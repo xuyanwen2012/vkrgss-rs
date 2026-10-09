@@ -398,6 +398,74 @@ fn freezing_again_replaces_the_held_frame() {
 }
 
 #[test]
+fn freeze_during_a_mix_holds_the_mixed_image() {
+    let whole = Rect::from_size(SIZE);
+    let grey = [64, 64, 64, 255];
+    let mut compositor = black_then_white();
+    compositor.set_mix(0.25);
+    let on_screen = compositor.scale_frame(SIZE).unwrap();
+    assert_all(
+        &on_screen,
+        whole,
+        grey,
+        "a quarter of the way from black to white",
+    );
+
+    // Freeze in the middle of the fade, as a session does, and render on.
+    compositor.freeze().unwrap();
+    compositor.set_mix(0.0);
+    for color in [[0, 255, 0, 255], [255, 0, 255, 255]] {
+        compositor.render(&flat(SIZE, color)).unwrap();
+        assert_eq!(compositor.scale_frame(SIZE).unwrap(), on_screen);
+        let doubled = compositor.scale_frame(Size::new(40, 36)).unwrap();
+        assert_eq!(doubled, blocks(&on_screen, 2));
+    }
+
+    // The next fade starts from the grey, not from the black or the white behind it.
+    compositor.set_mix(0.5);
+    let half = compositor.scale_frame(SIZE).unwrap();
+    for y in 0..SIZE.height {
+        for x in 0..SIZE.width {
+            let [r, g, b, a] = pixel(&half, x, y);
+            assert!((159..=160).contains(&r), "({x}, {y}): {r}");
+            assert_eq!((g, b, a), (32, r, 255), "({x}, {y})");
+        }
+    }
+}
+
+#[test]
+fn freeze_during_a_mix_holds_each_pixel_of_a_detailed_image() {
+    let (mut compositor, first) = rendered(&gradient(SIZE));
+    compositor.freeze().unwrap();
+    compositor
+        .render(&halves(SIZE, [250, 10, 90, 255], [5, 200, 40, 255]))
+        .unwrap();
+    compositor.set_mix(0.75);
+    let on_screen = compositor.scale_frame(SIZE).unwrap();
+    assert_ne!(on_screen, first);
+
+    compositor.freeze().unwrap();
+    compositor.set_mix(0.0);
+    compositor.render(&flat(SIZE, WHITE)).unwrap();
+    assert_eq!(compositor.scale_frame(SIZE).unwrap(), on_screen);
+}
+
+#[test]
+fn freeze_at_weight_zero_keeps_the_held_frame() {
+    let mut compositor = black_then_white();
+    compositor.set_mix(0.0);
+    compositor.freeze().unwrap();
+    compositor.render(&flat(SIZE, [1, 2, 3, 255])).unwrap();
+    let scaled = compositor.scale_frame(SIZE).unwrap();
+    assert_all(
+        &scaled,
+        Rect::from_size(SIZE),
+        BLACK,
+        "still the first held frame",
+    );
+}
+
+#[test]
 fn freeze_before_the_first_frame_holds_black() {
     let mut compositor = TestCompositor::new();
     compositor.freeze().unwrap();

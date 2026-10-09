@@ -593,8 +593,10 @@ impl VkCompositor {
         self.gpu.surface.is_some()
     }
 
-    /// Captures the newest frame as the held frame, which the mix weight then blends with the
-    /// frames rendered afterwards. Before the first frame the held frame is black.
+    /// Captures what is shown now as the held frame: the mix of the held and the newest frame
+    /// at the current weight, at the frame's own size. The mix weight then blends that image
+    /// with the frames rendered afterwards. At weight 1 this is the newest frame as it is, at
+    /// weight 0 the held frame stays what it was, and before the first frame it is black.
     ///
     /// The held frame has the size of the frame it was taken from. When a later packet has
     /// another logical size the held frame is dropped and counts as black.
@@ -605,21 +607,35 @@ impl VkCompositor {
             .as_ref()
             .filter(|_| self.has_frame)
             .map(|target| (target.image, (target.width, target.height)));
-        match target {
-            Some((source, size)) => {
-                let held = self.ensure_held(size)?;
-                self.submit_or_idle(|compositor| compositor.copy_to_held(source, held, size))
-            }
-            None => {
-                let held = self.presenter.as_ref().and_then(|p| p.held.as_ref());
-                match held.map(|held| held.image) {
-                    Some(held) => self.submit_or_idle(|compositor| {
-                        compositor.clear_held(held, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                    }),
-                    None => Ok(()),
-                }
-            }
+        let Some((newest, size)) = target else {
+            // Nothing has been rendered, so black is what is shown.
+            let held = self.presenter.as_ref().and_then(|p| p.held.as_ref());
+            return match held.map(|held| held.image) {
+                Some(held) => self.submit_or_idle(|compositor| {
+                    compositor.clear_held(held, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                }),
+                None => Ok(()),
+            };
+        };
+        // A held frame of another size counts as black, which this makes it.
+        let held = self.ensure_held(size)?;
+        if self.mix >= 1.0 {
+            return self.submit_or_idle(|compositor| {
+                compositor.copy_to_held(newest, vk::ImageLayout::GENERAL, held, size)
+            });
         }
+        if self.mix <= 0.0 {
+            // The held frame alone is shown, and it stays.
+            return Ok(());
+        }
+        // In between, what is shown exists nowhere yet: draw it at the frame's size, where
+        // scaling changes nothing, and take the result. The off-screen target and the held
+        // frame have formats of the same size, so the copy moves the bytes as they are.
+        self.with_offscreen(Size::new(size.0, size.1), |compositor, mixed| {
+            compositor.submit_or_idle(|compositor| {
+                compositor.copy_to_held(mixed, vk::ImageLayout::TRANSFER_SRC_OPTIMAL, held, size)
+            })
+        })
     }
 
     /// Draws what [`present`](VkCompositor::present) would show in a window of `size` pixels
@@ -644,6 +660,25 @@ impl VkCompositor {
                 maximum: u64::from(self.gpu.max_image_dimension),
             });
         }
+        let rgba = self.with_offscreen(size, |compositor, image| {
+            compositor.read_image(
+                image,
+                (size.width, size.height),
+                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+            )
+        })?;
+        Ok(Frame { size, rgba })
+    }
+
+    /// Draws what a window of `size` pixels would show into a new off-screen target and hands
+    /// its image, in the `TRANSFER_SRC_OPTIMAL` layout, to `then`. The target is destroyed
+    /// afterwards, so `then` has to wait for whatever it submits. `size` has no zero dimension
+    /// and is within the device's limit.
+    fn with_offscreen<T>(
+        &mut self,
+        size: Size,
+        then: impl FnOnce(&mut VkCompositor, vk::Image) -> Result<T, VkError>,
+    ) -> Result<T, VkError> {
         let source = self.prepare_sources()?;
         let device = &self.gpu.device;
         let presenter = self.presenter.as_mut().expect("made with the sources");
@@ -701,18 +736,12 @@ impl VkCompositor {
             }
             compositor.submit_and_wait()
         });
-        let rgba = drawn.and_then(|()| {
-            self.read_image(
-                image.image,
-                (size.width, size.height),
-                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-            )
-        });
+        let result = drawn.and_then(|()| then(self, image.image));
         // SAFETY: every submission that used the framebuffer was waited for, or the device was
         // idled after a failure; the handle is not used again.
         unsafe { self.gpu.device.destroy_framebuffer(framebuffer, None) };
         image.destroy(&self.gpu.device, &mut self.allocator);
-        Ok(Frame { size, rgba: rgba? })
+        result
     }
 
     /// Tells the compositor the size of the window in pixels. The swapchain is made for that
@@ -971,10 +1000,12 @@ impl VkCompositor {
         self.submit_and_wait()
     }
 
-    /// Copies the frame target into the held frame; both are `size` pixels large.
+    /// Copies `source`, which is in `source_layout`, into the held frame; both are `size`
+    /// pixels large.
     fn copy_to_held(
         &mut self,
         source: vk::Image,
+        source_layout: vk::ImageLayout,
         held: vk::Image,
         (width, height): (u32, u32),
     ) -> Result<(), VkError> {
@@ -988,10 +1019,12 @@ impl VkCompositor {
                 height,
                 depth: 1,
             });
-        // SAFETY: the command buffer is recording. The source is the live frame target, in
-        // `GENERAL` with transfer-source usage; the held frame is live, in
-        // `SHADER_READ_ONLY_OPTIMAL` with transfer-destination usage. Both have the same
-        // format and are `size` pixels large, and both outlive the wait below.
+        // SAFETY: the command buffer is recording. The source is the live frame target or an
+        // off-screen target, in `source_layout`, which is `GENERAL` or
+        // `TRANSFER_SRC_OPTIMAL`, with transfer-source usage; the held frame is live, in
+        // `SHADER_READ_ONLY_OPTIMAL` with transfer-destination usage. Their formats are four
+        // 8-bit channels each, which copies allow between, both are `size` pixels large, and
+        // both outlive the wait below.
         unsafe {
             transition(
                 device,
@@ -1003,7 +1036,7 @@ impl VkCompositor {
             device.cmd_copy_image(
                 commands,
                 source,
-                vk::ImageLayout::GENERAL,
+                source_layout,
                 held,
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                 &[region],
