@@ -16,7 +16,7 @@ use vkxp_ruby_sys::{Raise, Raised, Ruby, RubyError};
 use vkxp_vfs::GameIni;
 
 use crate::guest::{Config, Guest};
-use crate::{audio, graphics, input, kernel, rb};
+use crate::{audio, graphics, input, kernel, rb, win32api};
 
 /// The Ruby part of the preparation: globals, `Reset` and `Hangup`, `save_data`, `Win32API`,
 /// and `require` and `load` limited to the game directory.
@@ -221,6 +221,7 @@ pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
     graphics::define(ruby)?;
     input::define(ruby)?;
     audio::define(ruby)?;
+    win32api::define(ruby)?;
     kernel::define(ruby)
 }
 

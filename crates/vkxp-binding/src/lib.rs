@@ -288,6 +288,7 @@ mod table;
 mod text;
 mod tilemap;
 mod viewport;
+mod win32api;
 mod window;
 mod wrap;
 

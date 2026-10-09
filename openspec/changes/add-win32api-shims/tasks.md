@@ -2,7 +2,7 @@
 
 ## 1. Call path (`vkxp-binding`)
 
-- [ ] 1.1 Route `Win32API#call` through a table of emulated functions with integer and buffer arguments. Verify: Ruby tests that an emulated function receives and overwrites a buffer in place, that names match without regard to case and suffix, and that an unknown function still returns 0 with one report.
+- [x] 1.1 Route `Win32API#call` through a table of emulated functions with integer and buffer arguments. Verify: Ruby tests that an emulated function receives and overwrites a buffer in place, that names match without regard to case and suffix, and that an unknown function still returns 0 with one report.
 
 ## 2. Functions (`vkxp-binding`)
 

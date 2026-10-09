@@ -38,15 +38,20 @@ def vkxp_load_scripts(path)
   $RGSS_SCRIPTS.size
 end
 
-# A placeholder: every function returns 0.
+# Calls go to the host's table of emulated functions. A function outside the table returns 0
+# and is named once.
 class Win32API
   @@vkxp_called = {}
 
   def initialize(dll, function, import, export)
+    @vkxp_dll = dll.to_s
+    @vkxp_function = function.to_s
     @vkxp_name = "#{dll} #{function}"
   end
 
   def call(*args)
+    result = vkxp_win32api(@vkxp_dll, @vkxp_function, *args)
+    return result if result
     unless @@vkxp_called[@vkxp_name]
       @@vkxp_called[@vkxp_name] = true
       $stderr.write("vkxp: Win32API #{@vkxp_name} is not emulated and returns 0\n")
