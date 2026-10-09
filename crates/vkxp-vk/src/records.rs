@@ -36,6 +36,7 @@ const fn blend_mode(blend: BlendMode) -> u32 {
         BlendMode::Normal => 0,
         BlendMode::Add => 1,
         BlendMode::Subtract => 2,
+        BlendMode::Window => 3,
     }
 }
 
@@ -650,7 +651,12 @@ mod tests {
 
     #[test]
     fn records_keep_op_order_and_blend_modes_are_distinct() {
-        let blends = [BlendMode::Normal, BlendMode::Add, BlendMode::Subtract];
+        let blends = [
+            BlendMode::Normal,
+            BlendMode::Add,
+            BlendMode::Subtract,
+            BlendMode::Window,
+        ];
         let ops: Vec<Op> = blends
             .iter()
             .map(|&blend| {
@@ -668,6 +674,6 @@ mod tests {
             .collect();
         let records = encode_ops(&table(), SIZE, &ops).unwrap();
         let modes: Vec<u32> = records.iter().map(|record| record.words()[17]).collect();
-        assert_eq!(modes, [0, 1, 2]);
+        assert_eq!(modes, [0, 1, 2, 3]);
     }
 }

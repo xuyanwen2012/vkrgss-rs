@@ -2,7 +2,7 @@
 
 ## 1. Blend mode (`vkxp-proto`, `vkxp-pixel`, `vkxp-compose-ref`, `vkxp-vk`)
 
-- [ ] 1.1 Add the window blend mode with its arithmetic and the odd-pixel rule to the protocol, the CPU reference and the shader. Verify: the scenarios of `specs/guest-host-protocol/spec.md` and `specs/frame-composition/spec.md`, and the CPU-against-GPU tests on llvmpipe.
+- [x] 1.1 Add the window blend mode with its arithmetic and the odd-pixel rule to the protocol, the CPU reference and the shader. Verify: the scenarios of `specs/guest-host-protocol/spec.md` and `specs/frame-composition/spec.md`, and the CPU-against-GPU tests on llvmpipe.
 
 ## 2. Windows (`vkxp-core`)
 

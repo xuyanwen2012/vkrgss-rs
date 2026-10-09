@@ -232,13 +232,21 @@ fn identity_transform_copies_texels() {
     });
 }
 
-const BLENDS: [BlendMode; 3] = [BlendMode::Normal, BlendMode::Add, BlendMode::Subtract];
+/// Every mode. The quads of these tests have an even width, so the window mode has no pixel
+/// that takes the normal formula.
+const BLENDS: [BlendMode; 4] = [
+    BlendMode::Normal,
+    BlendMode::Add,
+    BlendMode::Subtract,
+    BlendMode::Window,
+];
 
 fn blend(mode: BlendMode, dst: Rgba, src: Rgba, opacity: u8) -> Rgba {
     match mode {
         BlendMode::Normal => vkxp_pixel::blend_normal(dst, src, opacity),
         BlendMode::Add => vkxp_pixel::blend_add(dst, src, opacity),
         BlendMode::Subtract => vkxp_pixel::blend_sub(dst, src, opacity),
+        BlendMode::Window => vkxp_pixel::blend_window(dst, src, opacity),
     }
 }
 
@@ -1076,5 +1084,144 @@ fn stretch_quad_far_larger_than_the_screen_shows_its_part_on_screen() {
     for x in 0..size.width {
         let i = u64::from(x) + (1 << 31);
         assert_eq!(frame.pixel(x, 0), column(((i * step) >> 20) as u32));
+    }
+}
+
+// Requirement: Window blend arithmetic of the original
+
+/// A window-mode quad showing a `width` by 1 bitmap of grey texels (`source`, alpha `alpha`)
+/// with its left edge at `x`, over a grey `destination`, on a frame of `size`.
+fn window_row(size: Size, clip: Rect, x: i16, width: u32, [d, s, a]: [u8; 3]) -> Frame {
+    let rgba = fixtures::solid(width, 1, Color::new(s, s, s, a));
+    let quad = Op::Quad(Quad {
+        clip,
+        blend: BlendMode::Window,
+        ..sprite(ID, width, 1, x, 0)
+    });
+    let packet = FramePacket {
+        logical_size: size,
+        ..packet(
+            bitmap(ID, width, 1, rgba).into(),
+            vec![
+                Op::Clear {
+                    clip: Rect::from_size(size),
+                    color: Color::new(d, d, d, 255),
+                },
+                quad,
+            ],
+        )
+    };
+    Compositor::new().render(&packet).unwrap()
+}
+
+/// The samples of one kind of `tests/data/window-blend-samples.txt`, as their numbers.
+fn window_blend_samples(kind: &str) -> Vec<Vec<u8>> {
+    include_str!("data/window-blend-samples.txt")
+        .lines()
+        .filter_map(|line| line.strip_prefix(kind)?.strip_prefix(' '))
+        .map(|row| {
+            row.split_whitespace()
+                .filter(|word| *word != "|")
+                .map(|word| word.parse().unwrap())
+                .collect()
+        })
+        .collect()
+}
+
+#[test]
+fn window_blend_reproduces_the_measured_samples() {
+    let size = Size::new(64, 1);
+    let screen = Rect::from_size(size);
+    let samples = window_blend_samples("blend");
+    assert!(samples.len() >= 30);
+    for sample in samples {
+        let &[d, s, a, out] = sample.as_slice() else {
+            panic!("{sample:?}");
+        };
+        let frame = window_row(size, screen, 10, 2, [d, s, a]);
+        for x in [10, 11] {
+            assert_eq!(frame.pixel(x, 0), [out, out, out, 255], "{sample:?}");
+        }
+        assert_eq!(frame.pixel(12, 0), [d, d, d, 255]);
+    }
+    // The last pixel of a row of 33: the window of the probe, at x = 10.
+    let samples = window_blend_samples("tail");
+    assert!(samples.len() >= 8);
+    for sample in samples {
+        let &[x, d, s, a, out] = sample.as_slice() else {
+            panic!("{sample:?}");
+        };
+        let frame = window_row(size, screen, 10, 33, [d, s, a]);
+        assert_eq!(
+            frame.pixel(u32::from(x), 0),
+            [out, out, out, 255],
+            "{sample:?}"
+        );
+    }
+}
+
+#[test]
+fn window_blend_uses_the_normal_formula_for_the_last_pixel_of_an_odd_row() {
+    // Destination 161, source 0, alpha 4: the window formula gives 158, the normal one 157.
+    let size = Size::new(16, 1);
+    let screen = Rect::from_size(size);
+    let (window, normal) = ([158, 158, 158, 255], [157, 157, 157, 255]);
+    let untouched = [161, 161, 161, 255];
+    let expect = |frame: &Frame, tail: Option<u32>, covered: std::ops::Range<u32>| {
+        for x in 0..size.width {
+            let expected = if Some(x) == tail {
+                normal
+            } else if covered.contains(&x) {
+                window
+            } else {
+                untouched
+            };
+            assert_eq!(frame.pixel(x, 0), expected, "pixel {x}");
+        }
+    };
+    // Five pixels wide: four by the window formula, the fifth by the normal one.
+    expect(&window_row(size, screen, 3, 5, [161, 0, 4]), Some(7), 3..8);
+    // Six wide: no such pixel, until the clip or the frame leaves an odd part of it.
+    expect(&window_row(size, screen, 3, 6, [161, 0, 4]), None, 3..9);
+    let clip = Rect::new(0, 0, 8, 1);
+    expect(&window_row(size, clip, 3, 6, [161, 0, 4]), Some(7), 3..8);
+    let clip = Rect::new(4, 0, 12, 1);
+    expect(&window_row(size, clip, 3, 6, [161, 0, 4]), Some(8), 4..9);
+    expect(
+        &window_row(size, screen, 13, 6, [161, 0, 4]),
+        Some(15),
+        13..16,
+    );
+    expect(&window_row(size, screen, -3, 6, [161, 0, 4]), Some(2), 0..3);
+}
+
+#[test]
+fn window_blend_of_a_scaled_quad_has_no_exception() {
+    let size = Size::new(16, 1);
+    let rgba = fixtures::solid(5, 1, Color::new(0, 0, 0, 4));
+    let quad = Op::Quad(Quad {
+        clip: Rect::from_size(size),
+        bitmap: ID,
+        src: Rect::new(0, 0, 5, 1),
+        sampling: Sampling::Stretch {
+            dest: Rect::new(3, 0, 5, 1),
+            mirror: false,
+        },
+        tone: Tone::NEUTRAL,
+        color: Color::new(0, 0, 0, 0),
+        opacity: 255,
+        blend: BlendMode::Window,
+    });
+    let clear = Op::Clear {
+        clip: Rect::from_size(size),
+        color: Color::new(161, 161, 161, 255),
+    };
+    let packet = FramePacket {
+        logical_size: size,
+        ..packet(bitmap(ID, 5, 1, rgba).into(), vec![clear, quad])
+    };
+    let frame = Compositor::new().render(&packet).unwrap();
+    for x in 3..8 {
+        assert_eq!(frame.pixel(x, 0), [158, 158, 158, 255], "pixel {x}");
     }
 }

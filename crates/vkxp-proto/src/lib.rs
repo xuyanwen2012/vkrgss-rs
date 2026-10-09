@@ -8,11 +8,12 @@
 //! binary form for recordings, test fixtures and a later process split. [`link`] is the pair of
 //! endpoints the two threads hold.
 //!
-//! This is protocol version 3. Over version 1 a [`FramePacket`] carries the guest's
+//! This is protocol version 4. Over version 1 a [`FramePacket`] carries the guest's
 //! [`FrameRate`], a [`Quad`] carries a tone and a colour for its own texels, the messages
 //! [`GuestToHost::FrameReset`] and [`HostToGuest::Reset`] exist, and [`Button`] has F9. Over
 //! version 2 a [`Quad`] states its [`Sampling`]: the affine transform it always had, or a
-//! stretch into a rectangle of screen pixels. Streams of older versions are rejected.
+//! stretch into a rectangle of screen pixels. Over version 3 the blend modes include
+//! [`BlendMode::Window`]. Streams of older versions are rejected.
 //!
 //! The binary form encodes enum variants by position, so reordering or removing variants, or
 //! changing fields, requires a new [`codec::PROTOCOL_VERSION`].

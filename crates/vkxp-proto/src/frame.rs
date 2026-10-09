@@ -208,6 +208,49 @@ pub struct Quad {
     pub blend: BlendMode,
 }
 
+impl Quad {
+    /// Whether screen pixel column `px` is the one pixel of a row that a quad in
+    /// [`BlendMode::Window`] blends as in [`BlendMode::Normal`]: the last column of the quad's
+    /// visible part, when that part has an odd number of columns. The visible part is what the
+    /// quad covers inside its clip and a frame of `frame` pixels.
+    ///
+    /// This is defined only for a quad placed unscaled on whole pixels, as
+    /// [`Sampling::place_at`] places it, which is how window layers are drawn. For any other
+    /// quad the answer is `false`. Every backend must match this.
+    pub const fn is_window_tail(&self, frame: Size, px: u16) -> bool {
+        let Sampling::Affine(t) = self.sampling else {
+            return false;
+        };
+        let one = Fixed::ONE.to_bits();
+        let whole = (1 << Fixed::FRAC_BITS) - 1;
+        if t.xx.to_bits() != one
+            || t.xy.to_bits() != 0
+            || t.yx.to_bits() != 0
+            || t.yy.to_bits() != one
+            || t.tx.to_bits() & whole != 0
+            || t.ty.to_bits() & whole != 0
+        {
+            return false;
+        }
+        let left = -((t.tx.to_bits() >> Fixed::FRAC_BITS) as i64);
+        let clip_low = self.clip.x as i64;
+        let clip_high = clip_low + self.clip.width as i64;
+        let mut low = if clip_low > 0 { clip_low } else { 0 };
+        if left > low {
+            low = left;
+        }
+        let mut high = if clip_high < frame.width as i64 {
+            clip_high
+        } else {
+            frame.width as i64
+        };
+        if left + (self.src.width as i64) < high {
+            high = left + self.src.width as i64;
+        }
+        px as i64 == high - 1 && (high - low) & 1 == 1
+    }
+}
+
 /// How a quad maps screen pixels to the texels of its source rectangle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Sampling {
@@ -293,6 +336,10 @@ pub enum BlendMode {
     Add,
     /// Subtracts the source from the destination, saturating at 0.
     Subtract,
+    /// The blend of a window layer, `vkxp_pixel::blend_window`. In each row, when the part of
+    /// the quad that is visible has an odd number of pixels, the last of them is blended as in
+    /// `Normal` instead: see [`Quad::is_window_tail`].
+    Window,
 }
 
 /// A fixed-point affine map from logical screen space to the source rectangle of a quad.
@@ -583,5 +630,56 @@ mod tests {
         let (u, v) = transform.source_position(u16::MAX, u16::MAX);
         assert!(u > 0);
         assert!(v < 0);
+    }
+
+    #[test]
+    fn window_tail_is_the_last_column_of_an_odd_visible_part() {
+        let frame = Size::new(40, 30);
+        let quad = |clip, width, sampling| Quad {
+            clip,
+            bitmap: BitmapId::new(0, 0),
+            src: Rect::new(0, 0, width, 4),
+            sampling,
+            tone: Tone::NEUTRAL,
+            color: Color::default(),
+            opacity: 255,
+            blend: BlendMode::Window,
+        };
+        let screen = Rect::from_size(frame);
+        let tails = |quad: Quad| -> Vec<u16> {
+            (0..frame.width as u16)
+                .filter(|&px| quad.is_window_tail(frame, px))
+                .collect()
+        };
+        // Five columns from 10: the fifth. Six columns: none.
+        assert_eq!(tails(quad(screen, 5, Sampling::place_at(10, 2))), [14]);
+        assert_eq!(tails(quad(screen, 6, Sampling::place_at(10, 2))), []);
+        // Cut to an odd part by the clip, on the right and on the left.
+        let clip = Rect::new(0, 0, 13, 30);
+        assert_eq!(tails(quad(clip, 6, Sampling::place_at(10, 2))), [12]);
+        let clip = Rect::new(11, 0, 29, 30);
+        assert_eq!(tails(quad(clip, 6, Sampling::place_at(10, 2))), [15]);
+        // Cut by the frame: 37..40 and 0..3.
+        assert_eq!(tails(quad(screen, 6, Sampling::place_at(37, 2))), [39]);
+        assert_eq!(tails(quad(screen, 6, Sampling::place_at(-3, 2))), [2]);
+        // A clip that reaches beyond the frame does not count beyond it.
+        let clip = Rect::new(-100, -100, 1000, 1000);
+        assert_eq!(tails(quad(clip, 6, Sampling::place_at(37, 2))), [39]);
+        // Not placed unscaled on whole pixels: no such pixel.
+        let half = Transform {
+            tx: Fixed::from_bits(-(10 << 16) + 1),
+            ..Transform::place_at(10, 2)
+        };
+        assert_eq!(tails(quad(screen, 5, Sampling::Affine(half))), []);
+        let scaled = Transform {
+            xx: Fixed::HALF,
+            ..Transform::place_at(10, 2)
+        };
+        assert_eq!(tails(quad(screen, 5, Sampling::Affine(scaled))), []);
+        let stretch = Sampling::Stretch {
+            dest: Rect::new(10, 2, 5, 4),
+            mirror: false,
+        };
+        assert_eq!(tails(quad(screen, 5, stretch)), []);
     }
 }

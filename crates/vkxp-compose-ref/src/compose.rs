@@ -90,7 +90,7 @@ impl Compositor {
             for px in 0..size.width as u16 {
                 let mut pixel = BACKGROUND;
                 for step in &steps {
-                    pixel = step.apply(pixel, px, py);
+                    pixel = step.apply(pixel, size, px, py);
                 }
                 rgba.extend_from_slice(&pixel);
             }
@@ -144,8 +144,9 @@ enum Step<'a> {
 }
 
 impl Step<'_> {
-    /// The value of screen pixel (`px`, `py`) after this op, given its value before.
-    fn apply(&self, pixel: Rgba, px: u16, py: u16) -> Rgba {
+    /// The value of pixel (`px`, `py`) of a frame of `frame` pixels after this op, given its
+    /// value before.
+    fn apply(&self, pixel: Rgba, frame: Size, px: u16, py: u16) -> Rgba {
         let (x, y) = (i32::from(px), i32::from(py));
         match self {
             Step::Clear { clip, color } => {
@@ -171,6 +172,10 @@ impl Step<'_> {
                     BlendMode::Normal => vkxp_pixel::blend_normal(pixel, texel, quad.opacity),
                     BlendMode::Add => vkxp_pixel::blend_add(pixel, texel, quad.opacity),
                     BlendMode::Subtract => vkxp_pixel::blend_sub(pixel, texel, quad.opacity),
+                    BlendMode::Window if quad.is_window_tail(frame, px) => {
+                        vkxp_pixel::blend_normal(pixel, texel, quad.opacity)
+                    }
+                    BlendMode::Window => vkxp_pixel::blend_window(pixel, texel, quad.opacity),
                 }
             }
             Step::RectEffect(effect) => {

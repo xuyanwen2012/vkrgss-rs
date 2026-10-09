@@ -883,3 +883,77 @@ fn stretch_quads_blend_like_other_quads() {
     }
     assert_stream_matches(&[frame(size, deltas, ops)]);
 }
+
+/// Window-mode quads whose visible part is odd or even, cut by clips and by the frame, placed
+/// on whole pixels or not, over opaque and translucent pixels: the one pixel per row that
+/// takes the normal formula is the same on both backends.
+#[test]
+fn window_quads_agree_on_the_last_pixel_of_odd_rows() {
+    let size = Size::new(70, 40);
+    let screen = Rect::from_size(size);
+    let (even, odd) = (BitmapId::new(0, 0), BitmapId::new(1, 0));
+    let texels = |width: u32| -> Vec<u8> {
+        (0..width * 6)
+            .flat_map(|i| {
+                [
+                    (i * 37) as u8,
+                    (i * 11) as u8,
+                    255 - i as u8,
+                    (i * 29) as u8,
+                ]
+            })
+            .collect()
+    };
+    let mut deltas: Vec<BitmapDelta> = bitmap(even, 12, 6, texels(12)).into();
+    deltas.extend(bitmap(odd, 11, 6, texels(11)));
+    let mut ops = vec![
+        clear(screen, [161, 90, 30, 255]),
+        clear(Rect::new(0, 20, 70, 20), [200, 100, 50, 77]),
+    ];
+    let mut push = |bitmap, width, clip, sampling| {
+        ops.push(Op::Quad(Quad {
+            clip,
+            bitmap,
+            src: Rect::new(0, 0, width, 6),
+            sampling,
+            tone: Tone::NEUTRAL,
+            color: Color::new(0, 0, 0, 0),
+            opacity: 131,
+            blend: BlendMode::Window,
+        }));
+    };
+    for (row, y) in [1i16, 21].into_iter().enumerate() {
+        let band = Rect::new(0, i32::from(y) - 1, 70, 16);
+        for (bitmap, width) in [(even, 12), (odd, 11)] {
+            let y = y + if width == 12 { 0 } else { 8 };
+            push(bitmap, width, band, Sampling::place_at(-5, y));
+            push(bitmap, width, band, Sampling::place_at(8, y));
+            push(
+                bitmap,
+                width,
+                Rect::new(23, 0, 7, 40),
+                Sampling::place_at(20, y),
+            );
+            push(
+                bitmap,
+                width,
+                Rect::new(30, 0, 8, 40),
+                Sampling::place_at(33, y),
+            );
+            push(bitmap, width, band, Sampling::place_at(62, y));
+            // Half a pixel off, and scaled: no pixel is an exception.
+            let moved = Transform {
+                tx: Fixed::from_bits(-(46 << 16) + (1 << 15)),
+                ..Transform::place_at(46, y)
+            };
+            push(bitmap, width, band, Sampling::Affine(moved));
+        }
+        let dest = Rect::new(47, i32::from(y) + 8, 11, 6);
+        let stretch = Sampling::Stretch {
+            dest,
+            mirror: row == 1,
+        };
+        push(odd, 11, band, stretch);
+    }
+    assert_stream_matches(&[frame(size, deltas, ops)]);
+}

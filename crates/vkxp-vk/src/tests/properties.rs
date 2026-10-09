@@ -215,7 +215,8 @@ fn blend_mode() -> impl Strategy<Value = BlendMode> {
     prop_oneof![
         Just(BlendMode::Normal),
         Just(BlendMode::Add),
-        Just(BlendMode::Subtract)
+        Just(BlendMode::Subtract),
+        Just(BlendMode::Window)
     ]
 }
 
@@ -677,7 +678,7 @@ struct Coverage {
     frames: u32,
     clears: u32,
     effects: u32,
-    quads_by_blend: [u32; 3],
+    quads_by_blend: [u32; 4],
     /// Quads by whether they have a tone and a colour: neither, tone, colour, both.
     quads_by_recolouring: [u32; 4],
     transformed_quads: u32,
@@ -784,6 +785,7 @@ fn generated_sequences_cover_what_the_properties_claim() {
         valid.quads_by_blend[0],
         valid.quads_by_blend[1],
         valid.quads_by_blend[2],
+        valid.quads_by_blend[3],
         valid.quads_by_recolouring[0],
         valid.quads_by_recolouring[1],
         valid.quads_by_recolouring[2],

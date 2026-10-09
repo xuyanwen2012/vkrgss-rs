@@ -154,6 +154,24 @@ uvec4 blend_sub(uvec4 dst, uvec4 src, uint opacity) {
         dst.a);
 }
 
+// Mirrors `window_mix` in vkxp-pixel: the mix of a window layer. At most 255.
+uint window_mix(uint dst, uint src, uint alpha) {
+    return (src * (alpha + 1u) + dst * (256u - alpha)) >> 8;
+}
+
+// Mirrors `vkxp_pixel::blend_window`.
+uvec4 blend_window(uvec4 dst, uvec4 src, uint opacity) {
+    uint a = effective_alpha(src.a, opacity);
+    if (a == 0u) {
+        return dst;
+    }
+    return uvec4(
+        window_mix(dst.r, src.r, a),
+        window_mix(dst.g, src.g, a),
+        window_mix(dst.b, src.b, a),
+        dst.a);
+}
+
 // Mirrors `vkxp_pixel::blend_color`.
 uvec4 blend_color(uvec4 dst, uvec4 color) {
     if (color.a == 0u) {

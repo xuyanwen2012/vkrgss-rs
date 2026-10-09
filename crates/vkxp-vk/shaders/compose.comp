@@ -23,6 +23,7 @@ const uint OP_RECT_EFFECT = 2u;
 const uint BLEND_NORMAL = 0u;
 const uint BLEND_ADD = 1u;
 const uint BLEND_SUBTRACT = 2u;
+const uint BLEND_WINDOW = 3u;
 
 // Values of `OpRecord.sampling`. They match `sampling_kind` in `src/records.rs`.
 const uint SAMPLING_AFFINE = 0u;
@@ -105,6 +106,21 @@ ivec2 stretch_texel(OpRecord op, ivec2 position) {
     return ivec2(column, row);
 }
 
+// Mirrors `Quad::is_window_tail` in vkxp-proto: whether `position`, which the quad covers
+// inside its clip, is the last pixel of a row whose visible part has an odd number of pixels.
+// Only a quad placed unscaled on whole pixels has such a pixel.
+bool is_window_tail(OpRecord op, ivec2 position) {
+    Transform t = op.transform;
+    if (op.sampling != SAMPLING_AFFINE || t.xx != 65536 || t.xy != 0 || t.yx != 0
+            || t.yy != 65536 || (t.tx & 0xFFFF) != 0 || (t.ty & 0xFFFF) != 0) {
+        return false;
+    }
+    int left = -(t.tx >> 16);
+    int low = max(left, op.clip_x0);
+    int high = min(left + op.src_width, op.clip_x1);
+    return position.x == high - 1 && ((high - low) & 1) == 1;
+}
+
 // The value of screen pixel `position` after `op`, given its value before.
 uvec4 apply_op(OpRecord op, uvec4 pixel, ivec2 position) {
     if (position.x < op.clip_x0 || position.x >= op.clip_x1
@@ -131,6 +147,10 @@ uvec4 apply_op(OpRecord op, uvec4 pixel, ivec2 position) {
             return blend_normal(pixel, source, op.opacity);
         case BLEND_ADD:
             return blend_add(pixel, source, op.opacity);
+        case BLEND_WINDOW:
+            return is_window_tail(op, position)
+                ? blend_normal(pixel, source, op.opacity)
+                : blend_window(pixel, source, op.opacity);
         default:
             return blend_sub(pixel, source, op.opacity);
         }

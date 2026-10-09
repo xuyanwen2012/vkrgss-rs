@@ -190,6 +190,11 @@ fn subtractive_blend_sweep_is_byte_identical() {
     blend_sweep(BlendMode::Subtract);
 }
 
+#[test]
+fn window_blend_sweep_is_byte_identical() {
+    blend_sweep(BlendMode::Window);
+}
+
 /// The ops that lay down a destination for a rectangle effect: the pattern bitmap at its own
 /// alpha, or a uniformly coloured transparent screen.
 fn effect_destinations(height: u32) -> Vec<(String, Vec<Op>)> {

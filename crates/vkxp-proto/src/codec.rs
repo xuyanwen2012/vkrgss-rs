@@ -23,7 +23,7 @@ use crate::{GuestToHost, HostToGuest, InputSnapshot};
 pub const MAGIC: [u8; 4] = *b"VKXP";
 
 /// Version of the message types and their encoding. Any change to either increments it.
-pub const PROTOCOL_VERSION: u16 = 3;
+pub const PROTOCOL_VERSION: u16 = 4;
 
 /// Length of the stream header in bytes.
 pub const HEADER_LEN: usize = 7;
@@ -231,8 +231,8 @@ mod tests {
 
     #[test]
     fn older_streams_are_rejected_naming_both_versions() {
-        assert_eq!(PROTOCOL_VERSION, 3);
-        for found in [1u16, 2] {
+        assert_eq!(PROTOCOL_VERSION, 4);
+        for found in [1u16, 2, 3] {
             let mut bytes = encode_stream(&sample()).unwrap();
             bytes[4..6].copy_from_slice(&found.to_le_bytes());
 
@@ -241,12 +241,12 @@ mod tests {
                 error,
                 DecodeError::UnsupportedVersion {
                     found,
-                    supported: 3,
+                    supported: 4,
                 }
             );
             assert_eq!(
                 error.to_string(),
-                format!("unsupported protocol version: found {found}, supported 3")
+                format!("unsupported protocol version: found {found}, supported 4")
             );
         }
     }
@@ -255,7 +255,7 @@ mod tests {
     fn affine_and_stretch_quads_survive_a_round_trip() {
         use crate::{BlendMode, Color, Fixed, Op, Quad, Rect, Sampling, Tone, Transform};
 
-        let quad = |sampling| {
+        let blended = |sampling, blend| {
             Op::Quad(Quad {
                 clip: Rect::new(0, 0, 640, 480),
                 bitmap: BitmapId::new(7, 2),
@@ -264,9 +264,10 @@ mod tests {
                 tone: Tone::new(-10, 20, 30, 40),
                 color: Color::new(1, 2, 3, 4),
                 opacity: 200,
-                blend: BlendMode::Add,
+                blend,
             })
         };
+        let quad = |sampling| blended(sampling, BlendMode::Add);
         let affine = Sampling::Affine(Transform {
             xx: Fixed::HALF,
             xy: Fixed::from_bits(-7),
@@ -284,7 +285,11 @@ mod tests {
             logical_size: Size::new(640, 480),
             frame_rate: FrameRate::DEFAULT,
             bitmaps: vec![],
-            ops: vec![quad(affine), quad(stretch)],
+            ops: vec![
+                quad(affine),
+                quad(stretch),
+                blended(Sampling::place_at(3, -4), BlendMode::Window),
+            ],
         })];
         let bytes = encode_stream(&messages).unwrap();
         assert_eq!(decode_stream::<GuestToHost>(&bytes).unwrap(), messages);

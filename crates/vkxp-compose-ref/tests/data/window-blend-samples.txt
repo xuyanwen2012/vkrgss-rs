@@ -1,0 +1,50 @@
+# Window blend samples measured on RGSS103J.dll (window probes, 2026-10-09): a selection.
+#
+# blend D S A | OUT : destination, source, effective alpha, screen value (one channel; background layer, opacity 255)
+#   rule: OUT = D if A == 0 else (S*(A+1) + D*(256-A)) >> 8
+blend 3 0 4 | 2
+blend 90 128 4 | 91
+blend 21 219 4 | 24
+blend 21 167 4 | 23
+blend 21 107 4 | 22
+blend 21 55 4 | 21
+blend 21 3 4 | 20
+blend 56 255 24 | 75
+blend 8 36 24 | 10
+blend 8 88 24 | 15
+blend 8 148 24 | 21
+blend 8 200 24 | 26
+blend 8 252 24 | 31
+blend 13 0 44 | 10
+blend 90 128 44 | 97
+blend 91 219 44 | 113
+blend 91 167 44 | 104
+blend 91 107 44 | 94
+blend 91 55 44 | 85
+blend 91 3 44 | 75
+blend 126 255 64 | 159
+blend 18 36 64 | 22
+blend 18 88 64 | 35
+blend 18 148 64 | 51
+blend 18 200 64 | 64
+blend 18 252 64 | 77
+blend 23 0 84 | 15
+blend 90 128 84 | 102
+blend 161 219 84 | 180
+blend 161 167 84 | 163
+blend 161 107 84 | 143
+blend 161 55 84 | 126
+blend 161 3 84 | 109
+#
+# tail X D S A | OUT : last visible pixel of a row with an odd number of visible pixels (frame layer, half transparent skin, window 33 wide at x=10)
+#   rule: that pixel takes the normal formula D + (((S-D)*(A+1)) >> 8)
+tail 42 42 191 128 | 117
+tail 42 38 0 128 | 18
+tail 42 90 255 128 | 173
+tail 42 38 3 128 | 20
+tail 42 38 5 128 | 21
+tail 42 38 26 128 | 31
+tail 42 38 28 128 | 32
+tail 42 38 57 128 | 47
+tail 42 38 60 128 | 49
+tail 42 38 63 128 | 50

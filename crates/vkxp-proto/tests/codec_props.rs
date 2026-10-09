@@ -57,6 +57,7 @@ fn blend_mode() -> impl Strategy<Value = BlendMode> {
         Just(BlendMode::Normal),
         Just(BlendMode::Add),
         Just(BlendMode::Subtract),
+        Just(BlendMode::Window),
     ]
 }
 

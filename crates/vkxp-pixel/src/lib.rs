@@ -23,7 +23,8 @@ mod bitmap;
 
 pub use arith::{
     PROVENANCE, Rgba, apply_gray, apply_tone, blend_add, blend_add_translucent, blend_color,
-    blend_normal, blend_normal_translucent, blend_sub, blend_sub_translucent, effective_alpha,
+    blend_normal, blend_normal_translucent, blend_sub, blend_sub_translucent, blend_window,
+    effective_alpha,
 };
 pub use bitmap::{BITMAP_PROVENANCE, rotate_hue, stretch_index};
 

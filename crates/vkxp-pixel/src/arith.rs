@@ -26,6 +26,11 @@ const MEASURED_TONE: Provenance = Provenance::ReverseEngineered {
     source: "oracle measurement 2026-10-09, RGSS103J, tone probe",
 };
 
+/// The measurement the blend of window layers was fitted to.
+const MEASURED_WINDOW: Provenance = Provenance::ReverseEngineered {
+    source: "oracle measurement 2026-10-09, RGSS103J, window probes",
+};
+
 /// The provenance of every public function in this file, in declaration order.
 pub const PROVENANCE: &[ArithmeticFn] = &[
     ArithmeticFn {
@@ -77,6 +82,13 @@ pub const PROVENANCE: &[ArithmeticFn] = &[
         provenance: Provenance::Textbook,
     },
     ArithmeticFn {
+        name: "blend_window",
+        formula: "a = effective_alpha(src.a, opacity), \
+                  out.c = (src.c * (a + 1) + dst.c * (256 - a)) >> 8, out.a = dst.a, \
+                  out = dst when a = 0",
+        provenance: MEASURED_WINDOW,
+    },
+    ArithmeticFn {
         name: "blend_color",
         formula: "c = dst.c + (((color.c - dst.c) * (color.a + 1)) >> 8), \
                   out = dst when color.a = 0",
@@ -117,6 +129,11 @@ const fn share(value: i32, alpha: u8) -> i32 {
 /// `dst + share(src - dst, alpha)`: `src` at alpha 255, never outside the two.
 const fn lerp(dst: u8, src: u8, alpha: u8) -> u8 {
     (dst as i32 + share(src as i32 - dst as i32, alpha)) as u8
+}
+
+/// `(src * (alpha + 1) + dst * (256 - alpha)) >> 8`: the mix of a window layer. At most 255.
+const fn window_mix(dst: u8, src: u8, alpha: u8) -> u8 {
+    ((src as u32 * (alpha as u32 + 1) + dst as u32 * (256 - alpha as u32)) >> 8) as u8
 }
 
 /// The alpha a source pixel is drawn with: its own alpha scaled by the opacity of the draw.
@@ -299,6 +316,29 @@ pub const fn blend_sub_translucent(dst: Rgba, src: Rgba, opacity: u8) -> Rgba {
         dst[0].saturating_sub(scale(src[0], a)),
         dst[1].saturating_sub(scale(src[1], a)),
         dst[2].saturating_sub(scale(src[2], a)),
+        dst[3],
+    ]
+}
+
+/// The blend of a window layer: `src` drawn over `dst` at `opacity` with weights that sum to
+/// 257, not 256. The destination alpha is kept.
+///
+/// Formula, per colour channel `c`, with `a = effective_alpha(src.a, opacity)`:
+/// `c = (src.c * (a + 1) + dst.c * (256 - a)) >> 8`, and `dst` unchanged when `a = 0`.
+/// `a = 255` returns the colour of `src`; no result exceeds 255. The original uses it for
+/// all but one pixel of a row of a window layer; which pixel takes [`blend_normal`] instead is
+/// a matter of the quad, decided by the compositors.
+///
+/// PROVENANCE: ReverseEngineered (oracle measurement 2026-10-09, RGSS103J, window probes).
+pub const fn blend_window(dst: Rgba, src: Rgba, opacity: u8) -> Rgba {
+    let a = effective_alpha(src[3], opacity);
+    if a == 0 {
+        return dst;
+    }
+    [
+        window_mix(dst[0], src[0], a),
+        window_mix(dst[1], src[1], a),
+        window_mix(dst[2], src[2], a),
         dst[3],
     ]
 }
@@ -817,6 +857,42 @@ mod tests {
         );
     }
 
+    #[test]
+    fn window_blend_weights_sum_to_257() {
+        // a = 84: (128 * 85 + 90 * 172) >> 8 = 102, (252 * 85 + 23 * 172) >> 8 = 99 and
+        // (0 * 85 + 3 * 172) >> 8 = 2.
+        assert_eq!(
+            blend_window([90, 23, 3, 255], [128, 252, 0, 84], 255),
+            [102, 99, 2, 255]
+        );
+        // a = 4: (0 * 5 + 161 * 252) >> 8 = 158, where the normal blend gives
+        // 161 + ((-161 * 5) >> 8) = 157.
+        assert_eq!(
+            blend_window([161, 21, 90, 255], [0, 255, 128, 4], 255)[0],
+            158
+        );
+        assert_eq!(
+            blend_normal([161, 21, 90, 255], [0, 255, 128, 4], 255)[0],
+            157
+        );
+        // No channel leaves the range, although the weights sum to 257.
+        assert_eq!(blend_window([255; 4], [255, 255, 255, 1], 255), [255; 4]);
+        assert_eq!(blend_window([255; 4], [255, 255, 255, 128], 255), [255; 4]);
+        // Alpha 0 leaves the pixel alone, 255 replaces the colour, the alpha is kept.
+        assert_eq!(
+            blend_window([1, 2, 3, 77], [9, 9, 9, 0], 255),
+            [1, 2, 3, 77]
+        );
+        assert_eq!(
+            blend_window([1, 2, 3, 77], [9, 9, 9, 255], 0),
+            [1, 2, 3, 77]
+        );
+        assert_eq!(
+            blend_window([1, 2, 3, 77], [9, 8, 7, 255], 255),
+            [9, 8, 7, 77]
+        );
+    }
+
     /// Names of the `pub fn`s declared in this file, in order.
     fn public_functions() -> Vec<&'static str> {
         include_str!("arith.rs")
@@ -833,7 +909,7 @@ mod tests {
     #[test]
     fn every_public_function_is_listed_once_in_order() {
         let functions = public_functions();
-        assert_eq!(functions.len(), 10, "found {functions:?}");
+        assert_eq!(functions.len(), 11, "found {functions:?}");
         let listed: Vec<&str> = crate::provenance().iter().map(|entry| entry.name).collect();
         assert_eq!(listed, functions);
     }
@@ -850,6 +926,7 @@ mod tests {
                 let probe = match entry.name {
                     "blend_normal_translucent" => "bitmap blt probe",
                     "apply_gray" => "tone probe",
+                    "blend_window" => "window probes",
                     _ => "screen blend probe",
                 };
                 assert_eq!(

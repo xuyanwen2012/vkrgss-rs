@@ -267,7 +267,7 @@ mod tests {
     #[test]
     fn compositing_provenance_is_unchanged() {
         let names: Vec<&str> = crate::provenance().iter().map(|entry| entry.name).collect();
-        assert_eq!(names.len(), 10);
+        assert_eq!(names.len(), 11);
         assert_eq!(
             names,
             [
@@ -278,6 +278,7 @@ mod tests {
                 "blend_add_translucent",
                 "blend_sub",
                 "blend_sub_translucent",
+                "blend_window",
                 "blend_color",
                 "apply_gray",
                 "apply_tone",
