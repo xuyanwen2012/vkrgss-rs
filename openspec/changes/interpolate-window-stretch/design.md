@@ -22,3 +22,9 @@
 - Committed samples come from the probe captures of the corrected measurement (non-ramp
   skins); the earlier ramp samples stay valid for both rules.
 - The binding calls `set_active` and `set_pause`.
+
+## Follow-ups
+
+- A skin smaller than the layout: the bilinear stretch counts texels outside the skin as
+  transparent. The original was not measured with such a skin on this path (the nearest
+  stretch has its measured clipping rules in `Bitmap#stretch_blt`).

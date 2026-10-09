@@ -2,7 +2,7 @@
 
 ## 1. Stretch (`vkxp-core`)
 
-- [ ] 1.1 Implement the bilinear stretch for the background and the cursor centre and commit samples of the corrected measurement. Verify: the scenarios of the two stretch requirements in `specs/core-scene/spec.md`; the earlier window tests still pass.
+- [x] 1.1 Implement the bilinear stretch for the background and the cursor centre and commit samples of the corrected measurement. Verify: the scenarios of the two stretch requirements in `specs/core-scene/spec.md`; the earlier window tests still pass.
 
 ## 2. Binding (`vkxp-binding`)
 

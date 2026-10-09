@@ -117,10 +117,10 @@ impl Caches {
     }
 }
 
-/// The part of a `side` by `side` block of the skin that is stretched to `width` by `height`
-/// with the stretch rule: all of it, or one texel less in both directions as soon as the
-/// target is more than half the block in both directions and not a copy of it. The last
-/// column and row of the block are never shown then.
+/// The numerator with which a `side` by `side` block of the skin is stretched to `width` by
+/// `height`: `side`, or one less in both directions as soon as the target is more than half
+/// the block in both directions and not a copy of it. With `side` the stretch is the stretch
+/// rule, which picks texels; with the reduced numerator it is [`stretch_bilinear`].
 fn stretched_part(side: i32, width: i32, height: i32) -> i32 {
     let over_half = width > side / 2 && height > side / 2;
     if over_half && (width, height) != (side, side) {
@@ -128,6 +128,86 @@ fn stretched_part(side: i32, width: i32, height: i32) -> i32 {
     } else {
         side
     }
+}
+
+/// A colour and an alpha; no colour where no texel with an alpha above 0 lent one.
+type Mixed = (Option<[u8; 3]>, u8);
+
+/// `p + (((q - p) * f) >> 8)`, the shift being an arithmetic one.
+fn lerp(p: u8, q: u8, f: i32) -> u8 {
+    // Between `p` and `q`, as `f` is below 256.
+    (i32::from(p) + (((i32::from(q) - i32::from(p)) * f) >> 8)) as u8
+}
+
+/// `p` and `q` weighted by `f` of 256: the alpha always, the colour where both have one;
+/// where one has none, the colour is the other's, unweighted.
+fn mix(p: Mixed, q: Mixed, f: i32) -> Mixed {
+    let colour = match (p.0, q.0) {
+        (Some(p), Some(q)) => Some([0, 1, 2].map(|c| lerp(p[c], q[c], f))),
+        (p, q) => p.or(q),
+    };
+    (colour, lerp(p.1, q.1, f))
+}
+
+/// Where pixel `i` of `length` reads a block stretched with the reduced numerator `part`:
+/// the texel, and the weight of the next one in 256ths.
+fn bilinear_position(i: usize, part: i32, length: i32) -> (i32, i32) {
+    let position = i as i64 * ((i64::from(part) << 32) / i64::from(length));
+    // The texel is below `part`, as `i` is below `length`.
+    ((position >> 32) as i32, ((position >> 24) & 255) as i32)
+}
+
+/// Stretches the `side` by `side` block of `skin` at `corner` over the rectangle `to` of the
+/// cleared bitmap `dst` as the original does with the reduced numerator `side - 1`: each
+/// pixel is interpolated between four texels, along the row first and then between the two
+/// rows, with 8-bit weights and truncation, the alpha like a colour channel. A texel with an
+/// alpha of 0 lends no colour.
+///
+/// Texels outside the skin count as transparent (not measured).
+fn stretch_bilinear(
+    bitmaps: &mut Bitmaps,
+    dst: BitmapId,
+    to: Rect,
+    skin: BitmapId,
+    corner: (i32, i32),
+    side: i32,
+) -> Result<(), BitmapError> {
+    let Some(area) = bitmaps.get(dst)?.clip(to) else {
+        return Ok(());
+    };
+    let source = bitmaps.get(skin)?;
+    let texel = |x: i32, y: i32| -> Mixed {
+        let inside = (0..source.width as i64).contains(&i64::from(x))
+            && (0..source.height as i64).contains(&i64::from(y));
+        if !inside {
+            return (None, 0);
+        }
+        let [r, g, b, a] = source.pixel(x as usize, y as usize);
+        ((a != 0).then_some([r, g, b]), a)
+    };
+    let mut pixels = Vec::with_capacity((area.right - area.left) * (area.bottom - area.top));
+    for y in area.top..area.bottom {
+        let (y0, fy) = bilinear_position(y - to.y as usize, side - 1, to.height);
+        for x in area.left..area.right {
+            let (x0, fx) = bilinear_position(x - to.x as usize, side - 1, to.width);
+            let row = |y: i32| {
+                let (x, y) = (corner.0 + x0, corner.1 + y);
+                mix(texel(x, y), texel(x + 1, y), fx)
+            };
+            let (colour, alpha) = mix(row(y0), row(y0 + 1), fy);
+            let [r, g, b] = colour.unwrap_or_default();
+            pixels.push([r, g, b, alpha]);
+        }
+    }
+    let target = bitmaps.get_mut(dst)?;
+    let mut pixels = pixels.into_iter();
+    for y in area.top..area.bottom {
+        for (x, pixel) in (area.left..area.right).zip(&mut pixels) {
+            target.put(x, y, pixel);
+        }
+    }
+    target.mark(area);
+    Ok(())
 }
 
 /// The background: the skin's pattern stretched to the inner size of the window, or tiled
@@ -147,9 +227,12 @@ fn draw_background(
 ) -> Result<(), BitmapError> {
     let width = width - 1;
     if stretch {
-        let part = stretched_part(PATTERN, width, height);
-        let from = Rect::new(0, 0, part, part);
-        return bitmaps.stretch_blt(dst, Rect::new(0, 0, width, height), skin, from, 255);
+        let to = Rect::new(0, 0, width, height);
+        if stretched_part(PATTERN, width, height) < PATTERN {
+            return stretch_bilinear(bitmaps, dst, to, skin, (0, 0), PATTERN);
+        }
+        let from = Rect::new(0, 0, PATTERN, PATTERN);
+        return bitmaps.stretch_blt(dst, to, skin, from, 255);
     }
     for y in (0..height).step_by(PATTERN as usize) {
         for x in (0..width).step_by(PATTERN as usize) {
@@ -218,10 +301,14 @@ fn draw_cursor(
     let (near_x, near_y) = (CURSOR.x, CURSOR.y);
     let (far_x, far_y) = (near_x + border + image, near_y + border + image);
     if inner_width > 0 && inner_height > 0 {
-        let part = stretched_part(image, inner_width, inner_height);
-        let from = Rect::new(near_x + border, near_y + border, part, part);
+        let corner = (near_x + border, near_y + border);
         let to = Rect::new(border, border, inner_width, inner_height);
-        bitmaps.stretch_blt(dst, to, skin, from, 255)?;
+        if stretched_part(image, inner_width, inner_height) < image {
+            stretch_bilinear(bitmaps, dst, to, skin, corner, image)?;
+        } else {
+            let from = Rect::new(corner.0, corner.1, image, image);
+            bitmaps.stretch_blt(dst, to, skin, from, 255)?;
+        }
     }
     if inner_width > 0 {
         for (y, skin_y) in [(0, near_y), (height - border, far_y)] {
@@ -1937,6 +2024,99 @@ mod tests {
             let drawn = bounds(&frame, |pixel| pixel != BLACK);
             assert_eq!(drawn, Some([16, 16, 15 + width, 15 + height]), "{sample:?}");
         }
+    }
+
+    /// Renders each sample of `kind`, a window with the listed texels for a skin, and checks
+    /// the listed pixels; returns whether any of the texels had an alpha of 0.
+    fn bilinear_samples_show_as_measured(kind: &str) -> bool {
+        let mut transparent = false;
+        for sample in samples(kind) {
+            let head = numbers(sample[0]);
+            let (width, height) = (head[0], head[1]);
+            let mut rgba = vec![0; 192 * 128 * 4];
+            for texel in sample[1].split_whitespace() {
+                let &[x, y, r, g, b, a] = numbers(&texel.replace(',', " ")).as_slice() else {
+                    panic!("{texel}");
+                };
+                let offset = (y as usize * 192 + x as usize) * 4;
+                rgba[offset..offset + 4].copy_from_slice(&[r as u8, g as u8, b as u8, a as u8]);
+                transparent |= a == 0;
+            }
+            let mut stage = Stage::sized(width as u32, height as u32);
+            let skin = stage.bitmap(192, 128, rgba);
+            let id = sized(&mut stage, skin, width, height);
+            if let &[_, _, x, y, cursor_width, cursor_height] = head.as_slice() {
+                let rect = Rect::new(x, y, cursor_width, cursor_height);
+                stage.scene.window_mut(id).unwrap().cursor_rect = rect;
+            }
+            let frame = stage.frame();
+            for pixel in sample[2].split_whitespace() {
+                let &[x, y, r, g, b] = numbers(&pixel.replace(',', " ")).as_slice() else {
+                    panic!("{pixel}");
+                };
+                let expected = [r as u8, g as u8, b as u8, 255];
+                assert_eq!(
+                    frame.pixel(x as u32, y as u32),
+                    expected,
+                    "{head:?} {pixel}"
+                );
+            }
+        }
+        transparent
+    }
+
+    #[test]
+    fn the_background_is_interpolated_as_measured() {
+        assert!(bilinear_samples_show_as_measured("bilinear-bg"));
+    }
+
+    #[test]
+    fn the_centre_of_the_cursor_is_interpolated_as_measured() {
+        assert!(bilinear_samples_show_as_measured("bilinear-cursor"));
+    }
+
+    #[test]
+    fn a_pixel_between_two_texels_is_not_the_nearest_texel() {
+        let mut stage = Stage::sized(480, 100);
+        let mut rgba = vec![0; 192 * 128 * 4];
+        for y in 0..128 {
+            for (x, value) in [(63, 70), (64, 69)] {
+                let offset = (y * 192 + x) * 4;
+                rgba[offset..offset + 4].copy_from_slice(&[value, value, value, 255]);
+            }
+        }
+        let skin = stage.bitmap(192, 128, rgba);
+        sized(&mut stage, skin, 480, 100);
+        // Pixel 238 of 476 lies at texel 63 and 127 of 256, and 70 - 127 / 256 truncates
+        // to 69.
+        assert_eq!(stage.frame().pixel(2 + 238, 50), [69, 69, 69, 255]);
+    }
+
+    #[test]
+    fn a_transparent_texel_lends_no_colour() {
+        // The row's colour is the other texel's, whichever of the two is transparent, and
+        // its alpha is interpolated.
+        let (opaque, clear): (Mixed, Mixed) = ((Some([200, 100, 50]), 255), (None, 0));
+        assert_eq!(mix(opaque, clear, 64), (Some([200, 100, 50]), 191));
+        assert_eq!(mix(clear, opaque, 64), (Some([200, 100, 50]), 63));
+        assert_eq!(mix(clear, clear, 64), (None, 0));
+
+        // On the screen: texel 63 transparent, texel 64 opaque, as in the example above.
+        let mut stage = Stage::sized(480, 100);
+        let mut rgba = vec![0; 192 * 128 * 4];
+        for y in 0..128 {
+            let offset = (y * 192 + 64) * 4;
+            rgba[offset..offset + 4].copy_from_slice(&[200, 100, 50, 255]);
+            // A colour that must not show.
+            rgba[offset - 4..offset].copy_from_slice(&[9, 9, 9, 0]);
+        }
+        let skin = stage.bitmap(192, 128, rgba);
+        sized(&mut stage, skin, 480, 100);
+        // The alpha is 0 + ((255 * 127) >> 8) = 126, and the window blend over black gives
+        // (colour * 127) >> 8.
+        let expected = [200, 100, 50].map(|c: i32| ((c * 127) >> 8) as u8);
+        let [r, g, b] = expected;
+        assert_eq!(stage.frame().pixel(2 + 238, 50), [r, g, b, 255]);
     }
 
     /// The skin of the animation probes: a white cursor and four pause images.
