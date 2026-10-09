@@ -7,8 +7,8 @@
 
 ## 2. Configuration (`vkxp`)
 
-- [ ] 2.1 Add the configuration structure, its layering with the options and `--config` and `--no-config`. Verify: tests for the scenarios of `specs/game-launch/spec.md`.
-- [ ] 2.2 Document the file in `README.md` with a complete example. Verify: a test parses the README's example with the real loader.
+- [x] 2.1 Add the configuration structure, its layering with the options and `--config` and `--no-config`. Verify: tests for the scenarios of `specs/game-launch/spec.md`.
+- [x] 2.2 Document the file in `README.md` with a complete example. Verify: a test parses the README's example with the real loader.
 
 ## 3. Integration check
 

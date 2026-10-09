@@ -10,7 +10,7 @@ use gilrs::{Axis, Gilrs};
 use vkxp_proto::{Button, InputSnapshot};
 
 use crate::MapError;
-use crate::keys::with_overrides;
+use crate::keys::{same_bindings, with_overrides};
 
 /// How far the left stick has to be pushed along an axis to hold a direction.
 pub const DEAD_ZONE: f32 = 0.5;
@@ -83,10 +83,19 @@ pub struct PadState {
 }
 
 /// Which buttons each pad button holds down.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct GamepadMap {
     bindings: Vec<(PadButton, Button)>,
 }
+
+/// Two maps are equal when they hold the same bindings, in whatever order.
+impl PartialEq for GamepadMap {
+    fn eq(&self, other: &GamepadMap) -> bool {
+        same_bindings(&self.bindings, &other.bindings)
+    }
+}
+
+impl Eq for GamepadMap {}
 
 impl GamepadMap {
     /// The default map with the pad buttons of every button in `overrides` replaced: the

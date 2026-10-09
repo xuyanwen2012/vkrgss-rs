@@ -14,6 +14,8 @@ workspace = true
 [dependencies]
 anyhow.workspace = true
 libc.workspace = true
+serde.workspace = true
+toml.workspace = true
 vkxp-binding.workspace = true
 vkxp-core.workspace = true
 vkxp-host.workspace = true

@@ -6,7 +6,8 @@ The project can start a game: `vkxp <game directory>` runs the game's scripts in
 Ruby interpreter against the RGSS classes and shows the frames of the Vulkan compositor in a
 window, or writes them to files in a headless run. In a window it plays the game's audio:
 Ogg Vorbis, WAV, MP3 and, with a SoundFont, MIDI. A game's encrypted archive (`Game.rgssad`)
-is read. There is no configuration file or gamepad support yet.
+is read. Settings come from configuration files and the command line, and gamepads work
+besides the keyboard.
 `docs/decisions.md` records the settled design, and `openspec/` holds the change proposals
 that implement it.
 
@@ -141,6 +142,8 @@ Paths on the command line are relative to the directory the program was started 
 
 | Option | Meaning |
 |---|---|
+| `--config FILE` | The user's configuration file, instead of the default location. See *Configuration files*. |
+| `--no-config` | Read no configuration file. Not together with `--config`. |
 | `--rtp NAME=DIR` | The directory of the run-time package that `Game.ini` names `NAME`. Repeatable. A game that names a package without this option does not start. |
 | `--builtin-scripts FILE` | The built-in scripts file, instead of the default location. |
 | `--device INDEX\|NAME` | The Vulkan device: its index or a part of its name, as `vulkaninfo --summary` prints them. In a window the default is the first discrete GPU, then an integrated one; headless it is `llvmpipe`. |
@@ -165,6 +168,87 @@ The exit status is 0 when the game ends normally: its scripts return or call `ex
 window is closed, or the frame limit of a headless run is reached. It is non-zero when a
 script error ends the game (its report is on the error stream), when the host fails, when a
 frame is rejected in a headless run, or when a frame that was to be dumped was never reached.
+
+### Configuration files
+
+What the options above set can be written down in two files, both optional: the user's, at
+`$XDG_CONFIG_HOME/vkxp/config.toml` (`~/.config/vkxp/config.toml` unless `XDG_CONFIG_HOME` is
+set) or wherever `--config` says, and `vkxp.toml` in the game directory. The game's file
+overrides the user's and the command line overrides both: a value replaces the value, a list
+replaces the whole list, and the tables `[rtp]`, `[keys]` and `[gamepad]` are overridden entry
+by entry. `--no-config` reads neither file. Paths in a file are relative to the directory of
+that file. A file that does not parse, or that holds an unknown key, a value of the wrong type
+or an unknown name of a key or button, ends the program with an error that names the file and
+what is wrong in it, before any window opens.
+
+This example holds every setting. Its `[keys]` and `[gamepad]` tables are the default maps,
+so leaving them out changes nothing:
+
+```toml
+builtin_scripts = "rpg_builtin.rb"           # --builtin-scripts
+device = "RADV"                              # --device; an index is written "0"
+font_dirs = ["fonts"]                        # --font-dir, in this order
+encoding = "gbk"                             # --encoding
+debug = false                                # true is --debug
+allow_process_functions = false              # true is --allow-process-functions
+audio = true                                 # false is --no-audio
+soundfont = "/usr/share/soundfonts/FluidR3_GM.sf2" # --soundfont
+seed = 7                                     # --seed
+preload = ["patches/fonts.rb"]               # --preload, in this order
+
+[rtp]                                        # --rtp NAME=DIR
+Standard = "/home/me/rtp/Standard"
+
+[keys]
+DOWN = ["ArrowDown", "Numpad2"]
+LEFT = ["ArrowLeft", "Numpad4"]
+RIGHT = ["ArrowRight", "Numpad6"]
+UP = ["ArrowUp", "Numpad8"]
+A = ["ShiftLeft", "ShiftRight", "KeyZ"]
+B = ["Escape", "Numpad0", "Insert", "KeyX"]
+C = ["Space", "Enter", "NumpadEnter", "KeyC"]
+X = ["KeyA"]
+Y = ["KeyS"]
+Z = ["KeyD"]
+L = ["KeyQ", "PageUp"]
+R = ["KeyW", "PageDown"]
+SHIFT = ["ShiftLeft", "ShiftRight"]
+CTRL = ["ControlLeft", "ControlRight"]
+ALT = ["AltLeft", "AltRight"]
+F5 = ["F5"]
+F6 = ["F6"]
+F7 = ["F7"]
+F8 = ["F8"]
+F9 = ["F9"]
+
+[gamepad]
+A = ["West"]
+B = ["East", "Select"]
+C = ["South", "Start"]
+X = ["North"]
+L = ["LeftShoulder"]
+R = ["RightShoulder"]
+```
+
+In `[keys]` and `[gamepad]` a button, by the name of its `Input` constant, is held by exactly
+the keys or pad buttons listed for it; an empty list leaves it without any. Buttons that are
+not mentioned keep their defaults. A key is named as the key codes of `winit` are
+(`winit::keyboard::KeyCode`): `KeyA` to `KeyZ`, `Digit0` to `Digit9`, `Numpad0` to `Numpad9`,
+`F1` to `F12`, `ArrowUp`, `Space`, `Enter`, `Escape`, `ShiftLeft`, `ControlRight` and so on.
+They name the position of a key, not the letter a keyboard layout puts on it. The host keys
+(F12, F2, Tab, Alt+Enter) are not part of the map.
+
+### Gamepads
+
+A windowed run reads every connected gamepad together with the keyboard: a button is held
+while a key or a pad holds it. The directional pad and the left stick, pushed more than half
+of its way along an axis, are the directions. The other pad buttons hold what `[gamepad]`
+says, by default as in the example above; their names are `South`, `East`, `West`, `North`
+(the four face buttons by position), `LeftShoulder`, `RightShoulder`, `LeftTrigger`,
+`RightTrigger`, `Select`, `Start`, `LeftStick` and `RightStick` (the sticks pressed). A pad
+may be connected or removed while the game runs, and a removed pad releases what it held. On
+a machine where gamepads cannot be read this is said once on the error stream and the game
+runs with the keyboard. A headless run reads no gamepad.
 
 ### In a window
 
@@ -333,6 +417,7 @@ Building the workspace compiles the shaders of `vkxp-vk` and the embedded Ruby i
 | build | `glslc` on `PATH`, to compile GLSL to SPIR-V | `glslc` or `shaderc` |
 | build | `spirv-val` on `PATH`, to validate the SPIR-V | `spirv-tools` |
 | build | the development files of ALSA (`alsa.pc`, `libasound.so`), for the audio output | `alsa-lib-devel` or `libasound2-dev` |
+| build | the development files of libudev (`libudev.pc`, `libudev.so`), for gamepads | `systemd-devel` or `libudev-dev` |
 | test | a Vulkan 1.3 device; the Mesa software rasteriser lavapipe (llvmpipe) is enough | `mesa-vulkan-drivers` |
 | test, optional | the Khronos validation layer `VK_LAYER_KHRONOS_validation` | `vulkan-validation-layers` |
 

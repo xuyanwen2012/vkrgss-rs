@@ -11,6 +11,9 @@ pub const USAGE: &str = "\
 usage: vkxp [GAME_DIR] [OPTIONS]
 
   GAME_DIR                  the game directory; the current directory if absent
+  --config FILE             the user's configuration file;
+                            default: $XDG_CONFIG_HOME/vkxp/config.toml
+  --no-config               read neither that file nor vkxp.toml in the game directory
   --rtp NAME=DIR            the directory of the run-time package NAME; repeatable
   --builtin-scripts FILE    the built-in scripts file, made by `cargo xtask extract-rpg`;
                             default: $XDG_DATA_HOME/vkxp/rpg_builtin.rb
@@ -47,6 +50,10 @@ pub enum Input {
 pub struct Options {
     /// The game directory, if one was given.
     pub game_dir: Option<PathBuf>,
+    /// The user's configuration file, instead of the default location.
+    pub config: Option<PathBuf>,
+    /// Whether no configuration file is read.
+    pub no_config: bool,
     /// The directory of each run-time package, by its name.
     pub rtps: BTreeMap<String, PathBuf>,
     pub builtin_scripts: Option<PathBuf>,
@@ -83,14 +90,15 @@ fn pair<'a>(option: &str, text: &'a str, form: &str) -> Result<(&'a str, &'a str
         .ok_or_else(|| format!("{option}: `{text}` is not of the form {form}"))
 }
 
-fn encoding(text: &str) -> Result<Encoding, String> {
+/// The encoding with this name, in either case. The error says what the names are.
+pub fn encoding(text: &str) -> Result<Encoding, String> {
     match text.to_ascii_lowercase().as_str() {
         "utf-8" => Ok(Encoding::Utf8),
         "gbk" => Ok(Encoding::Gbk),
         "shift-jis" => Ok(Encoding::ShiftJis),
         "big5" => Ok(Encoding::Big5),
         _ => Err(format!(
-            "--encoding: `{text}` is not one of utf-8, gbk, shift-jis, big5"
+            "`{text}` is not one of utf-8, gbk, shift-jis, big5"
         )),
     }
 }
@@ -114,7 +122,13 @@ pub fn parse(arguments: &[String]) -> Result<Options, String> {
             "--builtin-scripts" => options.builtin_scripts = Some(PathBuf::from(value()?)),
             "--device" => options.device = Some(value()?.clone()),
             "--font-dir" => options.font_dirs.push(PathBuf::from(value()?)),
-            "--encoding" => options.encoding = Some(encoding(value()?)?),
+            "--config" => options.config = Some(PathBuf::from(value()?)),
+            "--no-config" => options.no_config = true,
+            "--encoding" => {
+                let encoding =
+                    encoding(value()?).map_err(|error| format!("--encoding: {error}"))?;
+                options.encoding = Some(encoding);
+            }
             "--debug" => options.debug = true,
             "--allow-process-functions" => options.process_functions = true,
             "--no-audio" => options.no_audio = true,
@@ -170,6 +184,9 @@ pub fn parse(arguments: &[String]) -> Result<Options, String> {
         if let Some((_, option)) = headless_only.iter().find(|(given, _)| *given) {
             return Err(format!("{option} needs --headless"));
         }
+    }
+    if options.no_config && options.config.is_some() {
+        return Err("--config cannot be used together with --no-config".to_owned());
     }
     if options.replay.is_some() {
         // A replay stands in for every other input.
@@ -326,6 +343,23 @@ mod tests {
         let error =
             parse_words(&["--headless", "--input", "1:UP", "--replay", "b.txt"]).unwrap_err();
         assert!(error.contains("--input"), "{error}");
+    }
+
+    #[test]
+    fn the_configuration_file_is_named_or_left_out() {
+        let options = parse_words(&["game"]).unwrap();
+        assert_eq!(options.config, None);
+        assert!(!options.no_config);
+
+        let options = parse_words(&["game", "--config", "my.toml"]).unwrap();
+        assert_eq!(options.config, Some("my.toml".into()));
+
+        let options = parse_words(&["--no-config", "game"]).unwrap();
+        assert!(options.no_config);
+
+        let error = parse_words(&["--no-config", "--config", "my.toml"]).unwrap_err();
+        assert!(error.contains("--no-config"), "{error}");
+        assert!(parse_words(&["--config"]).is_err());
     }
 
     #[test]

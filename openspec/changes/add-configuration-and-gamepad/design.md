@@ -28,3 +28,22 @@
 
 - [`gilrs` needs `libudev` development files on Linux] → Check what the build needs; if it is
   not on the development machine, say so in the final report and in the README prerequisites.
+
+## Follow-ups
+
+- The files hold the settings the proposal lists, plus `encoding`, `debug` and
+  `allow_process_functions`. The options that shape one run (`--record`, `--replay`,
+  `--headless`, `--frames`, `--input`, `--dump`) have no key in the files. Should they?
+- The development machine has `libudev.so.1` but not the development files of libudev
+  (`libudev.pc`), which `gilrs` needs to build through `libudev-sys`. The change was built
+  with a stand-in like the one for ALSA, kept under the ignored `local/udev-standin` and added
+  to `PKG_CONFIG_PATH`. Either install `systemd-devel` or move the stand-in next to the ALSA
+  one and name it in the agent guide.
+- The windowed runner reads the pads whenever its event loop wakes, which a running game makes
+  happen at least once per frame. A pad does not wake the loop by itself; whether it should
+  (a thread that waits for pad events) is open.
+- `gilrs` is built with its default features, because `gilrs-core` refuses to compile without
+  a Windows backend feature on every target.
+- A seed in a file is a TOML integer, so seeds above 2^63 - 1 can only be given with `--seed`.
+- No pad was at hand: the mapping is tested over plain pad states, the `gilrs` layer was not
+  exercised with a device.

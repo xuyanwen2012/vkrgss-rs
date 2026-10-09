@@ -28,6 +28,11 @@ fn key_named(name: &str) -> Option<KeyCode> {
     KeyCode::deserialize(IntoDeserializer::<NameError>::into_deserializer(name)).ok()
 }
 
+/// Whether two lists without repetitions hold the same bindings.
+pub(crate) fn same_bindings<T: PartialEq>(one: &[T], other: &[T]) -> bool {
+    one.len() == other.len() && one.iter().all(|binding| other.contains(binding))
+}
+
 /// `defaults` with the bindings of every button in `overrides` replaced by the ones listed
 /// for it. Shared by the key map and the gamepad map.
 pub(crate) fn with_overrides<T: Copy + PartialEq>(
@@ -51,10 +56,19 @@ pub(crate) fn with_overrides<T: Copy + PartialEq>(
 
 /// Which buttons each physical key holds down. One key may hold several buttons and several
 /// keys may hold the same one.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct KeyMap {
     bindings: Vec<(KeyCode, Button)>,
 }
+
+/// Two maps are equal when they hold the same bindings, in whatever order.
+impl PartialEq for KeyMap {
+    fn eq(&self, other: &KeyMap) -> bool {
+        same_bindings(&self.bindings, &other.bindings)
+    }
+}
+
+impl Eq for KeyMap {}
 
 /// The default bindings, those of the original runtime.
 const DEFAULTS: [(KeyCode, Button); 37] = [

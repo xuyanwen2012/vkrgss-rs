@@ -106,14 +106,16 @@ fn vkxp(arguments: &[&str]) -> Ran {
     )
 }
 
-/// Runs the executable in `work`, which is also where it looks for the user's data.
+/// Runs the executable in `work`, which is also where it looks for the user's data and
+/// configuration.
 fn vkxp_in(work: TempDir, arguments: &[&str]) -> Ran {
     let restriction = isolation();
     let mut command = Command::new(env!("CARGO_BIN_EXE_vkxp"));
     command
         .args(arguments)
         .current_dir(work.path())
-        .env("XDG_DATA_HOME", work.path());
+        .env("XDG_DATA_HOME", work.path())
+        .env("XDG_CONFIG_HOME", work.path());
     for (name, value) in restriction {
         command.env(name, value);
     }
@@ -356,6 +358,76 @@ fn a_run_time_package_that_is_not_given_is_an_error_naming_it_and_the_option() {
     assert!(stderr.contains("Standard"), "{stderr}");
     assert!(stderr.contains("--rtp"), "{stderr}");
     assert!(!game.dir().join("size.txt").exists());
+}
+
+/// A fresh directory for a run with `text` as the user's configuration file at its default
+/// location below it.
+fn work_with_user_config(text: &str) -> TempDir {
+    let work = tempfile::tempdir().unwrap();
+    fs::create_dir(work.path().join("vkxp")).unwrap();
+    fs::write(work.path().join("vkxp").join("config.toml"), text).unwrap();
+    work
+}
+
+/// Scenario "RTP from the file".
+#[test]
+fn a_run_time_package_named_in_the_user_file_is_found() {
+    let (game, rtp) = rtp_game("e2e-rtp-config");
+    let work = work_with_user_config(&format!("[rtp]\nStandard = '{}'\n", rtp.path().display()));
+    let ran = headless_in(work, &game, &[]);
+    ran.assert_success();
+    let size = fs::read_to_string(game.dir().join("size.txt")).expect("the script ran");
+    assert_eq!(size, "3x2");
+}
+
+/// Scenario "Precedence".
+#[test]
+fn the_seed_of_the_game_file_overrides_the_user_file_and_the_command_line_both() {
+    let game = rand_game("e2e-config-seed");
+    let run = |user: Option<&str>, arguments: &[&str]| {
+        let mut all = vec!["--dump", "2=out.png"];
+        all.extend_from_slice(arguments);
+        let work = match user {
+            Some(text) => work_with_user_config(text),
+            None => tempfile::tempdir().unwrap(),
+        };
+        let ran = headless_in(work, &game, &all);
+        ran.assert_success();
+        fs::read(ran.file("out.png")).unwrap()
+    };
+    let seeds: Vec<Vec<u8>> = ["1", "2", "3"]
+        .iter()
+        .map(|seed| run(None, &["--seed", seed]))
+        .collect();
+    assert_ne!(seeds[0], seeds[1]);
+    assert_ne!(seeds[1], seeds[2]);
+
+    assert_eq!(run(Some("seed = 1"), &[]), seeds[0]);
+    fs::write(game.dir().join("vkxp.toml"), "seed = 2").unwrap();
+    assert_eq!(run(Some("seed = 1"), &[]), seeds[1]);
+    assert_eq!(run(Some("seed = 1"), &["--seed", "3"]), seeds[2]);
+    assert_eq!(
+        run(Some("seed = 1"), &["--no-config", "--seed", "1"]),
+        seeds[0]
+    );
+}
+
+/// Scenarios "Ignored" and "Unknown key".
+#[test]
+fn a_user_file_with_an_error_ends_the_program_unless_it_is_ignored() {
+    let game = Game::new(
+        "e2e-config-error",
+        "Config",
+        &[("Main", "3.times { Graphics.update }")],
+    );
+    let ran = headless_in(work_with_user_config("sead = 1"), &game, &[]);
+    ran.assert_failure();
+    let stderr = ran.stderr();
+    assert!(stderr.contains("config.toml"), "{stderr}");
+    assert!(stderr.contains("sead"), "{stderr}");
+
+    let ran = headless_in(work_with_user_config("sead = 1"), &game, &["--no-config"]);
+    ran.assert_success();
 }
 
 #[test]

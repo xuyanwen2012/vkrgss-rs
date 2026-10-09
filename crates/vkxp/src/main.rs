@@ -9,7 +9,8 @@
 //!
 //! 1. The arguments are parsed (`args`); a mistake there ends with the usage message and
 //!    status 2.
-//! 2. `Game.ini` is read, the run-time packages it names are looked up in the `--rtp` table,
+//! 2. The configuration files are read and the command line is put over them (`config`).
+//!    `Game.ini` is read, the run-time packages it names are looked up in the `--rtp` table,
 //!    the built-in scripts file is found and a SoundFont named with `--soundfont` is checked
 //!    to exist. The recording of `--replay` is read or the file of `--record` created, the
 //!    random seed is settled, and the game's files are opened, with the encrypted archive
@@ -33,6 +34,7 @@
 //! and then exits with a message and a non-zero status.
 
 mod args;
+mod config;
 mod font;
 mod signals;
 
@@ -53,6 +55,7 @@ use vkxp_ruby_sys::Interpreter;
 use vkxp_vfs::{GameFiles, GameIni, VfsError, resolve_rtps};
 
 use crate::args::{Input, Options};
+use crate::config::Settings;
 use crate::font::FontBackend;
 
 /// How long the program waits for the game's scripts to end after the host has.
@@ -206,6 +209,11 @@ fn seed_and_input(options: &Options) -> Result<(u64, Option<Box<dyn InputSource>
 /// run that failed and has said why.
 fn run(options: Options, script: InputScript) -> Result<bool> {
     let game_dir = absolute(options.game_dir.as_deref().unwrap_or(Path::new(".")))?;
+    let Settings {
+        options,
+        keys,
+        pads,
+    } = config::settle(config::load(&options, &game_dir)?, options)?;
     let ini = GameIni::read(&game_dir, options.encoding)?;
     let rtp_table = options
         .rtps
@@ -215,7 +223,7 @@ fn run(options: Options, script: InputScript) -> Result<bool> {
     let rtp_dirs = resolve_rtps(&ini.rtp, &rtp_table).map_err(|error| match error {
         VfsError::UnknownRtp { name } => anyhow!(
             "the game needs the run-time package `{name}`; pass its directory with --rtp \
-             {name}=DIR"
+             {name}=DIR or name it under [rtp] in a configuration file"
         ),
         other => other.into(),
     })?;
@@ -305,6 +313,8 @@ fn run(options: Options, script: InputScript) -> Result<bool> {
     } else {
         let host_options = WindowedOptions {
             title,
+            keys,
+            pads,
             audio,
             input,
             ..WindowedOptions::new(device.unwrap_or_default())
