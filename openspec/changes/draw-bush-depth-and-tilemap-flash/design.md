@@ -29,3 +29,12 @@ quad just above the ground layer and below every priority layer. The pulse is a 
 
 - [Rebuilding the overlay every pulse step] → Only when flash data is present and has non-zero
   cells in view; the bitmap is at most the visible area.
+
+## Follow-ups
+
+- The pulse reaches alpha 0 once per period, so a tilemap that is never updated shows no
+  flash. Whether the original's pulse has a floor is part of the PLACEHOLDER measurement.
+- The flash data is read as repeating beyond its edges, like the map data. Not checked against
+  the original.
+- The overlay bitmap is uploaded whole on every pulse step while a flashing cell is in view.
+  The tilemap op of `docs/decisions.md` is the place to remove that cost.
