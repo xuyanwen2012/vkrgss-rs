@@ -220,7 +220,7 @@ pub(crate) fn encode_ops(
                 record.set_tone_and_color(effect.tone, effect.color);
                 records.push(record);
             }
-            Op::Plane { .. } | Op::TilemapLayer { .. } => {
+            Op::Plane { .. } | Op::TilemapLayer(_) => {
                 return Err(VkError::UnsupportedOp {
                     kind: op.kind(),
                     index,
@@ -377,10 +377,7 @@ mod tests {
 
     #[test]
     fn reserved_ops_are_unsupported_and_name_kind_and_index() {
-        let cases = [
-            (Op::Plane { clip: SCREEN }, OpKind::Plane),
-            (Op::TilemapLayer { clip: SCREEN }, OpKind::TilemapLayer),
-        ];
+        let cases = [(Op::Plane { clip: SCREEN }, OpKind::Plane)];
         for (op, kind) in cases {
             let ops = [clear(SCREEN), op];
             assert_eq!(

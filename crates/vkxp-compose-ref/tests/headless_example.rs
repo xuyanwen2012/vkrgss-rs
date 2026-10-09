@@ -84,8 +84,9 @@ fn example_reports_a_reserved_op_and_writes_nothing() {
         frame_index: 0,
         logical_size: size,
         frame_rate: FrameRate::DEFAULT,
+        tables: vec![],
         bitmaps: vec![],
-        ops: vec![Op::TilemapLayer {
+        ops: vec![Op::Plane {
             clip: Rect::from_size(size),
         }],
     })];
@@ -93,10 +94,7 @@ fn example_reports_a_reserved_op_and_writes_nothing() {
     assert_eq!(run.status.code(), Some(1));
     assert!(!wrote_output);
     let stderr = String::from_utf8_lossy(&run.stderr);
-    assert!(
-        stderr.contains("unsupported op kind `TilemapLayer`"),
-        "{stderr}"
-    );
+    assert!(stderr.contains("unsupported op kind `Plane`"), "{stderr}");
 }
 
 #[test]

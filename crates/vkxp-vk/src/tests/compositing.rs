@@ -24,6 +24,7 @@ fn packet(bitmaps: Vec<BitmapDelta>, ops: Vec<Op>) -> FramePacket {
         frame_index: 0,
         logical_size: SIZE,
         frame_rate: FrameRate::DEFAULT,
+        tables: vec![],
         bitmaps,
         ops,
     }
@@ -130,6 +131,7 @@ fn frame_follows_a_change_of_logical_size() {
             frame_index: 0,
             logical_size: Size::new(width, height),
             frame_rate: FrameRate::DEFAULT,
+            tables: vec![],
             bitmaps: vec![],
             ops: vec![Op::Clear {
                 clip: Rect::new(1, 1, width, height),
@@ -168,9 +170,9 @@ fn op_error_after_valid_deltas_keeps_the_bitmap() {
 fn op_error_produces_no_frame() {
     let mut compositor = TestCompositor::new();
     assert_eq!(
-        compositor.render(&packet(vec![], vec![Op::TilemapLayer { clip: SCREEN }])),
+        compositor.render(&packet(vec![], vec![Op::Plane { clip: SCREEN }])),
         Err(VkError::UnsupportedOp {
-            kind: OpKind::TilemapLayer,
+            kind: OpKind::Plane,
             index: 0
         })
     );
@@ -275,6 +277,7 @@ fn invalid_logical_size_is_rejected_before_the_deltas_are_applied() {
             frame_index: 0,
             logical_size: size,
             frame_rate: FrameRate::DEFAULT,
+            tables: vec![],
             bitmaps: vec![BitmapDelta::Create {
                 id: ID,
                 width: 1,

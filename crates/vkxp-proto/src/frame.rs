@@ -1,9 +1,9 @@
-//! The frame packet: bitmap changes and the ordered op list.
+//! The frame packet: bitmap and table changes and the ordered op list.
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{BitmapId, Color, Fixed, Rect, Size, Tone};
+use crate::{BitmapId, Color, Fixed, Rect, Size, TableId, Tone};
 
 /// Everything a backend needs to produce one frame.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -16,6 +16,8 @@ pub struct FramePacket {
     pub frame_rate: FrameRate,
     /// Bitmap changes since the previous packet, applied in order before any op is drawn.
     pub bitmaps: Vec<BitmapDelta>,
+    /// Table changes since the previous packet, applied in order before any op is drawn.
+    pub tables: Vec<TableDelta>,
     /// Draw ops. Their order is the draw order; backends never reorder them.
     pub ops: Vec<Op>,
 }
@@ -116,6 +118,25 @@ pub enum BitmapDelta {
     Destroy { id: BitmapId },
 }
 
+/// A change to the set of tables known to the host.
+///
+/// A table is an array of signed 16-bit integers with one to three dimensions; a dimension it
+/// does not use has size 1. Elements are in order with x varying fastest, then y, then z.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TableDelta {
+    /// Creates the table `id`, or replaces it when it exists. `data` holds
+    /// `xsize * ysize * zsize` elements.
+    Set {
+        id: TableId,
+        xsize: u32,
+        ysize: u32,
+        zsize: u32,
+        data: Vec<i16>,
+    },
+    /// Destroys a table. Its id is invalid until it is set again.
+    Destroy { id: TableId },
+}
+
 /// One step of drawing. Every op carries a clip rectangle in logical screen pixels and never
 /// changes a pixel outside it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -128,8 +149,8 @@ pub enum Op {
     RectEffect(RectEffect),
     /// Reserved for planes. Not specified yet; backends reject it.
     Plane { clip: Rect },
-    /// Reserved for tilemap layers. Not specified yet; backends reject it.
-    TilemapLayer { clip: Rect },
+    /// Draws the tiles of one priority of one layer of a map.
+    TilemapLayer(TilemapLayer),
 }
 
 impl Op {
@@ -140,15 +161,16 @@ impl Op {
             Op::Quad(_) => OpKind::Quad,
             Op::RectEffect(_) => OpKind::RectEffect,
             Op::Plane { .. } => OpKind::Plane,
-            Op::TilemapLayer { .. } => OpKind::TilemapLayer,
+            Op::TilemapLayer(_) => OpKind::TilemapLayer,
         }
     }
 
     /// The clip rectangle of this op.
     pub const fn clip(&self) -> Rect {
         match self {
-            Op::Clear { clip, .. } | Op::Plane { clip } | Op::TilemapLayer { clip } => *clip,
+            Op::Clear { clip, .. } | Op::Plane { clip } => *clip,
             Op::Quad(quad) => quad.clip,
+            Op::TilemapLayer(layer) => layer.clip,
             Op::RectEffect(effect) => effect.clip,
         }
     }
@@ -167,7 +189,7 @@ pub enum OpKind {
 impl OpKind {
     /// Whether the kind is only a reserved name, with no specified behaviour yet.
     pub const fn is_reserved(self) -> bool {
-        matches!(self, OpKind::Plane | OpKind::TilemapLayer)
+        matches!(self, OpKind::Plane)
     }
 }
 
@@ -410,6 +432,44 @@ impl Transform {
     }
 }
 
+/// Draws, inside `clip`, the tiles of priority `priority` that layer `layer` of a map holds.
+///
+/// The screen pixel (`X`, `Y`) shows the map pixel (`X + origin.0`, `Y + origin.1`), which lies
+/// in the cell at both coordinates divided by 32, rounded down and wrapped into the size of
+/// `map`: the map repeats in both directions. The cell's element of layer `layer` is a tile
+/// number, and its entry in `priorities` (0 for a number the table has no entry for, an entry
+/// being an element of its first row) is the tile's priority. When that equals `priority`, the
+/// tile's texel for the pixel is blended over the pixel in [`BlendMode::Normal`] at opacity
+/// 255; otherwise the op leaves the pixel alone, as it does for a `layer` the map does not
+/// have and for a map without cells.
+///
+/// A tile number from 384 names the 32 by 32 block of `tileset` at column
+/// `(number - 384) mod 8` and row `(number - 384) div 8`. A number from 48 to 383 names
+/// pattern `number mod 48` of the autotile `number div 48 - 1`: each 16 by 16 quarter of the
+/// tile is the quarter of the sheet that the pattern table names, in the frame
+/// `animation_step` modulo the sheet's number of frames, where a frame is 96 pixels wide. An
+/// autotile sheet at most 32 pixels high holds whole tiles instead, one per frame of 32
+/// pixels. A sheet narrower than one frame has one frame. Numbers below 48 draw nothing, and
+/// so does a tile whose bitmap is absent or whose texel lies outside its bitmap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TilemapLayer {
+    pub clip: Rect,
+    pub tileset: Option<BitmapId>,
+    pub autotiles: [Option<BitmapId>; 7],
+    /// The tile numbers: one element per cell and layer of the map.
+    pub map: TableId,
+    /// The priority of each tile number.
+    pub priorities: TableId,
+    /// The map pixel under the top-left pixel of the screen.
+    pub origin: (i32, i32),
+    /// The layer of the map, from 0 to 2.
+    pub layer: u8,
+    /// The priority this op draws, from 0 to 5.
+    pub priority: u8,
+    /// Counts the animation frames of the autotiles.
+    pub animation_step: u64,
+}
+
 /// Changes the pixels already present inside `clip`: first the tone, then the colour blended
 /// over the result with the colour's alpha. No bitmap is read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -457,7 +517,17 @@ mod tests {
             (Op::RectEffect(effect), OpKind::RectEffect, "RectEffect"),
             (Op::Plane { clip }, OpKind::Plane, "Plane"),
             (
-                Op::TilemapLayer { clip },
+                Op::TilemapLayer(TilemapLayer {
+                    clip,
+                    tileset: None,
+                    autotiles: [None; 7],
+                    map: TableId::new(0),
+                    priorities: TableId::new(1),
+                    origin: (0, 0),
+                    layer: 0,
+                    priority: 0,
+                    animation_step: 0,
+                }),
                 OpKind::TilemapLayer,
                 "TilemapLayer",
             ),
@@ -470,9 +540,9 @@ mod tests {
     }
 
     #[test]
-    fn only_plane_and_tilemap_layer_are_reserved() {
+    fn only_plane_is_reserved() {
         assert!(OpKind::Plane.is_reserved());
-        assert!(OpKind::TilemapLayer.is_reserved());
+        assert!(!OpKind::TilemapLayer.is_reserved());
         assert!(!OpKind::Clear.is_reserved());
         assert!(!OpKind::Quad.is_reserved());
         assert!(!OpKind::RectEffect.is_reserved());

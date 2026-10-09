@@ -137,6 +137,23 @@ impl std::fmt::Display for BitmapId {
     }
 }
 
+/// Identifies a table known to both sides. Tables have a number space of their own, apart
+/// from the bitmaps'.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct TableId(pub u32);
+
+impl TableId {
+    pub const fn new(index: u32) -> TableId {
+        TableId(index)
+    }
+}
+
+impl std::fmt::Display for TableId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

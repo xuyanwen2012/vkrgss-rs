@@ -457,6 +457,7 @@ impl Scene {
             frame_index,
             logical_size: self.logical_size,
             frame_rate: self.frame_rate,
+            tables: vec![],
             bitmaps: deltas,
             ops,
         }

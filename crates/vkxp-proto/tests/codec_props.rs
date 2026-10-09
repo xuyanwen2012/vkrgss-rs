@@ -8,7 +8,7 @@ use vkxp_proto::codec::{Message, decode_stream, encode_stream};
 use vkxp_proto::{
     AudioChannel, AudioCommand, BitmapDelta, BitmapId, BlendMode, Color, Fixed, FramePacket,
     FrameRate, GuestToHost, HostToGuest, InputSnapshot, Op, Quad, Rect, RectEffect, Sampling, Size,
-    Tone, Transform,
+    TableDelta, TableId, TilemapLayer, Tone, Transform,
 };
 
 fn fixed() -> impl Strategy<Value = Fixed> {
@@ -96,7 +96,53 @@ fn op() -> impl Strategy<Value = Op> {
             color
         })),
         rect().prop_map(|clip| Op::Plane { clip }),
-        rect().prop_map(|clip| Op::TilemapLayer { clip }),
+        tilemap_layer().prop_map(Op::TilemapLayer),
+    ]
+}
+
+fn table_id() -> impl Strategy<Value = TableId> {
+    any::<u32>().prop_map(TableId::new)
+}
+
+fn tilemap_layer() -> impl Strategy<Value = TilemapLayer> {
+    (
+        rect(),
+        option::of(bitmap_id()),
+        proptest::array::uniform7(option::of(bitmap_id())),
+        (table_id(), table_id()),
+        any::<(i32, i32)>(),
+        any::<(u8, u8, u64)>(),
+    )
+        .prop_map(
+            |(clip, tileset, autotiles, (map, priorities), origin, numbers)| TilemapLayer {
+                clip,
+                tileset,
+                autotiles,
+                map,
+                priorities,
+                origin,
+                layer: numbers.0,
+                priority: numbers.1,
+                animation_step: numbers.2,
+            },
+        )
+}
+
+fn table_delta() -> impl Strategy<Value = TableDelta> {
+    prop_oneof![
+        (
+            table_id(),
+            any::<(u32, u32, u32)>(),
+            vec(any::<i16>(), 0..64)
+        )
+            .prop_map(|(id, (xsize, ysize, zsize), data)| TableDelta::Set {
+                id,
+                xsize,
+                ysize,
+                zsize,
+                data,
+            }),
+        table_id().prop_map(|id| TableDelta::Destroy { id }),
     ]
 }
 
@@ -120,13 +166,15 @@ fn frame_packet() -> impl Strategy<Value = FramePacket> {
         any::<(u32, u32)>(),
         frame_rate(),
         vec(bitmap_delta(), 0..6),
+        vec(table_delta(), 0..4),
         vec(op(), 0..8),
     )
         .prop_map(
-            |(frame_index, (width, height), frame_rate, bitmaps, ops)| FramePacket {
+            |(frame_index, (width, height), frame_rate, bitmaps, tables, ops)| FramePacket {
                 frame_index,
                 logical_size: Size::new(width, height),
                 frame_rate,
+                tables,
                 bitmaps,
                 ops,
             },

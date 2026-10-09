@@ -22,6 +22,7 @@ fn packet(bitmaps: Vec<BitmapDelta>, ops: Vec<Op>) -> FramePacket {
         frame_index: 0,
         logical_size: SIZE,
         frame_rate: FrameRate::DEFAULT,
+        tables: vec![],
         bitmaps,
         ops,
     }
@@ -793,14 +794,7 @@ fn destroyed_bitmap_without_reuse_is_an_invalid_reference() {
 
 #[test]
 fn reserved_op_kind_gets_a_typed_error_and_no_frame() {
-    let reserved = [
-        (Op::Plane { clip: SCREEN }, OpKind::Plane, "Plane"),
-        (
-            Op::TilemapLayer { clip: SCREEN },
-            OpKind::TilemapLayer,
-            "TilemapLayer",
-        ),
-    ];
+    let reserved = [(Op::Plane { clip: SCREEN }, OpKind::Plane, "Plane")];
     for (op, kind, name) in reserved {
         // Valid ops before and after do not rescue the frame.
         let result = Compositor::new().render(&packet(vec![], vec![clear(GREY), op, clear(RED)]));
@@ -874,6 +868,7 @@ fn empty_or_oversized_logical_size_is_rejected() {
             frame_index: 0,
             logical_size: size,
             frame_rate: FrameRate::DEFAULT,
+            tables: vec![],
             bitmaps: vec![],
             ops: vec![],
         });

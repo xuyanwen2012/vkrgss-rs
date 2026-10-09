@@ -108,6 +108,7 @@ pub fn small_frame(frame_index: u64) -> GuestToHost {
         frame_index,
         logical_size: size,
         frame_rate: FrameRate::DEFAULT,
+        tables: vec![],
         bitmaps: Vec::new(),
         ops: vec![Op::Clear {
             clip: Rect::from_size(size),

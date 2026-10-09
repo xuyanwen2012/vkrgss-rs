@@ -150,6 +150,7 @@ fn frame(frame_index: u64, bitmaps: Vec<BitmapDelta>, ops: Vec<Op>) -> GuestToHo
         frame_index,
         logical_size: SIZE,
         frame_rate: FrameRate::DEFAULT,
+        tables: vec![],
         bitmaps,
         ops,
     })

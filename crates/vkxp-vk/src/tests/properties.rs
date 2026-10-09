@@ -133,7 +133,6 @@ enum OpPlan {
 #[derive(Debug, Clone)]
 enum InvalidOp {
     Plane,
-    TilemapLayer,
     /// A quad of a destroyed bitmap, or of one that never existed when none was destroyed.
     StaleQuad {
         pick: u32,
@@ -268,7 +267,6 @@ fn op_plan() -> impl Strategy<Value = OpPlan> {
 fn invalid_op() -> impl Strategy<Value = InvalidOp> {
     prop_oneof![
         Just(InvalidOp::Plane),
-        Just(InvalidOp::TilemapLayer),
         any::<u32>().prop_map(|pick| InvalidOp::StaleQuad { pick }),
         any::<u32>().prop_map(|pick| InvalidOp::SourceOutOfBounds { pick }),
     ]
@@ -618,7 +616,6 @@ fn build(plans: &[PacketPlan], faults: bool) -> Vec<GuestToHost> {
                     };
                     ops.push(match invalid {
                         InvalidOp::Plane => Op::Plane { clip: screen },
-                        InvalidOp::TilemapLayer => Op::TilemapLayer { clip: screen },
                         InvalidOp::StaleQuad { pick } => {
                             quad(model.stale(*pick), Rect::new(0, 0, 1, 1))
                         }
@@ -642,6 +639,7 @@ fn build(plans: &[PacketPlan], faults: bool) -> Vec<GuestToHost> {
             frame_index: frame_index as u64,
             logical_size,
             frame_rate: FrameRate::DEFAULT,
+            tables: vec![],
             bitmaps,
             ops,
         }));

@@ -21,6 +21,7 @@ fn packet(size: Size, bitmaps: Vec<BitmapDelta>, ops: Vec<Op>) -> FramePacket {
         frame_index: 0,
         logical_size: size,
         frame_rate: FrameRate::DEFAULT,
+        tables: vec![],
         bitmaps,
         ops,
     }
@@ -335,10 +336,7 @@ fn reserved_op_is_an_unsupported_op_error_naming_kind_and_index() {
     let size = Size::new(20, 20);
     let screen = Rect::from_size(size);
     let mut compositor = TestCompositor::new();
-    for (op, kind) in [
-        (Op::Plane { clip: screen }, OpKind::Plane),
-        (Op::TilemapLayer { clip: screen }, OpKind::TilemapLayer),
-    ] {
+    for (op, kind) in [(Op::Plane { clip: screen }, OpKind::Plane)] {
         let ops = vec![clear(screen, [1, 1, 1, 1]), clear(screen, [2, 2, 2, 2]), op];
         assert_eq!(
             compositor.render(&packet(size, vec![], ops)),

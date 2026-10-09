@@ -124,7 +124,7 @@ impl Compositor {
                     Step::Quad { quad, bitmap }
                 }
                 Op::RectEffect(effect) => Step::RectEffect(effect),
-                Op::Plane { .. } | Op::TilemapLayer { .. } => {
+                Op::Plane { .. } | Op::TilemapLayer(_) => {
                     return Err(ComposeError::UnsupportedOp {
                         kind: op.kind(),
                         index,

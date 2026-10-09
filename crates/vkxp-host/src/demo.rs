@@ -100,6 +100,7 @@ pub fn run(link: &GuestEnd, options: DemoOptions) -> Result<(), Disconnected> {
             frame_index,
             logical_size: size,
             frame_rate: options.frame_rate,
+            tables: vec![],
             bitmaps,
             ops: ops(size, &state, frame_index, input),
         }))?;

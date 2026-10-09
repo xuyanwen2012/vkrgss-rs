@@ -23,7 +23,7 @@ use crate::{GuestToHost, HostToGuest, InputSnapshot};
 pub const MAGIC: [u8; 4] = *b"VKXP";
 
 /// Version of the message types and their encoding. Any change to either increments it.
-pub const PROTOCOL_VERSION: u16 = 5;
+pub const PROTOCOL_VERSION: u16 = 6;
 
 /// Length of the stream header in bytes.
 pub const HEADER_LEN: usize = 7;
@@ -165,6 +165,7 @@ mod tests {
                 frame_index: 1,
                 logical_size: Size::new(640, 480),
                 frame_rate: FrameRate::DEFAULT,
+                tables: vec![],
                 bitmaps: vec![],
                 ops: vec![],
             }),
@@ -231,8 +232,8 @@ mod tests {
 
     #[test]
     fn older_streams_are_rejected_naming_both_versions() {
-        assert_eq!(PROTOCOL_VERSION, 5);
-        for found in [1u16, 2, 3, 4] {
+        assert_eq!(PROTOCOL_VERSION, 6);
+        for found in [1u16, 2, 3, 4, 5] {
             let mut bytes = encode_stream(&sample()).unwrap();
             bytes[4..6].copy_from_slice(&found.to_le_bytes());
 
@@ -241,12 +242,12 @@ mod tests {
                 error,
                 DecodeError::UnsupportedVersion {
                     found,
-                    supported: 5,
+                    supported: 6,
                 }
             );
             assert_eq!(
                 error.to_string(),
-                format!("unsupported protocol version: found {found}, supported 5")
+                format!("unsupported protocol version: found {found}, supported 6")
             );
         }
     }
@@ -284,6 +285,7 @@ mod tests {
             frame_index: 3,
             logical_size: Size::new(640, 480),
             frame_rate: FrameRate::DEFAULT,
+            tables: vec![],
             bitmaps: vec![],
             ops: vec![
                 quad(affine),
@@ -295,11 +297,68 @@ mod tests {
         assert_eq!(decode_stream::<GuestToHost>(&bytes).unwrap(), messages);
     }
 
+    #[test]
+    fn tables_and_tilemap_layers_survive_a_round_trip() {
+        use crate::{Op, Rect, TableDelta, TableId, TilemapLayer};
+
+        let (map, priorities) = (TableId::new(0), TableId::new(u32::MAX));
+        let cells: Vec<i16> = (0..20 * 15 * 3)
+            .map(|i| (i * 7 % 2000 - 5) as i16)
+            .collect();
+        let messages = vec![GuestToHost::Frame(FramePacket {
+            frame_index: 9,
+            logical_size: Size::new(640, 480),
+            frame_rate: FrameRate::DEFAULT,
+            tables: vec![
+                TableDelta::Set {
+                    id: map,
+                    xsize: 20,
+                    ysize: 15,
+                    zsize: 3,
+                    data: cells,
+                },
+                TableDelta::Set {
+                    id: priorities,
+                    xsize: 400,
+                    ysize: 1,
+                    zsize: 1,
+                    data: (0..400).map(|i| i % 6).collect(),
+                },
+                TableDelta::Destroy {
+                    id: TableId::new(5),
+                },
+            ],
+            bitmaps: vec![],
+            ops: vec![Op::TilemapLayer(TilemapLayer {
+                clip: Rect::new(0, 64, 640, 32),
+                tileset: Some(BitmapId::new(4, 1)),
+                autotiles: [
+                    Some(BitmapId::new(5, 0)),
+                    None,
+                    None,
+                    Some(BitmapId::new(u32::MAX, u32::MAX)),
+                    None,
+                    None,
+                    Some(BitmapId::new(6, 2)),
+                ],
+                map,
+                priorities,
+                origin: (i32::MIN, i32::MAX),
+                layer: 2,
+                priority: 5,
+                animation_step: u64::MAX,
+            })],
+        })];
+        let bytes = encode_stream(&messages).unwrap();
+        assert_eq!(decode_stream::<GuestToHost>(&bytes).unwrap(), messages);
+    }
+
     fn packet_at(frame_index: u64, frame_rate: FrameRate) -> GuestToHost {
         GuestToHost::Frame(FramePacket {
             frame_index,
             logical_size: Size::new(640, 480),
             frame_rate,
+            tables: vec![],
             bitmaps: vec![],
             ops: vec![],
         })

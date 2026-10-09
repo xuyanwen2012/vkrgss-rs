@@ -23,6 +23,7 @@ fn packet(height: u32, bitmaps: Vec<BitmapDelta>, ops: Vec<Op>) -> GuestToHost {
         frame_index: 0,
         logical_size: Size::new(N, height),
         frame_rate: FrameRate::DEFAULT,
+        tables: vec![],
         bitmaps,
         ops,
     })

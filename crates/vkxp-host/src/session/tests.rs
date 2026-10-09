@@ -35,6 +35,7 @@ fn packet(frame_index: u64, rate: u8) -> FramePacket {
         frame_index,
         logical_size: SIZE,
         frame_rate: FrameRate::new(rate).unwrap(),
+        tables: vec![],
         bitmaps: Vec::new(),
         ops: vec![Op::Clear {
             clip: Rect::from_size(SIZE),
