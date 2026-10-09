@@ -131,6 +131,8 @@ pub struct Derivation<'a> {
     pub italic: bool,
     /// Font units added to every glyph's advance width.
     pub wider_by: u16,
+    /// Replaces the character map by one that maps no character at all.
+    pub empty_cmap: bool,
 }
 
 fn u16_at(bytes: &[u8], at: usize) -> u16 {
@@ -184,6 +186,13 @@ pub fn derive_font(file: &str, target: &Path, change: Derivation<'_>) -> PathBuf
                 // macStyle: bit 0 bold, bit 1 italic.
                 let style = u16_at(data, 44) | u16::from(bold) | u16::from(change.italic) << 1;
                 put_u16(data, 44, style);
+            }
+            b"cmap" if change.empty_cmap => {
+                // One Windows Unicode subtable of format 4 holding only the closing segment.
+                let cmap: [u16; 18] = [
+                    0, 1, 3, 1, 0, 12, 4, 24, 0, 2, 2, 0, 0, 0xFFFF, 0, 0xFFFF, 1, 0,
+                ];
+                *data = cmap.into_iter().flat_map(u16::to_be_bytes).collect();
             }
             b"hmtx" => {
                 for metric in 0..metric_count {

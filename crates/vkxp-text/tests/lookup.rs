@@ -74,6 +74,85 @@ fn engine_without_fonts_does_not_fail() {
     assert_eq!((mask.width, mask.height, mask.coverage.len()), (0, 22, 0));
 }
 
+#[test]
+fn hidden_system_face_is_not_the_font_of_last_resort() {
+    // The caller has only a bold face of the family; the system's regular face is hidden and
+    // must not come back when no requested name and no fallback family matches.
+    let system = tempfile::tempdir().unwrap();
+    let caller = tempfile::tempdir().unwrap();
+    copy_font(system.path(), LIBERATION_FILE);
+    let change = Derivation {
+        weight: Some(700),
+        wider_by: 150,
+        ..Derivation::default()
+    };
+    let caller_file = derive_font(LIBERATION_FILE, &caller.path().join("bold.ttf"), change);
+    let mut engine = TextEngine::new(&FontSources {
+        system: SystemFonts::Directories(vec![system.path().to_owned()]),
+        directories: vec![caller.path().to_owned()],
+        fallback_families: Some(Vec::new()),
+        ..FontSources::default()
+    });
+    assert_eq!(engine.families(), [LIBERATION]);
+
+    for family in [LIBERATION, "NoSuchFont"] {
+        for bold in [false, true] {
+            let request = TextRequest {
+                bold,
+                ..request(family, 22)
+            };
+            let face = engine.resolve(&request).unwrap();
+            assert_eq!(face.path.canonicalize().unwrap(), caller_file, "{family}");
+        }
+    }
+}
+
+#[test]
+fn hidden_system_face_does_not_supply_missing_characters() {
+    // The caller's font of the family maps no character; the system's font of the same
+    // family has them all, but is hidden and must not be used for per-character fallback.
+    let system = tempfile::tempdir().unwrap();
+    let caller = tempfile::tempdir().unwrap();
+    copy_font(system.path(), LIBERATION_FILE);
+    let change = Derivation {
+        wider_by: 150,
+        empty_cmap: true,
+        ..Derivation::default()
+    };
+    let caller_file = derive_font(LIBERATION_FILE, &caller.path().join("caller.ttf"), change);
+    let mut only_caller = TextEngine::new(&FontSources::directories_only([caller.path()]));
+    let with_system = FontSources {
+        system: SystemFonts::Directories(vec![system.path().to_owned()]),
+        directories: vec![caller.path().to_owned()],
+        ..FontSources::default()
+    };
+    let mut both = TextEngine::new(&with_system);
+    let request = request(LIBERATION, 22);
+
+    let face = both.resolve(&request).unwrap();
+    assert_eq!(face.path.canonicalize().unwrap(), caller_file);
+    for text in ["A", "Text 0123"] {
+        let expected = only_caller.rasterize(&request, text);
+        assert!(expected.width > 0);
+        assert_eq!(both.measure(&request, text), (expected.width, 22));
+        assert_eq!(both.rasterize(&request, text), expected, "{text:?}");
+    }
+    // The system's own drawing of the letter is a different one.
+    assert_ne!(
+        both.rasterize(&request, "A"),
+        engine().rasterize(&request, "A")
+    );
+
+    // A system font of another family is not hidden and does supply characters.
+    copy_font(system.path(), SYMBOLS_FILE);
+    let mut both = TextEngine::new(&with_system);
+    let symbol = common::SYMBOL.to_string();
+    assert_ne!(
+        both.rasterize(&request, &symbol),
+        only_caller.rasterize(&request, &symbol)
+    );
+}
+
 // Requirement: Family lookup
 
 #[test]

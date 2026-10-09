@@ -47,7 +47,8 @@ pub(crate) struct FontIndex {
     /// Family key to the records of that family. Holds only the faces of the family's first
     /// source: a family in a caller directory hides the system's faces of the same name.
     by_family: HashMap<String, Vec<usize>>,
-    /// All records, upright regular faces first: the order of the last-resort glyph search.
+    /// The records reachable through `by_family`, upright regular faces first: the order of
+    /// the last-resort font and glyph search. Faces hidden by another source are left out.
     scan_order: Vec<usize>,
 }
 
@@ -125,7 +126,12 @@ impl FontIndex {
             }
         }
 
-        let mut scan_order: Vec<usize> = (0..records.len()).collect();
+        // A face that another source hides under every one of its names takes no part in
+        // fallback either; one that keeps a name of its own does.
+        let visible: HashSet<usize> = by_family.values().flatten().copied().collect();
+        let mut scan_order: Vec<usize> = (0..records.len())
+            .filter(|position| visible.contains(position))
+            .collect();
         scan_order.sort_by_key(|&position| {
             let record = &records[position];
             let plain = !record.italic && record.normal_width && record.weight == REGULAR_WEIGHT;
@@ -151,10 +157,10 @@ impl FontIndex {
     /// The first family name of every face that is not hidden by another source, sorted and
     /// without duplicates.
     pub(crate) fn families(&self) -> Vec<String> {
-        let visible: HashSet<usize> = self.by_family.values().flatten().copied().collect();
-        let mut names: Vec<String> = visible
-            .into_iter()
-            .filter_map(|position| self.records[position].families.first().cloned())
+        let mut names: Vec<String> = self
+            .scan_order
+            .iter()
+            .filter_map(|&position| self.records[position].families.first().cloned())
             .collect();
         names.sort();
         names.dedup();

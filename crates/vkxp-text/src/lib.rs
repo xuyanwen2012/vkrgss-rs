@@ -22,7 +22,8 @@
 //! through its font configuration), directories of the caller, or both. Directories are
 //! searched recursively; collections and variable fonts are supported. A family found in a
 //! caller directory hides the system's faces of the same family name, and an earlier caller
-//! directory hides a later one. The engine does not read the configuration file: the caller
+//! directory hides a later one. A face hidden under every family name it declares is not
+//! used at all, not even as a fallback; a face that keeps a name of its own stays in use. The engine does not read the configuration file: the caller
 //! passes the directories, extra substitutions and fallback families.
 //!
 //! For a given set of font files the results are the same on every run. A font file is read
