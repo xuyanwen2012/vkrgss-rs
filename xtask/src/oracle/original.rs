@@ -1,0 +1,364 @@
+//! The original side of a comparison: `Game.exe` under Wine in a virtual display of its own.
+//!
+//! The probe holds the game at each capture frame by writing a request file into the game
+//! copy; the picture of the game window is then read from the display and the request is
+//! removed.
+
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Stdio};
+use std::thread::sleep;
+use std::time::{Duration, Instant};
+
+use anyhow::{Context, Result, bail, ensure};
+use x11rb::connection::Connection;
+use x11rb::protocol::xproto::{ConnectionExt, ImageFormat, ImageOrder, MapState};
+
+use super::report::{self, HEIGHT, Picture, WIDTH};
+
+/// Font names that games ask for, and an installed font to draw them with. Without a
+/// replacement the runtime draws no text at all for a font the prefix does not have.
+/// PLACEHOLDER: the list and the replacement are a first guess; text is compared for layout
+/// only.
+const FONT_REPLACEMENTS: [(&str, &str); 12] = [
+    ("MS PGothic", "Noto Sans CJK JP"),
+    (
+        "\u{ff2d}\u{ff33} \u{ff30}\u{30b4}\u{30b7}\u{30c3}\u{30af}",
+        "Noto Sans CJK JP",
+    ),
+    ("MS Gothic", "Noto Sans CJK JP"),
+    (
+        "\u{ff2d}\u{ff33} \u{30b4}\u{30b7}\u{30c3}\u{30af}",
+        "Noto Sans CJK JP",
+    ),
+    ("MS UI Gothic", "Noto Sans CJK JP"),
+    ("SimSun", "Noto Sans CJK SC"),
+    ("\u{5b8b}\u{4f53}", "Noto Sans CJK SC"),
+    ("NSimSun", "Noto Sans CJK SC"),
+    ("SimHei", "Noto Sans CJK SC"),
+    ("\u{9ed1}\u{4f53}", "Noto Sans CJK SC"),
+    ("Microsoft YaHei", "Noto Sans CJK SC"),
+    ("Arial", "Liberation Sans"),
+];
+
+/// How long the picture of a held frame is given to reach the display.
+const SETTLE: Duration = Duration::from_millis(200);
+
+/// What a run of the original needs besides the game.
+pub struct Run<'a> {
+    /// The RGSS DLL, which is copied into the game copy.
+    pub dll: &'a Path,
+    /// The directory of each run-time package, by its name.
+    pub rtps: &'a [(String, PathBuf)],
+    /// The Wine prefix, made on first use.
+    pub prefix: &'a Path,
+    /// `LC_ALL` of the run, which decides the code page of the game's file names.
+    pub locale: &'a str,
+    /// How long one capture frame may take to be reached.
+    pub timeout: Duration,
+}
+
+/// What must be there before the original side can run, checked before anything is started.
+pub fn check_prerequisites(game: &Path, dll: &Path) -> Result<()> {
+    ensure!(
+        dll.is_file(),
+        "{}: the RGSS DLL does not exist",
+        dll.display()
+    );
+    ensure!(
+        game.join("Game.exe").is_file(),
+        "{}: the game has no Game.exe to run in the original runtime",
+        game.display()
+    );
+    for program in ["wine", "wineboot", "wineserver", "Xvfb"] {
+        ensure!(
+            on_path(program),
+            "`{program}` is not on PATH; the original side needs Wine and Xvfb \
+             (--vkxp-only runs without them)"
+        );
+    }
+    Ok(())
+}
+
+fn on_path(program: &str) -> bool {
+    std::env::var_os("PATH")
+        .is_some_and(|path| std::env::split_paths(&path).any(|dir| dir.join(program).is_file()))
+}
+
+impl Run<'_> {
+    /// Runs the game copy `game`, into which the probe of the original side was put, and
+    /// writes each of `frames`, which are in ascending order, as the picture `out` holds
+    /// for the original. `log` receives what Wine and the game print.
+    pub fn capture(&self, game: &Path, frames: &[u64], out: &Path, log: &Path) -> Result<()> {
+        let dll_name = self.dll.file_name().context("the DLL path has no name")?;
+        fs::copy(self.dll, game.join(dll_name)).with_context(|| self.dll.display().to_string())?;
+
+        let display = Xvfb::start()?;
+        // From here on the Wine server is shut down however the run ends.
+        let _server = Server(self, &display.name);
+        self.prepare_prefix(&display.name)?;
+
+        let log_file = fs::File::create(log).with_context(|| log.display().to_string())?;
+        let mut wine = Killed(
+            self.wine("wine", &display.name)
+                .arg("Game.exe")
+                .current_dir(game)
+                .stdin(Stdio::null())
+                .stdout(log_file.try_clone().context("the log file")?)
+                .stderr(log_file)
+                .spawn()
+                .context("could not start `wine`")?,
+        );
+        for &frame in frames {
+            let request = game.join(format!("capture-{frame}.request"));
+            let deadline = Instant::now() + self.timeout;
+            while !request.exists() {
+                let failure = match wine.0.try_wait().context("waiting for `wine`")? {
+                    Some(status) => format!("the original ended ({status})"),
+                    None if Instant::now() > deadline => {
+                        format!("the original took more than {:?}", self.timeout)
+                    }
+                    None => {
+                        sleep(Duration::from_millis(10));
+                        continue;
+                    }
+                };
+                bail!(
+                    "{failure} before frame {frame} was reached; its messages are in {}",
+                    log.display()
+                );
+            }
+            sleep(SETTLE);
+            let picture = grab(&display.name).with_context(|| format!("frame {frame}"))?;
+            picture.write(&out.join(report::original_file(frame)))?;
+            fs::remove_file(&request).with_context(|| request.display().to_string())?;
+        }
+        Ok(())
+    }
+
+    /// A Wine program with the environment of the run.
+    fn wine(&self, program: &str, display: &str) -> Command {
+        let mut command = Command::new(program);
+        command
+            .env("WINEPREFIX", self.prefix)
+            .env("WINEDEBUG", "err+all,+msgbox")
+            // No Mono or Gecko installer, and no menu entries in the user's home directory.
+            .env("WINEDLLOVERRIDES", "mscoree,mshtml=;winemenubuilder.exe=d")
+            .env("DISPLAY", display)
+            .env_remove("WAYLAND_DISPLAY")
+            // Software rendering only: Wine must not open a GPU of the machine.
+            .env("LIBGL_ALWAYS_SOFTWARE", "1")
+            .env("VK_LOADER_DRIVERS_SELECT", "*lvp*")
+            // The runtime uses the ANSI file functions, so the locale decides which file
+            // names of the game resolve.
+            .env("LC_ALL", self.locale);
+        command
+    }
+
+    /// Makes the prefix if it is new and writes what the runtime looks for into it.
+    fn prepare_prefix(&self, display: &str) -> Result<()> {
+        fs::create_dir_all(self.prefix).with_context(|| self.prefix.display().to_string())?;
+        let prepared = self.prefix.join("vkxp-oracle-prepared");
+        if !prepared.exists() {
+            eprintln!("oracle: creating the Wine prefix {}", self.prefix.display());
+            run(self.wine("wineboot", display).arg("-i"), "wineboot -i")?;
+            for (name, replacement) in FONT_REPLACEMENTS {
+                let key = "HKCU\\Software\\Wine\\Fonts\\Replacements";
+                self.registry_value(display, key, name, replacement, None)?;
+            }
+            fs::write(&prepared, b"").with_context(|| prepared.display().to_string())?;
+        }
+
+        // The runtime reads the directory of a run-time package from the 32-bit view.
+        for (name, dir) in self.rtps {
+            let key = "HKLM\\Software\\Enterbrain\\RGSS\\RTP";
+            let dir = format!("Z:{}", dir.display()).replace('/', "\\");
+            self.registry_value(display, key, name, &dir, Some("/reg:32"))?;
+        }
+
+        // The runtime refuses to start unless system32\D3D8.DLL exists, and a Wine without
+        // 32-bit Direct3D 8 has none. Only the existence of the file is checked, so another
+        // DLL of the prefix stands in for it.
+        let windows = self.prefix.join("drive_c/windows");
+        let system = ["syswow64", "system32"]
+            .map(|name| windows.join(name))
+            .into_iter()
+            .find(|dir| dir.is_dir())
+            .with_context(|| format!("{}: no system directory", windows.display()))?;
+        let d3d8 = system.join("d3d8.dll");
+        if !d3d8.exists() {
+            let stand_in = system.join("d3d8thk.dll");
+            if stand_in.is_file() {
+                fs::copy(&stand_in, &d3d8).with_context(|| d3d8.display().to_string())?;
+            } else {
+                fs::write(&d3d8, b"").with_context(|| d3d8.display().to_string())?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Sets a string value in the registry of the prefix with `reg add`.
+    fn registry_value(
+        &self,
+        display: &str,
+        key: &str,
+        name: &str,
+        value: &str,
+        view: Option<&str>,
+    ) -> Result<()> {
+        let mut reg = self.wine("wine", display);
+        reg.args([
+            "reg", "add", key, "/v", name, "/t", "REG_SZ", "/d", value, "/f",
+        ]);
+        reg.args(view);
+        run(&mut reg, "wine reg add")
+    }
+}
+
+fn run(command: &mut Command, name: &str) -> Result<()> {
+    let output = command
+        .stdin(Stdio::null())
+        .output()
+        .with_context(|| format!("could not start `{name}`"))?;
+    ensure!(
+        output.status.success(),
+        "`{name}` ended with {}: {}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    Ok(())
+}
+
+/// A child process that is killed when the run is over.
+struct Killed(Child);
+
+impl Drop for Killed {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+/// Shuts the Wine server of the prefix down when the run is over, which ends every Wine
+/// process in it.
+struct Server<'a>(&'a Run<'a>, &'a str);
+
+impl Drop for Server<'_> {
+    fn drop(&mut self) {
+        let Server(run, display) = self;
+        let _ = run.wine("wineserver", display).arg("-k").status();
+        let _ = run.wine("wineserver", display).arg("-w").status();
+    }
+}
+
+/// A virtual display started for one run.
+struct Xvfb {
+    /// The display as `DISPLAY` names it.
+    name: String,
+    _process: Killed,
+}
+
+impl Xvfb {
+    /// Starts `Xvfb` on the first display number, from 99 on, that it can serve.
+    fn start() -> Result<Xvfb> {
+        for number in 99..199 {
+            let name = format!(":{number}");
+            let mut process = Killed(
+                Command::new("Xvfb")
+                    .args([&name, "-screen", "0", "1024x768x24", "-nolisten", "tcp"])
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
+                    .context("could not start `Xvfb`")?,
+            );
+            // The server is up when it accepts a connection; it ends at once when the
+            // number is taken.
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while process
+                .0
+                .try_wait()
+                .context("waiting for `Xvfb`")?
+                .is_none()
+            {
+                if x11rb::connect(Some(&name)).is_ok() {
+                    return Ok(Xvfb {
+                        name,
+                        _process: process,
+                    });
+                }
+                ensure!(
+                    Instant::now() < deadline,
+                    "`Xvfb` runs on the display {name} but accepts no connection; it may not \
+                     be allowed to create its socket in /tmp/.X11-unix"
+                );
+                sleep(Duration::from_millis(20));
+            }
+        }
+        bail!("`Xvfb` did not start on any display from :99 to :198")
+    }
+}
+
+/// Reads the picture of the game window, the top-level window of 640 by 480, from `display`.
+fn grab(display: &str) -> Result<Picture> {
+    let (connection, screen) =
+        x11rb::connect(Some(display)).with_context(|| format!("the display {display}"))?;
+    let setup = connection.setup();
+    let root = setup.roots[screen].root;
+    let mut window = None;
+    // The children of the root are in stacking order, the topmost last.
+    for &child in connection.query_tree(root)?.reply()?.children.iter().rev() {
+        // A window may be gone by the time it is asked about.
+        let Ok(geometry) = connection.get_geometry(child)?.reply() else {
+            continue;
+        };
+        let Ok(attributes) = connection.get_window_attributes(child)?.reply() else {
+            continue;
+        };
+        if (u32::from(geometry.width), u32::from(geometry.height)) == (WIDTH, HEIGHT)
+            && attributes.map_state == MapState::VIEWABLE
+        {
+            window = Some(child);
+            break;
+        }
+    }
+    let window =
+        window.with_context(|| format!("no window of {WIDTH} by {HEIGHT} on the display"))?;
+    let image = connection
+        .get_image(
+            ImageFormat::Z_PIXMAP,
+            window,
+            0,
+            0,
+            WIDTH as u16,
+            HEIGHT as u16,
+            !0,
+        )?
+        .reply()
+        .context("reading the game window")?;
+    let bits_per_pixel = setup
+        .pixmap_formats
+        .iter()
+        .find(|format| format.depth == image.depth)
+        .map(|format| format.bits_per_pixel);
+    ensure!(
+        bits_per_pixel == Some(32) && setup.image_byte_order == ImageOrder::LSB_FIRST,
+        "the display does not store pixels as 32 bits with the least significant byte first"
+    );
+    let rgba: Vec<u8> = image
+        .data
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .flat_map(|bgrx| [bgrx[2], bgrx[1], bgrx[0], 255])
+        .collect();
+    ensure!(
+        rgba.len() == (WIDTH * HEIGHT * 4) as usize,
+        "the picture of the game window is incomplete"
+    );
+    Ok(Picture {
+        width: WIDTH,
+        height: HEIGHT,
+        rgba,
+    })
+}

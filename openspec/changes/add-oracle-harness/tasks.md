@@ -7,8 +7,8 @@
 
 ## 2. Runs and capture (`xtask`)
 
-- [ ] 2.1 Implement the vkxp side: build the options, run headless, collect the dumps. Verify: the capture-in-vkxp scenario.
-- [ ] 2.2 Implement the original side: prefix preparation, Xvfb and Wine start and shutdown, request polling, window capture with `x11rb`, timeout. Verify: the capture-in-the-original scenario where the prerequisites exist, otherwise as `design.md` states; the missing-prerequisites scenario.
+- [x] 2.1 Implement the vkxp side: build the options, run headless, collect the dumps. Verify: the capture-in-vkxp scenario.
+- [x] 2.2 Implement the original side: prefix preparation, Xvfb and Wine start and shutdown, request polling, window capture with `x11rb`, timeout. Verify: the capture-in-the-original scenario where the prerequisites exist, otherwise as `design.md` states; the missing-prerequisites scenario.
 
 ## 3. Report (`xtask`)
 
