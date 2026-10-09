@@ -13,10 +13,10 @@
 
 ## 3. Sprites (`vkxp-core`)
 
-- [ ] 3.1 Extract a sprite as a quad: position, origin, source rectangle including the part outside the bitmap, missing or disposed bitmap, invisibility. Verify: tests for the four sprite-placement scenarios.
-- [ ] 3.2 Apply zoom, rotation and mirror. Verify: tests for the four scenarios of that requirement and for zoom 0.
-- [ ] 3.3 Apply opacity, blend type, tone and colour. Verify: tests for the sprite-appearance scenarios.
-- [ ] 3.4 Implement flash and sprite update. Verify: tests for the three sprite-flash scenarios.
+- [x] 3.1 Extract a sprite as a quad: position, origin, source rectangle including the part outside the bitmap, missing or disposed bitmap, invisibility. Verify: tests for the four sprite-placement scenarios.
+- [x] 3.2 Apply zoom, rotation and mirror. Verify: tests for the four scenarios of that requirement and for zoom 0.
+- [x] 3.3 Apply opacity, blend type, tone and colour. Verify: tests for the sprite-appearance scenarios.
+- [x] 3.4 Implement flash and sprite update. Verify: tests for the three sprite-flash scenarios.
 
 ## 4. Viewports (`vkxp-core`)
 

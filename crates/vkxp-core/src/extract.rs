@@ -384,8 +384,10 @@ pub(crate) mod testing {
 mod tests {
     use vkxp_proto::BitmapId;
 
+    use vkxp_pixel::Rgba;
+
     use super::testing::*;
-    use crate::{Rect, SpriteId, ViewportId};
+    use crate::{Color, Rect, SpriteId, Tone, ViewportId};
 
     /// A sprite showing `bitmap` at (`x`, `y`).
     fn sprite(stage: &mut Stage, bitmap: BitmapId, x: i32, y: i32) -> SpriteId {
@@ -517,5 +519,480 @@ mod tests {
             GREEN,
             "same z again changes nothing"
         );
+    }
+
+    /// The opaque pixel a [`grid`] bitmap has at (`x`, `y`).
+    fn cell(x: u32, y: u32) -> Rgba {
+        [10 + 40 * x as u8, 10 + 40 * y as u8, 77, 255]
+    }
+
+    /// An opaque bitmap whose every pixel differs.
+    fn grid(stage: &mut Stage, width: u32, height: u32) -> BitmapId {
+        let pixels: Vec<Rgba> = (0..height)
+            .flat_map(|y| (0..width).map(move |x| cell(x, y)))
+            .collect();
+        stage.pixels(width, height, &pixels)
+    }
+
+    const A: Rgba = [200, 10, 10, 255];
+    const B: Rgba = [10, 10, 200, 255];
+
+    /// The sprite of the zoom, rotation and mirror scenarios: a 2 by 1 bitmap holding A and
+    /// B, at (10, 10).
+    fn a_and_b(stage: &mut Stage) -> SpriteId {
+        let bitmap = stage.pixels(2, 1, &[A, B]);
+        sprite(stage, bitmap, 10, 10)
+    }
+
+    /// The pixels of the frame that are not black, as (x, y, pixel).
+    fn drawn(frame: &vkxp_compose_ref::Frame) -> Vec<(u32, u32, Rgba)> {
+        let mut found = Vec::new();
+        for y in 0..frame.size.height {
+            for x in 0..frame.size.width {
+                if frame.pixel(x, y) != BLACK {
+                    found.push((x, y, frame.pixel(x, y)));
+                }
+            }
+        }
+        found
+    }
+
+    #[test]
+    fn the_origin_of_a_sprite_lands_on_its_position() {
+        let mut stage = Stage::sized(32, 32);
+        let bitmap = grid(&mut stage, 4, 4);
+        let id = sprite(&mut stage, bitmap, 10, 20);
+        let sprite = stage.scene.sprite_mut(id).unwrap();
+        sprite.ox = 1;
+        sprite.oy = 1;
+        let frame = stage.frame();
+        assert_eq!(frame.pixel(10, 20), cell(1, 1));
+        assert_eq!(frame.pixel(9, 19), cell(0, 0));
+        assert_eq!(frame.pixel(12, 22), cell(3, 3));
+        assert_eq!(frame.pixel(8, 19), BLACK);
+        assert_eq!(frame.pixel(13, 22), BLACK);
+        assert_eq!(drawn(&frame).len(), 16, "one bitmap pixel per screen pixel");
+    }
+
+    #[test]
+    fn assigning_a_bitmap_sets_the_source_rectangle_to_all_of_it() {
+        let mut stage = Stage::sized(16, 16);
+        let small = stage.solid(4, 3, RED);
+        let large = stage.solid(9, 7, GREEN);
+        let id = sprite(&mut stage, small, 0, 0);
+        assert_eq!(stage.scene.sprite(id).unwrap().bitmap(), Some(small));
+        assert_eq!(
+            stage.scene.sprite(id).unwrap().src_rect,
+            Rect::new(0, 0, 4, 3)
+        );
+        stage.scene.sprite_mut(id).unwrap().src_rect = Rect::new(1, 1, 2, 2);
+        stage
+            .scene
+            .sprite_mut(id)
+            .unwrap()
+            .set_bitmap(Some(large), &stage.bitmaps);
+        assert_eq!(
+            stage.scene.sprite(id).unwrap().src_rect,
+            Rect::new(0, 0, 9, 7)
+        );
+        assert_eq!(drawn(&stage.frame()).len(), 63);
+        // Taking the bitmap away keeps the rectangle.
+        stage
+            .scene
+            .sprite_mut(id)
+            .unwrap()
+            .set_bitmap(None, &stage.bitmaps);
+        assert_eq!(stage.scene.sprite(id).unwrap().bitmap(), None);
+        assert_eq!(
+            stage.scene.sprite(id).unwrap().src_rect,
+            Rect::new(0, 0, 9, 7)
+        );
+    }
+
+    #[test]
+    fn the_source_rectangle_selects_what_is_drawn() {
+        let mut stage = Stage::sized(32, 32);
+        let bitmap = grid(&mut stage, 4, 4);
+        let id = sprite(&mut stage, bitmap, 10, 20);
+        stage.scene.sprite_mut(id).unwrap().src_rect = Rect::new(2, 0, 2, 4);
+        let frame = stage.frame();
+        assert_eq!(frame.pixel(10, 20), cell(2, 0));
+        assert_eq!(frame.pixel(11, 23), cell(3, 3));
+        assert_eq!(drawn(&frame).len(), 8, "columns 0 and 1 are not drawn");
+        assert_eq!(frame.pixel(9, 20), BLACK);
+        assert_eq!(frame.pixel(12, 20), BLACK);
+    }
+
+    #[test]
+    fn the_part_of_the_source_rectangle_outside_the_bitmap_draws_nothing() {
+        let mut stage = Stage::sized(32, 32);
+        let bitmap = grid(&mut stage, 4, 4);
+        let id = sprite(&mut stage, bitmap, 10, 20);
+        stage.scene.sprite_mut(id).unwrap().src_rect = Rect::new(-2, 0, 4, 4);
+        let frame = stage.frame();
+        assert_eq!(frame.pixel(12, 20), cell(0, 0));
+        assert_eq!(frame.pixel(13, 23), cell(1, 3));
+        assert_eq!(frame.pixel(10, 20), BLACK);
+        assert_eq!(frame.pixel(11, 20), BLACK);
+        assert_eq!(frame.pixel(14, 20), BLACK);
+        assert_eq!(drawn(&frame).len(), 8);
+
+        // Beyond the right and bottom edges, and with an origin.
+        let sprite = stage.scene.sprite_mut(id).unwrap();
+        sprite.src_rect = Rect::new(3, 2, 10, 10);
+        sprite.ox = 1;
+        let frame = stage.frame();
+        assert_eq!(frame.pixel(9, 20), cell(3, 2));
+        assert_eq!(frame.pixel(9, 21), cell(3, 3));
+        assert_eq!(drawn(&frame).len(), 2);
+
+        // Mirrored, the rectangle flips in place: its empty left half ends up on the right.
+        let sprite = stage.scene.sprite_mut(id).unwrap();
+        sprite.src_rect = Rect::new(-2, 0, 4, 4);
+        sprite.ox = 0;
+        sprite.mirror = true;
+        let frame = stage.frame();
+        assert_eq!(frame.pixel(10, 20), cell(1, 0));
+        assert_eq!(frame.pixel(11, 20), cell(0, 0));
+        assert_eq!(frame.pixel(12, 20), BLACK);
+        assert_eq!(drawn(&frame).len(), 8);
+
+        // Entirely outside, and without pixels.
+        for rect in [
+            Rect::new(4, 0, 4, 4),
+            Rect::new(0, -4, 4, 4),
+            Rect::new(0, 0, 0, 4),
+            Rect::new(0, 0, 4, -1),
+        ] {
+            stage.scene.sprite_mut(id).unwrap().src_rect = rect;
+            assert!(all(&stage.frame(), BLACK), "{rect:?}");
+        }
+    }
+
+    #[test]
+    fn a_sprite_without_a_live_bitmap_draws_nothing() {
+        let mut stage = Stage::sized(16, 16);
+        let id = stage.scene.create_sprite(None).unwrap();
+        assert!(all(&stage.frame(), BLACK), "no bitmap");
+
+        let bitmap = stage.solid(4, 4, RED);
+        stage
+            .scene
+            .sprite_mut(id)
+            .unwrap()
+            .set_bitmap(Some(bitmap), &stage.bitmaps);
+        assert_eq!(stage.frame().pixel(0, 0), RED);
+        stage.bitmaps.dispose(bitmap);
+        assert!(all(&stage.frame(), BLACK), "disposed bitmap");
+
+        // Assigning a disposed bitmap is no error either.
+        stage
+            .scene
+            .sprite_mut(id)
+            .unwrap()
+            .set_bitmap(Some(bitmap), &stage.bitmaps);
+        assert!(all(&stage.frame(), BLACK));
+    }
+
+    #[test]
+    fn an_invisible_or_disposed_sprite_is_not_drawn() {
+        let mut stage = Stage::sized(16, 16);
+        let bitmap = stage.solid(4, 4, RED);
+        let id = sprite(&mut stage, bitmap, 0, 0);
+        assert_eq!(stage.frame().pixel(0, 0), RED);
+        stage.scene.sprite_mut(id).unwrap().visible = false;
+        assert!(all(&stage.frame(), BLACK));
+        stage.scene.sprite_mut(id).unwrap().visible = true;
+        assert_eq!(stage.frame().pixel(0, 0), RED);
+        stage.scene.dispose_sprite(id);
+        assert!(all(&stage.frame(), BLACK));
+    }
+
+    #[test]
+    fn zoom_scales_a_sprite_about_its_origin() {
+        let mut stage = Stage::sized(32, 32);
+        let id = a_and_b(&mut stage);
+        stage.scene.sprite_mut(id).unwrap().zoom_x = 2.0;
+        let frame = stage.frame();
+        assert_eq!(
+            drawn(&frame),
+            [(10, 10, A), (11, 10, A), (12, 10, B), (13, 10, B)]
+        );
+
+        // Independently in y, and about an origin that is not the corner.
+        let sprite = stage.scene.sprite_mut(id).unwrap();
+        sprite.zoom_x = 1.0;
+        sprite.zoom_y = 3.0;
+        sprite.ox = 1;
+        let frame = stage.frame();
+        assert_eq!(
+            drawn(&frame),
+            [
+                (9, 10, A),
+                (10, 10, B),
+                (9, 11, A),
+                (10, 11, B),
+                (9, 12, A),
+                (10, 12, B)
+            ]
+        );
+    }
+
+    #[test]
+    fn a_zoom_of_zero_draws_nothing() {
+        let mut stage = Stage::sized(32, 32);
+        let id = a_and_b(&mut stage);
+        stage.scene.sprite_mut(id).unwrap().zoom_x = 0.0;
+        assert!(all(&stage.frame(), BLACK));
+        let sprite = stage.scene.sprite_mut(id).unwrap();
+        sprite.zoom_x = 1.0;
+        sprite.zoom_y = 0.0;
+        assert!(all(&stage.frame(), BLACK));
+        stage.scene.sprite_mut(id).unwrap().zoom_y = f64::NAN;
+        assert!(all(&stage.frame(), BLACK));
+    }
+
+    #[test]
+    fn the_angle_turns_a_sprite_counter_clockwise_about_its_origin() {
+        let mut stage = Stage::sized(32, 32);
+        let id = a_and_b(&mut stage);
+        stage.scene.sprite_mut(id).unwrap().angle = 90.0;
+        assert_eq!(drawn(&stage.frame()), [(10, 8, B), (10, 9, A)]);
+
+        stage.scene.sprite_mut(id).unwrap().angle = 180.0;
+        assert_eq!(drawn(&stage.frame()), [(8, 9, B), (9, 9, A)]);
+
+        stage.scene.sprite_mut(id).unwrap().angle = 270.0;
+        assert_eq!(drawn(&stage.frame()), [(9, 10, A), (9, 11, B)]);
+
+        stage.scene.sprite_mut(id).unwrap().angle = 360.0;
+        assert_eq!(drawn(&stage.frame()), [(10, 10, A), (11, 10, B)]);
+
+        // Turned and zoomed by a whole number: still whole pixels.
+        let sprite = stage.scene.sprite_mut(id).unwrap();
+        sprite.angle = 90.0;
+        sprite.zoom_x = 2.0;
+        assert_eq!(
+            drawn(&stage.frame()),
+            [(10, 6, B), (10, 7, B), (10, 8, A), (10, 9, A)]
+        );
+    }
+
+    #[test]
+    fn mirroring_flips_a_sprite_in_place() {
+        let mut stage = Stage::sized(32, 32);
+        let id = a_and_b(&mut stage);
+        stage.scene.sprite_mut(id).unwrap().mirror = true;
+        assert_eq!(drawn(&stage.frame()), [(10, 10, B), (11, 10, A)]);
+    }
+
+    #[test]
+    fn a_sprite_draws_wherever_it_is_turned_at_any_angle() {
+        // Not exact, but a turned square still covers about its area around its centre.
+        let mut stage = Stage::sized(64, 64);
+        let bitmap = stage.solid(16, 16, RED);
+        let id = sprite(&mut stage, bitmap, 32, 32);
+        let sprite = stage.scene.sprite_mut(id).unwrap();
+        sprite.ox = 8;
+        sprite.oy = 8;
+        for angle in [1.0, 33.3, 45.0, 123.0, -77.5, 359.0] {
+            stage.scene.sprite_mut(id).unwrap().angle = angle;
+            let frame = stage.frame();
+            let count = drawn(&frame).len();
+            assert!(
+                (236..=276).contains(&count),
+                "angle {angle}: {count} pixels"
+            );
+            assert_eq!(frame.pixel(32, 32), RED);
+            assert_eq!(frame.pixel(31, 31), RED);
+        }
+    }
+
+    #[test]
+    fn opacity_scales_the_alpha_of_a_sprite() {
+        let mut stage = Stage::sized(16, 16);
+        let bitmap = stage.solid(4, 4, WHITE);
+        let id = sprite(&mut stage, bitmap, 0, 0);
+        for opacity in [255, 128, 1] {
+            stage.scene.sprite_mut(id).unwrap().set_opacity(opacity);
+            let expected = vkxp_pixel::blend_normal(BLACK, WHITE, opacity as u8);
+            assert_eq!(stage.frame().pixel(1, 1), expected, "opacity {opacity}");
+        }
+        stage.scene.sprite_mut(id).unwrap().set_opacity(0);
+        assert!(all(&stage.frame(), BLACK));
+        stage.scene.sprite_mut(id).unwrap().set_opacity(300);
+        assert_eq!(stage.frame().pixel(1, 1), WHITE);
+    }
+
+    #[test]
+    fn blend_types_add_and_subtract() {
+        const GREY: Rgba = [128, 128, 128, 255];
+        let mut stage = Stage::sized(16, 16);
+        let grey = stage.solid(8, 8, GREY);
+        let white = stage.solid(4, 4, WHITE);
+        let dim = stage.solid(4, 4, [100, 50, 200, 255]);
+        sprite(&mut stage, grey, 0, 0);
+        let over = sprite(&mut stage, white, 2, 2);
+
+        stage.scene.sprite_mut(over).unwrap().blend_type = 2;
+        let frame = stage.frame();
+        assert_eq!(frame.pixel(3, 3), BLACK);
+        assert_eq!(frame.pixel(0, 0), GREY);
+
+        stage.scene.sprite_mut(over).unwrap().blend_type = 1;
+        assert_eq!(stage.frame().pixel(3, 3), WHITE);
+
+        stage
+            .scene
+            .sprite_mut(over)
+            .unwrap()
+            .set_bitmap(Some(dim), &stage.bitmaps);
+        assert_eq!(stage.frame().pixel(3, 3), [228, 178, 255, 255]);
+        stage.scene.sprite_mut(over).unwrap().blend_type = 2;
+        assert_eq!(stage.frame().pixel(3, 3), [28, 78, 0, 255]);
+
+        // Every other value blends normally.
+        for blend_type in [0, 3, -1, i32::MAX] {
+            stage.scene.sprite_mut(over).unwrap().blend_type = blend_type;
+            assert_eq!(stage.frame().pixel(3, 3), [100, 50, 200, 255]);
+        }
+    }
+
+    #[test]
+    fn the_colour_of_a_sprite_recolours_its_own_pixels_only() {
+        let mut stage = Stage::sized(16, 16);
+        let blue = stage.solid(16, 16, BLUE);
+        // Opaque on the left, transparent on the right.
+        let shape = stage.pixels(2, 1, &[GREEN, CLEAR]);
+        sprite(&mut stage, blue, 0, 0);
+        let id = sprite(&mut stage, shape, 4, 4);
+        stage.scene.sprite_mut(id).unwrap().color = Color::new(255.0, 0.0, 0.0, 255.0);
+        let frame = stage.frame();
+        assert_eq!(frame.pixel(4, 4), RED);
+        assert_eq!(
+            frame.pixel(5, 4),
+            BLUE,
+            "transparent pixels stay transparent"
+        );
+        assert_eq!(frame.pixel(3, 4), BLUE);
+        assert_eq!(frame.pixel(4, 5), BLUE);
+
+        // A partial alpha mixes the colour into the sprite's own pixel.
+        stage.scene.sprite_mut(id).unwrap().color = Color::new(255.0, 0.0, 0.0, 100.0);
+        assert_eq!(
+            stage.frame().pixel(4, 4),
+            vkxp_pixel::blend_color(GREEN, [255, 0, 0, 100])
+        );
+    }
+
+    #[test]
+    fn the_tone_of_a_sprite_comes_before_its_colour_and_stays_inside_it() {
+        let mut stage = Stage::sized(16, 16);
+        let blue = stage.solid(16, 16, BLUE);
+        let patch = stage.solid(2, 2, [200, 100, 0, 255]);
+        sprite(&mut stage, blue, 0, 0);
+        let id = sprite(&mut stage, patch, 4, 4);
+        stage.scene.sprite_mut(id).unwrap().tone = Tone::new(-50.0, 50.0, 30.0, 0.0);
+        let frame = stage.frame();
+        assert_eq!(frame.pixel(4, 4), [150, 150, 30, 255]);
+        assert_eq!(frame.pixel(3, 4), BLUE);
+        assert_eq!(frame.pixel(6, 6), BLUE);
+
+        stage.scene.sprite_mut(id).unwrap().tone = Tone::new(0.0, 0.0, 0.0, 255.0);
+        let grey = vkxp_pixel::apply_tone([200, 100, 0, 255], 0, 0, 0, 255);
+        assert_eq!((grey[0], grey[1]), (grey[1], grey[2]), "full grey");
+        assert_eq!(stage.frame().pixel(4, 4), grey);
+
+        stage.scene.sprite_mut(id).unwrap().color = Color::new(0.0, 255.0, 0.0, 128.0);
+        assert_eq!(
+            stage.frame().pixel(4, 4),
+            vkxp_pixel::blend_color(grey, [0, 255, 0, 128])
+        );
+    }
+
+    /// A sprite with one opaque black pixel at (0, 0).
+    fn dot(stage: &mut Stage) -> SpriteId {
+        let bitmap = stage.solid(1, 1, [0, 0, 0, 255]);
+        sprite(stage, bitmap, 0, 0)
+    }
+
+    /// What the black pixel of [`dot`] looks like under a white colour of `alpha`.
+    fn whitened(alpha: u8) -> Rgba {
+        vkxp_pixel::blend_color([0, 0, 0, 255], [255, 255, 255, alpha])
+    }
+
+    #[test]
+    fn a_flash_decays_linearly_with_each_update() {
+        let mut stage = Stage::sized(4, 4);
+        let id = dot(&mut stage);
+        let white = Color::new(255.0, 255.0, 255.0, 200.0);
+        stage.scene.sprite_mut(id).unwrap().flash(Some(white), 4);
+        for alpha in [200, 150, 100, 50] {
+            assert_eq!(stage.frame().pixel(0, 0), whitened(alpha), "alpha {alpha}");
+            stage.scene.sprite_mut(id).unwrap().update();
+        }
+        assert_eq!(
+            stage.frame().pixel(0, 0),
+            BLACK,
+            "over after the fourth update"
+        );
+        stage.scene.sprite_mut(id).unwrap().update();
+        assert_eq!(stage.frame().pixel(0, 0), BLACK);
+
+        // The alpha is rounded down: 100 * 2 / 3 and 100 * 1 / 3.
+        let white = Color::new(255.0, 255.0, 255.0, 100.0);
+        stage.scene.sprite_mut(id).unwrap().flash(Some(white), 3);
+        for alpha in [100, 66, 33] {
+            assert_eq!(stage.frame().pixel(0, 0), whitened(alpha), "alpha {alpha}");
+            stage.scene.sprite_mut(id).unwrap().update();
+        }
+        assert_eq!(stage.frame().pixel(0, 0), BLACK);
+    }
+
+    #[test]
+    fn the_larger_alpha_of_flash_and_own_colour_wins() {
+        let mut stage = Stage::sized(4, 4);
+        let id = dot(&mut stage);
+        let own = vkxp_pixel::blend_color([0, 0, 0, 255], [255, 0, 0, 120]);
+        let sprite = stage.scene.sprite_mut(id).unwrap();
+        sprite.color = Color::new(255.0, 0.0, 0.0, 120.0);
+        sprite.flash(Some(Color::new(255.0, 255.0, 255.0, 200.0)), 4);
+        // Flash alphas 200 and 150 exceed 120; 100 and 50 do not.
+        for expected in [whitened(200), whitened(150), own, own, own] {
+            assert_eq!(stage.frame().pixel(0, 0), expected);
+            stage.scene.sprite_mut(id).unwrap().update();
+        }
+    }
+
+    #[test]
+    fn a_flash_without_a_colour_hides_the_sprite() {
+        let mut stage = Stage::sized(4, 4);
+        let bitmap = stage.solid(1, 1, RED);
+        let id = sprite(&mut stage, bitmap, 0, 0);
+        stage.scene.sprite_mut(id).unwrap().flash(None, 2);
+        assert!(all(&stage.frame(), BLACK));
+        stage.scene.sprite_mut(id).unwrap().update();
+        assert!(all(&stage.frame(), BLACK));
+        stage.scene.sprite_mut(id).unwrap().update();
+        assert_eq!(stage.frame().pixel(0, 0), RED);
+    }
+
+    #[test]
+    fn a_flash_advances_only_when_the_sprite_is_updated() {
+        let mut stage = Stage::sized(4, 4);
+        let id = dot(&mut stage);
+        let white = Color::new(255.0, 255.0, 255.0, 200.0);
+        stage.scene.sprite_mut(id).unwrap().flash(Some(white), 4);
+        let first = stage.frame();
+        assert_eq!(first.pixel(0, 0), whitened(200));
+        assert_eq!(stage.frame(), first);
+        assert_eq!(stage.frame(), first);
+
+        // A new flash replaces the running one, and a duration of 0 ends it.
+        stage.scene.sprite_mut(id).unwrap().update();
+        stage.scene.sprite_mut(id).unwrap().flash(Some(white), 2);
+        assert_eq!(stage.frame().pixel(0, 0), whitened(200));
+        stage.scene.sprite_mut(id).unwrap().flash(Some(white), 0);
+        assert_eq!(stage.frame().pixel(0, 0), BLACK);
     }
 }
