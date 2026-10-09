@@ -23,4 +23,4 @@
 
 ## 4. Integration check
 
-- [ ] 4.1 Run the full gate. Verify: `cargo xtask gate` exits 0, `cargo xtask deps` reports no violation, and `openspec validate add-core-tilemap-and-plane --strict` passes.
+- [x] 4.1 Run the full gate. Verify: `cargo xtask gate` exits 0, `cargo xtask deps` reports no violation, and `openspec validate add-core-tilemap-and-plane --strict` passes.
