@@ -519,20 +519,12 @@ impl TextEngine {
 
     /// The glyph that draws `ch` when `selected` is the selected face: its own, else the
     /// first fallback family's that has one, else any font's, else its missing-glyph box.
-    /// A glyph of another face is set at the advance of the selected face's missing glyph,
-    /// and a control character is not looked for in other faces.
+    /// A glyph of another face is set at the advance of the selected face's missing glyph.
+    /// A control character is the selected face's missing glyph whatever the face maps it
+    /// to.
     ///
     /// PLACEHOLDER: the original draws the missing glyph for a character the font lacks.
     fn find_glyph(&mut self, selected: usize, bold: bool, italic: bool, ch: char) -> CharGlyph {
-        let own = self.faces[selected].glyph(ch);
-        if own != 0 {
-            return CharGlyph {
-                face: selected,
-                glyph: own,
-                advance: self.faces[selected].advance(own),
-                lacking: false,
-            };
-        }
         let missing = CharGlyph {
             face: selected,
             glyph: 0,
@@ -541,6 +533,15 @@ impl TextEngine {
         };
         if ch.is_control() {
             return missing;
+        }
+        let own = self.faces[selected].glyph(ch);
+        if own != 0 {
+            return CharGlyph {
+                face: selected,
+                glyph: own,
+                advance: self.faces[selected].advance(own),
+                lacking: false,
+            };
         }
         let from = |faces: &[LoadedFace], face: usize| {
             let glyph = faces[face].glyph(ch);

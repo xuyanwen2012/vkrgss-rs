@@ -3,7 +3,8 @@
 mod common;
 
 use common::{
-    LIBERATION, LIBERATION_FILE, RawFont, SYMBOL, engine, max_coverage, request, test_sources,
+    LIBERATION, LIBERATION_FILE, NOWHERE, RawFont, SYMBOL, SYMBOLS, SYMBOLS_FILE, engine,
+    max_coverage, request, test_sources,
 };
 use vkxp_text::{FontSources, TextEngine, TextRequest};
 
@@ -271,7 +272,7 @@ fn size_zero() {
 }
 
 #[test]
-fn control_characters_measure_as_glyphs_and_do_not_start_a_line() {
+fn control_characters_measure_as_the_missing_glyph_and_do_not_start_a_line() {
     let raw = RawFont::load(LIBERATION_FILE);
     let mut engine = engine();
     let request = request(LIBERATION, 22);
@@ -280,15 +281,45 @@ fn control_characters_measure_as_glyphs_and_do_not_start_a_line() {
         raw.advance('A', pixels_per_em),
         raw.advance('B', pixels_per_em),
     );
+    let missing = raw.advance(NOWHERE, pixels_per_em);
+    assert!(!raw.has(NOWHERE) && missing > 0);
     let height = engine.measure(&request, "AB").1;
-    // The font has no glyph for these, so each is as wide as its missing glyph.
-    for control in ['\n', '\t', '\u{1}'] {
-        assert!(!raw.has(control));
-        let missing = raw.advance(control, pixels_per_em);
-        assert!(missing > 0);
+    for control in ['\n', '\r', '\t', '\u{0}', '\u{1}', '\u{7f}', '\u{85}'] {
         let text = format!("A{control}B");
         assert_eq!(engine.layout(&request, &text).advances, [a, missing, b]);
         assert_eq!(engine.measure(&request, &text), (a + missing + b, height));
         assert_eq!(engine.rasterize(&request, &text).height, height);
     }
+}
+
+#[test]
+fn control_characters_the_font_maps_measure_as_the_missing_glyph_too() {
+    // Noto Sans Symbols 2 maps carriage return, NUL and DEL to glyphs of their own, whose
+    // advances are not that of its missing glyph.
+    let raw = RawFont::load(SYMBOLS_FILE);
+    let mut engine = engine();
+    let request = request(SYMBOLS, 22);
+    let pixels_per_em = raw.pixels_per_em(22);
+    let missing = raw.advance(NOWHERE, pixels_per_em);
+    assert!(!raw.has(NOWHERE) && missing > 0);
+    let (width, height) = engine.measure(&request, &SYMBOL.to_string());
+    let box_mask = engine.rasterize(&request, &NOWHERE.to_string());
+    for control in ['\r', '\u{0}', '\u{7f}'] {
+        assert!(raw.has(control), "{control:?} is mapped");
+        assert_ne!(raw.advance(control, pixels_per_em), missing, "{control:?}");
+        let alone = control.to_string();
+        assert_eq!(engine.layout(&request, &alone).advances, [missing]);
+        assert_eq!(engine.measure(&request, &alone), (missing, height));
+        // It is drawn as the missing glyph as well.
+        assert_eq!(engine.rasterize(&request, &alone), box_mask, "{control:?}");
+        // One line: the height stays, and the widths add up.
+        let text = format!("{SYMBOL}{control}{SYMBOL}");
+        assert_eq!(
+            engine.measure(&request, &text),
+            (2 * width + missing, height)
+        );
+    }
+    // A control character the font does not map is the same.
+    assert!(!raw.has('\u{1}'));
+    assert_eq!(engine.measure(&request, "\u{1}"), (missing, height));
 }

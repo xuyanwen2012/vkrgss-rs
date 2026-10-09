@@ -75,9 +75,9 @@
 //! A character the selected face lacks is drawn from the first fallback family that has it,
 //! then from any font that has it, at the selected face's pixels per em and on its baseline,
 //! and is set at the advance of the selected face's missing glyph. A character no font has
-//! is drawn as that missing-glyph box. Control characters, line breaks included, are
-//! characters like any other: one the selected face lacks is its missing-glyph box, and none
-//! starts a new line. A lacking character outside the Basic Multilingual Plane is as wide as
+//! is drawn as that missing-glyph box. A control character, line breaks included, is
+//! measured and drawn as the selected face's missing glyph, also where the face maps it to a
+//! glyph of its own, and none starts a new line. A lacking character outside the Basic Multilingual Plane is as wide as
 //! two missing glyphs.
 //!
 //! PLACEHOLDER: the original runtime draws the missing glyph for every character the font
