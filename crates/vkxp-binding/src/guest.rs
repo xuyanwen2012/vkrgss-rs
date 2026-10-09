@@ -12,7 +12,7 @@ use crate::element::{self, SceneClasses};
 use crate::error::{self, ErrorClasses};
 use crate::runtime::{self, RunConfig};
 use crate::text::TextBackend;
-use crate::{bitmap, color, font, rect, table};
+use crate::{bitmap, color, font, rect, table, win32api};
 
 /// What a guest is created from.
 pub struct Config {
@@ -41,6 +41,8 @@ pub struct Guest {
     pub(crate) input: InputState,
     /// The link to the host and what running a game keeps.
     pub(crate) runtime: runtime::State,
+    /// What the emulated `Win32API` functions keep between calls.
+    pub(crate) win32api: win32api::State,
 }
 
 /// The Ruby classes this crate defines, and the ones it raises.
@@ -75,6 +77,7 @@ impl Guest {
             scene: Scene::new(),
             input: InputState::new(),
             runtime: runtime::State::new(config.run),
+            win32api: win32api::State::default(),
         }
     }
 

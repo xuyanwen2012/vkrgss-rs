@@ -216,12 +216,52 @@
 //!   function that finds the file through the game's files, without regard to letter case.
 //! - `print` and `p` write their text to `$stderr` and show it as a modal message, and return
 //!   when the host has dismissed it.
-//! - `Win32API` is a placeholder: `call` returns 0 and names each function once on `$stderr`.
+//! - `Win32API#call` goes to the table of emulated functions, see *Win32API*; a function
+//!   outside the table returns 0 and is named once on `$stderr`.
 //! - `require` and `load` evaluate only `.rb` files inside the game directory and raise
 //!   `LoadError` for anything else.
 //! - Unless the `RunConfig` enables them, `system`, backticks, `exec`, `fork`, `syscall` and
 //!   `IO.popen` start nothing, return `nil` and say so on `$stderr`
 //!   (`src/prelude_process_off.rb`).
+//!
+//! # Win32API
+//!
+//! `Win32API.new(library, function, import, export)` keeps the two names, and `call` passes
+//! them with its arguments to the host function `vkxp_win32api` (private module `win32api`).
+//! The library name matches without regard to letter case and with or without `.dll`; a
+//! function name also finds its ANSI variant, so `GetPrivateProfileString` is
+//! `GetPrivateProfileStringA`. An integer argument arrives as it is and `nil` as 0. A string
+//! argument is a buffer: what a function writes goes into the very string object the script
+//! passed, never beyond its length.
+//!
+//! | Library | Function | What it does |
+//! |---|---|---|
+//! | `kernel32` | `GetPrivateProfileStringA` | reads a value of a profile file into the buffer, zero-terminated and cut to fit; the default for a missing key or file; returns the length |
+//! | `kernel32` | `GetPrivateProfileIntA` | the number a value starts with, the default for a missing key or file |
+//! | `kernel32` | `WritePrivateProfileStringA` | sets a value, creating the file, the section or the key; 1, or 0 when nothing was written |
+//! | `kernel32` | `MultiByteToWideChar` | text of a code page to UTF-16; with size 0 the size needed |
+//! | `kernel32` | `WideCharToMultiByte` | UTF-16 to text of a code page, `?` for what it does not have; with size 0 the size needed |
+//! | `kernel32` | `GetTickCount` | the milliseconds of the frames shown so far |
+//! | `winmm` | `timeGetTime` | the same |
+//! | `kernel32` | `RtlMoveMemory` | copies between two strings; an address given as an integer copies nothing |
+//! | `user32` | `GetSystemMetrics` | the logical width for 0 and height for 1, otherwise 0 |
+//! | `user32` | `FindWindowA`, `GetActiveWindow`, `GetForegroundWindow` | the fixed handle `0x00010001` of the game window |
+//! | `user32` | `GetWindowRect`, `GetClientRect` | for that handle, the rectangle 0, 0, width, height of the logical size as four 32-bit integers; 1, otherwise 0 |
+//! | `user32` | `ShowCursor` | keeps the display count and returns it; the pointer does not change yet |
+//!
+//! **Profile files.** A file name is taken relative to the game directory and found without
+//! regard to letter case. An absolute path, a drive or `..` beyond the top names a file
+//! outside: reading finds nothing there and writing returns 0. The file is read as
+//! `vkxp-vfs` reads `Game.ini` (sections and keys without regard to letter case, the first
+//! occurrence of a key wins) and values are exchanged in the file's own bytes, undecoded.
+//!
+//! **Code pages.** 65001 is UTF-8, 936 GBK, 932 Shift-JIS and 950 Big5. 0 and 1 are the
+//! game's code page: the encoding of its `Game.ini`, detected as `vkxp-vfs` detects it.
+//! Any other code page makes the conversion return 0. So does a buffer too small for the
+//! result, after what fits was stored.
+//!
+//! **Ticks.** The tick count advances with every frame `Graphics` shows, by 1000 over the
+//! frame rate, and never follows the clock, so a run is the same every time.
 //!
 //! # The pump
 //!

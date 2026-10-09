@@ -32,7 +32,7 @@ end
 ";
 
 /// Extracts one frame, sends it with `front` before its own bitmap deltas, and waits for its
-/// tick.
+/// tick. The tick count of the emulated `Win32API` functions advances by the frame.
 fn frame(mut front: Vec<BitmapDelta>) {
     Guest::with(|guest| {
         let mut packet = guest.scene.extract(&mut guest.bitmaps);
@@ -42,6 +42,8 @@ fn frame(mut front: Vec<BitmapDelta>) {
         }
         guest.send(GuestToHost::Frame(packet));
         guest.pump(Await::Tick);
+        let frame_rate = guest.scene.frame_rate().get();
+        guest.win32api.frame_shown(frame_rate.into());
     });
 }
 

@@ -17,6 +17,7 @@ workspace = true
 testing = ["dep:png"]
 
 [dependencies]
+encoding_rs.workspace = true
 png = { workspace = true, optional = true }
 thiserror.workspace = true
 vkxp-core.workspace = true

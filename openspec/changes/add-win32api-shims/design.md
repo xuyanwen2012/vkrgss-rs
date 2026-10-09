@@ -32,3 +32,26 @@
 
 - [A script passes a buffer shorter than the data] → Truncate as Windows does and return the
   truncated length.
+
+## Follow-ups
+
+- The tick count is accumulated per frame shown (1000 over the frame rate each) instead of
+  being computed from `Graphics.frame_count`: scripts set that counter back (a new game, a
+  loaded save), and a tick count must not go backwards. It still comes from frames and the
+  frame rate only.
+- The game's code page (code pages 0 and 1) is detected again from the bytes of `Game.ini`,
+  because `GameIni` and `RunConfig` do not carry the encoding the file was read with. An
+  encoding override given to the host is therefore not seen. Should `vkxp-vfs` expose the
+  encoding it chose?
+- A `Game.ini` that is valid UTF-8, which includes plain ASCII, makes the game's code page
+  UTF-8. The original would use the system's ANSI code page; is a configuration value wanted?
+- Profile functions with a null section or key (listing the sections or the keys) and
+  `WritePrivateProfileStringA` with a null key or value (deleting) are not emulated: reading
+  gives the default and writing returns 0.
+- Profile files are read from the game directory only, not from the encrypted archive.
+- `RtlMoveMemory` copies between two strings. Scripts that pass a raw address obtained
+  elsewhere get no copy, because the guest has no such memory.
+- `GetSystemMetrics` answers only the indices 0 and 1; window frame and caption metrics, which
+  window-resizing scripts ask for, return 0.
+- A file name with bytes outside UTF-8 (a legacy-encoded name) is not found by the profile
+  functions.

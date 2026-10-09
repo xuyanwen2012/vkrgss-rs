@@ -6,9 +6,9 @@
 
 ## 2. Functions (`vkxp-binding`)
 
-- [ ] 2.1 Implement the profile functions with the directory rule. Verify: Ruby tests for the four profile scenarios and the outside-path scenario of `specs/rgss-runtime/spec.md`.
-- [ ] 2.2 Implement text conversion, ticks, metrics, window queries, `ShowCursor` and `RtlMoveMemory`. Verify: Ruby tests for the remaining scenarios.
-- [ ] 2.3 Document the table in the crate documentation. Verify: `cargo doc -p vkxp-binding --no-deps` builds without warnings.
+- [x] 2.1 Implement the profile functions with the directory rule. Verify: Ruby tests for the four profile scenarios and the outside-path scenario of `specs/rgss-runtime/spec.md`.
+- [x] 2.2 Implement text conversion, ticks, metrics, window queries, `ShowCursor` and `RtlMoveMemory`. Verify: Ruby tests for the remaining scenarios.
+- [x] 2.3 Document the table in the crate documentation. Verify: `cargo doc -p vkxp-binding --no-deps` builds without warnings.
 
 ## 3. Integration check
 

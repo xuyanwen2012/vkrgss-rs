@@ -11,9 +11,12 @@
 //! result in the buffer it passed.
 
 use std::ffi::c_long;
+use std::path::PathBuf;
 
+use encoding_rs::Encoding;
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{Arity, HostResult, Raised, Ruby};
+use vkxp_vfs::FileKind;
 
 use crate::guest::Guest;
 use crate::rb;
@@ -32,7 +35,53 @@ enum Arg {
 type Shim = fn(&mut Guest, &mut [Arg]) -> i64;
 
 /// The emulated functions: library name in lower case without `.dll`, function name, entry.
-const TABLE: &[(&str, &str, Shim)] = &[("kernel32", "RtlMoveMemory", move_memory)];
+const TABLE: &[(&str, &str, Shim)] = &[
+    ("kernel32", "GetPrivateProfileStringA", profile_string),
+    ("kernel32", "GetPrivateProfileIntA", profile_int),
+    (
+        "kernel32",
+        "WritePrivateProfileStringA",
+        write_profile_string,
+    ),
+    ("kernel32", "MultiByteToWideChar", multi_byte_to_wide_char),
+    ("kernel32", "WideCharToMultiByte", wide_char_to_multi_byte),
+    ("kernel32", "GetTickCount", tick_count),
+    ("winmm", "timeGetTime", tick_count),
+    ("kernel32", "RtlMoveMemory", move_memory),
+    ("user32", "GetSystemMetrics", system_metrics),
+    ("user32", "FindWindowA", window),
+    ("user32", "GetActiveWindow", window),
+    ("user32", "GetForegroundWindow", window),
+    ("user32", "GetWindowRect", window_rect),
+    ("user32", "GetClientRect", window_rect),
+    ("user32", "ShowCursor", show_cursor),
+];
+
+/// The handle every window function gives for the game window.
+const WINDOW: i64 = 0x0001_0001;
+
+/// What the emulated functions keep between calls.
+#[derive(Debug, Default)]
+pub(crate) struct State {
+    /// The tick count: the milliseconds of the frames shown so far.
+    milliseconds: u64,
+    /// What the frames shown so far leave over of a millisecond, in units of one over the
+    /// frame rate.
+    remainder: u64,
+    /// The display count of `ShowCursor`.
+    cursor: i64,
+}
+
+impl State {
+    /// Advances the tick count by one frame of `frame_rate` frames per second. The count
+    /// follows the frames, not the clock, so a run is the same every time; and it follows
+    /// the frames shown, not `Graphics.frame_count`, which a script may set back.
+    pub(crate) fn frame_shown(&mut self, frame_rate: u64) {
+        self.remainder += 1000;
+        self.milliseconds += self.remainder / frame_rate.max(1);
+        self.remainder %= frame_rate.max(1);
+    }
+}
 
 /// The entry for a function of a library. The library name matches without regard to letter
 /// case and with or without `.dll`; like the original `Win32API`, a function name also finds
@@ -73,6 +122,417 @@ fn buffer_mut(args: &mut [Arg], index: usize) -> Option<&mut [u8]> {
     }
 }
 
+/// The text argument at `index`: the bytes of a buffer up to its first zero byte.
+fn c_string(args: &[Arg], index: usize) -> Option<&[u8]> {
+    let bytes = buffer(args, index)?;
+    let end = bytes.iter().position(|&byte| byte == 0);
+    Some(&bytes[..end.unwrap_or(bytes.len())])
+}
+
+// --- Profile files ----------------------------------------------------------------------------
+
+/// What a line of a profile file is, read as `vkxp-vfs` reads `Game.ini`.
+enum Line<'a> {
+    /// `[name]`.
+    Section(&'a [u8]),
+    /// `key=value`, both without surrounding white space.
+    Entry(&'a [u8], &'a [u8]),
+    /// A comment, an empty line or anything else.
+    Other,
+}
+
+fn classify(line: &[u8]) -> Line<'_> {
+    let line = line.trim_ascii();
+    if line.starts_with(b";") {
+        return Line::Other;
+    }
+    if let Some(rest) = line.strip_prefix(b"[") {
+        let end = rest.iter().position(|&byte| byte == b']');
+        return Line::Section(rest[..end.unwrap_or(rest.len())].trim_ascii());
+    }
+    match line.iter().position(|&byte| byte == b'=') {
+        Some(at) => Line::Entry(line[..at].trim_ascii(), line[at + 1..].trim_ascii()),
+        None => Line::Other,
+    }
+}
+
+/// A file's byte-order mark, if it has one, and the rest.
+fn split_mark(contents: &[u8]) -> (&[u8], &[u8]) {
+    const MARK: &[u8] = b"\xEF\xBB\xBF";
+    match contents.strip_prefix(MARK) {
+        Some(rest) => (MARK, rest),
+        None => (b"", contents),
+    }
+}
+
+/// The value of `key` in `section`, in the file's bytes. Names match without regard to
+/// letter case, the first occurrence of a key wins, and a pair of quotes around the value is
+/// dropped as Windows drops it.
+fn profile_lookup<'a>(contents: &'a [u8], section: &[u8], key: &[u8]) -> Option<&'a [u8]> {
+    let mut inside = false;
+    for line in split_mark(contents).1.split(|&byte| byte == b'\n') {
+        match classify(line) {
+            Line::Section(name) => inside = name.eq_ignore_ascii_case(section),
+            Line::Entry(name, value) if inside && name.eq_ignore_ascii_case(key) => {
+                let quoted = value.len() >= 2
+                    && matches!(value[0], b'"' | b'\'')
+                    && value[value.len() - 1] == value[0];
+                return Some(if quoted {
+                    &value[1..value.len() - 1]
+                } else {
+                    value
+                });
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// `contents` with `key` of `section` set to `value`: in place of the value of the key's
+/// first entry, or after the last entry of the section, or in a new section at the end.
+fn profile_set(contents: &[u8], section: &[u8], key: &[u8], value: &[u8]) -> Vec<u8> {
+    let (mark, body) = split_mark(contents);
+    let unix = body.contains(&b'\n') && !body.windows(2).any(|pair| pair == b"\r\n");
+    let newline: &[u8] = if unix { b"\n" } else { b"\r\n" };
+    let entry = |name: &[u8]| [name, b"=", value, newline].concat();
+    let lines: Vec<&[u8]> = body.split_inclusive(|&byte| byte == b'\n').collect();
+    let mut inside = false;
+    let mut replace = None;
+    let mut insert = None;
+    for (index, line) in lines.iter().enumerate() {
+        match classify(line) {
+            Line::Section(name) => {
+                inside = name.eq_ignore_ascii_case(section);
+                if inside {
+                    insert = Some(index + 1);
+                }
+            }
+            Line::Entry(name, _) if inside => {
+                if name.eq_ignore_ascii_case(key) {
+                    replace = Some((index, name));
+                    break;
+                }
+                insert = Some(index + 1);
+            }
+            _ => {}
+        }
+    }
+    let mut out = mark.to_vec();
+    for (index, line) in lines.iter().enumerate() {
+        match replace {
+            // The key keeps the spelling the file has.
+            Some((at, name)) if at == index => out.extend_from_slice(&entry(name)),
+            Some(_) => out.extend_from_slice(line),
+            None => {
+                if insert == Some(index) {
+                    out.extend_from_slice(&entry(key));
+                }
+                out.extend_from_slice(line);
+            }
+        }
+    }
+    if replace.is_none() && insert.is_none_or(|at| at >= lines.len()) {
+        if body.last().is_some_and(|&byte| byte != b'\n') {
+            out.extend_from_slice(newline);
+        }
+        if insert.is_none() {
+            out.extend_from_slice(&[b"[", section, b"]", newline].concat());
+        }
+        out.extend_from_slice(&entry(key));
+    }
+    out
+}
+
+/// The components of a file name given to a profile function, relative to the game
+/// directory, or `None` for a name that leaves it: an absolute path, a drive, or `..` beyond
+/// the top.
+fn inside_game(name: &[u8]) -> Option<Vec<String>> {
+    let name = String::from_utf8_lossy(name);
+    if name.starts_with(['/', '\\']) || name.as_bytes().get(1) == Some(&b':') {
+        return None;
+    }
+    let mut components = Vec::new();
+    for component in name.split(['/', '\\']) {
+        match component {
+            "" | "." => {}
+            ".." => {
+                components.pop()?;
+            }
+            name => components.push(name.to_owned()),
+        }
+    }
+    (!components.is_empty()).then_some(components)
+}
+
+/// Where the profile file `name` is, or would be created, inside the game directory. An
+/// existing file is found without regard to letter case.
+fn profile_path(guest: &Guest, name: &[u8]) -> Option<PathBuf> {
+    let components = inside_game(name)?;
+    // Scripts create files through Ruby's own file API, which the cached listings do not see.
+    guest.files.refresh();
+    let relative = components.join("/");
+    let existing = guest.files.resolve(FileKind::Data, &relative);
+    Some(existing.unwrap_or_else(|_| guest.files.game_dir().join(relative)))
+}
+
+/// The value the section, key and file name arguments name: the first two arguments and the
+/// one at `file`. `None` when the file is missing or outside the game directory, or has no
+/// such key.
+fn profile_value(guest: &Guest, args: &[Arg], file: usize) -> Option<Vec<u8>> {
+    let section = c_string(args, 0)?;
+    let key = c_string(args, 1)?;
+    let contents = std::fs::read(profile_path(guest, c_string(args, file)?)?).ok()?;
+    profile_lookup(&contents, section, key).map(<[u8]>::to_vec)
+}
+
+/// `GetPrivateProfileStringA(section, key, default, buffer, size, file)`: the value, or the
+/// default, goes into the buffer with a zero byte after it, cut to fit; returns its length.
+fn profile_string(guest: &mut Guest, args: &mut [Arg]) -> i64 {
+    let value = profile_value(guest, args, 5)
+        .or_else(|| c_string(args, 2).map(<[u8]>::to_vec))
+        .unwrap_or_default();
+    let size = usize::try_from(int(args, 4)).unwrap_or(0);
+    let Some(buffer) = buffer_mut(args, 3) else {
+        return 0;
+    };
+    let Some(room) = size.min(buffer.len()).checked_sub(1) else {
+        return 0;
+    };
+    let length = value.len().min(room);
+    buffer[..length].copy_from_slice(&value[..length]);
+    buffer[length] = 0;
+    length as i64
+}
+
+/// `GetPrivateProfileIntA(section, key, default, file)`: the number the value starts with,
+/// 0 for a value that starts with none, the default for a missing key.
+fn profile_int(guest: &mut Guest, args: &mut [Arg]) -> i64 {
+    let Some(value) = profile_value(guest, args, 3) else {
+        return int(args, 2);
+    };
+    let (negative, digits) = match value.split_first() {
+        Some((b'-', rest)) => (true, rest),
+        Some((b'+', rest)) => (false, rest),
+        _ => (false, &value[..]),
+    };
+    let number = digits
+        .iter()
+        .take_while(|byte| byte.is_ascii_digit())
+        .fold(0u32, |number, byte| {
+            number.wrapping_mul(10).wrapping_add(u32::from(byte - b'0'))
+        });
+    let number = if negative {
+        number.wrapping_neg()
+    } else {
+        number
+    };
+    i64::from(number as i32)
+}
+
+/// `WritePrivateProfileStringA(section, key, value, file)`: returns 1 when the file was
+/// written, 0 when it was not or lies outside the game directory.
+fn write_profile_string(guest: &mut Guest, args: &mut [Arg]) -> i64 {
+    let (Some(section), Some(key), Some(value), Some(file)) = (
+        c_string(args, 0),
+        c_string(args, 1),
+        c_string(args, 2),
+        c_string(args, 3),
+    ) else {
+        return 0;
+    };
+    let Some(path) = profile_path(guest, file) else {
+        return 0;
+    };
+    let contents = std::fs::read(&path).unwrap_or_default();
+    let written = std::fs::write(&path, profile_set(&contents, section, key, value)).is_ok();
+    guest.files.refresh();
+    i64::from(written)
+}
+
+// --- Text conversion --------------------------------------------------------------------------
+
+/// The encoding of a configuration file with these contents, found as `vkxp-vfs` finds it:
+/// UTF-8 if that is valid, otherwise the first legacy encoding that accepts every byte.
+fn detect(contents: &[u8]) -> &'static Encoding {
+    if std::str::from_utf8(contents).is_ok() {
+        return encoding_rs::UTF_8;
+    }
+    vkxp_vfs::Encoding::LEGACY_ORDER
+        .into_iter()
+        .map(|legacy| match legacy {
+            vkxp_vfs::Encoding::Utf8 => encoding_rs::UTF_8,
+            vkxp_vfs::Encoding::Gbk => encoding_rs::GBK,
+            vkxp_vfs::Encoding::ShiftJis => encoding_rs::SHIFT_JIS,
+            vkxp_vfs::Encoding::Big5 => encoding_rs::BIG5,
+        })
+        .find(|encoding| {
+            encoding
+                .decode_without_bom_handling_and_without_replacement(contents)
+                .is_some()
+        })
+        .unwrap_or(encoding_rs::UTF_8)
+}
+
+/// The encoding a code page number names. 0 and 1, the ANSI and OEM code pages of the
+/// system, are the game's own: the encoding of its `Game.ini`.
+fn code_page(guest: &Guest, number: i64) -> Option<&'static Encoding> {
+    match number {
+        65001 => Some(encoding_rs::UTF_8),
+        936 => Some(encoding_rs::GBK),
+        932 => Some(encoding_rs::SHIFT_JIS),
+        950 => Some(encoding_rs::BIG5),
+        0 | 1 => {
+            let ini = guest.files.resolve(FileKind::Data, "Game.ini");
+            let contents = ini.ok().and_then(|path| std::fs::read(path).ok());
+            Some(detect(&contents.unwrap_or_default()))
+        }
+        _ => None,
+    }
+}
+
+/// `text` in `encoding`, with `?` for what the encoding does not have.
+fn encode(encoding: &'static Encoding, text: &str) -> Vec<u8> {
+    let (bytes, _, unmappable) = encoding.encode(text);
+    if !unmappable {
+        return bytes.into_owned();
+    }
+    let mut out = Vec::new();
+    let mut utf8 = [0; 4];
+    for character in text.chars() {
+        match encoding.encode(character.encode_utf8(&mut utf8)) {
+            (_, _, true) => out.push(b'?'),
+            (bytes, _, false) => out.extend_from_slice(&bytes),
+        }
+    }
+    out
+}
+
+/// Stores the result of a conversion, `data` in units of `unit` bytes, in the buffer at
+/// `index`, whose size in units is the argument after it. A size of 0 asks for the number
+/// of units needed. Returns the number of units stored, or 0, as Windows does, when the
+/// buffer is too small for all of them; what fits is stored all the same.
+fn store(args: &mut [Arg], index: usize, data: &[u8], unit: usize) -> i64 {
+    let size = usize::try_from(int(args, index + 1)).unwrap_or(0);
+    if size == 0 {
+        return (data.len() / unit) as i64;
+    }
+    let Some(buffer) = buffer_mut(args, index) else {
+        return 0;
+    };
+    let room = size.min(buffer.len() / unit) * unit;
+    let stored = data.len().min(room);
+    buffer[..stored].copy_from_slice(&data[..stored]);
+    if stored == data.len() {
+        (stored / unit) as i64
+    } else {
+        0
+    }
+}
+
+/// `MultiByteToWideChar(code_page, flags, source, length, buffer, size)`: UTF-16 in
+/// little-endian byte order, the size counted in 16-bit units. A length of -1 takes the
+/// source up to its zero byte and converts the terminator too.
+fn multi_byte_to_wide_char(guest: &mut Guest, args: &mut [Arg]) -> i64 {
+    let Some(encoding) = code_page(guest, int(args, 0)) else {
+        return 0;
+    };
+    let length = int(args, 3);
+    let source = match usize::try_from(length) {
+        Ok(length) => buffer(args, 2).map(|bytes| &bytes[..length.min(bytes.len())]),
+        Err(_) => c_string(args, 2),
+    };
+    let Some(source) = source else {
+        return 0;
+    };
+    let (text, _) = encoding.decode_without_bom_handling(source);
+    let terminator = (length < 0).then_some(0);
+    let wide: Vec<u8> = text
+        .encode_utf16()
+        .chain(terminator)
+        .flat_map(u16::to_le_bytes)
+        .collect();
+    store(args, 4, &wide, 2)
+}
+
+/// `WideCharToMultiByte(code_page, flags, source, length, buffer, size, default, used)`: the
+/// reverse, the length counted in 16-bit units and the size in bytes. The last two arguments
+/// are not used.
+fn wide_char_to_multi_byte(guest: &mut Guest, args: &mut [Arg]) -> i64 {
+    let Some(encoding) = code_page(guest, int(args, 0)) else {
+        return 0;
+    };
+    let Some(source) = buffer(args, 2) else {
+        return 0;
+    };
+    let units = source
+        .chunks_exact(2)
+        .map(|pair| u16::from_le_bytes([pair[0], pair[1]]));
+    let length = int(args, 3);
+    let units: Vec<u16> = match usize::try_from(length) {
+        Ok(length) => units.take(length).collect(),
+        Err(_) => units.take_while(|&unit| unit != 0).collect(),
+    };
+    let mut bytes = encode(encoding, &String::from_utf16_lossy(&units));
+    if length < 0 {
+        bytes.push(0);
+    }
+    store(args, 4, &bytes, 1)
+}
+
+// --- Time, screen and window ------------------------------------------------------------------
+
+/// `GetTickCount()` and `timeGetTime()`: the milliseconds of the frames shown so far, in 32
+/// bits.
+fn tick_count(guest: &mut Guest, _args: &mut [Arg]) -> i64 {
+    i64::from(guest.win32api.milliseconds as u32)
+}
+
+/// `GetSystemMetrics(index)`: the logical size for the width (0) and the height (1) of the
+/// screen, 0 for every other index.
+fn system_metrics(guest: &mut Guest, args: &mut [Arg]) -> i64 {
+    let size = guest.scene.logical_size();
+    match int(args, 0) {
+        0 => i64::from(size.width),
+        1 => i64::from(size.height),
+        _ => 0,
+    }
+}
+
+/// `FindWindowA(class, title)`, `GetActiveWindow()` and `GetForegroundWindow()`: the game
+/// window, whatever is asked for.
+fn window(_guest: &mut Guest, _args: &mut [Arg]) -> i64 {
+    WINDOW
+}
+
+/// `GetWindowRect(window, buffer)` and `GetClientRect(window, buffer)`: the rectangle of the
+/// logical size at the origin, as left, top, right and bottom in 32 bits each.
+fn window_rect(guest: &mut Guest, args: &mut [Arg]) -> i64 {
+    let size = guest.scene.logical_size();
+    if int(args, 0) != WINDOW {
+        return 0;
+    }
+    let Some(rect) = buffer_mut(args, 1).and_then(|buffer| buffer.get_mut(..16)) else {
+        return 0;
+    };
+    for (side, value) in rect
+        .chunks_exact_mut(4)
+        .zip([0, 0, size.width, size.height])
+    {
+        side.copy_from_slice(&value.to_le_bytes());
+    }
+    1
+}
+
+/// `ShowCursor(show)`: the new display count.
+// PLACEHOLDER: the count is kept, but the host is not told to hide the pointer.
+fn show_cursor(guest: &mut Guest, args: &mut [Arg]) -> i64 {
+    guest.win32api.cursor += if int(args, 0) != 0 { 1 } else { -1 };
+    guest.win32api.cursor
+}
+
+// --- Memory -----------------------------------------------------------------------------------
+
 /// `RtlMoveMemory(destination, source, length)` between two strings. An address given as an
 /// integer names memory the guest does not have, and nothing is copied.
 fn move_memory(_guest: &mut Guest, args: &mut [Arg]) -> i64 {
@@ -86,6 +546,8 @@ fn move_memory(_guest: &mut Guest, args: &mut [Arg]) -> i64 {
     }
     0
 }
+
+// --- The call ---------------------------------------------------------------------------------
 
 /// `vkxp_win32api(library, function, *arguments)`: the value of the emulated function, or
 /// `nil` when the function is not in the table.
@@ -125,4 +587,93 @@ fn call(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
 /// Defines the host function the prelude's `Win32API` builds on.
 pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
     ruby.define_global_function_with_arity(c"vkxp_win32api", Arity::Any, call)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_profile_is_read_as_the_configuration_file_is() {
+        let file = b"\xEF\xBB\xBF; note\r\n[Other]\r\nTitle=no\r\n[ game ]\r\n title = A=B \r\n\
+                     Title=later\r\nQuoted=\" x \"\r\nEmpty=\r\n";
+        assert_eq!(profile_lookup(file, b"Game", b"TITLE"), Some(&b"A=B"[..]));
+        assert_eq!(profile_lookup(file, b"Game", b"quoted"), Some(&b" x "[..]));
+        assert_eq!(profile_lookup(file, b"Game", b"Empty"), Some(&b""[..]));
+        assert_eq!(profile_lookup(file, b"Game", b"note"), None);
+        assert_eq!(profile_lookup(file, b"Absent", b"Title"), None);
+    }
+
+    #[test]
+    fn a_profile_is_changed_where_the_key_belongs() {
+        let set = |contents: &str, key: &str| {
+            String::from_utf8(profile_set(contents.as_bytes(), b"b", key.as_bytes(), b"9")).unwrap()
+        };
+        assert_eq!(set("", "k"), "[b]\r\nk=9\r\n");
+        assert_eq!(set("[a]\nx=1", "k"), "[a]\nx=1\n[b]\nk=9\n");
+        assert_eq!(
+            set("[B]\r\nx=1\r\nK = 2\r\n[c]\r\nk=3\r\n", "k"),
+            "[B]\r\nx=1\r\nK=9\r\n[c]\r\nk=3\r\n"
+        );
+        assert_eq!(
+            set("[b]\nx=1\n\n[c]\ny=2\n", "k"),
+            "[b]\nx=1\nk=9\n\n[c]\ny=2\n"
+        );
+        assert_eq!(set("[b]\nx=1", "k"), "[b]\nx=1\nk=9\n");
+        assert_eq!(set("\u{feff}[b]\n", "k"), "\u{feff}[b]\nk=9\n");
+    }
+
+    #[test]
+    fn the_code_page_of_a_game_is_the_encoding_of_its_configuration_file() {
+        assert_eq!(detect(b""), encoding_rs::UTF_8);
+        assert_eq!(detect("Title=测试".as_bytes()), encoding_rs::UTF_8);
+        assert_eq!(detect(b"Title=\xB2\xE2\xCA\xD4"), encoding_rs::GBK);
+        // Shift-JIS text that is not valid GBK: a lone half-width katakana.
+        assert_eq!(detect(b"Title=\x83\x65\xB1"), encoding_rs::SHIFT_JIS);
+    }
+
+    #[test]
+    fn what_an_encoding_does_not_have_becomes_a_question_mark() {
+        assert_eq!(encode(encoding_rs::GBK, "a测b"), b"a\xB2\xE2b");
+        assert_eq!(
+            encode(encoding_rs::SHIFT_JIS, "a\u{1F600}測"),
+            b"a?\x91\xAA"
+        );
+    }
+
+    #[test]
+    fn ticks_follow_the_frames_at_their_rate() {
+        let mut state = State::default();
+        for _ in 0..40 {
+            state.frame_shown(40);
+        }
+        assert_eq!(state.milliseconds, 1000);
+        for _ in 0..3 {
+            state.frame_shown(60);
+        }
+        assert_eq!(state.milliseconds, 1050);
+    }
+
+    #[test]
+    fn a_profile_name_stays_inside_the_game_directory() {
+        let inside = |name: &str| inside_game(name.as_bytes()).map(|parts| parts.join("/"));
+        assert_eq!(inside(".\\Game.ini").as_deref(), Some("Game.ini"));
+        assert_eq!(inside("Data/../save.ini").as_deref(), Some("save.ini"));
+        assert_eq!(
+            inside("Data\\Config.ini").as_deref(),
+            Some("Data/Config.ini")
+        );
+        for outside in [
+            "C:\\Windows\\win.ini",
+            "c:win.ini",
+            "../other.ini",
+            "/etc/x.ini",
+            "\\\\host\\x.ini",
+            "a/../../x.ini",
+            ".",
+            "",
+        ] {
+            assert_eq!(inside(outside), None, "{outside}");
+        }
+    }
 }

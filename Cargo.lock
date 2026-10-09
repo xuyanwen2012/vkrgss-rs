@@ -2398,6 +2398,7 @@ dependencies = [
 name = "vkxp-binding"
 version = "0.1.0"
 dependencies = [
+ "encoding_rs",
  "png",
  "thiserror 2.0.21",
  "vkxp-binding",
