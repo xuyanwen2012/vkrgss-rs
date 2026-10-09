@@ -1,6 +1,6 @@
 [package]
 name = "xtask"
-description = "Repository automation for vkxp: merge gate and dependency rules"
+description = "Repository automation for vkxp: merge gate, dependency rules, built-in script extraction"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

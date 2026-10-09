@@ -2,7 +2,7 @@
 
 ## 1. Extraction tool (`xtask`)
 
-- [ ] 1.1 Implement `cargo xtask extract-rpg <DLL> <OUTPUT>`. Verify: unit tests for the two extraction-tool scenarios in `specs/game-launch/spec.md`, with input files built in the test.
+- [x] 1.1 Implement `cargo xtask extract-rpg <DLL> <OUTPUT>`. Verify: unit tests for the two extraction-tool scenarios in `specs/game-launch/spec.md`, with input files built in the test.
 
 ## 2. Executable (`vkxp`)
 

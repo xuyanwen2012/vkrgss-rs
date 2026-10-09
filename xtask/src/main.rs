@@ -2,22 +2,26 @@
 //!
 //! - `gate`: the merge gate (formatting, lints, tests, OpenSpec validation).
 //! - `deps`: the dependency-direction rules on their own.
+//! - `extract-rpg <DLL> <OUTPUT>`: copies the built-in `RPG` scripts out of an RGSS DLL.
 
 #![forbid(unsafe_code)]
 
 mod deps;
+mod extract;
 mod gate;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-const USAGE: &str = "usage: cargo xtask <gate|deps>";
+const USAGE: &str = "usage: cargo xtask <gate|deps|extract-rpg <DLL> <OUTPUT>>";
 
 fn main() -> ExitCode {
-    let mut args = std::env::args().skip(1);
-    let result = match (args.next().as_deref(), args.next()) {
-        (Some("gate"), None) => gate::run(&workspace_root()),
-        (Some("deps"), None) => deps::run(&workspace_root()),
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    let result = match args[..] {
+        ["gate"] => gate::run(&workspace_root()),
+        ["deps"] => deps::run(&workspace_root()),
+        ["extract-rpg", dll, output] => extract::run(Path::new(dll), Path::new(output)),
         _ => {
             eprintln!("{USAGE}");
             return ExitCode::from(2);
