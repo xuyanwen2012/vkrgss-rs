@@ -1,8 +1,9 @@
 //! A scripted host for the tests of what crosses the link, built on `vkxp_proto::link` alone.
 //!
 //! [`scripted_host`] starts a thread that holds the host end of a new link. It answers every
-//! frame with a tick and every modal message with its dismissal, records what it receives,
-//! and sends what its [`Script`] tells it to. [`play`] evaluates a Ruby snippet on the
+//! frame with a tick and every modal message with its dismissal, at once unless its
+//! [`Script`] says after how many frames, records what it receives, and sends what its
+//! [`Script`] tells it to. [`play`] evaluates a Ruby snippet on the
 //! harness's guest against such a host, and [`run_game`] plays a [`Game`], a game directory
 //! made for one test, on it.
 //!
@@ -36,6 +37,7 @@ use crate::{Guest, RunConfig, RunError, runtime};
 pub struct Script {
     at_start: Vec<HostToGuest>,
     after_frame: Vec<(usize, HostToGuest)>,
+    dismiss_after: Option<usize>,
 }
 
 impl Script {
@@ -56,6 +58,14 @@ impl Script {
     #[must_use]
     pub fn after_frame(mut self, frame: usize, message: HostToGuest) -> Script {
         self.after_frame.push((frame, message));
+        self
+    }
+
+    /// Dismisses a modal message when this many frames have arrived after it, before the
+    /// tick of the last of them, instead of at once.
+    #[must_use]
+    pub fn dismiss_after(mut self, frames: usize) -> Script {
+        self.dismiss_after = Some(frames);
         self
     }
 }
@@ -117,6 +127,8 @@ pub fn scripted_host(script: Script) -> (GuestEnd, ScriptedHost) {
     let thread = thread::spawn(move || {
         let mut record = Record::default();
         let mut frames = 0;
+        // The frames still to come before the modal message being shown is dismissed.
+        let mut modal_frames = None;
         // The wake hook is dropped with the guest end, which ends the outer loop.
         while woken.recv().is_ok() {
             while let Ok(Some(message)) = host.try_recv() {
@@ -128,9 +140,22 @@ pub fn scripted_host(script: Script) -> (GuestEnd, ScriptedHost) {
                                 let _ = host.send(extra.clone());
                             }
                         }
+                        if let Some(left) = &mut modal_frames {
+                            *left -= 1;
+                            if *left == 0 {
+                                modal_frames = None;
+                                let _ = host.send(HostToGuest::ModalDismissed);
+                            }
+                        }
                         Some(HostToGuest::Tick)
                     }
-                    GuestToHost::Modal { .. } => Some(HostToGuest::ModalDismissed),
+                    GuestToHost::Modal { .. } => match script.dismiss_after {
+                        Some(frames) if frames > 0 => {
+                            modal_frames = Some(frames);
+                            None
+                        }
+                        _ => Some(HostToGuest::ModalDismissed),
+                    },
                     _ => None,
                 };
                 record.received.push(message);

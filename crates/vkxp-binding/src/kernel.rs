@@ -1,7 +1,6 @@
 //! The global functions of a game that are host functions, and the host functions the Ruby
 //! prelude builds on, whose names start with `vkxp_`.
 
-use vkxp_proto::GuestToHost;
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{Arity, HostResult, Raise, Raised, Ruby};
 use vkxp_vfs::FileKind;
@@ -9,7 +8,7 @@ use vkxp_vfs::FileKind;
 use crate::error;
 use crate::guest::Guest;
 use crate::rb;
-use crate::runtime::Await;
+use crate::runtime;
 
 /// `LoadError`.
 fn load_error(_ruby: &Ruby) -> VALUE {
@@ -56,20 +55,27 @@ fn load_data(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     Ok(unsafe { ruby.funcall(marshal, c"load", &[dump]) }?)
 }
 
-/// `vkxp_modal(text)`: shows the host a modal message and returns when it was dismissed.
-/// The prelude's `print` and `p` build on it.
+/// `vkxp_modal(text)`: shows the host a modal message, and the message panel until it was
+/// dismissed. The prelude's `print` and `p` build on it.
 fn modal(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     let text = rb::text(ruby, args[0])?;
-    Guest::with(|guest| {
-        guest.send(GuestToHost::Modal { text });
-        guest.pump(Await::Dismissal);
-    });
+    Guest::with(|guest| guest.show_message(text));
+    runtime::raise_pending(ruby)?;
     Ok(ffi::Qnil)
+}
+
+/// `vkxp_modal_p(text)`: `vkxp_modal` for `p`, which does nothing when `p` is log-only.
+fn modal_p(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    if Guest::with(|guest| guest.runtime.run.log_p) {
+        return Ok(ffi::Qnil);
+    }
+    modal(ruby, recv, args)
 }
 
 /// Defines the global functions.
 pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
     ruby.define_global_function_with_arity(c"load_data", Arity::Fixed(1), load_data)?;
     ruby.define_global_function_with_arity(c"vkxp_locate", Arity::Fixed(2), locate)?;
-    ruby.define_global_function_with_arity(c"vkxp_modal", Arity::Fixed(1), modal)
+    ruby.define_global_function_with_arity(c"vkxp_modal", Arity::Fixed(1), modal)?;
+    ruby.define_global_function_with_arity(c"vkxp_modal_p", Arity::Fixed(1), modal_p)
 }

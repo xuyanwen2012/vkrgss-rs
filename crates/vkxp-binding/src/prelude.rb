@@ -16,7 +16,8 @@ def save_data(object, filename)
   File.open(filename, "wb") { |file| Marshal.dump(object, file) }
 end
 
-# The text goes to the error stream and to the host, which shows it until it is dismissed.
+# The text goes to the error stream and to the host, and is shown in the message panel until
+# the host has dismissed it. `p` can be made log-only, which leaves the error stream.
 def print(*args)
   text = ""
   args.each { |arg| text << arg.to_s }
@@ -27,7 +28,7 @@ end
 def p(*args)
   text = args.map { |arg| arg.inspect }.join("\n")
   $stderr.write(text + "\n")
-  vkxp_modal(text)
+  vkxp_modal_p(text)
 end
 
 # Reads the script archive as the original runtime does: each entry holds an identifier, a

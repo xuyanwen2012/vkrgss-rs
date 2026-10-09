@@ -6,7 +6,7 @@
 
 ## 2. Guest (`vkxp-binding`)
 
-- [ ] 2.1 Draw the panel and keep sending frames while waiting. Verify: Ruby tests for the three scenarios of `specs/rgss-runtime/spec.md`, with pixels read through the test helper.
+- [x] 2.1 Draw the panel and keep sending frames while waiting. Verify: Ruby tests for the three scenarios of `specs/rgss-runtime/spec.md`, with pixels read through the test helper.
 
 ## 3. Executable (`vkxp`)
 

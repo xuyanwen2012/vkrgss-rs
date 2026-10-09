@@ -256,10 +256,14 @@ fn an_uncaught_error_is_reported_with_script_name_and_line() {
          undefined method `frobnicate' for nil:NilClass"
     );
     assert_eq!(played.after.as_deref(), Ok("[:title]"));
-    // The host shows the report before it is told that the guest has ended.
+    // The host shows the report before it is told that the guest has ended. The frame with
+    // the message panel is between the two.
     let mut expected = vec![title("Error"), GuestToHost::Modal { text: report }];
     expected.extend(ending());
-    assert_eq!(played.record.received, expected);
+    let others: Vec<GuestToHost> = played.record.others().into_iter().cloned().collect();
+    assert_eq!(others, expected);
+    assert!(matches!(played.record.received[2], GuestToHost::Frame(_)));
+    assert_eq!(played.record.frames().len(), 1);
 }
 
 #[test]

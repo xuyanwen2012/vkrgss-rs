@@ -9,6 +9,10 @@
 //!
 //! `solid(width, height, red, green, blue)` makes an opaque bitmap of one colour.
 //!
+//! [`rendered`] is for the frames a scripted host recorded: it draws them in order with one
+//! reference compositor, which is how a test reads the pixels of frames that were sent while
+//! a script waited.
+//!
 //! `scene_count` returns the number of live scene elements made by Ruby objects of one kind:
 //! `:sprite`, `:viewport`, `:window`, `:plane` or `:tilemap`.
 //!
@@ -23,7 +27,7 @@ use std::sync::OnceLock;
 use vkxp_binding::{scene_testing, testing};
 use vkxp_compose_ref::{Compositor, Frame};
 use vkxp_core::ElementKind;
-use vkxp_proto::{BitmapDelta, Op};
+use vkxp_proto::{BitmapDelta, FramePacket, Op};
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{Arity, HostResult, Ruby};
 
@@ -88,6 +92,33 @@ fn frame() -> Frame {
             .render(&packet)
             .expect("the reference compositor accepts every extracted packet")
     })
+}
+
+/// The frames of a recording as the reference compositor draws them, one after another.
+///
+/// The arena is shared by the tests of a binary, so a recording can start with the disposal
+/// of bitmaps an earlier test made. Those were never announced to this compositor and are
+/// left out.
+pub fn rendered(packets: &[&FramePacket]) -> Vec<Frame> {
+    let mut compositor = Compositor::new();
+    let mut created = Vec::new();
+    packets
+        .iter()
+        .map(|packet| {
+            let mut packet = (*packet).clone();
+            packet.bitmaps.retain(|delta| match delta {
+                BitmapDelta::Create { id, .. } => {
+                    created.push(*id);
+                    true
+                }
+                BitmapDelta::Destroy { id } => created.contains(id),
+                _ => true,
+            });
+            compositor
+                .render(&packet)
+                .expect("the reference compositor accepts every extracted packet")
+        })
+        .collect()
 }
 
 /// A `Fixnum` argument that is at least 0.

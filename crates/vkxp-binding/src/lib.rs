@@ -193,7 +193,7 @@
 //! | its last statement | the next script runs; after the last one the game is over |
 //! | `SystemExit` | the game is over |
 //! | `Reset` | audio stops, `Graphics._reset` disposes every scene element and bitmap, the input state is cleared, and the scripts run again from the first in the same interpreter |
-//! | any other exception | the report `Script '<name>' line <n>: <class> occurred.` with the message goes to the error stream and to the host as a modal message; once that is dismissed the game is over, and the run returns [`RunError::Script`] |
+//! | any other exception | the report `Script '<name>' line <n>: <class> occurred.` with the message goes to the error stream and to the host as a modal message, and is shown in the message panel; once that is dismissed the game is over, and the run returns [`RunError::Script`] |
 //!
 //! The script of a report is found through the `Section` index of the backtrace and named
 //! as the archive names it. However the game ends, and also when the built-in scripts file
@@ -215,7 +215,11 @@
 //! - `save_data` writes a `Marshal` dump through Ruby's `File`. `load_data` is a host
 //!   function that finds the file through the game's files, without regard to letter case.
 //! - `print` and `p` write their text to `$stderr` and show it as a modal message, and return
-//!   when the host has dismissed it.
+//!   when the host has dismissed it. While they wait, the guest keeps sending frames that
+//!   show the text in a panel over the scene (`src/panel.rs`): at least one, and then one
+//!   more for every tick until the dismissal has arrived. These frames do not advance
+//!   `Graphics.frame_count`, and a reset or quit request ends the wait and is raised as by
+//!   `Graphics.update`. With `log_p` of the [`RunConfig`], `p` only writes to `$stderr`.
 //! - `Win32API#call` goes to the table of emulated functions, see *Win32API*; a function
 //!   outside the table returns 0 and is named once on `$stderr`.
 //! - `require` and `load` evaluate only `.rb` files inside the game directory and raise
@@ -304,7 +308,7 @@
 //! The `testing` module, behind the feature of the same name, starts the one interpreter of
 //! a test process with a guest over a generated game directory and evaluates Ruby source.
 //! Its `host` module is a scripted host on the other end of a link: it ticks every frame,
-//! dismisses every modal message, records what the guest sent, and plays whole games made
+//! dismisses every modal message, at once or after a number of frames, records what the guest sent, and plays whole games made
 //! for a test.
 //! The `scene_testing` module, behind the same feature, gives tests the guest's scene and
 //! counts the elements the element classes made. The tests of the scene classes draw the
@@ -321,6 +325,7 @@ mod graphics;
 mod guest;
 mod input;
 mod kernel;
+mod panel;
 mod plane;
 mod rb;
 mod rect;

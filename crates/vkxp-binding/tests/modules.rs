@@ -470,12 +470,15 @@ fn save_data_then_load_data() {
 fn print_shows_a_modal_message() {
     let (value, record) = eval(&with_error_stream("print('a', 1)"));
     assert_eq!(value, r#"[nil, "a1\n"]"#);
+    // The message, and one frame with the panel before the dismissal is seen.
     assert_eq!(
-        record.received,
-        [GuestToHost::Modal {
+        record.others(),
+        [&GuestToHost::Modal {
             text: "a1".to_owned()
         }]
     );
+    assert_eq!(record.frames().len(), 1);
+    assert!(matches!(record.received[0], GuestToHost::Modal { .. }));
 }
 
 #[test]
@@ -483,11 +486,12 @@ fn p_shows_inspect_of_each_argument() {
     let (value, record) = eval(&with_error_stream("p 'a', nil"));
     assert_eq!(value, r#"[nil, "\"a\"\nnil\n"]"#);
     assert_eq!(
-        record.received,
-        [GuestToHost::Modal {
+        record.others(),
+        [&GuestToHost::Modal {
             text: "\"a\"\nnil".to_owned()
         }]
     );
+    assert_eq!(record.frames().len(), 1);
 }
 
 #[test]

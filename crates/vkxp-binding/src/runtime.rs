@@ -16,6 +16,7 @@ use vkxp_ruby_sys::{Raise, Raised, Ruby, RubyError};
 use vkxp_vfs::GameIni;
 
 use crate::guest::{Config, Guest};
+use crate::panel::Panel;
 use crate::{audio, graphics, input, kernel, rb, win32api};
 
 /// The Ruby part of the preparation: globals, `Reset` and `Hangup`, `save_data`, `Win32API`,
@@ -50,6 +51,9 @@ pub struct RunConfig {
     /// first script, and again after every reset. They are read from these paths as given,
     /// not from the game directory.
     pub preload: Vec<PathBuf>,
+    /// Whether `p` is log-only: it writes to the error stream, shows no message panel and
+    /// waits for nothing.
+    pub log_p: bool,
 }
 
 impl Default for RunConfig {
@@ -69,6 +73,7 @@ impl Default for RunConfig {
             process_functions: false,
             seed: None,
             preload: Vec::new(),
+            log_p: false,
         }
     }
 }
@@ -80,8 +85,6 @@ pub(crate) enum Await {
     Nothing,
     /// The tick of the frame just sent.
     Tick,
-    /// The dismissal of the modal message just sent.
-    Dismissal,
 }
 
 /// What the host asked for and the next `Graphics.update` raises.
@@ -107,6 +110,8 @@ pub(crate) struct State {
     /// The guest end of the link. A guest without one behaves as one whose host has gone.
     link: Option<GuestEnd>,
     pending: Option<Pending>,
+    /// Whether the dismissal of the modal message being shown has arrived.
+    dismissed: bool,
     /// What the music channel plays.
     pub(crate) music: Option<Playing>,
     /// What the background-sound channel plays.
@@ -121,6 +126,7 @@ impl State {
             run,
             link: None,
             pending: None,
+            dismissed: false,
             music: None,
             background_sound: None,
             visible: true,
@@ -159,7 +165,8 @@ impl Guest {
     /// Consumes the messages of the host, and returns when what `wait` names has arrived, or
     /// with [`Await::Nothing`] when no message is waiting.
     ///
-    /// An input snapshot is kept for the next `Input.update`. A reset or quit request is
+    /// An input snapshot is kept for the next `Input.update`, and a dismissal is noted for
+    /// [`Guest::show_message`]. A reset or quit request is
     /// recorded for [`raise_pending`]; a host that has gone counts as a quit request and ends
     /// the wait.
     pub(crate) fn pump(&mut self, wait: Await) {
@@ -182,13 +189,39 @@ impl Guest {
             match message {
                 HostToGuest::Input(snapshot) => self.input.receive(snapshot),
                 HostToGuest::Tick if wait == Await::Tick => return,
-                HostToGuest::ModalDismissed if wait == Await::Dismissal => return,
-                HostToGuest::Tick | HostToGuest::ModalDismissed => {}
+                HostToGuest::Tick => {}
+                HostToGuest::ModalDismissed => self.runtime.dismissed = true,
                 HostToGuest::Reset => {
                     self.runtime.pending.get_or_insert(Pending::Reset);
                 }
                 HostToGuest::Quit => self.runtime.pending = Some(Pending::Quit),
             }
+        }
+    }
+
+    /// Sends the host the modal message `text` and shows it in the message panel until the
+    /// dismissal has arrived: a frame with the panel is sent and its tick awaited, at least
+    /// once and then again for as long as the host has not dismissed the message. These
+    /// frames do not advance `Graphics.frame_count`. A reset or quit request ends the wait
+    /// and is left for [`raise_pending`].
+    pub(crate) fn show_message(&mut self, text: String) {
+        let panel = Panel::show(self, &text);
+        self.runtime.dismissed = false;
+        self.send(GuestToHost::Modal { text });
+        loop {
+            let frame_count = self.scene.frame_count();
+            let packet = self.scene.extract(&mut self.bitmaps);
+            self.scene.set_frame_count(frame_count);
+            self.send(GuestToHost::Frame(packet));
+            self.pump(Await::Tick);
+            let frame_rate = self.scene.frame_rate().get();
+            self.win32api.frame_shown(frame_rate.into());
+            if self.runtime.dismissed || self.runtime.pending.is_some() {
+                break;
+            }
+        }
+        if let Some(panel) = panel {
+            panel.dispose(self);
         }
     }
 
@@ -513,12 +546,7 @@ pub(crate) fn play(ruby: &Ruby, link: GuestEnd) -> Result<(), RunError> {
         .and_then(|(preload, count)| run_scripts(ruby, &preload, count));
     if let Err(RunError::Script(report)) = &outcome {
         eprintln!("{report}");
-        Guest::with(|guest| {
-            guest.send(GuestToHost::Modal {
-                text: report.clone(),
-            });
-            guest.pump(Await::Dismissal);
-        });
+        Guest::with(|guest| guest.show_message(report.clone()));
     }
     Guest::with(|guest| {
         audio::stop_all(guest);
@@ -545,7 +573,7 @@ pub(crate) fn play(ruby: &Ruby, link: GuestEnd) -> Result<(), RunError> {
 ///    disposes every scene element and bitmap, clears the input state, seeds the generator
 ///    again and starts over from the first preload script; `SystemExit` ends the game. Any
 ///    other exception ends it with [`RunError::Script`], after its report was written to the
-///    error stream, shown by the host as a modal message and dismissed.
+///    error stream, shown in the message panel and dismissed by the host.
 /// 6. Stops the audio, sends the host the shutdown message and drops the link, also when a
 ///    step before failed.
 ///
