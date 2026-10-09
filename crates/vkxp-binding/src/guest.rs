@@ -4,11 +4,13 @@ use std::cell::{Cell, RefCell};
 
 use vkxp_core::{Bitmaps, FontDefaults};
 use vkxp_proto::BitmapId;
+use vkxp_ruby_sys::ffi::VALUE;
 use vkxp_ruby_sys::{Raised, Ruby};
 use vkxp_vfs::GameFiles;
 
 use crate::error::{self, ErrorClasses};
 use crate::text::TextBackend;
+use crate::{color, font, rect, table};
 
 /// What a guest is created from.
 pub struct Config {
@@ -34,6 +36,11 @@ pub struct Guest {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Classes {
     pub(crate) errors: ErrorClasses,
+    pub(crate) color: VALUE,
+    pub(crate) tone: VALUE,
+    pub(crate) rect: VALUE,
+    pub(crate) table: VALUE,
+    pub(crate) font: VALUE,
 }
 
 thread_local! {
@@ -70,10 +77,15 @@ impl Guest {
         );
         let classes = Classes {
             errors: error::define(ruby)?,
+            color: color::define_color(ruby)?,
+            tone: color::define_tone(ruby)?,
+            rect: rect::define(ruby)?,
+            table: table::define(ruby)?,
+            font: font::define(ruby)?,
         };
         CLASSES.set(Some(classes));
         enter(Guest::new(config));
-        Ok(())
+        font::install_default_color(ruby)
     }
 
     /// Runs `access` on the guest of this thread.

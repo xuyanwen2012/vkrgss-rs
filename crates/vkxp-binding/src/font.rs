@@ -1,0 +1,340 @@
+//! The Ruby class `Font`.
+//!
+//! A `Font` object holds the core font attributes. Its colour is a `Color` object of its
+//! own, kept in an instance variable of the font so that `font.color.red = 0` changes the
+//! font's colour; the colour inside the core attributes is filled in from that object when
+//! the font is used. The class-level defaults are the guest's [`FontDefaults`], with the
+//! default colour as a `Color` object kept by the class in the same way.
+//!
+//! [`FontDefaults`]: vkxp_core::FontDefaults
+
+use std::ffi::CStr;
+
+use vkxp_core::{Color, Font, FontDefaults};
+use vkxp_ruby_sys::ffi::{self, VALUE};
+use vkxp_ruby_sys::{HostResult, Raise, Raised, Ruby};
+
+use crate::color::{color_arg, color_new, color_set};
+use crate::guest::{self, Classes, Guest};
+use crate::rb;
+use crate::wrap::{self, Handle, Owned, Wrapped};
+
+/// The instance variable of a font that holds its `Color` object. Without `@`, so scripts
+/// do not see it.
+const COLOR: &CStr = c"color";
+
+/// The instance variable of the class that holds the `Color` object of
+/// `Font.default_color`.
+const DEFAULT_COLOR: &CStr = c"default_color";
+
+/// The data of a `Font` object.
+#[derive(Debug, Clone)]
+pub(crate) struct FontData {
+    /// The attributes. `color` is not kept up to date here: see [`font_arg`].
+    font: Font,
+    /// Whether `name` is an Array (or a single String).
+    names_listed: bool,
+}
+
+impl Wrapped for FontData {
+    const CLASS_NAME: &'static str = "Font";
+
+    fn class(classes: &Classes) -> VALUE {
+        classes.font
+    }
+
+    fn blank() -> Self {
+        FontData {
+            font: Font {
+                names: Vec::new(),
+                size: FontDefaults::INITIAL_SIZE,
+                bold: false,
+                italic: false,
+                color: Color::rgb(255.0, 255.0, 255.0),
+            },
+            names_listed: true,
+        }
+    }
+}
+
+fn this(ruby: &Ruby, recv: VALUE) -> Result<Handle<FontData>, Raise> {
+    wrap::expect(ruby, recv)
+}
+
+/// Family names given as a String or as an Array of Strings, and whether it was an Array.
+/// Anything else raises `TypeError`.
+fn names_arg(ruby: &Ruby, value: VALUE) -> Result<(Vec<String>, bool), Raise> {
+    match rb::array_elements(ruby, value) {
+        // `value` stays in the caller's frame while the copies of its elements are read.
+        Some(elements) => {
+            let names: Result<Vec<String>, Raise> = elements
+                .iter()
+                .map(|&element| rb::text(ruby, element))
+                .collect();
+            Ok((names?, true))
+        }
+        None => Ok((vec![rb::text(ruby, value)?], false)),
+    }
+}
+
+/// Family names as a script reads them: an Array of Strings, or the one String.
+fn names_value(ruby: &Ruby, names: &[String], listed: bool) -> HostResult {
+    match names {
+        [name] if !listed => rb::string_new(ruby, name.as_bytes()),
+        _ => rb::strings_new(ruby, names),
+    }
+}
+
+/// The value of the `Color` object in instance variable `name` of `object`, if it is set.
+fn color_at(ruby: &Ruby, object: VALUE, name: &CStr) -> Result<Option<Color>, Raise> {
+    let color = rb::ivar_get(ruby, object, name)?;
+    if ffi::nil_p(color) {
+        return Ok(None);
+    }
+    Ok(Some(color_arg(ruby, color)?))
+}
+
+/// Gives `object` a new `Color` object of this value in instance variable `name`.
+fn give_color(ruby: &Ruby, object: VALUE, name: &CStr, color: Color) -> Result<(), Raise> {
+    let color = color_new(ruby, color)?;
+    Ok(rb::ivar_set(ruby, object, name, color)?)
+}
+
+/// `color=` for the `Color` object in instance variable `name`: the value is copied into
+/// the object the font (or the class) already has.
+fn assign_color(ruby: &Ruby, object: VALUE, name: &CStr, value: VALUE) -> Result<(), Raise> {
+    let assigned = color_arg(ruby, value)?;
+    let own = rb::ivar_get(ruby, object, name)?;
+    if ffi::nil_p(own) {
+        give_color(ruby, object, name, assigned)
+    } else {
+        color_set(ruby, own, assigned)
+    }
+}
+
+/// The current defaults: the guest's, with the colour of the `Font.default_color` object.
+fn defaults(ruby: &Ruby) -> Result<(FontDefaults, bool), Raise> {
+    let class = guest::classes().font;
+    let color = color_at(ruby, class, DEFAULT_COLOR)?;
+    let (mut defaults, listed) =
+        Guest::with(|guest| (guest.font_defaults.clone(), guest.font_names_listed));
+    if let Some(color) = color {
+        defaults.color = color;
+    }
+    Ok((defaults, listed))
+}
+
+/// The attributes of a `Font` argument, colour included. Anything else raises `TypeError`.
+pub(crate) fn font_arg(ruby: &Ruby, value: VALUE) -> Result<Font, Raise> {
+    let mut font = this(ruby, value)?.get().font;
+    if let Some(color) = color_at(ruby, value, COLOR)? {
+        font.color = color;
+    }
+    Ok(font)
+}
+
+/// A new `Font` object with the current defaults.
+pub(crate) fn font_new_default(ruby: &Ruby) -> HostResult {
+    let (defaults, names_listed) = defaults(ruby)?;
+    let font = Font::new(&defaults);
+    let color = font.color;
+    let object = wrap::new_object(ruby, FontData { font, names_listed })?;
+    give_color(ruby, object, COLOR, color)?;
+    Ok(object)
+}
+
+/// A new `Font` object with the attributes of another, and a `Color` object of its own.
+pub(crate) fn font_copy(ruby: &Ruby, original: VALUE) -> HostResult {
+    let data = this(ruby, original)?.get();
+    let color = font_arg(ruby, original)?.color;
+    let object = wrap::new_object(ruby, data)?;
+    give_color(ruby, object, COLOR, color)?;
+    Ok(object)
+}
+
+/// `initialize(name = Font.default_name, size = Font.default_size)`.
+fn initialize(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    rb::check_count(ruby, args, 0, 2)?;
+    let names = args.first().map(|&arg| names_arg(ruby, arg)).transpose()?;
+    let size = args.get(1).map(|&arg| rb::int(ruby, arg)).transpose()?;
+    let (defaults, default_listed) = defaults(ruby)?;
+    let (names, names_listed) = match names {
+        Some((names, listed)) => (Some(names), listed),
+        None => (None, default_listed),
+    };
+    let font = Font::with(&defaults, names, size);
+    let color = font.color;
+    this(ruby, recv)?.with(|data| *data = FontData { font, names_listed });
+    give_color(ruby, recv, COLOR, color)?;
+    Ok(recv)
+}
+
+/// The copy takes the attributes of the original and gets a `Color` object of its own; the
+/// instance variable Ruby copied still names the original's.
+fn initialize_copy(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let data = this(ruby, args[0])?.get();
+    let color = font_arg(ruby, args[0])?.color;
+    this(ruby, recv)?.with(|copy| *copy = data);
+    give_color(ruby, recv, COLOR, color)?;
+    Ok(recv)
+}
+
+fn name(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
+    let data = this(ruby, recv)?.get();
+    names_value(ruby, &data.font.names, data.names_listed)
+}
+
+fn set_name(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let (names, listed) = names_arg(ruby, args[0])?;
+    this(ruby, recv)?.with(|data| {
+        data.font.names = names;
+        data.names_listed = listed;
+    });
+    Ok(args[0])
+}
+
+fn size(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
+    Ok(rb::fix(this(ruby, recv)?.with(|data| data.font.size)))
+}
+
+fn set_size(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let size = rb::int(ruby, args[0])?;
+    this(ruby, recv)?.with(|data| data.font.size = size);
+    Ok(args[0])
+}
+
+fn bold(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
+    Ok(rb::boolean(this(ruby, recv)?.with(|data| data.font.bold)))
+}
+
+fn set_bold(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let bold = rb::truthy(args[0]);
+    this(ruby, recv)?.with(|data| data.font.bold = bold);
+    Ok(args[0])
+}
+
+fn italic(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
+    Ok(rb::boolean(this(ruby, recv)?.with(|data| data.font.italic)))
+}
+
+fn set_italic(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let italic = rb::truthy(args[0]);
+    this(ruby, recv)?.with(|data| data.font.italic = italic);
+    Ok(args[0])
+}
+
+/// The font's own `Color` object.
+fn color(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
+    this(ruby, recv)?;
+    Ok(rb::ivar_get(ruby, recv, COLOR)?)
+}
+
+fn set_color(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    this(ruby, recv)?;
+    assign_color(ruby, recv, COLOR, args[0])?;
+    Ok(args[0])
+}
+
+fn default_name(ruby: &Ruby, _class: VALUE, _args: &[VALUE]) -> HostResult {
+    let (names, listed) =
+        Guest::with(|guest| (guest.font_defaults.names.clone(), guest.font_names_listed));
+    names_value(ruby, &names, listed)
+}
+
+fn set_default_name(ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
+    let (names, listed) = names_arg(ruby, args[0])?;
+    Guest::with(|guest| {
+        guest.font_defaults.names = names;
+        guest.font_names_listed = listed;
+    });
+    Ok(args[0])
+}
+
+fn default_size(_ruby: &Ruby, _class: VALUE, _args: &[VALUE]) -> HostResult {
+    Ok(rb::fix(Guest::with(|guest| guest.font_defaults.size)))
+}
+
+fn set_default_size(ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
+    let size = rb::int(ruby, args[0])?;
+    Guest::with(|guest| guest.font_defaults.size = size);
+    Ok(args[0])
+}
+
+fn default_bold(_ruby: &Ruby, _class: VALUE, _args: &[VALUE]) -> HostResult {
+    Ok(rb::boolean(Guest::with(|guest| guest.font_defaults.bold)))
+}
+
+fn set_default_bold(_ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
+    let bold = rb::truthy(args[0]);
+    Guest::with(|guest| guest.font_defaults.bold = bold);
+    Ok(args[0])
+}
+
+fn default_italic(_ruby: &Ruby, _class: VALUE, _args: &[VALUE]) -> HostResult {
+    Ok(rb::boolean(Guest::with(|guest| guest.font_defaults.italic)))
+}
+
+fn set_default_italic(_ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
+    let italic = rb::truthy(args[0]);
+    Guest::with(|guest| guest.font_defaults.italic = italic);
+    Ok(args[0])
+}
+
+/// The `Color` object new fonts copy their colour from.
+fn default_color(ruby: &Ruby, _class: VALUE, _args: &[VALUE]) -> HostResult {
+    Ok(rb::ivar_get(ruby, guest::classes().font, DEFAULT_COLOR)?)
+}
+
+fn set_default_color(ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
+    assign_color(ruby, guest::classes().font, DEFAULT_COLOR, args[0])?;
+    Ok(args[0])
+}
+
+/// `Font.exist?(name)`: whether the guest's text backend has the family.
+fn exist(ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
+    let name = rb::text(ruby, args[0])?;
+    Ok(rb::boolean(Guest::with(|guest| {
+        guest.text.font_exists(&name)
+    })))
+}
+
+/// Gives the class the `Color` object of `Font.default_color`, with the colour the guest's
+/// defaults start with. Runs once the classes are installed.
+pub(crate) fn install_default_color(ruby: &Ruby) -> Result<(), Raised> {
+    let classes = guest::classes();
+    let color = Guest::with(|guest| guest.font_defaults.color);
+    let object = rb::allocate(ruby, classes.color)?;
+    if let Some(data) = wrap::find::<Owned<Color>>(ruby, object) {
+        data.with(|data| data.set(color));
+    }
+    rb::ivar_set(ruby, classes.font, DEFAULT_COLOR, object)
+}
+
+/// Defines `Font`.
+pub(crate) fn define(ruby: &Ruby) -> Result<VALUE, Raised> {
+    let class = wrap::define_class::<FontData>(ruby, c"Font")?;
+    rb::method(ruby, class, c"initialize", -1, initialize)?;
+    rb::method(ruby, class, c"initialize_copy", 1, initialize_copy)?;
+    rb::method(ruby, class, c"name", 0, name)?;
+    rb::method(ruby, class, c"name=", 1, set_name)?;
+    rb::method(ruby, class, c"size", 0, size)?;
+    rb::method(ruby, class, c"size=", 1, set_size)?;
+    rb::method(ruby, class, c"bold", 0, bold)?;
+    rb::method(ruby, class, c"bold=", 1, set_bold)?;
+    rb::method(ruby, class, c"italic", 0, italic)?;
+    rb::method(ruby, class, c"italic=", 1, set_italic)?;
+    rb::method(ruby, class, c"color", 0, color)?;
+    rb::method(ruby, class, c"color=", 1, set_color)?;
+    rb::class_method(ruby, class, c"default_name", 0, default_name)?;
+    rb::class_method(ruby, class, c"default_name=", 1, set_default_name)?;
+    rb::class_method(ruby, class, c"default_size", 0, default_size)?;
+    rb::class_method(ruby, class, c"default_size=", 1, set_default_size)?;
+    rb::class_method(ruby, class, c"default_bold", 0, default_bold)?;
+    rb::class_method(ruby, class, c"default_bold=", 1, set_default_bold)?;
+    rb::class_method(ruby, class, c"default_italic", 0, default_italic)?;
+    rb::class_method(ruby, class, c"default_italic=", 1, set_default_italic)?;
+    rb::class_method(ruby, class, c"default_color", 0, default_color)?;
+    rb::class_method(ruby, class, c"default_color=", 1, set_default_color)?;
+    rb::class_method(ruby, class, c"exist?", 1, exist)?;
+    Ok(class)
+}

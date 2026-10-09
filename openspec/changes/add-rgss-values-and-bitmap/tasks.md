@@ -13,12 +13,12 @@
 
 ## 3. Value classes (`vkxp-binding`)
 
-- [ ] 3.1 Implement `Color` and `Tone`. Verify: Ruby tests for the four scenarios of the Color-and-Tone requirement in `specs/rgss-values/spec.md`; both classes added to the arity test.
-- [ ] 3.2 Implement `Rect`. Verify: Ruby tests for the three Rect scenarios; class added to the arity test.
-- [ ] 3.3 Implement `Table`. Verify: Ruby tests for the three Table scenarios; class added to the arity test.
-- [ ] 3.4 Implement `_dump` and `_load` for the four classes. Verify: Ruby tests for the four Marshal scenarios, the original-runtime payload built from bytes in the test.
-- [ ] 3.5 Implement `Font` with its class-level defaults, its own `Color` object and `Font.exist?`. Verify: Ruby tests for the four Font scenarios; class added to the arity test.
-- [ ] 3.6 Implement `clone` and `dup` through `initialize_copy`. Verify: Ruby tests that a copy of each of the five classes is equal to and independent of the original.
+- [x] 3.1 Implement `Color` and `Tone`. Verify: Ruby tests for the four scenarios of the Color-and-Tone requirement in `specs/rgss-values/spec.md`; both classes added to the arity test.
+- [x] 3.2 Implement `Rect`. Verify: Ruby tests for the three Rect scenarios; class added to the arity test.
+- [x] 3.3 Implement `Table`. Verify: Ruby tests for the three Table scenarios; class added to the arity test.
+- [x] 3.4 Implement `_dump` and `_load` for the four classes. Verify: Ruby tests for the four Marshal scenarios, the original-runtime payload built from bytes in the test.
+- [x] 3.5 Implement `Font` with its class-level defaults, its own `Color` object and `Font.exist?`. Verify: Ruby tests for the four Font scenarios; class added to the arity test.
+- [x] 3.6 Implement `clone` and `dup` through `initialize_copy`. Verify: Ruby tests that a copy of each of the five classes is equal to and independent of the original.
 
 ## 4. Bitmap (`vkxp-binding`)
 
