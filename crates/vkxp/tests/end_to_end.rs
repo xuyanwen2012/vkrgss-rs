@@ -430,6 +430,81 @@ fn a_user_file_with_an_error_ends_the_program_unless_it_is_ignored() {
     ran.assert_success();
 }
 
+/// The settings of a headless run come from the user file alone: the command line names
+/// only the game and its built-in scripts. A second run replays what the first recorded.
+#[test]
+fn a_headless_run_is_set_up_by_the_user_file() {
+    let game = demo("e2e-config-headless");
+    let by_options = run_demo(&game);
+    by_options.assert_success();
+
+    let dir = game.dir().to_string_lossy().into_owned();
+    let builtin = game.builtin_scripts().to_string_lossy().into_owned();
+    let arguments = [dir.as_str(), "--builtin-scripts", &builtin];
+    let common = format!(
+        "headless = true\ndevice = '{}'\nfont_dirs = ['{}']\nframes = 12\n\
+         dump = ['1=first.png', '8=later.png']\n",
+        device(),
+        font_dir().display()
+    );
+
+    let text = format!("{common}input = '2:RIGHT, 6:'\nrecord = 'session.txt'\n");
+    let recorded = vkxp_in(work_with_user_config(&text), &arguments);
+    recorded.assert_success();
+    // Paths in the file are relative to the file.
+    let config_dir = recorded.file("vkxp");
+    assert!(config_dir.join("session.txt").is_file());
+    for name in ["first.png", "later.png"] {
+        assert_eq!(
+            fs::read(config_dir.join(name)).unwrap(),
+            fs::read(by_options.file(name)).unwrap(),
+            "{name}"
+        );
+    }
+
+    let session = config_dir.join("session.txt");
+    let text = format!("{common}replay = '{}'\n", session.display());
+    let replayed = vkxp_in(work_with_user_config(&text), &arguments);
+    replayed.assert_success();
+    assert_eq!(
+        fs::read(replayed.file("vkxp").join("later.png")).unwrap(),
+        fs::read(by_options.file("later.png")).unwrap()
+    );
+
+    // An input script in a file that the user file names, and frames from the command line.
+    let work = work_with_user_config(&format!("{common}input = '@keys.txt'\n"));
+    fs::write(work.path().join("vkxp").join("keys.txt"), "2:RIGHT\n6:\n").unwrap();
+    let ran = vkxp_in(work, &[arguments.as_slice(), &["--frames", "12"]].concat());
+    ran.assert_success();
+    assert_eq!(
+        fs::read(ran.file("vkxp").join("later.png")).unwrap(),
+        fs::read(by_options.file("later.png")).unwrap()
+    );
+}
+
+/// The checks of the options apply to the final settings.
+#[test]
+fn settings_of_a_file_that_do_not_go_together_print_the_usage_message() {
+    let game = demo("e2e-config-check");
+    let dir = game.dir().to_string_lossy().into_owned();
+    let builtin = game.builtin_scripts().to_string_lossy().into_owned();
+    let headless = "headless = true\nreplay = 'a.txt'\n";
+    for (text, extra, named) in [
+        // No window opens for these: the check comes first.
+        ("frames = 3\n", &[][..], "--headless"),
+        (headless, &["--record", "b.txt"], "--replay"),
+        (headless, &["--input", "1:UP"], "--input"),
+    ] {
+        let mut arguments = vec![dir.as_str(), "--builtin-scripts", &builtin];
+        arguments.extend_from_slice(extra);
+        let ran = vkxp_in(work_with_user_config(text), &arguments);
+        assert_eq!(ran.output.status.code(), Some(2), "{text}");
+        let stderr = ran.stderr();
+        assert!(stderr.contains(named), "{text}: {stderr}");
+        assert!(stderr.contains("usage: vkxp"), "{text}: {stderr}");
+    }
+}
+
 #[test]
 fn an_unknown_option_prints_the_usage_message() {
     let ran = vkxp(&["--no-such-option"]);

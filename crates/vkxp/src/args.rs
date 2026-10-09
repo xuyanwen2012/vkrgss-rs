@@ -84,10 +84,29 @@ pub struct Options {
 }
 
 /// `NAME=VALUE` with neither part empty.
-fn pair<'a>(option: &str, text: &'a str, form: &str) -> Result<(&'a str, &'a str), String> {
+fn pair<'a>(text: &'a str, form: &str) -> Result<(&'a str, &'a str), String> {
     text.split_once('=')
         .filter(|(name, value)| !name.is_empty() && !value.is_empty())
-        .ok_or_else(|| format!("{option}: `{text}` is not of the form {form}"))
+        .ok_or_else(|| format!("`{text}` is not of the form {form}"))
+}
+
+/// An input script as it is given: the script itself, or `@FILE` for a file that holds it.
+pub fn input(text: &str) -> Result<Input, String> {
+    match text.strip_prefix('@') {
+        Some(file) => Ok(Input::File(PathBuf::from(file))),
+        None => InputScript::parse(text)
+            .map(Input::Script)
+            .map_err(|error| error.to_string()),
+    }
+}
+
+/// A frame to dump as it is given: `FRAME=FILE`.
+pub fn dump(text: &str) -> Result<(u64, PathBuf), String> {
+    let (frame, file) = pair(text, "FRAME=FILE")?;
+    let frame = frame
+        .parse()
+        .map_err(|_| format!("`{frame}` is not a frame number"))?;
+    Ok((frame, PathBuf::from(file)))
 }
 
 /// The encoding with this name, in either case. The error says what the names are.
@@ -104,7 +123,8 @@ pub fn encoding(text: &str) -> Result<Encoding, String> {
 }
 
 /// Reads the arguments that follow the program name. The error is a message for the user,
-/// to be printed with [`USAGE`].
+/// to be printed with [`USAGE`]. Whether the options go together is for [`check`] to say,
+/// once the configuration files have been put under them.
 pub fn parse(arguments: &[String]) -> Result<Options, String> {
     let mut options = Options::default();
     let mut arguments = arguments.iter();
@@ -116,7 +136,8 @@ pub fn parse(arguments: &[String]) -> Result<Options, String> {
         };
         match argument.as_str() {
             "--rtp" => {
-                let (name, dir) = pair(argument, value()?, "NAME=DIR")?;
+                let (name, dir) =
+                    pair(value()?, "NAME=DIR").map_err(|error| format!("--rtp: {error}"))?;
                 options.rtps.insert(name.to_owned(), PathBuf::from(dir));
             }
             "--builtin-scripts" => options.builtin_scripts = Some(PathBuf::from(value()?)),
@@ -152,21 +173,12 @@ pub fn parse(arguments: &[String]) -> Result<Options, String> {
                 options.frames = Some(frames);
             }
             "--input" => {
-                let text = value()?;
-                options.input = Some(match text.strip_prefix('@') {
-                    Some(file) => Input::File(PathBuf::from(file)),
-                    None => Input::Script(
-                        InputScript::parse(text).map_err(|error| format!("--input: {error}"))?,
-                    ),
-                });
+                let input = input(value()?).map_err(|error| format!("--input: {error}"))?;
+                options.input = Some(input);
             }
             "--dump" => {
-                let text = value()?;
-                let (frame, file) = pair(argument, text, "FRAME=FILE")?;
-                let frame = frame
-                    .parse()
-                    .map_err(|_| format!("--dump: `{frame}` is not a frame number"))?;
-                options.dumps.push((frame, PathBuf::from(file)));
+                let dump = dump(value()?).map_err(|error| format!("--dump: {error}"))?;
+                options.dumps.push(dump);
             }
             option if option.starts_with('-') => return Err(format!("unknown option `{option}`")),
             _ if options.game_dir.is_some() => {
@@ -175,6 +187,16 @@ pub fn parse(arguments: &[String]) -> Result<Options, String> {
             dir => options.game_dir = Some(PathBuf::from(dir)),
         }
     }
+    if options.no_config && options.config.is_some() {
+        return Err("--config cannot be used together with --no-config".to_owned());
+    }
+    Ok(options)
+}
+
+/// Whether the settings of a run go together, whichever of them came from the command line
+/// and whichever from a configuration file. The error is a message for the user, to be
+/// printed with [`USAGE`].
+pub fn check(options: &Options) -> Result<(), String> {
     if !options.headless {
         let headless_only = [
             (options.frames.is_some(), "--frames"),
@@ -184,9 +206,6 @@ pub fn parse(arguments: &[String]) -> Result<Options, String> {
         if let Some((_, option)) = headless_only.iter().find(|(given, _)| *given) {
             return Err(format!("{option} needs --headless"));
         }
-    }
-    if options.no_config && options.config.is_some() {
-        return Err("--config cannot be used together with --no-config".to_owned());
     }
     if options.replay.is_some() {
         // A replay stands in for every other input.
@@ -198,7 +217,7 @@ pub fn parse(arguments: &[String]) -> Result<Options, String> {
             return Err(format!("{option} cannot be used together with --replay"));
         }
     }
-    Ok(options)
+    Ok(())
 }
 
 #[cfg(test)]
@@ -207,7 +226,9 @@ mod tests {
 
     fn parse_words(words: &[&str]) -> Result<Options, String> {
         let arguments: Vec<String> = words.iter().map(|word| (*word).to_owned()).collect();
-        parse(&arguments)
+        let options = parse(&arguments)?;
+        check(&options)?;
+        Ok(options)
     }
 
     #[test]

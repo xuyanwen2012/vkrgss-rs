@@ -31,9 +31,11 @@
 
 ## Follow-ups
 
-- The files hold the settings the proposal lists, plus `encoding`, `debug` and
-  `allow_process_functions`. The options that shape one run (`--record`, `--replay`,
-  `--headless`, `--frames`, `--input`, `--dump`) have no key in the files. Should they?
+- Every option but `--config` and `--no-config` has a key in the files, the ones that shape
+  one run included (`record`, `replay`, `headless`, `frames`, `input`, `dump`). A flag that a
+  file sets (`headless`, `debug`, `allow_process_functions`, `audio = false`) cannot be unset
+  from the command line, which has no negative forms; only `--no-config` or the other file
+  undoes it. Whether negative options are wanted is open.
 - The development machine has `libudev.so.1` but not the development files of libudev
   (`libudev.pc`), which `gilrs` needs to build through `libudev-sys`. The change was built
   with a stand-in like the one for ALSA, kept under the ignored `local/udev-standin` and added

@@ -181,8 +181,14 @@ that file. A file that does not parse, or that holds an unknown key, a value of 
 or an unknown name of a key or button, ends the program with an error that names the file and
 what is wrong in it, before any window opens.
 
-This example holds every setting. Its `[keys]` and `[gamepad]` tables are the default maps,
-so leaving them out changes nothing:
+Whether settings go together is decided once the files and the command line are put
+together, with the same rules and messages as for the options: `frames`, `input` and `dump`
+need a headless run, whether `headless = true` or `--headless` makes it one, and `replay`
+goes with neither `record` nor `input`, wherever each of them is set.
+
+This example holds every setting; `replay` is a comment in it because it does not go together
+with `record` and `input`. Its `[keys]` and `[gamepad]` tables are the default maps, so
+leaving them out changes nothing:
 
 ```toml
 builtin_scripts = "rpg_builtin.rb"           # --builtin-scripts
@@ -195,6 +201,12 @@ audio = true                                 # false is --no-audio
 soundfont = "/usr/share/soundfonts/FluidR3_GM.sf2" # --soundfont
 seed = 7                                     # --seed
 preload = ["patches/fonts.rb"]               # --preload, in this order
+headless = true                              # true is --headless
+frames = 600                                 # --frames
+input = "40:C, 42:"                          # --input; "@keys.txt" names a file
+dump = ["100=frame.png"]                     # --dump FRAME=FILE, one entry per frame
+record = "session.txt"                       # --record
+# replay = "session.txt"                     # --replay; not together with record or input
 
 [rtp]                                        # --rtp NAME=DIR
 Standard = "/home/me/rtp/Standard"

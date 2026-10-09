@@ -9,8 +9,8 @@
 //!
 //! 1. The arguments are parsed (`args`); a mistake there ends with the usage message and
 //!    status 2.
-//! 2. The configuration files are read and the command line is put over them (`config`).
-//!    `Game.ini` is read, the run-time packages it names are looked up in the `--rtp` table,
+//! 2. The configuration files are read and the command line is put over them (`config`);
+//!    settings that do not go together end with the usage message and status 2. `Game.ini` is read, the run-time packages it names are looked up in the `--rtp` table,
 //!    the built-in scripts file is found and a SoundFont named with `--soundfont` is checked
 //!    to exist. The recording of `--replay` is read or the file of `--record` created, the
 //!    random seed is settled, and the game's files are opened, with the encrypted archive
@@ -71,12 +71,23 @@ fn main() -> ExitCode {
         eprintln!("{}", args::USAGE);
         ExitCode::from(2)
     };
-    let mut options = match args::parse(&arguments) {
+    let options = match args::parse(&arguments) {
         Ok(options) => options,
         Err(message) => return usage(message),
     };
-    // A script in a file is a value of the command line like one given in place.
-    let script = match input_script(options.input.take()) {
+    let (game_dir, mut settings) = match settings(options) {
+        Ok(settled) => settled,
+        Err(error) => {
+            eprintln!("vkxp: {error:#}");
+            return ExitCode::FAILURE;
+        }
+    };
+    // Whether the settings go together is asked of the final ones, wherever each came from.
+    if let Err(message) = args::check(&settings.options) {
+        return usage(message);
+    }
+    // A script in a file is a value like one given in place.
+    let script = match input_script(settings.options.input.take()) {
         Ok(script) => script,
         Err(InputError::Malformed(message)) => return usage(message),
         Err(InputError::Unreadable(message)) => {
@@ -84,7 +95,7 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    match run(options, script) {
+    match run(game_dir, settings, script) {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::FAILURE,
         Err(error) => {
@@ -205,15 +216,22 @@ fn seed_and_input(options: &Options) -> Result<(u64, Option<Box<dyn InputSource>
     Ok((seed, input))
 }
 
-/// Runs the game the options describe, headless with the input `script`. `Ok(false)` is a
-/// run that failed and has said why.
-fn run(options: Options, script: InputScript) -> Result<bool> {
+/// The game directory and the settings of the run: the command line over the configuration
+/// files.
+fn settings(options: Options) -> Result<(PathBuf, Settings)> {
     let game_dir = absolute(options.game_dir.as_deref().unwrap_or(Path::new(".")))?;
+    let settings = config::settle(config::load(&options, &game_dir)?, options)?;
+    Ok((game_dir, settings))
+}
+
+/// Runs the game in `game_dir` as the settings describe, headless with the input `script`.
+/// `Ok(false)` is a run that failed and has said why.
+fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<bool> {
     let Settings {
         options,
         keys,
         pads,
-    } = config::settle(config::load(&options, &game_dir)?, options)?;
+    } = settings;
     let ini = GameIni::read(&game_dir, options.encoding)?;
     let rtp_table = options
         .rtps

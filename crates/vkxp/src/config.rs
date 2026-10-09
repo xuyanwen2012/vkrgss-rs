@@ -10,10 +10,11 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf, absolute};
 
 use anyhow::{Context, Result, anyhow};
-use serde::Deserialize;
+use serde::de::Error as _;
+use serde::{Deserialize, Deserializer};
 use vkxp_host::{GamepadMap, KeyMap};
 
-use crate::args::{self, Options};
+use crate::args::{self, Input, Options};
 
 /// The name of the configuration file in a game directory.
 pub const GAME_FILE: &str = "vkxp.toml";
@@ -36,12 +37,35 @@ pub struct File {
     soundfont: Option<PathBuf>,
     seed: Option<u64>,
     preload: Option<Vec<PathBuf>>,
+    record: Option<PathBuf>,
+    replay: Option<PathBuf>,
+    headless: Option<bool>,
+    frames: Option<u64>,
+    /// An input script or `@FILE`, as `--input` takes it.
+    #[serde(default, deserialize_with = "input")]
+    input: Option<Input>,
+    /// Frames to write, each as `FRAME=FILE`, as `--dump` takes it.
+    #[serde(default, deserialize_with = "dumps")]
+    dump: Option<Vec<(u64, PathBuf)>>,
     /// The keys of buttons, by the button's name.
     #[serde(default)]
     keys: BTreeMap<String, Vec<String>>,
     /// The gamepad buttons of buttons, by the button's name.
     #[serde(default)]
     gamepad: BTreeMap<String, Vec<String>>,
+}
+
+fn input<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Input>, D::Error> {
+    let text = String::deserialize(deserializer)?;
+    args::input(&text).map(Some).map_err(D::Error::custom)
+}
+
+fn dumps<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Vec<(u64, PathBuf)>>, D::Error> {
+    let texts = Vec::<String>::deserialize(deserializer)?;
+    let dumps: Result<Vec<_>, String> = texts.iter().map(|text| args::dump(text)).collect();
+    dumps.map(Some).map_err(D::Error::custom)
 }
 
 impl File {
@@ -74,7 +98,14 @@ impl File {
             .chain(&mut file.builtin_scripts)
             .chain(file.font_dirs.iter_mut().flatten())
             .chain(&mut file.soundfont)
-            .chain(file.preload.iter_mut().flatten());
+            .chain(file.preload.iter_mut().flatten())
+            .chain(&mut file.record)
+            .chain(&mut file.replay)
+            .chain(file.input.iter_mut().filter_map(|input| match input {
+                Input::File(path) => Some(path),
+                Input::Script(_) => None,
+            }))
+            .chain(file.dump.iter_mut().flatten().map(|(_, path)| path));
         for path in paths {
             *path = dir.join(&*path);
         }
@@ -101,6 +132,12 @@ impl File {
             soundfont: over.soundfont.or(self.soundfont),
             seed: over.seed.or(self.seed),
             preload: over.preload.or(self.preload),
+            record: over.record.or(self.record),
+            replay: over.replay.or(self.replay),
+            headless: over.headless.or(self.headless),
+            frames: over.frames.or(self.frames),
+            input: over.input.or(self.input),
+            dump: over.dump.or(self.dump),
             keys: self.keys,
             gamepad: self.gamepad,
         }
@@ -167,6 +204,14 @@ pub fn settle(file: File, mut options: Options) -> Result<Settings> {
     options.seed = options.seed.or(file.seed);
     if options.preload.is_empty() {
         options.preload = file.preload.unwrap_or_default();
+    }
+    options.record = options.record.or(file.record);
+    options.replay = options.replay.or(file.replay);
+    options.headless |= file.headless == Some(true);
+    options.frames = options.frames.or(file.frames);
+    options.input = options.input.or(file.input);
+    if options.dumps.is_empty() {
+        options.dumps = file.dump.unwrap_or_default();
     }
     Ok(Settings {
         options,
@@ -314,6 +359,12 @@ mod tests {
             ("preload = \"one.rb\"", "preload"),
             ("[rtp]\nStandard = 3", "Standard"),
             ("[keys]\nC = \"KeyJ\"", "C"),
+            ("headless = \"yes\"", "headless"),
+            ("frames = -3", "frames"),
+            ("record = 1", "record"),
+            ("replay = []", "replay"),
+            ("input = 2", "input"),
+            ("dump = \"1=a.png\"", "dump"),
         ] {
             let files = Files::new().user(text);
             let error = format!("{:#}", files.settle(Options::default()).unwrap_err());
@@ -336,6 +387,9 @@ mod tests {
             ("[keys]\nJUMP = [\"KeyJ\"]", "JUMP"),
             ("[gamepad]\nC = [\"Middle\"]", "Middle"),
             ("encoding = \"latin1\"", "latin1"),
+            ("input = \"2:SIDEWAYS\"", "SIDEWAYS"),
+            ("dump = [\"1=a.png\", \"three=b.png\"]", "three"),
+            ("dump = [\"7\"]", "FRAME=FILE"),
         ] {
             let files = Files::new().game(text);
             let error = format!("{:#}", files.settle(Options::default()).unwrap_err());
@@ -357,6 +411,11 @@ mod tests {
              soundfont = \"sf/gm.sf2\"\n\
              seed = 7\n\
              preload = [\"one.rb\"]\n\
+             record = \"session.txt\"\n\
+             headless = true\n\
+             frames = 10\n\
+             input = \"@keys.txt\"\n\
+             dump = [\"1=a.png\", \"8=/abs/b=c.png\"]\n\
              [rtp]\n\
              Standard = \"rtp/standard\"\n",
         );
@@ -377,9 +436,104 @@ mod tests {
                 soundfont: Some(base.join("sf/gm.sf2")),
                 seed: Some(7),
                 preload: vec![base.join("one.rb")],
+                record: Some(base.join("session.txt")),
+                headless: true,
+                frames: Some(10),
+                input: Some(Input::File(base.join("keys.txt"))),
+                dumps: vec![(1, base.join("a.png")), (8, "/abs/b=c.png".into())],
                 ..Options::default()
             }
         );
+        assert_eq!(args::check(&settings.options), Ok(()));
+
+        let files = Files::new().user("replay = \"session.txt\"\ninput = \"2:RIGHT, 6:\"");
+        let options = files.settle(Options::default()).unwrap().options;
+        assert_eq!(options.replay, Some(files.dir.path().join("session.txt")));
+        let script = vkxp_host::InputScript::parse("2:RIGHT, 6:").unwrap();
+        assert_eq!(options.input, Some(Input::Script(script)));
+    }
+
+    #[test]
+    fn the_run_settings_are_layered_like_the_others() {
+        let files = Files::new()
+            .user(
+                "headless = true\nframes = 1\ninput = \"1:UP\"\nrecord = \"user.txt\"\n\
+                 dump = [\"1=user.png\"]\n",
+            )
+            .game("frames = 2\ninput = \"@keys.txt\"\ndump = [\"2=game.png\"]\n");
+        let game = files.game_dir();
+        let options = files.settle(Options::default()).unwrap().options;
+        assert!(options.headless);
+        assert_eq!(options.frames, Some(2));
+        assert_eq!(options.input, Some(Input::File(game.join("keys.txt"))));
+        assert_eq!(options.dumps, [(2, game.join("game.png"))]);
+        assert_eq!(options.record, Some(files.dir.path().join("user.txt")));
+
+        let script = vkxp_host::InputScript::parse("3:C").unwrap();
+        let command_line = Options {
+            frames: Some(3),
+            input: Some(Input::Script(script)),
+            dumps: vec![(3, "cli.png".into())],
+            record: Some("cli.txt".into()),
+            ..Options::default()
+        };
+        let options = files.settle(command_line.clone()).unwrap().options;
+        assert!(options.headless);
+        assert_eq!(options.frames, Some(3));
+        assert_eq!(options.input, command_line.input);
+        assert_eq!(options.dumps, command_line.dumps);
+        assert_eq!(options.record, command_line.record);
+    }
+
+    /// Whether settings go together is asked of the final ones.
+    #[test]
+    fn settings_that_do_not_go_together_are_refused_wherever_they_come_from() {
+        let check =
+            |files: &Files, options: Options| args::check(&files.settle(options).unwrap().options);
+        for text in ["frames = 3", "input = \"1:UP\"", "dump = [\"1=a.png\"]"] {
+            let files = Files::new().user(text);
+            let error = check(&files, Options::default()).unwrap_err();
+            assert!(error.contains("--headless"), "{text}: {error}");
+            // The command line may supply what the file leaves out, and the game's file too.
+            let headless = Options {
+                headless: true,
+                ..Options::default()
+            };
+            assert_eq!(check(&files, headless), Ok(()), "{text}");
+            let files = files.game("headless = true");
+            assert_eq!(check(&files, Options::default()), Ok(()), "{text}");
+        }
+
+        // A file that sets headless lets the command line give the headless options.
+        let files = Files::new().user("headless = true");
+        let frames = Options {
+            frames: Some(3),
+            ..Options::default()
+        };
+        assert_eq!(check(&files, frames), Ok(()));
+
+        let files = Files::new()
+            .user("replay = \"a.txt\"")
+            .game("record = \"b.txt\"");
+        let error = check(&files, Options::default()).unwrap_err();
+        assert!(error.contains("--record"), "{error}");
+        assert!(error.contains("--replay"), "{error}");
+
+        let files = Files::new().user("record = \"b.txt\"");
+        let replay = Options {
+            replay: Some("a.txt".into()),
+            ..Options::default()
+        };
+        let error = check(&files, replay).unwrap_err();
+        assert!(error.contains("--replay"), "{error}");
+
+        let files = Files::new().user("headless = true\ninput = \"1:UP\"");
+        let replay = Options {
+            replay: Some("a.txt".into()),
+            ..Options::default()
+        };
+        let error = check(&files, replay).unwrap_err();
+        assert!(error.contains("--input"), "{error}");
     }
 
     #[test]
@@ -481,6 +635,14 @@ mod tests {
         assert!(options.soundfont.is_some());
         assert_eq!(options.seed, Some(7));
         assert_eq!(options.preload, [base.join("patches/fonts.rb")]);
+        assert!(options.headless);
+        assert_eq!(options.frames, Some(600));
+        let script = vkxp_host::InputScript::parse("40:C, 42:").unwrap();
+        assert_eq!(options.input, Some(Input::Script(script)));
+        assert_eq!(options.dumps, [(100, base.join("frame.png"))]);
+        assert_eq!(options.record, Some(base.join("session.txt")));
+        assert_eq!(options.replay, None);
+        assert_eq!(args::check(options), Ok(()));
         assert_eq!(settings.keys, KeyMap::default());
         assert_eq!(settings.pads, GamepadMap::default());
 
@@ -490,5 +652,20 @@ mod tests {
         assert!(file.audio.is_some() && file.debug.is_some());
         assert!(file.allow_process_functions.is_some());
         assert!(!file.gamepad.is_empty());
+
+        // The one setting the example can only show as a comment, because it does not go
+        // together with two of the others.
+        let with_replay: String = example
+            .lines()
+            .filter(|line| !line.starts_with("record =") && !line.starts_with("input ="))
+            .map(|line| line.strip_prefix("# ").unwrap_or(line).to_owned() + "\n")
+            .collect();
+        assert_ne!(with_replay, example);
+        let files = Files::new().user(&with_replay);
+        let options = files.settle(Options::default()).unwrap().options;
+        assert_eq!(options.replay, Some(files.dir.path().join("session.txt")));
+        assert_eq!(options.record, None);
+        assert_eq!(options.input, None);
+        assert_eq!(args::check(&options), Ok(()));
     }
 }
