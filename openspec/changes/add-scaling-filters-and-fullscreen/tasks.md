@@ -6,7 +6,7 @@
 
 ## 2. Window (`vkxp-host`)
 
-- [ ] 2.1 Add the initial size computation and the fullscreen toggle. Verify: unit tests for the size-computation scenario and for the key handling of the toggle scenario on the event-handling function, without opening a window.
+- [x] 2.1 Add the initial size computation and the fullscreen toggle. Verify: unit tests for the size-computation scenario and for the key handling of the toggle scenario on the event-handling function, without opening a window.
 
 ## 3. Options (`vkxp`)
 

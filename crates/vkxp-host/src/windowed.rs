@@ -12,7 +12,7 @@ use std::time::Duration;
 use thiserror::Error;
 use vkxp_proto::link::{GuestEnd, HostEnd, link};
 use vkxp_proto::{BitmapId, FramePacket, Size};
-use vkxp_vk::{DeviceChoice, VkCompositor, VkError};
+use vkxp_vk::{DeviceChoice, Filter, VkCompositor, VkError};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, WindowEvent};
@@ -35,6 +35,10 @@ pub struct WindowedOptions {
     pub title: String,
     /// The logical screen size the window is first sized for.
     pub logical_size: Size,
+    /// The filter that scales the frame into the window.
+    pub filter: Filter,
+    /// Whether the window starts in borderless fullscreen.
+    pub fullscreen: bool,
     /// The physical keys that hold each button.
     pub keys: KeyMap,
     /// The gamepad buttons that hold each button.
@@ -52,6 +56,8 @@ impl WindowedOptions {
             device,
             title: "vkxp".to_owned(),
             logical_size: Size::new(640, 480),
+            filter: Filter::Auto,
+            fullscreen: false,
             keys: KeyMap::default(),
             pads: GamepadMap::default(),
             audio: None,
@@ -75,8 +81,12 @@ pub enum WindowedError {
     GuestPanicked,
 }
 
-/// The size in pixels a window for a `logical` screen starts with on a monitor of `monitor`
-/// pixels: the logical size at the largest whole-number scale that fits, and at least once.
+/// The size in pixels of the client area a window for a `logical` screen starts with when
+/// the work area of its monitor is `monitor` pixels: the logical size at the largest
+/// whole-number scale that fits, and at least once. An unknown monitor gives the logical size.
+///
+/// The windowing library does not report a work area, so the caller passes the monitor's
+/// size; a window system may then shrink the window, which is a resize like any other.
 pub fn initial_window_size(logical: Size, monitor: Option<Size>) -> Size {
     let scale = match monitor {
         Some(monitor) if logical.width > 0 && logical.height > 0 => {
@@ -230,17 +240,24 @@ impl App {
             .map(|monitor| monitor.size())
             .map(|size| Size::new(size.width, size.height));
         let size = initial_window_size(self.options.logical_size, monitor);
+        // Leaving fullscreen later goes back to this size.
         let attributes = Window::default_attributes()
             .with_title(self.options.title.clone())
-            .with_inner_size(PhysicalSize::new(size.width, size.height));
+            .with_inner_size(PhysicalSize::new(size.width, size.height))
+            .with_fullscreen(
+                self.options
+                    .fullscreen
+                    .then_some(Fullscreen::Borderless(None)),
+            );
         let window = event_loop
             .create_window(attributes)
             .map(Arc::new)
             .map_err(|error| WindowedError::Window(error.to_string()))?;
 
-        let compositor =
+        let mut compositor =
             VkCompositor::for_window(self.options.device.clone(), Arc::clone(&window), None)
                 .map_err(WindowedError::Compositor)?;
+        compositor.set_filter(self.options.filter);
         let mut display = VulkanDisplay {
             compositor,
             window: Arc::clone(&window),
@@ -322,6 +339,8 @@ impl ApplicationHandler<GuestSpoke> for App {
             WindowEvent::KeyboardInput { event, .. } => {
                 let action = running.driver.key(event.physical_key, event.state);
                 if action == KeyAction::ToggleFullscreen {
+                    // Borderless on the monitor the window is on; the window system gives
+                    // the window its earlier size back when it leaves.
                     let window = &running.window;
                     window.set_fullscreen(match window.fullscreen() {
                         Some(_) => None,
@@ -356,8 +375,8 @@ impl ApplicationHandler<GuestSpoke> for App {
 /// down or goes away. Must be called on the main thread, as `winit` requires.
 ///
 /// Closing the window sends the guest a quit request; the window stays until the guest has
-/// answered with its shutdown message. F12 asks the guest to reset, Alt+Enter switches to
-/// borderless fullscreen and back, F2 shows the frame rate in the title, and Tab held runs
+/// answered with its shutdown message. F12 asks the guest to reset, Alt+Enter and F11 switch
+/// to borderless fullscreen and back, F2 shows the frame rate in the title, and Tab held runs
 /// the guest as fast as it goes.
 pub fn run_windowed<G>(options: WindowedOptions, guest: G) -> Result<SessionEnd, WindowedError>
 where
@@ -509,9 +528,23 @@ mod tests {
         );
         let (key, state) = release(KeyCode::Enter);
         driver.key(key, state);
+        // The second press toggles back, again without C.
+        let (key, state) = press(KeyCode::Enter);
+        assert_eq!(driver.key(key, state), KeyAction::ToggleFullscreen);
+        let (key, state) = release(KeyCode::Enter);
+        driver.key(key, state);
+        assert_eq!(received(&guest), [], "neither C nor ALT is newly held");
         let (key, state) = release(KeyCode::AltRight);
         driver.key(key, state);
         assert_eq!(received(&guest), [held(&[])]);
+
+        for _ in 0..2 {
+            let (key, state) = press(KeyCode::F11);
+            assert_eq!(driver.key(key, state), KeyAction::ToggleFullscreen);
+            let (key, state) = release(KeyCode::F11);
+            assert_eq!(driver.key(key, state), KeyAction::None);
+        }
+        assert_eq!(received(&guest), [], "F11 is not a button");
 
         let (key, state) = press(KeyCode::Tab);
         driver.key(key, state);
@@ -613,6 +646,8 @@ mod tests {
     fn window_starts_at_the_largest_whole_scale_that_fits_the_monitor() {
         let logical = Size::new(640, 480);
         let cases = [
+            (Some(Size::new(1920, 1040)), Size::new(1280, 960)),
+            (Some(Size::new(600, 400)), Size::new(640, 480)),
             (Some(Size::new(1920, 1080)), Size::new(1280, 960)),
             (Some(Size::new(2560, 1440)), Size::new(1920, 1440)),
             (Some(Size::new(3840, 2160)), Size::new(2560, 1920)),

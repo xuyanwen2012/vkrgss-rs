@@ -14,6 +14,8 @@ use crate::{AudioSink, Clock, Display, InputSource, KeyMap, NullSink};
 const RESET_KEY: KeyCode = KeyCode::F12;
 /// The key that shows the measured frame rate in the window title.
 const FPS_KEY: KeyCode = KeyCode::F2;
+/// The key that, like Alt+Enter, switches between windowed and borderless fullscreen.
+const FULLSCREEN_KEY: KeyCode = KeyCode::F11;
 /// The key that engages fast-forward while it is held. A placeholder until the key is settled.
 const FAST_FORWARD_KEY: KeyCode = KeyCode::Tab;
 
@@ -43,7 +45,7 @@ impl SessionEnd {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyAction {
     None,
-    /// Alt+Enter: switch between windowed and borderless fullscreen.
+    /// Alt+Enter or F11: switch between windowed and borderless fullscreen.
     ToggleFullscreen,
 }
 
@@ -361,6 +363,11 @@ impl<D: Display, C: Clock> Session<D, C> {
                 FAST_FORWARD_KEY => {
                     self.fast_forward_key = true;
                     self.hurry();
+                }
+                // Whatever the key map says of these keys, this press holds no button.
+                FULLSCREEN_KEY => {
+                    self.swallowed_keys.insert(key);
+                    action = KeyAction::ToggleFullscreen;
                 }
                 KeyCode::Enter | KeyCode::NumpadEnter if alt => {
                     self.swallowed_keys.insert(key);

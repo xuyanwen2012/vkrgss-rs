@@ -574,6 +574,20 @@ fn alt_enter_toggles_fullscreen_without_pressing_c() {
     assert_eq!(rig.session.take_messages(), [held(&[Button::C])]);
 }
 
+#[test]
+fn f11_toggles_fullscreen_once_per_press_and_holds_no_button() {
+    let mut rig = Rig::new();
+    for _ in 0..2 {
+        assert_eq!(
+            rig.session.key(KeyCode::F11, true),
+            KeyAction::ToggleFullscreen
+        );
+        assert_eq!(rig.session.key(KeyCode::F11, true), KeyAction::None, "held");
+        assert_eq!(rig.key(KeyCode::F11, false), []);
+    }
+    assert_eq!(rig.session.take_messages(), []);
+}
+
 // Reset, quit and shutdown.
 
 #[test]
