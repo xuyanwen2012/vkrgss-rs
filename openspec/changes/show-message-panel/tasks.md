@@ -2,7 +2,7 @@
 
 ## 1. Host (`vkxp-host`)
 
-- [ ] 1.1 Keep modal messages pending in windowed sessions until a confirm or cancel press or a click, and suppress that press. Verify: tests for the three scenarios of `specs/host-session/spec.md`.
+- [x] 1.1 Keep modal messages pending in windowed sessions until a confirm or cancel press or a click, and suppress that press. Verify: tests for the three scenarios of `specs/host-session/spec.md`.
 
 ## 2. Guest (`vkxp-binding`)
 

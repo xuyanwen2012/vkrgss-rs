@@ -136,6 +136,12 @@ impl<D: Display, C: Clock> Driver<D, C> {
         action
     }
 
+    /// A mouse button was clicked.
+    pub fn click(&mut self) {
+        self.session.click();
+        self.session.pump(&self.link);
+    }
+
     /// The window gained or lost keyboard focus.
     pub fn focus_changed(&mut self, focused: bool) {
         if !focused {
@@ -277,6 +283,7 @@ impl App {
             keys: self.options.keys.clone(),
             audio,
             input: self.options.input.take(),
+            wait_for_modal: true,
             ..SessionOptions::default()
         };
         let link = self.link.take().expect("the session starts once");
@@ -348,6 +355,10 @@ impl ApplicationHandler<GuestSpoke> for App {
                     });
                 }
             }
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                ..
+            } => running.driver.click(),
             WindowEvent::Focused(focused) => running.driver.focus_changed(focused),
             WindowEvent::Resized(size) => {
                 let display = running.driver.session_mut().display_mut();

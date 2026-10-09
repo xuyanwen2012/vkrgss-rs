@@ -57,6 +57,9 @@ pub struct SessionOptions {
     /// run wants, instead of being reported and skipped. The session ends once the tick of
     /// that frame has been sent: a rejected frame is answered like any other.
     pub fail_on_rejected_frame: bool,
+    /// Whether a modal message stays pending until the player dismisses it, as a windowed
+    /// session wants, instead of being dismissed at once.
+    pub wait_for_modal: bool,
     /// Where modal texts and errors are written.
     pub errors: Box<dyn Write + Send>,
     /// Where audio commands go.
@@ -73,6 +76,7 @@ impl Default for SessionOptions {
         SessionOptions {
             keys: KeyMap::default(),
             fail_on_rejected_frame: false,
+            wait_for_modal: false,
             errors: Box::new(std::io::stderr()),
             audio: Box::new(NullSink),
             input: None,
@@ -121,6 +125,9 @@ pub struct Session<D: Display, C: Clock> {
     clock: C,
     keys: KeyMap,
     fail_on_rejected_frame: bool,
+    wait_for_modal: bool,
+    /// Whether a modal message waits for the player to dismiss it.
+    pending_modal: bool,
     errors: Box<dyn Write + Send>,
     audio: Box<dyn AudioSink>,
     /// Messages for the guest that have not been handed to the link yet.
@@ -173,6 +180,8 @@ impl<D: Display, C: Clock> Session<D, C> {
             clock,
             keys: options.keys,
             fail_on_rejected_frame: options.fail_on_rejected_frame,
+            wait_for_modal: options.wait_for_modal,
+            pending_modal: false,
             errors: options.errors,
             audio: options.audio,
             outbox: VecDeque::new(),
@@ -266,7 +275,11 @@ impl<D: Display, C: Clock> Session<D, C> {
             GuestToHost::Audio(command) => self.audio.command(command),
             GuestToHost::Modal { text } => {
                 self.report(format_args!("{text}"));
-                self.outbox.push_back(HostToGuest::ModalDismissed);
+                if self.wait_for_modal {
+                    self.pending_modal = true;
+                } else {
+                    self.outbox.push_back(HostToGuest::ModalDismissed);
+                }
             }
             GuestToHost::SetTitle { title } => {
                 self.title = title;
@@ -304,7 +317,7 @@ impl<D: Display, C: Clock> Session<D, C> {
     /// due, hands over the messages for the guest and handles the guest's messages.
     ///
     /// A pending tick does not hold up what the guest sends after its frame: a modal is
-    /// answered at once, a title is set, a freeze applies to the frame already shown. Only
+    /// answered at once unless the session waits for the player, a title is set, a freeze applies to the frame already shown. Only
     /// the next frame waits. It is taken from the link and set aside until the tick has gone
     /// out, and nothing behind it is read before then, so every message is handled in the
     /// order it was sent and every frame is answered in turn.
@@ -373,6 +386,11 @@ impl<D: Display, C: Clock> Session<D, C> {
                     self.swallowed_keys.insert(key);
                     action = KeyAction::ToggleFullscreen;
                 }
+                // The press that dismisses a modal message holds no button either.
+                _ if self.pending_modal && self.dismisses(key) => {
+                    self.swallowed_keys.insert(key);
+                    self.dismiss_modal();
+                }
                 _ => {}
             }
         } else {
@@ -384,6 +402,28 @@ impl<D: Display, C: Clock> Session<D, C> {
         }
         self.update_buttons();
         action
+    }
+
+    /// A mouse button was clicked.
+    pub fn click(&mut self) {
+        if self.end.is_none() {
+            self.dismiss_modal();
+        }
+    }
+
+    /// Whether `key` holds a button that dismisses a modal message.
+    fn dismisses(&self, key: KeyCode) -> bool {
+        self.keys
+            .buttons(key)
+            .any(|button| matches!(button, Button::C | Button::B))
+    }
+
+    /// Answers the pending modal message, if there is one.
+    fn dismiss_modal(&mut self) {
+        if self.pending_modal {
+            self.pending_modal = false;
+            self.outbox.push_back(HostToGuest::ModalDismissed);
+        }
     }
 
     /// The window lost keyboard focus: every key counts as released.

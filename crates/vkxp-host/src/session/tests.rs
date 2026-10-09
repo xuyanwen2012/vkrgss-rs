@@ -81,12 +81,26 @@ impl Rig {
     }
 
     fn with(fail_on_rejected_frame: bool) -> Rig {
+        Rig::with_options(SessionOptions {
+            fail_on_rejected_frame,
+            ..SessionOptions::default()
+        })
+    }
+
+    /// A session set up like a windowed one: modal messages wait for the player.
+    fn windowed() -> Rig {
+        Rig::with_options(SessionOptions {
+            wait_for_modal: true,
+            ..SessionOptions::default()
+        })
+    }
+
+    fn with_options(options: SessionOptions) -> Rig {
         let clock = ManualClock::new();
         let errors = ErrorBuffer::new();
         let options = SessionOptions {
-            fail_on_rejected_frame,
             errors: Box::new(errors.clone()),
-            ..SessionOptions::default()
+            ..options
         };
         Rig {
             session: Session::new(RecordingDisplay::new(), clock.clone(), options),
@@ -1105,6 +1119,59 @@ fn modal_text_goes_to_the_error_stream_and_is_dismissed_at_once() {
         "{}",
         rig.errors.text()
     );
+}
+
+#[test]
+fn windowed_modal_waits_for_the_confirm_key_and_hides_that_press() {
+    let mut rig = Rig::windowed();
+    assert_eq!(rig.send(modal("Save failed.")), []);
+    assert!(rig.errors.text().contains("Save failed."));
+    // Frames are shown and answered while the message is pending.
+    for index in 0..3 {
+        rig.frame(frame(index));
+        assert_eq!(rig.shown(), Shown::Frame(index));
+    }
+    // A key that is neither confirm nor cancel reaches the game and dismisses nothing.
+    assert_eq!(rig.key(KeyCode::ArrowDown, true), [held(&[Button::Down])]);
+    assert_eq!(rig.key(KeyCode::ArrowDown, false), [held(&[])]);
+
+    assert_eq!(rig.key(KeyCode::Enter, true), [HostToGuest::ModalDismissed]);
+    // The press stays hidden for as long as the key is down.
+    assert_eq!(rig.key(KeyCode::ArrowDown, true), [held(&[Button::Down])]);
+    assert_eq!(rig.key(KeyCode::Enter, false), []);
+    assert_eq!(
+        rig.key(KeyCode::Enter, true),
+        [held(&[Button::Down, Button::C])]
+    );
+}
+
+#[test]
+fn windowed_modal_is_dismissed_by_the_cancel_key_and_by_a_click() {
+    let mut rig = Rig::windowed();
+    rig.send(modal("first"));
+    assert_eq!(
+        rig.key(KeyCode::Escape, true),
+        [HostToGuest::ModalDismissed]
+    );
+    assert_eq!(rig.key(KeyCode::Escape, false), []);
+
+    rig.send(modal("second"));
+    rig.session.click();
+    assert_eq!(rig.session.take_messages(), [HostToGuest::ModalDismissed]);
+    // Nothing is pending any more.
+    rig.session.click();
+    assert_eq!(rig.session.take_messages(), []);
+}
+
+#[test]
+fn windowed_modal_is_not_dismissed_by_a_key_that_was_already_down() {
+    let mut rig = Rig::windowed();
+    assert_eq!(rig.key(KeyCode::Enter, true), [held(&[Button::C])]);
+    rig.send(modal("Save failed."));
+    // The platform repeats the held key.
+    assert_eq!(rig.key(KeyCode::Enter, true), []);
+    assert_eq!(rig.key(KeyCode::Enter, false), [held(&[])]);
+    assert_eq!(rig.key(KeyCode::Enter, true), [HostToGuest::ModalDismissed]);
 }
 
 #[test]
