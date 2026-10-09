@@ -176,6 +176,84 @@ fn late_frame_is_ticked_at_once_and_lateness_is_not_made_up() {
 }
 
 #[test]
+fn tick_sent_late_because_the_host_woke_late_is_not_made_up() {
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    assert_eq!(rig.send(frame(1)), []);
+    assert_eq!(rig.session.next_wake(), Some(ms(25)));
+    // The host comes back 75 milliseconds after the tick was due.
+    rig.clock.advance_to(ms(100));
+    rig.session.poll();
+    assert_eq!(rig.session.take_messages(), [HostToGuest::Tick]);
+
+    assert_eq!(
+        rig.send(frame(2)),
+        [],
+        "a full period after the tick at 100"
+    );
+    assert_eq!(rig.session.next_wake(), Some(ms(125)));
+    assert_eq!(rig.wait_for_tick(), ms(125));
+    assert_eq!(rig.frame(frame(3)), ms(150));
+}
+
+#[test]
+fn tick_sent_slightly_late_times_the_next_one_from_when_it_was_sent() {
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    rig.send(frame(1));
+    rig.clock.advance_to(ms(28));
+    rig.session.poll();
+    assert_eq!(rig.session.take_messages(), [HostToGuest::Tick]);
+    assert_eq!(rig.frame(frame(2)), ms(53));
+}
+
+#[test]
+fn rendering_that_outlasts_the_period_delays_the_tick_and_is_not_made_up() {
+    let clock = ManualClock::new();
+    let display = RecordingDisplay::with_render_time(clock.clone(), ms(40));
+    let mut session = Session::new(display, clock.clone(), SessionOptions::default());
+    let mut ticked_at = Vec::new();
+    for index in 0..4 {
+        session.handle_message(frame(index));
+        if let Some(due) = session.next_wake() {
+            clock.advance_to(due);
+            session.poll();
+        }
+        assert_eq!(
+            session.take_messages(),
+            [HostToGuest::Tick],
+            "frame {index}"
+        );
+        ticked_at.push(clock.now());
+    }
+    // Each frame arrives with the previous tick and takes 40 milliseconds to render, so its
+    // tick goes out as soon as it is rendered: 40 apart, never two in a row to catch up.
+    assert_eq!(ticked_at, [ms(40), ms(80), ms(120), ms(160)]);
+}
+
+#[test]
+fn rendering_within_the_period_does_not_delay_the_tick() {
+    let clock = ManualClock::new();
+    let display = RecordingDisplay::with_render_time(clock.clone(), ms(10));
+    let mut session = Session::new(display, clock.clone(), SessionOptions::default());
+    let mut ticked_at = Vec::new();
+    for index in 0..4 {
+        session.handle_message(frame(index));
+        if let Some(due) = session.next_wake() {
+            clock.advance_to(due);
+            session.poll();
+        }
+        assert_eq!(
+            session.take_messages(),
+            [HostToGuest::Tick],
+            "frame {index}"
+        );
+        ticked_at.push(clock.now());
+    }
+    assert_eq!(ticked_at, [ms(10), ms(35), ms(60), ms(85)]);
+}
+
+#[test]
 fn frame_rate_of_the_packet_sets_the_period_of_its_tick() {
     let mut rig = Rig::new();
     rig.frame(frame(0));
@@ -342,7 +420,8 @@ fn a_second_frame_handled_directly_still_gets_one_tick_each() {
         [HostToGuest::Tick],
         "the tick of frame 1"
     );
-    assert_eq!(rig.wait_for_tick(), ms(50));
+    // That tick went out at 0, ahead of its time, and the next one is timed from there.
+    assert_eq!(rig.wait_for_tick(), ms(25));
 }
 
 // Input delivery.
@@ -596,11 +675,7 @@ fn transition_cross_fades_in_equal_steps_then_shows_frames_normally() {
         "the fade starts with the next frame"
     );
 
-    let mix = |newest, weight| Shown::Mix {
-        held: Some(0),
-        newest,
-        weight,
-    };
+    let mix = |newest, weight| Shown::mix(Shown::Frame(0), newest, weight);
     rig.frame(frame(1));
     assert_eq!(rig.shown(), mix(1, 0.25));
     rig.frame(frame(2));
@@ -634,14 +709,7 @@ fn frames_between_freeze_and_transition_do_not_advance_the_fade() {
     rig.frame(frame(2));
     rig.send(transition(2));
     rig.frame(frame(3));
-    assert_eq!(
-        rig.shown(),
-        Shown::Mix {
-            held: Some(0),
-            newest: 3,
-            weight: 0.5
-        }
-    );
+    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(0), 3, 0.5));
     rig.frame(frame(4));
     assert_eq!(rig.shown(), Shown::Frame(4));
 }
@@ -688,14 +756,7 @@ fn masked_transition_is_a_plain_cross_fade_of_the_same_duration() {
         vague: 40,
     });
     rig.frame(frame(1));
-    assert_eq!(
-        rig.shown(),
-        Shown::Mix {
-            held: Some(0),
-            newest: 1,
-            weight: 0.5
-        }
-    );
+    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(0), 1, 0.5));
     rig.frame(frame(2));
     assert_eq!(rig.shown(), Shown::Frame(2));
     assert_eq!(rig.errors.text().matches("mask").count(), 1);
@@ -718,6 +779,82 @@ fn a_second_freeze_keeps_the_frame_already_held() {
     rig.frame(frame(1));
     rig.send(GuestToHost::Freeze);
     rig.frame(frame(2));
+    assert_eq!(rig.shown(), Shown::Frame(0));
+}
+
+/// A rig one step into a cross-fade of four from frame 0 to frame 1.
+fn fading() -> (Rig, Shown) {
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    rig.send(GuestToHost::Freeze);
+    rig.send(transition(4));
+    rig.frame(frame(1));
+    let shown = Shown::mix(Shown::Frame(0), 1, 0.25);
+    assert_eq!(rig.shown(), shown);
+    (rig, shown)
+}
+
+#[test]
+fn freeze_during_a_transition_holds_the_mixed_image_on_screen() {
+    let (mut rig, on_screen) = fading();
+    rig.send(GuestToHost::Freeze);
+    for index in 2..=4 {
+        rig.frame(frame(index));
+        assert_eq!(rig.shown(), on_screen, "after frame {index}");
+    }
+
+    // The next transition fades from that image, not from either frame behind it.
+    rig.send(transition(2));
+    rig.frame(frame(5));
+    assert_eq!(rig.shown(), Shown::mix(on_screen, 5, 0.5));
+    rig.frame(frame(6));
+    assert_eq!(rig.shown(), Shown::Frame(6));
+}
+
+#[test]
+fn frame_rejected_during_a_transition_keeps_the_image_and_its_weight() {
+    let (mut rig, on_screen) = fading();
+    assert_eq!(rig.send(invalid_frame(2)), []);
+    rig.wait_for_tick();
+    assert_eq!(rig.shown(), on_screen);
+
+    // Whatever makes the window draw again, a resize or an expose, shows the same image.
+    rig.session.display_mut().redraw().unwrap();
+    assert_eq!(rig.shown(), on_screen, "after a redraw");
+    assert_eq!(rig.session.end(), None);
+
+    // The fade goes on with the next frame that is shown, at the step the rejected one missed.
+    rig.frame(frame(3));
+    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(0), 3, 0.5));
+    rig.frame(frame(4));
+    rig.frame(frame(5));
+    assert_eq!(rig.shown(), Shown::Frame(5));
+    rig.session.display_mut().redraw().unwrap();
+    assert_eq!(rig.shown(), Shown::Frame(5));
+}
+
+#[test]
+fn frame_rejected_on_the_last_step_of_a_transition_does_not_end_it() {
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    rig.send(GuestToHost::Freeze);
+    rig.send(transition(1));
+    rig.send(invalid_frame(1));
+    rig.wait_for_tick();
+    rig.session.display_mut().redraw().unwrap();
+    assert_eq!(rig.shown(), Shown::Frame(0), "still the held frame");
+    rig.frame(frame(2));
+    assert_eq!(rig.shown(), Shown::Frame(2));
+}
+
+#[test]
+fn frame_rejected_while_frozen_keeps_the_held_frame() {
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    rig.send(GuestToHost::Freeze);
+    rig.send(invalid_frame(1));
+    rig.wait_for_tick();
+    rig.session.display_mut().redraw().unwrap();
     assert_eq!(rig.shown(), Shown::Frame(0));
 }
 

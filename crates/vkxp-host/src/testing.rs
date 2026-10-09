@@ -5,10 +5,11 @@
 
 use std::io::Write;
 use std::sync::{Arc, Mutex, PoisonError};
+use std::time::Duration;
 
 use vkxp_proto::FramePacket;
 
-use crate::Display;
+use crate::{Display, ManualClock};
 
 /// One request a [`RecordingDisplay`] received.
 #[derive(Debug, Clone, PartialEq)]
@@ -27,19 +28,31 @@ pub enum DisplayEvent {
     Title(String),
 }
 
-/// What a [`RecordingDisplay`] has on screen, with frames named by their `frame_index`.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// An image as a [`RecordingDisplay`] models it, with frames named by their `frame_index`.
+#[derive(Debug, Clone, PartialEq)]
 pub enum Shown {
-    /// Nothing was ever shown, or a held frame that does not exist: black.
+    /// Black: nothing was ever rendered, or nothing was ever held.
     Nothing,
     /// One frame alone.
     Frame(u64),
-    /// A mix of the held frame (`None` is black) and the newest frame.
+    /// The mix of a held image and the newest frame. The held image is itself a mix when it
+    /// was captured in the middle of a cross-fade.
     Mix {
-        held: Option<u64>,
+        held: Box<Shown>,
         newest: u64,
         weight: f32,
     },
+}
+
+impl Shown {
+    /// The mix of `held` and the frame `newest` at `weight`.
+    pub fn mix(held: Shown, newest: u64, weight: f32) -> Shown {
+        Shown::Mix {
+            held: Box::new(held),
+            newest,
+            weight,
+        }
+    }
 }
 
 /// Why a [`RecordingDisplay`] rejected a packet.
@@ -57,15 +70,17 @@ impl std::fmt::Display for Rejected {
 
 /// A display that renders nothing. It records every request and models which frame would be
 /// on screen. Like the compositors, it rejects a packet that contains an op of a reserved kind.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct RecordingDisplay {
     /// Every request, oldest first.
     pub events: Vec<DisplayEvent>,
     newest: Option<u64>,
-    held: Option<u64>,
+    held: Shown,
     weight: f32,
     shown: Shown,
     title: String,
+    /// A clock to move forward by a fixed time whenever a packet is rendered.
+    render_time: Option<(ManualClock, Duration)>,
 }
 
 impl RecordingDisplay {
@@ -73,16 +88,25 @@ impl RecordingDisplay {
         RecordingDisplay {
             events: Vec::new(),
             newest: None,
-            held: None,
+            held: Shown::Nothing,
             weight: 1.0,
             shown: Shown::Nothing,
             title: String::new(),
+            render_time: None,
         }
     }
 
-    /// What is on screen.
+    /// A display on which rendering a packet, accepted or not, takes `time` on `clock`.
+    pub fn with_render_time(clock: ManualClock, time: Duration) -> RecordingDisplay {
+        RecordingDisplay {
+            render_time: Some((clock, time)),
+            ..RecordingDisplay::new()
+        }
+    }
+
+    /// What is on screen: the image that was last shown.
     pub fn shown(&self) -> Shown {
-        self.shown
+        self.shown.clone()
     }
 
     /// The current window title.
@@ -101,17 +125,18 @@ impl RecordingDisplay {
             .collect()
     }
 
+    /// The image the current state gives: the mix of the held image and the newest frame.
+    fn compose(&self) -> Shown {
+        match self.newest {
+            None => Shown::Nothing,
+            Some(newest) if self.weight >= 1.0 => Shown::Frame(newest),
+            Some(_) if self.weight <= 0.0 => self.held.clone(),
+            Some(newest) => Shown::mix(self.held.clone(), newest, self.weight),
+        }
+    }
+
     fn show(&mut self) {
-        self.shown = match (self.newest, self.held) {
-            (Some(newest), _) if self.weight >= 1.0 => Shown::Frame(newest),
-            (_, held) if self.weight <= 0.0 => held.map_or(Shown::Nothing, Shown::Frame),
-            (Some(newest), held) => Shown::Mix {
-                held,
-                newest,
-                weight: self.weight,
-            },
-            (None, _) => Shown::Nothing,
-        };
+        self.shown = self.compose();
     }
 }
 
@@ -126,6 +151,9 @@ impl Display for RecordingDisplay {
 
     fn render(&mut self, packet: &FramePacket) -> Result<(), Rejected> {
         let frame_index = packet.frame_index;
+        if let Some((clock, time)) = &self.render_time {
+            clock.advance(*time);
+        }
         if let Some(op) = packet.ops.iter().position(|op| op.kind().is_reserved()) {
             self.events.push(DisplayEvent::Rejected { frame_index });
             return Err(Rejected { op });
@@ -138,7 +166,7 @@ impl Display for RecordingDisplay {
 
     fn hold(&mut self) -> Result<(), Rejected> {
         self.events.push(DisplayEvent::Hold);
-        self.held = self.newest;
+        self.held = self.compose();
         Ok(())
     }
 

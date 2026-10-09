@@ -90,10 +90,12 @@ struct FpsCounter {
 /// # Pacing
 ///
 /// Every frame message is answered with exactly one tick. With `p` the period of the frame
-/// being answered and `t_prev` the time the previous tick was due, the tick is due at
-/// `max(t_prev + p, t_arrival)`: one period after the previous one, or at once when that has
-/// passed, and lateness is never made up. Fast-forward makes it due at `t_arrival`; after a
-/// frame reset it is due at `t_arrival + p`.
+/// being answered and `t_prev` the time the previous tick was actually sent, the tick is due
+/// at `max(t_prev + p, t_arrival)`: one period after the previous one, or at once when that
+/// has passed. Lateness is never made up, whether the frame arrived late, rendering it took
+/// long or the host woke late for the tick: the next tick is a full period after the late one.
+/// Fast-forward makes it due at `t_arrival`; after a frame reset it is due at
+/// `t_arrival + p`.
 pub struct Session<D: Display, C: Clock> {
     display: D,
     clock: C,
@@ -104,7 +106,7 @@ pub struct Session<D: Display, C: Clock> {
     outbox: VecDeque<HostToGuest>,
     /// When the tick of the frame being answered is due.
     pending_tick: Option<Duration>,
-    /// When the previous tick was due.
+    /// When the previous tick was sent.
     previous_tick: Option<Duration>,
     /// Whether a frame reset is waiting for the frame it applies to.
     frame_reset: bool,
@@ -118,6 +120,8 @@ pub struct Session<D: Display, C: Clock> {
     /// The snapshot the guest was last sent.
     buttons: InputSnapshot,
     fade: Fade,
+    /// The mix weight the display is at.
+    mix: f32,
     title: String,
     fps: Option<FpsCounter>,
     frames: u64,
@@ -147,6 +151,7 @@ impl<D: Display, C: Clock> Session<D, C> {
             swallowed_keys: HashSet::new(),
             buttons: InputSnapshot::EMPTY,
             fade: Fade::Normal,
+            mix: 1.0,
             title: String::new(),
             fps: None,
             frames: 0,
@@ -253,8 +258,8 @@ impl<D: Display, C: Clock> Session<D, C> {
             return;
         }
         let now = self.clock.now();
-        if let Some(due) = self.pending_tick.filter(|due| *due <= now) {
-            self.send_tick(due, now);
+        if self.pending_tick.is_some_and(|due| due <= now) {
+            self.send_tick(now);
         }
     }
 
@@ -266,11 +271,9 @@ impl<D: Display, C: Clock> Session<D, C> {
     /// the link's wake hook has run or the user did something.
     pub fn pump(&mut self, link: &HostEnd) {
         loop {
-            if self.guest_gone
-                && let Some(due) = self.pending_tick
-            {
+            if self.guest_gone && self.pending_tick.is_some() {
                 // Nobody waits for this tick; do not let it hold up the rest of the link.
-                self.send_tick(due, self.clock.now());
+                self.send_tick(self.clock.now());
             }
             self.poll();
             self.flush(link);
@@ -353,30 +356,51 @@ impl<D: Display, C: Clock> Session<D, C> {
 
     fn frame(&mut self, packet: &FramePacket) {
         let arrival = self.clock.now();
-        if let Some(due) = self.pending_tick {
+        if self.pending_tick.is_some() {
             // A guest that keeps to the handshake never gets here. Answering the earlier frame
             // first keeps one tick per frame.
-            self.send_tick(due, arrival);
+            self.send_tick(arrival);
         }
         self.frames += 1;
 
-        if let Fade::Fading { step, duration } = self.fade {
-            let step = step + 1;
-            self.display.set_mix(step as f32 / duration as f32);
-            self.fade = if step >= duration {
-                Fade::Normal
-            } else {
-                Fade::Fading { step, duration }
-            };
+        // The step of a cross-fade this frame takes, with the weight that shows it. The
+        // display needs the weight before it renders; the session only counts the step once
+        // the frame has been shown.
+        let step = match self.fade {
+            Fade::Fading { step, duration } => {
+                let step = step + 1;
+                Some((step, duration, step as f32 / duration as f32))
+            }
+            Fade::Normal | Fade::Frozen => None,
+        };
+        if let Some((_, _, weight)) = step {
+            self.display.set_mix(weight);
         }
-        if let Err(error) = self.display.render(packet) {
-            self.report(format_args!(
-                "frame {} was rejected: {error}",
-                packet.frame_index
-            ));
-            if self.fail_on_rejected_frame {
-                self.end = Some(SessionEnd::Failed);
-                return;
+        match self.display.render(packet) {
+            Ok(()) => {
+                if let Some((step, duration, weight)) = step {
+                    self.mix = weight;
+                    self.fade = if step >= duration {
+                        Fade::Normal
+                    } else {
+                        Fade::Fading { step, duration }
+                    };
+                }
+            }
+            Err(error) => {
+                if step.is_some() {
+                    // The image on screen stays, so its weight does too: a redraw must not
+                    // show the frame before at the weight meant for this one.
+                    self.display.set_mix(self.mix);
+                }
+                self.report(format_args!(
+                    "frame {} was rejected: {error}",
+                    packet.frame_index
+                ));
+                if self.fail_on_rejected_frame {
+                    self.end = Some(SessionEnd::Failed);
+                    return;
+                }
             }
         }
 
@@ -396,9 +420,10 @@ impl<D: Display, C: Clock> Session<D, C> {
         self.poll();
     }
 
-    fn send_tick(&mut self, due: Duration, now: Duration) {
+    /// Sends the pending tick at the time `now`, from which the next one is timed.
+    fn send_tick(&mut self, now: Duration) {
         self.pending_tick = None;
-        self.previous_tick = Some(due);
+        self.previous_tick = Some(now);
         self.outbox.push_back(HostToGuest::Tick);
         if let Some(fps) = &mut self.fps {
             fps.ticks += 1;
@@ -429,10 +454,11 @@ impl<D: Display, C: Clock> Session<D, C> {
             // Already showing a held frame; that one stays.
             return;
         }
+        // In the middle of a cross-fade this captures the mixed image on screen.
         if let Err(error) = self.display.hold() {
             self.report(format_args!("cannot freeze the display: {error}"));
         }
-        self.display.set_mix(0.0);
+        self.set_mix(0.0);
         self.fade = Fade::Frozen;
     }
 
@@ -442,13 +468,18 @@ impl<D: Display, C: Clock> Session<D, C> {
             Fade::Normal => {}
             Fade::Frozen | Fade::Fading { .. } if duration == 0 => {
                 self.fade = Fade::Normal;
-                self.display.set_mix(1.0);
+                self.set_mix(1.0);
                 if let Err(error) = self.display.redraw() {
                     self.report(format_args!("cannot redraw the display: {error}"));
                 }
             }
             Fade::Frozen | Fade::Fading { .. } => self.fade = Fade::Fading { step: 0, duration },
         }
+    }
+
+    fn set_mix(&mut self, weight: f32) {
+        self.mix = weight;
+        self.display.set_mix(weight);
     }
 
     fn toggle_fps(&mut self) {
