@@ -78,3 +78,11 @@ SHALL stop only the display server and Wine server that it started.
 #### Scenario: Server that fails to start
 - **WHEN** the display server exits without announcing a display
 - **THEN** the run ends with an error that says so, within the start-up timeout
+
+### Requirement: Archives with large identifiers
+The harness SHALL read script archives whose entries have identifiers stored as Bignums and
+SHALL write them back unchanged.
+
+#### Scenario: Bignum identifier
+- **WHEN** an archive whose second entry has the identifier 3000000000 is read, a probe is added and the result is read again
+- **THEN** the entries after the probe are byte for byte as before
