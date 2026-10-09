@@ -20,14 +20,21 @@ pub const BITMAP_PROVENANCE: &[ArithmeticFn] = &[
     },
     ArithmeticFn {
         name: "rotate_hue",
-        formula: "M = max(r, g, b), m = min(r, g, b), d = M - m, \
-                  p = hue position in 0..6d (red at 0, green at 2d, blue at 4d), \
-                  p' = (p + (h * d + 30) / 60) mod 6d with h = degrees mod 360, \
-                  s = p' / d, f = p' - s * d, \
-                  out.rgb = (M, m+f, m), (M-f, M, m), (m, M, m+f), (m, M-f, M), (m+f, m, M), \
-                  (M, m, M-f) for s = 0..5, \
-                  out = pixel when d = 0, out.a = pixel.a",
-        provenance: Provenance::Textbook,
+        formula: "M = max(r, g, b), m = min(r, g, b), L = (M + m) >> 1, d = M - m; \
+                  d = 0: H = 0, S = 0; else S = d * 255 / (M + m if L < 128 else 511 - (M + m)), \
+                  H = (g - b) * 60 / d + 360 if r = M, (b - r) * 60 / d + 480 if g = M, \
+                  else (r - g) * 60 / d + 600 (division towards zero), minus 360 once if >= 360; \
+                  h = degrees, plus 360 once if negative; H = H + h, minus 360 once if >= 360; \
+                  q = S + L - ((L * S + 127) * 0x8081 >> 23) if L >= 128 \
+                  else ((S + 255) * L * 0x8081) >> 23, p = 2 * L - q; \
+                  f(x) = p + (((q - p) * x * 0x8889) >> 21) if x < 60, q if x < 180, \
+                  p + (((q - p) * (240 - x) * 0x8889) >> 21) if x < 240, else p; \
+                  out.r = f(H + 120, minus 360 if >= 360), out.g = f(H), \
+                  out.b = f(H - 120, plus 360 if < 0), each its low 8 bits, in unsigned 32-bit \
+                  arithmetic; out = pixel when degrees = 0; out.a = pixel.a",
+        provenance: Provenance::ReverseEngineered {
+            source: "oracle measurement 2026-10-09, RGSS104E, hue probe",
+        },
     },
 ];
 
@@ -53,67 +60,130 @@ pub const fn stretch_index(i: u32, src_len: u32, dst_len: u32) -> u32 {
     ((i as u64).wrapping_mul(step) >> 20) as u32
 }
 
-/// Rotates the hue of a pixel by `degrees`, keeping its alpha and the values of its largest
-/// and smallest colour channels.
-///
-/// The usual rotation in hue-saturation-value terms, in exact integer arithmetic. With `M` and
-/// `m` the largest and smallest of red, green and blue and `d = M - m`, the hue position `p`
-/// lies in `0..6d`:
+/// Rotates the hue of a pixel by `degrees`, keeping its alpha, as the original runtime's
+/// `Bitmap#hue_change` does: through an integer hue, saturation and lightness form and back.
 ///
 /// ```text
-/// M is red:    p = g - b            if g >= b, else 6d - (b - g)
-/// M is green:  p = 2d + (b - r)
-/// M is blue:   p = 4d + (r - g)     (ties resolved red, then green, then blue)
+/// h = degrees, plus 360 once when negative
 ///
-/// p' = (p + (h * d + 30) / 60) mod 6d      with h = degrees reduced to 0..359
-/// s  = p' / d,   f = p' - s * d
+/// M, m = largest and smallest of r, g, b;  L = (M + m) >> 1
+/// M = m:  H = 0, S = 0
+/// else    d = M - m;  S = d * 255 / (M + m  if L < 128  else  511 - (M + m))
+///         r = M:  H = (g - b) * 60 / d + 360      (division towards zero)
+///         g = M:  H = (b - r) * 60 / d + 480
+///         else:   H = (r - g) * 60 / d + 600
+///         H >= 360:  H = H - 360
 ///
-/// s = 0: (M, m+f, m)   s = 1: (M-f, M, m)   s = 2: (m, M, m+f)
-/// s = 3: (m, M-f, M)   s = 4: (m+f, m, M)   s = 5: (M, m, M-f)
+/// H = H + h;  H >= 360:  H = H - 360              (once)
+///
+/// L >= 128:  q = S + L - ((L * S + 127) * 0x8081 >> 23)
+/// else       q = ((S + 255) * L * 0x8081) >> 23
+/// p = 2 * L - q
+/// f(x) = p + (((q - p) * x * 0x8889) >> 21)             if x < 60
+///        q                                              if x < 180
+///        p + (((q - p) * (240 - x) * 0x8889) >> 21)     if x < 240
+///        p                                              otherwise
+/// red = f(H + 120, minus 360 if >= 360),  green = f(H),  blue = f(H - 120, plus 360 if < 0)
 /// ```
 ///
-/// A pixel with `d = 0` (a grey) is returned unchanged. An angle that is a multiple of 360
-/// reproduces every pixel exactly, and multiples of 60 permute the channels exactly.
+/// The products and sums of the way back are unsigned 32-bit and wrap; the low 8 bits of
+/// each result are kept. `0x8081 >> 23` divides by 255 and `0x8889 >> 21` by 60.
 ///
-/// PROVENANCE: Textbook.
+/// The round trip is not exact: an angle of 360 changes many colours by a little. A grey has
+/// saturation 0 and comes back as it was; an angle of exactly 0 returns every pixel
+/// unchanged. Angles are reduced once, not modulo 360, so an angle of 720 or more, or below
+/// -360, leaves the hue outside its range; it is then kept in 16 bits, as in the model that
+/// reproduces the samples.
+///
+/// PROVENANCE: ReverseEngineered (oracle measurement 2026-10-09, RGSS104E, hue probe; the
+/// routines are at 0x100d0200, 0x100d7440 and 0x100d72e0 of that DLL).
 pub const fn rotate_hue(pixel: Rgba, degrees: i32) -> Rgba {
-    let (r, g, b) = (pixel[0] as u32, pixel[1] as u32, pixel[2] as u32);
-    let max = max3(r, g, b);
-    let min = min3(r, g, b);
-    let d = max - min;
-    if d == 0 {
+    if degrees == 0 {
         return pixel;
     }
-    let position = if r == max {
-        if g >= b { g - b } else { 6 * d - (b - g) }
-    } else if g == max {
-        // `b - r` may be negative, but never below `-d`: add before subtracting.
-        2 * d + b - r
+    let turn = if degrees < 0 {
+        degrees as i64 + 360
     } else {
-        // Likewise `r - g`.
-        4 * d + r - g
+        degrees as i64
     };
-    let h = degrees.rem_euclid(360) as u32;
-    let rotated = (position + (h * d + 30) / 60) % (6 * d);
-    let sector = rotated / d;
-    let f = rotated - sector * d;
-    let (r, g, b) = match sector {
-        0 => (max, min + f, min),
-        1 => (max - f, max, min),
-        2 => (min, max, min + f),
-        3 => (min, max - f, max),
-        4 => (min + f, min, max),
-        _ => (max, min, max - f),
+    let (r, g, b) = (pixel[0] as i32, pixel[1] as i32, pixel[2] as i32);
+    let max = max3(r, g, b);
+    let min = min3(r, g, b);
+    let sum = max + min;
+    let lightness = (sum >> 1) as u32;
+    let (mut hue, saturation) = if max == min {
+        (0, 0)
+    } else {
+        let d = max - min;
+        let saturation = d * 255 / if lightness < 128 { sum } else { 511 - sum };
+        let hue = if r == max {
+            (g - b) * 60 / d + 360
+        } else if g == max {
+            (b - r) * 60 / d + 480
+        } else {
+            (r - g) * 60 / d + 600
+        };
+        (
+            if hue >= 360 { hue - 360 } else { hue } as i64,
+            (saturation & 255) as u32,
+        )
     };
-    [r as u8, g as u8, b as u8, pixel[3]]
+    hue += turn;
+    if hue >= 360 {
+        hue -= 360;
+    }
+    let hue = hue & 0xffff;
+
+    let q = if lightness >= 128 {
+        (saturation + lightness)
+            .wrapping_sub((lightness * saturation + 127).wrapping_mul(0x8081) >> 23)
+    } else {
+        ((saturation + 255) * lightness).wrapping_mul(0x8081) >> 23
+    };
+    let p = (2 * lightness).wrapping_sub(q);
+    let above = if hue + 120 >= 360 {
+        hue - 240
+    } else {
+        hue + 120
+    };
+    let below = if hue < 120 { hue + 240 } else { hue - 120 };
+    [
+        hue_channel(p, q, above),
+        hue_channel(p, q, hue),
+        hue_channel(p, q, below),
+        pixel[3],
+    ]
 }
 
-const fn max3(a: u32, b: u32, c: u32) -> u32 {
+/// `f` of [`rotate_hue`]: one channel on the way back from hue, saturation and lightness.
+const fn hue_channel(p: u32, q: u32, x: i64) -> u8 {
+    let value = if x < 60 {
+        hue_ramp(p, q, x)
+    } else if x < 180 {
+        q
+    } else if x < 240 {
+        hue_ramp(p, q, 240 - x)
+    } else {
+        p
+    };
+    value as u8
+}
+
+/// `p + (((q - p) * steps * 0x8889) >> 21)`, wrapping.
+const fn hue_ramp(p: u32, q: u32, steps: i64) -> u32 {
+    (q.wrapping_sub(p)
+        .wrapping_mul(steps as u32)
+        .wrapping_mul(0x8889)
+        >> 21)
+        .wrapping_add(p)
+}
+
+const fn max3(a: i32, b: i32, c: i32) -> i32 {
     let ab = if a > b { a } else { b };
     if ab > c { ab } else { c }
 }
 
-const fn min3(a: u32, b: u32, c: u32) -> u32 {
+const fn min3(a: i32, b: i32, c: i32) -> i32 {
     let ab = if a < b { a } else { b };
     if ab < c { ab } else { c }
 }
@@ -142,46 +212,39 @@ mod tests {
     }
 
     #[test]
-    fn full_turns_are_the_identity() {
-        for pixel in [[255, 0, 0, 255], [12, 200, 99, 3], [5, 5, 250, 128]] {
-            for degrees in [360, -360, 720, -720, 3600] {
-                assert_eq!(rotate_hue(pixel, degrees), pixel, "{degrees}");
-            }
-        }
+    fn a_full_turn_is_not_the_identity() {
+        // The way through hue, saturation and lightness loses a little.
+        assert_eq!(rotate_hue([255, 0, 0, 255], 360), [254, 0, 0, 255]);
+        assert_eq!(rotate_hue([81, 81, 0, 255], 360), [80, 80, 0, 255]);
+        assert_eq!(rotate_hue([200, 120, 40, 9], 360), [200, 120, 40, 9]);
     }
 
     #[test]
-    fn thirds_of_a_turn_map_red_to_green_and_blue() {
+    fn thirds_of_a_turn_map_red_to_green_and_blue_up_to_the_rounding() {
         let red = [255, 0, 0, 255];
-        assert_eq!(rotate_hue(red, 120), [0, 255, 0, 255]);
-        assert_eq!(rotate_hue(red, 240), [0, 0, 255, 255]);
+        assert_eq!(rotate_hue(red, 120), [0, 254, 0, 255]);
+        assert_eq!(rotate_hue(red, 240), [0, 0, 254, 255]);
+        assert_eq!(rotate_hue(red, 60), [254, 254, 0, 255]);
+        assert_eq!(rotate_hue(red, 180), [0, 254, 254, 255]);
+        assert_eq!(rotate_hue([200, 120, 40, 9], 120), [40, 200, 120, 9]);
+        assert_eq!(rotate_hue([12, 200, 99, 3], 200), [199, 13, 53, 3]);
     }
 
     #[test]
-    fn multiples_of_60_permute_the_channels() {
+    fn angles_are_reduced_once() {
         let pixel = [200, 120, 40, 9];
-        assert_eq!(rotate_hue(pixel, 120), [40, 200, 120, 9]);
-        assert_eq!(rotate_hue(pixel, 240), [120, 40, 200, 9]);
-        assert_eq!(rotate_hue([255, 0, 0, 1], 60), [255, 255, 0, 1]);
-        assert_eq!(rotate_hue([255, 0, 0, 1], 180), [0, 255, 255, 1]);
-        assert_eq!(rotate_hue([255, 0, 0, 1], 300), [255, 0, 255, 1]);
-    }
-
-    #[test]
-    fn negative_angles_equal_their_positive_counterparts() {
-        let pixel = [200, 120, 40, 9];
-        for degrees in [1, 59, 120, 200, 359] {
-            let expected = rotate_hue(pixel, degrees);
-            assert_eq!(rotate_hue(pixel, degrees - 360), expected, "{degrees}");
-            assert_eq!(rotate_hue(pixel, degrees - 720), expected, "{degrees}");
-            assert_eq!(rotate_hue(pixel, degrees + 360), expected, "{degrees}");
-        }
-        assert_eq!(rotate_hue(pixel, i32::MIN), rotate_hue(pixel, 232));
-        assert_eq!(rotate_hue(pixel, i32::MAX), rotate_hue(pixel, 127));
+        // A negative angle is raised by 360 once.
+        assert_eq!(rotate_hue(pixel, -30), rotate_hue(pixel, 330));
+        assert_eq!(rotate_hue(pixel, -30), [200, 40, 40, 9]);
+        assert_eq!(rotate_hue([0, 0, 255, 255], -30), [0, 127, 254, 255]);
+        // The sum is lowered by 360 once: two turns leave the hue out of its range.
+        assert_eq!(rotate_hue(pixel, 720), [200, 40, 40, 9]);
+        assert_eq!(rotate_hue(pixel, -400), [40, 40, 40, 9]);
     }
 
     #[test]
     fn grey_pixels_never_change() {
+        // Saturation 0: both ends of the ramp are the lightness.
         for value in 0..=255u8 {
             for degrees in (-720..=720).step_by(7) {
                 let pixel = [value, value, value, value.wrapping_mul(3)];
@@ -234,7 +297,7 @@ mod tests {
     }
 
     #[test]
-    fn both_functions_are_listed_and_only_the_hue_is_a_placeholder() {
+    fn both_functions_are_listed_and_neither_is_a_placeholder() {
         let listed: Vec<&str> = crate::bitmap_provenance()
             .iter()
             .map(|entry| entry.name)
@@ -248,8 +311,11 @@ mod tests {
             stretch.provenance.to_string(),
             "reverse-engineered: oracle measurement 2026-10-09, RGSS103J, bitmap stretch probe"
         );
-        assert_eq!(hue.provenance, Provenance::Textbook);
-        assert!(hue.provenance.is_placeholder());
+        assert_eq!(
+            hue.provenance.to_string(),
+            "reverse-engineered: oracle measurement 2026-10-09, RGSS104E, hue probe"
+        );
+        assert!(!hue.provenance.is_placeholder());
         for entry in crate::bitmap_provenance() {
             assert!(!entry.formula.is_empty(), "{}", entry.name);
         }
@@ -291,26 +357,11 @@ mod tests {
 
     proptest! {
         #[test]
-        fn largest_and_smallest_channels_and_alpha_are_preserved(
+        fn alpha_is_kept_at_any_angle(
             pixel in any::<[u8; 4]>(),
             degrees in any::<i32>(),
         ) {
-            let rotated = rotate_hue(pixel, degrees);
-            prop_assert_eq!(rotated[3], pixel[3]);
-            prop_assert_eq!(rotated[..3].iter().max(), pixel[..3].iter().max());
-            prop_assert_eq!(rotated[..3].iter().min(), pixel[..3].iter().min());
-        }
-
-        #[test]
-        fn small_angles_preserve_the_extremes_too(
-            pixel in any::<[u8; 4]>(),
-            degrees in -720..=720i32,
-        ) {
-            let rotated = rotate_hue(pixel, degrees);
-            prop_assert_eq!(rotated[3], pixel[3]);
-            prop_assert_eq!(rotated[..3].iter().max(), pixel[..3].iter().max());
-            prop_assert_eq!(rotated[..3].iter().min(), pixel[..3].iter().min());
-            prop_assert_eq!(rotated, rotate_hue(pixel, degrees.rem_euclid(360)));
+            prop_assert_eq!(rotate_hue(pixel, degrees)[3], pixel[3]);
         }
 
         #[test]

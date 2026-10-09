@@ -1,7 +1,9 @@
 //! The samples measured on the original runtime (the files of `tests/data`): every one of
 //! them is reproduced exactly. The comment lines of each file describe its columns.
 
-use vkxp_pixel::{apply_tone, blend_add, blend_color, blend_normal, blend_sub, stretch_index};
+use vkxp_pixel::{
+    apply_tone, blend_add, blend_color, blend_normal, blend_sub, rotate_hue, stretch_index,
+};
 
 const SAMPLES: &str = include_str!("data/screen-blend-samples.txt");
 
@@ -201,4 +203,29 @@ fn stretch_step_reproduces_the_measured_samples() {
         }
     }
     assert!(count > 80, "{count} rows");
+}
+
+/// `hue-samples.txt`: `Bitmap#hue_change` on single colours.
+#[test]
+fn hue_samples() {
+    let samples = include_str!("data/hue-samples.txt");
+    let mut checked = 0;
+    for line in samples.lines().filter(|line| !line.starts_with('#')) {
+        let (given, measured) = line.split_once("->").expect("an arrow");
+        let given: Vec<i32> = given
+            .split_whitespace()
+            .map(|number| number.parse().expect("a number"))
+            .collect();
+        let measured: Vec<u8> = measured
+            .split_whitespace()
+            .map(|number| number.parse().expect("a channel"))
+            .collect();
+        let channel = |value: i32| u8::try_from(value).expect("a channel");
+        let pixel = [channel(given[1]), channel(given[2]), channel(given[3]), 77];
+        let rotated = rotate_hue(pixel, given[0]);
+        assert_eq!(rotated[..3], measured[..], "{line}");
+        assert_eq!(rotated[3], 77, "{line}");
+        checked += 1;
+    }
+    assert!(checked > 250, "{checked}");
 }

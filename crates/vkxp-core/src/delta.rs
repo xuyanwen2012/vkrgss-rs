@@ -293,12 +293,10 @@ mod tests {
     }
 
     #[test]
-    fn hue_change_marks_the_whole_bitmap_unless_it_is_a_full_turn() {
+    fn hue_change_marks_the_whole_bitmap_unless_the_angle_is_0() {
         let mut bitmaps = Bitmaps::new();
         let id = known(&mut bitmaps, 10, 8);
-        for degrees in [0, 360, -720] {
-            bitmaps.hue_change(id, degrees).unwrap();
-        }
+        bitmaps.hue_change(id, 0).unwrap();
         assert_eq!(changed(&bitmaps, id), None);
         bitmaps.hue_change(id, 30).unwrap();
         assert_eq!(changed(&bitmaps, id), Some(ProtoRect::new(0, 0, 10, 8)));

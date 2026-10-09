@@ -693,7 +693,7 @@ pub const BITMAP_DRAWING: &[Case] = &[
         "hue_change",
         "b = Bitmap.new(1, 1); b.set_pixel(0, 0, Color.new(255, 0, 0, 77)); b.hue_change(120); \
          c = b.get_pixel(0, 0); b.hue_change(360); [c.red, c.green, c.blue, c.alpha, b.get_pixel(0, 0) == c]",
-        "[0.0, 255.0, 0.0, 77.0, true]",
+        "[0.0, 254.0, 0.0, 77.0, true]",
     ),
     raises(
         "fill_rect with a colour of the wrong class",

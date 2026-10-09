@@ -6,7 +6,7 @@
 
 ## 2. Hue (`vkxp-pixel`, `vkxp-core`)
 
-- [ ] 2.1 Implement the measured hue arithmetic with its provenance and commit a selection of the samples. Verify: the scenarios of `specs/core-bitmap/spec.md`.
+- [x] 2.1 Implement the measured hue arithmetic with its provenance and commit a selection of the samples. Verify: the scenarios of `specs/core-bitmap/spec.md`.
 
 ## 3. Tiles (`vkxp-core`)
 

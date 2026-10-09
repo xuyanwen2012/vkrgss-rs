@@ -582,15 +582,13 @@ impl Bitmaps {
         Ok(())
     }
 
-    /// Rotates the hue of every pixel by `degrees` ([`vkxp_pixel::rotate_hue`]). Alpha and the
-    /// values of each pixel's largest and smallest colour channels are kept; a multiple of 360
-    /// degrees changes nothing.
-    ///
-    /// PLACEHOLDER: the formula and its rounding are not yet checked against the original
-    /// runtime.
+    /// Rotates the hue of every pixel by `degrees` ([`vkxp_pixel::rotate_hue`]), with the
+    /// integer arithmetic measured on the original runtime. Alpha is kept. An angle of 0
+    /// changes nothing; every other angle, 360 included, goes through the arithmetic, which
+    /// does not give every colour back.
     pub fn hue_change(&mut self, id: BitmapId, degrees: i32) -> Result<(), BitmapError> {
         let bitmap = self.get_mut(id)?;
-        if degrees.rem_euclid(360) == 0 {
+        if degrees == 0 {
             return Ok(());
         }
         for pixel in bitmap.rgba.as_chunks_mut::<4>().0 {
@@ -1593,19 +1591,28 @@ mod tests {
     // Hue.
 
     #[test]
-    fn full_turns_change_no_pixel() {
+    fn only_an_angle_of_0_changes_no_pixel() {
         let mut bitmaps = Bitmaps::new();
         let id = bitmaps
             .create_from_rgba(4, 4, pattern(4, 4, 3), &defaults())
             .unwrap();
-        for degrees in [0, 360, -720] {
-            bitmaps.hue_change(id, degrees).unwrap();
-            assert_eq!(bitmaps.rgba(id).unwrap(), pattern(4, 4, 3), "{degrees}");
-        }
+        bitmaps.hue_change(id, 0).unwrap();
+        assert_eq!(bitmaps.rgba(id).unwrap(), pattern(4, 4, 3));
+
+        // A full turn goes through the arithmetic, as measured on the original runtime.
+        let colours = [[255, 0, 0, 255], [81, 81, 0, 255], [51, 153, 204, 255]].concat();
+        let id = bitmaps
+            .create_from_rgba(3, 1, colours, &defaults())
+            .unwrap();
+        bitmaps.hue_change(id, 360).unwrap();
+        assert_eq!(
+            bitmaps.rgba(id).unwrap(),
+            [[254, 0, 0, 255], [80, 80, 0, 255], [51, 152, 203, 255]].concat()
+        );
     }
 
     #[test]
-    fn primary_colours_rotate_into_each_other() {
+    fn primary_colours_rotate_into_each_other_up_to_the_rounding() {
         let mut bitmaps = Bitmaps::new();
         let red = [255, 0, 0, 255].repeat(2);
         let first = bitmaps
@@ -1614,8 +1621,8 @@ mod tests {
         let second = bitmaps.create_from_rgba(2, 1, red, &defaults()).unwrap();
         bitmaps.hue_change(first, 120).unwrap();
         bitmaps.hue_change(second, 240).unwrap();
-        assert_eq!(bitmaps.rgba(first).unwrap(), [0, 255, 0, 255].repeat(2));
-        assert_eq!(bitmaps.rgba(second).unwrap(), [0, 0, 255, 255].repeat(2));
+        assert_eq!(bitmaps.rgba(first).unwrap(), [0, 254, 0, 255].repeat(2));
+        assert_eq!(bitmaps.rgba(second).unwrap(), [0, 0, 254, 255].repeat(2));
     }
 
     #[test]
@@ -1643,7 +1650,7 @@ mod tests {
         let id = bitmaps
             .create_from_rgba(3, 1, greys.clone(), &defaults())
             .unwrap();
-        for degrees in [1, 59, 90, 180, 271, -45] {
+        for degrees in [1, 59, 90, 180, 271, -45, 360, 720] {
             bitmaps.hue_change(id, degrees).unwrap();
             assert_eq!(bitmaps.rgba(id).unwrap(), greys, "{degrees}");
         }
@@ -1656,7 +1663,13 @@ mod tests {
             .create_from_rgba(2, 1, vec![255, 0, 0, 128, 10, 200, 30, 0], &defaults())
             .unwrap();
         bitmaps.hue_change(id, 120).unwrap();
-        assert_eq!(bitmaps.rgba(id).unwrap(), [0, 255, 0, 128, 30, 10, 200, 0]);
+        let rotated = rotate_hue([10, 200, 30, 0], 120);
+        assert_eq!(rotated[3], 0);
+        assert_ne!(rotated[..3], [10, 200, 30]);
+        assert_eq!(
+            bitmaps.rgba(id).unwrap(),
+            [[0, 254, 0, 128], rotated].concat()
+        );
     }
 
     proptest! {
