@@ -51,10 +51,12 @@ impl Fixed {
         if denominator == 0 {
             return None;
         }
-        let scaled = i64::from(numerator) << Self::FRAC_BITS;
-        i32::try_from(scaled.div_euclid(i64::from(denominator)))
-            .ok()
-            .map(Fixed)
+        // With a positive divisor, Euclidean division rounds towards negative infinity, so
+        // move the sign of the denominator to the numerator first.
+        let sign = i64::from(denominator.signum());
+        let scaled = sign * (i64::from(numerator) << Self::FRAC_BITS);
+        let divisor = sign * i64::from(denominator);
+        i32::try_from(scaled.div_euclid(divisor)).ok().map(Fixed)
     }
 
     /// The largest integer not greater than the value.
@@ -129,6 +131,116 @@ mod tests {
         assert_eq!(Fixed::from_ratio(1, -2), Some(Fixed::from_bits(-32768)));
         assert_eq!(Fixed::from_ratio(1, 0), None);
         assert_eq!(Fixed::from_ratio(32768, 1), None);
+    }
+
+    /// floor(n * 65536 / d), computed independently in 128-bit arithmetic.
+    fn floor_ratio_bits(numerator: i32, denominator: i32) -> i128 {
+        let (n, d) = (i128::from(numerator) * 65536, i128::from(denominator));
+        let quotient = n / d;
+        // `/` truncates towards zero; step down when it rounded a negative result up.
+        if n % d != 0 && ((n < 0) != (d < 0)) {
+            quotient - 1
+        } else {
+            quotient
+        }
+    }
+
+    #[test]
+    fn inexact_ratios_round_down_for_every_sign_combination() {
+        // 1/3 = 0.33333..., which is 21845.33... in units of 1/65536.
+        assert_eq!(Fixed::from_ratio(1, 3), Some(Fixed::from_bits(21845)));
+        assert_eq!(Fixed::from_ratio(-1, 3), Some(Fixed::from_bits(-21846)));
+        assert_eq!(Fixed::from_ratio(1, -3), Some(Fixed::from_bits(-21846)));
+        assert_eq!(Fixed::from_ratio(-1, -3), Some(Fixed::from_bits(21845)));
+        // 7/5 = 1.4, which is 91750.4 in units of 1/65536.
+        assert_eq!(Fixed::from_ratio(7, 5), Some(Fixed::from_bits(91750)));
+        assert_eq!(Fixed::from_ratio(-7, 5), Some(Fixed::from_bits(-91751)));
+        assert_eq!(Fixed::from_ratio(7, -5), Some(Fixed::from_bits(-91751)));
+        assert_eq!(Fixed::from_ratio(-7, -5), Some(Fixed::from_bits(91750)));
+    }
+
+    #[test]
+    fn exact_ratios_are_exact_for_every_sign_combination() {
+        assert_eq!(Fixed::from_ratio(-1, 2), Some(Fixed::from_bits(-32768)));
+        assert_eq!(Fixed::from_ratio(-1, -2), Some(Fixed::HALF));
+        assert_eq!(Fixed::from_ratio(6, -2), Some(Fixed::from_int(-3)));
+        assert_eq!(Fixed::from_ratio(0, -7), Some(Fixed::ZERO));
+        assert_eq!(Fixed::from_ratio(0, 7), Some(Fixed::ZERO));
+    }
+
+    #[test]
+    fn ratios_match_floor_division_across_signs_and_magnitudes() {
+        let values = [
+            i32::MIN,
+            i32::MIN + 1,
+            -65537,
+            -65536,
+            -32768,
+            -1000,
+            -7,
+            -3,
+            -2,
+            -1,
+            0,
+            1,
+            2,
+            3,
+            7,
+            1000,
+            32767,
+            65536,
+            65537,
+            i32::MAX - 1,
+            i32::MAX,
+        ];
+        for numerator in values {
+            for denominator in values {
+                if denominator == 0 {
+                    assert_eq!(Fixed::from_ratio(numerator, denominator), None);
+                    continue;
+                }
+                let expected = i32::try_from(floor_ratio_bits(numerator, denominator))
+                    .ok()
+                    .map(Fixed::from_bits);
+                assert_eq!(
+                    Fixed::from_ratio(numerator, denominator),
+                    expected,
+                    "{numerator} / {denominator}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn ratios_at_the_range_boundaries() {
+        let min = Fixed::from_bits(i32::MIN);
+        let max = Fixed::from_bits(i32::MAX);
+        // The lowest value, -32768, is representable; +32768 is not.
+        assert_eq!(Fixed::from_ratio(-32768, 1), Some(min));
+        assert_eq!(Fixed::from_ratio(32768, -1), Some(min));
+        assert_eq!(Fixed::from_ratio(32768, 1), None);
+        assert_eq!(Fixed::from_ratio(-32768, -1), None);
+        assert_eq!(Fixed::from_ratio(-32769, 1), None);
+        assert_eq!(Fixed::from_ratio(32769, -1), None);
+        assert_eq!(Fixed::from_ratio(32767, 1), Some(Fixed::from_int(i16::MAX)));
+        assert_eq!(
+            Fixed::from_ratio(-32767, -1),
+            Some(Fixed::from_int(i16::MAX))
+        );
+        // Raw extremes, reached through a denominator of 65536.
+        assert_eq!(Fixed::from_ratio(i32::MAX, 65536), Some(max));
+        assert_eq!(Fixed::from_ratio(i32::MIN, 65536), Some(min));
+        assert_eq!(Fixed::from_ratio(i32::MIN, -65536), None);
+        assert_eq!(Fixed::from_ratio(i32::MIN + 1, -65536), Some(max));
+        // Extreme operands that would overflow 32-bit negation.
+        assert_eq!(Fixed::from_ratio(i32::MIN, i32::MIN), Some(Fixed::ONE));
+        assert_eq!(Fixed::from_ratio(i32::MIN, -1), None);
+        assert_eq!(Fixed::from_ratio(i32::MIN, 1), None);
+        // 1 / i32::MIN is a tiny negative number, which rounds down to -1/65536.
+        assert_eq!(Fixed::from_ratio(1, i32::MIN), Some(Fixed::from_bits(-1)));
+        assert_eq!(Fixed::from_ratio(-1, i32::MIN), Some(Fixed::ZERO));
+        assert_eq!(Fixed::from_ratio(1, i32::MAX), Some(Fixed::ZERO));
+        assert_eq!(Fixed::from_ratio(-1, i32::MAX), Some(Fixed::from_bits(-1)));
     }
 
     #[test]
