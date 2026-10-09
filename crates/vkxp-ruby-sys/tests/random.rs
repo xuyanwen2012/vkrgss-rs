@@ -52,11 +52,9 @@ impl Mt19937 {
         y ^ (y >> 18)
     }
 
-    /// `genrand_res53`: a real in [0, 1) from two outputs.
+    /// A real in [0, 1): one output divided by 2^32.
     fn next_real(&mut self) -> f64 {
-        let a = f64::from(self.next_u32() >> 5);
-        let b = f64::from(self.next_u32() >> 6);
-        (a * 67_108_864.0 + b) * (1.0 / 9_007_199_254_740_992.0)
+        f64::from(self.next_u32()) * (1.0 / 4_294_967_296.0)
     }
 }
 
@@ -85,15 +83,37 @@ fn negative_limit_counts_as_its_absolute_value() {
     );
 }
 
+/// Measured in the original runtime.
+#[test]
+fn integers_match_the_original() {
+    assert_eq!(
+        eval("srand(1234); (1..12).map { rand(1000) }"),
+        Ok("[191, 497, 622, 817, 437, 612, 785, 771, 779, 860, 272, 150]".to_owned())
+    );
+}
+
+/// Measured in the original runtime: the thirteenth output divided by 2^32.
 #[test]
 fn float_is_the_real_itself() {
     assert_eq!(
-        eval("srand(1); '%.15f' % rand"),
-        Ok("\"0.417022004702574\"".to_owned())
+        eval("srand(1234); 12.times { rand(1000) }; '%.15f' % rand"),
+        Ok("\"0.276464259717613\"".to_owned())
     );
     assert_eq!(
-        eval("srand(1); '%.15f' % rand(0)"),
-        Ok("\"0.417022004702574\"".to_owned())
+        eval("srand(1234); 12.times { rand(1000) }; '%.15f' % rand(0)"),
+        Ok("\"0.276464259717613\"".to_owned())
+    );
+}
+
+#[test]
+fn one_output_is_consumed_per_number() {
+    let mut reference = Mt19937::new(1234);
+    let expected: Vec<String> = (0..4)
+        .map(|_| format!("{:.15}", reference.next_real()))
+        .collect();
+    assert_eq!(
+        eval("srand(1234); (1..4).map { '%.15f' % rand }"),
+        Ok(format!("{expected:?}"))
     );
 }
 

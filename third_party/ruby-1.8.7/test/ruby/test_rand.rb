@@ -2,93 +2,94 @@ require 'test/unit'
 
 class TestRand < Test::Unit::TestCase
   # vkxp: srand and rand follow Ruby 1.8.1 (see PATCHES.md), so the sequences pinned here are
-  # the 1.8.1 ones wherever the limit is a Fixnum. test_mt now only shows that a seed counts
-  # by its low 32 bits. The two tests with Bignum limits keep their upstream values.
+  # the 1.8.1 ones wherever the limit is a Fixnum: one 32-bit output divided by 2^32, scaled
+  # and truncated. test_mt now only shows that a seed counts by its low 32 bits. The two tests
+  # with Bignum limits keep their upstream values.
   def test_mt
     srand(0x00000456_00000345_00000234_00000123)
-    %w(422279212 2896376844 2794392594 1785336940 3256458092).each {|w|
+    %w(422279215 1698001409 2896376837 1703936274 2794392607).each {|w|
       assert_equal(w.to_i, rand(0x100000000))
     }
   end
 
   def test_0x3fffffff
     srand(0)
-    %w(589284012 767928734 647212246 585063862 454895876).each {|w|
+    %w(589284010 636562059 767928732 906523439 647212240).each {|w|
       assert_equal(w.to_i, rand(0x3fffffff))
     }
   end
 
   def test_0x40000000
     srand(0)
-    %w(589284012 767928734 647212246 585063862 454895876).each {|w|
+    %w(589284011 636562059 767928733 906523440 647212240).each {|w|
       assert_equal(w.to_i, rand(0x40000000))
     }
   end
 
   def test_0x40000001
     srand(0)
-    %w(589284013 767928735 647212247 585063863 454895877).each {|w|
+    %w(589284011 636562060 767928733 906523440 647212241).each {|w|
       assert_equal(w.to_i, rand(0x40000001))
     }
   end
 
   def test_0xffffffff
     srand(0)
-    %w(2357136050 3071714938 2588848986 2340255450 1819583507).each {|w|
+    %w(2357136043 2546248238 3071714932 3626093759 2588848962).each {|w|
       assert_equal(w.to_i, rand(0xffffffff))
     }
   end
 
   def test_0x100000000
     srand(0)
-    %w(2357136050 3071714939 2588848987 2340255451 1819583507).each {|w|
+    %w(2357136044 2546248239 3071714933 3626093760 2588848963).each {|w|
       assert_equal(w.to_i, rand(0x100000000))
     }
   end
 
   def test_0x100000001
     srand(0)
-    %w(2357136051 3071714939 2588848988 2340255451 1819583508).each {|w|
+    %w(2357136044 2546248239 3071714933 3626093760 2588848963).each {|w|
       assert_equal(w.to_i, rand(0x100000001))
     }
   end
 
   def test_rand_0x100000000
     srand(311702798)
-    %w(3888582751 3778706670 1249045523 3287113490 882162109).each {|w|
+    %w(3888582720 4119812344 3778706665 1867155870 1249045521).each {|w|
       assert_equal(w.to_i, rand(0x100000001))
     }
   end
 
   def test_0x1000000000000
     srand(0)
-    %w(154477268236437
-       201307910243385
-       169662807241802
-       153370981244079
-       119248224777275).each {|w|
+    %w(154477267779584
+       166870924591104
+       201307909849088
+       237639680655360
+       169662805639168).each {|w|
       assert_equal(w.to_i, rand(0x1000000000000))
     }
   end
 
   def test_0x1000000000001
     srand(0)
-    %w(154477268236437
-       201307910243386
-       169662807241802
-       153370981244080
-       119248224777276).each {|w|
+    %w(154477267779584
+       166870924591104
+       201307909849088
+       237639680655360
+       169662805639168).each {|w|
       assert_equal(w.to_i, rand(0x1000000000001))
     }
   end
 
   def test_0x3fffffffffffffff
     srand(0)
-    %w(2530955562785787904
-       3298228801427629568
-       2779755433849689600
-       2512830156703001088
-       1953762914750887424).each {|w|
+    %w(2530955555300704256
+       2734013228500647936
+       3298228794967457792
+       3893488527857418240
+       2779755407592128512).each {|w|
       assert_equal(w.to_i, rand(0x3fffffffffffffff))
     }
   end
@@ -116,7 +117,7 @@ class TestRand < Test::Unit::TestCase
   end
 
   def test_neg_0x10000000000
-    ws = %w(605608698435 778616765152 319853143009 561660891703 981805559292)
+    ws = %w(605608700416 77762828288 778616764672 923533738752 319853148160)
     srand(3)
     ws.each {|w| assert_equal(w.to_i, rand(0x10000000000)) }
     srand(3)
@@ -124,7 +125,7 @@ class TestRand < Test::Unit::TestCase
   end
 
   def test_neg_0x10000
-    ws = %w(35967 46870 39502 35709 27764)
+    ws = %w(35967 38852 46870 55329 39502)
     srand(0)
     ws.each {|w| assert_equal(w.to_i, rand(0x10000)) }
     srand(0)

@@ -890,14 +890,16 @@ flo_hash(num)
     VALUE num;
 {
     double d;
-    char *c;
-    int i, hash;
+    signed char *c;
+    int i;
+    int32_t hash;
 
+    /* vkxp: as in Ruby 1.8.1, the sum of the bytes, taken as signed, times 971 */
     d = RFLOAT(num)->value;
     if (d == 0) d = fabs(d);
-    c = (char*)&d;
+    c = (signed char*)&d;
     for (hash=0, i=0; i<sizeof(double);i++) {
-	hash = (hash * 971) ^ (unsigned char)c[i];
+	hash += c[i] * 971;
     }
     if (hash < 0) hash = -hash;
     return INT2FIX(hash);

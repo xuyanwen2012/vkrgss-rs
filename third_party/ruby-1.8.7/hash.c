@@ -110,8 +110,8 @@ rb_any_hash(a)
 	break;
 
       case T_STRING:
-	hnum = rb_str_hash(a);
-	break;
+	/* vkxp: as in Ruby 1.8.1, all 32 bits of a string's hash choose the bin */
+	return rb_str_hash(a);
 
       default:
         hval = rb_hash(a);

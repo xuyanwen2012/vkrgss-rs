@@ -163,12 +163,12 @@ rb_genrand_int32(void)
     return y;
 }
 
-/* generates a random number on [0,1) with 53-bit resolution*/
+/* generates a random number on [0,1) with 32-bit resolution */
+/* vkxp: as in Ruby 1.8.1, one 32-bit output divided by 2^32 */
 double
 rb_genrand_real(void) 
 { 
-    unsigned long a=rb_genrand_int32()>>5, b=rb_genrand_int32()>>6; 
-    return(a*67108864.0+b)*(1.0/9007199254740992.0); 
+    return rb_genrand_int32()*(1.0/4294967296.0); 
 } 
 /* These real versions are due to Isaku Wada, 2002/01/09 added */
 
@@ -454,7 +454,7 @@ rb_f_rand(argc, argv, obj)
 	return rb_float_new(rb_genrand_real());
     }
     if (max < 0) max = -max;
-    /* vkxp: as in Ruby 1.8.1, the 53-bit real scaled and truncated */
+    /* vkxp: as in Ruby 1.8.1, the real scaled and truncated */
     val = max * rb_genrand_real();
     return LONG2NUM(val);
 }

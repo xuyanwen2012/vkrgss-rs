@@ -875,43 +875,21 @@ rb_str_concat(str1, str2)
     return str1;
 }
 
-static unsigned long hash_seed;
-
+/* vkxp: as in Ruby 1.8.1, and in the 32-bit arithmetic of the original's build: no seed,
+   bytes taken as signed, an arithmetic shift at the end. */
 int
 rb_str_hash(str)
     VALUE str;
 {
     register long len = RSTRING(str)->len;
-    register char *p = RSTRING(str)->ptr;
-    register unsigned long key = hash_seed;
-
-#if defined(HASH_ELFHASH)
-    register unsigned int g;
+    register signed char *p = (signed char *)RSTRING(str)->ptr;
+    register uint32_t key = 0;
 
     while (len--) {
-	key = (key << 4) + *p++;
-	if (g = key & 0xF0000000)
-	    key ^= g >> 24;
-	key &= ~g;
+	key = key*65599 + (uint32_t)(int32_t)*p++;
     }
-#elif defined(HASH_PERL)
-    while (len--) {
-	key += *p++;
-	key += (key << 10);
-	key ^= (key >> 6);
-    }
-    key += (key << 3);
-    key ^= (key >> 11);
-    key += (key << 15);
-#else
-    while (len--) {
-	key = key*65599 + *p;
-	p++;
-	key = (key << 13) | (key >> ((sizeof(unsigned long) * CHAR_BIT) - 13));
-    }
-    key = key + (key>>5);
-#endif
-    return key;
+    key = key + (uint32_t)((int32_t)key>>5);
+    return (int32_t)key;
 }
 
 /*
@@ -925,8 +903,9 @@ static VALUE
 rb_str_hash_m(str)
     VALUE str;
 {
-    int key = rb_str_hash(str);
-    return INT2FIX(key);
+    /* vkxp: the top bit is dropped, as INT2FIX does where a Fixnum has 31 bits */
+    uint32_t key = (uint32_t)rb_str_hash(str);
+    return INT2FIX((int32_t)(key << 1) >> 1);
 }
 
 #define lesser(a,b) (((a)>(b))?(b):(a))
@@ -5065,6 +5044,4 @@ Init_String()
     rb_fs = Qnil;
     rb_define_variable("$;", &rb_fs);
     rb_define_variable("$-F", &rb_fs);
-
-    hash_seed = rb_genrand_int32();
 }

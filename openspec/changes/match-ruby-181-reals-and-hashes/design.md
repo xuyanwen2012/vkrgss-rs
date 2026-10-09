@@ -28,6 +28,10 @@
   `rb_str_hash_m` return the value with the top bit dropped as a 32-bit `INT2FIX` would. Remove
   the seeding in `Init_String`.
 - Patch `flo_hash` likewise with explicit types.
+- Found while implementing: 1.8.7's `rb_any_hash` in `hash.c` drops the top bit of every key's
+  hash before the table takes it, and 1.8.1 does not. The measured iteration order (`pdef`,
+  whose hash has differing top bits) is only reached when a string key hands all 32 bits to
+  the table, so `hash.c` gets a fourth patch for string keys, recorded like the others.
 - Record the three patches in `PATCHES.md` with patch files and manifest hashes; adjust
   upstream tests that pin the old values, with a comment, and list them.
 

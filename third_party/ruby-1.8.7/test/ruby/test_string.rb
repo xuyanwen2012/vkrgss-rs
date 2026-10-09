@@ -31,6 +31,8 @@ class TestString < Test::Unit::TestCase
     $KCODE = original_kcode
   end
 
+  # vkxp: String#hash follows Ruby 1.8.1 (see PATCHES.md) and has no random seed, so every
+  # process computes the same value. Upstream asserted that the values differ.
   def test_hash_random
     str = 'abc'
     a = [str.hash.to_s]
@@ -40,6 +42,6 @@ class TestString < Test::Unit::TestCase
         a << o.read
       }
     }
-    assert_not_equal([str.hash.to_s], a.uniq)
+    assert_equal([str.hash.to_s], a.uniq)
   end
 end
