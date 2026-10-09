@@ -81,8 +81,8 @@ struct Rig {
     session: Session<RecordingDisplay, ManualClock>,
     clock: ManualClock,
     errors: ErrorBuffer,
-    /// The buttons of the last snapshot [`Rig::taken`] returned.
-    buttons: u32,
+    /// The last snapshot [`Rig::taken`] saw, as the session sent it.
+    last: InputSnapshot,
 }
 
 impl Rig {
@@ -116,26 +116,27 @@ impl Rig {
             session: Session::new(RecordingDisplay::new(), clock.clone(), options),
             clock,
             errors,
-            buttons: 0,
+            last: InputSnapshot::EMPTY,
         }
     }
 
     /// What the session has to send, as far as the buttons go: a snapshot is reduced to its
-    /// buttons, and left out when they are those of the snapshot before it. The tests of the
-    /// raw keys and the pointer take the messages from the session themselves.
+    /// buttons, and left out when only its raw keys or its pointer differ from the snapshot
+    /// before it. A snapshot that repeats the one before it stays, so a session that sends
+    /// one twice is found out.
     fn taken(&mut self) -> Vec<HostToGuest> {
         let mut messages = self.session.take_messages();
         messages.retain_mut(|message| {
             let HostToGuest::Input(snapshot) = message else {
                 return true;
             };
-            let changed = snapshot.buttons != self.buttons;
-            self.buttons = snapshot.buttons;
+            let only_raw = *snapshot != self.last && snapshot.buttons == self.last.buttons;
+            self.last = *snapshot;
             *snapshot = InputSnapshot {
                 buttons: snapshot.buttons,
                 ..InputSnapshot::EMPTY
             };
-            changed
+            !only_raw
         });
         messages
     }
@@ -558,7 +559,16 @@ fn scripted_buttons_bypass_the_key_map_and_are_sent_on_change_only() {
     rig.session.set_buttons(right);
     rig.session.set_buttons(right);
     rig.session.set_buttons(InputSnapshot::EMPTY);
-    assert_eq!(rig.taken(), [HostToGuest::Input(right), held(&[])]);
+    assert_eq!(
+        rig.session.take_messages(),
+        [HostToGuest::Input(right), held(&[])]
+    );
+
+    // The same goes for the raw keys and the pointer of a snapshot.
+    let raw = right.with_key(0x41).with_pointer(Some((100, 50)));
+    rig.session.set_buttons(raw);
+    rig.session.set_buttons(raw);
+    assert_eq!(rig.session.take_messages(), [HostToGuest::Input(raw)]);
 }
 
 // The default key map.
@@ -1602,7 +1612,7 @@ impl Rig {
             session: Session::new(RecordingDisplay::new(), clock.clone(), options),
             clock,
             errors,
-            buttons: 0,
+            last: InputSnapshot::EMPTY,
         }
     }
 

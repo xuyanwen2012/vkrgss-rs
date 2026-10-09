@@ -510,24 +510,26 @@ mod tests {
     }
 
     thread_local! {
-        /// The buttons of the last snapshot [`received`] returned in this test.
-        static BUTTONS: Cell<u32> = const { Cell::new(0) };
+        /// The last snapshot [`received`] saw in this test, as the session sent it.
+        static LAST: Cell<InputSnapshot> = const { Cell::new(InputSnapshot::EMPTY) };
     }
 
     /// What the guest was sent, as far as the buttons go: a snapshot is reduced to its
-    /// buttons, and left out when they are those of the snapshot before it.
+    /// buttons, and left out when only its raw keys or its pointer differ from the snapshot
+    /// before it. A snapshot that repeats the one before it stays.
     fn received(guest: &GuestEnd) -> Vec<HostToGuest> {
         let mut messages = received_raw(guest);
         messages.retain_mut(|message| {
             let HostToGuest::Input(snapshot) = message else {
                 return true;
             };
-            let changed = BUTTONS.replace(snapshot.buttons) != snapshot.buttons;
+            let last = LAST.replace(*snapshot);
+            let only_raw = *snapshot != last && snapshot.buttons == last.buttons;
             *snapshot = InputSnapshot {
                 buttons: snapshot.buttons,
                 ..InputSnapshot::EMPTY
             };
-            changed
+            !only_raw
         });
         messages
     }
@@ -558,7 +560,7 @@ mod tests {
         // The platform repeats a held key; the guest hears nothing new.
         let (key, state) = press(KeyCode::ArrowDown);
         driver.key(key, state);
-        assert_eq!(received(&guest), []);
+        assert_eq!(received_raw(&guest), []);
 
         let (key, state) = release(KeyCode::ArrowDown);
         driver.key(key, state);
