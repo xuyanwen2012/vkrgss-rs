@@ -71,7 +71,8 @@ pub fn compile_object(scratch: &Path, source: &Path) -> PathBuf {
 /// Builds Ruby's own command-line executable from the archives the build script produced:
 /// `main.c`, the `fcntl` and `stringio` extensions that Ruby's tests load, and an `Init_ext`
 /// that registers them and `Zlib`. `-rdynamic` exports every symbol of default visibility, as
-/// a real `ruby` does, which is also what makes the executable a probe for leaked symbols.
+/// a real `ruby` does, which is also what makes the executable a probe for leaked symbols:
+/// `vkxp_export_probe` is the one symbol given default visibility on purpose, to show that.
 pub fn build_ruby_executable(scratch: &Path) -> PathBuf {
     let source = source_dir();
     let init_ext = scratch.join("extinit.c");
@@ -82,6 +83,7 @@ pub fn build_ruby_executable(scratch: &Path) -> PathBuf {
          void Init_zlib _((void));\n\
          void Init_fcntl _((void));\n\
          void Init_stringio _((void));\n\
+         __attribute__((visibility(\"default\"))) int vkxp_export_probe = 1;\n\
          void Init_ext _((void))\n\
          {\n\
          \x20   ruby_init_ext(\"zlib.so\", Init_zlib);\n\

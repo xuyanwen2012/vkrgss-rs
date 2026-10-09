@@ -37,8 +37,8 @@
 
 ## 7. Symbols and documentation
 
-- [ ] 7.1 Add the symbol test: list the dynamic symbols of a test executable that links the interpreter and assert the names of the spec are absent. Verify: the test passes, and fails if `-fvisibility=hidden` is removed from the build script (restore afterwards).
-- [ ] 7.2 Write the crate documentation: the threading rule, the two rules for entering and leaving Ruby, rooting, and the SIGVTALRM note. Verify: `cargo doc -p vkxp-ruby-sys --no-deps` builds without warnings.
+- [x] 7.1 Add the symbol test: list the dynamic symbols of a test executable that links the interpreter and assert the names of the spec are absent. Verify: the test passes, and fails if `-fvisibility=hidden` is removed from the build script (restore afterwards).
+- [x] 7.2 Write the crate documentation: the threading rule, the two rules for entering and leaving Ruby, rooting, and the SIGVTALRM note. Verify: `cargo doc -p vkxp-ruby-sys --no-deps` builds without warnings.
 
 ## 8. Integration check
 
