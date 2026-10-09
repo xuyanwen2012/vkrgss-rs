@@ -325,3 +325,63 @@ fn a_file_is_created_in_a_directory_of_the_game() {
         b"[A]\r\nk=w\r\n"
     );
 }
+
+/// The scenario "Plain name" of `rgss-runtime`.
+#[test]
+fn a_plain_name_finds_the_ansi_function() {
+    write_game_ini();
+    assert_eq!(
+        eval(&with_error_stream(
+            "get = Win32API.new('kernel32', 'GetPrivateProfileString', 'pppplp', 'l')
+             buffer = \"\\xff\" * 256
+             length = get.call('Game', 'Title', '', buffer, 256, '.\\\\Game.ini')
+             [length, buffer[0, length + 1].unpack('C*')]"
+        )),
+        r#"[[4, [178, 226, 202, 212, 0]], ""]"#
+    );
+}
+
+/// The scenarios "Copy inside the game directory" and "Copy outside" of `rgss-runtime`.
+#[test]
+fn a_file_is_copied_inside_the_game_directory_only() {
+    let game = testing::game_dir();
+    let outside = game.with_file_name("copied.rxdata");
+    let _ = fs::remove_file(&outside);
+    fs::create_dir_all(game.join("Save")).unwrap();
+    fs::write(game.join("Save/a.rxdata"), b"\x04\x08save\x00\xff").unwrap();
+    fs::write(game.join("Save/kept.rxdata"), b"kept").unwrap();
+    assert_eq!(
+        eval(&with_error_stream(&format!(
+            "copy = Win32API.new('kernel32', 'CopyFileA', 'ppi', 'i')
+             plain = Win32API.new('kernel32', 'CopyFile', 'ppi', 'i')
+             [copy.call('Save\\\\a.rxdata', 'Save\\\\b.rxdata', 0) != 0,
+              copy.call('Save\\\\a.rxdata', 'Save\\\\kept.rxdata', 1),
+              plain.call('Save\\\\a.rxdata', 'Save\\\\c.rxdata', 1),
+              copy.call('Save\\\\absent.rxdata', 'Save\\\\d.rxdata', 0),
+              copy.call('Save\\\\a.rxdata', '..\\\\copied.rxdata', 0),
+              copy.call('Save\\\\a.rxdata', {absolute}, 0),
+              copy.call('Save\\\\a.rxdata', 'C:\\\\copied.rxdata', 0)]",
+            absolute = host::ruby_literal(&outside.to_string_lossy())
+        ))),
+        r#"[[true, 0, 1, 0, 0, 0, 0], ""]"#
+    );
+    let source = fs::read(game.join("Save/a.rxdata")).unwrap();
+    assert_eq!(fs::read(game.join("Save/b.rxdata")).unwrap(), source);
+    assert_eq!(fs::read(game.join("Save/c.rxdata")).unwrap(), source);
+    assert_eq!(fs::read(game.join("Save/kept.rxdata")).unwrap(), b"kept");
+    assert!(!game.join("Save/d.rxdata").exists());
+    assert!(!outside.exists());
+}
+
+#[test]
+fn the_priority_is_accepted_and_the_process_times_are_zero() {
+    assert_eq!(
+        eval(&with_error_stream(
+            "times = (1..4).map { \"\\xff\" * 8 }
+             [Win32API.new('kernel32', 'SetPriorityClass', 'pi', 'i').call(-1, 0x80),
+              Win32API.new('kernel32', 'GetProcessTimes', 'ipppp', 'i').call(-1, *times),
+              times.map { |time| time.unpack('C*') }.uniq]"
+        )),
+        r#"[[1, 1, [[0, 0, 0, 0, 0, 0, 0, 0]]], ""]"#
+    );
+}

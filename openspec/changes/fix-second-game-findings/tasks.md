@@ -6,7 +6,7 @@
 
 ## 2. Win32API (`vkxp-binding`)
 
-- [ ] 2.1 Add the name fallback and the three functions. Verify: Ruby tests for the three scenarios of `specs/rgss-runtime/spec.md`.
+- [x] 2.1 Add the name fallback and the three functions. Verify: Ruby tests for the three scenarios of `specs/rgss-runtime/spec.md`.
 
 ## 3. Harness (`xtask`)
 

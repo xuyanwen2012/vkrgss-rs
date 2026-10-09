@@ -43,6 +43,9 @@ const TABLE: &[(&str, &str, Shim)] = &[
         "WritePrivateProfileStringA",
         write_profile_string,
     ),
+    ("kernel32", "CopyFileA", copy_file),
+    ("kernel32", "SetPriorityClass", set_priority_class),
+    ("kernel32", "GetProcessTimes", process_times),
     ("kernel32", "MultiByteToWideChar", multi_byte_to_wide_char),
     ("kernel32", "WideCharToMultiByte", wide_char_to_multi_byte),
     ("kernel32", "GetTickCount", tick_count),
@@ -366,6 +369,30 @@ fn write_profile_string(guest: &mut Guest, args: &mut [Arg]) -> i64 {
     i64::from(written)
 }
 
+/// `CopyFileA(source, destination, fail_if_exists)`: both names follow the rule of the
+/// profile files. Returns 1 when the file was copied, 0 when it was not: a name outside the
+/// game directory, a source that cannot be read, or a destination that exists while the third
+/// argument is not 0.
+fn copy_file(guest: &mut Guest, args: &mut [Arg]) -> i64 {
+    let (Some(source), Some(destination)) = (c_string(args, 0), c_string(args, 1)) else {
+        return 0;
+    };
+    let (Some(source), Some(destination)) =
+        (profile_path(guest, source), profile_path(guest, destination))
+    else {
+        return 0;
+    };
+    if int(args, 2) != 0 && destination.exists() {
+        return 0;
+    }
+    let Ok(contents) = std::fs::read(source) else {
+        return 0;
+    };
+    let written = std::fs::write(destination, contents).is_ok();
+    guest.files.refresh();
+    i64::from(written)
+}
+
 // --- Text conversion --------------------------------------------------------------------------
 
 /// The encoding of a configuration file with these contents, found as `vkxp-vfs` finds it:
@@ -545,6 +572,23 @@ fn window_rect(guest: &mut Guest, args: &mut [Arg]) -> i64 {
 fn show_cursor(guest: &mut Guest, args: &mut [Arg]) -> i64 {
     guest.win32api.cursor += if int(args, 0) != 0 { 1 } else { -1 };
     guest.win32api.cursor
+}
+
+/// `SetPriorityClass(process, priority)`: nothing is done, and that succeeds.
+fn set_priority_class(_guest: &mut Guest, _args: &mut [Arg]) -> i64 {
+    1
+}
+
+/// `GetProcessTimes(process, creation, exit, kernel, user)`: every time is 0, in 8 bytes
+/// each.
+fn process_times(_guest: &mut Guest, args: &mut [Arg]) -> i64 {
+    for index in 1..=4 {
+        if let Some(buffer) = buffer_mut(args, index) {
+            let length = buffer.len().min(8);
+            buffer[..length].fill(0);
+        }
+    }
+    1
 }
 
 // --- Memory -----------------------------------------------------------------------------------
