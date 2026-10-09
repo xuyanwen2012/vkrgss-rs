@@ -2,7 +2,7 @@
 
 ## 1. Bush depth (`vkxp-core`)
 
-- [ ] 1.1 Extract a sprite with bush depth as two quads. Verify: pixel tests for the three scenarios of the bush-depth requirement in `specs/core-scene/spec.md`, and one with mirror and rotation that compares against the same sprite drawn from two hand-split bitmaps.
+- [x] 1.1 Extract a sprite with bush depth as two quads. Verify: pixel tests for the three scenarios of the bush-depth requirement in `specs/core-scene/spec.md`, and one with mirror and rotation that compares against the same sprite drawn from two hand-split bitmaps.
 
 ## 2. Tilemap flash (`vkxp-core`)
 

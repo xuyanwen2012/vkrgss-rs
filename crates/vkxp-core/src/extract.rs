@@ -116,13 +116,27 @@ impl Assembly<'_> {
         clip: vkxp_proto::Rect,
         look: Look,
     ) {
+        self.part(bitmap, src, src, geometry, clip, look);
+    }
+
+    /// Draws the pixels of `part`, a rectangle inside `src`, where a quad of `src` through
+    /// `geometry` shows them, and nothing of the rest of `src`.
+    fn part(
+        &mut self,
+        bitmap: BitmapId,
+        src: Rect,
+        part: Rect,
+        geometry: &Geometry,
+        clip: vkxp_proto::Rect,
+        look: Look,
+    ) {
         if look.opacity == 0 || clip.is_empty() {
             return;
         }
         let Ok(bounds) = self.bitmaps.rect(bitmap) else {
             return;
         };
-        let inside = intersect(src.to_proto(), bounds.to_proto());
+        let inside = intersect(part.to_proto(), bounds.to_proto());
         if inside.is_empty() {
             return;
         }
@@ -170,7 +184,17 @@ impl Assembly<'_> {
             opacity: sprite.opacity,
             blend: blend_mode(sprite.blend_type),
         };
-        self.quad(bitmap, sprite.src_rect, &geometry, level.clip, look);
+        // The lowest rows, as many as the bush depth, are drawn with half the opacity.
+        let src = sprite.src_rect;
+        let bush = sprite.bush_depth.clamp(0, src.height.max(0));
+        let above = Rect::new(src.x, src.y, src.width, src.height - bush);
+        let below = Rect::new(src.x, src.y.saturating_add(above.height), src.width, bush);
+        let faint = Look {
+            opacity: look.opacity / 2,
+            ..look
+        };
+        self.part(bitmap, src, above, &geometry, level.clip, look);
+        self.part(bitmap, src, below, &geometry, level.clip, faint);
     }
 
     /// Applies the viewport's tone and colour to everything drawn so far inside `clip`.
@@ -910,6 +934,120 @@ mod tests {
             assert_eq!(frame.pixel(32, 32), RED);
             assert_eq!(frame.pixel(31, 31), RED);
         }
+    }
+
+    /// A white 32 by 32 sprite at the top-left corner of a black stage, and its faint white.
+    fn bush(stage: &mut Stage, depth: i32) -> (SpriteId, Rgba) {
+        let bitmap = stage.solid(32, 32, WHITE);
+        let id = sprite(stage, bitmap, 0, 0);
+        stage.scene.sprite_mut(id).unwrap().bush_depth = depth;
+        (id, vkxp_pixel::blend_normal(BLACK, WHITE, 127))
+    }
+
+    /// Whether the rows of the frame from `top` up to `bottom` are `pixel` in their first 32
+    /// columns.
+    fn rows(frame: &vkxp_compose_ref::Frame, top: u32, bottom: u32, pixel: Rgba) -> bool {
+        (top..bottom).all(|y| (0..32).all(|x| frame.pixel(x, y) == pixel))
+    }
+
+    #[test]
+    fn the_rows_of_the_bush_depth_are_drawn_with_half_the_opacity() {
+        let mut stage = Stage::sized(48, 48);
+        let (id, faint) = bush(&mut stage, 8);
+        let frame = stage.frame();
+        assert!(rows(&frame, 0, 24, WHITE));
+        assert!(rows(&frame, 24, 32, faint));
+        assert!(rows(&frame, 32, 48, BLACK));
+        assert!((120..=135).contains(&faint[0]), "mid grey");
+
+        // Half of the sprite's own opacity, rounded down.
+        stage.scene.sprite_mut(id).unwrap().set_opacity(101);
+        let frame = stage.frame();
+        assert_eq!(
+            frame.pixel(0, 0),
+            vkxp_pixel::blend_normal(BLACK, WHITE, 101)
+        );
+        assert_eq!(
+            frame.pixel(0, 31),
+            vkxp_pixel::blend_normal(BLACK, WHITE, 50)
+        );
+    }
+
+    #[test]
+    fn the_bush_depth_counts_source_rows_whatever_the_zoom() {
+        let mut stage = Stage::sized(48, 80);
+        let (id, faint) = bush(&mut stage, 8);
+        stage.scene.sprite_mut(id).unwrap().zoom_y = 2.0;
+        let frame = stage.frame();
+        assert!(rows(&frame, 0, 48, WHITE));
+        assert!(rows(&frame, 48, 64, faint));
+        assert!(rows(&frame, 64, 80, BLACK));
+    }
+
+    #[test]
+    fn a_bush_depth_of_zero_or_less_changes_nothing() {
+        let mut stage = Stage::sized(48, 48);
+        let bitmap = stage.solid(32, 32, WHITE);
+        sprite(&mut stage, bitmap, 0, 0);
+        let plain = stage.scene.extract(&mut stage.bitmaps);
+        let plain_frame = stage.render(&plain).unwrap();
+        for depth in [0, -8, i32::MIN] {
+            let mut stage = Stage::sized(48, 48);
+            bush(&mut stage, depth);
+            let packet = stage.scene.extract(&mut stage.bitmaps);
+            assert_eq!(packet.ops, plain.ops, "depth {depth}");
+            assert_eq!(stage.render(&packet).unwrap().rgba, plain_frame.rgba);
+        }
+    }
+
+    #[test]
+    fn a_bush_depth_beyond_the_source_height_covers_the_whole_sprite() {
+        for depth in [32, 33, i32::MAX] {
+            let mut stage = Stage::sized(48, 48);
+            let (_, faint) = bush(&mut stage, depth);
+            let frame = stage.frame();
+            assert!(rows(&frame, 0, 32, faint), "depth {depth}");
+            assert!(rows(&frame, 32, 48, BLACK));
+        }
+    }
+
+    #[test]
+    fn a_turned_and_mirrored_bush_sprite_equals_its_two_halves_drawn_apart() {
+        // What every sprite of the comparison shares.
+        fn place(stage: &mut Stage, bitmap: BitmapId, oy: i32, opacity: i32) -> SpriteId {
+            let id = sprite(stage, bitmap, 30, 30);
+            let sprite = stage.scene.sprite_mut(id).unwrap();
+            sprite.ox = 2;
+            sprite.oy = oy;
+            sprite.zoom_x = 3.0;
+            sprite.zoom_y = 2.5;
+            sprite.angle = 30.0;
+            sprite.mirror = true;
+            sprite.tone = Tone::new(40.0, -20.0, 0.0, 100.0);
+            sprite.color = Color::new(0.0, 255.0, 0.0, 60.0);
+            sprite.set_opacity(opacity);
+            id
+        }
+        let pixels = |top: u32, height: u32| -> Vec<Rgba> {
+            (top..top + height)
+                .flat_map(|y| (0..6).map(move |x| cell(x, y)))
+                .collect()
+        };
+
+        let mut whole = Stage::sized(64, 64);
+        let bitmap = grid(&mut whole, 6, 6);
+        let id = place(&mut whole, bitmap, 5, 201);
+        whole.scene.sprite_mut(id).unwrap().bush_depth = 2;
+
+        let mut halves = Stage::sized(64, 64);
+        let above = halves.pixels(6, 4, &pixels(0, 4));
+        let below = halves.pixels(6, 2, &pixels(4, 2));
+        place(&mut halves, above, 5, 201);
+        place(&mut halves, below, 1, 100);
+
+        let frame = whole.frame();
+        assert!(drawn(&frame).len() > 200);
+        assert_eq!(frame.rgba, halves.frame().rgba);
     }
 
     #[test]

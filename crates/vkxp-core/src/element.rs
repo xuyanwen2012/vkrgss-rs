@@ -103,7 +103,8 @@ pub struct Sprite {
     /// Rotation about the origin in degrees, counter-clockwise on screen.
     pub angle: f64,
     pub mirror: bool,
-    /// Stored only: bush depth is not drawn yet.
+    /// Number of rows at the bottom of the source rectangle that are drawn with half the
+    /// opacity; 0 or less for none.
     pub bush_depth: i32,
     /// 1 adds, 2 subtracts, every other value blends normally.
     pub blend_type: i32,
