@@ -22,6 +22,12 @@ usage: vkxp [GAME_DIR] [OPTIONS]
   --no-audio                run without sound: no audio device is opened
   --soundfont FILE          the SoundFont that MIDI music is played with;
                             default: the first found in /usr/share/soundfonts
+  --seed N                  the seed of the random number generator; default: 0 in a
+                            headless run, the seed of the recording in a replay, and
+                            one taken from the clock otherwise
+  --preload FILE            a Ruby file evaluated before the game's scripts; repeatable
+  --record FILE             write the input of every frame and the seed to FILE
+  --replay FILE             play the input of a recording back instead of the keyboard
   --headless                run without a window, on a virtual clock
   --frames N                headless: stop after N frames
   --input SCRIPT|@FILE      headless: held buttons, for example \"2:RIGHT, 6:\"
@@ -55,6 +61,14 @@ pub struct Options {
     pub no_audio: bool,
     /// The SoundFont for MIDI, instead of the system's.
     pub soundfont: Option<PathBuf>,
+    /// The seed of the random number generator, if one was given.
+    pub seed: Option<u64>,
+    /// Preload scripts, in the order given.
+    pub preload: Vec<PathBuf>,
+    /// The file the input is recorded into.
+    pub record: Option<PathBuf>,
+    /// The recording that is played back.
+    pub replay: Option<PathBuf>,
     pub headless: bool,
     pub frames: Option<u64>,
     pub input: Option<Input>,
@@ -105,6 +119,16 @@ pub fn parse(arguments: &[String]) -> Result<Options, String> {
             "--allow-process-functions" => options.process_functions = true,
             "--no-audio" => options.no_audio = true,
             "--soundfont" => options.soundfont = Some(PathBuf::from(value()?)),
+            "--seed" => {
+                let text = value()?;
+                let seed = text
+                    .parse()
+                    .map_err(|_| format!("--seed: `{text}` is not a seed, a number from 0 on"))?;
+                options.seed = Some(seed);
+            }
+            "--preload" => options.preload.push(PathBuf::from(value()?)),
+            "--record" => options.record = Some(PathBuf::from(value()?)),
+            "--replay" => options.replay = Some(PathBuf::from(value()?)),
             "--headless" => options.headless = true,
             "--frames" => {
                 let text = value()?;
@@ -145,6 +169,16 @@ pub fn parse(arguments: &[String]) -> Result<Options, String> {
         ];
         if let Some((_, option)) = headless_only.iter().find(|(given, _)| *given) {
             return Err(format!("{option} needs --headless"));
+        }
+    }
+    if options.replay.is_some() {
+        // A replay stands in for every other input.
+        let other_input = [
+            (options.record.is_some(), "--record"),
+            (options.input.is_some(), "--input"),
+        ];
+        if let Some((_, option)) = other_input.iter().find(|(given, _)| *given) {
+            return Err(format!("{option} cannot be used together with --replay"));
         }
     }
     Ok(options)
@@ -235,6 +269,63 @@ mod tests {
         );
         assert_eq!(options.dumps, [(1, "a.png".into()), (8, "b=c.png".into())]);
         assert_eq!(options.device.as_deref(), Some("0"));
+    }
+
+    #[test]
+    fn seed_preload_record_and_replay() {
+        let options = parse_words(&[
+            "game",
+            "--seed",
+            "18446744073709551615",
+            "--preload",
+            "one.rb",
+            "--preload",
+            "patches/two.rb",
+            "--record",
+            "input.txt",
+        ])
+        .unwrap();
+        assert_eq!(options.seed, Some(u64::MAX));
+        assert_eq!(
+            options.preload,
+            [PathBuf::from("one.rb"), "patches/two.rb".into()]
+        );
+        assert_eq!(options.record, Some("input.txt".into()));
+        assert_eq!(options.replay, None);
+
+        let options = parse_words(&["--headless", "--replay", "input.txt"]).unwrap();
+        assert_eq!(options.replay, Some("input.txt".into()));
+        assert_eq!(options.seed, None);
+        assert!(options.preload.is_empty());
+
+        for option in ["--seed", "--preload", "--record", "--replay"] {
+            let error = parse_words(&["game", option]).unwrap_err();
+            assert!(error.contains(option), "{error}");
+        }
+    }
+
+    #[test]
+    fn a_malformed_seed_is_an_error() {
+        for value in ["seven", "-1", "1.5", "", "18446744073709551616"] {
+            let error = parse_words(&["--seed", value]).unwrap_err();
+            assert!(error.contains("--seed"), "{value}: {error}");
+        }
+    }
+
+    /// Scenario "Record and replay together".
+    #[test]
+    fn record_and_replay_together_are_refused() {
+        for words in [
+            &["--record", "a.txt", "--replay", "b.txt"][..],
+            &["--replay", "b.txt", "--record", "a.txt", "--headless"],
+        ] {
+            let error = parse_words(words).unwrap_err();
+            assert!(error.contains("--record"), "{error}");
+            assert!(error.contains("--replay"), "{error}");
+        }
+        let error =
+            parse_words(&["--headless", "--input", "1:UP", "--replay", "b.txt"]).unwrap_err();
+        assert!(error.contains("--input"), "{error}");
     }
 
     #[test]

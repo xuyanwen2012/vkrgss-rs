@@ -123,6 +123,15 @@ fn vkxp_in(work: TempDir, arguments: &[&str]) -> Ran {
 
 /// Runs `game` headless with its stand-in built-in scripts file, followed by `arguments`.
 fn headless(game: &Game, arguments: &[&str]) -> Ran {
+    headless_in(
+        tempfile::tempdir().expect("a temporary directory"),
+        game,
+        arguments,
+    )
+}
+
+/// Runs `game` headless as [`headless`] does, started in `work`.
+fn headless_in(work: TempDir, game: &Game, arguments: &[&str]) -> Ran {
     let dir = game.dir().to_string_lossy().into_owned();
     let builtin = game.builtin_scripts().to_string_lossy().into_owned();
     let device = device();
@@ -135,7 +144,7 @@ fn headless(game: &Game, arguments: &[&str]) -> Ran {
         &device,
     ];
     all.extend_from_slice(arguments);
-    vkxp(&all)
+    vkxp_in(work, &all)
 }
 
 /// A dumped frame.
@@ -515,4 +524,211 @@ loop { }
     assert!(ran.stderr().contains("did not end"), "{}", ran.stderr());
     // The wait is a few seconds; the rest is the start of the program.
     assert!(elapsed < Duration::from_secs(60), "{elapsed:?}");
+}
+
+/// A game that puts the red sprite at a `rand` position and runs for three frames.
+fn rand_game(name: &str) -> Game {
+    let main = format!(
+        "{RED_SPRITE}$sprite.x = rand(600)\n$sprite.y = rand(440)\n3.times {{ Graphics.update }}\n"
+    );
+    Game::new(name, "Rand", &[("Main", &main)])
+}
+
+/// Scenario "Headless default".
+#[test]
+fn headless_runs_without_a_seed_draw_the_same_rand_position() {
+    let game = rand_game("e2e-rand");
+    let run = |arguments: &[&str]| {
+        let mut all = vec!["--dump", "2=out.png"];
+        all.extend_from_slice(arguments);
+        let ran = headless(&game, &all);
+        ran.assert_success();
+        assert!(ran.frame("out.png").leftmost(RED).is_some());
+        fs::read(ran.file("out.png")).unwrap()
+    };
+    let default = run(&[]);
+    assert_eq!(default, run(&[]));
+    // The default is seed 0, and another seed is another position.
+    assert_eq!(default, run(&["--seed", "0"]));
+    assert_ne!(default, run(&["--seed", "1"]));
+}
+
+/// Scenario "Round trip": a run with an input script is recorded, and the replay of the
+/// recording writes the same frames.
+#[test]
+fn a_replayed_recording_writes_the_frames_of_the_recorded_run() {
+    let game = demo("e2e-replay");
+    let mut arguments = demo_arguments();
+    arguments.extend(["--seed", "5", "--record", "input.txt"].map(str::to_owned));
+    let arguments: Vec<&str> = arguments.iter().map(String::as_str).collect();
+    let recorded = headless(&game, &arguments);
+    recorded.assert_success();
+    assert_eq!(
+        fs::read_to_string(recorded.file("input.txt")).unwrap(),
+        "vkxp-input 1 seed=5\n2x\n4x RIGHT\n6x\n"
+    );
+
+    let recording = recorded.file("input.txt").to_string_lossy().into_owned();
+    let fonts = font_dir().to_string_lossy().into_owned();
+    let replayed = headless(
+        &game,
+        &["--font-dir", &fonts, "--replay", &recording]
+            .into_iter()
+            .chain(["--dump", "1=first.png", "--dump", "8=later.png"])
+            .collect::<Vec<_>>(),
+    );
+    replayed.assert_success();
+    assert_eq!(replayed.frame("later.png").leftmost(RED), Some(26));
+    for name in ["first.png", "later.png"] {
+        let bytes = fs::read(recorded.file(name)).unwrap();
+        assert_eq!(bytes, fs::read(replayed.file(name)).unwrap(), "{name}");
+    }
+}
+
+/// A replay takes its seed from the recording unless one is given.
+#[test]
+fn a_replay_uses_the_seed_of_the_recording() {
+    let game = rand_game("e2e-replay-seed");
+    let seeded = headless(&game, &["--seed", "9", "--dump", "2=out.png"]);
+    seeded.assert_success();
+    let expected = fs::read(seeded.file("out.png")).unwrap();
+
+    let work = tempfile::tempdir().unwrap();
+    fs::write(work.path().join("input.txt"), "vkxp-input 1 seed=9\n3x\n").unwrap();
+    let replay = |work: TempDir, arguments: &[&str]| {
+        let mut all = vec!["--replay", "input.txt", "--dump", "2=out.png"];
+        all.extend_from_slice(arguments);
+        let ran = headless_in(work, &game, &all);
+        ran.assert_success();
+        ran
+    };
+    let replayed = replay(work, &[]);
+    assert_eq!(fs::read(replayed.file("out.png")).unwrap(), expected);
+    let reseeded = replay(replayed.work, &["--seed", "10"]);
+    assert_ne!(fs::read(reseeded.file("out.png")).unwrap(), expected);
+}
+
+/// Scenario "Record and replay together".
+#[test]
+fn record_and_replay_together_print_the_usage_message() {
+    let ran = vkxp(&["game", "--record", "a.txt", "--replay", "b.txt"]);
+    assert_eq!(ran.output.status.code(), Some(2));
+    let stderr = ran.stderr();
+    assert!(stderr.contains("--record"), "{stderr}");
+    assert!(stderr.contains("usage: vkxp"), "{stderr}");
+    assert!(!ran.file("a.txt").exists());
+}
+
+/// Scenario "Not a recording".
+#[test]
+fn a_replay_of_a_file_that_is_no_recording_fails_before_the_first_frame() {
+    let game = Game::new(
+        "e2e-not-a-recording",
+        "Replay",
+        &[(
+            "Main",
+            "File.open('ran.txt', 'w') { }\n3.times { Graphics.update }",
+        )],
+    );
+    let work = tempfile::tempdir().unwrap();
+    fs::write(work.path().join("notes.txt"), "2:RIGHT, 6:\n").unwrap();
+    let ran = headless_in(
+        work,
+        &game,
+        &["--replay", "notes.txt", "--dump", "0=out.png"],
+    );
+    ran.assert_failure();
+    let stderr = ran.stderr();
+    assert!(stderr.contains("notes.txt"), "{stderr}");
+    assert!(stderr.contains("not an input recording"), "{stderr}");
+    assert!(!ran.file("out.png").exists());
+    assert!(!game.dir().join("ran.txt").exists(), "no script ran");
+}
+
+#[test]
+fn a_preload_script_patches_the_game() {
+    let main = format!("{RED_SPRITE}$sprite.x = PATCHED_X\n3.times {{ Graphics.update }}\n");
+    let game = Game::new("e2e-preload", "Preload", &[("Main", &main)]);
+    let work = tempfile::tempdir().unwrap();
+    fs::write(work.path().join("patch.rb"), "PATCHED_X = 200\n").unwrap();
+    let ran = headless_in(
+        work,
+        &game,
+        &["--preload", "patch.rb", "--dump", "2=out.png"],
+    );
+    ran.assert_success();
+    assert_eq!(ran.frame("out.png").leftmost(RED), Some(200));
+
+    let ran = headless(&game, &["--preload", "absent.rb"]);
+    ran.assert_failure();
+    assert!(ran.stderr().contains("absent.rb"), "{}", ran.stderr());
+}
+
+/// An RGSSAD version 1 archive of these entries, in the format `vkxp-vfs` documents: after
+/// the header, per entry, the length of the name, the name, the size of the data and the
+/// data, XORed with a key that advances after every length, name byte and size, the data
+/// word by word with a copy of the key.
+fn rgssad(entries: &[(&str, &[u8])]) -> Vec<u8> {
+    fn step(key: &mut u32) -> u32 {
+        let current = *key;
+        *key = key.wrapping_mul(7).wrapping_add(3);
+        current
+    }
+    let mut key: u32 = 0xDEAD_CAFE;
+    let mut archive = b"RGSSAD\0\x01".to_vec();
+    for (name, contents) in entries {
+        let length = u32::try_from(name.len()).unwrap();
+        archive.extend((length ^ step(&mut key)).to_le_bytes());
+        archive.extend(name.bytes().map(|byte| byte ^ step(&mut key) as u8));
+        let size = u32::try_from(contents.len()).unwrap();
+        archive.extend((size ^ step(&mut key)).to_le_bytes());
+        let mut data_key = key;
+        for word in contents.chunks(4) {
+            let mask = step(&mut data_key).to_le_bytes();
+            archive.extend(word.iter().zip(mask).map(|(byte, mask)| byte ^ mask));
+        }
+    }
+    archive
+}
+
+/// Scenario "Game in an archive".
+#[test]
+fn a_game_whose_data_is_in_the_archive_runs_like_the_one_with_loose_files() {
+    let main = format!("{RED_SPRITE}$sprite.x = 300\n3.times {{ Graphics.update }}\n");
+    let game = Game::new("e2e-archive", "Archive", &[("Main", &main)]);
+    let loose = headless(&game, &["--dump", "2=out.png"]);
+    loose.assert_success();
+
+    let data = game.dir().join("Data");
+    let scripts = fs::read(data.join("Scripts.rxdata")).unwrap();
+    fs::write(
+        game.dir().join("Game.rgssad"),
+        rgssad(&[("Data\\Scripts.rxdata", &scripts)]),
+    )
+    .unwrap();
+    fs::remove_dir_all(&data).unwrap();
+    let archived = headless(&game, &["--dump", "2=out.png"]);
+    archived.assert_success();
+    assert_eq!(archived.frame("out.png").leftmost(RED), Some(300));
+    assert_eq!(
+        fs::read(loose.file("out.png")).unwrap(),
+        fs::read(archived.file("out.png")).unwrap()
+    );
+}
+
+#[test]
+fn a_damaged_archive_is_an_error_naming_it() {
+    let game = Game::new(
+        "e2e-damaged-archive",
+        "Archive",
+        &[("Main", "3.times { Graphics.update }")],
+    );
+    let scripts = fs::read(game.dir().join("Data").join("Scripts.rxdata")).unwrap();
+    let mut archive = rgssad(&[("Data\\Scripts.rxdata", &scripts)]);
+    archive.truncate(archive.len() - 5);
+    fs::write(game.dir().join("Game.rgssad"), archive).unwrap();
+    let ran = headless(&game, &["--dump", "0=out.png"]);
+    ran.assert_failure();
+    assert!(ran.stderr().contains("Game.rgssad"), "{}", ran.stderr());
+    assert!(!ran.file("out.png").exists());
 }

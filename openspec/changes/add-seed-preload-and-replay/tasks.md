@@ -10,9 +10,9 @@
 
 ## 3. Executable (`vkxp`)
 
-- [ ] 3.1 Add the four options and the seed defaults. Verify: argument tests, and end-to-end tests for the round-trip scenario of `specs/host-session/spec.md` and the two scenarios of the options requirement.
-- [ ] 3.2 Open the game's files with `GameFiles::open`. Verify: the game-in-an-archive scenario and a damaged-archive run that exits non-zero naming the file.
-- [ ] 3.3 Describe the options in `README.md`. Verify: every command shown matches the implemented options.
+- [x] 3.1 Add the four options and the seed defaults. Verify: argument tests, and end-to-end tests for the round-trip scenario of `specs/host-session/spec.md` and the two scenarios of the options requirement.
+- [x] 3.2 Open the game's files with `GameFiles::open`. Verify: the game-in-an-archive scenario and a damaged-archive run that exits non-zero naming the file.
+- [x] 3.3 Describe the options in `README.md`. Verify: every command shown matches the implemented options.
 
 ## 4. Integration check
 

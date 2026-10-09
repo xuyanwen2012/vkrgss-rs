@@ -5,8 +5,8 @@ A Rust + Vulkan runtime for RPG Maker XP (RGSS1) games. Linux first, MIT license
 The project can start a game: `vkxp <game directory>` runs the game's scripts in the embedded
 Ruby interpreter against the RGSS classes and shows the frames of the Vulkan compositor in a
 window, or writes them to files in a headless run. In a window it plays the game's audio:
-Ogg Vorbis, WAV, MP3 and, with a SoundFont, MIDI. There is no configuration file or gamepad
-support yet, and encrypted archives are not read.
+Ogg Vorbis, WAV, MP3 and, with a SoundFont, MIDI. A game's encrypted archive (`Game.rgssad`)
+is read. There is no configuration file or gamepad support yet.
 `docs/decisions.md` records the settled design, and `openspec/` holds the change proposals
 that implement it.
 
@@ -150,6 +150,10 @@ Paths on the command line are relative to the directory the program was started 
 | `--allow-process-functions` | Lets `system`, backticks, `exec`, `fork`, `syscall` and `IO.popen` start processes. Without it they do nothing. |
 | `--no-audio` | Run without sound. No audio device is opened. |
 | `--soundfont FILE` | The SoundFont that MIDI music is played with. A file that does not exist ends the program with an error before any window opens. |
+| `--seed N` | The seed of the random number generator, set before any script runs and again on every reset. Without it a headless run uses 0, a replay the seed of its recording, and a windowed run one taken from the clock. |
+| `--preload FILE` | A Ruby file evaluated after the built-in scripts and before the game's first script, and again after a reset. Repeatable, in the order given. |
+| `--record FILE` | Write the input of every frame and the seed to `FILE`. |
+| `--replay FILE` | Play the input of a recording back instead of the keyboard. Not together with `--record` or `--input`. |
 | `--headless` | Run without a window, on a virtual clock that never waits. |
 | `--frames N` | Headless: stop after N frames if the game has not ended. |
 | `--input SCRIPT\|@FILE` | Headless: the buttons held from given frames on, in the syntax described under *Running the demo*, or a file that holds such a script. |
@@ -211,6 +215,44 @@ then ends with a message and a non-zero status.
 The end-to-end test of the `vkxp` crate runs the built program this way on games it assembles
 itself, with a stand-in for the built-in scripts. Like the other tests that render, it refuses
 to run while the loader is not restricted, and it passes the restriction on to the program.
+
+### Seed, preload scripts and input recordings
+
+Games call `rand`, so two runs only draw the same frames when they start from the same seed.
+`--seed` sets it; a headless run without the option uses seed 0, which is why its frames are
+reproducible.
+
+A preload script is a patch for a game that is not to be edited: it runs after the `RPG`
+module is defined and before the game's first script, so it can define constants and methods
+the game then meets. An error in one ends the run like a script error of the game, with the
+file's name and line in the report, and a file that does not exist ends it before any script.
+
+```sh
+VK_LOADER_DRIVERS_SELECT='*radeon*' \
+    cargo run -p vkxp -- <game directory> --rtp Standard=<RTP directory> --device RADV \
+    --preload fixes/fonts.rb --preload fixes/skip_intro.rb
+```
+
+`--record` writes what the game was given as input, frame by frame, and `--replay` gives it to
+the game again, in a window or headless:
+
+```sh
+VK_LOADER_DRIVERS_SELECT='*radeon*' \
+    cargo run -p vkxp -- <game directory> --rtp Standard=<RTP directory> --device RADV \
+    --record session.txt
+VK_LOADER_DRIVERS_SELECT='*lvp*' \
+    cargo run -p vkxp -- <game directory> --rtp Standard=<RTP directory> \
+    --headless --replay session.txt --frames 600 --dump 599=target/frame.png
+```
+
+A recording is text: the line `vkxp-input 1 seed=<n>`, then one line per run of frames with
+the same buttons held, `<count>x` followed by the `+`-joined button names, if any. The replay
+uses the recorded seed unless `--seed` is given. After the last recorded frame the keyboard
+applies again in a window, and no button is held in a headless run. A file that is not a
+recording ends the program with an error that names it, before the first frame. While input
+is recorded or replayed the game is given each frame's buttons together with that frame's
+tick, so a key pressed and released between two frames is not seen. Only input and the seed
+are recorded: a reset with F12 is not, and a game that reads the clock can still diverge.
 
 ## Comparing with the original runtime
 

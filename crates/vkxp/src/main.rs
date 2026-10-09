@@ -11,7 +11,10 @@
 //!    status 2.
 //! 2. `Game.ini` is read, the run-time packages it names are looked up in the `--rtp` table,
 //!    the built-in scripts file is found and a SoundFont named with `--soundfont` is checked
-//!    to exist. A failure is a message and status 1, before any window or interpreter exists.
+//!    to exist. The recording of `--replay` is read or the file of `--record` created, the
+//!    random seed is settled, and the game's files are opened, with the encrypted archive
+//!    `Game.rgssad` if there is one. A failure is a message and status 1, before any window
+//!    or interpreter exists.
 //! 3. The game directory becomes the working directory, because scripts write their saves
 //!    with relative names. Paths given on the command line are made absolute first.
 //! 4. SIGVTALRM is blocked while the main thread is still the only one (`signals`); the
@@ -37,13 +40,13 @@ use std::path::{Path, PathBuf, absolute};
 use std::process::ExitCode;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, anyhow, bail};
 use vkxp_binding::{Config, RunConfig, RunError, run_game};
 use vkxp_host::{
-    AudioOptions, HeadlessOptions, InputScript, WindowedOptions, device_from_text, headless_link,
-    run_headless, run_windowed,
+    AudioOptions, HeadlessOptions, InputScript, InputSource, Recorder, Recording, Replayer,
+    WindowedOptions, device_from_text, headless_link, run_headless, run_windowed,
 };
 use vkxp_proto::link::GuestEnd;
 use vkxp_ruby_sys::Interpreter;
@@ -173,6 +176,32 @@ fn input_script(input: Option<Input>) -> Result<InputScript, InputError> {
     }
 }
 
+/// The seed of a run and the recorder or replayer of its input. The seed is the one given;
+/// without one it is that of the replayed recording, 0 in a headless run and otherwise taken
+/// from the clock. A recording is read, and a file to record into created, here: before any
+/// window or interpreter exists.
+fn seed_and_input(options: &Options) -> Result<(u64, Option<Box<dyn InputSource>>)> {
+    let recording = match &options.replay {
+        Some(path) => Some(Recording::read(&absolute(path)?)?),
+        None => None,
+    };
+    let seed = match (options.seed, &recording) {
+        (Some(seed), _) => seed,
+        (None, Some(recording)) => recording.seed,
+        (None, None) if options.headless => 0,
+        (None, None) => SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            // The low 64 bits of the nanoseconds; a clock before 1970 gives 0.
+            .map_or(0, |since| since.as_nanos() as u64),
+    };
+    let input: Option<Box<dyn InputSource>> = match (recording, &options.record) {
+        (Some(recording), _) => Some(Box::new(Replayer::new(recording))),
+        (None, Some(path)) => Some(Box::new(Recorder::create(&absolute(path)?, seed)?)),
+        (None, None) => None,
+    };
+    Ok((seed, input))
+}
+
 /// Runs the game the options describe, headless with the input `script`. `Ok(false)` is a
 /// run that failed and has said why.
 fn run(options: Options, script: InputScript) -> Result<bool> {
@@ -190,7 +219,7 @@ fn run(options: Options, script: InputScript) -> Result<bool> {
         ),
         other => other.into(),
     })?;
-    let builtin_scripts = builtin_scripts(options.builtin_scripts)?;
+    let builtin_scripts = builtin_scripts(options.builtin_scripts.clone())?;
     let audio = audio_options(options.no_audio, options.soundfont.as_deref())?;
     let dumps = options
         .dumps
@@ -203,13 +232,21 @@ fn run(options: Options, script: InputScript) -> Result<bool> {
         .map(absolute)
         .collect::<std::io::Result<Vec<_>>>()?;
 
+    let preload = options
+        .preload
+        .iter()
+        .map(absolute)
+        .collect::<std::io::Result<Vec<_>>>()?;
+    let (seed, input) = seed_and_input(&options)?;
+    let files = GameFiles::open(game_dir.clone(), rtp_dirs)?;
+
     std::env::set_current_dir(&game_dir)
         .with_context(|| format!("cannot enter the game directory {}", game_dir.display()))?;
     signals::block_virtual_timer();
 
     let title = ini.title.clone();
     let config = Config {
-        files: GameFiles::new(game_dir.clone(), rtp_dirs),
+        files,
         font_names: default_font_names(&ini.library),
         text: Box::new(FontBackend::for_game(&game_dir, &font_dirs)),
         run: RunConfig {
@@ -217,6 +254,8 @@ fn run(options: Options, script: InputScript) -> Result<bool> {
             builtin_scripts,
             debug: options.debug,
             process_functions: options.process_functions,
+            seed: Some(seed),
+            preload,
             ..RunConfig::default()
         },
     };
@@ -242,6 +281,7 @@ fn run(options: Options, script: InputScript) -> Result<bool> {
             device: device.unwrap_or(defaults.device),
             frames: options.frames,
             script,
+            input,
             dumps,
             ..defaults
         };
@@ -266,6 +306,7 @@ fn run(options: Options, script: InputScript) -> Result<bool> {
         let host_options = WindowedOptions {
             title,
             audio,
+            input,
             ..WindowedOptions::new(device.unwrap_or_default())
         };
         // The windowed runner returns once the guest thread has ended.

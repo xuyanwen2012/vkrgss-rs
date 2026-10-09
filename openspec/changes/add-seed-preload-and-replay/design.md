@@ -32,3 +32,17 @@
 
 - [Replay diverges when the game reads the clock] → Out of scope; the guest's time comes from
   frame ticks.
+
+## Follow-ups
+
+- `--input` together with `--replay` is refused with the usage message, so that after the last
+  recorded frame of a headless replay no button is held, as the spec asks. Whether an input
+  script should instead take over after the recording is open.
+- With a recorder or replayer the session sends each frame's snapshot together with that
+  frame's tick, so that what is recorded is exactly what the guest saw in that frame. A key
+  pressed and released between two frames is therefore not seen while recording. Without a
+  source, live input is sent as it changes, as before.
+- A reset with F12 is not recorded (only input and seed are in scope), so a session with a
+  reset does not replay exactly. Recording host requests would need a format version 2.
+- A failure to write the recording during a run is reported once on the error stream and the
+  run goes on; whether it should fail the run is open.
