@@ -24,7 +24,8 @@ const uint BLEND_NORMAL = 0u;
 const uint BLEND_ADD = 1u;
 const uint BLEND_SUBTRACT = 2u;
 
-// One validated op, as `OpRecord` in `src/records.rs` lays it out: 24 words of 32 bits.
+// One validated op, as `OpRecord` in `src/records.rs` lays it out: 23 words of 32 bits
+// (`RECORD_WORDS`), which is also the stride of the array below.
 struct OpRecord {
     uint kind;
     // Clip rectangle, already intersected with the screen: x0 <= x < x1, y0 <= y < y1.

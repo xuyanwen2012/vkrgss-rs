@@ -24,10 +24,10 @@
 
 ## 5. Compositing
 
-- [ ] 5.1 Implement packet validation equal to the reference (logical size, deltas in order, op checks, reserved ops) and op-record encoding with clips intersected with the screen. Verify: unit tests for each error kind and index, and for the failed-packet scenarios in `specs/frame-composition/spec.md`.
-- [ ] 5.2 Implement CPU tile binning as a pure function. Verify: property tests without a device assert that for every pixel the tile's list contains, in op order, exactly the records whose clip contains a pixel of that tile, for sizes that are and are not multiples of 16.
-- [ ] 5.3 Implement the compute pipeline, descriptor set, per-frame buffers, dispatch and frame readback. Verify: tests for the empty op list, a full-screen clear and one identity quad equal the reference frames.
-- [ ] 5.4 Implement `handle` so non-frame messages are ignored as in the reference. Verify: a test feeds every `GuestToHost` variant and compares results with the reference.
+- [x] 5.1 Implement packet validation equal to the reference (logical size, deltas in order, op checks, reserved ops) and op-record encoding with clips intersected with the screen. Verify: unit tests for each error kind and index, and for the failed-packet scenarios in `specs/frame-composition/spec.md`.
+- [x] 5.2 Implement CPU tile binning as a pure function. Verify: property tests without a device assert that for every pixel the tile's list contains, in op order, exactly the records whose clip contains a pixel of that tile, for sizes that are and are not multiples of 16.
+- [x] 5.3 Implement the compute pipeline, descriptor set, per-frame buffers, dispatch and frame readback. Verify: tests for the empty op list, a full-screen clear and one identity quad equal the reference frames.
+- [x] 5.4 Implement `handle` so non-frame messages are ignored as in the reference. Verify: a test feeds every `GuestToHost` variant and compares results with the reference.
 
 ## 6. Differential tests
 

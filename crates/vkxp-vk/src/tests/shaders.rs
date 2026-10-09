@@ -4,8 +4,11 @@
 use vkxp_proto::{Fixed, Transform};
 
 use super::harness::{Rng, TestCompositor};
+use crate::records::RECORD_WORDS;
+use crate::resources::read_words;
 
 const PIXEL_GLSL: &str = include_str!("../../shaders/pixel.glsl");
+const COMPOSE_SPIRV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/compose.comp.spv"));
 const TRANSFORM_TEST_SPIRV: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/transform_test.comp.spv"));
 
@@ -63,6 +66,34 @@ fn every_glsl_pixel_function_names_what_it_mirrors() {
     }
 }
 
+/// The values of every `ArrayStride` decoration in a SPIR-V binary.
+fn array_strides(spirv: &[u8]) -> Vec<u32> {
+    const OP_DECORATE: u32 = 71;
+    const DECORATION_ARRAY_STRIDE: u32 = 6;
+    let words = read_words(spirv);
+    let mut strides = Vec::new();
+    // Instructions follow the five-word header; each starts with its length and opcode.
+    let mut position = 5;
+    while position < words.len() {
+        let (length, opcode) = ((words[position] >> 16) as usize, words[position] & 0xFFFF);
+        if opcode == OP_DECORATE && words[position + 2] == DECORATION_ARRAY_STRIDE {
+            strides.push(words[position + 3]);
+        }
+        position += length;
+    }
+    strides
+}
+
+/// The record layout is written by hand on both sides. A record of another size in the shader
+/// would go unnoticed by every frame that has a single op.
+#[test]
+fn shader_reads_op_records_at_the_stride_they_are_written_with() {
+    let mut strides = array_strides(COMPOSE_SPIRV);
+    strides.sort_unstable();
+    // Tile op indices, tile headers, op records.
+    assert_eq!(strides, [4, 8, RECORD_WORDS as u32 * 4]);
+}
+
 /// One input of the transform test shader.
 #[derive(Debug, Clone, Copy)]
 struct Case {
@@ -95,7 +126,7 @@ fn assert_matches_source_position(cases: &[Case]) {
         64,
     );
 
-    for (case, outcome) in cases.iter().zip(output.chunks_exact(OUTCOME_WORDS)) {
+    for (case, outcome) in cases.iter().zip(output.as_chunks::<OUTCOME_WORDS>().0) {
         let (u, v) = case.transform.source_position(case.px, case.py);
         let join = |hi: u32, lo: u32| ((u64::from(hi) << 32) | u64::from(lo)) as i64;
         assert_eq!(
@@ -168,7 +199,7 @@ fn transform_matches_source_position_for_random_coefficients() {
     for round in 0..60_000 {
         // Full-range coefficients, and small ones around the scales real sprites use, where
         // the fractional bits decide the texel.
-        let mut coefficient = |rng: &mut Rng| {
+        let coefficient = |rng: &mut Rng| {
             let bits = rng.next_u32() as i32;
             Fixed::from_bits(if round % 2 == 0 { bits } else { bits >> 13 })
         };

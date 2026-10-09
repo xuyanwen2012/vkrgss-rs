@@ -236,16 +236,18 @@ pub(crate) fn create_shader_module(
 /// Copies 32-bit words to the start of `bytes` in the byte order of the machine, which is how
 /// the device reads them.
 pub(crate) fn write_words(bytes: &mut [u8], words: &[u32]) {
-    for (target, word) in bytes.chunks_exact_mut(4).zip(words) {
-        target.copy_from_slice(&word.to_ne_bytes());
+    for (target, word) in bytes.as_chunks_mut::<4>().0.iter_mut().zip(words) {
+        *target = word.to_ne_bytes();
     }
 }
 
 /// The 32-bit words that `bytes`, whose length is a multiple of four, hold.
 pub(crate) fn read_words(bytes: &[u8]) -> Vec<u32> {
     bytes
-        .chunks_exact(4)
-        .map(|word| u32::from_ne_bytes([word[0], word[1], word[2], word[3]]))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|word| u32::from_ne_bytes(*word))
         .collect()
 }
 
