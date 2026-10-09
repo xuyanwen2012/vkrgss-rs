@@ -106,3 +106,11 @@ comparable.
 #### Scenario: No font given
 - **WHEN** the harness runs without `--font`
 - **THEN** its output has a line saying that text is not comparable
+
+### Requirement: Own metrics with shared fonts
+When fonts are shared with `--font`, the harness SHALL run vkxp with fonts' own metrics, so
+that both runtimes size the shared font by its own line box.
+
+#### Scenario: Command line
+- **WHEN** the harness builds vkxp's command line for a run with `--font`
+- **THEN** it contains `--font-own-metrics`, and without `--font` it does not
