@@ -1,0 +1,1384 @@
+//! Presentation: scaling the frame into a swapchain image or an off-screen target.
+//!
+//! One graphics pipeline draws a triangle over the whole target. `shaders/present.frag` puts
+//! the frame inside the letterbox rectangle computed here and black outside it, mixing the
+//! newest frame with the held one on the way. The same draw goes to a swapchain image
+//! ([`VkCompositor::present`]) or to an image that is read back
+//! ([`VkCompositor::scale_frame`]), which is how scaling and mixing are tested without a
+//! window.
+//!
+//! Like the rest of the compositor this is synchronous: each call submits its work and waits
+//! for it before it returns or hands the image to the presentation engine.
+
+use ash::vk;
+use gpu_allocator::vulkan::Allocator;
+use vkxp_proto::{Rect, Size};
+
+use super::{Frame, VkCompositor};
+use crate::resources::{
+    COLOR_LAYERS, COLOR_RANGE, GpuImage, create_shader_module, transition, write_words,
+};
+use crate::{Limit, VkError};
+
+const VERTEX_SPIRV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/present.vert.spv"));
+const FRAGMENT_SPIRV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/present.frag.spv"));
+
+/// Bindings of the presenter's descriptor set, as `shaders/present.frag` declares them.
+mod binding {
+    pub const NEWEST: u32 = 0;
+    pub const HELD: u32 = 1;
+}
+
+/// Bytes of the push constants: the letterbox origin and size, the frame size, the mix weight
+/// and the flags, four bytes per component.
+const PUSH_CONSTANT_BYTES: usize = 32;
+
+/// Flags of the fragment shader, as `shaders/present.frag` defines them.
+const FLAG_NEAREST: u32 = 1;
+const FLAG_SRGB_TARGET: u32 = 2;
+
+/// Format of the off-screen target. Its values are what a `UNORM` swapchain image would hold.
+const OFFSCREEN_FORMAT: vk::Format = vk::Format::R8G8B8A8_UNORM;
+
+/// What the held frame and an empty target are cleared to: opaque black.
+const BLACK: [u32; 4] = [0, 0, 0, 255];
+
+/// Where a frame of `frame` pixels goes in a window of `window` pixels: scaled by one factor
+/// in both directions, the largest at which it still fits, and centred.
+///
+/// The side that does not fill the window is rounded down to whole pixels. The rectangle is
+/// empty when either size has a zero dimension, or when the window is so narrow that the
+/// scaled frame has no pixel.
+pub fn letterbox(frame: Size, window: Size) -> Rect {
+    let (frame_w, frame_h) = (u64::from(frame.width), u64::from(frame.height));
+    let (window_w, window_h) = (u64::from(window.width), u64::from(window.height));
+    if frame_w == 0 || frame_h == 0 || window_w == 0 || window_h == 0 {
+        return Rect::default();
+    }
+    // The window is at least as wide as the frame's shape: the height is what limits.
+    let (width, height) = if frame_w * window_h <= frame_h * window_w {
+        (frame_w * window_h / frame_h, window_h)
+    } else {
+        (window_w, frame_h * window_w / frame_w)
+    };
+    if width == 0 || height == 0 {
+        return Rect::default();
+    }
+    Rect::new(
+        ((window_w - width) / 2) as i32,
+        ((window_h - height) / 2) as i32,
+        width as u32,
+        height as u32,
+    )
+}
+
+/// Whether `rect` shows a frame of `frame` pixels at a whole-number factor.
+fn is_whole_factor(frame: Size, rect: &Rect) -> bool {
+    !rect.is_empty()
+        && rect.width.is_multiple_of(frame.width)
+        && rect.height.is_multiple_of(frame.height)
+        && rect.width / frame.width == rect.height / frame.height
+}
+
+/// The push constants that put a frame of `frame` pixels into a target of `target` pixels, or
+/// `None` when no pixel of the frame would be visible.
+fn push_constants(
+    frame: Size,
+    target: Size,
+    weight: f32,
+    srgb_target: bool,
+) -> Option<[u8; PUSH_CONSTANT_BYTES]> {
+    let rect = letterbox(frame, target);
+    if rect.is_empty() {
+        return None;
+    }
+    let mut flags = 0;
+    if is_whole_factor(frame, &rect) {
+        flags |= FLAG_NEAREST;
+    }
+    if srgb_target {
+        flags |= FLAG_SRGB_TARGET;
+    }
+    let mut bytes = [0; PUSH_CONSTANT_BYTES];
+    write_words(
+        &mut bytes,
+        &[
+            rect.x as u32,
+            rect.y as u32,
+            rect.width,
+            rect.height,
+            frame.width,
+            frame.height,
+            weight.to_bits(),
+            flags,
+        ],
+    );
+    Some(bytes)
+}
+
+/// The surface format to present in, and whether it is an sRGB format.
+///
+/// A `UNORM` format passes the frame's values through unchanged and is preferred. With only
+/// sRGB formats on offer the shader undoes the encoding the format applies. Anything else is
+/// taken as it comes.
+fn choose_format(formats: &[vk::SurfaceFormatKHR]) -> Option<(vk::SurfaceFormatKHR, bool)> {
+    const UNORM: [vk::Format; 3] = [
+        vk::Format::B8G8R8A8_UNORM,
+        vk::Format::R8G8B8A8_UNORM,
+        vk::Format::A8B8G8R8_UNORM_PACK32,
+    ];
+    const SRGB: [vk::Format; 3] = [
+        vk::Format::B8G8R8A8_SRGB,
+        vk::Format::R8G8B8A8_SRGB,
+        vk::Format::A8B8G8R8_SRGB_PACK32,
+    ];
+    let find = |wanted: &[vk::Format]| {
+        wanted.iter().find_map(|format| {
+            formats.iter().copied().find(|offered| {
+                offered.format == *format
+                    && offered.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR
+            })
+        })
+    };
+    find(&UNORM)
+        .map(|format| (format, false))
+        .or_else(|| find(&SRGB).map(|format| (format, true)))
+        .or_else(|| formats.first().map(|format| (*format, false)))
+}
+
+/// The extent of a swapchain for a surface with `capabilities` in a window of `requested`
+/// pixels. A zero dimension means nothing can be presented now.
+fn swapchain_extent(capabilities: &vk::SurfaceCapabilitiesKHR, requested: Size) -> vk::Extent2D {
+    // The special value says the surface takes whatever size the swapchain has.
+    if capabilities.current_extent.width != u32::MAX {
+        return capabilities.current_extent;
+    }
+    let (min, max) = (capabilities.min_image_extent, capabilities.max_image_extent);
+    vk::Extent2D {
+        width: requested.width.clamp(min.width, max.width.max(min.width)),
+        height: requested
+            .height
+            .clamp(min.height, max.height.max(min.height)),
+    }
+}
+
+/// A render pass for one target format and the pipeline that draws in it.
+struct Pass {
+    format: vk::Format,
+    final_layout: vk::ImageLayout,
+    render_pass: vk::RenderPass,
+    pipeline: vk::Pipeline,
+}
+
+/// A swapchain with what is needed to draw into and present its images.
+struct Swapchain {
+    handle: vk::SwapchainKHR,
+    extent: vk::Extent2D,
+    /// The window size the swapchain was made for.
+    requested: Size,
+    srgb: bool,
+    render_pass: vk::RenderPass,
+    pipeline: vk::Pipeline,
+    views: Vec<vk::ImageView>,
+    framebuffers: Vec<vk::Framebuffer>,
+    /// Signalled when an image has been acquired; waited for by the draw.
+    acquired: vk::Semaphore,
+    /// Per image: signalled by the draw, waited for by the presentation engine.
+    drawn: Vec<vk::Semaphore>,
+    /// Whether the swapchain no longer matches the surface and has to be replaced.
+    stale: bool,
+}
+
+impl Swapchain {
+    /// Destroys the swapchain and everything made for it. The device must be idle.
+    fn destroy(self, device: &ash::Device, loader: &ash::khr::swapchain::Device) {
+        // SAFETY: the caller guarantees that nothing is in use; every handle was created from
+        // this device for this swapchain and is consumed here. Destroying a swapchain also
+        // releases an image that was acquired and not presented.
+        unsafe {
+            for framebuffer in self.framebuffers {
+                device.destroy_framebuffer(framebuffer, None);
+            }
+            for view in self.views {
+                device.destroy_image_view(view, None);
+            }
+            for semaphore in self.drawn {
+                device.destroy_semaphore(semaphore, None);
+            }
+            device.destroy_semaphore(self.acquired, None);
+            loader.destroy_swapchain(self.handle, None);
+        }
+    }
+}
+
+/// Everything that scales the frame into a target. Owned by the compositor, which destroys it
+/// before the device.
+pub(super) struct Presenter {
+    set_layout: vk::DescriptorSetLayout,
+    pipeline_layout: vk::PipelineLayout,
+    descriptor_pool: vk::DescriptorPool,
+    descriptors: vk::DescriptorSet,
+    vertex: vk::ShaderModule,
+    fragment: vk::ShaderModule,
+    /// One pass per target format in use: the off-screen one and the swapchain's.
+    passes: Vec<Pass>,
+    /// The held frame, of the size of the frame target it was made for and in the
+    /// `SHADER_READ_ONLY_OPTIMAL` layout between submissions. Black until a freeze.
+    held: Option<GpuImage>,
+    /// The views of the newest and the held frame that the descriptor set points at.
+    bound: Option<(vk::ImageView, vk::ImageView)>,
+    swapchain_loader: Option<ash::khr::swapchain::Device>,
+    swapchain: Option<Swapchain>,
+}
+
+/// One draw of the frame: what to bind and the constants to push.
+struct DrawCall {
+    pipeline: vk::Pipeline,
+    pipeline_layout: vk::PipelineLayout,
+    descriptors: vk::DescriptorSet,
+    constants: [u8; PUSH_CONSTANT_BYTES],
+}
+
+impl Presenter {
+    fn new(device: &ash::Device, allocator: &mut Allocator) -> Result<Presenter, VkError> {
+        // Handles start out null so that `destroy` can clean up after a failure part way
+        // through `init`: destroying a null handle is a no-op.
+        let mut presenter = Presenter {
+            set_layout: vk::DescriptorSetLayout::null(),
+            pipeline_layout: vk::PipelineLayout::null(),
+            descriptor_pool: vk::DescriptorPool::null(),
+            descriptors: vk::DescriptorSet::null(),
+            vertex: vk::ShaderModule::null(),
+            fragment: vk::ShaderModule::null(),
+            passes: Vec::new(),
+            held: None,
+            bound: None,
+            swapchain_loader: None,
+            swapchain: None,
+        };
+        match presenter.init(device) {
+            Ok(()) => Ok(presenter),
+            Err(error) => {
+                presenter.destroy(device, allocator);
+                Err(error)
+            }
+        }
+    }
+
+    fn init(&mut self, device: &ash::Device) -> Result<(), VkError> {
+        let bindings = [binding::NEWEST, binding::HELD].map(|binding| {
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(binding)
+                .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+        });
+        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
+        // SAFETY: the device is live and the description is valid for the call.
+        self.set_layout = unsafe { device.create_descriptor_set_layout(&layout_info, None) }
+            .map_err(VkError::vulkan("vkCreateDescriptorSetLayout"))?;
+
+        let set_layouts = [self.set_layout];
+        let push_ranges = [vk::PushConstantRange::default()
+            .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+            .size(PUSH_CONSTANT_BYTES as u32)];
+        let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default()
+            .set_layouts(&set_layouts)
+            .push_constant_ranges(&push_ranges);
+        // SAFETY: the set layout was just created from this device.
+        self.pipeline_layout =
+            unsafe { device.create_pipeline_layout(&pipeline_layout_info, None) }
+                .map_err(VkError::vulkan("vkCreatePipelineLayout"))?;
+
+        let pool_sizes = [vk::DescriptorPoolSize::default()
+            .ty(vk::DescriptorType::SAMPLED_IMAGE)
+            .descriptor_count(2)];
+        let pool_info = vk::DescriptorPoolCreateInfo::default()
+            .max_sets(1)
+            .pool_sizes(&pool_sizes);
+        // SAFETY: the device is live.
+        self.descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None) }
+            .map_err(VkError::vulkan("vkCreateDescriptorPool"))?;
+        let allocate = vk::DescriptorSetAllocateInfo::default()
+            .descriptor_pool(self.descriptor_pool)
+            .set_layouts(&set_layouts);
+        // SAFETY: the pool was created for exactly one set of this layout.
+        self.descriptors = unsafe { device.allocate_descriptor_sets(&allocate) }
+            .map_err(VkError::vulkan("vkAllocateDescriptorSets"))?[0];
+
+        self.vertex = create_shader_module(device, VERTEX_SPIRV)?;
+        self.fragment = create_shader_module(device, FRAGMENT_SPIRV)?;
+        Ok(())
+    }
+
+    /// The render pass and pipeline for a target of `format` that is left in `final_layout`,
+    /// made on first use.
+    fn pass(
+        &mut self,
+        device: &ash::Device,
+        format: vk::Format,
+        final_layout: vk::ImageLayout,
+    ) -> Result<(vk::RenderPass, vk::Pipeline), VkError> {
+        let known = self
+            .passes
+            .iter()
+            .find(|pass| pass.format == format && pass.final_layout == final_layout);
+        if let Some(pass) = known {
+            return Ok((pass.render_pass, pass.pipeline));
+        }
+
+        let attachments = [vk::AttachmentDescription::default()
+            .format(format)
+            .samples(vk::SampleCountFlags::TYPE_1)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::STORE)
+            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .final_layout(final_layout)];
+        let color = [vk::AttachmentReference::default()
+            .attachment(0)
+            .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)];
+        let subpasses = [vk::SubpassDescription::default()
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+            .color_attachments(&color)];
+        // The layout change at the start of the pass waits at the stage where a swapchain
+        // image becomes available to the draw.
+        let dependencies = [vk::SubpassDependency::default()
+            .src_subpass(vk::SUBPASS_EXTERNAL)
+            .dst_subpass(0)
+            .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+            .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+            .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)];
+        let pass_info = vk::RenderPassCreateInfo::default()
+            .attachments(&attachments)
+            .subpasses(&subpasses)
+            .dependencies(&dependencies);
+        // SAFETY: the device is live and the description is a valid single-subpass pass.
+        let render_pass = unsafe { device.create_render_pass(&pass_info, None) }
+            .map_err(VkError::vulkan("vkCreateRenderPass"))?;
+
+        let stages = [
+            vk::PipelineShaderStageCreateInfo::default()
+                .stage(vk::ShaderStageFlags::VERTEX)
+                .module(self.vertex)
+                .name(c"main"),
+            vk::PipelineShaderStageCreateInfo::default()
+                .stage(vk::ShaderStageFlags::FRAGMENT)
+                .module(self.fragment)
+                .name(c"main"),
+        ];
+        let vertex_input = vk::PipelineVertexInputStateCreateInfo::default();
+        let assembly = vk::PipelineInputAssemblyStateCreateInfo::default()
+            .topology(vk::PrimitiveTopology::TRIANGLE_LIST);
+        let viewport = vk::PipelineViewportStateCreateInfo::default()
+            .viewport_count(1)
+            .scissor_count(1);
+        let rasterization = vk::PipelineRasterizationStateCreateInfo::default()
+            .polygon_mode(vk::PolygonMode::FILL)
+            .cull_mode(vk::CullModeFlags::NONE)
+            .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
+            .line_width(1.0);
+        let multisample = vk::PipelineMultisampleStateCreateInfo::default()
+            .rasterization_samples(vk::SampleCountFlags::TYPE_1);
+        let blend_attachments = [vk::PipelineColorBlendAttachmentState::default()
+            .color_write_mask(vk::ColorComponentFlags::RGBA)];
+        let blend =
+            vk::PipelineColorBlendStateCreateInfo::default().attachments(&blend_attachments);
+        let dynamic_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
+        let dynamic = vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
+        let pipeline_info = [vk::GraphicsPipelineCreateInfo::default()
+            .stages(&stages)
+            .vertex_input_state(&vertex_input)
+            .input_assembly_state(&assembly)
+            .viewport_state(&viewport)
+            .rasterization_state(&rasterization)
+            .multisample_state(&multisample)
+            .color_blend_state(&blend)
+            .dynamic_state(&dynamic)
+            .layout(self.pipeline_layout)
+            .render_pass(render_pass)
+            .subpass(0)];
+        // SAFETY: the modules hold a vertex and a fragment shader with entry point `main`
+        // whose interfaces match each other, the pipeline layout and the one colour attachment
+        // of the pass, which was just created from this device.
+        let pipelines = unsafe {
+            device.create_graphics_pipelines(vk::PipelineCache::null(), &pipeline_info, None)
+        };
+        let pipeline = match pipelines {
+            Ok(pipelines) => pipelines[0],
+            Err((_, result)) => {
+                // SAFETY: the pass is unused and not referenced anywhere else.
+                unsafe { device.destroy_render_pass(render_pass, None) };
+                return Err(VkError::Vulkan {
+                    call: "vkCreateGraphicsPipelines",
+                    result,
+                });
+            }
+        };
+        self.passes.push(Pass {
+            format,
+            final_layout,
+            render_pass,
+            pipeline,
+        });
+        Ok((render_pass, pipeline))
+    }
+
+    /// Points the descriptor set at the views of the newest and the held frame.
+    fn bind(&mut self, device: &ash::Device, newest: vk::ImageView, held: vk::ImageView) {
+        if self.bound == Some((newest, held)) {
+            return;
+        }
+        let infos = [
+            (binding::NEWEST, newest, vk::ImageLayout::GENERAL),
+            (
+                binding::HELD,
+                held,
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            ),
+        ]
+        .map(|(binding, view, layout)| {
+            let info = vk::DescriptorImageInfo::default()
+                .image_view(view)
+                .image_layout(layout);
+            (binding, [info])
+        });
+        let writes = infos.each_ref().map(|(binding, info)| {
+            vk::WriteDescriptorSet::default()
+                .dst_set(self.descriptors)
+                .dst_binding(*binding)
+                .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
+                .image_info(info)
+        });
+        // SAFETY: the set and both views are live and no command buffer that uses the set is
+        // pending.
+        unsafe { device.update_descriptor_sets(&writes, &[]) };
+        self.bound = Some((newest, held));
+    }
+
+    /// Destroys everything. The device must be idle.
+    pub(super) fn destroy(mut self, device: &ash::Device, allocator: &mut Allocator) {
+        if let (Some(swapchain), Some(loader)) = (self.swapchain.take(), &self.swapchain_loader) {
+            swapchain.destroy(device, loader);
+        }
+        if let Some(held) = self.held.take() {
+            held.destroy(device, allocator);
+        }
+        // SAFETY: the caller guarantees that nothing is in use; each handle was created from
+        // this device or is null, and none is used again.
+        unsafe {
+            for pass in self.passes.drain(..) {
+                device.destroy_pipeline(pass.pipeline, None);
+                device.destroy_render_pass(pass.render_pass, None);
+            }
+            device.destroy_shader_module(self.fragment, None);
+            device.destroy_shader_module(self.vertex, None);
+            // Frees the descriptor set with it.
+            device.destroy_descriptor_pool(self.descriptor_pool, None);
+            device.destroy_pipeline_layout(self.pipeline_layout, None);
+            device.destroy_descriptor_set_layout(self.set_layout, None);
+        }
+    }
+}
+
+/// Creates a framebuffer of `extent` pixels over one view.
+fn create_framebuffer(
+    device: &ash::Device,
+    render_pass: vk::RenderPass,
+    view: vk::ImageView,
+    extent: vk::Extent2D,
+) -> Result<vk::Framebuffer, VkError> {
+    let attachments = [view];
+    let info = vk::FramebufferCreateInfo::default()
+        .render_pass(render_pass)
+        .attachments(&attachments)
+        .width(extent.width)
+        .height(extent.height)
+        .layers(1);
+    // SAFETY: the pass and the view belong to this device, the view has the format of the
+    // pass's attachment, and its image is at least `extent` pixels large.
+    unsafe { device.create_framebuffer(&info, None) }
+        .map_err(VkError::vulkan("vkCreateFramebuffer"))
+}
+
+/// Records one render pass over the whole framebuffer: a clear to black, then the frame when
+/// there is one to draw.
+///
+/// # Safety
+///
+/// `commands` must be a command buffer of `device` in the recording state. `render_pass` and
+/// `framebuffer` must be live, match each other and be `extent` pixels large. For a draw, the
+/// pipeline must have been made for `render_pass`, and both images behind the descriptor set
+/// must be live and in the layouts the set names when the commands execute.
+unsafe fn record_pass(
+    device: &ash::Device,
+    commands: vk::CommandBuffer,
+    render_pass: vk::RenderPass,
+    framebuffer: vk::Framebuffer,
+    extent: vk::Extent2D,
+    draw: Option<&DrawCall>,
+) {
+    let area = vk::Rect2D {
+        offset: vk::Offset2D::default(),
+        extent,
+    };
+    let clear = [vk::ClearValue {
+        color: vk::ClearColorValue {
+            float32: [0.0, 0.0, 0.0, 1.0],
+        },
+    }];
+    let begin = vk::RenderPassBeginInfo::default()
+        .render_pass(render_pass)
+        .framebuffer(framebuffer)
+        .render_area(area)
+        .clear_values(&clear);
+    // SAFETY: guaranteed by the caller.
+    unsafe {
+        device.cmd_begin_render_pass(commands, &begin, vk::SubpassContents::INLINE);
+        if let Some(draw) = draw {
+            let viewport = vk::Viewport {
+                x: 0.0,
+                y: 0.0,
+                width: extent.width as f32,
+                height: extent.height as f32,
+                min_depth: 0.0,
+                max_depth: 1.0,
+            };
+            device.cmd_set_viewport(commands, 0, &[viewport]);
+            device.cmd_set_scissor(commands, 0, &[area]);
+            device.cmd_bind_pipeline(commands, vk::PipelineBindPoint::GRAPHICS, draw.pipeline);
+            device.cmd_bind_descriptor_sets(
+                commands,
+                vk::PipelineBindPoint::GRAPHICS,
+                draw.pipeline_layout,
+                0,
+                &[draw.descriptors],
+                &[],
+            );
+            device.cmd_push_constants(
+                commands,
+                draw.pipeline_layout,
+                vk::ShaderStageFlags::FRAGMENT,
+                0,
+                &draw.constants,
+            );
+            device.cmd_draw(commands, 3, 1, 0, 0);
+        }
+        device.cmd_end_render_pass(commands);
+    }
+}
+
+impl VkCompositor {
+    /// Sets the weight of the newest frame against the held frame for everything shown from
+    /// now on: 0 shows the held frame only, 1 the newest frame only, and values in between mix
+    /// the two per channel before scaling. It starts at 1. Values outside 0 to 1 are clamped.
+    pub fn set_mix(&mut self, weight: f32) {
+        self.mix = if weight.is_nan() {
+            1.0
+        } else {
+            weight.clamp(0.0, 1.0)
+        };
+    }
+
+    /// The current mix weight.
+    pub fn mix(&self) -> f32 {
+        self.mix
+    }
+
+    /// Whether the compositor was created for a surface and can [`present`].
+    ///
+    /// [`present`]: VkCompositor::present
+    pub fn has_surface(&self) -> bool {
+        self.gpu.surface.is_some()
+    }
+
+    /// Captures the newest frame as the held frame, which the mix weight then blends with the
+    /// frames rendered afterwards. Before the first frame the held frame is black.
+    ///
+    /// The held frame has the size of the frame it was taken from. When a later packet has
+    /// another logical size the held frame is dropped and counts as black.
+    pub fn freeze(&mut self) -> Result<(), VkError> {
+        self.ensure_presenter()?;
+        let target = self
+            .target
+            .as_ref()
+            .filter(|_| self.has_frame)
+            .map(|target| (target.image, (target.width, target.height)));
+        match target {
+            Some((source, size)) => {
+                let held = self.ensure_held(size)?;
+                self.submit_or_idle(|compositor| compositor.copy_to_held(source, held, size))
+            }
+            None => {
+                let held = self.presenter.as_ref().and_then(|p| p.held.as_ref());
+                match held.map(|held| held.image) {
+                    Some(held) => self.submit_or_idle(|compositor| {
+                        compositor.clear_held(held, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                    }),
+                    None => Ok(()),
+                }
+            }
+        }
+    }
+
+    /// Draws what [`present`](VkCompositor::present) would show in a window of `size` pixels
+    /// into an off-screen target and reads it back: the frame scaled by the largest factor
+    /// that fits, centred, black around it, mixed with the held frame at the current weight.
+    /// Before the first frame the result is black. Alpha is 255 everywhere.
+    ///
+    /// The target is an `R8G8B8A8_UNORM` image, so the bytes are what a `UNORM` swapchain
+    /// image would hold. Works with and without a surface.
+    pub fn scale_frame(&mut self, size: Size) -> Result<Frame, VkError> {
+        if size.width == 0 || size.height == 0 {
+            return Ok(Frame {
+                size,
+                rgba: Vec::new(),
+            });
+        }
+        let longest = size.width.max(size.height);
+        if longest > self.gpu.max_image_dimension {
+            return Err(VkError::Limit {
+                limit: Limit::FrameDimension,
+                requested: u64::from(longest),
+                maximum: u64::from(self.gpu.max_image_dimension),
+            });
+        }
+        let source = self.prepare_sources()?;
+        let device = &self.gpu.device;
+        let presenter = self.presenter.as_mut().expect("made with the sources");
+        let (render_pass, pipeline) = presenter.pass(
+            device,
+            OFFSCREEN_FORMAT,
+            vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+        )?;
+        let draw = source.and_then(|frame| {
+            Some(DrawCall {
+                pipeline,
+                pipeline_layout: presenter.pipeline_layout,
+                descriptors: presenter.descriptors,
+                constants: push_constants(frame, size, self.mix, false)?,
+            })
+        });
+
+        let extent = vk::Extent2D {
+            width: size.width,
+            height: size.height,
+        };
+        let image = GpuImage::with_format(
+            device,
+            &mut self.allocator,
+            "off-screen target",
+            (size.width, size.height),
+            OFFSCREEN_FORMAT,
+            vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_SRC,
+            vk::ImageCreateFlags::empty(),
+        )?;
+        let framebuffer = match create_framebuffer(device, render_pass, image.view, extent) {
+            Ok(framebuffer) => framebuffer,
+            Err(error) => {
+                image.destroy(device, &mut self.allocator);
+                return Err(error);
+            }
+        };
+
+        let drawn = self.submit_or_idle(|compositor| {
+            compositor.begin_commands()?;
+            // SAFETY: the command buffer is recording. The pass, the framebuffer and the image
+            // behind it were made above for each other and for `extent`, and live until this
+            // submission has been waited for. A draw call only exists when a frame does, in
+            // which case `prepare_sources` pointed the set at the frame target (`GENERAL`) and
+            // the held frame (`SHADER_READ_ONLY_OPTIMAL`).
+            unsafe {
+                record_pass(
+                    &compositor.gpu.device,
+                    compositor.commands,
+                    render_pass,
+                    framebuffer,
+                    extent,
+                    draw.as_ref(),
+                );
+            }
+            compositor.submit_and_wait()
+        });
+        let rgba = drawn.and_then(|()| {
+            self.read_image(
+                image.image,
+                (size.width, size.height),
+                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+            )
+        });
+        // SAFETY: every submission that used the framebuffer was waited for, or the device was
+        // idled after a failure; the handle is not used again.
+        unsafe { self.gpu.device.destroy_framebuffer(framebuffer, None) };
+        image.destroy(&self.gpu.device, &mut self.allocator);
+        Ok(Frame { size, rgba: rgba? })
+    }
+
+    /// Tells the compositor the size of the window in pixels. The swapchain is made for that
+    /// size at the next [`present`](VkCompositor::present), and replaced when it changes.
+    /// Until a size is given, and while either dimension is 0, nothing is presented.
+    pub fn resize_surface(&mut self, size: Size) {
+        self.surface_size = size;
+    }
+
+    /// Shows the current state in the window: the newest frame mixed with the held frame at
+    /// the current weight, scaled into the window and centred, black around it. Before the
+    /// first frame the window is black.
+    ///
+    /// Returns whether an image was presented. Nothing is presented, and no error is raised,
+    /// while the window has no pixels. A swapchain that the surface reports as out of date is
+    /// replaced and the present tried once more.
+    ///
+    /// Fails with [`VkError::NoSurface`] on a compositor that was created without a surface.
+    pub fn present(&mut self) -> Result<bool, VkError> {
+        if self.gpu.surface.is_none() {
+            return Err(VkError::NoSurface);
+        }
+        if self.surface_size.width == 0 || self.surface_size.height == 0 {
+            return Ok(false);
+        }
+        let source = self.prepare_sources()?;
+        for _attempt in 0..2 {
+            if !self.ensure_swapchain()? {
+                return Ok(false);
+            }
+            let presenter = self.presenter.as_mut().expect("made with the sources");
+            let loader = presenter
+                .swapchain_loader
+                .clone()
+                .expect("made with the swapchain");
+            let chain = presenter.swapchain.as_mut().expect("just ensured");
+            // SAFETY: the swapchain and the semaphore are live and belong to this device, and
+            // the semaphore is unsignalled: the draw that waited on it last has completed, and
+            // a swapchain whose draw failed is replaced together with its semaphores.
+            let acquired = unsafe {
+                loader.acquire_next_image(chain.handle, u64::MAX, chain.acquired, vk::Fence::null())
+            };
+            let index = match acquired {
+                Ok((index, suboptimal)) => {
+                    chain.stale |= suboptimal;
+                    index
+                }
+                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+                    chain.stale = true;
+                    continue;
+                }
+                Err(result) => {
+                    return Err(VkError::Vulkan {
+                        call: "vkAcquireNextImageKHR",
+                        result,
+                    });
+                }
+            };
+            let (handle, extent) = (chain.handle, chain.extent);
+            let (render_pass, framebuffer) =
+                (chain.render_pass, chain.framebuffers[index as usize]);
+            let (wait, signal) = (chain.acquired, chain.drawn[index as usize]);
+            let target = Size::new(extent.width, extent.height);
+            let draw = source.and_then(|frame| {
+                Some(DrawCall {
+                    pipeline: chain.pipeline,
+                    pipeline_layout: presenter.pipeline_layout,
+                    descriptors: presenter.descriptors,
+                    constants: push_constants(frame, target, self.mix, chain.srgb)?,
+                })
+            });
+
+            let drawn = self.submit_or_idle(|compositor| {
+                compositor.begin_commands()?;
+                // SAFETY: the command buffer is recording. The pass and the framebuffer belong
+                // to the live swapchain and are `extent` pixels large. A draw call only exists
+                // when a frame does, in which case `prepare_sources` pointed the set at the
+                // frame target (`GENERAL`) and the held frame (`SHADER_READ_ONLY_OPTIMAL`).
+                unsafe {
+                    record_pass(
+                        &compositor.gpu.device,
+                        compositor.commands,
+                        render_pass,
+                        framebuffer,
+                        extent,
+                        draw.as_ref(),
+                    );
+                }
+                compositor.submit_drawn(wait, signal)
+            });
+            if let Err(error) = drawn {
+                // The semaphores are in an unknown state; a new swapchain brings new ones.
+                self.mark_swapchain_stale();
+                return Err(error);
+            }
+
+            let (swapchains, indices, waits) = ([handle], [index], [signal]);
+            let info = vk::PresentInfoKHR::default()
+                .wait_semaphores(&waits)
+                .swapchains(&swapchains)
+                .image_indices(&indices);
+            // SAFETY: the queue can present to the surface, which was checked when the device
+            // was chosen; the image was acquired from this swapchain and drawn by a submission
+            // that has completed and signalled the semaphore.
+            match unsafe { loader.queue_present(self.gpu.queue, &info) } {
+                Ok(suboptimal) => {
+                    if suboptimal {
+                        self.mark_swapchain_stale();
+                    }
+                    return Ok(true);
+                }
+                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => self.mark_swapchain_stale(),
+                Err(result) => {
+                    self.mark_swapchain_stale();
+                    return Err(VkError::Vulkan {
+                        call: "vkQueuePresentKHR",
+                        result,
+                    });
+                }
+            }
+        }
+        Ok(false)
+    }
+
+    /// The extent of the current swapchain, if there is one.
+    #[cfg(test)]
+    pub(crate) fn swapchain_extent(&self) -> Option<(u32, u32)> {
+        let chain = self.presenter.as_ref()?.swapchain.as_ref()?;
+        Some((chain.extent.width, chain.extent.height))
+    }
+
+    /// Makes the next present replace the swapchain, as an out-of-date report does.
+    #[cfg(test)]
+    pub(crate) fn invalidate_swapchain(&mut self) {
+        self.mark_swapchain_stale();
+    }
+
+    fn mark_swapchain_stale(&mut self) {
+        if let Some(chain) = self.presenter.as_mut().and_then(|p| p.swapchain.as_mut()) {
+            chain.stale = true;
+        }
+    }
+
+    /// Runs `work`, which records and submits commands, and idles the device if it fails, so
+    /// that whatever was submitted is finished before the caller releases anything.
+    fn submit_or_idle(
+        &mut self,
+        work: impl FnOnce(&mut VkCompositor) -> Result<(), VkError>,
+    ) -> Result<(), VkError> {
+        let result = work(self);
+        if result.is_err() {
+            // SAFETY: the device is live. If this fails too the device is lost.
+            let _ = unsafe { self.gpu.device.device_wait_idle() };
+        }
+        result
+    }
+
+    fn ensure_presenter(&mut self) -> Result<(), VkError> {
+        if !self.gpu.can_draw {
+            return Err(VkError::CannotDraw {
+                device: self.gpu.info.name.clone(),
+            });
+        }
+        if self.presenter.is_none() {
+            self.presenter = Some(Presenter::new(&self.gpu.device, &mut self.allocator)?);
+        }
+        Ok(())
+    }
+
+    /// Makes everything a draw reads ready: the presenter, a held frame of the size of the
+    /// frame target, and the descriptor set pointing at both. Returns the size of the frame,
+    /// or `None` when no frame has been rendered and there is nothing to draw.
+    fn prepare_sources(&mut self) -> Result<Option<Size>, VkError> {
+        self.ensure_presenter()?;
+        let target = self
+            .target
+            .as_ref()
+            .filter(|_| self.has_frame)
+            .map(|target| (target.view, (target.width, target.height)));
+        let Some((newest, size)) = target else {
+            return Ok(None);
+        };
+        self.ensure_held(size)?;
+        let presenter = self.presenter.as_mut().expect("just ensured");
+        let held = presenter.held.as_ref().expect("just ensured").view;
+        presenter.bind(&self.gpu.device, newest, held);
+        Ok(Some(Size::new(size.0, size.1)))
+    }
+
+    /// Makes the held frame `size` pixels large and returns its image. A new one is black.
+    fn ensure_held(&mut self, size: (u32, u32)) -> Result<vk::Image, VkError> {
+        let presenter = self.presenter.as_mut().expect("made by the caller");
+        if let Some(held) = &presenter.held
+            && (held.width, held.height) == size
+        {
+            return Ok(held.image);
+        }
+        presenter.bound = None;
+        if let Some(old) = presenter.held.take() {
+            // Nothing is pending, so the old image is idle.
+            old.destroy(&self.gpu.device, &mut self.allocator);
+        }
+        let held = GpuImage::new(
+            &self.gpu.device,
+            &mut self.allocator,
+            "held frame",
+            size,
+            vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_DST,
+            vk::ImageCreateFlags::empty(),
+        )?;
+        let image = held.image;
+        let cleared = self
+            .submit_or_idle(|compositor| compositor.clear_held(image, vk::ImageLayout::UNDEFINED));
+        match cleared {
+            Ok(()) => {
+                self.presenter.as_mut().expect("made by the caller").held = Some(held);
+                Ok(image)
+            }
+            Err(error) => {
+                held.destroy(&self.gpu.device, &mut self.allocator);
+                Err(error)
+            }
+        }
+    }
+
+    /// Fills the held frame, which is in layout `from`, with opaque black.
+    fn clear_held(&mut self, held: vk::Image, from: vk::ImageLayout) -> Result<(), VkError> {
+        self.begin_commands()?;
+        let (device, commands) = (&self.gpu.device, self.commands);
+        // SAFETY: the command buffer is recording; the caller passes the live held image in
+        // layout `from`, which has transfer-destination usage and stays alive until the
+        // submission has been waited for.
+        unsafe {
+            transition(
+                device,
+                commands,
+                held,
+                from,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            );
+            device.cmd_clear_color_image(
+                commands,
+                held,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                &vk::ClearColorValue { uint32: BLACK },
+                &[COLOR_RANGE],
+            );
+            transition(
+                device,
+                commands,
+                held,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            );
+        }
+        self.submit_and_wait()
+    }
+
+    /// Copies the frame target into the held frame; both are `size` pixels large.
+    fn copy_to_held(
+        &mut self,
+        source: vk::Image,
+        held: vk::Image,
+        (width, height): (u32, u32),
+    ) -> Result<(), VkError> {
+        self.begin_commands()?;
+        let (device, commands) = (&self.gpu.device, self.commands);
+        let region = vk::ImageCopy::default()
+            .src_subresource(COLOR_LAYERS)
+            .dst_subresource(COLOR_LAYERS)
+            .extent(vk::Extent3D {
+                width,
+                height,
+                depth: 1,
+            });
+        // SAFETY: the command buffer is recording. The source is the live frame target, in
+        // `GENERAL` with transfer-source usage; the held frame is live, in
+        // `SHADER_READ_ONLY_OPTIMAL` with transfer-destination usage. Both have the same
+        // format and are `size` pixels large, and both outlive the wait below.
+        unsafe {
+            transition(
+                device,
+                commands,
+                held,
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            );
+            device.cmd_copy_image(
+                commands,
+                source,
+                vk::ImageLayout::GENERAL,
+                held,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                &[region],
+            );
+            transition(
+                device,
+                commands,
+                held,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            );
+        }
+        self.submit_and_wait()
+    }
+
+    /// Ends recording and submits the command buffer so that it starts drawing once the
+    /// swapchain image is available (`wait`) and signals `signal` when it is done, then
+    /// blocks until the device has finished it.
+    fn submit_drawn(&self, wait: vk::Semaphore, signal: vk::Semaphore) -> Result<(), VkError> {
+        let device = &self.gpu.device;
+        let (buffers, waits, signals) = ([self.commands], [wait], [signal]);
+        let stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+        let submit = vk::SubmitInfo::default()
+            .wait_semaphores(&waits)
+            .wait_dst_stage_mask(&stages)
+            .command_buffers(&buffers)
+            .signal_semaphores(&signals);
+        // SAFETY: the command buffer is recording and everything it references stays alive
+        // until the wait below returns. `wait` was signalled by the acquire of the image the
+        // commands draw into, and `signal` is unsignalled: the presentation engine consumed
+        // its previous signal before it handed the image out again. The queue and the fence
+        // belong to this device, the fence is unsignalled, and the queue is only used from
+        // here.
+        unsafe {
+            device
+                .end_command_buffer(self.commands)
+                .map_err(VkError::vulkan("vkEndCommandBuffer"))?;
+            device
+                .queue_submit(self.gpu.queue, &[submit], self.fence)
+                .map_err(VkError::vulkan("vkQueueSubmit"))?;
+            device
+                .wait_for_fences(&[self.fence], true, u64::MAX)
+                .map_err(VkError::vulkan("vkWaitForFences"))?;
+            device
+                .reset_fences(&[self.fence])
+                .map_err(VkError::vulkan("vkResetFences"))
+        }
+    }
+
+    /// Makes a swapchain that matches the surface and the window size. Returns `false` when
+    /// the surface has no pixels now, in which case there is nothing to present into.
+    fn ensure_swapchain(&mut self) -> Result<bool, VkError> {
+        let requested = self.surface_size;
+        let device = &self.gpu.device;
+        let surface = self.gpu.surface.as_ref().expect("checked by the caller");
+        let presenter = self.presenter.as_mut().expect("made by the caller");
+        if let Some(chain) = &presenter.swapchain
+            && !chain.stale
+            && chain.requested == requested
+        {
+            return Ok(true);
+        }
+
+        // SAFETY: the physical device and the surface belong to the live instance.
+        let capabilities = unsafe {
+            surface
+                .loader
+                .get_physical_device_surface_capabilities(self.gpu.physical, surface.handle)
+        }
+        .map_err(VkError::vulkan("vkGetPhysicalDeviceSurfaceCapabilitiesKHR"))?;
+        let extent = swapchain_extent(&capabilities, requested);
+        if extent.width == 0 || extent.height == 0 {
+            return Ok(false);
+        }
+        // SAFETY: as above.
+        let formats = unsafe {
+            surface
+                .loader
+                .get_physical_device_surface_formats(self.gpu.physical, surface.handle)
+        }
+        .map_err(VkError::vulkan("vkGetPhysicalDeviceSurfaceFormatsKHR"))?;
+        let (format, srgb) = choose_format(&formats).ok_or(VkError::Vulkan {
+            call: "vkGetPhysicalDeviceSurfaceFormatsKHR",
+            result: vk::Result::ERROR_FORMAT_NOT_SUPPORTED,
+        })?;
+        let (render_pass, pipeline) =
+            presenter.pass(device, format.format, vk::ImageLayout::PRESENT_SRC_KHR)?;
+
+        let mut image_count = capabilities.min_image_count + 1;
+        if capabilities.max_image_count > 0 {
+            image_count = image_count.min(capabilities.max_image_count);
+        }
+        let composite_alpha = [
+            vk::CompositeAlphaFlagsKHR::OPAQUE,
+            vk::CompositeAlphaFlagsKHR::INHERIT,
+            vk::CompositeAlphaFlagsKHR::PRE_MULTIPLIED,
+            vk::CompositeAlphaFlagsKHR::POST_MULTIPLIED,
+        ]
+        .into_iter()
+        .find(|mode| capabilities.supported_composite_alpha.contains(*mode))
+        .unwrap_or(vk::CompositeAlphaFlagsKHR::OPAQUE);
+
+        let loader = presenter
+            .swapchain_loader
+            .get_or_insert_with(|| ash::khr::swapchain::Device::new(self.gpu.instance(), device));
+        if presenter.swapchain.is_some() {
+            // The presentation engine may still hold the semaphore of the last present. A
+            // fence wait does not cover that; idling the device does.
+            // SAFETY: the device is live.
+            unsafe { device.device_wait_idle() }.map_err(VkError::vulkan("vkDeviceWaitIdle"))?;
+        }
+        let old = presenter.swapchain.take();
+        let info = vk::SwapchainCreateInfoKHR::default()
+            .surface(surface.handle)
+            .min_image_count(image_count)
+            .image_format(format.format)
+            .image_color_space(format.color_space)
+            .image_extent(extent)
+            .image_array_layers(1)
+            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
+            .image_sharing_mode(vk::SharingMode::EXCLUSIVE)
+            .pre_transform(capabilities.current_transform)
+            .composite_alpha(composite_alpha)
+            // Every surface supports it, and it paces presentation to the display.
+            .present_mode(vk::PresentModeKHR::FIFO)
+            .clipped(true)
+            .old_swapchain(
+                old.as_ref()
+                    .map_or(vk::SwapchainKHR::null(), |old| old.handle),
+            );
+        // SAFETY: the surface belongs to the instance of this device, which was created with
+        // the swapchain extension and whose queue can present to it. The values come from the
+        // surface's own capabilities and formats. Every submission was waited for, so the old
+        // swapchain, if any, is idle and is retired by this call.
+        let created = unsafe { loader.create_swapchain(&info, None) };
+        if let Some(old) = old {
+            old.destroy(device, loader);
+        }
+        let handle = created.map_err(VkError::vulkan("vkCreateSwapchainKHR"))?;
+
+        let mut chain = Swapchain {
+            handle,
+            extent,
+            requested,
+            srgb,
+            render_pass,
+            pipeline,
+            views: Vec::new(),
+            framebuffers: Vec::new(),
+            acquired: vk::Semaphore::null(),
+            drawn: Vec::new(),
+            stale: false,
+        };
+        let filled = (|| {
+            // SAFETY: the swapchain was just created from this device.
+            let images = unsafe { loader.get_swapchain_images(chain.handle) }
+                .map_err(VkError::vulkan("vkGetSwapchainImagesKHR"))?;
+            let semaphore = || {
+                // SAFETY: the device is live.
+                unsafe { device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None) }
+                    .map_err(VkError::vulkan("vkCreateSemaphore"))
+            };
+            chain.acquired = semaphore()?;
+            for image in images {
+                let view_info = vk::ImageViewCreateInfo::default()
+                    .image(image)
+                    .view_type(vk::ImageViewType::TYPE_2D)
+                    .format(format.format)
+                    .subresource_range(COLOR_RANGE);
+                // SAFETY: the image belongs to the live swapchain and the view matches its
+                // format and its single colour subresource.
+                let view = unsafe { device.create_image_view(&view_info, None) }
+                    .map_err(VkError::vulkan("vkCreateImageView"))?;
+                chain.views.push(view);
+                chain
+                    .framebuffers
+                    .push(create_framebuffer(device, render_pass, view, extent)?);
+                chain.drawn.push(semaphore()?);
+            }
+            Ok(())
+        })();
+        match filled {
+            Ok(()) => {
+                presenter.swapchain = Some(chain);
+                Ok(true)
+            }
+            Err(error) => {
+                chain.destroy(device, loader);
+                Err(error)
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn frame_that_fits_exactly_fills_the_window() {
+        let rect = letterbox(Size::new(640, 480), Size::new(1280, 960));
+        assert_eq!(rect, Rect::new(0, 0, 1280, 960));
+        assert!(is_whole_factor(Size::new(640, 480), &rect));
+        assert_eq!(
+            letterbox(Size::new(640, 480), Size::new(640, 480)),
+            Rect::new(0, 0, 640, 480)
+        );
+    }
+
+    #[test]
+    fn wide_window_gets_bars_left_and_right() {
+        let rect = letterbox(Size::new(640, 480), Size::new(1920, 1080));
+        assert_eq!(rect, Rect::new(240, 0, 1440, 1080));
+        assert!(!is_whole_factor(Size::new(640, 480), &rect), "2.25");
+    }
+
+    #[test]
+    fn tall_window_gets_bars_above_and_below() {
+        let rect = letterbox(Size::new(640, 480), Size::new(1280, 1200));
+        assert_eq!(rect, Rect::new(0, 120, 1280, 960));
+        assert!(is_whole_factor(Size::new(640, 480), &rect));
+    }
+
+    #[test]
+    fn smaller_window_scales_the_frame_down() {
+        assert_eq!(
+            letterbox(Size::new(640, 480), Size::new(320, 300)),
+            Rect::new(0, 30, 320, 240)
+        );
+        // Odd leftovers are split with the extra pixel after the image.
+        assert_eq!(
+            letterbox(Size::new(4, 4), Size::new(7, 4)),
+            Rect::new(1, 0, 4, 4)
+        );
+        // A side that does not divide is rounded down.
+        assert_eq!(
+            letterbox(Size::new(640, 480), Size::new(1000, 1000)),
+            Rect::new(0, 125, 1000, 750)
+        );
+        assert_eq!(
+            letterbox(Size::new(3, 2), Size::new(100, 10)),
+            Rect::new(42, 0, 15, 10)
+        );
+    }
+
+    #[test]
+    fn nothing_is_shown_without_pixels() {
+        let frame = Size::new(640, 480);
+        for window in [Size::new(0, 480), Size::new(640, 0), Size::new(0, 0)] {
+            assert!(letterbox(frame, window).is_empty(), "{window:?}");
+            assert_eq!(push_constants(frame, window, 1.0, false), None);
+        }
+        assert!(letterbox(Size::new(0, 0), Size::new(640, 480)).is_empty());
+        // One pixel wide: the scaled frame would be less than a pixel high.
+        assert!(letterbox(frame, Size::new(1, 1000)).is_empty());
+        assert!(letterbox(Size::new(u32::MAX, 1), Size::new(u32::MAX, u32::MAX)).width > 0);
+    }
+
+    #[test]
+    fn whole_factor_needs_the_same_whole_number_both_ways() {
+        let frame = Size::new(4, 3);
+        assert!(is_whole_factor(frame, &Rect::new(0, 0, 4, 3)));
+        assert!(is_whole_factor(frame, &Rect::new(5, 0, 12, 9)));
+        assert!(!is_whole_factor(frame, &Rect::new(0, 0, 6, 4)));
+        assert!(!is_whole_factor(frame, &Rect::new(0, 0, 8, 9)));
+        assert!(!is_whole_factor(frame, &Rect::new(0, 0, 2, 1)));
+        assert!(!is_whole_factor(frame, &Rect::default()));
+    }
+
+    #[test]
+    fn push_constants_carry_the_rectangle_the_frame_size_the_weight_and_the_flags() {
+        let words = |bytes: [u8; PUSH_CONSTANT_BYTES]| crate::resources::read_words(&bytes);
+        let whole = push_constants(Size::new(640, 480), Size::new(1920, 1440), 1.0, false);
+        assert_eq!(
+            words(whole.unwrap()),
+            [0, 0, 1920, 1440, 640, 480, 1.0f32.to_bits(), FLAG_NEAREST]
+        );
+        let fractional = push_constants(Size::new(640, 480), Size::new(1920, 1080), 0.25, true);
+        assert_eq!(
+            words(fractional.unwrap()),
+            [
+                240,
+                0,
+                1440,
+                1080,
+                640,
+                480,
+                0.25f32.to_bits(),
+                FLAG_SRGB_TARGET
+            ]
+        );
+    }
+
+    fn format(format: vk::Format) -> vk::SurfaceFormatKHR {
+        vk::SurfaceFormatKHR {
+            format,
+            color_space: vk::ColorSpaceKHR::SRGB_NONLINEAR,
+        }
+    }
+
+    #[test]
+    fn unorm_surface_format_is_preferred_over_srgb() {
+        let offered = [
+            format(vk::Format::B8G8R8A8_SRGB),
+            format(vk::Format::R8G8B8A8_UNORM),
+            format(vk::Format::B8G8R8A8_UNORM),
+        ];
+        assert_eq!(
+            choose_format(&offered),
+            Some((format(vk::Format::B8G8R8A8_UNORM), false))
+        );
+        assert_eq!(
+            choose_format(&offered[..2]),
+            Some((format(vk::Format::R8G8B8A8_UNORM), false))
+        );
+    }
+
+    #[test]
+    fn srgb_surface_format_is_taken_with_the_inverse_transfer_when_nothing_else_is_offered() {
+        let offered = [
+            format(vk::Format::R16G16B16A16_SFLOAT),
+            format(vk::Format::R8G8B8A8_SRGB),
+        ];
+        assert_eq!(
+            choose_format(&offered),
+            Some((format(vk::Format::R8G8B8A8_SRGB), true))
+        );
+        // A UNORM format in another colour space is not the pass-through one.
+        let wide = vk::SurfaceFormatKHR {
+            format: vk::Format::B8G8R8A8_UNORM,
+            color_space: vk::ColorSpaceKHR::DISPLAY_P3_NONLINEAR_EXT,
+        };
+        assert_eq!(
+            choose_format(&[wide, format(vk::Format::B8G8R8A8_SRGB)]),
+            Some((format(vk::Format::B8G8R8A8_SRGB), true))
+        );
+        assert_eq!(choose_format(&[wide]), Some((wide, false)));
+        assert_eq!(choose_format(&[]), None);
+    }
+
+    #[test]
+    fn swapchain_extent_follows_the_surface_or_the_window() {
+        let extent = |width, height| vk::Extent2D { width, height };
+        let fixed = vk::SurfaceCapabilitiesKHR {
+            current_extent: extent(800, 600),
+            min_image_extent: extent(800, 600),
+            max_image_extent: extent(800, 600),
+            ..Default::default()
+        };
+        assert_eq!(
+            swapchain_extent(&fixed, Size::new(640, 480)),
+            extent(800, 600)
+        );
+
+        let free = vk::SurfaceCapabilitiesKHR {
+            current_extent: extent(u32::MAX, u32::MAX),
+            min_image_extent: extent(1, 1),
+            max_image_extent: extent(4096, 4096),
+            ..Default::default()
+        };
+        assert_eq!(
+            swapchain_extent(&free, Size::new(640, 480)),
+            extent(640, 480)
+        );
+        assert_eq!(
+            swapchain_extent(&free, Size::new(8000, 480)),
+            extent(4096, 480)
+        );
+        let minimised = vk::SurfaceCapabilitiesKHR {
+            current_extent: extent(0, 0),
+            ..Default::default()
+        };
+        assert_eq!(
+            swapchain_extent(&minimised, Size::new(640, 480)),
+            extent(0, 0)
+        );
+    }
+}

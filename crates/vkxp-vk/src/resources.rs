@@ -106,7 +106,8 @@ impl GpuBuffer {
     }
 }
 
-/// A 2D image of [`PIXEL_FORMAT`] with one view of the same format, bound to device memory.
+/// A 2D image, of [`PIXEL_FORMAT`] unless made otherwise, with one view of the same format,
+/// bound to device memory.
 pub(crate) struct GpuImage {
     pub image: vk::Image,
     pub view: vk::ImageView,
@@ -121,14 +122,28 @@ impl GpuImage {
         device: &ash::Device,
         allocator: &mut Allocator,
         name: &'static str,
+        size: (u32, u32),
+        usage: vk::ImageUsageFlags,
+        flags: vk::ImageCreateFlags,
+    ) -> Result<GpuImage, VkError> {
+        GpuImage::with_format(device, allocator, name, size, PIXEL_FORMAT, usage, flags)
+    }
+
+    /// Like [`GpuImage::new`], but with `format` for the image and its view instead of
+    /// [`PIXEL_FORMAT`]. The device must support the format with this usage.
+    pub fn with_format(
+        device: &ash::Device,
+        allocator: &mut Allocator,
+        name: &'static str,
         (width, height): (u32, u32),
+        format: vk::Format,
         usage: vk::ImageUsageFlags,
         flags: vk::ImageCreateFlags,
     ) -> Result<GpuImage, VkError> {
         let info = vk::ImageCreateInfo::default()
             .flags(flags)
             .image_type(vk::ImageType::TYPE_2D)
-            .format(PIXEL_FORMAT)
+            .format(format)
             .extent(vk::Extent3D {
                 width,
                 height,
@@ -188,7 +203,7 @@ impl GpuImage {
         let view_info = vk::ImageViewCreateInfo::default()
             .image(image.image)
             .view_type(vk::ImageViewType::TYPE_2D)
-            .format(PIXEL_FORMAT)
+            .format(format)
             .subresource_range(COLOR_RANGE);
         // SAFETY: the image is bound to memory and the view matches its format and range.
         match unsafe { device.create_image_view(&view_info, None) } {

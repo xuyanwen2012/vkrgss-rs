@@ -1,11 +1,15 @@
-//! Instance and headless device creation, and the choice of the physical device.
+//! Instance and device creation, and the choice of the physical device.
 //!
-//! No surface, swapchain or window-system extension is involved: the device only needs a queue
-//! that runs compute work.
+//! [`Gpu::new`] opens a headless device: no surface, swapchain or window-system extension is
+//! involved, and the device only needs a queue that runs compute work. [`Gpu::with_surface`]
+//! opens a device for a surface: the instance gets the surface extensions, the device gets
+//! `VK_KHR_swapchain`, and its queue also draws and presents to that surface.
 
-use std::ffi::CStr;
+use std::any::Any;
+use std::ffi::{CStr, c_char};
 
 use ash::vk;
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
 use crate::validation::{self, ValidationLog};
 use crate::{DeviceError, VkError};
@@ -182,6 +186,62 @@ pub(crate) fn lacks(caps: &DeviceCaps) -> Vec<String> {
     lacks
 }
 
+/// What one queue family of a device can do, as far as presenting cares.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct FamilyCaps {
+    pub compute: bool,
+    pub graphics: bool,
+    /// Whether the family can present to the surface in question.
+    pub present: bool,
+}
+
+/// The queue family a device presents with: the first that computes, draws and can present to
+/// the surface. Fails, naming the device, when it has no swapchain extension or no such family.
+pub(crate) fn presenting_family(
+    device: &DeviceInfo,
+    swapchain_extension: bool,
+    families: &[FamilyCaps],
+) -> Result<u32, DeviceError> {
+    let cannot = |reason: &str| DeviceError::CannotPresent {
+        device: device.name.clone(),
+        reason: reason.to_owned(),
+    };
+    if !swapchain_extension {
+        return Err(cannot("it lacks the VK_KHR_swapchain extension"));
+    }
+    families
+        .iter()
+        .position(|family| family.compute && family.graphics && family.present)
+        .map(|family| family as u32)
+        .ok_or_else(|| {
+            cannot("none of its queue families can compute, draw and present to that surface")
+        })
+}
+
+/// The positions in `devices` to try for a surface, most preferred first: every suitable
+/// device in the automatic preference order, or the one device an explicit choice selects.
+pub(crate) fn surface_candidates(
+    choice: &DeviceChoice,
+    devices: &[DeviceInfo],
+) -> Result<Vec<usize>, DeviceError> {
+    match choice {
+        DeviceChoice::Auto => {
+            let mut positions: Vec<usize> = (0..devices.len())
+                .filter(|position| devices[*position].is_suitable())
+                .collect();
+            if positions.is_empty() {
+                return Err(DeviceError::NoSuitableDevice {
+                    devices: devices.to_vec(),
+                });
+            }
+            // Stable, so equally ranked devices keep their enumeration order.
+            positions.sort_by_key(|position| devices[*position].kind.rank());
+            Ok(positions)
+        }
+        _ => Ok(vec![select(choice, devices)?]),
+    }
+}
+
 /// The position in `devices` of the device `choice` selects.
 ///
 /// An explicit choice never falls back to another device: when it names no device, or only
@@ -237,7 +297,7 @@ fn explicit(
 
 /// The Vulkan devices of this machine, in enumeration order, each with what it lacks.
 pub fn available_devices() -> Result<Vec<DeviceInfo>, VkError> {
-    let instance = Instance::new(None)?;
+    let instance = Instance::new(None, &[])?;
     Ok(instance
         .physical_devices()?
         .into_iter()
@@ -257,17 +317,24 @@ struct Instance {
     _log: Option<ValidationLog>,
 }
 
-/// A physical device with what `Gpu::new` needs to open it.
+/// A physical device with what `Gpu` needs to open it.
 struct Candidate {
     physical: vk::PhysicalDevice,
     info: DeviceInfo,
     compute_family: Option<u32>,
+    /// What each queue family can do; empty flags for a family without queues.
+    families: Vec<vk::QueueFlags>,
     max_image_dimension: u32,
     max_storage_buffer_range: u32,
 }
 
 impl Instance {
-    fn new(log: Option<&ValidationLog>) -> Result<Instance, VkError> {
+    /// Creates the instance. `surface_extensions` are the instance extensions a surface needs;
+    /// a headless instance passes none.
+    fn new(
+        log: Option<&ValidationLog>,
+        surface_extensions: &[&'static CStr],
+    ) -> Result<Instance, VkError> {
         // SAFETY: loading the system's Vulkan library runs its initialisers; that is the
         // documented way to obtain the entry points and has no other precondition.
         let entry = unsafe { ash::Entry::load() }
@@ -286,19 +353,41 @@ impl Instance {
         };
         let log = log.filter(|_| validate).cloned();
 
+        if !surface_extensions.is_empty() {
+            // SAFETY: the entry points are loaded and the call takes no handle.
+            let offered = unsafe { entry.enumerate_instance_extension_properties(None) }
+                .map_err(VkError::vulkan("vkEnumerateInstanceExtensionProperties"))?;
+            for wanted in surface_extensions {
+                let found = offered
+                    .iter()
+                    .any(|extension| extension.extension_name_as_c_str().ok() == Some(*wanted));
+                if !found {
+                    return Err(DeviceError::MissingInstanceExtension {
+                        name: wanted.to_string_lossy().into_owned(),
+                    }
+                    .into());
+                }
+            }
+        }
+
         let application = vk::ApplicationInfo::default()
             .application_name(c"vkxp")
             .api_version(vk::API_VERSION_1_3);
         let layers = [validation::LAYER_NAME.as_ptr()];
-        let extensions = [ash::ext::debug_utils::NAME.as_ptr()];
+        let mut extensions: Vec<*const c_char> = surface_extensions
+            .iter()
+            .map(|extension| extension.as_ptr())
+            .collect();
         let mut messenger_info = log.as_ref().map(ValidationLog::messenger_info);
-        let mut info = vk::InstanceCreateInfo::default().application_info(&application);
+        if messenger_info.is_some() {
+            extensions.push(ash::ext::debug_utils::NAME.as_ptr());
+        }
+        let mut info = vk::InstanceCreateInfo::default()
+            .application_info(&application)
+            .enabled_extension_names(&extensions);
         if let Some(messenger_info) = messenger_info.as_mut() {
             // Chaining the messenger also covers instance creation and destruction.
-            info = info
-                .enabled_layer_names(&layers)
-                .enabled_extension_names(&extensions)
-                .push_next(messenger_info);
+            info = info.enabled_layer_names(&layers).push_next(messenger_info);
         }
         // SAFETY: `info` and everything it points to are valid for the call, and the log the
         // chained messenger reports into is kept alive by the returned `Instance`.
@@ -427,9 +516,63 @@ impl Instance {
                 lacks: lacks(&caps),
             },
             compute_family,
+            families: families
+                .iter()
+                .map(|family| match family.queue_count {
+                    0 => vk::QueueFlags::empty(),
+                    _ => family.queue_flags,
+                })
+                .collect(),
             max_image_dimension: properties.limits.max_image_dimension2_d,
             max_storage_buffer_range: properties.limits.max_storage_buffer_range,
         }
+    }
+}
+
+impl Instance {
+    /// Asks the device whether it can present to `surface`: the queue family to use, or why
+    /// it cannot.
+    fn presenting_family(
+        &self,
+        candidate: &Candidate,
+        surface: &Surface,
+    ) -> Result<Result<u32, DeviceError>, VkError> {
+        // SAFETY: the physical device was enumerated from this live instance.
+        let extensions = unsafe {
+            self.raw
+                .enumerate_device_extension_properties(candidate.physical)
+        }
+        .map_err(VkError::vulkan("vkEnumerateDeviceExtensionProperties"))?;
+        let swapchain_extension = extensions.iter().any(|extension| {
+            extension.extension_name_as_c_str().ok() == Some(ash::khr::swapchain::NAME)
+        });
+
+        let mut families = Vec::with_capacity(candidate.families.len());
+        for (index, flags) in candidate.families.iter().enumerate() {
+            let usable = flags.contains(vk::QueueFlags::COMPUTE | vk::QueueFlags::GRAPHICS);
+            // Only a family that could be used is asked about the surface.
+            let present = usable
+                // SAFETY: the physical device and the surface belong to this live instance
+                // and the index is one of the device's queue families.
+                && unsafe {
+                    surface.loader.get_physical_device_surface_support(
+                        candidate.physical,
+                        index as u32,
+                        surface.handle,
+                    )
+                }
+                .map_err(VkError::vulkan("vkGetPhysicalDeviceSurfaceSupportKHR"))?;
+            families.push(FamilyCaps {
+                compute: flags.contains(vk::QueueFlags::COMPUTE),
+                graphics: flags.contains(vk::QueueFlags::GRAPHICS),
+                present,
+            });
+        }
+        Ok(presenting_family(
+            &candidate.info,
+            swapchain_extension,
+            &families,
+        ))
     }
 }
 
@@ -456,20 +599,60 @@ fn c_chars(chars: &[std::ffi::c_char]) -> String {
     }
 }
 
-/// An open logical device with its one queue. Dropping it destroys the device and then the
-/// instance; whoever creates objects from the device destroys them first.
+/// Where a surface comes from.
+pub(crate) enum SurfaceSource {
+    /// A surface without any window system behind it (`VK_EXT_headless_surface`).
+    Headless,
+    /// The surface of a window, which is kept alive for as long as the surface exists.
+    Window(Box<dyn SurfaceWindow>),
+}
+
+/// A window a surface can be created for and that can be kept alongside it.
+pub(crate) trait SurfaceWindow:
+    HasWindowHandle + HasDisplayHandle + Any + Send + Sync
+{
+}
+
+impl<T: HasWindowHandle + HasDisplayHandle + Any + Send + Sync> SurfaceWindow for T {}
+
+/// A surface and the device-level functions that present to it. Dropping it destroys the
+/// surface, so it has to be dropped after the device and before the instance.
+pub(crate) struct Surface {
+    pub loader: ash::khr::surface::Instance,
+    pub handle: vk::SurfaceKHR,
+    // After the handle in declaration order: the window outlives its surface.
+    _window: Option<Box<dyn SurfaceWindow>>,
+}
+
+impl Drop for Surface {
+    fn drop(&mut self) {
+        // SAFETY: the surface belongs to the instance behind `loader`, which is still alive
+        // (see the field order of `Gpu`); every swapchain created for it has been destroyed by
+        // its owner, and the handle is not used again.
+        unsafe { self.loader.destroy_surface(self.handle, None) };
+    }
+}
+
+/// An open logical device with its one queue. Dropping it destroys the device, then the
+/// surface if there is one, and then the instance; whoever creates objects from the device
+/// destroys them first.
 pub(crate) struct Gpu {
     pub device: ash::Device,
     pub physical: vk::PhysicalDevice,
     pub queue: vk::Queue,
     pub queue_family: u32,
+    /// Whether the queue can draw as well as compute. Always true for a device opened for a
+    /// surface.
+    pub can_draw: bool,
     pub info: DeviceInfo,
     /// `maxImageDimension2D` of the device.
     pub max_image_dimension: u32,
     /// `maxStorageBufferRange` of the device.
     pub max_storage_buffer_range: u32,
+    /// The surface the device presents to, when it was opened for one.
+    pub surface: Option<Surface>,
     // After `device` in declaration order only for clarity; `drop` destroys the device before
-    // this field's own drop destroys the instance.
+    // the fields are dropped, which then happens in this order: the surface, then the instance.
     instance: Instance,
 }
 
@@ -477,18 +660,128 @@ impl Gpu {
     /// Opens the device `choice` selects. With a log, the validation layer is enabled when it
     /// is installed and its errors are recorded there.
     pub fn new(choice: &DeviceChoice, log: Option<&ValidationLog>) -> Result<Gpu, VkError> {
-        let instance = Instance::new(log)?;
+        let instance = Instance::new(log, &[])?;
         let mut candidates = instance.physical_devices()?;
         let infos: Vec<DeviceInfo> = candidates.iter().map(|c| c.info.clone()).collect();
         let candidate = candidates.swap_remove(select(choice, &infos)?);
         let queue_family = candidate
             .compute_family
             .expect("a suitable device has a compute queue");
+        Gpu::open(instance, candidate, queue_family, None)
+    }
 
+    /// Opens a device that can present to a surface made from `source`.
+    ///
+    /// An explicit choice is checked against the surface and fails when that device cannot
+    /// present to it; the automatic choice takes the most preferred device that can. Only the
+    /// devices tried are asked about the surface.
+    pub fn with_surface(
+        choice: &DeviceChoice,
+        log: Option<&ValidationLog>,
+        source: SurfaceSource,
+    ) -> Result<Gpu, VkError> {
+        let extensions: Vec<&'static CStr> = match &source {
+            SurfaceSource::Headless => {
+                vec![ash::khr::surface::NAME, ash::ext::headless_surface::NAME]
+            }
+            SurfaceSource::Window(window) => {
+                let display = window
+                    .display_handle()
+                    .map_err(|error| DeviceError::Window(error.to_string()))?;
+                ash_window::enumerate_required_extensions(display.as_raw())
+                    .map_err(VkError::vulkan("ash_window::enumerate_required_extensions"))?
+                    .iter()
+                    // SAFETY: `ash-window` returns pointers to the NUL-terminated extension
+                    // names that `ash` defines as constants, which live for the program.
+                    .map(|name| unsafe { CStr::from_ptr(*name) })
+                    .collect()
+            }
+        };
+        let instance = Instance::new(log, &extensions)?;
+
+        let handle = match &source {
+            SurfaceSource::Headless => {
+                let loader =
+                    ash::ext::headless_surface::Instance::new(&instance._entry, &instance.raw);
+                // SAFETY: the instance is live and was created with the headless-surface
+                // extension; the description has no parameters.
+                unsafe {
+                    loader
+                        .create_headless_surface(&vk::HeadlessSurfaceCreateInfoEXT::default(), None)
+                }
+                .map_err(VkError::vulkan("vkCreateHeadlessSurfaceEXT"))?
+            }
+            SurfaceSource::Window(window) => {
+                let handles = window.display_handle().and_then(|display| {
+                    window
+                        .window_handle()
+                        .map(|window| (display.as_raw(), window.as_raw()))
+                });
+                let (display, window) =
+                    handles.map_err(|error| DeviceError::Window(error.to_string()))?;
+                // SAFETY: the instance is live and was created with the extensions this
+                // display needs. The handles were just obtained from the window, which is
+                // kept alive by the `Surface` below until after the surface is destroyed.
+                unsafe {
+                    ash_window::create_surface(
+                        &instance._entry,
+                        &instance.raw,
+                        display,
+                        window,
+                        None,
+                    )
+                }
+                .map_err(VkError::vulkan("vkCreateSurface"))?
+            }
+        };
+        // Declared after `instance`, so on an early return the surface is destroyed first.
+        let surface = Surface {
+            loader: ash::khr::surface::Instance::new(&instance._entry, &instance.raw),
+            handle,
+            _window: match source {
+                SurfaceSource::Headless => None,
+                SurfaceSource::Window(window) => Some(window),
+            },
+        };
+
+        let mut candidates = instance.physical_devices()?;
+        let infos: Vec<DeviceInfo> = candidates.iter().map(|c| c.info.clone()).collect();
+        let mut refusal = None;
+        let mut chosen = None;
+        for position in surface_candidates(choice, &infos)? {
+            match instance.presenting_family(&candidates[position], &surface)? {
+                Ok(family) => {
+                    chosen = Some((position, family));
+                    break;
+                }
+                // The most preferred device is the one to report.
+                Err(error) => refusal = refusal.or(Some(error)),
+            }
+        }
+        let Some((position, queue_family)) = chosen else {
+            return Err(refusal.expect("at least one device was tried").into());
+        };
+        let candidate = candidates.swap_remove(position);
+        Gpu::open(instance, candidate, queue_family, Some(surface))
+    }
+
+    /// Creates the logical device with one queue of `queue_family`, and with the swapchain
+    /// extension when there is a surface.
+    fn open(
+        instance: Instance,
+        candidate: Candidate,
+        queue_family: u32,
+        surface: Option<Surface>,
+    ) -> Result<Gpu, VkError> {
         let priorities = [1.0];
         let queues = [vk::DeviceQueueCreateInfo::default()
             .queue_family_index(queue_family)
             .queue_priorities(&priorities)];
+        let swapchain = [ash::khr::swapchain::NAME.as_ptr()];
+        let extensions: &[*const c_char] = match surface {
+            Some(_) => &swapchain,
+            None => &[],
+        };
         // Exactly the features the requirement check looked for, and nothing else.
         let mut features12 = vk::PhysicalDeviceVulkan12Features::default()
             .runtime_descriptor_array(true)
@@ -497,11 +790,23 @@ impl Gpu {
             .descriptor_binding_sampled_image_update_after_bind(true);
         let info = vk::DeviceCreateInfo::default()
             .queue_create_infos(&queues)
+            .enabled_extension_names(extensions)
             .push_next(&mut features12);
         // SAFETY: the physical device belongs to the live instance, the requested features
-        // were reported as supported, and `info` is valid for the call.
-        let device = unsafe { instance.raw.create_device(candidate.physical, &info, None) }
-            .map_err(VkError::vulkan("vkCreateDevice"))?;
+        // were reported as supported, the swapchain extension is only requested for a device
+        // that lists it, and `info` is valid for the call.
+        let created = unsafe { instance.raw.create_device(candidate.physical, &info, None) };
+        let device = match created {
+            Ok(device) => device,
+            Err(result) => {
+                // Explicitly before the instance, which goes when this function returns.
+                drop(surface);
+                return Err(VkError::Vulkan {
+                    call: "vkCreateDevice",
+                    result,
+                });
+            }
+        };
         // SAFETY: the device was created with one queue in this family.
         let queue = unsafe { device.get_device_queue(queue_family, 0) };
 
@@ -510,9 +815,11 @@ impl Gpu {
             physical: candidate.physical,
             queue,
             queue_family,
+            can_draw: candidate.families[queue_family as usize].contains(vk::QueueFlags::GRAPHICS),
             info: candidate.info,
             max_image_dimension: candidate.max_image_dimension,
             max_storage_buffer_range: candidate.max_storage_buffer_range,
+            surface,
             instance,
         })
     }
@@ -829,6 +1136,90 @@ mod tests {
         assert!(matches!(
             select(&DeviceChoice::Index(0), &[]),
             Err(DeviceError::NotFound { .. })
+        ));
+    }
+
+    #[test]
+    fn presenting_family_is_the_first_that_computes_draws_and_presents() {
+        let device = device(1, "Chip", DeviceKind::Integrated, CAPABLE);
+        let family = |compute, graphics, present| FamilyCaps {
+            compute,
+            graphics,
+            present,
+        };
+        let families = [
+            family(true, false, false),
+            family(true, true, false),
+            family(false, true, true),
+            family(true, true, true),
+            family(true, true, true),
+        ];
+        assert_eq!(presenting_family(&device, true, &families), Ok(3));
+    }
+
+    #[test]
+    fn device_that_cannot_present_is_refused_by_name() {
+        let device = device(2, "Compute Brick 3000", DeviceKind::Discrete, CAPABLE);
+        let family = |compute, graphics, present| FamilyCaps {
+            compute,
+            graphics,
+            present,
+        };
+
+        let error = presenting_family(
+            &device,
+            true,
+            &[family(true, true, false), family(true, false, true)],
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "Vulkan device `Compute Brick 3000` cannot present to the surface: none of its \
+             queue families can compute, draw and present to that surface"
+        );
+
+        let error = presenting_family(&device, false, &[family(true, true, true)]).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "Vulkan device `Compute Brick 3000` cannot present to the surface: it lacks the \
+             VK_KHR_swapchain extension"
+        );
+        assert!(matches!(error, DeviceError::CannotPresent { .. }));
+    }
+
+    #[test]
+    fn surface_candidates_follow_the_preference_order_or_the_explicit_choice() {
+        let devices = three();
+        assert_eq!(
+            surface_candidates(&DeviceChoice::Auto, &devices),
+            Ok(vec![2, 1, 0])
+        );
+        let mixed = vec![
+            device(0, "old discrete", DeviceKind::Discrete, old()),
+            device(1, "llvmpipe", DeviceKind::Cpu, CAPABLE),
+            device(2, "integrated", DeviceKind::Integrated, CAPABLE),
+            device(3, "virtual", DeviceKind::Virtual, CAPABLE),
+        ];
+        assert_eq!(
+            surface_candidates(&DeviceChoice::Auto, &mixed),
+            Ok(vec![2, 1, 3])
+        );
+        // An explicit choice is one device and never widens to another.
+        assert_eq!(
+            surface_candidates(&DeviceChoice::Name("llvmpipe".to_owned()), &devices),
+            Ok(vec![0])
+        );
+        assert_eq!(
+            surface_candidates(&DeviceChoice::Index(1), &devices),
+            Ok(vec![1])
+        );
+        assert!(matches!(
+            surface_candidates(&DeviceChoice::Index(0), &mixed),
+            Err(DeviceError::Unsuitable { .. })
+        ));
+        assert!(matches!(
+            surface_candidates(&DeviceChoice::Auto, &mixed[..1]),
+            Err(DeviceError::NoSuitableDevice { .. })
         ));
     }
 

@@ -126,6 +126,12 @@ pub enum VkError {
     },
     #[error("cannot allocate memory for {what}: {message}")]
     Memory { what: &'static str, message: String },
+    /// Presenting was asked of a backend that was created without a surface.
+    #[error("the backend was created without a surface and cannot present")]
+    NoSurface,
+    /// The queue of a headless backend cannot draw, so it cannot scale a frame either.
+    #[error("the queue of Vulkan device `{device}` computes but cannot draw")]
+    CannotDraw { device: String },
 }
 
 impl VkError {
@@ -155,6 +161,13 @@ pub enum DeviceError {
         choice: String,
         devices: Vec<DeviceInfo>,
     },
+    /// The device meets the requirements but cannot show frames on the given surface.
+    #[error("Vulkan device `{device}` cannot present to the surface: {reason}")]
+    CannotPresent { device: String, reason: String },
+    #[error("the Vulkan installation does not offer the instance extension {name}")]
+    MissingInstanceExtension { name: String },
+    #[error("cannot get the handles of the window: {0}")]
+    Window(String),
 }
 
 /// The available devices, one per line, each with what it lacks.

@@ -14,10 +14,10 @@
 
 ## 3. Presentation (`vkxp-vk`)
 
-- [ ] 3.1 Add a compositor constructor for a window surface (surface extensions, swapchain extension, a device that can present) without changing the headless constructor. Verify: existing `cargo test -p vkxp-vk` passes unchanged; a test creates the compositor for a headless surface on llvmpipe; a test for the device-cannot-present error where it can be provoked.
-- [ ] 3.2 Implement the scaling pipeline (letterbox, nearest at whole-number factors, sharp bilinear otherwise, held-frame mix) with an off-screen target and readback. Verify: tests for the scaling, sampling and transition-mix scenarios in `specs/vulkan-presentation/spec.md`, comparing read-back pixels.
-- [ ] 3.3 Implement the swapchain: creation, acquire and present, recreation on resize and out-of-date, zero-sized windows, teardown. Verify: a test on llvmpipe with a headless surface presents frames, resizes, presents again and drops the backend, with the validation layer reporting nothing.
-- [ ] 3.4 Implement freeze (copy to the held image) and the mix weight in the presenter, and expose them through a type that implements the host's `Display` operations. Verify: off-screen tests that a held frame is shown after later renders and that weights 0, one half and 1 give the expected images.
+- [x] 3.1 Add a compositor constructor for a window surface (surface extensions, swapchain extension, a device that can present) without changing the headless constructor. Verify: existing `cargo test -p vkxp-vk` passes unchanged; a test creates the compositor for a headless surface on llvmpipe; a test for the device-cannot-present error where it can be provoked.
+- [x] 3.2 Implement the scaling pipeline (letterbox, nearest at whole-number factors, sharp bilinear otherwise, held-frame mix) with an off-screen target and readback. Verify: tests for the scaling, sampling and transition-mix scenarios in `specs/vulkan-presentation/spec.md`, comparing read-back pixels.
+- [x] 3.3 Implement the swapchain: creation, acquire and present, recreation on resize and out-of-date, zero-sized windows, teardown. Verify: a test on llvmpipe with a headless surface presents frames, resizes, presents again and drops the backend, with the validation layer reporting nothing.
+- [x] 3.4 Implement freeze (copy to the held image) and the mix weight in the presenter, and expose them through a type that implements the host's `Display` operations. Verify: off-screen tests that a held frame is shown after later renders and that weights 0, one half and 1 give the expected images.
 
 ## 4. Runners and demo (`vkxp-host`)
 

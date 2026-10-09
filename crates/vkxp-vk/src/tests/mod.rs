@@ -5,6 +5,7 @@ mod compositing;
 mod differential;
 mod fixtures;
 mod harness;
+mod presentation;
 mod properties;
 mod shaders;
 mod sweeps;

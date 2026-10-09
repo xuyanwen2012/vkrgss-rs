@@ -6,11 +6,12 @@ use std::mem::ManuallyDrop;
 use ash::vk;
 use gpu_allocator::MemoryLocation;
 use gpu_allocator::vulkan::{Allocator, AllocatorCreateDesc};
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use vkxp_proto::{BitmapDelta, FramePacket, GuestToHost, Rect, Size};
 
 use crate::binning::{TileLists, bin};
 use crate::bitmaps::{BitmapTable, Change};
-use crate::device::{BITMAP_SLOTS, Gpu};
+use crate::device::{BITMAP_SLOTS, Gpu, SurfaceSource};
 use crate::records::{ClipRect, OpRecord, RECORD_WORDS, check_logical_size, encode_ops};
 use crate::resources::{
     COLOR_LAYERS, COLOR_RANGE, GpuBuffer, GpuImage, create_shader_module, make_host_readable,
@@ -40,8 +41,12 @@ pub struct Frame {
     pub rgba: Vec<u8>,
 }
 
+mod present;
 #[cfg(test)]
 mod test_compute;
+
+use present::Presenter;
+pub use present::letterbox;
 
 /// The Vulkan compositor.
 ///
@@ -63,6 +68,13 @@ pub struct VkCompositor {
     pipeline: vk::Pipeline,
     descriptor_pool: vk::DescriptorPool,
     descriptors: vk::DescriptorSet,
+    /// Everything that scales the frame into a swapchain image or an off-screen target. Made
+    /// the first time it is needed, so a compositor that only renders never has it.
+    presenter: Option<Presenter>,
+    /// Weight of the newest frame against the held frame when a frame is shown.
+    mix: f32,
+    /// Size of the window in pixels, as the owner last reported it.
+    surface_size: Size,
     /// Failure injection: the number of per-submission buffers that may still be allocated
     /// before one allocation fails, once.
     #[cfg(test)]
@@ -125,8 +137,43 @@ impl VkCompositor {
         VkCompositor::create(&choice, Some(log))
     }
 
+    /// Opens the chosen device for the surface of `window`, so that frames can be shown with
+    /// [`present`](VkCompositor::present). The device has to be able to present to that
+    /// surface: an explicit choice that cannot fails with [`DeviceError::CannotPresent`], and
+    /// the automatic choice takes the most preferred device that can.
+    ///
+    /// The window is kept alive until the compositor is dropped. With a log, the validation
+    /// layer is enabled when it is installed.
+    ///
+    /// [`DeviceError::CannotPresent`]: crate::DeviceError::CannotPresent
+    pub fn for_window<W>(
+        choice: DeviceChoice,
+        window: W,
+        log: Option<&ValidationLog>,
+    ) -> Result<VkCompositor, VkError>
+    where
+        W: HasWindowHandle + HasDisplayHandle + Send + Sync + 'static,
+    {
+        let source = SurfaceSource::Window(Box::new(window));
+        VkCompositor::finish(Gpu::with_surface(&choice, log, source)?)
+    }
+
+    /// Opens the chosen device for a surface that has no window system behind it
+    /// (`VK_EXT_headless_surface`). Presenting then goes through a real swapchain whose images
+    /// nobody sees, which is how presentation is tested without a display.
+    pub fn with_headless_surface(
+        choice: DeviceChoice,
+        log: Option<&ValidationLog>,
+    ) -> Result<VkCompositor, VkError> {
+        VkCompositor::finish(Gpu::with_surface(&choice, log, SurfaceSource::Headless)?)
+    }
+
     fn create(choice: &DeviceChoice, log: Option<&ValidationLog>) -> Result<VkCompositor, VkError> {
-        let gpu = Gpu::new(choice, log)?;
+        VkCompositor::finish(Gpu::new(choice, log)?)
+    }
+
+    /// Builds the compositor on an open device.
+    fn finish(gpu: Gpu) -> Result<VkCompositor, VkError> {
         let allocator = Allocator::new(&AllocatorCreateDesc {
             instance: gpu.instance().clone(),
             device: gpu.device.clone(),
@@ -152,6 +199,9 @@ impl VkCompositor {
             pipeline: vk::Pipeline::null(),
             descriptor_pool: vk::DescriptorPool::null(),
             descriptors: vk::DescriptorSet::null(),
+            presenter: None,
+            mix: 1.0,
+            surface_size: Size::new(0, 0),
             #[cfg(test)]
             temporary_buffer_failure: None,
             allocator: ManuallyDrop::new(allocator),
@@ -984,6 +1034,9 @@ impl Drop for VkCompositor {
         // exactly once, here, after its allocations were freed and while the device is alive.
         unsafe {
             let _ = device.device_wait_idle();
+            if let Some(presenter) = self.presenter.take() {
+                presenter.destroy(device, &mut self.allocator);
+            }
             for (_, image) in self.images.drain() {
                 image.destroy(device, &mut self.allocator);
             }
