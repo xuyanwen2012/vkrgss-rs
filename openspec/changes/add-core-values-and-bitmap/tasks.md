@@ -35,4 +35,4 @@
 
 ## 6. Integration check
 
-- [ ] 6.1 Document the crate's modules in `crates/vkxp-core/src/lib.rs` and run the full gate. Verify: `cargo xtask gate` exits 0, `cargo xtask deps` reports no violation, and `openspec validate add-core-values-and-bitmap --strict` passes.
+- [x] 6.1 Document the crate's modules in `crates/vkxp-core/src/lib.rs` and run the full gate. Verify: `cargo xtask gate` exits 0, `cargo xtask deps` reports no violation, and `openspec validate add-core-values-and-bitmap --strict` passes.
