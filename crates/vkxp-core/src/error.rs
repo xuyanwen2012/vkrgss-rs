@@ -75,3 +75,36 @@ pub enum CreateFailure {
     #[error("the bitmap arena has no free slot")]
     ArenaFull,
 }
+
+/// A kind of scene element, as error messages name it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ElementKind {
+    Sprite,
+    Viewport,
+    Window,
+    Plane,
+    Tilemap,
+}
+
+impl std::fmt::Display for ElementKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            ElementKind::Sprite => "sprite",
+            ElementKind::Viewport => "viewport",
+            ElementKind::Window => "window",
+            ElementKind::Plane => "plane",
+            ElementKind::Tilemap => "tilemap",
+        })
+    }
+}
+
+/// Why a scene operation failed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum SceneError {
+    /// The element was disposed (or its handle never named an element of this scene).
+    #[error("disposed {0}")]
+    Disposed(ElementKind),
+    /// Every slot the scene can name for this kind of element is taken or used up.
+    #[error("the scene has no free slot for another {0}")]
+    Full(ElementKind),
+}

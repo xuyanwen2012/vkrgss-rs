@@ -49,17 +49,22 @@
 mod bitmap;
 mod color;
 mod delta;
+mod element;
 mod error;
+mod extract;
 mod font;
 mod rect;
+mod scene;
 mod table;
 pub mod test_support;
 mod text;
 
 pub use bitmap::{Bitmaps, MAX_BITMAP_PIXELS};
 pub use color::{Color, Tone};
-pub use error::{BitmapError, CreateFailure, DecodeError, TableError};
+pub use element::{Plane, Sprite, Tilemap, Viewport, Window};
+pub use error::{BitmapError, CreateFailure, DecodeError, ElementKind, SceneError, TableError};
 pub use font::{Font, FontDefaults};
 pub use rect::Rect;
+pub use scene::{MAX_LOGICAL_DIMENSION, PlaneId, Scene, SpriteId, TilemapId, ViewportId, WindowId};
 pub use table::Table;
 pub use text::{Align, Mask, TextRasterizer};

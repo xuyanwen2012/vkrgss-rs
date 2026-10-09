@@ -2,9 +2,9 @@
 
 ## 1. Scene arena and elements (`vkxp-core`)
 
-- [ ] 1.1 Add the `Scene` arena with generation-carrying handles for sprites, viewports, windows, planes and tilemaps, creation with or without a viewport, disposal and the disposed error. Verify: tests for the use-after-disposal scenario for each kind and for a stale handle after its slot is reused.
-- [ ] 1.2 Add the properties of sprite, viewport and window with their RGSS1 defaults and clamping (opacity values 0 to 255). Verify: tests for the sprite-defaults scenario, equivalent default checks for viewport and window, and the opacity-clamp scenario.
-- [ ] 1.3 Add planes and tilemaps as property holders. Verify: tests that their properties read back what was written and the plane scenario of `specs/core-scene/spec.md` (rendered with the reference compositor).
+- [x] 1.1 Add the `Scene` arena with generation-carrying handles for sprites, viewports, windows, planes and tilemaps, creation with or without a viewport, disposal and the disposed error. Verify: tests for the use-after-disposal scenario for each kind and for a stale handle after its slot is reused.
+- [x] 1.2 Add the properties of sprite, viewport and window with their RGSS1 defaults and clamping (opacity values 0 to 255). Verify: tests for the sprite-defaults scenario, equivalent default checks for viewport and window, and the opacity-clamp scenario.
+- [x] 1.3 Add planes and tilemaps as property holders. Verify: tests that their properties read back what was written and the plane scenario of `specs/core-scene/spec.md` (rendered with the reference compositor).
 
 ## 2. Order and geometry (`vkxp-core`)
 
