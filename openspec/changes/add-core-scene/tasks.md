@@ -42,4 +42,4 @@
 
 ## 8. Integration check
 
-- [ ] 8.1 Extend the crate documentation in `crates/vkxp-core/src/lib.rs` with the scene, extraction and input modules, and run the full gate. Verify: `cargo xtask gate` exits 0, `cargo xtask deps` reports no violation, and `openspec validate add-core-scene --strict` passes.
+- [x] 8.1 Extend the crate documentation in `crates/vkxp-core/src/lib.rs` with the scene, extraction and input modules, and run the full gate. Verify: `cargo xtask gate` exits 0, `cargo xtask deps` reports no violation, and `openspec validate add-core-scene --strict` passes.

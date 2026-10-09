@@ -182,6 +182,9 @@ impl Entry {
 }
 
 /// Sorts into draw order: ascending z, and among equal z ascending stamp.
+///
+/// PLACEHOLDER: the order among elements with equal z is not yet checked against the original
+/// runtime.
 fn sort(entries: &mut [Entry]) {
     entries.sort_by_key(|entry| (entry.z, entry.stamp));
 }
