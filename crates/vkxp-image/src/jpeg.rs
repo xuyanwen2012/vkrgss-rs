@@ -1,4 +1,14 @@
-//! JPEG, through `jpeg-decoder`.
+//! JPEG.
+//!
+//! Baseline and progressive Huffman-coded files in greyscale, or in Y, Cb, Cr with chroma at
+//! full resolution or halved horizontally or in both directions, are decoded here with the
+//! arithmetic of the original runtime, which is IJG libjpeg 6b with its floating-point inverse
+//! DCT. Every other file, and every file on which that decoder gives up, goes through
+//! `jpeg-decoder`.
+
+mod coefficients;
+mod idct;
+mod samples;
 
 use jpeg_decoder::{Decoder, PixelFormat};
 
@@ -13,7 +23,58 @@ fn error(error: jpeg_decoder::Error) -> ImageError {
     }
 }
 
+/// Decodes with the arithmetic of the original runtime, or gives up with `None`.
+fn decode_like_the_original(bytes: &[u8]) -> Option<DecodedImage> {
+    let frame = coefficients::read(bytes)?;
+    let (width, height) = (frame.width as usize, frame.height as usize);
+    let (h_max, v_max) = (frame.components[0].h, frame.components[0].v);
+    let planes: Vec<samples::Plane> = frame
+        .components
+        .iter()
+        .map(|component| {
+            let multipliers = idct::multipliers(&component.quant);
+            let stride = component.blocks_wide * 8;
+            let mut samples = vec![0; stride * component.blocks_high * 8];
+            for (index, block) in component
+                .coefficients
+                .as_chunks::<64>()
+                .0
+                .iter()
+                .enumerate()
+            {
+                let (row, column) = (index / component.blocks_wide, index % component.blocks_wide);
+                let out = &mut samples[row * 8 * stride + column * 8..];
+                idct::inverse(block, &multipliers, out, stride);
+            }
+            samples::Plane {
+                samples,
+                stride,
+                width: (width * component.h).div_ceil(h_max),
+                height: (height * component.v).div_ceil(v_max),
+            }
+        })
+        .collect();
+
+    let mut rgba = vec![0; width * height * 4];
+    match <[samples::Plane; 3]>::try_from(planes) {
+        Ok(planes) => samples::colour(&planes, (h_max == 2, v_max == 2), pixels_mut(&mut rgba)),
+        Err(planes) => samples::grey(&planes[0], pixels_mut(&mut rgba)),
+    }
+    Some(DecodedImage {
+        width: frame.width,
+        height: frame.height,
+        rgba,
+    })
+}
+
 pub(crate) fn decode(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
+    match decode_like_the_original(bytes) {
+        Some(image) => Ok(image),
+        None => decode_with_library(bytes),
+    }
+}
+
+fn decode_with_library(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
     let mut decoder = Decoder::new(bytes);
     decoder.read_info().map_err(error)?;
     let info = decoder
@@ -180,6 +241,101 @@ mod tests {
             let rgba = decode_ok(&progressive, 21, 13);
             assert_close(&rgba, &source, channels, 4);
             assert_eq!(rgba, decode_ok(&baseline, 21, 13));
+        }
+    }
+
+    /// A committed test file with the pixels measured on the original runtime for it; see
+    /// `testdata/jpeg/README.md`.
+    macro_rules! measured {
+        ($jpeg:literal, $png:literal) => {
+            (
+                $jpeg,
+                &include_bytes!(concat!("../testdata/jpeg/", $jpeg, ".jpg"))[..],
+                &include_bytes!(concat!("../testdata/jpeg/", $png, ".png"))[..],
+            )
+        };
+    }
+
+    fn assert_measured(files: &[(&str, &[u8], &[u8])]) {
+        for &(name, jpeg, png) in files {
+            let decoded = decode_like_the_original(jpeg).expect(name);
+            let measured = crate::decode(png).unwrap();
+            assert_eq!(
+                (decoded.width, decoded.height),
+                (measured.width, measured.height),
+                "{name}"
+            );
+            for (index, (pixel, expected)) in decoded
+                .rgba
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .zip(measured.rgba.as_chunks::<4>().0)
+                .enumerate()
+            {
+                let (x, y) = (index as u32 % decoded.width, index as u32 / decoded.width);
+                assert_eq!(pixel, expected, "{name}, pixel ({x}, {y})");
+            }
+            assert_eq!(crate::decode(jpeg).unwrap(), decoded, "{name}");
+        }
+    }
+
+    #[test]
+    fn measured_colour_blocks() {
+        assert_measured(&[measured!("flat", "flat")]);
+    }
+
+    #[test]
+    fn measured_grey_samples() {
+        assert_measured(&[
+            measured!("grey-q90", "grey-q90"),
+            measured!("grey-q1", "grey-q1"),
+            measured!("grey-q50", "grey-q50"),
+        ]);
+    }
+
+    #[test]
+    fn measured_colour_with_chroma_at_full_resolution() {
+        assert_measured(&[measured!("colour-444", "colour-444")]);
+    }
+
+    #[test]
+    fn measured_subsampled_chroma() {
+        assert_measured(&[
+            measured!("colour-420", "colour-420"),
+            measured!("colour-422", "colour-422"),
+            measured!("colour-420-narrow", "colour-420-narrow"),
+        ]);
+    }
+
+    #[test]
+    fn measured_restart_intervals() {
+        assert_measured(&[measured!("colour-420-restart", "colour-420")]);
+    }
+
+    #[test]
+    fn progressive_equals_baseline() {
+        // The same coefficients stored progressively: the pixels of the baseline file.
+        assert_measured(&[
+            measured!("grey-q90-progressive", "grey-q90"),
+            measured!("colour-420-progressive", "colour-420"),
+        ]);
+    }
+
+    #[test]
+    fn other_layouts_decode_as_before() {
+        let source = gradient(21, 13, 3);
+        // Chroma halved vertically only, and layouts that are rarer still.
+        for sampling in [
+            SamplingFactor::F_1_2,
+            SamplingFactor::F_4_1,
+            SamplingFactor::F_2_4,
+        ] {
+            let bytes = testutil::jpeg(21, 13, ColorType::Rgb, &source, |encoder| {
+                encoder.set_sampling_factor(sampling);
+            });
+            assert!(decode_like_the_original(&bytes).is_none(), "{sampling:?}");
+            assert_eq!(crate::decode(&bytes), decode_with_library(&bytes));
         }
     }
 

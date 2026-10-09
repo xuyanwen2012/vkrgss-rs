@@ -11,8 +11,8 @@
 //!   are expanded, a `tRNS` chunk becomes alpha, 16-bit samples keep their high byte. No gamma
 //!   or colour-profile correction is applied.
 //! - **JPEG**: baseline and progressive, greyscale or three components, any chroma
-//!   subsampling; always opaque. The pixels are not guaranteed to match the original
-//!   runtime's decoder bit for bit.
+//!   subsampling; always opaque. Greyscale, and colour with chroma at full resolution or
+//!   halved horizontally or in both directions, decode to the pixels of the original runtime.
 //! - **BMP**: uncompressed, 1, 4, 8, 24 or 32 bits per pixel, bottom-up or top-down. The
 //!   fourth byte of 32-bit pixels is alpha only if some pixel has it non-zero.
 //!

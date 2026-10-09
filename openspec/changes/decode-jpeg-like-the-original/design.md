@@ -39,7 +39,10 @@
 - [A second JPEG path to maintain] → It is the only way to the original's pixels; the library
   path stays for everything unusual.
 - [Restart intervals, odd sizes with subsampling] → Implemented as libjpeg does; marked
-  PLACEHOLDER where the README says "not measured".
+  PLACEHOLDER where the README says "not measured". During implementation the committed
+  probes for progressive files, a restart interval, chroma halved horizontally and odd sizes
+  were measured on the original (`crates/vkxp-image/testdata/jpeg/README.md`) and agree, so
+  no PLACEHOLDER remains.
 
 ## Follow-ups
 
