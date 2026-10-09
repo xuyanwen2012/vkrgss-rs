@@ -12,7 +12,9 @@
 //! - [`resolve_rtps`] maps those names to directories through a table the caller supplies,
 //!   standing in for the Windows registry.
 //! - [`GameFiles`] resolves script-style paths against the game directory and then the
-//!   run-time packages, trying the extensions of the requested [`FileKind`].
+//!   run-time packages, trying the extensions of the requested [`FileKind`]. A path never
+//!   resolves to a file outside the directory it is searched in, whether through `..` or
+//!   through a symbolic link.
 //!
 //! The encrypted archive (`Game.rgssad`) is not read yet. Nothing here writes files: saves go
 //! through Ruby's own file API.

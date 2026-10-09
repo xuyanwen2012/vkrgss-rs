@@ -53,6 +53,20 @@ fn components(script_path: &str) -> Option<Vec<&str>> {
     (!components.is_empty()).then_some(components)
 }
 
+/// Whether `path`, an entry of a directory inside `root`, is still inside `root` once a symbolic
+/// link is followed. Only a link can lead out, so anything else is inside without a look at
+/// the file system beyond the entry itself.
+fn stays_inside(root: &Path, path: &Path) -> bool {
+    match path.symlink_metadata() {
+        Ok(metadata) if !metadata.file_type().is_symlink() => true,
+        Ok(_) => match (root.canonicalize(), path.canonicalize()) {
+            (Ok(root), Ok(target)) => target.starts_with(root),
+            _ => false,
+        },
+        Err(_) => false,
+    }
+}
+
 /// The files of one game: its own directory, then its run-time package directories.
 ///
 /// Directory listings are cached, since games do not add assets while running; see
@@ -89,8 +103,9 @@ impl GameFiles {
     ///
     /// Components are separated by `/` or `\` and match directory entries without regard to
     /// letter case, an exact match being preferred. In each root the path as given is tried
-    /// first, then with each extension of `kind` appended. The error carries `script_path`
-    /// exactly as given.
+    /// first, then with each extension of `kind` appended. A symbolic link is followed only if
+    /// its target lies inside the root it was found in. The error carries `script_path` exactly
+    /// as given.
     pub fn resolve(&self, kind: FileKind, script_path: &str) -> Result<PathBuf, VfsError> {
         let roots = if kind.searches_rtps() {
             &self.roots[..]
@@ -101,7 +116,7 @@ impl GameFiles {
             .and_then(|components| {
                 roots
                     .iter()
-                    .find_map(|root| self.find(root, &components, kind.extensions()))
+                    .find_map(|root| self.find(root, root, &components, kind.extensions()))
             })
             .ok_or_else(|| VfsError::NotFound {
                 path: script_path.to_owned(),
@@ -124,9 +139,16 @@ impl GameFiles {
             .clear();
     }
 
-    /// Finds `components` below `dir`. When several entries match a directory component, each
-    /// is searched in turn.
-    fn find(&self, dir: &Path, components: &[&str], extensions: &[&str]) -> Option<PathBuf> {
+    /// Finds `components` below `dir`, a directory inside `root`. When several entries match a
+    /// directory component, each is searched in turn. Entries that are symbolic links to
+    /// somewhere outside `root` are passed over.
+    fn find(
+        &self,
+        root: &Path,
+        dir: &Path,
+        components: &[&str],
+        extensions: &[&str],
+    ) -> Option<PathBuf> {
         let (name, rest) = components.split_first()?;
         let listing = self.listing(dir);
         if rest.is_empty() {
@@ -137,13 +159,15 @@ impl GameFiles {
                     .matches(&candidate)
                     .into_iter()
                     .map(|real| dir.join(real))
-                    .find(|path| path.is_file())
+                    .find(|path| stays_inside(root, path) && path.is_file())
             })
         } else {
             listing
                 .matches(name)
                 .into_iter()
-                .find_map(|real| self.find(&dir.join(real), rest, extensions))
+                .map(|real| dir.join(real))
+                .filter(|path| stays_inside(root, path))
+                .find_map(|path| self.find(root, &path, rest, extensions))
         }
     }
 
@@ -238,6 +262,93 @@ mod tests {
         // Staying inside the root is fine.
         let found = files.resolve(FileKind::Image, "Graphics/../Graphics/inside");
         assert_eq!(found.unwrap(), inside);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symbolic_links_do_not_lead_out_of_the_root() {
+        use std::os::unix::fs::symlink;
+
+        let outer = tempfile::tempdir().unwrap();
+        put(outer.path(), "outside/secret.png", b"secret");
+        put(outer.path(), "outside/Sub/deep.png", b"secret");
+        for root in ["game", "rtp"] {
+            let root = outer.path().join(root);
+            std::fs::create_dir(&root).unwrap();
+            symlink("../outside", root.join("link")).unwrap();
+            symlink(outer.path().join("outside"), root.join("absolute")).unwrap();
+            symlink("../outside/secret.png", root.join("direct.png")).unwrap();
+            symlink("../outside/secret.png", root.join("bare")).unwrap();
+            symlink("missing", root.join("dangling.png")).unwrap();
+        }
+        let files = GameFiles::new(outer.path().join("game"), [outer.path().join("rtp")]);
+        for path in [
+            "link/secret",
+            "link/secret.png",
+            "LINK\\Sub\\deep",
+            "absolute/secret",
+            "direct",
+            "direct.png",
+            "bare",
+            "dangling",
+        ] {
+            for kind in [FileKind::Image, FileKind::Data] {
+                assert!(
+                    matches!(files.read(kind, path), Err(VfsError::NotFound { .. })),
+                    "{path}"
+                );
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symbolic_links_inside_the_root_are_followed() {
+        use std::os::unix::fs::symlink;
+
+        let outer = tempfile::tempdir().unwrap();
+        let game = outer.path().join("game");
+        let rtp = outer.path().join("rtp");
+        put(&game, "Graphics/Real/picture.png", b"own");
+        symlink("Real", game.join("Graphics/Alias")).unwrap();
+        symlink("Real/picture.png", game.join("Graphics/copy.png")).unwrap();
+        put(&rtp, "Audio/Real/theme.ogg", b"package");
+        symlink("Real", rtp.join("Audio/BGM")).unwrap();
+        // The roots themselves may be reached through links.
+        symlink(&game, outer.path().join("game-link")).unwrap();
+        symlink(&rtp, outer.path().join("rtp-link")).unwrap();
+        let files = GameFiles::new(
+            outer.path().join("game-link"),
+            [outer.path().join("rtp-link")],
+        );
+        let read = |kind, path| files.read(kind, path).unwrap();
+        assert_eq!(read(FileKind::Image, "graphics/alias/Picture"), b"own");
+        assert_eq!(read(FileKind::Image, "Graphics/copy"), b"own");
+        assert_eq!(read(FileKind::Audio, "Audio/BGM/theme"), b"package");
+        // A link from a package into the game directory leaves the package.
+        symlink(game.join("Graphics/Real"), rtp.join("Audio/Game")).unwrap();
+        files.refresh();
+        assert!(files.read(FileKind::Image, "Audio/Game/picture").is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_link_out_of_the_root_does_not_hide_a_later_match() {
+        use std::os::unix::fs::symlink;
+
+        let outer = tempfile::tempdir().unwrap();
+        put(outer.path(), "outside/Fog.png", b"secret");
+        let game = outer.path().join("game");
+        let rtp = outer.path().join("rtp");
+        let jpg = put(&game, "Fog.jpg", b"own");
+        symlink("../outside/Fog.png", game.join("Fog.png")).unwrap();
+        symlink("../outside", game.join("Graphics")).unwrap();
+        let packaged = put(&rtp, "Graphics/Fog.png", b"package");
+        let files = GameFiles::new(&game, [rtp]);
+        // The next extension in the same directory, then the next root.
+        assert_eq!(files.resolve(FileKind::Image, "Fog").unwrap(), jpg);
+        let found = files.resolve(FileKind::Image, "Graphics/Fog").unwrap();
+        assert_eq!(found, packaged);
     }
 
     #[test]
