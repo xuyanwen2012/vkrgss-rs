@@ -52,16 +52,22 @@ conversion SHALL change the values of the frame's channels on the way to the scr
 - **THEN** pixels well inside each half have exactly that half's colour
 
 ### Requirement: Transition mix
-The presenter SHALL be able to show a mix of a held frame and the newest frame with a weight
-from 0 (held frame only) to 1 (newest frame only), applied per channel before scaling.
+The presenter SHALL be able to show a mix of a held frame and the newest frame with an integer
+weight `an` from 0 to 255, computed per channel on the frames' 8-bit values before scaling as
+`(old * (256 - an) + new * an) >> 8`, and SHALL show the newest frame unmixed when no
+transition is active.
 
 #### Scenario: End points
-- **WHEN** the mix weight is 0 and then 1
+- **WHEN** the mix transition is inactive, and then active with weight 0
 - **THEN** the output equals the held frame and then the newest frame
 
 #### Scenario: Half way
 - **WHEN** the held frame is black, the newest is white and the weight is one half
 - **THEN** the output is mid-grey to within one step per channel
+
+#### Scenario: Measured samples
+- **WHEN** each committed cross-fade sample measured on the original runtime is evaluated with its weight
+- **THEN** the output equals the measured value
 
 ### Requirement: Swapchain lifetime
 The backend SHALL recreate its swapchain when the surface is resized or the swapchain is
@@ -86,11 +92,11 @@ and mixing can be verified without a window.
 - **THEN** every present succeeds with the validation layer reporting nothing
 
 ### Requirement: Masked transition mix
-The presenter SHALL be able to mix the held frame and the newest frame per pixel under a mask
-bitmap, a progress from 0 to 1 and a vagueness from 1 to 256: with `m` the mask's red channel
-at the pixel as a fraction, `v` the vagueness divided by 256 and `p` the progress, the weight
-of the held frame SHALL be `(clamp(m, p, p + v) - p) / v`. The mask SHALL be stretched to the
-frame. At progress 1 the output SHALL be the newest frame alone.
+The presenter SHALL be able to mix under a mask bitmap, a threshold `T` from 0 to 255 and a
+vagueness: with `L` the mask's luminance at the pixel, the weight of the held frame SHALL be
+`w = 0` for `L <= T` and `min(255, (L - T) * 255 / vague)` above it, or for a vagueness of 0
+`255` for `L >= T` and 0 below, and the output SHALL be `new` for `w = 0` and
+`new + (((old - new) * (w + 1)) >> 8)` otherwise. A mask smaller than the frame SHALL be tiled.
 
 #### Scenario: Dark side first
 - **WHEN** the mask is black on the left half and white on the right half, the vagueness is 1 and the progress is 0.5
@@ -103,6 +109,14 @@ frame. At progress 1 the output SHALL be the newest frame alone.
 #### Scenario: End
 - **WHEN** the progress is 1
 - **THEN** the output equals the newest frame for any mask
+
+#### Scenario: Measured samples
+- **WHEN** each committed masked sample measured on the original runtime is evaluated with its threshold and vagueness
+- **THEN** the output equals the measured value
+
+#### Scenario: Tiled mask
+- **WHEN** a 64 by 48 mask is used on a 640 by 480 frame
+- **THEN** the pattern repeats every 64 pixels horizontally and every 48 vertically
 
 ### Requirement: Scaling filters
 The presenter SHALL scale the frame into its letterbox rectangle with one of three filters:
