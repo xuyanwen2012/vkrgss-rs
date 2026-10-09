@@ -2,19 +2,24 @@
 //!
 //! A tilemap is not drawn tile by tile every frame. The cells that can show in its area, and
 //! one more column and row so that the origin can move within a tile, are composed with the
-//! operations of the bitmap arena into bitmaps of the scene's own: `ground` for the tiles of
-//! priority 0, and one bitmap for each of the priorities 1 to 5 that a visible tile has. They
-//! are composed again only when what they show changes: a scroll across a tile boundary, a
-//! change of the area's size, of a table, of a sheet, or of the animation frame of a visible
-//! autotile.
+//! operations of the bitmap arena into bitmaps of the scene's own: one for each priority from
+//! 0 to 5 and each of the three layers of the map that a visible tile has. They are composed
+//! again only when what they show changes: a scroll across a tile boundary, a change of the
+//! area's size, of a table, of a sheet, or of the animation frame of a visible autotile.
 //!
-//! A frame then draws `ground` as one quad at z 0, and of every priority bitmap one quad for
-//! each row of cells that holds a tile of that priority, at the z that ranks the row among
-//! sprites.
+//! The layers of the map are kept apart because the original runtime blends every tile onto
+//! the screen by itself, in ascending priority and, within a priority, in the order of the
+//! layers. No two tiles of one bitmap overlap, so drawing the bitmaps of a priority one after
+//! the other in layer order does the same; composing them into one first would not, where a
+//! translucent tile lies on another translucent tile of its priority.
+//!
+//! A frame then draws the bitmaps of priority 0, the ground, as one quad each at z 0, and of
+//! every bitmap of a higher priority one quad for each row of cells in which it holds a
+//! tile, at the z that ranks the row among sprites.
 //!
 //! The cells the flash data marks are filled with their colour, at the alpha of the pulse,
-//! in one more bitmap of the same size, which is drawn additively right above `ground`. It is
-//! filled again when the flash data, the first cell or the pulse changes.
+//! in one more bitmap of the same size, which is drawn additively right above the ground. It
+//! is filled again when the flash data, the first cell or the pulse changes.
 //!
 //! This is a stand-in for the tilemap op of `docs/decisions.md`, which is to replace the
 //! cache without changing what the tilemap looks like from outside.
@@ -27,7 +32,7 @@ use crate::tiles::{Sheet, TILE, frames, pieces, sheet};
 use crate::{Bitmaps, Color, FontDefaults, Rect, SharedTable, Table, Tilemap};
 
 /// Number of layers of a map.
-const LAYERS: i32 = 3;
+const LAYERS: usize = 3;
 /// The highest priority a tile can have.
 const MAX_PRIORITY: usize = 5;
 /// Number of updates one animation frame of an autotile stays.
@@ -70,10 +75,12 @@ pub(crate) struct TileCache {
     key: Option<Key>,
     /// The animation frame each autotile was drawn at; `None` for one no visible tile uses.
     frames: [Option<u32>; 7],
-    /// `layers[0]` is `ground`, `layers[p]` holds the tiles of priority `p`.
-    layers: [Option<BitmapId>; MAX_PRIORITY + 1],
-    /// For each priority from 1 on, the rows of cells that hold a tile of it, ascending.
-    rows: [Vec<i32>; MAX_PRIORITY],
+    /// `layers[p][l]` holds the tiles of priority `p` of layer `l` of the map; the bitmaps of
+    /// priority 0 are the ground.
+    layers: [[Option<BitmapId>; LAYERS]; MAX_PRIORITY + 1],
+    /// For each priority from 1 on and each layer of the map, the rows of cells that hold a
+    /// tile of them, ascending.
+    rows: [[Vec<i32>; LAYERS]; MAX_PRIORITY],
     /// What `flash` was filled from; `None` without flash data.
     flash_key: Option<FlashKey>,
     /// The colours of the flashing cells, when there is one among the cached cells.
@@ -85,6 +92,8 @@ struct Tile {
     column: i32,
     row: i32,
     id: i16,
+    /// The layer of the map.
+    layer: usize,
     priority: usize,
     sheet: BitmapId,
     /// Width and height of the sheet.
@@ -94,7 +103,7 @@ struct Tile {
 
 impl TileCache {
     pub(crate) fn dispose(&mut self, bitmaps: &mut Bitmaps) {
-        for layer in self.layers.iter_mut().chain([&mut self.flash]) {
+        for layer in self.layers.iter_mut().flatten().chain([&mut self.flash]) {
             if let Some(id) = layer.take() {
                 bitmaps.dispose(id);
             }
@@ -104,7 +113,7 @@ impl TileCache {
 
     /// Whether a bitmap of the cache was disposed behind its back.
     fn lost(&self, bitmaps: &Bitmaps) -> bool {
-        let layers = self.layers.iter().flatten();
+        let layers = self.layers.iter().flatten().flatten();
         layers.into_iter().any(|&id| bitmaps.is_disposed(id))
     }
 
@@ -151,16 +160,20 @@ impl TileCache {
         self.frames = [None; 7];
         self.rows = Default::default();
         for priority in 0..=MAX_PRIORITY {
-            let wanted = tiles.iter().any(|tile| tile.priority == priority);
-            // A side is at most the screen's and two tiles more.
-            let layer = &mut self.layers[priority];
-            TileCache::prepare(layer, bitmaps, wanted, columns * TILE, rows * TILE);
+            for layer in 0..LAYERS {
+                let wanted = tiles
+                    .iter()
+                    .any(|tile| tile.priority == priority && tile.layer == layer);
+                // A side is at most the screen's and two tiles more.
+                let bitmap = &mut self.layers[priority][layer];
+                TileCache::prepare(bitmap, bitmaps, wanted, columns * TILE, rows * TILE);
+            }
         }
         for tile in tiles {
             if let Some(Sheet::Autotile(index)) = sheet(tile.id) {
                 self.frames[index] = Some(tile.frame);
             }
-            let Some(layer) = self.layers[tile.priority] else {
+            let Some(layer) = self.layers[tile.priority][tile.layer] else {
                 continue;
             };
             let (width, height) = tile.size;
@@ -170,8 +183,11 @@ impl TileCache {
                 let _ = bitmaps.blt(layer, x, y, tile.sheet, piece.src, 255);
             }
             // Tiles come row by row.
-            if tile.priority > 0 && self.rows[tile.priority - 1].last() != Some(&tile.row) {
-                self.rows[tile.priority - 1].push(tile.row);
+            if tile.priority > 0 {
+                let rows = &mut self.rows[tile.priority - 1][tile.layer];
+                if rows.last() != Some(&tile.row) {
+                    rows.push(tile.row);
+                }
             }
         }
     }
@@ -329,7 +345,7 @@ impl Tilemap {
             for column in 0..cells.0 {
                 let x = (first.0 + i64::from(column)).rem_euclid(i64::from(xsize)) as i32;
                 for layer in 0..LAYERS {
-                    let Some(id) = map_table.get(x, y, layer) else {
+                    let Some(id) = map_table.get(x, y, layer as i32) else {
                         continue;
                     };
                     let found = match sheet(id) {
@@ -349,6 +365,7 @@ impl Tilemap {
                         column,
                         row,
                         id,
+                        layer,
                         priority: priority(priorities.as_deref(), id),
                         sheet,
                         size,
@@ -380,7 +397,11 @@ impl Tilemap {
         let rows = (1..=MAX_PRIORITY)
             .filter(move |_| key.is_some())
             .flat_map(move |priority| {
-                self.cache.rows[priority - 1].iter().map(move |&row| {
+                // The rows that hold a tile of this priority in any layer of the map.
+                let mut rows: Vec<i32> = self.cache.rows[priority - 1].concat();
+                rows.sort_unstable();
+                rows.dedup();
+                rows.into_iter().map(move |row| {
                     let y = top + i64::from(row) * i64::from(TILE);
                     let z = y + (priority as i64 + 1) * i64::from(TILE);
                     (z, Strip::Row { priority, row })
@@ -393,16 +414,19 @@ impl Tilemap {
 /// One piece of a tilemap that takes a place of its own in the draw order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Strip {
-    /// Every tile of priority 0.
+    /// Every tile of priority 0, layer by layer of the map.
     Ground,
     /// The colours of the flashing cells.
     Flash,
-    /// The tiles of one priority from 1 on in one row of cells of the cache.
+    /// The tiles of one priority from 1 on in one row of cells of the cache, layer by layer of
+    /// the map.
     Row { priority: usize, row: i32 },
 }
 
 impl Assembly<'_> {
-    /// One piece of a tilemap, from its cached bitmaps.
+    /// One piece of a tilemap, from its cached bitmaps: one quad for each layer of the map
+    /// that holds a tile of the piece, in the order of the layers, so that every tile is
+    /// blended onto the frame by itself.
     pub(crate) fn tiles(&mut self, tilemap: &Tilemap, strip: Strip, level: &Level) {
         let Some(key) = tilemap.cache.key.as_ref().filter(|_| tilemap.visible) else {
             return;
@@ -414,7 +438,7 @@ impl Assembly<'_> {
         let y = level.dy + key.first.1 * tile - i64::from(tilemap.oy);
         match strip {
             Strip::Ground => {
-                if let Some(bitmap) = tilemap.cache.layers[0] {
+                for bitmap in tilemap.cache.layers[0].into_iter().flatten() {
                     self.whole(bitmap, x, y, level.clip, 255);
                 }
             }
@@ -429,10 +453,13 @@ impl Assembly<'_> {
                 }
             }
             Strip::Row { priority, row } => {
-                if let Some(bitmap) = tilemap.cache.layers[priority] {
-                    let src = Rect::new(0, row * TILE, key.cells.0 * TILE, TILE);
-                    let geometry = Geometry::at(x, y + i64::from(row) * tile);
-                    self.quad(bitmap, src, &geometry, level.clip, Look::plain(255));
+                let src = Rect::new(0, row * TILE, key.cells.0 * TILE, TILE);
+                let geometry = Geometry::at(x, y + i64::from(row) * tile);
+                let layers = tilemap.cache.layers[priority].iter();
+                for (bitmap, rows) in layers.zip(&tilemap.cache.rows[priority - 1]) {
+                    if let Some(bitmap) = bitmap.filter(|_| rows.binary_search(&row).is_ok()) {
+                        self.quad(bitmap, src, &geometry, level.clip, Look::plain(255));
+                    }
                 }
             }
         }
@@ -1209,6 +1236,63 @@ mod tests {
         assert_eq!(stage.frame().pixel(5, 6), GREEN);
     }
 
+    /// Measured on the original runtime (tilemap blend probe): an opaque tile of priority 0
+    /// on the lowest layer and the same translucent tile of priority 2 on both layers above.
+    /// Each of the two is blended onto the frame by itself; composed with each other first
+    /// they would give (111, 106, 120).
+    #[test]
+    fn stacked_translucent_tiles_of_one_priority_are_blended_one_by_one() {
+        let mut stage = Stage::sized(64, 64);
+        let mut rgba = [6, 14, 2, 255].repeat(32 * 32);
+        rgba.extend([138, 130, 150, 142].repeat(32 * 32));
+        let tileset = stage.bitmap(32, 64, rgba);
+        let map = map(3, 3);
+        map.set(0, 0, 0, 384);
+        map.set(0, 0, 1, 392);
+        map.set(0, 0, 2, 392);
+        // One translucent tile alone, and one opaque tile alone.
+        map.set(1, 0, 2, 392);
+        map.set(1, 1, 0, 384);
+        let priorities = SharedTable::new(Table::new(500).unwrap());
+        priorities.set(392, 0, 0, 2);
+        let id = stage.scene.create_tilemap(None).unwrap();
+        let tilemap = stage.scene.tilemap_mut(id).unwrap();
+        tilemap.tileset = Some(tileset);
+        tilemap.map_data = Some(map.clone());
+        tilemap.priorities = Some(priorities);
+
+        let packet = stage.scene.extract(&mut stage.bitmaps);
+        // The ground of the lowest layer, and a row of priority 2 of each layer above: the
+        // lowest layer holds no tile of that priority and draws nothing for it.
+        assert_eq!(packet.ops.len(), 3);
+        let frame = stage.render(&packet).unwrap();
+        assert_eq!(frame.pixel(5, 6), [111, 107, 120, 255]);
+        let once = vkxp_pixel::blend_normal(BLACK, [138, 130, 150, 142], 255);
+        assert_eq!(frame.pixel(40, 6), once);
+        assert_eq!(frame.pixel(40, 40), [6, 14, 2, 255]);
+    }
+
+    /// The layers of the ground are blended one by one as well.
+    #[test]
+    fn stacked_translucent_tiles_of_the_ground_are_blended_one_by_one() {
+        let mut stage = Stage::sized(64, 64);
+        let mut rgba = [6, 14, 2, 255].repeat(32 * 32);
+        rgba.extend([138, 130, 150, 142].repeat(32 * 32));
+        let tileset = stage.bitmap(32, 64, rgba);
+        let map = map(3, 3);
+        map.set(0, 0, 0, 384);
+        map.set(0, 0, 1, 392);
+        map.set(0, 0, 2, 392);
+        let id = stage.scene.create_tilemap(None).unwrap();
+        let tilemap = stage.scene.tilemap_mut(id).unwrap();
+        tilemap.tileset = Some(tileset);
+        tilemap.map_data = Some(map.clone());
+        let packet = stage.scene.extract(&mut stage.bitmaps);
+        assert_eq!(packet.ops.len(), 3);
+        let frame = stage.render(&packet).unwrap();
+        assert_eq!(frame.pixel(5, 6), [111, 107, 120, 255]);
+    }
+
     #[test]
     fn cached_bitmaps_are_disposed_with_the_tilemap_or_when_it_is_invisible() {
         let mut stage = Stage::sized(160, 160);
@@ -1226,11 +1310,16 @@ mod tests {
         stage.frame();
         assert_eq!(stage.bitmaps.len(), before + 3, "ground and two priorities");
 
-        // Composing anew does not let bitmaps pile up, and a priority no visible tile has
-        // any more gives its bitmap back.
+        // Composing anew does not let bitmaps pile up; a tile on another layer of the map
+        // gets a bitmap of its own, and a priority no visible tile has any more gives its
+        // bitmap back.
         stage.scene.tilemap_mut(id).unwrap().ox = 32;
         stage.frame();
+        assert_eq!(stage.bitmaps.len(), before + 3);
         map.set(4, 4, 1, 387);
+        stage.frame();
+        assert_eq!(stage.bitmaps.len(), before + 4, "the ground of two layers");
+        map.set(4, 4, 1, 0);
         stage.frame();
         assert_eq!(stage.bitmaps.len(), before + 3);
         priorities.set(386, 0, 0, 1);

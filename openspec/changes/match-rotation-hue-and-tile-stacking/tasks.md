@@ -10,7 +10,7 @@
 
 ## 3. Tiles (`vkxp-core`)
 
-- [ ] 3.1 Keep tilemap layers apart per priority. Verify: the two scenarios of the tile requirement; the existing tilemap tests still pass.
+- [x] 3.1 Keep tilemap layers apart per priority. Verify: the two scenarios of the tile requirement; the existing tilemap tests still pass.
 
 ## 4. Integration check
 

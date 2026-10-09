@@ -52,9 +52,10 @@
 //!   pre-tiled bitmap of the scene's own when its bitmap is small against the area and the
 //!   zoom lets copies in a row stretch as one. A tilemap is drawn from
 //!   bitmaps of the scene's own as well: its visible tiles are composed on the CPU into one
-//!   bitmap for the tiles of priority 0 and one for each higher priority, shown as one quad at
-//!   z 0 and one quad per row of priority tiles at the z that ranks the row among sprites, and
-//!   composed again when a scroll crosses a tile boundary or a table, a sheet or a visible
+//!   bitmap for each priority and layer of the map, so that every tile meets the frame by
+//!   itself; those of priority 0 are shown as one quad each at z 0 and the others as one quad
+//!   per row of tiles at the z that ranks the row among sprites, in the order of the layers,
+//!   and composed again when a scroll crosses a tile boundary or a table, a sheet or a visible
 //!   autotile's animation frame changes. This stands in for the tilemap op of
 //!   `docs/decisions.md`. The scene also holds `Graphics` bookkeeping: frame count, frame
 //!   rate and the logical size (640 by 480 unless given, at most [`MAX_LOGICAL_DIMENSION`] a
