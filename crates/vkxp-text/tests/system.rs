@@ -44,31 +44,4 @@ fn system_fonts_measure_and_rasterize() {
             }
         }
     }
-
-    // Where the selected family has a bold face, bold text is wider.
-    for family in ["Arial", "黑体"] {
-        let regular = TextRequest::new([family], 22);
-        let bold = TextRequest {
-            bold: true,
-            ..regular.clone()
-        };
-        let (Some(regular_face), Some(bold_face)) =
-            (engine.resolve(&regular), engine.resolve(&bold))
-        else {
-            continue;
-        };
-        if regular_face.family == bold_face.family
-            && regular_face.weight < 600
-            && bold_face.weight >= 600
-        {
-            let text = "Hello, World! 0123";
-            assert!(engine.measure(&bold, text).0 > engine.measure(&regular, text).0);
-        }
-    }
-
-    if has_fonts {
-        let mask = engine.rasterize(&TextRequest::new(["Arial"], 22), "Hello");
-        assert!(mask.width > 0);
-        assert!(mask.coverage.iter().any(|&value| value != 0));
-    }
 }

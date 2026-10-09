@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-use swash::FontRef;
+use swash::{FontRef, StringId};
 
 use crate::sources::{FontSources, SystemFonts};
 use crate::substitution::family_key;
@@ -21,7 +21,9 @@ pub(crate) struct FaceRecord {
     pub(crate) path: PathBuf,
     /// The face's index in the file, for collections.
     pub(crate) index: u32,
-    /// Every family name the face declares, its English one first.
+    /// Every family name the face declares, in every language: its preferred English one
+    /// first, then the typographic (name ID 16) and legacy (name ID 1) names of its `name`
+    /// table.
     pub(crate) families: Vec<String>,
     pub(crate) weight: u16,
     pub(crate) italic: bool,
@@ -82,11 +84,24 @@ impl FontIndex {
                 let fontdb::Source::File(path) = &face.source else {
                     return None;
                 };
+                // fontdb keeps the typographic family names and drops the legacy ones when
+                // both exist, so the `name` table is read again for the rest.
+                let mut families: Vec<String> =
+                    face.families.iter().map(|(name, _)| name.clone()).collect();
+                let declared = db
+                    .with_face_data(face.id, declared_families)
+                    .unwrap_or_default();
+                for name in declared {
+                    let key = family_key(&name);
+                    if !key.is_empty() && !families.iter().any(|known| family_key(known) == key) {
+                        families.push(name);
+                    }
+                }
                 Some(FaceRecord {
                     id: face.id,
                     path: path.clone(),
                     index: face.index,
-                    families: face.families.iter().map(|(name, _)| name.clone()).collect(),
+                    families,
                     weight: face.weight.0,
                     italic: face.style != fontdb::Style::Normal,
                     normal_width: face.stretch == fontdb::Stretch::Normal,
@@ -146,24 +161,43 @@ impl FontIndex {
         names
     }
 
-    /// The face of the family `key` that suits the style best: a face with the requested
-    /// slant and weight class when there is one, otherwise the closest, the regular face
-    /// before any other.
+    /// The face of the family `key` for the style: a face of exactly the requested weight
+    /// class and slant when the family has one, otherwise its regular face. A family without
+    /// a regular face gives the face that differs least, in slant before weight class.
     pub(crate) fn pick(&self, key: &str, bold: bool, italic: bool) -> Option<usize> {
+        let faces = self.by_family.get(key)?;
         let target = if bold { BOLD_WEIGHT } else { REGULAR_WEIGHT };
-        self.by_family
-            .get(key)?
-            .iter()
-            .copied()
-            .min_by_key(|&position| {
-                let record = &self.records[position];
-                (
-                    record.italic != italic,
-                    record.is_bold() != bold,
-                    !record.normal_width,
-                    record.weight.abs_diff(target),
-                    position,
-                )
+        // Among faces of one style: normal width first, then the nearest weight.
+        let closest = |bold: bool, italic: bool, target: u16| {
+            faces
+                .iter()
+                .copied()
+                .filter(|&position| {
+                    let record = &self.records[position];
+                    record.is_bold() == bold && record.italic == italic
+                })
+                .min_by_key(|&position| {
+                    let record = &self.records[position];
+                    (
+                        !record.normal_width,
+                        record.weight.abs_diff(target),
+                        position,
+                    )
+                })
+        };
+        closest(bold, italic, target)
+            .or_else(|| closest(false, false, REGULAR_WEIGHT))
+            .or_else(|| {
+                faces.iter().copied().min_by_key(|&position| {
+                    let record = &self.records[position];
+                    (
+                        record.italic != italic,
+                        record.is_bold() != bold,
+                        !record.normal_width,
+                        record.weight.abs_diff(target),
+                        position,
+                    )
+                })
             })
     }
 
@@ -185,6 +219,19 @@ impl FontIndex {
     pub(crate) fn scan_order(&self) -> &[usize] {
         &self.scan_order
     }
+}
+
+/// The typographic and legacy family names in the `name` table of face `index` of `data`, in
+/// every language.
+fn declared_families(data: &[u8], index: u32) -> Vec<String> {
+    let Some(font) = FontRef::from_index(data, index as usize) else {
+        return Vec::new();
+    };
+    font.localized_strings()
+        .filter(|name| matches!(name.id(), StringId::Family | StringId::TypographicFamily))
+        .filter(|name| name.is_decodable())
+        .map(|name| name.chars().collect())
+        .collect()
 }
 
 #[cfg(test)]
@@ -231,17 +278,38 @@ mod tests {
 
     #[test]
     fn the_regular_face_is_selected_when_a_style_is_absent() {
+        // Regular and bold italic: neither italic nor bold alone exists.
+        let index = family(&[(700, true), (400, false)]);
+        assert_eq!(picked(&index, false, true), (400, false));
+        assert_eq!(picked(&index, true, false), (400, false));
+        assert_eq!(picked(&index, true, true), (700, true));
+
+        // Regular and italic: no bold face of either slant.
         let index = family(&[(400, true), (400, false)]);
         assert_eq!(picked(&index, true, false), (400, false));
-        assert_eq!(picked(&index, true, true), (400, true));
+        assert_eq!(picked(&index, true, true), (400, false));
+        assert_eq!(picked(&index, false, true), (400, true));
 
+        // Regular and bold: no italic face of either weight.
         let index = family(&[(700, false), (400, false)]);
         assert_eq!(picked(&index, false, true), (400, false));
-        assert_eq!(picked(&index, true, true), (700, false));
+        assert_eq!(picked(&index, true, true), (400, false));
+        assert_eq!(picked(&index, true, false), (700, false));
 
         let index = family(&[(400, false)]);
         for (bold, italic) in [(true, false), (false, true), (true, true)] {
             assert_eq!(picked(&index, bold, italic), (400, false));
+        }
+    }
+
+    #[test]
+    fn a_family_without_a_regular_face_gives_the_nearest_style() {
+        let index = family(&[(700, true), (700, false), (400, true)]);
+        assert_eq!(picked(&index, false, false), (700, false));
+
+        let index = family(&[(700, true)]);
+        for (bold, italic) in [(false, false), (true, false), (false, true)] {
+            assert_eq!(picked(&index, bold, italic), (700, true));
         }
     }
 

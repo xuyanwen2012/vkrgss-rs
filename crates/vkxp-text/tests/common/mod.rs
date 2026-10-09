@@ -111,3 +111,147 @@ pub fn max_coverage(mask: &TextMask, columns: std::ops::Range<u32>) -> u8 {
     }
     max
 }
+
+/// Windows language IDs for names added by [`derive_font`].
+pub const ENGLISH_US: u16 = 0x0409;
+pub const CHINESE_PRC: u16 = 0x0804;
+
+/// Name IDs of the legacy and the typographic family name.
+pub const NAME_FAMILY: u16 = 1;
+pub const NAME_TYPOGRAPHIC_FAMILY: u16 = 16;
+
+/// How a font derived from a committed test font differs from it.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Derivation<'a> {
+    /// Records added to the `name` table: name ID, Windows language ID, text.
+    pub names: &'a [(u16, u16, &'a str)],
+    /// The OS/2 weight class; 600 and above also sets the bold flags.
+    pub weight: Option<u16>,
+    /// Sets the italic flags.
+    pub italic: bool,
+    /// Font units added to every glyph's advance width.
+    pub wider_by: u16,
+}
+
+fn u16_at(bytes: &[u8], at: usize) -> u16 {
+    u16::from_be_bytes([bytes[at], bytes[at + 1]])
+}
+
+fn u32_at(bytes: &[u8], at: usize) -> u32 {
+    u32::from_be_bytes([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]])
+}
+
+fn put_u16(bytes: &mut [u8], at: usize, value: u16) {
+    bytes[at..at + 2].copy_from_slice(&value.to_be_bytes());
+}
+
+/// Writes a variant of the test font `file` to `target` and returns its path. The variant is
+/// made in memory from the committed file, so no further font needs to be committed.
+pub fn derive_font(file: &str, target: &Path, change: Derivation<'_>) -> PathBuf {
+    let source = std::fs::read(fonts_dir().join(file)).expect("read test font");
+    let table_count = usize::from(u16_at(&source, 4));
+    let mut tables: Vec<([u8; 4], Vec<u8>)> = (0..table_count)
+        .map(|position| {
+            let record = 12 + 16 * position;
+            let tag = source[record..record + 4].try_into().unwrap();
+            let offset = u32_at(&source, record + 8) as usize;
+            let length = u32_at(&source, record + 12) as usize;
+            (tag, source[offset..offset + length].to_vec())
+        })
+        .collect();
+    let metric_count = {
+        let hhea = &tables.iter().find(|(tag, _)| tag == b"hhea").unwrap().1;
+        usize::from(u16_at(hhea, 34))
+    };
+    let bold = change.weight.is_some_and(|weight| weight >= 600);
+
+    for (tag, data) in &mut tables {
+        match &*tag {
+            b"name" if !change.names.is_empty() => *data = with_names(data, change.names),
+            b"OS/2" => {
+                if let Some(weight) = change.weight {
+                    put_u16(data, 4, weight);
+                }
+                // fsSelection: bit 0 italic, bit 5 bold, bit 6 regular.
+                let mut selection = u16_at(data, 62);
+                selection |= u16::from(change.italic) | u16::from(bold) << 5;
+                if change.italic || bold {
+                    selection &= !(1 << 6);
+                }
+                put_u16(data, 62, selection);
+            }
+            b"head" => {
+                // macStyle: bit 0 bold, bit 1 italic.
+                let style = u16_at(data, 44) | u16::from(bold) | u16::from(change.italic) << 1;
+                put_u16(data, 44, style);
+            }
+            b"hmtx" => {
+                for metric in 0..metric_count {
+                    let advance = u16_at(data, 4 * metric) + change.wider_by;
+                    put_u16(data, 4 * metric, advance);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // Header and table directory, then the tables, each padded to four bytes.
+    let mut font = source[..12 + 16 * table_count].to_vec();
+    for (position, (_, data)) in tables.iter().enumerate() {
+        let offset = font.len() as u32;
+        font.extend_from_slice(data);
+        font.resize(font.len().next_multiple_of(4), 0);
+        let (words, _) = font[offset as usize..].as_chunks::<4>();
+        let checksum = words.iter().fold(0u32, |sum, word| {
+            sum.wrapping_add(u32::from_be_bytes(*word))
+        });
+        let record = 12 + 16 * position;
+        font[record + 4..record + 8].copy_from_slice(&checksum.to_be_bytes());
+        font[record + 8..record + 12].copy_from_slice(&offset.to_be_bytes());
+        font[record + 12..record + 16].copy_from_slice(&(data.len() as u32).to_be_bytes());
+    }
+    std::fs::write(target, font).expect("write derived font");
+    target
+        .canonicalize()
+        .expect("canonical path of the derived font")
+}
+
+/// The `name` table `table` with Windows Unicode records added.
+fn with_names(table: &[u8], added: &[(u16, u16, &str)]) -> Vec<u8> {
+    let count = usize::from(u16_at(table, 2));
+    let strings = usize::from(u16_at(table, 4));
+    // Platform, encoding, language and name ID, then the string's bytes.
+    let mut records: Vec<([u16; 4], Vec<u8>)> = (0..count)
+        .map(|position| {
+            let record = 6 + 12 * position;
+            let field = |number: usize| u16_at(table, record + 2 * number);
+            let start = strings + usize::from(field(5));
+            let text = table[start..start + usize::from(field(4))].to_vec();
+            ([field(0), field(1), field(2), field(3)], text)
+        })
+        .collect();
+    for &(name_id, language, text) in added {
+        let text = text.encode_utf16().flat_map(u16::to_be_bytes).collect();
+        records.push(([3, 1, language, name_id], text));
+    }
+    records.sort();
+
+    let mut result = vec![0; 6 + 12 * records.len()];
+    put_u16(&mut result, 2, records.len() as u16);
+    let strings = result.len() as u16;
+    put_u16(&mut result, 4, strings);
+    let mut offset = 0;
+    for (position, (key, text)) in records.iter().enumerate() {
+        let record = 6 + 12 * position;
+        for (number, value) in key.iter().enumerate() {
+            put_u16(&mut result, record + 2 * number, *value);
+        }
+        put_u16(&mut result, record + 8, text.len() as u16);
+        put_u16(&mut result, record + 10, offset);
+        offset += text.len() as u16;
+    }
+    for (_, text) in &records {
+        result.extend_from_slice(text);
+    }
+    result
+}

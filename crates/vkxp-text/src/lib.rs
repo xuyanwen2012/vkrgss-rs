@@ -31,8 +31,9 @@
 //! # Lookup order
 //!
 //! A request names families in order of preference. Names are compared without regard to
-//! letter case, against every family name a font declares, localised ones such as `黑体`
-//! included. For each requested name in turn:
+//! letter case, against every family name a font declares in its `name` table: typographic
+//! (name ID 16) and legacy (name ID 1) names, in every language, so localised names such as
+//! `黑体` match. For each requested name in turn:
 //!
 //! 1. the family of that name;
 //! 2. each replacement the substitution table lists for the name, the caller's entries before
@@ -42,9 +43,9 @@
 //! ([`DEFAULT_FALLBACK_FAMILIES`] unless the caller names others), and failing that any font.
 //! [`TextEngine::is_available`] answers steps 1 and 2 only.
 //!
-//! Within the family, a bold or italic request selects the face of that weight class and
-//! slant when the family has one and the regular face otherwise; nothing is synthesised. A
-//! font with a weight axis is set to weight 400, or 700 for a bold request.
+//! Within the family, a bold, italic or bold-italic request selects the face of exactly that
+//! weight class and slant when the family has one and the regular face otherwise; nothing is
+//! synthesised. A font with a weight axis is set to weight 400, or 700 for a bold request.
 //!
 //! A character the selected face lacks is drawn from the first fallback family that has it,
 //! then from any font that has it, at the selected face's pixels per em and on its baseline.

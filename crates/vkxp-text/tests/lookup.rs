@@ -3,7 +3,8 @@
 mod common;
 
 use common::{
-    LIBERATION, LIBERATION_FILE, SYMBOLS, SYMBOLS_FILE, copy_font, engine, request,
+    CHINESE_PRC, Derivation, ENGLISH_US, LIBERATION, LIBERATION_FILE, NAME_FAMILY,
+    NAME_TYPOGRAPHIC_FAMILY, SYMBOLS, SYMBOLS_FILE, copy_font, derive_font, engine, request,
     resolved_family, test_sources,
 };
 use vkxp_text::{FontSources, SystemFonts, TextEngine, TextRequest, default_substitutions};
@@ -155,6 +156,118 @@ fn nothing_matches() {
         ..test_sources()
     });
     draws(&mut engine);
+}
+
+// Family names a font declares: typographic, legacy and localised
+
+const TYPOGRAPHIC: &str = "Typographic Family";
+const ALIAS: &str = "本地别名 Alias";
+
+/// Liberation Sans with an English typographic family name (name ID 16) and a legacy family
+/// name (name ID 1) in another language added. Its original legacy name stays.
+fn aliased_font(directory: &std::path::Path) -> std::path::PathBuf {
+    let change = Derivation {
+        names: &[
+            (NAME_TYPOGRAPHIC_FAMILY, ENGLISH_US, TYPOGRAPHIC),
+            (NAME_FAMILY, CHINESE_PRC, ALIAS),
+        ],
+        ..Derivation::default()
+    };
+    derive_font(LIBERATION_FILE, &directory.join("aliased.ttf"), change)
+}
+
+#[test]
+fn every_declared_family_name_is_available() {
+    let directory = tempfile::tempdir().unwrap();
+    aliased_font(directory.path());
+    let engine = TextEngine::new(&FontSources::directories_only([directory.path()]));
+
+    assert_eq!(engine.families(), [TYPOGRAPHIC]);
+    for name in [
+        TYPOGRAPHIC,
+        ALIAS,
+        LIBERATION,
+        "本地别名 ALIAS",
+        "typographic family",
+    ] {
+        assert!(engine.is_available(name), "{name}");
+    }
+    assert!(!engine.is_available("本地别名"));
+    assert!(!engine.is_available(SYMBOLS));
+}
+
+#[test]
+fn every_declared_family_name_resolves() {
+    let directory = tempfile::tempdir().unwrap();
+    let aliased = aliased_font(directory.path());
+    let symbols = copy_font(directory.path(), SYMBOLS_FILE);
+    // With Noto Sans Symbols 2 as the only fallback, a name that is not matched shows.
+    let mut engine = TextEngine::new(&FontSources {
+        fallback_families: Some(vec![SYMBOLS.to_owned()]),
+        ..FontSources::directories_only([directory.path()])
+    });
+    let mut path_of = |families: &[&str]| {
+        let face = engine.resolve(&TextRequest::new(families.iter().copied(), 22));
+        face.unwrap().path.canonicalize().unwrap()
+    };
+
+    for name in [TYPOGRAPHIC, ALIAS, LIBERATION, "本地别名 alias"] {
+        assert_eq!(path_of(&[name]), aliased, "{name}");
+        assert_eq!(path_of(&["NoSuchFont", name]), aliased, "{name}");
+    }
+    // Arial is substituted by Liberation Sans, here only a legacy name of the font.
+    assert_eq!(path_of(&["Arial"]), aliased);
+    assert_eq!(path_of(&["NoSuchFont"]), symbols);
+
+    let request = request(ALIAS, 22);
+    let mask = engine.rasterize(&request, "Text");
+    assert_eq!((mask.width, mask.height), engine.measure(&request, "Text"));
+    assert!(mask.coverage.iter().any(|&value| value != 0));
+    assert_eq!(
+        mask,
+        common::engine().rasterize(&common::request(LIBERATION, 22), "Text")
+    );
+}
+
+#[test]
+fn caller_directory_wins_under_every_declared_family_name() {
+    let system = tempfile::tempdir().unwrap();
+    let caller = tempfile::tempdir().unwrap();
+    let system_file = aliased_font(system.path());
+    let system_symbols = copy_font(system.path(), SYMBOLS_FILE);
+    let caller_file = aliased_font(caller.path());
+    let system_only = FontSources {
+        system: SystemFonts::Directories(vec![system.path().to_owned()]),
+        ..FontSources::default()
+    };
+    let both = FontSources {
+        directories: vec![caller.path().to_owned()],
+        ..system_only.clone()
+    };
+    let path_of = |sources: &FontSources, family: &str| {
+        let face = TextEngine::new(sources).resolve(&request(family, 22));
+        face.unwrap().path.canonicalize().unwrap()
+    };
+
+    for name in [TYPOGRAPHIC, ALIAS, LIBERATION] {
+        assert_eq!(path_of(&system_only, name), system_file, "{name}");
+        assert_eq!(path_of(&both, name), caller_file, "{name}");
+        assert!(TextEngine::new(&both).is_available(name), "{name}");
+    }
+    assert_eq!(path_of(&both, SYMBOLS), system_symbols);
+    assert_eq!(TextEngine::new(&both).families(), [SYMBOLS, TYPOGRAPHIC]);
+
+    // The caller's plain Liberation Sans hides the system font under the one name they
+    // share; the system font keeps the names only it declares.
+    let plain = tempfile::tempdir().unwrap();
+    let plain_file = copy_font(plain.path(), LIBERATION_FILE);
+    let mixed = FontSources {
+        directories: vec![plain.path().to_owned()],
+        ..system_only.clone()
+    };
+    assert_eq!(path_of(&mixed, LIBERATION), plain_file);
+    assert_eq!(path_of(&mixed, ALIAS), system_file);
+    assert_eq!(path_of(&mixed, TYPOGRAPHIC), system_file);
 }
 
 // Requirement: Default substitutions
