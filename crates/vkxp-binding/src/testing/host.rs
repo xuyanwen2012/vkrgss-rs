@@ -3,7 +3,8 @@
 //! [`scripted_host`] starts a thread that holds the host end of a new link. It answers every
 //! frame with a tick and every modal message with its dismissal, records what it receives,
 //! and sends what its [`Script`] tells it to. [`play`] evaluates a Ruby snippet on the
-//! harness's guest against such a host.
+//! harness's guest against such a host, and [`run_game`] plays a [`Game`], a game directory
+//! made for one test, on it.
 //!
 //! The first use of [`play`] adds these files to the generated game directory and evaluates
 //! the prelude of the binding, with the default [`RunConfig`] unless [`configure`] came
@@ -16,15 +17,19 @@
 //! | `game/Graphics/Transitions/004-Blind04.png` | 2 by 2 pixels, [`DOT_PIXELS`](super::DOT_PIXELS) |
 //! | `rtp/Audio/SE/001-System01.ogg` | [`SOUND_BYTES`], which is not sound |
 
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::sync::{Mutex, Once, PoisonError};
 use std::thread::{self, JoinHandle};
 
+use vkxp_core::Scene;
 use vkxp_proto::link::{GuestEnd, link};
 use vkxp_proto::{FramePacket, GuestToHost, HostToGuest};
 use vkxp_ruby_sys::{Ruby, RubyError};
+use vkxp_vfs::{GameFiles, GameIni};
 
-use crate::{Guest, RunConfig, runtime};
+use crate::{Guest, RunConfig, RunError, runtime};
 
 /// What a scripted host sends besides its answers.
 #[derive(Debug, Clone, Default)]
@@ -250,6 +255,128 @@ pub fn play(source: &str, script: Script) -> (Result<String, RubyError>, Record)
         outcome
     });
     (outcome, host.finish())
+}
+
+/// A stand-in for the built-in scripts of the original runtime, written for these tests: a
+/// minimal `RPG` module.
+pub const RPG_STAND_IN: &str = "\
+module RPG
+  module Cache
+  end
+
+  class Sprite
+  end
+
+  class Weather
+  end
+end
+";
+
+/// A game directory made for one test, with a `Game.ini`, a script archive and, next to it,
+/// a built-in scripts file holding [`RPG_STAND_IN`].
+#[derive(Debug, Clone)]
+pub struct Game {
+    dir: PathBuf,
+}
+
+impl Game {
+    /// Creates the game `name` afresh below the harness's directory. Its window title is
+    /// `title` and its archive, `Data/Scripts.rxdata`, holds `scripts` as pairs of name and
+    /// source, assembled with `Marshal` and `Zlib` of the interpreter.
+    pub fn new(name: &str, title: &str, scripts: &[(&str, &str)]) -> Game {
+        let dir = super::game_dir().with_file_name("games").join(name);
+        if dir.exists() {
+            fs::remove_dir_all(&dir).unwrap_or_else(|error| panic!("{}: {error}", dir.display()));
+        }
+        let game = Game { dir };
+        let ini = format!(
+            "[Game]\r\nLibrary=RGSS104E.dll\r\nScripts=Data\\Scripts.rxdata\r\nTitle={title}\r\n"
+        );
+        super::write(&game.dir.join("Game.ini"), ini.as_bytes());
+        super::write(&game.builtin_scripts(), RPG_STAND_IN.as_bytes());
+        let archive = game.dir.join("Data").join("Scripts.rxdata");
+        super::write(&archive, b"");
+        let entries: Vec<String> = scripts
+            .iter()
+            .enumerate()
+            .map(|(id, (name, source))| {
+                format!(
+                    "[{id}, {}, Zlib::Deflate.deflate({})]",
+                    ruby_literal(name),
+                    ruby_literal(source)
+                )
+            })
+            .collect();
+        let assemble = format!(
+            "File.open({}, 'wb') {{ |file| Marshal.dump([{}], file) }}",
+            ruby_literal(&archive.to_string_lossy()),
+            entries.join(", ")
+        );
+        super::run(move |ruby| ruby.eval_protected(&assemble, "testing", 1).map(|_| ()))
+            .expect("the script archive is written");
+        game
+    }
+
+    /// The game directory.
+    pub fn dir(&self) -> &Path {
+        &self.dir
+    }
+
+    /// The built-in scripts file of this game, outside its directory.
+    pub fn builtin_scripts(&self) -> PathBuf {
+        self.dir.with_extension("rpg.rb")
+    }
+
+    /// What running this game needs, as a caller of `run_game` puts it together: the
+    /// configuration file read from the directory, the built-in scripts file, and every
+    /// switch off.
+    pub fn run_config(&self) -> RunConfig {
+        RunConfig {
+            ini: GameIni::read(&self.dir, None).expect("the game has a Game.ini"),
+            builtin_scripts: self.builtin_scripts(),
+            ..RunConfig::default()
+        }
+    }
+}
+
+/// How a game went.
+#[derive(Debug)]
+pub struct Played {
+    /// What running it returned.
+    pub outcome: Result<(), RunError>,
+    /// What the host saw.
+    pub record: Record,
+    /// `inspect` of the snippet evaluated after the run.
+    pub after: Result<String, RubyError>,
+}
+
+/// Plays `game` with the settings `run` against a scripted host, then evaluates the snippet
+/// `after`, which is how a test reads what the scripts left in global variables.
+///
+/// The process has one interpreter and the harness's guest is installed on it, so this is
+/// `run_game` from its second step on, on that guest: what an earlier game left is disposed,
+/// and the guest gets the files of `game` (without run-time packages), an empty scene and
+/// `run`. Classes, constants and global variables of earlier games stay.
+pub fn run_game(game: &Game, run: RunConfig, script: Script, after: &str) -> Played {
+    let (link, host) = scripted_host(script);
+    let files = GameFiles::new(game.dir(), []);
+    let after = after.to_owned();
+    let (outcome, after) = super::run(move |ruby| {
+        ruby.eval_protected("Graphics._reset", "testing", 1)
+            .expect("what the previous game left is disposed");
+        Guest::with(|guest| {
+            guest.files = files;
+            guest.scene = Scene::new();
+            guest.runtime.run = run;
+        });
+        let outcome = runtime::play(ruby, link);
+        (outcome, inspect(ruby, &after))
+    });
+    Played {
+        outcome,
+        record: host.finish(),
+        after,
+    }
 }
 
 #[cfg(test)]

@@ -1,9 +1,11 @@
-//! The guest's side of the link, and the preparation of the interpreter for a game.
+//! Running a game: the guest's side of the link, the preparation of the interpreter, and
+//! the evaluation of the game's scripts from start to shutdown.
 //!
 //! The guest holds the [`GuestEnd`] of the link. Everything it tells the host goes through
 //! [`Guest::send`], and everything the host tells it is consumed in one place,
-//! [`Guest::pump`].
+//! [`Guest::pump`]. [`run_game`] is the one call that plays a game.
 
+use std::io;
 use std::path::PathBuf;
 
 use vkxp_core::InputState;
@@ -13,7 +15,7 @@ use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{Raise, Raised, Ruby, RubyError};
 use vkxp_vfs::GameIni;
 
-use crate::guest::Guest;
+use crate::guest::{Config, Guest};
 use crate::{audio, graphics, input, kernel, rb};
 
 /// The Ruby part of the preparation: globals, `Reset` and `Hangup`, `save_data`, `Win32API`,
@@ -229,4 +231,275 @@ pub(crate) fn prepare(ruby: &Ruby) -> Result<(), RubyError> {
     let flags = format!("$DEBUG = {debug}\n$BTEST = {battle_test}\n");
     ruby.eval_protected(&flags, PRELUDE_NAME, 1)?;
     Ok(())
+}
+
+/// The file name the built-in scripts are reported under.
+const BUILTIN_NAME: &str = "(builtin)";
+
+/// Why a game did not run to its end.
+#[derive(Debug, thiserror::Error)]
+pub enum RunError {
+    /// The classes or the prelude of the binding could not be defined.
+    #[error("the interpreter could not be prepared: {0}")]
+    Prepare(RubyError),
+    /// The file of the built-in `RPG` scripts could not be read.
+    #[error(
+        "cannot read the built-in scripts file {}: {source}; it holds the RPG scripts of the \
+         original runtime, which vkxp's script extraction tool takes out of the RGSS DLL",
+        path.display()
+    )]
+    BuiltinScripts {
+        /// The file the caller named.
+        path: PathBuf,
+        source: io::Error,
+    },
+    /// The script archive could not be found, read or taken apart.
+    #[error("cannot load the script archive {path}: {reason}")]
+    Archive {
+        /// The path as the game's configuration file gives it.
+        path: String,
+        /// The exception that reading it raised.
+        reason: String,
+    },
+    /// A script raised an exception that no script rescued. This is the report, which was
+    /// also written to the error stream and shown by the host.
+    #[error("{0}")]
+    Script(String),
+}
+
+/// How an evaluation that did not return ended.
+enum Ended {
+    /// `SystemExit`: the game is over.
+    Exit,
+    /// `Reset`: the scripts start over.
+    Reset,
+    /// Anything else, as its report.
+    Failed(String),
+}
+
+/// Evaluates a Ruby string at the top level under the file name `name`, as the original
+/// runtime evaluates a script.
+fn evaluate(ruby: &Ruby, source: VALUE, name: &str) -> Result<(), Raised> {
+    let name = ruby.str_new(name.as_bytes())?;
+    // SAFETY: `&Ruby` proves the thread, on which the main object exists for the life of the
+    // interpreter. `source` is live by the caller's word and `name` was just returned; both
+    // are in locals.
+    unsafe {
+        let arguments = [source, ffi::Qnil, name, ffi::long2fix(1)];
+        ruby.funcall(ffi::ruby_top_self, c"eval", &arguments)?;
+    }
+    Ok(())
+}
+
+/// The file and line at the start of a backtrace entry such as ``Section001:3:in `update'``.
+fn position(entry: &str) -> Option<(&str, u32)> {
+    let (file, rest) = entry.split_once(':')?;
+    let digits = rest.split(|c: char| !c.is_ascii_digit()).next()?;
+    Some((file, digits.parse().ok()?))
+}
+
+/// The index of a script in the archive from the file name it is evaluated under.
+fn section_index(file: &str) -> Option<usize> {
+    let digits = file.strip_prefix("Section")?;
+    (digits.len() >= 3 && digits.bytes().all(|byte| byte.is_ascii_digit()))
+        .then(|| digits.parse().ok())?
+}
+
+/// The name the archive stores for the script at `index`.
+fn script_name(ruby: &Ruby, index: usize) -> Option<String> {
+    let name = ruby
+        .eval(&format!("$RGSS_SCRIPTS[{index}][1]"), PRELUDE_NAME, 1)
+        .ok()?;
+    rb::string_bytes(ruby, name).map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+}
+
+/// The report of an uncaught exception, in the form of the original runtime: the script by
+/// the name the archive stores for it, found through the first position of the backtrace
+/// (or, for a script that does not parse, of the message) that lies in a script.
+fn report(ruby: &Ruby, error: &RubyError) -> String {
+    let positions = || {
+        error
+            .backtrace
+            .iter()
+            .map(String::as_str)
+            .chain(error.message.lines())
+            .filter_map(position)
+    };
+    let in_a_script = positions().find_map(|(file, line)| {
+        let name = script_name(ruby, section_index(file)?)?;
+        Some((name, line))
+    });
+    let (name, line) = in_a_script
+        .or_else(|| {
+            positions()
+                .next()
+                .map(|(file, line)| (file.to_owned(), line))
+        })
+        .unwrap_or_default();
+    format!(
+        "Script '{name}' line {line}: {} occurred.\n\n{}",
+        error.class_name, error.message
+    )
+}
+
+/// What a jump out of an evaluation means for the game.
+fn ended(ruby: &Ruby, raised: Raised) -> Ended {
+    let is_a = |class: VALUE| {
+        // SAFETY: the exception has been in the local `raised` since it was raised, and the
+        // class is kept alive by its constant; the check itself calls nothing.
+        raised.state == ffi::TAG_RAISE
+            && ffi::rtest(unsafe { ffi::rb_obj_is_kind_of(raised.exception, class) })
+    };
+    if is_a(system_exit(ruby)) {
+        return Ended::Exit;
+    }
+    if rb::class_at(ruby, c"Reset").is_ok_and(is_a) {
+        return Ended::Reset;
+    }
+    // SAFETY: as above, the exception is still alive in `raised`.
+    let error = unsafe { ruby.describe(raised) };
+    Ended::Failed(report(ruby, &error))
+}
+
+/// Evaluates the built-in scripts file and reads the script archive. Returns the number of
+/// scripts.
+fn load(ruby: &Ruby) -> Result<usize, RunError> {
+    let (builtin, archive) = Guest::with(|guest| {
+        let run = &guest.runtime.run;
+        (run.builtin_scripts.clone(), run.ini.scripts.clone())
+    });
+    let source = std::fs::read(&builtin).map_err(|source| RunError::BuiltinScripts {
+        path: builtin,
+        source,
+    })?;
+    let prepare = |raised| {
+        // SAFETY: `raised` was produced just now on this thread and sat in a local since.
+        RunError::Prepare(unsafe { ruby.describe(raised) })
+    };
+    let source = ruby.str_new(&source).map_err(prepare)?;
+    if let Err(raised) = evaluate(ruby, source, BUILTIN_NAME) {
+        // SAFETY: as above.
+        let error = unsafe { ruby.describe(raised) };
+        return Err(RunError::Script(report(ruby, &error)));
+    }
+
+    let path = ruby.str_new(archive.as_bytes()).map_err(prepare)?;
+    // SAFETY: the main object lives as long as the interpreter, and `path` was just returned
+    // and is in a local.
+    let count = unsafe { ruby.funcall(ffi::ruby_top_self, c"vkxp_load_scripts", &[path]) };
+    match count {
+        Ok(count) if ffi::fixnum_p(count) => Ok(usize::try_from(ffi::fix2long(count)).unwrap_or(0)),
+        Ok(_) => Ok(0),
+        Err(raised) => {
+            // SAFETY: as above.
+            let error = unsafe { ruby.describe(raised) };
+            Err(RunError::Archive {
+                path: archive,
+                reason: format!("{}: {}", error.class_name, error.message),
+            })
+        }
+    }
+}
+
+/// What a reset does between two runs of the scripts: audio stops, every scene element and
+/// bitmap is disposed, and the input state starts afresh. The interpreter and what the
+/// scripts defined stay, as in the original runtime.
+fn reset(ruby: &Ruby) -> Result<(), Raised> {
+    Guest::with(audio::stop_all);
+    let graphics = rb::class_at(ruby, c"Graphics")?;
+    // SAFETY: the module is kept alive by its constant.
+    unsafe { ruby.funcall(graphics, c"_reset", &[]) }?;
+    Guest::with(|guest| {
+        guest.input = InputState::new();
+        guest.runtime.pending = None;
+    });
+    Ok(())
+}
+
+/// Evaluates the `count` scripts of `$RGSS_SCRIPTS` in order, each under the name `Section`
+/// and its index, again from the first after a reset, until the last returns or one exits.
+fn run_scripts(ruby: &Ruby, count: usize) -> Result<(), RunError> {
+    let mut index = 0;
+    while index < count {
+        let evaluated = ruby
+            .eval(&format!("$RGSS_SCRIPTS[{index}][3]"), PRELUDE_NAME, 1)
+            .and_then(|source| evaluate(ruby, source, &format!("Section{index:03}")));
+        index += 1;
+        let Err(raised) = evaluated else {
+            continue;
+        };
+        match ended(ruby, raised) {
+            Ended::Exit => break,
+            Ended::Reset => match reset(ruby) {
+                Ok(()) => index = 0,
+                Err(raised) => {
+                    if let Ended::Failed(report) = ended(ruby, raised) {
+                        return Err(RunError::Script(report));
+                    }
+                    break;
+                }
+            },
+            Ended::Failed(report) => return Err(RunError::Script(report)),
+        }
+    }
+    Ok(())
+}
+
+/// Plays the game of the installed guest's [`RunConfig`] over `link`: everything of
+/// [`run_game`] after the installation of the guest.
+pub(crate) fn play(ruby: &Ruby, link: GuestEnd) -> Result<(), RunError> {
+    Guest::with(|guest| {
+        guest.connect(link);
+        let title = guest.runtime.run.ini.title.clone();
+        guest.send(GuestToHost::SetTitle { title });
+    });
+    let outcome = prepare(ruby)
+        .map_err(RunError::Prepare)
+        .and_then(|()| load(ruby))
+        .and_then(|count| run_scripts(ruby, count));
+    if let Err(RunError::Script(report)) = &outcome {
+        eprintln!("{report}");
+        Guest::with(|guest| {
+            guest.send(GuestToHost::Modal {
+                text: report.clone(),
+            });
+            guest.pump(Await::Dismissal);
+        });
+    }
+    Guest::with(|guest| {
+        audio::stop_all(guest);
+        guest.send(GuestToHost::Shutdown);
+        guest.disconnect();
+    });
+    outcome
+}
+
+/// Plays a game from start to shutdown. Called once, on the interpreter thread, in an
+/// interpreter that has run nothing yet.
+///
+/// 1. Installs the guest of `config` ([`Guest::install`]) and sends the host the window
+///    title of the game's configuration file.
+/// 2. Prepares the interpreter with the prelude of this crate: `$KCODE`, an empty load path,
+///    `$DEBUG` and `$BTEST`, `Reset` and `Hangup`, `save_data`, `print` and `p`, `Win32API`,
+///    the process functions and `require` and `load`.
+/// 3. Evaluates the built-in scripts file under the name `(builtin)`.
+/// 4. Reads the script archive into `$RGSS_SCRIPTS`, each entry with its inflated source
+///    as fourth element.
+/// 5. Evaluates the scripts in order as `Section000`, `Section001` and so on. `Reset`
+///    leaving a script stops the audio, disposes every scene element and bitmap, clears the
+///    input state and starts the scripts over; `SystemExit` ends the game. Any other
+///    exception ends it with [`RunError::Script`], after its report was written to the error
+///    stream, shown by the host as a modal message and dismissed.
+/// 6. Stops the audio, sends the host the shutdown message and drops the link, also when a
+///    step before failed.
+///
+/// # Panics
+///
+/// Panics when a guest is already installed on this thread.
+pub fn run_game(ruby: &Ruby, config: Config, link: GuestEnd) -> Result<(), RunError> {
+    Guest::install(ruby, config).map_err(|raised| {
+        // SAFETY: `raised` was produced just now on this thread and sat in a local since.
+        RunError::Prepare(unsafe { ruby.describe(raised) })
+    })?;
+    play(ruby, link)
 }

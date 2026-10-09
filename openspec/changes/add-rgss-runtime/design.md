@@ -140,3 +140,28 @@ defines a minimal `RPG` module.
 - [The scene classes land in parallel and touch `Guest`] → This change adds the scene field and
   the disposal-on-reset entry point; the other adds classes. The overlap is the registration
   list, merged by hand.
+
+## Follow-ups
+
+- `vkxp-core` has no way to enumerate or clear the elements of a `Scene` or the bitmaps of
+  `Bitmaps`. Reset therefore disposes through the Ruby objects: `Graphics._reset` walks
+  `ObjectSpace` for the instances of `Sprite`, `Viewport`, `Window`, `Plane`, `Tilemap` and
+  `Bitmap` and calls each class's own `dispose`. An element or bitmap that no Ruby object
+  owns is not found that way; none exists today. Should core get `Scene::clear` and a
+  disposal of all bitmaps, and reset use them?
+- `GameFiles` caches directory listings and has no way to learn that a script wrote a file
+  through Ruby's `File`. `load_data` therefore drops the cache before every lookup, which
+  costs a listing per call; `Bitmap.new` and `Audio` do not, so a picture or sound a script
+  creates while the game runs is not seen. Should the cache be invalidated from the write
+  side, or by directory modification time?
+- The pump waits for the tick of every frame also after a quit request, on the protocol's
+  word that the host answers every `Frame` with one `Tick`. A host that stops ticking once it
+  has sent `Quit` would have to drop its end of the link, which the guest takes as a quit.
+- The process-function switch covers the calls the specification lists, and `Process.fork`.
+  `open("|command")` and `IO.read("|command")` are not covered; the real barrier is the
+  sandbox planned for the guest process.
+- The stand-in for the built-in scripts is all the tests have. Whether the extracted file
+  evaluates cleanly (it defines `RPG::Sprite < ::Sprite`, so it needs the scene classes) can
+  only be checked once `add-rgss-scene-classes` is merged.
+- `Graphics.transition` clamps `vague` to the range of the protocol field (0 to 65535); the
+  range the original accepts is not measured.

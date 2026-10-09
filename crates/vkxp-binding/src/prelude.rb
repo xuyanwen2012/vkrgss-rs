@@ -30,6 +30,14 @@ def p(*args)
   vkxp_modal(text)
 end
 
+# Reads the script archive as the original runtime does: each entry holds an identifier, a
+# name and the deflated source, and gets the source as its fourth element.
+def vkxp_load_scripts(path)
+  $RGSS_SCRIPTS = load_data(path)
+  $RGSS_SCRIPTS.each { |script| script[3] = Zlib::Inflate.inflate(script[2]) }
+  $RGSS_SCRIPTS.size
+end
+
 # A placeholder: every function returns 0.
 class Win32API
   @@vkxp_called = {}

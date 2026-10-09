@@ -103,6 +103,97 @@
 //! over real fonts comes with the change that runs games; tests use the `CellBackend` of
 //! the `testing` module.
 //!
+//! # Running a game
+//!
+//! [`run_game`] is the one call that plays a game, made on the interpreter thread with a
+//! [`Config`] and the guest end of a link (`vkxp_proto::link`). The caller has read
+//! `Game.ini` and resolved the run-time packages, whose errors it reports before a window
+//! exists, and has made the game directory the working directory, because scripts write
+//! their saves through Ruby's own file API. The [`RunConfig`] inside the `Config` carries
+//! the configuration file, the path of the built-in scripts file, the debug and battle-test
+//! flags and the switch for the process functions.
+//!
+//! ```no_run
+//! use vkxp_binding::{Config, RunConfig, run_game};
+//! use vkxp_ruby_sys::{Interpreter, Options};
+//! # fn text_backend() -> Box<dyn vkxp_binding::TextBackend + Send> { unimplemented!() }
+//!
+//! let game = std::path::Path::new("path/to/game");
+//! let config = Config {
+//!     files: vkxp_vfs::GameFiles::new(game, []),
+//!     font_names: vec!["Arial".to_owned()],
+//!     text: text_backend(),
+//!     run: RunConfig {
+//!         ini: vkxp_vfs::GameIni::read(game, None)?,
+//!         builtin_scripts: "path/to/rpg.rb".into(),
+//!         ..RunConfig::default()
+//!     },
+//! };
+//! let (guest_end, host_end) = vkxp_proto::link::link(|| { /* wake the host */ });
+//! let interpreter = Interpreter::start(Options::default())?;
+//! // The host serves `host_end` meanwhile: a tick for every frame, input, reset and quit.
+//! # drop(host_end);
+//! interpreter.run(move |ruby| run_game(ruby, config, guest_end))?;
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! In order, `run_game` installs the guest and sends the window title; evaluates the
+//! prelude; evaluates the built-in scripts file under the name `(builtin)`; reads the script
+//! archive into `$RGSS_SCRIPTS`, where each entry gets its inflated source as fourth
+//! element; and evaluates the scripts as `Section000`, `Section001` and so on. Then:
+//!
+//! | A script ends with | What happens |
+//! |---|---|
+//! | its last statement | the next script runs; after the last one the game is over |
+//! | `SystemExit` | the game is over |
+//! | `Reset` | audio stops, `Graphics._reset` disposes every scene element and bitmap, the input state is cleared, and the scripts run again from the first in the same interpreter |
+//! | any other exception | the report `Script '<name>' line <n>: <class> occurred.` with the message goes to the error stream and to the host as a modal message; once that is dismissed the game is over, and the run returns [`RunError::Script`] |
+//!
+//! The script of a report is found through the `Section` index of the backtrace and named
+//! as the archive names it. However the game ends, and also when the built-in scripts file
+//! or the archive cannot be read, the audio channels are stopped, the host gets its shutdown
+//! message and the link is dropped.
+//!
+//! The built-in scripts are Enterbrain's and are not part of this repository: the file is
+//! extracted from the user's RGSS DLL. `Graphics._reset` finds what to dispose through the
+//! Ruby objects of the RGSS classes, with each class's own `dispose`.
+//!
+//! # The prelude
+//!
+//! What a game meets outside the RGSS classes is prepared by a prelude written in Ruby
+//! (`src/prelude.rb`), on top of a few host functions whose names start with `vkxp_`:
+//!
+//! - `$KCODE` is `"UTF8"`, the load path is empty, `$DEBUG` and `$BTEST` follow the
+//!   [`RunConfig`].
+//! - `Reset` and `Hangup` are subclasses of `Exception`, so a bare `rescue` lets them pass.
+//! - `save_data` writes a `Marshal` dump through Ruby's `File`. `load_data` is a host
+//!   function that finds the file through the game's files, without regard to letter case.
+//! - `print` and `p` write their text to `$stderr` and show it as a modal message, and return
+//!   when the host has dismissed it.
+//! - `Win32API` is a placeholder: `call` returns 0 and names each function once on `$stderr`.
+//! - `require` and `load` evaluate only `.rb` files inside the game directory and raise
+//!   `LoadError` for anything else.
+//! - Unless the `RunConfig` enables them, `system`, backticks, `exec`, `fork`, `syscall` and
+//!   `IO.popen` start nothing, return `nil` and say so on `$stderr`
+//!   (`src/prelude_process_off.rb`).
+//!
+//! # The pump
+//!
+//! The modules `Graphics`, `Input` and `Audio` and the functions above talk to the host
+//! through the guest: `Guest::send` for what goes out, and one place that consumes what
+//! comes in, `Guest::pump`. It is called by `Graphics.update` and by every frame of
+//! `Graphics.transition` (waiting for the tick of the frame just sent), by `Input.update`
+//! (taking only what has arrived) and by `print`, `p` and the error report (waiting for the
+//! dismissal). Whatever it waits for, it keeps the latest input snapshot for the next
+//! `Input.update` and records a reset or quit request. The request is raised, as `Reset` or
+//! `SystemExit`, by `Graphics.update` or `Graphics.transition` after the pump has returned
+//! and the guest is released, which is the raise rule of the interpreter crate. A host that
+//! has gone counts as a quit request, so a guest never waits for a host that is not there.
+//!
+//! Music and background sound remember the description they were started with (file name,
+//! volume, pitch): `Audio.bgm_play` and `Audio.bgs_play` with the same description send
+//! nothing, and a stop or a fade forgets it.
+//!
 //! # Adding a class
 //!
 //! A later change adds a class in a module of its own:
@@ -124,6 +215,9 @@
 //!
 //! The `testing` module, behind the feature of the same name, starts the one interpreter of
 //! a test process with a guest over a generated game directory and evaluates Ruby source.
+//! Its `host` module is a scripted host on the other end of a link: it ticks every frame,
+//! dismisses every modal message, records what the guest sent, and plays whole games made
+//! for a test.
 
 mod audio;
 mod bitmap;
@@ -149,5 +243,5 @@ pub mod testing;
 
 pub use error::Error;
 pub use guest::{Config, Guest};
-pub use runtime::RunConfig;
+pub use runtime::{RunConfig, RunError, run_game};
 pub use text::TextBackend;

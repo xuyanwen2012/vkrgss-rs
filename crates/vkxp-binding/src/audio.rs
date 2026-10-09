@@ -28,6 +28,18 @@ fn stop_channel(guest: &mut Guest, channel: AudioChannel) {
     guest.send(GuestToHost::Audio(AudioCommand::Stop { channel }));
 }
 
+/// Stops the four channels.
+pub(crate) fn stop_all(guest: &mut Guest) {
+    for channel in [
+        AudioChannel::Bgm,
+        AudioChannel::Bgs,
+        AudioChannel::Me,
+        AudioChannel::Se,
+    ] {
+        stop_channel(guest, channel);
+    }
+}
+
 /// `play(filename, volume = 100, pitch = 100)` on a channel. Music and background sound
 /// that repeat the description of what their channel plays keep playing: nothing is sent.
 fn play(ruby: &Ruby, channel: AudioChannel, args: &[VALUE]) -> HostResult {

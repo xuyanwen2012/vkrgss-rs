@@ -14,10 +14,10 @@
 
 ## 3. Running a game (`vkxp-binding`)
 
-- [ ] 3.1 Implement `run_game` up to the evaluation of the scripts: configuration file, title, prelude, built-in scripts file, archive, `$RGSS_SCRIPTS`, section names. Verify: tests for the built-in-scripts, script-archive and title scenarios, with archives assembled in the test.
-- [ ] 3.2 Implement the end of the game and the error report. Verify: tests for the end-of-game and uncaught-error scenarios, asserting the report text and the modal and shutdown messages.
-- [ ] 3.3 Implement reset and quit. Verify: tests for the reset scenario (a script that counts its own evaluations sees 2 after one reset and the scene is empty) and the quit scenario of `Graphics.update`.
-- [ ] 3.4 Document `run_game`, the prelude and the pump in the crate documentation. Verify: `cargo doc -p vkxp-binding --no-deps` builds without warnings.
+- [x] 3.1 Implement `run_game` up to the evaluation of the scripts: configuration file, title, prelude, built-in scripts file, archive, `$RGSS_SCRIPTS`, section names. Verify: tests for the built-in-scripts, script-archive and title scenarios, with archives assembled in the test.
+- [x] 3.2 Implement the end of the game and the error report. Verify: tests for the end-of-game and uncaught-error scenarios, asserting the report text and the modal and shutdown messages.
+- [x] 3.3 Implement reset and quit. Verify: tests for the reset scenario (a script that counts its own evaluations sees 2 after one reset and the scene is empty) and the quit scenario of `Graphics.update`.
+- [x] 3.4 Document `run_game`, the prelude and the pump in the crate documentation. Verify: `cargo doc -p vkxp-binding --no-deps` builds without warnings.
 
 ## 4. Integration check
 
