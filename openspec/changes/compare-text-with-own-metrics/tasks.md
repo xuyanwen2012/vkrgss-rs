@@ -10,7 +10,7 @@
 
 ## 3. Harness (`xtask`)
 
-- [ ] 3.1 Pass the option when fonts are shared. Verify: the scenario of `specs/oracle-harness/spec.md`.
+- [x] 3.1 Pass the option when fonts are shared. Verify: the scenario of `specs/oracle-harness/spec.md`.
 
 ## 4. Integration check
 

@@ -504,6 +504,26 @@ loop { Graphics.update }
         assert_eq!(fs::read(font_dir.join("TestSans.ttf")).unwrap(), data);
     }
 
+    /// The command-line scenario of `oracle-harness`.
+    #[test]
+    fn the_command_line_of_vkxp_asks_for_own_metrics_exactly_with_shared_fonts() {
+        let own_metrics = |font_dir| {
+            let command = vkxp::Run {
+                executable: Path::new("vkxp"),
+                rtps: &[],
+                font_dir,
+                builtin_scripts: None,
+            }
+            .command(Path::new("game"), &[3], Path::new("out"))
+            .unwrap();
+            command
+                .get_args()
+                .any(|argument| argument == "--font-own-metrics")
+        };
+        assert!(own_metrics(Some(Path::new("out/fonts"))));
+        assert!(!own_metrics(None));
+    }
+
     /// The not-a-font scenario of `oracle-harness`.
     #[test]
     fn a_font_that_is_a_text_file_is_an_error_naming_it() {

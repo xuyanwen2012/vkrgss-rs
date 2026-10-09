@@ -431,7 +431,7 @@ headless on the CPU device unless the Vulkan loader is already restricted to oth
 Text can only be compared when both runtimes draw it with the same font file. `--font FILE`,
 which may be given several times, names such a file, a TrueType or OpenType font or a
 collection: the files are copied to `<out>/fonts`, which vkxp searches before the fonts of the
-system, and into the font directory of the prefix, where they are registered, and the common
+system and sizes by their own line boxes (`--font-own-metrics`), as the original does, and into the font directory of the prefix, where they are registered, and the common
 game font names (`SimHei`, `黑体`, `SimSun`, `MS PGothic` and the like) are replaced in the
 original by the family name read from the first file. A file that cannot be read or is not a
 font ends the run before either runtime starts. Without `--font` the original draws those

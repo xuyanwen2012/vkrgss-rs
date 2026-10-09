@@ -49,7 +49,8 @@ pub struct Run<'a> {
     pub executable: &'a Path,
     /// The directory of each run-time package, by its name.
     pub rtps: &'a [(String, PathBuf)],
-    /// A directory of fonts that vkxp searches before those of the system.
+    /// A directory of fonts that vkxp searches before those of the system: the fonts shared
+    /// with the original, which vkxp then sizes by their own line boxes as the original does.
     pub font_dir: Option<&'a Path>,
     pub builtin_scripts: Option<&'a Path>,
 }
@@ -78,7 +79,7 @@ impl Run<'_> {
                 .arg(format!("{name}={}", dir.display()));
         }
         if let Some(dir) = self.font_dir {
-            command.arg("--font-dir").arg(dir);
+            command.arg("--font-dir").arg(dir).arg("--font-own-metrics");
         }
         if let Some(file) = self.builtin_scripts {
             command.arg("--builtin-scripts").arg(file);
