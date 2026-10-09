@@ -4,7 +4,7 @@ mod common;
 
 use common::{
     CHINESE_PRC, Derivation, LIBERATION, LIBERATION_FILE, NAME_FAMILY, RawFont, SYMBOL,
-    derive_font, engine, request, test_sources,
+    SYMBOLS_FILE, derive_font, engine, request, test_sources,
 };
 use vkxp_text::{FontSources, LineBox, TextEngine, TextMask, default_line_box};
 
@@ -66,12 +66,12 @@ fn replacement_takes_the_size_of_the_family_it_replaces() {
 
     // The baseline lies the replaced family's share of ascent below the top.
     assert_eq!(ink_bottom(&engine.rasterize(&replaced, "H")), 18);
-    // A character from a fallback font is as wide as the replacement's missing glyph at
-    // the same pixels per em.
-    let liberation = RawFont::load(LIBERATION_FILE);
+    // A character from a fallback font is as wide as it is in that font at the same pixels
+    // per em.
+    let symbols = RawFont::load(SYMBOLS_FILE);
     assert_eq!(
         engine.layout(&replaced, &SYMBOL.to_string()).advances,
-        [liberation.advance(SYMBOL, 22)]
+        [symbols.advance(SYMBOL, 22)]
     );
 }
 

@@ -155,11 +155,10 @@ struct CharGlyph {
     /// The loaded face the glyph comes from.
     face: usize,
     glyph: GlyphId,
-    /// The advance in the selected face's font units: the glyph's own, or that of the
-    /// selected face's missing glyph for a character it lacks.
+    /// The glyph's advance in the font units of `face`.
     advance: u32,
-    /// Whether the selected face lacks the character.
-    lacking: bool,
+    /// Whether the glyph is the selected face's missing glyph.
+    missing: bool,
 }
 
 /// A glyph of the string being laid out.
@@ -429,14 +428,16 @@ impl TextEngine {
                     found
                 }
             };
-            let mut advance = advance_pixels(found.advance, pixels_per_em, units_per_em)
-                .saturating_add(emboldened);
+            let (glyph_bold, glyph_italic) = self.face_style(found.face);
+            // A glyph of a fallback face keeps its own advance, at the same pixels per em.
+            let glyph_units = u32::from(self.faces[found.face].units_per_em);
+            let mut advance = advance_pixels(found.advance, pixels_per_em, glyph_units)
+                .saturating_add(u32::from(request.bold && !glyph_bold));
             // As measured: a character outside the Basic Multilingual Plane is two units to
-            // GDI, each of which the font lacks.
-            if found.lacking && u32::from(ch) > 0xFFFF {
+            // GDI, each of which is a missing glyph.
+            if found.missing && u32::from(ch) > 0xFFFF {
                 advance = advance.saturating_mul(2);
             }
-            let (glyph_bold, glyph_italic) = self.face_style(found.face);
             self.run.push(Placed {
                 face: found.face,
                 glyph: found.glyph,
@@ -519,17 +520,18 @@ impl TextEngine {
 
     /// The glyph that draws `ch` when `selected` is the selected face: its own, else the
     /// first fallback family's that has one, else any font's, else its missing-glyph box.
-    /// A glyph of another face is set at the advance of the selected face's missing glyph.
+    /// A glyph of another face keeps that face's advance.
     /// A control character is the selected face's missing glyph whatever the face maps it
     /// to.
     ///
-    /// PLACEHOLDER: the original draws the missing glyph for a character the font lacks.
+    /// PLACEHOLDER: the original, measured under Wine, draws the missing glyph for a
+    /// character the font lacks.
     fn find_glyph(&mut self, selected: usize, bold: bool, italic: bool, ch: char) -> CharGlyph {
         let missing = CharGlyph {
             face: selected,
             glyph: 0,
             advance: self.faces[selected].advance(0),
-            lacking: true,
+            missing: true,
         };
         if ch.is_control() {
             return missing;
@@ -540,7 +542,7 @@ impl TextEngine {
                 face: selected,
                 glyph: own,
                 advance: self.faces[selected].advance(own),
-                lacking: false,
+                missing: false,
             };
         }
         let from = |faces: &[LoadedFace], face: usize| {
@@ -548,7 +550,8 @@ impl TextEngine {
             (glyph != 0).then_some(CharGlyph {
                 face,
                 glyph,
-                ..missing
+                advance: faces[face].advance(glyph),
+                missing: false,
             })
         };
         for position in 0..self.fallback_families.len() {

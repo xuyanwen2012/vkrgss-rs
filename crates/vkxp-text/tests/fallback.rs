@@ -38,13 +38,13 @@ fn mixed_string() {
         let mut engine = TextEngine::new(&sources);
         for size in [12, 22, 52] {
             let request = request(LIBERATION, size);
-            // The symbol is drawn from the other font and set at the advance of the
-            // selected font's missing glyph.
+            // The symbol is drawn from the other font and keeps its advance there, at the
+            // selected font's pixels per em.
             let pixels_per_em = liberation.pixels_per_em(size);
             let a = liberation.advance('A', pixels_per_em);
-            let symbol = liberation.advance(SYMBOL, pixels_per_em);
+            let symbol = symbols.advance(SYMBOL, pixels_per_em);
             let b = liberation.advance('B', pixels_per_em);
-            assert_ne!(symbol, symbols.advance(SYMBOL, pixels_per_em));
+            assert_ne!(symbol, liberation.advance(SYMBOL, pixels_per_em));
             let height = engine.measure(&request, "A").1;
 
             assert_eq!(engine.measure(&request, "A").0, a);
@@ -76,6 +76,48 @@ fn mixed_string() {
         }
     }
 }
+
+// Requirement: Measurement
+
+#[test]
+fn fallback_glyphs_do_not_overlap() {
+    let liberation = RawFont::load(LIBERATION_FILE);
+    let symbols = RawFont::load(SYMBOLS_FILE);
+    let mut engine = engine();
+    let one = SYMBOL.to_string();
+    let two = format!("{SYMBOL}{SYMBOL}");
+    for size in [12, 22, 52] {
+        let request = request(LIBERATION, size);
+        let pixels_per_em = liberation.pixels_per_em(size);
+        let symbol = symbols.advance(SYMBOL, pixels_per_em);
+        // The selected font's missing glyph is narrower than the symbol.
+        assert!(liberation.advance(SYMBOL, pixels_per_em) < symbol);
+
+        assert_eq!(engine.layout(&request, &two).advances, [symbol, symbol]);
+        assert_eq!(engine.measure(&request, &two).0, 2 * symbol);
+
+        // The second glyph is the first one again, its own advance further right.
+        let alone = engine.rasterize(&request, &one);
+        let mask = engine.rasterize(&request, &two);
+        assert_eq!(mask.left_overhang, 0);
+        assert_eq!(mask.width, alone.width + symbol);
+        assert!(max_coverage(&alone, 0..symbol) > 0);
+        for y in 0..mask.height {
+            for x in 0..mask.width {
+                let at = |x: u32| alone.coverage[(y * alone.width + x) as usize];
+                let first = if x < alone.width { at(x) } else { 0 };
+                let second = if x >= symbol { at(x - symbol) } else { 0 };
+                assert_eq!(
+                    mask.coverage[(y * mask.width + x) as usize],
+                    first.max(second),
+                    "({x}, {y}) at {size}"
+                );
+            }
+        }
+    }
+}
+
+// Requirement: Per-character fallback
 
 #[test]
 fn fallback_glyph_is_the_fallback_fonts_drawing() {

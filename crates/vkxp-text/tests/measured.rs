@@ -45,7 +45,8 @@ fn string(field: &str) -> String {
     String::from_utf8(bytes).expect("UTF-8")
 }
 
-/// An engine on the measured CJK font, when the file is there.
+/// An engine on the measured CJK font, when the file is there. It knows no other font, so a
+/// character the font lacks has no fallback and is the missing glyph, as it was measured.
 fn noto_engine() -> Option<TextEngine> {
     let fonts = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../local/fonts");
     if !fonts.join("NotoSansCJKsc-Regular.otf").is_file() {

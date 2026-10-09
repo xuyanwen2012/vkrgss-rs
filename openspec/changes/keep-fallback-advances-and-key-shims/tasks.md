@@ -2,7 +2,7 @@
 
 ## 1. Text (`vkxp-text`)
 
-- [ ] 1.1 Give fallback glyphs their own advance. Verify: the scenarios of `specs/text-rendering/spec.md`, the existing "Per-character fallback" scenarios, and the committed measured samples.
+- [x] 1.1 Give fallback glyphs their own advance. Verify: the scenarios of `specs/text-rendering/spec.md`, the existing "Per-character fallback" scenarios, and the committed measured samples.
 
 ## 2. Win32API (`vkxp-binding`)
 
