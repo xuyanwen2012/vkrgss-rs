@@ -21,9 +21,12 @@ use crate::midi::{self, SoundFonts};
 /// Why a sound cannot be played.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DecodeError {
-    /// The bytes are no supported format, or are too damaged to start decoding.
+    /// The bytes are no supported format, or are so damaged that nothing of them decodes.
     #[error("the audio data is not in a supported format ({0})")]
     Unsupported(String),
+    /// Part of the data does not decode. The sound is played without that part.
+    #[error("the audio data is damaged ({0})")]
+    Damaged(String),
     /// The bytes are a MIDI file and none of the SoundFont locations holds a file.
     #[error("no SoundFont was found for MIDI music (looked for {})", list(.searched))]
     NoSoundFont { searched: Vec<PathBuf> },
@@ -50,18 +53,24 @@ pub trait Source: Send {
     fn rewind(&mut self);
 }
 
+/// Where a source reports damage it meets while it plays: [`DecodeError::Damaged`], at most
+/// once for each source. It is called where the source is read, so it must not wait.
+pub type Report = Arc<dyn Fn(&DecodeError) + Send + Sync>;
+
 /// Opens `data` as a source of frames at `sample_rate`. `soundfonts` is consulted, and its
-/// file loaded, only when the data is a MIDI file.
+/// file loaded, only when the data is a MIDI file. Data of which nothing can be played is an
+/// error; data of which a part cannot is played without it and told to `report`.
 pub fn open(
     data: Arc<[u8]>,
     sample_rate: u32,
     soundfonts: &mut SoundFonts,
+    report: &Report,
 ) -> Result<Box<dyn Source>, DecodeError> {
     if midi::is_midi(&data) {
         let source = midi::MidiSource::new(&data, sample_rate, soundfonts.get()?)?;
         Ok(Box::new(source))
     } else {
-        Ok(Box::new(Sampled::new(data, sample_rate)?))
+        Ok(Box::new(Sampled::new(data, sample_rate, report.clone())?))
     }
 }
 
@@ -106,22 +115,43 @@ impl Stream {
     }
 
     /// Decodes the next block and appends it to `frames` as stereo. Returns the block's
-    /// sample rate, or `None` at the end of the file. A damaged packet is skipped.
+    /// sample rate, or `None` when the sound has ended. A packet that does not decode is
+    /// skipped, and what the library said about the first of them is left in `damage`; so is
+    /// the reason when the sound ends for anything but the end of its data.
     fn next_block(
         &mut self,
         samples: &mut Option<SampleBuffer<f32>>,
         frames: &mut Vec<f32>,
+        damage: &mut Option<String>,
     ) -> Option<u32> {
         loop {
-            // Any error of the reader, the end of the file included, ends the sound.
-            let packet = self.format.next_packet().ok()?;
+            let packet = match self.format.next_packet() {
+                Ok(packet) => packet,
+                // This is how the library says that the data has ended, also when a file
+                // was cut short.
+                Err(SymphoniaError::IoError(error))
+                    if error.kind() == std::io::ErrorKind::UnexpectedEof =>
+                {
+                    return None;
+                }
+                Err(error) => {
+                    damage.get_or_insert_with(|| error.to_string());
+                    return None;
+                }
+            };
             if packet.track_id() != self.track {
                 continue;
             }
             let decoded = match self.decoder.decode(&packet) {
                 Ok(decoded) => decoded,
-                Err(SymphoniaError::DecodeError(_) | SymphoniaError::IoError(_)) => continue,
-                Err(_) => return None,
+                Err(error @ (SymphoniaError::DecodeError(_) | SymphoniaError::IoError(_))) => {
+                    damage.get_or_insert_with(|| error.to_string());
+                    continue;
+                }
+                Err(error) => {
+                    damage.get_or_insert_with(|| error.to_string());
+                    return None;
+                }
             };
             let spec = *decoded.spec();
             let channels = spec.channels.count();
@@ -155,10 +185,12 @@ struct Sampled {
     position: f64,
     /// Input frames per output frame.
     step: f64,
+    /// Where damage is reported, until it has been.
+    report: Option<Report>,
 }
 
 impl Sampled {
-    fn new(data: Arc<[u8]>, sample_rate: u32) -> Result<Sampled, DecodeError> {
+    fn new(data: Arc<[u8]>, sample_rate: u32, report: Report) -> Result<Sampled, DecodeError> {
         let stream = Stream::open(data.clone())?;
         let mut source = Sampled {
             data,
@@ -168,25 +200,42 @@ impl Sampled {
             frames: Vec::new(),
             position: 0.0,
             step: 1.0,
+            report: Some(report),
         };
         // The first block is decoded here, so that it is not decoded where the sound is mixed.
-        source.refill();
+        // Packets that do not decode are skipped on the way to it.
+        if let Some(damage) = source.refill() {
+            if source.frames.is_empty() {
+                return Err(DecodeError::Unsupported(damage));
+            }
+            source.damaged(damage);
+        }
         Ok(source)
     }
 
+    /// Reports damage, the first time for this source.
+    fn damaged(&mut self, damage: String) {
+        if let Some(report) = self.report.take() {
+            report(&DecodeError::Damaged(damage));
+        }
+    }
+
     /// Drops the frames before the position and appends the next block, if there is one.
-    fn refill(&mut self) {
+    /// Returns what the library said if data did not decode on the way.
+    fn refill(&mut self) -> Option<String> {
         let consumed = (self.position as usize).min(self.frames.len() / 2);
         self.frames.drain(..consumed * 2);
         self.position -= consumed as f64;
+        let mut damage = None;
         let rate = self
             .stream
             .as_mut()
-            .and_then(|stream| stream.next_block(&mut self.samples, &mut self.frames));
+            .and_then(|stream| stream.next_block(&mut self.samples, &mut self.frames, &mut damage));
         match rate {
             Some(rate) => self.step = f64::from(rate) / f64::from(self.sample_rate),
             None => self.stream = None,
         }
+        damage
     }
 }
 
@@ -196,7 +245,9 @@ impl Source for Sampled {
         for frame in out.as_chunks_mut::<2>().0 {
             // Interpolation needs the frame at the position and the one after it.
             while self.stream.is_some() && self.position as usize + 1 >= self.frames.len() / 2 {
-                self.refill();
+                if let Some(damage) = self.refill() {
+                    self.damaged(damage);
+                }
             }
             let count = self.frames.len() / 2;
             let index = self.position as usize;
@@ -222,6 +273,8 @@ impl Source for Sampled {
         self.stream = Stream::open(self.data.clone()).ok();
         self.frames.clear();
         self.position = 0.0;
-        self.refill();
+        if let Some(damage) = self.refill() {
+            self.damaged(damage);
+        }
     }
 }

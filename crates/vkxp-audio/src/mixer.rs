@@ -7,10 +7,11 @@
 //! callback of the device.
 
 use std::io::Write;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use vkxp_proto::{AudioChannel, AudioCommand};
 
-use crate::decode::{self, DecodeError, Source};
+use crate::decode::{self, DecodeError, Report, Source};
 use crate::midi::SoundFonts;
 
 /// The range of the pitch of a play command, in percent.
@@ -50,13 +51,42 @@ pub(crate) enum Prepared {
     },
 }
 
-/// Opens the sources of play commands and reports the failures, each kind once.
+/// What has been reported, and where.
+struct Reports {
+    errors: Box<dyn Write + Send>,
+    undecodable_reported: bool,
+    soundfont_reported: bool,
+}
+
+impl Reports {
+    /// Writes the report of `error` unless one of its kind has been written.
+    fn report(&mut self, error: &DecodeError) {
+        let (reported, consequence) = match error {
+            DecodeError::Unsupported(_) => (
+                &mut self.undecodable_reported,
+                "sounds that cannot be decoded stay silent",
+            ),
+            DecodeError::Damaged(_) => (
+                &mut self.undecodable_reported,
+                "what cannot be decoded of a sound is left out",
+            ),
+            DecodeError::NoSoundFont { .. } | DecodeError::SoundFont { .. } => {
+                (&mut self.soundfont_reported, "MIDI music stays silent")
+            }
+        };
+        if !std::mem::replace(reported, true) {
+            // Nothing useful can be done when the error stream itself fails.
+            let _ = writeln!(self.errors, "vkxp: audio: {error}; {consequence}");
+        }
+    }
+}
+
+/// Opens the sources of play commands and reports the failures, each kind once: its own and,
+/// through the same [`Report`], the damage a source meets later while it plays.
 pub(crate) struct Loader {
     sample_rate: u32,
     soundfonts: SoundFonts,
-    errors: Box<dyn Write + Send>,
-    unsupported_reported: bool,
-    soundfont_reported: bool,
+    report: Report,
 }
 
 impl Loader {
@@ -72,9 +102,9 @@ impl Loader {
                 // output's, is faster or slower by their ratio. That is the pitch.
                 let pitch = u64::from(pitch.clamp(*PITCH.start(), *PITCH.end()));
                 let rate = (u64::from(self.sample_rate) * 100 + pitch / 2) / pitch;
-                let source = decode::open(data.into(), rate as u32, &mut self.soundfonts)
-                    .map_err(|error| self.report(&error))
-                    .ok();
+                let opened =
+                    decode::open(data.into(), rate as u32, &mut self.soundfonts, &self.report);
+                let source = opened.map_err(|error| (self.report)(&error)).ok();
                 Prepared::Play {
                     channel,
                     source,
@@ -89,22 +119,6 @@ impl Loader {
                 channel,
                 duration_ms,
             },
-        }
-    }
-
-    fn report(&mut self, error: &DecodeError) {
-        let (reported, consequence) = match error {
-            DecodeError::Unsupported(_) => (
-                &mut self.unsupported_reported,
-                "sounds that cannot be decoded stay silent",
-            ),
-            DecodeError::NoSoundFont { .. } | DecodeError::SoundFont { .. } => {
-                (&mut self.soundfont_reported, "MIDI music stays silent")
-            }
-        };
-        if !std::mem::replace(reported, true) {
-            // Nothing useful can be done when the error stream itself fails.
-            let _ = writeln!(self.errors, "vkxp: audio: {error}; {consequence}");
         }
     }
 }
@@ -300,13 +314,20 @@ pub struct Mixer {
 impl Mixer {
     /// A mixer that renders at `sample_rate` frames per second.
     pub fn new(sample_rate: u32, options: MixerOptions) -> Mixer {
+        let reports = Mutex::new(Reports {
+            errors: options.errors,
+            undecodable_reported: false,
+            soundfont_reported: false,
+        });
+        let report: Report = Arc::new(move |error: &DecodeError| {
+            let mut reports = reports.lock().unwrap_or_else(PoisonError::into_inner);
+            reports.report(error);
+        });
         Mixer {
             loader: Loader {
                 sample_rate,
                 soundfonts: options.soundfonts,
-                errors: options.errors,
-                unsupported_reported: false,
-                soundfont_reported: false,
+                report,
             },
             channels: Channels {
                 sample_rate,

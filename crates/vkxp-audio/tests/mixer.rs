@@ -5,8 +5,8 @@ mod common;
 use std::path::Path;
 
 use common::{
-    AMPLITUDE, MP3, OGG, Reports, frequency, level, one_note_midi, peak, side, sounding_seconds,
-    tone_wav, wav_of,
+    AMPLITUDE, MP3, OGG, Reports, damaged_mp3, frequency, level, one_note_midi, peak, side,
+    sounding_seconds, tone_wav, wav_of,
 };
 use vkxp_audio::{Mixer, MixerOptions, SYSTEM_SOUNDFONTS, SoundFonts};
 use vkxp_proto::{AudioChannel, AudioCommand};
@@ -72,12 +72,14 @@ fn a_wav_tone_is_heard_on_both_output_channels() {
 #[test]
 fn the_ogg_and_mp3_fixtures_are_heard_for_their_second() {
     for (name, data) in [("ogg", OGG), ("mp3", MP3)] {
-        let mut mixer = mixer();
+        let reports = Reports::default();
+        let mut mixer = mixer_reporting_to(&reports);
         mixer.apply(play(AudioChannel::Se, data));
         let out = render(&mut mixer, 2.0);
         assert!(peak(&out) > 0.1, "{name}");
         let seconds = sounding_seconds(&out, RATE);
         assert!((seconds - 1.0).abs() < 0.1, "{name}: {seconds} s");
+        assert_eq!(reports.text(), "", "{name}");
     }
 }
 
@@ -291,6 +293,64 @@ fn unsupported_data_is_reported_once_and_leaves_the_channel_silent() {
         channel: AudioChannel::Bgm,
     });
     assert_eq!(peak(&render(&mut mixer, 0.1)), 0.0);
+}
+
+/// Data that is found to be MP3 and of which no frame decodes.
+#[test]
+fn damaged_data_is_reported_once_and_leaves_the_channel_silent() {
+    let reports = Reports::default();
+    let mut mixer = mixer_reporting_to(&reports);
+    mixer.apply(play(AudioChannel::Bgm, &tone(440.0, 0.5)));
+    render(&mut mixer, 0.1);
+
+    let damaged = damaged_mp3(1);
+    mixer.apply(play(AudioChannel::Bgm, &damaged));
+    assert_eq!(peak(&render(&mut mixer, 1.5)), 0.0);
+    assert_eq!(reports.lines(), 1, "{}", reports.text());
+    assert!(reports.text().contains("supported format"));
+
+    // Playing it again, and other data that is no audio, adds nothing.
+    mixer.apply(play(AudioChannel::Bgm, &damaged));
+    mixer.apply(play(AudioChannel::Se, &damaged));
+    mixer.apply(play(AudioChannel::Me, b"these bytes are no audio file"));
+    assert_eq!(peak(&render(&mut mixer, 0.5)), 0.0);
+    assert_eq!(reports.lines(), 1, "{}", reports.text());
+
+    // Later commands still work.
+    mixer.apply(play(AudioChannel::Bgm, &tone(440.0, 0.5)));
+    let out = side(&render(&mut mixer, 0.5), 0);
+    assert!((level(&out, RATE, 440.0) - AMPLITUDE).abs() < 0.01);
+}
+
+/// The data decodes at first and then does not: the failure comes while the mixer renders.
+#[test]
+fn damage_behind_the_first_block_is_reported_once_while_the_rest_plays() {
+    let reports = Reports::default();
+    let mut mixer = mixer_reporting_to(&reports);
+    let damaged = damaged_mp3(20);
+    mixer.apply(play(AudioChannel::Bgm, &damaged));
+    assert_eq!(reports.text(), "", "nothing is wrong with the first block");
+
+    // The half that decodes is heard, and loops as music does.
+    let out = render(&mut mixer, 3.0);
+    assert!(peak(&out[..RATE as usize / 2]) > 0.1);
+    assert!(peak(&out[RATE as usize * 4..]) > 0.1);
+    assert_eq!(reports.lines(), 1, "{}", reports.text());
+    assert!(reports.text().contains("damaged"), "{}", reports.text());
+
+    mixer.apply(play(AudioChannel::Se, &damaged));
+    mixer.apply(play(AudioChannel::Me, &damaged_mp3(1)));
+    render(&mut mixer, 1.0);
+    assert_eq!(reports.lines(), 1, "{}", reports.text());
+
+    // Later commands still work.
+    mixer.apply(AudioCommand::Stop {
+        channel: AudioChannel::Bgm,
+    });
+    assert_eq!(peak(&render(&mut mixer, 1.0)), 0.0);
+    mixer.apply(play(AudioChannel::Bgm, &tone(440.0, 0.5)));
+    let out = side(&render(&mut mixer, 0.5), 0);
+    assert!((level(&out, RATE, 440.0) - AMPLITUDE).abs() < 0.01);
 }
 
 #[test]

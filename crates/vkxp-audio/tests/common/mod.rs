@@ -75,6 +75,46 @@ pub fn one_note_midi(seconds: u32) -> Vec<u8> {
     midi
 }
 
+/// Where each frame of [`MP3`] starts: behind its ID3v2 tag, frames of MPEG-1 layer III.
+fn mp3_frames() -> Vec<usize> {
+    const KILOBITS: [usize; 15] = [
+        0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320,
+    ];
+    const RATES: [usize; 3] = [44100, 48000, 32000];
+    assert_eq!(&MP3[..3], b"ID3");
+    let tag = MP3[6..10]
+        .iter()
+        .fold(0, |size, byte| size << 7 | usize::from(*byte));
+    let mut frames = Vec::new();
+    let mut at = 10 + tag;
+    while at + 4 <= MP3.len() {
+        let header = &MP3[at..at + 4];
+        assert_eq!((header[0], header[1] & 0xfe), (0xff, 0xfa), "frame at {at}");
+        let bit_rate = KILOBITS[usize::from(header[2] >> 4)] * 1000;
+        let sample_rate = RATES[usize::from(header[2] >> 2 & 3)];
+        let padding = usize::from(header[2] >> 1 & 1);
+        frames.push(at);
+        at += 144 * bit_rate / sample_rate + padding;
+    }
+    frames
+}
+
+/// [`MP3`] with every frame from the frame `first` on damaged: the frame headers stay, so
+/// the file is still found to be MP3, and the side information behind each is overwritten,
+/// so the frame does not decode.
+pub fn damaged_mp3(first: usize) -> Vec<u8> {
+    let mut data = MP3.to_vec();
+    let frames = mp3_frames();
+    assert!(frames.len() > 30, "{} frames", frames.len());
+    for start in &frames[first..] {
+        // Without a checksum, which the header says, the side information of a mono frame
+        // is the 17 bytes behind the header.
+        let end = (start + 4 + 17).min(data.len());
+        data[start + 4..end].fill(0xff);
+    }
+    data
+}
+
 /// One side of an interleaved stereo buffer: 0 is left, 1 is right.
 pub fn side(stereo: &[f32], side: usize) -> Vec<f32> {
     stereo.iter().skip(side).step_by(2).copied().collect()
