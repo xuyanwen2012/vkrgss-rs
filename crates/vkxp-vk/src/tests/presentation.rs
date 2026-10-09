@@ -451,6 +451,121 @@ fn freeze_during_a_mix_holds_each_pixel_of_a_detailed_image() {
     assert_eq!(compositor.scale_frame(SIZE).unwrap(), on_screen);
 }
 
+/// A frame in which every pixel has its own grey, different from its neighbours'.
+fn detailed(seed: u32) -> FramePacket {
+    let mut ops = Vec::new();
+    for y in 0..SIZE.height {
+        for x in 0..SIZE.width {
+            let grey = ((x * 37 + y * 71 + seed * 53) % 256) as u8;
+            ops.push(Op::Clear {
+                clip: Rect::new(x as i32, y as i32, 1, 1),
+                color: Color::new(grey, grey, grey, 255),
+            });
+        }
+    }
+    packet(SIZE, ops)
+}
+
+/// A compositor a quarter of the way from one detailed frame to another.
+fn detailed_fade() -> TestCompositor {
+    let mut compositor = TestCompositor::new();
+    compositor.render(&detailed(0)).unwrap();
+    compositor.freeze().unwrap();
+    compositor.render(&detailed(1)).unwrap();
+    compositor.set_mix(0.25);
+    compositor
+}
+
+/// Freezes in the middle of [`detailed_fade`] as shown in `window` and asserts that the
+/// window shows the same pixels right after, after later frames and when it is drawn again.
+fn assert_freeze_keeps(window: Size) {
+    let mut compositor = detailed_fade();
+    let on_screen = compositor.scale_frame(window).unwrap();
+
+    compositor.freeze().unwrap();
+    compositor.set_mix(0.0);
+    assert!(
+        compositor.scale_frame(window).unwrap() == on_screen,
+        "{window:?}: the freeze changed what is shown"
+    );
+    for (round, later) in [
+        detailed(2),
+        flat(SIZE, WHITE),
+        flat(Size::new(32, 24), BLACK),
+    ]
+    .iter()
+    .enumerate()
+    {
+        compositor.render(later).unwrap();
+        for redraw in 0..2 {
+            assert!(
+                compositor.scale_frame(window).unwrap() == on_screen,
+                "{window:?}: changed after later frame {round}, redraw {redraw}"
+            );
+        }
+    }
+
+    // The next fade starts from those pixels and ends on the newest frame.
+    compositor.render(&flat(SIZE, WHITE)).unwrap();
+    compositor.set_mix(0.5);
+    assert!(compositor.scale_frame(window).unwrap() != on_screen);
+    compositor.set_mix(1.0);
+    let end = compositor.scale_frame(window).unwrap();
+    let rect = crate::letterbox(SIZE, window);
+    assert_all(&end, rect, WHITE, "the newest frame alone");
+}
+
+#[test]
+fn freeze_during_a_mix_keeps_the_pixels_shown_at_a_fractional_factor() {
+    // 1.5 times: mixing first and scaling the rounded result would change some of these.
+    assert_freeze_keeps(Size::new(30, 27));
+}
+
+#[test]
+fn freeze_during_a_mix_keeps_the_pixels_shown_at_other_factors_and_with_bars() {
+    for window in [
+        // 1.5 times with bars left and right, then above and below.
+        Size::new(50, 27),
+        Size::new(30, 40),
+        // 2.25 times, and a reduction.
+        Size::new(45, 41),
+        Size::new(13, 11),
+        // Whole factors.
+        SIZE,
+        Size::new(40, 36),
+        Size::new(70, 54),
+    ] {
+        assert_freeze_keeps(window);
+    }
+}
+
+#[test]
+fn freeze_during_a_mix_at_a_fractional_factor_keeps_what_the_swapchain_shows() {
+    let log = ValidationLog::new();
+    let mut compositor = surface_compositor(&log);
+    let window = Size::new(50, 27);
+    compositor.resize_surface(window);
+    compositor.render(&detailed(0)).unwrap();
+    compositor.freeze().unwrap();
+    compositor.render(&detailed(1)).unwrap();
+    compositor.set_mix(0.25);
+    assert_eq!(compositor.present(), Ok(true));
+    let on_screen = compositor.scale_frame(window).unwrap();
+    // Looking at it off-screen at another size does not change what the window shows.
+    compositor.scale_frame(Size::new(40, 36)).unwrap();
+
+    compositor.freeze().unwrap();
+    compositor.set_mix(0.0);
+    for later in [detailed(2), flat(SIZE, WHITE)] {
+        compositor.render(&later).unwrap();
+        assert_eq!(compositor.present(), Ok(true));
+        assert!(compositor.scale_frame(window).unwrap() == on_screen);
+    }
+    assert_clean(&log, "freezing a scaled mix while presenting");
+    drop(compositor);
+    assert_clean(&log, "while the compositor was dropped");
+}
+
 #[test]
 fn freeze_at_weight_zero_keeps_the_held_frame() {
     let mut compositor = black_then_white();

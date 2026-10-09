@@ -103,6 +103,29 @@ fn push_constants(
     if newest.is_empty() && held.is_empty() {
         return None;
     }
+    Some(encode_constants(sources, newest, held, weight, srgb_target))
+}
+
+/// The push constants that stretch frames of one size, `frame`, over the whole of a target of
+/// `target` pixels, which has to be the letterbox rectangle of such a frame in some window.
+/// The draw then gives exactly the pixels that rectangle has in that window.
+fn filling_constants(frame: Size, target: Size, weight: f32) -> [u8; PUSH_CONSTANT_BYTES] {
+    let sources = Sources {
+        newest: frame,
+        held: frame,
+    };
+    let whole = Rect::from_size(target);
+    encode_constants(sources, whole, whole, weight, false)
+}
+
+/// The push constants for the frames of `sources` in the rectangles `newest` and `held`.
+fn encode_constants(
+    sources: Sources,
+    newest: Rect,
+    held: Rect,
+    weight: f32,
+    srgb_target: bool,
+) -> [u8; PUSH_CONSTANT_BYTES] {
     let mut flags = 0;
     if is_whole_factor(sources.newest, &newest) {
         flags |= FLAG_NEAREST;
@@ -136,7 +159,16 @@ fn push_constants(
             flags,
         ],
     );
-    Some(bytes)
+    bytes
+}
+
+/// How a draw places the frames in its target.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Placement {
+    /// Each frame in the letterbox rectangle of its size, as a window shows them.
+    Letterbox,
+    /// Both frames, which have the same size, stretched over the whole target.
+    Fill,
 }
 
 /// The surface format to present in, and whether it is an sRGB format.
@@ -627,12 +659,20 @@ impl VkCompositor {
     /// the letterbox rectangle of its own size, and a cross-fade mixes the two frames where
     /// each of them lies in the window.
     ///
-    /// In the middle of such a cross-fade the image on screen has no size of its own: where
-    /// the two frames lie depends on the window. It is then captured as it was last shown,
-    /// bars included, at the size of the swapchain, or without one at the size
-    /// [`scale_frame`](VkCompositor::scale_frame) last drew at, so that showing it again at
-    /// that size gives the same pixels. If nothing has been shown yet it is taken at the size
-    /// of the newest frame.
+    /// In the middle of a cross-fade the mixed image exists only as it was shown, and it is
+    /// captured so that showing it again in the same window gives the same pixels. The window
+    /// is the swapchain, or without one the target [`scale_frame`](VkCompositor::scale_frame)
+    /// last drew into.
+    ///
+    /// - Frames of one size at a whole-number factor: the mix is taken at the frame's size,
+    ///   since each of its pixels is shown as it is.
+    /// - Frames of one size at another factor: the mix is taken at the size of its letterbox
+    ///   rectangle in that window, after scaling, because mixing first and scaling the
+    ///   rounded result afterwards does not give the pixels that were shown.
+    /// - Frames of different sizes: where the two lie depends on the window, so the whole
+    ///   window is taken, bars included.
+    ///
+    /// If nothing has been shown yet the mix is taken at the size of the newest frame.
     pub fn freeze(&mut self) -> Result<(), VkError> {
         self.ensure_presenter()?;
         let target = self
@@ -657,23 +697,34 @@ impl VkCompositor {
             // The held frame alone is shown, and it stays, at whatever size it has.
             return Ok(());
         }
-        // In between, what is shown exists nowhere yet: draw it and take the result. Frames
-        // of one size share one rectangle in every window, so the mix is drawn at that size,
-        // where scaling changes nothing. Frames of different sizes lie differently in the
-        // window, and only the picture as it was shown, at the size it was shown at, keeps
-        // both where they were. The off-screen target and the held frame have formats of the
-        // same size, so the copy moves the bytes as they are.
+        // In between, what is shown exists nowhere yet: draw it again as it was shown and
+        // take the result; see the documentation above for the three cases. The off-screen
+        // target and the held frame have formats of the same size, so the copy moves the
+        // bytes as they are.
+        let frame = Size::new(size.0, size.1);
         let held_size = self
             .presenter
             .as_ref()
             .and_then(|presenter| presenter.held.as_ref())
-            .map_or(size, |held| (held.width, held.height));
-        let capture = match self.shown_size() {
-            Some(shown) if held_size != size => (shown.width, shown.height),
-            _ => size,
+            .map_or(frame, |held| Size::new(held.width, held.height));
+        let (capture, placement) = match self.shown_size() {
+            None => (frame, Placement::Letterbox),
+            Some(shown) if held_size != frame => (shown, Placement::Letterbox),
+            Some(shown) => {
+                let rect = letterbox(frame, shown);
+                if rect.is_empty() || is_whole_factor(frame, &rect) {
+                    (frame, Placement::Letterbox)
+                } else {
+                    (Size::new(rect.width, rect.height), Placement::Fill)
+                }
+            }
         };
-        self.with_offscreen(Size::new(capture.0, capture.1), |compositor, mixed| {
-            compositor.capture_held(mixed, vk::ImageLayout::TRANSFER_SRC_OPTIMAL, capture)
+        self.with_offscreen(capture, placement, |compositor, mixed| {
+            compositor.capture_held(
+                mixed,
+                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                (capture.width, capture.height),
+            )
         })
     }
 
@@ -777,7 +828,7 @@ impl VkCompositor {
             });
         }
         self.last_scaled = Some(size);
-        let rgba = self.with_offscreen(size, |compositor, image| {
+        let rgba = self.with_offscreen(size, Placement::Letterbox, |compositor, image| {
             compositor.read_image(
                 image,
                 (size.width, size.height),
@@ -787,13 +838,15 @@ impl VkCompositor {
         Ok(Frame { size, rgba })
     }
 
-    /// Draws what a window of `size` pixels would show into a new off-screen target and hands
-    /// its image, in the `TRANSFER_SRC_OPTIMAL` layout, to `then`. The target is destroyed
-    /// afterwards, so `then` has to wait for whatever it submits. `size` has no zero dimension
-    /// and is within the device's limit.
+    /// Draws what a window of `size` pixels would show into a new off-screen target, or with
+    /// [`Placement::Fill`] the frames stretched over all of it, and hands its image, in the
+    /// `TRANSFER_SRC_OPTIMAL` layout, to `then`. The target is destroyed afterwards, so `then`
+    /// has to wait for whatever it submits. `size` has no zero dimension and is within the
+    /// device's limit.
     fn with_offscreen<T>(
         &mut self,
         size: Size,
+        placement: Placement,
         then: impl FnOnce(&mut VkCompositor, vk::Image) -> Result<T, VkError>,
     ) -> Result<T, VkError> {
         let source = self.prepare_sources()?;
@@ -809,7 +862,10 @@ impl VkCompositor {
                 pipeline,
                 pipeline_layout: presenter.pipeline_layout,
                 descriptors: presenter.descriptors,
-                constants: push_constants(sources, size, self.mix, false)?,
+                constants: match placement {
+                    Placement::Letterbox => push_constants(sources, size, self.mix, false)?,
+                    Placement::Fill => filling_constants(sources.newest, size, self.mix),
+                },
             })
         });
 
@@ -1459,6 +1515,38 @@ mod tests {
             ]
             .concat()
         );
+    }
+
+    #[test]
+    fn filling_constants_are_those_of_the_letterbox_rectangle_moved_to_the_origin() {
+        let frame = Size::new(20, 18);
+        // Windows in which the frame is scaled by a factor that is not whole, with bars on
+        // either axis, including one whose rectangle would not be found again from its size.
+        for window in [
+            Size::new(30, 27),
+            Size::new(50, 27),
+            Size::new(30, 40),
+            Size::new(100, 10),
+            Size::new(1920, 1080),
+        ] {
+            let rect = letterbox(frame, window);
+            let in_window = words(push_constants(same(frame), window, 0.25, false));
+            let filling = words(Some(filling_constants(
+                frame,
+                Size::new(rect.width, rect.height),
+                0.25,
+            )));
+            // The same sizes, weight and flags; only the origins differ.
+            assert_eq!(filling[2..6], in_window[2..6], "{window:?}");
+            assert_eq!(filling[8..], in_window[8..], "{window:?}");
+            assert_eq!([filling[0], filling[1], filling[6], filling[7]], [0; 4]);
+            // Shown again in that window, the captured rectangle lies where it was.
+            assert_eq!(
+                letterbox(Size::new(rect.width, rect.height), window),
+                rect,
+                "{window:?}"
+            );
+        }
     }
 
     #[test]
