@@ -2,10 +2,12 @@
 
 A Rust + Vulkan runtime for RPG Maker XP (RGSS1) games. Linux first, MIT licensed.
 
-The project is at its foundation stage: the workspace, the guest/host protocol, a CPU
-reference compositor, the Vulkan compositor, a host that shows its frames in a window, and the
-embedded Ruby interpreter exist; the RGSS binding and audio do not yet. `docs/decisions.md`
-records the settled design, and `openspec/` holds the change proposals that implement it.
+The project can start a game: `vkxp <game directory>` runs the game's scripts in the embedded
+Ruby interpreter against the RGSS classes and shows the frames of the Vulkan compositor in a
+window, or writes them to files in a headless run. Audio commands are accepted and dropped,
+there is no configuration file or gamepad support yet, and encrypted archives are not read.
+`docs/decisions.md` records the settled design, and `openspec/` holds the change proposals
+that implement it.
 
 ## Layout
 
@@ -28,7 +30,8 @@ defined in `vkxp-proto`.
 | `vkxp-host` | Event loop, input mapping, thread orchestration, configuration | host |
 | `vkxp` | Executable | |
 
-`xtask` holds repository automation and is not part of the runtime.
+`xtask` holds repository automation and the tool that extracts the built-in scripts; it is not
+part of the runtime.
 
 ## Third-party source
 
@@ -56,7 +59,7 @@ change, to be reviewed before committing.
 
 ## Running the demo
 
-Until the Ruby side exists the host is driven by a guest written in Rust, `vkxp_host::demo`. It
+The host can also be driven without Ruby, by a guest written in Rust, `vkxp_host::demo`. It
 moves a sprite with the arrow keys (faster with Shift), tints the middle of the screen while
 Space, Enter or C is held, and swaps the background with a transition on Escape or X.
 
@@ -103,6 +106,93 @@ a `+`-joined list of button names (`DOWN`, `LEFT`, `RIGHT`, `UP`, `A`, `B`, `C`,
 `L`, `R`, `SHIFT`, `CTRL`, `ALT`, `F5` to `F9`) or nothing, and each entry sets what is held
 from that frame on. Two runs with the same options write byte-identical files, and a dumped
 frame equals what the CPU reference compositor produces for the same messages.
+
+## Running a game
+
+### The built-in scripts
+
+A game expects the `RPG` module of the original runtime: the data classes, `RPG::Cache`,
+`RPG::Sprite` and `RPG::Weather`. That Ruby source is Enterbrain's and is not part of this
+repository. The original runtime keeps it as plain text inside its DLL, and one command copies
+it from a DLL of your own into a file that `vkxp` loads:
+
+```sh
+mkdir -p ~/.local/share/vkxp
+cargo xtask extract-rpg <RGSS DLL> ~/.local/share/vkxp/rpg_builtin.rb
+```
+
+The DLLs of versions 1.00 and 1.02 (`RGSS100J.dll`, `RGSS102E.dll`, `RGSS102J.dll`) hold the
+text as it is. Later ones are compressed by their protector, and the command says so and
+writes nothing; an unpacked copy of such a DLL works. `vkxp` looks for the file at
+`$XDG_DATA_HOME/vkxp/rpg_builtin.rb`, which is `~/.local/share/vkxp/rpg_builtin.rb` unless
+`XDG_DATA_HOME` is set, or takes the file named with `--builtin-scripts`. Without the file it
+ends with a message that names the command above.
+
+### Options
+
+```text
+vkxp [GAME_DIR] [OPTIONS]
+```
+
+`GAME_DIR` is the directory that holds `Game.ini`; without it the current directory is used.
+The game directory becomes the working directory of the scripts, so saves are written there.
+Paths on the command line are relative to the directory the program was started in.
+
+| Option | Meaning |
+|---|---|
+| `--rtp NAME=DIR` | The directory of the run-time package that `Game.ini` names `NAME`. Repeatable. A game that names a package without this option does not start. |
+| `--builtin-scripts FILE` | The built-in scripts file, instead of the default location. |
+| `--device INDEX\|NAME` | The Vulkan device: its index or a part of its name, as `vulkaninfo --summary` prints them. In a window the default is the first discrete GPU, then an integrated one; headless it is `llvmpipe`. |
+| `--font-dir DIR` | A directory of fonts. Repeatable; earlier directories come first, then the game's `Fonts` directory, then the fonts installed on the system. |
+| `--encoding ENCODING` | The text encoding of `Game.ini`: `utf-8`, `gbk`, `shift-jis` or `big5`. Without it UTF-8 is tried, then those three in that order. |
+| `--debug` | Debug mode: `$DEBUG` is `true`. |
+| `--allow-process-functions` | Lets `system`, backticks, `exec`, `fork`, `syscall` and `IO.popen` start processes. Without it they do nothing. |
+| `--headless` | Run without a window, on a virtual clock that never waits. |
+| `--frames N` | Headless: stop after N frames if the game has not ended. |
+| `--input SCRIPT\|@FILE` | Headless: the buttons held from given frames on, in the syntax described under *Running the demo*, or a file that holds such a script. |
+| `--dump FRAME=FILE` | Headless: write frame `FRAME`, counted from 0, as a PNG file. Repeatable. |
+
+An unknown option or a malformed value ends the program with the usage message and status 2.
+The exit status is 0 when the game ends normally: its scripts return or call `exit`, the
+window is closed, or the frame limit of a headless run is reached. It is non-zero when a
+script error ends the game (its report is on the error stream), when the host fails, when a
+frame is rejected in a headless run, or when a frame that was to be dumped was never reached.
+
+### In a window
+
+```sh
+cargo run -p vkxp -- <game directory> --rtp Standard=<RTP directory> --device <device>
+```
+
+The host keys are those of the demo: F12 (reset), Alt+Enter (borderless fullscreen), F2
+(frame rate in the title) and Tab held (fast-forward). Closing the window asks the game to
+quit.
+
+Without `--device` the program chooses a GPU by itself, and whatever it chooses, the Vulkan
+loader loads the driver of every GPU to enumerate them. On the development machine the Intel
+Arc B580 must not be opened, so every run there restricts the loader and names the device:
+
+```sh
+VK_LOADER_DRIVERS_SELECT='*radeon*' \
+    cargo run -p vkxp -- <game directory> --rtp Standard=<RTP directory> --device RADV
+```
+
+### Headless
+
+```sh
+VK_LOADER_DRIVERS_SELECT='*lvp*' \
+    cargo run -p vkxp -- <game directory> --rtp Standard=<RTP directory> \
+    --headless --frames 120 --input "40:C, 42:, 60:DOWN, 62:" --dump 100=target/frame.png
+```
+
+Nothing in a headless run depends on real time, so two runs with the same options write
+byte-identical files. A script that loops without calling `Graphics.update` never sees the
+request to quit that follows the last frame; the program waits five seconds for the game and
+then ends with a message and a non-zero status.
+
+The end-to-end test of the `vkxp` crate runs the built program this way on games it assembles
+itself, with a stand-in for the built-in scripts. Like the other tests that render, it refuses
+to run while the loader is not restricted, and it passes the restriction on to the program.
 
 ## Prerequisites
 

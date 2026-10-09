@@ -14,7 +14,7 @@
 
 ## 3. Documentation
 
-- [ ] 3.1 Add "Running a game" to `README.md`: extracting the built-in scripts, the options, windowed and headless examples with the loader restriction, and update the status paragraph. Verify: every command in the section matches the implemented options.
+- [x] 3.1 Add "Running a game" to `README.md`: extracting the built-in scripts, the options, windowed and headless examples with the loader restriction, and update the status paragraph. Verify: every command in the section matches the implemented options.
 
 ## 4. Integration check
 
