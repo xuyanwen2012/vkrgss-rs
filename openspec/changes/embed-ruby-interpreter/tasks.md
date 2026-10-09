@@ -2,9 +2,9 @@
 
 ## 1. Vendored source
 
-- [ ] 1.1 Verify `local/ruby/ruby-1.8.7-p374.tar.gz` against the SHA-256 in `specs/embedded-ruby/spec.md` (if the file is absent, download it from `https://cache.ruby-lang.org/pub/ruby/1.8/ruby-1.8.7-p374.tar.gz` into `local/ruby/` first) and copy the file set listed in `design.md` into `third_party/ruby-1.8.7/` at its original relative paths. Verify: `find third_party/ruby-1.8.7 -type f | wc -l` is between 155 and 170 and no file outside the listed set is present.
-- [ ] 1.2 Add `MANIFEST.sha256` (upstream hash per vendored path), `PATCHES.md`, a `patches/` directory and `README.vkxp.md` (origin, licence, how the subset was chosen) to `third_party/ruby-1.8.7/`, and a third-party notice in the repository `README.md`. Verify: `sha256sum -c` over the manifest passes from inside `third_party/ruby-1.8.7/`.
-- [ ] 1.3 Add the manifest test to `vkxp-ruby-sys`. Verify: `cargo test -p vkxp-ruby-sys manifest` passes; changing one byte of a vendored file makes it fail naming that file (revert afterwards).
+- [x] 1.1 Verify `local/ruby/ruby-1.8.7-p374.tar.gz` against the SHA-256 in `specs/embedded-ruby/spec.md` (if the file is absent, download it from `https://cache.ruby-lang.org/pub/ruby/1.8/ruby-1.8.7-p374.tar.gz` into `local/ruby/` first) and copy the file set listed in `design.md` into `third_party/ruby-1.8.7/` at its original relative paths. Verify: `find third_party/ruby-1.8.7 -type f | wc -l` is between 155 and 170 and no file outside the listed set is present.
+- [x] 1.2 Add `MANIFEST.sha256` (upstream hash per vendored path), `PATCHES.md`, a `patches/` directory and `README.vkxp.md` (origin, licence, how the subset was chosen) to `third_party/ruby-1.8.7/`, and a third-party notice in the repository `README.md`. Verify: `sha256sum -c` over the manifest passes from inside `third_party/ruby-1.8.7/`.
+- [x] 1.3 Add the manifest test to `vkxp-ruby-sys`. Verify: `cargo test -p vkxp-ruby-sys manifest` passes; changing one byte of a vendored file makes it fail naming that file (revert afterwards).
 
 ## 2. Build script
 

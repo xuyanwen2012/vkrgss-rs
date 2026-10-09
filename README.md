@@ -30,6 +30,15 @@ defined in `vkxp-proto`.
 
 `xtask` holds repository automation and is not part of the runtime.
 
+## Third-party source
+
+`third_party/ruby-1.8.7/` holds the part of the Ruby 1.8.7-p374 release that `vkxp-ruby-sys`
+builds into the embedded interpreter. The MIT licence of this repository does not cover that
+directory: it stays under Ruby's own terms (the Ruby licence or the GPL version 2, with the
+exceptions its `LEGAL` file lists, such as the LGPL for `regex.c`). Its `README.vkxp.md` states
+the origin and how the subset was chosen, `MANIFEST.sha256` the upstream hash of every file and
+`PATCHES.md` every local change.
+
 ## Headless proof
 
 The contract between the two sides is testable without a window, Ruby or a GPU. The example
