@@ -8,9 +8,9 @@
 
 ## 2. Gate and dependency rules
 
-- [ ] 2.1 Add an `xtask` crate with a `gate` command running fmt check, clippy `-D warnings`, workspace tests and `openspec validate --all`, reporting which step failed. Verify: `cargo xtask gate` exits 0; breaking formatting makes it exit non-zero naming the fmt step.
-- [ ] 2.2 Add a dependency-direction test over `cargo metadata`: guest crates must not reach host crates; `vkxp-core` only reaches its allow-list. Verify: unit tests feed it a synthetic graph with a forbidden edge and assert the reported path; the real workspace passes.
-- [ ] 2.3 Document the gate and the rules in `README.md`. Verify: README names the command and both rules.
+- [x] 2.1 Add an `xtask` crate with a `gate` command running fmt check, clippy `-D warnings`, workspace tests and `openspec validate --all`, reporting which step failed. Verify: `cargo xtask gate` exits 0; breaking formatting makes it exit non-zero naming the fmt step.
+- [x] 2.2 Add a dependency-direction test over `cargo metadata`: guest crates must not reach host crates; `vkxp-core` only reaches its allow-list. Verify: unit tests feed it a synthetic graph with a forbidden edge and assert the reported path; the real workspace passes.
+- [x] 2.3 Document the gate and the rules in `README.md`. Verify: README names the command and both rules.
 
 ## 3. Protocol types
 
