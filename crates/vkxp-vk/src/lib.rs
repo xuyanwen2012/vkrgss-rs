@@ -6,9 +6,11 @@
 //! CPU reference compositor and produces the same frames, byte for byte, on a device chosen
 //! with [`DeviceChoice`]. It needs no window, surface or display.
 
+mod bitmaps;
 mod compositor;
 mod device;
 mod error;
+mod resources;
 mod validation;
 
 #[cfg(test)]

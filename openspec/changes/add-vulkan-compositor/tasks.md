@@ -14,8 +14,8 @@
 
 ## 3. Bitmap table
 
-- [ ] 3.1 Implement the slot table with `Create`, `Update` and `Destroy`, `R8G8B8A8_UINT` images, staging uploads and the same error kinds as the reference store, plus `Limit` errors for slot capacity and image size. Verify: unit tests mirror the reference store's tests for create, update, destroy, stale generation, out-of-bounds update and length mismatch.
-- [ ] 3.2 Add a test-only readback of a bitmap's pixels. Verify: a test uploads generated patterns in several partial updates and reads back bytes equal to the reference store's bitmap.
+- [x] 3.1 Implement the slot table with `Create`, `Update` and `Destroy`, `R8G8B8A8_UINT` images, staging uploads and the same error kinds as the reference store, plus `Limit` errors for slot capacity and image size. Verify: unit tests mirror the reference store's tests for create, update, destroy, stale generation, out-of-bounds update and length mismatch.
+- [x] 3.2 Add a test-only readback of a bitmap's pixels. Verify: a test uploads generated patterns in several partial updates and reads back bytes equal to the reference store's bitmap.
 
 ## 4. Shader arithmetic
 

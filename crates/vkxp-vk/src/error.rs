@@ -65,7 +65,7 @@ pub enum BitmapError {
 /// A limit of the device or of this backend that a valid packet can exceed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Limit {
-    /// Number of bitmap slots; the requested value is the slot index.
+    /// Index of a bitmap slot, bounded by the size of the slot table.
     BitmapSlots,
     /// Width or height of a bitmap, bounded by the device's 2D image size.
     BitmapDimension,
@@ -78,7 +78,7 @@ pub enum Limit {
 impl std::fmt::Display for Limit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
-            Limit::BitmapSlots => "bitmap slot count",
+            Limit::BitmapSlots => "bitmap slot index",
             Limit::BitmapDimension => "bitmap width or height",
             Limit::FrameDimension => "frame width or height",
             Limit::FrameDataBytes => "per-frame data size in bytes",
