@@ -86,6 +86,19 @@ impl Ruby {
             not_send: PhantomData,
         }
     }
+
+    /// Tells the interpreter that the game's scripts begin here.
+    ///
+    /// Symbol numbers follow the original runtime: a name it has before its first game
+    /// script has the number measured there, whenever it is interned. Any other name
+    /// interned before this call gets a number from a separate high range; from this call
+    /// on, a new name gets the next number of the original's sequence, and the first use of
+    /// a name of the high range consumes one number of that sequence. Calling it again
+    /// changes nothing.
+    pub fn mark_game_scripts(&self) {
+        // SAFETY: on the interpreter thread; the function sets a flag and cannot raise.
+        unsafe { ffi::ruby_vkxp_mark_game_scripts() };
+    }
 }
 
 type Job = Box<dyn FnOnce(&Ruby) + Send>;

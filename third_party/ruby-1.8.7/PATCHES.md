@@ -118,3 +118,31 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
   undefined constant. The constant is removed first, so that no "already initialized
   constant" warning is printed; the original prints none. No upstream test pinned the
   `TypeError`.
+
+## 11. symbol-ids-ruby-181
+
+- File: `parse.y`
+- Patch: `patches/symbol-ids-ruby-181.patch`
+- Patched SHA-256: `21f671ab8252ab2e6a9233017d4a8ab8dd9d0f792ae42780f072aa7b94cce1a6`
+- Reason: a symbol's number decides the order of instance variables and of hashes with
+  symbol keys, and so the bytes of a save file. 1.8.7 and vkxp's binding intern another set of
+  names at start-up than the original runtime's Ruby 1.8.1, so every name a game creates had
+  another number. `rb_intern` now gives a name of the measured table
+  (`crates/vkxp-ruby-sys/data/symbols.startup.txt`, the 2002 symbols the original has before
+  its first game script; the build generates `vkxp_symbol_table.h` from it) the number it has
+  there, and calls `rb_bug` when the scope bits it derives from the name disagree with the
+  table. Any other name interned before the host calls `ruby_vkxp_mark_game_scripts` is
+  numbered from a provisional counter starting at 2^24. From the mark on, new names and the
+  parser's internal identifiers continue the original's sequence (counter 2024, the number
+  16193 for a local variable), and the first `rb_intern` of a provisional name advances that
+  sequence once and keeps the name's number. An executable that never calls the mark, such
+  as the one of the upstream suites, numbers every name outside the table provisionally.
+
+## 12. symbol-ids-ruby-181-generated
+
+- File: `parse.c`
+- Patch: `patches/symbol-ids-ruby-181-generated.patch`
+- Patched SHA-256: `f974de8dedcace66cdca60d894a70e8542e91bed6642824e3b21c26a7f5bce68`
+- Reason: follows patch 11. `parse.c` is the release's pre-generated parser and the file the
+  build compiles; the changed code is in the part of `parse.y` that the generator copies
+  verbatim, so the same three hunks are applied to it by hand, at an offset of 5947 lines.

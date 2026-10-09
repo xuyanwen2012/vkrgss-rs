@@ -11983,12 +11983,78 @@ Init_sym()
     sym_rev_tbl = st_init_numtable_with_size(200);
 }
 
-static ID last_id = tLAST_TOKEN;
+/* Symbol numbers as in the original runtime (Ruby 1.8.1).  A name of the
+   measured table, which the build generates from the data file of
+   vkxp-ruby-sys, has the number it has there at start-up.  Until the host
+   marks the start of the game's scripts, any other name is numbered from a
+   provisional counter far above the table; from the mark on, new names
+   continue the original's sequence in last_id, and the first rb_intern of a
+   provisional name advances that sequence once and keeps the name's
+   number. */
+#include "vkxp_symbol_table.h"
+
+#define VKXP_FIRST_PROVISIONAL ((ID)1 << 24)
+
+static ID last_id = VKXP_LAST_MEASURED;
+static ID provisional_id = VKXP_FIRST_PROVISIONAL - 1;
+static char *provisional_seen;
+static ID provisional_capa;
+static int scripts_marked;
+
+void
+ruby_vkxp_mark_game_scripts()
+{
+    scripts_marked = 1;
+}
+
+static ID
+vkxp_measured_id(name)
+    const char *name;
+{
+    int low = 0;
+    int high = sizeof(vkxp_symbol_table) / sizeof(vkxp_symbol_table[0]);
+
+    while (low < high) {
+	int mid = (low + high) / 2;
+	int order = strcmp(name, vkxp_symbol_table[mid].name);
+
+	if (order == 0) return vkxp_symbol_table[mid].id;
+	if (order < 0) high = mid;
+	else low = mid + 1;
+    }
+    return 0;
+}
+
+/* The next counter value for a name outside the table; `named' is zero for
+   the parser's internal identifiers, which no rb_intern finds again. */
+static ID
+vkxp_next_counter(named)
+    int named;
+{
+    ID n;
+
+    if (scripts_marked) {
+	if (last_id >= VKXP_FIRST_PROVISIONAL - 1) {
+	    rb_raise(rb_eRuntimeError, "symbol table overflow");
+	}
+	return ++last_id;
+    }
+    n = provisional_id - (VKXP_FIRST_PROVISIONAL - 1);
+    if (n >= provisional_capa) {
+	ID capa = provisional_capa ? provisional_capa * 2 : 1024;
+
+	REALLOC_N(provisional_seen, char, capa);
+	MEMZERO(provisional_seen + provisional_capa, char, capa - provisional_capa);
+	provisional_capa = capa;
+    }
+    provisional_seen[n] = !named;
+    return ++provisional_id;
+}
 
 static ID
 internal_id()
 {
-    return ID_INTERNAL | (++last_id << ID_SCOPE_SHIFT);
+    return ID_INTERNAL | (vkxp_next_counter(0) << ID_SCOPE_SHIFT);
 }
 
 static int
@@ -12107,8 +12173,17 @@ rb_intern(name)
     ID id;
     int last;
 
-    if (st_lookup(sym_tbl, (st_data_t)name, (st_data_t *)&id))
+    if (st_lookup(sym_tbl, (st_data_t)name, (st_data_t *)&id)) {
+	ID n = id >> ID_SCOPE_SHIFT;
+
+	if (scripts_marked && n >= VKXP_FIRST_PROVISIONAL &&
+	    !provisional_seen[n - VKXP_FIRST_PROVISIONAL]) {
+	    /* first use by the game of a name that only vkxp had */
+	    provisional_seen[n - VKXP_FIRST_PROVISIONAL] = 1;
+	    vkxp_next_counter(1);
+	}
 	return id;
+    }
 
     last = strlen(name)-1;
     id = 0;
@@ -12169,17 +12244,20 @@ rb_intern(name)
     }
     if (*m) id = ID_JUNK;
   new_id:
-    if (last_id >= SYM2ID(~(VALUE)0) >> ID_SCOPE_SHIFT) {
-	if (last > 20) {
-	    rb_raise(rb_eRuntimeError, "symbol table overflow (symbol %.20s...)",
-		     name);
+    {
+	ID measured = vkxp_measured_id(name);
+
+	if (measured) {
+	    if ((measured & ID_SCOPE_MASK) != id) {
+		rb_bug("vkxp symbol table: scope of %s is %d, measured %d",
+		       name, (int)id, (int)(measured & ID_SCOPE_MASK));
+	    }
+	    id = measured;
 	}
 	else {
-	    rb_raise(rb_eRuntimeError, "symbol table overflow (symbol %.*s)",
-		     last, name);
+	    id |= vkxp_next_counter(1) << ID_SCOPE_SHIFT;
 	}
     }
-    id |= ++last_id << ID_SCOPE_SHIFT;
   id_regist:
     name = strdup(name);
     st_add_direct(sym_tbl, (st_data_t)name, id);

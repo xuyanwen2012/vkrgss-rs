@@ -474,6 +474,9 @@ unsafe extern "C" {
     /// Sets the stack depth, in bytes below the base, at which `SystemStackError` is raised.
     /// Exported by `gc.c` but declared in no header.
     pub fn ruby_set_stack_size(size: usize);
+    /// Marks the start of the game's scripts for symbol numbering: names first interned from
+    /// here on continue the original runtime's sequence. Added to `parse.c` by a vkxp patch.
+    pub fn ruby_vkxp_mark_game_scripts();
     /// Runs the initialisation function of a compiled-in extension as if `name` had been
     /// required, and marks `name` as loaded. Exported by `eval.c` but declared in no header.
     pub fn ruby_init_ext(name: *const c_char, init: unsafe extern "C" fn());

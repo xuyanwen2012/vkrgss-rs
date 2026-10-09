@@ -2,7 +2,7 @@
 
 ## 1. Interpreter (`third_party/ruby-1.8.7`, `vkxp-ruby-sys`)
 
-- [ ] 1.1 Commit the table as data, patch symbol numbering with the two counters and the mark, and record the patch. Verify: tests for the four scenarios of `specs/embedded-ruby/spec.md` at the level of `vkxp-ruby-sys`; the upstream suites pass.
+- [x] 1.1 Commit the table as data, patch symbol numbering with the two counters and the mark, and record the patch. Verify: tests for the four scenarios of `specs/embedded-ruby/spec.md` at the level of `vkxp-ruby-sys`; the upstream suites pass.
 
 ## 2. Binding (`vkxp-binding`)
 

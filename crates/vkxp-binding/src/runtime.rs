@@ -546,7 +546,11 @@ pub(crate) fn play(ruby: &Ruby, link: GuestEnd) -> Result<(), RunError> {
     let outcome = prepare(ruby)
         .map_err(RunError::Prepare)
         .and_then(|()| load(ruby))
-        .and_then(|(preload, count)| run_scripts(ruby, &preload, count));
+        .and_then(|(preload, count)| {
+            // Symbols the scripts create from here on are numbered as in the original.
+            ruby.mark_game_scripts();
+            run_scripts(ruby, &preload, count)
+        });
     if let Err(RunError::Script(report)) = &outcome {
         eprintln!("{report}");
         Guest::with(|guest| guest.show_message(report.clone()));
@@ -571,7 +575,8 @@ pub(crate) fn play(ruby: &Ruby, link: GuestEnd) -> Result<(), RunError> {
 ///    has a seed, and evaluates the built-in scripts file under the name `(builtin)`.
 /// 4. Reads the script archive into `$RGSS_SCRIPTS`, each entry with its inflated source
 ///    as fourth element.
-/// 5. Evaluates the preload scripts under their paths, then the scripts in order as
+/// 5. Marks the start of the game's scripts for the interpreter's symbol numbering, once per
+///    process. Evaluates the preload scripts under their paths, then the scripts in order as
 ///    `Section000`, `Section001` and so on. `Reset` leaving a script stops the audio,
 ///    disposes every scene element and bitmap, clears the input state, seeds the generator
 ///    again and starts over from the first preload script; `SystemExit` ends the game. Any
