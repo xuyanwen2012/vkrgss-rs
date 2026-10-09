@@ -10,3 +10,10 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+fontdb.workspace = true
+swash.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

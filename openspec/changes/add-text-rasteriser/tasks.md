@@ -2,9 +2,9 @@
 
 ## 1. Fonts and lookup (`vkxp-text`)
 
-- [ ] 1.1 Add the dependencies and copy the two test fonts from `local/fonts/` into `crates/vkxp-text/tests/fonts/` together with the SIL Open Font License text and a short README naming their origin. Verify: `cargo build -p vkxp-text` has no warnings, `cargo xtask deps` reports no violation, and the directory holds exactly two font files and the licence files.
-- [ ] 1.2 Implement the font database from system fonts and caller directories with caller priority, and the availability query. Verify: tests for the two font-source scenarios and the two availability scenarios in `specs/text-rendering/spec.md`, using engines built from temporary directories that contain copies of the test fonts.
-- [ ] 1.3 Implement the substitution table (built-in entries of `design.md`, caller entries first) and the family lookup with its cache. Verify: tests for the four family-lookup scenarios and the two default-substitution scenarios, including that every family listed in the requirement has an entry.
+- [x] 1.1 Add the dependencies and copy the two test fonts from `local/fonts/` into `crates/vkxp-text/tests/fonts/` together with the SIL Open Font License text and a short README naming their origin. Verify: `cargo build -p vkxp-text` has no warnings, `cargo xtask deps` reports no violation, and the directory holds exactly two font files and the licence files.
+- [x] 1.2 Implement the font database from system fonts and caller directories with caller priority, and the availability query. Verify: tests for the two font-source scenarios and the two availability scenarios in `specs/text-rendering/spec.md`, using engines built from temporary directories that contain copies of the test fonts.
+- [x] 1.3 Implement the substitution table (built-in entries of `design.md`, caller entries first) and the family lookup with its cache. Verify: tests for the four family-lookup scenarios and the two default-substitution scenarios, including that every family listed in the requirement has an entry.
 
 ## 2. Measuring and rasterising (`vkxp-text`)
 
