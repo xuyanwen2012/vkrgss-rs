@@ -15,11 +15,11 @@
 
 ## 3. Bitmap (`vkxp-core`)
 
-- [ ] 3.1 Implement the `Bitmaps` arena with creation (blank and from pixels), the creation limit, disposal, the disposed error and the per-bitmap font. Verify: tests for every scenario of the creation, font and disposal requirements in `specs/core-bitmap/spec.md`, and a test (using the development-only dependency) that the limit equals `vkxp_compose_ref::MAX_BITMAP_PIXELS`.
-- [ ] 3.2 Implement `get_pixel`, `set_pixel`, `clear` and `fill_rect`. Verify: tests for every scenario of the pixel-access and clear-and-fill requirements.
-- [ ] 3.3 Implement `blt` with clipping against source and destination and the same-bitmap case. Verify: tests for every block-transfer scenario, plus a property test comparing against a naive per-pixel model for random rectangles, positions and opacities.
-- [ ] 3.4 Implement `stretch_blt`. Verify: tests for the three stretched-transfer scenarios and for empty rectangles.
-- [ ] 3.5 Implement `hue_change`. Verify: tests for the four hue scenarios at bitmap level.
+- [x] 3.1 Implement the `Bitmaps` arena with creation (blank and from pixels), the creation limit, disposal, the disposed error and the per-bitmap font. Verify: tests for every scenario of the creation, font and disposal requirements in `specs/core-bitmap/spec.md`, and a test (using the development-only dependency) that the limit equals `vkxp_compose_ref::MAX_BITMAP_PIXELS`.
+- [x] 3.2 Implement `get_pixel`, `set_pixel`, `clear` and `fill_rect`. Verify: tests for every scenario of the pixel-access and clear-and-fill requirements.
+- [x] 3.3 Implement `blt` with clipping against source and destination and the same-bitmap case. Verify: tests for every block-transfer scenario, plus a property test comparing against a naive per-pixel model for random rectangles, positions and opacities.
+- [x] 3.4 Implement `stretch_blt`. Verify: tests for the three stretched-transfer scenarios and for empty rectangles.
+- [x] 3.5 Implement `hue_change`. Verify: tests for the four hue scenarios at bitmap level.
 
 ## 4. Text (`vkxp-core`)
 
