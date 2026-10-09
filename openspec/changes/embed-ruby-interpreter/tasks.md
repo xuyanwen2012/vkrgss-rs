@@ -32,8 +32,8 @@
 
 ## 6. Ruby's own suites
 
-- [ ] 6.1 Add the integration test that builds the test executable (`main.c`, `fcntl`, `stringio`, `Init_ext`) against the archives from the build script. Verify: the executable prints `ruby 1.8.7 (2013-06-27 patchlevel 374) [x86_64-linux]` for `-v`.
-- [ ] 6.2 Run `test/ruby` (one process per file, several at a time), `test/zlib` and `sample/test.rb` from that test and assert the totals. Verify: `cargo test -p vkxp-ruby-sys upstream` reports 625 core tests, no failure and no error, in under 60 seconds.
+- [x] 6.1 Add the integration test that builds the test executable (`main.c`, `fcntl`, `stringio`, `Init_ext`) against the archives from the build script. Verify: the executable prints `ruby 1.8.7 (2013-06-27 patchlevel 374) [x86_64-linux]` for `-v`.
+- [x] 6.2 Run `test/ruby` (one process per file, several at a time), `test/zlib` and `sample/test.rb` from that test and assert the totals. Verify: `cargo test -p vkxp-ruby-sys upstream` reports 625 core tests, no failure and no error, in under 60 seconds.
 
 ## 7. Symbols and documentation
 
