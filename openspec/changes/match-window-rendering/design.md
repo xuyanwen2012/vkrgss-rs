@@ -29,7 +29,10 @@
 - Background: a stretch quad cannot express the numerator 127, so the stretched background is
   rendered into a cached bitmap of the inner size with the rule of the README and drawn 1:1;
   the tiled form likewise. Frame and cursor are composed into cached bitmaps with `blt`, as
-  measured. Caches are rebuilt when size, skin or the skin's content changes.
+  measured. Caches are rebuilt when size, skin or the skin's content changes. The background
+  bitmap has one spare, transparent column at its right: the original gives an odd
+  background row its normal-formula pixel only where the screen or a viewport cuts the row,
+  and with that column the quad's own odd-pixel rule yields exactly that.
 - Cursor and pause state follow the measured counters exactly; `active = true` on an active
   window and `pause = true` while pausing leave the counters alone (not measured; PLACEHOLDER).
 - Provenance of the new blend function: reverse-engineered,
@@ -38,3 +41,12 @@
 ## Follow-ups
 
 - Viewport tone, colour and flash on windows; the two unmeasured assignments above.
+- `vkxp-binding` assigns `active` and `pause` as fields of `vkxp_core::Window`, and that crate
+  is outside this change. The counters follow such an assignment at the next update or frame,
+  which covers every measured case but two: `active = false; active = true` and
+  `pause = false; pause = true` with neither an update nor a frame in between leave the
+  counters alone, where the original puts the blink at step 12 and restarts the sign.
+  `Window::set_active` and `Window::set_pause` do it as measured; should the binding call
+  them?
+- Blending in the window mode onto a pixel whose alpha is below 255 keeps that alpha and
+  uses the same formula (the frame is opaque; not measured, as for the additive mode).

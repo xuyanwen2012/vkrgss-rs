@@ -249,10 +249,12 @@ pub struct Window {
     pub stretch: bool,
     /// The cursor, relative to the contents area. One without pixels shows no cursor.
     pub cursor_rect: Rect,
-    /// Whether the cursor blinks.
+    /// Whether the cursor blinks. Assign it with [`Window::set_active`]; an assignment to the
+    /// field is noticed at the next update or frame.
     pub active: bool,
     pub visible: bool,
-    /// Whether the pause sign is shown.
+    /// Whether the pause sign is shown. Assign it with [`Window::set_pause`]; an assignment
+    /// to the field is noticed at the next update or frame.
     pub pause: bool,
     pub x: i32,
     pub y: i32,
@@ -268,8 +270,10 @@ pub struct Window {
     pub(crate) contents_opacity: u8,
     /// Position in the 32 steps of the cursor blink.
     pub(crate) cursor_step: u8,
-    /// Number of updates since the pause sign appeared.
+    /// Number of updates since the pause flag was assigned.
     pub(crate) pause_step: u32,
+    /// The values of `active` and `pause` that the two counters have followed.
+    counted: (bool, bool),
     /// The bitmaps drawn from the window skin.
     pub(crate) caches: Caches,
 }
@@ -297,6 +301,7 @@ impl Window {
             contents_opacity: 255,
             cursor_step: 0,
             pause_step: 0,
+            counted: (true, false),
             caches: Caches::default(),
         }
     }
@@ -340,32 +345,49 @@ impl Window {
         self.contents_opacity = clamp_opacity(opacity);
     }
 
-    /// Advances the cursor blink while the window is active, and the pause sign while the
-    /// pause flag is set.
+    /// Makes the window active or inactive. Making it inactive puts the cursor blink at its
+    /// twelfth step at once, where it stays until the window is active and updated again.
     ///
-    /// PLACEHOLDER: that an inactive window keeps the cursor at its current alpha, and the
-    /// pause sign's speed of 16 updates per image, are not yet checked against the original
-    /// runtime.
+    /// PLACEHOLDER: that `true` for an active window leaves the blink alone is not measured.
+    pub fn set_active(&mut self, active: bool) {
+        self.follow_flags();
+        self.active = active;
+        self.follow_flags();
+    }
+
+    /// Shows or hides the pause sign. A change starts its animation over.
+    ///
+    /// PLACEHOLDER: that `true` for a pausing window leaves the animation alone is not
+    /// measured.
+    pub fn set_pause(&mut self, pause: bool) {
+        self.follow_flags();
+        self.pause = pause;
+        self.follow_flags();
+    }
+
+    /// Lets the counters follow `active` and `pause` when their fields were assigned.
+    pub(crate) fn follow_flags(&mut self) {
+        let (active, pause) = self.counted;
+        if self.active != active && !self.active {
+            self.cursor_step = 12;
+        }
+        if self.pause != pause {
+            self.pause_step = 0;
+        }
+        self.counted = (self.active, self.pause);
+    }
+
+    /// Advances the cursor blink while the window is active, and the pause sign while the
+    /// pause flag is set, as measured on the original runtime. Both run whether the window
+    /// is visible or not.
     pub fn update(&mut self) {
+        self.follow_flags();
         if self.active {
             self.cursor_step = (self.cursor_step + 1) % 32;
         }
-        // Wrapping keeps the animation seamless: 2^32 is a multiple of its period.
-        self.pause_step = if self.pause {
-            self.pause_step.wrapping_add(1)
-        } else {
-            0
-        };
-    }
-
-    /// The alpha of the cursor: from 255 it falls by 8 per step for 16 steps, then rises by
-    /// 8 per step back to 255.
-    ///
-    /// PLACEHOLDER: the blink values are not yet checked against the original runtime.
-    pub(crate) fn cursor_alpha(&self) -> u8 {
-        match self.cursor_step {
-            step @ 0..=16 => 255 - 8 * step,
-            step => 127 + 8 * (step - 16),
+        if self.pause {
+            // 2^32 and 32 are the same step of the sign: both multiples of its period.
+            self.pause_step = self.pause_step.checked_add(1).unwrap_or(32);
         }
     }
 }

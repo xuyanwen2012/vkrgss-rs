@@ -574,10 +574,11 @@ pub const WINDOW: &[Case] = &[
             "w = Window.new; w.windowskin = skin; w.x = 300; w.y = 300; w.width = 64; \
              w.height = 64; w.cursor_rect.set(0, 0, 32, 32); before = pixel(332, 332); \
              16.times { w.update }; after = pixel(332, 332); w.active = false; \
-             16.times { w.update }; r = [before, before == after, after == pixel(332, 332)]; \
+             16.times { w.update }; r = [before, after, pixel(332, 332)]; \
              w.dispose; skin.dispose; r"
         ),
-        "[[255, 255, 255, 255], false, true]",
+        // 127 at the sixteenth update; an inactive window stands at 159.
+        "[[255, 255, 255, 255], [127, 127, 255, 255], [159, 159, 255, 255]]",
     ),
     raises_with(
         "use after dispose",

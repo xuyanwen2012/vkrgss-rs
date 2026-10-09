@@ -6,9 +6,9 @@
 
 ## 2. Windows (`vkxp-core`)
 
-- [ ] 2.1 Commit a selection of the samples as test data and implement background and frame. Verify: the scenarios of the background and frame requirements in `specs/core-scene/spec.md`.
-- [ ] 2.2 Implement contents, arrows and cursor. Verify: the scenarios of those two requirements.
-- [ ] 2.3 Implement the pause sign. Verify: the fade-in scenario.
+- [x] 2.1 Commit a selection of the samples as test data and implement background and frame. Verify: the scenarios of the background and frame requirements in `specs/core-scene/spec.md`.
+- [x] 2.2 Implement contents, arrows and cursor. Verify: the scenarios of those two requirements.
+- [x] 2.3 Implement the pause sign. Verify: the fade-in scenario.
 
 ## 3. Integration check
 

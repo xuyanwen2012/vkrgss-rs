@@ -7,8 +7,12 @@
 //! Background, frame and cursor are not drawn piece by piece every frame. Each is drawn once
 //! into a bitmap of the scene's own, with the operations of the bitmap arena, and drawn again
 //! only when what it depends on changes.
+//!
+//! Every rule here was measured on the original runtime (RGSS103J, window probes,
+//! 2026-10-09); the samples of `tests/data/window-samples.txt` are a selection of what was
+//! measured. All parts of a window are drawn in the window blend mode.
 
-use vkxp_proto::BitmapId;
+use vkxp_proto::{BitmapId, BlendMode};
 
 use crate::extract::{Assembly, Level, Look};
 use crate::geometry::Geometry;
@@ -24,6 +28,8 @@ const PATTERN: i32 = 128;
 const CORNER: i32 = 16;
 /// Length of the piece of the skin that a frame edge repeats.
 const EDGE: i32 = 32;
+/// How far a frame edge runs under the corners at its ends.
+const EDGE_START: i32 = 8;
 /// Left and top of the frame area.
 const FRAME: (i32, i32) = (128, 0);
 /// The cursor image.
@@ -33,7 +39,7 @@ const CURSOR_BORDER: i32 = 2;
 /// Left and top of the pause sign's four images, each 16 by 16.
 const PAUSE: (i32, i32) = (160, 64);
 /// Number of updates one image of the pause sign stays.
-const PAUSE_PERIOD: u32 = 16;
+const PAUSE_PERIOD: u32 = 8;
 
 /// What a cached bitmap was drawn from: the skin, the skin's revision, the width and height
 /// of the result, and the stretch flag where it matters.
@@ -111,10 +117,26 @@ impl Caches {
     }
 }
 
-/// The background: the skin's pattern stretched to `width` by `height`, or tiled over it.
+/// The part of a `side` by `side` block of the skin that is stretched to `width` by `height`
+/// with the stretch rule: all of it, or one texel less in both directions as soon as the
+/// target is more than half the block in both directions and not a copy of it. The last
+/// column and row of the block are never shown then.
+fn stretched_part(side: i32, width: i32, height: i32) -> i32 {
+    let over_half = width > side / 2 && height > side / 2;
+    if over_half && (width, height) != (side, side) {
+        side - 1
+    } else {
+        side
+    }
+}
+
+/// The background: the skin's pattern stretched to the inner size of the window, or tiled
+/// over it from its corner.
 ///
-/// PLACEHOLDER: the sampling of the stretched pattern is that of `stretch_blt`, not yet
-/// checked against the original runtime.
+/// The bitmap is one column wider than the background, and that column stays transparent. A
+/// row of a window layer whose visible part is odd blends its last pixel with another
+/// formula; for the background the original does so only where the screen or a viewport cuts
+/// the row, and the spare column makes the quad's rows behave that way.
 fn draw_background(
     bitmaps: &mut Bitmaps,
     dst: BitmapId,
@@ -123,23 +145,25 @@ fn draw_background(
     height: i32,
     stretch: bool,
 ) -> Result<(), BitmapError> {
-    let pattern = Rect::new(0, 0, PATTERN, PATTERN);
+    let width = width - 1;
     if stretch {
-        return bitmaps.stretch_blt(dst, Rect::new(0, 0, width, height), skin, pattern, 255);
+        let part = stretched_part(PATTERN, width, height);
+        let from = Rect::new(0, 0, part, part);
+        return bitmaps.stretch_blt(dst, Rect::new(0, 0, width, height), skin, from, 255);
     }
     for y in (0..height).step_by(PATTERN as usize) {
         for x in (0..width).step_by(PATTERN as usize) {
-            bitmaps.blt(dst, x, y, skin, pattern, 255)?;
+            let piece = Rect::new(0, 0, PATTERN.min(width - x), PATTERN.min(height - y));
+            bitmaps.blt(dst, x, y, skin, piece, 255)?;
         }
     }
     Ok(())
 }
 
-/// The frame: the four corners of the skin's frame area, and between them its edges, each
-/// repeated from the middle piece of the matching side and cut off at the far corner.
-///
-/// PLACEHOLDER: how the original runtime fills the edges (repeating or stretching, and from
-/// where) and what a window smaller than two corners shows are not yet checked.
+/// The frame, composed as the original composes it: the top, bottom, left and right edges,
+/// each tiled from its 32-pixel piece of the skin from 8 pixels inside the window to 8 pixels
+/// before its far side, then the four corners over their ends. A window too small for a
+/// piece shows what of it lies inside, later pieces over earlier ones.
 fn draw_frame(
     bitmaps: &mut Bitmaps,
     dst: BitmapId,
@@ -150,19 +174,19 @@ fn draw_frame(
 ) -> Result<(), BitmapError> {
     let (left, top) = FRAME;
     let (far_x, far_y) = (left + CORNER + EDGE, top + CORNER + EDGE);
-    for x in (CORNER..width - CORNER).step_by(EDGE as usize) {
-        let length = EDGE.min(width - CORNER - x);
-        let piece = Rect::new(left + CORNER, top, length, CORNER);
-        bitmaps.blt(dst, x, 0, skin, piece, 255)?;
-        let piece = Rect::new(left + CORNER, far_y, length, CORNER);
-        bitmaps.blt(dst, x, height - CORNER, skin, piece, 255)?;
+    for (y, skin_y) in [(0, top), (height - CORNER, far_y)] {
+        for x in (EDGE_START..width - EDGE_START).step_by(EDGE as usize) {
+            let length = EDGE.min(width - EDGE_START - x);
+            let piece = Rect::new(left + CORNER, skin_y, length, CORNER);
+            bitmaps.blt(dst, x, y, skin, piece, 255)?;
+        }
     }
-    for y in (CORNER..height - CORNER).step_by(EDGE as usize) {
-        let length = EDGE.min(height - CORNER - y);
-        let piece = Rect::new(left, top + CORNER, CORNER, length);
-        bitmaps.blt(dst, 0, y, skin, piece, 255)?;
-        let piece = Rect::new(far_x, top + CORNER, CORNER, length);
-        bitmaps.blt(dst, width - CORNER, y, skin, piece, 255)?;
+    for (x, skin_x) in [(0, left), (width - CORNER, far_x)] {
+        for y in (EDGE_START..height - EDGE_START).step_by(EDGE as usize) {
+            let length = EDGE.min(height - EDGE_START - y);
+            let piece = Rect::new(skin_x, top + CORNER, CORNER, length);
+            bitmaps.blt(dst, x, y, skin, piece, 255)?;
+        }
     }
     for (x, y, skin_x, skin_y) in [
         (0, 0, left, top),
@@ -176,11 +200,10 @@ fn draw_frame(
     Ok(())
 }
 
-/// The cursor: the skin's cursor image stretched to `width` by `height`, except for a border
-/// of 2 pixels that keeps its size.
-///
-/// PLACEHOLDER: the width of the unscaled border, and what a cursor too small for it shows
-/// (here: the whole image stretched), are not yet checked against the original runtime.
+/// The cursor, composed as the original composes it: the centre of the skin's cursor image
+/// stretched to all but a border of 2 pixels, then the top, bottom, left and right edges
+/// stretched along their length, then the four corners. A cursor too small for a piece shows
+/// what of it lies inside, later pieces over earlier ones.
 fn draw_cursor(
     bitmaps: &mut Bitmaps,
     dst: BitmapId,
@@ -189,38 +212,39 @@ fn draw_cursor(
     height: i32,
     _stretch: bool,
 ) -> Result<(), BitmapError> {
-    if width < 2 * CURSOR_BORDER || height < 2 * CURSOR_BORDER {
-        return bitmaps.stretch_blt(dst, Rect::new(0, 0, width, height), skin, CURSOR, 255);
+    let border = CURSOR_BORDER;
+    let (inner_width, inner_height) = (width - 2 * border, height - 2 * border);
+    let image = CURSOR.width - 2 * border;
+    let (near_x, near_y) = (CURSOR.x, CURSOR.y);
+    let (far_x, far_y) = (near_x + border + image, near_y + border + image);
+    if inner_width > 0 && inner_height > 0 {
+        let part = stretched_part(image, inner_width, inner_height);
+        let from = Rect::new(near_x + border, near_y + border, part, part);
+        let to = Rect::new(border, border, inner_width, inner_height);
+        bitmaps.stretch_blt(dst, to, skin, from, 255)?;
     }
-    // Along one axis: where each of the three strips starts and how long it is, in the
-    // destination and in the image.
-    let strips = |length: i32, image: i32| {
-        [
-            (0, CURSOR_BORDER, 0, CURSOR_BORDER),
-            (
-                CURSOR_BORDER,
-                length - 2 * CURSOR_BORDER,
-                CURSOR_BORDER,
-                image - 2 * CURSOR_BORDER,
-            ),
-            (
-                length - CURSOR_BORDER,
-                CURSOR_BORDER,
-                image - CURSOR_BORDER,
-                CURSOR_BORDER,
-            ),
-        ]
-    };
-    for (y, rows, image_y, image_rows) in strips(height, CURSOR.height) {
-        for (x, columns, image_x, image_columns) in strips(width, CURSOR.width) {
-            let from = Rect::new(
-                CURSOR.x + image_x,
-                CURSOR.y + image_y,
-                image_columns,
-                image_rows,
-            );
-            bitmaps.stretch_blt(dst, Rect::new(x, y, columns, rows), skin, from, 255)?;
+    if inner_width > 0 {
+        for (y, skin_y) in [(0, near_y), (height - border, far_y)] {
+            let from = Rect::new(near_x + border, skin_y, image, border);
+            let to = Rect::new(border, y, inner_width, border);
+            bitmaps.stretch_blt(dst, to, skin, from, 255)?;
         }
+    }
+    if inner_height > 0 {
+        for (x, skin_x) in [(0, near_x), (width - border, far_x)] {
+            let from = Rect::new(skin_x, near_y + border, border, image);
+            let to = Rect::new(x, border, border, inner_height);
+            bitmaps.stretch_blt(dst, to, skin, from, 255)?;
+        }
+    }
+    for (x, y, skin_x, skin_y) in [
+        (0, 0, near_x, near_y),
+        (width - border, 0, far_x, near_y),
+        (0, height - border, near_x, far_y),
+        (width - border, height - border, far_x, far_y),
+    ] {
+        let corner = Rect::new(skin_x, skin_y, border, border);
+        bitmaps.blt(dst, x, y, skin, corner, 255)?;
     }
     Ok(())
 }
@@ -244,20 +268,47 @@ fn clip_to(clip: vkxp_proto::Rect, x: i64, y: i64, width: i64, height: i64) -> v
     }
 }
 
+/// How a part of a window looks: unchanged colours, the window blend.
+fn layer(opacity: u8) -> Look {
+    Look {
+        blend: BlendMode::Window,
+        ..Look::plain(opacity)
+    }
+}
+
 impl Window {
-    /// The opacity of the background: the window's opacity times its back opacity over 255.
+    /// The opacity of the background: the window's opacity times its back opacity over 255,
+    /// rounded down.
     fn background_opacity(&self) -> u8 {
         (u32::from(self.opacity) * u32::from(self.back_opacity) / 255) as u8
     }
 
-    /// The opacity of the cursor: its blink alpha times the contents opacity over 255.
-    fn cursor_opacity(&self) -> u8 {
-        (u32::from(self.cursor_alpha()) * u32::from(self.contents_opacity) / 255) as u8
+    /// The opacity of the cursor: the contents opacity less 8 for each step the blink is
+    /// away from its start, at most 16 steps either way. The contents opacity is subtracted
+    /// from, not scaled.
+    pub(crate) fn cursor_opacity(&self) -> u8 {
+        let step = match self.cursor_step {
+            step @ 0..=16 => step,
+            step => 32 - step,
+        };
+        self.contents_opacity.saturating_sub(8 * step)
+    }
+
+    /// The opacity and the image of the pause sign, or `None` while it is not shown: it
+    /// fades in by 32 per update from the update after the flag was set, and shows each of
+    /// its four images for 8 updates.
+    pub(crate) fn pause_sign(&self) -> Option<(u8, u32)> {
+        if !self.pause || self.pause_step == 0 {
+            return None;
+        }
+        let opacity = self.pause_step.saturating_mul(32).min(255) as u8;
+        Some((opacity, self.pause_step / PAUSE_PERIOD % 4))
     }
 
     /// Brings the cached bitmaps this frame draws up to date. What is not drawn this frame
     /// is left as it is.
     pub(crate) fn refresh_caches(&mut self, bitmaps: &mut Bitmaps) {
+        self.follow_flags();
         if !self.visible {
             return;
         }
@@ -270,11 +321,10 @@ impl Window {
                 .map(|(id, revision)| (id, revision, width, height, stretch))
         };
         if self.background_opacity() > 0 {
-            let wanted = key(
-                self.width.saturating_sub(2 * BACK_MARGIN),
-                self.height.saturating_sub(2 * BACK_MARGIN),
-                self.stretch,
-            );
+            let width = self.width.saturating_sub(2 * BACK_MARGIN);
+            let height = self.height.saturating_sub(2 * BACK_MARGIN);
+            // One spare column: see `draw_background`.
+            let wanted = key(width.saturating_add(1), height, self.stretch).filter(|_| width > 0);
             self.caches
                 .background
                 .refresh(bitmaps, wanted, draw_background);
@@ -300,18 +350,19 @@ impl Assembly<'_> {
         clip: vkxp_proto::Rect,
         opacity: u8,
     ) {
+        self.whole_as(bitmap, x, y, clip, Look::plain(opacity));
+    }
+
+    /// Draws the whole of `bitmap` unscaled with its top-left corner at (`x`, `y`), looking
+    /// as `look` says.
+    fn whole_as(&mut self, bitmap: BitmapId, x: i64, y: i64, clip: vkxp_proto::Rect, look: Look) {
         if let Ok(rect) = self.bitmaps.rect(bitmap) {
-            self.quad(
-                bitmap,
-                rect,
-                &Geometry::at(x, y),
-                clip,
-                Look::plain(opacity),
-            );
+            self.quad(bitmap, rect, &Geometry::at(x, y), clip, look);
         }
     }
 
-    /// Background and frame of a window, at the window's z.
+    /// Background and frame of a window, at the window's z. The background takes the window's
+    /// opacity and its back opacity, the frame the window's opacity alone.
     pub(crate) fn window_back(&mut self, window: &Window, level: &Level) {
         if !window.visible {
             return;
@@ -320,20 +371,20 @@ impl Assembly<'_> {
         let y = i64::from(window.y) + level.dy;
         if let Some(bitmap) = window.caches.background.bitmap {
             let margin = i64::from(BACK_MARGIN);
-            let opacity = window.background_opacity();
-            self.whole(bitmap, x + margin, y + margin, level.clip, opacity);
+            let look = layer(window.background_opacity());
+            self.whole_as(bitmap, x + margin, y + margin, level.clip, look);
         }
         if let Some(bitmap) = window.caches.frame.bitmap {
-            self.whole(bitmap, x, y, level.clip, window.opacity);
+            self.whole_as(bitmap, x, y, level.clip, layer(window.opacity));
         }
     }
 
-    /// Cursor, contents, pause sign and scroll arrows of a window, at the window's z plus 2.
+    /// The upper part of a window, at the window's z plus 2, from bottom to top: cursor,
+    /// contents, the scroll arrows in the order down, left, right, up, and the pause sign.
     ///
-    /// PLACEHOLDER: where the arrows sit (centred on their edge, 4 pixels in), when they
-    /// appear (whenever contents lie beyond the visible area in that direction) and that
-    /// pause sign and arrows ignore the contents opacity are not yet checked against the
-    /// original runtime.
+    /// The cursor does not move with the window's origin and is cut off by the window, not by
+    /// the contents area; the contents opacity acts on the contents and the cursor only, and
+    /// no opacity on the arrows and the pause sign. Arrows need a contents bitmap.
     pub(crate) fn window_front(&mut self, window: &Window, level: &Level) {
         if !window.visible {
             return;
@@ -343,19 +394,19 @@ impl Assembly<'_> {
         let (width, height) = (i64::from(window.width), i64::from(window.height));
         let padding = i64::from(PADDING);
         let (inner_width, inner_height) = (width - 2 * padding, height - 2 * padding);
+        let inside = clip_to(level.clip, x, y, width, height);
 
         let cursor = window.cursor_rect;
         if let Some(bitmap) = window.caches.cursor.bitmap
             && cursor.width > 0
             && cursor.height > 0
         {
-            let clip = clip_to(level.clip, x, y, width, height);
-            self.whole(
+            self.whole_as(
                 bitmap,
                 x + padding + i64::from(cursor.x),
                 y + padding + i64::from(cursor.y),
-                clip,
-                window.cursor_opacity(),
+                inside,
+                layer(window.cursor_opacity()),
             );
         }
 
@@ -370,63 +421,51 @@ impl Assembly<'_> {
                 inner_width,
                 inner_height,
             );
-            self.whole(
+            self.whole_as(
                 bitmap,
                 x + padding - i64::from(window.ox),
                 y + padding - i64::from(window.oy),
                 clip,
-                window.contents_opacity,
+                layer(window.contents_opacity),
             );
         }
 
         let Some(skin) = window.windowskin else {
             return;
         };
-        let centre_x = x + (width - 16) / 2;
-        let centre_y = y + (height - 16) / 2;
-        let mut piece = |from: Rect, x: i64, y: i64| {
-            self.quad(
-                skin,
-                from,
-                &Geometry::at(x, y),
-                level.clip,
-                Look::plain(255),
-            );
+        let centre_x = x + width / 2 - 8;
+        let centre_y = y + height / 2 - 8;
+        let mut piece = |from: Rect, x: i64, y: i64, opacity: u8| {
+            self.quad(skin, from, &Geometry::at(x, y), inside, layer(opacity));
         };
-        if window.pause {
-            let image = (window.pause_step / PAUSE_PERIOD % 4) as i32;
+        if let Some((_, size)) = contents {
+            let (ox, oy) = (i64::from(window.ox), i64::from(window.oy));
+            // The arrows sit around the 32 by 32 centre of the frame area.
+            let (left, top) = (FRAME.0 + CORNER, FRAME.1 + CORNER);
+            if i64::from(size.height) - oy > inner_height {
+                let from = Rect::new(left + 8, top + 24, 16, 8);
+                piece(from, centre_x, y + height - 12, 255);
+            }
+            if ox > 0 {
+                piece(Rect::new(left, top + 8, 8, 16), x + 4, centre_y, 255);
+            }
+            if i64::from(size.width) - ox > inner_width {
+                let from = Rect::new(left + 24, top + 8, 8, 16);
+                piece(from, x + width - 12, centre_y, 255);
+            }
+            if oy > 0 {
+                piece(Rect::new(left + 8, top, 16, 8), centre_x, y + 4, 255);
+            }
+        }
+        if let Some((opacity, image)) = window.pause_sign() {
+            let image = image as i32;
             let from = Rect::new(
                 PAUSE.0 + 16 * (image % 2),
                 PAUSE.1 + 16 * (image / 2),
                 16,
                 16,
             );
-            piece(from, centre_x, y + height - 16);
-        }
-        if let Some((_, size)) = contents {
-            let (ox, oy) = (i64::from(window.ox), i64::from(window.oy));
-            // The arrows sit around the 32 by 32 centre of the frame area.
-            let (left, top) = (FRAME.0 + CORNER, FRAME.1 + CORNER);
-            if oy > 0 {
-                piece(Rect::new(left + 8, top, 16, 8), centre_x, y + 4);
-            }
-            if i64::from(size.height) - oy > inner_height {
-                piece(
-                    Rect::new(left + 8, top + 24, 16, 8),
-                    centre_x,
-                    y + height - 12,
-                );
-            }
-            if ox > 0 {
-                piece(Rect::new(left, top + 8, 8, 16), x + 4, centre_y);
-            }
-            if i64::from(size.width) - ox > inner_width {
-                piece(
-                    Rect::new(left + 24, top + 8, 8, 16),
-                    x + width - 12,
-                    centre_y,
-                );
-            }
+            piece(from, centre_x, y + height - 16, opacity);
         }
     }
 }
@@ -632,13 +671,14 @@ mod tests {
         let id = window(&mut stage, Some(skin));
         stage.scene.window_mut(id).unwrap().width = 100;
         let frame = stage.frame();
+        // The pieces start 8 pixels inside the window, under the corner.
         for x in 16..84 {
-            let expected = if (x - 16) % 32 == 0 { WHITE } else { TOP };
+            let expected = if (x - 8) % 32 == 0 { WHITE } else { TOP };
             assert_eq!(frame.pixel(x, 3), expected, "x {x}");
         }
         assert_eq!(frame.pixel(84, 3), TOP_RIGHT);
         for y in 16..80 {
-            let expected = if (y - 16) % 32 == 0 { WHITE } else { LEFT };
+            let expected = if (y - 8) % 32 == 0 { WHITE } else { LEFT };
             assert_eq!(frame.pixel(3, y), expected, "y {y}");
         }
         assert_eq!(frame.pixel(3, 80), BOTTOM_LEFT);
@@ -661,7 +701,7 @@ mod tests {
         assert_eq!(frame.pixel(0, 0), TOP_LEFT);
         assert_eq!(
             frame.pixel(80, 48),
-            vkxp_pixel::blend_normal(BLACK, BACK, 100)
+            vkxp_pixel::blend_window(BLACK, BACK, 100)
         );
     }
 
@@ -689,11 +729,11 @@ mod tests {
         let frame = stage.frame();
         assert_eq!(
             frame.pixel(0, 0),
-            vkxp_pixel::blend_normal(BLACK, TOP_LEFT, 200)
+            vkxp_pixel::blend_window(BLACK, TOP_LEFT, 200)
         );
         assert_eq!(
             frame.pixel(80, 48),
-            vkxp_pixel::blend_normal(BLACK, BACK, 78)
+            vkxp_pixel::blend_window(BLACK, BACK, 78)
         );
     }
 
@@ -749,8 +789,9 @@ mod tests {
         window.height = 164;
         let stretched = stage.frame();
         for (x, y) in [(0, 0), (1, 0), (57, 3), (199, 159), (100, 80)] {
-            let from_x = vkxp_pixel::stretch_index(x, 128, 200);
-            let from_y = vkxp_pixel::stretch_index(y, 128, 160);
+            // Larger than half the pattern both ways: 127 texels are stretched, not 128.
+            let from_x = vkxp_pixel::stretch_index(x, 127, 200);
+            let from_y = vkxp_pixel::stretch_index(y, 127, 160);
             assert_eq!(
                 stretched.pixel(2 + x, 2 + y),
                 pattern(from_x, from_y),
@@ -919,7 +960,7 @@ mod tests {
         window.set_contents_opacity(90);
         assert_eq!(
             stage.frame().pixel(16, 16),
-            vkxp_pixel::blend_normal(BLACK, WHITE, 90)
+            vkxp_pixel::blend_window(BLACK, WHITE, 90)
         );
         stage.scene.window_mut(id).unwrap().set_contents_opacity(0);
         assert!(all(&stage.frame(), BLACK));
@@ -1053,12 +1094,20 @@ mod tests {
         assert_eq!(frame.pixel(164, 229), BACK);
         assert_eq!(frame.pixel(124, 230), BACK);
 
-        // Too small for its border, the whole image is stretched.
+        // Too narrow for a centre, it shows its borders, the right one over the left one.
         stage.scene.window_mut(id).unwrap().cursor_rect = Rect::new(0, 0, 3, 32);
         let frame = stage.frame();
         assert_eq!(frame.pixel(116, 216), CURSOR_EDGE);
-        assert_eq!(frame.pixel(117, 220), CURSOR_FILL);
+        assert_eq!(frame.pixel(117, 220), CURSOR_EDGE);
+        assert_eq!(frame.pixel(118, 220), CURSOR_EDGE);
         assert_eq!(frame.pixel(119, 220), BACK);
+
+        // It is cut off by the window, not by the contents area.
+        stage.scene.window_mut(id).unwrap().cursor_rect = Rect::new(-16, -16, 200, 20);
+        let frame = stage.frame();
+        assert_eq!(frame.pixel(100, 200), CURSOR_EDGE);
+        assert_eq!(frame.pixel(259, 210), CURSOR_FILL);
+        assert_eq!(frame.pixel(260, 210), BLACK);
     }
 
     #[test]
@@ -1093,7 +1142,7 @@ mod tests {
 
     /// The colour of the cursor's inside over the background at `alpha`.
     fn blinking(alpha: u8) -> Rgba {
-        vkxp_pixel::blend_normal(BACK, CURSOR_FILL, alpha)
+        vkxp_pixel::blend_window(BACK, CURSOR_FILL, alpha)
     }
 
     #[test]
@@ -1110,7 +1159,7 @@ mod tests {
         let mut alphas = Vec::new();
         for _ in 0..32 {
             stage.scene.window_mut(id).unwrap().update();
-            alphas.push(stage.scene.window(id).unwrap().cursor_alpha());
+            alphas.push(stage.scene.window(id).unwrap().cursor_opacity());
         }
         let falling: Vec<u8> = (1..=16).map(|step| 255 - 8 * step).collect();
         let rising: Vec<u8> = (1..=16).map(|step| 127 + 8 * step).collect();
@@ -1133,25 +1182,70 @@ mod tests {
     }
 
     #[test]
-    fn the_cursor_of_an_inactive_window_keeps_its_alpha() {
+    fn the_cursor_of_an_inactive_window_stands_at_its_twelfth_step() {
         let mut stage = Stage::new();
         let id = with_cursor(&mut stage);
         for _ in 0..5 {
             stage.scene.window_mut(id).unwrap().update();
         }
         assert_eq!(stage.frame().pixel(80, 60), blinking(215));
-        stage.scene.window_mut(id).unwrap().active = false;
+        stage.scene.window_mut(id).unwrap().set_active(false);
+        assert_eq!(stage.scene.window(id).unwrap().cursor_opacity(), 159);
+        assert_eq!(stage.frame().pixel(80, 60), blinking(159));
         for _ in 0..7 {
             stage.scene.window_mut(id).unwrap().update();
-            assert_eq!(stage.frame().pixel(80, 60), blinking(215));
+            assert_eq!(stage.frame().pixel(80, 60), blinking(159));
         }
-        stage.scene.window_mut(id).unwrap().active = true;
+        // It goes on from there.
+        stage.scene.window_mut(id).unwrap().set_active(true);
+        assert_eq!(stage.frame().pixel(80, 60), blinking(159));
         stage.scene.window_mut(id).unwrap().update();
-        assert_eq!(stage.frame().pixel(80, 60), blinking(207));
+        assert_eq!(stage.frame().pixel(80, 60), blinking(151));
+        // Active again without an update in between: from the twelfth step all the same.
+        let window = stage.scene.window_mut(id).unwrap();
+        window.set_active(false);
+        window.set_active(true);
+        window.update();
+        assert_eq!(window.cursor_opacity(), 151);
+        // Making an active window active changes nothing.
+        window.set_active(true);
+        assert_eq!(window.cursor_opacity(), 151);
     }
 
     #[test]
-    fn the_contents_opacity_fades_the_cursor_too() {
+    fn flags_assigned_as_fields_are_followed_at_the_next_frame_or_update() {
+        let mut stage = Stage::new();
+        let id = with_cursor(&mut stage);
+        for _ in 0..5 {
+            stage.scene.window_mut(id).unwrap().update();
+        }
+        stage.scene.window_mut(id).unwrap().active = false;
+        assert_eq!(stage.frame().pixel(80, 60), blinking(159));
+        stage.scene.window_mut(id).unwrap().active = true;
+        stage.scene.window_mut(id).unwrap().update();
+        assert_eq!(stage.frame().pixel(80, 60), blinking(151));
+
+        let window = stage.scene.window_mut(id).unwrap();
+        window.active = false;
+        window.update();
+        assert_eq!(window.cursor_opacity(), 159);
+
+        // The pause sign starts over when the flag has changed.
+        window.pause = true;
+        for _ in 0..3 {
+            window.update();
+        }
+        assert_eq!(window.pause_sign(), Some((96, 0)));
+        window.pause = false;
+        window.update();
+        assert_eq!(window.pause_sign(), None);
+        window.pause = true;
+        window.update();
+        assert_eq!(window.pause_sign(), Some((32, 0)));
+    }
+
+    #[test]
+    fn the_contents_opacity_is_what_the_blink_takes_from() {
         let mut stage = Stage::new();
         let id = with_cursor(&mut stage);
         stage
@@ -1160,10 +1254,22 @@ mod tests {
             .unwrap()
             .set_contents_opacity(100);
         assert_eq!(stage.frame().pixel(80, 60), blinking(100));
-        for _ in 0..16 {
+        for _ in 0..4 {
             stage.scene.window_mut(id).unwrap().update();
         }
-        assert_eq!(stage.frame().pixel(80, 60), blinking(49));
+        assert_eq!(stage.frame().pixel(80, 60), blinking(68));
+        for _ in 0..12 {
+            stage.scene.window_mut(id).unwrap().update();
+        }
+        assert_eq!(stage.frame().pixel(80, 60), BACK);
+        // Opacity and back opacity do not act on the cursor.
+        let window = stage.scene.window_mut(id).unwrap();
+        window.set_contents_opacity(255);
+        window.set_opacity(0);
+        assert_eq!(
+            stage.frame().pixel(80, 60),
+            vkxp_pixel::blend_window(BLACK, CURSOR_FILL, 127)
+        );
     }
 
     #[test]
@@ -1192,30 +1298,49 @@ mod tests {
     }
 
     #[test]
-    fn the_pause_sign_steps_through_its_four_images() {
+    fn the_pause_sign_fades_in_and_steps_through_its_four_images() {
         let mut stage = Stage::new();
         let skin = skin(&mut stage);
         let id = window(&mut stage, Some(skin));
         let without = stage.frame();
         assert_eq!(without.pixel(72, 80), BOTTOM);
 
-        stage.scene.window_mut(id).unwrap().pause = true;
+        // Before the first update it is not drawn.
+        stage.scene.window_mut(id).unwrap().set_pause(true);
+        assert_eq!(stage.frame(), without);
+
+        let sign =
+            |alpha: u8, image: usize| vkxp_pixel::blend_window(BOTTOM, PAUSE_IMAGES[image], alpha);
+        stage.scene.window_mut(id).unwrap().update();
         let frame = stage.frame();
         for y in 78..98 {
             for x in 70..90 {
                 let inside = (72..88).contains(&x) && (80..96).contains(&y);
                 let expected = if inside {
-                    PAUSE_IMAGES[0]
+                    sign(32, 0)
                 } else {
                     without.pixel(x, y)
                 };
                 assert_eq!(frame.pixel(x, y), expected, "({x}, {y})");
             }
         }
+        stage.scene.window_mut(id).unwrap().update();
+        assert_eq!(stage.frame().pixel(72, 80), sign(64, 0));
+        for updates in 3..=7 {
+            stage.scene.window_mut(id).unwrap().update();
+            let alpha = 32 * updates;
+            assert_eq!(stage.frame().pixel(72, 80), sign(alpha, 0), "{updates}");
+        }
+        // From the eighth update it is opaque and shows its second image.
+        stage.scene.window_mut(id).unwrap().update();
+        assert_eq!(stage.scene.window(id).unwrap().pause_sign(), Some((255, 1)));
+        assert_eq!(stage.frame().pixel(72, 80), PAUSE_IMAGES[1]);
+        assert_eq!(stage.frame().pixel(87, 95), PAUSE_IMAGES[1]);
 
+        // Eight updates per image from then on.
         for round in 0..2 {
-            for image in [1, 2, 3, 0] {
-                for step in 0..16 {
+            for image in [2, 3, 0, 1] {
+                for step in 0..8 {
                     let previous = PAUSE_IMAGES[(image + 3) % 4];
                     assert_eq!(
                         stage.frame().pixel(72, 80),
@@ -1225,35 +1350,55 @@ mod tests {
                     stage.scene.window_mut(id).unwrap().update();
                 }
                 assert_eq!(stage.frame().pixel(72, 80), PAUSE_IMAGES[image]);
-                assert_eq!(stage.frame().pixel(87, 95), PAUSE_IMAGES[image]);
             }
         }
 
-        // Without the flag there is no sign, and it starts over when the flag returns.
-        for _ in 0..20 {
-            stage.scene.window_mut(id).unwrap().update();
-        }
+        // No opacity acts on it.
+        let window = stage.scene.window_mut(id).unwrap();
+        window.set_opacity(0);
+        window.set_back_opacity(0);
+        window.set_contents_opacity(0);
         assert_eq!(stage.frame().pixel(72, 80), PAUSE_IMAGES[1]);
-        stage.scene.window_mut(id).unwrap().pause = false;
+        let window = stage.scene.window_mut(id).unwrap();
+        window.set_opacity(255);
+        window.set_back_opacity(255);
+
+        // Without the flag there is no sign at once, and it starts over when the flag
+        // returns, with or without an update in between.
+        stage.scene.window_mut(id).unwrap().set_pause(false);
         assert_eq!(stage.frame(), without);
         stage.scene.window_mut(id).unwrap().update();
-        stage.scene.window_mut(id).unwrap().pause = true;
-        assert_eq!(stage.frame().pixel(72, 80), PAUSE_IMAGES[0]);
+        stage.scene.window_mut(id).unwrap().set_pause(true);
+        assert_eq!(stage.frame(), without);
+        stage.scene.window_mut(id).unwrap().update();
+        assert_eq!(stage.frame().pixel(72, 80), sign(32, 0));
+        let window = stage.scene.window_mut(id).unwrap();
+        window.set_pause(false);
+        window.set_pause(true);
+        window.update();
+        assert_eq!(window.pause_sign(), Some((32, 0)));
+        // Setting the flag of a pausing window changes nothing.
+        window.set_pause(true);
+        window.update();
+        assert_eq!(window.pause_sign(), Some((64, 0)));
     }
 
     #[test]
-    fn the_pause_sign_is_in_front_of_the_contents() {
+    fn the_pause_sign_is_in_front_of_the_contents_and_the_down_arrow() {
         let mut stage = Stage::new();
         let skin = skin(&mut stage);
         let id = stage.scene.create_window(None).unwrap();
-        let bitmap = contents(&mut stage, 128, 64);
+        let bitmap = contents(&mut stage, 128, 200);
         let window = stage.scene.window_mut(id).unwrap();
         window.windowskin = Some(skin);
         window.contents = Some(bitmap);
         window.width = 160;
         window.height = 96;
         window.oy = -20;
-        window.pause = true;
+        window.set_pause(true);
+        for _ in 0..8 {
+            window.update();
+        }
         stage.scene.set_window_z(id, 10).unwrap();
         // A sprite between the two parts of the window is behind the sign.
         let green = stage.solid(160, 96, GREEN);
@@ -1265,9 +1410,12 @@ mod tests {
             .set_bitmap(Some(green), &stage.bitmaps);
         stage.scene.set_sprite_z(sprite, 11).unwrap();
         let frame = stage.frame();
-        assert_eq!(frame.pixel(72, 80), PAUSE_IMAGES[0]);
+        assert_eq!(frame.pixel(72, 80), PAUSE_IMAGES[1]);
         assert_eq!(frame.pixel(60, 80), GREEN);
         assert_eq!(frame.pixel(60, 70), content(44, 34));
+        // The down arrow, 4 rows lower, is under the sign and shows nowhere.
+        assert_eq!(frame.pixel(72, 84), PAUSE_IMAGES[1]);
+        assert_eq!(frame.pixel(87, 91), PAUSE_IMAGES[1]);
     }
 
     /// Which arrows the frame shows: up, down, left, right.
@@ -1423,5 +1571,723 @@ mod tests {
         stage.scene.window_mut(id).unwrap().windowskin = None;
         stage.frame();
         assert_eq!(stage.bitmaps.len(), before);
+    }
+
+    // The samples measured on the original runtime.
+
+    const MEASURED: &str = include_str!("../tests/data/window-samples.txt");
+
+    /// The samples of one kind, each split at its bars, without the kind.
+    fn samples(kind: &str) -> Vec<Vec<&'static str>> {
+        let rows: Vec<Vec<&str>> = MEASURED
+            .lines()
+            .filter_map(|line| line.strip_prefix(kind)?.strip_prefix(' '))
+            .map(|row| row.split('|').map(str::trim).collect())
+            .collect();
+        assert!(!rows.is_empty(), "no `{kind}` samples");
+        rows
+    }
+
+    fn numbers(text: &str) -> Vec<i32> {
+        text.split_whitespace()
+            .map(|word| word.parse().unwrap_or_else(|_| panic!("a number: {word}")))
+            .collect()
+    }
+
+    /// A list of `length` values of which the middle may be left out as "...": each value
+    /// that is listed, with its position.
+    fn listed(text: &str, length: i32) -> Vec<(i32, i32)> {
+        // Some lists carry a caption that ends in a colon.
+        let text = text.rsplit(':').next().unwrap();
+        let mut parts = text.split("...");
+        let first = numbers(parts.next().unwrap());
+        let mut values: Vec<(i32, i32)> = (0..).zip(first).collect();
+        match parts.next() {
+            Some(rest) => {
+                let rest = numbers(rest);
+                let start = length - rest.len() as i32;
+                assert!(start >= values.len() as i32, "{text}");
+                values.extend((start..).zip(rest));
+            }
+            None => assert_eq!(values.len() as i32, length, "{text}"),
+        }
+        values
+    }
+
+    /// The skin of the traced probes, of which only the texels that `keep` names are there:
+    /// texel (x, y) has the colour (x, y, 255).
+    fn traced_skin(stage: &mut Stage, keep: impl Fn(u32, u32) -> bool) -> BitmapId {
+        let mut rgba = Vec::with_capacity(192 * 128 * 4);
+        for y in 0..128 {
+            for x in 0..192 {
+                let texel = if keep(x, y) { traced(x, y) } else { CLEAR };
+                rgba.extend_from_slice(&texel);
+            }
+        }
+        stage.bitmap(192, 128, rgba)
+    }
+
+    fn traced(x: u32, y: u32) -> Rgba {
+        [x as u8, y as u8, 255, 255]
+    }
+
+    /// The contents of the probes: texel (x, y) has the colour (x mod 256, y mod 256, 100).
+    fn traced_contents(stage: &mut Stage, width: u32, height: u32) -> BitmapId {
+        let mut rgba = Vec::new();
+        for y in 0..height {
+            for x in 0..width {
+                rgba.extend_from_slice(&[x as u8, y as u8, 100, 255]);
+            }
+        }
+        stage.bitmap(width, height, rgba)
+    }
+
+    /// A window of `width` by `height` at 0, 0.
+    fn sized(stage: &mut Stage, skin: BitmapId, width: i32, height: i32) -> WindowId {
+        let id = stage.scene.create_window(None).unwrap();
+        let window = stage.scene.window_mut(id).unwrap();
+        window.windowskin = Some(skin);
+        window.width = width;
+        window.height = height;
+        id
+    }
+
+    /// The smallest rectangle around the pixels of the frame that `wanted` names, as its
+    /// first and last column and row.
+    fn bounds(frame: &Frame, wanted: impl Fn(Rgba) -> bool) -> Option<[i32; 4]> {
+        let mut bounds: Option<[i32; 4]> = None;
+        for y in 0..frame.size.height {
+            for x in 0..frame.size.width {
+                if wanted(frame.pixel(x, y)) {
+                    let (x, y) = (x as i32, y as i32);
+                    let [x0, y0, x1, y1] = bounds.unwrap_or([x, y, x, y]);
+                    bounds = Some([x0.min(x), y0.min(y), x1.max(x), y1.max(y)]);
+                }
+            }
+        }
+        bounds
+    }
+
+    /// Checks the background of a window of each sampled size against the texels listed for
+    /// its first row and its first column.
+    fn background_shows_the_measured_texels(kind: &str, stretch: bool) {
+        let mut stage = Stage::new();
+        let skin = traced_skin(&mut stage, |x, _| x < 128);
+        let id = sized(&mut stage, skin, 0, 0);
+        stage.scene.window_mut(id).unwrap().stretch = stretch;
+        for sample in samples(kind) {
+            let &[width, height] = numbers(sample[0]).as_slice() else {
+                panic!("{sample:?}");
+            };
+            let [across, down] = [sample[sample.len() - 2], sample[sample.len() - 1]];
+            let across = listed(across, width - 4);
+            let down = listed(down, height - 4);
+            let window = stage.scene.window_mut(id).unwrap();
+            (window.width, window.height) = (width, height);
+            let frame = stage.frame();
+            for &(i, x) in &across {
+                let expected = traced(x as u32, down[0].1 as u32);
+                assert_eq!(frame.pixel(2 + i as u32, 2), expected, "{sample:?} {i}");
+            }
+            for &(j, y) in &down {
+                let expected = traced(across[0].1 as u32, y as u32);
+                assert_eq!(frame.pixel(2, 2 + j as u32), expected, "{sample:?} {j}");
+            }
+            // Nothing in the margin of two pixels.
+            let drawn = bounds(&frame, |pixel| pixel != BLACK);
+            assert_eq!(drawn, Some([2, 2, width - 3, height - 3]), "{sample:?}");
+        }
+    }
+
+    #[test]
+    fn the_stretched_background_shows_the_measured_texels() {
+        background_shows_the_measured_texels("bg", true);
+    }
+
+    #[test]
+    fn the_tiled_background_shows_the_measured_texels() {
+        background_shows_the_measured_texels("tiled", false);
+    }
+
+    #[test]
+    fn the_background_is_stretched_from_the_measured_number_of_texels() {
+        let mut stage = Stage::sized(210, 210);
+        let skin = traced_skin(&mut stage, |x, _| x < 128);
+        let id = sized(&mut stage, skin, 0, 0);
+        let mut seen = [false; 2];
+        for sample in samples("bgnum") {
+            for case in sample[0].split(';') {
+                let &[width, height, part] = numbers(case).as_slice() else {
+                    panic!("{case}");
+                };
+                seen[usize::from(part == 127)] = true;
+                let window = stage.scene.window_mut(id).unwrap();
+                (window.width, window.height) = (width, height);
+                let frame = stage.frame();
+                // The last column and the last row tell the two apart.
+                let last = |length: i32| {
+                    vkxp_pixel::stretch_index(length as u32 - 1, part as u32, length as u32)
+                };
+                let corner = frame.pixel(width as u32 - 3, height as u32 - 3);
+                assert_eq!(corner, traced(last(width - 4), last(height - 4)), "{case}");
+            }
+        }
+        assert_eq!(seen, [true; 2]);
+    }
+
+    #[test]
+    fn the_background_takes_the_measured_alpha() {
+        const ALPHAS: [u8; 6] = [4, 60, 124, 131, 195, 255];
+        let mut stage = Stage::sized(120, 20);
+        let windows = ALPHAS.map(|alpha| {
+            let mut skin = vec![0; 192 * 128 * 4];
+            for texel in skin.as_chunks_mut::<4>().0 {
+                *texel = [255, 255, 255, alpha];
+            }
+            let skin = stage.bitmap(192, 128, skin);
+            // Only the background: nothing of the frame.
+            stage
+                .bitmaps
+                .fill_rect(skin, Rect::new(128, 0, 64, 128), color(CLEAR))
+                .unwrap();
+            sized(&mut stage, skin, 20, 20)
+        });
+        for (index, &id) in windows.iter().enumerate() {
+            stage.scene.window_mut(id).unwrap().x = 20 * index as i32;
+        }
+        for sample in samples("back") {
+            let &[opacity, back_opacity] = numbers(sample[0]).as_slice() else {
+                panic!("{sample:?}");
+            };
+            for &id in &windows {
+                let window = stage.scene.window_mut(id).unwrap();
+                window.set_opacity(opacity);
+                window.set_back_opacity(back_opacity);
+            }
+            let frame = stage.frame();
+            for (index, alpha) in numbers(sample[1]).into_iter().enumerate() {
+                // White over black in the window blend is the alpha itself.
+                let alpha = alpha as u8;
+                let pixel = frame.pixel(20 * index as u32 + 10, 10);
+                assert_eq!(pixel, [alpha, alpha, alpha, 255], "{sample:?} {index}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_frame_shows_the_measured_texels() {
+        let mut stage = Stage::sized(110, 110);
+        let skin = traced_skin(&mut stage, |x, y| x >= 128 && y < 64);
+        let id = sized(&mut stage, skin, 0, 0);
+        // Along the top the texel's x is the same whatever the height, and down the left
+        // side its y whatever the width.
+        for (kind, channel) in [("frame-top", 0), ("frame-left", 1)] {
+            let mut small = 0;
+            for sample in samples(kind) {
+                let side: i32 = sample[0].parse().unwrap();
+                small += i32::from(side < 32);
+                let window = stage.scene.window_mut(id).unwrap();
+                (window.width, window.height) = (side, side);
+                let frame = stage.frame();
+                for (at, texel) in listed(sample[1], side) {
+                    let (x, y) = if channel == 0 { (at, 0) } else { (0, at) };
+                    let pixel = frame.pixel(x as u32, y as u32);
+                    assert_eq!(i32::from(pixel[channel]), texel, "{kind} {side} at {at}");
+                    assert_eq!(pixel[2], 255, "{kind} {side} at {at}");
+                }
+            }
+            assert!(small >= 4, "windows smaller than 32 pixels");
+        }
+    }
+
+    #[test]
+    fn contents_and_arrows_show_as_measured() {
+        let mut stage = Stage::sized(160, 96);
+        let skin = traced_skin(&mut stage, |_, _| true);
+        let id = sized(&mut stage, skin, 0, 0);
+        for sample in samples("contents") {
+            let &[width, height, across, down, ox, oy] = numbers(sample[0]).as_slice() else {
+                panic!("{sample:?}");
+            };
+            let bitmap = traced_contents(&mut stage, across as u32, down as u32);
+            let window = stage.scene.window_mut(id).unwrap();
+            (window.width, window.height) = (width, height);
+            (window.ox, window.oy) = (ox, oy);
+            let old = window.contents.replace(bitmap);
+            if let Some(old) = old {
+                stage.bitmaps.dispose(old);
+            }
+            let frame = stage.frame();
+            let corner = frame.pixel(16, 16);
+            match sample[1] {
+                "none" => assert_eq!(corner[2], 255, "{sample:?}"),
+                texel => {
+                    let texel: Vec<u8> = texel
+                        .split(',')
+                        .map(|word| word.parse::<i32>().unwrap() as u8)
+                        .collect();
+                    assert_eq!(corner, [texel[0], texel[1], 100, 255], "{sample:?}");
+                }
+            }
+            let (width, height) = (width as u32, height as u32);
+            let arrows = [
+                (4, height / 2 - 8, traced(144, 24)),
+                (width / 2 - 8, 4, traced(152, 16)),
+                (width - 12, height / 2 - 8, traced(168, 24)),
+                (width / 2 - 8, height - 12, traced(152, 40)),
+            ];
+            let shown: Vec<i32> = arrows
+                .iter()
+                .map(|&(x, y, texel)| i32::from(frame.pixel(x, y) == texel))
+                .collect();
+            assert_eq!(shown, numbers(sample[2]), "{sample:?}");
+        }
+    }
+
+    #[test]
+    fn arrows_sit_and_overlap_as_measured() {
+        let mut stage = Stage::sized(300, 200);
+        let skin = traced_skin(&mut stage, |_, _| true);
+        let bitmap = traced_contents(&mut stage, 300, 200);
+        let id = sized(&mut stage, skin, 0, 0);
+        let window = stage.scene.window_mut(id).unwrap();
+        window.contents = Some(bitmap);
+        (window.ox, window.oy) = (20, 20);
+        // The four arrows are the frame area's middle, which is nothing else's source.
+        let arrow = |pixel: Rgba| {
+            (144..176).contains(&pixel[0]) && (16..48).contains(&pixel[1]) && pixel[2] == 255
+        };
+        for sample in samples("arrows") {
+            let &[width, height] = numbers(sample[0]).as_slice() else {
+                panic!("{sample:?}");
+            };
+            let window = stage.scene.window_mut(id).unwrap();
+            (window.width, window.height) = (width, height);
+            let frame = stage.frame();
+            let drawn = bounds(&frame, arrow).map(Vec::from);
+            assert_eq!(drawn, Some(numbers(sample[1])), "{sample:?}");
+            let places = [
+                (4, height / 2 - 8),
+                (width / 2 - 8, 4),
+                (width - 12, height / 2 - 8),
+                (width / 2 - 8, height - 12),
+            ];
+            for ((x, y), texel) in places.into_iter().zip(sample[2].split_whitespace()) {
+                let texel: Vec<u32> = texel.split(',').map(|word| word.parse().unwrap()).collect();
+                let expected = traced(texel[0], texel[1]);
+                assert_eq!(frame.pixel(x as u32, y as u32), expected, "{sample:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn arrows_take_no_opacity_and_need_contents() {
+        let mut stage = Stage::sized(160, 96);
+        let skin = skin(&mut stage);
+        let id = window(&mut stage, Some(skin));
+        let bitmap = stage.bitmaps.create(300, 200, &defaults()).unwrap();
+        let window = stage.scene.window_mut(id).unwrap();
+        window.contents = Some(bitmap);
+        (window.ox, window.oy) = (20, 20);
+        window.set_opacity(0);
+        window.set_back_opacity(0);
+        window.set_contents_opacity(0);
+        let frame = stage.frame();
+        assert_eq!(arrows(&frame), [true; 4]);
+        assert_eq!(drawn(&frame), 4 * 16 * 8);
+        stage.scene.window_mut(id).unwrap().contents = None;
+        assert!(all(&stage.frame(), BLACK));
+    }
+
+    #[test]
+    fn the_cursor_shows_the_measured_texels() {
+        let mut stage = Stage::sized(124, 78);
+        let skin = traced_skin(&mut stage, |x, y| (128..160).contains(&x) && y >= 64);
+        let id = sized(&mut stage, skin, 124, 78);
+        for sample in samples("cursor") {
+            let &[width, height] = numbers(sample[0]).as_slice() else {
+                panic!("{sample:?}");
+            };
+            stage.scene.window_mut(id).unwrap().cursor_rect = Rect::new(0, 0, width, height);
+            let frame = stage.frame();
+            let at = |x: i32, y: i32| frame.pixel(16 + x as u32, 16 + y as u32);
+            let rows = [(0, 1), (height / 2, 2)];
+            for (row, list) in rows {
+                for (i, texel) in listed(sample[list], width) {
+                    let pixel = at(i, row);
+                    assert_eq!(
+                        i32::from(pixel[0]) - 128,
+                        texel,
+                        "{sample:?} row {row} at {i}"
+                    );
+                    assert_eq!(pixel[2], 255);
+                }
+            }
+            let columns = [(0, 3), (width / 2, 4)];
+            for (column, list) in columns {
+                for (j, texel) in listed(sample[list], height) {
+                    let pixel = at(column, j);
+                    assert_eq!(
+                        i32::from(pixel[1]) - 64,
+                        texel,
+                        "{sample:?} column {column} at {j}"
+                    );
+                }
+            }
+            let drawn = bounds(&frame, |pixel| pixel != BLACK);
+            assert_eq!(drawn, Some([16, 16, 15 + width, 15 + height]), "{sample:?}");
+        }
+    }
+
+    /// The skin of the animation probes: a white cursor and four pause images.
+    fn animation_skin(stage: &mut Stage) -> BitmapId {
+        let id = stage.bitmaps.create(192, 128, &defaults()).unwrap();
+        let mut fill = |x, y, width, height, pixel| {
+            stage
+                .bitmaps
+                .fill_rect(id, Rect::new(x, y, width, height), color(pixel))
+                .unwrap();
+        };
+        fill(128, 64, 32, 32, WHITE);
+        for (index, image) in SIGNS.into_iter().enumerate() {
+            let index = index as i32;
+            fill(160 + 16 * (index % 2), 64 + 16 * (index / 2), 16, 16, image);
+        }
+        id
+    }
+
+    const SIGNS: [Rgba; 4] = [
+        [255, 60, 1, 255],
+        [255, 120, 2, 255],
+        [255, 180, 3, 255],
+        [255, 240, 4, 255],
+    ];
+
+    /// Runs the loop of the animation probes on a window of 64 by 64: on pass `t`, `script`
+    /// changes the window and says how often it is updated, then a frame is drawn, of which
+    /// the pixel at (`x`, `y`) is returned.
+    fn animate(
+        frames: usize,
+        (x, y): (u32, u32),
+        mut script: impl FnMut(usize, &mut Window) -> usize,
+    ) -> Vec<Rgba> {
+        let mut stage = Stage::sized(64, 64);
+        let skin = animation_skin(&mut stage);
+        let id = sized(&mut stage, skin, 64, 64);
+        (0..frames)
+            .map(|t| {
+                let window = stage.scene.window_mut(id).unwrap();
+                for _ in 0..script(t, window) {
+                    window.update();
+                }
+                stage.frame().pixel(x, y)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_cursor_blinks_as_measured() {
+        let mut names = Vec::new();
+        for sample in samples("blink") {
+            let name = sample[0];
+            names.push(name);
+            let expected = numbers(sample[1]);
+            let pixels = animate(expected.len(), (32, 32), |t, window| {
+                if t == 0 {
+                    window.cursor_rect = Rect::new(0, 0, 32, 32);
+                }
+                let start = |window: &mut Window, active: bool, opacity: i32| {
+                    if t == 0 {
+                        window.set_active(active);
+                        window.set_contents_opacity(opacity);
+                    }
+                };
+                match name {
+                    "active-updated" => 1,
+                    "active-never-updated" => 0,
+                    "updated-twice-per-frame" => 2,
+                    "updated-on-even-t-only" => usize::from(t % 2 == 0),
+                    "inactive-updated" => {
+                        start(window, false, 255);
+                        1
+                    }
+                    "inactive-never-updated" => {
+                        start(window, false, 255);
+                        0
+                    }
+                    "contents_opacity=128" => {
+                        start(window, true, 128);
+                        1
+                    }
+                    "contents_opacity=100" => {
+                        start(window, true, 100);
+                        1
+                    }
+                    "inactive,contents_opacity=100" => {
+                        start(window, false, 100);
+                        1
+                    }
+                    "active;inactive-at-t=100;active-at-t=150" => {
+                        match t {
+                            100 => window.set_active(false),
+                            150 => window.set_active(true),
+                            _ => {}
+                        }
+                        1
+                    }
+                    "invisible-until-t=30" => {
+                        window.visible = t >= 30;
+                        1
+                    }
+                    "t=20:active=false;active=true-before-update" => {
+                        if t == 20 {
+                            window.set_active(false);
+                            window.set_active(true);
+                        }
+                        1
+                    }
+                    "inactive-never-updated;t=20:active=true" => {
+                        start(window, false, 255);
+                        if t == 20 {
+                            window.set_active(true);
+                        }
+                        0
+                    }
+                    "t=20:active=false;t=21:active=true" => {
+                        match t {
+                            20 => window.set_active(false),
+                            21 => window.set_active(true),
+                            _ => {}
+                        }
+                        1
+                    }
+                    other => panic!("no script for {other}"),
+                }
+            });
+            // A white cursor over black: the red channel is the cursor's alpha.
+            let alphas: Vec<i32> = pixels.iter().map(|pixel| i32::from(pixel[0])).collect();
+            assert_eq!(alphas, expected, "{name}");
+        }
+        assert!(names.len() >= 10, "{names:?}");
+    }
+
+    #[test]
+    fn the_pause_sign_animates_as_measured() {
+        let mut names = Vec::new();
+        for sample in samples("pause") {
+            let name = sample[0];
+            names.push(name);
+            let expected: Vec<Rgba> = sample[1]
+                .split_whitespace()
+                .map(|step| {
+                    let (alpha, image) = step.split_once('/').unwrap();
+                    let (alpha, image): (u8, usize) =
+                        (alpha.parse().unwrap(), image.parse().unwrap());
+                    match image {
+                        0 => BLACK,
+                        image => vkxp_pixel::blend_window(BLACK, SIGNS[image - 1], alpha),
+                    }
+                })
+                .collect();
+            let pixels = animate(expected.len(), (24, 48), |t, window| {
+                if t == 0 {
+                    window.set_pause(true);
+                }
+                match name {
+                    "updated-from-creation" => 1,
+                    "never-updated" => 0,
+                    "updated-twice-per-frame" => 2,
+                    "contents_opacity=128" => {
+                        window.set_contents_opacity(128);
+                        1
+                    }
+                    "opacity=100,back_opacity=100" => {
+                        window.set_opacity(100);
+                        window.set_back_opacity(100);
+                        1
+                    }
+                    "t=20:pause=false;pause=true-before-update;t=50:false;t=51:true" => {
+                        match t {
+                            20 => {
+                                window.set_pause(false);
+                                window.set_pause(true);
+                            }
+                            50 => window.set_pause(false),
+                            51 => window.set_pause(true),
+                            _ => {}
+                        }
+                        1
+                    }
+                    "invisible-t=20..29" => {
+                        window.visible = !(20..30).contains(&t);
+                        1
+                    }
+                    other => panic!("no script for {other}"),
+                }
+            });
+            assert_eq!(pixels, expected, "{name}");
+        }
+        assert!(names.len() >= 5, "{names:?}");
+    }
+
+    #[test]
+    fn windows_in_viewports_are_placed_and_cut_as_measured() {
+        for sample in samples("viewport") {
+            let mut stage = Stage::new();
+            let skin = traced_skin(&mut stage, |_, _| true);
+            let bitmap = traced_contents(&mut stage, 300, 200);
+            let &[vx, vy, vw, vh, vox, voy] = numbers(sample[0]).as_slice() else {
+                panic!("{sample:?}");
+            };
+            let &[x, y, width, height] = numbers(sample[1]).as_slice() else {
+                panic!("{sample:?}");
+            };
+            let viewport = stage
+                .scene
+                .create_viewport(Rect::new(vx, vy, vw, vh))
+                .unwrap();
+            let view = stage.scene.viewport_mut(viewport).unwrap();
+            (view.ox, view.oy) = (vox, voy);
+            let id = stage.scene.create_window(Some(viewport)).unwrap();
+            let window = stage.scene.window_mut(id).unwrap();
+            window.windowskin = Some(skin);
+            window.contents = Some(bitmap);
+            (window.x, window.y, window.width, window.height) = (x, y, width, height);
+            (window.ox, window.oy) = (20, 10);
+            window.cursor_rect = Rect::new(5, 5, 60, 30);
+            let frame = stage.frame();
+            let drawn = bounds(&frame, |pixel| pixel != BLACK).unwrap();
+            assert_eq!(Vec::from(drawn), numbers(sample[2]), "{sample:?}");
+            let (kind, texel) = sample[3].split_once(' ').unwrap();
+            let texel: Vec<u8> = texel.split(',').map(|word| word.parse().unwrap()).collect();
+            let blue = if kind == "skin" { 255 } else { 100 };
+            assert_eq!(
+                frame.pixel(drawn[0] as u32, drawn[1] as u32),
+                [texel[0], texel[1], blue, 255],
+                "{sample:?}"
+            );
+        }
+    }
+
+    // The one pixel of an odd row that the window blend treats differently.
+
+    /// A skin whose every texel is half transparent, of which only the texels that `keep`
+    /// names are there.
+    fn half_skin(stage: &mut Stage, keep: impl Fn(u32, u32) -> bool) -> BitmapId {
+        let mut rgba = Vec::with_capacity(192 * 128 * 4);
+        for y in 0..128 {
+            for x in 0..192 {
+                let texel = if keep(x, y) { [0, 0, 0, 4] } else { CLEAR };
+                rgba.extend_from_slice(&texel);
+            }
+        }
+        stage.bitmap(192, 128, rgba)
+    }
+
+    /// A grey backdrop over which the two formulas differ for the texels of [`half_skin`]:
+    /// 158 by the window blend, 157 by the normal one.
+    fn backdrop(stage: &mut Stage) {
+        let size = stage.scene.logical_size();
+        let grey = stage.solid(size.width, size.height, [161, 161, 161, 255]);
+        let sprite = stage.scene.create_sprite(None).unwrap();
+        stage
+            .scene
+            .sprite_mut(sprite)
+            .unwrap()
+            .set_bitmap(Some(grey), &stage.bitmaps);
+        stage.scene.set_sprite_z(sprite, -100).unwrap();
+    }
+
+    /// The columns of row `y` that were blended with the normal formula.
+    fn tails(frame: &Frame, y: u32) -> Vec<u32> {
+        (0..frame.size.width)
+            .filter(|&x| frame.pixel(x, y)[0] == 157)
+            .collect()
+    }
+
+    #[test]
+    fn an_odd_background_row_has_its_exception_only_where_it_is_cut() {
+        let mut stage = Stage::sized(64, 40);
+        backdrop(&mut stage);
+        let skin = half_skin(&mut stage, |x, _| x < 128);
+        // Inner widths of 29 and 30.
+        for (width, x, expected) in [
+            (33, 10, vec![]),
+            (34, 10, vec![]),
+            // Cut by the right edge of the screen to 23, 22 and 29 pixels.
+            (33, 39, vec![63]),
+            (34, 40, vec![]),
+            (33, 33, vec![63]),
+            // Cut by the left edge to 22 and 21 pixels: the row ends inside the screen.
+            (33, -9, vec![]),
+            (34, -11, vec![]),
+        ] {
+            let id = sized(&mut stage, skin, width, 30);
+            stage.scene.window_mut(id).unwrap().x = x;
+            let frame = stage.frame();
+            assert_eq!(tails(&frame, 10), expected, "{width} wide at {x}");
+            let first = (x + 2).max(0) as u32;
+            let last = (x + width - 3).min(63) as u32;
+            let blended = bounds(&frame, |pixel| pixel[0] != 161).unwrap();
+            assert_eq!(
+                [blended[0] as u32, blended[2] as u32],
+                [first, last],
+                "{width} wide at {x}"
+            );
+            stage.scene.dispose_window(id, &mut stage.bitmaps);
+        }
+    }
+
+    #[test]
+    fn an_odd_frame_row_counts_the_whole_width_of_the_window() {
+        let mut stage = Stage::sized(64, 64);
+        backdrop(&mut stage);
+        let skin = half_skin(&mut stage, |x, y| x >= 128 && y < 64);
+        for (width, x, expected) in [
+            // The last pixel of the measured window: 33 wide at 10.
+            (33, 10, vec![42]),
+            (34, 10, vec![]),
+            (34, 31, vec![63]),
+            (34, -5, vec![28]),
+            (33, -5, vec![]),
+        ] {
+            let id = sized(&mut stage, skin, width, 60);
+            stage.scene.window_mut(id).unwrap().x = x;
+            let frame = stage.frame();
+            assert_eq!(tails(&frame, 3), expected, "{width} wide at {x}");
+            // In the rows of the side edges the middle is transparent, and counts.
+            assert_eq!(tails(&frame, 30), expected, "{width} wide at {x}");
+            stage.scene.dispose_window(id, &mut stage.bitmaps);
+        }
+    }
+
+    #[test]
+    fn odd_rows_of_the_upper_parts_count_what_the_window_leaves_of_them() {
+        let mut stage = Stage::sized(64, 80);
+        backdrop(&mut stage);
+        let none = stage.bitmaps.create(192, 128, &defaults()).unwrap();
+        let contents = stage.solid(21, 20, [0, 0, 0, 4]);
+        let id = sized(&mut stage, none, 60, 60);
+        let window = stage.scene.window_mut(id).unwrap();
+        window.contents = Some(contents);
+        // 21 columns from 16.
+        assert_eq!(tails(&stage.frame(), 20), [36]);
+        // Scrolled so that the contents area leaves 16 of them, then 15.
+        stage.scene.window_mut(id).unwrap().ox = 5;
+        assert_eq!(tails(&stage.frame(), 20), []);
+        stage.scene.window_mut(id).unwrap().ox = 6;
+        assert_eq!(tails(&stage.frame(), 20), [30]);
+
+        // A cursor of 33 columns, whole and cut by the window to 28 and 27.
+        let skin = half_skin(&mut stage, |x, y| (128..160).contains(&x) && y >= 64);
+        let window = stage.scene.window_mut(id).unwrap();
+        window.windowskin = Some(skin);
+        window.contents = None;
+        window.cursor_rect = Rect::new(0, 0, 33, 33);
+        assert_eq!(tails(&stage.frame(), 30), [48]);
+        stage.scene.window_mut(id).unwrap().cursor_rect = Rect::new(16, 0, 33, 33);
+        assert_eq!(tails(&stage.frame(), 30), []);
+        stage.scene.window_mut(id).unwrap().cursor_rect = Rect::new(17, 0, 33, 33);
+        assert_eq!(tails(&stage.frame(), 30), [59]);
     }
 }
