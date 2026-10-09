@@ -72,6 +72,10 @@ VKXP_TEST_DEVICE=RADV cargo test -p vkxp-vk
 When the validation layer is installed the tests enable it, and any validation error fails the
 test that caused it.
 
+Choosing a device still enumerates every device the Vulkan loader finds. To keep a driver from
+being loaded at all, restrict the loader itself, for example
+`VK_LOADER_DRIVERS_SELECT='*lvp*'` for lavapipe only.
+
 ## Merge gate
 
 One command checks everything a change must pass:

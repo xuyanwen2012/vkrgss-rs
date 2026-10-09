@@ -736,11 +736,12 @@ fn generated_sequences_cover_what_the_properties_claim() {
         valid.transformed_quads,
         valid.clipped_ops,
         valid.quads_of_earlier_bitmaps,
-        valid.reused_slots,
         valid.odd_sizes,
     ] {
-        assert!(count >= 40, "{valid:?}");
+        assert!(count >= 100, "{valid:?}");
     }
+    // Rarer by nature: a slot has to be created, destroyed and created again.
+    assert!(valid.reused_slots >= 20, "{valid:?}");
 
     let faulty = coverage(faulty_sequence(), true);
     eprintln!("faulty sequences: {faulty:?}");

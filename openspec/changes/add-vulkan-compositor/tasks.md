@@ -38,5 +38,5 @@
 
 ## 7. Integration check
 
-- [ ] 7.1 Run the differential tests on a hardware device. Verify: `VKXP_TEST_DEVICE=<name> cargo test -p vkxp-vk` passes on at least one hardware GPU, and the device name and driver version are recorded in the commit message.
+- [x] 7.1 Run the differential tests on a hardware device. Verify: `VKXP_TEST_DEVICE=<name> cargo test -p vkxp-vk` passes on at least one hardware GPU, and the device name and driver version are recorded in the commit message.
 - [ ] 7.2 Run the full gate. Verify: `cargo xtask gate` exits 0 and `openspec validate add-vulkan-compositor --strict` passes.
