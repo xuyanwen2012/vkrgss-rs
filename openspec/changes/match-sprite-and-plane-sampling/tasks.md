@@ -6,7 +6,7 @@
 
 ## 2. Compositors (`vkxp-compose-ref`, `vkxp-vk`)
 
-- [ ] 2.1 Evaluate stretch quads in the CPU reference and in the compute shader. Verify: the scenarios of `specs/frame-composition/spec.md` and the CPU-against-GPU tests on llvmpipe, including destination rectangles far outside the screen and widths above 4096.
+- [x] 2.1 Evaluate stretch quads in the CPU reference and in the compute shader. Verify: the scenarios of `specs/frame-composition/spec.md` and the CPU-against-GPU tests on llvmpipe, including destination rectangles far outside the screen and widths above 4096.
 
 ## 3. Scene (`vkxp-core`)
 

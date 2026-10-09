@@ -8,7 +8,7 @@ use vkxp_compose_ref::{BACKGROUND, BitmapError, ComposeError, Compositor, Frame,
 use vkxp_pixel::Rgba;
 use vkxp_proto::{
     BitmapDelta, BitmapId, BlendMode, Color, FramePacket, FrameRate, Op, OpKind, Quad, Rect,
-    RectEffect, Size, Tone,
+    RectEffect, Sampling, Size, Tone,
 };
 
 const SIZE: Size = Size::new(16, 12);
@@ -873,5 +873,208 @@ fn empty_or_oversized_logical_size_is_rejected() {
             result,
             Err(ComposeError::InvalidLogicalSize { size, limit: 16384 })
         );
+    }
+}
+
+// Requirement: Stretch sampling of quads
+
+/// A bitmap one row high whose texel `x` is [`column`]`(x)`.
+fn row_bitmap(id: BitmapId, width: u32) -> Vec<BitmapDelta> {
+    let rgba = (0..width).flat_map(column).collect();
+    bitmap(id, width, 1, rgba).into()
+}
+
+fn column(x: u32) -> Rgba {
+    [(x % 256) as u8, (x / 256) as u8, 77, 255]
+}
+
+fn stretch(clip: Rect, src: Rect, dest: Rect, mirror: bool) -> Op {
+    Op::Quad(Quad {
+        clip,
+        bitmap: ID,
+        src,
+        sampling: Sampling::Stretch { dest, mirror },
+        tone: Tone::NEUTRAL,
+        color: Color::new(0, 0, 0, 0),
+        opacity: 255,
+        blend: BlendMode::Normal,
+    })
+}
+
+/// Renders `ops` over a grey screen of `size`.
+fn render_sized(size: Size, bitmaps: Vec<BitmapDelta>, mut ops: Vec<Op>) -> Frame {
+    ops.insert(
+        0,
+        Op::Clear {
+            clip: Rect::from_size(size),
+            color: Color::from_rgba(GREY),
+        },
+    );
+    let packet = FramePacket {
+        logical_size: size,
+        ..packet(bitmaps, ops)
+    };
+    Compositor::new().render(&packet).unwrap()
+}
+
+/// One line of `tests/data/sprite-zoom-samples.txt`: where the original runtime drew a zoomed
+/// sprite 16 pixels wide, and the source column it showed at each pixel.
+struct ZoomSample {
+    mirror: bool,
+    first: i32,
+    columns: Vec<u32>,
+}
+
+fn zoom_samples() -> Vec<ZoomSample> {
+    let number = |text: &str| text.parse::<i32>().unwrap();
+    include_str!("data/sprite-zoom-samples.txt")
+        .lines()
+        .filter(|line| !line.starts_with('#'))
+        .filter_map(|line| {
+            let parts: Vec<&str> = line.split('|').collect();
+            let mirror = parts[0].split_whitespace().nth(3) == Some("1");
+            let placed: Vec<i32> = parts[1]
+                .split_whitespace()
+                .map_while(|w| w.parse().ok())
+                .collect();
+            let &[first, width] = placed.as_slice() else {
+                // "none": the sprite drew nothing, which only the extraction can show.
+                return None;
+            };
+            let columns: Vec<u32> = parts[2]
+                .split_whitespace()
+                .map(|w| number(w) as u32)
+                .collect();
+            assert_eq!(columns.len() as i32, width, "{line}");
+            Some(ZoomSample {
+                mirror,
+                first,
+                columns,
+            })
+        })
+        .collect()
+}
+
+#[test]
+fn stretch_quads_show_the_measured_texels() {
+    let samples = zoom_samples();
+    assert!(samples.len() > 60);
+    let size = Size::new(640, 1);
+    for sample in samples {
+        let width = sample.columns.len() as u32;
+        let dest = Rect::new(sample.first, 0, width, 1);
+        let op = stretch(
+            Rect::from_size(size),
+            Rect::new(0, 0, 16, 1),
+            dest,
+            sample.mirror,
+        );
+        let frame = render_sized(size, row_bitmap(ID, 16), vec![op]);
+        for x in 0..size.width {
+            let expected = match (x as i32).checked_sub(sample.first) {
+                Some(i) if (0..width as i32).contains(&i) => column(sample.columns[i as usize]),
+                _ => GREY,
+            };
+            assert_eq!(frame.pixel(x, 0), expected, "{width} wide, pixel {x}");
+        }
+    }
+}
+
+#[test]
+fn clipped_stretch_quad_counts_from_its_unclipped_corner() {
+    // 300 texels into 450 pixels, of which the first 100 lie left of the clip.
+    let size = Size::new(40, 3);
+    let clip = Rect::new(4, 1, 20, 1);
+    let dest = Rect::new(4 - 100, 1 - 2, 450, 3);
+    let op = stretch(clip, Rect::new(0, 0, 300, 1), dest, false);
+    let frame = render_sized(size, row_bitmap(ID, 300), vec![op]);
+    let step = (300u64 << 20) / 450;
+    assert_eq!(frame.pixel(4, 1), column(((100 * step) >> 20) as u32));
+    assert_ne!(frame.pixel(4, 1), column(0));
+    for y in 0..size.height {
+        for x in 0..size.width {
+            let expected = if clip.contains(x as i32, y as i32) {
+                column(((u64::from(x + 96) * step) >> 20) as u32)
+            } else {
+                GREY
+            };
+            assert_eq!(frame.pixel(x, y), expected, "pixel ({x}, {y})");
+        }
+    }
+}
+
+#[test]
+fn unscaled_stretch_quad_copies_texels() {
+    let (width, height) = (7u32, 5u32);
+    let texel = |x: u32, y: u32| [x as u8 * 30 + 1, y as u8 * 40 + 2, (x + y) as u8, 255];
+    let mut rgba = Vec::new();
+    for y in 0..height {
+        for x in 0..width {
+            rgba.extend(texel(x, y));
+        }
+    }
+    let src = Rect::new(0, 0, width, height);
+    for mirror in [false, true] {
+        let frame = render(
+            bitmap(ID, width, height, rgba.clone()).into(),
+            vec![
+                clear(GREY),
+                stretch(SCREEN, src, Rect::new(3, 2, width, height), mirror),
+            ],
+        );
+        assert_pixels(&frame, |x, y| {
+            if !within(x, y, Rect::new(3, 2, width, height)) {
+                GREY
+            } else if mirror {
+                texel(width - 1 - (x - 3), y - 2)
+            } else {
+                texel(x - 3, y - 2)
+            }
+        });
+    }
+}
+
+#[test]
+fn stretch_quad_takes_its_texels_from_the_source_rectangle() {
+    // The middle 4 by 2 texels of an 8 by 4 bitmap, doubled.
+    let texel = |x: u32, y: u32| [x as u8 + 1, y as u8 + 1, 9, 255];
+    let rgba = (0..4)
+        .flat_map(|y| (0..8).flat_map(move |x| texel(x, y)))
+        .collect();
+    let op = stretch(SCREEN, Rect::new(2, 1, 4, 2), Rect::new(1, 1, 8, 4), false);
+    let frame = render(bitmap(ID, 8, 4, rgba).into(), vec![clear(GREY), op]);
+    assert_pixels(&frame, |x, y| {
+        if within(x, y, Rect::new(1, 1, 8, 4)) {
+            texel(2 + (x - 1) / 2, 1 + (y - 1) / 2)
+        } else {
+            GREY
+        }
+    });
+}
+
+#[test]
+fn stretch_quad_with_an_empty_destination_draws_nothing() {
+    for dest in [
+        Rect::new(2, 2, 0, 6),
+        Rect::new(2, 2, 6, 0),
+        Rect::new(2, 2, 0, 0),
+    ] {
+        let op = stretch(SCREEN, Rect::new(0, 0, 4, 4), dest, false);
+        let frame = render(solid(ID, 4, 4, RED), vec![clear(GREY), op]);
+        assert_pixels(&frame, |_, _| GREY);
+    }
+}
+
+#[test]
+fn stretch_quad_far_larger_than_the_screen_shows_its_part_on_screen() {
+    // 16 texels into the widest rectangle there is, the screen somewhere in its middle.
+    let size = Size::new(40, 2);
+    let dest = Rect::new(i32::MIN, i32::MIN, u32::MAX, u32::MAX);
+    let op = stretch(Rect::from_size(size), Rect::new(0, 0, 16, 1), dest, false);
+    let frame = render_sized(size, row_bitmap(ID, 16), vec![op]);
+    let step = (16u64 << 20) / u64::from(u32::MAX);
+    for x in 0..size.width {
+        let i = u64::from(x) + (1 << 31);
+        assert_eq!(frame.pixel(x, 0), column(((i * step) >> 20) as u32));
     }
 }
