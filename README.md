@@ -2,8 +2,9 @@
 
 A Rust + Vulkan runtime for RPG Maker XP (RGSS1) games. Linux first, MIT licensed.
 
-The project is at its foundation stage: the workspace, the guest/host protocol and a CPU
-reference compositor exist; Ruby, Vulkan, windowing and audio do not yet. `docs/decisions.md`
+The project is at its foundation stage: the workspace, the guest/host protocol, a CPU
+reference compositor and a headless Vulkan compositor exist; Ruby, windowing and audio do not
+yet. `docs/decisions.md`
 records the settled design, and `openspec/` holds the change proposals that implement it.
 
 ## Layout
@@ -43,6 +44,33 @@ cargo run -p vkxp-compose-ref --example render_frame -- <messages> <output.png>
 frames are committed under `crates/vkxp-compose-ref/tests/expected/` and compared byte for byte;
 `VKXP_BLESS=1 cargo test -p vkxp-compose-ref --test fixtures` rewrites them after an intended
 change, to be reviewed before committing.
+
+## Prerequisites
+
+Building the workspace compiles the shaders of `vkxp-vk`, and testing it renders with Vulkan:
+
+| Needed for | Prerequisite | Typical package |
+|---|---|---|
+| build | `glslc` on `PATH`, to compile GLSL to SPIR-V | `glslc` or `shaderc` |
+| build | `spirv-val` on `PATH`, to validate the SPIR-V | `spirv-tools` |
+| test | a Vulkan 1.3 device; the Mesa software rasteriser lavapipe (llvmpipe) is enough | `mesa-vulkan-drivers` |
+| test, optional | the Khronos validation layer `VK_LAYER_KHRONOS_validation` | `vulkan-validation-layers` |
+
+A missing build tool stops the build with a message naming it. Compiled shaders are written to
+the build directory only.
+
+The tests of `vkxp-vk` render every message stream with both the CPU reference compositor and
+the Vulkan backend and require byte-identical frames. By default they run on the CPU device
+(llvmpipe), so the result does not depend on the hardware in the machine, and they fail rather
+than skip when no such device exists. `VKXP_TEST_DEVICE` runs the same tests on another device;
+it holds a device index or a part of the device name, as `vulkaninfo --summary` prints it:
+
+```sh
+VKXP_TEST_DEVICE=RADV cargo test -p vkxp-vk
+```
+
+When the validation layer is installed the tests enable it, and any validation error fails the
+test that caused it.
 
 ## Merge gate
 

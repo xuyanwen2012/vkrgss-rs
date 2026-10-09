@@ -10,3 +10,14 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+ash.workspace = true
+gpu-allocator.workspace = true
+thiserror.workspace = true
+vkxp-pixel.workspace = true
+vkxp-proto.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+vkxp-compose-ref.workspace = true

@@ -2,9 +2,9 @@
 
 ## 1. Build setup
 
-- [ ] 1.1 Add `ash` and `gpu-allocator` to `[workspace.dependencies]` and to `vkxp-vk`, with `vkxp-proto`, `vkxp-pixel` and `thiserror`; add `vkxp-compose-ref` and `proptest` as dev-dependencies. Verify: `cargo build -p vkxp-vk` succeeds and `cargo xtask deps` still passes.
-- [ ] 1.2 Add `build.rs` that compiles every shader under `crates/vkxp-vk/shaders/` with `glslc` for Vulkan 1.3 with warnings as errors, runs `spirv-val` on each output, and fails naming the tool when one is missing. Verify: a placeholder compute shader builds; a deliberate syntax error fails the build showing the `glslc` message; `PATH` without `glslc` fails naming `glslc`; then restore.
-- [ ] 1.3 Document the build and test prerequisites (`glslc`, `spirv-val`, a Vulkan 1.3 device or lavapipe, optional validation layer, `VKXP_TEST_DEVICE`) in `README.md`. Verify: README names each prerequisite and the variable.
+- [x] 1.1 Add `ash` and `gpu-allocator` to `[workspace.dependencies]` and to `vkxp-vk`, with `vkxp-proto`, `vkxp-pixel` and `thiserror`; add `vkxp-compose-ref` and `proptest` as dev-dependencies. Verify: `cargo build -p vkxp-vk` succeeds and `cargo xtask deps` still passes.
+- [x] 1.2 Add `build.rs` that compiles every shader under `crates/vkxp-vk/shaders/` with `glslc` for Vulkan 1.3 with warnings as errors, runs `spirv-val` on each output, and fails naming the tool when one is missing. Verify: a placeholder compute shader builds; a deliberate syntax error fails the build showing the `glslc` message; `PATH` without `glslc` fails naming `glslc`; then restore.
+- [x] 1.3 Document the build and test prerequisites (`glslc`, `spirv-val`, a Vulkan 1.3 device or lavapipe, optional validation layer, `VKXP_TEST_DEVICE`) in `README.md`. Verify: README names each prerequisite and the variable.
 
 ## 2. Device
 
