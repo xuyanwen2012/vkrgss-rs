@@ -6,7 +6,7 @@
 
 ## 2. Tilemap flash (`vkxp-core`)
 
-- [ ] 2.1 Draw the flash overlay with its pulse. Verify: pixel tests for the three scenarios of the flash-data requirement; the test for the removed "stored only" requirement is replaced.
+- [x] 2.1 Draw the flash overlay with its pulse. Verify: pixel tests for the three scenarios of the flash-data requirement; the test for the removed "stored only" requirement is replaced.
 
 ## 3. Integration check
 

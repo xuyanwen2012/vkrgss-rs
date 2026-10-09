@@ -439,7 +439,8 @@ pub struct Tilemap {
     /// Which tile each cell of each of the three layers holds. The table is shared: the
     /// tilemap shows what it holds when a frame is extracted.
     pub map_data: Option<SharedTable>,
-    /// Stored only: flash data is not drawn.
+    /// The cells that flash: a cell whose entry is not 0 is overlaid with the colour its
+    /// lowest twelve bits hold, four each for red, green and blue. Shared like the map data.
     pub flash_data: Option<SharedTable>,
     /// The priority of every tile identifier, shared like the map data.
     pub priorities: Option<SharedTable>,
@@ -479,8 +480,8 @@ impl Tilemap {
         self.viewport
     }
 
-    /// One step of the autotile animation: every 16 updates each animated autotile shows its
-    /// next frame.
+    /// One step of the autotile animation and of the pulse of the flash data: every 16
+    /// updates each animated autotile shows its next frame.
     ///
     /// PLACEHOLDER: the speed of 16 updates per frame is not yet checked against the original
     /// runtime.
