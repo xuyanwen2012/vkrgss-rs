@@ -580,6 +580,32 @@ pub const WINDOW: &[Case] = &[
         // 127 at the sixteenth update; an inactive window stands at 159.
         "[[255, 255, 255, 255], [127, 127, 255, 255], [159, 159, 255, 255]]",
     ),
+    value(
+        "window active off and on at once",
+        concat!(
+            skin!(),
+            "w = Window.new; w.windowskin = skin; w.x = 300; w.y = 300; w.width = 64; \
+             w.height = 64; w.cursor_rect.set(0, 0, 32, 32); 5.times { w.update }; \
+             before = pixel(332, 332); w.active = false; w.active = true; \
+             r = [before, pixel(332, 332)]; w.update; r << pixel(332, 332); \
+             w.dispose; skin.dispose; r"
+        ),
+        // The blink counter goes from 5 to 12 at the assignment and on from there.
+        "[[215, 215, 255, 255], [159, 159, 255, 255], [151, 151, 255, 255]]",
+    ),
+    value(
+        "window pause off and on at once",
+        concat!(
+            skin!(),
+            "skin.fill_rect(160, 64, 32, 32, Color.new(0, 255, 0)); \
+             w = Window.new; w.windowskin = skin; w.x = 300; w.y = 300; w.width = 64; \
+             w.height = 64; w.pause = true; 8.times { w.update }; before = pixel(332, 356); \
+             w.pause = false; w.pause = true; r = [before, pixel(332, 356)]; \
+             w.dispose; skin.dispose; r"
+        ),
+        // The sign starts over: it is gone until the next update.
+        "[[0, 255, 0, 255], [0, 0, 255, 255]]",
+    ),
     raises_with(
         "use after dispose",
         "w = Window.new; w.dispose; w.dispose; w.update",

@@ -79,9 +79,17 @@ object!(
     rect_set
 );
 field!(stretch, set_stretch, WindowId, window, window_mut, stretch: bool);
-field!(active, set_active, WindowId, window, window_mut, active: bool);
+reader!(active, WindowId, |guest, id| guest.scene.window(id)?.active);
+writer!(set_active, WindowId, |guest, id, value: bool| guest
+    .scene
+    .window_mut(id)?
+    .set_active(value));
 field!(visible, set_visible, WindowId, window, window_mut, visible: bool);
-field!(pause, set_pause, WindowId, window, window_mut, pause: bool);
+reader!(pause, WindowId, |guest, id| guest.scene.window(id)?.pause);
+writer!(set_pause, WindowId, |guest, id, value: bool| guest
+    .scene
+    .window_mut(id)?
+    .set_pause(value));
 field!(x, set_x, WindowId, window, window_mut, x: i32);
 field!(y, set_y, WindowId, window, window_mut, y: i32);
 field!(width, set_width, WindowId, window, window_mut, width: i32);

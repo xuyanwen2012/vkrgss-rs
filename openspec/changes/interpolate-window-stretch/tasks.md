@@ -6,7 +6,7 @@
 
 ## 2. Binding (`vkxp-binding`)
 
-- [ ] 2.1 Assign `active` and `pause` through the counter-keeping functions. Verify: a Ruby test for the off-and-on scenario and the same for `pause`.
+- [x] 2.1 Assign `active` and `pause` through the counter-keeping functions. Verify: a Ruby test for the off-and-on scenario and the same for `pause`.
 
 ## 3. Integration check
 
