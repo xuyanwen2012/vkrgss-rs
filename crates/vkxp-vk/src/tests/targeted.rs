@@ -619,3 +619,93 @@ fn renders_without_a_window_system_connection() {
         String::from_utf8_lossy(&output.stderr)
     );
 }
+
+// Requirement: Clean under validation, on the failure paths too
+
+/// A packet with uploads and ops needs four buffers for its one submission: the bitmap staging
+/// buffer and the three storage buffers of the frame. Whichever allocation fails, the buffers
+/// made before it must be released: every compositor here is dropped under the harness, which
+/// fails the test when the validation layer reports a leaked object. The backend also has to
+/// stay usable, with the frame it had and the bitmaps in a drawable state.
+#[test]
+fn failed_buffer_allocation_releases_the_buffers_before_it() {
+    let size = Size::new(40, 30);
+    let screen = Rect::from_size(size);
+    let id = BitmapId::new(0, 0);
+    let deltas: Vec<BitmapDelta> = bitmap(id, 8, 8, fixtures::gradient(8, 8)).into();
+    let upload = deltas[1].clone();
+    let ops = vec![
+        clear(screen, [10, 20, 30, 255]),
+        Op::Quad(sprite(id, 8, 8, 5, 5)),
+    ];
+    let wanted = reference::Compositor::new()
+        .render(&packet(size, deltas.clone(), ops.clone()))
+        .unwrap();
+    let injected = |what| {
+        Err(VkError::Memory {
+            what,
+            message: "injected failure".to_owned(),
+        })
+    };
+
+    let buffers = [
+        "bitmap staging",
+        "op records",
+        "tile headers",
+        "tile op indices",
+    ];
+    for (successes, what) in buffers.into_iter().enumerate() {
+        let mut compositor = TestCompositor::new();
+        compositor.fail_temporary_buffer_after(successes as u32);
+        assert_eq!(
+            compositor.render(&packet(size, deltas.clone(), ops.clone())),
+            injected(what),
+        );
+        assert_eq!(compositor.read_frame(), Ok(None), "no frame");
+
+        // The bitmap exists and can be drawn. When the staging buffer was the one that failed
+        // its pixels were not uploaded, so they are sent again; otherwise they are there.
+        let again = if successes == 0 {
+            vec![upload.clone()]
+        } else {
+            vec![]
+        };
+        compositor
+            .render(&packet(size, again, ops.clone()))
+            .unwrap();
+        for _ in 0..2 {
+            let rendered = compositor.read_frame().unwrap().unwrap();
+            assert_eq!(frame_difference(&wanted, &rendered), None, "after {what}");
+            compositor
+                .render(&packet(size, vec![], ops.clone()))
+                .unwrap();
+        }
+
+        // A failure with a frame on the device: that frame stays, and teardown follows at once.
+        compositor.fail_temporary_buffer_after(successes as u32);
+        let other = vec![clear(screen, [200, 0, 0, 255])];
+        assert_eq!(
+            compositor.render(&packet(size, vec![upload.clone()], other)),
+            injected(what),
+        );
+        let kept = compositor.read_frame().unwrap().unwrap();
+        assert_eq!(frame_difference(&wanted, &kept), None, "after {what}");
+    }
+}
+
+/// The same for a packet without uploads, where the op records are the first of only three
+/// buffers, and with no earlier frame to fall back on.
+#[test]
+fn failed_frame_buffer_allocation_without_uploads_leaks_nothing() {
+    let size = Size::new(33, 17);
+    let ops = vec![clear(Rect::from_size(size), [1, 2, 3, 4])];
+    for successes in 0..3 {
+        let mut compositor = TestCompositor::new();
+        compositor.fail_temporary_buffer_after(successes);
+        assert!(matches!(
+            compositor.render(&packet(size, vec![], ops.clone())),
+            Err(VkError::Memory { .. })
+        ));
+        assert_eq!(compositor.read_frame(), Ok(None));
+    }
+}
