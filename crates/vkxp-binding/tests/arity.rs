@@ -118,7 +118,14 @@ fn a_wrong_entry_is_reported() {
 }
 
 /// The scene classes, which the change `add-rgss-scene-classes` added.
-const SCENE_CLASSES: &[&str] = &["Viewport", "Sprite", "Plane"];
+const SCENE_CLASSES: &[&str] = &[
+    "Viewport",
+    "Sprite",
+    "Plane",
+    "Window",
+    "Tilemap",
+    "TilemapAutotiles",
+];
 
 #[test]
 fn every_listed_method_of_the_scene_classes_has_the_listed_arity() {

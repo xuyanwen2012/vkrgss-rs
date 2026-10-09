@@ -236,7 +236,9 @@ mod runtime;
 mod sprite;
 mod table;
 mod text;
+mod tilemap;
 mod viewport;
+mod window;
 mod wrap;
 
 #[cfg(test)]

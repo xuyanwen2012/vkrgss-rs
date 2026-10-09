@@ -52,9 +52,19 @@ fn plane() {
 }
 
 #[test]
+fn window() {
+    check(scene_cases::WINDOW);
+}
+
+#[test]
+fn tilemap() {
+    check(scene_cases::TILEMAP);
+}
+
+#[test]
 fn every_group_is_tested_here() {
     // One test function per group above: a group added to the list must get one too.
-    assert_eq!(scene_cases::GROUPS.len(), 7);
+    assert_eq!(scene_cases::GROUPS.len(), 9);
 }
 
 #[test]

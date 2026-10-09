@@ -50,6 +50,8 @@ pub const GROUPS: &[(&str, &[Case])] = &[
     ("sprite disposal", SPRITE_DISPOSAL),
     ("sprite flash", SPRITE_FLASH),
     ("plane", PLANE),
+    ("window", WINDOW),
+    ("tilemap", TILEMAP),
 ];
 
 // --- Viewport ---------------------------------------------------------------------------------
@@ -489,5 +491,246 @@ pub const PLANE: &[Case] = &[
         "p = Plane.new; p.dispose; p.color",
         "RGSSError",
         "disposed plane",
+    ),
+];
+
+// --- Window -----------------------------------------------------------------------------------
+
+/// A window skin whose background and frame are blue and whose cursor is white.
+macro_rules! skin {
+    () => {
+        "skin = solid(192, 128, 0, 0, 255); \
+         skin.fill_rect(128, 64, 32, 32, Color.new(255, 255, 255)); "
+    };
+}
+
+pub const WINDOW: &[Case] = &[
+    value(
+        "construction and defaults",
+        "v = Viewport.new(0, 0, 1, 1); w = Window.new(v); u = Window.new; \
+         r = [w.viewport.equal?(v), u.viewport, u.windowskin, u.contents, u.stretch, \
+         u.active, u.visible, u.pause, u.x, u.y, u.width, u.height, u.z, u.ox, u.oy, \
+         u.opacity, u.back_opacity, u.contents_opacity, u.cursor_rect == Rect.new(0, 0, 0, 0), \
+         u.disposed?]; w.dispose; u.dispose; v.dispose; r",
+        "[true, nil, nil, nil, true, true, true, false, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, \
+         true, false]",
+    ),
+    raises("wrong argument", "Window.new(:viewport)", "TypeError"),
+    value(
+        "flags, positions, sizes and opacities",
+        "w = Window.new; w.stretch = false; w.active = nil; w.visible = false; w.pause = 1; \
+         w.x = 1; w.y = 2; w.width = 3; w.height = 4; w.z = 5; w.ox = 6; w.oy = 7; \
+         w.opacity = 300; w.back_opacity = -1; w.contents_opacity = 128; \
+         r = [w.stretch, w.active, w.visible, w.pause, w.x, w.y, w.width, w.height, w.z, \
+         w.ox, w.oy, w.opacity, w.back_opacity, w.contents_opacity]; w.dispose; r",
+        "[false, false, false, true, 1, 2, 3, 4, 5, 6, 7, 255, 0, 128]",
+    ),
+    value(
+        "the contents appear 16 pixels inside the window",
+        concat!(
+            skin!(),
+            "c = solid(32, 32, 255, 0, 0); w = Window.new; w.windowskin = skin; \
+             w.x = 300; w.y = 100; w.width = 64; w.height = 64; w.contents = c; \
+             r = [pixel(316, 116), pixel(315, 116), pixel(347, 147), pixel(348, 147), \
+             pixel(299, 100)]; w.dispose; r << pixel(316, 116); c.dispose; skin.dispose; r"
+        ),
+        "[[255, 0, 0, 255], [0, 0, 255, 255], [255, 0, 0, 255], [0, 0, 255, 255], \
+         [0, 0, 0, 255], [0, 0, 0, 255]]",
+    ),
+    value(
+        "window skin and contents are kept by reference and survive the window",
+        "skin = Bitmap.new(192, 128); c = Bitmap.new(32, 32); w = Window.new; \
+         w.windowskin = skin; w.contents = c; \
+         r = [w.windowskin.equal?(skin), w.contents.equal?(c)]; \
+         w.contents = nil; r << w.contents; w.contents = c; w.dispose; \
+         r << skin.disposed? << c.disposed?",
+        "[true, true, nil, false, false]",
+    ),
+    raises(
+        "no bitmap as the contents",
+        "Window.new.contents = 1",
+        "TypeError",
+    ),
+    value(
+        "the cursor rectangle is the window's own",
+        concat!(
+            skin!(),
+            "w = Window.new; w.windowskin = skin; w.x = 300; w.y = 200; w.width = 96; \
+             w.height = 64; same = w.cursor_rect.equal?(w.cursor_rect); \
+             r = [same, pixel(332, 232)]; w.cursor_rect.set(0, 0, 32, 32); r << pixel(332, 232); \
+             given = Rect.new(32, 0, 32, 32); w.cursor_rect = given; given.x = 0; \
+             r << pixel(332, 232) << pixel(364, 232) << w.cursor_rect.x; \
+             w.dispose; skin.dispose; r"
+        ),
+        "[true, [0, 0, 255, 255], [255, 255, 255, 255], [0, 0, 255, 255], \
+         [255, 255, 255, 255], 32]",
+    ),
+    value(
+        "window cursor blinks",
+        concat!(
+            skin!(),
+            "w = Window.new; w.windowskin = skin; w.x = 300; w.y = 300; w.width = 64; \
+             w.height = 64; w.cursor_rect.set(0, 0, 32, 32); before = pixel(332, 332); \
+             16.times { w.update }; after = pixel(332, 332); w.active = false; \
+             16.times { w.update }; r = [before, before == after, after == pixel(332, 332)]; \
+             w.dispose; skin.dispose; r"
+        ),
+        "[[255, 255, 255, 255], false, true]",
+    ),
+    raises_with(
+        "use after dispose",
+        "w = Window.new; w.dispose; w.dispose; w.update",
+        "RGSSError",
+        "disposed window",
+    ),
+    raises_with(
+        "an object property after dispose",
+        "w = Window.new; w.dispose; w.cursor_rect",
+        "RGSSError",
+        "disposed window",
+    ),
+    value(
+        "disposed?",
+        "w = Window.new; a = w.disposed?; w.dispose; [a, w.disposed?]",
+        "[false, true]",
+    ),
+];
+
+// --- Tilemap ----------------------------------------------------------------------------------
+
+/// A tileset whose second tile (identifier 385) is green, and a tilemap `t` with it and an
+/// empty map of 20 by 15 cells in three layers.
+macro_rules! map {
+    () => {
+        "set = Bitmap.new(256, 32); set.fill_rect(32, 0, 32, 32, Color.new(0, 255, 0)); \
+         data = Table.new(20, 15, 3); t = Tilemap.new; t.tileset = set; t.map_data = data; "
+    };
+}
+
+pub const TILEMAP: &[Case] = &[
+    value(
+        "construction and defaults",
+        "v = Viewport.new(0, 0, 1, 1); t = Tilemap.new(v); u = Tilemap.new; \
+         r = [t.viewport.equal?(v), u.viewport, u.tileset, u.map_data, u.flash_data, \
+         u.priorities, u.visible, u.ox, u.oy, u.disposed?, u.autotiles.class, u.update]; \
+         t.dispose; u.dispose; v.dispose; r",
+        "[true, nil, nil, nil, nil, nil, true, 0, 0, false, TilemapAutotiles, nil]",
+    ),
+    raises("wrong argument", "Tilemap.new(0)", "TypeError"),
+    value(
+        "plain properties",
+        "t = Tilemap.new; t.visible = false; t.ox = 33; t.oy = -2; \
+         r = [t.visible, t.ox, t.oy]; t.dispose; r",
+        "[false, 33, -2]",
+    ),
+    value(
+        "a tileset tile appears at its cell",
+        concat!(
+            map!(),
+            "data[2, 1, 0] = 385; \
+             r = [pixel(64, 32), pixel(95, 63), pixel(63, 32), pixel(96, 32), pixel(64, 64)]; \
+             t.ox = 32; r << pixel(32, 32) << pixel(64, 32); t.visible = false; \
+             r << pixel(32, 32); t.dispose; set.dispose; r"
+        ),
+        "[[0, 255, 0, 255], [0, 255, 0, 255], [0, 0, 0, 255], [0, 0, 0, 255], \
+         [0, 0, 0, 255], [0, 255, 0, 255], [0, 0, 0, 255], [0, 0, 0, 255]]",
+    ),
+    value(
+        "table changes reach the tilemap",
+        concat!(
+            map!(),
+            "r = [t.map_data.equal?(data), pixel(96, 32)]; data[3, 1, 0] = 385; \
+             r << pixel(96, 32); t.map_data[3, 1, 0] = 0; r << pixel(96, 32); \
+             t.dispose; set.dispose; r"
+        ),
+        "[true, [0, 0, 0, 255], [0, 255, 0, 255], [0, 0, 0, 255]]",
+    ),
+    value(
+        "a copy of a table is not connected",
+        concat!(
+            map!(),
+            "copy = data.dup; copy[3, 1, 0] = 385; r = [pixel(96, 32), data[3, 1, 0]]; \
+             t.map_data = nil; data[3, 1, 0] = 385; r << t.map_data << pixel(96, 32); \
+             t.dispose; set.dispose; r"
+        ),
+        "[[0, 0, 0, 255], 0, nil, [0, 0, 0, 255]]",
+    ),
+    value(
+        "tables and tileset are kept by reference",
+        "t = Tilemap.new; set = Bitmap.new(256, 32); flash = Table.new(2, 2); \
+         priorities = Table.new(400); t.tileset = set; t.flash_data = flash; \
+         t.priorities = priorities; \
+         r = [t.tileset.equal?(set), t.flash_data.equal?(flash), \
+         t.priorities.equal?(priorities)]; t.tileset = nil; t.flash_data = nil; \
+         t.priorities = nil; r << t.tileset << t.flash_data << t.priorities; \
+         t.tileset = set; t.dispose; r << set.disposed?",
+        "[true, true, true, nil, nil, nil, false]",
+    ),
+    raises(
+        "no table as the map data",
+        "Tilemap.new.map_data = [1, 2]",
+        "TypeError",
+    ),
+    raises(
+        "no bitmap as the tileset",
+        "Tilemap.new.tileset = Table.new(1)",
+        "TypeError",
+    ),
+    value(
+        "autotile list",
+        "t = Tilemap.new; b = Bitmap.new(96, 128); t.autotiles[3] = b; \
+         r = [t.autotiles[3].equal?(b), t.autotiles[0], t.autotiles.equal?(t.autotiles)]; \
+         t.dispose; r",
+        "[true, nil, true]",
+    ),
+    value(
+        "an autotile index outside 0 to 6 reads nil and writes nothing",
+        "t = Tilemap.new; b = Bitmap.new(96, 128); a = t.autotiles; a[7] = b; a[-1] = b; \
+         r = [a[7], a[-1], (0..6).map { |i| a[i] }.compact.size]; a[6] = b; a[6] = nil; \
+         r << a[6]; t.dispose; r",
+        "[nil, nil, 0, nil]",
+    ),
+    raises(
+        "no bitmap as an autotile",
+        "Tilemap.new.autotiles[0] = 1",
+        "TypeError",
+    ),
+    value(
+        "an autotile appears at its cell",
+        concat!(
+            map!(),
+            "auto = solid(96, 128, 0, 0, 255); t.autotiles[0] = auto; data[5, 5, 0] = 48; \
+             r = [pixel(160, 160), pixel(191, 191), pixel(159, 160)]; \
+             t.autotiles[0] = nil; r << pixel(160, 160); \
+             t.dispose; set.dispose; auto.dispose; r"
+        ),
+        "[[0, 0, 255, 255], [0, 0, 255, 255], [0, 0, 0, 255], [0, 0, 0, 255]]",
+    ),
+    value(
+        "the autotile list outlives its tilemap's disposal",
+        "t = Tilemap.new; a = t.autotiles; b = Bitmap.new(96, 128); a[0] = b; t.dispose; \
+         a[1] = b; [a[0].equal?(b), a[1].equal?(b), b.disposed?]",
+        "[true, true, false]",
+    ),
+    raises_with(
+        "use after dispose",
+        "t = Tilemap.new; t.dispose; t.dispose; t.autotiles",
+        "RGSSError",
+        "disposed tilemap",
+    ),
+    raises_with(
+        "update after dispose",
+        "t = Tilemap.new; t.dispose; t.update",
+        "RGSSError",
+        "disposed tilemap",
+    ),
+    value(
+        "disposed? and pixels gone",
+        concat!(
+            map!(),
+            "data[2, 1, 0] = 385; r = [t.disposed?, pixel(64, 32)]; t.dispose; \
+             r << t.disposed? << pixel(64, 32); set.dispose; r"
+        ),
+        "[false, [0, 255, 0, 255], true, [0, 0, 0, 255]]",
     ),
 ];

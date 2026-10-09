@@ -13,8 +13,8 @@
 
 ## 3. Window and Tilemap (`vkxp-binding`)
 
-- [ ] 3.1 Implement `Window` with `windowskin` and `contents` by reference, `cursor_rect` as an owned object, and its flags, positions, sizes and opacities. Verify: Ruby tests for the cursor-blink scenario, for contents appearing 16 pixels inside the window, and for disposal; class added to the arity test.
-- [ ] 3.2 Implement `Tilemap` and `TilemapAutotiles` with shared tables. Verify: Ruby tests for the autotile-list and table-change scenarios and for a tileset tile appearing at its cell; both classes added to the arity test, which now covers the whole list.
+- [x] 3.1 Implement `Window` with `windowskin` and `contents` by reference, `cursor_rect` as an owned object, and its flags, positions, sizes and opacities. Verify: Ruby tests for the cursor-blink scenario, for contents appearing 16 pixels inside the window, and for disposal; class added to the arity test.
+- [x] 3.2 Implement `Tilemap` and `TilemapAutotiles` with shared tables. Verify: Ruby tests for the autotile-list and table-change scenarios and for a tileset tile appearing at its cell; both classes added to the arity test, which now covers the whole list.
 
 ## 4. Lifetime (`vkxp-binding`)
 

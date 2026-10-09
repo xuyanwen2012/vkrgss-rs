@@ -19,7 +19,8 @@
 
 use std::cell::RefCell;
 
-use vkxp_core::{Color, ElementKind, PlaneId, Rect, Scene, SceneError, SpriteId, ViewportId};
+use vkxp_core::{Color, ElementKind, PlaneId, Rect, Scene, SceneError, SpriteId, TilemapId};
+use vkxp_core::{ViewportId, WindowId};
 use vkxp_proto::BitmapId;
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{HostResult, Raise, Raised, Ruby};
@@ -30,7 +31,7 @@ use crate::error::{self, Error};
 use crate::guest::{Classes, Guest};
 use crate::rb;
 use crate::wrap::{self, Wrapped};
-use crate::{plane, sprite, viewport};
+use crate::{plane, sprite, tilemap, viewport, window};
 
 /// The instance variable of an element that holds its `Viewport` object, or `nil`.
 pub(crate) const VIEWPORT: &std::ffi::CStr = c"viewport";
@@ -40,7 +41,10 @@ pub(crate) const VIEWPORT: &std::ffi::CStr = c"viewport";
 pub(crate) struct SceneClasses {
     pub(crate) sprite: VALUE,
     pub(crate) viewport: VALUE,
+    pub(crate) window: VALUE,
     pub(crate) plane: VALUE,
+    pub(crate) tilemap: VALUE,
+    pub(crate) autotiles: VALUE,
 }
 
 /// Defines the scene classes.
@@ -48,7 +52,10 @@ pub(crate) fn define(ruby: &Ruby) -> Result<SceneClasses, Raised> {
     Ok(SceneClasses {
         sprite: sprite::define(ruby)?,
         viewport: viewport::define(ruby)?,
+        window: window::define(ruby)?,
         plane: plane::define(ruby)?,
+        tilemap: tilemap::define(ruby)?,
+        autotiles: tilemap::define_autotiles(ruby)?,
     })
 }
 
@@ -116,6 +123,14 @@ kind!(
     |id, guest| guest.scene.dispose_viewport(id)
 );
 kind!(
+    WindowId,
+    Window,
+    "Window",
+    window,
+    is_window_disposed,
+    |id, guest| guest.scene.dispose_window(id, &mut guest.bitmaps)
+);
+kind!(
     PlaneId,
     Plane,
     "Plane",
@@ -123,12 +138,23 @@ kind!(
     is_plane_disposed,
     |id, guest| guest.scene.dispose_plane(id, &mut guest.bitmaps)
 );
+kind!(
+    TilemapId,
+    Tilemap,
+    "Tilemap",
+    tilemap,
+    is_tilemap_disposed,
+    |id, guest| guest.scene.dispose_tilemap(id, &mut guest.bitmaps)
+);
+
 /// The element of a collected object, waiting to be disposed.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Freed {
     Sprite(SpriteId),
     Viewport(ViewportId),
+    Window(WindowId),
     Plane(PlaneId),
+    Tilemap(TilemapId),
 }
 
 thread_local! {
@@ -152,7 +178,9 @@ pub(crate) fn dispose_freed(guest: &mut Guest) {
         match element {
             Freed::Sprite(id) => dispose_in(id, guest),
             Freed::Viewport(id) => dispose_in(id, guest),
+            Freed::Window(id) => dispose_in(id, guest),
             Freed::Plane(id) => dispose_in(id, guest),
+            Freed::Tilemap(id) => dispose_in(id, guest),
         }
     }
 }
