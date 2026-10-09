@@ -206,13 +206,14 @@ pub fn frame_pointer(frame: Size, window: Size, x: f64, y: f64) -> Option<(i16, 
         return None;
     }
     let along = |position: f64, origin: i32, shown: u32, pixels: u32| {
-        let offset = position.floor() - f64::from(origin);
+        let offset = position - f64::from(origin);
         if offset < 0.0 || offset >= f64::from(shown) {
             return None;
         }
-        // Below `pixels`, since the offset is below `shown`.
-        let pixel = offset as u64 * u64::from(pixels) / u64::from(shown);
-        i16::try_from(pixel).ok()
+        // The fraction of a window pixel counts until the position is in frame pixels. The
+        // offset is below `shown`, so the pixel is below `pixels` but for rounding.
+        let pixel = (offset * f64::from(pixels) / f64::from(shown)).floor() as u64;
+        i16::try_from(pixel.min(u64::from(pixels) - 1)).ok()
     };
     Some((
         along(x, rect.x, rect.width, frame.width)?,
@@ -322,6 +323,26 @@ mod tests {
         assert_eq!(frame_pointer(frame, window, 1380.0, 959.0), None);
         assert_eq!(frame_pointer(frame, window, 300.0, 960.0), None);
         assert_eq!(frame_pointer(frame, window, 300.0, -1.0), None);
+    }
+
+    #[test]
+    fn a_fraction_of_a_window_pixel_counts_in_the_frame() {
+        let frame = Size::new(640, 480);
+        // Enlarged by one and a half: 1.75 window pixels are 1.17 frame pixels.
+        let enlarged = Size::new(960, 720);
+        assert_eq!(frame_pointer(frame, enlarged, 1.75, 1.75), Some((1, 1)));
+        assert_eq!(frame_pointer(frame, enlarged, 1.25, 1.25), Some((0, 0)));
+        // Reduced to a half: 100.75 window pixels are 201.5 frame pixels.
+        let reduced = Size::new(320, 240);
+        assert_eq!(
+            frame_pointer(frame, reduced, 100.75, 50.75),
+            Some((201, 101))
+        );
+        assert_eq!(
+            frame_pointer(frame, reduced, 319.99, 239.99),
+            Some((639, 479))
+        );
+        assert_eq!(frame_pointer(frame, reduced, 320.0, 239.0), None);
     }
 
     #[test]
