@@ -85,8 +85,10 @@ enum Fade {
     Normal,
     /// The held frame is shown.
     Frozen,
-    /// `step` of `duration` equal steps from the held frame to the newest have been taken.
-    Fading { step: u32, duration: u32 },
+    /// `shown` frames have been shown since the transition message. The next one is shown at
+    /// step `shown` of `duration` equal steps from the held frame to the newest, and the one
+    /// after the `duration`-th is shown alone and ends the transition.
+    Fading { shown: u32, duration: u32 },
 }
 
 /// The frame rate shown in the title: ticks counted since `since`.
@@ -423,14 +425,15 @@ impl<D: Display, C: Clock> Session<D, C> {
             self.deliver(snapshot);
         }
 
-        // The step of a cross-fade this frame takes, with the weight that shows it. The
-        // display needs the weight before it renders; the session only counts the step once
-        // the frame has been shown.
+        // The step of a cross-fade this frame is shown at, with the weight that shows it. The
+        // display needs the weight before it renders; the session only counts the frame once
+        // it has been shown.
         let step = match self.fade {
-            Fade::Fading { step, duration } => {
-                let step = step + 1;
-                Some((step, duration, step as f32 / duration as f32))
-            }
+            Fade::Fading { shown, duration } => Some((
+                shown,
+                duration,
+                shown.min(duration) as f32 / duration as f32,
+            )),
             Fade::Normal | Fade::Frozen => None,
         };
         if let Some((_, _, weight)) = step {
@@ -438,7 +441,7 @@ impl<D: Display, C: Clock> Session<D, C> {
         }
         match self.display.render(packet) {
             Ok(()) => {
-                if let Some((step, duration, weight)) = step {
+                if let Some((shown, duration, weight)) = step {
                     self.mix = weight;
                     // The mask comes with the frames after the transition message, so only
                     // now is it known whether there is one. Without it the display shows a
@@ -453,11 +456,14 @@ impl<D: Display, C: Clock> Session<D, C> {
                         ));
                         self.set_mask(None);
                     }
-                    self.fade = if step >= duration {
+                    self.fade = if shown >= duration {
                         self.set_mask(None);
                         Fade::Normal
                     } else {
-                        Fade::Fading { step, duration }
+                        Fade::Fading {
+                            shown: shown + 1,
+                            duration,
+                        }
                     };
                 }
             }
@@ -553,7 +559,7 @@ impl<D: Display, C: Clock> Session<D, C> {
                 }
             }
             Fade::Frozen | Fade::Fading { .. } => {
-                self.fade = Fade::Fading { step: 0, duration };
+                self.fade = Fade::Fading { shown: 0, duration };
                 self.set_mask(mask);
             }
         }

@@ -664,28 +664,26 @@ fn frozen_display_keeps_its_image_while_frames_are_rendered_and_ticked() {
 }
 
 #[test]
-fn transition_cross_fades_in_equal_steps_then_shows_frames_normally() {
+fn transition_cross_fades_one_step_behind_its_frames_then_shows_frames_normally() {
     let mut rig = Rig::new();
     rig.frame(frame(0));
     rig.send(GuestToHost::Freeze);
     rig.send(transition(4));
-    assert_eq!(
-        rig.shown(),
-        Shown::Frame(0),
-        "the fade starts with the next frame"
-    );
+    assert_eq!(rig.shown(), Shown::Frame(0));
 
     let mix = |newest, weight| Shown::mix(Shown::Frame(0), newest, weight);
     rig.frame(frame(1));
-    assert_eq!(rig.shown(), mix(1, 0.25));
+    assert_eq!(rig.shown(), Shown::Frame(0), "the held frame alone");
     rig.frame(frame(2));
-    assert_eq!(rig.shown(), mix(2, 0.5), "the even mix");
+    assert_eq!(rig.shown(), mix(2, 0.25));
     rig.frame(frame(3));
-    assert_eq!(rig.shown(), mix(3, 0.75));
+    assert_eq!(rig.shown(), mix(3, 0.5), "the even mix");
     rig.frame(frame(4));
-    assert_eq!(rig.shown(), Shown::Frame(4), "the newest frame alone");
+    assert_eq!(rig.shown(), mix(4, 0.75), "one quarter of the held frame");
     rig.frame(frame(5));
-    assert_eq!(rig.shown(), Shown::Frame(5));
+    assert_eq!(rig.shown(), Shown::Frame(5), "the newest frame alone");
+    rig.frame(frame(6));
+    assert_eq!(rig.shown(), Shown::Frame(6));
 
     let mixes: Vec<f32> = rig
         .session
@@ -697,7 +695,19 @@ fn transition_cross_fades_in_equal_steps_then_shows_frames_normally() {
             _ => None,
         })
         .collect();
-    assert_eq!(mixes, [0.0, 0.25, 0.5, 0.75, 1.0]);
+    assert_eq!(mixes, [0.0, 0.0, 0.25, 0.5, 0.75, 1.0]);
+}
+
+#[test]
+fn transition_of_duration_one_shows_the_held_frame_then_the_newest() {
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    rig.send(GuestToHost::Freeze);
+    rig.send(transition(1));
+    rig.frame(frame(1));
+    assert_eq!(rig.shown(), Shown::Frame(0));
+    rig.frame(frame(2));
+    assert_eq!(rig.shown(), Shown::Frame(2));
 }
 
 #[test]
@@ -709,9 +719,11 @@ fn frames_between_freeze_and_transition_do_not_advance_the_fade() {
     rig.frame(frame(2));
     rig.send(transition(2));
     rig.frame(frame(3));
-    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(0), 3, 0.5));
+    assert_eq!(rig.shown(), Shown::Frame(0));
     rig.frame(frame(4));
-    assert_eq!(rig.shown(), Shown::Frame(4));
+    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(0), 4, 0.5));
+    rig.frame(frame(5));
+    assert_eq!(rig.shown(), Shown::Frame(5));
 }
 
 #[test]
@@ -801,21 +813,25 @@ fn masked_transition_is_the_masked_mix_with_the_mask_and_the_vagueness() {
     rig.send(masked_transition(4, 40));
     // The mask arrives with the first frame after the transition message.
     rig.frame(frame_with_mask(1));
-    assert_eq!(rig.shown(), masked(1, 0.25, 40));
+    assert_eq!(rig.shown(), masked(1, 0.0, 40));
     rig.frame(frame(2));
+    assert_eq!(rig.shown(), masked(2, 0.25, 40));
+    rig.frame(frame(3));
     // At this progress the display shows the newest frame where the mask is black and the
     // held frame where it is white; the presenter's tests look at the pixels.
-    assert_eq!(rig.shown(), masked(2, 0.5, 40));
-    rig.frame(frame(3));
+    assert_eq!(rig.shown(), masked(3, 0.5, 40));
     rig.frame(frame(4));
-    assert_eq!(rig.shown(), Shown::Frame(4));
+    assert_eq!(rig.shown(), masked(4, 0.75, 40));
+    rig.frame(frame(5));
+    assert_eq!(rig.shown(), Shown::Frame(5));
     assert_eq!(rig.errors.text(), "");
 
     // The mask is dropped with the transition: the next one is a cross-fade.
     rig.send(GuestToHost::Freeze);
     rig.send(transition(2));
-    rig.frame(frame(5));
-    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(4), 5, 0.5));
+    rig.frame(frame(6));
+    rig.frame(frame(7));
+    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(5), 7, 0.5));
     let masks: Vec<&DisplayEvent> = rig
         .session
         .display()
@@ -839,7 +855,8 @@ fn vagueness_of_zero_is_treated_as_one() {
     rig.send(GuestToHost::Freeze);
     rig.send(masked_transition(2, 0));
     rig.frame(frame_with_mask(1));
-    assert_eq!(rig.shown(), masked(1, 0.5, 1));
+    rig.frame(frame(2));
+    assert_eq!(rig.shown(), masked(2, 0.5, 1));
 }
 
 #[test]
@@ -849,12 +866,14 @@ fn transition_with_an_unknown_mask_is_a_cross_fade_and_is_reported_once() {
     rig.send(GuestToHost::Freeze);
     rig.send(masked_transition(4, 40));
     rig.frame(frame(1));
-    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(0), 1, 0.25));
+    assert_eq!(rig.shown(), Shown::Frame(0));
     rig.frame(frame(2));
-    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(0), 2, 0.5));
+    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(0), 2, 0.25));
     rig.frame(frame(3));
+    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(0), 3, 0.5));
     rig.frame(frame(4));
-    assert_eq!(rig.shown(), Shown::Frame(4));
+    rig.frame(frame(5));
+    assert_eq!(rig.shown(), Shown::Frame(5));
     assert_eq!(rig.errors.text().matches("mask").count(), 1);
 }
 
@@ -865,14 +884,17 @@ fn freeze_during_a_masked_transition_holds_the_masked_image_and_drops_the_mask()
     rig.send(GuestToHost::Freeze);
     rig.send(masked_transition(4, 40));
     rig.frame(frame_with_mask(1));
-    let on_screen = rig.shown();
-    assert_eq!(on_screen, masked(1, 0.25, 40));
-    rig.send(GuestToHost::Freeze);
     rig.frame(frame(2));
+    let on_screen = rig.shown();
+    assert_eq!(on_screen, masked(2, 0.25, 40));
+    rig.send(GuestToHost::Freeze);
+    rig.frame(frame(3));
     assert_eq!(rig.shown(), on_screen);
     rig.send(transition(2));
-    rig.frame(frame(3));
-    assert_eq!(rig.shown(), Shown::mix(on_screen, 3, 0.5));
+    rig.frame(frame(4));
+    assert_eq!(rig.shown(), on_screen);
+    rig.frame(frame(5));
+    assert_eq!(rig.shown(), Shown::mix(on_screen, 5, 0.5));
 }
 
 #[test]
@@ -886,14 +908,15 @@ fn a_second_freeze_keeps_the_frame_already_held() {
     assert_eq!(rig.shown(), Shown::Frame(0));
 }
 
-/// A rig one step into a cross-fade of four from frame 0 to frame 1.
+/// A rig one step into a cross-fade of four from frame 0 to frame 2.
 fn fading() -> (Rig, Shown) {
     let mut rig = Rig::new();
     rig.frame(frame(0));
     rig.send(GuestToHost::Freeze);
     rig.send(transition(4));
     rig.frame(frame(1));
-    let shown = Shown::mix(Shown::Frame(0), 1, 0.25);
+    rig.frame(frame(2));
+    let shown = Shown::mix(Shown::Frame(0), 2, 0.25);
     assert_eq!(rig.shown(), shown);
     (rig, shown)
 }
@@ -902,23 +925,25 @@ fn fading() -> (Rig, Shown) {
 fn freeze_during_a_transition_holds_the_mixed_image_on_screen() {
     let (mut rig, on_screen) = fading();
     rig.send(GuestToHost::Freeze);
-    for index in 2..=4 {
+    for index in 3..=5 {
         rig.frame(frame(index));
         assert_eq!(rig.shown(), on_screen, "after frame {index}");
     }
 
     // The next transition fades from that image, not from either frame behind it.
     rig.send(transition(2));
-    rig.frame(frame(5));
-    assert_eq!(rig.shown(), Shown::mix(on_screen, 5, 0.5));
     rig.frame(frame(6));
-    assert_eq!(rig.shown(), Shown::Frame(6));
+    assert_eq!(rig.shown(), on_screen);
+    rig.frame(frame(7));
+    assert_eq!(rig.shown(), Shown::mix(on_screen, 7, 0.5));
+    rig.frame(frame(8));
+    assert_eq!(rig.shown(), Shown::Frame(8));
 }
 
 #[test]
 fn frame_rejected_during_a_transition_keeps_the_image_and_its_weight() {
     let (mut rig, on_screen) = fading();
-    assert_eq!(rig.send(invalid_frame(2)), []);
+    assert_eq!(rig.send(invalid_frame(3)), []);
     rig.wait_for_tick();
     assert_eq!(rig.shown(), on_screen);
 
@@ -928,27 +953,28 @@ fn frame_rejected_during_a_transition_keeps_the_image_and_its_weight() {
     assert_eq!(rig.session.end(), None);
 
     // The fade goes on with the next frame that is shown, at the step the rejected one missed.
-    rig.frame(frame(3));
-    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(0), 3, 0.5));
     rig.frame(frame(4));
+    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(0), 4, 0.5));
     rig.frame(frame(5));
-    assert_eq!(rig.shown(), Shown::Frame(5));
+    rig.frame(frame(6));
+    assert_eq!(rig.shown(), Shown::Frame(6));
     rig.session.display_mut().redraw().unwrap();
-    assert_eq!(rig.shown(), Shown::Frame(5));
+    assert_eq!(rig.shown(), Shown::Frame(6));
 }
 
 #[test]
-fn frame_rejected_on_the_last_step_of_a_transition_does_not_end_it() {
+fn frame_rejected_at_the_end_of_a_transition_does_not_end_it() {
     let mut rig = Rig::new();
     rig.frame(frame(0));
     rig.send(GuestToHost::Freeze);
     rig.send(transition(1));
-    rig.send(invalid_frame(1));
+    rig.frame(frame(1));
+    rig.send(invalid_frame(2));
     rig.wait_for_tick();
     rig.session.display_mut().redraw().unwrap();
     assert_eq!(rig.shown(), Shown::Frame(0), "still the held frame");
-    rig.frame(frame(2));
-    assert_eq!(rig.shown(), Shown::Frame(2));
+    rig.frame(frame(3));
+    assert_eq!(rig.shown(), Shown::Frame(3));
 }
 
 #[test]
@@ -970,7 +996,9 @@ fn freeze_before_any_frame_shows_nothing_until_the_transition() {
     assert_eq!(rig.shown(), Shown::Nothing);
     rig.send(transition(1));
     rig.frame(frame(1));
-    assert_eq!(rig.shown(), Shown::Frame(1));
+    assert_eq!(rig.shown(), Shown::Nothing);
+    rig.frame(frame(2));
+    assert_eq!(rig.shown(), Shown::Frame(2));
 }
 
 // Title and modal.

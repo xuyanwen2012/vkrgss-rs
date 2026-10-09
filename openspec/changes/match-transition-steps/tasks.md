@@ -2,7 +2,7 @@
 
 ## 1. Session (`vkxp-host`)
 
-- [ ] 1.1 Shift the transition steps by one frame. Verify: tests for the six scenarios of `specs/host-session/spec.md`.
+- [x] 1.1 Shift the transition steps by one frame. Verify: tests for the six scenarios of `specs/host-session/spec.md`.
 
 ## 2. Integration check
 
