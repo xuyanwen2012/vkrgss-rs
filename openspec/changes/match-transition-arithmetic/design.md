@@ -31,3 +31,15 @@
 
 - Exact luminance of coloured masks; steps other than N-1 cannot be measured with the present
   harness.
+- Found while implementing. The missing-mask report was a false one: the guest disposes of
+  the picture when `Graphics.transition` returns, the destroy delta travels with the next
+  frame, and the session looked for the mask on that frame too, which is past the last step
+  and shown alone. The frames inside the transition were masked all along.
+- At step 0 the threshold is 0, so with a vagueness above 0 the pixels where the mask is
+  exactly black already show the newest frame in the first frame of a transition. This is
+  what the generalised formula gives; it could not be measured.
+- The alpha of a mask pixel is not looked at. The measured masks were opaque.
+- When the held frame has another size than the newest, the two are scaled separately and
+  mixed in floating point with the same weights; only frames of one size are mixed exactly.
+- The committed colour samples leave out the colours the luminance formula does not
+  reproduce (1 of the 300 in the sample file).
