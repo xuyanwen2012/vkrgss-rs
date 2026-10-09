@@ -14,10 +14,10 @@
 
 ## 3. Protocol types
 
-- [ ] 3.1 Implement fixed-point, rectangle, colour, tone and bitmap-id (index plus generation) types in `vkxp-proto`. Verify: unit tests for fixed-point conversion and id equality.
-- [ ] 3.2 Implement `BitmapDelta`, `Op` (`Clear`, `Quad`, `RectEffect`, reserved `Plane`, `TilemapLayer`), `FramePacket`, `AudioCommand`, `InputSnapshot`, `GuestToHost`, `HostToGuest`. Verify: a compile-time or test check that no message field is `f32`/`f64`.
-- [ ] 3.3 Implement versioned encode/decode with magic and protocol version. Verify: property tests for round trip and deterministic bytes; a test that an unsupported version is rejected with both versions in the error.
-- [ ] 3.4 Implement input-recording read/write on top of 3.3. Verify: a recorded snapshot sequence round-trips through a temp file.
+- [x] 3.1 Implement fixed-point, rectangle, colour, tone and bitmap-id (index plus generation) types in `vkxp-proto`. Verify: unit tests for fixed-point conversion and id equality.
+- [x] 3.2 Implement `BitmapDelta`, `Op` (`Clear`, `Quad`, `RectEffect`, reserved `Plane`, `TilemapLayer`), `FramePacket`, `AudioCommand`, `InputSnapshot`, `GuestToHost`, `HostToGuest`. Verify: a compile-time or test check that no message field is `f32`/`f64`.
+- [x] 3.3 Implement versioned encode/decode with magic and protocol version. Verify: property tests for round trip and deterministic bytes; a test that an unsupported version is rejected with both versions in the error.
+- [x] 3.4 Implement input-recording read/write on top of 3.3. Verify: a recorded snapshot sequence round-trips through a temp file.
 
 ## 4. Pixel arithmetic
 

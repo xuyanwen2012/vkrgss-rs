@@ -1,5 +1,30 @@
 //! Plain data shared by both sides: frame packet, op list, audio commands, input snapshot.
 //!
 //! Side: shared.
+//!
+//! Everything the guest (script thread) and the host (window, GPU, audio) exchange is defined
+//! here. The types are self-contained values: no handles, no references, no floating point.
+//! Inside one process they move through channels as they are; [`codec`] gives them a versioned
+//! binary form for recordings, test fixtures and a later process split.
+//!
+//! The binary form encodes enum variants by position, so reordering or removing variants, or
+//! changing fields, requires a new [`codec::PROTOCOL_VERSION`].
 
 #![forbid(unsafe_code)]
+
+pub mod codec;
+pub mod recording;
+
+mod audio;
+mod fixed;
+mod frame;
+mod input;
+mod message;
+mod types;
+
+pub use audio::{AudioChannel, AudioCommand};
+pub use fixed::Fixed;
+pub use frame::{BitmapDelta, BlendMode, FramePacket, Op, OpKind, Quad, RectEffect, Transform};
+pub use input::{Button, InputSnapshot};
+pub use message::{GuestToHost, HostToGuest};
+pub use types::{BitmapId, Color, Rect, Size, Tone};
