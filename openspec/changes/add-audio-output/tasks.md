@@ -2,8 +2,8 @@
 
 ## 1. Decoding (`vkxp-audio`)
 
-- [ ] 1.1 Add the dependencies with the minimal feature sets and the `Source` abstraction for sampled formats with format detection. Verify: tests for the WAV and the Ogg and MP3 scenarios of `specs/audio-playback/spec.md` at the source level; `cargo xtask deps` reports no violation.
-- [ ] 1.2 Add the MIDI source with SoundFont loading. Verify: the MIDI scenario, run only when one of the system SoundFont locations exists, and a test that a missing SoundFont yields the documented error.
+- [x] 1.1 Add the dependencies with the minimal feature sets and the `Source` abstraction for sampled formats with format detection. Verify: tests for the WAV and the Ogg and MP3 scenarios of `specs/audio-playback/spec.md` at the source level; `cargo xtask deps` reports no violation.
+- [x] 1.2 Add the MIDI source with SoundFont loading. Verify: the MIDI scenario, run only when one of the system SoundFont locations exists, and a test that a missing SoundFont yields the documented error.
 
 ## 2. Mixer (`vkxp-audio`)
 

@@ -10,3 +10,10 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+cpal.workspace = true
+rustysynth.workspace = true
+symphonia.workspace = true
+thiserror.workspace = true
+vkxp-proto.workspace = true
