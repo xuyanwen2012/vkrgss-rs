@@ -15,7 +15,7 @@ use vkxp_core::{SharedTable, Tilemap, TilemapId};
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{HostResult, Raise, Raised, Ruby};
 
-use crate::element::{self, field, kept};
+use crate::element::{self, field, kept, kept_after_dispose};
 use crate::guest::{Classes, Guest};
 use crate::rb;
 use crate::table::table_arg;
@@ -99,7 +99,7 @@ fn set_tileset(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     Ok(args[0])
 }
 
-kept!(autotiles, TilemapId, AUTOTILES);
+kept_after_dispose!(autotiles, TilemapId, AUTOTILES);
 kept!(map_data, TilemapId, MAP_DATA);
 kept!(flash_data, TilemapId, FLASH_DATA);
 kept!(priorities, TilemapId, PRIORITIES);

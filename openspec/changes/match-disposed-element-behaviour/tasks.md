@@ -6,7 +6,7 @@
 
 ## 2. Classes (`vkxp-binding`)
 
-- [ ] 2.1 Let `Sprite#bitmap` and `Tilemap#autotiles` work on disposed elements and let constructors accept a disposed viewport. Verify: Ruby tests for the four measured scenarios of `specs/rgss-scene-classes/spec.md`; the other scenarios still pass.
+- [x] 2.1 Let `Sprite#bitmap` and `Tilemap#autotiles` work on disposed elements and let constructors accept a disposed viewport. Verify: Ruby tests for the four measured scenarios of `specs/rgss-scene-classes/spec.md`; the other scenarios still pass.
 
 ## 3. Integration check
 

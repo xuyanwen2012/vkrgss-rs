@@ -11,7 +11,7 @@ use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{HostResult, Raised, Ruby};
 
 use crate::color::{color_arg, color_of, color_set, tone_arg, tone_of, tone_set};
-use crate::element::{self, field, kept, object, reader, writer};
+use crate::element::{self, field, kept_after_dispose, object, reader, writer};
 use crate::rb;
 use crate::rect::{rect_arg, rect_of, rect_set};
 use crate::wrap::Owner;
@@ -61,7 +61,7 @@ fn update(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
     Ok(ffi::Qnil)
 }
 
-kept!(bitmap, SpriteId, BITMAP);
+kept_after_dispose!(bitmap, SpriteId, BITMAP);
 
 /// `bitmap = bitmap_or_nil`: keeps the object, and a live bitmap also becomes the whole
 /// source rectangle.

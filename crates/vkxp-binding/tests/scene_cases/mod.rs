@@ -426,6 +426,17 @@ pub const SPRITE_DISPOSAL: &[Case] = &[
          r << pixel(111, 0) << s.disposed?; s.dispose; b.dispose; r",
         "[[255, 0, 0, 255], [0, 0, 0, 255], true]",
     ),
+    value(
+        "the bitmap of a disposed sprite",
+        "b = Bitmap.new(1, 1); s = Sprite.new; s.bitmap = b; s.dispose; \
+         r = [s.bitmap.equal?(b)]; s.bitmap.dispose; r << b.disposed?",
+        "[true, true]",
+    ),
+    value(
+        "the bitmap of a disposed sprite that had none",
+        "s = Sprite.new; s.dispose; s.bitmap",
+        "nil",
+    ),
 ];
 
 pub const SPRITE_FLASH: &[Case] = &[
@@ -774,6 +785,11 @@ pub const TILEMAP: &[Case] = &[
         "t = Tilemap.new; t.dispose; t.dispose; t.ox",
         "RGSSError",
         "disposed tilemap",
+    ),
+    value(
+        "the autotiles of a disposed tilemap",
+        "t = Tilemap.new; a = t.autotiles; t.dispose; [t.autotiles.equal?(a), a.class]",
+        "[true, TilemapAutotiles]",
     ),
     raises_with(
         "update after dispose",
