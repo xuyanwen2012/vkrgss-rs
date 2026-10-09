@@ -14,8 +14,8 @@
 
 ## 3. FFI
 
-- [ ] 3.1 Write the `ffi` module: types, constants, struct layouts, fixnum and type helpers, class and exception globals, and the function declarations named in `design.md`, including the two functions that no header declares. Verify: `cargo build -p vkxp-ruby-sys` has no warnings and every `unsafe` block carries a safety comment.
-- [ ] 3.2 Add the layout test that compiles a C program against the vendored headers and compares `sizeof` and `offsetof` of the mirrored structs and the values of the special constants with the Rust side. Verify: `cargo test -p vkxp-ruby-sys layout` passes; temporarily swapping two fields of a Rust struct makes it fail.
+- [x] 3.1 Write the `ffi` module: types, constants, struct layouts, fixnum and type helpers, class and exception globals, and the function declarations named in `design.md`, including the two functions that no header declares. Verify: `cargo build -p vkxp-ruby-sys` has no warnings and every `unsafe` block carries a safety comment.
+- [x] 3.2 Add the layout test that compiles a C program against the vendored headers and compares `sizeof` and `offsetof` of the mirrored structs and the values of the special constants with the Rust side. Verify: `cargo test -p vkxp-ruby-sys layout` passes; temporarily swapping two fields of a Rust struct makes it fail.
 
 ## 4. Interpreter thread
 

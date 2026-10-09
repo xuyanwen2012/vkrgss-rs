@@ -57,7 +57,10 @@ struct Patch {
 
 /// The value of a `- Name: value` field line, with the backticks around it removed.
 fn field<'a>(line: &'a str, name: &str) -> Option<&'a str> {
-    let value = line.strip_prefix("- ")?.strip_prefix(name)?.strip_prefix(':')?;
+    let value = line
+        .strip_prefix("- ")?
+        .strip_prefix(name)?
+        .strip_prefix(':')?;
     Some(value.trim().trim_matches('`'))
 }
 
@@ -112,8 +115,9 @@ fn manifest_and_patch_log_describe_the_vendored_tree() {
     let manifest = parse_manifest(
         &fs::read_to_string(root.join("MANIFEST.sha256")).expect("MANIFEST.sha256 is readable"),
     );
-    let patches =
-        parse_patches(&fs::read_to_string(root.join("PATCHES.md")).expect("PATCHES.md is readable"));
+    let patches = parse_patches(
+        &fs::read_to_string(root.join("PATCHES.md")).expect("PATCHES.md is readable"),
+    );
 
     let mut problems: Vec<String> = Vec::new();
 
@@ -131,7 +135,10 @@ fn manifest_and_patch_log_describe_the_vendored_tree() {
             continue;
         };
         if !entry.has_reason {
-            problems.push(format!("PATCHES.md entry `{}` gives no Reason", entry.title));
+            problems.push(format!(
+                "PATCHES.md entry `{}` gives no Reason",
+                entry.title
+            ));
         }
         if !manifest.contains_key(file) {
             problems.push(format!(
@@ -170,7 +177,9 @@ fn manifest_and_patch_log_describe_the_vendored_tree() {
             continue;
         }
         let Some(upstream) = manifest.get(file) else {
-            problems.push(format!("{file}: present in the tree but not in the manifest"));
+            problems.push(format!(
+                "{file}: present in the tree but not in the manifest"
+            ));
             continue;
         };
         let actual = sha256_hex(&root.join(file));
@@ -191,7 +200,9 @@ fn manifest_and_patch_log_describe_the_vendored_tree() {
     }
     for file in manifest.keys() {
         if !files.contains(file) {
-            problems.push(format!("{file}: listed in the manifest but missing from the tree"));
+            problems.push(format!(
+                "{file}: listed in the manifest but missing from the tree"
+            ));
         }
     }
 
