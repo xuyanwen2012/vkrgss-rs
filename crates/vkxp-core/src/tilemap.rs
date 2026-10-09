@@ -170,12 +170,16 @@ fn priority(priorities: Option<&Table>, id: i16) -> usize {
 
 impl Tilemap {
     /// Brings the cached bitmaps up to date with what this frame shows in `level`. An
-    /// invisible tilemap gives them back.
-    pub(crate) fn refresh_cache(&mut self, bitmaps: &mut Bitmaps, level: &Level) {
+    /// invisible tilemap gives them back; one that has no `level`, because its viewport is
+    /// not drawn, keeps what it has.
+    pub(crate) fn refresh_cache(&mut self, bitmaps: &mut Bitmaps, level: Option<&Level>) {
         if !self.visible {
             self.cache.dispose(bitmaps);
             return;
         }
+        let Some(level) = level else {
+            return;
+        };
         let Some(map) = self.map_data.clone() else {
             self.cache.dispose(bitmaps);
             return;
@@ -962,6 +966,54 @@ mod tests {
     }
 
     #[test]
+    fn an_invisible_tilemap_gives_its_bitmaps_back_also_in_a_hidden_viewport() {
+        let mut stage = Stage::sized(160, 160);
+        let viewport = stage.scene.create_viewport(Rect::new(0, 0, 160, 160));
+        let viewport = viewport.unwrap();
+        let map = map(5, 5);
+        map.set(1, 1, 0, 384);
+        let tileset = tileset(&mut stage);
+        let id = stage.scene.create_tilemap(Some(viewport)).unwrap();
+        let tilemap = stage.scene.tilemap_mut(id).unwrap();
+        tilemap.tileset = Some(tileset);
+        tilemap.map_data = Some(map);
+        let before = stage.bitmaps.len();
+        stage.frame();
+        assert_eq!(stage.bitmaps.len(), before + 1);
+
+        // A visible tilemap in a hidden viewport keeps its bitmaps.
+        stage.scene.viewport_mut(viewport).unwrap().visible = false;
+        assert!(all(&stage.frame(), BLACK));
+        assert_eq!(stage.bitmaps.len(), before + 1);
+
+        // An invisible one gives them back, whatever its viewport: hidden, off the screen or
+        // disposed.
+        stage.scene.tilemap_mut(id).unwrap().visible = false;
+        stage.frame();
+        assert_eq!(stage.bitmaps.len(), before);
+
+        stage.scene.viewport_mut(viewport).unwrap().visible = true;
+        stage.scene.tilemap_mut(id).unwrap().visible = true;
+        assert!(!all(&stage.frame(), BLACK));
+        assert_eq!(stage.bitmaps.len(), before + 1);
+        stage.scene.viewport_mut(viewport).unwrap().rect = Rect::new(200, 0, 64, 64);
+        stage.scene.tilemap_mut(id).unwrap().visible = false;
+        stage.frame();
+        assert_eq!(stage.bitmaps.len(), before);
+
+        stage.scene.viewport_mut(viewport).unwrap().rect = Rect::new(0, 0, 160, 160);
+        stage.scene.tilemap_mut(id).unwrap().visible = true;
+        stage.frame();
+        assert_eq!(stage.bitmaps.len(), before + 1);
+        stage.scene.dispose_viewport(viewport);
+        stage.frame();
+        assert_eq!(stage.bitmaps.len(), before + 1);
+        stage.scene.tilemap_mut(id).unwrap().visible = false;
+        assert!(all(&stage.frame(), BLACK));
+        assert_eq!(stage.bitmaps.len(), before);
+    }
+
+    #[test]
     fn a_tile_without_an_entry_in_the_priorities_has_priority_0() {
         let (mut stage, sprite, id) = with_priority(3);
         stage.scene.set_sprite_z(sprite, 1).unwrap();
@@ -1138,7 +1190,7 @@ mod tests {
             let tilemap = stage.scene.tilemap_mut(id).unwrap();
             tilemap.ox = step * 32;
             let start = std::time::Instant::now();
-            tilemap.refresh_cache(&mut stage.bitmaps, &screen);
+            tilemap.refresh_cache(&mut stage.bitmaps, Some(&screen));
             compose.push(start.elapsed());
 
             stage.scene.tilemap_mut(id).unwrap().oy = step * 32;

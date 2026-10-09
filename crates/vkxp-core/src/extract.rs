@@ -254,15 +254,15 @@ impl Scene {
         for (_, window) in self.windows.iter_mut() {
             window.refresh_caches(bitmaps);
         }
+        // An element without a level is not drawn, but still gives its cache back when it is
+        // invisible itself.
         for (_, tilemap) in self.tilemaps.iter_mut() {
-            if let Some(level) = level_of(&self.viewports, self.logical_size, tilemap.viewport) {
-                tilemap.refresh_cache(bitmaps, &level);
-            }
+            let level = level_of(&self.viewports, self.logical_size, tilemap.viewport);
+            tilemap.refresh_cache(bitmaps, level.as_ref());
         }
         for (_, plane) in self.planes.iter_mut() {
-            if let Some(level) = level_of(&self.viewports, self.logical_size, plane.viewport) {
-                plane.refresh_cache(bitmaps, &level);
-            }
+            let level = level_of(&self.viewports, self.logical_size, plane.viewport);
+            plane.refresh_cache(bitmaps, level.as_ref());
         }
         let (ops, referenced) = self.ops(bitmaps);
         // Every quad was checked to name a live bitmap, which is all `deltas` requires.

@@ -121,15 +121,16 @@ impl Plane {
     }
 
     /// Brings the pre-tiled bitmap up to date, if this frame draws from one. An invisible
-    /// plane gives it back.
-    pub(crate) fn refresh_cache(&mut self, bitmaps: &mut Bitmaps, level: &Level) {
+    /// plane gives it back; one that is not drawn for another reason, such as having no
+    /// `level` because its viewport is hidden, keeps what it has.
+    pub(crate) fn refresh_cache(&mut self, bitmaps: &mut Bitmaps, level: Option<&Level>) {
         if !self.visible {
             self.pretiled.dispose(bitmaps);
             return;
         }
-        if self.opacity == 0 {
+        let Some(level) = level.filter(|_| self.opacity > 0) else {
             return;
-        }
+        };
         let wanted = self.bitmap.and_then(|source| {
             let size = bitmaps.rect(source).ok()?;
             let (width, height) = self.pretiled_size(level, size)?;
@@ -536,6 +537,50 @@ mod tests {
             (x * 5 + 2) % 4,
             (y * 5 + 2) % 4
         )));
+    }
+
+    #[test]
+    fn an_invisible_plane_gives_its_copy_back_also_in_a_hidden_viewport() {
+        let mut stage = Stage::new();
+        let bitmap = pattern(&mut stage, 4, 4);
+        let before = stage.bitmaps.len();
+        let viewport = stage.scene.create_viewport(Rect::new(0, 0, 640, 480));
+        let viewport = viewport.unwrap();
+        let id = stage.scene.create_plane(Some(viewport)).unwrap();
+        stage.scene.plane_mut(id).unwrap().bitmap = Some(bitmap);
+        stage.frame();
+        assert_eq!(stage.bitmaps.len(), before + 1);
+
+        // A visible plane in a hidden viewport keeps its copy.
+        stage.scene.viewport_mut(viewport).unwrap().visible = false;
+        assert!(all(&stage.frame(), BLACK));
+        assert_eq!(stage.bitmaps.len(), before + 1);
+
+        // An invisible one gives it back, whatever its viewport: hidden, off the screen or
+        // disposed.
+        stage.scene.plane_mut(id).unwrap().visible = false;
+        stage.frame();
+        assert_eq!(stage.bitmaps.len(), before);
+
+        stage.scene.viewport_mut(viewport).unwrap().visible = true;
+        stage.scene.plane_mut(id).unwrap().visible = true;
+        stage.frame();
+        assert_eq!(stage.bitmaps.len(), before + 1);
+        stage.scene.viewport_mut(viewport).unwrap().rect = Rect::new(700, 0, 64, 64);
+        stage.scene.plane_mut(id).unwrap().visible = false;
+        stage.frame();
+        assert_eq!(stage.bitmaps.len(), before);
+
+        stage.scene.viewport_mut(viewport).unwrap().rect = Rect::new(0, 0, 640, 480);
+        stage.scene.plane_mut(id).unwrap().visible = true;
+        stage.frame();
+        assert_eq!(stage.bitmaps.len(), before + 1);
+        stage.scene.dispose_viewport(viewport);
+        stage.frame();
+        assert_eq!(stage.bitmaps.len(), before + 1);
+        stage.scene.plane_mut(id).unwrap().visible = false;
+        assert!(all(&stage.frame(), BLACK));
+        assert_eq!(stage.bitmaps.len(), before);
     }
 
     #[test]
