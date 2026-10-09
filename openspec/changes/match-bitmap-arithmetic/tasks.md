@@ -12,7 +12,7 @@
 
 ## 3. Backends (`vkxp-compose-ref`, `vkxp-vk`)
 
-- [ ] 3.1 Mirror the grey tone in the GLSL and update dependent tests. Verify: the CPU-against-GPU tests pass on llvmpipe.
+- [x] 3.1 Mirror the grey tone in the GLSL and update dependent tests. Verify: the CPU-against-GPU tests pass on llvmpipe.
 
 ## 4. Integration check
 

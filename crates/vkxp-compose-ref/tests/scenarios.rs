@@ -301,7 +301,8 @@ fn neutral_tone_and_zero_alpha_colour_change_nothing() {
 #[test]
 fn full_alpha_colour_replaces_the_texels_colour() {
     // Four columns of different alpha, drawn over transparent black so the drawn texel can be
-    // read back, alpha included.
+    // read back, alpha included. Where nothing is underneath and nothing is drawn (alpha 0),
+    // the pixel still takes the colour.
     let alphas = [255u8, 180, 3, 0];
     let mut rgba = Vec::new();
     for y in 0..4u8 {
@@ -320,10 +321,7 @@ fn full_alpha_colour_replaces_the_texels_colour() {
     );
     assert_pixels(&frame, |x, y| {
         if within(x, y, Rect::new(5, 3, 4, 4)) {
-            match alphas[(x - 5) as usize] {
-                0 => [0, 0, 0, 0],
-                alpha => [10, 200, 30, alpha],
-            }
+            [10, 200, 30, alphas[(x - 5) as usize]]
         } else {
             [0, 0, 0, 0]
         }
@@ -509,13 +507,14 @@ fn translucent_quad_over_a_transparent_clear_keeps_its_colour_and_drawn_alpha() 
 }
 
 #[test]
-fn translucent_quad_over_a_partially_transparent_clear_is_source_over() {
+fn translucent_quad_over_a_partially_transparent_clear_follows_the_measured_formula() {
     // Drawn alpha a = 128 over destination alpha 128:
-    //   n     = 255 * 128 + 128 * 127 = 48896, alpha = round(n / 255) = 192
-    //   red   = round(32640 * 200 / n) = 134
-    //   green = round((32640 * 100 + 16256 * 50) / n) = 83
-    //   blue  = round(16256 * 255 / n) = 85
-    let expected = [134, 83, 85, 192];
+    //   den   = 255 * 128 + 255 * 128 - 128 * 128 = 48896, alpha = den / 255 = 191
+    //   w     = 128 * 65025 / den = 170
+    //   red   = 0 + ((200 * 171) >> 8) = 133
+    //   green = 50 + ((50 * 171) >> 8) = 83
+    //   blue  = 255 + ((-255 * 171) >> 8) = 84
+    let expected = [133, 83, 84, 191];
     assert_eq!(
         normal_over(TRANSLUCENT_BLUE, [200, 100, 0, 128], 255),
         expected
@@ -538,7 +537,14 @@ fn nothing_drawn_leaves_transparent_and_translucent_clears_unchanged() {
                     ..sprite(ID, 16, 12, 0, 0)
                 };
                 let frame = render(solid(ID, 16, 12, source), vec![clear(base), Op::Quad(quad)]);
-                assert_pixels(&frame, |_, _| base);
+                // The one exception, as measured: a normal blend at an opacity above 0 onto a
+                // fully transparent pixel leaves the texel's colour there, with alpha 0.
+                let expected = if blend == BlendMode::Normal && base[3] == 0 && opacity != 0 {
+                    [source[0], source[1], source[2], 0]
+                } else {
+                    base
+                };
+                assert_pixels(&frame, |_, _| expected);
             }
         }
     }
@@ -671,9 +677,11 @@ fn listing_tells_measured_functions_from_placeholders() {
     };
     for used in [
         "blend_normal",
+        "blend_normal_translucent",
         "blend_add",
         "blend_sub",
         "blend_color",
+        "apply_gray",
         "apply_tone",
     ] {
         let provenance = entry(used).provenance;
@@ -683,7 +691,7 @@ fn listing_tells_measured_functions_from_placeholders() {
             "{used}"
         );
     }
-    for unmeasured in ["blend_normal_translucent", "apply_gray"] {
+    for unmeasured in ["blend_add_translucent", "blend_sub_translucent"] {
         assert!(
             entry(unmeasured).provenance.is_placeholder(),
             "{unmeasured}"
