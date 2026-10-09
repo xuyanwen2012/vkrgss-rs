@@ -6,7 +6,7 @@
 
 ## 2. Binding (`vkxp-binding`)
 
-- [ ] 2.1 Call the mark before the game's scripts. Verify: a Ruby test through `run_game` that the first new local variable of the first game script has the number 16193.
+- [x] 2.1 Call the mark before the game's scripts. Verify: a Ruby test through `run_game` that the first new local variable of the first game script has the number 16193.
 
 ## 3. Integration check
 
