@@ -959,7 +959,11 @@ fn rejected_frame_is_reported_keeps_the_image_and_still_gets_its_tick() {
 fn rejected_frame_ends_a_session_that_does_not_continue_with_failure() {
     let mut rig = Rig::with(true);
     rig.frame(frame(0));
-    rig.send(invalid_frame(1));
+    assert_eq!(rig.send(invalid_frame(1)), []);
+    // The rejected frame is answered first, at its time, like any other.
+    assert_eq!(rig.session.end(), None);
+    assert!(rig.session.is_failing());
+    assert_eq!(rig.wait_for_tick(), ms(25));
 
     let end = rig.session.end().expect("the session has ended");
     assert_eq!(end, SessionEnd::Failed);
@@ -967,4 +971,45 @@ fn rejected_frame_ends_a_session_that_does_not_continue_with_failure() {
     let errors = rig.errors.text();
     assert!(errors.contains("frame 1 was rejected"), "{errors}");
     assert!(errors.contains("reserved kind"), "{errors}");
+}
+
+#[test]
+fn guest_of_a_failing_session_gets_the_one_tick_of_the_rejected_frame_and_no_more() {
+    let (guest, host) = link(|| {});
+    let mut rig = Rig::with(true);
+    guest.send(frame(0)).unwrap();
+    rig.session.pump(&host);
+    assert_eq!(guest.try_recv(), Ok(Some(HostToGuest::Tick)));
+
+    guest.send(invalid_frame(1)).unwrap();
+    // More from a guest that does not wait; none of it is answered.
+    guest.send(frame(2)).unwrap();
+    rig.session.pump(&host);
+    assert_eq!(guest.try_recv(), Ok(None), "the tick is not due yet");
+    assert_eq!(rig.session.end(), None);
+    while let Some(due) = rig.session.next_wake() {
+        rig.clock.advance_to(due);
+        rig.session.pump(&host);
+    }
+    assert_eq!(rig.session.end(), Some(SessionEnd::Failed));
+    assert_eq!(guest.try_recv(), Ok(Some(HostToGuest::Tick)));
+    assert_eq!(guest.try_recv(), Ok(None), "exactly one");
+
+    rig.clock.advance(ms(1000));
+    rig.session.pump(&host);
+    assert_eq!(guest.try_recv(), Ok(None));
+    assert_eq!(
+        rig.session.display().rendered(),
+        [0],
+        "frame 2 was never read"
+    );
+}
+
+#[test]
+fn rejected_frame_in_a_failing_session_is_ticked_at_once_when_it_is_late() {
+    let mut rig = Rig::with(true);
+    rig.frame(frame(0));
+    rig.clock.advance(ms(100));
+    assert_eq!(rig.send(invalid_frame(1)), [HostToGuest::Tick]);
+    assert_eq!(rig.session.end(), Some(SessionEnd::Failed));
 }

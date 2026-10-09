@@ -288,27 +288,57 @@ fn modal_is_written_to_the_error_stream_and_dismissed() {
 }
 
 #[test]
-fn rejected_frame_fails_the_run_with_the_error_on_the_error_stream() {
+fn rejected_frame_gets_its_tick_and_then_fails_the_run_with_the_error_reported() {
     let errors = ErrorBuffer::new();
-    let (result, _) = run_with(
+    let directory = tempfile::tempdir().unwrap();
+    let dump = directory.path().join("rejected.png");
+    let (result, received) = run_with(
         HeadlessOptions {
             errors: Box::new(errors.clone()),
+            dumps: vec![(2, dump.clone())],
             ..options()
         },
         |link| {
-            for index in 0..5 {
+            // Everything the host sends, in order, until it is gone.
+            let mut received = Vec::new();
+            for index in 0..3 {
                 let mut frame = small_frame(index);
                 if let (2, GuestToHost::Frame(packet)) = (index, &mut frame) {
                     packet.ops.push(Op::Plane {
                         clip: Rect::new(0, 0, 4, 4),
                     });
                 }
-                if link.send(frame).is_err() || link.recv() != Ok(HostToGuest::Tick) {
-                    return;
-                }
+                link.send(frame)
+                    .expect("the host is there for the first three frames");
+                received.push(link.recv());
             }
+            // The run has failed by now or is about to. Whether this frame still gets into the
+            // link or not, it is not answered: the next thing the guest learns is that the
+            // host has gone.
+            let _ = link.send(small_frame(3));
+            received.push(link.recv());
+            received.push(link.recv());
+            received
         },
     );
+
+    // One tick per frame, the rejected third one included, and only then the disconnection.
+    assert_eq!(
+        received,
+        [
+            Ok(HostToGuest::Tick),
+            Ok(HostToGuest::Tick),
+            Ok(HostToGuest::Tick),
+            Err(Disconnected),
+            Err(Disconnected),
+        ]
+    );
+    let ticks = received
+        .iter()
+        .filter(|message| **message == Ok(HostToGuest::Tick))
+        .count();
+    assert_eq!(ticks, 3);
+
     let error = result.unwrap_err();
     assert!(
         matches!(error, HeadlessError::FrameRejected { frame: 2 }),
@@ -319,6 +349,41 @@ fn rejected_frame_fails_the_run_with_the_error_on_the_error_stream() {
     assert!(
         text.contains("unsupported op kind `Plane` (op 1)"),
         "{text}"
+    );
+    assert!(!dump.exists(), "a rejected frame is not dumped");
+}
+
+#[test]
+fn input_scripted_for_a_rejected_frame_still_arrives_before_its_tick() {
+    let (result, received) = run_with(
+        HeadlessOptions {
+            script: InputScript::parse("0:A").unwrap(),
+            errors: Box::new(ErrorBuffer::new()),
+            ..options()
+        },
+        |link| {
+            let GuestToHost::Frame(mut packet) = small_frame(0) else {
+                unreachable!("small_frame makes a frame");
+            };
+            packet.ops.clear();
+            packet.ops.push(Op::Plane {
+                clip: Rect::new(0, 0, 4, 4),
+            });
+            link.send(GuestToHost::Frame(packet)).unwrap();
+            [link.recv(), link.recv(), link.recv()]
+        },
+    );
+    assert!(matches!(
+        result,
+        Err(HeadlessError::FrameRejected { frame: 0 })
+    ));
+    assert_eq!(
+        received,
+        [
+            Ok(HostToGuest::Input(InputSnapshot::EMPTY.with(Button::A))),
+            Ok(HostToGuest::Tick),
+            Err(Disconnected),
+        ]
     );
 }
 

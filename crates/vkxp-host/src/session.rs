@@ -27,7 +27,8 @@ pub enum SessionEnd {
     Shutdown,
     /// The guest's end of the link went away without a shutdown message.
     Disconnected,
-    /// A frame was rejected in a session that does not continue after that.
+    /// A frame was rejected in a session that does not continue after that. The frame still
+    /// got its tick.
     Failed,
 }
 
@@ -51,7 +52,8 @@ pub struct SessionOptions {
     /// The physical keys that hold each button.
     pub keys: KeyMap,
     /// Whether a rejected frame ends the session with [`SessionEnd::Failed`], as a headless
-    /// run wants, instead of being reported and skipped.
+    /// run wants, instead of being reported and skipped. The session ends once the tick of
+    /// that frame has been sent: a rejected frame is answered like any other.
     pub fail_on_rejected_frame: bool,
     /// Where modal texts and errors are written.
     pub errors: Box<dyn Write + Send>,
@@ -130,6 +132,9 @@ pub struct Session<D: Display, C: Clock> {
     /// Whether sending to the guest has failed. What the guest sent before it went is still
     /// read, so a shutdown message that is already in the link is not lost.
     guest_gone: bool,
+    /// Whether a frame was rejected in a session that does not continue after that. The
+    /// session ends as failed when the tick of that frame goes out.
+    failing: bool,
     end: Option<SessionEnd>,
 }
 
@@ -158,6 +163,7 @@ impl<D: Display, C: Clock> Session<D, C> {
             mask_reported: false,
             audio_reported: false,
             guest_gone: false,
+            failing: false,
             end: None,
         }
     }
@@ -173,6 +179,12 @@ impl<D: Display, C: Clock> Session<D, C> {
     /// How the session ended, or `None` while it runs.
     pub fn end(&self) -> Option<SessionEnd> {
         self.end
+    }
+
+    /// Whether a frame has been rejected in a session that does not continue after that, and
+    /// the session is only waiting to send that frame's tick before it ends.
+    pub fn is_failing(&self) -> bool {
+        self.failing
     }
 
     /// The number of frame messages handled so far.
@@ -360,6 +372,10 @@ impl<D: Display, C: Clock> Session<D, C> {
             // A guest that keeps to the handshake never gets here. Answering the earlier frame
             // first keeps one tick per frame.
             self.send_tick(arrival);
+            if self.end.is_some() {
+                // That was the tick of a rejected frame in a session that ends with it.
+                return;
+            }
         }
         self.frames += 1;
 
@@ -397,10 +413,8 @@ impl<D: Display, C: Clock> Session<D, C> {
                     "frame {} was rejected: {error}",
                     packet.frame_index
                 ));
-                if self.fail_on_rejected_frame {
-                    self.end = Some(SessionEnd::Failed);
-                    return;
-                }
+                // The frame is answered with its tick all the same; see `send_tick`.
+                self.failing |= self.fail_on_rejected_frame;
             }
         }
 
@@ -425,6 +439,11 @@ impl<D: Display, C: Clock> Session<D, C> {
         self.pending_tick = None;
         self.previous_tick = Some(now);
         self.outbox.push_back(HostToGuest::Tick);
+        if self.failing {
+            // The rejected frame has its one tick; nothing else is answered.
+            self.end = Some(SessionEnd::Failed);
+            return;
+        }
         if let Some(fps) = &mut self.fps {
             fps.ticks += 1;
             let elapsed = now.saturating_sub(fps.since);

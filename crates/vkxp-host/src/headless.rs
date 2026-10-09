@@ -194,7 +194,8 @@ impl Display for HeadlessDisplay {
 /// the last frame of a limited run the guest gets that frame's tick and then a quit request,
 /// and the run ends without waiting for the guest's answer.
 ///
-/// A rejected frame fails the run after its error has been written to the error stream.
+/// A rejected frame fails the run: its error is written to the error stream, the guest gets
+/// that frame's tick like any other, and then the run ends and the guest is disconnected.
 pub fn run_headless(
     options: HeadlessOptions,
     link: HostLink,
@@ -246,17 +247,15 @@ pub fn run_headless(
         }
         session.handle_message(message);
 
-        match session.end() {
-            Some(SessionEnd::Shutdown) => return report(&session, HeadlessEnd::Shutdown, frames),
-            Some(SessionEnd::Failed) => return Err(HeadlessError::FrameRejected { frame: frames }),
-            Some(SessionEnd::Disconnected) => {
-                return Err(HeadlessError::GuestDisconnected { frames });
-            }
-            None => {}
-        }
+        // The number of the frame just handled, if it was one.
+        let handled = frames;
         if is_frame {
-            for (_, path) in dumps.iter().filter(|(frame, _)| *frame == frames) {
-                dump(session.display_mut(), frames, path)?;
+            // A rejected frame left the previous one in the compositor; that is not dumped
+            // under this frame's number.
+            if !session.is_failing() {
+                for (_, path) in dumps.iter().filter(|(frame, _)| *frame == handled) {
+                    dump(session.display_mut(), handled, path)?;
+                }
             }
             frames += 1;
             if let Some(due) = session.next_wake() {
@@ -265,10 +264,22 @@ pub fn run_headless(
                 session.poll();
             }
         }
+        // Everything the session produced goes out before the run looks at how it stands, so
+        // a rejected frame has its tick before the run fails and the guest is cut off.
+        let mut gone = false;
         for message in session.take_messages() {
-            if link.send(message).is_err() {
+            gone |= link.send(message).is_err();
+        }
+        match session.end() {
+            Some(SessionEnd::Shutdown) => return report(&session, HeadlessEnd::Shutdown, frames),
+            Some(SessionEnd::Failed) => {
+                return Err(HeadlessError::FrameRejected { frame: handled });
+            }
+            Some(SessionEnd::Disconnected) => {
                 return Err(HeadlessError::GuestDisconnected { frames });
             }
+            None if gone => return Err(HeadlessError::GuestDisconnected { frames }),
+            None => {}
         }
         if is_frame && limit == Some(frames) {
             let _ = link.send(HostToGuest::Quit);
