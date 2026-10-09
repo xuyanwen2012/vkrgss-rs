@@ -6,7 +6,7 @@
 
 ## 2. Host (`vkxp-host`)
 
-- [ ] 2.1 Fill raw keys and pointer from window events and extend the recording format. Verify: tests for the three scenarios of `specs/host-session/spec.md` on the translation functions and the recorder.
+- [x] 2.1 Fill raw keys and pointer from window events and extend the recording format. Verify: tests for the three scenarios of `specs/host-session/spec.md` on the translation functions and the recorder.
 
 ## 3. Guest (`vkxp-binding`)
 

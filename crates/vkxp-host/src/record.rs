@@ -1,20 +1,26 @@
 //! Input recording and replay.
 //!
-//! A recording is a text file. Its first line is `vkxp-input 1 seed=<n>`, with the random
+//! A recording is a text file. Its first line is `vkxp-input 2 seed=<n>`, with the random
 //! seed of the recorded run. Every other line stands for a run of frames with the same
-//! buttons held: `<count>x`, followed by a blank and the `+`-joined names of the held buttons
-//! when there are any. For example
+//! input: `<count>x`, followed by a blank and the `+`-joined names of the held buttons
+//! when there are any, by `keys=` and the comma-separated hexadecimal Windows virtual-key
+//! codes of the held raw keys when there are any, and by `pointer=<x>,<y>` when the pointer
+//! is over the picture. For example
 //!
 //! ```text
-//! vkxp-input 1 seed=7
+//! vkxp-input 2 seed=7
 //! 60x
-//! 2x C
-//! 58x
-//! 4x DOWN+SHIFT
+//! 2x C keys=d
+//! 58x pointer=100,50
+//! 4x DOWN+SHIFT keys=10,28,a0
 //! ```
 //!
-//! holds nothing for 60 frames, C for two, nothing for 58 and DOWN and SHIFT for four. Button
-//! names are those of the input script (see [`button_name`]).
+//! holds nothing for 60 frames, C and the Enter key for two, nothing for 58 with the pointer
+//! at (100, 50), and DOWN and SHIFT with the down arrow and left Shift for four. Button names
+//! are those of the input script (see [`button_name`]).
+//!
+//! Format version 1, whose first line is `vkxp-input 1 seed=<n>`, has the buttons only; it is
+//! still read.
 //!
 //! A session that has an [`InputSource`] asks it once per frame, in order, for the snapshot
 //! to deliver, and sends that snapshot ahead of the frame's tick. [`Recorder`] passes the
@@ -32,7 +38,9 @@ use crate::button_name;
 use crate::script::button_named;
 
 /// What the first line of a recording starts with: the format's name and version.
-const MAGIC: &str = "vkxp-input 1 seed=";
+const MAGIC: &str = "vkxp-input 2 seed=";
+/// The same of format version 1, which has no raw keys and no pointer.
+const MAGIC_1: &str = "vkxp-input 1 seed=";
 
 /// Where a session takes the input snapshot of each frame from.
 pub trait InputSource: Debug + Send {
@@ -104,9 +112,15 @@ impl Recording {
     pub fn parse(text: &str) -> Result<Recording, String> {
         let mut lines = text.lines();
         let first = lines.next().unwrap_or_default();
-        let seed = first
-            .strip_prefix(MAGIC)
-            .and_then(|seed| seed.trim_end().parse().ok())
+        let (seed, raw) = match (first.strip_prefix(MAGIC), first.strip_prefix(MAGIC_1)) {
+            (Some(seed), _) => (seed, true),
+            (None, Some(seed)) => (seed, false),
+            (None, None) => ("", false),
+        };
+        let seed = seed
+            .trim_end()
+            .parse()
+            .ok()
             .ok_or_else(|| format!("its first line is not `{MAGIC}<n>`"))?;
         let mut recording = Recording::new(seed);
         for (index, line) in lines.enumerate() {
@@ -122,8 +136,30 @@ impl Recording {
                 .parse()
                 .map_err(|_| wrong("it does not start with a number of frames"))?;
             let mut snapshot = InputSnapshot::EMPTY;
-            if !buttons.trim().is_empty() {
-                for name in buttons.split('+').map(str::trim) {
+            let mut names = String::new();
+            for word in buttons.split_whitespace() {
+                match word.split_once('=') {
+                    Some(("keys", keys)) if raw => {
+                        for key in keys.split(',') {
+                            let key = u8::from_str_radix(key, 16)
+                                .map_err(|_| wrong(&format!("`{key}` is not the code of a key")))?;
+                            snapshot = snapshot.with_key(key);
+                        }
+                    }
+                    Some(("pointer", pointer)) if raw => {
+                        let position = pointer
+                            .split_once(',')
+                            .and_then(|(x, y)| Some((x.parse().ok()?, y.parse().ok()?)))
+                            .ok_or_else(|| {
+                                wrong(&format!("`{pointer}` is not a pointer position"))
+                            })?;
+                        snapshot = snapshot.with_pointer(Some(position));
+                    }
+                    _ => names.push_str(word),
+                }
+            }
+            if !names.is_empty() {
+                for name in names.split('+') {
                     let button = button_named(name)
                         .ok_or_else(|| wrong(&format!("`{name}` is not the name of a button")))?;
                     snapshot = snapshot.with(button);
@@ -166,11 +202,21 @@ fn run_line(count: u64, snapshot: InputSnapshot) -> String {
         .filter(|button| snapshot.is_down(*button))
         .map(button_name)
         .collect();
-    if names.is_empty() {
-        format!("{count}x\n")
-    } else {
-        format!("{count}x {}\n", names.join("+"))
+    let keys: Vec<String> = (0..=255u8)
+        .filter(|key| snapshot.is_key_down(*key))
+        .map(|key| format!("{key:x}"))
+        .collect();
+    let mut line = format!("{count}x");
+    if !names.is_empty() {
+        line += &format!(" {}", names.join("+"));
     }
+    if !keys.is_empty() {
+        line += &format!(" keys={}", keys.join(","));
+    }
+    if let Some((x, y)) = snapshot.pointer {
+        line += &format!(" pointer={x},{y}");
+    }
+    line + "\n"
 }
 
 impl std::fmt::Display for Recording {
@@ -300,7 +346,7 @@ mod tests {
         vec![empty, empty, empty, c, c, down_shift]
     }
 
-    const EXAMPLE_TEXT: &str = "vkxp-input 1 seed=7\n3x\n2x C\n1x DOWN+SHIFT\n";
+    const EXAMPLE_TEXT: &str = "vkxp-input 2 seed=7\n3x\n2x C\n1x DOWN+SHIFT\n";
 
     #[test]
     fn a_recorder_writes_the_seed_and_run_length_lines() {
@@ -309,7 +355,7 @@ mod tests {
         let mut recorder = Recorder::create(&path, 7).unwrap();
         assert_eq!(
             std::fs::read_to_string(&path).unwrap(),
-            "vkxp-input 1 seed=7\n"
+            "vkxp-input 2 seed=7\n"
         );
         for snapshot in example() {
             assert_eq!(recorder.next(snapshot), snapshot);
@@ -317,7 +363,7 @@ mod tests {
         // The runs that have ended are in the file while the recorder lives.
         assert_eq!(
             std::fs::read_to_string(&path).unwrap(),
-            "vkxp-input 1 seed=7\n3x\n2x C\n"
+            "vkxp-input 2 seed=7\n3x\n2x C\n"
         );
         drop(recorder);
         assert_eq!(std::fs::read_to_string(&path).unwrap(), EXAMPLE_TEXT);
@@ -362,7 +408,61 @@ mod tests {
         assert_eq!(recording.seed, 0);
         assert_eq!(
             recording.to_string(),
-            "vkxp-input 1 seed=0\n3x\n1x DOWN+SHIFT\n"
+            "vkxp-input 2 seed=0\n3x\n1x DOWN+SHIFT\n"
+        );
+    }
+
+    /// Two frames of C with Enter, the left mouse button and the pointer, one of the pointer
+    /// alone, one of the letter A alone.
+    fn raw_example() -> Vec<InputSnapshot> {
+        let pointer = InputSnapshot::EMPTY.with_pointer(Some((100, 50)));
+        let c = held(&[Button::C]).with_key(0x0D).with_key(0x01);
+        vec![
+            c.with_pointer(Some((100, 50))),
+            c.with_pointer(Some((100, 50))),
+            pointer,
+            InputSnapshot::EMPTY.with_key(0x41),
+        ]
+    }
+
+    const RAW_EXAMPLE_TEXT: &str =
+        "vkxp-input 2 seed=3\n2x C keys=1,d pointer=100,50\n1x pointer=100,50\n1x keys=41\n";
+
+    #[test]
+    fn raw_keys_and_the_pointer_of_every_frame_are_written_and_read_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("input.txt");
+        let mut recorder = Recorder::create(&path, 3).unwrap();
+        for snapshot in raw_example() {
+            assert_eq!(recorder.next(snapshot), snapshot);
+        }
+        drop(recorder);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), RAW_EXAMPLE_TEXT);
+
+        let recording = Recording::read(&path).unwrap();
+        assert_eq!(recording.snapshots().collect::<Vec<_>>(), raw_example());
+        assert_eq!(recording.to_string(), RAW_EXAMPLE_TEXT);
+
+        let every_key = (0..=255u8).fold(InputSnapshot::EMPTY, InputSnapshot::with_key);
+        let mut all = Recording::new(0);
+        all.push(every_key.with_pointer(Some((-1, i16::MAX))));
+        assert_eq!(Recording::parse(&all.to_string()), Ok(all));
+    }
+
+    /// Scenario "Old recording".
+    #[test]
+    fn a_recording_of_format_version_1_replays_as_before_with_no_raw_keys() {
+        let recording = Recording::parse("vkxp-input 1 seed=7\n3x\n2x C\n1x DOWN+SHIFT\n").unwrap();
+        assert_eq!(recording.seed, 7);
+        let mut replayer = Replayer::new(recording);
+        let delivered: Vec<InputSnapshot> = (0..6)
+            .map(|_| replayer.next(InputSnapshot::EMPTY))
+            .collect();
+        assert_eq!(delivered, example());
+        assert!(
+            delivered
+                .iter()
+                .all(|snapshot| snapshot.keys == [0; 4] && snapshot.pointer.is_none())
         );
     }
 
@@ -371,7 +471,11 @@ mod tests {
         for (text, reason) in [
             ("", "first line"),
             ("2:RIGHT, 6:", "first line"),
-            ("vkxp-input 2 seed=1\n", "first line"),
+            ("vkxp-input 3 seed=1\n", "first line"),
+            ("vkxp-input 2 seed=1\n1x keys=\n", "line 2"),
+            ("vkxp-input 2 seed=1\n1x keys=100\n", "`100`"),
+            ("vkxp-input 2 seed=1\n1x pointer=5\n", "`5`"),
+            ("vkxp-input 1 seed=1\n1x keys=41\n", "`keys=41`"),
             ("vkxp-input 1 seed=one\n", "first line"),
             ("vkxp-input 1 seed=1\n3\n", "line 2: no `x`"),
             ("vkxp-input 1 seed=1\n1x\nmanyx C\n", "line 3"),

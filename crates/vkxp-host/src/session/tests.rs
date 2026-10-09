@@ -81,6 +81,8 @@ struct Rig {
     session: Session<RecordingDisplay, ManualClock>,
     clock: ManualClock,
     errors: ErrorBuffer,
+    /// The buttons of the last snapshot [`Rig::taken`] returned.
+    buttons: u32,
 }
 
 impl Rig {
@@ -114,12 +116,33 @@ impl Rig {
             session: Session::new(RecordingDisplay::new(), clock.clone(), options),
             clock,
             errors,
+            buttons: 0,
         }
+    }
+
+    /// What the session has to send, as far as the buttons go: a snapshot is reduced to its
+    /// buttons, and left out when they are those of the snapshot before it. The tests of the
+    /// raw keys and the pointer take the messages from the session themselves.
+    fn taken(&mut self) -> Vec<HostToGuest> {
+        let mut messages = self.session.take_messages();
+        messages.retain_mut(|message| {
+            let HostToGuest::Input(snapshot) = message else {
+                return true;
+            };
+            let changed = snapshot.buttons != self.buttons;
+            self.buttons = snapshot.buttons;
+            *snapshot = InputSnapshot {
+                buttons: snapshot.buttons,
+                ..InputSnapshot::EMPTY
+            };
+            changed
+        });
+        messages
     }
 
     fn send(&mut self, message: GuestToHost) -> Vec<HostToGuest> {
         self.session.handle_message(message);
-        self.session.take_messages()
+        self.taken()
     }
 
     /// Moves the clock to the pending tick and returns the time it was sent at.
@@ -127,7 +150,7 @@ impl Rig {
         let due = self.session.next_wake().expect("a tick is pending");
         self.clock.advance_to(due);
         self.session.poll();
-        assert_eq!(self.session.take_messages(), [HostToGuest::Tick]);
+        assert_eq!(self.taken(), [HostToGuest::Tick]);
         self.clock.now()
     }
 
@@ -143,7 +166,7 @@ impl Rig {
 
     fn key(&mut self, key: KeyCode, pressed: bool) -> Vec<HostToGuest> {
         self.session.key(key, pressed);
-        self.session.take_messages()
+        self.taken()
     }
 
     fn shown(&self) -> Shown {
@@ -168,10 +191,10 @@ fn a_tick_is_not_sent_before_it_is_due() {
     assert_eq!(rig.session.next_wake(), Some(ms(25)));
     rig.clock.advance(ms(24));
     rig.session.poll();
-    assert_eq!(rig.session.take_messages(), []);
+    assert_eq!(rig.taken(), []);
     rig.clock.advance(ms(1));
     rig.session.poll();
-    assert_eq!(rig.session.take_messages(), [HostToGuest::Tick]);
+    assert_eq!(rig.taken(), [HostToGuest::Tick]);
     assert_eq!(rig.session.next_wake(), None);
 }
 
@@ -206,7 +229,7 @@ fn tick_sent_late_because_the_host_woke_late_is_not_made_up() {
     // The host comes back 75 milliseconds after the tick was due.
     rig.clock.advance_to(ms(100));
     rig.session.poll();
-    assert_eq!(rig.session.take_messages(), [HostToGuest::Tick]);
+    assert_eq!(rig.taken(), [HostToGuest::Tick]);
 
     assert_eq!(
         rig.send(frame(2)),
@@ -225,7 +248,7 @@ fn tick_sent_slightly_late_times_the_next_one_from_when_it_was_sent() {
     rig.send(frame(1));
     rig.clock.advance_to(ms(28));
     rig.session.poll();
-    assert_eq!(rig.session.take_messages(), [HostToGuest::Tick]);
+    assert_eq!(rig.taken(), [HostToGuest::Tick]);
     assert_eq!(rig.frame(frame(2)), ms(53));
 }
 
@@ -312,7 +335,7 @@ fn fast_forward_key_engages_while_held_and_hurries_a_pending_tick() {
     assert_eq!(rig.key(KeyCode::Tab, true), [], "the key holds no button");
     assert!(rig.session.fast_forward());
     rig.session.poll();
-    assert_eq!(rig.session.take_messages(), [HostToGuest::Tick]);
+    assert_eq!(rig.taken(), [HostToGuest::Tick]);
     assert_eq!(rig.send(frame(2)), [HostToGuest::Tick]);
 
     rig.key(KeyCode::Tab, false);
@@ -482,17 +505,14 @@ fn the_keyboard_and_the_pads_hold_buttons_together() {
     assert_eq!(rig.key(KeyCode::ArrowLeft, true), [held(&[Button::Left])]);
     rig.session
         .pad_buttons(map.held(std::slice::from_ref(&pad)));
-    assert_eq!(
-        rig.session.take_messages(),
-        [held(&[Button::Left, Button::C])]
-    );
+    assert_eq!(rig.taken(), [held(&[Button::Left, Button::C])]);
     rig.session.pad_buttons(map.held(&[pad]));
-    assert_eq!(rig.session.take_messages(), [], "nothing changed");
+    assert_eq!(rig.taken(), [], "nothing changed");
     assert_eq!(rig.key(KeyCode::ArrowLeft, false), [held(&[Button::C])]);
 
     // The pad is removed: it is no longer among the states.
     rig.session.pad_buttons(map.held(&[]));
-    assert_eq!(rig.session.take_messages(), [held(&[])]);
+    assert_eq!(rig.taken(), [held(&[])]);
 }
 
 #[test]
@@ -510,13 +530,13 @@ fn losing_focus_releases_every_button() {
     rig.key(KeyCode::ArrowLeft, true);
     rig.key(KeyCode::KeyZ, true);
     rig.key(KeyCode::Tab, true);
-    rig.session.take_messages();
+    rig.taken();
 
     rig.session.focus_lost();
-    assert_eq!(rig.session.take_messages(), [held(&[])]);
+    assert_eq!(rig.taken(), [held(&[])]);
     assert!(!rig.session.fast_forward());
     rig.session.focus_lost();
-    assert_eq!(rig.session.take_messages(), [], "nothing changed");
+    assert_eq!(rig.taken(), [], "nothing changed");
     // The key was released while the window was not looking.
     assert_eq!(rig.key(KeyCode::ArrowLeft, false), []);
     assert_eq!(rig.key(KeyCode::ArrowLeft, true), [held(&[Button::Left])]);
@@ -538,10 +558,7 @@ fn scripted_buttons_bypass_the_key_map_and_are_sent_on_change_only() {
     rig.session.set_buttons(right);
     rig.session.set_buttons(right);
     rig.session.set_buttons(InputSnapshot::EMPTY);
-    assert_eq!(
-        rig.session.take_messages(),
-        [HostToGuest::Input(right), held(&[])]
-    );
+    assert_eq!(rig.taken(), [HostToGuest::Input(right), held(&[])]);
 }
 
 // The default key map.
@@ -560,7 +577,7 @@ fn the_letter_x_is_b_and_the_letter_a_is_x() {
     let mut rig = Rig::new();
     assert_eq!(rig.key(KeyCode::KeyX, true), [held(&[Button::B])]);
     rig.key(KeyCode::KeyX, false);
-    rig.session.take_messages();
+    rig.taken();
     assert_eq!(rig.key(KeyCode::KeyA, true), [held(&[Button::X])]);
 }
 
@@ -588,12 +605,12 @@ fn alt_enter_toggles_fullscreen_without_pressing_c() {
         KeyAction::ToggleFullscreen
     );
     assert_eq!(rig.session.key(KeyCode::Enter, true), KeyAction::None);
-    assert_eq!(rig.session.take_messages(), []);
+    assert_eq!(rig.taken(), []);
     // Still swallowed after Alt goes up first.
     assert_eq!(rig.key(KeyCode::AltLeft, false), [held(&[])]);
     assert_eq!(rig.key(KeyCode::Enter, false), []);
     assert_eq!(rig.session.key(KeyCode::Enter, true), KeyAction::None);
-    assert_eq!(rig.session.take_messages(), [held(&[Button::C])]);
+    assert_eq!(rig.taken(), [held(&[Button::C])]);
 }
 
 #[test]
@@ -607,7 +624,7 @@ fn f11_toggles_fullscreen_once_per_press_and_holds_no_button() {
         assert_eq!(rig.session.key(KeyCode::F11, true), KeyAction::None, "held");
         assert_eq!(rig.key(KeyCode::F11, false), []);
     }
-    assert_eq!(rig.session.take_messages(), []);
+    assert_eq!(rig.taken(), []);
 }
 
 // Reset, quit and shutdown.
@@ -628,7 +645,7 @@ fn closing_the_window_asks_the_guest_to_quit_and_the_session_runs_on() {
     let mut rig = Rig::new();
     rig.frame(frame(0));
     rig.session.close_requested();
-    assert_eq!(rig.session.take_messages(), [HostToGuest::Quit]);
+    assert_eq!(rig.taken(), [HostToGuest::Quit]);
     assert_eq!(rig.session.end(), None);
     // The guest may still draw while it winds down.
     assert_eq!(rig.frame(frame(1)), ms(25));
@@ -651,7 +668,7 @@ fn guest_shutdown_ends_the_session_with_success() {
     assert_eq!(rig.key(KeyCode::F12, true), []);
     rig.session.close_requested();
     rig.session.poll();
-    assert_eq!(rig.session.take_messages(), []);
+    assert_eq!(rig.taken(), []);
     assert_eq!(rig.session.next_wake(), None);
     assert_eq!(rig.session.display().rendered(), [0]);
 }
@@ -1215,10 +1232,10 @@ fn windowed_modal_is_dismissed_by_the_cancel_key_and_by_a_click() {
 
     rig.send(modal("second"));
     rig.session.click();
-    assert_eq!(rig.session.take_messages(), [HostToGuest::ModalDismissed]);
+    assert_eq!(rig.taken(), [HostToGuest::ModalDismissed]);
     // Nothing is pending any more.
     rig.session.click();
-    assert_eq!(rig.session.take_messages(), []);
+    assert_eq!(rig.taken(), []);
 }
 
 #[test]
@@ -1585,6 +1602,7 @@ impl Rig {
             session: Session::new(RecordingDisplay::new(), clock.clone(), options),
             clock,
             errors,
+            buttons: 0,
         }
     }
 
@@ -1595,7 +1613,7 @@ impl Rig {
             let due = self.session.next_wake().expect("a tick is pending");
             self.clock.advance_to(due);
             self.session.poll();
-            sent.extend(self.session.take_messages());
+            sent.extend(self.taken());
         }
         assert_eq!(sent.pop(), Some(HostToGuest::Tick));
         sent
@@ -1638,7 +1656,7 @@ fn a_recorder_writes_the_snapshot_delivered_for_every_frame() {
     );
     assert_eq!(
         std::fs::read_to_string(&path).unwrap(),
-        "vkxp-input 1 seed=7\n1x\n2x RIGHT\n1x\n1x C\n"
+        "vkxp-input 2 seed=7\n1x\n2x RIGHT keys=27\n1x\n1x C keys=43\n"
     );
 }
 
@@ -1661,6 +1679,40 @@ fn a_replayed_recording_delivers_the_recorded_snapshots_frame_by_frame() {
     assert_eq!(rig.frame_input(5), [held(&[Button::Down])]);
     assert_eq!(rig.key(KeyCode::ArrowDown, false), []);
     assert_eq!(rig.frame_input(6), [held(&[])]);
+}
+
+#[test]
+fn a_replayed_recording_delivers_its_raw_keys_and_pointer() {
+    let text = "vkxp-input 2 seed=0\n2x C keys=1,d pointer=100,50\n1x\n";
+    let mut rig = Rig::with_input(crate::Replayer::new(crate::Recording::parse(text).unwrap()));
+    let snapshot = InputSnapshot::EMPTY
+        .with(Button::C)
+        .with_key(0x01)
+        .with_key(0x0D)
+        .with_pointer(Some((100, 50)));
+    rig.session.handle_message(frame(0));
+    assert_eq!(
+        rig.session.take_messages(),
+        [HostToGuest::Input(snapshot), HostToGuest::Tick]
+    );
+}
+
+#[test]
+fn a_recorder_writes_the_raw_keys_and_the_pointer_of_the_window() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("input.txt");
+    let mut rig = Rig::with_input(crate::Recorder::create(&path, 1).unwrap());
+    rig.frame_input(0);
+    rig.session.key(KeyCode::KeyJ, true);
+    rig.session
+        .mouse_button(winit::event::MouseButton::Left, true);
+    rig.session.pointer_moved(Some((100, 50)));
+    rig.frame_input(1);
+    drop(rig);
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap(),
+        "vkxp-input 2 seed=1\n1x\n1x keys=1,4a pointer=100,50\n"
+    );
 }
 
 #[test]

@@ -377,8 +377,11 @@ VK_LOADER_DRIVERS_SELECT='*lvp*' \
     --headless --replay session.txt --frames 600 --dump 599=target/frame.png
 ```
 
-A recording is text: the line `vkxp-input 1 seed=<n>`, then one line per run of frames with
-the same buttons held, `<count>x` followed by the `+`-joined button names, if any. The replay
+A recording is text: the line `vkxp-input 2 seed=<n>`, then one line per run of frames with
+the same input, `<count>x` followed by the `+`-joined button names, if any, by `keys=` and the
+hexadecimal Windows virtual-key codes of the held keys and mouse buttons, if any, and by
+`pointer=<x>,<y>` while the pointer is over the picture. Recordings of version 1, with the
+buttons only, still replay. The replay
 uses the recorded seed unless `--seed` is given. After the last recorded frame the keyboard
 applies again in a window, and no button is held in a headless run. A file that is not a
 recording ends the program with an error that names it, before the first frame. While input

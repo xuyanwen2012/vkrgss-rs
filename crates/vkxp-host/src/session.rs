@@ -5,10 +5,12 @@ use std::io::Write;
 use std::time::Duration;
 
 use vkxp_proto::link::HostEnd;
-use vkxp_proto::{BitmapId, Button, FramePacket, GuestToHost, HostToGuest, InputSnapshot};
+use vkxp_proto::{BitmapId, Button, FramePacket, GuestToHost, HostToGuest, InputSnapshot, Size};
 use vkxp_vk::Mix;
+use winit::event::MouseButton;
 use winit::keyboard::KeyCode;
 
+use crate::raw::with_raw_keys;
 use crate::{AudioSink, Clock, Display, InputSource, KeyMap, NullSink};
 
 /// The key that asks the guest to restart.
@@ -150,6 +152,12 @@ pub struct Session<D: Display, C: Clock> {
     held_keys: HashSet<KeyCode>,
     /// Keys that are down as part of a host shortcut and hold no button until released.
     swallowed_keys: HashSet<KeyCode>,
+    /// Mouse buttons currently down.
+    held_mouse: HashSet<MouseButton>,
+    /// Where the pointer is in the frame, when it is over the picture.
+    pointer: Option<(i16, i16)>,
+    /// The logical size of the newest frame the guest sent.
+    frame_size: Option<Size>,
     /// The buttons the gamepads hold.
     pad: InputSnapshot,
     /// The snapshot the guest was last sent.
@@ -195,6 +203,9 @@ impl<D: Display, C: Clock> Session<D, C> {
             fast_forward_forced: false,
             held_keys: HashSet::new(),
             swallowed_keys: HashSet::new(),
+            held_mouse: HashSet::new(),
+            pointer: None,
+            frame_size: None,
             pad: InputSnapshot::EMPTY,
             buttons: InputSnapshot::EMPTY,
             live: InputSnapshot::EMPTY,
@@ -414,6 +425,33 @@ impl<D: Display, C: Clock> Session<D, C> {
         }
     }
 
+    /// A mouse button went down or up.
+    pub fn mouse_button(&mut self, button: MouseButton, pressed: bool) {
+        if self.end.is_some() {
+            return;
+        }
+        if pressed {
+            self.held_mouse.insert(button);
+        } else {
+            self.held_mouse.remove(&button);
+        }
+        self.update_buttons();
+    }
+
+    /// The pointer is at `pointer` in the frame, or not over the picture.
+    pub fn pointer_moved(&mut self, pointer: Option<(i16, i16)>) {
+        if self.end.is_none() && pointer != self.pointer {
+            self.pointer = pointer;
+            self.update_buttons();
+        }
+    }
+
+    /// The logical size of the newest frame the guest sent, which is the picture a pointer
+    /// position is mapped into.
+    pub fn frame_size(&self) -> Option<Size> {
+        self.frame_size
+    }
+
     /// Whether `key` holds a button that dismisses a modal message.
     fn dismisses(&self, key: KeyCode) -> bool {
         self.keys
@@ -429,9 +467,10 @@ impl<D: Display, C: Clock> Session<D, C> {
         }
     }
 
-    /// The window lost keyboard focus: every key counts as released.
+    /// The window lost keyboard focus: every key and mouse button counts as released.
     pub fn focus_lost(&mut self) {
         self.held_keys.clear();
+        self.held_mouse.clear();
         self.swallowed_keys.clear();
         self.fast_forward_key = false;
         self.update_buttons();
@@ -485,6 +524,7 @@ impl<D: Display, C: Clock> Session<D, C> {
             }
         }
         self.frames += 1;
+        self.frame_size = Some(packet.logical_size);
         if let Some(input) = &mut self.input {
             // Queued ahead of this frame's tick.
             let snapshot = input.next(self.live);
@@ -678,9 +718,10 @@ impl<D: Display, C: Clock> Session<D, C> {
         };
     }
 
-    /// Sends the guest a snapshot if the set of held buttons has changed.
+    /// Sends the guest a snapshot if the held buttons, the raw keys or the pointer have
+    /// changed.
     fn update_buttons(&mut self) {
-        let snapshot = self
+        let buttons = self
             .held_keys
             .iter()
             .filter(|key| !self.swallowed_keys.contains(key))
@@ -688,7 +729,13 @@ impl<D: Display, C: Clock> Session<D, C> {
             .fold(self.pad, |snapshot: InputSnapshot, button: Button| {
                 snapshot.with(button)
             });
-        self.set_buttons(snapshot);
+        // The raw state is that of the keyboard: a key a host shortcut took is held in it.
+        let snapshot = with_raw_keys(
+            buttons,
+            self.held_keys.iter().copied(),
+            self.held_mouse.iter().copied(),
+        );
+        self.set_buttons(snapshot.with_pointer(self.pointer));
     }
 
     /// Hands the messages produced so far to the link.

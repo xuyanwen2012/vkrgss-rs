@@ -15,14 +15,14 @@ use vkxp_proto::{BitmapId, FramePacket, Size};
 use vkxp_vk::{DeviceChoice, Filter, Mix, VkCompositor, VkError};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
-use winit::event::{ElementState, WindowEvent};
+use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::PhysicalKey;
 use winit::window::{Fullscreen, Window, WindowId};
 
 use crate::{
     AudioOptions, AudioSink, Clock, Display, GamepadMap, Gamepads, InputSource, KeyAction, KeyMap,
-    NullSink, Session, SessionEnd, SessionOptions, SystemClock,
+    NullSink, Session, SessionEnd, SessionOptions, SystemClock, frame_pointer,
 };
 
 /// How a windowed session is set up.
@@ -139,6 +139,27 @@ impl<D: Display, C: Clock> Driver<D, C> {
     /// A mouse button was clicked.
     pub fn click(&mut self) {
         self.session.click();
+        self.session.pump(&self.link);
+    }
+
+    /// A mouse button went down or up. A press also answers a modal message.
+    pub fn mouse_button(&mut self, button: MouseButton, state: ElementState) {
+        if state.is_pressed() {
+            self.session.click();
+        }
+        self.session.mouse_button(button, state.is_pressed());
+        self.session.pump(&self.link);
+    }
+
+    /// The pointer is at `position` in a window whose client area is `window` pixels, or has
+    /// left the window.
+    pub fn pointer_moved(&mut self, window: Size, position: Option<(f64, f64)>) {
+        let pointer = self
+            .session
+            .frame_size()
+            .zip(position)
+            .and_then(|(frame, (x, y))| frame_pointer(frame, window, x, y));
+        self.session.pointer_moved(pointer);
         self.session.pump(&self.link);
     }
 
@@ -355,10 +376,22 @@ impl ApplicationHandler<GuestSpoke> for App {
                     });
                 }
             }
-            WindowEvent::MouseInput {
-                state: ElementState::Pressed,
-                ..
-            } => running.driver.click(),
+            WindowEvent::MouseInput { state, button, .. } => {
+                running.driver.mouse_button(button, state);
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                let size = running.window.inner_size();
+                running.driver.pointer_moved(
+                    Size::new(size.width, size.height),
+                    Some((position.x, position.y)),
+                );
+            }
+            WindowEvent::CursorLeft { .. } => {
+                let size = running.window.inner_size();
+                running
+                    .driver
+                    .pointer_moved(Size::new(size.width, size.height), None);
+            }
             WindowEvent::Focused(focused) => running.driver.focus_changed(focused),
             WindowEvent::Resized(size) => {
                 let display = running.driver.session_mut().display_mut();
@@ -427,7 +460,9 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
     use vkxp_proto::{Button, Color, FrameRate, GuestToHost, HostToGuest, InputSnapshot, Op, Rect};
+
     use winit::keyboard::{KeyCode, NativeKeyCode};
 
     use super::*;
@@ -469,8 +504,32 @@ mod tests {
         })
     }
 
-    fn received(guest: &GuestEnd) -> Vec<HostToGuest> {
+    /// Everything the guest was sent, raw keys and pointer included.
+    fn received_raw(guest: &GuestEnd) -> Vec<HostToGuest> {
         std::iter::from_fn(|| guest.try_recv().unwrap()).collect()
+    }
+
+    thread_local! {
+        /// The buttons of the last snapshot [`received`] returned in this test.
+        static BUTTONS: Cell<u32> = const { Cell::new(0) };
+    }
+
+    /// What the guest was sent, as far as the buttons go: a snapshot is reduced to its
+    /// buttons, and left out when they are those of the snapshot before it.
+    fn received(guest: &GuestEnd) -> Vec<HostToGuest> {
+        let mut messages = received_raw(guest);
+        messages.retain_mut(|message| {
+            let HostToGuest::Input(snapshot) = message else {
+                return true;
+            };
+            let changed = BUTTONS.replace(snapshot.buttons) != snapshot.buttons;
+            *snapshot = InputSnapshot {
+                buttons: snapshot.buttons,
+                ..InputSnapshot::EMPTY
+            };
+            changed
+        });
+        messages
     }
 
     fn held(buttons: &[Button]) -> HostToGuest {
@@ -509,6 +568,114 @@ mod tests {
             received(&guest),
             [held(&[Button::A, Button::Shift]), held(&[])]
         );
+    }
+
+    fn raw(keys: &[u8], pointer: Option<(i16, i16)>) -> HostToGuest {
+        let snapshot = keys.iter().fold(InputSnapshot::EMPTY, |snapshot, key| {
+            snapshot.with_key(*key)
+        });
+        HostToGuest::Input(snapshot.with_pointer(pointer))
+    }
+
+    /// Scenario "Letter and modifier", from the events of the window.
+    #[test]
+    fn held_keys_and_mouse_buttons_reach_the_guest_as_virtual_keys() {
+        let (mut driver, guest, _) = driver();
+        // Keys without a button in the default map.
+        let (key, state) = press(KeyCode::KeyJ);
+        driver.key(key, state);
+        assert_eq!(received_raw(&guest), [raw(&[0x4A], None)]);
+        let (key, state) = press(KeyCode::ControlLeft);
+        driver.key(key, state);
+        let HostToGuest::Input(snapshot) = received_raw(&guest)[0] else {
+            panic!("a snapshot")
+        };
+        assert_eq!(snapshot.keys, raw_keys(&[0x4A, 0x11, 0xA2]));
+        let (key, state) = release(KeyCode::ControlLeft);
+        driver.key(key, state);
+        assert_eq!(received_raw(&guest), [raw(&[0x4A], None)]);
+
+        driver.mouse_button(MouseButton::Left, ElementState::Pressed);
+        assert_eq!(received_raw(&guest), [raw(&[0x4A, 0x01], None)]);
+        driver.mouse_button(MouseButton::Right, ElementState::Pressed);
+        driver.mouse_button(MouseButton::Left, ElementState::Released);
+        assert_eq!(
+            received_raw(&guest),
+            [raw(&[0x4A, 0x01, 0x02], None), raw(&[0x4A, 0x02], None)]
+        );
+        // Without focus nothing is held.
+        driver.focus_changed(false);
+        assert_eq!(received_raw(&guest), [raw(&[], None)]);
+    }
+
+    fn raw_keys(keys: &[u8]) -> [u64; 4] {
+        let HostToGuest::Input(snapshot) = raw(keys, None) else {
+            unreachable!()
+        };
+        snapshot.keys
+    }
+
+    #[test]
+    fn a_letter_and_left_shift_hold_buttons_and_virtual_keys_together() {
+        let (mut driver, guest, _) = driver();
+        let (key, state) = press(KeyCode::KeyA);
+        driver.key(key, state);
+        let (key, state) = press(KeyCode::ShiftLeft);
+        driver.key(key, state);
+        let sent = received_raw(&guest);
+        let Some(HostToGuest::Input(snapshot)) = sent.last() else {
+            panic!("a snapshot")
+        };
+        assert_eq!(snapshot.keys, raw_keys(&[0x41, 0x10, 0xA0]));
+        assert!(
+            [Button::X, Button::A, Button::Shift]
+                .iter()
+                .all(|button| snapshot.is_down(*button))
+        );
+    }
+
+    /// Scenario "Pointer in a letterboxed window", from the events of the window.
+    #[test]
+    fn the_pointer_reaches_the_guest_in_frame_pixels_while_it_is_over_the_picture() {
+        let (mut driver, guest, _) = driver();
+        // A frame of 32 by 24 at scale 10, with bars of 40 pixels left and right.
+        let window = Size::new(400, 240);
+        driver.pointer_moved(window, Some((100.0, 100.0)));
+        assert_eq!(received_raw(&guest), [], "no frame yet, so no picture");
+
+        guest.send(frame(0)).unwrap();
+        driver.wake();
+        assert_eq!(received_raw(&guest), [HostToGuest::Tick]);
+        driver.pointer_moved(window, Some((140.0, 100.0)));
+        assert_eq!(received_raw(&guest), [raw(&[], Some((10, 10)))]);
+        driver.pointer_moved(window, Some((145.5, 109.0)));
+        assert_eq!(received_raw(&guest), [], "the same pixel of the frame");
+        driver.pointer_moved(window, Some((20.0, 100.0)));
+        assert_eq!(received_raw(&guest), [raw(&[], None)], "on a bar");
+        driver.pointer_moved(window, Some((359.0, 239.0)));
+        assert_eq!(received_raw(&guest), [raw(&[], Some((31, 23)))]);
+        driver.pointer_moved(window, None);
+        assert_eq!(received_raw(&guest), [raw(&[], None)], "left the window");
+    }
+
+    #[test]
+    fn a_mouse_press_answers_a_modal_message() {
+        let (guest, host) = link(|| {});
+        let options = SessionOptions {
+            wait_for_modal: true,
+            ..SessionOptions::default()
+        };
+        let session = Session::new(RecordingDisplay::new(), ManualClock::new(), options);
+        let mut driver = Driver::new(session, host);
+        guest
+            .send(GuestToHost::Modal {
+                text: "hello".to_owned(),
+            })
+            .unwrap();
+        driver.wake();
+        assert_eq!(received(&guest), []);
+        driver.mouse_button(MouseButton::Left, ElementState::Pressed);
+        assert_eq!(received(&guest), [HostToGuest::ModalDismissed]);
     }
 
     #[test]

@@ -862,7 +862,7 @@ fn a_replayed_recording_writes_the_frames_of_the_recorded_run() {
     recorded.assert_success();
     assert_eq!(
         fs::read_to_string(recorded.file("input.txt")).unwrap(),
-        "vkxp-input 1 seed=5\n2x\n4x RIGHT\n6x\n"
+        "vkxp-input 2 seed=5\n2x\n4x RIGHT\n6x\n"
     );
 
     let recording = recorded.file("input.txt").to_string_lossy().into_owned();

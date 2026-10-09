@@ -30,6 +30,7 @@ mod display;
 mod gamepad;
 mod headless;
 mod keys;
+mod raw;
 mod record;
 mod script;
 mod session;
@@ -47,6 +48,7 @@ pub use headless::{
     HostLink, headless_link, run_headless,
 };
 pub use keys::{KeyMap, MapError};
+pub use raw::{frame_pointer, mouse_key, virtual_key};
 pub use record::{InputSource, Recorder, Recording, RecordingError, Replayer};
 pub use script::{InputScript, ScriptError, button_name};
 pub use session::{KeyAction, Session, SessionEnd, SessionOptions};
