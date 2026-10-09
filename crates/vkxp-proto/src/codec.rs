@@ -462,9 +462,9 @@ mod tests {
             .with_pointer(Some((100, 50)));
         let bytes = encode_stream(&[snapshot]).unwrap();
         assert_eq!(decode_stream::<InputSnapshot>(&bytes), Ok(vec![snapshot]));
-        let message = HostToGuest::Input(snapshot);
-        let bytes = encode_stream(&[message.clone()]).unwrap();
-        assert_eq!(decode_stream::<HostToGuest>(&bytes), Ok(vec![message]));
+        let messages = vec![HostToGuest::Input(snapshot)];
+        let bytes = encode_stream(&messages).unwrap();
+        assert_eq!(decode_stream::<HostToGuest>(&bytes), Ok(messages));
     }
 
     #[test]
