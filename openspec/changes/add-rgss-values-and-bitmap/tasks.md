@@ -30,8 +30,8 @@
 
 ## 5. Robustness (`vkxp-binding`)
 
-- [ ] 5.1 Add the collection stress test: run every Ruby test snippet of this change with `GC.stress = true` where the interpreter supports it, or with `GC.start` forced between statements otherwise. Verify: all snippets give the same results as without stress.
-- [ ] 5.2 Document the crate in `crates/vkxp-binding/src/lib.rs`: guest state, wrapping, the free queue, error mapping, how later changes add a class. Verify: `cargo doc -p vkxp-binding --no-deps` builds without warnings.
+- [x] 5.1 Add the collection stress test: run every Ruby test snippet of this change with `GC.stress = true` where the interpreter supports it, or with `GC.start` forced between statements otherwise. Verify: all snippets give the same results as without stress.
+- [x] 5.2 Document the crate in `crates/vkxp-binding/src/lib.rs`: guest state, wrapping, the free queue, error mapping, how later changes add a class. Verify: `cargo doc -p vkxp-binding --no-deps` builds without warnings.
 
 ## 6. Integration check
 

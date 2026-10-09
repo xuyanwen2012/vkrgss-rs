@@ -155,3 +155,31 @@ interpreter per process, tests in one test binary run on it one after another.
   reference.
 - [Global state survives between tests in one process] → Tests use fresh objects and reset font
   defaults they change.
+
+## Follow-ups
+
+Questions that came up during implementation and were not built or settled here:
+
+- The error mapping names no exception for two failures. A table size that `vkxp-core`
+  refuses (`TableError`) raises `ArgumentError`, and a file that is found but cannot be read
+  (`VfsError::Io`) raises `IOError`. What the original runtime raises in either case is not
+  checked.
+- Comparing a `Color`, `Tone` or `Rect` with an object of another class (`color == nil`)
+  returns `false`. Whether the original runtime returns `false` or raises `TypeError` is not
+  checked.
+- `Table#[]` and `Table#[]=` with a number of indices other than the table's dimensions
+  raise `ArgumentError`. The requirement only defines the matching count; the original's
+  behaviour for the others is not checked.
+- Integer arguments follow `NUM2INT`, so a number outside 32 bits raises `RangeError`. The
+  original runtime may truncate or clamp instead.
+- `Font#color=` and `Font.default_color=` copy the value into the `Color` object the font
+  already has; `Bitmap#font=` keeps the given `Font` object. Whether the original keeps or
+  copies in each case is not checked.
+- The classes are kept alive by their constants only. A script that removes the constant
+  `Color` and forces a collection would leave the binding with a dead class. Registering the
+  classes as collector roots would close that; `vkxp-ruby-sys` has `Root` for it.
+- A path or text that is not valid UTF-8 has its invalid bytes replaced before it reaches
+  `vkxp-vfs` or the text backend, so a file whose name is in a legacy encoding cannot be
+  named by a script yet. This belongs to the encoding work of the change that runs games.
+- The arity test covers the six classes of this change; the other nine of the method list
+  are added by the changes that implement them.

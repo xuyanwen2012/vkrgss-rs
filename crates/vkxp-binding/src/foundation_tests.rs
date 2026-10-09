@@ -1,5 +1,6 @@
 //! Tests of the argument helpers and the error mapping, through the interpreter: a module of
-//! host functions that exists only in this test binary exposes them to Ruby.
+//! host functions that exists only in this test binary exposes them to Ruby. Every snippet
+//! is also evaluated with a garbage collection at every allocation.
 
 use std::sync::OnceLock;
 
@@ -73,10 +74,25 @@ fn define(ruby: &Ruby) {
     rb::class_method(ruby, module, c"fail", 1, probe_fail).unwrap();
 }
 
+/// Evaluates a snippet, and once more with a collection at every allocation, which must
+/// not change the outcome.
 fn eval(source: &str) -> Result<String, RubyError> {
     static DEFINED: OnceLock<()> = OnceLock::new();
     DEFINED.get_or_init(|| testing::run(define));
-    testing::eval(source)
+    let plain = testing::eval(source);
+    let stressed = testing::eval(&format!(
+        "GC.stress = true\nbegin\n{source}\nensure\nGC.stress = false\nend"
+    ));
+    let outcome = |result: &Result<String, RubyError>| match result {
+        Ok(inspect) => Ok(inspect.clone()),
+        Err(error) => Err((error.class_name.clone(), error.message.clone())),
+    };
+    assert_eq!(
+        outcome(&plain),
+        outcome(&stressed),
+        "under stress: {source}"
+    );
+    plain
 }
 
 /// The class name and message of the exception `source` raises.
