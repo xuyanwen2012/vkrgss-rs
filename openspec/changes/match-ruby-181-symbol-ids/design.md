@@ -40,3 +40,18 @@
 
 - [A table entry whose scope bits disagree with what 1.8.7 derives from the name] → Assert at
   build or start-up that every table number's scope equals the derived one, and fail loudly.
+
+## Follow-ups
+
+- The table is committed as `crates/vkxp-ruby-sys/data/symbols.startup.txt` and the C table is
+  generated at build time into `OUT_DIR`: the manifest test admits no added file in the
+  vendored tree.
+- The scope check runs when a table name is interned (`rb_bug` on disagreement), not once at
+  start-up; a test of `vkxp-ruby-sys` interns all 2002 names and compares their numbers, so a
+  wrong table fails the gate. Is a check of the whole table at start-up wanted as well?
+- Preload scripts run after the mark, as decided, so the names they create take numbers of the
+  sequence and shift those of the game's scripts. Should a game with preload scripts keep the
+  original's numbers, the preload scripts would have to run before the mark.
+- A name that only vkxp interns at start-up keeps its provisional number when the game first
+  uses it; the original gives it the sequence number that is consumed. The order of instance
+  variables with such names can therefore still differ from the original.
