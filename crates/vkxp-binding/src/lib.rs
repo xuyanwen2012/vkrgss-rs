@@ -157,7 +157,7 @@
 //! exists, and has made the game directory the working directory, because scripts write
 //! their saves through Ruby's own file API. The [`RunConfig`] inside the `Config` carries
 //! the configuration file, the path of the built-in scripts file, the debug and battle-test
-//! flags and the switch for the process functions.
+//! flags, the switch for the process functions, the random seed and the preload scripts.
 //!
 //! ```no_run
 //! use vkxp_binding::{Config, RunConfig, run_game};

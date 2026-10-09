@@ -370,3 +370,163 @@ fn a_quit_request_ends_the_game() {
     assert_eq!(played.record.frames().len(), 3);
     assert_eq!(played.record.received[4..], ending());
 }
+
+/// A game that writes ten values of `rand(1000)` to `file`, played with `seed`.
+fn rand_values(name: &str, seed: u64) -> String {
+    let file = testing::game_dir().with_file_name(format!("{name}.txt"));
+    let source = format!(
+        "File.open({}, 'w') {{ |file| 10.times {{ file.puts(rand(1000)) }} }}",
+        host::ruby_literal(&file.to_string_lossy())
+    );
+    let game = Game::new(name, "Rand", &[("Main", &source)]);
+    let config = RunConfig {
+        seed: Some(seed),
+        ..game.run_config()
+    };
+    let played = host::run_game(&game, config, Script::new(), "nil");
+    assert!(played.outcome.is_ok(), "{:?}", played.outcome);
+    let values = fs::read_to_string(file).unwrap();
+    assert_eq!(values.lines().count(), 10, "{values}");
+    values
+}
+
+#[test]
+fn the_same_seed_gives_the_same_values() {
+    assert_eq!(rand_values("seed_a", 7), rand_values("seed_b", 7));
+}
+
+#[test]
+fn different_seeds_give_different_values() {
+    assert_ne!(rand_values("seed_c", 7), rand_values("seed_d", 8));
+}
+
+#[test]
+fn the_seed_is_set_before_the_built_in_scripts() {
+    let game = Game::new("seed_builtin", "Rand", &[("Main", "")]);
+    let builtin = format!("{}$vkxp_seed_builtin = rand(1000000)\n", host::RPG_STAND_IN);
+    fs::write(game.builtin_scripts(), builtin).unwrap();
+    let play = || {
+        let config = RunConfig {
+            seed: Some(7),
+            ..game.run_config()
+        };
+        let played = host::run_game(&game, config, Script::new(), "$vkxp_seed_builtin");
+        assert!(played.outcome.is_ok(), "{:?}", played.outcome);
+        played.after.unwrap()
+    };
+    assert_eq!(play(), play());
+}
+
+#[test]
+fn a_reset_seeds_again_and_evaluates_the_preload_scripts_again() {
+    let game = Game::new(
+        "seed_reset",
+        "Reset",
+        &[(
+            "Main",
+            "($vkxp_seed_reset ||= []) << [rand(1000000), rand(1000000), $vkxp_preload_runs]
+             loop { Graphics.update } if $vkxp_seed_reset.size == 1",
+        )],
+    );
+    let preload = game.dir().join("count.rb");
+    fs::write(
+        &preload,
+        "$vkxp_preload_runs = ($vkxp_preload_runs || 0) + 1\n",
+    )
+    .unwrap();
+    let config = RunConfig {
+        seed: Some(7),
+        preload: vec![preload],
+        ..game.run_config()
+    };
+    let played = host::run_game(
+        &game,
+        config,
+        Script::new().after_frame(2, HostToGuest::Reset),
+        "[$vkxp_seed_reset.size, $vkxp_seed_reset[0][0, 2] == $vkxp_seed_reset[1][0, 2], \
+         $vkxp_seed_reset.map { |run| run[2] }]",
+    );
+    assert!(played.outcome.is_ok(), "{:?}", played.outcome);
+    assert_eq!(played.after.as_deref(), Ok("[2, true, [1, 2]]"));
+}
+
+#[test]
+fn preload_scripts_run_in_order_between_the_built_in_scripts_and_the_game() {
+    let game = Game::new(
+        "preload",
+        "Preload",
+        &[(
+            "Main",
+            "$vkxp_preload = [VKXP_PRELOAD_PATCH, $vkxp_preload_order]",
+        )],
+    );
+    let first = game.dir().join("first.rb");
+    let second = game.dir().join("second.rb");
+    fs::write(
+        &first,
+        "VKXP_PRELOAD_PATCH = defined?(RPG::Cache)\n$vkxp_preload_order = [__FILE__]\n",
+    )
+    .unwrap();
+    fs::write(&second, "$vkxp_preload_order << :second\n").unwrap();
+    let config = RunConfig {
+        preload: vec![first.clone(), second],
+        ..game.run_config()
+    };
+    let played = host::run_game(&game, config, Script::new(), "$vkxp_preload");
+    assert!(played.outcome.is_ok(), "{:?}", played.outcome);
+    assert_eq!(
+        played.after,
+        Ok(format!(r#"["constant", ["{}", :second]]"#, first.display()))
+    );
+}
+
+#[test]
+fn an_error_in_a_preload_script_is_reported_with_its_file_and_line() {
+    let game = Game::new(
+        "preload_error",
+        "Preload",
+        &[("Main", "$vkxp_preload_error = :ran")],
+    );
+    let patch = game.dir().join("patch.rb");
+    fs::write(&patch, "x = 1\nraise ArgumentError, 'bad patch'\n").unwrap();
+    let config = RunConfig {
+        preload: vec![patch.clone()],
+        ..game.run_config()
+    };
+    let played = host::run_game(&game, config, Script::new(), "$vkxp_preload_error");
+    assert_eq!(
+        report(&played),
+        format!(
+            "Script '{}' line 2: ArgumentError occurred.\n\nbad patch",
+            patch.display()
+        )
+    );
+    assert_eq!(played.after.as_deref(), Ok("nil"));
+}
+
+#[test]
+fn a_missing_preload_script_fails_before_any_script() {
+    let game = Game::new(
+        "preload_missing",
+        "Preload",
+        &[("Main", "$vkxp_preload_missing = :ran")],
+    );
+    fs::write(game.builtin_scripts(), "$vkxp_preload_missing = :builtin\n").unwrap();
+    let missing = game.dir().join("nowhere.rb");
+    let config = RunConfig {
+        preload: vec![missing.clone()],
+        ..game.run_config()
+    };
+    let played = host::run_game(&game, config, Script::new(), "$vkxp_preload_missing");
+    let error = played.outcome.expect_err("the run fails");
+    assert!(
+        matches!(&error, RunError::Preload { path, .. } if *path == missing),
+        "{error:?}"
+    );
+    assert!(
+        error.to_string().contains(&missing.display().to_string()),
+        "{error}"
+    );
+    assert_eq!(played.after.as_deref(), Ok("nil"));
+    assert_eq!(played.record.received[1..], ending());
+}

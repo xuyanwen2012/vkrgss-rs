@@ -43,6 +43,13 @@ pub struct RunConfig {
     /// Whether `system`, backticks, `exec`, `fork`, `syscall` and `IO.popen` start processes.
     /// They do nothing when this is `false`.
     pub process_functions: bool,
+    /// The seed of the random number generator, set before the built-in scripts run and
+    /// again on every reset. Without one the generator is left as the interpreter seeds it.
+    pub seed: Option<u64>,
+    /// Ruby files evaluated in this order after the built-in scripts and before the game's
+    /// first script, and again after every reset. They are read from these paths as given,
+    /// not from the game directory.
+    pub preload: Vec<PathBuf>,
 }
 
 impl Default for RunConfig {
@@ -60,6 +67,8 @@ impl Default for RunConfig {
             debug: false,
             battle_test: false,
             process_functions: false,
+            seed: None,
+            preload: Vec::new(),
         }
     }
 }
@@ -253,6 +262,13 @@ pub enum RunError {
         path: PathBuf,
         source: io::Error,
     },
+    /// A preload script could not be read.
+    #[error("cannot read the preload script {}: {source}", path.display())]
+    Preload {
+        /// The file the caller named.
+        path: PathBuf,
+        source: io::Error,
+    },
     /// The script archive could not be found, read or taken apart.
     #[error("cannot load the script archive {path}: {reason}")]
     Archive {
@@ -361,13 +377,38 @@ fn ended(ruby: &Ruby, raised: Raised) -> Ended {
     Ended::Failed(report(ruby, &error))
 }
 
-/// Evaluates the built-in scripts file and reads the script archive. Returns the number of
-/// scripts.
-fn load(ruby: &Ruby) -> Result<usize, RunError> {
-    let (builtin, archive) = Guest::with(|guest| {
+/// A preload script: the name it is evaluated under, which is its path as the caller gave
+/// it, and its source.
+type Preload = (String, Vec<u8>);
+
+/// Seeds the random number generator with the seed of the guest's [`RunConfig`], if it has
+/// one.
+fn seed(ruby: &Ruby) -> Result<(), Raised> {
+    if let Some(seed) = Guest::with(|guest| guest.runtime.run.seed) {
+        ruby.eval(&format!("Kernel.srand({seed})"), PRELUDE_NAME, 1)?;
+    }
+    Ok(())
+}
+
+/// Reads the preload scripts, seeds the random number generator, evaluates the built-in
+/// scripts file and reads the script archive. Returns the preload scripts and the number of
+/// scripts in the archive.
+fn load(ruby: &Ruby) -> Result<(Vec<Preload>, usize), RunError> {
+    let (builtin, archive, preload) = Guest::with(|guest| {
         let run = &guest.runtime.run;
-        (run.builtin_scripts.clone(), run.ini.scripts.clone())
+        (
+            run.builtin_scripts.clone(),
+            run.ini.scripts.clone(),
+            run.preload.clone(),
+        )
     });
+    let preload = preload
+        .into_iter()
+        .map(|path| match std::fs::read(&path) {
+            Ok(source) => Ok((path.display().to_string(), source)),
+            Err(source) => Err(RunError::Preload { path, source }),
+        })
+        .collect::<Result<Vec<Preload>, RunError>>()?;
     let source = std::fs::read(&builtin).map_err(|source| RunError::BuiltinScripts {
         path: builtin,
         source,
@@ -376,6 +417,7 @@ fn load(ruby: &Ruby) -> Result<usize, RunError> {
         // SAFETY: `raised` was produced just now on this thread and sat in a local since.
         RunError::Prepare(unsafe { ruby.describe(raised) })
     };
+    seed(ruby).map_err(prepare)?;
     let source = ruby.str_new(&source).map_err(prepare)?;
     if let Err(raised) = evaluate(ruby, source, BUILTIN_NAME) {
         // SAFETY: as above.
@@ -388,8 +430,10 @@ fn load(ruby: &Ruby) -> Result<usize, RunError> {
     // and is in a local.
     let count = unsafe { ruby.funcall(ffi::ruby_top_self, c"vkxp_load_scripts", &[path]) };
     match count {
-        Ok(count) if ffi::fixnum_p(count) => Ok(usize::try_from(ffi::fix2long(count)).unwrap_or(0)),
-        Ok(_) => Ok(0),
+        Ok(count) if ffi::fixnum_p(count) => {
+            Ok((preload, usize::try_from(ffi::fix2long(count)).unwrap_or(0)))
+        }
+        Ok(_) => Ok((preload, 0)),
         Err(raised) => {
             // SAFETY: as above.
             let error = unsafe { ruby.describe(raised) };
@@ -402,8 +446,9 @@ fn load(ruby: &Ruby) -> Result<usize, RunError> {
 }
 
 /// What a reset does between two runs of the scripts: audio stops, every scene element and
-/// bitmap is disposed, and the input state starts afresh. The interpreter and what the
-/// scripts defined stay, as in the original runtime.
+/// bitmap is disposed, the input state starts afresh and the random number generator is
+/// seeded again. The interpreter and what the scripts defined stay, as in the original
+/// runtime.
 fn reset(ruby: &Ruby) -> Result<(), Raised> {
     Guest::with(audio::stop_all);
     let graphics = rb::class_at(ruby, c"Graphics")?;
@@ -413,17 +458,25 @@ fn reset(ruby: &Ruby) -> Result<(), Raised> {
         guest.input = InputState::new();
         guest.runtime.pending = None;
     });
-    Ok(())
+    seed(ruby)
 }
 
-/// Evaluates the `count` scripts of `$RGSS_SCRIPTS` in order, each under the name `Section`
-/// and its index, again from the first after a reset, until the last returns or one exits.
-fn run_scripts(ruby: &Ruby, count: usize) -> Result<(), RunError> {
+/// Evaluates the preload scripts and then the `count` scripts of `$RGSS_SCRIPTS` in order,
+/// each of the latter under the name `Section` and its index, again from the first preload
+/// script after a reset, until the last returns or one exits.
+fn run_scripts(ruby: &Ruby, preload: &[Preload], count: usize) -> Result<(), RunError> {
     let mut index = 0;
-    while index < count {
-        let evaluated = ruby
-            .eval(&format!("$RGSS_SCRIPTS[{index}][3]"), PRELUDE_NAME, 1)
-            .and_then(|source| evaluate(ruby, source, &format!("Section{index:03}")));
+    while index < preload.len() + count {
+        let evaluated = match preload.get(index) {
+            Some((name, source)) => ruby
+                .str_new(source)
+                .and_then(|source| evaluate(ruby, source, name)),
+            None => {
+                let index = index - preload.len();
+                ruby.eval(&format!("$RGSS_SCRIPTS[{index}][3]"), PRELUDE_NAME, 1)
+                    .and_then(|source| evaluate(ruby, source, &format!("Section{index:03}")))
+            }
+        };
         index += 1;
         let Err(raised) = evaluated else {
             continue;
@@ -456,7 +509,7 @@ pub(crate) fn play(ruby: &Ruby, link: GuestEnd) -> Result<(), RunError> {
     let outcome = prepare(ruby)
         .map_err(RunError::Prepare)
         .and_then(|()| load(ruby))
-        .and_then(|count| run_scripts(ruby, count));
+        .and_then(|(preload, count)| run_scripts(ruby, &preload, count));
     if let Err(RunError::Script(report)) = &outcome {
         eprintln!("{report}");
         Guest::with(|guest| {
@@ -482,14 +535,16 @@ pub(crate) fn play(ruby: &Ruby, link: GuestEnd) -> Result<(), RunError> {
 /// 2. Prepares the interpreter with the prelude of this crate: `$KCODE`, an empty load path,
 ///    `$DEBUG` and `$BTEST`, `Reset` and `Hangup`, `save_data`, `print` and `p`, `Win32API`,
 ///    the process functions and `require` and `load`.
-/// 3. Evaluates the built-in scripts file under the name `(builtin)`.
+/// 3. Reads the preload scripts, seeds the random number generator when the configuration
+///    has a seed, and evaluates the built-in scripts file under the name `(builtin)`.
 /// 4. Reads the script archive into `$RGSS_SCRIPTS`, each entry with its inflated source
 ///    as fourth element.
-/// 5. Evaluates the scripts in order as `Section000`, `Section001` and so on. `Reset`
-///    leaving a script stops the audio, disposes every scene element and bitmap, clears the
-///    input state and starts the scripts over; `SystemExit` ends the game. Any other
-///    exception ends it with [`RunError::Script`], after its report was written to the error
-///    stream, shown by the host as a modal message and dismissed.
+/// 5. Evaluates the preload scripts under their paths, then the scripts in order as
+///    `Section000`, `Section001` and so on. `Reset` leaving a script stops the audio,
+///    disposes every scene element and bitmap, clears the input state, seeds the generator
+///    again and starts over from the first preload script; `SystemExit` ends the game. Any
+///    other exception ends it with [`RunError::Script`], after its report was written to the
+///    error stream, shown by the host as a modal message and dismissed.
 /// 6. Stops the audio, sends the host the shutdown message and drops the link, also when a
 ///    step before failed.
 ///

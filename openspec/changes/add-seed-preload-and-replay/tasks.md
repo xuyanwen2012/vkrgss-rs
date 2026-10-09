@@ -2,7 +2,7 @@
 
 ## 1. Guest (`vkxp-binding`)
 
-- [ ] 1.1 Add seed and preload scripts to the run configuration and `run_game`. Verify: tests for the four scenarios of `specs/rgss-runtime/spec.md`, including a reset.
+- [x] 1.1 Add seed and preload scripts to the run configuration and `run_game`. Verify: tests for the four scenarios of `specs/rgss-runtime/spec.md`, including a reset.
 
 ## 2. Host (`vkxp-host`)
 
