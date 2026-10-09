@@ -8,4 +8,4 @@
 
 ## 2. Integration check
 
-- [ ] 2.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate match-ruby-181-reals-and-hashes --strict` passes.
+- [x] 2.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate match-ruby-181-reals-and-hashes --strict` passes.
