@@ -280,6 +280,7 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
             builtin_scripts,
             debug: options.debug,
             process_functions: options.process_functions,
+            log_p: options.log_p,
             seed: Some(seed),
             preload,
             ..RunConfig::default()

@@ -22,6 +22,7 @@ usage: vkxp [GAME_DIR] [OPTIONS]
   --encoding ENCODING       the text encoding of Game.ini: utf-8, gbk, shift-jis or big5
   --debug                   debug mode: $DEBUG is true
   --allow-process-functions let scripts start processes (system, exec and the like)
+  --log-p                   p only writes to the error stream and shows no message panel
   --filter FILTER           how the frame is scaled into the window: auto, nearest,
                             linear or sharp; default: auto, which is nearest at a
                             whole-number scale and sharp otherwise
@@ -68,6 +69,8 @@ pub struct Options {
     pub encoding: Option<Encoding>,
     pub debug: bool,
     pub process_functions: bool,
+    /// Whether `p` is log-only.
+    pub log_p: bool,
     /// The filter that scales the frame into the window, if one was given.
     pub filter: Option<Filter>,
     /// Whether the window starts in borderless fullscreen.
@@ -178,6 +181,7 @@ pub fn parse(arguments: &[String]) -> Result<Options, String> {
             "--fullscreen" => options.fullscreen = true,
             "--debug" => options.debug = true,
             "--allow-process-functions" => options.process_functions = true,
+            "--log-p" => options.log_p = true,
             "--no-audio" => options.no_audio = true,
             "--soundfont" => options.soundfont = Some(PathBuf::from(value()?)),
             "--seed" => {
@@ -282,6 +286,7 @@ mod tests {
             "Shift-JIS",
             "--debug",
             "--allow-process-functions",
+            "--log-p",
             "--no-audio",
             "--soundfont",
             "sf/gm.sf2",
@@ -304,6 +309,7 @@ mod tests {
                 encoding: Some(Encoding::ShiftJis),
                 debug: true,
                 process_functions: true,
+                log_p: true,
                 no_audio: true,
                 soundfont: Some("sf/gm.sf2".into()),
                 filter: Some(Filter::Linear),

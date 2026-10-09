@@ -30,3 +30,21 @@
 - [A frozen screen (`Graphics.freeze`) hides the panel] → The host shows held frames while
   frozen; a message during a freeze is then only on the error stream until the transition.
   Accepted for now and noted as a follow-up.
+
+## Follow-ups
+
+- A message during a freeze is not visible (see the risk above), yet a windowed session still
+  waits for its dismissal. Should the panel be shown over the held frame?
+- Only the keyboard and the mouse dismiss a message. Should a gamepad button mapped to C or B
+  dismiss it too, and be suppressed until released like a key?
+- A key mapped to C or B that is already down when the message arrives does not dismiss it;
+  it has to be released and pressed again. Its hold stays visible to the game.
+- When a reset or quit request ends the guest's wait, the windowed session still holds the
+  message as pending: the next confirm or cancel press is swallowed and its dismissal reaches
+  a guest that no longer waits for it. Should the guest tell the host that it gave up, which
+  would need a protocol message?
+- The guest always sends at least one frame with the panel, also when the host dismisses at
+  once, so a headless run shows every message for one frame. The frames of the wait advance
+  the emulated tick count of `Win32API` but not `Graphics.frame_count`.
+- With an input recording or replay in a windowed session a message still waits for the
+  player; the dismissing press is not part of the recording.

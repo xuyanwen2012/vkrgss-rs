@@ -33,6 +33,7 @@ pub struct File {
     encoding: Option<String>,
     debug: Option<bool>,
     allow_process_functions: Option<bool>,
+    log_p: Option<bool>,
     /// The scaling filter, by its name.
     filter: Option<String>,
     fullscreen: Option<bool>,
@@ -156,6 +157,7 @@ impl File {
             allow_process_functions: over
                 .allow_process_functions
                 .or(self.allow_process_functions),
+            log_p: over.log_p.or(self.log_p),
             filter: over.filter.or(self.filter),
             fullscreen: over.fullscreen.or(self.fullscreen),
             audio: over.audio.or(self.audio),
@@ -229,6 +231,7 @@ pub fn settle(file: File, mut options: Options) -> Result<Settings> {
     }
     options.debug |= file.debug == Some(true);
     options.process_functions |= file.allow_process_functions == Some(true);
+    options.log_p |= file.log_p == Some(true);
     if options.filter.is_none() {
         let filter = file.filter.as_deref().map(args::filter).transpose();
         options.filter = filter.map_err(|error| anyhow!("filter: {error}"))?;
@@ -444,6 +447,7 @@ mod tests {
              encoding = \"Shift-JIS\"\n\
              debug = true\n\
              allow_process_functions = true\n\
+             log_p = true\n\
              filter = \"sharp\"\n\
              fullscreen = true\n\
              audio = false\n\
@@ -471,6 +475,7 @@ mod tests {
                 encoding: Some(Encoding::ShiftJis),
                 debug: true,
                 process_functions: true,
+                log_p: true,
                 filter: Some(Filter::Sharp),
                 fullscreen: true,
                 no_audio: true,
@@ -754,6 +759,7 @@ mod tests {
         assert_eq!(options.encoding, Some(Encoding::Gbk));
         assert!(!options.debug);
         assert!(!options.process_functions);
+        assert!(!options.log_p);
         assert!(!options.no_audio);
         assert!(options.soundfont.is_some());
         assert_eq!(options.seed, Some(7));
@@ -774,6 +780,7 @@ mod tests {
         assert_eq!(file.keys.len(), vkxp_proto::Button::ALL.len());
         assert!(file.audio.is_some() && file.debug.is_some());
         assert!(file.allow_process_functions.is_some());
+        assert!(file.log_p.is_some());
         assert!(!file.gamepad.is_empty());
 
         // The one setting the example can only show as a comment, because it does not go

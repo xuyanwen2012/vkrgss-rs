@@ -10,7 +10,7 @@
 
 ## 3. Executable (`vkxp`)
 
-- [ ] 3.1 Add `--log-p` and its configuration key. Verify: argument and configuration tests.
+- [x] 3.1 Add `--log-p` and its configuration key. Verify: argument and configuration tests.
 
 ## 4. Integration check
 

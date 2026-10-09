@@ -153,6 +153,7 @@ Paths on the command line are relative to the directory the program was started 
 | `--fullscreen` | Start in borderless fullscreen. |
 | `--debug` | Debug mode: `$DEBUG` is `true`. |
 | `--allow-process-functions` | Lets `system`, backticks, `exec`, `fork`, `syscall` and `IO.popen` start processes. Without it they do nothing. |
+| `--log-p` | `p` only writes to the error stream: no message panel is shown and the game does not wait. See *Messages*. |
 | `--no-audio` | Run without sound. No audio device is opened. |
 | `--soundfont FILE` | The SoundFont that MIDI music is played with. A file that does not exist ends the program with an error before any window opens. |
 | `--seed N` | The seed of the random number generator, set before any script runs and again on every reset. Without it a headless run uses 0, a replay the seed of its recording, and a windowed run one taken from the clock. |
@@ -199,6 +200,7 @@ font_dirs = ["fonts"]                        # --font-dir, in this order
 encoding = "gbk"                             # --encoding
 debug = false                                # true is --debug
 allow_process_functions = false              # true is --allow-process-functions
+log_p = false                                # true is --log-p
 filter = "auto"                              # --filter
 fullscreen = false                           # true is --fullscreen
 audio = true                                 # false is --no-audio
@@ -285,6 +287,17 @@ on the AMD integrated GPU, or the same on the CPU with `VK_LOADER_DRIVERS_SELECT
 The host keys are those of the demo: F12 (reset), Alt+Enter or F11 (borderless fullscreen),
 F2 (frame rate in the title) and Tab held (fast-forward). Closing the window asks the game to
 quit.
+
+### Messages
+
+`print`, `p` and the report of an uncaught script error are written to the error stream and
+shown in a panel over the picture: white text in a dark box in the middle of the screen,
+wrapped to the box and cut with `...` when it has more lines than fit. The game waits until
+the message is dismissed with a key that holds C or B (by default Space, Enter, C, Escape, X
+and so on) or a mouse click. That press does not reach the game. A headless run dismisses
+every message at once. With `--log-p`, `p` writes to the error stream only and the game goes
+on. While the screen is frozen (`Graphics.freeze`) the panel is not visible; the message is
+still on the error stream and still waits for its dismissal.
 
 ### Window
 
