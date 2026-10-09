@@ -13,10 +13,16 @@ fn mask_size() {
     for size in [12, 22, 52] {
         for text in ["", " ", "I", "Hello, World!", "fj", "  padded  "] {
             let request = request(LIBERATION, size);
-            let (width, height) = engine.measure(&request, text);
+            let layout = engine.layout(&request, text);
+            let width = layout.width() + layout.right_overhang;
             let mask = engine.rasterize(&request, text);
-            assert_eq!((mask.width, mask.height), (width, height), "{text:?}");
-            assert_eq!(mask.coverage.len(), (width * height) as usize);
+            assert_eq!(
+                (mask.width, mask.height),
+                (width, layout.height),
+                "{text:?}"
+            );
+            assert_eq!(mask.left_overhang, layout.left_overhang);
+            assert_eq!(mask.coverage.len(), (width * layout.height) as usize);
         }
     }
 }
@@ -62,10 +68,11 @@ fn coverage_outside_the_mask_is_clipped() {
     for size in [1, 2, 3, 12, 52] {
         for text in ["\u{2BC5}\u{2B1B}\u{1F0A1}", "jfjf", "Åg_|"] {
             let request = TextRequest::new([LIBERATION, SYMBOLS], size);
-            let (width, height) = engine.measure(&request, text);
+            let layout = engine.layout(&request, text);
+            let width = layout.width() + layout.right_overhang;
             let mask = engine.rasterize(&request, text);
-            assert_eq!((mask.width, mask.height), (width, height));
-            assert_eq!(mask.coverage.len(), (width * height) as usize);
+            assert_eq!((mask.width, mask.height), (width, layout.height));
+            assert_eq!(mask.coverage.len(), (width * layout.height) as usize);
         }
     }
 }
@@ -76,7 +83,10 @@ fn space() {
     for size in [12, 22, 52] {
         let mask = engine.rasterize(&request(LIBERATION, size), " ");
         assert!(mask.width > 0);
-        assert_eq!(mask.height, size);
+        assert_eq!(
+            mask.height,
+            engine.measure(&request(LIBERATION, size), " ").1
+        );
         assert!(mask.coverage.iter().all(|&value| value == 0));
     }
 }

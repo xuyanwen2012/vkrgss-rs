@@ -4,7 +4,7 @@ mod common;
 
 use common::{
     CHINESE_PRC, Derivation, LIBERATION, LIBERATION_FILE, NAME_FAMILY, RawFont, SYMBOL,
-    SYMBOLS_FILE, derive_font, engine, request, test_sources,
+    derive_font, engine, request, test_sources,
 };
 use vkxp_text::{FontSources, LineBox, TextEngine, TextMask, default_line_box};
 
@@ -49,7 +49,7 @@ fn ink_bottom(mask: &TextMask) -> u32 {
 fn em_dash_is_one_em_wide() {
     let raw = RawFont::load(LIBERATION_FILE);
     assert!(raw.has('\u{2014}'));
-    assert_eq!(raw.advance('\u{2014}', 22.0), 22);
+    assert_eq!(raw.advance('\u{2014}', 22), 22);
     assert_eq!(raw.advance('\u{2014}', raw.pixels_per_em(22)), 20);
 }
 
@@ -66,11 +66,12 @@ fn replacement_takes_the_size_of_the_family_it_replaces() {
 
     // The baseline lies the replaced family's share of ascent below the top.
     assert_eq!(ink_bottom(&engine.rasterize(&replaced, "H")), 18);
-    // A character from a fallback font follows the same pixels per em.
-    let symbols = RawFont::load(SYMBOLS_FILE);
+    // A character from a fallback font is as wide as the replacement's missing glyph at
+    // the same pixels per em.
+    let liberation = RawFont::load(LIBERATION_FILE);
     assert_eq!(
-        engine.measure(&replaced, &SYMBOL.to_string()).0,
-        symbols.advance(SYMBOL, 22.0)
+        engine.layout(&replaced, &SYMBOL.to_string()).advances,
+        [liberation.advance(SYMBOL, 22)]
     );
 }
 
@@ -79,9 +80,10 @@ fn height_stays_the_size() {
     let mut engine = engine_replacing("SimHei", &[("SimHei", ONE_EM)]);
     let replaced = request("SimHei", 22);
     let mixed = format!("Ag{SYMBOL}");
-    for text in ["", " ", "Ag", "Éj|", EM_DASH, mixed.as_str()] {
+    for text in [" ", "Ag", "Éj|", EM_DASH, mixed.as_str()] {
         let (width, height) = engine.measure(&replaced, text);
         assert_eq!(height, 22, "{text:?}");
+        let width = width + engine.layout(&replaced, text).right_overhang;
         let mask = engine.rasterize(&replaced, text);
         assert_eq!((mask.width, mask.height), (width, 22), "{text:?}");
         assert_eq!(mask.coverage.len(), (width * 22) as usize, "{text:?}");

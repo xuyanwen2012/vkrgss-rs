@@ -24,7 +24,7 @@ fn a_thousand_short_strings_at_size_22() {
     for text in &texts {
         let (width, _) = engine.measure(&request, text);
         let mask = engine.rasterize(&request, text);
-        assert_eq!(mask.width, width);
+        assert!(mask.width >= width);
         pixels += mask.coverage.len();
     }
     let elapsed = start.elapsed();

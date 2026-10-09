@@ -69,9 +69,15 @@ fn engine_without_fonts_does_not_fail() {
 
     assert!(engine.families().is_empty());
     assert_eq!(engine.resolve(&request(LIBERATION, 22)), None);
-    assert_eq!(engine.measure(&request(LIBERATION, 22), "Text"), (0, 22));
+    assert_eq!(engine.measure(&request(LIBERATION, 22), "Text"), (0, 0));
+    assert!(
+        engine
+            .layout(&request(LIBERATION, 22), "Text")
+            .advances
+            .is_empty()
+    );
     let mask = engine.rasterize(&request(LIBERATION, 22), "Text");
-    assert_eq!((mask.width, mask.height, mask.coverage.len()), (0, 22, 0));
+    assert_eq!((mask.width, mask.height, mask.coverage.len()), (0, 0, 0));
 }
 
 #[test]

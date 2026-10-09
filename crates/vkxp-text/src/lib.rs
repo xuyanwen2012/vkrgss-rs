@@ -13,7 +13,8 @@
 //! let request = TextRequest::new(["楷体_GB2312", "黑体"], 22);
 //! let (width, height) = engine.measure(&request, "开始游戏");
 //! let mask = engine.rasterize(&request, "开始游戏");
-//! assert_eq!((mask.width, mask.height), (width, height));
+//! assert!(mask.width >= width);
+//! assert_eq!(mask.height, height);
 //! ```
 //!
 //! The caller's own fonts, substitutions and line boxes go into the sources:
@@ -63,24 +64,44 @@
 //! [`TextEngine::is_available`] answers steps 1 and 2 only.
 //!
 //! Within the family, a bold, italic or bold-italic request selects the face of exactly that
-//! weight class and slant when the family has one and the regular face otherwise; nothing is
-//! synthesised. A font with a weight axis is set to weight 400, or 700 for a bold request.
+//! weight class and slant when the family has one and the regular face otherwise. A font with
+//! a weight axis is set to weight 400, or 700 for a bold request. A style the selected face
+//! does not have is synthesised: bold by making every glyph one pixel bolder and every
+//! advance, and the average width, one pixel wider; italic by slanting the glyphs, which
+//! keeps the advances and gives the glyphs overhangs.
 //!
 //! A character the selected face lacks is drawn from the first fallback family that has it,
-//! then from any font that has it, at the selected face's pixels per em and on its baseline.
-//! A character no font has is drawn as the selected face's missing-glyph box. Control
-//! characters, line breaks included, take no space and draw nothing.
+//! then from any font that has it, at the selected face's pixels per em and on its baseline,
+//! and is set at the advance of the selected face's missing glyph. A character no font has
+//! is drawn as that missing-glyph box. Control characters, line breaks included, are
+//! characters like any other: one the selected face lacks is its missing-glyph box, and none
+//! starts a new line. A lacking character outside the Basic Multilingual Plane is as wide as
+//! two missing glyphs.
+//!
+//! PLACEHOLDER: the original runtime draws the missing glyph for every character the font
+//! lacks; drawing it from another font is kept because it is better for play.
 //!
 //! # Metrics
 //!
-//! PLACEHOLDER: the rule below is a guess at what the original runtime passes to GDI, pending
-//! measurement against it. It is confined to `line_metrics` in `face.rs`.
+//! The rules are those measured on the original runtime under Wine's GDI, which rasterises
+//! with FreeType ([`TextEngine::layout`] reports the results as a [`TextLayout`]).
 //!
-//! The requested size is the height of the line box the text is set in: the selected face is
-//! scaled so that the ascent plus descent of that line box equals the size. The baseline lies
-//! the rounded ascent below the top of the mask, and the mask is always as high as the size;
-//! ink beyond it is clipped. A string's width is the sum of its characters' advances, each
-//! rounded to a whole pixel on its own. There is no kerning, shaping or hinting.
+//! The requested size is the height of the cell asked of GDI. The face is set at a whole
+//! number of pixels per em: `round(upm * size / box)`, one less when `round(box * ppem / upm)`
+//! would exceed the size, where `box` is the ascent plus descent of the line box. The text
+//! height is the rounded ascent plus the rounded descent at that pixels per em, which is not
+//! always the size, and the baseline lies the rounded ascent below the top of the mask.
+//!
+//! PLACEHOLDER: the decrement in the choice of pixels per em is Wine's; it is confined to
+//! `LineBox::pixels_per_em` in `line_box.rs`.
+//!
+//! Each advance is rounded to a whole pixel at that pixels per em the way FreeType rounds
+//! it. A string's width is the sum of its characters' advances plus the amount by which the
+//! first glyph reaches left of the pen (its left overhang); an empty string measures 0 by 0.
+//! There is no kerning, shaping or hinting. A mask is as high as the text and holds the
+//! advances and the overhangs of the first and the last glyph; other ink beyond it is
+//! clipped. [`TextEngine::rasterize_run`] sets a string with advances of the caller and
+//! glyphs condensed horizontally, which is how text is squeezed into a narrow rectangle.
 //!
 //! The line box is the selected face's own, from the OS/2 `usWinAscent` and `usWinDescent` as
 //! Windows takes them, falling back to `hhea`, with one exception. A face that stands in for
@@ -118,8 +139,8 @@ mod sources;
 mod substitution;
 
 pub use engine::{
-    DEFAULT_FALLBACK_FAMILIES, DEFAULT_GLYPH_CACHE_BYTES, ResolvedFace, TextEngine, TextMask,
-    TextRequest,
+    DEFAULT_FALLBACK_FAMILIES, DEFAULT_GLYPH_CACHE_BYTES, ResolvedFace, TextEngine, TextLayout,
+    TextMask, TextRequest,
 };
 pub use line_box::{LineBox, default_line_box};
 pub use sources::{FontSources, SystemFonts};

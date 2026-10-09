@@ -7,12 +7,12 @@ use std::sync::Arc;
 
 use swash::GlyphId;
 use swash::scale::{Render, ScaleContext, Source};
-use swash::zeno::Format;
+use swash::zeno::{Format, Transform};
 
 use crate::face::LoadedFace;
 use crate::glyph_cache::{Glyph, GlyphCache, GlyphKey};
 use crate::index::FontIndex;
-use crate::line_box::{LineBox, LineBoxTable};
+use crate::line_box::{Cell, LineBox, LineBoxTable, mul_div};
 use crate::sources::FontSources;
 use crate::substitution::{SubstitutionTable, family_key};
 
@@ -56,14 +56,56 @@ impl TextRequest {
     }
 }
 
-/// Glyph coverage of a string.
+/// Glyph coverage of a string: the cell of the text, as high as the text height and as wide as
+/// the advances plus the overhangs of the first and the last glyph.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TextMask {
     pub width: u32,
     pub height: u32,
+    /// The column the pen starts at: how far the first glyph reaches left of it.
+    pub left_overhang: u32,
     /// `width * height` bytes, rows from the top, 0 for no coverage to 255 for full.
     pub coverage: Vec<u8>,
 }
+
+/// How a string is set at a size: what is needed to place and to squeeze it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TextLayout {
+    /// The whole pixels per em the font is set at.
+    pub pixels_per_em: u32,
+    /// The text height: the rounded ascent plus the rounded descent.
+    pub height: u32,
+    /// Distance from the top of the text to the baseline.
+    pub ascent: u32,
+    /// The advance of each character, in order.
+    pub advances: Vec<u32>,
+    /// How far the first glyph reaches left of the pen.
+    pub left_overhang: u32,
+    /// How far the last glyph reaches right of its advance.
+    pub right_overhang: u32,
+    /// The font's average character width at this size, at least 1.
+    pub average_width: u32,
+    /// The pixels a synthesised bold adds to every advance and to the average width: 1, or
+    /// 0 when nothing is synthesised.
+    pub emboldened: u32,
+}
+
+impl TextLayout {
+    /// The measured width: the advances plus the first glyph's left overhang.
+    pub fn width(&self) -> u32 {
+        let advances = self
+            .advances
+            .iter()
+            .fold(0u32, |sum, &a| sum.saturating_add(a));
+        advances.saturating_add(self.left_overhang)
+    }
+}
+
+/// The slant of a synthesised italic: how far a point moves right per unit of height.
+///
+/// PLACEHOLDER: the value is not measured; the overhangs it gives differ from those of the
+/// original runtime under Wine.
+const SYNTHETIC_SLANT: f32 = 0.25;
 
 /// The face a request resolves to.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,8 +139,11 @@ struct CharGlyph {
     /// The loaded face the glyph comes from.
     face: usize,
     glyph: GlyphId,
-    /// The glyph's advance in that face's font units.
-    advance: f32,
+    /// The advance in the selected face's font units: the glyph's own, or that of the
+    /// selected face's missing glyph for a character it lacks.
+    advance: u32,
+    /// Whether the selected face lacks the character.
+    lacking: bool,
 }
 
 /// A glyph of the string being laid out.
@@ -106,8 +151,19 @@ struct CharGlyph {
 struct Placed {
     face: usize,
     glyph: GlyphId,
-    /// The pen position: the sum of the advances before the glyph.
-    x: u32,
+    /// The natural advance in pixels.
+    advance: u32,
+    /// Whether the glyph is emboldened and slanted, its face having no such style.
+    bold: bool,
+    italic: bool,
+}
+
+/// What a request selects at its size.
+#[derive(Debug, Clone, Copy)]
+struct Setting {
+    cell: Cell,
+    average_width: u32,
+    emboldened: u32,
 }
 
 /// Finds fonts for family names and turns strings into coverage masks.
@@ -217,38 +273,107 @@ impl TextEngine {
         })
     }
 
-    /// The width and height of `text` in pixels. The height is always the requested size.
+    /// The width and height of `text` in pixels: the advances plus the first glyph's left
+    /// overhang, and the text height. An empty string measures (0, 0).
     pub fn measure(&mut self, request: &TextRequest, text: &str) -> (u32, u32) {
-        let width = self.layout(request, text).map_or(0, |(_, width)| width);
-        (width, request.size)
+        let layout = self.layout(request, text);
+        if layout.advances.is_empty() {
+            return (0, 0);
+        }
+        (layout.width(), layout.height)
     }
 
-    /// The coverage of `text`: a mask of exactly the size [`TextEngine::measure`] reports.
+    /// How `text` is set. Without a usable font everything is 0 and there are no advances.
+    pub fn layout(&mut self, request: &TextRequest, text: &str) -> TextLayout {
+        let Some(setting) = self.set(request, text) else {
+            return TextLayout::default();
+        };
+        let run = std::mem::take(&mut self.run);
+        let pixels_per_em = setting.cell.pixels_per_em;
+        let mut overhang = |placed: Option<&Placed>| match placed {
+            Some(placed) => {
+                let glyph = self.glyph(placed.key(pixels_per_em, (1, 1)));
+                (glyph.left_overhang(), glyph.right_overhang(placed.advance))
+            }
+            None => (0, 0),
+        };
+        let layout = TextLayout {
+            pixels_per_em,
+            height: setting.cell.ascent + setting.cell.descent,
+            ascent: setting.cell.ascent,
+            left_overhang: overhang(run.first()).0,
+            right_overhang: overhang(run.last()).1,
+            advances: run.iter().map(|placed| placed.advance).collect(),
+            average_width: setting.average_width,
+            emboldened: setting.emboldened,
+        };
+        self.run = run;
+        layout
+    }
+
+    /// The coverage of `text` at its natural advances: [`TextEngine::rasterize_run`] with
+    /// the advances of [`TextEngine::layout`].
     pub fn rasterize(&mut self, request: &TextRequest, text: &str) -> TextMask {
-        let layout = self.layout(request, text);
-        let width = layout.map_or(0, |(_, width)| width);
+        let advances = self.layout(request, text).advances;
+        self.rasterize_run(request, text, &advances, None)
+    }
+
+    /// The coverage of `text` with the characters set `advances` apart, one advance per
+    /// character, and every glyph `condense.0 / condense.1` as wide as it naturally is.
+    ///
+    /// The mask is as high as the text height and holds the advances and the overhangs of
+    /// the first and the last glyph as drawn; other ink beyond it is clipped.
+    pub fn rasterize_run(
+        &mut self,
+        request: &TextRequest,
+        text: &str,
+        advances: &[u32],
+        condense: Option<(u32, u32)>,
+    ) -> TextMask {
+        let Some(setting) = self.set(request, text) else {
+            return TextMask::default();
+        };
+        let condense = match condense {
+            Some((numerator, denominator)) if numerator != denominator => (numerator, denominator),
+            _ => (1, 1),
+        };
+        let run = std::mem::take(&mut self.run);
+        let glyphs: Vec<(Arc<Glyph>, u32)> = run
+            .iter()
+            .zip(advances)
+            .map(|(placed, &advance)| {
+                let key = placed.key(setting.cell.pixels_per_em, condense);
+                (self.glyph(key), advance)
+            })
+            .collect();
+        self.run = run;
+
+        let left_overhang = glyphs.first().map_or(0, |(glyph, _)| glyph.left_overhang());
+        let right_overhang = glyphs
+            .last()
+            .map_or(0, |(glyph, advance)| glyph.right_overhang(*advance));
+        let width = glyphs
+            .iter()
+            .fold(left_overhang, |sum, (_, advance)| {
+                sum.saturating_add(*advance)
+            })
+            .saturating_add(right_overhang);
+        let height = setting.cell.ascent + setting.cell.descent;
         let mut mask = TextMask {
             width,
-            height: request.size,
-            coverage: vec![0; width as usize * request.size as usize],
-        };
-        let Some((selected, _)) = layout else {
-            return mask;
+            height,
+            left_overhang,
+            coverage: vec![0; width as usize * height as usize],
         };
         if mask.coverage.is_empty() {
             return mask;
         }
-        let face = &self.faces[selected.face];
-        let pixels_per_em = face.pixels_per_em(request.size, selected.line_box);
-        let baseline = face.baseline(request.size, selected.line_box);
-        let run = std::mem::take(&mut self.run);
-        for placed in &run {
-            let glyph = self.glyph(placed.face, pixels_per_em, placed.glyph);
-            let left = i64::from(placed.x) + i64::from(glyph.left);
-            let top = i64::from(baseline) - i64::from(glyph.top);
-            blit(&mut mask, &glyph, left, top);
+        let mut pen = i64::from(left_overhang);
+        for (glyph, advance) in &glyphs {
+            let top = i64::from(setting.cell.ascent) - i64::from(glyph.top);
+            blit(&mut mask, glyph, pen + i64::from(glyph.left), top);
+            pen += i64::from(*advance);
         }
-        self.run = run;
         mask
     }
 
@@ -262,23 +387,24 @@ impl TextEngine {
         self.glyphs.set_limit(bytes);
     }
 
-    /// Fills `self.run` with the glyphs of `text` and returns what the request selects and
-    /// the width. `None` when the size is zero or the engine has no usable font.
-    fn layout(&mut self, request: &TextRequest, text: &str) -> Option<(Selected, u32)> {
+    /// Fills `self.run` with the glyphs of `text`, one for each character, and returns how
+    /// the request is set. `None` when the engine has no usable font.
+    fn set(&mut self, request: &TextRequest, text: &str) -> Option<Setting> {
         self.run.clear();
-        if request.size == 0 {
-            return None;
-        }
         let selection = self.selected_face(request)?;
         let selected = selection.face;
-        let pixels_per_em = self.faces[selected].pixels_per_em(request.size, selection.line_box);
+        let face = &self.faces[selected];
+        let units_per_em = u32::from(face.units_per_em);
+        let cell = selection
+            .line_box
+            .unwrap_or_else(|| face.line_box())
+            .cell(request.size);
+        let pixels_per_em = cell.pixels_per_em;
+        let (has_bold, _) = self.face_style(selected);
+        let emboldened = u32::from(request.bold && !has_bold);
+        let average_width = mul_div(face.average_width.into(), pixels_per_em, units_per_em);
         let style = style_bits(request.bold, request.italic);
-        let mut x = 0u32;
         for ch in text.chars() {
-            // Control characters, line breaks included, take no space and draw nothing.
-            if ch.is_control() {
-                continue;
-            }
             let found = match self.chars.get(&(selected, style, ch)) {
                 Some(found) => *found,
                 None => {
@@ -287,16 +413,37 @@ impl TextEngine {
                     found
                 }
             };
+            let mut advance = advance_pixels(found.advance, pixels_per_em, units_per_em)
+                .saturating_add(emboldened);
+            // As measured: a character outside the Basic Multilingual Plane is two units to
+            // GDI, each of which the font lacks.
+            if found.lacking && u32::from(ch) > 0xFFFF {
+                advance = advance.saturating_mul(2);
+            }
+            let (glyph_bold, glyph_italic) = self.face_style(found.face);
             self.run.push(Placed {
                 face: found.face,
                 glyph: found.glyph,
-                x,
+                advance,
+                bold: request.bold && !glyph_bold,
+                italic: request.italic && !glyph_italic,
             });
-            let scale = pixels_per_em / self.faces[found.face].units_per_em;
-            let advance = (found.advance * scale).round().max(0.0) as u32;
-            x = x.saturating_add(advance);
         }
-        Some((selection, x))
+        Some(Setting {
+            cell,
+            average_width: average_width.max(1) + emboldened,
+            emboldened,
+        })
+    }
+
+    /// Whether a loaded face is bold and whether it is italic.
+    fn face_style(&self, face: usize) -> (bool, bool) {
+        let loaded = &self.faces[face];
+        let record = self.index.record(loaded.record);
+        let bold = loaded
+            .variable_weight
+            .map_or(record.is_bold(), |weight| weight >= 600);
+        (bold, record.italic)
     }
 
     /// The loaded face and line box for the request's family names and style.
@@ -356,18 +503,37 @@ impl TextEngine {
 
     /// The glyph that draws `ch` when `selected` is the selected face: its own, else the
     /// first fallback family's that has one, else any font's, else its missing-glyph box.
+    /// A glyph of another face is set at the advance of the selected face's missing glyph,
+    /// and a control character is not looked for in other faces.
+    ///
+    /// PLACEHOLDER: the original draws the missing glyph for a character the font lacks.
     fn find_glyph(&mut self, selected: usize, bold: bool, italic: bool, ch: char) -> CharGlyph {
+        let own = self.faces[selected].glyph(ch);
+        if own != 0 {
+            return CharGlyph {
+                face: selected,
+                glyph: own,
+                advance: self.faces[selected].advance(own),
+                lacking: false,
+            };
+        }
+        let missing = CharGlyph {
+            face: selected,
+            glyph: 0,
+            advance: self.faces[selected].advance(0),
+            lacking: true,
+        };
+        if ch.is_control() {
+            return missing;
+        }
         let from = |faces: &[LoadedFace], face: usize| {
             let glyph = faces[face].glyph(ch);
-            (glyph != 0).then(|| CharGlyph {
+            (glyph != 0).then_some(CharGlyph {
                 face,
                 glyph,
-                advance: faces[face].advance(glyph),
+                ..missing
             })
         };
-        if let Some(found) = from(&self.faces, selected) {
-            return found;
-        }
         for position in 0..self.fallback_families.len() {
             let key = self.fallback_families[position].clone();
             if let Some(face) = self.family_face(&key, bold, italic)
@@ -390,15 +556,11 @@ impl TextEngine {
         {
             return found;
         }
-        CharGlyph {
-            face: selected,
-            glyph: 0,
-            advance: self.faces[selected].advance(0),
-        }
+        missing
     }
 
     /// Loads the face at font index position `record`. `bold` matters only for a font with a
-    /// weight axis, which is set to its own bold design; nothing is synthesised.
+    /// weight axis, which is set to its own bold design.
     fn load(&mut self, record: usize, bold: bool) -> Option<usize> {
         if let Some(&face) = self.face_ids.get(&(record, bold)) {
             return face;
@@ -427,26 +589,38 @@ impl TextEngine {
     }
 
     /// The image of a glyph, from the cache or rendered now.
-    fn glyph(&mut self, face: usize, pixels_per_em: f32, glyph: GlyphId) -> Arc<Glyph> {
-        let key = GlyphKey {
-            face,
-            pixels_per_em: pixels_per_em.to_bits(),
-            glyph,
-        };
+    fn glyph(&mut self, key: GlyphKey) -> Arc<Glyph> {
         if let Some(cached) = self.glyphs.get(key) {
             return cached;
         }
-        let loaded = &self.faces[face];
+        let (numerator, denominator) = key.condense;
+        // Nothing can be drawn at no size or no width.
+        if key.pixels_per_em == 0 || numerator == 0 || denominator == 0 {
+            return Arc::new(Glyph::default());
+        }
+        let loaded = &self.faces[key.face];
         let mut scaler = self
             .scaler
             .builder(loaded.font())
-            .size(pixels_per_em)
+            .size(key.pixels_per_em as f32)
             .hint(false)
             .normalized_coords(loaded.coords())
             .build();
+        let slant = if key.italic { SYNTHETIC_SLANT } else { 0.0 };
+        let transform = (key.italic || numerator != denominator).then(|| {
+            Transform::new(
+                numerator as f32 / denominator as f32,
+                0.0,
+                slant,
+                1.0,
+                0.0,
+                0.0,
+            )
+        });
         let rendered = Render::new(&[Source::Outline])
             .format(Format::Alpha)
-            .render(&mut scaler, glyph)
+            .transform(transform)
+            .render(&mut scaler, key.glyph)
             .and_then(|image| {
                 let placement = image.placement;
                 let bytes = placement.width as usize * placement.height as usize;
@@ -460,9 +634,58 @@ impl TextEngine {
             })
             // A glyph without an outline, such as a space, draws nothing.
             .unwrap_or_default();
-        let rendered = Arc::new(rendered);
+        let rendered = Arc::new(if key.bold {
+            embolden(&rendered)
+        } else {
+            rendered
+        });
         self.glyphs.insert(key, Arc::clone(&rendered));
         rendered
+    }
+}
+
+impl Placed {
+    fn key(&self, pixels_per_em: u32, condense: (u32, u32)) -> GlyphKey {
+        GlyphKey {
+            face: self.face,
+            pixels_per_em,
+            glyph: self.glyph,
+            bold: self.bold,
+            italic: self.italic,
+            condense,
+        }
+    }
+}
+
+/// The advance of `units` font units in whole pixels at `pixels_per_em`, rounded the way
+/// FreeType rounds it, which is twice: the scale to 16.16 fixed point, the advance to
+/// 26.6 and then to whole pixels.
+fn advance_pixels(units: u32, pixels_per_em: u32, units_per_em: u32) -> u32 {
+    let units_per_em = u64::from(units_per_em.max(1));
+    let scale = (u64::from(pixels_per_em) * 64 * 65536 * 2 + units_per_em) / (2 * units_per_em);
+    let advance = (u64::from(units) * scale + 0x8000) >> 16;
+    ((advance + 32) >> 6).min(u64::from(u32::MAX)) as u32
+}
+
+/// `glyph` one pixel bolder: every pixel also covers its right neighbour.
+fn embolden(glyph: &Glyph) -> Glyph {
+    if glyph.width == 0 || glyph.height == 0 {
+        return Glyph::default();
+    }
+    let (old, new) = (glyph.width as usize, glyph.width as usize + 1);
+    let mut coverage = vec![0; new * glyph.height as usize];
+    for (from, to) in glyph.coverage.chunks(old).zip(coverage.chunks_mut(new)) {
+        for (x, &value) in from.iter().enumerate() {
+            to[x] = to[x].max(value);
+            to[x + 1] = value;
+        }
+    }
+    Glyph {
+        left: glyph.left,
+        top: glyph.top,
+        width: glyph.width + 1,
+        height: glyph.height,
+        coverage,
     }
 }
 
@@ -496,6 +719,7 @@ mod tests {
         TextMask {
             width,
             height,
+            left_overhang: 0,
             coverage: vec![0; (width * height) as usize],
         }
     }
@@ -544,5 +768,29 @@ mod tests {
         let mut empty = mask(0, 2);
         blit(&mut empty, &numbered, 0, 0);
         assert!(empty.coverage.is_empty());
+    }
+
+    #[test]
+    fn advances_round_twice() {
+        // 812 units of 1000 at 8 pixels per em are 6.496 pixels: 6.5 in 26.6, then 7.
+        assert_eq!(advance_pixels(812, 8, 1000), 7);
+        assert_eq!(advance_pixels(1000, 15, 1000), 15);
+        assert_eq!(advance_pixels(555, 8, 1000), 4);
+        assert_eq!(advance_pixels(1000, 0, 1000), 0);
+    }
+
+    #[test]
+    fn emboldening_widens_by_one_pixel() {
+        let thin = Glyph {
+            left: 2,
+            top: 5,
+            width: 3,
+            height: 2,
+            coverage: vec![0, 200, 0, 100, 0, 50],
+        };
+        let bold = embolden(&thin);
+        assert_eq!((bold.left, bold.top, bold.width, bold.height), (2, 5, 4, 2));
+        assert_eq!(bold.coverage, [0, 200, 200, 0, 100, 100, 50, 50]);
+        assert_eq!(embolden(&Glyph::default()).width, 0);
     }
 }

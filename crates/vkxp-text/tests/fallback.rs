@@ -38,20 +38,24 @@ fn mixed_string() {
         let mut engine = TextEngine::new(&sources);
         for size in [12, 22, 52] {
             let request = request(LIBERATION, size);
-            // Every font is scaled to the pixels per em of the selected one.
+            // The symbol is drawn from the other font and set at the advance of the
+            // selected font's missing glyph.
             let pixels_per_em = liberation.pixels_per_em(size);
             let a = liberation.advance('A', pixels_per_em);
-            let symbol = symbols.advance(SYMBOL, pixels_per_em);
+            let symbol = liberation.advance(SYMBOL, pixels_per_em);
             let b = liberation.advance('B', pixels_per_em);
-            assert_ne!(symbol, liberation.advance(SYMBOL, pixels_per_em));
+            assert_ne!(symbol, symbols.advance(SYMBOL, pixels_per_em));
+            let height = engine.measure(&request, "A").1;
 
             assert_eq!(engine.measure(&request, "A").0, a);
             assert_eq!(engine.measure(&request, &SYMBOL.to_string()).0, symbol);
             assert_eq!(engine.measure(&request, "B").0, b);
-            assert_eq!(engine.measure(&request, &text), (a + symbol + b, size));
+            assert_eq!(engine.layout(&request, &text).advances, [a, symbol, b]);
+            assert_eq!(engine.measure(&request, &text), (a + symbol + b, height));
 
             let mask = engine.rasterize(&request, &text);
-            assert_eq!((mask.width, mask.height), (a + symbol + b, size));
+            assert_eq!(mask.height, height);
+            assert!(mask.width >= a + symbol + b);
             assert!(max_coverage(&mask, 0..a) > 0);
             assert!(max_coverage(&mask, a..a + symbol) > 0);
             assert!(max_coverage(&mask, a + symbol..a + symbol + b) > 0);
@@ -59,7 +63,7 @@ fn mixed_string() {
             // The rest of the string stays in the selected font.
             assert_eq!(engine.resolve(&request).unwrap().family, LIBERATION);
             let alone = engine.rasterize(&request, "A");
-            for y in 0..size {
+            for y in 0..height {
                 let row = (y * mask.width) as usize;
                 let alone_row = (y * alone.width) as usize;
                 // The last column may also hold the symbol's left edge.
@@ -100,14 +104,20 @@ fn no_font_has_the_character() {
         let a = liberation.advance('A', pixels_per_em);
         assert!(missing > 0);
 
+        let height = engine.measure(&request, "A").1;
         let text = format!("A{NOWHERE}{NOWHERE}A");
-        assert_eq!(engine.measure(&request, &text), (2 * a + 2 * missing, size));
+        assert_eq!(
+            engine.measure(&request, &text),
+            (2 * a + 2 * missing, height)
+        );
+        let overhang = engine.layout(&request, &text).right_overhang;
         let mask = engine.rasterize(&request, &text);
-        assert_eq!((mask.width, mask.height), (2 * a + 2 * missing, size));
+        assert_eq!(mask.width, 2 * a + 2 * missing + overhang);
+        assert_eq!(mask.height, height);
         assert!(max_coverage(&mask, 0..a) > 0);
 
         let text = NOWHERE.to_string();
-        assert_eq!(engine.measure(&request, &text), (missing, size));
+        assert_eq!(engine.measure(&request, &text), (missing, height));
         assert_eq!(engine.rasterize(&request, &text).width, missing);
     }
 }

@@ -77,13 +77,19 @@ fn check(present: &[Style], expected: &[(Style, Style)]) {
 
         let (width, height) = engine.measure(&styled(requested), text);
         assert_eq!(height, 22);
+        let layout = engine.layout(&styled(requested), text);
+        let advances: u32 = layout.advances.iter().sum();
         if selected == REGULAR {
-            assert_eq!(width, regular_width, "{context}");
+            // A bold request without a bold face is synthesised: one pixel per character.
+            let extra = u32::from(requested.0) * text.chars().count() as u32;
+            assert_eq!(advances, regular_width + extra, "{context}");
         } else {
+            assert_eq!(layout.emboldened, u32::from(requested.0 && !selected.0));
             assert!(width > regular_width, "{context}");
         }
         let mask = engine.rasterize(&styled(requested), text);
-        assert_eq!((mask.width, mask.height), (width, height), "{context}");
+        let drawn = width + layout.right_overhang;
+        assert_eq!((mask.width, mask.height), (drawn, height), "{context}");
         assert!(mask.coverage.iter().any(|&value| value != 0), "{context}");
     }
 }

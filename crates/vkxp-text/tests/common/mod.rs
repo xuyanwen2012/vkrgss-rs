@@ -71,33 +71,50 @@ impl RawFont {
         self.font().charmap().map(ch) != 0
     }
 
-    pub fn units_per_em(&self) -> f32 {
-        f32::from(self.font().metrics(&[]).units_per_em)
+    pub fn units_per_em(&self) -> u32 {
+        u32::from(self.font().metrics(&[]).units_per_em)
     }
 
     /// The OS/2 `usWinAscent` and `usWinDescent`.
-    pub fn win_metrics(&self) -> (f32, f32) {
+    pub fn win_metrics(&self) -> (u32, u32) {
         let table = self
             .font()
             .table(swash::tag_from_bytes(b"OS/2"))
             .expect("OS/2 table");
-        let value = |at: usize| f32::from(u16::from_be_bytes([table[at], table[at + 1]]));
+        let value = |at: usize| u32::from(u16::from_be_bytes([table[at], table[at + 1]]));
         (value(74), value(76))
     }
 
-    /// Pixels per em at which this font's line box is `size` pixels high.
-    pub fn pixels_per_em(&self, size: u32) -> f32 {
+    /// The whole pixels per em at which this font is set for `size`: the line box scaled to
+    /// the size, one less when the box would then be higher than the size.
+    pub fn pixels_per_em(&self, size: u32) -> u32 {
         let (ascent, descent) = self.win_metrics();
-        size as f32 * self.units_per_em() / (ascent + descent)
+        let (units, em) = (ascent + descent, self.units_per_em());
+        let pixels_per_em = (em * size + units / 2) / units;
+        if pixels_per_em > 1 && (units * pixels_per_em + em / 2) / em > size {
+            pixels_per_em - 1
+        } else {
+            pixels_per_em
+        }
+    }
+
+    /// The rounded ascent and descent of this font at `size`.
+    pub fn cell(&self, size: u32) -> (u32, u32) {
+        let (ascent, descent) = self.win_metrics();
+        let (pixels_per_em, em) = (self.pixels_per_em(size), self.units_per_em());
+        let scaled = |units: u32| (units * pixels_per_em + em / 2) / em;
+        (scaled(ascent), scaled(descent))
     }
 
     /// The advance of `ch` (of the missing-glyph box when the font lacks it) at
-    /// `pixels_per_em`, rounded to whole pixels.
-    pub fn advance(&self, ch: char, pixels_per_em: f32) -> u32 {
+    /// `pixels_per_em`, in whole pixels: rounded to 1/64 pixel and then to a pixel.
+    pub fn advance(&self, ch: char, pixels_per_em: u32) -> u32 {
         let font = self.font();
         let glyph = font.charmap().map(ch);
-        let units = font.glyph_metrics(&[]).advance_width(glyph);
-        (units * pixels_per_em / self.units_per_em()).round() as u32
+        let units = font.glyph_metrics(&[]).advance_width(glyph) as u64;
+        let em = u64::from(self.units_per_em());
+        let scale = (u64::from(pixels_per_em) * 64 * 65536 * 2 + em) / (2 * em);
+        ((((units * scale + 0x8000) >> 16) + 32) >> 6) as u32
     }
 }
 

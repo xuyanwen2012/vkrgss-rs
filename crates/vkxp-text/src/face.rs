@@ -21,11 +21,13 @@ pub(crate) struct LoadedFace {
     pub(crate) variable_weight: Option<u16>,
     /// The face's position in the font index.
     pub(crate) record: usize,
-    pub(crate) units_per_em: f32,
+    pub(crate) units_per_em: u16,
     /// Distance from the baseline to the top of the line box, in font units.
-    pub(crate) ascent: f32,
+    pub(crate) ascent: u16,
     /// Distance from the baseline to the bottom of the line box, in font units, positive.
-    pub(crate) descent: f32,
+    pub(crate) descent: u16,
+    /// The average character width the font states, in font units.
+    pub(crate) average_width: u16,
 }
 
 impl LoadedFace {
@@ -37,8 +39,8 @@ impl LoadedFace {
     /// thinnest design, which is not what a request for regular text means.
     pub(crate) fn new(data: Arc<Vec<u8>>, index: u32, record: usize, bold: bool) -> Option<Self> {
         let font = FontRef::from_index(&data, index as usize)?;
-        let units_per_em = f32::from(font.metrics(&[]).units_per_em);
-        if units_per_em <= 0.0 {
+        let units_per_em = font.metrics(&[]).units_per_em;
+        if units_per_em == 0 {
             return None;
         }
         let tag = tag_from_bytes(b"wght");
@@ -55,6 +57,7 @@ impl LoadedFace {
             None => (Vec::new(), None),
         };
         let (ascent, descent) = line_metrics(&font, units_per_em);
+        let average_width = average_width(&font, units_per_em);
         let (offset, key) = (font.offset, font.key);
         Some(Self {
             data,
@@ -66,6 +69,7 @@ impl LoadedFace {
             units_per_em,
             ascent,
             descent,
+            average_width,
         })
     }
 
@@ -87,53 +91,59 @@ impl LoadedFace {
     }
 
     /// The advance width of `glyph` in font units.
-    pub(crate) fn advance(&self, glyph: GlyphId) -> f32 {
-        self.font().glyph_metrics(&self.coords).advance_width(glyph)
+    pub(crate) fn advance(&self, glyph: GlyphId) -> u32 {
+        let advance = self.font().glyph_metrics(&self.coords).advance_width(glyph);
+        advance.round().max(0.0) as u32
     }
 
-    /// Pixels per em at which the line box the face is set in is `size` pixels high: the
-    /// replaced family's `line_box`, or the face's own without one.
-    pub(crate) fn pixels_per_em(&self, size: u32, line_box: Option<LineBox>) -> f32 {
-        match line_box {
-            Some(line_box) => line_box.pixels_per_em(size),
-            None => size as f32 * self.units_per_em / (self.ascent + self.descent),
-        }
-    }
-
-    /// Distance in whole pixels from the top of a line box `size` pixels high to the baseline,
-    /// for the replaced family's `line_box` or the face's own without one.
-    pub(crate) fn baseline(&self, size: u32, line_box: Option<LineBox>) -> i32 {
-        match line_box {
-            Some(line_box) => line_box.baseline(size),
-            None => (size as f32 * self.ascent / (self.ascent + self.descent)).round() as i32,
+    /// The face's own line box.
+    pub(crate) fn line_box(&self) -> LineBox {
+        LineBox {
+            ascent: self.ascent,
+            descent: self.descent,
+            units_per_em: self.units_per_em,
         }
     }
 }
 
+fn u16_at(table: &[u8], at: usize) -> Option<u16> {
+    table
+        .get(at..at + 2)
+        .map(|bytes| u16::from_be_bytes([bytes[0], bytes[1]]))
+}
+
+/// The OS/2 `xAvgCharWidth`, which GDI reports as the average character width; half an em for
+/// a font that does not state one.
+fn average_width(font: &FontRef<'_>, units_per_em: u16) -> u16 {
+    font.table(tag_from_bytes(b"OS/2"))
+        .and_then(|table| u16_at(table, 2))
+        .map(|width| width as i16)
+        .filter(|&width| width > 0)
+        .map_or(units_per_em / 2, |width| width as u16)
+}
+
 /// The ascent and descent, in font units, of the line box that the requested size refers to.
 ///
-/// PLACEHOLDER: this assumes the original runtime asks GDI for a font by cell height, for
-/// which Windows uses the OS/2 `usWinAscent` and `usWinDescent`. Whether `Font.size` is the
-/// cell height or the em height is still to be measured against the original; the answer
-/// changes only this function.
-fn line_metrics(font: &FontRef<'_>, units_per_em: f32) -> (f32, f32) {
-    let u16_at = |table: &[u8], at: usize| {
-        table
-            .get(at..at + 2)
-            .map(|bytes| u16::from_be_bytes([bytes[0], bytes[1]]))
+/// The requested size is the cell height asked of GDI, for which Windows uses the OS/2
+/// `usWinAscent` and `usWinDescent`; `hhea` stands in for a font without them.
+fn line_metrics(font: &FontRef<'_>, units_per_em: u16) -> (u16, u16) {
+    let positive = |ascent: i32, descent: i32| {
+        let ascent = u16::try_from(ascent.max(0)).ok()?;
+        let descent = u16::try_from(descent.max(0)).ok()?;
+        (u32::from(ascent) + u32::from(descent) > 0).then_some((ascent, descent))
     };
-    let win = font.table(tag_from_bytes(b"OS/2")).and_then(|table| {
-        let ascent = f32::from(u16_at(table, 74)?);
-        let descent = f32::from(u16_at(table, 76)?);
-        (ascent + descent > 0.0).then_some((ascent, descent))
-    });
+    let win = font
+        .table(tag_from_bytes(b"OS/2"))
+        .and_then(|table| positive(u16_at(table, 74)?.into(), u16_at(table, 76)?.into()));
     let hhea = || {
         font.table(tag_from_bytes(b"hhea")).and_then(|table| {
-            let ascent = f32::from(u16_at(table, 4)? as i16);
-            let descent = -f32::from(u16_at(table, 6)? as i16);
-            (ascent + descent > 0.0).then_some((ascent, descent))
+            let ascent = u16_at(table, 4)? as i16;
+            let descent = u16_at(table, 6)? as i16;
+            positive(ascent.into(), -i32::from(descent))
         })
     };
-    win.or_else(hhea)
-        .unwrap_or((units_per_em * 0.8, units_per_em * 0.2))
+    win.or_else(hhea).unwrap_or_else(|| {
+        let ascent = (u32::from(units_per_em) * 4 / 5) as u16;
+        (ascent, units_per_em - ascent)
+    })
 }

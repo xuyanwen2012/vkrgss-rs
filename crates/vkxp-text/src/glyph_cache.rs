@@ -21,12 +21,35 @@ pub(crate) struct Glyph {
     pub(crate) coverage: Vec<u8>,
 }
 
-/// Identifies a rendered glyph: the loaded face, the bits of its pixels per em, the glyph.
+impl Glyph {
+    /// How far the image reaches left of the pen.
+    pub(crate) fn left_overhang(&self) -> u32 {
+        if self.width == 0 {
+            return 0;
+        }
+        self.left.min(0).unsigned_abs()
+    }
+
+    /// How far the image reaches right of the pen moved on by `advance`.
+    pub(crate) fn right_overhang(&self, advance: u32) -> u32 {
+        if self.width == 0 {
+            return 0;
+        }
+        let right = i64::from(self.left) + i64::from(self.width) - i64::from(advance);
+        right.clamp(0, i64::from(u32::MAX)) as u32
+    }
+}
+
+/// Identifies a rendered glyph: the loaded face, its pixels per em, the glyph, the styles
+/// synthesised for it, and the fraction of its natural width it is condensed to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct GlyphKey {
     pub(crate) face: usize,
     pub(crate) pixels_per_em: u32,
     pub(crate) glyph: GlyphId,
+    pub(crate) bold: bool,
+    pub(crate) italic: bool,
+    pub(crate) condense: (u32, u32),
 }
 
 struct Entry {
@@ -138,6 +161,9 @@ mod tests {
             face: 0,
             pixels_per_em: 0,
             glyph,
+            bold: false,
+            italic: false,
+            condense: (1, 1),
         }
     }
 

@@ -35,10 +35,16 @@ fn system_fonts_measure_and_rasterize() {
                     "A中\u{2BC5}\u{10FFFF}",
                 ] {
                     let (width, height) = engine.measure(&request, text);
+                    let layout = engine.layout(&request, text);
                     let mask = engine.rasterize(&request, text);
-                    assert_eq!(height, size);
-                    assert_eq!((mask.width, mask.height), (width, height));
-                    assert_eq!(mask.coverage.len(), (width * height) as usize);
+                    if has_fonts {
+                        assert_eq!((width, height), (layout.width(), layout.height));
+                    } else {
+                        assert_eq!((width, height), (0, 0));
+                    }
+                    let drawn = width + layout.right_overhang;
+                    assert_eq!((mask.width, mask.height), (drawn, height));
+                    assert_eq!(mask.coverage.len(), (drawn * height) as usize);
                     assert_eq!(engine.rasterize(&request, text), mask);
                 }
             }

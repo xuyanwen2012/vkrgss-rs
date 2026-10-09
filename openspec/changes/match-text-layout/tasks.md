@@ -2,8 +2,8 @@
 
 ## 1. Engine (`vkxp-text`)
 
-- [ ] 1.1 Size fonts at whole pixels per em with the measured rule and report height, ascent, advances, overhangs and average width. Verify: the scenarios of the two modified requirements in `specs/text-rendering/spec.md`, with a selection of the measured samples committed as test data.
-- [ ] 1.2 Synthesise bold and italic when the family has no such face, and rasterise runs with given advances. Verify: the bold-face-absent scenario and a test that a condensed run has the requested advances.
+- [x] 1.1 Size fonts at whole pixels per em with the measured rule and report height, ascent, advances, overhangs and average width. Verify: the scenarios of the two modified requirements in `specs/text-rendering/spec.md`, with a selection of the measured samples committed as test data.
+- [x] 1.2 Synthesise bold and italic when the family has no such face, and rasterise runs with given advances. Verify: the bold-face-absent scenario and a test that a condensed run has the requested advances.
 
 ## 2. Drawing (`vkxp-core`, `vkxp-binding`)
 
