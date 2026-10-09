@@ -29,6 +29,7 @@ mod compositor;
 mod device;
 mod error;
 mod pacing;
+mod present_timing;
 mod records;
 mod resources;
 mod validation;

@@ -1428,3 +1428,37 @@ fn presenting_compositor_is_created_and_dropped_repeatedly_without_leaks() {
         assert_clean(&log, &format!("in round {round}"));
     }
 }
+
+/// Scenario "No support": the test device has no `VK_EXT_present_timing`, so presents go out
+/// as before, and the statistics come from the compositor's own clock.
+#[test]
+fn device_without_present_timing_presents_as_before_and_measures_by_its_own_clock() {
+    let log = ValidationLog::new();
+    let mut compositor = surface_compositor(&log);
+    if compositor.device().kind != crate::DeviceKind::Cpu {
+        eprintln!("not the CPU device; it may pace with present timing");
+        return;
+    }
+    compositor.resize_surface(Size::new(64, 48));
+    compositor.set_frame_rate(40);
+    assert_eq!(compositor.present_summary(), None);
+    for color in [WHITE, BLACK, WHITE, BLACK] {
+        compositor.render(&flat(SIZE, color)).unwrap();
+        assert_eq!(compositor.present(), Ok(true));
+        // A present that repeats the frame is not a frame.
+        assert_eq!(compositor.present(), Ok(true));
+    }
+    assert!(!compositor.paces_with_present_timing());
+    assert_eq!(compositor.present_summary().unwrap().count, 3);
+
+    compositor.restart_pacing();
+    compositor.set_frame_rate(20);
+    compositor.render(&flat(SIZE, WHITE)).unwrap();
+    assert_eq!(compositor.present(), Ok(true));
+    assert_eq!(compositor.present_summary().unwrap().count, 4);
+    assert_eq!(compositor.take_pacing_report(), None);
+
+    assert_clean(&log, "while presenting without present timing");
+    drop(compositor);
+    assert_clean(&log, "while the compositor was dropped");
+}

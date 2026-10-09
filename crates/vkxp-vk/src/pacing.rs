@@ -77,6 +77,11 @@ impl PresentSchedule {
         target
     }
 
+    /// The newest target, or `None` before the first one and after a restart.
+    pub fn current(&self) -> Option<u64> {
+        self.run.map(|run| run.target(run.frames))
+    }
+
     fn start(&mut self, now: u64, rate: u32) -> u64 {
         self.run = Some(Run {
             base: now,
@@ -239,7 +244,9 @@ mod tests {
         schedule.next(0, 40);
         schedule.next(0, 40);
         schedule.restart();
+        assert_eq!(schedule.current(), None);
         assert_eq!(schedule.next(7 * MS, 40), 7 * MS);
+        assert_eq!(schedule.current(), Some(7 * MS));
         assert_eq!(schedule.next(7 * MS, 40), 32 * MS);
         // A target ahead of the clock is kept however far ahead it is.
         assert_eq!(schedule.next(0, 40), 57 * MS);

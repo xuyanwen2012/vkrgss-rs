@@ -3,7 +3,9 @@
 //! [`Gpu::new`] opens a headless device: no surface, swapchain or window-system extension is
 //! involved, and the device only needs a queue that runs compute work. [`Gpu::with_surface`]
 //! opens a device for a surface: the instance gets the surface extensions, the device gets
-//! `VK_KHR_swapchain`, and its queue also draws and presents to that surface.
+//! `VK_KHR_swapchain`, and its queue also draws and presents to that surface. Such a device
+//! also gets `VK_EXT_present_timing` and `VK_KHR_present_wait2` with what they depend on,
+//! when it has them; see [`pacing_support`].
 
 use std::any::Any;
 use std::ffi::{CStr, c_char};
@@ -11,6 +13,7 @@ use std::ffi::{CStr, c_char};
 use ash::vk;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
+use crate::present_timing as timing;
 use crate::validation::{self, ValidationLog};
 use crate::{DeviceError, VkError};
 
@@ -218,6 +221,51 @@ pub(crate) fn presenting_family(
         })
 }
 
+/// What decides whether presents can be paced with `VK_EXT_present_timing`: the extensions
+/// the device lists and the features it reports for them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) struct PacingCaps {
+    /// Whether the instance has `VK_KHR_get_surface_capabilities2`.
+    pub surface_capabilities2: bool,
+    pub present_timing_extension: bool,
+    pub present_id2_extension: bool,
+    pub present_wait2_extension: bool,
+    pub calibrated_timestamps_extension: bool,
+    /// The `presentTiming` feature.
+    pub present_timing: bool,
+    /// The `presentAtAbsoluteTime` feature.
+    pub present_at_absolute_time: bool,
+    /// The `presentId2` feature.
+    pub present_id2: bool,
+    /// The `presentWait2` feature.
+    pub present_wait2: bool,
+}
+
+/// Which of the optional pacing extensions a device is opened with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) struct PacingSupport {
+    /// `VK_EXT_present_timing` with presentation at an absolute time, together with the
+    /// extensions it depends on.
+    pub timing: bool,
+    /// Also `VK_KHR_present_wait2`, with present ids.
+    pub wait: bool,
+}
+
+/// What a device with `caps` is opened with. Present timing needs its extension, the ones
+/// it depends on and its two features; the present wait is only used on top of it.
+pub(crate) fn pacing_support(caps: &PacingCaps) -> PacingSupport {
+    let timing = caps.surface_capabilities2
+        && caps.present_timing_extension
+        && caps.present_id2_extension
+        && caps.calibrated_timestamps_extension
+        && caps.present_timing
+        && caps.present_at_absolute_time;
+    PacingSupport {
+        timing,
+        wait: timing && caps.present_wait2_extension && caps.present_id2 && caps.present_wait2,
+    }
+}
+
 /// The positions in `devices` to try for a surface, most preferred first: every suitable
 /// device in the automatic preference order, or the one device an explicit choice selects.
 pub(crate) fn surface_candidates(
@@ -312,6 +360,9 @@ struct Instance {
     _entry: ash::Entry,
     raw: ash::Instance,
     messenger: Option<(ash::ext::debug_utils::Instance, vk::DebugUtilsMessengerEXT)>,
+    /// Whether the instance was created with `VK_KHR_get_surface_capabilities2`, which an
+    /// instance for a surface gets when the installation offers it.
+    surface_capabilities2: bool,
     // The messenger's callback points into the log; holding it here keeps that target alive
     // until `drop` has destroyed the instance.
     _log: Option<ValidationLog>,
@@ -353,10 +404,16 @@ impl Instance {
         };
         let log = log.filter(|_| validate).cloned();
 
+        let mut surface_capabilities2 = false;
         if !surface_extensions.is_empty() {
             // SAFETY: the entry points are loaded and the call takes no handle.
             let offered = unsafe { entry.enumerate_instance_extension_properties(None) }
                 .map_err(VkError::vulkan("vkEnumerateInstanceExtensionProperties"))?;
+            // Optional: only the present-timing path asks the surface through it.
+            surface_capabilities2 = offered.iter().any(|extension| {
+                extension.extension_name_as_c_str().ok()
+                    == Some(ash::khr::get_surface_capabilities2::NAME)
+            });
             for wanted in surface_extensions {
                 let found = offered
                     .iter()
@@ -378,6 +435,9 @@ impl Instance {
             .iter()
             .map(|extension| extension.as_ptr())
             .collect();
+        if surface_capabilities2 {
+            extensions.push(ash::khr::get_surface_capabilities2::NAME.as_ptr());
+        }
         let mut messenger_info = log.as_ref().map(ValidationLog::messenger_info);
         if messenger_info.is_some() {
             extensions.push(ash::ext::debug_utils::NAME.as_ptr());
@@ -398,6 +458,7 @@ impl Instance {
             _entry: entry,
             raw,
             messenger: None,
+            surface_capabilities2,
             _log: log.clone(),
         };
         if let Some(log) = &log {
@@ -576,6 +637,59 @@ impl Instance {
     }
 }
 
+impl Instance {
+    /// What the device offers for pacing presents: the extensions it lists and the features
+    /// it reports for those of them it lists.
+    fn pacing_caps(&self, physical: vk::PhysicalDevice) -> Result<PacingCaps, VkError> {
+        let mut caps = PacingCaps {
+            surface_capabilities2: self.surface_capabilities2,
+            ..PacingCaps::default()
+        };
+        // SAFETY: the physical device was enumerated from this live instance.
+        let extensions = unsafe { self.raw.enumerate_device_extension_properties(physical) }
+            .map_err(VkError::vulkan("vkEnumerateDeviceExtensionProperties"))?;
+        let listed = |name: &CStr| {
+            extensions
+                .iter()
+                .any(|extension| extension.extension_name_as_c_str().ok() == Some(name))
+        };
+        caps.present_timing_extension = listed(timing::PRESENT_TIMING_NAME);
+        caps.present_id2_extension = listed(timing::PRESENT_ID_2_NAME);
+        caps.present_wait2_extension = listed(timing::PRESENT_WAIT_2_NAME);
+        caps.calibrated_timestamps_extension = listed(ash::khr::calibrated_timestamps::NAME);
+
+        let mut timing_features = timing::PhysicalDevicePresentTimingFeatures::default();
+        let mut id_features = timing::PhysicalDevicePresentId2Features::default();
+        let mut wait_features = timing::PhysicalDevicePresentWait2Features::default();
+        let mut features = vk::PhysicalDeviceFeatures2::default();
+        // A structure is only chained for a device that lists its extension.
+        if caps.present_timing_extension {
+            timing_features.p_next = features.p_next;
+            features.p_next = (&raw mut timing_features).cast();
+        }
+        if caps.present_id2_extension {
+            id_features.p_next = features.p_next;
+            features.p_next = (&raw mut id_features).cast();
+        }
+        if caps.present_wait2_extension {
+            wait_features.p_next = features.p_next;
+            features.p_next = (&raw mut wait_features).cast();
+        }
+        // SAFETY: `physical` is valid, a suitable device is of Vulkan 1.3, and the chain
+        // holds only live structures of extensions the device lists, each with the layout
+        // and the structure type of the header.
+        unsafe {
+            self.raw
+                .get_physical_device_features2(physical, &mut features)
+        };
+        caps.present_timing = timing_features.present_timing == vk::TRUE;
+        caps.present_at_absolute_time = timing_features.present_at_absolute_time == vk::TRUE;
+        caps.present_id2 = id_features.present_id2 == vk::TRUE;
+        caps.present_wait2 = wait_features.present_wait2 == vk::TRUE;
+        Ok(caps)
+    }
+}
+
 impl Drop for Instance {
     fn drop(&mut self) {
         // SAFETY: every object created from the instance has been destroyed by its owner, the
@@ -619,6 +733,8 @@ impl<T: HasWindowHandle + HasDisplayHandle + Any + Send + Sync> SurfaceWindow fo
 /// surface, so it has to be dropped after the device and before the instance.
 pub(crate) struct Surface {
     pub loader: ash::khr::surface::Instance,
+    /// The functions of `VK_KHR_get_surface_capabilities2`, when the instance has it.
+    pub capabilities2: Option<ash::khr::get_surface_capabilities2::Instance>,
     pub handle: vk::SurfaceKHR,
     // After the handle in declaration order: the window outlives its surface.
     _window: Option<Box<dyn SurfaceWindow>>,
@@ -651,6 +767,8 @@ pub(crate) struct Gpu {
     pub max_storage_buffer_range: u32,
     /// The surface the device presents to, when it was opened for one.
     pub surface: Option<Surface>,
+    /// The pacing extensions the device was created with. None without a surface.
+    pub pacing: PacingSupport,
     // After `device` in declaration order only for clarity; `drop` destroys the device before
     // the fields are dropped, which then happens in this order: the surface, then the instance.
     instance: Instance,
@@ -737,6 +855,9 @@ impl Gpu {
         // Declared after `instance`, so on an early return the surface is destroyed first.
         let surface = Surface {
             loader: ash::khr::surface::Instance::new(&instance._entry, &instance.raw),
+            capabilities2: instance.surface_capabilities2.then(|| {
+                ash::khr::get_surface_capabilities2::Instance::new(&instance._entry, &instance.raw)
+            }),
             handle,
             _window: match source {
                 SurfaceSource::Headless => None,
@@ -766,7 +887,8 @@ impl Gpu {
     }
 
     /// Creates the logical device with one queue of `queue_family`, and with the swapchain
-    /// extension when there is a surface.
+    /// extension when there is a surface, together with the pacing extensions the device
+    /// supports.
     fn open(
         instance: Instance,
         candidate: Candidate,
@@ -777,10 +899,26 @@ impl Gpu {
         let queues = [vk::DeviceQueueCreateInfo::default()
             .queue_family_index(queue_family)
             .queue_priorities(&priorities)];
-        let swapchain = [ash::khr::swapchain::NAME.as_ptr()];
-        let extensions: &[*const c_char] = match surface {
-            Some(_) => &swapchain,
-            None => &[],
+        let pacing = match surface {
+            Some(_) => pacing_support(&instance.pacing_caps(candidate.physical)?),
+            None => PacingSupport::default(),
+        };
+        let mut extensions: Vec<*const c_char> = Vec::new();
+        if surface.is_some() {
+            extensions.push(ash::khr::swapchain::NAME.as_ptr());
+        }
+        let mut timing_features = timing::PhysicalDevicePresentTimingFeatures {
+            present_timing: vk::TRUE,
+            present_at_absolute_time: vk::TRUE,
+            ..Default::default()
+        };
+        let mut id_features = timing::PhysicalDevicePresentId2Features {
+            present_id2: vk::TRUE,
+            ..Default::default()
+        };
+        let mut wait_features = timing::PhysicalDevicePresentWait2Features {
+            present_wait2: vk::TRUE,
+            ..Default::default()
         };
         // Exactly the features the requirement check looked for, and nothing else.
         let mut features12 = vk::PhysicalDeviceVulkan12Features::default()
@@ -788,13 +926,31 @@ impl Gpu {
             .shader_sampled_image_array_non_uniform_indexing(true)
             .descriptor_binding_partially_bound(true)
             .descriptor_binding_sampled_image_update_after_bind(true);
+        if pacing.timing {
+            extensions.extend([
+                timing::PRESENT_TIMING_NAME.as_ptr(),
+                timing::PRESENT_ID_2_NAME.as_ptr(),
+                ash::khr::calibrated_timestamps::NAME.as_ptr(),
+            ]);
+            timing_features.p_next = features12.p_next;
+            features12.p_next = (&raw mut timing_features).cast();
+        }
+        if pacing.wait {
+            extensions.push(timing::PRESENT_WAIT_2_NAME.as_ptr());
+            id_features.p_next = features12.p_next;
+            features12.p_next = (&raw mut id_features).cast();
+            wait_features.p_next = features12.p_next;
+            features12.p_next = (&raw mut wait_features).cast();
+        }
         let info = vk::DeviceCreateInfo::default()
             .queue_create_infos(&queues)
-            .enabled_extension_names(extensions)
+            .enabled_extension_names(&extensions)
             .push_next(&mut features12);
         // SAFETY: the physical device belongs to the live instance, the requested features
         // were reported as supported, the swapchain extension is only requested for a device
-        // that lists it, and `info` is valid for the call.
+        // that lists it, as are the pacing extensions, whose feature structures behind
+        // `features12` are live and have the layout of the header, and `info` is valid for
+        // the call.
         let created = unsafe { instance.raw.create_device(candidate.physical, &info, None) };
         let device = match created {
             Ok(device) => device,
@@ -820,6 +976,7 @@ impl Gpu {
             max_image_dimension: candidate.max_image_dimension,
             max_storage_buffer_range: candidate.max_storage_buffer_range,
             surface,
+            pacing,
             instance,
         })
     }
@@ -1185,6 +1342,58 @@ mod tests {
              VK_KHR_swapchain extension"
         );
         assert!(matches!(error, DeviceError::CannotPresent { .. }));
+    }
+
+    #[test]
+    fn pacing_extensions_need_their_dependencies_and_features() {
+        let all = PacingCaps {
+            surface_capabilities2: true,
+            present_timing_extension: true,
+            present_id2_extension: true,
+            present_wait2_extension: true,
+            calibrated_timestamps_extension: true,
+            present_timing: true,
+            present_at_absolute_time: true,
+            present_id2: true,
+            present_wait2: true,
+        };
+        let both = PacingSupport {
+            timing: true,
+            wait: true,
+        };
+        assert_eq!(pacing_support(&all), both);
+        // What the CPU device of the tests offers.
+        assert_eq!(
+            pacing_support(&PacingCaps::default()),
+            PacingSupport::default()
+        );
+        let neither: [fn(&mut PacingCaps); 6] = [
+            |caps| caps.surface_capabilities2 = false,
+            |caps| caps.present_timing_extension = false,
+            |caps| caps.present_id2_extension = false,
+            |caps| caps.calibrated_timestamps_extension = false,
+            |caps| caps.present_timing = false,
+            |caps| caps.present_at_absolute_time = false,
+        ];
+        for remove in neither {
+            let mut caps = all;
+            remove(&mut caps);
+            assert_eq!(pacing_support(&caps), PacingSupport::default());
+        }
+        let timing_only: [fn(&mut PacingCaps); 3] = [
+            |caps| caps.present_wait2_extension = false,
+            |caps| caps.present_id2 = false,
+            |caps| caps.present_wait2 = false,
+        ];
+        for remove in timing_only {
+            let mut caps = all;
+            remove(&mut caps);
+            let expected = PacingSupport {
+                timing: true,
+                wait: false,
+            };
+            assert_eq!(pacing_support(&caps), expected);
+        }
     }
 
     #[test]

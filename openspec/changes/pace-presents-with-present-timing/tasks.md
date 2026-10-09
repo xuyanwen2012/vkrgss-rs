@@ -6,8 +6,8 @@
 
 ## 2. Extension (`vkxp-vk`)
 
-- [ ] 2.1 Add the hand-written bindings with their layout test, feature detection and device and swapchain setup. Verify: the layout test, and the no-support scenario on llvmpipe (all existing presentation tests pass).
-- [ ] 2.2 Attach target times to presents, read the feedback, and use the present wait when available, with the run-time fallback. Verify: `cargo build` without warnings, the no-support scenario, and a test of the fallback path with a stand-in that fails the extension call.
+- [x] 2.1 Add the hand-written bindings with their layout test, feature detection and device and swapchain setup. Verify: the layout test, and the no-support scenario on llvmpipe (all existing presentation tests pass).
+- [x] 2.2 Attach target times to presents, read the feedback, and use the present wait when available, with the run-time fallback. Verify: `cargo build` without warnings, the no-support scenario, and a test of the fallback path with a stand-in that fails the extension call.
 
 ## 3. Host and option (`vkxp-host`, `vkxp`)
 

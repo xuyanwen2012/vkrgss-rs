@@ -41,6 +41,7 @@ pub struct Frame {
     pub rgba: Vec<u8>,
 }
 
+mod pacer;
 mod present;
 #[cfg(test)]
 mod test_compute;
@@ -81,6 +82,10 @@ pub struct VkCompositor {
     surface_size: Size,
     /// Size of the target that [`scale_frame`](VkCompositor::scale_frame) last drew into.
     last_scaled: Option<Size>,
+    /// The target times of presents and the statistics of the intervals achieved.
+    pacer: pacer::Pacer,
+    /// Whether a frame has been rendered that no present has shown yet.
+    unshown_frame: bool,
     /// Failure injection: the number of per-submission buffers that may still be allocated
     /// before one allocation fails, once.
     #[cfg(test)]
@@ -211,6 +216,8 @@ impl VkCompositor {
             mask: None,
             surface_size: Size::new(0, 0),
             last_scaled: None,
+            pacer: pacer::Pacer::new(),
+            unshown_frame: false,
             #[cfg(test)]
             temporary_buffer_failure: None,
             allocator: ManuallyDrop::new(allocator),
@@ -378,7 +385,11 @@ impl VkCompositor {
             .queue_deltas(&packet.bitmaps, &mut pending)
             .and_then(|()| self.prepare_frame(packet));
         match prepared {
-            Ok(frame) => self.execute(pending, Some(&frame)),
+            Ok(frame) => {
+                self.execute(pending, Some(&frame))?;
+                self.unshown_frame = true;
+                Ok(())
+            }
             Err(error) => {
                 // A failure of the device outranks an invalid packet.
                 self.execute(pending, None)?;

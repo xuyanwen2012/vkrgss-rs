@@ -15,7 +15,10 @@ use ash::vk;
 use gpu_allocator::vulkan::Allocator;
 use vkxp_proto::{BitmapId, Rect, Size};
 
+use super::pacer::{SwapchainTiming, TimingCalls, surface_pacing};
 use super::{Frame, VkCompositor};
+use crate::pacing::IntervalSummary;
+use crate::present_timing as ffi;
 use crate::resources::{
     COLOR_LAYERS, COLOR_RANGE, GpuImage, create_shader_module, transition, write_words,
 };
@@ -344,6 +347,8 @@ struct Swapchain {
     drawn: Vec<vk::Semaphore>,
     /// Whether the swapchain no longer matches the surface and has to be replaced.
     stale: bool,
+    /// The pacing extensions on this swapchain, when it was created for them.
+    timing: Option<SwapchainTiming>,
 }
 
 impl Swapchain {
@@ -390,6 +395,9 @@ pub(super) struct Presenter {
     /// points at.
     bound: Option<[vk::ImageView; 3]>,
     swapchain_loader: Option<ash::khr::swapchain::Device>,
+    /// The commands of the pacing extensions, loaded with the first swapchain that is
+    /// created for them.
+    timing_commands: Option<(ffi::Commands, ash::khr::calibrated_timestamps::Device)>,
     swapchain: Option<Swapchain>,
 }
 
@@ -417,6 +425,7 @@ impl Presenter {
             no_mask: None,
             bound: None,
             swapchain_loader: None,
+            timing_commands: None,
             swapchain: None,
         };
         match presenter.init(device) {
@@ -1086,6 +1095,42 @@ impl VkCompositor {
         result
     }
 
+    /// Sets the frame rate that presents are paced at from now on: where the device and the
+    /// surface support `VK_EXT_present_timing`, each present of a new frame is given a target
+    /// time one period of this rate after the one before. It starts as 40. A rate of 0
+    /// counts as 1.
+    pub fn set_frame_rate(&mut self, rate: u32) {
+        self.pacer.set_frame_rate(rate);
+    }
+
+    /// Makes the target time of the next frame start from the clock again instead of
+    /// following the one before, as after anything that broke the rhythm of the frames.
+    pub fn restart_pacing(&mut self) {
+        self.pacer.restart();
+    }
+
+    /// The intervals between the times at which the frames presented last became visible:
+    /// the newest [`STATS_INTERVALS`](crate::STATS_INTERVALS) of them, or `None` while there
+    /// is none. The times are the ones the presentation engine reports where presents are
+    /// paced with `VK_EXT_present_timing`, and otherwise the times at which the presents
+    /// were handed over, by the compositor's own clock. A present that repeats a frame
+    /// already shown is not counted.
+    pub fn present_summary(&self) -> Option<IntervalSummary> {
+        self.pacer.summary()
+    }
+
+    /// Whether the current swapchain's presents carry target times.
+    pub fn paces_with_present_timing(&self) -> bool {
+        let chain = self.presenter.as_ref().and_then(|p| p.swapchain.as_ref());
+        self.pacer.wants_timing() && chain.is_some_and(|chain| chain.timing.is_some())
+    }
+
+    /// Why presents stopped carrying target times, once: a call of the extension failed.
+    /// Presenting goes on without them.
+    pub fn take_pacing_report(&mut self) -> Option<String> {
+        self.pacer.take_report()
+    }
+
     /// Tells the compositor the size of the window in pixels. The swapchain is made for that
     /// size at the next [`present`](VkCompositor::present), and replaced when it changes.
     /// Until a size is given, and while either dimension is 0, nothing is presented.
@@ -1101,6 +1146,9 @@ impl VkCompositor {
     /// while the window has no pixels. A swapchain that the surface reports as out of date is
     /// replaced and the present tried once more.
     ///
+    /// Where the device and the surface support it, the present carries a target time; see
+    /// [`set_frame_rate`](VkCompositor::set_frame_rate).
+    ///
     /// Fails with [`VkError::NoSurface`] on a compositor that was created without a surface.
     pub fn present(&mut self) -> Result<bool, VkError> {
         if self.gpu.surface.is_none() {
@@ -1110,6 +1158,8 @@ impl VkCompositor {
             return Ok(false);
         }
         let source = self.prepare_sources()?;
+        // Whether this present shows a frame for the first time, which is what is paced.
+        let frame = std::mem::take(&mut self.unshown_frame);
         for _attempt in 0..2 {
             if !self.ensure_swapchain()? {
                 return Ok(false);
@@ -1120,6 +1170,16 @@ impl VkCompositor {
                 .clone()
                 .expect("made with the swapchain");
             let chain = presenter.swapchain.as_mut().expect("just ensured");
+            // Before the image is acquired: this may wait for the frame before to be shown.
+            let calls = chain
+                .timing
+                .as_mut()
+                .map(|timing| timing as &mut dyn TimingCalls);
+            let plan = self.pacer.plan(calls, frame);
+            let timing_info = plan
+                .as_ref()
+                .zip(chain.timing.as_ref())
+                .map(|(plan, timing)| timing.present_info(plan));
             // SAFETY: the swapchain and the semaphore are live and belong to this device, and
             // the semaphore is unsignalled: the draw that waited on it last has completed, and
             // a swapchain whose draw failed is replaced together with its semaphores.
@@ -1182,15 +1242,40 @@ impl VkCompositor {
             }
 
             let (swapchains, indices, waits) = ([handle], [index], [signal]);
-            let info = vk::PresentInfoKHR::default()
+            let mut info = vk::PresentInfoKHR::default()
                 .wait_semaphores(&waits)
                 .swapchains(&swapchains)
                 .image_indices(&indices);
+            // The structures of the pacing extensions, chained in when the present is paced.
+            let present_ids = [plan.and_then(|plan| plan.present_id).unwrap_or(0)];
+            let mut id_info = ffi::PresentId2 {
+                swapchain_count: 1,
+                p_present_ids: present_ids.as_ptr(),
+                ..Default::default()
+            };
+            let mut timings_info = ffi::PresentTimingsInfo {
+                swapchain_count: 1,
+                ..Default::default()
+            };
+            if let Some(timing_info) = &timing_info {
+                timings_info.p_timing_infos = timing_info;
+                timings_info.p_next = info.p_next;
+                info.p_next = (&raw const timings_info).cast();
+            }
+            if present_ids[0] != 0 {
+                id_info.p_next = info.p_next;
+                info.p_next = (&raw const id_info).cast();
+            }
             // SAFETY: the queue can present to the surface, which was checked when the device
             // was chosen; the image was acquired from this swapchain and drawn by a submission
-            // that has completed and signalled the semaphore.
+            // that has completed and signalled the semaphore. The chained structures, which
+            // have the layout of the header, only exist for a swapchain that was created with
+            // the flags of their extensions on a device that has them enabled; they and what
+            // they point to live until the call returns; the target time is in a time domain
+            // of the swapchain and the present id is greater than every one before it.
             match unsafe { loader.queue_present(self.gpu.queue, &info) } {
                 Ok(suboptimal) => {
+                    self.pacer.presented(plan.as_ref(), frame);
                     if suboptimal {
                         self.mark_swapchain_stale();
                     }
@@ -1517,7 +1602,46 @@ impl VkCompositor {
             unsafe { device.device_wait_idle() }.map_err(VkError::vulkan("vkDeviceWaitIdle"))?;
         }
         let old = presenter.swapchain.take();
+        if old.is_some() {
+            self.pacer.swapchain_replaced();
+        }
+        // Whether the swapchain is created for the pacing extensions, and with what.
+        let mut pacing = None;
+        if self.gpu.pacing.timing && self.pacer.wants_timing() {
+            if presenter.timing_commands.is_none() {
+                // SAFETY: the device is live, belongs to this instance and was created with
+                // the extensions `pacing` names.
+                let commands = unsafe {
+                    ffi::Commands::load(self.gpu.instance(), device, self.gpu.pacing.wait)
+                };
+                match commands {
+                    Some(commands) => {
+                        let calibrated = ash::khr::calibrated_timestamps::Device::new(
+                            self.gpu.instance(),
+                            device,
+                        );
+                        presenter.timing_commands = Some((commands, calibrated));
+                    }
+                    None => self.pacer.fail((
+                        "vkGetDeviceProcAddr",
+                        vk::Result::ERROR_EXTENSION_NOT_PRESENT,
+                    )),
+                }
+            }
+            if let Some(commands) = &presenter.timing_commands {
+                match surface_pacing(&self.gpu) {
+                    Ok(supported) => pacing = supported.map(|pacing| (pacing, commands.clone())),
+                    Err(failure) => self.pacer.fail(failure),
+                }
+            }
+        }
+        let flags = pacing
+            .as_ref()
+            .map_or(vk::SwapchainCreateFlagsKHR::empty(), |(pacing, _)| {
+                pacing.swapchain_flags()
+            });
         let info = vk::SwapchainCreateInfoKHR::default()
+            .flags(flags)
             .surface(surface.handle)
             .min_image_count(image_count)
             .image_format(format.format)
@@ -1537,13 +1661,24 @@ impl VkCompositor {
             );
         // SAFETY: the surface belongs to the instance of this device, which was created with
         // the swapchain extension and whose queue can present to it. The values come from the
-        // surface's own capabilities and formats. Every submission was waited for, so the old
-        // swapchain, if any, is idle and is retired by this call.
+        // surface's own capabilities and formats; the flags are those of extensions the
+        // device was created with and the surface reports support for. Every submission was
+        // waited for, so the old swapchain, if any, is idle and is retired by this call.
         let created = unsafe { loader.create_swapchain(&info, None) };
         if let Some(old) = old {
             old.destroy(device, loader);
         }
         let handle = created.map_err(VkError::vulkan("vkCreateSwapchainKHR"))?;
+        let timing = pacing.and_then(|(pacing, (commands, calibrated))| {
+            // SAFETY: the swapchain was just created from this device with the flags of
+            // `pacing`, and the value is kept in the `Swapchain` that owns the handle; the
+            // commands were loaded for this device.
+            let timing = unsafe {
+                SwapchainTiming::new(commands, calibrated, device.handle(), handle, pacing)
+            };
+            // The swapchain presents without the extension like any other.
+            timing.map_err(|failure| self.pacer.fail(failure)).ok()
+        });
 
         let mut chain = Swapchain {
             handle,
@@ -1557,6 +1692,7 @@ impl VkCompositor {
             acquired: vk::Semaphore::null(),
             drawn: Vec::new(),
             stale: false,
+            timing,
         };
         let filled = (|| {
             // SAFETY: the swapchain was just created from this device.
