@@ -49,6 +49,8 @@ pub struct Run<'a> {
     pub executable: &'a Path,
     /// The directory of each run-time package, by its name.
     pub rtps: &'a [(String, PathBuf)],
+    /// A directory of fonts that vkxp searches before those of the system.
+    pub font_dir: Option<&'a Path>,
     pub builtin_scripts: Option<&'a Path>,
 }
 
@@ -56,12 +58,27 @@ impl Run<'_> {
     /// Runs the game in `game` headless and writes each of `frames`, which are in ascending
     /// order, as the picture `out` holds for vkxp.
     pub fn capture(&self, game: &Path, frames: &[u64], out: &Path) -> Result<()> {
+        let status = self
+            .command(game, frames, out)?
+            .status()
+            .with_context(|| format!("could not start {}", self.executable.display()))?;
+        if !status.success() {
+            bail!("vkxp ended with {status}; its messages are above");
+        }
+        Ok(())
+    }
+
+    /// The command of the run that `capture` describes.
+    pub fn command(&self, game: &Path, frames: &[u64], out: &Path) -> Result<Command> {
         let mut command = Command::new(self.executable);
         command.arg(game).arg("--headless");
         for (name, dir) in self.rtps {
             command
                 .arg("--rtp")
                 .arg(format!("{name}={}", dir.display()));
+        }
+        if let Some(dir) = self.font_dir {
+            command.arg("--font-dir").arg(dir);
         }
         if let Some(file) = self.builtin_scripts {
             command.arg("--builtin-scripts").arg(file);
@@ -79,12 +96,6 @@ impl Run<'_> {
             // pixels, and no GPU of the machine is opened by accident.
             command.env("VK_LOADER_DRIVERS_SELECT", "*lvp*");
         }
-        let status = command
-            .status()
-            .with_context(|| format!("could not start {}", self.executable.display()))?;
-        if !status.success() {
-            bail!("vkxp ended with {status}; its messages are above");
-        }
-        Ok(())
+        Ok(command)
     }
 }

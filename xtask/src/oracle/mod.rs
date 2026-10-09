@@ -8,6 +8,7 @@
 //! same frames. Nothing is written outside the output directory.
 
 mod archive;
+mod fonts;
 mod game;
 mod original;
 mod probe;
@@ -32,6 +33,7 @@ usage: cargo xtask oracle <GAME_DIR> --frames N[,N...] [OPTIONS]
   --rtp NAME=DIR          the directory of the run-time package NAME; repeatable
   --input SCHEDULE|@FILE  held buttons in the syntax of `vkxp --input`, for example
                           \"60:RIGHT, 100:\", or a file that holds such a schedule
+  --font FILE             a font file that both runtimes draw text with; repeatable
   --builtin-scripts FILE  the built-in scripts file for vkxp, instead of its default location
   --out DIR               where everything is written; default: target/oracle
   --vkxp-only             run only vkxp; needs neither Wine nor Xvfb nor the DLL
@@ -48,6 +50,8 @@ pub struct Options {
     pub dll: Option<PathBuf>,
     pub rtps: Vec<(String, PathBuf)>,
     pub schedule: Schedule,
+    /// The font files that both runtimes draw text with.
+    pub fonts: Vec<PathBuf>,
     pub builtin_scripts: Option<PathBuf>,
     pub out: PathBuf,
     pub vkxp_only: bool,
@@ -66,6 +70,7 @@ pub fn parse(arguments: &[&str], root: &Path) -> Result<Options> {
         dll: None,
         rtps: Vec::new(),
         schedule: Schedule::default(),
+        fonts: Vec::new(),
         builtin_scripts: None,
         out: root.join("target").join("oracle"),
         vkxp_only: false,
@@ -99,6 +104,7 @@ pub fn parse(arguments: &[&str], root: &Path) -> Result<Options> {
                 };
                 options.schedule = Schedule::parse(&text).context("--input")?;
             }
+            "--font" => options.fonts.push(path(value()?)?),
             "--builtin-scripts" => options.builtin_scripts = Some(path(value()?)?),
             "--out" => options.out = path(value()?)?,
             "--vkxp-only" => options.vkxp_only = true,
@@ -122,7 +128,7 @@ pub fn parse(arguments: &[&str], root: &Path) -> Result<Options> {
 }
 
 /// Runs a copy of the game with the probe in the original runtime and writes its frames.
-fn capture_original(options: &Options, dll: &Path) -> Result<()> {
+fn capture_original(options: &Options, dll: &Path, fonts: Option<&fonts::Shared>) -> Result<()> {
     let Options {
         game, out, frames, ..
     } = options;
@@ -132,6 +138,7 @@ fn capture_original(options: &Options, dll: &Path) -> Result<()> {
     original::Run {
         dll,
         rtps: &options.rtps,
+        fonts,
         prefix: &out.join("prefix"),
         locale: &options.locale,
         timeout: options.timeout,
@@ -171,6 +178,8 @@ pub fn run(options: &Options, root: &Path) -> Result<()> {
         "the output directory {} is inside the game directory",
         out.display()
     );
+    // Before either runtime is started: a file that is no font ends the run here.
+    let shared = fonts::share(&options.fonts, out)?;
     let executable = vkxp::build(root)?;
 
     let frames_dir = out.join("frames");
@@ -182,7 +191,7 @@ pub fn run(options: &Options, root: &Path) -> Result<()> {
 
     if let Some(dll) = dll {
         eprintln!("oracle: running the original");
-        capture_original(options, dll)?;
+        capture_original(options, dll, shared.as_ref())?;
     }
 
     let copy = out.join("vkxp").join("game");
@@ -192,10 +201,12 @@ pub fn run(options: &Options, root: &Path) -> Result<()> {
     vkxp::Run {
         executable: &executable,
         rtps: &options.rtps,
+        font_dir: shared.as_ref().map(|shared| shared.dir.as_path()),
         builtin_scripts: options.builtin_scripts.as_deref(),
     }
     .capture(&copy, frames, out)?;
 
+    println!("{}", fonts::notice(shared.as_ref()));
     report::write(out, frames, dll.is_none())
 }
 
@@ -334,6 +345,10 @@ end
                 "ja_JP.UTF-8",
                 "--timeout",
                 "30",
+                "--font",
+                "/fonts/one.otf",
+                "--font",
+                "/fonts/two.ttf",
             ],
             root,
         )
@@ -346,6 +361,10 @@ end
             [("Standard".to_owned(), PathBuf::from("/rtp"))]
         );
         assert_eq!(options.schedule, Schedule::parse("60:RIGHT, 100:").unwrap());
+        assert_eq!(
+            options.fonts,
+            [Path::new("/fonts/one.otf"), Path::new("/fonts/two.ttf")]
+        );
         assert_eq!(options.out, Path::new("/workspace/target/oracle"));
         assert_eq!(options.locale, "ja_JP.UTF-8");
         assert_eq!(options.timeout, Duration::from_secs(30));
@@ -455,6 +474,70 @@ loop { Graphics.update }
         assert_eq!(frames.next(), Some(131), "every frame was logged");
     }
 
+    /// The family-name scenario of `oracle-harness`, on the side of vkxp; the registry script
+    /// is covered in `fonts`.
+    #[test]
+    fn the_command_line_of_vkxp_names_a_directory_with_a_copy_of_the_font() {
+        let dir = tempfile::tempdir().unwrap();
+        let font = dir.path().join("TestSans.ttf");
+        let data = fonts::minimal_font(&[(1, 0x409, "Test Sans")]);
+        fs::write(&font, &data).unwrap();
+        let out = dir.path().join("out");
+
+        let shared = fonts::share(&[font], &out).unwrap().unwrap();
+        let command = vkxp::Run {
+            executable: Path::new("vkxp"),
+            rtps: &[],
+            font_dir: Some(&shared.dir),
+            builtin_scripts: None,
+        }
+        .command(&dir.path().join("game"), &[3], &out)
+        .unwrap();
+
+        assert_eq!(shared.family, "Test Sans");
+        let arguments: Vec<_> = command.get_args().collect();
+        let option = arguments
+            .iter()
+            .position(|argument| *argument == "--font-dir")
+            .expect("a font directory");
+        let font_dir = Path::new(arguments[option + 1]);
+        assert_eq!(fs::read(font_dir.join("TestSans.ttf")).unwrap(), data);
+    }
+
+    /// The not-a-font scenario of `oracle-harness`.
+    #[test]
+    fn a_font_that_is_a_text_file_is_an_error_naming_it() {
+        let generated = Generated::new(&[("Main", MOVING_SQUARE)]);
+        let mut options = generated.options("1", "");
+        let text = generated.dir.path().join("notes.txt");
+        fs::write(&text, "These are notes, not glyphs.\n").unwrap();
+        options.fonts = vec![text];
+        let error = run(&options, &crate::workspace_root()).unwrap_err();
+        assert!(format!("{error:#}").contains("notes.txt"), "{error:#}");
+        assert!(!generated.out().exists(), "nothing was started");
+
+        options.fonts = vec![generated.dir.path().join("Missing.ttf")];
+        let error = run(&options, &crate::workspace_root()).unwrap_err();
+        assert!(format!("{error:#}").contains("Missing.ttf"), "{error:#}");
+        assert!(!generated.out().exists(), "nothing was started");
+    }
+
+    /// The no-font-given scenario of `oracle-harness`: this is the line that a run prints.
+    #[test]
+    fn without_a_font_the_output_says_that_text_is_not_comparable() {
+        let line = fonts::notice(None);
+        assert!(line.contains("text is not comparable"), "{line}");
+        assert_eq!(line.lines().count(), 1);
+
+        let shared = fonts::Shared {
+            family: "Test Sans".to_owned(),
+            dir: PathBuf::new(),
+            files: Vec::new(),
+        };
+        let line = fonts::notice(Some(&shared));
+        assert!(!line.contains("not comparable"), "{line}");
+    }
+
     /// The capture-in-the-original scenario of `oracle-harness`. It needs the original
     /// runtime, which is not in the repository: `VKXP_ORACLE_DLL` names the RGSS DLL,
     /// `VKXP_ORACLE_RTP` the directory of the run-time package `Standard`, and
@@ -477,7 +560,7 @@ loop { Graphics.update }
         original::check_prerequisites(&options.game, &dll).unwrap();
         fs::create_dir_all(out.join("frames")).unwrap();
 
-        capture_original(&options, &dll).unwrap();
+        capture_original(&options, &dll, None).unwrap();
 
         for frame in [10, 20] {
             let picture = report::Picture::read(&out.join(report::original_file(frame))).unwrap();

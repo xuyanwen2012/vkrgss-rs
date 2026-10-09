@@ -426,6 +426,16 @@ be held in the middle of one. What Wine and the game print is in `<out>/original
 which is where to look when the command reports that a frame was not reached. vkxp runs
 headless on the CPU device unless the Vulkan loader is already restricted to other drivers.
 
+Text can only be compared when both runtimes draw it with the same font file. `--font FILE`,
+which may be given several times, names such a file, a TrueType or OpenType font or a
+collection: the files are copied to `<out>/fonts`, which vkxp searches before the fonts of the
+system, and into the font directory of the prefix, where they are registered, and the common
+game font names (`SimHei`, `黑体`, `SimSun`, `MS PGothic` and the like) are replaced in the
+original by the family name read from the first file. A file that cannot be read or is not a
+font ends the run before either runtime starts. Without `--font` the original draws those
+names with whatever `Noto Sans CJK` the machine has and vkxp with its own choice, and the
+command prints a line saying that text is not comparable.
+
 The command prints one line per frame and writes:
 
 | File | Contents |

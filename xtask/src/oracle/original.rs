@@ -16,32 +16,8 @@ use anyhow::{Context, Result, bail, ensure};
 use x11rb::connection::Connection;
 use x11rb::protocol::xproto::{ConnectionExt, ImageFormat, ImageOrder, MapState};
 
+use super::fonts;
 use super::report::{self, HEIGHT, Picture, WIDTH};
-
-/// Font names that games ask for, and an installed font to draw them with. Without a
-/// replacement the runtime draws no text at all for a font the prefix does not have.
-/// PLACEHOLDER: the list and the replacement are a first guess; text is compared for layout
-/// only.
-const FONT_REPLACEMENTS: [(&str, &str); 12] = [
-    ("MS PGothic", "Noto Sans CJK JP"),
-    (
-        "\u{ff2d}\u{ff33} \u{ff30}\u{30b4}\u{30b7}\u{30c3}\u{30af}",
-        "Noto Sans CJK JP",
-    ),
-    ("MS Gothic", "Noto Sans CJK JP"),
-    (
-        "\u{ff2d}\u{ff33} \u{30b4}\u{30b7}\u{30c3}\u{30af}",
-        "Noto Sans CJK JP",
-    ),
-    ("MS UI Gothic", "Noto Sans CJK JP"),
-    ("SimSun", "Noto Sans CJK SC"),
-    ("\u{5b8b}\u{4f53}", "Noto Sans CJK SC"),
-    ("NSimSun", "Noto Sans CJK SC"),
-    ("SimHei", "Noto Sans CJK SC"),
-    ("\u{9ed1}\u{4f53}", "Noto Sans CJK SC"),
-    ("Microsoft YaHei", "Noto Sans CJK SC"),
-    ("Arial", "Liberation Sans"),
-];
 
 /// How long the picture of a held frame is given to reach the display.
 const SETTLE: Duration = Duration::from_millis(200);
@@ -52,6 +28,8 @@ pub struct Run<'a> {
     pub dll: &'a Path,
     /// The directory of each run-time package, by its name.
     pub rtps: &'a [(String, PathBuf)],
+    /// The fonts that the game font names are replaced by, if any are shared with vkxp.
+    pub fonts: Option<&'a fonts::Shared>,
     /// The Wine prefix, made on first use.
     pub prefix: &'a Path,
     /// `LC_ALL` of the run, which decides the code page of the game's file names.
@@ -164,12 +142,20 @@ impl Run<'_> {
         if !prepared.exists() {
             eprintln!("oracle: creating the Wine prefix {}", self.prefix.display());
             run(self.wine("wineboot", display).arg("-i"), "wineboot -i")?;
-            for (name, replacement) in FONT_REPLACEMENTS {
-                let key = "HKCU\\Software\\Wine\\Fonts\\Replacements";
-                self.registry_value(display, key, name, replacement, None)?;
-            }
             fs::write(&prepared, b"").with_context(|| prepared.display().to_string())?;
         }
+
+        // Written on every run, because the fonts may differ from those of the last one.
+        let windows = self.prefix.join("drive_c/windows");
+        let installed = fonts::install(self.fonts, &windows.join("Fonts"))?;
+        let family = self.fonts.map(|shared| shared.family.as_str());
+        let script = self.prefix.join("drive_c/vkxp-oracle-fonts.reg");
+        let text = fonts::registry_script(family, &installed);
+        fs::write(&script, fonts::encode_script(&text))
+            .with_context(|| script.display().to_string())?;
+        let mut regedit = self.wine("wine", display);
+        regedit.args(["regedit", "/S", "C:\\vkxp-oracle-fonts.reg"]);
+        run(&mut regedit, "wine regedit")?;
 
         // The runtime reads the directory of a run-time package from the 32-bit view.
         for (name, dir) in self.rtps {
@@ -181,7 +167,6 @@ impl Run<'_> {
         // The runtime refuses to start unless system32\D3D8.DLL exists, and a Wine without
         // 32-bit Direct3D 8 has none. Only the existence of the file is checked, so another
         // DLL of the prefix stands in for it.
-        let windows = self.prefix.join("drive_c/windows");
         let system = ["syswow64", "system32"]
             .map(|name| windows.join(name))
             .into_iter()
@@ -196,7 +181,17 @@ impl Run<'_> {
                 fs::write(&d3d8, b"").with_context(|| d3d8.display().to_string())?;
             }
         }
+
+        // Wine lists the fonts once per server, so the game gets a server that starts after
+        // the fonts were installed and registered.
+        self.stop_server(display);
         Ok(())
+    }
+
+    /// Shuts the Wine server of the prefix down, which ends every Wine process in it.
+    fn stop_server(&self, display: &str) {
+        let _ = self.wine("wineserver", display).arg("-k").status();
+        let _ = self.wine("wineserver", display).arg("-w").status();
     }
 
     /// Sets a string value in the registry of the prefix with `reg add`.
@@ -248,8 +243,7 @@ struct Server<'a>(&'a Run<'a>, &'a str);
 impl Drop for Server<'_> {
     fn drop(&mut self) {
         let Server(run, display) = self;
-        let _ = run.wine("wineserver", display).arg("-k").status();
-        let _ = run.wine("wineserver", display).arg("-w").status();
+        run.stop_server(display);
     }
 }
 
