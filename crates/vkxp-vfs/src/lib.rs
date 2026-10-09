@@ -16,7 +16,8 @@
 //!   resolves to a file outside the directory it is searched in, whether through `..` or
 //!   through a symbolic link.
 //!
-//! The encrypted archive (`Game.rgssad`) is not read yet. Nothing here writes files: saves go
+//! [`GameFiles::open`] also reads the encrypted archive of the game (`Game.rgssad`, RGSSAD
+//! version 1), whose entries come before loose files. Nothing here writes files: saves go
 //! through Ruby's own file API.
 //!
 //! # Example
@@ -56,6 +57,7 @@
 
 #![forbid(unsafe_code)]
 
+mod archive;
 mod dir;
 mod error;
 mod files;

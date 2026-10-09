@@ -26,3 +26,17 @@
 ## Risks / Trade-offs
 
 - [Very large archives] → Only the table is held in memory; entries are read on demand.
+
+## Follow-ups
+
+- The archive is read by a new constructor, `GameFiles::open`, because opening can now fail
+  and `GameFiles::new` is infallible and used by other crates. This change is confined to
+  `vkxp-vfs`, so the executable (`crates/vkxp/src/main.rs`) still calls `GameFiles::new` and
+  does not read archives until it is switched to `GameFiles::open`.
+- `GameFiles::resolve` returns the path of a real file, so it never finds an archive entry;
+  only `GameFiles::read` does. Its one caller outside the crate is the lookup of `.rb` files
+  for `require` and `load`. Whether anything needs a path-less lookup is open.
+- An entry whose name is not valid UTF-8 is left out of the index, as loose files with such
+  names are. Whether archives with names in a legacy encoding exist is not known.
+- Of two entries whose names differ only in letter case the first is kept; loose files prefer
+  the exact match. What the original does with such an archive has not been measured.

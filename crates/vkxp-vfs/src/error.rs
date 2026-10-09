@@ -28,6 +28,9 @@ pub enum VfsError {
     /// exactly as it was requested.
     #[error("file not found: {path}")]
     NotFound { path: String },
+    /// The encrypted archive of the game is not a complete RGSSAD version 1 archive.
+    #[error("damaged archive {}: {reason}", path.display())]
+    DamagedArchive { path: PathBuf, reason: &'static str },
     /// The file or directory exists but could not be read.
     #[error("cannot read {}: {source}", path.display())]
     Io { path: PathBuf, source: io::Error },
