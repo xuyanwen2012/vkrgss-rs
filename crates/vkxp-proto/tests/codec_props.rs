@@ -184,7 +184,13 @@ fn guest_to_host() -> impl Strategy<Value = GuestToHost> {
 }
 
 fn input_snapshot() -> impl Strategy<Value = InputSnapshot> {
-    any::<u32>().prop_map(|buttons| InputSnapshot { buttons })
+    (any::<u32>(), any::<[u64; 4]>(), any::<Option<(i16, i16)>>()).prop_map(
+        |(buttons, keys, pointer)| InputSnapshot {
+            buttons,
+            keys,
+            pointer,
+        },
+    )
 }
 
 fn host_to_guest() -> impl Strategy<Value = HostToGuest> {

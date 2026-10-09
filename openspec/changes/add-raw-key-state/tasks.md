@@ -2,7 +2,7 @@
 
 ## 1. Protocol and input state (`vkxp-proto`, `vkxp-core`)
 
-- [ ] 1.1 Add raw keys and pointer to the snapshot, raise the version, and keep the previous snapshot in the input state. Verify: the scenarios of `specs/guest-host-protocol/spec.md` and the existing input tests.
+- [x] 1.1 Add raw keys and pointer to the snapshot, raise the version, and keep the previous snapshot in the input state. Verify: the scenarios of `specs/guest-host-protocol/spec.md` and the existing input tests.
 
 ## 2. Host (`vkxp-host`)
 

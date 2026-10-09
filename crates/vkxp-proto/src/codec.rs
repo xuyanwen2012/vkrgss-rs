@@ -23,7 +23,7 @@ use crate::{GuestToHost, HostToGuest, InputSnapshot};
 pub const MAGIC: [u8; 4] = *b"VKXP";
 
 /// Version of the message types and their encoding. Any change to either increments it.
-pub const PROTOCOL_VERSION: u16 = 4;
+pub const PROTOCOL_VERSION: u16 = 5;
 
 /// Length of the stream header in bytes.
 pub const HEADER_LEN: usize = 7;
@@ -231,8 +231,8 @@ mod tests {
 
     #[test]
     fn older_streams_are_rejected_naming_both_versions() {
-        assert_eq!(PROTOCOL_VERSION, 4);
-        for found in [1u16, 2, 3] {
+        assert_eq!(PROTOCOL_VERSION, 5);
+        for found in [1u16, 2, 3, 4] {
             let mut bytes = encode_stream(&sample()).unwrap();
             bytes[4..6].copy_from_slice(&found.to_le_bytes());
 
@@ -241,12 +241,12 @@ mod tests {
                 error,
                 DecodeError::UnsupportedVersion {
                     found,
-                    supported: 4,
+                    supported: 5,
                 }
             );
             assert_eq!(
                 error.to_string(),
-                format!("unsupported protocol version: found {found}, supported 4")
+                format!("unsupported protocol version: found {found}, supported 5")
             );
         }
     }
@@ -451,6 +451,20 @@ mod tests {
             decode_stream::<GuestToHost>(&[]),
             Err(DecodeError::TruncatedHeader { len: 0 })
         );
+    }
+
+    /// Scenario "Round trip" of the raw key and pointer state.
+    #[test]
+    fn a_snapshot_with_raw_keys_and_a_pointer_round_trips() {
+        let snapshot = InputSnapshot::EMPTY
+            .with_key(0x01)
+            .with_key(0x41)
+            .with_pointer(Some((100, 50)));
+        let bytes = encode_stream(&[snapshot]).unwrap();
+        assert_eq!(decode_stream::<InputSnapshot>(&bytes), Ok(vec![snapshot]));
+        let message = HostToGuest::Input(snapshot);
+        let bytes = encode_stream(&[message.clone()]).unwrap();
+        assert_eq!(decode_stream::<HostToGuest>(&bytes), Ok(vec![message]));
     }
 
     #[test]

@@ -58,19 +58,30 @@ impl Button {
     }
 }
 
-/// The complete logical button state at one sampling point.
+/// The complete input state at one sampling point.
 ///
 /// The guest samples input once per `Input.update`; a recording is the sequence of those
 /// snapshots. Bit `n` of `buttons` is set while the button whose `Input` constant is `n` is
 /// held.
+///
+/// `keys` is the raw state behind the emulated `Win32API` keyboard functions: one bit for
+/// each of the 256 Windows virtual-key codes, mouse buttons included, code `n` at bit
+/// `n % 64` of word `n / 64`. `pointer` is the position of the mouse pointer in logical frame
+/// pixels, or `None` when it is not over the picture.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct InputSnapshot {
     pub buttons: u32,
+    pub keys: [u64; 4],
+    pub pointer: Option<(i16, i16)>,
 }
 
 impl InputSnapshot {
-    /// No button held.
-    pub const EMPTY: InputSnapshot = InputSnapshot { buttons: 0 };
+    /// No button and no key held, no pointer.
+    pub const EMPTY: InputSnapshot = InputSnapshot {
+        buttons: 0,
+        keys: [0; 4],
+        pointer: None,
+    };
 
     /// Whether `button` is held.
     pub const fn is_down(&self, button: Button) -> bool {
@@ -82,7 +93,26 @@ impl InputSnapshot {
     pub const fn with(self, button: Button) -> InputSnapshot {
         InputSnapshot {
             buttons: self.buttons | button.mask(),
+            ..self
         }
+    }
+
+    /// Whether the key with the Windows virtual-key code `key` is held.
+    pub const fn is_key_down(&self, key: u8) -> bool {
+        self.keys[key as usize / 64] & (1 << (key % 64)) != 0
+    }
+
+    /// This snapshot with the key with the Windows virtual-key code `key` held.
+    #[must_use]
+    pub const fn with_key(mut self, key: u8) -> InputSnapshot {
+        self.keys[key as usize / 64] |= 1 << (key % 64);
+        self
+    }
+
+    /// This snapshot with the pointer at `pointer`.
+    #[must_use]
+    pub const fn with_pointer(self, pointer: Option<(i16, i16)>) -> InputSnapshot {
+        InputSnapshot { pointer, ..self }
     }
 }
 
@@ -131,5 +161,24 @@ mod tests {
             assert_eq!(snapshot.is_down(button), expected, "{button:?}");
         }
         assert_eq!(snapshot.buttons, (1 << 2) | (1 << 13));
+    }
+
+    #[test]
+    fn the_empty_snapshot_has_no_key_and_no_pointer() {
+        assert_eq!(InputSnapshot::EMPTY, InputSnapshot::default());
+        assert!((0..=255).all(|key| !InputSnapshot::EMPTY.is_key_down(key)));
+        assert_eq!(InputSnapshot::EMPTY.pointer, None);
+    }
+
+    #[test]
+    fn each_key_alone_is_the_only_one_held() {
+        for held in 0..=255u8 {
+            let snapshot = InputSnapshot::EMPTY.with_key(held);
+            assert_eq!(snapshot.buttons, 0);
+            assert_eq!(snapshot.keys.map(u64::count_ones).iter().sum::<u32>(), 1);
+            for key in 0..=255u8 {
+                assert_eq!(snapshot.is_key_down(key), key == held, "{key:#04x}");
+            }
+        }
     }
 }

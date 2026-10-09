@@ -22,6 +22,8 @@ pub struct InputState {
     received: Option<InputSnapshot>,
     /// The snapshot the queries answer from.
     latched: InputSnapshot,
+    /// The snapshot the queries answered from before the last update.
+    previous: InputSnapshot,
     /// For each button, the number of consecutive updates it has been held.
     held: [u64; BUTTON_BITS],
     /// For each button, the number of the update at which it was last triggered.
@@ -45,6 +47,7 @@ impl InputState {
     /// One `Input.update`: latches the most recent snapshot, or keeps the button state when
     /// none was received, and advances every button by one step.
     pub fn update(&mut self) {
+        self.previous = self.latched;
         if let Some(snapshot) = self.received.take() {
             self.latched = snapshot;
         }
@@ -60,6 +63,23 @@ impl InputState {
                 self.held[bit] = 0;
             }
         }
+    }
+
+    /// Whether the key with the Windows virtual-key code `key` is held.
+    pub fn is_key_down(&self, key: u8) -> bool {
+        self.latched.is_key_down(key)
+    }
+
+    /// Whether the key with the Windows virtual-key code `key` is held and was not before the
+    /// last update.
+    pub fn is_key_new(&self, key: u8) -> bool {
+        self.latched.is_key_down(key) && !self.previous.is_key_down(key)
+    }
+
+    /// The pointer position in logical frame pixels, or `None` when the pointer is not over
+    /// the picture.
+    pub fn pointer(&self) -> Option<(i16, i16)> {
+        self.latched.pointer
     }
 
     /// Number of consecutive updates `button` has been held, 0 when it is not held.
@@ -408,6 +428,38 @@ mod tests {
         input.receive(holding(&[Button::Down, Button::Right, Button::Left]));
         input.update();
         assert_eq!((input.dir4(), input.dir8()), (2, 2));
+    }
+
+    #[test]
+    fn raw_keys_and_the_pointer_follow_the_latched_snapshot() {
+        let mut input = InputState::new();
+        input.update();
+        assert!(!input.is_key_down(0x41));
+        assert_eq!(input.pointer(), None);
+
+        let held = InputSnapshot::EMPTY
+            .with_key(0x41)
+            .with_pointer(Some((100, 50)));
+        input.receive(held);
+        assert!(!input.is_key_down(0x41));
+        assert_eq!(input.pointer(), None);
+        input.update();
+        assert!(input.is_key_down(0x41) && input.is_key_new(0x41));
+        assert!(!input.is_key_down(0x42) && !input.is_key_new(0x42));
+        assert_eq!(input.pointer(), Some((100, 50)));
+
+        // Held on without a new snapshot, and with one: no longer new.
+        input.update();
+        assert!(input.is_key_down(0x41) && !input.is_key_new(0x41));
+        input.receive(held.with_key(0x42));
+        input.update();
+        assert!(input.is_key_down(0x41) && !input.is_key_new(0x41));
+        assert!(input.is_key_new(0x42));
+
+        input.receive(InputSnapshot::EMPTY);
+        input.update();
+        assert!(!input.is_key_down(0x41) && !input.is_key_new(0x41));
+        assert_eq!(input.pointer(), None);
     }
 
     #[test]

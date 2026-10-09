@@ -317,7 +317,10 @@ fn an_unknown_button_is_not_pressed() {
     let (value, _) = play(
         "Input.update
          [Input.press?(99), Input.trigger?(0), Input.repeat?(-1), Input.press?(2 ** 40)]",
-        Script::new().at_start(HostToGuest::Input(InputSnapshot { buttons: u32::MAX })),
+        Script::new().at_start(HostToGuest::Input(InputSnapshot {
+            buttons: u32::MAX,
+            ..InputSnapshot::EMPTY
+        })),
     );
     assert_eq!(value, "[false, false, false, false]");
 }
