@@ -2,22 +2,37 @@
 //! reads this file and fails if one is missing.
 //!
 //! Notation used in the formulas: channels are integers from 0 to 255, `/` is integer division
-//! rounding down, and `div255(x) = (x + 127) / 255` is division by 255 rounded to nearest.
+//! rounding down, `div255(x) = (x + 127) / 255` is division by 255 rounded to nearest, and `>>`
+//! is an arithmetic shift, which rounds a negative value down.
 
 use crate::{ArithmeticFn, Provenance};
 
 /// A pixel: red, green, blue and straight (non-premultiplied) alpha.
 pub type Rgba = [u8; 4];
 
+/// The measurement the formulas for an opaque destination, the colour and the tone offsets
+/// were fitted to.
+const MEASURED: Provenance = Provenance::ReverseEngineered {
+    source: "oracle measurement 2026-10-09, RGSS103J, screen blend probe",
+};
+
 /// The provenance of every public function in this file, in declaration order.
 pub const PROVENANCE: &[ArithmeticFn] = &[
     ArithmeticFn {
         name: "effective_alpha",
         formula: "a = div255(alpha * opacity)",
-        provenance: Provenance::Textbook,
+        provenance: MEASURED,
     },
     ArithmeticFn {
         name: "blend_normal",
+        formula: "for dst.a = 255: a = effective_alpha(src.a, opacity), \
+                  out.c = dst.c + (((src.c - dst.c) * (a + 1)) >> 8), out.a = 255, \
+                  out = dst when a = 0; \
+                  for dst.a < 255: blend_normal_translucent",
+        provenance: MEASURED,
+    },
+    ArithmeticFn {
+        name: "blend_normal_translucent",
         formula: "a = effective_alpha(src.a, opacity), \
                   w = dst.a * (255 - a), \
                   n = 255 * a + w, \
@@ -28,25 +43,45 @@ pub const PROVENANCE: &[ArithmeticFn] = &[
     },
     ArithmeticFn {
         name: "blend_add",
+        formula: "for dst.a = 255: a = effective_alpha(src.a, opacity), \
+                  c = min(255, dst.c + ((src.c * (a + 1)) >> 8)), out = dst when a = 0; \
+                  for dst.a < 255: blend_add_translucent",
+        provenance: MEASURED,
+    },
+    ArithmeticFn {
+        name: "blend_add_translucent",
         formula: "c = min(255, dst.c + div255(src.c * a)), a = effective_alpha(src.a, opacity)",
         provenance: Provenance::Textbook,
     },
     ArithmeticFn {
         name: "blend_sub",
+        formula: "for dst.a = 255: a = effective_alpha(src.a, opacity), \
+                  c = max(0, dst.c - ((src.c * (a + 1)) >> 8)), out = dst when a = 0; \
+                  for dst.a < 255: blend_sub_translucent",
+        provenance: MEASURED,
+    },
+    ArithmeticFn {
+        name: "blend_sub_translucent",
         formula: "c = max(0, dst.c - div255(src.c * a)), a = effective_alpha(src.a, opacity)",
         provenance: Provenance::Textbook,
     },
     ArithmeticFn {
         name: "blend_color",
-        formula: "c = div255(color.c * color.a + dst.c * (255 - color.a))",
+        formula: "c = dst.c + (((color.c - dst.c) * (color.a + 1)) >> 8), \
+                  out = dst when color.a = 0",
+        provenance: MEASURED,
+    },
+    ArithmeticFn {
+        name: "apply_gray",
+        formula: "l = (77 * r + 150 * g + 29 * b) / 256, \
+                  c = div255(dst.c * (255 - gray) + l * gray)",
         provenance: Provenance::Textbook,
     },
     ArithmeticFn {
         name: "apply_tone",
-        formula: "l = (77 * r + 150 * g + 29 * b) / 256, \
-                  m = div255(dst.c * (255 - gray) + l * gray), \
-                  c = clamp(m + clamp(tone.c, -255, 255), 0, 255)",
-        provenance: Provenance::Textbook,
+        formula: "m = apply_gray(dst, gray), \
+                  c = clamp(m.c + clamp(tone.c, -255, 255), 0, 255)",
+        provenance: MEASURED,
     },
 ];
 
@@ -60,21 +95,65 @@ const fn mix(dst: u8, src: u8, alpha: u8) -> u8 {
     div255(src as u32 * alpha as u32 + dst as u32 * (255 - alpha as u32)) as u8
 }
 
-/// `div255(channel * alpha)`: the share of a source channel that is added or subtracted.
+/// `div255(channel * alpha)`: the share of a source channel that is added or subtracted to a
+/// translucent destination.
 const fn scale(channel: u8, alpha: u8) -> u8 {
     div255(channel as u32 * alpha as u32) as u8
 }
 
-/// The alpha a source pixel is drawn with: its own alpha scaled by the opacity of the draw.
-///
-/// Formula: `a = div255(alpha * opacity)`.
-///
-/// PROVENANCE: Textbook.
-pub const fn effective_alpha(alpha: u8, opacity: u8) -> u8 {
-    scale(alpha, opacity)
+/// `(value * (alpha + 1)) >> 8`: the share of a signed value that an alpha lets through, as the
+/// original computes it. The shift is arithmetic.
+const fn share(value: i32, alpha: u8) -> i32 {
+    (value * (alpha as i32 + 1)) >> 8
 }
 
-/// Normal blend: `src` drawn over `dst` at `opacity`, both with straight alpha (source-over).
+/// `dst + share(src - dst, alpha)`: `src` at alpha 255, never outside the two.
+const fn lerp(dst: u8, src: u8, alpha: u8) -> u8 {
+    (dst as i32 + share(src as i32 - dst as i32, alpha)) as u8
+}
+
+/// The alpha a source pixel is drawn with: its own alpha scaled by the opacity of the draw.
+///
+/// Formula: `a = div255(alpha * opacity)`, that is `(alpha * opacity + 127) / 255`.
+///
+/// PROVENANCE: ReverseEngineered (oracle measurement 2026-10-09, RGSS103J, screen blend probe).
+pub const fn effective_alpha(alpha: u8, opacity: u8) -> u8 {
+    div255(alpha as u32 * opacity as u32) as u8
+}
+
+/// Normal blend: `src` drawn over `dst` at `opacity`.
+///
+/// Formula for an opaque destination (`dst.a = 255`, the frame), with
+/// `a = effective_alpha(src.a, opacity)`:
+///
+/// ```text
+/// out   = dst                                        when a = 0
+/// out.c = dst.c + (((src.c - dst.c) * (a + 1)) >> 8)  per colour channel c
+/// out.a = 255
+/// ```
+///
+/// `a = 255` returns `src`. A destination with an alpha below 255 is blended by
+/// [`blend_normal_translucent`], which is not measured yet.
+///
+/// PROVENANCE: ReverseEngineered (oracle measurement 2026-10-09, RGSS103J, screen blend probe).
+pub const fn blend_normal(dst: Rgba, src: Rgba, opacity: u8) -> Rgba {
+    if dst[3] != 255 {
+        return blend_normal_translucent(dst, src, opacity);
+    }
+    let a = effective_alpha(src[3], opacity);
+    if a == 0 {
+        return dst;
+    }
+    [
+        lerp(dst[0], src[0], a),
+        lerp(dst[1], src[1], a),
+        lerp(dst[2], src[2], a),
+        255,
+    ]
+}
+
+/// Normal blend onto a destination of any alpha, both with straight alpha (source-over). This
+/// is what `blend_normal` computes for a destination alpha below 255.
 ///
 /// Formula, with `a = effective_alpha(src.a, opacity)`:
 ///
@@ -86,14 +165,13 @@ pub const fn effective_alpha(alpha: u8, opacity: u8) -> u8 {
 /// ```
 ///
 /// When `n` is 0 (nothing drawn onto a fully transparent destination) the result is `dst`.
-/// Three cases follow from the formula and are relied upon:
+/// Two cases follow from the formula and are relied upon:
 ///
 /// - `a = 0` returns `dst` unchanged, whatever its alpha.
 /// - `a = 255` returns `src` with alpha 255, whatever the destination.
-/// - `dst.a = 255` gives `out.a = 255` and `out.c = div255(src.c * a + dst.c * (255 - a))`.
 ///
 /// PROVENANCE: Textbook.
-pub const fn blend_normal(dst: Rgba, src: Rgba, opacity: u8) -> Rgba {
+pub const fn blend_normal_translucent(dst: Rgba, src: Rgba, opacity: u8) -> Rgba {
     let a = effective_alpha(src[3], opacity) as u32;
     let weight = dst[3] as u32 * (255 - a);
     let total = 255 * a + weight;
@@ -116,11 +194,36 @@ const fn over(dst: u8, src: u8, a: u32, weight: u32, total: u32) -> u8 {
 /// Additive blend of `src` onto `dst` at `opacity`, saturating at 255. The destination alpha
 /// is kept.
 ///
+/// Formula for an opaque destination, per colour channel `c`, with
+/// `a = effective_alpha(src.a, opacity)`: `c = min(255, dst.c + ((src.c * (a + 1)) >> 8))`, and
+/// `dst` unchanged when `a = 0`. A destination with an alpha below 255 is blended by
+/// [`blend_add_translucent`], which is not measured yet.
+///
+/// PROVENANCE: ReverseEngineered (oracle measurement 2026-10-09, RGSS103J, screen blend probe).
+pub const fn blend_add(dst: Rgba, src: Rgba, opacity: u8) -> Rgba {
+    if dst[3] != 255 {
+        return blend_add_translucent(dst, src, opacity);
+    }
+    let a = effective_alpha(src[3], opacity);
+    if a == 0 {
+        return dst;
+    }
+    [
+        dst[0].saturating_add(share(src[0] as i32, a) as u8),
+        dst[1].saturating_add(share(src[1] as i32, a) as u8),
+        dst[2].saturating_add(share(src[2] as i32, a) as u8),
+        dst[3],
+    ]
+}
+
+/// Additive blend onto a destination of any alpha, which is kept. This is what `blend_add`
+/// computes for a destination alpha below 255.
+///
 /// Formula, per colour channel `c`, with `a = effective_alpha(src.a, opacity)`:
 /// `c = min(255, dst.c + div255(src.c * a))`.
 ///
 /// PROVENANCE: Textbook.
-pub const fn blend_add(dst: Rgba, src: Rgba, opacity: u8) -> Rgba {
+pub const fn blend_add_translucent(dst: Rgba, src: Rgba, opacity: u8) -> Rgba {
     let a = effective_alpha(src[3], opacity);
     [
         dst[0].saturating_add(scale(src[0], a)),
@@ -133,11 +236,36 @@ pub const fn blend_add(dst: Rgba, src: Rgba, opacity: u8) -> Rgba {
 /// Subtractive blend of `src` from `dst` at `opacity`, saturating at 0. The destination alpha
 /// is kept.
 ///
+/// Formula for an opaque destination, per colour channel `c`, with
+/// `a = effective_alpha(src.a, opacity)`: `c = max(0, dst.c - ((src.c * (a + 1)) >> 8))`, and
+/// `dst` unchanged when `a = 0`. A destination with an alpha below 255 is blended by
+/// [`blend_sub_translucent`], which is not measured yet.
+///
+/// PROVENANCE: ReverseEngineered (oracle measurement 2026-10-09, RGSS103J, screen blend probe).
+pub const fn blend_sub(dst: Rgba, src: Rgba, opacity: u8) -> Rgba {
+    if dst[3] != 255 {
+        return blend_sub_translucent(dst, src, opacity);
+    }
+    let a = effective_alpha(src[3], opacity);
+    if a == 0 {
+        return dst;
+    }
+    [
+        dst[0].saturating_sub(share(src[0] as i32, a) as u8),
+        dst[1].saturating_sub(share(src[1] as i32, a) as u8),
+        dst[2].saturating_sub(share(src[2] as i32, a) as u8),
+        dst[3],
+    ]
+}
+
+/// Subtractive blend from a destination of any alpha, which is kept. This is what `blend_sub`
+/// computes for a destination alpha below 255.
+///
 /// Formula, per colour channel `c`, with `a = effective_alpha(src.a, opacity)`:
 /// `c = max(0, dst.c - div255(src.c * a))`.
 ///
 /// PROVENANCE: Textbook.
-pub const fn blend_sub(dst: Rgba, src: Rgba, opacity: u8) -> Rgba {
+pub const fn blend_sub_translucent(dst: Rgba, src: Rgba, opacity: u8) -> Rgba {
     let a = effective_alpha(src[3], opacity);
     [
         dst[0].saturating_sub(scale(src[0], a)),
@@ -149,36 +277,55 @@ pub const fn blend_sub(dst: Rgba, src: Rgba, opacity: u8) -> Rgba {
 
 /// Blends a flat `color` over `dst` with the colour's alpha. The destination alpha is kept.
 ///
-/// Formula, per colour channel `c`: `c = div255(color.c * color.a + dst.c * (255 - color.a))`.
+/// Formula, per colour channel `c`: `c = dst.c + (((color.c - dst.c) * (color.a + 1)) >> 8)`,
+/// and `dst` unchanged when `color.a = 0`.
 ///
-/// PROVENANCE: Textbook.
+/// PROVENANCE: ReverseEngineered (oracle measurement 2026-10-09, RGSS103J, screen blend probe).
 pub const fn blend_color(dst: Rgba, color: Rgba) -> Rgba {
+    if color[3] == 0 {
+        return dst;
+    }
     [
-        mix(dst[0], color[0], color[3]),
-        mix(dst[1], color[1], color[3]),
-        mix(dst[2], color[2], color[3]),
+        lerp(dst[0], color[0], color[3]),
+        lerp(dst[1], color[1], color[3]),
+        lerp(dst[2], color[2], color[3]),
         dst[3],
     ]
 }
 
-/// Applies a tone to `dst`: desaturation by `gray`, then the signed offsets `red`, `green` and
-/// `blue`. The destination alpha is kept.
+/// The grey part of a tone: desaturates `dst` by `gray`. The destination alpha is kept.
 ///
-/// Formula, with `r`, `g`, `b` the channels of `dst` and offsets clamped to -255..=255:
+/// Formula, with `r`, `g`, `b` the channels of `dst`:
 ///
 /// ```text
 /// l = (77 * r + 150 * g + 29 * b) / 256
-/// m = div255(dst.c * (255 - gray) + l * gray)      per colour channel c
-/// c = clamp(m + offset.c, 0, 255)
+/// c = div255(dst.c * (255 - gray) + l * gray)      per colour channel c
 /// ```
 ///
 /// PROVENANCE: Textbook.
-pub const fn apply_tone(dst: Rgba, red: i16, green: i16, blue: i16, gray: u8) -> Rgba {
+pub const fn apply_gray(dst: Rgba, gray: u8) -> Rgba {
     let luma = ((77 * dst[0] as u32 + 150 * dst[1] as u32 + 29 * dst[2] as u32) / 256) as u8;
     [
-        offset(mix(dst[0], luma, gray), red),
-        offset(mix(dst[1], luma, gray), green),
-        offset(mix(dst[2], luma, gray), blue),
+        mix(dst[0], luma, gray),
+        mix(dst[1], luma, gray),
+        mix(dst[2], luma, gray),
+        dst[3],
+    ]
+}
+
+/// Applies a tone to `dst`: desaturation by `gray` ([`apply_gray`], not measured yet), then the
+/// signed offsets `red`, `green` and `blue`. The destination alpha is kept.
+///
+/// Formula, with `m = apply_gray(dst, gray)` and offsets clamped to -255..=255, per colour
+/// channel `c`: `c = clamp(m.c + offset.c, 0, 255)`.
+///
+/// PROVENANCE: ReverseEngineered (oracle measurement 2026-10-09, RGSS103J, screen blend probe).
+pub const fn apply_tone(dst: Rgba, red: i16, green: i16, blue: i16, gray: u8) -> Rgba {
+    let grayed = apply_gray(dst, gray);
+    [
+        offset(grayed[0], red),
+        offset(grayed[1], green),
+        offset(grayed[2], blue),
         dst[3],
     ]
 }
@@ -337,19 +484,61 @@ mod tests {
         }
     }
 
-    /// Over an opaque destination the general formula is the plain mix, for every input.
+    /// The formula of the original, written out, for every input on an opaque destination.
     #[test]
-    fn normal_blend_onto_opaque_destination_is_the_plain_mix() {
-        for dst in 0..=255u8 {
-            for src in [0u8, 1, 100, 127, 128, 254, 255] {
-                for alpha in 0..=255u8 {
-                    let out = blend_normal([dst, 0, 0, 255], [src, 0, 0, alpha], 255);
-                    assert_eq!(
-                        out,
-                        [mix(dst, src, alpha), 0, 0, 255],
-                        "{dst} {src} {alpha}"
-                    );
+    fn blends_onto_opaque_destination_follow_the_measured_formula() {
+        for dst in 0..=255i32 {
+            for src in [0i32, 1, 100, 127, 128, 254, 255] {
+                for alpha in 0..=255i32 {
+                    let d = [dst as u8, 0, 0, 255];
+                    let s = [src as u8, 0, 0, alpha as u8];
+                    let (normal, add, sub) = if alpha == 0 {
+                        (dst, dst, dst)
+                    } else {
+                        (
+                            dst + (((src - dst) * (alpha + 1)) >> 8),
+                            (dst + ((src * (alpha + 1)) >> 8)).min(255),
+                            (dst - ((src * (alpha + 1)) >> 8)).max(0),
+                        )
+                    };
+                    let case = format!("{dst} {src} {alpha}");
+                    assert_eq!(blend_normal(d, s, 255), [normal as u8, 0, 0, 255], "{case}");
+                    assert_eq!(blend_add(d, s, 255), [add as u8, 0, 0, 255], "{case}");
+                    assert_eq!(blend_sub(d, s, 255), [sub as u8, 0, 0, 255], "{case}");
                 }
+            }
+        }
+    }
+
+    /// A destination that is darker than the source by one step of alpha is not pulled below
+    /// itself: the arithmetic shift rounds down, so alpha 0 has to leave the pixel alone.
+    #[test]
+    fn zero_alpha_is_not_the_formula_at_zero() {
+        assert_eq!(blend_normal([200, 0, 0, 255], [0, 0, 0, 0], 255)[0], 200);
+        assert_eq!(blend_normal([200, 0, 0, 255], [0, 0, 0, 1], 255)[0], 198);
+        assert_eq!(blend_color([200, 0, 0, 255], [0, 0, 0, 0])[0], 200);
+        assert_eq!(blend_color([200, 0, 0, 255], [0, 0, 0, 1])[0], 198);
+    }
+
+    #[test]
+    fn a_translucent_destination_takes_the_placeholder_path() {
+        for dst in SAMPLES {
+            for src in SAMPLES {
+                if dst[3] == 255 {
+                    continue;
+                }
+                assert_eq!(
+                    blend_normal(dst, src, 200),
+                    blend_normal_translucent(dst, src, 200)
+                );
+                assert_eq!(
+                    blend_add(dst, src, 200),
+                    blend_add_translucent(dst, src, 200)
+                );
+                assert_eq!(
+                    blend_sub(dst, src, 200),
+                    blend_sub_translucent(dst, src, 200)
+                );
             }
         }
     }
@@ -358,7 +547,7 @@ mod tests {
     fn normal_blend_mixes_halfway() {
         assert_eq!(
             blend_normal([0, 100, 255, 255], [255, 200, 0, 255], 128),
-            [128, 150, 127, 255]
+            [128, 150, 126, 255]
         );
         // Half alpha and half opacity: a = div255(128 * 128) = 64.
         assert_eq!(
@@ -420,7 +609,7 @@ mod tests {
         }
         assert_eq!(
             blend_color([0, 100, 255, 7], [255, 200, 0, 128]),
-            [128, 150, 127, 7]
+            [128, 150, 126, 7]
         );
     }
 
@@ -510,18 +699,39 @@ mod tests {
     #[test]
     fn every_public_function_is_listed_once_in_order() {
         let functions = public_functions();
-        assert_eq!(functions.len(), 6, "found {functions:?}");
+        assert_eq!(functions.len(), 10, "found {functions:?}");
         let listed: Vec<&str> = crate::provenance().iter().map(|entry| entry.name).collect();
         assert_eq!(listed, functions);
     }
 
     #[test]
-    fn every_listed_function_is_currently_a_placeholder() {
+    fn measured_functions_name_the_measurement_and_the_rest_are_placeholders() {
+        const PLACEHOLDERS: [&str; 4] = [
+            "blend_normal_translucent",
+            "blend_add_translucent",
+            "blend_sub_translucent",
+            "apply_gray",
+        ];
         for entry in crate::provenance() {
-            assert_eq!(entry.provenance, Provenance::Textbook, "{}", entry.name);
-            assert!(entry.provenance.is_placeholder(), "{}", entry.name);
             assert!(!entry.formula.is_empty(), "{}", entry.name);
+            if PLACEHOLDERS.contains(&entry.name) {
+                assert_eq!(entry.provenance, Provenance::Textbook, "{}", entry.name);
+                assert!(entry.provenance.is_placeholder(), "{}", entry.name);
+            } else {
+                assert_eq!(
+                    entry.provenance.to_string(),
+                    "reverse-engineered: oracle measurement 2026-10-09, RGSS103J, \
+                     screen blend probe",
+                    "{}",
+                    entry.name
+                );
+            }
         }
+        let placeholders = crate::provenance()
+            .iter()
+            .filter(|entry| entry.provenance.is_placeholder())
+            .count();
+        assert_eq!(placeholders, PLACEHOLDERS.len());
     }
 
     #[test]

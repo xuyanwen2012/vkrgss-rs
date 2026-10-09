@@ -2,7 +2,7 @@
 
 ## 1. Arithmetic (`vkxp-pixel`)
 
-- [ ] 1.1 Commit the measured samples as test data and implement the formulas with their provenance. Verify: tests for the scenarios of the three requirements in `specs/frame-composition/spec.md`.
+- [x] 1.1 Commit the measured samples as test data and implement the formulas with their provenance. Verify: tests for the scenarios of the three requirements in `specs/frame-composition/spec.md`.
 
 ## 2. Backends (`vkxp-compose-ref`, `vkxp-vk`)
 

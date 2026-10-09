@@ -6,9 +6,10 @@
 //! and the guest's bitmap operations call them, and the GLSL of the Vulkan backend mirrors them
 //! line for line, so this crate is the single definition of what a blended pixel is.
 //!
-//! Each function declares where its formula comes from. Today all of them are textbook
-//! placeholders; they are replaced one by one as reverse-engineering specs of the original
-//! runtime's inner loops land. [`PROVENANCE`] lists the current state.
+//! Each function declares where its formula comes from. Blending onto an opaque destination,
+//! the colour and the tone offsets follow measurements of the original runtime; the rest are
+//! textbook placeholders, replaced one by one as measurements and reverse-engineering specs of
+//! the original runtime's inner loops land. [`PROVENANCE`] lists the current state.
 //!
 //! Arithmetic that only the guest's bitmap operations use (hue rotation, stretch sampling) runs
 //! on the CPU alone and has no GLSL counterpart. It is listed separately, in
@@ -20,7 +21,8 @@ mod arith;
 mod bitmap;
 
 pub use arith::{
-    PROVENANCE, Rgba, apply_tone, blend_add, blend_color, blend_normal, blend_sub, effective_alpha,
+    PROVENANCE, Rgba, apply_gray, apply_tone, blend_add, blend_add_translucent, blend_color,
+    blend_normal, blend_normal_translucent, blend_sub, blend_sub_translucent, effective_alpha,
 };
 pub use bitmap::{BITMAP_PROVENANCE, rotate_hue, stretch_index};
 
@@ -29,7 +31,8 @@ pub use bitmap::{BITMAP_PROVENANCE, rotate_hue, stretch_index};
 pub enum Provenance {
     /// A placeholder: the usual textbook formula, not checked against the original runtime.
     Textbook,
-    /// Derived from the original runtime, as documented in the named reverse-engineering spec.
+    /// Derived from the original runtime, as documented in the named reverse-engineering spec
+    /// or measurement.
     ReverseEngineered { source: &'static str },
 }
 
