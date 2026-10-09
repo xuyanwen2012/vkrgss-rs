@@ -23,9 +23,9 @@
 
 ## 4. Text (`vkxp-core`)
 
-- [ ] 4.1 Define the `TextRasterizer` interface and a deterministic stand-in rasteriser for tests (not exported from the crate's public API outside a test-support module). Verify: the stand-in's `rasterize` output always has the size its `measure` reports, asserted by a test over several strings and fonts.
-- [ ] 4.2 Implement `draw_text` (alignment, vertical centring, squeezing to no less than 60 percent, clipping, coverage and colour alpha). Verify: tests for the five text-drawing scenarios using the stand-in.
-- [ ] 4.3 Implement `text_size`. Verify: tests for the two measurement scenarios.
+- [x] 4.1 Define the `TextRasterizer` interface and a deterministic stand-in rasteriser for tests (not exported from the crate's public API outside a test-support module). Verify: the stand-in's `rasterize` output always has the size its `measure` reports, asserted by a test over several strings and fonts.
+- [x] 4.2 Implement `draw_text` (alignment, vertical centring, squeezing to no less than 60 percent, clipping, coverage and colour alpha). Verify: tests for the five text-drawing scenarios using the stand-in.
+- [x] 4.3 Implement `text_size`. Verify: tests for the two measurement scenarios.
 
 ## 5. Deltas (`vkxp-core`)
 
