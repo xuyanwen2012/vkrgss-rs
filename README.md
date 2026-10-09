@@ -3,8 +3,8 @@
 A Rust + Vulkan runtime for RPG Maker XP (RGSS1) games. Linux first, MIT licensed.
 
 The project is at its foundation stage: the workspace, the guest/host protocol, a CPU
-reference compositor, a headless Vulkan compositor and the embedded Ruby interpreter exist; the
-RGSS binding, windowing and audio do not yet. `docs/decisions.md`
+reference compositor, the Vulkan compositor, a host that shows its frames in a window, and the
+embedded Ruby interpreter exist; the RGSS binding and audio do not yet. `docs/decisions.md`
 records the settled design, and `openspec/` holds the change proposals that implement it.
 
 ## Layout
@@ -54,6 +54,51 @@ frames are committed under `crates/vkxp-compose-ref/tests/expected/` and compare
 `VKXP_BLESS=1 cargo test -p vkxp-compose-ref --test fixtures` rewrites them after an intended
 change, to be reviewed before committing.
 
+## Running the demo
+
+Until the Ruby side exists the host is driven by a guest written in Rust, `vkxp_host::demo`. It
+moves a sprite with the arrow keys (faster with Shift), tints the middle of the screen while
+Space, Enter or C is held, and swaps the background with a transition on Escape or X.
+
+In a window:
+
+```sh
+cargo run -p vkxp-host --example demo -- <device>
+```
+
+`<device>` is the index of a Vulkan device or a part of its name, as `vulkaninfo --summary`
+prints them. It has no default, so that the GPU that drives the window is always a choice. The
+host keys are F12 (reset), Alt+Enter (borderless fullscreen), F2 (frame rate in the title) and
+Tab held (fast-forward). Closing the window asks the guest to quit.
+
+On the development machine the Intel Arc B580 is reserved for other work and must not be
+opened, so the demo is run on the AMD integrated GPU with the loader restricted to its driver,
+or on the CPU:
+
+```sh
+VK_LOADER_DRIVERS_SELECT='*radeon*' cargo run -p vkxp-host --example demo -- RADV
+VK_LOADER_DRIVERS_SELECT='*lvp*' cargo run -p vkxp-host --example demo -- llvmpipe
+```
+
+Without a window, on a virtual clock that never waits:
+
+```sh
+cargo run -p vkxp-host --example demo-headless -- --frames 30 --dump 10=target/frame.png
+```
+
+| Option | Meaning |
+|---|---|
+| `--frames N` | Stop after N frames. Required: the demo runs until it is asked to quit. |
+| `--dump N=PATH` | Write frame N, counted from 0, as a PNG file at the logical size. Repeatable. |
+| `--input SCRIPT` | Buttons held from given frames on, for example `"5:RIGHT, 12:RIGHT+SHIFT, 20:"`. |
+| `--device DEVICE` | Index of a Vulkan device or a part of its name. Defaults to `llvmpipe`. |
+
+A script is a list of `frame:BUTTONS` entries separated by commas or line breaks; `BUTTONS` is
+a `+`-joined list of button names (`DOWN`, `LEFT`, `RIGHT`, `UP`, `A`, `B`, `C`, `X`, `Y`, `Z`,
+`L`, `R`, `SHIFT`, `CTRL`, `ALT`, `F5` to `F9`) or nothing, and each entry sets what is held
+from that frame on. Two runs with the same options write byte-identical files, and a dumped
+frame equals what the CPU reference compositor produces for the same messages.
+
 ## Prerequisites
 
 Building the workspace compiles the shaders of `vkxp-vk` and the embedded Ruby interpreter of
@@ -91,6 +136,11 @@ VKXP_TEST_DEVICE=RADV cargo test -p vkxp-vk
 
 When the validation layer is installed the tests enable it, and any validation error fails the
 test that caused it.
+
+Presentation is tested the same way and never opens a window: scaling and mixing are drawn into
+an off-screen target and read back, and the swapchain runs on a surface without a window system
+(`VK_EXT_headless_surface`). The headless tests of `vkxp-host` follow `VKXP_TEST_DEVICE` too
+and default to llvmpipe.
 
 Choosing a device still enumerates every device the Vulkan loader finds. To keep a driver from
 being loaded at all, restrict the loader itself, for example

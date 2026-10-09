@@ -21,10 +21,10 @@
 
 ## 4. Runners and demo (`vkxp-host`)
 
-- [ ] 4.1 Implement the demo guest. Verify: a test runs it against a scripted host end for 50 frames and checks it sends one frame per tick and shuts down on quit.
-- [ ] 4.2 Implement `run_headless` with the virtual clock, the input script parser, frame dumps and the frame limit. Verify: tests for the four headless-run scenarios, including the comparison of a dumped frame with `vkxp-compose-ref` rendering the same messages, and parser tests for the script syntax and its errors.
-- [ ] 4.3 Implement `run_windowed` on `winit` with the Vulkan display, key translation, Alt+Enter, F2, F12, Tab and close handling. Verify: it compiles on the default target and a test drives the same event-handling code with synthetic key events through the session (no window is created in tests).
-- [ ] 4.4 Add the `demo` example (windowed, taking a device name or index) and a `demo-headless` example (frame dump), and document both in `README.md` including which device to pass on the development machine. Verify: `cargo run -p vkxp-host --example demo-headless -- --frames 30 --dump 10=target/frame.png` writes a PNG; the README commands match the examples' arguments.
+- [x] 4.1 Implement the demo guest. Verify: a test runs it against a scripted host end for 50 frames and checks it sends one frame per tick and shuts down on quit.
+- [x] 4.2 Implement `run_headless` with the virtual clock, the input script parser, frame dumps and the frame limit. Verify: tests for the four headless-run scenarios, including the comparison of a dumped frame with `vkxp-compose-ref` rendering the same messages, and parser tests for the script syntax and its errors.
+- [x] 4.3 Implement `run_windowed` on `winit` with the Vulkan display, key translation, Alt+Enter, F2, F12, Tab and close handling. Verify: it compiles on the default target and a test drives the same event-handling code with synthetic key events through the session (no window is created in tests).
+- [x] 4.4 Add the `demo` example (windowed, taking a device name or index) and a `demo-headless` example (frame dump), and document both in `README.md` including which device to pass on the development machine. Verify: `cargo run -p vkxp-host --example demo-headless -- --frames 30 --dump 10=target/frame.png` writes a PNG; the README commands match the examples' arguments.
 
 ## 5. Integration check
 

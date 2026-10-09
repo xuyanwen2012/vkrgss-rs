@@ -13,17 +13,39 @@
 //!    on a virtual clock with scripted input and frame dumps.
 //! 3. The [`Display`] implementations: the Vulkan presenter for a window, an off-screen one for
 //!    headless runs, and the recording fake.
+//!
+//! [`demo`] is a guest written in Rust, used by the tests and the examples until the Ruby side
+//! exists.
 
 #![forbid(unsafe_code)]
 
 mod clock;
 mod display;
+mod headless;
 mod keys;
+mod script;
 mod session;
+mod windowed;
 
+pub mod demo;
 pub mod testing;
 
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use display::Display;
+pub use headless::{
+    DEFAULT_DEVICE, HeadlessDisplay, HeadlessEnd, HeadlessError, HeadlessOptions, HeadlessReport,
+    HostLink, headless_link, run_headless,
+};
 pub use keys::KeyMap;
+pub use script::{InputScript, ScriptError, button_name};
 pub use session::{KeyAction, Session, SessionEnd, SessionOptions};
+pub use windowed::{Driver, WindowedError, WindowedOptions, initial_window_size, run_windowed};
+
+/// Reads a device from a command-line argument or an environment variable: a number is the
+/// device's index in the enumeration order, anything else is a part of its name.
+pub fn device_from_text(text: &str) -> vkxp_vk::DeviceChoice {
+    match text.parse() {
+        Ok(index) => vkxp_vk::DeviceChoice::Index(index),
+        Err(_) => vkxp_vk::DeviceChoice::Name(text.to_owned()),
+    }
+}
