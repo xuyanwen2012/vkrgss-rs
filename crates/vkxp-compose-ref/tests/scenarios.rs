@@ -231,6 +231,128 @@ fn identity_transform_copies_texels() {
     });
 }
 
+/// Clears the screen to `base`, then draws a full-screen normal-mode quad of `source` at
+/// `opacity`, and returns the one colour the whole frame has.
+fn normal_over(base: Rgba, source: Rgba, opacity: u8) -> Rgba {
+    let quad = Quad {
+        opacity,
+        ..sprite(ID, 16, 12, 0, 0)
+    };
+    let frame = render(solid(ID, 16, 12, source), vec![clear(base), Op::Quad(quad)]);
+    let pixel = frame.pixel(0, 0);
+    assert_pixels(&frame, |_, _| pixel);
+    pixel
+}
+
+const TRANSPARENT: Rgba = [0, 0, 0, 0];
+const TRANSLUCENT_BLUE: Rgba = [0, 50, 255, 128];
+
+#[test]
+fn opaque_quad_copies_texels_over_a_transparent_clear() {
+    // The identity scenario must hold whatever is underneath, alpha included.
+    assert_eq!(
+        normal_over(TRANSPARENT, [255, 0, 0, 255], 255),
+        [255, 0, 0, 255]
+    );
+    assert_eq!(
+        normal_over([9, 8, 7, 0], [1, 2, 3, 255], 255),
+        [1, 2, 3, 255]
+    );
+}
+
+#[test]
+fn opaque_quad_copies_texels_over_a_partially_transparent_clear() {
+    assert_eq!(
+        normal_over(TRANSLUCENT_BLUE, [255, 0, 0, 255], 255),
+        [255, 0, 0, 255]
+    );
+    assert_eq!(
+        normal_over([200, 200, 200, 1], [1, 2, 3, 255], 255),
+        [1, 2, 3, 255]
+    );
+}
+
+#[test]
+fn identity_transform_copies_texels_over_a_transparent_clear() {
+    // The distinct-texel bitmap of `identity_transform_copies_texels`, on a transparent screen.
+    let (width, height) = (7u32, 5u32);
+    let texel = |x: u32, y: u32| [x as u8 * 30 + 1, y as u8 * 40 + 2, (x + y) as u8, 255];
+    let mut rgba = Vec::new();
+    for y in 0..height {
+        for x in 0..width {
+            rgba.extend(texel(x, y));
+        }
+    }
+    let frame = render(
+        bitmap(ID, width, height, rgba).into(),
+        vec![
+            clear(TRANSPARENT),
+            Op::Quad(sprite(ID, width, height, 3, 2)),
+        ],
+    );
+    assert_pixels(&frame, |x, y| {
+        if within(x, y, Rect::new(3, 2, width, height)) {
+            texel(x - 3, y - 2)
+        } else {
+            TRANSPARENT
+        }
+    });
+}
+
+#[test]
+fn translucent_quad_over_a_transparent_clear_keeps_its_colour_and_drawn_alpha() {
+    // Nothing is underneath, so the colour is the source's and the alpha is what was drawn.
+    assert_eq!(
+        normal_over(TRANSPARENT, [255, 0, 0, 128], 255),
+        [255, 0, 0, 128]
+    );
+    assert_eq!(
+        normal_over(TRANSPARENT, [200, 100, 7, 255], 128),
+        [200, 100, 7, 128]
+    );
+    // Texel alpha 128 at opacity 128 draws with alpha div255(128 * 128) = 64.
+    assert_eq!(
+        normal_over(TRANSPARENT, [200, 100, 7, 128], 128),
+        [200, 100, 7, 64]
+    );
+}
+
+#[test]
+fn translucent_quad_over_a_partially_transparent_clear_is_source_over() {
+    // Drawn alpha a = 128 over destination alpha 128:
+    //   n     = 255 * 128 + 128 * 127 = 48896, alpha = round(n / 255) = 192
+    //   red   = round(32640 * 200 / n) = 134
+    //   green = round((32640 * 100 + 16256 * 50) / n) = 83
+    //   blue  = round(16256 * 255 / n) = 85
+    let expected = [134, 83, 85, 192];
+    assert_eq!(
+        normal_over(TRANSLUCENT_BLUE, [200, 100, 0, 128], 255),
+        expected
+    );
+    assert_eq!(
+        normal_over(TRANSLUCENT_BLUE, [200, 100, 0, 255], 128),
+        expected
+    );
+}
+
+#[test]
+fn nothing_drawn_leaves_transparent_and_translucent_clears_unchanged() {
+    for base in [TRANSPARENT, [9, 8, 7, 0], TRANSLUCENT_BLUE, GREY] {
+        for blend in [BlendMode::Normal, BlendMode::Add, BlendMode::Subtract] {
+            // Zero opacity, then a transparent texel that still carries colour.
+            for (source, opacity) in [([255, 128, 7, 255], 0), ([255, 128, 7, 0], 255)] {
+                let quad = Quad {
+                    opacity,
+                    blend,
+                    ..sprite(ID, 16, 12, 0, 0)
+                };
+                let frame = render(solid(ID, 16, 12, source), vec![clear(base), Op::Quad(quad)]);
+                assert_pixels(&frame, |_, _| base);
+            }
+        }
+    }
+}
+
 #[test]
 fn quad_draws_only_its_source_rectangle() {
     // A 4x4 bitmap split into four 2x2 colour blocks; only the bottom-right block is drawn.

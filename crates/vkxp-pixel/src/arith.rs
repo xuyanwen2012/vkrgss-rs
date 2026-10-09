@@ -18,7 +18,12 @@ pub const PROVENANCE: &[ArithmeticFn] = &[
     },
     ArithmeticFn {
         name: "blend_normal",
-        formula: "c = div255(src.c * a + dst.c * (255 - a)), a = effective_alpha(src.a, opacity)",
+        formula: "a = effective_alpha(src.a, opacity), \
+                  w = dst.a * (255 - a), \
+                  n = 255 * a + w, \
+                  out.a = div255(n), \
+                  out.c = (255 * a * src.c + w * dst.c + n / 2) / n, \
+                  out = dst when n = 0",
         provenance: Provenance::Textbook,
     },
     ArithmeticFn {
@@ -69,20 +74,43 @@ pub const fn effective_alpha(alpha: u8, opacity: u8) -> u8 {
     scale(alpha, opacity)
 }
 
-/// Normal blend of `src` over `dst` at `opacity`. The destination alpha is kept.
+/// Normal blend: `src` drawn over `dst` at `opacity`, both with straight alpha (source-over).
 ///
-/// Formula, per colour channel `c`, with `a = effective_alpha(src.a, opacity)`:
-/// `c = div255(src.c * a + dst.c * (255 - a))`.
+/// Formula, with `a = effective_alpha(src.a, opacity)`:
+///
+/// ```text
+/// w     = dst.a * (255 - a)                          weight of the destination, times 255
+/// n     = 255 * a + w                                resulting alpha, times 255
+/// out.a = div255(n)
+/// out.c = (255 * a * src.c + w * dst.c + n / 2) / n  per colour channel c, rounded to nearest
+/// ```
+///
+/// When `n` is 0 (nothing drawn onto a fully transparent destination) the result is `dst`.
+/// Three cases follow from the formula and are relied upon:
+///
+/// - `a = 0` returns `dst` unchanged, whatever its alpha.
+/// - `a = 255` returns `src` with alpha 255, whatever the destination.
+/// - `dst.a = 255` gives `out.a = 255` and `out.c = div255(src.c * a + dst.c * (255 - a))`.
 ///
 /// PROVENANCE: Textbook.
 pub const fn blend_normal(dst: Rgba, src: Rgba, opacity: u8) -> Rgba {
-    let a = effective_alpha(src[3], opacity);
+    let a = effective_alpha(src[3], opacity) as u32;
+    let weight = dst[3] as u32 * (255 - a);
+    let total = 255 * a + weight;
+    if total == 0 {
+        return dst;
+    }
     [
-        mix(dst[0], src[0], a),
-        mix(dst[1], src[1], a),
-        mix(dst[2], src[2], a),
-        dst[3],
+        over(dst[0], src[0], a, weight, total),
+        over(dst[1], src[1], a, weight, total),
+        over(dst[2], src[2], a, weight, total),
+        div255(total) as u8,
     ]
+}
+
+/// `(255 * a * src + weight * dst + total / 2) / total`: one colour channel of source-over.
+const fn over(dst: u8, src: u8, a: u32, weight: u32, total: u32) -> u8 {
+    ((255 * a * src as u32 + weight * dst as u32 + total / 2) / total) as u8
 }
 
 /// Additive blend of `src` onto `dst` at `opacity`, saturating at 255. The destination alpha
@@ -233,8 +261,8 @@ mod tests {
     }
 
     #[test]
-    fn blends_keep_destination_alpha() {
-        for (name, blend) in BLENDS {
+    fn additive_and_subtractive_blends_keep_destination_alpha() {
+        for (name, blend) in &BLENDS[1..] {
             for dst in SAMPLES {
                 for src in SAMPLES {
                     assert_eq!(blend(dst, src, 200)[3], dst[3], "{name}");
@@ -244,12 +272,85 @@ mod tests {
     }
 
     #[test]
-    fn normal_blend_at_full_alpha_and_opacity_copies_source_colour() {
+    fn normal_blend_of_an_opaque_source_copies_it_alpha_included() {
         for dst in SAMPLES {
+            for src in [[12, 34, 56, 255], [255, 0, 0, 255], [0, 0, 0, 255]] {
+                assert_eq!(blend_normal(dst, src, 255), src, "{dst:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn normal_blend_onto_transparent_destination_gives_the_source_at_its_drawn_alpha() {
+        for dst in [[0, 0, 0, 0], [90, 60, 30, 0]] {
+            assert_eq!(blend_normal(dst, [255, 0, 0, 128], 255), [255, 0, 0, 128]);
             assert_eq!(
-                blend_normal(dst, [12, 34, 56, 255], 255),
-                [12, 34, 56, dst[3]]
+                blend_normal(dst, [200, 100, 7, 255], 128),
+                [200, 100, 7, 128]
             );
+            // a = div255(128 * 128) = 64.
+            assert_eq!(
+                blend_normal(dst, [200, 100, 7, 128], 128),
+                [200, 100, 7, 64]
+            );
+            assert_eq!(blend_normal(dst, [200, 100, 7, 1], 255), [200, 100, 7, 1]);
+        }
+    }
+
+    #[test]
+    fn normal_blend_onto_translucent_destination_is_source_over() {
+        // a = 128, w = 128 * 127 = 16256, n = 32640 + 16256 = 48896, alpha = div255(n) = 192.
+        // red   = (32640 * 200 + 24448) / n = 134
+        // green = (32640 * 100 + 16256 * 50 + 24448) / n = 83
+        // blue  = (16256 * 255 + 24448) / n = 85
+        assert_eq!(
+            blend_normal([0, 50, 255, 128], [200, 100, 0, 128], 255),
+            [134, 83, 85, 192]
+        );
+        // The same drawn alpha reached through opacity gives the same pixel.
+        assert_eq!(
+            blend_normal([0, 50, 255, 128], [200, 100, 0, 255], 128),
+            [134, 83, 85, 192]
+        );
+        // An opaque source replaces a translucent destination completely.
+        assert_eq!(
+            blend_normal([0, 50, 255, 128], [200, 100, 0, 255], 255),
+            [200, 100, 0, 255]
+        );
+    }
+
+    #[test]
+    fn normal_blend_alpha_never_drops_and_colour_stays_between() {
+        for dst_alpha in [0u8, 1, 64, 128, 254, 255] {
+            for src_alpha in [0u8, 1, 64, 128, 254, 255] {
+                for opacity in [0u8, 1, 128, 255] {
+                    for (dst_c, src_c) in [(0u8, 255u8), (255, 0), (10, 200), (77, 77)] {
+                        let dst = [dst_c, dst_c, dst_c, dst_alpha];
+                        let src = [src_c, src_c, src_c, src_alpha];
+                        let out = blend_normal(dst, src, opacity);
+                        let a = effective_alpha(src_alpha, opacity);
+                        assert!(out[3] >= dst_alpha.max(a), "{dst:?} {src:?} {opacity}");
+                        assert!(out[0] >= dst_c.min(src_c) && out[0] <= dst_c.max(src_c));
+                    }
+                }
+            }
+        }
+    }
+
+    /// Over an opaque destination the general formula is the plain mix, for every input.
+    #[test]
+    fn normal_blend_onto_opaque_destination_is_the_plain_mix() {
+        for dst in 0..=255u8 {
+            for src in [0u8, 1, 100, 127, 128, 254, 255] {
+                for alpha in 0..=255u8 {
+                    let out = blend_normal([dst, 0, 0, 255], [src, 0, 0, alpha], 255);
+                    assert_eq!(
+                        out,
+                        [mix(dst, src, alpha), 0, 0, 255],
+                        "{dst} {src} {alpha}"
+                    );
+                }
+            }
         }
     }
 
