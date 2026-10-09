@@ -333,14 +333,14 @@ fn full_alpha_colour_replaces_the_texels_colour() {
 #[test]
 fn quad_applies_tone_before_colour() {
     // Tone first: red 255 - 100 = 155, green 0 + 50 = 50; then half-alpha red over that gives
-    // red div255(255 * 128 + 155 * 127) = 205 and green div255(50 * 127) = 25. The other order
-    // would give red 255 - 100 = 155.
+    // red 155 + ((100 * 129) >> 8) = 205 and green 50 + ((-50 * 129) >> 8) = 24. The other
+    // order would give red 255 - 100 = 155.
     let (tone, color) = (Tone::new(-100, 50, 0, 0), Color::new(255, 0, 0, 128));
     let toned = vkxp_pixel::apply_tone(RED, tone.red, tone.green, tone.blue, tone.gray);
     assert_eq!(toned, [155, 50, 0, 255]);
     assert_eq!(
         vkxp_pixel::blend_color(toned, color.to_rgba()),
-        [205, 25, 0, 255]
+        [205, 24, 0, 255]
     );
 
     let quad = Quad {
@@ -349,7 +349,7 @@ fn quad_applies_tone_before_colour() {
         ..sprite(ID, 16, 12, 0, 0)
     };
     let frame = render(solid(ID, 16, 12, RED), vec![clear(GREY), Op::Quad(quad)]);
-    assert_pixels(&frame, |_, _| [205, 25, 0, 255]);
+    assert_pixels(&frame, |_, _| [205, 24, 0, 255]);
 
     // The drawn texel keeps the sampled alpha: at alpha 128 it is blended half over the grey.
     let translucent = [255, 0, 0, 128];
@@ -357,8 +357,8 @@ fn quad_applies_tone_before_colour() {
         solid(ID, 16, 12, translucent),
         vec![clear(GREY), Op::Quad(quad)],
     );
-    let expected = vkxp_pixel::blend_normal(GREY, [205, 25, 0, 128], 255);
-    assert_eq!(expected, [153, 67, 60, 255]);
+    let expected = vkxp_pixel::blend_normal(GREY, [205, 24, 0, 128], 255);
+    assert_eq!(expected, [152, 66, 59, 255]);
     assert_pixels(&frame, |_, _| expected);
 }
 
@@ -661,8 +661,14 @@ fn deterministic_reference_output() {
 // Requirement: Arithmetic provenance
 
 #[test]
-fn listing_placeholders() {
+fn listing_tells_measured_functions_from_placeholders() {
     let listing = vkxp_pixel::provenance();
+    let entry = |name: &str| {
+        listing
+            .iter()
+            .find(|entry| entry.name == name)
+            .unwrap_or_else(|| panic!("`{name}` is not in the provenance listing"))
+    };
     for used in [
         "blend_normal",
         "blend_add",
@@ -670,11 +676,18 @@ fn listing_placeholders() {
         "blend_color",
         "apply_tone",
     ] {
-        let entry = listing
-            .iter()
-            .find(|entry| entry.name == used)
-            .unwrap_or_else(|| panic!("`{used}` is not in the provenance listing"));
-        assert!(entry.provenance.is_placeholder(), "{used}");
+        let provenance = entry(used).provenance;
+        assert!(!provenance.is_placeholder(), "{used}");
+        assert!(
+            provenance.to_string().contains("oracle measurement"),
+            "{used}"
+        );
+    }
+    for unmeasured in ["blend_normal_translucent", "apply_gray"] {
+        assert!(
+            entry(unmeasured).provenance.is_placeholder(),
+            "{unmeasured}"
+        );
     }
 }
 

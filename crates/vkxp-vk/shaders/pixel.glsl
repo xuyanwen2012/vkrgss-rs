@@ -2,8 +2,9 @@
 //
 // This file mirrors `crates/vkxp-pixel/src/arith.rs` function for function: the same names,
 // the same integer expressions, in the same order. Channels are unsigned integers from 0 to
-// 255 held in `uint`, a pixel is a `uvec4` of red, green, blue and straight alpha, and `/` is
-// integer division rounding down. Every intermediate value fits in 32 bits, as it does in Rust.
+// 255 held in `uint`, a pixel is a `uvec4` of red, green, blue and straight alpha, `/` is
+// integer division rounding down and `>>` on an `int` is an arithmetic shift. Every
+// intermediate value fits in 32 bits, as it does in Rust.
 //
 // When a formula changes in vkxp-pixel, change it here in the same commit. The arithmetic
 // sweep tests render every pair of channel values through both and fail on any difference.
@@ -22,14 +23,25 @@ uint mix(uint dst, uint src, uint alpha) {
     return div255(src * alpha + dst * (255u - alpha));
 }
 
-// Mirrors `scale` in vkxp-pixel: the share of a source channel that is added or subtracted.
+// Mirrors `scale` in vkxp-pixel: the share of a source channel that is added or subtracted to a
+// translucent destination.
 uint scale(uint channel, uint alpha) {
     return div255(channel * alpha);
 }
 
+// Mirrors `share` in vkxp-pixel: the share of a signed value that an alpha lets through.
+int share(int value, uint alpha) {
+    return (value * (int(alpha) + 1)) >> 8;
+}
+
+// Mirrors `lerp` in vkxp-pixel: `src` at alpha 255, never outside the two.
+uint lerp(uint dst, uint src, uint alpha) {
+    return uint(int(dst) + share(int(src) - int(dst), alpha));
+}
+
 // Mirrors `vkxp_pixel::effective_alpha`.
 uint effective_alpha(uint alpha, uint opacity) {
-    return scale(alpha, opacity);
+    return div255(alpha * opacity);
 }
 
 // Mirrors `over` in vkxp-pixel: one colour channel of source-over.
@@ -37,8 +49,8 @@ uint over(uint dst, uint src, uint a, uint weight, uint total) {
     return (255u * a * src + weight * dst + total / 2u) / total;
 }
 
-// Mirrors `vkxp_pixel::blend_normal`.
-uvec4 blend_normal(uvec4 dst, uvec4 src, uint opacity) {
+// Mirrors `vkxp_pixel::blend_normal_translucent`.
+uvec4 blend_normal_translucent(uvec4 dst, uvec4 src, uint opacity) {
     uint a = effective_alpha(src.a, opacity);
     uint weight = dst.a * (255u - a);
     uint total = 255u * a + weight;
@@ -52,6 +64,22 @@ uvec4 blend_normal(uvec4 dst, uvec4 src, uint opacity) {
         div255(total));
 }
 
+// Mirrors `vkxp_pixel::blend_normal`.
+uvec4 blend_normal(uvec4 dst, uvec4 src, uint opacity) {
+    if (dst.a != 255u) {
+        return blend_normal_translucent(dst, src, opacity);
+    }
+    uint a = effective_alpha(src.a, opacity);
+    if (a == 0u) {
+        return dst;
+    }
+    return uvec4(
+        lerp(dst.r, src.r, a),
+        lerp(dst.g, src.g, a),
+        lerp(dst.b, src.b, a),
+        255u);
+}
+
 // Mirrors `u8::saturating_add`.
 uint saturating_add(uint channel, uint amount) {
     return min(channel + amount, 255u);
@@ -62,8 +90,8 @@ uint saturating_sub(uint channel, uint amount) {
     return channel - min(channel, amount);
 }
 
-// Mirrors `vkxp_pixel::blend_add`.
-uvec4 blend_add(uvec4 dst, uvec4 src, uint opacity) {
+// Mirrors `vkxp_pixel::blend_add_translucent`.
+uvec4 blend_add_translucent(uvec4 dst, uvec4 src, uint opacity) {
     uint a = effective_alpha(src.a, opacity);
     return uvec4(
         saturating_add(dst.r, scale(src.r, a)),
@@ -72,8 +100,24 @@ uvec4 blend_add(uvec4 dst, uvec4 src, uint opacity) {
         dst.a);
 }
 
-// Mirrors `vkxp_pixel::blend_sub`.
-uvec4 blend_sub(uvec4 dst, uvec4 src, uint opacity) {
+// Mirrors `vkxp_pixel::blend_add`.
+uvec4 blend_add(uvec4 dst, uvec4 src, uint opacity) {
+    if (dst.a != 255u) {
+        return blend_add_translucent(dst, src, opacity);
+    }
+    uint a = effective_alpha(src.a, opacity);
+    if (a == 0u) {
+        return dst;
+    }
+    return uvec4(
+        saturating_add(dst.r, uint(share(int(src.r), a))),
+        saturating_add(dst.g, uint(share(int(src.g), a))),
+        saturating_add(dst.b, uint(share(int(src.b), a))),
+        dst.a);
+}
+
+// Mirrors `vkxp_pixel::blend_sub_translucent`.
+uvec4 blend_sub_translucent(uvec4 dst, uvec4 src, uint opacity) {
     uint a = effective_alpha(src.a, opacity);
     return uvec4(
         saturating_sub(dst.r, scale(src.r, a)),
@@ -82,12 +126,31 @@ uvec4 blend_sub(uvec4 dst, uvec4 src, uint opacity) {
         dst.a);
 }
 
+// Mirrors `vkxp_pixel::blend_sub`.
+uvec4 blend_sub(uvec4 dst, uvec4 src, uint opacity) {
+    if (dst.a != 255u) {
+        return blend_sub_translucent(dst, src, opacity);
+    }
+    uint a = effective_alpha(src.a, opacity);
+    if (a == 0u) {
+        return dst;
+    }
+    return uvec4(
+        saturating_sub(dst.r, uint(share(int(src.r), a))),
+        saturating_sub(dst.g, uint(share(int(src.g), a))),
+        saturating_sub(dst.b, uint(share(int(src.b), a))),
+        dst.a);
+}
+
 // Mirrors `vkxp_pixel::blend_color`.
 uvec4 blend_color(uvec4 dst, uvec4 color) {
+    if (color.a == 0u) {
+        return dst;
+    }
     return uvec4(
-        mix(dst.r, color.r, color.a),
-        mix(dst.g, color.g, color.a),
-        mix(dst.b, color.b, color.a),
+        lerp(dst.r, color.r, color.a),
+        lerp(dst.g, color.g, color.a),
+        lerp(dst.b, color.b, color.a),
         dst.a);
 }
 
@@ -103,13 +166,23 @@ uint offset(uint channel, int amount) {
     }
 }
 
-// Mirrors `vkxp_pixel::apply_tone`.
-uvec4 apply_tone(uvec4 dst, int red, int green, int blue, uint gray) {
+// Mirrors `vkxp_pixel::apply_gray`.
+uvec4 apply_gray(uvec4 dst, uint gray) {
     uint luma = (77u * dst.r + 150u * dst.g + 29u * dst.b) / 256u;
     return uvec4(
-        offset(mix(dst.r, luma, gray), red),
-        offset(mix(dst.g, luma, gray), green),
-        offset(mix(dst.b, luma, gray), blue),
+        mix(dst.r, luma, gray),
+        mix(dst.g, luma, gray),
+        mix(dst.b, luma, gray),
+        dst.a);
+}
+
+// Mirrors `vkxp_pixel::apply_tone`.
+uvec4 apply_tone(uvec4 dst, int red, int green, int blue, uint gray) {
+    uvec4 grayed = apply_gray(dst, gray);
+    return uvec4(
+        offset(grayed.r, red),
+        offset(grayed.g, green),
+        offset(grayed.b, blue),
         dst.a);
 }
 

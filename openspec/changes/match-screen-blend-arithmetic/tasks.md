@@ -6,7 +6,7 @@
 
 ## 2. Backends (`vkxp-compose-ref`, `vkxp-vk`)
 
-- [ ] 2.1 Mirror the formulas in the GLSL and update dependent tests. Verify: the CPU-against-GPU tests pass on llvmpipe and the workspace tests pass.
+- [x] 2.1 Mirror the formulas in the GLSL and update dependent tests. Verify: the CPU-against-GPU tests pass on llvmpipe and the workspace tests pass.
 
 ## 3. Integration check
 
