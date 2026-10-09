@@ -97,21 +97,25 @@ The toolchain is pinned in `rust-toolchain.toml`. The `openspec` CLI must be on 
 
 ## Dependency rules
 
-Two rules keep the guest/host boundary intact. A test in `xtask` checks them against
+Three rules keep the guest/host boundary intact. A test in `xtask` checks them against
 `cargo metadata` as part of the `test` step, and `cargo xtask deps` runs the check alone. A
 violation is reported with the full dependency path that causes it.
 
 1. **Guest crates do not reach host crates.** None of `vkxp-core`, `vkxp-image`, `vkxp-text`,
    `vkxp-vfs`, `vkxp-ruby-sys`, `vkxp-binding` may depend, directly or transitively, on
    `vkxp-vk`, `vkxp-audio` or `vkxp-host`.
-2. **`vkxp-core` stays pure.** Everything `vkxp-core` reaches, directly or transitively, must be
+2. **Host crates do not reach guest crates.** None of `vkxp-vk`, `vkxp-audio`, `vkxp-host`, and
+   not the reference compositor `vkxp-compose-ref` either, may depend, directly or transitively,
+   on a guest crate. The `vkxp` binary is exempt from both directions: it is the one crate that
+   depends on both sides and joins them.
+3. **`vkxp-core` stays pure.** Everything `vkxp-core` reaches, directly or transitively, must be
    on its allow-list: `vkxp-proto`, `vkxp-pixel` and the pure crates those need. The list is
    `CORE_ALLOW_LIST` in `xtask/src/deps.rs`; adding to it is a reviewed decision, and nothing
    that does file I/O or binds Ruby, Vulkan, windowing or audio belongs there.
 
 The check runs with every feature of every workspace crate enabled, so an optional dependency
 or an off-by-default feature cannot hide a forbidden path. Only normal and build dependencies
-count; dev-dependencies are not linked into the guest.
+count; dev-dependencies are not linked into either side.
 
 In addition, `vkxp-proto`, `vkxp-pixel`, `vkxp-core` and `vkxp-compose-ref` carry
 `#![forbid(unsafe_code)]`, so `unsafe` in them does not compile.

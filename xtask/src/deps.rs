@@ -1,15 +1,19 @@
 //! Dependency-direction rules, checked over `cargo metadata`.
 //!
-//! Two rules hold for the workspace:
+//! Three rules hold for the workspace:
 //!
 //! 1. No guest crate reaches a host crate, directly or transitively.
-//! 2. Everything `vkxp-core` reaches is on its allow-list of pure crates.
+//! 2. No host crate, and not the reference compositor, reaches a guest crate, directly or
+//!    transitively.
+//! 3. Everything `vkxp-core` reaches is on its allow-list of pure crates.
+//!
+//! The `vkxp` binary is on neither side: it is the one crate that may depend on both.
 //!
 //! The graph is taken with every feature of every workspace crate enabled, so a forbidden
 //! dependency cannot hide behind an optional dependency or a feature that is off by default.
 //!
-//! Only normal and build dependencies count. Dev-dependencies are not linked into the guest, so
-//! they do not cross the guest/host boundary.
+//! Only normal and build dependencies count. Dev-dependencies are not linked into either side,
+//! so they do not cross the guest/host boundary.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
@@ -31,6 +35,10 @@ pub const GUEST_CRATES: &[&str] = &[
 
 /// Crates that own the window, the GPU or the audio device.
 pub const HOST_CRATES: &[&str] = &["vkxp-vk", "vkxp-audio", "vkxp-host"];
+
+/// Crates that must not reach a guest crate: the host crates and the reference compositor,
+/// which runs on the host and in tests.
+pub const HOST_SIDE_CRATES: &[&str] = &["vkxp-vk", "vkxp-audio", "vkxp-host", "vkxp-compose-ref"];
 
 /// The crate that must stay free of I/O, Ruby and Vulkan.
 pub const CORE_CRATE: &str = "vkxp-core";
@@ -68,6 +76,9 @@ pub enum Violation {
     /// A guest crate reaches a host crate. The path starts at the guest crate and ends at the
     /// host crate.
     GuestReachesHost { path: Vec<String> },
+    /// A host crate or the reference compositor reaches a guest crate. The path starts at the
+    /// former and ends at the guest crate.
+    HostReachesGuest { path: Vec<String> },
     /// `vkxp-core` reaches a crate outside its allow-list. The path starts at `vkxp-core` and
     /// ends at the offending dependency.
     CoreDependency { path: Vec<String> },
@@ -79,6 +90,13 @@ impl fmt::Display for Violation {
             Violation::GuestReachesHost { path } => write!(
                 f,
                 "guest crate `{}` reaches host crate `{}`: {}",
+                path.first().map_or("", String::as_str),
+                path.last().map_or("", String::as_str),
+                path.join(" -> ")
+            ),
+            Violation::HostReachesGuest { path } => write!(
+                f,
+                "host-side crate `{}` reaches guest crate `{}`: {}",
                 path.first().map_or("", String::as_str),
                 path.last().map_or("", String::as_str),
                 path.join(" -> ")
@@ -112,7 +130,7 @@ fn paths_from(graph: &Graph, start: &str) -> BTreeMap<String, Vec<String>> {
     paths
 }
 
-/// Checks both rules and returns every violation, in a stable order.
+/// Checks every rule and returns every violation, in a stable order.
 pub fn check(graph: &Graph) -> Vec<Violation> {
     let mut violations = Vec::new();
     for guest in GUEST_CRATES {
@@ -120,6 +138,14 @@ pub fn check(graph: &Graph) -> Vec<Violation> {
         for host in HOST_CRATES {
             if let Some(path) = paths.get(*host) {
                 violations.push(Violation::GuestReachesHost { path: path.clone() });
+            }
+        }
+    }
+    for host in HOST_SIDE_CRATES {
+        let paths = paths_from(graph, host);
+        for guest in GUEST_CRATES {
+            if let Some(path) = paths.get(*guest) {
+                violations.push(Violation::HostReachesGuest { path: path.clone() });
             }
         }
     }
@@ -235,8 +261,9 @@ mod tests {
             ("vkxp-core", "vkxp-pixel"),
             ("vkxp-proto", "serde"),
             ("vkxp-host", "vkxp-vk"),
-            ("vkxp-host", "vkxp-core"),
+            ("vkxp-host", "vkxp-compose-ref"),
             ("vkxp-vk", "vkxp-proto"),
+            ("vkxp-compose-ref", "vkxp-pixel"),
         ]);
         assert_eq!(check(&graph), vec![]);
     }
@@ -274,9 +301,115 @@ mod tests {
     }
 
     #[test]
-    fn host_reaching_guest_is_allowed() {
+    fn direct_host_to_guest_edge_is_reported() {
+        for host in HOST_SIDE_CRATES {
+            let graph = graph(&[(host, "vkxp-image")]);
+            let violations = check(&graph);
+            assert_eq!(
+                violations,
+                vec![Violation::HostReachesGuest {
+                    path: path(&[host, "vkxp-image"]),
+                }]
+            );
+            assert_eq!(
+                violations[0].to_string(),
+                format!(
+                    "host-side crate `{host}` reaches guest crate `vkxp-image`: \
+                     {host} -> vkxp-image"
+                )
+            );
+        }
+    }
+
+    #[test]
+    fn transitive_host_to_guest_path_is_reported_in_full() {
+        let graph = graph(&[
+            ("vkxp-compose-ref", "helper"),
+            ("helper", "glue"),
+            ("glue", "vkxp-vfs"),
+        ]);
+        let violations = check(&graph);
+        assert_eq!(
+            violations,
+            vec![Violation::HostReachesGuest {
+                path: path(&["vkxp-compose-ref", "helper", "glue", "vkxp-vfs"]),
+            }]
+        );
+        assert_eq!(
+            violations[0].to_string(),
+            "host-side crate `vkxp-compose-ref` reaches guest crate `vkxp-vfs`: \
+             vkxp-compose-ref -> helper -> glue -> vkxp-vfs"
+        );
+    }
+
+    /// Every guest crate a host crate reaches is reported, each with its own shortest path.
+    #[test]
+    fn host_reaching_two_guest_crates_reports_both() {
         let graph = graph(&[("vkxp-host", "vkxp-binding"), ("vkxp-binding", "vkxp-core")]);
+        assert_eq!(
+            check(&graph),
+            vec![
+                Violation::HostReachesGuest {
+                    path: path(&["vkxp-host", "vkxp-binding", "vkxp-core"]),
+                },
+                Violation::HostReachesGuest {
+                    path: path(&["vkxp-host", "vkxp-binding"]),
+                },
+            ]
+        );
+    }
+
+    /// The binary joins the two sides; neither rule starts from it or passes through it.
+    #[test]
+    fn binary_may_depend_on_both_sides() {
+        let graph = graph(&[
+            ("vkxp", "vkxp-binding"),
+            ("vkxp", "vkxp-core"),
+            ("vkxp", "vkxp-host"),
+            ("vkxp", "vkxp-compose-ref"),
+            ("vkxp-binding", "vkxp-core"),
+            ("vkxp-host", "vkxp-vk"),
+        ]);
         assert_eq!(check(&graph), vec![]);
+    }
+
+    #[test]
+    fn metadata_dev_dependency_of_a_host_crate_on_a_guest_crate_is_allowed() {
+        let metadata = serde_json::json!({
+            "packages": [
+                { "id": "vk 0.1", "name": "vkxp-vk" },
+                { "id": "ref 0.1", "name": "vkxp-compose-ref" },
+                { "id": "core 0.1", "name": "vkxp-core" },
+                { "id": "image 0.1", "name": "vkxp-image" },
+            ],
+            "resolve": { "nodes": [
+                { "id": "vk 0.1", "deps": [
+                    { "pkg": "core 0.1", "dep_kinds": [{ "kind": "dev" }] },
+                ] },
+                { "id": "ref 0.1", "deps": [
+                    { "pkg": "image 0.1", "dep_kinds": [{ "kind": "dev" }] },
+                ] },
+                { "id": "core 0.1", "deps": [] },
+                { "id": "image 0.1", "deps": [] },
+            ] },
+        });
+        let graph = graph_from_metadata(&metadata).unwrap();
+        assert!(graph["vkxp-vk"].is_empty());
+        assert!(graph["vkxp-compose-ref"].is_empty());
+        assert_eq!(check(&graph), vec![]);
+
+        // The same edge as a normal dependency is the violation.
+        let mut linked = graph;
+        linked
+            .get_mut("vkxp-vk")
+            .unwrap()
+            .insert("vkxp-core".to_owned());
+        assert_eq!(
+            check(&linked),
+            vec![Violation::HostReachesGuest {
+                path: path(&["vkxp-vk", "vkxp-core"]),
+            }]
+        );
     }
 
     #[test]
@@ -297,7 +430,7 @@ mod tests {
     }
 
     #[test]
-    fn core_reaching_host_breaks_both_rules() {
+    fn core_reaching_host_breaks_two_rules() {
         let graph = graph(&[("vkxp-core", "vkxp-vk")]);
         assert_eq!(
             check(&graph),
@@ -390,7 +523,8 @@ mod tests {
     }
 
     /// Forbidden dependencies that are optional and switched off by default are still found,
-    /// for the guest/host rule and for the core allow-list, through real `cargo metadata`.
+    /// for both directions of the guest/host rule and for the core allow-list, through real
+    /// `cargo metadata`.
     #[test]
     fn inactive_optional_forbidden_dependencies_are_reported() {
         let directory = tempfile::tempdir().unwrap();
@@ -417,9 +551,19 @@ mod tests {
                      impure-io = { path = \"../impure-io\", optional = true }\n\n\
                      [features]\ndefault = []\nfiles = [\"dep:impure-io\"]\n",
                 ),
+                (
+                    "vkxp-host",
+                    "[dependencies]\nvkxp-vfs = { path = \"../vkxp-vfs\", optional = true }\n",
+                ),
+                (
+                    "vkxp-compose-ref",
+                    "[dependencies]\nglue = { path = \"../glue\" }\n\n\
+                     [build-dependencies]\nvkxp-vfs = { path = \"../vkxp-vfs\" }\n",
+                ),
                 ("vkxp-proto", ""),
                 ("vkxp-vk", ""),
                 ("vkxp-audio", ""),
+                ("vkxp-vfs", ""),
                 ("impure-io", ""),
             ],
         );
@@ -433,6 +577,12 @@ mod tests {
                 },
                 Violation::GuestReachesHost {
                     path: path(&["vkxp-text", "glue", "vkxp-audio"]),
+                },
+                Violation::HostReachesGuest {
+                    path: path(&["vkxp-host", "vkxp-vfs"]),
+                },
+                Violation::HostReachesGuest {
+                    path: path(&["vkxp-compose-ref", "vkxp-vfs"]),
                 },
                 Violation::CoreDependency {
                     path: path(&["vkxp-core", "impure-io"]),
@@ -455,14 +605,26 @@ mod tests {
                 ),
                 (
                     "vkxp-host",
-                    "[dependencies]\nvkxp-core = { path = \"../vkxp-core\", optional = true }\n",
+                    "[dependencies]\nvkxp-vk = { path = \"../vkxp-vk\", optional = true }\n\n\
+                     [dev-dependencies]\nvkxp-core = { path = \"../vkxp-core\" }\n",
+                ),
+                (
+                    "vkxp",
+                    "[dependencies]\nvkxp-core = { path = \"../vkxp-core\" }\n\
+                     vkxp-host = { path = \"../vkxp-host\" }\n",
                 ),
                 ("vkxp-proto", ""),
+                ("vkxp-vk", ""),
             ],
         );
         let graph = workspace_graph(directory.path()).unwrap();
         assert!(graph["vkxp-core"].contains("vkxp-proto"));
-        assert!(graph["vkxp-host"].contains("vkxp-core"));
+        assert!(graph["vkxp-host"].contains("vkxp-vk"));
+        assert!(
+            !graph["vkxp-host"].contains("vkxp-core"),
+            "development only"
+        );
+        assert!(graph["vkxp"].contains("vkxp-core") && graph["vkxp"].contains("vkxp-host"));
         assert_eq!(check(&graph), vec![]);
     }
 
@@ -473,7 +635,7 @@ mod tests {
     #[test]
     fn real_workspace_contains_every_named_crate() {
         let graph = real_graph();
-        for name in GUEST_CRATES.iter().chain(HOST_CRATES) {
+        for name in GUEST_CRATES.iter().chain(HOST_SIDE_CRATES).chain(&["vkxp"]) {
             assert!(
                 graph.contains_key(*name),
                 "`{name}` is missing from the workspace"

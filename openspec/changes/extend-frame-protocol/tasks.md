@@ -20,8 +20,8 @@
 
 ## 4. Dependency rule (`xtask`)
 
-- [ ] 4.1 Add the host-to-guest rule to the dependency check: `vkxp-vk`, `vkxp-audio`, `vkxp-host` and `vkxp-compose-ref` must not reach a guest crate; the `vkxp` binary is exempt. Verify: unit tests feed synthetic graphs (a forbidden direct edge, a forbidden transitive path, a development-only edge that is allowed, the binary depending on both sides) and assert the reported paths; `cargo xtask deps` passes on the workspace.
-- [ ] 4.2 Describe the rule in the "Dependency rules" section of `README.md`. Verify: the README names the four crates and the exemption of the binary.
+- [x] 4.1 Add the host-to-guest rule to the dependency check: `vkxp-vk`, `vkxp-audio`, `vkxp-host` and `vkxp-compose-ref` must not reach a guest crate; the `vkxp` binary is exempt. Verify: unit tests feed synthetic graphs (a forbidden direct edge, a forbidden transitive path, a development-only edge that is allowed, the binary depending on both sides) and assert the reported paths; `cargo xtask deps` passes on the workspace.
+- [x] 4.2 Describe the rule in the "Dependency rules" section of `README.md`. Verify: the README names the four crates and the exemption of the binary.
 
 ## 5. Integration check
 
