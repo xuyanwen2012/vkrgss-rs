@@ -24,7 +24,7 @@ const MAX_REPEATS: i64 = 64;
 const AXIS_REPEATS: i64 = 8;
 
 /// Most pixels a pre-tiled bitmap may have. A plane that would need more, because it is
-/// zoomed out very far, is not drawn.
+/// zoomed out very far, draws every repeat from its bitmap instead.
 const MAX_PRETILED_PIXELS: i64 = 1 << 22;
 
 /// The pre-tiled bitmap: `src` repeated over `width` by `height`.
@@ -106,7 +106,8 @@ impl Plane {
     }
 
     /// The size of the pre-tiled bitmap a plane showing a bitmap of `size` inside `level`
-    /// draws from, or `None` when it draws from the bitmap itself or draws nothing.
+    /// draws from, or `None` when it draws from the bitmap itself or draws nothing. The
+    /// pre-tiled bitmap only saves quads, so one that would be too large is not used.
     fn pretiled_size(&self, level: &Level, size: Rect) -> Option<(i32, i32)> {
         let (across, down) = self.tiling(level, size)?;
         if across.copies == 1 && down.copies == 1 {
@@ -124,12 +125,8 @@ impl Plane {
         }
         let width = across.copies * i64::from(size.width);
         let height = down.copies * i64::from(size.height);
-        if width * height > MAX_PRETILED_PIXELS {
-            // A size no bitmap can have: the plane goes without and is not drawn.
-            return Some((i32::MAX, i32::MAX));
-        }
         // Both are at most their product.
-        Some((width as i32, height as i32))
+        (width * height <= MAX_PRETILED_PIXELS).then_some((width as i32, height as i32))
     }
 
     /// Brings the pre-tiled bitmap up to date, if this frame draws from one. An invisible
@@ -177,16 +174,15 @@ impl Assembly<'_> {
         let Some((mut across, mut down)) = plane.tiling(level, size) else {
             return;
         };
-        let bitmap = match plane.pretiled_size(level, size) {
+        // Without a pre-tiled bitmap, also when one could not be made, every repeat is drawn
+        // from the source.
+        let pretiled = plane.pretiled_size(level, size);
+        let bitmap = match pretiled.and(plane.pretiled.bitmap) {
+            Some(bitmap) => bitmap,
             None => {
                 (across.copies, down.copies) = (1, 1);
                 source
             }
-            // A pre-tiled bitmap that could not be made leaves the plane undrawn.
-            Some(_) => match plane.pretiled.bitmap {
-                Some(bitmap) => bitmap,
-                None => return,
-            },
         };
         let Ok(tile) = self.bitmaps.rect(bitmap) else {
             return;
@@ -643,16 +639,35 @@ mod tests {
     }
 
     #[test]
-    fn a_plane_that_would_need_too_large_a_copy_is_not_drawn() {
-        // A tile of one pixel has an exact step, but a copy of 1024 texels per pixel would
-        // be far too large.
-        let mut stage = Stage::new();
+    fn a_plane_that_would_need_too_large_a_copy_draws_every_repeat_from_its_bitmap() {
+        // Tiles of 2 by 2 pixels have an exact step, but copies of 1024 texels a side for
+        // them would be far too large: the plane goes without.
+        let mut stage = Stage::sized(32, 32);
         let bitmap = pattern(&mut stage, 1024, 1024);
         let id = plane(&mut stage, bitmap);
         let zoomed = stage.scene.plane_mut(id).unwrap();
-        (zoomed.zoom_x, zoomed.zoom_y) = (1.0 / 1024.0, 1.0 / 1024.0);
-        assert!(all(&stage.frame(), BLACK));
+        (zoomed.zoom_x, zoomed.zoom_y) = (2.0 / 1024.0, 2.0 / 1024.0);
+        (zoomed.ox, zoomed.oy) = (1, 0);
+        let packet = stage.scene.extract(&mut stage.bitmaps);
         assert_eq!(stage.bitmaps.len(), 1);
+        assert_eq!(quads(&packet), 17 * 16);
+        let frame = stage.render(&packet).unwrap();
+        assert!(shows(&frame, |x, y| texel((x + 1) % 2 * 512, y % 2 * 512)));
+
+        // A tile of one pixel on the whole screen: a quad for every pixel.
+        let mut stage = Stage::new();
+        let bitmap = stage.solid(32, 32, RED);
+        let id = plane(&mut stage, bitmap);
+        let zoomed = stage.scene.plane_mut(id).unwrap();
+        (zoomed.zoom_x, zoomed.zoom_y) = (1.0 / 32.0, 1.0 / 32.0);
+        let packet = stage.scene.extract(&mut stage.bitmaps);
+        assert_eq!(stage.bitmaps.len(), 1);
+        assert_eq!(quads(&packet), 640 * 480);
+        let covered = packet.ops.iter().all(|op| match op {
+            vkxp_proto::Op::Quad(quad) => (quad.clip.width, quad.clip.height) == (1, 1),
+            _ => true,
+        });
+        assert!(covered);
 
         // Zoomed out less far, each screen pixel takes every fourth texel of a copy.
         let mut stage = Stage::new();
