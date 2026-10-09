@@ -18,6 +18,17 @@ changing anything; it records decisions that are settled.
   workspace tests, `openspec validate --all`).
 - Chat with the owner in Chinese; everything written to the repository stays English.
 
+## Scope and proportion
+
+- The requirements and scenarios of the change are the acceptance criteria, for the author and
+  for the reviewer alike. Meet them; do not read them more strictly than they are written.
+- Do not add machinery that the change's `design.md` does not name: a second implementation
+  next to a library, a validator in front of one, a fallback path. If a requirement seems to
+  need it, or a review finding asks for it, record the question under a "Follow-ups" heading
+  at the end of the change's `design.md` instead of building it, and go on.
+- Old games must run. Where the original runtime, or the decoders and libraries of its time,
+  accept an input, accept it too.
+
 ## Reference material (outside the repository)
 
 The workspace directory that holds the main checkout (`vkxp/`) also holds `ref/` and `games/`.
