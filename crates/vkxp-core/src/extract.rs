@@ -1544,7 +1544,7 @@ mod tests {
     }
 
     #[test]
-    fn a_flash_decays_linearly_with_each_update() {
+    fn a_flash_decays_with_each_update() {
         let mut stage = Stage::sized(4, 4);
         let id = dot(&mut stage);
         let white = Color::new(255.0, 255.0, 255.0, 200.0);
@@ -1561,10 +1561,10 @@ mod tests {
         stage.scene.sprite_mut(id).unwrap().update();
         assert_eq!(stage.frame().pixel(0, 0), BLACK);
 
-        // The alpha is rounded down: 100 * 2 / 3 and 100 * 1 / 3.
-        let white = Color::new(255.0, 255.0, 255.0, 100.0);
-        stage.scene.sprite_mut(id).unwrap().flash(Some(white), 3);
-        for alpha in [100, 66, 33] {
+        // Each step is rounded down from the one before: 128 * 4 / 5, 102 * 3 / 4, ...
+        let white = Color::new(255.0, 255.0, 255.0, 128.0);
+        stage.scene.sprite_mut(id).unwrap().flash(Some(white), 5);
+        for alpha in [128, 102, 76, 50, 25] {
             assert_eq!(stage.frame().pixel(0, 0), whitened(alpha), "alpha {alpha}");
             stage.scene.sprite_mut(id).unwrap().update();
         }
@@ -1572,7 +1572,7 @@ mod tests {
     }
 
     #[test]
-    fn the_larger_alpha_of_flash_and_own_colour_wins() {
+    fn the_larger_alpha_of_flash_and_own_colour_wins_and_a_tie_goes_to_the_flash() {
         let mut stage = Stage::sized(4, 4);
         let id = dot(&mut stage);
         let own = vkxp_pixel::blend_color([0, 0, 0, 255], [255, 0, 0, 120]);
@@ -1581,6 +1581,14 @@ mod tests {
         sprite.flash(Some(Color::new(255.0, 255.0, 255.0, 200.0)), 4);
         // Flash alphas 200 and 150 exceed 120; 100 and 50 do not.
         for expected in [whitened(200), whitened(150), own, own, own] {
+            assert_eq!(stage.frame().pixel(0, 0), expected);
+            stage.scene.sprite_mut(id).unwrap().update();
+        }
+
+        // 240, 180 and 120: the last equals the colour's alpha and still shows.
+        let sprite = stage.scene.sprite_mut(id).unwrap();
+        sprite.flash(Some(Color::new(255.0, 255.0, 255.0, 240.0)), 4);
+        for expected in [whitened(240), whitened(180), whitened(120), own] {
             assert_eq!(stage.frame().pixel(0, 0), expected);
             stage.scene.sprite_mut(id).unwrap().update();
         }
@@ -1610,12 +1618,148 @@ mod tests {
         assert_eq!(stage.frame(), first);
         assert_eq!(stage.frame(), first);
 
-        // A new flash replaces the running one, and a duration of 0 ends it.
+        // A new flash replaces the running one, and one of duration 0 shows until the next
+        // update.
         stage.scene.sprite_mut(id).unwrap().update();
         stage.scene.sprite_mut(id).unwrap().flash(Some(white), 2);
         assert_eq!(stage.frame().pixel(0, 0), whitened(200));
         stage.scene.sprite_mut(id).unwrap().flash(Some(white), 0);
+        assert_eq!(stage.frame().pixel(0, 0), whitened(200));
+        assert_eq!(stage.frame().pixel(0, 0), whitened(200));
+        stage.scene.sprite_mut(id).unwrap().update();
         assert_eq!(stage.frame().pixel(0, 0), BLACK);
+    }
+
+    const MEASURED: &str = include_str!("../tests/data/flash-bush-samples.txt");
+    /// The background of the measured frames.
+    const BACKDROP: Rgba = [88, 120, 200, 255];
+
+    /// The lines of [`MEASURED`] that begin with `kind`, as what follows it up to the colon
+    /// and what follows the colon.
+    fn measured(kind: &'static str) -> impl Iterator<Item = (&'static str, &'static str)> {
+        MEASURED
+            .lines()
+            .filter_map(move |line| line.strip_prefix(kind)?.split_once(':'))
+    }
+
+    fn rgb(text: &str) -> Rgba {
+        let channels: Vec<u8> = text.split(',').map(|c| c.parse().unwrap()).collect();
+        [channels[0], channels[1], channels[2], 255]
+    }
+
+    /// A stage with the measured background behind everything.
+    fn measured_stage() -> Stage {
+        let mut stage = Stage::sized(8, 80);
+        let backdrop = stage.solid(8, 80, BACKDROP);
+        sprite(&mut stage, backdrop, 0, 0);
+        stage
+    }
+
+    /// The "flash" lines of `flash-bush-samples.txt`: an opaque grey pixel, flashed as the
+    /// row number says, before any update and after each of twelve.
+    #[test]
+    fn flashes_show_the_measured_pixels() {
+        let red = Some(Color::new(255.0, 0.0, 0.0, 255.0));
+        let mut checked = 0;
+        for (row, pixels) in measured("flash ") {
+            let row: u32 = row.parse().unwrap();
+            let mut stage = measured_stage();
+            let grey = stage.solid(1, 1, [100, 100, 100, 255]);
+            let viewport = stage.scene.create_viewport(Rect::new(0, 0, 8, 8)).unwrap();
+            stage.scene.set_viewport_z(viewport, 1).unwrap();
+            let in_viewport = matches!(row, 6 | 7).then_some(viewport);
+            let id = sprite_in(&mut stage, in_viewport, grey, 2, 2);
+            stage.scene.set_sprite_z(id, 1).unwrap();
+            let subject = stage.scene.sprite_mut(id).unwrap();
+            match row {
+                0 | 13 => subject.flash(red, 8),
+                1 => subject.flash(Some(Color::new(0.0, 255.0, 0.0, 128.0)), 5),
+                2 => subject.flash(None, 4),
+                3 => {
+                    subject.color = Color::new(0.0, 0.0, 255.0, 100.0);
+                    subject.flash(Some(Color::new(255.0, 255.0, 255.0, 200.0)), 10);
+                }
+                4 => subject.flash(red, 1),
+                6 => stage.scene.viewport_mut(viewport).unwrap().flash(red, 8),
+                7 => stage.scene.viewport_mut(viewport).unwrap().flash(None, 4),
+                9 => {
+                    subject.tone = Tone::new(50.0, -50.0, 0.0, 128.0);
+                    subject.flash(red, 8);
+                }
+                10 => {
+                    subject.set_opacity(128);
+                    subject.flash(red, 8);
+                }
+                11 => subject.flash(Some(Color::new(255.0, 255.0, 255.0, 255.0)), 16),
+                12 => subject.flash(red, 8),
+                14 => {
+                    subject.blend_type = 1;
+                    subject.flash(red, 8);
+                }
+                15 => subject.flash(red, 0),
+                _ => panic!("no setup for flash row {row}"),
+            }
+            for (updates, expected) in pixels.split_whitespace().enumerate() {
+                if row == 12 && updates == 4 {
+                    let blue = Some(Color::new(0.0, 0.0, 255.0, 255.0));
+                    stage.scene.sprite_mut(id).unwrap().flash(blue, 4);
+                }
+                assert_eq!(
+                    stage.frame().pixel(2, 2),
+                    rgb(expected),
+                    "flash row {row} after {updates} updates"
+                );
+                if row != 13 {
+                    stage.scene.sprite_mut(id).unwrap().update();
+                    stage.scene.viewport_mut(viewport).unwrap().update();
+                }
+            }
+            checked += 1;
+        }
+        assert!(checked >= 12);
+    }
+
+    /// The "bush" lines of `flash-bush-samples.txt`: a sprite 32 rows high of one colour,
+    /// set up as the line says, and the colour of its screen rows as runs.
+    #[test]
+    fn bush_depths_show_the_measured_rows() {
+        let mut checked = 0;
+        for (setup, runs) in measured("bush ") {
+            // The number that follows `name` in the setup, if the setup names it.
+            let value = |name: &str| -> Option<f64> {
+                let rest = &setup[setup.find(name)? + name.len()..];
+                rest.split_whitespace()
+                    .next()?
+                    .trim_end_matches(',')
+                    .parse()
+                    .ok()
+            };
+            let mut stage = measured_stage();
+            let alpha = value("pixel alpha").unwrap_or(255.0) as u8;
+            let bitmap = stage.solid(4, 32, [100, 155, 128, alpha]);
+            let id = sprite(&mut stage, bitmap, 2, 0);
+            let subject = stage.scene.sprite_mut(id).unwrap();
+            subject.bush_depth = value("depth").unwrap() as i32;
+            subject.set_opacity(value("opacity").unwrap_or(255.0) as i32);
+            subject.zoom_y = value("zoom_y").unwrap_or(1.0);
+            subject.src_rect.height = value("src_rect height").unwrap_or(32.0) as i32;
+            let frame = stage.frame();
+
+            let runs: Vec<(u32, Rgba)> = runs
+                .split_whitespace()
+                .map(|run| {
+                    let (first, colour) = run.split_once(':').unwrap();
+                    (first.parse().unwrap(), rgb(colour))
+                })
+                .collect();
+            for y in 0..80 {
+                let run = runs.iter().rev().find(|run| run.0 <= y).unwrap();
+                assert_eq!(frame.pixel(3, y), run.1, "row {y} of bush {setup}");
+            }
+            assert_eq!(runs.last().unwrap().1, BACKDROP);
+            checked += 1;
+        }
+        assert!(checked >= 8);
     }
 
     /// The viewport of the viewport scenarios, 100, 50, 200, 100, holding a sprite at 0, 0
@@ -1825,7 +1969,8 @@ mod tests {
         assert_eq!(frame.pixel(1, 2), own(GREEN));
         assert_eq!(frame.pixel(2, 0), BLUE);
 
-        // A flash of alpha 200 for 4 updates: 200 and 150 exceed the colour's 100.
+        // A flash of alpha 200 for 4 updates: 200 and 150 exceed the colour's 100, and the
+        // third step equals it, which still shows the flash.
         let white = Color::new(255.0, 255.0, 255.0, 200.0);
         stage
             .scene
@@ -1839,7 +1984,7 @@ mod tests {
             flashed(200),
             "no update, no progress"
         );
-        for expected in [flashed(150), own(RED), own(RED), own(RED)] {
+        for expected in [flashed(150), flashed(100), own(RED), own(RED)] {
             stage.scene.viewport_mut(viewport).unwrap().update();
             assert_eq!(stage.frame().pixel(0, 0), expected);
         }

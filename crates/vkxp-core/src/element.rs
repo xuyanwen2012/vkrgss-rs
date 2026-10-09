@@ -28,62 +28,65 @@ pub(crate) struct Order {
 /// A flash of a sprite or a viewport: a colour, or none, for a number of updates.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub(crate) struct Flash {
+    /// Whether the flash shows: from its start until the update that ends it.
+    shown: bool,
     color: Option<Color>,
-    duration: u32,
-    elapsed: u32,
+    /// The alpha the colour is laid on with now.
+    alpha: u8,
+    /// The updates the flash still lasts.
+    remaining: u32,
 }
 
 impl Flash {
-    /// Starts a flash, replacing a running one. A duration of 0 or less is no flash.
+    /// Starts a flash, replacing a running one. It shows until `duration` updates have
+    /// passed, and one of duration 0 or less until the first update.
     fn start(&mut self, color: Option<Color>, duration: i32) {
         *self = Flash {
+            shown: true,
             color,
-            duration: duration.max(0).unsigned_abs(),
-            elapsed: 0,
+            alpha: color.map_or(0, |color| color.to_proto().a),
+            remaining: duration.max(0).unsigned_abs(),
         };
     }
 
-    /// One update of the element.
+    /// One update of the element. As measured on the original runtime, with `r` updates
+    /// remaining the alpha becomes `alpha * (r - 1) / r`, rounded down, and the update that
+    /// leaves none ends the flash.
     fn advance(&mut self) {
-        if self.running() {
-            self.elapsed += 1;
+        if !self.shown {
+            return;
         }
-    }
-
-    fn running(&self) -> bool {
-        self.elapsed < self.duration
+        if self.remaining <= 1 {
+            *self = Flash::default();
+        } else {
+            let (alpha, remaining) = (u32::from(self.alpha), self.remaining);
+            // At most the alpha it was.
+            self.alpha = (alpha * (remaining - 1) / remaining) as u8;
+            self.remaining -= 1;
+        }
     }
 
     /// Whether a flash without a colour is running, which hides the element.
     pub(crate) fn hides(&self) -> bool {
-        self.running() && self.color.is_none()
+        self.shown && self.color.is_none()
     }
 
-    /// The colour of a running flash with its current alpha: after `k` updates of a flash of
-    /// duration `d` and alpha `A` it is `A * (d - k) / d`, rounded down.
-    ///
-    /// PLACEHOLDER: the linear decay and its rounding are not yet checked against the original
-    /// runtime.
+    /// The colour of a running flash with its current alpha.
     fn color(&self) -> Option<vkxp_proto::Color> {
-        if !self.running() {
+        if !self.shown {
             return None;
         }
         let mut color = self.color?.to_proto();
-        let remaining = u64::from(self.duration - self.elapsed);
-        // The quotient is at most the alpha it started from.
-        color.a = (u64::from(color.a) * remaining / u64::from(self.duration)) as u8;
+        color.a = self.alpha;
         Some(color)
     }
 
     /// The colour an element with the colour `own` and this flash is drawn with: the flash
-    /// colour while its current alpha exceeds the alpha of `own`, otherwise `own`.
-    ///
-    /// PLACEHOLDER: which of the two colours wins is not yet checked against the original
-    /// runtime.
+    /// colour while its current alpha is at least the alpha of `own`, otherwise `own`.
     pub(crate) fn effective_color(&self, own: Color) -> vkxp_proto::Color {
         let own = own.to_proto();
         match self.color() {
-            Some(flash) if flash.a > own.a => flash,
+            Some(flash) if flash.a >= own.a => flash,
             _ => own,
         }
     }
@@ -178,8 +181,8 @@ impl Sprite {
     }
 
     /// Starts a flash that lasts `duration` updates: the sprite shows `color` with its alpha
-    /// falling to 0, or is hidden when `color` is `None`. A duration of 0 or less ends a
-    /// running flash.
+    /// falling to 0, or is hidden when `color` is `None`. A duration of 0 or less lasts until
+    /// the next update.
     pub fn flash(&mut self, color: Option<Color>, duration: i32) {
         self.flash.start(color, duration);
     }

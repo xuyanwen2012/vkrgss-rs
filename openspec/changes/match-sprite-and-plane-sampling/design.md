@@ -44,3 +44,15 @@
 ## Follow-ups
 
 - Exact rotation; windows.
+- An unrotated, zoomed sprite whose source rectangle reaches outside its bitmap: the quad's
+  source must lie inside the bitmap, so the rectangle is cut and the stretch starts anew at
+  the cut corner. Place and size are those of the uncut stretch, but a texel may be one off.
+  What the original draws there is not measured; an exact form would need a stretch quad that
+  can name a source rectangle outside the bitmap.
+- A plane whose stretch step is not exact (`(w << 20) % tw != 0`) cannot draw from the
+  pre-tiled bitmap and is one quad per repetition. Above 4096 quads (tiles of a few pixels)
+  it is not drawn, as a plane that would need too large a pre-tiled bitmap already was not.
+  Pre-tiling the stretched tile instead of the source would lift both limits; it needs the
+  bitmap `stretch_blt` to follow the same rule, which the parallel change brings.
+- A turned sprite with a zoom of 0 or less keeps what it drew before (nothing at 0, the
+  flipped image below); only the unrotated case is measured.
