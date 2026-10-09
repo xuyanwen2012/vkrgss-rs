@@ -12,6 +12,7 @@ use swash::zeno::Format;
 use crate::face::LoadedFace;
 use crate::glyph_cache::{Glyph, GlyphCache, GlyphKey};
 use crate::index::FontIndex;
+use crate::line_box::{LineBox, LineBoxTable};
 use crate::sources::FontSources;
 use crate::substitution::{SubstitutionTable, family_key};
 
@@ -79,6 +80,17 @@ pub struct ResolvedFace {
     pub italic: bool,
 }
 
+/// What a request's family names and style select.
+#[derive(Debug, Clone, Copy)]
+struct Selected {
+    /// The loaded face.
+    face: usize,
+    /// The line box of the family the face replaces, when the face was found through the
+    /// substitution table and that family's line box is known. `None` sets the text in the
+    /// face's own line box.
+    line_box: Option<LineBox>,
+}
+
 /// A character resolved against a selected face and style.
 #[derive(Debug, Clone, Copy)]
 struct CharGlyph {
@@ -105,6 +117,7 @@ struct Placed {
 pub struct TextEngine {
     index: FontIndex,
     substitutions: SubstitutionTable,
+    line_boxes: LineBoxTable,
     /// Family keys of the fallback families, in order.
     fallback_families: Vec<String>,
     /// Contents of the font files in use. `None` for a file that could not be read.
@@ -113,8 +126,8 @@ pub struct TextEngine {
     /// Font index position and bold request to the loaded face. Both requests share a face
     /// unless the font has a weight axis.
     face_ids: HashMap<(usize, bool), Option<usize>>,
-    /// Requested family names to the selected loaded face, one map per style.
-    requests: [HashMap<Vec<String>, Option<usize>>; 4],
+    /// Requested family names to what they select, one map per style.
+    requests: [HashMap<Vec<String>, Option<Selected>>; 4],
     /// Selected face, style and character to the glyph that draws the character.
     chars: HashMap<(usize, u8, char), CharGlyph>,
     /// Characters that neither the selected nor a fallback face had, to the font index
@@ -154,6 +167,7 @@ impl TextEngine {
         Self {
             index: FontIndex::new(sources),
             substitutions: SubstitutionTable::new(&sources.substitutions),
+            line_boxes: LineBoxTable::new(&sources.line_boxes),
             fallback_families,
             files: HashMap::new(),
             faces: Vec::new(),
@@ -189,7 +203,7 @@ impl TextEngine {
     /// has no usable font at all.
     pub fn resolve(&mut self, request: &TextRequest) -> Option<ResolvedFace> {
         let selected = self.selected_face(request)?;
-        let face = &self.faces[selected];
+        let face = &self.faces[selected.face];
         let record = self.index.record(face.record);
         Some(ResolvedFace {
             family: record.families.first().cloned().unwrap_or_default(),
@@ -221,8 +235,9 @@ impl TextEngine {
         if mask.coverage.is_empty() {
             return mask;
         }
-        let pixels_per_em = self.faces[selected].pixels_per_em(request.size);
-        let baseline = self.faces[selected].baseline(request.size);
+        let face = &self.faces[selected.face];
+        let pixels_per_em = face.pixels_per_em(request.size, selected.line_box);
+        let baseline = face.baseline(request.size, selected.line_box);
         let run = std::mem::take(&mut self.run);
         for placed in &run {
             let glyph = self.glyph(placed.face, pixels_per_em, placed.glyph);
@@ -244,15 +259,16 @@ impl TextEngine {
         self.glyphs.set_limit(bytes);
     }
 
-    /// Fills `self.run` with the glyphs of `text` and returns the selected face and the
-    /// width. `None` when the size is zero or the engine has no usable font.
-    fn layout(&mut self, request: &TextRequest, text: &str) -> Option<(usize, u32)> {
+    /// Fills `self.run` with the glyphs of `text` and returns what the request selects and
+    /// the width. `None` when the size is zero or the engine has no usable font.
+    fn layout(&mut self, request: &TextRequest, text: &str) -> Option<(Selected, u32)> {
         self.run.clear();
         if request.size == 0 {
             return None;
         }
-        let selected = self.selected_face(request)?;
-        let pixels_per_em = self.faces[selected].pixels_per_em(request.size);
+        let selection = self.selected_face(request)?;
+        let selected = selection.face;
+        let pixels_per_em = self.faces[selected].pixels_per_em(request.size, selection.line_box);
         let style = style_bits(request.bold, request.italic);
         let mut x = 0u32;
         for ch in text.chars() {
@@ -277,11 +293,11 @@ impl TextEngine {
             let advance = (found.advance * scale).round().max(0.0) as u32;
             x = x.saturating_add(advance);
         }
-        Some((selected, x))
+        Some((selection, x))
     }
 
-    /// The loaded face for the request's family names and style.
-    fn selected_face(&mut self, request: &TextRequest) -> Option<usize> {
+    /// The loaded face and line box for the request's family names and style.
+    fn selected_face(&mut self, request: &TextRequest) -> Option<Selected> {
         let style = usize::from(style_bits(request.bold, request.italic));
         if let Some(&face) = self.requests[style].get(request.families.as_slice()) {
             return face;
@@ -291,22 +307,30 @@ impl TextEngine {
         face
     }
 
-    fn select_face(&mut self, names: &[String], bold: bool, italic: bool) -> Option<usize> {
+    fn select_face(&mut self, names: &[String], bold: bool, italic: bool) -> Option<Selected> {
+        let own = |face| Selected {
+            face,
+            line_box: None,
+        };
         for name in names {
             let key = family_key(name);
             if let Some(face) = self.family_face(&key, bold, italic) {
-                return Some(face);
+                return Some(own(face));
             }
             for replacement in self.substitutions.replacements(&key).to_vec() {
                 if let Some(face) = self.family_face(&replacement, bold, italic) {
-                    return Some(face);
+                    // The replacement is set in the line box of the name it stands in for.
+                    return Some(Selected {
+                        face,
+                        line_box: self.line_boxes.get(&key),
+                    });
                 }
             }
         }
         for position in 0..self.fallback_families.len() {
             let key = self.fallback_families[position].clone();
             if let Some(face) = self.family_face(&key, bold, italic) {
-                return Some(face);
+                return Some(own(face));
             }
         }
         // None of the fallback families is installed: any font is better than no text.
@@ -315,6 +339,7 @@ impl TextEngine {
             .to_vec()
             .into_iter()
             .find_map(|record| self.load(record, bold))
+            .map(own)
     }
 
     /// The loaded face of the family `key` that suits the style best.

@@ -4,6 +4,8 @@ use std::sync::Arc;
 
 use swash::{CacheKey, FontRef, GlyphId, NormalizedCoord, Setting, tag_from_bytes};
 
+use crate::line_box::LineBox;
+
 /// The weights a variable font is set to for a regular and for a bold request.
 const REGULAR_WEIGHT: f32 = 400.0;
 const BOLD_WEIGHT: f32 = 700.0;
@@ -89,14 +91,22 @@ impl LoadedFace {
         self.font().glyph_metrics(&self.coords).advance_width(glyph)
     }
 
-    /// Pixels per em at which the face's line box is `size` pixels high.
-    pub(crate) fn pixels_per_em(&self, size: u32) -> f32 {
-        size as f32 * self.units_per_em / (self.ascent + self.descent)
+    /// Pixels per em at which the line box the face is set in is `size` pixels high: the
+    /// replaced family's `line_box`, or the face's own without one.
+    pub(crate) fn pixels_per_em(&self, size: u32, line_box: Option<LineBox>) -> f32 {
+        match line_box {
+            Some(line_box) => line_box.pixels_per_em(size),
+            None => size as f32 * self.units_per_em / (self.ascent + self.descent),
+        }
     }
 
-    /// Distance in whole pixels from the top of a line box `size` pixels high to the baseline.
-    pub(crate) fn baseline(&self, size: u32) -> i32 {
-        (size as f32 * self.ascent / (self.ascent + self.descent)).round() as i32
+    /// Distance in whole pixels from the top of a line box `size` pixels high to the baseline,
+    /// for the replaced family's `line_box` or the face's own without one.
+    pub(crate) fn baseline(&self, size: u32, line_box: Option<LineBox>) -> i32 {
+        match line_box {
+            Some(line_box) => line_box.baseline(size),
+            None => (size as f32 * self.ascent / (self.ascent + self.descent)).round() as i32,
+        }
     }
 }
 

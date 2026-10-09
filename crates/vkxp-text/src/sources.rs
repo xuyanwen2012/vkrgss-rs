@@ -2,6 +2,8 @@
 
 use std::path::PathBuf;
 
+use crate::line_box::LineBox;
+
 /// Which fonts count as the system's.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum SystemFonts {
@@ -26,6 +28,9 @@ pub struct FontSources {
     /// Substitutions tried before the built-in ones: a family name and the families that may
     /// replace it, in order of preference.
     pub substitutions: Vec<(String, Vec<String>)>,
+    /// Line boxes that take precedence over the built-in ones: a family name and the line box
+    /// a font is set in when it replaces that family. See [`crate::default_line_box`].
+    pub line_boxes: Vec<(String, LineBox)>,
     /// Families used when no requested name matches and for characters the selected font
     /// lacks, in order. `None` keeps [`crate::DEFAULT_FALLBACK_FAMILIES`].
     pub fallback_families: Option<Vec<String>>,
