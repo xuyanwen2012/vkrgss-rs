@@ -1,21 +1,24 @@
 //! Planes: a bitmap repeated without end over an area, drawn as one quad per repeat.
 //!
-//! Every repeat is a quad over the whole bitmap. The repeats share the linear part of the
-//! transform and differ in a translation that is a whole multiple of the bitmap's width or
-//! height, so each screen pixel lies in the source rectangle of exactly one of them: repeats
-//! meet without gaps or overlaps at any zoom.
+//! As measured on the original runtime, a plane repeats a tile: its bitmap stretched to
+//! `floor(width * zoom_x)` by `floor(height * zoom_y)` whole pixels by the rule of a stretch
+//! quad. The tiles lie on a grid of whole screen pixels that the origins of the plane and of
+//! its viewport shift, pixel by pixel whatever the zoom. Every repeat that shows is a stretch
+//! quad over the whole bitmap.
 //!
-//! A bitmap that is small against the area would need many quads. The plane then draws from a
-//! bitmap of the scene's own that repeats the source a few times, kept in the bitmap arena and
-//! drawn again only when the source changes.
+//! A bitmap that is small against the area would need many quads. Where that leaves every
+//! pixel as it is, the plane then draws from a bitmap of the scene's own that repeats the
+//! source a few times, kept in the bitmap arena and drawn again only when the source changes.
+//! It does so along an axis whose stretch step is exact: only then is a stretch of several
+//! copies the same as several stretches of one.
 
-use vkxp_proto::{BitmapId, Fixed, Op, Quad, Sampling, Transform};
+use vkxp_proto::{BitmapId, STRETCH_FRAC_BITS};
 
 use crate::extract::{Assembly, Level, Look, blend_mode};
-use crate::geometry::Geometry;
+use crate::geometry::stretch_length;
 use crate::{BitmapError, Bitmaps, Plane, Rect};
 
-/// Most quads one plane is drawn with.
+/// Most quads a plane is drawn with when it can draw from a pre-tiled bitmap.
 const MAX_REPEATS: i64 = 64;
 /// Most repeats along one axis once the plane draws from a pre-tiled bitmap.
 const AXIS_REPEATS: i64 = 8;
@@ -23,6 +26,10 @@ const AXIS_REPEATS: i64 = 8;
 /// Most pixels a pre-tiled bitmap may have. A plane that would need more, because it is
 /// zoomed out very far, is not drawn.
 const MAX_PRETILED_PIXELS: i64 = 1 << 22;
+
+/// Most quads a plane is drawn with at all. A plane that would need more, because its tile
+/// is a few pixels small at a zoom that allows no pre-tiled bitmap, is not drawn.
+const MAX_QUADS: i64 = 4096;
 
 /// The pre-tiled bitmap: `src` repeated over `width` by `height`.
 fn draw_pretiled(
@@ -50,74 +57,83 @@ fn draw_pretiled(
     Ok(())
 }
 
-/// An upper bound of the number of repeats of a tile `size` texels long that `pixels` screen
-/// pixels in a row can show, when one screen pixel advances by `step` (in units of 2^-16
-/// texels).
-fn repeats(pixels: u32, step: i64, size: i64) -> i64 {
-    span(pixels, step) / size + 2
+/// How a plane tiles one axis of its area.
+#[derive(Debug, Clone, Copy)]
+struct Tiling {
+    /// The screen pixels one copy of the source is stretched into.
+    tile: i64,
+    /// How many copies of the source one quad draws: 1 from the source itself, more from a
+    /// pre-tiled bitmap.
+    copies: i64,
 }
 
-/// An upper bound of the distance in texels between the first and the last of `pixels` screen
-/// pixels. The rounding of the transform and of the texel add at most one each.
-fn span(pixels: u32, step: i64) -> i64 {
-    ((step * (i64::from(pixels) - 1)) >> Fixed::FRAC_BITS) + 2
-}
+impl Tiling {
+    /// The tiling of `pixels` screen pixels in a row by a source `size` texels long at
+    /// `zoom`, or `None` when nothing is drawn.
+    fn new(size: i32, zoom: f64, pixels: u32) -> Option<Tiling> {
+        let tile = stretch_length(size, zoom)?;
+        // Whether the stretch step is exact, so that copies of the source in a row stretch
+        // as the source itself does.
+        let exact =
+            (u64::from(size.unsigned_abs()) << STRETCH_FRAC_BITS).is_multiple_of(u64::from(tile));
+        let (tile, pixels) = (i64::from(tile), i64::from(pixels));
+        let single = Tiling { tile, copies: 1 };
+        let copies = if exact && single.repeats(pixels) > AXIS_REPEATS {
+            // The fewest copies that leave at most `AXIS_REPEATS` repeats.
+            pixels / ((AXIS_REPEATS - 2) * tile) + 1
+        } else {
+            1
+        };
+        Some(Tiling { tile, copies })
+    }
 
-/// How many times the source is repeated along one axis of the pre-tiled bitmap so that at
-/// most [`AXIS_REPEATS`] of the result are shown.
-fn copies(pixels: u32, step: i64, size: i64) -> i64 {
-    if repeats(pixels, step, size) <= AXIS_REPEATS {
-        1
-    } else {
-        span(pixels, step) / ((AXIS_REPEATS - 1) * size) + 1
+    /// The screen pixels one quad covers.
+    fn span(&self) -> i64 {
+        self.tile * self.copies
+    }
+
+    /// An upper bound of the quads that `pixels` screen pixels in a row can show, wherever
+    /// the grid lies.
+    fn repeats(&self, pixels: i64) -> i64 {
+        pixels / self.span() + 2
     }
 }
 
 impl Plane {
-    /// The placement of the repeat whose top-left corner is the one bitmap pixel (0, 0) of the
-    /// plane has, for a tile of `width` by `height` pixels.
-    ///
-    /// PLACEHOLDER: how the original runtime samples a zoomed plane, what a zoom of 0 or less
-    /// draws (here: nothing, and the flipped image), and whether the origin of the viewport
-    /// scrolls a plane (here: it does) are not yet checked.
-    fn geometry(&self, level: &Level, width: i32, height: i32) -> Geometry {
-        Geometry {
-            // Sums of two `i32`.
-            x: level.dx as f64,
-            y: level.dy as f64,
-            // The image repeats, so the origin counts modulo the tile; this keeps the
-            // translation small whatever the origin is.
-            ox: f64::from(self.ox.rem_euclid(width)),
-            oy: f64::from(self.oy.rem_euclid(height)),
-            zoom_x: self.zoom_x,
-            zoom_y: self.zoom_y,
-            angle: 0.0,
-            mirror: false,
-        }
+    /// How the plane tiles a `level` with a bitmap of `size`: across and down. `None` when
+    /// it draws nothing: a zoom of 0 or less, or a tile of less than one pixel.
+    fn tiling(&self, level: &Level, size: Rect) -> Option<(Tiling, Tiling)> {
+        Some((
+            Tiling::new(size.width, self.zoom_x, level.clip.width)?,
+            Tiling::new(size.height, self.zoom_y, level.clip.height)?,
+        ))
     }
 
-    /// The size of the pre-tiled bitmap a plane showing a bitmap of `size` inside `clip`
+    /// The size of the pre-tiled bitmap a plane showing a bitmap of `size` inside `level`
     /// draws from, or `None` when it draws from the bitmap itself or draws nothing.
     fn pretiled_size(&self, level: &Level, size: Rect) -> Option<(i32, i32)> {
-        let transform = self
-            .geometry(level, size.width, size.height)
-            .transform(0.0, 0.0, 0.0)?;
-        let step_x = i64::from(transform.xx.to_bits()).abs();
-        let step_y = i64::from(transform.yy.to_bits()).abs();
-        let (width, height) = (i64::from(size.width), i64::from(size.height));
-        let clip = level.clip;
-        if repeats(clip.width, step_x, width) * repeats(clip.height, step_y, height) <= MAX_REPEATS
-        {
+        let (across, down) = self.tiling(level, size)?;
+        if across.copies == 1 && down.copies == 1 {
             return None;
         }
-        let pretiled_width = copies(clip.width, step_x, width) * width;
-        let pretiled_height = copies(clip.height, step_y, height) * height;
-        if pretiled_width * pretiled_height > MAX_PRETILED_PIXELS {
+        let clip = level.clip;
+        let source = Tiling {
+            copies: 1,
+            ..across
+        }
+        .repeats(i64::from(clip.width))
+            * Tiling { copies: 1, ..down }.repeats(i64::from(clip.height));
+        if source <= MAX_REPEATS {
+            return None;
+        }
+        let width = across.copies * i64::from(size.width);
+        let height = down.copies * i64::from(size.height);
+        if width * height > MAX_PRETILED_PIXELS {
             // A size no bitmap can have: the plane goes without and is not drawn.
             return Some((i32::MAX, i32::MAX));
         }
         // Both are at most their product.
-        Some((pretiled_width as i32, pretiled_height as i32))
+        Some((width as i32, height as i32))
     }
 
     /// Brings the pre-tiled bitmap up to date, if this frame draws from one. An invisible
@@ -140,8 +156,18 @@ impl Plane {
     }
 }
 
+/// The first of the positions `start`, `start + span`, ... that the grid of a plane has at
+/// or before `first`, when `shift` is what the origins move the grid by.
+fn grid_start(first: i64, shift: i64, span: i64) -> i64 {
+    // The mathematical modulo: an origin below zero moves the grid the other way.
+    first - (first - shift).rem_euclid(span)
+}
+
 impl Assembly<'_> {
-    /// A plane: one quad for every repeat of its bitmap that shows inside the clip.
+    /// A plane: one stretch quad for every repeat of its tile that shows inside the clip.
+    ///
+    /// Column `i` of the viewport, or of the screen without one, shows column
+    /// `(i + plane.ox + viewport.ox) mod tile width` of the tile, and rows likewise.
     pub(crate) fn plane(&mut self, plane: &Plane, level: &Level) {
         if !plane.visible || plane.opacity == 0 {
             return;
@@ -152,8 +178,14 @@ impl Assembly<'_> {
         let Ok(size) = self.bitmaps.rect(source) else {
             return;
         };
+        let Some((mut across, mut down)) = plane.tiling(level, size) else {
+            return;
+        };
         let bitmap = match plane.pretiled_size(level, size) {
-            None => source,
+            None => {
+                (across.copies, down.copies) = (1, 1);
+                source
+            }
             // A pre-tiled bitmap that could not be made leaves the plane undrawn.
             Some(_) => match plane.pretiled.bitmap {
                 Some(bitmap) => bitmap,
@@ -163,55 +195,36 @@ impl Assembly<'_> {
         let Ok(tile) = self.bitmaps.rect(bitmap) else {
             return;
         };
-        let geometry = plane.geometry(level, tile.width, tile.height);
-        let Some(base) = geometry.transform(f64::from(tile.width), 0.0, 0.0) else {
-            return;
-        };
-
-        // The transform is monotonic along each axis, so the repeats that show are those
-        // between the ones under the first and the last pixel of the clip, which lies on the
-        // screen and so has coordinates that fit `u16`.
         let clip = level.clip;
-        let (width, height) = (i64::from(tile.width), i64::from(tile.height));
-        let first = base.source_position(clip.x as u16, clip.y as u16);
-        let last = base.source_position(
-            (clip.x as u32 + clip.width - 1) as u16,
-            (clip.y as u32 + clip.height - 1) as u16,
-        );
-        let repeat = |position: i64, size: i64| (position >> Fixed::FRAC_BITS).div_euclid(size);
-        let columns = (repeat(first.0, width), repeat(last.0, width));
-        let rows = (repeat(first.1, height), repeat(last.1, height));
+        let quads = across.repeats(i64::from(clip.width)) * down.repeats(i64::from(clip.height));
+        if quads > MAX_QUADS {
+            return;
+        }
         let look = Look {
             tone: plane.tone.to_proto(),
             color: plane.color.to_proto(),
             opacity: plane.opacity,
             blend: blend_mode(plane.blend_type),
         };
-        // A repeat too far from the base for the fixed-point range is left out.
-        let shifted = |translation: Fixed, repeat: i64, size: i64| {
-            let bits = i64::from(translation.to_bits()) - ((repeat * size) << Fixed::FRAC_BITS);
-            i32::try_from(bits).ok().map(Fixed::from_bits)
-        };
-        for row in rows.0.min(rows.1)..=rows.0.max(rows.1) {
-            let Some(ty) = shifted(base.ty, row, height) else {
-                continue;
-            };
-            for column in columns.0.min(columns.1)..=columns.0.max(columns.1) {
-                let Some(tx) = shifted(base.tx, column, width) else {
-                    continue;
-                };
-                self.referenced.push(bitmap);
-                self.ops.push(Op::Quad(Quad {
-                    clip,
-                    bitmap,
-                    src: tile.to_proto(),
-                    sampling: Sampling::Affine(Transform { tx, ty, ..base }),
-                    tone: look.tone,
-                    color: look.color,
-                    opacity: look.opacity,
-                    blend: look.blend,
-                }));
+        // The grid has a line where the viewport begins, moved back by both origins.
+        let (left, top) = (i64::from(clip.x), i64::from(clip.y));
+        let (right, bottom) = (left + i64::from(clip.width), top + i64::from(clip.height));
+        let first_x = grid_start(left, level.dx - i64::from(plane.ox), across.span());
+        let first_y = grid_start(top, level.dy - i64::from(plane.oy), down.span());
+        // A span is one tile or little more than the clip, so it fits. A tile so large that
+        // it begins beyond the coordinates of the protocol is left out.
+        let (width, height) = (across.span() as u32, down.span() as u32);
+        let mut y = first_y;
+        while y < bottom {
+            let mut x = first_x;
+            while x < right {
+                if let (Ok(x), Ok(y)) = (i32::try_from(x), i32::try_from(y)) {
+                    let dest = vkxp_proto::Rect::new(x, y, width, height);
+                    self.stretched(bitmap, tile, dest, false, clip, look);
+                }
+                x += across.span();
             }
+            y += down.span();
         }
     }
 }
@@ -255,7 +268,7 @@ mod tests {
     }
 
     fn quads(packet: &vkxp_proto::FramePacket) -> usize {
-        let quad = |op: &&Op| matches!(op, Op::Quad(_));
+        let quad = |op: &&vkxp_proto::Op| matches!(op, vkxp_proto::Op::Quad(_));
         packet.ops.iter().filter(quad).count()
     }
 
@@ -306,6 +319,69 @@ mod tests {
         assert!(shows(&frame, |x, y| texel((x + ox) % 64, (y + oy) % 64)));
     }
 
+    /// The lines of `plane-samples.txt`: the source column and row that the original runtime
+    /// showed at the first 60 columns and rows of a viewport of 320 by 240.
+    #[test]
+    fn planes_show_the_measured_texels() {
+        let numbers = |text: &str| -> Vec<f64> {
+            let words = text.split_whitespace();
+            words.map(|word| word.parse().unwrap()).collect()
+        };
+        let samples = include_str!("../tests/data/plane-samples.txt");
+        let mut checked = 0;
+        for line in samples.lines().filter(|line| !line.starts_with('#')) {
+            let parts: Vec<Vec<f64>> = line.split('|').map(numbers).collect();
+            // The viewport reaches beyond this screen; its columns count from its own corner.
+            let mut stage = Stage::sized(80, 72);
+            let bitmap = pattern(&mut stage, parts[0][0] as u32, parts[0][1] as u32);
+            let area = Rect::new(8, 4, 320, 240);
+            let viewport = stage.scene.create_viewport(area).unwrap();
+            let view = stage.scene.viewport_mut(viewport).unwrap();
+            (view.ox, view.oy) = (parts[3][0] as i32, parts[3][1] as i32);
+            let id = stage.scene.create_plane(Some(viewport)).unwrap();
+            let plane = stage.scene.plane_mut(id).unwrap();
+            plane.bitmap = Some(bitmap);
+            (plane.zoom_x, plane.zoom_y) = (parts[1][0], parts[1][1]);
+            (plane.ox, plane.oy) = (parts[2][0] as i32, parts[2][1] as i32);
+            let frame = stage.frame();
+            let (columns, rows) = (&parts[4], &parts[5]);
+            assert_eq!((columns.len(), rows.len()), (60, 60), "{line}");
+            for (j, row) in rows.iter().enumerate() {
+                for (i, column) in columns.iter().enumerate() {
+                    assert_eq!(
+                        frame.pixel(8 + i as u32, 4 + j as u32),
+                        texel(*column as u32, *row as u32),
+                        "column {i}, row {j} of {line}"
+                    );
+                }
+            }
+            checked += 1;
+        }
+        assert!(checked >= 20);
+    }
+
+    /// Without a viewport the grid begins at the corner of the screen, and the origin counts
+    /// in screen pixels whatever the zoom.
+    #[test]
+    fn the_origin_of_a_zoomed_plane_counts_screen_pixels() {
+        let mut stage = Stage::sized(64, 48);
+        let bitmap = pattern(&mut stage, 13, 7);
+        let id = plane(&mut stage, bitmap);
+        let plane = stage.scene.plane_mut(id).unwrap();
+        (plane.zoom_x, plane.zoom_y) = (2.5, 1.7);
+        (plane.ox, plane.oy) = (-5, 100);
+        // Tiles of 32 by 11 pixels.
+        let (step_x, step_y) = ((13u64 << 20) / 32, (7u64 << 20) / 11);
+        assert!(shows(&stage.frame(), |x, y| {
+            let column = (i64::from(x) - 5).rem_euclid(32) as u64;
+            let row = (i64::from(y) + 100).rem_euclid(11) as u64;
+            texel(
+                ((column * step_x) >> 20) as u32,
+                ((row * step_y) >> 20) as u32,
+            )
+        }));
+    }
+
     #[test]
     fn zoom_scales_a_plane_about_the_corner_of_its_area() {
         let mut stage = Stage::new();
@@ -326,8 +402,8 @@ mod tests {
     #[test]
     fn repeats_meet_without_seams_at_a_fractional_zoom() {
         for (width, height) in [(7, 5), (64, 64), (200, 150)] {
-            let mut stage = Stage::new();
-            let back = stage.solid(640, 480, [40, 80, 120, 255]);
+            let mut stage = Stage::sized(160, 120);
+            let back = stage.solid(160, 120, [40, 80, 120, 255]);
             let sprite = stage.scene.create_sprite(None).unwrap();
             let sprite = stage.scene.sprite_mut(sprite).unwrap();
             sprite.set_bitmap(Some(back), &stage.bitmaps);
@@ -483,20 +559,21 @@ mod tests {
         };
         assert!(shows(&stage.frame(), expected));
 
-        // So do origin and zoom, which need no new copy.
+        // So do origin and zoom: a zoom of 2 has an exact step, so copies in a row stretch
+        // as the source does. The origin counts screen pixels.
         let plane = stage.scene.plane_mut(id).unwrap();
         (plane.ox, plane.oy) = (-3, 9);
         (plane.zoom_x, plane.zoom_y) = (2.0, 1.0);
         let packet = stage.scene.extract(&mut stage.bitmaps);
         assert!(quads(&packet) <= 64);
         let frame = stage.render(&packet).unwrap();
-        assert!(shows(&frame, |x, y| expected((x / 2 + 1) % 4, (y + 9) % 4)));
+        assert!(shows(&frame, |x, y| expected((x + 5) % 8 / 2, (y + 9) % 4)));
     }
 
     #[test]
-    fn a_plane_never_needs_more_than_64_quads() {
-        let zooms = [1.0, 0.5, 0.11, 3.0, 1.0 / 3.0, -1.0, 40.0];
-        for (width, height) in [(1, 1), (4, 4), (3, 200), (64, 64), (100, 7), (640, 480)] {
+    fn a_plane_with_exact_steps_never_needs_more_than_64_quads() {
+        let zooms = [1.0, 0.5, 0.25, 2.0, 4.0, 32.0];
+        for (width, height) in [(1, 1), (4, 4), (3, 200), (64, 64), (100, 8), (640, 480)] {
             for zoom in zooms {
                 let mut stage = Stage::new();
                 let bitmap = pattern(&mut stage, width, height);
@@ -511,32 +588,69 @@ mod tests {
                     "{count} quads for {width} by {height} at {zoom}"
                 );
                 let frame = stage.render(&packet).unwrap();
+                // A tile of less than one pixel draws nothing.
+                let shows = f64::from(width.min(height)) * zoom >= 1.0;
                 let drawn = frame.rgba.as_chunks::<4>().0;
-                assert!(
+                assert_eq!(
                     drawn.iter().all(|pixel| *pixel != BLACK),
+                    shows,
                     "{width} by {height} at {zoom} covers the screen"
                 );
+                assert_eq!(drawn.iter().all(|pixel| *pixel == BLACK), !shows);
             }
         }
     }
 
+    /// A step that is not exact allows no pre-tiled copy: every repeat is a quad of its own.
     #[test]
-    fn a_plane_zoomed_out_too_far_for_a_pretiled_copy_is_not_drawn() {
-        let mut stage = Stage::new();
+    fn a_plane_with_an_inexact_step_draws_every_repeat_from_its_bitmap() {
+        let mut stage = Stage::sized(160, 120);
         let bitmap = pattern(&mut stage, 4, 4);
         let id = plane(&mut stage, bitmap);
         let plane = stage.scene.plane_mut(id).unwrap();
-        (plane.zoom_x, plane.zoom_y) = (0.01, 0.01);
+        (plane.zoom_x, plane.zoom_y) = (1.5, 1.5);
+        let packet = stage.scene.extract(&mut stage.bitmaps);
+        assert_eq!(stage.bitmaps.len(), 1);
+        // Tiles of 6 by 6 pixels.
+        assert_eq!(quads(&packet), 27 * 20);
+        let step = (4u64 << 20) / 6;
+        let tile = |i: u32| ((u64::from(i % 6) * step) >> 20) as u32;
+        assert!(shows(&stage.render(&packet).unwrap(), |x, y| texel(
+            tile(x),
+            tile(y)
+        )));
+    }
+
+    #[test]
+    fn a_plane_that_would_need_too_many_quads_or_too_large_a_copy_is_not_drawn() {
+        // Tiles of 3 by 3 pixels with an inexact step: tens of thousands of quads.
+        let mut stage = Stage::new();
+        let bitmap = pattern(&mut stage, 4, 4);
+        let id = plane(&mut stage, bitmap);
+        let zoomed = stage.scene.plane_mut(id).unwrap();
+        (zoomed.zoom_x, zoomed.zoom_y) = (0.75, 0.75);
         assert!(all(&stage.frame(), BLACK));
         assert_eq!(stage.bitmaps.len(), 1);
-        // Zoomed out less far, each screen pixel takes every fifth texel.
-        let plane = stage.scene.plane_mut(id).unwrap();
-        (plane.zoom_x, plane.zoom_y) = (0.2, 0.2);
+
+        // A tile of one pixel has an exact step, but a copy of 1024 texels per pixel would
+        // be far too large.
+        let mut stage = Stage::new();
+        let bitmap = pattern(&mut stage, 1024, 1024);
+        let id = plane(&mut stage, bitmap);
+        let zoomed = stage.scene.plane_mut(id).unwrap();
+        (zoomed.zoom_x, zoomed.zoom_y) = (1.0 / 1024.0, 1.0 / 1024.0);
+        assert!(all(&stage.frame(), BLACK));
+        assert_eq!(stage.bitmaps.len(), 1);
+
+        // Zoomed out less far, each screen pixel takes every fourth texel of a copy.
+        let mut stage = Stage::new();
+        let bitmap = pattern(&mut stage, 16, 16);
+        let id = plane(&mut stage, bitmap);
+        let zoomed = stage.scene.plane_mut(id).unwrap();
+        (zoomed.zoom_x, zoomed.zoom_y) = (0.25, 0.25);
         let frame = stage.frame();
-        assert!(shows(&frame, |x, y| texel(
-            (x * 5 + 2) % 4,
-            (y * 5 + 2) % 4
-        )));
+        assert_eq!(stage.bitmaps.len(), 2);
+        assert!(shows(&frame, |x, y| texel(x % 4 * 4, y % 4 * 4)));
     }
 
     #[test]

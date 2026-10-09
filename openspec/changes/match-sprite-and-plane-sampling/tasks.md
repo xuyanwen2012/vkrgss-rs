@@ -11,7 +11,7 @@
 ## 3. Scene (`vkxp-core`)
 
 - [x] 3.1 Extract unrotated sprites as stretch quads and rotated ones with the integer-offset rule. Verify: the scenarios of the two sprite requirements in `specs/core-scene/spec.md`.
-- [ ] 3.2 Extract planes as tiled stretch quads. Verify: the plane scenario.
+- [x] 3.2 Extract planes as tiled stretch quads. Verify: the plane scenario.
 - [ ] 3.3 Apply the bush and flash rules. Verify: the two scenarios of that requirement.
 
 ## 4. Integration check

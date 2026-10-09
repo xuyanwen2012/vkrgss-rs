@@ -47,8 +47,9 @@
 //!   drawn from bitmaps of the scene's own in the bitmap arena (background, frame, cursor),
 //!   redrawn from the window skin only when the skin, the size, the stretch flag or the
 //!   cursor size changes, plus its contents, pause sign and scroll arrows. A plane is one
-//!   quad per repeat of its bitmap, all with the same scale, and draws from a pre-tiled bitmap
-//!   of the scene's own when its bitmap is small against the area. A tilemap is drawn from
+//!   stretch quad per repeat of its tile, on a grid of whole pixels, and draws from a
+//!   pre-tiled bitmap of the scene's own when its bitmap is small against the area and the
+//!   zoom lets copies in a row stretch as one. A tilemap is drawn from
 //!   bitmaps of the scene's own as well: its visible tiles are composed on the CPU into one
 //!   bitmap for the tiles of priority 0 and one for each higher priority, shown as one quad at
 //!   z 0 and one quad per row of priority tiles at the z that ranks the row among sprites, and
