@@ -4,11 +4,12 @@
 //!
 //! The fake clock is [`ManualClock`](crate::ManualClock), which the headless runner uses too.
 
+use std::collections::HashSet;
 use std::io::Write;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use vkxp_proto::{AudioCommand, FramePacket};
+use vkxp_proto::{AudioCommand, BitmapDelta, BitmapId, FramePacket};
 
 use crate::{AudioSink, Display, ManualClock};
 
@@ -25,6 +26,7 @@ pub enum DisplayEvent {
     },
     Hold,
     Mix(f32),
+    Mask(Option<(BitmapId, u32)>),
     Redraw,
     Title(String),
 }
@@ -42,6 +44,14 @@ pub enum Shown {
         held: Box<Shown>,
         newest: u64,
         weight: f32,
+    },
+    /// The masked mix of a held image and the newest frame.
+    Masked {
+        held: Box<Shown>,
+        newest: u64,
+        progress: f32,
+        mask: BitmapId,
+        vagueness: u32,
     },
 }
 
@@ -78,6 +88,9 @@ pub struct RecordingDisplay {
     newest: Option<u64>,
     held: Shown,
     weight: f32,
+    mask: Option<(BitmapId, u32)>,
+    /// The bitmaps the packets so far have created and not destroyed.
+    bitmaps: HashSet<BitmapId>,
     shown: Shown,
     title: String,
     /// A clock to move forward by a fixed time whenever a packet is rendered.
@@ -91,6 +104,8 @@ impl RecordingDisplay {
             newest: None,
             held: Shown::Nothing,
             weight: 1.0,
+            mask: None,
+            bitmaps: HashSet::new(),
             shown: Shown::Nothing,
             title: String::new(),
             render_time: None,
@@ -126,8 +141,22 @@ impl RecordingDisplay {
             .collect()
     }
 
-    /// The image the current state gives: the mix of the held image and the newest frame.
+    /// The image the current state gives: the mix of the held image and the newest frame,
+    /// masked while a mask is set that names a bitmap the display has.
     fn compose(&self) -> Shown {
+        let mask = self.mask.filter(|(id, _)| self.bitmaps.contains(id));
+        match (self.newest, mask) {
+            (Some(newest), Some((mask, vagueness))) if self.weight < 1.0 => {
+                return Shown::Masked {
+                    held: Box::new(self.held.clone()),
+                    newest,
+                    progress: self.weight,
+                    mask,
+                    vagueness,
+                };
+            }
+            _ => {}
+        }
         match self.newest {
             None => Shown::Nothing,
             Some(newest) if self.weight >= 1.0 => Shown::Frame(newest),
@@ -155,6 +184,18 @@ impl Display for RecordingDisplay {
         if let Some((clock, time)) = &self.render_time {
             clock.advance(*time);
         }
+        // Like the compositors, which apply the bitmap changes of a packet they then reject.
+        for delta in &packet.bitmaps {
+            match delta {
+                BitmapDelta::Create { id, .. } => {
+                    self.bitmaps.insert(*id);
+                }
+                BitmapDelta::Destroy { id } => {
+                    self.bitmaps.remove(id);
+                }
+                BitmapDelta::Update { .. } => {}
+            }
+        }
         if let Some(op) = packet.ops.iter().position(|op| op.kind().is_reserved()) {
             self.events.push(DisplayEvent::Rejected { frame_index });
             return Err(Rejected { op });
@@ -174,6 +215,15 @@ impl Display for RecordingDisplay {
     fn set_mix(&mut self, weight: f32) {
         self.events.push(DisplayEvent::Mix(weight));
         self.weight = weight;
+    }
+
+    fn set_mask(&mut self, mask: Option<(BitmapId, u32)>) {
+        self.events.push(DisplayEvent::Mask(mask));
+        self.mask = mask;
+    }
+
+    fn has_bitmap(&self, id: BitmapId) -> bool {
+        self.bitmaps.contains(&id)
     }
 
     fn redraw(&mut self) -> Result<(), Rejected> {

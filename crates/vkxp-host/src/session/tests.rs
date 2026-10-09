@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use vkxp_proto::link::{GuestEnd, HostEnd, link};
 use vkxp_proto::{
-    AudioChannel, AudioCommand, BitmapId, Button, Color, FramePacket, FrameRate, GuestToHost,
-    HostToGuest, InputSnapshot, Op, Rect, Size,
+    AudioChannel, AudioCommand, BitmapDelta, BitmapId, Button, Color, FramePacket, FrameRate,
+    GuestToHost, HostToGuest, InputSnapshot, Op, Rect, Size,
 };
 use winit::keyboard::KeyCode;
 
@@ -745,30 +745,134 @@ fn transition_without_freeze_changes_nothing() {
     );
 }
 
+const MASK: BitmapId = BitmapId::new(3, 0);
+
+fn masked_transition(duration: u32, vague: u16) -> GuestToHost {
+    GuestToHost::Transition {
+        duration,
+        mask: Some(MASK),
+        vague,
+    }
+}
+
+/// A frame that brings the mask bitmap, black on the left half and white on the right half.
+fn frame_with_mask(frame_index: u64) -> GuestToHost {
+    let mut packet = packet(frame_index, 40);
+    let rgba = (0..SIZE.width * SIZE.height)
+        .flat_map(|index| {
+            let level = if index % SIZE.width < SIZE.width / 2 {
+                0
+            } else {
+                255
+            };
+            [level, level, level, 255]
+        })
+        .collect();
+    packet.bitmaps = vec![
+        BitmapDelta::Create {
+            id: MASK,
+            width: SIZE.width,
+            height: SIZE.height,
+        },
+        BitmapDelta::Update {
+            id: MASK,
+            rect: Rect::from_size(SIZE),
+            rgba,
+        },
+    ];
+    GuestToHost::Frame(packet)
+}
+
+fn masked(newest: u64, progress: f32, vagueness: u32) -> Shown {
+    Shown::Masked {
+        held: Box::new(Shown::Frame(0)),
+        newest,
+        progress,
+        mask: MASK,
+        vagueness,
+    }
+}
+
 #[test]
-fn masked_transition_is_a_plain_cross_fade_of_the_same_duration() {
+fn masked_transition_is_the_masked_mix_with_the_mask_and_the_vagueness() {
     let mut rig = Rig::new();
     rig.frame(frame(0));
     rig.send(GuestToHost::Freeze);
-    rig.send(GuestToHost::Transition {
-        duration: 2,
-        mask: Some(BitmapId::new(3, 0)),
-        vague: 40,
-    });
-    rig.frame(frame(1));
-    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(0), 1, 0.5));
+    rig.send(masked_transition(4, 40));
+    // The mask arrives with the first frame after the transition message.
+    rig.frame(frame_with_mask(1));
+    assert_eq!(rig.shown(), masked(1, 0.25, 40));
     rig.frame(frame(2));
-    assert_eq!(rig.shown(), Shown::Frame(2));
-    assert_eq!(rig.errors.text().matches("mask").count(), 1);
+    // At this progress the display shows the newest frame where the mask is black and the
+    // held frame where it is white; the presenter's tests look at the pixels.
+    assert_eq!(rig.shown(), masked(2, 0.5, 40));
+    rig.frame(frame(3));
+    rig.frame(frame(4));
+    assert_eq!(rig.shown(), Shown::Frame(4));
+    assert_eq!(rig.errors.text(), "");
 
-    // The note is written once, not per transition.
+    // The mask is dropped with the transition: the next one is a cross-fade.
     rig.send(GuestToHost::Freeze);
-    rig.send(GuestToHost::Transition {
-        duration: 1,
-        mask: Some(BitmapId::new(3, 0)),
-        vague: 40,
-    });
+    rig.send(transition(2));
+    rig.frame(frame(5));
+    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(4), 5, 0.5));
+    let masks: Vec<&DisplayEvent> = rig
+        .session
+        .display()
+        .events
+        .iter()
+        .filter(|event| matches!(event, DisplayEvent::Mask(_)))
+        .collect();
+    assert_eq!(
+        masks,
+        [
+            &DisplayEvent::Mask(Some((MASK, 40))),
+            &DisplayEvent::Mask(None)
+        ]
+    );
+}
+
+#[test]
+fn vagueness_of_zero_is_treated_as_one() {
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    rig.send(GuestToHost::Freeze);
+    rig.send(masked_transition(2, 0));
+    rig.frame(frame_with_mask(1));
+    assert_eq!(rig.shown(), masked(1, 0.5, 1));
+}
+
+#[test]
+fn transition_with_an_unknown_mask_is_a_cross_fade_and_is_reported_once() {
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    rig.send(GuestToHost::Freeze);
+    rig.send(masked_transition(4, 40));
+    rig.frame(frame(1));
+    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(0), 1, 0.25));
+    rig.frame(frame(2));
+    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(0), 2, 0.5));
+    rig.frame(frame(3));
+    rig.frame(frame(4));
+    assert_eq!(rig.shown(), Shown::Frame(4));
     assert_eq!(rig.errors.text().matches("mask").count(), 1);
+}
+
+#[test]
+fn freeze_during_a_masked_transition_holds_the_masked_image_and_drops_the_mask() {
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    rig.send(GuestToHost::Freeze);
+    rig.send(masked_transition(4, 40));
+    rig.frame(frame_with_mask(1));
+    let on_screen = rig.shown();
+    assert_eq!(on_screen, masked(1, 0.25, 40));
+    rig.send(GuestToHost::Freeze);
+    rig.frame(frame(2));
+    assert_eq!(rig.shown(), on_screen);
+    rig.send(transition(2));
+    rig.frame(frame(3));
+    assert_eq!(rig.shown(), Shown::mix(on_screen, 3, 0.5));
 }
 
 #[test]

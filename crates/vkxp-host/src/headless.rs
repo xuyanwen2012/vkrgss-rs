@@ -15,7 +15,7 @@ use std::sync::mpsc::{Receiver, channel};
 
 use thiserror::Error;
 use vkxp_proto::link::{Disconnected, GuestEnd, HostEnd, link};
-use vkxp_proto::{FramePacket, GuestToHost, HostToGuest};
+use vkxp_proto::{BitmapId, FramePacket, GuestToHost, HostToGuest};
 use vkxp_vk::{DeviceChoice, Frame, VkCompositor, VkError};
 
 use crate::{Clock, Display, InputScript, ManualClock, Session, SessionEnd, SessionOptions};
@@ -176,6 +176,14 @@ impl Display for HeadlessDisplay {
 
     fn set_mix(&mut self, weight: f32) {
         self.compositor.set_mix(weight);
+    }
+
+    fn set_mask(&mut self, mask: Option<(BitmapId, u32)>) {
+        self.compositor.set_mask(mask);
+    }
+
+    fn has_bitmap(&self, id: BitmapId) -> bool {
+        self.compositor.has_bitmap(id)
     }
 
     fn redraw(&mut self) -> Result<(), VkError> {

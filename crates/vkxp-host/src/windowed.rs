@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use thiserror::Error;
 use vkxp_proto::link::{GuestEnd, HostEnd, link};
-use vkxp_proto::{FramePacket, Size};
+use vkxp_proto::{BitmapId, FramePacket, Size};
 use vkxp_vk::{DeviceChoice, VkCompositor, VkError};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
@@ -176,6 +176,14 @@ impl Display for VulkanDisplay {
 
     fn set_mix(&mut self, weight: f32) {
         self.compositor.set_mix(weight);
+    }
+
+    fn set_mask(&mut self, mask: Option<(BitmapId, u32)>) {
+        self.compositor.set_mask(mask);
+    }
+
+    fn has_bitmap(&self, id: BitmapId) -> bool {
+        self.compositor.has_bitmap(id)
     }
 
     fn redraw(&mut self) -> Result<(), VkError> {

@@ -5,7 +5,7 @@ use std::io::Write;
 use std::time::Duration;
 
 use vkxp_proto::link::HostEnd;
-use vkxp_proto::{Button, FramePacket, GuestToHost, HostToGuest, InputSnapshot};
+use vkxp_proto::{BitmapId, Button, FramePacket, GuestToHost, HostToGuest, InputSnapshot};
 use winit::keyboard::KeyCode;
 
 use crate::{AudioSink, Clock, Display, KeyMap, NullSink};
@@ -131,10 +131,11 @@ pub struct Session<D: Display, C: Clock> {
     fade: Fade,
     /// The mix weight the display is at.
     mix: f32,
+    /// The mask bitmap and the vagueness of the transition under way, if it has a mask.
+    mask: Option<(BitmapId, u32)>,
     title: String,
     fps: Option<FpsCounter>,
     frames: u64,
-    mask_reported: bool,
     /// Whether sending to the guest has failed. What the guest sent before it went is still
     /// read, so a shutdown message that is already in the link is not lost.
     guest_gone: bool,
@@ -165,10 +166,10 @@ impl<D: Display, C: Clock> Session<D, C> {
             buttons: InputSnapshot::EMPTY,
             fade: Fade::Normal,
             mix: 1.0,
+            mask: None,
             title: String::new(),
             fps: None,
             frames: 0,
-            mask_reported: false,
             guest_gone: false,
             failing: false,
             end: None,
@@ -229,14 +230,14 @@ impl<D: Display, C: Clock> Session<D, C> {
         match message {
             GuestToHost::Frame(packet) => self.frame(&packet),
             GuestToHost::Freeze => self.freeze(),
-            GuestToHost::Transition { duration, mask, .. } => {
-                if mask.is_some() && !self.mask_reported {
-                    self.mask_reported = true;
-                    self.report(format_args!(
-                        "transition masks are not implemented; showing a plain cross-fade"
-                    ));
-                }
-                self.transition(duration);
+            GuestToHost::Transition {
+                duration,
+                mask,
+                vague,
+            } => {
+                // A vagueness of 0 is treated as 1.
+                let mask = mask.map(|id| (id, u32::from(vague).max(1)));
+                self.transition(duration, mask);
             }
             GuestToHost::Audio(command) => self.audio.command(command),
             GuestToHost::Modal { text } => {
@@ -414,7 +415,21 @@ impl<D: Display, C: Clock> Session<D, C> {
             Ok(()) => {
                 if let Some((step, duration, weight)) = step {
                     self.mix = weight;
+                    // The mask comes with the frames after the transition message, so only
+                    // now is it known whether there is one. Without it the display shows a
+                    // cross-fade.
+                    if let Some((id, _)) = self.mask
+                        && !self.display.has_bitmap(id)
+                    {
+                        self.report(format_args!(
+                            "the transition's mask, bitmap {} of generation {}, does not \
+                             exist; showing a plain cross-fade",
+                            id.index, id.generation
+                        ));
+                        self.set_mask(None);
+                    }
                     self.fade = if step >= duration {
+                        self.set_mask(None);
                         Fade::Normal
                     } else {
                         Fade::Fading { step, duration }
@@ -496,21 +511,34 @@ impl<D: Display, C: Clock> Session<D, C> {
             self.report(format_args!("cannot freeze the display: {error}"));
         }
         self.set_mix(0.0);
+        self.set_mask(None);
         self.fade = Fade::Frozen;
     }
 
-    fn transition(&mut self, duration: u32) {
+    fn transition(&mut self, duration: u32, mask: Option<(BitmapId, u32)>) {
         match self.fade {
             // Nothing is held, so there is nothing to fade from.
             Fade::Normal => {}
             Fade::Frozen | Fade::Fading { .. } if duration == 0 => {
                 self.fade = Fade::Normal;
                 self.set_mix(1.0);
+                self.set_mask(None);
                 if let Err(error) = self.display.redraw() {
                     self.report(format_args!("cannot redraw the display: {error}"));
                 }
             }
-            Fade::Frozen | Fade::Fading { .. } => self.fade = Fade::Fading { step: 0, duration },
+            Fade::Frozen | Fade::Fading { .. } => {
+                self.fade = Fade::Fading { step: 0, duration };
+                self.set_mask(mask);
+            }
+        }
+    }
+
+    /// Sets the mask of the transition under way, telling the display when it changes.
+    fn set_mask(&mut self, mask: Option<(BitmapId, u32)>) {
+        if self.mask != mask {
+            self.mask = mask;
+            self.display.set_mask(mask);
         }
     }
 

@@ -6,7 +6,7 @@
 
 ## 2. Session (`vkxp-host`)
 
-- [ ] 2.1 Carry mask and vagueness through the transition state and remove the "not implemented" report. Verify: tests for the masked-transition and unknown-mask scenarios of `specs/host-session/spec.md`; the other scenarios still pass.
+- [x] 2.1 Carry mask and vagueness through the transition state and remove the "not implemented" report. Verify: tests for the masked-transition and unknown-mask scenarios of `specs/host-session/spec.md`; the other scenarios still pass.
 
 ## 3. Integration check
 
