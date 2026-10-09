@@ -63,25 +63,36 @@
     always give a height equal to the size: the 220 + 36 of 256 box gives 33 at size 32 and
     97 at size 96 (82.5 and 13.5 both round up). The README states height = size for such
     fonts; which is right needs a measurement with such a font.
-  - Synthesised styles: the overhangs differ from the measured ones. The original's bold
-    grows the outline to the left and upwards as well (a first glyph such as `A` gets a left
-    overhang of 1, so `text_size` is 1 wider there), and its italic overhangs follow the
-    slanted bounding box of the glyph, not its ink. The slant used here (0.25) is not
-    measured. The advances agree in all 2024 width samples; the committed width samples
-    check width and height for the regular style and the advances for the others, and only
-    the regular overhang and alignment samples are committed.
-  - One of the 506 regular width samples differs: `Y` at size 6 has a left overhang of 1 in
-    the original and 0 here (a difference of the rasterisers at 4 pixels per em). The
-    committed selection has the sizes 12, 22, 48 and 96.
-  - Squeeze samples: `HH` in Liberation Sans at size 13 lists the widths 18, 14, 12 where
-    the rule also gives 8 at the 60 percent step, inside the range of rectangle widths the
-    probe covered. The test checks the listed widths only for this sample; the case needs a
-    second look at the probe output. The sample with an overhang (`EE` at size 6) is skipped.
-  - The measured vertical and alignment samples are checked through the font adapter, which
-    is in `crates/vkxp/src/font.rs` (the binary crate), not in `vkxp-binding`. They need the
-    measured font and are skipped without it. The last ink row (the baseline) and the first
-    ink column are compared exactly; the first ink row and the last ink column within one
-    pixel, since they depend on how the glyph is rasterised (no hinting here).
+  - Synthesised styles follow what the samples show of GDI rather than the two decisions
+    above as worded: bold emboldens the outline by a 24th of the em (the advance and the
+    average width still grow by one pixel), italic slants the outline by 0.25, and the
+    overhangs are taken from the box of the emboldened outline with its corners slanted.
+    "One pixel" and a shear of the bitmaps do not give the measured left overhangs (a bold
+    `A` reaches one pixel left of the pen). With this, width, height and advances agree in
+    2022 of the 2024 width samples of all four styles and in all 736 committed ones (sizes
+    12, 22, 48, 96), and the overhangs of the 73 regular and bold samples agree.
+  - Still different: the right overhang of an italic glyph in 12 of 108 samples and of a bold
+    italic one in 4 of 104, by one pixel (the box GDI slants comes from the hinted glyph;
+    the bottom of that box is fitted here, constant `SHALLOW_BOTTOM`, and its top and right
+    edge are not). These samples and the bold italic alignment samples, of which 37 of 426
+    differ in an ink column, are not committed. The left overhang of `Y` at size 6 (regular
+    and italic, 4 pixels per em) is 1 in the original and 0 here; size 6 is not among the
+    committed sizes.
+  - Squeeze samples: the sample of `HH` in Liberation Sans at size 13 listed the widths 18,
+    14, 12 where the rule also gives 8. A sweep of every rectangle width on the original
+    (probe and raw output in `local/measurements/text-squeeze-sweep-*`) shows the text 8
+    wide and right-aligned for the rectangle widths 8 to 11, as the rule says, so the
+    committed line is corrected and the sweep is committed as `P` samples; vkxp reproduces
+    its 300 cells column for column. The sweep of `WW` at size 13 is not committed: the
+    original draws the squeezed text one pixel wider at the 60 percent step than here (an
+    overhang of the squeezed `W`), which is the open point named above.
+  - The measured vertical, alignment and squeeze samples are checked through the font
+    adapter, which is in `crates/vkxp/src/font.rs` (the binary crate), not in
+    `vkxp-binding`; for that `vkxp-core` makes the squeeze rule public
+    (`TextMetrics::squeezed`). Samples of the font that is not committed are skipped without
+    it. The last ink row (the baseline) and the first ink column are compared exactly; the
+    first ink row and the last ink column within one pixel, since they depend on how the
+    glyph is rasterised (no hinting here).
   - `Font#size=` keeps the whole part of a fractional size (`96.5` reads back as 96, in the
     original as 96.5), since the core font size is an integer. `Font.new(name, size)` and
     `Font.default_size=` are not range-checked; they were not measured.

@@ -130,4 +130,4 @@ pub use scene::{
     WindowId,
 };
 pub use table::{SharedTable, Table};
-pub use text::{Align, Mask, TextMetrics, TextRasterizer};
+pub use text::{Align, Mask, SQUEEZE_STEPS, TextMetrics, TextRasterizer};

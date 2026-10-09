@@ -331,4 +331,110 @@ mod tests {
         let count = (wrong.len(), samples.len());
         assert!(wrong.is_empty(), "{count:?}:\n{}", wrong.join("\n"));
     }
+
+    /// The backend and family of the font a sample names; `None` for the font that is not
+    /// committed when it is absent.
+    fn sample_font<'a>(
+        name: &str,
+        committed: &'a FontBackend,
+        measured: Option<&'a FontBackend>,
+    ) -> Option<(&'a FontBackend, &'static str)> {
+        match name {
+            "liberation" => Some((committed, "Liberation Sans")),
+            "noto" => measured.map(|backend| (backend, NOTO)),
+            other => panic!("a sample of the unknown font {other}"),
+        }
+    }
+
+    /// `Q font size string natural_width | widths`: the widths the text is drawn with, the
+    /// natural one and then each narrower one a squeeze step gives, overhangs included.
+    #[test]
+    fn measured_squeeze_levels() {
+        let committed = backend();
+        let measured = measured_backend();
+        let mut wrong = Vec::new();
+        let mut checked = 0;
+        for sample in samples("Q") {
+            let Some((backend, family)) = sample_font(&sample[1], &committed, measured.as_ref())
+            else {
+                continue;
+            };
+            let size = number(&sample[2]);
+            let font = font(family, size);
+            let text = string(&sample[3]);
+            let metrics = backend.metrics(&font, &text);
+            let expected: Vec<u32> = sample[6..].iter().map(|w| number(w) as u32).collect();
+            let mut levels = vec![natural(backend, &font, &text).width()];
+            for step in vkxp_core::SQUEEZE_STEPS {
+                let (advances, condense) = metrics.squeezed(size as u32, step);
+                let width = backend
+                    .rasterize(&font, &text, &advances, Some(condense))
+                    .width();
+                if width < *levels.last().unwrap() {
+                    levels.push(width);
+                }
+            }
+            if metrics.width() as i32 != number(&sample[4]) || levels != expected {
+                wrong.push(format!(
+                    "{}: {} {levels:?}",
+                    sample.join(" "),
+                    metrics.width()
+                ));
+            }
+            checked += 1;
+        }
+        assert!(checked > 0);
+        assert!(
+            wrong.is_empty(),
+            "{} of {checked}:\n{}",
+            wrong.len(),
+            wrong.join("\n")
+        );
+    }
+
+    /// `P font size string text_size_width rect_w align | first..last ink column`: a sweep of
+    /// rectangle widths from 1 to past the text width, in which the text is squeezed step
+    /// by step and at last cut.
+    #[test]
+    fn measured_squeeze_sweep() {
+        let committed = backend();
+        let measured = measured_backend();
+        let mut wrong = Vec::new();
+        let mut checked = 0;
+        for sample in samples("P") {
+            let Some((backend, family)) = sample_font(&sample[1], &committed, measured.as_ref())
+            else {
+                continue;
+            };
+            let font = font(family, number(&sample[2]));
+            let text = string(&sample[3]);
+            let metrics = backend.metrics(&font, &text);
+            let align = match number(&sample[6]) {
+                2 => Align::Right,
+                _ => Align::Left,
+            };
+            let width = number(&sample[5]);
+            let rect = Rect::new(20, 0, width, metrics.height as i32);
+            let size = (metrics.width() + 44, metrics.height);
+            let rows = drawn(backend, &font, size, rect, &text, align);
+            let columns = (0..size.0 as usize).map(|x| rows.iter().any(|row| row[x] > 0));
+            let found = ink(columns).map(|(first, last)| (first - 20, last - 20));
+            let expected = (number(&sample[8]), number(&sample[9]));
+            if metrics.width() as i32 != number(&sample[4]) || found != Some(expected) {
+                wrong.push(format!(
+                    "{}: {} {found:?}",
+                    sample.join(" "),
+                    metrics.width()
+                ));
+            }
+            checked += 1;
+        }
+        assert!(checked > 0);
+        assert!(
+            wrong.is_empty(),
+            "{} of {checked}:\n{}",
+            wrong.len(),
+            wrong.join("\n")
+        );
+    }
 }

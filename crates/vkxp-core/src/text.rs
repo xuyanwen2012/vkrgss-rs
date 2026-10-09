@@ -136,36 +136,40 @@ fn align_offset(drawn: u32, width: u32, align: Align) -> u32 {
     }
 }
 
-/// The step numbers of squeezing: 90, 80, 70 and 60 percent.
-const SQUEEZE_STEPS: [u32; 4] = [9, 8, 7, 6];
+/// The step numbers of squeezing, in the order they are tried: 90, 80, 70 and 60 percent.
+pub const SQUEEZE_STEPS: [u32; 4] = [9, 8, 7, 6];
 
-/// The advances of text squeezed to step `step` of a font of size `size`, and the fraction
-/// of its natural width each glyph is condensed to.
-///
-/// The narrower font has the average character width `k = (size * step * ave) div (10 * th)`
-/// for the natural average `ave` and the text height `th`, and each advance is
-/// `ceil(natural * k / ave)`. The pixel a synthesised bold adds is taken off before and put
-/// back after, and the division is by the average without it.
-///
-/// PLACEHOLDER: the rounding up and the factor `size / th` are those of Wine's GDI, under
-/// which the original runtime was measured; whether they are the runtime's or Wine's is not
-/// determined.
-fn squeeze(metrics: &TextMetrics, size: u32, step: u32) -> (Vec<u32>, (u32, u32)) {
-    let bold = u64::from(metrics.emboldened);
-    let average = u64::from(metrics.average_width.max(1));
-    let regular = average.saturating_sub(bold).max(1);
-    let height = u64::from(metrics.height.max(1));
-    let k = u64::from(size) * u64::from(step) * average / (10 * height);
-    let advances = metrics
-        .advances
-        .iter()
-        .map(|&natural| {
-            let natural = u64::from(natural).saturating_sub(bold);
-            ((natural * k).div_ceil(regular) + bold).min(u64::from(u32::MAX)) as u32
-        })
-        .collect();
-    let fraction = |value: u64| value.min(u64::from(u32::MAX)) as u32;
-    (advances, (fraction(k), fraction(regular)))
+impl TextMetrics {
+    /// The advances of this text squeezed to step `step` (one of [`SQUEEZE_STEPS`]) of a
+    /// font of size `size`, and the fraction of its natural width each glyph is condensed
+    /// to: what [`TextRasterizer::rasterize`] is asked for when the text is too wide.
+    ///
+    /// The narrower font has the average character width
+    /// `k = (size * step * ave) div (10 * th)` for the natural average `ave` and the text
+    /// height `th`, and each advance is `ceil(natural * k / ave)`. The pixel a synthesised
+    /// bold adds is taken off before and put back after, and the division is by the average
+    /// without it.
+    ///
+    /// PLACEHOLDER: the rounding up and the factor `size / th` are those of Wine's GDI,
+    /// under which the original runtime was measured; whether they are the runtime's or
+    /// Wine's is not determined.
+    pub fn squeezed(&self, size: u32, step: u32) -> (Vec<u32>, (u32, u32)) {
+        let bold = u64::from(self.emboldened);
+        let average = u64::from(self.average_width.max(1));
+        let regular = average.saturating_sub(bold).max(1);
+        let height = u64::from(self.height.max(1));
+        let k = u64::from(size) * u64::from(step) * average / (10 * height);
+        let advances = self
+            .advances
+            .iter()
+            .map(|&natural| {
+                let natural = u64::from(natural).saturating_sub(bold);
+                ((natural * k).div_ceil(regular) + bold).min(u64::from(u32::MAX)) as u32
+            })
+            .collect();
+        let fraction = |value: u64| value.min(u64::from(u32::MAX)) as u32;
+        (advances, (fraction(k), fraction(regular)))
+    }
 }
 
 impl Bitmaps {
@@ -220,7 +224,7 @@ impl Bitmaps {
             let mut squeezed = None;
             for step in SQUEEZE_STEPS {
                 let last = step == SQUEEZE_STEPS[SQUEEZE_STEPS.len() - 1];
-                let (advances, condense) = squeeze(&metrics, size, step);
+                let (advances, condense) = metrics.squeezed(size, step);
                 // The overhangs only add to the advances.
                 if total(&advances) > width && !last {
                     continue;
@@ -847,25 +851,28 @@ mod tests {
         let wide = metrics(&[15; 5], 21, 15, 0);
         let widths: Vec<u32> = SQUEEZE_STEPS
             .iter()
-            .map(|&step| total(&squeeze(&wide, 22, step).0))
+            .map(|&step| total(&wide.squeezed(22, step).0))
             .collect();
         assert_eq!(widths, [70, 60, 55, 45]);
-        assert_eq!(squeeze(&wide, 22, 9).1, (14, 15));
+        assert_eq!(wide.squeezed(22, 9).1, (14, 15));
         // Each advance is rounded up on its own.
-        assert_eq!(
-            squeeze(&metrics(&[11, 4, 15], 21, 15, 0), 22, 9).0,
-            [11, 4, 14]
-        );
+        let mixed = metrics(&[11, 4, 15], 21, 15, 0);
+        assert_eq!(mixed.squeezed(22, 9).0, [11, 4, 14]);
         // The pixel of a synthesised bold is not scaled: 16 = 15 + 1, k = 22 * 9 * 16 / 210.
         let bold = metrics(&[16, 12], 21, 16, 1);
-        assert_eq!(squeeze(&bold, 22, 9), (vec![16, 12], (15, 15)));
-        assert_eq!(squeeze(&bold, 22, 6), (vec![11, 9], (10, 15)));
+        assert_eq!(bold.squeezed(22, 9), (vec![16, 12], (15, 15)));
+        assert_eq!(bold.squeezed(22, 6), (vec![11, 9], (10, 15)));
         // Nothing to divide by does not divide by zero.
-        assert_eq!(squeeze(&metrics(&[3], 0, 0, 0), 0, 9).0, [0]);
+        assert_eq!(metrics(&[3], 0, 0, 0).squeezed(0, 9).0, [0]);
     }
 
     /// `Q font size string natural_width | widths`, with the text height and the average
     /// width of the `M` line of the font and size. Each string is one character twice.
+    ///
+    /// The widths listed are drawn widths: the first is the natural one, which is the
+    /// measured width plus the last glyph's right overhang, and the same overhang is in the
+    /// others. Here the advances are checked; the widths the font engine draws with are
+    /// checked against the same samples where the engine is at hand.
     #[test]
     fn measured_squeeze_levels() {
         let number = |word: &String| word.parse::<u32>().expect("a number");
@@ -873,12 +880,6 @@ mod tests {
         for (words, _) in samples("Q") {
             let (size, natural) = (number(&words[2]), number(&words[4]));
             let expected: Vec<u32> = words[6..].iter().map(number).collect();
-            // One sample is drawn a pixel wider than its advances at every step, an overhang
-            // of its end glyph: the widths compared here are those of the advances.
-            if expected[0] != natural {
-                assert_eq!(words[1..4], ["liberation", "6", "4545"]);
-                continue;
-            }
             let (line, _) = sizes
                 .iter()
                 .find(|(line, _)| line[1] == words[1] && line[2] == words[2])
@@ -886,19 +887,15 @@ mod tests {
             let height = number(&line[4]) + number(&line[5]);
             let average = number(&line[6]);
             let text = metrics(&[natural / 2; 2], height, average, 0);
+            let overhang = expected[0] - natural;
             // The natural width, then every width a step gives that is narrower than the
             // one before.
-            let mut levels = vec![natural];
+            let mut levels = vec![natural + overhang];
             for step in SQUEEZE_STEPS {
-                let width = total(&squeeze(&text, size, step).0);
+                let width = total(&text.squeezed(size, step).0) + overhang;
                 if width < *levels.last().unwrap() {
                     levels.push(width);
                 }
-            }
-            // One sample does not list the last width the rule gives (8, at 60 percent).
-            if words[1..4] == ["liberation", "13", "4848"] {
-                assert_eq!(levels[..3], expected[..], "{words:?}");
-                continue;
             }
             assert_eq!(levels, expected, "{words:?}");
         }
