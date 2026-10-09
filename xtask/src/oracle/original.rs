@@ -5,9 +5,11 @@
 //! removed.
 
 use std::fs;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::thread::sleep;
+use std::sync::mpsc;
+use std::thread::{self, sleep};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail, ensure};
@@ -251,6 +253,9 @@ impl Drop for Server<'_> {
     }
 }
 
+/// How long the display server is given to announce its display.
+const DISPLAY_START: Duration = Duration::from_secs(10);
+
 /// A virtual display started for one run.
 struct Xvfb {
     /// The display as `DISPLAY` names it.
@@ -259,43 +264,54 @@ struct Xvfb {
 }
 
 impl Xvfb {
-    /// Starts `Xvfb` on the first display number, from 99 on, that it can serve.
+    /// Starts `Xvfb` on a display number that it chooses itself.
     fn start() -> Result<Xvfb> {
-        for number in 99..199 {
-            let name = format!(":{number}");
-            let mut process = Killed(
-                Command::new("Xvfb")
-                    .args([&name, "-screen", "0", "1024x768x24", "-nolisten", "tcp"])
-                    .stdin(Stdio::null())
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn()
-                    .context("could not start `Xvfb`")?,
-            );
-            // The server is up when it accepts a connection; it ends at once when the
-            // number is taken.
-            let deadline = Instant::now() + Duration::from_secs(5);
-            while process
-                .0
-                .try_wait()
-                .context("waiting for `Xvfb`")?
-                .is_none()
-            {
-                if x11rb::connect(Some(&name)).is_ok() {
-                    return Ok(Xvfb {
-                        name,
-                        _process: process,
-                    });
-                }
-                ensure!(
-                    Instant::now() < deadline,
-                    "`Xvfb` runs on the display {name} but accepts no connection; it may not \
-                     be allowed to create its socket in /tmp/.X11-unix"
-                );
-                sleep(Duration::from_millis(20));
-            }
-        }
-        bail!("`Xvfb` did not start on any display from :99 to :198")
+        Xvfb::start_server(Command::new("Xvfb"), DISPLAY_START)
+    }
+
+    /// Starts `server`, which takes the arguments of `Xvfb`, and waits up to `timeout` for
+    /// the display number it announces. The server writes the number to its standard output,
+    /// as `-displayfd` asks, once it accepts connections; a number picked here could be taken
+    /// by another run before the server binds it.
+    fn start_server(mut server: Command, timeout: Duration) -> Result<Xvfb> {
+        let mut process = Killed(
+            server
+                .args(["-displayfd", "1"])
+                .args(["-screen", "0", "1024x768x24", "-nolisten", "tcp"])
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn()
+                .context("could not start `Xvfb`")?,
+        );
+        let mut output = BufReader::new(process.0.stdout.take().context("no output of `Xvfb`")?);
+        let (sender, announced) = mpsc::channel();
+        // The read ends when the server has written its line or is gone, at the latest when
+        // it is killed after the timeout.
+        thread::spawn(move || {
+            let mut line = String::new();
+            let _ = sender.send(output.read_line(&mut line).map(|_| line));
+        });
+        let line = match announced.recv_timeout(timeout) {
+            Ok(line) => line.context("reading the display number of `Xvfb`")?,
+            Err(_) => bail!(
+                "`Xvfb` did not announce a display within {} seconds",
+                timeout.as_secs_f32()
+            ),
+        };
+        ensure!(
+            !line.is_empty(),
+            "`Xvfb` exited without announcing a display; it may not be allowed to create its \
+             socket in /tmp/.X11-unix"
+        );
+        let number: u32 = line
+            .trim()
+            .parse()
+            .with_context(|| format!("`Xvfb` announced {line:?}, which is no display number"))?;
+        Ok(Xvfb {
+            name: format!(":{number}"),
+            _process: process,
+        })
     }
 }
 
@@ -361,4 +377,69 @@ fn grab(display: &str) -> Result<Picture> {
         height: HEIGHT,
         rgba,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A program in place of `Xvfb`: a shell that runs `script` with the arguments of the
+    /// server and the file descriptor of `-displayfd` in `$fd`.
+    fn stand_in(script: &str) -> Command {
+        let find = "while [ \"$1\" != -displayfd ]; do shift; done; fd=$2; ";
+        let mut shell = Command::new("sh");
+        shell.args(["-c", &format!("{find}{script}"), "sh"]);
+        shell
+    }
+
+    #[test]
+    fn the_display_is_the_one_the_server_announces() {
+        // The server found the first numbers taken, 99 among them, and chose another.
+        let display = Xvfb::start_server(
+            stand_in("echo 104 >&$fd; exec sleep 60"),
+            Duration::from_secs(30),
+        )
+        .unwrap();
+        assert_eq!(display.name, ":104");
+    }
+
+    #[test]
+    fn a_server_that_exits_without_a_display_is_an_error() {
+        let started = Instant::now();
+        let error = Xvfb::start_server(stand_in("exit 1"), Duration::from_secs(30))
+            .err()
+            .unwrap();
+        assert!(
+            error
+                .to_string()
+                .contains("exited without announcing a display"),
+            "{error}"
+        );
+        assert!(started.elapsed() < Duration::from_secs(30));
+    }
+
+    #[test]
+    fn a_server_that_announces_nothing_is_an_error_after_the_timeout() {
+        let error = Xvfb::start_server(stand_in("exec sleep 60"), Duration::from_millis(200))
+            .err()
+            .unwrap();
+        assert!(
+            error.to_string().contains("did not announce a display"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    #[ignore = "needs Xvfb"]
+    fn two_displays_started_at_once_are_distinct_and_accept_connections() {
+        let starts: Vec<_> = (0..2).map(|_| thread::spawn(Xvfb::start)).collect();
+        let displays: Vec<Xvfb> = starts
+            .into_iter()
+            .map(|start| start.join().unwrap().unwrap())
+            .collect();
+        assert_ne!(displays[0].name, displays[1].name);
+        for display in &displays {
+            x11rb::connect(Some(&display.name)).unwrap();
+        }
+    }
 }

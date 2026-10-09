@@ -2,7 +2,7 @@
 
 ## 1. Display (`xtask`)
 
-- [ ] 1.1 Start the display server with `-displayfd` and read the number back with a timeout. Verify: tests for the two scenarios of `specs/oracle-harness/spec.md` with a stand-in server program, and an ignored test with the real `Xvfb` that starts two harness displays at once and connects to both.
+- [x] 1.1 Start the display server with `-displayfd` and read the number back with a timeout. Verify: tests for the two scenarios of `specs/oracle-harness/spec.md` with a stand-in server program, and an ignored test with the real `Xvfb` that starts two harness displays at once and connects to both.
 
 ## 2. Integration check
 
