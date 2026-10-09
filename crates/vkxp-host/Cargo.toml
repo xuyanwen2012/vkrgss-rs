@@ -10,3 +10,14 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+png.workspace = true
+thiserror.workspace = true
+vkxp-proto.workspace = true
+vkxp-vk.workspace = true
+winit.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+vkxp-compose-ref.workspace = true

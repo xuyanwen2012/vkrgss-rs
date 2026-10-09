@@ -6,11 +6,11 @@
 
 ## 2. Session logic (`vkxp-host`)
 
-- [ ] 2.1 Add the dependencies and define the `Clock` and `Display` traits, a fake clock and a recording display for tests. Verify: `cargo build -p vkxp-host` has no warnings and `cargo xtask deps` reports no violation.
-- [ ] 2.2 Implement pacing in `Session`: one tick per frame, the due time rule, frame-rate changes, fast-forward and frame reset. Verify: tests with the fake clock for every scenario of the frame-pacing and fast-forward-and-frame-reset requirements and of the tick handshake.
-- [ ] 2.3 Implement the key map with its defaults, snapshots on change only, and release on focus loss. Verify: tests for every scenario of the input-delivery and default-key-map requirements.
-- [ ] 2.4 Implement reset, quit, shutdown and disconnection handling. Verify: tests for the three scenarios of that requirement plus a dropped guest end.
-- [ ] 2.5 Implement freeze, transition, title, modal and rejected-frame handling against the `Display` trait. Verify: tests using the recording display for the freeze-and-transition, title-and-modal and rejected-frames scenarios.
+- [x] 2.1 Add the dependencies and define the `Clock` and `Display` traits, a fake clock and a recording display for tests. Verify: `cargo build -p vkxp-host` has no warnings and `cargo xtask deps` reports no violation.
+- [x] 2.2 Implement pacing in `Session`: one tick per frame, the due time rule, frame-rate changes, fast-forward and frame reset. Verify: tests with the fake clock for every scenario of the frame-pacing and fast-forward-and-frame-reset requirements and of the tick handshake.
+- [x] 2.3 Implement the key map with its defaults, snapshots on change only, and release on focus loss. Verify: tests for every scenario of the input-delivery and default-key-map requirements.
+- [x] 2.4 Implement reset, quit, shutdown and disconnection handling. Verify: tests for the three scenarios of that requirement plus a dropped guest end.
+- [x] 2.5 Implement freeze, transition, title, modal and rejected-frame handling against the `Display` trait. Verify: tests using the recording display for the freeze-and-transition, title-and-modal and rejected-frames scenarios.
 
 ## 3. Presentation (`vkxp-vk`)
 
