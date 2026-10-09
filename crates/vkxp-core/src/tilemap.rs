@@ -270,14 +270,18 @@ impl Tilemap {
         self.cache.compose(bitmaps, key, &tiles);
     }
 
-    /// The pieces this frame draws the tilemap with, each with its z.
+    /// The pieces this frame draws the tilemap with, each with its z. `scroll` is the vertical
+    /// origin of the tilemap's viewport, 0 without one: the top edge of a row is where it is
+    /// drawn in the viewport, which both origins move.
     ///
     /// PLACEHOLDER: the z of the tiles of priority 1 to 5, the y of their top edge in the
     /// viewport plus 32 for each step of priority and 32 more, is not yet checked against the
     /// original runtime; neither is that a sprite created after the tilemap wins a tie.
-    pub(crate) fn strips(&self) -> impl Iterator<Item = (i64, Strip)> {
+    pub(crate) fn strips(&self, scroll: i64) -> impl Iterator<Item = (i64, Strip)> {
         let key = self.cache.key.as_ref().filter(|_| self.visible);
-        let top = key.map_or(0, |key| key.first.1 * i64::from(TILE) - i64::from(self.oy));
+        let top = key.map_or(0, |key| {
+            key.first.1 * i64::from(TILE) - i64::from(self.oy) - scroll
+        });
         let ground = key.map(|_| (0, Strip::Ground));
         let rows = (1..=MAX_PRIORITY)
             .filter(move |_| key.is_some())
@@ -907,6 +911,54 @@ mod tests {
             tile_shows(&frame, 64, y, |px, py| tile_pixel(400, px, py)),
             tile_shows(&frame, 96, y, |px, py| tile_pixel(384, px, py)),
         )
+    }
+
+    #[test]
+    fn the_z_of_a_tile_follows_the_origin_of_its_viewport() {
+        let mut stage = Stage::sized(160, 160);
+        let viewport = stage.scene.create_viewport(Rect::new(0, 0, 160, 160));
+        let viewport = viewport.unwrap();
+        stage.scene.viewport_mut(viewport).unwrap().oy = 32;
+        let blue = stage.solid(32, 32, BLUE);
+        let sprite = stage.scene.create_sprite(Some(viewport)).unwrap();
+        let sprite_mut = stage.scene.sprite_mut(sprite).unwrap();
+        sprite_mut.set_bitmap(Some(blue), &stage.bitmaps);
+        (sprite_mut.x, sprite_mut.y) = (64, 96);
+
+        let map = map(5, 5);
+        map.set(2, 3, 0, 400);
+        let priorities = SharedTable::new(Table::new(500).unwrap());
+        priorities.set(400, 0, 0, 1);
+        let tileset = tileset(&mut stage);
+        let id = stage.scene.create_tilemap(Some(viewport)).unwrap();
+        let tilemap = stage.scene.tilemap_mut(id).unwrap();
+        tilemap.tileset = Some(tileset);
+        tilemap.map_data = Some(map);
+        tilemap.priorities = Some(priorities);
+
+        // The viewport's origin moves the tile's top edge from y 96 to y 64 in the viewport,
+        // so its z is 64 + 64. Tile and sprite are both drawn at (64, 64).
+        let mut tile_in_front = |z: i32| {
+            stage.scene.set_sprite_z(sprite, z).unwrap();
+            let frame = stage.frame();
+            let tile = tile_shows(&frame, 64, 64, |x, y| tile_pixel(400, x, y));
+            assert!(tile || tile_shows(&frame, 64, 64, |_, _| BLUE));
+            tile
+        };
+        assert!(!tile_in_front(144));
+        assert!(!tile_in_front(129));
+        assert!(tile_in_front(127));
+
+        // Both origins count.
+        stage.scene.tilemap_mut(id).unwrap().oy = -16;
+        stage.scene.sprite_mut(sprite).unwrap().y = 112;
+        let mut tile_in_front = |z: i32| {
+            stage.scene.set_sprite_z(sprite, z).unwrap();
+            let frame = stage.frame();
+            tile_shows(&frame, 64, 80, |x, y| tile_pixel(400, x, y))
+        };
+        assert!(tile_in_front(80 + 64 - 1));
+        assert!(!tile_in_front(80 + 64 + 1));
     }
 
     #[test]
