@@ -2,11 +2,11 @@
 
 ## 1. Value types (`vkxp-core`)
 
-- [ ] 1.1 Implement `Color` and `Tone` (floating-point components, clamping setters, default alpha 255 and grey 0, equality) and their conversion to the protocol's integer types by discarding fractions. Verify: `cargo test -p vkxp-core` covers every scenario of the colour, tone and conversion requirements in `specs/core-values/spec.md`.
-- [ ] 1.2 Implement `Rect` (four `i32` stored as given, emptying, equality) and its conversion to a protocol rectangle (non-positive sizes become empty). Verify: tests for the rectangle scenarios and for the conversion of negative sizes.
-- [ ] 1.3 Implement `Table` (one to three dimensions, zero-initialised, bounds-checked reads returning no value, ignored out-of-range writes, 16-bit wrap, resize). Verify: tests for every scenario of the table and table-resize requirements.
-- [ ] 1.4 Implement the serialized forms of `Color`, `Tone`, `Rect` and `Table` with a typed error for malformed input. Verify: tests for the known colour bytes, the 1820-byte map table and its header, the element order, wrong lengths and an inconsistent header; property tests that every value round-trips.
-- [ ] 1.5 Implement `Font` and `FontDefaults` (names, size, bold, italic, colour; defaults size 22, not bold, not italic, opaque white; family names given at construction). Verify: tests for the three font scenarios.
+- [x] 1.1 Implement `Color` and `Tone` (floating-point components, clamping setters, default alpha 255 and grey 0, equality) and their conversion to the protocol's integer types by discarding fractions. Verify: `cargo test -p vkxp-core` covers every scenario of the colour, tone and conversion requirements in `specs/core-values/spec.md`.
+- [x] 1.2 Implement `Rect` (four `i32` stored as given, emptying, equality) and its conversion to a protocol rectangle (non-positive sizes become empty). Verify: tests for the rectangle scenarios and for the conversion of negative sizes.
+- [x] 1.3 Implement `Table` (one to three dimensions, zero-initialised, bounds-checked reads returning no value, ignored out-of-range writes, 16-bit wrap, resize). Verify: tests for every scenario of the table and table-resize requirements.
+- [x] 1.4 Implement the serialized forms of `Color`, `Tone`, `Rect` and `Table` with a typed error for malformed input. Verify: tests for the known colour bytes, the 1820-byte map table and its header, the element order, wrong lengths and an inconsistent header; property tests that every value round-trips.
+- [x] 1.5 Implement `Font` and `FontDefaults` (names, size, bold, italic, colour; defaults size 22, not bold, not italic, opaque white; family names given at construction). Verify: tests for the three font scenarios.
 
 ## 2. Bitmap arithmetic (`vkxp-pixel`)
 

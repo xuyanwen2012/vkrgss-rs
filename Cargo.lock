@@ -544,6 +544,13 @@ dependencies = [
 [[package]]
 name = "vkxp-core"
 version = "0.1.0"
+dependencies = [
+ "proptest",
+ "thiserror",
+ "vkxp-compose-ref",
+ "vkxp-pixel",
+ "vkxp-proto",
+]
 
 [[package]]
 name = "vkxp-host"
