@@ -4,7 +4,7 @@
 use std::fs;
 
 use vkxp_binding::testing;
-use vkxp_binding::testing::host::{self, Script};
+use vkxp_binding::testing::host::{self, Script, with_error_stream};
 
 /// The value of a snippet, or its exception as `Class: message`.
 fn eval(source: &str) -> String {
@@ -12,31 +12,6 @@ fn eval(source: &str) -> String {
         Ok(inspect) => inspect,
         Err(error) => format!("{}: {}", error.class_name, error.message),
     }
-}
-
-/// A snippet whose value is that of `source` together with what it wrote to the error
-/// stream.
-fn with_error_stream(source: &str) -> String {
-    format!(
-        "vkxp_capture = Object.new
-         def vkxp_capture.write(text)
-           (@text ||= '') << text.to_s
-           text.to_s.size
-         end
-         def vkxp_capture.text
-           @text || ''
-         end
-         vkxp_stderr = $stderr
-         begin
-           $stderr = vkxp_capture
-           vkxp_value = begin
-             {source}
-           end
-         ensure
-           $stderr = vkxp_stderr
-         end
-         [vkxp_value, vkxp_capture.text]"
-    )
 }
 
 #[test]

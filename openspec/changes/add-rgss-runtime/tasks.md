@@ -7,10 +7,10 @@
 
 ## 2. Modules (`vkxp-binding`)
 
-- [ ] 2.1 Implement `Graphics` (`update`, `freeze`, `transition`, `frame_reset`, `frame_rate`, `frame_count`, the stored `visible` flag). Verify: tests for the scenarios of the three Graphics requirements in `specs/rgss-modules/spec.md`; `Graphics` added to the arity test.
-- [ ] 2.2 Implement `Input` with its constants. Verify: tests for the input scenarios and the button-constants scenario; `Input` added to the arity test.
-- [ ] 2.3 Implement `Audio` with the duplicate check for music and background sound. Verify: tests for the four audio scenarios; `Audio` added to the arity test.
-- [ ] 2.4 Implement `load_data`, `print` and `p`. Verify: tests for the data-file and message-output scenarios.
+- [x] 2.1 Implement `Graphics` (`update`, `freeze`, `transition`, `frame_reset`, `frame_rate`, `frame_count`, the stored `visible` flag). Verify: tests for the scenarios of the three Graphics requirements in `specs/rgss-modules/spec.md`; `Graphics` added to the arity test.
+- [x] 2.2 Implement `Input` with its constants. Verify: tests for the input scenarios and the button-constants scenario; `Input` added to the arity test.
+- [x] 2.3 Implement `Audio` with the duplicate check for music and background sound. Verify: tests for the four audio scenarios; `Audio` added to the arity test.
+- [x] 2.4 Implement `load_data`, `print` and `p`. Verify: tests for the data-file and message-output scenarios.
 
 ## 3. Running a game (`vkxp-binding`)
 

@@ -16,6 +16,20 @@ def save_data(object, filename)
   File.open(filename, "wb") { |file| Marshal.dump(object, file) }
 end
 
+# The text goes to the error stream and to the host, which shows it until it is dismissed.
+def print(*args)
+  text = ""
+  args.each { |arg| text << arg.to_s }
+  $stderr.write(text + "\n")
+  vkxp_modal(text)
+end
+
+def p(*args)
+  text = args.map { |arg| arg.inspect }.join("\n")
+  $stderr.write(text + "\n")
+  vkxp_modal(text)
+end
+
 # A placeholder: every function returns 0.
 class Win32API
   @@vkxp_called = {}

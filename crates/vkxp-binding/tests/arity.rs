@@ -11,7 +11,9 @@ const METHOD_LIST: &str = include_str!("data/rgss1_api.txt");
 
 /// The classes whose entries are checked. Later binding changes extend this until it is
 /// every class of the list.
-const IMPLEMENTED: &[&str] = &["Color", "Tone", "Rect", "Table", "Font", "Bitmap"];
+const IMPLEMENTED: &[&str] = &[
+    "Color", "Tone", "Rect", "Table", "Font", "Bitmap", "Graphics", "Input", "Audio",
+];
 
 /// One entry of the method list.
 #[derive(Debug, PartialEq, Eq)]

@@ -12,6 +12,9 @@
 //! | File | Contents |
 //! |---|---|
 //! | `game/Extra.rb` | Ruby source that defines `VKXP_EXTRA` and counts its evaluations in `$vkxp_extra_loads` |
+//! | `game/data/thing.rxdata` | the `Marshal` dump of `[1, "two"]` |
+//! | `game/Graphics/Transitions/004-Blind04.png` | 2 by 2 pixels, [`DOT_PIXELS`](super::DOT_PIXELS) |
+//! | `rtp/Audio/SE/001-System01.ogg` | [`SOUND_BYTES`], which is not sound |
 
 use std::sync::mpsc;
 use std::sync::{Mutex, Once, PoisonError};
@@ -143,6 +146,9 @@ pub fn scripted_host(script: Script) -> (GuestEnd, ScriptedHost) {
 const EXTRA_RB: &str = "VKXP_EXTRA = :extra unless defined?(VKXP_EXTRA)\n\
                         $vkxp_extra_loads = ($vkxp_extra_loads || 0) + 1\n";
 
+/// The contents of `Audio/SE/001-System01.ogg` in the run-time package directory.
+pub const SOUND_BYTES: &[u8] = b"not really Ogg Vorbis";
+
 /// The settings [`configure`] asked for, until the preparation takes them.
 static CONFIGURED: Mutex<Option<RunConfig>> = Mutex::new(None);
 
@@ -158,12 +164,28 @@ pub fn configure(run: RunConfig) {
 fn prepare() {
     static PREPARED: Once = Once::new();
     PREPARED.call_once(|| {
-        super::write(&super::game_dir().join("Extra.rb"), EXTRA_RB.as_bytes());
+        let game = super::game_dir();
+        super::write(&game.join("Extra.rb"), EXTRA_RB.as_bytes());
+        super::write(
+            &game.join("Graphics/Transitions/004-Blind04.png"),
+            &super::png(2, &super::DOT_PIXELS),
+        );
+        super::write(
+            &game.with_file_name("rtp").join("Audio/SE/001-System01.ogg"),
+            SOUND_BYTES,
+        );
+        // Written by the interpreter below; the directory has to exist.
+        let thing = game.join("data/thing.rxdata");
+        super::write(&thing, b"");
+        let dump_thing = format!(
+            "File.open({}, 'wb') {{ |file| Marshal.dump([1, 'two'], file) }}",
+            ruby_literal(&thing.to_string_lossy())
+        );
         let run = CONFIGURED
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .take();
-        super::run(|ruby| {
+        super::run(move |ruby| {
             Guest::with(|guest| {
                 guest.files.refresh();
                 if let Some(run) = run {
@@ -171,8 +193,40 @@ fn prepare() {
                 }
             });
             runtime::prepare(ruby).expect("the prelude evaluates");
+            ruby.eval_protected(&dump_thing, "testing", 1)
+                .expect("the data file is written");
         });
     });
+}
+
+/// A Ruby string literal of `text`.
+pub fn ruby_literal(text: &str) -> String {
+    format!("'{}'", text.replace('\\', "\\\\").replace('\'', "\\'"))
+}
+
+/// A snippet whose value is the value of `source` together with what `source` wrote to the
+/// error stream, as an array of the two.
+pub fn with_error_stream(source: &str) -> String {
+    format!(
+        "vkxp_capture = Object.new
+         def vkxp_capture.write(text)
+           (@text ||= '') << text.to_s
+           text.to_s.size
+         end
+         def vkxp_capture.text
+           @text || ''
+         end
+         vkxp_stderr = $stderr
+         begin
+           $stderr = vkxp_capture
+           vkxp_value = begin
+             {source}
+           end
+         ensure
+           $stderr = vkxp_stderr
+         end
+         [vkxp_value, vkxp_capture.text]"
+    )
 }
 
 /// `inspect` of the value of `source`, evaluated as `test`, line 1.

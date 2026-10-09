@@ -125,11 +125,14 @@
 //! The `testing` module, behind the feature of the same name, starts the one interpreter of
 //! a test process with a guest over a generated game directory and evaluates Ruby source.
 
+mod audio;
 mod bitmap;
 mod color;
 mod error;
 mod font;
+mod graphics;
 mod guest;
+mod input;
 mod kernel;
 mod rb;
 mod rect;
