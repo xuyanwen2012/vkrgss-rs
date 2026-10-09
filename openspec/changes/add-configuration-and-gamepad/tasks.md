@@ -2,8 +2,8 @@
 
 ## 1. Key map and gamepad (`vkxp-host`)
 
-- [ ] 1.1 Make the key map a value built from defaults and per-button overrides with name parsing. Verify: tests for the two scenarios of the key-map requirement in `specs/host-session/spec.md`; the default-key-map tests still pass.
-- [ ] 1.2 Add the gamepad mapping over an abstract pad state and the `gilrs` layer. Verify: tests for the four gamepad scenarios, none of which opens a device.
+- [x] 1.1 Make the key map a value built from defaults and per-button overrides with name parsing. Verify: tests for the two scenarios of the key-map requirement in `specs/host-session/spec.md`; the default-key-map tests still pass.
+- [x] 1.2 Add the gamepad mapping over an abstract pad state and the `gilrs` layer. Verify: tests for the four gamepad scenarios, none of which opens a device.
 
 ## 2. Configuration (`vkxp`)
 

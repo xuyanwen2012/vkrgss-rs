@@ -12,12 +12,15 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+gilrs.workspace = true
 png.workspace = true
+serde.workspace = true
 thiserror.workspace = true
 vkxp-audio.workspace = true
 vkxp-proto.workspace = true
 vkxp-vk.workspace = true
-winit.workspace = true
+# `serde` reads the names of key codes in a configuration.
+winit = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
 tempfile.workspace = true

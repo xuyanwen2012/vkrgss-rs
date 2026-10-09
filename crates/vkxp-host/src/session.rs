@@ -139,6 +139,8 @@ pub struct Session<D: Display, C: Clock> {
     held_keys: HashSet<KeyCode>,
     /// Keys that are down as part of a host shortcut and hold no button until released.
     swallowed_keys: HashSet<KeyCode>,
+    /// The buttons the gamepads hold.
+    pad: InputSnapshot,
     /// The snapshot the guest was last sent.
     buttons: InputSnapshot,
     /// The buttons live input holds, which is what the guest is sent unless `input` says
@@ -180,6 +182,7 @@ impl<D: Display, C: Clock> Session<D, C> {
             fast_forward_forced: false,
             held_keys: HashSet::new(),
             swallowed_keys: HashSet::new(),
+            pad: InputSnapshot::EMPTY,
             buttons: InputSnapshot::EMPTY,
             live: InputSnapshot::EMPTY,
             input: options.input,
@@ -382,6 +385,14 @@ impl<D: Display, C: Clock> Session<D, C> {
         self.swallowed_keys.clear();
         self.fast_forward_key = false;
         self.update_buttons();
+    }
+
+    /// The gamepads hold `snapshot` from now on, together with what the keyboard holds.
+    pub fn pad_buttons(&mut self, snapshot: InputSnapshot) {
+        if self.end.is_none() && snapshot != self.pad {
+            self.pad = snapshot;
+            self.update_buttons();
+        }
     }
 
     /// Sets the held buttons directly, bypassing the key map, as a scripted run does.
@@ -622,10 +633,9 @@ impl<D: Display, C: Clock> Session<D, C> {
             .iter()
             .filter(|key| !self.swallowed_keys.contains(key))
             .flat_map(|key| self.keys.buttons(*key))
-            .fold(
-                InputSnapshot::EMPTY,
-                |snapshot: InputSnapshot, button: Button| snapshot.with(button),
-            );
+            .fold(self.pad, |snapshot: InputSnapshot, button: Button| {
+                snapshot.with(button)
+            });
         self.set_buttons(snapshot);
     }
 

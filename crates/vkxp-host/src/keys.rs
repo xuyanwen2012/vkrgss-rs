@@ -1,7 +1,53 @@
 //! The map from physical keys to RGSS1 buttons.
 
+use std::collections::BTreeMap;
+
+use serde::Deserialize;
+use serde::de::IntoDeserializer;
+use serde::de::value::Error as NameError;
+use thiserror::Error;
 use vkxp_proto::Button;
 use winit::keyboard::KeyCode;
+
+use crate::script::button_named;
+
+/// Why a map could not be built from the names in a configuration.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum MapError {
+    #[error("unknown button `{0}`")]
+    UnknownButton(String),
+    #[error("unknown key `{0}`")]
+    UnknownKey(String),
+    #[error("unknown gamepad button `{0}`")]
+    UnknownPadButton(String),
+}
+
+/// The key with the name the windowing library gives it, such as `KeyJ`, `Space` or
+/// `ArrowDown`.
+fn key_named(name: &str) -> Option<KeyCode> {
+    KeyCode::deserialize(IntoDeserializer::<NameError>::into_deserializer(name)).ok()
+}
+
+/// `defaults` with the bindings of every button in `overrides` replaced by the ones listed
+/// for it. Shared by the key map and the gamepad map.
+pub(crate) fn with_overrides<T: Copy + PartialEq>(
+    defaults: &[(T, Button)],
+    overrides: &BTreeMap<String, Vec<String>>,
+    named: impl Fn(&str) -> Result<T, MapError>,
+) -> Result<Vec<(T, Button)>, MapError> {
+    let mut bindings = defaults.to_vec();
+    for (name, sources) in overrides {
+        let button = button_named(name).ok_or_else(|| MapError::UnknownButton(name.to_owned()))?;
+        bindings.retain(|(_, bound)| *bound != button);
+        for source in sources {
+            let binding = (named(source)?, button);
+            if !bindings.contains(&binding) {
+                bindings.push(binding);
+            }
+        }
+    }
+    Ok(bindings)
+}
 
 /// Which buttons each physical key holds down. One key may hold several buttons and several
 /// keys may hold the same one.
@@ -57,6 +103,16 @@ impl KeyMap {
         KeyMap {
             bindings: Vec::new(),
         }
+    }
+
+    /// The default map with the keys of every button in `overrides` replaced: the button, by
+    /// its `Input` name, is held by exactly the keys listed for it, by the names of the
+    /// windowing library's key codes. Buttons that are not mentioned keep their default keys.
+    pub fn with_overrides(overrides: &BTreeMap<String, Vec<String>>) -> Result<KeyMap, MapError> {
+        let bindings = with_overrides(&DEFAULTS, overrides, |name| {
+            key_named(name).ok_or_else(|| MapError::UnknownKey(name.to_owned()))
+        })?;
+        Ok(KeyMap { bindings })
     }
 
     /// Makes `key` hold `button`, in addition to whatever it holds already.
@@ -154,5 +210,68 @@ mod tests {
             map.buttons(KeyCode::KeyJ).collect::<Vec<_>>(),
             [Button::C, Button::A]
         );
+    }
+
+    fn overrides(entries: &[(&str, &[&str])]) -> BTreeMap<String, Vec<String>> {
+        entries
+            .iter()
+            .map(|(button, keys)| {
+                let keys = keys.iter().map(|key| (*key).to_owned()).collect();
+                ((*button).to_owned(), keys)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn no_overrides_is_the_default_map() {
+        assert_eq!(
+            KeyMap::with_overrides(&BTreeMap::new()),
+            Ok(KeyMap::default())
+        );
+    }
+
+    /// Scenario "Remapped button".
+    #[test]
+    fn a_remapped_button_is_held_by_exactly_its_keys() {
+        let map = KeyMap::with_overrides(&overrides(&[("C", &["KeyJ"])])).unwrap();
+        let held = |key| map.buttons(key).collect::<Vec<_>>();
+        assert_eq!(held(KeyCode::KeyJ), [Button::C]);
+        for key in [
+            KeyCode::Space,
+            KeyCode::Enter,
+            KeyCode::NumpadEnter,
+            KeyCode::KeyC,
+        ] {
+            assert_eq!(held(key), [], "{key:?}");
+        }
+        assert_eq!(held(KeyCode::ArrowDown), [Button::Down]);
+        assert_eq!(held(KeyCode::ArrowLeft), [Button::Left]);
+        assert_eq!(held(KeyCode::ArrowRight), [Button::Right]);
+        assert_eq!(held(KeyCode::ArrowUp), [Button::Up]);
+        assert_eq!(held(KeyCode::Escape), [Button::B]);
+    }
+
+    #[test]
+    fn a_remapped_button_leaves_the_other_buttons_of_its_keys() {
+        let map = KeyMap::with_overrides(&overrides(&[("a", &["KeyZ"]), ("B", &[])])).unwrap();
+        let held = |key| map.buttons(key).collect::<Vec<_>>();
+        assert_eq!(held(KeyCode::ShiftLeft), [Button::Shift]);
+        assert_eq!(held(KeyCode::KeyZ), [Button::A]);
+        assert_eq!(held(KeyCode::Escape), []);
+    }
+
+    /// Scenario "Unknown key name".
+    #[test]
+    fn an_unknown_key_name_is_an_error_naming_it() {
+        let error = KeyMap::with_overrides(&overrides(&[("C", &["KeyJ", "Jay"])])).unwrap_err();
+        assert_eq!(error, MapError::UnknownKey("Jay".to_owned()));
+        assert!(error.to_string().contains("Jay"), "{error}");
+    }
+
+    #[test]
+    fn an_unknown_button_name_is_an_error_naming_it() {
+        let error = KeyMap::with_overrides(&overrides(&[("JUMP", &["KeyJ"])])).unwrap_err();
+        assert_eq!(error, MapError::UnknownButton("JUMP".to_owned()));
+        assert!(error.to_string().contains("JUMP"), "{error}");
     }
 }

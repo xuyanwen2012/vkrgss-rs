@@ -21,8 +21,8 @@ use winit::keyboard::PhysicalKey;
 use winit::window::{Fullscreen, Window, WindowId};
 
 use crate::{
-    AudioOptions, AudioSink, Clock, Display, InputSource, KeyAction, KeyMap, NullSink, Session,
-    SessionEnd, SessionOptions, SystemClock,
+    AudioOptions, AudioSink, Clock, Display, GamepadMap, Gamepads, InputSource, KeyAction, KeyMap,
+    NullSink, Session, SessionEnd, SessionOptions, SystemClock,
 };
 
 /// How a windowed session is set up.
@@ -37,6 +37,8 @@ pub struct WindowedOptions {
     pub logical_size: Size,
     /// The physical keys that hold each button.
     pub keys: KeyMap,
+    /// The gamepad buttons that hold each button.
+    pub pads: GamepadMap,
     /// The audio output, or `None` for a run without sound, which opens no audio device.
     pub audio: Option<AudioOptions>,
     /// A recorder or a replayer of the input, which the session takes when it starts.
@@ -51,6 +53,7 @@ impl WindowedOptions {
             title: "vkxp".to_owned(),
             logical_size: Size::new(640, 480),
             keys: KeyMap::default(),
+            pads: GamepadMap::default(),
             audio: None,
             input: None,
         }
@@ -207,6 +210,8 @@ struct Running {
     driver: Driver<VulkanDisplay, SystemClock>,
     clock: SystemClock,
     window: Arc<Window>,
+    /// The gamepads, unless the machine has no support for them.
+    pads: Option<Gamepads>,
 }
 
 struct App {
@@ -262,6 +267,7 @@ impl App {
             driver: Driver::new(Session::new(display, clock, options), link),
             clock,
             window,
+            pads: Gamepads::open(self.options.pads.clone()),
         })
     }
 
@@ -270,6 +276,12 @@ impl App {
         let Some(running) = &mut self.running else {
             return;
         };
+        // The pads have no events of their own in this loop: they are read whenever it wakes,
+        // which is at least once per frame.
+        if let Some(pads) = &mut running.pads {
+            let held = pads.poll();
+            running.driver.session_mut().pad_buttons(held);
+        }
         let next = running.driver.wake();
         if let Some(end) = running.driver.end() {
             self.outcome = Some(Ok(end));

@@ -446,6 +446,33 @@ fn snapshots_are_complete() {
     assert_eq!(rig.key(KeyCode::ArrowDown, false), [held(&[Button::C])]);
 }
 
+/// Scenarios "Keyboard and pad together" and "Removal".
+#[test]
+fn the_keyboard_and_the_pads_hold_buttons_together() {
+    use crate::{GamepadMap, PadButton, PadState};
+
+    let map = GamepadMap::default();
+    let pad = PadState {
+        held: vec![PadButton::South],
+        stick: (0.0, 0.0),
+    };
+    let mut rig = Rig::new();
+    assert_eq!(rig.key(KeyCode::ArrowLeft, true), [held(&[Button::Left])]);
+    rig.session
+        .pad_buttons(map.held(std::slice::from_ref(&pad)));
+    assert_eq!(
+        rig.session.take_messages(),
+        [held(&[Button::Left, Button::C])]
+    );
+    rig.session.pad_buttons(map.held(&[pad]));
+    assert_eq!(rig.session.take_messages(), [], "nothing changed");
+    assert_eq!(rig.key(KeyCode::ArrowLeft, false), [held(&[Button::C])]);
+
+    // The pad is removed: it is no longer among the states.
+    rig.session.pad_buttons(map.held(&[]));
+    assert_eq!(rig.session.take_messages(), [held(&[])]);
+}
+
 #[test]
 fn releasing_one_of_two_keys_for_a_button_sends_nothing() {
     let mut rig = Rig::new();

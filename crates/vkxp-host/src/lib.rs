@@ -10,7 +10,8 @@
 //!    [`Clock`], so every pacing, input and transition rule is tested with a fake clock and a
 //!    recording display (see [`testing`]).
 //! 2. The runners drive a session: one in a window on `winit` with the real clock, one headless
-//!    on a virtual clock with scripted input and frame dumps. Either can record the input of
+//!    on a virtual clock with scripted input and frame dumps. The windowed one reads the
+//!    gamepads ([`Gamepads`]); a headless run reads none. Either can record the input of
 //!    every frame into a file or replay such a file ([`Recorder`], [`Replayer`]).
 //! 3. The [`Display`] implementations: the Vulkan presenter for a window, an off-screen one for
 //!    headless runs, and the recording fake.
@@ -26,6 +27,7 @@
 mod audio;
 mod clock;
 mod display;
+mod gamepad;
 mod headless;
 mod keys;
 mod record;
@@ -39,11 +41,12 @@ pub mod testing;
 pub use audio::{AudioOptions, AudioSink, NullSink};
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use display::Display;
+pub use gamepad::{DEAD_ZONE, GamepadMap, Gamepads, PadButton, PadState};
 pub use headless::{
     DEFAULT_DEVICE, HeadlessDisplay, HeadlessEnd, HeadlessError, HeadlessOptions, HeadlessReport,
     HostLink, headless_link, run_headless,
 };
-pub use keys::KeyMap;
+pub use keys::{KeyMap, MapError};
 pub use record::{InputSource, Recorder, Recording, RecordingError, Replayer};
 pub use script::{InputScript, ScriptError, button_name};
 pub use session::{KeyAction, Session, SessionEnd, SessionOptions};
