@@ -21,8 +21,8 @@
 
 ## 4. Pixel arithmetic
 
-- [ ] 4.1 Implement normal, additive and subtractive blend with opacity, colour blend and tone in `vkxp-pixel`, each with a documented formula and a provenance marker. Verify: unit tests for zero opacity, zero alpha, saturation and neutral tone.
-- [ ] 4.2 Expose a provenance listing. Verify: a test asserts every public arithmetic function is listed and currently marked as placeholder.
+- [x] 4.1 Implement normal, additive and subtractive blend with opacity, colour blend and tone in `vkxp-pixel`, each with a documented formula and a provenance marker. Verify: unit tests for zero opacity, zero alpha, saturation and neutral tone.
+- [x] 4.2 Expose a provenance listing. Verify: a test asserts every public arithmetic function is listed and currently marked as placeholder.
 
 ## 5. CPU reference compositor
 
