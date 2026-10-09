@@ -8,7 +8,7 @@
 ## 2. Drawing (`vkxp-core`, `vkxp-binding`)
 
 - [x] 2.1 Extend the rasteriser interface and its adapter, and implement vertical placement, overhang-aware alignment and the whole-cell blend. Verify: the scenarios of the text-drawing and text-measurement requirements in `specs/core-bitmap/spec.md` except the squeeze ones.
-- [x] 2.2 Implement squeezing by steps. Verify: the two squeeze scenarios and the measured-levels scenario.
+- [ ] 2.2 Implement squeezing by steps. Verify: the two squeeze scenarios and the measured-levels scenario.
 - [x] 2.3 Raise the argument errors. Verify: Ruby tests for the two scenarios of `specs/rgss-bitmap/spec.md`.
 
 ## 3. Integration check

@@ -17,26 +17,26 @@ pub(crate) struct Glyph {
     pub(crate) top: i32,
     pub(crate) width: u32,
     pub(crate) height: u32,
+    /// The columns, relative to the pen, of the left and right edge of the box the overhangs
+    /// are taken from. `None` for a glyph without an outline.
+    pub(crate) extent: Option<(i32, i32)>,
     /// `width * height` coverage bytes, rows from the top.
     pub(crate) coverage: Vec<u8>,
 }
 
 impl Glyph {
-    /// How far the image reaches left of the pen.
+    /// How far the glyph reaches left of the pen.
     pub(crate) fn left_overhang(&self) -> u32 {
-        if self.width == 0 {
-            return 0;
-        }
-        self.left.min(0).unsigned_abs()
+        self.extent
+            .map_or(0, |(left, _)| left.min(0).unsigned_abs())
     }
 
-    /// How far the image reaches right of the pen moved on by `advance`.
+    /// How far the glyph reaches right of the pen moved on by `advance`.
     pub(crate) fn right_overhang(&self, advance: u32) -> u32 {
-        if self.width == 0 {
+        let Some((_, right)) = self.extent else {
             return 0;
-        }
-        let right = i64::from(self.left) + i64::from(self.width) - i64::from(advance);
-        right.clamp(0, i64::from(u32::MAX)) as u32
+        };
+        (i64::from(right) - i64::from(advance)).clamp(0, i64::from(u32::MAX)) as u32
     }
 }
 

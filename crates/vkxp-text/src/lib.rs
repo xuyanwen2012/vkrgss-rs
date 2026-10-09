@@ -66,9 +66,11 @@
 //! Within the family, a bold, italic or bold-italic request selects the face of exactly that
 //! weight class and slant when the family has one and the regular face otherwise. A font with
 //! a weight axis is set to weight 400, or 700 for a bold request. A style the selected face
-//! does not have is synthesised: bold by making every glyph one pixel bolder and every
-//! advance, and the average width, one pixel wider; italic by slanting the glyphs, which
-//! keeps the advances and gives the glyphs overhangs.
+//! does not have is synthesised as GDI was measured to do it: bold by emboldening the
+//! outline by a 24th of the em and making every advance, and the average width, one pixel
+//! wider; italic by slanting the outline by a quarter, which keeps the advances and gives
+//! the glyphs overhangs. The overhangs of such glyphs are those of the box GDI takes them
+//! from: the box of the emboldened outline, slanted at its corners.
 //!
 //! A character the selected face lacks is drawn from the first fallback family that has it,
 //! then from any font that has it, at the selected face's pixels per em and on its baseline,

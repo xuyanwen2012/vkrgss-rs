@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use swash::GlyphId;
 use swash::scale::{Render, ScaleContext, Source};
-use swash::zeno::{Format, Transform};
+use swash::zeno::{Format, Transform, Vector};
 
 use crate::face::LoadedFace;
 use crate::glyph_cache::{Glyph, GlyphCache, GlyphKey};
@@ -101,10 +101,26 @@ impl TextLayout {
     }
 }
 
+/// The strength of a synthesised bold as a fraction of the pixels per em: the outline grows
+/// by twice this, a 24th of the em, to the right and upwards, and a little beyond at sharp
+/// corners.
+///
+/// PLACEHOLDER: the strength Wine's GDI emboldens with, under which the original runtime
+/// was measured.
+const SYNTHETIC_BOLD: f32 = 1.0 / 48.0;
+
+/// How far below a pixel row, in pixels, the bottom of a glyph that ends less than a pixel
+/// below the baseline may lie and still count as ending on that row, where the box GDI
+/// slants comes from the hinted glyph; a deeper bottom is on the nearest row.
+///
+/// PLACEHOLDER: fitted to the left overhangs measured in italic with Noto Sans CJK SC under
+/// Wine's GDI, not derived from its hinter.
+const SHALLOW_BOTTOM: f32 = 0.25;
+
 /// The slant of a synthesised italic: how far a point moves right per unit of height.
 ///
-/// PLACEHOLDER: the value is not measured; the overhangs it gives differ from those of the
-/// original runtime under Wine.
+/// PLACEHOLDER: the slant of Wine's GDI, under which the original runtime was measured; it
+/// is the value that fits the measured overhangs.
 const SYNTHETIC_SLANT: f32 = 0.25;
 
 /// The face a request resolves to.
@@ -606,19 +622,44 @@ impl TextEngine {
             .hint(false)
             .normalized_coords(loaded.coords())
             .build();
+        let strength = if key.bold {
+            key.pixels_per_em as f32 * SYNTHETIC_BOLD
+        } else {
+            0.0
+        };
         let slant = if key.italic { SYNTHETIC_SLANT } else { 0.0 };
-        let transform = (key.italic || numerator != denominator).then(|| {
-            Transform::new(
-                numerator as f32 / denominator as f32,
-                0.0,
-                slant,
-                1.0,
-                0.0,
-                0.0,
-            )
-        });
+        let condense = numerator as f32 / denominator as f32;
+        let transform = (key.italic || numerator != denominator)
+            .then(|| Transform::new(condense, 0.0, slant, 1.0, 0.0, 0.0));
+
+        // The box GDI takes the overhangs from: that of the outline's points, emboldened,
+        // with its corners condensed and slanted.
+        let extent = scaler
+            .scale_outline(key.glyph)
+            .filter(|outline| !outline.points().is_empty())
+            .map(|mut outline| {
+                if key.bold {
+                    outline.embolden(strength, strength);
+                }
+                let bounds = outline.bounds();
+                let (mut min, mut max) = (bounds.min, bounds.max);
+                min.x *= condense;
+                max.x *= condense;
+                // As measured: the box of a glyph that is not emboldened is on whole
+                // pixels before it is slanted (GDI has it from the hinted glyph, whose
+                // overshoot below the baseline is gone), that of an emboldened one is not.
+                if !key.bold {
+                    let bias = if min.y < -1.0 { 0.5 } else { SHALLOW_BOTTOM };
+                    min = Vector::new(min.x.floor(), (min.y + bias).floor());
+                    max = max.ceil();
+                }
+                let left = min.x + (slant * min.y).min(slant * max.y);
+                let right = max.x + (slant * min.y).max(slant * max.y);
+                (left.floor() as i32, right.ceil() as i32)
+            });
         let rendered = Render::new(&[Source::Outline])
             .format(Format::Alpha)
+            .embolden(strength)
             .transform(transform)
             .render(&mut scaler, key.glyph)
             .and_then(|image| {
@@ -629,16 +670,13 @@ impl TextEngine {
                     top: placement.top,
                     width: placement.width,
                     height: placement.height,
+                    extent,
                     coverage: image.data,
                 })
             })
             // A glyph without an outline, such as a space, draws nothing.
             .unwrap_or_default();
-        let rendered = Arc::new(if key.bold {
-            embolden(&rendered)
-        } else {
-            rendered
-        });
+        let rendered = Arc::new(rendered);
         self.glyphs.insert(key, Arc::clone(&rendered));
         rendered
     }
@@ -665,28 +703,6 @@ fn advance_pixels(units: u32, pixels_per_em: u32, units_per_em: u32) -> u32 {
     let scale = (u64::from(pixels_per_em) * 64 * 65536 * 2 + units_per_em) / (2 * units_per_em);
     let advance = (u64::from(units) * scale + 0x8000) >> 16;
     ((advance + 32) >> 6).min(u64::from(u32::MAX)) as u32
-}
-
-/// `glyph` one pixel bolder: every pixel also covers its right neighbour.
-fn embolden(glyph: &Glyph) -> Glyph {
-    if glyph.width == 0 || glyph.height == 0 {
-        return Glyph::default();
-    }
-    let (old, new) = (glyph.width as usize, glyph.width as usize + 1);
-    let mut coverage = vec![0; new * glyph.height as usize];
-    for (from, to) in glyph.coverage.chunks(old).zip(coverage.chunks_mut(new)) {
-        for (x, &value) in from.iter().enumerate() {
-            to[x] = to[x].max(value);
-            to[x + 1] = value;
-        }
-    }
-    Glyph {
-        left: glyph.left,
-        top: glyph.top,
-        width: glyph.width + 1,
-        height: glyph.height,
-        coverage,
-    }
 }
 
 /// Composes `glyph` into `mask` with its top-left corner at (`left`, `top`), keeping the
@@ -777,20 +793,5 @@ mod tests {
         assert_eq!(advance_pixels(1000, 15, 1000), 15);
         assert_eq!(advance_pixels(555, 8, 1000), 4);
         assert_eq!(advance_pixels(1000, 0, 1000), 0);
-    }
-
-    #[test]
-    fn emboldening_widens_by_one_pixel() {
-        let thin = Glyph {
-            left: 2,
-            top: 5,
-            width: 3,
-            height: 2,
-            coverage: vec![0, 200, 0, 100, 0, 50],
-        };
-        let bold = embolden(&thin);
-        assert_eq!((bold.left, bold.top, bold.width, bold.height), (2, 5, 4, 2));
-        assert_eq!(bold.coverage, [0, 200, 200, 0, 100, 100, 50, 50]);
-        assert_eq!(embolden(&Glyph::default()).width, 0);
     }
 }

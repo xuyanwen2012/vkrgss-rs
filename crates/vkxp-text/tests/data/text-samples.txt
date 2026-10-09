@@ -932,7 +932,8 @@ T 96 3 e5bc80e5a78be6b8b8e6888f | 268 96 | 264 96 | 268 0
 T 96 3 f09f9880 | 134 96 | 69 96 | 134 0
 #
 # O size style character advance L R
-#   Characters whose glyph reaches left of the pen (L) or right of its advance (R). Regular.
+#   Characters whose glyph reaches left of the pen (L) or right of its advance (R). Regular
+#   and bold.
 O 12 0 23 4 0 1
 O 12 0 25 7 0 1
 O 12 0 26 5 0 1
@@ -961,6 +962,11 @@ O 12 0 77 6 0 1
 O 12 0 79 4 0 1
 O 12 0 7e 4 0 1
 O 12 0 c3a9 4 0 1
+O 12 1 41 6 1 0
+O 12 1 56 6 1 0
+O 12 1 59 5 1 0
+O 12 1 6a 3 1 0
+O 12 1 c385 6 1 0
 O 22 0 41 9 0 1
 O 22 0 59 8 1 0
 O 22 0 5f 8 0 1
@@ -970,10 +976,37 @@ O 22 0 6a 4 1 0
 O 22 0 6b 8 0 1
 O 22 0 78 7 0 1
 O 22 0 c385 9 0 1
+O 22 1 41 10 1 0
+O 22 1 56 10 1 0
+O 22 1 59 9 1 0
+O 22 1 66 6 0 1
+O 22 1 6a 5 1 0
+O 22 1 78 8 1 1
+O 22 1 c385 10 1 0
 O 48 0 4b 21 0 1
 O 48 0 59 18 1 0
 O 48 0 66 11 0 1
 O 48 0 6a 9 2 0
+O 48 1 26 23 0 1
+O 48 1 2f 14 0 1
+O 48 1 41 21 1 1
+O 48 1 4b 22 0 2
+O 48 1 56 20 1 1
+O 48 1 58 20 0 1
+O 48 1 59 19 1 1
+O 48 1 5c 14 0 1
+O 48 1 5f 19 0 1
+O 48 1 66 12 0 2
+O 48 1 6a 10 2 0
+O 48 1 6b 19 0 1
+O 48 1 72 14 0 1
+O 48 1 74 13 0 1
+O 48 1 76 18 0 1
+O 48 1 77 27 0 1
+O 48 1 78 17 1 1
+O 48 1 79 18 0 1
+O 48 1 c385 21 1 1
+O 48 1 e29688 34 0 1
 #
 # V size style rect_h | text height, first and last ink row of 'H' from the rect top | vkxp the same
 #   'H国g' drawn left aligned in a rect of height rect_h. The last ink row of H is the row

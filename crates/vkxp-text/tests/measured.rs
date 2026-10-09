@@ -109,11 +109,8 @@ fn measured_sizes_of_noto_sans_cjk() {
 
 // Requirement: Measurement
 
-/// `T size style string | width height | ... | sum of the advances, left overhang`.
-///
-/// The advances are checked in every style. The width and the height are checked for the
-/// regular style only: they include the left overhang of the first glyph, which for a
-/// synthesised bold or italic glyph is not the original's.
+/// `T size style string | width height | ... | sum of the advances, left overhang`, in every
+/// style: the width, which includes the left overhang, the height and the advances.
 #[test]
 fn measured_widths() {
     let Some(mut engine) = noto_engine() else {
@@ -122,24 +119,24 @@ fn measured_widths() {
     let mut wrong = Vec::new();
     let samples = samples("T");
     for sample in &samples {
-        let style = number(&sample[2]);
-        let request = styled(NOTO, number(&sample[1]), style);
+        let request = styled(NOTO, number(&sample[1]), number(&sample[2]));
         let text = string(&sample[3]);
         let layout = engine.layout(&request, &text);
         let sum: u32 = layout.advances.iter().sum();
         let measured = engine.measure(&request, &text);
         let expected = (number(&sample[5]), number(&sample[6]));
-        if sum != number(&sample[11]) || measured.1 != expected.1 {
-            wrong.push(format!("{}: advances {sum}", sample.join(" ")));
-        } else if style == 0 && measured != expected {
-            wrong.push(format!("{}: {measured:?}", sample.join(" ")));
+        if sum != number(&sample[11]) || measured != expected {
+            wrong.push(format!(
+                "{}: {measured:?}, advances {sum}",
+                sample.join(" ")
+            ));
         }
     }
     let count = (wrong.len(), samples.len());
     assert!(wrong.is_empty(), "{count:?}:\n{}", wrong.join("\n"));
 }
 
-/// `O size style character advance left right`: characters with an overhang, regular style.
+/// `O size style character advance left right`: characters with an overhang.
 #[test]
 fn measured_overhangs() {
     let Some(mut engine) = noto_engine() else {
