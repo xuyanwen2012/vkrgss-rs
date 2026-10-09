@@ -2,7 +2,7 @@
 
 ## 1. Missing mask
 
-- [ ] 1.1 Reproduce the missing-mask report end to end, find the cause and fix it. Verify: the mask-file scenario of `specs/host-session/spec.md`.
+- [x] 1.1 Reproduce the missing-mask report end to end, find the cause and fix it. Verify: the mask-file scenario of `specs/host-session/spec.md`.
 
 ## 2. Presenter (`vkxp-vk`)
 

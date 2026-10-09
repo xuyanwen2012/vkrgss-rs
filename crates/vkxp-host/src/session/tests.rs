@@ -941,6 +941,23 @@ fn masked_transition_is_the_masked_mix_with_the_mask_and_the_vagueness() {
     );
 }
 
+/// The guest disposes of the picture when its transition returns, so the frame that ends the
+/// transition carries the destroy delta.
+#[test]
+fn mask_destroyed_with_the_frame_that_ends_the_transition_is_not_reported() {
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    rig.send(GuestToHost::Freeze);
+    rig.send(masked_transition(2, 40));
+    rig.frame(frame_with_mask(1));
+    rig.frame(frame(2));
+    let mut last = packet(3, 40);
+    last.bitmaps = vec![BitmapDelta::Destroy { id: MASK }];
+    rig.frame(GuestToHost::Frame(last));
+    assert_eq!(rig.shown(), Shown::Frame(3));
+    assert_eq!(rig.errors.text(), "");
+}
+
 #[test]
 fn vagueness_of_zero_is_treated_as_one() {
     let mut rig = Rig::new();

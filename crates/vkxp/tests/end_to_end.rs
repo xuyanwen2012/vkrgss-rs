@@ -589,6 +589,63 @@ Graphics.update
     }
 }
 
+/// Writes a grey picture of `width` by `height` pixels as an RGB PNG file: `level(x, y)` in
+/// every channel.
+fn write_grey_png(path: &Path, width: u32, height: u32, level: impl Fn(u32, u32) -> u8) {
+    let file = fs::File::create(path).unwrap();
+    let mut encoder = png::Encoder::new(std::io::BufWriter::new(file), width, height);
+    encoder.set_color(png::ColorType::Rgb);
+    encoder.set_depth(png::BitDepth::Eight);
+    let mut writer = encoder.write_header().unwrap();
+    let data: Vec<u8> = (0..height)
+        .flat_map(|y| (0..width).map(move |x| (x, y)))
+        .flat_map(|(x, y)| [level(x, y); 3])
+        .collect();
+    writer.write_image_data(&data).unwrap();
+    writer.finish().unwrap();
+}
+
+/// Scenario "Mask file of a game" of the host session's requirement that mask bitmaps reach
+/// the display.
+#[test]
+fn a_transition_picture_of_a_game_masks_the_transition() {
+    let main = "\
+sprite = Sprite.new
+sprite.bitmap = Bitmap.new(640, 480)
+sprite.bitmap.fill_rect(0, 0, 640, 480, Color.new(255, 255, 255))
+Graphics.update
+Graphics.freeze
+sprite.visible = false
+Graphics.transition(10, 'Graphics/Transitions/halves')
+Graphics.update
+";
+    let game = Game::new("e2e-mask", "Mask", &[("Main", main)]);
+    let transitions = game.dir().join("Graphics").join("Transitions");
+    fs::create_dir_all(&transitions).unwrap();
+    // Black on the left half, white on the right half.
+    write_grey_png(&transitions.join("halves.png"), 640, 480, |x, _| {
+        if x < 320 { 0 } else { 255 }
+    });
+
+    // Frame 0 is the white one, frames 1 to 10 are the transition to black.
+    let ran = headless(&game, &["--dump", "6=inside.png", "--dump", "11=after.png"]);
+    ran.assert_success();
+    let stderr = ran.stderr();
+    assert!(!stderr.contains("mask"), "{stderr}");
+
+    // The newest frame comes first where the mask is dark.
+    let inside = ran.frame("inside.png");
+    for y in [0, 240, 479] {
+        assert_eq!(inside.pixel(0, y), [0, 0, 0, 255]);
+        assert_eq!(inside.pixel(319, y), [0, 0, 0, 255]);
+        assert_eq!(inside.pixel(320, y), [255, 255, 255, 255]);
+        assert_eq!(inside.pixel(639, y), [255, 255, 255, 255]);
+    }
+    let after = ran.frame("after.png");
+    assert_eq!(after.pixel(0, 0), [0, 0, 0, 255]);
+    assert_eq!(after.pixel(639, 479), [0, 0, 0, 255]);
+}
+
 #[test]
 fn scripted_input_moves_the_sprite() {
     let ran = run_demo(&demo("e2e-input"));

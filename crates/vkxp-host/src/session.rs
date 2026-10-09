@@ -519,8 +519,10 @@ impl<D: Display, C: Clock> Session<D, C> {
                     self.mix = weight;
                     // The mask comes with the frames after the transition message, so only
                     // now is it known whether there is one. Without it the display shows a
-                    // cross-fade.
-                    if let Some((id, _)) = self.mask
+                    // cross-fade. The frame past the last step is shown alone, and the guest
+                    // has disposed of the mask by then.
+                    if shown < duration
+                        && let Some((id, _)) = self.mask
                         && !self.display.has_bitmap(id)
                     {
                         self.report(format_args!(
