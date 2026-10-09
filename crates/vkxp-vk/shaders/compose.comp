@@ -1,8 +1,125 @@
 #version 460
+// Both extensions are language features of the GLSL front end. In SPIR-V they become the
+// descriptor indexing capabilities the backend requires and a plain image fetch.
+#extension GL_EXT_nonuniform_qualifier : require
+#extension GL_EXT_samplerless_texture_functions : require
 
-// Placeholder until the compositing shader lands.
+// The compositor: one workgroup per 16x16 tile, one invocation per pixel. Each invocation
+// starts from opaque black and applies, in order, the ops binned to its tile. All arithmetic
+// is on integers and texels are fetched, never filtered, so the result is the same on every
+// device and equal to the CPU reference compositor.
+
+#include "pixel.glsl"
+#include "transform.glsl"
 
 layout(local_size_x = 16, local_size_y = 16) in;
 
+// Values of `OpRecord.kind`. They match `op_kind` in `src/records.rs`.
+const uint OP_CLEAR = 0u;
+const uint OP_QUAD = 1u;
+const uint OP_RECT_EFFECT = 2u;
+
+// Values of `OpRecord.blend`. They match `blend_mode` in `src/records.rs`.
+const uint BLEND_NORMAL = 0u;
+const uint BLEND_ADD = 1u;
+const uint BLEND_SUBTRACT = 2u;
+
+// One validated op, as `OpRecord` in `src/records.rs` lays it out: 24 words of 32 bits.
+struct OpRecord {
+    uint kind;
+    // Clip rectangle, already intersected with the screen: x0 <= x < x1, y0 <= y < y1.
+    int clip_x0;
+    int clip_y0;
+    int clip_x1;
+    int clip_y1;
+    // Quad: bitmap slot and source rectangle, which lies inside the bitmap and is not empty.
+    uint bitmap;
+    int src_x;
+    int src_y;
+    int src_width;
+    int src_height;
+    Transform transform;
+    uint opacity;
+    uint blend;
+    // Clear and rectangle effect: red in the lowest byte, then green, blue, alpha.
+    uint color;
+    // Rectangle effect.
+    int tone_red;
+    int tone_green;
+    int tone_blue;
+    uint tone_gray;
+};
+
+layout(set = 0, binding = 0) uniform utexture2D bitmaps[];
+layout(set = 0, binding = 1, rgba8ui) uniform writeonly uimage2D frame;
+
+layout(std430, set = 0, binding = 2) readonly buffer Ops {
+    OpRecord ops[];
+};
+
+// Per tile, in row order: `x` is the offset of its list in `tile_ops`, `y` its length.
+layout(std430, set = 0, binding = 3) readonly buffer TileHeaders {
+    uvec2 tiles[];
+};
+
+// Indices into `ops`, tile after tile, each list in op order.
+layout(std430, set = 0, binding = 4) readonly buffer TileOps {
+    uint tile_ops[];
+};
+
+layout(push_constant) uniform FrameConstants {
+    // Logical size in pixels.
+    uvec2 size;
+    // Width of the tile grid.
+    uint tiles_x;
+} frame_constants;
+
+uvec4 unpack_color(uint color) {
+    return uvec4(color & 0xFFu, (color >> 8) & 0xFFu, (color >> 16) & 0xFFu, color >> 24);
+}
+
+// The value of screen pixel `position` after `op`, given its value before.
+uvec4 apply_op(OpRecord op, uvec4 pixel, ivec2 position) {
+    if (position.x < op.clip_x0 || position.x >= op.clip_x1
+            || position.y < op.clip_y0 || position.y >= op.clip_y1) {
+        return pixel;
+    }
+    switch (op.kind) {
+    case OP_CLEAR:
+        return unpack_color(op.color);
+    case OP_QUAD: {
+        ivec2 texel = source_texel(op.transform, position);
+        if (texel.x < 0 || texel.x >= op.src_width || texel.y < 0 || texel.y >= op.src_height) {
+            return pixel;
+        }
+        uvec4 source = texelFetch(
+            bitmaps[nonuniformEXT(op.bitmap)], ivec2(op.src_x, op.src_y) + texel, 0);
+        switch (op.blend) {
+        case BLEND_NORMAL:
+            return blend_normal(pixel, source, op.opacity);
+        case BLEND_ADD:
+            return blend_add(pixel, source, op.opacity);
+        default:
+            return blend_sub(pixel, source, op.opacity);
+        }
+    }
+    default: {
+        uvec4 toned = apply_tone(pixel, op.tone_red, op.tone_green, op.tone_blue, op.tone_gray);
+        return blend_color(toned, unpack_color(op.color));
+    }
+    }
+}
+
 void main() {
+    uvec2 position = gl_GlobalInvocationID.xy;
+    // The tile grid covers the screen rounded up to whole tiles.
+    if (position.x >= frame_constants.size.x || position.y >= frame_constants.size.y) {
+        return;
+    }
+    uvec2 tile = tiles[gl_WorkGroupID.y * frame_constants.tiles_x + gl_WorkGroupID.x];
+    uvec4 pixel = uvec4(0u, 0u, 0u, 255u);
+    for (uint i = 0u; i < tile.y; ++i) {
+        pixel = apply_op(ops[tile_ops[tile.x + i]], pixel, ivec2(position));
+    }
+    imageStore(frame, ivec2(position), pixel);
 }

@@ -2,3 +2,4 @@
 
 mod bitmaps;
 mod harness;
+mod shaders;

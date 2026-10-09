@@ -13,6 +13,9 @@ use crate::device::Gpu;
 use crate::resources::{COLOR_LAYERS, COLOR_RANGE, GpuBuffer, GpuImage, transition};
 use crate::{DeviceChoice, DeviceInfo, ValidationLog, VkError};
 
+#[cfg(test)]
+mod test_compute;
+
 /// The Vulkan compositor.
 ///
 /// Rendering is synchronous: every call submits its work and waits for it, so no Vulkan object

@@ -1,0 +1,49 @@
+#version 460
+
+// Test only: evaluates the transform helpers for a buffer of inputs so that a test can compare
+// them with `Transform::source_position`. Not used by the compositor.
+
+#include "transform.glsl"
+
+layout(local_size_x = 64) in;
+
+struct Case {
+    Transform transform;
+    int px;
+    int py;
+};
+
+struct Outcome {
+    int u_hi;
+    uint u_lo;
+    int v_hi;
+    uint v_lo;
+    int column;
+    int row;
+};
+
+layout(std430, set = 0, binding = 0) readonly buffer Cases {
+    Case cases[];
+};
+
+layout(std430, set = 0, binding = 1) writeonly buffer Outcomes {
+    Outcome outcomes[];
+};
+
+layout(push_constant) uniform Params {
+    uint count;
+} params;
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    if (index >= params.count) {
+        return;
+    }
+    Case c = cases[index];
+    ivec2 pixel = ivec2(c.px, c.py);
+    I64 u;
+    I64 v;
+    source_position(c.transform, pixel, u, v);
+    ivec2 texel = source_texel(c.transform, pixel);
+    outcomes[index] = Outcome(u.hi, u.lo, v.hi, v.lo, texel.x, texel.y);
+}

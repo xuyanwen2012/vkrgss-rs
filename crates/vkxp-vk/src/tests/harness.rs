@@ -43,6 +43,27 @@ pub(crate) fn test_device() -> DeviceChoice {
         .clone()
 }
 
+/// A small deterministic generator (xorshift64*), for test data that needs no shrinking.
+pub(crate) struct Rng(u64);
+
+impl Rng {
+    pub(crate) fn new(seed: u64) -> Rng {
+        Rng(seed | 1)
+    }
+
+    pub(crate) fn next_u32(&mut self) -> u32 {
+        self.0 ^= self.0 >> 12;
+        self.0 ^= self.0 << 25;
+        self.0 ^= self.0 >> 27;
+        (self.0.wrapping_mul(0x2545_F491_4F6C_DD1D) >> 32) as u32
+    }
+
+    /// A value in `0..bound`.
+    pub(crate) fn below(&mut self, bound: u32) -> u32 {
+        self.next_u32() % bound
+    }
+}
+
 /// Panics with the recorded messages unless the log is empty.
 pub(crate) fn assert_clean(log: &ValidationLog, when: &str) {
     let errors = log.errors();

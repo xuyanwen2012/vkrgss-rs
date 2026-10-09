@@ -19,8 +19,8 @@
 
 ## 4. Shader arithmetic
 
-- [ ] 4.1 Write the GLSL include mirroring `vkxp-pixel` function for function, each with a comment naming its Rust counterpart. Verify: `spirv-val` passes in the build and a test asserts every function listed by `vkxp_pixel::provenance()` has a GLSL function of the same name.
-- [ ] 4.2 Write the GLSL 64-bit helpers and the transform evaluation using 32-bit words only. Verify: a test-only compute shader evaluates a buffer of coefficient and pixel inputs, including the extreme coefficients and randomly generated ones, and every result equals `Transform::source_position`.
+- [x] 4.1 Write the GLSL include mirroring `vkxp-pixel` function for function, each with a comment naming its Rust counterpart. Verify: `spirv-val` passes in the build and a test asserts every function listed by `vkxp_pixel::provenance()` has a GLSL function of the same name.
+- [x] 4.2 Write the GLSL 64-bit helpers and the transform evaluation using 32-bit words only. Verify: a test-only compute shader evaluates a buffer of coefficient and pixel inputs, including the extreme coefficients and randomly generated ones, and every result equals `Transform::source_position`.
 
 ## 5. Compositing
 

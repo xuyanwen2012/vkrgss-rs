@@ -220,6 +220,35 @@ impl GpuImage {
     }
 }
 
+/// Creates a shader module from SPIR-V embedded by the build script.
+pub(crate) fn create_shader_module(
+    device: &ash::Device,
+    spirv: &[u8],
+) -> Result<vk::ShaderModule, VkError> {
+    let words = read_words(spirv);
+    let info = vk::ShaderModuleCreateInfo::default().code(&words);
+    // SAFETY: the device is live and the code is SPIR-V that `spirv-val` accepted at build
+    // time for the Vulkan version the device supports.
+    unsafe { device.create_shader_module(&info, None) }
+        .map_err(VkError::vulkan("vkCreateShaderModule"))
+}
+
+/// Copies 32-bit words to the start of `bytes` in the byte order of the machine, which is how
+/// the device reads them.
+pub(crate) fn write_words(bytes: &mut [u8], words: &[u32]) {
+    for (target, word) in bytes.chunks_exact_mut(4).zip(words) {
+        target.copy_from_slice(&word.to_ne_bytes());
+    }
+}
+
+/// The 32-bit words that `bytes`, whose length is a multiple of four, hold.
+pub(crate) fn read_words(bytes: &[u8]) -> Vec<u32> {
+    bytes
+        .chunks_exact(4)
+        .map(|word| u32::from_ne_bytes([word[0], word[1], word[2], word[3]]))
+        .collect()
+}
+
 fn memory_error(what: &'static str, error: gpu_allocator::AllocationError) -> VkError {
     VkError::Memory {
         what,
