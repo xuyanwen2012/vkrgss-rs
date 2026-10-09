@@ -372,11 +372,6 @@ impl<D: Display, C: Clock> Session<D, C> {
                 .any(|alt| self.held_keys.contains(alt));
             match key {
                 RESET_KEY => self.outbox.push_back(HostToGuest::Reset),
-                FPS_KEY => self.toggle_fps(),
-                FAST_FORWARD_KEY => {
-                    self.fast_forward_key = true;
-                    self.hurry();
-                }
                 // Whatever the key map says of these keys, this press holds no button.
                 FULLSCREEN_KEY => {
                     self.swallowed_keys.insert(key);
@@ -386,10 +381,17 @@ impl<D: Display, C: Clock> Session<D, C> {
                     self.swallowed_keys.insert(key);
                     action = KeyAction::ToggleFullscreen;
                 }
-                // The press that dismisses a modal message holds no button either.
+                // The press that dismisses a modal message holds no button either, and is
+                // not the shortcut the key otherwise is: the key map may put C or B on the
+                // keys below.
                 _ if self.pending_modal && self.dismisses(key) => {
                     self.swallowed_keys.insert(key);
                     self.dismiss_modal();
+                }
+                FPS_KEY => self.toggle_fps(),
+                FAST_FORWARD_KEY => {
+                    self.fast_forward_key = true;
+                    self.hurry();
                 }
                 _ => {}
             }

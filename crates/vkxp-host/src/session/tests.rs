@@ -1164,6 +1164,53 @@ fn windowed_modal_is_dismissed_by_the_cancel_key_and_by_a_click() {
 }
 
 #[test]
+fn windowed_modal_is_dismissed_by_a_host_key_remapped_to_confirm_or_cancel() {
+    for (key, button) in [
+        (KeyCode::Tab, Button::C),
+        (KeyCode::F2, Button::C),
+        (KeyCode::Tab, Button::B),
+    ] {
+        let mut keys = KeyMap::default();
+        keys.bind(key, button);
+        let mut rig = Rig::with_options(SessionOptions {
+            wait_for_modal: true,
+            keys,
+            ..SessionOptions::default()
+        });
+        rig.send(GuestToHost::SetTitle {
+            title: "Game".to_owned(),
+        });
+        rig.send(modal("Save failed."));
+        // The press dismisses once, and is neither a button nor the host's shortcut.
+        assert_eq!(rig.key(key, true), [HostToGuest::ModalDismissed], "{key:?}");
+        assert!(!rig.session.fast_forward());
+        assert_eq!(rig.key(key, true), [], "a repeat of the held key");
+        assert_eq!(rig.key(KeyCode::ArrowDown, true), [held(&[Button::Down])]);
+        assert_eq!(rig.key(KeyCode::ArrowDown, false), [held(&[])]);
+        assert_eq!(rig.key(key, false), []);
+        // Pressed again it is the game's button, and the shortcut it was.
+        assert_eq!(rig.key(key, true), [held(&[button])], "{key:?}");
+        assert_eq!(rig.session.fast_forward(), key == KeyCode::Tab);
+        assert_eq!(rig.key(key, false), [held(&[])]);
+    }
+}
+
+#[test]
+fn reset_key_mapped_to_confirm_still_asks_for_a_reset_while_a_modal_waits() {
+    let mut keys = KeyMap::default();
+    keys.bind(KeyCode::F12, Button::C);
+    let mut rig = Rig::with_options(SessionOptions {
+        wait_for_modal: true,
+        keys,
+        ..SessionOptions::default()
+    });
+    rig.send(modal("Save failed."));
+    let answer = rig.key(KeyCode::F12, true);
+    assert_eq!(answer[0], HostToGuest::Reset);
+    assert!(!answer.contains(&HostToGuest::ModalDismissed));
+}
+
+#[test]
 fn windowed_modal_is_not_dismissed_by_a_key_that_was_already_down() {
     let mut rig = Rig::windowed();
     assert_eq!(rig.key(KeyCode::Enter, true), [held(&[Button::C])]);
