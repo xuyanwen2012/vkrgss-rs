@@ -13,8 +13,10 @@ use crate::{ArithmeticFn, Provenance, Rgba};
 pub const BITMAP_PROVENANCE: &[ArithmeticFn] = &[
     ArithmeticFn {
         name: "stretch_index",
-        formula: "s = (i * src_len) / dst_len",
-        provenance: Provenance::Textbook,
+        formula: "s = (i * ((src_len << 20) / dst_len)) >> 20",
+        provenance: Provenance::ReverseEngineered {
+            source: "oracle measurement 2026-10-09, RGSS103J, bitmap stretch probe",
+        },
     },
     ArithmeticFn {
         name: "rotate_hue",
@@ -32,18 +34,23 @@ pub const BITMAP_PROVENANCE: &[ArithmeticFn] = &[
 /// Nearest sampling for a stretched transfer: the source index that position `i` of a
 /// destination span of `dst_len` takes from a source span of `src_len`.
 ///
-/// Formula: `s = (i * src_len) / dst_len`.
+/// Formula: `s = (i * step) >> 20` with the fixed-point step `(src_len << 20) / dst_len`, in
+/// 64-bit arithmetic. No interpolation and no pixel centres. The step is rounded down, so a
+/// ratio that is not a binary fraction lands one index low where the exact product is a whole
+/// number: 16 stretched to 24 takes 0, 0, 1, 1, 2, 3.
 ///
-/// For `i < dst_len` the result is below `src_len`. When both spans have the same length the
-/// result is `i`.
+/// For `i < dst_len`, which is what the callers pass, the result is below `src_len`. When both
+/// spans have the same length the result is `i`.
 ///
 /// # Panics
 ///
 /// If `dst_len` is 0.
 ///
-/// PROVENANCE: Textbook.
+/// PROVENANCE: ReverseEngineered (oracle measurement 2026-10-09, RGSS103J, bitmap stretch
+/// probe).
 pub const fn stretch_index(i: u32, src_len: u32, dst_len: u32) -> u32 {
-    ((i as u64 * src_len as u64) / dst_len as u64) as u32
+    let step = ((src_len as u64) << 20) / dst_len as u64;
+    ((i as u64).wrapping_mul(step) >> 20) as u32
 }
 
 /// Rotates the hue of a pixel by `degrees`, keeping its alpha and the values of its largest
@@ -192,6 +199,12 @@ mod tests {
     }
 
     #[test]
+    fn stretch_index_of_sixteen_to_twenty_four_lands_one_low() {
+        let taken: Vec<u32> = (0..6).map(|i| stretch_index(i, 16, 24)).collect();
+        assert_eq!(taken, [0, 0, 1, 1, 2, 3]);
+    }
+
+    #[test]
     fn stretch_index_halves() {
         let taken: Vec<u32> = (0..2).map(|i| stretch_index(i, 4, 2)).collect();
         assert_eq!(taken, [0, 2]);
@@ -221,16 +234,23 @@ mod tests {
     }
 
     #[test]
-    fn both_functions_are_listed_as_placeholders() {
+    fn both_functions_are_listed_and_only_the_hue_is_a_placeholder() {
         let listed: Vec<&str> = crate::bitmap_provenance()
             .iter()
             .map(|entry| entry.name)
             .collect();
         assert_eq!(listed, ["stretch_index", "rotate_hue"]);
         assert_eq!(listed, public_functions());
+        let [stretch, hue] = crate::bitmap_provenance() else {
+            panic!("two entries");
+        };
+        assert_eq!(
+            stretch.provenance.to_string(),
+            "reverse-engineered: oracle measurement 2026-10-09, RGSS103J, bitmap stretch probe"
+        );
+        assert_eq!(hue.provenance, Provenance::Textbook);
+        assert!(hue.provenance.is_placeholder());
         for entry in crate::bitmap_provenance() {
-            assert_eq!(entry.provenance, Provenance::Textbook, "{}", entry.name);
-            assert!(entry.provenance.is_placeholder(), "{}", entry.name);
             assert!(!entry.formula.is_empty(), "{}", entry.name);
         }
     }

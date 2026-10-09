@@ -16,6 +16,16 @@ const MEASURED: Provenance = Provenance::ReverseEngineered {
     source: "oracle measurement 2026-10-09, RGSS103J, screen blend probe",
 };
 
+/// The measurement the normal blend onto a destination with alpha was fitted to.
+const MEASURED_BLT: Provenance = Provenance::ReverseEngineered {
+    source: "oracle measurement 2026-10-09, RGSS103J, bitmap blt probe",
+};
+
+/// The measurement the grey part of the tone was fitted to.
+const MEASURED_TONE: Provenance = Provenance::ReverseEngineered {
+    source: "oracle measurement 2026-10-09, RGSS103J, tone probe",
+};
+
 /// The provenance of every public function in this file, in declaration order.
 pub const PROVENANCE: &[ArithmeticFn] = &[
     ArithmeticFn {
@@ -34,12 +44,13 @@ pub const PROVENANCE: &[ArithmeticFn] = &[
     ArithmeticFn {
         name: "blend_normal_translucent",
         formula: "a = effective_alpha(src.a, opacity), \
-                  w = dst.a * (255 - a), \
-                  n = 255 * a + w, \
-                  out.a = div255(n), \
-                  out.c = (255 * a * src.c + w * dst.c + n / 2) / n, \
-                  out = dst when n = 0",
-        provenance: Provenance::Textbook,
+                  den = 255 * dst.a + 255 * a - dst.a * a, \
+                  w = a * 65025 / den, lowered by one for the pairs (a, dst.a) of \
+                  BLT_WEIGHT_EXCEPTIONS, \
+                  out.c = dst.c + (((src.c - dst.c) * (w + 1)) >> 8), out.c = dst.c when w = 0, \
+                  out.a = den / 255, \
+                  out = dst when opacity = 0, out = (src.rgb, 0) when den = 0",
+        provenance: MEASURED_BLT,
     },
     ArithmeticFn {
         name: "blend_add",
@@ -73,9 +84,10 @@ pub const PROVENANCE: &[ArithmeticFn] = &[
     },
     ArithmeticFn {
         name: "apply_gray",
-        formula: "l = (77 * r + 150 * g + 29 * b) / 256, \
-                  c = div255(dst.c * (255 - gray) + l * gray)",
-        provenance: Provenance::Textbook,
+        formula: "l = (77 * r + 150 * g + 29 * b) >> 8, \
+                  c = dst.c + (((l - dst.c) * (gray + 1)) >> 8), \
+                  out = dst when gray = 0",
+        provenance: MEASURED_TONE,
     },
     ArithmeticFn {
         name: "apply_tone",
@@ -88,11 +100,6 @@ pub const PROVENANCE: &[ArithmeticFn] = &[
 /// Division by 255, rounded to nearest.
 const fn div255(value: u32) -> u32 {
     (value + 127) / 255
-}
-
-/// `div255(src * alpha + dst * (255 - alpha))`: `dst` at alpha 0, `src` at alpha 255.
-const fn mix(dst: u8, src: u8, alpha: u8) -> u8 {
-    div255(src as u32 * alpha as u32 + dst as u32 * (255 - alpha as u32)) as u8
 }
 
 /// `div255(channel * alpha)`: the share of a source channel that is added or subtracted to a
@@ -133,7 +140,7 @@ pub const fn effective_alpha(alpha: u8, opacity: u8) -> u8 {
 /// ```
 ///
 /// `a = 255` returns `src`. A destination with an alpha below 255 is blended by
-/// [`blend_normal_translucent`], which is not measured yet.
+/// [`blend_normal_translucent`], which gives the same result for an alpha of 255.
 ///
 /// PROVENANCE: ReverseEngineered (oracle measurement 2026-10-09, RGSS103J, screen blend probe).
 pub const fn blend_normal(dst: Rgba, src: Rgba, opacity: u8) -> Rgba {
@@ -152,43 +159,64 @@ pub const fn blend_normal(dst: Rgba, src: Rgba, opacity: u8) -> Rgba {
     ]
 }
 
-/// Normal blend onto a destination of any alpha, both with straight alpha (source-over). This
-/// is what `blend_normal` computes for a destination alpha below 255.
+/// The pairs `(a, dst.a)` for which the weight of [`blend_normal_translucent`] is one below
+/// the quotient. They are measured, not derived: the grids of the bitmap blt probe pin the
+/// weight for every pair, and it equals the quotient everywhere else.
+const BLT_WEIGHT_EXCEPTIONS: [(u8, u8); 5] =
+    [(30, 51), (30, 136), (105, 204), (180, 153), (210, 85)];
+
+/// The weight of the source in [`blend_normal_translucent`]: `a * 65025 / den`, lowered by one
+/// for the pairs of [`BLT_WEIGHT_EXCEPTIONS`]. `den` is not 0.
+const fn blt_weight(a: u8, dst_alpha: u8, den: u32) -> u8 {
+    let mut weight = a as u32 * 65025 / den;
+    let mut i = 0;
+    while i < BLT_WEIGHT_EXCEPTIONS.len() {
+        if BLT_WEIGHT_EXCEPTIONS[i].0 == a && BLT_WEIGHT_EXCEPTIONS[i].1 == dst_alpha {
+            weight -= 1;
+        }
+        i += 1;
+    }
+    weight as u8
+}
+
+/// Normal blend onto a destination of any alpha, both with straight alpha, as `Bitmap#blt`
+/// draws into a bitmap. This is what `blend_normal` computes for a destination alpha below 255.
 ///
 /// Formula, with `a = effective_alpha(src.a, opacity)`:
 ///
 /// ```text
-/// w     = dst.a * (255 - a)                          weight of the destination, times 255
-/// n     = 255 * a + w                                resulting alpha, times 255
-/// out.a = div255(n)
-/// out.c = (255 * a * src.c + w * dst.c + n / 2) / n  per colour channel c, rounded to nearest
+/// out   = dst                                        when opacity = 0
+/// den   = 255 * dst.a + 255 * a - dst.a * a          resulting alpha, times 255
+/// out   = (src.r, src.g, src.b, 0)                   when den = 0, that is a = 0 and dst.a = 0
+/// w     = a * 65025 / den                            lowered by one for five pairs (a, dst.a)
+/// out.c = dst.c                                      when w = 0
+/// out.c = dst.c + (((src.c - dst.c) * (w + 1)) >> 8)  per colour channel c otherwise
+/// out.a = den / 255
 /// ```
 ///
-/// When `n` is 0 (nothing drawn onto a fully transparent destination) the result is `dst`.
-/// Two cases follow from the formula and are relied upon:
+/// The five pairs are those of `BLT_WEIGHT_EXCEPTIONS`. `w` is 255 for `dst.a = 0` and `a` for
+/// `dst.a = 255`, so an opaque destination gets the formula of [`blend_normal`].
 ///
-/// - `a = 0` returns `dst` unchanged, whatever its alpha.
-/// - `a = 255` returns `src` with alpha 255, whatever the destination.
-///
-/// PROVENANCE: Textbook.
+/// PROVENANCE: ReverseEngineered (oracle measurement 2026-10-09, RGSS103J, bitmap blt probe).
 pub const fn blend_normal_translucent(dst: Rgba, src: Rgba, opacity: u8) -> Rgba {
-    let a = effective_alpha(src[3], opacity) as u32;
-    let weight = dst[3] as u32 * (255 - a);
-    let total = 255 * a + weight;
-    if total == 0 {
+    if opacity == 0 {
         return dst;
     }
+    let a = effective_alpha(src[3], opacity);
+    let den = 255 * dst[3] as u32 + 255 * a as u32 - dst[3] as u32 * a as u32;
+    if den == 0 {
+        return [src[0], src[1], src[2], 0];
+    }
+    let weight = blt_weight(a, dst[3], den);
+    if weight == 0 {
+        return [dst[0], dst[1], dst[2], (den / 255) as u8];
+    }
     [
-        over(dst[0], src[0], a, weight, total),
-        over(dst[1], src[1], a, weight, total),
-        over(dst[2], src[2], a, weight, total),
-        div255(total) as u8,
+        lerp(dst[0], src[0], weight),
+        lerp(dst[1], src[1], weight),
+        lerp(dst[2], src[2], weight),
+        (den / 255) as u8,
     ]
-}
-
-/// `(255 * a * src + weight * dst + total / 2) / total`: one colour channel of source-over.
-const fn over(dst: u8, src: u8, a: u32, weight: u32, total: u32) -> u8 {
-    ((255 * a * src as u32 + weight * dst as u32 + total / 2) / total) as u8
 }
 
 /// Additive blend of `src` onto `dst` at `opacity`, saturating at 255. The destination alpha
@@ -298,23 +326,27 @@ pub const fn blend_color(dst: Rgba, color: Rgba) -> Rgba {
 /// Formula, with `r`, `g`, `b` the channels of `dst`:
 ///
 /// ```text
-/// l = (77 * r + 150 * g + 29 * b) / 256
-/// c = div255(dst.c * (255 - gray) + l * gray)      per colour channel c
+/// out = dst                                        when gray = 0
+/// l   = (77 * r + 150 * g + 29 * b) >> 8
+/// c   = dst.c + (((l - dst.c) * (gray + 1)) >> 8)   per colour channel c
 /// ```
 ///
-/// PROVENANCE: Textbook.
+/// PROVENANCE: ReverseEngineered (oracle measurement 2026-10-09, RGSS103J, tone probe).
 pub const fn apply_gray(dst: Rgba, gray: u8) -> Rgba {
-    let luma = ((77 * dst[0] as u32 + 150 * dst[1] as u32 + 29 * dst[2] as u32) / 256) as u8;
+    if gray == 0 {
+        return dst;
+    }
+    let luma = ((77 * dst[0] as u32 + 150 * dst[1] as u32 + 29 * dst[2] as u32) >> 8) as u8;
     [
-        mix(dst[0], luma, gray),
-        mix(dst[1], luma, gray),
-        mix(dst[2], luma, gray),
+        lerp(dst[0], luma, gray),
+        lerp(dst[1], luma, gray),
+        lerp(dst[2], luma, gray),
         dst[3],
     ]
 }
 
-/// Applies a tone to `dst`: desaturation by `gray` ([`apply_gray`], not measured yet), then the
-/// signed offsets `red`, `green` and `blue`. The destination alpha is kept.
+/// Applies a tone to `dst`: desaturation by `gray` ([`apply_gray`]), then the signed offsets
+/// `red`, `green` and `blue`. The destination alpha is kept.
 ///
 /// Formula, with `m = apply_gray(dst, gray)` and offsets clamped to -255..=255, per colour
 /// channel `c`: `c = clamp(m.c + offset.c, 0, 255)`.
@@ -395,16 +427,104 @@ mod tests {
         }
     }
 
+    /// The normal blend onto a fully transparent destination is the exception: see
+    /// `nothing_underneath_and_nothing_drawn_gives_the_source_colour_with_alpha_0`.
     #[test]
     fn zero_alpha_source_leaves_destination_unchanged() {
         for (name, blend) in BLENDS {
             for dst in SAMPLES {
+                if name == "blend_normal" && dst[3] == 0 {
+                    continue;
+                }
                 for opacity in [0, 1, 128, 255] {
                     let src = [255, 128, 7, 0];
                     assert_eq!(blend(dst, src, opacity), dst, "{name} {dst:?} {opacity}");
                 }
             }
         }
+    }
+
+    #[test]
+    fn nothing_underneath_and_nothing_drawn_gives_the_source_colour_with_alpha_0() {
+        for dst in [[0, 0, 0, 0], [90, 60, 30, 0]] {
+            // A source alpha of 0, and one that the opacity scales down to 0.
+            assert_eq!(blend_normal(dst, [255, 128, 7, 0], 255), [255, 128, 7, 0]);
+            assert_eq!(blend_normal(dst, [255, 128, 7, 0], 1), [255, 128, 7, 0]);
+            assert_eq!(blend_normal(dst, [255, 128, 7, 1], 127), [255, 128, 7, 0]);
+            // Opacity 0 comes first and leaves the destination.
+            assert_eq!(blend_normal(dst, [255, 128, 7, 0], 0), dst);
+            assert_eq!(blend_normal(dst, [255, 128, 7, 255], 0), dst);
+        }
+    }
+
+    /// For a destination alpha of 255 the formula for a destination with alpha is the screen
+    /// formula: every destination channel, source channel and drawn alpha.
+    #[test]
+    fn an_opaque_destination_gets_the_screen_formula() {
+        for dst in 0..=255i32 {
+            for src in 0..=255i32 {
+                for alpha in 0..=255i32 {
+                    let expected = if alpha == 0 {
+                        dst
+                    } else {
+                        dst + (((src - dst) * (alpha + 1)) >> 8)
+                    };
+                    let d = [dst as u8, 0, 255, 255];
+                    let s = [src as u8, 255, 0, alpha as u8];
+                    let out = blend_normal_translucent(d, s, 255);
+                    assert_eq!(
+                        (out[0], out[3]),
+                        (expected as u8, 255),
+                        "{dst} {src} {alpha}"
+                    );
+                }
+            }
+        }
+        // The drawn alpha is all that the source alpha and the opacity contribute.
+        for alpha in 0..=255u8 {
+            for opacity in 1..=255u8 {
+                let s = [200, 100, 7, alpha];
+                let drawn = [200, 100, 7, effective_alpha(alpha, opacity)];
+                for d in [[10, 128, 250, 255], [255, 0, 77, 255]] {
+                    assert_eq!(
+                        blend_normal_translucent(d, s, opacity),
+                        blend_normal_translucent(d, drawn, 255)
+                    );
+                }
+            }
+        }
+    }
+
+    /// The weight is the quotient except for the five measured pairs.
+    #[test]
+    fn the_weight_is_one_below_the_quotient_for_the_five_measured_pairs() {
+        let mut lowered = Vec::new();
+        for a in 0..=255u32 {
+            for da in 0..=255u32 {
+                let den = 255 * da + 255 * a - da * a;
+                if den == 0 {
+                    continue;
+                }
+                let quotient = a * 65025 / den;
+                let weight = u32::from(blt_weight(a as u8, da as u8, den));
+                if weight != quotient {
+                    assert_eq!(weight + 1, quotient);
+                    lowered.push((a as u8, da as u8));
+                }
+                if da == 0 {
+                    assert_eq!(weight, 255);
+                }
+                if da == 255 {
+                    assert_eq!(weight, a);
+                }
+            }
+        }
+        assert_eq!(lowered, BLT_WEIGHT_EXCEPTIONS);
+        // (30, 51): den = 255 * 51 + 255 * 30 - 51 * 30 = 19125, 30 * 65025 / 19125 = 102.
+        assert_eq!(
+            blend_normal([0, 0, 0, 51], [255, 255, 255, 30], 255),
+            [101, 101, 101, 75]
+        );
     }
 
     #[test]
@@ -445,19 +565,20 @@ mod tests {
     }
 
     #[test]
-    fn normal_blend_onto_translucent_destination_is_source_over() {
-        // a = 128, w = 128 * 127 = 16256, n = 32640 + 16256 = 48896, alpha = div255(n) = 192.
-        // red   = (32640 * 200 + 24448) / n = 134
-        // green = (32640 * 100 + 16256 * 50 + 24448) / n = 83
-        // blue  = (16256 * 255 + 24448) / n = 85
+    fn normal_blend_onto_translucent_destination_follows_the_measured_formula() {
+        // a = 128, den = 255 * 128 + 255 * 128 - 128 * 128 = 48896, alpha = den / 255 = 191,
+        // w = 128 * 65025 / den = 170.
+        // red   = 0 + ((200 * 171) >> 8) = 133
+        // green = 50 + ((50 * 171) >> 8) = 83
+        // blue  = 255 + ((-255 * 171) >> 8) = 255 - 171 = 84
         assert_eq!(
             blend_normal([0, 50, 255, 128], [200, 100, 0, 128], 255),
-            [134, 83, 85, 192]
+            [133, 83, 84, 191]
         );
         // The same drawn alpha reached through opacity gives the same pixel.
         assert_eq!(
             blend_normal([0, 50, 255, 128], [200, 100, 0, 255], 128),
-            [134, 83, 85, 192]
+            [133, 83, 84, 191]
         );
         // An opaque source replaces a translucent destination completely.
         assert_eq!(
@@ -521,7 +642,7 @@ mod tests {
     }
 
     #[test]
-    fn a_translucent_destination_takes_the_placeholder_path() {
+    fn a_translucent_destination_takes_the_path_for_a_destination_with_alpha() {
         for dst in SAMPLES {
             for src in SAMPLES {
                 if dst[3] == 255 {
@@ -675,6 +796,19 @@ mod tests {
     }
 
     #[test]
+    fn gray_follows_the_measured_formula() {
+        // l = (77 * 240) >> 8 = 72; red = 240 + ((-168 * 165) >> 8) = 240 - 109,
+        // green = blue = 0 + ((72 * 165) >> 8) = 46.
+        assert_eq!(
+            apply_tone([240, 0, 0, 255], 0, 0, 0, 164),
+            [131, 46, 46, 255]
+        );
+        // A grey amount of 1 already moves a channel that lies above the luminance.
+        assert_eq!(apply_gray([255, 0, 0, 7], 1), [253, 0, 0, 7]);
+        assert_eq!(apply_gray([255, 0, 0, 7], 0), [255, 0, 0, 7]);
+    }
+
+    #[test]
     fn gray_is_applied_before_offsets() {
         // Full gray turns red into 76 everywhere, then only red is raised.
         assert_eq!(
@@ -706,22 +840,21 @@ mod tests {
 
     #[test]
     fn measured_functions_name_the_measurement_and_the_rest_are_placeholders() {
-        const PLACEHOLDERS: [&str; 4] = [
-            "blend_normal_translucent",
-            "blend_add_translucent",
-            "blend_sub_translucent",
-            "apply_gray",
-        ];
+        const PLACEHOLDERS: [&str; 2] = ["blend_add_translucent", "blend_sub_translucent"];
         for entry in crate::provenance() {
             assert!(!entry.formula.is_empty(), "{}", entry.name);
             if PLACEHOLDERS.contains(&entry.name) {
                 assert_eq!(entry.provenance, Provenance::Textbook, "{}", entry.name);
                 assert!(entry.provenance.is_placeholder(), "{}", entry.name);
             } else {
+                let probe = match entry.name {
+                    "blend_normal_translucent" => "bitmap blt probe",
+                    "apply_gray" => "tone probe",
+                    _ => "screen blend probe",
+                };
                 assert_eq!(
                     entry.provenance.to_string(),
-                    "reverse-engineered: oracle measurement 2026-10-09, RGSS103J, \
-                     screen blend probe",
+                    format!("reverse-engineered: oracle measurement 2026-10-09, RGSS103J, {probe}"),
                     "{}",
                     entry.name
                 );

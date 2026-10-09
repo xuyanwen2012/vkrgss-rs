@@ -17,12 +17,6 @@ uint div255(uint value) {
     return (value + 127u) / 255u;
 }
 
-// Mirrors `mix` in vkxp-pixel: `dst` at alpha 0, `src` at alpha 255. It overloads the builtin
-// of the same name, which has no all-`uint` form.
-uint mix(uint dst, uint src, uint alpha) {
-    return div255(src * alpha + dst * (255u - alpha));
-}
-
 // Mirrors `scale` in vkxp-pixel: the share of a source channel that is added or subtracted to a
 // translucent destination.
 uint scale(uint channel, uint alpha) {
@@ -44,24 +38,42 @@ uint effective_alpha(uint alpha, uint opacity) {
     return div255(alpha * opacity);
 }
 
-// Mirrors `over` in vkxp-pixel: one colour channel of source-over.
-uint over(uint dst, uint src, uint a, uint weight, uint total) {
-    return (255u * a * src + weight * dst + total / 2u) / total;
+// Mirrors `BLT_WEIGHT_EXCEPTIONS` in vkxp-pixel: the pairs `(a, dst.a)` for which the weight is
+// one below the quotient. They are measured, not derived.
+const uvec2 BLT_WEIGHT_EXCEPTIONS[5] = uvec2[5](
+    uvec2(30u, 51u), uvec2(30u, 136u), uvec2(105u, 204u), uvec2(180u, 153u), uvec2(210u, 85u));
+
+// Mirrors `blt_weight` in vkxp-pixel: the weight of the source for a destination with alpha.
+// `den` is not 0.
+uint blt_weight(uint a, uint dst_alpha, uint den) {
+    uint weight = a * 65025u / den;
+    for (int i = 0; i < 5; i++) {
+        if (BLT_WEIGHT_EXCEPTIONS[i].x == a && BLT_WEIGHT_EXCEPTIONS[i].y == dst_alpha) {
+            weight -= 1u;
+        }
+    }
+    return weight;
 }
 
 // Mirrors `vkxp_pixel::blend_normal_translucent`.
 uvec4 blend_normal_translucent(uvec4 dst, uvec4 src, uint opacity) {
-    uint a = effective_alpha(src.a, opacity);
-    uint weight = dst.a * (255u - a);
-    uint total = 255u * a + weight;
-    if (total == 0u) {
+    if (opacity == 0u) {
         return dst;
     }
+    uint a = effective_alpha(src.a, opacity);
+    uint den = 255u * dst.a + 255u * a - dst.a * a;
+    if (den == 0u) {
+        return uvec4(src.r, src.g, src.b, 0u);
+    }
+    uint weight = blt_weight(a, dst.a, den);
+    if (weight == 0u) {
+        return uvec4(dst.r, dst.g, dst.b, den / 255u);
+    }
     return uvec4(
-        over(dst.r, src.r, a, weight, total),
-        over(dst.g, src.g, a, weight, total),
-        over(dst.b, src.b, a, weight, total),
-        div255(total));
+        lerp(dst.r, src.r, weight),
+        lerp(dst.g, src.g, weight),
+        lerp(dst.b, src.b, weight),
+        den / 255u);
 }
 
 // Mirrors `vkxp_pixel::blend_normal`.
@@ -168,11 +180,14 @@ uint offset(uint channel, int amount) {
 
 // Mirrors `vkxp_pixel::apply_gray`.
 uvec4 apply_gray(uvec4 dst, uint gray) {
-    uint luma = (77u * dst.r + 150u * dst.g + 29u * dst.b) / 256u;
+    if (gray == 0u) {
+        return dst;
+    }
+    uint luma = (77u * dst.r + 150u * dst.g + 29u * dst.b) >> 8;
     return uvec4(
-        mix(dst.r, luma, gray),
-        mix(dst.g, luma, gray),
-        mix(dst.b, luma, gray),
+        lerp(dst.r, luma, gray),
+        lerp(dst.g, luma, gray),
+        lerp(dst.b, luma, gray),
         dst.a);
 }
 

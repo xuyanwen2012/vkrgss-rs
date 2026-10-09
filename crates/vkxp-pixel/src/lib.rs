@@ -7,9 +7,10 @@
 //! line for line, so this crate is the single definition of what a blended pixel is.
 //!
 //! Each function declares where its formula comes from. Blending onto an opaque destination,
-//! the colour and the tone offsets follow measurements of the original runtime; the rest are
-//! textbook placeholders, replaced one by one as measurements and reverse-engineering specs of
-//! the original runtime's inner loops land. [`PROVENANCE`] lists the current state.
+//! the normal blend onto a destination with alpha, the colour, the tone and stretch sampling
+//! follow measurements of the original runtime; the rest are textbook placeholders, replaced
+//! one by one as measurements and reverse-engineering specs of the original runtime's inner
+//! loops land. [`PROVENANCE`] lists the current state.
 //!
 //! Arithmetic that only the guest's bitmap operations use (hue rotation, stretch sampling) runs
 //! on the CPU alone and has no GLSL counterpart. It is listed separately, in

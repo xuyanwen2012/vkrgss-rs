@@ -2,8 +2,8 @@
 
 ## 1. Arithmetic (`vkxp-pixel`)
 
-- [ ] 1.1 Commit selections of the three sample files as test data and implement the `blt` blend with its provenance. Verify: the two scenarios of the blend requirement in `specs/core-bitmap/spec.md`.
-- [ ] 1.2 Implement the stretch step and the grey tone. Verify: the sixteen-to-twenty-four scenario and the scenario of `specs/frame-composition/spec.md`.
+- [x] 1.1 Commit selections of the three sample files as test data and implement the `blt` blend with its provenance. Verify: the two scenarios of the blend requirement in `specs/core-bitmap/spec.md`.
+- [x] 1.2 Implement the stretch step and the grey tone. Verify: the sixteen-to-twenty-four scenario and the scenario of `specs/frame-composition/spec.md`.
 
 ## 2. Bitmap operations and values (`vkxp-core`)
 
