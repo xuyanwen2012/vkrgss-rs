@@ -2,7 +2,8 @@
 //!
 //! One graphics pipeline draws a triangle over the whole target. `shaders/present.frag` puts
 //! the frame inside the letterbox rectangle computed here and black outside it, mixing the
-//! newest frame with the held one on the way. The same draw goes to a swapchain image
+//! newest frame with the held one on the way, by one weight or per pixel under the mask of a
+//! transition. The same draw goes to a swapchain image
 //! ([`VkCompositor::present`]) or to an image that is read back
 //! ([`VkCompositor::scale_frame`]), which is how scaling and mixing are tested without a
 //! window.
@@ -12,7 +13,7 @@
 
 use ash::vk;
 use gpu_allocator::vulkan::Allocator;
-use vkxp_proto::{Rect, Size};
+use vkxp_proto::{BitmapId, Rect, Size};
 
 use super::{Frame, VkCompositor};
 use crate::resources::{
@@ -27,17 +28,23 @@ const FRAGMENT_SPIRV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/present.
 mod binding {
     pub const NEWEST: u32 = 0;
     pub const HELD: u32 = 1;
+    pub const MASK: u32 = 2;
 }
 
 /// Bytes of the push constants: for the newest and then the held frame the letterbox origin
-/// and size and the frame size, then the mix weight and the flags, four bytes per component.
-const PUSH_CONSTANT_BYTES: usize = 56;
+/// and size and the frame size, then the mix weight, the flags and the vagueness, four bytes per
+/// component.
+const PUSH_CONSTANT_BYTES: usize = 60;
 
 /// Flags of the fragment shader, as `shaders/present.frag` defines them.
 const FLAG_NEAREST: u32 = 1;
 const FLAG_SRGB_TARGET: u32 = 2;
 const FLAG_HELD_NEAREST: u32 = 4;
 const FLAG_SAME_GRID: u32 = 8;
+const FLAG_MASK: u32 = 16;
+
+/// The range of a vagueness, in 256ths of the mask's range.
+const VAGUENESS: std::ops::RangeInclusive<u32> = 1..=256;
 
 /// Format of the off-screen target. Its values are what a `UNORM` swapchain image would hold.
 const OFFSCREEN_FORMAT: vk::Format = vk::Format::R8G8B8A8_UNORM;
@@ -82,12 +89,22 @@ fn is_whole_factor(frame: Size, rect: &Rect) -> bool {
         && rect.width / frame.width == rect.height / frame.height
 }
 
+/// The picture that orders a transition: where it is dark the newest frame appears first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct Mask {
+    bitmap: BitmapId,
+    /// Width of the soft edge, within [`VAGUENESS`].
+    vagueness: u32,
+}
+
 /// The sizes of the two frames a draw reads. They differ when the logical size changed after
 /// the held frame was captured.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Sources {
     newest: Size,
     held: Size,
+    /// The vagueness of the mask the draw reads, or `None` for a mix by the one weight.
+    vagueness: Option<u32>,
 }
 
 /// The push constants that put the frames of `sources` into a target of `target` pixels, each
@@ -106,13 +123,14 @@ fn push_constants(
     Some(encode_constants(sources, newest, held, weight, srgb_target))
 }
 
-/// The push constants that stretch frames of one size, `frame`, over the whole of a target of
-/// `target` pixels, which has to be the letterbox rectangle of such a frame in some window.
+/// The push constants that stretch frames of one size, that of the newest frame of `sources`,
+/// over the whole of a target of `target` pixels, which has to be the letterbox rectangle of
+/// such a frame in some window.
 /// The draw then gives exactly the pixels that rectangle has in that window.
-fn filling_constants(frame: Size, target: Size, weight: f32) -> [u8; PUSH_CONSTANT_BYTES] {
+fn filling_constants(sources: Sources, target: Size, weight: f32) -> [u8; PUSH_CONSTANT_BYTES] {
     let sources = Sources {
-        newest: frame,
-        held: frame,
+        held: sources.newest,
+        ..sources
     };
     let whole = Rect::from_size(target);
     encode_constants(sources, whole, whole, weight, false)
@@ -139,6 +157,10 @@ fn encode_constants(
     if srgb_target {
         flags |= FLAG_SRGB_TARGET;
     }
+    if sources.vagueness.is_some() {
+        flags |= FLAG_MASK;
+    }
+    let vagueness = sources.vagueness.unwrap_or(*VAGUENESS.end()) as f32 / 256.0;
     let mut bytes = [0; PUSH_CONSTANT_BYTES];
     write_words(
         &mut bytes,
@@ -157,6 +179,7 @@ fn encode_constants(
             sources.held.height,
             weight.to_bits(),
             flags,
+            vagueness.to_bits(),
         ],
     );
     bytes
@@ -281,8 +304,12 @@ pub(super) struct Presenter {
     /// the size of the frame it was captured from, which later frames need not share, and
     /// lives until the next capture. Black, at the size of the first frame, until a freeze.
     held: Option<GpuImage>,
-    /// The views of the newest and the held frame that the descriptor set points at.
-    bound: Option<(vk::ImageView, vk::ImageView)>,
+    /// One texel, in the `SHADER_READ_ONLY_OPTIMAL` layout, bound in place of a mask when a
+    /// draw has none.
+    no_mask: Option<GpuImage>,
+    /// The views of the newest frame, the held frame and the mask that the descriptor set
+    /// points at.
+    bound: Option<[vk::ImageView; 3]>,
     swapchain_loader: Option<ash::khr::swapchain::Device>,
     swapchain: Option<Swapchain>,
 }
@@ -308,6 +335,7 @@ impl Presenter {
             fragment: vk::ShaderModule::null(),
             passes: Vec::new(),
             held: None,
+            no_mask: None,
             bound: None,
             swapchain_loader: None,
             swapchain: None,
@@ -322,7 +350,7 @@ impl Presenter {
     }
 
     fn init(&mut self, device: &ash::Device) -> Result<(), VkError> {
-        let bindings = [binding::NEWEST, binding::HELD].map(|binding| {
+        let bindings = [binding::NEWEST, binding::HELD, binding::MASK].map(|binding| {
             vk::DescriptorSetLayoutBinding::default()
                 .binding(binding)
                 .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
@@ -348,7 +376,7 @@ impl Presenter {
 
         let pool_sizes = [vk::DescriptorPoolSize::default()
             .ty(vk::DescriptorType::SAMPLED_IMAGE)
-            .descriptor_count(2)];
+            .descriptor_count(3)];
         let pool_info = vk::DescriptorPoolCreateInfo::default()
             .max_sets(1)
             .pool_sizes(&pool_sizes);
@@ -481,9 +509,19 @@ impl Presenter {
         Ok((render_pass, pipeline))
     }
 
-    /// Points the descriptor set at the views of the newest and the held frame.
-    fn bind(&mut self, device: &ash::Device, newest: vk::ImageView, held: vk::ImageView) {
-        if self.bound == Some((newest, held)) {
+    /// Points the descriptor set at the views of the newest frame, the held frame and the
+    /// mask, which is a bitmap's view or that of the stand-in.
+    fn bind(
+        &mut self,
+        device: &ash::Device,
+        newest: vk::ImageView,
+        held: vk::ImageView,
+        mask: vk::ImageView,
+    ) {
+        // A bitmap's view is written every time: the bitmap may have been destroyed since,
+        // and a new view can have the handle of the old one.
+        let stand_in = self.no_mask.as_ref().map(|image| image.view);
+        if self.bound == Some([newest, held, mask]) && stand_in == Some(mask) {
             return;
         }
         let infos = [
@@ -491,6 +529,11 @@ impl Presenter {
             (
                 binding::HELD,
                 held,
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            ),
+            (
+                binding::MASK,
+                mask,
                 vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
             ),
         ]
@@ -507,10 +550,10 @@ impl Presenter {
                 .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
                 .image_info(info)
         });
-        // SAFETY: the set and both views are live and no command buffer that uses the set is
+        // SAFETY: the set and the views are live and no command buffer that uses the set is
         // pending.
         unsafe { device.update_descriptor_sets(&writes, &[]) };
-        self.bound = Some((newest, held));
+        self.bound = Some([newest, held, mask]);
     }
 
     /// Destroys everything. The device must be idle.
@@ -520,6 +563,9 @@ impl Presenter {
         }
         if let Some(held) = self.held.take() {
             held.destroy(device, allocator);
+        }
+        if let Some(no_mask) = self.no_mask.take() {
+            no_mask.destroy(device, allocator);
         }
         // SAFETY: the caller guarantees that nothing is in use; each handle was created from
         // this device or is null, and none is used again.
@@ -565,7 +611,7 @@ fn create_framebuffer(
 ///
 /// `commands` must be a command buffer of `device` in the recording state. `render_pass` and
 /// `framebuffer` must be live, match each other and be `extent` pixels large. For a draw, the
-/// pipeline must have been made for `render_pass`, and both images behind the descriptor set
+/// pipeline must have been made for `render_pass`, and the images behind the descriptor set
 /// must be live and in the layouts the set names when the commands execute.
 unsafe fn record_pass(
     device: &ash::Device,
@@ -642,6 +688,38 @@ impl VkCompositor {
         self.mix
     }
 
+    /// Makes the mix from now on a masked one, or with `None` a plain one again. Under a mask
+    /// the mix weight is the progress of a transition and each pixel has its own weight: with
+    /// `m` the red channel of the mask there as a fraction, `p` the progress and `v` the
+    /// vagueness divided by 256, the held frame weighs `(clamp(m, p, p + v) - p) / v`. So the
+    /// newest frame appears first where the mask is dark, behind an edge that is the softer
+    /// the larger the vagueness, and alone at progress 1. The mask is stretched to the newest
+    /// frame. The vagueness is clamped to 1 to 256.
+    ///
+    /// The bitmap is looked up each time something is shown, so it may be created by a packet
+    /// rendered after this call. While there is no such bitmap, or it has no pixels, the mix
+    /// is the plain one.
+    pub fn set_mask(&mut self, mask: Option<(BitmapId, u32)>) {
+        self.mask = mask.map(|(bitmap, vagueness)| Mask {
+            bitmap,
+            vagueness: vagueness.clamp(*VAGUENESS.start(), *VAGUENESS.end()),
+        });
+    }
+
+    /// Whether `id` names a live bitmap.
+    pub fn has_bitmap(&self, id: BitmapId) -> bool {
+        self.table.get(id).is_ok()
+    }
+
+    /// The view and the vagueness of the mask in effect: the one set, if its bitmap is live
+    /// and has pixels.
+    fn mask_in_effect(&self) -> Option<(vk::ImageView, u32)> {
+        let mask = self.mask?;
+        self.table.get(mask.bitmap).ok()?;
+        let image = self.images.get(&mask.bitmap.index)?;
+        Some((image.view, mask.vagueness))
+    }
+
     /// Whether the compositor was created for a surface and can [`present`].
     ///
     /// [`present`]: VkCompositor::present
@@ -693,7 +771,7 @@ impl VkCompositor {
         if self.mix >= 1.0 {
             return self.capture_held(newest, vk::ImageLayout::GENERAL, size);
         }
-        if self.mix <= 0.0 {
+        if self.mix <= 0.0 && self.mask_in_effect().is_none() {
             // The held frame alone is shown, and it stays, at whatever size it has.
             return Ok(());
         }
@@ -864,7 +942,7 @@ impl VkCompositor {
                 descriptors: presenter.descriptors,
                 constants: match placement {
                     Placement::Letterbox => push_constants(sources, size, self.mix, false)?,
-                    Placement::Fill => filling_constants(sources.newest, size, self.mix),
+                    Placement::Fill => filling_constants(sources, size, self.mix),
                 },
             })
         });
@@ -895,8 +973,8 @@ impl VkCompositor {
             // SAFETY: the command buffer is recording. The pass, the framebuffer and the image
             // behind it were made above for each other and for `extent`, and live until this
             // submission has been waited for. A draw call only exists when a frame does, in
-            // which case `prepare_sources` pointed the set at the frame target (`GENERAL`) and
-            // the held frame (`SHADER_READ_ONLY_OPTIMAL`).
+            // which case `prepare_sources` pointed the set at the frame target (`GENERAL`),
+            // the held frame and the mask (`SHADER_READ_ONLY_OPTIMAL`).
             unsafe {
                 record_pass(
                     &compositor.gpu.device,
@@ -992,7 +1070,8 @@ impl VkCompositor {
                 // SAFETY: the command buffer is recording. The pass and the framebuffer belong
                 // to the live swapchain and are `extent` pixels large. A draw call only exists
                 // when a frame does, in which case `prepare_sources` pointed the set at the
-                // frame target (`GENERAL`) and the held frame (`SHADER_READ_ONLY_OPTIMAL`).
+                // frame target (`GENERAL`), the held frame and the mask
+                // (`SHADER_READ_ONLY_OPTIMAL`).
                 unsafe {
                     record_pass(
                         &compositor.gpu.device,
@@ -1085,7 +1164,7 @@ impl VkCompositor {
     }
 
     /// Makes everything a draw reads ready: the presenter, a held frame, and the descriptor
-    /// set pointing at both frames. Returns their sizes, or `None` when no frame has been
+    /// set pointing at both frames and the mask. Returns their sizes, or `None` when no frame has been
     /// rendered and there is nothing to draw.
     fn prepare_sources(&mut self) -> Result<Option<Sources>, VkError> {
         self.ensure_presenter()?;
@@ -1098,14 +1177,43 @@ impl VkCompositor {
             return Ok(None);
         };
         self.ensure_held(size)?;
+        self.ensure_no_mask()?;
+        let mask = self.mask_in_effect();
         let presenter = self.presenter.as_mut().expect("just ensured");
         let held = presenter.held.as_ref().expect("just ensured");
         let (held_view, held_size) = (held.view, Size::new(held.width, held.height));
-        presenter.bind(&self.gpu.device, newest, held_view);
+        let no_mask = presenter.no_mask.as_ref().expect("just ensured").view;
+        let mask_view = mask.map_or(no_mask, |(view, _)| view);
+        presenter.bind(&self.gpu.device, newest, held_view, mask_view);
         Ok(Some(Sources {
             newest: Size::new(size.0, size.1),
             held: held_size,
+            vagueness: mask.map(|(_, vagueness)| vagueness),
         }))
+    }
+
+    /// Makes sure there is the texel that stands in for a mask.
+    fn ensure_no_mask(&mut self) -> Result<(), VkError> {
+        let presenter = self.presenter.as_ref().expect("made by the caller");
+        if presenter.no_mask.is_some() {
+            return Ok(());
+        }
+        // Made and filled like a held frame of one pixel.
+        let no_mask = self.new_held_image((1, 1))?;
+        let image = no_mask.image;
+        let cleared = self
+            .submit_or_idle(|compositor| compositor.clear_held(image, vk::ImageLayout::UNDEFINED));
+        match cleared {
+            Ok(()) => {
+                let presenter = self.presenter.as_mut().expect("made by the caller");
+                presenter.no_mask = Some(no_mask);
+                Ok(())
+            }
+            Err(error) => {
+                no_mask.destroy(&self.gpu.device, &mut self.allocator);
+                Err(error)
+            }
+        }
     }
 
     /// Makes sure there is a held frame. One that exists is left alone whatever its size; a
@@ -1480,6 +1588,7 @@ mod tests {
         Sources {
             newest: size,
             held: size,
+            vagueness: None,
         }
     }
 
@@ -1499,7 +1608,8 @@ mod tests {
                 rect.as_slice(),
                 &[
                     1.0f32.to_bits(),
-                    FLAG_NEAREST | FLAG_HELD_NEAREST | FLAG_SAME_GRID
+                    FLAG_NEAREST | FLAG_HELD_NEAREST | FLAG_SAME_GRID,
+                    1.0f32.to_bits()
                 ]
             ]
             .concat()
@@ -1511,10 +1621,34 @@ mod tests {
             [
                 rect.as_slice(),
                 rect.as_slice(),
-                &[0.25f32.to_bits(), FLAG_SRGB_TARGET | FLAG_SAME_GRID]
+                &[
+                    0.25f32.to_bits(),
+                    FLAG_SRGB_TARGET | FLAG_SAME_GRID,
+                    1.0f32.to_bits()
+                ]
             ]
             .concat()
         );
+    }
+
+    #[test]
+    fn push_constants_of_a_masked_draw_carry_the_flag_and_the_vagueness_as_a_fraction() {
+        let frame = Size::new(640, 480);
+        let masked = Sources {
+            vagueness: Some(64),
+            ..same(frame)
+        };
+        let constants = words(push_constants(masked, frame, 0.5, false));
+        assert_eq!(
+            constants[12..],
+            [
+                0.5f32.to_bits(),
+                FLAG_NEAREST | FLAG_HELD_NEAREST | FLAG_SAME_GRID | FLAG_MASK,
+                0.25f32.to_bits()
+            ]
+        );
+        let filling = words(Some(filling_constants(masked, frame, 0.5)));
+        assert_eq!(filling, constants);
     }
 
     #[test]
@@ -1532,7 +1666,7 @@ mod tests {
             let rect = letterbox(frame, window);
             let in_window = words(push_constants(same(frame), window, 0.25, false));
             let filling = words(Some(filling_constants(
-                frame,
+                same(frame),
                 Size::new(rect.width, rect.height),
                 0.25,
             )));
@@ -1554,6 +1688,7 @@ mod tests {
         let sources = Sources {
             newest: Size::new(32, 24),
             held: Size::new(20, 18),
+            vagueness: None,
         };
         // The held frame fills the target four times over; the newest is 2.5 times as wide
         // and leaves bars above and below.
@@ -1573,13 +1708,15 @@ mod tests {
                 20,
                 18,
                 0.5f32.to_bits(),
-                FLAG_HELD_NEAREST
+                FLAG_HELD_NEAREST,
+                1.0f32.to_bits()
             ]
         );
         // One of the two may have no pixel while the other still has.
         let thin = Sources {
             newest: Size::new(640, 480),
             held: Size::new(2, 100),
+            vagueness: None,
         };
         let constants = words(push_constants(thin, Size::new(1, 50), 0.5, false));
         assert_eq!(constants[..6], [0, 0, 0, 0, 640, 480]);

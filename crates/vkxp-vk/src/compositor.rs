@@ -73,6 +73,8 @@ pub struct VkCompositor {
     presenter: Option<Presenter>,
     /// Weight of the newest frame against the held frame when a frame is shown.
     mix: f32,
+    /// The mask that turns the mix into a masked one, when a transition has one.
+    mask: Option<present::Mask>,
     /// Size of the window in pixels, as the owner last reported it.
     surface_size: Size,
     /// Size of the target that [`scale_frame`](VkCompositor::scale_frame) last drew into.
@@ -203,6 +205,7 @@ impl VkCompositor {
             descriptors: vk::DescriptorSet::null(),
             presenter: None,
             mix: 1.0,
+            mask: None,
             surface_size: Size::new(0, 0),
             last_scaled: None,
             #[cfg(test)]

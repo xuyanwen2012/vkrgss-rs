@@ -2,7 +2,7 @@
 
 ## 1. Presenter (`vkxp-vk`)
 
-- [ ] 1.1 Add the mask input, progress and vagueness to the present pass and its off-screen variant. Verify: tests on llvmpipe for the three scenarios of `specs/vulkan-presentation/spec.md`, and the existing mix tests still pass.
+- [x] 1.1 Add the mask input, progress and vagueness to the present pass and its off-screen variant. Verify: tests on llvmpipe for the three scenarios of `specs/vulkan-presentation/spec.md`, and the existing mix tests still pass.
 
 ## 2. Session (`vkxp-host`)
 

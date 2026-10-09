@@ -13,11 +13,16 @@
 // texel before scaling. A held frame of another size than the newest has its own rectangle;
 // the two are then scaled separately and mixed per target pixel.
 //
+// A transition picture replaces the one weight of the mix by a weight per texel, taken from
+// the mask bitmap stretched over the newest frame.
+//
 // This pass uses floating point. That is acceptable here and nowhere else: what it produces is
 // only looked at, never read back into the compositor.
 
 layout(set = 0, binding = 0) uniform utexture2D newest;
 layout(set = 0, binding = 1) uniform utexture2D held;
+// The transition picture, or one texel that is not read without FLAG_MASK.
+layout(set = 0, binding = 2) uniform utexture2D mask;
 
 layout(push_constant) uniform Constants {
     // The letterbox rectangle of the newest frame in target pixels, and its size in texels.
@@ -28,9 +33,12 @@ layout(push_constant) uniform Constants {
     ivec2 held_origin;
     ivec2 held_size;
     ivec2 held_source;
-    // 0 shows the held frame, 1 the newest.
+    // 0 shows the held frame, 1 the newest. With FLAG_MASK it is the progress of the
+    // transition.
     float weight;
     uint flags;
+    // Width of the soft edge of a masked transition as a fraction of the mask's range.
+    float vagueness;
 } constants;
 
 // Each target pixel takes one texel of the newest frame: its factor is a whole number.
@@ -41,6 +49,8 @@ const uint FLAG_SRGB_TARGET = 2u;
 const uint FLAG_HELD_NEAREST = 4u;
 // Both frames have the same size, and so the same rectangle.
 const uint FLAG_SAME_GRID = 8u;
+// The mix is driven per texel by the mask.
+const uint FLAG_MASK = 16u;
 
 // What a texel is read from.
 const int NEWEST = 0;
@@ -50,6 +60,25 @@ const int MIXED = 2;
 
 layout(location = 0) out vec4 color;
 
+// The weight of the newest frame at `position` in a grid of `extent` cells that the newest
+// frame fills: the one weight, or with a mask what its texel there gives.
+float weight_at(ivec2 position, ivec2 extent) {
+    if ((constants.flags & FLAG_MASK) == 0u) {
+        return constants.weight;
+    }
+    // The mask is stretched over the grid; a cell takes the mask texel under its centre.
+    ivec2 mask_size = textureSize(mask, 0);
+    ivec2 cell = (2 * position + 1) * mask_size / (2 * max(extent, ivec2(1)));
+    ivec2 at = clamp(cell, ivec2(0), mask_size - 1);
+    // PLACEHOLDER: the formula and the use of the red channel follow mkxp until the original
+    // has been measured.
+    float level = float(texelFetch(mask, at, 0).r) / 255.0;
+    float progress = constants.weight;
+    float held_weight =
+        (clamp(level, progress, progress + constants.vagueness) - progress) / constants.vagueness;
+    return 1.0 - held_weight;
+}
+
 // The colour of one texel, 0 to 1, clamping the position to a frame of `source` texels.
 vec3 texel(int which, ivec2 position, ivec2 source) {
     ivec2 at = clamp(position, ivec2(0), source - 1);
@@ -58,11 +87,18 @@ vec3 texel(int which, ivec2 position, ivec2 source) {
         return vec3(texelFetch(newest, at, 0).rgb) / 255.0;
     }
     vec3 before = vec3(texelFetch(held, at, 0).rgb);
-    if (which == HELD || constants.weight <= 0.0) {
+    if (which == HELD) {
+        return before / 255.0;
+    }
+    float weight = weight_at(at, source);
+    if (weight <= 0.0) {
         return before / 255.0;
     }
     vec3 after = vec3(texelFetch(newest, at, 0).rgb);
-    return mix(before, after, constants.weight) / 255.0;
+    if (weight >= 1.0) {
+        return after / 255.0;
+    }
+    return mix(before, after, weight) / 255.0;
 }
 
 // The colour at `pixel`, counted from the corner of a rectangle of `size` target pixels that
@@ -113,13 +149,15 @@ void main() {
             rgb = scaled(MIXED, pixel, constants.size, constants.source, nearest);
         }
     } else {
+        // The mask lies over the rectangle of the newest frame.
+        float weight = weight_at(pixel, constants.size);
         vec3 after = vec3(0.0);
-        if (constants.weight > 0.0 && inside(pixel, constants.size)) {
+        if (weight > 0.0 && inside(pixel, constants.size)) {
             after = scaled(NEWEST, pixel, constants.size, constants.source, nearest);
         }
         vec3 before = vec3(0.0);
         ivec2 held_pixel = target - constants.held_origin;
-        if (constants.weight < 1.0 && inside(held_pixel, constants.held_size)) {
+        if (weight < 1.0 && inside(held_pixel, constants.held_size)) {
             before = scaled(
                 HELD,
                 held_pixel,
@@ -127,12 +165,12 @@ void main() {
                 constants.held_source,
                 (constants.flags & FLAG_HELD_NEAREST) != 0u);
         }
-        if (constants.weight >= 1.0) {
+        if (weight >= 1.0) {
             rgb = after;
-        } else if (constants.weight <= 0.0) {
+        } else if (weight <= 0.0) {
             rgb = before;
         } else {
-            rgb = mix(before, after, constants.weight);
+            rgb = mix(before, after, weight);
         }
     }
     if ((constants.flags & FLAG_SRGB_TARGET) != 0u) {
