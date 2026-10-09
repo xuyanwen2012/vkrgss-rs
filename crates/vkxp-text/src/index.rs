@@ -186,3 +186,70 @@ impl FontIndex {
         &self.scan_order
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An index over made-up faces of one family, `(weight, italic)` each.
+    fn family(faces: &[(u16, bool)]) -> FontIndex {
+        let records: Vec<FaceRecord> = faces
+            .iter()
+            .enumerate()
+            .map(|(position, &(weight, italic))| FaceRecord {
+                id: fontdb::ID::dummy(),
+                path: PathBuf::from(format!("{position}.ttf")),
+                index: 0,
+                families: vec!["Family".to_owned()],
+                weight,
+                italic,
+                normal_width: true,
+                tier: u32::MAX,
+            })
+            .collect();
+        FontIndex {
+            db: fontdb::Database::new(),
+            by_family: HashMap::from([("family".to_owned(), (0..records.len()).collect())]),
+            scan_order: (0..records.len()).collect(),
+            records,
+        }
+    }
+
+    fn picked(index: &FontIndex, bold: bool, italic: bool) -> (u16, bool) {
+        let record = index.record(index.pick("family", bold, italic).unwrap());
+        (record.weight, record.italic)
+    }
+
+    #[test]
+    fn styled_faces_are_selected_when_present() {
+        let index = family(&[(700, true), (400, true), (700, false), (400, false)]);
+        assert_eq!(picked(&index, false, false), (400, false));
+        assert_eq!(picked(&index, true, false), (700, false));
+        assert_eq!(picked(&index, false, true), (400, true));
+        assert_eq!(picked(&index, true, true), (700, true));
+    }
+
+    #[test]
+    fn the_regular_face_is_selected_when_a_style_is_absent() {
+        let index = family(&[(400, true), (400, false)]);
+        assert_eq!(picked(&index, true, false), (400, false));
+        assert_eq!(picked(&index, true, true), (400, true));
+
+        let index = family(&[(700, false), (400, false)]);
+        assert_eq!(picked(&index, false, true), (400, false));
+        assert_eq!(picked(&index, true, true), (700, false));
+
+        let index = family(&[(400, false)]);
+        for (bold, italic) in [(true, false), (false, true), (true, true)] {
+            assert_eq!(picked(&index, bold, italic), (400, false));
+        }
+    }
+
+    #[test]
+    fn the_closest_weight_is_selected_among_several() {
+        let index = family(&[(200, false), (250, false), (500, false), (900, false)]);
+        assert_eq!(picked(&index, false, false), (500, false));
+        assert_eq!(picked(&index, true, false), (900, false));
+        assert!(index.pick("other", false, false).is_none());
+    }
+}

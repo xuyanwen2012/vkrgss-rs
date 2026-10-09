@@ -73,7 +73,8 @@ pub struct ResolvedFace {
     pub path: PathBuf,
     /// The face's index in the file, for collections.
     pub index: u32,
-    /// The weight the face is used at, 400 for regular and 700 for bold.
+    /// The weight the face is used at, 400 for regular and 700 for bold. For a font with a
+    /// weight axis this is the weight the axis is set to.
     pub weight: u16,
     pub italic: bool,
 }
@@ -109,7 +110,8 @@ pub struct TextEngine {
     /// Contents of the font files in use. `None` for a file that could not be read.
     files: HashMap<PathBuf, Option<Arc<Vec<u8>>>>,
     faces: Vec<LoadedFace>,
-    /// Font index position and "set to bold on the weight axis" to the loaded face.
+    /// Font index position and bold request to the loaded face. Both requests share a face
+    /// unless the font has a weight axis.
     face_ids: HashMap<(usize, bool), Option<usize>>,
     /// Requested family names to the selected loaded face, one map per style.
     requests: [HashMap<Vec<String>, Option<usize>>; 4],
@@ -193,11 +195,7 @@ impl TextEngine {
             family: record.families.first().cloned().unwrap_or_default(),
             path: record.path.clone(),
             index: record.index,
-            weight: if face.coords().is_empty() {
-                record.weight
-            } else {
-                700
-            },
+            weight: face.variable_weight.unwrap_or(record.weight),
             italic: record.italic,
         })
     }
@@ -368,20 +366,21 @@ impl TextEngine {
         }
     }
 
-    /// Loads the face at font index position `record`. A bold request for a face that is not
-    /// bold sets a variable font to a bold weight; this is the font's own bold design, not a
-    /// synthesised one. Other fonts are used as they are.
+    /// Loads the face at font index position `record`. `bold` matters only for a font with a
+    /// weight axis, which is set to its own bold design; nothing is synthesised.
     fn load(&mut self, record: usize, bold: bool) -> Option<usize> {
-        let variation = bold && !self.index.record(record).is_bold();
-        if let Some(&face) = self.face_ids.get(&(record, variation)) {
+        if let Some(&face) = self.face_ids.get(&(record, bold)) {
             return face;
         }
-        let face = self.load_uncached(record, variation);
-        self.face_ids.insert((record, variation), face);
+        let face = self.load_uncached(record, bold);
+        self.face_ids.insert((record, bold), face);
+        if face.is_none_or(|face| self.faces[face].variable_weight.is_none()) {
+            self.face_ids.insert((record, !bold), face);
+        }
         face
     }
 
-    fn load_uncached(&mut self, record: usize, variation: bool) -> Option<usize> {
+    fn load_uncached(&mut self, record: usize, bold: bool) -> Option<usize> {
         let (path, index) = {
             let record = self.index.record(record);
             (record.path.clone(), record.index)
@@ -392,14 +391,8 @@ impl TextEngine {
             .entry(path)
             .or_insert_with_key(|path| std::fs::read(path).ok().map(Arc::new))
             .clone()?;
-        match LoadedFace::new(data, index, record, variation) {
-            Some(face) => {
-                self.faces.push(face);
-                Some(self.faces.len() - 1)
-            }
-            None if variation => self.load(record, false),
-            None => None,
-        }
+        self.faces.push(LoadedFace::new(data, index, record, bold)?);
+        Some(self.faces.len() - 1)
     }
 
     /// The image of a glyph, from the cache or rendered now.
@@ -461,5 +454,64 @@ fn blit(mask: &mut TextMask, glyph: &Glyph, left: i64, top: i64) {
         for (to, from) in target.iter_mut().zip(source) {
             *to = (*to).max(*from);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mask(width: u32, height: u32) -> TextMask {
+        TextMask {
+            width,
+            height,
+            coverage: vec![0; (width * height) as usize],
+        }
+    }
+
+    fn glyph(width: u32, height: u32, value: u8) -> Glyph {
+        Glyph {
+            width,
+            height,
+            coverage: vec![value; (width * height) as usize],
+            ..Glyph::default()
+        }
+    }
+
+    #[test]
+    fn overlapping_glyphs_keep_the_larger_coverage() {
+        let mut mask = mask(4, 1);
+        blit(&mut mask, &glyph(3, 1, 200), 0, 0);
+        blit(&mut mask, &glyph(3, 1, 100), 1, 0);
+        assert_eq!(mask.coverage, [200, 200, 200, 100]);
+        blit(&mut mask, &glyph(2, 1, 255), 2, 0);
+        assert_eq!(mask.coverage, [200, 200, 255, 255]);
+    }
+
+    #[test]
+    fn coverage_outside_the_mask_is_dropped() {
+        // A 3x3 glyph whose bytes number its pixels, moved over every edge of a 2x2 mask.
+        let numbered = Glyph {
+            width: 3,
+            height: 3,
+            coverage: (1..=9).collect(),
+            ..Glyph::default()
+        };
+        let drawn = |left: i64, top: i64| {
+            let mut mask = mask(2, 2);
+            blit(&mut mask, &numbered, left, top);
+            mask.coverage
+        };
+        assert_eq!(drawn(0, 0), [1, 2, 4, 5]);
+        assert_eq!(drawn(-1, -1), [5, 6, 8, 9]);
+        assert_eq!(drawn(1, 1), [0, 0, 0, 1]);
+        assert_eq!(drawn(-2, 1), [0, 0, 3, 0]);
+        for (left, top) in [(2, 0), (0, 2), (-3, 0), (0, -3), (i64::MAX / 2, 0)] {
+            assert_eq!(drawn(left, top), [0; 4], "at ({left}, {top})");
+        }
+        // A mask without pixels takes nothing.
+        let mut empty = mask(0, 2);
+        blit(&mut empty, &numbered, 0, 0);
+        assert!(empty.coverage.is_empty());
     }
 }

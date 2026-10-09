@@ -4,18 +4,19 @@ use std::sync::Arc;
 
 use swash::{CacheKey, FontRef, GlyphId, NormalizedCoord, Setting, tag_from_bytes};
 
-/// The weight a variable font is set to for a bold request.
+/// The weights a variable font is set to for a regular and for a bold request.
+const REGULAR_WEIGHT: f32 = 400.0;
 const BOLD_WEIGHT: f32 = 700.0;
-/// A variable font's weight axis must reach at least this far to count as having a bold face.
-const BOLD_THRESHOLD: f32 = 600.0;
 
 /// A face with its file contents and the values read from it once.
 pub(crate) struct LoadedFace {
     data: Arc<Vec<u8>>,
     offset: u32,
     key: CacheKey,
-    /// Variation coordinates: empty for the font's default instance.
+    /// Variation coordinates: empty for a font without a weight axis.
     coords: Vec<NormalizedCoord>,
+    /// The weight a variable font is set to; `None` for a font without a weight axis.
+    pub(crate) variable_weight: Option<u16>,
     /// The face's position in the font index.
     pub(crate) record: usize,
     pub(crate) units_per_em: f32,
@@ -26,32 +27,30 @@ pub(crate) struct LoadedFace {
 }
 
 impl LoadedFace {
-    /// Loads face `index` of the file contents `data`. With `bold_variation` the face is set
-    /// to a bold weight on its weight axis; `None` when the face has no such axis, and when
-    /// the data is not a usable font.
-    pub(crate) fn new(
-        data: Arc<Vec<u8>>,
-        index: u32,
-        record: usize,
-        bold_variation: bool,
-    ) -> Option<Self> {
+    /// Loads face `index` of the file contents `data`; `None` when the data is not a usable
+    /// font.
+    ///
+    /// A font with a weight axis is set to regular weight, or to bold weight for `bold`,
+    /// within the range of the axis. The default instance of such a font is often its
+    /// thinnest design, which is not what a request for regular text means.
+    pub(crate) fn new(data: Arc<Vec<u8>>, index: u32, record: usize, bold: bool) -> Option<Self> {
         let font = FontRef::from_index(&data, index as usize)?;
         let units_per_em = f32::from(font.metrics(&[]).units_per_em);
         if units_per_em <= 0.0 {
             return None;
         }
-        let coords = if bold_variation {
-            let tag = tag_from_bytes(b"wght");
-            let axis = font.variations().find_by_tag(tag)?;
-            if axis.max_value() < BOLD_THRESHOLD {
-                return None;
+        let tag = tag_from_bytes(b"wght");
+        let (coords, variable_weight) = match font.variations().find_by_tag(tag) {
+            Some(axis) => {
+                let wanted = if bold { BOLD_WEIGHT } else { REGULAR_WEIGHT };
+                let value = wanted.clamp(axis.min_value(), axis.max_value());
+                let coords = font
+                    .variations()
+                    .normalized_coords([Setting { tag, value }])
+                    .collect();
+                (coords, Some(value as u16))
             }
-            let value = BOLD_WEIGHT.min(axis.max_value());
-            font.variations()
-                .normalized_coords([Setting { tag, value }])
-                .collect()
-        } else {
-            Vec::new()
+            None => (Vec::new(), None),
         };
         let (ascent, descent) = line_metrics(&font, units_per_em);
         let (offset, key) = (font.offset, font.key);
@@ -60,6 +59,7 @@ impl LoadedFace {
             offset,
             key,
             coords,
+            variable_weight,
             record,
             units_per_em,
             ascent,

@@ -8,10 +8,10 @@
 
 ## 2. Measuring and rasterising (`vkxp-text`)
 
-- [ ] 2.1 Implement scaling to the requested line height, the baseline, bold and italic face selection and whole-pixel advances. Verify: tests for the size-bold-italic scenarios that can run with the test fonts (height equals size at 12, 22 and 52; a bold request on a regular-only family uses the regular face) and for the two measurement scenarios.
-- [ ] 2.2 Implement glyph rendering into coverage masks with the bounded glyph cache. Verify: tests for the four rasterisation scenarios.
-- [ ] 2.3 Implement per-character fallback, including a character no font has. Verify: tests for the two fallback scenarios, using a symbol that only Noto Sans Symbols 2 covers.
-- [ ] 2.4 Add the smoke test on system fonts and a throughput check. Verify: an engine built from system fonts measures and rasterises an ASCII string and a Chinese string without error; rasterising 1000 short strings at size 22 after warm-up takes under one second in a release-profile test run recorded in the commit message.
+- [x] 2.1 Implement scaling to the requested line height, the baseline, bold and italic face selection and whole-pixel advances. Verify: tests for the size-bold-italic scenarios that can run with the test fonts (height equals size at 12, 22 and 52; a bold request on a regular-only family uses the regular face) and for the two measurement scenarios.
+- [x] 2.2 Implement glyph rendering into coverage masks with the bounded glyph cache. Verify: tests for the four rasterisation scenarios.
+- [x] 2.3 Implement per-character fallback, including a character no font has. Verify: tests for the two fallback scenarios, using a symbol that only Noto Sans Symbols 2 covers.
+- [x] 2.4 Add the smoke test on system fonts and a throughput check. Verify: an engine built from system fonts measures and rasterises an ASCII string and a Chinese string without error; rasterising 1000 short strings at size 22 after warm-up takes under one second in a release-profile test run recorded in the commit message.
 
 ## 3. Integration check
 
