@@ -5,7 +5,7 @@
 //! runs under `rb_protect`. The only frames a raise can jump over are that function's, and it
 //! holds no Rust value with a destructor.
 
-use std::ffi::c_int;
+use std::ffi::{CStr, c_int};
 
 use crate::ffi::{self, VALUE};
 
@@ -53,6 +53,39 @@ pub(crate) unsafe fn protect<T>(
         state,
         exception: if is_raise { exception } else { ffi::Qnil },
     })
+}
+
+struct Funcall {
+    recv: VALUE,
+    method: *const std::ffi::c_char,
+    argc: c_int,
+    argv: *const VALUE,
+}
+
+unsafe extern "C" fn funcall_body(data: VALUE) -> VALUE {
+    // SAFETY: `funcall` passes a pointer to a `Funcall` that outlives this call, with a
+    // NUL-terminated name and `argc` values at `argv`.
+    unsafe {
+        let call = &*(data as *const Funcall);
+        ffi::rb_funcall2(call.recv, ffi::rb_intern(call.method), call.argc, call.argv)
+    }
+}
+
+/// Calls a method by name, ignoring its visibility, and stops any jump out of it.
+///
+/// # Safety
+///
+/// Interpreter thread only; `recv` and `args` must be live Ruby values.
+pub(crate) unsafe fn funcall(recv: VALUE, method: &CStr, args: &[VALUE]) -> Result<VALUE, Raised> {
+    let mut call = Funcall {
+        recv,
+        method: method.as_ptr(),
+        argc: c_int::try_from(args.len()).expect("fewer than 2^31 arguments"),
+        argv: args.as_ptr(),
+    };
+    // SAFETY: `funcall_body` fits the contract of `protect`, and the caller guarantees the
+    // thread and the values.
+    unsafe { protect(&mut call, funcall_body) }
 }
 
 unsafe extern "C" fn call_void_body(data: VALUE) -> VALUE {

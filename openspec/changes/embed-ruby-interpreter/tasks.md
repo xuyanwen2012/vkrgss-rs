@@ -25,10 +25,10 @@
 
 ## 5. Calling in and out
 
-- [ ] 5.1 Implement `eval_protected(source, file, line)` returning the value or class name, message and backtrace. Verify: tests for the three protected-evaluation scenarios and the interpreter-identity scenarios.
-- [ ] 5.2 Implement the helpers for defining classes, modules, methods and global functions backed by host functions, with the panic and raise discipline of `design.md`. Verify: tests for the three host-function scenarios.
-- [ ] 5.3 Expose rooting of values and test it. Verify: the rooted-string scenario passes with collections forced in a loop.
-- [ ] 5.4 Add the Zlib tests. Verify: both `crc_table` scenarios and a deflate/inflate round trip pass.
+- [x] 5.1 Implement `eval_protected(source, file, line)` returning the value or class name, message and backtrace. Verify: tests for the three protected-evaluation scenarios and the interpreter-identity scenarios.
+- [x] 5.2 Implement the helpers for defining classes, modules, methods and global functions backed by host functions, with the panic and raise discipline of `design.md`. Verify: tests for the three host-function scenarios.
+- [x] 5.3 Expose rooting of values and test it. Verify: the rooted-string scenario passes with collections forced in a loop.
+- [x] 5.4 Add the Zlib tests. Verify: both `crc_table` scenarios and a deflate/inflate round trip pass.
 
 ## 6. Ruby's own suites
 
