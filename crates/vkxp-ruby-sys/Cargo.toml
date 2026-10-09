@@ -14,6 +14,7 @@ links = "vkxp_ruby"
 workspace = true
 
 [dependencies]
+thiserror.workspace = true
 libc.workspace = true
 libz-sys.workspace = true
 
@@ -21,4 +22,5 @@ libz-sys.workspace = true
 cc.workspace = true
 
 [dev-dependencies]
+libc.workspace = true
 sha2.workspace = true

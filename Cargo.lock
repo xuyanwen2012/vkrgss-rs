@@ -702,6 +702,7 @@ dependencies = [
  "libc",
  "libz-sys",
  "sha2",
+ "thiserror",
 ]
 
 [[package]]

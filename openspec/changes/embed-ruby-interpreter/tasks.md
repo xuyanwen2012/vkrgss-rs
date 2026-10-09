@@ -19,9 +19,9 @@
 
 ## 4. Interpreter thread
 
-- [ ] 4.1 Implement `Interpreter::start`, `run` and shutdown as described in `design.md` (16 MiB stack, stack limit with 1 MiB headroom, `Zlib` registration, synchronous output, single-interpreter guard). Verify: tests for the start-up-state scenarios and for "work from another thread" and "second interpreter".
-- [ ] 4.2 Save and restore signal dispositions around `ruby_init` and at shutdown. Verify: tests for the two signal scenarios, comparing `sigaction` results for every listed signal before and after.
-- [ ] 4.3 Add the recursion tests. Verify: the three unbounded-recursion patterns each raise `SystemStackError` and the interpreter answers `1 + 1` afterwards, on the default stack size and on 32 MiB.
+- [x] 4.1 Implement `Interpreter::start`, `run` and shutdown as described in `design.md` (16 MiB stack, stack limit with 1 MiB headroom, `Zlib` registration, synchronous output, single-interpreter guard). Verify: tests for the start-up-state scenarios and for "work from another thread" and "second interpreter".
+- [x] 4.2 Save and restore signal dispositions around `ruby_init` and at shutdown. Verify: tests for the two signal scenarios, comparing `sigaction` results for every listed signal before and after.
+- [x] 4.3 Add the recursion tests. Verify: the three unbounded-recursion patterns each raise `SystemStackError` and the interpreter answers `1 + 1` afterwards, on the default stack size and on 32 MiB.
 
 ## 5. Calling in and out
 

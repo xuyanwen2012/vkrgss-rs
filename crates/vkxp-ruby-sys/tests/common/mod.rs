@@ -113,3 +113,80 @@ pub fn build_ruby_executable(scratch: &Path) -> PathBuf {
         .arg(&executable));
     executable
 }
+
+/// Evaluates Ruby source with the raw C API and returns `inspect` of the result, or of the
+/// exception as `Err`. For tests that must not depend on the crate's own evaluation helpers.
+///
+/// Call it only inside a closure given to `Interpreter::run`.
+pub fn eval_inspect(source: &str) -> Result<String, String> {
+    use std::ffi::{CString, c_int};
+    use vkxp_ruby_sys::ffi;
+
+    let source = CString::new(source).expect("no NUL in the source");
+    // SAFETY: the caller is on the interpreter thread. Every call that can raise is protected
+    // or is `inspect`/`to_s` of a value, which the tests only use on well-behaved objects.
+    unsafe {
+        let mut state: c_int = 0;
+        let mut value = ffi::rb_eval_string_protect(source.as_ptr(), &mut state);
+        let raised = state != 0;
+        if raised {
+            value = ffi::ruby_errinfo;
+            ffi::ruby_errinfo = ffi::Qnil;
+        }
+        let text = ffi::rb_inspect(value);
+        let string = &*ffi::rstring(text);
+        let bytes = std::slice::from_raw_parts(string.ptr.cast::<u8>(), string.len as usize);
+        let text = String::from_utf8_lossy(bytes).into_owned();
+        if raised { Err(text) } else { Ok(text) }
+    }
+}
+
+/// The three ways a script recurses without end: a method that calls itself, a block that
+/// yields to itself, and a string that evaluates itself.
+pub const UNBOUNDED_RECURSIONS: [&str; 3] = [
+    "def vkxp_rec_method; vkxp_rec_method; end; vkxp_rec_method",
+    "def vkxp_rec_block; [1].each { vkxp_rec_block }; end; vkxp_rec_block",
+    "$vkxp_rec_source = 'eval($vkxp_rec_source)'; eval($vkxp_rec_source)",
+];
+
+/// Runs each unbounded recursion several times and checks that it raises `SystemStackError`
+/// and that the interpreter still computes afterwards.
+pub fn assert_recursion_is_bounded(interpreter: &vkxp_ruby_sys::Interpreter) {
+    for source in UNBOUNDED_RECURSIONS {
+        for round in 0..3 {
+            let outcome = interpreter.run(move |_| eval_inspect(source));
+            // `rb_eval_string` prefixes the message with a position.
+            let error = outcome.expect_err("unbounded recursion cannot return");
+            assert!(
+                error.starts_with("#<SystemStackError: ")
+                    && error.ends_with("stack level too deep>"),
+                "round {round} of {source:?} raised {error}"
+            );
+            let after = interpreter.run(|_| eval_inspect("1 + 1"));
+            assert_eq!(
+                after,
+                Ok("2".to_owned()),
+                "after round {round} of {source:?}"
+            );
+        }
+    }
+}
+
+/// The current disposition of each signal Ruby takes, as (signal, handler, flags, mask).
+pub fn dispositions() -> Vec<(libc::c_int, usize, libc::c_int, Vec<libc::c_int>)> {
+    vkxp_ruby_sys::SIGNALS_TAKEN_BY_RUBY
+        .iter()
+        .map(|&signal| {
+            // SAFETY: a null new action only queries, and a zeroed `sigaction` is a valid
+            // buffer for the old one. `sigismember` reads the mask that was just filled in.
+            unsafe {
+                let mut action: libc::sigaction = std::mem::zeroed();
+                assert_eq!(libc::sigaction(signal, std::ptr::null(), &mut action), 0);
+                let mask = (1..=64)
+                    .filter(|&other| libc::sigismember(&action.sa_mask, other) == 1)
+                    .collect();
+                (signal, action.sa_sigaction, action.sa_flags, mask)
+            }
+        })
+        .collect()
+}
