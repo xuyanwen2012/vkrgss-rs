@@ -162,21 +162,20 @@ frame is rejected in a headless run, or when a frame that was to be dumped was n
 ### In a window
 
 ```sh
-cargo run -p vkxp -- <game directory> --rtp Standard=<RTP directory> --device <device>
+VK_LOADER_DRIVERS_SELECT='*radeon*' \
+    cargo run -p vkxp -- <game directory> --rtp Standard=<RTP directory> --device RADV
 ```
+
+The loader restriction is part of the command. `--device` only chooses among the devices the
+loader enumerates, and without it the program chooses a GPU by itself; either way the loader
+loads the driver of every GPU in the machine unless it is restricted. On the development
+machine the Intel Arc B580 must not be opened, so a windowed run there is the command above,
+on the AMD integrated GPU, or the same on the CPU with `VK_LOADER_DRIVERS_SELECT='*lvp*'` and
+`--device llvmpipe`.
 
 The host keys are those of the demo: F12 (reset), Alt+Enter (borderless fullscreen), F2
 (frame rate in the title) and Tab held (fast-forward). Closing the window asks the game to
 quit.
-
-Without `--device` the program chooses a GPU by itself, and whatever it chooses, the Vulkan
-loader loads the driver of every GPU to enumerate them. On the development machine the Intel
-Arc B580 must not be opened, so every run there restricts the loader and names the device:
-
-```sh
-VK_LOADER_DRIVERS_SELECT='*radeon*' \
-    cargo run -p vkxp -- <game directory> --rtp Standard=<RTP directory> --device RADV
-```
 
 ### Headless
 
