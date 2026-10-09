@@ -9,10 +9,10 @@
 
 ## 2. Path resolution (`vkxp-vfs`)
 
-- [ ] 2.1 Implement component-wise, case-insensitive matching with both separators, the exact-case preference, the rejection of paths that leave their root, and the per-directory cache with `refresh`. Verify: tests for the three path-matching scenarios, built in a temporary directory.
-- [ ] 2.2 Implement the extension lists per kind and the rule that a name matching as given wins. Verify: tests for the three extension-search scenarios.
-- [ ] 2.3 Implement the search order over the game directory and RTP directories, data files in the game directory only, the not-found error carrying the requested path, and `read`. Verify: tests for the search-order and lookup-failure scenarios.
-- [ ] 2.4 Document the crate in `crates/vkxp-vfs/src/lib.rs` with a usage example that compiles as a doctest. Verify: `cargo test -p vkxp-vfs --doc` passes.
+- [x] 2.1 Implement component-wise, case-insensitive matching with both separators, the exact-case preference, the rejection of paths that leave their root, and the per-directory cache with `refresh`. Verify: tests for the three path-matching scenarios, built in a temporary directory.
+- [x] 2.2 Implement the extension lists per kind and the rule that a name matching as given wins. Verify: tests for the three extension-search scenarios.
+- [x] 2.3 Implement the search order over the game directory and RTP directories, data files in the game directory only, the not-found error carrying the requested path, and `read`. Verify: tests for the search-order and lookup-failure scenarios.
+- [x] 2.4 Document the crate in `crates/vkxp-vfs/src/lib.rs` with a usage example that compiles as a doctest. Verify: `cargo test -p vkxp-vfs --doc` passes.
 
 ## 3. Image decoding (`vkxp-image`)
 
