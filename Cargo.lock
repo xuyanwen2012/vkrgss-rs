@@ -1910,6 +1910,19 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "vkxp"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "libc",
+ "png",
+ "tempfile",
+ "vkxp-binding",
+ "vkxp-core",
+ "vkxp-host",
+ "vkxp-proto",
+ "vkxp-ruby-sys",
+ "vkxp-text",
+ "vkxp-vfs",
+]
 
 [[package]]
 name = "vkxp-audio"

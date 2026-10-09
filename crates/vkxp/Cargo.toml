@@ -10,3 +10,20 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+anyhow.workspace = true
+libc.workspace = true
+vkxp-binding.workspace = true
+vkxp-core.workspace = true
+vkxp-host.workspace = true
+vkxp-proto.workspace = true
+vkxp-ruby-sys.workspace = true
+vkxp-text.workspace = true
+vkxp-vfs.workspace = true
+
+[dev-dependencies]
+png.workspace = true
+tempfile.workspace = true
+# The end-to-end test assembles its games with the binding's test support.
+vkxp-binding = { workspace = true, features = ["testing"] }

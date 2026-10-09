@@ -120,3 +120,19 @@ loader is not restricted, and passes the restriction on to the child process.
   restriction; the README states what to pass on the development machine.
 - [The interpreter is started on the main thread's behalf but used from the host's guest
   thread] → `Interpreter::run` is what crosses threads; the extra thread only waits.
+
+## Follow-ups
+
+- The wait for a guest that does not answer a quit request is implemented for headless runs
+  only. In a window the program cannot tell when the quit request went out: `run_windowed`
+  keeps the window until the guest's shutdown message and joins the guest thread itself before
+  it returns, so a script that loops without calling `Graphics.update` keeps the window, and
+  after a host error the process, alive. `vkxp-host` would have to bound that wait itself or
+  report the close request to its caller.
+- The end-to-end test cannot make a font family exist only in a `--font-dir` directory: the
+  system's fonts are always a source, and the test fonts of `vkxp-text` may be installed on
+  the machine. The test relies on a font directory coming before the system's fonts. A way to
+  run without system fonts would make it independent of the machine.
+- The default font name is `Arial`, or `ＭＳ Ｐゴシック` when the name of the game's library
+  ends in `J`. Whether the original runtime's Japanese edition starts with exactly that name
+  has not been measured.
