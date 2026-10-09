@@ -161,83 +161,6 @@ tone, a colour of alpha 0 and no flash SHALL change nothing.
 - **WHEN** a sprite outside the viewport has a larger z than the viewport
 - **THEN** the viewport's tone does not change that sprite
 
-### Requirement: Window frame and background
-A visible window with a window skin SHALL draw, at its z, a background taken from the skin's
-128 by 128 pattern inside a margin of 2 pixels, stretched to that area or tiled over it as its
-stretch flag says, and over it a frame built from the skin's corner and edge pieces. The frame's
-alpha SHALL be scaled by the window's opacity and the background's by opacity times back opacity
-over 255. A window without a skin SHALL draw neither.
-
-#### Scenario: Background area
-- **WHEN** a 160 by 96 window at 0, 0 with a single-coloured background pattern is drawn
-- **THEN** screen pixels from (2, 2) to (157, 93) not covered by the frame have that colour
-
-#### Scenario: Corners
-- **WHEN** the skin's four frame corners have four different colours
-- **THEN** each corner of the window shows the colour of the matching skin corner
-
-#### Scenario: Back opacity
-- **WHEN** the back opacity is 0 and the opacity is 255
-- **THEN** the frame is drawn and the background is not
-
-#### Scenario: Opacity
-- **WHEN** the opacity is 0
-- **THEN** neither frame nor background is drawn, and the contents still are
-
-### Requirement: Window contents
-A window's contents bitmap SHALL be drawn 16 pixels in from the window's top-left corner, shifted
-by the window's origin, clipped to the area 16 pixels inside each edge, with its alpha scaled by
-the contents opacity, at the window's z plus 2.
-
-#### Scenario: Clipping
-- **WHEN** a 160 by 96 window has a 300 by 300 contents bitmap
-- **THEN** only its top-left 128 by 64 pixels are drawn, from screen pixel (16, 16) on
-
-#### Scenario: Scrolling
-- **WHEN** the window's origin y is 32
-- **THEN** row 32 of the contents is at screen row 16 of the window
-
-#### Scenario: Between frame and contents
-- **WHEN** a sprite has the window's z plus 1 and overlaps the window
-- **THEN** it is in front of the window's background and frame and behind its contents
-
-### Requirement: Window cursor
-A window with a non-empty cursor rectangle SHALL draw the skin's cursor image scaled to that
-rectangle, positioned relative to the contents area, behind the contents and in front of the
-background. While the window is active the cursor's alpha SHALL cycle with each update of the
-window over 32 steps, falling from 255 by 8 per step for 16 steps and then rising by 8 per
-step; while inactive it SHALL keep its current value.
-
-#### Scenario: Position and size
-- **WHEN** the cursor rectangle is 0, 32, 128, 32 in a window at 0, 0
-- **THEN** the cursor covers screen pixels (16, 48) to (143, 79)
-
-#### Scenario: Blink
-- **WHEN** an active window is updated 16 times and then 16 more times
-- **THEN** the cursor alpha is 127 after the first 16 updates and 255 again after 32
-
-#### Scenario: Inactive window
-- **WHEN** an inactive window is updated
-- **THEN** the cursor alpha does not change
-
-#### Scenario: Empty rectangle
-- **WHEN** the cursor rectangle has width 0
-- **THEN** no cursor is drawn
-
-### Requirement: Window pause sign and scroll arrows
-A window whose pause flag is set SHALL draw the skin's pause sign centred at its bottom edge,
-stepping through the sign's four images as the window is updated. A window SHALL draw the
-skin's arrow for each direction in which its contents extend beyond the visible area. Both
-SHALL be drawn at the window's z plus 2.
-
-#### Scenario: Pause sign
-- **WHEN** the pause flag of a 160 by 96 window is set
-- **THEN** a 16 by 16 image from the skin's pause area is drawn with its top-left corner at window pixel (72, 80)
-
-#### Scenario: Arrow for hidden rows
-- **WHEN** the contents are taller than the visible area and the window's origin y is 0
-- **THEN** the down arrow is drawn and the up arrow is not
-
 ### Requirement: Frame bookkeeping
 The frame count SHALL start at 0, increase by 1 with every extracted frame and be settable to
 any value. The frame rate SHALL default to 40, be clamped to 10 to 120 when set, and be carried
@@ -485,3 +408,61 @@ SHALL replace the sprite's colour when its alpha is greater than or equal to the
 #### Scenario: Decay
 - **WHEN** a flash with alpha 128 and duration 5 is updated five times
 - **THEN** its alpha is 128, 102, 76, 50, 25 and then 0
+
+### Requirement: Window background as in the original
+A window with a skin SHALL draw the skin's 128 by 128 background into the rectangle inset by 2
+pixels: stretched without interpolation by the stretch rule, with the measured choice between
+the numerators 128 and 127, or tiled from the inset corner when its stretch flag is off. Its
+alpha SHALL be `(skin_alpha * ((back_opacity * opacity) / 255) + 127) / 255`.
+
+#### Scenario: Measured samples
+- **WHEN** each committed background sample measured on the original runtime is extracted and rendered
+- **THEN** the listed pixels equal the measured ones
+
+### Requirement: Window frame as in the original
+The frame SHALL be composed into a bitmap of the window's size: the four edges tiled from the
+skin's 32-pixel edge pieces over columns and rows 8 to size minus 9, in the order top, bottom,
+left, right, then the four 16-pixel corners, each drawn with `blt`; and that bitmap SHALL be
+drawn with alpha `(bitmap_alpha * opacity + 127) / 255`. Back opacity SHALL NOT affect it.
+
+#### Scenario: Measured samples
+- **WHEN** each committed frame sample, including windows smaller than 32 pixels, is extracted and rendered
+- **THEN** the listed pixels equal the measured ones
+
+### Requirement: Window contents and arrows as in the original
+Contents texel `(i - 16 + ox, j - 16 + oy)` SHALL appear at window pixel `(i, j)` inside the
+interior, with the contents opacity as its only opacity. With a contents bitmap set, the arrows
+SHALL appear by the measured conditions at the measured positions in the order down, left,
+right, up, unaffected by any opacity.
+
+#### Scenario: Measured samples
+- **WHEN** each committed contents and arrow sample is extracted and rendered
+- **THEN** the listed pixels equal the measured ones
+
+### Requirement: Window cursor as in the original
+The cursor SHALL be drawn at window position `(16 + x, 16 + y)` of its rectangle, not moved by
+the window's origin, clipped by the window, below the contents, from the measured corner, edge
+and centre pieces. Its opacity SHALL be `max(0, contents_opacity - 8 * m)` with `m = c` for
+`c <= 16` and `32 - c` above, where the counter `c` starts at 0, advances modulo 32 with each
+update of an active window, and becomes 12 when the window is made inactive.
+
+#### Scenario: Blink sequence
+- **WHEN** an active window with contents opacity 255 is updated 32 times
+- **THEN** the cursor opacity goes 247, 239, down to 127 at the sixteenth update, and back up to 255
+
+#### Scenario: Inactive
+- **WHEN** a window is made inactive
+- **THEN** its cursor opacity is 159 at contents opacity 255
+
+#### Scenario: Measured samples
+- **WHEN** each committed cursor sample is extracted and rendered
+- **THEN** the listed pixels equal the measured ones
+
+### Requirement: Window pause sign as in the original
+The pause sign SHALL be drawn at `(W / 2 - 8, H - 16)` above the down arrow and the cursor,
+with alpha `min(255, 32 * p)` and image `(p / 8) mod 4`, where `p` is 0 when `pause` is
+assigned and advances with each update while pausing. No opacity SHALL affect it.
+
+#### Scenario: Fade in
+- **WHEN** `pause` is set and the window is updated once, twice and eight times
+- **THEN** the sign's alpha is 32, 64 and 255, it shows its first image until the eighth update and its second from then, and before the first update it is not drawn
