@@ -29,9 +29,9 @@
 
 ## 5. Deltas (`vkxp-core`)
 
-- [ ] 5.1 Track per bitmap what the host knows and the rectangle changed since the last update, updated by every drawing operation. Verify: tests that each operation marks exactly the pixels it may have changed (for example `set_pixel` marks one pixel, a clipped `fill_rect` marks only its visible part).
-- [ ] 5.2 Implement `deltas(referenced)` in the order given in `design.md`. Verify: tests for the five bitmap-delta scenarios and the slot-reuse scenario.
-- [ ] 5.3 Add the property test that applies emitted deltas to `vkxp_compose_ref::BitmapStore`. Verify: for random sequences of creation, drawing, disposal and delta requests the store never rejects a delta and every referenced bitmap equals the arena's pixels byte for byte.
+- [x] 5.1 Track per bitmap what the host knows and the rectangle changed since the last update, updated by every drawing operation. Verify: tests that each operation marks exactly the pixels it may have changed (for example `set_pixel` marks one pixel, a clipped `fill_rect` marks only its visible part).
+- [x] 5.2 Implement `deltas(referenced)` in the order given in `design.md`. Verify: tests for the five bitmap-delta scenarios and the slot-reuse scenario.
+- [x] 5.3 Add the property test that applies emitted deltas to `vkxp_compose_ref::BitmapStore`. Verify: for random sequences of creation, drawing, disposal and delta requests the store never rejects a delta and every referenced bitmap equals the arena's pixels byte for byte.
 
 ## 6. Integration check
 

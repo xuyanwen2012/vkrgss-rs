@@ -8,6 +8,7 @@
 
 mod bitmap;
 mod color;
+mod delta;
 mod error;
 mod font;
 mod rect;

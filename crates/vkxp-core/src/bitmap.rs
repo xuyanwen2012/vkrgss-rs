@@ -39,7 +39,8 @@ pub(crate) fn clip_span(pos: i32, len: i32, size: usize) -> Option<(usize, usize
 }
 
 /// One bitmap: its pixels in the protocol's layout (red, green, blue, straight alpha, row
-/// order), its font, and the area changed since the last update sent to the host.
+/// order), its font, the area changed since the last update sent to the host, and whether the
+/// host knows the bitmap at all.
 #[derive(Debug, Clone)]
 pub(crate) struct Bitmap {
     pub(crate) width: usize,
@@ -47,6 +48,8 @@ pub(crate) struct Bitmap {
     pub(crate) rgba: Vec<u8>,
     pub(crate) font: Font,
     pub(crate) changed: Option<Area>,
+    /// Whether a create for this bitmap was emitted.
+    pub(crate) known: bool,
 }
 
 impl Bitmap {
@@ -187,6 +190,8 @@ pub struct Bitmaps {
     slots: Vec<Slot>,
     /// Empty slots that can take a new occupant.
     free: Vec<u32>,
+    /// Disposed bitmaps the host still knows, in the order they were disposed.
+    pub(crate) destroyed: Vec<BitmapId>,
 }
 
 impl Bitmaps {
@@ -271,6 +276,7 @@ impl Bitmaps {
             rgba,
             font: Font::new(defaults),
             changed: None,
+            known: false,
         };
         if let Some(index) = self.free.pop() {
             let slot = &mut self.slots[index as usize];
@@ -287,13 +293,20 @@ impl Bitmaps {
         Ok(BitmapId::new(index, 0))
     }
 
-    /// Disposes a bitmap and frees its pixels. Disposing a disposed bitmap does nothing.
+    /// Disposes a bitmap and frees its pixels. Disposing a disposed bitmap does nothing. If
+    /// the host knows the bitmap, the next [`Bitmaps::deltas`] tells it to destroy it.
     pub fn dispose(&mut self, id: BitmapId) {
         let Some(slot) = self.slots.get_mut(id.index as usize) else {
             return;
         };
-        if slot.generation != id.generation || slot.bitmap.take().is_none() {
+        if slot.generation != id.generation {
             return;
+        }
+        let Some(bitmap) = slot.bitmap.take() else {
+            return;
+        };
+        if bitmap.known {
+            self.destroyed.push(id);
         }
         // A slot at the last generation is retired, so that no id is ever handed out twice.
         if slot.generation < u32::MAX {
