@@ -10,3 +10,21 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[features]
+# The test harness of `vkxp_binding::testing`: an interpreter with this binding installed over
+# a generated game directory.
+testing = ["dep:png"]
+
+[dependencies]
+png = { workspace = true, optional = true }
+thiserror.workspace = true
+vkxp-core.workspace = true
+vkxp-image.workspace = true
+vkxp-proto.workspace = true
+vkxp-ruby-sys.workspace = true
+vkxp-vfs.workspace = true
+
+[dev-dependencies]
+# The crate's own tests use its harness.
+vkxp-binding = { workspace = true, features = ["testing"] }

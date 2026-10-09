@@ -6,10 +6,10 @@
 
 ## 2. Foundation (`vkxp-binding`)
 
-- [ ] 2.1 Add the dependencies, the `Guest` state with its thread-local accessor, `Guest::install` taking the configuration of `design.md`, and the queue that defers frees from the garbage collector. Verify: `cargo build -p vkxp-binding` has no warnings, `cargo xtask deps` reports no violation, and a unit test shows that re-entrant mutable access to the guest is detected.
-- [ ] 2.2 Add the argument helpers and the single error-mapping function, define `RGSSError`, and register methods with the arities of the method list. Verify: unit tests through the interpreter for each conversion (Fixnum, Float truncation, wrong type raising `TypeError`, wrong count raising `ArgumentError`) and for each mapped error.
-- [ ] 2.3 Add the test harness (`testing` module): one interpreter per test process, a temporary game directory with generated PNG files and an RTP directory, the cell-based text backend, and `eval` returning `inspect` or the raised class and message. Verify: a harness self-test evaluates `1 + 1` and a raising snippet.
-- [ ] 2.4 Commit the method list as `crates/vkxp-binding/tests/data/rgss1_api.txt` (copy `local/rgss1_api.txt`) and add the arity test restricted to a set of implemented classes, empty for now. Verify: the test passes and fails when a deliberately wrong entry is added (remove it afterwards).
+- [x] 2.1 Add the dependencies, the `Guest` state with its thread-local accessor, `Guest::install` taking the configuration of `design.md`, and the queue that defers frees from the garbage collector. Verify: `cargo build -p vkxp-binding` has no warnings, `cargo xtask deps` reports no violation, and a unit test shows that re-entrant mutable access to the guest is detected.
+- [x] 2.2 Add the argument helpers and the single error-mapping function, define `RGSSError`, and register methods with the arities of the method list. Verify: unit tests through the interpreter for each conversion (Fixnum, Float truncation, wrong type raising `TypeError`, wrong count raising `ArgumentError`) and for each mapped error.
+- [x] 2.3 Add the test harness (`testing` module): one interpreter per test process, a temporary game directory with generated PNG files and an RTP directory, the cell-based text backend, and `eval` returning `inspect` or the raised class and message. Verify: a harness self-test evaluates `1 + 1` and a raising snippet.
+- [x] 2.4 Commit the method list as `crates/vkxp-binding/tests/data/rgss1_api.txt` (copy `local/rgss1_api.txt`) and add the arity test restricted to a set of implemented classes, empty for now. Verify: the test passes and fails when a deliberately wrong entry is added (remove it afterwards).
 
 ## 3. Value classes (`vkxp-binding`)
 

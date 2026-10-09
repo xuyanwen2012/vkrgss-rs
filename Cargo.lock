@@ -1918,6 +1918,16 @@ version = "0.1.0"
 [[package]]
 name = "vkxp-binding"
 version = "0.1.0"
+dependencies = [
+ "png",
+ "thiserror",
+ "vkxp-binding",
+ "vkxp-core",
+ "vkxp-image",
+ "vkxp-proto",
+ "vkxp-ruby-sys",
+ "vkxp-vfs",
+]
 
 [[package]]
 name = "vkxp-compose-ref"
