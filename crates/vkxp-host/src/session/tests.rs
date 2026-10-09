@@ -14,6 +14,14 @@ use super::*;
 use crate::ManualClock;
 use crate::testing::{DisplayEvent, ErrorBuffer, RecordingDisplay, RecordingSink, Shown};
 
+/// A step of a transition whose weight and threshold are both `value`.
+fn step(value: u8) -> Mix {
+    Mix::Step {
+        weight: value,
+        threshold: value,
+    }
+}
+
 const SIZE: Size = Size::new(32, 24);
 
 fn ms(milliseconds: u64) -> Duration {
@@ -730,27 +738,60 @@ fn transition_cross_fades_one_step_behind_its_frames_then_shows_frames_normally(
     rig.frame(frame(1));
     assert_eq!(rig.shown(), Shown::Frame(0), "the held frame alone");
     rig.frame(frame(2));
-    assert_eq!(rig.shown(), mix(2, 0.25));
+    assert_eq!(rig.shown(), mix(2, 63));
     rig.frame(frame(3));
-    assert_eq!(rig.shown(), mix(3, 0.5), "the even mix");
+    assert_eq!(rig.shown(), mix(3, 127), "the even mix");
     rig.frame(frame(4));
-    assert_eq!(rig.shown(), mix(4, 0.75), "one quarter of the held frame");
+    assert_eq!(rig.shown(), mix(4, 191), "one quarter of the held frame");
     rig.frame(frame(5));
     assert_eq!(rig.shown(), Shown::Frame(5), "the newest frame alone");
     rig.frame(frame(6));
     assert_eq!(rig.shown(), Shown::Frame(6));
 
-    let mixes: Vec<f32> = rig
+    let mixes: Vec<Mix> = rig
         .session
         .display()
         .events
         .iter()
         .filter_map(|event| match event {
-            DisplayEvent::Mix(weight) => Some(*weight),
+            DisplayEvent::Mix(mix) => Some(*mix),
             _ => None,
         })
         .collect();
-    assert_eq!(mixes, [0.0, 0.0, 0.25, 0.5, 0.75, 1.0]);
+    // The freeze, then the steps 0 to 3 of 4, then the frame that is shown alone.
+    assert_eq!(
+        mixes,
+        [
+            Mix::HELD,
+            Mix::HELD,
+            step(63),
+            step(127),
+            step(191),
+            Mix::Newest
+        ]
+    );
+}
+
+/// Scenario "Last step" of the transition step values.
+#[test]
+fn last_step_has_the_weight_and_the_threshold_measured_on_the_original() {
+    let last = |duration| step_mix(duration - 1, duration);
+    assert!(matches!(last(8), Mix::Step { weight: 223, .. }));
+    assert!(matches!(last(3), Mix::Step { threshold: 169, .. }));
+    assert!(matches!(last(5), Mix::Step { threshold: 203, .. }));
+    // The first step shows the held frame, and no duration overflows.
+    assert_eq!(step_mix(0, 8), Mix::HELD);
+    assert_eq!(step_mix(u32::MAX - 1, u32::MAX), step(254));
+
+    // The eighth frame of a transition of duration 8 is shown with them.
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    rig.send(GuestToHost::Freeze);
+    rig.send(transition(8));
+    for index in 1..=8 {
+        rig.frame(frame(index));
+    }
+    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(0), 8, 223));
 }
 
 #[test]
@@ -776,7 +817,7 @@ fn frames_between_freeze_and_transition_do_not_advance_the_fade() {
     rig.frame(frame(3));
     assert_eq!(rig.shown(), Shown::Frame(0));
     rig.frame(frame(4));
-    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(0), 4, 0.5));
+    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(0), 4, 127));
     rig.frame(frame(5));
     assert_eq!(rig.shown(), Shown::Frame(5));
 }
@@ -888,11 +929,11 @@ fn frame_with_mask(frame_index: u64) -> GuestToHost {
     GuestToHost::Frame(packet)
 }
 
-fn masked(newest: u64, progress: f32, vagueness: u32) -> Shown {
+fn masked(newest: u64, threshold: u8, vagueness: u32) -> Shown {
     Shown::Masked {
         held: Box::new(Shown::Frame(0)),
         newest,
-        progress,
+        threshold,
         mask: MASK,
         vagueness,
     }
@@ -906,15 +947,15 @@ fn masked_transition_is_the_masked_mix_with_the_mask_and_the_vagueness() {
     rig.send(masked_transition(4, 40));
     // The mask arrives with the first frame after the transition message.
     rig.frame(frame_with_mask(1));
-    assert_eq!(rig.shown(), masked(1, 0.0, 40));
+    assert_eq!(rig.shown(), masked(1, 0, 40));
     rig.frame(frame(2));
-    assert_eq!(rig.shown(), masked(2, 0.25, 40));
+    assert_eq!(rig.shown(), masked(2, 63, 40));
     rig.frame(frame(3));
-    // At this progress the display shows the newest frame where the mask is black and the
+    // At this threshold the display shows the newest frame where the mask is black and the
     // held frame where it is white; the presenter's tests look at the pixels.
-    assert_eq!(rig.shown(), masked(3, 0.5, 40));
+    assert_eq!(rig.shown(), masked(3, 127, 40));
     rig.frame(frame(4));
-    assert_eq!(rig.shown(), masked(4, 0.75, 40));
+    assert_eq!(rig.shown(), masked(4, 191, 40));
     rig.frame(frame(5));
     assert_eq!(rig.shown(), Shown::Frame(5));
     assert_eq!(rig.errors.text(), "");
@@ -924,7 +965,7 @@ fn masked_transition_is_the_masked_mix_with_the_mask_and_the_vagueness() {
     rig.send(transition(2));
     rig.frame(frame(6));
     rig.frame(frame(7));
-    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(5), 7, 0.5));
+    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(5), 7, 127));
     let masks: Vec<&DisplayEvent> = rig
         .session
         .display()
@@ -959,14 +1000,14 @@ fn mask_destroyed_with_the_frame_that_ends_the_transition_is_not_reported() {
 }
 
 #[test]
-fn vagueness_of_zero_is_treated_as_one() {
+fn vagueness_of_zero_is_passed_on_as_it_is() {
     let mut rig = Rig::new();
     rig.frame(frame(0));
     rig.send(GuestToHost::Freeze);
     rig.send(masked_transition(2, 0));
     rig.frame(frame_with_mask(1));
     rig.frame(frame(2));
-    assert_eq!(rig.shown(), masked(2, 0.5, 1));
+    assert_eq!(rig.shown(), masked(2, 127, 0));
 }
 
 #[test]
@@ -978,9 +1019,9 @@ fn transition_with_an_unknown_mask_is_a_cross_fade_and_is_reported_once() {
     rig.frame(frame(1));
     assert_eq!(rig.shown(), Shown::Frame(0));
     rig.frame(frame(2));
-    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(0), 2, 0.25));
+    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(0), 2, 63));
     rig.frame(frame(3));
-    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(0), 3, 0.5));
+    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(0), 3, 127));
     rig.frame(frame(4));
     rig.frame(frame(5));
     assert_eq!(rig.shown(), Shown::Frame(5));
@@ -996,7 +1037,7 @@ fn freeze_during_a_masked_transition_holds_the_masked_image_and_drops_the_mask()
     rig.frame(frame_with_mask(1));
     rig.frame(frame(2));
     let on_screen = rig.shown();
-    assert_eq!(on_screen, masked(2, 0.25, 40));
+    assert_eq!(on_screen, masked(2, 63, 40));
     rig.send(GuestToHost::Freeze);
     rig.frame(frame(3));
     assert_eq!(rig.shown(), on_screen);
@@ -1004,7 +1045,7 @@ fn freeze_during_a_masked_transition_holds_the_masked_image_and_drops_the_mask()
     rig.frame(frame(4));
     assert_eq!(rig.shown(), on_screen);
     rig.frame(frame(5));
-    assert_eq!(rig.shown(), Shown::mix(on_screen, 5, 0.5));
+    assert_eq!(rig.shown(), Shown::mix(on_screen, 5, 127));
 }
 
 #[test]
@@ -1026,7 +1067,7 @@ fn fading() -> (Rig, Shown) {
     rig.send(transition(4));
     rig.frame(frame(1));
     rig.frame(frame(2));
-    let shown = Shown::mix(Shown::Frame(0), 2, 0.25);
+    let shown = Shown::mix(Shown::Frame(0), 2, 63);
     assert_eq!(rig.shown(), shown);
     (rig, shown)
 }
@@ -1045,7 +1086,7 @@ fn freeze_during_a_transition_holds_the_mixed_image_on_screen() {
     rig.frame(frame(6));
     assert_eq!(rig.shown(), on_screen);
     rig.frame(frame(7));
-    assert_eq!(rig.shown(), Shown::mix(on_screen, 7, 0.5));
+    assert_eq!(rig.shown(), Shown::mix(on_screen, 7, 127));
     rig.frame(frame(8));
     assert_eq!(rig.shown(), Shown::Frame(8));
 }
@@ -1064,7 +1105,7 @@ fn frame_rejected_during_a_transition_keeps_the_image_and_its_weight() {
 
     // The fade goes on with the next frame that is shown, at the step the rejected one missed.
     rig.frame(frame(4));
-    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(0), 4, 0.5));
+    assert_eq!(rig.shown(), Shown::mix(Shown::Frame(0), 4, 127));
     rig.frame(frame(5));
     rig.frame(frame(6));
     assert_eq!(rig.shown(), Shown::Frame(6));

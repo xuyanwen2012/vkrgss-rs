@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use vkxp_proto::link::HostEnd;
 use vkxp_proto::{BitmapId, Button, FramePacket, GuestToHost, HostToGuest, InputSnapshot};
+use vkxp_vk::Mix;
 use winit::keyboard::KeyCode;
 
 use crate::{AudioSink, Clock, Display, InputSource, KeyMap, NullSink};
@@ -92,8 +93,9 @@ enum Fade {
     /// The held frame is shown.
     Frozen,
     /// `shown` frames have been shown since the transition message. The next one is shown at
-    /// step `shown` of `duration` equal steps from the held frame to the newest, and the one
-    /// after the `duration`-th is shown alone and ends the transition. A `still` transition,
+    /// step `shown` of `duration` steps from the held frame to the newest, with the values of
+    /// [`step_mix`], and the one after the `duration`-th is shown alone and ends the
+    /// transition. A `still` transition,
     /// one that arrived while nothing was frozen, shows the held frame at every step.
     Fading {
         shown: u32,
@@ -157,8 +159,8 @@ pub struct Session<D: Display, C: Clock> {
     live: InputSnapshot,
     input: Option<Box<dyn InputSource>>,
     fade: Fade,
-    /// The mix weight the display is at.
-    mix: f32,
+    /// The mix the display is at.
+    mix: Mix,
     /// The mask bitmap and the vagueness of the transition under way, if it has a mask.
     mask: Option<(BitmapId, u32)>,
     title: String,
@@ -198,7 +200,7 @@ impl<D: Display, C: Clock> Session<D, C> {
             live: InputSnapshot::EMPTY,
             input: options.input,
             fade: Fade::Normal,
-            mix: 1.0,
+            mix: Mix::Newest,
             mask: None,
             title: String::new(),
             fps: None,
@@ -268,8 +270,7 @@ impl<D: Display, C: Clock> Session<D, C> {
                 mask,
                 vague,
             } => {
-                // A vagueness of 0 is treated as 1.
-                let mask = mask.map(|id| (id, u32::from(vague).max(1)));
+                let mask = mask.map(|id| (id, u32::from(vague)));
                 self.transition(duration, mask);
             }
             GuestToHost::Audio(command) => self.audio.command(command),
@@ -490,33 +491,33 @@ impl<D: Display, C: Clock> Session<D, C> {
             self.deliver(snapshot);
         }
 
-        // The step of a cross-fade this frame is shown at, with the weight that shows it. The
-        // display needs the weight before it renders; the session only counts the frame once
-        // it has been shown.
+        // The step of a transition this frame is shown at, with the mix that shows it. The
+        // display needs the mix before it renders; the session only counts the frame once it
+        // has been shown.
         let step = match self.fade {
             Fade::Fading {
                 shown,
                 duration,
                 still,
             } => {
-                let weight = if shown >= duration {
-                    1.0
+                let mix = if shown >= duration {
+                    Mix::Newest
                 } else if still {
-                    0.0
+                    Mix::HELD
                 } else {
-                    shown as f32 / duration as f32
+                    step_mix(shown, duration)
                 };
-                Some((shown, duration, still, weight))
+                Some((shown, duration, still, mix))
             }
             Fade::Normal | Fade::Frozen => None,
         };
-        if let Some((_, _, _, weight)) = step {
-            self.display.set_mix(weight);
+        if let Some((_, _, _, mix)) = step {
+            self.display.set_mix(mix);
         }
         match self.display.render(packet) {
             Ok(()) => {
-                if let Some((shown, duration, still, weight)) = step {
-                    self.mix = weight;
+                if let Some((shown, duration, still, mix)) = step {
+                    self.mix = mix;
                     // The mask comes with the frames after the transition message, so only
                     // now is it known whether there is one. Without it the display shows a
                     // cross-fade. The frame past the last step is shown alone, and the guest
@@ -546,8 +547,8 @@ impl<D: Display, C: Clock> Session<D, C> {
             }
             Err(error) => {
                 if step.is_some() {
-                    // The image on screen stays, so its weight does too: a redraw must not
-                    // show the frame before at the weight meant for this one.
+                    // The image on screen stays, so its mix does too: a redraw must not show
+                    // the frame before in the mix meant for this one.
                     self.display.set_mix(self.mix);
                 }
                 self.report(format_args!(
@@ -618,7 +619,7 @@ impl<D: Display, C: Clock> Session<D, C> {
         if let Err(error) = self.display.hold() {
             self.report(format_args!("cannot freeze the display: {error}"));
         }
-        self.set_mix(0.0);
+        self.set_mix(Mix::HELD);
         self.set_mask(None);
         self.fade = Fade::Frozen;
     }
@@ -631,7 +632,7 @@ impl<D: Display, C: Clock> Session<D, C> {
                 if let Err(error) = self.display.hold() {
                     self.report(format_args!("cannot freeze the display: {error}"));
                 }
-                self.set_mix(0.0);
+                self.set_mix(Mix::HELD);
                 self.fade = Fade::Fading {
                     shown: 0,
                     duration,
@@ -659,9 +660,9 @@ impl<D: Display, C: Clock> Session<D, C> {
         }
     }
 
-    fn set_mix(&mut self, weight: f32) {
-        self.mix = weight;
-        self.display.set_mix(weight);
+    fn set_mix(&mut self, mix: Mix) {
+        self.mix = mix;
+        self.display.set_mix(mix);
     }
 
     fn toggle_fps(&mut self) {
@@ -703,6 +704,22 @@ impl<D: Display, C: Clock> Session<D, C> {
     fn report(&mut self, message: std::fmt::Arguments<'_>) {
         // Nothing useful can be done when the error stream itself fails.
         let _ = writeln!(self.errors, "vkxp: {message}");
+    }
+}
+
+/// The mix of step `step` of a transition of `duration` frames, `step` below `duration`: the
+/// cross-fade weight `255 * step / duration` and the mask threshold
+/// `(255 * step - 1) / duration`, which is 0 at step 0.
+///
+/// PLACEHOLDER for the steps before the last: the original could only be measured at the step
+/// its `Graphics.transition` returns at, `duration - 1`.
+fn step_mix(step: u32, duration: u32) -> Mix {
+    let scaled = 255 * u64::from(step);
+    let duration = u64::from(duration);
+    // Both are below 255, since the step is below the duration.
+    Mix::Step {
+        weight: (scaled / duration) as u8,
+        threshold: (scaled.saturating_sub(1) / duration) as u8,
     }
 }
 

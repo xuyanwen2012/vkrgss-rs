@@ -139,8 +139,7 @@ fn dumped_frames_equal_the_reference_compositor() {
     );
 
     // B froze the display and started a transition that frame 12 is inside, so its dump is
-    // the mix of the frame that was held and frame 12, which the presenter makes in floating
-    // point.
+    // the mix of the frame that was held and frame 12, which the presenter makes in integers.
     let frames_before = |wanted: fn(&GuestToHost) -> bool| {
         let at = messages.iter().position(wanted).unwrap();
         messages[..at]
@@ -154,15 +153,16 @@ fn dumped_frames_equal_the_reference_compositor() {
         held < first && first < 12,
         "frame 12 is past the first step"
     );
-    let weight = (12 - first) as f32 / TRANSITION_FRAMES as f32;
+    let weight = 255 * (12 - first) as u32 / TRANSITION_FRAMES;
     let mixed = dumped(12);
     assert_ne!(frames[held].rgba, frames[12].rgba);
     for (at, shown) in mixed.iter().enumerate() {
         let (from, to) = (frames[held].rgba[at], frames[12].rgba[at]);
-        let exact = f32::from(from) + (f32::from(to) - f32::from(from)) * weight;
-        assert!(
-            (f32::from(*shown) - exact).abs() <= 1.0,
-            "byte {at} of frame 12 is {shown}, not the mix of {from} and {to} at {weight}"
+        let exact = (u32::from(from) * (256 - weight) + u32::from(to) * weight) >> 8;
+        assert_eq!(
+            u32::from(*shown),
+            exact,
+            "byte {at} of frame 12 is not the mix of {from} and {to} at {weight}"
         );
     }
 }
@@ -244,12 +244,9 @@ fn dump_of_a_frame_under_a_freeze_is_the_held_frame() {
 #[test]
 fn dump_in_the_middle_of_a_transition_is_the_mix() {
     let levels = dumped_levels(vec![GuestToHost::Freeze, transition(4)], 6);
-    // The third black frame is at step 2 of 4, the even mix, which rounds either way.
-    assert!((127..=128).contains(&levels[3]), "{levels:?}");
-    assert_eq!(levels[..2], [255, 255]);
-    assert!((190..=192).contains(&levels[2]), "{levels:?}");
-    assert!((63..=64).contains(&levels[4]), "{levels:?}");
-    assert_eq!(levels[5..], [0, 0]);
+    // The black frames of the transition are at steps 0 to 3 of 4, with the weights 0, 63,
+    // 127 and 191: white keeps `(255 * (256 - weight)) >> 8`.
+    assert_eq!(levels, [255, 255, 192, 128, 64, 0, 0]);
 }
 
 #[test]

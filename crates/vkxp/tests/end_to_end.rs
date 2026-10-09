@@ -568,14 +568,15 @@ Graphics.update
     let ran = headless(&game, &dumps);
     ran.assert_success();
 
-    // The frame before the freeze, the four of the transition, and the one after it. The mix
-    // is made in floating point, so a step that falls between two levels rounds either way.
-    let expected = [255..=255, 255..=255, 191..=192, 127..=128, 63..=64, 0..=0];
-    for (index, levels) in expected.into_iter().enumerate() {
+    // The frame before the freeze, the four of the transition, and the one after it. At the
+    // steps 0 to 3 of 4 the weights are 0, 63, 127 and 191, and white keeps
+    // `(255 * (256 - weight)) >> 8`.
+    let expected = [255, 255, 192, 128, 64, 0];
+    for (index, level) in expected.into_iter().enumerate() {
         let frame = ran.frame(&format!("{index}.png"));
         assert_eq!((frame.width, frame.height), (640, 480));
         let first = frame.pixel(0, 0);
-        assert!(levels.contains(&first[0]), "frame {index}: {first:?}");
+        assert_eq!(first[0], level, "frame {index}: {first:?}");
         assert_eq!([first[1], first[2], first[3]], [first[0], first[0], 255]);
         assert!(
             frame

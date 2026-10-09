@@ -17,7 +17,7 @@ use std::sync::mpsc::{Receiver, channel};
 use thiserror::Error;
 use vkxp_proto::link::{Disconnected, GuestEnd, HostEnd, link};
 use vkxp_proto::{BitmapId, FramePacket, GuestToHost, HostToGuest, Size};
-use vkxp_vk::{DeviceChoice, Frame, VkCompositor, VkError};
+use vkxp_vk::{DeviceChoice, Frame, Mix, VkCompositor, VkError};
 
 use crate::{
     Clock, Display, InputScript, InputSource, ManualClock, Session, SessionEnd, SessionOptions,
@@ -172,7 +172,7 @@ impl HeadlessDisplay {
     /// frame, drawn off screen at scale 1.
     pub fn read_shown(&mut self) -> Result<Option<Frame>, VkError> {
         match self.size {
-            Some(size) if self.compositor.mix() < 1.0 => {
+            Some(size) if self.compositor.mix() != Mix::Newest => {
                 self.compositor.scale_frame(size).map(Some)
             }
             _ => self.compositor.read_frame(),
@@ -198,8 +198,8 @@ impl Display for HeadlessDisplay {
         self.compositor.freeze()
     }
 
-    fn set_mix(&mut self, weight: f32) {
-        self.compositor.set_mix(weight);
+    fn set_mix(&mut self, mix: Mix) {
+        self.compositor.set_mix(mix);
     }
 
     fn set_mask(&mut self, mask: Option<(BitmapId, u32)>) {

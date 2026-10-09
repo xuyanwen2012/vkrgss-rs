@@ -10,7 +10,7 @@
 
 ## 3. Session (`vkxp-host`)
 
-- [ ] 3.1 Compute the step values and pass them on. Verify: the last-step scenario and the existing freeze and transition tests, recomputed where they pinned old values.
+- [x] 3.1 Compute the step values and pass them on. Verify: the last-step scenario and the existing freeze and transition tests, recomputed where they pinned old values.
 
 ## 4. Integration check
 

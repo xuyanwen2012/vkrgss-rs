@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use vkxp_proto::{AudioCommand, BitmapDelta, BitmapId, FramePacket};
+use vkxp_vk::Mix;
 
 use crate::{AudioSink, Display, ManualClock};
 
@@ -25,7 +26,7 @@ pub enum DisplayEvent {
         frame_index: u64,
     },
     Hold,
-    Mix(f32),
+    Mix(Mix),
     Mask(Option<(BitmapId, u32)>),
     Redraw,
     Title(String),
@@ -43,13 +44,14 @@ pub enum Shown {
     Mix {
         held: Box<Shown>,
         newest: u64,
-        weight: f32,
+        /// The weight of the newest frame, of 256.
+        weight: u8,
     },
     /// The masked mix of a held image and the newest frame.
     Masked {
         held: Box<Shown>,
         newest: u64,
-        progress: f32,
+        threshold: u8,
         mask: BitmapId,
         vagueness: u32,
     },
@@ -57,7 +59,7 @@ pub enum Shown {
 
 impl Shown {
     /// The mix of `held` and the frame `newest` at `weight`.
-    pub fn mix(held: Shown, newest: u64, weight: f32) -> Shown {
+    pub fn mix(held: Shown, newest: u64, weight: u8) -> Shown {
         Shown::Mix {
             held: Box::new(held),
             newest,
@@ -87,7 +89,7 @@ pub struct RecordingDisplay {
     pub events: Vec<DisplayEvent>,
     newest: Option<u64>,
     held: Shown,
-    weight: f32,
+    mix: Mix,
     mask: Option<(BitmapId, u32)>,
     /// The bitmaps the packets so far have created and not destroyed.
     bitmaps: HashSet<BitmapId>,
@@ -103,7 +105,7 @@ impl RecordingDisplay {
             events: Vec::new(),
             newest: None,
             held: Shown::Nothing,
-            weight: 1.0,
+            mix: Mix::Newest,
             mask: None,
             bitmaps: HashSet::new(),
             shown: Shown::Nothing,
@@ -144,24 +146,22 @@ impl RecordingDisplay {
     /// The image the current state gives: the mix of the held image and the newest frame,
     /// masked while a mask is set that names a bitmap the display has.
     fn compose(&self) -> Shown {
-        let mask = self.mask.filter(|(id, _)| self.bitmaps.contains(id));
-        match (self.newest, mask) {
-            (Some(newest), Some((mask, vagueness))) if self.weight < 1.0 => {
-                return Shown::Masked {
-                    held: Box::new(self.held.clone()),
-                    newest,
-                    progress: self.weight,
-                    mask,
-                    vagueness,
-                };
-            }
-            _ => {}
-        }
-        match self.newest {
-            None => Shown::Nothing,
-            Some(newest) if self.weight >= 1.0 => Shown::Frame(newest),
-            Some(_) if self.weight <= 0.0 => self.held.clone(),
-            Some(newest) => Shown::mix(self.held.clone(), newest, self.weight),
+        let Some(newest) = self.newest else {
+            return Shown::Nothing;
+        };
+        let Mix::Step { weight, threshold } = self.mix else {
+            return Shown::Frame(newest);
+        };
+        match self.mask.filter(|(id, _)| self.bitmaps.contains(id)) {
+            Some((mask, vagueness)) => Shown::Masked {
+                held: Box::new(self.held.clone()),
+                newest,
+                threshold,
+                mask,
+                vagueness,
+            },
+            None if weight == 0 => self.held.clone(),
+            None => Shown::mix(self.held.clone(), newest, weight),
         }
     }
 
@@ -212,9 +212,9 @@ impl Display for RecordingDisplay {
         Ok(())
     }
 
-    fn set_mix(&mut self, weight: f32) {
-        self.events.push(DisplayEvent::Mix(weight));
-        self.weight = weight;
+    fn set_mix(&mut self, mix: Mix) {
+        self.events.push(DisplayEvent::Mix(mix));
+        self.mix = mix;
     }
 
     fn set_mask(&mut self, mask: Option<(BitmapId, u32)>) {
