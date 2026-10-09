@@ -133,7 +133,7 @@ mod tests {
     fn the_probe_holds_the_schedule_the_frames_and_the_side() {
         let schedule = Schedule::parse("60:RIGHT+C, 100:").unwrap();
         let original = generate(Side::Original, &schedule, &[10, 20]);
-        assert!(original.contains("SIDE = :original\n"), "{original}");
+        assert!(original.contains("SIDE = \"original\"\n"), "{original}");
         assert!(
             original.contains("SCHEDULE = [[60, [:RIGHT, :C]], [100, []]]\n"),
             "{original}"
@@ -143,7 +143,7 @@ mod tests {
         assert!(!original.contains("__"), "{original}");
 
         let vkxp = generate(Side::Vkxp, &Schedule::default(), &[3]);
-        assert!(vkxp.contains("SIDE = :vkxp\n"), "{vkxp}");
+        assert!(vkxp.contains("SIDE = \"vkxp\"\n"), "{vkxp}");
         assert!(vkxp.contains("SCHEDULE = []\n"), "{vkxp}");
     }
 

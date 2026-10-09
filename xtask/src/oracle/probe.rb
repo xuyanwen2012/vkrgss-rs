@@ -5,7 +5,9 @@
 # and `Graphics.transition(d)` is d frames. `OracleProbe.frame` is the number of the frame
 # the scripts are working on, counted from 0.
 module OracleProbe
-  SIDE = :__SIDE__
+  # A string, not a symbol: both sides must intern exactly the same names, or the symbol
+  # numbers of everything the game creates afterwards would differ between the two runs.
+  SIDE = "__SIDE__"
   # Pairs of a frame and the buttons held from that frame on, in ascending order.
   SCHEDULE = [__SCHEDULE__]
   # The frames to capture, in ascending order.
@@ -25,7 +27,7 @@ module OracleProbe
   # Called when `frames` more frames have been shown.
   def self.advance(frames)
     @frame += frames
-    return if SIDE != :original || CAPTURES.empty?
+    return if SIDE != "original" || CAPTURES.empty?
     while @captured < CAPTURES.size && CAPTURES[@captured] < @frame
       hold(CAPTURES[@captured])
       @captured += 1
