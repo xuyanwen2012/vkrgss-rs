@@ -1,6 +1,6 @@
 [package]
 name = "xtask"
-description = "Repository automation for vkxp: merge gate, dependency rules, built-in script extraction"
+description = "Repository automation for vkxp: merge gate, dependency rules, built-in script extraction, oracle harness"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,7 +13,10 @@ workspace = true
 
 [dependencies]
 anyhow.workspace = true
+flate2.workspace = true
+png.workspace = true
 serde_json.workspace = true
+x11rb.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

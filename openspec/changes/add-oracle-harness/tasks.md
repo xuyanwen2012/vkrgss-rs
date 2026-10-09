@@ -2,8 +2,8 @@
 
 ## 1. Archive and probe (`xtask`)
 
-- [ ] 1.1 Implement the script archive reader and writer. Verify: the archive round-trip scenario of `specs/oracle-harness/spec.md` and a test that vkxp runs a game whose archive the writer produced.
-- [ ] 1.2 Implement the probe template and its generation for both sides, and the copy of the game directory. Verify: the source-untouched scenario and the scheduled-input scenario, the latter by running the probe in vkxp on a generated game.
+- [x] 1.1 Implement the script archive reader and writer. Verify: the archive round-trip scenario of `specs/oracle-harness/spec.md` and a test that vkxp runs a game whose archive the writer produced.
+- [x] 1.2 Implement the probe template and its generation for both sides, and the copy of the game directory. Verify: the source-untouched scenario and the scheduled-input scenario, the latter by running the probe in vkxp on a generated game.
 
 ## 2. Runs and capture (`xtask`)
 

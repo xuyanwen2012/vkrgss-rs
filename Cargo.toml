@@ -51,6 +51,7 @@ ash = "0.38"
 ash-window = "0.13"
 cc = "1"
 encoding_rs = "0.8"
+flate2 = "1"
 fontdb = "0.24"
 gpu-allocator = { version = "0.28", default-features = false, features = ["std", "vulkan"] }
 jpeg-decoder = { version = "0.3", default-features = false }
@@ -69,3 +70,4 @@ swash = "0.2"
 tempfile = "3"
 thiserror = "2"
 winit = "0.30"
+x11rb = "0.13"
