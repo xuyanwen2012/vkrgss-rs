@@ -82,6 +82,19 @@ Declared dimensions are checked against the 2^28 pixel limit before any pixel bu
 allocated. All decoder errors map to one error enum (unsupported format, malformed data, too
 large).
 
+Decoding is lenient where common decoders are. A game runtime has to show the files a game
+ships. IJG libjpeg 6b, the decoder `docs/decisions.md` names as the one to match, answers data
+that ends early with a warning and fills the rest of the picture; libpng of that time does not
+check palette indices at all. A stricter reader in front of the library would only add ways for
+an old game to fail on a file that used to show. So a JPEG whose data stops early decodes with
+its missing blocks filled, as the library does it, and a PNG pixel that names a missing
+palette entry decodes as the library expands it. What is required is narrower and absolute: no
+panic, no allocation driven by an unchecked header, a typed error when nothing can be decoded,
+and a result of the declared size. JPEG layouts the library does not read (chroma subsampled
+by a ratio that is not a whole number, four components, 12-bit samples) are unsupported-format
+errors; none occurs in the run-time package or in the test game. How the original runtime
+itself treats damaged files has not been measured; that belongs to the oracle work.
+
 Alternative considered: the `image` crate. Rejected because it pulls in many formats that the
 original runtime does not read and makes the output of each format harder to pin down.
 
@@ -99,6 +112,8 @@ tests build their directory trees in a temporary directory.
   extensions in the same folder; the order is a single constant.
 - [JPEG pixels differ slightly from the original's decoder] → Accepted for now; decisions allow
   switching to libjpeg-turbo if bit-exactness is later required.
+- [A damaged image is shown instead of reported] → Intended, see the leniency rule above. To
+  be compared with the original runtime once the oracle runs.
 - [A directory changes under the cache] → Only assets are cached, saves are not resolved through
   this crate, and `refresh` exists.
 

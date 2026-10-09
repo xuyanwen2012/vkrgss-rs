@@ -51,8 +51,9 @@ or colour-profile correction SHALL be applied.
 
 ### Requirement: JPEG
 JPEG decoding SHALL support baseline and progressive images in greyscale and in three-component
-colour, with any chroma subsampling, and SHALL return them opaque. Other component layouts SHALL
-fail with an unsupported-format error.
+colour, with chroma at full resolution or subsampled by two horizontally, vertically or both,
+and SHALL return them opaque. A JPEG outside what the decoder supports, such as one with another
+number of components, SHALL fail with an unsupported-format error.
 
 #### Scenario: Greyscale
 - **WHEN** a greyscale JPEG is decoded
@@ -61,6 +62,10 @@ fail with an unsupported-format error.
 #### Scenario: Colour
 - **WHEN** a JPEG made from a flat mid-grey image with subsampled chroma is decoded
 - **THEN** every channel of every pixel is within 2 of the original value
+
+#### Scenario: Unsupported layout
+- **WHEN** a JPEG with four components is decoded
+- **THEN** decoding fails with an unsupported-format error
 
 ### Requirement: BMP
 BMP decoding SHALL support uncompressed images of 1, 4, 8, 24 and 32 bits per pixel, stored
@@ -81,9 +86,12 @@ Compressed BMP data SHALL fail with an unsupported-format error.
 - **THEN** every pixel has alpha 255
 
 ### Requirement: Malformed input
-Decoding SHALL fail with a typed error, and SHALL NOT panic or return a partial image, when the
-input is truncated or corrupt. An image whose pixel count exceeds the largest bitmap the
-compositors accept SHALL be refused before its pixels are allocated.
+Decoding SHALL fail with a typed error and SHALL NOT panic when the input is truncated or
+cannot be decoded, and a decode that succeeds SHALL return an image of the full declared size.
+A damaged file that still decodes MAY be accepted, with what it lacks filled in, as common
+decoders do; detecting every deviation from a format's standard is not required. An image
+whose pixel count exceeds the largest bitmap the compositors accept SHALL be refused before
+its pixels are allocated.
 
 #### Scenario: Truncated files
 - **WHEN** valid PNG, JPEG and BMP inputs are cut off at every length shorter than the original
