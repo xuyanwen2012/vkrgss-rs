@@ -1,0 +1,44 @@
+schema: spec-driven
+
+context: |
+  vkxp is a Rust + Vulkan (ash) runtime for RPG Maker XP (RGSS1) games on Linux.
+  docs/decisions.md records settled decisions; artifacts must not contradict it.
+  Write all artifacts in English.
+  Guest (Ruby, core, CPU bitmaps) and host (window, Vulkan, audio) exchange plain data only.
+  Never commit original DLLs, RTP assets or Enterbrain Ruby source; tests use generated images.
+
+rules:
+  tasks:
+    - Every task states its verification command or artifact
+    - Keep each change inside the crates named in its proposal
+
+# Project context (optional)
+# Add only constraints that should guide OpenSpec artifacts and workflows.
+# Include constraints an agent cannot infer by reading the code.
+# Keep general project documentation and discoverable codebase facts out.
+# Example:
+#   context: |
+#     Designs and tasks must cover Windows, macOS, and Linux
+#     Write all artifacts in Spanish
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always state what is out of scope
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing
