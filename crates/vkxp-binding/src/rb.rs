@@ -43,6 +43,9 @@ enum Op {
     AsString(VALUE),
     /// The class or module at a path such as `Errno::ENOENT`.
     ClassAt(*const c_char),
+    /// The name of the value's class, into [`Call::name`]. Naming an anonymous class
+    /// allocates and caches the name in the class, which raises when the class is frozen.
+    ClassName(VALUE),
     AllocFunc {
         class: VALUE,
         function: AllocFn,
@@ -59,6 +62,8 @@ struct Call {
     op: Op,
     long: c_long,
     double: f64,
+    /// A NUL-terminated name owned by the interpreter, or null.
+    name: *const c_char,
 }
 
 unsafe extern "C" fn call_body(data: VALUE) -> VALUE {
@@ -86,6 +91,10 @@ unsafe extern "C" fn call_body(data: VALUE) -> VALUE {
             Op::IvarGet { object, name } => ffi::rb_attr_get(object, ffi::rb_intern(name)),
             Op::AsString(value) => ffi::rb_obj_as_string(value),
             Op::ClassAt(path) => ffi::rb_path2class(path),
+            Op::ClassName(value) => {
+                call.name = ffi::rb_obj_classname(value);
+                ffi::Qnil
+            }
             Op::AllocFunc { class, function } => {
                 ffi::rb_define_alloc_func(class, function);
                 ffi::Qnil
@@ -110,6 +119,7 @@ fn perform(_ruby: &Ruby, op: Op) -> Result<(VALUE, Call), Raised> {
         op,
         long: 0,
         double: 0.0,
+        name: std::ptr::null(),
     };
     let mut state: c_int = 0;
     // SAFETY: `&Ruby` proves the interpreter thread. `call` outlives the call and
@@ -183,13 +193,28 @@ pub(crate) fn class_at(ruby: &Ruby, path: &CStr) -> Result<VALUE, Raised> {
 }
 
 /// The name of the value's class, for messages.
-pub(crate) fn class_name(_ruby: &Ruby, value: VALUE) -> String {
-    // SAFETY: the value is live by the condition of this module; the function returns a
-    // NUL-terminated name owned by the interpreter and does not raise.
-    unsafe {
-        CStr::from_ptr(ffi::rb_obj_classname(value))
-            .to_string_lossy()
-            .into_owned()
+pub(crate) fn class_name(ruby: &Ruby, value: VALUE) -> Result<String, Raised> {
+    let name = perform(ruby, Op::ClassName(value))?.1.name;
+    if name.is_null() {
+        return Ok(String::new());
+    }
+    // SAFETY: the interpreter returned a NUL-terminated name that it owns, held by the
+    // class of the live value; it is copied before anything else runs.
+    Ok(unsafe { CStr::from_ptr(name) }
+        .to_string_lossy()
+        .into_owned())
+}
+
+/// The `TypeError` for a value of the wrong class: `describe` makes the message from the
+/// name of the value's class. A failure to name the class is raised in its place.
+pub(crate) fn wrong_type(
+    ruby: &Ruby,
+    value: VALUE,
+    describe: impl FnOnce(&str) -> String,
+) -> Raise {
+    match class_name(ruby, value) {
+        Ok(name) => Raise::new(type_error(ruby), describe(&name)),
+        Err(raised) => raised.into(),
     }
 }
 
@@ -276,10 +301,9 @@ pub(crate) fn string_bytes(ruby: &Ruby, value: VALUE) -> Option<Vec<u8>> {
 /// The bytes of a `String` argument. Anything else raises `TypeError`.
 pub(crate) fn bytes(ruby: &Ruby, value: VALUE) -> Result<Vec<u8>, Raise> {
     string_bytes(ruby, value).ok_or_else(|| {
-        Raise::new(
-            type_error(ruby),
-            format!("can't convert {} into String", class_name(ruby, value)),
-        )
+        wrong_type(ruby, value, |class| {
+            format!("can't convert {class} into String")
+        })
     })
 }
 

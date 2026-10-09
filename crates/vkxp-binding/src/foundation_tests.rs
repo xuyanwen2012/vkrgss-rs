@@ -2,7 +2,8 @@
 //! host functions that exists only in this test binary exposes them to Ruby. Every snippet
 //! is also evaluated with a garbage collection at every allocation.
 
-use std::sync::OnceLock;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Mutex, OnceLock, PoisonError};
 
 use vkxp_core::{BitmapError, Color, CreateFailure, Table};
 use vkxp_ruby_sys::ffi::VALUE;
@@ -10,6 +11,7 @@ use vkxp_ruby_sys::{HostResult, Ruby, RubyError};
 use vkxp_vfs::{FileKind, GameFiles, VfsError};
 
 use crate::error::{self, Error};
+use crate::wrap::{self, Owned};
 use crate::{rb, testing};
 
 fn probe_int(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
@@ -64,6 +66,35 @@ fn probe_fail(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     Err(error::to_raise(ruby, error))
 }
 
+/// How many [`Held`] values were dropped.
+static HELD_DROPS: AtomicUsize = AtomicUsize::new(0);
+
+/// Held by the tests that call the probes with a [`Held`], so that one of them can count.
+static HELD_PROBES: Mutex<()> = Mutex::new(());
+
+/// A value with a destructor, alive in a host function while a conversion fails.
+struct Held;
+
+impl Drop for Held {
+    fn drop(&mut self) {
+        HELD_DROPS.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+/// Holds a value with a destructor while its argument fails to be a `String`.
+fn probe_held_bytes(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
+    let _held = Held;
+    rb::bytes(ruby, args[0])?;
+    Ok(args[0])
+}
+
+/// Holds a value with a destructor while its argument fails to be a `Color`.
+fn probe_held_color(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
+    let _held = Held;
+    wrap::expect::<Owned<Color>>(ruby, args[0])?;
+    Ok(args[0])
+}
+
 fn define(ruby: &Ruby) {
     let module = ruby.define_module(c"BindingProbe").expect("a new module");
     rb::class_method(ruby, module, c"int", 1, probe_int).unwrap();
@@ -72,6 +103,8 @@ fn define(ruby: &Ruby) {
     rb::class_method(ruby, module, c"to_text", 1, probe_to_text).unwrap();
     rb::class_method(ruby, module, c"count", -1, probe_count).unwrap();
     rb::class_method(ruby, module, c"fail", 1, probe_fail).unwrap();
+    rb::class_method(ruby, module, c"held_bytes", 1, probe_held_bytes).unwrap();
+    rb::class_method(ruby, module, c"held_color", 1, probe_held_color).unwrap();
 }
 
 /// Evaluates a snippet, and once more with a collection at every allocation, which must
@@ -241,4 +274,52 @@ fn each_error_maps_to_its_exception() {
         )
     );
     assert_eq!(raised("BindingProbe.fail(:table)").0, "ArgumentError");
+}
+
+/// An instance of an anonymous class that is frozen: naming the class for a message has to
+/// store the name in the class, which raises.
+const UNNAMEABLE: &str = "c = Class.new; Object.instance_method(:freeze).bind(c).call; c.new";
+
+#[test]
+fn a_failure_to_name_the_class_of_a_wrong_argument_is_raised_after_destructors_ran() {
+    let _alone = HELD_PROBES.lock().unwrap_or_else(PoisonError::into_inner);
+    let before = HELD_DROPS.load(Ordering::SeqCst);
+    for probe in ["held_bytes", "held_color"] {
+        assert_eq!(
+            raised(&format!("BindingProbe.{probe}(({UNNAMEABLE}))")),
+            raises("TypeError", "can't modify frozen object"),
+            "{probe}"
+        );
+    }
+    // Each snippet ran twice, plain and under stress, and every call dropped its value.
+    assert_eq!(HELD_DROPS.load(Ordering::SeqCst) - before, 4);
+    // The interpreter goes on, and so does the class through its public surface.
+    assert_eq!(eval("BindingProbe.int(1)").as_deref(), Ok("1"));
+    assert_eq!(
+        raised(&format!("Font.new(['A', ({UNNAMEABLE})])")),
+        raises("TypeError", "can't modify frozen object")
+    );
+    assert_eq!(eval("Font.new(['A']).name").as_deref(), Ok("[\"A\"]"));
+}
+
+#[test]
+fn wrong_type_messages_name_the_class() {
+    let _alone = HELD_PROBES.lock().unwrap_or_else(PoisonError::into_inner);
+    assert_eq!(
+        raised("BindingProbe.held_bytes(12)"),
+        raises("TypeError", "can't convert Fixnum into String")
+    );
+    assert_eq!(
+        raised("BindingProbe.held_color(Tone.new(0, 0, 0))"),
+        raises("TypeError", "wrong argument type Tone (expected Color)")
+    );
+    assert_eq!(
+        raised("BindingProbe.held_color(nil)"),
+        raises("TypeError", "wrong argument type NilClass (expected Color)")
+    );
+    // An anonymous class that can be named is named as Ruby names it.
+    assert_eq!(
+        eval("begin; BindingProbe.held_bytes(Class.new.new); rescue TypeError; $!.message =~ /\\Acan't convert #<Class:0x[0-9a-f]+> into String\\z/ ? :named : $!.message; end").as_deref(),
+        Ok(":named")
+    );
 }

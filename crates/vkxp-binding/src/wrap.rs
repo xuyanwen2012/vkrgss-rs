@@ -113,14 +113,9 @@ pub(crate) fn find<T: Wrapped>(_ruby: &Ruby, value: VALUE) -> Option<Handle<T>> 
 /// raises `TypeError` naming the expected class.
 pub(crate) fn expect<T: Wrapped>(ruby: &Ruby, value: VALUE) -> Result<Handle<T>, Raise> {
     find(ruby, value).ok_or_else(|| {
-        Raise::new(
-            rb::type_error(ruby),
-            format!(
-                "wrong argument type {} (expected {})",
-                rb::class_name(ruby, value),
-                T::CLASS_NAME
-            ),
-        )
+        rb::wrong_type(ruby, value, |class| {
+            format!("wrong argument type {class} (expected {})", T::CLASS_NAME)
+        })
     })
 }
 
