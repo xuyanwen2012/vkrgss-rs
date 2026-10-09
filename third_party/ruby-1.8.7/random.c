@@ -192,62 +192,18 @@ rb_genrand_real(void)
 static int seed_initialized = 0;
 static VALUE saved_seed = INT2FIX(0);
 
+/* vkxp: as in Ruby 1.8.1, the seed is one 32-bit integer for init_genrand. */
 static VALUE
-rand_init(vseed)
-    VALUE vseed;
+rand_init(seed)
+    unsigned long seed;
 {
-    volatile VALUE seed;
     VALUE old;
-    long len;
-    unsigned long *buf;
 
-    seed = rb_to_int(vseed);
-    switch (TYPE(seed)) {
-      case T_FIXNUM:
-          len = sizeof(VALUE);
-          break;
-      case T_BIGNUM:
-          len = RBIGNUM(seed)->len * SIZEOF_BDIGITS;
-          if (len == 0)
-              len = 4;
-          break;
-      default:
-          rb_raise(rb_eTypeError, "failed to convert %s into Integer",
-                   rb_obj_classname(vseed));
-    }
-    len = (len + 3) / 4; /* number of 32bit words */
-    buf = ALLOC_N(unsigned long, len); /* allocate longs for init_by_array */
-    memset(buf, 0, len * sizeof(long));
-    if (FIXNUM_P(seed)) {
-        buf[0] = FIX2ULONG(seed) & 0xffffffff;
-#if SIZEOF_LONG > 4
-        buf[1] = FIX2ULONG(seed) >> 32;
-#endif
-    }
-    else {
-        int i, j;
-        for (i = RBIGNUM(seed)->len-1; 0 <= i; i--) {
-            j = i * SIZEOF_BDIGITS / 4;
-#if SIZEOF_BDIGITS < 4
-            buf[j] <<= SIZEOF_BDIGITS * 8;
-#endif
-            buf[j] |= ((BDIGIT *)RBIGNUM(seed)->digits)[i];
-        }
-    }
-    while (1 < len && buf[len-1] == 0) {
-        len--;
-    }
-    if (len <= 1) {
-        init_genrand(buf[0]);
-    }
-    else {
-        if (buf[len-1] == 1) /* remove leading-zero-guard */
-            len--;
-        init_by_array(buf, len);
-    }
+    seed &= 0xffffffffUL;
+    init_genrand(seed);
+    seed_initialized = 1;
     old = saved_seed;
-    saved_seed = seed;
-    free(buf);
+    saved_seed = ULONG2NUM(seed);
     return old;
 }
 
@@ -294,33 +250,12 @@ fill_random_seed(ptr)
     seed[3] ^= (unsigned long)&seed;
 }
 
-static VALUE
-make_seed_value(char *ptr)
-{
-    BDIGIT *digits;
-    NEWOBJ(big, struct RBignum);
-    OBJSETUP(big, rb_cBignum, T_BIGNUM);
-
-    RBIGNUM_SET_SIGN(big, 1);
-
-    digits = ALLOC_N(char, DEFAULT_SEED_LEN);
-    RBIGNUM(big)->digits = digits;
-    RBIGNUM(big)->len = DEFAULT_SEED_LEN / SIZEOF_BDIGITS;
-
-    MEMCPY(digits, ptr, char, DEFAULT_SEED_LEN);
-
-    /* set leading-zero-guard if need. */
-    digits[RBIGNUM_LEN(big)-1] = digits[RBIGNUM_LEN(big)-2] <= 1 ? 1 : 0;
-
-    return rb_big_norm((VALUE)big);
-}
-
-static VALUE
+static unsigned long
 random_seed(void)
 {
     char buf[DEFAULT_SEED_LEN];
     fill_random_seed(buf);
-    return make_seed_value(buf);
+    return ((unsigned long *)buf)[0];
 }
 
 /*
@@ -343,15 +278,25 @@ rb_f_srand(argc, argv, obj)
     VALUE *argv;
     VALUE obj;
 {
-    VALUE seed, old;
+    VALUE sd;
+    unsigned long seed;
 
     rb_secure(4);
-    if (rb_scan_args(argc, argv, "01", &seed) == 0) {
+    if (rb_scan_args(argc, argv, "01", &sd) == 0) {
 	seed = random_seed();
     }
-    old = rand_init(seed);
+    else {
+	/* vkxp: the low 32 bits of any integer, where 1.8.1 has NUM2ULONG */
+	sd = rb_to_int(sd);
+	if (FIXNUM_P(sd)) {
+	    seed = FIX2ULONG(sd);
+	}
+	else {
+	    seed = NUM2ULONG(rb_big_and(sd, ULONG2NUM(0xffffffffUL)));
+	}
+    }
 
-    return old;
+    return rand_init(seed);
 }
 
 static unsigned long 
@@ -509,7 +454,8 @@ rb_f_rand(argc, argv, obj)
 	return rb_float_new(rb_genrand_real());
     }
     if (max < 0) max = -max;
-    val = limited_rand(max-1);
+    /* vkxp: as in Ruby 1.8.1, the 53-bit real scaled and truncated */
+    val = max * rb_genrand_real();
     return LONG2NUM(val);
 }
 
@@ -525,14 +471,14 @@ void
 Init_RandomSeed(void)
 {
     fill_random_seed(initial_seed);
-    init_by_array((unsigned long*)initial_seed, DEFAULT_SEED_LEN/sizeof(unsigned long));
+    init_genrand(((unsigned long *)initial_seed)[0] & 0xffffffffUL);
     seed_initialized = 1;
 }
 
 static void
 Init_RandomSeed2(void)
 {
-    saved_seed = make_seed_value(initial_seed);
+    saved_seed = ULONG2NUM(((unsigned long *)initial_seed)[0] & 0xffffffffUL);
     memset(initial_seed, 0, DEFAULT_SEED_LEN);
 }
 

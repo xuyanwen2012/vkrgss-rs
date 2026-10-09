@@ -30,3 +30,16 @@
 
 - [The recollection of the 1.8.1 source is wrong in a detail] → The oracle comparison after the
   merge decides; the patch is small and easy to adjust.
+
+## Follow-ups
+
+- A seed of more than 32 bits: 1.8.1 on the original's 32-bit build raises `RangeError` from
+  `NUM2ULONG`; the patch takes the low 32 bits instead, as the requirement words it. Whether a
+  game could depend on the error is open.
+- `srand` without an argument, and the seed at start-up, still come from 1.8.7's
+  `/dev/urandom`-based source, reduced to 32 bits, not from 1.8.1's time, process id and
+  counter. The value is not reproducible either way; left as it was.
+- On a 64-bit build a limit from 2^30 up to 2^62 is a Fixnum and takes the 1.8.1 Fixnum
+  formula, while the original's 32-bit build treats it as a Bignum (`rb_big_rand`). Together
+  with the Bignum placeholder above, limits of 2^30 and more are not confirmed against the
+  original.
