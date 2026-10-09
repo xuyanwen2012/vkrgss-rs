@@ -2,9 +2,9 @@
 
 ## 1. Workspace skeleton
 
-- [ ] 1.1 Create the root `Cargo.toml` workspace (edition 2024, shared package metadata, lints, dependency table), `rust-toolchain.toml` pinned to the installed stable, and `LICENSE` (MIT). Verify: `cargo metadata --no-deps` succeeds.
-- [ ] 1.2 Create the thirteen crates under `crates/` as stubs with crate-level docs stating side and responsibility from `docs/decisions.md`. Verify: `cargo build --workspace` has no warnings.
-- [ ] 1.3 Add `#![forbid(unsafe_code)]` to `vkxp-proto`, `vkxp-pixel`, `vkxp-core`, `vkxp-compose-ref`. Verify: a temporary `unsafe {}` in `vkxp-core` fails to compile, then remove it.
+- [x] 1.1 Create the root `Cargo.toml` workspace (edition 2024, shared package metadata, lints, dependency table), `rust-toolchain.toml` pinned to the installed stable, and `LICENSE` (MIT). Verify: `cargo metadata --no-deps` succeeds.
+- [x] 1.2 Create the thirteen crates under `crates/` as stubs with crate-level docs stating side and responsibility from `docs/decisions.md`. Verify: `cargo build --workspace` has no warnings.
+- [x] 1.3 Add `#![forbid(unsafe_code)]` to `vkxp-proto`, `vkxp-pixel`, `vkxp-core`, `vkxp-compose-ref`. Verify: a temporary `unsafe {}` in `vkxp-core` fails to compile, then remove it.
 
 ## 2. Gate and dependency rules
 

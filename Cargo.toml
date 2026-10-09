@@ -1,0 +1,55 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/vkxp-proto",
+    "crates/vkxp-pixel",
+    "crates/vkxp-core",
+    "crates/vkxp-image",
+    "crates/vkxp-text",
+    "crates/vkxp-vfs",
+    "crates/vkxp-ruby-sys",
+    "crates/vkxp-binding",
+    "crates/vkxp-compose-ref",
+    "crates/vkxp-vk",
+    "crates/vkxp-audio",
+    "crates/vkxp-host",
+    "crates/vkxp",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+authors = ["Yanwen Xu"]
+publish = false
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+undocumented_unsafe_blocks = "warn"
+
+[workspace.dependencies]
+vkxp-proto = { path = "crates/vkxp-proto" }
+vkxp-pixel = { path = "crates/vkxp-pixel" }
+vkxp-core = { path = "crates/vkxp-core" }
+vkxp-image = { path = "crates/vkxp-image" }
+vkxp-text = { path = "crates/vkxp-text" }
+vkxp-vfs = { path = "crates/vkxp-vfs" }
+vkxp-ruby-sys = { path = "crates/vkxp-ruby-sys" }
+vkxp-binding = { path = "crates/vkxp-binding" }
+vkxp-compose-ref = { path = "crates/vkxp-compose-ref" }
+vkxp-vk = { path = "crates/vkxp-vk" }
+vkxp-audio = { path = "crates/vkxp-audio" }
+vkxp-host = { path = "crates/vkxp-host" }
+
+anyhow = "1"
+png = "0.18"
+postcard = { version = "1", default-features = false, features = ["alloc"] }
+proptest = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+thiserror = "2"
