@@ -198,6 +198,9 @@ pub struct Scene {
     pub(crate) windows: Arena<Window>,
     pub(crate) planes: Arena<Plane>,
     pub(crate) tilemaps: Arena<Tilemap>,
+    /// Bitmaps of the scene's own whose sprite was disposed; the next extraction disposes
+    /// them.
+    pub(crate) released: Vec<vkxp_proto::BitmapId>,
     /// The stamp given out last.
     stamp: u64,
     pub(crate) frame_count: i64,
@@ -231,6 +234,7 @@ impl Scene {
             windows: Arena::default(),
             planes: Arena::default(),
             tilemaps: Arena::default(),
+            released: Vec::new(),
             stamp: 0,
             frame_count: 0,
             frame_index: 0,
@@ -305,9 +309,12 @@ impl Scene {
             .ok_or(SceneError::Full(ElementKind::Tilemap))
     }
 
-    /// Disposes a sprite. Disposing a disposed sprite does nothing.
+    /// Disposes a sprite. Disposing a disposed sprite does nothing. The bitmap the scene
+    /// rendered for a turned sprite is disposed by the next [`Scene::extract`].
     pub fn dispose_sprite(&mut self, id: SpriteId) {
-        self.sprites.remove(id.0);
+        if let Some(sprite) = self.sprites.remove(id.0) {
+            self.released.extend(sprite.turned.bitmap);
+        }
     }
 
     /// Disposes a viewport and with it every element that was created in it, and tells how

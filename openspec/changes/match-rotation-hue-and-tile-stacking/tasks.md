@@ -2,7 +2,7 @@
 
 ## 1. Rotation (`vkxp-core`)
 
-- [ ] 1.1 Render rotated sprites by the measured rule into cached bitmaps and extract them as unscaled quads; commit small crops of the measured frames as test data. Verify: the scenarios of the two sprite requirements in `specs/core-scene/spec.md`.
+- [x] 1.1 Render rotated sprites by the measured rule into cached bitmaps and extract them as unscaled quads; commit small crops of the measured frames as test data. Verify: the scenarios of the two sprite requirements in `specs/core-scene/spec.md`.
 
 ## 2. Hue (`vkxp-pixel`, `vkxp-core`)
 

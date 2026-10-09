@@ -302,11 +302,11 @@ impl Assembly<'_> {
             opacity: sprite.opacity,
             blend: blend_mode(sprite.blend_type),
         };
-        // The remainder of a floating-point division is exact.
-        if sprite.angle.rem_euclid(360.0) == 0.0 {
+        // Only an angle of exactly 0 is not turned: a full turn is.
+        if sprite.angle == 0.0 {
             self.upright_sprite(sprite, bitmap, level, look);
         } else {
-            self.turned_sprite(sprite, bitmap, level, look);
+            self.turned_sprite(sprite, level, look);
         }
     }
 
@@ -346,35 +346,6 @@ impl Assembly<'_> {
         let below = rows(level.clip, split, i64::MAX);
         self.stretched(bitmap, src, dest, sprite.mirror, above, look);
         self.stretched(bitmap, src, dest, sprite.mirror, below, faint);
-    }
-
-    /// A turned sprite: an affine quad sampled at whole offsets from the sprite's position.
-    /// The lowest rows of the source rectangle, as many as the bush depth, are drawn with
-    /// half the opacity.
-    fn turned_sprite(&mut self, sprite: &Sprite, bitmap: BitmapId, level: &Level, look: Look) {
-        let geometry = Geometry {
-            // Sums of two `i32` and an `i64` offset built from two more.
-            x: (i64::from(sprite.x) + level.dx) as f64,
-            y: (i64::from(sprite.y) + level.dy) as f64,
-            ox: f64::from(sprite.ox),
-            oy: f64::from(sprite.oy),
-            zoom_x: sprite.zoom_x,
-            zoom_y: sprite.zoom_y,
-            angle: sprite.angle,
-            mirror: sprite.mirror,
-        };
-        let src = sprite.src_rect;
-        let bush = sprite.bush_depth.clamp(0, src.height.max(0));
-        let above = Rect::new(src.x, src.y, src.width, src.height - bush);
-        let below = Rect::new(src.x, src.y.saturating_add(above.height), src.width, bush);
-        let faint = Look {
-            opacity: look.opacity >> 1,
-            ..look
-        };
-        let transform_of =
-            |cut_left, cut_top| geometry.turned_transform(f64::from(src.width), cut_left, cut_top);
-        self.transformed(bitmap, src, above, level.clip, look, transform_of);
-        self.transformed(bitmap, src, below, level.clip, faint, transform_of);
     }
 
     /// Applies the viewport's tone and colour to everything drawn so far inside `clip`.
@@ -458,8 +429,15 @@ impl Scene {
         for (_, window) in self.windows.iter_mut() {
             window.refresh_caches(bitmaps);
         }
+        for id in self.released.drain(..) {
+            bitmaps.dispose(id);
+        }
         // An element without a level is not drawn, but still gives its cache back when it is
         // invisible itself.
+        for (_, sprite) in self.sprites.iter_mut() {
+            let level = level_of(&self.viewports, self.logical_size, sprite.viewport);
+            sprite.refresh_turned(bitmaps, level.as_ref());
+        }
         for (_, tilemap) in self.tilemaps.iter_mut() {
             let level = level_of(&self.viewports, self.logical_size, tilemap.viewport);
             tilemap.refresh_cache(bitmaps, level.as_ref());
@@ -1073,34 +1051,79 @@ mod tests {
     }
 
     /// The pixel at a whole offset from the position shows the texel that offset turns to.
-    /// PLACEHOLDER: at these right angles every pixel lies on a texel boundary, where the
-    /// original runtime shows a mixture of two texels.
+    /// At right angles every position lies on a texel boundary, where the original runtime's
+    /// sine of pi and cosine of pi / 2, which are not quite 0, decide between two texels:
+    /// some texels are lost and others shown twice. The lists are what the measured rule
+    /// gives, each pixel with the texel it shows.
     #[test]
     fn the_angle_turns_a_sprite_counter_clockwise_about_its_origin() {
         let mut stage = Stage::sized(32, 32);
-        let id = a_and_b(&mut stage);
-        stage.scene.sprite_mut(id).unwrap().angle = 90.0;
-        assert_eq!(drawn(&stage.frame()), [(10, 9, B), (10, 10, A)]);
-
-        stage.scene.sprite_mut(id).unwrap().angle = 180.0;
-        assert_eq!(drawn(&stage.frame()), [(9, 10, B), (10, 10, A)]);
-
-        stage.scene.sprite_mut(id).unwrap().angle = 270.0;
-        assert_eq!(drawn(&stage.frame()), [(10, 10, A), (10, 11, B)]);
-
-        for angle in [360.0, -360.0, 720.0] {
-            stage.scene.sprite_mut(id).unwrap().angle = angle;
-            assert_eq!(drawn(&stage.frame()), [(10, 10, A), (11, 10, B)]);
-        }
-
-        // Turned and zoomed by a whole number: still whole pixels.
-        let sprite = stage.scene.sprite_mut(id).unwrap();
-        sprite.angle = 90.0;
-        sprite.zoom_x = 2.0;
+        let bitmap = grid(&mut stage, 4, 3);
+        let id = sprite(&mut stage, bitmap, 10, 10);
+        let mut shown = |angle: f64, zoom_x: f64| -> Vec<(u32, u32, (u32, u32))> {
+            let sprite = stage.scene.sprite_mut(id).unwrap();
+            (sprite.angle, sprite.zoom_x) = (angle, zoom_x);
+            let texel = |pixel: Rgba| {
+                let found = (0..4).flat_map(|x| (0..3).map(move |y| (x, y)));
+                found
+                    .into_iter()
+                    .find(|&(x, y)| cell(x, y) == pixel)
+                    .unwrap()
+            };
+            let pixels = drawn(&stage.frame());
+            pixels
+                .iter()
+                .map(|&(x, y, pixel)| (x, y, texel(pixel)))
+                .collect()
+        };
+        // The columns of the bitmap run up the screen.
         assert_eq!(
-            drawn(&stage.frame()),
-            [(10, 7, B), (10, 8, B), (10, 9, A), (10, 10, A)]
+            shown(90.0, 1.0),
+            [
+                (11, 7, (3, 0)),
+                (12, 7, (3, 1)),
+                (11, 8, (2, 0)),
+                (12, 8, (2, 2)),
+                (11, 9, (1, 0)),
+                (12, 9, (1, 2))
+            ]
         );
+        // Upside down, left of and above the position.
+        assert_eq!(
+            shown(180.0, 1.0),
+            [
+                (7, 7, (3, 2)),
+                (8, 7, (2, 2)),
+                (9, 7, (1, 2)),
+                (7, 8, (3, 1)),
+                (8, 8, (2, 2)),
+                (9, 8, (1, 2)),
+                (7, 9, (3, 0)),
+                (8, 9, (2, 0)),
+                (9, 9, (1, 0))
+            ]
+        );
+        // The columns of the bitmap run down the screen.
+        assert_eq!(
+            shown(270.0, 1.0),
+            [
+                (8, 10, (0, 2)),
+                (9, 10, (0, 1)),
+                (8, 11, (1, 2)),
+                (9, 11, (1, 1)),
+                (7, 12, (2, 2)),
+                (8, 12, (2, 1)),
+                (9, 12, (2, 0)),
+                (7, 13, (3, 2)),
+                (8, 13, (3, 1)),
+                (9, 13, (3, 0))
+            ]
+        );
+        // Turned and zoomed: twice as far up the screen.
+        let zoomed = shown(90.0, 2.0);
+        assert_eq!(zoomed.len(), 14);
+        assert_eq!(zoomed[0], (11, 3, (3, 0)));
+        assert_eq!(zoomed[13], (12, 9, (0, 2)));
     }
 
     /// One line of `sprite-zoom-samples.txt`: a sprite 16 pixels wide, and the source column
@@ -1280,6 +1303,178 @@ mod tests {
         assert!(checked.0 > 30 && checked.1 > 200, "{checked:?}");
     }
 
+    /// The bitmaps of the sprite angle probe: texel (x, y) holds its own coordinates.
+    fn probe_bitmap(stage: &mut Stage, width: u32, height: u32) -> BitmapId {
+        let mut rgba = Vec::new();
+        for y in 0..height {
+            for x in 0..width {
+                let high = 100 + (x >> 8) + 2 * (y >> 8);
+                rgba.extend_from_slice(&[x as u8, y as u8, high as u8, 255]);
+            }
+        }
+        stage.bitmap(width, height, rgba)
+    }
+
+    fn fields(text: &str) -> Vec<f64> {
+        text.split_whitespace()
+            .map(|word| word.parse().unwrap())
+            .collect()
+    }
+
+    /// The frames of `sprite-angle-frames.txt`: right angles, full turns, generic angles,
+    /// zoom, mirror, a source rectangle and sprites partly off screen. Every frame is
+    /// compared as a whole, by the number of pixels the sprite covers and by a hash, and
+    /// pixel by pixel in the committed crops.
+    #[test]
+    fn rotated_sprites_equal_the_measured_frames() {
+        let data = include_str!("../tests/data/sprite-angle-frames.txt");
+        let mut lines = data
+            .lines()
+            .filter(|line| !line.starts_with('#'))
+            .peekable();
+        let mut stage = Stage::new();
+        let bitmaps = [
+            probe_bitmap(&mut stage, 200, 150),
+            probe_bitmap(&mut stage, 329, 329),
+        ];
+        let id = stage.scene.create_sprite(None).unwrap();
+        let mut cases = 0;
+        while let Some(case) = lines.next() {
+            let parts: Vec<&str> = case.strip_prefix("case ").unwrap().split('|').collect();
+            let (size, given, src) = (fields(parts[0]), fields(parts[1]), fields(parts[2]));
+            let covered: usize = parts[3].trim().parse().unwrap();
+            let hash = u64::from_str_radix(parts[4].trim(), 16).unwrap();
+            let bitmap = bitmaps[usize::from(size[0] != 200.0)];
+            let sprite = stage.scene.sprite_mut(id).unwrap();
+            sprite.set_bitmap(Some(bitmap), &stage.bitmaps);
+            sprite.src_rect = Rect::new(src[0] as i32, src[1] as i32, src[2] as i32, src[3] as i32);
+            sprite.angle = given[0];
+            (sprite.x, sprite.y) = (given[1] as i32, given[2] as i32);
+            (sprite.ox, sprite.oy) = (given[3] as i32, given[4] as i32);
+            (sprite.zoom_x, sprite.zoom_y) = (given[5], given[6]);
+            sprite.mirror = given[7] == 1.0;
+            let frame = stage.frame();
+
+            while let Some(crop) = lines.next_if(|line| line.starts_with("crop ")) {
+                let at = fields(crop.strip_prefix("crop ").unwrap());
+                for row in 0..at[3] as u32 {
+                    let line = lines.next().unwrap();
+                    for column in 0..at[2] as u32 {
+                        let hex = &line[column as usize * 6..][..6];
+                        let rgb = u32::from_str_radix(hex, 16).unwrap().to_be_bytes();
+                        let (x, y) = (at[0] as u32 + column, at[1] as u32 + row);
+                        assert_eq!(
+                            frame.pixel(x, y),
+                            [rgb[1], rgb[2], rgb[3], 255],
+                            "({x}, {y}) of {case}"
+                        );
+                    }
+                }
+            }
+            assert_eq!(drawn(&frame).len(), covered, "{case}");
+            let mut found = 0xcbf2_9ce4_8422_2325u64;
+            for pixel in frame.rgba.as_chunks::<4>().0 {
+                for byte in &pixel[..3] {
+                    found = (found ^ u64::from(*byte)).wrapping_mul(0x0100_0000_01b3);
+                }
+            }
+            assert_eq!(found, hash, "{case}");
+            cases += 1;
+        }
+        assert_eq!(cases, 36);
+    }
+
+    /// A half turn about (100, 75) at (320, 240): the position shows the texel above the
+    /// origin, and the last column and row of the box are missing.
+    #[test]
+    fn a_half_turn_shows_what_was_measured() {
+        let mut stage = Stage::new();
+        let bitmap = probe_bitmap(&mut stage, 200, 150);
+        let id = sprite(&mut stage, bitmap, 320, 240);
+        let sprite = stage.scene.sprite_mut(id).unwrap();
+        (sprite.ox, sprite.oy) = (100, 75);
+        sprite.angle = 180.0;
+        let frame = stage.frame();
+        assert_eq!(frame.pixel(320, 240), [100, 74, 100, 255]);
+        assert_eq!(drawn(&frame).len(), 29651);
+    }
+
+    /// A full turn is drawn by the rule of turned sprites, not as a sprite that is not
+    /// turned: the last column and the last row of its box are missing.
+    #[test]
+    fn a_full_turn_is_drawn_as_a_turned_sprite() {
+        let mut stage = Stage::sized(32, 32);
+        let bitmap = grid(&mut stage, 6, 4);
+        let id = sprite(&mut stage, bitmap, 10, 10);
+        let upright = drawn(&stage.frame());
+        assert_eq!(upright.len(), 24);
+        for angle in [360.0, -360.0, 720.0] {
+            stage.scene.sprite_mut(id).unwrap().angle = angle;
+            let packet = stage.scene.extract(&mut stage.bitmaps);
+            let [vkxp_proto::Op::Quad(quad)] = packet.ops.as_slice() else {
+                panic!("one quad");
+            };
+            assert_ne!(quad.bitmap, bitmap, "angle {angle}");
+            let pixels = drawn(&stage.render(&packet).unwrap());
+            assert!(!pixels.is_empty() && pixels != upright, "angle {angle}");
+            // The box ends before column 16 and row 14.
+            assert!(
+                pixels
+                    .iter()
+                    .all(|pixel| (10..16).contains(&pixel.0) && (10..14).contains(&pixel.1)),
+                "angle {angle}: {pixels:?}"
+            );
+        }
+    }
+
+    /// The bitmap of a turned sprite is rendered again only when what it shows changes, and
+    /// is given back when the sprite is no longer turned or is disposed.
+    #[test]
+    fn the_bitmap_of_a_turned_sprite_is_kept_while_nothing_changes() {
+        let mut stage = Stage::sized(64, 64);
+        let bitmap = grid(&mut stage, 6, 4);
+        let id = sprite(&mut stage, bitmap, 30, 30);
+        assert_eq!(stage.bitmaps.len(), 1);
+        stage.scene.sprite_mut(id).unwrap().angle = 30.0;
+        let first = stage.scene.extract(&mut stage.bitmaps);
+        assert_eq!(stage.bitmaps.len(), 2);
+        // Only the rendered bitmap is uploaded.
+        assert!(!delta_ids(&first.bitmaps).is_empty());
+        assert!(
+            delta_ids(&first.bitmaps)
+                .iter()
+                .all(|delta| delta.1 != bitmap)
+        );
+
+        // Unchanged, and moved: nothing is uploaded.
+        assert!(stage.scene.extract(&mut stage.bitmaps).bitmaps.is_empty());
+        let sprite = stage.scene.sprite_mut(id).unwrap();
+        (sprite.x, sprite.y) = (20, 25);
+        sprite.set_opacity(100);
+        assert!(stage.scene.extract(&mut stage.bitmaps).bitmaps.is_empty());
+
+        // A changed source and a changed angle are rendered again.
+        stage
+            .bitmaps
+            .set_pixel(bitmap, 0, 0, Color::new(1.0, 2.0, 3.0, 255.0))
+            .unwrap();
+        assert!(!stage.scene.extract(&mut stage.bitmaps).bitmaps.is_empty());
+        stage.scene.sprite_mut(id).unwrap().angle = 31.0;
+        assert!(!stage.scene.extract(&mut stage.bitmaps).bitmaps.is_empty());
+        assert_eq!(stage.bitmaps.len(), 2);
+
+        stage.scene.sprite_mut(id).unwrap().angle = 0.0;
+        stage.scene.extract(&mut stage.bitmaps);
+        assert_eq!(stage.bitmaps.len(), 1);
+
+        stage.scene.sprite_mut(id).unwrap().angle = 30.0;
+        stage.scene.extract(&mut stage.bitmaps);
+        assert_eq!(stage.bitmaps.len(), 2);
+        stage.scene.dispose_sprite(id);
+        stage.scene.extract(&mut stage.bitmaps);
+        assert_eq!(stage.bitmaps.len(), 1);
+    }
+
     #[test]
     fn mirroring_flips_a_sprite_in_place() {
         let mut stage = Stage::sized(32, 32);
@@ -1391,43 +1586,36 @@ mod tests {
         }
     }
 
+    /// PLACEHOLDER: not measured; the lowest rows of the source rectangle of a turned sprite
+    /// are faint, wherever they are on the screen.
     #[test]
-    fn a_turned_and_mirrored_bush_sprite_equals_its_two_halves_drawn_apart() {
-        // What every sprite of the comparison shares.
-        fn place(stage: &mut Stage, bitmap: BitmapId, oy: i32, opacity: i32) -> SpriteId {
-            let id = sprite(stage, bitmap, 30, 30);
-            let sprite = stage.scene.sprite_mut(id).unwrap();
-            sprite.ox = 2;
-            sprite.oy = oy;
-            sprite.zoom_x = 3.0;
-            sprite.zoom_y = 2.5;
-            sprite.angle = 30.0;
-            sprite.mirror = true;
-            sprite.tone = Tone::new(40.0, -20.0, 0.0, 100.0);
-            sprite.color = Color::new(0.0, 255.0, 0.0, 60.0);
-            sprite.set_opacity(opacity);
-            id
+    fn the_bush_depth_of_a_turned_sprite_counts_rows_of_its_source() {
+        let mut stage = Stage::sized(64, 64);
+        let bitmap = grid(&mut stage, 6, 6);
+        let id = sprite(&mut stage, bitmap, 30, 30);
+        let sprite = stage.scene.sprite_mut(id).unwrap();
+        (sprite.ox, sprite.oy) = (2, 5);
+        (sprite.zoom_x, sprite.zoom_y) = (3.0, 2.5);
+        sprite.angle = 30.0;
+        sprite.mirror = true;
+        let plain = drawn(&stage.frame());
+        stage.scene.sprite_mut(id).unwrap().bush_depth = 2;
+        let bushy = drawn(&stage.frame());
+        assert!(plain.len() > 200);
+        assert_eq!(plain.len(), bushy.len());
+        let mut faint = 0;
+        for (full, found) in plain.iter().zip(&bushy) {
+            let pixel = full.2;
+            // The rows 4 and 5 of the grid.
+            let expected = if pixel[1] >= cell(0, 4)[1] {
+                faint += 1;
+                vkxp_pixel::blend_normal(BLACK, [pixel[0], pixel[1], pixel[2], 127], 255)
+            } else {
+                pixel
+            };
+            assert_eq!(*found, (full.0, full.1, expected));
         }
-        let pixels = |top: u32, height: u32| -> Vec<Rgba> {
-            (top..top + height)
-                .flat_map(|y| (0..6).map(move |x| cell(x, y)))
-                .collect()
-        };
-
-        let mut whole = Stage::sized(64, 64);
-        let bitmap = grid(&mut whole, 6, 6);
-        let id = place(&mut whole, bitmap, 5, 201);
-        whole.scene.sprite_mut(id).unwrap().bush_depth = 2;
-
-        let mut halves = Stage::sized(64, 64);
-        let above = halves.pixels(6, 4, &pixels(0, 4));
-        let below = halves.pixels(6, 2, &pixels(4, 2));
-        place(&mut halves, above, 5, 201);
-        place(&mut halves, below, 1, 100);
-
-        let frame = whole.frame();
-        assert!(drawn(&frame).len() > 200);
-        assert_eq!(frame.rgba, halves.frame().rgba);
+        assert!(faint > 60, "{faint}");
     }
 
     #[test]

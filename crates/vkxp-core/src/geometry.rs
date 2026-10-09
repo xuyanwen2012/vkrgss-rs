@@ -1,11 +1,12 @@
 //! Geometry of a quad: from position, origin, zoom, angle and mirror to the protocol's
-//! fixed-point transform or to the rectangle of a stretch.
+//! fixed-point transform, to the rectangle of a stretch, or to the texels of a turned sprite.
 //!
-//! This is the one place where floating point becomes protocol data. The coefficients of a
-//! transform are computed in `f64` with operations that give the same bits on every platform
-//! (sines and cosines come from the pure-Rust `libm`), and each is then rounded to the nearest
-//! multiple of 2^-16. The rectangle of a stretch is computed in `f32`, as the original runtime
-//! does, with operations that IEEE 754 defines exactly.
+//! This is the one place where floating point becomes protocol data or pixels. The
+//! coefficients of a transform are computed in `f64` with operations that give the same bits
+//! on every platform (sines and cosines come from the pure-Rust `libm`), and each is then
+//! rounded to the nearest multiple of 2^-16. The rectangle of a stretch is computed in `f32`,
+//! as the original runtime does, with operations that IEEE 754 defines exactly. A turned
+//! sprite is walked in `f64`, as the original runtime does.
 
 use vkxp_proto::{Fixed, Transform};
 
@@ -89,35 +90,129 @@ impl Geometry {
     }
 }
 
+/// The box of whole screen pixels a turned sprite is walked over, with the sine and cosine
+/// its rows are computed from. The last column and the last row, `right` and `bottom`, are
+/// not drawn.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct TurnedBox {
+    pub(crate) left: i64,
+    pub(crate) top: i64,
+    pub(crate) right: i64,
+    pub(crate) bottom: i64,
+    /// Of the angle the original runtime turns by, which is the negated angle of the sprite.
+    sin: f64,
+    cos: f64,
+}
+
+/// Beyond this a corner of a turned sprite has no place in a box.
+const CORNER_END: f64 = 2_147_483_648.0;
+
 impl Geometry {
-    /// The map of a turned sprite, as measured on the original runtime: the screen pixel at
-    /// the whole offset (`dx`, `dy`) from the position shows the texel under
+    /// The box of a sprite turned by an angle other than 0, as the original runtime computes
+    /// it in double precision: the corners of the source rectangle of `width` by `height`,
     ///
     /// ```text
-    /// U = ox + (dx * cos a - dy * sin a) / zoom_x
-    /// V = oy + (dx * sin a + dy * cos a) / zoom_y
+    /// t = ((-angle) + (-angle)) * pi / 360,  s = sin t,  c = cos t
+    /// P0 = (x - (ox*c*zoom_x - oy*s*zoom_y),  y - (ox*s*zoom_x + oy*c*zoom_y))
+    /// P1 = (w*c*zoom_x + P0.x,  w*s*zoom_x + P0.y)
+    /// P2 = (P0.x - h*s*zoom_y,  h*c*zoom_y + P0.y)
+    /// P3 = (w*c*zoom_x + P2.x,  w*s*zoom_x + P2.y)
     /// ```
     ///
-    /// with `U` replaced by `(src_width - 1) - U` when mirrored, and no half pixel anywhere.
-    /// The backends evaluate a transform at pixel centres, so the position is moved by half a
-    /// pixel to make the centre of a pixel stand for its whole offset.
+    /// each coordinate rounded with `floor(v + 0.5)`, and the smallest and largest of them.
+    /// The products are formed from left to right, which matters for the last bit.
     ///
-    /// PLACEHOLDER: where `U` or `V` is a whole number the original runtime shows either of
-    /// two texels, depending on the rounding of its 32-bit floats; that is every pixel at 90,
-    /// 180 and 270 degrees. This shows the texel of the exact value.
-    pub(crate) fn turned_transform(
+    /// `None` when nothing is drawn: a zoom of 0, an empty source rectangle, or a corner that
+    /// is not a number or beyond the coordinates of a rectangle.
+    ///
+    /// Provenance: oracle measurement 2026-10-09, RGSS104E, sprite angle probe (36 whole
+    /// frames without a differing pixel); the routine is at 0x10021960 of that DLL.
+    ///
+    /// PLACEHOLDER: what a negative zoom draws through this rule is not measured.
+    pub(crate) fn turned_box(&self, width: i32, height: i32) -> Option<TurnedBox> {
+        if self.zoom_x == 0.0 || self.zoom_y == 0.0 || width <= 0 || height <= 0 {
+            return None;
+        }
+        let (x, y, ox, oy) = (self.x, self.y, self.ox, self.oy);
+        let (zx, zy) = (self.zoom_x, self.zoom_y);
+        let (w, h) = (f64::from(width), f64::from(height));
+        let t = ((-self.angle) + (-self.angle)) * std::f64::consts::PI / 360.0;
+        let (s, c) = (libm::sin(t), libm::cos(t));
+        let p0 = (
+            x - (ox * c * zx - oy * s * zy),
+            y - (ox * s * zx + oy * c * zy),
+        );
+        let p1 = (w * c * zx + p0.0, w * s * zx + p0.1);
+        let p2 = (p0.0 - h * s * zy, h * c * zy + p0.1);
+        let p3 = (w * c * zx + p2.0, w * s * zx + p2.1);
+        let corners = [p0, p1, p2, p3];
+        let mut xs = [0i64; 4];
+        let mut ys = [0i64; 4];
+        for (i, corner) in corners.into_iter().enumerate() {
+            let (px, py) = ((corner.0 + 0.5).floor(), (corner.1 + 0.5).floor());
+            // Not a number fails both comparisons.
+            if !(px.abs() < CORNER_END && py.abs() < CORNER_END) {
+                return None;
+            }
+            (xs[i], ys[i]) = (px as i64, py as i64);
+        }
+        Some(TurnedBox {
+            left: xs.into_iter().min()?,
+            top: ys.into_iter().min()?,
+            right: xs.into_iter().max()?,
+            bottom: ys.into_iter().max()?,
+            sin: s,
+            cos: c,
+        })
+    }
+
+    /// Row `j` of the box of a turned sprite, as the original runtime walks it: the position
+    /// in the bitmap is computed at the left edge of the box,
+    ///
+    /// ```text
+    /// U = (src.x + ox) + ((left - x)*c + (j - y)*s) / zoom_x
+    /// V = (src.y + oy) + ((-s)*(left - x) + (j - y)*c) / zoom_y
+    /// mirrored: U = (src.x + w - 1) - (U - src.x)
+    /// ```
+    ///
+    /// and then advanced pixel by pixel, `U` by `c / zoom_x` (subtracted when mirrored) and
+    /// `V` by `(-s) / zoom_y`. A pixel shows the texel at the truncated position when that
+    /// is inside `src`. The sums are accumulated, not computed anew, which decides the texel
+    /// wherever the exact position is a whole number.
+    ///
+    /// `show` is called with the column, counted from the left edge of the box, and the
+    /// texel, for every pixel of `columns` that shows one.
+    ///
+    /// Provenance: as [`Geometry::turned_box`]; the loop is at 0x10022720.
+    pub(crate) fn turned_row(
         &self,
-        src_width: f64,
-        cut_left: f64,
-        cut_top: f64,
-    ) -> Option<Transform> {
-        let moved = Geometry {
-            // Halves of whole numbers, which `f64` holds exactly.
-            x: self.x + 0.5,
-            y: self.y + 0.5,
-            ..*self
-        };
-        moved.transform(src_width - 1.0, cut_left, cut_top)
+        bounds: &TurnedBox,
+        src: crate::Rect,
+        j: i64,
+        columns: std::ops::Range<i64>,
+        mut show: impl FnMut(i64, i32, i32),
+    ) {
+        let (s, c) = (bounds.sin, bounds.cos);
+        // Whole numbers far inside what `f64` holds exactly, and so are their differences.
+        let dx = bounds.left as f64 - self.x;
+        let dy = j as f64 - self.y;
+        let (src_x, src_y) = (f64::from(src.x), f64::from(src.y));
+        let (src_right, src_bottom) = (src_x + f64::from(src.width), src_y + f64::from(src.height));
+        let mut u = (src_x + self.ox) + (dx * c + dy * s) / self.zoom_x;
+        let mut v = (src_y + self.oy) + ((-s) * dx + dy * c) / self.zoom_y;
+        if self.mirror {
+            u = (src_right - 1.0) - (u - src_x);
+        }
+        let du = c / self.zoom_x;
+        let dv = (-s) / self.zoom_y;
+        for i in 0..columns.end {
+            if i >= columns.start && src_x <= u && src_y <= v && u < src_right && v < src_bottom {
+                // Inside `src`, whose coordinates are `i32`.
+                show(i, u as i32, v as i32);
+            }
+            u = if self.mirror { u - du } else { du + u };
+            v += dv;
+        }
     }
 }
 
@@ -371,46 +466,6 @@ mod tests {
             Geometry { x: 40000.0, ..base },
         ] {
             assert_eq!(geometry.transform(4.0, 0.0, 0.0), None, "{geometry:?}");
-        }
-    }
-
-    #[test]
-    fn a_turned_transform_samples_at_whole_offsets() {
-        // 30 degrees about (3, 5) at (20, 10): the texel of pixel (dx, dy) from the position
-        // is the floor of the measured rule.
-        let geometry = Geometry {
-            ox: 3.0,
-            oy: 5.0,
-            angle: 30.0,
-            ..Geometry::at(20, 10)
-        };
-        let transform = geometry.turned_transform(16.0, 0.0, 0.0).unwrap();
-        let (sin, cos) = (0.5f64, 0.75f64.sqrt());
-        for (dx, dy) in [(1i32, 0i32), (7, 3), (-2, 9), (5, -4), (-3, -1)] {
-            let u = 3.0 + f64::from(dx) * cos - f64::from(dy) * sin;
-            let v = 5.0 + f64::from(dx) * sin + f64::from(dy) * cos;
-            assert_eq!(
-                texel(&transform, (20 + dx) as u16, (10 + dy) as u16),
-                (u.floor() as i64, v.floor() as i64),
-                "({dx}, {dy})"
-            );
-        }
-        // The position itself shows the origin.
-        assert_eq!(texel(&transform, 20, 10), (3, 5));
-
-        // Mirrored: about the last texel, not about the width.
-        let mirrored = Geometry {
-            mirror: true,
-            ..geometry
-        };
-        let transform = mirrored.turned_transform(16.0, 0.0, 0.0).unwrap();
-        for (dx, dy) in [(1i32, 0i32), (7, 3), (-2, 9)] {
-            let u = 15.0 - (3.0 + f64::from(dx) * cos - f64::from(dy) * sin);
-            assert_eq!(
-                texel(&transform, (20 + dx) as u16, (10 + dy) as u16).0,
-                u.floor() as i64,
-                "({dx}, {dy})"
-            );
         }
     }
 

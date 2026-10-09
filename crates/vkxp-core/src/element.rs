@@ -9,6 +9,7 @@ use vkxp_proto::BitmapId;
 
 use crate::scene::ViewportId;
 use crate::tilemap::TileCache;
+use crate::turned::Turned;
 use crate::window::{Cache, Caches};
 use crate::{Bitmaps, Color, Rect, SharedTable, Tone};
 
@@ -122,6 +123,8 @@ pub struct Sprite {
     pub(crate) bitmap: Option<BitmapId>,
     pub(crate) opacity: u8,
     pub(crate) flash: Flash,
+    /// The bitmap the sprite is drawn from while it is turned.
+    pub(crate) turned: Turned,
 }
 
 impl Sprite {
@@ -146,6 +149,7 @@ impl Sprite {
             bitmap: None,
             opacity: 255,
             flash: Flash::default(),
+            turned: Turned::default(),
         }
     }
 

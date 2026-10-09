@@ -39,10 +39,11 @@
 //!   protocol `FramePacket` with the ops of every visible element in draw order and the
 //!   deltas for exactly the bitmaps those ops refer to, and counts the frame. A sprite that is
 //!   not turned becomes a stretch quad: its source rectangle stretched into a rectangle of
-//!   whole pixels, found in `f32` as the original runtime finds it. A turned sprite becomes
-//!   an affine quad; its position, origin, zoom, angle and mirror are resolved once, in `f64`
-//!   with sines and cosines from the pure-Rust `libm`, and rounded to the protocol's
-//!   fixed-point transform. A viewport clips and offsets its
+//!   whole pixels, found in `f32` as the original runtime finds it. A sprite with an angle
+//!   other than exactly 0 is rendered by the rule measured on the original runtime, in `f64`
+//!   with sines and cosines from the pure-Rust `libm`, into a bitmap of the scene's own that
+//!   is drawn as an unscaled quad and rendered again only when what it shows changes. A
+//!   viewport clips and offsets its
 //!   elements and then applies its tone, colour and flash as a rectangle effect. A window is
 //!   drawn from bitmaps of the scene's own in the bitmap arena (background, frame, cursor),
 //!   redrawn from the window skin only when the skin, the size, the stretch flag or the
@@ -83,8 +84,9 @@
 //! | `delta` | changed rectangles and [`Bitmaps::deltas`] |
 //! | `scene` | [`Scene`], the element arenas and their handles, creation and disposal |
 //! | `element` | [`Sprite`], [`Viewport`], [`Window`], [`Plane`], [`Tilemap`], flashes |
-//! | `geometry` | the fixed-point transform of a quad, the rectangle of a stretch |
+//! | `geometry` | the fixed-point transform of a quad, the rectangle of a stretch, the walk of a turned sprite |
 //! | `extract` | [`Scene::extract`], the draw order, sprites and viewports as ops |
+//! | `turned` | the bitmap a turned sprite is rendered into |
 //! | `window` | the bitmaps cached from a window skin, windows as ops |
 //! | `plane` | planes as tiled quads, the pre-tiled bitmap of a small pattern |
 //! | `tiles` | the autotile table, tile identifiers as source rectangles |
@@ -112,6 +114,7 @@ pub mod test_support;
 mod text;
 mod tilemap;
 mod tiles;
+mod turned;
 mod window;
 
 pub use bitmap::{Bitmaps, MAX_BITMAP_PIXELS};
