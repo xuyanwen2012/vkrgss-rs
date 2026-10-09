@@ -1289,3 +1289,107 @@ fn guest_that_goes_with_a_frame_waiting_ends_the_session_after_that_frame() {
     assert_eq!(rig.session.display().rendered(), [0, 1, 2]);
     assert_eq!(rig.session.end(), Some(SessionEnd::Disconnected));
 }
+
+// Input recording and replay.
+
+impl Rig {
+    /// A session that takes each frame's snapshot from `input`.
+    fn with_input(input: impl crate::InputSource + 'static) -> Rig {
+        let clock = ManualClock::new();
+        let errors = ErrorBuffer::new();
+        let options = SessionOptions {
+            errors: Box::new(errors.clone()),
+            input: Some(Box::new(input)),
+            ..SessionOptions::default()
+        };
+        Rig {
+            session: Session::new(RecordingDisplay::new(), clock.clone(), options),
+            clock,
+            errors,
+        }
+    }
+
+    /// Sends a frame, waits for its tick and returns what the guest was sent before the tick.
+    fn frame_input(&mut self, frame_index: u64) -> Vec<HostToGuest> {
+        let mut sent = self.send(frame(frame_index));
+        if sent.last() != Some(&HostToGuest::Tick) {
+            let due = self.session.next_wake().expect("a tick is pending");
+            self.clock.advance_to(due);
+            self.session.poll();
+            sent.extend(self.session.take_messages());
+        }
+        assert_eq!(sent.pop(), Some(HostToGuest::Tick));
+        sent
+    }
+}
+
+/// Records a session in which RIGHT is held during frames 1 and 2 and C during frame 4, and
+/// returns what the guest was sent before each frame's tick.
+fn record_a_session(path: &std::path::Path) -> Vec<Vec<HostToGuest>> {
+    let mut rig = Rig::with_input(crate::Recorder::create(path, 7).unwrap());
+    let mut delivered = vec![rig.frame_input(0)];
+    // With a source, live input waits for the next frame.
+    assert_eq!(rig.key(KeyCode::ArrowRight, true), []);
+    delivered.push(rig.frame_input(1));
+    delivered.push(rig.frame_input(2));
+    assert_eq!(rig.key(KeyCode::ArrowRight, false), []);
+    delivered.push(rig.frame_input(3));
+    // Pressed and released between two frames: no frame sees it.
+    assert_eq!(rig.key(KeyCode::KeyZ, true), []);
+    assert_eq!(rig.key(KeyCode::KeyZ, false), []);
+    assert_eq!(rig.key(KeyCode::KeyC, true), []);
+    delivered.push(rig.frame_input(4));
+    delivered
+}
+
+#[test]
+fn a_recorder_writes_the_snapshot_delivered_for_every_frame() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("input.txt");
+    let delivered = record_a_session(&path);
+    assert_eq!(
+        delivered,
+        [
+            vec![],
+            vec![held(&[Button::Right])],
+            vec![],
+            vec![held(&[])],
+            vec![held(&[Button::C])]
+        ]
+    );
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap(),
+        "vkxp-input 1 seed=7\n1x\n2x RIGHT\n1x\n1x C\n"
+    );
+}
+
+#[test]
+fn a_replayed_recording_delivers_the_recorded_snapshots_frame_by_frame() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("input.txt");
+    let recorded = record_a_session(&path);
+
+    let recording = crate::Recording::read(&path).unwrap();
+    assert_eq!(recording.seed, 7);
+    let mut rig = Rig::with_input(crate::Replayer::new(recording));
+    // Live input does not reach the guest during the replay.
+    assert_eq!(rig.key(KeyCode::ArrowDown, true), []);
+    let replayed: Vec<Vec<HostToGuest>> = (0..5).map(|index| rig.frame_input(index)).collect();
+    assert_eq!(replayed, recorded);
+    assert_eq!(rig.errors.text(), "");
+
+    // After the last recorded frame live input applies again.
+    assert_eq!(rig.frame_input(5), [held(&[Button::Down])]);
+    assert_eq!(rig.key(KeyCode::ArrowDown, false), []);
+    assert_eq!(rig.frame_input(6), [held(&[])]);
+}
+
+#[test]
+fn after_a_replay_without_live_input_no_button_is_held() {
+    let recording = crate::Recording::parse("vkxp-input 1 seed=0\n2x C\n").unwrap();
+    let mut rig = Rig::with_input(crate::Replayer::new(recording));
+    assert_eq!(rig.frame_input(0), [held(&[Button::C])]);
+    assert_eq!(rig.frame_input(1), []);
+    assert_eq!(rig.frame_input(2), [held(&[])]);
+    assert_eq!(rig.frame_input(3), []);
+}

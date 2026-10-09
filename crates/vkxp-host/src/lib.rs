@@ -10,7 +10,8 @@
 //!    [`Clock`], so every pacing, input and transition rule is tested with a fake clock and a
 //!    recording display (see [`testing`]).
 //! 2. The runners drive a session: one in a window on `winit` with the real clock, one headless
-//!    on a virtual clock with scripted input and frame dumps.
+//!    on a virtual clock with scripted input and frame dumps. Either can record the input of
+//!    every frame into a file or replay such a file ([`Recorder`], [`Replayer`]).
 //! 3. The [`Display`] implementations: the Vulkan presenter for a window, an off-screen one for
 //!    headless runs, and the recording fake.
 //!
@@ -27,6 +28,7 @@ mod clock;
 mod display;
 mod headless;
 mod keys;
+mod record;
 mod script;
 mod session;
 mod windowed;
@@ -42,6 +44,7 @@ pub use headless::{
     HostLink, headless_link, run_headless,
 };
 pub use keys::KeyMap;
+pub use record::{InputSource, Recorder, Recording, RecordingError, Replayer};
 pub use script::{InputScript, ScriptError, button_name};
 pub use session::{KeyAction, Session, SessionEnd, SessionOptions};
 pub use windowed::{Driver, WindowedError, WindowedOptions, initial_window_size, run_windowed};

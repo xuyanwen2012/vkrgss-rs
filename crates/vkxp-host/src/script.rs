@@ -130,7 +130,7 @@ pub fn button_name(button: Button) -> &'static str {
     }
 }
 
-fn button_named(name: &str) -> Option<Button> {
+pub(crate) fn button_named(name: &str) -> Option<Button> {
     Button::ALL
         .into_iter()
         .find(|button| button_name(*button).eq_ignore_ascii_case(name))

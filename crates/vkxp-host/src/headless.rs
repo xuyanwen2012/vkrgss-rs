@@ -18,7 +18,9 @@ use vkxp_proto::link::{Disconnected, GuestEnd, HostEnd, link};
 use vkxp_proto::{BitmapId, FramePacket, GuestToHost, HostToGuest};
 use vkxp_vk::{DeviceChoice, Frame, VkCompositor, VkError};
 
-use crate::{Clock, Display, InputScript, ManualClock, Session, SessionEnd, SessionOptions};
+use crate::{
+    Clock, Display, InputScript, InputSource, ManualClock, Session, SessionEnd, SessionOptions,
+};
 
 /// The device a headless run uses unless told otherwise: the CPU rasteriser, so that a run
 /// neither depends on nor disturbs the GPUs of the machine.
@@ -69,6 +71,9 @@ pub struct HeadlessOptions {
     pub frames: Option<u64>,
     /// The buttons held from given frames on.
     pub script: InputScript,
+    /// A recorder or a replayer of the input. The script is the live input a recorder writes
+    /// down, and what applies after the last frame of a replayed recording.
+    pub input: Option<Box<dyn InputSource>>,
     /// Frames to write as PNG files, by frame number.
     pub dumps: Vec<(u64, PathBuf)>,
     /// Where modal texts and errors are written.
@@ -81,6 +86,7 @@ impl Default for HeadlessOptions {
             device: DeviceChoice::Name(DEFAULT_DEVICE.to_owned()),
             frames: None,
             script: InputScript::new(),
+            input: None,
             dumps: Vec::new(),
             errors: Box::new(std::io::stderr()),
         }
@@ -212,6 +218,7 @@ pub fn run_headless(
         device,
         frames: limit,
         script,
+        input,
         dumps,
         errors,
     } = options;
@@ -220,6 +227,7 @@ pub fn run_headless(
     let session_options = SessionOptions {
         fail_on_rejected_frame: true,
         errors,
+        input,
         ..SessionOptions::default()
     };
     let mut session = Session::new(display, clock.clone(), session_options);

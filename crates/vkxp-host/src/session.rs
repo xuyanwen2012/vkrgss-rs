@@ -8,7 +8,7 @@ use vkxp_proto::link::HostEnd;
 use vkxp_proto::{BitmapId, Button, FramePacket, GuestToHost, HostToGuest, InputSnapshot};
 use winit::keyboard::KeyCode;
 
-use crate::{AudioSink, Clock, Display, KeyMap, NullSink};
+use crate::{AudioSink, Clock, Display, InputSource, KeyMap, NullSink};
 
 /// The key that asks the guest to restart.
 const RESET_KEY: KeyCode = KeyCode::F12;
@@ -59,6 +59,11 @@ pub struct SessionOptions {
     pub errors: Box<dyn Write + Send>,
     /// Where audio commands go.
     pub audio: Box<dyn AudioSink>,
+    /// Where the input snapshot of each frame comes from: a recorder or a replayer. With a
+    /// source the guest is sent the source's snapshot for a frame, if it differs from the
+    /// one before, ahead of that frame's tick and at no other time. Without one, live input
+    /// is sent as it changes.
+    pub input: Option<Box<dyn InputSource>>,
 }
 
 impl Default for SessionOptions {
@@ -68,6 +73,7 @@ impl Default for SessionOptions {
             fail_on_rejected_frame: false,
             errors: Box::new(std::io::stderr()),
             audio: Box::new(NullSink),
+            input: None,
         }
     }
 }
@@ -128,6 +134,10 @@ pub struct Session<D: Display, C: Clock> {
     swallowed_keys: HashSet<KeyCode>,
     /// The snapshot the guest was last sent.
     buttons: InputSnapshot,
+    /// The buttons live input holds, which is what the guest is sent unless `input` says
+    /// otherwise.
+    live: InputSnapshot,
+    input: Option<Box<dyn InputSource>>,
     fade: Fade,
     /// The mix weight the display is at.
     mix: f32,
@@ -164,6 +174,8 @@ impl<D: Display, C: Clock> Session<D, C> {
             held_keys: HashSet::new(),
             swallowed_keys: HashSet::new(),
             buttons: InputSnapshot::EMPTY,
+            live: InputSnapshot::EMPTY,
+            input: options.input,
             fade: Fade::Normal,
             mix: 1.0,
             mask: None,
@@ -367,6 +379,14 @@ impl<D: Display, C: Clock> Session<D, C> {
 
     /// Sets the held buttons directly, bypassing the key map, as a scripted run does.
     pub fn set_buttons(&mut self, snapshot: InputSnapshot) {
+        self.live = snapshot;
+        if self.input.is_none() {
+            self.deliver(snapshot);
+        }
+    }
+
+    /// Sends the guest a snapshot if it differs from the one it was last sent.
+    fn deliver(&mut self, snapshot: InputSnapshot) {
         if self.end.is_none() && snapshot != self.buttons {
             self.buttons = snapshot;
             self.outbox.push_back(HostToGuest::Input(snapshot));
@@ -397,6 +417,11 @@ impl<D: Display, C: Clock> Session<D, C> {
             }
         }
         self.frames += 1;
+        if let Some(input) = &mut self.input {
+            // Queued ahead of this frame's tick.
+            let snapshot = input.next(self.live);
+            self.deliver(snapshot);
+        }
 
         // The step of a cross-fade this frame takes, with the weight that shows it. The
         // display needs the weight before it renders; the session only counts the step once

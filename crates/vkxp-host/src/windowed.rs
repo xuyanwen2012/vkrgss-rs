@@ -21,12 +21,12 @@ use winit::keyboard::PhysicalKey;
 use winit::window::{Fullscreen, Window, WindowId};
 
 use crate::{
-    AudioOptions, AudioSink, Clock, Display, KeyAction, KeyMap, NullSink, Session, SessionEnd,
-    SessionOptions, SystemClock,
+    AudioOptions, AudioSink, Clock, Display, InputSource, KeyAction, KeyMap, NullSink, Session,
+    SessionEnd, SessionOptions, SystemClock,
 };
 
 /// How a windowed session is set up.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct WindowedOptions {
     /// The device that composites and presents. There is deliberately no default: on a
     /// machine with several GPUs the caller says which one drives the window.
@@ -39,6 +39,8 @@ pub struct WindowedOptions {
     pub keys: KeyMap,
     /// The audio output, or `None` for a run without sound, which opens no audio device.
     pub audio: Option<AudioOptions>,
+    /// A recorder or a replayer of the input, which the session takes when it starts.
+    pub input: Option<Box<dyn InputSource>>,
 }
 
 impl WindowedOptions {
@@ -50,6 +52,7 @@ impl WindowedOptions {
             logical_size: Size::new(640, 480),
             keys: KeyMap::default(),
             audio: None,
+            input: None,
         }
     }
 }
@@ -251,6 +254,7 @@ impl App {
         let options = SessionOptions {
             keys: self.options.keys.clone(),
             audio,
+            input: self.options.input.take(),
             ..SessionOptions::default()
         };
         let link = self.link.take().expect("the session starts once");

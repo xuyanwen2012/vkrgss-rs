@@ -6,7 +6,7 @@
 
 ## 2. Host (`vkxp-host`)
 
-- [ ] 2.1 Add the recording format, the recorder and the replayer as input sources. Verify: unit tests of writing and reading, the not-a-recording scenario, and a session test that a replayed recording delivers the recorded snapshots frame by frame.
+- [x] 2.1 Add the recording format, the recorder and the replayer as input sources. Verify: unit tests of writing and reading, the not-a-recording scenario, and a session test that a replayed recording delivers the recorded snapshots frame by frame.
 
 ## 3. Executable (`vkxp`)
 
