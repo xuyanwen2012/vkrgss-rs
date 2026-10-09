@@ -46,3 +46,25 @@
   layouts and the no-support path are tested; the live path is checked by hand with
   `--present-stats` on the AMD GPU and documented in the README.
 - [Compositors that ignore target times] → The feedback then shows it; nothing breaks.
+
+## Follow-ups
+
+- The session does not make up lateness: a tick that goes out late moves every later one.
+  The target times do not move with it, so after enough late ticks the targets lie behind
+  the clock, frames are shown at once, and the schedule only starts over when it is more than
+  four periods behind. Whether the session should take its ticks from the schedule instead,
+  or the schedule should follow the session, is for the live check to answer.
+- The extension recommends rebasing the target times on the reported visible times now and
+  then, against drift between the clocks. The schedule here counts from its first target
+  only.
+- A present that shows no new frame (a redraw after a resize or an expose) is given the
+  target of the frame it repeats and is not counted in the statistics, so that redraws
+  cannot push the targets ahead of the clock. The spec does not say what such a present
+  carries.
+- While fast-forward is engaged every frame restarts the schedule, so its target is the
+  clock's time; the present wait, where it is in use, still waits for the frame before, as
+  the FIFO swapchain does anyway.
+- `--present-stats` has no entry in the configuration files.
+- The time domain is the system's monotonic clock when the swapchain offers it, read with
+  `vkGetCalibratedTimestampsKHR` like the swapchain's own domains. Which domains RADV offers
+  on the development machine is not known from here.

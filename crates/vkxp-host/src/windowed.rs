@@ -11,8 +11,8 @@ use std::time::Duration;
 
 use thiserror::Error;
 use vkxp_proto::link::{GuestEnd, HostEnd, link};
-use vkxp_proto::{BitmapId, FramePacket, Size};
-use vkxp_vk::{DeviceChoice, Filter, Mix, VkCompositor, VkError};
+use vkxp_proto::{BitmapId, FramePacket, FrameRate, Size};
+use vkxp_vk::{DeviceChoice, Filter, IntervalSummary, Mix, STATS_INTERVALS, VkCompositor, VkError};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, MouseButton, WindowEvent};
@@ -47,6 +47,9 @@ pub struct WindowedOptions {
     pub audio: Option<AudioOptions>,
     /// A recorder or a replayer of the input, which the session takes when it starts.
     pub input: Option<Box<dyn InputSource>>,
+    /// Whether a summary of the intervals between the frames shown is written to the error
+    /// stream, every [`STATS_INTERVALS`] frames and when the session ends.
+    pub present_stats: bool,
 }
 
 impl WindowedOptions {
@@ -62,6 +65,7 @@ impl WindowedOptions {
             pads: GamepadMap::default(),
             audio: None,
             input: None,
+            present_stats: false,
         }
     }
 }
@@ -191,12 +195,43 @@ struct VulkanDisplay {
     // compositor also keeps the window alive itself.
     compositor: VkCompositor,
     window: Arc<Window>,
+    /// Whether the intervals between the frames shown are reported.
+    present_stats: bool,
+    /// Frames shown since the last report.
+    frames: usize,
+}
+
+/// The line that reports the intervals between the frames shown: their summary, if there
+/// is one yet, and whether the times are those `VK_EXT_present_timing` reports.
+fn present_stats_line(summary: Option<IntervalSummary>, timed: bool) -> String {
+    let source = if timed {
+        "as VK_EXT_present_timing reports them"
+    } else {
+        "by the host's clock, without VK_EXT_present_timing"
+    };
+    match summary {
+        Some(summary) => format!("frames shown, {source}: {summary}"),
+        None => format!("frames shown, {source}: no intervals yet"),
+    }
 }
 
 impl VulkanDisplay {
     fn present(&mut self) -> Result<(), VkError> {
         self.window.pre_present_notify();
-        self.compositor.present().map(|_| ())
+        let presented = self.compositor.present().map(|_| ());
+        if let Some(report) = self.compositor.take_pacing_report() {
+            eprintln!("vkxp: {report}");
+        }
+        presented
+    }
+
+    fn report_present_stats(&mut self) {
+        self.frames = 0;
+        let line = present_stats_line(
+            self.compositor.present_summary(),
+            self.compositor.paces_with_present_timing(),
+        );
+        eprintln!("vkxp: {line}");
     }
 
     fn resized(&mut self, size: PhysicalSize<u32>) {
@@ -210,11 +245,24 @@ impl Display for VulkanDisplay {
 
     fn render(&mut self, packet: &FramePacket) -> Result<(), VkError> {
         self.compositor.render(packet)?;
-        self.present()
+        self.present()?;
+        self.frames += 1;
+        if self.present_stats && self.frames >= STATS_INTERVALS {
+            self.report_present_stats();
+        }
+        Ok(())
     }
 
     fn hold(&mut self) -> Result<(), VkError> {
         self.compositor.freeze()
+    }
+
+    fn set_frame_rate(&mut self, rate: FrameRate) {
+        self.compositor.set_frame_rate(u32::from(rate.get()));
+    }
+
+    fn restart_pacing(&mut self) {
+        self.compositor.restart_pacing();
     }
 
     fn set_mix(&mut self, mix: Mix) {
@@ -235,6 +283,14 @@ impl Display for VulkanDisplay {
 
     fn set_title(&mut self, title: &str) {
         self.window.set_title(title);
+    }
+}
+
+impl Drop for VulkanDisplay {
+    fn drop(&mut self) {
+        if self.present_stats {
+            self.report_present_stats();
+        }
     }
 }
 
@@ -288,6 +344,8 @@ impl App {
         let mut display = VulkanDisplay {
             compositor,
             window: Arc::clone(&window),
+            present_stats: self.options.present_stats,
+            frames: 0,
         };
         display.resized(window.inner_size());
         // Some window systems only show a window once it has content.
@@ -820,6 +878,25 @@ mod tests {
         drop(guest);
         driver.wake();
         assert_eq!(driver.end(), Some(SessionEnd::Disconnected));
+    }
+
+    #[test]
+    fn present_statistics_line_names_the_source_of_its_times() {
+        let summary = IntervalSummary {
+            count: 600,
+            mean: 25.0e6,
+            smallest: 16_600_000,
+            largest: 33_400_000,
+        };
+        assert_eq!(
+            present_stats_line(Some(summary), true),
+            "frames shown, as VK_EXT_present_timing reports them: 600 intervals, mean 25.00 ms, \
+             smallest 16.60 ms, largest 33.40 ms"
+        );
+        assert_eq!(
+            present_stats_line(None, false),
+            "frames shown, by the host's clock, without VK_EXT_present_timing: no intervals yet"
+        );
     }
 
     #[test]

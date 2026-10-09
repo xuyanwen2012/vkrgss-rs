@@ -316,6 +316,17 @@ bilinear) is nearest except in a band one window pixel wide along the borders be
 pixels, where it interpolates. `auto`, the default, is `nearest` when the scale is a whole
 number and `sharp` otherwise. A headless run has no window and ignores both options.
 
+Frames are shown at the game's frame rate, 40 per second unless the game changes it. Where
+the Vulkan device and the window system support `VK_EXT_present_timing`, every frame is given
+the time it is to appear on screen, one frame period after the frame before it, so that on a
+display whose refresh rate is no multiple of the frame rate each frame stays up for as even a
+time as the display allows; with `VK_KHR_present_wait2` as well, a frame is only handed over
+once the one before it has reached the display. Without the extension, and after any error
+from it, which is reported once, frames are shown at the first refresh after they are ready.
+`--present-stats` writes the intervals between the frames shown to the error stream, every
+600 frames and at exit, as their count, mean, smallest and largest in milliseconds, and says
+whether the times are those the extension reports or those of the host's own clock.
+
 ### Audio
 
 A windowed run plays music, background sounds, music effects and sound effects on the default

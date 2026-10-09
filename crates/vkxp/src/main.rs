@@ -338,6 +338,7 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
             title,
             filter: options.filter.unwrap_or_default(),
             fullscreen: options.fullscreen,
+            present_stats: options.present_stats,
             keys,
             pads,
             audio,

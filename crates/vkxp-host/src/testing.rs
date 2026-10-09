@@ -9,7 +9,7 @@ use std::io::Write;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use vkxp_proto::{AudioCommand, BitmapDelta, BitmapId, FramePacket};
+use vkxp_proto::{AudioCommand, BitmapDelta, BitmapId, FramePacket, FrameRate};
 use vkxp_vk::Mix;
 
 use crate::{AudioSink, Display, ManualClock};
@@ -30,6 +30,15 @@ pub enum DisplayEvent {
     Mask(Option<(BitmapId, u32)>),
     Redraw,
     Title(String),
+}
+
+/// What a [`RecordingDisplay`] was told about the pacing of its frames.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PacingEvent {
+    /// The frame rate of the packet rendered next.
+    Rate(u8),
+    /// Pacing starts anew with the packet rendered next.
+    Restart,
 }
 
 /// An image as a [`RecordingDisplay`] models it, with frames named by their `frame_index`.
@@ -87,6 +96,8 @@ impl std::fmt::Display for Rejected {
 pub struct RecordingDisplay {
     /// Every request, oldest first.
     pub events: Vec<DisplayEvent>,
+    /// What it was told about pacing, oldest first. Kept apart from the requests above.
+    pub pacing: Vec<PacingEvent>,
     newest: Option<u64>,
     held: Shown,
     mix: Mix,
@@ -103,6 +114,7 @@ impl RecordingDisplay {
     pub fn new() -> RecordingDisplay {
         RecordingDisplay {
             events: Vec::new(),
+            pacing: Vec::new(),
             newest: None,
             held: Shown::Nothing,
             mix: Mix::Newest,
@@ -224,6 +236,14 @@ impl Display for RecordingDisplay {
 
     fn has_bitmap(&self, id: BitmapId) -> bool {
         self.bitmaps.contains(&id)
+    }
+
+    fn set_frame_rate(&mut self, rate: FrameRate) {
+        self.pacing.push(PacingEvent::Rate(rate.get()));
+    }
+
+    fn restart_pacing(&mut self) {
+        self.pacing.push(PacingEvent::Restart);
     }
 
     fn redraw(&mut self) -> Result<(), Rejected> {

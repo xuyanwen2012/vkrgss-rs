@@ -28,6 +28,8 @@ usage: vkxp [GAME_DIR] [OPTIONS]
                             linear or sharp; default: auto, which is nearest at a
                             whole-number scale and sharp otherwise
   --fullscreen              start in borderless fullscreen; Alt+Enter or F11 toggles
+  --present-stats           write the intervals between the frames shown to the error
+                            stream, every 600 frames and at exit
   --no-audio                run without sound: no audio device is opened
   --soundfont FILE          the SoundFont that MIDI music is played with;
                             default: the first found in /usr/share/soundfonts
@@ -78,6 +80,8 @@ pub struct Options {
     pub filter: Option<Filter>,
     /// Whether the window starts in borderless fullscreen.
     pub fullscreen: bool,
+    /// Whether the intervals between the frames shown are reported.
+    pub present_stats: bool,
     /// Whether the audio output stays closed.
     pub no_audio: bool,
     /// The SoundFont for MIDI, instead of the system's.
@@ -183,6 +187,7 @@ pub fn parse(arguments: &[String]) -> Result<Options, String> {
                 options.filter = Some(filter);
             }
             "--fullscreen" => options.fullscreen = true,
+            "--present-stats" => options.present_stats = true,
             "--debug" => options.debug = true,
             "--allow-process-functions" => options.process_functions = true,
             "--log-p" => options.log_p = true,
@@ -323,6 +328,17 @@ mod tests {
                 ..Options::default()
             }
         );
+    }
+
+    #[test]
+    fn present_statistics_are_asked_for_with_a_flag() {
+        assert!(!parse_words(&[]).unwrap().present_stats);
+        let options = parse_words(&["games/demo", "--present-stats"]).unwrap();
+        assert!(options.present_stats);
+        assert!(USAGE.contains("--present-stats"));
+        // The flag takes no value.
+        let options = parse_words(&["--present-stats", "games/demo"]).unwrap();
+        assert_eq!(options.game_dir, Some("games/demo".into()));
     }
 
     #[test]

@@ -1,6 +1,6 @@
 //! What a session asks of whatever shows its frames.
 
-use vkxp_proto::{BitmapId, FramePacket};
+use vkxp_proto::{BitmapId, FramePacket, FrameRate};
 use vkxp_vk::Mix;
 
 /// The surface a session draws on: a window, an off-screen target, or a recording fake.
@@ -36,6 +36,15 @@ pub trait Display {
 
     /// Whether the display has the bitmap `id`, from the packets rendered so far.
     fn has_bitmap(&self, id: BitmapId) -> bool;
+
+    /// Tells the display the frame rate of the packet it is about to render. A display that
+    /// can ask for the time a frame appears on screen spaces its frames by the period of
+    /// that rate; the others ignore it.
+    fn set_frame_rate(&mut self, _rate: FrameRate) {}
+
+    /// The frame about to be rendered does not follow the one before it by a period: the
+    /// display starts spacing its frames anew from it.
+    fn restart_pacing(&mut self) {}
 
     /// Shows the current state again without a new frame.
     fn redraw(&mut self) -> Result<(), Self::Error>;

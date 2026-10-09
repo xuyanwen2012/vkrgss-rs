@@ -124,6 +124,12 @@ struct FpsCounter {
 /// long or the host woke late for the tick: the next tick is a full period after the late one.
 /// Fast-forward makes it due at `t_arrival`; after a frame reset it is due at
 /// `t_arrival + p`.
+///
+/// The display is told the frame rate of every frame before it renders it, and that its own
+/// pacing starts anew with a frame that does not follow the one before it by a period: the
+/// frame after a frame reset, every frame while fast-forward is engaged and the first after
+/// it was engaged or released, and the first after a modal message that waited for the
+/// player.
 pub struct Session<D: Display, C: Clock> {
     display: D,
     clock: C,
@@ -145,6 +151,8 @@ pub struct Session<D: Display, C: Clock> {
     waiting_frame: Option<GuestToHost>,
     /// Whether a frame reset is waiting for the frame it applies to.
     frame_reset: bool,
+    /// Whether the display is to start its pacing anew with the next frame.
+    pacing_restart: bool,
     /// Fast-forward engaged by its key, and by [`Session::set_fast_forward`].
     fast_forward_key: bool,
     fast_forward_forced: bool,
@@ -199,6 +207,7 @@ impl<D: Display, C: Clock> Session<D, C> {
             previous_tick: None,
             waiting_frame: None,
             frame_reset: false,
+            pacing_restart: false,
             fast_forward_key: false,
             fast_forward_forced: false,
             held_keys: HashSet::new(),
@@ -260,6 +269,7 @@ impl<D: Display, C: Clock> Session<D, C> {
     /// Engages or releases fast-forward independently of its key.
     pub fn set_fast_forward(&mut self, engaged: bool) {
         self.fast_forward_forced = engaged;
+        self.pacing_restart = true;
         self.hurry();
     }
 
@@ -403,6 +413,7 @@ impl<D: Display, C: Clock> Session<D, C> {
                 FPS_KEY => self.toggle_fps(),
                 FAST_FORWARD_KEY => {
                     self.fast_forward_key = true;
+                    self.pacing_restart = true;
                     self.hurry();
                 }
                 _ => {}
@@ -412,6 +423,7 @@ impl<D: Display, C: Clock> Session<D, C> {
             self.swallowed_keys.remove(&key);
             if key == FAST_FORWARD_KEY {
                 self.fast_forward_key = false;
+                self.pacing_restart = true;
             }
         }
         self.update_buttons();
@@ -463,6 +475,8 @@ impl<D: Display, C: Clock> Session<D, C> {
     fn dismiss_modal(&mut self) {
         if self.pending_modal {
             self.pending_modal = false;
+            // The guest stood still for as long as the message did.
+            self.pacing_restart = true;
             self.outbox.push_back(HostToGuest::ModalDismissed);
         }
     }
@@ -472,6 +486,7 @@ impl<D: Display, C: Clock> Session<D, C> {
         self.held_keys.clear();
         self.held_mouse.clear();
         self.swallowed_keys.clear();
+        self.pacing_restart |= self.fast_forward_key;
         self.fast_forward_key = false;
         self.update_buttons();
     }
@@ -554,6 +569,11 @@ impl<D: Display, C: Clock> Session<D, C> {
         if let Some((_, _, _, mix)) = step {
             self.display.set_mix(mix);
         }
+        let restart = std::mem::take(&mut self.pacing_restart);
+        if restart || self.frame_reset || self.fast_forward() {
+            self.display.restart_pacing();
+        }
+        self.display.set_frame_rate(packet.frame_rate);
         match self.display.render(packet) {
             Ok(()) => {
                 if let Some((shown, duration, still, mix)) = step {

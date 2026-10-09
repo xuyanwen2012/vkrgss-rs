@@ -11,7 +11,7 @@
 
 ## 3. Host and option (`vkxp-host`, `vkxp`)
 
-- [ ] 3.1 Pass the frame period and pacing restarts to the presenter and add `--present-stats`. Verify: session tests that the presenter is told the period and the restarts; an argument test; a README paragraph that matches the option.
+- [x] 3.1 Pass the frame period and pacing restarts to the presenter and add `--present-stats`. Verify: session tests that the presenter is told the period and the restarts; an argument test; a README paragraph that matches the option.
 
 ## 4. Integration check
 

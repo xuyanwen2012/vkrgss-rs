@@ -12,7 +12,9 @@ use winit::keyboard::KeyCode;
 
 use super::*;
 use crate::ManualClock;
-use crate::testing::{DisplayEvent, ErrorBuffer, RecordingDisplay, RecordingSink, Shown};
+use crate::testing::{
+    DisplayEvent, ErrorBuffer, PacingEvent, RecordingDisplay, RecordingSink, Shown,
+};
 
 /// A step of a transition whose weight and threshold are both `value`.
 fn step(value: u8) -> Mix {
@@ -1733,4 +1735,95 @@ fn after_a_replay_without_live_input_no_button_is_held() {
     assert_eq!(rig.frame_input(1), []);
     assert_eq!(rig.frame_input(2), [held(&[])]);
     assert_eq!(rig.frame_input(3), []);
+}
+
+// What the display is told about pacing.
+
+/// What the display has been told about pacing since the last call.
+fn pacing(rig: &mut Rig) -> Vec<PacingEvent> {
+    std::mem::take(&mut rig.session.display_mut().pacing)
+}
+
+const RATE_40: PacingEvent = PacingEvent::Rate(40);
+const RESTART: PacingEvent = PacingEvent::Restart;
+
+#[test]
+fn display_is_told_the_frame_rate_of_every_frame_before_it_renders_it() {
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    rig.frame(frame_at_rate(1, 20));
+    rig.frame(frame(2));
+    // A rejected frame is one too.
+    rig.frame(invalid_frame(3));
+    assert_eq!(
+        pacing(&mut rig),
+        [RATE_40, PacingEvent::Rate(20), RATE_40, RATE_40]
+    );
+}
+
+#[test]
+fn display_restarts_its_pacing_with_the_frame_after_a_frame_reset() {
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    rig.send(GuestToHost::FrameReset);
+    assert_eq!(pacing(&mut rig), [RATE_40], "not before the frame");
+    rig.frame(frame(1));
+    rig.frame(frame(2));
+    assert_eq!(pacing(&mut rig), [RESTART, RATE_40, RATE_40]);
+}
+
+#[test]
+fn display_restarts_its_pacing_with_every_frame_of_a_fast_forward_and_the_one_after() {
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    rig.key(KeyCode::Tab, true);
+    rig.frame(frame(1));
+    rig.frame(frame(2));
+    rig.key(KeyCode::Tab, false);
+    rig.frame(frame(3));
+    rig.frame(frame(4));
+    assert_eq!(
+        pacing(&mut rig),
+        [
+            RATE_40, RESTART, RATE_40, RESTART, RATE_40, RESTART, RATE_40, RATE_40
+        ]
+    );
+
+    // Engaged and released between two frames, or released by a loss of focus.
+    rig.session.set_fast_forward(true);
+    rig.session.set_fast_forward(false);
+    rig.frame(frame(5));
+    rig.key(KeyCode::Tab, true);
+    rig.session.focus_lost();
+    rig.frame(frame(6));
+    rig.session.focus_lost();
+    rig.frame(frame(7));
+    assert_eq!(
+        pacing(&mut rig),
+        [RESTART, RATE_40, RESTART, RATE_40, RATE_40]
+    );
+}
+
+#[test]
+fn display_restarts_its_pacing_with_the_frame_after_a_modal_wait() {
+    let mut rig = Rig::windowed();
+    rig.frame(frame(0));
+    rig.send(GuestToHost::Modal {
+        text: "wait".to_owned(),
+    });
+    rig.clock.advance(ms(3000));
+    assert_eq!(rig.key(KeyCode::Enter, true), [HostToGuest::ModalDismissed]);
+    rig.key(KeyCode::Enter, false);
+    rig.frame(frame(1));
+    rig.frame(frame(2));
+    assert_eq!(pacing(&mut rig), [RATE_40, RESTART, RATE_40, RATE_40]);
+
+    // A message that does not wait breaks no rhythm.
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    rig.send(GuestToHost::Modal {
+        text: "no wait".to_owned(),
+    });
+    rig.frame(frame(1));
+    assert_eq!(pacing(&mut rig), [RATE_40, RATE_40]);
 }
