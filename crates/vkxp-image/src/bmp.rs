@@ -47,7 +47,8 @@ struct Header {
     height: u32,
     top_down: bool,
     bits: u16,
-    /// Where the palette starts.
+    /// Where the palette starts: the end of the information header and of the channel masks
+    /// that may follow it. The pixels cannot start before this.
     palette_offset: usize,
     /// Bytes per palette entry: blue, green, red and, in all but the oldest header, a filler.
     palette_entry_len: usize,
@@ -57,11 +58,18 @@ struct Header {
 
 fn header(bytes: &[u8]) -> Result<Header, ImageError> {
     let header_len = u32_at(bytes, FILE_HEADER_LEN)?;
+    // The whole header the file declares must be present, whatever part of it is read.
     let palette_offset = usize::try_from(header_len)
         .ok()
         .and_then(|len| len.checked_add(FILE_HEADER_LEN))
+        .filter(|end| *end <= bytes.len())
         .ok_or_else(truncated)?;
+    let check_planes = |planes: u16| match planes {
+        1 => Ok(()),
+        other => Err(malformed(format!("{other} colour planes"))),
+    };
     if header_len == CORE_HEADER_LEN {
+        check_planes(u16_at(bytes, 22)?)?;
         return Ok(Header {
             width: u32::from(u16_at(bytes, 18)?),
             height: u32::from(u16_at(bytes, 20)?),
@@ -79,9 +87,16 @@ fn header(bytes: &[u8]) -> Result<Header, ImageError> {
     }
     let width = i32_at(bytes, 18)?;
     let height = i32_at(bytes, 22)?;
+    check_planes(u16_at(bytes, 26)?)?;
     let bits = u16_at(bytes, 28)?;
     let compression = u32_at(bytes, 30)?;
     let colors_used = u32_at(bytes, 46)?;
+    // The common header is followed by its channel masks; later headers contain them.
+    let masks_len = if compression == BI_BITFIELDS && header_len == INFO_HEADER_LEN {
+        12
+    } else {
+        0
+    };
     match compression {
         BI_RGB => {}
         // The layout that image editors write for 32 bits is the uncompressed one with its
@@ -108,7 +123,7 @@ fn header(bytes: &[u8]) -> Result<Header, ImageError> {
         height: height.unsigned_abs(),
         top_down: height < 0,
         bits,
-        palette_offset,
+        palette_offset: palette_offset + masks_len,
         palette_entry_len: 4,
         colors_used,
     })
@@ -147,6 +162,13 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
     } else {
         Vec::new()
     };
+    // The pixels come after the headers and the palette, never on top of them.
+    let pixels_from = header.palette_offset + palette.len() * header.palette_entry_len;
+    if (pixel_offset as u64) < pixels_from as u64 {
+        return Err(malformed(format!(
+            "pixels at offset {pixel_offset} overlap the {pixels_from} bytes of headers and palette"
+        )));
+    }
 
     // Rows are padded to a multiple of four bytes. All of them must be present before the
     // pixel buffer is allocated.
@@ -185,9 +207,12 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
                     // Pixels are packed from the most significant bit of each byte.
                     let shift = 8 - bits - (x * bits) % 8;
                     let index = (row[x * bits / 8] >> shift) & (0xFF >> (8 - bits));
-                    // An index past the end of the palette is black, as Windows shows it.
-                    let [red, green, blue] =
-                        palette.get(usize::from(index)).copied().unwrap_or_default();
+                    let [red, green, blue] = *palette.get(usize::from(index)).ok_or_else(|| {
+                        malformed(format!(
+                            "palette index {index} with {} palette entries",
+                            palette.len()
+                        ))
+                    })?;
                     *out = [red, green, blue, 255];
                 }
             }
@@ -270,12 +295,97 @@ mod tests {
         assert_eq!(decode_ok(&bytes, 3, 2), expected);
     }
 
+    fn is_malformed(bytes: &[u8]) -> bool {
+        matches!(
+            crate::decode(bytes),
+            Err(ImageError::Malformed {
+                format: ImageFormat::Bmp,
+                ..
+            })
+        )
+    }
+
     #[test]
-    fn index_past_the_palette_is_black() {
-        let bytes = Bmp::new(2, 1, 8, vec![1, 200, 0, 0])
+    fn index_past_the_palette_is_malformed() {
+        let two_colours = [[10, 20, 30, 0], [40, 50, 60, 0]];
+        let bmp = |pixels: Vec<u8>| Bmp::new(2, 1, 8, pixels).palette(&two_colours).build();
+        assert_eq!(
+            decode_ok(&bmp(vec![1, 0, 0, 0]), 2, 1),
+            [60, 50, 40, 255, 30, 20, 10, 255]
+        );
+        assert!(is_malformed(&bmp(vec![1, 200, 0, 0])));
+        assert!(is_malformed(&bmp(vec![2, 0, 0, 0])));
+        // Padding bytes are not pixels and may hold anything.
+        assert!(crate::decode(&bmp(vec![1, 0, 200, 200])).is_ok());
+
+        // Four bits can name sixteen colours; this file has three.
+        let three = [[0; 4], [1; 4], [2; 4]];
+        let bmp = |pixels: Vec<u8>| Bmp::new(2, 1, 4, pixels).palette(&three).build();
+        assert!(crate::decode(&bmp(vec![0x21, 0, 0, 0])).is_ok());
+        assert!(is_malformed(&bmp(vec![0x23, 0, 0, 0])));
+    }
+
+    #[test]
+    fn broken_structure_is_malformed() {
+        let valid = Bmp::new(1, 1, 24, vec![1, 2, 3, 0]).build();
+        assert_eq!(valid.len(), 58);
+        assert_eq!(decode_ok(&valid, 1, 1), [3, 2, 1, 255]);
+        let with = |offset: usize, value: &[u8]| {
+            let mut bytes = valid.clone();
+            bytes[offset..offset + value.len()].copy_from_slice(value);
+            bytes
+        };
+        // The number of colour planes is always 1.
+        assert!(is_malformed(&with(26, &0u16.to_le_bytes())));
+        assert!(is_malformed(&with(26, &2u16.to_le_bytes())));
+        // Pixels that start inside the file header or the information header.
+        for offset in [0u32, 13, 14, 53] {
+            assert!(is_malformed(&with(10, &offset.to_le_bytes())), "{offset}");
+        }
+        // An information header longer than the file.
+        for header_len in [124u32, 45, u32::MAX] {
+            assert!(
+                is_malformed(&with(14, &header_len.to_le_bytes())),
+                "{header_len}"
+            );
+        }
+        // A longer header that is present is fine, with the pixels behind it.
+        let mut longer = valid.clone();
+        longer.splice(54..54, [0; 68]);
+        longer[14..18].copy_from_slice(&108u32.to_le_bytes());
+        assert!(is_malformed(&longer));
+        longer[10..14].copy_from_slice(&122u32.to_le_bytes());
+        assert_eq!(decode_ok(&longer, 1, 1), [3, 2, 1, 255]);
+
+        // Pixels that start inside the palette.
+        let indexed = Bmp::new(1, 1, 8, vec![1, 0, 0, 0])
             .palette(&[[10, 20, 30, 0], [40, 50, 60, 0]])
             .build();
-        assert_eq!(decode_ok(&bytes, 2, 1), [60, 50, 40, 255, 0, 0, 0, 255]);
+        assert_eq!(decode_ok(&indexed, 1, 1), [60, 50, 40, 255]);
+        let mut overlapping = indexed.clone();
+        overlapping[10..14].copy_from_slice(&58u32.to_le_bytes());
+        assert!(is_malformed(&overlapping));
+
+        // Pixels that start inside the channel masks behind a 40-byte header.
+        let mut masked = Bmp::new(1, 1, 32, vec![1, 2, 3, 4]);
+        masked.compression = BI_BITFIELDS;
+        let mut masked = masked.build();
+        let masks = [0x00FF_0000u32, 0x0000_FF00, 0x0000_00FF].map(u32::to_le_bytes);
+        masked.splice(54..54, masks.concat());
+        assert!(is_malformed(&masked));
+        masked[10..14].copy_from_slice(&66u32.to_le_bytes());
+        assert_eq!(decode_ok(&masked, 1, 1), [3, 2, 1, 4]);
+
+        // The oldest header has its plane count checked too.
+        let mut core = b"BM".to_vec();
+        core.extend([0; 8]);
+        core.extend(32u32.to_le_bytes());
+        core.extend(12u32.to_le_bytes());
+        core.extend([1, 0, 1, 0, 0, 0, 1, 0]);
+        core.extend([10, 20, 30, 40, 50, 60, 0x80, 0, 0, 0]);
+        assert!(is_malformed(&core));
+        core[22] = 1;
+        assert_eq!(decode_ok(&core, 1, 1), [60, 50, 40, 255]);
     }
 
     #[test]
