@@ -2,7 +2,7 @@
 
 ## 1. Schedule and statistics (`vkxp-vk`)
 
-- [ ] 1.1 Implement the present schedule and the interval statistics as pure types. Verify: the first three scenarios of the target-times requirement and the scenario of the statistics requirement in `specs/vulkan-presentation/spec.md`.
+- [x] 1.1 Implement the present schedule and the interval statistics as pure types. Verify: the first three scenarios of the target-times requirement and the scenario of the statistics requirement in `specs/vulkan-presentation/spec.md`.
 
 ## 2. Extension (`vkxp-vk`)
 
