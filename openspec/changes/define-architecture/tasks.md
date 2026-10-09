@@ -34,4 +34,4 @@
 
 ## 6. Integration check
 
-- [ ] 6.1 Run the full gate on the finished tree. Verify: `cargo xtask gate` exits 0 and `openspec validate define-architecture` passes.
+- [x] 6.1 Run the full gate on the finished tree. Verify: `cargo xtask gate` exits 0 and `openspec validate define-architecture` passes.
