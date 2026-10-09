@@ -42,4 +42,4 @@
 
 ## 8. Integration check
 
-- [ ] 8.1 Run the full gate. Verify: `cargo xtask gate` exits 0, `cargo xtask deps` reports no violation, and `openspec validate embed-ruby-interpreter --strict` passes.
+- [x] 8.1 Run the full gate. Verify: `cargo xtask gate` exits 0, `cargo xtask deps` reports no violation, and `openspec validate embed-ruby-interpreter --strict` passes.

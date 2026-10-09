@@ -3,8 +3,8 @@
 A Rust + Vulkan runtime for RPG Maker XP (RGSS1) games. Linux first, MIT licensed.
 
 The project is at its foundation stage: the workspace, the guest/host protocol, a CPU
-reference compositor and a headless Vulkan compositor exist; Ruby, windowing and audio do not
-yet. `docs/decisions.md`
+reference compositor, a headless Vulkan compositor and the embedded Ruby interpreter exist; the
+RGSS binding, windowing and audio do not yet. `docs/decisions.md`
 records the settled design, and `openspec/` holds the change proposals that implement it.
 
 ## Layout
