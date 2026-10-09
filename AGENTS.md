@@ -14,8 +14,9 @@ changing anything; it records decisions that are settled.
 - `unsafe` is allowed only in `vkxp-vk`, `vkxp-ruby-sys`, `vkxp-binding` and platform code.
 - Never commit anything from `../ref` or `../games`, any original DLL, RTP asset, or Enterbrain
   Ruby source. Tests use procedurally generated images only.
-- Gate before declaring done: `cargo xtask gate` (format check, clippy with warnings denied,
-  workspace tests, `openspec validate --all`).
+- Gate before declaring done: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` (format
+  check, clippy with warnings denied, workspace tests, `openspec validate --all`). The Vulkan
+  tests refuse to run unless the loader is restricted to chosen drivers.
 - Chat with the owner in Chinese; everything written to the repository stays English.
 
 ## Scope and proportion
@@ -49,6 +50,9 @@ From the main checkout they are `../ref` and `../games`; from a clone or worktre
 - Files that must not be committed (downloads, extracted data) go under `local/`, which is
   ignored.
 - GPU rule for the development machine: the Intel Arc B580 is reserved for unrelated
-  measurement work and must never be used or opened. Vulkan tests default to llvmpipe; a
-  hardware run uses the AMD integrated GPU with
-  `VK_LOADER_DRIVERS_SELECT='*radeon*' VKXP_TEST_DEVICE=RADV`.
+  measurement work and must never be used or opened. Naming a device is not enough, because
+  the Vulkan loader loads every installed driver to enumerate devices. Every command that
+  reaches Vulkan (tests, the gate, examples, the game itself) therefore restricts the loader:
+  `VK_LOADER_DRIVERS_SELECT='*lvp*'` for llvmpipe, which is the default for tests, or
+  `VK_LOADER_DRIVERS_SELECT='*radeon*' VKXP_TEST_DEVICE=RADV` for a hardware run on the AMD
+  integrated GPU.
