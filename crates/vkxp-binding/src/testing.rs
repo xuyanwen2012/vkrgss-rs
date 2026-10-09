@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use vkxp_core::test_support::CellRasterizer;
-use vkxp_core::{Font, Mask, TextRasterizer};
+use vkxp_core::{Font, Mask, TextMetrics, TextRasterizer};
 use vkxp_ruby_sys::{Interpreter, Options, Ruby, RubyError};
 use vkxp_vfs::GameFiles;
 
@@ -62,12 +62,18 @@ impl CellBackend {
 }
 
 impl TextRasterizer for CellBackend {
-    fn measure(&self, font: &Font, text: &str) -> (u32, u32) {
-        CellRasterizer.measure(font, text)
+    fn metrics(&self, font: &Font, text: &str) -> TextMetrics {
+        CellRasterizer.metrics(font, text)
     }
 
-    fn rasterize(&self, font: &Font, text: &str) -> Mask {
-        CellRasterizer.rasterize(font, text)
+    fn rasterize(
+        &self,
+        font: &Font,
+        text: &str,
+        advances: &[u32],
+        condense: Option<(u32, u32)>,
+    ) -> Mask {
+        CellRasterizer.rasterize(font, text, advances, condense)
     }
 }
 

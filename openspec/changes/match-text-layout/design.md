@@ -54,3 +54,38 @@
 ## Follow-ups
 
 - Overhangs of squeezed and synthesised glyphs; glyph coverage levels; real Windows fonts.
+- Found while implementing; nothing was built for these:
+  - A character drawn from a fallback font is set at the selected font's missing-glyph
+    advance, as decided. Where that advance is narrower than the glyph (Chinese text in a
+    Latin-only font: 0.75 em in Liberation Sans) neighbouring glyphs overlap. Is that wanted
+    for play, or should the fallback glyph keep its own advance?
+  - Ascent and descent are rounded each on its own, so a line box equal to the em does not
+    always give a height equal to the size: the 220 + 36 of 256 box gives 33 at size 32 and
+    97 at size 96 (82.5 and 13.5 both round up). The README states height = size for such
+    fonts; which is right needs a measurement with such a font.
+  - Synthesised styles: the overhangs differ from the measured ones. The original's bold
+    grows the outline to the left and upwards as well (a first glyph such as `A` gets a left
+    overhang of 1, so `text_size` is 1 wider there), and its italic overhangs follow the
+    slanted bounding box of the glyph, not its ink. The slant used here (0.25) is not
+    measured. The advances agree in all 2024 width samples; the committed width samples
+    check width and height for the regular style and the advances for the others, and only
+    the regular overhang and alignment samples are committed.
+  - One of the 506 regular width samples differs: `Y` at size 6 has a left overhang of 1 in
+    the original and 0 here (a difference of the rasterisers at 4 pixels per em). The
+    committed selection has the sizes 12, 22, 48 and 96.
+  - Squeeze samples: `HH` in Liberation Sans at size 13 lists the widths 18, 14, 12 where
+    the rule also gives 8 at the 60 percent step, inside the range of rectangle widths the
+    probe covered. The test checks the listed widths only for this sample; the case needs a
+    second look at the probe output. The sample with an overhang (`EE` at size 6) is skipped.
+  - The measured vertical and alignment samples are checked through the font adapter, which
+    is in `crates/vkxp/src/font.rs` (the binary crate), not in `vkxp-binding`. They need the
+    measured font and are skipped without it. The last ink row (the baseline) and the first
+    ink column are compared exactly; the first ink row and the last ink column within one
+    pixel, since they depend on how the glyph is rasterised (no hinting here).
+  - `Font#size=` keeps the whole part of a fractional size (`96.5` reads back as 96, in the
+    original as 96.5), since the core font size is an integer. `Font.new(name, size)` and
+    `Font.default_size=` are not range-checked; they were not measured.
+  - The `TypeError` for text that is not a string has the wording of the embedded Ruby 1.8.7
+    (`can't convert Fixnum into String`), the original's 1.8.1 says `cannot convert`.
+  - A control character the font lacks now draws the font's missing-glyph box, as in the
+    original; scripts that pass `"\n"` to `draw_text` show a box.

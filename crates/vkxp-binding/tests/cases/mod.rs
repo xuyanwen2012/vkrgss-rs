@@ -390,6 +390,33 @@ pub const MARSHAL: &[Case] = &[
 // --- rgss-values: Font ------------------------------------------------------------------------
 
 pub const FONT: &[Case] = &[
+    raises_with(
+        "a size below 6",
+        "Font.new.size = 5",
+        "ArgumentError",
+        "bad value for size",
+    ),
+    raises_with(
+        "a size above 96",
+        "Font.new.size = 97",
+        "ArgumentError",
+        "bad value for size",
+    ),
+    value(
+        "sizes at the ends of the range and a fractional size",
+        "f = Font.new; [6, 96, 96.5, 6.9, 5.9, 0, 1, -1, 97, 120].map { |size| begin; f.size = size; f.size; rescue ArgumentError; :bad; end }",
+        "[6, 96, 96, 6, :bad, :bad, :bad, :bad, :bad, :bad]",
+    ),
+    value(
+        "a refused size leaves the font as it was",
+        "f = Font.new; begin; f.size = 120; rescue ArgumentError; end; f.size",
+        "22",
+    ),
+    raises(
+        "a size that is not a number",
+        r#"Font.new.size = "22""#,
+        "TypeError",
+    ),
     value(
         "defaults are copied",
         "Font.default_size = 30; f = Font.new; Font.default_size = 22; f.size",
@@ -750,10 +777,25 @@ pub const BITMAP_TEXT: &[Case] = &[
         r#"b = Bitmap.new(200, 40); b.font.color = Color.new(255, 0, 0); b.draw_text(0, 0, 200, 40, "A"); (0...11).map { |x| p = b.get_pixel(x, 20); [p.red, p.green, p.blue, p.alpha > 0] }.uniq"#,
         "[[255.0, 0.0, 0.0, true]]",
     ),
+    raises(
+        "draw_text with text that is not a string",
+        r#"Bitmap.new(200, 40).draw_text(0, 0, 100, 32, 123)"#,
+        "TypeError",
+    ),
+    raises(
+        "draw_text with a rectangle and text that is not a string",
+        r#"b = Bitmap.new(200, 40); b.draw_text(b.rect, :text)"#,
+        "TypeError",
+    ),
+    raises(
+        "text_size with text that is not a string",
+        r#"Bitmap.new(1, 1).text_size(123)"#,
+        "TypeError",
+    ),
     value(
-        "numbers are converted",
-        r#"b = Bitmap.new(200, 40); b.draw_text(0, 0, 200, 40, 123); c = Bitmap.new(200, 40); c.draw_text(0, 0, 200, 40, "123"); row = lambda { |m| (0...200).map { |x| m.get_pixel(x, 20).alpha } }; [row.call(b) == row.call(c), row.call(b).select { |a| a > 0 }.size, b.text_size(123).width]"#,
-        "[true, 33, 33]",
+        "an empty string has no size",
+        r#"Bitmap.new(1, 1).text_size("").to_s"#,
+        r#""(0, 0, 0, 0)""#,
     ),
     value(
         "the rectangle form and alignment",
@@ -815,7 +857,7 @@ pub const BITMAP_COPYING: &[Case] = &[
     ),
     value(
         "a copy has the size, pixels and font values",
-        r#"a = Bitmap.new(3, 2); a.set_pixel(2, 1, Color.new(9, 8, 7, 6)); a.font.size = 31; a.font.name = ["P", "Q"]; a.font.bold = true; a.font.color = Color.new(1, 2, 3); b = a.dup; e = [b.width, b.height, b.get_pixel(2, 1).to_s, b.font.size, b.font.name, b.font.bold, b.font.color == a.font.color, b.font.equal?(a.font), b.font.color.equal?(a.font.color)]; a.set_pixel(2, 1, Color.new(0, 0, 0)); a.font.size = 5; a.font.color.red = 200; e + [b.get_pixel(2, 1).alpha, b.font.size, b.font.color.red]"#,
+        r#"a = Bitmap.new(3, 2); a.set_pixel(2, 1, Color.new(9, 8, 7, 6)); a.font.size = 31; a.font.name = ["P", "Q"]; a.font.bold = true; a.font.color = Color.new(1, 2, 3); b = a.dup; e = [b.width, b.height, b.get_pixel(2, 1).to_s, b.font.size, b.font.name, b.font.bold, b.font.color == a.font.color, b.font.equal?(a.font), b.font.color.equal?(a.font.color)]; a.set_pixel(2, 1, Color.new(0, 0, 0)); a.font.size = 6; a.font.color.red = 200; e + [b.get_pixel(2, 1).alpha, b.font.size, b.font.color.red]"#,
         r#"[3, 2, "(9.000000, 8.000000, 7.000000, 6.000000)", 31, ["P", "Q"], true, true, false, false, 6.0, 31, 1.0]"#,
     ),
     raises(

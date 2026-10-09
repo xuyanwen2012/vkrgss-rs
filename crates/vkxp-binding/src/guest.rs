@@ -189,19 +189,25 @@ mod tests {
     use std::panic::{self, AssertUnwindSafe};
 
     use vkxp_core::test_support::CellRasterizer;
-    use vkxp_core::{Font, Mask, TextRasterizer};
+    use vkxp_core::{Font, Mask, TextMetrics, TextRasterizer};
 
     use super::*;
 
     struct NoFonts;
 
     impl TextRasterizer for NoFonts {
-        fn measure(&self, font: &Font, text: &str) -> (u32, u32) {
-            CellRasterizer.measure(font, text)
+        fn metrics(&self, font: &Font, text: &str) -> TextMetrics {
+            CellRasterizer.metrics(font, text)
         }
 
-        fn rasterize(&self, font: &Font, text: &str) -> Mask {
-            CellRasterizer.rasterize(font, text)
+        fn rasterize(
+            &self,
+            font: &Font,
+            text: &str,
+            advances: &[u32],
+            condense: Option<(u32, u32)>,
+        ) -> Mask {
+            CellRasterizer.rasterize(font, text, advances, condense)
         }
     }
 

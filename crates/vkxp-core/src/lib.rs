@@ -21,9 +21,9 @@
 //!   bitmaps and draws into them: pixel access, `clear`, `fill_rect`, `blt`, `stretch_blt`,
 //!   `hue_change`. Failures are a [`BitmapError`]: a disposed bitmap, or a creation that
 //!   failed for a [`CreateFailure`].
-//! - Text. `draw_text` and `text_size` lay text out and blend it; the glyph coverage comes
-//!   from a [`TextRasterizer`] that the embedder supplies as a [`Mask`]. [`test_support`] has
-//!   a deterministic stand-in for tests.
+//! - Text. `draw_text` and `text_size` lay text out and blend it; the measurements
+//!   ([`TextMetrics`]) and the glyph coverage (a [`Mask`]) come from a [`TextRasterizer`]
+//!   that the embedder supplies. [`test_support`] has a deterministic stand-in for tests.
 //! - Deltas. Every drawing operation records the rectangle it may have changed, and
 //!   [`Bitmaps::deltas`] turns that into the `BitmapDelta`s (create, update, destroy) a
 //!   compositor needs for the bitmaps a frame refers to.
@@ -81,7 +81,7 @@
 //! | `table` | [`Table`], [`SharedTable`] |
 //! | `font` | [`Font`], [`FontDefaults`] |
 //! | `bitmap` | [`Bitmaps`], [`MAX_BITMAP_PIXELS`], the drawing operations |
-//! | `text` | [`TextRasterizer`], [`Mask`], [`Align`], `draw_text`, `text_size` |
+//! | `text` | [`TextRasterizer`], [`TextMetrics`], [`Mask`], [`Align`], `draw_text`, `text_size` |
 //! | `delta` | changed rectangles and [`Bitmaps::deltas`] |
 //! | `scene` | [`Scene`], the element arenas and their handles, creation and disposal |
 //! | `element` | [`Sprite`], [`Viewport`], [`Window`], [`Plane`], [`Tilemap`], flashes |
@@ -130,4 +130,4 @@ pub use scene::{
     WindowId,
 };
 pub use table::{SharedTable, Table};
-pub use text::{Align, Mask, TextRasterizer};
+pub use text::{Align, Mask, TextMetrics, TextRasterizer};

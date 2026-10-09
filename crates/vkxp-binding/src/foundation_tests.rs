@@ -26,19 +26,15 @@ fn probe_text(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     rb::string_new(ruby, rb::text(ruby, args[0])?.as_bytes())
 }
 
-fn probe_to_text(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
-    rb::string_new(ruby, rb::to_text(ruby, args[0])?.as_bytes())
-}
-
 /// Takes one or two arguments and returns how many it got.
 fn probe_count(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     rb::check_count(ruby, args, 1, 2)?;
     Ok(rb::fix(args.len() as i32))
 }
 
-/// Fails with the error the symbol names.
+/// Fails with the error the string names.
 fn probe_fail(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
-    let which = rb::to_text(ruby, args[0])?;
+    let which = rb::text(ruby, args[0])?;
     let files = GameFiles::new(testing::game_dir(), []);
     let error: Error = match which.as_str() {
         "disposed" => BitmapError::Disposed.into(),
@@ -100,7 +96,6 @@ fn define(ruby: &Ruby) {
     rb::class_method(ruby, module, c"int", 1, probe_int).unwrap();
     rb::class_method(ruby, module, c"float", 1, probe_float).unwrap();
     rb::class_method(ruby, module, c"text", 1, probe_text).unwrap();
-    rb::class_method(ruby, module, c"to_text", 1, probe_to_text).unwrap();
     rb::class_method(ruby, module, c"count", -1, probe_count).unwrap();
     rb::class_method(ruby, module, c"fail", 1, probe_fail).unwrap();
     rb::class_method(ruby, module, c"held_bytes", 1, probe_held_bytes).unwrap();
@@ -206,9 +201,6 @@ fn strings_convert_and_invalid_utf8_is_replaced() {
         raised("BindingProbe.text(12)"),
         raises("TypeError", "can't convert Fixnum into String")
     );
-    assert_eq!(eval("BindingProbe.to_text(123)").as_deref(), Ok("\"123\""));
-    assert_eq!(eval("BindingProbe.to_text('x')").as_deref(), Ok("\"x\""));
-    assert_eq!(eval("BindingProbe.to_text(nil)").as_deref(), Ok("\"\""));
 }
 
 #[test]
@@ -247,33 +239,33 @@ fn rgss_error_is_a_standard_error() {
 #[test]
 fn each_error_maps_to_its_exception() {
     assert_eq!(
-        raised("BindingProbe.fail(:disposed)"),
+        raised("BindingProbe.fail('disposed')"),
         raises("RGSSError", "disposed bitmap")
     );
     assert_eq!(
-        raised("BindingProbe.fail(:create)"),
+        raised("BindingProbe.fail('create')"),
         raises("RGSSError", "failed to create bitmap")
     );
     assert_eq!(
-        raised("BindingProbe.fail(:image)"),
+        raised("BindingProbe.fail('image')"),
         raises("RGSSError", "failed to create bitmap")
     );
     assert_eq!(
-        raised("BindingProbe.fail(:missing)"),
+        raised("BindingProbe.fail('missing')"),
         raises(
             "Errno::ENOENT",
             "No such file or directory - Graphics/Pictures/Nope"
         )
     );
-    assert_eq!(raised("BindingProbe.fail(:unreadable)").0, "IOError");
+    assert_eq!(raised("BindingProbe.fail('unreadable')").0, "IOError");
     assert_eq!(
-        raised("BindingProbe.fail(:decode)"),
+        raised("BindingProbe.fail('decode')"),
         raises(
             "ArgumentError",
             "serialized colour must be 32 bytes long, found 31"
         )
     );
-    assert_eq!(raised("BindingProbe.fail(:table)").0, "ArgumentError");
+    assert_eq!(raised("BindingProbe.fail('table')").0, "ArgumentError");
 }
 
 /// An instance of an anonymous class that is frozen: naming the class for a message has to

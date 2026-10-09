@@ -1,9 +1,14 @@
 //! Text: the rasteriser interface, and drawing and measuring text in a bitmap.
 //!
-//! This crate lays text out and blends it; turning a string into glyph coverage is the job of
-//! a [`TextRasterizer`] that the embedder supplies.
+//! This crate lays text out and blends it; measuring a string and turning it into glyph
+//! coverage is the job of a [`TextRasterizer`] that the embedder supplies.
+//!
+//! The layout rules are those measured on the original runtime. Text is placed by its drawn
+//! width, the measured width plus the last glyph's right overhang. Text wider than its
+//! rectangle is not scaled: it is set again in a narrower form of the font, at the first of
+//! four steps that fits.
 
-use vkxp_pixel::{blend_normal, effective_alpha, stretch_index};
+use vkxp_pixel::{blend_normal, effective_alpha};
 use vkxp_proto::BitmapId;
 
 use crate::bitmap::Area;
@@ -61,15 +66,54 @@ impl Mask {
     }
 }
 
-/// Turns text into glyph coverage. Implemented for real fonts outside this crate.
-pub trait TextRasterizer {
-    /// The width and height of `text` in `font`, in pixels. An empty string has width 0 and
-    /// the height of one line.
-    fn measure(&self, font: &Font, text: &str) -> (u32, u32);
+/// How a string is set in a font: what placing and squeezing it needs.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TextMetrics {
+    /// The height of the text, which is not always the font's size.
+    pub height: u32,
+    /// The advance of each character, in order. Empty for an empty string.
+    pub advances: Vec<u32>,
+    /// How far the first glyph reaches left of the pen.
+    pub left_overhang: u32,
+    /// How far the last glyph reaches right of its advance.
+    pub right_overhang: u32,
+    /// The font's average character width, at least 1.
+    pub average_width: u32,
+    /// The pixels a synthesised bold adds to every advance and to the average width; they
+    /// are not scaled when text is squeezed.
+    pub emboldened: u32,
+}
 
-    /// The coverage of `text` in `font`: a mask of exactly the size [`TextRasterizer::measure`]
-    /// reports.
-    fn rasterize(&self, font: &Font, text: &str) -> Mask;
+impl TextMetrics {
+    /// The measured width: the advances plus the first glyph's left overhang.
+    pub fn width(&self) -> u32 {
+        total(&self.advances).saturating_add(self.left_overhang)
+    }
+}
+
+fn total(advances: &[u32]) -> u32 {
+    advances.iter().fold(0, |sum, &a| sum.saturating_add(a))
+}
+
+/// Measures text and turns it into glyph coverage. Implemented for real fonts outside this
+/// crate.
+pub trait TextRasterizer {
+    /// How `text` is set in `font`.
+    fn metrics(&self, font: &Font, text: &str) -> TextMetrics;
+
+    /// The coverage of `text` in `font` with the characters set `advances` apart, one advance
+    /// per character, and every glyph `condense.0 / condense.1` as wide as it naturally is.
+    ///
+    /// The mask is the cell of the text: as high as the text, and as wide as the advances
+    /// plus the overhangs of the first and the last glyph as drawn. With the advances of
+    /// [`TextRasterizer::metrics`] and no condensing these are the overhangs it reports.
+    fn rasterize(
+        &self,
+        font: &Font,
+        text: &str,
+        advances: &[u32],
+        condense: Option<(u32, u32)>,
+    ) -> Mask;
 }
 
 /// Horizontal placement of text inside its rectangle.
@@ -81,45 +125,68 @@ pub enum Align {
     Right,
 }
 
-/// The width text of natural width `natural` is drawn with in a rectangle of width `width`,
-/// and the distance of its left edge from the rectangle's.
-///
-/// Text that fits keeps its width and is placed by `align`. Wider text is squeezed to the
-/// rectangle's width, but to no less than 60 percent of its natural width (rounded up), and
-/// starts at the rectangle's left edge.
-///
-/// PLACEHOLDER: the 60 percent limit and the placement of text that still does not fit are not
-/// yet checked against the original runtime.
-fn horizontal_layout(natural: u32, width: u32, align: Align) -> (u32, u32) {
-    if natural <= width {
-        let free = width - natural;
-        let offset = match align {
-            Align::Left => 0,
-            Align::Center => free / 2,
-            Align::Right => free,
-        };
-        return (natural, offset);
+/// The distance of the left edge of text `drawn` wide from that of a rectangle `width` wide
+/// that holds it.
+fn align_offset(drawn: u32, width: u32, align: Align) -> u32 {
+    let free = width.saturating_sub(drawn);
+    match align {
+        Align::Left => 0,
+        Align::Center => free / 2,
+        Align::Right => free,
     }
-    // ceil(0.6 * natural), which is below `natural` and so fits `u32`.
-    let limit = (u64::from(natural) * 3).div_ceil(5) as u32;
-    (width.max(limit), 0)
+}
+
+/// The step numbers of squeezing: 90, 80, 70 and 60 percent.
+const SQUEEZE_STEPS: [u32; 4] = [9, 8, 7, 6];
+
+/// The advances of text squeezed to step `step` of a font of size `size`, and the fraction
+/// of its natural width each glyph is condensed to.
+///
+/// The narrower font has the average character width `k = (size * step * ave) div (10 * th)`
+/// for the natural average `ave` and the text height `th`, and each advance is
+/// `ceil(natural * k / ave)`. The pixel a synthesised bold adds is taken off before and put
+/// back after, and the division is by the average without it.
+///
+/// PLACEHOLDER: the rounding up and the factor `size / th` are those of Wine's GDI, under
+/// which the original runtime was measured; whether they are the runtime's or Wine's is not
+/// determined.
+fn squeeze(metrics: &TextMetrics, size: u32, step: u32) -> (Vec<u32>, (u32, u32)) {
+    let bold = u64::from(metrics.emboldened);
+    let average = u64::from(metrics.average_width.max(1));
+    let regular = average.saturating_sub(bold).max(1);
+    let height = u64::from(metrics.height.max(1));
+    let k = u64::from(size) * u64::from(step) * average / (10 * height);
+    let advances = metrics
+        .advances
+        .iter()
+        .map(|&natural| {
+            let natural = u64::from(natural).saturating_sub(bold);
+            ((natural * k).div_ceil(regular) + bold).min(u64::from(u32::MAX)) as u32
+        })
+        .collect();
+    let fraction = |value: u64| value.min(u64::from(u32::MAX)) as u32;
+    (advances, (fraction(k), fraction(regular)))
 }
 
 impl Bitmaps {
     /// Draws `text` inside `rect` with the bitmap's font.
     ///
-    /// The text is centred vertically (the free height halved, rounded down) and placed
-    /// horizontally by `align`. Text wider than the rectangle is squeezed to fit, to no less
-    /// than 60 percent of its natural width, by taking mask columns with
-    /// [`vkxp_pixel::stretch_index`]; what still does not fit is clipped, as is everything
-    /// outside the rectangle or the bitmap.
+    /// The text cell is as high as the text and as wide as the text is drawn: its measured
+    /// width plus the last glyph's right overhang. Its top is at
+    /// `y + max(0, (h - th) div 2)` for a text height `th`, so a rectangle lower than the
+    /// text shows the top of the cell. It is placed horizontally by `align`, with its drawn
+    /// width.
     ///
-    /// Each mask value `c` draws the font's colour with alpha
-    /// `effective_alpha(c, colour alpha)`, blended as a block transfer blends
-    /// ([`vkxp_pixel::blend_normal`]). A pixel whose alpha comes to 0 is left alone.
+    /// Text drawn wider than the rectangle is squeezed: set again with the advances and
+    /// condensed glyphs of the first of the steps 90, 80, 70 and 60 percent whose drawn
+    /// width fits, and aligned by that width. Text that does not fit at 60 percent is drawn
+    /// at that step from the rectangle's left edge. Everything outside the rectangle or the
+    /// bitmap is clipped.
     ///
-    /// PLACEHOLDER: how squeezed text is resampled is not yet checked against the original
-    /// runtime.
+    /// The whole cell is blended as a block transfer blends ([`vkxp_pixel::blend_normal`]):
+    /// each mask value `c` draws the font's colour with alpha
+    /// `effective_alpha(c, colour alpha)`, also where that is 0, which gives a transparent
+    /// pixel of the cell the font's colour. A font colour of alpha 0 draws nothing.
     pub fn draw_text(
         &mut self,
         id: BitmapId,
@@ -133,29 +200,61 @@ impl Bitmaps {
             return Ok(());
         };
         let [red, green, blue, color_alpha] = bitmap.font.color.to_pixel();
-        // With alpha 0 every glyph pixel is drawn with alpha 0, which changes nothing.
         if color_alpha == 0 {
             return Ok(());
         }
-        let mask = rasterizer.rasterize(&bitmap.font, text);
-        if mask.width == 0 || mask.height == 0 {
+        let metrics = rasterizer.metrics(&bitmap.font, text);
+        if metrics.advances.is_empty() || metrics.height == 0 {
             return Ok(());
         }
 
         // The rectangle is not empty here, so its sizes are positive.
-        let (drawn_width, offset) = horizontal_layout(mask.width, rect.width.unsigned_abs(), align);
-        let left = i64::from(rect.x) + i64::from(offset);
-        let top =
-            i64::from(rect.y) + (i64::from(rect.height) - i64::from(mask.height)).div_euclid(2);
+        let width = rect.width.unsigned_abs();
+        let drawn = metrics.width().saturating_add(metrics.right_overhang);
+        let (mask, offset) = if drawn <= width {
+            let mask = rasterizer.rasterize(&bitmap.font, text, &metrics.advances, None);
+            let offset = align_offset(mask.width, width, align);
+            (mask, offset)
+        } else {
+            let size = bitmap.font.size.max(0).unsigned_abs();
+            let mut squeezed = None;
+            for step in SQUEEZE_STEPS {
+                let last = step == SQUEEZE_STEPS[SQUEEZE_STEPS.len() - 1];
+                let (advances, condense) = squeeze(&metrics, size, step);
+                // The overhangs only add to the advances.
+                if total(&advances) > width && !last {
+                    continue;
+                }
+                let mask = rasterizer.rasterize(&bitmap.font, text, &advances, Some(condense));
+                if mask.width <= width {
+                    let offset = align_offset(mask.width, width, align);
+                    squeezed = Some((mask, offset));
+                    break;
+                }
+                if last {
+                    squeezed = Some((mask, 0));
+                }
+            }
+            let Some(squeezed) = squeezed else {
+                return Ok(());
+            };
+            squeezed
+        };
+        if mask.width == 0 || mask.height == 0 {
+            return Ok(());
+        }
 
-        // The part of the text that lies inside the rectangle and the bitmap.
+        let left = i64::from(rect.x) + i64::from(offset);
+        let free = i64::from(rect.height) - i64::from(mask.height);
+        let top = i64::from(rect.y) + (free / 2).max(0);
+
+        // The part of the text cell that lies inside the rectangle and the bitmap.
         let span = |start: i64, len: u32, low: usize, high: usize| {
             let first = start.max(low as i64);
             let end = (start + i64::from(len)).min(high as i64);
             (first < end).then_some((first as usize, end as usize))
         };
-        let Some((first_column, end_column)) = span(left, drawn_width, clip.left, clip.right)
-        else {
+        let Some((first_column, end_column)) = span(left, mask.width, clip.left, clip.right) else {
             return Ok(());
         };
         let Some((first_row, end_row)) = span(top, mask.height, clip.top, clip.bottom) else {
@@ -165,12 +264,8 @@ impl Bitmaps {
         for y in first_row..end_row {
             let mask_y = (y as i64 - top) as u32;
             for x in first_column..end_column {
-                let mask_x = stretch_index((x as i64 - left) as u32, mask.width, drawn_width);
+                let mask_x = (x as i64 - left) as u32;
                 let alpha = effective_alpha(mask.get(mask_x, mask_y), color_alpha);
-                // No coverage draws nothing, also where the bitmap is transparent.
-                if alpha == 0 {
-                    continue;
-                }
                 let source = [red, green, blue, alpha];
                 let blended = blend_normal(bitmap.pixel(x, y), source, 255);
                 bitmap.put(x, y, blended);
@@ -185,17 +280,26 @@ impl Bitmaps {
         Ok(())
     }
 
-    /// The size `text` has in the bitmap's font, as a rectangle at the origin. Nothing is
-    /// drawn. An empty string has width 0 and the height of one line.
+    /// The size `text` has in the bitmap's font, as a rectangle at the origin: the advances
+    /// plus the first glyph's left overhang, and the text height. Nothing is drawn. An
+    /// empty string has width 0 and height 0.
     pub fn text_size(
         &self,
         id: BitmapId,
         text: &str,
         rasterizer: &dyn TextRasterizer,
     ) -> Result<Rect, BitmapError> {
-        let (width, height) = rasterizer.measure(&self.get(id)?.font, text);
+        let metrics = rasterizer.metrics(&self.get(id)?.font, text);
+        if metrics.advances.is_empty() {
+            return Ok(Rect::new(0, 0, 0, 0));
+        }
         let clamp = |value: u32| i32::try_from(value).unwrap_or(i32::MAX);
-        Ok(Rect::new(0, 0, clamp(width), clamp(height)))
+        Ok(Rect::new(
+            0,
+            0,
+            clamp(metrics.width()),
+            clamp(metrics.height),
+        ))
     }
 }
 
@@ -208,6 +312,28 @@ mod tests {
     use crate::test_support::CellRasterizer;
     use crate::{Color, FontDefaults};
 
+    /// The samples measured on the original runtime, shared with the text engine's tests.
+    const SAMPLES: &str = include_str!("../../vkxp-text/tests/data/text-samples.txt");
+
+    /// The sample lines of one kind as numbers; fields that are not numbers are left out.
+    fn samples(kind: &str) -> Vec<(Vec<String>, Vec<u32>)> {
+        let lines: Vec<_> = SAMPLES
+            .lines()
+            .map(|line| line.split_whitespace().collect::<Vec<_>>())
+            .filter(|fields| fields.first() == Some(&kind))
+            .map(|fields| {
+                let words = fields.iter().map(|field| (*field).to_owned()).collect();
+                let numbers = fields
+                    .iter()
+                    .filter_map(|field| field.parse().ok())
+                    .collect();
+                (words, numbers)
+            })
+            .collect();
+        assert!(!lines.is_empty(), "no {kind} samples");
+        lines
+    }
+
     /// Defaults whose font the stand-in draws with cells of 5 by 10 pixels.
     fn small() -> FontDefaults {
         let mut defaults = defaults();
@@ -215,43 +341,103 @@ mod tests {
         defaults
     }
 
-    /// A string of natural width 100 at the font of [`small`].
-    const WIDE: &str = "ABCDEFGHIJKLMNOPQRST";
+    /// Defaults whose font the stand-in draws with cells of 11 by 22 pixels.
+    fn normal() -> FontDefaults {
+        let mut defaults = defaults();
+        defaults.size = 22;
+        defaults
+    }
 
-    /// What `draw_text` must leave in a bitmap that held `before`: the model of the layout
-    /// rules, written with signed arithmetic and no clipping shortcuts.
-    #[allow(clippy::too_many_arguments)]
+    /// Ten characters of natural advance 11 at the font of [`normal`].
+    const TEN: &str = "ABCDEFGHIJ";
+
+    /// The stand-in with overhangs: the first glyph reaches `left` pixels left of the pen
+    /// and the last `right` pixels right of its advance, with coverage 40 there. Text set
+    /// with other advances than the natural ones has no overhang.
+    struct Overhanging {
+        left: u32,
+        right: u32,
+    }
+
+    impl TextRasterizer for Overhanging {
+        fn metrics(&self, font: &Font, text: &str) -> TextMetrics {
+            TextMetrics {
+                left_overhang: self.left,
+                right_overhang: self.right,
+                ..CellRasterizer.metrics(font, text)
+            }
+        }
+
+        fn rasterize(
+            &self,
+            font: &Font,
+            text: &str,
+            advances: &[u32],
+            condense: Option<(u32, u32)>,
+        ) -> Mask {
+            let inner = CellRasterizer.rasterize(font, text, advances, condense);
+            if condense.is_some() {
+                return inner;
+            }
+            let width = self.left + inner.width() + self.right;
+            let mut coverage = Vec::new();
+            for y in 0..inner.height() {
+                coverage.extend(std::iter::repeat_n(40, self.left as usize));
+                coverage.extend((0..inner.width()).map(|x| inner.get(x, y)));
+                coverage.extend(std::iter::repeat_n(40, self.right as usize));
+            }
+            Mask::new(width, inner.height(), coverage)
+        }
+    }
+
+    /// One character whose cell is a single pixel of the given coverage.
+    struct Dot(u8);
+
+    impl TextRasterizer for Dot {
+        fn metrics(&self, _font: &Font, text: &str) -> TextMetrics {
+            TextMetrics {
+                height: 1,
+                advances: vec![1; text.chars().count()],
+                average_width: 1,
+                ..TextMetrics::default()
+            }
+        }
+
+        fn rasterize(&self, _: &Font, _: &str, advances: &[u32], _: Option<(u32, u32)>) -> Mask {
+            Mask::new(advances.len() as u32, 1, vec![self.0; advances.len()])
+        }
+    }
+
+    /// What `draw_text` must leave in a bitmap that held `before` when the text cell is
+    /// `mask`, `offset` pixels in from the rectangle's left edge: the model of the placement
+    /// and blending rules, written with signed arithmetic and no clipping shortcuts.
     fn model(
         before: &[u8],
         (width, height): (u32, u32),
         rect: Rect,
         mask: &Mask,
-        (drawn_width, offset): (u32, u32),
+        offset: u32,
         color: Rgba,
     ) -> Vec<u8> {
         let mut after = before.to_vec();
         let left = rect.x + offset as i32;
-        let top = rect.y + (rect.height - mask.height() as i32).div_euclid(2);
+        let top = rect.y + ((rect.height - mask.height() as i32) / 2).max(0);
         for y in 0..height as i32 {
             for x in 0..width as i32 {
                 let in_rect = (rect.x..rect.x + rect.width).contains(&x)
                     && (rect.y..rect.y + rect.height).contains(&y);
-                let in_text = (left..left + drawn_width as i32).contains(&x)
+                let in_text = (left..left + mask.width() as i32).contains(&x)
                     && (top..top + mask.height() as i32).contains(&y);
                 if !(in_rect && in_text) {
                     continue;
                 }
-                let mask_x = stretch_index((x - left) as u32, mask.width(), drawn_width);
-                let coverage = mask.get(mask_x, (y - top) as u32);
+                let coverage = mask.get((x - left) as u32, (y - top) as u32);
                 let source = [
                     color[0],
                     color[1],
                     color[2],
                     effective_alpha(coverage, color[3]),
                 ];
-                if source[3] == 0 {
-                    continue;
-                }
                 let offset = ((y as u32 * width + x as u32) * 4) as usize;
                 let target: Rgba = before[offset..offset + 4].try_into().unwrap();
                 after[offset..offset + 4].copy_from_slice(&blend_normal(target, source, 255));
@@ -274,21 +460,25 @@ mod tests {
             .collect()
     }
 
-    #[test]
-    fn horizontal_layout_rules() {
-        assert_eq!(horizontal_layout(10, 30, Align::Left), (10, 0));
-        assert_eq!(horizontal_layout(10, 30, Align::Center), (10, 10));
-        assert_eq!(horizontal_layout(10, 30, Align::Right), (10, 20));
-        assert_eq!(horizontal_layout(10, 31, Align::Center), (10, 10));
-        assert_eq!(horizontal_layout(10, 10, Align::Right), (10, 0));
-        for align in [Align::Left, Align::Center, Align::Right] {
-            assert_eq!(horizontal_layout(100, 80, align), (80, 0));
-            assert_eq!(horizontal_layout(100, 60, align), (60, 0));
-            assert_eq!(horizontal_layout(100, 40, align), (60, 0));
-            // 60 percent of 101 is 60.6, which rounds up.
-            assert_eq!(horizontal_layout(101, 1, align), (61, 0));
+    fn metrics(advances: &[u32], height: u32, average_width: u32, bold: u32) -> TextMetrics {
+        TextMetrics {
+            height,
+            advances: advances.to_vec(),
+            average_width,
+            emboldened: bold,
+            ..TextMetrics::default()
         }
-        assert_eq!(horizontal_layout(u32::MAX, 1, Align::Left).0, 2_576_980_377);
+    }
+
+    // Requirement: Text drawing
+
+    #[test]
+    fn align_offset_rules() {
+        assert_eq!(align_offset(10, 30, Align::Left), 0);
+        assert_eq!(align_offset(10, 30, Align::Center), 10);
+        assert_eq!(align_offset(10, 30, Align::Right), 20);
+        assert_eq!(align_offset(10, 31, Align::Center), 10);
+        assert_eq!(align_offset(10, 10, Align::Right), 0);
     }
 
     #[test]
@@ -312,11 +502,70 @@ mod tests {
     }
 
     #[test]
+    fn alignment_is_by_the_drawn_width() {
+        // "AB" measures 10 + 2 and is drawn 3 wider: 15 pixels in a rectangle of 30.
+        let rasterizer = Overhanging { left: 2, right: 3 };
+        for (align, left) in [(Align::Left, 3), (Align::Center, 10), (Align::Right, 18)] {
+            let mut bitmaps = Bitmaps::new();
+            let id = bitmaps.create(40, 10, &small()).unwrap();
+            bitmaps
+                .draw_text(id, Rect::new(3, 0, 30, 10), "AB", align, &rasterizer)
+                .unwrap();
+            let rgba = bitmaps.rgba(id).unwrap();
+            let expected: Vec<u32> = (left..left + 15).collect();
+            assert_eq!(drawn_columns(rgba, 40, 4), expected, "{align:?}");
+            // The first glyph's overhang is drawn, and the pen starts right of it.
+            assert_eq!(at(rgba, 40, left, 4)[3], 40);
+            assert_eq!(at(rgba, 40, left + 1, 4)[3], 40);
+            assert_eq!(
+                at(rgba, 40, left + 2, 4)[3],
+                CellRasterizer::coverage('A', 0, 4)
+            );
+            assert_eq!(at(rgba, 40, left + 14, 4)[3], 40);
+        }
+    }
+
+    #[test]
+    fn right_overhang_is_cut_at_the_rectangle() {
+        // A rectangle as wide as the text measures is too narrow for the drawn width, so
+        // the text is squeezed; one as wide as the drawn width holds it unsqueezed.
+        let rasterizer = Overhanging { left: 0, right: 3 };
+        let mut bitmaps = Bitmaps::new();
+        let id = bitmaps.create(40, 10, &small()).unwrap();
+        let size = bitmaps.text_size(id, "ABCD", &rasterizer).unwrap();
+        assert_eq!(size.width, 20);
+        bitmaps
+            .draw_text(
+                id,
+                Rect::new(0, 0, 20, 10),
+                "ABCD",
+                Align::Left,
+                &rasterizer,
+            )
+            .unwrap();
+        // Step 9 of a size 10 font with average width 5: every advance 4.
+        assert_eq!(drawn_columns(bitmaps.rgba(id).unwrap(), 40, 4).len(), 16);
+
+        let id = bitmaps.create(40, 10, &small()).unwrap();
+        bitmaps
+            .draw_text(
+                id,
+                Rect::new(0, 0, 23, 10),
+                "ABCD",
+                Align::Left,
+                &rasterizer,
+            )
+            .unwrap();
+        assert_eq!(drawn_columns(bitmaps.rgba(id).unwrap(), 40, 4).len(), 23);
+    }
+
+    #[test]
     fn vertical_centring() {
         let rasterizer = CellRasterizer;
         let mut bitmaps = Bitmaps::new();
         let id = bitmaps.create(12, 40, &small()).unwrap();
-        // Text of height 10 in a rectangle of height 30 that starts at row 4.
+        // Text of height 10 in a rectangle of height 30: rows 10 to 19 of the rectangle,
+        // which starts at row 4.
         bitmaps
             .draw_text(id, Rect::new(0, 4, 12, 30), "A", Align::Left, &rasterizer)
             .unwrap();
@@ -333,44 +582,80 @@ mod tests {
     }
 
     #[test]
-    fn text_taller_than_its_rectangle_is_clipped_around_its_middle() {
+    fn rectangle_lower_than_the_text_shows_its_top() {
         let rasterizer = CellRasterizer;
+        let mut defaults = defaults();
+        defaults.size = 21;
         let mut bitmaps = Bitmaps::new();
-        let id = bitmaps.create(12, 20, &small()).unwrap();
-        let rect = Rect::new(1, 5, 5, 3);
+        let id = bitmaps.create(12, 40, &defaults).unwrap();
+        // Text of height 21 in a rectangle of height 10.
+        let rect = Rect::new(1, 5, 10, 10);
         bitmaps
             .draw_text(id, rect, "A", Align::Left, &rasterizer)
             .unwrap();
         let font = bitmaps.font(id).unwrap().clone();
-        let mask = rasterizer.rasterize(&font, "A");
+        let mask = CellRasterizer::natural(&font, "A");
+        assert_eq!(mask.height(), 21);
         let rgba = bitmaps.rgba(id).unwrap();
-        assert_eq!(drawn_rows(rgba, 12, 20, 1), [5, 6, 7]);
-        // (3 - 10) / 2 rounded down is -4: rectangle row 0 shows mask row 4.
-        for row in 0..3 {
-            assert_eq!(at(rgba, 12, 1, 5 + row)[3], mask.get(0, 4 + row));
+        assert_eq!(drawn_rows(rgba, 12, 40, 1), (5..15).collect::<Vec<u32>>());
+        for row in 0..10 {
+            assert_eq!(at(rgba, 12, 1, 5 + row)[3], mask.get(0, row), "row {row}");
         }
     }
 
     #[test]
-    fn squeezing_to_the_rectangle() {
+    fn squeezing_sets_the_text_at_a_step() {
         let rasterizer = CellRasterizer;
-        for align in [Align::Left, Align::Center, Align::Right] {
+        // Ten characters of advance 11 in a rectangle of 100: nine pixels each at the 90
+        // percent step, 90 wide, placed by that width.
+        for (align, offset) in [(Align::Left, 0), (Align::Center, 5), (Align::Right, 10)] {
             let mut bitmaps = Bitmaps::new();
-            let id = bitmaps.create(120, 12, &small()).unwrap();
+            let id = bitmaps.create(120, 24, &normal()).unwrap();
             let font = bitmaps.font(id).unwrap().clone();
-            let mask = rasterizer.rasterize(&font, WIDE);
-            assert_eq!(mask.width(), 100);
+            assert_eq!(rasterizer.metrics(&font, TEN).advances, [11; 10]);
             bitmaps
-                .draw_text(id, Rect::new(10, 1, 80, 10), WIDE, align, &rasterizer)
+                .draw_text(id, Rect::new(10, 1, 100, 22), TEN, align, &rasterizer)
                 .unwrap();
             let rgba = bitmaps.rgba(id).unwrap();
-            let expected: Vec<u32> = (10..90).collect();
+            let expected: Vec<u32> = (10 + offset..100 + offset).collect();
             assert_eq!(drawn_columns(rgba, 120, 5), expected, "{align:?}");
-            for i in 0..80 {
+            let mask = rasterizer.rasterize(&font, TEN, &[9; 10], None);
+            for i in 0..90 {
                 // The font colour is opaque, so on a transparent bitmap alpha is coverage.
-                let coverage = mask.get(stretch_index(i, 100, 80), 4);
-                assert_eq!(at(rgba, 120, 10 + i, 5)[3], coverage, "column {i}");
+                assert_eq!(
+                    at(rgba, 120, 10 + offset + i, 5)[3],
+                    mask.get(i, 4),
+                    "column {i}"
+                );
             }
+        }
+    }
+
+    #[test]
+    fn squeezing_takes_the_first_step_that_fits() {
+        let rasterizer = CellRasterizer;
+        // Size 22, average width 11: the steps are 90, 80, 70 and 60 pixels wide.
+        for (width, drawn) in [
+            (110, 110),
+            (109, 90),
+            (90, 90),
+            (89, 80),
+            (79, 70),
+            (69, 60),
+        ] {
+            let mut bitmaps = Bitmaps::new();
+            let id = bitmaps.create(120, 22, &normal()).unwrap();
+            bitmaps
+                .draw_text(
+                    id,
+                    Rect::new(0, 0, width, 22),
+                    TEN,
+                    Align::Left,
+                    &rasterizer,
+                )
+                .unwrap();
+            let columns = drawn_columns(bitmaps.rgba(id).unwrap(), 120, 5);
+            assert_eq!(columns, (0..drawn).collect::<Vec<u32>>(), "width {width}");
         }
     }
 
@@ -379,31 +664,36 @@ mod tests {
         let rasterizer = CellRasterizer;
         for align in [Align::Left, Align::Center, Align::Right] {
             let mut bitmaps = Bitmaps::new();
-            let id = bitmaps.create(120, 12, &small()).unwrap();
+            let id = bitmaps.create(120, 24, &normal()).unwrap();
             let font = bitmaps.font(id).unwrap().clone();
-            let mask = rasterizer.rasterize(&font, WIDE);
             bitmaps
-                .draw_text(id, Rect::new(10, 1, 40, 10), WIDE, align, &rasterizer)
+                .draw_text(id, Rect::new(10, 1, 40, 22), TEN, align, &rasterizer)
                 .unwrap();
             let rgba = bitmaps.rgba(id).unwrap();
-            // Drawn 60 wide from the rectangle's left edge; only its first 40 columns appear.
+            // Set 60 wide at the last step from the rectangle's left edge; only its first 40
+            // columns appear.
             let expected: Vec<u32> = (10..50).collect();
             assert_eq!(drawn_columns(rgba, 120, 5), expected, "{align:?}");
+            let mask = rasterizer.rasterize(&font, TEN, &[6; 10], None);
             for i in 0..40 {
-                let coverage = mask.get(stretch_index(i, 100, 60), 4);
-                assert_eq!(at(rgba, 120, 10 + i, 5)[3], coverage, "column {i}");
+                assert_eq!(at(rgba, 120, 10 + i, 5)[3], mask.get(i, 4), "column {i}");
             }
         }
     }
 
     #[test]
-    fn zero_coverage_leaves_the_destination() {
+    fn zero_coverage_is_blended_like_the_rest_of_the_cell() {
         let rasterizer = CellRasterizer;
         let mut bitmaps = Bitmaps::new();
-        let before = pattern(15, 10, 8);
+        // Rows 0 to 4 transparent black, rows 5 to 9 a translucent colour.
+        let mut before = vec![0; 15 * 10 * 4];
+        for pixel in before.chunks_mut(4).skip(15 * 5) {
+            pixel.copy_from_slice(&[9, 8, 7, 100]);
+        }
         let id = bitmaps
             .create_from_rgba(15, 10, before.clone(), &small())
             .unwrap();
+        bitmaps.font_mut(id).unwrap().color = color([200, 100, 50, 255]);
         // The stand-in gives a space no coverage at all.
         bitmaps
             .draw_text(id, Rect::new(0, 0, 15, 10), " A ", Align::Left, &rasterizer)
@@ -411,8 +701,15 @@ mod tests {
         let rgba = bitmaps.rgba(id).unwrap();
         for y in 0..10 {
             for x in 0..15 {
-                let unchanged = at(rgba, 15, x, y) == at(&before, 15, x, y);
-                assert_eq!(unchanged, !(5..10).contains(&x), "({x}, {y})");
+                let pixel = at(rgba, 15, x, y);
+                if (5..10).contains(&x) {
+                    assert_ne!(pixel, at(&before, 15, x, y), "({x}, {y})");
+                } else if y < 5 {
+                    // A transparent pixel takes the font's colour and stays transparent.
+                    assert_eq!(pixel, [200, 100, 50, 0], "({x}, {y})");
+                } else {
+                    assert_eq!(pixel, [9, 8, 7, 100], "({x}, {y})");
+                }
             }
         }
     }
@@ -421,7 +718,7 @@ mod tests {
     fn zero_colour_alpha_leaves_the_destination() {
         let rasterizer = CellRasterizer;
         let mut bitmaps = Bitmaps::new();
-        let before = pattern(15, 10, 8);
+        let before = vec![0; 15 * 10 * 4];
         let id = bitmaps
             .create_from_rgba(15, 10, before.clone(), &small())
             .unwrap();
@@ -436,12 +733,14 @@ mod tests {
     fn coverage_scales_the_colour_alpha_and_blends_source_over() {
         let rasterizer = CellRasterizer;
         let color: Rgba = [200, 100, 50, 128];
+        // Rectangle, text, alignment, and the advances and offset the rules give.
         let cases = [
-            (Rect::new(2, 1, 30, 14), "ABC", Align::Center, (15, 7)),
-            (Rect::new(-3, -2, 12, 9), "ABCD", Align::Right, (12, 0)),
-            (Rect::new(20, 4, 100, 12), "AB", Align::Left, (10, 0)),
+            (Rect::new(2, 1, 30, 14), "ABC", Align::Center, 5, 7),
+            // 20 wide in a rectangle of 12: step 7 of size 10, three pixels a character.
+            (Rect::new(-3, -2, 12, 9), "ABCD", Align::Right, 3, 0),
+            (Rect::new(20, 4, 100, 12), "AB", Align::Left, 5, 0),
         ];
-        for (rect, text, align, layout) in cases {
+        for (rect, text, align, advance, offset) in cases {
             let mut bitmaps = Bitmaps::new();
             let before = pattern(36, 18, 8);
             let id = bitmaps
@@ -449,13 +748,39 @@ mod tests {
                 .unwrap();
             bitmaps.font_mut(id).unwrap().color = crate::bitmap::testing::color(color);
             let font = bitmaps.font(id).unwrap().clone();
-            let mask = rasterizer.rasterize(&font, text);
+            let advances = vec![advance; text.chars().count()];
+            let mask = rasterizer.rasterize(&font, text, &advances, None);
             bitmaps
                 .draw_text(id, rect, text, align, &rasterizer)
                 .unwrap();
-            let expected = model(&before, (36, 18), rect, &mask, layout, color);
+            let expected = model(&before, (36, 18), rect, &mask, offset, color);
             assert!(bitmaps.rgba(id).unwrap() == expected, "{rect:?}");
             assert!(expected != before, "{rect:?} draws something");
+        }
+    }
+
+    /// `C coverage colour_alpha | destination | result`: pixels of the text cell.
+    #[test]
+    fn measured_colour_and_alpha() {
+        for (words, numbers) in samples("C") {
+            let [coverage, alpha, dr, dg, db, da, r, g, b, a] = numbers[..] else {
+                panic!("{words:?}");
+            };
+            let mut bitmaps = Bitmaps::new();
+            let before = [dr, dg, db, da].map(|value| value as u8).to_vec();
+            let id = bitmaps.create_from_rgba(1, 1, before, &small()).unwrap();
+            bitmaps.font_mut(id).unwrap().color = color([200, 100, 50, alpha as u8]);
+            bitmaps
+                .draw_text(
+                    id,
+                    Rect::new(0, 0, 1, 1),
+                    "A",
+                    Align::Left,
+                    &Dot(coverage as u8),
+                )
+                .unwrap();
+            let expected = [r, g, b, a].map(|value| value as u8);
+            assert_eq!(bitmaps.rgba(id).unwrap(), expected, "{words:?}");
         }
     }
 
@@ -514,6 +839,73 @@ mod tests {
         );
     }
 
+    // Requirement: Text squeezing
+
+    #[test]
+    fn squeeze_rule() {
+        // Size 22, text height 21, average width 15, as measured: k = 14, 12, 11, 9.
+        let wide = metrics(&[15; 5], 21, 15, 0);
+        let widths: Vec<u32> = SQUEEZE_STEPS
+            .iter()
+            .map(|&step| total(&squeeze(&wide, 22, step).0))
+            .collect();
+        assert_eq!(widths, [70, 60, 55, 45]);
+        assert_eq!(squeeze(&wide, 22, 9).1, (14, 15));
+        // Each advance is rounded up on its own.
+        assert_eq!(
+            squeeze(&metrics(&[11, 4, 15], 21, 15, 0), 22, 9).0,
+            [11, 4, 14]
+        );
+        // The pixel of a synthesised bold is not scaled: 16 = 15 + 1, k = 22 * 9 * 16 / 210.
+        let bold = metrics(&[16, 12], 21, 16, 1);
+        assert_eq!(squeeze(&bold, 22, 9), (vec![16, 12], (15, 15)));
+        assert_eq!(squeeze(&bold, 22, 6), (vec![11, 9], (10, 15)));
+        // Nothing to divide by does not divide by zero.
+        assert_eq!(squeeze(&metrics(&[3], 0, 0, 0), 0, 9).0, [0]);
+    }
+
+    /// `Q font size string natural_width | widths`, with the text height and the average
+    /// width of the `M` line of the font and size. Each string is one character twice.
+    #[test]
+    fn measured_squeeze_levels() {
+        let number = |word: &String| word.parse::<u32>().expect("a number");
+        let sizes = samples("M");
+        for (words, _) in samples("Q") {
+            let (size, natural) = (number(&words[2]), number(&words[4]));
+            let expected: Vec<u32> = words[6..].iter().map(number).collect();
+            // One sample is drawn a pixel wider than its advances at every step, an overhang
+            // of its end glyph: the widths compared here are those of the advances.
+            if expected[0] != natural {
+                assert_eq!(words[1..4], ["liberation", "6", "4545"]);
+                continue;
+            }
+            let (line, _) = sizes
+                .iter()
+                .find(|(line, _)| line[1] == words[1] && line[2] == words[2])
+                .expect("the size sample of the font");
+            let height = number(&line[4]) + number(&line[5]);
+            let average = number(&line[6]);
+            let text = metrics(&[natural / 2; 2], height, average, 0);
+            // The natural width, then every width a step gives that is narrower than the
+            // one before.
+            let mut levels = vec![natural];
+            for step in SQUEEZE_STEPS {
+                let width = total(&squeeze(&text, size, step).0);
+                if width < *levels.last().unwrap() {
+                    levels.push(width);
+                }
+            }
+            // One sample does not list the last width the rule gives (8, at 60 percent).
+            if words[1..4] == ["liberation", "13", "4848"] {
+                assert_eq!(levels[..3], expected[..], "{words:?}");
+                continue;
+            }
+            assert_eq!(levels, expected, "{words:?}");
+        }
+    }
+
+    // Requirement: Text measurement
+
     #[test]
     fn measurement_matches_drawing() {
         let rasterizer = CellRasterizer;
@@ -529,7 +921,7 @@ mod tests {
             .draw_text(id, rect, "Hello", Align::Left, &rasterizer)
             .unwrap();
         let font = bitmaps.font(id).unwrap().clone();
-        let mask = rasterizer.rasterize(&font, "Hello");
+        let mask = CellRasterizer::natural(&font, "Hello");
         let rgba = bitmaps.rgba(id).unwrap();
         for y in 0..20 {
             for x in 0..40 {
@@ -543,25 +935,31 @@ mod tests {
     }
 
     #[test]
-    fn empty_string_measures_one_line() {
-        let rasterizer = CellRasterizer;
+    fn measurement_includes_the_left_overhang_only() {
+        let rasterizer = Overhanging { left: 2, right: 3 };
         let mut bitmaps = Bitmaps::new();
         let id = bitmaps.create(4, 4, &small()).unwrap();
         assert_eq!(
-            bitmaps.text_size(id, "", &rasterizer),
-            Ok(Rect::new(0, 0, 0, 10))
+            bitmaps.text_size(id, "Hello", &rasterizer),
+            Ok(Rect::new(0, 0, 27, 10))
         );
-        bitmaps.font_mut(id).unwrap().size = 24;
-        let font = bitmaps.font(id).unwrap().clone();
-        assert_eq!(
-            bitmaps.text_size(id, "", &rasterizer),
-            Ok(Rect::new(
-                0,
-                0,
-                0,
-                CellRasterizer::line_height(&font) as i32
-            ))
-        );
-        assert_eq!(CellRasterizer::line_height(&font), 24);
+    }
+
+    #[test]
+    fn empty_string_measures_nothing() {
+        let mut bitmaps = Bitmaps::new();
+        let id = bitmaps.create(4, 4, &small()).unwrap();
+        for size in [10, 24] {
+            bitmaps.font_mut(id).unwrap().size = size;
+            assert_eq!(
+                bitmaps.text_size(id, "", &CellRasterizer),
+                Ok(Rect::new(0, 0, 0, 0))
+            );
+            // Also with a rasteriser that reports overhangs for it.
+            assert_eq!(
+                bitmaps.text_size(id, "", &Overhanging { left: 2, right: 3 }),
+                Ok(Rect::new(0, 0, 0, 0))
+            );
+        }
     }
 }

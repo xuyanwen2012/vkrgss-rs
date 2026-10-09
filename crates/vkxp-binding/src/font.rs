@@ -197,8 +197,14 @@ fn size(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
     Ok(rb::fix(this(ruby, recv)?.with(|data| data.font.size)))
 }
 
+/// `size=`: a number whose whole part is from 6 to 96, as the original accepts; the fraction
+/// is dropped. Anything else raises `ArgumentError`.
 fn set_size(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
-    let size = rb::int(ruby, args[0])?;
+    let size = rb::float(ruby, args[0])?;
+    if !(6.0..97.0).contains(&size) {
+        return Err(Raise::new(rb::arg_error(ruby), "bad value for size"));
+    }
+    let size = size as i32;
     this(ruby, recv)?.with(|data| data.font.size = size);
     Ok(args[0])
 }

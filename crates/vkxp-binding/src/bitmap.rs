@@ -301,6 +301,7 @@ fn apply_font(ruby: &Ruby, recv: VALUE, id: BitmapId) -> Result<(), Raise> {
 }
 
 /// `draw_text(x, y, width, height, string, align = 0)` or `draw_text(rect, string, align = 0)`.
+/// Text that is not a `String` raises `TypeError`, as in the original.
 fn draw_text(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     let id = id_arg(ruby, recv)?;
     let (rect, rest) = match args.len() {
@@ -308,7 +309,7 @@ fn draw_text(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
         5 | 6 => (rect_of(ruby, &args[..4])?, &args[4..]),
         _ => return Err(rb::count_error(ruby, args, &[2, 3, 5, 6])),
     };
-    let text = rb::to_text(ruby, rest[0])?;
+    let text = rb::text(ruby, rest[0])?;
     let align = match rest.get(1).map(|&align| rb::int(ruby, align)).transpose()? {
         Some(1) => Align::Center,
         Some(2) => Align::Right,
@@ -324,9 +325,10 @@ fn draw_text(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
 }
 
 /// `text_size(string)`: a `Rect` at 0, 0 with the size the text has in the bitmap's font.
+/// Text that is not a `String` raises `TypeError`.
 fn text_size(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     let id = id_arg(ruby, recv)?;
-    let text = rb::to_text(ruby, args[0])?;
+    let text = rb::text(ruby, args[0])?;
     apply_font(ruby, recv, id)?;
     let size = operate(ruby, |guest| {
         Ok(guest.bitmaps.text_size(id, &text, &*guest.text)?)

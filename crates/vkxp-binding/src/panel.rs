@@ -82,17 +82,16 @@ impl Panel {
         let mut font = Font::new(&guest.font_defaults);
         font.color = Color::rgb(255.0, 255.0, 255.0);
 
-        let line_height = guest.text.measure(&font, "").1.max(1);
+        let line_height = guest.text.metrics(&font, "").height.max(1);
         let limit = (max_height.saturating_sub(2 * PADDING) / line_height).max(1);
         let text_width = max_width.saturating_sub(2 * PADDING).max(1);
-        let lines = wrap(text, text_width, limit as usize, |line| {
-            guest.text.measure(&font, line).0
-        });
-        let widest = lines
-            .iter()
-            .map(|line| guest.text.measure(&font, line).0)
-            .max()
-            .unwrap_or(0);
+        // The width a line is drawn with, its last glyph's overhang included.
+        let drawn = |line: &str| {
+            let metrics = guest.text.metrics(&font, line);
+            metrics.width().saturating_add(metrics.right_overhang)
+        };
+        let lines = wrap(text, text_width, limit as usize, drawn);
+        let widest = lines.iter().map(|line| drawn(line)).max().unwrap_or(0);
         let width = (widest + 2 * PADDING).min(max_width);
         let height = (lines.len() as u32 * line_height + 2 * PADDING).min(max_height);
 

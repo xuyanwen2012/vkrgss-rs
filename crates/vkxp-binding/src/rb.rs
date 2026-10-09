@@ -39,8 +39,6 @@ enum Op {
         object: VALUE,
         name: *const c_char,
     },
-    /// `to_s`, with Ruby's fallback when that does not return a string.
-    AsString(VALUE),
     /// The class or module at a path such as `Errno::ENOENT`.
     ClassAt(*const c_char),
     /// The name of the value's class, into [`Call::name`]. Naming an anonymous class
@@ -89,7 +87,6 @@ unsafe extern "C" fn call_body(data: VALUE) -> VALUE {
                 value,
             } => ffi::rb_ivar_set(object, ffi::rb_intern(name), value),
             Op::IvarGet { object, name } => ffi::rb_attr_get(object, ffi::rb_intern(name)),
-            Op::AsString(value) => ffi::rb_obj_as_string(value),
             Op::ClassAt(path) => ffi::rb_path2class(path),
             Op::ClassName(value) => {
                 call.name = ffi::rb_obj_classname(value);
@@ -311,13 +308,6 @@ pub(crate) fn bytes(ruby: &Ruby, value: VALUE) -> Result<Vec<u8>, Raise> {
 /// Anything but a `String` raises `TypeError`.
 pub(crate) fn text(ruby: &Ruby, value: VALUE) -> Result<String, Raise> {
     Ok(String::from_utf8_lossy(&bytes(ruby, value)?).into_owned())
-}
-
-/// Any value as text: a `String` as it is, anything else through its `to_s`. Bytes that are
-/// not valid UTF-8 are replaced.
-pub(crate) fn to_text(ruby: &Ruby, value: VALUE) -> Result<String, Raise> {
-    let string = perform(ruby, Op::AsString(value))?.0;
-    Ok(String::from_utf8_lossy(&string_bytes(ruby, string).unwrap_or_default()).into_owned())
 }
 
 /// The elements of an `Array`, or `None` for anything else. The copies are for immediate
