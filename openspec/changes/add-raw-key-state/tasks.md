@@ -10,7 +10,7 @@
 
 ## 3. Guest (`vkxp-binding`)
 
-- [ ] 3.1 Emulate the five functions. Verify: Ruby tests for the three scenarios of `specs/rgss-runtime/spec.md`.
+- [x] 3.1 Emulate the five functions. Verify: Ruby tests for the three scenarios of `specs/rgss-runtime/spec.md`.
 
 ## 4. Integration check
 

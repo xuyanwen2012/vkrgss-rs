@@ -58,6 +58,11 @@ const TABLE: &[(&str, &str, Shim)] = &[
     ("user32", "GetWindowRect", window_rect),
     ("user32", "GetClientRect", window_rect),
     ("user32", "ShowCursor", show_cursor),
+    ("user32", "GetAsyncKeyState", async_key_state),
+    ("user32", "GetKeyState", key_state),
+    ("user32", "GetKeyboardState", keyboard_state),
+    ("user32", "GetCursorPos", cursor_pos),
+    ("user32", "ScreenToClient", screen_to_client),
 ];
 
 /// The handle every window function gives for the game window.
@@ -573,6 +578,71 @@ fn window_rect(guest: &mut Guest, args: &mut [Arg]) -> i64 {
 fn show_cursor(guest: &mut Guest, args: &mut [Arg]) -> i64 {
     guest.win32api.cursor += if int(args, 0) != 0 { 1 } else { -1 };
     guest.win32api.cursor
+}
+
+// --- Keyboard and mouse -----------------------------------------------------------------------
+
+/// The virtual-key code argument at `index`, when it is one of the 256.
+fn virtual_key(args: &[Arg], index: usize) -> Option<u8> {
+    u8::try_from(int(args, index)).ok()
+}
+
+/// `GetAsyncKeyState(key)`: bit 15 while the key is held in the snapshot `Input.update`
+/// latched, and bit 0 too when it was not held in the one before. The value is a 16-bit
+/// integer with its sign, as on Windows.
+fn async_key_state(guest: &mut Guest, args: &mut [Arg]) -> i64 {
+    match virtual_key(args, 0) {
+        Some(key) if guest.input.is_key_down(key) => {
+            i64::from(i16::MIN | i16::from(guest.input.is_key_new(key)))
+        }
+        _ => 0,
+    }
+}
+
+/// `GetKeyState(key)`: the sign bit and bit 7 while the key is held, in a 16-bit integer
+/// with its sign, as on Windows.
+// PLACEHOLDER: bit 0, the toggle state of a lock key, is always 0.
+fn key_state(guest: &mut Guest, args: &mut [Arg]) -> i64 {
+    match virtual_key(args, 0) {
+        Some(key) if guest.input.is_key_down(key) => -0x80,
+        _ => 0,
+    }
+}
+
+/// `GetKeyboardState(buffer)`: 0x80 for each held key and 0 for the others, in one byte per
+/// virtual-key code.
+fn keyboard_state(guest: &mut Guest, args: &mut [Arg]) -> i64 {
+    let Some(buffer) = buffer_mut(args, 0) else {
+        return 0;
+    };
+    for (key, state) in (0..=255u8).zip(buffer.iter_mut()) {
+        *state = if guest.input.is_key_down(key) {
+            0x80
+        } else {
+            0
+        };
+    }
+    1
+}
+
+/// `GetCursorPos(buffer)`: the pointer position in the frame as x and y in 32 bits each,
+/// (-1, -1) when the pointer is not over the picture.
+fn cursor_pos(guest: &mut Guest, args: &mut [Arg]) -> i64 {
+    let (x, y) = guest.input.pointer().unwrap_or((-1, -1));
+    let Some(point) = buffer_mut(args, 0).and_then(|buffer| buffer.get_mut(..8)) else {
+        return 0;
+    };
+    let coordinates = point.as_chunks_mut::<4>().0.iter_mut();
+    for (coordinate, value) in coordinates.zip([x, y]) {
+        *coordinate = i32::from(value).to_le_bytes();
+    }
+    1
+}
+
+/// `ScreenToClient(window, buffer)`: the point stays what it is, since the pointer position
+/// is in the frame already.
+fn screen_to_client(_guest: &mut Guest, _args: &mut [Arg]) -> i64 {
+    1
 }
 
 /// `SetPriorityClass(process, priority)`: nothing is done, and that succeeds.

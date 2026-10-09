@@ -6,6 +6,7 @@ use std::sync::Once;
 
 use vkxp_binding::testing;
 use vkxp_binding::testing::host::{self, Script, with_error_stream};
+use vkxp_proto::{HostToGuest, InputSnapshot};
 
 /// The bytes of `测试` in GBK.
 const TITLE_GBK: [u8; 4] = [0xB2, 0xE2, 0xCA, 0xD4];
@@ -24,10 +25,115 @@ fn write_game_ini() {
 
 /// The value of a snippet, or its exception as `Class: message`.
 fn eval(source: &str) -> String {
-    match host::play(source, Script::new()).0 {
+    eval_with(source, Script::new())
+}
+
+/// The value of a snippet played against a scripted host.
+fn eval_with(source: &str, script: Script) -> String {
+    match host::play(source, script).0 {
         Ok(inspect) => inspect,
         Err(error) => format!("{}: {}", error.class_name, error.message),
     }
+}
+
+/// A host that has sent `snapshot` before the snippet starts.
+fn holding(snapshot: InputSnapshot) -> Script {
+    Script::new().at_start(HostToGuest::Input(snapshot))
+}
+
+/// Scenario "Held key".
+#[test]
+fn a_held_key_has_bit_15_and_a_key_that_is_not_held_is_zero() {
+    let held = holding(InputSnapshot::EMPTY.with_key(0x0D));
+    assert_eq!(
+        eval_with(
+            "async = Win32API.new('user32', 'GetAsyncKeyState', 'i', 'i')
+             state = Win32API.new('user32.dll', 'GetKeyState', 'i', 'i')
+             before = [async.call(0x0D), state.call(0x0D)]
+             Input.update
+             [before, async.call(0x0D) & 0x8000 == 0x8000, async.call(0x41) & 0x8000,
+              state.call(0x0D) & 0x8000 == 0x8000, state.call(0x41), async.call(0x10D),
+              async.call(-1), state.call(256)]",
+            held
+        ),
+        "[[0, 0], true, 0, true, 0, 0, 0, 0]"
+    );
+}
+
+#[test]
+fn bit_0_of_the_asynchronous_state_is_set_at_the_update_a_key_goes_down() {
+    let script = holding(InputSnapshot::EMPTY.with_key(0x41)).after_frame(
+        1,
+        HostToGuest::Input(InputSnapshot::EMPTY.with_key(0x41).with_key(0x01)),
+    );
+    assert_eq!(
+        eval_with(
+            "async = Win32API.new('user32', 'GetAsyncKeyState', 'i', 'i')
+             state = Win32API.new('user32', 'GetKeyState', 'i', 'i')
+             bits = proc { |key| [async.call(key) & 0x8000 != 0, async.call(key) & 1] }
+             Input.update
+             first = [bits.call(0x41), bits.call(0x41), state.call(0x41) & 1]
+             Input.update
+             second = bits.call(0x41)
+             Graphics.update
+             Input.update
+             [first, second, bits.call(0x41), bits.call(0x01), bits.call(0x02)]",
+            script
+        ),
+        "[[[true, 1], [true, 1], 0], [true, 0], [true, 0], [true, 1], [false, 0]]"
+    );
+}
+
+/// Scenario "Keyboard state".
+#[test]
+fn the_keyboard_state_has_0x80_for_each_held_key() {
+    assert_eq!(
+        eval_with(
+            "state = Win32API.new('user32', 'GetKeyboardState', 'p', 'i')
+             buffer = \"\\xff\" * 256
+             Input.update
+             result = state.call(buffer)
+             held = (0...256).select { |key| buffer[key] != 0 }
+             short = \"\\xff\" * 0x42
+             state.call(short)
+             [result, buffer.size, buffer[0x41], held, short.size, short[0x41], state.call(0)]",
+            holding(InputSnapshot::EMPTY.with_key(0x41))
+        ),
+        "[1, 256, 128, [65], 66, 128, 0]"
+    );
+}
+
+/// Scenario "Pointer".
+#[test]
+fn the_cursor_position_is_the_pointer_in_the_frame() {
+    assert_eq!(
+        eval_with(
+            "cursor = Win32API.new('user32', 'GetCursorPos', 'p', 'i')
+             client = Win32API.new('user32', 'ScreenToClient', 'lp', 'i')
+             window = Win32API.new('user32', 'GetActiveWindow', '', 'l').call
+             before = \"\\0\" * 8
+             cursor.call(before)
+             Input.update
+             point = \"\\0\" * 8
+             results = [cursor.call(point), point.unpack('ll'), client.call(window, point)]
+             results + [point.unpack('ll'), before.unpack('ll'), cursor.call(0)]",
+            holding(InputSnapshot::EMPTY.with_pointer(Some((100, 50))))
+        ),
+        "[1, [100, 50], 1, [100, 50], [-1, -1], 0]"
+    );
+}
+
+#[test]
+fn without_a_pointer_the_cursor_position_is_minus_one() {
+    assert_eq!(
+        eval(
+            "point = \"\\0\" * 8
+             Input.update
+             Win32API.new('user32', 'GetCursorPos', 'p', 'i').call(point)
+             point.unpack('ll')"
+        ),
+        "[-1, -1]"
+    );
 }
 
 #[test]
@@ -76,14 +182,15 @@ fn library_names_match_without_regard_to_case_and_suffix() {
 fn an_unknown_function_returns_zero_with_one_report() {
     assert_eq!(
         eval(&with_error_stream(
-            "api = Win32API.new('user32', 'GetKeyState', 'i', 'i')
+            "api = Win32API.new('user32', 'GetKeyNameTextA', 'i', 'i')
              other = Win32API.new('user32.dll', 'RtlMoveMemory', 'ppl', '')
              buffer = 'ab'
-             [api.call(13), api.call(13), Win32API.new('user32', 'GetKeyState', 'i', 'i').Call(1),
+             [api.call(13), api.call(13),
+              Win32API.new('user32', 'GetKeyNameTextA', 'i', 'i').Call(1),
               other.call(buffer, 'XY', 2), buffer]"
         )),
         "[[0, 0, 0, 0, \"ab\"], \
-         \"vkxp: Win32API user32 GetKeyState is not emulated and returns 0\\n\
+         \"vkxp: Win32API user32 GetKeyNameTextA is not emulated and returns 0\\n\
          vkxp: Win32API user32.dll RtlMoveMemory is not emulated and returns 0\\n\"]"
     );
 }
