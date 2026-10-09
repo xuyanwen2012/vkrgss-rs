@@ -4,6 +4,7 @@
 mod cases;
 
 use cases::Case;
+use vkxp_binding::testing;
 
 fn check(cases: &[Case]) {
     let wrong = cases::failures(cases, str::to_owned);
@@ -46,7 +47,49 @@ fn copies_of_values() {
 }
 
 #[test]
+fn bitmap_creation_from_a_size() {
+    check(cases::BITMAP_FROM_SIZE);
+}
+
+#[test]
+fn bitmap_creation_from_a_file() {
+    check(cases::BITMAP_FROM_FILE);
+}
+
+#[test]
+fn bitmap_disposal() {
+    check(cases::BITMAP_DISPOSAL);
+}
+
+#[test]
+fn bitmap_drawing() {
+    check(cases::BITMAP_DRAWING);
+}
+
+#[test]
+fn bitmap_text() {
+    check(cases::BITMAP_TEXT);
+}
+
+#[test]
+fn bitmap_copying() {
+    check(cases::BITMAP_COPYING);
+}
+
+#[test]
+fn unreachable_bitmaps_are_freed() {
+    assert_eq!(
+        testing::eval(cases::UNREACHABLE_BITMAPS).as_deref(),
+        Ok("nil")
+    );
+    // The other tests of this binary hold a few bitmaps, and the conservative collector may
+    // keep a few of the ten thousand alive.
+    let remaining = testing::bitmap_count();
+    assert!(remaining < 500, "{remaining} bitmaps are left in the arena");
+}
+
+#[test]
 fn every_group_is_tested_here() {
     // One test function per group above: a group added to the list must get one too.
-    assert_eq!(cases::GROUPS.len(), 7);
+    assert_eq!(cases::GROUPS.len(), 13);
 }

@@ -22,11 +22,11 @@
 
 ## 4. Bitmap (`vkxp-binding`)
 
-- [ ] 4.1 Implement `Bitmap.new(width, height)`, `width`, `height`, `rect`, `dispose`, `disposed?` and freeing through the deferred queue. Verify: Ruby tests for the creation-from-size and disposal scenarios in `specs/rgss-bitmap/spec.md`, including the ten-thousand-bitmap scenario.
-- [ ] 4.2 Implement `Bitmap.new(path)` through `vkxp-vfs` and `vkxp-image`. Verify: Ruby tests for the four creation-from-file scenarios using the harness's generated files.
-- [ ] 4.3 Implement `clear`, both forms of `fill_rect`, `get_pixel`, `set_pixel`, `blt`, `stretch_blt` and `hue_change`. Verify: Ruby tests for the three drawing scenarios plus one call of each method.
-- [ ] 4.4 Implement the `TextBackend` trait with its cell-based test implementation, `font`, `font=`, both forms of `draw_text`, and `text_size`. Verify: Ruby tests for the four text scenarios.
-- [ ] 4.5 Implement `clone` and `dup` of bitmaps and add `Bitmap` to the arity test. Verify: the copying scenario and the arity test for `Bitmap`.
+- [x] 4.1 Implement `Bitmap.new(width, height)`, `width`, `height`, `rect`, `dispose`, `disposed?` and freeing through the deferred queue. Verify: Ruby tests for the creation-from-size and disposal scenarios in `specs/rgss-bitmap/spec.md`, including the ten-thousand-bitmap scenario.
+- [x] 4.2 Implement `Bitmap.new(path)` through `vkxp-vfs` and `vkxp-image`. Verify: Ruby tests for the four creation-from-file scenarios using the harness's generated files.
+- [x] 4.3 Implement `clear`, both forms of `fill_rect`, `get_pixel`, `set_pixel`, `blt`, `stretch_blt` and `hue_change`. Verify: Ruby tests for the three drawing scenarios plus one call of each method.
+- [x] 4.4 Implement the `TextBackend` trait with its cell-based test implementation, `font`, `font=`, both forms of `draw_text`, and `text_size`. Verify: Ruby tests for the four text scenarios.
+- [x] 4.5 Implement `clone` and `dup` of bitmaps and add `Bitmap` to the arity test. Verify: the copying scenario and the arity test for `Bitmap`.
 
 ## 5. Robustness (`vkxp-binding`)
 

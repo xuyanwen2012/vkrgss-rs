@@ -10,7 +10,7 @@ use vkxp_vfs::GameFiles;
 
 use crate::error::{self, ErrorClasses};
 use crate::text::TextBackend;
-use crate::{color, font, rect, table};
+use crate::{bitmap, color, font, rect, table};
 
 /// What a guest is created from.
 pub struct Config {
@@ -41,6 +41,7 @@ pub(crate) struct Classes {
     pub(crate) rect: VALUE,
     pub(crate) table: VALUE,
     pub(crate) font: VALUE,
+    pub(crate) bitmap: VALUE,
 }
 
 thread_local! {
@@ -82,6 +83,7 @@ impl Guest {
             rect: rect::define(ruby)?,
             table: table::define(ruby)?,
             font: font::define(ruby)?,
+            bitmap: bitmap::define(ruby)?,
         };
         CLASSES.set(Some(classes));
         enter(Guest::new(config));
@@ -114,16 +116,6 @@ impl Guest {
     /// The bitmap arena.
     pub fn bitmaps(&self) -> &Bitmaps {
         &self.bitmaps
-    }
-
-    /// The bitmap arena, for the frame extraction of later changes.
-    pub fn bitmaps_mut(&mut self) -> &mut Bitmaps {
-        &mut self.bitmaps
-    }
-
-    /// The game's files.
-    pub fn files(&self) -> &GameFiles {
-        &self.files
     }
 
     /// Disposes the arena bitmaps of collected `Bitmap` objects.

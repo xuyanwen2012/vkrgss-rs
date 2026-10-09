@@ -93,7 +93,18 @@ pub const GROUPS: &[(&str, &[Case])] = &[
     ("marshal", MARSHAL),
     ("font", FONT),
     ("copies of values", VALUE_COPIES),
+    ("bitmap creation from a size", BITMAP_FROM_SIZE),
+    ("bitmap creation from a file", BITMAP_FROM_FILE),
+    ("bitmap disposal", BITMAP_DISPOSAL),
+    ("bitmap drawing", BITMAP_DRAWING),
+    ("bitmap text", BITMAP_TEXT),
+    ("bitmap copying", BITMAP_COPYING),
 ];
+
+/// Creates ten thousand bitmaps without keeping or disposing any, collecting now and then;
+/// the arena must not keep them. The count is checked from Rust.
+pub const UNREACHABLE_BITMAPS: &str =
+    "10_000.times { |i| Bitmap.new(1, 1); GC.start if i % 500 == 499 }; GC.start; nil";
 
 // --- rgss-values: Method surface of the value classes -----------------------------------------
 
@@ -486,6 +497,318 @@ pub const VALUE_COPIES: &[Case] = &[
     raises(
         "a copy from another class",
         "Color.new(0, 0, 0).send(:initialize_copy, Tone.new(0, 0, 0))",
+        "TypeError",
+    ),
+];
+
+// --- rgss-bitmap: Creation from a size --------------------------------------------------------
+
+pub const BITMAP_FROM_SIZE: &[Case] = &[
+    value(
+        "blank bitmap",
+        "b = Bitmap.new(32, 16); [b.width, b.height, b.rect == Rect.new(0, 0, 32, 16), \
+          b.get_pixel(0, 0) == Color.new(0, 0, 0, 0)]",
+        "[32, 16, true, true]",
+    ),
+    raises_with(
+        "zero size",
+        "Bitmap.new(0, 10)",
+        "RGSSError",
+        "failed to create bitmap",
+    ),
+    raises_with(
+        "negative size",
+        "Bitmap.new(10, -1)",
+        "RGSSError",
+        "failed to create bitmap",
+    ),
+    raises_with(
+        "a size beyond the arena's limit",
+        "Bitmap.new(100_000, 100_000)",
+        "RGSSError",
+        "failed to create bitmap",
+    ),
+    raises("no arguments", "Bitmap.new", "ArgumentError"),
+    raises("three arguments", "Bitmap.new(1, 2, 3)", "ArgumentError"),
+    raises(
+        "a size that is not a number",
+        r#"Bitmap.new(1, "2")"#,
+        "TypeError",
+    ),
+    value(
+        "the rectangle is a new object each time",
+        "b = Bitmap.new(3, 4); r = b.rect; r.width = 99; [b.rect.to_s, b.width]",
+        r#"["(0, 0, 3, 4)", 3]"#,
+    ),
+];
+
+// --- rgss-bitmap: Creation from a file --------------------------------------------------------
+
+pub const BITMAP_FROM_FILE: &[Case] = &[
+    value(
+        "file from the game directory",
+        r#"b = Bitmap.new("graphics\\pictures\\dot"); [b.width, b.height] + [[0, 0], [1, 0], [0, 1], [1, 1]].map { |x, y| c = b.get_pixel(x, y); [c.red, c.green, c.blue, c.alpha] }"#,
+        "[2, 2, [255.0, 0.0, 0.0, 255.0], [0.0, 255.0, 0.0, 128.0], [0.0, 0.0, 255.0, 255.0], \
+         [10.0, 20.0, 30.0, 0.0]]",
+    ),
+    value(
+        "file from the run-time package",
+        r#"b = Bitmap.new("Graphics/Pictures/RtpOnly"); [b.width, b.height, b.get_pixel(2, 0).to_s]"#,
+        r#"[3, 1, "(7.000000, 8.000000, 9.000000, 255.000000)"]"#,
+    ),
+    raises_with(
+        "missing file",
+        r#"Bitmap.new("Graphics/Pictures/Nope")"#,
+        "Errno::ENOENT",
+        "No such file or directory - Graphics/Pictures/Nope",
+    ),
+    raises_with(
+        "not an image",
+        r#"Bitmap.new("Graphics/Pictures/Broken")"#,
+        "RGSSError",
+        "failed to create bitmap",
+    ),
+    value(
+        "the extension may be given",
+        r#"Bitmap.new("Graphics/Pictures/Dot.png").width"#,
+        "2",
+    ),
+    value(
+        "the missing-file message is what the default Main script parses",
+        r#"begin; Bitmap.new("Graphics/Titles/001-Title01"); rescue Errno::ENOENT; $!.message.sub("No such file or directory - ", ""); end"#,
+        r#""Graphics/Titles/001-Title01""#,
+    ),
+    raises(
+        "a path that is not a string",
+        "Bitmap.new(:dot)",
+        "TypeError",
+    ),
+];
+
+// --- rgss-bitmap: Disposal --------------------------------------------------------------------
+
+pub const BITMAP_DISPOSAL: &[Case] = &[
+    raises_with(
+        "use after dispose",
+        "b = Bitmap.new(1, 1); b.dispose; b.width",
+        "RGSSError",
+        "disposed bitmap",
+    ),
+    value(
+        "disposed? reports it and disposing twice does nothing",
+        "b = Bitmap.new(1, 1); a = b.disposed?; b.dispose; c = b.disposed?; b.dispose; \
+         [a, c, b.disposed?]",
+        "[false, true, true]",
+    ),
+    value(
+        "every other method raises on a disposed bitmap",
+        r#"b = Bitmap.new(2, 2); o = Bitmap.new(2, 2); b.dispose; calls = [lambda { b.width }, lambda { b.height }, lambda { b.rect }, lambda { b.clear }, lambda { b.fill_rect(0, 0, 1, 1, Color.new(0, 0, 0)) }, lambda { b.fill_rect(Rect.new(0, 0, 1, 1), Color.new(0, 0, 0)) }, lambda { b.get_pixel(0, 0) }, lambda { b.set_pixel(0, 0, Color.new(0, 0, 0)) }, lambda { b.blt(0, 0, o, o.rect) }, lambda { b.stretch_blt(o.rect, o, o.rect) }, lambda { b.hue_change(10) }, lambda { b.font }, lambda { b.font = Font.new }, lambda { b.draw_text(0, 0, 2, 2, "a") }, lambda { b.draw_text(o.rect, "a") }, lambda { b.text_size("a") }, lambda { b.clone }, lambda { b.dup }]; calls.map { |call| begin; call.call; :returned; rescue RGSSError; $!.message; end }.uniq"#,
+        r#"["disposed bitmap"]"#,
+    ),
+    raises_with(
+        "a bitmap that was never initialised counts as disposed",
+        "b = Bitmap.allocate; raise 'not reported' unless b.disposed?; b.width",
+        "RGSSError",
+        "disposed bitmap",
+    ),
+];
+
+// --- rgss-bitmap: Drawing methods -------------------------------------------------------------
+
+pub const BITMAP_DRAWING: &[Case] = &[
+    value(
+        "fill and read",
+        "b = Bitmap.new(4, 4); b.fill_rect(1, 1, 2, 2, Color.new(255, 0, 0)); \
+         b.fill_rect(Rect.new(0, 0, 1, 1), Color.new(0, 255, 0, 128)); \
+         [b.get_pixel(1, 1) == Color.new(255, 0, 0, 255), \
+          b.get_pixel(0, 0) == Color.new(0, 255, 0, 128), \
+          b.get_pixel(3, 3) == Color.new(0, 0, 0, 0)]",
+        "[true, true, true]",
+    ),
+    value(
+        "transfer",
+        "s = Bitmap.new(2, 2); s.fill_rect(s.rect, Color.new(255, 0, 0)); d = Bitmap.new(4, 4); \
+         d.blt(1, 1, s, s.rect); red = Color.new(255, 0, 0); clear = Color.new(0, 0, 0, 0); \
+         (0...16).map { |i| x = i % 4; y = i / 4; inside = (1..2).include?(x) && (1..2).include?(y); \
+           d.get_pixel(x, y) == (inside ? red : clear) }.uniq",
+        "[true]",
+    ),
+    raises(
+        "wrong class",
+        r#"b = Bitmap.new(2, 2); b.blt(0, 0, "not a bitmap", Rect.new(0, 0, 1, 1))"#,
+        "TypeError",
+    ),
+    raises_with(
+        "disposed source",
+        "b = Bitmap.new(2, 2); s = Bitmap.new(2, 2); s.dispose; b.blt(0, 0, s, Rect.new(0, 0, 1, 1))",
+        "RGSSError",
+        "disposed bitmap",
+    ),
+    value(
+        "clear",
+        "b = Bitmap.new(2, 2); b.fill_rect(b.rect, Color.new(1, 2, 3)); b.clear; \
+         [b.get_pixel(0, 0).to_s, b.get_pixel(1, 1).alpha]",
+        r#"["(0.000000, 0.000000, 0.000000, 0.000000)", 0.0]"#,
+    ),
+    value(
+        "set_pixel and get_pixel",
+        "b = Bitmap.new(2, 2); b.set_pixel(1, 0, Color.new(10, 20, 30, 40)); b.set_pixel(5, 5, Color.new(1, 1, 1)); \
+         [b.get_pixel(1, 0).to_s, b.get_pixel(0, 0).alpha, b.get_pixel(-1, 0).to_s, b.get_pixel(2, 2).alpha]",
+        r#"["(10.000000, 20.000000, 30.000000, 40.000000)", 0.0, "(0.000000, 0.000000, 0.000000, 0.000000)", 0.0]"#,
+    ),
+    value(
+        "blt with opacity",
+        "s = Bitmap.new(1, 1); s.set_pixel(0, 0, Color.new(200, 100, 50)); d = Bitmap.new(2, 1); \
+         d.blt(0, 0, s, s.rect, 0); d.blt(1, 0, s, s.rect, 255); a = d.get_pixel(0, 0).alpha; \
+         d.blt(0, 0, s, s.rect, 128); half = d.get_pixel(0, 0).alpha; \
+         [a, d.get_pixel(1, 0).to_s, half > 0, half < 255]",
+        r#"[0.0, "(200.000000, 100.000000, 50.000000, 255.000000)", true, true]"#,
+    ),
+    value(
+        "stretch_blt",
+        "s = Bitmap.new(2, 1); s.set_pixel(0, 0, Color.new(255, 0, 0)); s.set_pixel(1, 0, Color.new(0, 0, 255)); \
+         d = Bitmap.new(4, 2); d.stretch_blt(d.rect, s, s.rect); \
+         (0...4).map { |x| [d.get_pixel(x, 0).red, d.get_pixel(x, 1).blue] }",
+        "[[255.0, 0.0], [255.0, 0.0], [0.0, 255.0], [0.0, 255.0]]",
+    ),
+    value(
+        "stretch_blt with opacity 0 draws nothing",
+        "s = Bitmap.new(1, 1); s.set_pixel(0, 0, Color.new(9, 9, 9)); d = Bitmap.new(2, 2); \
+         d.stretch_blt(d.rect, s, s.rect, 0); d.get_pixel(0, 0).alpha",
+        "0.0",
+    ),
+    value(
+        "hue_change",
+        "b = Bitmap.new(1, 1); b.set_pixel(0, 0, Color.new(255, 0, 0, 77)); b.hue_change(120); \
+         c = b.get_pixel(0, 0); b.hue_change(360); [c.red, c.green, c.blue, c.alpha, b.get_pixel(0, 0) == c]",
+        "[0.0, 255.0, 0.0, 77.0, true]",
+    ),
+    raises(
+        "fill_rect with a colour of the wrong class",
+        "Bitmap.new(1, 1).fill_rect(0, 0, 1, 1, Tone.new(0, 0, 0))",
+        "TypeError",
+    ),
+    raises(
+        "fill_rect with a rectangle of the wrong class",
+        "Bitmap.new(1, 1).fill_rect([0, 0, 1, 1], Color.new(0, 0, 0))",
+        "TypeError",
+    ),
+    raises_with(
+        "fill_rect with three arguments",
+        "Bitmap.new(1, 1).fill_rect(0, 0, Color.new(0, 0, 0))",
+        "ArgumentError",
+        "wrong number of arguments (3 for 5)",
+    ),
+    raises(
+        "stretch_blt with a source rectangle of the wrong class",
+        "b = Bitmap.new(1, 1); b.stretch_blt(b.rect, b, nil)",
+        "TypeError",
+    ),
+    raises(
+        "set_pixel with a colour of the wrong class",
+        "Bitmap.new(1, 1).set_pixel(0, 0, 255)",
+        "TypeError",
+    ),
+    raises_with(
+        "blt with too few arguments",
+        "b = Bitmap.new(1, 1); b.blt(0, 0, b)",
+        "ArgumentError",
+        "wrong number of arguments (3 for 4)",
+    ),
+];
+
+// --- rgss-bitmap: Text ------------------------------------------------------------------------
+
+// The harness's text backend draws every character as a cell half the font size wide and
+// the font size high, fully inked except for spaces; at size 22 that is 11 by 22 pixels, and
+// a line is centred vertically in its rectangle.
+pub const BITMAP_TEXT: &[Case] = &[
+    value(
+        "text leaves ink",
+        r#"b = Bitmap.new(200, 40); b.draw_text(0, 0, 200, 40, "Hello"); inked = (0...200).select { |x| b.get_pixel(x, 20).alpha > 0 }; p = b.get_pixel(inked.first, 20); [inked.size > 0, [p.red, p.green, p.blue] == [b.font.color.red, b.font.color.green, b.font.color.blue], inked.first, inked.last, b.get_pixel(0, 2).alpha]"#,
+        "[true, true, 0, 54, 0.0]",
+    ),
+    value(
+        "size of text",
+        r#"b = Bitmap.new(1, 1); r = b.text_size("Hello"); [b.font.size, r.class, r.x, r.y, r.width > 0, r.width, r.height]"#,
+        "[22, Rect, 0, 0, true, 55, 22]",
+    ),
+    value(
+        "font object is live",
+        r#"b = Bitmap.new(200, 40); b.font.color = Color.new(255, 0, 0); b.draw_text(0, 0, 200, 40, "A"); (0...11).map { |x| p = b.get_pixel(x, 20); [p.red, p.green, p.blue, p.alpha > 0] }.uniq"#,
+        "[[255.0, 0.0, 0.0, true]]",
+    ),
+    value(
+        "numbers are converted",
+        r#"b = Bitmap.new(200, 40); b.draw_text(0, 0, 200, 40, 123); c = Bitmap.new(200, 40); c.draw_text(0, 0, 200, 40, "123"); row = lambda { |m| (0...200).map { |x| m.get_pixel(x, 20).alpha } }; [row.call(b) == row.call(c), row.call(b).select { |a| a > 0 }.size, b.text_size(123).width]"#,
+        "[true, 33, 33]",
+    ),
+    value(
+        "the rectangle form and alignment",
+        r#"inked = lambda { |align| m = Bitmap.new(100, 22); m.draw_text(Rect.new(0, 0, 100, 22), "AB", align); xs = (0...100).select { |x| m.get_pixel(x, 0).alpha > 0 }; [xs.first, xs.last] }; b = Bitmap.new(100, 22); b.draw_text(b.rect, "AB"); [inked.call(0), inked.call(1), inked.call(2), b.get_pixel(21, 0).alpha > 0, b.get_pixel(22, 0).alpha]"#,
+        "[[0, 21], [39, 60], [78, 99], true, 0.0]",
+    ),
+    value(
+        "alignment in the form with coordinates",
+        r#"b = Bitmap.new(100, 22); b.draw_text(0, 0, 100, 22, "A", 2); xs = (0...100).select { |x| b.get_pixel(x, 0).alpha > 0 }; [xs.first, xs.last]"#,
+        "[89, 99]",
+    ),
+    value(
+        "changes to the font object affect later drawing",
+        r#"b = Bitmap.new(1, 1); f = b.font; f.size = 40; a = b.text_size("ab"); f.bold = true; c = b.text_size("ab"); [f.equal?(b.font), a.width, a.height, c.width]"#,
+        "[true, 40, 40, 42]",
+    ),
+    value(
+        "font= replaces the font object",
+        r#"b = Bitmap.new(1, 1); old = b.font; f = Font.new("Other", 10); b.font = f; [b.font.equal?(f), b.font.equal?(old), b.text_size("abc").to_s]"#,
+        r#"[true, false, "(0, 0, 15, 10)"]"#,
+    ),
+    value(
+        "a new bitmap's font has the defaults of the moment",
+        "begin; Font.default_size = 30; b = Bitmap.new(1, 1); ensure; Font.default_size = 22; end; \
+         [b.font.size, b.font.name, b.font.class, Bitmap.new(1, 1).font.equal?(b.font)]",
+        r#"[30, "Test Sans", Font, false]"#,
+    ),
+    value(
+        "a font colour without alpha draws nothing",
+        r#"b = Bitmap.new(20, 22); b.font.color = Color.new(0, 255, 0, 0); b.draw_text(0, 0, 20, 22, "A"); b.get_pixel(0, 0).alpha"#,
+        "0.0",
+    ),
+    raises(
+        "font= with another class",
+        "Bitmap.new(1, 1).font = Color.new(0, 0, 0)",
+        "TypeError",
+    ),
+    raises_with(
+        "draw_text with four arguments",
+        r#"Bitmap.new(1, 1).draw_text(0, 0, 1, 1)"#,
+        "ArgumentError",
+        "wrong number of arguments (4 for 5)",
+    ),
+    raises(
+        "draw_text with a rectangle of the wrong class",
+        r#"Bitmap.new(1, 1).draw_text("a", "b")"#,
+        "TypeError",
+    ),
+];
+
+// --- rgss-bitmap: Copying ---------------------------------------------------------------------
+
+pub const BITMAP_COPYING: &[Case] = &[
+    value(
+        "independent copy",
+        "a = Bitmap.new(2, 2); b = a.clone; b.set_pixel(0, 0, Color.new(1, 2, 3)); a.dispose; \
+         [b.get_pixel(0, 0) == Color.new(1, 2, 3, 255), a.disposed?, b.disposed?]",
+        "[true, true, false]",
+    ),
+    value(
+        "a copy has the size, pixels and font values",
+        r#"a = Bitmap.new(3, 2); a.set_pixel(2, 1, Color.new(9, 8, 7, 6)); a.font.size = 31; a.font.name = ["P", "Q"]; a.font.bold = true; a.font.color = Color.new(1, 2, 3); b = a.dup; e = [b.width, b.height, b.get_pixel(2, 1).to_s, b.font.size, b.font.name, b.font.bold, b.font.color == a.font.color, b.font.equal?(a.font), b.font.color.equal?(a.font.color)]; a.set_pixel(2, 1, Color.new(0, 0, 0)); a.font.size = 5; a.font.color.red = 200; e + [b.get_pixel(2, 1).alpha, b.font.size, b.font.color.red]"#,
+        r#"[3, 2, "(9.000000, 8.000000, 7.000000, 6.000000)", 31, ["P", "Q"], true, true, false, false, 6.0, 31, 1.0]"#,
+    ),
+    raises(
+        "a copy from another class",
+        "Bitmap.new(1, 1).send(:initialize_copy, Rect.new(0, 0, 1, 1))",
         "TypeError",
     ),
 ];

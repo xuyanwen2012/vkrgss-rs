@@ -2,9 +2,7 @@
 //!
 //! Side: guest.
 
-// The foundation has no class on it yet; the allowance goes when the classes arrive.
-#![allow(dead_code)]
-
+mod bitmap;
 mod color;
 mod error;
 mod font;

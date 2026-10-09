@@ -216,6 +216,22 @@ pub(crate) fn check_count(
     ))
 }
 
+/// The `ArgumentError` of a method that takes one of several argument counts, `accepted` in
+/// ascending order: Ruby's usual message with the nearest accepted count at or above the
+/// given one, or the largest.
+pub(crate) fn count_error(ruby: &Ruby, args: &[VALUE], accepted: &[usize]) -> Raise {
+    let expected = accepted
+        .iter()
+        .find(|&&count| count >= args.len())
+        .or(accepted.last())
+        .copied()
+        .unwrap_or(0);
+    Raise::new(
+        arg_error(ruby),
+        format!("wrong number of arguments ({} for {expected})", args.len()),
+    )
+}
+
 /// An integer argument of 64 bits: a `Fixnum`, a `Bignum` in range, or a `Float`, which is
 /// truncated. Anything else raises `TypeError`, a number out of range `RangeError`.
 pub(crate) fn long(ruby: &Ruby, value: VALUE) -> Result<i64, Raise> {
