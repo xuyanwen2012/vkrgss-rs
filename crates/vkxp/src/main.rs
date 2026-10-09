@@ -59,15 +59,25 @@ const EXTRACTION_TOOL: &str = "cargo xtask extract-rpg";
 
 fn main() -> ExitCode {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
-    let options = match args::parse(&arguments) {
+    let usage = |message: String| {
+        eprintln!("vkxp: {message}");
+        eprintln!("{}", args::USAGE);
+        ExitCode::from(2)
+    };
+    let mut options = match args::parse(&arguments) {
         Ok(options) => options,
-        Err(message) => {
+        Err(message) => return usage(message),
+    };
+    // A script in a file is a value of the command line like one given in place.
+    let script = match input_script(options.input.take()) {
+        Ok(script) => script,
+        Err(InputError::Malformed(message)) => return usage(message),
+        Err(InputError::Unreadable(message)) => {
             eprintln!("vkxp: {message}");
-            eprintln!("{}", args::USAGE);
-            return ExitCode::from(2);
+            return ExitCode::FAILURE;
         }
     };
-    match run(options) {
+    match run(options, script) {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::FAILURE,
         Err(error) => {
@@ -120,22 +130,37 @@ fn default_font_names(library: &str) -> Vec<String> {
     vec![name.to_owned()]
 }
 
+/// Why the input script of a headless run could not be taken from its file.
+#[derive(Debug, PartialEq, Eq)]
+enum InputError {
+    /// The file could not be read.
+    Unreadable(String),
+    /// The file does not hold a script: a malformed value of `--input`.
+    Malformed(String),
+}
+
 /// The input script of a headless run.
-fn input_script(input: Option<Input>) -> Result<InputScript> {
+fn input_script(input: Option<Input>) -> Result<InputScript, InputError> {
     match input {
         None => Ok(InputScript::new()),
         Some(Input::Script(script)) => Ok(script),
         Some(Input::File(path)) => {
-            let text = std::fs::read_to_string(&path)
-                .with_context(|| format!("cannot read the input script {}", path.display()))?;
-            InputScript::parse(&text)
-                .with_context(|| format!("in the input script {}", path.display()))
+            let text = std::fs::read_to_string(&path).map_err(|error| {
+                InputError::Unreadable(format!(
+                    "cannot read the input script {}: {error}",
+                    path.display()
+                ))
+            })?;
+            InputScript::parse(&text).map_err(|error| {
+                InputError::Malformed(format!("--input: in {}: {error}", path.display()))
+            })
         }
     }
 }
 
-/// Runs the game the options describe. `Ok(false)` is a run that failed and has said why.
-fn run(options: Options) -> Result<bool> {
+/// Runs the game the options describe, headless with the input `script`. `Ok(false)` is a
+/// run that failed and has said why.
+fn run(options: Options, script: InputScript) -> Result<bool> {
     let game_dir = absolute(options.game_dir.as_deref().unwrap_or(Path::new(".")))?;
     let ini = GameIni::read(&game_dir, options.encoding)?;
     let rtp_table = options
@@ -151,7 +176,6 @@ fn run(options: Options) -> Result<bool> {
         other => other.into(),
     })?;
     let builtin_scripts = builtin_scripts(options.builtin_scripts)?;
-    let script = input_script(options.input)?;
     let dumps = options
         .dumps
         .iter()
@@ -271,6 +295,28 @@ mod tests {
         assert_eq!(default_font_names("RGSS102J.dll"), ["ＭＳ Ｐゴシック"]);
         assert_eq!(default_font_names("rgss103j"), ["ＭＳ Ｐゴシック"]);
         assert_eq!(default_font_names(""), ["Arial"]);
+    }
+
+    #[test]
+    fn an_input_script_file_is_read_and_parsed() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("keys.txt");
+        std::fs::write(&file, "2:RIGHT\n6:\n").unwrap();
+        assert_eq!(
+            input_script(Some(Input::File(file.clone()))),
+            Ok(InputScript::parse("2:RIGHT, 6:").unwrap())
+        );
+
+        std::fs::write(&file, "2:SIDEWAYS").unwrap();
+        let error = input_script(Some(Input::File(file))).unwrap_err();
+        assert!(
+            matches!(&error, InputError::Malformed(message) if message.contains("SIDEWAYS")),
+            "{error:?}"
+        );
+
+        let absent = Input::File(dir.path().join("absent.txt"));
+        let error = input_script(Some(absent)).unwrap_err();
+        assert!(matches!(error, InputError::Unreadable(_)), "{error:?}");
     }
 
     #[test]

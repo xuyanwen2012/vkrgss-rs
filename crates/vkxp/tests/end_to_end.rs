@@ -359,6 +359,19 @@ fn an_unknown_option_prints_the_usage_message() {
 }
 
 #[test]
+fn a_malformed_input_script_file_prints_the_usage_message() {
+    let game = Game::new("e2e-bad-input", "Input", &[("Main", "Graphics.update")]);
+    let keys = tempfile::tempdir().unwrap();
+    let file = keys.path().join("bad.txt");
+    fs::write(&file, "2:SIDEWAYS").unwrap();
+    let ran = headless(&game, &["--input", &format!("@{}", file.display())]);
+    ran.assert_failure();
+    let stderr = ran.stderr();
+    assert!(stderr.contains("SIDEWAYS"), "{stderr}");
+    assert!(stderr.contains("usage: vkxp"), "{stderr}");
+}
+
+#[test]
 fn a_dumped_frame_shows_the_red_sprite_where_it_is() {
     let main = format!("{RED_SPRITE}loop {{ Graphics.update }}\n");
     let game = Game::new("e2e-dump", "Dump", &[("Main", &main)]);

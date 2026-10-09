@@ -152,7 +152,8 @@ Paths on the command line are relative to the directory the program was started 
 | `--input SCRIPT\|@FILE` | Headless: the buttons held from given frames on, in the syntax described under *Running the demo*, or a file that holds such a script. |
 | `--dump FRAME=FILE` | Headless: write frame `FRAME`, counted from 0, as a PNG file. Repeatable. |
 
-An unknown option or a malformed value ends the program with the usage message and status 2.
+An unknown option or a malformed value, a malformed input script file included, ends the
+program with the usage message and status 2.
 The exit status is 0 when the game ends normally: its scripts return or call `exit`, the
 window is closed, or the frame limit of a headless run is reached. It is non-zero when a
 script error ends the game (its report is on the error stream), when the host fails, when a
