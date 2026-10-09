@@ -71,8 +71,10 @@ configuration file will expose that.
 
 - PNG through the `png` crate with palette and low-bit-depth expansion, `tRNS` to alpha and
   16-bit stripping; gamma and colour profiles are ignored.
-- JPEG through `zune-jpeg`, converted to RGBA with alpha 255. If it proves unsuitable,
-  `jpeg-decoder` is the fallback; either way the choice stays inside this crate.
+- JPEG through `jpeg-decoder` (without its threading feature), converted to RGBA with alpha
+  255. `zune-jpeg` was the first choice and proved unsuitable: version 0.5.15 returns wrong
+  pixels, without an error, for chroma subsampled by a factor of four in either direction.
+  The choice stays inside this crate.
 - BMP through a small decoder in this crate: the format subset is small and a dependency
   would bring more code than it saves.
 

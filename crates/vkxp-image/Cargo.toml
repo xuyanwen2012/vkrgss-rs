@@ -10,3 +10,12 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+jpeg-decoder.workspace = true
+png.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+jpeg-encoder.workspace = true
+proptest.workspace = true

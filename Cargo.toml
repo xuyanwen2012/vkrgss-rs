@@ -51,6 +51,8 @@ ash = "0.38"
 cc = "1"
 encoding_rs = "0.8"
 gpu-allocator = { version = "0.28", default-features = false, features = ["std", "vulkan"] }
+jpeg-decoder = { version = "0.3", default-features = false }
+jpeg-encoder = "0.7"
 libc = "0.2"
 libz-sys = { version = "1.1", default-features = false, features = ["static"] }
 png = "0.18"

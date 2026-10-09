@@ -36,7 +36,7 @@ None.
 ## Impact
 
 - Crates: `vkxp-vfs`, `vkxp-image`. Both are guest crates and stay free of `unsafe`.
-- New dependencies: `encoding_rs` (legacy text encodings of `Game.ini`), `zune-jpeg` (JPEG);
+- New dependencies: `encoding_rs` (legacy text encodings of `Game.ini`), `jpeg-decoder` (JPEG);
   `png` is already in the workspace. Development-only: an image encoder to synthesise test
   inputs.
 - `Cargo.toml` (workspace dependency table) and `Cargo.lock` change accordingly.

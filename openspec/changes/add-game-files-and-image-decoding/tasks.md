@@ -16,12 +16,12 @@
 
 ## 3. Image decoding (`vkxp-image`)
 
-- [ ] 3.1 Add the dependencies (`png`, `zune-jpeg`; a development-only JPEG encoder), the `DecodedImage` type, the error enum and signature sniffing. Verify: tests for the two format-recognition scenarios in `specs/image-decoding/spec.md`.
-- [ ] 3.2 Implement PNG decoding. Verify: tests for the three PNG scenarios plus one test per colour type and for an interlaced image, with inputs encoded in the test.
-- [ ] 3.3 Implement JPEG decoding. Verify: tests for the two JPEG scenarios, a progressive image, and an unsupported component layout returning the unsupported-format error.
-- [ ] 3.4 Implement BMP decoding for 1, 4, 8, 24 and 32 bits, bottom-up and top-down, with the alpha rule for 32 bits and an error for compressed data. Verify: tests for the three BMP scenarios and one per bit depth, with inputs built byte by byte.
-- [ ] 3.5 Enforce the pixel limit before allocation and make every failure a typed error. Verify: tests for the three malformed-input scenarios: truncation at every length for one input per format, a property test over random bytes behind each signature, and the 65535 by 65535 header.
-- [ ] 3.6 Document the crate in `crates/vkxp-image/src/lib.rs`. Verify: `cargo doc -p vkxp-image --no-deps` builds without warnings.
+- [x] 3.1 Add the dependencies (`png`, `jpeg-decoder` in place of `zune-jpeg`, see `design.md`; a development-only JPEG encoder), the `DecodedImage` type, the error enum and signature sniffing. Verify: tests for the two format-recognition scenarios in `specs/image-decoding/spec.md`.
+- [x] 3.2 Implement PNG decoding. Verify: tests for the three PNG scenarios plus one test per colour type and for an interlaced image, with inputs encoded in the test.
+- [x] 3.3 Implement JPEG decoding. Verify: tests for the two JPEG scenarios, a progressive image, and an unsupported component layout returning the unsupported-format error.
+- [x] 3.4 Implement BMP decoding for 1, 4, 8, 24 and 32 bits, bottom-up and top-down, with the alpha rule for 32 bits and an error for compressed data. Verify: tests for the three BMP scenarios and one per bit depth, with inputs built byte by byte.
+- [x] 3.5 Enforce the pixel limit before allocation and make every failure a typed error. Verify: tests for the three malformed-input scenarios: truncation at every length for one input per format, a property test over random bytes behind each signature, and the 65535 by 65535 header.
+- [x] 3.6 Document the crate in `crates/vkxp-image/src/lib.rs`. Verify: `cargo doc -p vkxp-image --no-deps` builds without warnings.
 
 ## 4. Integration check
 
