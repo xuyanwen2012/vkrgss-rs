@@ -30,3 +30,11 @@
 ## Risks / Trade-offs
 
 - [Scripts that relied on the `TypeError`] → None can exist for a runtime that never raised it.
+
+## Follow-ups
+
+- `GetCurrentProcess`, which a script calls to get the handle it passes to `SetPriorityClass`
+  and `GetProcessTimes`, is not in the table: it returns 0 with one report. Should it be
+  emulated as well?
+- The name fallback (`A` appended) was already in `find` of `win32api.rs` before this change;
+  the change adds only the test of the scenario.
