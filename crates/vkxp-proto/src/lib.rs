@@ -5,7 +5,8 @@
 //! Everything the guest (script thread) and the host (window, GPU, audio) exchange is defined
 //! here. The types are self-contained values: no handles, no references, no floating point.
 //! Inside one process they move through channels as they are; [`codec`] gives them a versioned
-//! binary form for recordings, test fixtures and a later process split.
+//! binary form for recordings, test fixtures and a later process split. [`link`] is the pair of
+//! endpoints the two threads hold.
 //!
 //! This is protocol version 2. Over version 1 a [`FramePacket`] carries the guest's
 //! [`FrameRate`], a [`Quad`] carries a tone and a colour for its own texels, the messages
@@ -18,6 +19,7 @@
 #![forbid(unsafe_code)]
 
 pub mod codec;
+pub mod link;
 pub mod recording;
 
 mod audio;

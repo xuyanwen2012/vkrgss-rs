@@ -2,7 +2,7 @@
 
 ## 1. Link (`vkxp-proto`)
 
-- [ ] 1.1 Add the `link` module: `link(wake)` returning a guest end (`send`, blocking `recv`, `try_recv`) and a host end (`try_recv`, `send`), with a disconnection error. Verify: tests for the three link scenarios in `specs/guest-host-protocol/spec.md` (order, wake callback, dropped peer), run with a second thread.
+- [x] 1.1 Add the `link` module: `link(wake)` returning a guest end (`send`, blocking `recv`, `try_recv`) and a host end (`try_recv`, `send`), with a disconnection error. Verify: tests for the three link scenarios in `specs/guest-host-protocol/spec.md` (order, wake callback, dropped peer), run with a second thread.
 
 ## 2. Session logic (`vkxp-host`)
 
