@@ -2,7 +2,7 @@
 
 ## 1. Archive (`xtask`)
 
-- [ ] 1.1 Implement the reader and writer of the archive format and `pack-rgssad`. Verify: the two scenarios of the packing requirement in `specs/oracle-harness/spec.md`, and a test that `vkxp` runs a generated game packed by the command.
+- [x] 1.1 Implement the reader and writer of the archive format and `pack-rgssad`. Verify: the two scenarios of the packing requirement in `specs/oracle-harness/spec.md`, and a test that `vkxp` runs a generated game packed by the command.
 
 ## 2. Harness (`xtask`)
 

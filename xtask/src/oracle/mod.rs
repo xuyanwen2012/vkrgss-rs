@@ -259,6 +259,11 @@ end
             generated
         }
 
+        /// Packs the game as `cargo xtask pack-rgssad` does.
+        fn pack(&self) {
+            crate::rgssad::pack(&self.game()).unwrap();
+        }
+
         fn game(&self) -> PathBuf {
             self.dir.path().join("game")
         }
@@ -388,6 +393,18 @@ end
             ("First", "$drawn = 0"),
             ("Main", "3.times { Graphics.update; $drawn += 1 }"),
         ]);
+        generated.plain_run(&["--dump", "2=last.png"]);
+        assert!(generated.dir.path().join("last.png").is_file());
+    }
+
+    #[test]
+    fn vkxp_runs_a_game_that_the_command_packed() {
+        let generated = Generated::new(&[
+            ("First", "$drawn = 0"),
+            ("Main", "3.times { Graphics.update; $drawn += 1 }"),
+        ]);
+        generated.pack();
+        assert!(!generated.game().join("Data").exists());
         generated.plain_run(&["--dump", "2=last.png"]);
         assert!(generated.dir.path().join("last.png").is_file());
     }
