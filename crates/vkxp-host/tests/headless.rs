@@ -9,13 +9,14 @@ use std::thread;
 use std::time::Duration;
 
 use common::{SMALL_DEMO, drive_demo, small_frame, spawn_demo, test_device};
+use vkxp_host::demo::TRANSITION_FRAMES;
 use vkxp_host::testing::ErrorBuffer;
 use vkxp_host::{
     HeadlessEnd, HeadlessError, HeadlessOptions, HeadlessReport, HostLink, InputScript,
     headless_link, run_headless,
 };
 use vkxp_proto::link::{Disconnected, GuestEnd};
-use vkxp_proto::{Button, GuestToHost, HostToGuest, InputSnapshot, Op, Rect, Size};
+use vkxp_proto::{Button, Color, GuestToHost, HostToGuest, InputSnapshot, Op, Rect, Size};
 use vkxp_vk::DeviceChoice;
 
 #[test]
@@ -126,17 +127,141 @@ fn dumped_frames_equal_the_reference_compositor() {
         .collect();
     assert_eq!(frames.len(), 14);
 
-    for index in [6, 12] {
+    let dumped = |index: usize| {
         let (size, rgba) = read_png(&directory.path().join(format!("frame-{index}.png")));
         assert_eq!(size, SMALL_DEMO.size, "dumps are at the logical size");
         assert_eq!(size, frames[index].size);
+        rgba
+    };
+    assert!(
+        dumped(6) == frames[6].rgba,
+        "frame 6 differs from the reference"
+    );
+
+    // B froze the display and started a transition that frame 12 is inside, so its dump is
+    // the mix of the frame that was held and frame 12, which the presenter makes in floating
+    // point.
+    let frames_before = |wanted: fn(&GuestToHost) -> bool| {
+        let at = messages.iter().position(wanted).unwrap();
+        messages[..at]
+            .iter()
+            .filter(|message| matches!(message, GuestToHost::Frame(_)))
+            .count()
+    };
+    let held = frames_before(|message| matches!(message, GuestToHost::Freeze)) - 1;
+    let first = frames_before(|message| matches!(message, GuestToHost::Transition { .. }));
+    assert!(
+        held < first && first < 12,
+        "frame 12 is past the first step"
+    );
+    let weight = (12 - first) as f32 / TRANSITION_FRAMES as f32;
+    let mixed = dumped(12);
+    assert_ne!(frames[held].rgba, frames[12].rgba);
+    for (at, shown) in mixed.iter().enumerate() {
+        let (from, to) = (frames[held].rgba[at], frames[12].rgba[at]);
+        let exact = f32::from(from) + (f32::from(to) - f32::from(from)) * weight;
         assert!(
-            rgba == frames[index].rgba,
-            "frame {index} differs from the reference"
+            (f32::from(*shown) - exact).abs() <= 1.0,
+            "byte {at} of frame 12 is {shown}, not the mix of {from} and {to} at {weight}"
         );
     }
-    // The two dumps show different moments: the script moved the sprite in between.
-    assert_ne!(frames[6].rgba, frames[12].rgba);
+}
+
+/// A frame of one grey level, of the size of [`small_frame`].
+fn grey_frame(frame_index: u64, level: u8) -> GuestToHost {
+    let GuestToHost::Frame(mut packet) = small_frame(frame_index) else {
+        unreachable!("a small frame is a frame");
+    };
+    packet.ops = vec![Op::Clear {
+        clip: Rect::from_size(packet.logical_size),
+        color: Color::new(level, level, level, 255),
+    }];
+    GuestToHost::Frame(packet)
+}
+
+/// Runs a guest that shows a white frame, sends `between`, shows `black` black frames and
+/// shuts down, with every frame dumped. Returns the red channel of each dump, which is a
+/// frame of one colour.
+fn dumped_levels(between: Vec<GuestToHost>, black: u64) -> Vec<u8> {
+    let directory = tempfile::tempdir().unwrap();
+    let path = |index: u64| directory.path().join(format!("frame-{index}.png"));
+    let frames = 1 + black;
+    let guest = move |link: GuestEnd| {
+        let show = |message| {
+            link.send(message).unwrap();
+            assert_eq!(link.recv(), Ok(HostToGuest::Tick));
+        };
+        show(grey_frame(0, 255));
+        for message in between {
+            link.send(message).unwrap();
+        }
+        for index in 1..frames {
+            show(grey_frame(index, 0));
+        }
+        link.send(GuestToHost::Shutdown).unwrap();
+    };
+    let errors = ErrorBuffer::new();
+    let (result, ()) = run_with(
+        HeadlessOptions {
+            dumps: (0..frames).map(|index| (index, path(index))).collect(),
+            errors: Box::new(errors.clone()),
+            ..options()
+        },
+        guest,
+    );
+    assert_eq!(result.unwrap().frames, frames);
+    assert_eq!(errors.text(), "");
+    (0..frames)
+        .map(|index| {
+            let (size, rgba) = read_png(&path(index));
+            assert_eq!(size, Size::new(16, 12), "dumps are at the logical size");
+            let (pixels, rest) = rgba.as_chunks::<4>();
+            assert!(rest.is_empty());
+            let first = pixels[0];
+            assert_eq!([first[1], first[2], first[3]], [first[0], first[0], 255]);
+            assert!(
+                pixels.iter().all(|pixel| *pixel == first),
+                "frame {index} is of one colour"
+            );
+            first[0]
+        })
+        .collect()
+}
+
+fn transition(duration: u32) -> GuestToHost {
+    GuestToHost::Transition {
+        duration,
+        mask: None,
+        vague: 40,
+    }
+}
+
+#[test]
+fn dump_of_a_frame_under_a_freeze_is_the_held_frame() {
+    assert_eq!(dumped_levels(vec![GuestToHost::Freeze], 2), [255, 255, 255]);
+}
+
+#[test]
+fn dump_in_the_middle_of_a_transition_is_the_mix() {
+    let levels = dumped_levels(vec![GuestToHost::Freeze, transition(4)], 6);
+    // The third black frame is at step 2 of 4, the even mix, which rounds either way.
+    assert!((127..=128).contains(&levels[3]), "{levels:?}");
+    assert_eq!(levels[..2], [255, 255]);
+    assert!((190..=192).contains(&levels[2]), "{levels:?}");
+    assert!((63..=64).contains(&levels[4]), "{levels:?}");
+    assert_eq!(levels[5..], [0, 0]);
+}
+
+#[test]
+fn dump_under_a_transition_without_a_freeze_is_the_frame_that_was_on_screen() {
+    let levels = dumped_levels(vec![transition(2)], 4);
+    assert_eq!(levels, [255, 255, 255, 0, 0]);
+}
+
+#[test]
+fn dump_after_a_transition_of_duration_zero_is_the_newest_frame() {
+    let levels = dumped_levels(vec![GuestToHost::Freeze, transition(0)], 2);
+    assert_eq!(levels, [255, 0, 0]);
 }
 
 #[test]

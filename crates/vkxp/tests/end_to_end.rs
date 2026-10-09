@@ -395,6 +395,45 @@ fn a_dumped_frame_shows_the_red_sprite_where_it_is() {
 }
 
 #[test]
+fn dumped_frames_show_a_transition_as_a_window_would() {
+    let main = "\
+sprite = Sprite.new
+sprite.bitmap = Bitmap.new(640, 480)
+sprite.bitmap.fill_rect(0, 0, 640, 480, Color.new(255, 255, 255))
+Graphics.update
+Graphics.freeze
+sprite.visible = false
+Graphics.transition(4)
+Graphics.update
+";
+    let game = Game::new("e2e-transition", "Transition", &[("Main", main)]);
+    let names: Vec<String> = (0..6).map(|index| format!("{index}={index}.png")).collect();
+    let dumps: Vec<&str> = names.iter().flat_map(|name| ["--dump", name]).collect();
+    let ran = headless(&game, &dumps);
+    ran.assert_success();
+
+    // The frame before the freeze, the four of the transition, and the one after it. The mix
+    // is made in floating point, so a step that falls between two levels rounds either way.
+    let expected = [255..=255, 255..=255, 191..=192, 127..=128, 63..=64, 0..=0];
+    for (index, levels) in expected.into_iter().enumerate() {
+        let frame = ran.frame(&format!("{index}.png"));
+        assert_eq!((frame.width, frame.height), (640, 480));
+        let first = frame.pixel(0, 0);
+        assert!(levels.contains(&first[0]), "frame {index}: {first:?}");
+        assert_eq!([first[1], first[2], first[3]], [first[0], first[0], 255]);
+        assert!(
+            frame
+                .rgba
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .all(|pixel| *pixel == first),
+            "frame {index} is of one colour"
+        );
+    }
+}
+
+#[test]
 fn scripted_input_moves_the_sprite() {
     let ran = run_demo(&demo("e2e-input"));
     ran.assert_success();

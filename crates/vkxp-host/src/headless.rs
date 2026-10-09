@@ -2,8 +2,9 @@
 //!
 //! It runs on a virtual clock that never waits: when a tick is due in the future the clock is
 //! simply moved there. Input comes from an [`InputScript`], and chosen frames are written as
-//! PNG files at the logical size, taken from the compositor's frame. Nothing in a run depends
-//! on real time, so two runs of the same guest with the same script write identical files.
+//! PNG files at the logical size, showing what a window of that size would: the held frame
+//! while the display is frozen and the mix during a transition. Nothing in a run depends on
+//! real time, so two runs of the same guest with the same script write identical files.
 //!
 //! Frames are numbered from 0 in the order their messages arrive, which for a guest that
 //! counts its frames from 0 is the packet's `frame_index`.
@@ -15,7 +16,7 @@ use std::sync::mpsc::{Receiver, channel};
 
 use thiserror::Error;
 use vkxp_proto::link::{Disconnected, GuestEnd, HostEnd, link};
-use vkxp_proto::{BitmapId, FramePacket, GuestToHost, HostToGuest};
+use vkxp_proto::{BitmapId, FramePacket, GuestToHost, HostToGuest, Size};
 use vkxp_vk::{DeviceChoice, Frame, VkCompositor, VkError};
 
 use crate::{
@@ -142,10 +143,12 @@ pub enum HeadlessError {
 
 /// The display of a headless run: the compositor and nothing that shows its frames.
 ///
-/// Packets are composited exactly as in a window. Freezing has no effect because there is
-/// nothing on screen to keep; frame dumps are of the compositor's frame either way.
+/// Packets are composited exactly as in a window, and the held frame and the mix are kept as
+/// in a window, so that [`read_shown`](HeadlessDisplay::read_shown) gives what one would show.
 pub struct HeadlessDisplay {
     compositor: VkCompositor,
+    /// The logical size of the newest frame.
+    size: Option<Size>,
     title: String,
 }
 
@@ -154,6 +157,7 @@ impl HeadlessDisplay {
     pub fn new(device: DeviceChoice) -> Result<HeadlessDisplay, VkError> {
         Ok(HeadlessDisplay {
             compositor: VkCompositor::new(device)?,
+            size: None,
             title: String::new(),
         })
     }
@@ -161,6 +165,18 @@ impl HeadlessDisplay {
     /// The newest frame, read back from the device.
     pub fn read_frame(&mut self) -> Result<Option<Frame>, VkError> {
         self.compositor.read_frame()
+    }
+
+    /// What a window of the newest frame's size would show: that frame as it was composited,
+    /// or while a freeze or a transition is under way the presenter's mix of it and the held
+    /// frame, drawn off screen at scale 1.
+    pub fn read_shown(&mut self) -> Result<Option<Frame>, VkError> {
+        match self.size {
+            Some(size) if self.compositor.mix() < 1.0 => {
+                self.compositor.scale_frame(size).map(Some)
+            }
+            _ => self.compositor.read_frame(),
+        }
     }
 
     /// The title the guest set last.
@@ -173,11 +189,13 @@ impl Display for HeadlessDisplay {
     type Error = VkError;
 
     fn render(&mut self, packet: &FramePacket) -> Result<(), VkError> {
-        self.compositor.render(packet)
+        self.compositor.render(packet)?;
+        self.size = Some(packet.logical_size);
+        Ok(())
     }
 
     fn hold(&mut self) -> Result<(), VkError> {
-        Ok(())
+        self.compositor.freeze()
     }
 
     fn set_mix(&mut self, weight: f32) {
@@ -266,8 +284,8 @@ pub fn run_headless(
         // The number of the frame just handled, if it was one.
         let handled = frames;
         if is_frame {
-            // A rejected frame left the previous one in the compositor; that is not dumped
-            // under this frame's number.
+            // A rejected frame left the previous one on the display; that is not dumped under
+            // this frame's number.
             if !session.is_failing() {
                 for (_, path) in dumps.iter().filter(|(frame, _)| *frame == handled) {
                     dump(session.display_mut(), handled, path)?;
@@ -304,10 +322,10 @@ pub fn run_headless(
     }
 }
 
-/// Writes the display's newest frame to `path` as a PNG file.
+/// Writes what the display shows to `path` as a PNG file.
 fn dump(display: &mut HeadlessDisplay, frame: u64, path: &Path) -> Result<(), HeadlessError> {
     let image = display
-        .read_frame()
+        .read_shown()
         .map_err(|source| HeadlessError::ReadFrame { frame, source })?
         .expect("a frame was just rendered");
     write_png(path, &image).map_err(|message| HeadlessError::Dump {
