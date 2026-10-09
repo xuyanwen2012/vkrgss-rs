@@ -60,9 +60,9 @@ impl Look {
 /// The frame being assembled.
 pub(crate) struct Assembly<'a> {
     pub(crate) bitmaps: &'a Bitmaps,
-    ops: Vec<Op>,
+    pub(crate) ops: Vec<Op>,
     /// The bitmap of every quad in `ops`.
-    referenced: Vec<BitmapId>,
+    pub(crate) referenced: Vec<BitmapId>,
 }
 
 impl Assembly<'_> {
@@ -156,6 +156,10 @@ impl Assembly<'_> {
 #[derive(Debug, Clone, Copy)]
 enum Item {
     Sprite(Key),
+    /// The frame and background of a window.
+    WindowBack(Key),
+    /// What a window shows inside: cursor, contents, pause sign and arrows.
+    WindowFront(Key),
     Viewport(Key),
 }
 
@@ -209,6 +213,9 @@ impl Scene {
     /// The packets of one scene must reach a compositor in the order they were extracted,
     /// because the bitmap arena takes every delta it hands out to be delivered.
     pub fn extract(&mut self, bitmaps: &mut Bitmaps) -> FramePacket {
+        for (_, window) in self.windows.iter_mut() {
+            window.refresh_caches(bitmaps);
+        }
         let (ops, referenced) = self.ops(bitmaps);
         // Every quad was checked to name a live bitmap, which is all `deltas` requires.
         let deltas = bitmaps.deltas(&referenced).unwrap_or_default();
@@ -245,6 +252,16 @@ impl Scene {
         };
         for (key, sprite) in self.sprites.iter() {
             place(sprite.viewport, Entry::new(sprite.order, Item::Sprite(key)));
+        }
+        for (key, window) in self.windows.iter() {
+            let back = Entry::new(window.order, Item::WindowBack(key));
+            let front = Entry {
+                z: back.z + 2,
+                item: Item::WindowFront(key),
+                ..back
+            };
+            place(window.viewport, back);
+            place(window.viewport, front);
         }
         sort(&mut top);
 
@@ -294,6 +311,16 @@ impl Scene {
             Item::Sprite(key) => {
                 if let Some(sprite) = self.sprites.get(key) {
                     assembly.sprite(sprite, level);
+                }
+            }
+            Item::WindowBack(key) => {
+                if let Some(window) = self.windows.get(key) {
+                    assembly.window_back(window, level);
+                }
+            }
+            Item::WindowFront(key) => {
+                if let Some(window) = self.windows.get(key) {
+                    assembly.window_front(window, level);
                 }
             }
             Item::Viewport(_) => {}

@@ -50,6 +50,9 @@ pub(crate) struct Bitmap {
     pub(crate) changed: Option<Area>,
     /// Whether a create for this bitmap was emitted.
     pub(crate) known: bool,
+    /// Counts the drawing operations that may have changed pixels, so that whatever is
+    /// derived from the pixels can tell when it is out of date.
+    pub(crate) revision: u64,
 }
 
 impl Bitmap {
@@ -92,6 +95,7 @@ impl Bitmap {
 
     /// Records that pixels inside `area` may have changed.
     pub(crate) fn mark(&mut self, area: Area) {
+        self.revision += 1;
         self.changed = Some(match self.changed {
             Some(changed) => changed.union(area),
             None => area,
@@ -277,6 +281,7 @@ impl Bitmaps {
             font: Font::new(defaults),
             changed: None,
             known: false,
+            revision: 0,
         };
         if let Some(index) = self.free.pop() {
             let slot = &mut self.slots[index as usize];
@@ -333,6 +338,12 @@ impl Bitmaps {
             .filter(|slot| slot.generation == id.generation)
             .and_then(|slot| slot.bitmap.as_mut())
             .ok_or(BitmapError::Disposed)
+    }
+
+    /// A number that is different after every operation that may have changed the bitmap's
+    /// pixels.
+    pub(crate) fn revision(&self, id: BitmapId) -> Result<u64, BitmapError> {
+        Ok(self.get(id)?.revision)
     }
 
     pub fn width(&self, id: BitmapId) -> Result<u32, BitmapError> {

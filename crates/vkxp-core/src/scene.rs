@@ -3,7 +3,7 @@
 use vkxp_proto::{FrameRate, Size};
 
 use crate::element::Order;
-use crate::{ElementKind, Plane, Rect, SceneError, Sprite, Tilemap, Viewport, Window};
+use crate::{Bitmaps, ElementKind, Plane, Rect, SceneError, Sprite, Tilemap, Viewport, Window};
 
 /// Largest logical width or height of a scene, the limit of the compositors.
 pub const MAX_LOGICAL_DIMENSION: u32 = 16384;
@@ -306,9 +306,12 @@ impl Scene {
         self.viewports.remove(id.0);
     }
 
-    /// Disposes a window. Disposing a disposed window does nothing.
-    pub fn dispose_window(&mut self, id: WindowId) {
-        self.windows.remove(id.0);
+    /// Disposes a window, and with it the bitmaps the scene drew from its window skin, which
+    /// live in `bitmaps`. Disposing a disposed window does nothing.
+    pub fn dispose_window(&mut self, id: WindowId, bitmaps: &mut Bitmaps) {
+        if let Some(mut window) = self.windows.remove(id.0) {
+            window.caches.dispose(bitmaps);
+        }
     }
 
     /// Disposes a plane. Disposing a disposed plane does nothing.
@@ -422,7 +425,7 @@ set_z!(PlaneId, plane_mut, set_plane_z);
 mod tests {
     use super::*;
     use crate::extract::testing::*;
-    use crate::{Bitmaps, Color, Table, Tone};
+    use crate::{Color, Table, Tone};
 
     const DISPOSED_SPRITE: SceneError = SceneError::Disposed(ElementKind::Sprite);
 
@@ -465,13 +468,14 @@ mod tests {
     fn a_disposed_window_fails_every_operation_but_disposal() {
         let error = SceneError::Disposed(ElementKind::Window);
         let mut scene = Scene::new();
+        let mut bitmaps = Bitmaps::new();
         let window = scene.create_window(None).unwrap();
-        scene.dispose_window(window);
+        scene.dispose_window(window, &mut bitmaps);
         assert!(scene.is_window_disposed(window));
         assert_eq!(scene.window(window).err(), Some(error));
         assert_eq!(scene.window_mut(window).map(|w| w.x = 1).err(), Some(error));
         assert_eq!(scene.set_window_z(window, 3), Err(error));
-        scene.dispose_window(window);
+        scene.dispose_window(window, &mut bitmaps);
         assert_eq!(error.to_string(), "disposed window");
     }
 
@@ -531,7 +535,7 @@ mod tests {
         assert_eq!(scene.viewport(new).unwrap().rect, Rect::new(0, 0, 2, 2));
 
         let old = scene.create_window(None).unwrap();
-        scene.dispose_window(old);
+        scene.dispose_window(old, &mut Bitmaps::new());
         let new = scene.create_window(None).unwrap();
         assert!(scene.is_window_disposed(old) && !scene.is_window_disposed(new));
 

@@ -25,10 +25,10 @@
 
 ## 5. Windows (`vkxp-core`)
 
-- [ ] 5.1 Build and cache the background and frame bitmaps from the skin, invalidated by skin changes, size and the stretch flag, and emit them with the two opacities. Verify: tests for the four frame-and-background scenarios, plus tests that changing the size, the stretch flag and a pixel of the skin each change the rendered window.
-- [ ] 5.2 Emit the contents with origin, clip and contents opacity at z plus 2. Verify: tests for the three window-contents scenarios.
-- [ ] 5.3 Build the cursor bitmap, place it behind the contents, and implement the blink with window update. Verify: tests for the four cursor scenarios.
-- [ ] 5.4 Emit the pause sign and the scroll arrows. Verify: tests for the two scenarios of that requirement and that cached bitmaps are disposed with the window (the arena's bitmap count returns to its earlier value).
+- [x] 5.1 Build and cache the background and frame bitmaps from the skin, invalidated by skin changes, size and the stretch flag, and emit them with the two opacities. Verify: tests for the four frame-and-background scenarios, plus tests that changing the size, the stretch flag and a pixel of the skin each change the rendered window.
+- [x] 5.2 Emit the contents with origin, clip and contents opacity at z plus 2. Verify: tests for the three window-contents scenarios.
+- [x] 5.3 Build the cursor bitmap, place it behind the contents, and implement the blink with window update. Verify: tests for the four cursor scenarios.
+- [x] 5.4 Emit the pause sign and the scroll arrows. Verify: tests for the two scenarios of that requirement and that cached bitmaps are disposed with the window (the arena's bitmap count returns to its earlier value).
 
 ## 6. Extraction and bookkeeping (`vkxp-core`)
 

@@ -8,6 +8,7 @@
 use vkxp_proto::BitmapId;
 
 use crate::scene::ViewportId;
+use crate::window::Caches;
 use crate::{Bitmaps, Color, Rect, Table, Tone};
 
 /// An opacity as scripts assign it, clamped to 0 to 255.
@@ -259,6 +260,12 @@ pub struct Window {
     pub(crate) opacity: u8,
     pub(crate) back_opacity: u8,
     pub(crate) contents_opacity: u8,
+    /// Position in the 32 steps of the cursor blink.
+    pub(crate) cursor_step: u8,
+    /// Number of updates since the pause sign appeared.
+    pub(crate) pause_step: u32,
+    /// The bitmaps drawn from the window skin.
+    pub(crate) caches: Caches,
 }
 
 impl Window {
@@ -282,6 +289,9 @@ impl Window {
             opacity: 255,
             back_opacity: 255,
             contents_opacity: 255,
+            cursor_step: 0,
+            pause_step: 0,
+            caches: Caches::default(),
         }
     }
 
@@ -322,6 +332,35 @@ impl Window {
     /// Sets the contents opacity, clamped to 0 to 255.
     pub fn set_contents_opacity(&mut self, opacity: i32) {
         self.contents_opacity = clamp_opacity(opacity);
+    }
+
+    /// Advances the cursor blink while the window is active, and the pause sign while the
+    /// pause flag is set.
+    ///
+    /// PLACEHOLDER: that an inactive window keeps the cursor at its current alpha, and the
+    /// pause sign's speed of 16 updates per image, are not yet checked against the original
+    /// runtime.
+    pub fn update(&mut self) {
+        if self.active {
+            self.cursor_step = (self.cursor_step + 1) % 32;
+        }
+        // Wrapping keeps the animation seamless: 2^32 is a multiple of its period.
+        self.pause_step = if self.pause {
+            self.pause_step.wrapping_add(1)
+        } else {
+            0
+        };
+    }
+
+    /// The alpha of the cursor: from 255 it falls by 8 per step for 16 steps, then rises by
+    /// 8 per step back to 255.
+    ///
+    /// PLACEHOLDER: the blink values are not yet checked against the original runtime.
+    pub(crate) fn cursor_alpha(&self) -> u8 {
+        match self.cursor_step {
+            step @ 0..=16 => 255 - 8 * step,
+            step => 127 + 8 * (step - 16),
+        }
     }
 }
 
