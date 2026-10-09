@@ -32,8 +32,8 @@
 
 ## 6. Extraction and bookkeeping (`vkxp-core`)
 
-- [ ] 6.1 Implement frame count, frame rate and logical size, and assemble the packet with the deltas for exactly the referenced bitmaps. Verify: tests for the frame-bookkeeping scenarios and the unused-bitmap scenario.
-- [ ] 6.2 Add the property test over random scenes and operations. Verify: every extracted packet is rendered by `vkxp_compose_ref::Compositor` without error, across at least a few hundred generated cases.
+- [x] 6.1 Implement frame count, frame rate and logical size, and assemble the packet with the deltas for exactly the referenced bitmaps. Verify: tests for the frame-bookkeeping scenarios and the unused-bitmap scenario.
+- [x] 6.2 Add the property test over random scenes and operations. Verify: every extracted packet is rendered by `vkxp_compose_ref::Compositor` without error, across at least a few hundred generated cases.
 
 ## 7. Input (`vkxp-core`)
 

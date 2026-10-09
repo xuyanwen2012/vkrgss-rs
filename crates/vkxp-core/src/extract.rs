@@ -330,9 +330,9 @@ impl Scene {
 
 #[cfg(test)]
 pub(crate) mod testing {
-    use vkxp_compose_ref::{Compositor, Frame};
+    use vkxp_compose_ref::{ComposeError, Compositor, Frame};
     use vkxp_pixel::Rgba;
-    use vkxp_proto::{BitmapId, Size};
+    use vkxp_proto::{BitmapId, FramePacket, Size};
 
     use crate::bitmap::testing::defaults;
     use crate::{Bitmaps, Scene};
@@ -373,9 +373,13 @@ pub(crate) mod testing {
         /// Extracts the next frame and renders it.
         pub(crate) fn frame(&mut self) -> Frame {
             let packet = self.scene.extract(&mut self.bitmaps);
-            self.compositor
-                .render(&packet)
+            self.render(&packet)
                 .expect("the reference compositor accepts every extracted packet")
+        }
+
+        /// Renders a packet extracted from the scene.
+        pub(crate) fn render(&mut self, packet: &FramePacket) -> Result<Frame, ComposeError> {
+            self.compositor.render(packet)
         }
 
         /// A bitmap with the given pixels.
@@ -411,10 +415,13 @@ pub(crate) mod testing {
 mod tests {
     use vkxp_proto::BitmapId;
 
+    use proptest::prelude::*;
     use vkxp_pixel::Rgba;
+    use vkxp_proto::{BitmapDelta, FrameRate, Size};
 
     use super::testing::*;
-    use crate::{Color, Rect, SpriteId, Tone, ViewportId};
+    use crate::bitmap::testing::{color, defaults};
+    use crate::{Bitmaps, Color, Rect, Scene, SpriteId, Tone, ViewportId, WindowId};
 
     /// A sprite showing `bitmap` at (`x`, `y`).
     fn sprite(stage: &mut Stage, bitmap: BitmapId, x: i32, y: i32) -> SpriteId {
@@ -1295,5 +1302,601 @@ mod tests {
                 .all(|op| op.kind() != vkxp_proto::OpKind::RectEffect)
         );
         assert_eq!(stage.frame(), without);
+    }
+
+    #[test]
+    fn the_frame_count_follows_the_extracted_frames_and_can_be_set() {
+        let mut scene = Scene::new();
+        let mut bitmaps = Bitmaps::new();
+        assert_eq!(scene.frame_count(), 0);
+        for index in 0..3 {
+            assert_eq!(scene.extract(&mut bitmaps).frame_index, index);
+        }
+        assert_eq!(scene.frame_count(), 3);
+        scene.set_frame_count(100);
+        assert_eq!(scene.frame_count(), 100);
+        // The packet's own index is not the settable count.
+        assert_eq!(scene.extract(&mut bitmaps).frame_index, 3);
+        assert_eq!(scene.frame_count(), 101);
+
+        scene.set_frame_count(-5);
+        scene.extract(&mut bitmaps);
+        assert_eq!(scene.frame_count(), -4);
+        scene.set_frame_count(i64::MAX);
+        assert_eq!(scene.extract(&mut bitmaps).frame_index, 5);
+        assert_eq!(scene.frame_count(), i64::MIN);
+    }
+
+    #[test]
+    fn the_frame_rate_is_clamped_and_carried_by_every_packet() {
+        let mut scene = Scene::new();
+        let mut bitmaps = Bitmaps::new();
+        assert_eq!(scene.frame_rate().get(), 40);
+        assert_eq!(scene.extract(&mut bitmaps).frame_rate, FrameRate::DEFAULT);
+        scene.set_frame_rate(5);
+        assert_eq!(scene.frame_rate().get(), 10);
+        assert_eq!(scene.extract(&mut bitmaps).frame_rate.get(), 10);
+        scene.set_frame_rate(500);
+        assert_eq!(scene.frame_rate().get(), 120);
+        assert_eq!(scene.extract(&mut bitmaps).frame_rate.get(), 120);
+        scene.set_frame_rate(60);
+        assert_eq!(scene.extract(&mut bitmaps).frame_rate.get(), 60);
+        scene.set_frame_rate(-1);
+        assert_eq!(scene.frame_rate().get(), 10);
+    }
+
+    #[test]
+    fn packets_carry_the_logical_size_of_the_scene() {
+        let mut bitmaps = Bitmaps::new();
+        let packet = Scene::new().extract(&mut bitmaps);
+        assert_eq!(packet.logical_size, Size::new(640, 480));
+        let packet = Scene::with_logical_size(Size::new(320, 240)).extract(&mut bitmaps);
+        assert_eq!(packet.logical_size, Size::new(320, 240));
+
+        // A sprite is clipped to that size.
+        let mut stage = Stage::sized(8, 6);
+        let red = stage.solid(20, 20, RED);
+        sprite(&mut stage, red, 0, 0);
+        let frame = stage.frame();
+        assert_eq!(frame.size, Size::new(8, 6));
+        assert!(all(&frame, RED));
+    }
+
+    /// The ids the deltas create, update and destroy, in order.
+    fn delta_ids(deltas: &[BitmapDelta]) -> Vec<(&'static str, BitmapId)> {
+        deltas
+            .iter()
+            .map(|delta| match delta {
+                BitmapDelta::Create { id, .. } => ("create", *id),
+                BitmapDelta::Update { id, .. } => ("update", *id),
+                BitmapDelta::Destroy { id } => ("destroy", *id),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn deltas_cover_exactly_the_bitmaps_the_ops_refer_to() {
+        let mut stage = Stage::sized(16, 16);
+        let used = stage.solid(4, 4, RED);
+        let unused = stage.solid(4, 4, GREEN);
+        let hidden = stage.solid(4, 4, BLUE);
+        sprite(&mut stage, used, 0, 0);
+        let invisible = sprite(&mut stage, hidden, 0, 0);
+        stage.scene.sprite_mut(invisible).unwrap().visible = false;
+
+        let packet = stage.scene.extract(&mut stage.bitmaps);
+        assert_eq!(
+            delta_ids(&packet.bitmaps),
+            [("create", used), ("update", used)]
+        );
+        assert_eq!(packet.ops.len(), 1);
+
+        // Nothing changed: nothing is sent, also not for the bitmaps nobody shows.
+        stage.bitmaps.set_pixel(unused, 0, 0, color(WHITE)).unwrap();
+        stage.bitmaps.set_pixel(hidden, 0, 0, color(WHITE)).unwrap();
+        let packet = stage.scene.extract(&mut stage.bitmaps);
+        assert_eq!(delta_ids(&packet.bitmaps), []);
+
+        // A change to a shown bitmap is sent, and a bitmap is uploaded once it is shown.
+        stage.bitmaps.set_pixel(used, 1, 1, color(WHITE)).unwrap();
+        stage.scene.sprite_mut(invisible).unwrap().visible = true;
+        let packet = stage.scene.extract(&mut stage.bitmaps);
+        assert_eq!(
+            delta_ids(&packet.bitmaps),
+            [("create", hidden), ("update", hidden), ("update", used)]
+        );
+
+        // Two sprites with one bitmap upload it once.
+        let shared = stage.solid(2, 2, WHITE);
+        sprite(&mut stage, shared, 8, 8);
+        sprite(&mut stage, shared, 10, 10);
+        let packet = stage.scene.extract(&mut stage.bitmaps);
+        assert_eq!(
+            delta_ids(&packet.bitmaps),
+            [("create", shared), ("update", shared)]
+        );
+
+        // A disposed bitmap the compositor knows is destroyed there, the unused one is not.
+        stage.bitmaps.dispose(used);
+        stage.bitmaps.dispose(unused);
+        let packet = stage.scene.extract(&mut stage.bitmaps);
+        assert_eq!(delta_ids(&packet.bitmaps), [("destroy", used)]);
+    }
+
+    #[test]
+    fn a_sprite_that_draws_nothing_does_not_upload_its_bitmap() {
+        let mut stage = Stage::sized(16, 16);
+        let bitmap = stage.solid(4, 4, RED);
+        let id = sprite(&mut stage, bitmap, 0, 0);
+        stage.scene.sprite_mut(id).unwrap().set_opacity(0);
+        assert_eq!(stage.scene.extract(&mut stage.bitmaps).bitmaps, []);
+        let sprite = stage.scene.sprite_mut(id).unwrap();
+        sprite.set_opacity(255);
+        sprite.zoom_x = 0.0;
+        assert_eq!(stage.scene.extract(&mut stage.bitmaps).bitmaps, []);
+        let sprite = stage.scene.sprite_mut(id).unwrap();
+        sprite.zoom_x = 1.0;
+        sprite.src_rect = Rect::new(4, 4, 4, 4);
+        assert_eq!(stage.scene.extract(&mut stage.bitmaps).bitmaps, []);
+    }
+
+    /// One operation of a random script.
+    #[derive(Debug, Clone)]
+    enum Step {
+        CreateBitmap(u32, u32, u8),
+        CreateSkin(u8),
+        DisposeBitmap(usize),
+        Fill(usize, Rect, [u8; 4]),
+        CreateViewport(Rect),
+        DisposeViewport(usize),
+        Viewport(usize, ViewportChange),
+        CreateSprite(Option<usize>),
+        DisposeSprite(usize),
+        Sprite(usize, SpriteChange),
+        CreateWindow(Option<usize>),
+        DisposeWindow(usize),
+        Window(usize, WindowChange),
+        CreateOther(Option<usize>, Option<usize>),
+        Update,
+    }
+
+    #[derive(Debug, Clone)]
+    enum ViewportChange {
+        Rect(Rect),
+        Origin(i32, i32),
+        Z(i32),
+        Visible(bool),
+        Color([u8; 4]),
+        Tone([i16; 4]),
+        Flash(Option<[u8; 4]>, i32),
+    }
+
+    #[derive(Debug, Clone)]
+    enum SpriteChange {
+        Bitmap(Option<usize>),
+        SrcRect(Rect),
+        Position(i32, i32),
+        Origin(i32, i32),
+        Z(i32),
+        Zoom(f64, f64),
+        Angle(f64),
+        Mirror(bool),
+        Visible(bool),
+        Opacity(i32),
+        BlendType(i32),
+        Color([u8; 4]),
+        Tone([i16; 4]),
+        Flash(Option<[u8; 4]>, i32),
+    }
+
+    #[derive(Debug, Clone)]
+    enum WindowChange {
+        Skin(Option<usize>),
+        Contents(Option<usize>),
+        Position(i32, i32),
+        Size(i32, i32),
+        Origin(i32, i32),
+        Z(i32),
+        Stretch(bool),
+        Cursor(Rect),
+        Active(bool),
+        Visible(bool),
+        Pause(bool),
+        Opacities(i32, i32, i32),
+    }
+
+    /// A coordinate around a small screen, now and then one at the limits of its type.
+    fn coordinate() -> impl Strategy<Value = i32> {
+        prop_oneof![
+            12 => -40..80i32,
+            1 => prop_oneof![
+                Just(i32::MIN),
+                Just(i32::MAX),
+                Just(-70_000),
+                Just(70_000),
+                Just(32_767),
+                Just(-32_768)
+            ],
+        ]
+    }
+
+    /// A length that may be empty or negative, and now and then one too large for a bitmap.
+    fn length() -> impl Strategy<Value = i32> {
+        prop_oneof![
+            12 => -4..70i32,
+            1 => prop_oneof![Just(i32::MIN), Just(i32::MAX), Just(100_000)],
+        ]
+    }
+
+    fn rect() -> impl Strategy<Value = Rect> {
+        (coordinate(), coordinate(), length(), length())
+            .prop_map(|(x, y, width, height)| Rect::new(x, y, width, height))
+    }
+
+    fn z() -> impl Strategy<Value = i32> {
+        prop_oneof![8 => -3..6i32, 1 => prop_oneof![Just(i32::MIN), Just(i32::MAX)]]
+    }
+
+    fn zoom() -> impl Strategy<Value = f64> {
+        prop_oneof![
+            4 => Just(1.0),
+            4 => -4.0..8.0f64,
+            1 => prop_oneof![
+                Just(0.0),
+                Just(-0.0),
+                Just(f64::NAN),
+                Just(f64::INFINITY),
+                Just(f64::NEG_INFINITY),
+                Just(1e-300),
+                Just(1e300),
+                Just(1.0 / 65536.0),
+                Just(40_000.0)
+            ],
+        ]
+    }
+
+    fn angle() -> impl Strategy<Value = f64> {
+        prop_oneof![
+            3 => prop_oneof![Just(0.0), Just(90.0), Just(180.0), Just(270.0), Just(-90.0)],
+            6 => -800.0..800.0f64,
+            1 => prop_oneof![Just(f64::NAN), Just(f64::INFINITY), Just(1e300), Just(-1e-300)],
+        ]
+    }
+
+    fn opacity() -> impl Strategy<Value = i32> {
+        prop_oneof![Just(255), Just(0), -50..320i32]
+    }
+
+    fn tone() -> impl Strategy<Value = [i16; 4]> {
+        prop_oneof![Just([0; 4]), any::<[i16; 4]>()]
+    }
+
+    fn flash() -> impl Strategy<Value = (Option<[u8; 4]>, i32)> {
+        (proptest::option::of(any::<[u8; 4]>()), -2..6i32)
+    }
+
+    fn viewport_change() -> impl Strategy<Value = ViewportChange> {
+        prop_oneof![
+            rect().prop_map(ViewportChange::Rect),
+            (coordinate(), coordinate()).prop_map(|(x, y)| ViewportChange::Origin(x, y)),
+            z().prop_map(ViewportChange::Z),
+            any::<bool>().prop_map(ViewportChange::Visible),
+            any::<[u8; 4]>().prop_map(ViewportChange::Color),
+            tone().prop_map(ViewportChange::Tone),
+            flash().prop_map(|(color, duration)| ViewportChange::Flash(color, duration)),
+        ]
+    }
+
+    fn sprite_change() -> impl Strategy<Value = SpriteChange> {
+        prop_oneof![
+            3 => proptest::option::weighted(0.9, any::<usize>()).prop_map(SpriteChange::Bitmap),
+            2 => rect().prop_map(SpriteChange::SrcRect),
+            3 => (coordinate(), coordinate()).prop_map(|(x, y)| SpriteChange::Position(x, y)),
+            1 => (coordinate(), coordinate()).prop_map(|(x, y)| SpriteChange::Origin(x, y)),
+            1 => z().prop_map(SpriteChange::Z),
+            2 => (zoom(), zoom()).prop_map(|(x, y)| SpriteChange::Zoom(x, y)),
+            2 => angle().prop_map(SpriteChange::Angle),
+            1 => any::<bool>().prop_map(SpriteChange::Mirror),
+            1 => any::<bool>().prop_map(SpriteChange::Visible),
+            1 => opacity().prop_map(SpriteChange::Opacity),
+            1 => (-1..4i32).prop_map(SpriteChange::BlendType),
+            1 => any::<[u8; 4]>().prop_map(SpriteChange::Color),
+            1 => tone().prop_map(SpriteChange::Tone),
+            1 => flash().prop_map(|(color, duration)| SpriteChange::Flash(color, duration)),
+        ]
+    }
+
+    fn window_change() -> impl Strategy<Value = WindowChange> {
+        prop_oneof![
+            3 => proptest::option::weighted(0.9, any::<usize>()).prop_map(WindowChange::Skin),
+            2 => proptest::option::weighted(0.9, any::<usize>())
+                .prop_map(WindowChange::Contents),
+            2 => (coordinate(), coordinate()).prop_map(|(x, y)| WindowChange::Position(x, y)),
+            3 => (length(), length()).prop_map(|(w, h)| WindowChange::Size(w, h)),
+            1 => (coordinate(), coordinate()).prop_map(|(x, y)| WindowChange::Origin(x, y)),
+            1 => z().prop_map(WindowChange::Z),
+            1 => any::<bool>().prop_map(WindowChange::Stretch),
+            2 => rect().prop_map(WindowChange::Cursor),
+            1 => any::<bool>().prop_map(WindowChange::Active),
+            1 => any::<bool>().prop_map(WindowChange::Visible),
+            1 => any::<bool>().prop_map(WindowChange::Pause),
+            1 => (opacity(), opacity(), opacity())
+                .prop_map(|(a, b, c)| WindowChange::Opacities(a, b, c)),
+        ]
+    }
+
+    fn step() -> impl Strategy<Value = Step> {
+        let viewport = || proptest::option::of(any::<usize>());
+        prop_oneof![
+            3 => (1..40u32, 1..40u32, any::<u8>())
+                .prop_map(|(width, height, seed)| Step::CreateBitmap(width, height, seed)),
+            1 => any::<u8>().prop_map(Step::CreateSkin),
+            1 => any::<usize>().prop_map(Step::DisposeBitmap),
+            2 => (any::<usize>(), rect(), any::<[u8; 4]>())
+                .prop_map(|(bitmap, rect, pixel)| Step::Fill(bitmap, rect, pixel)),
+            2 => rect().prop_map(Step::CreateViewport),
+            1 => any::<usize>().prop_map(Step::DisposeViewport),
+            4 => (any::<usize>(), viewport_change())
+                .prop_map(|(index, change)| Step::Viewport(index, change)),
+            3 => viewport().prop_map(Step::CreateSprite),
+            1 => any::<usize>().prop_map(Step::DisposeSprite),
+            10 => (any::<usize>(), sprite_change())
+                .prop_map(|(index, change)| Step::Sprite(index, change)),
+            2 => viewport().prop_map(Step::CreateWindow),
+            1 => any::<usize>().prop_map(Step::DisposeWindow),
+            10 => (any::<usize>(), window_change())
+                .prop_map(|(index, change)| Step::Window(index, change)),
+            1 => (viewport(), proptest::option::of(any::<usize>()))
+                .prop_map(|(viewport, bitmap)| Step::CreateOther(viewport, bitmap)),
+            2 => Just(Step::Update),
+        ]
+    }
+
+    /// The elements a random script has made. Disposed ones stay listed, so that the script
+    /// also works with stale handles.
+    #[derive(Default)]
+    struct Made {
+        bitmaps: Vec<BitmapId>,
+        viewports: Vec<ViewportId>,
+        sprites: Vec<SpriteId>,
+        windows: Vec<WindowId>,
+    }
+
+    fn pick<T: Copy>(made: &[T], index: usize) -> Option<T> {
+        (!made.is_empty()).then(|| made[index % made.len()])
+    }
+
+    fn perform(stage: &mut Stage, made: &mut Made, step: Step) {
+        let rgba = |[r, g, b, a]: [u8; 4]| {
+            Color::new(f64::from(r), f64::from(g), f64::from(b), f64::from(a))
+        };
+        let toned = |[r, g, b, gray]: [i16; 4]| {
+            Tone::new(f64::from(r), f64::from(g), f64::from(b), f64::from(gray))
+        };
+        let scene = &mut stage.scene;
+        match step {
+            Step::CreateBitmap(width, height, seed) => {
+                let pixels = crate::bitmap::testing::pattern(width, height, seed);
+                let id = stage
+                    .bitmaps
+                    .create_from_rgba(width, height, pixels, &defaults());
+                made.bitmaps.push(id.unwrap());
+            }
+            Step::CreateSkin(seed) => {
+                let pixels = crate::bitmap::testing::pattern(192, 128, seed);
+                let id = stage
+                    .bitmaps
+                    .create_from_rgba(192, 128, pixels, &defaults());
+                made.bitmaps.push(id.unwrap());
+            }
+            Step::DisposeBitmap(index) => {
+                if let Some(id) = pick(&made.bitmaps, index) {
+                    stage.bitmaps.dispose(id);
+                }
+            }
+            Step::Fill(index, rect, pixel) => {
+                if let Some(id) = pick(&made.bitmaps, index) {
+                    let _ = stage.bitmaps.fill_rect(id, rect, color(pixel));
+                }
+            }
+            Step::CreateViewport(rect) => {
+                made.viewports.push(scene.create_viewport(rect).unwrap());
+            }
+            Step::DisposeViewport(index) => {
+                if let Some(id) = pick(&made.viewports, index) {
+                    scene.dispose_viewport(id);
+                }
+            }
+            Step::Viewport(index, change) => {
+                let Some(id) = pick(&made.viewports, index) else {
+                    return;
+                };
+                if let ViewportChange::Z(z) = change {
+                    let _ = scene.set_viewport_z(id, z);
+                    return;
+                }
+                let Ok(viewport) = scene.viewport_mut(id) else {
+                    return;
+                };
+                match change {
+                    ViewportChange::Rect(rect) => viewport.rect = rect,
+                    ViewportChange::Origin(x, y) => (viewport.ox, viewport.oy) = (x, y),
+                    ViewportChange::Z(_) => {}
+                    ViewportChange::Visible(visible) => viewport.visible = visible,
+                    ViewportChange::Color(pixel) => viewport.color = rgba(pixel),
+                    ViewportChange::Tone(tone) => viewport.tone = toned(tone),
+                    ViewportChange::Flash(pixel, duration) => {
+                        viewport.flash(pixel.map(rgba), duration);
+                    }
+                }
+            }
+            Step::CreateSprite(viewport) => {
+                let viewport = viewport.and_then(|index| pick(&made.viewports, index));
+                if let Ok(id) = scene.create_sprite(viewport) {
+                    made.sprites.push(id);
+                }
+            }
+            Step::DisposeSprite(index) => {
+                if let Some(id) = pick(&made.sprites, index) {
+                    scene.dispose_sprite(id);
+                }
+            }
+            Step::Sprite(index, change) => {
+                let Some(id) = pick(&made.sprites, index) else {
+                    return;
+                };
+                if let SpriteChange::Z(z) = change {
+                    let _ = scene.set_sprite_z(id, z);
+                    return;
+                }
+                let Ok(sprite) = scene.sprite_mut(id) else {
+                    return;
+                };
+                match change {
+                    SpriteChange::Bitmap(bitmap) => {
+                        let bitmap = bitmap.and_then(|index| pick(&made.bitmaps, index));
+                        sprite.set_bitmap(bitmap, &stage.bitmaps);
+                    }
+                    SpriteChange::SrcRect(rect) => sprite.src_rect = rect,
+                    SpriteChange::Position(x, y) => (sprite.x, sprite.y) = (x, y),
+                    SpriteChange::Origin(x, y) => (sprite.ox, sprite.oy) = (x, y),
+                    SpriteChange::Z(_) => {}
+                    SpriteChange::Zoom(x, y) => (sprite.zoom_x, sprite.zoom_y) = (x, y),
+                    SpriteChange::Angle(angle) => sprite.angle = angle,
+                    SpriteChange::Mirror(mirror) => sprite.mirror = mirror,
+                    SpriteChange::Visible(visible) => sprite.visible = visible,
+                    SpriteChange::Opacity(opacity) => sprite.set_opacity(opacity),
+                    SpriteChange::BlendType(blend_type) => sprite.blend_type = blend_type,
+                    SpriteChange::Color(pixel) => sprite.color = rgba(pixel),
+                    SpriteChange::Tone(tone) => sprite.tone = toned(tone),
+                    SpriteChange::Flash(pixel, duration) => {
+                        sprite.flash(pixel.map(rgba), duration);
+                    }
+                }
+            }
+            Step::CreateWindow(viewport) => {
+                let viewport = viewport.and_then(|index| pick(&made.viewports, index));
+                if let Ok(id) = scene.create_window(viewport) {
+                    made.windows.push(id);
+                }
+            }
+            Step::DisposeWindow(index) => {
+                if let Some(id) = pick(&made.windows, index) {
+                    scene.dispose_window(id, &mut stage.bitmaps);
+                }
+            }
+            Step::Window(index, change) => {
+                let Some(id) = pick(&made.windows, index) else {
+                    return;
+                };
+                if let WindowChange::Z(z) = change {
+                    let _ = scene.set_window_z(id, z);
+                    return;
+                }
+                let Ok(window) = scene.window_mut(id) else {
+                    return;
+                };
+                match change {
+                    WindowChange::Skin(bitmap) => {
+                        window.windowskin = bitmap.and_then(|index| pick(&made.bitmaps, index));
+                    }
+                    WindowChange::Contents(bitmap) => {
+                        window.contents = bitmap.and_then(|index| pick(&made.bitmaps, index));
+                    }
+                    WindowChange::Position(x, y) => (window.x, window.y) = (x, y),
+                    WindowChange::Size(width, height) => {
+                        (window.width, window.height) = (width, height);
+                    }
+                    WindowChange::Origin(x, y) => (window.ox, window.oy) = (x, y),
+                    WindowChange::Z(_) => {}
+                    WindowChange::Stretch(stretch) => window.stretch = stretch,
+                    WindowChange::Cursor(rect) => window.cursor_rect = rect,
+                    WindowChange::Active(active) => window.active = active,
+                    WindowChange::Visible(visible) => window.visible = visible,
+                    WindowChange::Pause(pause) => window.pause = pause,
+                    WindowChange::Opacities(opacity, back, contents) => {
+                        window.set_opacity(opacity);
+                        window.set_back_opacity(back);
+                        window.set_contents_opacity(contents);
+                    }
+                }
+            }
+            Step::CreateOther(viewport, bitmap) => {
+                let viewport = viewport.and_then(|index| pick(&made.viewports, index));
+                let bitmap = bitmap.and_then(|index| pick(&made.bitmaps, index));
+                if let Ok(id) = scene.create_plane(viewport) {
+                    scene.plane_mut(id).unwrap().bitmap = bitmap;
+                }
+                if let Ok(id) = scene.create_tilemap(viewport) {
+                    scene.tilemap_mut(id).unwrap().tileset = bitmap;
+                }
+            }
+            Step::Update => {
+                for &id in &made.sprites {
+                    if let Ok(sprite) = scene.sprite_mut(id) {
+                        sprite.update();
+                    }
+                }
+                for &id in &made.viewports {
+                    if let Ok(viewport) = scene.viewport_mut(id) {
+                        viewport.update();
+                    }
+                }
+                for &id in &made.windows {
+                    if let Ok(window) = scene.window_mut(id) {
+                        window.update();
+                    }
+                }
+            }
+        }
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(400))]
+
+        #[test]
+        fn the_reference_compositor_renders_every_extracted_packet(
+            steps in proptest::collection::vec(step(), 1..50),
+        ) {
+            let mut stage = Stage::sized(40, 30);
+            let mut made = Made::default();
+            // Something to look at from the first frame on: sprites inside and outside a
+            // viewport, and a window with everything it can show.
+            for step in [
+                Step::CreateBitmap(12, 9, 1),
+                Step::CreateBitmap(70, 50, 2),
+                Step::CreateSkin(3),
+                Step::CreateViewport(Rect::new(4, 3, 30, 20)),
+                Step::CreateSprite(None),
+                Step::Sprite(0, SpriteChange::Bitmap(Some(0))),
+                Step::CreateSprite(Some(0)),
+                Step::Sprite(1, SpriteChange::Bitmap(Some(1))),
+                Step::CreateWindow(None),
+                Step::Window(0, WindowChange::Skin(Some(2))),
+                Step::Window(0, WindowChange::Contents(Some(1))),
+                Step::Window(0, WindowChange::Size(38, 36)),
+                Step::Window(0, WindowChange::Cursor(Rect::new(0, 0, 6, 4))),
+                Step::Window(0, WindowChange::Pause(true)),
+            ] {
+                perform(&mut stage, &mut made, step);
+            }
+            for step in steps {
+                perform(&mut stage, &mut made, step.clone());
+                let packet = stage.scene.extract(&mut stage.bitmaps);
+                let rendered = stage.render(&packet);
+                prop_assert!(rendered.is_ok(), "after {:?}: {:?}", step, rendered.err());
+                // Every delta is for a bitmap an op draws, or destroys one that is gone.
+                for delta in &packet.bitmaps {
+                    let (BitmapDelta::Create { id, .. }
+                    | BitmapDelta::Update { id, .. }
+                    | BitmapDelta::Destroy { id }) = delta;
+                    let destroyed = matches!(delta, BitmapDelta::Destroy { .. });
+                    let drawn = packet.ops.iter().any(
+                        |op| matches!(op, vkxp_proto::Op::Quad(quad) if quad.bitmap == *id),
+                    );
+                    prop_assert_eq!(drawn, !destroyed, "{:?} after {:?}", id, step);
+                }
+            }
+        }
     }
 }
