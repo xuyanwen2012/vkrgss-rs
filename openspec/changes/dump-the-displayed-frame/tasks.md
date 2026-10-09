@@ -2,7 +2,7 @@
 
 ## 1. Session (`vkxp-host`)
 
-- [ ] 1.1 Apply the two transition cases and test the double freeze. Verify: tests for the scenarios of the modified requirement in `specs/host-session/spec.md`.
+- [x] 1.1 Apply the two transition cases and test the double freeze. Verify: tests for the scenarios of the modified requirement in `specs/host-session/spec.md`.
 
 ## 2. Headless display (`vkxp-host`)
 

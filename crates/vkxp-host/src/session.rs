@@ -87,8 +87,13 @@ enum Fade {
     Frozen,
     /// `shown` frames have been shown since the transition message. The next one is shown at
     /// step `shown` of `duration` equal steps from the held frame to the newest, and the one
-    /// after the `duration`-th is shown alone and ends the transition.
-    Fading { shown: u32, duration: u32 },
+    /// after the `duration`-th is shown alone and ends the transition. A `still` transition,
+    /// one that arrived while nothing was frozen, shows the held frame at every step.
+    Fading {
+        shown: u32,
+        duration: u32,
+        still: bool,
+    },
 }
 
 /// The frame rate shown in the title: ticks counted since `since`.
@@ -429,19 +434,28 @@ impl<D: Display, C: Clock> Session<D, C> {
         // display needs the weight before it renders; the session only counts the frame once
         // it has been shown.
         let step = match self.fade {
-            Fade::Fading { shown, duration } => Some((
+            Fade::Fading {
                 shown,
                 duration,
-                shown.min(duration) as f32 / duration as f32,
-            )),
+                still,
+            } => {
+                let weight = if shown >= duration {
+                    1.0
+                } else if still {
+                    0.0
+                } else {
+                    shown as f32 / duration as f32
+                };
+                Some((shown, duration, still, weight))
+            }
             Fade::Normal | Fade::Frozen => None,
         };
-        if let Some((_, _, weight)) = step {
+        if let Some((_, _, _, weight)) = step {
             self.display.set_mix(weight);
         }
         match self.display.render(packet) {
             Ok(()) => {
-                if let Some((shown, duration, weight)) = step {
+                if let Some((shown, duration, still, weight)) = step {
                     self.mix = weight;
                     // The mask comes with the frames after the transition message, so only
                     // now is it known whether there is one. Without it the display shows a
@@ -463,6 +477,7 @@ impl<D: Display, C: Clock> Session<D, C> {
                         Fade::Fading {
                             shown: shown + 1,
                             duration,
+                            still,
                         }
                     };
                 }
@@ -548,19 +563,28 @@ impl<D: Display, C: Clock> Session<D, C> {
 
     fn transition(&mut self, duration: u32, mask: Option<(BitmapId, u32)>) {
         match self.fade {
-            // Nothing is held, so there is nothing to fade from.
-            Fade::Normal => {}
-            Fade::Frozen | Fade::Fading { .. } if duration == 0 => {
-                self.fade = Fade::Normal;
-                self.set_mix(1.0);
-                self.set_mask(None);
-                if let Err(error) = self.display.redraw() {
-                    self.report(format_args!("cannot redraw the display: {error}"));
+            Fade::Normal if duration == 0 => {}
+            // Nothing is frozen: the picture on screen stays for the transition's frames.
+            Fade::Normal => {
+                if let Err(error) = self.display.hold() {
+                    self.report(format_args!("cannot freeze the display: {error}"));
                 }
+                self.set_mix(0.0);
+                self.fade = Fade::Fading {
+                    shown: 0,
+                    duration,
+                    still: true,
+                };
             }
+            // With duration 0 nothing changes on the display: the next frame is past the
+            // last step and is shown alone.
             Fade::Frozen | Fade::Fading { .. } => {
-                self.fade = Fade::Fading { shown: 0, duration };
-                self.set_mask(mask);
+                self.fade = Fade::Fading {
+                    shown: 0,
+                    duration,
+                    still: false,
+                };
+                self.set_mask(mask.filter(|_| duration > 0));
             }
         }
     }

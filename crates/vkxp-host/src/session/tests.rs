@@ -727,24 +727,62 @@ fn frames_between_freeze_and_transition_do_not_advance_the_fade() {
 }
 
 #[test]
-fn transition_of_duration_zero_shows_the_newest_frame_at_once() {
+fn transition_of_duration_zero_keeps_the_held_frame_until_the_next_frame() {
     let mut rig = Rig::new();
     rig.frame(frame(0));
     rig.send(GuestToHost::Freeze);
-    rig.frame(frame(1));
-    assert_eq!(rig.shown(), Shown::Frame(0));
     rig.send(transition(0));
-    assert_eq!(rig.shown(), Shown::Frame(1), "without waiting for a frame");
+    assert_eq!(rig.shown(), Shown::Frame(0));
+    // Whatever makes the window draw again shows the held frame too.
+    rig.session.display_mut().redraw().unwrap();
+    assert_eq!(rig.shown(), Shown::Frame(0), "after a redraw");
+    rig.frame(frame(1));
+    assert_eq!(rig.shown(), Shown::Frame(1));
     rig.frame(frame(2));
+    assert_eq!(rig.shown(), Shown::Frame(2));
+
+    // The freeze has ended: the next one holds the frame then on screen.
+    rig.send(GuestToHost::Freeze);
+    rig.frame(frame(3));
     assert_eq!(rig.shown(), Shown::Frame(2));
 }
 
 #[test]
-fn transition_without_freeze_changes_nothing() {
+fn transition_without_freeze_keeps_the_picture_on_screen_for_its_frames() {
     let mut rig = Rig::new();
     rig.frame(frame(0));
     rig.send(transition(4));
-    for index in 1..=5 {
+    assert_eq!(rig.shown(), Shown::Frame(0));
+    for index in 1..=4 {
+        rig.frame(frame(index));
+        assert_eq!(rig.shown(), Shown::Frame(0), "after frame {index}");
+    }
+    rig.frame(frame(5));
+    assert_eq!(rig.shown(), Shown::Frame(5));
+    rig.frame(frame(6));
+    assert_eq!(rig.shown(), Shown::Frame(6));
+}
+
+#[test]
+fn masked_transition_without_freeze_keeps_the_picture_on_screen_too() {
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    rig.send(masked_transition(2, 40));
+    rig.frame(frame_with_mask(1));
+    assert_eq!(rig.shown(), Shown::Frame(0));
+    rig.frame(frame(2));
+    assert_eq!(rig.shown(), Shown::Frame(0));
+    rig.frame(frame(3));
+    assert_eq!(rig.shown(), Shown::Frame(3));
+    assert_eq!(rig.errors.text(), "");
+}
+
+#[test]
+fn transition_of_duration_zero_without_freeze_changes_nothing() {
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    rig.send(transition(0));
+    for index in 1..=2 {
         rig.frame(frame(index));
         assert_eq!(rig.shown(), Shown::Frame(index));
     }
