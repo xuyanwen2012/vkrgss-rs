@@ -35,4 +35,4 @@
 
 ## 6. Integration check
 
-- [ ] 6.1 Run the full gate. Verify: `cargo xtask gate` exits 0, `cargo xtask deps` reports no violation, and `openspec validate add-rgss-values-and-bitmap --strict` passes.
+- [x] 6.1 Run the full gate. Verify: `cargo xtask gate` exits 0, `cargo xtask deps` reports no violation, and `openspec validate add-rgss-values-and-bitmap --strict` passes.
