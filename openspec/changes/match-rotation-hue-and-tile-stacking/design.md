@@ -41,3 +41,29 @@
 - [More quads per tilemap row] → At most three per priority that is present.
 - [Uploading a rotated bitmap every frame for spinning sprites] → Bounded by the sprite's box;
   the upload path already handles bitmaps that change every frame.
+
+## Follow-ups
+
+- The cache key of a rotated sprite also holds where the bounding box and its rendered part
+  lie against the sprite's position, and the bush depth. The position enters the measured
+  rule only through these whole-number offsets, so a sprite that moves keeps its bitmap, and
+  the pixels stay exact where the rounding of a corner depends on the position.
+- Only the part of the bounding box inside the sprite's viewport or the screen is rendered,
+  so the cached bitmap is never larger than the screen. A row is still walked from the left
+  edge of the box, as the rule accumulates from there; a box of more than `MAX_BITMAP_PIXELS`
+  cells is not drawn. Whether the original runtime draws anything at such zooms is not
+  measured.
+- `Scene::dispose_sprite` takes no bitmap arena, so the cached bitmap of a disposed rotated
+  sprite is disposed by the next `Scene::extract`.
+- Bush depth of a rotated sprite: the texels of the lowest source rows get half their alpha in
+  the cached bitmap. Before, they were a second quad with half the opacity; the two differ by
+  rounding. Still a PLACEHOLDER, to be replaced by a measurement.
+- A negative zoom of a rotated sprite goes through the measured rule as it is written; what
+  the original runtime draws there is not measured.
+- Right angles of very small sprites draw little or nothing by the measured rule (a 2 by 1
+  bitmap at 90 degrees shows no pixel). This follows from the rule, which reproduces the
+  measured 200 by 150 and 329 by 329 frames; no frame of a tiny sprite was captured.
+- `Geometry::transform` and the affine quad remain for windows and tilemaps, which use them
+  unrotated.
+- The committed hue samples were measured on RGSS103J; the arithmetic was read from RGSS104E.
+  All of them are reproduced. The 634 texels of the game sprite are not committed (game art).
