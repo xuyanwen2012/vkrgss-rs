@@ -2,10 +2,10 @@
 
 ## 1. Game configuration (`vkxp-vfs`)
 
-- [ ] 1.1 Add the dependencies (`encoding_rs`; `tempfile` for tests) and an error type for the crate. Verify: `cargo build -p vkxp-vfs` has no warnings and `cargo xtask deps` reports no violation.
-- [ ] 1.2 Implement reading `Game.ini`: case-insensitive file, section and key names, both line endings, trimming, the six values, errors for a missing file and a missing `Scripts`. Verify: tests for the three scenarios of the configuration-file requirement in `specs/game-files/spec.md`.
-- [ ] 1.3 Implement the decoding rule (UTF-8 with optional byte-order mark, then GBK, Shift-JIS, Big5, with a caller-named override). Verify: tests for the three encoding scenarios, including the bytes `B9 A4 B3 CC`.
-- [ ] 1.4 Implement the resolution of RTP names through a caller-supplied table. Verify: tests for the two run-time-package scenarios and for skipping empty names.
+- [x] 1.1 Add the dependencies (`encoding_rs`; `tempfile` for tests) and an error type for the crate. Verify: `cargo build -p vkxp-vfs` has no warnings and `cargo xtask deps` reports no violation.
+- [x] 1.2 Implement reading `Game.ini`: case-insensitive file, section and key names, both line endings, trimming, the six values, errors for a missing file and a missing `Scripts`. Verify: tests for the three scenarios of the configuration-file requirement in `specs/game-files/spec.md`.
+- [x] 1.3 Implement the decoding rule (UTF-8 with optional byte-order mark, then GBK, Shift-JIS, Big5, with a caller-named override). Verify: tests for the three encoding scenarios, including the bytes `B9 A4 B3 CC`.
+- [x] 1.4 Implement the resolution of RTP names through a caller-supplied table. Verify: tests for the two run-time-package scenarios and for skipping empty names.
 
 ## 2. Path resolution (`vkxp-vfs`)
 
