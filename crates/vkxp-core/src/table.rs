@@ -1,4 +1,8 @@
-//! `Table`: a one-, two- or three-dimensional array of signed 16-bit integers.
+//! `Table`: a one-, two- or three-dimensional array of signed 16-bit integers, and
+//! `SharedTable`, the handle through which several owners see one table.
+
+use std::cell::{Ref, RefCell};
+use std::rc::Rc;
 
 use crate::{DecodeError, TableError};
 
@@ -214,6 +218,73 @@ impl Table {
             zsize,
             data,
         })
+    }
+}
+
+/// A table and the number of writes it has seen.
+#[derive(Debug)]
+struct Shared {
+    table: Table,
+    revision: u64,
+}
+
+/// A handle to a [`Table`] that several owners share: a clone of the handle names the same
+/// table, so a write through one handle is seen through every other. This is what a script's
+/// `Table` object is, and what a tilemap keeps of the tables assigned to it.
+///
+/// Every write through a handle increments the table's revision, which tells whoever drew
+/// from the table that it may have changed. Two handles are equal when they name the same
+/// table. The handle is for one thread: the scene and its tables live on the guest thread.
+#[derive(Debug, Clone)]
+pub struct SharedTable(Rc<RefCell<Shared>>);
+
+impl SharedTable {
+    /// Wraps `table` in a handle of its own, at revision 0.
+    pub fn new(table: Table) -> SharedTable {
+        SharedTable(Rc::new(RefCell::new(Shared { table, revision: 0 })))
+    }
+
+    /// The table, for reading. Do not hold it across a write through any handle to the same
+    /// table.
+    pub fn read(&self) -> Ref<'_, Table> {
+        Ref::map(self.0.borrow(), |shared| &shared.table)
+    }
+
+    /// Changes the table with `change` and increments the revision, whether or not `change`
+    /// altered anything.
+    pub fn write<R>(&self, change: impl FnOnce(&mut Table) -> R) -> R {
+        let mut shared = self.0.borrow_mut();
+        shared.revision += 1;
+        change(&mut shared.table)
+    }
+
+    /// [`Table::get`] of the shared table.
+    pub fn get(&self, x: i32, y: i32, z: i32) -> Option<i16> {
+        self.read().get(x, y, z)
+    }
+
+    /// [`Table::set`] on the shared table. Increments the revision.
+    pub fn set(&self, x: i32, y: i32, z: i32, value: i64) {
+        self.write(|table| table.set(x, y, z, value));
+    }
+
+    /// Number of writes made to the table through any of its handles.
+    pub fn revision(&self) -> u64 {
+        self.0.borrow().revision
+    }
+}
+
+impl PartialEq for SharedTable {
+    fn eq(&self, other: &SharedTable) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for SharedTable {}
+
+impl From<Table> for SharedTable {
+    fn from(table: Table) -> SharedTable {
+        SharedTable::new(table)
     }
 }
 
@@ -507,6 +578,44 @@ mod tests {
             );
         }
         assert!(Table::from_bytes(&raw([2, 2, 2, 1, 4], 8)).is_ok());
+    }
+
+    #[test]
+    fn writes_through_one_handle_are_seen_through_another() {
+        let first = SharedTable::new(Table::new_2d(4, 3).unwrap());
+        let second = first.clone();
+        assert_eq!(first, second);
+        assert_eq!(first.revision(), 0);
+
+        first.set(1, 2, 0, 7);
+        assert_eq!(second.get(1, 2, 0), Some(7));
+        assert_eq!(second.read().get(1, 2, 0), Some(7));
+        assert_eq!((first.revision(), second.revision()), (1, 1));
+
+        second.write(|table| table.resize_2d(8, 8)).unwrap();
+        assert_eq!((first.read().xsize(), first.read().ysize()), (8, 8));
+        assert_eq!(first.get(1, 2, 0), Some(7));
+        assert_eq!(first.revision(), 2);
+
+        // A table of its own is another table, also with the same contents.
+        let other = SharedTable::from(first.read().clone());
+        assert_ne!(other, first);
+        other.set(0, 0, 0, 1);
+        assert_eq!(first.get(0, 0, 0), Some(0));
+        assert_eq!((other.revision(), first.revision()), (1, 2));
+    }
+
+    #[test]
+    fn reading_a_shared_table_keeps_its_revision() {
+        let table = SharedTable::new(Table::new(4).unwrap());
+        table.set(0, 0, 0, 5);
+        let revision = table.revision();
+        assert_eq!(table.get(0, 0, 0), Some(5));
+        assert_eq!(table.get(9, 0, 0), None);
+        assert_eq!(table.read().xsize(), 4);
+        let _ = table.read().to_bytes();
+        let _ = table.clone();
+        assert_eq!(table.revision(), revision);
     }
 
     fn any_table() -> impl Strategy<Value = Table> {

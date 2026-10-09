@@ -8,8 +8,8 @@
 use vkxp_proto::BitmapId;
 
 use crate::scene::ViewportId;
-use crate::window::Caches;
-use crate::{Bitmaps, Color, Rect, Table, Tone};
+use crate::window::{Cache, Caches};
+use crate::{Bitmaps, Color, Rect, SharedTable, Tone};
 
 /// An opacity as scripts assign it, clamped to 0 to 255.
 fn clamp_opacity(value: i32) -> u8 {
@@ -364,22 +364,26 @@ impl Window {
     }
 }
 
-/// A plane: a bitmap repeated over its whole viewport. It holds its properties and is not
-/// drawn yet.
+/// A plane: a bitmap repeated without end over its viewport's rectangle, or over the screen.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Plane {
     pub bitmap: Option<BitmapId>,
     pub visible: bool,
+    /// The bitmap pixel at the top-left corner of the area.
     pub ox: i32,
     pub oy: i32,
+    /// Scales the repeated image about the top-left corner of the area.
     pub zoom_x: f64,
     pub zoom_y: f64,
+    /// 1 adds, 2 subtracts, every other value blends normally.
     pub blend_type: i32,
     pub color: Color,
     pub tone: Tone,
     pub(crate) order: Order,
     pub(crate) viewport: Option<ViewportId>,
     pub(crate) opacity: u8,
+    /// The bitmap repeated a few times, for when it is small against the area.
+    pub(crate) pretiled: Cache,
 }
 
 impl Plane {
@@ -397,6 +401,7 @@ impl Plane {
             order: Order { z: 0, stamp },
             viewport,
             opacity: 255,
+            pretiled: Cache::default(),
         }
     }
 
@@ -426,9 +431,13 @@ impl Plane {
 pub struct Tilemap {
     pub tileset: Option<BitmapId>,
     pub autotiles: [Option<BitmapId>; 7],
-    pub map_data: Option<Table>,
-    pub flash_data: Option<Table>,
-    pub priorities: Option<Table>,
+    /// Which tile each cell of each of the three layers holds. The table is shared: the
+    /// tilemap shows what it holds when a frame is extracted.
+    pub map_data: Option<SharedTable>,
+    /// Stored only: flash data is not drawn.
+    pub flash_data: Option<SharedTable>,
+    /// The priority of every tile identifier, shared like the map data.
+    pub priorities: Option<SharedTable>,
     pub visible: bool,
     pub ox: i32,
     pub oy: i32,

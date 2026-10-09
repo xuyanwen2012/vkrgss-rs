@@ -314,9 +314,12 @@ impl Scene {
         }
     }
 
-    /// Disposes a plane. Disposing a disposed plane does nothing.
-    pub fn dispose_plane(&mut self, id: PlaneId) {
-        self.planes.remove(id.0);
+    /// Disposes a plane, and with it the bitmap the scene may have tiled from the plane's,
+    /// which lives in `bitmaps`. Disposing a disposed plane does nothing.
+    pub fn dispose_plane(&mut self, id: PlaneId, bitmaps: &mut Bitmaps) {
+        if let Some(mut plane) = self.planes.remove(id.0) {
+            plane.pretiled.dispose(bitmaps);
+        }
     }
 
     /// Disposes a tilemap. Disposing a disposed tilemap does nothing.
@@ -424,8 +427,7 @@ set_z!(PlaneId, plane_mut, set_plane_z);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::extract::testing::*;
-    use crate::{Color, Table, Tone};
+    use crate::{Color, SharedTable, Table, Tone};
 
     const DISPOSED_SPRITE: SceneError = SceneError::Disposed(ElementKind::Sprite);
 
@@ -483,13 +485,14 @@ mod tests {
     fn a_disposed_plane_fails_every_operation_but_disposal() {
         let error = SceneError::Disposed(ElementKind::Plane);
         let mut scene = Scene::new();
+        let mut bitmaps = Bitmaps::new();
         let plane = scene.create_plane(None).unwrap();
-        scene.dispose_plane(plane);
+        scene.dispose_plane(plane, &mut bitmaps);
         assert!(scene.is_plane_disposed(plane));
         assert_eq!(scene.plane(plane).err(), Some(error));
         assert_eq!(scene.plane_mut(plane).map(|p| p.ox = 1).err(), Some(error));
         assert_eq!(scene.set_plane_z(plane, 3), Err(error));
-        scene.dispose_plane(plane);
+        scene.dispose_plane(plane, &mut bitmaps);
         assert_eq!(error.to_string(), "disposed plane");
     }
 
@@ -540,7 +543,7 @@ mod tests {
         assert!(scene.is_window_disposed(old) && !scene.is_window_disposed(new));
 
         let old = scene.create_plane(None).unwrap();
-        scene.dispose_plane(old);
+        scene.dispose_plane(old, &mut Bitmaps::new());
         let new = scene.create_plane(None).unwrap();
         assert!(scene.is_plane_disposed(old) && !scene.is_plane_disposed(new));
 
@@ -746,14 +749,16 @@ mod tests {
             assert!(tilemap.visible);
             assert_eq!((tilemap.ox, tilemap.oy), (0, 0));
         }
-        let mut map = Table::new_3d(2, 2, 3).unwrap();
+        let map = SharedTable::new(Table::new_3d(2, 2, 3).unwrap());
         map.set(1, 1, 2, 384);
+        let flash = SharedTable::new(Table::new_2d(2, 2).unwrap());
+        let priorities = SharedTable::new(Table::new(400).unwrap());
         let tilemap = scene.tilemap_mut(id).unwrap();
         tilemap.tileset = Some(tileset);
         tilemap.autotiles[6] = Some(autotile);
         tilemap.map_data = Some(map.clone());
-        tilemap.flash_data = Some(Table::new_2d(2, 2).unwrap());
-        tilemap.priorities = Some(Table::new(400).unwrap());
+        tilemap.flash_data = Some(flash.clone());
+        tilemap.priorities = Some(priorities.clone());
         tilemap.visible = false;
         tilemap.ox = 32;
         tilemap.oy = -32;
@@ -764,24 +769,10 @@ mod tests {
         assert_eq!(tilemap.autotiles[6], Some(autotile));
         assert_eq!(tilemap.autotiles[0], None);
         assert_eq!(tilemap.map_data, Some(map));
-        assert_eq!(tilemap.flash_data, Some(Table::new_2d(2, 2).unwrap()));
-        assert_eq!(tilemap.priorities, Some(Table::new(400).unwrap()));
+        assert_eq!(tilemap.flash_data, Some(flash));
+        assert_eq!(tilemap.priorities, Some(priorities));
         assert!(!tilemap.visible);
         assert_eq!((tilemap.ox, tilemap.oy), (32, -32));
-    }
-
-    #[test]
-    fn a_plane_and_a_tilemap_draw_nothing() {
-        let mut stage = Stage::sized(32, 24);
-        let bitmap = stage.solid(8, 8, RED);
-        let plane = stage.scene.create_plane(None).unwrap();
-        stage.scene.plane_mut(plane).unwrap().bitmap = Some(bitmap);
-        assert!(stage.scene.plane(plane).unwrap().visible);
-        assert!(all(&stage.frame(), BLACK));
-
-        let tilemap = stage.scene.create_tilemap(None).unwrap();
-        stage.scene.tilemap_mut(tilemap).unwrap().tileset = Some(bitmap);
-        assert!(all(&stage.frame(), BLACK));
     }
 
     #[test]

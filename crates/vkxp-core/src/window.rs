@@ -37,22 +37,23 @@ const PAUSE_PERIOD: u32 = 16;
 
 /// What a cached bitmap was drawn from: the skin, the skin's revision, the width and height
 /// of the result, and the stretch flag where it matters.
-type Key = (BitmapId, u64, i32, i32, bool);
+pub(crate) type Key = (BitmapId, u64, i32, i32, bool);
 
 /// Draws into the cleared bitmap `dst` from the skin `skin`.
 type Draw = fn(&mut Bitmaps, BitmapId, BitmapId, i32, i32, bool) -> Result<(), BitmapError>;
 
-/// One bitmap derived from a window skin.
+/// One bitmap derived from a window skin, or from another bitmap in the same way: planes
+/// keep their pre-tiled bitmap in one.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct Cache {
     /// What `bitmap` was drawn from, or would have been had it been possible to create.
     key: Option<Key>,
-    bitmap: Option<BitmapId>,
+    pub(crate) bitmap: Option<BitmapId>,
 }
 
 impl Cache {
     /// Brings the bitmap up to date with `wanted`; `None` means there is nothing to show.
-    fn refresh(&mut self, bitmaps: &mut Bitmaps, wanted: Option<Key>, draw: Draw) {
+    pub(crate) fn refresh(&mut self, bitmaps: &mut Bitmaps, wanted: Option<Key>, draw: Draw) {
         let lost = self.bitmap.is_some_and(|id| bitmaps.is_disposed(id));
         if wanted == self.key && !lost {
             return;
@@ -68,8 +69,8 @@ impl Cache {
             Some(id) => bitmaps.clear(id).ok().map(|()| id),
             None => {
                 self.dispose(bitmaps);
-                // A window too large for a bitmap goes without; the key is kept so that
-                // the attempt is not repeated every frame.
+                // What is too large for a bitmap goes without; the key is kept so that the
+                // attempt is not repeated every frame.
                 let defaults = FontDefaults::new(Vec::new());
                 bitmaps
                     .create(width.unsigned_abs(), height.unsigned_abs(), &defaults)
@@ -86,7 +87,7 @@ impl Cache {
         });
     }
 
-    fn dispose(&mut self, bitmaps: &mut Bitmaps) {
+    pub(crate) fn dispose(&mut self, bitmaps: &mut Bitmaps) {
         if let Some(id) = self.bitmap.take() {
             bitmaps.dispose(id);
         }

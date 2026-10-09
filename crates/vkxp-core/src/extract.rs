@@ -4,8 +4,9 @@ use vkxp_proto::{BitmapId, BlendMode, FramePacket, FrameRate, Op, Quad, RectEffe
 
 use crate::element::Order;
 use crate::geometry::Geometry;
+use crate::scene::Arena;
 use crate::scene::Key;
-use crate::{Bitmaps, Rect, Scene, Sprite, Viewport};
+use crate::{Bitmaps, Rect, Scene, Sprite, Viewport, ViewportId};
 
 /// The pixels both rectangles cover; a rectangle without pixels when they share none.
 pub(crate) fn intersect(a: vkxp_proto::Rect, b: vkxp_proto::Rect) -> vkxp_proto::Rect {
@@ -34,6 +35,40 @@ pub(crate) struct Level {
     /// Added to the position of every element.
     pub(crate) dx: i64,
     pub(crate) dy: i64,
+}
+
+/// Where the elements of `viewport` are drawn, or of the screen for `None`. No level when
+/// they are not drawn: the viewport is disposed, invisible or has no pixel on the screen.
+pub(crate) fn level_of(
+    viewports: &Arena<Viewport>,
+    logical_size: vkxp_proto::Size,
+    viewport: Option<ViewportId>,
+) -> Option<Level> {
+    let screen = vkxp_proto::Rect::from_size(logical_size);
+    let Some(id) = viewport else {
+        return Some(Level {
+            clip: screen,
+            dx: 0,
+            dy: 0,
+        });
+    };
+    let viewport = viewports.get(id.0)?;
+    let clip = intersect(viewport.rect.to_proto(), screen);
+    (viewport.visible && !clip.is_empty()).then(|| Level {
+        clip,
+        dx: i64::from(viewport.rect.x) - i64::from(viewport.ox),
+        dy: i64::from(viewport.rect.y) - i64::from(viewport.oy),
+    })
+}
+
+/// The blend mode a blend type selects: 1 adds, 2 subtracts, every other value blends
+/// normally.
+pub(crate) fn blend_mode(blend_type: i32) -> BlendMode {
+    match blend_type {
+        1 => BlendMode::Add,
+        2 => BlendMode::Subtract,
+        _ => BlendMode::Normal,
+    }
 }
 
 /// How a quad looks, apart from where it is.
@@ -132,11 +167,7 @@ impl Assembly<'_> {
             tone: sprite.tone.to_proto(),
             color: sprite.flash.effective_color(sprite.color),
             opacity: sprite.opacity,
-            blend: match sprite.blend_type {
-                1 => BlendMode::Add,
-                2 => BlendMode::Subtract,
-                _ => BlendMode::Normal,
-            },
+            blend: blend_mode(sprite.blend_type),
         };
         self.quad(bitmap, sprite.src_rect, &geometry, level.clip, look);
     }
@@ -156,6 +187,7 @@ impl Assembly<'_> {
 #[derive(Debug, Clone, Copy)]
 enum Item {
     Sprite(Key),
+    Plane(Key),
     /// The frame and background of a window.
     WindowBack(Key),
     /// What a window shows inside: cursor, contents, pause sign and arrows.
@@ -219,6 +251,11 @@ impl Scene {
         for (_, window) in self.windows.iter_mut() {
             window.refresh_caches(bitmaps);
         }
+        for (_, plane) in self.planes.iter_mut() {
+            if let Some(level) = level_of(&self.viewports, self.logical_size, plane.viewport) {
+                plane.refresh_cache(bitmaps, &level);
+            }
+        }
         let (ops, referenced) = self.ops(bitmaps);
         // Every quad was checked to name a live bitmap, which is all `deltas` requires.
         let deltas = bitmaps.deltas(&referenced).unwrap_or_default();
@@ -245,7 +282,7 @@ impl Scene {
         for (key, viewport) in self.viewports.iter() {
             top.push(Entry::new(viewport.order, Item::Viewport(key)));
         }
-        let mut place = |viewport: Option<crate::ViewportId>, entry: Entry| match viewport {
+        let mut place = |viewport: Option<ViewportId>, entry: Entry| match viewport {
             None => top.push(entry),
             // The elements of a disposed viewport are not drawn.
             Some(id) if self.viewports.get(id.0).is_some() => {
@@ -255,6 +292,9 @@ impl Scene {
         };
         for (key, sprite) in self.sprites.iter() {
             place(sprite.viewport, Entry::new(sprite.order, Item::Sprite(key)));
+        }
+        for (key, plane) in self.planes.iter() {
+            place(plane.viewport, Entry::new(plane.order, Item::Plane(key)));
         }
         for (key, window) in self.windows.iter() {
             let back = Entry::new(window.order, Item::WindowBack(key));
@@ -268,10 +308,9 @@ impl Scene {
         }
         sort(&mut top);
 
-        let screen = Level {
-            clip: vkxp_proto::Rect::from_size(self.logical_size),
-            dx: 0,
-            dy: 0,
+        let level = |viewport| level_of(&self.viewports, self.logical_size, viewport);
+        let Some(screen) = level(None) else {
+            return (Vec::new(), Vec::new());
         };
         let mut assembly = Assembly {
             bitmaps,
@@ -284,14 +323,8 @@ impl Scene {
                     let Some(viewport) = self.viewports.get(key) else {
                         continue;
                     };
-                    let clip = intersect(viewport.rect.to_proto(), screen.clip);
-                    if !viewport.visible || clip.is_empty() {
+                    let Some(level) = level(Some(ViewportId(key))) else {
                         continue;
-                    }
-                    let level = Level {
-                        clip,
-                        dx: i64::from(viewport.rect.x) - i64::from(viewport.ox),
-                        dy: i64::from(viewport.rect.y) - i64::from(viewport.oy),
                     };
                     if !viewport.flash.hides() {
                         let entries = &mut inside[key.index as usize];
@@ -300,7 +333,7 @@ impl Scene {
                             self.item(&mut assembly, entry.item, &level);
                         }
                     }
-                    assembly.viewport_effect(viewport, clip);
+                    assembly.viewport_effect(viewport, level.clip);
                 }
                 item => self.item(&mut assembly, item, &screen),
             }
@@ -314,6 +347,11 @@ impl Scene {
             Item::Sprite(key) => {
                 if let Some(sprite) = self.sprites.get(key) {
                     assembly.sprite(sprite, level);
+                }
+            }
+            Item::Plane(key) => {
+                if let Some(plane) = self.planes.get(key) {
+                    assembly.plane(plane, level);
                 }
             }
             Item::WindowBack(key) => {

@@ -2,9 +2,9 @@
 
 ## 1. Shared tables and planes (`vkxp-core`)
 
-- [ ] 1.1 Add `SharedTable` (shared handle to a `Table` with a revision counter incremented by every write) and store such handles in tilemaps for map data, priorities and flash data. Verify: tests that writes through one handle are visible through another and bump the revision, and that reading does not.
-- [ ] 1.2 Draw planes as tiled quads with the shared linear transform, origin, zoom, opacity, blend type, colour, tone and viewport clip. Verify: tests for the six plane scenarios in `specs/core-scene/spec.md`, rendered with the reference compositor.
-- [ ] 1.3 Add the cached pre-tiled bitmap for planes that would exceed 64 repeats. Verify: a plane with a 4 by 4 bitmap over the full screen renders the same pixels as the formula of the tiling scenario, emits no more than 64 quads, and changing a pixel of the source bitmap changes the next frame.
+- [x] 1.1 Add `SharedTable` (shared handle to a `Table` with a revision counter incremented by every write) and store such handles in tilemaps for map data, priorities and flash data. Verify: tests that writes through one handle are visible through another and bump the revision, and that reading does not.
+- [x] 1.2 Draw planes as tiled quads with the shared linear transform, origin, zoom, opacity, blend type, colour, tone and viewport clip. Verify: tests for the six plane scenarios in `specs/core-scene/spec.md`, rendered with the reference compositor.
+- [x] 1.3 Add the cached pre-tiled bitmap for planes that would exceed 64 repeats. Verify: a plane with a 4 by 4 bitmap over the full screen renders the same pixels as the formula of the tiling scenario, emits no more than 64 quads, and changing a pixel of the source bitmap changes the next frame.
 
 ## 2. Tiles (`vkxp-core`)
 
