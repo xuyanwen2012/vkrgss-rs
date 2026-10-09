@@ -59,8 +59,9 @@ impl Flash {
         if self.remaining <= 1 {
             *self = Flash::default();
         } else {
-            let (alpha, remaining) = (u32::from(self.alpha), self.remaining);
-            // At most the alpha it was.
+            // In 64 bits: the product of an alpha and any duration fits. The quotient is at
+            // most the alpha it was.
+            let (alpha, remaining) = (u64::from(self.alpha), u64::from(self.remaining));
             self.alpha = (alpha * (remaining - 1) / remaining) as u8;
             self.remaining -= 1;
         }
@@ -491,5 +492,85 @@ impl Tilemap {
     pub fn update(&mut self) {
         // The count does not wrap within the lifetime of a process.
         self.updates += 1;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The alphas a flash of `alpha` for `duration` updates shows: before any update and
+    /// after each of `updates`. `None` is the flash being over.
+    fn alphas(alpha: f64, duration: i32, updates: usize) -> Vec<Option<u8>> {
+        let mut flash = Flash::default();
+        flash.start(Some(Color::new(255.0, 0.0, 0.0, alpha)), duration);
+        let mut shown = vec![flash.color().map(|color| color.a)];
+        for _ in 0..updates {
+            flash.advance();
+            shown.push(flash.color().map(|color| color.a));
+        }
+        shown
+    }
+
+    /// The alpha series the measured pictures imply (`flash-bush-samples.txt`).
+    #[test]
+    fn the_alpha_decays_by_the_measured_integer_formula() {
+        let series: [(f64, i32, &[u8]); 7] = [
+            (255.0, 8, &[255, 223, 191, 159, 127, 95, 63, 31]),
+            (128.0, 5, &[128, 102, 76, 50, 25]),
+            (200.0, 10, &[200, 180, 160, 140, 120, 100, 80, 60, 40, 20]),
+            (255.0, 6, &[255, 212, 169, 126, 84, 42]),
+            (100.0, 3, &[100, 66, 33]),
+            (
+                255.0,
+                16,
+                &[
+                    255, 239, 223, 207, 191, 175, 159, 143, 127, 111, 95, 79, 63, 47, 31, 15,
+                ],
+            ),
+            (255.0, 1, &[255]),
+        ];
+        for (alpha, duration, expected) in series {
+            let mut expected: Vec<Option<u8>> = expected.iter().copied().map(Some).collect();
+            expected.extend([None, None]);
+            assert_eq!(
+                alphas(alpha, duration, duration as usize + 1),
+                expected,
+                "alpha {alpha} for {duration}"
+            );
+        }
+    }
+
+    /// The longest duration there is: the product of alpha and duration needs more than 32
+    /// bits.
+    #[test]
+    fn a_flash_of_the_longest_duration_decays_without_overflow() {
+        assert_eq!(
+            alphas(255.0, i32::MAX, 2),
+            [Some(255), Some(254), Some(253)]
+        );
+        // The same state serves sprites and viewports.
+        let red = Color::new(255.0, 0.0, 0.0, 255.0);
+        let mut sprite = Sprite::new(None, 0);
+        sprite.flash(Some(red), i32::MAX);
+        sprite.update();
+        let mut viewport = Viewport::new(Rect::new(0, 0, 8, 8), 0);
+        viewport.flash(Some(red), i32::MAX);
+        viewport.update();
+        let expected = vkxp_proto::Color::new(255, 0, 0, 254);
+        assert_eq!(sprite.flash.effective_color(Color::TRANSPARENT), expected);
+        assert_eq!(viewport.flash.effective_color(Color::TRANSPARENT), expected);
+    }
+
+    #[test]
+    fn a_flash_of_duration_zero_or_less_shows_until_the_first_update() {
+        for duration in [0, -1, i32::MIN] {
+            assert_eq!(alphas(255.0, duration, 2), [Some(255), None, None]);
+        }
+        let mut flash = Flash::default();
+        flash.start(None, 0);
+        assert!(flash.hides());
+        flash.advance();
+        assert!(!flash.hides());
     }
 }
