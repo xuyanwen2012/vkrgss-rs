@@ -54,6 +54,7 @@ gpu-allocator = { version = "0.28", default-features = false, features = ["std",
 jpeg-decoder = { version = "0.3", default-features = false }
 jpeg-encoder = "0.7"
 libc = "0.2"
+libm = { version = "0.2", default-features = false }
 libz-sys = { version = "1.1", default-features = false, features = ["static"] }
 png = "0.18"
 postcard = { version = "1", default-features = false, features = ["alloc"] }

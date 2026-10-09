@@ -8,8 +8,8 @@
 
 ## 2. Order and geometry (`vkxp-core`)
 
-- [ ] 2.1 Implement the draw order with z and stamps, for top-level elements, viewports and the elements inside a viewport. Verify: tests for the four draw-order scenarios, asserting rendered pixels.
-- [ ] 2.2 Add `libm` (workspace dependency, allow-list entry in `xtask/src/deps.rs` with a comment) and implement the transform derivation of `design.md`, exact for multiples of 90 degrees. Verify: `cargo xtask deps` reports no violation; unit tests that angles 0, 90, 180 and 270 give coefficients of exactly 0, 1 or -1 and that the derived map sends pixel centres to the expected source positions for a zoomed and a mirrored case.
+- [x] 2.1 Implement the draw order with z and stamps, for top-level elements, viewports and the elements inside a viewport. Verify: tests for the four draw-order scenarios, asserting rendered pixels.
+- [x] 2.2 Add `libm` (workspace dependency, allow-list entry in `xtask/src/deps.rs` with a comment) and implement the transform derivation of `design.md`, exact for multiples of 90 degrees. Verify: `cargo xtask deps` reports no violation; unit tests that angles 0, 90, 180 and 270 give coefficients of exactly 0, 1 or -1 and that the derived map sends pixel centres to the expected source positions for a zoomed and a mirrored case.
 
 ## 3. Sprites (`vkxp-core`)
 

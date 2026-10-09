@@ -12,6 +12,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+libm.workspace = true
 thiserror.workspace = true
 vkxp-pixel.workspace = true
 vkxp-proto.workspace = true

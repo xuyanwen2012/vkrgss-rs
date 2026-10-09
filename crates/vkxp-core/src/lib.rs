@@ -53,6 +53,7 @@ mod element;
 mod error;
 mod extract;
 mod font;
+mod geometry;
 mod rect;
 mod scene;
 mod table;

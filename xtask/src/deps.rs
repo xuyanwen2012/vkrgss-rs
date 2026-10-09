@@ -65,6 +65,9 @@ pub const CORE_ALLOW_LIST: &[&str] = &[
     "quote",
     "syn",
     "unicode-ident",
+    // Sines and cosines for sprite rotation that give the same bits on every platform. Pure
+    // Rust without dependencies, I/O or FFI; reviewed in the design of add-core-scene.
+    "libm",
 ];
 
 /// Crate name to the names of its normal and build dependencies.
