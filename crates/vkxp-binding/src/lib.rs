@@ -30,7 +30,8 @@
 //! # Guest state
 //!
 //! A [`Guest`] holds what the classes operate on: the bitmap arena, the font defaults, the
-//! game's files and the [`TextBackend`]. [`Guest::install`] defines the classes and puts one
+//! game's files and the [`TextBackend`], and already the scene and the input state that the
+//! scene classes and the modules `Graphics` and `Input` will use. [`Guest::install`] defines the classes and puts one
 //! guest, made from a [`Config`], into a thread-local of the interpreter thread; there is one
 //! per interpreter. Host functions reach it through [`Guest::with`], which panics on
 //! re-entrant access. That is why an access is short and never calls into Ruby: a Ruby call

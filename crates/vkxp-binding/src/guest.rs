@@ -2,7 +2,7 @@
 
 use std::cell::{Cell, RefCell};
 
-use vkxp_core::{Bitmaps, FontDefaults};
+use vkxp_core::{Bitmaps, FontDefaults, InputState, Scene};
 use vkxp_proto::BitmapId;
 use vkxp_ruby_sys::ffi::VALUE;
 use vkxp_ruby_sys::{Raised, Ruby};
@@ -30,6 +30,11 @@ pub struct Guest {
     pub(crate) font_names_listed: bool,
     pub(crate) files: GameFiles,
     pub(crate) text: Box<dyn TextBackend + Send>,
+    /// What is on the screen: the elements of the scene classes, from which frames are
+    /// extracted.
+    pub(crate) scene: Scene,
+    /// What `Input` answers from.
+    pub(crate) input: InputState,
 }
 
 /// The Ruby classes this crate defines, and the ones it raises.
@@ -60,6 +65,8 @@ impl Guest {
             font_names_listed,
             files: config.files,
             text: config.text,
+            scene: Scene::new(),
+            input: InputState::new(),
         }
     }
 
@@ -116,6 +123,16 @@ impl Guest {
     /// The bitmap arena.
     pub fn bitmaps(&self) -> &Bitmaps {
         &self.bitmaps
+    }
+
+    /// The scene.
+    pub fn scene(&self) -> &Scene {
+        &self.scene
+    }
+
+    /// The input state.
+    pub fn input(&self) -> &InputState {
+        &self.input
     }
 
     /// Disposes the arena bitmaps of collected `Bitmap` objects.
