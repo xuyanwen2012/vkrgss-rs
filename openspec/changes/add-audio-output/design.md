@@ -61,3 +61,14 @@ next to them), are committed under `crates/vkxp-audio/tests/data/`. No test open
 ## Follow-ups
 
 - MIDI loop markers (controller 111), WMA, the original's volume curve.
+- The callback decodes every block after the first of a sampled source, and reopens a
+  looping source when it wraps, itself; only opening a file and its first block are on the
+  worker thread. Should a slow file ever make the output stutter, blocks decoded ahead on
+  the worker are the next step.
+- The output stream is opened with `f32` samples. A device that only takes integer samples
+  fails to open and is reported under the no-device rule; whether to convert is open.
+- MIDI data inside a RIFF container (`.rmi`) is not recognised and is reported as unsupported.
+- A pitch outside 50 to 150 is clamped to that range; what the original does with such values
+  has not been looked at.
+- `cpal` links ALSA on Linux, so building now needs the ALSA development files
+  (`alsa-lib-devel`); the README lists them.

@@ -8,7 +8,7 @@ use vkxp_proto::link::HostEnd;
 use vkxp_proto::{Button, FramePacket, GuestToHost, HostToGuest, InputSnapshot};
 use winit::keyboard::KeyCode;
 
-use crate::{Clock, Display, KeyMap};
+use crate::{AudioSink, Clock, Display, KeyMap, NullSink};
 
 /// The key that asks the guest to restart.
 const RESET_KEY: KeyCode = KeyCode::F12;
@@ -57,6 +57,8 @@ pub struct SessionOptions {
     pub fail_on_rejected_frame: bool,
     /// Where modal texts and errors are written.
     pub errors: Box<dyn Write + Send>,
+    /// Where audio commands go.
+    pub audio: Box<dyn AudioSink>,
 }
 
 impl Default for SessionOptions {
@@ -65,6 +67,7 @@ impl Default for SessionOptions {
             keys: KeyMap::default(),
             fail_on_rejected_frame: false,
             errors: Box::new(std::io::stderr()),
+            audio: Box::new(NullSink),
         }
     }
 }
@@ -104,6 +107,7 @@ pub struct Session<D: Display, C: Clock> {
     keys: KeyMap,
     fail_on_rejected_frame: bool,
     errors: Box<dyn Write + Send>,
+    audio: Box<dyn AudioSink>,
     /// Messages for the guest that have not been handed to the link yet.
     outbox: VecDeque<HostToGuest>,
     /// When the tick of the frame being answered is due.
@@ -131,7 +135,6 @@ pub struct Session<D: Display, C: Clock> {
     fps: Option<FpsCounter>,
     frames: u64,
     mask_reported: bool,
-    audio_reported: bool,
     /// Whether sending to the guest has failed. What the guest sent before it went is still
     /// read, so a shutdown message that is already in the link is not lost.
     guest_gone: bool,
@@ -149,6 +152,7 @@ impl<D: Display, C: Clock> Session<D, C> {
             keys: options.keys,
             fail_on_rejected_frame: options.fail_on_rejected_frame,
             errors: options.errors,
+            audio: options.audio,
             outbox: VecDeque::new(),
             pending_tick: None,
             previous_tick: None,
@@ -165,7 +169,6 @@ impl<D: Display, C: Clock> Session<D, C> {
             fps: None,
             frames: 0,
             mask_reported: false,
-            audio_reported: false,
             guest_gone: false,
             failing: false,
             end: None,
@@ -235,14 +238,7 @@ impl<D: Display, C: Clock> Session<D, C> {
                 }
                 self.transition(duration);
             }
-            GuestToHost::Audio(_) => {
-                if !self.audio_reported {
-                    self.audio_reported = true;
-                    self.report(format_args!(
-                        "audio is not implemented; ignoring audio commands"
-                    ));
-                }
-            }
+            GuestToHost::Audio(command) => self.audio.command(command),
             GuestToHost::Modal { text } => {
                 self.report(format_args!("{text}"));
                 self.outbox.push_back(HostToGuest::ModalDismissed);

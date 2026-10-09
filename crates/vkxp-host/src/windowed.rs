@@ -20,7 +20,10 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::PhysicalKey;
 use winit::window::{Fullscreen, Window, WindowId};
 
-use crate::{Clock, Display, KeyAction, KeyMap, Session, SessionEnd, SessionOptions, SystemClock};
+use crate::{
+    AudioOptions, AudioSink, Clock, Display, KeyAction, KeyMap, NullSink, Session, SessionEnd,
+    SessionOptions, SystemClock,
+};
 
 /// How a windowed session is set up.
 #[derive(Debug, Clone)]
@@ -34,16 +37,19 @@ pub struct WindowedOptions {
     pub logical_size: Size,
     /// The physical keys that hold each button.
     pub keys: KeyMap,
+    /// The audio output, or `None` for a run without sound, which opens no audio device.
+    pub audio: Option<AudioOptions>,
 }
 
 impl WindowedOptions {
-    /// The defaults for a game of 640 by 480 pixels on `device`.
+    /// The defaults for a game of 640 by 480 pixels on `device`, without sound.
     pub fn new(device: DeviceChoice) -> WindowedOptions {
         WindowedOptions {
             device,
             title: "vkxp".to_owned(),
             logical_size: Size::new(640, 480),
             keys: KeyMap::default(),
+            audio: None,
         }
     }
 }
@@ -230,8 +236,13 @@ impl App {
         }
 
         let clock = SystemClock::new();
+        let audio: Box<dyn AudioSink> = match &self.options.audio {
+            Some(audio) => audio.open(),
+            None => Box::new(NullSink),
+        };
         let options = SessionOptions {
             keys: self.options.keys.clone(),
+            audio,
             ..SessionOptions::default()
         };
         let link = self.link.take().expect("the session starts once");

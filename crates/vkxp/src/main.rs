@@ -9,16 +9,17 @@
 //!
 //! 1. The arguments are parsed (`args`); a mistake there ends with the usage message and
 //!    status 2.
-//! 2. `Game.ini` is read, the run-time packages it names are looked up in the `--rtp` table
-//!    and the built-in scripts file is found. A failure is a message and status 1, before
-//!    any window or interpreter exists.
+//! 2. `Game.ini` is read, the run-time packages it names are looked up in the `--rtp` table,
+//!    the built-in scripts file is found and a SoundFont named with `--soundfont` is checked
+//!    to exist. A failure is a message and status 1, before any window or interpreter exists.
 //! 3. The game directory becomes the working directory, because scripts write their saves
 //!    with relative names. Paths given on the command line are made absolute first.
 //! 4. SIGVTALRM is blocked while the main thread is still the only one (`signals`); the
 //!    closure that runs the game unblocks it on the interpreter thread.
 //! 5. The text backend over the font engine (`font`) and the binding's configuration are
 //!    built and the interpreter is started.
-//! 6. The host runs on the main thread. The guest thread, which the windowed runner spawns
+//! 6. The host runs on the main thread. In a window it plays the game's audio on the default
+//!    output device unless `--no-audio` is given; headless it opens none. The guest thread, which the windowed runner spawns
 //!    and the headless mode spawns itself, sends the game to the interpreter thread and
 //!    waits for it.
 //! 7. The guest is joined, which drops the interpreter, and the status is 0 only if the
@@ -41,8 +42,8 @@ use std::time::Duration;
 use anyhow::{Context, Result, anyhow, bail};
 use vkxp_binding::{Config, RunConfig, RunError, run_game};
 use vkxp_host::{
-    HeadlessOptions, InputScript, WindowedOptions, device_from_text, headless_link, run_headless,
-    run_windowed,
+    AudioOptions, HeadlessOptions, InputScript, WindowedOptions, device_from_text, headless_link,
+    run_headless, run_windowed,
 };
 use vkxp_proto::link::GuestEnd;
 use vkxp_ruby_sys::Interpreter;
@@ -118,6 +119,20 @@ fn builtin_scripts(named: Option<PathBuf>) -> Result<PathBuf> {
     Ok(path)
 }
 
+/// The audio of a windowed run: `None`, which opens no audio device, when it is disabled. A
+/// SoundFont that is named has to exist, whether or not it will be used.
+fn audio_options(disabled: bool, soundfont: Option<&Path>) -> Result<Option<AudioOptions>> {
+    let soundfont = soundfont.map(absolute).transpose()?;
+    if let Some(path) = soundfont.as_deref().filter(|path| !path.is_file()) {
+        bail!(
+            "the SoundFont {} does not exist; name another file with --soundfont, or leave \
+             the option out to use the system's",
+            path.display()
+        );
+    }
+    Ok((!disabled).then_some(AudioOptions { soundfont }))
+}
+
 /// The names `Font.default_name` starts with. The original runtime's Japanese edition, which
 /// a trailing `J` in the name of the game's library stands for, starts with another font.
 fn default_font_names(library: &str) -> Vec<String> {
@@ -176,6 +191,7 @@ fn run(options: Options, script: InputScript) -> Result<bool> {
         other => other.into(),
     })?;
     let builtin_scripts = builtin_scripts(options.builtin_scripts)?;
+    let audio = audio_options(options.no_audio, options.soundfont.as_deref())?;
     let dumps = options
         .dumps
         .iter()
@@ -249,6 +265,7 @@ fn run(options: Options, script: InputScript) -> Result<bool> {
     } else {
         let host_options = WindowedOptions {
             title,
+            audio,
             ..WindowedOptions::new(device.unwrap_or_default())
         };
         // The windowed runner returns once the guest thread has ended.
@@ -326,6 +343,42 @@ mod tests {
         let message = error.to_string();
         assert!(message.contains(EXTRACTION_TOOL), "{message}");
         assert!(message.contains("absent.rb"), "{message}");
+    }
+
+    /// Scenario "Disabled": without audio options the windowed runner opens no device.
+    #[test]
+    fn no_audio_leaves_the_windowed_run_without_audio_options() {
+        assert_eq!(audio_options(true, None).unwrap(), None);
+        assert_eq!(
+            audio_options(false, None).unwrap(),
+            Some(AudioOptions { soundfont: None })
+        );
+    }
+
+    #[test]
+    fn a_named_soundfont_is_passed_on_with_its_absolute_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("gm.sf2");
+        std::fs::write(&file, "").unwrap();
+        assert_eq!(
+            audio_options(false, Some(&file)).unwrap(),
+            Some(AudioOptions {
+                soundfont: Some(file)
+            })
+        );
+    }
+
+    /// Scenario "SoundFont missing".
+    #[test]
+    fn a_missing_soundfont_is_an_error_naming_the_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let absent = dir.path().join("absent.sf2");
+        for disabled in [false, true] {
+            let error = audio_options(disabled, Some(&absent)).unwrap_err();
+            let message = error.to_string();
+            assert!(message.contains("absent.sf2"), "{message}");
+            assert!(message.contains("--soundfont"), "{message}");
+        }
     }
 
     #[test]

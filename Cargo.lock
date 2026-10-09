@@ -2298,6 +2298,7 @@ dependencies = [
  "png",
  "tempfile",
  "thiserror 2.0.21",
+ "vkxp-audio",
  "vkxp-compose-ref",
  "vkxp-proto",
  "vkxp-vk",

@@ -4,8 +4,9 @@ A Rust + Vulkan runtime for RPG Maker XP (RGSS1) games. Linux first, MIT license
 
 The project can start a game: `vkxp <game directory>` runs the game's scripts in the embedded
 Ruby interpreter against the RGSS classes and shows the frames of the Vulkan compositor in a
-window, or writes them to files in a headless run. Audio commands are accepted and dropped,
-there is no configuration file or gamepad support yet, and encrypted archives are not read.
+window, or writes them to files in a headless run. In a window it plays the game's audio:
+Ogg Vorbis, WAV, MP3 and, with a SoundFont, MIDI. There is no configuration file or gamepad
+support yet, and encrypted archives are not read.
 `docs/decisions.md` records the settled design, and `openspec/` holds the change proposals
 that implement it.
 
@@ -147,6 +148,8 @@ Paths on the command line are relative to the directory the program was started 
 | `--encoding ENCODING` | The text encoding of `Game.ini`: `utf-8`, `gbk`, `shift-jis` or `big5`. Without it UTF-8 is tried, then those three in that order. |
 | `--debug` | Debug mode: `$DEBUG` is `true`. |
 | `--allow-process-functions` | Lets `system`, backticks, `exec`, `fork`, `syscall` and `IO.popen` start processes. Without it they do nothing. |
+| `--no-audio` | Run without sound. No audio device is opened. |
+| `--soundfont FILE` | The SoundFont that MIDI music is played with. A file that does not exist ends the program with an error before any window opens. |
 | `--headless` | Run without a window, on a virtual clock that never waits. |
 | `--frames N` | Headless: stop after N frames if the game has not ended. |
 | `--input SCRIPT\|@FILE` | Headless: the buttons held from given frames on, in the syntax described under *Running the demo*, or a file that holds such a script. |
@@ -176,6 +179,21 @@ on the AMD integrated GPU, or the same on the CPU with `VK_LOADER_DRIVERS_SELECT
 The host keys are those of the demo: F12 (reset), Alt+Enter (borderless fullscreen), F2
 (frame rate in the title) and Tab held (fast-forward). Closing the window asks the game to
 quit.
+
+### Audio
+
+A windowed run plays music, background sounds, music effects and sound effects on the default
+output device. The format of a file is recognised from its content: Ogg Vorbis, WAV (PCM) and
+MP3 are decoded, and a Standard MIDI file is played with a SoundFont. Without `--soundfont`
+the first of `/usr/share/soundfonts/default.sf2`, `/usr/share/soundfonts/FluidR3_GM.sf2` and
+`/usr/share/sounds/sf2/FluidR3_GM.sf2` that exists is used (the package `fluid-soundfont-gm`
+installs one); it is loaded when the first MIDI file is played.
+
+Nothing about audio stops a game. A file that cannot be decoded, MIDI music without a
+SoundFont and an output device that cannot be opened are each reported once on the error
+stream, and the game runs on without that sound. A headless run plays nothing and opens no
+audio device. Volume is a linear factor for now, not the original's curve, and the loop
+markers of MIDI files are not followed: a track loops from its beginning.
 
 ### Headless
 
@@ -272,6 +290,7 @@ Building the workspace compiles the shaders of `vkxp-vk` and the embedded Ruby i
 | build | the development files of libcrypt (`crypt.h`, `libcrypt.so`) | `libxcrypt-devel` or `libcrypt-dev` |
 | build | `glslc` on `PATH`, to compile GLSL to SPIR-V | `glslc` or `shaderc` |
 | build | `spirv-val` on `PATH`, to validate the SPIR-V | `spirv-tools` |
+| build | the development files of ALSA (`alsa.pc`, `libasound.so`), for the audio output | `alsa-lib-devel` or `libasound2-dev` |
 | test | a Vulkan 1.3 device; the Mesa software rasteriser lavapipe (llvmpipe) is enough | `mesa-vulkan-drivers` |
 | test, optional | the Khronos validation layer `VK_LAYER_KHRONOS_validation` | `vulkan-validation-layers` |
 

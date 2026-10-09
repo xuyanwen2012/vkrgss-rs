@@ -330,4 +330,8 @@ impl Mixer {
     pub fn render(&mut self, out: &mut [f32]) {
         self.channels.render(out);
     }
+
+    pub(crate) fn into_parts(self) -> (Loader, Channels) {
+        (self.loader, self.channels)
+    }
 }

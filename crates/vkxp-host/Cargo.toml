@@ -14,6 +14,7 @@ workspace = true
 [dependencies]
 png.workspace = true
 thiserror.workspace = true
+vkxp-audio.workspace = true
 vkxp-proto.workspace = true
 vkxp-vk.workspace = true
 winit.workspace = true

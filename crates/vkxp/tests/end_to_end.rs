@@ -459,6 +459,27 @@ fn a_missing_built_in_scripts_file_names_the_tool_that_creates_it() {
     assert!(stderr.contains("rpg_builtin.rb"), "{stderr}");
 }
 
+/// The run is headless, so that this test opens neither a window nor an audio device
+/// whatever the program does with the option.
+#[test]
+fn a_soundfont_that_does_not_exist_is_an_error_naming_it() {
+    let game = Game::new("e2e-soundfont", "SoundFont", &[("Main", "Graphics.update")]);
+    let absent = game.dir().join("absent.sf2");
+    let ran = headless(&game, &["--soundfont", &absent.to_string_lossy()]);
+    ran.assert_failure();
+    let stderr = ran.stderr();
+    assert!(stderr.contains("absent.sf2"), "{stderr}");
+    assert!(stderr.contains("--soundfont"), "{stderr}");
+}
+
+#[test]
+fn audio_options_do_not_disturb_a_headless_run() {
+    let game = Game::new("e2e-no-audio", "NoAudio", &[("Main", "Graphics.update")]);
+    let ran = headless(&game, &["--no-audio"]);
+    ran.assert_success();
+    assert!(!ran.stderr().contains("audio"), "{}", ran.stderr());
+}
+
 #[test]
 fn the_built_in_scripts_file_is_loaded_from_the_default_location() {
     let source = "File.open('rpg.txt', 'w') { |file| file.write(RPG::Cache.class.to_s) }";

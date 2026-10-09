@@ -14,11 +14,15 @@
 //! 3. The [`Display`] implementations: the Vulkan presenter for a window, an off-screen one for
 //!    headless runs, and the recording fake.
 //!
+//! Audio commands go to the session's [`AudioSink`]: the output of `vkxp-audio` in a window
+//! unless audio is disabled, [`NullSink`] otherwise and in every headless run.
+//!
 //! [`demo`] is a guest written in Rust, used by the tests and the examples until the Ruby side
 //! exists.
 
 #![forbid(unsafe_code)]
 
+mod audio;
 mod clock;
 mod display;
 mod headless;
@@ -30,6 +34,7 @@ mod windowed;
 pub mod demo;
 pub mod testing;
 
+pub use audio::{AudioOptions, AudioSink, NullSink};
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use display::Display;
 pub use headless::{

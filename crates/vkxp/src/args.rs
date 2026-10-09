@@ -19,6 +19,9 @@ usage: vkxp [GAME_DIR] [OPTIONS]
   --encoding ENCODING       the text encoding of Game.ini: utf-8, gbk, shift-jis or big5
   --debug                   debug mode: $DEBUG is true
   --allow-process-functions let scripts start processes (system, exec and the like)
+  --no-audio                run without sound: no audio device is opened
+  --soundfont FILE          the SoundFont that MIDI music is played with;
+                            default: the first found in /usr/share/soundfonts
   --headless                run without a window, on a virtual clock
   --frames N                headless: stop after N frames
   --input SCRIPT|@FILE      headless: held buttons, for example \"2:RIGHT, 6:\"
@@ -48,6 +51,10 @@ pub struct Options {
     pub encoding: Option<Encoding>,
     pub debug: bool,
     pub process_functions: bool,
+    /// Whether the audio output stays closed.
+    pub no_audio: bool,
+    /// The SoundFont for MIDI, instead of the system's.
+    pub soundfont: Option<PathBuf>,
     pub headless: bool,
     pub frames: Option<u64>,
     pub input: Option<Input>,
@@ -96,6 +103,8 @@ pub fn parse(arguments: &[String]) -> Result<Options, String> {
             "--encoding" => options.encoding = Some(encoding(value()?)?),
             "--debug" => options.debug = true,
             "--allow-process-functions" => options.process_functions = true,
+            "--no-audio" => options.no_audio = true,
+            "--soundfont" => options.soundfont = Some(PathBuf::from(value()?)),
             "--headless" => options.headless = true,
             "--frames" => {
                 let text = value()?;
@@ -175,6 +184,9 @@ mod tests {
             "Shift-JIS",
             "--debug",
             "--allow-process-functions",
+            "--no-audio",
+            "--soundfont",
+            "sf/gm.sf2",
         ])
         .unwrap();
         assert_eq!(
@@ -191,6 +203,8 @@ mod tests {
                 encoding: Some(Encoding::ShiftJis),
                 debug: true,
                 process_functions: true,
+                no_audio: true,
+                soundfont: Some("sf/gm.sf2".into()),
                 ..Options::default()
             }
         );
@@ -241,6 +255,26 @@ mod tests {
             assert_eq!(options.encoding, Some(encoding));
         }
         assert!(parse_words(&["--encoding", "latin1"]).is_err());
+    }
+
+    #[test]
+    fn audio_is_on_unless_disabled() {
+        let options = parse_words(&["game"]).unwrap();
+        assert!(!options.no_audio);
+        assert_eq!(options.soundfont, None);
+
+        let options = parse_words(&["game", "--no-audio"]).unwrap();
+        assert!(options.no_audio);
+    }
+
+    #[test]
+    fn a_soundfont_is_a_file_name() {
+        let options = parse_words(&["--soundfont", "FluidR3_GM.sf2", "game"]).unwrap();
+        assert_eq!(options.soundfont, Some("FluidR3_GM.sf2".into()));
+        assert!(!options.no_audio);
+
+        let error = parse_words(&["game", "--soundfont"]).unwrap_err();
+        assert!(error.contains("--soundfont"), "{error}");
     }
 
     #[test]

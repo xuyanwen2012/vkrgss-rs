@@ -477,3 +477,49 @@ fn unknown_device_fails_the_run_before_any_message() {
     assert!(matches!(error, HeadlessError::Compositor(_)), "{error}");
     assert!(error.to_string().contains("cannot start the compositor"));
 }
+
+/// Scenario "Headless" of the audio commands requirement. A headless run has the sink that
+/// plays nothing: this crate opens an audio device only in the windowed runner.
+#[test]
+fn a_game_that_plays_music_runs_headless_without_an_audio_report() {
+    use vkxp_proto::{AudioChannel, AudioCommand};
+
+    let errors = ErrorBuffer::new();
+    let (result, ()) = run_with(
+        HeadlessOptions {
+            errors: Box::new(errors.clone()),
+            ..options()
+        },
+        |link| {
+            let tick = |index| {
+                link.send(small_frame(index)).unwrap();
+                assert_eq!(link.recv(), Ok(HostToGuest::Tick));
+            };
+            let audio = |command| link.send(GuestToHost::Audio(command)).unwrap();
+            tick(0);
+            for channel in [AudioChannel::Bgm, AudioChannel::Se] {
+                audio(AudioCommand::Play {
+                    channel,
+                    // No sink of a headless run looks at the data.
+                    data: b"MThd music".to_vec(),
+                    volume: 100,
+                    pitch: 100,
+                });
+            }
+            tick(1);
+            audio(AudioCommand::Fade {
+                channel: AudioChannel::Bgm,
+                duration_ms: 1000,
+            });
+            tick(2);
+            audio(AudioCommand::Stop {
+                channel: AudioChannel::Bgm,
+            });
+            link.send(GuestToHost::Shutdown).unwrap();
+        },
+    );
+    let report = result.unwrap();
+    assert_eq!(report.end, HeadlessEnd::Shutdown);
+    assert_eq!(report.frames, 3);
+    assert_eq!(errors.text(), "", "nothing is reported about audio");
+}

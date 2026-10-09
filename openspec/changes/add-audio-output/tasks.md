@@ -13,9 +13,9 @@
 
 ## 3. Output and host (`vkxp-audio`, `vkxp-host`, `vkxp`)
 
-- [ ] 3.1 Implement `Output` over `cpal` with the worker thread, and the no-device rule. Verify: a test that constructing it with a device-opening function that fails yields a sink which accepts commands and reports once.
-- [ ] 3.2 Add `AudioSink` to the session, the null sink for headless runs and the recording sink for tests; remove the "not implemented" report. Verify: tests for the two scenarios of `specs/host-session/spec.md`.
-- [ ] 3.3 Add `--no-audio` and `--soundfont` to the executable and a README paragraph. Verify: argument tests for both options and the two scenarios of `specs/game-launch/spec.md`.
+- [x] 3.1 Implement `Output` over `cpal` with the worker thread, and the no-device rule. Verify: a test that constructing it with a device-opening function that fails yields a sink which accepts commands and reports once.
+- [x] 3.2 Add `AudioSink` to the session, the null sink for headless runs and the recording sink for tests; remove the "not implemented" report. Verify: tests for the two scenarios of `specs/host-session/spec.md`.
+- [x] 3.3 Add `--no-audio` and `--soundfont` to the executable and a README paragraph. Verify: argument tests for both options and the two scenarios of `specs/game-launch/spec.md`.
 
 ## 4. Integration check
 

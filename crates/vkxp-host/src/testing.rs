@@ -1,5 +1,6 @@
-//! Fakes for testing a [`Session`](crate::Session) without a window or a GPU: a display that
-//! records what it was asked to do, and an error stream that can be read back.
+//! Fakes for testing a [`Session`](crate::Session) without a window, a GPU or an audio device:
+//! a display that records what it was asked to do, an audio sink that records its commands,
+//! and an error stream that can be read back.
 //!
 //! The fake clock is [`ManualClock`](crate::ManualClock), which the headless runner uses too.
 
@@ -7,9 +8,9 @@ use std::io::Write;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use vkxp_proto::FramePacket;
+use vkxp_proto::{AudioCommand, FramePacket};
 
-use crate::{Display, ManualClock};
+use crate::{AudioSink, Display, ManualClock};
 
 /// One request a [`RecordingDisplay`] received.
 #[derive(Debug, Clone, PartialEq)]
@@ -184,6 +185,33 @@ impl Display for RecordingDisplay {
     fn set_title(&mut self, title: &str) {
         self.events.push(DisplayEvent::Title(title.to_owned()));
         self.title = title.to_owned();
+    }
+}
+
+/// An audio sink that keeps the commands it is sent and plays nothing. Clones share one list.
+#[derive(Debug, Clone, Default)]
+pub struct RecordingSink {
+    commands: Arc<Mutex<Vec<AudioCommand>>>,
+}
+
+impl RecordingSink {
+    pub fn new() -> RecordingSink {
+        RecordingSink::default()
+    }
+
+    /// Every command received so far, oldest first.
+    pub fn commands(&self) -> Vec<AudioCommand> {
+        self.lock().clone()
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, Vec<AudioCommand>> {
+        self.commands.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+impl AudioSink for RecordingSink {
+    fn command(&mut self, command: AudioCommand) {
+        self.lock().push(command);
     }
 }
 

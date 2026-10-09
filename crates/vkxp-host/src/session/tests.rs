@@ -12,7 +12,7 @@ use winit::keyboard::KeyCode;
 
 use super::*;
 use crate::ManualClock;
-use crate::testing::{DisplayEvent, ErrorBuffer, RecordingDisplay, Shown};
+use crate::testing::{DisplayEvent, ErrorBuffer, RecordingDisplay, RecordingSink, Shown};
 
 const SIZE: Size = Size::new(32, 24);
 
@@ -918,8 +918,48 @@ fn frame_rate_key_puts_the_measured_rate_in_the_title_and_takes_it_out_again() {
     assert_eq!(rig.session.display().title(), "Game");
 }
 
+/// Scenario "Order" of the audio commands requirement.
 #[test]
-fn audio_commands_are_accepted_and_noted_once() {
+fn audio_commands_reach_the_sink_in_the_order_sent() {
+    let sink = RecordingSink::new();
+    let clock = ManualClock::new();
+    let errors = ErrorBuffer::new();
+    let options = SessionOptions {
+        errors: Box::new(errors.clone()),
+        audio: Box::new(sink.clone()),
+        ..SessionOptions::default()
+    };
+    let mut session = Session::new(RecordingDisplay::new(), clock.clone(), options);
+    let (guest, host) = link(|| {});
+
+    let play = AudioCommand::Play {
+        channel: AudioChannel::Bgm,
+        data: vec![1, 2, 3],
+        volume: 80,
+        pitch: 100,
+    };
+    let fade = AudioCommand::Fade {
+        channel: AudioChannel::Bgm,
+        duration_ms: 500,
+    };
+    let stop = AudioCommand::Stop {
+        channel: AudioChannel::Se,
+    };
+    guest.send(frame(0)).unwrap();
+    guest.send(GuestToHost::Audio(play.clone())).unwrap();
+    guest.send(GuestToHost::Audio(fade.clone())).unwrap();
+    guest.send(frame(1)).unwrap();
+    guest.send(GuestToHost::Audio(stop.clone())).unwrap();
+    session.pump(&host);
+    // None of them waits for a tick, not even the one behind the frame whose tick is pending.
+    assert_eq!(session.next_wake(), Some(ms(25)));
+    assert_eq!(sink.commands(), [play, fade, stop]);
+    assert_eq!(errors.text(), "");
+}
+
+/// The sink of a session that was given none, as in a headless run, reports nothing.
+#[test]
+fn audio_commands_without_a_sink_are_dropped_silently() {
     let mut rig = Rig::new();
     for _ in 0..3 {
         let answer = rig.send(GuestToHost::Audio(AudioCommand::Stop {
@@ -927,13 +967,7 @@ fn audio_commands_are_accepted_and_noted_once() {
         }));
         assert_eq!(answer, []);
     }
-    assert_eq!(
-        rig.errors.text().matches("audio").count(),
-        2,
-        "{}",
-        rig.errors.text()
-    );
-    assert_eq!(rig.errors.text().lines().count(), 1);
+    assert_eq!(rig.errors.text(), "");
 }
 
 // Rejected frames.
