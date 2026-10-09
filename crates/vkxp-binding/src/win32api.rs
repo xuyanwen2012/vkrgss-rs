@@ -61,6 +61,9 @@ const TABLE: &[(&str, &str, Shim)] = &[
     ("user32", "GetAsyncKeyState", async_key_state),
     ("user32", "GetKeyState", key_state),
     ("user32", "GetKeyboardState", keyboard_state),
+    ("user32", "SetKeyboardState", set_keyboard_state),
+    ("user32", "keybd_event", inject_event),
+    ("user32", "mouse_event", inject_event),
     ("user32", "GetCursorPos", cursor_pos),
     ("user32", "ScreenToClient", screen_to_client),
 ];
@@ -622,6 +625,20 @@ fn keyboard_state(guest: &mut Guest, args: &mut [Arg]) -> i64 {
             0
         };
     }
+    1
+}
+
+/// `keybd_event(key, scan, flags, extra)` and `mouse_event(flags, dx, dy, data, extra)`:
+/// nothing is done.
+// PLACEHOLDER: no key or button is injected into the state `GetAsyncKeyState` reports; a
+// game that injects a key to read it back would need that.
+fn inject_event(_guest: &mut Guest, _args: &mut [Arg]) -> i64 {
+    0
+}
+
+/// `SetKeyboardState(buffer)`: nothing is done, and that succeeds.
+// PLACEHOLDER: the key state is left as it is, as for `keybd_event`.
+fn set_keyboard_state(_guest: &mut Guest, _args: &mut [Arg]) -> i64 {
     1
 }
 

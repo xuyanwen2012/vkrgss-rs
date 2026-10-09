@@ -84,7 +84,36 @@ fn bit_0_of_the_asynchronous_state_is_set_at_the_update_a_key_goes_down() {
     );
 }
 
-/// Scenario "Keyboard state".
+/// Scenario "keybd_event".
+#[test]
+fn key_injection_is_accepted_and_leaves_the_key_state() {
+    assert_eq!(
+        eval_with(
+            &with_error_stream(
+                "async = Win32API.new('user32', 'GetAsyncKeyState', 'i', 'i')
+                 get = Win32API.new('user32', 'GetKeyboardState', 'p', 'i')
+                 state = proc do
+                   buffer = \"\\0\" * 256
+                   get.call(buffer)
+                   [async.call(0x0D), async.call(0x41), buffer]
+                 end
+                 Input.update
+                 before = state.call
+                 results = [
+                   Win32API.new(\"user32.dll\", \"keybd_event\", \"iiii\", \"v\").call(0x0D, 0, 0, 0),
+                   Win32API.new('user32', 'keybd_event', 'iiii', 'v').call(0x41, 0, 2, 0),
+                   Win32API.new('user32', 'mouse_event', 'iiiii', 'v').call(2, 0, 0, 0, 0),
+                   Win32API.new('user32', 'SetKeyboardState', 'p', 'i').call(\"\\x80\" * 256)]
+                 unchanged = state.call == before
+                 Input.update
+                 [results, unchanged, state.call == before, before[0, 2]]"
+            ),
+            holding(InputSnapshot::EMPTY.with_key(0x41))
+        ),
+        r#"[[[0, 0, 0, 1], true, false, [0, -32767]], ""]"#
+    );
+}
+
 #[test]
 fn the_keyboard_state_has_0x80_for_each_held_key() {
     assert_eq!(

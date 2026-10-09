@@ -6,7 +6,7 @@
 
 ## 2. Win32API (`vkxp-binding`)
 
-- [ ] 2.1 Accept the three functions. Verify: a Ruby test for the scenario of `specs/rgss-runtime/spec.md`.
+- [x] 2.1 Accept the three functions. Verify: a Ruby test for the scenario of `specs/rgss-runtime/spec.md`.
 
 ## 3. Integration check
 
