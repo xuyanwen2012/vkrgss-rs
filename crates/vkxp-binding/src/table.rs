@@ -1,6 +1,6 @@
 //! The Ruby class `Table`.
 
-use vkxp_core::Table;
+use vkxp_core::{SharedTable, Table};
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{HostResult, Raise, Raised, Ruby};
 
@@ -11,11 +11,11 @@ use crate::wrap::{self, Handle, Wrapped};
 
 /// The data of a `Table` object.
 ///
-/// The table is reached only through the object's handle, so that a tilemap can later hold
-/// the Ruby object and read the same table a script writes to.
-#[derive(Debug, Clone)]
+/// The table is shared: a tilemap the object is assigned to holds the same table, and so
+/// reads what a script writes through the object.
+#[derive(Debug)]
 pub(crate) struct TableData {
-    table: Table,
+    table: SharedTable,
 }
 
 impl Wrapped for TableData {
@@ -26,10 +26,17 @@ impl Wrapped for TableData {
     }
 
     fn blank() -> Self {
+        let empty = Table::new(0).expect("a table without elements can always be made");
         TableData {
-            table: Table::new(0).expect("a table without elements can always be made"),
+            table: SharedTable::new(empty),
         }
     }
+}
+
+/// The table of a `Table` argument, shared with the object. Anything else raises
+/// `TypeError`.
+pub(crate) fn table_arg(ruby: &Ruby, value: VALUE) -> Result<SharedTable, Raise> {
+    Ok(this(ruby, value)?.with(|data| data.table.clone()))
 }
 
 fn this(ruby: &Ruby, recv: VALUE) -> Result<Handle<TableData>, Raise> {
@@ -51,13 +58,14 @@ fn initialize(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
         _ => unreachable!("one to three sizes were checked"),
     }
     .map_err(|error| error::to_raise(ruby, Error::Table(error)))?;
-    this(ruby, recv)?.with(|data| data.table = table);
+    this(ruby, recv)?.with(|data| data.table.write(|own| *own = table));
     Ok(recv)
 }
 
 fn initialize_copy(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
-    let copy = this(ruby, args[0])?.get();
-    this(ruby, recv)?.with(|data| *data = copy);
+    // A table of its own with the original's elements, not a second handle to the original.
+    let copy = this(ruby, args[0])?.with(|data| data.table.read().clone());
+    this(ruby, recv)?.with(|data| data.table.write(|own| *own = copy));
     Ok(recv)
 }
 
@@ -65,11 +73,13 @@ fn initialize_copy(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
 fn resize(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     let sizes = sizes(ruby, args)?;
     this(ruby, recv)?
-        .with(|data| match sizes[..] {
-            [xsize] => data.table.resize(xsize),
-            [xsize, ysize] => data.table.resize_2d(xsize, ysize),
-            [xsize, ysize, zsize] => data.table.resize_3d(xsize, ysize, zsize),
-            _ => unreachable!("one to three sizes were checked"),
+        .with(|data| {
+            data.table.write(|table| match sizes[..] {
+                [xsize] => table.resize(xsize),
+                [xsize, ysize] => table.resize_2d(xsize, ysize),
+                [xsize, ysize, zsize] => table.resize_3d(xsize, ysize, zsize),
+                _ => unreachable!("one to three sizes were checked"),
+            })
         })
         .map_err(|error| error::to_raise(ruby, Error::Table(error)))?;
     Ok(recv)
@@ -83,7 +93,7 @@ fn indices(
     args: &[VALUE],
     extra: usize,
 ) -> Result<[i32; 3], Raise> {
-    let dimensions = table.with(|data| data.table.dimensions()) as usize;
+    let dimensions = table.with(|data| data.table.read().dimensions()) as usize;
     rb::check_count(ruby, args, dimensions + extra, dimensions + extra)?;
     let mut indices = [0; 3];
     for (index, &arg) in indices.iter_mut().zip(&args[..dimensions]) {
@@ -113,20 +123,26 @@ fn set_element(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
 }
 
 fn xsize(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
-    Ok(rb::fix(this(ruby, recv)?.with(|data| data.table.xsize())))
+    Ok(rb::fix(
+        this(ruby, recv)?.with(|data| data.table.read().xsize()),
+    ))
 }
 
 fn ysize(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
-    Ok(rb::fix(this(ruby, recv)?.with(|data| data.table.ysize())))
+    Ok(rb::fix(
+        this(ruby, recv)?.with(|data| data.table.read().ysize()),
+    ))
 }
 
 fn zsize(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
-    Ok(rb::fix(this(ruby, recv)?.with(|data| data.table.zsize())))
+    Ok(rb::fix(
+        this(ruby, recv)?.with(|data| data.table.read().zsize()),
+    ))
 }
 
 /// `_dump(depth)`: the serialized form `Marshal` stores.
 fn dump(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
-    let bytes = this(ruby, recv)?.with(|data| data.table.to_bytes());
+    let bytes = this(ruby, recv)?.with(|data| data.table.read().to_bytes());
     rb::string_new(ruby, &bytes)
 }
 
@@ -135,6 +151,7 @@ fn load(ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
     let bytes = rb::bytes(ruby, args[0])?;
     let table =
         Table::from_bytes(&bytes).map_err(|error| error::to_raise(ruby, Error::Decode(error)))?;
+    let table = SharedTable::new(table);
     wrap::new_object(ruby, TableData { table })
 }
 

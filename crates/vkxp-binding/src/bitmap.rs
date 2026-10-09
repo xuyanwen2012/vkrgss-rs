@@ -71,6 +71,12 @@ fn id_arg(ruby: &Ruby, value: VALUE) -> Result<BitmapId, Raise> {
         .ok_or_else(|| error::to_raise(ruby, BitmapError::Disposed.into()))
 }
 
+/// The arena id of a `Bitmap` argument that an element is to draw from, `None` when the
+/// bitmap is disposed. Anything else raises `TypeError`.
+pub(crate) fn bitmap_arg(ruby: &Ruby, value: VALUE) -> Result<Option<BitmapId>, Raise> {
+    Ok(this(ruby, value)?.get().id)
+}
+
 /// Makes `id` the bitmap of the object, disposing the one it had.
 fn adopt(ruby: &Ruby, recv: VALUE, id: BitmapId) -> Result<(), Raise> {
     let previous = this(ruby, recv)?.with(|data| data.id.replace(id));

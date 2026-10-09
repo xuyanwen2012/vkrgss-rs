@@ -241,6 +241,9 @@ mod foundation_tests;
 #[cfg(feature = "testing")]
 pub mod testing;
 
+#[cfg(feature = "testing")]
+pub mod scene_testing;
+
 pub use error::Error;
 pub use guest::{Config, Guest};
 pub use runtime::{RunConfig, RunError, run_game};

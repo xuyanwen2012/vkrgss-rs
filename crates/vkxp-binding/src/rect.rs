@@ -7,7 +7,7 @@ use vkxp_ruby_sys::{HostResult, Raise, Raised, Ruby};
 use crate::error::{self, Error};
 use crate::guest::Classes;
 use crate::rb;
-use crate::wrap::{self, Handle, Owned, Wrapped};
+use crate::wrap::{self, Handle, Owned, Owner, Wrapped};
 
 impl Wrapped for Owned<Rect> {
     const CLASS_NAME: &'static str = "Rect";
@@ -29,6 +29,17 @@ pub(crate) fn rect_arg(ruby: &Ruby, value: VALUE) -> Result<Rect, Raise> {
 /// A new `Rect` object.
 pub(crate) fn rect_new(ruby: &Ruby, rect: Rect) -> HostResult {
     wrap::new_object(ruby, Owned::new(rect))
+}
+
+/// A new `Rect` object that is the property `owner` names.
+pub(crate) fn rect_of(ruby: &Ruby, rect: Rect, owner: Owner) -> HostResult {
+    wrap::new_object(ruby, Owned::of(rect, owner))
+}
+
+/// Replaces the value of a `Rect` object.
+pub(crate) fn rect_set(ruby: &Ruby, object: VALUE, rect: Rect) -> Result<(), Raise> {
+    this(ruby, object)?.with(|data| data.set(rect));
+    Ok(())
 }
 
 fn this(ruby: &Ruby, recv: VALUE) -> Result<Handle<Owned<Rect>>, Raise> {

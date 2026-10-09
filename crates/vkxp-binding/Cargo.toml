@@ -28,3 +28,5 @@ vkxp-vfs.workspace = true
 [dev-dependencies]
 # The crate's own tests use its harness.
 vkxp-binding = { workspace = true, features = ["testing"] }
+# The reference compositor draws the scene in the tests of the scene classes.
+vkxp-compose-ref.workspace = true

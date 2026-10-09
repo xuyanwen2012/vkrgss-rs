@@ -2,7 +2,7 @@
 
 use std::ffi::CStr;
 
-use vkxp_core::{BitmapError, DecodeError, TableError};
+use vkxp_core::{BitmapError, DecodeError, SceneError, TableError};
 use vkxp_image::ImageError;
 use vkxp_ruby_sys::ffi::VALUE;
 use vkxp_ruby_sys::{Raise, Raised, Ruby};
@@ -29,6 +29,9 @@ pub enum Error {
     /// A table cannot have the requested size.
     #[error(transparent)]
     Table(#[from] TableError),
+    /// A scene element was disposed or could not be created.
+    #[error(transparent)]
+    Scene(#[from] SceneError),
 }
 
 /// The exception classes the mapping raises that Ruby has no global for.
@@ -62,6 +65,8 @@ pub(crate) fn define(ruby: &Ruby) -> Result<ErrorClasses, Raised> {
 /// | a file that is not found | `Errno::ENOENT`, `No such file or directory - <path as given>` |
 /// | a file that cannot be read | `IOError` |
 /// | malformed serialized data, an impossible table size | `ArgumentError` |
+/// | a disposed scene element | `RGSSError`, `disposed sprite` and so on for each class |
+/// | a scene element that cannot be created | `RGSSError` |
 pub(crate) fn to_raise(ruby: &Ruby, error: Error) -> Raise {
     let classes = guest::classes().errors;
     match error {
@@ -74,5 +79,6 @@ pub(crate) fn to_raise(ruby: &Ruby, error: Error) -> Raise {
         Error::Files(other) => Raise::new(rb::io_error(ruby), other.to_string()),
         Error::Decode(malformed) => Raise::new(rb::arg_error(ruby), malformed.to_string()),
         Error::Table(impossible) => Raise::new(rb::arg_error(ruby), impossible.to_string()),
+        Error::Scene(failure) => Raise::new(classes.rgss_error, failure.to_string()),
     }
 }

@@ -2,8 +2,8 @@
 
 ## 1. Shared machinery (`vkxp-binding`)
 
-- [ ] 1.1 Give the `Color`, `Tone` and `Rect` wrappers working owners (scene handle and property tag) with write-through on every mutation, and make the `Table` wrapper hold a `SharedTable`. Verify: the existing Ruby tests of the value classes still pass, and a unit test shows that a value object keeps working after its owner element is disposed.
-- [ ] 1.2 Add the test-only helpers `pixel(x, y)` (extract, render with the reference compositor, read) and `scene_count(kind)`. Verify: a harness test draws a 1 by 1 bitmap through a sprite created from Rust and reads its colour from Ruby.
+- [x] 1.1 Give the `Color`, `Tone` and `Rect` wrappers working owners (scene handle and property tag) with write-through on every mutation, and make the `Table` wrapper hold a `SharedTable`. Verify: the existing Ruby tests of the value classes still pass, and a unit test shows that a value object keeps working after its owner element is disposed.
+- [x] 1.2 Add the test-only helpers `pixel(x, y)` (extract, render with the reference compositor, read) and `scene_count(kind)`. Verify: a harness test draws a 1 by 1 bitmap through a sprite created from Rust and reads its colour from Ruby.
 
 ## 2. Sprite, Viewport and Plane (`vkxp-binding`)
 

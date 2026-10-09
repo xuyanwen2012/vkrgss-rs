@@ -11,10 +11,11 @@
 use std::ffi::{CStr, c_void};
 use std::ptr::NonNull;
 
+use vkxp_core::{Color, PlaneId, Rect, Scene, SpriteId, Tone, ViewportId, WindowId};
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{Raise, Raised, Ruby};
 
-use crate::guest::{self, Classes};
+use crate::guest::{self, Classes, Guest};
 use crate::rb;
 
 /// A Rust type that is the data of the instances of one Ruby class.
@@ -126,36 +127,154 @@ pub(crate) fn new_object<T: Wrapped>(ruby: &Ruby, data: T) -> Result<VALUE, Rais
     Ok(object)
 }
 
-/// What a `Color`, `Tone` or `Rect` object is a live view of: a property of a scene element.
+/// What a `Color`, `Tone` or `Rect` object is a live view of: a property of a scene element,
+/// named by the element's handle and the property.
 ///
-/// A sprite's `color`, for one, is an object whose changes reach the sprite. The scene
-/// classes add the variants; until then no object has an owner.
+/// A sprite's `color`, for one, is an object whose changes reach the sprite.
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum Owner {}
+pub(crate) enum Owner {
+    SpriteColor(SpriteId),
+    SpriteTone(SpriteId),
+    SpriteSrcRect(SpriteId),
+    ViewportColor(ViewportId),
+    ViewportTone(ViewportId),
+    ViewportRect(ViewportId),
+    PlaneColor(PlaneId),
+    PlaneTone(PlaneId),
+    WindowCursorRect(WindowId),
+}
+
+/// A value that can be a property of a scene element.
+pub(crate) trait Property: Copy {
+    /// Makes this the value of the property `owner` names. A disposed element, and a
+    /// property of another type, are left alone.
+    fn store(self, owner: Owner, scene: &mut Scene);
+}
+
+impl Property for Color {
+    fn store(self, owner: Owner, scene: &mut Scene) {
+        match owner {
+            Owner::SpriteColor(id) => {
+                let _ = scene.sprite_mut(id).map(|sprite| sprite.color = self);
+            }
+            Owner::ViewportColor(id) => {
+                let _ = scene.viewport_mut(id).map(|viewport| viewport.color = self);
+            }
+            Owner::PlaneColor(id) => {
+                let _ = scene.plane_mut(id).map(|plane| plane.color = self);
+            }
+            _ => {}
+        }
+    }
+}
+
+impl Property for Tone {
+    fn store(self, owner: Owner, scene: &mut Scene) {
+        match owner {
+            Owner::SpriteTone(id) => {
+                let _ = scene.sprite_mut(id).map(|sprite| sprite.tone = self);
+            }
+            Owner::ViewportTone(id) => {
+                let _ = scene.viewport_mut(id).map(|viewport| viewport.tone = self);
+            }
+            Owner::PlaneTone(id) => {
+                let _ = scene.plane_mut(id).map(|plane| plane.tone = self);
+            }
+            _ => {}
+        }
+    }
+}
+
+impl Property for Rect {
+    fn store(self, owner: Owner, scene: &mut Scene) {
+        match owner {
+            Owner::SpriteSrcRect(id) => {
+                let _ = scene.sprite_mut(id).map(|sprite| sprite.src_rect = self);
+            }
+            Owner::ViewportRect(id) => {
+                let _ = scene.viewport_mut(id).map(|viewport| viewport.rect = self);
+            }
+            Owner::WindowCursorRect(id) => {
+                let _ = scene.window_mut(id).map(|window| window.cursor_rect = self);
+            }
+            _ => {}
+        }
+    }
+}
 
 /// The data of a `Color`, `Tone` or `Rect` object: the value, and the owner a change of the
 /// value is passed on to.
+///
+/// The object keeps its own copy of the value, so it goes on working as a plain value when
+/// its element is disposed.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Owned<T> {
     value: T,
     owner: Option<Owner>,
 }
 
-impl<T: Copy> Owned<T> {
+impl<T: Property> Owned<T> {
     /// A value without an owner.
     pub(crate) fn new(value: T) -> Owned<T> {
         Owned { value, owner: None }
+    }
+
+    /// The value of the property `owner` names, which follows every change of this value.
+    pub(crate) fn of(value: T, owner: Owner) -> Owned<T> {
+        Owned {
+            value,
+            owner: Some(owner),
+        }
     }
 
     pub(crate) fn value(&self) -> T {
         self.value
     }
 
-    /// Replaces the value and passes the change on to the owner.
+    /// Replaces the value and passes the change on to the owner. With an owner this enters
+    /// the guest state, so it must not be called from inside [`Guest::with`].
     pub(crate) fn set(&mut self, value: T) {
         self.value = value;
         if let Some(owner) = self.owner {
-            match owner {}
+            Guest::with(|guest| value.store(owner, &mut guest.scene));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testing;
+
+    #[test]
+    fn an_owned_value_follows_its_element_and_outlives_it() {
+        let red = Color::new(255.0, 0.0, 0.0, 255.0);
+        let blue = Color::new(0.0, 0.0, 255.0, 255.0);
+        let (in_scene, after_disposal) = testing::run(move |_ruby| {
+            let sprite = Guest::with(|guest| guest.scene.create_sprite(None)).unwrap();
+            let mut color = Owned::of(Color::TRANSPARENT, Owner::SpriteColor(sprite));
+            color.set(red);
+            let in_scene = Guest::with(|guest| guest.scene.sprite(sprite).map(|s| s.color));
+            Guest::with(|guest| guest.scene.dispose_sprite(sprite));
+            // The handle names nothing now: the object is a plain value.
+            color.set(blue);
+            (in_scene, color.value())
+        });
+        assert_eq!(in_scene, Ok(red));
+        assert_eq!(after_disposal, blue);
+    }
+
+    #[test]
+    fn a_property_of_another_type_is_left_alone() {
+        let rect = testing::run(|_ruby| {
+            Guest::with(|guest| {
+                let sprite = guest.scene.create_sprite(None).unwrap();
+                Rect::new(1, 2, 3, 4).store(Owner::SpriteColor(sprite), &mut guest.scene);
+                let rect = guest.scene.sprite(sprite).unwrap().src_rect;
+                guest.scene.dispose_sprite(sprite);
+                rect
+            })
+        });
+        assert_eq!(rect, Rect::default());
     }
 }

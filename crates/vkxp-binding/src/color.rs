@@ -10,10 +10,10 @@ use vkxp_ruby_sys::{HostResult, Raise, Raised, Ruby};
 use crate::error::{self, Error};
 use crate::guest::Classes;
 use crate::rb;
-use crate::wrap::{self, Handle, Owned, Wrapped};
+use crate::wrap::{self, Handle, Owned, Owner, Property, Wrapped};
 
 /// A value of four components: `Color` or `Tone`.
-pub(crate) trait Quad: Copy + PartialEq + 'static {
+pub(crate) trait Quad: Property + PartialEq + 'static {
     /// The fourth component when a script gives three.
     const FOURTH: f64;
 
@@ -110,6 +110,27 @@ pub(crate) fn color_new(ruby: &Ruby, color: Color) -> HostResult {
 pub(crate) fn color_set(ruby: &Ruby, object: VALUE, color: Color) -> Result<(), Raise> {
     wrap::expect::<Owned<Color>>(ruby, object)?.with(|data| data.set(color));
     Ok(())
+}
+
+/// The value of a `Tone` argument. Anything else raises `TypeError`.
+pub(crate) fn tone_arg(ruby: &Ruby, value: VALUE) -> Result<Tone, Raise> {
+    Ok(wrap::expect::<Owned<Tone>>(ruby, value)?.get().value())
+}
+
+/// Replaces the value of a `Tone` object.
+pub(crate) fn tone_set(ruby: &Ruby, object: VALUE, tone: Tone) -> Result<(), Raise> {
+    wrap::expect::<Owned<Tone>>(ruby, object)?.with(|data| data.set(tone));
+    Ok(())
+}
+
+/// A new `Color` object that is the property `owner` names.
+pub(crate) fn color_of(ruby: &Ruby, color: Color, owner: Owner) -> HostResult {
+    wrap::new_object(ruby, Owned::of(color, owner))
+}
+
+/// A new `Tone` object that is the property `owner` names.
+pub(crate) fn tone_of(ruby: &Ruby, tone: Tone, owner: Owner) -> HostResult {
+    wrap::new_object(ruby, Owned::of(tone, owner))
 }
 
 fn this<Q: Quad>(ruby: &Ruby, recv: VALUE) -> Result<Handle<Owned<Q>>, Raise>

@@ -1922,6 +1922,7 @@ dependencies = [
  "png",
  "thiserror 2.0.21",
  "vkxp-binding",
+ "vkxp-compose-ref",
  "vkxp-core",
  "vkxp-image",
  "vkxp-proto",
