@@ -13,7 +13,8 @@ use crate::bitmaps::{BitmapTable, Change};
 use crate::device::{BITMAP_SLOTS, Gpu};
 use crate::records::{ClipRect, OpRecord, RECORD_WORDS, check_logical_size, encode_ops};
 use crate::resources::{
-    COLOR_LAYERS, COLOR_RANGE, GpuBuffer, GpuImage, create_shader_module, transition, write_words,
+    COLOR_LAYERS, COLOR_RANGE, GpuBuffer, GpuImage, create_shader_module, make_host_readable,
+    transition, write_words,
 };
 use crate::{DeviceChoice, DeviceInfo, Limit, ValidationLog, VkError};
 
@@ -943,6 +944,14 @@ impl VkCompositor {
                 transition(device, commands, image, layout, copy_layout);
             }
             device.cmd_copy_image_to_buffer(commands, image, copy_layout, buffer, &[region]);
+            // The caller reads the buffer through its mapping once the fence has signalled.
+            make_host_readable(
+                device,
+                commands,
+                buffer,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::AccessFlags::TRANSFER_WRITE,
+            );
             if copy_layout != layout {
                 transition(device, commands, image, copy_layout, layout);
             }

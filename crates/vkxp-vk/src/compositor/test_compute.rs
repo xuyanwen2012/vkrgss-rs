@@ -5,7 +5,9 @@ use ash::vk;
 use gpu_allocator::MemoryLocation;
 
 use super::VkCompositor;
-use crate::resources::{GpuBuffer, create_shader_module, read_words, write_words};
+use crate::resources::{
+    GpuBuffer, create_shader_module, make_host_readable, read_words, write_words,
+};
 
 impl VkCompositor {
     /// Runs `spirv` with `input` at binding 0 and a zeroed buffer of `output_words` words at
@@ -143,6 +145,14 @@ impl VkCompositor {
                 &count.to_ne_bytes(),
             );
             device.cmd_dispatch(commands, count.div_ceil(local_size), 1, 1);
+            // The output is read through its mapping once the fence has signalled.
+            make_host_readable(
+                device,
+                commands,
+                output_buffer.buffer,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::AccessFlags::SHADER_WRITE,
+            );
             self.submit_and_wait().unwrap();
 
             device.destroy_descriptor_pool(pool, None);

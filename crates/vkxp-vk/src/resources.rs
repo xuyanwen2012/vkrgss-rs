@@ -324,3 +324,44 @@ pub(crate) unsafe fn transition(
         );
     }
 }
+
+/// Records a barrier that makes what the device wrote to `buffer` visible to the host.
+///
+/// Waiting for the fence of a submission says that its commands have completed, not that
+/// their writes can be seen through a mapping. That takes a dependency from the writing stage
+/// to the host, and host-coherent memory does not stand in for it: coherence only removes the
+/// need to invalidate the mapped range.
+///
+/// # Safety
+///
+/// `commands` must be a command buffer of `device` in the recording state and `buffer` a live
+/// buffer of that device, written by the commands recorded before this one at `stage` with
+/// `access`.
+pub(crate) unsafe fn make_host_readable(
+    device: &ash::Device,
+    commands: vk::CommandBuffer,
+    buffer: vk::Buffer,
+    stage: vk::PipelineStageFlags,
+    access: vk::AccessFlags,
+) {
+    let barrier = vk::BufferMemoryBarrier::default()
+        .src_access_mask(access)
+        .dst_access_mask(vk::AccessFlags::HOST_READ)
+        .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+        .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+        .buffer(buffer)
+        .offset(0)
+        .size(vk::WHOLE_SIZE);
+    // SAFETY: guaranteed by the caller.
+    unsafe {
+        device.cmd_pipeline_barrier(
+            commands,
+            stage,
+            vk::PipelineStageFlags::HOST,
+            vk::DependencyFlags::empty(),
+            &[],
+            &[barrier],
+            &[],
+        );
+    }
+}
