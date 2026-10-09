@@ -232,6 +232,196 @@ fn identity_transform_copies_texels() {
     });
 }
 
+const BLENDS: [BlendMode; 3] = [BlendMode::Normal, BlendMode::Add, BlendMode::Subtract];
+
+fn blend(mode: BlendMode, dst: Rgba, src: Rgba, opacity: u8) -> Rgba {
+    match mode {
+        BlendMode::Normal => vkxp_pixel::blend_normal(dst, src, opacity),
+        BlendMode::Add => vkxp_pixel::blend_add(dst, src, opacity),
+        BlendMode::Subtract => vkxp_pixel::blend_sub(dst, src, opacity),
+    }
+}
+
+#[test]
+fn neutral_tone_and_zero_alpha_colour_change_nothing() {
+    // Column `v` holds channel value `v` in red, its complement in green and a scrambled value
+    // in blue; the rows differ in alpha. Every channel takes all 256 values.
+    const ALPHAS: [u8; 4] = [255, 128, 1, 0];
+    let size = Size::new(256, 4);
+    let texel = |x: u32, y: u32| {
+        let v = x as u8;
+        [v, 255 - v, v.wrapping_mul(7), ALPHAS[y as usize]]
+    };
+    let mut rgba = Vec::new();
+    for y in 0..size.height {
+        for x in 0..size.width {
+            rgba.extend(texel(x, y));
+        }
+    }
+    for mode in BLENDS {
+        for opacity in [255, 100] {
+            let quad = Quad {
+                clip: Rect::from_size(size),
+                tone: Tone::NEUTRAL,
+                // Colour channels are set; only the zero alpha makes it neutral.
+                color: Color::new(255, 128, 64, 0),
+                opacity,
+                blend: mode,
+                ..sprite(ID, size.width, size.height, 0, 0)
+            };
+            let frame = Compositor::new()
+                .render(&FramePacket {
+                    logical_size: size,
+                    ..packet(
+                        bitmap(ID, size.width, size.height, rgba.clone()).into(),
+                        vec![
+                            Op::Clear {
+                                clip: Rect::from_size(size),
+                                color: Color::from_rgba(GREY),
+                            },
+                            Op::Quad(quad),
+                        ],
+                    )
+                })
+                .unwrap();
+            for y in 0..size.height {
+                for x in 0..size.width {
+                    // The texel drawn as it is.
+                    let expected = blend(mode, GREY, texel(x, y), opacity);
+                    assert_eq!(frame.pixel(x, y), expected, "{mode:?} {opacity} ({x}, {y})");
+                    if mode == BlendMode::Normal && opacity == 255 && y == 0 {
+                        assert_eq!(expected, texel(x, y));
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn full_alpha_colour_replaces_the_texels_colour() {
+    // Four columns of different alpha, drawn over transparent black so the drawn texel can be
+    // read back, alpha included.
+    let alphas = [255u8, 180, 3, 0];
+    let mut rgba = Vec::new();
+    for y in 0..4u8 {
+        for (x, alpha) in alphas.iter().enumerate() {
+            rgba.extend([x as u8 * 60, 255 - y * 50, 77, *alpha]);
+        }
+    }
+    let quad = Quad {
+        tone: Tone::NEUTRAL,
+        color: Color::new(10, 200, 30, 255),
+        ..sprite(ID, 4, 4, 5, 3)
+    };
+    let frame = render(
+        bitmap(ID, 4, 4, rgba).into(),
+        vec![clear([0, 0, 0, 0]), Op::Quad(quad)],
+    );
+    assert_pixels(&frame, |x, y| {
+        if within(x, y, Rect::new(5, 3, 4, 4)) {
+            match alphas[(x - 5) as usize] {
+                0 => [0, 0, 0, 0],
+                alpha => [10, 200, 30, alpha],
+            }
+        } else {
+            [0, 0, 0, 0]
+        }
+    });
+}
+
+#[test]
+fn quad_applies_tone_before_colour() {
+    // Tone first: red 255 - 100 = 155, green 0 + 50 = 50; then half-alpha red over that gives
+    // red div255(255 * 128 + 155 * 127) = 205 and green div255(50 * 127) = 25. The other order
+    // would give red 255 - 100 = 155.
+    let (tone, color) = (Tone::new(-100, 50, 0, 0), Color::new(255, 0, 0, 128));
+    let toned = vkxp_pixel::apply_tone(RED, tone.red, tone.green, tone.blue, tone.gray);
+    assert_eq!(toned, [155, 50, 0, 255]);
+    assert_eq!(
+        vkxp_pixel::blend_color(toned, color.to_rgba()),
+        [205, 25, 0, 255]
+    );
+
+    let quad = Quad {
+        tone,
+        color,
+        ..sprite(ID, 16, 12, 0, 0)
+    };
+    let frame = render(solid(ID, 16, 12, RED), vec![clear(GREY), Op::Quad(quad)]);
+    assert_pixels(&frame, |_, _| [205, 25, 0, 255]);
+
+    // The drawn texel keeps the sampled alpha: at alpha 128 it is blended half over the grey.
+    let translucent = [255, 0, 0, 128];
+    let frame = render(
+        solid(ID, 16, 12, translucent),
+        vec![clear(GREY), Op::Quad(quad)],
+    );
+    let expected = vkxp_pixel::blend_normal(GREY, [205, 25, 0, 128], 255);
+    assert_eq!(expected, [153, 67, 60, 255]);
+    assert_pixels(&frame, |_, _| expected);
+}
+
+#[test]
+fn quad_tone_and_colour_do_not_reach_the_pixels_underneath() {
+    let (tone, color) = (Tone::new(255, -255, 90, 200), Color::new(0, 255, 0, 255));
+    for mode in BLENDS {
+        // Opacity 0: nothing is drawn, so nothing is recoloured.
+        let hidden = Quad {
+            tone,
+            color,
+            opacity: 0,
+            blend: mode,
+            ..sprite(ID, 16, 12, 0, 0)
+        };
+        let frame = render(solid(ID, 16, 12, RED), vec![clear(GREY), Op::Quad(hidden)]);
+        assert_pixels(&frame, |_, _| GREY);
+
+        // The clip is the whole screen but the source rectangle covers only 4x4 pixels.
+        let covered = Rect::new(6, 4, 4, 4);
+        let small = Quad {
+            tone,
+            color,
+            blend: mode,
+            ..sprite(ID, 4, 4, 6, 4)
+        };
+        let frame = render(solid(ID, 4, 4, RED), vec![clear(GREY), Op::Quad(small)]);
+        let drawn = blend(mode, GREY, [0, 255, 0, 255], 255);
+        assert_ne!(drawn, GREY);
+        assert_pixels(
+            &frame,
+            |x, y| if within(x, y, covered) { drawn } else { GREY },
+        );
+    }
+}
+
+#[test]
+fn transparent_source_texel_draws_nothing_whatever_tone_and_colour() {
+    let cases = [
+        (
+            Tone::new(255, 255, 255, 255),
+            Color::new(255, 255, 255, 255),
+        ),
+        (Tone::new(-255, 40, 0, 128), Color::new(9, 8, 7, 100)),
+        (Tone::NEUTRAL, Color::new(255, 0, 255, 255)),
+    ];
+    for mode in BLENDS {
+        for (tone, color) in cases {
+            let quad = Quad {
+                tone,
+                color,
+                blend: mode,
+                ..sprite(ID, 16, 12, 0, 0)
+            };
+            let frame = render(
+                solid(ID, 16, 12, [200, 150, 100, 0]),
+                vec![clear(GREY), Op::Quad(quad)],
+            );
+            assert_pixels(&frame, |_, _| GREY);
+        }
+    }
+}
+
 /// Clears the screen to `base`, then draws a full-screen normal-mode quad of `source` at
 /// `opacity`, and returns the one colour the whole frame has.
 fn normal_over(base: Rgba, source: Rgba, opacity: u8) -> Rgba {

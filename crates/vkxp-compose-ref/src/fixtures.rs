@@ -34,6 +34,12 @@ pub fn all() -> Vec<Fixture> {
         rect_effect_fixture(),
         rotation_fixture(),
         persistent_bitmap_fixture(),
+        quad_tone_fixture("quad_tone_normal", BlendMode::Normal),
+        quad_tone_fixture("quad_tone_add", BlendMode::Add),
+        quad_tone_fixture("quad_tone_subtract", BlendMode::Subtract),
+        quad_color_fixture("quad_color_normal", BlendMode::Normal),
+        quad_color_fixture("quad_color_add", BlendMode::Add),
+        quad_color_fixture("quad_color_subtract", BlendMode::Subtract),
     ]
 }
 
@@ -388,4 +394,50 @@ fn persistent_bitmap_fixture() -> Fixture {
             ),
         ],
     }
+}
+
+/// A gradient with a soft disc over it, both recoloured by `tone` and `color` as quads and
+/// drawn in the given blend mode: the gradient opaque on the left three quarters of a cleared
+/// screen, the disc at reduced opacity and hanging over the right edge.
+fn recoloured_fixture(name: &'static str, blend: BlendMode, tone: Tone, color: Color) -> Fixture {
+    let (board, shape) = (BitmapId::new(0, 0), BitmapId::new(1, 0));
+    let (width, height) = (48, SIZE.height);
+    let mut bitmaps: Vec<BitmapDelta> =
+        bitmap(board, width, height, gradient(width, height)).into();
+    bitmaps.extend(bitmap(
+        shape,
+        40,
+        40,
+        disc(40, Color::new(255, 160, 64, 255)),
+    ));
+    let recoloured = |quad: Quad, opacity| {
+        Op::Quad(Quad {
+            tone,
+            color,
+            opacity,
+            blend,
+            ..quad
+        })
+    };
+    single_frame(
+        name,
+        bitmaps,
+        vec![
+            clear(Color::new(96, 96, 96, 255)),
+            recoloured(sprite(board, width, height, 0, 0), 255),
+            recoloured(sprite(shape, 40, 40, 30, 4), 192),
+        ],
+    )
+}
+
+/// Quads with a tone (offsets of both signs and partial grey) and no colour.
+fn quad_tone_fixture(name: &'static str, blend: BlendMode) -> Fixture {
+    let tone = Tone::new(-64, 32, 96, 160);
+    recoloured_fixture(name, blend, tone, Color::new(0, 0, 0, 0))
+}
+
+/// Quads with a colour of partial alpha and a neutral tone.
+fn quad_color_fixture(name: &'static str, blend: BlendMode) -> Fixture {
+    let color = Color::new(40, 96, 255, 144);
+    recoloured_fixture(name, blend, Tone::NEUTRAL, color)
 }

@@ -162,6 +162,11 @@ impl Step<'_> {
                 let Some(texel) = sample(quad, bitmap, px, py) else {
                     return pixel;
                 };
+                // Tone, then colour, on the texel alone; both keep its alpha.
+                let tone = quad.tone;
+                let texel =
+                    vkxp_pixel::apply_tone(texel, tone.red, tone.green, tone.blue, tone.gray);
+                let texel = vkxp_pixel::blend_color(texel, quad.color.to_rgba());
                 match quad.blend {
                     BlendMode::Normal => vkxp_pixel::blend_normal(pixel, texel, quad.opacity),
                     BlendMode::Add => vkxp_pixel::blend_add(pixel, texel, quad.opacity),

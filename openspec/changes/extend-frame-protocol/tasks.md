@@ -9,8 +9,8 @@
 
 ## 2. Reference compositor (`vkxp-compose-ref`)
 
-- [ ] 2.1 Apply the quad's tone and then its colour to the sampled texel before blending. Verify: one test per new scenario in `specs/frame-composition/spec.md` (neutral values change nothing for every channel value, full-alpha colour, tone before colour, pixels underneath untouched), and the existing scenario tests pass.
-- [ ] 2.2 Set neutral tone and zero-alpha colour in the existing fixture builders and add fixtures for quad tone and quad colour in each blend mode, with their expected frames. Verify: `cargo test -p vkxp-compose-ref` passes twice in a row and `git status --short crates/vkxp-compose-ref/tests/expected` shows only added files, no modified ones.
+- [x] 2.1 Apply the quad's tone and then its colour to the sampled texel before blending. Verify: one test per new scenario in `specs/frame-composition/spec.md` (neutral values change nothing for every channel value, full-alpha colour, tone before colour, pixels underneath untouched), and the existing scenario tests pass.
+- [x] 2.2 Set neutral tone and zero-alpha colour in the existing fixture builders and add fixtures for quad tone and quad colour in each blend mode, with their expected frames. Verify: `cargo test -p vkxp-compose-ref` passes twice in a row and `git status --short crates/vkxp-compose-ref/tests/expected` shows only added files, no modified ones.
 
 ## 3. Vulkan backend (`vkxp-vk`)
 
