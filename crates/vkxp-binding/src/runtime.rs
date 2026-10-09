@@ -210,8 +210,11 @@ impl Guest {
         self.send(GuestToHost::Modal { text });
         loop {
             let frame_count = self.scene.frame_count();
-            let packet = self.scene.extract(&mut self.bitmaps);
+            let mut packet = self.scene.extract(&mut self.bitmaps);
             self.scene.set_frame_count(frame_count);
+            if let Some(panel) = &panel {
+                panel.bring_to_front(&mut packet.ops);
+            }
             self.send(GuestToHost::Frame(packet));
             self.pump(Await::Tick);
             let frame_rate = self.scene.frame_rate().get();

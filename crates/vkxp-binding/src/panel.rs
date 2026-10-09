@@ -2,11 +2,13 @@
 //! guest waits for the dismissal.
 //!
 //! The panel is a bitmap of the guest's arena on a sprite of its scene, with no Ruby object
-//! behind either, so no script can reach them. The sprite has no viewport and the highest z,
-//! and is the newest element with it, which puts it in front of everything else.
+//! behind either, so no script can reach them. The sprite has no viewport and the highest z.
+//! That alone does not put it in front of everything: the contents of a window are drawn
+//! above the window's z. So the op that draws the panel is moved to the end of every frame
+//! sent while it is shown ([`Panel::bring_to_front`]).
 
 use vkxp_core::{Align, Color, Font, Rect, SpriteId};
-use vkxp_proto::BitmapId;
+use vkxp_proto::{BitmapId, Op};
 
 use crate::guest::Guest;
 
@@ -148,6 +150,15 @@ impl Panel {
         sprite.y = (screen.height as i32 - size.height) / 2;
         sprite.set_bitmap(Some(self.bitmap), &guest.bitmaps);
         Some(())
+    }
+
+    /// Moves what draws the panel to the end of the ops of an extracted frame, after
+    /// everything of the scene.
+    pub(crate) fn bring_to_front(&self, ops: &mut Vec<Op>) {
+        let draws_panel = |op: &Op| matches!(op, Op::Quad(quad) if quad.bitmap == self.bitmap);
+        let (panel, mut scene): (Vec<Op>, Vec<Op>) = ops.drain(..).partition(|op| draws_panel(op));
+        scene.extend(panel);
+        *ops = scene;
     }
 
     /// Takes the panel off the screen.

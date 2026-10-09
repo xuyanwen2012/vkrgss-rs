@@ -82,6 +82,42 @@ fn print_shows_a_panel_over_the_scene_until_the_dismissal() {
 }
 
 #[test]
+fn the_panel_is_in_front_of_a_window_with_the_highest_z() {
+    let (value, record) = host::play(
+        "window = Window.new
+         window.x = 0
+         window.y = 0
+         window.width = 640
+         window.height = 480
+         window.z = 2147483647
+         window.contents = Bitmap.new(608, 448)
+         window.contents.fill_rect(0, 0, 608, 448, Color.new(0, 255, 0))
+         Graphics.update
+         print('hello')
+         Graphics.update
+         window.contents.dispose
+         window.dispose
+         nil",
+        Script::new().dismiss_after(3),
+    );
+    assert_eq!(value.as_deref(), Ok("nil"));
+    let frames = scene_support::rendered(&record.frames());
+    assert_eq!(frames.len(), 5);
+    let before = &frames[0];
+    assert_eq!(before.pixel(320, 240), [0, 255, 0, 255]);
+    for shown in &frames[1..4] {
+        let differing = differences(before, shown);
+        assert!(!differing.is_empty(), "the panel is drawn over the window");
+        assert!(differing.iter().all(|&(x, y)| in_panel_area(x, y)));
+        let left = differing.iter().map(|&(x, _)| x).min().unwrap();
+        let top = differing.iter().map(|&(_, y)| y).min().unwrap();
+        assert_eq!(shown.pixel(left, top), [200, 200, 200, 255]);
+        assert_eq!(shown.pixel(left + 2, top + 2), [0, 50, 0, 255]);
+    }
+    assert_eq!(&frames[4], before);
+}
+
+#[test]
 fn a_reset_request_ends_the_wait_and_is_raised() {
     let (value, record) = host::play(
         "begin
