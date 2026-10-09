@@ -19,6 +19,7 @@ usage: vkxp [GAME_DIR] [OPTIONS]
                             default: $XDG_DATA_HOME/vkxp/rpg_builtin.rb
   --device INDEX|NAME       the Vulkan device, by index or by a part of its name
   --font-dir DIR            a directory of fonts, searched before the system's; repeatable
+  --font-own-metrics        size every font by its own line box, a replacement included
   --encoding ENCODING       the text encoding of Game.ini: utf-8, gbk, shift-jis or big5
   --debug                   debug mode: $DEBUG is true
   --allow-process-functions let scripts start processes (system, exec and the like)
@@ -66,6 +67,8 @@ pub struct Options {
     pub device: Option<String>,
     /// Font directories, in the order given.
     pub font_dirs: Vec<PathBuf>,
+    /// Whether a font that replaces another keeps its own line box.
+    pub font_own_metrics: bool,
     pub encoding: Option<Encoding>,
     pub debug: bool,
     pub process_functions: bool,
@@ -167,6 +170,7 @@ pub fn parse(arguments: &[String]) -> Result<Options, String> {
             "--builtin-scripts" => options.builtin_scripts = Some(PathBuf::from(value()?)),
             "--device" => options.device = Some(value()?.clone()),
             "--font-dir" => options.font_dirs.push(PathBuf::from(value()?)),
+            "--font-own-metrics" => options.font_own_metrics = true,
             "--config" => options.config = Some(PathBuf::from(value()?)),
             "--no-config" => options.no_config = true,
             "--encoding" => {
@@ -282,6 +286,7 @@ mod tests {
             "first",
             "--font-dir",
             "second",
+            "--font-own-metrics",
             "--encoding",
             "Shift-JIS",
             "--debug",
@@ -306,6 +311,7 @@ mod tests {
                 builtin_scripts: Some("rpg.rb".into()),
                 device: Some("RADV".to_owned()),
                 font_dirs: vec!["first".into(), "second".into()],
+                font_own_metrics: true,
                 encoding: Some(Encoding::ShiftJis),
                 debug: true,
                 process_functions: true,

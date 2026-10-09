@@ -16,6 +16,9 @@
 - A boolean in the text engine's configuration, default off, that skips the replaced-font line
   box; threaded from the option through the run configuration.
 - The harness adds the option exactly when it shares fonts.
+- The text engine is built in the binary (`FontBackend::for_game`) and handed to the guest's
+  configuration as its text backend, so the flag goes from the option into the engine's
+  sources there; `vkxp-binding` itself needs no change.
 
 ## Follow-ups
 

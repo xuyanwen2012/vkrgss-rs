@@ -710,6 +710,50 @@ File.open('fonts.txt', 'w') { |file| file.write(answers.inspect) }
     assert_eq!(answers, "[true, false]");
 }
 
+/// The columns of `frame` that have a pixel that is not black: the first and one past the
+/// last.
+fn ink_columns(frame: &Frame) -> (u32, u32) {
+    let inked = |x: &u32| (0..frame.height).any(|y| frame.pixel(*x, y) != [0, 0, 0, 255]);
+    let first = (0..frame.width).find(inked).expect("ink");
+    let last = (0..frame.width).rev().find(inked).expect("ink");
+    (first, last + 1)
+}
+
+/// `Tahoma` is replaced by a font whose own line box is not the one Tahoma's replacements
+/// are scaled to: `DejaVu Sans` where the machine has it, else the test font.
+#[test]
+fn own_font_metrics_change_the_size_of_text_in_a_replaced_font() {
+    let source = "\
+text = Bitmap.new(600, 80)
+text.font.name = 'Tahoma'
+text.font.size = 64
+text.font.color = Color.new(255, 255, 255)
+text.draw_text(0, 0, 600, 80, 'HHHHHHHH')
+sprite = Sprite.new
+sprite.bitmap = text
+File.open('width.txt', 'w') { |file| file.write(text.text_size('HHHHHHHH').width.to_s) }
+2.times { Graphics.update }
+";
+    let fonts = font_dir().to_string_lossy().into_owned();
+    let run = |name: &str, arguments: &[&str]| {
+        let game = Game::new(name, "Own metrics", &[("Main", source)]);
+        let mut all = vec!["--font-dir", &fonts, "--dump", "1=text.png"];
+        all.extend_from_slice(arguments);
+        let ran = headless(&game, &all);
+        ran.assert_success();
+        let width = fs::read_to_string(game.dir().join("width.txt")).expect("the script ran");
+        let (left, right) = ink_columns(&ran.frame("text.png"));
+        (width.parse::<u32>().expect("a width"), right - left)
+    };
+    let (scaled_width, scaled_ink) = run("e2e-replaced-metrics", &[]);
+    let (own_width, own_ink) = run("e2e-own-metrics", &["--font-own-metrics"]);
+    assert!(
+        own_width > scaled_width,
+        "{own_width} against {scaled_width}"
+    );
+    assert!(own_ink > scaled_ink, "{own_ink} against {scaled_ink}");
+}
+
 #[test]
 fn a_missing_built_in_scripts_file_names_the_tool_that_creates_it() {
     let game = Game::new("e2e-builtin", "Builtin", &[("Main", "Graphics.update")]);

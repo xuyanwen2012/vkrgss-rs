@@ -148,6 +148,7 @@ Paths on the command line are relative to the directory the program was started 
 | `--builtin-scripts FILE` | The built-in scripts file, instead of the default location. |
 | `--device INDEX\|NAME` | The Vulkan device: its index or a part of its name, as `vulkaninfo --summary` prints them. In a window the default is the first discrete GPU, then an integrated one; headless it is `llvmpipe`. |
 | `--font-dir DIR` | A directory of fonts. Repeatable; earlier directories come first, then the game's `Fonts` directory, then the fonts installed on the system. |
+| `--font-own-metrics` | Size every font by its own line box. Without it a font that replaces a Windows font is scaled to the line box of the font it replaces. Meant for comparing text with the original when both draw with the same font file. |
 | `--encoding ENCODING` | The text encoding of `Game.ini`: `utf-8`, `gbk`, `shift-jis` or `big5`. Without it UTF-8 is tried, then those three in that order. |
 | `--filter FILTER` | How the frame is scaled into the window: `auto`, `nearest`, `linear` or `sharp`. See *Window*. |
 | `--fullscreen` | Start in borderless fullscreen. |
@@ -197,6 +198,7 @@ leaving them out changes nothing:
 builtin_scripts = "rpg_builtin.rb"           # --builtin-scripts
 device = "RADV"                              # --device; an index is written "0"
 font_dirs = ["fonts"]                        # --font-dir, in this order
+font_own_metrics = false                     # true is --font-own-metrics
 encoding = "gbk"                             # --encoding
 debug = false                                # true is --debug
 allow_process_functions = false              # true is --allow-process-functions

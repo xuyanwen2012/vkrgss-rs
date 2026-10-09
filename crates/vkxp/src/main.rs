@@ -274,7 +274,11 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
     let config = Config {
         files,
         font_names: default_font_names(&ini.library),
-        text: Box::new(FontBackend::for_game(&game_dir, &font_dirs)),
+        text: Box::new(FontBackend::for_game(
+            &game_dir,
+            &font_dirs,
+            options.font_own_metrics,
+        )),
         run: RunConfig {
             ini,
             builtin_scripts,

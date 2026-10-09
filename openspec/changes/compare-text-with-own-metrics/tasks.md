@@ -6,7 +6,7 @@
 
 ## 2. Option (`vkxp-binding`, `vkxp`)
 
-- [ ] 2.1 Add `--font-own-metrics` and its configuration key and pass it to the engine. Verify: the scenario of `specs/game-launch/spec.md` and argument and configuration tests.
+- [x] 2.1 Add `--font-own-metrics` and its configuration key and pass it to the engine. Verify: the scenario of `specs/game-launch/spec.md` and argument and configuration tests.
 
 ## 3. Harness (`xtask`)
 

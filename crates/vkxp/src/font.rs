@@ -26,8 +26,9 @@ impl FontBackend {
     }
 
     /// The backend of a game: the fonts of `font_dirs` first, then those of the game's
-    /// `Fonts` directory if it has one, then the fonts installed on the system.
-    pub fn for_game(game_dir: &Path, font_dirs: &[PathBuf]) -> FontBackend {
+    /// `Fonts` directory if it has one, then the fonts installed on the system. With
+    /// `own_metrics` a font that replaces another is sized by its own line box.
+    pub fn for_game(game_dir: &Path, font_dirs: &[PathBuf], own_metrics: bool) -> FontBackend {
         let mut directories = font_dirs.to_vec();
         let game_fonts = game_dir.join("Fonts");
         if game_fonts.is_dir() {
@@ -35,6 +36,7 @@ impl FontBackend {
         }
         FontBackend::new(&FontSources {
             directories,
+            own_metrics,
             ..FontSources::system()
         })
     }

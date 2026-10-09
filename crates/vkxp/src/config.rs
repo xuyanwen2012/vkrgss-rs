@@ -30,6 +30,7 @@ pub struct File {
     /// The device: an index or a part of a name.
     device: Option<String>,
     font_dirs: Option<Vec<PathBuf>>,
+    font_own_metrics: Option<bool>,
     encoding: Option<String>,
     debug: Option<bool>,
     allow_process_functions: Option<bool>,
@@ -152,6 +153,7 @@ impl File {
             builtin_scripts: over.builtin_scripts.or(self.builtin_scripts),
             device: over.device.or(self.device),
             font_dirs: over.font_dirs.or(self.font_dirs),
+            font_own_metrics: over.font_own_metrics.or(self.font_own_metrics),
             encoding: over.encoding.or(self.encoding),
             debug: over.debug.or(self.debug),
             allow_process_functions: over
@@ -225,6 +227,7 @@ pub fn settle(file: File, mut options: Options) -> Result<Settings> {
     if options.font_dirs.is_empty() {
         options.font_dirs = file.font_dirs.unwrap_or_default();
     }
+    options.font_own_metrics |= file.font_own_metrics == Some(true);
     if options.encoding.is_none() {
         let encoding = file.encoding.as_deref().map(args::encoding).transpose();
         options.encoding = encoding.map_err(|error| anyhow!("encoding: {error}"))?;
@@ -444,6 +447,7 @@ mod tests {
             "builtin_scripts = \"rpg.rb\"\n\
              device = \"RADV\"\n\
              font_dirs = [\"fonts\", \"/abs/fonts\"]\n\
+             font_own_metrics = true\n\
              encoding = \"Shift-JIS\"\n\
              debug = true\n\
              allow_process_functions = true\n\
@@ -472,6 +476,7 @@ mod tests {
                 builtin_scripts: Some(base.join("rpg.rb")),
                 device: Some("RADV".to_owned()),
                 font_dirs: vec![base.join("fonts"), "/abs/fonts".into()],
+                font_own_metrics: true,
                 encoding: Some(Encoding::ShiftJis),
                 debug: true,
                 process_functions: true,
@@ -756,6 +761,7 @@ mod tests {
         assert_eq!(options.builtin_scripts, Some(base.join("rpg_builtin.rb")));
         assert_eq!(options.device.as_deref(), Some("RADV"));
         assert_eq!(options.font_dirs, [base.join("fonts")]);
+        assert!(!options.font_own_metrics);
         assert_eq!(options.encoding, Some(Encoding::Gbk));
         assert!(!options.debug);
         assert!(!options.process_functions);
@@ -781,6 +787,7 @@ mod tests {
         assert!(file.audio.is_some() && file.debug.is_some());
         assert!(file.allow_process_functions.is_some());
         assert!(file.log_p.is_some());
+        assert!(file.font_own_metrics.is_some());
         assert!(!file.gamepad.is_empty());
 
         // The one setting the example can only show as a comment, because it does not go
