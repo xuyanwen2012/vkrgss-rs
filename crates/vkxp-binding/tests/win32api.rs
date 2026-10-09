@@ -270,3 +270,58 @@ fn the_cursor_keeps_its_display_count() {
         "[-1, 0, 1]"
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn a_symbolic_link_does_not_lead_out_of_the_game_directory() {
+    use std::os::unix::fs::symlink;
+
+    let game = testing::game_dir();
+    let outside_file = game.with_file_name("linked.ini");
+    let outside_dir = game.with_file_name("linked");
+    let original = b"[Game]\r\nTitle=outside\r\n";
+    fs::write(&outside_file, original).unwrap();
+    fs::create_dir_all(&outside_dir).unwrap();
+    fs::write(outside_dir.join("config.ini"), original).unwrap();
+    symlink(&outside_file, game.join("escape.ini")).unwrap();
+    symlink(&outside_dir, game.join("escape")).unwrap();
+    symlink(
+        game.with_file_name("dangling.ini"),
+        game.join("dangling.ini"),
+    )
+    .unwrap();
+    assert_eq!(
+        eval(&format!(
+            "{READ_STRING}
+             set = Win32API.new('kernel32', 'WritePrivateProfileStringA', 'pppp', 'l')
+             files = ['escape.ini', 'ESCAPE.INI', 'escape/config.ini', 'escape/new.ini',
+                      'dangling.ini', 'escape']
+             [files.map {{ |file| read_string('Game', 'Title', 'dflt', file) }}.uniq,
+              files.map {{ |file| set.call('Game', 'Title', 'changed', file) }}]"
+        )),
+        "[[[4, [100, 102, 108, 116, 0]]], [0, 0, 0, 0, 0, 0]]"
+    );
+    assert_eq!(fs::read(&outside_file).unwrap(), original);
+    assert_eq!(fs::read(outside_dir.join("config.ini")).unwrap(), original);
+    assert!(!outside_dir.join("new.ini").exists());
+    assert!(!game.with_file_name("dangling.ini").exists());
+}
+
+#[test]
+fn a_file_is_created_in_a_directory_of_the_game() {
+    fs::create_dir_all(testing::game_dir().join("Saves")).unwrap();
+    assert_eq!(
+        eval(&format!(
+            "{READ_STRING}
+             set = Win32API.new('kernel32', 'WritePrivateProfileStringA', 'pppp', 'l')
+             [set.call('A', 'k', 'v', 'Saves\\\\Slot.ini'), set.call('A', 'k', 'w', 'saves/SLOT.ini'),
+              set.call('A', 'k', 'v', 'Absent\\\\Slot.ini'),
+              read_string('a', 'K', '', './Saves/../saves/slot.ini')]"
+        )),
+        "[1, 1, 0, [1, [119, 0]]]"
+    );
+    assert_eq!(
+        fs::read(testing::game_dir().join("Saves/Slot.ini")).unwrap(),
+        b"[A]\r\nk=w\r\n"
+    );
+}

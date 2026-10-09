@@ -251,7 +251,9 @@
 //!
 //! **Profile files.** A file name is taken relative to the game directory and found without
 //! regard to letter case. An absolute path, a drive or `..` beyond the top names a file
-//! outside: reading finds nothing there and writing returns 0. The file is read as
+//! outside, and so does a symbolic link whose target is not in the game directory: reading
+//! finds nothing there and writing returns 0. A new file is created only in a directory
+//! that exists inside the game directory. The file is read as
 //! `vkxp-vfs` reads `Game.ini` (sections and keys without regard to letter case, the first
 //! occurrence of a key wins) and values are exchanged in the file's own bytes, undecoded.
 //!

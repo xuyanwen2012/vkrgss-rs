@@ -265,15 +265,31 @@ fn inside_game(name: &[u8]) -> Option<Vec<String>> {
     (!components.is_empty()).then_some(components)
 }
 
-/// Where the profile file `name` is, or would be created, inside the game directory. An
-/// existing file is found without regard to letter case.
+/// Where the profile file `name` is, or may be created, inside the game directory. An
+/// existing file is found without regard to letter case. `None` for a name that leaves the
+/// game directory, also through a symbolic link: the game's files pass such links over, and
+/// a file is only created where nothing is yet, in a directory that really lies inside.
 fn profile_path(guest: &Guest, name: &[u8]) -> Option<PathBuf> {
     let components = inside_game(name)?;
     // Scripts create files through Ruby's own file API, which the cached listings do not see.
     guest.files.refresh();
     let relative = components.join("/");
-    let existing = guest.files.resolve(FileKind::Data, &relative);
-    Some(existing.unwrap_or_else(|_| guest.files.game_dir().join(relative)))
+    if let Ok(existing) = guest.files.resolve(FileKind::Data, &relative) {
+        return Some(existing);
+    }
+    let game_dir = guest.files.game_dir().canonicalize().ok()?;
+    let new = guest.files.game_dir().join(relative);
+    let parent = new.parent()?.canonicalize().ok()?;
+    if !parent.starts_with(&game_dir) {
+        return None;
+    }
+    // An entry of that name which the game's files did not accept is a link that leads
+    // outside, also one whose target does not exist yet, or a directory.
+    let leaf = new.file_name()?.to_str()?.to_lowercase();
+    let taken = std::fs::read_dir(&parent).ok()?.any(|entry| {
+        entry.is_ok_and(|entry| entry.file_name().to_string_lossy().to_lowercase() == leaf)
+    });
+    (!taken).then(|| parent.join(new.file_name().unwrap_or_default()))
 }
 
 /// The value the section, key and file name arguments name: the first two arguments and the
