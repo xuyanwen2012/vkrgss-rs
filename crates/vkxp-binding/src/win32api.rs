@@ -466,8 +466,10 @@ fn wide_char_to_multi_byte(guest: &mut Guest, args: &mut [Arg]) -> i64 {
         return 0;
     };
     let units = source
-        .chunks_exact(2)
-        .map(|pair| u16::from_le_bytes([pair[0], pair[1]]));
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|&pair| u16::from_le_bytes(pair));
     let length = int(args, 3);
     let units: Vec<u16> = match usize::try_from(length) {
         Ok(length) => units.take(length).collect(),
@@ -515,11 +517,9 @@ fn window_rect(guest: &mut Guest, args: &mut [Arg]) -> i64 {
     let Some(rect) = buffer_mut(args, 1).and_then(|buffer| buffer.get_mut(..16)) else {
         return 0;
     };
-    for (side, value) in rect
-        .chunks_exact_mut(4)
-        .zip([0, 0, size.width, size.height])
-    {
-        side.copy_from_slice(&value.to_le_bytes());
+    let sides = rect.as_chunks_mut::<4>().0.iter_mut();
+    for (side, value) in sides.zip([0, 0, size.width, size.height]) {
+        *side = value.to_le_bytes();
     }
     1
 }
