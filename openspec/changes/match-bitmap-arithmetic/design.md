@@ -36,3 +36,17 @@
 ## Follow-ups
 
 - `hue_change`; why exactly those five pairs.
+- `stretch_blt` loses no column on the right when both rectangles have the same size. The
+  measurement has that case only with both axes equal; the implementation treats the whole
+  transfer as a block transfer then. Whether one axis of equal length next to a stretched one
+  behaves the same is not measured.
+- Clipping rules combined (a source rectangle leaving the source while the destination
+  rectangle is clipped on the same side) follow from applying both rules; not measured.
+- Text drawing keeps leaving a pixel alone where the coverage is 0, as the existing
+  requirement says. Whether the original writes the font colour with alpha 0 onto a fully
+  transparent pixel there, as `blt` does, is not measured.
+- The compositors use the same normal blend for a frame cleared with an alpha below 255, so a
+  transparent texel now leaves its colour (alpha 0) on a fully transparent frame pixel. The
+  additive and subtractive blends onto a destination with alpha stay placeholders.
+- Colour components far below zero are reduced modulo 256 after conversion to a 64-bit
+  integer; the original's behaviour beyond the 32-bit range is not measured.
