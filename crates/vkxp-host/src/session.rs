@@ -110,6 +110,9 @@ pub struct Session<D: Display, C: Clock> {
     pending_tick: Option<Duration>,
     /// When the previous tick was sent.
     previous_tick: Option<Duration>,
+    /// A frame message that [`pump`](Session::pump) took from the link while the tick of the
+    /// frame before it was still pending.
+    waiting_frame: Option<GuestToHost>,
     /// Whether a frame reset is waiting for the frame it applies to.
     frame_reset: bool,
     /// Fast-forward engaged by its key, and by [`Session::set_fast_forward`].
@@ -149,6 +152,7 @@ impl<D: Display, C: Clock> Session<D, C> {
             outbox: VecDeque::new(),
             pending_tick: None,
             previous_tick: None,
+            waiting_frame: None,
             frame_reset: false,
             fast_forward_key: false,
             fast_forward_forced: false,
@@ -278,9 +282,14 @@ impl<D: Display, C: Clock> Session<D, C> {
     /// Runs the session against its link as far as it can go without waiting: sends what is
     /// due, hands over the messages for the guest and handles the guest's messages.
     ///
-    /// While a tick is pending no further guest message is read, so the guest is never
-    /// answered out of order. Call it again at [`next_wake`](Session::next_wake) and whenever
-    /// the link's wake hook has run or the user did something.
+    /// A pending tick does not hold up what the guest sends after its frame: a modal is
+    /// answered at once, a title is set, a freeze applies to the frame already shown. Only
+    /// the next frame waits. It is taken from the link and set aside until the tick has gone
+    /// out, and nothing behind it is read before then, so every message is handled in the
+    /// order it was sent and every frame is answered in turn.
+    ///
+    /// Call it again at [`next_wake`](Session::next_wake) and whenever the link's wake hook
+    /// has run or the user did something.
     pub fn pump(&mut self, link: &HostEnd) {
         loop {
             if self.guest_gone && self.pending_tick.is_some() {
@@ -289,10 +298,23 @@ impl<D: Display, C: Clock> Session<D, C> {
             }
             self.poll();
             self.flush(link);
-            if self.end.is_some() || self.pending_tick.is_some() {
+            if self.end.is_some() {
+                return;
+            }
+            if self.pending_tick.is_none()
+                && let Some(frame) = self.waiting_frame.take()
+            {
+                self.handle_message(frame);
+                continue;
+            }
+            if self.waiting_frame.is_some() {
+                // A frame waits for the tick of the one before it; see above.
                 return;
             }
             match link.try_recv() {
+                Ok(Some(message @ GuestToHost::Frame(_))) if self.pending_tick.is_some() => {
+                    self.waiting_frame = Some(message);
+                }
                 Ok(Some(message)) => self.handle_message(message),
                 Ok(None) => break,
                 Err(_) => self.guest_disconnected(),

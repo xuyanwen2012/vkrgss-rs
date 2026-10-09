@@ -1013,3 +1013,141 @@ fn rejected_frame_in_a_failing_session_is_ticked_at_once_when_it_is_late() {
     assert_eq!(rig.send(invalid_frame(1)), [HostToGuest::Tick]);
     assert_eq!(rig.session.end(), Some(SessionEnd::Failed));
 }
+
+// Messages behind a frame whose tick is pending, through a link.
+
+/// A linked rig at 10 frames per second with frame 0 ticked and frame 1 waiting for its tick,
+/// which is due at 100 milliseconds. The clock is still at 0.
+fn waiting_for_a_tick() -> (Rig, GuestEnd, HostEnd) {
+    let (mut rig, guest, host) = linked();
+    guest.send(frame_at_rate(0, 10)).unwrap();
+    rig.session.pump(&host);
+    assert_eq!(guest.try_recv(), Ok(Some(HostToGuest::Tick)));
+    guest.send(frame_at_rate(1, 10)).unwrap();
+    rig.session.pump(&host);
+    assert_eq!(rig.session.next_wake(), Some(ms(100)));
+    assert_eq!(guest.try_recv(), Ok(None));
+    (rig, guest, host)
+}
+
+fn modal(text: &str) -> GuestToHost {
+    GuestToHost::Modal {
+        text: text.to_owned(),
+    }
+}
+
+#[test]
+fn modal_behind_a_frame_is_answered_at_once_while_the_tick_still_waits() {
+    let (mut rig, guest, host) = waiting_for_a_tick();
+    guest.send(modal("Save failed.")).unwrap();
+    rig.session.pump(&host);
+
+    // No time has passed: the text is out and the dismissal is there, the tick is not.
+    assert_eq!(rig.clock.now(), ms(0));
+    assert!(
+        rig.errors.text().contains("Save failed."),
+        "{}",
+        rig.errors.text()
+    );
+    assert_eq!(guest.try_recv(), Ok(Some(HostToGuest::ModalDismissed)));
+    assert_eq!(guest.try_recv(), Ok(None), "the tick is not due yet");
+    assert_eq!(
+        rig.session.next_wake(),
+        Some(ms(100)),
+        "and is due when it was"
+    );
+
+    rig.clock.advance(ms(99));
+    rig.session.pump(&host);
+    assert_eq!(guest.try_recv(), Ok(None));
+    rig.clock.advance(ms(1));
+    rig.session.pump(&host);
+    assert_eq!(guest.try_recv(), Ok(Some(HostToGuest::Tick)));
+    assert_eq!(guest.try_recv(), Ok(None), "one tick for the frame");
+}
+
+#[test]
+fn control_messages_behind_a_frame_take_effect_while_its_tick_waits() {
+    let (mut rig, guest, host) = waiting_for_a_tick();
+    guest
+        .send(GuestToHost::SetTitle {
+            title: "Loading".to_owned(),
+        })
+        .unwrap();
+    guest.send(GuestToHost::Freeze).unwrap();
+    guest.send(modal("first")).unwrap();
+    guest.send(modal("second")).unwrap();
+    rig.session.pump(&host);
+
+    assert_eq!(rig.session.display().title(), "Loading");
+    assert!(rig.session.display().events.contains(&DisplayEvent::Hold));
+    assert_eq!(guest.try_recv(), Ok(Some(HostToGuest::ModalDismissed)));
+    assert_eq!(guest.try_recv(), Ok(Some(HostToGuest::ModalDismissed)));
+    assert_eq!(guest.try_recv(), Ok(None));
+    assert_eq!(rig.session.next_wake(), Some(ms(100)));
+}
+
+#[test]
+fn next_frame_and_what_follows_it_wait_for_the_tick_in_the_order_sent() {
+    let (mut rig, guest, host) = waiting_for_a_tick();
+    guest.send(modal("before the frame")).unwrap();
+    // A guest that does not wait for its tick: the next frame, and a modal behind it.
+    guest.send(frame_at_rate(2, 10)).unwrap();
+    guest.send(modal("after the frame")).unwrap();
+    guest.send(frame_at_rate(3, 10)).unwrap();
+    rig.session.pump(&host);
+    rig.session.pump(&host);
+
+    assert_eq!(guest.try_recv(), Ok(Some(HostToGuest::ModalDismissed)));
+    assert_eq!(guest.try_recv(), Ok(None));
+    assert!(rig.errors.text().contains("before the frame"));
+    assert!(
+        !rig.errors.text().contains("after the frame"),
+        "it is behind frame 2"
+    );
+    assert_eq!(rig.session.display().rendered(), [0, 1]);
+    assert_eq!(rig.session.next_wake(), Some(ms(100)));
+
+    // The tick of frame 1 lets frame 2 in, and the modal behind it; frame 3 waits in turn.
+    rig.clock.advance_to(ms(100));
+    rig.session.pump(&host);
+    assert_eq!(guest.try_recv(), Ok(Some(HostToGuest::Tick)));
+    assert_eq!(guest.try_recv(), Ok(Some(HostToGuest::ModalDismissed)));
+    assert_eq!(guest.try_recv(), Ok(None));
+    assert!(rig.errors.text().contains("after the frame"));
+    assert_eq!(rig.session.display().rendered(), [0, 1, 2]);
+    assert_eq!(rig.session.next_wake(), Some(ms(200)));
+
+    rig.clock.advance_to(ms(200));
+    rig.session.pump(&host);
+    assert_eq!(guest.try_recv(), Ok(Some(HostToGuest::Tick)));
+    assert_eq!(rig.session.display().rendered(), [0, 1, 2, 3]);
+    rig.clock.advance_to(ms(300));
+    rig.session.pump(&host);
+    assert_eq!(guest.try_recv(), Ok(Some(HostToGuest::Tick)));
+    assert_eq!(guest.try_recv(), Ok(None), "four frames, four ticks");
+}
+
+#[test]
+fn shutdown_behind_a_frame_ends_the_session_without_waiting_for_the_tick() {
+    let (mut rig, guest, host) = waiting_for_a_tick();
+    guest.send(GuestToHost::Shutdown).unwrap();
+    rig.session.pump(&host);
+    assert_eq!(rig.session.end(), Some(SessionEnd::Shutdown));
+    assert_eq!(rig.clock.now(), ms(0));
+}
+
+#[test]
+fn guest_that_goes_with_a_frame_waiting_ends_the_session_after_that_frame() {
+    let (mut rig, guest, host) = waiting_for_a_tick();
+    guest.send(frame_at_rate(2, 10)).unwrap();
+    drop(guest);
+    rig.session.pump(&host);
+    while let Some(due) = rig.session.next_wake() {
+        rig.clock.advance_to(due);
+        rig.session.pump(&host);
+    }
+    rig.session.pump(&host);
+    assert_eq!(rig.session.display().rendered(), [0, 1, 2]);
+    assert_eq!(rig.session.end(), Some(SessionEnd::Disconnected));
+}
