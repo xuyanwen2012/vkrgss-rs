@@ -15,6 +15,8 @@
 
 pub mod decode;
 mod midi;
+mod mixer;
 
 pub use decode::{DecodeError, Source};
 pub use midi::{SYSTEM_SOUNDFONTS, SoundFonts};
+pub use mixer::{Mixer, MixerOptions};

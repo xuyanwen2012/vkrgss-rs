@@ -7,9 +7,9 @@
 
 ## 2. Mixer (`vkxp-audio`)
 
-- [ ] 2.1 Implement the mixer with the four channels, looping, replacement and the music-effect pause. Verify: tests for the three scenarios of the channels requirement.
-- [ ] 2.2 Implement volume, pitch, stop and fade. Verify: tests for the two scenarios of that requirement and for volume 0 and 100.
-- [ ] 2.3 Implement the failure rules. Verify: the unsupported-data scenario.
+- [x] 2.1 Implement the mixer with the four channels, looping, replacement and the music-effect pause. Verify: tests for the three scenarios of the channels requirement.
+- [x] 2.2 Implement volume, pitch, stop and fade. Verify: tests for the two scenarios of that requirement and for volume 0 and 100.
+- [x] 2.3 Implement the failure rules. Verify: the unsupported-data scenario.
 
 ## 3. Output and host (`vkxp-audio`, `vkxp-host`, `vkxp`)
 
