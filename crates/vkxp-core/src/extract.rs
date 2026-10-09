@@ -995,4 +995,278 @@ mod tests {
         stage.scene.sprite_mut(id).unwrap().flash(Some(white), 0);
         assert_eq!(stage.frame().pixel(0, 0), BLACK);
     }
+
+    /// The viewport of the viewport scenarios, 100, 50, 200, 100, holding a sprite at 0, 0
+    /// with a 300 by 10 bitmap whose columns all differ.
+    fn wide_viewport(stage: &mut Stage) -> (ViewportId, SpriteId) {
+        let pixels: Vec<Rgba> = (0..10).flat_map(|_| (0..300u32).map(column)).collect();
+        let bitmap = stage.pixels(300, 10, &pixels);
+        let viewport = stage
+            .scene
+            .create_viewport(Rect::new(100, 50, 200, 100))
+            .unwrap();
+        let sprite = sprite_in(stage, Some(viewport), bitmap, 0, 0);
+        (viewport, sprite)
+    }
+
+    /// The pixel of column `x` of the bitmap of [`wide_viewport`].
+    fn column(x: u32) -> Rgba {
+        [(x % 256) as u8, (x / 256) as u8 + 1, 200, 255]
+    }
+
+    #[test]
+    fn a_viewport_offsets_and_clips_its_elements() {
+        let mut stage = Stage::new();
+        wide_viewport(&mut stage);
+        let frame = stage.frame();
+        assert_eq!(frame.pixel(100, 50), column(0));
+        assert_eq!(frame.pixel(299, 59), column(199));
+        assert_eq!(frame.pixel(99, 50), BLACK);
+        assert_eq!(frame.pixel(100, 49), BLACK);
+        assert_eq!(frame.pixel(100, 60), BLACK);
+        for x in 300..640 {
+            assert_eq!(frame.pixel(x, 50), BLACK, "x {x}");
+        }
+        assert_eq!(drawn(&frame).len(), 200 * 10);
+    }
+
+    #[test]
+    fn the_origin_of_a_viewport_scrolls_its_elements() {
+        let mut stage = Stage::new();
+        let (viewport, sprite) = wide_viewport(&mut stage);
+        stage.scene.viewport_mut(viewport).unwrap().ox = 10;
+        let frame = stage.frame();
+        assert_eq!(frame.pixel(100, 50), column(10));
+        assert_eq!(frame.pixel(299, 50), column(209));
+        assert_eq!(frame.pixel(99, 50), BLACK);
+        assert_eq!(frame.pixel(300, 50), BLACK);
+
+        let viewport = stage.scene.viewport_mut(viewport).unwrap();
+        viewport.ox = -5;
+        viewport.oy = 4;
+        stage.scene.sprite_mut(sprite).unwrap().y = 6;
+        let frame = stage.frame();
+        assert_eq!(frame.pixel(105, 52), column(0));
+        assert_eq!(frame.pixel(104, 52), BLACK);
+        assert_eq!(frame.pixel(105, 51), BLACK);
+    }
+
+    #[test]
+    fn the_z_of_a_viewport_outranks_the_z_of_its_elements() {
+        let mut stage = Stage::sized(16, 16);
+        let red = stage.solid(4, 4, RED);
+        let green = stage.solid(4, 4, GREEN);
+        let viewport = stage
+            .scene
+            .create_viewport(Rect::new(0, 0, 16, 16))
+            .unwrap();
+        stage.scene.set_viewport_z(viewport, 100).unwrap();
+        let inside = sprite_in(&mut stage, Some(viewport), red, 2, 2);
+        let outside = sprite(&mut stage, green, 4, 4);
+        stage.scene.set_sprite_z(inside, 0).unwrap();
+        stage.scene.set_sprite_z(outside, 50).unwrap();
+        let frame = stage.frame();
+        assert_eq!(frame.pixel(4, 4), RED);
+        assert_eq!(frame.pixel(7, 7), GREEN);
+
+        stage.scene.set_sprite_z(outside, 101).unwrap();
+        assert_eq!(stage.frame().pixel(4, 4), GREEN);
+    }
+
+    #[test]
+    fn an_invisible_or_disposed_viewport_hides_its_elements() {
+        let mut stage = Stage::sized(16, 16);
+        let red = stage.solid(4, 4, RED);
+        let green = stage.solid(2, 2, GREEN);
+        let viewport = stage
+            .scene
+            .create_viewport(Rect::new(0, 0, 16, 16))
+            .unwrap();
+        let inside = sprite_in(&mut stage, Some(viewport), red, 2, 2);
+        sprite(&mut stage, green, 10, 10);
+        assert_eq!(stage.frame().pixel(2, 2), RED);
+
+        stage.scene.viewport_mut(viewport).unwrap().visible = false;
+        let frame = stage.frame();
+        assert_eq!(frame.pixel(2, 2), BLACK);
+        assert_eq!(frame.pixel(10, 10), GREEN);
+        assert_eq!(drawn(&frame).len(), 4);
+
+        stage.scene.viewport_mut(viewport).unwrap().visible = true;
+        assert_eq!(stage.frame().pixel(2, 2), RED);
+
+        stage.scene.dispose_viewport(viewport);
+        assert_eq!(drawn(&stage.frame()).len(), 4);
+        // The sprite itself is still alive, and stays hidden when the slot is reused.
+        assert!(!stage.scene.is_sprite_disposed(inside));
+        stage
+            .scene
+            .create_viewport(Rect::new(0, 0, 16, 16))
+            .unwrap();
+        assert_eq!(drawn(&stage.frame()).len(), 4);
+    }
+
+    #[test]
+    fn a_viewport_without_pixels_on_the_screen_shows_nothing() {
+        let mut stage = Stage::sized(16, 16);
+        let red = stage.solid(4, 4, RED);
+        for rect in [
+            Rect::new(0, 0, 0, 16),
+            Rect::new(0, 0, 16, -3),
+            Rect::new(16, 0, 8, 8),
+            Rect::new(-8, -8, 8, 8),
+        ] {
+            let viewport = stage.scene.create_viewport(rect).unwrap();
+            stage.scene.viewport_mut(viewport).unwrap().tone = Tone::new(255.0, 255.0, 255.0, 0.0);
+            sprite_in(&mut stage, Some(viewport), red, 0, 0);
+            assert!(all(&stage.frame(), BLACK), "{rect:?}");
+        }
+        // Partly on the screen, only that part shows.
+        let viewport = stage
+            .scene
+            .create_viewport(Rect::new(-2, 14, 8, 8))
+            .unwrap();
+        sprite_in(&mut stage, Some(viewport), red, 0, 0);
+        let frame = stage.frame();
+        assert_eq!(frame.pixel(0, 14), RED);
+        assert_eq!(frame.pixel(1, 15), RED);
+        assert_eq!(drawn(&frame).len(), 4);
+    }
+
+    /// A scene with a striped sprite behind a viewport that covers the left half of it.
+    fn tinted_half(stage: &mut Stage) -> ViewportId {
+        let stripes = stage.pixels(4, 1, &[RED, GREEN, BLUE, [200, 100, 0, 255]]);
+        let behind = sprite(stage, stripes, 0, 0);
+        stage.scene.sprite_mut(behind).unwrap().zoom_y = 4.0;
+        let viewport = stage.scene.create_viewport(Rect::new(0, 0, 2, 4)).unwrap();
+        stage.scene.set_viewport_z(viewport, 10).unwrap();
+        viewport
+    }
+
+    #[test]
+    fn the_tone_of_a_viewport_reaches_what_is_behind_it() {
+        let mut stage = Stage::sized(8, 8);
+        let viewport = tinted_half(&mut stage);
+        stage.scene.viewport_mut(viewport).unwrap().tone = Tone::new(0.0, 0.0, 0.0, 255.0);
+        let frame = stage.frame();
+        for (x, original) in [(0, RED), (1, GREEN)] {
+            let grey = vkxp_pixel::apply_tone(original, 0, 0, 0, 255);
+            assert_eq!((grey[0], grey[1]), (grey[1], grey[2]));
+            assert_eq!(frame.pixel(x, 0), grey);
+            assert_eq!(frame.pixel(x, 3), grey);
+        }
+        assert_eq!(frame.pixel(2, 0), BLUE);
+        assert_eq!(frame.pixel(3, 3), [200, 100, 0, 255]);
+        assert_eq!(frame.pixel(0, 4), BLACK, "outside the rectangle");
+    }
+
+    #[test]
+    fn the_effect_of_a_viewport_covers_its_own_elements_too() {
+        let mut stage = Stage::sized(8, 8);
+        let viewport = tinted_half(&mut stage);
+        let white = stage.solid(1, 1, WHITE);
+        sprite_in(&mut stage, Some(viewport), white, 1, 1);
+        stage.scene.viewport_mut(viewport).unwrap().tone = Tone::new(-100.0, -100.0, 0.0, 0.0);
+        let frame = stage.frame();
+        assert_eq!(frame.pixel(1, 1), [155, 155, 255, 255]);
+        assert_eq!(frame.pixel(0, 0), [155, 0, 0, 255]);
+    }
+
+    #[test]
+    fn elements_in_front_of_a_viewport_keep_their_colours() {
+        let mut stage = Stage::sized(8, 8);
+        let viewport = tinted_half(&mut stage);
+        stage.scene.viewport_mut(viewport).unwrap().tone = Tone::new(0.0, 0.0, 0.0, 255.0);
+        let white = stage.solid(1, 1, [10, 200, 30, 255]);
+        let front = sprite(&mut stage, white, 0, 0);
+        stage.scene.set_sprite_z(front, 11).unwrap();
+        let frame = stage.frame();
+        assert_eq!(frame.pixel(0, 0), [10, 200, 30, 255]);
+        assert_ne!(frame.pixel(0, 1), RED);
+
+        // Behind the viewport, the same sprite is toned with the rest.
+        stage.scene.set_sprite_z(front, 9).unwrap();
+        assert_eq!(
+            stage.frame().pixel(0, 0),
+            vkxp_pixel::apply_tone([10, 200, 30, 255], 0, 0, 0, 255)
+        );
+    }
+
+    #[test]
+    fn the_colour_and_flash_of_a_viewport_fill_its_rectangle() {
+        let mut stage = Stage::sized(8, 8);
+        let viewport = tinted_half(&mut stage);
+        stage.scene.viewport_mut(viewport).unwrap().color = Color::new(0.0, 0.0, 255.0, 100.0);
+        let own = |pixel| vkxp_pixel::blend_color(pixel, [0, 0, 255, 100]);
+        let frame = stage.frame();
+        assert_eq!(frame.pixel(0, 0), own(RED));
+        assert_eq!(frame.pixel(1, 2), own(GREEN));
+        assert_eq!(frame.pixel(2, 0), BLUE);
+
+        // A flash of alpha 200 for 4 updates: 200 and 150 exceed the colour's 100.
+        let white = Color::new(255.0, 255.0, 255.0, 200.0);
+        stage
+            .scene
+            .viewport_mut(viewport)
+            .unwrap()
+            .flash(Some(white), 4);
+        let flashed = |alpha| vkxp_pixel::blend_color(RED, [255, 255, 255, alpha]);
+        assert_eq!(stage.frame().pixel(0, 0), flashed(200));
+        assert_eq!(
+            stage.frame().pixel(0, 0),
+            flashed(200),
+            "no update, no progress"
+        );
+        for expected in [flashed(150), own(RED), own(RED), own(RED)] {
+            stage.scene.viewport_mut(viewport).unwrap().update();
+            assert_eq!(stage.frame().pixel(0, 0), expected);
+        }
+    }
+
+    #[test]
+    fn a_viewport_flash_without_a_colour_hides_its_elements() {
+        let mut stage = Stage::sized(8, 8);
+        let viewport = tinted_half(&mut stage);
+        let white = stage.solid(1, 1, WHITE);
+        sprite_in(&mut stage, Some(viewport), white, 1, 1);
+        stage.scene.viewport_mut(viewport).unwrap().flash(None, 1);
+        let frame = stage.frame();
+        assert_eq!(frame.pixel(1, 1), GREEN, "what is behind still shows");
+        stage.scene.viewport_mut(viewport).unwrap().update();
+        assert_eq!(stage.frame().pixel(1, 1), WHITE);
+    }
+
+    #[test]
+    fn a_neutral_viewport_changes_nothing() {
+        let mut stage = Stage::sized(8, 8);
+        let stripes = stage.pixels(4, 1, &[RED, GREEN, BLUE, [200, 100, 0, 255]]);
+        sprite(&mut stage, stripes, 0, 0);
+        let without = stage.frame();
+
+        let viewport = stage.scene.create_viewport(Rect::new(0, 0, 8, 8)).unwrap();
+        stage.scene.set_viewport_z(viewport, 10).unwrap();
+        let packet = stage.scene.extract(&mut stage.bitmaps);
+        assert!(
+            packet
+                .ops
+                .iter()
+                .all(|op| op.kind() != vkxp_proto::OpKind::RectEffect),
+            "a neutral viewport emits no rectangle effect"
+        );
+        assert_eq!(stage.frame(), without);
+
+        // A colour without alpha and a finished flash are neutral too.
+        let viewport = stage.scene.viewport_mut(viewport).unwrap();
+        viewport.color = Color::new(255.0, 255.0, 255.0, 0.0);
+        viewport.flash(Some(Color::new(255.0, 255.0, 255.0, 255.0)), 1);
+        viewport.update();
+        let packet = stage.scene.extract(&mut stage.bitmaps);
+        assert!(
+            packet
+                .ops
+                .iter()
+                .all(|op| op.kind() != vkxp_proto::OpKind::RectEffect)
+        );
+        assert_eq!(stage.frame(), without);
+    }
 }

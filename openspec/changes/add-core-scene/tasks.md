@@ -20,8 +20,8 @@
 
 ## 4. Viewports (`vkxp-core`)
 
-- [ ] 4.1 Extract the elements of a viewport with offset, origin, clip and visibility, at the viewport's place in the order. Verify: tests for the four viewport scenarios.
-- [ ] 4.2 Emit the viewport's tone, colour and flash as a rectangle effect, and implement viewport update. Verify: tests for the two viewport-effect scenarios and that a neutral viewport emits no rectangle effect.
+- [x] 4.1 Extract the elements of a viewport with offset, origin, clip and visibility, at the viewport's place in the order. Verify: tests for the four viewport scenarios.
+- [x] 4.2 Emit the viewport's tone, colour and flash as a rectangle effect, and implement viewport update. Verify: tests for the two viewport-effect scenarios and that a neutral viewport emits no rectangle effect.
 
 ## 5. Windows (`vkxp-core`)
 
