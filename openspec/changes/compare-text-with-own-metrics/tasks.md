@@ -2,7 +2,7 @@
 
 ## 1. Engine (`vkxp-text`)
 
-- [ ] 1.1 Add the own-metrics configuration. Verify: the two scenarios of `specs/text-rendering/spec.md`.
+- [x] 1.1 Add the own-metrics configuration. Verify: the two scenarios of `specs/text-rendering/spec.md`.
 
 ## 2. Option (`vkxp-binding`, `vkxp`)
 

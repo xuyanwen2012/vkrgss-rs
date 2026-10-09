@@ -31,6 +31,9 @@ pub struct FontSources {
     /// Line boxes that take precedence over the built-in ones: a family name and the line box
     /// a font is set in when it replaces that family. See [`crate::default_line_box`].
     pub line_boxes: Vec<(String, LineBox)>,
+    /// Whether every font is set in its own line box, a replacement included: the line boxes
+    /// of replaced families, the built-in ones too, are not used.
+    pub own_metrics: bool,
     /// Families used when no requested name matches and for characters the selected font
     /// lacks, in order. `None` keeps [`crate::DEFAULT_FALLBACK_FAMILIES`].
     pub fallback_families: Option<Vec<String>>,

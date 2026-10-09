@@ -118,6 +118,8 @@ pub struct TextEngine {
     index: FontIndex,
     substitutions: SubstitutionTable,
     line_boxes: LineBoxTable,
+    /// Whether a replacement keeps its own line box.
+    own_metrics: bool,
     /// Family keys of the fallback families, in order.
     fallback_families: Vec<String>,
     /// Contents of the font files in use. `None` for a file that could not be read.
@@ -168,6 +170,7 @@ impl TextEngine {
             index: FontIndex::new(sources),
             substitutions: SubstitutionTable::new(&sources.substitutions),
             line_boxes: LineBoxTable::new(&sources.line_boxes),
+            own_metrics: sources.own_metrics,
             fallback_families,
             files: HashMap::new(),
             faces: Vec::new(),
@@ -319,6 +322,9 @@ impl TextEngine {
             }
             for replacement in self.substitutions.replacements(&key).to_vec() {
                 if let Some(face) = self.family_face(&replacement, bold, italic) {
+                    if self.own_metrics {
+                        return Some(own(face));
+                    }
                     // The replacement is set in the line box of the name it stands in for.
                     return Some(Selected {
                         face,

@@ -94,6 +94,10 @@
 //! requested name, not to the replacement. A font found under the requested name, a
 //! replacement for a name without a known line box, and a fallback font keep their own.
 //!
+//! With [`FontSources::own_metrics`] set there is no exception: a replacement is set in its
+//! own line box like any other font. That is how GDI sizes a font it is given, so it is the
+//! rule to compare against the original when both draw with the same font file.
+//!
 //! PLACEHOLDER: most built-in line boxes are from memory of the Windows fonts' metric tables;
 //! the list in `line_box.rs` marks each.
 //!

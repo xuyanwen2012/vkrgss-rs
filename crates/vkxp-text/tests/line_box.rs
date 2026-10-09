@@ -234,3 +234,46 @@ fn fallback_font() {
         engine.rasterize(&request(LIBERATION, 22), &text)
     );
 }
+
+// Requirement: Own line box on request
+
+#[test]
+fn replacement_font_at_its_own_size() {
+    let text = format!("Hello, World! {EM_DASH}{SYMBOL}");
+    // A built-in line box and one of the caller: neither applies.
+    for line_boxes in [&[][..], &[("SimHei", ONE_EM)]] {
+        let mut engine = TextEngine::new(&FontSources {
+            substitutions: vec![("SimHei".to_owned(), vec![LIBERATION.to_owned()])],
+            line_boxes: line_boxes
+                .iter()
+                .map(|(name, line_box)| ((*name).to_owned(), *line_box))
+                .collect(),
+            own_metrics: true,
+            ..test_sources()
+        });
+        let replaced = request("SimHei", 22);
+        let named = request(LIBERATION, 22);
+        assert_eq!(engine.resolve(&replaced).unwrap().family, LIBERATION);
+        assert_eq!(engine.measure(&replaced, &text).1, 22);
+        assert_eq!(
+            engine.measure(&replaced, &text),
+            engine.measure(&named, &text)
+        );
+        assert_eq!(engine.measure(&replaced, EM_DASH).0, 20);
+        assert_eq!(
+            engine.rasterize(&replaced, &text),
+            engine.rasterize(&named, &text)
+        );
+    }
+}
+
+#[test]
+fn default_unchanged() {
+    assert!(!test_sources().own_metrics);
+    // Without the configuration the replacement is still set in the line box of `SimHei`,
+    // in which the em is as high as the size.
+    let mut engine = engine_replacing("SimHei", &[]);
+    let replaced = request("SimHei", 22);
+    assert_eq!(engine.measure(&replaced, EM_DASH), (22, 22));
+    assert_eq!(ink_bottom(&engine.rasterize(&replaced, "H")), 19);
+}
