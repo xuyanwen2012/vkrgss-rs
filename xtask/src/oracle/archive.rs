@@ -1,7 +1,8 @@
 //! The script archive of a game (`Scripts.rxdata`): a Ruby `Marshal` dump of an array of
 //! `[Integer, String, String]`, the third element being the zlib-deflated source.
 //!
-//! Only the shapes such an archive uses are read and written: arrays, fixnums and strings.
+//! Only the shapes such an archive uses are read and written: arrays, integers and strings.
+//! The identifier of a script, a Fixnum or a Bignum, is kept as its `Marshal` bytes.
 //! A string wrapped with instance variables, as a newer Ruby writes it, is read and its
 //! variables are dropped.
 
@@ -14,7 +15,8 @@ use flate2::write::ZlibEncoder;
 /// One script of an archive.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
-    pub id: i32,
+    /// The identifier as stored: the `Marshal` bytes of a Fixnum or a Bignum, with the type.
+    pub id: Vec<u8>,
     /// The name as stored, in the encoding of the editor that wrote it.
     pub name: Vec<u8>,
     /// The source as stored: zlib-deflated.
@@ -28,8 +30,10 @@ impl Entry {
         encoder
             .write_all(source.as_bytes())
             .expect("writing to memory does not fail");
+        let mut stored = vec![b'i'];
+        write_long(&mut stored, id);
         Entry {
-            id,
+            id: stored,
             name: name.as_bytes().to_vec(),
             deflated: encoder.finish().expect("writing to memory does not fail"),
         }
@@ -49,8 +53,7 @@ pub fn read(bytes: &[u8]) -> Result<Vec<Entry>> {
     for _ in 0..count {
         reader.expect(b'[', "an array for a script")?;
         ensure!(reader.long()? == 3, "a script is not an array of three");
-        reader.expect(b'i', "the number of a script")?;
-        let id = reader.long()?;
+        let id = reader.integer()?;
         let name = reader.string()?;
         let deflated = reader.string()?;
         entries.push(Entry { id, name, deflated });
@@ -68,8 +71,8 @@ pub fn write(entries: &[Entry]) -> Vec<u8> {
     let count = i32::try_from(entries.len()).expect("an archive has few scripts");
     write_long(&mut bytes, count);
     for entry in entries {
-        bytes.extend([b'[', 3 + 5, b'i']);
-        write_long(&mut bytes, entry.id);
+        bytes.extend([b'[', 3 + 5]);
+        bytes.extend_from_slice(&entry.id);
         for string in [&entry.name, &entry.deflated] {
             bytes.push(b'"');
             let length = i32::try_from(string.len()).expect("a script is shorter than 2 GiB");
@@ -165,6 +168,28 @@ impl<'a> Reader<'a> {
         usize::try_from(self.long()?).context("a negative length")
     }
 
+    /// The stored bytes of an integer: a Fixnum (`i` and a long) or a Bignum (`l`, a sign
+    /// byte, a length in 16-bit words and the words).
+    fn integer(&mut self) -> Result<Vec<u8>> {
+        let bytes: &'a [u8] = self.bytes;
+        let at = self.at;
+        match self.byte()? {
+            b'i' => {
+                self.long()?;
+            }
+            b'l' => {
+                self.byte()?;
+                let words = self.length()?;
+                self.take(words.checked_mul(2).context("the archive ends early")?)?;
+            }
+            other => bail!(
+                "byte {at} of the archive: expected the number of a script, found the type `{}`",
+                other.escape_ascii()
+            ),
+        }
+        Ok(bytes[at..self.at].to_vec())
+    }
+
     /// A string, with or without instance variables around it.
     fn string(&mut self) -> Result<Vec<u8>> {
         let with_variables = self.bytes.get(self.at) == Some(&b'I');
@@ -255,7 +280,7 @@ mod tests {
             Entry::new(0x0484_eb58, "Game_Temp", "class Game_Temp\nend\n"),
             Entry::new(7, "\u{7fa4}\u{6218}", "$x = 1"),
             Entry {
-                id: 300,
+                id: vec![b'i', 2, 0x2c, 0x01],
                 name: b"Main".to_vec(),
                 // Stored bytes are kept even when they are not what this writer would make.
                 deflated: vec![0x78, 0x9c, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01],
@@ -270,6 +295,28 @@ mod tests {
         assert_eq!(four[0].name, b"probe");
         assert_eq!(source(&four[0]), b"srand(1)");
         assert_eq!(four[1..], three);
+    }
+
+    /// The scenario "Bignum identifier" of `oracle-harness`.
+    #[test]
+    fn a_bignum_identifier_is_kept_as_it_is_stored() {
+        // Marshal.dump(3000000000) of Ruby 1.8 is "l+" with two 16-bit words.
+        let large = vec![b'l', b'+', 2 + 5, 0x00, 0x5e, 0xd0, 0xb2];
+        let mut second = Entry::new(0, "Large", "$y = 2");
+        second.id = large.clone();
+        let mut negative = Entry::new(0, "Negative", "$z = 3");
+        negative.id = vec![b'l', b'-', 3 + 5, 1, 2, 3, 4, 5, 6];
+        let three = [Entry::new(7, "Small", "$x = 1"), second, negative];
+        let archive = write(&three);
+        let entries = read(&archive).unwrap();
+        assert_eq!(entries, three);
+        assert_eq!(entries[1].id, large);
+
+        let probed = with_first(&archive, "probe", "srand(1)").unwrap();
+        let first = write(&read(&probed).unwrap()[..1]);
+        // After the version, the array header and the probe, the bytes are those of the archive.
+        assert_eq!(probed[first.len()..], archive[4..]);
+        assert_eq!(read(&probed).unwrap()[1..], three);
     }
 
     #[test]
@@ -293,5 +340,7 @@ mod tests {
         assert!(read(b"").is_err());
         assert!(read(&[4, 8, b'{', 0]).is_err());
         assert!(read(&[4, 8, b'[', 6, b'[', 8, b'i', 6, b'"', 20, b'a']).is_err());
+        assert!(read(&[4, 8, b'[', 6, b'[', 8, b'f', 6, b'1', b'"', 0, b'"', 0]).is_err());
+        assert!(read(&[4, 8, b'[', 6, b'[', 8, b'l', b'+', 7, 0, 0x5e]).is_err());
     }
 }

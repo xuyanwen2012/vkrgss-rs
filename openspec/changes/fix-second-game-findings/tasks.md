@@ -10,7 +10,7 @@
 
 ## 3. Harness (`xtask`)
 
-- [ ] 3.1 Preserve Bignum identifiers in the archive reader and writer. Verify: the scenario of `specs/oracle-harness/spec.md`.
+- [x] 3.1 Preserve Bignum identifiers in the archive reader and writer. Verify: the scenario of `specs/oracle-harness/spec.md`.
 
 ## 4. Integration check
 
