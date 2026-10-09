@@ -377,9 +377,10 @@ fn copy_file(guest: &mut Guest, args: &mut [Arg]) -> i64 {
     let (Some(source), Some(destination)) = (c_string(args, 0), c_string(args, 1)) else {
         return 0;
     };
-    let (Some(source), Some(destination)) =
-        (profile_path(guest, source), profile_path(guest, destination))
-    else {
+    let (Some(source), Some(destination)) = (
+        profile_path(guest, source),
+        profile_path(guest, destination),
+    ) else {
         return 0;
     };
     if int(args, 2) != 0 && destination.exists() {
