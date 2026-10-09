@@ -104,3 +104,17 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 - Patched SHA-256: `ca5cb0f891a1153e6dd0dc44e507ee30fde1ccb226a1ae260c22ab16f2fa4a88`
 - Reason: follows patch 5. `test_hash_random` asserted that `'abc'.hash` differs between
   processes; without the seed it asserts that every process computes the same value.
+
+## 10. class-redefinition-ruby-181
+
+- File: `eval.c`
+- Patch: `patches/class-redefinition-ruby-181.patch`
+- Patched SHA-256: `672916f463210a2bef18be3285bf627e9c9f7dbeb8f68e1f6852837b8aaa894d`
+- Reason: measured on the original runtime, a `class` statement that names an existing class
+  with an explicit superclass other than that class's own defines a new class and binds the
+  constant to it; the old class object and its instances stay as they were. 1.8.7 raises
+  `TypeError` ("superclass mismatch"), and a game whose scripts redefine a class this way did
+  not start. As in 1.8.1, `NODE_CLASS` goes on to the code that defines a class for an
+  undefined constant. The constant is removed first, so that no "already initialized
+  constant" warning is printed; the original prints none. No upstream test pinned the
+  `TypeError`.

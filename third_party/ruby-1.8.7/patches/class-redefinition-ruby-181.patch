@@ -1,0 +1,24 @@
+--- a/eval.c
++++ b/eval.c
+@@ -4076,8 +4076,11 @@
+ 		if (super) {
+ 		    tmp = rb_class_real(RCLASS(klass)->super);
+ 		    if (tmp != super) {
+-			rb_raise(rb_eTypeError, "superclass mismatch for class %s",
+-				 rb_id2name(cname));
++			/* As in Ruby 1.8.1: a new class takes the name.  The
++			   constant is removed first, so that setting it does
++			   not warn. */
++			rb_mod_remove_const(cbase, ID2SYM(cname));
++			goto override_class;
+ 		    }
+ 		    super = 0;
+ 		}
+@@ -4086,6 +4089,7 @@
+ 		}
+ 	    }
+ 	    else {
++	      override_class:
+ 		if (!super) super = rb_cObject;
+ 		klass = rb_define_class_id(cname, super);
+ 		rb_set_class_path(klass, cbase, rb_id2name(cname));

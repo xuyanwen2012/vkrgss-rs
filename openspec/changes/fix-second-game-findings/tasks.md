@@ -2,7 +2,7 @@
 
 ## 1. Interpreter (`third_party/ruby-1.8.7`, `vkxp-ruby-sys`)
 
-- [ ] 1.1 Patch class redefinition and record the patch. Verify: tests for the four scenarios of `specs/embedded-ruby/spec.md`; the upstream suites pass, with any upstream test that pins the `TypeError` adjusted and listed.
+- [x] 1.1 Patch class redefinition and record the patch. Verify: tests for the four scenarios of `specs/embedded-ruby/spec.md`; the upstream suites pass, with any upstream test that pins the `TypeError` adjusted and listed.
 
 ## 2. Win32API (`vkxp-binding`)
 
