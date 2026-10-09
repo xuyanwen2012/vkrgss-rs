@@ -9,6 +9,7 @@ use vkxp_ruby_sys::{Raised, Ruby};
 use vkxp_vfs::GameFiles;
 
 use crate::error::{self, ErrorClasses};
+use crate::runtime::{self, RunConfig};
 use crate::text::TextBackend;
 use crate::{bitmap, color, font, rect, table};
 
@@ -20,6 +21,8 @@ pub struct Config {
     pub font_names: Vec<String>,
     /// Where glyphs and the knowledge of installed fonts come from.
     pub text: Box<dyn TextBackend + Send>,
+    /// What running a game needs: its configuration file, the built-in scripts and the modes.
+    pub run: RunConfig,
 }
 
 /// The state the Ruby classes operate on. One exists per interpreter, on its thread.
@@ -35,6 +38,8 @@ pub struct Guest {
     pub(crate) scene: Scene,
     /// What `Input` answers from.
     pub(crate) input: InputState,
+    /// The link to the host and what running a game keeps.
+    pub(crate) runtime: runtime::State,
 }
 
 /// The Ruby classes this crate defines, and the ones it raises.
@@ -67,6 +72,7 @@ impl Guest {
             text: config.text,
             scene: Scene::new(),
             input: InputState::new(),
+            runtime: runtime::State::new(config.run),
         }
     }
 
@@ -94,6 +100,7 @@ impl Guest {
         };
         CLASSES.set(Some(classes));
         enter(Guest::new(config));
+        runtime::define(ruby)?;
         font::install_default_color(ruby)
     }
 
@@ -203,6 +210,7 @@ mod tests {
             files: GameFiles::new("/nonexistent", []),
             font_names: vec!["Test".to_owned()],
             text: Box::new(NoFonts),
+            run: RunConfig::default(),
         }));
     }
 

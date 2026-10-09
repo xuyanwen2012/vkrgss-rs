@@ -2,8 +2,8 @@
 
 ## 1. Guest plumbing (`vkxp-binding`)
 
-- [ ] 1.1 Add the scene, the input state, the guest end of the link and `Guest::pump` to the guest state, and the scripted host to the test harness. Verify: a harness test sends three frames through `pump` and the scripted host records three frames and has sent three ticks.
-- [ ] 1.2 Write the Ruby prelude (`$KCODE`, load path, `$DEBUG`, `$BTEST`, `Reset`, `Hangup`, `save_data`, `Win32API`, disabled process functions, restricted `require` and `load`) and its evaluation at start-up. Verify: Ruby tests for the interpreter-preparation, reset-class, process-function, loading-code and Win32API scenarios in `specs/rgss-runtime/spec.md`.
+- [x] 1.1 Add the scene, the input state, the guest end of the link and `Guest::pump` to the guest state, and the scripted host to the test harness. Verify: a harness test sends three frames through `pump` and the scripted host records three frames and has sent three ticks.
+- [x] 1.2 Write the Ruby prelude (`$KCODE`, load path, `$DEBUG`, `$BTEST`, `Reset`, `Hangup`, `save_data`, `Win32API`, disabled process functions, restricted `require` and `load`) and its evaluation at start-up. Verify: Ruby tests for the interpreter-preparation, reset-class, process-function, loading-code and Win32API scenarios in `specs/rgss-runtime/spec.md`.
 
 ## 2. Modules (`vkxp-binding`)
 

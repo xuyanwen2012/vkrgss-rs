@@ -1,0 +1,240 @@
+//! A scripted host for the tests of what crosses the link, built on `vkxp_proto::link` alone.
+//!
+//! [`scripted_host`] starts a thread that holds the host end of a new link. It answers every
+//! frame with a tick and every modal message with its dismissal, records what it receives,
+//! and sends what its [`Script`] tells it to. [`play`] evaluates a Ruby snippet on the
+//! harness's guest against such a host.
+//!
+//! The first use of [`play`] adds these files to the generated game directory and evaluates
+//! the prelude of the binding, with the default [`RunConfig`] unless [`configure`] came
+//! first:
+//!
+//! | File | Contents |
+//! |---|---|
+//! | `game/Extra.rb` | Ruby source that defines `VKXP_EXTRA` and counts its evaluations in `$vkxp_extra_loads` |
+
+use std::sync::mpsc;
+use std::sync::{Mutex, Once, PoisonError};
+use std::thread::{self, JoinHandle};
+
+use vkxp_proto::link::{GuestEnd, link};
+use vkxp_proto::{FramePacket, GuestToHost, HostToGuest};
+use vkxp_ruby_sys::{Ruby, RubyError};
+
+use crate::{Guest, RunConfig, runtime};
+
+/// What a scripted host sends besides its answers.
+#[derive(Debug, Clone, Default)]
+pub struct Script {
+    at_start: Vec<HostToGuest>,
+    after_frame: Vec<(usize, HostToGuest)>,
+}
+
+impl Script {
+    /// A host that only answers.
+    pub fn new() -> Script {
+        Script::default()
+    }
+
+    /// Sends `message` before the guest does anything.
+    #[must_use]
+    pub fn at_start(mut self, message: HostToGuest) -> Script {
+        self.at_start.push(message);
+        self
+    }
+
+    /// Sends `message` when the frame with this number has arrived, counted from 1, before
+    /// the tick that answers it.
+    #[must_use]
+    pub fn after_frame(mut self, frame: usize, message: HostToGuest) -> Script {
+        self.after_frame.push((frame, message));
+        self
+    }
+}
+
+/// What a scripted host saw.
+#[derive(Debug, Clone, Default)]
+pub struct Record {
+    /// Every message of the guest, in the order received.
+    pub received: Vec<GuestToHost>,
+    /// The number of ticks sent.
+    pub ticks: usize,
+}
+
+impl Record {
+    /// The frame packets received, in order.
+    pub fn frames(&self) -> Vec<&FramePacket> {
+        self.received
+            .iter()
+            .filter_map(|message| match message {
+                GuestToHost::Frame(packet) => Some(packet),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The messages received that are not frames, in order.
+    pub fn others(&self) -> Vec<&GuestToHost> {
+        self.received
+            .iter()
+            .filter(|message| !matches!(message, GuestToHost::Frame(_)))
+            .collect()
+    }
+}
+
+/// A running scripted host.
+#[derive(Debug)]
+pub struct ScriptedHost {
+    thread: JoinHandle<Record>,
+}
+
+impl ScriptedHost {
+    /// Waits until the guest end of the link is dropped and returns what the host saw.
+    pub fn finish(self) -> Record {
+        self.thread
+            .join()
+            .expect("the scripted host does not panic")
+    }
+}
+
+/// Starts a scripted host and returns the guest end of its link.
+pub fn scripted_host(script: Script) -> (GuestEnd, ScriptedHost) {
+    let (wake, woken) = mpsc::channel();
+    let (guest, host) = link(move || {
+        let _ = wake.send(());
+    });
+    for message in &script.at_start {
+        host.send(message.clone()).expect("the guest end is alive");
+    }
+    let thread = thread::spawn(move || {
+        let mut record = Record::default();
+        let mut frames = 0;
+        // The wake hook is dropped with the guest end, which ends the outer loop.
+        while woken.recv().is_ok() {
+            while let Ok(Some(message)) = host.try_recv() {
+                let answer = match &message {
+                    GuestToHost::Frame(_) => {
+                        frames += 1;
+                        for (frame, extra) in &script.after_frame {
+                            if *frame == frames {
+                                let _ = host.send(extra.clone());
+                            }
+                        }
+                        Some(HostToGuest::Tick)
+                    }
+                    GuestToHost::Modal { .. } => Some(HostToGuest::ModalDismissed),
+                    _ => None,
+                };
+                record.received.push(message);
+                if let Some(answer) = answer {
+                    let is_tick = answer == HostToGuest::Tick;
+                    if host.send(answer).is_ok() && is_tick {
+                        record.ticks += 1;
+                    }
+                }
+            }
+        }
+        record
+    });
+    (guest, ScriptedHost { thread })
+}
+
+/// The Ruby source of `Extra.rb` in the game directory.
+const EXTRA_RB: &str = "VKXP_EXTRA = :extra unless defined?(VKXP_EXTRA)\n\
+                        $vkxp_extra_loads = ($vkxp_extra_loads || 0) + 1\n";
+
+/// The settings [`configure`] asked for, until the preparation takes them.
+static CONFIGURED: Mutex<Option<RunConfig>> = Mutex::new(None);
+
+/// Makes the one preparation of this process use `run` in place of the default settings. A
+/// test binary calls this before anything else of this module, because what the prelude
+/// defines cannot be taken back: the process functions stay off once they were turned off.
+pub fn configure(run: RunConfig) {
+    *CONFIGURED.lock().unwrap_or_else(PoisonError::into_inner) = Some(run);
+    prepare();
+}
+
+/// Adds the files of this module to the game directory and evaluates the prelude, once.
+fn prepare() {
+    static PREPARED: Once = Once::new();
+    PREPARED.call_once(|| {
+        super::write(&super::game_dir().join("Extra.rb"), EXTRA_RB.as_bytes());
+        let run = CONFIGURED
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        super::run(|ruby| {
+            Guest::with(|guest| {
+                guest.files.refresh();
+                if let Some(run) = run {
+                    guest.runtime.run = run;
+                }
+            });
+            runtime::prepare(ruby).expect("the prelude evaluates");
+        });
+    });
+}
+
+/// `inspect` of the value of `source`, evaluated as `test`, line 1.
+fn inspect(ruby: &Ruby, source: &str) -> Result<String, RubyError> {
+    let value = ruby.eval_protected(source, "test", 1)?;
+    // SAFETY: `value` was just returned by the interpreter and is held in a local; so is the
+    // exception of a failed `inspect`.
+    unsafe { ruby.inspect(value).map_err(|raised| ruby.describe(raised)) }
+}
+
+/// Evaluates Ruby source on the harness's guest, connected to a new scripted host, with the
+/// prelude in place. Returns what [`eval`](super::eval) returns and what the host saw.
+pub fn play(source: &str, script: Script) -> (Result<String, RubyError>, Record) {
+    prepare();
+    let (link, host) = scripted_host(script);
+    let source = source.to_owned();
+    let outcome = super::run(move |ruby| {
+        Guest::with(|guest| guest.connect(link));
+        let outcome = inspect(ruby, &source);
+        Guest::with(Guest::disconnect);
+        outcome
+    });
+    (outcome, host.finish())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::Await;
+
+    #[test]
+    fn three_frames_through_the_pump_are_three_frames_and_three_ticks() {
+        let (link, host) = scripted_host(Script::new());
+        super::super::run(move |_ruby| {
+            Guest::with(|guest| {
+                guest.connect(link);
+                for _ in 0..3 {
+                    let packet = guest.scene.extract(&mut guest.bitmaps);
+                    guest.send(GuestToHost::Frame(packet));
+                    guest.pump(Await::Tick);
+                }
+                guest.disconnect();
+            });
+        });
+        let record = host.finish();
+        assert_eq!(record.frames().len(), 3);
+        assert_eq!(record.received.len(), 3);
+        assert_eq!(record.ticks, 3);
+    }
+
+    #[test]
+    fn a_guest_whose_host_has_gone_stops_waiting_and_quits() {
+        let (link, host) = scripted_host(Script::new());
+        let quit = super::super::run(move |ruby| {
+            Guest::with(|guest| {
+                guest.connect(link);
+                guest.disconnect();
+                guest.pump(Await::Tick);
+            });
+            runtime::raise_pending(ruby).is_err()
+        });
+        assert!(quit);
+        assert!(host.finish().received.is_empty());
+    }
+}

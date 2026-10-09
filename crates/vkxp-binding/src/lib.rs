@@ -18,6 +18,7 @@
 //!     files: vkxp_vfs::GameFiles::new("path/to/game", []),
 //!     font_names: vec!["Arial".to_owned()],
 //!     text: text_backend(),
+//!     run: vkxp_binding::RunConfig::default(),
 //! };
 //! let interpreter = Interpreter::start(Options::default())?;
 //! interpreter.run(move |ruby| {
@@ -129,8 +130,10 @@ mod color;
 mod error;
 mod font;
 mod guest;
+mod kernel;
 mod rb;
 mod rect;
+mod runtime;
 mod table;
 mod text;
 mod wrap;
@@ -143,4 +146,5 @@ pub mod testing;
 
 pub use error::Error;
 pub use guest::{Config, Guest};
+pub use runtime::RunConfig;
 pub use text::TextBackend;

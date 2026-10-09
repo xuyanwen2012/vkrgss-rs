@@ -28,6 +28,8 @@ use vkxp_vfs::GameFiles;
 
 use crate::{Config, Guest, TextBackend};
 
+pub mod host;
+
 /// The font families the harness's text backend has.
 pub const FONT_FAMILIES: &[&str] = &["Test Sans", "Liberation Sans"];
 
@@ -132,6 +134,7 @@ fn harness() -> &'static Harness {
             files: GameFiles::new(game_dir.clone(), [root.join("rtp")]),
             font_names: vec![FONT_FAMILIES[0].to_owned()],
             text: Box::new(CellBackend::new(FONT_FAMILIES.iter().copied())),
+            run: crate::RunConfig::default(),
         };
         let interpreter = Interpreter::start(Options::default()).expect("the interpreter starts");
         interpreter
