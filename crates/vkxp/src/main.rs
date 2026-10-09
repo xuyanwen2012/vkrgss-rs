@@ -331,6 +331,8 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
     } else {
         let host_options = WindowedOptions {
             title,
+            filter: options.filter.unwrap_or_default(),
+            fullscreen: options.fullscreen,
             keys,
             pads,
             audio,

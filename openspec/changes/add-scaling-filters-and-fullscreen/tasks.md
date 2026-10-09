@@ -10,7 +10,7 @@
 
 ## 3. Options (`vkxp`)
 
-- [ ] 3.1 Add `--filter` and `--fullscreen` with their configuration keys and a README paragraph. Verify: tests for the two scenarios of `specs/game-launch/spec.md`.
+- [x] 3.1 Add `--filter` and `--fullscreen` with their configuration keys and a README paragraph. Verify: tests for the two scenarios of `specs/game-launch/spec.md`.
 
 ## 4. Integration check
 

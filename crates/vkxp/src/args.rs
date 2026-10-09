@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use vkxp_host::InputScript;
+use vkxp_host::{Filter, InputScript};
 use vkxp_vfs::Encoding;
 
 /// What is printed with every command-line error.
@@ -22,6 +22,10 @@ usage: vkxp [GAME_DIR] [OPTIONS]
   --encoding ENCODING       the text encoding of Game.ini: utf-8, gbk, shift-jis or big5
   --debug                   debug mode: $DEBUG is true
   --allow-process-functions let scripts start processes (system, exec and the like)
+  --filter FILTER           how the frame is scaled into the window: auto, nearest,
+                            linear or sharp; default: auto, which is nearest at a
+                            whole-number scale and sharp otherwise
+  --fullscreen              start in borderless fullscreen; Alt+Enter or F11 toggles
   --no-audio                run without sound: no audio device is opened
   --soundfont FILE          the SoundFont that MIDI music is played with;
                             default: the first found in /usr/share/soundfonts
@@ -64,6 +68,10 @@ pub struct Options {
     pub encoding: Option<Encoding>,
     pub debug: bool,
     pub process_functions: bool,
+    /// The filter that scales the frame into the window, if one was given.
+    pub filter: Option<Filter>,
+    /// Whether the window starts in borderless fullscreen.
+    pub fullscreen: bool,
     /// Whether the audio output stays closed.
     pub no_audio: bool,
     /// The SoundFont for MIDI, instead of the system's.
@@ -122,6 +130,19 @@ pub fn encoding(text: &str) -> Result<Encoding, String> {
     }
 }
 
+/// The scaling filter with this name, in either case. The error says what the names are.
+pub fn filter(text: &str) -> Result<Filter, String> {
+    match text.to_ascii_lowercase().as_str() {
+        "auto" => Ok(Filter::Auto),
+        "nearest" => Ok(Filter::Nearest),
+        "linear" => Ok(Filter::Linear),
+        "sharp" => Ok(Filter::Sharp),
+        _ => Err(format!(
+            "`{text}` is not one of auto, nearest, linear, sharp"
+        )),
+    }
+}
+
 /// Reads the arguments that follow the program name. The error is a message for the user,
 /// to be printed with [`USAGE`]. Whether the options go together is for [`check`] to say,
 /// once the configuration files have been put under them.
@@ -150,6 +171,11 @@ pub fn parse(arguments: &[String]) -> Result<Options, String> {
                     encoding(value()?).map_err(|error| format!("--encoding: {error}"))?;
                 options.encoding = Some(encoding);
             }
+            "--filter" => {
+                let filter = filter(value()?).map_err(|error| format!("--filter: {error}"))?;
+                options.filter = Some(filter);
+            }
+            "--fullscreen" => options.fullscreen = true,
             "--debug" => options.debug = true,
             "--allow-process-functions" => options.process_functions = true,
             "--no-audio" => options.no_audio = true,
@@ -259,6 +285,9 @@ mod tests {
             "--no-audio",
             "--soundfont",
             "sf/gm.sf2",
+            "--filter",
+            "linear",
+            "--fullscreen",
         ])
         .unwrap();
         assert_eq!(
@@ -277,6 +306,8 @@ mod tests {
                 process_functions: true,
                 no_audio: true,
                 soundfont: Some("sf/gm.sf2".into()),
+                filter: Some(Filter::Linear),
+                fullscreen: true,
                 ..Options::default()
             }
         );
@@ -387,6 +418,26 @@ mod tests {
     fn an_input_script_can_be_a_file() {
         let options = parse_words(&["--headless", "--input", "@keys.txt"]).unwrap();
         assert_eq!(options.input, Some(Input::File("keys.txt".into())));
+    }
+
+    /// Scenario "Unknown filter", as far as the parser goes.
+    #[test]
+    fn every_filter_has_a_name_and_another_name_is_refused() {
+        for (name, filter) in [
+            ("auto", Filter::Auto),
+            ("nearest", Filter::Nearest),
+            ("linear", Filter::Linear),
+            ("sharp", Filter::Sharp),
+        ] {
+            let options = parse_words(&["--filter", name]).unwrap();
+            assert_eq!(options.filter, Some(filter));
+        }
+        let error = parse_words(&["--filter", "cubic"]).unwrap_err();
+        assert!(
+            error.contains("--filter") && error.contains("cubic"),
+            "{error}"
+        );
+        assert!(parse_words(&["--filter"]).is_err());
     }
 
     #[test]

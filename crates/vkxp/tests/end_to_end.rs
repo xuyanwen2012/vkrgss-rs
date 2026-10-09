@@ -506,6 +506,15 @@ fn settings_of_a_file_that_do_not_go_together_print_the_usage_message() {
 }
 
 #[test]
+fn an_unknown_filter_prints_the_usage_message() {
+    let ran = vkxp(&["--filter", "cubic"]);
+    ran.assert_failure();
+    let stderr = ran.stderr();
+    assert!(stderr.contains("cubic"), "{stderr}");
+    assert!(stderr.contains("usage: vkxp"), "{stderr}");
+}
+
+#[test]
 fn an_unknown_option_prints_the_usage_message() {
     let ran = vkxp(&["--no-such-option"]);
     ran.assert_failure();

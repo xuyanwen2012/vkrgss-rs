@@ -33,6 +33,9 @@ pub struct File {
     encoding: Option<String>,
     debug: Option<bool>,
     allow_process_functions: Option<bool>,
+    /// The scaling filter, by its name.
+    filter: Option<String>,
+    fullscreen: Option<bool>,
     audio: Option<bool>,
     soundfont: Option<PathBuf>,
     seed: Option<u64>,
@@ -94,6 +97,11 @@ impl File {
                 .map_err(|error| anyhow!("encoding: {error}"))
                 .with_context(named)?;
         }
+        if let Some(name) = &file.filter {
+            args::filter(name)
+                .map_err(|error| anyhow!("filter: {error}"))
+                .with_context(named)?;
+        }
         KeyMap::with_overrides(&file.keys)
             .map_err(|error| anyhow!("[keys]: {error}"))
             .with_context(named)?;
@@ -148,6 +156,8 @@ impl File {
             allow_process_functions: over
                 .allow_process_functions
                 .or(self.allow_process_functions),
+            filter: over.filter.or(self.filter),
+            fullscreen: over.fullscreen.or(self.fullscreen),
             audio: over.audio.or(self.audio),
             soundfont: over.soundfont.or(self.soundfont),
             seed: over.seed.or(self.seed),
@@ -219,6 +229,11 @@ pub fn settle(file: File, mut options: Options) -> Result<Settings> {
     }
     options.debug |= file.debug == Some(true);
     options.process_functions |= file.allow_process_functions == Some(true);
+    if options.filter.is_none() {
+        let filter = file.filter.as_deref().map(args::filter).transpose();
+        options.filter = filter.map_err(|error| anyhow!("filter: {error}"))?;
+    }
+    options.fullscreen |= file.fullscreen == Some(true);
     options.no_audio |= file.audio == Some(false);
     options.soundfont = options.soundfont.or(file.soundfont);
     options.seed = options.seed.or(file.seed);
@@ -243,6 +258,7 @@ pub fn settle(file: File, mut options: Options) -> Result<Settings> {
 #[cfg(test)]
 mod tests {
     use tempfile::TempDir;
+    use vkxp_host::Filter;
     use vkxp_vfs::Encoding;
 
     use super::*;
@@ -407,6 +423,7 @@ mod tests {
             ("[keys]\nJUMP = [\"KeyJ\"]", "JUMP"),
             ("[gamepad]\nC = [\"Middle\"]", "Middle"),
             ("encoding = \"latin1\"", "latin1"),
+            ("filter = \"cubic\"", "cubic"),
             ("input = \"2:SIDEWAYS\"", "SIDEWAYS"),
             ("dump = [\"1=a.png\", \"three=b.png\"]", "three"),
             ("dump = [\"7\"]", "FRAME=FILE"),
@@ -427,6 +444,8 @@ mod tests {
              encoding = \"Shift-JIS\"\n\
              debug = true\n\
              allow_process_functions = true\n\
+             filter = \"sharp\"\n\
+             fullscreen = true\n\
              audio = false\n\
              soundfont = \"sf/gm.sf2\"\n\
              seed = 7\n\
@@ -452,6 +471,8 @@ mod tests {
                 encoding: Some(Encoding::ShiftJis),
                 debug: true,
                 process_functions: true,
+                filter: Some(Filter::Sharp),
+                fullscreen: true,
                 no_audio: true,
                 soundfont: Some(base.join("sf/gm.sf2")),
                 seed: Some(7),
@@ -554,6 +575,27 @@ mod tests {
         };
         let error = check(&files, replay).unwrap_err();
         assert!(error.contains("--input"), "{error}");
+    }
+
+    /// Scenario "From the file".
+    #[test]
+    fn the_filter_of_a_file_is_used_unless_the_command_line_gives_one() {
+        let files = Files::new().user("filter = \"linear\"");
+        let settings = files.settle(Options::default()).unwrap();
+        assert_eq!(settings.options.filter, Some(Filter::Linear));
+
+        let nearest = Options {
+            filter: Some(Filter::Nearest),
+            ..Options::default()
+        };
+        let settings = files.settle(nearest).unwrap();
+        assert_eq!(settings.options.filter, Some(Filter::Nearest));
+
+        let files = Files::new();
+        assert_eq!(
+            files.settle(Options::default()).unwrap().options.filter,
+            None
+        );
     }
 
     #[test]

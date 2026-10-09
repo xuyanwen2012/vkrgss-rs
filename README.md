@@ -73,8 +73,8 @@ cargo run -p vkxp-host --example demo -- <device>
 
 `<device>` is the index of a Vulkan device or a part of its name, as `vulkaninfo --summary`
 prints them. It has no default, so that the GPU that drives the window is always a choice. The
-host keys are F12 (reset), Alt+Enter (borderless fullscreen), F2 (frame rate in the title) and
-Tab held (fast-forward). Closing the window asks the guest to quit.
+host keys are F12 (reset), Alt+Enter or F11 (borderless fullscreen), F2 (frame rate in the
+title) and Tab held (fast-forward). Closing the window asks the guest to quit.
 
 On the development machine the Intel Arc B580 is reserved for other work and must not be
 opened, so the demo is run on the AMD integrated GPU with the loader restricted to its driver,
@@ -149,6 +149,8 @@ Paths on the command line are relative to the directory the program was started 
 | `--device INDEX\|NAME` | The Vulkan device: its index or a part of its name, as `vulkaninfo --summary` prints them. In a window the default is the first discrete GPU, then an integrated one; headless it is `llvmpipe`. |
 | `--font-dir DIR` | A directory of fonts. Repeatable; earlier directories come first, then the game's `Fonts` directory, then the fonts installed on the system. |
 | `--encoding ENCODING` | The text encoding of `Game.ini`: `utf-8`, `gbk`, `shift-jis` or `big5`. Without it UTF-8 is tried, then those three in that order. |
+| `--filter FILTER` | How the frame is scaled into the window: `auto`, `nearest`, `linear` or `sharp`. See *Window*. |
+| `--fullscreen` | Start in borderless fullscreen. |
 | `--debug` | Debug mode: `$DEBUG` is `true`. |
 | `--allow-process-functions` | Lets `system`, backticks, `exec`, `fork`, `syscall` and `IO.popen` start processes. Without it they do nothing. |
 | `--no-audio` | Run without sound. No audio device is opened. |
@@ -197,6 +199,8 @@ font_dirs = ["fonts"]                        # --font-dir, in this order
 encoding = "gbk"                             # --encoding
 debug = false                                # true is --debug
 allow_process_functions = false              # true is --allow-process-functions
+filter = "auto"                              # --filter
+fullscreen = false                           # true is --fullscreen
 audio = true                                 # false is --no-audio
 soundfont = "/usr/share/soundfonts/FluidR3_GM.sf2" # --soundfont
 seed = 7                                     # --seed
@@ -250,7 +254,7 @@ refused. A key is named as the key codes of `winit` are
 (`winit::keyboard::KeyCode`): `KeyA` to `KeyZ`, `Digit0` to `Digit9`, `Numpad0` to `Numpad9`,
 `F1` to `F12`, `ArrowUp`, `Space`, `Enter`, `Escape`, `ShiftLeft`, `ControlRight` and so on.
 They name the position of a key, not the letter a keyboard layout puts on it. The host keys
-(F12, F2, Tab, Alt+Enter) are not part of the map.
+(F12, F2, F11, Tab, Alt+Enter) are not part of the map.
 
 ### Gamepads
 
@@ -278,9 +282,24 @@ machine the Intel Arc B580 must not be opened, so a windowed run there is the co
 on the AMD integrated GPU, or the same on the CPU with `VK_LOADER_DRIVERS_SELECT='*lvp*'` and
 `--device llvmpipe`.
 
-The host keys are those of the demo: F12 (reset), Alt+Enter (borderless fullscreen), F2
-(frame rate in the title) and Tab held (fast-forward). Closing the window asks the game to
+The host keys are those of the demo: F12 (reset), Alt+Enter or F11 (borderless fullscreen),
+F2 (frame rate in the title) and Tab held (fast-forward). Closing the window asks the game to
 quit.
+
+### Window
+
+The window opens with the game's screen at the largest whole-number scale that fits the
+monitor, and can be resized freely; the picture keeps its shape, with black bars where the
+window has another. Alt+Enter and F11 switch to borderless fullscreen on the monitor the
+window is on and back to the earlier window size, and `--fullscreen` starts that way. Neither
+key reaches the game as a button while it toggles.
+
+`--filter` chooses how the picture is scaled. `nearest` shows for every pixel of the window
+the game pixel under its centre, which is exact at whole-number scales and uneven at others.
+`linear` interpolates between the four nearest game pixels and is soft. `sharp` (sharp
+bilinear) is nearest except in a band one window pixel wide along the borders between game
+pixels, where it interpolates. `auto`, the default, is `nearest` when the scale is a whole
+number and `sharp` otherwise. A headless run has no window and ignores both options.
 
 ### Audio
 

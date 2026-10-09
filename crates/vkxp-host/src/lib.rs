@@ -50,6 +50,7 @@ pub use keys::{KeyMap, MapError};
 pub use record::{InputSource, Recorder, Recording, RecordingError, Replayer};
 pub use script::{InputScript, ScriptError, button_name};
 pub use session::{KeyAction, Session, SessionEnd, SessionOptions};
+pub use vkxp_vk::Filter;
 pub use windowed::{Driver, WindowedError, WindowedOptions, initial_window_size, run_windowed};
 
 /// Reads a device from a command-line argument or an environment variable: a number is the
