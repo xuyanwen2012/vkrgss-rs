@@ -20,6 +20,10 @@ const MAX_REPEATS: i64 = 64;
 /// Most repeats along one axis once the plane draws from a pre-tiled bitmap.
 const AXIS_REPEATS: i64 = 8;
 
+/// Most pixels a pre-tiled bitmap may have. A plane that would need more, because it is
+/// zoomed out very far, is not drawn.
+const MAX_PRETILED_PIXELS: i64 = 1 << 22;
+
 /// The pre-tiled bitmap: `src` repeated over `width` by `height`.
 fn draw_pretiled(
     bitmaps: &mut Bitmaps,
@@ -30,10 +34,18 @@ fn draw_pretiled(
     _stretch: bool,
 ) -> Result<(), BitmapError> {
     let tile = bitmaps.rect(src)?;
-    for y in (0..height).step_by(tile.height.max(1) as usize) {
-        for x in (0..width).step_by(tile.width.max(1) as usize) {
-            bitmaps.blt(dst, x, y, src, tile, 255)?;
-        }
+    bitmaps.blt(dst, 0, 0, src, tile, 255)?;
+    // What is there is doubled until it fills the first row of repeats, and that row until
+    // it fills the bitmap. A transfer onto transparent pixels copies.
+    let mut done = tile.width;
+    while done < width {
+        bitmaps.blt(dst, done, 0, dst, Rect::new(0, 0, done, tile.height), 255)?;
+        done *= 2;
+    }
+    let mut done = tile.height;
+    while done < height {
+        bitmaps.blt(dst, 0, done, dst, Rect::new(0, 0, width, done), 255)?;
+        done *= 2;
     }
     Ok(())
 }
@@ -98,18 +110,24 @@ impl Plane {
         {
             return None;
         }
-        // A size no bitmap can have stands for every size that is too large.
-        let side = |copies: i64, size: i64| i32::try_from(copies * size).unwrap_or(i32::MAX);
-        Some((
-            side(copies(clip.width, step_x, width), width),
-            side(copies(clip.height, step_y, height), height),
-        ))
+        let pretiled_width = copies(clip.width, step_x, width) * width;
+        let pretiled_height = copies(clip.height, step_y, height) * height;
+        if pretiled_width * pretiled_height > MAX_PRETILED_PIXELS {
+            // A size no bitmap can have: the plane goes without and is not drawn.
+            return Some((i32::MAX, i32::MAX));
+        }
+        // Both are at most their product.
+        Some((pretiled_width as i32, pretiled_height as i32))
     }
 
-    /// Brings the pre-tiled bitmap up to date, if this frame draws from one. A plane that is
-    /// not drawn keeps what it has.
+    /// Brings the pre-tiled bitmap up to date, if this frame draws from one. An invisible
+    /// plane gives it back.
     pub(crate) fn refresh_cache(&mut self, bitmaps: &mut Bitmaps, level: &Level) {
-        if !self.visible || self.opacity == 0 {
+        if !self.visible {
+            self.pretiled.dispose(bitmaps);
+            return;
+        }
+        if self.opacity == 0 {
             return;
         }
         let wanted = self.bitmap.and_then(|source| {
@@ -502,6 +520,25 @@ mod tests {
     }
 
     #[test]
+    fn a_plane_zoomed_out_too_far_for_a_pretiled_copy_is_not_drawn() {
+        let mut stage = Stage::new();
+        let bitmap = pattern(&mut stage, 4, 4);
+        let id = plane(&mut stage, bitmap);
+        let plane = stage.scene.plane_mut(id).unwrap();
+        (plane.zoom_x, plane.zoom_y) = (0.01, 0.01);
+        assert!(all(&stage.frame(), BLACK));
+        assert_eq!(stage.bitmaps.len(), 1);
+        // Zoomed out less far, each screen pixel takes every fifth texel.
+        let plane = stage.scene.plane_mut(id).unwrap();
+        (plane.zoom_x, plane.zoom_y) = (0.2, 0.2);
+        let frame = stage.frame();
+        assert!(shows(&frame, |x, y| texel(
+            (x * 5 + 2) % 4,
+            (y * 5 + 2) % 4
+        )));
+    }
+
+    #[test]
     fn the_pretiled_copy_is_disposed_with_the_plane_or_when_it_is_not_needed() {
         let mut stage = Stage::new();
         let bitmap = pattern(&mut stage, 4, 4);
@@ -516,14 +553,14 @@ mod tests {
         stage.frame();
         assert_eq!(stage.bitmaps.len(), before + 1);
 
-        // An invisible plane keeps what it has and draws no new copy.
+        // An invisible plane keeps no copy.
         stage.scene.plane_mut(id).unwrap().visible = false;
         stage.bitmaps.set_pixel(bitmap, 0, 0, color(GREEN)).unwrap();
-        let packet = stage.scene.extract(&mut stage.bitmaps);
-        assert_eq!(packet.bitmaps, []);
-        stage.render(&packet).unwrap();
+        assert!(all(&stage.frame(), BLACK));
+        assert_eq!(stage.bitmaps.len(), before);
         stage.scene.plane_mut(id).unwrap().visible = true;
         assert_eq!(stage.frame().pixel(0, 0), GREEN);
+        assert_eq!(stage.bitmaps.len(), before + 1);
 
         // A bitmap that needs no copy gives it back.
         stage.scene.plane_mut(id).unwrap().bitmap = Some(large);

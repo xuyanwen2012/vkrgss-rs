@@ -11,7 +11,9 @@
 //!   that clamp when set; [`Rect`] stores four integers as given; [`Table`] is a one- to
 //!   three-dimensional array of 16-bit integers; [`Font`] holds the attributes text is drawn
 //!   with and [`FontDefaults`] the values new fonts copy. They are plain values without
-//!   identity. `to_proto` converts to the integer types of `vkxp-proto`, and `to_bytes` /
+//!   identity; [`SharedTable`] is the one handle with identity, a reference-counted [`Table`]
+//!   with a revision counter, so that a table assigned to a tilemap stays connected to the
+//!   script's own. `to_proto` converts to the integer types of `vkxp-proto`, and `to_bytes` /
 //!   `from_bytes` give the serialized layouts of the original runtime's data files
 //!   ([`DecodeError`] for malformed input).
 //! - [`Bitmaps`], the arena that owns every bitmap. A bitmap is named by its protocol
@@ -32,8 +34,7 @@
 //!   (`scene.sprite(id)`, `scene.sprite_mut(id)`); z is set through the scene
 //!   (`scene.set_sprite_z`), because it decides the draw order: ascending z, and among equal z
 //!   the element created or last given a different z more recently in front. Using a disposed
-//!   element fails with [`SceneError::Disposed`], which names the [`ElementKind`]. Planes and
-//!   tilemaps hold their properties and draw nothing yet.
+//!   element fails with [`SceneError::Disposed`], which names the [`ElementKind`].
 //! - Extraction. [`Scene::extract`] is the only place a frame is assembled: it returns the
 //!   protocol `FramePacket` with the ops of every visible element in draw order and the
 //!   deltas for exactly the bitmaps those ops refer to, and counts the frame. A sprite becomes
@@ -43,9 +44,17 @@
 //!   elements and then applies its tone, colour and flash as a rectangle effect. A window is
 //!   drawn from bitmaps of the scene's own in the bitmap arena (background, frame, cursor),
 //!   redrawn from the window skin only when the skin, the size, the stretch flag or the
-//!   cursor size changes, plus its contents, pause sign and scroll arrows. The scene also
-//!   holds `Graphics` bookkeeping: frame count, frame rate and the logical size
-//!   (640 by 480 unless given, at most [`MAX_LOGICAL_DIMENSION`] a side).
+//!   cursor size changes, plus its contents, pause sign and scroll arrows. A plane is one
+//!   quad per repeat of its bitmap, all with the same scale, and draws from a pre-tiled bitmap
+//!   of the scene's own when its bitmap is small against the area. A tilemap is drawn from
+//!   bitmaps of the scene's own as well: its visible tiles are composed on the CPU into one
+//!   bitmap for the tiles of priority 0 and one for each higher priority, shown as one quad at
+//!   z 0 and one quad per row of priority tiles at the z that ranks the row among sprites, and
+//!   composed again when a scroll crosses a tile boundary or a table, a sheet or a visible
+//!   autotile's animation frame changes. This stands in for the tilemap op of
+//!   `docs/decisions.md`. The scene also holds `Graphics` bookkeeping: frame count, frame
+//!   rate and the logical size (640 by 480 unless given, at most [`MAX_LOGICAL_DIMENSION`] a
+//!   side).
 //! - Input. [`InputState`] takes the protocol's input snapshots as they arrive and latches
 //!   the newest one per update, from which it answers pressed, triggered, repeated and the
 //!   four- and eight-way direction queries. The same snapshots always give the same answers.
@@ -64,7 +73,7 @@
 //! |---|---|
 //! | `color` | [`Color`], [`Tone`] |
 //! | `rect` | [`Rect`] |
-//! | `table` | [`Table`] |
+//! | `table` | [`Table`], [`SharedTable`] |
 //! | `font` | [`Font`], [`FontDefaults`] |
 //! | `bitmap` | [`Bitmaps`], [`MAX_BITMAP_PIXELS`], the drawing operations |
 //! | `text` | [`TextRasterizer`], [`Mask`], [`Align`], `draw_text`, `text_size` |
@@ -74,6 +83,9 @@
 //! | `geometry` | the fixed-point transform of a quad |
 //! | `extract` | [`Scene::extract`], the draw order, sprites and viewports as ops |
 //! | `window` | the bitmaps cached from a window skin, windows as ops |
+//! | `plane` | planes as tiled quads, the pre-tiled bitmap of a small pattern |
+//! | `tiles` | the autotile table, tile identifiers as source rectangles |
+//! | `tilemap` | the bitmaps a tilemap composes its visible tiles into, tilemaps as ops |
 //! | `input` | [`InputState`] |
 //! | `error` | [`BitmapError`], [`CreateFailure`], [`DecodeError`], [`TableError`], [`SceneError`], [`ElementKind`] |
 //! | `test_support` | stand-ins for tests, such as a rasteriser with fixed-size cells |

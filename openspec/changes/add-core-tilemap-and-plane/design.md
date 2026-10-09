@@ -120,3 +120,18 @@ scripts rely on for characters standing exactly one row below a priority tile.
 Behaviour to confirm against the original runtime later: wrap-around; the z of priority tiles
 and the tie rule; autotile animation speed; what identifiers 1 to 47 draw; the treatment of
 undersized autotile sheets; plane sampling under zoom.
+
+## Follow-ups
+
+- A plane zoomed out so far that its pre-tiled bitmap would need more than 2^22 pixels is not
+  drawn (for a small pattern over a 640 by 480 area: a zoom below about 0.04). Staying under
+  64 quads there needs either a larger cached bitmap or another way of drawing; neither is
+  named above, so the case is left undrawn. Is it worth more?
+- Whether the origin of a viewport scrolls its planes and tilemaps is not stated above. They
+  follow it here, as sprites do, marked `PLACEHOLDER`.
+- An invisible plane or tilemap gives its cached bitmaps back and composes them again when it
+  is shown; one that is hidden by its viewport keeps them. If scripts toggle visibility every
+  few frames, keeping them may be the better trade.
+- One rebuild of a full 21 by 16 cell cache takes about 7.5 ms in the release profile on the
+  development machine, which a walking player pays every eighth frame. The tilemap op removes
+  it; until then, composing only the column or row that scrolled in would cut it.

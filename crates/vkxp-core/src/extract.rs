@@ -485,7 +485,10 @@ mod tests {
 
     use super::testing::*;
     use crate::bitmap::testing::{color, defaults};
-    use crate::{Bitmaps, Color, Rect, Scene, SpriteId, Tone, ViewportId, WindowId};
+    use crate::{
+        Bitmaps, Color, PlaneId, Rect, Scene, SharedTable, SpriteId, Table, TilemapId, Tone,
+        ViewportId, WindowId,
+    };
 
     /// A sprite showing `bitmap` at (`x`, `y`).
     fn sprite(stage: &mut Stage, bitmap: BitmapId, x: i32, y: i32) -> SpriteId {
@@ -1520,7 +1523,16 @@ mod tests {
         CreateWindow(Option<usize>),
         DisposeWindow(usize),
         Window(usize, WindowChange),
-        CreateOther(Option<usize>, Option<usize>),
+        CreateSheet(u32, u32, u8),
+        CreatePlane(Option<usize>),
+        DisposePlane(usize),
+        Plane(usize, PlaneChange),
+        CreateMap(i32, i32, u32),
+        CreatePriorities(u32),
+        SetCell(usize, i32, i32, i32, i16),
+        CreateTilemap(Option<usize>),
+        DisposeTilemap(usize),
+        Tilemap(usize, TilemapChange),
         Update,
     }
 
@@ -1551,6 +1563,30 @@ mod tests {
         Color([u8; 4]),
         Tone([i16; 4]),
         Flash(Option<[u8; 4]>, i32),
+    }
+
+    #[derive(Debug, Clone)]
+    enum PlaneChange {
+        Bitmap(Option<usize>),
+        Origin(i32, i32),
+        Z(i32),
+        Zoom(f64, f64),
+        Visible(bool),
+        Opacity(i32),
+        BlendType(i32),
+        Color([u8; 4]),
+        Tone([i16; 4]),
+    }
+
+    #[derive(Debug, Clone)]
+    enum TilemapChange {
+        Tileset(Option<usize>),
+        Autotile(usize, Option<usize>),
+        MapData(Option<usize>),
+        Priorities(Option<usize>),
+        FlashData(Option<usize>),
+        Origin(i32, i32),
+        Visible(bool),
     }
 
     #[derive(Debug, Clone)]
@@ -1689,6 +1725,48 @@ mod tests {
         ]
     }
 
+    fn plane_change() -> impl Strategy<Value = PlaneChange> {
+        prop_oneof![
+            3 => proptest::option::weighted(0.9, any::<usize>()).prop_map(PlaneChange::Bitmap),
+            3 => (coordinate(), coordinate()).prop_map(|(x, y)| PlaneChange::Origin(x, y)),
+            1 => z().prop_map(PlaneChange::Z),
+            3 => (zoom(), zoom()).prop_map(|(x, y)| PlaneChange::Zoom(x, y)),
+            1 => any::<bool>().prop_map(PlaneChange::Visible),
+            1 => opacity().prop_map(PlaneChange::Opacity),
+            1 => (-1..4i32).prop_map(PlaneChange::BlendType),
+            1 => any::<[u8; 4]>().prop_map(PlaneChange::Color),
+            1 => tone().prop_map(PlaneChange::Tone),
+        ]
+    }
+
+    fn tilemap_change() -> impl Strategy<Value = TilemapChange> {
+        let bitmap = || proptest::option::weighted(0.9, any::<usize>());
+        let table = || proptest::option::weighted(0.9, any::<usize>());
+        prop_oneof![
+            2 => bitmap().prop_map(TilemapChange::Tileset),
+            3 => (0..7usize, bitmap())
+                .prop_map(|(slot, bitmap)| TilemapChange::Autotile(slot, bitmap)),
+            2 => table().prop_map(TilemapChange::MapData),
+            2 => table().prop_map(TilemapChange::Priorities),
+            1 => table().prop_map(TilemapChange::FlashData),
+            4 => (coordinate(), coordinate()).prop_map(|(x, y)| TilemapChange::Origin(x, y)),
+            1 => any::<bool>().prop_map(TilemapChange::Visible),
+        ]
+    }
+
+    /// The size of a tileset or of an autotile sheet, whole or undersized.
+    fn sheet_size() -> impl Strategy<Value = (u32, u32)> {
+        prop_oneof![
+            Just((256, 96)),
+            Just((96, 128)),
+            Just((288, 128)),
+            Just((32, 32)),
+            Just((96, 32)),
+            Just((70, 50)),
+            Just((200, 16)),
+        ]
+    }
+
     fn step() -> impl Strategy<Value = Step> {
         let viewport = || proptest::option::of(any::<usize>());
         prop_oneof![
@@ -1710,9 +1788,22 @@ mod tests {
             1 => any::<usize>().prop_map(Step::DisposeWindow),
             10 => (any::<usize>(), window_change())
                 .prop_map(|(index, change)| Step::Window(index, change)),
-            1 => (viewport(), proptest::option::of(any::<usize>()))
-                .prop_map(|(viewport, bitmap)| Step::CreateOther(viewport, bitmap)),
-            2 => Just(Step::Update),
+            2 => (sheet_size(), any::<u8>())
+                .prop_map(|((width, height), seed)| Step::CreateSheet(width, height, seed)),
+            2 => viewport().prop_map(Step::CreatePlane),
+            1 => any::<usize>().prop_map(Step::DisposePlane),
+            8 => (any::<usize>(), plane_change())
+                .prop_map(|(index, change)| Step::Plane(index, change)),
+            2 => (0..7i32, 0..7i32, any::<u32>())
+                .prop_map(|(width, height, seed)| Step::CreateMap(width, height, seed)),
+            1 => any::<u32>().prop_map(Step::CreatePriorities),
+            3 => (any::<usize>(), 0..440i32, 0..7i32, 0..4i32, any::<i16>())
+                .prop_map(|(table, x, y, z, value)| Step::SetCell(table, x, y, z, value)),
+            2 => viewport().prop_map(Step::CreateTilemap),
+            1 => any::<usize>().prop_map(Step::DisposeTilemap),
+            8 => (any::<usize>(), tilemap_change())
+                .prop_map(|(index, change)| Step::Tilemap(index, change)),
+            3 => Just(Step::Update),
         ]
     }
 
@@ -1724,6 +1815,18 @@ mod tests {
         viewports: Vec<ViewportId>,
         sprites: Vec<SpriteId>,
         windows: Vec<WindowId>,
+        planes: Vec<PlaneId>,
+        tilemaps: Vec<TilemapId>,
+        tables: Vec<SharedTable>,
+    }
+
+    /// Numbers that follow from `seed`, for filling tables.
+    fn numbers(seed: u32) -> impl Iterator<Item = u32> {
+        let mut state = seed;
+        std::iter::repeat_with(move || {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            state >> 16
+        })
     }
 
     fn pick<T: Copy>(made: &[T], index: usize) -> Option<T> {
@@ -1885,14 +1988,114 @@ mod tests {
                     }
                 }
             }
-            Step::CreateOther(viewport, bitmap) => {
+            Step::CreateSheet(width, height, seed) => {
+                let pixels = crate::bitmap::testing::pattern(width, height, seed);
+                let id = stage
+                    .bitmaps
+                    .create_from_rgba(width, height, pixels, &defaults());
+                made.bitmaps.push(id.unwrap());
+            }
+            Step::CreatePlane(viewport) => {
                 let viewport = viewport.and_then(|index| pick(&made.viewports, index));
-                let bitmap = bitmap.and_then(|index| pick(&made.bitmaps, index));
                 if let Ok(id) = scene.create_plane(viewport) {
-                    scene.plane_mut(id).unwrap().bitmap = bitmap;
+                    made.planes.push(id);
                 }
+            }
+            Step::DisposePlane(index) => {
+                if let Some(id) = pick(&made.planes, index) {
+                    scene.dispose_plane(id, &mut stage.bitmaps);
+                }
+            }
+            Step::Plane(index, change) => {
+                let Some(id) = pick(&made.planes, index) else {
+                    return;
+                };
+                if let PlaneChange::Z(z) = change {
+                    let _ = scene.set_plane_z(id, z);
+                    return;
+                }
+                let Ok(plane) = scene.plane_mut(id) else {
+                    return;
+                };
+                match change {
+                    PlaneChange::Bitmap(bitmap) => {
+                        plane.bitmap = bitmap.and_then(|index| pick(&made.bitmaps, index));
+                    }
+                    PlaneChange::Origin(x, y) => (plane.ox, plane.oy) = (x, y),
+                    PlaneChange::Z(_) => {}
+                    PlaneChange::Zoom(x, y) => (plane.zoom_x, plane.zoom_y) = (x, y),
+                    PlaneChange::Visible(visible) => plane.visible = visible,
+                    PlaneChange::Opacity(opacity) => plane.set_opacity(opacity),
+                    PlaneChange::BlendType(blend_type) => plane.blend_type = blend_type,
+                    PlaneChange::Color(pixel) => plane.color = rgba(pixel),
+                    PlaneChange::Tone(tone) => plane.tone = toned(tone),
+                }
+            }
+            Step::CreateMap(width, height, seed) => {
+                // Tiles of every kind: empty, autotiles, the tileset, now and then anything.
+                let mut table = Table::new_3d(width, height, 3).unwrap();
+                let mut numbers = numbers(seed);
+                for z in 0..3 {
+                    for y in 0..height {
+                        for x in 0..width {
+                            let n = numbers.next().unwrap_or(0);
+                            let id = match n % 8 {
+                                0 => 0,
+                                1..=3 => 48 + n / 8 % 336,
+                                4..=6 => 384 + n / 8 % 32,
+                                _ => n / 8,
+                            };
+                            table.set(x, y, z, i64::from(id));
+                        }
+                    }
+                }
+                made.tables.push(SharedTable::new(table));
+            }
+            Step::CreatePriorities(seed) => {
+                let mut table = Table::new(430).unwrap();
+                for (id, n) in (0..430).zip(numbers(seed)) {
+                    table.set(id, 0, 0, i64::from(n % 9) - 1);
+                }
+                made.tables.push(SharedTable::new(table));
+            }
+            Step::SetCell(index, x, y, z, value) => {
+                if let Some(table) = made.tables.get(index % made.tables.len().max(1)) {
+                    table.set(x, y, z, i64::from(value));
+                }
+            }
+            Step::CreateTilemap(viewport) => {
+                let viewport = viewport.and_then(|index| pick(&made.viewports, index));
                 if let Ok(id) = scene.create_tilemap(viewport) {
-                    scene.tilemap_mut(id).unwrap().tileset = bitmap;
+                    made.tilemaps.push(id);
+                }
+            }
+            Step::DisposeTilemap(index) => {
+                if let Some(id) = pick(&made.tilemaps, index) {
+                    scene.dispose_tilemap(id, &mut stage.bitmaps);
+                }
+            }
+            Step::Tilemap(index, change) => {
+                let Some(id) = pick(&made.tilemaps, index) else {
+                    return;
+                };
+                let Ok(tilemap) = scene.tilemap_mut(id) else {
+                    return;
+                };
+                let bitmap = |index: Option<usize>| index.and_then(|i| pick(&made.bitmaps, i));
+                let table = |index: Option<usize>| {
+                    let index = index.filter(|_| !made.tables.is_empty())?;
+                    Some(made.tables[index % made.tables.len()].clone())
+                };
+                match change {
+                    TilemapChange::Tileset(index) => tilemap.tileset = bitmap(index),
+                    TilemapChange::Autotile(slot, index) => {
+                        tilemap.autotiles[slot] = bitmap(index);
+                    }
+                    TilemapChange::MapData(index) => tilemap.map_data = table(index),
+                    TilemapChange::Priorities(index) => tilemap.priorities = table(index),
+                    TilemapChange::FlashData(index) => tilemap.flash_data = table(index),
+                    TilemapChange::Origin(x, y) => (tilemap.ox, tilemap.oy) = (x, y),
+                    TilemapChange::Visible(visible) => tilemap.visible = visible,
                 }
             }
             Step::Update => {
@@ -1911,6 +2114,12 @@ mod tests {
                         window.update();
                     }
                 }
+                // Enough updates for an autotile to show its next frame now and then.
+                for &id in &made.tilemaps {
+                    if let Ok(tilemap) = scene.tilemap_mut(id) {
+                        (0..8).for_each(|_| tilemap.update());
+                    }
+                }
             }
         }
     }
@@ -1925,7 +2134,8 @@ mod tests {
             let mut stage = Stage::sized(40, 30);
             let mut made = Made::default();
             // Something to look at from the first frame on: sprites inside and outside a
-            // viewport, and a window with everything it can show.
+            // viewport, a window with everything it can show, a plane, and a tilemap with
+            // a tileset, autotile sheets, a map and priorities.
             for step in [
                 Step::CreateBitmap(12, 9, 1),
                 Step::CreateBitmap(70, 50, 2),
@@ -1941,6 +2151,19 @@ mod tests {
                 Step::Window(0, WindowChange::Size(38, 36)),
                 Step::Window(0, WindowChange::Cursor(Rect::new(0, 0, 6, 4))),
                 Step::Window(0, WindowChange::Pause(true)),
+                Step::CreatePlane(None),
+                Step::Plane(0, PlaneChange::Bitmap(Some(0))),
+                Step::CreateSheet(256, 96, 4),
+                Step::CreateSheet(288, 128, 5),
+                Step::CreateSheet(96, 32, 6),
+                Step::CreateMap(5, 4, 7),
+                Step::CreatePriorities(8),
+                Step::CreateTilemap(Some(0)),
+                Step::Tilemap(0, TilemapChange::Tileset(Some(3))),
+                Step::Tilemap(0, TilemapChange::Autotile(0, Some(4))),
+                Step::Tilemap(0, TilemapChange::Autotile(1, Some(5))),
+                Step::Tilemap(0, TilemapChange::MapData(Some(0))),
+                Step::Tilemap(0, TilemapChange::Priorities(Some(1))),
             ] {
                 perform(&mut stage, &mut made, step);
             }

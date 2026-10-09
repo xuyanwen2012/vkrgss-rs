@@ -39,6 +39,11 @@ settled; change one only through an OpenSpec change that says so.
 - One compute dispatch evaluates the ops per pixel, in order, with integer arithmetic and
   `texelFetch` from a bindless `texture2D[]`, writing an RGBA8 storage image. No blend state.
 - A tilemap layer is an op type evaluated in the shader, not expanded into per-tile quads.
+  Current state, since the change `add-core-tilemap-and-plane`: tilemaps are composed on the
+  CPU, in `vkxp-core`, into cached bitmaps (the tiles of priority 0, and one bitmap per higher
+  priority) that are drawn as ordinary quads and re-uploaded when a scroll crosses a tile
+  boundary. This is a temporary deviation to reach a playable map without a protocol change;
+  the tilemap op remains the target and is to replace the cache.
 - Freeze and transition are a final per-pixel mix. A fragment pass scales the result to the
   swapchain.
 - A pure-Rust CPU reference compositor evaluates the same op list and must match the GPU output

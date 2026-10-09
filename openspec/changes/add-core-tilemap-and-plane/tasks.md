@@ -16,10 +16,10 @@
 
 ## 3. Housekeeping (`vkxp-core`, `docs`)
 
-- [ ] 3.1 Dispose cached bitmaps with their tilemap or plane, and stop caching for invisible ones. Verify: the arena's bitmap count returns to its earlier value after disposal.
-- [ ] 3.2 Extend the random-scene property test with planes and tilemaps (random tables, origins, priorities, autotile sheets). Verify: the reference compositor renders every extracted packet without error.
-- [ ] 3.3 Measure a rebuild: a 21 by 16 cell area with three full layers and autotiles. Verify: the time of one rebuild in a release-profile test is recorded in the commit message.
-- [ ] 3.4 Add the paragraph to `docs/decisions.md` (section "Compositor") stating that tilemaps are currently composed on the CPU into cached bitmaps and that the tilemap op remains the target, and document the new modules in the crate documentation. Verify: the paragraph names this change.
+- [x] 3.1 Dispose cached bitmaps with their tilemap or plane, and stop caching for invisible ones. Verify: the arena's bitmap count returns to its earlier value after disposal.
+- [x] 3.2 Extend the random-scene property test with planes and tilemaps (random tables, origins, priorities, autotile sheets). Verify: the reference compositor renders every extracted packet without error.
+- [x] 3.3 Measure a rebuild: a 21 by 16 cell area with three full layers and autotiles. Verify: the time of one rebuild in a release-profile test is recorded in the commit message.
+- [x] 3.4 Add the paragraph to `docs/decisions.md` (section "Compositor") stating that tilemaps are currently composed on the CPU into cached bitmaps and that the tilemap op remains the target, and document the new modules in the crate documentation. Verify: the paragraph names this change.
 
 ## 4. Integration check
 

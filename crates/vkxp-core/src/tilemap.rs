@@ -169,10 +169,11 @@ fn priority(priorities: Option<&Table>, id: i16) -> usize {
 }
 
 impl Tilemap {
-    /// Brings the cached bitmaps up to date with what this frame shows in `level`. A tilemap
-    /// that is not drawn keeps what it has.
+    /// Brings the cached bitmaps up to date with what this frame shows in `level`. An
+    /// invisible tilemap gives them back.
     pub(crate) fn refresh_cache(&mut self, bitmaps: &mut Bitmaps, level: &Level) {
         if !self.visible {
+            self.cache.dispose(bitmaps);
             return;
         }
         let Some(map) = self.map_data.clone() else {
@@ -1001,6 +1002,109 @@ mod tests {
         let other = stage.solid(256, 64, GREEN);
         stage.scene.tilemap_mut(id).unwrap().tileset = Some(other);
         assert_eq!(stage.frame().pixel(5, 6), GREEN);
+    }
+
+    #[test]
+    fn cached_bitmaps_are_disposed_with_the_tilemap_or_when_it_is_invisible() {
+        let mut stage = Stage::sized(160, 160);
+        let map = map(5, 5);
+        map.set(0, 0, 0, 384);
+        map.set(1, 1, 0, 385);
+        map.set(2, 2, 0, 386);
+        let priorities = SharedTable::new(Table::new(500).unwrap());
+        priorities.set(385, 0, 0, 1);
+        priorities.set(386, 0, 0, 5);
+        let id = tilemap(&mut stage, &map);
+        stage.scene.tilemap_mut(id).unwrap().priorities = Some(priorities.clone());
+        let before = stage.bitmaps.len();
+        assert_eq!(before, 1, "the tileset");
+        stage.frame();
+        assert_eq!(stage.bitmaps.len(), before + 3, "ground and two priorities");
+
+        // Composing anew does not let bitmaps pile up, and a priority no visible tile has
+        // any more gives its bitmap back.
+        stage.scene.tilemap_mut(id).unwrap().ox = 32;
+        stage.frame();
+        map.set(4, 4, 1, 387);
+        stage.frame();
+        assert_eq!(stage.bitmaps.len(), before + 3);
+        priorities.set(386, 0, 0, 1);
+        stage.frame();
+        assert_eq!(stage.bitmaps.len(), before + 2);
+
+        // An invisible tilemap keeps none.
+        stage.scene.tilemap_mut(id).unwrap().visible = false;
+        assert!(all(&stage.frame(), BLACK));
+        assert_eq!(stage.bitmaps.len(), before);
+        stage.scene.tilemap_mut(id).unwrap().visible = true;
+        assert!(!all(&stage.frame(), BLACK));
+        assert_eq!(stage.bitmaps.len(), before + 2);
+
+        stage.scene.dispose_tilemap(id, &mut stage.bitmaps);
+        assert_eq!(stage.bitmaps.len(), before);
+        // The compositor is told, and accepts the frame that follows.
+        assert!(all(&stage.frame(), BLACK));
+    }
+
+    /// Not a check: prints how long composing the cache takes for a screen of 640 by 480,
+    /// which is 21 by 16 cells, with three full layers. Run it in the release profile:
+    /// `cargo test --release -p vkxp-core measure_a_rebuild -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "a measurement, run on request"]
+    fn measure_a_rebuild() {
+        let mut stage = Stage::new();
+        let map = map(40, 30);
+        for y in 0..30 {
+            for x in 0..40 {
+                // Autotiles below, tileset tiles above, some of them with a priority.
+                map.set(x, y, 0, i64::from(48 + (x * 7 + y * 13) % 336));
+                map.set(x, y, 1, i64::from(384 + (x + y * 3) % TILES));
+                map.set(x, y, 2, i64::from(384 + (x * 5 + y) % TILES));
+            }
+        }
+        let priorities = SharedTable::new(Table::new(384 + TILES).unwrap());
+        for id in 384..384 + TILES {
+            priorities.set(id, 0, 0, i64::from(id % 6));
+        }
+        let id = tilemap(&mut stage, &map);
+        for index in 0..7 {
+            let sheet = painted(&mut stage, 384, 128, autotile_pixel);
+            stage.scene.tilemap_mut(id).unwrap().autotiles[index] = Some(sheet);
+        }
+        stage.scene.tilemap_mut(id).unwrap().priorities = Some(priorities);
+        stage.frame();
+
+        let screen = Level {
+            clip: vkxp_proto::Rect::new(0, 0, 640, 480),
+            dx: 0,
+            dy: 0,
+        };
+        let mut compose = Vec::new();
+        let mut extract = Vec::new();
+        for step in 1..=20 {
+            // Each step scrolls across a tile boundary, so everything is composed anew.
+            let tilemap = stage.scene.tilemap_mut(id).unwrap();
+            tilemap.ox = step * 32;
+            let start = std::time::Instant::now();
+            tilemap.refresh_cache(&mut stage.bitmaps, &screen);
+            compose.push(start.elapsed());
+
+            stage.scene.tilemap_mut(id).unwrap().oy = step * 32;
+            let start = std::time::Instant::now();
+            let packet = stage.scene.extract(&mut stage.bitmaps);
+            extract.push(start.elapsed());
+            assert_eq!(packet.bitmaps.len(), 6, "ground and five priorities");
+        }
+        compose.sort();
+        extract.sort();
+        println!(
+            "composing 21 by 16 cells in three layers: median {:?}",
+            compose[10]
+        );
+        println!(
+            "extracting the frame with its uploads: median {:?}",
+            extract[10]
+        );
     }
 
     #[test]
