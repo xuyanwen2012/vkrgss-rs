@@ -27,3 +27,11 @@
 
 - [Wayland does not report a work area] → Use the monitor size; a compositor may then shrink
   the window, which the resize path already handles.
+
+## Follow-ups
+
+- The present pass already read the frames as integers with `texelFetch` and interpolated in
+  the shader, with the mix taken per texel before scaling. The filter selector was added to
+  that code (flags in the push constants) instead of moving to a linear sampler: an integer
+  image cannot be sampled linearly, and mixing before scaling needs the texels. The sample
+  positions are the ones the decision describes. Whether to move to a sampler is open.

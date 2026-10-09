@@ -4,10 +4,11 @@
 // Scales what is shown into the target: the mix of the held and the newest frame, each inside
 // its own letterbox rectangle, black outside.
 //
-// The frames are read as integers with texelFetch. At a whole-number factor every target pixel
-// takes exactly one texel. At other factors the sampling is "sharp bilinear": the interior of
-// each scaled texel keeps its value and only a band one target pixel wide across each texel
-// border interpolates.
+// The frames are read as integers with texelFetch, and the flags select one of three filters.
+// Nearest: every target pixel takes the texel under its centre. Linear: it interpolates
+// between the four texels around its centre. Sharp bilinear, when neither flag is set: the
+// interior of each scaled texel keeps its value and only a band one target pixel wide across
+// each texel border interpolates.
 //
 // When the two frames have the same size, which is the usual case, they are mixed texel by
 // texel before scaling. A held frame of another size than the newest has its own rectangle;
@@ -41,7 +42,7 @@ layout(push_constant) uniform Constants {
     float vagueness;
 } constants;
 
-// Each target pixel takes one texel of the newest frame: its factor is a whole number.
+// Each target pixel takes one texel of the newest frame: the filter is nearest.
 const uint FLAG_NEAREST = 1u;
 // The target has an sRGB format, which encodes what is written to it.
 const uint FLAG_SRGB_TARGET = 2u;
@@ -51,6 +52,8 @@ const uint FLAG_HELD_NEAREST = 4u;
 const uint FLAG_SAME_GRID = 8u;
 // The mix is driven per texel by the mask.
 const uint FLAG_MASK = 16u;
+// Where a frame is not read with nearest, the filter is linear instead of sharp bilinear.
+const uint FLAG_LINEAR = 32u;
 
 // What a texel is read from.
 const int NEWEST = 0;
@@ -105,15 +108,19 @@ vec3 texel(int which, ivec2 position, ivec2 source) {
 // shows a frame of `source` texels.
 vec3 scaled(int which, ivec2 pixel, ivec2 size, ivec2 source, bool nearest) {
     if (nearest) {
-        return texel(which, (pixel * source) / size, source);
+        // The texel under the pixel centre.
+        return texel(which, ((2 * pixel + 1) * source) / (2 * size), source);
     }
     vec2 scale = vec2(size) / vec2(source);
     // The pixel centre in texel units, measured from the centre of texel (0, 0).
     vec2 position = (vec2(pixel) + 0.5) / scale - 0.5;
     vec2 base = floor(position);
-    // Stretching the fraction around one half by the factor leaves a band one target pixel
-    // wide to interpolate in; everything else snaps to one of the two texels.
-    vec2 blend = clamp((position - base - 0.5) * max(scale, vec2(1.0)) + 0.5, 0.0, 1.0);
+    vec2 blend = position - base;
+    if ((constants.flags & FLAG_LINEAR) == 0u) {
+        // Stretching the fraction around one half by the factor leaves a band one target
+        // pixel wide to interpolate in; everything else snaps to one of the two texels.
+        blend = clamp((blend - 0.5) * max(scale, vec2(1.0)) + 0.5, 0.0, 1.0);
+    }
     ivec2 corner = ivec2(base);
     vec3 top = mix(
         texel(which, corner, source),

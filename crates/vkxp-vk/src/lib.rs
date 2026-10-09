@@ -32,7 +32,7 @@ mod validation;
 #[cfg(test)]
 mod tests;
 
-pub use compositor::{Frame, VkCompositor, letterbox};
+pub use compositor::{Filter, Frame, VkCompositor, letterbox};
 pub use device::{DeviceChoice, DeviceInfo, DeviceKind, available_devices};
 pub use error::{BitmapError, DeviceError, Limit, SlotState, VkError};
 pub use validation::ValidationLog;

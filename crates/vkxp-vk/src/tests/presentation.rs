@@ -5,7 +5,9 @@ use vkxp_compose_ref::fixtures::{self, bitmap, sprite};
 use vkxp_proto::{BitmapId, Color, FramePacket, FrameRate, Op, Rect, Size};
 
 use super::harness::{TestCompositor, assert_clean, require_isolation, test_device};
-use crate::{DeviceChoice, DeviceError, DeviceKind, Frame, ValidationLog, VkCompositor, VkError};
+use crate::{
+    DeviceChoice, DeviceError, DeviceKind, Filter, Frame, ValidationLog, VkCompositor, VkError,
+};
 
 const SIZE: Size = Size::new(20, 18);
 const BLACK: [u8; 4] = [0, 0, 0, 255];
@@ -305,6 +307,105 @@ fn fractional_factor_interpolates_only_across_pixel_borders() {
             assert_eq!((g, b, a), (r, r, 255));
         }
     }
+}
+
+// Scaling filters.
+
+/// Whether each column of `frame` is black, white, or something in between (`None`), having
+/// checked that it is the same grey from top to bottom.
+fn column_kinds(frame: &Frame) -> Vec<Option<bool>> {
+    (0..frame.size.width)
+        .map(|x| {
+            let first = pixel(frame, x, 0);
+            assert_eq!((first[1], first[2], first[3]), (first[0], first[0], 255));
+            for y in 0..frame.size.height {
+                assert_eq!(pixel(frame, x, y), first, "({x}, {y})");
+            }
+            match first[0] {
+                0 => Some(false),
+                255 => Some(true),
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+#[test]
+fn auto_filter_at_a_whole_number_factor_shows_blocks_of_exact_pixels() {
+    let size = Size::new(4, 4);
+    let ops = (0..16u8)
+        .map(|i| Op::Clear {
+            clip: Rect::new(i32::from(i % 4), i32::from(i / 4), 1, 1),
+            color: Color::new(17 * i, 255 - 13 * i, 40 + 7 * i, 255),
+        })
+        .collect();
+    let (mut compositor, frame) = rendered(&packet(size, ops));
+    assert_eq!(compositor.filter(), Filter::Auto);
+    let scaled = compositor.scale_frame(Size::new(12, 12)).unwrap();
+    assert_eq!(scaled, blocks(&frame, 3));
+}
+
+#[test]
+fn sharp_filter_at_a_fractional_factor_keeps_stripes_pure_with_one_mixed_column_between() {
+    let (mut compositor, _) = rendered(&columns(SIZE));
+    compositor.set_filter(Filter::Sharp);
+    // 2.5 times 20 by 18.
+    let kinds = column_kinds(&compositor.scale_frame(Size::new(50, 45)).unwrap());
+    for stripe in 0..SIZE.width {
+        // The output columns that lie wholly inside the stripe.
+        let inside = (stripe * 5).div_ceil(2)..(stripe * 5 + 5) / 2;
+        assert!(!inside.is_empty());
+        for x in inside {
+            assert_eq!(kinds[x as usize], Some(stripe % 2 == 1), "column {x}");
+        }
+    }
+    for pair in kinds.windows(2) {
+        assert!(pair[0].is_some() || pair[1].is_some(), "{kinds:?}");
+    }
+}
+
+#[test]
+fn linear_filter_mixes_columns_that_sharp_bilinear_keeps_pure() {
+    let (mut compositor, _) = rendered(&columns(SIZE));
+    let window = Size::new(50, 45);
+    compositor.set_filter(Filter::Sharp);
+    let sharp = column_kinds(&compositor.scale_frame(window).unwrap());
+    compositor.set_filter(Filter::Linear);
+    let linear = column_kinds(&compositor.scale_frame(window).unwrap());
+    let softened = (0..sharp.len())
+        .filter(|&x| sharp[x].is_some() && linear[x].is_none())
+        .count();
+    assert!(softened > 0, "{sharp:?} {linear:?}");
+}
+
+#[test]
+fn nearest_filter_at_a_fractional_factor_shows_the_pixel_under_each_centre() {
+    let (mut compositor, frame) = rendered(&gradient(SIZE));
+    compositor.set_filter(Filter::Nearest);
+    let scaled = compositor.scale_frame(Size::new(50, 45)).unwrap();
+    for y in 0..45 {
+        for x in 0..50 {
+            // The centre of output pixel x lies at (x + 0.5) / 2.5 frame pixels.
+            let expected = pixel(&frame, (2 * x + 1) / 5, (2 * y + 1) / 5);
+            assert_eq!(pixel(&scaled, x, y), expected, "({x}, {y})");
+        }
+    }
+}
+
+#[test]
+fn filter_does_not_change_a_mix_at_factor_one() {
+    let mut compositor = detailed_fade();
+    let shown = [Filter::Nearest, Filter::Linear, Filter::Sharp].map(|filter| {
+        compositor.set_filter(filter);
+        compositor.scale_frame(SIZE).unwrap()
+    });
+    assert_eq!(shown[0], shown[1]);
+    assert_eq!(shown[0], shown[2]);
+    // The mix is one: neither of the two frames alone.
+    compositor.set_mix(1.0);
+    assert_ne!(compositor.scale_frame(SIZE).unwrap(), shown[0]);
+    compositor.set_mix(0.0);
+    assert_ne!(compositor.scale_frame(SIZE).unwrap(), shown[0]);
 }
 
 // Transition mix and freeze.

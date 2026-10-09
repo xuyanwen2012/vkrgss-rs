@@ -42,6 +42,7 @@ const FLAG_SRGB_TARGET: u32 = 2;
 const FLAG_HELD_NEAREST: u32 = 4;
 const FLAG_SAME_GRID: u32 = 8;
 const FLAG_MASK: u32 = 16;
+const FLAG_LINEAR: u32 = 32;
 
 /// The range of a vagueness, in 256ths of the mask's range.
 const VAGUENESS: std::ops::RangeInclusive<u32> = 1..=256;
@@ -81,6 +82,33 @@ pub fn letterbox(frame: Size, window: Size) -> Rect {
     )
 }
 
+/// How the frame is scaled into its letterbox rectangle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Filter {
+    /// Nearest when the factor is a whole number, sharp bilinear otherwise.
+    #[default]
+    Auto,
+    /// Each output pixel shows the frame pixel under its centre.
+    Nearest,
+    /// Each output pixel interpolates between the four nearest frame pixels.
+    Linear,
+    /// Nearest, except in a band one output pixel wide along each frame pixel boundary,
+    /// which interpolates.
+    Sharp,
+}
+
+impl Filter {
+    /// Whether a frame of `frame` pixels shown in `rect` has each of its pixels shown as it
+    /// is, without interpolation.
+    fn is_nearest(self, frame: Size, rect: &Rect) -> bool {
+        match self {
+            Filter::Auto => is_whole_factor(frame, rect),
+            Filter::Nearest => true,
+            Filter::Linear | Filter::Sharp => false,
+        }
+    }
+}
+
 /// Whether `rect` shows a frame of `frame` pixels at a whole-number factor.
 fn is_whole_factor(frame: Size, rect: &Rect) -> bool {
     !rect.is_empty()
@@ -114,26 +142,39 @@ fn push_constants(
     target: Size,
     weight: f32,
     srgb_target: bool,
+    filter: Filter,
 ) -> Option<[u8; PUSH_CONSTANT_BYTES]> {
     let newest = letterbox(sources.newest, target);
     let held = letterbox(sources.held, target);
     if newest.is_empty() && held.is_empty() {
         return None;
     }
-    Some(encode_constants(sources, newest, held, weight, srgb_target))
+    Some(encode_constants(
+        sources,
+        newest,
+        held,
+        weight,
+        srgb_target,
+        filter,
+    ))
 }
 
 /// The push constants that stretch frames of one size, that of the newest frame of `sources`,
 /// over the whole of a target of `target` pixels, which has to be the letterbox rectangle of
 /// such a frame in some window.
 /// The draw then gives exactly the pixels that rectangle has in that window.
-fn filling_constants(sources: Sources, target: Size, weight: f32) -> [u8; PUSH_CONSTANT_BYTES] {
+fn filling_constants(
+    sources: Sources,
+    target: Size,
+    weight: f32,
+    filter: Filter,
+) -> [u8; PUSH_CONSTANT_BYTES] {
     let sources = Sources {
         held: sources.newest,
         ..sources
     };
     let whole = Rect::from_size(target);
-    encode_constants(sources, whole, whole, weight, false)
+    encode_constants(sources, whole, whole, weight, false, filter)
 }
 
 /// The push constants for the frames of `sources` in the rectangles `newest` and `held`.
@@ -143,13 +184,17 @@ fn encode_constants(
     held: Rect,
     weight: f32,
     srgb_target: bool,
+    filter: Filter,
 ) -> [u8; PUSH_CONSTANT_BYTES] {
     let mut flags = 0;
-    if is_whole_factor(sources.newest, &newest) {
+    if filter.is_nearest(sources.newest, &newest) {
         flags |= FLAG_NEAREST;
     }
-    if is_whole_factor(sources.held, &held) {
+    if filter.is_nearest(sources.held, &held) {
         flags |= FLAG_HELD_NEAREST;
+    }
+    if filter == Filter::Linear {
+        flags |= FLAG_LINEAR;
     }
     if sources.newest == sources.held {
         flags |= FLAG_SAME_GRID;
@@ -688,6 +733,17 @@ impl VkCompositor {
         self.mix
     }
 
+    /// Sets the filter that scales everything shown from now on. It starts as
+    /// [`Filter::Auto`].
+    pub fn set_filter(&mut self, filter: Filter) {
+        self.filter = filter;
+    }
+
+    /// The current scaling filter.
+    pub fn filter(&self) -> Filter {
+        self.filter
+    }
+
     /// Makes the mix from now on a masked one, or with `None` a plain one again. Under a mask
     /// the mix weight is the progress of a transition and each pixel has its own weight: with
     /// `m` the red channel of the mask there as a fraction, `p` the progress and `v` the
@@ -742,9 +798,10 @@ impl VkCompositor {
     /// is the swapchain, or without one the target [`scale_frame`](VkCompositor::scale_frame)
     /// last drew into.
     ///
-    /// - Frames of one size at a whole-number factor: the mix is taken at the frame's size,
-    ///   since each of its pixels is shown as it is.
-    /// - Frames of one size at another factor: the mix is taken at the size of its letterbox
+    /// - Frames of one size shown without interpolation, as at a whole-number factor with
+    ///   [`Filter::Auto`]: the mix is taken at the frame's size, since each of its pixels is
+    ///   shown as it is.
+    /// - Frames of one size otherwise: the mix is taken at the size of its letterbox
     ///   rectangle in that window, after scaling, because mixing first and scaling the
     ///   rounded result afterwards does not give the pixels that were shown.
     /// - Frames of different sizes: where the two lie depends on the window, so the whole
@@ -790,7 +847,7 @@ impl VkCompositor {
             Some(shown) if held_size != frame => (shown, Placement::Letterbox),
             Some(shown) => {
                 let rect = letterbox(frame, shown);
-                if rect.is_empty() || is_whole_factor(frame, &rect) {
+                if rect.is_empty() || self.filter.is_nearest(frame, &rect) {
                     (frame, Placement::Letterbox)
                 } else {
                     (Size::new(rect.width, rect.height), Placement::Fill)
@@ -941,8 +998,10 @@ impl VkCompositor {
                 pipeline_layout: presenter.pipeline_layout,
                 descriptors: presenter.descriptors,
                 constants: match placement {
-                    Placement::Letterbox => push_constants(sources, size, self.mix, false)?,
-                    Placement::Fill => filling_constants(sources, size, self.mix),
+                    Placement::Letterbox => {
+                        push_constants(sources, size, self.mix, false, self.filter)?
+                    }
+                    Placement::Fill => filling_constants(sources, size, self.mix, self.filter),
                 },
             })
         });
@@ -1061,7 +1120,7 @@ impl VkCompositor {
                     pipeline: chain.pipeline,
                     pipeline_layout: presenter.pipeline_layout,
                     descriptors: presenter.descriptors,
-                    constants: push_constants(sources, target, self.mix, chain.srgb)?,
+                    constants: push_constants(sources, target, self.mix, chain.srgb, self.filter)?,
                 })
             });
 
@@ -1564,7 +1623,10 @@ mod tests {
         let frame = Size::new(640, 480);
         for window in [Size::new(0, 480), Size::new(640, 0), Size::new(0, 0)] {
             assert!(letterbox(frame, window).is_empty(), "{window:?}");
-            assert_eq!(push_constants(same(frame), window, 1.0, false), None);
+            assert_eq!(
+                push_constants(same(frame), window, 1.0, false, Filter::Auto),
+                None
+            );
         }
         assert!(letterbox(Size::new(0, 0), Size::new(640, 480)).is_empty());
         // One pixel wide: the scaled frame would be less than a pixel high.
@@ -1583,6 +1645,26 @@ mod tests {
         assert!(!is_whole_factor(frame, &Rect::default()));
     }
 
+    #[test]
+    fn filter_selects_the_sampling_flags() {
+        let frame = Size::new(4, 4);
+        let flags = |window: u32, filter| {
+            words(push_constants(
+                same(frame),
+                Size::new(window, window),
+                1.0,
+                false,
+                filter,
+            ))[13]
+        };
+        let nearest = FLAG_NEAREST | FLAG_HELD_NEAREST | FLAG_SAME_GRID;
+        assert_eq!(flags(12, Filter::Auto), nearest);
+        assert_eq!(flags(10, Filter::Auto), FLAG_SAME_GRID);
+        assert_eq!(flags(10, Filter::Nearest), nearest);
+        assert_eq!(flags(12, Filter::Sharp), FLAG_SAME_GRID);
+        assert_eq!(flags(12, Filter::Linear), FLAG_SAME_GRID | FLAG_LINEAR);
+    }
+
     /// Both frames of one size, as when the logical size never changes.
     fn same(size: Size) -> Sources {
         Sources {
@@ -1599,7 +1681,7 @@ mod tests {
     #[test]
     fn push_constants_carry_the_rectangles_the_frame_sizes_the_weight_and_the_flags() {
         let frame = Size::new(640, 480);
-        let whole = push_constants(same(frame), Size::new(1920, 1440), 1.0, false);
+        let whole = push_constants(same(frame), Size::new(1920, 1440), 1.0, false, Filter::Auto);
         let rect = [0, 0, 1920, 1440, 640, 480];
         assert_eq!(
             words(whole),
@@ -1614,7 +1696,8 @@ mod tests {
             ]
             .concat()
         );
-        let fractional = push_constants(same(frame), Size::new(1920, 1080), 0.25, true);
+        let fractional =
+            push_constants(same(frame), Size::new(1920, 1080), 0.25, true, Filter::Auto);
         let rect = [240, 0, 1440, 1080, 640, 480];
         assert_eq!(
             words(fractional),
@@ -1638,7 +1721,7 @@ mod tests {
             vagueness: Some(64),
             ..same(frame)
         };
-        let constants = words(push_constants(masked, frame, 0.5, false));
+        let constants = words(push_constants(masked, frame, 0.5, false, Filter::Auto));
         assert_eq!(
             constants[12..],
             [
@@ -1647,7 +1730,7 @@ mod tests {
                 0.25f32.to_bits()
             ]
         );
-        let filling = words(Some(filling_constants(masked, frame, 0.5)));
+        let filling = words(Some(filling_constants(masked, frame, 0.5, Filter::Auto)));
         assert_eq!(filling, constants);
     }
 
@@ -1664,11 +1747,18 @@ mod tests {
             Size::new(1920, 1080),
         ] {
             let rect = letterbox(frame, window);
-            let in_window = words(push_constants(same(frame), window, 0.25, false));
+            let in_window = words(push_constants(
+                same(frame),
+                window,
+                0.25,
+                false,
+                Filter::Auto,
+            ));
             let filling = words(Some(filling_constants(
                 same(frame),
                 Size::new(rect.width, rect.height),
                 0.25,
+                Filter::Auto,
             )));
             // The same sizes, weight and flags; only the origins differ.
             assert_eq!(filling[2..6], in_window[2..6], "{window:?}");
@@ -1693,7 +1783,13 @@ mod tests {
         // The held frame fills the target four times over; the newest is 2.5 times as wide
         // and leaves bars above and below.
         assert_eq!(
-            words(push_constants(sources, Size::new(80, 72), 0.5, false)),
+            words(push_constants(
+                sources,
+                Size::new(80, 72),
+                0.5,
+                false,
+                Filter::Auto
+            )),
             [
                 0,
                 6,
@@ -1718,7 +1814,13 @@ mod tests {
             held: Size::new(2, 100),
             vagueness: None,
         };
-        let constants = words(push_constants(thin, Size::new(1, 50), 0.5, false));
+        let constants = words(push_constants(
+            thin,
+            Size::new(1, 50),
+            0.5,
+            false,
+            Filter::Auto,
+        ));
         assert_eq!(constants[..6], [0, 0, 0, 0, 640, 480]);
         assert_eq!(constants[6..12], [0, 0, 1, 50, 2, 100]);
     }

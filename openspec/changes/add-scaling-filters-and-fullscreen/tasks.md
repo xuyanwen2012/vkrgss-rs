@@ -2,7 +2,7 @@
 
 ## 1. Presenter (`vkxp-vk`)
 
-- [ ] 1.1 Add the filter selector to the present pass. Verify: tests on llvmpipe for the four scenarios of `specs/vulkan-presentation/spec.md`; the existing presentation tests still pass.
+- [x] 1.1 Add the filter selector to the present pass. Verify: tests on llvmpipe for the four scenarios of `specs/vulkan-presentation/spec.md`; the existing presentation tests still pass.
 
 ## 2. Window (`vkxp-host`)
 

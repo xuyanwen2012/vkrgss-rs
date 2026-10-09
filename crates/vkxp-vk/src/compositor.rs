@@ -46,7 +46,7 @@ mod present;
 mod test_compute;
 
 use present::Presenter;
-pub use present::letterbox;
+pub use present::{Filter, letterbox};
 
 /// The Vulkan compositor.
 ///
@@ -73,6 +73,8 @@ pub struct VkCompositor {
     presenter: Option<Presenter>,
     /// Weight of the newest frame against the held frame when a frame is shown.
     mix: f32,
+    /// The filter that scales a frame when it is shown.
+    filter: Filter,
     /// The mask that turns the mix into a masked one, when a transition has one.
     mask: Option<present::Mask>,
     /// Size of the window in pixels, as the owner last reported it.
@@ -205,6 +207,7 @@ impl VkCompositor {
             descriptors: vk::DescriptorSet::null(),
             presenter: None,
             mix: 1.0,
+            filter: Filter::Auto,
             mask: None,
             surface_size: Size::new(0, 0),
             last_scaled: None,
