@@ -8,9 +8,9 @@
 
 ## 2. Device
 
-- [ ] 2.1 Implement instance and headless device creation with `DeviceChoice` (`Auto`, `Index`, `Name`), the required-feature check and the preference order discrete, integrated, other. Verify: unit tests of the selection function over synthetic device descriptions cover each choice, the preference order, and the error that lists every device with what it lacks.
-- [ ] 2.2 Add the shared test harness: device from `VKXP_TEST_DEVICE` defaulting to the CPU device, validation layer enabled when installed, a debug-utils messenger recording error-severity messages, and an assertion that the record is empty. Verify: a test creates and drops the device with an empty record; a test that deliberately triggers a validation error is caught by the harness (kept as a test that expects the record to be non-empty).
-- [ ] 2.3 Set up `gpu-allocator`, the command pool, and teardown order. Verify: creating and dropping the compositor a hundred times in one test reports no validation error and no leaked object.
+- [x] 2.1 Implement instance and headless device creation with `DeviceChoice` (`Auto`, `Index`, `Name`), the required-feature check and the preference order discrete, integrated, other. Verify: unit tests of the selection function over synthetic device descriptions cover each choice, the preference order, and the error that lists every device with what it lacks.
+- [x] 2.2 Add the shared test harness: device from `VKXP_TEST_DEVICE` defaulting to the CPU device, validation layer enabled when installed, a debug-utils messenger recording error-severity messages, and an assertion that the record is empty. Verify: a test creates and drops the device with an empty record; a test that deliberately triggers a validation error is caught by the harness (kept as a test that expects the record to be non-empty).
+- [x] 2.3 Set up `gpu-allocator`, the command pool, and teardown order. Verify: creating and dropping the compositor a hundred times in one test reports no validation error and no leaked object.
 
 ## 3. Bitmap table
 
