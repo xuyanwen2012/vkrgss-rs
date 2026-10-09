@@ -134,7 +134,19 @@ pub const COLOR_AND_TONE: &[Case] = &[
     value(
         "construction and clamping",
         "c = Color.new(300, -5, 12.5); [c.red, c.green, c.blue, c.alpha]",
-        "[255.0, 0.0, 12.5, 255.0]",
+        "[255.0, -5.0, 12.5, 255.0]",
+    ),
+    value(
+        "only the upper bound of a colour is clamped, both bounds of a tone",
+        "c = Color.new(300, -5, 0); t = Tone.new(300, -300, 0); c.blue = -20; c.alpha = 999; \
+         [c.red, c.green, c.blue, c.alpha, t.red, t.green]",
+        "[255.0, -5.0, -20.0, 255.0, 255.0, -255.0]",
+    ),
+    value(
+        "a negative red is kept by the colour and stored modulo 256",
+        "c = Color.new(-5, 0, 0); b = Bitmap.new(1, 1); b.set_pixel(0, 0, c); \
+         [c.red, b.get_pixel(0, 0).red]",
+        "[-5.0, 251.0]",
     ),
     value(
         "setters",

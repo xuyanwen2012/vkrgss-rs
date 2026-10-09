@@ -7,8 +7,8 @@
 
 ## 2. Bitmap operations and values (`vkxp-core`)
 
-- [ ] 2.1 Use the new blend in `blt` and `stretch_blt`, with mirroring and the clipping rules. Verify: the measured-samples scenario of the stretch requirement, including the clipped and mirrored cases.
-- [ ] 2.2 Change colour storage and the bounds of `Color` and `Tone`. Verify: the two scenarios of the colour requirement, and the Ruby-level tests of `vkxp-binding` for those classes.
+- [x] 2.1 Use the new blend in `blt` and `stretch_blt`, with mirroring and the clipping rules. Verify: the measured-samples scenario of the stretch requirement, including the clipped and mirrored cases.
+- [x] 2.2 Change colour storage and the bounds of `Color` and `Tone`. Verify: the two scenarios of the colour requirement, and the Ruby-level tests of `vkxp-binding` for those classes.
 
 ## 3. Backends (`vkxp-compose-ref`, `vkxp-vk`)
 

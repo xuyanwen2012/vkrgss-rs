@@ -1,4 +1,5 @@
-//! `Color` and `Tone`: floating-point components that clamp whenever they are set.
+//! `Color` and `Tone`: floating-point components that clamp whenever they are set. A colour
+//! clamps only at its upper bound, as measured on the original runtime.
 
 use crate::DecodeError;
 
@@ -12,6 +13,15 @@ fn clamp(value: f64, min: f64, max: f64) -> f64 {
         0.0
     } else {
         value.clamp(min, max)
+    }
+}
+
+/// Clamps a colour component to at most 255; there is no lower bound. Not-a-number becomes 0.
+fn clamp_upper(value: f64) -> f64 {
+    if value.is_nan() {
+        0.0
+    } else {
+        value.min(255.0)
     }
 }
 
@@ -40,7 +50,10 @@ fn components_from_bytes(what: &'static str, bytes: &[u8]) -> Result<[f64; 4], D
     Ok(components)
 }
 
-/// A colour: red, green, blue and alpha, each from 0 to 255 with its fraction kept.
+/// A colour: red, green, blue and alpha, each at most 255 with its fraction kept. As in the
+/// original runtime a component has no lower bound: a negative value is kept as it is, and
+/// only where the colour is used does it become a channel ([`Color::to_pixel`],
+/// [`Color::to_proto`]).
 ///
 /// Two colours are equal exactly when all four components are equal.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -60,7 +73,7 @@ impl Color {
         alpha: 0.0,
     };
 
-    /// A colour from four components, each clamped to 0 to 255.
+    /// A colour from four components, each clamped to at most 255.
     pub fn new(red: f64, green: f64, blue: f64, alpha: f64) -> Color {
         let mut color = Color::TRANSPARENT;
         color.set(red, green, blue, alpha);
@@ -89,19 +102,19 @@ impl Color {
     }
 
     pub fn set_red(&mut self, red: f64) {
-        self.red = clamp(red, 0.0, 255.0);
+        self.red = clamp_upper(red);
     }
 
     pub fn set_green(&mut self, green: f64) {
-        self.green = clamp(green, 0.0, 255.0);
+        self.green = clamp_upper(green);
     }
 
     pub fn set_blue(&mut self, blue: f64) {
-        self.blue = clamp(blue, 0.0, 255.0);
+        self.blue = clamp_upper(blue);
     }
 
     pub fn set_alpha(&mut self, alpha: f64) {
-        self.alpha = clamp(alpha, 0.0, 255.0);
+        self.alpha = clamp_upper(alpha);
     }
 
     /// Sets all four components, clamping each.
@@ -112,12 +125,26 @@ impl Color {
         self.set_alpha(alpha);
     }
 
-    /// The colour as integers, each component with its fraction discarded. This is the colour
-    /// used for drawing and sent to the host.
+    /// The colour as a stored pixel, as `fill_rect`, `set_pixel` and text drawing write it:
+    /// red, green and blue truncated toward zero and taken modulo 256, alpha truncated with a
+    /// negative alpha stored as 0. Red -5 is stored as 251 and red -0.5 as 0.
+    pub fn to_pixel(self) -> [u8; 4] {
+        let wrap = |component: f64| (component as i64).rem_euclid(256) as u8;
+        // `as u8` discards the fraction and takes a negative alpha to 0.
+        [
+            wrap(self.red),
+            wrap(self.green),
+            wrap(self.blue),
+            self.alpha as u8,
+        ]
+    }
+
+    /// The colour as integers for the protocol, each component clamped to 0 to 255 with its
+    /// fraction discarded. This is the colour sent to the host.
     ///
     /// PLACEHOLDER: discarding the fraction is not yet checked against the original runtime.
     pub fn to_proto(self) -> vkxp_proto::Color {
-        // Components are within 0 to 255, where `as` discards the fraction.
+        // `as` discards the fraction and takes a negative component to 0.
         vkxp_proto::Color::new(
             self.red as u8,
             self.green as u8,
@@ -267,10 +294,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn colour_components_are_clamped() {
+    fn colour_components_are_clamped_at_the_upper_bound_only() {
         let color = Color::new(300.0, -5.0, 0.0, 0.0);
         assert_eq!(color.red(), 255.0);
-        assert_eq!(color.green(), 0.0);
+        assert_eq!(color.green(), -5.0);
 
         let mut color = Color::rgb(1.0, 2.0, 3.0);
         color.set_red(300.0);
@@ -279,13 +306,41 @@ mod tests {
         color.set_alpha(-1e9);
         assert_eq!(
             (color.red(), color.green(), color.blue(), color.alpha()),
-            (255.0, 0.0, 255.0, 0.0)
+            (255.0, -5.0, 255.0, -1e9)
         );
         color.set(256.0, -0.5, 255.5, f64::INFINITY);
         assert_eq!(
             (color.red(), color.green(), color.blue(), color.alpha()),
-            (255.0, 0.0, 255.0, 255.0)
+            (255.0, -0.5, 255.0, 255.0)
         );
+    }
+
+    #[test]
+    fn stored_pixel_wraps_colour_and_floors_alpha_at_0() {
+        assert_eq!(
+            Color::new(-5.0, 0.0, 0.0, 255.0).to_pixel(),
+            [251, 0, 0, 255]
+        );
+        assert_eq!(Color::new(0.0, 0.0, 0.0, -5.0).to_pixel(), [0, 0, 0, 0]);
+        assert_eq!(Color::new(7.6, 7.4, 7.5, 128.5).to_pixel(), [7, 7, 7, 128]);
+        assert_eq!(
+            Color::new(0.9, 255.9, 256.0, 254.9).to_pixel(),
+            [0, 255, 255, 254]
+        );
+        assert_eq!(
+            Color::new(-0.5, -1.0, -0.9, -1.5).to_pixel(),
+            [0, 255, 0, 0]
+        );
+        assert_eq!(
+            Color::new(-256.0, -257.0, -511.5, 0.0).to_pixel(),
+            [0, 255, 1, 0]
+        );
+    }
+
+    #[test]
+    fn protocol_colour_is_clamped_at_both_bounds() {
+        let color = Color::new(-5.0, 300.0, -0.5, -1.0);
+        assert_eq!(color.to_proto(), vkxp_proto::Color::new(0, 255, 0, 0));
     }
 
     #[test]
@@ -433,8 +488,9 @@ mod tests {
         bytes[24..].copy_from_slice(&(-1000.0f64).to_le_bytes());
         assert_eq!(
             Color::from_bytes(&bytes),
-            Ok(Color::new(255.0, 0.0, 0.0, 0.0))
+            Ok(Color::new(255.0, 0.0, 0.0, -1000.0))
         );
+        assert_eq!(Color::from_bytes(&bytes).unwrap().alpha(), -1000.0);
         assert_eq!(
             Tone::from_bytes(&bytes),
             Ok(Tone::new(255.0, 0.0, 0.0, 0.0))

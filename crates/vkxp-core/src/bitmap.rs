@@ -124,29 +124,68 @@ struct Slot {
 }
 
 /// For each position of a destination span that a transfer draws, the destination coordinate
-/// and the source coordinate it takes.
+/// and the source coordinate it takes, as measured on the original runtime.
 ///
-/// Position `i` of `0..dst_len` lands on `dst_pos + i` and takes
-/// `src_pos + stretch_index(i, src_len, dst_len)`. It is drawn only when the first lies inside
-/// `0..dst_size` and the second inside `0..src_size`. The destination coordinates of the result
-/// are consecutive.
+/// A `dst_len` of 0 or less and a `src_len` of 0 draw nothing. Otherwise the source span is
+/// walked over `span = |src_len|` texels, from `src_pos` upward, or from `src_pos - 1` downward
+/// when `src_len` is negative (mirroring). Position `i` of `0..dst_len` lands on `dst_pos + i`
+/// and takes the texel `stretch_index(i, span, dst_len)` steps into the walk, with these rules
+/// where the walk leaves `0..src_size`:
+///
+/// - When the walk starts `c` texels before the source, the first position drawn is
+///   `c * dst_len / span`, and the steps are counted again from 0 there, at the first texel of
+///   the source.
+/// - When only the first `v` texels of the walk exist, with `v` below `span`, positions stop
+///   before `(v * dst_len - 1) / span`. A block transfer (`block`, both spans of both axes of
+///   equal length) loses nothing instead: it stops before `v`.
+///
+/// Clipping by `0..dst_size` leaves `i` counted from the unclipped start. The destination
+/// coordinates of the result are consecutive.
 fn transfer_axis(
     (dst_pos, dst_len, dst_size): (i32, i32, usize),
     (src_pos, src_len, src_size): (i32, i32, usize),
+    block: bool,
 ) -> Vec<(usize, usize)> {
-    if src_len <= 0 {
+    if src_len == 0 {
         return Vec::new();
     }
     let Some((start, end)) = clip_span(dst_pos, dst_len, dst_size) else {
         return Vec::new();
     };
+    let mirrored = src_len < 0;
+    let (dst_len, span) = (i64::from(dst_len), i64::from(src_len).abs());
+    let (src_pos, src_size) = (i64::from(src_pos), src_size as i64);
+    // Texels of the walk that lie before the source, and texels from the start of the walk to
+    // the far edge of the source.
+    let (before, valid) = if mirrored {
+        (src_pos - src_size, src_pos)
+    } else {
+        (-src_pos, src_size - src_pos)
+    };
+    let before = before.max(0);
+    let first = before * dst_len / span;
+    let stop = if valid >= span {
+        dst_len
+    } else if block {
+        valid
+    } else {
+        (valid * dst_len - 1).div_euclid(span)
+    };
     (start..end)
         .filter_map(|dst| {
             // `dst` is inside the span, so the difference is in `0..dst_len`.
-            let i = (dst as i64 - i64::from(dst_pos)) as u32;
-            let taken = stretch_index(i, src_len.unsigned_abs(), dst_len.unsigned_abs());
-            let src = i64::from(src_pos) + i64::from(taken);
-            (src >= 0 && src < src_size as i64).then_some((dst, src as usize))
+            let i = dst as i64 - i64::from(dst_pos);
+            if i < first || i >= stop {
+                return None;
+            }
+            let steps = stretch_index((i - first) as u32, span as u32, dst_len as u32);
+            let offset = before + i64::from(steps);
+            let src = if mirrored {
+                src_pos - 1 - offset
+            } else {
+                src_pos + offset
+            };
+            (src >= 0 && src < src_size).then_some((dst, src as usize))
         })
         .collect()
 }
@@ -393,8 +432,8 @@ impl Bitmaps {
         })
     }
 
-    /// Replaces all four channels of a pixel with `color`, its fractions discarded. Outside
-    /// the bitmap nothing changes.
+    /// Replaces all four channels of a pixel with `color` as a stored pixel
+    /// ([`Color::to_pixel`]). Outside the bitmap nothing changes.
     pub fn set_pixel(
         &mut self,
         id: BitmapId,
@@ -412,26 +451,28 @@ impl Bitmaps {
         Ok(())
     }
 
-    /// Sets every pixel inside both `rect` and the bitmap to `color`, alpha included, without
-    /// blending. A rectangle with a width or height of 0 or less fills nothing.
+    /// Sets every pixel inside both `rect` and the bitmap to `color` as a stored pixel
+    /// ([`Color::to_pixel`]), alpha included, without blending. A rectangle with a width or height of 0 or less fills nothing.
     pub fn fill_rect(&mut self, id: BitmapId, rect: Rect, color: Color) -> Result<(), BitmapError> {
         let bitmap = self.get_mut(id)?;
         if let Some(area) = bitmap.clip(rect) {
-            bitmap.fill(area, color.to_proto().to_rgba());
+            bitmap.fill(area, color.to_pixel());
         }
         Ok(())
     }
 
     /// Block transfer: draws `src_rect` of `src` with its top left corner at (`x`, `y`) of
-    /// `dst`, at `opacity`, combining by straight-alpha source-over
-    /// ([`vkxp_pixel::blend_normal`]).
+    /// `dst`, at `opacity`, combining with the blend the original runtime uses for a
+    /// destination with alpha ([`vkxp_pixel::blend_normal`]).
     ///
     /// Only the part of `src_rect` inside the source bitmap is drawn, at the offset it has
-    /// within the rectangle, and only where it lands inside the destination. `src` may be
-    /// `dst`: the transfer then reads the pixels as they were before it started.
+    /// within the rectangle, and only where it lands inside the destination. A negative width
+    /// mirrors: column `i` takes source column `src_rect.x - 1 - i`; a negative height
+    /// likewise. `src` may be `dst`: the transfer then reads the pixels as they were before it
+    /// started.
     ///
-    /// PLACEHOLDER: the alpha arithmetic and the result of an overlapping transfer within one
-    /// bitmap are not yet checked against the original runtime.
+    /// PLACEHOLDER: the result of an overlapping transfer within one bitmap is not yet checked
+    /// against the original runtime.
     pub fn blt(
         &mut self,
         dst: BitmapId,
@@ -441,18 +482,29 @@ impl Bitmaps {
         src_rect: Rect,
         opacity: u8,
     ) -> Result<(), BitmapError> {
-        let dst_rect = Rect::new(x, y, src_rect.width, src_rect.height);
-        self.stretch_blt(dst, dst_rect, src, src_rect, opacity)
+        let dst_rect = Rect::new(
+            x,
+            y,
+            src_rect.width.saturating_abs(),
+            src_rect.height.saturating_abs(),
+        );
+        self.transfer(dst, dst_rect, src, src_rect, opacity, true)
     }
 
-    /// Stretched transfer: draws `src_rect` of `src` scaled into `dst_rect` of `dst` with
-    /// nearest sampling. Column `i` of `dst_rect` takes column
+    /// Stretched transfer: draws `src_rect` of `src` scaled into `dst_rect` of `dst` without
+    /// interpolation, as measured on the original runtime. Column `i` of `dst_rect`, counted
+    /// from its unclipped left edge, takes column
     /// `stretch_index(i, src_rect.width, dst_rect.width)` of `src_rect`, and rows likewise
-    /// ([`vkxp_pixel::stretch_index`]). Blending, opacity and clipping are those of
-    /// [`Bitmaps::blt`]. A source or destination rectangle with a width or height of 0 or less
-    /// draws nothing.
+    /// ([`vkxp_pixel::stretch_index`]). Blending and opacity are those of [`Bitmaps::blt`].
     ///
-    /// PLACEHOLDER: the sampling rule is not yet checked against the original runtime.
+    /// A destination rectangle with a width or height of 0 or less draws nothing, as does a
+    /// source rectangle with a width or height of 0. A negative source width or height mirrors.
+    /// A source rectangle that leaves the source bitmap is clipped by the measured rules: where
+    /// it starts `c` texels before the bitmap, the first column drawn is
+    /// `c * dst_rect.width / src_rect.width` and takes the bitmap's first column, with `i`
+    /// counted from there; where only its first `v` columns exist, columns stop before
+    /// `(v * dst_rect.width - 1) / src_rect.width`. When both rectangles have the same size the
+    /// transfer is a block transfer and loses no column.
     pub fn stretch_blt(
         &mut self,
         dst: BitmapId,
@@ -460,6 +512,22 @@ impl Bitmaps {
         src: BitmapId,
         src_rect: Rect,
         opacity: u8,
+    ) -> Result<(), BitmapError> {
+        let block = i64::from(dst_rect.width) == i64::from(src_rect.width).abs()
+            && i64::from(dst_rect.height) == i64::from(src_rect.height).abs();
+        self.transfer(dst, dst_rect, src, src_rect, opacity, block)
+    }
+
+    /// The transfer behind [`Bitmaps::blt`] and [`Bitmaps::stretch_blt`]; `block` is that of
+    /// [`transfer_axis`].
+    fn transfer(
+        &mut self,
+        dst: BitmapId,
+        dst_rect: Rect,
+        src: BitmapId,
+        src_rect: Rect,
+        opacity: u8,
+        block: bool,
     ) -> Result<(), BitmapError> {
         let (dst_width, dst_height) = {
             let bitmap = self.get(dst)?;
@@ -469,17 +537,19 @@ impl Bitmaps {
             let bitmap = self.get(src)?;
             (bitmap.width, bitmap.height)
         };
-        // At opacity 0 every source pixel is drawn with alpha 0, which changes nothing.
+        // Opacity 0 leaves the destination unchanged.
         if opacity == 0 {
             return Ok(());
         }
         let columns = transfer_axis(
             (dst_rect.x, dst_rect.width, dst_width),
             (src_rect.x, src_rect.width, src_width),
+            block,
         );
         let rows = transfer_axis(
             (dst_rect.y, dst_rect.height, dst_height),
             (src_rect.y, src_rect.height, src_height),
+            block,
         );
         if columns.is_empty() || rows.is_empty() {
             return Ok(());
@@ -588,9 +658,17 @@ mod tests {
         rect: Rect,
         opacity: u8,
     ) {
-        for j in 0..i64::from(rect.height) {
-            for i in 0..i64::from(rect.width) {
-                let (sx, sy) = (i64::from(rect.x) + i, i64::from(rect.y) + j);
+        // A negative width or height mirrors.
+        let walk = |pos: i32, len: i32, i: i64| {
+            if len < 0 {
+                i64::from(pos) - 1 - i
+            } else {
+                i64::from(pos) + i
+            }
+        };
+        for j in 0..i64::from(rect.height).abs() {
+            for i in 0..i64::from(rect.width).abs() {
+                let (sx, sy) = (walk(rect.x, rect.width, i), walk(rect.y, rect.height, j));
                 let (dx, dy) = (i64::from(x) + i, i64::from(y) + j);
                 let in_src = (0..i64::from(src_width)).contains(&sx)
                     && (0..i64::from(src_height)).contains(&sy);
@@ -894,6 +972,20 @@ mod tests {
     }
 
     #[test]
+    fn negative_components_are_stored_modulo_256() {
+        let mut bitmaps = Bitmaps::new();
+        let id = bitmaps.create(2, 1, &defaults()).unwrap();
+        let color = Color::new(-5.0, 0.0, 0.0, 255.0);
+        assert_eq!(color.red(), -5.0);
+        bitmaps.set_pixel(id, 0, 0, color).unwrap();
+        assert_eq!(bitmaps.get_pixel(id, 0, 0).unwrap().red(), 251.0);
+        bitmaps
+            .fill_rect(id, Rect::new(1, 0, 1, 1), Color::new(-0.5, -1.0, 7.6, -5.0))
+            .unwrap();
+        assert_eq!(bitmaps.rgba(id).unwrap(), [251, 0, 0, 255, 0, 255, 7, 0]);
+    }
+
+    #[test]
     fn reading_outside_gives_all_zero() {
         let mut bitmaps = Bitmaps::new();
         let id = bitmaps
@@ -1144,12 +1236,45 @@ mod tests {
         for rect in [
             Rect::new(0, 0, 0, 3),
             Rect::new(0, 0, 3, 0),
-            Rect::new(2, 2, -2, -2),
+            Rect::new(0, 0, -2, 0),
+            // Mirrored from the left edge of the source: every column lies outside.
             Rect::new(0, 0, i32::MIN, 3),
         ] {
             bitmaps.blt(dst, 0, 0, src, rect, 255).unwrap();
         }
         assert_eq!(bitmaps.rgba(dst).unwrap(), [0; 36]);
+    }
+
+    #[test]
+    fn transfer_with_a_negative_size_mirrors() {
+        let mut bitmaps = Bitmaps::new();
+        let source = pattern(4, 2, 5);
+        let src = bitmaps
+            .create_from_rgba(4, 2, source.clone(), &defaults())
+            .unwrap();
+        let dst = bitmaps.create(4, 2, &defaults()).unwrap();
+        // Columns 2, 1, 0 of the source, in that order.
+        bitmaps
+            .blt(dst, 0, 0, src, Rect::new(3, 0, -3, 2), 255)
+            .unwrap();
+        let rgba = bitmaps.rgba(dst).unwrap().to_vec();
+        for y in 0..2 {
+            for x in 0..3 {
+                assert_eq!(at(&rgba, 4, x, y), at(&source, 4, 2 - x, y), "({x}, {y})");
+            }
+            assert_eq!(at(&rgba, 4, 3, y), [0; 4]);
+        }
+        // Rows likewise.
+        bitmaps.clear(dst).unwrap();
+        bitmaps
+            .blt(dst, 0, 0, src, Rect::new(0, 2, 4, -2), 255)
+            .unwrap();
+        let rgba = bitmaps.rgba(dst).unwrap();
+        for y in 0..2 {
+            for x in 0..4 {
+                assert_eq!(at(rgba, 4, x, y), at(&source, 4, x, 1 - y), "({x}, {y})");
+            }
+        }
     }
 
     #[test]
@@ -1296,6 +1421,173 @@ mod tests {
             bitmaps.rgba(dst).unwrap(),
             [pixels[1], [0; 4], [0; 4]].concat()
         );
+    }
+
+    /// The bitmap of the stretch probe: pixel (x, y) holds red `x mod 256`, green
+    /// `y + x / 256` and alpha 255, so that red and green name the source column and row.
+    fn probe_source(bitmaps: &mut Bitmaps, width: u32, height: u32) -> BitmapId {
+        let mut rgba = Vec::new();
+        for y in 0..height {
+            for x in 0..width {
+                rgba.extend([x as u8, (y + x / 256) as u8, 0, 255]);
+            }
+        }
+        bitmaps
+            .create_from_rgba(width, height, rgba, &defaults())
+            .unwrap()
+    }
+
+    /// The cells of a sample line: a source index, or `None` for an untouched pixel.
+    fn cells(line: &str) -> Vec<Option<u32>> {
+        line.split_whitespace()
+            .map(|cell| (cell != ".").then(|| cell.parse().unwrap()))
+            .collect()
+    }
+
+    /// Asserts every pixel of `id` against the measured source column and row of its position;
+    /// a position without either is untouched.
+    fn assert_sampled(
+        bitmaps: &Bitmaps,
+        id: BitmapId,
+        columns: &[Option<u32>],
+        rows: &[Option<u32>],
+        case: &str,
+    ) {
+        let rgba = bitmaps.rgba(id).unwrap();
+        let width = bitmaps.width(id).unwrap();
+        assert_eq!(columns.len(), width as usize, "{case}");
+        assert_eq!(rows.len(), bitmaps.height(id).unwrap() as usize, "{case}");
+        for (y, row) in rows.iter().enumerate() {
+            for (x, column) in columns.iter().enumerate() {
+                let expected = match (column, row) {
+                    (Some(column), Some(row)) => {
+                        [*column as u8, (row + column / 256) as u8, 0, 255]
+                    }
+                    _ => [0; 4],
+                };
+                assert_eq!(
+                    at(rgba, width, x as u32, y as u32),
+                    expected,
+                    "{case} ({x}, {y})"
+                );
+            }
+        }
+    }
+
+    /// Every committed stretch sample measured on the original runtime: whole bitmaps, long
+    /// rows, source rectangles that leave the source, mirrored ones and clipped destinations.
+    /// The clipped cases were measured along both axes with the same result, so each is
+    /// evaluated along both.
+    #[test]
+    fn stretch_reproduces_the_measured_samples() {
+        let samples = include_str!("../../vkxp-pixel/tests/data/bitmap-stretch-samples.txt");
+        let mut lines = samples.lines().filter(|line| !line.starts_with('#'));
+        let mut counts = [0; 4];
+        let straight: Vec<Option<u32>> = (0..16).map(Some).collect();
+        while let Some(case) = lines.next() {
+            let n: Vec<i32> = case
+                .split_whitespace()
+                .filter_map(|word| word.parse().ok())
+                .collect();
+            let mut bitmaps = Bitmaps::new();
+            match case.split_whitespace().next().unwrap() {
+                "full" => {
+                    let (sw, sh, dw, dh) = (n[0], n[1], n[2], n[3]);
+                    let columns = cells(lines.next().unwrap());
+                    let rows = cells(lines.next().unwrap());
+                    let src = probe_source(&mut bitmaps, sw as u32, sh as u32);
+                    let dst = bitmaps.create(dw as u32, dh as u32, &defaults()).unwrap();
+                    let (to, from) = (Rect::new(0, 0, dw, dh), Rect::new(0, 0, sw, sh));
+                    bitmaps.stretch_blt(dst, to, src, from, 255).unwrap();
+                    assert_sampled(&bitmaps, dst, &columns, &rows, case);
+                    counts[0] += 1;
+                }
+                "big" => {
+                    let (sw, dw) = (n[0], n[1]);
+                    let columns = cells(lines.next().unwrap());
+                    let src = probe_source(&mut bitmaps, sw as u32, 1);
+                    let dst = bitmaps.create(dw as u32, 1, &defaults()).unwrap();
+                    let (to, from) = (Rect::new(0, 0, dw, 1), Rect::new(0, 0, sw, 1));
+                    bitmaps.stretch_blt(dst, to, src, from, 255).unwrap();
+                    assert_sampled(&bitmaps, dst, &columns, &[Some(0)], case);
+                    counts[1] += 1;
+                }
+                "clipx" => {
+                    let (sx, sw, dx, dw) = (n[0], n[1], n[2], n[3]);
+                    let measured = cells(lines.next().unwrap());
+                    let src = probe_source(&mut bitmaps, 16, 16);
+                    let wide = bitmaps.create(48, 16, &defaults()).unwrap();
+                    let (to, from) = (Rect::new(dx, 0, dw, 16), Rect::new(sx, 0, sw, 16));
+                    bitmaps.stretch_blt(wide, to, src, from, 255).unwrap();
+                    assert_sampled(&bitmaps, wide, &measured, &straight, case);
+                    let tall = bitmaps.create(16, 48, &defaults()).unwrap();
+                    let (to, from) = (Rect::new(0, dx, 16, dw), Rect::new(0, sx, 16, sw));
+                    bitmaps.stretch_blt(tall, to, src, from, 255).unwrap();
+                    assert_sampled(&bitmaps, tall, &straight, &measured, case);
+                    counts[2] += 1;
+                }
+                "blt" => {
+                    let (sx, sw, dx) = (n[0], n[1], n[2]);
+                    let measured = cells(lines.next().unwrap());
+                    let src = probe_source(&mut bitmaps, 16, 16);
+                    let wide = bitmaps.create(48, 16, &defaults()).unwrap();
+                    bitmaps
+                        .blt(wide, dx, 0, src, Rect::new(sx, 0, sw, 16), 255)
+                        .unwrap();
+                    assert_sampled(&bitmaps, wide, &measured, &straight, case);
+                    let tall = bitmaps.create(16, 48, &defaults()).unwrap();
+                    bitmaps
+                        .blt(tall, 0, dx, src, Rect::new(0, sx, 16, sw), 255)
+                        .unwrap();
+                    assert_sampled(&bitmaps, tall, &straight, &measured, case);
+                    counts[3] += 1;
+                }
+                _ => panic!("{case}"),
+            }
+        }
+        assert!(counts[0] >= 30, "{counts:?}");
+        assert_eq!(counts[1..], [3, 26, 5]);
+    }
+
+    #[test]
+    fn stretch_onto_a_negative_destination_size_draws_nothing() {
+        let mut bitmaps = Bitmaps::new();
+        let src = probe_source(&mut bitmaps, 16, 16);
+        let dst = bitmaps.create(48, 48, &defaults()).unwrap();
+        let from = Rect::new(0, 0, 16, 16);
+        for to in [Rect::new(2, 2, -10, 10), Rect::new(2, 2, 10, -10)] {
+            bitmaps.stretch_blt(dst, to, src, from, 255).unwrap();
+        }
+        assert!(bitmaps.rgba(dst).unwrap().iter().all(|&byte| byte == 0));
+    }
+
+    /// `blt` and `stretch_blt` blend with the formula for a destination with alpha: a selection
+    /// of the measured samples through the bitmap operations.
+    #[test]
+    fn transfers_blend_as_the_measured_samples() {
+        let samples = include_str!("../../vkxp-pixel/tests/data/bitmap-blt-samples.txt");
+        for line in samples.lines().filter(|line| !line.starts_with('#')) {
+            let n: Vec<u8> = line
+                .split_whitespace()
+                .filter_map(|word| word.parse().ok())
+                .collect();
+            let (target, source, opacity, result) = (&n[0..4], &n[4..8], n[8], &n[9..13]);
+            let mut bitmaps = Bitmaps::new();
+            let src = bitmaps
+                .create_from_rgba(1, 1, source.to_vec(), &defaults())
+                .unwrap();
+            let one = Rect::new(0, 0, 1, 1);
+            let dst = bitmaps
+                .create_from_rgba(2, 2, target.repeat(4), &defaults())
+                .unwrap();
+            bitmaps.blt(dst, 0, 0, src, one, opacity).unwrap();
+            assert_eq!(at(bitmaps.rgba(dst).unwrap(), 2, 0, 0), result, "{line}");
+            assert_eq!(at(bitmaps.rgba(dst).unwrap(), 2, 1, 0), target, "{line}");
+            // Stretched over all four pixels.
+            let all = Rect::new(0, 0, 2, 2);
+            bitmaps.stretch_blt(dst, all, src, one, opacity).unwrap();
+            assert_eq!(at(bitmaps.rgba(dst).unwrap(), 2, 1, 1), result, "{line}");
+        }
     }
 
     // Hue.

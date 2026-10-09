@@ -115,8 +115,8 @@ impl Bitmaps {
     /// outside the rectangle or the bitmap.
     ///
     /// Each mask value `c` draws the font's colour with alpha
-    /// `effective_alpha(c, colour alpha)` by straight-alpha source-over
-    /// ([`vkxp_pixel::blend_normal`]).
+    /// `effective_alpha(c, colour alpha)`, blended as a block transfer blends
+    /// ([`vkxp_pixel::blend_normal`]). A pixel whose alpha comes to 0 is left alone.
     ///
     /// PLACEHOLDER: how squeezed text is resampled is not yet checked against the original
     /// runtime.
@@ -132,9 +132,9 @@ impl Bitmaps {
         let Some(clip) = bitmap.clip(rect) else {
             return Ok(());
         };
-        let color = bitmap.font.color.to_proto();
+        let [red, green, blue, color_alpha] = bitmap.font.color.to_pixel();
         // With alpha 0 every glyph pixel is drawn with alpha 0, which changes nothing.
-        if color.a == 0 {
+        if color_alpha == 0 {
             return Ok(());
         }
         let mask = rasterizer.rasterize(&bitmap.font, text);
@@ -166,8 +166,12 @@ impl Bitmaps {
             let mask_y = (y as i64 - top) as u32;
             for x in first_column..end_column {
                 let mask_x = stretch_index((x as i64 - left) as u32, mask.width, drawn_width);
-                let alpha = effective_alpha(mask.get(mask_x, mask_y), color.a);
-                let source = [color.r, color.g, color.b, alpha];
+                let alpha = effective_alpha(mask.get(mask_x, mask_y), color_alpha);
+                // No coverage draws nothing, also where the bitmap is transparent.
+                if alpha == 0 {
+                    continue;
+                }
+                let source = [red, green, blue, alpha];
                 let blended = blend_normal(bitmap.pixel(x, y), source, 255);
                 bitmap.put(x, y, blended);
             }
@@ -245,6 +249,9 @@ mod tests {
                     color[2],
                     effective_alpha(coverage, color[3]),
                 ];
+                if source[3] == 0 {
+                    continue;
+                }
                 let offset = ((y as u32 * width + x as u32) * 4) as usize;
                 let target: Rgba = before[offset..offset + 4].try_into().unwrap();
                 after[offset..offset + 4].copy_from_slice(&blend_normal(target, source, 255));
