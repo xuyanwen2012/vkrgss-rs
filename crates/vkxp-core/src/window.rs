@@ -292,7 +292,14 @@ impl Window {
 
 impl Assembly<'_> {
     /// Draws the whole of `bitmap` unscaled with its top-left corner at (`x`, `y`).
-    fn whole(&mut self, bitmap: BitmapId, x: i64, y: i64, clip: vkxp_proto::Rect, opacity: u8) {
+    pub(crate) fn whole(
+        &mut self,
+        bitmap: BitmapId,
+        x: i64,
+        y: i64,
+        clip: vkxp_proto::Rect,
+        opacity: u8,
+    ) {
         if let Ok(rect) = self.bitmaps.rect(bitmap) {
             self.quad(
                 bitmap,

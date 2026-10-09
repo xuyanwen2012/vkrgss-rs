@@ -286,8 +286,9 @@ impl Scene {
         viewport: Option<ViewportId>,
     ) -> Result<TilemapId, SceneError> {
         self.check_viewport(viewport)?;
+        let stamp = self.next_stamp();
         self.tilemaps
-            .insert(Tilemap::new(viewport))
+            .insert(Tilemap::new(viewport, stamp))
             .map(TilemapId)
             .ok_or(SceneError::Full(ElementKind::Tilemap))
     }
@@ -322,9 +323,12 @@ impl Scene {
         }
     }
 
-    /// Disposes a tilemap. Disposing a disposed tilemap does nothing.
-    pub fn dispose_tilemap(&mut self, id: TilemapId) {
-        self.tilemaps.remove(id.0);
+    /// Disposes a tilemap, and with it the bitmaps the scene composed its tiles into, which
+    /// live in `bitmaps`. Disposing a disposed tilemap does nothing.
+    pub fn dispose_tilemap(&mut self, id: TilemapId, bitmaps: &mut Bitmaps) {
+        if let Some(mut tilemap) = self.tilemaps.remove(id.0) {
+            tilemap.cache.dispose(bitmaps);
+        }
     }
 }
 
@@ -500,15 +504,16 @@ mod tests {
     fn a_disposed_tilemap_fails_every_operation_but_disposal() {
         let error = SceneError::Disposed(ElementKind::Tilemap);
         let mut scene = Scene::new();
+        let mut bitmaps = Bitmaps::new();
         let tilemap = scene.create_tilemap(None).unwrap();
-        scene.dispose_tilemap(tilemap);
+        scene.dispose_tilemap(tilemap, &mut bitmaps);
         assert!(scene.is_tilemap_disposed(tilemap));
         assert_eq!(scene.tilemap(tilemap).err(), Some(error));
         assert_eq!(
             scene.tilemap_mut(tilemap).map(|t| t.ox = 1).err(),
             Some(error)
         );
-        scene.dispose_tilemap(tilemap);
+        scene.dispose_tilemap(tilemap, &mut bitmaps);
         assert_eq!(error.to_string(), "disposed tilemap");
     }
 
@@ -548,7 +553,7 @@ mod tests {
         assert!(scene.is_plane_disposed(old) && !scene.is_plane_disposed(new));
 
         let old = scene.create_tilemap(None).unwrap();
-        scene.dispose_tilemap(old);
+        scene.dispose_tilemap(old, &mut Bitmaps::new());
         let new = scene.create_tilemap(None).unwrap();
         assert!(scene.is_tilemap_disposed(old) && !scene.is_tilemap_disposed(new));
     }

@@ -8,11 +8,11 @@
 
 ## 2. Tiles (`vkxp-core`)
 
-- [ ] 2.1 Add the autotile table as data, with a comment naming its source, and the functions that turn a tile identifier into source rectangles (tileset tile; autotile quarters for a given frame; single-tile sheets; nothing for identifiers below 48 or outside the bitmap). Verify: tests for the tile-identifier scenarios and the four autotile-pattern scenarios, including the test that draws all 48 patterns from a sheet with 48 distinct quarters.
-- [ ] 2.2 Implement the tilemap cache: the visible cell range with wrap-around, `ground` and the per-priority bitmaps drawn with `blt`, and the invalidation rules of `design.md`. Verify: tests for the four tilemap-layout scenarios and the missing-tileset scenario.
-- [ ] 2.3 Emit the ground quad and the per-row quads with their z values. Verify: tests for the four tile-priority scenarios.
-- [ ] 2.4 Implement tilemap update and autotile animation. Verify: tests for the two animation scenarios.
-- [ ] 2.5 React to table and bitmap changes. Verify: the shared-table scenario; a test that drawing into the tileset bitmap changes the next frame; the flash-data scenario.
+- [x] 2.1 Add the autotile table as data, with a comment naming its source, and the functions that turn a tile identifier into source rectangles (tileset tile; autotile quarters for a given frame; single-tile sheets; nothing for identifiers below 48 or outside the bitmap). Verify: tests for the tile-identifier scenarios and the four autotile-pattern scenarios, including the test that draws all 48 patterns from a sheet with 48 distinct quarters.
+- [x] 2.2 Implement the tilemap cache: the visible cell range with wrap-around, `ground` and the per-priority bitmaps drawn with `blt`, and the invalidation rules of `design.md`. Verify: tests for the four tilemap-layout scenarios and the missing-tileset scenario.
+- [x] 2.3 Emit the ground quad and the per-row quads with their z values. Verify: tests for the four tile-priority scenarios.
+- [x] 2.4 Implement tilemap update and autotile animation. Verify: tests for the two animation scenarios.
+- [x] 2.5 React to table and bitmap changes. Verify: the shared-table scenario; a test that drawing into the tileset bitmap changes the next frame; the flash-data scenario.
 
 ## 3. Housekeeping (`vkxp-core`, `docs`)
 

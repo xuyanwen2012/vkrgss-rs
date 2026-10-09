@@ -8,6 +8,7 @@
 use vkxp_proto::BitmapId;
 
 use crate::scene::ViewportId;
+use crate::tilemap::TileCache;
 use crate::window::{Cache, Caches};
 use crate::{Bitmaps, Color, Rect, SharedTable, Tone};
 
@@ -425,8 +426,11 @@ impl Plane {
     }
 }
 
-/// A tilemap: a tileset, autotiles and the tables that say which tile goes where. It holds
-/// its properties and is not drawn yet.
+/// A tilemap: a tileset, autotiles and the tables that say which tile goes where, drawn as
+/// three layers of 32 by 32 tiles over its viewport's rectangle, or over the screen.
+///
+/// It has no z of its own: tiles of priority 0 are drawn at z 0 and the others at a z that
+/// follows from their row, all with the stamp the tilemap got when it was created.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Tilemap {
     pub tileset: Option<BitmapId>,
@@ -439,13 +443,20 @@ pub struct Tilemap {
     /// The priority of every tile identifier, shared like the map data.
     pub priorities: Option<SharedTable>,
     pub visible: bool,
+    /// The pixel of the map at the top-left corner of the area.
     pub ox: i32,
     pub oy: i32,
     pub(crate) viewport: Option<ViewportId>,
+    /// The stamp of every piece of the tilemap; `z` is not used.
+    pub(crate) order: Order,
+    /// Number of updates so far, which the autotile animation follows.
+    pub(crate) updates: u64,
+    /// The bitmaps the visible tiles are composed into.
+    pub(crate) cache: TileCache,
 }
 
 impl Tilemap {
-    pub(crate) fn new(viewport: Option<ViewportId>) -> Tilemap {
+    pub(crate) fn new(viewport: Option<ViewportId>, stamp: u64) -> Tilemap {
         Tilemap {
             tileset: None,
             autotiles: [None; 7],
@@ -456,6 +467,9 @@ impl Tilemap {
             ox: 0,
             oy: 0,
             viewport,
+            order: Order { z: 0, stamp },
+            updates: 0,
+            cache: TileCache::default(),
         }
     }
 
@@ -464,6 +478,13 @@ impl Tilemap {
         self.viewport
     }
 
-    /// One step of the autotile animation. Nothing is drawn yet, so nothing changes.
-    pub fn update(&mut self) {}
+    /// One step of the autotile animation: every 16 updates each animated autotile shows its
+    /// next frame.
+    ///
+    /// PLACEHOLDER: the speed of 16 updates per frame is not yet checked against the original
+    /// runtime.
+    pub fn update(&mut self) {
+        // The count does not wrap within the lifetime of a process.
+        self.updates += 1;
+    }
 }

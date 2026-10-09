@@ -95,6 +95,8 @@ mod scene;
 mod table;
 pub mod test_support;
 mod text;
+mod tilemap;
+mod tiles;
 mod window;
 
 pub use bitmap::{Bitmaps, MAX_BITMAP_PIXELS};

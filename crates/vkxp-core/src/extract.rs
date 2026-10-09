@@ -6,6 +6,7 @@ use crate::element::Order;
 use crate::geometry::Geometry;
 use crate::scene::Arena;
 use crate::scene::Key;
+use crate::tilemap::Strip;
 use crate::{Bitmaps, Rect, Scene, Sprite, Viewport, ViewportId};
 
 /// The pixels both rectangles cover; a rectangle without pixels when they share none.
@@ -188,6 +189,8 @@ impl Assembly<'_> {
 enum Item {
     Sprite(Key),
     Plane(Key),
+    /// One piece of a tilemap: its ground, or a row of tiles of one priority.
+    Tiles(Key, Strip),
     /// The frame and background of a window.
     WindowBack(Key),
     /// What a window shows inside: cursor, contents, pause sign and arrows.
@@ -251,6 +254,11 @@ impl Scene {
         for (_, window) in self.windows.iter_mut() {
             window.refresh_caches(bitmaps);
         }
+        for (_, tilemap) in self.tilemaps.iter_mut() {
+            if let Some(level) = level_of(&self.viewports, self.logical_size, tilemap.viewport) {
+                tilemap.refresh_cache(bitmaps, &level);
+            }
+        }
         for (_, plane) in self.planes.iter_mut() {
             if let Some(level) = level_of(&self.viewports, self.logical_size, plane.viewport) {
                 plane.refresh_cache(bitmaps, &level);
@@ -295,6 +303,16 @@ impl Scene {
         }
         for (key, plane) in self.planes.iter() {
             place(plane.viewport, Entry::new(plane.order, Item::Plane(key)));
+        }
+        for (key, tilemap) in self.tilemaps.iter() {
+            for (z, strip) in tilemap.strips() {
+                let entry = Entry {
+                    z,
+                    stamp: tilemap.order.stamp,
+                    item: Item::Tiles(key, strip),
+                };
+                place(tilemap.viewport, entry);
+            }
         }
         for (key, window) in self.windows.iter() {
             let back = Entry::new(window.order, Item::WindowBack(key));
@@ -352,6 +370,11 @@ impl Scene {
             Item::Plane(key) => {
                 if let Some(plane) = self.planes.get(key) {
                     assembly.plane(plane, level);
+                }
+            }
+            Item::Tiles(key, strip) => {
+                if let Some(tilemap) = self.tilemaps.get(key) {
+                    assembly.tiles(tilemap, strip, level);
                 }
             }
             Item::WindowBack(key) => {
