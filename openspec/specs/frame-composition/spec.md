@@ -171,3 +171,14 @@ stay listed as placeholders.
 #### Scenario: Provenance list
 - **WHEN** the provenance of all pixel arithmetic functions is listed
 - **THEN** the functions for blending onto an opaque destination, for the colour and for the tone offsets name the measurement, and at least the blend into a translucent destination is a placeholder
+
+### Requirement: Grey tone arithmetic of the original
+The grey part of a tone SHALL be applied before its red, green and blue offsets: with
+`L = (77 * r + 150 * g + 29 * b) >> 8`, each channel `c` SHALL become
+`c + (((L - c) * (gray + 1)) >> 8)` for a grey value above 0 and stay unchanged for 0. CPU
+reference and GPU SHALL agree bit for bit, and the function SHALL be listed with a
+reverse-engineered provenance.
+
+#### Scenario: Measured samples
+- **WHEN** each committed tone sample measured on the original runtime is evaluated
+- **THEN** the result equals the measured value
