@@ -83,8 +83,13 @@ VK_LOADER_DRIVERS_SELECT='*lvp*' cargo run -p vkxp-host --example demo -- llvmpi
 Without a window, on a virtual clock that never waits:
 
 ```sh
-cargo run -p vkxp-host --example demo-headless -- --frames 30 --dump 10=target/frame.png
+VK_LOADER_DRIVERS_SELECT='*lvp*' \
+    cargo run -p vkxp-host --example demo-headless -- --frames 30 --dump 10=target/frame.png
 ```
+
+The loader restriction is part of the command, not decoration: `--device` only chooses among
+the devices the loader enumerates, and enumerating loads the driver of every GPU in the machine.
+On the development machine every headless run is restricted to lavapipe like this.
 
 | Option | Meaning |
 |---|---|
@@ -127,11 +132,24 @@ tests need the C compiler too.
 The tests of `vkxp-vk` render every message stream with both the CPU reference compositor and
 the Vulkan backend and require byte-identical frames. By default they run on the CPU device
 (llvmpipe), so the result does not depend on the hardware in the machine, and they fail rather
-than skip when no such device exists. `VKXP_TEST_DEVICE` runs the same tests on another device;
-it holds a device index or a part of the device name, as `vulkaninfo --summary` prints it:
+than skip when no such device exists.
+
+Choosing a device is not enough to leave the other GPUs alone: the Vulkan loader loads every
+installed driver to enumerate the devices. The tests of `vkxp-vk` and `vkxp-host` therefore
+refuse to start, before anything is asked of the loader, unless it has been restricted to
+chosen drivers with `VK_LOADER_DRIVERS_SELECT` (or `VK_DRIVER_FILES` / `VK_ICD_FILENAMES`).
+For the default device that is lavapipe only:
 
 ```sh
-VKXP_TEST_DEVICE=RADV cargo test -p vkxp-vk
+VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test --workspace
+```
+
+`VKXP_TEST_DEVICE` runs the same tests on another device; it holds a device index or a part of
+the device name, as `vulkaninfo --summary` prints it. The loader is then restricted to that
+device's driver, for example the AMD integrated GPU:
+
+```sh
+VK_LOADER_DRIVERS_SELECT='*radeon*' VKXP_TEST_DEVICE=RADV cargo test -p vkxp-vk
 ```
 
 When the validation layer is installed the tests enable it, and any validation error fails the
@@ -142,16 +160,14 @@ an off-screen target and read back, and the swapchain runs on a surface without 
 (`VK_EXT_headless_surface`). The headless tests of `vkxp-host` follow `VKXP_TEST_DEVICE` too
 and default to llvmpipe.
 
-Choosing a device still enumerates every device the Vulkan loader finds. To keep a driver from
-being loaded at all, restrict the loader itself, for example
-`VK_LOADER_DRIVERS_SELECT='*lvp*'` for lavapipe only.
 
 ## Merge gate
 
-One command checks everything a change must pass:
+One command checks everything a change must pass. Its `test` step renders with Vulkan, so the
+loader restriction described under Prerequisites is part of it:
 
 ```sh
-cargo xtask gate
+VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate
 ```
 
 It runs these steps in order, stops at the first failure and names the step that failed:

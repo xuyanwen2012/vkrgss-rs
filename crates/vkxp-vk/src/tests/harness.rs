@@ -12,12 +12,49 @@ use crate::{DeviceChoice, DeviceKind, ValidationLog, VkCompositor, available_dev
 /// Environment variable naming the device the tests run on: an index or part of a name.
 const DEVICE_VARIABLE: &str = "VKXP_TEST_DEVICE";
 
+/// Environment variables that restrict which drivers the Vulkan loader loads. Naming a
+/// device does not do that: the loader loads every installed driver to enumerate the devices,
+/// including the driver of a GPU that must be left alone.
+const ISOLATION_VARIABLES: [&str; 3] = [
+    "VK_LOADER_DRIVERS_SELECT",
+    "VK_DRIVER_FILES",
+    "VK_ICD_FILENAMES",
+];
+
+/// Why the tests may not touch Vulkan in an environment where `variable` reads the loader's
+/// variables, or `None` when one of them restricts the loader.
+pub(crate) fn isolation_error(variable: impl Fn(&str) -> Option<String>) -> Option<String> {
+    let restricted = ISOLATION_VARIABLES
+        .iter()
+        .any(|name| variable(name).is_some_and(|value| !value.trim().is_empty()));
+    (!restricted).then(|| {
+        format!(
+            "the Vulkan loader is not restricted to chosen drivers, so these tests would load \
+             the driver of every GPU in the machine just to enumerate the devices. Set \
+             VK_LOADER_DRIVERS_SELECT before running them: '*lvp*' for the CPU device \
+             (lavapipe), which is what the tests use by default, or the pattern of the driver \
+             that {DEVICE_VARIABLE} names, for example '*radeon*' with {DEVICE_VARIABLE}=RADV."
+        )
+    })
+}
+
+/// Fails the test before anything is asked of the Vulkan loader unless the loader has been
+/// restricted. Every test that reaches Vulkan goes through this, most of them by way of
+/// [`test_device`].
+pub(crate) fn require_isolation() {
+    if let Some(error) = isolation_error(|name| std::env::var(name).ok()) {
+        panic!("{error}");
+    }
+}
+
 /// The device every test runs on.
 ///
 /// `VKXP_TEST_DEVICE` selects it; when the variable is unset it is the CPU device, so the
-/// result does not depend on, or disturb, the hardware GPUs of the machine. There is no skip:
-/// a machine without a usable device fails the tests.
+/// result does not depend on the hardware GPUs of the machine. There is no skip: a machine
+/// without a usable device fails the tests, and so does a loader that is not restricted to
+/// chosen drivers (see [`require_isolation`]).
 pub(crate) fn test_device() -> DeviceChoice {
+    require_isolation();
     static CHOICE: OnceLock<DeviceChoice> = OnceLock::new();
     CHOICE
         .get_or_init(|| match std::env::var(DEVICE_VARIABLE) {
@@ -122,6 +159,33 @@ impl Drop for TestCompositor {
         self.compositor = None;
         assert_clean(&self.log, "while the compositor was dropped");
     }
+}
+
+#[test]
+fn unrestricted_loader_is_refused_before_any_vulkan_call() {
+    let with = |set: &'static [(&'static str, &'static str)]| {
+        isolation_error(move |name| {
+            set.iter()
+                .find(|(variable, _)| *variable == name)
+                .map(|(_, value)| (*value).to_owned())
+        })
+    };
+    let error = with(&[]).expect("nothing restricts the loader");
+    assert!(error.contains("VK_LOADER_DRIVERS_SELECT"), "{error}");
+    assert!(error.contains("'*lvp*'"), "{error}");
+    // Naming the device is not a restriction, and neither is an empty value.
+    assert!(with(&[("VKXP_TEST_DEVICE", "llvmpipe")]).is_some());
+    assert!(with(&[("VK_LOADER_DRIVERS_SELECT", " ")]).is_some());
+
+    assert_eq!(with(&[("VK_LOADER_DRIVERS_SELECT", "*lvp*")]), None);
+    assert_eq!(
+        with(&[(
+            "VK_DRIVER_FILES",
+            "/usr/share/vulkan/icd.d/lvp_icd.x86_64.json"
+        )]),
+        None
+    );
+    assert_eq!(with(&[("VK_ICD_FILENAMES", "lvp_icd.json")]), None);
 }
 
 #[test]

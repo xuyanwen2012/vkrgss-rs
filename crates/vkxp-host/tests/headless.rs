@@ -18,6 +18,19 @@ use vkxp_proto::link::{Disconnected, GuestEnd};
 use vkxp_proto::{Button, GuestToHost, HostToGuest, InputSnapshot, Op, Rect, Size};
 use vkxp_vk::DeviceChoice;
 
+#[test]
+fn unrestricted_loader_is_refused_before_any_vulkan_call() {
+    let error = common::isolation_error(|_| None).expect("nothing restricts the loader");
+    assert!(error.contains("VK_LOADER_DRIVERS_SELECT"), "{error}");
+    let named = |name: &str| (name == "VKXP_TEST_DEVICE").then(|| "llvmpipe".to_owned());
+    assert!(
+        common::isolation_error(named).is_some(),
+        "a name is no restriction"
+    );
+    let restricted = |name: &str| (name == "VK_LOADER_DRIVERS_SELECT").then(|| "*lvp*".to_owned());
+    assert_eq!(common::isolation_error(restricted), None);
+}
+
 fn options() -> HeadlessOptions {
     HeadlessOptions {
         device: test_device(),
@@ -387,6 +400,7 @@ fn frame_limit_of_zero_quits_before_any_frame() {
 
 #[test]
 fn unknown_device_fails_the_run_before_any_message() {
+    common::require_isolation();
     let (result, _) = run_with(
         HeadlessOptions {
             device: DeviceChoice::Name("no such device".to_owned()),

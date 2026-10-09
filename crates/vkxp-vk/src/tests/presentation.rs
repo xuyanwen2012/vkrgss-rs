@@ -4,7 +4,7 @@
 use vkxp_compose_ref::fixtures::{self, bitmap, sprite};
 use vkxp_proto::{BitmapId, Color, FramePacket, FrameRate, Op, Rect, Size};
 
-use super::harness::{TestCompositor, assert_clean, test_device};
+use super::harness::{TestCompositor, assert_clean, require_isolation, test_device};
 use crate::{DeviceChoice, DeviceError, DeviceKind, Frame, ValidationLog, VkCompositor, VkError};
 
 const SIZE: Size = Size::new(20, 18);
@@ -164,6 +164,7 @@ fn compositor_for_a_headless_surface_is_created_on_the_test_device() {
 
 #[test]
 fn explicit_device_that_does_not_exist_is_not_replaced_for_a_surface() {
+    require_isolation();
     let choice = DeviceChoice::Name("no such device".to_owned());
     let error = VkCompositor::with_headless_surface(choice, None)
         .err()

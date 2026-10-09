@@ -11,9 +11,45 @@ use vkxp_proto::{
 };
 use vkxp_vk::DeviceChoice;
 
+/// Environment variables that restrict which drivers the Vulkan loader loads. Naming a
+/// device does not do that: the loader loads every installed driver to enumerate the devices,
+/// including the driver of a GPU that must be left alone.
+const ISOLATION_VARIABLES: [&str; 3] = [
+    "VK_LOADER_DRIVERS_SELECT",
+    "VK_DRIVER_FILES",
+    "VK_ICD_FILENAMES",
+];
+
+/// Why the tests may not touch Vulkan in an environment where `variable` reads the loader's
+/// variables, or `None` when one of them restricts the loader.
+pub fn isolation_error(variable: impl Fn(&str) -> Option<String>) -> Option<String> {
+    let restricted = ISOLATION_VARIABLES
+        .iter()
+        .any(|name| variable(name).is_some_and(|value| !value.trim().is_empty()));
+    (!restricted).then(|| {
+        "the Vulkan loader is not restricted to chosen drivers, so these tests would load the \
+         driver of every GPU in the machine just to enumerate the devices. Set \
+         VK_LOADER_DRIVERS_SELECT before running them: '*lvp*' for the CPU device (lavapipe), \
+         which is what the tests use by default, or the pattern of the driver that \
+         VKXP_TEST_DEVICE names, for example '*radeon*' with VKXP_TEST_DEVICE=RADV."
+            .to_owned()
+    })
+}
+
+/// Fails the test before anything is asked of the Vulkan loader unless the loader has been
+/// restricted. Every test that reaches Vulkan goes through this, most of them by way of
+/// [`test_device`].
+pub fn require_isolation() {
+    if let Some(error) = isolation_error(|name| std::env::var(name).ok()) {
+        panic!("{error}");
+    }
+}
+
 /// The device the tests composite on: llvmpipe, unless `VKXP_TEST_DEVICE` names another one by
-/// index or by part of its name, as for the tests of `vkxp-vk`.
+/// index or by part of its name, as for the tests of `vkxp-vk`. Like those, the tests refuse
+/// to start while the loader is not restricted to chosen drivers.
 pub fn test_device() -> DeviceChoice {
+    require_isolation();
     match std::env::var("VKXP_TEST_DEVICE") {
         Ok(value) if !value.is_empty() => vkxp_host::device_from_text(&value),
         _ => DeviceChoice::Name(vkxp_host::DEFAULT_DEVICE.to_owned()),

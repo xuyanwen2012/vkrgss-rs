@@ -10,7 +10,7 @@ use vkxp_proto::{
 };
 
 use super::differential::{Pair, assert_stream_matches, frame_difference};
-use super::harness::{TestCompositor, test_device};
+use super::harness::{TestCompositor, require_isolation, test_device};
 use crate::{
     BitmapError, DeviceChoice, DeviceError, Limit, SlotState, VkCompositor, VkError,
     available_devices,
@@ -567,6 +567,7 @@ fn bitmap_slot_beyond_the_table_is_a_limit_error_and_recoverable() {
 
 #[test]
 fn named_device_that_does_not_exist_fails_and_lists_the_devices() {
+    require_isolation();
     let devices = available_devices().unwrap();
     assert!(!devices.is_empty());
     for choice in [
@@ -593,6 +594,7 @@ fn named_device_that_does_not_exist_fails_and_lists_the_devices() {
 
 #[test]
 fn explicit_choice_selects_exactly_that_device() {
+    require_isolation();
     let devices = available_devices().unwrap();
     let wanted = test_device();
     let compositor = VkCompositor::new(wanted.clone()).unwrap();
