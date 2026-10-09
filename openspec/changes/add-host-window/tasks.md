@@ -28,4 +28,4 @@
 
 ## 5. Integration check
 
-- [ ] 5.1 Run the full gate. Verify: `cargo xtask gate` exits 0, `cargo xtask deps` reports no violation, and `openspec validate add-host-window --strict` passes.
+- [x] 5.1 Run the full gate. Verify: `cargo xtask gate` exits 0, `cargo xtask deps` reports no violation, and `openspec validate add-host-window --strict` passes.
