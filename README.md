@@ -244,7 +244,9 @@ R = ["RightShoulder"]
 
 In `[keys]` and `[gamepad]` a button, by the name of its `Input` constant, is held by exactly
 the keys or pad buttons listed for it; an empty list leaves it without any. Buttons that are
-not mentioned keep their defaults. A key is named as the key codes of `winit` are
+not mentioned keep their defaults. The name of a button may be written in either case, and
+`c` in one file is the same entry as `C` in another; a file that lists one button twice is
+refused. A key is named as the key codes of `winit` are
 (`winit::keyboard::KeyCode`): `KeyA` to `KeyZ`, `Digit0` to `Digit9`, `Numpad0` to `Numpad9`,
 `F1` to `F12`, `ArrowUp`, `Space`, `Enter`, `Escape`, `ShiftLeft`, `ControlRight` and so on.
 They name the position of a key, not the letter a keyboard layout puts on it. The host keys

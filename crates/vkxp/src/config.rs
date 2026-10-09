@@ -68,6 +68,20 @@ fn dumps<'de, D: Deserializer<'de>>(
     dumps.map(Some).map_err(D::Error::custom)
 }
 
+/// A table of buttons, whose names were accepted in either case, with every button under its
+/// one name, so that an entry of one file takes the place of the same button's entry in
+/// another however each spells it.
+fn by_button(table: BTreeMap<String, Vec<String>>) -> Result<BTreeMap<String, Vec<String>>> {
+    let mut buttons = BTreeMap::new();
+    for (name, sources) in table {
+        // The names of the buttons are upper case.
+        if buttons.insert(name.to_ascii_uppercase(), sources).is_some() {
+            return Err(anyhow!("the button `{name}` is listed more than once"));
+        }
+    }
+    Ok(buttons)
+}
+
 impl File {
     /// Reads and checks the file at `path`. Every error names the file.
     pub fn read(path: &Path) -> Result<File> {
@@ -84,6 +98,12 @@ impl File {
             .map_err(|error| anyhow!("[keys]: {error}"))
             .with_context(named)?;
         GamepadMap::with_overrides(&file.gamepad)
+            .map_err(|error| anyhow!("[gamepad]: {error}"))
+            .with_context(named)?;
+        file.keys = by_button(file.keys)
+            .map_err(|error| anyhow!("[keys]: {error}"))
+            .with_context(named)?;
+        file.gamepad = by_button(file.gamepad)
             .map_err(|error| anyhow!("[gamepad]: {error}"))
             .with_context(named)?;
 
@@ -605,6 +625,67 @@ mod tests {
             settings.pads,
             GamepadMap::with_overrides(&table(&[("C", "East"), ("B", "South")])).unwrap()
         );
+    }
+
+    /// A button is the same button however a file spells its name.
+    #[test]
+    fn the_game_file_overrides_a_button_spelled_in_another_case() {
+        let table = |entries: &[(&str, &str)]| -> BTreeMap<String, Vec<String>> {
+            entries
+                .iter()
+                .map(|(button, name)| ((*button).to_owned(), vec![(*name).to_owned()]))
+                .collect()
+        };
+        for (user, game) in [("c", "C"), ("C", "c"), ("Shift", "sHIFT")] {
+            let canonical = user.to_ascii_uppercase();
+            let files = Files::new()
+                .user(&format!(
+                    "[keys]\n{user} = ['KeyJ']\n[gamepad]\n{user} = ['East']\n"
+                ))
+                .game(&format!(
+                    "[keys]\n{game} = ['KeyK']\n[gamepad]\n{game} = ['North']\n"
+                ));
+            let settings = files.settle(Options::default()).unwrap();
+            // Exactly the game's entry on top of the defaults: the user's is gone and the
+            // buttons neither file mentions keep their default bindings.
+            assert_eq!(
+                settings.keys,
+                KeyMap::with_overrides(&table(&[(&canonical, "KeyK")])).unwrap(),
+                "{user} then {game}"
+            );
+            assert_ne!(settings.keys, KeyMap::default());
+            assert_eq!(
+                settings.pads,
+                GamepadMap::with_overrides(&table(&[(&canonical, "North")])).unwrap(),
+                "{user} then {game}"
+            );
+            assert_ne!(settings.pads, GamepadMap::default());
+        }
+
+        // Without a game file the user's entry stands, in either case.
+        let files = Files::new().user("[keys]\nc = ['KeyJ']\n[gamepad]\nb = ['North']\n");
+        let settings = files.settle(Options::default()).unwrap();
+        assert_eq!(
+            settings.keys,
+            KeyMap::with_overrides(&table(&[("C", "KeyJ")])).unwrap()
+        );
+        assert_eq!(
+            settings.pads,
+            GamepadMap::with_overrides(&table(&[("B", "North")])).unwrap()
+        );
+    }
+
+    #[test]
+    fn a_button_listed_twice_in_one_file_is_an_error_naming_it() {
+        for text in [
+            "[keys]\nc = ['KeyJ']\nC = ['KeyK']\n",
+            "[gamepad]\nc = ['East']\nC = ['North']\n",
+        ] {
+            let files = Files::new().user(text);
+            let error = format!("{:#}", files.settle(Options::default()).unwrap_err());
+            assert!(error.contains("user.toml"), "{error}");
+            assert!(error.contains("`c`"), "{error}");
+        }
     }
 
     /// The example of the README is a complete file, and its two maps are the defaults.
