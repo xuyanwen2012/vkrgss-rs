@@ -222,17 +222,21 @@
 mod audio;
 mod bitmap;
 mod color;
+mod element;
 mod error;
 mod font;
 mod graphics;
 mod guest;
 mod input;
 mod kernel;
+mod plane;
 mod rb;
 mod rect;
 mod runtime;
+mod sprite;
 mod table;
 mod text;
+mod viewport;
 mod wrap;
 
 #[cfg(test)]

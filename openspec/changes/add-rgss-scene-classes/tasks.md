@@ -7,9 +7,9 @@
 
 ## 2. Sprite, Viewport and Plane (`vkxp-binding`)
 
-- [ ] 2.1 Implement `Viewport` (both constructors, `rect`, `visible`, `z`, `ox`, `oy`, `color`, `tone`, `flash`, `update`, `dispose`, no `disposed?`). Verify: Ruby tests for the viewport cases of the construction, plain-property, object-property and disposal requirements in `specs/rgss-scene-classes/spec.md`; class added to the arity test.
-- [ ] 2.2 Implement `Sprite` with all its properties, `bitmap` by reference, `src_rect` reset on assignment, `flash`, `update`, `dispose`, `disposed?`. Verify: Ruby tests for every scenario that names a sprite; class added to the arity test.
-- [ ] 2.3 Implement `Plane`. Verify: Ruby tests that a plane with a bitmap tiles the screen (two pixels one bitmap width apart are equal) and for its object properties and disposal; class added to the arity test.
+- [x] 2.1 Implement `Viewport` (both constructors, `rect`, `visible`, `z`, `ox`, `oy`, `color`, `tone`, `flash`, `update`, `dispose`, no `disposed?`). Verify: Ruby tests for the viewport cases of the construction, plain-property, object-property and disposal requirements in `specs/rgss-scene-classes/spec.md`; class added to the arity test.
+- [x] 2.2 Implement `Sprite` with all its properties, `bitmap` by reference, `src_rect` reset on assignment, `flash`, `update`, `dispose`, `disposed?`. Verify: Ruby tests for every scenario that names a sprite; class added to the arity test.
+- [x] 2.3 Implement `Plane`. Verify: Ruby tests that a plane with a bitmap tiles the screen (two pixels one bitmap width apart are equal) and for its object properties and disposal; class added to the arity test.
 
 ## 3. Window and Tilemap (`vkxp-binding`)
 

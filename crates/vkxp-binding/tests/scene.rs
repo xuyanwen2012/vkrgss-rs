@@ -2,10 +2,60 @@
 //! interpreter. The snippets are in `scene_cases`; what they see of the scene comes from
 //! the helpers of `scene_support`.
 
+mod cases;
+mod scene_cases;
 mod scene_support;
 
+use cases::Case;
 use vkxp_binding::{scene_testing, testing};
 use vkxp_core::FontDefaults;
+
+fn check(cases: &[Case]) {
+    scene_support::install();
+    let wrong = cases::failures(cases, str::to_owned);
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+#[test]
+fn viewport() {
+    check(scene_cases::VIEWPORT);
+}
+
+#[test]
+fn sprite_construction_and_plain_properties() {
+    check(scene_cases::SPRITE_PLAIN);
+}
+
+#[test]
+fn sprite_object_properties() {
+    check(scene_cases::SPRITE_OBJECTS);
+}
+
+#[test]
+fn sprite_bitmap() {
+    check(scene_cases::SPRITE_BITMAP);
+}
+
+#[test]
+fn sprite_disposal() {
+    check(scene_cases::SPRITE_DISPOSAL);
+}
+
+#[test]
+fn sprite_flash() {
+    check(scene_cases::SPRITE_FLASH);
+}
+
+#[test]
+fn plane() {
+    check(scene_cases::PLANE);
+}
+
+#[test]
+fn every_group_is_tested_here() {
+    // One test function per group above: a group added to the list must get one too.
+    assert_eq!(scene_cases::GROUPS.len(), 7);
+}
 
 #[test]
 fn ruby_reads_the_pixel_of_a_sprite_made_in_rust() {

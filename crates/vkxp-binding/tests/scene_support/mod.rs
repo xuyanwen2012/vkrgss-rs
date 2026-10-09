@@ -7,6 +7,8 @@
 //! and of the bitmap arena and uploads every bitmap the frame refers to whole, so looking at
 //! the scene counts no frame and takes no bitmap change away from a real one.
 //!
+//! `solid(width, height, red, green, blue)` makes an opaque bitmap of one colour.
+//!
 //! `scene_count` returns the number of live scene elements made by Ruby objects of one kind:
 //! `:sprite`, `:viewport`, `:window`, `:plane` or `:tilemap`.
 //!
@@ -31,6 +33,12 @@ const RUBY_SIDE: &str = "
 def pixel(x, y)
   packed = __vkxp_pixel(x, y)
   packed && [packed >> 24, (packed >> 16) & 255, (packed >> 8) & 255, packed & 255]
+end
+
+def solid(width, height, red, green, blue)
+  bitmap = Bitmap.new(width, height)
+  bitmap.fill_rect(0, 0, width, height, Color.new(red, green, blue))
+  bitmap
 end
 
 def scene_count(kind)
@@ -112,7 +120,7 @@ fn scene_count(_ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     Ok(ffi::long2fix(count.try_into().unwrap_or(i64::MAX >> 2)))
 }
 
-/// Defines `pixel` and `scene_count` in the harness's interpreter, once.
+/// Defines `pixel`, `solid` and `scene_count` in the harness's interpreter, once.
 pub fn install() {
     static INSTALLED: OnceLock<()> = OnceLock::new();
     INSTALLED.get_or_init(|| {

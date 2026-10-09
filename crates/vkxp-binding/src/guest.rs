@@ -8,6 +8,7 @@ use vkxp_ruby_sys::ffi::VALUE;
 use vkxp_ruby_sys::{Raised, Ruby};
 use vkxp_vfs::GameFiles;
 
+use crate::element::{self, SceneClasses};
 use crate::error::{self, ErrorClasses};
 use crate::runtime::{self, RunConfig};
 use crate::text::TextBackend;
@@ -52,6 +53,7 @@ pub(crate) struct Classes {
     pub(crate) table: VALUE,
     pub(crate) font: VALUE,
     pub(crate) bitmap: VALUE,
+    pub(crate) scene: SceneClasses,
 }
 
 thread_local! {
@@ -97,6 +99,7 @@ impl Guest {
             table: table::define(ruby)?,
             font: font::define(ruby)?,
             bitmap: bitmap::define(ruby)?,
+            scene: element::define(ruby)?,
         };
         CLASSES.set(Some(classes));
         enter(Guest::new(config));
@@ -148,6 +151,7 @@ impl Guest {
         for id in freed {
             self.bitmaps.dispose(id);
         }
+        element::dispose_freed(self);
     }
 }
 
