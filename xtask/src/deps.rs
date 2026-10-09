@@ -43,6 +43,9 @@ pub const CORE_ALLOW_LIST: &[&str] = &[
     "serde_derive",
     "postcard",
     "cobs",
+    // Not built: `cargo metadata` lists it because postcard's `alloc` feature names it as a
+    // weak dependency feature. It is a no_std trait crate in any case.
+    "embedded-io",
     // Error types.
     "thiserror",
     "thiserror-impl",

@@ -26,11 +26,11 @@
 
 ## 5. CPU reference compositor
 
-- [ ] 5.1 Implement the bitmap store driven by `BitmapDelta`, including stale-id detection. Verify: tests for create/update/destroy and for a reused slot with an old generation.
-- [ ] 5.2 Implement per-pixel ordered evaluation of `Clear`, `Quad` and `RectEffect` with clip rectangles and nearest sampling. Verify: one test per scenario in `specs/frame-composition/spec.md`.
-- [ ] 5.3 Return a typed unsupported-op error for reserved ops. Verify: a test with a `Plane` op gets the error and no frame.
-- [ ] 5.4 Add the headless example: encoded messages in, PNG out. Verify: running it on a generated fixture writes a PNG whose bytes match the committed expected image.
-- [ ] 5.5 Add generated fixtures (checkerboard, gradient, alpha shape; overlap, clip, each blend mode, rectangle effect) with committed expected PNGs. Verify: `cargo test -p vkxp-compose-ref` compares all of them byte for byte and passes twice in a row.
+- [x] 5.1 Implement the bitmap store driven by `BitmapDelta`, including stale-id detection. Verify: tests for create/update/destroy and for a reused slot with an old generation.
+- [x] 5.2 Implement per-pixel ordered evaluation of `Clear`, `Quad` and `RectEffect` with clip rectangles and nearest sampling. Verify: one test per scenario in `specs/frame-composition/spec.md`.
+- [x] 5.3 Return a typed unsupported-op error for reserved ops. Verify: a test with a `Plane` op gets the error and no frame.
+- [x] 5.4 Add the headless example: encoded messages in, PNG out. Verify: running it on a generated fixture writes a PNG whose bytes match the committed expected image.
+- [x] 5.5 Add generated fixtures (checkerboard, gradient, alpha shape; overlap, clip, each blend mode, rectangle effect) with committed expected PNGs. Verify: `cargo test -p vkxp-compose-ref` compares all of them byte for byte and passes twice in a row.
 
 ## 6. Integration check
 

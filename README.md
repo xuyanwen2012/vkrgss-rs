@@ -29,6 +29,21 @@ defined in `vkxp-proto`.
 
 `xtask` holds repository automation and is not part of the runtime.
 
+## Headless proof
+
+The contract between the two sides is testable without a window, Ruby or a GPU. The example
+below reads an encoded stream of `GuestToHost` messages, runs it through the CPU reference
+compositor and writes the last frame as PNG:
+
+```sh
+cargo run -p vkxp-compose-ref --example render_frame -- <messages> <output.png>
+```
+
+`vkxp_compose_ref::fixtures` generates the test streams from procedural patterns. Their expected
+frames are committed under `crates/vkxp-compose-ref/tests/expected/` and compared byte for byte;
+`VKXP_BLESS=1 cargo test -p vkxp-compose-ref --test fixtures` rewrites them after an intended
+change, to be reviewed before committing.
+
 ## Merge gate
 
 One command checks everything a change must pass:
