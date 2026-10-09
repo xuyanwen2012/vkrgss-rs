@@ -50,9 +50,9 @@
   What the original draws there is not measured; an exact form would need a stretch quad that
   can name a source rectangle outside the bitmap.
 - A plane whose stretch step is not exact (`(w << 20) % tw != 0`) cannot draw from the
-  pre-tiled bitmap and is one quad per repetition. Above 4096 quads (tiles of a few pixels)
-  it is not drawn, as a plane that would need too large a pre-tiled bitmap already was not.
-  Pre-tiling the stretched tile instead of the source would lift both limits; it needs the
-  bitmap `stretch_blt` to follow the same rule, which the parallel change brings.
+  pre-tiled bitmap and is one quad per repetition, which is tens of thousands of quads when
+  its tile is a few pixels small. Pre-tiling the stretched tile instead of the source would
+  need fewer; it needs the bitmap `stretch_blt` to follow the same rule, which the parallel
+  change brings.
 - A turned sprite with a zoom of 0 or less keeps what it drew before (nothing at 0, the
   flipped image below); only the unrotated case is measured.

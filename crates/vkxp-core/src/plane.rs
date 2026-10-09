@@ -27,10 +27,6 @@ const AXIS_REPEATS: i64 = 8;
 /// zoomed out very far, is not drawn.
 const MAX_PRETILED_PIXELS: i64 = 1 << 22;
 
-/// Most quads a plane is drawn with at all. A plane that would need more, because its tile
-/// is a few pixels small at a zoom that allows no pre-tiled bitmap, is not drawn.
-const MAX_QUADS: i64 = 4096;
-
 /// The pre-tiled bitmap: `src` repeated over `width` by `height`.
 fn draw_pretiled(
     bitmaps: &mut Bitmaps,
@@ -196,10 +192,6 @@ impl Assembly<'_> {
             return;
         };
         let clip = level.clip;
-        let quads = across.repeats(i64::from(clip.width)) * down.repeats(i64::from(clip.height));
-        if quads > MAX_QUADS {
-            return;
-        }
         let look = Look {
             tone: plane.tone.to_proto(),
             color: plane.color.to_proto(),
@@ -402,8 +394,8 @@ mod tests {
     #[test]
     fn repeats_meet_without_seams_at_a_fractional_zoom() {
         for (width, height) in [(7, 5), (64, 64), (200, 150)] {
-            let mut stage = Stage::sized(160, 120);
-            let back = stage.solid(160, 120, [40, 80, 120, 255]);
+            let mut stage = Stage::new();
+            let back = stage.solid(640, 480, [40, 80, 120, 255]);
             let sprite = stage.scene.create_sprite(None).unwrap();
             let sprite = stage.scene.sprite_mut(sprite).unwrap();
             sprite.set_bitmap(Some(back), &stage.bitmaps);
@@ -621,17 +613,37 @@ mod tests {
         )));
     }
 
+    /// Tiles of 3 by 3 pixels with an inexact step: a quad for each, however many there are.
     #[test]
-    fn a_plane_that_would_need_too_many_quads_or_too_large_a_copy_is_not_drawn() {
-        // Tiles of 3 by 3 pixels with an inexact step: tens of thousands of quads.
+    fn a_plane_of_tiny_tiles_with_an_inexact_step_is_drawn_tile_by_tile() {
+        let mut stage = Stage::sized(64, 48);
+        let bitmap = pattern(&mut stage, 4, 4);
+        let id = plane(&mut stage, bitmap);
+        let zoomed = stage.scene.plane_mut(id).unwrap();
+        (zoomed.zoom_x, zoomed.zoom_y) = (0.75, 0.75);
+        (zoomed.ox, zoomed.oy) = (1, -1);
+        let packet = stage.scene.extract(&mut stage.bitmaps);
+        assert_eq!(stage.bitmaps.len(), 1);
+        assert_eq!(quads(&packet), 22 * 17);
+        let step = (4u64 << 20) / 3;
+        let tile = |i: u32| ((u64::from(i % 3) * step) >> 20) as u32;
+        assert!(shows(&stage.render(&packet).unwrap(), |x, y| texel(
+            tile(x + 1),
+            tile(y + 2)
+        )));
+
+        // On the whole screen as well: every repeat that shows is a quad.
         let mut stage = Stage::new();
         let bitmap = pattern(&mut stage, 4, 4);
         let id = plane(&mut stage, bitmap);
         let zoomed = stage.scene.plane_mut(id).unwrap();
         (zoomed.zoom_x, zoomed.zoom_y) = (0.75, 0.75);
-        assert!(all(&stage.frame(), BLACK));
-        assert_eq!(stage.bitmaps.len(), 1);
+        let packet = stage.scene.extract(&mut stage.bitmaps);
+        assert_eq!(quads(&packet), 214 * 160);
+    }
 
+    #[test]
+    fn a_plane_that_would_need_too_large_a_copy_is_not_drawn() {
         // A tile of one pixel has an exact step, but a copy of 1024 texels per pixel would
         // be far too large.
         let mut stage = Stage::new();
