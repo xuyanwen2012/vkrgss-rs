@@ -7,8 +7,8 @@
 
 use vkxp_compose_ref::fixtures::bitmap;
 use vkxp_proto::{
-    BitmapDelta, BitmapId, BlendMode, Color, FramePacket, GuestToHost, Op, Quad, Rect, RectEffect,
-    Size, Tone, Transform,
+    BitmapDelta, BitmapId, BlendMode, Color, FramePacket, FrameRate, GuestToHost, Op, Quad, Rect,
+    RectEffect, Size, Tone, Transform,
 };
 
 use super::differential::Pair;
@@ -19,6 +19,7 @@ fn packet(height: u32, bitmaps: Vec<BitmapDelta>, ops: Vec<Op>) -> GuestToHost {
     GuestToHost::Frame(FramePacket {
         frame_index: 0,
         logical_size: Size::new(N, height),
+        frame_rate: FrameRate::DEFAULT,
         bitmaps,
         ops,
     })
@@ -42,6 +43,8 @@ fn full_quad(id: BitmapId, height: u32, opacity: u8, blend: BlendMode) -> Op {
         bitmap: id,
         src: Rect::new(0, 0, N, height),
         transform: Transform::IDENTITY,
+        tone: Tone::NEUTRAL,
+        color: Color::new(0, 0, 0, 0),
         opacity,
         blend,
     })

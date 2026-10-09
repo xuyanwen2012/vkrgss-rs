@@ -203,6 +203,8 @@ mod tests {
             bitmap,
             src,
             transform: Transform::IDENTITY,
+            tone: Tone::NEUTRAL,
+            color: Color::new(0, 0, 0, 0),
             opacity: 255,
             blend: BlendMode::Normal,
         })
@@ -352,6 +354,8 @@ mod tests {
                 bitmap: ID,
                 src: Rect::new(0, 0, 8, 6),
                 transform: Transform::IDENTITY,
+                tone: Tone::NEUTRAL,
+                color: Color::new(0, 0, 0, 0),
                 opacity: 255,
                 blend: BlendMode::Normal,
             }),
@@ -368,6 +372,8 @@ mod tests {
             bitmap: BitmapId::new(9, 0),
             src: Rect::new(0, 0, 1, 1),
             transform: Transform::IDENTITY,
+            tone: Tone::NEUTRAL,
+            color: Color::new(0, 0, 0, 0),
             opacity: 255,
             blend: BlendMode::Normal,
         })];
@@ -441,6 +447,8 @@ mod tests {
                 tx: Fixed::from_bits(15),
                 ty: Fixed::from_bits(-1),
             },
+            tone: Tone::NEUTRAL,
+            color: Color::new(0, 0, 0, 0),
             opacity: 200,
             blend: BlendMode::Subtract,
         });
@@ -482,6 +490,8 @@ mod tests {
                     bitmap: ID,
                     src: Rect::new(0, 0, 8, 6),
                     transform: Transform::IDENTITY,
+                    tone: Tone::NEUTRAL,
+                    color: Color::new(0, 0, 0, 0),
                     opacity: 255,
                     blend,
                 })

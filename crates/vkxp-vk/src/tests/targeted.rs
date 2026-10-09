@@ -5,8 +5,8 @@ use std::process::Command;
 use vkxp_compose_ref as reference;
 use vkxp_compose_ref::fixtures::{self, bitmap, sprite};
 use vkxp_proto::{
-    BitmapDelta, BitmapId, BlendMode, Color, Fixed, FramePacket, GuestToHost, Op, OpKind, Quad,
-    Rect, RectEffect, Size, Tone, Transform,
+    BitmapDelta, BitmapId, BlendMode, Color, Fixed, FramePacket, FrameRate, GuestToHost, Op,
+    OpKind, Quad, Rect, RectEffect, Size, Tone, Transform,
 };
 
 use super::differential::{Pair, assert_stream_matches, frame_difference};
@@ -20,6 +20,7 @@ fn packet(size: Size, bitmaps: Vec<BitmapDelta>, ops: Vec<Op>) -> FramePacket {
     FramePacket {
         frame_index: 0,
         logical_size: size,
+        frame_rate: FrameRate::DEFAULT,
         bitmaps,
         ops,
     }
@@ -71,6 +72,8 @@ fn several_thousand_ops_on_one_pixel() {
                     bitmap: id,
                     src: Rect::new(0, 0, 8, 8),
                     transform: Transform::place_at((px - 4) as i16, (py - 4) as i16),
+                    tone: Tone::NEUTRAL,
+                    color: Color::new(0, 0, 0, 0),
                     opacity: (40 + i % 200) as u8,
                     blend: [BlendMode::Normal, BlendMode::Add, BlendMode::Subtract]
                         [(i % 3) as usize],
@@ -306,6 +309,8 @@ fn extreme_coefficients_select_the_reference_texels() {
                 tx: coefficient(4),
                 ty: coefficient(5),
             },
+            tone: Tone::NEUTRAL,
+            color: Color::new(0, 0, 0, 0),
             opacity: 200,
             blend: [BlendMode::Normal, BlendMode::Add, BlendMode::Subtract][index % 3],
         }));

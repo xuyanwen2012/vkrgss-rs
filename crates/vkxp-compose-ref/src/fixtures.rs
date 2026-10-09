@@ -6,8 +6,8 @@
 //! exactly those pixels.
 
 use vkxp_proto::{
-    BitmapDelta, BitmapId, BlendMode, Color, Fixed, FramePacket, GuestToHost, Op, Quad, Rect,
-    RectEffect, Size, Tone, Transform,
+    BitmapDelta, BitmapId, BlendMode, Color, Fixed, FramePacket, FrameRate, GuestToHost, Op, Quad,
+    Rect, RectEffect, Size, Tone, Transform,
 };
 
 /// Logical screen size of every fixture.
@@ -118,13 +118,15 @@ pub fn bitmap(id: BitmapId, width: u32, height: u32, rgba: Vec<u8>) -> [BitmapDe
 }
 
 /// An unscaled, fully opaque, normal-mode quad of a whole bitmap at (`x`, `y`), clipped to the
-/// screen.
+/// screen, with a neutral tone and a colour of alpha 0.
 pub fn sprite(id: BitmapId, width: u32, height: u32, x: i16, y: i16) -> Quad {
     Quad {
         clip: SCREEN,
         bitmap: id,
         src: Rect::new(0, 0, width, height),
         transform: Transform::place_at(x, y),
+        tone: Tone::NEUTRAL,
+        color: Color::new(0, 0, 0, 0),
         opacity: 255,
         blend: BlendMode::Normal,
     }
@@ -141,6 +143,7 @@ fn frame(frame_index: u64, bitmaps: Vec<BitmapDelta>, ops: Vec<Op>) -> GuestToHo
     GuestToHost::Frame(FramePacket {
         frame_index,
         logical_size: SIZE,
+        frame_rate: FrameRate::DEFAULT,
         bitmaps,
         ops,
     })

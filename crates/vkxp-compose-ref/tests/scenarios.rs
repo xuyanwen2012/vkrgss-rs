@@ -7,8 +7,8 @@ use vkxp_compose_ref::fixtures::{self, bitmap, sprite};
 use vkxp_compose_ref::{BACKGROUND, BitmapError, ComposeError, Compositor, Frame, SlotState};
 use vkxp_pixel::Rgba;
 use vkxp_proto::{
-    BitmapDelta, BitmapId, BlendMode, Color, FramePacket, Op, OpKind, Quad, Rect, RectEffect, Size,
-    Tone,
+    BitmapDelta, BitmapId, BlendMode, Color, FramePacket, FrameRate, Op, OpKind, Quad, Rect,
+    RectEffect, Size, Tone,
 };
 
 const SIZE: Size = Size::new(16, 12);
@@ -21,6 +21,7 @@ fn packet(bitmaps: Vec<BitmapDelta>, ops: Vec<Op>) -> FramePacket {
     FramePacket {
         frame_index: 0,
         logical_size: SIZE,
+        frame_rate: FrameRate::DEFAULT,
         bitmaps,
         ops,
     }
@@ -653,6 +654,7 @@ fn empty_or_oversized_logical_size_is_rejected() {
         let result = Compositor::new().render(&FramePacket {
             frame_index: 0,
             logical_size: size,
+            frame_rate: FrameRate::DEFAULT,
             bitmaps: vec![],
             ops: vec![],
         });

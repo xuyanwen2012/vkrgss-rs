@@ -23,7 +23,7 @@ use crate::{GuestToHost, HostToGuest, InputSnapshot};
 pub const MAGIC: [u8; 4] = *b"VKXP";
 
 /// Version of the message types and their encoding. Any change to either increments it.
-pub const PROTOCOL_VERSION: u16 = 1;
+pub const PROTOCOL_VERSION: u16 = 2;
 
 /// Length of the stream header in bytes.
 pub const HEADER_LEN: usize = 7;
@@ -154,7 +154,7 @@ pub fn decode_stream<T: Message>(bytes: &[u8]) -> Result<Vec<T>, DecodeError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Button, FramePacket, Size};
+    use crate::{AudioChannel, AudioCommand, BitmapId, Button, FramePacket, FrameRate, Size};
 
     fn sample() -> Vec<GuestToHost> {
         vec![
@@ -164,6 +164,7 @@ mod tests {
             GuestToHost::Frame(FramePacket {
                 frame_index: 1,
                 logical_size: Size::new(640, 480),
+                frame_rate: FrameRate::DEFAULT,
                 bitmaps: vec![],
                 ops: vec![],
             }),
@@ -225,6 +226,162 @@ mod tests {
                 found: 0,
                 supported: PROTOCOL_VERSION,
             })
+        );
+    }
+
+    #[test]
+    fn version_1_stream_is_rejected_naming_versions_1_and_2() {
+        assert_eq!(PROTOCOL_VERSION, 2);
+        let mut bytes = encode_stream(&sample()).unwrap();
+        bytes[4..6].copy_from_slice(&1u16.to_le_bytes());
+
+        let error = decode_stream::<GuestToHost>(&bytes).unwrap_err();
+        assert_eq!(
+            error,
+            DecodeError::UnsupportedVersion {
+                found: 1,
+                supported: 2,
+            }
+        );
+        assert_eq!(
+            error.to_string(),
+            "unsupported protocol version: found 1, supported 2"
+        );
+    }
+
+    fn packet_at(frame_index: u64, frame_rate: FrameRate) -> GuestToHost {
+        GuestToHost::Frame(FramePacket {
+            frame_index,
+            logical_size: Size::new(640, 480),
+            frame_rate,
+            bitmaps: vec![],
+            ops: vec![],
+        })
+    }
+
+    #[test]
+    fn frame_rate_travels_with_every_packet() {
+        let messages = [
+            packet_at(0, FrameRate::DEFAULT),
+            packet_at(1, FrameRate::MAX),
+            packet_at(2, FrameRate::MIN),
+        ];
+        let bytes = encode_stream(&messages).unwrap();
+        let decoded = decode_stream::<GuestToHost>(&bytes).unwrap();
+        let rates: Vec<u8> = decoded
+            .iter()
+            .map(|message| match message {
+                GuestToHost::Frame(packet) => packet.frame_rate.get(),
+                other => panic!("not a frame: {other:?}"),
+            })
+            .collect();
+        assert_eq!(rates, [40, 120, 10]);
+    }
+
+    /// The stream of one empty packet whose frame-rate byte is replaced by `fps`.
+    fn stream_with_frame_rate(fps: u8) -> Vec<u8> {
+        let marker = FrameRate::new(77).unwrap();
+        let mut bytes = encode_stream(&[packet_at(0, marker)]).unwrap();
+        let positions: Vec<usize> = (HEADER_LEN..bytes.len())
+            .filter(|&index| bytes[index] == 77)
+            .collect();
+        assert_eq!(positions.len(), 1, "the frame rate is one distinct byte");
+        bytes[positions[0]] = fps;
+        bytes
+    }
+
+    #[test]
+    fn frame_rate_out_of_range_does_not_decode() {
+        for fps in [0, 9, 121, 127] {
+            assert!(
+                matches!(
+                    decode_stream::<GuestToHost>(&stream_with_frame_rate(fps)),
+                    Err(DecodeError::Malformed { index: 0, .. })
+                ),
+                "frame rate {fps}"
+            );
+        }
+        for fps in [10, 40, 120] {
+            assert_eq!(
+                decode_stream::<GuestToHost>(&stream_with_frame_rate(fps)),
+                Ok(vec![packet_at(0, FrameRate::new(fps).unwrap())]),
+                "frame rate {fps}"
+            );
+        }
+    }
+
+    #[test]
+    fn every_kind_of_message_round_trips() {
+        let guest = vec![
+            packet_at(3, FrameRate::DEFAULT),
+            GuestToHost::Freeze,
+            GuestToHost::Transition {
+                duration: 20,
+                mask: Some(BitmapId::new(4, 1)),
+                vague: 40,
+            },
+            GuestToHost::Audio(AudioCommand::Stop {
+                channel: AudioChannel::Bgm,
+            }),
+            GuestToHost::Modal {
+                text: "message".to_owned(),
+            },
+            GuestToHost::SetTitle {
+                title: "title".to_owned(),
+            },
+            GuestToHost::Shutdown,
+            GuestToHost::FrameReset,
+        ];
+        // Fails to compile when a kind is added without extending the list above.
+        for message in &guest {
+            match message {
+                GuestToHost::Frame(_)
+                | GuestToHost::Freeze
+                | GuestToHost::Transition { .. }
+                | GuestToHost::Audio(_)
+                | GuestToHost::Modal { .. }
+                | GuestToHost::SetTitle { .. }
+                | GuestToHost::Shutdown
+                | GuestToHost::FrameReset => {}
+            }
+        }
+        let kinds: std::collections::HashSet<_> =
+            guest.iter().map(std::mem::discriminant).collect();
+        assert_eq!(kinds.len(), 8);
+        let bytes = encode_stream(&guest).unwrap();
+        assert_eq!(decode_stream::<GuestToHost>(&bytes), Ok(guest));
+
+        let host = vec![
+            HostToGuest::Input(InputSnapshot::EMPTY.with(Button::F9)),
+            HostToGuest::ModalDismissed,
+            HostToGuest::Tick,
+            HostToGuest::Quit,
+            HostToGuest::Reset,
+        ];
+        for message in &host {
+            match message {
+                HostToGuest::Input(_)
+                | HostToGuest::ModalDismissed
+                | HostToGuest::Tick
+                | HostToGuest::Quit
+                | HostToGuest::Reset => {}
+            }
+        }
+        let kinds: std::collections::HashSet<_> = host.iter().map(std::mem::discriminant).collect();
+        assert_eq!(kinds.len(), 5);
+        let bytes = encode_stream(&host).unwrap();
+        assert_eq!(decode_stream::<HostToGuest>(&bytes), Ok(host));
+    }
+
+    #[test]
+    fn reset_is_not_quit() {
+        let bytes = encode_stream(&[HostToGuest::Reset, HostToGuest::Quit]).unwrap();
+        let decoded = decode_stream::<HostToGuest>(&bytes).unwrap();
+        assert_eq!(decoded, [HostToGuest::Reset, HostToGuest::Quit]);
+        assert_ne!(decoded[0], decoded[1]);
+        assert_ne!(
+            encode_stream(&[HostToGuest::Reset]).unwrap(),
+            encode_stream(&[HostToGuest::Quit]).unwrap()
         );
     }
 

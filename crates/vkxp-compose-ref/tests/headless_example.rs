@@ -7,7 +7,7 @@ use std::process::Command;
 
 use vkxp_compose_ref::fixtures;
 use vkxp_proto::codec::encode_stream;
-use vkxp_proto::{FramePacket, GuestToHost, Op, Rect, Size};
+use vkxp_proto::{FramePacket, FrameRate, GuestToHost, Op, Rect, Size};
 
 /// The example binary, which `cargo test` builds next to the test binaries.
 fn example() -> PathBuf {
@@ -83,6 +83,7 @@ fn example_reports_a_reserved_op_and_writes_nothing() {
     let messages = [GuestToHost::Frame(FramePacket {
         frame_index: 0,
         logical_size: size,
+        frame_rate: FrameRate::DEFAULT,
         bitmaps: vec![],
         ops: vec![Op::TilemapLayer {
             clip: Rect::from_size(size),

@@ -25,11 +25,12 @@ pub enum Button {
     F6 = 26,
     F7 = 27,
     F8 = 28,
+    F9 = 29,
 }
 
 impl Button {
     /// Every button, in ascending order of its `Input` constant.
-    pub const ALL: [Button; 19] = [
+    pub const ALL: [Button; 20] = [
         Button::Down,
         Button::Left,
         Button::Right,
@@ -49,6 +50,7 @@ impl Button {
         Button::F6,
         Button::F7,
         Button::F8,
+        Button::F9,
     ];
 
     const fn mask(self) -> u32 {
@@ -94,6 +96,30 @@ mod tests {
         for button in Button::ALL {
             assert_eq!(seen & button.mask(), 0, "{button:?} shares a bit");
             seen |= button.mask();
+        }
+    }
+
+    #[test]
+    fn there_are_twenty_buttons_with_the_values_of_their_constants() {
+        let values = Button::ALL.map(|button| button as u8);
+        assert_eq!(
+            values,
+            [
+                2, 4, 6, 8, 11, 12, 13, 14, 15, 16, 17, 18, 21, 22, 23, 25, 26, 27, 28, 29
+            ]
+        );
+        assert_eq!(Button::F9 as u8, 29);
+        assert_eq!(Button::ALL[19], Button::F9);
+    }
+
+    #[test]
+    fn each_button_alone_is_the_only_one_held() {
+        for held in Button::ALL {
+            let snapshot = InputSnapshot::EMPTY.with(held);
+            assert_eq!(snapshot.buttons, 1 << held as u8);
+            for button in Button::ALL {
+                assert_eq!(snapshot.is_down(button), button == held, "{button:?}");
+            }
         }
     }
 

@@ -7,7 +7,8 @@ use proptest::prelude::*;
 use vkxp_proto::codec::{Message, decode_stream, encode_stream};
 use vkxp_proto::{
     AudioChannel, AudioCommand, BitmapDelta, BitmapId, BlendMode, Color, Fixed, FramePacket,
-    GuestToHost, HostToGuest, InputSnapshot, Op, Quad, Rect, RectEffect, Size, Tone, Transform,
+    FrameRate, GuestToHost, HostToGuest, InputSnapshot, Op, Quad, Rect, RectEffect, Size, Tone,
+    Transform,
 };
 
 fn fixed() -> impl Strategy<Value = Fixed> {
@@ -58,17 +59,23 @@ fn quad() -> impl Strategy<Value = Quad> {
         bitmap_id(),
         rect(),
         transform(),
+        tone(),
+        color(),
         any::<u8>(),
         blend_mode(),
     )
-        .prop_map(|(clip, bitmap, src, transform, opacity, blend)| Quad {
-            clip,
-            bitmap,
-            src,
-            transform,
-            opacity,
-            blend,
-        })
+        .prop_map(
+            |(clip, bitmap, src, transform, tone, color, opacity, blend)| Quad {
+                clip,
+                bitmap,
+                src,
+                transform,
+                tone,
+                color,
+                opacity,
+                blend,
+            },
+        )
 }
 
 fn op() -> impl Strategy<Value = Op> {
@@ -95,19 +102,27 @@ fn bitmap_delta() -> impl Strategy<Value = BitmapDelta> {
     ]
 }
 
+fn frame_rate() -> impl Strategy<Value = FrameRate> {
+    (FrameRate::MIN.get()..=FrameRate::MAX.get()).prop_map(|fps| FrameRate::new(fps).unwrap())
+}
+
 fn frame_packet() -> impl Strategy<Value = FramePacket> {
     (
         any::<u64>(),
         any::<(u32, u32)>(),
+        frame_rate(),
         vec(bitmap_delta(), 0..6),
         vec(op(), 0..8),
     )
-        .prop_map(|(frame_index, (width, height), bitmaps, ops)| FramePacket {
-            frame_index,
-            logical_size: Size::new(width, height),
-            bitmaps,
-            ops,
-        })
+        .prop_map(
+            |(frame_index, (width, height), frame_rate, bitmaps, ops)| FramePacket {
+                frame_index,
+                logical_size: Size::new(width, height),
+                frame_rate,
+                bitmaps,
+                ops,
+            },
+        )
 }
 
 fn audio_channel() -> impl Strategy<Value = AudioChannel> {
@@ -156,6 +171,7 @@ fn guest_to_host() -> impl Strategy<Value = GuestToHost> {
         any::<String>().prop_map(|text| GuestToHost::Modal { text }),
         any::<String>().prop_map(|title| GuestToHost::SetTitle { title }),
         Just(GuestToHost::Shutdown),
+        Just(GuestToHost::FrameReset),
     ]
 }
 
@@ -169,6 +185,7 @@ fn host_to_guest() -> impl Strategy<Value = HostToGuest> {
         Just(HostToGuest::ModalDismissed),
         Just(HostToGuest::Tick),
         Just(HostToGuest::Quit),
+        Just(HostToGuest::Reset),
     ]
 }
 

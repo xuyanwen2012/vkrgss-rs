@@ -13,8 +13,8 @@ use proptest::strategy::ValueTree;
 use proptest::test_runner::{Config, TestRunner};
 use vkxp_compose_ref as reference;
 use vkxp_proto::{
-    BitmapDelta, BitmapId, BlendMode, Color, Fixed, FramePacket, GuestToHost, Op, Quad, Rect,
-    RectEffect, Size, Tone, Transform,
+    BitmapDelta, BitmapId, BlendMode, Color, Fixed, FramePacket, FrameRate, GuestToHost, Op, Quad,
+    Rect, RectEffect, Size, Tone, Transform,
 };
 
 use super::differential::compare_stream;
@@ -546,6 +546,8 @@ fn build(plans: &[PacketPlan], faults: bool) -> Vec<GuestToHost> {
                         bitmap: id,
                         src: sub_rect(*span, width, height),
                         transform: transform(transform_plan),
+                        tone: Tone::NEUTRAL,
+                        color: Color::new(0, 0, 0, 0),
                         opacity: *opacity,
                         blend: *blend,
                     }));
@@ -570,6 +572,8 @@ fn build(plans: &[PacketPlan], faults: bool) -> Vec<GuestToHost> {
                             bitmap,
                             src,
                             transform: Transform::IDENTITY,
+                            tone: Tone::NEUTRAL,
+                            color: Color::new(0, 0, 0, 0),
                             opacity: 255,
                             blend: BlendMode::Normal,
                         })
@@ -599,6 +603,7 @@ fn build(plans: &[PacketPlan], faults: bool) -> Vec<GuestToHost> {
         messages.push(GuestToHost::Frame(FramePacket {
             frame_index: frame_index as u64,
             logical_size,
+            frame_rate: FrameRate::DEFAULT,
             bitmaps,
             ops,
         }));

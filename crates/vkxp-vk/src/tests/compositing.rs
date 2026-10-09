@@ -6,8 +6,8 @@
 
 use vkxp_compose_ref::fixtures::{self, bitmap, sprite};
 use vkxp_proto::{
-    AudioChannel, AudioCommand, BitmapDelta, BitmapId, Color, FramePacket, GuestToHost, Op, OpKind,
-    Rect, Size,
+    AudioChannel, AudioCommand, BitmapDelta, BitmapId, Color, FramePacket, FrameRate, GuestToHost,
+    Op, OpKind, Rect, Size,
 };
 
 use super::differential::{Pair, assert_stream_matches};
@@ -23,6 +23,7 @@ fn packet(bitmaps: Vec<BitmapDelta>, ops: Vec<Op>) -> FramePacket {
     FramePacket {
         frame_index: 0,
         logical_size: SIZE,
+        frame_rate: FrameRate::DEFAULT,
         bitmaps,
         ops,
     }
@@ -128,6 +129,7 @@ fn frame_follows_a_change_of_logical_size() {
         GuestToHost::Frame(FramePacket {
             frame_index: 0,
             logical_size: Size::new(width, height),
+            frame_rate: FrameRate::DEFAULT,
             bitmaps: vec![],
             ops: vec![Op::Clear {
                 clip: Rect::new(1, 1, width, height),
@@ -272,6 +274,7 @@ fn invalid_logical_size_is_rejected_before_the_deltas_are_applied() {
         let invalid = GuestToHost::Frame(FramePacket {
             frame_index: 0,
             logical_size: size,
+            frame_rate: FrameRate::DEFAULT,
             bitmaps: vec![BitmapDelta::Create {
                 id: ID,
                 width: 1,

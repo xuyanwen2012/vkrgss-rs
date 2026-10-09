@@ -2,10 +2,10 @@
 
 ## 1. Protocol types (`vkxp-proto`)
 
-- [ ] 1.1 Add `FrameRate` (10 to 120, default 40, checked and clamping constructors, validation on decode) and the field `FramePacket::frame_rate`. Verify: unit tests for both bounds and the clamp; a test that a stream carrying a frame rate of 9 or 121 fails to decode; `cargo test -p vkxp-proto`.
-- [ ] 1.2 Add `tone: Tone` and `color: Color` to `Quad` and document the order (tone, colour, then opacity and blend). Verify: the no-float test still passes and a unit test builds a quad with the neutral values.
-- [ ] 1.3 Add `GuestToHost::FrameReset`, `HostToGuest::Reset` and `Button::F9 = 29`, and document the tick handshake and the meaning of both messages on the types. Verify: a test round-trips one message of every guest-to-host and host-to-guest kind and asserts reset and quit differ; the button tests cover twenty buttons and assert F9 is 29.
-- [ ] 1.4 Set `PROTOCOL_VERSION` to 2 and update the crate documentation. Verify: a test decodes a stream with version 1 in its header and gets an error naming versions 1 and 2; the property tests in `tests/codec_props.rs` generate the new fields and pass.
+- [x] 1.1 Add `FrameRate` (10 to 120, default 40, checked and clamping constructors, validation on decode) and the field `FramePacket::frame_rate`. Verify: unit tests for both bounds and the clamp; a test that a stream carrying a frame rate of 9 or 121 fails to decode; `cargo test -p vkxp-proto`.
+- [x] 1.2 Add `tone: Tone` and `color: Color` to `Quad` and document the order (tone, colour, then opacity and blend). Verify: the no-float test still passes and a unit test builds a quad with the neutral values.
+- [x] 1.3 Add `GuestToHost::FrameReset`, `HostToGuest::Reset` and `Button::F9 = 29`, and document the tick handshake and the meaning of both messages on the types. Verify: a test round-trips one message of every guest-to-host and host-to-guest kind and asserts reset and quit differ; the button tests cover twenty buttons and assert F9 is 29.
+- [x] 1.4 Set `PROTOCOL_VERSION` to 2 and update the crate documentation. Verify: a test decodes a stream with version 1 in its header and gets an error naming versions 1 and 2; the property tests in `tests/codec_props.rs` generate the new fields and pass.
 
 ## 2. Reference compositor (`vkxp-compose-ref`)
 

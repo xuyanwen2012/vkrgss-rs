@@ -1,6 +1,7 @@
 //! The frame packet: bitmap changes and the ordered op list.
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::{BitmapId, Color, Fixed, Rect, Size, Tone};
 
@@ -11,10 +12,88 @@ pub struct FramePacket {
     pub frame_index: u64,
     /// Size of the logical screen in pixels. Op coordinates are in this space.
     pub logical_size: Size,
+    /// The frame rate the guest runs at. Compositors ignore it; the host paces to it.
+    pub frame_rate: FrameRate,
     /// Bitmap changes since the previous packet, applied in order before any op is drawn.
     pub bitmaps: Vec<BitmapDelta>,
     /// Draw ops. Their order is the draw order; backends never reorder them.
     pub ops: Vec<Op>,
+}
+
+/// A frame rate in whole frames per second, always from [`FrameRate::MIN`] to
+/// [`FrameRate::MAX`].
+///
+/// The range is that of `Graphics.frame_rate`. A value outside it cannot be constructed and
+/// does not decode, so no receiver has to check it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(try_from = "u8", into = "u8")]
+pub struct FrameRate(u8);
+
+impl FrameRate {
+    /// The lowest frame rate.
+    pub const MIN: FrameRate = FrameRate(10);
+    /// The highest frame rate.
+    pub const MAX: FrameRate = FrameRate(120);
+    /// The frame rate a game starts with.
+    pub const DEFAULT: FrameRate = FrameRate(40);
+
+    /// The frame rate of `fps` frames per second, if that is in range.
+    pub const fn new(fps: u8) -> Result<FrameRate, FrameRateOutOfRange> {
+        if fps >= Self::MIN.0 && fps <= Self::MAX.0 {
+            Ok(FrameRate(fps))
+        } else {
+            Err(FrameRateOutOfRange { found: fps })
+        }
+    }
+
+    /// The frame rate nearest to `fps`, as `Graphics.frame_rate=` assigns it.
+    pub const fn clamped(fps: i64) -> FrameRate {
+        if fps < Self::MIN.0 as i64 {
+            Self::MIN
+        } else if fps > Self::MAX.0 as i64 {
+            Self::MAX
+        } else {
+            FrameRate(fps as u8)
+        }
+    }
+
+    /// Frames per second.
+    pub const fn get(self) -> u8 {
+        self.0
+    }
+}
+
+impl Default for FrameRate {
+    fn default() -> FrameRate {
+        FrameRate::DEFAULT
+    }
+}
+
+impl TryFrom<u8> for FrameRate {
+    type Error = FrameRateOutOfRange;
+
+    fn try_from(fps: u8) -> Result<FrameRate, FrameRateOutOfRange> {
+        FrameRate::new(fps)
+    }
+}
+
+impl From<FrameRate> for u8 {
+    fn from(rate: FrameRate) -> u8 {
+        rate.get()
+    }
+}
+
+impl std::fmt::Display for FrameRate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+/// A number of frames per second that is not a valid [`FrameRate`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+#[error("frame rate {found} is outside {min} to {max}", min = FrameRate::MIN, max = FrameRate::MAX)]
+pub struct FrameRateOutOfRange {
+    pub found: u8,
 }
 
 /// A change to the set of bitmaps known to the host.
@@ -107,7 +186,12 @@ impl std::fmt::Display for OpKind {
 /// Draws the `src` rectangle of a bitmap through an affine transform.
 ///
 /// A screen pixel is covered when `transform` maps its centre into the source rectangle; it then
-/// takes the texel under that point (nearest sampling) and blends it over the pixel underneath.
+/// takes the texel under that point (nearest sampling). The texel is changed first by `tone`,
+/// then by `color` blended over it with the colour's alpha, both keeping the texel's own alpha.
+/// The result is blended over the pixel underneath at `opacity` in mode `blend`.
+///
+/// Tone and colour recolour what the quad draws, never the pixels underneath: that is
+/// [`RectEffect`]. [`Tone::NEUTRAL`] and a colour of alpha 0 leave the texel as it is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Quad {
     pub clip: Rect,
@@ -115,6 +199,10 @@ pub struct Quad {
     /// The part of the bitmap to draw, in bitmap pixels. It must lie inside the bitmap.
     pub src: Rect,
     pub transform: Transform,
+    /// Applied to the sampled texel first.
+    pub tone: Tone,
+    /// Blended over the toned texel with its alpha; alpha 0 changes nothing.
+    pub color: Color,
     /// 0 draws nothing, 255 draws the bitmap at its own alpha.
     pub opacity: u8,
     pub blend: BlendMode,
@@ -221,9 +309,13 @@ mod tests {
             bitmap: BitmapId::new(0, 0),
             src: Rect::new(0, 0, 1, 1),
             transform: Transform::IDENTITY,
+            tone: Tone::NEUTRAL,
+            color: Color::default(),
             opacity: 255,
             blend: BlendMode::Normal,
         };
+        assert_eq!(quad.tone, Tone::new(0, 0, 0, 0));
+        assert_eq!(quad.color.a, 0);
         let effect = RectEffect {
             clip,
             tone: Tone::NEUTRAL,
@@ -261,6 +353,53 @@ mod tests {
         assert!(!OpKind::Clear.is_reserved());
         assert!(!OpKind::Quad.is_reserved());
         assert!(!OpKind::RectEffect.is_reserved());
+    }
+
+    #[test]
+    fn frame_rate_accepts_exactly_10_to_120() {
+        assert_eq!(FrameRate::new(9), Err(FrameRateOutOfRange { found: 9 }));
+        assert_eq!(FrameRate::new(10), Ok(FrameRate::MIN));
+        assert_eq!(FrameRate::new(120), Ok(FrameRate::MAX));
+        assert_eq!(FrameRate::new(121), Err(FrameRateOutOfRange { found: 121 }));
+        for fps in 0..=u8::MAX {
+            let rate = FrameRate::new(fps);
+            assert_eq!(rate.is_ok(), (10..=120).contains(&fps), "{fps}");
+            assert_eq!(FrameRate::try_from(fps), rate);
+            if let Ok(rate) = rate {
+                assert_eq!(rate.get(), fps);
+                assert_eq!(u8::from(rate), fps);
+            }
+        }
+        assert_eq!(
+            FrameRate::new(9).unwrap_err().to_string(),
+            "frame rate 9 is outside 10 to 120"
+        );
+    }
+
+    #[test]
+    fn frame_rate_defaults_to_40() {
+        assert_eq!(FrameRate::default().get(), 40);
+        assert_eq!(FrameRate::DEFAULT, FrameRate::default());
+        assert_eq!(FrameRate::DEFAULT.to_string(), "40");
+    }
+
+    #[test]
+    fn frame_rate_clamps_like_graphics_frame_rate() {
+        assert_eq!(FrameRate::clamped(i64::MIN), FrameRate::MIN);
+        assert_eq!(FrameRate::clamped(-1), FrameRate::MIN);
+        assert_eq!(FrameRate::clamped(9), FrameRate::MIN);
+        assert_eq!(FrameRate::clamped(10), FrameRate::MIN);
+        assert_eq!(FrameRate::clamped(11).get(), 11);
+        assert_eq!(FrameRate::clamped(60).get(), 60);
+        assert_eq!(FrameRate::clamped(119).get(), 119);
+        assert_eq!(FrameRate::clamped(120), FrameRate::MAX);
+        assert_eq!(FrameRate::clamped(121), FrameRate::MAX);
+        assert_eq!(
+            FrameRate::clamped(376),
+            FrameRate::MAX,
+            "376 is 120 mod 256"
+        );
+        assert_eq!(FrameRate::clamped(i64::MAX), FrameRate::MAX);
     }
 
     fn texel(transform: &Transform, px: u16, py: u16) -> (i64, i64) {

@@ -7,6 +7,11 @@
 //! Inside one process they move through channels as they are; [`codec`] gives them a versioned
 //! binary form for recordings, test fixtures and a later process split.
 //!
+//! This is protocol version 2. Over version 1 a [`FramePacket`] carries the guest's
+//! [`FrameRate`], a [`Quad`] carries a tone and a colour for its own texels, the messages
+//! [`GuestToHost::FrameReset`] and [`HostToGuest::Reset`] exist, and [`Button`] has F9. Streams
+//! of version 1 are rejected.
+//!
 //! The binary form encodes enum variants by position, so reordering or removing variants, or
 //! changing fields, requires a new [`codec::PROTOCOL_VERSION`].
 
@@ -24,7 +29,10 @@ mod types;
 
 pub use audio::{AudioChannel, AudioCommand};
 pub use fixed::Fixed;
-pub use frame::{BitmapDelta, BlendMode, FramePacket, Op, OpKind, Quad, RectEffect, Transform};
+pub use frame::{
+    BitmapDelta, BlendMode, FramePacket, FrameRate, FrameRateOutOfRange, Op, OpKind, Quad,
+    RectEffect, Transform,
+};
 pub use input::{Button, InputSnapshot};
 pub use message::{GuestToHost, HostToGuest};
 pub use types::{BitmapId, Color, Rect, Size, Tone};
