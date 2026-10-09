@@ -37,10 +37,12 @@
 //!   element fails with [`SceneError::Disposed`], which names the [`ElementKind`].
 //! - Extraction. [`Scene::extract`] is the only place a frame is assembled: it returns the
 //!   protocol `FramePacket` with the ops of every visible element in draw order and the
-//!   deltas for exactly the bitmaps those ops refer to, and counts the frame. A sprite becomes
-//!   one quad; its position, origin, zoom, angle and mirror are resolved once, in `f64` with
-//!   sines and cosines from the pure-Rust `libm`, and rounded to the protocol's fixed-point
-//!   transform, exactly for multiples of 90 degrees. A viewport clips and offsets its
+//!   deltas for exactly the bitmaps those ops refer to, and counts the frame. A sprite that is
+//!   not turned becomes a stretch quad: its source rectangle stretched into a rectangle of
+//!   whole pixels, found in `f32` as the original runtime finds it. A turned sprite becomes
+//!   an affine quad; its position, origin, zoom, angle and mirror are resolved once, in `f64`
+//!   with sines and cosines from the pure-Rust `libm`, and rounded to the protocol's
+//!   fixed-point transform. A viewport clips and offsets its
 //!   elements and then applies its tone, colour and flash as a rectangle effect. A window is
 //!   drawn from bitmaps of the scene's own in the bitmap arena (background, frame, cursor),
 //!   redrawn from the window skin only when the skin, the size, the stretch flag or the
@@ -80,7 +82,7 @@
 //! | `delta` | changed rectangles and [`Bitmaps::deltas`] |
 //! | `scene` | [`Scene`], the element arenas and their handles, creation and disposal |
 //! | `element` | [`Sprite`], [`Viewport`], [`Window`], [`Plane`], [`Tilemap`], flashes |
-//! | `geometry` | the fixed-point transform of a quad |
+//! | `geometry` | the fixed-point transform of a quad, the rectangle of a stretch |
 //! | `extract` | [`Scene::extract`], the draw order, sprites and viewports as ops |
 //! | `window` | the bitmaps cached from a window skin, windows as ops |
 //! | `plane` | planes as tiled quads, the pre-tiled bitmap of a small pattern |

@@ -1,10 +1,11 @@
 //! Geometry of a quad: from position, origin, zoom, angle and mirror to the protocol's
-//! fixed-point transform.
+//! fixed-point transform or to the rectangle of a stretch.
 //!
-//! This is the one place where floating point becomes protocol data. The coefficients are
-//! computed in `f64` with operations that give the same bits on every platform (sines and
-//! cosines come from the pure-Rust `libm`), and each is then rounded to the nearest multiple
-//! of 2^-16.
+//! This is the one place where floating point becomes protocol data. The coefficients of a
+//! transform are computed in `f64` with operations that give the same bits on every platform
+//! (sines and cosines come from the pure-Rust `libm`), and each is then rounded to the nearest
+//! multiple of 2^-16. The rectangle of a stretch is computed in `f32`, as the original runtime
+//! does, with operations that IEEE 754 defines exactly.
 
 use vkxp_proto::{Fixed, Transform};
 
@@ -54,8 +55,8 @@ impl Geometry {
     /// `None` when the placement draws nothing or cannot be expressed: a zoom of 0, a value
     /// that is not a number, or a coefficient outside the fixed-point range.
     ///
-    /// PLACEHOLDER: the rounding of rotated and zoomed geometry is not yet checked against the
-    /// original runtime; neither is what a negative zoom draws (here: the flipped image).
+    /// PLACEHOLDER: what a negative zoom draws through a transform (here: the flipped image) is
+    /// not yet checked against the original runtime.
     pub(crate) fn transform(
         &self,
         src_width: f64,
@@ -86,6 +87,67 @@ impl Geometry {
             ty: to_fixed(ty - cut_top)?,
         })
     }
+}
+
+impl Geometry {
+    /// The map of a turned sprite, as measured on the original runtime: the screen pixel at
+    /// the whole offset (`dx`, `dy`) from the position shows the texel under
+    ///
+    /// ```text
+    /// U = ox + (dx * cos a - dy * sin a) / zoom_x
+    /// V = oy + (dx * sin a + dy * cos a) / zoom_y
+    /// ```
+    ///
+    /// with `U` replaced by `(src_width - 1) - U` when mirrored, and no half pixel anywhere.
+    /// The backends evaluate a transform at pixel centres, so the position is moved by half a
+    /// pixel to make the centre of a pixel stand for its whole offset.
+    ///
+    /// PLACEHOLDER: where `U` or `V` is a whole number the original runtime shows either of
+    /// two texels, depending on the rounding of its 32-bit floats; that is every pixel at 90,
+    /// 180 and 270 degrees. This shows the texel of the exact value.
+    pub(crate) fn turned_transform(
+        &self,
+        src_width: f64,
+        cut_left: f64,
+        cut_top: f64,
+    ) -> Option<Transform> {
+        let moved = Geometry {
+            // Halves of whole numbers, which `f64` holds exactly.
+            x: self.x + 0.5,
+            y: self.y + 0.5,
+            ..*self
+        };
+        moved.transform(src_width - 1.0, cut_left, cut_top)
+    }
+}
+
+/// The largest whole number below 2^32 and 2^31 that `f32` holds is below these.
+const F32_U32_END: f32 = 4_294_967_296.0;
+const F32_I32_END: f32 = 2_147_483_648.0;
+
+/// The number of screen pixels that `length` source pixels are stretched into at `zoom`, as
+/// the original runtime finds it: `floor(length * zoom)` in 32-bit floating point, the zoom
+/// rounded to that precision first. `None` when nothing is drawn: a zoom of 0 or less or not
+/// a number, or a result of 0 or beyond what a rectangle can hold.
+pub(crate) fn stretch_length(length: i32, zoom: f64) -> Option<u32> {
+    let zoom = zoom as f32;
+    if zoom.is_nan() || zoom <= 0.0 {
+        return None;
+    }
+    let pixels = (length as f32 * zoom).floor();
+    (1.0..F32_U32_END)
+        .contains(&pixels)
+        .then_some(pixels as u32)
+}
+
+/// The first screen pixel of an unrotated sprite along one axis, as the original runtime
+/// finds it: `floor(position - origin * zoom)` in 32-bit floating point. `None` when it is
+/// not a number or beyond the coordinates of a rectangle.
+pub(crate) fn stretch_start(position: i32, origin: i32, zoom: f64) -> Option<i32> {
+    let start = (position as f32 - origin as f32 * zoom as f32).floor();
+    (-F32_I32_END..F32_I32_END)
+        .contains(&start)
+        .then_some(start as i32)
 }
 
 /// Sine and cosine of an angle in degrees. Multiples of 90 degrees give exactly 0, 1 and -1.
@@ -310,6 +372,88 @@ mod tests {
         ] {
             assert_eq!(geometry.transform(4.0, 0.0, 0.0), None, "{geometry:?}");
         }
+    }
+
+    #[test]
+    fn a_turned_transform_samples_at_whole_offsets() {
+        // 30 degrees about (3, 5) at (20, 10): the texel of pixel (dx, dy) from the position
+        // is the floor of the measured rule.
+        let geometry = Geometry {
+            ox: 3.0,
+            oy: 5.0,
+            angle: 30.0,
+            ..Geometry::at(20, 10)
+        };
+        let transform = geometry.turned_transform(16.0, 0.0, 0.0).unwrap();
+        let (sin, cos) = (0.5f64, 0.75f64.sqrt());
+        for (dx, dy) in [(1i32, 0i32), (7, 3), (-2, 9), (5, -4), (-3, -1)] {
+            let u = 3.0 + f64::from(dx) * cos - f64::from(dy) * sin;
+            let v = 5.0 + f64::from(dx) * sin + f64::from(dy) * cos;
+            assert_eq!(
+                texel(&transform, (20 + dx) as u16, (10 + dy) as u16),
+                (u.floor() as i64, v.floor() as i64),
+                "({dx}, {dy})"
+            );
+        }
+        // The position itself shows the origin.
+        assert_eq!(texel(&transform, 20, 10), (3, 5));
+
+        // Mirrored: about the last texel, not about the width.
+        let mirrored = Geometry {
+            mirror: true,
+            ..geometry
+        };
+        let transform = mirrored.turned_transform(16.0, 0.0, 0.0).unwrap();
+        for (dx, dy) in [(1i32, 0i32), (7, 3), (-2, 9)] {
+            let u = 15.0 - (3.0 + f64::from(dx) * cos - f64::from(dy) * sin);
+            assert_eq!(
+                texel(&transform, (20 + dx) as u16, (10 + dy) as u16).0,
+                u.floor() as i64,
+                "({dx}, {dy})"
+            );
+        }
+    }
+
+    #[test]
+    fn stretch_lengths_are_floored_in_single_precision() {
+        assert_eq!(stretch_length(16, 1.0), Some(16));
+        assert_eq!(stretch_length(16, 2.5), Some(40));
+        assert_eq!(stretch_length(16, 0.14), Some(2));
+        // 16 * 1.1 is 17.6 either way, but 0.7 as a 32-bit float is above 0.7: 10 * 0.7 is 7
+        // there and 6.999... in double precision.
+        assert_eq!(stretch_length(16, 1.1), Some(17));
+        assert_eq!(stretch_length(10, 0.7), Some(7));
+        assert_eq!((10.0 * 0.7f64).floor(), 7.0);
+        assert_eq!(stretch_length(100, 0.29), Some(29));
+        assert_eq!((100.0 * 0.29f64).floor(), 28.0);
+        for (length, zoom) in [
+            (16, 0.0),
+            (16, -1.0),
+            (16, -0.0),
+            (16, f64::NAN),
+            (16, f64::INFINITY),
+            (16, 0.06),
+            (0, 3.0),
+            (-16, 3.0),
+            (i32::MAX, 2.0),
+            (16, 1e30),
+        ] {
+            assert_eq!(stretch_length(length, zoom), None, "{length} at {zoom}");
+        }
+        assert_eq!(stretch_length(i32::MAX, 1.0), Some(1 << 31));
+    }
+
+    #[test]
+    fn stretch_starts_are_floored_in_single_precision() {
+        assert_eq!(stretch_start(10, 0, 3.3), Some(10));
+        assert_eq!(stretch_start(260, 5, 0.5), Some(257));
+        assert_eq!(stretch_start(260, 5, 0.08), Some(259));
+        assert_eq!(stretch_start(260, 5, 1.02), Some(254));
+        assert_eq!(stretch_start(-3, 1, 1.5), Some(-5));
+        assert_eq!(stretch_start(0, 1, 1e30), None);
+        assert_eq!(stretch_start(0, 1, f64::NAN), None);
+        assert_eq!(stretch_start(i32::MIN, 0, 1.0), Some(i32::MIN));
+        assert_eq!(stretch_start(i32::MAX, 0, 1.0), None);
     }
 
     #[test]

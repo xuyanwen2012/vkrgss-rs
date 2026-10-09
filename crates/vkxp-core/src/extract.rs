@@ -1,9 +1,11 @@
 //! Frame extraction: the scene and the bitmap arena become a protocol frame packet.
 
-use vkxp_proto::{BitmapId, BlendMode, FramePacket, FrameRate, Op, Quad, RectEffect, Sampling};
+use vkxp_proto::{
+    BitmapId, BlendMode, FramePacket, FrameRate, Op, Quad, RectEffect, Sampling, Transform,
+};
 
 use crate::element::Order;
-use crate::geometry::Geometry;
+use crate::geometry::{self, Geometry};
 use crate::scene::Arena;
 use crate::scene::Key;
 use crate::tilemap::Strip;
@@ -60,6 +62,57 @@ pub(crate) fn level_of(
         dx: i64::from(viewport.rect.x) - i64::from(viewport.ox),
         dy: i64::from(viewport.rect.y) - i64::from(viewport.oy),
     })
+}
+
+/// The rows of `clip` from `top` up to `bottom`; a rectangle without pixels when there are
+/// none.
+fn rows(clip: vkxp_proto::Rect, top: i64, bottom: i64) -> vkxp_proto::Rect {
+    let first = top.max(i64::from(clip.y));
+    let end = bottom.min(i64::from(clip.y) + i64::from(clip.height));
+    if first < end {
+        // Both lie inside `clip`.
+        vkxp_proto::Rect::new(clip.x, first as i32, clip.width, (end - first) as u32)
+    } else {
+        vkxp_proto::Rect::new(clip.x, clip.y, clip.width, 0)
+    }
+}
+
+/// One axis of a stretch whose source is cut: `src` (start and length) is stretched into
+/// `dest`, and only `inside`, a part of `src`, may be drawn. The pixels of `dest` that show a
+/// texel of `inside`, as start and length, or `None` when none does. `mirror` counts the
+/// texels from the far end of `src`.
+fn cut_span(
+    src: (i32, u32),
+    inside: (i32, u32),
+    dest: (i32, u32),
+    mirror: bool,
+) -> Option<(i32, u32)> {
+    if inside == src {
+        return Some(dest);
+    }
+    // The texels that may show, counted from the start of `src` in the order of the pixels.
+    let low = u64::from(inside.0.abs_diff(src.0));
+    let high = low + u64::from(inside.1);
+    let length = u64::from(src.1);
+    let (low, high) = if mirror {
+        (length - high, length - low)
+    } else {
+        (low, high)
+    };
+    let step = vkxp_proto::stretch_step(src.1, dest.1);
+    // The first pixel whose texel is at least `texel`: the texels never decrease.
+    let first_at = |texel: u64| match (texel, step) {
+        (0, _) => 0,
+        (texel, _) if texel >= length => u64::from(dest.1),
+        (_, 0) => u64::from(dest.1),
+        (texel, step) => (texel << vkxp_proto::STRETCH_FRAC_BITS)
+            .div_ceil(step)
+            .min(u64::from(dest.1)),
+    };
+    let (first, end) = (first_at(low), first_at(high));
+    let start = i32::try_from(i64::from(dest.0) + first as i64).ok()?;
+    // At most the length of `dest`.
+    (first < end).then_some((start, (end - first) as u32))
 }
 
 /// The blend mode a blend type selects: 1 adds, 2 subtracts, every other value blends
@@ -130,6 +183,22 @@ impl Assembly<'_> {
         clip: vkxp_proto::Rect,
         look: Look,
     ) {
+        self.transformed(bitmap, src, part, clip, look, |cut_left, cut_top| {
+            geometry.transform(f64::from(src.width), cut_left, cut_top)
+        });
+    }
+
+    /// Draws the pixels of `part`, a rectangle inside `src`, through the transform that
+    /// `transform_of` gives for what was cut off `src` at its left and top.
+    fn transformed(
+        &mut self,
+        bitmap: BitmapId,
+        src: Rect,
+        part: Rect,
+        clip: vkxp_proto::Rect,
+        look: Look,
+        transform_of: impl Fn(f64, f64) -> Option<Transform>,
+    ) {
         if look.opacity == 0 || clip.is_empty() {
             return;
         }
@@ -143,8 +212,7 @@ impl Assembly<'_> {
         let cut_left = i64::from(inside.x) - i64::from(src.x);
         let cut_top = i64::from(inside.y) - i64::from(src.y);
         // Cuts are at most a rectangle side, which `f64` holds exactly.
-        let transform = geometry.transform(f64::from(src.width), cut_left as f64, cut_top as f64);
-        let Some(transform) = transform else {
+        let Some(transform) = transform_of(cut_left as f64, cut_top as f64) else {
             return;
         };
         self.referenced.push(bitmap);
@@ -160,6 +228,67 @@ impl Assembly<'_> {
         }));
     }
 
+    /// Draws `src` of `bitmap` stretched into `dest`, mirrored or not, if anything of it can
+    /// show inside `clip`.
+    ///
+    /// The protocol wants the source rectangle inside the bitmap, so the part of `src` outside
+    /// is cut off and `dest` with it, down to the pixels that show what is left.
+    ///
+    /// PLACEHOLDER: the stretch of a cut rectangle starts anew at its corner, so a zoomed
+    /// sprite whose source rectangle reaches outside its bitmap may show texels one off. What
+    /// the original runtime draws there is not measured.
+    pub(crate) fn stretched(
+        &mut self,
+        bitmap: BitmapId,
+        src: Rect,
+        dest: vkxp_proto::Rect,
+        mirror: bool,
+        clip: vkxp_proto::Rect,
+        look: Look,
+    ) {
+        let clip = intersect(clip, dest);
+        if look.opacity == 0 || clip.is_empty() {
+            return;
+        }
+        let Ok(bounds) = self.bitmaps.rect(bitmap) else {
+            return;
+        };
+        let src = src.to_proto();
+        let inside = intersect(src, bounds.to_proto());
+        if inside.is_empty() {
+            return;
+        }
+        let across = cut_span(
+            (src.x, src.width),
+            (inside.x, inside.width),
+            (dest.x, dest.width),
+            mirror,
+        );
+        let down = cut_span(
+            (src.y, src.height),
+            (inside.y, inside.height),
+            (dest.y, dest.height),
+            false,
+        );
+        let (Some((x, width)), Some((y, height))) = (across, down) else {
+            return;
+        };
+        self.referenced.push(bitmap);
+        self.ops.push(Op::Quad(Quad {
+            clip,
+            bitmap,
+            src: inside,
+            sampling: Sampling::Stretch {
+                dest: vkxp_proto::Rect::new(x, y, width, height),
+                mirror,
+            },
+            tone: look.tone,
+            color: look.color,
+            opacity: look.opacity,
+            blend: look.blend,
+        }));
+    }
+
     fn sprite(&mut self, sprite: &Sprite, level: &Level) {
         let Some(bitmap) = sprite.bitmap else {
             return;
@@ -167,6 +296,62 @@ impl Assembly<'_> {
         if !sprite.visible || sprite.flash.hides() {
             return;
         }
+        let look = Look {
+            tone: sprite.tone.to_proto(),
+            color: sprite.flash.effective_color(sprite.color),
+            opacity: sprite.opacity,
+            blend: blend_mode(sprite.blend_type),
+        };
+        // The remainder of a floating-point division is exact.
+        if sprite.angle.rem_euclid(360.0) == 0.0 {
+            self.upright_sprite(sprite, bitmap, level, look);
+        } else {
+            self.turned_sprite(sprite, bitmap, level, look);
+        }
+    }
+
+    /// A sprite that is not turned: its source rectangle stretched into a rectangle of whole
+    /// pixels, as measured on the original runtime. The lowest rows of that rectangle, as
+    /// many as the bush depth whatever the zoom, are drawn with half the opacity.
+    fn upright_sprite(&mut self, sprite: &Sprite, bitmap: BitmapId, level: &Level, look: Look) {
+        let src = sprite.src_rect;
+        let (Some(width), Some(height)) = (
+            geometry::stretch_length(src.width, sprite.zoom_x),
+            geometry::stretch_length(src.height, sprite.zoom_y),
+        ) else {
+            return;
+        };
+        let (Some(x), Some(y)) = (
+            geometry::stretch_start(sprite.x, sprite.ox, sprite.zoom_x),
+            geometry::stretch_start(sprite.y, sprite.oy, sprite.zoom_y),
+        ) else {
+            return;
+        };
+        // A rectangle that begins beyond the coordinates of the protocol is not drawn.
+        let (Ok(x), Ok(y)) = (
+            i32::try_from(i64::from(x) + level.dx),
+            i32::try_from(i64::from(y) + level.dy),
+        ) else {
+            return;
+        };
+        let dest = vkxp_proto::Rect::new(x, y, width, height);
+        let bush = sprite.bush_depth.max(0).unsigned_abs().min(height);
+        // Where the faint rows begin.
+        let split = i64::from(y) + i64::from(height - bush);
+        let faint = Look {
+            opacity: look.opacity >> 1,
+            ..look
+        };
+        let above = rows(level.clip, i64::MIN, split);
+        let below = rows(level.clip, split, i64::MAX);
+        self.stretched(bitmap, src, dest, sprite.mirror, above, look);
+        self.stretched(bitmap, src, dest, sprite.mirror, below, faint);
+    }
+
+    /// A turned sprite: an affine quad sampled at whole offsets from the sprite's position.
+    /// The lowest rows of the source rectangle, as many as the bush depth, are drawn with
+    /// half the opacity.
+    fn turned_sprite(&mut self, sprite: &Sprite, bitmap: BitmapId, level: &Level, look: Look) {
         let geometry = Geometry {
             // Sums of two `i32` and an `i64` offset built from two more.
             x: (i64::from(sprite.x) + level.dx) as f64,
@@ -178,23 +363,18 @@ impl Assembly<'_> {
             angle: sprite.angle,
             mirror: sprite.mirror,
         };
-        let look = Look {
-            tone: sprite.tone.to_proto(),
-            color: sprite.flash.effective_color(sprite.color),
-            opacity: sprite.opacity,
-            blend: blend_mode(sprite.blend_type),
-        };
-        // The lowest rows, as many as the bush depth, are drawn with half the opacity.
         let src = sprite.src_rect;
         let bush = sprite.bush_depth.clamp(0, src.height.max(0));
         let above = Rect::new(src.x, src.y, src.width, src.height - bush);
         let below = Rect::new(src.x, src.y.saturating_add(above.height), src.width, bush);
         let faint = Look {
-            opacity: look.opacity / 2,
+            opacity: look.opacity >> 1,
             ..look
         };
-        self.part(bitmap, src, above, &geometry, level.clip, look);
-        self.part(bitmap, src, below, &geometry, level.clip, faint);
+        let transform_of =
+            |cut_left, cut_top| geometry.turned_transform(f64::from(src.width), cut_left, cut_top);
+        self.transformed(bitmap, src, above, level.clip, look, transform_of);
+        self.transformed(bitmap, src, below, level.clip, faint, transform_of);
     }
 
     /// Applies the viewport's tone and colour to everything drawn so far inside `clip`.
@@ -881,20 +1061,37 @@ mod tests {
     }
 
     #[test]
+    fn a_negative_zoom_draws_nothing_of_an_unrotated_sprite() {
+        let mut stage = Stage::sized(32, 32);
+        let id = a_and_b(&mut stage);
+        for (zoom_x, zoom_y) in [(-1.0, 1.0), (1.0, -2.0), (-1.0, -1.0), (0.4, 1.0)] {
+            let sprite = stage.scene.sprite_mut(id).unwrap();
+            (sprite.zoom_x, sprite.zoom_y) = (zoom_x, zoom_y);
+            // The last: two columns at 0.4 are less than one pixel.
+            assert!(all(&stage.frame(), BLACK), "{zoom_x} by {zoom_y}");
+        }
+    }
+
+    /// The pixel at a whole offset from the position shows the texel that offset turns to.
+    /// PLACEHOLDER: at these right angles every pixel lies on a texel boundary, where the
+    /// original runtime shows a mixture of two texels.
+    #[test]
     fn the_angle_turns_a_sprite_counter_clockwise_about_its_origin() {
         let mut stage = Stage::sized(32, 32);
         let id = a_and_b(&mut stage);
         stage.scene.sprite_mut(id).unwrap().angle = 90.0;
-        assert_eq!(drawn(&stage.frame()), [(10, 8, B), (10, 9, A)]);
+        assert_eq!(drawn(&stage.frame()), [(10, 9, B), (10, 10, A)]);
 
         stage.scene.sprite_mut(id).unwrap().angle = 180.0;
-        assert_eq!(drawn(&stage.frame()), [(8, 9, B), (9, 9, A)]);
+        assert_eq!(drawn(&stage.frame()), [(9, 10, B), (10, 10, A)]);
 
         stage.scene.sprite_mut(id).unwrap().angle = 270.0;
-        assert_eq!(drawn(&stage.frame()), [(9, 10, A), (9, 11, B)]);
+        assert_eq!(drawn(&stage.frame()), [(10, 10, A), (10, 11, B)]);
 
-        stage.scene.sprite_mut(id).unwrap().angle = 360.0;
-        assert_eq!(drawn(&stage.frame()), [(10, 10, A), (11, 10, B)]);
+        for angle in [360.0, -360.0, 720.0] {
+            stage.scene.sprite_mut(id).unwrap().angle = angle;
+            assert_eq!(drawn(&stage.frame()), [(10, 10, A), (11, 10, B)]);
+        }
 
         // Turned and zoomed by a whole number: still whole pixels.
         let sprite = stage.scene.sprite_mut(id).unwrap();
@@ -902,8 +1099,185 @@ mod tests {
         sprite.zoom_x = 2.0;
         assert_eq!(
             drawn(&stage.frame()),
-            [(10, 6, B), (10, 7, B), (10, 8, A), (10, 9, A)]
+            [(10, 7, B), (10, 8, B), (10, 9, A), (10, 10, A)]
         );
+    }
+
+    /// One line of `sprite-zoom-samples.txt`: a sprite 16 pixels wide, and the source column
+    /// the original runtime showed at each screen pixel it covered.
+    #[test]
+    fn unrotated_sprites_show_the_measured_columns() {
+        let column = |x: u32| [x as u8 * 10 + 5, 200, 30, 255];
+        let samples = include_str!("../../vkxp-compose-ref/tests/data/sprite-zoom-samples.txt");
+        let mut checked = 0;
+        for line in samples.lines().filter(|line| !line.starts_with('#')) {
+            let parts: Vec<&str> = line.split('|').collect();
+            let given: Vec<&str> = parts[0].split_whitespace().collect();
+            let mut stage = Stage::sized(640, 3);
+            let bitmap = stage.pixels(16, 1, &(0..16).map(column).collect::<Vec<_>>());
+            let id = sprite(&mut stage, bitmap, given[1].parse().unwrap(), 1);
+            let sprite = stage.scene.sprite_mut(id).unwrap();
+            sprite.zoom_x = given[0].parse().unwrap();
+            sprite.ox = given[2].parse().unwrap();
+            sprite.mirror = given[3] == "1";
+            let frame = stage.frame();
+
+            let mut expected = Vec::new();
+            if parts[1].trim() != "none" {
+                let first: u32 = parts[1].split_whitespace().next().unwrap().parse().unwrap();
+                for (i, shown) in parts[2].split_whitespace().enumerate() {
+                    expected.push((first + i as u32, 1, column(shown.parse().unwrap())));
+                }
+            }
+            assert_eq!(drawn(&frame), expected, "{line}");
+            checked += 1;
+        }
+        assert!(checked > 60);
+    }
+
+    /// The rows of a sprite follow the rule of its columns, and both count from the corner
+    /// of the source rectangle.
+    #[test]
+    fn unrotated_sprites_stretch_their_source_rectangle_along_both_axes() {
+        let mut stage = Stage::sized(64, 64);
+        let bitmap = grid(&mut stage, 6, 6);
+        let id = sprite(&mut stage, bitmap, 20, 30);
+        let sprite = stage.scene.sprite_mut(id).unwrap();
+        sprite.src_rect = Rect::new(1, 2, 5, 4);
+        (sprite.ox, sprite.oy) = (3, 1);
+        (sprite.zoom_x, sprite.zoom_y) = (2.3, 3.7);
+        sprite.mirror = true;
+        // 5 * 2.3 = 11.5 and 4 * 3.7 = 14.8; 20 - 3 * 2.3 = 13.1 and 30 - 3.7 = 26.3.
+        let (width, height, left, top) = (11u32, 14u32, 13u32, 26u32);
+        let (step_x, step_y) = ((5u64 << 20) / 11, (4u64 << 20) / 14);
+        let frame = stage.frame();
+        let mut expected = Vec::new();
+        for j in 0..height {
+            for i in 0..width {
+                let u = ((u64::from(i) * step_x) >> 20) as u32;
+                let v = ((u64::from(j) * step_y) >> 20) as u32;
+                expected.push((left + i, top + j, cell(1 + 4 - u, 2 + v)));
+            }
+        }
+        assert_eq!(drawn(&frame), expected);
+    }
+
+    #[test]
+    fn a_viewport_moves_an_unrotated_sprite_by_whole_pixels() {
+        let mut stage = Stage::sized(64, 32);
+        let bitmap = grid(&mut stage, 6, 2);
+        let viewport = stage
+            .scene
+            .create_viewport(Rect::new(5, 4, 40, 20))
+            .unwrap();
+        stage.scene.viewport_mut(viewport).unwrap().ox = -3;
+        let id = sprite_in(&mut stage, Some(viewport), bitmap, 2, 1);
+        let sprite = stage.scene.sprite_mut(id).unwrap();
+        sprite.zoom_x = 1.5;
+        sprite.ox = 1;
+        // floor(2 - 1.5) = 0 inside the viewport, which begins at 5 and is scrolled by 3.
+        let step = (6u64 << 20) / 9;
+        let expected: Vec<_> = (0..2)
+            .flat_map(|j| {
+                (0..9u32).map(move |i| {
+                    let u = ((u64::from(i) * step) >> 20) as u32;
+                    (8 + i, 5 + j, cell(u, j))
+                })
+            })
+            .collect();
+        assert_eq!(drawn(&stage.frame()), expected);
+    }
+
+    /// A zoomed sprite whose source rectangle reaches outside its bitmap keeps its place and
+    /// its size, and shows only texels of the bitmap.
+    #[test]
+    fn a_zoomed_sprite_keeps_its_place_when_its_source_rectangle_is_cut() {
+        for mirror in [false, true] {
+            let mut stage = Stage::sized(64, 16);
+            let bitmap = grid(&mut stage, 4, 2);
+            let id = sprite(&mut stage, bitmap, 10, 3);
+            let sprite = stage.scene.sprite_mut(id).unwrap();
+            // Two columns left of the bitmap, its four columns, two columns right of it.
+            sprite.src_rect = Rect::new(-2, 0, 8, 2);
+            sprite.zoom_x = 3.0;
+            sprite.mirror = mirror;
+            let pixels = drawn(&stage.frame());
+            // 24 pixels for 8 columns, a step of just under a third: column 2, the first of
+            // the bitmap, begins at the 8th pixel, and column 6 at the 20th.
+            let row: Vec<(u32, Rgba)> = pixels
+                .iter()
+                .filter(|pixel| pixel.1 == 3)
+                .map(|pixel| (pixel.0, pixel.2))
+                .collect();
+            let columns: Vec<u32> = row.iter().map(|pixel| pixel.0).collect();
+            assert_eq!(columns, (17..29).collect::<Vec<_>>(), "mirror {mirror}");
+            let (first, last) = if mirror { (3, 0) } else { (0, 3) };
+            assert_eq!(row[0].1, cell(first, 0));
+            assert_eq!(row[11].1, cell(last, 0));
+            assert_eq!(pixels.len(), 24);
+        }
+    }
+
+    /// The lines of `sprite-rotation-samples.txt`: a turned sprite of 200 by 150 at
+    /// (320, 240), and the texel the original runtime showed at offsets from there.
+    #[test]
+    fn rotated_sprites_show_the_measured_texels() {
+        let samples = include_str!("../tests/data/sprite-rotation-samples.txt");
+        let lines: Vec<&str> = samples
+            .lines()
+            .filter(|line| !line.starts_with('#'))
+            .collect();
+        let mut stage = Stage::new();
+        let mut rgba = Vec::new();
+        for y in 0..150u8 {
+            for x in 0..200u8 {
+                rgba.extend_from_slice(&[x, y, 100, 255]);
+            }
+        }
+        let bitmap = stage.bitmap(200, 150, rgba);
+        let id = sprite(&mut stage, bitmap, 320, 240);
+        let mut checked = (0, 0);
+        // Lines of one placement follow each other.
+        for group in lines.chunk_by(|a, b| a.split('|').next() == b.split('|').next()) {
+            let given: Vec<f64> = group[0]
+                .split('|')
+                .next()
+                .unwrap()
+                .split_whitespace()
+                .map(|word| word.parse().unwrap())
+                .collect();
+            let sprite = stage.scene.sprite_mut(id).unwrap();
+            sprite.angle = given[0];
+            (sprite.ox, sprite.oy) = (given[1] as i32, given[2] as i32);
+            (sprite.zoom_x, sprite.zoom_y) = (given[3], given[4]);
+            sprite.mirror = given[5] == 1.0;
+            let frame = stage.frame();
+            for line in group {
+                let (offset, shown) = line.split('|').nth(1).unwrap().split_once("->").unwrap();
+                let offset: Vec<i32> = offset
+                    .split_whitespace()
+                    .map(|word| word.parse().unwrap())
+                    .collect();
+                let texel: Vec<u8> = shown
+                    .split_whitespace()
+                    .map_while(|word| word.parse().ok())
+                    .collect();
+                let expected = match texel.as_slice() {
+                    [u, v] => {
+                        checked.0 += 1;
+                        [*u, *v, 100, 255]
+                    }
+                    _ => {
+                        checked.1 += 1;
+                        BLACK
+                    }
+                };
+                let pixel = frame.pixel((320 + offset[0]) as u32, (240 + offset[1]) as u32);
+                assert_eq!(pixel, expected, "{line}");
+            }
+        }
+        // Covered pixels and pixels beside the sprite.
+        assert!(checked.0 > 30 && checked.1 > 200, "{checked:?}");
     }
 
     #[test]
@@ -974,14 +1348,20 @@ mod tests {
     }
 
     #[test]
-    fn the_bush_depth_counts_source_rows_whatever_the_zoom() {
+    fn the_bush_depth_counts_screen_rows_whatever_the_zoom() {
         let mut stage = Stage::sized(48, 80);
         let (id, faint) = bush(&mut stage, 8);
         stage.scene.sprite_mut(id).unwrap().zoom_y = 2.0;
         let frame = stage.frame();
-        assert!(rows(&frame, 0, 48, WHITE));
-        assert!(rows(&frame, 48, 64, faint));
+        assert!(rows(&frame, 0, 56, WHITE));
+        assert!(rows(&frame, 56, 64, faint));
         assert!(rows(&frame, 64, 80, BLACK));
+
+        // Zoomed out below the bush depth: every row is faint.
+        stage.scene.sprite_mut(id).unwrap().zoom_y = 0.2;
+        let frame = stage.frame();
+        assert!(rows(&frame, 0, 6, faint));
+        assert!(rows(&frame, 6, 80, BLACK));
     }
 
     #[test]
