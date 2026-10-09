@@ -68,3 +68,8 @@
 - The time domain is the system's monotonic clock when the swapchain offers it, read with
   `vkGetCalibratedTimestampsKHR` like the swapchain's own domains. Which domains RADV offers
   on the development machine is not known from here.
+- A present that `vkQueuePresentKHR` refuses with `VK_ERROR_PRESENT_TIMING_QUEUE_FULL_EXT`
+  ends the use of the extension like any other error of it, and the frame is acquired, drawn
+  and presented again without it. The presenter counts the free slots of the results queue
+  and does not ask for a result beyond them, so this error is not expected; growing the queue
+  instead of giving up is the alternative if the live check meets it.

@@ -1160,7 +1160,11 @@ impl VkCompositor {
         let source = self.prepare_sources()?;
         // Whether this present shows a frame for the first time, which is what is paced.
         let frame = std::mem::take(&mut self.unshown_frame);
-        for _attempt in 0..2 {
+        // One more attempt after an out-of-date swapchain, and one that does not count after
+        // a present the pacing extension refused, which happens once at most.
+        let mut attempts = 2;
+        while attempts > 0 {
+            attempts -= 1;
             if !self.ensure_swapchain()? {
                 return Ok(false);
             }
@@ -1282,6 +1286,12 @@ impl VkCompositor {
                     return Ok(true);
                 }
                 Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => self.mark_swapchain_stale(),
+                // The results queue of the swapchain is full. The presentation engine did
+                // not take the image: its acquisition is released, and the wait on the
+                // semaphore the draw signalled is queued, so the semaphore is unsignalled
+                // again. The swapchain is as it was before the acquire, and the frame is
+                // acquired, drawn and presented once more, now without the extension.
+                Err(result) if self.pacer.present_failed(plan.as_ref(), result) => attempts += 1,
                 Err(result) => {
                     self.mark_swapchain_stale();
                     return Err(VkError::Vulkan {

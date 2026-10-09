@@ -34,6 +34,9 @@ const SURFACE_CAPABILITIES_PRESENT_WAIT_2: vk::StructureType = structure_type(10
 const PHYSICAL_DEVICE_PRESENT_WAIT_2_FEATURES: vk::StructureType = structure_type(1000480001);
 const PRESENT_WAIT_2_INFO: vk::StructureType = structure_type(1000480002);
 
+/// `VK_ERROR_PRESENT_TIMING_QUEUE_FULL_EXT`.
+pub(crate) const ERROR_PRESENT_TIMING_QUEUE_FULL: vk::Result = vk::Result::from_raw(-1000208000);
+
 /// `VK_SWAPCHAIN_CREATE_PRESENT_TIMING_BIT_EXT`.
 pub(crate) const SWAPCHAIN_CREATE_PRESENT_TIMING: vk::SwapchainCreateFlagsKHR =
     vk::SwapchainCreateFlagsKHR::from_raw(0x0000_0200);

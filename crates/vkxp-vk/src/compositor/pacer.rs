@@ -22,10 +22,11 @@ pub(super) type Failure = (&'static str, vk::Result);
 pub(super) struct Feedback {
     /// How many presents were reported completely, each freeing a slot of the results queue.
     pub completed: u32,
-    /// The times at which those presents became visible, oldest first, on the clock of
-    /// [`TimingCalls::now`].
+    /// The times at which those presents became visible, oldest first, on the clock
+    /// [`TimingCalls::now`] read before this call.
     pub visible: Vec<u64>,
-    /// Whether that clock is another one from now on.
+    /// Whether [`TimingCalls::now`] reads another clock from now on. The times above are
+    /// still on the one before.
     pub clock_changed: bool,
 }
 
@@ -117,14 +118,28 @@ impl Pacer {
     }
 
     /// A new swapchain presents from now on: nothing of the old one is waited for, and its
-    /// clock may be another one.
+    /// clock may be another one, so no target of the old one is carried over. The statistics
+    /// are only interrupted when their times come from that clock.
     pub(super) fn swapchain_replaced(&mut self) {
         self.awaited = None;
         self.outstanding = 0;
+        self.schedule.restart();
         if self.from_feedback {
-            self.schedule.restart();
             self.stats.interrupt();
         }
+    }
+
+    /// The present of `plan` failed with `result`. Returns whether the failure is the
+    /// extension's own, a full results queue, in which case the extension is not used from
+    /// here on and the present is to be made again without it. The pacer only asks for a
+    /// result while it counts a free slot, so a full queue means the count cannot be relied
+    /// on.
+    pub(super) fn present_failed(&mut self, plan: Option<&Plan>, result: vk::Result) -> bool {
+        let full = plan.is_some() && result == ffi::ERROR_PRESENT_TIMING_QUEUE_FULL;
+        if full {
+            self.fail(("vkQueuePresentKHR", result));
+        }
+        full
     }
 
     /// A call of the extension failed: it is not used from here on.
@@ -170,12 +185,13 @@ impl Pacer {
         if queue_size > 0 {
             let feedback = calls.feedback()?;
             self.outstanding = self.outstanding.saturating_sub(feedback.completed);
+            // These times are still on the clock in use until now.
+            for time in feedback.visible {
+                self.stats.record(time);
+            }
             if feedback.clock_changed {
                 self.schedule.restart();
                 self.stats.interrupt();
-            }
-            for time in feedback.visible {
-                self.stats.record(time);
             }
         }
         let now = calls.now()?;
@@ -555,6 +571,8 @@ mod tests {
         waited_for: Vec<(u64, u64)>,
         /// Visible times not reported yet.
         pending: Vec<u64>,
+        /// Whether the next feedback says that the clock is another one from then on.
+        clock_changes: bool,
     }
 
     impl StandIn {
@@ -588,7 +606,7 @@ mod tests {
             Ok(Feedback {
                 completed: visible.len() as u32,
                 visible,
-                clock_changed: false,
+                clock_changed: std::mem::take(&mut self.clock_changes),
             })
         }
 
@@ -756,31 +774,117 @@ mod tests {
         assert_eq!(pacer.take_report(), None);
     }
 
+    /// With and without times reported by the surface: the clock of the new swapchain may
+    /// be another one either way.
     #[test]
     fn replaced_swapchain_is_not_waited_for_and_starts_the_schedule_from_its_clock() {
+        for queue_size in [4, 0] {
+            let mut pacer = Pacer::new();
+            let mut old = StandIn {
+                now: 1000 * MS,
+                wait: true,
+                queue_size,
+                ..StandIn::default()
+            };
+            present(&mut pacer, &mut old);
+            present(&mut pacer, &mut old);
+            pacer.swapchain_replaced();
+            let mut new = StandIn {
+                now: 7 * MS,
+                wait: true,
+                queue_size,
+                ..StandIn::default()
+            };
+            let plan = present(&mut pacer, &mut new).unwrap();
+            assert_eq!(
+                (plan.target, plan.present_id),
+                (7 * MS, Some(3)),
+                "ids keep growing; results queue of {queue_size}"
+            );
+            assert_eq!(new.waited_for, []);
+            new.now += 25 * MS;
+            assert_eq!(present(&mut pacer, &mut new).unwrap().target, 32 * MS);
+        }
+    }
+
+    #[test]
+    fn replaced_swapchain_keeps_the_intervals_measured_by_the_presenters_clock() {
         let mut pacer = Pacer::new();
-        let mut old = StandIn {
-            now: 1000 * MS,
-            wait: true,
-            queue_size: 4,
-            ..StandIn::default()
-        };
-        present(&mut pacer, &mut old);
-        present(&mut pacer, &mut old);
+        for _ in 0..3 {
+            pacer.presented(None, true);
+        }
         pacer.swapchain_replaced();
-        let mut new = StandIn {
-            now: 7 * MS,
+        pacer.presented(None, true);
+        assert_eq!(pacer.summary().unwrap().count, 3);
+    }
+
+    /// The feedback that announces another clock still carries times of the one before:
+    /// they are measured against each other, and no interval spans the two clocks.
+    #[test]
+    fn times_of_the_clock_before_a_change_are_not_measured_against_those_after_it() {
+        let mut pacer = Pacer::new();
+        let mut swapchain = StandIn {
+            now: 1000 * MS,
+            queue_size: 4,
+            ..StandIn::default()
+        };
+        // Visible at 1000 and 1025 ms of the first clock.
+        present(&mut pacer, &mut swapchain);
+        swapchain.now += 25 * MS;
+        present(&mut pacer, &mut swapchain);
+
+        // The feedback read for the third frame reports 1025 ms and the change.
+        swapchain.clock_changes = true;
+        swapchain.now = 7 * MS;
+        let mut targets = Vec::new();
+        for _ in 0..3 {
+            targets.push(present(&mut pacer, &mut swapchain).unwrap().target);
+            swapchain.now += 25 * MS;
+        }
+        assert_eq!(targets, [7, 32, 57].map(|ms| ms * MS), "from the new clock");
+        // Read so far: 1000 and 1025 ms, then 7 and 32 ms.
+        let summary = pacer.summary().unwrap();
+        assert_eq!(
+            (summary.count, summary.smallest, summary.largest),
+            (2, 25 * MS, 25 * MS)
+        );
+    }
+
+    /// The run-time fallback for the one error of the extension that the present itself
+    /// returns.
+    #[test]
+    fn present_refused_for_a_full_results_queue_is_reported_once_and_made_again_untimed() {
+        let mut pacer = Pacer::new();
+        let mut swapchain = StandIn {
             wait: true,
             queue_size: 4,
             ..StandIn::default()
         };
-        let plan = present(&mut pacer, &mut new).unwrap();
-        assert_eq!(
-            (plan.target, plan.present_id),
-            (7 * MS, Some(3)),
-            "ids keep growing"
+        assert!(present(&mut pacer, &mut swapchain).is_some());
+
+        // Any other failure of a present is not the extension's.
+        let plan = pacer.plan(Some(&mut swapchain), true).unwrap();
+        assert!(!pacer.present_failed(Some(&plan), vk::Result::ERROR_DEVICE_LOST));
+        assert!(!pacer.present_failed(None, ffi::ERROR_PRESENT_TIMING_QUEUE_FULL));
+        assert!(pacer.wants_timing());
+        assert_eq!(pacer.take_report(), None);
+
+        assert!(pacer.present_failed(Some(&plan), ffi::ERROR_PRESENT_TIMING_QUEUE_FULL));
+        assert!(!pacer.wants_timing());
+        let report = pacer.take_report().expect("the failure is reported");
+        assert!(
+            report.contains("vkQueuePresentKHR") && report.contains("without target times"),
+            "{report}"
         );
-        assert_eq!(new.waited_for, []);
+
+        // The present is made again, and every later one, with nothing of the extension.
+        let calls = swapchain.calls.len();
+        for _ in 0..3 {
+            assert_eq!(present(&mut pacer, &mut swapchain), None);
+        }
+        assert_eq!(swapchain.calls.len(), calls);
+        assert_eq!(pacer.take_report(), None, "reported once");
+        assert_eq!(ffi::ERROR_PRESENT_TIMING_QUEUE_FULL.as_raw(), -1000208000);
     }
 
     #[test]
