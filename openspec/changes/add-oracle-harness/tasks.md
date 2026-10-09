@@ -12,8 +12,8 @@
 
 ## 3. Report (`xtask`)
 
-- [ ] 3.1 Implement the comparison, the difference pictures and the summary. Verify: the two report scenarios.
-- [ ] 3.2 Add the `oracle` command with its usage text and a README section. Verify: every command in the section matches the implemented options.
+- [x] 3.1 Implement the comparison, the difference pictures and the summary. Verify: the two report scenarios.
+- [x] 3.2 Add the `oracle` command with its usage text and a README section. Verify: every command in the section matches the implemented options.
 
 ## 4. Integration check
 

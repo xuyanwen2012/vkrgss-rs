@@ -194,6 +194,73 @@ The end-to-end test of the `vkxp` crate runs the built program this way on games
 itself, with a stand-in for the built-in scripts. Like the other tests that render, it refuses
 to run while the loader is not restricted, and it passes the restriction on to the program.
 
+## Comparing with the original runtime
+
+`cargo xtask oracle` runs one game in the original runtime and in vkxp under the same
+conditions and reports how chosen frames differ. The original runtime, the run-time package
+and the game are yours and stay where they are: the command takes their locations, works on
+copies of the game and writes only below its output directory.
+
+```sh
+cargo xtask oracle <game directory> --frames 10,20,200 \
+    --dll <RGSS DLL> --rtp Standard=<RTP directory> --input "60:RIGHT, 100:"
+```
+
+| Option | Meaning |
+|---|---|
+| `--frames N[,N...]` | The frames to capture, numbered from 0 as `vkxp --dump` numbers them. Required. |
+| `--dll FILE` | The RGSS DLL that the game's `Game.ini` names with `Library=`. Required unless `--vkxp-only` is given. |
+| `--rtp NAME=DIR` | The directory of the run-time package that `Game.ini` names `NAME`. Repeatable. |
+| `--input SCHEDULE\|@FILE` | The buttons held from given frames on, in the syntax described under *Running the demo*, or a file that holds such a schedule. |
+| `--builtin-scripts FILE` | The built-in scripts file for vkxp, instead of its default location. |
+| `--out DIR` | Where everything is written. Defaults to `target/oracle`. |
+| `--vkxp-only` | Run only vkxp. Needs neither Wine nor Xvfb nor the DLL. |
+| `--locale LOCALE` | `LC_ALL` of the original, which decides the code page its file names are read in: `zh_CN.UTF-8`, the default, for a Chinese game, `ja_JP.UTF-8` for a Japanese one. |
+| `--timeout SECONDS` | How long the original may take to reach one frame. Defaults to 120. |
+
+Each side runs a copy of the game, `<out>/original/game` and `<out>/vkxp/game`, with a probe
+script added in front of the scripts of its archive. The probe seeds the random numbers with
+a fixed value, answers `Input.press?`, `Input.trigger?`, `Input.repeat?`, `Input.dir4` and
+`Input.dir8` from the schedule instead of the keyboard, and counts frames as the host of vkxp
+does: one for every `Graphics.update` and `d` for `Graphics.transition(d)`. The game directory
+given is never written to, and the output directory may not be inside it.
+
+The original side needs `wine`, `wineboot`, `wineserver` and `Xvfb` on `PATH` and a game that
+has its `Game.exe`. The command starts a virtual display of its own, makes a Wine prefix at
+`<out>/prefix` on the first run (which takes a while), registers the run-time packages and
+replacements for common game fonts in it, and runs `Game.exe` with software rendering only.
+At each frame asked for the probe holds the game until the command has read the picture of
+the game window from the display; after the last one the game ends. A frame that falls
+inside a transition is captured when the transition has ended, because the original cannot
+be held in the middle of one. What Wine and the game print is in `<out>/original/wine.log`,
+which is where to look when the command reports that a frame was not reached. vkxp runs
+headless on the CPU device unless the Vulkan loader is already restricted to other drivers.
+
+The command prints one line per frame and writes:
+
+| File | Contents |
+|---|---|
+| `<out>/frames/<n>-original.png` | frame `n` of the original |
+| `<out>/frames/<n>-vkxp.png` | frame `n` of vkxp |
+| `<out>/frames/<n>-diff.png` | the absolute difference of red, green and blue, multiplied by 32 |
+| `<out>/summary.json` | for every frame the three file names, `differing_pixels` and `largest_difference` (of any colour channel) |
+
+It exits with status 0 when both runs completed, whatever the differences are; a missing
+prerequisite or a run that fails is an error that names what was missing or what happened.
+With `--vkxp-only` there is nothing to compare, and the summary lists the pictures of vkxp.
+The pictures show the game's and the run-time package's art, so they stay out of the
+repository, like everything else below `target/`.
+
+The tests of the harness run the vkxp side on games they generate. The one test of the
+original side is ignored by default, because it needs Wine, Xvfb and files that are not in the
+repository; it captures frames 10 and 20 of a real game below `target/oracle-test`. Its three
+variables hold absolute paths:
+
+```sh
+VKXP_ORACLE_DLL=<RGSS DLL> VKXP_ORACLE_RTP=<RTP directory> VKXP_ORACLE_GAME=<game directory> \
+    cargo test -p xtask -- --ignored the_original_is_captured
+```
+
 ## Prerequisites
 
 Building the workspace compiles the shaders of `vkxp-vk` and the embedded Ruby interpreter of
