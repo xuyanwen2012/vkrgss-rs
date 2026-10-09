@@ -1,0 +1,621 @@
+//! Targeted cases: the corners that random generation is unlikely to hit squarely.
+
+use std::process::Command;
+
+use vkxp_compose_ref as reference;
+use vkxp_compose_ref::fixtures::{self, bitmap, sprite};
+use vkxp_proto::{
+    BitmapDelta, BitmapId, BlendMode, Color, Fixed, FramePacket, GuestToHost, Op, OpKind, Quad,
+    Rect, RectEffect, Size, Tone, Transform,
+};
+
+use super::differential::{Pair, assert_stream_matches, frame_difference};
+use super::harness::{TestCompositor, test_device};
+use crate::{
+    BitmapError, DeviceChoice, DeviceError, Limit, SlotState, VkCompositor, VkError,
+    available_devices,
+};
+
+fn packet(size: Size, bitmaps: Vec<BitmapDelta>, ops: Vec<Op>) -> FramePacket {
+    FramePacket {
+        frame_index: 0,
+        logical_size: size,
+        bitmaps,
+        ops,
+    }
+}
+
+fn frame(size: Size, bitmaps: Vec<BitmapDelta>, ops: Vec<Op>) -> GuestToHost {
+    GuestToHost::Frame(packet(size, bitmaps, ops))
+}
+
+fn clear(clip: Rect, color: [u8; 4]) -> Op {
+    Op::Clear {
+        clip,
+        color: Color::from_rgba(color),
+    }
+}
+
+fn effect(clip: Rect, tone: Tone, color: [u8; 4]) -> Op {
+    Op::RectEffect(RectEffect {
+        clip,
+        tone,
+        color: Color::from_rgba(color),
+    })
+}
+
+// Requirement: Tile binning is not observable
+
+/// Six thousand ops whose result depends on their order, all covering one pixel: translucent
+/// quads in every blend mode, tones, colours and partial clears, with clips of many sizes
+/// around the pixel so that neighbouring tiles see different sub-lists.
+#[test]
+fn several_thousand_ops_on_one_pixel() {
+    const OPS: u32 = 6000;
+    let size = Size::new(40, 30);
+    let (px, py) = (17, 9);
+    let id = BitmapId::new(0, 0);
+    let texels = fixtures::disc(8, Color::new(200, 120, 40, 255));
+    let ops: Vec<Op> = (0..OPS)
+        .map(|i| {
+            // Always contains (px, py); reaches a different distance each time.
+            let reach = (i % 23) as i32;
+            let clip = Rect::new(px - reach, py - reach % 9, 2 * reach as u32 + 1, 12);
+            match i % 7 {
+                0 => clear(
+                    Rect::new(px, py, 1 + i % 3, 1),
+                    [(i % 251) as u8, (i % 13) as u8, 90, 255 - (i % 200) as u8],
+                ),
+                1..=3 => Op::Quad(Quad {
+                    clip,
+                    bitmap: id,
+                    src: Rect::new(0, 0, 8, 8),
+                    transform: Transform::place_at((px - 4) as i16, (py - 4) as i16),
+                    opacity: (40 + i % 200) as u8,
+                    blend: [BlendMode::Normal, BlendMode::Add, BlendMode::Subtract]
+                        [(i % 3) as usize],
+                }),
+                4 => effect(clip, Tone::new(3, -2, 1, (i % 40) as u8), [0, 0, 0, 0]),
+                5 => effect(clip, Tone::NEUTRAL, [(i % 256) as u8, 20, 200, 9]),
+                _ => effect(clip, Tone::new(-1, 2, -3, 1), [10, (i % 256) as u8, 30, 5]),
+            }
+        })
+        .collect();
+    assert_eq!(ops.len() as u32, OPS);
+    assert!(ops.iter().all(|op| op.clip().contains(px, py)));
+
+    let stream = [frame(size, bitmap(id, 8, 8, texels).into(), ops.clone())];
+    assert_stream_matches(&stream);
+
+    // The order matters: the same ops reversed give another pixel, so a backend that skipped
+    // or reordered some could not have matched by accident.
+    let forwards = reference::render_stream(&stream).unwrap().unwrap();
+    let mut reversed = ops;
+    reversed.reverse();
+    let GuestToHost::Frame(first) = &stream[0] else {
+        unreachable!()
+    };
+    let backwards = reference::render_stream(&[frame(size, first.bitmaps.clone(), reversed)])
+        .unwrap()
+        .unwrap();
+    assert_ne!(
+        forwards.pixel(px as u32, py as u32),
+        backwards.pixel(px as u32, py as u32)
+    );
+}
+
+#[test]
+fn ops_entirely_off_screen_change_nothing() {
+    let size = Size::new(50, 40);
+    let id = BitmapId::new(0, 0);
+    let deltas: Vec<BitmapDelta> = bitmap(id, 8, 8, fixtures::gradient(8, 8)).into();
+    let beside = [
+        Rect::new(50, 0, 10, 40),
+        Rect::new(0, 40, 50, 10),
+        Rect::new(-10, 0, 10, 40),
+        Rect::new(0, -10, 50, 10),
+        Rect::new(1000, 1000, 5, 5),
+        Rect::new(i32::MIN, i32::MIN, 100, 100),
+        Rect::new(i32::MAX, i32::MAX, u32::MAX, u32::MAX),
+        Rect::new(10, 10, 0, 0),
+    ];
+    let mut ops = vec![clear(Rect::from_size(size), [10, 20, 30, 255])];
+    for clip in beside {
+        ops.push(clear(clip, [255, 0, 0, 255]));
+        ops.push(effect(
+            clip,
+            Tone::new(100, 100, 100, 255),
+            [0, 255, 0, 255],
+        ));
+        ops.push(Op::Quad(Quad {
+            clip,
+            ..sprite(id, 8, 8, 0, 0)
+        }));
+    }
+    // A quad whose clip is the screen but whose transform puts it far away.
+    ops.push(Op::Quad(Quad {
+        clip: Rect::from_size(size),
+        ..sprite(id, 8, 8, 500, -500)
+    }));
+
+    let mut pair = Pair::new();
+    let rendered = pair
+        .step(&frame(size, deltas, ops))
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert!(
+        rendered
+            .rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .all(|pixel| *pixel == [10, 20, 30, 255])
+    );
+    // Only off-screen ops, without a clear: the background.
+    let only_off_screen = vec![clear(Rect::new(50, 40, 5, 5), [255, 0, 0, 255])];
+    let background = pair
+        .step(&frame(size, vec![], only_off_screen))
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(background.pixel(49, 39), reference::BACKGROUND);
+}
+
+/// A logical size that is not a multiple of the tile size in either direction: one partial
+/// column and one partial row of tiles, drawn into right up to the last pixel.
+#[test]
+fn logical_size_641_by_479() {
+    let size = Size::new(641, 479);
+    let screen = Rect::from_size(size);
+    let (board, shape) = (BitmapId::new(0, 0), BitmapId::new(1, 0));
+    let mut deltas: Vec<BitmapDelta> = bitmap(
+        board,
+        64,
+        48,
+        fixtures::checkerboard(
+            64,
+            48,
+            4,
+            Color::new(32, 32, 48, 255),
+            Color::new(224, 224, 208, 255),
+        ),
+    )
+    .into();
+    deltas.extend(bitmap(
+        shape,
+        40,
+        40,
+        fixtures::disc(40, Color::new(255, 160, 64, 255)),
+    ));
+    // The checkerboard magnified to just cover 641 by 479.
+    let magnified = Quad {
+        clip: screen,
+        transform: Transform {
+            xx: Fixed::from_ratio(64, 641).unwrap(),
+            yy: Fixed::from_ratio(48, 479).unwrap(),
+            ..Transform::IDENTITY
+        },
+        ..sprite(board, 64, 48, 0, 0)
+    };
+    let ops = vec![
+        Op::Quad(magnified),
+        // Over the right and bottom edges, into the partial tiles.
+        Op::Quad(Quad {
+            clip: screen,
+            opacity: 192,
+            blend: BlendMode::Add,
+            ..sprite(shape, 40, 40, 620, 460)
+        }),
+        effect(
+            Rect::new(600, 0, 41, 479),
+            Tone::new(40, -30, 0, 128),
+            [0, 0, 255, 40],
+        ),
+        effect(Rect::new(0, 470, 641, 9), Tone::NEUTRAL, [255, 255, 0, 96]),
+        clear(Rect::new(640, 478, 1, 1), [1, 2, 3, 4]),
+        clear(Rect::new(640, 0, 1, 1), [5, 6, 7, 8]),
+        clear(Rect::new(0, 478, 1, 1), [9, 10, 11, 12]),
+    ];
+    let mut pair = Pair::new();
+    let rendered = pair
+        .step(&frame(size, deltas, ops))
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(rendered.size, size);
+    assert_eq!(rendered.pixel(640, 478), [1, 2, 3, 4]);
+    assert_eq!(rendered.pixel(640, 0), [5, 6, 7, 8]);
+    assert_eq!(rendered.pixel(0, 478), [9, 10, 11, 12]);
+}
+
+/// Clips that end on, start on, straddle and sit inside tile boundaries, at a size that is a
+/// multiple of the tile size and at sizes one pixel either side of it.
+#[test]
+fn ops_that_span_and_touch_tile_boundaries() {
+    for size in [Size::new(64, 48), Size::new(65, 49), Size::new(63, 47)] {
+        let mut ops = vec![clear(Rect::from_size(size), [20, 20, 20, 255])];
+        let mut shade = 0u8;
+        for (x, width) in [
+            (0, 16),
+            (16, 16),
+            (15, 2),
+            (31, 1),
+            (32, 1),
+            (8, 40),
+            (48, 17),
+        ] {
+            for (y, height) in [
+                (0, 16),
+                (16, 16),
+                (15, 2),
+                (31, 1),
+                (32, 1),
+                (4, 40),
+                (47, 2),
+            ] {
+                shade = shade.wrapping_add(37);
+                ops.push(effect(
+                    Rect::new(x, y, width, height),
+                    Tone::new(i16::from(shade % 9) - 4, 2, -1, shade % 5),
+                    [shade, 255 - shade, 7, 23],
+                ));
+            }
+        }
+        assert_stream_matches(&[frame(size, vec![], ops)]);
+    }
+}
+
+// Requirement: Quad sampling position
+
+/// Transforms built from the largest and smallest coefficients, placed so that some pixels do
+/// land inside the source rectangle.
+#[test]
+fn extreme_coefficients_select_the_reference_texels() {
+    let size = Size::new(70, 50);
+    let id = BitmapId::new(0, 0);
+    let deltas: Vec<BitmapDelta> = bitmap(id, 64, 64, fixtures::gradient(64, 64)).into();
+    let (max, min) = (i32::MAX, i32::MIN);
+    // `u = c * (px + 1/2) + t`: with the largest coefficient one pixel step is 32768 texels,
+    // and `t = -c / 2` brings the first pixel back to texel 0.
+    let cases = [
+        [max, 0, 0, max, -(max / 2), -(max / 2)],
+        [min, 0, 0, min, 16384 << 16 >> 1, 16384 << 16 >> 1],
+        [max, max, min, min, min, max],
+        [min, max, max, min, 0, 0],
+        [0, max, min, 0, min, max],
+        [1, 0, 0, 1, 0, 0],
+        [-1, 0, 0, -1, 1 << 16, 1 << 16],
+        [0, 0, 0, 0, 5 << 16, 63 << 16],
+        [0, 0, 0, 0, max, max],
+        [0, 0, 0, 0, min, min],
+        [65535, 0, 0, 65537, 32767, -32768],
+    ];
+    let mut ops = vec![clear(Rect::from_size(size), [0, 0, 0, 0])];
+    for (index, bits) in cases.iter().enumerate() {
+        let coefficient = |i: usize| Fixed::from_bits(bits[i]);
+        ops.push(Op::Quad(Quad {
+            clip: Rect::from_size(size),
+            bitmap: id,
+            src: Rect::new(0, 0, 64, 64),
+            transform: Transform {
+                xx: coefficient(0),
+                xy: coefficient(1),
+                yx: coefficient(2),
+                yy: coefficient(3),
+                tx: coefficient(4),
+                ty: coefficient(5),
+            },
+            opacity: 200,
+            blend: [BlendMode::Normal, BlendMode::Add, BlendMode::Subtract][index % 3],
+        }));
+    }
+    let mut pair = Pair::new();
+    let rendered = pair
+        .step(&frame(size, deltas, ops))
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    // Something was drawn: the test would mean little if every quad missed the screen.
+    assert_ne!(rendered.pixel(0, 0), [0, 0, 0, 0]);
+}
+
+// Requirement: Errors match the reference
+
+#[test]
+fn reserved_op_is_an_unsupported_op_error_naming_kind_and_index() {
+    let size = Size::new(20, 20);
+    let screen = Rect::from_size(size);
+    let mut compositor = TestCompositor::new();
+    for (op, kind) in [
+        (Op::Plane { clip: screen }, OpKind::Plane),
+        (Op::TilemapLayer { clip: screen }, OpKind::TilemapLayer),
+    ] {
+        let ops = vec![clear(screen, [1, 1, 1, 1]), clear(screen, [2, 2, 2, 2]), op];
+        assert_eq!(
+            compositor.render(&packet(size, vec![], ops)),
+            Err(VkError::UnsupportedOp { kind, index: 2 })
+        );
+        assert_eq!(compositor.read_frame(), Ok(None), "no frame");
+    }
+}
+
+/// A destroyed bitmap whose slot was reused: the old id is an error, and the new occupant is
+/// not drawn in its place.
+#[test]
+fn stale_reference_to_a_reused_slot_does_not_draw_the_new_occupant() {
+    let size = Size::new(16, 16);
+    let screen = Rect::from_size(size);
+    let (old, new) = (BitmapId::new(3, 0), BitmapId::new(3, 1));
+    let red = fixtures::solid(4, 4, Color::new(255, 0, 0, 255));
+    let blue = fixtures::solid(4, 4, Color::new(0, 0, 255, 255));
+
+    let mut pair = Pair::new();
+    let first = frame(
+        size,
+        bitmap(old, 4, 4, red).into(),
+        vec![
+            clear(screen, [50, 50, 50, 255]),
+            Op::Quad(sprite(old, 4, 4, 0, 0)),
+        ],
+    );
+    assert!(pair.step(&first).unwrap().is_ok());
+
+    let mut deltas = vec![BitmapDelta::Destroy { id: old }];
+    deltas.extend(bitmap(new, 4, 4, blue));
+    let stale = frame(size, deltas, vec![Op::Quad(sprite(old, 4, 4, 0, 0))]);
+    // `step` also checks that the frame of the first packet is still in place.
+    assert_eq!(
+        pair.step(&stale).unwrap(),
+        Err(reference::ComposeError::InvalidOpBitmap {
+            index: 0,
+            source: reference::BitmapError::InvalidReference {
+                id: old,
+                slot: reference::SlotState::Occupied { generation: 1 },
+            },
+        })
+    );
+    // The new occupant is there under its own id.
+    let drawn = pair
+        .step(&frame(
+            size,
+            vec![],
+            vec![Op::Quad(sprite(new, 4, 4, 0, 0))],
+        ))
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(drawn.pixel(0, 0), [0, 0, 255, 255]);
+}
+
+// Requirement: Device limits are reported
+
+/// Feeds the same packets to a reference compositor and to the backend, where the backend is
+/// expected to refuse `over_limit` with `expected` and the reference to accept it, and then
+/// checks that both render `later` identically.
+fn assert_limit_then_recovery(
+    compositor: &mut TestCompositor,
+    before: &FramePacket,
+    over_limit: &FramePacket,
+    expected: VkError,
+    later: &FramePacket,
+) {
+    let mut reference = reference::Compositor::new();
+    let first = reference.render(before).unwrap();
+    compositor.render(before).unwrap();
+
+    assert!(
+        reference.render(over_limit).is_ok(),
+        "the packet must be valid for the reference"
+    );
+    assert_eq!(compositor.render(over_limit), Err(expected));
+    // No partial or different frame: the previous one is still there.
+    let kept = compositor.read_frame().unwrap().unwrap();
+    assert_eq!(frame_difference(&first, &kept), None);
+
+    let wanted = reference.render(later).unwrap();
+    compositor.render(later).unwrap();
+    let rendered = compositor.read_frame().unwrap().unwrap();
+    assert_eq!(frame_difference(&wanted, &rendered), None);
+}
+
+#[test]
+fn bitmap_larger_than_the_device_supports_is_a_limit_error_and_recoverable() {
+    let size = Size::new(24, 24);
+    let screen = Rect::from_size(size);
+    let mut compositor = TestCompositor::new();
+    let maximum = compositor.max_image_dimension();
+    assert!(
+        maximum < (1 << 28),
+        "a bitmap one pixel wider must still be valid for the reference"
+    );
+    let (small, wide, tall) = (
+        BitmapId::new(0, 0),
+        BitmapId::new(1, 0),
+        BitmapId::new(2, 0),
+    );
+    let before = packet(
+        size,
+        bitmap(small, 6, 6, fixtures::gradient(6, 6)).into(),
+        vec![clear(screen, [9, 9, 9, 255])],
+    );
+    let create = |id, width, height| BitmapDelta::Create { id, width, height };
+    for (id, width, height) in [(wide, maximum + 1, 1), (tall, 1, maximum + 1)] {
+        // The oversized bitmap is created after a delta that stays applied and is never drawn.
+        let marker = BitmapDelta::Update {
+            id: small,
+            rect: Rect::new(0, 0, 1, 1),
+            rgba: vec![255, 255, 255, 255],
+        };
+        let over_limit = packet(
+            size,
+            vec![marker, create(id, width, height)],
+            vec![clear(screen, [200, 0, 0, 255])],
+        );
+        let later = packet(
+            size,
+            vec![],
+            vec![
+                clear(screen, [0, 40, 80, 255]),
+                Op::Quad(sprite(small, 6, 6, 3, 3)),
+            ],
+        );
+        assert_limit_then_recovery(
+            &mut compositor,
+            &before,
+            &over_limit,
+            VkError::Limit {
+                limit: Limit::BitmapDimension,
+                requested: u64::from(maximum) + 1,
+                maximum: u64::from(maximum),
+            },
+            &later,
+        );
+        // The refused bitmap does not exist, and its slot can be used.
+        assert!(matches!(
+            compositor.render(&packet(size, vec![BitmapDelta::Destroy { id }], vec![])),
+            Err(VkError::InvalidDelta {
+                index: 0,
+                source: BitmapError::InvalidReference {
+                    slot: SlotState::Empty,
+                    ..
+                },
+            })
+        ));
+        compositor
+            .render(&packet(size, vec![create(id, 2, 2)], vec![]))
+            .unwrap();
+        compositor
+            .render(&packet(size, vec![BitmapDelta::Destroy { id }], vec![]))
+            .unwrap();
+        compositor
+            .render(&packet(
+                size,
+                vec![BitmapDelta::Destroy { id: small }],
+                vec![],
+            ))
+            .unwrap();
+        compositor.render(&before).unwrap();
+        // Back to the state `before` leaves, for the next round.
+        compositor
+            .render(&packet(
+                size,
+                vec![BitmapDelta::Destroy { id: small }],
+                vec![],
+            ))
+            .unwrap();
+    }
+    let error = VkError::Limit {
+        limit: Limit::BitmapDimension,
+        requested: 20000,
+        maximum: 16384,
+    };
+    assert_eq!(
+        error.to_string(),
+        "limit exceeded: bitmap width or height is at most 16384, requested 20000"
+    );
+}
+
+#[test]
+fn bitmap_slot_beyond_the_table_is_a_limit_error_and_recoverable() {
+    let size = Size::new(24, 24);
+    let screen = Rect::from_size(size);
+    let mut compositor = TestCompositor::new();
+    let (small, beyond) = (BitmapId::new(65535, 0), BitmapId::new(65536, 0));
+    let before = packet(
+        size,
+        bitmap(small, 6, 6, fixtures::gradient(6, 6)).into(),
+        vec![clear(screen, [9, 9, 9, 255])],
+    );
+    let over_limit = packet(
+        size,
+        vec![BitmapDelta::Create {
+            id: beyond,
+            width: 2,
+            height: 2,
+        }],
+        vec![clear(screen, [200, 0, 0, 255])],
+    );
+    // The last slot of the table works, bitmap array entry 65535 included.
+    let later = packet(
+        size,
+        vec![],
+        vec![
+            clear(screen, [0, 40, 80, 255]),
+            Op::Quad(sprite(small, 6, 6, 10, 10)),
+        ],
+    );
+    assert_limit_then_recovery(
+        &mut compositor,
+        &before,
+        &over_limit,
+        VkError::Limit {
+            limit: Limit::BitmapSlots,
+            requested: 65536,
+            maximum: 65535,
+        },
+        &later,
+    );
+}
+
+// Requirement: Device selection, on the real devices of this machine
+
+#[test]
+fn named_device_that_does_not_exist_fails_and_lists_the_devices() {
+    let devices = available_devices().unwrap();
+    assert!(!devices.is_empty());
+    for choice in [
+        DeviceChoice::Name("no such device, surely".to_owned()),
+        DeviceChoice::Index(devices.len()),
+    ] {
+        let error = match VkCompositor::new(choice.clone()) {
+            Err(VkError::Device(error)) => error,
+            other => panic!("expected a device error, got {:?}", other.map(|_| ())),
+        };
+        assert_eq!(
+            error,
+            DeviceError::NotFound {
+                choice: choice.to_string(),
+                devices: devices.clone(),
+            }
+        );
+        let text = error.to_string();
+        for device in &devices {
+            assert!(text.contains(&device.name), "{text}");
+        }
+    }
+}
+
+#[test]
+fn explicit_choice_selects_exactly_that_device() {
+    let devices = available_devices().unwrap();
+    let wanted = test_device();
+    let compositor = VkCompositor::new(wanted.clone()).unwrap();
+    let chosen = compositor.device();
+    assert_eq!(devices[chosen.index], *chosen);
+    if let DeviceChoice::Name(name) = wanted {
+        assert!(chosen.name.to_lowercase().contains(&name.to_lowercase()));
+    }
+}
+
+// Requirement: Device requirements
+
+/// Runs one rendering test again in a child process that has no window system to connect to.
+#[test]
+fn renders_without_a_window_system_connection() {
+    const TEST: &str = "tests::compositing::identity_quad_copies_texels";
+    let output = Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", TEST, "--test-threads", "1"])
+        .env_remove("DISPLAY")
+        .env_remove("WAYLAND_DISPLAY")
+        .env_remove("WAYLAND_SOCKET")
+        .env_remove("XAUTHORITY")
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success() && stdout.contains("1 passed"),
+        "the child failed:\n{stdout}\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}

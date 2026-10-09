@@ -31,10 +31,10 @@
 
 ## 6. Differential tests
 
-- [ ] 6.1 Add the differential helper and run every stream of `vkxp_compose_ref::fixtures::all()` through it. Verify: `cargo test -p vkxp-vk` passes with every fixture byte-identical.
-- [ ] 6.2 Add the arithmetic sweeps for each blend mode at several opacities and alphas, colour blend and tone, including a transparent destination. Verify: all sweeps are byte-identical; temporarily changing one constant in the GLSL include makes a sweep fail, then restore.
-- [ ] 6.3 Add `proptest` strategies for valid packet sequences and for sequences with injected invalid deltas and ops. Verify: both properties pass with a fixed case count; temporarily reversing the tile list order makes the valid-sequence property fail, then restore.
-- [ ] 6.4 Add the targeted cases: several thousand ops on one pixel, an op entirely off screen, logical size 641x479, both limit errors and recovery after them. Verify: each is a named test that passes.
+- [x] 6.1 Add the differential helper and run every stream of `vkxp_compose_ref::fixtures::all()` through it. Verify: `cargo test -p vkxp-vk` passes with every fixture byte-identical.
+- [x] 6.2 Add the arithmetic sweeps for each blend mode at several opacities and alphas, colour blend and tone, including a transparent destination. Verify: all sweeps are byte-identical; temporarily changing one constant in the GLSL include makes a sweep fail, then restore.
+- [x] 6.3 Add `proptest` strategies for valid packet sequences and for sequences with injected invalid deltas and ops. Verify: both properties pass with a fixed case count; temporarily reversing the tile list order makes the valid-sequence property fail, then restore.
+- [x] 6.4 Add the targeted cases: several thousand ops on one pixel, an op entirely off screen, logical size 641x479, both limit errors and recovery after them. Verify: each is a named test that passes.
 
 ## 7. Integration check
 

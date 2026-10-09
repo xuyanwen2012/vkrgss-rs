@@ -85,7 +85,7 @@ fn expected_bitmap_error(error: reference::BitmapError) -> BitmapError {
 
 /// Describes the first difference between two frames, or returns `None` when they are equal
 /// byte for byte.
-fn frame_difference(expected: &reference::Frame, actual: &Frame) -> Option<String> {
+pub(crate) fn frame_difference(expected: &reference::Frame, actual: &Frame) -> Option<String> {
     if expected.size != actual.size {
         return Some(format!(
             "frame size: reference {:?}, vulkan {:?}",
