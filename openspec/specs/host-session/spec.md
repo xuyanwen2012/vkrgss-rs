@@ -93,9 +93,11 @@ disconnects, the session SHALL end.
 ### Requirement: Freeze and transition
 After a freeze message the host SHALL keep showing the frame that was on screen when it arrived,
 while still rendering and answering the frames that follow. After a transition message of
-duration N the host SHALL show a cross-fade from the held frame to the newest frame that
+duration N the host SHALL show a transition from the held frame to the newest frame that
 advances by one of N equal steps with each following frame, and SHALL show frames normally once
-the Nth step is reached. A duration of 0 SHALL show the newest frame at once.
+the Nth step is reached. Without a mask the transition SHALL be a cross-fade; with a mask
+bitmap it SHALL be the presenter's masked mix with that bitmap and the message's vagueness. A
+duration of 0 SHALL show the newest frame at once.
 
 #### Scenario: Frozen display
 - **WHEN** a freeze is followed by three frames with different contents
@@ -111,8 +113,12 @@ the Nth step is reached. A duration of 0 SHALL show the newest frame at once.
 - **THEN** frames are shown normally
 
 #### Scenario: Masked transition
-- **WHEN** a transition names a mask bitmap
-- **THEN** it is shown as a plain cross-fade of the same duration
+- **WHEN** a transition of duration 4 names a mask bitmap that is black on the left half and white on the right half, and two more frames arrive
+- **THEN** the left half of the display shows the newest frame and the right half the held frame
+
+#### Scenario: Unknown mask
+- **WHEN** a transition names a bitmap the host does not have
+- **THEN** it is shown as a cross-fade and one report is made
 
 ### Requirement: Title and modal messages
 A title message SHALL set the window title. A modal message SHALL be written to the error
@@ -174,3 +180,18 @@ reports nothing.
 #### Scenario: Headless
 - **WHEN** a game that plays music runs headless
 - **THEN** no audio device is opened and no audio report is printed
+
+### Requirement: Input recording and replay
+The host SHALL be able to record the input snapshot it delivers for every frame into a file
+together with the run's seed, and to replay such a file: during a replay the recorded snapshot
+of each frame SHALL be delivered in place of live input, and after the last recorded frame live
+input SHALL apply again in a windowed run and no button SHALL be held in a headless run. A
+file that is not a recording SHALL be refused with an error naming it.
+
+#### Scenario: Round trip
+- **WHEN** a headless run with an input script is recorded and the recording is replayed in a second headless run with the same seed
+- **THEN** the frame dumps of both runs are byte-identical
+
+#### Scenario: Not a recording
+- **WHEN** a replay is asked for with a file of other content
+- **THEN** the run fails before the first frame and names the file
