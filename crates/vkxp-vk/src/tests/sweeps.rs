@@ -11,7 +11,7 @@
 use vkxp_compose_ref::fixtures::bitmap;
 use vkxp_proto::{
     BitmapDelta, BitmapId, BlendMode, Color, FramePacket, FrameRate, GuestToHost, Op, Quad, Rect,
-    RectEffect, Size, Tone, Transform,
+    RectEffect, Sampling, Size, Tone, Transform,
 };
 
 use super::differential::Pair;
@@ -45,7 +45,7 @@ fn full_quad(id: BitmapId, height: u32, opacity: u8, blend: BlendMode) -> Op {
         clip: Rect::new(0, 0, N, height),
         bitmap: id,
         src: Rect::new(0, 0, N, height),
-        transform: Transform::IDENTITY,
+        sampling: Sampling::Affine(Transform::IDENTITY),
         tone: Tone::NEUTRAL,
         color: Color::new(0, 0, 0, 0),
         opacity,
@@ -334,7 +334,7 @@ fn row_quad(id: BitmapId, row: u32, tone: Tone, color: Color, opacity: u8, blend
         clip: Rect::new(0, row as i32, N, 1),
         bitmap: id,
         src: Rect::new(0, 0, N, 1),
-        transform: Transform::place_at(0, row as i16),
+        sampling: Sampling::Affine(Transform::place_at(0, row as i16)),
         tone,
         color,
         opacity,

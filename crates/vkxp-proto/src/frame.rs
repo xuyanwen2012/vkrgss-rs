@@ -183,12 +183,12 @@ impl std::fmt::Display for OpKind {
     }
 }
 
-/// Draws the `src` rectangle of a bitmap through an affine transform.
+/// Draws the `src` rectangle of a bitmap, placed on the screen as `sampling` says.
 ///
-/// A screen pixel is covered when `transform` maps its centre into the source rectangle; it then
-/// takes the texel under that point (nearest sampling). The texel is changed first by `tone`,
-/// then by `color` blended over it with the colour's alpha, both keeping the texel's own alpha.
-/// The result is blended over the pixel underneath at `opacity` in mode `blend`.
+/// `sampling` decides which screen pixels the quad covers and which texel each of them takes;
+/// no texel is ever filtered. The texel is changed first by `tone`, then by `color` blended over
+/// it with the colour's alpha, both keeping the texel's own alpha. The result is blended over
+/// the pixel underneath at `opacity` in mode `blend`.
 ///
 /// Tone and colour recolour what the quad draws, never the pixels underneath: that is
 /// [`RectEffect`]. [`Tone::NEUTRAL`] and a colour of alpha 0 leave the texel as it is.
@@ -198,7 +198,7 @@ pub struct Quad {
     pub bitmap: BitmapId,
     /// The part of the bitmap to draw, in bitmap pixels. It must lie inside the bitmap.
     pub src: Rect,
-    pub transform: Transform,
+    pub sampling: Sampling,
     /// Applied to the sampled texel first.
     pub tone: Tone,
     /// Blended over the toned texel with its alpha; alpha 0 changes nothing.
@@ -206,6 +206,82 @@ pub struct Quad {
     /// 0 draws nothing, 255 draws the bitmap at its own alpha.
     pub opacity: u8,
     pub blend: BlendMode,
+}
+
+/// How a quad maps screen pixels to the texels of its source rectangle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Sampling {
+    /// A screen pixel is covered when the transform maps its centre into the source rectangle;
+    /// it then takes the texel under that point.
+    Affine(Transform),
+    /// The source rectangle stretched into the rectangle `dest` of logical screen pixels, as
+    /// the original runtime stretches: the pixel at column `i` and row `j` of `dest` takes the
+    /// texel at column [`stretch_index`]`(i, `[`stretch_step`]`(src.width, dest.width))` and
+    /// the row found likewise, the column counted from the right edge of the source rectangle
+    /// when `mirror` is set. A `dest` without pixels draws nothing.
+    Stretch { dest: Rect, mirror: bool },
+}
+
+impl Sampling {
+    /// The source rectangle unscaled with its top-left corner at screen pixel (`x`, `y`).
+    pub const fn place_at(x: i16, y: i16) -> Sampling {
+        Sampling::Affine(Transform::place_at(x, y))
+    }
+
+    /// The texel that screen pixel (`px`, `py`) takes from a source rectangle of `width` by
+    /// `height` texels, relative to that rectangle, or `None` when the pixel is not covered.
+    /// Every backend must match this.
+    pub const fn source_texel(
+        &self,
+        width: u32,
+        height: u32,
+        px: u16,
+        py: u16,
+    ) -> Option<(u32, u32)> {
+        match self {
+            Sampling::Affine(transform) => {
+                let (u, v) = transform.source_position(px, py);
+                let (column, row) = (u >> Fixed::FRAC_BITS, v >> Fixed::FRAC_BITS);
+                if column >= 0 && column < width as i64 && row >= 0 && row < height as i64 {
+                    Some((column as u32, row as u32))
+                } else {
+                    None
+                }
+            }
+            Sampling::Stretch { dest, mirror } => {
+                if !dest.contains(px as i32, py as i32) || width == 0 || height == 0 {
+                    return None;
+                }
+                // Inside `dest`, so both are below its width and height.
+                let i = (px as i64 - dest.x as i64) as u32;
+                let j = (py as i64 - dest.y as i64) as u32;
+                let column = stretch_index(i, stretch_step(width, dest.width));
+                let row = stretch_index(j, stretch_step(height, dest.height));
+                Some((if *mirror { width - 1 - column } else { column }, row))
+            }
+        }
+    }
+}
+
+/// Number of fractional bits of a stretch step.
+pub const STRETCH_FRAC_BITS: u32 = 20;
+
+/// The step of a stretch of `src` texels into `dest` pixels: the texels one pixel advances by,
+/// with [`STRETCH_FRAC_BITS`] fractional bits, rounded down. An exact ratio that is not a
+/// binary fraction is therefore a little short, as in the original runtime.
+///
+/// # Panics
+///
+/// If `dest` is 0.
+pub const fn stretch_step(src: u32, dest: u32) -> u64 {
+    ((src as u64) << STRETCH_FRAC_BITS) / dest as u64
+}
+
+/// The texel of pixel `i` of a stretch with the step `step`, counted from the start of the
+/// source: below the source length for every `i` below the destination length.
+pub const fn stretch_index(i: u32, step: u64) -> u32 {
+    // The product is below the source length shifted, which fits 52 bits.
+    ((i as u64 * step) >> STRETCH_FRAC_BITS) as u32
 }
 
 /// How a quad combines with the pixels underneath.
@@ -308,7 +384,7 @@ mod tests {
             clip,
             bitmap: BitmapId::new(0, 0),
             src: Rect::new(0, 0, 1, 1),
-            transform: Transform::IDENTITY,
+            sampling: Sampling::Affine(Transform::IDENTITY),
             tone: Tone::NEUTRAL,
             color: Color::default(),
             opacity: 255,
@@ -428,6 +504,68 @@ mod tests {
         assert_eq!(texel(&transform, 1, 1), (0, 0));
         assert_eq!(texel(&transform, 2, 3), (1, 1));
         assert_eq!(texel(&transform, 5, 4), (2, 2));
+    }
+
+    #[test]
+    fn stretch_steps_round_down() {
+        // 16 texels into 24 pixels: the exact ratio 2/3 is not a binary fraction.
+        let step = stretch_step(16, 24);
+        let texels: Vec<u32> = (0..6).map(|i| stretch_index(i, step)).collect();
+        assert_eq!(texels, [0, 0, 1, 1, 2, 3]);
+        // An exact binary ratio is exact.
+        let step = stretch_step(8, 16);
+        assert!((0..16).all(|i| stretch_index(i, step) == i / 2));
+        let step = stretch_step(8, 8);
+        assert!((0..8).all(|i| stretch_index(i, step) == i));
+    }
+
+    #[test]
+    fn stretch_indices_stay_inside_the_source_at_the_extremes() {
+        for (src, dest) in [
+            (u32::MAX, u32::MAX),
+            (u32::MAX, 1),
+            (1, u32::MAX),
+            (5000, 4097),
+            (4097, 100_000),
+        ] {
+            let step = stretch_step(src, dest);
+            assert!(stretch_index(dest - 1, step) < src, "{src} into {dest}");
+            assert_eq!(stretch_index(0, step), 0);
+        }
+    }
+
+    #[test]
+    fn stretch_sampling_covers_its_destination_only() {
+        let sampling = Sampling::Stretch {
+            dest: Rect::new(10, 20, 8, 2),
+            mirror: false,
+        };
+        assert_eq!(sampling.source_texel(4, 2, 10, 20), Some((0, 0)));
+        assert_eq!(sampling.source_texel(4, 2, 17, 21), Some((3, 1)));
+        for (px, py) in [(9, 20), (18, 20), (10, 19), (10, 22)] {
+            assert_eq!(sampling.source_texel(4, 2, px, py), None);
+        }
+        let mirrored = Sampling::Stretch {
+            dest: Rect::new(10, 20, 8, 2),
+            mirror: true,
+        };
+        assert_eq!(mirrored.source_texel(4, 2, 10, 20), Some((3, 0)));
+        assert_eq!(mirrored.source_texel(4, 2, 17, 21), Some((0, 1)));
+        // No pixels, or no texels: nothing.
+        let empty = Sampling::Stretch {
+            dest: Rect::new(0, 0, 0, 5),
+            mirror: false,
+        };
+        assert_eq!(empty.source_texel(4, 2, 0, 0), None);
+        assert_eq!(sampling.source_texel(0, 2, 10, 20), None);
+    }
+
+    #[test]
+    fn affine_sampling_takes_the_texel_under_the_pixel_centre() {
+        let sampling = Sampling::place_at(10, 20);
+        assert_eq!(sampling.source_texel(4, 4, 13, 22), Some((3, 2)));
+        assert_eq!(sampling.source_texel(4, 4, 14, 22), None);
+        assert_eq!(sampling.source_texel(4, 4, 9, 22), None);
     }
 
     #[test]

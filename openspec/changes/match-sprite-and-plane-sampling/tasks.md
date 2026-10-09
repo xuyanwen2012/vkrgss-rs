@@ -2,7 +2,7 @@
 
 ## 1. Protocol (`vkxp-proto`)
 
-- [ ] 1.1 Add the sampling variants and raise the version. Verify: the two scenarios of `specs/guest-host-protocol/spec.md`.
+- [x] 1.1 Add the sampling variants and raise the version. Verify: the two scenarios of `specs/guest-host-protocol/spec.md`.
 
 ## 2. Compositors (`vkxp-compose-ref`, `vkxp-vk`)
 

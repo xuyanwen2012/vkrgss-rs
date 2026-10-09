@@ -7,8 +7,8 @@ use proptest::prelude::*;
 use vkxp_proto::codec::{Message, decode_stream, encode_stream};
 use vkxp_proto::{
     AudioChannel, AudioCommand, BitmapDelta, BitmapId, BlendMode, Color, Fixed, FramePacket,
-    FrameRate, GuestToHost, HostToGuest, InputSnapshot, Op, Quad, Rect, RectEffect, Size, Tone,
-    Transform,
+    FrameRate, GuestToHost, HostToGuest, InputSnapshot, Op, Quad, Rect, RectEffect, Sampling, Size,
+    Tone, Transform,
 };
 
 fn fixed() -> impl Strategy<Value = Fixed> {
@@ -45,6 +45,13 @@ fn transform() -> impl Strategy<Value = Transform> {
     })
 }
 
+fn sampling() -> impl Strategy<Value = Sampling> {
+    prop_oneof![
+        transform().prop_map(Sampling::Affine),
+        (rect(), any::<bool>()).prop_map(|(dest, mirror)| Sampling::Stretch { dest, mirror }),
+    ]
+}
+
 fn blend_mode() -> impl Strategy<Value = BlendMode> {
     prop_oneof![
         Just(BlendMode::Normal),
@@ -58,18 +65,18 @@ fn quad() -> impl Strategy<Value = Quad> {
         rect(),
         bitmap_id(),
         rect(),
-        transform(),
+        sampling(),
         tone(),
         color(),
         any::<u8>(),
         blend_mode(),
     )
         .prop_map(
-            |(clip, bitmap, src, transform, tone, color, opacity, blend)| Quad {
+            |(clip, bitmap, src, sampling, tone, color, opacity, blend)| Quad {
                 clip,
                 bitmap,
                 src,
-                transform,
+                sampling,
                 tone,
                 color,
                 opacity,

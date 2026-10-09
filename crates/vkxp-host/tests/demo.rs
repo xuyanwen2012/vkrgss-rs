@@ -8,7 +8,7 @@ use vkxp_host::demo::{self, DemoOptions, SPRITE_SIZE, TITLE, TRANSITION_FRAMES};
 use vkxp_proto::link::Disconnected;
 use vkxp_proto::{
     BitmapDelta, Button, FramePacket, FrameRate, GuestToHost, HostToGuest, InputSnapshot, Op,
-    OpKind, Size, Transform,
+    OpKind, Sampling, Size, Transform,
 };
 
 fn packets(messages: &[GuestToHost]) -> Vec<&FramePacket> {
@@ -28,7 +28,10 @@ fn sprite(packet: &FramePacket) -> Transform {
         .iter()
         .rev()
         .find_map(|op| match op {
-            Op::Quad(quad) => Some(quad.transform),
+            Op::Quad(quad) => match quad.sampling {
+                Sampling::Affine(transform) => Some(transform),
+                Sampling::Stretch { .. } => None,
+            },
             _ => None,
         })
         .expect("every frame draws the sprite")

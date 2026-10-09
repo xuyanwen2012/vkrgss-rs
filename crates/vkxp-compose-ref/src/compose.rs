@@ -186,20 +186,17 @@ impl Step<'_> {
     }
 }
 
-/// The source texel nearest to the centre of screen pixel (`px`, `py`), or `None` when the
-/// centre maps outside the quad's source rectangle.
+/// The source texel that screen pixel (`px`, `py`) takes through the quad's sampling, or `None`
+/// when the quad does not cover the pixel.
 fn sample(quad: &Quad, bitmap: &Bitmap, px: u16, py: u16) -> Option<Rgba> {
-    let (u, v) = quad.transform.source_position(px, py);
-    let (column, row) = (u >> 16, v >> 16);
-    let inside = (0..i64::from(quad.src.width)).contains(&column)
-        && (0..i64::from(quad.src.height)).contains(&row);
+    let (column, row) = quad
+        .sampling
+        .source_texel(quad.src.width, quad.src.height, px, py)?;
     // `prepare` checked that the source rectangle lies inside the bitmap.
-    inside.then(|| {
-        bitmap.pixel(
-            (i64::from(quad.src.x) + column) as u32,
-            (i64::from(quad.src.y) + row) as u32,
-        )
-    })
+    Some(bitmap.pixel(
+        (i64::from(quad.src.x) + i64::from(column)) as u32,
+        (i64::from(quad.src.y) + i64::from(row)) as u32,
+    ))
 }
 
 /// Feeds a whole message sequence to a fresh compositor and returns the last frame, or `None`

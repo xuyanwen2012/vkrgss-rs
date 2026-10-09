@@ -14,7 +14,7 @@ use proptest::test_runner::{Config, TestRunner};
 use vkxp_compose_ref as reference;
 use vkxp_proto::{
     BitmapDelta, BitmapId, BlendMode, Color, Fixed, FramePacket, FrameRate, GuestToHost, Op, Quad,
-    Rect, RectEffect, Size, Tone, Transform,
+    Rect, RectEffect, Sampling, Size, Tone, Transform,
 };
 
 use super::differential::compare_stream;
@@ -98,6 +98,10 @@ enum TransformPlan {
     Affine { bits: [i32; 6] },
     /// Six arbitrary coefficients.
     Wild { bits: [i32; 6] },
+    /// A stretch into a rectangle near the screen.
+    Stretch { dest: Rect, mirror: bool },
+    /// A stretch into any rectangle at all.
+    WildStretch { dest: Rect, mirror: bool },
 }
 
 #[derive(Debug, Clone)]
@@ -192,6 +196,18 @@ fn transform_plan() -> impl Strategy<Value = TransformPlan> {
             |(m, tx, ty)| TransformPlan::Affine { bits: [m[0], m[1], m[2], m[3], tx, ty] }
         ),
         1 => any::<[i32; 6]>().prop_map(|bits| TransformPlan::Wild { bits }),
+        4 => (-40i32..80, -40i32..60, 0u32..160, 0u32..120, any::<bool>()).prop_map(
+            |(x, y, width, height, mirror)| TransformPlan::Stretch {
+                dest: Rect::new(x, y, width, height),
+                mirror,
+            }
+        ),
+        1 => (any::<(i32, i32, u32, u32)>(), any::<bool>()).prop_map(
+            |((x, y, width, height), mirror)| TransformPlan::WildStretch {
+                dest: Rect::new(x, y, width, height),
+                mirror,
+            }
+        ),
     ]
 }
 
@@ -385,7 +401,7 @@ fn clip(plan: &ClipPlan, size: Size) -> Rect {
     }
 }
 
-fn transform(plan: &TransformPlan) -> Transform {
+fn sampling(plan: &TransformPlan) -> Sampling {
     let from_bits = |bits: &[i32; 6]| Transform {
         xx: Fixed::from_bits(bits[0]),
         xy: Fixed::from_bits(bits[1]),
@@ -394,7 +410,7 @@ fn transform(plan: &TransformPlan) -> Transform {
         tx: Fixed::from_bits(bits[4]),
         ty: Fixed::from_bits(bits[5]),
     };
-    match plan {
+    Sampling::Affine(match plan {
         TransformPlan::Place { x, y } => Transform::place_at(*x, *y),
         TransformPlan::Scale { x, y, tx, ty } => Transform {
             xx: Fixed::from_ratio(x.0, x.1).expect("small ratio"),
@@ -405,7 +421,13 @@ fn transform(plan: &TransformPlan) -> Transform {
             ty: Fixed::from_bits(*ty),
         },
         TransformPlan::Affine { bits } | TransformPlan::Wild { bits } => from_bits(bits),
-    }
+        TransformPlan::Stretch { dest, mirror } | TransformPlan::WildStretch { dest, mirror } => {
+            return Sampling::Stretch {
+                dest: *dest,
+                mirror: *mirror,
+            };
+        }
+    })
 }
 
 /// Turns the plans into frame messages. With `faults` off, invalid plan items are left out.
@@ -558,7 +580,7 @@ fn build(plans: &[PacketPlan], faults: bool) -> Vec<GuestToHost> {
                         clip: clip(clip_plan, size),
                         bitmap: id,
                         src: sub_rect(*span, width, height),
-                        transform: transform(transform_plan),
+                        sampling: sampling(transform_plan),
                         tone: tone.map_or(Tone::NEUTRAL, |(red, green, blue, gray)| {
                             Tone::new(red, green, blue, gray)
                         }),
@@ -586,7 +608,7 @@ fn build(plans: &[PacketPlan], faults: bool) -> Vec<GuestToHost> {
                             clip: screen,
                             bitmap,
                             src,
-                            transform: Transform::IDENTITY,
+                            sampling: Sampling::Affine(Transform::IDENTITY),
                             tone: Tone::NEUTRAL,
                             color: Color::new(0, 0, 0, 0),
                             opacity: 255,
@@ -659,6 +681,7 @@ struct Coverage {
     /// Quads by whether they have a tone and a colour: neither, tone, colour, both.
     quads_by_recolouring: [u32; 4],
     transformed_quads: u32,
+    stretch_quads: u32,
     clipped_ops: u32,
     quads_of_earlier_bitmaps: u32,
     reused_slots: u32,
@@ -715,8 +738,11 @@ fn coverage(strategy: impl Strategy<Value = Vec<PacketPlan>>, faults: bool) -> C
                                 let toned = usize::from(quad.tone != Tone::NEUTRAL);
                                 let coloured = usize::from(quad.color.a != 0);
                                 coverage.quads_by_recolouring[toned + 2 * coloured] += 1;
-                                coverage.transformed_quads +=
-                                    u32::from(quad.transform != Transform::IDENTITY);
+                                coverage.transformed_quads += u32::from(
+                                    quad.sampling != Sampling::Affine(Transform::IDENTITY),
+                                );
+                                coverage.stretch_quads +=
+                                    u32::from(matches!(quad.sampling, Sampling::Stretch { .. }));
                                 coverage.quads_of_earlier_bitmaps +=
                                     u32::from(!created.contains(&quad.bitmap.index));
                             }
@@ -763,6 +789,7 @@ fn generated_sequences_cover_what_the_properties_claim() {
         valid.quads_by_recolouring[2],
         valid.quads_by_recolouring[3],
         valid.transformed_quads,
+        valid.stretch_quads,
         valid.clipped_ops,
         valid.quads_of_earlier_bitmaps,
         valid.odd_sizes,

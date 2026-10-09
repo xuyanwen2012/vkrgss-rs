@@ -7,7 +7,7 @@
 
 use vkxp_proto::{
     BitmapDelta, BitmapId, BlendMode, Color, Fixed, FramePacket, FrameRate, GuestToHost, Op, Quad,
-    Rect, RectEffect, Size, Tone, Transform,
+    Rect, RectEffect, Sampling, Size, Tone, Transform,
 };
 
 /// Logical screen size of every fixture.
@@ -130,7 +130,7 @@ pub fn sprite(id: BitmapId, width: u32, height: u32, x: i16, y: i16) -> Quad {
         clip: SCREEN,
         bitmap: id,
         src: Rect::new(0, 0, width, height),
-        transform: Transform::place_at(x, y),
+        sampling: Sampling::Affine(Transform::place_at(x, y)),
         tone: Tone::NEUTRAL,
         color: Color::new(0, 0, 0, 0),
         opacity: 255,
@@ -195,11 +195,11 @@ fn gradient_fixture() -> Fixture {
     let id = BitmapId::new(0, 0);
     let (width, height) = (SIZE.width / 2, SIZE.height / 2);
     let magnified = Quad {
-        transform: Transform {
+        sampling: Sampling::Affine(Transform {
             xx: Fixed::HALF,
             yy: Fixed::HALF,
             ..Transform::IDENTITY
-        },
+        }),
         ..sprite(id, width, height, 0, 0)
     };
     single_frame(
@@ -330,7 +330,7 @@ fn rotation_fixture() -> Fixture {
         ty: Fixed::from_int(44),
     };
     let quad = Quad {
-        transform: quarter_turn,
+        sampling: Sampling::Affine(quarter_turn),
         ..sprite(id, width, height, 0, 0)
     };
     single_frame(

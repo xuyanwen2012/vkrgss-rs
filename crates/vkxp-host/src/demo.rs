@@ -15,7 +15,7 @@
 use vkxp_proto::link::{Disconnected, GuestEnd};
 use vkxp_proto::{
     BitmapDelta, BitmapId, BlendMode, Button, Color, FramePacket, FrameRate, GuestToHost,
-    HostToGuest, InputSnapshot, Op, Quad, Rect, RectEffect, Size, Tone, Transform,
+    HostToGuest, InputSnapshot, Op, Quad, Rect, RectEffect, Sampling, Size, Tone, Transform,
 };
 
 /// The window title the demo sets.
@@ -155,7 +155,7 @@ fn ops(size: Size, state: &State, frame_index: u64, input: InputSnapshot) -> Vec
             clip: screen,
             bitmap,
             src: Rect::new(0, 0, width, height),
-            transform: Transform::place_at(x as i16, y as i16),
+            sampling: Sampling::Affine(Transform::place_at(x as i16, y as i16)),
             tone: Tone::NEUTRAL,
             color: Color::new(0, 0, 0, 0),
             opacity: 255,

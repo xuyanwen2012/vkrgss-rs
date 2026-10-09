@@ -9,7 +9,7 @@
 //! bitmap of the scene's own that repeats the source a few times, kept in the bitmap arena and
 //! drawn again only when the source changes.
 
-use vkxp_proto::{BitmapId, Fixed, Op, Quad, Transform};
+use vkxp_proto::{BitmapId, Fixed, Op, Quad, Sampling, Transform};
 
 use crate::extract::{Assembly, Level, Look, blend_mode};
 use crate::geometry::Geometry;
@@ -205,7 +205,7 @@ impl Assembly<'_> {
                     clip,
                     bitmap,
                     src: tile.to_proto(),
-                    transform: Transform { tx, ty, ..base },
+                    sampling: Sampling::Affine(Transform { tx, ty, ..base }),
                     tone: look.tone,
                     color: look.color,
                     opacity: look.opacity,

@@ -4,7 +4,7 @@
 //! and their order are those of the reference compositor, so both reject the same packets with
 //! the same error. The shader then never sees an invalid slot or source rectangle.
 
-use vkxp_proto::{BlendMode, Color, Op, Rect, Size, Tone};
+use vkxp_proto::{BlendMode, Color, Op, Rect, Sampling, Size, Tone, stretch_step};
 
 use crate::VkError;
 use crate::bitmaps::BitmapTable;
@@ -13,13 +13,21 @@ use crate::bitmaps::BitmapTable;
 pub(crate) const MAX_LOGICAL_DIMENSION: u32 = 16384;
 
 /// Number of 32-bit words in one record; `OpRecord` in `shaders/compose.comp` has this layout.
-pub(crate) const RECORD_WORDS: usize = 23;
+pub(crate) const RECORD_WORDS: usize = 24;
 
 /// Values of the `kind` word. They match the `OP_*` constants in `shaders/compose.comp`.
 mod op_kind {
     pub const CLEAR: u32 = 0;
     pub const QUAD: u32 = 1;
     pub const RECT_EFFECT: u32 = 2;
+}
+
+/// Values of the `sampling` word of a quad. They match the `SAMPLING_*` constants in
+/// `shaders/compose.comp`.
+mod sampling_kind {
+    pub const AFFINE: u32 = 0;
+    pub const STRETCH: u32 = 1;
+    pub const STRETCH_MIRRORED: u32 = 2;
 }
 
 /// The `blend` word of a quad. It matches the `BLEND_*` constants in `shaders/compose.comp`.
@@ -67,6 +75,19 @@ impl ClipRect {
         Some(ClipRect { x0, y0, x1, y1 })
     }
 
+    /// The part of this rectangle inside `rect`, or `None` when no pixel is.
+    fn within(self, rect: Rect) -> Option<ClipRect> {
+        let span = |low: u32, high: u32, start: i32, length: u32| {
+            let start = i64::from(start);
+            let low = i64::from(low).max(start);
+            let high = i64::from(high).min(start + i64::from(length));
+            (low < high).then_some((low as u32, high as u32))
+        };
+        let (x0, x1) = span(self.x0, self.x1, rect.x, rect.width)?;
+        let (y0, y1) = span(self.y0, self.y1, rect.y, rect.height)?;
+        Some(ClipRect { x0, y0, x1, y1 })
+    }
+
     #[cfg(test)]
     pub fn contains(&self, x: u32, y: u32) -> bool {
         (self.x0..self.x1).contains(&x) && (self.y0..self.y1).contains(&y)
@@ -109,6 +130,10 @@ impl OpRecord {
 /// An op whose clip misses the screen, and a quad with an empty source rectangle, is checked
 /// like any other but yields no record: it covers no pixel. So a record's clip is never empty
 /// and a quad record always names a slot that holds an image.
+///
+/// A stretch quad covers exactly its destination rectangle, so its record's clip is the part
+/// of the clip inside that rectangle, and the shader needs no test of its own. The two steps
+/// are divided here, where 64-bit integers are at hand.
 pub(crate) fn encode_ops(
     table: &BitmapTable,
     size: Size,
@@ -141,8 +166,37 @@ pub(crate) fn encode_ops(
                 if quad.src.is_empty() {
                     continue;
                 }
+                let src = quad.src;
+                let (clip, kind, geometry) = match quad.sampling {
+                    Sampling::Affine(t) => {
+                        let coefficients = [t.xx, t.xy, t.yx, t.yy, t.tx, t.ty];
+                        let words = coefficients.map(|c| c.to_bits() as u32);
+                        (clip, sampling_kind::AFFINE, words)
+                    }
+                    Sampling::Stretch { dest, mirror } => {
+                        let Some(clip) = clip.within(dest) else {
+                            continue;
+                        };
+                        // Not empty, or nothing of the clip would be inside it.
+                        let step_x = stretch_step(src.width, dest.width);
+                        let step_y = stretch_step(src.height, dest.height);
+                        let kind = if mirror {
+                            sampling_kind::STRETCH_MIRRORED
+                        } else {
+                            sampling_kind::STRETCH
+                        };
+                        let words = [
+                            dest.x as u32,
+                            dest.y as u32,
+                            (step_x >> 32) as u32,
+                            step_x as u32,
+                            (step_y >> 32) as u32,
+                            step_y as u32,
+                        ];
+                        (clip, kind, words)
+                    }
+                };
                 let mut record = OpRecord::new(op_kind::QUAD, clip);
-                let (src, t) = (quad.src, quad.transform);
                 record.words[5] = quad.bitmap.index;
                 // Inside the bitmap and not empty, so the origin is not negative and every
                 // value is at most the largest image dimension.
@@ -152,8 +206,8 @@ pub(crate) fn encode_ops(
                     src.width,
                     src.height,
                 ]);
-                let coefficients = [t.xx, t.xy, t.yx, t.yy, t.tx, t.ty];
-                record.words[10..16].copy_from_slice(&coefficients.map(|c| c.to_bits() as u32));
+                record.words[10..16].copy_from_slice(&geometry);
+                record.words[23] = kind;
                 record.words[16] = u32::from(quad.opacity);
                 record.words[17] = blend_mode(quad.blend);
                 record.set_tone_and_color(quad.tone, quad.color);
@@ -179,7 +233,7 @@ pub(crate) fn encode_ops(
 #[cfg(test)]
 mod tests {
     use vkxp_proto::{
-        BitmapDelta, BitmapId, Color, Fixed, OpKind, Quad, RectEffect, Tone, Transform,
+        BitmapDelta, BitmapId, Color, Fixed, OpKind, Quad, RectEffect, Sampling, Tone, Transform,
     };
 
     use super::*;
@@ -207,7 +261,7 @@ mod tests {
             clip: SCREEN,
             bitmap,
             src,
-            transform: Transform::IDENTITY,
+            sampling: Sampling::Affine(Transform::IDENTITY),
             tone: Tone::NEUTRAL,
             color: Color::new(0, 0, 0, 0),
             opacity: 255,
@@ -358,7 +412,7 @@ mod tests {
                 clip: off,
                 bitmap: ID,
                 src: Rect::new(0, 0, 8, 6),
-                transform: Transform::IDENTITY,
+                sampling: Sampling::Affine(Transform::IDENTITY),
                 tone: Tone::NEUTRAL,
                 color: Color::new(0, 0, 0, 0),
                 opacity: 255,
@@ -376,7 +430,7 @@ mod tests {
             clip: off,
             bitmap: BitmapId::new(9, 0),
             src: Rect::new(0, 0, 1, 1),
-            transform: Transform::IDENTITY,
+            sampling: Sampling::Affine(Transform::IDENTITY),
             tone: Tone::NEUTRAL,
             color: Color::new(0, 0, 0, 0),
             opacity: 255,
@@ -444,14 +498,14 @@ mod tests {
             clip: Rect::new(1, 2, 3, 4),
             bitmap: ID,
             src: Rect::new(2, 1, 5, 4),
-            transform: Transform {
+            sampling: Sampling::Affine(Transform {
                 xx: Fixed::from_bits(11),
                 xy: Fixed::from_bits(-12),
                 yx: Fixed::from_bits(13),
                 yy: Fixed::from_bits(i32::MIN),
                 tx: Fixed::from_bits(15),
                 ty: Fixed::from_bits(-1),
-            },
+            }),
             tone: Tone::new(-255, i16::MAX, i16::MIN, 77),
             color: Color::new(255, 0, 128, 96),
             opacity: 200,
@@ -465,15 +519,118 @@ mod tests {
             11, -12i32 as u32, 13, 0x8000_0000, 15, u32::MAX,
             200, 2,
             0x6080_00FF, -255i32 as u32, 32767, -32768i32 as u32, 77,
+            0,
         ];
         assert_eq!(records[0].words(), &expected);
+    }
+
+    fn stretch(clip: Rect, src: Rect, dest: Rect, mirror: bool) -> Op {
+        Op::Quad(Quad {
+            clip,
+            bitmap: ID,
+            src,
+            sampling: Sampling::Stretch { dest, mirror },
+            tone: Tone::NEUTRAL,
+            color: Color::new(0, 0, 0, 0),
+            opacity: 255,
+            blend: BlendMode::Normal,
+        })
+    }
+
+    #[test]
+    fn stretch_quad_record_layout() {
+        let src = Rect::new(2, 1, 5, 4);
+        let op = stretch(SCREEN, src, Rect::new(-3, 7, 15, 6), true);
+        let records = encode_ops(&table(), SIZE, &[op]).unwrap();
+        // 5 texels into 15 pixels and 4 into 6, with 20 fractional bits and rounded down.
+        let (step_x, step_y) = ((5u32 << 20) / 15, (4u32 << 20) / 6);
+        #[rustfmt::skip]
+        let expected = [
+            1, 0, 7, 12, 13,
+            3, 2, 1, 5, 4,
+            -3i32 as u32, 7, 0, step_x, 0, step_y,
+            255, 0,
+            0, 0, 0, 0, 0,
+            2,
+        ];
+        assert_eq!(records[0].words(), &expected);
+
+        let plain = stretch(SCREEN, src, Rect::new(-3, 7, 15, 6), false);
+        let records = encode_ops(&table(), SIZE, &[plain]).unwrap();
+        assert_eq!(records[0].words()[23], 1);
+    }
+
+    /// A step that does not fit 32 bits: many texels into few pixels.
+    #[test]
+    fn stretch_steps_are_split_into_two_words() {
+        let mut table = BitmapTable::new(8192);
+        let wide = BitmapId::new(0, 0);
+        let delta = BitmapDelta::Create {
+            id: wide,
+            width: 8000,
+            height: 1,
+        };
+        table.apply(&delta).unwrap();
+        let op = Op::Quad(Quad {
+            clip: SCREEN,
+            bitmap: wide,
+            src: Rect::new(0, 0, 8000, 1),
+            sampling: Sampling::Stretch {
+                dest: Rect::new(0, 0, 1, 1),
+                mirror: false,
+            },
+            tone: Tone::NEUTRAL,
+            color: Color::new(0, 0, 0, 0),
+            opacity: 255,
+            blend: BlendMode::Normal,
+        });
+        let records = encode_ops(&table, SIZE, &[op]).unwrap();
+        let step = 8000u64 << 20;
+        assert!(step > u64::from(u32::MAX));
+        let words = records[0].words();
+        assert_eq!((u64::from(words[12]) << 32) | u64::from(words[13]), step);
+        assert_eq!(words[14..16], [0, 1 << 20]);
+    }
+
+    /// A stretch quad's record is clipped to its destination, wherever that lies.
+    #[test]
+    fn stretch_quad_is_clipped_to_its_destination() {
+        let src = Rect::new(0, 0, 8, 6);
+        let clip_of = |clip, dest| {
+            let records = encode_ops(&table(), SIZE, &[stretch(clip, src, dest, false)]).unwrap();
+            records.first().map(|record| record.clip)
+        };
+        let rect = |x0, y0, x1, y1| Some(ClipRect { x0, y0, x1, y1 });
+        assert_eq!(clip_of(SCREEN, Rect::new(5, 6, 7, 8)), rect(5, 6, 12, 14));
+        assert_eq!(
+            clip_of(Rect::new(10, 10, 5, 5), Rect::new(-100, -100, 112, 300)),
+            rect(10, 10, 12, 15)
+        );
+        assert_eq!(
+            clip_of(SCREEN, Rect::new(i32::MIN, i32::MIN, u32::MAX, u32::MAX)),
+            rect(0, 0, 40, 30)
+        );
+        // Beside the clip, beside the screen, or without pixels: no record.
+        for dest in [
+            Rect::new(40, 0, 10, 10),
+            Rect::new(-10, 0, 10, 10),
+            Rect::new(i32::MAX, i32::MAX, u32::MAX, u32::MAX),
+            Rect::new(3, 3, 0, 10),
+            Rect::new(3, 3, 10, 0),
+        ] {
+            assert_eq!(clip_of(SCREEN, dest), None, "{dest:?}");
+        }
+        assert_eq!(
+            clip_of(Rect::new(0, 0, 5, 5), Rect::new(5, 0, 10, 10)),
+            None
+        );
     }
 
     /// The words an old quad left at zero are exactly the neutral tone and zero-alpha colour.
     #[test]
     fn neutral_quad_leaves_the_tone_and_colour_words_zero() {
         let records = encode_ops(&table(), SIZE, &[quad(ID, Rect::new(0, 0, 8, 6))]).unwrap();
-        assert_eq!(records[0].words()[18..], [0; 5]);
+        assert_eq!(records[0].words()[18..], [0; 6]);
     }
 
     #[test]
@@ -501,7 +658,7 @@ mod tests {
                     clip: SCREEN,
                     bitmap: ID,
                     src: Rect::new(0, 0, 8, 6),
-                    transform: Transform::IDENTITY,
+                    sampling: Sampling::Affine(Transform::IDENTITY),
                     tone: Tone::NEUTRAL,
                     color: Color::new(0, 0, 0, 0),
                     opacity: 255,

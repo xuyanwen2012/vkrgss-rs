@@ -1,4 +1,4 @@
-// Exact evaluation of a quad's transform with 32-bit words only.
+// Exact evaluation of a quad's sampling with 32-bit words only.
 //
 // `Transform::source_position` in vkxp-proto forms each sum of two products exactly, rounds it
 // towards negative infinity to 16 fractional bits and adds the translation. The products need
@@ -83,6 +83,17 @@ ivec2 source_texel(Transform transform, ivec2 pixel) {
     I64 v;
     source_position(transform, pixel, u, v);
     return ivec2(i64_shr16_to_int(u), i64_shr16_to_int(v));
+}
+
+// Mirrors `vkxp_proto::stretch_index`: `(i * step) >> 20` for a step of 64 bits given as two
+// words. The caller guarantees what a stretch does: the product is below the source length
+// shifted left by 20, so below 2^52, and the result fits 32 bits.
+uint stretch_index(uint i, uint step_hi, uint step_lo) {
+    uint hi;
+    uint lo;
+    umulExtended(i, step_lo, hi, lo);
+    hi += i * step_hi;
+    return (hi << 12) | (lo >> 20);
 }
 
 #endif

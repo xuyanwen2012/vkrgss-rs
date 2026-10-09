@@ -6,7 +6,7 @@ use vkxp_compose_ref as reference;
 use vkxp_compose_ref::fixtures::{self, bitmap, sprite};
 use vkxp_proto::{
     BitmapDelta, BitmapId, BlendMode, Color, Fixed, FramePacket, FrameRate, GuestToHost, Op,
-    OpKind, Quad, Rect, RectEffect, Size, Tone, Transform,
+    OpKind, Quad, Rect, RectEffect, Sampling, Size, Tone, Transform,
 };
 
 use super::differential::{Pair, assert_stream_matches, frame_difference};
@@ -71,7 +71,10 @@ fn several_thousand_ops_on_one_pixel() {
                     clip,
                     bitmap: id,
                     src: Rect::new(0, 0, 8, 8),
-                    transform: Transform::place_at((px - 4) as i16, (py - 4) as i16),
+                    sampling: Sampling::Affine(Transform::place_at(
+                        (px - 4) as i16,
+                        (py - 4) as i16,
+                    )),
                     tone: Tone::NEUTRAL,
                     color: Color::new(0, 0, 0, 0),
                     opacity: (40 + i % 200) as u8,
@@ -194,11 +197,11 @@ fn logical_size_641_by_479() {
     // The checkerboard magnified to just cover 641 by 479.
     let magnified = Quad {
         clip: screen,
-        transform: Transform {
+        sampling: Sampling::Affine(Transform {
             xx: Fixed::from_ratio(64, 641).unwrap(),
             yy: Fixed::from_ratio(48, 479).unwrap(),
             ..Transform::IDENTITY
-        },
+        }),
         ..sprite(board, 64, 48, 0, 0)
     };
     let ops = vec![
@@ -301,14 +304,14 @@ fn extreme_coefficients_select_the_reference_texels() {
             clip: Rect::from_size(size),
             bitmap: id,
             src: Rect::new(0, 0, 64, 64),
-            transform: Transform {
+            sampling: Sampling::Affine(Transform {
                 xx: coefficient(0),
                 xy: coefficient(1),
                 yx: coefficient(2),
                 yy: coefficient(3),
                 tx: coefficient(4),
                 ty: coefficient(5),
-            },
+            }),
             tone: Tone::NEUTRAL,
             color: Color::new(0, 0, 0, 0),
             opacity: 200,
@@ -715,4 +718,168 @@ fn failed_frame_buffer_allocation_without_uploads_leaks_nothing() {
         ));
         assert_eq!(compositor.read_frame(), Ok(None));
     }
+}
+
+// Requirement: Stretch sampling of quads
+
+/// A bitmap one row high in which every texel differs from its neighbours.
+fn row_bitmap(id: BitmapId, width: u32) -> Vec<BitmapDelta> {
+    let rgba = (0..width)
+        .flat_map(|x| [(x % 256) as u8, (x / 256) as u8, (x % 7) as u8 * 30, 255])
+        .collect();
+    bitmap(id, width, 1, rgba).into()
+}
+
+fn stretch(clip: Rect, bitmap: BitmapId, src: Rect, dest: Rect, mirror: bool) -> Op {
+    Op::Quad(Quad {
+        clip,
+        bitmap,
+        src,
+        sampling: Sampling::Stretch { dest, mirror },
+        tone: Tone::NEUTRAL,
+        color: Color::new(0, 0, 0, 0),
+        opacity: 255,
+        blend: BlendMode::Normal,
+    })
+}
+
+/// Every destination width from 1 to 200 for a source of 16 texels, which contains every
+/// measured zoom of `sprite-zoom-samples.txt`, plain and mirrored, one row each.
+#[test]
+fn stretch_quads_of_every_small_width_match_the_reference() {
+    let size = Size::new(210, 400);
+    let screen = Rect::from_size(size);
+    let id = BitmapId::new(0, 0);
+    let mut ops = vec![clear(screen, [10, 20, 30, 255])];
+    for width in 1..=200u32 {
+        for mirror in [false, true] {
+            let row = (width - 1) * 2 + u32::from(mirror);
+            let dest = Rect::new(5, row as i32, width, 1);
+            ops.push(stretch(screen, id, Rect::new(0, 0, 16, 1), dest, mirror));
+        }
+    }
+    assert_stream_matches(&[frame(size, row_bitmap(id, 16), ops)]);
+}
+
+/// Destination rectangles that begin or end far outside the screen, up to the ends of the
+/// coordinate range, with clips of their own.
+#[test]
+fn stretch_quads_far_outside_the_screen_match_the_reference() {
+    let size = Size::new(70, 50);
+    let screen = Rect::from_size(size);
+    let id = BitmapId::new(0, 0);
+    let src = Rect::new(3, 0, 40, 1);
+    let dests = [
+        Rect::new(-100, 0, 300, 50),
+        Rect::new(-100_000, -100_000, 200_050, 200_020),
+        Rect::new(i32::MIN, i32::MIN, u32::MAX, u32::MAX),
+        Rect::new(i32::MIN, 10, 1 << 31, 5),
+        Rect::new(i32::MIN, 10, (1 << 31) + 20, 5),
+        Rect::new(-1, -1, u32::MAX, u32::MAX),
+        Rect::new(69, 49, u32::MAX, u32::MAX),
+        Rect::new(30, i32::MIN + 7, 9, u32::MAX),
+        // Beside the screen, or without pixels.
+        Rect::new(70, 0, 500, 50),
+        Rect::new(-500, 0, 500, 50),
+        Rect::new(i32::MAX, i32::MAX, u32::MAX, u32::MAX),
+        Rect::new(5, 5, 0, 9),
+    ];
+    let mut messages = vec![frame(size, row_bitmap(id, 64), vec![])];
+    for dest in dests {
+        for mirror in [false, true] {
+            for clip in [
+                screen,
+                Rect::new(13, 7, 31, 22),
+                Rect::new(-40, -40, 60, 60),
+            ] {
+                let ops = vec![
+                    clear(screen, [10, 20, 30, 255]),
+                    stretch(clip, id, src, dest, mirror),
+                ];
+                messages.push(frame(size, vec![], ops));
+            }
+        }
+    }
+    assert_stream_matches(&messages);
+}
+
+/// Sources and destinations wider than 4096, where a step or a product no longer fits 32 bits.
+#[test]
+fn stretch_quads_wider_than_4096_match_the_reference() {
+    let size = Size::new(300, 20);
+    let screen = Rect::from_size(size);
+    let (small, wide) = (BitmapId::new(0, 0), BitmapId::new(1, 0));
+    let wide_width = 5000u32;
+    let mut deltas = row_bitmap(small, 16);
+    deltas.extend(row_bitmap(wide, wide_width));
+    let mut ops = vec![clear(screen, [10, 20, 30, 255])];
+    let mut row = 0;
+    let mut push = |bitmap, src: Rect, x: i32, width: u32, mirror| {
+        let dest = Rect::new(x, row, width, 1);
+        ops.push(stretch(screen, bitmap, src, dest, mirror));
+        row += 1;
+    };
+    let all = Rect::new(0, 0, wide_width, 1);
+    // A wide source squeezed and unscaled, a narrow one stretched wide, and both at once.
+    push(wide, all, 0, 300, false);
+    push(wide, all, 0, 3, false);
+    push(wide, all, 40, 1, true);
+    push(wide, all, -4800, wide_width, false);
+    push(wide, all, -4800, wide_width, true);
+    push(wide, Rect::new(4097, 0, 900, 1), -3, 4097, false);
+    push(small, Rect::new(0, 0, 16, 1), -2000, 4097, false);
+    push(small, Rect::new(0, 0, 16, 1), -99_000, 100_000, true);
+    push(small, Rect::new(0, 0, 16, 1), -(1 << 30), u32::MAX, false);
+    push(wide, all, -6000, 12_345, false);
+    push(wide, all, -70_000, 100_003, true);
+    push(wide, all, -(1 << 30), u32::MAX, false);
+    push(wide, all, i32::MIN, u32::MAX, true);
+    assert_stream_matches(&[frame(size, deltas, ops)]);
+}
+
+/// Stretch quads keep their place in the op order and take tone, colour, opacity and blend
+/// mode like any quad.
+#[test]
+fn stretch_quads_blend_like_other_quads() {
+    let size = Size::new(64, 48);
+    let screen = Rect::from_size(size);
+    let (disc, grid) = (BitmapId::new(0, 0), BitmapId::new(1, 0));
+    let mut deltas: Vec<BitmapDelta> =
+        bitmap(disc, 8, 8, fixtures::disc(8, Color::new(200, 120, 40, 255))).into();
+    deltas.extend(bitmap(grid, 9, 7, fixtures::gradient(9, 7)));
+    let mut ops = vec![clear(screen, [90, 60, 30, 255])];
+    for (i, blend) in [BlendMode::Normal, BlendMode::Add, BlendMode::Subtract]
+        .into_iter()
+        .enumerate()
+    {
+        let x = i as i32 * 20;
+        ops.push(Op::Quad(Quad {
+            clip: screen,
+            bitmap: grid,
+            src: Rect::new(1, 1, 7, 5),
+            sampling: Sampling::Stretch {
+                dest: Rect::new(x - 3, 2, 23, 31),
+                mirror: i == 1,
+            },
+            tone: Tone::new(20, -30, 40, 100),
+            color: Color::new(10, 200, 30, 90),
+            opacity: 180,
+            blend,
+        }));
+        ops.push(Op::Quad(sprite(disc, 8, 8, x as i16 + 4, 10)));
+        ops.push(Op::Quad(Quad {
+            clip: Rect::new(x, 20, 15, 25),
+            bitmap: disc,
+            src: Rect::new(0, 0, 8, 8),
+            sampling: Sampling::Stretch {
+                dest: Rect::new(x - 2, 14, 21, 40),
+                mirror: false,
+            },
+            tone: Tone::NEUTRAL,
+            color: Color::new(0, 0, 0, 0),
+            opacity: 120,
+            blend,
+        }));
+    }
+    assert_stream_matches(&[frame(size, deltas, ops)]);
 }

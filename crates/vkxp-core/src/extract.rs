@@ -1,6 +1,6 @@
 //! Frame extraction: the scene and the bitmap arena become a protocol frame packet.
 
-use vkxp_proto::{BitmapId, BlendMode, FramePacket, FrameRate, Op, Quad, RectEffect};
+use vkxp_proto::{BitmapId, BlendMode, FramePacket, FrameRate, Op, Quad, RectEffect, Sampling};
 
 use crate::element::Order;
 use crate::geometry::Geometry;
@@ -152,7 +152,7 @@ impl Assembly<'_> {
             clip,
             bitmap,
             src: inside,
-            transform,
+            sampling: Sampling::Affine(transform),
             tone: look.tone,
             color: look.color,
             opacity: look.opacity,

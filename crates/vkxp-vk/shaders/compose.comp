@@ -24,7 +24,12 @@ const uint BLEND_NORMAL = 0u;
 const uint BLEND_ADD = 1u;
 const uint BLEND_SUBTRACT = 2u;
 
-// One validated op, as `OpRecord` in `src/records.rs` lays it out: 23 words of 32 bits
+// Values of `OpRecord.sampling`. They match `sampling_kind` in `src/records.rs`.
+const uint SAMPLING_AFFINE = 0u;
+const uint SAMPLING_STRETCH = 1u;
+const uint SAMPLING_STRETCH_MIRRORED = 2u;
+
+// One validated op, as `OpRecord` in `src/records.rs` lays it out: 24 words of 32 bits
 // (`RECORD_WORDS`), which is also the stride of the array below.
 struct OpRecord {
     uint kind;
@@ -39,6 +44,10 @@ struct OpRecord {
     int src_y;
     int src_width;
     int src_height;
+    // Quad, affine sampling: the transform. Stretch sampling: the same six words hold the
+    // left and top of the destination rectangle (`xx`, `xy`) and the steps along x (`yx` the
+    // high word, `yy` the low) and along y (`tx`, `ty`); the clip rectangle is then inside
+    // the destination rectangle.
     Transform transform;
     uint opacity;
     uint blend;
@@ -50,6 +59,8 @@ struct OpRecord {
     int tone_green;
     int tone_blue;
     uint tone_gray;
+    // Quad: how the six words of `transform` are read.
+    uint sampling;
 };
 
 layout(set = 0, binding = 0) uniform utexture2D bitmaps[];
@@ -80,6 +91,20 @@ uvec4 unpack_color(uint color) {
     return uvec4(color & 0xFFu, (color >> 8) & 0xFFu, (color >> 16) & 0xFFu, color >> 24);
 }
 
+// The texel of a stretch quad under `position`, relative to its source rectangle. `position`
+// is inside the clip, so inside the destination rectangle: both offsets are counted from its
+// corner and are below its size, whatever was clipped away.
+ivec2 stretch_texel(OpRecord op, ivec2 position) {
+    uint i = uint(position.x) - uint(op.transform.xx);
+    uint j = uint(position.y) - uint(op.transform.xy);
+    uint column = stretch_index(i, uint(op.transform.yx), uint(op.transform.yy));
+    uint row = stretch_index(j, uint(op.transform.tx), uint(op.transform.ty));
+    if (op.sampling == SAMPLING_STRETCH_MIRRORED) {
+        column = uint(op.src_width) - 1u - column;
+    }
+    return ivec2(column, row);
+}
+
 // The value of screen pixel `position` after `op`, given its value before.
 uvec4 apply_op(OpRecord op, uvec4 pixel, ivec2 position) {
     if (position.x < op.clip_x0 || position.x >= op.clip_x1
@@ -90,7 +115,9 @@ uvec4 apply_op(OpRecord op, uvec4 pixel, ivec2 position) {
     case OP_CLEAR:
         return unpack_color(op.color);
     case OP_QUAD: {
-        ivec2 texel = source_texel(op.transform, position);
+        ivec2 texel = op.sampling == SAMPLING_AFFINE
+            ? source_texel(op.transform, position)
+            : stretch_texel(op, position);
         if (texel.x < 0 || texel.x >= op.src_width || texel.y < 0 || texel.y >= op.src_height) {
             return pixel;
         }
