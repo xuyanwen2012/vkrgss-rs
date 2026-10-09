@@ -8,9 +8,9 @@
 
 ## 2. Build script
 
-- [ ] 2.1 Check in `local/ruby/config.h` as `crates/vkxp-ruby-sys/config/x86_64-unknown-linux-gnu/config.h` and write `build.rs` as described in `design.md` (fixed file list, pinned flags, hidden visibility, clang extras, static zlib through `libz-sys`, link libraries, rerun rules, error for other targets). Verify: `cargo build -p vkxp-ruby-sys` succeeds with gcc, and `CC=clang cargo build -p vkxp-ruby-sys` succeeds when clang is installed.
-- [ ] 2.2 Apply the `crc_table` patch to `ext/zlib/zlib.c`, store it under `patches/` and record it in `PATCHES.md` with the patched file's hash. Verify: the manifest test of 1.3 still passes and the compiler no longer warns about that line.
-- [ ] 2.3 Document build prerequisites (C compiler, libcrypt development files) in `README.md`. Verify: the README's prerequisite table lists both.
+- [x] 2.1 Check in `local/ruby/config.h` as `crates/vkxp-ruby-sys/config/x86_64-unknown-linux-gnu/config.h` and write `build.rs` as described in `design.md` (fixed file list, pinned flags, hidden visibility, clang extras, static zlib through `libz-sys`, link libraries, rerun rules, error for other targets). Verify: `cargo build -p vkxp-ruby-sys` succeeds with gcc, and `CC=clang cargo build -p vkxp-ruby-sys` succeeds when clang is installed.
+- [x] 2.2 Apply the `crc_table` patch to `ext/zlib/zlib.c`, store it under `patches/` and record it in `PATCHES.md` with the patched file's hash. Verify: the manifest test of 1.3 still passes and the compiler no longer warns about that line.
+- [x] 2.3 Document build prerequisites (C compiler, libcrypt development files) in `README.md`. Verify: the README's prerequisite table lists both.
 
 ## 3. FFI
 
