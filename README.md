@@ -77,7 +77,9 @@ violation is reported with the full dependency path that causes it.
    `CORE_ALLOW_LIST` in `xtask/src/deps.rs`; adding to it is a reviewed decision, and nothing
    that does file I/O or binds Ruby, Vulkan, windowing or audio belongs there.
 
-Only normal and build dependencies count; dev-dependencies are not linked into the guest.
+The check runs with every feature of every workspace crate enabled, so an optional dependency
+or an off-by-default feature cannot hide a forbidden path. Only normal and build dependencies
+count; dev-dependencies are not linked into the guest.
 
 In addition, `vkxp-proto`, `vkxp-pixel`, `vkxp-core` and `vkxp-compose-ref` carry
 `#![forbid(unsafe_code)]`, so `unsafe` in them does not compile.

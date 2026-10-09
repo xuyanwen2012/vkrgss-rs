@@ -5,6 +5,9 @@
 //! 1. No guest crate reaches a host crate, directly or transitively.
 //! 2. Everything `vkxp-core` reaches is on its allow-list of pure crates.
 //!
+//! The graph is taken with every feature of every workspace crate enabled, so a forbidden
+//! dependency cannot hide behind an optional dependency or a feature that is off by default.
+//!
 //! Only normal and build dependencies count. Dev-dependencies are not linked into the guest, so
 //! they do not cross the guest/host boundary.
 
@@ -172,10 +175,12 @@ pub fn graph_from_metadata(metadata: &Value) -> Result<Graph> {
     Ok(graph)
 }
 
-/// Runs `cargo metadata` for the workspace at `root` and builds its graph.
+/// Runs `cargo metadata` for the workspace at `root`, with all features of its members
+/// enabled, and builds its graph.
 pub fn workspace_graph(root: &Path) -> Result<Graph> {
     let output = Command::new(crate::cargo())
-        .args(["metadata", "--format-version", "1", "--manifest-path"])
+        .args(["metadata", "--format-version", "1", "--all-features"])
+        .arg("--manifest-path")
         .arg(root.join("Cargo.toml"))
         .output()
         .context("could not start `cargo metadata`")?;
@@ -359,6 +364,106 @@ mod tests {
                 path: path(&["vkxp-ruby-sys", "vkxp-audio"]),
             }]
         );
+    }
+
+    /// Writes a throwaway workspace: each entry is a crate name and the body of its manifest
+    /// after the `[package]` table.
+    fn write_workspace(root: &Path, crates: &[(&str, &str)]) {
+        let members: Vec<String> = crates
+            .iter()
+            .map(|(name, _)| format!("\"{name}\""))
+            .collect();
+        let manifest = format!(
+            "[workspace]\nresolver = \"2\"\nmembers = [{}]\n",
+            members.join(", ")
+        );
+        std::fs::write(root.join("Cargo.toml"), manifest).unwrap();
+        for (name, body) in crates {
+            let directory = root.join(name);
+            std::fs::create_dir_all(directory.join("src")).unwrap();
+            std::fs::write(directory.join("src/lib.rs"), "").unwrap();
+            let manifest = format!(
+                "[package]\nname = \"{name}\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n{body}"
+            );
+            std::fs::write(directory.join("Cargo.toml"), manifest).unwrap();
+        }
+    }
+
+    /// Forbidden dependencies that are optional and switched off by default are still found,
+    /// for the guest/host rule and for the core allow-list, through real `cargo metadata`.
+    #[test]
+    fn inactive_optional_forbidden_dependencies_are_reported() {
+        let directory = tempfile::tempdir().unwrap();
+        write_workspace(
+            directory.path(),
+            &[
+                (
+                    "vkxp-image",
+                    "[dependencies]\nvkxp-vk = { path = \"../vkxp-vk\", optional = true }\n",
+                ),
+                (
+                    "vkxp-text",
+                    "[dependencies]\nglue = { path = \"../glue\" }\n\n\
+                     [features]\nsound = [\"glue/sound\"]\n",
+                ),
+                (
+                    "glue",
+                    "[dependencies]\nvkxp-audio = { path = \"../vkxp-audio\", optional = true }\n\n\
+                     [features]\nsound = [\"dep:vkxp-audio\"]\n",
+                ),
+                (
+                    "vkxp-core",
+                    "[dependencies]\nvkxp-proto = { path = \"../vkxp-proto\" }\n\
+                     impure-io = { path = \"../impure-io\", optional = true }\n\n\
+                     [features]\ndefault = []\nfiles = [\"dep:impure-io\"]\n",
+                ),
+                ("vkxp-proto", ""),
+                ("vkxp-vk", ""),
+                ("vkxp-audio", ""),
+                ("impure-io", ""),
+            ],
+        );
+
+        let graph = workspace_graph(directory.path()).unwrap();
+        assert_eq!(
+            check(&graph),
+            vec![
+                Violation::GuestReachesHost {
+                    path: path(&["vkxp-image", "vkxp-vk"]),
+                },
+                Violation::GuestReachesHost {
+                    path: path(&["vkxp-text", "glue", "vkxp-audio"]),
+                },
+                Violation::CoreDependency {
+                    path: path(&["vkxp-core", "impure-io"]),
+                },
+            ]
+        );
+    }
+
+    /// The same throwaway layout without the forbidden edges passes, so the test above fails
+    /// for the right reason.
+    #[test]
+    fn optional_allowed_dependencies_pass() {
+        let directory = tempfile::tempdir().unwrap();
+        write_workspace(
+            directory.path(),
+            &[
+                (
+                    "vkxp-core",
+                    "[dependencies]\nvkxp-proto = { path = \"../vkxp-proto\", optional = true }\n",
+                ),
+                (
+                    "vkxp-host",
+                    "[dependencies]\nvkxp-core = { path = \"../vkxp-core\", optional = true }\n",
+                ),
+                ("vkxp-proto", ""),
+            ],
+        );
+        let graph = workspace_graph(directory.path()).unwrap();
+        assert!(graph["vkxp-core"].contains("vkxp-proto"));
+        assert!(graph["vkxp-host"].contains("vkxp-core"));
+        assert_eq!(check(&graph), vec![]);
     }
 
     fn real_graph() -> Graph {
