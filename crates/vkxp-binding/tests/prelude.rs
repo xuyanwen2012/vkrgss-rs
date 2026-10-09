@@ -113,9 +113,9 @@ fn nothing_else_is_loaded() {
 fn win32api_returns_zero_and_names_a_function_once() {
     assert_eq!(
         eval(&with_error_stream(
-            "api = Win32API.new('user32', 'GetAsyncKeyState', 'i', 'i')
-             [api.call(13), api.call(13), Win32API.new('user32', 'GetAsyncKeyState', 'i', 'i').Call(1)]"
+            "api = Win32API.new('user32', 'GetKeyNameTextA', 'i', 'i')
+             [api.call(13), api.call(13), Win32API.new('user32', 'GetKeyNameTextA', 'i', 'i').Call(1)]"
         )),
-        r#"[[0, 0, 0], "vkxp: Win32API user32 GetAsyncKeyState is not emulated and returns 0\n"]"#
+        r#"[[0, 0, 0], "vkxp: Win32API user32 GetKeyNameTextA is not emulated and returns 0\n"]"#
     );
 }

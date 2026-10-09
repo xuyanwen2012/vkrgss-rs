@@ -27,3 +27,10 @@
 ## Follow-ups
 
 - `GetKeyState`'s toggle bit for lock keys; mouse wheel; text input.
+- Keys that a host shortcut takes (F12, F2, F11, Tab, Alt+Enter, the key that dismisses a
+  modal message) hold no button but are held as raw keys, as the keyboard has them. Whether
+  a game should be kept from seeing them is open.
+- The pointer is mapped when it moves; a window resize or a new logical size under a
+  resting pointer leaves the old position until the next move.
+- `GetAsyncKeyState` and `GetKeyState` return 16-bit values with their sign (-32768, -32767,
+  -128), as observed on Windows; not yet checked against the original runtime under Wine.
