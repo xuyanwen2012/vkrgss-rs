@@ -121,6 +121,9 @@ pub use error::{BitmapError, CreateFailure, DecodeError, ElementKind, SceneError
 pub use font::{Font, FontDefaults};
 pub use input::InputState;
 pub use rect::Rect;
-pub use scene::{MAX_LOGICAL_DIMENSION, PlaneId, Scene, SpriteId, TilemapId, ViewportId, WindowId};
+pub use scene::{
+    DisposedElements, MAX_LOGICAL_DIMENSION, PlaneId, Scene, SpriteId, TilemapId, ViewportId,
+    WindowId,
+};
 pub use table::{SharedTable, Table};
 pub use text::{Align, Mask, TextRasterizer};

@@ -1088,8 +1088,7 @@ mod tests {
         assert!(all(&stage.frame(), BLACK));
         assert_eq!(stage.bitmaps.len(), before + 1);
 
-        // An invisible one gives them back, whatever its viewport: hidden, off the screen or
-        // disposed.
+        // An invisible one gives them back, whatever its viewport: hidden or off the screen.
         stage.scene.tilemap_mut(id).unwrap().visible = false;
         stage.frame();
         assert_eq!(stage.bitmaps.len(), before);
@@ -1107,10 +1106,10 @@ mod tests {
         stage.scene.tilemap_mut(id).unwrap().visible = true;
         stage.frame();
         assert_eq!(stage.bitmaps.len(), before + 1);
-        stage.scene.dispose_viewport(viewport);
-        stage.frame();
-        assert_eq!(stage.bitmaps.len(), before + 1);
-        stage.scene.tilemap_mut(id).unwrap().visible = false;
+        // A disposed viewport takes the tilemap along.
+        stage.scene.dispose_viewport(viewport, &mut stage.bitmaps);
+        assert!(stage.scene.is_tilemap_disposed(id));
+        assert_eq!(stage.bitmaps.len(), before);
         assert!(all(&stage.frame(), BLACK));
         assert_eq!(stage.bitmaps.len(), before);
     }

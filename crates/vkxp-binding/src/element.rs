@@ -12,7 +12,10 @@
 //! values of its argument into that object.
 //!
 //! `dispose` removes the element from the scene and leaves the handle in the object, so
-//! that every later use fails in the scene with the class's `disposed` message. When the
+//! that every later use fails in the scene with the class's `disposed` message; only
+//! `Sprite#bitmap` and `Tilemap#autotiles` go on returning their object. Disposing a viewport
+//! disposes the elements created in it in the same way. An element created in a disposed
+//! viewport is alive, keeps that `Viewport` object and is never drawn. When the
 //! collector frees an element object that was not disposed, its handle goes to a queue, as
 //! the bitmap of a collected `Bitmap` does, and the element is disposed the next time the
 //! guest is entered.
@@ -120,7 +123,7 @@ kind!(
     "Viewport",
     viewport,
     is_viewport_disposed,
-    |id, guest| guest.scene.dispose_viewport(id)
+    |id, guest| dispose_viewport(id, guest)
 );
 kind!(
     WindowId,
@@ -146,6 +149,20 @@ kind!(
     is_tilemap_disposed,
     |id, guest| guest.scene.dispose_tilemap(id, &mut guest.bitmaps)
 );
+
+/// Disposes a viewport, and with it the elements that were created in it.
+fn dispose_viewport(id: ViewportId, guest: &mut Guest) {
+    let _disposed = guest.scene.dispose_viewport(id, &mut guest.bitmaps);
+    #[cfg(feature = "testing")]
+    for (kind, count) in [
+        (ElementKind::Sprite, _disposed.sprites),
+        (ElementKind::Window, _disposed.windows),
+        (ElementKind::Plane, _disposed.planes),
+        (ElementKind::Tilemap, _disposed.tilemaps),
+    ] {
+        crate::scene_testing::count(kind, -count.cast_signed());
+    }
+}
 
 /// The element of a collected object, waiting to be disposed.
 #[derive(Debug, Clone, Copy)]
@@ -246,7 +263,7 @@ pub(crate) fn live<K: Kind>(ruby: &Ruby, recv: VALUE) -> Result<K, Raise> {
 }
 
 /// The optional viewport argument of a constructor: no argument or `nil` for none, or a
-/// `Viewport`. Anything else raises `TypeError`.
+/// `Viewport`, which may be disposed. Anything else raises `TypeError`.
 pub(crate) fn viewport_arg(ruby: &Ruby, args: &[VALUE]) -> Result<Option<ViewportId>, Raise> {
     rb::check_count(ruby, args, 0, 1)?;
     match args.first() {
@@ -467,6 +484,21 @@ macro_rules! kept {
     };
 }
 
+/// Defines the reader `$name` of a Ruby object the element keeps in the instance variable
+/// `$variable` and goes on returning when it is disposed, as the original runtime does.
+macro_rules! kept_after_dispose {
+    ($name:ident, $id:ty, $variable:expr) => {
+        fn $name(
+            ruby: &vkxp_ruby_sys::Ruby,
+            recv: vkxp_ruby_sys::ffi::VALUE,
+            _args: &[vkxp_ruby_sys::ffi::VALUE],
+        ) -> vkxp_ruby_sys::HostResult {
+            $crate::wrap::expect::<$crate::element::Element<$id>>(ruby, recv)?;
+            Ok($crate::rb::ivar_get(ruby, recv, $variable)?)
+        }
+    };
+}
+
 /// Defines the reader and the writer of an object property kept in the instance variable
 /// `$variable`. The writer takes the value of its argument with `$arg` and copies it into
 /// the element's own object with `$set`, which passes it on to the scene.
@@ -488,4 +520,4 @@ macro_rules! object {
     };
 }
 
-pub(crate) use {field, kept, object, reader, writer};
+pub(crate) use {field, kept, kept_after_dispose, object, reader, writer};

@@ -155,6 +155,24 @@ handle!(
     TilemapId
 );
 
+/// The keys of the elements of `arena` that `chosen` holds for.
+fn keys_of<T>(arena: &Arena<T>, chosen: impl Fn(&T) -> bool) -> Vec<Key> {
+    arena
+        .iter()
+        .filter(|(_, element)| chosen(element))
+        .map(|(key, _)| key)
+        .collect()
+}
+
+/// How many elements of each kind [`Scene::dispose_viewport`] disposed with the viewport.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DisposedElements {
+    pub sprites: usize,
+    pub windows: usize,
+    pub planes: usize,
+    pub tilemaps: usize,
+}
+
 /// Everything scripts put on the screen, and the bookkeeping of `Graphics`.
 ///
 /// Elements live in arenas, one per kind, and are named by handles: [`SpriteId`],
@@ -162,7 +180,9 @@ handle!(
 /// disposed names nothing: reading or changing it fails with [`SceneError::Disposed`], and
 /// only disposing it again and asking whether it is disposed still work.
 ///
-/// An element is created with or without a viewport and keeps it for life. Elements are drawn
+/// An element is created with or without a viewport and keeps it for life: disposing the
+/// viewport disposes it, and an element created in a disposed viewport is alive and never
+/// drawn. Elements are drawn
 /// in ascending order of z; among equal z, the element created, or last given a different z,
 /// more recently is in front. A viewport takes one place in that order for all its elements,
 /// which are ordered among themselves in the same way.
@@ -233,17 +253,9 @@ impl Scene {
         self.stamp
     }
 
-    /// Fails when `viewport` names a disposed viewport.
-    fn check_viewport(&self, viewport: Option<ViewportId>) -> Result<(), SceneError> {
-        match viewport {
-            Some(id) => self.viewport(id).map(|_| ()),
-            None => Ok(()),
-        }
-    }
-
     /// Creates a sprite with the RGSS1 defaults, in `viewport` or directly on the screen.
+    /// In a disposed viewport the sprite is alive and not drawn.
     pub fn create_sprite(&mut self, viewport: Option<ViewportId>) -> Result<SpriteId, SceneError> {
-        self.check_viewport(viewport)?;
         let stamp = self.next_stamp();
         self.sprites
             .insert(Sprite::new(viewport, stamp))
@@ -261,8 +273,8 @@ impl Scene {
     }
 
     /// Creates a window with the RGSS1 defaults, in `viewport` or directly on the screen.
+    /// In a disposed viewport the window is alive and not drawn.
     pub fn create_window(&mut self, viewport: Option<ViewportId>) -> Result<WindowId, SceneError> {
-        self.check_viewport(viewport)?;
         let stamp = self.next_stamp();
         self.windows
             .insert(Window::new(viewport, stamp))
@@ -271,8 +283,8 @@ impl Scene {
     }
 
     /// Creates a plane with the RGSS1 defaults, in `viewport` or directly on the screen.
+    /// In a disposed viewport the plane is alive and not drawn.
     pub fn create_plane(&mut self, viewport: Option<ViewportId>) -> Result<PlaneId, SceneError> {
-        self.check_viewport(viewport)?;
         let stamp = self.next_stamp();
         self.planes
             .insert(Plane::new(viewport, stamp))
@@ -281,11 +293,11 @@ impl Scene {
     }
 
     /// Creates a tilemap with the RGSS1 defaults, in `viewport` or directly on the screen.
+    /// In a disposed viewport the tilemap is alive and not drawn.
     pub fn create_tilemap(
         &mut self,
         viewport: Option<ViewportId>,
     ) -> Result<TilemapId, SceneError> {
-        self.check_viewport(viewport)?;
         let stamp = self.next_stamp();
         self.tilemaps
             .insert(Tilemap::new(viewport, stamp))
@@ -298,13 +310,33 @@ impl Scene {
         self.sprites.remove(id.0);
     }
 
-    /// Disposes a viewport. Disposing a disposed viewport does nothing. Its elements stay
-    /// alive and are no longer drawn.
-    ///
-    /// PLACEHOLDER: whether the original runtime hides or releases the elements of a disposed
-    /// viewport is not yet checked.
-    pub fn dispose_viewport(&mut self, id: ViewportId) {
-        self.viewports.remove(id.0);
+    /// Disposes a viewport and with it every element that was created in it, and tells how
+    /// many of each kind those were. The bitmaps the scene made for those elements live in
+    /// `bitmaps`. Disposing a disposed viewport does nothing, also to the elements that were
+    /// created in it since.
+    pub fn dispose_viewport(&mut self, id: ViewportId, bitmaps: &mut Bitmaps) -> DisposedElements {
+        let mut disposed = DisposedElements::default();
+        if self.viewports.remove(id.0).is_none() {
+            return disposed;
+        }
+        let inside = Some(id);
+        for key in keys_of(&self.sprites, |sprite| sprite.viewport == inside) {
+            self.dispose_sprite(SpriteId(key));
+            disposed.sprites += 1;
+        }
+        for key in keys_of(&self.windows, |window| window.viewport == inside) {
+            self.dispose_window(WindowId(key), bitmaps);
+            disposed.windows += 1;
+        }
+        for key in keys_of(&self.planes, |plane| plane.viewport == inside) {
+            self.dispose_plane(PlaneId(key), bitmaps);
+            disposed.planes += 1;
+        }
+        for key in keys_of(&self.tilemaps, |tilemap| tilemap.viewport == inside) {
+            self.dispose_tilemap(TilemapId(key), bitmaps);
+            disposed.tilemaps += 1;
+        }
+        disposed
     }
 
     /// Disposes a window, and with it the bitmaps the scene drew from its window skin, which
@@ -458,7 +490,7 @@ mod tests {
         let error = SceneError::Disposed(ElementKind::Viewport);
         let mut scene = Scene::new();
         let viewport = scene.create_viewport(Rect::new(0, 0, 10, 10)).unwrap();
-        scene.dispose_viewport(viewport);
+        scene.dispose_viewport(viewport, &mut Bitmaps::new());
         assert!(scene.is_viewport_disposed(viewport));
         assert_eq!(scene.viewport(viewport).err(), Some(error));
         assert_eq!(
@@ -466,7 +498,7 @@ mod tests {
             Some(error)
         );
         assert_eq!(scene.set_viewport_z(viewport, 3), Err(error));
-        scene.dispose_viewport(viewport);
+        scene.dispose_viewport(viewport, &mut Bitmaps::new());
         assert_eq!(error.to_string(), "disposed viewport");
     }
 
@@ -537,7 +569,7 @@ mod tests {
         assert!(!scene.is_sprite_disposed(new));
 
         let old = scene.create_viewport(Rect::new(0, 0, 1, 1)).unwrap();
-        scene.dispose_viewport(old);
+        scene.dispose_viewport(old, &mut Bitmaps::new());
         let new = scene.create_viewport(Rect::new(0, 0, 2, 2)).unwrap();
         assert!(scene.is_viewport_disposed(old));
         assert_eq!(scene.viewport(new).unwrap().rect, Rect::new(0, 0, 2, 2));
@@ -575,13 +607,95 @@ mod tests {
 
         let sprite = scene.create_sprite(None).unwrap();
         assert_eq!(scene.sprite(sprite).unwrap().viewport(), None);
+    }
 
-        scene.dispose_viewport(viewport);
-        let error = SceneError::Disposed(ElementKind::Viewport);
-        assert_eq!(scene.create_sprite(inside), Err(error));
-        assert_eq!(scene.create_window(inside), Err(error));
-        assert_eq!(scene.create_plane(inside), Err(error));
-        assert_eq!(scene.create_tilemap(inside), Err(error));
+    #[test]
+    fn a_viewport_takes_its_elements_along() {
+        let mut scene = Scene::new();
+        let mut bitmaps = Bitmaps::new();
+        let viewport = scene.create_viewport(Rect::new(0, 0, 10, 10)).unwrap();
+        let other = scene.create_viewport(Rect::new(0, 0, 10, 10)).unwrap();
+        let sprite = scene.create_sprite(Some(viewport)).unwrap();
+        let window = scene.create_window(Some(viewport)).unwrap();
+        let plane = scene.create_plane(Some(viewport)).unwrap();
+        let tilemap = scene.create_tilemap(Some(viewport)).unwrap();
+        let outside = (
+            scene.create_sprite(None).unwrap(),
+            scene.create_window(None).unwrap(),
+            scene.create_plane(None).unwrap(),
+            scene.create_tilemap(None).unwrap(),
+        );
+        let elsewhere = (
+            scene.create_sprite(Some(other)).unwrap(),
+            scene.create_window(Some(other)).unwrap(),
+            scene.create_plane(Some(other)).unwrap(),
+            scene.create_tilemap(Some(other)).unwrap(),
+        );
+
+        let disposed = scene.dispose_viewport(viewport, &mut bitmaps);
+        assert_eq!(
+            disposed,
+            DisposedElements {
+                sprites: 1,
+                windows: 1,
+                planes: 1,
+                tilemaps: 1,
+            }
+        );
+        assert!(scene.is_sprite_disposed(sprite));
+        assert!(scene.is_window_disposed(window));
+        assert!(scene.is_plane_disposed(plane));
+        assert!(scene.is_tilemap_disposed(tilemap));
+        assert_eq!(scene.sprite(sprite).err(), Some(DISPOSED_SPRITE));
+        // Disposing them again does nothing.
+        scene.dispose_sprite(sprite);
+        scene.dispose_window(window, &mut bitmaps);
+        scene.dispose_plane(plane, &mut bitmaps);
+        scene.dispose_tilemap(tilemap, &mut bitmaps);
+
+        assert!(!scene.is_viewport_disposed(other));
+        for (sprite, window, plane, tilemap) in [outside, elsewhere] {
+            assert!(!scene.is_sprite_disposed(sprite));
+            assert!(!scene.is_window_disposed(window));
+            assert!(!scene.is_plane_disposed(plane));
+            assert!(!scene.is_tilemap_disposed(tilemap));
+        }
+    }
+
+    #[test]
+    fn an_element_created_in_a_disposed_viewport_is_alive() {
+        let mut scene = Scene::new();
+        let mut bitmaps = Bitmaps::new();
+        let viewport = scene.create_viewport(Rect::new(0, 0, 10, 10)).unwrap();
+        scene.dispose_viewport(viewport, &mut bitmaps);
+        let inside = Some(viewport);
+
+        let sprite = scene.create_sprite(inside).unwrap();
+        let window = scene.create_window(inside).unwrap();
+        let plane = scene.create_plane(inside).unwrap();
+        let tilemap = scene.create_tilemap(inside).unwrap();
+        scene.sprite_mut(sprite).unwrap().x = 5;
+        assert_eq!(scene.sprite(sprite).unwrap().x, 5);
+        assert_eq!(scene.sprite(sprite).unwrap().viewport(), inside);
+        assert_eq!(scene.window(window).unwrap().viewport(), inside);
+        assert_eq!(scene.plane(plane).unwrap().viewport(), inside);
+        assert_eq!(scene.tilemap(tilemap).unwrap().viewport(), inside);
+
+        // Disposing the viewport again, or one that took its slot, leaves them alone.
+        assert_eq!(
+            scene.dispose_viewport(viewport, &mut bitmaps),
+            DisposedElements::default()
+        );
+        let reused = scene.create_viewport(Rect::new(0, 0, 10, 10)).unwrap();
+        assert_eq!(reused.0.index, viewport.0.index, "the slot is reused");
+        assert_eq!(
+            scene.dispose_viewport(reused, &mut bitmaps),
+            DisposedElements::default()
+        );
+        assert!(!scene.is_sprite_disposed(sprite));
+        assert!(!scene.is_window_disposed(window));
+        assert!(!scene.is_plane_disposed(plane));
+        assert!(!scene.is_tilemap_disposed(tilemap));
     }
 
     #[test]

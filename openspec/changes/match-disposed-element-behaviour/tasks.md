@@ -2,7 +2,7 @@
 
 ## 1. Scene (`vkxp-core`)
 
-- [ ] 1.1 Dispose the elements of a viewport with it, and allow elements in a disposed viewport. Verify: unit tests that the four kinds of element are disposed with their viewport, that an element created afterwards is alive and draws nothing, and that other elements are untouched.
+- [x] 1.1 Dispose the elements of a viewport with it, and allow elements in a disposed viewport. Verify: unit tests that the four kinds of element are disposed with their viewport, that an element created afterwards is alive and draws nothing, and that other elements are untouched.
 
 ## 2. Classes (`vkxp-binding`)
 

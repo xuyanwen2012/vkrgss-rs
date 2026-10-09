@@ -153,11 +153,39 @@ pub const VIEWPORT: &[Case] = &[
          v.dispose; r << pixel(70, 70)",
         "[[255, 0, 0, 255], [0, 0, 0, 255]]",
     ),
-    raises_with(
+    value(
         "a disposed viewport given to a constructor",
-        "v = Viewport.new(0, 0, 1, 1); v.dispose; Sprite.new(v)",
-        "RGSSError",
-        "disposed viewport",
+        "v = Viewport.new(0, 0, 1, 1); v.dispose; n = Sprite.new(v); n.x = 5; \
+         o = [Plane.new(v), Window.new(v), Tilemap.new(v)]; \
+         r = [n.disposed?, n.x, n.viewport.equal?(v)] + o.map { |e| e.disposed? } + \
+         o.map { |e| e.viewport.equal?(v) }; (o << n).each { |e| e.dispose }; r",
+        "[false, 5, true, false, false, false, true, true, true]",
+    ),
+    value(
+        "an element created in a disposed viewport draws nothing and outlives another dispose",
+        "b = solid(1, 1, 255, 0, 0); v = Viewport.new(71, 70, 1, 1); v.dispose; \
+         s = Sprite.new(v); s.bitmap = b; r = [pixel(71, 70)]; v.dispose; \
+         r << s.disposed?; s.dispose; b.dispose; r",
+        "[[0, 0, 0, 255], false]",
+    ),
+    value(
+        "a viewport takes its elements along",
+        "v = Viewport.new(0, 0, 1, 1); s = Sprite.new(v); p = Plane.new(v); w = Window.new(v); \
+         t = Tilemap.new(v); other = Sprite.new; v.dispose; \
+         r = [s, p, w, t].map { |e| e.disposed? }; \
+         r << begin; s.x; rescue RGSSError; $!.message; end; \
+         r << begin; s.viewport; rescue RGSSError; $!.message; end; \
+         r += [s, p, w, t].map { |e| e.dispose }; r << other.disposed? << other.x; \
+         other.dispose; r",
+        r#"[true, true, true, true, "disposed sprite", "disposed sprite", nil, nil, nil, nil, false, 0]"#,
+    ),
+    value(
+        "the elements a viewport took along are counted as disposed",
+        "v = Viewport.new(0, 0, 1, 1); held = [Sprite.new(v), Plane.new(v), Window.new(v), \
+         Tilemap.new(v)]; kinds = [:sprite, :plane, :window, :tilemap]; \
+         before = kinds.map { |kind| scene_count(kind) }; v.dispose; \
+         r = kinds.zip(before).map { |kind, was| scene_count(kind) < was }; held.clear; r",
+        "[true, true, true, true]",
     ),
     raises_with(
         "a viewport that was never initialized",
@@ -363,7 +391,7 @@ pub const SPRITE_DISPOSAL: &[Case] = &[
     value(
         "every other method after dispose",
         "s = Sprite.new; s.dispose; \
-         calls = [[:viewport], [:bitmap], [:bitmap=, nil], [:src_rect], [:color], \
+         calls = [[:viewport], [:bitmap=, nil], [:src_rect], [:color], \
          [:color=, Color.new(0, 0, 0)], [:tone], [:z], [:z=, 1], [:opacity], [:opacity=, 1], \
          [:flash, nil, 1], [:update], [:zoom_x=, 1], [:visible]]; \
          calls.map { |call| begin; s.send(*call); :none; rescue RGSSError; $!.message; end }.uniq",
@@ -392,11 +420,11 @@ pub const SPRITE_DISPOSAL: &[Case] = &[
         "disposed sprite",
     ),
     value(
-        "a sprite of a disposed viewport lives on and is not drawn",
+        "a sprite of a disposed viewport is disposed and not drawn",
         "b = solid(1, 1, 255, 0, 0); v = Viewport.new(111, 0, 1, 1); s = Sprite.new(v); \
          s.bitmap = b; r = [pixel(111, 0)]; v.dispose; \
-         r << pixel(111, 0) << s.disposed? << s.viewport.equal?(v); s.dispose; b.dispose; r",
-        "[[255, 0, 0, 255], [0, 0, 0, 255], false, true]",
+         r << pixel(111, 0) << s.disposed?; s.dispose; b.dispose; r",
+        "[[255, 0, 0, 255], [0, 0, 0, 255], true]",
     ),
 ];
 
@@ -743,7 +771,7 @@ pub const TILEMAP: &[Case] = &[
     ),
     raises_with(
         "use after dispose",
-        "t = Tilemap.new; t.dispose; t.dispose; t.autotiles",
+        "t = Tilemap.new; t.dispose; t.dispose; t.ox",
         "RGSSError",
         "disposed tilemap",
     ),

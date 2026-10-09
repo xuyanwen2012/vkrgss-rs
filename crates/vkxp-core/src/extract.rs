@@ -1861,15 +1861,24 @@ mod tests {
         stage.scene.viewport_mut(viewport).unwrap().visible = true;
         assert_eq!(stage.frame().pixel(2, 2), RED);
 
-        stage.scene.dispose_viewport(viewport);
+        stage.scene.dispose_viewport(viewport, &mut stage.bitmaps);
         assert_eq!(drawn(&stage.frame()).len(), 4);
-        // The sprite itself is still alive, and stays hidden when the slot is reused.
-        assert!(!stage.scene.is_sprite_disposed(inside));
+        // The sprite went with its viewport.
+        assert!(stage.scene.is_sprite_disposed(inside));
+        // One created in the disposed viewport is alive and draws nothing, also when the
+        // slot is reused.
+        let late = sprite_in(&mut stage, Some(viewport), red, 2, 2);
+        let frame = stage.frame();
+        assert_eq!(frame.pixel(2, 2), BLACK);
+        assert_eq!(drawn(&frame).len(), 4);
         stage
             .scene
             .create_viewport(Rect::new(0, 0, 16, 16))
             .unwrap();
-        assert_eq!(drawn(&stage.frame()).len(), 4);
+        let frame = stage.frame();
+        assert_eq!(frame.pixel(2, 2), BLACK);
+        assert_eq!(drawn(&frame).len(), 4);
+        assert!(!stage.scene.is_sprite_disposed(late));
     }
 
     #[test]
@@ -2537,7 +2546,7 @@ mod tests {
             }
             Step::DisposeViewport(index) => {
                 if let Some(id) = pick(&made.viewports, index) {
-                    scene.dispose_viewport(id);
+                    scene.dispose_viewport(id, &mut stage.bitmaps);
                 }
             }
             Step::Viewport(index, change) => {
