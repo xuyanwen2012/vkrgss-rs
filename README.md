@@ -323,7 +323,9 @@ display whose refresh rate is no multiple of the frame rate each frame stays up 
 time as the display allows; with `VK_KHR_present_wait2` as well, a frame is only handed over
 once the one before it has reached the display. Without the extension, and after any error
 from it, which is reported once, frames are shown at the first refresh after they are ready.
-`--present-stats` writes the intervals between the frames shown to the error stream, every
+Pacing with `VK_EXT_present_timing` is used only when the environment variable
+`VKXP_PRESENT_TIMING=1` is set and the device supports it; otherwise frames are paced by the
+host's timer alone. `--present-stats` writes the intervals between the frames shown to the error stream, every
 600 frames and at exit, as their count, mean, smallest and largest in milliseconds, and says
 whether the times are those the extension reports or those of the host's own clock.
 

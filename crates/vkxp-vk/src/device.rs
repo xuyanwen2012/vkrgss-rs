@@ -900,7 +900,12 @@ impl Gpu {
             .queue_family_index(queue_family)
             .queue_priorities(&priorities)];
         let pacing = match surface {
-            Some(_) => pacing_support(&instance.pacing_caps(candidate.physical)?),
+            // Opt-in (`VKXP_PRESENT_TIMING=1`) until the live path has been checked on real
+            // hardware: it cannot be exercised by the automated tests.
+            Some(_) if std::env::var_os("VKXP_PRESENT_TIMING").is_some_and(|v| v == "1") => {
+                pacing_support(&instance.pacing_caps(candidate.physical)?)
+            }
+            Some(_) => PacingSupport::default(),
             None => PacingSupport::default(),
         };
         let mut extensions: Vec<*const c_char> = Vec::new();

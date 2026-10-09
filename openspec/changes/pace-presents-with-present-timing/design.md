@@ -49,6 +49,11 @@
 
 ## Follow-ups
 
+- Added by the coordinator at merge: the path is opt-in through `VKXP_PRESENT_TIMING=1` until a
+  live check on the AMD GPU has been done; the first attempt found the desktop session locked
+  and the display asleep, where no window is composited at all, so nothing could be measured.
+  Make it the default once `--present-stats` shows steady intervals.
+
 - The session does not make up lateness: a tick that goes out late moves every later one.
   The target times do not move with it, so after enough late ticks the targets lie behind
   the clock, frames are shown at once, and the schedule only starts over when it is more than
