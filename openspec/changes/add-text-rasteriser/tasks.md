@@ -15,4 +15,4 @@
 
 ## 3. Integration check
 
-- [ ] 3.1 Document the crate in `crates/vkxp-text/src/lib.rs` (sources, lookup order, metrics rule marked as placeholder) and run the full gate. Verify: `cargo xtask gate` exits 0, `cargo xtask deps` reports no violation, and `openspec validate add-text-rasteriser --strict` passes.
+- [x] 3.1 Document the crate in `crates/vkxp-text/src/lib.rs` (sources, lookup order, metrics rule marked as placeholder) and run the full gate. Verify: `cargo xtask gate` exits 0, `cargo xtask deps` reports no violation, and `openspec validate add-text-rasteriser --strict` passes.
