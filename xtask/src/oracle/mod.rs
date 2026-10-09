@@ -444,6 +444,57 @@ end
         assert!(summary.contains("frames/20-vkxp.png"), "{summary}");
     }
 
+    /// The probe-inside-the-archive scenario of `oracle-harness`.
+    #[test]
+    fn the_probe_is_added_inside_the_archive_of_a_packed_game() {
+        use crate::rgssad;
+
+        let generated = Generated::new(&[("Main", MOVING_SQUARE)]);
+        let game = generated.game();
+        fs::write(game.join("Data/Map001.rxdata"), [4, 8, b'0']).unwrap();
+        fs::create_dir_all(game.join("Graphics/Titles")).unwrap();
+        fs::write(game.join("Graphics/Titles/one.png"), b"not read").unwrap();
+        generated.pack();
+        let before = generated.files();
+        let packed = rgssad::read(&before[&game.join(rgssad::FILE_NAME)]).unwrap();
+        let copy = generated.out().join("game");
+
+        game::prepare(&game, &copy, "$probed = true").unwrap();
+
+        assert_eq!(generated.files(), before);
+        assert!(!copy.join("Data").exists());
+        let probed = rgssad::read(&fs::read(copy.join(rgssad::FILE_NAME)).unwrap()).unwrap();
+        assert_eq!(probed.len(), 3);
+        for (probed, packed) in probed.iter().zip(&packed) {
+            assert_eq!(probed.name, packed.name);
+            if probed.name != b"Data\\Scripts.rxdata" {
+                assert_eq!(probed, packed);
+                continue;
+            }
+            let scripts = archive::read(&probed.data).unwrap();
+            assert_eq!(scripts[0].name, probe::NAME.as_bytes());
+            assert_eq!(scripts[1..], archive::read(&packed.data).unwrap());
+        }
+    }
+
+    /// The packed-game-runs-in-vkxp scenario of `oracle-harness`.
+    #[test]
+    fn the_frames_of_a_packed_game_equal_those_of_the_game_unpacked() {
+        let pictures = |packed: bool| {
+            let generated = Generated::new(&[("Main", MOVING_SQUARE)]);
+            if packed {
+                generated.pack();
+            }
+            run(&generated.options("10,20", ""), &crate::workspace_root()).unwrap();
+            [10, 20].map(|frame| {
+                report::Picture::read(&generated.out().join(report::vkxp_file(frame))).unwrap()
+            })
+        };
+        let (packed, unpacked) = (pictures(true), pictures(false));
+        assert!(packed == unpacked, "the packed game draws other frames");
+        assert!(packed[0] != packed[1], "the square did not move");
+    }
+
     /// The scheduled-input scenario of `oracle-harness`: the probe runs in vkxp.
     #[test]
     fn the_probe_answers_input_from_the_schedule_by_frame() {

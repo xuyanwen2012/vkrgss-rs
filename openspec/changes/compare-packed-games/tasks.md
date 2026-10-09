@@ -6,8 +6,8 @@
 
 ## 2. Harness (`xtask`)
 
-- [ ] 2.1 Add the probe inside the archive when a game has one. Verify: the two scenarios of the encrypted-archive requirement.
-- [ ] 2.2 Describe both in `README.md`. Verify: the text matches the implemented commands.
+- [x] 2.1 Add the probe inside the archive when a game has one. Verify: the two scenarios of the encrypted-archive requirement.
+- [x] 2.2 Describe both in `README.md`. Verify: the text matches the implemented commands.
 
 ## 3. Integration check
 

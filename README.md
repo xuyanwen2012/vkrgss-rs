@@ -420,6 +420,15 @@ a fixed value, answers `Input.press?`, `Input.trigger?`, `Input.repeat?`, `Input
 does: one for every `Graphics.update` and `d` for `Graphics.transition(d)`. The game directory
 given is never written to, and the output directory may not be inside it.
 
+A game that ships its data in `Game.rgssad` (RGSSAD version 1) is compared as it is: the
+probe is added to the script archive inside the encrypted archive of each copy, every other
+entry is written back unchanged, and no loose script archive is added, because the original
+reads its scripts only from the archive when there is one. To make such a game from an
+unpacked one, `cargo xtask pack-rgssad <game directory>` writes every file below the
+directory's `Data` and `Graphics` folders into `Game.rgssad`, under its path with
+backslashes, and then removes the two folders. It changes the directory it is given, so give
+it a copy; it refuses a directory that already has an archive or has no `Game.ini`.
+
 The original side needs `wine`, `wineboot`, `wineserver` and `Xvfb` on `PATH` and a game that
 has its `Game.exe`. The command starts a virtual display of its own, makes a Wine prefix at
 `<out>/prefix` on the first run (which takes a while), registers the run-time packages and
