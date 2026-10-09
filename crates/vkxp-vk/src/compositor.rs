@@ -75,6 +75,8 @@ pub struct VkCompositor {
     mix: f32,
     /// Size of the window in pixels, as the owner last reported it.
     surface_size: Size,
+    /// Size of the target that [`scale_frame`](VkCompositor::scale_frame) last drew into.
+    last_scaled: Option<Size>,
     /// Failure injection: the number of per-submission buffers that may still be allocated
     /// before one allocation fails, once.
     #[cfg(test)]
@@ -202,6 +204,7 @@ impl VkCompositor {
             presenter: None,
             mix: 1.0,
             surface_size: Size::new(0, 0),
+            last_scaled: None,
             #[cfg(test)]
             temporary_buffer_failure: None,
             allocator: ManuallyDrop::new(allocator),

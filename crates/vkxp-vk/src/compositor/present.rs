@@ -625,8 +625,14 @@ impl VkCompositor {
     /// The held frame keeps its own size and its pixels whatever is rendered afterwards. When
     /// a later packet has another logical size, the held frame is still shown as it was, in
     /// the letterbox rectangle of its own size, and a cross-fade mixes the two frames where
-    /// each of them lies in the window. A capture in the middle of such a cross-fade is taken
-    /// at the size of the newest frame.
+    /// each of them lies in the window.
+    ///
+    /// In the middle of such a cross-fade the image on screen has no size of its own: where
+    /// the two frames lie depends on the window. It is then captured as it was last shown,
+    /// bars included, at the size of the swapchain, or without one at the size
+    /// [`scale_frame`](VkCompositor::scale_frame) last drew at, so that showing it again at
+    /// that size gives the same pixels. If nothing has been shown yet it is taken at the size
+    /// of the newest frame.
     pub fn freeze(&mut self) -> Result<(), VkError> {
         self.ensure_presenter()?;
         let target = self
@@ -651,12 +657,37 @@ impl VkCompositor {
             // The held frame alone is shown, and it stays, at whatever size it has.
             return Ok(());
         }
-        // In between, what is shown exists nowhere yet: draw it at the newest frame's size
-        // and take the result. The off-screen target and the held frame have formats of the
+        // In between, what is shown exists nowhere yet: draw it and take the result. Frames
+        // of one size share one rectangle in every window, so the mix is drawn at that size,
+        // where scaling changes nothing. Frames of different sizes lie differently in the
+        // window, and only the picture as it was shown, at the size it was shown at, keeps
+        // both where they were. The off-screen target and the held frame have formats of the
         // same size, so the copy moves the bytes as they are.
-        self.with_offscreen(Size::new(size.0, size.1), |compositor, mixed| {
-            compositor.capture_held(mixed, vk::ImageLayout::TRANSFER_SRC_OPTIMAL, size)
+        let held_size = self
+            .presenter
+            .as_ref()
+            .and_then(|presenter| presenter.held.as_ref())
+            .map_or(size, |held| (held.width, held.height));
+        let capture = match self.shown_size() {
+            Some(shown) if held_size != size => (shown.width, shown.height),
+            _ => size,
+        };
+        self.with_offscreen(Size::new(capture.0, capture.1), |compositor, mixed| {
+            compositor.capture_held(mixed, vk::ImageLayout::TRANSFER_SRC_OPTIMAL, capture)
         })
+    }
+
+    /// The size of the target the current state was last shown in: the swapchain when there
+    /// is one, else the last off-screen target.
+    fn shown_size(&self) -> Option<Size> {
+        let chain = self
+            .presenter
+            .as_ref()
+            .and_then(|presenter| presenter.swapchain.as_ref());
+        match chain {
+            Some(chain) => Some(Size::new(chain.extent.width, chain.extent.height)),
+            None => self.last_scaled,
+        }
     }
 
     /// Makes the held frame a copy of `source`, an image of `size` pixels in `source_layout`.
@@ -745,6 +776,7 @@ impl VkCompositor {
                 maximum: u64::from(self.gpu.max_image_dimension),
             });
         }
+        self.last_scaled = Some(size);
         let rgba = self.with_offscreen(size, |compositor, image| {
             compositor.read_image(
                 image,

@@ -605,6 +605,128 @@ fn freeze_during_a_transition_across_sizes_holds_what_is_shown() {
     }
 }
 
+/// A compositor half way from a held white 20 by 18 frame to a 32 by 24 frame of another
+/// shape, with the windows used to look at it.
+fn fading_across_shapes(compositor: &mut VkCompositor) {
+    compositor.render(&flat(SIZE, WHITE)).unwrap();
+    compositor.freeze().unwrap();
+    compositor
+        .render(&flat(Size::new(32, 24), [40, 80, 120, 255]))
+        .unwrap();
+    compositor.set_mix(0.5);
+}
+
+#[test]
+fn freeze_during_a_transition_across_shapes_keeps_the_geometry_on_screen() {
+    let mut compositor = TestCompositor::new();
+    fading_across_shapes(&mut compositor);
+    // The window has the shape of the held frame, so that fills it and the newest frame
+    // leaves bars of 6 rows, where the held white fades towards black.
+    let window = Size::new(80, 72);
+    let on_screen = compositor.scale_frame(window).unwrap();
+    assert_near(
+        &on_screen,
+        Rect::new(0, 0, 80, 6),
+        [128, 128, 128, 255],
+        "top bar",
+    );
+    assert_near(
+        &on_screen,
+        Rect::new(0, 6, 80, 60),
+        [148, 168, 188, 255],
+        "frame",
+    );
+    assert_near(
+        &on_screen,
+        Rect::new(0, 66, 80, 6),
+        [128, 128, 128, 255],
+        "bottom bar",
+    );
+
+    compositor.freeze().unwrap();
+    compositor.set_mix(0.0);
+    assert_eq!(
+        compositor.scale_frame(window).unwrap(),
+        on_screen,
+        "right after"
+    );
+
+    // Later frames of any size, and drawing the window again, leave it as it is.
+    for size in [Size::new(32, 24), SIZE, Size::new(64, 20), Size::new(9, 40)] {
+        compositor.render(&flat(size, [0, 255, 0, 255])).unwrap();
+        for redraw in 0..2 {
+            assert_eq!(
+                compositor.scale_frame(window).unwrap(),
+                on_screen,
+                "{size:?}, redraw {redraw}"
+            );
+        }
+    }
+
+    // The next transition starts from that picture.
+    compositor.set_mix(0.5);
+    let fading = compositor.scale_frame(window).unwrap();
+    assert_ne!(fading, on_screen);
+    compositor.set_mix(0.0);
+    assert_eq!(compositor.scale_frame(window).unwrap(), on_screen);
+}
+
+#[test]
+fn freeze_during_a_transition_across_shapes_keeps_the_geometry_in_a_tall_window() {
+    let mut compositor = TestCompositor::new();
+    fading_across_shapes(&mut compositor);
+    // Neither frame fills this one: both have bars, of different heights.
+    let window = Size::new(60, 100);
+    let on_screen = compositor.scale_frame(window).unwrap();
+    assert_all(&on_screen, Rect::new(0, 0, 60, 23), BLACK, "above both");
+    assert_near(
+        &on_screen,
+        Rect::new(0, 23, 60, 4),
+        [128, 128, 128, 255],
+        "held only",
+    );
+    assert_near(
+        &on_screen,
+        Rect::new(0, 27, 60, 45),
+        [148, 168, 188, 255],
+        "both",
+    );
+
+    compositor.freeze().unwrap();
+    compositor.set_mix(0.0);
+    compositor.render(&flat(Size::new(50, 50), WHITE)).unwrap();
+    assert_eq!(compositor.scale_frame(window).unwrap(), on_screen);
+}
+
+#[test]
+fn freeze_during_a_transition_across_shapes_keeps_what_the_swapchain_shows() {
+    let log = ValidationLog::new();
+    let mut compositor = surface_compositor(&log);
+    let window = Size::new(100, 90);
+    compositor.resize_surface(window);
+    fading_across_shapes(&mut compositor);
+    assert_eq!(compositor.present(), Ok(true));
+    // An off-screen look at another size does not change what the window is taken to show.
+    compositor.scale_frame(Size::new(13, 17)).unwrap();
+    let on_screen = compositor.scale_frame(window).unwrap();
+    compositor.scale_frame(Size::new(13, 17)).unwrap();
+
+    compositor.freeze().unwrap();
+    compositor.set_mix(0.0);
+    for size in [Size::new(32, 24), Size::new(48, 16)] {
+        compositor.render(&flat(size, [0, 255, 0, 255])).unwrap();
+        assert_eq!(compositor.present(), Ok(true));
+        assert_eq!(
+            compositor.scale_frame(window).unwrap(),
+            on_screen,
+            "{size:?}"
+        );
+    }
+    assert_clean(&log, "freezing across shapes while presenting");
+    drop(compositor);
+    assert_clean(&log, "while the compositor was dropped");
+}
+
 #[test]
 fn freeze_at_weight_one_after_a_size_change_holds_the_newest_frame_at_its_size() {
     let mut compositor = black_then_white();
