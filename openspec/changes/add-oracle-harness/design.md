@@ -85,3 +85,20 @@ final report and leave that scenario's verification to the coordinator.
 ## Follow-ups
 
 - Exact text comparison needs the original fonts in the prefix.
+- The original side could not be run in the implementing flow's sandbox, which denies writing
+  to `/tmp`: `Xvfb` cannot create its socket in `/tmp/.X11-unix` and `wineserver` cannot
+  create `/tmp/.wine-<uid>`. It is implemented against the recipe (prefix, `reg add` with
+  `/reg:32`, `d3d8.dll` stand-in, locale, software rendering), and the capture-in-the-original
+  scenario is left to the coordinator: the ignored test
+  `the_original_is_captured_at_the_frames_asked_for`, as the README describes.
+- That test needs a third variable, `VKXP_ORACLE_GAME`: a generated game has no `Game.exe`,
+  which is part of the original runtime and cannot be committed or generated.
+- The X socket and the Wine server directory are in `/tmp`, where `Xvfb` and Wine put them;
+  neither can be moved below the output directory. Should they be isolated (a private `/tmp`)?
+- On the original side a capture frame inside a transition is taken when the transition has
+  ended, because the probe cannot hold the game in the middle of one. Is a probe-side
+  re-implementation of the transition wanted?
+- The DLL is copied into the game copy under its own file name, as the recipe does. Should it
+  take the name that `Library=` gives, so that any 1.0x DLL can stand in?
+- The 200 ms wait before a window capture and the font replacement table are unverified
+  guesses until the original side has run.
