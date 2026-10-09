@@ -49,6 +49,9 @@ From the main checkout they are `../ref` and `../games`; from a clone or worktre
   `CARGO_HOME="$PWD/target/cargo-home"`.
 - Files that must not be committed (downloads, extracted data) go under `local/`, which is
   ignored.
+- Building needs the ALSA development files. While `alsa-lib-devel` is not installed on the
+  development machine, set `PKG_CONFIG_PATH` to the stand-in at `ref/tools/alsa-standin`
+  (`../../ref/tools/alsa-standin` from a clone, as an absolute path).
 - GPU rule for the development machine: the Intel Arc B580 is reserved for unrelated
   measurement work and must never be used or opened. Naming a device is not enough, because
   the Vulkan loader loads every installed driver to enumerate devices. Every command that
