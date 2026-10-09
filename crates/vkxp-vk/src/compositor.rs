@@ -46,7 +46,7 @@ mod present;
 mod test_compute;
 
 use present::Presenter;
-pub use present::{Filter, letterbox};
+pub use present::{Filter, Mix, letterbox};
 
 /// The Vulkan compositor.
 ///
@@ -71,8 +71,8 @@ pub struct VkCompositor {
     /// Everything that scales the frame into a swapchain image or an off-screen target. Made
     /// the first time it is needed, so a compositor that only renders never has it.
     presenter: Option<Presenter>,
-    /// Weight of the newest frame against the held frame when a frame is shown.
-    mix: f32,
+    /// What is shown of the held and the newest frame when a frame is shown.
+    mix: Mix,
     /// The filter that scales a frame when it is shown.
     filter: Filter,
     /// The mask that turns the mix into a masked one, when a transition has one.
@@ -206,7 +206,7 @@ impl VkCompositor {
             descriptor_pool: vk::DescriptorPool::null(),
             descriptors: vk::DescriptorSet::null(),
             presenter: None,
-            mix: 1.0,
+            mix: Mix::Newest,
             filter: Filter::Auto,
             mask: None,
             surface_size: Size::new(0, 0),

@@ -6,7 +6,7 @@ use vkxp_proto::{BitmapId, Color, FramePacket, FrameRate, Op, Rect, Size};
 
 use super::harness::{TestCompositor, assert_clean, require_isolation, test_device};
 use crate::{
-    DeviceChoice, DeviceError, DeviceKind, Filter, Frame, ValidationLog, VkCompositor, VkError,
+    DeviceChoice, DeviceError, DeviceKind, Filter, Frame, Mix, ValidationLog, VkCompositor, VkError,
 };
 
 const SIZE: Size = Size::new(20, 18);
@@ -402,9 +402,9 @@ fn filter_does_not_change_a_mix_at_factor_one() {
     assert_eq!(shown[0], shown[1]);
     assert_eq!(shown[0], shown[2]);
     // The mix is one: neither of the two frames alone.
-    compositor.set_mix(1.0);
+    compositor.set_mix(Mix::Newest);
     assert_ne!(compositor.scale_frame(SIZE).unwrap(), shown[0]);
-    compositor.set_mix(0.0);
+    compositor.set_mix(Mix::HELD);
     assert_ne!(compositor.scale_frame(SIZE).unwrap(), shown[0]);
 }
 
@@ -419,23 +419,37 @@ fn black_then_white() -> TestCompositor {
     compositor
 }
 
-#[test]
-fn mix_weight_starts_at_one_and_is_clamped() {
-    let mut compositor = TestCompositor::new();
-    assert_eq!(compositor.mix(), 1.0);
-    for (given, kept) in [(0.25, 0.25), (-3.0, 0.0), (7.0, 1.0), (f32::NAN, 1.0)] {
-        compositor.set_mix(given);
-        assert_eq!(compositor.mix(), kept, "{given}");
+/// The step of a cross-fade at which the newest frame weighs `weight` of 256.
+fn fade(weight: u8) -> Mix {
+    Mix::Step {
+        weight,
+        threshold: 0,
     }
+}
+
+/// The step of a masked transition with the threshold `threshold`.
+fn under_mask(threshold: u8) -> Mix {
+    Mix::Step {
+        weight: threshold,
+        threshold,
+    }
+}
+
+#[test]
+fn mix_starts_as_the_newest_frame_alone() {
+    let mut compositor = TestCompositor::new();
+    assert_eq!(compositor.mix(), Mix::Newest);
+    compositor.set_mix(fade(64));
+    assert_eq!(compositor.mix(), fade(64));
 }
 
 #[test]
 fn mix_end_points_show_the_held_frame_and_the_newest_frame() {
     let mut compositor = black_then_white();
     let whole = Rect::from_size(SIZE);
-    compositor.set_mix(0.0);
+    compositor.set_mix(Mix::HELD);
     assert_all(&compositor.scale_frame(SIZE).unwrap(), whole, BLACK, "held");
-    compositor.set_mix(1.0);
+    compositor.set_mix(Mix::Newest);
     assert_all(
         &compositor.scale_frame(SIZE).unwrap(),
         whole,
@@ -447,16 +461,11 @@ fn mix_end_points_show_the_held_frame_and_the_newest_frame() {
 #[test]
 fn mix_of_one_half_is_mid_grey_between_black_and_white() {
     let mut compositor = black_then_white();
-    compositor.set_mix(0.5);
+    compositor.set_mix(fade(128));
     for size in [SIZE, Size::new(40, 36), Size::new(30, 27)] {
         let scaled = compositor.scale_frame(size).unwrap();
-        for y in 0..size.height {
-            for x in 0..size.width {
-                let [r, g, b, a] = pixel(&scaled, x, y);
-                assert!((127..=128).contains(&r), "{size:?} ({x}, {y}): {r}");
-                assert_eq!((g, b, a), (r, r, 255));
-            }
-        }
+        // (0 * 128 + 255 * 128) >> 8, mixed before scaling.
+        assert_all(&scaled, Rect::from_size(size), [127, 127, 127, 255], "mix");
     }
 }
 
@@ -466,20 +475,25 @@ const MASK: BitmapId = BitmapId::new(7, 0);
 const RED: [u8; 4] = [200, 0, 0, 255];
 const BLUE: [u8; 4] = [0, 0, 200, 255];
 
-/// The held frame is red and the newest is blue, and a mask of `size` pixels whose red channel
+/// The held frame is red and the newest is blue, and a grey mask of `size` pixels whose level
 /// is `level(x, y)` came with the newest frame.
 fn red_then_blue_under(size: Size, level: impl Fn(u32, u32) -> u8) -> TestCompositor {
+    red_then_blue(SIZE, size, level)
+}
+
+/// The same with frames of `frame` pixels.
+fn red_then_blue(frame: Size, size: Size, level: impl Fn(u32, u32) -> u8) -> TestCompositor {
     let mut compositor = TestCompositor::new();
-    compositor.render(&flat(SIZE, RED)).unwrap();
+    compositor.render(&flat(frame, RED)).unwrap();
     compositor.freeze().unwrap();
     let mut rgba = Vec::new();
     for y in 0..size.height {
         for x in 0..size.width {
-            // Only the red channel counts.
-            rgba.extend_from_slice(&[level(x, y), 255, 0, 0]);
+            // The alpha does not count.
+            rgba.extend_from_slice(&[level(x, y), level(x, y), level(x, y), 0]);
         }
     }
-    let mut newest = flat(SIZE, BLUE);
+    let mut newest = flat(frame, BLUE);
     newest.bitmaps = bitmap(MASK, size.width, size.height, rgba).to_vec();
     compositor.render(&newest).unwrap();
     compositor
@@ -494,7 +508,7 @@ fn left_dark(size: Size) -> impl Fn(u32, u32) -> u8 {
 fn masked_mix_shows_the_newest_frame_on_the_dark_side_first() {
     let mut compositor = red_then_blue_under(SIZE, left_dark(SIZE));
     compositor.set_mask(Some((MASK, 1)));
-    compositor.set_mix(0.5);
+    compositor.set_mix(under_mask(127));
     let half = SIZE.width / 2;
     // At two whole factors.
     for (size, factor) in [(SIZE, 1), (Size::new(40, 36), 2)] {
@@ -516,22 +530,25 @@ fn masked_mix_has_a_soft_edge_as_wide_as_the_vagueness() {
     compositor.render(&flat(size, RED)).unwrap();
     compositor.freeze().unwrap();
     let rgba = (0..size.width * size.height)
-        .flat_map(|index| [(index % size.width) as u8, 0, 0, 255])
+        .flat_map(|index| {
+            let level = (index % size.width) as u8;
+            [level, level, level, 255]
+        })
         .collect();
     let mut newest = flat(size, BLUE);
     newest.bitmaps = bitmap(MASK, size.width, size.height, rgba).to_vec();
     compositor.render(&newest).unwrap();
     compositor.set_mask(Some((MASK, 64)));
-    compositor.set_mix(0.25);
+    compositor.set_mix(under_mask(64));
 
     let scaled = compositor.scale_frame(size).unwrap();
     let row: Vec<[u8; 4]> = (0..size.width).map(|x| pixel(&scaled, x, 0)).collect();
     let newest_end = row.iter().position(|pixel| *pixel != BLUE).unwrap();
     let held_start = row.iter().rposition(|pixel| *pixel != RED).unwrap() + 1;
-    // Levels up to the progress show the newest frame, levels from the progress plus the
-    // vagueness on show the held frame: 0.25 and 0.5 of 255.
-    assert!((63..=65).contains(&newest_end), "{newest_end}");
-    assert!((127..=129).contains(&held_start), "{held_start}");
+    // Levels up to the threshold show the newest frame, levels from the threshold plus the
+    // vagueness on show the held frame.
+    assert_eq!(newest_end, 65);
+    assert_eq!(held_start, 128);
     // In between the two are mixed, more of the held frame with every column.
     let band = &row[newest_end..held_start];
     assert!(band.iter().all(|[r, _, b, _]| *r > 0 && *b > 0));
@@ -540,7 +557,7 @@ fn masked_mix_has_a_soft_edge_as_wide_as_the_vagueness() {
 }
 
 #[test]
-fn masked_mix_at_progress_one_is_the_newest_frame_for_any_mask() {
+fn masked_mix_at_the_end_is_the_newest_frame_for_any_mask() {
     type Level = fn(u32, u32) -> u8;
     let masks: [(Size, Level); 3] = [
         (SIZE, |_, _| 255),
@@ -549,8 +566,8 @@ fn masked_mix_at_progress_one_is_the_newest_frame_for_any_mask() {
     ];
     for (size, level) in masks {
         let mut compositor = red_then_blue_under(size, level);
-        compositor.set_mix(1.0);
-        for vagueness in [1, 64, 256] {
+        compositor.set_mix(Mix::Newest);
+        for vagueness in [0, 1, 64, 256] {
             compositor.set_mask(Some((MASK, vagueness)));
             for window in [SIZE, Size::new(30, 27)] {
                 let scaled = compositor.scale_frame(window).unwrap();
@@ -561,17 +578,193 @@ fn masked_mix_at_progress_one_is_the_newest_frame_for_any_mask() {
 }
 
 #[test]
-fn mask_of_another_size_is_stretched_to_the_frame() {
-    // Two texels: the dark one covers the left half of the frame.
-    let small = Size::new(2, 1);
-    let mut compositor = red_then_blue_under(small, left_dark(small));
+fn mask_smaller_than_the_frame_is_tiled() {
+    let frame = Size::new(640, 480);
+    // Dark in the top left and the bottom right quarter of the mask.
+    let dark = |x: u32, y: u32| (x < 32) == (y < 24);
+    let level = |x, y| if dark(x, y) { 0 } else { 255 };
+    let mut compositor = red_then_blue(frame, Size::new(64, 48), level);
     compositor.set_mask(Some((MASK, 1)));
-    compositor.set_mix(0.5);
-    let scaled = compositor.scale_frame(SIZE).unwrap();
-    let half = SIZE.width / 2;
-    assert_all(&scaled, Rect::new(0, 0, half, SIZE.height), BLUE, "newest");
-    let right = Rect::new(half as i32, 0, half, SIZE.height);
-    assert_all(&scaled, right, RED, "held");
+    compositor.set_mix(under_mask(127));
+
+    let scaled = compositor.scale_frame(frame).unwrap();
+    for y in 0..frame.height {
+        for x in 0..frame.width {
+            let expected = if dark(x % 64, y % 48) { BLUE } else { RED };
+            assert_eq!(pixel(&scaled, x, y), expected, "({x}, {y})");
+        }
+    }
+}
+
+#[test]
+fn vagueness_of_zero_is_a_hard_edge_that_keeps_the_threshold_level() {
+    // A horizontal gradient, one level per column.
+    let size = Size::new(256, 2);
+    let mut compositor = red_then_blue(size, size, |x, _| x as u8);
+    compositor.set_mask(Some((MASK, 0)));
+    compositor.set_mix(under_mask(100));
+    let scaled = compositor.scale_frame(size).unwrap();
+    assert_all(&scaled, Rect::new(0, 0, 100, 2), BLUE, "newest");
+    assert_all(&scaled, Rect::new(100, 0, 156, 2), RED, "held");
+    // With a vagueness the level of the threshold shows the newest frame.
+    compositor.set_mask(Some((MASK, 1)));
+    let scaled = compositor.scale_frame(size).unwrap();
+    assert_all(&scaled, Rect::new(0, 0, 101, 2), BLUE, "newest");
+    assert_all(&scaled, Rect::new(101, 0, 155, 2), RED, "held");
+}
+
+// The samples measured on the original runtime.
+
+const FADE_SAMPLES: &str = include_str!("data/transition-samples.txt");
+const MASK_SAMPLES: &str = include_str!("data/transition-mask-samples.txt");
+
+/// The numbers of each sample line of `text` whose first word is `kind`, or of every sample
+/// line when `kind` is empty. Comment lines start with `#`.
+fn samples(text: &str, kind: &str) -> Vec<Vec<u32>> {
+    text.lines()
+        .filter(|line| !line.starts_with('#'))
+        .filter(|line| kind.is_empty() || line.split(' ').next() == Some(kind))
+        .map(|line| {
+            line.split(' ')
+                .filter_map(|word| word.parse().ok())
+                .collect()
+        })
+        .collect()
+}
+
+/// A frame one row high per entry of `rows`, each row one colour per column.
+fn rows(width: u32, rows: &[&dyn Fn(u32) -> [u8; 3]]) -> FramePacket {
+    let size = Size::new(width, rows.len() as u32);
+    let mut ops = Vec::new();
+    for (y, row) in rows.iter().enumerate() {
+        for x in 0..width {
+            let [r, g, b] = row(x);
+            ops.push(Op::Clear {
+                clip: Rect::new(x as i32, y as i32, 1, 1),
+                color: Color::new(r, g, b, 255),
+            });
+        }
+    }
+    packet(size, ops)
+}
+
+/// The step at which `Graphics.transition(duration)` returns, where the samples were taken.
+fn last_step(duration: u32) -> Mix {
+    Mix::Step {
+        weight: (255 * (duration - 1) / duration) as u8,
+        threshold: ((255 * (duration - 1)).saturating_sub(1) / duration) as u8,
+    }
+}
+
+#[test]
+fn cross_fade_equals_every_measured_sample() {
+    let all = samples(FADE_SAMPLES, "");
+    assert!(all.len() >= 200, "{} samples", all.len());
+    let mut compositor = TestCompositor::new();
+    for duration in [1, 2, 3, 4, 7, 8, 20, 40, 100] {
+        let group: Vec<&Vec<u32>> = all.iter().filter(|line| line[0] == duration).collect();
+        assert!(!group.is_empty(), "no samples of duration {duration}");
+        let width = group.len() as u32;
+        let (old, new) = (
+            |x: u32| [group[x as usize][1] as u8; 3],
+            |x: u32| [group[x as usize][2] as u8; 3],
+        );
+        compositor.set_mix(Mix::Newest);
+        compositor.render(&rows(width, &[&old])).unwrap();
+        compositor.freeze().unwrap();
+        compositor.render(&rows(width, &[&new])).unwrap();
+        compositor.set_mix(last_step(duration));
+        let shown = compositor.scale_frame(Size::new(width, 1)).unwrap();
+        for (x, line) in group.iter().enumerate() {
+            let expected = line[3] as u8;
+            assert_eq!(
+                pixel(&shown, x as u32, 0),
+                [expected, expected, expected, 255],
+                "{line:?}"
+            );
+        }
+    }
+}
+
+/// Shows the step at which a transition of `duration` frames returns, from a held frame of
+/// the rows `old` to a newest frame of the rows `new`, under a mask one row high with the
+/// colours `mask`, which came as the bitmap `id`.
+fn masked_last_step(
+    compositor: &mut TestCompositor,
+    id: BitmapId,
+    (duration, vagueness): (u32, u32),
+    mask: &[[u8; 3]],
+    (old, new): ([[u8; 3]; 2], [[u8; 3]; 2]),
+) -> Frame {
+    let width = mask.len() as u32;
+    compositor.set_mix(Mix::Newest);
+    compositor.set_mask(None);
+    let old = rows(width, &[&|_| old[0], &|_| old[1]]);
+    compositor.render(&old).unwrap();
+    compositor.freeze().unwrap();
+    let mut new = rows(width, &[&|_| new[0], &|_| new[1]]);
+    let rgba = mask
+        .iter()
+        .flat_map(|[r, g, b]| [*r, *g, *b, 255])
+        .collect();
+    new.bitmaps = bitmap(id, width, 1, rgba).to_vec();
+    compositor.render(&new).unwrap();
+    compositor.set_mask(Some((id, vagueness)));
+    compositor.set_mix(last_step(duration));
+    compositor.scale_frame(Size::new(width, 2)).unwrap()
+}
+
+/// The colours of the mask probe: white to black in the first row, and a pair of colours.
+const PROBE: ([[u8; 3]; 2], [[u8; 3]; 2]) =
+    ([[255, 255, 255], [200, 50, 0]], [[0, 0, 0], [50, 200, 255]]);
+
+#[test]
+fn masked_mix_equals_every_measured_sample_of_a_grey_mask() {
+    // w N vague L -> a | r g b
+    let all = samples(MASK_SAMPLES, "w");
+    assert!(all.len() >= 300, "{} samples", all.len());
+    let mut groups: Vec<(u32, u32)> = all.iter().map(|line| (line[0], line[1])).collect();
+    groups.dedup();
+    assert!(groups.len() >= 50, "{} groups", groups.len());
+    let mut compositor = TestCompositor::new();
+    for (index, step) in groups.into_iter().enumerate() {
+        let group: Vec<&Vec<u32>> = all
+            .iter()
+            .filter(|line| (line[0], line[1]) == step)
+            .collect();
+        let mask: Vec<[u8; 3]> = group.iter().map(|line| [line[2] as u8; 3]).collect();
+        let id = BitmapId::new(index as u32, 0);
+        let shown = masked_last_step(&mut compositor, id, step, &mask, PROBE);
+        for (x, line) in group.iter().enumerate() {
+            let x = x as u32;
+            let a = line[3] as u8;
+            assert_eq!(pixel(&shown, x, 0), [a, a, a, 255], "{line:?}");
+            let expected = [line[4] as u8, line[5] as u8, line[6] as u8, 255];
+            assert_eq!(pixel(&shown, x, 1), expected, "{line:?}");
+        }
+    }
+}
+
+#[test]
+fn mask_value_equals_every_selected_sample_of_a_coloured_mask() {
+    // lum r g b -> L
+    let all = samples(MASK_SAMPLES, "lum");
+    assert!(all.len() >= 100, "{} samples", all.len());
+    let mask: Vec<[u8; 3]> = all
+        .iter()
+        .map(|line| [line[0] as u8, line[1] as u8, line[2] as u8])
+        .collect();
+    let mut compositor = TestCompositor::new();
+    // With a duration of 2 and a vagueness of 255 the first row shows the mask value less 127.
+    let shown = masked_last_step(&mut compositor, MASK, (2, 255), &mask, PROBE);
+    for (x, line) in all.iter().enumerate() {
+        let expected = (line[3] - 127) as u8;
+        assert_eq!(
+            pixel(&shown, x as u32, 0),
+            [expected, expected, expected, 255],
+            "{line:?}"
+        );
+    }
 }
 
 #[test]
@@ -581,7 +774,10 @@ fn mask_that_is_not_a_live_bitmap_leaves_the_plain_mix() {
     let absent = BitmapId::new(9, 0);
     assert!(!compositor.has_bitmap(absent));
     compositor.set_mask(Some((absent, 1)));
-    compositor.set_mix(0.5);
+    compositor.set_mix(Mix::Step {
+        weight: 128,
+        threshold: 127,
+    });
     let plain = compositor.scale_frame(SIZE).unwrap();
     assert_all(&plain, Rect::from_size(SIZE), [100, 0, 100, 255], "mix");
 
@@ -600,11 +796,11 @@ fn mask_that_is_not_a_live_bitmap_leaves_the_plain_mix() {
 fn freeze_during_a_masked_mix_holds_the_image_on_screen() {
     let mut compositor = red_then_blue_under(SIZE, left_dark(SIZE));
     compositor.set_mask(Some((MASK, 1)));
-    compositor.set_mix(0.5);
+    compositor.set_mix(under_mask(127));
     let shown = compositor.scale_frame(SIZE).unwrap();
     compositor.freeze().unwrap();
     compositor.set_mask(None);
-    compositor.set_mix(0.0);
+    compositor.set_mix(Mix::HELD);
     assert_eq!(compositor.scale_frame(SIZE).unwrap(), shown);
 }
 
@@ -614,7 +810,7 @@ fn mix_is_applied_per_channel() {
     compositor.render(&flat(SIZE, [200, 0, 100, 255])).unwrap();
     compositor.freeze().unwrap();
     compositor.render(&flat(SIZE, [0, 100, 100, 255])).unwrap();
-    compositor.set_mix(0.25);
+    compositor.set_mix(fade(64));
     let scaled = compositor.scale_frame(SIZE).unwrap();
     assert_all(&scaled, Rect::from_size(SIZE), [150, 25, 100, 255], "mix");
 }
@@ -623,7 +819,7 @@ fn mix_is_applied_per_channel() {
 fn held_frame_stays_shown_while_later_frames_are_rendered() {
     let (mut compositor, first) = rendered(&gradient(SIZE));
     compositor.freeze().unwrap();
-    compositor.set_mix(0.0);
+    compositor.set_mix(Mix::HELD);
     for color in [WHITE, [9, 8, 7, 255], [0, 255, 0, 255]] {
         compositor.render(&flat(SIZE, color)).unwrap();
         assert_eq!(compositor.scale_frame(SIZE).unwrap(), first);
@@ -633,7 +829,7 @@ fn held_frame_stays_shown_while_later_frames_are_rendered() {
     // The newest frame was rendered all along.
     let newest = opaque(compositor.read_frame().unwrap().unwrap());
     assert_all(&newest, Rect::from_size(SIZE), [0, 255, 0, 255], "newest");
-    compositor.set_mix(1.0);
+    compositor.set_mix(Mix::Newest);
     assert_eq!(compositor.scale_frame(SIZE).unwrap(), newest);
 }
 
@@ -642,7 +838,7 @@ fn freezing_again_replaces_the_held_frame() {
     let mut compositor = black_then_white();
     compositor.freeze().unwrap();
     compositor.render(&flat(SIZE, [10, 20, 30, 255])).unwrap();
-    compositor.set_mix(0.0);
+    compositor.set_mix(Mix::HELD);
     let scaled = compositor.scale_frame(SIZE).unwrap();
     assert_all(&scaled, Rect::from_size(SIZE), WHITE, "second held frame");
 }
@@ -650,9 +846,9 @@ fn freezing_again_replaces_the_held_frame() {
 #[test]
 fn freeze_during_a_mix_holds_the_mixed_image() {
     let whole = Rect::from_size(SIZE);
-    let grey = [64, 64, 64, 255];
+    let grey = [63, 63, 63, 255];
     let mut compositor = black_then_white();
-    compositor.set_mix(0.25);
+    compositor.set_mix(fade(64));
     let on_screen = compositor.scale_frame(SIZE).unwrap();
     assert_all(
         &on_screen,
@@ -663,7 +859,7 @@ fn freeze_during_a_mix_holds_the_mixed_image() {
 
     // Freeze in the middle of the fade, as a session does, and render on.
     compositor.freeze().unwrap();
-    compositor.set_mix(0.0);
+    compositor.set_mix(Mix::HELD);
     for color in [[0, 255, 0, 255], [255, 0, 255, 255]] {
         compositor.render(&flat(SIZE, color)).unwrap();
         assert_eq!(compositor.scale_frame(SIZE).unwrap(), on_screen);
@@ -672,13 +868,12 @@ fn freeze_during_a_mix_holds_the_mixed_image() {
     }
 
     // The next fade starts from the grey, not from the black or the white behind it.
-    compositor.set_mix(0.5);
+    compositor.set_mix(fade(128));
     let half = compositor.scale_frame(SIZE).unwrap();
     for y in 0..SIZE.height {
         for x in 0..SIZE.width {
             let [r, g, b, a] = pixel(&half, x, y);
-            assert!((159..=160).contains(&r), "({x}, {y}): {r}");
-            assert_eq!((g, b, a), (32, r, 255), "({x}, {y})");
+            assert_eq!((r, g, b, a), (159, 31, 159, 255), "({x}, {y})");
         }
     }
 }
@@ -690,12 +885,12 @@ fn freeze_during_a_mix_holds_each_pixel_of_a_detailed_image() {
     compositor
         .render(&halves(SIZE, [250, 10, 90, 255], [5, 200, 40, 255]))
         .unwrap();
-    compositor.set_mix(0.75);
+    compositor.set_mix(fade(192));
     let on_screen = compositor.scale_frame(SIZE).unwrap();
     assert_ne!(on_screen, first);
 
     compositor.freeze().unwrap();
-    compositor.set_mix(0.0);
+    compositor.set_mix(Mix::HELD);
     compositor.render(&flat(SIZE, WHITE)).unwrap();
     assert_eq!(compositor.scale_frame(SIZE).unwrap(), on_screen);
 }
@@ -721,7 +916,7 @@ fn detailed_fade() -> TestCompositor {
     compositor.render(&detailed(0)).unwrap();
     compositor.freeze().unwrap();
     compositor.render(&detailed(1)).unwrap();
-    compositor.set_mix(0.25);
+    compositor.set_mix(fade(64));
     compositor
 }
 
@@ -732,7 +927,7 @@ fn assert_freeze_keeps(window: Size) {
     let on_screen = compositor.scale_frame(window).unwrap();
 
     compositor.freeze().unwrap();
-    compositor.set_mix(0.0);
+    compositor.set_mix(Mix::HELD);
     assert!(
         compositor.scale_frame(window).unwrap() == on_screen,
         "{window:?}: the freeze changed what is shown"
@@ -756,9 +951,9 @@ fn assert_freeze_keeps(window: Size) {
 
     // The next fade starts from those pixels and ends on the newest frame.
     compositor.render(&flat(SIZE, WHITE)).unwrap();
-    compositor.set_mix(0.5);
+    compositor.set_mix(fade(128));
     assert!(compositor.scale_frame(window).unwrap() != on_screen);
-    compositor.set_mix(1.0);
+    compositor.set_mix(Mix::Newest);
     let end = compositor.scale_frame(window).unwrap();
     let rect = crate::letterbox(SIZE, window);
     assert_all(&end, rect, WHITE, "the newest frame alone");
@@ -797,14 +992,14 @@ fn freeze_during_a_mix_at_a_fractional_factor_keeps_what_the_swapchain_shows() {
     compositor.render(&detailed(0)).unwrap();
     compositor.freeze().unwrap();
     compositor.render(&detailed(1)).unwrap();
-    compositor.set_mix(0.25);
+    compositor.set_mix(fade(64));
     assert_eq!(compositor.present(), Ok(true));
     let on_screen = compositor.scale_frame(window).unwrap();
     // Looking at it off-screen at another size does not change what the window shows.
     compositor.scale_frame(Size::new(40, 36)).unwrap();
 
     compositor.freeze().unwrap();
-    compositor.set_mix(0.0);
+    compositor.set_mix(Mix::HELD);
     for later in [detailed(2), flat(SIZE, WHITE)] {
         compositor.render(&later).unwrap();
         assert_eq!(compositor.present(), Ok(true));
@@ -818,7 +1013,7 @@ fn freeze_during_a_mix_at_a_fractional_factor_keeps_what_the_swapchain_shows() {
 #[test]
 fn freeze_at_weight_zero_keeps_the_held_frame() {
     let mut compositor = black_then_white();
-    compositor.set_mix(0.0);
+    compositor.set_mix(Mix::HELD);
     compositor.freeze().unwrap();
     compositor.render(&flat(SIZE, [1, 2, 3, 255])).unwrap();
     let scaled = compositor.scale_frame(SIZE).unwrap();
@@ -834,7 +1029,7 @@ fn freeze_at_weight_zero_keeps_the_held_frame() {
 fn freeze_before_the_first_frame_holds_black() {
     let mut compositor = TestCompositor::new();
     compositor.freeze().unwrap();
-    compositor.set_mix(0.0);
+    compositor.set_mix(Mix::HELD);
     compositor.render(&flat(SIZE, WHITE)).unwrap();
     let scaled = compositor.scale_frame(SIZE).unwrap();
     assert_all(&scaled, Rect::from_size(SIZE), BLACK, "held");
@@ -862,7 +1057,7 @@ fn held_frame_stays_shown_when_later_frames_have_another_size() {
     let mut compositor = TestCompositor::new();
     compositor.render(&flat(SIZE, WHITE)).unwrap();
     compositor.freeze().unwrap();
-    compositor.set_mix(0.0);
+    compositor.set_mix(Mix::HELD);
     let doubled = Size::new(40, 36);
     let before = compositor.scale_frame(doubled).unwrap();
     assert_all(&before, Rect::from_size(doubled), WHITE, "held, before");
@@ -878,7 +1073,7 @@ fn held_frame_stays_shown_when_later_frames_have_another_size() {
 fn held_frame_keeps_every_pixel_when_later_frames_have_another_size() {
     let (mut compositor, first) = rendered(&gradient(SIZE));
     compositor.freeze().unwrap();
-    compositor.set_mix(0.0);
+    compositor.set_mix(Mix::HELD);
     compositor
         .render(&halves(Size::new(64, 48), WHITE, BLACK))
         .unwrap();
@@ -910,13 +1105,13 @@ fn transition_after_a_size_change_fades_from_the_held_frame_to_the_newest() {
         Rect::new(0, 66, 80, 6),
     );
 
-    compositor.set_mix(0.0);
+    compositor.set_mix(Mix::HELD);
     let start = compositor.scale_frame(window).unwrap();
     assert_all(&start, Rect::from_size(window), WHITE, "held frame alone");
 
     // A quarter of the way: white towards the newest frame where that lies, and towards the
     // black of its bars elsewhere.
-    compositor.set_mix(0.25);
+    compositor.set_mix(fade(64));
     let quarter = compositor.scale_frame(window).unwrap();
     assert_near(&quarter, middle, [201, 211, 221, 255], "quarter, frame");
     assert_near(&quarter, top, [191, 191, 191, 255], "quarter, top bar");
@@ -927,12 +1122,12 @@ fn transition_after_a_size_change_fades_from_the_held_frame_to_the_newest() {
         "quarter, bottom bar",
     );
 
-    compositor.set_mix(0.5);
+    compositor.set_mix(fade(128));
     let half = compositor.scale_frame(window).unwrap();
     assert_near(&half, middle, [148, 168, 188, 255], "half, frame");
     assert_near(&half, top, [128, 128, 128, 255], "half, top bar");
 
-    compositor.set_mix(1.0);
+    compositor.set_mix(Mix::Newest);
     let end = compositor.scale_frame(window).unwrap();
     assert_all(&end, middle, newest, "newest frame alone");
     assert_all(&end, top, BLACK, "top bar");
@@ -948,7 +1143,7 @@ fn freeze_during_a_transition_across_sizes_holds_what_is_shown() {
     compositor
         .render(&flat(larger, [40, 80, 120, 255]))
         .unwrap();
-    compositor.set_mix(0.5);
+    compositor.set_mix(fade(128));
     let on_screen = compositor.scale_frame(larger).unwrap();
     assert_near(
         &on_screen,
@@ -958,7 +1153,7 @@ fn freeze_during_a_transition_across_sizes_holds_what_is_shown() {
     );
 
     compositor.freeze().unwrap();
-    compositor.set_mix(0.0);
+    compositor.set_mix(Mix::HELD);
     for size in [larger, SIZE, Size::new(64, 48)] {
         compositor.render(&flat(size, [0, 255, 0, 255])).unwrap();
         assert_eq!(
@@ -977,7 +1172,7 @@ fn fading_across_shapes(compositor: &mut VkCompositor) {
     compositor
         .render(&flat(Size::new(32, 24), [40, 80, 120, 255]))
         .unwrap();
-    compositor.set_mix(0.5);
+    compositor.set_mix(fade(128));
 }
 
 #[test]
@@ -1008,7 +1203,7 @@ fn freeze_during_a_transition_across_shapes_keeps_the_geometry_on_screen() {
     );
 
     compositor.freeze().unwrap();
-    compositor.set_mix(0.0);
+    compositor.set_mix(Mix::HELD);
     assert_eq!(
         compositor.scale_frame(window).unwrap(),
         on_screen,
@@ -1028,10 +1223,10 @@ fn freeze_during_a_transition_across_shapes_keeps_the_geometry_on_screen() {
     }
 
     // The next transition starts from that picture.
-    compositor.set_mix(0.5);
+    compositor.set_mix(fade(128));
     let fading = compositor.scale_frame(window).unwrap();
     assert_ne!(fading, on_screen);
-    compositor.set_mix(0.0);
+    compositor.set_mix(Mix::HELD);
     assert_eq!(compositor.scale_frame(window).unwrap(), on_screen);
 }
 
@@ -1057,7 +1252,7 @@ fn freeze_during_a_transition_across_shapes_keeps_the_geometry_in_a_tall_window(
     );
 
     compositor.freeze().unwrap();
-    compositor.set_mix(0.0);
+    compositor.set_mix(Mix::HELD);
     compositor.render(&flat(Size::new(50, 50), WHITE)).unwrap();
     assert_eq!(compositor.scale_frame(window).unwrap(), on_screen);
 }
@@ -1076,7 +1271,7 @@ fn freeze_during_a_transition_across_shapes_keeps_what_the_swapchain_shows() {
     compositor.scale_frame(Size::new(13, 17)).unwrap();
 
     compositor.freeze().unwrap();
-    compositor.set_mix(0.0);
+    compositor.set_mix(Mix::HELD);
     for size in [Size::new(32, 24), Size::new(48, 16)] {
         compositor.render(&flat(size, [0, 255, 0, 255])).unwrap();
         assert_eq!(compositor.present(), Ok(true));
@@ -1098,7 +1293,7 @@ fn freeze_at_weight_one_after_a_size_change_holds_the_newest_frame_at_its_size()
     let (_reference, expected) = rendered(&gradient(larger));
     compositor.render(&gradient(larger)).unwrap();
     compositor.freeze().unwrap();
-    compositor.set_mix(0.0);
+    compositor.set_mix(Mix::HELD);
     compositor.render(&flat(SIZE, [9, 9, 9, 255])).unwrap();
     assert_eq!(compositor.scale_frame(larger).unwrap(), expected);
 }
@@ -1172,7 +1367,11 @@ fn frames_are_presented_resized_presented_again_and_torn_down_cleanly() {
     // Freeze and a transition while presenting.
     compositor.freeze().unwrap();
     for step in 0..=4 {
-        compositor.set_mix(step as f32 / 4.0);
+        compositor.set_mix(if step < 4 {
+            fade(step * 64)
+        } else {
+            Mix::Newest
+        });
         compositor.render(&flat(SIZE, WHITE)).unwrap();
         assert_eq!(compositor.present(), Ok(true));
     }

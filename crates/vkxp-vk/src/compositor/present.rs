@@ -32,9 +32,9 @@ mod binding {
 }
 
 /// Bytes of the push constants: for the newest and then the held frame the letterbox origin
-/// and size and the frame size, then the mix weight, the flags and the vagueness, four bytes per
-/// component.
-const PUSH_CONSTANT_BYTES: usize = 60;
+/// and size and the frame size, then the mix weight, the flags, the threshold and the
+/// vagueness, four bytes per component.
+const PUSH_CONSTANT_BYTES: usize = 64;
 
 /// Flags of the fragment shader, as `shaders/present.frag` defines them.
 const FLAG_NEAREST: u32 = 1;
@@ -43,9 +43,35 @@ const FLAG_HELD_NEAREST: u32 = 4;
 const FLAG_SAME_GRID: u32 = 8;
 const FLAG_MASK: u32 = 16;
 const FLAG_LINEAR: u32 = 32;
+const FLAG_MIX: u32 = 64;
 
-/// The range of a vagueness, in 256ths of the mask's range.
-const VAGUENESS: std::ops::RangeInclusive<u32> = 1..=256;
+/// What is shown of the held and the newest frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mix {
+    /// The newest frame alone: no transition is active.
+    Newest,
+    /// One step of a transition, with the values of both of its forms.
+    Step {
+        /// The weight `an` of the newest frame in a cross-fade: per channel the result is
+        /// `(old * (256 - an) + new * an) >> 8`.
+        weight: u8,
+        /// The threshold `T` of a masked transition: the mask level up to which the newest
+        /// frame is shown alone.
+        threshold: u8,
+    },
+}
+
+impl Mix {
+    /// The held frame alone, where there is no mask.
+    pub const HELD: Mix = Mix::Step {
+        weight: 0,
+        threshold: 0,
+    };
+}
+
+/// The largest vagueness the shader's arithmetic is given. `Graphics.transition` passes none
+/// above it, and the ones above 255 already behave alike.
+const MAX_VAGUENESS: u32 = 65535;
 
 /// Format of the off-screen target. Its values are what a `UNORM` swapchain image would hold.
 const OFFSCREEN_FORMAT: vk::Format = vk::Format::R8G8B8A8_UNORM;
@@ -121,7 +147,7 @@ fn is_whole_factor(frame: Size, rect: &Rect) -> bool {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct Mask {
     bitmap: BitmapId,
-    /// Width of the soft edge, within [`VAGUENESS`].
+    /// Width of the soft edge in mask levels, at most [`MAX_VAGUENESS`]. 0 is a hard edge.
     vagueness: u32,
 }
 
@@ -140,7 +166,7 @@ struct Sources {
 fn push_constants(
     sources: Sources,
     target: Size,
-    weight: f32,
+    mix: Mix,
     srgb_target: bool,
     filter: Filter,
 ) -> Option<[u8; PUSH_CONSTANT_BYTES]> {
@@ -153,7 +179,7 @@ fn push_constants(
         sources,
         newest,
         held,
-        weight,
+        mix,
         srgb_target,
         filter,
     ))
@@ -166,7 +192,7 @@ fn push_constants(
 fn filling_constants(
     sources: Sources,
     target: Size,
-    weight: f32,
+    mix: Mix,
     filter: Filter,
 ) -> [u8; PUSH_CONSTANT_BYTES] {
     let sources = Sources {
@@ -174,7 +200,7 @@ fn filling_constants(
         ..sources
     };
     let whole = Rect::from_size(target);
-    encode_constants(sources, whole, whole, weight, false, filter)
+    encode_constants(sources, whole, whole, mix, false, filter)
 }
 
 /// The push constants for the frames of `sources` in the rectangles `newest` and `held`.
@@ -182,7 +208,7 @@ fn encode_constants(
     sources: Sources,
     newest: Rect,
     held: Rect,
-    weight: f32,
+    mix: Mix,
     srgb_target: bool,
     filter: Filter,
 ) -> [u8; PUSH_CONSTANT_BYTES] {
@@ -202,10 +228,17 @@ fn encode_constants(
     if srgb_target {
         flags |= FLAG_SRGB_TARGET;
     }
-    if sources.vagueness.is_some() {
-        flags |= FLAG_MASK;
-    }
-    let vagueness = sources.vagueness.unwrap_or(*VAGUENESS.end()) as f32 / 256.0;
+    let (weight, threshold) = match mix {
+        Mix::Newest => (0, 0),
+        Mix::Step { weight, threshold } => {
+            flags |= FLAG_MIX;
+            if sources.vagueness.is_some() {
+                flags |= FLAG_MASK;
+            }
+            (u32::from(weight), u32::from(threshold))
+        }
+    };
+    let vagueness = sources.vagueness.unwrap_or(0);
     let mut bytes = [0; PUSH_CONSTANT_BYTES];
     write_words(
         &mut bytes,
@@ -222,9 +255,10 @@ fn encode_constants(
             held.height,
             sources.held.width,
             sources.held.height,
-            weight.to_bits(),
+            weight,
             flags,
-            vagueness.to_bits(),
+            threshold,
+            vagueness,
         ],
     );
     bytes
@@ -717,19 +751,15 @@ unsafe fn record_pass(
 }
 
 impl VkCompositor {
-    /// Sets the weight of the newest frame against the held frame for everything shown from
-    /// now on: 0 shows the held frame only, 1 the newest frame only, and values in between mix
-    /// the two per channel before scaling. It starts at 1. Values outside 0 to 1 are clamped.
-    pub fn set_mix(&mut self, weight: f32) {
-        self.mix = if weight.is_nan() {
-            1.0
-        } else {
-            weight.clamp(0.0, 1.0)
-        };
+    /// Sets what is shown of the held and the newest frame from now on: the newest frame
+    /// alone, or a step of a transition, mixed per channel on the frames' 8-bit values before
+    /// scaling. It starts as [`Mix::Newest`].
+    pub fn set_mix(&mut self, mix: Mix) {
+        self.mix = mix;
     }
 
-    /// The current mix weight.
-    pub fn mix(&self) -> f32 {
+    /// What is shown of the held and the newest frame.
+    pub fn mix(&self) -> Mix {
         self.mix
     }
 
@@ -744,21 +774,22 @@ impl VkCompositor {
         self.filter
     }
 
-    /// Makes the mix from now on a masked one, or with `None` a plain one again. Under a mask
-    /// the mix weight is the progress of a transition and each pixel has its own weight: with
-    /// `m` the red channel of the mask there as a fraction, `p` the progress and `v` the
-    /// vagueness divided by 256, the held frame weighs `(clamp(m, p, p + v) - p) / v`. So the
-    /// newest frame appears first where the mask is dark, behind an edge that is the softer
-    /// the larger the vagueness, and alone at progress 1. The mask is stretched to the newest
-    /// frame. The vagueness is clamped to 1 to 256.
+    /// Makes the mix of a transition step from now on a masked one, or with `None` a
+    /// cross-fade again. Under a mask each pixel has its own weight: with `L` the luminance
+    /// of the mask there, `T` the step's threshold and `v` the vagueness, the held frame
+    /// weighs `w = 0` for `L <= T` and `min(255, (L - T) * 255 / v)` above it, or for a
+    /// vagueness of 0 `255` for `L >= T` and 0 below, and the result is the newest frame for
+    /// `w = 0` and `new + (((old - new) * (w + 1)) >> 8)` otherwise. So the newest frame
+    /// appears first where the mask is dark, behind an edge that is the softer the larger the
+    /// vagueness. A mask smaller than the newest frame is tiled from the frame's corner.
     ///
     /// The bitmap is looked up each time something is shown, so it may be created by a packet
     /// rendered after this call. While there is no such bitmap, or it has no pixels, the mix
-    /// is the plain one.
+    /// is the cross-fade.
     pub fn set_mask(&mut self, mask: Option<(BitmapId, u32)>) {
         self.mask = mask.map(|(bitmap, vagueness)| Mask {
             bitmap,
-            vagueness: vagueness.clamp(*VAGUENESS.start(), *VAGUENESS.end()),
+            vagueness: vagueness.min(MAX_VAGUENESS),
         });
     }
 
@@ -784,9 +815,10 @@ impl VkCompositor {
     }
 
     /// Captures what is shown now as the held frame: the mix of the held and the newest frame
-    /// at the current weight. The mix weight then blends that image with the frames rendered
-    /// afterwards. At weight 1 this is the newest frame as it is, at weight 0 the held frame
-    /// stays what it was, and before the first frame it is black.
+    /// as [`set_mix`](VkCompositor::set_mix) has it. The mix then blends that image with the
+    /// frames rendered afterwards. Outside a transition this is the newest frame as it is, at
+    /// weight 0 without a mask the held frame stays what it was, and before the first frame
+    /// it is black.
     ///
     /// The held frame keeps its own size and its pixels whatever is rendered afterwards. When
     /// a later packet has another logical size, the held frame is still shown as it was, in
@@ -825,10 +857,10 @@ impl VkCompositor {
                 None => Ok(()),
             };
         };
-        if self.mix >= 1.0 {
+        if self.mix == Mix::Newest {
             return self.capture_held(newest, vk::ImageLayout::GENERAL, size);
         }
-        if self.mix <= 0.0 && self.mask_in_effect().is_none() {
+        if matches!(self.mix, Mix::Step { weight: 0, .. }) && self.mask_in_effect().is_none() {
             // The held frame alone is shown, and it stays, at whatever size it has.
             return Ok(());
         }
@@ -942,7 +974,7 @@ impl VkCompositor {
 
     /// Draws what [`present`](VkCompositor::present) would show in a window of `size` pixels
     /// into an off-screen target and reads it back: the frame scaled by the largest factor
-    /// that fits, centred, black around it, mixed with the held frame at the current weight.
+    /// that fits, centred, black around it, mixed with the held frame as the current mix says.
     /// Before the first frame the result is black. Alpha is 255 everywhere.
     ///
     /// The target is an `R8G8B8A8_UNORM` image, so the bytes are what a `UNORM` swapchain
@@ -1624,7 +1656,7 @@ mod tests {
         for window in [Size::new(0, 480), Size::new(640, 0), Size::new(0, 0)] {
             assert!(letterbox(frame, window).is_empty(), "{window:?}");
             assert_eq!(
-                push_constants(same(frame), window, 1.0, false, Filter::Auto),
+                push_constants(same(frame), window, Mix::Newest, false, Filter::Auto),
                 None
             );
         }
@@ -1652,7 +1684,7 @@ mod tests {
             words(push_constants(
                 same(frame),
                 Size::new(window, window),
-                1.0,
+                Mix::Newest,
                 false,
                 filter,
             ))[13]
@@ -1674,6 +1706,12 @@ mod tests {
         }
     }
 
+    /// A step whose weight and threshold differ, so that neither is taken for the other.
+    const STEP: Mix = Mix::Step {
+        weight: 64,
+        threshold: 63,
+    };
+
     fn words(bytes: Option<[u8; PUSH_CONSTANT_BYTES]>) -> Vec<u32> {
         crate::resources::read_words(&bytes.expect("something is visible"))
     }
@@ -1681,56 +1719,64 @@ mod tests {
     #[test]
     fn push_constants_carry_the_rectangles_the_frame_sizes_the_weight_and_the_flags() {
         let frame = Size::new(640, 480);
-        let whole = push_constants(same(frame), Size::new(1920, 1440), 1.0, false, Filter::Auto);
+        let whole = push_constants(
+            same(frame),
+            Size::new(1920, 1440),
+            Mix::Newest,
+            false,
+            Filter::Auto,
+        );
         let rect = [0, 0, 1920, 1440, 640, 480];
         assert_eq!(
             words(whole),
             [
                 rect.as_slice(),
                 rect.as_slice(),
-                &[
-                    1.0f32.to_bits(),
-                    FLAG_NEAREST | FLAG_HELD_NEAREST | FLAG_SAME_GRID,
-                    1.0f32.to_bits()
-                ]
+                &[0, FLAG_NEAREST | FLAG_HELD_NEAREST | FLAG_SAME_GRID, 0, 0]
             ]
             .concat()
         );
         let fractional =
-            push_constants(same(frame), Size::new(1920, 1080), 0.25, true, Filter::Auto);
+            push_constants(same(frame), Size::new(1920, 1080), STEP, true, Filter::Auto);
         let rect = [240, 0, 1440, 1080, 640, 480];
         assert_eq!(
             words(fractional),
             [
                 rect.as_slice(),
                 rect.as_slice(),
-                &[
-                    0.25f32.to_bits(),
-                    FLAG_SRGB_TARGET | FLAG_SAME_GRID,
-                    1.0f32.to_bits()
-                ]
+                &[64, FLAG_SRGB_TARGET | FLAG_SAME_GRID | FLAG_MIX, 63, 0]
             ]
             .concat()
         );
     }
 
     #[test]
-    fn push_constants_of_a_masked_draw_carry_the_flag_and_the_vagueness_as_a_fraction() {
+    fn push_constants_of_a_masked_draw_carry_the_flag_the_threshold_and_the_vagueness() {
         let frame = Size::new(640, 480);
         let masked = Sources {
             vagueness: Some(64),
             ..same(frame)
         };
-        let constants = words(push_constants(masked, frame, 0.5, false, Filter::Auto));
+        let constants = words(push_constants(masked, frame, STEP, false, Filter::Auto));
         assert_eq!(
             constants[12..],
             [
-                0.5f32.to_bits(),
-                FLAG_NEAREST | FLAG_HELD_NEAREST | FLAG_SAME_GRID | FLAG_MASK,
-                0.25f32.to_bits()
+                64,
+                FLAG_NEAREST | FLAG_HELD_NEAREST | FLAG_SAME_GRID | FLAG_MIX | FLAG_MASK,
+                63,
+                64
             ]
         );
-        let filling = words(Some(filling_constants(masked, frame, 0.5, Filter::Auto)));
+        // Outside a transition the mask is not read.
+        let alone = words(push_constants(
+            masked,
+            frame,
+            Mix::Newest,
+            false,
+            Filter::Auto,
+        ));
+        assert_eq!(alone[13], FLAG_NEAREST | FLAG_HELD_NEAREST | FLAG_SAME_GRID);
+        let filling = words(Some(filling_constants(masked, frame, STEP, Filter::Auto)));
         assert_eq!(filling, constants);
     }
 
@@ -1750,14 +1796,14 @@ mod tests {
             let in_window = words(push_constants(
                 same(frame),
                 window,
-                0.25,
+                STEP,
                 false,
                 Filter::Auto,
             ));
             let filling = words(Some(filling_constants(
                 same(frame),
                 Size::new(rect.width, rect.height),
-                0.25,
+                STEP,
                 Filter::Auto,
             )));
             // The same sizes, weight and flags; only the origins differ.
@@ -1786,7 +1832,7 @@ mod tests {
             words(push_constants(
                 sources,
                 Size::new(80, 72),
-                0.5,
+                STEP,
                 false,
                 Filter::Auto
             )),
@@ -1803,9 +1849,10 @@ mod tests {
                 72,
                 20,
                 18,
-                0.5f32.to_bits(),
-                FLAG_HELD_NEAREST,
-                1.0f32.to_bits()
+                64,
+                FLAG_HELD_NEAREST | FLAG_MIX,
+                63,
+                0
             ]
         );
         // One of the two may have no pixel while the other still has.
@@ -1817,7 +1864,7 @@ mod tests {
         let constants = words(push_constants(
             thin,
             Size::new(1, 50),
-            0.5,
+            STEP,
             false,
             Filter::Auto,
         ));

@@ -6,7 +6,7 @@
 
 ## 2. Presenter (`vkxp-vk`)
 
-- [ ] 2.1 Commit selections of the two sample files as test data and change the mix to the integer formulas with tiling. Verify: tests on llvmpipe for the scenarios of `specs/vulkan-presentation/spec.md`.
+- [x] 2.1 Commit selections of the two sample files as test data and change the mix to the integer formulas with tiling. Verify: tests on llvmpipe for the scenarios of `specs/vulkan-presentation/spec.md`.
 
 ## 3. Session (`vkxp-host`)
 
