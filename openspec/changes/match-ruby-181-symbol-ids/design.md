@@ -2,7 +2,7 @@
 
 ## Context
 
-- Measured with `Symbol.all_symbols` in the original runtime (RGSS103J, Ruby 1.8.1): 2024
+- Measured with `Symbol.all_symbols` in the original runtime (RGSS103J, Ruby 1.8.1): 2002
   symbols exist before the first game script; the list with numbers is in this clone at
   `local/measurements/symbols.startup.txt` (ignored by git; it is committed by this change as
   data, being a list of measured numbers and of names that are Ruby and RGSS API names). The
