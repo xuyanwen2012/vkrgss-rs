@@ -9,14 +9,20 @@
 //! Each function declares where its formula comes from. Today all of them are textbook
 //! placeholders; they are replaced one by one as reverse-engineering specs of the original
 //! runtime's inner loops land. [`PROVENANCE`] lists the current state.
+//!
+//! Arithmetic that only the guest's bitmap operations use (hue rotation, stretch sampling) runs
+//! on the CPU alone and has no GLSL counterpart. It is listed separately, in
+//! [`BITMAP_PROVENANCE`].
 
 #![forbid(unsafe_code)]
 
 mod arith;
+mod bitmap;
 
 pub use arith::{
     PROVENANCE, Rgba, apply_tone, blend_add, blend_color, blend_normal, blend_sub, effective_alpha,
 };
+pub use bitmap::{BITMAP_PROVENANCE, rotate_hue, stretch_index};
 
 /// Where the formula of an arithmetic function comes from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -56,4 +62,10 @@ pub struct ArithmeticFn {
 /// The provenance of every public arithmetic function, in declaration order.
 pub fn provenance() -> &'static [ArithmeticFn] {
     PROVENANCE
+}
+
+/// The provenance of the arithmetic of bitmap operations, in declaration order. These functions
+/// run only on the CPU; none of them appears in [`provenance`], the list GPU backends mirror.
+pub fn bitmap_provenance() -> &'static [ArithmeticFn] {
+    BITMAP_PROVENANCE
 }

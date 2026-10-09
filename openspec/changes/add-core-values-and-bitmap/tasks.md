@@ -10,8 +10,8 @@
 
 ## 2. Bitmap arithmetic (`vkxp-pixel`)
 
-- [ ] 2.1 Add a module for CPU-only bitmap arithmetic with `stretch_index` and `rotate_hue` as specified in `design.md`, each documented with its formula and a provenance line. Verify: unit tests that an angle of 0 leaves every tested pixel unchanged (exhaustively over two channels, sampled over the third), that 120 and 240 degrees map pure red to pure green and blue, that grey pixels and alpha never change, that the largest and smallest channel values are preserved for random pixels and angles, and that `stretch_index` matches the doubling and halving scenarios.
-- [ ] 2.2 Add the separate provenance list and `bitmap_provenance()`. Verify: a test asserts both new functions are listed as placeholders and that `provenance()` is unchanged in length and names; `cargo test -p vkxp-pixel` and `cargo test -p vkxp-vk --lib tests::shaders` both pass.
+- [x] 2.1 Add a module for CPU-only bitmap arithmetic with `stretch_index` and `rotate_hue` as specified in `design.md`, each documented with its formula and a provenance line. Verify: unit tests that an angle of 0 leaves every tested pixel unchanged (exhaustively over two channels, sampled over the third), that 120 and 240 degrees map pure red to pure green and blue, that grey pixels and alpha never change, that the largest and smallest channel values are preserved for random pixels and angles, and that `stretch_index` matches the doubling and halving scenarios.
+- [x] 2.2 Add the separate provenance list and `bitmap_provenance()`. Verify: a test asserts both new functions are listed as placeholders and that `provenance()` is unchanged in length and names; `cargo test -p vkxp-pixel` and `cargo test -p vkxp-vk --lib tests::shaders` both pass.
 
 ## 3. Bitmap (`vkxp-core`)
 

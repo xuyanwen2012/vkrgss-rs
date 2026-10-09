@@ -563,6 +563,9 @@ version = "0.1.0"
 [[package]]
 name = "vkxp-pixel"
 version = "0.1.0"
+dependencies = [
+ "proptest",
+]
 
 [[package]]
 name = "vkxp-proto"
