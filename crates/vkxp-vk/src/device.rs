@@ -900,12 +900,12 @@ impl Gpu {
             .queue_family_index(queue_family)
             .queue_priorities(&priorities)];
         let pacing = match surface {
-            // Opt-in (`VKXP_PRESENT_TIMING=1`) until the live path has been checked on real
-            // hardware: it cannot be exercised by the automated tests.
-            Some(_) if std::env::var_os("VKXP_PRESENT_TIMING").is_some_and(|v| v == "1") => {
-                pacing_support(&instance.pacing_caps(candidate.physical)?)
+            // On by default; `VKXP_PRESENT_TIMING=0` switches it off. Checked live on RADV in a
+            // headless mutter at 60, 120 and 144 Hz (see README).
+            Some(_) if std::env::var_os("VKXP_PRESENT_TIMING").is_some_and(|v| v == "0") => {
+                PacingSupport::default()
             }
-            Some(_) => PacingSupport::default(),
+            Some(_) => pacing_support(&instance.pacing_caps(candidate.physical)?),
             None => PacingSupport::default(),
         };
         let mut extensions: Vec<*const c_char> = Vec::new();

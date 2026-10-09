@@ -143,8 +143,8 @@ otherwise.
 - **THEN** the output is the same for all three
 
 ### Requirement: Target presentation times
-When pacing by present timing is switched on and the device and surface support presentation
-at an absolute time through `VK_EXT_present_timing`, the presenter SHALL give every present a target time: the first from
+Unless pacing by present timing is switched off, when the device and surface support
+presentation at an absolute time through `VK_EXT_present_timing` the presenter SHALL give every present a target time: the first from
 the swapchain's clock, each following one the previous target plus the frame period, restarted
 from the clock when pacing is reset or the target has fallen more than four periods behind.
 Without that support the presenter SHALL present as before.
@@ -161,8 +161,8 @@ Without that support the presenter SHALL present as before.
 - **WHEN** the frame rate changes from 40 to 20
 - **THEN** the next target is 50 milliseconds after the previous one
 
-#### Scenario: Not switched on
-- **WHEN** the environment variable `VKXP_PRESENT_TIMING` is not `1`
+#### Scenario: Switched off
+- **WHEN** the environment variable `VKXP_PRESENT_TIMING` is `0`
 - **THEN** frames are presented as before, whatever the device supports
 
 #### Scenario: No support
