@@ -4,7 +4,7 @@
 //! and their order are those of the reference compositor, so both reject the same packets with
 //! the same error. The shader then never sees an invalid slot or source rectangle.
 
-use vkxp_proto::{BlendMode, Op, Rect, Size};
+use vkxp_proto::{BlendMode, Color, Op, Rect, Size, Tone};
 
 use crate::VkError;
 use crate::bitmaps::BitmapTable;
@@ -89,6 +89,15 @@ impl OpRecord {
         OpRecord { clip, words }
     }
 
+    /// Fills the colour word and the four tone words, which a quad and a rectangle effect share.
+    fn set_tone_and_color(&mut self, tone: Tone, color: Color) {
+        self.words[18] = u32::from_le_bytes(color.to_rgba());
+        // Sign-extended: the shader reads these three words as signed integers.
+        let offsets = [tone.red, tone.green, tone.blue];
+        self.words[19..22].copy_from_slice(&offsets.map(|c| i32::from(c) as u32));
+        self.words[22] = u32::from(tone.gray);
+    }
+
     /// The record's words, in the order of the fields of the GLSL `OpRecord`.
     pub fn words(&self) -> &[u32; RECORD_WORDS] {
         &self.words
@@ -147,17 +156,13 @@ pub(crate) fn encode_ops(
                 record.words[10..16].copy_from_slice(&coefficients.map(|c| c.to_bits() as u32));
                 record.words[16] = u32::from(quad.opacity);
                 record.words[17] = blend_mode(quad.blend);
+                record.set_tone_and_color(quad.tone, quad.color);
                 records.push(record);
             }
             Op::RectEffect(effect) => {
                 let Some(clip) = clip else { continue };
                 let mut record = OpRecord::new(op_kind::RECT_EFFECT, clip);
-                let tone = effect.tone;
-                record.words[18] = u32::from_le_bytes(effect.color.to_rgba());
-                // Sign-extended: the shader reads these three words as signed integers.
-                let offsets = [tone.red, tone.green, tone.blue];
-                record.words[19..22].copy_from_slice(&offsets.map(|c| i32::from(c) as u32));
-                record.words[22] = u32::from(tone.gray);
+                record.set_tone_and_color(effect.tone, effect.color);
                 records.push(record);
             }
             Op::Plane { .. } | Op::TilemapLayer { .. } => {
@@ -447,8 +452,8 @@ mod tests {
                 tx: Fixed::from_bits(15),
                 ty: Fixed::from_bits(-1),
             },
-            tone: Tone::NEUTRAL,
-            color: Color::new(0, 0, 0, 0),
+            tone: Tone::new(-255, i16::MAX, i16::MIN, 77),
+            color: Color::new(255, 0, 128, 96),
             opacity: 200,
             blend: BlendMode::Subtract,
         });
@@ -459,9 +464,16 @@ mod tests {
             3, 2, 1, 5, 4,
             11, -12i32 as u32, 13, 0x8000_0000, 15, u32::MAX,
             200, 2,
-            0, 0, 0, 0, 0,
+            0x6080_00FF, -255i32 as u32, 32767, -32768i32 as u32, 77,
         ];
         assert_eq!(records[0].words(), &expected);
+    }
+
+    /// The words an old quad left at zero are exactly the neutral tone and zero-alpha colour.
+    #[test]
+    fn neutral_quad_leaves_the_tone_and_colour_words_zero() {
+        let records = encode_ops(&table(), SIZE, &[quad(ID, Rect::new(0, 0, 8, 6))]).unwrap();
+        assert_eq!(records[0].words()[18..], [0; 5]);
     }
 
     #[test]

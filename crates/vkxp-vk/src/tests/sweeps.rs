@@ -1,9 +1,12 @@
 //! Arithmetic sweeps: frames in which every destination channel value meets every source
-//! channel value, for each blend mode, the colour blend and the tone.
+//! channel value, for each blend mode, the colour blend and the tone, and frames in which
+//! every source channel value meets every grey amount and colour alpha of a quad.
 //!
 //! The frames are 256 pixels wide with the destination varying along x. For the blend modes
 //! the source varies along y; a rectangle effect has one colour and one tone per op, so there
-//! each row gets its own op. This is what catches a GLSL formula drifting from `vkxp-pixel`.
+//! each row gets its own op. A quad has one tone and one colour too, so in the quad sweep the
+//! source varies along x and each row is its own quad. This is what catches a GLSL formula
+//! drifting from `vkxp-pixel`.
 
 use vkxp_compose_ref::fixtures::bitmap;
 use vkxp_proto::{
@@ -323,4 +326,122 @@ fn tone_then_color_sweep_is_byte_identical() {
             &packet(N, vec![], ops),
         );
     }
+}
+
+/// A quad that draws an `N` by 1 bitmap into screen row `row`, with its own tone and colour.
+fn row_quad(id: BitmapId, row: u32, tone: Tone, color: Color, opacity: u8, blend: BlendMode) -> Op {
+    Op::Quad(Quad {
+        clip: Rect::new(0, row as i32, N, 1),
+        bitmap: id,
+        src: Rect::new(0, 0, N, 1),
+        transform: Transform::place_at(0, row as i16),
+        tone,
+        color,
+        opacity,
+        blend,
+    })
+}
+
+/// Every source channel value along x under a quad whose tone and colour vary along y: every
+/// grey amount with zero and extreme offsets, every colour alpha, and both together.
+fn quad_tone_and_color_sweep(blend: BlendMode) {
+    // What each row's quad carries, by row.
+    type Recolouring = (&'static str, u8, fn(u32) -> (Tone, Color));
+    const NONE: Color = Color::new(0, 0, 0, 0);
+    let recolourings: [Recolouring; 8] = [
+        ("every gray, zero offsets", 255, |row| {
+            (Tone::new(0, 0, 0, row as u8), NONE)
+        }),
+        ("every gray, extreme offsets", 255, |row| {
+            (Tone::new(255, -255, 255, row as u8), NONE)
+        }),
+        ("every gray, opposite extreme offsets", 255, |row| {
+            (Tone::new(-255, 255, -255, row as u8), NONE)
+        }),
+        ("every gray, offsets out of range", 255, |row| {
+            let offset = if row % 2 == 0 { i16::MAX } else { i16::MIN };
+            (Tone::new(offset, -300, 300, row as u8), NONE)
+        }),
+        ("every colour alpha, fixed colour", 255, |row| {
+            (Tone::NEUTRAL, Color::new(255, 0, 128, row as u8))
+        }),
+        ("every colour alpha, colour by row", 255, |row| {
+            let y = row as u8;
+            (Tone::NEUTRAL, Color::new(y, 255 - y, y.wrapping_mul(7), y))
+        }),
+        ("every gray, then every colour alpha", 255, |row| {
+            let y = row as u8;
+            (
+                Tone::new(255, 0, -255, y),
+                Color::new(255 - y, y, 99, 255 - y),
+            )
+        }),
+        ("tone then colour at reduced opacity", 128, |row| {
+            let y = row as u8;
+            (
+                Tone::new(row as i16 - 128, 128 - row as i16, 64, 255 - y),
+                Color::new(255 - y, y, 99, y),
+            )
+        }),
+    ];
+    // The neutral row values must really be in the sweep.
+    assert_eq!(recolourings[0].2(0), (Tone::NEUTRAL, NONE));
+
+    let mut pair = Pair::new();
+    // One source row per alpha: the channels at x, 255 - x and a third value.
+    let source_alphas = [255u8, 128, 1, 0];
+    let mut bitmaps = Vec::new();
+    for (slot, &alpha) in source_alphas.iter().enumerate() {
+        bitmaps.extend(bitmap(
+            BitmapId::new(slot as u32, 0),
+            N,
+            1,
+            pattern(1, |x, _| [x, 255 - x, x.wrapping_mul(7), alpha]),
+        ));
+    }
+    check(&mut pair, "setup", &packet(N, bitmaps, vec![]));
+
+    // Over a transparent screen a normal quad leaves the recoloured texel itself, alpha
+    // included; the other destinations show it through the blend.
+    for destination in [[0, 0, 0, 0], [90, 160, 230, 255], [200, 100, 50, 128]] {
+        for (slot, source_alpha) in source_alphas.iter().enumerate() {
+            for (name, opacity, recolouring) in recolourings {
+                let mut ops = vec![clear(N, destination)];
+                ops.extend((0..N).map(|row| {
+                    let (tone, color) = recolouring(row);
+                    row_quad(
+                        BitmapId::new(slot as u32, 0),
+                        row,
+                        tone,
+                        color,
+                        opacity,
+                        blend,
+                    )
+                }));
+                check(
+                    &mut pair,
+                    &format!(
+                        "quad {name}, {blend:?}, destination {destination:?}, source alpha \
+                         {source_alpha}"
+                    ),
+                    &packet(N, vec![], ops),
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn quad_tone_and_color_sweep_is_byte_identical_in_normal_mode() {
+    quad_tone_and_color_sweep(BlendMode::Normal);
+}
+
+#[test]
+fn quad_tone_and_color_sweep_is_byte_identical_in_additive_mode() {
+    quad_tone_and_color_sweep(BlendMode::Add);
+}
+
+#[test]
+fn quad_tone_and_color_sweep_is_byte_identical_in_subtractive_mode() {
+    quad_tone_and_color_sweep(BlendMode::Subtract);
 }

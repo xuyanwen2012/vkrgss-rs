@@ -14,9 +14,9 @@
 
 ## 3. Vulkan backend (`vkxp-vk`)
 
-- [ ] 3.1 Encode a quad's tone and colour into the existing tone and colour words of the op record and apply them in `shaders/compose.comp` before the blend. Verify: the fixture comparison in `cargo test -p vkxp-vk` passes for all fixtures including the new ones, on the default device (llvmpipe).
-- [ ] 3.2 Extend the generated-packet strategy with random quad tone and colour, and add the quad tone and colour sweep of `specs/vulkan-compositor/spec.md`. Verify: `cargo test -p vkxp-vk` passes on llvmpipe with the validation layer reporting nothing.
-- [ ] 3.3 Run the backend's tests on hardware. Verify: `VK_LOADER_DRIVERS_SELECT='*radeon*' VKXP_TEST_DEVICE=RADV cargo test -p vkxp-vk` passes and the commit message records device and driver. The Intel Arc B580 must not be used or opened.
+- [x] 3.1 Encode a quad's tone and colour into the existing tone and colour words of the op record and apply them in `shaders/compose.comp` before the blend. Verify: the fixture comparison in `cargo test -p vkxp-vk` passes for all fixtures including the new ones, on the default device (llvmpipe).
+- [x] 3.2 Extend the generated-packet strategy with random quad tone and colour, and add the quad tone and colour sweep of `specs/vulkan-compositor/spec.md`. Verify: `cargo test -p vkxp-vk` passes on llvmpipe with the validation layer reporting nothing.
+- [x] 3.3 Run the backend's tests on hardware. Verify: `VK_LOADER_DRIVERS_SELECT='*radeon*' VKXP_TEST_DEVICE=RADV cargo test -p vkxp-vk` passes and the commit message records device and driver. The Intel Arc B580 must not be used or opened.
 
 ## 4. Dependency rule (`xtask`)
 

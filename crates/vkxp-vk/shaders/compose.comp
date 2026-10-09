@@ -42,9 +42,10 @@ struct OpRecord {
     Transform transform;
     uint opacity;
     uint blend;
-    // Clear and rectangle effect: red in the lowest byte, then green, blue, alpha.
+    // Red in the lowest byte, then green, blue, alpha. Clear: the colour written. Quad: the
+    // colour blended over the sampled texel. Rectangle effect: the colour blended over the pixel.
     uint color;
-    // Rectangle effect.
+    // Quad: the tone of the sampled texel. Rectangle effect: the tone of the pixel.
     int tone_red;
     int tone_green;
     int tone_blue;
@@ -95,6 +96,9 @@ uvec4 apply_op(OpRecord op, uvec4 pixel, ivec2 position) {
         }
         uvec4 source = texelFetch(
             bitmaps[nonuniformEXT(op.bitmap)], ivec2(op.src_x, op.src_y) + texel, 0);
+        // Tone, then colour, on the texel alone; both keep its alpha.
+        source = apply_tone(source, op.tone_red, op.tone_green, op.tone_blue, op.tone_gray);
+        source = blend_color(source, unpack_color(op.color));
         switch (op.blend) {
         case BLEND_NORMAL:
             return blend_normal(pixel, source, op.opacity);

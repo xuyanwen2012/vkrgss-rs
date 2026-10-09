@@ -111,6 +111,10 @@ enum OpPlan {
         span: [u32; 4],
         clip: ClipPlan,
         transform: TransformPlan,
+        /// `None` is the neutral tone.
+        tone: Option<(i16, i16, i16, u8)>,
+        /// `None` is a colour of alpha 0.
+        color: Option<[u8; 4]>,
         opacity: u8,
         blend: BlendMode,
     },
@@ -217,16 +221,23 @@ fn op_plan() -> impl Strategy<Value = OpPlan> {
             any::<[u32; 4]>(),
             clip_plan(),
             transform_plan(),
+            // Half of the quads have no tone, half no colour, a quarter neither.
+            prop::option::of((tone_offset(), tone_offset(), tone_offset(), channel())),
+            prop::option::of((any::<[u8; 3]>(), channel())),
             channel(),
             blend_mode()
         )
-            .prop_map(|(pick, span, clip, transform, opacity, blend)| OpPlan::Quad {
-                pick,
-                span,
-                clip,
-                transform,
-                opacity,
-                blend,
+            .prop_map(|(pick, span, clip, transform, tone, color, opacity, blend)| {
+                OpPlan::Quad {
+                    pick,
+                    span,
+                    clip,
+                    transform,
+                    tone,
+                    color: color.map(|([r, g, b], a)| [r, g, b, a]),
+                    opacity,
+                    blend,
+                }
             }),
         2 => (
             clip_plan(),
@@ -535,6 +546,8 @@ fn build(plans: &[PacketPlan], faults: bool) -> Vec<GuestToHost> {
                     span,
                     clip: clip_plan,
                     transform: transform_plan,
+                    tone,
+                    color,
                     opacity,
                     blend,
                 } => {
@@ -546,8 +559,10 @@ fn build(plans: &[PacketPlan], faults: bool) -> Vec<GuestToHost> {
                         bitmap: id,
                         src: sub_rect(*span, width, height),
                         transform: transform(transform_plan),
-                        tone: Tone::NEUTRAL,
-                        color: Color::new(0, 0, 0, 0),
+                        tone: tone.map_or(Tone::NEUTRAL, |(red, green, blue, gray)| {
+                            Tone::new(red, green, blue, gray)
+                        }),
+                        color: color.map_or(Color::new(0, 0, 0, 0), Color::from_rgba),
                         opacity: *opacity,
                         blend: *blend,
                     }));
@@ -641,6 +656,8 @@ struct Coverage {
     clears: u32,
     effects: u32,
     quads_by_blend: [u32; 3],
+    /// Quads by whether they have a tone and a colour: neither, tone, colour, both.
+    quads_by_recolouring: [u32; 4],
     transformed_quads: u32,
     clipped_ops: u32,
     quads_of_earlier_bitmaps: u32,
@@ -695,6 +712,9 @@ fn coverage(strategy: impl Strategy<Value = Vec<PacketPlan>>, faults: bool) -> C
                             Op::RectEffect(_) => coverage.effects += 1,
                             Op::Quad(quad) => {
                                 coverage.quads_by_blend[quad.blend as usize] += 1;
+                                let toned = usize::from(quad.tone != Tone::NEUTRAL);
+                                let coloured = usize::from(quad.color.a != 0);
+                                coverage.quads_by_recolouring[toned + 2 * coloured] += 1;
                                 coverage.transformed_quads +=
                                     u32::from(quad.transform != Transform::IDENTITY);
                                 coverage.quads_of_earlier_bitmaps +=
@@ -738,6 +758,10 @@ fn generated_sequences_cover_what_the_properties_claim() {
         valid.quads_by_blend[0],
         valid.quads_by_blend[1],
         valid.quads_by_blend[2],
+        valid.quads_by_recolouring[0],
+        valid.quads_by_recolouring[1],
+        valid.quads_by_recolouring[2],
+        valid.quads_by_recolouring[3],
         valid.transformed_quads,
         valid.clipped_ops,
         valid.quads_of_earlier_bitmaps,
