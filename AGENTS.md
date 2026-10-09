@@ -14,12 +14,30 @@ changing anything; it records decisions that are settled.
 - `unsafe` is allowed only in `vkxp-vk`, `vkxp-ruby-sys`, `vkxp-binding` and platform code.
 - Never commit anything from `../ref` or `../games`, any original DLL, RTP asset, or Enterbrain
   Ruby source. Tests use procedurally generated images only.
-- Gate before declaring done: `cargo fmt --check`, `cargo clippy --workspace -- -D warnings`,
-  `cargo test --workspace`, `openspec validate --all`.
+- Gate before declaring done: `cargo xtask gate` (format check, clippy with warnings denied,
+  workspace tests, `openspec validate --all`).
+- Chat with the owner in Chinese; everything written to the repository stays English.
 
 ## Reference material (outside the repository)
 
-- `../ref/sys/` original RGSS DLLs, `../ref/sys/RGSS104E.unpacked.dll` for disassembly.
-- `../ref/app/` RTP assets. `../ref/RGSS104E_api.md` API list with arities (Chinese).
-- `../ref/tools/unpack/` unpacker and analysis scripts.
-- `../games/` local test games.
+The workspace directory that holds the main checkout (`vkxp/`) also holds `ref/` and `games/`.
+From the main checkout they are `../ref` and `../games`; from a clone or worktree under
+`wt/<name>/` they are `../../ref` and `../../games`. Nothing in them is ever committed.
+
+- `ref/sys/` original RGSS DLLs, `ref/sys/RGSS104E.unpacked.dll` for disassembly.
+- `ref/app/` RTP assets. `ref/RGSS104E_api.md` API list with arities (Chinese).
+- `ref/tools/unpack/` unpacker and analysis scripts.
+- `games/` local test games.
+
+## Working inside an agent flow
+
+- A flow runs in a full clone under `wt/<change>/`, on a branch named after the change. Commit
+  there as usual, one commit per task group. Do not push, archive the change or sync specs.
+- The sandbox may make `~/.cargo` read-only. If cargo cannot write its cache, set
+  `CARGO_HOME="$PWD/target/cargo-home"`.
+- Files that must not be committed (downloads, extracted data) go under `local/`, which is
+  ignored.
+- GPU rule for the development machine: the Intel Arc B580 is reserved for unrelated
+  measurement work and must never be used or opened. Vulkan tests default to llvmpipe; a
+  hardware run uses the AMD integrated GPU with
+  `VK_LOADER_DRIVERS_SELECT='*radeon*' VKXP_TEST_DEVICE=RADV`.
