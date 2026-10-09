@@ -1,13 +1,17 @@
 #version 460
 #extension GL_EXT_samplerless_texture_functions : require
 
-// Scales the frame into the target: the mix of the held and the newest frame inside the
-// letterbox rectangle, black outside it.
+// Scales what is shown into the target: the mix of the held and the newest frame, each inside
+// its own letterbox rectangle, black outside.
 //
 // The frames are read as integers with texelFetch. At a whole-number factor every target pixel
 // takes exactly one texel. At other factors the sampling is "sharp bilinear": the interior of
 // each scaled texel keeps its value and only a band one target pixel wide across each texel
 // border interpolates.
+//
+// When the two frames have the same size, which is the usual case, they are mixed texel by
+// texel before scaling. A held frame of another size than the newest has its own rectangle;
+// the two are then scaled separately and mixed per target pixel.
 //
 // This pass uses floating point. That is acceptable here and nowhere else: what it produces is
 // only looked at, never read back into the compositor.
@@ -16,36 +20,78 @@ layout(set = 0, binding = 0) uniform utexture2D newest;
 layout(set = 0, binding = 1) uniform utexture2D held;
 
 layout(push_constant) uniform Constants {
-    // The letterbox rectangle in target pixels.
+    // The letterbox rectangle of the newest frame in target pixels, and its size in texels.
     ivec2 origin;
     ivec2 size;
-    // Size of both frames in texels.
     ivec2 source;
+    // The same for the held frame.
+    ivec2 held_origin;
+    ivec2 held_size;
+    ivec2 held_source;
     // 0 shows the held frame, 1 the newest.
     float weight;
     uint flags;
 } constants;
 
-// Each target pixel takes one texel: the factor is a whole number.
+// Each target pixel takes one texel of the newest frame: its factor is a whole number.
 const uint FLAG_NEAREST = 1u;
 // The target has an sRGB format, which encodes what is written to it.
 const uint FLAG_SRGB_TARGET = 2u;
+// The same as FLAG_NEAREST for the held frame.
+const uint FLAG_HELD_NEAREST = 4u;
+// Both frames have the same size, and so the same rectangle.
+const uint FLAG_SAME_GRID = 8u;
+
+// What a texel is read from.
+const int NEWEST = 0;
+const int HELD = 1;
+// Both frames at the same position, mixed. Only with FLAG_SAME_GRID.
+const int MIXED = 2;
 
 layout(location = 0) out vec4 color;
 
-// The mixed colour of one texel, 0 to 1, clamping the position to the frame.
-vec3 texel(ivec2 position) {
-    ivec2 at = clamp(position, ivec2(0), constants.source - 1);
+// The colour of one texel, 0 to 1, clamping the position to a frame of `source` texels.
+vec3 texel(int which, ivec2 position, ivec2 source) {
+    ivec2 at = clamp(position, ivec2(0), source - 1);
     // The end points are taken as they are, so a plain frame passes through untouched.
-    if (constants.weight >= 1.0) {
+    if (which == NEWEST || (which == MIXED && constants.weight >= 1.0)) {
         return vec3(texelFetch(newest, at, 0).rgb) / 255.0;
     }
     vec3 before = vec3(texelFetch(held, at, 0).rgb);
-    if (constants.weight <= 0.0) {
+    if (which == HELD || constants.weight <= 0.0) {
         return before / 255.0;
     }
     vec3 after = vec3(texelFetch(newest, at, 0).rgb);
     return mix(before, after, constants.weight) / 255.0;
+}
+
+// The colour at `pixel`, counted from the corner of a rectangle of `size` target pixels that
+// shows a frame of `source` texels.
+vec3 scaled(int which, ivec2 pixel, ivec2 size, ivec2 source, bool nearest) {
+    if (nearest) {
+        return texel(which, (pixel * source) / size, source);
+    }
+    vec2 scale = vec2(size) / vec2(source);
+    // The pixel centre in texel units, measured from the centre of texel (0, 0).
+    vec2 position = (vec2(pixel) + 0.5) / scale - 0.5;
+    vec2 base = floor(position);
+    // Stretching the fraction around one half by the factor leaves a band one target pixel
+    // wide to interpolate in; everything else snaps to one of the two texels.
+    vec2 blend = clamp((position - base - 0.5) * max(scale, vec2(1.0)) + 0.5, 0.0, 1.0);
+    ivec2 corner = ivec2(base);
+    vec3 top = mix(
+        texel(which, corner, source),
+        texel(which, corner + ivec2(1, 0), source),
+        blend.x);
+    vec3 bottom = mix(
+        texel(which, corner + ivec2(0, 1), source),
+        texel(which, corner + ivec2(1, 1), source),
+        blend.x);
+    return mix(top, bottom, blend.y);
+}
+
+bool inside(ivec2 pixel, ivec2 size) {
+    return all(greaterThanEqual(pixel, ivec2(0))) && all(lessThan(pixel, size));
 }
 
 // The inverse of the encoding an sRGB target applies, so the stored value is the one given.
@@ -56,27 +102,38 @@ vec3 srgb_to_linear(vec3 encoded) {
 }
 
 void main() {
-    ivec2 pixel = ivec2(gl_FragCoord.xy) - constants.origin;
-    if (any(lessThan(pixel, ivec2(0))) || any(greaterThanEqual(pixel, constants.size))) {
-        color = vec4(0.0, 0.0, 0.0, 1.0);
-        return;
-    }
+    ivec2 target = ivec2(gl_FragCoord.xy);
+    ivec2 pixel = target - constants.origin;
+    bool nearest = (constants.flags & FLAG_NEAREST) != 0u;
 
-    vec3 rgb;
-    if ((constants.flags & FLAG_NEAREST) != 0u) {
-        rgb = texel((pixel * constants.source) / constants.size);
+    // Black wherever neither frame reaches.
+    vec3 rgb = vec3(0.0);
+    if ((constants.flags & FLAG_SAME_GRID) != 0u) {
+        if (inside(pixel, constants.size)) {
+            rgb = scaled(MIXED, pixel, constants.size, constants.source, nearest);
+        }
     } else {
-        vec2 scale = vec2(constants.size) / vec2(constants.source);
-        // The pixel centre in texel units, measured from the centre of texel (0, 0).
-        vec2 position = (vec2(pixel) + 0.5) / scale - 0.5;
-        vec2 base = floor(position);
-        // Stretching the fraction around one half by the factor leaves a band one target
-        // pixel wide to interpolate in; everything else snaps to one of the two texels.
-        vec2 blend = clamp((position - base - 0.5) * max(scale, vec2(1.0)) + 0.5, 0.0, 1.0);
-        ivec2 corner = ivec2(base);
-        vec3 top = mix(texel(corner), texel(corner + ivec2(1, 0)), blend.x);
-        vec3 bottom = mix(texel(corner + ivec2(0, 1)), texel(corner + ivec2(1, 1)), blend.x);
-        rgb = mix(top, bottom, blend.y);
+        vec3 after = vec3(0.0);
+        if (constants.weight > 0.0 && inside(pixel, constants.size)) {
+            after = scaled(NEWEST, pixel, constants.size, constants.source, nearest);
+        }
+        vec3 before = vec3(0.0);
+        ivec2 held_pixel = target - constants.held_origin;
+        if (constants.weight < 1.0 && inside(held_pixel, constants.held_size)) {
+            before = scaled(
+                HELD,
+                held_pixel,
+                constants.held_size,
+                constants.held_source,
+                (constants.flags & FLAG_HELD_NEAREST) != 0u);
+        }
+        if (constants.weight >= 1.0) {
+            rgb = after;
+        } else if (constants.weight <= 0.0) {
+            rgb = before;
+        } else {
+            rgb = mix(before, after, constants.weight);
+        }
     }
     if ((constants.flags & FLAG_SRGB_TARGET) != 0u) {
         rgb = srgb_to_linear(rgb);

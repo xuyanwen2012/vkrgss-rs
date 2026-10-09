@@ -476,25 +476,145 @@ fn freeze_before_the_first_frame_holds_black() {
     assert_all(&scaled, Rect::from_size(SIZE), BLACK, "held");
 }
 
+/// Asserts that every channel of every pixel in `area` is within one step of `expected`.
+fn assert_near(frame: &Frame, area: Rect, expected: [u8; 4], what: &str) {
+    for y in area.y as u32..area.y as u32 + area.height {
+        for x in area.x as u32..area.x as u32 + area.width {
+            let found = pixel(frame, x, y);
+            let near = found
+                .iter()
+                .zip(expected)
+                .all(|(found, expected)| found.abs_diff(expected) <= 1);
+            assert!(
+                near,
+                "{what} at ({x}, {y}): {found:?}, expected {expected:?}"
+            );
+        }
+    }
+}
+
 #[test]
-fn held_frame_of_another_size_counts_as_black() {
-    let mut compositor = black_then_white();
+fn held_frame_stays_shown_when_later_frames_have_another_size() {
+    let mut compositor = TestCompositor::new();
+    compositor.render(&flat(SIZE, WHITE)).unwrap();
     compositor.freeze().unwrap();
-    let larger = Size::new(24, 20);
+    compositor.set_mix(0.0);
+    let doubled = Size::new(40, 36);
+    let before = compositor.scale_frame(doubled).unwrap();
+    assert_all(&before, Rect::from_size(doubled), WHITE, "held, before");
+
+    // The logical size doubles, then changes shape, then comes back.
+    for size in [doubled, Size::new(32, 24), Size::new(7, 50), SIZE] {
+        compositor.render(&flat(size, [40, 80, 120, 255])).unwrap();
+        assert_eq!(compositor.scale_frame(doubled).unwrap(), before, "{size:?}");
+    }
+}
+
+#[test]
+fn held_frame_keeps_every_pixel_when_later_frames_have_another_size() {
+    let (mut compositor, first) = rendered(&gradient(SIZE));
+    compositor.freeze().unwrap();
+    compositor.set_mix(0.0);
+    compositor
+        .render(&halves(Size::new(64, 48), WHITE, BLACK))
+        .unwrap();
+    assert_eq!(compositor.scale_frame(SIZE).unwrap(), first);
+    let tripled = compositor.scale_frame(Size::new(60, 54)).unwrap();
+    assert_eq!(tripled, blocks(&first, 3));
+    // In a window of the new frame's shape the held frame keeps its own: 53 by 48, centred.
+    let scaled = compositor.scale_frame(Size::new(64, 48)).unwrap();
+    assert_all(&scaled, Rect::new(0, 0, 5, 48), BLACK, "left bar");
+    assert_all(&scaled, Rect::new(58, 0, 6, 48), BLACK, "right bar");
+    assert_ne!(pixel(&scaled, 5, 0), BLACK);
+    assert_ne!(pixel(&scaled, 57, 47), BLACK);
+}
+
+#[test]
+fn transition_after_a_size_change_fades_from_the_held_frame_to_the_newest() {
+    let mut compositor = TestCompositor::new();
+    compositor.render(&flat(SIZE, WHITE)).unwrap();
+    compositor.freeze().unwrap();
+    let newest = [40, 80, 120, 255];
+    compositor.render(&flat(Size::new(32, 24), newest)).unwrap();
+
+    // In an 80 by 72 window the held 20 by 18 frame fills everything, and the newest 32 by 24
+    // frame is 80 by 60 with bars of 6 rows above and below.
+    let window = Size::new(80, 72);
+    let (top, middle, bottom) = (
+        Rect::new(0, 0, 80, 6),
+        Rect::new(0, 6, 80, 60),
+        Rect::new(0, 66, 80, 6),
+    );
+
+    compositor.set_mix(0.0);
+    let start = compositor.scale_frame(window).unwrap();
+    assert_all(&start, Rect::from_size(window), WHITE, "held frame alone");
+
+    // A quarter of the way: white towards the newest frame where that lies, and towards the
+    // black of its bars elsewhere.
+    compositor.set_mix(0.25);
+    let quarter = compositor.scale_frame(window).unwrap();
+    assert_near(&quarter, middle, [201, 211, 221, 255], "quarter, frame");
+    assert_near(&quarter, top, [191, 191, 191, 255], "quarter, top bar");
+    assert_near(
+        &quarter,
+        bottom,
+        [191, 191, 191, 255],
+        "quarter, bottom bar",
+    );
+
+    compositor.set_mix(0.5);
+    let half = compositor.scale_frame(window).unwrap();
+    assert_near(&half, middle, [148, 168, 188, 255], "half, frame");
+    assert_near(&half, top, [128, 128, 128, 255], "half, top bar");
+
+    compositor.set_mix(1.0);
+    let end = compositor.scale_frame(window).unwrap();
+    assert_all(&end, middle, newest, "newest frame alone");
+    assert_all(&end, top, BLACK, "top bar");
+    assert_all(&end, bottom, BLACK, "bottom bar");
+}
+
+#[test]
+fn freeze_during_a_transition_across_sizes_holds_what_is_shown() {
+    let mut compositor = TestCompositor::new();
+    compositor.render(&flat(SIZE, WHITE)).unwrap();
+    compositor.freeze().unwrap();
+    let larger = Size::new(40, 36);
     compositor
         .render(&flat(larger, [40, 80, 120, 255]))
         .unwrap();
-    compositor.set_mix(0.0);
-    let scaled = compositor.scale_frame(larger).unwrap();
-    assert_all(&scaled, Rect::from_size(larger), BLACK, "held");
-    compositor.set_mix(1.0);
-    let scaled = compositor.scale_frame(larger).unwrap();
-    assert_all(
-        &scaled,
+    compositor.set_mix(0.5);
+    let on_screen = compositor.scale_frame(larger).unwrap();
+    assert_near(
+        &on_screen,
         Rect::from_size(larger),
-        [40, 80, 120, 255],
-        "newest",
+        [148, 168, 188, 255],
+        "half way",
     );
+
+    compositor.freeze().unwrap();
+    compositor.set_mix(0.0);
+    for size in [larger, SIZE, Size::new(64, 48)] {
+        compositor.render(&flat(size, [0, 255, 0, 255])).unwrap();
+        assert_eq!(
+            compositor.scale_frame(larger).unwrap(),
+            on_screen,
+            "{size:?}"
+        );
+    }
+}
+
+#[test]
+fn freeze_at_weight_one_after_a_size_change_holds_the_newest_frame_at_its_size() {
+    let mut compositor = black_then_white();
+    let larger = Size::new(24, 20);
+    let (_reference, expected) = rendered(&gradient(larger));
+    compositor.render(&gradient(larger)).unwrap();
+    compositor.freeze().unwrap();
+    compositor.set_mix(0.0);
+    compositor.render(&flat(SIZE, [9, 9, 9, 255])).unwrap();
+    assert_eq!(compositor.scale_frame(larger).unwrap(), expected);
 }
 
 #[test]

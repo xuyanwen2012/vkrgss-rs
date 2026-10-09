@@ -29,13 +29,15 @@ mod binding {
     pub const HELD: u32 = 1;
 }
 
-/// Bytes of the push constants: the letterbox origin and size, the frame size, the mix weight
-/// and the flags, four bytes per component.
-const PUSH_CONSTANT_BYTES: usize = 32;
+/// Bytes of the push constants: for the newest and then the held frame the letterbox origin
+/// and size and the frame size, then the mix weight and the flags, four bytes per component.
+const PUSH_CONSTANT_BYTES: usize = 56;
 
 /// Flags of the fragment shader, as `shaders/present.frag` defines them.
 const FLAG_NEAREST: u32 = 1;
 const FLAG_SRGB_TARGET: u32 = 2;
+const FLAG_HELD_NEAREST: u32 = 4;
+const FLAG_SAME_GRID: u32 = 8;
 
 /// Format of the off-screen target. Its values are what a `UNORM` swapchain image would hold.
 const OFFSCREEN_FORMAT: vk::Format = vk::Format::R8G8B8A8_UNORM;
@@ -80,21 +82,36 @@ fn is_whole_factor(frame: Size, rect: &Rect) -> bool {
         && rect.width / frame.width == rect.height / frame.height
 }
 
-/// The push constants that put a frame of `frame` pixels into a target of `target` pixels, or
-/// `None` when no pixel of the frame would be visible.
+/// The sizes of the two frames a draw reads. They differ when the logical size changed after
+/// the held frame was captured.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Sources {
+    newest: Size,
+    held: Size,
+}
+
+/// The push constants that put the frames of `sources` into a target of `target` pixels, each
+/// in its own letterbox rectangle, or `None` when no pixel of either would be visible.
 fn push_constants(
-    frame: Size,
+    sources: Sources,
     target: Size,
     weight: f32,
     srgb_target: bool,
 ) -> Option<[u8; PUSH_CONSTANT_BYTES]> {
-    let rect = letterbox(frame, target);
-    if rect.is_empty() {
+    let newest = letterbox(sources.newest, target);
+    let held = letterbox(sources.held, target);
+    if newest.is_empty() && held.is_empty() {
         return None;
     }
     let mut flags = 0;
-    if is_whole_factor(frame, &rect) {
+    if is_whole_factor(sources.newest, &newest) {
         flags |= FLAG_NEAREST;
+    }
+    if is_whole_factor(sources.held, &held) {
+        flags |= FLAG_HELD_NEAREST;
+    }
+    if sources.newest == sources.held {
+        flags |= FLAG_SAME_GRID;
     }
     if srgb_target {
         flags |= FLAG_SRGB_TARGET;
@@ -103,12 +120,18 @@ fn push_constants(
     write_words(
         &mut bytes,
         &[
-            rect.x as u32,
-            rect.y as u32,
-            rect.width,
-            rect.height,
-            frame.width,
-            frame.height,
+            newest.x as u32,
+            newest.y as u32,
+            newest.width,
+            newest.height,
+            sources.newest.width,
+            sources.newest.height,
+            held.x as u32,
+            held.y as u32,
+            held.width,
+            held.height,
+            sources.held.width,
+            sources.held.height,
             weight.to_bits(),
             flags,
         ],
@@ -222,8 +245,9 @@ pub(super) struct Presenter {
     fragment: vk::ShaderModule,
     /// One pass per target format in use: the off-screen one and the swapchain's.
     passes: Vec<Pass>,
-    /// The held frame, of the size of the frame target it was made for and in the
-    /// `SHADER_READ_ONLY_OPTIMAL` layout between submissions. Black until a freeze.
+    /// The held frame, in the `SHADER_READ_ONLY_OPTIMAL` layout between submissions. It has
+    /// the size of the frame it was captured from, which later frames need not share, and
+    /// lives until the next capture. Black, at the size of the first frame, until a freeze.
     held: Option<GpuImage>,
     /// The views of the newest and the held frame that the descriptor set points at.
     bound: Option<(vk::ImageView, vk::ImageView)>,
@@ -594,12 +618,15 @@ impl VkCompositor {
     }
 
     /// Captures what is shown now as the held frame: the mix of the held and the newest frame
-    /// at the current weight, at the frame's own size. The mix weight then blends that image
-    /// with the frames rendered afterwards. At weight 1 this is the newest frame as it is, at
-    /// weight 0 the held frame stays what it was, and before the first frame it is black.
+    /// at the current weight. The mix weight then blends that image with the frames rendered
+    /// afterwards. At weight 1 this is the newest frame as it is, at weight 0 the held frame
+    /// stays what it was, and before the first frame it is black.
     ///
-    /// The held frame has the size of the frame it was taken from. When a later packet has
-    /// another logical size the held frame is dropped and counts as black.
+    /// The held frame keeps its own size and its pixels whatever is rendered afterwards. When
+    /// a later packet has another logical size, the held frame is still shown as it was, in
+    /// the letterbox rectangle of its own size, and a cross-fade mixes the two frames where
+    /// each of them lies in the window. A capture in the middle of such a cross-fade is taken
+    /// at the size of the newest frame.
     pub fn freeze(&mut self) -> Result<(), VkError> {
         self.ensure_presenter()?;
         let target = self
@@ -617,25 +644,83 @@ impl VkCompositor {
                 None => Ok(()),
             };
         };
-        // A held frame of another size counts as black, which this makes it.
-        let held = self.ensure_held(size)?;
         if self.mix >= 1.0 {
-            return self.submit_or_idle(|compositor| {
-                compositor.copy_to_held(newest, vk::ImageLayout::GENERAL, held, size)
-            });
+            return self.capture_held(newest, vk::ImageLayout::GENERAL, size);
         }
         if self.mix <= 0.0 {
-            // The held frame alone is shown, and it stays.
+            // The held frame alone is shown, and it stays, at whatever size it has.
             return Ok(());
         }
-        // In between, what is shown exists nowhere yet: draw it at the frame's size, where
-        // scaling changes nothing, and take the result. The off-screen target and the held
-        // frame have formats of the same size, so the copy moves the bytes as they are.
+        // In between, what is shown exists nowhere yet: draw it at the newest frame's size
+        // and take the result. The off-screen target and the held frame have formats of the
+        // same size, so the copy moves the bytes as they are.
         self.with_offscreen(Size::new(size.0, size.1), |compositor, mixed| {
-            compositor.submit_or_idle(|compositor| {
-                compositor.copy_to_held(mixed, vk::ImageLayout::TRANSFER_SRC_OPTIMAL, held, size)
-            })
+            compositor.capture_held(mixed, vk::ImageLayout::TRANSFER_SRC_OPTIMAL, size)
         })
+    }
+
+    /// Makes the held frame a copy of `source`, an image of `size` pixels in `source_layout`.
+    /// A held frame of another size is replaced by a new image once the copy has succeeded.
+    fn capture_held(
+        &mut self,
+        source: vk::Image,
+        source_layout: vk::ImageLayout,
+        size: (u32, u32),
+    ) -> Result<(), VkError> {
+        let existing = self
+            .presenter
+            .as_ref()
+            .and_then(|presenter| presenter.held.as_ref())
+            .filter(|held| (held.width, held.height) == size)
+            .map(|held| held.image);
+        if let Some(held) = existing {
+            return self.submit_or_idle(|compositor| {
+                compositor.copy_to_held(
+                    source,
+                    source_layout,
+                    held,
+                    vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                    size,
+                )
+            });
+        }
+        let fresh = self.new_held_image(size)?;
+        let image = fresh.image;
+        let copied = self.submit_or_idle(|compositor| {
+            compositor.copy_to_held(
+                source,
+                source_layout,
+                image,
+                vk::ImageLayout::UNDEFINED,
+                size,
+            )
+        });
+        match copied {
+            Ok(()) => {
+                let presenter = self.presenter.as_mut().expect("made by the caller");
+                presenter.bound = None;
+                if let Some(old) = presenter.held.replace(fresh) {
+                    // Every submission that read it was waited for.
+                    old.destroy(&self.gpu.device, &mut self.allocator);
+                }
+                Ok(())
+            }
+            Err(error) => {
+                fresh.destroy(&self.gpu.device, &mut self.allocator);
+                Err(error)
+            }
+        }
+    }
+
+    fn new_held_image(&mut self, size: (u32, u32)) -> Result<GpuImage, VkError> {
+        GpuImage::new(
+            &self.gpu.device,
+            &mut self.allocator,
+            "held frame",
+            size,
+            vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_DST,
+            vk::ImageCreateFlags::empty(),
+        )
     }
 
     /// Draws what [`present`](VkCompositor::present) would show in a window of `size` pixels
@@ -687,12 +772,12 @@ impl VkCompositor {
             OFFSCREEN_FORMAT,
             vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
         )?;
-        let draw = source.and_then(|frame| {
+        let draw = source.and_then(|sources| {
             Some(DrawCall {
                 pipeline,
                 pipeline_layout: presenter.pipeline_layout,
                 descriptors: presenter.descriptors,
-                constants: push_constants(frame, size, self.mix, false)?,
+                constants: push_constants(sources, size, self.mix, false)?,
             })
         });
 
@@ -805,12 +890,12 @@ impl VkCompositor {
                 (chain.render_pass, chain.framebuffers[index as usize]);
             let (wait, signal) = (chain.acquired, chain.drawn[index as usize]);
             let target = Size::new(extent.width, extent.height);
-            let draw = source.and_then(|frame| {
+            let draw = source.and_then(|sources| {
                 Some(DrawCall {
                     pipeline: chain.pipeline,
                     pipeline_layout: presenter.pipeline_layout,
                     descriptors: presenter.descriptors,
-                    constants: push_constants(frame, target, self.mix, chain.srgb)?,
+                    constants: push_constants(sources, target, self.mix, chain.srgb)?,
                 })
             });
 
@@ -911,10 +996,10 @@ impl VkCompositor {
         Ok(())
     }
 
-    /// Makes everything a draw reads ready: the presenter, a held frame of the size of the
-    /// frame target, and the descriptor set pointing at both. Returns the size of the frame,
-    /// or `None` when no frame has been rendered and there is nothing to draw.
-    fn prepare_sources(&mut self) -> Result<Option<Size>, VkError> {
+    /// Makes everything a draw reads ready: the presenter, a held frame, and the descriptor
+    /// set pointing at both frames. Returns their sizes, or `None` when no frame has been
+    /// rendered and there is nothing to draw.
+    fn prepare_sources(&mut self) -> Result<Option<Sources>, VkError> {
         self.ensure_presenter()?;
         let target = self
             .target
@@ -926,39 +1011,32 @@ impl VkCompositor {
         };
         self.ensure_held(size)?;
         let presenter = self.presenter.as_mut().expect("just ensured");
-        let held = presenter.held.as_ref().expect("just ensured").view;
-        presenter.bind(&self.gpu.device, newest, held);
-        Ok(Some(Size::new(size.0, size.1)))
+        let held = presenter.held.as_ref().expect("just ensured");
+        let (held_view, held_size) = (held.view, Size::new(held.width, held.height));
+        presenter.bind(&self.gpu.device, newest, held_view);
+        Ok(Some(Sources {
+            newest: Size::new(size.0, size.1),
+            held: held_size,
+        }))
     }
 
-    /// Makes the held frame `size` pixels large and returns its image. A new one is black.
-    fn ensure_held(&mut self, size: (u32, u32)) -> Result<vk::Image, VkError> {
-        let presenter = self.presenter.as_mut().expect("made by the caller");
-        if let Some(held) = &presenter.held
-            && (held.width, held.height) == size
-        {
-            return Ok(held.image);
+    /// Makes sure there is a held frame. One that exists is left alone whatever its size; a
+    /// new one is `size` pixels large and black, which is what was shown before any frame.
+    fn ensure_held(&mut self, size: (u32, u32)) -> Result<(), VkError> {
+        let presenter = self.presenter.as_ref().expect("made by the caller");
+        if presenter.held.is_some() {
+            return Ok(());
         }
-        presenter.bound = None;
-        if let Some(old) = presenter.held.take() {
-            // Nothing is pending, so the old image is idle.
-            old.destroy(&self.gpu.device, &mut self.allocator);
-        }
-        let held = GpuImage::new(
-            &self.gpu.device,
-            &mut self.allocator,
-            "held frame",
-            size,
-            vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_DST,
-            vk::ImageCreateFlags::empty(),
-        )?;
+        let held = self.new_held_image(size)?;
         let image = held.image;
         let cleared = self
             .submit_or_idle(|compositor| compositor.clear_held(image, vk::ImageLayout::UNDEFINED));
         match cleared {
             Ok(()) => {
-                self.presenter.as_mut().expect("made by the caller").held = Some(held);
-                Ok(image)
+                let presenter = self.presenter.as_mut().expect("made by the caller");
+                presenter.bound = None;
+                presenter.held = Some(held);
+                Ok(())
             }
             Err(error) => {
                 held.destroy(&self.gpu.device, &mut self.allocator);
@@ -1000,13 +1078,14 @@ impl VkCompositor {
         self.submit_and_wait()
     }
 
-    /// Copies `source`, which is in `source_layout`, into the held frame; both are `size`
-    /// pixels large.
+    /// Copies `source`, which is in `source_layout`, into the held frame, which is in
+    /// `held_layout` and ends up in `SHADER_READ_ONLY_OPTIMAL`; both are `size` pixels large.
     fn copy_to_held(
         &mut self,
         source: vk::Image,
         source_layout: vk::ImageLayout,
         held: vk::Image,
+        held_layout: vk::ImageLayout,
         (width, height): (u32, u32),
     ) -> Result<(), VkError> {
         self.begin_commands()?;
@@ -1022,7 +1101,9 @@ impl VkCompositor {
         // SAFETY: the command buffer is recording. The source is the live frame target or an
         // off-screen target, in `source_layout`, which is `GENERAL` or
         // `TRANSFER_SRC_OPTIMAL`, with transfer-source usage; the held frame is live, in
-        // `SHADER_READ_ONLY_OPTIMAL` with transfer-destination usage. Their formats are four
+        // `held_layout`, which is `SHADER_READ_ONLY_OPTIMAL` or, for a new image whose
+        // contents do not matter, `UNDEFINED`, with transfer-destination usage. Every pixel
+        // of it is written, so nothing undefined is left. Their formats are four
         // 8-bit channels each, which copies allow between, both are `size` pixels large, and
         // both outlive the wait below.
         unsafe {
@@ -1030,7 +1111,7 @@ impl VkCompositor {
                 device,
                 commands,
                 held,
-                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                held_layout,
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
             );
             device.cmd_copy_image(
@@ -1287,7 +1368,7 @@ mod tests {
         let frame = Size::new(640, 480);
         for window in [Size::new(0, 480), Size::new(640, 0), Size::new(0, 0)] {
             assert!(letterbox(frame, window).is_empty(), "{window:?}");
-            assert_eq!(push_constants(frame, window, 1.0, false), None);
+            assert_eq!(push_constants(same(frame), window, 1.0, false), None);
         }
         assert!(letterbox(Size::new(0, 0), Size::new(640, 480)).is_empty());
         // One pixel wide: the scaled frame would be less than a pixel high.
@@ -1306,28 +1387,83 @@ mod tests {
         assert!(!is_whole_factor(frame, &Rect::default()));
     }
 
+    /// Both frames of one size, as when the logical size never changes.
+    fn same(size: Size) -> Sources {
+        Sources {
+            newest: size,
+            held: size,
+        }
+    }
+
+    fn words(bytes: Option<[u8; PUSH_CONSTANT_BYTES]>) -> Vec<u32> {
+        crate::resources::read_words(&bytes.expect("something is visible"))
+    }
+
     #[test]
-    fn push_constants_carry_the_rectangle_the_frame_size_the_weight_and_the_flags() {
-        let words = |bytes: [u8; PUSH_CONSTANT_BYTES]| crate::resources::read_words(&bytes);
-        let whole = push_constants(Size::new(640, 480), Size::new(1920, 1440), 1.0, false);
+    fn push_constants_carry_the_rectangles_the_frame_sizes_the_weight_and_the_flags() {
+        let frame = Size::new(640, 480);
+        let whole = push_constants(same(frame), Size::new(1920, 1440), 1.0, false);
+        let rect = [0, 0, 1920, 1440, 640, 480];
         assert_eq!(
-            words(whole.unwrap()),
-            [0, 0, 1920, 1440, 640, 480, 1.0f32.to_bits(), FLAG_NEAREST]
-        );
-        let fractional = push_constants(Size::new(640, 480), Size::new(1920, 1080), 0.25, true);
-        assert_eq!(
-            words(fractional.unwrap()),
+            words(whole),
             [
-                240,
+                rect.as_slice(),
+                rect.as_slice(),
+                &[
+                    1.0f32.to_bits(),
+                    FLAG_NEAREST | FLAG_HELD_NEAREST | FLAG_SAME_GRID
+                ]
+            ]
+            .concat()
+        );
+        let fractional = push_constants(same(frame), Size::new(1920, 1080), 0.25, true);
+        let rect = [240, 0, 1440, 1080, 640, 480];
+        assert_eq!(
+            words(fractional),
+            [
+                rect.as_slice(),
+                rect.as_slice(),
+                &[0.25f32.to_bits(), FLAG_SRGB_TARGET | FLAG_SAME_GRID]
+            ]
+            .concat()
+        );
+    }
+
+    #[test]
+    fn held_frame_of_another_size_gets_its_own_rectangle() {
+        let sources = Sources {
+            newest: Size::new(32, 24),
+            held: Size::new(20, 18),
+        };
+        // The held frame fills the target four times over; the newest is 2.5 times as wide
+        // and leaves bars above and below.
+        assert_eq!(
+            words(push_constants(sources, Size::new(80, 72), 0.5, false)),
+            [
                 0,
-                1440,
-                1080,
-                640,
-                480,
-                0.25f32.to_bits(),
-                FLAG_SRGB_TARGET
+                6,
+                80,
+                60,
+                32,
+                24,
+                0,
+                0,
+                80,
+                72,
+                20,
+                18,
+                0.5f32.to_bits(),
+                FLAG_HELD_NEAREST
             ]
         );
+        // One of the two may have no pixel while the other still has.
+        let thin = Sources {
+            newest: Size::new(640, 480),
+            held: Size::new(2, 100),
+        };
+        let constants = words(push_constants(thin, Size::new(1, 50), 0.5, false));
+        assert_eq!(constants[..6], [0, 0, 0, 0, 640, 480]);
+        assert_eq!(constants[6..12], [0, 0, 1, 50, 2, 100]);
     }
 
     fn format(format: vk::Format) -> vk::SurfaceFormatKHR {
