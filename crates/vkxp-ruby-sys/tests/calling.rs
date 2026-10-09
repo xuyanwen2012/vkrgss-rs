@@ -6,7 +6,7 @@ mod common;
 use std::sync::OnceLock;
 
 use vkxp_ruby_sys::ffi::{self, VALUE};
-use vkxp_ruby_sys::{HostResult, Interpreter, Options, Raise, Root, Ruby, RubyError};
+use vkxp_ruby_sys::{Arity, HostResult, Interpreter, Options, Raise, Root, Ruby, RubyError};
 
 fn interpreter() -> &'static Interpreter {
     static SHARED: OnceLock<Interpreter> = OnceLock::new();
@@ -210,6 +210,13 @@ fn call_block_value(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     Ok(value)
 }
 
+/// Returns its arguments, in order, as an array.
+fn pair(_ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
+    // SAFETY: the arguments are live for the duration of the call; the array is created with
+    // no Rust value alive in this frame that needs dropping.
+    Ok(unsafe { ffi::rb_ary_new4(args.len() as std::ffi::c_long, args.as_ptr()) })
+}
+
 fn define_host_api(ruby: &Ruby) {
     // SAFETY: the class globals and the freshly defined classes and modules are live.
     unsafe {
@@ -248,6 +255,35 @@ fn define_host_api(ruby: &Ruby) {
         ruby.define_module_under(module, c"Nested")
             .expect("the nested module is defined");
     }
+    // SAFETY: the freshly defined class and module are live.
+    unsafe {
+        let class = ruby
+            .define_class(c"VkxpFixedClass", ffi::rb_cObject)
+            .expect("the class is defined");
+        ruby.define_method_with_arity(class, c"pair", Arity::Fixed(2), pair)
+            .unwrap();
+        ruby.define_method_with_arity(class, c"none", Arity::Fixed(0), pair)
+            .unwrap();
+        ruby.define_method_with_arity(class, c"fifteen", Arity::Fixed(15), pair)
+            .unwrap();
+        ruby.define_method_with_arity(class, c"any", Arity::Any, pair)
+            .unwrap();
+        ruby.define_method_with_arity(class, c"reject", Arity::Fixed(1), reject)
+            .unwrap();
+        ruby.define_method_with_arity(class, c"explode", Arity::Fixed(0), explode)
+            .unwrap();
+        ruby.define_private_method_with_arity(class, c"hidden", Arity::Fixed(2), pair)
+            .unwrap();
+        ruby.define_singleton_method_with_arity(class, c"pair", Arity::Fixed(2), pair)
+            .unwrap();
+        let module = ruby
+            .define_module(c"VkxpFixedModule")
+            .expect("the module is defined");
+        ruby.define_module_function_with_arity(module, c"pair", Arity::Fixed(2), pair)
+            .unwrap();
+    }
+    ruby.define_global_function_with_arity(c"vkxp_pair", Arity::Fixed(2), pair)
+        .unwrap();
     ruby.define_global_function(c"vkxp_twice", twice).unwrap();
     ruby.define_global_function(c"vkxp_call", call_block_value)
         .unwrap();
@@ -569,4 +605,77 @@ fn deflate_and_inflate_round_trip() {
     );
     let error = eval("Zlib::Inflate.inflate('not a zlib stream')").expect_err("bad data raises");
     assert_eq!(error.class_name, "Zlib::DataError");
+}
+
+// --- Fixed-arity host functions ---------------------------------------------------------------
+
+#[test]
+fn fixed_arity_method_reports_its_arity() {
+    assert_eq!(
+        host_eval(
+            "c = VkxpFixedClass; [:pair, :none, :fifteen, :any, :reject, :hidden].map { |m| c.instance_method(m).arity }"
+        ),
+        ok("[2, 0, 15, -1, 1, 2]")
+    );
+    assert_eq!(
+        host_eval(
+            "[VkxpFixedClass.method(:pair).arity, VkxpFixedModule.method(:pair).arity, method(:vkxp_pair).arity]"
+        ),
+        ok("[2, 2, 2]")
+    );
+}
+
+#[test]
+fn fixed_arity_method_receives_its_arguments_in_order() {
+    assert_eq!(
+        host_eval("VkxpFixedClass.new.pair(:first, 'second')"),
+        ok("[:first, \"second\"]")
+    );
+    assert_eq!(host_eval("VkxpFixedClass.new.none"), ok("[]"));
+    assert_eq!(
+        host_eval("VkxpFixedClass.new.fifteen(*(1..15).to_a)"),
+        ok("[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]")
+    );
+    assert_eq!(
+        host_eval("VkxpFixedClass.new.any(1, 2, 3)"),
+        ok("[1, 2, 3]")
+    );
+    assert_eq!(
+        host_eval(
+            "[VkxpFixedClass.pair(1, 2), VkxpFixedModule.pair(3, 4), vkxp_pair(5, 6), VkxpFixedClass.new.send(:hidden, 7, 8)]"
+        ),
+        ok("[[1, 2], [3, 4], [5, 6], [7, 8]]")
+    );
+}
+
+#[test]
+fn fixed_arity_method_rejects_a_wrong_count_in_ruby() {
+    let error = host_eval("VkxpFixedClass.new.pair(1)").expect_err("one argument for two");
+    assert_eq!(error.class_name, "ArgumentError");
+    assert_eq!(error.message, "wrong number of arguments (1 for 2)");
+    let error = host_eval("VkxpFixedClass.new.none(1)").expect_err("one argument for none");
+    assert_eq!(error.message, "wrong number of arguments (1 for 0)");
+    assert_eq!(host_eval("VkxpFixedClass.new.pair(1, 2)"), ok("[1, 2]"));
+}
+
+#[test]
+fn raise_and_panic_in_a_fixed_arity_body_behave_as_in_the_any_arity_case() {
+    assert_eq!(
+        host_eval(
+            "begin; VkxpFixedClass.new.reject(1); :not_raised; \
+             rescue ArgumentError => e; [:rescued, e.message]; end"
+        ),
+        ok("[:rescued, \"rejected by the host\"]")
+    );
+    assert_eq!(
+        host_eval(
+            "[VkxpFixedClass.new, VkxpHostClass.new].map { |o| \
+             begin; o.explode; rescue Exception => e; [e.class, e.message]; end }"
+        ),
+        ok(
+            "[[Exception, \"panic in a host function: host function exploded\"], \
+             [Exception, \"panic in a host function: host function exploded\"]]"
+        )
+    );
+    assert_eq!(host_eval("VkxpFixedClass.new.pair(1, 2)"), ok("[1, 2]"));
 }

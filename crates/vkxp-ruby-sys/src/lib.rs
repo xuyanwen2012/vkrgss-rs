@@ -57,6 +57,15 @@
 //!    [`Raise`], or an `Exception` carrying the panic message. A `Raised` from a nested call
 //!    into Ruby converts into a `Raise` with `?` and continues on its way.
 //!
+//! A host function is registered with one of the `define_*` methods of [`Ruby`]. The plain
+//! ones ([`Ruby::define_method`] and its siblings) register it as taking any number of
+//! arguments, which the body counts with [`Ruby::check_arity`]. The `_with_arity` ones
+//! ([`Ruby::define_method_with_arity`], [`Ruby::define_private_method_with_arity`],
+//! [`Ruby::define_singleton_method_with_arity`], [`Ruby::define_module_function_with_arity`],
+//! [`Ruby::define_global_function_with_arity`]) take an [`Arity`]: with [`Arity::Fixed`] Ruby
+//! checks the count before the body runs and `Method#arity` reports it. Rule 2 holds for both
+//! in the same way.
+//!
 //! # Rooting
 //!
 //! The collector is conservative about the interpreter thread's stack and registers: a value
@@ -109,7 +118,7 @@ mod root;
 mod signals;
 
 pub use call::RubyError;
-pub use host::{HostResult, Raise};
+pub use host::{Arity, HostResult, Raise};
 pub use interp::{Interpreter, MIN_STACK_SIZE, Options, Ruby, STACK_HEADROOM, StartError};
 pub use protect::Raised;
 pub use root::Root;
