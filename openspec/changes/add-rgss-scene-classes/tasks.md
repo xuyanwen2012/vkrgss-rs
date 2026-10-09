@@ -18,9 +18,9 @@
 
 ## 4. Lifetime (`vkxp-binding`)
 
-- [ ] 4.1 Refuse `clone` and `dup`, and free unreachable elements through the deferred queue. Verify: Ruby tests for the no-copies scenario and the two unreachable-element scenarios, and for a bitmap kept alive only by a sprite.
-- [ ] 4.2 Run all Ruby tests of this change under forced garbage collection. Verify: same results as without it.
-- [ ] 4.3 Document the element classes, owned value objects and lifetime rules in the crate documentation. Verify: `cargo doc -p vkxp-binding --no-deps` builds without warnings.
+- [x] 4.1 Refuse `clone` and `dup`, and free unreachable elements through the deferred queue. Verify: Ruby tests for the no-copies scenario and the two unreachable-element scenarios, and for a bitmap kept alive only by a sprite.
+- [x] 4.2 Run all Ruby tests of this change under forced garbage collection. Verify: same results as without it.
+- [x] 4.3 Document the element classes, owned value objects and lifetime rules in the crate documentation. Verify: `cargo doc -p vkxp-binding --no-deps` builds without warnings.
 
 ## 5. Integration check
 

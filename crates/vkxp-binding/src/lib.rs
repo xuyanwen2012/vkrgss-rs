@@ -5,7 +5,8 @@
 //! This crate defines the classes a game's scripts see and connects them to the Rust crates
 //! that do the work: the interpreter of `vkxp-ruby-sys`, the values and bitmaps of
 //! `vkxp-core`, the files of `vkxp-vfs` and the decoders of `vkxp-image`. Today those classes
-//! are `Color`, `Tone`, `Rect`, `Table`, `Font` and `Bitmap`, and the exception `RGSSError`.
+//! are `Color`, `Tone`, `Rect`, `Table`, `Font` and `Bitmap`, the scene classes `Sprite`,
+//! `Viewport`, `Window`, `Plane`, `Tilemap` and `TilemapAutotiles`, and the exception `RGSSError`.
 //! Every method the original runtime defines for them exists with the original arity;
 //! `tests/data/rgss1_api.txt` is the list, and `tests/arity.rs` checks it.
 //!
@@ -56,12 +57,14 @@
 //! | Class | Data | Ruby objects it owns |
 //! |---|---|---|
 //! | `Color`, `Tone`, `Rect` | the core value, and an optional owner | |
-//! | `Table` | the core table | |
+//! | `Table` | the core table, shared with the tilemaps it is assigned to | |
 //! | `Font` | the core font attributes | its `Color`, in an instance variable |
 //! | `Bitmap` | the `BitmapId` of its bitmap in the arena | its `Font`, in an instance variable |
+//! | `Sprite`, `Viewport`, `Window`, `Plane`, `Tilemap` | the handle of its element in the scene | see *Scene elements* |
+//! | `TilemapAutotiles` | the handle of its tilemap | its tilemap and seven bitmaps, in instance variables |
 //!
-//! The owner of a `Color`, `Tone` or `Rect` is what will make `sprite.color.red = 0` reach
-//! the sprite; no object has one until the scene classes exist.
+//! The owner of a `Color`, `Tone` or `Rect` is what makes `sprite.color.red = 0` reach the
+//! sprite; see *Scene elements*.
 //!
 //! A Ruby object that belongs to another is kept in an instance variable of its owner whose
 //! name has no `@`, which scripts cannot see. That is what keeps it alive: the collector
@@ -72,12 +75,53 @@
 //! their values are read when they are needed: the attributes of a bitmap's `Font` object
 //! are copied into the arena before text is drawn or measured.
 //!
+//! # Scene elements
+//!
+//! The five element classes share the private module `element`. An object holds the typed
+//! handle of its element in the guest's scene, and every method is a short access to the
+//! scene through that handle.
+//!
+//! **Objects an element refers to.** The viewport an element was created in, the bitmap of
+//! a sprite or a plane, the window skin and the contents of a window, the tileset, the
+//! autotile list and the three tables of a tilemap are Ruby objects kept in hidden instance
+//! variables of the element object. The scene gets the `BitmapId`, the `ViewportId` or the
+//! shared table; the reader returns the variable, so a script reads back the very object it
+//! assigned, and the object lives as long as the element object does. Assigning a bitmap
+//! never copies or disposes it, and a disposed bitmap may be assigned: it draws nothing.
+//! A `Table` object and the tilemap it is assigned to hold the same `SharedTable`, so a
+//! write through the object is what the tilemap draws at the next frame.
+//!
+//! **Owned value objects.** `color` and `tone` of a sprite, a viewport and a plane,
+//! `src_rect` of a sprite, `rect` of a viewport and `cursor_rect` of a window are objects of
+//! the element's own, created with it and kept in hidden instance variables too. Each has
+//! an owner: the element's handle and the property. Every change of such an object, by
+//! `set`, by a component writer or by `initialize`, updates the object's own value and then
+//! writes it to the scene. A writer such as `sprite.color = c` copies the value of `c` into
+//! the sprite's own object and leaves `c` unconnected; so does a copy made by `dup`, which
+//! has no owner. Because the object keeps its value itself, it goes on working as a plain
+//! value after its element is disposed: the write to the scene finds nothing and is
+//! dropped. Assigning a bitmap to a sprite sets the sprite's `src_rect` object to the
+//! bitmap's rectangle.
+//!
+//! **Lifetime.** `dispose` removes the element from the scene and leaves the handle in the
+//! object; a handle whose element is gone names nothing, so every later method fails in
+//! the scene and raises `RGSSError` with `disposed sprite`, `disposed viewport`,
+//! `disposed window`, `disposed plane` or `disposed tilemap`. Only `dispose` itself and
+//! `disposed?`, which `Viewport` does not have, still work. Disposing an element disposes
+//! none of the objects it refers to. An object that was allocated and never initialized
+//! counts as disposed. `clone` and `dup` raise `TypeError` (`can't clone Sprite`). An
+//! element whose Ruby object is collected without having been disposed is disposed through
+//! the free queue below. The collector reaches elements only through Ruby references, so an
+//! element a script can still reach is never freed that way: a viewport is kept by its
+//! elements, a tilemap by its autotile list.
+//!
 //! # The free queue
 //!
 //! When the collector frees a `Bitmap` object, the bitmap in the arena must go too. But a
 //! collection can start inside any call that allocates a Ruby object, so the free function
 //! of a data object must not touch the guest. It pushes the `BitmapId` onto a queue, and
-//! [`Guest::with`] disposes the queued bitmaps each time the guest is entered.
+//! [`Guest::with`] disposes the queued bitmaps each time the guest is entered. The scene
+//! elements of collected element objects go the same way, through a queue of their own.
 //!
 //! # Errors
 //!
@@ -91,6 +135,8 @@
 //! | a file that is not found | `Errno::ENOENT`, `No such file or directory - <path as given>` |
 //! | a file that cannot be read | `IOError` |
 //! | malformed serialized data, an impossible table size | `ArgumentError` |
+//! | a disposed scene element | `RGSSError`, `disposed sprite` and so on |
+//! | a scene element that cannot be created | `RGSSError` |
 //!
 //! Arguments of the wrong class raise `TypeError`, a wrong argument count `ArgumentError`
 //! with Ruby's own message. Methods with a fixed arity are registered with it, so Ruby
@@ -218,6 +264,10 @@
 //! Its `host` module is a scripted host on the other end of a link: it ticks every frame,
 //! dismisses every modal message, records what the guest sent, and plays whole games made
 //! for a test.
+//! The `scene_testing` module, behind the same feature, gives tests the guest's scene and
+//! counts the elements the element classes made. The tests of the scene classes draw the
+//! scene with the reference compositor, a development dependency, instead of sending frames
+//! (`tests/scene_support`).
 
 mod audio;
 mod bitmap;

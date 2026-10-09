@@ -62,9 +62,19 @@ fn tilemap() {
 }
 
 #[test]
+fn no_copies() {
+    check(scene_cases::NO_COPIES);
+}
+
+#[test]
+fn lifetime() {
+    check(scene_cases::LIFETIME);
+}
+
+#[test]
 fn every_group_is_tested_here() {
     // One test function per group above: a group added to the list must get one too.
-    assert_eq!(scene_cases::GROUPS.len(), 9);
+    assert_eq!(scene_cases::GROUPS.len(), 11);
 }
 
 #[test]
@@ -108,5 +118,14 @@ fn elements_are_counted_by_kind() {
         testing::eval("[scene_count(:sprite).class, scene_count(:tilemap).class, scene_count(:x)]")
             .as_deref(),
         Ok("[Fixnum, Fixnum, nil]")
+    );
+    // A sprite that is held counts, and stops counting when it is disposed.
+    assert_eq!(
+        testing::eval(
+            "s = Sprite.new; held = scene_count(:sprite); s.dispose; \
+             [held >= 1, scene_count(:sprite) < held]"
+        )
+        .as_deref(),
+        Ok("[true, true]")
     );
 }

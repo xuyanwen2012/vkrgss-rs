@@ -52,6 +52,8 @@ pub const GROUPS: &[(&str, &[Case])] = &[
     ("plane", PLANE),
     ("window", WINDOW),
     ("tilemap", TILEMAP),
+    ("no copies", NO_COPIES),
+    ("lifetime", LIFETIME),
 ];
 
 // --- Viewport ---------------------------------------------------------------------------------
@@ -732,5 +734,103 @@ pub const TILEMAP: &[Case] = &[
              r << t.disposed? << pixel(64, 32); set.dispose; r"
         ),
         "[false, [0, 255, 0, 255], true, [0, 0, 0, 255]]",
+    ),
+];
+
+// --- Copies and collection --------------------------------------------------------------------
+
+pub const NO_COPIES: &[Case] = &[
+    raises_with(
+        "clone",
+        "Sprite.new.clone",
+        "TypeError",
+        "can't clone Sprite",
+    ),
+    raises_with("dup", "Sprite.new.dup", "TypeError", "can't dup Sprite"),
+    value(
+        "every element class refuses both",
+        "v = Viewport.new(0, 0, 1, 1); \
+         r = [Sprite.new, v, Window.new, Plane.new, Tilemap.new].map { |e| \
+         [:clone, :dup].map { |copy| \
+         begin; e.send(copy); :copied; rescue TypeError; $!.message; end } }; v.dispose; r",
+        r#"[["can't clone Sprite", "can't dup Sprite"], ["can't clone Viewport", "can't dup Viewport"], ["can't clone Window", "can't dup Window"], ["can't clone Plane", "can't dup Plane"], ["can't clone Tilemap", "can't dup Tilemap"]]"#,
+    ),
+    raises_with(
+        "a subclass is named in the message",
+        "class CaseCopySprite < Sprite; end; CaseCopySprite.new.clone",
+        "TypeError",
+        "can't clone CaseCopySprite",
+    ),
+    raises(
+        "a copy that does not come through clone or dup",
+        "Sprite.allocate.send(:initialize_copy, Sprite.new)",
+        "TypeError",
+    ),
+    value(
+        "the refused copy leaves the element as it was",
+        "s = Sprite.new; s.x = 4; begin; s.clone; rescue TypeError; end; [s.x, s.disposed?]",
+        "[4, false]",
+    ),
+];
+
+pub const LIFETIME: &[Case] = &[
+    value(
+        "forgotten sprites",
+        "1000.times { |i| Sprite.new; GC.start if i % 100 == 99 }; GC.start; \
+         scene_count(:sprite) < 500",
+        "true",
+    ),
+    value(
+        "forgotten elements of the other classes",
+        "300.times { |i| Viewport.new(0, 0, 1, 1); Window.new; Plane.new; Tilemap.new; \
+         GC.start if i % 100 == 99 }; GC.start; \
+         [:viewport, :window, :plane, :tilemap].map { |kind| scene_count(kind) < 150 }",
+        "[true, true, true, true]",
+    ),
+    value(
+        "kept sprite",
+        "b = solid(1, 1, 255, 0, 0); $case_kept = Sprite.new; $case_kept.bitmap = b; \
+         $case_kept.x = 130; 3.times { GC.start; 100.times { Sprite.new } }; \
+         r = [pixel(130, 0), $case_kept.disposed?]; $case_kept.dispose; $case_kept = nil; \
+         b.dispose; r",
+        "[[255, 0, 0, 255], false]",
+    ),
+    value(
+        "a bitmap kept alive only by a sprite",
+        "s = Sprite.new; s.x = 131; s.bitmap = solid(1, 1, 255, 0, 0); \
+         3.times { GC.start; 100.times { Bitmap.new(1, 1) } }; \
+         r = [pixel(131, 0), s.bitmap.disposed?]; s.bitmap.dispose; s.dispose; r",
+        "[[255, 0, 0, 255], false]",
+    ),
+    value(
+        "a viewport kept alive only by its sprite",
+        "s = Sprite.new(Viewport.new(132, 0, 1, 1)); s.bitmap = solid(1, 1, 255, 0, 0); \
+         3.times { GC.start; 100.times { Viewport.new(0, 0, 1, 1) } }; \
+         r = [pixel(132, 0), s.viewport.rect.x]; s.bitmap.dispose; s.viewport.dispose; \
+         s.dispose; r",
+        "[[255, 0, 0, 255], 132]",
+    ),
+    value(
+        "the objects of a window and a tilemap kept alive only by them",
+        "w = Window.new; w.windowskin = Bitmap.new(192, 128); w.contents = Bitmap.new(8, 8); \
+         t = Tilemap.new; t.tileset = Bitmap.new(256, 32); t.map_data = Table.new(2, 2, 3); \
+         t.autotiles[2] = Bitmap.new(96, 128); \
+         3.times { GC.start; 100.times { Bitmap.new(1, 1); Table.new(1) } }; \
+         t.map_data[1, 1, 2] = 7; \
+         r = [w.windowskin.disposed?, w.contents.width, t.tileset.disposed?, \
+         t.map_data[1, 1, 2], t.autotiles[2].height]; w.dispose; t.dispose; r",
+        "[false, 8, false, 7, 128]",
+    ),
+    value(
+        "an autotile list keeps its tilemap",
+        "a = Tilemap.new.autotiles; b = Bitmap.new(96, 128); \
+         3.times { GC.start; 100.times { Tilemap.new } }; a[0] = b; a[0].equal?(b)",
+        "true",
+    ),
+    value(
+        "an object property kept after its sprite was collected",
+        "c = Sprite.new.color; 3.times { GC.start; 100.times { Sprite.new } }; \
+         c.set(1, 2, 3, 4); [c.red, c.alpha]",
+        "[1.0, 4.0]",
     ),
 ];

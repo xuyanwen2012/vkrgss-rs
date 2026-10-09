@@ -108,3 +108,24 @@ elements through another test-only helper.
   which `instance_variables` does not list.
 - [Disposal order during collection: a viewport freed before its sprites] → Core treats elements
   of a disposed viewport as not drawn; their own frees follow.
+
+## Follow-ups
+
+- `vkxp-core`'s `Scene` has no public count of its elements. `scene_count(kind)` therefore
+  counts in the binding: the element classes record every element they create and dispose,
+  behind the `testing` feature only. A count in core would let the helper ask the scene
+  itself.
+- `Guest` gives no public mutable access to the scene and the bitmap arena, and
+  `vkxp-compose-ref` can only be a development dependency. `pixel(x, y)` is therefore defined
+  by the integration tests (`tests/scene_support`) on top of `scene_testing::with_scene`. It
+  renders a copy of the scene and uploads the referenced bitmaps whole, so that it neither
+  counts a frame nor takes bitmap deltas away from `Graphics.update` once the parallel change
+  is merged.
+- The arity test checks the six classes of this change in a test function of its own
+  (`SCENE_CLASSES`) to keep the merge with `add-rgss-runtime` free of conflicts. The scenario
+  "Whole list covered" holds once that change has added `Graphics`, `Input` and `Audio`; the
+  two lists can then become one.
+- Not checked against the original runtime: that a disposed element raises before a writer
+  looks at its argument; that assigning an autotile of a disposed tilemap is ignored; that a
+  `TilemapAutotiles` object keeps its tilemap alive; the message of a copy that reaches
+  `initialize_copy` without `clone` or `dup` (`can't clone <class>` here).
