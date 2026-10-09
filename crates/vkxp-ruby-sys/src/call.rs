@@ -93,6 +93,32 @@ unsafe extern "C" fn describe_body(data: VALUE) -> VALUE {
     ffi::Qnil
 }
 
+/// The plain data of creating a string.
+struct NewString {
+    bytes: *const c_char,
+    len: c_long,
+}
+
+unsafe extern "C" fn new_string_body(data: VALUE) -> VALUE {
+    // SAFETY: `Ruby::str_new` passes a pointer to a `NewString` whose buffer outlives the
+    // call. The allocation raises `NoMemoryError` when it fails, hence the protection.
+    unsafe {
+        let new = &*(data as *const NewString);
+        ffi::rb_str_new(new.bytes, new.len)
+    }
+}
+
+unsafe extern "C" fn inspect_body(data: VALUE) -> VALUE {
+    // SAFETY: `Ruby::inspect` passes a pointer to the live value to inspect. `inspect` may
+    // return any object, whose `to_s` runs in the conversion and may raise as well, so both
+    // steps are inside the protection.
+    unsafe {
+        let value = *(data as *const VALUE);
+        let text = ffi::rb_funcall(value, ffi::rb_intern(c"inspect".as_ptr()), 0);
+        ffi::rb_obj_as_string(text)
+    }
+}
+
 /// The bytes of a Ruby string as host text, with invalid UTF-8 replaced. Anything that is
 /// not a string gives an empty text.
 ///
@@ -209,12 +235,16 @@ impl Ruby {
         }
     }
 
-    /// A new Ruby string with these bytes.
-    pub fn str_new(&self, bytes: &[u8]) -> VALUE {
-        let len = c_long::try_from(bytes.len()).expect("fewer than 2^63 bytes");
-        // SAFETY: `&self` proves the thread; the buffer is valid for `len` bytes and is
-        // copied.
-        unsafe { ffi::rb_str_new(bytes.as_ptr().cast(), len) }
+    /// A new Ruby string with these bytes. The error is the `NoMemoryError` of a failed
+    /// allocation.
+    pub fn str_new(&self, bytes: &[u8]) -> Result<VALUE, Raised> {
+        let mut new = NewString {
+            bytes: bytes.as_ptr().cast(),
+            len: c_long::try_from(bytes.len()).expect("fewer than 2^63 bytes"),
+        };
+        // SAFETY: `&self` proves the thread; `new_string_body` fits the contract of
+        // `protect`, and the buffer is valid for `len` bytes and is copied.
+        unsafe { protect::protect(&mut new, new_string_body) }
     }
 
     /// The bytes of a Ruby string, or `None` when the value is not a string.
@@ -239,15 +269,20 @@ impl Ruby {
 
     /// `value.inspect` as host text.
     ///
+    /// Both the `inspect` method and the conversion of what it returns to a string run
+    /// protected: an exception from either comes back as the error.
+    ///
     /// # Safety
     ///
     /// `value` must be a special constant or a live object.
     pub unsafe fn inspect(&self, value: VALUE) -> Result<String, Raised> {
-        // SAFETY: `&self` proves the thread; the caller guarantees the value. The result of
-        // `inspect` stays in a local until its bytes are copied.
+        let mut value = value;
+        // SAFETY: `&self` proves the thread; the caller guarantees the value, and
+        // `inspect_body` fits the contract of `protect`. The resulting string stays in a
+        // local until its bytes are copied, which neither raises nor collects.
         unsafe {
-            let text = protect::funcall(value, c"inspect", &[])?;
-            Ok(text_of(ffi::rb_obj_as_string(text)))
+            let text = protect::protect(&mut value, inspect_body)?;
+            Ok(text_of(text))
         }
     }
 }

@@ -376,6 +376,86 @@ fn many_raises_and_panics_do_not_disturb_the_interpreter() {
     );
 }
 
+/// Counts the drops of the guard that `inspect_with_guard` holds across its call into Ruby.
+static GUARD_DROPS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+struct DropGuard;
+
+impl Drop for DropGuard {
+    fn drop(&mut self) {
+        GUARD_DROPS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// Inspects its argument while a value with a destructor is alive in the frame.
+fn inspect_with_guard(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
+    ruby.check_arity(args, 1)?;
+    let _guard = DropGuard;
+    // SAFETY: the argument is live for the duration of the call.
+    let text = unsafe { ruby.inspect(args[0]) }?;
+    Ok(ruby.str_new(text.as_bytes())?)
+}
+
+#[test]
+fn inspect_whose_result_cannot_become_a_string_is_an_error_not_a_jump() {
+    use std::sync::atomic::Ordering;
+
+    let (outcome, drops, after) = interpreter().run(|ruby| {
+        ruby.define_global_function(c"vkxp_inspect_guarded", inspect_with_guard)
+            .unwrap();
+        let before = GUARD_DROPS.load(Ordering::SeqCst);
+        // `inspect` itself succeeds; the `to_s` of what it returns raises.
+        let outcome = ruby
+            .eval_protected(
+                "class VkxpBadInspect\n\
+                 \x20 def inspect; x = Object.new; def x.to_s; raise IOError, 'conversion failed'; end; x; end\n\
+                 end\n\
+                 vkxp_inspect_guarded(VkxpBadInspect.new)",
+                "test",
+                1,
+            )
+            .map(|_| ());
+        let drops = GUARD_DROPS.load(Ordering::SeqCst) - before;
+        let after = inspect_eval(ruby, "1 + 1", "test", 1);
+        (outcome, drops, after)
+    });
+    let error = outcome.expect_err("the conversion raises");
+    assert_eq!(error.class_name, "IOError");
+    assert_eq!(error.message, "conversion failed");
+    assert_eq!(
+        drops, 1,
+        "the host frame was unwound normally, not jumped over"
+    );
+    assert_eq!(after, ok("2"));
+
+    // The same through the helper directly, and when `inspect` itself raises.
+    let errors = interpreter().run(|ruby| {
+        let bad_result = ruby
+            .eval_protected("VkxpBadInspect.new", "test", 1)
+            .expect("no exception");
+        let bad_method = ruby
+            .eval_protected(
+                "o = Object.new; def o.inspect; raise IndexError, 'no inspect'; end; o",
+                "test",
+                1,
+            )
+            .expect("no exception");
+        // SAFETY: both values were just returned and are held in locals; so are the
+        // raised exceptions until they are described.
+        unsafe {
+            let first = ruby.inspect(bad_result).expect_err("the conversion raises");
+            let second = ruby.inspect(bad_method).expect_err("inspect raises");
+            (ruby.describe(first), ruby.describe(second))
+        }
+    });
+    assert_eq!(errors.0.class_name, "IOError");
+    assert_eq!(errors.1.class_name, "IndexError");
+    assert_eq!(
+        host_eval("vkxp_inspect_guarded([1, :two, 'three'])"),
+        ok("\"[1, :two, \\\"three\\\"]\"")
+    );
+}
+
 // --- Rooting ----------------------------------------------------------------------------------
 
 /// Creates the strings in a frame of its own, so that the caller's frame never holds them.
@@ -383,9 +463,11 @@ fn many_raises_and_panics_do_not_disturb_the_interpreter() {
 fn make_rooted_strings(ruby: &Ruby, count: usize) -> Vec<Root> {
     (0..count)
         .map(|index| {
-            let value = ruby.str_new(format!("rooted string number {index}").as_bytes());
+            let value = ruby
+                .str_new(format!("rooted string number {index}").as_bytes())
+                .expect("the string is allocated");
             // SAFETY: the value was just created and is in a local.
-            unsafe { ruby.root(value) }
+            unsafe { ruby.root(value) }.expect("the root is registered")
         })
         .collect()
 }
@@ -433,10 +515,10 @@ fn rooted_strings_survive_many_collections() {
 #[test]
 fn a_root_can_be_replaced_and_keeps_its_new_value() {
     interpreter().run(|ruby| {
-        let first = ruby.str_new(b"first");
+        let first = ruby.str_new(b"first").expect("the string is allocated");
         // SAFETY: both values are fresh and in locals when they are rooted.
-        let mut root = unsafe { ruby.root(first) };
-        let second = ruby.str_new(b"second");
+        let mut root = unsafe { ruby.root(first) }.expect("the root is registered");
+        let second = ruby.str_new(b"second").expect("the string is allocated");
         // SAFETY: as above.
         unsafe { root.set(second) };
         // SAFETY: on the interpreter thread; the rooted value is live.

@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 
 use crate::ffi::{self, VALUE};
 use crate::interp::Ruby;
+use crate::protect::{self, Raised};
 
 /// A Ruby value that the collector treats as reachable for as long as the `Root` exists.
 ///
@@ -43,21 +44,34 @@ impl Drop for Root {
     }
 }
 
+unsafe extern "C" fn register_body(data: VALUE) -> VALUE {
+    // SAFETY: `Ruby::root` passes the address of a heap slot that holds a live value and
+    // stays valid until it is unregistered. Registering allocates a list node, which raises
+    // `NoMemoryError` when it fails, hence the protection.
+    unsafe { ffi::rb_gc_register_address(data as *mut VALUE) };
+    ffi::Qnil
+}
+
 impl Ruby {
     /// Registers a value as a root of the collector.
+    ///
+    /// The error is the `NoMemoryError` of a failed registration; nothing is registered
+    /// then.
     ///
     /// # Safety
     ///
     /// `value` must be a special constant or a live object, and the returned `Root` must be
     /// dropped before the interpreter is.
-    pub unsafe fn root(&self, value: VALUE) -> Root {
+    pub unsafe fn root(&self, value: VALUE) -> Result<Root, Raised> {
         let mut slot = Box::new(value);
-        // SAFETY: `&self` proves the thread. The slot's address is stable for the life of
-        // the box, and `Drop` unregisters it before the box is freed.
-        unsafe { ffi::rb_gc_register_address(&mut *slot) };
-        Root {
+        // SAFETY: `&self` proves the thread. `protect` hands `register_body` the address of
+        // the slot itself, which is stable for the life of the box; `Drop` unregisters it
+        // before the box is freed. On failure the slot was not registered and the box is
+        // simply dropped, with the value still held by the caller's local.
+        unsafe { protect::protect(&mut *slot, register_body) }?;
+        Ok(Root {
             slot,
             not_send: PhantomData,
-        }
+        })
     }
 }

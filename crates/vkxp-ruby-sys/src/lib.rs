@@ -43,7 +43,8 @@
 //!
 //! 1. **A call into Ruby that may raise goes through `rb_protect`.** The jump then ends
 //!    inside C and the host sees a status. [`Ruby::eval_protected`], [`Ruby::eval`],
-//!    [`Ruby::funcall`] and the `define_*` methods do this and return a `Result`: the error
+//!    [`Ruby::funcall`], [`Ruby::inspect`], [`Ruby::str_new`], [`Ruby::root`] and the
+//!    `define_*` methods do this and return a `Result`: the error
 //!    is a [`Raised`] (the exception object, as plain data) or a [`RubyError`] (class name,
 //!    message and backtrace, copied into host memory). Calling [`ffi`] directly is allowed
 //!    where no Rust value with a destructor is alive in any frame the jump could cross, which
