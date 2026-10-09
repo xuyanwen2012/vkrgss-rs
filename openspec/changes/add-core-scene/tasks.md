@@ -37,8 +37,8 @@
 
 ## 7. Input (`vkxp-core`)
 
-- [ ] 7.1 Implement `InputState` with `receive`, `update`, pressed, triggered and repeated. Verify: tests for every scenario of the first three requirements in `specs/core-input/spec.md`.
-- [ ] 7.2 Implement the four-way and eight-way direction queries. Verify: tests for the three direction scenarios and for all four diagonals.
+- [x] 7.1 Implement `InputState` with `receive`, `update`, pressed, triggered and repeated. Verify: tests for every scenario of the first three requirements in `specs/core-input/spec.md`.
+- [x] 7.2 Implement the four-way and eight-way direction queries. Verify: tests for the three direction scenarios and for all four diagonals.
 
 ## 8. Integration check
 
