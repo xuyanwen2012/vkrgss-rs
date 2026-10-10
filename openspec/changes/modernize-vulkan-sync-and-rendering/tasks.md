@@ -2,7 +2,7 @@
 
 ## 1. Device (`vkxp-vk`)
 
-- [ ] 1.1 Enable and check the two Vulkan 1.3 features. Verify: the scenarios of "Device requirements" in `specs/vulkan-compositor/spec.md`; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk` passes.
+- [x] 1.1 Enable and check the two Vulkan 1.3 features. Verify: the scenarios of "Device requirements" in `specs/vulkan-compositor/spec.md`; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk` passes.
 
 ## 2. Barriers (`vkxp-vk`)
 

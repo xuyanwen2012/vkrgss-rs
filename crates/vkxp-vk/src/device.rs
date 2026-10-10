@@ -125,6 +125,8 @@ pub(crate) struct DeviceCaps {
     pub sampled_image_array_non_uniform_indexing: bool,
     pub descriptor_binding_partially_bound: bool,
     pub descriptor_binding_sampled_image_update_after_bind: bool,
+    pub synchronization2: bool,
+    pub dynamic_rendering: bool,
     /// The smaller of the per-set and per-stage update-after-bind sampled-image limits.
     pub max_update_after_bind_sampled_images: u32,
     /// `maxComputeWorkGroupInvocations`.
@@ -160,6 +162,8 @@ pub(crate) fn lacks(caps: &DeviceCaps) -> Vec<String> {
             "descriptorBindingSampledImageUpdateAfterBind",
             caps.descriptor_binding_sampled_image_update_after_bind,
         ),
+        ("synchronization2", caps.synchronization2),
+        ("dynamicRendering", caps.dynamic_rendering),
     ];
     for (name, supported) in features {
         if !supported {
@@ -512,6 +516,8 @@ impl Instance {
             sampled_image_array_non_uniform_indexing: false,
             descriptor_binding_partially_bound: false,
             descriptor_binding_sampled_image_update_after_bind: false,
+            synchronization2: false,
+            dynamic_rendering: false,
             max_update_after_bind_sampled_images: 0,
             max_work_group_invocations: properties.limits.max_compute_work_group_invocations,
             max_work_group_size: [
@@ -559,6 +565,18 @@ impl Instance {
             .filter(|part| !part.is_empty())
             .collect::<Vec<_>>()
             .join(" ");
+        }
+        // Likewise the Vulkan 1.3 structure. Both features are mandatory in that version.
+        if api_version >= (1, 3) {
+            let mut features13 = vk::PhysicalDeviceVulkan13Features::default();
+            let mut features = vk::PhysicalDeviceFeatures2::default().push_next(&mut features13);
+            // SAFETY: as above.
+            unsafe {
+                self.raw
+                    .get_physical_device_features2(physical, &mut features)
+            };
+            caps.synchronization2 = features13.synchronization2 == vk::TRUE;
+            caps.dynamic_rendering = features13.dynamic_rendering == vk::TRUE;
         }
 
         Candidate {
@@ -931,6 +949,9 @@ impl Gpu {
             .shader_sampled_image_array_non_uniform_indexing(true)
             .descriptor_binding_partially_bound(true)
             .descriptor_binding_sampled_image_update_after_bind(true);
+        let mut features13 = vk::PhysicalDeviceVulkan13Features::default()
+            .synchronization2(true)
+            .dynamic_rendering(true);
         if pacing.timing {
             extensions.extend([
                 timing::PRESENT_TIMING_NAME.as_ptr(),
@@ -950,7 +971,8 @@ impl Gpu {
         let info = vk::DeviceCreateInfo::default()
             .queue_create_infos(&queues)
             .enabled_extension_names(&extensions)
-            .push_next(&mut features12);
+            .push_next(&mut features12)
+            .push_next(&mut features13);
         // SAFETY: the physical device belongs to the live instance, the requested features
         // were reported as supported, the swapchain extension is only requested for a device
         // that lists it, as are the pacing extensions, whose feature structures behind
@@ -1016,6 +1038,8 @@ mod tests {
         sampled_image_array_non_uniform_indexing: true,
         descriptor_binding_partially_bound: true,
         descriptor_binding_sampled_image_update_after_bind: true,
+        synchronization2: true,
+        dynamic_rendering: true,
         max_update_after_bind_sampled_images: BITMAP_SLOTS,
         max_work_group_invocations: 256,
         max_work_group_size: [16, 16],
@@ -1073,7 +1097,7 @@ mod tests {
 
     #[test]
     fn each_missing_requirement_is_named() {
-        let cases: [(DeviceCaps, &str); 9] = [
+        let cases: [(DeviceCaps, &str); 11] = [
             (old(), "Vulkan 1.3 (supports 1.1)"),
             (
                 DeviceCaps {
@@ -1109,6 +1133,20 @@ mod tests {
                     ..CAPABLE
                 },
                 "feature descriptorBindingSampledImageUpdateAfterBind",
+            ),
+            (
+                DeviceCaps {
+                    synchronization2: false,
+                    ..CAPABLE
+                },
+                "feature synchronization2",
+            ),
+            (
+                DeviceCaps {
+                    dynamic_rendering: false,
+                    ..CAPABLE
+                },
+                "feature dynamicRendering",
             ),
             (
                 DeviceCaps {
