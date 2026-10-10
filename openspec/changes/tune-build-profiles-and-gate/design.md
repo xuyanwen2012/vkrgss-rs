@@ -61,3 +61,10 @@
 
 - Dependency advisories and licences (`cargo deny`), in a later change.
 - `missing_docs`, once the number of reports is known.
+
+## Measured
+
+One run each on the development machine, with a warm build directory and the Vulkan tests on
+llvmpipe.
+
+- Before the change (four steps, no profiles): 83.4 s in total, of which the test step 82.4 s.

@@ -2,8 +2,8 @@
 
 ## 1. Profiles (root `Cargo.toml`)
 
-- [ ] 1.1 Measure the gate once on the unchanged tree with a warm build directory and note the total and the test step's time under "Measured" in `design.md`. Verify: the note is there.
-- [ ] 1.2 Add the `dev`, `release` and `profiling` profiles. Verify: the scenarios of "Build profiles" in `specs/workspace-structure/spec.md`; `cargo test --workspace --locked` passes with `VK_LOADER_DRIVERS_SELECT='*lvp*'`.
+- [x] 1.1 Measure the gate once on the unchanged tree with a warm build directory and note the total and the test step's time under "Measured" in `design.md`. Verify: the note is there.
+- [x] 1.2 Add the `dev`, `release` and `profiling` profiles. Verify: the scenarios of "Build profiles" in `specs/workspace-structure/spec.md`; `cargo test --workspace --locked` passes with `VK_LOADER_DRIVERS_SELECT='*lvp*'`.
 
 ## 2. Gate (`xtask`)
 

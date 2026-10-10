@@ -32,6 +32,23 @@ unsafe_op_in_unsafe_fn = "deny"
 all = { level = "warn", priority = -1 }
 undocumented_unsafe_blocks = "warn"
 
+# Development and test builds: debug assertions and overflow checks stay on, as `dev` has
+# them, and `test` inherits from `dev`.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+debug = "line-tables-only"
+
+[profile.profiling]
+inherits = "release"
+debug = true
+
 [workspace.dependencies]
 vkxp-proto = { path = "crates/vkxp-proto" }
 vkxp-pixel = { path = "crates/vkxp-pixel" }
