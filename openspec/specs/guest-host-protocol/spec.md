@@ -54,14 +54,6 @@ Geometry, colour and opacity values in messages SHALL be integers or fixed-point
 - **WHEN** the protocol types are inspected
 - **THEN** no field reachable from a message has a floating-point type
 
-### Requirement: Reserved ops are rejected explicitly
-A backend that receives an op kind it does not implement SHALL return a typed unsupported-op
-error naming the kind, and SHALL NOT silently skip it.
-
-#### Scenario: Reserved op kind
-- **WHEN** a packet contains a reserved op kind
-- **THEN** the backend returns an unsupported-op error and produces no frame
-
 ### Requirement: Input snapshot
 The host SHALL deliver input to the guest as a snapshot value containing the complete logical
 button state, and a recorded sequence of snapshots SHALL be replayable as input. The logical
@@ -192,3 +184,15 @@ step. The protocol version SHALL be 6, and the op SHALL no longer be a reserved 
 #### Scenario: Version
 - **WHEN** the protocol version constant is read
 - **THEN** it is 6
+
+### Requirement: Every op kind is implemented
+The protocol SHALL contain only op kinds that both backends evaluate. The protocol version
+SHALL be 7.
+
+#### Scenario: Version 6 stream
+- **WHEN** a decoder reads a stream that declares protocol version 6
+- **THEN** it returns the unsupported-version error naming 6 and 7
+
+#### Scenario: Round trip of each kind
+- **WHEN** one op of each kind is encoded and decoded
+- **THEN** each comes back equal, and both backends accept a packet that holds them
