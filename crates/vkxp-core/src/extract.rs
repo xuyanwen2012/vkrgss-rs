@@ -421,6 +421,12 @@ impl Scene {
         self.frame_rate = FrameRate::clamped(fps);
     }
 
+    /// Takes the compositor to have none of the scene's tables, so that the next frame sends
+    /// every table its tilemap ops read. For a compositor that starts anew.
+    pub fn resend_tables(&mut self) {
+        self.tables = Default::default();
+    }
+
     /// Assembles the next frame: the ops of every visible element in draw order, and before
     /// them the bitmap deltas for exactly the bitmaps those ops refer to and the table deltas
     /// for the tables the tilemap ops read.

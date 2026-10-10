@@ -63,13 +63,24 @@ fn frame() -> Frame {
     scene_testing::with_scene(|scene, bitmaps| {
         let mut scene = scene.clone();
         let mut bitmaps = bitmaps.clone();
+        // The compositor below starts without tables, as it starts without bitmaps.
+        scene.resend_tables();
         let mut packet = scene.extract(&mut bitmaps);
         let mut referenced = Vec::new();
         for op in &packet.ops {
-            if let Op::Quad(quad) = op
-                && !referenced.contains(&quad.bitmap)
-            {
-                referenced.push(quad.bitmap);
+            let (quad, sheets) = match op {
+                Op::Quad(quad) => (Some(quad.bitmap), [None; 8]),
+                Op::TilemapLayer(layer) => {
+                    let mut sheets = [layer.tileset; 8];
+                    sheets[1..].copy_from_slice(&layer.autotiles);
+                    (None, sheets)
+                }
+                _ => continue,
+            };
+            for id in sheets.into_iter().flatten().chain(quad) {
+                if !referenced.contains(&id) {
+                    referenced.push(id);
+                }
             }
         }
         packet.bitmaps = referenced
