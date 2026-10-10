@@ -572,9 +572,12 @@ prints how long each step took, after the step and once more for all of them at 
 | `doc` | `cargo doc --workspace --no-deps --locked` with `RUSTDOCFLAGS=-D warnings` |
 | `openspec` | `openspec validate --all` |
 
-`--locked` makes a step fail, without rewriting `Cargo.lock`, when a manifest asks for something
-the lock file does not hold. The toolchain is pinned in `rust-toolchain.toml`. The `openspec`
-CLI must be on `PATH`.
+The `clippy`, `test` and `doc` steps pass `--locked`, so none of them rewrites `Cargo.lock`. The
+command above does not yet fail on a lock file that is out of date, though: `cargo xtask` is an
+alias for `cargo run`, which is not locked and brings the lock file up to date before the gate
+starts. Check `git status` for a changed `Cargo.lock` after a run.
+
+The toolchain is pinned in `rust-toolchain.toml`. The `openspec` CLI must be on `PATH`.
 
 ## Dependency rules
 
