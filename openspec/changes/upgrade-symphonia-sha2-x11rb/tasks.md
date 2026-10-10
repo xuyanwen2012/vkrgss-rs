@@ -2,7 +2,7 @@
 
 ## 1. Upgrades
 
-- [ ] 1.1 `sha2` 0.11. Verify: `cargo test -p vkxp-ruby-sys --locked` passes.
+- [x] 1.1 `sha2` 0.11. Verify: `cargo test -p vkxp-ruby-sys --locked` passes.
 - [ ] 1.2 `x11rb` 0.14. Verify: `cargo test -p xtask --locked` and `cargo clippy -p xtask --all-targets --locked -- -D warnings` pass.
 - [ ] 1.3 `symphonia` 0.6, by the rule of `design.md`. Verify: `cargo test -p vkxp-audio --locked` passes; the outcome is under "Checked" in `design.md`.
 
