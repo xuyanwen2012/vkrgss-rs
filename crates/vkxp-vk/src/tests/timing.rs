@@ -5,7 +5,7 @@ use vkxp_compose_ref::fixtures::{self, bitmap, sprite};
 use vkxp_proto::{BitmapId, FramePacket, FrameRate, Op, Rect, Size};
 
 use super::harness::{TestCompositor, assert_clean, test_device};
-use crate::{ValidationLog, VkCompositor};
+use crate::{ValidationLog, VkCompositor, VkError};
 
 const SIZE: Size = Size::new(20, 18);
 const ID: BitmapId = BitmapId::new(0, 0);
@@ -76,6 +76,28 @@ fn rejected_frame_has_no_timing() {
     compositor.render(&frame_with_an_upload()).unwrap();
     // The bitmap exists already, so the same packet is invalid now.
     compositor.render(&frame_with_an_upload()).unwrap_err();
+    assert_eq!(compositor.take_frame_timing(), None);
+}
+
+/// A packet refused for its size, before anything else is looked at, leaves no timing
+/// either: not its own and not that of the frame before it.
+#[test]
+fn frame_of_an_invalid_size_drops_the_timing_of_the_frame_before() {
+    let mut compositor = TestCompositor::new();
+    compositor.set_frame_timing(true);
+    let mut packet = FramePacket {
+        bitmaps: Vec::new(),
+        ops: Vec::new(),
+        logical_size: Size::new(1, 1),
+        ..frame_with_an_upload()
+    };
+    compositor.render(&packet).unwrap();
+    packet.logical_size = Size::new(0, 1);
+    let error = compositor.render(&packet).unwrap_err();
+    assert!(
+        matches!(error, VkError::InvalidLogicalSize { .. }),
+        "{error}"
+    );
     assert_eq!(compositor.take_frame_timing(), None);
 }
 

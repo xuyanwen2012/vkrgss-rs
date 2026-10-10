@@ -605,9 +605,9 @@ impl VkCompositor {
     /// this backend. A limit met by a delta behaves like an invalid delta; a limit met by the
     /// frame as a whole leaves every delta applied.
     pub fn render(&mut self, packet: &FramePacket) -> Result<(), VkError> {
-        check_logical_size(packet.logical_size)?;
-        // What an earlier frame left is not this frame's.
+        // What an earlier frame left is not this frame's, also when this one is refused.
         self.frame_timing = None;
+        check_logical_size(packet.logical_size)?;
         let mut pending = Pending::default();
         let prepared = self
             .queue_deltas(&packet.bitmaps, &mut pending)
