@@ -6,7 +6,7 @@
 
 ## 2. Documents
 
-- [ ] 2.1 Describe the rows in `README.md`. Verify: the README names the four rows.
+- [x] 2.1 Describe the rows in `README.md`. Verify: the README names the four rows.
 
 ## 3. Integration check
 

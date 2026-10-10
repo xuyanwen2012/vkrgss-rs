@@ -397,7 +397,7 @@ measured for and its mean, smallest and largest duration in milliseconds:
 
 | Row | What it measures |
 |---|---|
-| `guest` | The host's wait from answering a frame to receiving the next one: the game's scripts, its bitmap operations and the extraction of the frame. The host holds back its answer until the frame's period is over, so the game's side never sleeps and this is its work alone, in a window as in a headless run. The first frame follows no answer and is not counted. |
+| `guest` | The host's wait from answering a frame to receiving the next one: the game's scripts, its bitmap operations and the extraction of the frame. The host holds back its answer until the frame's period is over, so the game's side never sleeps and this is its work alone, in a window as in a headless run. The first frame follows no answer and is not counted. The guest's own rows, below, split this work. |
 | `encode` | Checking the frame's ops and encoding them for the shader. |
 | `bin` | Assigning the ops to the 16x16 tiles they touch. |
 | `upload` | Copying the changed bitmap pixels and the frame's data into buffers and recording the commands. |
@@ -411,8 +411,36 @@ rows count no frames on a device whose queue has no timestamps, and a headless r
 nothing, so its `present` rows count none either. On llvmpipe the device is the processor
 and its timestamps say little.
 
-The `guest` row is not split further. To see where the game's side spends its time, build
-with the `profiling` profile, which is the release build with full debug information, and
+The guest measures its own frames as well and writes a second block at the same moments,
+every 600 frames and when the game's side ends, a little before or after the host's:
+
+```text
+vkxp: guest frame times over 600 frame(s):
+vkxp:   guest scripts: 600 frame(s), mean 2.104 ms, smallest 1.730 ms, largest 6.412 ms
+vkxp:   guest bitmap operations: 600 frame(s), mean 0.611 ms, smallest 0.000 ms, largest 2.250 ms
+vkxp:   guest text: 600 frame(s), mean 0.402 ms, smallest 0.000 ms, largest 1.981 ms
+vkxp:   guest extraction: 600 frame(s), mean 0.118 ms, smallest 0.094 ms, largest 0.530 ms
+```
+
+A frame of the guest lasts from the moment the wait for one frame's tick returns to the start
+of the wait for the next, so the wait itself is in no row, and what the game does before its
+first frame is not counted. Every row counts every such frame, one in which the part took no
+time too.
+
+| Row | What it measures |
+|---|---|
+| `guest scripts` | The frame without the three parts below: the game's scripts in the interpreter, and everything else the guest does for them, such as loading and decoding a picture. |
+| `guest bitmap operations` | The time inside the `Bitmap` methods `blt`, `stretch_blt`, `fill_rect`, `clear`, `hue_change`, `get_pixel` and `set_pixel`. |
+| `guest text` | The time inside `Bitmap#draw_text` and `Bitmap#text_size`. |
+| `guest extraction` | Extracting the frame from the scene, with the changed bitmap pixels, and handing it to the host. |
+
+A call inside another measured call belongs to the outer one, so no time is counted twice.
+For what the game's side costs, read these four rows: the host's `guest` row is a wait seen
+from the other side, and in a headless run the guest is often ahead of the host, so that row
+is smaller than their sum. The clock is read for this report only; no script can see it.
+
+The four rows are not split by method. To see more of where the game's side spends its time,
+build with the `profiling` profile, which is the release build with full debug information, and
 use a profiler. With `perf`, on a headless run, which does not wait between frames:
 
 ```sh
