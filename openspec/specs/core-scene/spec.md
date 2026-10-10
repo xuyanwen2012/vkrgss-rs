@@ -371,9 +371,7 @@ For every visible cell whose entry in the flash data table is 0 or more and has 
 nibble among its lowest twelve bits, a tilemap SHALL add to what lies below the ground layer's
 top, per channel and saturating at 255, the nibble (red, green, blue from the high to the low
 end of those bits) times `m = 4 + [0, 1, 2, 3, 4, 3, 2, 1][(u / 4) % 8]`, with `u` the number
-of updates of that tilemap. Bits 12 to 14 SHALL be ignored and a negative entry SHALL draw
-nothing. A flash table of another size than the map SHALL be indexed from the first visible
-column and row, wrapped by the map's size, counted on modulo the flash table's size.
+of updates of that tilemap.
 
 #### Scenario: Flashing cell
 - **WHEN** the flash data holds `0xF00` for one cell and the tilemap is rendered
@@ -391,6 +389,11 @@ column and row, wrapped by the map's size, counted on modulo the flash table's s
 - **WHEN** the tilemap's origin is moved by 16 pixels
 - **THEN** the overlay moves with its cell
 
+### Requirement: Flash entries and flash tables of another size
+Bits 12 to 14 of a flash entry SHALL be ignored and a negative entry SHALL draw nothing. A
+flash table of another size than the map SHALL be indexed from the first visible column and
+row, wrapped by the map's size, counted on modulo the flash table's size.
+
 #### Scenario: Flash table of another size
 - **WHEN** a map of 7 by 5 cells has a flash table of 5 by 4 and ox is 0, 40, 264, -50 and -300
 - **THEN** the screen columns from the one that holds pixel ox use the flash columns starting 0, 1, 1, 0 and 4, each counted on modulo 5
@@ -400,16 +403,18 @@ A sprite whose angle is a multiple of 360 SHALL be extracted as a stretch quad w
 `dw = floor(w * zoom_x)`, `dh = floor(h * zoom_y)`, `x0 = floor(x - ox * zoom_x)` and
 `y0 = floor(y - oy * zoom_y)`, computed in 32-bit floating point with the zoom values rounded
 to that precision first, `w` and `h` being the size of its source rectangle, and with the
-mirror flag for a mirrored sprite. A zoom of 0 or less SHALL draw nothing. When the sprite is stretched on
-either axis and its source rectangle leaves the bitmap, the columns and rows SHALL be those
-the original draws for a cut rectangle: with `a` the first index of the rectangle inside the
-bitmap, the first column is `a * dw / w` and the walk starts anew at `a`; a rectangle cut on
-the far side ends at column `(b * dw - 1) / w`; a mirrored rectangle is mirrored before it is
-cut.
+mirror flag for a mirrored sprite. A zoom of 0 or less SHALL draw nothing.
 
 #### Scenario: Measured frames
 - **WHEN** each committed case of zoom, origin, mirror and source rectangle measured on the original runtime is extracted and rendered
 - **THEN** the listed pixels equal the measured ones
+
+### Requirement: Stretched sprites with a cut source rectangle
+When an unrotated sprite is stretched on either axis and its source rectangle leaves the
+bitmap, the columns and rows SHALL be those the original draws for a cut rectangle: with `a`
+the first index of the rectangle inside the bitmap, the first column is `a * dw / w` and the
+walk starts anew at `a`; a rectangle cut on the far side ends at column `(b * dw - 1) / w`; a
+mirrored rectangle is mirrored before it is cut.
 
 #### Scenario: Cut source rectangles
 - **WHEN** each row of the table of measured columns in the design (source rectangles leaving a 24 by 16 bitmap on each side, zooms 2, 1 by 2, 2 by 1 and 2.5 by 3, mirrored and not) is extracted and rendered
@@ -428,13 +433,7 @@ and are not scaled by the zoom.
 
 ### Requirement: Bush depth and flash details of the original
 The bush depth SHALL select the lowest screen rows of a sprite, as many as the bush depth and
-not scaled by the vertical zoom, and draw them with the opacity shifted right by one. For an
-unrotated sprite of source height `h` drawn `dh` rows high, with `bd = min(depth, dh)` and
-`sb = bd * h / dh` in integer division, the upper `dh - bd` rows SHALL be the stretch of the
-source rows above the lowest `sb` and the lower `bd` rows the stretch of those `sb` rows, each
-stretched on its own, and with `sb = 0` the lower rows SHALL not be drawn. For a sprite with
-an angle the faint rows SHALL be those of its unclipped bounding box, whatever texels they
-show.
+not scaled by the vertical zoom, and draw them with the opacity shifted right by one.
 A flash's alpha SHALL become `alpha * (r - 1) / r` in integer division at each update with `r`
 frames remaining; a flash of duration 0 SHALL show until the first update; and the flash colour
 SHALL replace the sprite's colour when its alpha is greater than or equal to the colour's.
@@ -446,6 +445,15 @@ SHALL replace the sprite's colour when its alpha is greater than or equal to the
 #### Scenario: Decay
 - **WHEN** a flash with alpha 128 and duration 5 is updated five times
 - **THEN** its alpha is 128, 102, 76, 50, 25 and then 0
+
+### Requirement: Bush rows of zoomed and turned sprites
+For an
+unrotated sprite of source height `h` drawn `dh` rows high, with `bd = min(depth, dh)` and
+`sb = bd * h / dh` in integer division, the upper `dh - bd` rows SHALL be the stretch of the
+source rows above the lowest `sb` and the lower `bd` rows the stretch of those `sb` rows, each
+stretched on its own, and with `sb = 0` the lower rows SHALL not be drawn. For a sprite with
+an angle the faint rows SHALL be those of its unclipped bounding box, whatever texels they
+show.
 
 #### Scenario: Zoomed bush rows
 - **WHEN** a sprite of 16 rows is drawn with vertical zoom 2 and bush depth 3, and with vertical zoom 2 and bush depth 1
@@ -553,10 +561,7 @@ double precision: its rotated corners, rounded with `floor(v + 0.5)`, give a bou
 whose last row and column are not drawn; in each row the source position is computed at the
 box's left edge and advanced by a constant step per pixel; a pixel shows the texel at the
 truncated position when that is inside the source rectangle. Opacity, blend mode, tone and
-colour SHALL apply as for an unrotated sprite. Inside a viewport the bounding box
-SHALL be computed from the position less the viewport's origin and placed at the viewport's
-corner, while the source positions are computed from the position itself. A sprite with an
-angle whose source rectangle does not lie entirely inside its bitmap SHALL not be drawn.
+colour SHALL apply as for an unrotated sprite.
 
 #### Scenario: Measured frames
 - **WHEN** each committed rotation case measured on the original runtime (right angles, 360, generic angles, zoom, mirror, a source rectangle, a sprite partly off screen) is extracted and rendered
@@ -565,6 +570,12 @@ angle whose source rectangle does not lie entirely inside its bitmap SHALL not b
 #### Scenario: Full turn is not the unrotated path
 - **WHEN** a sprite has angle 360
 - **THEN** it is drawn by this rule, with the last row and column of its box missing
+
+### Requirement: Turned sprites in viewports and with cut source rectangles
+Inside a viewport the bounding box of a sprite with an angle SHALL be computed from the
+position less the viewport's origin and placed at the viewport's corner, while the source
+positions are computed from the position itself. A sprite with an angle whose source rectangle
+does not lie entirely inside its bitmap SHALL not be drawn.
 
 #### Scenario: Viewport with an origin
 - **WHEN** each committed case of a turned sprite in a viewport measured on the original runtime (origins (0,0), (13,7), (-9,-5) and (100,-50), viewports partly off screen) is extracted and rendered
