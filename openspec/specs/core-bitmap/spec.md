@@ -117,8 +117,8 @@ drawn, at the offset it has within the rectangle, and only where it lands inside
 - **THEN** its first two columns draw nothing and the third column lands 2 pixels right of the given position
 
 #### Scenario: Source and destination are the same bitmap
-- **WHEN** a rectangle is transferred within one bitmap to an overlapping position
-- **THEN** the result equals transferring from an unchanged copy of the bitmap
+- **WHEN** the row of pixels `a b c d e f` is transferred within its bitmap from columns 0 to 3 to columns 1 to 4 at opacity 255
+- **THEN** the row is `a a a a a f`, and a transfer from columns 1 to 4 to columns 0 to 3 of the same row gives `b c d e e f`
 
 ### Requirement: Stretched block transfer
 A stretched transfer SHALL draw a source rectangle scaled into a destination rectangle with
@@ -328,3 +328,13 @@ height.
 #### Scenario: Measured levels
 - **WHEN** each committed squeeze sample measured on the original runtime is evaluated
 - **THEN** the drawn widths at the four steps equal the measured ones
+
+### Requirement: Transfers within one bitmap work in place
+A block transfer or stretched block transfer whose source and destination are the same bitmap
+SHALL write the destination rows from top to bottom and the pixels of a row from left to
+right, reading each source pixel as the bitmap is at that moment, pixels already written by
+the same transfer included.
+
+#### Scenario: Measured transfers
+- **WHEN** each committed case measured on the original runtime (shifts in every direction, both opacities, stretched to the same size, to twice and to half the size, a mirrored transfer) is carried out
+- **THEN** every pixel of the bitmap equals the measured one

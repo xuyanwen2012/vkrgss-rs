@@ -27,8 +27,9 @@ is disposed SHALL fail with a disposed error, and it SHALL no longer be drawn.
 
 ### Requirement: Draw order
 Elements SHALL be drawn in ascending order of z, so that an element with a larger z appears in
-front. Among elements with equal z, the one that was created, or last given a different z, more
-recently SHALL appear in front.
+front. Among elements with equal z, the one that was created more recently SHALL appear in
+front; assigning a z does not change the order among equals. A viewport takes its place among
+the top-level elements by its own z and its own creation.
 
 #### Scenario: Larger z in front
 - **WHEN** two overlapping opaque sprites have z 1 and z 2
@@ -40,11 +41,19 @@ recently SHALL appear in front.
 
 #### Scenario: Moving to an occupied z
 - **WHEN** the earlier-created of two sprites is moved to another z and then back to the shared z
-- **THEN** the overlap shows that sprite
+- **THEN** the overlap still shows the later-created sprite
 
 #### Scenario: Setting the same z again
 - **WHEN** the earlier-created of two sprites with equal z has its z set to the value it already has
 - **THEN** the overlap still shows the later-created sprite
+
+#### Scenario: Measured orders
+- **WHEN** each row of the unit-test table of the design (sprites, a plane, windows, viewports and a tilemap, with z taken away and back) is built and extracted
+- **THEN** the elements are drawn in the order the table gives for the original
+
+#### Scenario: Viewport older than a top-level sprite
+- **WHEN** a viewport is created, then a top-level sprite, then a sprite in the viewport, all with z 0
+- **THEN** the top-level sprite is drawn over the sprite in the viewport
 
 ### Requirement: Sprite placement
 A visible sprite with a bitmap SHALL draw its source rectangle so that the point of that
@@ -299,8 +308,9 @@ order. The map SHALL repeat in both directions beyond its edges.
 ### Requirement: Tile priorities
 A tile's priority SHALL be the priorities table's value for its identifier, 0 when the table
 has no such entry. Tiles of priority 0 SHALL be drawn at z 0 among the elements of the
-tilemap's viewport. A tile of priority p from 1 to 5 SHALL be drawn at the z given by its top
-edge's y position in the viewport plus `(p + 1) * 32`, so that it ranks among sprites by row.
+tilemap's viewport. A tile of priority p from 1 to 5 in map row R SHALL be drawn at
+`z = 32 * R - oy + 32 + 32 * p` with `oy` the tilemap's origin; the viewport's origin and
+rectangle do not enter. A tile whose priority is not 0 to 5 SHALL not be drawn.
 
 #### Scenario: Ground under sprites
 - **WHEN** a sprite with z 1 overlaps tiles of priority 0
@@ -318,6 +328,18 @@ edge's y position in the viewport plus `(p + 1) * 32`, so that it ranks among sp
 - **WHEN** a tile of priority 2 with its top edge at y 96 overlaps a sprite with z 191
 - **THEN** the tile is in front
 
+#### Scenario: Viewport origin
+- **WHEN** a tile of priority 1 in map row 1 is drawn with the tilemap's oy 0 in a viewport whose oy is 10
+- **THEN** its z is 96
+
+#### Scenario: Measured rows
+- **WHEN** the rows (R, p, oy) = (1, 1, 7), (2, 2, 32), (3, 3, 109), (-1, 5, -20) and (11, 5, 300) are drawn
+- **THEN** their z is 89, 128, 115, 180 and 244
+
+#### Scenario: Priority out of range
+- **WHEN** the priorities table holds 6, 9, -1 or 100 for a tile on the map
+- **THEN** the tile is not drawn, neither as ground nor in a row
+
 ### Requirement: Shared tables
 The tilemap SHALL show the contents its map data and priorities tables have at each extraction,
 including changes made to a table after it was assigned to the tilemap.
@@ -327,10 +349,10 @@ including changes made to a table after it was assigned to the tilemap.
 - **THEN** the next extracted frame shows the new tile, without the table being assigned again
 
 ### Requirement: Sprite bush depth
-A sprite with a bush depth greater than zero SHALL draw the lowest rows of its source
-rectangle, as many as the bush depth, with half of the opacity of the rows above, and the rest
-unchanged. A bush depth of zero or less SHALL change nothing, and one that exceeds the source
-height SHALL apply to the whole sprite.
+A sprite with a bush depth greater than zero SHALL draw the lowest screen rows of the box it
+covers, as many as the bush depth and not scaled by the vertical zoom, with half of the
+opacity of the rows above, and the rest unchanged. A bush depth of zero or less SHALL change
+nothing, and one that exceeds the height of the box SHALL apply to the whole sprite.
 
 #### Scenario: Lower part is fainter
 - **WHEN** an opaque white 32 by 32 sprite with bush depth 8 is drawn over black
@@ -338,41 +360,60 @@ height SHALL apply to the whole sprite.
 
 #### Scenario: With zoom
 - **WHEN** that sprite is drawn with a vertical zoom of 2
-- **THEN** the lower 16 screen rows are the fainter ones
+- **THEN** the lower 8 screen rows are the fainter ones
 
 #### Scenario: Zero
 - **WHEN** the bush depth is 0
 - **THEN** the frame equals that of a sprite without the property
 
 ### Requirement: Tilemap flash data
-For every map cell whose entry in the flash data table is non-zero, a tilemap SHALL draw a
-32 by 32 overlay above the cell's ground tiles in the colour the entry encodes, four bits each
-for red, green and blue from the high to the low end of its lowest twelve bits, with a strength
-that rises and falls as the tilemap is updated. Cells with a zero entry and a tilemap without
-flash data SHALL be drawn as before.
+For every visible cell whose entry in the flash data table is 0 or more and has a non-zero
+nibble among its lowest twelve bits, a tilemap SHALL add to what lies below the ground layer's
+top, per channel and saturating at 255, the nibble (red, green, blue from the high to the low
+end of those bits) times `m = 4 + [0, 1, 2, 3, 4, 3, 2, 1][(u / 4) % 8]`, with `u` the number
+of updates of that tilemap. Bits 12 to 14 SHALL be ignored and a negative entry SHALL draw
+nothing. A flash table of another size than the map SHALL be indexed from the first visible
+column and row, wrapped by the map's size, counted on modulo the flash table's size.
 
 #### Scenario: Flashing cell
-- **WHEN** the flash data holds `0xF00` for one cell and the tilemap is rendered at the strongest point of the pulse
+- **WHEN** the flash data holds `0xF00` for one cell and the tilemap is rendered
 - **THEN** that cell is redder than without the entry and its neighbours are unchanged
 
 #### Scenario: Pulse
-- **WHEN** the tilemap is updated repeatedly
-- **THEN** the strength of the overlay differs between at least two of the frames and repeats
+- **WHEN** a cell with `0xFFF` over black is drawn after 0, 4, 16, 28 and 32 updates
+- **THEN** each channel is 60, 75, 120, 75 and 60
+
+#### Scenario: Measured samples
+- **WHEN** the entries `0x7ABC` and `0xFFF` over (50, 100, 150) are drawn after 4 updates, `0xF00` over (204, 51, 110) after 44, and `-1` and `0x1000` over any colour
+- **THEN** the results are (100, 155, 210), (125, 175, 225), (255, 51, 110), and the colour unchanged for the last two
 
 #### Scenario: Scrolled map
 - **WHEN** the tilemap's origin is moved by 16 pixels
 - **THEN** the overlay moves with its cell
+
+#### Scenario: Flash table of another size
+- **WHEN** a map of 7 by 5 cells has a flash table of 5 by 4 and ox is 0, 40, 264, -50 and -300
+- **THEN** the screen columns from the one that holds pixel ox use the flash columns starting 0, 1, 1, 0 and 4, each counted on modulo 5
 
 ### Requirement: Unrotated sprites are stretched as in the original
 A sprite whose angle is a multiple of 360 SHALL be extracted as a stretch quad with
 `dw = floor(w * zoom_x)`, `dh = floor(h * zoom_y)`, `x0 = floor(x - ox * zoom_x)` and
 `y0 = floor(y - oy * zoom_y)`, computed in 32-bit floating point with the zoom values rounded
 to that precision first, `w` and `h` being the size of its source rectangle, and with the
-mirror flag for a mirrored sprite. A zoom of 0 or less SHALL draw nothing.
+mirror flag for a mirrored sprite. A zoom of 0 or less SHALL draw nothing. When the sprite is stretched on
+either axis and its source rectangle leaves the bitmap, the columns and rows SHALL be those
+the original draws for a cut rectangle: with `a` the first index of the rectangle inside the
+bitmap, the first column is `a * dw / w` and the walk starts anew at `a`; a rectangle cut on
+the far side ends at column `(b * dw - 1) / w`; a mirrored rectangle is mirrored before it is
+cut.
 
 #### Scenario: Measured frames
 - **WHEN** each committed case of zoom, origin, mirror and source rectangle measured on the original runtime is extracted and rendered
 - **THEN** the listed pixels equal the measured ones
+
+#### Scenario: Cut source rectangles
+- **WHEN** each row of the table of measured columns in the design (source rectangles leaving a 24 by 16 bitmap on each side, zooms 2, 1 by 2, 2 by 1 and 2.5 by 3, mirrored and not) is extracted and rendered
+- **THEN** the columns and rows drawn and the texels they show are those of the table
 
 ### Requirement: Planes tile a stretched tile
 A plane SHALL repeat a tile of width `tw = floor(w * zoom_x)` and height
@@ -386,8 +427,14 @@ and are not scaled by the zoom.
 - **THEN** the listed pixels equal the measured ones
 
 ### Requirement: Bush depth and flash details of the original
-The bush depth SHALL select the lowest screen rows of an unrotated sprite, as many as the bush
-depth and not scaled by the vertical zoom, and draw them with the opacity shifted right by one.
+The bush depth SHALL select the lowest screen rows of a sprite, as many as the bush depth and
+not scaled by the vertical zoom, and draw them with the opacity shifted right by one. For an
+unrotated sprite of source height `h` drawn `dh` rows high, with `bd = min(depth, dh)` and
+`sb = bd * h / dh` in integer division, the upper `dh - bd` rows SHALL be the stretch of the
+source rows above the lowest `sb` and the lower `bd` rows the stretch of those `sb` rows, each
+stretched on its own, and with `sb = 0` the lower rows SHALL not be drawn. For a sprite with
+an angle the faint rows SHALL be those of its unclipped bounding box, whatever texels they
+show.
 A flash's alpha SHALL become `alpha * (r - 1) / r` in integer division at each update with `r`
 frames remaining; a flash of duration 0 SHALL show until the first update; and the flash colour
 SHALL replace the sprite's colour when its alpha is greater than or equal to the colour's.
@@ -399,6 +446,14 @@ SHALL replace the sprite's colour when its alpha is greater than or equal to the
 #### Scenario: Decay
 - **WHEN** a flash with alpha 128 and duration 5 is updated five times
 - **THEN** its alpha is 128, 102, 76, 50, 25 and then 0
+
+#### Scenario: Zoomed bush rows
+- **WHEN** a sprite of 16 rows is drawn with vertical zoom 2 and bush depth 3, and with vertical zoom 2 and bush depth 1
+- **THEN** the first shows the source rows 0 0 1 1 up to 13 13 14 and then row 15 three times faint, and the second is 31 rows high, ending with row 15 once, with no faint row
+
+#### Scenario: Turned bush rows
+- **WHEN** the measured case of a 24 by 16 sprite at (240, 60) with origin (12, 8), zoom 2, angle 30 and bush depth 8 is extracted and rendered
+- **THEN** screen rows 35 to 77 are at full opacity and rows 78 to 85 faint
 
 ### Requirement: Window background as in the original
 A window with a skin SHALL draw the skin's 128 by 128 background into the rectangle inset by 2
@@ -498,7 +553,10 @@ double precision: its rotated corners, rounded with `floor(v + 0.5)`, give a bou
 whose last row and column are not drawn; in each row the source position is computed at the
 box's left edge and advanced by a constant step per pixel; a pixel shows the texel at the
 truncated position when that is inside the source rectangle. Opacity, blend mode, tone and
-colour SHALL apply as for an unrotated sprite.
+colour SHALL apply as for an unrotated sprite. Inside a viewport the bounding box
+SHALL be computed from the position less the viewport's origin and placed at the viewport's
+corner, while the source positions are computed from the position itself. A sprite with an
+angle whose source rectangle does not lie entirely inside its bitmap SHALL not be drawn.
 
 #### Scenario: Measured frames
 - **WHEN** each committed rotation case measured on the original runtime (right angles, 360, generic angles, zoom, mirror, a source rectangle, a sprite partly off screen) is extracted and rendered
@@ -507,6 +565,14 @@ colour SHALL apply as for an unrotated sprite.
 #### Scenario: Full turn is not the unrotated path
 - **WHEN** a sprite has angle 360
 - **THEN** it is drawn by this rule, with the last row and column of its box missing
+
+#### Scenario: Viewport with an origin
+- **WHEN** each committed case of a turned sprite in a viewport measured on the original runtime (origins (0,0), (13,7), (-9,-5) and (100,-50), viewports partly off screen) is extracted and rendered
+- **THEN** every pixel of the listed rows equals the measured one, and the cases with the origin (100,-50) draw nothing
+
+#### Scenario: Source rectangle leaving the bitmap
+- **WHEN** a sprite with angle 30 has the source rectangle (-1, 0, 24, 16) on a bitmap of 24 by 16
+- **THEN** nothing of it is drawn
 
 ### Requirement: Tiles are blended one by one
 Where several tiles of a tilemap cover the same screen pixel, each SHALL be blended onto the
