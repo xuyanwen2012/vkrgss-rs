@@ -1062,6 +1062,49 @@ fn masked_transition_is_the_masked_mix_with_the_mask_and_the_vagueness() {
     );
 }
 
+/// A transition that arrives before the frame that would end a masked one: its step 0 is the
+/// held frame alone, not the held frame under the mask that is still on the display.
+#[test]
+fn first_step_of_a_transition_that_follows_a_masked_one_drops_the_old_mask() {
+    for vague in [None, Some(7)] {
+        let mut rig = Rig::new();
+        rig.frame(frame(0));
+        rig.send(GuestToHost::Freeze);
+        rig.send(masked_transition(2, 40));
+        rig.frame(frame_with_mask(1));
+        rig.frame(frame(2));
+        let on_screen = masked(2, 127, 40);
+        assert_eq!(rig.shown(), on_screen);
+
+        rig.send(match vague {
+            Some(vague) => masked_transition(2, vague),
+            None => transition(2),
+        });
+        // Until a frame of the new transition is shown, the image on screen stays.
+        rig.session.display_mut().redraw().unwrap();
+        assert_eq!(rig.shown(), on_screen, "{vague:?}: before step 0");
+        assert_eq!(rig.send(invalid_frame(3)), []);
+        rig.wait_for_tick();
+        assert_eq!(rig.shown(), on_screen, "{vague:?}: step 0 rejected");
+        rig.session.display_mut().redraw().unwrap();
+        assert_eq!(rig.shown(), on_screen, "{vague:?}: redrawn after that");
+
+        rig.frame(frame(4));
+        assert_eq!(rig.shown(), Shown::Frame(0), "{vague:?}: step 0");
+        rig.session.display_mut().redraw().unwrap();
+        assert_eq!(rig.shown(), Shown::Frame(0), "{vague:?}: step 0 redrawn");
+        rig.frame(frame(5));
+        let step_1 = match vague {
+            Some(vague) => masked(5, 127, u32::from(vague)),
+            None => Shown::mix(Shown::Frame(0), 5, 127),
+        };
+        assert_eq!(rig.shown(), step_1, "{vague:?}: step 1");
+        rig.frame(frame(6));
+        assert_eq!(rig.shown(), Shown::Frame(6));
+        assert!(!rig.errors.text().contains("mask"), "{}", rig.errors.text());
+    }
+}
+
 /// The guest disposes of the picture when its transition returns, so the frame that ends the
 /// transition carries the destroy delta.
 #[test]

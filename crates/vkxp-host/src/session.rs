@@ -631,7 +631,11 @@ impl<D: Display, C: Clock> Session<D, C> {
         let mask_before = self.display_mask;
         if let Some((shown, duration, _, mix)) = step {
             self.display.set_mix(mix);
-            if (1..duration).contains(&shown) {
+            // Step 0 shows the held frame alone, so not under the mask of a transition that
+            // this one took over from either.
+            if shown == 0 {
+                self.show_mask(None);
+            } else if shown < duration {
                 self.show_mask(self.mask);
             }
         }
