@@ -8,4 +8,4 @@
 
 ## 2. Integration check
 
-- [ ] 2.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' env --default-signal=INT cargo xtask gate` exits 0 and `openspec validate upgrade-symphonia-sha2-x11rb --strict` passes.
+- [x] 2.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' env --default-signal=INT cargo xtask gate` exits 0 and `openspec validate upgrade-symphonia-sha2-x11rb --strict` passes.
