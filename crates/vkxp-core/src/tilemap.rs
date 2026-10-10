@@ -16,10 +16,10 @@
 //! again only when they were written to; scrolling and animation send nothing. The
 //! priorities are sent as they are: no op draws a tile whose priority is not 0 to 5.
 //!
-//! The cells the flash data marks are filled with their colour, at the alpha of the pulse,
-//! in a bitmap of the scene's own that covers the visible cells and one more column and row,
-//! which is drawn additively right above the ground. It is filled again when the flash data,
-//! the first cell or the pulse changes.
+//! The cells the flash data marks are filled with their colour, at the strength of the
+//! pulse, in a bitmap of the scene's own that covers the visible cells and one more column
+//! and row, which is drawn additively right above the ground. It is filled again when the
+//! flash data, the first cell or the pulse changes.
 
 use vkxp_proto::tiles::{self, QUARTER_SIZE, Sheet, TILE_SIZE};
 use vkxp_proto::{BitmapId, BlendMode, Op, Size, TableDelta, TableId, TilemapLayer};
@@ -36,8 +36,10 @@ const LAYERS: usize = 3;
 const MAX_PRIORITY: usize = 5;
 /// Number of updates one animation frame of an autotile stays.
 const ANIMATION_PERIOD: u64 = 16;
-/// Number of updates one pulse of the flash data takes.
-const FLASH_PERIOD: u64 = 32;
+/// What a nibble of the flash data is multiplied by, less 4, step by step of the pulse.
+const FLASH_PULSE: [u8; 8] = [0, 1, 2, 3, 4, 3, 2, 1];
+/// Number of updates one step of the pulse of the flash data stays.
+const FLASH_STEP: u64 = 4;
 
 /// What a table is to the tilemap it was sent for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -183,10 +185,11 @@ impl SentTables {
 /// What the flash overlay was filled from.
 #[derive(Debug, Clone, PartialEq)]
 struct FlashKey {
-    first: (i64, i64),
+    /// The cell of the map in the top-left corner of the overlay.
+    start: (i64, i64),
     cells: (i32, i32),
     table: (SharedTable, u64),
-    alpha: u8,
+    multiplier: u8,
 }
 
 /// What this frame draws of a tilemap.
@@ -285,33 +288,32 @@ fn shows(id: i16, sheet: Size, animation_step: u64) -> bool {
     texels.any(|texel| texel.is_some())
 }
 
-/// The alpha the flashing cells are drawn with after `updates` updates: it rises from 0 to
-/// 255 in 16 updates and falls back in 16 more.
-///
-/// PLACEHOLDER: curve, period and peak of the pulse are not yet measured on the original
-/// runtime; neither is how the overlay is blended.
-fn flash_alpha(updates: u64) -> u8 {
-    let step = updates % FLASH_PERIOD;
-    let strength = step.min(FLASH_PERIOD - step);
-    // At most 255, at the middle of the period.
-    (strength * 255 / (FLASH_PERIOD / 2)) as u8
+/// What the nibbles of the flashing cells are multiplied by after `updates` updates: from 4
+/// to 8 and back in 32 updates, each value for 4 of them, as measured on the original
+/// runtime.
+fn flash_multiplier(updates: u64) -> u8 {
+    // An index below 8.
+    4 + FLASH_PULSE[(updates / FLASH_STEP % FLASH_PULSE.len() as u64) as usize]
 }
 
 impl Tilemap {
-    /// Brings the flash overlay up to date for the `cells` covered from cell `first` on.
-    fn refresh_flash(&mut self, bitmaps: &mut Bitmaps, first: (i64, i64), cells: (i32, i32)) {
+    /// Brings the flash overlay up to date for the `cells` covered from the cell `start` of
+    /// the map on.
+    fn refresh_flash(&mut self, bitmaps: &mut Bitmaps, start: (i64, i64), cells: (i32, i32)) {
         let key = self.flash_data.as_ref().map(|table| FlashKey {
-            first,
+            start,
             cells,
             table: (table.clone(), table.revision()),
-            alpha: flash_alpha(self.updates),
+            multiplier: flash_multiplier(self.updates),
         });
         let lost = self.cache.flash.is_some_and(|id| bitmaps.is_disposed(id));
         if self.cache.flash_key == key && !lost {
             return;
         }
 
-        // The flash data repeats beyond its edges as the map does.
+        // As measured on the original runtime, the first cell is one of the map, and from
+        // it on the flash data is counted through, repeating after its own size. A negative
+        // entry draws nothing, and bits 12 to 14 are not part of the colour.
         let mut flashing = Vec::new();
         if let Some(key) = &key {
             let table = key.table.0.read();
@@ -322,10 +324,10 @@ impl Tilemap {
                         continue;
                     }
                     // Remainders of sizes that are `i32`.
-                    let x = (first.0 + i64::from(column)).rem_euclid(xsize) as i32;
-                    let y = (first.1 + i64::from(row)).rem_euclid(ysize) as i32;
+                    let x = (start.0 + i64::from(column)).rem_euclid(xsize) as i32;
+                    let y = (start.1 + i64::from(row)).rem_euclid(ysize) as i32;
                     let entry = table.get(x, y, 0).unwrap_or(0);
-                    if entry != 0 {
+                    if entry > 0 && entry & 0xfff != 0 {
                         flashing.push((column, row, entry));
                     }
                 }
@@ -336,14 +338,11 @@ impl Tilemap {
         TileCache::prepare(layer, bitmaps, wanted, cells.0 * TILE, cells.1 * TILE);
         if let (Some(bitmap), Some(key)) = (self.cache.flash, &key) {
             for (column, row, entry) in flashing {
-                // Four bits each, which 17 spreads over 0 to 255.
-                let component = |shift: u32| f64::from((entry >> shift & 0xf) * 17);
-                let color = Color::new(
-                    component(8),
-                    component(4),
-                    component(0),
-                    f64::from(key.alpha),
-                );
+                // Four bits each, times the pulse: 120 at most. At full alpha the additive
+                // blend adds just that.
+                let multiplier = i16::from(key.multiplier);
+                let component = |shift: u32| f64::from((entry >> shift & 0xf) * multiplier);
+                let color = Color::new(component(8), component(4), component(0), 255.0);
                 let cell = Rect::new(column * TILE, row * TILE, TILE, TILE);
                 // The bitmap was just made or cleared.
                 let _ = bitmaps.fill_rect(bitmap, cell, color);
@@ -400,7 +399,11 @@ impl Tilemap {
             clip.width.div_ceil(TILE as u32) as i32 + 1,
             clip.height.div_ceil(TILE as u32) as i32 + 1,
         );
-        self.refresh_flash(bitmaps, first, cells);
+        let start = (
+            first.0.rem_euclid(i64::from(xsize)),
+            first.1.rem_euclid(i64::from(ysize)),
+        );
+        self.refresh_flash(bitmaps, start, cells);
 
         let live = |id: Option<BitmapId>| {
             let rect = bitmaps.rect(id?).ok()?;

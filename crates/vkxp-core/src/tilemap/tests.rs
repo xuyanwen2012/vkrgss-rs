@@ -1246,7 +1246,7 @@ fn flashing() -> (Stage, TilemapId, SharedTable) {
     (stage, id, flash)
 }
 
-/// Whether `frame` is `plain` with `color` added at full strength to the 32 by 32 pixels
+/// Whether `frame` is `plain` with `color` added to the 32 by 32 pixels
 /// at (`left`, `top`), as far as they are on the screen, and nothing else.
 fn flashes(frame: &Frame, plain: &Frame, (left, top): (i32, i32), color: Rgba) -> bool {
     (0..frame.size.height).all(|y| {
@@ -1269,21 +1269,22 @@ fn a_cell_with_a_flash_entry_is_tinted_and_its_neighbours_are_not() {
     let plain = stage.frame();
     flash.set(1, 1, 0, 0xf00);
     let frame = stage.frame();
-    assert!(flashes(&frame, &plain, (32, 32), [255, 0, 0, 255]));
+    assert!(flashes(&frame, &plain, (32, 32), [120, 0, 0, 255]));
     let (tinted, before) = (frame.pixel(40, 40), plain.pixel(40, 40));
     assert!(tinted[0] > before[0], "redder");
     assert_eq!(tinted[1..], before[1..]);
 
-    // Four bits each for red, green and blue; higher bits are not part of the colour.
+    // Four bits each for red, green and blue, times 8 at the strongest point; bits 12 to
+    // 14 are not part of the colour.
     flash.set(1, 1, 0, 0x48c);
-    assert!(flashes(
-        &stage.frame(),
-        &plain,
-        (32, 32),
-        [68, 136, 204, 255]
-    ));
+    assert!(flashes(&stage.frame(), &plain, (32, 32), [32, 64, 96, 255]));
     flash.set(1, 1, 0, 0x7000 + 0x00f);
-    assert!(flashes(&stage.frame(), &plain, (32, 32), [0, 0, 255, 255]));
+    assert!(flashes(&stage.frame(), &plain, (32, 32), [0, 0, 120, 255]));
+    // A negative entry, and one without a colour, draw nothing.
+    for entry in [-1, -2, -0x0edd, -0x8000, 0x1000, 0x7000] {
+        flash.set(1, 1, 0, entry);
+        assert_eq!(stage.frame().rgba, plain.rgba, "{entry}");
+    }
 
     // Back at zero, and without flash data, the tilemap is drawn as before.
     flash.set(1, 1, 0, 0);
@@ -1296,26 +1297,195 @@ fn a_cell_with_a_flash_entry_is_tinted_and_its_neighbours_are_not() {
     stage.assert_pinned("a_cell_with_a_flash_entry_is_tinted_and_its_neighbours_are_not");
 }
 
+/// The lines of part `part` of the samples measured on the original runtime.
+fn flash_samples(part: u32) -> impl Iterator<Item = &'static str> {
+    const SAMPLES: &str = include_str!("../../tests/data/tilemap-flash-samples.txt");
+    let from = SAMPLES.find(&format!("# Part {part}:")).unwrap();
+    let lines = SAMPLES[from..].lines().skip(1);
+    lines
+        .take_while(|line| !line.starts_with("# Part"))
+        .filter(|line| !line.starts_with('#'))
+}
+
+/// The numbers in `text`, in order.
+fn numbers(text: &str) -> Vec<i32> {
+    let words = text.split(|c: char| !c.is_ascii_digit() && c != '-');
+    words.filter_map(|word| word.parse().ok()).collect()
+}
+
+/// A stage of one cell without a tile, over a sprite of the colour `below` with z -1, whose
+/// flash data holds `entry`, after `updates` updates.
+fn flashing_cell(updates: u64, entry: i64, below: Rgba) -> (Stage, TilemapId) {
+    let mut stage = Stage::sized(32, 32);
+    let bitmap = stage.solid(32, 32, below);
+    let sprite = stage.scene.create_sprite(None).unwrap();
+    let sprite_mut = stage.scene.sprite_mut(sprite).unwrap();
+    sprite_mut.set_bitmap(Some(bitmap), &stage.bitmaps);
+    stage.scene.set_sprite_z(sprite, -1).unwrap();
+    let id = stage.scene.create_tilemap(None).unwrap();
+    let flash = SharedTable::new(Table::new_2d(1, 1).unwrap());
+    flash.set(0, 0, 0, entry);
+    let tilemap = stage.scene.tilemap_mut(id).unwrap();
+    tilemap.map_data = Some(map(1, 1));
+    tilemap.flash_data = Some(flash);
+    for _ in 0..updates {
+        tilemap.update();
+    }
+    (stage, id)
+}
+
+/// What a [`flashing_cell`] shows.
+fn flashed(updates: u64, entry: i64, below: Rgba) -> Rgba {
+    let (mut stage, _) = flashing_cell(updates, entry, below);
+    let frame = stage.frame();
+    assert!(all(&frame, frame.pixel(0, 0)));
+    frame.pixel(0, 0)
+}
+
 #[test]
 fn the_flash_pulses_with_the_updates_of_the_tilemap() {
-    let (mut stage, id, flash) = flashing();
-    flash.set(0, 0, 0, 0xfff);
+    for (updates, added) in [(0, 60), (4, 75), (16, 120), (28, 75), (32, 60)] {
+        let expected = [added, added, added, 255];
+        assert_eq!(flashed(updates, 0xfff, BLACK), expected, "{updates}");
+    }
+
+    // Every value stays for 4 updates, and without an update it stays.
+    let (mut stage, id) = flashing_cell(0, 0x888, BLACK);
     let mut reds = Vec::new();
     for _ in 0..80 {
-        // Without an update the strength stays.
         let red = stage.frame().pixel(8, 8)[0];
         assert_eq!(stage.frame().pixel(8, 8)[0], red);
         reds.push(red);
+        // Neither new flash data nor a second tilemap starts the pulse again.
+        let flash = SharedTable::new(Table::new_2d(1, 1).unwrap());
+        flash.set(0, 0, 0, 0x888);
+        stage.scene.tilemap_mut(id).unwrap().flash_data = Some(flash);
+        stage.scene.create_tilemap(None).unwrap();
         stage.scene.tilemap_mut(id).unwrap().update();
     }
-    // It starts at the strongest point, falls for 16 updates and rises for 16.
-    assert!(reds[..17].windows(2).all(|pair| pair[0] > pair[1]));
-    assert!(reds[16..33].windows(2).all(|pair| pair[0] < pair[1]));
-    assert!((0..48).all(|update| reds[update] == reds[update + 32]));
-    // At the weakest point nothing is added.
-    flash.set(0, 0, 0, 0);
-    assert_eq!(stage.frame().pixel(8, 8)[0], reds[16]);
-    stage.assert_pinned("the_flash_pulses_with_the_updates_of_the_tilemap");
+    let steps = [32, 40, 48, 56, 64, 56, 48, 40];
+    assert!((0..80).all(|update| reds[update] == steps[update / 4 % 8]));
+}
+
+#[test]
+fn the_pulse_is_the_measured_one() {
+    let mut lines = 0;
+    for line in flash_samples(1) {
+        let sample = numbers(line);
+        let (updates, added) = (sample[1] as u64, sample[2]);
+        assert_eq!(15 * i32::from(flash_multiplier(updates)), added, "{line}");
+        lines += 1;
+    }
+    assert_eq!(lines, 160);
+}
+
+#[test]
+fn flashing_cells_show_the_measured_colours() {
+    // Spelled out: bits 12 to 14 are ignored, the sum stops at 255, a negative entry and
+    // one without a colour change nothing.
+    let below = [50, 100, 150, 255];
+    assert_eq!(flashed(4, 0x7abc, below), [100, 155, 210, 255]);
+    assert_eq!(flashed(4, 0xfff, below), [125, 175, 225, 255]);
+    assert_eq!(flashed(44, 0xf00, [204, 51, 110, 255]), [255, 51, 110, 255]);
+    assert_eq!(flashed(1, 0xfff, GREEN), [60, 255, 60, 255]);
+    assert_eq!(flashed(4, -1, below), below);
+    assert_eq!(flashed(1, 0x1000, below), below);
+
+    let channel = |value: i32| u8::try_from(value).unwrap();
+    let mut lines = 0;
+    for line in flash_samples(2) {
+        let sample = numbers(line);
+        let below = [sample[3], sample[4], sample[5], 255].map(channel);
+        let shown = [sample[6], sample[7], sample[8], 255].map(channel);
+        let found = flashed(sample[1] as u64, i64::from(sample[2]), below);
+        assert_eq!(found, shown, "{line}");
+        lines += 1;
+    }
+    assert_eq!(lines, 400);
+    // After 4 updates over one colour.
+    for line in flash_samples(3) {
+        let (entry, shown) = line.split_once("->").unwrap();
+        let (entry, shown) = (numbers(entry)[0], numbers(shown));
+        let shown = [shown[0], shown[1], shown[2], 255].map(channel);
+        let found = flashed(4, i64::from(entry), below);
+        assert_eq!(found, shown, "{line}");
+        lines += 1;
+    }
+    assert_eq!(lines, 408);
+}
+
+/// A stage with a map of 7 by 5 cells without tiles, scrolled to `origin`, whose flash data
+/// of `size` names its cell in each entry: column and row, plus one, in red and green.
+fn flash_of_another_size(size: (i32, i32), origin: (i32, i32)) -> Frame {
+    let mut stage = Stage::new();
+    let id = stage.scene.create_tilemap(None).unwrap();
+    let flash = SharedTable::new(Table::new_2d(size.0, size.1).unwrap());
+    for y in 0..size.1 {
+        for x in 0..size.0 {
+            flash.set(x, y, 0, i64::from((x + 1) << 8 | (y + 1) << 4 | 8));
+        }
+    }
+    let tilemap = stage.scene.tilemap_mut(id).unwrap();
+    tilemap.map_data = Some(map(7, 5));
+    tilemap.flash_data = Some(flash);
+    (tilemap.ox, tilemap.oy) = origin;
+    stage.frame()
+}
+
+/// The cell of the flash data of a [`flash_of_another_size`] that the pixel shows.
+fn flash_cell(frame: &Frame, x: i32, y: i32) -> (i32, i32) {
+    let pixel = frame.pixel(x as u32, y as u32);
+    assert_eq!((pixel[0] % 4, pixel[1] % 4, pixel[2]), (0, 0, 32));
+    (i32::from(pixel[0]) / 4 - 1, i32::from(pixel[1]) / 4 - 1)
+}
+
+/// The columns of the flash data that the first `count` columns of the screen show, from
+/// the one that holds pixel `ox` on.
+fn flash_columns(size: (i32, i32), ox: i32, count: i32) -> Vec<i32> {
+    let frame = flash_of_another_size(size, (ox, 0));
+    let columns = (0..count).map(|column| column * 32 + 31 - ox.rem_euclid(32));
+    columns.map(|x| flash_cell(&frame, x, 0).0).collect()
+}
+
+/// [`flash_columns`] for the rows.
+fn flash_rows(size: (i32, i32), oy: i32, count: i32) -> Vec<i32> {
+    let frame = flash_of_another_size(size, (0, oy));
+    let rows = (0..count).map(|row| row * 32 + 31 - oy.rem_euclid(32));
+    rows.map(|y| flash_cell(&frame, 0, y).1).collect()
+}
+
+#[test]
+fn flash_data_of_another_size_is_counted_on_from_the_first_cell_of_the_map() {
+    for (ox, first) in [(0, 0), (40, 1), (264, 1), (-50, 0), (-300, 4)] {
+        let counted: Vec<i32> = (0..20).map(|column| (first + column) % 5).collect();
+        assert_eq!(flash_columns((5, 4), ox, 20), counted, "ox {ox}");
+    }
+    assert_eq!(flash_columns((9, 6), -300, 7), [4, 5, 6, 7, 8, 0, 1]);
+    assert_eq!(flash_rows((9, 6), -200, 5), [3, 4, 5, 0, 1]);
+    // Of the same size as the map, the flash data gives the map's cell.
+    assert_eq!(flash_columns((7, 5), 264, 8), [1, 2, 3, 4, 5, 6, 0, 1]);
+    assert_eq!(flash_rows((7, 5), -200, 6), [3, 4, 0, 1, 2, 3]);
+}
+
+#[test]
+fn flash_data_of_another_size_shows_the_measured_cells() {
+    let mut lines = 0;
+    for line in flash_samples(4) {
+        // Sizes of the flash data, origin, where the first whole cell is on the screen,
+        // then the columns of the 12 whole cells of the top row and the rows of those of
+        // the left column.
+        let sample = numbers(line);
+        let (size, origin) = ((sample[0], sample[1]), (sample[2], sample[3]));
+        let (left, top) = (sample[4], sample[5]);
+        let frame = flash_of_another_size(size, origin);
+        for (cell, (&column, &row)) in sample[6..18].iter().zip(&sample[18..30]).enumerate() {
+            let step = cell as i32 * 32;
+            assert_eq!(flash_cell(&frame, left + step, top).0, column, "{line}");
+            assert_eq!(flash_cell(&frame, left, top + step).1, row, "{line}");
+        }
+        lines += 1;
+    }
+    assert_eq!(lines, 40);
 }
 
 #[test]
@@ -1347,7 +1517,7 @@ fn the_flash_overlay_scrolls_with_its_cell() {
             for y in 0..64 {
                 for x in 0..96 {
                     if flashes_at(corner, x, y) {
-                        let pixel = vkxp_pixel::blend_add(shown.pixel(x, y), [0, 255, 0, 255], 255);
+                        let pixel = vkxp_pixel::blend_add(shown.pixel(x, y), [0, 120, 0, 255], 255);
                         let offset = ((y * 96 + x) * 4) as usize;
                         next.rgba[offset..offset + 4].copy_from_slice(&pixel);
                     }
@@ -1379,7 +1549,7 @@ fn the_flash_overlay_is_above_the_ground_and_below_tiles_with_a_priority() {
     flash.set(1, 0, 0, 0xfff);
     flash.set(2, 0, 0, 0xfff);
     let frame = stage.frame();
-    assert!(flashes(&frame, &plain, (32, 0), WHITE));
+    assert!(flashes(&frame, &plain, (32, 0), [120, 120, 120, 255]));
     assert!(tile_shows(&frame, 64, 0, |x, y| tile_pixel(484, x, y)));
     stage.assert_pinned("the_flash_overlay_is_above_the_ground_and_below_tiles_with_a_priority");
 }

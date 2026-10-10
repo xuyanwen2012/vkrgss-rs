@@ -6,8 +6,8 @@
 
 ## 2. Flash (`vkxp-core`)
 
-- [ ] 2.1 Replace the pulse, skip negative entries and show the overlay from the start. Verify: scenarios "Pulse" and "Measured samples"; `cargo test -p vkxp-core --locked` passes.
-- [ ] 2.2 Index a flash table of another size as measured. Verify: scenario "Flash table of another size" and the two rows for a flash table of 9 by 6 in `design.md`; `cargo test -p vkxp-core --locked` passes.
+- [x] 2.1 Replace the pulse, skip negative entries and show the overlay from the start. Verify: scenarios "Pulse" and "Measured samples"; `cargo test -p vkxp-core --locked` passes.
+- [x] 2.2 Index a flash table of another size as measured. Verify: scenario "Flash table of another size" and the two rows for a flash table of 9 by 6 in `design.md`; `cargo test -p vkxp-core --locked` passes.
 
 ## 3. Notes
 
