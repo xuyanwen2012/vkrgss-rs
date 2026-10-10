@@ -2,8 +2,8 @@
 
 ## 1. Move (`vkxp-core`)
 
-- [ ] 1.1 Save the list of test names of the crate before any edit (under `local/`). Verify: the file exists.
-- [ ] 1.2 Move the test modules that the rule of `design.md` selects, one commit per module. Verify: the scenarios of `specs/workspace-structure/spec.md`; the saved list equals the list after the move; `git diff --stat` against the starting commit shows no file outside `crates/vkxp-core` and the change's own directory.
+- [x] 1.1 Save the list of test names of the crate before any edit (under `local/`). Verify: the file exists.
+- [x] 1.2 Move the test modules that the rule of `design.md` selects, one commit per module. Verify: the scenarios of `specs/workspace-structure/spec.md`; the saved list equals the list after the move; `git diff --stat` against the starting commit shows no file outside `crates/vkxp-core` and the change's own directory.
 
 ## 2. Integration check
 

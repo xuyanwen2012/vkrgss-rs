@@ -21,6 +21,14 @@
   under `cfg(test)`, stays where it is.
 - No test is renamed, removed, split or edited. If a moved test needs a visibility change to
   compile, something was not a pure move; find out what instead of widening visibility.
+- The one edit a moved test body needs: `include_str!` resolves its path against the file
+  that holds it, so each `include_str!("../..")` of a moved test gains one `../` (twelve
+  lines in `extract`, `window`, `bitmap`, `text` and `plane`). Nothing else differs from the
+  former body but the indentation and the lines rustfmt joins at the new width.
+- The rule selects `extract`, `window`, `tilemap`, `bitmap`, `text`, `delta`, `plane`,
+  `scene`, `table` and `input` (341 to 2392 lines of tests). `geometry` and `color` (about
+  245 each) and the smaller ones stay inline. The modules `extract::testing` and
+  `bitmap::testing` stay where they are: the tests of other modules use them.
 - One commit per moved module, so `git log --follow` and `git blame -C` keep working.
 
 ## Risks / Trade-offs
