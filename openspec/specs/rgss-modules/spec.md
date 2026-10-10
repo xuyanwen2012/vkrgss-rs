@@ -52,7 +52,7 @@ host a frame-reset message.
 
 ### Requirement: Freeze and transition
 `Graphics.freeze` SHALL send the host a freeze message. `Graphics.transition(duration = 8,
-filename = nil, vague = 40)` SHALL send a transition message with that duration, the bitmap
+filename = nil, vague = 20)` SHALL send a transition message with that duration, the bitmap
 loaded from `filename` as mask when one is given, and the vagueness, and SHALL then send one
 frame and wait for its tick `duration` times before returning. A filename that is not found
 SHALL raise `Errno::ENOENT`.
@@ -68,6 +68,10 @@ SHALL raise `Errno::ENOENT`.
 #### Scenario: Transition picture
 - **WHEN** `Graphics.transition(40, "Graphics/Transitions/004-Blind04")` is evaluated and the picture exists
 - **THEN** the transition message names a mask bitmap, and the first frame message that follows carries the creation of that bitmap
+
+#### Scenario: Default vagueness
+- **WHEN** `Graphics.transition(5, "Graphics/Transitions/004-Blind04")` is evaluated and the picture exists
+- **THEN** the transition message carries the vagueness 20
 
 ### Requirement: Input
 `Input.update` SHALL latch the most recent input snapshot received from the host and advance

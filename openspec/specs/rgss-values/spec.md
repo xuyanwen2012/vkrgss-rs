@@ -28,8 +28,8 @@ printable with `to_s` as `(r, g, b, a)` with six decimals. Passing something tha
 number SHALL raise `TypeError`, and a wrong number of arguments `ArgumentError`.
 
 #### Scenario: Construction and clamping
-- **WHEN** `c = Color.new(300, -5, 12.5)` is evaluated
-- **THEN** `c.red`, `c.green`, `c.blue` and `c.alpha` are `255.0`, `0.0`, `12.5` and `255.0`
+- **WHEN** `c = Color.new(300, -300, 12.5, -7)` is evaluated
+- **THEN** `c.red`, `c.green`, `c.blue` and `c.alpha` are `255.0`, `-255.0`, `12.5` and `0.0`
 
 #### Scenario: Setters
 - **WHEN** `t = Tone.new(0, 0, 0); t.gray = 300; t.set(-300, 1, 2)` is evaluated
