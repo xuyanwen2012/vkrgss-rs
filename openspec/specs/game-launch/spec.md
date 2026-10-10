@@ -228,3 +228,11 @@ status.
 #### Scenario: Malformed filter
 - **WHEN** the program runs with `VKXP_LOG` set to `=`
 - **THEN** it ends with a message naming the variable and a non-zero status
+
+### Requirement: Frame statistics option
+The program SHALL accept `--frame-stats`, which requests the frame time statistics of the
+host session, in windowed and in headless mode.
+
+#### Scenario: Option accepted
+- **WHEN** the program is run with `--frame-stats` in headless mode
+- **THEN** it runs the game and writes the summary to the error stream
