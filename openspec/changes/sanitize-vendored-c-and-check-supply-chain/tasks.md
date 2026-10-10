@@ -19,4 +19,4 @@
 
 ## 5. Integration check
 
-- [ ] 5.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' env --default-signal=INT cargo xtask gate` exits 0 and `openspec validate sanitize-vendored-c-and-check-supply-chain --strict` passes.
+- [x] 5.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' env --default-signal=INT cargo xtask gate` exits 0 and `openspec validate sanitize-vendored-c-and-check-supply-chain --strict` passes.
