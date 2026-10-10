@@ -487,11 +487,13 @@ rb_reg_to_s(re)
 	if (*ptr == ':' && ptr[len-1] == ')') {
 	    Regexp *rp;
 	    rb_kcode_set_option(re);
-	    rp = ALLOC(Regexp);
-	    MEMZERO((char *)rp, Regexp, 1);
-	    err = re_compile_pattern(++ptr, len -= 2, rp) != 0;
+	    ++ptr;
+	    len -= 2;
+	    if (re_alloc_pattern(&rp) == 0) {
+		err = re_compile_pattern(ptr, len, rp, 0) != 0;
+		re_free_pattern(rp);
+	    }
 	    rb_kcode_reset_option();
-	    re_free_pattern(rp);
 	}
 	if (err) {
 	    options = RREGEXP(re)->ptr->options;
@@ -616,6 +618,36 @@ rb_reg_kcode_m(re)
     return Qnil;
 }
 
+static OnigSyntaxType reg_syntax;
+
+/* Compiles a pattern with Oniguruma, in the encoding that re_mbcinit() set
+   last.  Returns 0 and leaves the message in err when it does not compile. */
+static Regexp*
+reg_compile(s, len, flags, err)
+    const char *s;
+    long len;
+    int flags;
+    char *err;
+{
+    Regexp *rp;
+    int r;
+
+    r = re_alloc_pattern(&rp);
+    if (r != 0) {
+	onig_error_code_to_str((OnigUChar *)err, r);
+	return 0;
+    }
+    if (flags) {
+	rp->options |= flags;
+    }
+    r = re_compile_pattern(s, len, rp, err);
+    if (r != 0) {
+	re_free_pattern(rp);
+	return 0;
+    }
+    return rp;
+}
+
 static Regexp*
 make_regexp(s, len, flags)
     const char *s;
@@ -623,27 +655,10 @@ make_regexp(s, len, flags)
     int flags;
 {
     Regexp *rp;
-    const char *err;
+    char err[ONIG_MAX_ERROR_MESSAGE_LEN];
 
-    /* Handle escaped characters first. */
-
-    /* Build a copy of the string (in dest) with the
-       escaped characters translated,  and generate the regex
-       from that.
-    */
-
-    rp = ALLOC(Regexp);
-    MEMZERO((char *)rp, Regexp, 1);
-    rp->buffer = ALLOC_N(char, 16);
-    rp->allocated = 16;
-    rp->fastmap = ALLOC_N(char, 256);
-    if (flags) {
-	rp->options = flags;
-    }
-    err = re_compile_pattern(s, len, rp);
-
-    if (err != NULL) {
-	re_free_pattern(rp);
+    rp = reg_compile(s, len, flags, err);
+    if (rp == 0) {
 	rb_reg_raise(s, len, err, 0);
 	return 0;
     }
@@ -858,17 +873,45 @@ rb_reg_prepare_re(re)
     }
 
     if (need_recompile) {
-	const char *err;
+	Regexp *rp;
+	char err[ONIG_MAX_ERROR_MESSAGE_LEN];
 
 	if (FL_TEST(re, KCODE_FIXED))
 	    rb_kcode_set_option(re);
 	rb_reg_check(re);
-	RREGEXP(re)->ptr->fastmap_accurate = 0;
-	err = re_compile_pattern(RREGEXP(re)->str, RREGEXP(re)->len, RREGEXP(re)->ptr);
-	if (err != NULL) {
+	/* an Oniguruma pattern keeps the encoding it was allocated with */
+	rp = reg_compile(RREGEXP(re)->str, RREGEXP(re)->len,
+			 RREGEXP(re)->ptr->options, err);
+	if (rp == 0) {
 	    rb_reg_raise(RREGEXP(re)->str, RREGEXP(re)->len, err, re);
 	}
+	else {
+	    re_free_pattern(RREGEXP(re)->ptr);
+	    RREGEXP(re)->ptr = rp;
+	}
     }
+}
+
+/* Moves a byte position onto a character boundary of the current encoding,
+   forward when range is positive.  regex.c had this function; parse.y calls
+   it to shorten the source line of an error message. */
+int
+re_mbc_startpos(string, size, startpos, range)
+    const char *string;
+    int size, startpos, range;
+{
+    OnigEncoding enc = onigenc_get_default_encoding();
+    const OnigUChar *start = (const OnigUChar *)string;
+    const OnigUChar *p;
+
+    if (startpos <= 0 || startpos >= size) return startpos;
+    if (range > 0) {
+	p = onigenc_get_right_adjust_char_head(enc, start, start + startpos);
+    }
+    else {
+	p = onigenc_get_left_adjust_char_head(enc, start, start + startpos);
+    }
+    return p - start;
 }
 
 long
@@ -895,6 +938,30 @@ rb_reg_adjust_startpos(re, str, pos, reverse)
     return re_adjust_startpos(RREGEXP(re)->ptr,
 			      RSTRING(str)->ptr, RSTRING(str)->len,
 			      pos, range);
+}
+
+/* Searches backward from pos: the match that begins at the last character
+   boundary at or before pos, wherever it ends, as the former engine found
+   it.  Oniguruma's own backward search only takes a match that ends within
+   the character at pos, which is not what rindex and start_with? ask for. */
+static long
+reg_search_backward(rp, s, len, pos, regs)
+    Regexp *rp;
+    const char *s;
+    long len, pos;
+    struct re_registers *regs;
+{
+    const OnigUChar *start = (const OnigUChar *)s;
+    const OnigUChar *p = start + pos;
+    int r;
+
+    for (;;) {
+	r = re_match(rp, s, len, p - start, regs);
+	if (r >= 0) return p - start;
+	if (r < ONIG_MISMATCH) return r;
+	if (p == start) return ONIG_MISMATCH;
+	p = onigenc_get_prev_char_head(rp->enc, start, p);
+    }
 }
 
 long
@@ -927,15 +994,24 @@ rb_reg_search(re, str, pos, reverse)
 	range = RSTRING(str)->len - pos;
     }
     MEMZERO(&regs, struct re_registers, 1);
-    result = re_search(RREGEXP(re)->ptr,RSTRING(str)->ptr,RSTRING(str)->len,
-		       pos, range, &regs);
+    if (reverse) {
+	result = reg_search_backward(RREGEXP(re)->ptr, RSTRING(str)->ptr,
+				     RSTRING(str)->len, pos, &regs);
+    }
+    else {
+	result = re_search(RREGEXP(re)->ptr,RSTRING(str)->ptr,RSTRING(str)->len,
+			   pos, range, &regs);
+    }
 
     if (FL_TEST(re, KCODE_FIXED))
 	rb_kcode_reset_option();
 
-    if (result == -2) {
-	rb_reg_raise(RREGEXP(re)->str, RREGEXP(re)->len,
-		     "Stack overflow in regexp matcher", re);
+    if (result < ONIG_MISMATCH) {
+	char err[ONIG_MAX_ERROR_MESSAGE_LEN];
+
+	re_free_registers(&regs);
+	onig_error_code_to_str((OnigUChar *)err, (int)result);
+	rb_reg_raise(RREGEXP(re)->str, RREGEXP(re)->len, err, re);
     }
 
     if (result < 0) {
@@ -2325,6 +2401,17 @@ void
 Init_Regexp()
 {
     rb_eRegexpError = rb_define_class("RegexpError", rb_eStandardError);
+
+    /* Oniguruma's Ruby syntax, less what the older Oniguruma of the original
+       runtime does not have: there "\h", "\p{...}" and "{,n}" are literal
+       text, and "{n}?" is a reluctant interval. */
+    onig_copy_syntax(&reg_syntax, ONIG_SYNTAX_RUBY);
+    reg_syntax.op2 &= ~(ONIG_SYN_OP2_ESC_H_XDIGIT |
+			ONIG_SYN_OP2_ESC_P_BRACE_CHAR_PROPERTY |
+			ONIG_SYN_OP2_ESC_P_BRACE_CIRCUMFLEX_NOT);
+    reg_syntax.behavior &= ~(ONIG_SYN_ALLOW_INTERVAL_LOW_ABBREV |
+			     ONIG_SYN_FIXED_INTERVAL_IS_GREEDY_ONLY);
+    onig_set_default_syntax(&reg_syntax);
 
     re_set_casetable(casetable);
 #if DEFAULT_KCODE == KCODE_EUC

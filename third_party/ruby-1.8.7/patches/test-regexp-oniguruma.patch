@@ -1,0 +1,29 @@
+--- a/test/ruby/test_regexp.rb
++++ b/test/ruby/test_regexp.rb
+@@ -162,7 +162,7 @@ class TestRegexp < Test::Unit::TestCase
+     assert_equal(/\xFF/n, /#{ s="\\xFF" }/n)
+     assert_equal(/\177/, (s = '\177'; /#{ s }/))
+ 
+-    assert_raise(RegexpError) { s = '\x'; /#{ s }/ }
++    assert_nothing_raised { s = '\x'; /#{ s }/ }
+ 
+     assert_equal("\xe1", [0x00, 0xe1, 0xff].pack("C*")[/\M-a/])
+     assert_equal("\xdc", [0x00, 0xdc, 0xff].pack("C*")[/\M-\\/])
+@@ -326,7 +326,7 @@ class TestRegexp < Test::Unit::TestCase
+     check(/\A\77\z/, "?")
+     check(/\A\78\z/, "\7" + '8', ["\100", ""])
+     check(/\A\Qfoo\E\z/, "QfooE")
+-    failcheck('\Aa++\z')
++    check('\Aa++\z', %w(a aa), ["", "ab"])
+     check('\Ax]\z', "x]")
+     check(/x#foo/x, "x", "#foo")
+     check(/\Ax#foo#{ "\n" }x\z/x, "xx", ["x", "x#foo\nx"])
+@@ -365,7 +365,7 @@ class TestRegexp < Test::Unit::TestCase
+     check(/\Aa{0}+\z/, "", %w(a aa aab))
+     check(/\Aa{1}+\z/, %w(a aa), ["", "aab"])
+     check(/\Aa{1,2}b{1,2}\z/, %w(ab aab abb aabb), ["", "aaabb", "abbb"])
+-    check(/(?!x){0,1}/, [ ['', 'ab'], ['', ''] ])
++    failcheck('(?!x){0,1}')
+     failcheck('.{100001}')
+     failcheck('.{0,100001}')
+     failcheck('.{1,0}')

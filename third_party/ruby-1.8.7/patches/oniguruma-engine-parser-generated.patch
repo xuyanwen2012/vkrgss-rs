@@ -1,0 +1,11 @@
+--- a/parse.c
++++ b/parse.c
+@@ -8501,7 +8501,7 @@ yyreturn:
+ #undef YYMALLOC
+ #endif
+ 
+-#include "regex.h"
++#include "vkxp_regex.h"
+ #include "util.h"
+ 
+ /* We remove any previous definition of `SIGN_EXTEND_CHAR',

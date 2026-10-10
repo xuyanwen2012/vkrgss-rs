@@ -23,7 +23,8 @@ pub fn scratch_dir(name: &str) -> PathBuf {
 }
 
 /// The compiler with the flags and defines the interpreter was built with, the include paths
-/// of `config.h` and the vendored tree, and a temporary directory that is surely writable.
+/// of `config.h`, the vendored tree and what its `re.h` includes, and a temporary directory
+/// that is surely writable.
 pub fn compiler(scratch: &Path) -> Command {
     let mut command = Command::new(env!("VKXP_RUBY_CC"));
     command
@@ -36,6 +37,10 @@ pub fn compiler(scratch: &Path) -> Command {
         .arg(env!("VKXP_RUBY_CONFIG_DIR"))
         .arg("-I")
         .arg(source_dir())
+        .arg("-I")
+        .arg(env!("VKXP_RUBY_COMPAT_DIR"))
+        .arg("-I")
+        .arg(env!("VKXP_RUBY_ONIG_DIR"))
         .env("TMPDIR", scratch);
     command
 }
@@ -109,6 +114,7 @@ pub fn build_ruby_executable(scratch: &Path) -> PathBuf {
         .args(&objects)
         .arg(ruby_libs.join("libvkxp-ruby-zlib.a"))
         .arg(ruby_libs.join("libvkxp-ruby-static.a"))
+        .arg(ruby_libs.join("libvkxp-ruby-onig.a"))
         .arg(zlib_libs.join("libz.a"))
         .args(["-lcrypt", "-lm"])
         .arg("-o")

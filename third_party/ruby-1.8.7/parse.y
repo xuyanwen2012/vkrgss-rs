@@ -2554,7 +2554,7 @@ none		: /* none */ {$$ = 0;}
 #undef YYMALLOC
 #endif
 
-#include "regex.h"
+#include "vkxp_regex.h"
 #include "util.h"
 
 /* We remove any previous definition of `SIGN_EXTEND_CHAR',

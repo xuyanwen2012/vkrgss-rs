@@ -123,7 +123,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `parse.y`
 - Patch: `patches/symbol-ids-ruby-181.patch`
-- Patched SHA-256: `21f671ab8252ab2e6a9233017d4a8ab8dd9d0f792ae42780f072aa7b94cce1a6`
+- Patched SHA-256: `24c7b3f636054f214471dd51ae0d4c16af4d96f8b3d594c90e0870908db40565`
 - Reason: a symbol's number decides the order of instance variables and of hashes with
   symbol keys, and so the bytes of a save file. 1.8.7 and vkxp's binding intern another set of
   names at start-up than the original runtime's Ruby 1.8.1, so every name a game creates had
@@ -142,7 +142,67 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `parse.c`
 - Patch: `patches/symbol-ids-ruby-181-generated.patch`
-- Patched SHA-256: `f974de8dedcace66cdca60d894a70e8542e91bed6642824e3b21c26a7f5bce68`
+- Patched SHA-256: `d79dd3b2b63263556c46121176becd46e6682a553e7bd1bf7084b7100c04fb86`
 - Reason: follows patch 11. `parse.c` is the release's pre-generated parser and the file the
   build compiles; the changed code is in the part of `parse.y` that the generator copies
   verbatim, so the same three hunks are applied to it by hand, at an offset of 5947 lines.
+
+## 13. oniguruma-engine
+
+- File: `re.c`
+- Patch: `patches/oniguruma-engine.patch`
+- Patched SHA-256: `79aceaf7eb1fcc444e58d1c1c95f4f5ea4ba0edc0885e85b09ac5d30b30034c4`
+- Reason: the original runtime's Ruby 1.8.1 is built with the Oniguruma regular expression
+  engine, and scripts use what only that engine accepts (a character class inside another,
+  named groups, look-behind, possessive quantifiers). `re.c` now calls Oniguruma 5.9.6
+  (`third_party/oniguruma-5.9.6/`) through its GNU-compatible interface, and `regex.c` is no
+  longer built. A pattern is allocated with `re_alloc_pattern`, which gives it the encoding
+  that `re_mbcinit` set last from `$KCODE` or the expression's own flag, and compiled with
+  `re_compile_pattern`, whose message becomes the error's. Because an Oniguruma pattern keeps
+  its encoding, a change of `$KCODE` or `$=` compiles a new pattern in place of the old one.
+  The syntax is Oniguruma's Ruby syntax less five options that the original's older Oniguruma
+  does not show: measured there, `\h`, `\p{...}` and `{,n}` are literal text and `{n}?` is a
+  reluctant interval. A backward search (`rindex`, `start_with?`) tries a match at each
+  character boundary from the start position down, as the former engine did, because
+  Oniguruma's own backward search rejects a match that reaches beyond the character at the
+  start position. A search that fails with an error raises with Oniguruma's message in place
+  of "Stack overflow in regexp matcher". `re_mbc_startpos`, which `parse.y` takes from
+  `regex.c`, is defined here on Oniguruma's encoding functions.
+
+## 14. oniguruma-engine-header
+
+- File: `re.h`
+- Patch: `patches/oniguruma-engine-header.patch`
+- Patched SHA-256: `dfd1988bd6289f64ee6a7bdce89bf4d74c716fa5c12d6ef9805622ec3d8811ef`
+- Reason: follows patch 13. `re.h` includes `vkxp_regex.h` in place of `regex.h`. That header
+  is `crates/vkxp-ruby-sys/compat/vkxp_regex.h`: it includes Oniguruma's `oniggnu.h` and
+  provides the `MBCTYPE_*` names, `re_copy_registers`, and `ismbchar` and `mbclen` on the
+  encoding that `re_mbcinit` set, so that `string.c` and the other files that use them are
+  unchanged.
+
+## 15. oniguruma-engine-parser
+
+- File: `parse.y`
+- Patch: `patches/oniguruma-engine-parser.patch`
+- Patched SHA-256: `24c7b3f636054f214471dd51ae0d4c16af4d96f8b3d594c90e0870908db40565`
+- Reason: follows patch 14 and applies after patch 11. The parser includes `regex.h` itself,
+  for `ismbchar` and `mbclen`; it includes `vkxp_regex.h` instead.
+
+## 16. oniguruma-engine-parser-generated
+
+- File: `parse.c`
+- Patch: `patches/oniguruma-engine-parser-generated.patch`
+- Patched SHA-256: `d79dd3b2b63263556c46121176becd46e6682a553e7bd1bf7084b7100c04fb86`
+- Reason: follows patch 15 and applies after patch 12. The same line of the pre-generated
+  parser, changed by hand.
+
+## 17. test-regexp-oniguruma
+
+- File: `test/ruby/test_regexp.rb`
+- Patch: `patches/test-regexp-oniguruma.patch`
+- Patched SHA-256: `c0eeadd74feec67bfc0fff61e6952b8ddc18f7b844a72e7b95732bdb59e8cc51`
+- Reason: follows patch 13. Three cases pinned behaviour of the former engine and now pin
+  Oniguruma's. In `test_parse`, `a++` was an error and is a possessive quantifier. In
+  `test_unescape`, `\x` without a digit was an error and is accepted. In
+  `test_parse_curly_brace`, `(?!x){0,1}` matched and is an error ("target of repeat operator
+  is invalid").

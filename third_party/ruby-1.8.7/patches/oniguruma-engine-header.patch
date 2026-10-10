@@ -1,0 +1,11 @@
+--- a/re.h
++++ b/re.h
+@@ -16,7 +16,7 @@
+ #include <sys/types.h>
+ #include <stdio.h>
+ 
+-#include "regex.h"
++#include "vkxp_regex.h"
+ 
+ typedef struct re_pattern_buffer Regexp;
+ 

@@ -19,3 +19,14 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+--------------------------------------------------------------------------------
+
+Third-party source code
+
+The licence above does not cover the directories below third_party/. Each has
+its own licence files and a README.vkxp.md that says where it comes from:
+
+- third_party/ruby-1.8.7/: Ruby 1.8.7-p374, under the Ruby licence or the GPL
+  version 2 (COPYING, GPL), with the exceptions that its LEGAL file lists.
+- third_party/oniguruma-5.9.6/: Oniguruma 5.9.6, under a BSD licence (COPYING).

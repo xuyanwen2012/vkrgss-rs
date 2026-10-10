@@ -1,7 +1,9 @@
-//! Builds the vendored Ruby 1.8.7 interpreter and its `Zlib` extension as static libraries.
+//! Builds the vendored Ruby 1.8.7 interpreter, its `Zlib` extension and the vendored Oniguruma
+//! regular expression engine as static libraries.
 //!
 //! The file list and the flags are fixed: no `configure`, no `make`, no installed Ruby. The one
-//! file `configure` would generate, `config.h`, is checked in per target under `config/`.
+//! file `configure` would generate, `config.h`, is checked in per target under `config/`, for
+//! the interpreter and, in `oniguruma/` below it, for the engine.
 //!
 //! `-std=gnu89` and `-fwrapv` are not optional. Without the first the sources do not compile
 //! under today's default C dialect; without the second the build succeeds and the overflow
@@ -16,7 +18,8 @@ use std::path::{Path, PathBuf};
 /// The targets that have a checked-in `config.h`.
 const SUPPORTED_TARGETS: &[&str] = &["x86_64-unknown-linux-gnu"];
 
-/// The C files of `libruby-static.a` in the release's own build, without their extension.
+/// The C files of `libruby-static.a` in the release's own build, without their extension and
+/// without `regex`, the interpreter's own regular expression engine: Oniguruma replaces it.
 const CORE_SOURCES: &[&str] = &[
     "array",
     "bignum",
@@ -44,7 +47,6 @@ const CORE_SOURCES: &[&str] = &[
     "random",
     "range",
     "re",
-    "regex",
     "ruby",
     "signal",
     "sprintf",
@@ -56,6 +58,27 @@ const CORE_SOURCES: &[&str] = &[
     "variable",
     "version",
     "dmyext",
+];
+
+/// The C files of Oniguruma that are built: the engine, its GNU-compatible interface, and the
+/// encodings that `$KCODE` can select (`unicode` is what the UTF-8 one needs).
+const ONIGURUMA_SOURCES: &[&str] = &[
+    "regcomp",
+    "regenc",
+    "regerror",
+    "regexec",
+    "regext",
+    "reggnu",
+    "regparse",
+    "regsyntax",
+    "regtrav",
+    "regversion",
+    "st",
+    "enc/ascii",
+    "enc/euc_jp",
+    "enc/sjis",
+    "enc/unicode",
+    "enc/utf8",
 ];
 
 /// The pinned flags. `-fvisibility=hidden` is the one deliberate difference from the release's
@@ -165,6 +188,10 @@ fn main() {
         .join("../../third_party/ruby-1.8.7")
         .canonicalize()
         .expect("third_party/ruby-1.8.7 exists");
+    let onig_dir = manifest_dir
+        .join("../../third_party/oniguruma-5.9.6")
+        .canonicalize()
+        .expect("third_party/oniguruma-5.9.6 exists");
     let zlib_include = PathBuf::from(
         env::var_os("DEP_Z_INCLUDE").expect("libz-sys exports the include path of its zlib"),
     );
@@ -172,9 +199,11 @@ fn main() {
         PathBuf::from(env::var_os("DEP_Z_ROOT").expect("libz-sys exports the root of its zlib"));
 
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=compat");
     println!("cargo:rerun-if-changed=config");
     println!("cargo:rerun-if-changed=data");
     println!("cargo:rerun-if-changed={}", utf8(&ruby_dir));
+    println!("cargo:rerun-if-changed={}", utf8(&onig_dir));
 
     let base = base_build();
 
@@ -186,10 +215,15 @@ fn main() {
     );
 
     // The interpreter. The include order matters: `config.h` first, then the vendored tree.
+    // `compat` holds `vkxp_regex.h`, which the patched `re.h` includes and which in turn
+    // includes Oniguruma's `oniggnu.h`.
+    let compat_dir = manifest_dir.join("compat");
     let mut core = base.clone();
     core.include(&config_dir)
         .include(&ruby_dir)
-        .include(&generated_dir);
+        .include(&generated_dir)
+        .include(&compat_dir)
+        .include(&onig_dir);
     for name in CORE_SOURCES {
         core.file(ruby_dir.join(format!("{name}.c")));
     }
@@ -204,6 +238,15 @@ fn main() {
         .define("OS_CODE", "OS_UNIX")
         .file(ruby_dir.join("ext/zlib/zlib.c"));
     zlib.compile("vkxp-ruby-zlib");
+
+    // The engine, after the interpreter that refers to it. Its own `config.h` comes first.
+    let mut onig = base.clone();
+    onig.include(config_dir.join("oniguruma"))
+        .include(&onig_dir);
+    for name in ONIGURUMA_SOURCES {
+        onig.file(onig_dir.join(format!("{name}.c")));
+    }
+    onig.compile("vkxp-ruby-onig");
 
     println!("cargo:rustc-link-lib=crypt");
     println!("cargo:rustc-link-lib=m");
@@ -224,6 +267,8 @@ fn main() {
     println!("cargo:rustc-env=VKXP_RUBY_CFLAGS={}", args.join(" "));
     println!("cargo:rustc-env=VKXP_RUBY_CONFIG_DIR={}", utf8(&config_dir));
     println!("cargo:rustc-env=VKXP_RUBY_SOURCE_DIR={}", utf8(&ruby_dir));
+    println!("cargo:rustc-env=VKXP_RUBY_COMPAT_DIR={}", utf8(&compat_dir));
+    println!("cargo:rustc-env=VKXP_RUBY_ONIG_DIR={}", utf8(&onig_dir));
     println!("cargo:rustc-env=VKXP_RUBY_LIB_DIR={}", utf8(&out_dir));
     println!(
         "cargo:rustc-env=VKXP_RUBY_ZLIB_LIB_DIR={}",

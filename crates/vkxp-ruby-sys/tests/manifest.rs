@@ -1,8 +1,9 @@
-//! The vendored Ruby tree must match its manifest and its patch log.
+//! The vendored trees must match their manifests and their patch logs.
 //!
 //! `MANIFEST.sha256` holds the upstream hash of every vendored file. A file may differ from it
 //! only when an entry of `PATCHES.md` names the file, and then it must match the patched hash
-//! of that entry. Files may be neither added nor removed without a record.
+//! of that entry. Files may be neither added nor removed without a record. A tree without a
+//! `PATCHES.md` has no patches.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -16,8 +17,10 @@ const OWN_FILES: &[&str] = &["MANIFEST.sha256", "PATCHES.md", "README.vkxp.md"];
 /// Directory of the patch files, which vkxp adds as well.
 const PATCH_DIR: &str = "patches";
 
-fn vendored_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../third_party/ruby-1.8.7")
+fn vendored_root(tree: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../third_party")
+        .join(tree)
 }
 
 fn sha256_hex(path: &Path) -> String {
@@ -109,15 +112,18 @@ fn collect_files(root: &Path, dir: &Path, out: &mut Vec<String>) {
     }
 }
 
-#[test]
-fn manifest_and_patch_log_describe_the_vendored_tree() {
-    let root = vendored_root();
+/// Checks one tree below `third_party` against its records.
+fn check_tree(tree: &str) {
+    let root = vendored_root(tree);
     let manifest = parse_manifest(
         &fs::read_to_string(root.join("MANIFEST.sha256")).expect("MANIFEST.sha256 is readable"),
     );
-    let patches = parse_patches(
-        &fs::read_to_string(root.join("PATCHES.md")).expect("PATCHES.md is readable"),
-    );
+    let patch_log = root.join("PATCHES.md");
+    let patches = if patch_log.is_file() {
+        parse_patches(&fs::read_to_string(patch_log).expect("PATCHES.md is readable"))
+    } else {
+        Vec::new()
+    };
 
     let mut problems: Vec<String> = Vec::new();
 
@@ -208,7 +214,17 @@ fn manifest_and_patch_log_describe_the_vendored_tree() {
 
     assert!(
         problems.is_empty(),
-        "the vendored tree does not match its records:\n  {}",
+        "the vendored tree {tree} does not match its records:\n  {}",
         problems.join("\n  ")
     );
+}
+
+#[test]
+fn manifest_and_patch_log_describe_the_vendored_tree() {
+    check_tree("ruby-1.8.7");
+}
+
+#[test]
+fn manifest_describes_the_vendored_engine() {
+    check_tree("oniguruma-5.9.6");
 }

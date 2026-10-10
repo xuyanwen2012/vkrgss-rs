@@ -2,9 +2,10 @@
 //!
 //! Side: guest.
 //!
-//! The build script compiles the vendored Ruby 1.8.7-p374 of `third_party/ruby-1.8.7/` and
-//! its `Zlib` extension into this crate, with a fixed file list and fixed flags. This crate
-//! then offers three layers:
+//! The build script compiles the vendored Ruby 1.8.7-p374 of `third_party/ruby-1.8.7/`, its
+//! `Zlib` extension and, as its regular expression engine, the vendored Oniguruma of
+//! `third_party/oniguruma-5.9.6/` into this crate, with a fixed file list and fixed flags.
+//! This crate then offers three layers:
 //!
 //! - [`ffi`]: hand-written declarations of the C API, as raw as the C headers.
 //! - [`Interpreter`]: the interpreter on a thread of its own, and the way onto that thread.

@@ -48,3 +48,30 @@
 ## Follow-ups
 
 - Behaviour that differs between Oniguruma versions and that no probe has shown yet.
+- Differences from the measured output that remain; the line numbers are those of
+  `crates/vkxp-ruby-sys/tests/data/regex.original.txt`, and the test adjusts exactly these
+  before it compares:
+  - Line 40, `/[\d-z]+/`: an error in both, but the original says "mismatch multibyte code
+    length in char-class range" and Oniguruma 5.9.6 says "empty range in char class". The
+    message is chosen inside the engine's parser, not by an option.
+  - Line 17, `/../n` on a UTF-8 subject: the capture is the same two bytes. `String#inspect`
+    of the original's Ruby 1.8.1 prints an incomplete multi-byte character raw, together
+    with the byte after the string; 1.8.7 prints escapes. This is the interpreter's
+    `inspect`, not the engine; whether to follow 1.8.1 here is open.
+  - Line 43, `/#{1+1}/`: the result is equal. `String#inspect` of 1.8.1 does not escape `#{`
+    and 1.8.7 does, so the test takes the pattern's text from the measured line.
+- Four measured lines (11, 12, 19, 20) are matched by options: the syntax is
+  `ONIG_SYNTAX_RUBY` without `ONIG_SYN_OP2_ESC_H_XDIGIT`,
+  `ONIG_SYN_OP2_ESC_P_BRACE_CHAR_PROPERTY`, `ONIG_SYN_OP2_ESC_P_BRACE_CIRCUMFLEX_NOT`,
+  `ONIG_SYN_ALLOW_INTERVAL_LOW_ABBREV` and `ONIG_SYN_FIXED_INTERVAL_IS_GREEDY_ONLY`. Other
+  options of the 5.9.6 Ruby syntax that the original's engine may lack have not been probed.
+- Backward search (`rindex`, `start_with?`) is a loop of anchored matches in `re.c`, because
+  the backward search of 5.9.6 rejects a match that reaches beyond the character at the start
+  position (a compile-time setting inside `regexec.c`) and the upstream suite needs
+  `start_with?` to work. How the original behaves for `rindex` with a pattern has not been
+  measured.
+- Oniguruma's warnings (a redundant nested repeat, an unescaped `-` or `]` in a class) are not
+  connected to `rb_warn`; what the original prints for them has not been measured.
+- `README.md` and `docs/decisions.md` still describe the stock engine and the LGPL of
+  `regex.c` as built; they are outside this change's files. `regex.c` and `regex.h` stay in
+  the vendored tree unbuilt; removing them is a separate question.
