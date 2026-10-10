@@ -68,3 +68,5 @@ One run each on the development machine, with a warm build directory and the Vul
 llvmpipe.
 
 - Before the change (four steps, no profiles): 83.4 s in total, of which the test step 82.4 s.
+- After the change (five steps, with the profiles): 38.9 s in total, of which the test step
+  37.7 s and the documentation step 0.1 s.
