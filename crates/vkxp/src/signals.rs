@@ -32,3 +32,12 @@ pub(crate) fn block_virtual_timer() {
 pub(crate) fn unblock_virtual_timer() {
     change_virtual_timer(libc::SIG_UNBLOCK);
 }
+
+/// Asks the kernel to end this process when the thread of the parent process that started it
+/// ends; for the guest process, whose game may be caught in a loop.
+pub(crate) fn die_with_parent() {
+    // SAFETY: `PR_SET_PDEATHSIG` takes a signal number as its one argument and changes only
+    // a setting of the calling process.
+    let status = unsafe { libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) };
+    assert_eq!(status, 0, "prctl cannot set the parent-death signal");
+}

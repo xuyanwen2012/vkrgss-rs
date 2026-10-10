@@ -44,6 +44,8 @@ pub(crate) struct File {
     preload: Option<Vec<PathBuf>>,
     record: Option<PathBuf>,
     replay: Option<PathBuf>,
+    /// Where the guest runs, by the name of the form.
+    guest: Option<String>,
     headless: Option<bool>,
     frames: Option<u64>,
     /// An input script or `@FILE`, as `--input` takes it.
@@ -102,6 +104,11 @@ impl File {
         if let Some(name) = &file.filter {
             args::filter(name)
                 .map_err(|error| anyhow!("filter: {error}"))
+                .with_context(named)?;
+        }
+        if let Some(name) = &file.guest {
+            args::guest_form(name)
+                .map_err(|error| anyhow!("guest: {error}"))
                 .with_context(named)?;
         }
         KeyMap::with_overrides(&file.keys)
@@ -168,6 +175,7 @@ impl File {
             preload: over.preload.or(self.preload),
             record: over.record.or(self.record),
             replay: over.replay.or(self.replay),
+            guest: over.guest.or(self.guest),
             headless: over.headless.or(self.headless),
             frames: over.frames.or(self.frames),
             input: over.input.or(self.input),
@@ -249,6 +257,10 @@ pub(crate) fn settle(file: File, mut options: Options) -> Result<Settings> {
     }
     options.record = options.record.or(file.record);
     options.replay = options.replay.or(file.replay);
+    if options.guest.is_none() {
+        let guest = file.guest.as_deref().map(args::guest_form).transpose();
+        options.guest = guest.map_err(|error| anyhow!("guest: {error}"))?;
+    }
     options.headless |= file.headless == Some(true);
     options.frames = options.frames.or(file.frames);
     options.input = options.input.or(file.input);
@@ -589,6 +601,40 @@ mod tests {
     }
 
     /// Scenario "From the file".
+    #[test]
+    fn the_guest_of_a_file_is_used_unless_the_command_line_gives_one() {
+        use crate::args::GuestForm;
+
+        let files = Files::new()
+            .user("guest = \"thread\"")
+            .game("guest = \"process\"");
+        let settings = files.settle(Options::default()).unwrap();
+        assert_eq!(settings.options.guest, Some(GuestForm::Process));
+        // The environment is put into the options before the files are, like the command
+        // line.
+        let given = Options {
+            guest: Some(GuestForm::Thread),
+            ..Options::default()
+        };
+        assert_eq!(
+            files.settle(given).unwrap().options.guest,
+            Some(GuestForm::Thread)
+        );
+        assert_eq!(files_without_guest().options.guest, None);
+
+        let files = Files::new().user("guest = \"fiber\"");
+        let error = format!("{:#}", files.settle(Options::default()).unwrap_err());
+        assert!(error.contains("user.toml"), "{error}");
+        assert!(
+            error.contains("thread") && error.contains("process"),
+            "{error}"
+        );
+    }
+
+    fn files_without_guest() -> Settings {
+        Files::new().settle(Options::default()).unwrap()
+    }
+
     #[test]
     fn the_filter_of_a_file_is_used_unless_the_command_line_gives_one() {
         let files = Files::new().user("filter = \"linear\"");

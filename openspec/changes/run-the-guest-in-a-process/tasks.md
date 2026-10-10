@@ -7,10 +7,10 @@
 
 ## 2. Guest process (`vkxp`)
 
-- [ ] 2.1 Add the option, the configuration key and the environment variable. Verify: scenarios "Unknown value" and "Environment" (the latter may be checked together with 2.3); `cargo test -p vkxp --locked` passes with `VK_LOADER_DRIVERS_SELECT='*lvp*'`.
-- [ ] 2.2 Add the guest role (hidden option, configuration settled as in the parent, `run_game` on the socket transport, exit status, parent-death signal) and the parent's side (private directory, listening socket, start of the child, relay, wait and end). Verify: `cargo test -p vkxp --locked` passes with `VK_LOADER_DRIVERS_SELECT='*lvp*'`.
-- [ ] 2.3 Add end-to-end tests in `crates/vkxp/tests/` for the scenarios "Same frames", "Script error", "Guest process dies" and "Frame limit". Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` passes.
-- [ ] 2.4 Frame statistics in the process form: the guest's rows are written by the guest process. Verify: the existing statistics test of `end_to_end.rs`, run in both forms, finds the same row names.
+- [x] 2.1 Add the option, the configuration key and the environment variable. Verify: scenarios "Unknown value" and "Environment" (the latter may be checked together with 2.3); `cargo test -p vkxp --locked` passes with `VK_LOADER_DRIVERS_SELECT='*lvp*'`.
+- [x] 2.2 Add the guest role (hidden option, configuration settled as in the parent, `run_game` on the socket transport, exit status, parent-death signal) and the parent's side (private directory, listening socket, start of the child, relay, wait and end). Verify: `cargo test -p vkxp --locked` passes with `VK_LOADER_DRIVERS_SELECT='*lvp*'`.
+- [x] 2.3 Add end-to-end tests in `crates/vkxp/tests/` for the scenarios "Same frames", "Script error", "Guest process dies" and "Frame limit". Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` passes.
+- [x] 2.4 Frame statistics in the process form: the guest's rows are written by the guest process. Verify: the existing statistics test of `end_to_end.rs`, run in both forms, finds the same row names.
 
 ## 3. Documentation and measurement
 

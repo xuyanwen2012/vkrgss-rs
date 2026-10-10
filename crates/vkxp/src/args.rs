@@ -46,6 +46,10 @@ usage: vkxp [GAME_DIR] [OPTIONS]
   --preload FILE            a Ruby file evaluated before the game's scripts; repeatable
   --record FILE             write the input of every frame and the seed to FILE
   --replay FILE             play the input of a recording back instead of the keyboard
+  --guest thread|process    where the game's scripts run: on a thread of the program or
+                            in a process of their own; default: thread; the
+                            environment variable VKXP_GUEST sets it too, and comes
+                            after this option
   --headless                run without a window, on a virtual clock
   --frames N                headless: stop after N frames
   --input SCRIPT|@FILE      headless: held buttons, for example \"2:RIGHT, 6:\"
@@ -59,6 +63,32 @@ pub(crate) enum Input {
     /// A file that holds the script.
     File(PathBuf),
 }
+
+/// Where the guest runs.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) enum GuestForm {
+    /// On a thread of the program.
+    #[default]
+    Thread,
+    /// In a child process.
+    Process,
+}
+
+/// What makes the program the guest process of another: the hidden option [`GUEST_ROLE`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct GuestRole {
+    /// The seed the parent settled on.
+    pub seed: u64,
+    /// The socket the parent listens on.
+    pub socket: PathBuf,
+}
+
+/// The option the program gives itself when it starts its guest process, with the value
+/// `SEED=SOCKET`. It is not part of the usage message.
+pub(crate) const GUEST_ROLE: &str = "--guest-role";
+
+/// The environment variable that says where the guest runs.
+pub(crate) const GUEST_VARIABLE: &str = "VKXP_GUEST";
 
 /// The parsed command line.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -105,6 +135,10 @@ pub(crate) struct Options {
     pub record: Option<PathBuf>,
     /// The recording that is played back.
     pub replay: Option<PathBuf>,
+    /// Where the guest runs, if that was given.
+    pub guest: Option<GuestForm>,
+    /// Whether this process is the guest process of another, and of which.
+    pub guest_role: Option<GuestRole>,
     pub headless: bool,
     pub frames: Option<u64>,
     pub input: Option<Input>,
@@ -164,6 +198,37 @@ pub(crate) fn filter(text: &str) -> Result<Filter, String> {
     }
 }
 
+/// The form of the guest with this name, in either case. The error says what the names are.
+pub(crate) fn guest_form(text: &str) -> Result<GuestForm, String> {
+    match text.to_ascii_lowercase().as_str() {
+        "thread" => Ok(GuestForm::Thread),
+        "process" => Ok(GuestForm::Process),
+        _ => Err(format!("`{text}` is not one of thread, process")),
+    }
+}
+
+/// The form of the guest that the value of [`GUEST_VARIABLE`] asks for; none when the
+/// variable is not set or empty. The error is a message for the user that names the variable.
+pub(crate) fn guest_of_environment(value: Option<&str>) -> Result<Option<GuestForm>, String> {
+    value
+        .filter(|value| !value.is_empty())
+        .map(guest_form)
+        .transpose()
+        .map_err(|error| format!("{GUEST_VARIABLE}: {error}"))
+}
+
+/// The value of [`GUEST_ROLE`]: `SEED=SOCKET`.
+fn guest_role(text: &str) -> Result<GuestRole, String> {
+    let (seed, socket) = pair(text, "SEED=SOCKET")?;
+    let seed = seed
+        .parse()
+        .map_err(|_| format!("`{seed}` is not a seed"))?;
+    Ok(GuestRole {
+        seed,
+        socket: PathBuf::from(socket),
+    })
+}
+
 /// Reads the arguments that follow the program name. The error is a message for the user,
 /// to be printed with [`USAGE`]. Whether the options go together is for [`check`] to say,
 /// once the configuration files have been put under them.
@@ -216,6 +281,15 @@ pub(crate) fn parse(arguments: &[String]) -> Result<Options, String> {
             "--preload" => options.preload.push(PathBuf::from(value()?)),
             "--record" => options.record = Some(PathBuf::from(value()?)),
             "--replay" => options.replay = Some(PathBuf::from(value()?)),
+            "--guest" => {
+                let form = guest_form(value()?).map_err(|error| format!("--guest: {error}"))?;
+                options.guest = Some(form);
+            }
+            GUEST_ROLE => {
+                let role =
+                    guest_role(value()?).map_err(|error| format!("{GUEST_ROLE}: {error}"))?;
+                options.guest_role = Some(role);
+            }
             "--headless" => options.headless = true,
             "--frames" => {
                 let text = value()?;
@@ -364,6 +438,61 @@ mod tests {
         let options = parse_words(&["games/demo", "--headless", "--frame-stats"]).unwrap();
         assert!(options.frame_stats && options.headless);
         assert!(USAGE.contains("--frame-stats"));
+    }
+
+    /// Scenario "Unknown value", and the option itself.
+    #[test]
+    fn the_form_of_the_guest_is_thread_or_process() {
+        assert_eq!(parse_words(&[]).unwrap().guest, None);
+        assert_eq!(GuestForm::default(), GuestForm::Thread);
+        let options = parse_words(&["--guest", "process", "games/demo"]).unwrap();
+        assert_eq!(options.guest, Some(GuestForm::Process));
+        assert_eq!(options.game_dir, Some("games/demo".into()));
+        let options = parse_words(&["--guest", "Thread"]).unwrap();
+        assert_eq!(options.guest, Some(GuestForm::Thread));
+        assert!(USAGE.contains("--guest thread|process"));
+        assert!(USAGE.contains(GUEST_VARIABLE));
+
+        let error = parse_words(&["--guest", "fiber"]).unwrap_err();
+        assert!(error.contains("--guest"), "{error}");
+        assert!(error.contains("fiber"), "{error}");
+        assert!(
+            error.contains("thread") && error.contains("process"),
+            "{error}"
+        );
+        assert!(parse_words(&["--guest"]).is_err());
+    }
+
+    #[test]
+    fn the_environment_names_the_form_of_the_guest() {
+        assert_eq!(guest_of_environment(None), Ok(None));
+        assert_eq!(guest_of_environment(Some("")), Ok(None));
+        assert_eq!(
+            guest_of_environment(Some("process")),
+            Ok(Some(GuestForm::Process))
+        );
+        let error = guest_of_environment(Some("fiber")).unwrap_err();
+        assert!(error.contains(GUEST_VARIABLE), "{error}");
+        assert!(
+            error.contains("thread") && error.contains("process"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn the_guest_role_is_a_hidden_option_with_a_seed_and_a_socket() {
+        let options =
+            parse_words(&["game", GUEST_ROLE, "7=/run/user/1/vkxp-1/guest.sock"]).unwrap();
+        assert_eq!(
+            options.guest_role,
+            Some(GuestRole {
+                seed: 7,
+                socket: "/run/user/1/vkxp-1/guest.sock".into(),
+            })
+        );
+        assert!(!USAGE.contains(GUEST_ROLE));
+        assert!(parse_words(&[GUEST_ROLE, "seven=/s"]).is_err());
+        assert!(parse_words(&[GUEST_ROLE, "/s"]).is_err());
     }
 
     #[test]

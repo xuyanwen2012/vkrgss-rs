@@ -34,13 +34,22 @@
 //! A script can loop without ever calling `Graphics.update` and then never sees a quit
 //! request. After a headless run has ended, the program waits [`GUEST_WAIT`] for the game
 //! and then exits with a message and a non-zero status.
+//!
+//! With `--guest process` the game's scripts run in a child process instead of on a thread
+//! (`process`). The program then does the steps above without the interpreter: it checks
+//! what the game needs, starts itself again in the guest role, and gives the host a relay
+//! to that process as its guest. The child does the steps 1 to 5, opens no window, device
+//! or recording, plays the game over the socket of its parent and exits with status 0 only
+//! if the game ended without a failure.
 
 mod args;
 mod config;
 mod font;
 mod log;
+mod process;
 mod signals;
 
+use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf, absolute};
 use std::process::ExitCode;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
@@ -57,9 +66,10 @@ use vkxp_proto::link::GuestEnd;
 use vkxp_ruby_sys::Interpreter;
 use vkxp_vfs::{GameFiles, GameIni, VfsError, resolve_rtps};
 
-use crate::args::{Input, Options};
+use crate::args::{GuestForm, GuestRole, Input, Options};
 use crate::config::Settings;
 use crate::font::FontBackend;
+use crate::process::GuestProcess;
 
 /// How long the program waits for the game's scripts to end after the host has.
 const GUEST_WAIT: Duration = Duration::from_secs(5);
@@ -84,6 +94,15 @@ fn main() -> ExitCode {
         Ok(level) => log::install(level),
         Err(message) => return usage(message),
     }
+    let variable = std::env::var(args::GUEST_VARIABLE).ok();
+    let from_environment = match args::guest_of_environment(variable.as_deref()) {
+        Ok(form) => form,
+        Err(message) => return usage(message),
+    };
+    let options = Options {
+        guest: options.guest.or(from_environment),
+        ..options
+    };
     let (game_dir, mut settings) = match settings(options) {
         Ok(settled) => settled,
         Err(error) => {
@@ -95,16 +114,22 @@ fn main() -> ExitCode {
     if let Err(message) = args::check(&settings.options) {
         return usage(message);
     }
-    // A script in a file is a value like one given in place.
-    let script = match input_script(settings.options.input.take()) {
-        Ok(script) => script,
-        Err(InputError::Malformed(message)) => return usage(message),
-        Err(InputError::Unreadable(message)) => {
-            eprintln!("vkxp: {message}");
-            return ExitCode::FAILURE;
+    let ran = match settings.options.guest_role.take() {
+        Some(role) => run_guest(game_dir, settings.options, &role),
+        None => {
+            // A script in a file is a value like one given in place.
+            let script = match input_script(settings.options.input.take()) {
+                Ok(script) => script,
+                Err(InputError::Malformed(message)) => return usage(message),
+                Err(InputError::Unreadable(message)) => {
+                    eprintln!("vkxp: {message}");
+                    return ExitCode::FAILURE;
+                }
+            };
+            run(game_dir, settings, script)
         }
     };
-    match run(game_dir, settings, script) {
+    match ran {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::FAILURE,
         Err(error) => {
@@ -249,15 +274,20 @@ fn settings(options: Options) -> Result<(PathBuf, Settings)> {
     Ok((game_dir, settings))
 }
 
-/// Runs the game in `game_dir` as the settings describe, headless with the input `script`.
-/// `Ok(false)` is a run that failed and has said why.
-fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<bool> {
-    let Settings {
-        options,
-        keys,
-        pads,
-    } = settings;
-    let ini = GameIni::read(&game_dir, options.encoding)?;
+/// What the guest of a run is set up with, as far as it is looked up before any game file
+/// is opened.
+struct GuestInputs {
+    ini: GameIni,
+    rtp_dirs: Vec<PathBuf>,
+    builtin_scripts: PathBuf,
+    font_dirs: Vec<PathBuf>,
+    preload: Vec<PathBuf>,
+}
+
+/// Reads `Game.ini`, looks the run-time packages it names up in the table of the options and
+/// finds the built-in scripts file.
+fn guest_inputs(game_dir: &Path, options: &Options) -> Result<GuestInputs> {
+    let ini = GameIni::read(game_dir, options.encoding)?;
     let rtp_table = options
         .rtps
         .iter()
@@ -275,39 +305,54 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
     }
     let builtin_scripts = builtin_scripts(options.builtin_scripts.clone())?;
     tracing::info!("built-in scripts file: {}", builtin_scripts.display());
-    let audio = audio_options(options.no_audio, options.soundfont.as_deref())?;
-    let dumps = options
-        .dumps
-        .iter()
-        .map(|(frame, path)| Ok((*frame, absolute(path)?)))
-        .collect::<Result<Vec<_>>>()?;
     let font_dirs = options
         .font_dirs
         .iter()
         .map(absolute)
         .collect::<std::io::Result<Vec<_>>>()?;
-
     let preload = options
         .preload
         .iter()
         .map(absolute)
         .collect::<std::io::Result<Vec<_>>>()?;
-    let (seed, input) = seed_and_input(&options)?;
-    let files = GameFiles::open(game_dir.clone(), rtp_dirs)?;
-    if let Some(archive) = archive(&game_dir) {
+    Ok(GuestInputs {
+        ini,
+        rtp_dirs,
+        builtin_scripts,
+        font_dirs,
+        preload,
+    })
+}
+
+/// Opens the game's files, enters the game directory, blocks SIGVTALRM in the calling
+/// thread, which has to be the only one still, and builds the binding's configuration.
+fn guest_config(
+    game_dir: &Path,
+    options: &Options,
+    inputs: GuestInputs,
+    seed: u64,
+) -> Result<Config> {
+    let GuestInputs {
+        ini,
+        rtp_dirs,
+        builtin_scripts,
+        font_dirs,
+        preload,
+    } = inputs;
+    let files = GameFiles::open(game_dir.to_owned(), rtp_dirs)?;
+    if let Some(archive) = archive(game_dir) {
         tracing::info!("encrypted archive: {}", archive.display());
     }
 
-    std::env::set_current_dir(&game_dir)
+    std::env::set_current_dir(game_dir)
         .with_context(|| format!("cannot enter the game directory {}", game_dir.display()))?;
     signals::block_virtual_timer();
 
-    let title = ini.title.clone();
-    let config = Config {
+    Ok(Config {
         files,
         font_names: default_font_names(&ini.library),
         text: Box::new(FontBackend::for_game(
-            &game_dir,
+            game_dir,
             &font_dirs,
             options.font_own_metrics,
         )),
@@ -322,21 +367,96 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
             preload,
             ..RunConfig::default()
         },
-    };
-    let interpreter = Interpreter::start(vkxp_ruby_sys::Options::default())?;
+    })
+}
 
-    // What the guest thread does: it sends the game to the interpreter thread, waits for it,
-    // reports how it went and lets go of the interpreter.
-    let (done, outcome) = mpsc::channel();
-    let guest = move |link: GuestEnd| {
-        let result = interpreter.run(move |ruby| {
-            signals::unblock_virtual_timer();
-            run_game(ruby, config, link)
-        });
-        // Nobody listens once the program has given up waiting.
-        let _ = done.send(result);
-        drop(interpreter);
-    };
+/// The guest of a run, as the host is given it and as the program waits for it.
+enum Guest {
+    /// The interpreter thread of this process, and what the guest thread reports.
+    Thread(Receiver<Result<(), RunError>>),
+    /// A child process.
+    Process(GuestProcess),
+}
+
+impl Guest {
+    /// Waits for the game's scripts to end, once the host has, and says whether the game
+    /// ended without a failure.
+    fn ended(self) -> Result<bool> {
+        match self {
+            Guest::Thread(outcome) => game_ended(&outcome),
+            Guest::Process(process) => process.wait(),
+        }
+    }
+}
+
+/// The guest role: plays the game in `game_dir` over the socket of the parent process.
+/// `Ok(false)` is a game that failed and has said why.
+fn run_guest(game_dir: PathBuf, options: Options, role: &GuestRole) -> Result<bool> {
+    signals::die_with_parent();
+    let inputs = guest_inputs(&game_dir, &options)?;
+    let config = guest_config(&game_dir, &options, inputs, role.seed)?;
+    let interpreter = Interpreter::start(vkxp_ruby_sys::Options::default())?;
+    let stream = UnixStream::connect(&role.socket).with_context(|| {
+        format!(
+            "cannot connect to the socket {} of the parent process",
+            role.socket.display()
+        )
+    })?;
+    // The interpreter thread reads and writes the socket itself.
+    let link = GuestEnd::over_stream(stream);
+    let result = interpreter.run(move |ruby| {
+        signals::unblock_virtual_timer();
+        run_game(ruby, config, link)
+    });
+    drop(interpreter);
+    Ok(game_succeeded(result))
+}
+
+/// Runs the game in `game_dir` as the settings describe, headless with the input `script`.
+/// `Ok(false)` is a run that failed and has said why.
+fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<bool> {
+    let Settings {
+        options,
+        keys,
+        pads,
+    } = settings;
+    let inputs = guest_inputs(&game_dir, &options)?;
+    let audio = audio_options(options.no_audio, options.soundfont.as_deref())?;
+    let dumps = options
+        .dumps
+        .iter()
+        .map(|(frame, path)| Ok((*frame, absolute(path)?)))
+        .collect::<Result<Vec<_>>>()?;
+    let (seed, input) = seed_and_input(&options)?;
+    let title = inputs.ini.title.clone();
+
+    // What the guest thread does, and what the program waits for once the host has ended.
+    let (guest, waited): (Box<dyn FnOnce(GuestEnd) + Send>, Guest) =
+        match options.guest.unwrap_or_default() {
+            GuestForm::Thread => {
+                let config = guest_config(&game_dir, &options, inputs, seed)?;
+                let interpreter = Interpreter::start(vkxp_ruby_sys::Options::default())?;
+                // It sends the game to the interpreter thread, waits for it, reports how
+                // it went and lets go of the interpreter.
+                let (done, outcome) = mpsc::channel();
+                let guest = move |link: GuestEnd| {
+                    let result = interpreter.run(move |ruby| {
+                        signals::unblock_virtual_timer();
+                        run_game(ruby, config, link)
+                    });
+                    // Nobody listens once the program has given up waiting.
+                    let _ = done.send(result);
+                    drop(interpreter);
+                };
+                (Box::new(guest), Guest::Thread(outcome))
+            }
+            GuestForm::Process => {
+                // The child does what `guest_config` does; this process has no interpreter.
+                let (process, stream) = GuestProcess::start(seed)?;
+                let guest = move |link: GuestEnd| process::relay(link, stream);
+                (Box::new(guest), Guest::Process(process))
+            }
+        };
 
     let device = options.device.as_deref().map(device_from_text);
     if options.headless {
@@ -361,7 +481,7 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
                 false
             }
         };
-        let game_ok = game_ended(&outcome)?;
+        let game_ok = waited.ended()?;
         guest_thread
             .join()
             .map_err(|_| anyhow!("the guest thread panicked"))?;
@@ -383,7 +503,7 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
         };
         // The windowed runner returns once the guest thread has ended.
         let end = run_windowed(host_options, guest)?;
-        let game_ok = game_ended(&outcome)?;
+        let game_ok = waited.ended()?;
         if !end.is_success() {
             eprintln!("vkxp: the session ended without the game shutting down ({end:?})");
         }
@@ -395,13 +515,7 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
 /// without a failure. A game that does not end within [`GUEST_WAIT`] ends the process.
 fn game_ended(outcome: &Receiver<Result<(), RunError>>) -> Result<bool> {
     match outcome.recv_timeout(GUEST_WAIT) {
-        Ok(Ok(())) => Ok(true),
-        // The report of a script error is on the error stream already.
-        Ok(Err(RunError::Script(_))) => Ok(false),
-        Ok(Err(error)) => {
-            eprintln!("vkxp: {error}");
-            Ok(false)
-        }
+        Ok(result) => Ok(game_succeeded(result)),
         Err(RecvTimeoutError::Timeout) => {
             eprintln!(
                 "vkxp: the game's scripts did not end within {} seconds of being asked to \
@@ -412,6 +526,20 @@ fn game_ended(outcome: &Receiver<Result<(), RunError>>) -> Result<bool> {
             std::process::exit(1);
         }
         Err(RecvTimeoutError::Disconnected) => bail!("the guest thread panicked"),
+    }
+}
+
+/// Whether the game ended without a failure. A failure that is not on the error stream yet
+/// is written there.
+fn game_succeeded(result: Result<(), RunError>) -> bool {
+    match result {
+        Ok(()) => true,
+        // The report of a script error is on the error stream already.
+        Err(RunError::Script(_)) => false,
+        Err(error) => {
+            eprintln!("vkxp: {error}");
+            false
+        }
     }
 }
 

@@ -10,7 +10,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Child, Command, Output, Stdio};
 use std::time::{Duration, Instant};
 
 use tempfile::TempDir;
@@ -115,22 +115,32 @@ fn vkxp_in(work: TempDir, arguments: &[&str]) -> Ran {
 /// Runs the executable as [`vkxp_in`] does, with the environment variable `VKXP_LOG` set to
 /// `log` or, without one, not set.
 fn vkxp_logging(work: TempDir, arguments: &[&str], log: Option<&str>) -> Ran {
+    let mut command = command(work.path(), arguments);
+    if let Some(log) = log {
+        command.env("VKXP_LOG", log);
+    }
+    let output = command.output().expect("the program starts");
+    Ran { output, work }
+}
+
+/// The executable with these arguments, to be started in `work`, with the loader restricted
+/// as this process is and neither `VKXP_LOG` nor `VKXP_GUEST` set. `work` also stands in for
+/// the user's run-time directory, where the socket of a guest process is made.
+fn command(work: &Path, arguments: &[&str]) -> Command {
     let restriction = isolation();
     let mut command = Command::new(env!("CARGO_BIN_EXE_vkxp"));
     command
         .args(arguments)
-        .current_dir(work.path())
-        .env("XDG_DATA_HOME", work.path())
-        .env("XDG_CONFIG_HOME", work.path())
-        .env_remove("VKXP_LOG");
-    if let Some(log) = log {
-        command.env("VKXP_LOG", log);
-    }
+        .current_dir(work)
+        .env("XDG_DATA_HOME", work)
+        .env("XDG_CONFIG_HOME", work)
+        .env("XDG_RUNTIME_DIR", work)
+        .env_remove("VKXP_LOG")
+        .env_remove("VKXP_GUEST");
     for (name, value) in restriction {
         command.env(name, value);
     }
-    let output = command.output().expect("the program starts");
-    Ran { output, work }
+    command
 }
 
 /// Runs `game` headless with its stand-in built-in scripts file, followed by `arguments`.
@@ -339,6 +349,9 @@ fn the_frame_limit_ends_a_game_that_never_ends_with_status_0() {
     assert!(!ran.file("eleventh.png").exists());
 }
 
+/// The two forms of the guest, as `--guest` names them.
+const FORMS: [&str; 2] = ["thread", "process"];
+
 /// Scenario "Option accepted" of `specs/game-launch/spec.md`.
 #[test]
 fn frame_statistics_of_a_headless_run_are_written_to_the_error_stream() {
@@ -347,19 +360,22 @@ fn frame_statistics_of_a_headless_run_are_written_to_the_error_stream() {
         "Stats",
         &[("Main", "loop { Graphics.update }")],
     );
-    let ran = headless(&game, &["--frames", "10", "--frame-stats"]);
-    ran.assert_success();
-    let stderr = ran.stderr();
-    assert!(
-        stderr.contains("vkxp: frame times over 10 frame(s):"),
-        "{stderr}"
-    );
-    for row in [
-        "guest: 9 frame(s)",
-        "encode: 10 frame(s)",
-        "submit: 10 frame(s)",
-    ] {
-        assert!(stderr.contains(row), "no `{row}` in: {stderr}");
+    // The rows are the same whether the guest is a thread or a process.
+    for form in FORMS {
+        let ran = headless(&game, &["--frames", "10", "--frame-stats", "--guest", form]);
+        ran.assert_success();
+        let stderr = ran.stderr();
+        assert!(
+            stderr.contains("vkxp: frame times over 10 frame(s):"),
+            "{form}: {stderr}"
+        );
+        for row in [
+            "guest: 9 frame(s)",
+            "encode: 10 frame(s)",
+            "submit: 10 frame(s)",
+        ] {
+            assert!(stderr.contains(row), "{form}: no `{row}` in: {stderr}");
+        }
     }
 
     // The option asked for the summary, so it is shown at every level.
@@ -431,14 +447,16 @@ end
     };
 
     // Rows of a headless run: each counts the frames the guest measured, which are the ones
-    // that follow a tick.
+    // that follow a tick. A guest in a process of its own writes the same rows itself.
     let measured = run(&["--frame-stats"]);
-    let stderr = measured.stderr();
-    assert!(stderr.contains("vkxp: guest frame times over "), "{stderr}");
-    let counts = ROWS.map(|name| row_count(&stderr, name));
-    let frames = counts[0].unwrap_or_else(|| panic!("no row of the scripts in: {stderr}"));
-    assert!((49..=50).contains(&frames), "{stderr}");
-    assert_eq!(counts, [Some(frames); 4], "{stderr}");
+    for ran in [&measured, &run(&["--frame-stats", "--guest", "process"])] {
+        let stderr = ran.stderr();
+        assert!(stderr.contains("vkxp: guest frame times over "), "{stderr}");
+        let counts = ROWS.map(|name| row_count(&stderr, name));
+        let frames = counts[0].unwrap_or_else(|| panic!("no row of the scripts in: {stderr}"));
+        assert!((49..=50).contains(&frames), "{stderr}");
+        assert_eq!(counts, [Some(frames); 4], "{stderr}");
+    }
 
     // Not requested: no such row.
     let plain = run(&[]);
@@ -1242,4 +1260,230 @@ fn verbose_names_the_built_in_scripts_file() {
         .lines()
         .any(|line| line.starts_with("vkxp: INFO ") && line.contains(&*builtin.to_string_lossy()));
     assert!(named, "{stderr}");
+}
+
+/// A game for the scenarios of the guest in a process: it writes the number of the process
+/// its scripts run in to `pid.txt` in the game directory, then does what `rest` says.
+fn pid_game(name: &str, rest: &str) -> Game {
+    let main = format!(
+        "File.open('pid.tmp', 'w') {{ |file| file.write($$.to_s) }}\n\
+         File.rename('pid.tmp', 'pid.txt')\n\
+         {rest}\n"
+    );
+    Game::new(name, "Process", &[("Main", &main)])
+}
+
+/// The process number a [`pid_game`] wrote, once it has.
+fn guest_pid(game: &Game) -> Option<u32> {
+    fs::read_to_string(game.dir().join("pid.txt"))
+        .ok()?
+        .trim()
+        .parse()
+        .ok()
+}
+
+/// Starts `game` headless with `arguments`, its error stream kept.
+fn start_headless(work: &Path, game: &Game, arguments: &[&str]) -> Child {
+    let dir = game.dir().to_string_lossy().into_owned();
+    let builtin = game.builtin_scripts().to_string_lossy().into_owned();
+    let device = device();
+    let mut all = vec![
+        dir.as_str(),
+        "--builtin-scripts",
+        &builtin,
+        "--headless",
+        "--device",
+        &device,
+    ];
+    all.extend_from_slice(arguments);
+    command(work, &all)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the program starts")
+}
+
+/// Scenario "Same frames" of the requirement "Guest in a process".
+#[test]
+fn a_guest_in_a_process_writes_the_frames_of_a_guest_on_a_thread() {
+    let main = "\
+Graphics.update
+Graphics.freeze
+$sprite.y = 200
+Graphics.transition(4)
+12.times do
+  Graphics.update
+  Input.update
+  $sprite.x += 4 if Input.press?(Input::RIGHT)
+end
+exit
+";
+    let game = Game::new(
+        "e2e-process-frames",
+        "Frames",
+        &[("Sprite", RED_SPRITE), ("Main", main)],
+    );
+    let names: Vec<String> = (0..17)
+        .map(|index| format!("{index}={index}.png"))
+        .collect();
+    let mut arguments = vec!["--input", "7:RIGHT, 12:"];
+    arguments.extend(names.iter().flat_map(|name| ["--dump", name.as_str()]));
+    let [thread, process] = FORMS.map(|form| {
+        let mut all = arguments.clone();
+        all.extend(["--guest", form]);
+        let ran = headless(&game, &all);
+        ran.assert_success();
+        ran
+    });
+    for index in 0..17 {
+        let name = format!("{index}.png");
+        let written = fs::read(thread.file(&name)).expect("a dumped frame");
+        assert!(
+            written == fs::read(process.file(&name)).expect("a dumped frame"),
+            "frame {index} differs"
+        );
+    }
+    // The transition and the input both show.
+    let (first, last) = (thread.frame("0.png"), thread.frame("16.png"));
+    assert_eq!(first.pixel(10, 20), RED);
+    assert_eq!(last.pixel(10, 200), [0, 0, 0, 255]);
+    assert_eq!(last.leftmost(RED), Some(10 + 4 * 5));
+}
+
+/// Scenario "Script error" of the requirement "Guest in a process".
+#[test]
+fn a_script_error_of_a_guest_in_a_process_is_reported_as_that_of_a_thread() {
+    let source = "Graphics.update\nraise 'boom'\n";
+    let game = Game::new("e2e-process-error", "Error", &[("Main", source)]);
+    let [thread, process] = FORMS.map(|form| headless(&game, &["--guest", form]));
+    thread.assert_failure();
+    process.assert_failure();
+    assert!(process.stderr().contains("boom"), "{}", process.stderr());
+    assert_eq!(process.stderr(), thread.stderr());
+}
+
+/// Scenario "Guest process dies" of the requirement "Guest in a process".
+#[test]
+fn a_guest_process_ended_by_a_signal_fails_the_run_naming_the_signal() {
+    let game = pid_game("e2e-process-dies", "loop { Graphics.update }");
+    let work = tempfile::tempdir().expect("a temporary directory");
+    let child = start_headless(work.path(), &game, &["--guest", "process"]);
+    let started = Instant::now();
+    let pid = loop {
+        if let Some(pid) = guest_pid(&game) {
+            break pid;
+        }
+        assert!(started.elapsed() < Duration::from_secs(60), "no guest yet");
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    assert_ne!(pid, child.id(), "the guest is a process of its own");
+    let killed = Command::new("kill")
+        .args(["-KILL", &pid.to_string()])
+        .status()
+        .expect("kill starts");
+    assert!(killed.success());
+
+    let output = child.wait_with_output().expect("the program ends");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "{stderr}");
+    assert!(output.status.code().is_some(), "{}", output.status);
+    assert!(stderr.contains("SIGKILL"), "{stderr}");
+}
+
+/// Scenario "Frame limit" of the requirement "Guest in a process".
+#[test]
+fn the_frame_limit_ends_a_guest_process_too() {
+    let game = pid_game("e2e-process-limit", "loop { Graphics.update }");
+    let ran = headless(&game, &["--guest", "process", "--frames", "5"]);
+    ran.assert_success();
+    let pid = guest_pid(&game).expect("the game ran");
+    assert!(
+        !Path::new(&format!("/proc/{pid}")).exists(),
+        "the guest process {pid} is still there"
+    );
+}
+
+/// A guest process whose game never asks for the quit request is ended.
+#[test]
+fn a_guest_process_that_does_not_answer_the_quit_request_is_ended() {
+    let source = "\
+begin
+  3.times { Graphics.update }
+rescue SystemExit
+end
+loop { }";
+    let game = pid_game("e2e-process-stuck", source);
+    let ran = headless(&game, &["--guest", "process", "--frames", "3"]);
+    ran.assert_failure();
+    assert!(ran.stderr().contains("did not end"), "{}", ran.stderr());
+    let pid = guest_pid(&game).expect("the game ran");
+    assert!(!Path::new(&format!("/proc/{pid}")).exists());
+}
+
+/// Scenario "Unknown value" of the requirement "Guest option".
+#[test]
+fn an_unknown_form_of_the_guest_prints_the_usage_message() {
+    let ran = vkxp(&["--guest", "fiber"]);
+    assert_eq!(ran.output.status.code(), Some(2));
+    let stderr = ran.stderr();
+    assert!(stderr.contains("fiber"), "{stderr}");
+    assert!(stderr.contains("is not one of thread, process"), "{stderr}");
+    assert!(stderr.contains("usage: vkxp"), "{stderr}");
+}
+
+/// Scenario "Environment" of the requirement "Guest option", and the order of the three
+/// places the form is named in.
+#[test]
+fn the_form_of_the_guest_comes_from_the_command_line_the_environment_or_a_file() {
+    // Whether the scripts of a run with this environment, user file and command line ran in
+    // a process other than the program's.
+    let in_a_child = |variable: Option<&str>, file: &str, arguments: &[&str]| {
+        let game = pid_game("e2e-process-option", "Graphics.update");
+        let work = work_with_user_config(file);
+        let dir = game.dir().to_string_lossy().into_owned();
+        let builtin = game.builtin_scripts().to_string_lossy().into_owned();
+        let device = device();
+        let mut all = vec![
+            dir.as_str(),
+            "--builtin-scripts",
+            &builtin,
+            "--headless",
+            "--device",
+            &device,
+        ];
+        all.extend_from_slice(arguments);
+        let mut command = command(work.path(), &all);
+        if let Some(variable) = variable {
+            command.env("VKXP_GUEST", variable);
+        }
+        let child = command
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("the program starts");
+        let program = child.id();
+        let output = child.wait_with_output().expect("the program ends");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{stderr}");
+        guest_pid(&game).expect("the game ran") != program
+    };
+    assert!(!in_a_child(None, "", &[]), "the default is a thread");
+    assert!(in_a_child(Some("process"), "", &[]));
+    assert!(in_a_child(None, "guest = \"process\"", &[]));
+    assert!(!in_a_child(Some("thread"), "guest = \"process\"", &[]));
+    assert!(!in_a_child(Some("process"), "", &["--guest", "thread"]));
+    assert!(in_a_child(Some("thread"), "", &["--guest", "process"]));
+
+    // Another value of the variable is an error that names the two.
+    let work = tempfile::tempdir().expect("a temporary directory");
+    let output = command(work.path(), &[])
+        .env("VKXP_GUEST", "fiber")
+        .output()
+        .expect("the program starts");
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("VKXP_GUEST: `fiber` is not one of thread, process"),
+        "{stderr}"
+    );
 }
