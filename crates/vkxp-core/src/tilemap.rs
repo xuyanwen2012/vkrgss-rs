@@ -747,6 +747,7 @@ mod tests {
         assert!(tile_shows(&frame, 0, 0, |_, _| BLACK));
         assert!(tile_shows(&frame, 64, 32, |_, _| BLACK));
         assert!(tile_shows(&frame, 32, 0, |_, _| BLACK));
+        stage.assert_pinned("a_tileset_tile_shows_its_32_by_32_pixels_of_the_tileset");
     }
 
     #[test]
@@ -762,6 +763,7 @@ mod tests {
         let before = stage.bitmaps.len();
         assert!(all(&stage.frame(), BLACK));
         assert_eq!(stage.bitmaps.len(), before, "nothing to cache");
+        stage.assert_pinned("identifiers_below_48_and_tiles_outside_the_tileset_draw_nothing");
     }
 
     #[test]
@@ -789,6 +791,7 @@ mod tests {
         assert_ne!(frame.pixel(32, 0), BLACK);
         stage.bitmaps.dispose(autotile);
         assert!(all(&stage.frame(), BLACK));
+        stage.assert_pinned("a_tilemap_without_a_live_sheet_draws_nothing_for_its_tiles");
     }
 
     #[test]
@@ -798,6 +801,7 @@ mod tests {
         assert!(all(&stage.frame(), BLACK));
         stage.scene.tilemap_mut(id).unwrap().map_data = None;
         assert!(all(&stage.frame(), BLACK));
+        stage.assert_pinned("a_tilemap_without_map_data_draws_nothing");
     }
 
     /// A stage of 8 by 6 tiles showing the 48 patterns of autotile `index`, pattern `p` in
@@ -856,6 +860,8 @@ mod tests {
                 );
             }
         }
+        stage
+            .assert_pinned("every_autotile_pattern_is_assembled_from_the_quarters_the_table_names");
     }
 
     #[test]
@@ -863,6 +869,9 @@ mod tests {
         for index in [1, 6] {
             let (mut stage, _) = patterns(96, 128, index);
             assert!(shows_patterns(&stage.frame(), 0), "autotile {index}");
+            stage.assert_pinned(&format!(
+                "each_of_the_seven_autotiles_has_its_own_sheet_{index}"
+            ));
         }
     }
 
@@ -876,6 +885,7 @@ mod tests {
                 "pattern {pattern}"
             );
         }
+        stage.assert_pinned("a_sheet_32_pixels_high_shows_the_whole_sheet_for_every_pattern");
     }
 
     #[test]
@@ -901,6 +911,7 @@ mod tests {
                 "after {after} updates"
             );
         }
+        stage.assert_pinned("an_autotile_shows_its_next_frame_every_16_updates");
     }
 
     #[test]
@@ -916,6 +927,7 @@ mod tests {
                 stage.scene.tilemap_mut(id).unwrap().update();
             }
         }
+        stage.assert_pinned("a_single_tile_sheet_is_animated_in_frames_of_32_pixels");
     }
 
     #[test]
@@ -945,6 +957,7 @@ mod tests {
             y
         )));
         assert!(shows_full_map(&frame, (0, 0), SCREEN));
+        stage.assert_pinned("cell_x_y_is_drawn_at_32_times_its_coordinates");
     }
 
     #[test]
@@ -975,6 +988,7 @@ mod tests {
             (tilemap.ox, tilemap.oy) = origin;
             assert!(shows_full_map(&stage.frame(), origin, SCREEN), "{origin:?}");
         }
+        stage.assert_pinned("the_origin_scrolls_the_map_by_pixels");
     }
 
     #[test]
@@ -989,6 +1003,7 @@ mod tests {
             let wrapped = (origin.0.rem_euclid(640), origin.1.rem_euclid(480));
             assert!(shows_full_map(&frame, wrapped, area), "{origin:?}");
         }
+        stage.assert_pinned("an_origin_at_the_limits_of_its_type_is_drawn");
     }
 
     #[test]
@@ -1034,6 +1049,7 @@ mod tests {
         assert!(tile_shows(&frame, 32, 0, |x, y| tile_pixel(384 + 2, x, y)));
         assert!(tile_shows(&frame, 64, 32, |x, y| tile_pixel(384 + 5, x, y)));
         assert!(tile_shows(&frame, 0, 32, |x, y| tile_pixel(384 + 6, x, y)));
+        stage.assert_pinned("the_upper_layer_covers_the_lower_one");
     }
 
     #[test]
@@ -1054,6 +1070,7 @@ mod tests {
             let upper = !((8..24).contains(&x) && (8..24).contains(&y));
             tile_pixel(if upper { 385 } else { 384 }, x, y)
         }));
+        stage.assert_pinned("an_upper_tile_lets_the_lower_one_show_through_its_transparent_pixels");
     }
 
     #[test]
@@ -1072,6 +1089,7 @@ mod tests {
             );
         }
         assert!(shows_full_map(&frame, (320, 0), SCREEN));
+        stage.assert_pinned("the_map_repeats_beyond_its_edges");
     }
 
     #[test]
@@ -1100,6 +1118,7 @@ mod tests {
         viewport.rect = Rect::new(-50, -20, 200, 100);
         let frame = stage.frame();
         assert!(shows_full_map(&frame, (95, 13), Rect::new(0, 0, 150, 80)));
+        stage.assert_pinned("a_tilemap_in_a_viewport_is_drawn_inside_its_rectangle");
     }
 
     /// The stage of the priority scenarios: a tile of `priority` in cell (2, 3), whose top
@@ -1141,6 +1160,7 @@ mod tests {
         assert_eq!(in_front(&mut stage), (false, false));
         stage.scene.set_sprite_z(sprite, -1).unwrap();
         assert_eq!(in_front(&mut stage), (true, true));
+        stage.assert_pinned("tiles_of_priority_0_are_drawn_at_z_0");
     }
 
     #[test]
@@ -1156,6 +1176,7 @@ mod tests {
         assert_eq!(in_front(&mut stage), (false, false));
         stage.scene.set_sprite_z(sprite, 161).unwrap();
         assert_eq!(in_front(&mut stage), (false, false));
+        stage.assert_pinned("a_tile_of_priority_1_ranks_with_the_sprites_one_row_below_it");
     }
 
     #[test]
@@ -1173,7 +1194,11 @@ mod tests {
             assert_eq!(in_front(&mut stage), (true, false), "priority {priority}");
             stage.scene.set_sprite_z(sprite, z + 1).unwrap();
             assert_eq!(in_front(&mut stage), (false, false), "priority {priority}");
+            stage.assert_pinned(&format!(
+                "a_tile_of_a_higher_priority_ranks_32_higher_for_each_step_{priority}"
+            ));
         }
+        stage.assert_pinned("a_tile_of_a_higher_priority_ranks_32_higher_for_each_step");
     }
 
     #[test]
@@ -1186,6 +1211,7 @@ mod tests {
         assert_eq!(in_front_at(&mut stage, 48), (true, false));
         stage.scene.set_sprite_z(sprite, 48 + 64 + 1).unwrap();
         assert_eq!(in_front_at(&mut stage, 48), (false, false));
+        stage.assert_pinned("the_z_of_a_tile_follows_its_row_on_the_screen");
     }
 
     /// [`in_front`] for a tilemap scrolled so that the row of the tiles is at `y`.
@@ -1243,6 +1269,7 @@ mod tests {
         };
         assert!(tile_in_front(80 + 64 - 1));
         assert!(!tile_in_front(80 + 64 + 1));
+        stage.assert_pinned("the_z_of_a_tile_follows_the_origin_of_its_viewport");
     }
 
     #[test]
@@ -1294,6 +1321,8 @@ mod tests {
         assert_eq!(stage.bitmaps.len(), before);
         assert!(all(&stage.frame(), BLACK));
         assert_eq!(stage.bitmaps.len(), before);
+        stage
+            .assert_pinned("an_invisible_tilemap_gives_its_bitmaps_back_also_in_a_hidden_viewport");
     }
 
     #[test]
@@ -1307,6 +1336,7 @@ mod tests {
         assert_eq!(in_front(&mut stage), (false, true));
         stage.scene.tilemap_mut(id).unwrap().priorities = None;
         assert_eq!(in_front(&mut stage), (false, false));
+        stage.assert_pinned("a_tile_without_an_entry_in_the_priorities_has_priority_0");
     }
 
     #[test]
@@ -1358,6 +1388,7 @@ mod tests {
             x,
             y
         )));
+        stage.assert_pinned("a_change_to_a_shared_table_shows_in_the_next_frame");
     }
 
     #[test]
@@ -1389,6 +1420,7 @@ mod tests {
         let other = stage.solid(256, 64, GREEN);
         stage.scene.tilemap_mut(id).unwrap().tileset = Some(other);
         assert_eq!(stage.frame().pixel(5, 6), GREEN);
+        stage.assert_pinned("drawing_into_a_sheet_shows_in_the_next_frame");
     }
 
     /// Measured on the original runtime (tilemap blend probe): an opaque tile of priority 0
@@ -1425,6 +1457,9 @@ mod tests {
         let once = vkxp_pixel::blend_normal(BLACK, [138, 130, 150, 142], 255);
         assert_eq!(frame.pixel(40, 6), once);
         assert_eq!(frame.pixel(40, 40), [6, 14, 2, 255]);
+        // The same picture once more, as a frame of the stage.
+        assert_eq!(stage.frame(), frame);
+        stage.assert_pinned("stacked_translucent_tiles_of_one_priority_are_blended_one_by_one");
     }
 
     /// The layers of the ground are blended one by one as well.
@@ -1446,6 +1481,8 @@ mod tests {
         assert_eq!(packet.ops.len(), 3);
         let frame = stage.render(&packet).unwrap();
         assert_eq!(frame.pixel(5, 6), [111, 107, 120, 255]);
+        assert_eq!(stage.frame(), frame);
+        stage.assert_pinned("stacked_translucent_tiles_of_the_ground_are_blended_one_by_one");
     }
 
     #[test]
@@ -1472,6 +1509,7 @@ mod tests {
         stage.scene.tilemap_mut(id).unwrap().visible = true;
         assert!(!all(&stage.frame(), BLACK));
         assert_eq!(stage.bitmaps.len(), before);
+        stage.assert_pinned("tiles_are_drawn_without_bitmaps_of_the_scene");
     }
 
     /// The tilemap layer ops of a packet.
@@ -1539,6 +1577,9 @@ mod tests {
             );
             assert_ne!(layer.map, layer.priorities);
         }
+        stage.assert_pinned(
+            "a_tilemap_is_one_op_per_layer_of_the_ground_and_per_row_and_layer_above",
+        );
     }
 
     #[test]
@@ -1656,6 +1697,9 @@ mod tests {
         let frame = stage.frame();
         assert!(tile_shows(&frame, 0, 0, |_, _| BLUE));
         assert!(tile_shows(&frame, 0, 32, |x, y| tile_pixel(384, x, y)));
+        stage.assert_pinned(
+            "a_sprite_between_two_rows_is_in_front_of_the_upper_and_behind_the_lower",
+        );
     }
 
     #[test]
@@ -1772,6 +1816,7 @@ mod tests {
         assert_eq!(stage.frame().rgba, plain.rgba);
         let stored = stage.scene.tilemap(id).unwrap().flash_data.clone();
         assert_eq!(stored, None);
+        stage.assert_pinned("a_cell_with_a_flash_entry_is_tinted_and_its_neighbours_are_not");
     }
 
     #[test]
@@ -1793,6 +1838,7 @@ mod tests {
         // At the weakest point nothing is added.
         flash.set(0, 0, 0, 0);
         assert_eq!(stage.frame().pixel(8, 8)[0], reds[16]);
+        stage.assert_pinned("the_flash_pulses_with_the_updates_of_the_tilemap");
     }
 
     #[test]
@@ -1836,6 +1882,7 @@ mod tests {
             assert_eq!(frame.rgba, tinted.rgba, "origin ({ox}, {oy})");
             assert_ne!(frame.rgba, plain.rgba, "origin ({ox}, {oy})");
         }
+        stage.assert_pinned("the_flash_overlay_scrolls_with_its_cell");
     }
 
     /// Whether (`x`, `y`) is among the 32 by 32 pixels at `corner`.
@@ -1858,6 +1905,8 @@ mod tests {
         let frame = stage.frame();
         assert!(flashes(&frame, &plain, (32, 0), WHITE));
         assert!(tile_shows(&frame, 64, 0, |x, y| tile_pixel(484, x, y)));
+        stage
+            .assert_pinned("the_flash_overlay_is_above_the_ground_and_below_tiles_with_a_priority");
     }
 
     #[test]
@@ -1879,5 +1928,6 @@ mod tests {
         stage.scene.tilemap_mut(id).unwrap().visible = false;
         stage.frame();
         assert_eq!(stage.bitmaps.len(), without, "the overlay");
+        stage.assert_pinned("the_flash_overlay_is_given_back_with_the_last_flashing_cell");
     }
 }

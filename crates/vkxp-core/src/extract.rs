@@ -603,11 +603,33 @@ pub(crate) mod testing {
     pub(crate) const BLUE: Rgba = [0, 0, 255, 255];
     pub(crate) const CLEAR: Rgba = [0, 0, 0, 0];
 
+    /// The committed digests of the frames of the tilemap tests: a test's name, then one
+    /// digest for each frame [`Stage::frame`] drew of a scene with a tilemap, in order. They
+    /// were recorded while each of these frames was also compared with the frame the former
+    /// composition of tilemaps into cached bitmaps drew. To accept an intended change, run
+    /// `VKXP_BLESS=1 cargo test -p vkxp-core`, which rewrites the lines of the tests that ran.
+    const PINNED: &str = include_str!("../tests/data/tilemap-frames.txt");
+    const PINNED_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/tilemap-frames.txt");
+
+    /// One writer of the file at a time when the digests are recorded.
+    static BLESSING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// The digest of a frame: FNV-1a, 64 bits, over its size and its pixels.
+    fn digest(frame: &Frame) -> u64 {
+        let size = [frame.size.width, frame.size.height].map(u32::to_le_bytes);
+        let bytes = size.as_flattened().iter().chain(&frame.rgba);
+        bytes.fold(0xcbf2_9ce4_8422_2325, |hash, &byte| {
+            (hash ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3)
+        })
+    }
+
     /// A scene, its bitmaps and the reference compositor that draws its frames.
     pub(crate) struct Stage {
         pub(crate) scene: Scene,
         pub(crate) bitmaps: Bitmaps,
         compositor: Compositor,
+        /// The digests of the frames drawn of the scene while it had a tilemap.
+        tilemap_frames: Vec<u64>,
     }
 
     impl Stage {
@@ -626,6 +648,7 @@ pub(crate) mod testing {
                 scene,
                 bitmaps: Bitmaps::new(),
                 compositor: Compositor::new(),
+                tilemap_frames: Vec::new(),
             }
         }
 
@@ -651,8 +674,47 @@ pub(crate) mod testing {
                         cached.pixel(x, y)
                     );
                 }
+                self.tilemap_frames.push(digest(&frame));
             }
             frame
+        }
+
+        /// Asserts that the frames drawn so far of the scene with its tilemaps are those
+        /// committed under `name`.
+        pub(crate) fn assert_pinned(&self, name: &str) {
+            let digests: Vec<String> = self
+                .tilemap_frames
+                .iter()
+                .map(|d| format!("{d:016x}"))
+                .collect();
+            assert!(!digests.is_empty(), "`{name}` drew no frame with a tilemap");
+            let line = format!("{name} {}", digests.join(" "));
+            if std::env::var_os("VKXP_BLESS").is_some() {
+                let _guard = BLESSING.lock().unwrap();
+                let old = std::fs::read_to_string(PINNED_PATH).unwrap();
+                let (comments, lines): (Vec<&str>, Vec<&str>) =
+                    old.lines().partition(|line| line.starts_with('#'));
+                let kept = lines
+                    .into_iter()
+                    .filter(|line| line.split(' ').next() != Some(name));
+                let mut lines: Vec<&str> = kept.chain([line.as_str()]).collect();
+                lines.sort_unstable();
+                let new = comments
+                    .into_iter()
+                    .chain(lines)
+                    .fold(String::new(), |text, line| text + line + "\n");
+                std::fs::write(PINNED_PATH, new).unwrap();
+                return;
+            }
+            let expected = PINNED
+                .lines()
+                .find(|line| line.split(' ').next() == Some(name));
+            let expected =
+                expected.unwrap_or_else(|| panic!("no frames are committed for `{name}`"));
+            assert!(
+                expected == line,
+                "the frames of `{name}` are not the committed ones"
+            );
         }
 
         /// The next frame as the cached-bitmap composition of tilemaps draws it, or `None`

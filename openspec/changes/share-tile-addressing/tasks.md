@@ -2,7 +2,7 @@
 
 ## 1. Pin the pictures (`vkxp-core`)
 
-- [ ] 1.1 Commit an expectation for each tilemap test scene the cached comparison covers, asserted by the test. Verify: `cargo test -p vkxp-core` passes with the comparison still in place; changing one tile of a scene makes its test fail.
+- [x] 1.1 Commit an expectation for each tilemap test scene the cached comparison covers, asserted by the test. Verify: `cargo test -p vkxp-core` passes with the comparison still in place; changing one tile of a scene makes its test fail.
 
 ## 2. One definition (`vkxp-proto`, `vkxp-core`, `vkxp-compose-ref`, `vkxp-pixel`)
 
