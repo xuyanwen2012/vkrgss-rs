@@ -331,6 +331,7 @@ mod rb;
 mod rect;
 mod runtime;
 mod sprite;
+mod stats;
 mod table;
 mod text;
 mod tilemap;

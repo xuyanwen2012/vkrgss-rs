@@ -2,7 +2,7 @@
 
 ## 1. Measuring (`vkxp-binding`, `vkxp`)
 
-- [ ] 1.1 Add the option, the measuring and the rows. Verify: the scenarios of `specs/host-session/spec.md`.
+- [x] 1.1 Add the option, the measuring and the rows. Verify: the scenarios of `specs/host-session/spec.md`.
 
 ## 2. Documents
 

@@ -19,6 +19,7 @@ use crate::font::{font_arg, font_copy, font_new_default};
 use crate::guest::{self, Classes, Guest};
 use crate::rb;
 use crate::rect::{rect_arg, rect_new};
+use crate::stats::{Part, Span};
 use crate::wrap::{self, Handle, Wrapped};
 
 /// The instance variable of a bitmap that holds its `Font` object. Without `@`, so scripts
@@ -198,6 +199,7 @@ fn rect(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
 
 /// `blt(x, y, source, source_rect, opacity = 255)`.
 fn blt(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let _span = Span::enter(Part::Bitmap);
     rb::check_count(ruby, args, 4, 5)?;
     let id = id_arg(ruby, recv)?;
     let x = rb::int(ruby, args[0])?;
@@ -213,6 +215,7 @@ fn blt(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
 
 /// `stretch_blt(dest_rect, source, source_rect, opacity = 255)`.
 fn stretch_blt(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let _span = Span::enter(Part::Bitmap);
     rb::check_count(ruby, args, 3, 4)?;
     let id = id_arg(ruby, recv)?;
     let dest_rect = rect_arg(ruby, args[0])?;
@@ -229,6 +232,7 @@ fn stretch_blt(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
 
 /// `fill_rect(rect, color)` or `fill_rect(x, y, width, height, color)`.
 fn fill_rect(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let _span = Span::enter(Part::Bitmap);
     let id = id_arg(ruby, recv)?;
     let (rect, color) = match args {
         [rect, color] => (rect_arg(ruby, *rect)?, color_arg(ruby, *color)?),
@@ -245,12 +249,14 @@ fn fill_rect(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
 }
 
 fn clear(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
+    let _span = Span::enter(Part::Bitmap);
     let id = id_arg(ruby, recv)?;
     operate(ruby, |guest| Ok(guest.bitmaps.clear(id)?))?;
     Ok(ffi::Qnil)
 }
 
 fn get_pixel(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let _span = Span::enter(Part::Bitmap);
     let id = id_arg(ruby, recv)?;
     let x = rb::int(ruby, args[0])?;
     let y = rb::int(ruby, args[1])?;
@@ -259,6 +265,7 @@ fn get_pixel(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
 }
 
 fn set_pixel(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let _span = Span::enter(Part::Bitmap);
     let id = id_arg(ruby, recv)?;
     let x = rb::int(ruby, args[0])?;
     let y = rb::int(ruby, args[1])?;
@@ -270,6 +277,7 @@ fn set_pixel(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
 }
 
 fn hue_change(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let _span = Span::enter(Part::Bitmap);
     let id = id_arg(ruby, recv)?;
     let hue = rb::int(ruby, args[0])?;
     operate(ruby, |guest| Ok(guest.bitmaps.hue_change(id, hue)?))?;
@@ -303,6 +311,7 @@ fn apply_font(ruby: &Ruby, recv: VALUE, id: BitmapId) -> Result<(), Raise> {
 /// `draw_text(x, y, width, height, string, align = 0)` or `draw_text(rect, string, align = 0)`.
 /// Text that is not a `String` raises `TypeError`, as in the original.
 fn draw_text(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let _span = Span::enter(Part::Text);
     let id = id_arg(ruby, recv)?;
     let (rect, rest) = match args.len() {
         2 | 3 => (rect_arg(ruby, args[0])?, &args[1..]),
@@ -327,6 +336,7 @@ fn draw_text(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
 /// `text_size(string)`: a `Rect` at 0, 0 with the size the text has in the bitmap's font.
 /// Text that is not a `String` raises `TypeError`.
 fn text_size(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let _span = Span::enter(Part::Text);
     let id = id_arg(ruby, recv)?;
     let text = rb::text(ruby, args[0])?;
     apply_font(ruby, recv, id)?;

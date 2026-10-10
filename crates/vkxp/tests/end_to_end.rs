@@ -383,6 +383,74 @@ fn frame_statistics_of_a_headless_run_are_written_to_the_error_stream() {
     assert!(!ran.stderr().contains("frame times"), "{}", ran.stderr());
 }
 
+/// The number of frames a row of the frame time statistics counts, if `stderr` has the row.
+fn row_count(stderr: &str, name: &str) -> Option<usize> {
+    let row = format!("vkxp:   {name}: ");
+    let rest = stderr.lines().find_map(|line| line.strip_prefix(&row))?;
+    rest.split(' ').next()?.parse().ok()
+}
+
+/// The scenarios of the requirement "Guest time is split" of `specs/host-session/spec.md`.
+#[test]
+fn the_guest_splits_its_frame_time_when_statistics_are_requested() {
+    const ROWS: [&str; 4] = [
+        "guest scripts",
+        "guest bitmap operations",
+        "guest text",
+        "guest extraction",
+    ];
+    let source = "\
+text = Bitmap.new(200, 40)
+text.font.name = 'Liberation Sans'
+text.font.size = 32
+sprite = Sprite.new
+sprite.bitmap = text
+frame = 0
+loop do
+  text.clear
+  text.draw_text(0, 0, 200, 40, frame.to_s)
+  frame += 1
+  Graphics.update
+end
+";
+    let game = Game::new("e2e-guest-stats", "Split", &[("Main", source)]);
+    let fonts = font_dir().to_string_lossy().into_owned();
+    let run = |extra: &[&str]| {
+        let mut all = vec![
+            "--font-dir",
+            &fonts,
+            "--frames",
+            "50",
+            "--dump",
+            "30=out.png",
+        ];
+        all.extend(extra);
+        let ran = headless(&game, &all);
+        ran.assert_success();
+        ran
+    };
+
+    // Rows of a headless run: each counts the frames the guest measured, which are the ones
+    // that follow a tick.
+    let measured = run(&["--frame-stats"]);
+    let stderr = measured.stderr();
+    assert!(stderr.contains("vkxp: guest frame times over "), "{stderr}");
+    let counts = ROWS.map(|name| row_count(&stderr, name));
+    let frames = counts[0].unwrap_or_else(|| panic!("no row of the scripts in: {stderr}"));
+    assert!((49..=50).contains(&frames), "{stderr}");
+    assert_eq!(counts, [Some(frames); 4], "{stderr}");
+
+    // Not requested: no such row.
+    let plain = run(&[]);
+    let stderr = plain.stderr();
+    for name in ROWS {
+        assert!(!stderr.contains(name), "`{name}` in: {stderr}");
+    }
+
+    // Same frames.
+    assert!(measured.frame("out.png").rgba == plain.frame("out.png").rgba);
+}
+
 /// A game that names the run-time package `Standard` and loads a picture found only there.
 /// Returns the game and the directory of the package.
 fn rtp_game(name: &str) -> (Game, TempDir) {

@@ -17,6 +17,7 @@ use vkxp_vfs::GameIni;
 
 use crate::guest::{Config, Guest};
 use crate::panel::Panel;
+use crate::stats::{self, Part, Span};
 use crate::{audio, graphics, input, kernel, rb, win32api};
 
 /// The Ruby part of the preparation: globals, `Reset` and `Hangup`, `save_data`, `Win32API`,
@@ -54,6 +55,11 @@ pub struct RunConfig {
     /// Whether `p` is log-only: it writes to the error stream, shows no message panel and
     /// waits for nothing.
     pub log_p: bool,
+    /// Whether the guest measures where its frames spend their time and writes the summary
+    /// to the error stream, every 600 frames and when it ends: rows for the scripts, the
+    /// bitmap operations, the text and the extraction of the frame. Without it no clock is
+    /// read.
+    pub frame_stats: bool,
 }
 
 impl Default for RunConfig {
@@ -74,6 +80,7 @@ impl Default for RunConfig {
             seed: None,
             preload: Vec::new(),
             log_p: false,
+            frame_stats: false,
         }
     }
 }
@@ -169,7 +176,20 @@ impl Guest {
     /// [`Guest::show_message`]. A reset or quit request is
     /// recorded for [`raise_pending`]; a host that has gone counts as a quit request and ends
     /// the wait.
+    ///
+    /// A wait for a tick is where a frame of the guest's frame time statistics ends and the
+    /// next begins.
     pub(crate) fn pump(&mut self, wait: Await) {
+        if wait == Await::Tick {
+            stats::frame_ends();
+            self.receive(wait);
+            stats::frame_begins();
+        } else {
+            self.receive(wait);
+        }
+    }
+
+    fn receive(&mut self, wait: Await) {
         loop {
             let Some(link) = &self.runtime.link else {
                 return self.host_gone();
@@ -210,12 +230,14 @@ impl Guest {
         self.send(GuestToHost::Modal { text });
         loop {
             let frame_count = self.scene.frame_count();
+            let extraction = Span::enter(Part::Extraction);
             let mut packet = self.scene.extract(&mut self.bitmaps);
             self.scene.set_frame_count(frame_count);
             if let Some(panel) = &panel {
                 panel.bring_to_front(&mut packet.ops);
             }
             self.send(GuestToHost::Frame(packet));
+            drop(extraction);
             self.pump(Await::Tick);
             let frame_rate = self.scene.frame_rate().get();
             self.win32api.frame_shown(frame_rate.into());
@@ -540,6 +562,7 @@ fn run_scripts(ruby: &Ruby, preload: &[Preload], count: usize) -> Result<(), Run
 pub(crate) fn play(ruby: &Ruby, link: GuestEnd) -> Result<(), RunError> {
     Guest::with(|guest| {
         guest.connect(link);
+        stats::start(guest.runtime.run.frame_stats);
         let title = guest.runtime.run.ini.title.clone();
         guest.send(GuestToHost::SetTitle { title });
     });
@@ -560,6 +583,7 @@ pub(crate) fn play(ruby: &Ruby, link: GuestEnd) -> Result<(), RunError> {
         guest.send(GuestToHost::Shutdown);
         guest.disconnect();
     });
+    stats::finish();
     outcome
 }
 

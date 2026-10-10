@@ -317,6 +317,7 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
             debug: options.debug,
             process_functions: options.process_functions,
             log_p: options.log_p,
+            frame_stats: options.frame_stats,
             seed: Some(seed),
             preload,
             ..RunConfig::default()

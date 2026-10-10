@@ -14,6 +14,7 @@ use crate::error::{self, Error};
 use crate::guest::Guest;
 use crate::rb;
 use crate::runtime::{self, Await};
+use crate::stats::{Part, Span};
 
 /// `Graphics._reset`, in Ruby because it goes through the objects of the scripts: every
 /// sprite, viewport, window, plane, tilemap and bitmap is disposed by the `dispose` of its
@@ -35,12 +36,14 @@ end
 /// tick. The tick count of the emulated `Win32API` functions advances by the frame.
 fn frame(mut front: Vec<BitmapDelta>) {
     Guest::with(|guest| {
+        let extraction = Span::enter(Part::Extraction);
         let mut packet = guest.scene.extract(&mut guest.bitmaps);
         if !front.is_empty() {
             front.append(&mut packet.bitmaps);
             packet.bitmaps = front;
         }
         guest.send(GuestToHost::Frame(packet));
+        drop(extraction);
         guest.pump(Await::Tick);
         let frame_rate = guest.scene.frame_rate().get();
         guest.win32api.frame_shown(frame_rate.into());
