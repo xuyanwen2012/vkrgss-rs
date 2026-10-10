@@ -10,32 +10,17 @@ use vkxp_proto::{
 
 use crate::VkError;
 use crate::bitmaps::{BitmapTable, Entry};
+use crate::shared::{self, NO_BITMAP, WHOLE_TILES};
 use crate::tables::TableStore;
 
 pub(crate) use vkxp_proto::MAX_LOGICAL_DIMENSION;
 
 /// Number of 32-bit words in one record; `OpRecord` in `shaders/compose.comp` has this layout.
-pub(crate) const RECORD_WORDS: usize = 24;
-
-/// Values of the `kind` word. They match the `OP_*` constants in `shaders/compose.comp`.
-mod op_kind {
-    pub(super) const CLEAR: u32 = 0;
-    pub(super) const QUAD: u32 = 1;
-    pub(super) const RECT_EFFECT: u32 = 2;
-    pub(super) const TILEMAP: u32 = 3;
-}
+pub(crate) const RECORD_WORDS: usize = shared::RECORD_WORDS as usize;
 
 /// Number of 32-bit words in the record of a tilemap layer; `TilemapRecord` in
 /// `shaders/compose.comp` has this layout.
-pub(crate) const TILEMAP_WORDS: usize = 25;
-
-/// The slot word of a sheet a tilemap layer goes without. It matches `NO_BITMAP` in
-/// `shaders/compose.comp`.
-const NO_BITMAP: u32 = u32::MAX;
-
-/// Set in the frame word of an autotile whose sheet holds whole tiles. It matches
-/// `WHOLE_TILES` in `shaders/compose.comp`.
-const WHOLE_TILES: u32 = 1 << 31;
+pub(crate) const TILEMAP_WORDS: usize = shared::TILEMAP_WORDS as usize;
 
 /// What a tilemap layer op reads besides its clip, as the shader reads it: in this order, the
 /// index of the first element of the map's layer in the table buffer, the map's width and
@@ -45,21 +30,13 @@ const WHOLE_TILES: u32 = 1 << 31;
 /// autotiles, and the animation frame of each autotile.
 pub(crate) type TilemapRecord = [u32; TILEMAP_WORDS];
 
-/// Values of the `sampling` word of a quad. They match the `SAMPLING_*` constants in
-/// `shaders/compose.comp`.
-mod sampling_kind {
-    pub(super) const AFFINE: u32 = 0;
-    pub(super) const STRETCH: u32 = 1;
-    pub(super) const STRETCH_MIRRORED: u32 = 2;
-}
-
-/// The `blend` word of a quad. It matches the `BLEND_*` constants in `shaders/compose.comp`.
+/// The `blend` word of a quad.
 const fn blend_mode(blend: BlendMode) -> u32 {
     match blend {
-        BlendMode::Normal => 0,
-        BlendMode::Add => 1,
-        BlendMode::Subtract => 2,
-        BlendMode::Window => 3,
+        BlendMode::Normal => shared::BLEND_NORMAL,
+        BlendMode::Add => shared::BLEND_ADD,
+        BlendMode::Subtract => shared::BLEND_SUBTRACT,
+        BlendMode::Window => shared::BLEND_WINDOW,
     }
 }
 
@@ -268,7 +245,7 @@ pub(crate) fn encode_frame(
         match op {
             Op::Clear { color, .. } => {
                 let Some(clip) = clip else { continue };
-                let mut record = OpRecord::new(op_kind::CLEAR, clip);
+                let mut record = OpRecord::new(shared::OP_CLEAR, clip);
                 record.words[18] = u32::from_le_bytes(color.to_rgba());
                 records.push(record);
             }
@@ -294,7 +271,7 @@ pub(crate) fn encode_frame(
                     Sampling::Affine(t) => {
                         let coefficients = [t.xx, t.xy, t.yx, t.yy, t.tx, t.ty];
                         let words = coefficients.map(|c| c.to_bits() as u32);
-                        (clip, sampling_kind::AFFINE, words)
+                        (clip, shared::SAMPLING_AFFINE, words)
                     }
                     Sampling::Stretch { dest, mirror } => {
                         let Some(clip) = clip.within(dest) else {
@@ -304,9 +281,9 @@ pub(crate) fn encode_frame(
                         let step_x = stretch_step(src.width, dest.width);
                         let step_y = stretch_step(src.height, dest.height);
                         let kind = if mirror {
-                            sampling_kind::STRETCH_MIRRORED
+                            shared::SAMPLING_STRETCH_MIRRORED
                         } else {
-                            sampling_kind::STRETCH
+                            shared::SAMPLING_STRETCH
                         };
                         let words = [
                             dest.x as u32,
@@ -319,7 +296,7 @@ pub(crate) fn encode_frame(
                         (clip, kind, words)
                     }
                 };
-                let mut record = OpRecord::new(op_kind::QUAD, clip);
+                let mut record = OpRecord::new(shared::OP_QUAD, clip);
                 record.words[5] = quad.bitmap.index;
                 // Inside the bitmap and not empty, so the origin is not negative and every
                 // value is at most the largest image dimension.
@@ -338,7 +315,7 @@ pub(crate) fn encode_frame(
             }
             Op::RectEffect(effect) => {
                 let Some(clip) = clip else { continue };
-                let mut record = OpRecord::new(op_kind::RECT_EFFECT, clip);
+                let mut record = OpRecord::new(shared::OP_RECT_EFFECT, clip);
                 record.set_tone_and_color(effect.tone, effect.color);
                 records.push(record);
             }
@@ -347,7 +324,7 @@ pub(crate) fn encode_frame(
                 let (Some(clip), Some(tilemap)) = (clip, tilemap) else {
                     continue;
                 };
-                let mut record = OpRecord::new(op_kind::TILEMAP, clip);
+                let mut record = OpRecord::new(shared::OP_TILEMAP, clip);
                 record.words[5] = tilemaps.len() as u32;
                 tilemaps.push(tilemap);
                 records.push(record);

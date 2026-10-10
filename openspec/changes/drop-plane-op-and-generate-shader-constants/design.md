@@ -52,3 +52,10 @@
 - The fake display of `vkxp-host` (`src/testing.rs`) and the host tests used the reserved op
   as "a packet every compositor rejects". They now use a quad of a bitmap that does not
   exist, which both compositors and the fake display reject.
+- `shared.rs` holds the constants this design lists (op kinds, blend modes, sampling kinds,
+  record sizes, the two tilemap markers, the flag bits of `present.frag`). Numbers that are
+  part of a shader's interface declaration stay mirrored by hand: the descriptor bindings,
+  the tile size of 16 (the local size of `compose.comp`) and the sizes of the push constants.
+- The workspace denies `unreachable_pub`, which plain `pub const` items in a private module
+  and in a build script trigger; the module is allowed that lint at both places it is
+  declared.

@@ -44,20 +44,9 @@ layout(push_constant) uniform Constants {
     int vagueness;
 } constants;
 
-// Each target pixel takes one texel of the newest frame: the filter is nearest.
-const uint FLAG_NEAREST = 1u;
-// The target has an sRGB format, which encodes what is written to it.
-const uint FLAG_SRGB_TARGET = 2u;
-// The same as FLAG_NEAREST for the held frame.
-const uint FLAG_HELD_NEAREST = 4u;
-// Both frames have the same size, and so the same rectangle.
-const uint FLAG_SAME_GRID = 8u;
-// The mix is driven per texel by the mask. Only with FLAG_MIX.
-const uint FLAG_MASK = 16u;
-// Where a frame is not read with nearest, the filter is linear instead of sharp bilinear.
-const uint FLAG_LINEAR = 32u;
-// A transition is active: the held frame is mixed in. Without it the newest frame is shown.
-const uint FLAG_MIX = 64u;
+// The bits of `constants.flags` (`FLAG_*`). The build generates this file from
+// `src/shared.rs`, which says what each means.
+#include "shared.glsl"
 
 // What a texel is read from.
 const int NEWEST = 0;

@@ -7,10 +7,30 @@ use super::harness::{Rng, TestCompositor};
 use crate::records::{RECORD_WORDS, TILEMAP_WORDS};
 use crate::resources::read_words;
 
+const SHARED_RS: &str = include_str!("../shared.rs");
+const SHARED_GLSL: &str = include_str!(concat!(env!("OUT_DIR"), "/shared.glsl"));
 const PIXEL_GLSL: &str = include_str!("../../shaders/pixel.glsl");
 const COMPOSE_SPIRV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/compose.comp.spv"));
 const TRANSFORM_TEST_SPIRV: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/transform_test.comp.spv"));
+
+/// The list in `build.rs` names every constant of `src/shared.rs`: each is in the include the
+/// build generated.
+#[test]
+fn generated_include_defines_every_shared_constant() {
+    let names: Vec<&str> = SHARED_RS
+        .lines()
+        .filter_map(|line| line.strip_prefix("pub const ")?.split_once(':'))
+        .map(|(name, _)| name)
+        .collect();
+    assert!(names.contains(&"OP_CLEAR"), "{names:?}");
+    for name in names {
+        assert!(
+            SHARED_GLSL.contains(&format!("const uint {name} = ")),
+            "`{name}` of src/shared.rs is missing from the list in build.rs"
+        );
+    }
+}
 
 /// Names of the functions a GLSL source defines at top level, each with the comment lines
 /// directly above it.

@@ -36,6 +36,9 @@ mod pacing;
 mod present_timing;
 mod records;
 mod resources;
+// `build.rs` includes the file too, where a narrower visibility would not mean the same.
+#[allow(unreachable_pub)]
+mod shared;
 mod tables;
 mod validation;
 

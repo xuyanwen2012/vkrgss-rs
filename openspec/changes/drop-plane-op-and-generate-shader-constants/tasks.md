@@ -6,7 +6,7 @@
 
 ## 2. The constants (`vkxp-vk`)
 
-- [ ] 2.1 Add the shared constants file, generate the GLSL include, and remove the hand-written twins from the shaders. Verify: the scenarios of `specs/vulkan-compositor/spec.md`; no constant of the shared file is defined in a file under `shaders/`.
+- [x] 2.1 Add the shared constants file, generate the GLSL include, and remove the hand-written twins from the shaders. Verify: the scenarios of `specs/vulkan-compositor/spec.md`; no constant of the shared file is defined in a file under `shaders/`.
 
 ## 3. Documents
 

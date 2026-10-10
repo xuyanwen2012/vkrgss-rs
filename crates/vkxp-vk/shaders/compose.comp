@@ -11,25 +11,12 @@
 
 #include "pixel.glsl"
 #include "transform.glsl"
+// The values of `OpRecord.kind` (`OP_*`), `OpRecord.blend` (`BLEND_*`) and
+// `OpRecord.sampling` (`SAMPLING_*`), `NO_BITMAP` and `WHOLE_TILES`. The build generates this
+// file from `src/shared.rs`.
+#include "shared.glsl"
 
 layout(local_size_x = 16, local_size_y = 16) in;
-
-// Values of `OpRecord.kind`. They match `op_kind` in `src/records.rs`.
-const uint OP_CLEAR = 0u;
-const uint OP_QUAD = 1u;
-const uint OP_RECT_EFFECT = 2u;
-const uint OP_TILEMAP = 3u;
-
-// Values of `OpRecord.blend`. They match `blend_mode` in `src/records.rs`.
-const uint BLEND_NORMAL = 0u;
-const uint BLEND_ADD = 1u;
-const uint BLEND_SUBTRACT = 2u;
-const uint BLEND_WINDOW = 3u;
-
-// Values of `OpRecord.sampling`. They match `sampling_kind` in `src/records.rs`.
-const uint SAMPLING_AFFINE = 0u;
-const uint SAMPLING_STRETCH = 1u;
-const uint SAMPLING_STRETCH_MIRRORED = 2u;
 
 // One validated op, as `OpRecord` in `src/records.rs` lays it out: 24 words of 32 bits
 // (`RECORD_WORDS`), which is also the stride of the array below.
@@ -66,13 +53,6 @@ struct OpRecord {
     uint sampling;
 };
 
-// The slot of a sheet a tilemap layer goes without. It matches `NO_BITMAP` in
-// `src/records.rs`.
-const uint NO_BITMAP = 0xFFFFFFFFu;
-// Set in the frame word of an autotile whose sheet holds whole tiles, one per frame of 32
-// pixels. It matches `WHOLE_TILES` in `src/records.rs`.
-const uint WHOLE_TILES = 0x80000000u;
-
 // What a tilemap layer op reads, as `TilemapRecord` in `src/records.rs` lays it out: 25 words
 // of 32 bits (`TILEMAP_WORDS`).
 struct TilemapRecord {
@@ -92,7 +72,8 @@ struct TilemapRecord {
     uint cell_y;
     uint sub_x;
     uint sub_y;
-    // Bitmap slots, or `NO_BITMAP`. A slot named here holds an image.
+    // Bitmap slots, or `NO_BITMAP` for a sheet the layer goes without. A slot named here
+    // holds an image.
     uint tileset;
     uint autotiles[7];
     // The animation frame each autotile is drawn at, with `WHOLE_TILES`.

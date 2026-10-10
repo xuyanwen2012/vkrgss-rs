@@ -23,6 +23,10 @@ use crate::present_timing as ffi;
 use crate::resources::{
     COLOR_LAYERS, COLOR_RANGE, GpuImage, ImageUse, create_shader_module, transition, write_words,
 };
+use crate::shared::{
+    FLAG_HELD_NEAREST, FLAG_LINEAR, FLAG_MASK, FLAG_MIX, FLAG_NEAREST, FLAG_SAME_GRID,
+    FLAG_SRGB_TARGET,
+};
 use crate::{Limit, VkError};
 
 const VERTEX_SPIRV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/present.vert.spv"));
@@ -39,15 +43,6 @@ mod binding {
 /// and size and the frame size, then the mix weight, the flags, the threshold and the
 /// vagueness, four bytes per component.
 const PUSH_CONSTANT_BYTES: usize = 64;
-
-/// Flags of the fragment shader, as `shaders/present.frag` defines them.
-const FLAG_NEAREST: u32 = 1;
-const FLAG_SRGB_TARGET: u32 = 2;
-const FLAG_HELD_NEAREST: u32 = 4;
-const FLAG_SAME_GRID: u32 = 8;
-const FLAG_MASK: u32 = 16;
-const FLAG_LINEAR: u32 = 32;
-const FLAG_MIX: u32 = 64;
 
 /// What is shown of the held and the newest frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
