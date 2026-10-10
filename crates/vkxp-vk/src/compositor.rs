@@ -36,6 +36,43 @@ mod binding {
     pub(super) const TABLES: u32 = 6;
 }
 
+/// The buffers that carry a frame to the device, one of each, kept from frame to frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FrameBuffer {
+    /// The bytes of the bitmap uploads.
+    Staging,
+    Ops,
+    TileHeaders,
+    TileOps,
+    Tilemaps,
+}
+
+impl FrameBuffer {
+    const COUNT: usize = 5;
+
+    fn name(self) -> &'static str {
+        match self {
+            FrameBuffer::Staging => "bitmap staging",
+            FrameBuffer::Ops => "op records",
+            FrameBuffer::TileHeaders => "tile headers",
+            FrameBuffer::TileOps => "tile op indices",
+            FrameBuffer::Tilemaps => "tilemap records",
+        }
+    }
+
+    /// The binding the shader reads the buffer through, or `None` for the staging buffer,
+    /// which only copies read.
+    fn binding(self) -> Option<u32> {
+        match self {
+            FrameBuffer::Staging => None,
+            FrameBuffer::Ops => Some(binding::OPS),
+            FrameBuffer::TileHeaders => Some(binding::TILE_HEADERS),
+            FrameBuffer::TileOps => Some(binding::TILE_OPS),
+            FrameBuffer::Tilemaps => Some(binding::TILEMAPS),
+        }
+    }
+}
+
 /// Bytes of the push constants: logical width, logical height, tile grid width.
 const PUSH_CONSTANT_BYTES: u32 = 12;
 
@@ -69,6 +106,10 @@ pub struct VkCompositor {
     /// The buffer that holds every table for the shader, with the revision of the store it
     /// was written from. Made for the first frame and anew when a table has changed since.
     table_buffer: Option<(GpuBuffer, u64)>,
+    /// The buffers of a frame by [`FrameBuffer`], each with its size in bytes. One is made
+    /// when a frame first needs it and replaced by a larger one when a frame needs more room;
+    /// the descriptor of a storage buffer names the whole of it.
+    frame_buffers: [Option<(GpuBuffer, u64)>; FrameBuffer::COUNT],
     /// The frame target, in the `GENERAL` layout, sized for the last packet that got as far as
     /// drawing. It stays on the device; `read_frame` copies it out as a separate step.
     target: Option<GpuImage>,
@@ -102,10 +143,13 @@ pub struct VkCompositor {
     /// Failure injection: the number of acquires that still report a timeout.
     #[cfg(test)]
     acquire_timeouts: u32,
-    /// Failure injection: the number of per-submission buffers that may still be allocated
-    /// before one allocation fails, once.
+    /// Failure injection: the number of frame buffers that may still be created or grown
+    /// before one such allocation fails, once.
     #[cfg(test)]
-    temporary_buffer_failure: Option<u32>,
+    frame_buffer_failure: Option<u32>,
+    /// The number of frame buffers created so far, first ones and larger ones alike.
+    #[cfg(test)]
+    frame_buffers_created: u32,
     allocator: ManuallyDrop<Allocator>,
     pool: vk::CommandPool,
     commands: vk::CommandBuffer,
@@ -121,7 +165,7 @@ pub struct VkCompositor {
 struct Pending<'a> {
     /// What to record, in delta order.
     steps: Vec<Step<'a>>,
-    /// Total bytes of all uploads, the size of the staging buffer.
+    /// Total bytes of all uploads, which is what they fill of the staging buffer.
     staging_len: u64,
     /// Slots whose occupant changed, so their descriptor has to be rewritten.
     touched: BTreeSet<u32>,
@@ -221,6 +265,7 @@ impl VkCompositor {
             images: HashMap::new(),
             tables: TableStore::new(),
             table_buffer: None,
+            frame_buffers: Default::default(),
             target: None,
             has_frame: false,
             set_layout: vk::DescriptorSetLayout::null(),
@@ -240,7 +285,9 @@ impl VkCompositor {
             #[cfg(test)]
             acquire_timeouts: 0,
             #[cfg(test)]
-            temporary_buffer_failure: None,
+            frame_buffer_failure: None,
+            #[cfg(test)]
+            frame_buffers_created: 0,
             allocator: ManuallyDrop::new(allocator),
             pool: vk::CommandPool::null(),
             commands: vk::CommandBuffer::null(),
@@ -271,7 +318,7 @@ impl VkCompositor {
             .map_err(VkError::vulkan("vkCreateFence"))?;
 
         // One set: the bitmap array is partially bound and updated after bind; the frame
-        // target, the four per-frame buffers and the table buffer are plain bindings.
+        // target, the four storage buffers of a frame and the table buffer are plain bindings.
         let storage_buffer = |binding| {
             vk::DescriptorSetLayoutBinding::default()
                 .binding(binding)
@@ -434,11 +481,18 @@ impl VkCompositor {
         Ok(Some(Frame { size, rgba }))
     }
 
-    /// Makes one allocation of a per-submission buffer (the bitmap staging buffer, then the
-    /// four storage buffers of a frame) fail, after `successes` more of them have succeeded.
+    /// Makes one creation of a frame buffer (the bitmap staging buffer, then the four storage
+    /// buffers of a frame), a first one or a larger one, fail, after `successes` more of them
+    /// have succeeded.
     #[cfg(test)]
-    pub(crate) fn fail_temporary_buffer_after(&mut self, successes: u32) {
-        self.temporary_buffer_failure = Some(successes);
+    pub(crate) fn fail_frame_buffer_after(&mut self, successes: u32) {
+        self.frame_buffer_failure = Some(successes);
+    }
+
+    /// The number of frame buffers created so far.
+    #[cfg(test)]
+    pub(crate) fn frame_buffers_created(&self) -> u32 {
+        self.frame_buffers_created
     }
 
     /// Applies bitmap deltas in order and carries out their GPU work, without drawing.
@@ -575,16 +629,12 @@ impl VkCompositor {
     /// happens on every path, so a failure leaks nothing.
     fn execute(&mut self, pending: Pending<'_>, frame: Option<&FrameData>) -> Result<(), VkError> {
         self.write_bitmap_descriptors(&pending.touched);
-        // Buffers that live for this submission only.
-        let mut temporary = Vec::new();
-        let result = self.submit(&pending, frame, &mut temporary);
+        let result = self.submit(&pending, frame);
         if result.is_err() {
             // SAFETY: the device is live. Whatever was submitted has to finish before the
-            // objects below are destroyed; if this fails too the device is lost.
+            // objects below are destroyed and the frame buffers are written again; if this
+            // fails too the device is lost.
             let _ = unsafe { self.gpu.device.device_wait_idle() };
-        }
-        for buffer in temporary {
-            buffer.destroy(&self.gpu.device, &mut self.allocator);
         }
         for image in pending.retired {
             image.destroy(&self.gpu.device, &mut self.allocator);
@@ -626,53 +676,86 @@ impl VkCompositor {
         unsafe { self.gpu.device.update_descriptor_sets(&writes, &[]) };
     }
 
-    /// Creates a host-visible buffer that lives for the current submission. It is handed to
-    /// `temporary` at once, so `execute` releases it whatever fails afterwards.
-    fn temporary_buffer<'t>(
-        &mut self,
-        temporary: &'t mut Vec<GpuBuffer>,
-        name: &'static str,
-        size: u64,
-        usage: vk::BufferUsageFlags,
-    ) -> Result<&'t mut GpuBuffer, VkError> {
-        #[cfg(test)]
-        match self.temporary_buffer_failure {
-            Some(0) => {
-                self.temporary_buffer_failure = None;
-                return Err(VkError::Memory {
-                    what: name,
-                    message: "injected failure".to_owned(),
-                });
+    /// The frame buffer of `role` with room for `size` bytes, which is not 0: the one kept
+    /// when it is large enough, else a new one of at least twice the size of the one it
+    /// replaces, as far as the device lets the shader read a buffer. Nothing is pending, so
+    /// the buffer it replaces is idle and is destroyed at once. When the new one cannot be
+    /// had the old one stays.
+    fn frame_buffer(&mut self, role: FrameBuffer, size: u64) -> Result<&mut GpuBuffer, VkError> {
+        let slot = role as usize;
+        let kept = self.frame_buffers[slot].as_ref().map(|(_, bytes)| *bytes);
+        if kept.is_none_or(|bytes| bytes < size) {
+            #[cfg(test)]
+            match self.frame_buffer_failure {
+                Some(0) => {
+                    self.frame_buffer_failure = None;
+                    return Err(VkError::Memory {
+                        what: role.name(),
+                        message: "injected failure".to_owned(),
+                    });
+                }
+                Some(remaining) => self.frame_buffer_failure = Some(remaining - 1),
+                None => {}
             }
-            Some(remaining) => self.temporary_buffer_failure = Some(remaining - 1),
-            None => {}
+            // The descriptor of a storage buffer names all of it, so it stays within the
+            // range the device allows, which `size` was checked against with the frame.
+            let (usage, limit) = match role.binding() {
+                Some(_) => (
+                    vk::BufferUsageFlags::STORAGE_BUFFER,
+                    u64::from(self.gpu.max_storage_buffer_range),
+                ),
+                None => (vk::BufferUsageFlags::TRANSFER_SRC, u64::MAX),
+            };
+            let doubled = kept.map_or(0, |bytes| bytes.saturating_mul(2).min(limit));
+            let bytes = size.max(doubled);
+            let buffer = GpuBuffer::new(
+                &self.gpu.device,
+                &mut self.allocator,
+                role.name(),
+                bytes,
+                usage,
+                MemoryLocation::CpuToGpu,
+            )?;
+            if let Some(binding) = role.binding() {
+                self.write_buffer_descriptor(binding, buffer.buffer);
+            }
+            if let Some((old, _)) = self.frame_buffers[slot].replace((buffer, bytes)) {
+                old.destroy(&self.gpu.device, &mut self.allocator);
+            }
+            #[cfg(test)]
+            {
+                self.frame_buffers_created += 1;
+            }
         }
-        temporary.push(GpuBuffer::new(
-            &self.gpu.device,
-            &mut self.allocator,
-            name,
-            size,
-            usage,
-            MemoryLocation::CpuToGpu,
-        )?);
-        Ok(temporary.last_mut().expect("just pushed"))
+        let (buffer, _) = self.frame_buffers[slot].as_mut().expect("just ensured");
+        Ok(buffer)
     }
 
-    /// A storage buffer for this submission holding `words`, or one zero word when there are
-    /// none, because a buffer cannot be empty.
-    fn storage_buffer<'w>(
+    /// Points a storage buffer binding at the whole of `buffer`.
+    fn write_buffer_descriptor(&self, binding: u32, buffer: vk::Buffer) {
+        let info = [vk::DescriptorBufferInfo::default()
+            .buffer(buffer)
+            .range(vk::WHOLE_SIZE)];
+        let write = vk::WriteDescriptorSet::default()
+            .dst_set(self.descriptors)
+            .dst_binding(binding)
+            .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+            .buffer_info(&info);
+        // SAFETY: the set and the buffer are live, the buffer is a storage buffer no larger
+        // than the range the device allows, and no command buffer is pending.
+        unsafe { self.gpu.device.update_descriptor_sets(&[write], &[]) };
+    }
+
+    /// Writes `words` to the start of the storage buffer of `role`, or one zero word when
+    /// there are none, because a buffer cannot be empty. What the buffer holds beyond them is
+    /// left from earlier frames; the shader reads only as far as the counts it is given.
+    fn fill_storage_buffer<'w>(
         &mut self,
-        temporary: &mut Vec<GpuBuffer>,
-        name: &'static str,
+        role: FrameBuffer,
         word_count: usize,
         words: impl Iterator<Item = &'w [u32]>,
-    ) -> Result<vk::Buffer, VkError> {
-        let buffer = self.temporary_buffer(
-            temporary,
-            name,
-            word_count.max(1) as u64 * 4,
-            vk::BufferUsageFlags::STORAGE_BUFFER,
-        )?;
+    ) -> Result<(), VkError> {
+        let buffer = self.frame_buffer(role, word_count.max(1) as u64 * 4)?;
         let bytes = buffer.bytes_mut();
         bytes[..4].fill(0);
         let mut offset = 0;
@@ -680,85 +763,46 @@ impl VkCompositor {
             write_words(&mut bytes[offset..], chunk);
             offset += chunk.len() * 4;
         }
-        Ok(buffer.buffer)
+        Ok(())
     }
 
-    /// Makes everything a frame needs besides its commands: the five buffers the shader
-    /// reads, their descriptors and the frame target. Returns whether the target is a new
-    /// image, which is then in the `UNDEFINED` layout.
-    fn prepare_frame_resources(
-        &mut self,
-        frame: &FrameData,
-        temporary: &mut Vec<GpuBuffer>,
-    ) -> Result<bool, VkError> {
-        let buffers = [
-            (
-                binding::OPS,
-                self.storage_buffer(
-                    temporary,
-                    "op records",
-                    frame.records.ops.len() * RECORD_WORDS,
-                    frame.records.ops.iter().map(|record| &record.words()[..]),
-                )?,
-            ),
-            (
-                binding::TILE_HEADERS,
-                self.storage_buffer(
-                    temporary,
-                    "tile headers",
-                    frame.tiles.headers.len() * 2,
-                    frame.tiles.headers.iter().map(|header| &header[..]),
-                )?,
-            ),
-            (
-                binding::TILE_OPS,
-                self.storage_buffer(
-                    temporary,
-                    "tile op indices",
-                    frame.tiles.indices.len(),
-                    std::iter::once(&frame.tiles.indices[..]),
-                )?,
-            ),
-            (
-                binding::TILEMAPS,
-                self.storage_buffer(
-                    temporary,
-                    "tilemap records",
-                    frame.records.tilemaps.len() * TILEMAP_WORDS,
-                    frame.records.tilemaps.iter().map(|record| &record[..]),
-                )?,
-            ),
-            (binding::TABLES, self.current_table_buffer()?),
-        ];
-        let infos = buffers.map(|(_, buffer)| {
-            [vk::DescriptorBufferInfo::default()
-                .buffer(buffer)
-                .range(vk::WHOLE_SIZE)]
-        });
-        let writes: Vec<vk::WriteDescriptorSet<'_>> = buffers
-            .iter()
-            .zip(&infos)
-            .map(|((binding, _), info)| {
-                vk::WriteDescriptorSet::default()
-                    .dst_set(self.descriptors)
-                    .dst_binding(*binding)
-                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
-                    .buffer_info(info)
-            })
-            .collect();
-        // SAFETY: the set and the buffers are live and no command buffer is pending.
-        unsafe { self.gpu.device.update_descriptor_sets(&writes, &[]) };
+    /// Makes everything a frame needs besides its commands: what the shader reads of the
+    /// four frame buffers and the table buffer, and the frame target. Returns whether the
+    /// target is a new image, which is then in the `UNDEFINED` layout.
+    fn prepare_frame_resources(&mut self, frame: &FrameData) -> Result<bool, VkError> {
+        self.fill_storage_buffer(
+            FrameBuffer::Ops,
+            frame.records.ops.len() * RECORD_WORDS,
+            frame.records.ops.iter().map(|record| &record.words()[..]),
+        )?;
+        self.fill_storage_buffer(
+            FrameBuffer::TileHeaders,
+            frame.tiles.headers.len() * 2,
+            frame.tiles.headers.iter().map(|header| &header[..]),
+        )?;
+        self.fill_storage_buffer(
+            FrameBuffer::TileOps,
+            frame.tiles.indices.len(),
+            std::iter::once(&frame.tiles.indices[..]),
+        )?;
+        self.fill_storage_buffer(
+            FrameBuffer::Tilemaps,
+            frame.records.tilemaps.len() * TILEMAP_WORDS,
+            frame.records.tilemaps.iter().map(|record| &record[..]),
+        )?;
+        self.ensure_table_buffer()?;
         self.ensure_target(frame.size)
     }
 
-    /// The buffer that holds every table as the store has them now, written anew when a
-    /// table changed since it was made. Nothing is pending, so the buffer it replaces is idle.
-    fn current_table_buffer(&mut self) -> Result<vk::Buffer, VkError> {
+    /// Makes the table buffer hold every table as the store has them now: it is made anew,
+    /// and its descriptor written, when a table changed since it was made. Nothing is
+    /// pending, so the buffer it replaces is idle.
+    fn ensure_table_buffer(&mut self) -> Result<(), VkError> {
         let revision = self.tables.revision();
-        if let Some((buffer, written)) = &self.table_buffer
+        if let Some((_, written)) = &self.table_buffer
             && *written == revision
         {
-            return Ok(buffer.buffer);
+            return Ok(());
         }
         // One zero word when there is no element, because a buffer cannot be empty. The
         // length was checked against the device's limit with the frame.
@@ -776,11 +820,11 @@ impl VkCompositor {
         for (target, word) in words.zip(self.tables.buffer_words()) {
             *target = word.to_ne_bytes();
         }
-        let handle = buffer.buffer;
+        self.write_buffer_descriptor(binding::TABLES, buffer.buffer);
         if let Some((old, _)) = self.table_buffer.replace((buffer, revision)) {
             old.destroy(&self.gpu.device, &mut self.allocator);
         }
-        Ok(handle)
+        Ok(())
     }
 
     /// Makes the frame target `size` pixels large. Returns whether it is a new image, which is
@@ -826,26 +870,15 @@ impl VkCompositor {
     ///
     /// The table already counts the packet's deltas as applied, so the bitmap steps are
     /// submitted even when a buffer cannot be allocated: every image ends up in the layout the
-    /// rest of the backend expects. Without the staging buffer the uploads copy nothing and
-    /// those bitmaps keep their previous pixels; without a frame buffer or the target there is
-    /// no draw. Either way the allocation error is what the caller gets.
-    fn submit(
-        &mut self,
-        pending: &Pending<'_>,
-        frame: Option<&FrameData>,
-        temporary: &mut Vec<GpuBuffer>,
-    ) -> Result<(), VkError> {
+    /// rest of the backend expects. Without a staging buffer that holds the uploads they copy
+    /// nothing and those bitmaps keep their previous pixels; without a frame buffer or the
+    /// target there is no draw. Either way the allocation error is what the caller gets.
+    fn submit(&mut self, pending: &Pending<'_>, frame: Option<&FrameData>) -> Result<(), VkError> {
         let mut failure = None;
 
         let mut staging_buffer = vk::Buffer::null();
         if pending.staging_len > 0 {
-            let staging = self.temporary_buffer(
-                temporary,
-                "bitmap staging",
-                pending.staging_len,
-                vk::BufferUsageFlags::TRANSFER_SRC,
-            );
-            match staging {
+            match self.frame_buffer(FrameBuffer::Staging, pending.staging_len) {
                 Ok(buffer) => {
                     let bytes = buffer.bytes_mut();
                     for step in &pending.steps {
@@ -863,7 +896,7 @@ impl VkCompositor {
         // The frame, with whether its target is new. Made before recording starts.
         let mut draw = None;
         if let (Some(frame), None) = (frame, &failure) {
-            match self.prepare_frame_resources(frame, temporary) {
+            match self.prepare_frame_resources(frame) {
                 Ok(new_target) => draw = Some((frame, new_target)),
                 Err(error) => failure = Some(error),
             }
@@ -881,8 +914,8 @@ impl VkCompositor {
             // and destroyed ones in `pending.retired`. A new image starts in `UNDEFINED`; any
             // other is in `SHADER_READ_ONLY_OPTIMAL`, where the previous step or submission
             // left it for its readers. Upload rectangles were checked against the image size and their bytes
-            // lie inside the staging buffer, which is only null when its allocation failed, in
-            // which case no copy is recorded.
+            // lie inside the staging buffer, which is only null when one large enough could not
+            // be had, in which case no copy is recorded.
             unsafe {
                 match step {
                     Step::Clear { image } => {
@@ -962,8 +995,8 @@ impl VkCompositor {
             );
             // SAFETY: the command buffer is recording. The pipeline, its layout and the set
             // belong to this device and match each other. Every descriptor the shader can use
-            // is valid: the five buffers and the target were written by
-            // `prepare_frame_resources`, and a quad or tilemap record
+            // is valid: `prepare_frame_resources` saw to the five buffers and the target, each
+            // written when it was made, and a quad or tilemap record
             // only names a slot whose image is live and, after the steps above, in
             // `SHADER_READ_ONLY_OPTIMAL`. The buffers hold what the tile headers and indices
             // address, the table buffer holds every element a tilemap record's offsets and
@@ -1181,6 +1214,9 @@ impl Drop for VkCompositor {
                 image.destroy(device, &mut self.allocator);
             }
             if let Some((buffer, _)) = self.table_buffer.take() {
+                buffer.destroy(device, &mut self.allocator);
+            }
+            for (buffer, _) in self.frame_buffers.iter_mut().filter_map(Option::take) {
                 buffer.destroy(device, &mut self.allocator);
             }
             if let Some(target) = self.target.take() {

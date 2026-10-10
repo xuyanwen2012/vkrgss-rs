@@ -6,7 +6,7 @@
 
 ## 2. Buffer reuse (`vkxp-vk`)
 
-- [ ] 2.1 Replace the per-submission buffers by the five long-lived ones. Verify: the scenarios of `specs/vulkan-compositor/spec.md`; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk` passes.
+- [x] 2.1 Replace the per-submission buffers by the five long-lived ones. Verify: the scenarios of `specs/vulkan-compositor/spec.md`; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk` passes.
 
 ## 3. Swapchain maintenance (`vkxp-vk`)
 

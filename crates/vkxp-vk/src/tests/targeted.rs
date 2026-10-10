@@ -632,11 +632,12 @@ fn renders_without_a_window_system_connection() {
 
 // Requirement: Clean under validation, on the failure paths too
 
-/// A packet with uploads and ops needs four buffers for its one submission: the bitmap staging
-/// buffer and the four storage buffers of the frame. Whichever allocation fails, the buffers
-/// made before it must be released: every compositor here is dropped under the harness, which
-/// fails the test when the validation layer reports a leaked object. The backend also has to
-/// stay usable, with the frame it had and the bitmaps in a drawable state.
+/// A packet with uploads and ops needs five buffers for its one submission: the bitmap staging
+/// buffer and the four storage buffers of the frame. Whichever of them cannot be created, or
+/// later cannot be replaced by a larger one, nothing may leak: every compositor here is
+/// dropped under the harness, which fails the test when the validation layer reports a leaked
+/// object. The backend also has to stay usable, with the frame it had and the bitmaps in a
+/// drawable state. Also scenario "A buffer cannot be had" of "Per-frame buffers are reused".
 #[test]
 fn failed_buffer_allocation_releases_the_buffers_before_it() {
     let size = Size::new(40, 30);
@@ -648,8 +649,17 @@ fn failed_buffer_allocation_releases_the_buffers_before_it() {
         clear(screen, [10, 20, 30, 255]),
         Op::Quad(sprite(id, 8, 8, 5, 5)),
     ];
-    let wanted = reference::Compositor::new()
+    let mut reference = reference::Compositor::new();
+    let wanted = reference
         .render(&packet(size, deltas.clone(), ops.clone()))
+        .unwrap();
+    let large = Size::new(100, 70);
+    let large_ops: Vec<Op> = (0..40)
+        .map(|n| clear(Rect::new(n, n, 60, 30), [n as u8 * 6, 20, 30, 255]))
+        .chain([Op::Quad(sprite(id, 8, 8, 50, 40))])
+        .collect();
+    let wanted_large = reference
+        .render(&packet(large, vec![], large_ops.clone()))
         .unwrap();
     let injected = |what| {
         Err(VkError::Memory {
@@ -667,7 +677,7 @@ fn failed_buffer_allocation_releases_the_buffers_before_it() {
     ];
     for (successes, what) in buffers.into_iter().enumerate() {
         let mut compositor = TestCompositor::new();
-        compositor.fail_temporary_buffer_after(successes as u32);
+        compositor.fail_frame_buffer_after(successes as u32);
         assert_eq!(
             compositor.render(&packet(size, deltas.clone(), ops.clone())),
             injected(what),
@@ -692,15 +702,29 @@ fn failed_buffer_allocation_releases_the_buffers_before_it() {
                 .unwrap();
         }
 
-        // A failure with a frame on the device: that frame stays, and teardown follows at once.
-        compositor.fail_temporary_buffer_after(successes as u32);
-        let other = vec![clear(screen, [200, 0, 0, 255])];
-        assert_eq!(
-            compositor.render(&packet(size, vec![upload.clone()], other)),
-            injected(what),
+        // A failure with a frame on the device, where the buffers exist and a frame needs
+        // larger ones: twice the upload, more ops and more tiles. That frame stays, and the
+        // frame that failed renders once the buffer can be had. It has no tilemap, so the
+        // buffer of the tilemap records does not grow and is left out here.
+        if what == "tilemap records" {
+            continue;
+        }
+        compositor.fail_frame_buffer_after(successes as u32);
+        let larger = packet(
+            large,
+            vec![upload.clone(), upload.clone()],
+            large_ops.clone(),
         );
+        assert_eq!(compositor.render(&larger), injected(what));
         let kept = compositor.read_frame().unwrap().unwrap();
         assert_eq!(frame_difference(&wanted, &kept), None, "after {what}");
+        compositor.render(&larger).unwrap();
+        let rendered = compositor.read_frame().unwrap().unwrap();
+        assert_eq!(
+            frame_difference(&wanted_large, &rendered),
+            None,
+            "after {what}"
+        );
     }
 }
 
@@ -712,13 +736,90 @@ fn failed_frame_buffer_allocation_without_uploads_leaks_nothing() {
     let ops = vec![clear(Rect::from_size(size), [1, 2, 3, 4])];
     for successes in 0..4 {
         let mut compositor = TestCompositor::new();
-        compositor.fail_temporary_buffer_after(successes);
+        compositor.fail_frame_buffer_after(successes);
         assert!(matches!(
             compositor.render(&packet(size, vec![], ops.clone())),
             Err(VkError::Memory { .. })
         ));
         assert_eq!(compositor.read_frame(), Ok(None));
     }
+}
+
+// Requirement: Per-frame buffers are reused
+
+/// A frame with an upload, a quad and `clears` clears, and the bitmap the quad draws.
+fn buffer_frame(size: Size, id: BitmapId, clears: i32) -> FramePacket {
+    let upload = bitmap(id, 8, 8, fixtures::gradient(8, 8))[1].clone();
+    let ops = (0..clears)
+        .map(|n| {
+            clear(
+                Rect::new(n, n / 2, 20, 10),
+                [(n % 50) as u8 * 5, 90, 30, 255],
+            )
+        })
+        .chain([Op::Quad(sprite(id, 8, 8, 5, 5))])
+        .collect();
+    packet(size, vec![upload], ops)
+}
+
+/// Scenario "Steady frames".
+#[test]
+fn steady_frames_create_no_buffer_after_the_first() {
+    let size = Size::new(40, 30);
+    let id = BitmapId::new(0, 0);
+    let create = bitmap(id, 8, 8, fixtures::gradient(8, 8))[0].clone();
+    let steady = buffer_frame(size, id, 3);
+    let mut reference = reference::Compositor::new();
+    let mut compositor = TestCompositor::new();
+    reference
+        .render(&packet(size, vec![create.clone()], vec![]))
+        .unwrap();
+    compositor
+        .render(&packet(size, vec![create], vec![]))
+        .unwrap();
+
+    let wanted = reference.render(&steady).unwrap();
+    compositor.render(&steady).unwrap();
+    let created = compositor.frame_buffers_created();
+    for round in 0..20 {
+        let wanted = reference.render(&steady).unwrap();
+        compositor.render(&steady).unwrap();
+        let rendered = compositor.read_frame().unwrap().unwrap();
+        assert_eq!(frame_difference(&wanted, &rendered), None, "round {round}");
+    }
+    assert_eq!(compositor.frame_buffers_created(), created);
+    let rendered = compositor.read_frame().unwrap().unwrap();
+    assert_eq!(frame_difference(&wanted, &rendered), None);
+}
+
+/// Scenario "A larger frame": the buffers grow for it, and the small frame after it reads
+/// only its own part of what they hold. The harness checks the validation layer.
+#[test]
+fn larger_frame_and_the_small_one_after_it_match_the_reference() {
+    let id = BitmapId::new(0, 0);
+    let create = bitmap(id, 8, 8, fixtures::gradient(8, 8))[0].clone();
+    let small = buffer_frame(Size::new(40, 30), id, 2);
+    let large = buffer_frame(Size::new(200, 150), id, 300);
+    let mut reference = reference::Compositor::new();
+    let mut compositor = TestCompositor::new();
+    let setup = packet(Size::new(40, 30), vec![create], vec![]);
+    reference.render(&setup).unwrap();
+    compositor.render(&setup).unwrap();
+
+    let mut created = Vec::new();
+    for (what, packet) in [
+        ("small", &small),
+        ("large", &large),
+        ("small again", &small),
+    ] {
+        let wanted = reference.render(packet).unwrap();
+        compositor.render(packet).unwrap();
+        let rendered = compositor.read_frame().unwrap().unwrap();
+        assert_eq!(frame_difference(&wanted, &rendered), None, "{what}");
+        created.push(compositor.frame_buffers_created());
+    }
+    assert!(created[1] > created[0], "the large frame needs more room");
+    assert_eq!(created[2], created[1], "nothing shrinks");
 }
 
 // Requirement: Stretch sampling of quads
