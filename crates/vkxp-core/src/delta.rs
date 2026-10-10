@@ -50,6 +50,18 @@ impl Bitmaps {
         Ok(self.get(id)?.changed.map(Area::to_proto))
     }
 
+    /// Takes the host to have none of the bitmaps, so that the next [`Bitmaps::deltas`]
+    /// create and upload whole every bitmap they are asked for and destroy none. For a host
+    /// that starts anew; [`Scene::resend_tables`](crate::Scene::resend_tables) is the same
+    /// for the tables of a scene.
+    pub fn resend_all(&mut self) {
+        self.destroyed.clear();
+        for bitmap in self.live_mut() {
+            bitmap.known = false;
+            bitmap.changed = None;
+        }
+    }
+
     /// The bitmap changes the host needs before it draws a frame that refers to `referenced`,
     /// in an order a compositor's bitmap store accepts:
     ///

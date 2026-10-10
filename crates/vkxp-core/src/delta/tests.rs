@@ -5,6 +5,7 @@ use vkxp_proto::Rect as ProtoRect;
 
 use super::*;
 use crate::bitmap::testing::*;
+use crate::extract::testing::{RED, Stage};
 use crate::test_support::CellRasterizer;
 use crate::{Align, Color, Font, Rect};
 
@@ -654,4 +655,107 @@ proptest! {
         prop_assert_eq!(store.len(), bitmaps.len());
         prop_assert_eq!(bitmaps.deltas(&live), Ok(Vec::new()));
     }
+}
+
+// A host that starts anew.
+
+/// A scene of three sprites with a bitmap each and a tilemap with a map and priorities.
+fn sprites_and_a_tilemap() -> (Stage, [BitmapId; 4]) {
+    let mut stage = Stage::sized(96, 64);
+    let tileset = stage.bitmap(256, 64, pattern(256, 64, 5));
+    let map = crate::SharedTable::new(crate::Table::new_3d(3, 2, 3).unwrap());
+    for (x, y, tile) in [(0, 0, 384), (1, 0, 390), (2, 1, 399), (1, 1, 385)] {
+        map.set(x, y, 0, tile);
+    }
+    let priorities = crate::SharedTable::new(crate::Table::new(400).unwrap());
+    let tilemap = stage.scene.create_tilemap(None).unwrap();
+    let tilemap = stage.scene.tilemap_mut(tilemap).unwrap();
+    tilemap.tileset = Some(tileset);
+    tilemap.map_data = Some(map);
+    tilemap.priorities = Some(priorities);
+
+    let mut ids = [tileset; 4];
+    for (index, seed) in [1u8, 2, 3].into_iter().enumerate() {
+        let (side, at) = (8 + 4 * index as u32, 10 + 30 * index as i32);
+        let bitmap = stage.bitmap(side, side, pattern(side, side, seed));
+        let id = stage.scene.create_sprite(None).unwrap();
+        stage.scene.set_sprite_z(id, 500).unwrap();
+        let sprite = stage.scene.sprite_mut(id).unwrap();
+        sprite.set_bitmap(Some(bitmap), &stage.bitmaps);
+        (sprite.x, sprite.y) = (at, 4 + 16 * index as i32);
+        ids[index + 1] = bitmap;
+    }
+    (stage, ids)
+}
+
+#[test]
+fn after_resending_the_next_frame_carries_every_bitmap_and_table_whole() {
+    let (mut stage, ids) = sprites_and_a_tilemap();
+    // A sprite whose bitmap goes, so that a destroy is waiting.
+    let gone = stage.solid(2, 2, RED);
+    let sprite = stage.scene.create_sprite(None).unwrap();
+    stage.scene.set_sprite_z(sprite, 600).unwrap();
+    let sprite = stage.scene.sprite_mut(sprite).unwrap();
+    sprite.set_bitmap(Some(gone), &stage.bitmaps);
+    let first = stage.frame();
+    // What the host knows changes in part.
+    stage
+        .bitmaps
+        .set_pixel(ids[1], 0, 0, Color::rgb(9.0, 9.0, 9.0))
+        .unwrap();
+    stage.bitmaps.dispose(gone);
+
+    // What the host that has everything is sent next, and shows.
+    let (mut scene, mut bitmaps) = (stage.scene.clone(), stage.bitmaps.clone());
+    let partial = scene.extract(&mut bitmaps);
+    assert!(partial.tables.is_empty());
+    assert_eq!(
+        partial.bitmaps.len(),
+        2,
+        "a destroy and a part of one bitmap"
+    );
+    let second = stage.render(&partial).unwrap();
+    assert_ne!(first.rgba, second.rgba);
+
+    stage.bitmaps.resend_all();
+    stage.scene.resend_tables();
+    let packet = stage.scene.extract(&mut stage.bitmaps);
+
+    for id in ids {
+        let (width, height) = (
+            stage.bitmaps.width(id).unwrap(),
+            stage.bitmaps.height(id).unwrap(),
+        );
+        let found: Vec<&BitmapDelta> = packet
+            .bitmaps
+            .iter()
+            .filter(|delta| match delta {
+                BitmapDelta::Create { id: named, .. }
+                | BitmapDelta::Update { id: named, .. }
+                | BitmapDelta::Destroy { id: named } => *named == id,
+            })
+            .collect();
+        assert_eq!(found.len(), 2, "bitmap {id:?}");
+        assert_eq!(*found[0], BitmapDelta::Create { id, width, height });
+        assert!(
+            *found[1]
+                == BitmapDelta::Update {
+                    id,
+                    rect: ProtoRect::new(0, 0, width, height),
+                    rgba: stage.bitmaps.rgba(id).unwrap().to_vec(),
+                }
+        );
+    }
+    assert_eq!(packet.bitmaps.len(), 8, "no destroy and nothing else");
+    let sets =
+        |delta: &&vkxp_proto::TableDelta| matches!(delta, vkxp_proto::TableDelta::Set { .. });
+    assert_eq!(packet.tables.iter().filter(sets).count(), 2);
+    assert_eq!(packet.tables.len(), 2, "no table is destroyed");
+
+    // The packet alone, on a compositor that holds nothing, is the frame before it.
+    let alone = vkxp_compose_ref::Compositor::new()
+        .render(&packet)
+        .expect("the packet needs nothing the compositor does not get from it");
+    assert_eq!(alone.rgba, second.rgba);
+    assert_eq!(alone.size, second.size);
 }

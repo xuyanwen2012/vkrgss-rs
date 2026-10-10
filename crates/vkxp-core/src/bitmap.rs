@@ -364,6 +364,13 @@ impl Bitmaps {
         self.get(id).is_err()
     }
 
+    /// Every live bitmap.
+    pub(crate) fn live_mut(&mut self) -> impl Iterator<Item = &mut Bitmap> {
+        self.slots
+            .iter_mut()
+            .filter_map(|slot| slot.bitmap.as_mut())
+    }
+
     pub(crate) fn get(&self, id: BitmapId) -> Result<&Bitmap, BitmapError> {
         self.slots
             .get(id.index as usize)

@@ -4,16 +4,29 @@
 //! The guest holds the [`GuestEnd`] of the link. Everything it tells the host goes through
 //! [`Guest::send`], and everything the host tells it is consumed in one place,
 //! [`Guest::pump`]. [`run_game`] is the one call that plays a game.
+//!
+//! # States
+//!
+//! A guest whose [`RunConfig`] has a [`Copier`] can be saved. A request to save a state is
+//! noted when it arrives and served when the guest next enters a wait for a tick whose frame
+//! was sent while the display was not frozen and no modal message was shown: there the
+//! copier makes a copy of the guest, and the guest goes on as if nothing had happened. A
+//! copy that is resumed comes back from the same call with a new link, on which it sends
+//! what a host that holds nothing needs: the title, what the music and background sound
+//! channels play, and the frame of that wait with every bitmap and table whole. Then it
+//! waits for the tick like the guest it was copied from.
 
+use std::fmt::Debug;
 use std::io;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use vkxp_core::InputState;
 use vkxp_proto::link::GuestEnd;
-use vkxp_proto::{GuestToHost, HostToGuest};
+use vkxp_proto::{AudioChannel, AudioCommand, GuestToHost, HostToGuest};
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{Raise, Raised, Ruby, RubyError};
-use vkxp_vfs::GameIni;
+use vkxp_vfs::{FileKind, GameIni};
 
 use crate::guest::{Config, Guest};
 use crate::panel::Panel;
@@ -29,6 +42,29 @@ const PROCESS_FUNCTIONS_OFF: &str = include_str!("prelude_process_off.rb");
 
 /// The file name the prelude is reported under in backtraces.
 const PRELUDE_NAME: &str = "(prelude)";
+
+/// How a guest came back from having itself copied.
+#[derive(Debug)]
+pub enum Copied {
+    /// This is the guest that asked. A copy of it is parked.
+    WentOn,
+    /// This is a copy that was parked and has been told to resume, with its link to the
+    /// host, which holds nothing of this guest.
+    Resumed(GuestEnd),
+}
+
+/// No copy could be made.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("the guest could not be copied")]
+pub struct CopyFailed;
+
+/// The way a guest has itself copied for a state. The guest calls it on the interpreter
+/// thread, in a wait for a tick.
+pub trait Copier: Debug + Send + Sync {
+    /// Parks a copy of the guest as the state of `slot`. Returns [`Copied::WentOn`] in the
+    /// guest that asked and, in a copy that was resumed, the new link.
+    fn park(&self, slot: u8) -> Result<Copied, CopyFailed>;
+}
 
 /// What running a game needs beyond the guest's files, fonts and text.
 #[derive(Debug, Clone)]
@@ -60,6 +96,9 @@ pub struct RunConfig {
     /// bitmap operations, the text and the extraction of the frame. Without it no clock is
     /// read.
     pub frame_stats: bool,
+    /// The way the guest has itself copied when it is asked to save a state. A guest
+    /// without one answers such a request with the failure message.
+    pub copier: Option<Arc<dyn Copier>>,
 }
 
 impl Default for RunConfig {
@@ -81,6 +120,7 @@ impl Default for RunConfig {
             preload: Vec::new(),
             log_p: false,
             frame_stats: false,
+            copier: None,
         }
     }
 }
@@ -125,6 +165,14 @@ pub(crate) struct State {
     pub(crate) background_sound: Option<Playing>,
     /// `Graphics.visible`.
     pub(crate) visible: bool,
+    /// The slots of the state requests that wait for a frame at which the guest may be
+    /// copied.
+    saves: Vec<u8>,
+    /// Whether the display holds a picture: from `Graphics.freeze` or the start of a
+    /// transition to the end of the transition.
+    pub(crate) held: bool,
+    /// Whether a modal message is shown.
+    modal: bool,
 }
 
 impl State {
@@ -137,16 +185,23 @@ impl State {
             music: None,
             background_sound: None,
             visible: true,
+            saves: Vec::new(),
+            held: false,
+            modal: false,
         }
     }
 }
 
 impl Guest {
     /// Makes `link` the link to the host and forgets what the previous one left: a pending
-    /// reset or quit, the input and what the looping channels play.
+    /// reset or quit, state requests, a held picture, the input and what the looping
+    /// channels play.
     pub(crate) fn connect(&mut self, link: GuestEnd) {
         self.runtime.link = Some(link);
         self.runtime.pending = None;
+        self.runtime.saves.clear();
+        self.runtime.held = false;
+        self.runtime.modal = false;
         self.runtime.music = None;
         self.runtime.background_sound = None;
         self.input = InputState::new();
@@ -175,10 +230,12 @@ impl Guest {
     /// An input snapshot is kept for the next `Input.update`, and a dismissal is noted for
     /// [`Guest::show_message`]. A reset or quit request is
     /// recorded for [`raise_pending`]; a host that has gone counts as a quit request and ends
-    /// the wait.
+    /// the wait. A request to save a state is noted, or answered with the failure message
+    /// by a guest that cannot be copied.
     ///
     /// A wait for a tick is where a frame of the guest's frame time statistics ends and the
-    /// next begins.
+    /// next begins, and where the guest is copied for the state requests that wait; see
+    /// the module documentation.
     pub(crate) fn pump(&mut self, wait: Await) {
         if wait == Await::Tick {
             stats::frame_ends();
@@ -190,6 +247,9 @@ impl Guest {
     }
 
     fn receive(&mut self, wait: Await) {
+        if wait == Await::Tick {
+            self.save_states();
+        }
         loop {
             let Some(link) = &self.runtime.link else {
                 return self.host_gone();
@@ -198,12 +258,12 @@ impl Guest {
                 match link.try_recv() {
                     Ok(Some(message)) => message,
                     Ok(None) => return,
-                    Err(_) => return self.host_gone(),
+                    Err(_) => return self.host_silent(),
                 }
             } else {
                 match link.recv() {
                     Ok(message) => message,
-                    Err(_) => return self.host_gone(),
+                    Err(_) => return self.host_silent(),
                 }
             };
             match message {
@@ -215,10 +275,74 @@ impl Guest {
                     self.runtime.pending.get_or_insert(Pending::Reset);
                 }
                 HostToGuest::Quit => self.runtime.pending = Some(Pending::Quit),
-                HostToGuest::SaveState { .. } | HostToGuest::LoadState { .. } => {}
+                HostToGuest::SaveState { slot } if self.runtime.run.copier.is_some() => {
+                    self.runtime.saves.push(slot);
+                }
+                // A guest that cannot be copied has no states either.
+                HostToGuest::SaveState { slot } | HostToGuest::LoadState { slot } => {
+                    self.send(GuestToHost::StateFailed { slot });
+                }
+                // Only a parked copy is told to resume, and it is not here while it waits.
                 HostToGuest::Resume => {}
             }
         }
+    }
+
+    /// Has the guest copied for every state request that waits, if the frame just sent is
+    /// one at which it may be: the display holds no picture and no modal message is shown.
+    /// Called on entering the wait for the tick of that frame.
+    fn save_states(&mut self) {
+        if self.runtime.held || self.runtime.modal || self.runtime.saves.is_empty() {
+            return;
+        }
+        let Some(copier) = self.runtime.run.copier.clone() else {
+            return;
+        };
+        for slot in std::mem::take(&mut self.runtime.saves) {
+            match copier.park(slot) {
+                Ok(Copied::WentOn) => {}
+                // The requests that still waited are those of the guest that goes on.
+                Ok(Copied::Resumed(link)) => return self.resume(link),
+                Err(CopyFailed) => self.send(GuestToHost::StateFailed { slot }),
+            }
+        }
+    }
+
+    /// What a copy does when it is resumed, in the wait for a tick it was made in: `link`
+    /// becomes its link, and it sends the host, which holds nothing of this guest, the
+    /// title, the play commands of the music and the background sound it remembers, and the
+    /// frame of the wait again with every live bitmap and table whole.
+    fn resume(&mut self, link: GuestEnd) {
+        self.runtime.link = Some(link);
+        self.runtime.pending = None;
+        self.runtime.dismissed = false;
+        self.bitmaps.resend_all();
+        self.scene.resend_tables();
+        let title = self.runtime.run.ini.title.clone();
+        self.send(GuestToHost::SetTitle { title });
+        let looping = [
+            (AudioChannel::Bgm, self.runtime.music.clone()),
+            (AudioChannel::Bgs, self.runtime.background_sound.clone()),
+        ];
+        for (channel, playing) in looping {
+            let Some(playing) = playing else {
+                continue;
+            };
+            // A file that has gone since plays nothing, as if the channel had stopped.
+            if let Ok(data) = self.files.read(FileKind::Audio, &playing.name) {
+                self.send(GuestToHost::Audio(AudioCommand::Play {
+                    channel,
+                    data,
+                    volume: playing.volume,
+                    pitch: playing.pitch,
+                }));
+            }
+        }
+        // The frame of this wait was counted when it was first sent.
+        let frame_count = self.scene.frame_count();
+        let packet = self.scene.extract(&mut self.bitmaps);
+        self.scene.set_frame_count(frame_count);
+        self.send(GuestToHost::Frame(packet));
     }
 
     /// Sends the host the modal message `text` and shows it in the message panel until the
@@ -229,6 +353,7 @@ impl Guest {
     pub(crate) fn show_message(&mut self, text: String) {
         let panel = Panel::show(self, &text);
         self.runtime.dismissed = false;
+        self.runtime.modal = true;
         self.send(GuestToHost::Modal { text });
         loop {
             let frame_count = self.scene.frame_count();
@@ -247,9 +372,16 @@ impl Guest {
                 break;
             }
         }
+        self.runtime.modal = false;
         if let Some(panel) = panel {
             panel.dispose(self);
         }
+    }
+
+    /// The host sends nothing more, which counts as a quit request. The link stays for
+    /// what the guest still has to say: whoever reads it may still be there.
+    fn host_silent(&mut self) {
+        self.runtime.pending = Some(Pending::Quit);
     }
 
     fn host_gone(&mut self) {
@@ -582,6 +714,9 @@ pub(crate) fn play(ruby: &Ruby, link: GuestEnd) -> Result<(), RunError> {
     }
     Guest::with(|guest| {
         audio::stop_all(guest);
+        guest.send(GuestToHost::Outcome {
+            ok: outcome.is_ok(),
+        });
         guest.send(GuestToHost::Shutdown);
         guest.disconnect();
     });
@@ -608,8 +743,8 @@ pub(crate) fn play(ruby: &Ruby, link: GuestEnd) -> Result<(), RunError> {
 ///    again and starts over from the first preload script; `SystemExit` ends the game. Any
 ///    other exception ends it with [`RunError::Script`], after its report was written to the
 ///    error stream, shown in the message panel and dismissed by the host.
-/// 6. Stops the audio, sends the host the shutdown message and drops the link, also when a
-///    step before failed.
+/// 6. Stops the audio, sends the host the outcome of the game and the shutdown message and
+///    drops the link, also when a step before failed.
 ///
 /// # Panics
 ///

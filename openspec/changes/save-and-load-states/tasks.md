@@ -6,8 +6,8 @@
 
 ## 2. Guest (`vkxp-core`, `vkxp-binding`)
 
-- [ ] 2.1 `vkxp-core`: a way to mark every live bitmap and table as not yet sent. Verify: a test that extracts, marks and extracts again and gets every bitmap and table in full, and that applying the second packet alone to an empty compositor renders the frame of the first; `cargo test -p vkxp-core --locked` passes.
-- [ ] 2.2 `vkxp-binding`: the copier trait in the run configuration, the pending save and the frame boundary rule, the resume sequence. Verify: the scenarios of `specs/rgss-runtime/spec.md` with a fake copier; `cargo test -p vkxp-binding --locked` passes.
+- [x] 2.1 `vkxp-core`: a way to mark every live bitmap and table as not yet sent. Verify: a test that extracts, marks and extracts again and gets every bitmap and table in full, and that applying the second packet alone to an empty compositor renders the frame of the first; `cargo test -p vkxp-core --locked` passes.
+- [x] 2.2 `vkxp-binding`: the copier trait in the run configuration, the pending save and the frame boundary rule, the resume sequence. Verify: the scenarios of `specs/rgss-runtime/spec.md` with a fake copier; `cargo test -p vkxp-binding --locked` passes.
 
 ## 3. Host (`vkxp-host`)
 

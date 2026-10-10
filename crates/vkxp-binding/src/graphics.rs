@@ -57,7 +57,10 @@ fn update(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
 }
 
 fn freeze(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
-    Guest::with(|guest| guest.send(GuestToHost::Freeze));
+    Guest::with(|guest| {
+        guest.runtime.held = true;
+        guest.send(GuestToHost::Freeze);
+    });
     Ok(ffi::Qnil)
 }
 
@@ -106,6 +109,8 @@ fn transition(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
             }
             None => (None, Vec::new()),
         };
+        // The display holds a picture until the last frame of the transition.
+        guest.runtime.held = true;
         guest.send(GuestToHost::Transition {
             duration,
             mask,
@@ -121,10 +126,13 @@ fn transition(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
             break;
         }
     }
-    if let Some(id) = mask {
-        // The destroy delta travels with a later frame.
-        Guest::with(|guest| guest.bitmaps.dispose(id));
-    }
+    Guest::with(|guest| {
+        guest.runtime.held = false;
+        if let Some(id) = mask {
+            // The destroy delta travels with a later frame.
+            guest.bitmaps.dispose(id);
+        }
+    });
     interrupted?;
     Ok(ffi::Qnil)
 }

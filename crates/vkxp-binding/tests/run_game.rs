@@ -18,15 +18,22 @@ fn stop(channel: AudioChannel) -> GuestToHost {
     GuestToHost::Audio(AudioCommand::Stop { channel })
 }
 
-/// What every game ends with: the four channels stop, then the shutdown message.
-fn ending() -> Vec<GuestToHost> {
+/// What every game ends with: the four channels stop, then the outcome and the shutdown
+/// message.
+fn ending_of(ok: bool) -> Vec<GuestToHost> {
     vec![
         stop(AudioChannel::Bgm),
         stop(AudioChannel::Bgs),
         stop(AudioChannel::Me),
         stop(AudioChannel::Se),
+        GuestToHost::Outcome { ok },
         GuestToHost::Shutdown,
     ]
+}
+
+/// The ending of a game that did not fail.
+fn ending() -> Vec<GuestToHost> {
+    ending_of(true)
 }
 
 fn title(text: &str) -> GuestToHost {
@@ -120,7 +127,7 @@ fn a_missing_built_in_scripts_file_fails_before_any_script() {
     assert!(message.contains("extraction tool"), "{message}");
     assert_eq!(played.after.as_deref(), Ok("nil"));
     assert_eq!(played.record.received[0], title("None"));
-    assert_eq!(played.record.received[1..], ending());
+    assert_eq!(played.record.received[1..], ending_of(false));
 }
 
 #[test]
@@ -186,7 +193,7 @@ fn a_missing_archive_fails_before_any_script() {
          Errno::ENOENT: No such file or directory - Data\\Scripts.rxdata"
     );
     assert_eq!(played.after.as_deref(), Ok("nil"));
-    assert_eq!(played.record.received[1..], ending());
+    assert_eq!(played.record.received[1..], ending_of(false));
 }
 
 #[test]
@@ -259,7 +266,7 @@ fn an_uncaught_error_is_reported_with_script_name_and_line() {
     // The host shows the report before it is told that the guest has ended. The frame with
     // the message panel is between the two.
     let mut expected = vec![title("Error"), GuestToHost::Modal { text: report }];
-    expected.extend(ending());
+    expected.extend(ending_of(false));
     let others: Vec<GuestToHost> = played.record.others().into_iter().cloned().collect();
     assert_eq!(others, expected);
     assert!(matches!(played.record.received[2], GuestToHost::Frame(_)));
@@ -339,7 +346,7 @@ fn a_reset_request_starts_the_scripts_over() {
 
     // Two frames, the reset with its audio stops, then the one frame of the second run.
     let received = &played.record.received;
-    assert_eq!(received.len(), 14);
+    assert_eq!(received.len(), 15);
     assert_eq!(received[1], stop(AudioChannel::Bgm));
     assert!(matches!(received[2], GuestToHost::Frame(_)));
     assert!(matches!(received[3], GuestToHost::Frame(_)));
@@ -532,5 +539,5 @@ fn a_missing_preload_script_fails_before_any_script() {
         "{error}"
     );
     assert_eq!(played.after.as_deref(), Ok("nil"));
-    assert_eq!(played.record.received[1..], ending());
+    assert_eq!(played.record.received[1..], ending_of(false));
 }
