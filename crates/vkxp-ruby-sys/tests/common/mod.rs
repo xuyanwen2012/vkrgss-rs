@@ -6,6 +6,7 @@
 use std::collections::VecDeque;
 use std::fs;
 use std::os::unix::fs::symlink;
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Mutex;
@@ -210,6 +211,10 @@ impl Suites {
     /// Runs the executable in a working directory of its own, the way `make test-all` sets it
     /// up: `./ruby` and `./miniruby` in the current directory, `RUBY` pointing at the former, a
     /// scratch `HOME` and `TMPDIR`, and a load path that ends at the vendored `lib` and `ext`.
+    ///
+    /// SIGINT gets its default disposition whatever this process inherited: the suites start
+    /// interpreters that send it to themselves, and an ignored disposition would be inherited
+    /// by all of them.
     pub(crate) fn run_ruby(&self, name: &str, args: &[&str]) -> Finished {
         let source = source_dir();
         let dir = self.scratch.join("run").join(name);
@@ -225,7 +230,18 @@ impl Suites {
         let mut search = vec![dir.clone()];
         search.extend(std::env::split_paths(&path));
         let log = fs::File::create(dir.join("output.log")).expect("log file");
-        let mut child = Command::new(&ruby)
+        let mut command = Command::new(&ruby);
+        // SAFETY: the closure runs in the child between `fork` and `exec` and only calls
+        // `signal`, which is async-signal-safe.
+        unsafe {
+            command.pre_exec(|| {
+                if libc::signal(libc::SIGINT, libc::SIG_DFL) == libc::SIG_ERR {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        let mut child = command
             .args(args)
             .current_dir(&dir)
             .env("HOME", &home)
@@ -276,7 +292,7 @@ impl Suites {
     }
 
     /// Runs one file of a `test/unit` suite through `test/runner.rb`.
-    fn run_unit_file(&self, suite: &str, file: &str) -> Result<Totals, String> {
+    pub(crate) fn run_unit_file(&self, suite: &str, file: &str) -> Result<Totals, String> {
         let source = source_dir();
         let runner = source.join("test/runner.rb");
         let basedir = format!("--basedir={}", source.join("test").display());

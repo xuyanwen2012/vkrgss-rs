@@ -22,6 +22,13 @@
   harness itself (set in the test, restored afterwards, or through a child `cargo`-free
   invocation of the runner) and expects it to pass.
 - Nothing in the vendored tree changes.
+- Measured during implementation, each with `env --default-signal=INT --ignore-signal=<signal>
+  cargo test -p vkxp-ruby-sys --locked --test upstream`: SIGTERM, SIGHUP, SIGQUIT, SIGUSR1,
+  SIGUSR2, SIGALRM and SIGPIPE pass when ignored, so only SIGINT is reset.
+- The new test is `tests/upstream_signals.rs`. It ignores SIGINT in its own process, runs
+  `test/ruby/test_beginendblock.rb` through the runner and restores the disposition;
+  `Suites::run_unit_file` became `pub(crate)` for it. Without the reset the test fails with
+  the message quoted under "Context".
 
 ## Risks / Trade-offs
 
@@ -30,4 +37,7 @@
 
 ## Follow-ups
 
-- None.
+- With SIGCHLD ignored, every test of `tests/upstream.rs` fails within a fraction of a second,
+  before any suite runs: the kernel reaps the children itself and the harness cannot wait for
+  the compiler it starts. That is a signal of the harness, not one the suites send to
+  themselves, and no known caller ignores it, so nothing was built for it.

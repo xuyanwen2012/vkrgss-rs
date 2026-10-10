@@ -2,7 +2,7 @@
 
 ## 1. Harness (`vkxp-ruby-sys` tests)
 
-- [ ] 1.1 Reset the dispositions in the child and add the test. Verify: the scenarios of `specs/embedded-ruby/spec.md`; `env --ignore-signal=INT cargo test -p vkxp-ruby-sys --locked` passes.
+- [x] 1.1 Reset the dispositions in the child and add the test. Verify: the scenarios of `specs/embedded-ruby/spec.md`; `env --ignore-signal=INT cargo test -p vkxp-ruby-sys --locked` passes.
 
 ## 2. Integration check
 
