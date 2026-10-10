@@ -6,8 +6,8 @@
 
 ## 2. Barriers (`vkxp-vk`)
 
-- [ ] 2.1 Replace the layout-derived barriers by explicit synchronization2 barriers at every call site and add the missing ones. Verify: the scenarios of "Barriers name the stages that use an image"; no call of `cmd_pipeline_barrier` and no `layout_use` remain.
-- [ ] 2.2 Run the tests once with synchronisation validation as `design.md` says and fix or note the result. Verify: the run's outcome is written under a "Checked" heading at the end of `design.md`.
+- [x] 2.1 Replace the layout-derived barriers by explicit synchronization2 barriers at every call site and add the missing ones. Verify: the scenarios of "Barriers name the stages that use an image"; no call of `cmd_pipeline_barrier` and no `layout_use` remain.
+- [x] 2.2 Run the tests once with synchronisation validation as `design.md` says and fix or note the result. Verify: the run's outcome is written under a "Checked" heading at the end of `design.md`.
 
 ## 3. Dynamic rendering (`vkxp-vk`)
 

@@ -16,8 +16,8 @@ use crate::records::{
     ClipRect, RECORD_WORDS, Records, TILEMAP_WORDS, check_logical_size, encode_frame,
 };
 use crate::resources::{
-    COLOR_LAYERS, COLOR_RANGE, GpuBuffer, GpuImage, create_shader_module, make_host_readable,
-    transition, write_words,
+    COLOR_LAYERS, COLOR_RANGE, GpuBuffer, GpuImage, ImageUse, create_shader_module,
+    make_host_readable, transition, write_words,
 };
 use crate::tables::TableStore;
 use crate::{DeviceChoice, DeviceInfo, Limit, ValidationLog, VkError};
@@ -421,7 +421,7 @@ impl VkCompositor {
             return Ok(None);
         };
         let (image, size) = (target.image, Size::new(target.width, target.height));
-        let rgba = self.read_image(image, (size.width, size.height), vk::ImageLayout::GENERAL)?;
+        let rgba = self.read_image(image, (size.width, size.height), self.frame_use())?;
         Ok(Some(Frame { size, rgba }))
     }
 
@@ -865,13 +865,14 @@ impl VkCompositor {
         }
 
         self.begin_commands()?;
+        let (bitmap_use, frame_use) = (self.bitmap_use(), self.frame_use());
         let (device, commands) = (&self.gpu.device, self.commands);
         for step in &pending.steps {
             // SAFETY: the command buffer is recording. Every image named by a step is alive
             // until `execute` has waited for this submission: live ones are in `self.images`
             // and destroyed ones in `pending.retired`. A new image starts in `UNDEFINED`; any
             // other is in `SHADER_READ_ONLY_OPTIMAL`, where the previous step or submission
-            // left it. Upload rectangles were checked against the image size and their bytes
+            // left it for its readers. Upload rectangles were checked against the image size and their bytes
             // lie inside the staging buffer, which is only null when its allocation failed, in
             // which case no copy is recorded.
             unsafe {
@@ -881,8 +882,8 @@ impl VkCompositor {
                             device,
                             commands,
                             *image,
-                            vk::ImageLayout::UNDEFINED,
-                            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                            ImageUse::UNDEFINED,
+                            ImageUse::TRANSFER_WRITE,
                         );
                         device.cmd_clear_color_image(
                             commands,
@@ -902,8 +903,8 @@ impl VkCompositor {
                             device,
                             commands,
                             *image,
-                            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                            bitmap_use,
+                            ImageUse::TRANSFER_WRITE,
                         );
                         let region = vk::BufferImageCopy::default()
                             .buffer_offset(*offset)
@@ -934,8 +935,8 @@ impl VkCompositor {
                     device,
                     commands,
                     *image,
-                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                    vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                    ImageUse::TRANSFER_WRITE,
+                    bitmap_use,
                 );
             }
         }
@@ -959,17 +960,20 @@ impl VkCompositor {
             // `SHADER_READ_ONLY_OPTIMAL`. The buffers hold what the tile headers and indices
             // address, the table buffer holds every element a tilemap record's offsets and
             // sizes reach, the target has the size in the push constants, and the tile grid is
-            // within the dispatch limits every device has.
+            // within the dispatch limits every device has. The target is new or in `GENERAL`,
+            // where the dispatch before left it for its readers.
             unsafe {
-                if new_target {
-                    transition(
-                        device,
-                        commands,
-                        target,
-                        vk::ImageLayout::UNDEFINED,
-                        vk::ImageLayout::GENERAL,
-                    );
-                }
+                let before = match new_target {
+                    true => ImageUse::UNDEFINED,
+                    false => frame_use,
+                };
+                transition(
+                    device,
+                    commands,
+                    target,
+                    before,
+                    ImageUse::COMPUTE_STORAGE_WRITE,
+                );
                 device.cmd_bind_pipeline(commands, vk::PipelineBindPoint::COMPUTE, self.pipeline);
                 device.cmd_bind_descriptor_sets(
                     commands,
@@ -987,6 +991,14 @@ impl VkCompositor {
                     &constants,
                 );
                 device.cmd_dispatch(commands, frame.tiles.tiles_x, frame.tiles.tiles_y, 1);
+                // Hands the composed frame to the presentation pass and the copies.
+                transition(
+                    device,
+                    commands,
+                    target,
+                    ImageUse::COMPUTE_STORAGE_WRITE,
+                    frame_use,
+                );
             }
         }
         if draw.is_some() {
@@ -998,6 +1010,27 @@ impl VkCompositor {
             self.has_frame = true;
         }
         failure.map_or(Ok(()), Err)
+    }
+
+    /// How the image of a bitmap is used between its uploads: the compute dispatch fetches
+    /// from it, and so does the fragment shader of the presentation pass while the bitmap is a
+    /// transition mask, which only a queue that can draw gets to.
+    fn bitmap_use(&self) -> ImageUse {
+        match self.gpu.can_draw {
+            true => ImageUse::COMPUTE_SAMPLED_READ.and(ImageUse::FRAGMENT_SAMPLED_READ),
+            false => ImageUse::COMPUTE_SAMPLED_READ,
+        }
+    }
+
+    /// How the frame target is used between dispatches, in the `GENERAL` layout it stays in:
+    /// copies read it (read-back, freeze), and so does the fragment shader of the
+    /// presentation pass on a queue that can draw.
+    fn frame_use(&self) -> ImageUse {
+        let readers = match self.gpu.can_draw {
+            true => ImageUse::TRANSFER_READ.and(ImageUse::FRAGMENT_SAMPLED_READ),
+            false => ImageUse::TRANSFER_READ,
+        };
+        readers.in_layout(vk::ImageLayout::GENERAL)
     }
 
     /// Resets the command buffer and starts recording into it.
@@ -1040,13 +1073,13 @@ impl VkCompositor {
 
     /// Copies the pixels of an image to host memory: RGBA8 in row order.
     ///
-    /// `layout` is the layout the image is in, which is restored; an image in `GENERAL` is
-    /// copied from as it is.
+    /// `resting` is the use the image is in, which is restored; an image whose use already
+    /// lets copies read it, in `GENERAL` or `TRANSFER_SRC_OPTIMAL`, is copied from as it is.
     fn read_image(
         &mut self,
         image: vk::Image,
         (width, height): (u32, u32),
-        layout: vk::ImageLayout,
+        resting: ImageUse,
     ) -> Result<Vec<u8>, VkError> {
         let size = u64::from(width) * u64::from(height) * 4;
         let buffer = GpuBuffer::new(
@@ -1057,7 +1090,7 @@ impl VkCompositor {
             vk::BufferUsageFlags::TRANSFER_DST,
             MemoryLocation::GpuToCpu,
         )?;
-        let result = self.copy_image_to_buffer(image, (width, height), layout, buffer.buffer);
+        let result = self.copy_image_to_buffer(image, (width, height), resting, buffer.buffer);
         if result.is_err() {
             // SAFETY: the device is live; see `execute`.
             let _ = unsafe { self.gpu.device.device_wait_idle() };
@@ -1071,14 +1104,14 @@ impl VkCompositor {
         &self,
         image: vk::Image,
         (width, height): (u32, u32),
-        layout: vk::ImageLayout,
+        resting: ImageUse,
         buffer: vk::Buffer,
     ) -> Result<(), VkError> {
         self.begin_commands()?;
         let (device, commands) = (&self.gpu.device, self.commands);
-        let copy_layout = match layout {
-            vk::ImageLayout::GENERAL => layout,
-            _ => vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+        let copying = match resting.layout {
+            vk::ImageLayout::GENERAL | vk::ImageLayout::TRANSFER_SRC_OPTIMAL => resting,
+            _ => ImageUse::TRANSFER_READ,
         };
         let region = vk::BufferImageCopy::default()
             .image_subresource(COLOR_LAYERS)
@@ -1088,23 +1121,23 @@ impl VkCompositor {
                 depth: 1,
             });
         // SAFETY: the command buffer is recording; the caller passes a live image of this size
-        // in `layout`, created with transfer-source usage, and a live buffer that holds the
-        // whole image; both outlive the wait in `submit_and_wait`.
+        // in the use `resting`, created with transfer-source usage, and a live buffer that
+        // holds the whole image; both outlive the wait in `submit_and_wait`.
         unsafe {
-            if copy_layout != layout {
-                transition(device, commands, image, layout, copy_layout);
+            if copying != resting {
+                transition(device, commands, image, resting, copying);
             }
-            device.cmd_copy_image_to_buffer(commands, image, copy_layout, buffer, &[region]);
+            device.cmd_copy_image_to_buffer(commands, image, copying.layout, buffer, &[region]);
             // The caller reads the buffer through its mapping once the fence has signalled.
             make_host_readable(
                 device,
                 commands,
                 buffer,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::AccessFlags::TRANSFER_WRITE,
+                vk::PipelineStageFlags2::ALL_TRANSFER,
+                vk::AccessFlags2::TRANSFER_WRITE,
             );
-            if copy_layout != layout {
-                transition(device, commands, image, copy_layout, layout);
+            if copying != resting {
+                transition(device, commands, image, copying, resting);
             }
         }
         self.submit_and_wait()
@@ -1117,11 +1150,9 @@ impl VkCompositor {
             .get(id)
             .map_err(|source| VkError::InvalidOpBitmap { index: 0, source })?;
         match self.images.get(&id.index) {
-            Some(image) => self.read_image(
-                image.image,
-                (image.width, image.height),
-                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            ),
+            Some(image) => {
+                self.read_image(image.image, (image.width, image.height), self.bitmap_use())
+            }
             None => Ok(Vec::new()),
         }
     }

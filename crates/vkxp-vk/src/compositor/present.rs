@@ -20,7 +20,7 @@ use super::{Frame, VkCompositor};
 use crate::pacing::IntervalSummary;
 use crate::present_timing as ffi;
 use crate::resources::{
-    COLOR_LAYERS, COLOR_RANGE, GpuImage, create_shader_module, transition, write_words,
+    COLOR_LAYERS, COLOR_RANGE, GpuImage, ImageUse, create_shader_module, transition, write_words,
 };
 use crate::{Limit, VkError};
 
@@ -861,7 +861,7 @@ impl VkCompositor {
             let held = self.presenter.as_ref().and_then(|p| p.held.as_ref());
             return match held.map(|held| held.image) {
                 Some(held) => self.submit_or_idle(|compositor| {
-                    compositor.clear_held(held, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                    compositor.clear_held(held, ImageUse::FRAGMENT_SAMPLED_READ)
                 }),
                 None => Ok(()),
             };
@@ -937,7 +937,7 @@ impl VkCompositor {
                     source,
                     source_layout,
                     held,
-                    vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                    ImageUse::FRAGMENT_SAMPLED_READ,
                     size,
                 )
             });
@@ -945,13 +945,7 @@ impl VkCompositor {
         let fresh = self.new_held_image(size)?;
         let image = fresh.image;
         let copied = self.submit_or_idle(|compositor| {
-            compositor.copy_to_held(
-                source,
-                source_layout,
-                image,
-                vk::ImageLayout::UNDEFINED,
-                size,
-            )
+            compositor.copy_to_held(source, source_layout, image, ImageUse::UNDEFINED, size)
         });
         match copied {
             Ok(()) => {
@@ -1005,11 +999,7 @@ impl VkCompositor {
         }
         self.last_scaled = Some(size);
         let rgba = self.with_offscreen(size, Placement::Letterbox, |compositor, image| {
-            compositor.read_image(
-                image,
-                (size.width, size.height),
-                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-            )
+            compositor.read_image(image, (size.width, size.height), ImageUse::TRANSFER_READ)
         })?;
         Ok(Frame { size, rgba })
     }
@@ -1387,8 +1377,8 @@ impl VkCompositor {
         // Made and filled like a held frame of one pixel.
         let no_mask = self.new_held_image((1, 1))?;
         let image = no_mask.image;
-        let cleared = self
-            .submit_or_idle(|compositor| compositor.clear_held(image, vk::ImageLayout::UNDEFINED));
+        let cleared =
+            self.submit_or_idle(|compositor| compositor.clear_held(image, ImageUse::UNDEFINED));
         match cleared {
             Ok(()) => {
                 let presenter = self.presenter.as_mut().expect("made by the caller");
@@ -1411,8 +1401,8 @@ impl VkCompositor {
         }
         let held = self.new_held_image(size)?;
         let image = held.image;
-        let cleared = self
-            .submit_or_idle(|compositor| compositor.clear_held(image, vk::ImageLayout::UNDEFINED));
+        let cleared =
+            self.submit_or_idle(|compositor| compositor.clear_held(image, ImageUse::UNDEFINED));
         match cleared {
             Ok(()) => {
                 let presenter = self.presenter.as_mut().expect("made by the caller");
@@ -1427,21 +1417,16 @@ impl VkCompositor {
         }
     }
 
-    /// Fills the held frame, which is in layout `from`, with opaque black.
-    fn clear_held(&mut self, held: vk::Image, from: vk::ImageLayout) -> Result<(), VkError> {
+    /// Fills the held frame, which was last used as `from` says, with opaque black and leaves
+    /// it to the fragment shader.
+    fn clear_held(&mut self, held: vk::Image, from: ImageUse) -> Result<(), VkError> {
         self.begin_commands()?;
         let (device, commands) = (&self.gpu.device, self.commands);
         // SAFETY: the command buffer is recording; the caller passes the live held image in
-        // layout `from`, which has transfer-destination usage and stays alive until the
-        // submission has been waited for.
+        // the layout of `from`, which has transfer-destination usage and stays alive until
+        // the submission has been waited for. A held image only exists on a queue that draws.
         unsafe {
-            transition(
-                device,
-                commands,
-                held,
-                from,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            );
+            transition(device, commands, held, from, ImageUse::TRANSFER_WRITE);
             device.cmd_clear_color_image(
                 commands,
                 held,
@@ -1453,21 +1438,22 @@ impl VkCompositor {
                 device,
                 commands,
                 held,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                ImageUse::TRANSFER_WRITE,
+                ImageUse::FRAGMENT_SAMPLED_READ,
             );
         }
         self.submit_and_wait()
     }
 
-    /// Copies `source`, which is in `source_layout`, into the held frame, which is in
-    /// `held_layout` and ends up in `SHADER_READ_ONLY_OPTIMAL`; both are `size` pixels large.
+    /// Copies `source`, which is in `source_layout` for copies to read, into the held frame,
+    /// which was last used as `held_use` says and is left to the fragment shader in
+    /// `SHADER_READ_ONLY_OPTIMAL`; both are `size` pixels large.
     fn copy_to_held(
         &mut self,
         source: vk::Image,
         source_layout: vk::ImageLayout,
         held: vk::Image,
-        held_layout: vk::ImageLayout,
+        held_use: ImageUse,
         (width, height): (u32, u32),
     ) -> Result<(), VkError> {
         self.begin_commands()?;
@@ -1482,20 +1468,15 @@ impl VkCompositor {
             });
         // SAFETY: the command buffer is recording. The source is the live frame target or an
         // off-screen target, in `source_layout`, which is `GENERAL` or
-        // `TRANSFER_SRC_OPTIMAL`, with transfer-source usage; the held frame is live, in
-        // `held_layout`, which is `SHADER_READ_ONLY_OPTIMAL` or, for a new image whose
+        // `TRANSFER_SRC_OPTIMAL`, with transfer-source usage, and the barrier that left it
+        // there named the transfer stage as a reader; the held frame is live, in the layout
+        // of `held_use`, which is `SHADER_READ_ONLY_OPTIMAL` or, for a new image whose
         // contents do not matter, `UNDEFINED`, with transfer-destination usage. Every pixel
         // of it is written, so nothing undefined is left. Their formats are four
         // 8-bit channels each, which copies allow between, both are `size` pixels large, and
         // both outlive the wait below.
         unsafe {
-            transition(
-                device,
-                commands,
-                held,
-                held_layout,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            );
+            transition(device, commands, held, held_use, ImageUse::TRANSFER_WRITE);
             device.cmd_copy_image(
                 commands,
                 source,
@@ -1508,8 +1489,8 @@ impl VkCompositor {
                 device,
                 commands,
                 held,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                ImageUse::TRANSFER_WRITE,
+                ImageUse::FRAGMENT_SAMPLED_READ,
             );
         }
         self.submit_and_wait()

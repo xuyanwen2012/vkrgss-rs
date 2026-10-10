@@ -55,3 +55,29 @@
 ## Follow-ups
 
 - Batching the barriers of several uploads to one bitmap.
+
+## Checked
+
+Synchronisation validation, on llvmpipe (Mesa lavapipe) with `VK_LAYER_KHRONOS_validation`
+1.4.341:
+
+- The layer takes its settings from the environment, so nothing was added to the validation
+  set-up of the tests. The run was
+  `VK_LOADER_DRIVERS_SELECT='*lvp*' VK_LAYER_VALIDATE_SYNC=1 VK_LAYER_SYNCVAL_SHADER_ACCESSES_HEURISTIC=1 cargo test -p vkxp-vk`.
+  The second setting is needed: without it this version of the layer does not look at what a
+  shader reads or writes through a descriptor, which is most of what this crate does.
+  (`VK_VALIDATION_VALIDATE_SYNC`, `VK_KHRONOS_VALIDATION_VALIDATE_SYNC` and `VK_LAYER_ENABLES`
+  did not show any effect on this version.)
+- That the settings take effect was checked with a deliberate fault that was not committed:
+  with the barrier in front of the compute dispatch naming the transfer stage instead of the
+  compute stage, 10 of the 12 tests of `tests::compositing` fail with
+  `vkCmdDispatch(): WRITE_AFTER_WRITE hazard detected`; without the two settings the same
+  fault passes unnoticed.
+- Result after the barriers of task 2.1: all 218 tests pass, no message.
+- Limit of the check: the code before this change also passes it (run on the commit of task
+  1.1). Every submission is waited for through its fence before the next one is recorded, and
+  the layer then takes the earlier accesses as finished, so the stages that the old barriers
+  got wrong between two submissions (fragment reads taken for compute reads, no hand-over of
+  the composed frame) are not something it can report. Those are right by the stages each
+  call site now names, not by this run. The accesses of the bitmap array, which is bound
+  partially and indexed at run time, are also outside what the layer's heuristic follows.

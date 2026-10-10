@@ -1,4 +1,4 @@
-//! Buffers and images with their memory, and the barriers between image layouts.
+//! Buffers and images with their memory, and the barriers between the uses of an image.
 
 use ash::vk;
 use gpu_allocator::MemoryLocation;
@@ -273,71 +273,99 @@ fn memory_error(what: &'static str, error: gpu_allocator::AllocationError) -> Vk
     }
 }
 
-/// The pipeline stage and access with which this backend uses an image in `layout`.
-fn layout_use(layout: vk::ImageLayout) -> (vk::PipelineStageFlags, vk::AccessFlags) {
-    match layout {
-        vk::ImageLayout::UNDEFINED => (
-            vk::PipelineStageFlags::TOP_OF_PIPE,
-            vk::AccessFlags::empty(),
-        ),
-        vk::ImageLayout::TRANSFER_DST_OPTIMAL => (
-            vk::PipelineStageFlags::TRANSFER,
-            vk::AccessFlags::TRANSFER_WRITE,
-        ),
-        vk::ImageLayout::TRANSFER_SRC_OPTIMAL => (
-            vk::PipelineStageFlags::TRANSFER,
-            vk::AccessFlags::TRANSFER_READ,
-        ),
-        vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL => (
-            vk::PipelineStageFlags::COMPUTE_SHADER,
-            vk::AccessFlags::SHADER_READ,
-        ),
-        // The frame target: written by the compute shader, read by copies.
-        vk::ImageLayout::GENERAL => (
-            vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::TRANSFER,
-            vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::TRANSFER_READ,
-        ),
-        other => unreachable!("layout {other:?} is not used by this backend"),
+/// One way an image is used: the pipeline stages that touch it, how they access it, and the
+/// layout it is in meanwhile. A barrier is recorded between two of these.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ImageUse {
+    pub stage: vk::PipelineStageFlags2,
+    pub access: vk::AccessFlags2,
+    pub layout: vk::ImageLayout,
+}
+
+impl ImageUse {
+    /// A new image, or one whose contents may be discarded: nothing has used it.
+    pub(crate) const UNDEFINED: ImageUse = ImageUse {
+        stage: vk::PipelineStageFlags2::NONE,
+        access: vk::AccessFlags2::NONE,
+        layout: vk::ImageLayout::UNDEFINED,
+    };
+    /// Destination of a copy or a clear.
+    pub(crate) const TRANSFER_WRITE: ImageUse = ImageUse {
+        stage: vk::PipelineStageFlags2::ALL_TRANSFER,
+        access: vk::AccessFlags2::TRANSFER_WRITE,
+        layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+    };
+    /// Source of a copy.
+    pub(crate) const TRANSFER_READ: ImageUse = ImageUse {
+        stage: vk::PipelineStageFlags2::ALL_TRANSFER,
+        access: vk::AccessFlags2::TRANSFER_READ,
+        layout: vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+    };
+    /// Fetched from as a sampled image by the compute shader.
+    pub(crate) const COMPUTE_SAMPLED_READ: ImageUse = ImageUse {
+        stage: vk::PipelineStageFlags2::COMPUTE_SHADER,
+        access: vk::AccessFlags2::SHADER_SAMPLED_READ,
+        layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+    };
+    /// Written as a storage image by the compute shader.
+    pub(crate) const COMPUTE_STORAGE_WRITE: ImageUse = ImageUse {
+        stage: vk::PipelineStageFlags2::COMPUTE_SHADER,
+        access: vk::AccessFlags2::SHADER_STORAGE_WRITE,
+        layout: vk::ImageLayout::GENERAL,
+    };
+    /// Fetched from as a sampled image by the fragment shader.
+    pub(crate) const FRAGMENT_SAMPLED_READ: ImageUse = ImageUse {
+        stage: vk::PipelineStageFlags2::FRAGMENT_SHADER,
+        access: vk::AccessFlags2::SHADER_SAMPLED_READ,
+        layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+    };
+    /// This use together with `other`, for an image that both stages use in the layout of
+    /// this one.
+    pub(crate) fn and(self, other: ImageUse) -> ImageUse {
+        ImageUse {
+            stage: self.stage | other.stage,
+            access: self.access | other.access,
+            layout: self.layout,
+        }
+    }
+
+    /// The same stages and accesses with the image in `layout`.
+    pub(crate) fn in_layout(self, layout: vk::ImageLayout) -> ImageUse {
+        ImageUse { layout, ..self }
     }
 }
 
-/// Records a barrier that moves `image` from layout `old` to layout `new`.
+/// Records a barrier between two uses of `image`: the commands recorded afterwards use it as
+/// `to` says, once the earlier ones that used it as `from` says are done, and its layout
+/// changes from the one to the other.
 ///
 /// # Safety
 ///
 /// `commands` must be a command buffer of `device` in the recording state, and `image` a live
-/// image of that device that is in layout `old` (or whose contents may be discarded, for
-/// `UNDEFINED`) when the barrier executes.
+/// image of that device that is in the layout of `from` (or whose contents may be discarded,
+/// for `UNDEFINED`) when the barrier executes. The queue family of the command buffer must
+/// support the stages of both uses.
 pub(crate) unsafe fn transition(
     device: &ash::Device,
     commands: vk::CommandBuffer,
     image: vk::Image,
-    old: vk::ImageLayout,
-    new: vk::ImageLayout,
+    from: ImageUse,
+    to: ImageUse,
 ) {
-    let (src_stage, src_access) = layout_use(old);
-    let (dst_stage, dst_access) = layout_use(new);
-    let barrier = vk::ImageMemoryBarrier::default()
-        .src_access_mask(src_access)
-        .dst_access_mask(dst_access)
-        .old_layout(old)
-        .new_layout(new)
+    let barriers = [vk::ImageMemoryBarrier2::default()
+        .src_stage_mask(from.stage)
+        .src_access_mask(from.access)
+        .dst_stage_mask(to.stage)
+        .dst_access_mask(to.access)
+        .old_layout(from.layout)
+        .new_layout(to.layout)
         .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
         .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
         .image(image)
-        .subresource_range(COLOR_RANGE);
+        .subresource_range(COLOR_RANGE)];
+    let info = vk::DependencyInfo::default().image_memory_barriers(&barriers);
     // SAFETY: guaranteed by the caller.
-    unsafe {
-        device.cmd_pipeline_barrier(
-            commands,
-            src_stage,
-            dst_stage,
-            vk::DependencyFlags::empty(),
-            &[],
-            &[],
-            &[barrier],
-        );
-    }
+    unsafe { device.cmd_pipeline_barrier2(commands, &info) };
 }
 
 /// Records a barrier that makes what the device wrote to `buffer` visible to the host.
@@ -356,27 +384,20 @@ pub(crate) unsafe fn make_host_readable(
     device: &ash::Device,
     commands: vk::CommandBuffer,
     buffer: vk::Buffer,
-    stage: vk::PipelineStageFlags,
-    access: vk::AccessFlags,
+    stage: vk::PipelineStageFlags2,
+    access: vk::AccessFlags2,
 ) {
-    let barrier = vk::BufferMemoryBarrier::default()
+    let barriers = [vk::BufferMemoryBarrier2::default()
+        .src_stage_mask(stage)
         .src_access_mask(access)
-        .dst_access_mask(vk::AccessFlags::HOST_READ)
+        .dst_stage_mask(vk::PipelineStageFlags2::HOST)
+        .dst_access_mask(vk::AccessFlags2::HOST_READ)
         .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
         .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
         .buffer(buffer)
         .offset(0)
-        .size(vk::WHOLE_SIZE);
+        .size(vk::WHOLE_SIZE)];
+    let info = vk::DependencyInfo::default().buffer_memory_barriers(&barriers);
     // SAFETY: guaranteed by the caller.
-    unsafe {
-        device.cmd_pipeline_barrier(
-            commands,
-            stage,
-            vk::PipelineStageFlags::HOST,
-            vk::DependencyFlags::empty(),
-            &[],
-            &[barrier],
-            &[],
-        );
-    }
+    unsafe { device.cmd_pipeline_barrier2(commands, &info) };
 }

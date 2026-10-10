@@ -150,8 +150,8 @@ impl VkCompositor {
                 device,
                 commands,
                 output_buffer.buffer,
-                vk::PipelineStageFlags::COMPUTE_SHADER,
-                vk::AccessFlags::SHADER_WRITE,
+                vk::PipelineStageFlags2::COMPUTE_SHADER,
+                vk::AccessFlags2::SHADER_STORAGE_WRITE,
             );
             self.submit_and_wait().unwrap();
 
