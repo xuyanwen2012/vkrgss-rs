@@ -160,6 +160,7 @@ Paths on the command line are relative to the directory the program was started 
 | `--debug` | Debug mode: `$DEBUG` is `true`. |
 | `--allow-process-functions` | Lets `system`, backticks, `exec`, `fork`, `syscall` and `IO.popen` start processes. Without it they do nothing. |
 | `--log-p` | `p` only writes to the error stream: no message panel is shown and the game does not wait. See *Messages*. |
+| `--verbose` | Also write informational and debug messages to the error stream. See *Diagnostics*. |
 | `--no-audio` | Run without sound. No audio device is opened. |
 | `--soundfont FILE` | The SoundFont that MIDI music is played with. A file that does not exist ends the program with an error before any window opens. |
 | `--seed N` | The seed of the random number generator, set before any script runs and again on every reset. Without it a headless run uses 0, a replay the seed of its recording, and a windowed run one taken from the clock. |
@@ -177,6 +178,30 @@ The exit status is 0 when the game ends normally: its scripts return or call `ex
 window is closed, or the frame limit of a headless run is reached. It is non-zero when a
 script error ends the game (its report is on the error stream), when the host fails, when a
 frame is rejected in a headless run, or when a frame that was to be dumped was never reached.
+
+### Diagnostics
+
+What the running program has to say about itself goes to the error stream as lines that start
+with `vkxp: `. By default these are warnings and errors: a sound that cannot be decoded, MIDI
+without a SoundFont, no gamepad support, a frame that cannot be drawn. `--verbose` adds
+informational and debug messages, which name the choices the program made: the GPU and how
+frames are paced, the directories of the run-time packages, the built-in scripts file, the
+encrypted archive and the configuration files that were read. Each line then also names its
+level and the module it comes from:
+
+```text
+vkxp: INFO vkxp: built-in scripts file: /home/me/.local/share/vkxp/rpg_builtin.rb
+```
+
+The environment variable `VKXP_LOG` sets the level instead and comes before `--verbose`. It
+holds a level (`off`, `error`, `warn`, `info`, `debug` or `trace`) or a filter by module,
+such as `VKXP_LOG=warn,vkxp_host=trace`. A value that cannot be parsed ends the program with
+the usage message and status 2. There is no key for the level in a configuration file.
+
+What the game itself writes (`print`, `p`, the report of a script error), the usage message
+and the message of an error that ends the program are not diagnostics and are shown whatever
+the level. The intervals that `--present-stats` asks for are warnings, so they need no
+`--verbose`.
 
 ### Configuration files
 

@@ -11,7 +11,7 @@
 
 ## 3. Documents
 
-- [ ] 3.1 Describe `--verbose` and `VKXP_LOG` in `README.md` and in the usage text. Verify: the usage text test.
+- [x] 3.1 Describe `--verbose` and `VKXP_LOG` in `README.md` and in the usage text. Verify: the usage text test.
 
 ## 4. Integration check
 
