@@ -145,6 +145,22 @@ fn builtin_scripts(named: Option<PathBuf>) -> Result<PathBuf> {
     Ok(path)
 }
 
+/// The encrypted archive of the game in `game_dir`, which the game's files are opened with:
+/// a file `Game.rgssad` under any letter case.
+fn archive(game_dir: &Path) -> Option<PathBuf> {
+    std::fs::read_dir(game_dir)
+        .ok()?
+        .flatten()
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_str()
+                .is_some_and(|name| name.eq_ignore_ascii_case("Game.rgssad"))
+        })
+        .map(|entry| entry.path())
+        .find(|path| path.is_file())
+}
+
 /// The audio of a windowed run: `None`, which opens no audio device, when it is disabled. A
 /// SoundFont that is named has to exist, whether or not it will be used.
 fn audio_options(disabled: bool, soundfont: Option<&Path>) -> Result<Option<AudioOptions>> {
@@ -254,7 +270,11 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
         ),
         other => other.into(),
     })?;
+    for dir in &rtp_dirs {
+        tracing::info!("run-time package directory: {}", dir.display());
+    }
     let builtin_scripts = builtin_scripts(options.builtin_scripts.clone())?;
+    tracing::info!("built-in scripts file: {}", builtin_scripts.display());
     let audio = audio_options(options.no_audio, options.soundfont.as_deref())?;
     let dumps = options
         .dumps
@@ -274,6 +294,9 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
         .collect::<std::io::Result<Vec<_>>>()?;
     let (seed, input) = seed_and_input(&options)?;
     let files = GameFiles::open(game_dir.clone(), rtp_dirs)?;
+    if let Some(archive) = archive(&game_dir) {
+        tracing::info!("encrypted archive: {}", archive.display());
+    }
 
     std::env::set_current_dir(&game_dir)
         .with_context(|| format!("cannot enter the game directory {}", game_dir.display()))?;
@@ -316,14 +339,13 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
 
     let device = options.device.as_deref().map(device_from_text);
     if options.headless {
-        let defaults = HeadlessOptions::default();
         let host_options = HeadlessOptions {
-            device: device.unwrap_or(defaults.device),
+            device: device.unwrap_or(HeadlessOptions::default().device),
             frames: options.frames,
             script,
             input,
             dumps,
-            ..defaults
+            errors: log::EventLines::host(),
         };
         let (guest_end, link) = headless_link();
         let guest_thread = thread::Builder::new()
@@ -352,6 +374,8 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
             pads,
             audio,
             input,
+            errors: log::EventLines::host(),
+            audio_errors: log::EventLines::audio(),
             ..WindowedOptions::new(device.unwrap_or_default())
         };
         // The windowed runner returns once the guest thread has ended.

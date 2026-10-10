@@ -1091,3 +1091,33 @@ fn a_malformed_filter_ends_the_program_naming_the_variable() {
     assert!(stderr.contains("VKXP_LOG"), "{stderr}");
     assert!(stderr.contains("usage: vkxp"), "{stderr}");
 }
+
+/// Scenario "Script error at every level".
+#[test]
+fn a_script_error_is_reported_at_every_level() {
+    let source = "Graphics.update\nraise 'boom'\n";
+    let game = Game::new("e2e-log-error", "Error", &[("Main", source)]);
+    let work = tempfile::tempdir().expect("a temporary directory");
+    let ran = headless_logging(work, &game, &[], Some("error"));
+    ran.assert_failure();
+    let stderr = ran.stderr();
+    assert!(
+        stderr.contains("Script 'Main' line 2: RuntimeError occurred."),
+        "{stderr}"
+    );
+    assert!(stderr.contains("boom"), "{stderr}");
+}
+
+/// Scenario "Verbose".
+#[test]
+fn verbose_names_the_built_in_scripts_file() {
+    let game = quiet_game("e2e-log-verbose");
+    let ran = headless(&game, &["--verbose"]);
+    ran.assert_success();
+    let stderr = ran.stderr();
+    let builtin = game.builtin_scripts();
+    let named = stderr
+        .lines()
+        .any(|line| line.starts_with("vkxp: INFO ") && line.contains(&*builtin.to_string_lossy()));
+    assert!(named, "{stderr}");
+}

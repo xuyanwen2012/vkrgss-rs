@@ -1,5 +1,6 @@
 //! Where the session sends the guest's audio commands.
 
+use std::io::Write;
 use std::path::PathBuf;
 
 use vkxp_audio::{Output, OutputOptions, SoundFonts};
@@ -34,11 +35,11 @@ pub struct AudioOptions {
 
 impl AudioOptions {
     /// Opens the default output device. When that fails, the failure is reported once and
-    /// the sink ignores what it is sent.
-    pub(crate) fn open(&self) -> Box<dyn AudioSink> {
+    /// the sink ignores what it is sent. Reports are written to `errors`.
+    pub(crate) fn open(&self, errors: Box<dyn Write + Send>) -> Box<dyn AudioSink> {
         Box::new(Output::open(OutputOptions {
             soundfonts: SoundFonts::configured(self.soundfont.clone()),
-            ..OutputOptions::default()
+            errors,
         }))
     }
 }

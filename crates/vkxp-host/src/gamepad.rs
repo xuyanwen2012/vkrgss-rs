@@ -175,13 +175,13 @@ pub struct Gamepads {
 }
 
 impl Gamepads {
-    /// Starts reading pads. On a machine without gamepad support this says so once on the
-    /// error stream and returns `None`.
+    /// Starts reading pads. On a machine without gamepad support this says so once with a
+    /// warning and returns `None`.
     pub fn open(map: GamepadMap) -> Option<Gamepads> {
         match Gilrs::new() {
             Ok(gilrs) => Some(Gamepads { gilrs, map }),
             Err(error) => {
-                eprintln!("vkxp: no gamepad is read: {error}");
+                tracing::warn!("no gamepad is read: {error}");
                 None
             }
         }

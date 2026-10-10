@@ -203,6 +203,7 @@ pub(crate) fn load(options: &Options, game_dir: &Path) -> Result<File> {
     let mut settled = File::default();
     for path in user.iter().chain(&game) {
         settled = settled.overridden_by(File::read(path)?);
+        tracing::info!("read the configuration file {}", path.display());
     }
     Ok(settled)
 }

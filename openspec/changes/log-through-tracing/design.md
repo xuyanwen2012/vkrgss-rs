@@ -49,7 +49,43 @@
 - [Events before the subscriber exists are lost] → Install it first; argument errors are
   direct writes anyway.
 
+## Implementation notes
+
+- The filter is `tracing-subscriber`'s `EnvFilter`, built from the value of `VKXP_LOG`. Its
+  parser rejects `=`; the lighter `Targets` filter accepts it, so it was not used.
+- Every direct write left in `crates/vkxp/src/main.rs` is the usage message or the message
+  of a failure that ends the program with a non-zero status (a host error of a headless run,
+  a session that ended without the game shutting down, scripts that do not end). They stay
+  direct, so that no level hides why the program failed.
+- The executable passed no stream before: the session and the mixer of a windowed run took
+  their default, the error stream, inside `vkxp-host`. `WindowedOptions` therefore has two
+  new fields, `errors` and `audio_errors`, like `HeadlessOptions::errors`, and the executable
+  fills all three with the adapter. `WindowedOptions` no longer derives `Debug`, which a
+  boxed stream does not have and nothing used.
+- The adapter cannot tell what a line is, so every line is a warning, with the target
+  `vkxp_host` or `vkxp_audio`. The helpers keep their `vkxp: ` prefix, which tests of
+  `vkxp-host` and `vkxp-audio` read; the adapter leaves it out and the formatter writes it.
+  A report of several lines (the host's echo of a modal text) now has the prefix on each
+  line instead of on the first only.
+- Present statistics and the report that present-timing pacing stopped are warnings.
+- The format with `--verbose` or `VKXP_LOG` is `vkxp: <LEVEL> <target>: <message>`.
+- The archive is named by the executable, which looks for `Game.rgssad` in the game
+  directory itself: `vkxp-vfs` does not say whether it opened one, and its interface does
+  not change here.
+
 ## Follow-ups
 
 - Spans and frame timings (`measure-frame-times`).
 - Events from `vkxp-vk` and the guest crates.
+- The two diagnostics of `vkxp-binding` (a process function that is turned off, a `Win32API`
+  call that is not emulated) are not events yet, and the crate has no `tracing` dependency.
+  The Ruby prelude writes them to the script's `$stderr` as lines `vkxp: <text>`, and the
+  tests `tests/prelude.rs` and `tests/win32api.rs` read them from a `$stderr` they replaced.
+  As events they would no longer reach a replaced `$stderr`, so those tests could not pass
+  unchanged, which task 2.1 asks for; keeping both would need a second path beside the
+  event, which this design does not name. Today they are shown at every level, with the
+  default format's prefix. Open question: should they become warnings through a host
+  function, with the tests changed to match?
+- A line that comes through the adapter is a warning whatever it says. A rejected frame, or
+  a display that cannot be frozen, would be an error if the session emitted events itself;
+  that means the session's tests reading events instead of an injected stream.

@@ -241,6 +241,12 @@ pub fn run_headless(
         errors,
     } = options;
     let display = HeadlessDisplay::new(device).map_err(HeadlessError::Compositor)?;
+    let chosen = display.compositor.device();
+    tracing::info!(
+        "compositing on {} ({}), on a virtual clock",
+        chosen.name,
+        chosen.driver
+    );
     let clock = ManualClock::new();
     let session_options = SessionOptions {
         fail_on_rejected_frame: true,

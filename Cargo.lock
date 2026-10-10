@@ -2458,6 +2458,7 @@ dependencies = [
  "rustysynth",
  "symphonia",
  "thiserror 2.0.21",
+ "tracing",
  "vkxp-proto",
 ]
 
@@ -2509,6 +2510,7 @@ dependencies = [
  "serde",
  "tempfile",
  "thiserror 2.0.21",
+ "tracing",
  "vkxp-audio",
  "vkxp-compose-ref",
  "vkxp-proto",

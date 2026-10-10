@@ -270,7 +270,7 @@ impl Recorder {
                 path: self.path.clone(),
                 source,
             };
-            eprintln!("vkxp: {error}");
+            tracing::error!("{error}");
             self.file = None;
         }
     }

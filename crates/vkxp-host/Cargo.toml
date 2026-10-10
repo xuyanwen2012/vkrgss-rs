@@ -16,6 +16,7 @@ gilrs.workspace = true
 png.workspace = true
 serde.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
 vkxp-audio.workspace = true
 vkxp-proto.workspace = true
 vkxp-vk.workspace = true

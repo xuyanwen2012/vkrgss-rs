@@ -5,6 +5,7 @@
 //! [`Driver`] is the part between the window events and the session; it has no window in it,
 //! so the tests drive it with synthetic events.
 
+use std::io::Write;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -26,7 +27,6 @@ use crate::{
 };
 
 /// How a windowed session is set up.
-#[derive(Debug)]
 pub struct WindowedOptions {
     /// The device that composites and presents. There is deliberately no default: on a
     /// machine with several GPUs the caller says which one drives the window.
@@ -47,9 +47,14 @@ pub struct WindowedOptions {
     pub audio: Option<AudioOptions>,
     /// A recorder or a replayer of the input, which the session takes when it starts.
     pub input: Option<Box<dyn InputSource>>,
-    /// Whether a summary of the intervals between the frames shown is written to the error
-    /// stream, every [`STATS_INTERVALS`] frames and when the session ends.
+    /// Whether a summary of the intervals between the frames shown is reported, every
+    /// [`STATS_INTERVALS`] frames and when the session ends. It is a warning, so that it is
+    /// shown at the default level.
     pub present_stats: bool,
+    /// Where the session writes modal texts and errors, which it takes when it starts.
+    pub errors: Box<dyn Write + Send>,
+    /// Where the audio side reports sounds that cannot be played, taken likewise.
+    pub audio_errors: Box<dyn Write + Send>,
 }
 
 impl WindowedOptions {
@@ -66,6 +71,8 @@ impl WindowedOptions {
             audio: None,
             input: None,
             present_stats: false,
+            errors: Box::new(std::io::stderr()),
+            audio_errors: Box::new(std::io::stderr()),
         }
     }
 }
@@ -220,7 +227,7 @@ impl VulkanDisplay {
         self.window.pre_present_notify();
         let presented = self.compositor.present().map(|_| ());
         if let Some(report) = self.compositor.take_pacing_report() {
-            eprintln!("vkxp: {report}");
+            tracing::warn!("{report}");
         }
         presented
     }
@@ -231,7 +238,7 @@ impl VulkanDisplay {
             self.compositor.present_summary(),
             self.compositor.paces_with_present_timing(),
         );
-        eprintln!("vkxp: {line}");
+        tracing::warn!("{line}");
     }
 
     fn resized(&mut self, size: PhysicalSize<u32>) {
@@ -294,6 +301,11 @@ impl Drop for VulkanDisplay {
     }
 }
 
+/// Takes a stream out of the options, which keep one that discards what it is given.
+fn take_stream(stream: &mut Box<dyn Write + Send>) -> Box<dyn Write + Send> {
+    std::mem::replace(stream, Box::new(std::io::sink()))
+}
+
 /// The user event that the link's wake hook sends to the event loop.
 #[derive(Debug, Clone, Copy)]
 struct GuestSpoke;
@@ -350,12 +362,20 @@ impl App {
         display.resized(window.inner_size());
         // Some window systems only show a window once it has content.
         if let Err(error) = display.redraw() {
-            eprintln!("vkxp: cannot draw the window: {error}");
+            tracing::error!("cannot draw the window: {error}");
         }
+        let chosen = display.compositor.device();
+        tracing::info!("compositing on {} ({})", chosen.name, chosen.driver);
+        let pacing = if display.compositor.paces_with_present_timing() {
+            "with VK_EXT_present_timing"
+        } else {
+            "by the host's timer"
+        };
+        tracing::info!("frames are paced {pacing}");
 
         let clock = SystemClock::new();
         let audio: Box<dyn AudioSink> = match &self.options.audio {
-            Some(audio) => audio.open(),
+            Some(audio) => audio.open(take_stream(&mut self.options.audio_errors)),
             None => Box::new(NullSink),
         };
         let options = SessionOptions {
@@ -363,6 +383,7 @@ impl App {
             audio,
             input: self.options.input.take(),
             wait_for_modal: true,
+            errors: take_stream(&mut self.options.errors),
             ..SessionOptions::default()
         };
         let link = self.link.take().expect("the session starts once");
@@ -455,12 +476,12 @@ impl ApplicationHandler<GuestSpoke> for App {
                 let display = running.driver.session_mut().display_mut();
                 display.resized(size);
                 if let Err(error) = display.redraw() {
-                    eprintln!("vkxp: cannot redraw the window: {error}");
+                    tracing::error!("cannot redraw the window: {error}");
                 }
             }
             WindowEvent::RedrawRequested => {
                 if let Err(error) = running.driver.session_mut().display_mut().redraw() {
-                    eprintln!("vkxp: cannot redraw the window: {error}");
+                    tracing::error!("cannot redraw the window: {error}");
                 }
             }
             _ => {}

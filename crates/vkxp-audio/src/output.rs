@@ -170,7 +170,7 @@ fn open_default_device(start: Start) -> Result<Box<dyn Any>, String> {
             },
             move |error| {
                 if !std::mem::replace(&mut failed, true) {
-                    eprintln!("vkxp: audio: the output stream reported an error: {error}");
+                    tracing::error!("audio: the output stream reported an error: {error}");
                 }
             },
             None,

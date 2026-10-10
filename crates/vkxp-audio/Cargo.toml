@@ -16,4 +16,5 @@ cpal.workspace = true
 rustysynth.workspace = true
 symphonia.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
 vkxp-proto.workspace = true
