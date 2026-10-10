@@ -19,6 +19,9 @@
 //!   window with letterboxing, mixing it with a held frame for freeze and transition. The same
 //!   draw can go to an off-screen target with [`VkCompositor::scale_frame`]. This step uses
 //!   floating point and is never read back into the compositor.
+//! - `frame_timing` is what [`VkCompositor::set_frame_timing`] makes the compositor measure
+//!   of each frame: the processor time of its stages and, where the queue has timestamps,
+//!   the device time of the compose dispatch and of the presentation pass.
 //! - `pacing` holds the schedule of target presentation times and the statistics of the
 //!   intervals achieved; `present_timing` binds `VK_EXT_present_timing` and its companions,
 //!   which the presenter uses where the device and the surface support them.
@@ -28,6 +31,7 @@ mod bitmaps;
 mod compositor;
 mod device;
 mod error;
+mod frame_timing;
 mod pacing;
 mod present_timing;
 mod records;
@@ -41,5 +45,6 @@ mod tests;
 pub use compositor::{Filter, Frame, Mix, VkCompositor, letterbox};
 pub use device::{DeviceChoice, DeviceInfo, DeviceKind, available_devices};
 pub use error::{BitmapError, DeviceError, Limit, SlotState, TableError, VkError};
+pub use frame_timing::FrameTiming;
 pub use pacing::{IntervalSummary, PresentSchedule, PresentStats, STATS_INTERVALS};
 pub use validation::ValidationLog;

@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 use std::mem::ManuallyDrop;
+use std::time::{Duration, Instant};
 
 use ash::vk;
 use gpu_allocator::MemoryLocation;
@@ -20,7 +21,7 @@ use crate::resources::{
     make_host_readable, transition, write_words,
 };
 use crate::tables::TableStore;
-use crate::{DeviceChoice, DeviceInfo, Limit, ValidationLog, VkError};
+use crate::{DeviceChoice, DeviceInfo, FrameTiming, Limit, ValidationLog, VkError};
 
 /// The compositing shader, compiled and validated by the build script.
 const COMPOSE_SPIRV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/compose.comp.spv"));
@@ -71,6 +72,13 @@ impl FrameBuffer {
             FrameBuffer::Tilemaps => Some(binding::TILEMAPS),
         }
     }
+}
+
+/// The timestamp queries of the one query pool: a start and an end for each device duration.
+mod query {
+    pub(super) const COMPOSE: u32 = 0;
+    pub(super) const PRESENT: u32 = 2;
+    pub(super) const COUNT: u32 = 4;
 }
 
 /// Bytes of the push constants: logical width, logical height, tile grid width.
@@ -140,6 +148,12 @@ pub struct VkCompositor {
     /// Whether the last acquire of a swapchain image gave none in time. Until one succeeds
     /// the acquires do not wait.
     starved: bool,
+    /// Whether frames are measured.
+    timing_on: bool,
+    /// What was measured of the newest frame and has not been taken yet.
+    frame_timing: Option<FrameTiming>,
+    /// The timestamp queries of the device durations, or null on a queue without timestamps.
+    query_pool: vk::QueryPool,
     /// Failure injection: the number of acquires that still report a timeout.
     #[cfg(test)]
     acquire_timeouts: u32,
@@ -193,6 +207,9 @@ struct FrameData {
     size: Size,
     records: Records,
     tiles: TileLists,
+    /// How long encoding and binning took, when frames are measured.
+    encode: Option<Duration>,
+    bin: Option<Duration>,
 }
 
 enum Step<'a> {
@@ -297,6 +314,9 @@ impl VkCompositor {
             pacer: pacer::Pacer::new(),
             unshown_frame: false,
             starved: false,
+            timing_on: false,
+            frame_timing: None,
+            query_pool: vk::QueryPool::null(),
             #[cfg(test)]
             acquire_timeouts: 0,
             #[cfg(test)]
@@ -341,6 +361,14 @@ impl VkCompositor {
         // SAFETY: the device is live.
         self.fence = unsafe { device.create_fence(&vk::FenceCreateInfo::default(), None) }
             .map_err(VkError::vulkan("vkCreateFence"))?;
+        if self.gpu.timestamps.is_some() {
+            let query_info = vk::QueryPoolCreateInfo::default()
+                .query_type(vk::QueryType::TIMESTAMP)
+                .query_count(query::COUNT);
+            // SAFETY: the device is live.
+            self.query_pool = unsafe { device.create_query_pool(&query_info, None) }
+                .map_err(VkError::vulkan("vkCreateQueryPool"))?;
+        }
 
         // One set: the bitmap array is partially bound and updated after bind; the frame
         // target, the four storage buffers of a frame and the table buffer are plain bindings.
@@ -414,6 +442,7 @@ impl VkCompositor {
             call: "vkCreateComputePipelines",
             result,
         })?[0];
+        self.gpu.name_object(self.pipeline, "compose pipeline");
 
         let pool_sizes = [
             vk::DescriptorPoolSize::default()
@@ -447,6 +476,107 @@ impl VkCompositor {
         &self.gpu.info
     }
 
+    /// Turns the measuring of frames on or off. It starts off, and then no clock is read and
+    /// no query is recorded. While it is on, each [`render`](VkCompositor::render) starts a
+    /// [`FrameTiming`] and fills in its stages, and a [`present`](VkCompositor::present)
+    /// that shows something adds its own; [`take_frame_timing`] hands the value out.
+    /// Measuring changes no frame.
+    ///
+    /// [`take_frame_timing`]: VkCompositor::take_frame_timing
+    pub fn set_frame_timing(&mut self, on: bool) {
+        self.timing_on = on;
+        if !on {
+            self.frame_timing = None;
+        }
+    }
+
+    /// What was measured since the last call: the stages of the newest frame rendered, with
+    /// those of the presents since. `None` when nothing was measured, as always while the
+    /// measuring is off, and after a render that failed.
+    pub fn take_frame_timing(&mut self) -> Option<FrameTiming> {
+        self.frame_timing.take()
+    }
+
+    /// The clock reading a measured stage starts at, or `None` while frames are not measured.
+    fn stage_start(&self) -> Option<Instant> {
+        self.timing_on.then(Instant::now)
+    }
+
+    /// Whether device durations are measured: frames are, and the queue has timestamps.
+    fn times_device(&self) -> bool {
+        self.timing_on && self.query_pool != vk::QueryPool::null()
+    }
+
+    /// Records the start of the device duration whose queries begin at `first`, when device
+    /// durations are measured.
+    ///
+    /// # Safety
+    ///
+    /// The command buffer must be recording, outside a render pass.
+    unsafe fn record_span_start(&self, first: u32) {
+        if self.times_device() {
+            let (device, commands) = (&self.gpu.device, self.commands);
+            // SAFETY: the pool has timestamp queries `first` and `first + 1`, which no
+            // pending command buffer uses since every submission is waited for, and the
+            // queue has timestamps; the rest is guaranteed by the caller.
+            unsafe {
+                device.cmd_reset_query_pool(commands, self.query_pool, first, 2);
+                device.cmd_write_timestamp2(
+                    commands,
+                    vk::PipelineStageFlags2::ALL_COMMANDS,
+                    self.query_pool,
+                    first,
+                );
+            }
+        }
+    }
+
+    /// Records the end of the device duration whose queries begin at `first`.
+    ///
+    /// # Safety
+    ///
+    /// The command buffer must be recording, outside a render pass, after a
+    /// [`record_span_start`](VkCompositor::record_span_start) of the same queries in it.
+    unsafe fn record_span_end(&self, first: u32) {
+        if self.times_device() {
+            // SAFETY: as in `record_span_start`, which reset the query.
+            unsafe {
+                self.gpu.device.cmd_write_timestamp2(
+                    self.commands,
+                    vk::PipelineStageFlags2::ALL_COMMANDS,
+                    self.query_pool,
+                    first + 1,
+                );
+            }
+        }
+    }
+
+    /// The device duration whose queries begin at `first`, once the submission that wrote
+    /// them has been waited for. `None` when device durations are not measured or the
+    /// queries cannot be read.
+    fn read_span(&self, first: u32) -> Option<Duration> {
+        let timestamps = self.gpu.timestamps.filter(|_| self.times_device())?;
+        let mut ticks = [0u64; 2];
+        // SAFETY: the pool is live and has the two queries, which the submission just waited
+        // for wrote; the results are 64-bit values, as the flag says.
+        unsafe {
+            self.gpu.device.get_query_pool_results(
+                self.query_pool,
+                first,
+                &mut ticks,
+                vk::QueryResultFlags::TYPE_64,
+            )
+        }
+        .ok()?;
+        Some(Duration::from_nanos(timestamps.nanos(ticks[0], ticks[1])))
+    }
+
+    /// Whether the queue of the device has timestamps.
+    #[cfg(test)]
+    pub(crate) fn has_timestamps(&self) -> bool {
+        self.gpu.timestamps.is_some()
+    }
+
     /// Largest width or height of an image on the device.
     #[cfg(test)]
     pub(crate) fn max_image_dimension(&self) -> u32 {
@@ -476,6 +606,8 @@ impl VkCompositor {
     /// frame as a whole leaves every delta applied.
     pub fn render(&mut self, packet: &FramePacket) -> Result<(), VkError> {
         check_logical_size(packet.logical_size)?;
+        // What an earlier frame left is not this frame's.
+        self.frame_timing = None;
         let mut pending = Pending::default();
         let prepared = self
             .queue_deltas(&packet.bitmaps, &mut pending)
@@ -483,7 +615,18 @@ impl VkCompositor {
             .and_then(|()| self.prepare_frame(packet));
         match prepared {
             Ok(frame) => {
-                self.execute(pending, Some(&frame))?;
+                if self.timing_on {
+                    self.frame_timing = Some(FrameTiming {
+                        encode: frame.encode,
+                        bin: frame.bin,
+                        ..FrameTiming::default()
+                    });
+                }
+                let executed = self.execute(pending, Some(&frame));
+                if executed.is_err() {
+                    self.frame_timing = None;
+                }
+                executed?;
                 self.unshown_frame = true;
                 Ok(())
             }
@@ -544,7 +687,9 @@ impl VkCompositor {
     /// everything the shader reads. Nothing on the device is touched.
     fn prepare_frame(&self, packet: &FramePacket) -> Result<FrameData, VkError> {
         let size = packet.logical_size;
+        let started = self.stage_start();
         let records = encode_frame(&self.table, &self.tables, size, &packet.ops)?;
+        let encode = started.map(|started| started.elapsed());
 
         // From here on the packet is valid; what remains are limits.
         let longest = size.width.max(size.height);
@@ -576,12 +721,16 @@ impl VkCompositor {
                 return Err(data_limit(bytes));
             }
         }
+        let started = self.stage_start();
         let clips: Vec<ClipRect> = records.ops.iter().map(|record| record.clip).collect();
         let tiles = bin(size, &clips, max_bytes / 4).map_err(|entries| data_limit(entries * 4))?;
+        let bin = started.map(|started| started.elapsed());
         Ok(FrameData {
             size,
             records,
             tiles,
+            encode,
+            bin,
         })
     }
 
@@ -616,6 +765,7 @@ impl VkCompositor {
                     );
                     match image {
                         Ok(image) => {
+                            self.gpu.name_object(image.image, &format!("bitmap {slot}"));
                             pending.steps.push(Step::Clear { image: image.image });
                             self.images.insert(slot, image);
                         }
@@ -741,6 +891,7 @@ impl VkCompositor {
                 usage,
                 MemoryLocation::CpuToGpu,
             )?;
+            self.gpu.name_object(buffer.buffer, role.name());
             if let Some(binding) = role.binding() {
                 self.write_buffer_descriptor(binding, buffer.buffer);
             }
@@ -845,6 +996,7 @@ impl VkCompositor {
         for (target, word) in words.zip(self.tables.buffer_words()) {
             *target = word.to_ne_bytes();
         }
+        self.gpu.name_object(buffer.buffer, "tables");
         self.write_buffer_descriptor(binding::TABLES, buffer.buffer);
         if let Some((old, _)) = self.table_buffer.replace((buffer, revision)) {
             old.destroy(&self.gpu.device, &mut self.allocator);
@@ -876,6 +1028,7 @@ impl VkCompositor {
                 | vk::ImageUsageFlags::SAMPLED,
             vk::ImageCreateFlags::empty(),
         )?;
+        self.gpu.name_object(target.image, "frame target");
         let info = [vk::DescriptorImageInfo::default()
             .image_view(target.view)
             .image_layout(vk::ImageLayout::GENERAL)];
@@ -900,6 +1053,7 @@ impl VkCompositor {
     /// target there is no draw. Either way the allocation error is what the caller gets.
     fn submit(&mut self, pending: &Pending<'_>, frame: Option<&FrameData>) -> Result<(), VkError> {
         let mut failure = None;
+        let started = self.stage_start();
 
         let mut staging_buffer = vk::Buffer::null();
         if pending.staging_len > 0 {
@@ -933,6 +1087,10 @@ impl VkCompositor {
         self.begin_commands()?;
         let (bitmap_use, frame_use) = (self.bitmap_use(), self.frame_use());
         let (device, commands) = (&self.gpu.device, self.commands);
+        if !pending.steps.is_empty() {
+            // SAFETY: the command buffer is recording.
+            unsafe { self.gpu.begin_label(commands, c"upload") };
+        }
         for step in &pending.steps {
             // SAFETY: the command buffer is recording. Every image named by a step is alive
             // until `execute` has waited for this submission: live ones are in `self.images`
@@ -1006,6 +1164,10 @@ impl VkCompositor {
                 );
             }
         }
+        if !pending.steps.is_empty() {
+            // SAFETY: the command buffer is recording and the label above is open in it.
+            unsafe { self.gpu.end_label(commands) };
+        }
 
         if let Some((frame, new_target)) = draw {
             let target = self
@@ -1027,8 +1189,10 @@ impl VkCompositor {
             // address, the table buffer holds every element a tilemap record's offsets and
             // sizes reach, the target has the size in the push constants, and the tile grid is
             // within the dispatch limits every device has. The target is new or in `GENERAL`,
-            // where the dispatch before left it for its readers.
+            // where the dispatch before left it for its readers. The label and the timestamps
+            // are recorded outside any render pass, each end after its start.
             unsafe {
+                self.gpu.begin_label(commands, c"compose");
                 let before = match new_target {
                     true => ImageUse::UNDEFINED,
                     false => frame_use,
@@ -1040,6 +1204,7 @@ impl VkCompositor {
                     before,
                     ImageUse::COMPUTE_STORAGE_WRITE,
                 );
+                self.record_span_start(query::COMPOSE);
                 device.cmd_bind_pipeline(commands, vk::PipelineBindPoint::COMPUTE, self.pipeline);
                 device.cmd_bind_descriptor_sets(
                     commands,
@@ -1057,6 +1222,7 @@ impl VkCompositor {
                     &constants,
                 );
                 device.cmd_dispatch(commands, frame.tiles.tiles_x, frame.tiles.tiles_y, 1);
+                self.record_span_end(query::COMPOSE);
                 // Hands the composed frame to the presentation pass and the copies.
                 transition(
                     device,
@@ -1065,15 +1231,25 @@ impl VkCompositor {
                     ImageUse::COMPUTE_STORAGE_WRITE,
                     frame_use,
                 );
+                self.gpu.end_label(commands);
             }
         }
         if draw.is_some() {
             // Until the dispatch has completed the target holds no whole frame.
             self.has_frame = false;
         }
+        let recorded = self.stage_start();
         self.submit_and_wait()?;
         if draw.is_some() {
             self.has_frame = true;
+            let compose_device = self.read_span(query::COMPOSE);
+            if let (Some(timing), Some(started), Some(recorded)) =
+                (&mut self.frame_timing, started, recorded)
+            {
+                timing.upload = Some(recorded.duration_since(started));
+                timing.submit = Some(recorded.elapsed());
+                timing.compose_device = compose_device;
+            }
         }
         failure.map_or(Ok(()), Err)
     }
@@ -1253,6 +1429,7 @@ impl Drop for VkCompositor {
             device.destroy_pipeline_layout(self.pipeline_layout, None);
             device.destroy_descriptor_set_layout(self.set_layout, None);
             device.destroy_fence(self.fence, None);
+            device.destroy_query_pool(self.query_pool, None);
             // Frees the command buffer with it.
             device.destroy_command_pool(self.pool, None);
             ManuallyDrop::drop(&mut self.allocator);

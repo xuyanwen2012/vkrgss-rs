@@ -16,7 +16,8 @@ use gpu_allocator::vulkan::Allocator;
 use vkxp_proto::{BitmapId, Rect, Size};
 
 use super::pacer::{SwapchainTiming, TimingCalls, surface_pacing};
-use super::{Frame, VkCompositor};
+use super::{Frame, VkCompositor, query};
+use crate::device::Gpu;
 use crate::pacing::IntervalSummary;
 use crate::present_timing as ffi;
 use crate::resources::{
@@ -533,11 +534,8 @@ impl Presenter {
     }
 
     /// The pipeline that draws into a target of `format`, made on first use.
-    fn pipeline(
-        &mut self,
-        device: &ash::Device,
-        format: vk::Format,
-    ) -> Result<vk::Pipeline, VkError> {
+    fn pipeline(&mut self, gpu: &Gpu, format: vk::Format) -> Result<vk::Pipeline, VkError> {
+        let device = &gpu.device;
         let known = self.pipelines.iter().find(|known| known.format == format);
         if let Some(known) = known {
             return Ok(known.pipeline);
@@ -596,6 +594,7 @@ impl Presenter {
             call: "vkCreateGraphicsPipelines",
             result,
         })?[0];
+        gpu.name_object(pipeline, &format!("present pipeline {format:?}"));
         self.pipelines.push(FormatPipeline { format, pipeline });
         Ok(pipeline)
     }
@@ -957,7 +956,7 @@ impl VkCompositor {
                 )
             });
         }
-        let fresh = self.new_held_image(size)?;
+        let fresh = self.new_held_image(size, "held frame")?;
         let image = fresh.image;
         let copied = self.submit_or_idle(|compositor| {
             compositor.copy_to_held(source, source_layout, image, ImageUse::UNDEFINED, size)
@@ -979,15 +978,23 @@ impl VkCompositor {
         }
     }
 
-    fn new_held_image(&mut self, size: (u32, u32)) -> Result<GpuImage, VkError> {
-        GpuImage::new(
+    /// A new image for the held frame, or for the texel that stands in for a mask, with the
+    /// name it has in a capture.
+    fn new_held_image(
+        &mut self,
+        size: (u32, u32),
+        name: &'static str,
+    ) -> Result<GpuImage, VkError> {
+        let image = GpuImage::new(
             &self.gpu.device,
             &mut self.allocator,
-            "held frame",
+            name,
             size,
             vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_DST,
             vk::ImageCreateFlags::empty(),
-        )
+        )?;
+        self.gpu.name_object(image.image, name);
+        Ok(image)
     }
 
     /// Draws what [`present`](VkCompositor::present) would show in a window of `size` pixels
@@ -1033,7 +1040,7 @@ impl VkCompositor {
         let source = self.prepare_sources()?;
         let device = &self.gpu.device;
         let presenter = self.presenter.as_mut().expect("made with the sources");
-        let pipeline = presenter.pipeline(device, OFFSCREEN_FORMAT)?;
+        let pipeline = presenter.pipeline(&self.gpu, OFFSCREEN_FORMAT)?;
         let draw = source.and_then(|sources| {
             Some(DrawCall {
                 pipeline,
@@ -1079,12 +1086,14 @@ impl VkCompositor {
             // (`SHADER_READ_ONLY_OPTIMAL`), each left to the fragment stage by its last
             // barrier.
             unsafe {
+                compositor.gpu.begin_label(compositor.commands, c"present");
                 record_pass(
                     &compositor.gpu.device,
                     compositor.commands,
                     &target,
                     draw.as_ref(),
                 );
+                compositor.gpu.end_label(compositor.commands);
             }
             compositor.submit_and_wait()
         });
@@ -1274,6 +1283,7 @@ impl VkCompositor {
                 })
             });
 
+            let started = self.stage_start();
             let drawn = self.submit_or_idle(|compositor| {
                 #[cfg(test)]
                 if std::mem::take(&mut compositor.fail_draw) {
@@ -1290,17 +1300,28 @@ impl VkCompositor {
                 // when a frame does, in which case `prepare_sources` pointed the set at the
                 // frame target (`GENERAL`), the held frame and the mask
                 // (`SHADER_READ_ONLY_OPTIMAL`), each left to the fragment stage by its last
-                // barrier.
+                // barrier. The label and the timestamps are recorded around the pass, each
+                // end after its start.
                 unsafe {
+                    compositor.gpu.begin_label(compositor.commands, c"present");
+                    compositor.record_span_start(query::PRESENT);
                     record_pass(
                         &compositor.gpu.device,
                         compositor.commands,
                         &pass_target,
                         draw.as_ref(),
                     );
+                    compositor.record_span_end(query::PRESENT);
+                    compositor.gpu.end_label(compositor.commands);
                 }
                 compositor.submit_drawn(wait, signal)
             });
+            if let (Some(started), Ok(())) = (started, &drawn) {
+                let present_device = self.read_span(query::PRESENT);
+                let timing = self.frame_timing.get_or_insert_default();
+                timing.present = Some(started.elapsed());
+                timing.present_device = present_device;
+            }
             if let Err(error) = drawn {
                 // The image is acquired and the two semaphores are in an unknown state. With
                 // swapchain maintenance the image is given back and the semaphores are
@@ -1608,7 +1629,7 @@ impl VkCompositor {
             return Ok(());
         }
         // Made and filled like a held frame of one pixel.
-        let no_mask = self.new_held_image((1, 1))?;
+        let no_mask = self.new_held_image((1, 1), "no mask")?;
         let image = no_mask.image;
         let cleared =
             self.submit_or_idle(|compositor| compositor.clear_held(image, ImageUse::UNDEFINED));
@@ -1632,7 +1653,7 @@ impl VkCompositor {
         if presenter.held.is_some() {
             return Ok(());
         }
-        let held = self.new_held_image(size)?;
+        let held = self.new_held_image(size, "held frame")?;
         let image = held.image;
         let cleared =
             self.submit_or_idle(|compositor| compositor.clear_held(image, ImageUse::UNDEFINED));
@@ -1800,7 +1821,7 @@ impl VkCompositor {
             call: "vkGetPhysicalDeviceSurfaceFormatsKHR",
             result: vk::Result::ERROR_FORMAT_NOT_SUPPORTED,
         })?;
-        let pipeline = presenter.pipeline(device, format.format)?;
+        let pipeline = presenter.pipeline(&self.gpu, format.format)?;
 
         let mut image_count = capabilities.min_image_count + 1;
         if capabilities.max_image_count > 0 {
@@ -1942,7 +1963,9 @@ impl VkCompositor {
                     .map_err(VkError::vulkan("vkCreateSemaphore"))
             };
             chain.acquired = semaphore()?;
-            for &image in &chain.images {
+            for (index, &image) in chain.images.iter().enumerate() {
+                self.gpu
+                    .name_object(image, &format!("swapchain image {index}"));
                 let view_info = vk::ImageViewCreateInfo::default()
                     .image(image)
                     .view_type(vk::ImageViewType::TYPE_2D)

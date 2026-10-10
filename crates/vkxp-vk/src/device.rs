@@ -7,9 +7,13 @@
 //! also gets `VK_EXT_present_timing` and `VK_KHR_present_wait2` with what they depend on,
 //! when it has them; see [`pacing_support`]. It gets `VK_EXT_swapchain_maintenance1` too
 //! where it and the instance offer it.
+//!
+//! Every instance gets `VK_EXT_debug_utils` when the installation lists it, so that the
+//! objects of the backend have names and its command buffers have labels in a capture; see
+//! [`Gpu::name_object`].
 
 use std::any::Any;
-use std::ffi::{CStr, c_char};
+use std::ffi::{CStr, CString, c_char};
 
 use ash::vk;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
@@ -371,6 +375,9 @@ struct Instance {
     /// Whether the instance was created with `VK_EXT_surface_maintenance1`, which
     /// `VK_EXT_swapchain_maintenance1` on a device needs.
     surface_maintenance1: bool,
+    /// Whether the instance was created with `VK_EXT_debug_utils`: whenever the installation
+    /// lists it, and with the validation layer, which brings it.
+    debug_utils: bool,
     // The messenger's callback points into the log; holding it here keeps that target alive
     // until `drop` has destroyed the instance.
     _log: Option<ValidationLog>,
@@ -385,6 +392,27 @@ struct Candidate {
     families: Vec<vk::QueueFlags>,
     max_image_dimension: u32,
     max_storage_buffer_range: u32,
+    /// `timestampValidBits` of each queue family.
+    timestamp_bits: Vec<u32>,
+    /// `timestampPeriod` of the device: the nanoseconds of one tick of a timestamp.
+    timestamp_period: f32,
+}
+
+/// How the timestamps of the device's queue are read.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct Timestamps {
+    /// The bits of a timestamp that count.
+    pub mask: u64,
+    /// The nanoseconds of one tick.
+    pub period: f32,
+}
+
+impl Timestamps {
+    /// The nanoseconds from the timestamp `start` to the timestamp `end`.
+    pub(crate) fn nanos(&self, start: u64, end: u64) -> u64 {
+        let ticks = end.wrapping_sub(start) & self.mask;
+        (ticks as f64 * f64::from(self.period)) as u64
+    }
 }
 
 impl Instance {
@@ -412,12 +440,18 @@ impl Instance {
         };
         let log = log.filter(|_| validate).cloned();
 
+        // SAFETY: the entry points are loaded and the call takes no handle.
+        let offered = unsafe { entry.enumerate_instance_extension_properties(None) }
+            .map_err(VkError::vulkan("vkEnumerateInstanceExtensionProperties"))?;
+        // Optional: for the names and labels. The validation layer brings it when the
+        // installation does not, and the messenger needs it.
+        let debug_utils = validate
+            || offered.iter().any(|extension| {
+                extension.extension_name_as_c_str().ok() == Some(ash::ext::debug_utils::NAME)
+            });
         let mut surface_capabilities2 = false;
         let mut surface_maintenance1 = false;
         if !surface_extensions.is_empty() {
-            // SAFETY: the entry points are loaded and the call takes no handle.
-            let offered = unsafe { entry.enumerate_instance_extension_properties(None) }
-                .map_err(VkError::vulkan("vkEnumerateInstanceExtensionProperties"))?;
             // Optional: only the present-timing path asks the surface through it.
             surface_capabilities2 = offered.iter().any(|extension| {
                 extension.extension_name_as_c_str().ok()
@@ -457,7 +491,7 @@ impl Instance {
             extensions.push(ash::ext::surface_maintenance1::NAME.as_ptr());
         }
         let mut messenger_info = log.as_ref().map(ValidationLog::messenger_info);
-        if messenger_info.is_some() {
+        if debug_utils {
             extensions.push(ash::ext::debug_utils::NAME.as_ptr());
         }
         let mut info = vk::InstanceCreateInfo::default()
@@ -478,6 +512,7 @@ impl Instance {
             messenger: None,
             surface_capabilities2,
             surface_maintenance1,
+            debug_utils,
             _log: log.clone(),
         };
         if let Some(log) = &log {
@@ -619,6 +654,11 @@ impl Instance {
                 .collect(),
             max_image_dimension: properties.limits.max_image_dimension2_d,
             max_storage_buffer_range: properties.limits.max_storage_buffer_range,
+            timestamp_bits: families
+                .iter()
+                .map(|family| family.timestamp_valid_bits)
+                .collect(),
+            timestamp_period: properties.limits.timestamp_period,
         }
     }
 }
@@ -833,6 +873,12 @@ pub(crate) struct Gpu {
     /// Whether the device was created with `VK_EXT_swapchain_maintenance1`. Never without a
     /// surface.
     pub swapchain_maintenance: bool,
+    /// How the timestamps of the queue are read, or `None` for a queue family that has none
+    /// (`timestampValidBits` of 0).
+    pub timestamps: Option<Timestamps>,
+    /// The commands of `VK_EXT_debug_utils` on this device, when the instance has the
+    /// extension.
+    debug: Option<ash::ext::debug_utils::Device>,
     // After `device` in declaration order only for clarity; `drop` destroys the device before
     // the fields are dropped, which then happens in this order: the surface, then the instance.
     instance: Instance,
@@ -1052,6 +1098,16 @@ impl Gpu {
         };
         // SAFETY: the device was created with one queue in this family.
         let queue = unsafe { device.get_device_queue(queue_family, 0) };
+        let timestamps = match candidate.timestamp_bits[queue_family as usize] {
+            0 => None,
+            bits => Some(Timestamps {
+                mask: u64::MAX >> (64 - bits.min(64)),
+                period: candidate.timestamp_period,
+            }),
+        };
+        let debug = instance
+            .debug_utils
+            .then(|| ash::ext::debug_utils::Device::new(&instance.raw, &device));
 
         Ok(Gpu {
             device,
@@ -1065,8 +1121,55 @@ impl Gpu {
             surface,
             pacing,
             swapchain_maintenance,
+            timestamps,
+            debug,
             instance,
         })
+    }
+
+    /// Gives `handle`, an object of this device, a name for captures and validation
+    /// messages. Without `VK_EXT_debug_utils` nothing is named, and a failure to name is
+    /// ignored.
+    pub(crate) fn name_object<T: vk::Handle>(&self, handle: T, name: &str) {
+        let Some(debug) = &self.debug else {
+            return;
+        };
+        let Ok(name) = CString::new(name) else {
+            return;
+        };
+        let info = vk::DebugUtilsObjectNameInfoEXT::default()
+            .object_handle(handle)
+            .object_name(&name);
+        // SAFETY: the instance has the extension, every caller passes a live object of this
+        // device that no other thread uses, and the name lives for the call.
+        let _ = unsafe { debug.set_debug_utils_object_name(&info) };
+    }
+
+    /// Opens a labelled part of `commands`, which [`end_label`](Gpu::end_label) closes.
+    /// Without `VK_EXT_debug_utils` nothing is recorded.
+    ///
+    /// # Safety
+    ///
+    /// `commands` must be a command buffer of this device in the recording state.
+    pub(crate) unsafe fn begin_label(&self, commands: vk::CommandBuffer, name: &CStr) {
+        if let Some(debug) = &self.debug {
+            let label = vk::DebugUtilsLabelEXT::default().label_name(name);
+            // SAFETY: the instance has the extension; the rest is guaranteed by the caller.
+            unsafe { debug.cmd_begin_debug_utils_label(commands, &label) };
+        }
+    }
+
+    /// Closes the part that the last [`begin_label`](Gpu::begin_label) opened.
+    ///
+    /// # Safety
+    ///
+    /// `commands` must be a command buffer of this device in the recording state with a
+    /// label open that was begun in it.
+    pub(crate) unsafe fn end_label(&self, commands: vk::CommandBuffer) {
+        if let Some(debug) = &self.debug {
+            // SAFETY: the instance has the extension; the rest is guaranteed by the caller.
+            unsafe { debug.cmd_end_debug_utils_label(commands) };
+        }
     }
 
     /// The instance the device belongs to.

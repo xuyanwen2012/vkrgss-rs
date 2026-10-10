@@ -163,6 +163,13 @@ impl Pair {
         }
     }
 
+    /// The same, with the Vulkan backend measuring its frames.
+    pub(crate) fn timed() -> Pair {
+        let mut pair = Pair::new();
+        pair.vulkan.set_frame_timing(true);
+        pair
+    }
+
     /// Gives one message to both backends. They must both produce a frame with equal bytes,
     /// both produce none, or both fail with the same error. Returns the reference's result.
     pub(crate) fn step(
@@ -225,7 +232,20 @@ impl Pair {
 pub(crate) fn compare_stream<'a>(
     messages: impl IntoIterator<Item = &'a GuestToHost>,
 ) -> Result<(), String> {
-    let mut pair = Pair::new();
+    compare_stream_with(Pair::new(), messages)
+}
+
+/// Like [`compare_stream`], with the Vulkan backend measuring its frames.
+pub(crate) fn compare_stream_timed<'a>(
+    messages: impl IntoIterator<Item = &'a GuestToHost>,
+) -> Result<(), String> {
+    compare_stream_with(Pair::timed(), messages)
+}
+
+fn compare_stream_with<'a>(
+    mut pair: Pair,
+    messages: impl IntoIterator<Item = &'a GuestToHost>,
+) -> Result<(), String> {
     for message in messages {
         let _reference_result = pair.step(message)?;
     }

@@ -2,8 +2,8 @@
 
 ## 1. Backend (`vkxp-vk`)
 
-- [ ] 1.1 Add the frame timing with processor durations and the timestamp queries. Verify: the scenarios of "Frame timings on request" in `specs/vulkan-compositor/spec.md`.
-- [ ] 1.2 Enable debug utils where listed; name objects and label command buffers. Verify: the scenario of "Named objects"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk` passes.
+- [x] 1.1 Add the frame timing with processor durations and the timestamp queries. Verify: the scenarios of "Frame timings on request" in `specs/vulkan-compositor/spec.md`.
+- [x] 1.2 Enable debug utils where listed; name objects and label command buffers. Verify: the scenario of "Named objects"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk` passes.
 
 ## 2. Host and option (`vkxp-host`, `vkxp`)
 

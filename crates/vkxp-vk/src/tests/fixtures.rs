@@ -2,7 +2,7 @@
 
 use vkxp_compose_ref::fixtures;
 
-use super::differential::compare_stream;
+use super::differential::{compare_stream, compare_stream_timed};
 
 #[test]
 fn every_fixture_stream_is_byte_identical() {
@@ -27,6 +27,25 @@ fn every_fixture_stream_is_byte_identical() {
     assert!(
         failures.is_empty(),
         "fixtures differ:\n{}",
+        failures.join("\n")
+    );
+}
+
+/// Measuring changes no frame: the same streams with frame timing on, under the validation
+/// layer like every test.
+#[test]
+fn every_fixture_stream_is_byte_identical_with_frame_timing_on() {
+    let failures: Vec<String> = fixtures::all()
+        .iter()
+        .filter_map(|fixture| {
+            compare_stream_timed(&fixture.messages)
+                .err()
+                .map(|difference| format!("{}: {difference}", fixture.name))
+        })
+        .collect();
+    assert!(
+        failures.is_empty(),
+        "fixtures differ with frame timing on:\n{}",
         failures.join("\n")
     );
 }
