@@ -19,4 +19,4 @@
 
 ## 4. Integration check
 
-- [ ] 4.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate run-the-guest-in-a-process --strict` passes.
+- [x] 4.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate run-the-guest-in-a-process --strict` passes.
