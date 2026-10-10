@@ -634,3 +634,34 @@ count; dev-dependencies are not linked into either side.
 
 In addition, `vkxp-proto`, `vkxp-pixel`, `vkxp-core` and `vkxp-compose-ref` carry
 `#![forbid(unsafe_code)]`, so `unsafe` in them does not compile.
+
+## Checks outside the gate
+
+Two checks are run by hand, because one is slow and needs another compiler and the other
+needs the network. Neither is a step of the merge gate.
+
+**The upstream Ruby suites under sanitizers.** The interpreter, Oniguruma and Ruby's own test
+executable are compiled again with AddressSanitizer and UndefinedBehaviorSanitizer, and the
+suites the gate runs for their results are run for invalid memory accesses and undefined
+behaviour:
+
+```sh
+cargo test -p vkxp-ruby-sys --test sanitized -- --ignored
+```
+
+It needs `clang` with its sanitizer runtimes (`compiler-rt` on Fedora) and takes about a
+minute. It fails on a suite that does not pass and on every sanitizer report that
+`crates/vkxp-ruby-sys/tests/sanitized.allow` does not list; an entry there states why the
+report is harmless. The full reports are left in `target/tmp/sanitized/reports/`.
+
+**The dependency audit.** `cargo deny` checks every crate of `Cargo.lock` against the
+security advisory database, the licence allow-list and the allowed sources in `deny.toml`:
+
+```sh
+cargo xtask audit
+```
+
+It runs `cargo deny --locked check --warn unmaintained`, which downloads the advisory
+database. A vulnerability, a licence that is not on the list or a crate from anywhere but
+crates.io fails it; an unmaintained crate is a warning. Without `cargo-deny` the command
+says how to install it (`cargo install --locked cargo-deny`) and fails.

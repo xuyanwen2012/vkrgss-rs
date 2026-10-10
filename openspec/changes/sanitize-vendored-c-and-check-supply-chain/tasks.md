@@ -15,7 +15,7 @@
 
 ## 4. Documents
 
-- [ ] 4.1 Describe the two commands in `README.md`. Verify: the text names both commands as they are run.
+- [x] 4.1 Describe the two commands in `README.md`. Verify: the text names both commands as they are run.
 
 ## 5. Integration check
 
