@@ -14,7 +14,7 @@
 //!
 //! The two tables of a tilemap are sent to the compositor when an op first reads them and
 //! again only when they were written to; scrolling and animation send nothing. The
-//! priorities are sent brought into 0 to 5, which is all an op tells apart.
+//! priorities are sent as they are: no op draws a tile whose priority is not 0 to 5.
 //!
 //! The cells the flash data marks are filled with their colour, at the alpha of the pulse,
 //! in a bitmap of the scene's own that covers the visible cells and one more column and row,
@@ -44,7 +44,7 @@ const FLASH_PERIOD: u64 = 32;
 enum Role {
     /// The tile numbers, sent as they are.
     Map,
-    /// The priorities, of which the first row is sent, brought into 0 to 5.
+    /// The priorities, of which the first row is sent.
     Priorities,
 }
 
@@ -101,9 +101,7 @@ impl SentTables {
             },
             Role::Priorities => {
                 let entries = (0..table.xsize()).map_while(|id| table.get(id, 0, 0));
-                let data: Vec<i16> = entries
-                    .map(|entry| entry.clamp(0, MAX_PRIORITY as i16))
-                    .collect();
+                let data: Vec<i16> = entries.collect();
                 TableDelta::Set {
                     id,
                     xsize: data.len() as u32,
@@ -261,13 +259,15 @@ impl TileCache {
     }
 }
 
-/// The priority of tile `id`: the entry of the priorities table, 0 without one.
+/// The priority of tile `id`: the entry of the priorities table, 0 without one. `None` for
+/// an entry that is not 0 to 5, whose tile is not drawn.
 ///
-/// PLACEHOLDER: what the original runtime does with a priority outside 0 to 5 is not yet
-/// checked; here it is brought into that range.
-fn priority(priorities: Option<&Table>, id: i16) -> usize {
+/// As measured on the original runtime, which draws nothing of a tile with a priority of 6
+/// to 9 and crashes, or draws nothing, on the other values.
+fn priority(priorities: Option<&Table>, id: i16) -> Option<usize> {
     let value = priorities.and_then(|table| table.get(i32::from(id), 0, 0));
-    value.unwrap_or(0).clamp(0, MAX_PRIORITY as i16) as usize
+    let priority = usize::try_from(value.unwrap_or(0)).ok()?;
+    (priority <= MAX_PRIORITY).then_some(priority)
 }
 
 /// Whether tile `id` draws a pixel from its sheet of the size `sheet` at the animation step
@@ -443,8 +443,9 @@ impl Tilemap {
                         continue;
                     }
                     match priority(priorities.as_deref(), id) {
-                        0 => *ground = true,
-                        priority => {
+                        None => {}
+                        Some(0) => *ground = true,
+                        Some(priority) => {
                             // Cells come row by row.
                             let rows = &mut rows[priority - 1][layer];
                             if rows.last() != Some(&row) {
@@ -479,18 +480,18 @@ impl Tilemap {
         });
     }
 
-    /// The pieces this frame draws the tilemap with, each with its z. `scroll` is the vertical
-    /// origin of the tilemap's viewport, 0 without one: the top edge of a row is where it is
-    /// drawn in the viewport, which both origins move.
+    /// The pieces this frame draws the tilemap with, each with its z. `_scroll` is the
+    /// vertical origin of the tilemap's viewport, which moves the picture and not the z.
     ///
-    /// PLACEHOLDER: the z of the tiles of priority 1 to 5, the y of their top edge in the
-    /// viewport plus 32 for each step of priority and 32 more, is not yet checked against the
-    /// original runtime; neither is that a sprite created after the tilemap wins a tie.
-    pub(crate) fn strips(&self, scroll: i64) -> Vec<(i64, Strip)> {
+    /// As measured on the original runtime, the z of the tiles of priority 1 to 5 is the y
+    /// of their row's top edge, 32 times the row less the tilemap's origin, plus 32 for each
+    /// step of priority and 32 more; neither the origin nor the rectangle of the viewport
+    /// enters.
+    pub(crate) fn strips(&self, _scroll: i64) -> Vec<(i64, Strip)> {
         let Some(view) = self.cache.view.as_ref().filter(|_| self.visible) else {
             return Vec::new();
         };
-        let top = view.first.1 * i64::from(TILE) - i64::from(self.oy) - scroll;
+        let top = view.first.1 * i64::from(TILE) - i64::from(self.oy);
         let mut strips = vec![(0, Strip::Ground)];
         // In the same place of the order as the ground, and after it.
         if self.cache.flash.is_some() {

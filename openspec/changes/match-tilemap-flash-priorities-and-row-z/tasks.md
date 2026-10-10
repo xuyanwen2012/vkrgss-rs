@@ -2,7 +2,7 @@
 
 ## 1. Priorities and row z (`vkxp-core`)
 
-- [ ] 1.1 Do not draw tiles whose priority is not 0 to 5, and leave the viewport's origin out of the z of a priority row. Verify: the scenarios of "Tile priorities" in `specs/core-scene/spec.md` and the z table of item 4 in `design.md` as tests; `cargo test -p vkxp-core --locked` passes.
+- [x] 1.1 Do not draw tiles whose priority is not 0 to 5, and leave the viewport's origin out of the z of a priority row. Verify: the scenarios of "Tile priorities" in `specs/core-scene/spec.md` and the z table of item 4 in `design.md` as tests; `cargo test -p vkxp-core --locked` passes.
 
 ## 2. Flash (`vkxp-core`)
 

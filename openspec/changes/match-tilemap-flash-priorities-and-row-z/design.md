@@ -203,4 +203,7 @@ the dimensions, and the original's unchecked `Table._load`.
 
 ## Follow-ups
 
-(none yet)
+- `Tilemap::strips` keeps its `scroll` parameter, now unused, because its only caller is in
+  `crates/vkxp-core/src/extract.rs`, which other changes edit at the same time. Removing the
+  parameter, the two lines there that compute it and the comment above them ("Rows rank by
+  where they are in the viewport, which its origin scrolls") is left to a later change.

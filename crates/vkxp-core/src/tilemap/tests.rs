@@ -606,7 +606,7 @@ fn in_front_at(stage: &mut Stage, y: u32) -> (bool, bool) {
 }
 
 #[test]
-fn the_z_of_a_tile_follows_the_origin_of_its_viewport() {
+fn the_origin_of_the_viewport_does_not_enter_the_z_of_a_tile() {
     let mut stage = Stage::sized(160, 160);
     let viewport = stage.scene.create_viewport(Rect::new(0, 0, 160, 160));
     let viewport = viewport.unwrap();
@@ -628,8 +628,8 @@ fn the_z_of_a_tile_follows_the_origin_of_its_viewport() {
     tilemap.map_data = Some(map);
     tilemap.priorities = Some(priorities);
 
-    // The viewport's origin moves the tile's top edge from y 96 to y 64 in the viewport,
-    // so its z is 64 + 64. Tile and sprite are both drawn at (64, 64).
+    // The viewport's origin moves the tile's top edge from y 96 to y 64 on the screen, and
+    // its z stays 96 + 64. Tile and sprite are both drawn at (64, 64).
     let mut tile_in_front = |z: i32| {
         stage.scene.set_sprite_z(sprite, z).unwrap();
         let frame = stage.frame();
@@ -637,11 +637,11 @@ fn the_z_of_a_tile_follows_the_origin_of_its_viewport() {
         assert!(tile || tile_shows(&frame, 64, 64, |_, _| BLUE));
         tile
     };
-    assert!(!tile_in_front(144));
-    assert!(!tile_in_front(129));
-    assert!(tile_in_front(127));
+    assert!(!tile_in_front(161));
+    assert!(tile_in_front(159));
+    assert!(tile_in_front(129));
 
-    // Both origins count.
+    // The tilemap's origin counts.
     stage.scene.tilemap_mut(id).unwrap().oy = -16;
     stage.scene.sprite_mut(sprite).unwrap().y = 112;
     let mut tile_in_front = |z: i32| {
@@ -649,9 +649,114 @@ fn the_z_of_a_tile_follows_the_origin_of_its_viewport() {
         let frame = stage.frame();
         tile_shows(&frame, 64, 80, |x, y| tile_pixel(400, x, y))
     };
-    assert!(tile_in_front(80 + 64 - 1));
-    assert!(!tile_in_front(80 + 64 + 1));
-    stage.assert_pinned("the_z_of_a_tile_follows_the_origin_of_its_viewport");
+    assert!(tile_in_front(112 + 64 - 1));
+    assert!(!tile_in_front(112 + 64 + 1));
+    stage.assert_pinned("the_origin_of_the_viewport_does_not_enter_the_z_of_a_tile");
+}
+
+/// The z of the tiles of `priority` in map row `row`, counted without wrapping, of a map of
+/// 20 by `height` cells that is scrolled to `oy` and drawn in a viewport, if one is given,
+/// at `rect_y` with the origin `viewport_oy`.
+fn row_z(height: i32, row: i64, priority: i64, oy: i32, viewport: Option<(i32, i32)>) -> i64 {
+    let mut stage = Stage::new();
+    let viewport = viewport.map(|(rect_y, viewport_oy)| {
+        let rect = Rect::new(0, rect_y, 640, 480);
+        let id = stage.scene.create_viewport(rect).unwrap();
+        stage.scene.viewport_mut(id).unwrap().oy = viewport_oy;
+        id
+    });
+    let map = map(20, height);
+    for y in 0..height {
+        map.set(0, y, 0, 400);
+    }
+    let priorities = SharedTable::new(Table::new(500).unwrap());
+    priorities.set(400, 0, 0, priority);
+    let tileset = tileset(&mut stage);
+    let id = stage.scene.create_tilemap(viewport).unwrap();
+    let tilemap = stage.scene.tilemap_mut(id).unwrap();
+    tilemap.tileset = Some(tileset);
+    tilemap.map_data = Some(map);
+    tilemap.priorities = Some(priorities);
+    tilemap.oy = oy;
+    stage.frame();
+
+    let tilemap = stage.scene.tilemap(id).unwrap();
+    let first = tilemap.cache.view.as_ref().unwrap().first.1;
+    let scroll = viewport.map_or(0, |id| stage.scene.viewport(id).unwrap().oy);
+    let strips = tilemap.strips(i64::from(scroll)).into_iter();
+    let mut found = strips.filter_map(|(z, strip)| match strip {
+        Strip::Ground => (priority == 0).then_some(z),
+        Strip::Row { row: shown, .. } => (first + i64::from(shown) == row).then_some(z),
+        Strip::Flash => None,
+    });
+    found.next().expect("the row shows")
+}
+
+#[test]
+fn the_z_of_a_row_is_the_measured_one() {
+    // Row, priority and origin of the tilemap, then the z, as measured on the original
+    // runtime.
+    for (row, priority, oy, z) in [
+        (0, 0, 0, 0),
+        (0, 0, 45, 0),
+        (1, 1, 0, 96),
+        (2, 2, 0, 160),
+        (3, 3, 0, 224),
+        (4, 4, 0, 288),
+        (5, 5, 0, 352),
+        (7, 1, 0, 288),
+        (14, 2, 0, 544),
+        (1, 1, 7, 89),
+        (1, 1, 31, 65),
+        (2, 2, 32, 128),
+        (3, 3, 109, 115),
+        (11, 5, 300, 244),
+    ] {
+        assert_eq!(row_z(15, row, priority, oy, None), z, "row {row}, oy {oy}");
+    }
+    // The row above row 0 of a map of 4 rows.
+    assert_eq!(row_z(4, -1, 5, -20, None), 180);
+    // Neither the origin nor the rectangle of a viewport enters.
+    assert_eq!(row_z(15, 1, 1, 0, Some((0, 0))), 96);
+    assert_eq!(row_z(15, 1, 1, 0, Some((0, 10))), 96);
+    assert_eq!(row_z(15, 1, 1, 7, Some((16, 10))), 89);
+}
+
+#[test]
+fn a_tile_whose_priority_is_not_0_to_5_is_not_drawn() {
+    for priority in [6, 7, 8, 9, 10, 100, 255, 256, 32767, -1, -100, -32768] {
+        let (mut stage, sprite, _) = with_priority(priority);
+        // Neither in a row nor as ground: behind, at and in front of every z the cell is
+        // without the tile, and the ground tile next to it is drawn.
+        stage.scene.sprite_mut(sprite).unwrap().visible = false;
+        let frame = stage.frame();
+        assert!(tile_shows(&frame, 64, 96, |_, _| BLACK), "{priority}");
+        assert!(
+            tile_shows(&frame, 96, 96, |x, y| tile_pixel(384, x, y)),
+            "{priority}"
+        );
+        stage.scene.sprite_mut(sprite).unwrap().visible = true;
+        for z in [-1, 0, 1, 96 + 7 * 32, i32::MAX] {
+            stage.scene.set_sprite_z(sprite, z).unwrap();
+            let frame = stage.frame();
+            assert!(tile_shows(&frame, 64, 96, |_, _| BLUE), "{priority}, {z}");
+        }
+    }
+    // A priority that is in the table for a tile the map does not hold is harmless, and a
+    // map of such tiles alone sends no op.
+    let mut stage = Stage::sized(96, 64);
+    let map = map(3, 2);
+    map.set(1, 1, 0, 400);
+    let id = tilemap(&mut stage, &map);
+    let priorities = SharedTable::new(Table::new(500).unwrap());
+    priorities.set(400, 0, 0, 6);
+    priorities.set(401, 0, 0, -1);
+    stage.scene.tilemap_mut(id).unwrap().priorities = Some(priorities.clone());
+    let packet = stage.scene.extract(&mut stage.bitmaps);
+    assert_eq!(layers(&packet), []);
+    priorities.set(400, 0, 0, 5);
+    let packet = stage.scene.extract(&mut stage.bitmaps);
+    assert_eq!(layers(&packet).len(), 1);
 }
 
 #[test]
@@ -991,7 +1096,7 @@ fn a_changed_table_is_sent_again_and_a_table_no_tilemap_has_is_destroyed() {
         y
     )));
 
-    // A priority outside 0 to 5 is sent as the nearest of them.
+    // A priority outside 0 to 5 is sent too.
     priorities.set(384, 0, 0, 9);
     priorities.set(385, 0, 0, -3);
     let packet = stage.scene.extract(&mut stage.bitmaps);
@@ -1007,7 +1112,7 @@ fn a_changed_table_is_sent_again_and_a_table_no_tilemap_has_is_destroyed() {
         panic!("{:?}", packet.tables);
     };
     assert_eq!((*sent, *xsize), (op.priorities, 1000));
-    assert_eq!(data[384..386], [5, 0]);
+    assert_eq!(data[384..386], [9, -3]);
     stage.render(&packet).unwrap();
 
     // Invisible, the tilemap keeps its tables with the compositor.
