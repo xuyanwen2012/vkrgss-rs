@@ -79,6 +79,11 @@ const MAX_VAGUENESS: u32 = 65535;
 /// Format of the off-screen target. Its values are what a `UNORM` swapchain image would hold.
 const OFFSCREEN_FORMAT: vk::Format = vk::Format::R8G8B8A8_UNORM;
 
+/// How long an acquire waits for a swapchain image, in nanoseconds: four frame periods at
+/// 40 frames per second. A surface that hands out none in that time, as that of a hidden
+/// window may, must not stop the game.
+const ACQUIRE_TIMEOUT: u64 = 100_000_000;
+
 /// What the held frame and an empty target are cleared to: opaque black.
 const BLACK: [u32; 4] = [0, 0, 0, 255];
 
@@ -1087,8 +1092,11 @@ impl VkCompositor {
     /// first frame the window is black.
     ///
     /// Returns whether an image was presented. Nothing is presented, and no error is raised,
-    /// while the window has no pixels. A swapchain that the surface reports as out of date is
-    /// replaced and the present tried once more.
+    /// while the window has no pixels, or when the surface hands out no image within a tenth
+    /// of a second, as that of a hidden window may. After such a wait the presents that
+    /// follow do not wait at all until the surface hands out an image again, and that
+    /// present shows the newest frame. A swapchain that the surface reports as out of date
+    /// is replaced and the present tried once more.
     ///
     /// Where the device and the surface support it, the present carries a target time; see
     /// [`set_frame_rate`](VkCompositor::set_frame_rate).
@@ -1128,16 +1136,48 @@ impl VkCompositor {
                 .as_ref()
                 .zip(chain.timing.as_ref())
                 .map(|(plan, timing)| timing.present_info(plan));
-            // SAFETY: the swapchain and the semaphore are live and belong to this device, and
-            // the semaphore is unsignalled: the draw that waited on it last has completed, and
-            // a swapchain whose draw failed is replaced together with its semaphores.
-            let acquired = unsafe {
-                loader.acquire_next_image(chain.handle, u64::MAX, chain.acquired, vk::Fence::null())
+            // A surface that gave no image in time is not waited for again until it gives
+            // one, so a hidden window costs one wait and not one per frame.
+            let timeout = match self.starved {
+                true => 0,
+                false => ACQUIRE_TIMEOUT,
+            };
+            #[cfg(test)]
+            let injected = self.acquire_timeouts > 0;
+            #[cfg(not(test))]
+            let injected = false;
+            let acquired = if injected {
+                #[cfg(test)]
+                {
+                    self.acquire_timeouts -= 1;
+                }
+                Err(vk::Result::TIMEOUT)
+            } else {
+                // SAFETY: the swapchain and the semaphore are live and belong to this device,
+                // and the semaphore is unsignalled: the draw that waited on it last has
+                // completed, an acquire that gave no image left it as it was, and a swapchain
+                // whose draw failed is replaced together with its semaphores.
+                unsafe {
+                    loader.acquire_next_image(
+                        chain.handle,
+                        timeout,
+                        chain.acquired,
+                        vk::Fence::null(),
+                    )
+                }
             };
             let index = match acquired {
                 Ok((index, suboptimal)) => {
+                    self.starved = false;
                     chain.stale |= suboptimal;
                     index
+                }
+                // No image in time, or none at once. The frame is rendered and stays the one
+                // to show: like a window without pixels, this present counts for nothing.
+                Err(vk::Result::TIMEOUT | vk::Result::NOT_READY) => {
+                    self.starved = true;
+                    self.unshown_frame = frame;
+                    return Ok(false);
                 }
                 Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
                     chain.stale = true;
@@ -1260,6 +1300,19 @@ impl VkCompositor {
     pub(crate) fn swapchain_extent(&self) -> Option<(u32, u32)> {
         let chain = self.presenter.as_ref()?.swapchain.as_ref()?;
         Some((chain.extent.width, chain.extent.height))
+    }
+
+    /// Makes the next `count` acquires of a swapchain image report that none arrived in
+    /// time, without asking the surface.
+    #[cfg(test)]
+    pub(crate) fn fail_acquires(&mut self, count: u32) {
+        self.acquire_timeouts = count;
+    }
+
+    /// Whether the last acquire gave no image, so that the next one does not wait.
+    #[cfg(test)]
+    pub(crate) fn is_starved(&self) -> bool {
+        self.starved
     }
 
     /// Makes the next present replace the swapchain, as an out-of-date report does.

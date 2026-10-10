@@ -96,6 +96,12 @@ pub struct VkCompositor {
     pacer: pacer::Pacer,
     /// Whether a frame has been rendered that no present has shown yet.
     unshown_frame: bool,
+    /// Whether the last acquire of a swapchain image gave none in time. Until one succeeds
+    /// the acquires do not wait.
+    starved: bool,
+    /// Failure injection: the number of acquires that still report a timeout.
+    #[cfg(test)]
+    acquire_timeouts: u32,
     /// Failure injection: the number of per-submission buffers that may still be allocated
     /// before one allocation fails, once.
     #[cfg(test)]
@@ -230,6 +236,9 @@ impl VkCompositor {
             last_scaled: None,
             pacer: pacer::Pacer::new(),
             unshown_frame: false,
+            starved: false,
+            #[cfg(test)]
+            acquire_timeouts: 0,
             #[cfg(test)]
             temporary_buffer_failure: None,
             allocator: ManuallyDrop::new(allocator),

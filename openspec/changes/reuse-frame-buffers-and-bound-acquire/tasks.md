@@ -2,7 +2,7 @@
 
 ## 1. Bounded acquire (`vkxp-vk`)
 
-- [ ] 1.1 Bound the acquire and add the starved state and the test hook. Verify: the scenarios of "Acquiring an image is bounded" in `specs/vulkan-presentation/spec.md`; no `acquire_next_image` call with `u64::MAX` remains.
+- [x] 1.1 Bound the acquire and add the starved state and the test hook. Verify: the scenarios of "Acquiring an image is bounded" in `specs/vulkan-presentation/spec.md`; no `acquire_next_image` call with `u64::MAX` remains.
 
 ## 2. Buffer reuse (`vkxp-vk`)
 

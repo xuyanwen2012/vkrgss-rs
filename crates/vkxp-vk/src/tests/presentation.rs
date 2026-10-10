@@ -1,6 +1,7 @@
 //! The scenarios of `specs/vulkan-presentation/spec.md`: scaling and mixing through the
 //! off-screen target, and the swapchain on a headless surface. No test opens a window.
 
+use vkxp_compose_ref as reference;
 use vkxp_compose_ref::fixtures::{self, bitmap, sprite};
 use vkxp_proto::{BitmapId, Color, FramePacket, FrameRate, Op, Rect, Size};
 
@@ -1410,6 +1411,64 @@ fn window_without_pixels_presents_nothing_and_raises_no_error() {
     assert_eq!(compositor.swapchain_extent(), Some((80, 60)));
 
     assert_clean(&log, "around a minimised window");
+    drop(compositor);
+    assert_clean(&log, "while the compositor was dropped");
+}
+
+/// Requirement "Acquiring an image is bounded": a surface that hands out no image stops
+/// neither the present nor the rendering, and the present after it shows the newest frame.
+#[test]
+fn present_without_an_image_in_time_shows_nothing_and_the_next_one_presents() {
+    let log = ValidationLog::new();
+    let mut compositor = surface_compositor(&log);
+    compositor.resize_surface(Size::new(64, 48));
+    compositor.set_frame_rate(40);
+    compositor.render(&flat(SIZE, WHITE)).unwrap();
+    assert_eq!(compositor.present(), Ok(true));
+    assert!(!compositor.is_starved());
+    // Frames measured by the compositor's own clock are counted as their presents go out.
+    let own_clock = !compositor.paces_with_present_timing();
+    let count = |compositor: &VkCompositor| {
+        compositor
+            .present_summary()
+            .map_or(0, |summary| summary.count)
+    };
+    let counted = count(&compositor);
+
+    // Scenario "No image in time".
+    compositor.fail_acquires(2);
+    let newest = gradient(SIZE);
+    compositor.render(&newest).unwrap();
+    assert_eq!(compositor.present(), Ok(false));
+    assert!(compositor.is_starved());
+    let rendered = compositor.read_frame().unwrap().unwrap();
+    let wanted = reference::Compositor::new().render(&newest).unwrap();
+    assert_eq!(rendered.rgba, wanted.rgba, "the frame that was not shown");
+
+    // Scenario "Images come back": a second present without an image, then one with.
+    assert_eq!(compositor.present(), Ok(false));
+    assert!(compositor.is_starved());
+    if own_clock {
+        assert_eq!(count(&compositor), counted, "nothing was shown");
+    }
+    assert_eq!(compositor.present(), Ok(true));
+    assert!(!compositor.is_starved());
+    // The frame nobody saw is the one this present showed for the first time.
+    if own_clock {
+        assert_eq!(count(&compositor), counted + 1);
+    }
+    let shown = compositor.scale_frame(Size::new(80, 72)).unwrap();
+    assert_eq!(shown.rgba, blocks(&opaque(rendered), 4).rgba);
+
+    // Rendering and presenting go on as before, also across a replaced swapchain.
+    compositor.fail_acquires(1);
+    compositor.resize_surface(Size::new(100, 75));
+    compositor.render(&flat(SIZE, BLACK)).unwrap();
+    assert_eq!(compositor.present(), Ok(false));
+    assert_eq!(compositor.present(), Ok(true));
+    assert_eq!(compositor.swapchain_extent(), Some((100, 75)));
+
+    assert_clean(&log, "around presents without an image");
     drop(compositor);
     assert_clean(&log, "while the compositor was dropped");
 }
