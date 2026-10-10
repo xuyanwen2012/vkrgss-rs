@@ -532,7 +532,7 @@ content has changed.
 
 #### Scenario: Same pictures as before
 - **WHEN** the tilemap test scenes of this crate (scrolled, wrapped, with autotiles, priorities, translucent stacked tiles and a viewport) are extracted and rendered
-- **THEN** every frame equals the one the cached-bitmap implementation produced, pixel for pixel
+- **THEN** every frame equals its committed expectation, which was recorded while the former cached-bitmap implementation still produced the same frame
 
 #### Scenario: Scrolling uploads nothing
 - **WHEN** a tilemap's origin moves by 100 pixels over ten frames with unchanged tables and bitmaps

@@ -177,3 +177,15 @@ became visible, as a summary of count, mean, smallest and largest.
 #### Scenario: Summary
 - **WHEN** visible times 0, 25, 50 and 80 milliseconds are recorded
 - **THEN** the summary is three intervals with mean 26.67, smallest 25 and largest 30 milliseconds
+
+### Requirement: Presentation pass without render pass objects
+The presentation pass and the off-screen scaling pass SHALL render with dynamic rendering. The
+backend SHALL NOT create render pass or framebuffer objects.
+
+#### Scenario: Resize
+- **WHEN** frames are presented, the surface is resized and more frames are presented
+- **THEN** all presents succeed, the validation layer reports no error, and no framebuffer was created for the new swapchain
+
+#### Scenario: Scaled frame for a dump
+- **WHEN** a scaled frame is read back at each scaling filter
+- **THEN** it equals the frame the same test produced before this change
