@@ -645,3 +645,88 @@ fn a_game_that_plays_music_runs_headless_without_an_audio_report() {
     assert_eq!(report.frames, 3);
     assert_eq!(errors.text(), "", "nothing is reported about audio");
 }
+
+/// The rows of a frame time summary: the name of each with the number of frames it counts.
+fn summary_rows(text: &str) -> Vec<(String, u64)> {
+    text.lines()
+        .filter_map(|line| {
+            let (name, rest) = line.strip_prefix("vkxp:   ")?.split_once(": ")?;
+            let count = rest.split(' ').next()?.parse().ok()?;
+            Some((name.to_owned(), count))
+        })
+        .collect()
+}
+
+/// Scenario "Headless summary".
+#[test]
+fn frame_statistics_of_a_headless_run_are_one_summary_at_its_end() {
+    let errors = ErrorBuffer::new();
+    let (result, _) = run_with(
+        HeadlessOptions {
+            frame_stats: true,
+            errors: Box::new(errors.clone()),
+            ..options()
+        },
+        counting_guest(50),
+    );
+    assert_eq!(result.unwrap().frames, 50);
+    let text = errors.text();
+    assert_eq!(text.matches("frame times over").count(), 1, "{text}");
+    assert!(
+        text.contains("vkxp: frame times over 50 frame(s):"),
+        "{text}"
+    );
+    let rows = summary_rows(&text);
+    let count = |name: &str| {
+        let row = rows.iter().find(|(row, _)| row == name);
+        row.unwrap_or_else(|| panic!("no row `{name}` in:\n{text}"))
+            .1
+    };
+    // The first frame follows no answer; every other one was waited for.
+    assert_eq!(count("guest"), 49);
+    for stage in ["encode", "bin", "upload", "submit"] {
+        assert_eq!(count(stage), 50, "{stage}:\n{text}");
+    }
+    // A headless run presents nothing.
+    assert_eq!(count("present"), 0);
+}
+
+/// Scenario "Not requested".
+#[test]
+fn frame_statistics_are_not_written_unless_requested() {
+    let errors = ErrorBuffer::new();
+    let (result, _) = run_with(
+        HeadlessOptions {
+            errors: Box::new(errors.clone()),
+            ..options()
+        },
+        counting_guest(50),
+    );
+    assert_eq!(result.unwrap().frames, 50);
+    assert_eq!(errors.text(), "");
+}
+
+/// Scenario "Same frames".
+#[test]
+fn frame_statistics_do_not_change_a_dumped_frame() {
+    let directory = tempfile::tempdir().unwrap();
+    let dumped = |frame_stats: bool| {
+        let path = directory.path().join(format!("stats-{frame_stats}.png"));
+        let (host, demo) = spawn_demo(SMALL_DEMO);
+        run_headless(
+            HeadlessOptions {
+                frames: Some(14),
+                script: InputScript::parse("2:RIGHT, 6:").unwrap(),
+                dumps: vec![(12, path.clone())],
+                frame_stats,
+                errors: Box::new(std::io::sink()),
+                ..options()
+            },
+            host,
+        )
+        .unwrap();
+        assert_eq!(demo.join().unwrap(), Ok(()));
+        fs::read(path).unwrap()
+    };
+    assert_eq!(dumped(true), dumped(false));
+}

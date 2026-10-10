@@ -1828,3 +1828,91 @@ fn display_restarts_its_pacing_with_the_frame_after_a_modal_wait() {
     rig.frame(frame(1));
     assert_eq!(pacing(&mut rig), [RATE_40, RATE_40]);
 }
+
+/// Sends `frames` frames, each answered with its tick a period after the one before.
+fn run_frames(rig: &mut Rig, frames: u64) {
+    for index in 0..frames {
+        rig.session.handle_message(frame(index));
+        rig.clock.advance(ms(25));
+        rig.session.poll();
+    }
+}
+
+#[test]
+fn frame_statistics_are_written_once_when_the_session_ends() {
+    let mut rig = Rig::with_options(SessionOptions {
+        frame_stats: true,
+        ..SessionOptions::default()
+    });
+    run_frames(&mut rig, 5);
+    assert_eq!(rig.errors.text(), "", "nothing before the end");
+    let ticks = rig.session.take_messages();
+    assert_eq!(ticks.len(), 5, "the guest sees nothing else");
+    assert!(ticks.iter().all(|message| *message == HostToGuest::Tick));
+    drop(rig.session);
+    let text = rig.errors.text();
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines[0], "vkxp: frame times over 5 frame(s):");
+    // The wait for the guest is from the answer to a frame to the next frame.
+    assert!(
+        lines[1].starts_with("vkxp:   guest: 4 frame(s), mean "),
+        "{text}"
+    );
+    // The recording display measures nothing.
+    assert_eq!(lines[2], "vkxp:   encode: 0 frame(s)");
+    assert_eq!(lines.len(), 9, "{text}");
+}
+
+#[test]
+fn frame_statistics_are_not_written_unless_asked_for() {
+    let mut rig = Rig::new();
+    run_frames(&mut rig, 5);
+    drop(rig.session);
+    assert_eq!(rig.errors.text(), "");
+}
+
+#[test]
+fn frame_statistics_with_an_interval_are_written_after_each_and_start_anew() {
+    let mut rig = Rig::with_options(SessionOptions {
+        frame_stats: true,
+        frame_stats_interval: Some(3),
+        ..SessionOptions::default()
+    });
+    run_frames(&mut rig, 2);
+    assert_eq!(rig.errors.text(), "");
+    run_frames(&mut rig, 5);
+    let headings = |text: &str| -> Vec<String> {
+        text.lines()
+            .filter(|line| line.contains("frame times over"))
+            .map(str::to_owned)
+            .collect()
+    };
+    assert_eq!(
+        headings(&rig.errors.text()),
+        ["vkxp: frame times over 3 frame(s):"; 2]
+    );
+    // The frame since the last report is summed up at the end.
+    drop(rig.session);
+    let all = headings(&rig.errors.text());
+    assert_eq!(all.len(), 3);
+    assert_eq!(all[2], "vkxp: frame times over 1 frame(s):");
+}
+
+#[test]
+fn frame_statistics_do_not_move_a_tick() {
+    let due = |frame_stats| {
+        let mut rig = Rig::with_options(SessionOptions {
+            frame_stats,
+            ..SessionOptions::default()
+        });
+        let mut due = Vec::new();
+        for index in 0..4 {
+            rig.session.handle_message(frame(index));
+            due.push(rig.session.next_wake());
+            rig.clock.advance(ms(30));
+            rig.session.poll();
+        }
+        due
+    };
+    assert_eq!(due(true), due(false));
+}

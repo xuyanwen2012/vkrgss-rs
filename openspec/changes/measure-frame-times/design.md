@@ -60,3 +60,9 @@
 
 - Splitting the guest's time (scripts, bitmap operations, extraction) needs either a protocol
   field or guest-side events; decide after the first numbers.
+- A headless run has no surface and presents nothing, so its summary has the rows `present`
+  and `present (device)` with a count of 0, and the row `guest` counts one frame less than
+  the others, because the first frame follows no answer. Whether a headless summary should
+  leave out the rows that cannot be measured there is open.
+- The off-screen draw (`scale_frame`, the capture of a mixed frame at a freeze) is labelled
+  like a present but is not timed: the design names the presentation pass of `present` only.

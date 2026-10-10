@@ -13,7 +13,9 @@ use std::time::Duration;
 use thiserror::Error;
 use vkxp_proto::link::{GuestEnd, HostEnd, link};
 use vkxp_proto::{BitmapId, FramePacket, FrameRate, Size};
-use vkxp_vk::{DeviceChoice, Filter, IntervalSummary, Mix, STATS_INTERVALS, VkCompositor, VkError};
+use vkxp_vk::{
+    DeviceChoice, Filter, FrameTiming, IntervalSummary, Mix, STATS_INTERVALS, VkCompositor, VkError,
+};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, MouseButton, WindowEvent};
@@ -51,6 +53,9 @@ pub struct WindowedOptions {
     /// [`STATS_INTERVALS`] frames and when the session ends. It is a warning, so that it is
     /// shown at the default level.
     pub present_stats: bool,
+    /// Whether the frame time statistics are collected and their summary written to
+    /// `errors`, every [`STATS_INTERVALS`] frames and when the session ends.
+    pub frame_stats: bool,
     /// Where the session writes modal texts and errors, which it takes when it starts.
     pub errors: Box<dyn Write + Send>,
     /// Where the audio side reports sounds that cannot be played, taken likewise.
@@ -71,6 +76,7 @@ impl WindowedOptions {
             audio: None,
             input: None,
             present_stats: false,
+            frame_stats: false,
             errors: Box::new(std::io::stderr()),
             audio_errors: Box::new(std::io::stderr()),
         }
@@ -284,6 +290,10 @@ impl Display for VulkanDisplay {
         self.compositor.has_bitmap(id)
     }
 
+    fn take_frame_timing(&mut self) -> Option<FrameTiming> {
+        self.compositor.take_frame_timing()
+    }
+
     fn redraw(&mut self) -> Result<(), VkError> {
         self.present()
     }
@@ -353,6 +363,7 @@ impl App {
             VkCompositor::for_window(self.options.device.clone(), Arc::clone(&window), None)
                 .map_err(WindowedError::Compositor)?;
         compositor.set_filter(self.options.filter);
+        compositor.set_frame_timing(self.options.frame_stats);
         let mut display = VulkanDisplay {
             compositor,
             window: Arc::clone(&window),
@@ -383,6 +394,8 @@ impl App {
             audio,
             input: self.options.input.take(),
             wait_for_modal: true,
+            frame_stats: self.options.frame_stats,
+            frame_stats_interval: Some(STATS_INTERVALS),
             errors: take_stream(&mut self.options.errors),
             ..SessionOptions::default()
         };

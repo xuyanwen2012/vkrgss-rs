@@ -2,7 +2,7 @@
 
 use std::collections::{HashSet, VecDeque};
 use std::io::Write;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use vkxp_proto::link::HostEnd;
 use vkxp_proto::{BitmapId, Button, FramePacket, GuestToHost, HostToGuest, InputSnapshot, Size};
@@ -11,6 +11,7 @@ use winit::event::MouseButton;
 use winit::keyboard::KeyCode;
 
 use crate::raw::with_raw_keys;
+use crate::stats::FrameStats;
 use crate::{AudioSink, Clock, Display, InputSource, KeyMap, NullSink};
 
 /// The key that asks the guest to restart.
@@ -72,6 +73,13 @@ pub struct SessionOptions {
     /// one before, ahead of that frame's tick and at no other time. Without one, live input
     /// is sent as it changes.
     pub input: Option<Box<dyn InputSource>>,
+    /// Whether the session collects the frame time statistics: how long it waits for the
+    /// guest between frames, and what the display measures of each frame. Their summary is
+    /// written to `errors` when the session is dropped.
+    pub frame_stats: bool,
+    /// With `frame_stats`: the summary is also written after every so many frames, and the
+    /// statistics start anew each time.
+    pub frame_stats_interval: Option<usize>,
 }
 
 impl Default for SessionOptions {
@@ -83,8 +91,22 @@ impl Default for SessionOptions {
             errors: Box::new(std::io::stderr()),
             audio: Box::new(NullSink),
             input: None,
+            frame_stats: false,
+            frame_stats_interval: None,
         }
     }
+}
+
+/// The frame time statistics of a session that collects them.
+struct Measuring {
+    stats: FrameStats,
+    /// The frames after which a summary is written, besides the one at the end.
+    interval: Option<usize>,
+    /// When the frame before was answered, on the host's monotonic clock and not on the
+    /// session's, which a headless run moves by hand. `None` before the first answer.
+    answered: Option<Instant>,
+    /// Whether a summary has been written.
+    reported: bool,
 }
 
 /// Where the display is between a freeze and the end of the transition that follows it.
@@ -130,6 +152,13 @@ struct FpsCounter {
 /// frame after a frame reset, every frame while fast-forward is engaged and the first after
 /// it was engaged or released, and the first after a modal message that waited for the
 /// player.
+///
+/// # Frame time statistics
+///
+/// A session that was asked to (see [`SessionOptions::frame_stats`]) measures the time from
+/// answering a frame to receiving the next frame packet, and takes what its display measured
+/// of each frame it rendered. That reads the host's clock and nothing else: no tick is due
+/// earlier or later for it and the guest is sent nothing else.
 pub struct Session<D: Display, C: Clock> {
     display: D,
     clock: C,
@@ -189,6 +218,8 @@ pub struct Session<D: Display, C: Clock> {
     /// session ends as failed when the tick of that frame goes out.
     failing: bool,
     end: Option<SessionEnd>,
+    /// The frame time statistics, when the session collects them.
+    measuring: Option<Measuring>,
 }
 
 impl<D: Display, C: Clock> Session<D, C> {
@@ -228,6 +259,12 @@ impl<D: Display, C: Clock> Session<D, C> {
             guest_gone: false,
             failing: false,
             end: None,
+            measuring: options.frame_stats.then(|| Measuring {
+                stats: FrameStats::default(),
+                interval: options.frame_stats_interval,
+                answered: None,
+                reported: false,
+            }),
         }
     }
 
@@ -528,6 +565,11 @@ impl<D: Display, C: Clock> Session<D, C> {
     }
 
     fn frame(&mut self, packet: &FramePacket) {
+        if let Some(measuring) = &mut self.measuring
+            && let Some(answered) = measuring.answered.take()
+        {
+            measuring.stats.add_guest(answered.elapsed());
+        }
         let arrival = self.clock.now();
         if self.pending_tick.is_some() {
             // A guest that keeps to the handshake never gets here. Answering the earlier frame
@@ -576,6 +618,9 @@ impl<D: Display, C: Clock> Session<D, C> {
         self.display.set_frame_rate(packet.frame_rate);
         match self.display.render(packet) {
             Ok(()) => {
+                if self.measuring.is_some() {
+                    self.frame_measured();
+                }
                 if let Some((shown, duration, still, mix)) = step {
                     self.mix = mix;
                     // The mask comes with the frames after the transition message, so only
@@ -641,6 +686,9 @@ impl<D: Display, C: Clock> Session<D, C> {
         self.pending_tick = None;
         self.previous_tick = Some(now);
         self.outbox.push_back(HostToGuest::Tick);
+        if let Some(measuring) = &mut self.measuring {
+            measuring.answered = Some(Instant::now());
+        }
         if self.failing {
             // The rejected frame has its one tick; nothing else is answered.
             self.end = Some(SessionEnd::Failed);
@@ -771,6 +819,46 @@ impl<D: Display, C: Clock> Session<D, C> {
     fn report(&mut self, message: std::fmt::Arguments<'_>) {
         // Nothing useful can be done when the error stream itself fails.
         let _ = writeln!(self.errors, "vkxp: {message}");
+    }
+
+    /// Adds the frame just rendered to the statistics, and writes their summary when the
+    /// interval is over.
+    fn frame_measured(&mut self) {
+        let timing = self.display.take_frame_timing();
+        let Some(measuring) = &mut self.measuring else {
+            return;
+        };
+        measuring.stats.add_frame(timing);
+        if measuring
+            .interval
+            .is_some_and(|interval| measuring.stats.frames() >= interval)
+        {
+            self.report_frame_stats();
+        }
+    }
+
+    /// Writes the summary of the frame time statistics and starts them anew.
+    fn report_frame_stats(&mut self) {
+        let Some(measuring) = &mut self.measuring else {
+            return;
+        };
+        measuring.reported = true;
+        for line in std::mem::take(&mut measuring.stats).lines() {
+            self.report(format_args!("{line}"));
+        }
+    }
+}
+
+impl<D: Display, C: Clock> Drop for Session<D, C> {
+    fn drop(&mut self) {
+        // The summary of a run that reports once, or of the frames since the last report.
+        if self
+            .measuring
+            .as_ref()
+            .is_some_and(|measuring| !measuring.reported || measuring.stats.frames() > 0)
+        {
+            self.report_frame_stats();
+        }
     }
 }
 

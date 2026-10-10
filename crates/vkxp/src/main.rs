@@ -345,6 +345,7 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
             script,
             input,
             dumps,
+            frame_stats: options.frame_stats,
             errors: log::EventLines::host(),
         };
         let (guest_end, link) = headless_link();
@@ -370,6 +371,7 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
             filter: options.filter.unwrap_or_default(),
             fullscreen: options.fullscreen,
             present_stats: options.present_stats,
+            frame_stats: options.frame_stats,
             keys,
             pads,
             audio,

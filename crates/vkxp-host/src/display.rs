@@ -1,7 +1,7 @@
 //! What a session asks of whatever shows its frames.
 
 use vkxp_proto::{BitmapId, FramePacket, FrameRate};
-use vkxp_vk::Mix;
+use vkxp_vk::{FrameTiming, Mix};
 
 /// The surface a session draws on: a window, an off-screen target, or a recording fake.
 ///
@@ -45,6 +45,12 @@ pub trait Display {
     /// The frame about to be rendered does not follow the one before it by a period: the
     /// display starts spacing its frames anew from it.
     fn restart_pacing(&mut self) {}
+
+    /// What the display measured of the frame it rendered last, handed out once. A display
+    /// that measures nothing, or was not asked to, has none.
+    fn take_frame_timing(&mut self) -> Option<FrameTiming> {
+        None
+    }
 
     /// Shows the current state again without a new frame.
     fn redraw(&mut self) -> Result<(), Self::Error>;

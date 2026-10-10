@@ -329,6 +329,35 @@ fn the_frame_limit_ends_a_game_that_never_ends_with_status_0() {
     assert!(!ran.file("eleventh.png").exists());
 }
 
+/// Scenario "Option accepted" of `specs/game-launch/spec.md`.
+#[test]
+fn frame_statistics_of_a_headless_run_are_written_to_the_error_stream() {
+    let game = Game::new(
+        "e2e-frame-stats",
+        "Stats",
+        &[("Main", "loop { Graphics.update }")],
+    );
+    let ran = headless(&game, &["--frames", "10", "--frame-stats"]);
+    ran.assert_success();
+    let stderr = ran.stderr();
+    assert!(
+        stderr.contains("vkxp: frame times over 10 frame(s):"),
+        "{stderr}"
+    );
+    for row in [
+        "guest: 9 frame(s)",
+        "encode: 10 frame(s)",
+        "submit: 10 frame(s)",
+    ] {
+        assert!(stderr.contains(row), "no `{row}` in: {stderr}");
+    }
+
+    // Without the option there is no summary.
+    let ran = headless(&game, &["--frames", "10"]);
+    ran.assert_success();
+    assert!(!ran.stderr().contains("frame times"), "{}", ran.stderr());
+}
+
 /// A game that names the run-time package `Standard` and loads a picture found only there.
 /// Returns the game and the directory of the package.
 fn rtp_game(name: &str) -> (Game, TempDir) {

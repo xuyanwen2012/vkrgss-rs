@@ -17,7 +17,7 @@ use std::sync::mpsc::{Receiver, channel};
 use thiserror::Error;
 use vkxp_proto::link::{Disconnected, GuestEnd, HostEnd, link};
 use vkxp_proto::{BitmapId, FramePacket, GuestToHost, HostToGuest, Size};
-use vkxp_vk::{DeviceChoice, Frame, Mix, VkCompositor, VkError};
+use vkxp_vk::{DeviceChoice, Frame, FrameTiming, Mix, VkCompositor, VkError};
 
 use crate::{
     Clock, Display, InputScript, InputSource, ManualClock, Session, SessionEnd, SessionOptions,
@@ -77,6 +77,9 @@ pub struct HeadlessOptions {
     pub input: Option<Box<dyn InputSource>>,
     /// Frames to write as PNG files, by frame number.
     pub dumps: Vec<(u64, PathBuf)>,
+    /// Whether the frame time statistics are collected and their summary written to
+    /// `errors` when the run ends.
+    pub frame_stats: bool,
     /// Where modal texts and errors are written.
     pub errors: Box<dyn Write + Send>,
 }
@@ -89,6 +92,7 @@ impl Default for HeadlessOptions {
             script: InputScript::new(),
             input: None,
             dumps: Vec::new(),
+            frame_stats: false,
             errors: Box::new(std::io::stderr()),
         }
     }
@@ -210,6 +214,10 @@ impl Display for HeadlessDisplay {
         self.compositor.has_bitmap(id)
     }
 
+    fn take_frame_timing(&mut self) -> Option<FrameTiming> {
+        self.compositor.take_frame_timing()
+    }
+
     fn redraw(&mut self) -> Result<(), VkError> {
         Ok(())
     }
@@ -238,9 +246,11 @@ pub fn run_headless(
         script,
         input,
         dumps,
+        frame_stats,
         errors,
     } = options;
-    let display = HeadlessDisplay::new(device).map_err(HeadlessError::Compositor)?;
+    let mut display = HeadlessDisplay::new(device).map_err(HeadlessError::Compositor)?;
+    display.compositor.set_frame_timing(frame_stats);
     let chosen = display.compositor.device();
     tracing::info!(
         "compositing on {} ({}), on a virtual clock",
@@ -252,6 +262,7 @@ pub fn run_headless(
         fail_on_rejected_frame: true,
         errors,
         input,
+        frame_stats,
         ..SessionOptions::default()
     };
     let mut session = Session::new(display, clock.clone(), session_options);

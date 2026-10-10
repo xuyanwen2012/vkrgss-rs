@@ -86,6 +86,8 @@ pub(crate) struct Options {
     pub fullscreen: bool,
     /// Whether the intervals between the frames shown are reported.
     pub present_stats: bool,
+    /// Whether the frame time statistics are reported.
+    pub frame_stats: bool,
     /// Whether informational and debug messages are written too.
     pub verbose: bool,
     /// Whether the audio output stays closed.
@@ -194,6 +196,7 @@ pub(crate) fn parse(arguments: &[String]) -> Result<Options, String> {
             }
             "--fullscreen" => options.fullscreen = true,
             "--present-stats" => options.present_stats = true,
+            "--frame-stats" => options.frame_stats = true,
             "--debug" => options.debug = true,
             "--allow-process-functions" => options.process_functions = true,
             "--log-p" => options.log_p = true,
@@ -346,6 +349,17 @@ mod tests {
         // The flag takes no value.
         let options = parse_words(&["--present-stats", "games/demo"]).unwrap();
         assert_eq!(options.game_dir, Some("games/demo".into()));
+    }
+
+    #[test]
+    fn frame_statistics_are_asked_for_with_a_flag() {
+        assert!(!parse_words(&[]).unwrap().frame_stats);
+        // The flag takes no value, and goes with a window and with a headless run.
+        let options = parse_words(&["--frame-stats", "games/demo"]).unwrap();
+        assert!(options.frame_stats);
+        assert_eq!(options.game_dir, Some("games/demo".into()));
+        let options = parse_words(&["games/demo", "--headless", "--frame-stats"]).unwrap();
+        assert!(options.frame_stats && options.headless);
     }
 
     #[test]

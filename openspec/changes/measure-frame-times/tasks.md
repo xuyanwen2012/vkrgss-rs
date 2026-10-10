@@ -7,7 +7,7 @@
 
 ## 2. Host and option (`vkxp-host`, `vkxp`)
 
-- [ ] 2.1 Measure the wait for the guest, collect the summaries, add `--frame-stats`. Verify: the scenarios of `specs/host-session/spec.md` and `specs/game-launch/spec.md`.
+- [x] 2.1 Measure the wait for the guest, collect the summaries, add `--frame-stats`. Verify: the scenarios of `specs/host-session/spec.md` and `specs/game-launch/spec.md`.
 
 ## 3. Documents
 
