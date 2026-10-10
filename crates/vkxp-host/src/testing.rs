@@ -2,7 +2,7 @@
 //! a display that records what it was asked to do, an audio sink that records its commands,
 //! and an error stream that can be read back.
 //!
-//! The fake clock is [`ManualClock`](crate::ManualClock), which the headless runner uses too.
+//! The fake clock is [`ManualClock`], which the headless runner uses too.
 
 use std::collections::HashSet;
 use std::io::Write;
