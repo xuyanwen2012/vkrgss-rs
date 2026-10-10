@@ -381,6 +381,16 @@ fn guest_config(
     })
 }
 
+/// The form of the guest of a run: the one that was chosen, and without a choice a process
+/// in a window, where the state keys need it, and a thread in a headless run.
+fn guest_form(chosen: Option<GuestForm>, headless: bool) -> GuestForm {
+    chosen.unwrap_or(if headless {
+        GuestForm::Thread
+    } else {
+        GuestForm::Process
+    })
+}
+
 /// The guest of a run, as the host is given it and as the program waits for it.
 enum Guest {
     /// The interpreter thread of this process, and what the guest thread reports.
@@ -458,12 +468,7 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
     let (seed, input) = seed_and_input(&options)?;
     let title = inputs.ini.title.clone();
 
-    // Without a choice the guest is a process in a window, where the state keys need it.
-    let form = options.guest.unwrap_or(if options.headless {
-        GuestForm::Thread
-    } else {
-        GuestForm::Process
-    });
+    let form = guest_form(options.guest, options.headless);
     // What the guest thread does, and what the program waits for once the host has ended.
     let (guest, waited): (Box<dyn FnOnce(GuestEnd) + Send>, Guest) = match form {
         GuestForm::Thread => {
@@ -591,6 +596,19 @@ mod tests {
         assert_eq!(default_font_names("RGSS102J.dll"), ["ＭＳ Ｐゴシック"]);
         assert_eq!(default_font_names("rgss103j"), ["ＭＳ Ｐゴシック"]);
         assert_eq!(default_font_names(""), ["Arial"]);
+    }
+
+    /// Requirement "Guest option": the default by kind of run, and scenario "Headless
+    /// default".
+    #[test]
+    fn without_a_choice_the_guest_is_a_process_in_a_window_and_a_thread_headless() {
+        assert_eq!(guest_form(None, false), GuestForm::Process);
+        assert_eq!(guest_form(None, true), GuestForm::Thread);
+        for headless in [false, true] {
+            for form in [GuestForm::Thread, GuestForm::Process] {
+                assert_eq!(guest_form(Some(form), headless), form);
+            }
+        }
     }
 
     #[test]
