@@ -72,6 +72,19 @@
   the files this change may touch, so the question is whether the scope is extended to it.
   Task 2.1 stays open until the alias is locked and the scenario is verified with the real
   `cargo xtask gate`.
+- The gate fails at the `test` step when it is started with SIGINT ignored, as a tool that
+  runs it without a terminal may do. `test_should_propagate_signaled` in
+  `third_party/ruby-1.8.7/test/ruby/test_beginendblock.rb` starts a child interpreter that
+  sends itself SIGINT and expects the output to end in `Interrupt`; the ignored disposition is
+  inherited through every child process, and `install_sighandler` in `signal.c` keeps a
+  disposition that is not the default, so the child is not interrupted and prints nothing.
+  Measured with `cargo test -p vkxp-ruby-sys --test upstream`, twice each way:
+  `env --default-signal=INT` passes (5 of 5) and `env --ignore-signal=INT` fails with
+  `<""> expected to be =~ </Interrupt$/>`. The commit before this change (`df34240`) gives the
+  same two results, and the change touches neither the test nor the interpreter, so it is not
+  a regression of this change. Run the gate from a terminal, or under
+  `env --default-signal=INT`. Whether the gate or the test harness should restore the default
+  disposition itself is left open; neither is built here.
 
 ## Measured
 
