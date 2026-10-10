@@ -2,7 +2,7 @@
 
 use vkxp_proto::{Button, InputSnapshot};
 
-/// Number of consecutive updates a button is held before it starts to repeat.
+/// Number of consecutive updates the repeating button is held before it starts to repeat.
 const REPEAT_DELAY: u64 = 16;
 /// Number of updates between two repeats.
 const REPEAT_INTERVAL: u64 = 4;
@@ -26,10 +26,16 @@ pub struct InputState {
     previous: InputSnapshot,
     /// For each button, the number of consecutive updates it has been held.
     held: [u64; BUTTON_BITS],
-    /// For each button, the number of the update at which it was last triggered.
-    triggered_at: [u64; BUTTON_BITS],
-    /// Number of updates so far.
-    updates: u64,
+    /// The one button that repeats: the one triggered most recently, while it stays held.
+    rep_button: Option<Button>,
+    /// Number of consecutive updates the repeating button has been held since its trigger.
+    rep_count: u64,
+    /// Which direction a diagonal gives the four-way query: the horizontal one when unset,
+    /// the vertical one when set. A horizontal direction held alone sets it and a vertical
+    /// one held alone clears it; nothing else changes it, not even a release of everything.
+    axis_flag: bool,
+    /// The four-way direction as of the last update.
+    dir4: u8,
 }
 
 impl InputState {
@@ -51,18 +57,53 @@ impl InputState {
         if let Some(snapshot) = self.received.take() {
             self.latched = snapshot;
         }
-        self.updates += 1;
         for button in Button::ALL {
             let bit = button as usize;
             if self.latched.is_down(button) {
                 self.held[bit] += 1;
+                // Of several buttons triggered in one update the highest number is the last
+                // to be seen here, and is the one that repeats.
                 if self.held[bit] == 1 {
-                    self.triggered_at[bit] = self.updates;
+                    self.rep_button = Some(button);
+                    self.rep_count = 0;
                 }
             } else {
                 self.held[bit] = 0;
             }
         }
+        if self
+            .rep_button
+            .is_some_and(|button| self.is_pressed(button))
+        {
+            self.rep_count += 1;
+        } else {
+            self.rep_button = None;
+            self.rep_count = 0;
+        }
+        self.dir4 = self.update_dir4();
+    }
+
+    /// The four-way direction of this update, and the axis flag for the next diagonal.
+    fn update_dir4(&mut self) -> u8 {
+        let direction = match self.axes() {
+            (Some(horizontal), Some(vertical)) => {
+                if self.axis_flag {
+                    Some(vertical)
+                } else {
+                    Some(horizontal)
+                }
+            }
+            (Some(horizontal), None) => {
+                self.axis_flag = true;
+                Some(horizontal)
+            }
+            (None, Some(vertical)) => {
+                self.axis_flag = false;
+                Some(vertical)
+            }
+            (None, None) => None,
+        };
+        direction.map_or(0, |button| button as u8)
     }
 
     /// Whether the key with the Windows virtual-key code `key` is held.
@@ -97,13 +138,18 @@ impl InputState {
         self.held(button) == 1
     }
 
-    /// Whether `button` was triggered in the last update, or has been held long enough to
-    /// repeat: on the 15th update after the trigger, and on every 4th after that.
-    ///
-    /// PLACEHOLDER: the repeat timing is not yet checked against the original runtime.
+    /// Whether `button` is the repeating button and repeats at the last update: on the update
+    /// in which it was triggered, on the 15th update after that, and on every 4th after that.
+    /// Only one button repeats at a time: the one triggered most recently, and of several
+    /// triggered in the same update the one with the highest number. A button that lost the
+    /// repeat to another does not get it back while it stays held. Measured on the original
+    /// runtime.
     pub fn is_repeated(&self, button: Button) -> bool {
-        let held = self.held(button);
-        held == 1 || (held >= REPEAT_DELAY && (held - REPEAT_DELAY).is_multiple_of(REPEAT_INTERVAL))
+        let count = self.rep_count;
+        self.rep_button == Some(button)
+            && (count == 1
+                || (count >= REPEAT_DELAY
+                    && (count - REPEAT_DELAY).is_multiple_of(REPEAT_INTERVAL)))
     }
 
     /// Of two opposite directions, the one held alone.
@@ -125,25 +171,11 @@ impl InputState {
     }
 
     /// The four-way direction: 2 for down, 4 for left, 6 for right, 8 for up, 0 for none.
-    /// Opposite directions cancel; of two perpendicular directions the one pressed more
-    /// recently counts.
-    ///
-    /// PLACEHOLDER: the priority among directions, in particular that the vertical one wins
-    /// when both were pressed in the same update, is not yet checked against the original
-    /// runtime.
+    /// Opposite directions cancel. Of two perpendicular directions the one counts whose axis
+    /// was not the last to be held alone, and the horizontal one when neither axis has been
+    /// held alone yet. Measured on the original runtime.
     pub fn dir4(&self) -> u8 {
-        let direction = match self.axes() {
-            (Some(horizontal), Some(vertical)) => {
-                let pressed = |button: Button| self.triggered_at[button as usize];
-                if pressed(horizontal) > pressed(vertical) {
-                    Some(horizontal)
-                } else {
-                    Some(vertical)
-                }
-            }
-            (horizontal, vertical) => horizontal.or(vertical),
-        };
-        direction.map_or(0, |button| button as u8)
+        self.dir4
     }
 
     /// The eight-way direction: 1 for down-left, 3 for down-right, 7 for up-left and 9 for

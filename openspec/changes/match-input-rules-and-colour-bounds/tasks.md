@@ -2,8 +2,8 @@
 
 ## 1. Input (`vkxp-core`)
 
-- [ ] 1.1 Replace the per-button repeat by the single repeating button. Verify: the scenarios of "Repeat" and the three tables under "Repeat" in `design.md` as tests; `cargo test -p vkxp-core --locked` passes.
-- [ ] 1.2 Replace the trigger-time comparison of `dir4` by the axis flag. Verify: the scenarios of "Direction queries" and the two step tables under "Directions" in `design.md` as tests; `cargo test -p vkxp-core --locked` passes.
+- [x] 1.1 Replace the per-button repeat by the single repeating button. Verify: the scenarios of "Repeat" and the three tables under "Repeat" in `design.md` as tests; `cargo test -p vkxp-core --locked` passes.
+- [x] 1.2 Replace the trigger-time comparison of `dir4` by the axis flag. Verify: the scenarios of "Direction queries" and the two step tables under "Directions" in `design.md` as tests; `cargo test -p vkxp-core --locked` passes.
 
 ## 2. Colour bounds (`vkxp-core`, tests of `vkxp-binding`)
 

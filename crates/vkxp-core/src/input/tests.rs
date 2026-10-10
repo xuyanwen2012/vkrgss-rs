@@ -177,6 +177,88 @@ fn a_release_starts_the_repeat_pattern_over() {
     assert_eq!(repeats, [1, 16, 20]);
 }
 
+/// The buttons that repeat at each update of `steps`, where a step is the buttons held at
+/// one update.
+fn repeats(steps: impl IntoIterator<Item = Vec<Button>>) -> Vec<Vec<Button>> {
+    let mut input = InputState::new();
+    steps
+        .into_iter()
+        .map(|held| {
+            input.receive(holding(&held));
+            input.update();
+            let repeated = Button::ALL.into_iter().filter(|&b| input.is_repeated(b));
+            repeated.collect()
+        })
+        .collect()
+}
+
+#[test]
+fn a_second_button_takes_the_repeat() {
+    let steps = (1..=31).map(|update| {
+        if update < 8 {
+            vec![Button::Down]
+        } else {
+            vec![Button::Down, Button::Left]
+        }
+    });
+    for (update, repeated) in (1..).zip(repeats(steps)) {
+        let expected = match update {
+            1 => vec![Button::Down],
+            8 | 23 | 27 | 31 => vec![Button::Left],
+            _ => vec![],
+        };
+        assert_eq!(repeated, expected, "update {update}");
+    }
+}
+
+#[test]
+fn the_first_button_does_not_get_the_repeat_back() {
+    let steps = (1..=40).map(|update| {
+        if update == 2 {
+            vec![Button::Down, Button::Left]
+        } else {
+            vec![Button::Down]
+        }
+    });
+    for (update, repeated) in (1..).zip(repeats(steps)) {
+        let expected = match update {
+            1 => vec![Button::Down],
+            2 => vec![Button::Left],
+            _ => vec![],
+        };
+        assert_eq!(repeated, expected, "update {update}");
+    }
+}
+
+#[test]
+fn of_buttons_triggered_together_the_highest_number_repeats() {
+    for (low, high) in [
+        (Button::Down, Button::Left),
+        (Button::Left, Button::Up),
+        (Button::B, Button::C),
+    ] {
+        let input = after(&[low, high]);
+        assert!(input.is_triggered(low) && input.is_triggered(high));
+        assert!(!input.is_repeated(low), "{low:?} with {high:?}");
+        assert!(input.is_repeated(high), "{high:?} with {low:?}");
+    }
+}
+
+#[test]
+fn no_button_repeats_after_the_repeating_one_is_released() {
+    let mut input = after(&[Button::C]);
+    input.receive(InputSnapshot::EMPTY);
+    input.update();
+    input.receive(holding(&[Button::C]));
+    input.update();
+    assert!(input.is_repeated(Button::C), "a new trigger repeats");
+    // Fifteen updates later nothing remembers the first press.
+    for update in 2..=16 {
+        input.update();
+        assert_eq!(input.is_repeated(Button::C), update == 16, "{update}");
+    }
+}
+
 #[test]
 fn a_single_direction_is_reported_by_both_queries() {
     for (button, value) in [
@@ -210,30 +292,90 @@ fn opposite_directions_cancel() {
     assert_eq!((input.dir4(), input.dir8()), (6, 6));
 }
 
+/// The answers of both direction queries at each update of `steps`, where a step is the
+/// buttons held at one update.
+fn directions(steps: &[&[Button]]) -> Vec<(u8, u8)> {
+    let mut input = InputState::new();
+    steps
+        .iter()
+        .map(|held| {
+            input.receive(holding(held));
+            input.update();
+            (input.dir4(), input.dir8())
+        })
+        .collect()
+}
+
 #[test]
-fn of_two_perpendicular_directions_the_later_press_wins_dir4() {
+fn a_diagonal_gives_dir4_the_axis_that_was_not_the_last_held_alone() {
+    use Button::{Down, Left, Right, Up};
+    let answers = directions(&[
+        &[Down],
+        &[Down, Left],
+        &[Left],
+        &[Down, Left],
+        &[],
+        &[Left, Up],
+        &[Up],
+        &[],
+        &[Right, Up],
+    ]);
+    assert_eq!(
+        answers,
+        [
+            (2, 2),
+            (4, 1),
+            (4, 4),
+            (2, 1),
+            (0, 0),
+            (8, 7),
+            (8, 8),
+            (0, 0),
+            (6, 9)
+        ]
+    );
+}
+
+#[test]
+fn a_cancelled_axis_does_not_count_for_dir4() {
+    use Button::{Down, Left, Up};
+    let answers = directions(&[
+        &[Down],
+        &[Down, Up],
+        &[Down, Up, Left],
+        &[Up, Left],
+        &[Left],
+    ]);
+    assert_eq!(answers, [(2, 2), (0, 0), (4, 4), (8, 7), (4, 4)]);
+}
+
+#[test]
+fn a_diagonal_keeps_its_dir4_while_both_are_held() {
     let mut input = after(&[Button::Down]);
     input.receive(holding(&[Button::Down, Button::Right]));
     input.update();
     assert_eq!((input.dir4(), input.dir8()), (6, 3));
-    // It stays that way while both are held.
     for _ in 0..20 {
         input.update();
         assert_eq!((input.dir4(), input.dir8()), (6, 3));
     }
+}
 
-    let mut input = after(&[Button::Right]);
-    input.receive(holding(&[Button::Down, Button::Right]));
-    input.update();
-    assert_eq!((input.dir4(), input.dir8()), (2, 3));
-
-    // Pressing the first one again makes it the more recent.
-    input.receive(holding(&[Button::Down]));
-    input.update();
-    assert_eq!((input.dir4(), input.dir8()), (2, 2));
-    input.receive(holding(&[Button::Down, Button::Right]));
-    input.update();
-    assert_eq!((input.dir4(), input.dir8()), (6, 3));
+#[test]
+fn the_horizontal_direction_wins_dir4_before_any_axis_was_held_alone() {
+    for (vertical, horizontal) in [
+        (Button::Down, Button::Left),
+        (Button::Down, Button::Right),
+        (Button::Up, Button::Left),
+        (Button::Up, Button::Right),
+    ] {
+        let input = after(&[vertical, horizontal]);
+        assert_eq!(
+            input.dir4(),
+            horizontal as u8,
+            "{vertical:?} {horizontal:?}"
+        );
+    }
 }
 
 #[test]
@@ -249,12 +391,9 @@ fn all_four_diagonals_are_reported_by_dir8() {
             input.receive(holding(&[earlier, later]));
             input.update();
             assert_eq!(input.dir8(), diagonal, "{earlier:?} then {later:?}");
-            assert_eq!(input.dir4(), later as u8, "{earlier:?} then {later:?}");
         }
         // Pressed in the same update, the diagonal is the same.
-        let input = after(&[first, second]);
-        assert_eq!(input.dir8(), diagonal);
-        assert_eq!(input.dir4(), first as u8, "the vertical direction");
+        assert_eq!(after(&[first, second]).dir8(), diagonal);
     }
 }
 
