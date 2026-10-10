@@ -262,4 +262,15 @@ when `src_rect` is not contained in the bitmap's rectangle.
 
 ## Follow-ups
 
-(none yet)
+- A stretched sprite that both has a bush depth and a source rectangle leaving its bitmap was
+  not measured. It is drawn as the model of the measurements (`predict_case`) draws it: the
+  columns by the rule of item 5, the rows as the two stretches of item 3b with the rows outside
+  the bitmap left out, not cut by the rule of item 5. To be measured.
+- `Assembly::stretched` still restarts the stretch of a cut rectangle at its corner. Sprites no
+  longer reach it with such a rectangle while stretched; planes, which are out of scope, do
+  with tiles cut by their bitmap. Whether the original draws those by the rule of item 5 is
+  not measured.
+- The comment on `Sprite::bush_depth` in `element.rs`, outside the scope of this change, still
+  speaks of the rows at the bottom of the source rectangle; it should speak of screen rows.
+- The measured samples are committed without the topic `negzoom`, which belongs to item 1 of
+  the report and not to this change.

@@ -296,3 +296,232 @@ fn a_turned_sprite_with_a_source_rectangle_outside_its_bitmap_draws_nothing() {
     assert_eq!(first.src_rect, Some(Rect::new(-1, 0, 24, 16)));
     assert!(!all(&drawn_case("geom2/6"), BLACK));
 }
+
+/// Sprites that are not turned, with a bush depth and a vertical zoom: the faint rows are
+/// a stretch of their own.
+#[test]
+fn bush_depths_of_zoomed_sprites_show_the_measured_rows() {
+    assert_eq!(compare("bushzoom", |_| true), 16);
+    assert_eq!(compare("geom2", |case| (16..32).contains(&case.number)), 16);
+    assert_eq!(compare("bush", |case| case.angle == 0.0), 4);
+    assert_eq!(compare("geom2", |case| case.number == 42), 1);
+}
+
+/// Sprites that are not turned, with source rectangles that leave the bitmap on every
+/// side, at several zooms, mirrored and not.
+#[test]
+fn cut_source_rectangles_show_the_measured_pixels() {
+    assert_eq!(compare("srcrect", |case| case.angle == 0.0), 96);
+    assert_eq!(compare("srcrect2", |_| true), 16);
+}
+
+/// A sprite of the 24 by 16 pattern at (10, 10), or (20, 20) with a bush depth, that is
+/// not turned.
+fn upright(src_rect: Option<Rect>, zoom: (f64, f64), mirror: bool, bush_depth: i32) -> Case {
+    let at = if bush_depth > 0 { 20 } else { 10 };
+    Case {
+        name: "",
+        number: 0,
+        x: at,
+        y: at,
+        ox: 0,
+        oy: 0,
+        zoom,
+        angle: 0.0,
+        mirror,
+        src_rect,
+        bush_depth,
+        viewport: None,
+        drawn: 0,
+        bbox: None,
+        rows: Vec::new(),
+    }
+}
+
+/// The texel column of every pixel of `row` that is drawn, with the first of them.
+fn columns(frame: &vkxp_compose_ref::Frame, row: u32) -> (u32, Vec<u32>) {
+    let shown = |x: u32| {
+        let pixel = frame.pixel(x, row);
+        (pixel != BLACK).then(|| (u32::from(pixel[0]) - 8) / 10)
+    };
+    let first = (0..640).find(|&x| shown(x).is_some()).unwrap();
+    let texels: Vec<u32> = (first..640).map_while(shown).collect();
+    assert!((first + texels.len() as u32..640).all(|x| shown(x).is_none()));
+    (first, texels)
+}
+
+/// The texel row of every pixel of `column` that is drawn, with the first of them and
+/// whether each is faint.
+fn texel_rows(frame: &vkxp_compose_ref::Frame, column: u32) -> (u32, Vec<(u32, bool)>) {
+    let shown = |y: u32| {
+        let pixel = frame.pixel(column, y);
+        // The blue of every texel is 200, and 100 where it is faint.
+        let faint = pixel[2] == 100;
+        let green = u32::from(pixel[1]);
+        let row = (0..16).find(|v| {
+            let full = 8 + 15 * v;
+            green == if faint { (full * 128) >> 8 } else { full }
+        });
+        (pixel != BLACK).then(|| (row.unwrap(), faint))
+    };
+    let first = (0..480).find(|&y| shown(y).is_some()).unwrap();
+    let rows: Vec<(u32, bool)> = (first..480).map_while(shown).collect();
+    assert!((first + rows.len() as u32..480).all(|y| shown(y).is_none()));
+    (first, rows)
+}
+
+/// Every texel of `range` as many times as `times` says, in order.
+fn repeated(range: impl Iterator<Item = u32>, times: usize) -> Vec<u32> {
+    range.flat_map(|texel| [texel].repeat(times)).collect()
+}
+
+/// The table of measured columns of the design: source rectangles that leave a bitmap of
+/// 24 by 16 on each side, with the columns and rows drawn and the texels they show.
+#[test]
+fn cut_source_rectangles_show_the_columns_of_the_table() {
+    // The first column drawn and the texel of every column, in a row that is drawn.
+    let across = |rect: [i32; 4], zoom, mirror, x: i32, row| {
+        let mut case = upright(
+            Some(Rect::new(rect[0], rect[1], rect[2], rect[3])),
+            zoom,
+            mirror,
+            0,
+        );
+        case.x = x;
+        columns(&draw(&case), row)
+    };
+    // The first row drawn and the texel of every row, in a column that is drawn.
+    let down = |rect: [i32; 4], zoom, column| {
+        let case = upright(
+            Some(Rect::new(rect[0], rect[1], rect[2], rect[3])),
+            zoom,
+            false,
+            0,
+        );
+        let (first, rows) = texel_rows(&draw(&case), column);
+        (first, rows.into_iter().map(|row| row.0).collect::<Vec<_>>())
+    };
+    let z2 = (2.0, 2.0);
+    let all_but_last = |texels: Vec<u32>| texels[..texels.len() - 1].to_vec();
+
+    assert_eq!(
+        across([-6, 0, 24, 16], z2, false, 10, 20),
+        (22, repeated(0..18, 2))
+    );
+    let (first, texels) = across([6, 0, 24, 16], z2, false, 10, 20);
+    assert_eq!((first, texels.len()), (10, 35), "the last column is lost");
+    assert_eq!(texels, all_but_last(repeated(6..24, 2)));
+    let (first, texels) = across([-6, -4, 36, 24], z2, false, 10, 30);
+    assert_eq!((first, first + texels.len() as u32 - 1), (22, 68));
+    assert_eq!(texels, all_but_last(repeated(0..24, 2)));
+    let (first, rows) = down([-6, -4, 36, 24], z2, 30);
+    assert_eq!((first, first + rows.len() as u32 - 1), (18, 48));
+    assert_eq!(rows, all_but_last(repeated(0..16, 2)));
+    assert_eq!(
+        across([20, 0, 12, 8], z2, false, 10, 12),
+        (10, vec![20, 20, 21, 21, 22, 22, 23])
+    );
+    assert_eq!(
+        across([-6, 0, 12, 16], z2, false, 10, 20),
+        (22, repeated(0..6, 2))
+    );
+    let (first, rows) = down([0, 4, 24, 16], z2, 20);
+    assert_eq!((first, first + rows.len() as u32 - 1), (10, 32));
+    assert_eq!(rows, all_but_last(repeated(4..16, 2)));
+    // One axis at zoom 1 is cut as the stretched one is.
+    assert_eq!(
+        across([6, 0, 24, 16], (1.0, 2.0), false, 10, 20),
+        (10, (6..23).collect())
+    );
+    assert_eq!(
+        down([0, 4, 24, 16], (2.0, 1.0), 20),
+        (10, (4..15).collect())
+    );
+    // Not stretched at all, nothing is lost.
+    assert_eq!(
+        across([6, 0, 24, 16], (1.0, 1.0), false, 10, 20),
+        (10, (6..24).collect())
+    );
+
+    // Mirrored, the rectangle is mirrored before it is cut.
+    let (first, texels) = across([-6, 0, 24, 16], z2, true, 30, 20);
+    assert_eq!((first, texels.len()), (30, 35));
+    assert_eq!(texels, all_but_last(repeated((0..18).rev(), 2)));
+    assert_eq!(
+        across([6, 0, 24, 16], z2, true, 30, 20),
+        (42, repeated((6..24).rev(), 2))
+    );
+    let (first, texels) = across([-6, -4, 36, 24], z2, true, 30, 30);
+    assert_eq!((first, first + texels.len() as u32 - 1), (42, 88));
+    assert_eq!(texels, all_but_last(repeated((0..24).rev(), 2)));
+    assert_eq!(
+        across([-6, 0, 12, 16], (2.5, 3.0), true, 27, 20),
+        (27, vec![5, 5, 5, 4, 4, 4, 3, 3, 2, 2, 2, 1, 1, 0])
+    );
+}
+
+/// The table of item 3b of the design: the texel row of every screen row of a sprite of
+/// 16 rows, top to bottom, the faint ones marked.
+#[test]
+fn bush_depths_of_zoomed_sprites_show_the_rows_of_the_table() {
+    let measured = |zoom_y: f64, depth: i32| {
+        let frame = draw(&upright(None, (2.0, zoom_y), false, depth));
+        let (first, rows) = texel_rows(&frame, 30);
+        assert_eq!(first, 20);
+        rows
+    };
+    // The rows as the table writes them: a texel row, faint with a star.
+    let table = |text: &str| -> Vec<(u32, bool)> {
+        let row = |token: &str| {
+            (
+                token.trim_end_matches('*').parse().unwrap(),
+                token.ends_with('*'),
+            )
+        };
+        text.split_whitespace().map(row).collect()
+    };
+    let full = |range: std::ops::Range<u32>, times: usize| -> Vec<(u32, bool)> {
+        repeated(range, times)
+            .into_iter()
+            .map(|row| (row, false))
+            .collect()
+    };
+
+    // 16 source rows into 31, and no faint row.
+    let rows = measured(2.0, 1);
+    assert_eq!(rows.len(), 31);
+    assert_eq!(rows, [full(0..15, 2), table("15")].concat());
+    let rows = measured(2.0, 3);
+    assert_eq!(rows.len(), 32);
+    assert_eq!(rows, [full(0..14, 2), table("14 15* 15* 15*")].concat());
+    let rows = measured(2.0, 5);
+    assert_eq!(rows.len(), 32);
+    assert_eq!(
+        rows,
+        [full(0..13, 2), table("13 14* 14* 14* 15* 15*")].concat()
+    );
+    let rows = measured(3.0, 2);
+    assert_eq!(rows.len(), 46);
+    assert_eq!(
+        rows,
+        [full(0..8, 3), table("8 8"), full(9..15, 3), table("15 15")].concat()
+    );
+    let rows = measured(3.0, 4);
+    assert_eq!(rows.len(), 48);
+    assert_eq!(
+        rows,
+        [full(0..14, 3), table("14 14 15* 15* 15* 15*")].concat()
+    );
+    assert_eq!(
+        measured(1.5, 3),
+        table("0 0 1 1 2 3 3 4 5 5 6 7 7 8 9 9 10 11 11 12 13 14* 14* 15*")
+    );
+    assert_eq!(measured(0.5, 3), table("0 2 4 6 8 10* 12* 14*"));
+    assert_eq!(
+        measured(2.5, 6),
+        table(
+            "0 0 0 1 1 2 2 2 3 3 4 4 4 5 5 6 6 6 7 7 8 8 9 9 9 10 10 11 11 11 12 12 13 13 \
+             14* 14* 14* 14* 15* 15*"
+        )
+    );
+}

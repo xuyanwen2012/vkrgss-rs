@@ -8,8 +8,8 @@
 
 ## 2. Unrotated sprites (`vkxp-core`)
 
-- [ ] 2.1 Draw a zoomed sprite with a bush depth as two stretches. Verify: scenario "Zoomed bush rows" and every row of the table of item 3b in `design.md` as a test; `cargo test -p vkxp-core --locked` passes.
-- [ ] 2.2 Draw a stretched sprite whose source rectangle leaves its bitmap by the rule of item 5. Verify: scenario "Cut source rectangles" with every row of the table of measured columns in `design.md` as a test; `cargo test -p vkxp-core --locked` passes; `grep -n PLACEHOLDER crates/vkxp-core/src/turned.rs crates/vkxp-core/src/extract.rs crates/vkxp-core/src/extract/tests.rs` prints nothing for the notes this change settles.
+- [x] 2.1 Draw a zoomed sprite with a bush depth as two stretches. Verify: scenario "Zoomed bush rows" and every row of the table of item 3b in `design.md` as a test; `cargo test -p vkxp-core --locked` passes.
+- [x] 2.2 Draw a stretched sprite whose source rectangle leaves its bitmap by the rule of item 5. Verify: scenario "Cut source rectangles" with every row of the table of measured columns in `design.md` as a test; `cargo test -p vkxp-core --locked` passes; `grep -n PLACEHOLDER crates/vkxp-core/src/turned.rs crates/vkxp-core/src/extract.rs crates/vkxp-core/src/extract/tests.rs` prints nothing for the notes this change settles.
 
 ## 3. Integration check
 

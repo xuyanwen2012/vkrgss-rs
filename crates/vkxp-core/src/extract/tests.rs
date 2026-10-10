@@ -565,7 +565,8 @@ fn a_viewport_moves_an_unrotated_sprite_by_whole_pixels() {
 }
 
 /// A zoomed sprite whose source rectangle reaches outside its bitmap keeps its place and
-/// its size, and shows only texels of the bitmap.
+/// shows only texels of the bitmap, in the columns the original runtime draws of a cut
+/// rectangle: from column `a * dw / w` on, up to column `(b * dw - 1) / w`.
 #[test]
 fn a_zoomed_sprite_keeps_its_place_when_its_source_rectangle_is_cut() {
     for mirror in [false, true] {
@@ -578,19 +579,19 @@ fn a_zoomed_sprite_keeps_its_place_when_its_source_rectangle_is_cut() {
         sprite.zoom_x = 3.0;
         sprite.mirror = mirror;
         let pixels = drawn(&stage.frame());
-        // 24 pixels for 8 columns, a step of just under a third: column 2, the first of
-        // the bitmap, begins at the 8th pixel, and column 6 at the 20th.
+        // 24 pixels for 8 columns: column 2, the first of the bitmap, begins at the 6th
+        // pixel, 2 * 24 / 8, and the last pixel drawn is the 16th, (6 * 24 - 1) / 8 - 1.
         let row: Vec<(u32, Rgba)> = pixels
             .iter()
             .filter(|pixel| pixel.1 == 3)
             .map(|pixel| (pixel.0, pixel.2))
             .collect();
         let columns: Vec<u32> = row.iter().map(|pixel| pixel.0).collect();
-        assert_eq!(columns, (17..29).collect::<Vec<_>>(), "mirror {mirror}");
+        assert_eq!(columns, (16..27).collect::<Vec<_>>(), "mirror {mirror}");
         let (first, last) = if mirror { (3, 0) } else { (0, 3) };
         assert_eq!(row[0].1, cell(first, 0));
-        assert_eq!(row[11].1, cell(last, 0));
-        assert_eq!(pixels.len(), 24);
+        assert_eq!(row[10].1, cell(last, 0));
+        assert_eq!(pixels.len(), 22);
     }
 }
 
@@ -825,6 +826,44 @@ fn the_bitmap_of_a_turned_sprite_is_kept_while_nothing_changes() {
     assert_eq!(stage.bitmaps.len(), 2);
     stage.scene.dispose_sprite(id);
     stage.scene.extract(&mut stage.bitmaps);
+    assert_eq!(stage.bitmaps.len(), 1);
+}
+
+/// A stretched sprite whose source rectangle leaves its bitmap is drawn from a bitmap of
+/// its own, which is kept while nothing changes and given back when it is needed no more.
+#[test]
+fn the_bitmap_of_a_cut_sprite_is_kept_while_nothing_changes() {
+    let mut stage = Stage::sized(64, 64);
+    let bitmap = grid(&mut stage, 6, 4);
+    let id = sprite(&mut stage, bitmap, 30, 30);
+    let sprite = stage.scene.sprite_mut(id).unwrap();
+    sprite.src_rect = Rect::new(-2, 0, 6, 4);
+    stage.scene.extract(&mut stage.bitmaps);
+    assert_eq!(stage.bitmaps.len(), 1, "not stretched");
+
+    stage.scene.sprite_mut(id).unwrap().zoom_x = 2.0;
+    assert!(!stage.scene.extract(&mut stage.bitmaps).bitmaps.is_empty());
+    assert_eq!(stage.bitmaps.len(), 2);
+    // Unchanged, and moved: nothing is uploaded.
+    assert!(stage.scene.extract(&mut stage.bitmaps).bitmaps.is_empty());
+    let sprite = stage.scene.sprite_mut(id).unwrap();
+    (sprite.x, sprite.y) = (20, 25);
+    assert!(stage.scene.extract(&mut stage.bitmaps).bitmaps.is_empty());
+    // The faint rows are a stretch of their own.
+    stage.scene.sprite_mut(id).unwrap().bush_depth = 2;
+    assert!(!stage.scene.extract(&mut stage.bitmaps).bitmaps.is_empty());
+    assert_eq!(stage.bitmaps.len(), 2);
+
+    // Turned, the sprite is not drawn, and inside its bitmap it is drawn from that.
+    stage.scene.sprite_mut(id).unwrap().angle = 30.0;
+    assert!(stage.scene.extract(&mut stage.bitmaps).ops.is_empty());
+    assert_eq!(stage.bitmaps.len(), 1);
+    let sprite = stage.scene.sprite_mut(id).unwrap();
+    sprite.angle = 0.0;
+    stage.scene.extract(&mut stage.bitmaps);
+    assert_eq!(stage.bitmaps.len(), 2);
+    stage.scene.sprite_mut(id).unwrap().src_rect = Rect::new(0, 0, 6, 4);
+    assert_eq!(stage.scene.extract(&mut stage.bitmaps).ops.len(), 2);
     assert_eq!(stage.bitmaps.len(), 1);
 }
 

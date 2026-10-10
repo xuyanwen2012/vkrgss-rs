@@ -84,6 +84,69 @@ pub(crate) fn rows(clip: vkxp_proto::Rect, top: i64, bottom: i64) -> vkxp_proto:
     }
 }
 
+/// A run of rows of a sprite that is not turned: `length` source rows from row `start` of
+/// the bitmap on, stretched into `pixels` screen rows from row `first` of the sprite on.
+/// Neither is 0.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct Rows {
+    pub(crate) start: i64,
+    pub(crate) length: u32,
+    pub(crate) first: u32,
+    pub(crate) pixels: u32,
+}
+
+/// The rows of a sprite that is not turned, as its bush depth splits them.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct Bush {
+    /// The number of screen rows drawn with half the opacity.
+    pub(crate) faint: u32,
+    /// The rows above the faint ones; all rows when none is faint.
+    pub(crate) upper: Option<Rows>,
+    /// The faint rows, when they show anything.
+    pub(crate) lower: Option<Rows>,
+}
+
+impl Bush {
+    /// Splits the `h` rows of `src`, drawn `dh` screen rows high, by the bush depth, as the
+    /// original runtime does:
+    ///
+    /// ```text
+    /// bd = min(depth, dh)        the faint screen rows; none for a depth of 0 or less
+    /// sb = bd * h / dh           the source rows they show
+    /// upper: source rows [0, h - sb) stretched into screen rows [0, dh - bd)
+    /// lower: source rows [h - sb, h) stretched into screen rows [dh - bd, dh)
+    /// ```
+    ///
+    /// each stretched on its own. With `sb` of 0 the faint rows are not drawn at all.
+    ///
+    /// Provenance: oracle measurement 2026-10-10, RGSS103J, probes `bushzoom`, `geom2` and
+    /// `bush` (36 zoomed sprites, without a differing pixel; opaque texels at opacity 255
+    /// only).
+    pub(crate) fn new(src: Rect, dh: u32, depth: i32) -> Bush {
+        let h = src.height.max(0).unsigned_abs();
+        let faint = depth.max(0).unsigned_abs().min(dh);
+        // At most `h`.
+        let shown = if dh == 0 {
+            0
+        } else {
+            (u64::from(faint) * u64::from(h) / u64::from(dh)) as u32
+        };
+        let run = |start: u32, length: u32, first: u32, pixels: u32| {
+            (length > 0 && pixels > 0).then(|| Rows {
+                start: i64::from(src.y) + i64::from(start),
+                length,
+                first,
+                pixels,
+            })
+        };
+        Bush {
+            faint,
+            upper: run(0, h - shown, 0, dh - faint),
+            lower: run(h - shown, shown, dh - faint, faint),
+        }
+    }
+}
+
 /// One axis of a stretch whose source is cut: `src` (start and length) is stretched into
 /// `dest`, and only `inside`, a part of `src`, may be drawn. The pixels of `dest` that show a
 /// texel of `inside`, as start and length, or `None` when none does. `mirror` counts the
@@ -120,6 +183,21 @@ fn cut_span(
     let start = i32::try_from(i64::from(dest.0) + first as i64).ok()?;
     // At most the length of `dest`.
     (first < end).then_some((start, (end - first) as u32))
+}
+
+impl Sprite {
+    /// The pixels a sprite that is not turned covers inside `level`, before the level clips
+    /// it, or `None` when it covers none or begins beyond the coordinates of the protocol.
+    pub(crate) fn upright_dest(&self, level: &Level) -> Option<vkxp_proto::Rect> {
+        let src = self.src_rect;
+        let width = geometry::stretch_length(src.width, self.zoom_x)?;
+        let height = geometry::stretch_length(src.height, self.zoom_y)?;
+        let x = geometry::stretch_start(self.x, self.ox, self.zoom_x)?;
+        let y = geometry::stretch_start(self.y, self.oy, self.zoom_y)?;
+        let x = i32::try_from(i64::from(x) + level.dx).ok()?;
+        let y = i32::try_from(i64::from(y) + level.dy).ok()?;
+        Some(vkxp_proto::Rect::new(x, y, width, height))
+    }
 }
 
 /// The blend mode a blend type selects: 1 adds, 2 subtracts, every other value blends
@@ -239,11 +317,10 @@ impl Assembly<'_> {
     /// show inside `clip`.
     ///
     /// The protocol wants the source rectangle inside the bitmap, so the part of `src` outside
-    /// is cut off and `dest` with it, down to the pixels that show what is left.
-    ///
-    /// PLACEHOLDER: the stretch of a cut rectangle starts anew at its corner, so a zoomed
-    /// sprite whose source rectangle reaches outside its bitmap may show texels one off. What
-    /// the original runtime draws there is not measured.
+    /// is cut off and `dest` with it, down to the pixels that show what is left. The stretch
+    /// of what is left starts anew at its corner, which is not what the original runtime
+    /// draws of a sprite: a stretched sprite with such a rectangle does not come here but is
+    /// drawn from a picture of its own ([`Assembly::cut_sprite`]).
     pub(crate) fn stretched(
         &mut self,
         bitmap: BitmapId,
@@ -319,40 +396,41 @@ impl Assembly<'_> {
 
     /// A sprite that is not turned: its source rectangle stretched into a rectangle of whole
     /// pixels, as measured on the original runtime. The lowest rows of that rectangle, as
-    /// many as the bush depth whatever the zoom, are drawn with half the opacity.
+    /// many as the bush depth whatever the zoom, are drawn with half the opacity, and are a
+    /// stretch of their own ([`Bush::new`]).
     fn upright_sprite(&mut self, sprite: &Sprite, bitmap: BitmapId, level: &Level, look: Look) {
+        let Ok(bounds) = self.bitmaps.rect(bitmap) else {
+            return;
+        };
+        if sprite.is_cut(bounds) {
+            self.cut_sprite(sprite, level, look);
+            return;
+        }
+        let Some(dest) = sprite.upright_dest(level) else {
+            return;
+        };
         let src = sprite.src_rect;
-        let (Some(width), Some(height)) = (
-            geometry::stretch_length(src.width, sprite.zoom_x),
-            geometry::stretch_length(src.height, sprite.zoom_y),
-        ) else {
-            return;
-        };
-        let (Some(x), Some(y)) = (
-            geometry::stretch_start(sprite.x, sprite.ox, sprite.zoom_x),
-            geometry::stretch_start(sprite.y, sprite.oy, sprite.zoom_y),
-        ) else {
-            return;
-        };
-        // A rectangle that begins beyond the coordinates of the protocol is not drawn.
-        let (Ok(x), Ok(y)) = (
-            i32::try_from(i64::from(x) + level.dx),
-            i32::try_from(i64::from(y) + level.dy),
-        ) else {
-            return;
-        };
-        let dest = vkxp_proto::Rect::new(x, y, width, height);
-        let bush = sprite.bush_depth.max(0).unsigned_abs().min(height);
-        // Where the faint rows begin.
-        let split = i64::from(y) + i64::from(height - bush);
+        let bush = Bush::new(src, dest.height, sprite.bush_depth);
         let faint = Look {
             opacity: look.opacity >> 1,
             ..look
         };
-        let above = rows(level.clip, i64::MIN, split);
-        let below = rows(level.clip, split, i64::MAX);
-        self.stretched(bitmap, src, dest, sprite.mirror, above, look);
-        self.stretched(bitmap, src, dest, sprite.mirror, below, faint);
+        for (rows, look) in [(bush.upper, look), (bush.lower, faint)] {
+            let Some(rows) = rows else {
+                continue;
+            };
+            // Rows that begin beyond the coordinates of a rectangle are not drawn.
+            let (Ok(top), Ok(y), Ok(height)) = (
+                i32::try_from(rows.start),
+                i32::try_from(i64::from(dest.y) + i64::from(rows.first)),
+                i32::try_from(rows.length),
+            ) else {
+                continue;
+            };
+            let part = Rect::new(src.x, top, src.width, height);
+            let into = vkxp_proto::Rect::new(dest.x, y, dest.width, rows.pixels);
+            self.stretched(bitmap, part, into, sprite.mirror, level.clip, look);
+        }
     }
 
     /// Applies the viewport's tone and colour to everything drawn so far inside `clip`.
