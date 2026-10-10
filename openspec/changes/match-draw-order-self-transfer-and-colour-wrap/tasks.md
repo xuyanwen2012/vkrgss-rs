@@ -6,7 +6,7 @@
 
 ## 2. Transfers within one bitmap (`vkxp-core`)
 
-- [ ] 2.1 Make a transfer with the same source and destination read the live pixels. Verify: the scenarios of `specs/core-bitmap/spec.md`; the measured cases of `ph-scene-selfblt-samples.txt`, copied into the crate's test data with the calls of the probe written as a test, all equal; `cargo test -p vkxp-core --locked` passes.
+- [x] 2.1 Make a transfer with the same source and destination read the live pixels. Verify: the scenarios of `specs/core-bitmap/spec.md`; the measured cases of `ph-scene-selfblt-samples.txt`, copied into the crate's test data with the calls of the probe written as a test, all equal; `cargo test -p vkxp-core --locked` passes.
 
 ## 3. Colour conversion and notes (`vkxp-core`)
 

@@ -190,14 +190,15 @@ fn transfer_axis(
         .collect()
 }
 
-/// Blends source pixels onto `dst` at `opacity`. `columns` and `rows` come from
-/// [`transfer_axis`]; `source` is called with indices into them.
+/// Blends source pixels onto `dst` at `opacity`, row by row from the top and from left to
+/// right within a row. `columns` and `rows` come from [`transfer_axis`]; `source` is called
+/// with `dst` as it is at that moment and with indices into them.
 fn blend_into(
     dst: &mut Bitmap,
     columns: &[(usize, usize)],
     rows: &[(usize, usize)],
     opacity: u8,
-    source: impl Fn(usize, usize) -> Rgba,
+    source: impl Fn(&Bitmap, usize, usize) -> Rgba,
 ) {
     let (Some(first_column), Some(last_column)) = (columns.first(), columns.last()) else {
         return;
@@ -207,7 +208,7 @@ fn blend_into(
     };
     for (row, &(y, _)) in rows.iter().enumerate() {
         for (column, &(x, _)) in columns.iter().enumerate() {
-            let blended = blend_normal(dst.pixel(x, y), source(column, row), opacity);
+            let blended = blend_normal(dst.pixel(x, y), source(dst, column, row), opacity);
             dst.put(x, y, blended);
         }
     }
@@ -468,11 +469,15 @@ impl Bitmaps {
     /// Only the part of `src_rect` inside the source bitmap is drawn, at the offset it has
     /// within the rectangle, and only where it lands inside the destination. A negative width
     /// mirrors: column `i` takes source column `src_rect.x - 1 - i`; a negative height
-    /// likewise. `src` may be `dst`: the transfer then reads the pixels as they were before it
-    /// started.
+    /// likewise.
     ///
-    /// PLACEHOLDER: the result of an overlapping transfer within one bitmap is not yet checked
-    /// against the original runtime.
+    /// `src` may be `dst`: the transfer then works in place. It writes the rows from top to
+    /// bottom and the pixels of a row from left to right, and reads each source pixel as the
+    /// bitmap is at that moment, pixels this transfer has already written included. A shift to
+    /// the right or downwards therefore repeats the first columns or rows.
+    ///
+    /// Provenance: oracle measurement, RGSS103J, self transfer probe
+    /// (`ph-scene-selfblt-probe.rb`: 197 cases of `blt` and `stretch_blt`, every pixel equal).
     pub fn blt(
         &mut self,
         dst: BitmapId,
@@ -556,14 +561,10 @@ impl Bitmaps {
         }
 
         if dst == src {
-            // Read everything from a copy taken before the first pixel is written.
+            // In place: every source pixel is read when its turn comes.
             let bitmap = self.get_mut(dst)?;
-            let mut copy = Vec::with_capacity(columns.len() * rows.len());
-            for &(_, y) in &rows {
-                copy.extend(columns.iter().map(|&(_, x)| bitmap.pixel(x, y)));
-            }
-            blend_into(bitmap, &columns, &rows, opacity, |column, row| {
-                copy[row * columns.len() + column]
+            blend_into(bitmap, &columns, &rows, opacity, |bitmap, column, row| {
+                bitmap.pixel(columns[column].1, rows[row].1)
             });
             return Ok(());
         }
@@ -576,7 +577,7 @@ impl Bitmaps {
         else {
             return Err(BitmapError::Disposed);
         };
-        blend_into(dst_bitmap, &columns, &rows, opacity, |column, row| {
+        blend_into(dst_bitmap, &columns, &rows, opacity, |_, column, row| {
             src_bitmap.pixel(columns[column].1, rows[row].1)
         });
         Ok(())

@@ -3,14 +3,16 @@ use proptest::prelude::*;
 use super::testing::*;
 use super::*;
 
-/// A model of the block transfer, one pixel at a time, reading from `src` as given.
+/// A model of the block transfer, one pixel at a time from the top row down and from left to
+/// right, reading from `src` as given, or, without one, from `dst` as it is at that moment: a
+/// transfer within one bitmap.
 #[allow(clippy::too_many_arguments)]
 fn naive_blt(
     dst: &mut [u8],
     (dst_width, dst_height): (u32, u32),
     x: i32,
     y: i32,
-    src: &[u8],
+    src: Option<&[u8]>,
     (src_width, src_height): (u32, u32),
     rect: Rect,
     opacity: u8,
@@ -34,7 +36,7 @@ fn naive_blt(
             if !(in_src && in_dst) {
                 continue;
             }
-            let source = at(src, src_width, sx as u32, sy as u32);
+            let source = at(src.unwrap_or(dst), src_width, sx as u32, sy as u32);
             let offset = ((dy as u32 * dst_width + dx as u32) * 4) as usize;
             let target: Rgba = dst[offset..offset + 4].try_into().unwrap();
             dst[offset..offset + 4].copy_from_slice(&blend_normal(target, source, opacity));
@@ -572,7 +574,7 @@ fn transfer_is_clipped_to_the_destination() {
         (2, 2),
         -2,
         -1,
-        &source,
+        Some(&source),
         (3, 3),
         Rect::new(0, 0, 3, 3),
         255,
@@ -635,7 +637,7 @@ fn transfer_with_a_negative_size_mirrors() {
 }
 
 #[test]
-fn transfer_within_one_bitmap_reads_an_unchanged_copy() {
+fn transfer_within_one_bitmap_reads_the_live_pixels() {
     let original = pattern(4, 4, 31);
     for (x, y) in [(1, 1), (-1, -1), (1, 0), (0, 1), (2, -1), (0, 0)] {
         for opacity in [255, 128] {
@@ -646,16 +648,7 @@ fn transfer_within_one_bitmap_reads_an_unchanged_copy() {
             let rect = Rect::new(0, 0, 3, 3);
             bitmaps.blt(id, x, y, id, rect, opacity).unwrap();
             let mut expected = original.clone();
-            naive_blt(
-                &mut expected,
-                (4, 4),
-                x,
-                y,
-                &original,
-                (4, 4),
-                rect,
-                opacity,
-            );
+            naive_blt(&mut expected, (4, 4), x, y, None, (4, 4), rect, opacity);
             assert_eq!(bitmaps.rgba(id).unwrap(), expected, "to ({x}, {y})");
         }
     }
@@ -1050,7 +1043,7 @@ proptest! {
         let size = (dst_width, dst_height);
         if same {
             bitmaps.blt(dst, x, y, dst, rect, opacity).unwrap();
-            naive_blt(&mut expected, size, x, y, &dst_pixels, size, rect, opacity);
+            naive_blt(&mut expected, size, x, y, None, size, rect, opacity);
         } else {
             let src_pixels = pattern(src_width, src_height, src_seed);
             let src = bitmaps
@@ -1058,9 +1051,148 @@ proptest! {
                 .unwrap();
             bitmaps.blt(dst, x, y, src, rect, opacity).unwrap();
             let src_size = (src_width, src_height);
-            naive_blt(&mut expected, size, x, y, &src_pixels, src_size, rect, opacity);
+            let read = Some(&src_pixels[..]);
+            naive_blt(&mut expected, size, x, y, read, src_size, rect, opacity);
             prop_assert_eq!(bitmaps.rgba(src).unwrap(), &src_pixels[..]);
         }
         prop_assert_eq!(bitmaps.rgba(dst).unwrap(), &expected[..]);
     }
+}
+
+/// A bitmap one pixel high with the pixels `a` to `f`, and those pixels.
+fn row_a_to_f(bitmaps: &mut Bitmaps) -> (BitmapId, [Rgba; 6]) {
+    let pixels = [10, 20, 30, 40, 50, 60].map(|v| [v, v + 1, v + 2, 255]);
+    let rgba = pixels.as_flattened().to_vec();
+    let id = bitmaps.create_from_rgba(6, 1, rgba, &defaults()).unwrap();
+    (id, pixels)
+}
+
+#[test]
+fn a_transfer_within_one_bitmap_reads_what_it_has_written() {
+    let mut bitmaps = Bitmaps::new();
+    let (id, [a, b, c, d, e, f]) = row_a_to_f(&mut bitmaps);
+    bitmaps
+        .blt(id, 1, 0, id, Rect::new(0, 0, 4, 1), 255)
+        .unwrap();
+    let expected = [a, a, a, a, a, f];
+    assert_eq!(bitmaps.rgba(id).unwrap(), expected.as_flattened());
+
+    // To the left every source pixel is read before it is written.
+    let (id, _) = row_a_to_f(&mut bitmaps);
+    bitmaps
+        .blt(id, 0, 0, id, Rect::new(1, 0, 4, 1), 255)
+        .unwrap();
+    let expected = [b, c, d, e, e, f];
+    assert_eq!(bitmaps.rgba(id).unwrap(), expected.as_flattened());
+
+    // A shift by 2 repeats the first two pixels.
+    let (id, _) = row_a_to_f(&mut bitmaps);
+    bitmaps
+        .blt(id, 2, 0, id, Rect::new(0, 0, 4, 1), 255)
+        .unwrap();
+    let expected = [a, b, a, b, a, b];
+    assert_eq!(bitmaps.rgba(id).unwrap(), expected.as_flattened());
+}
+
+#[test]
+fn a_transfer_within_one_bitmap_downwards_repeats_the_first_row() {
+    let mut bitmaps = Bitmaps::new();
+    let rows = [10, 20, 30, 40].map(|v| [v, v + 1, v + 2, 255]);
+    let rgba = rows.as_flattened().to_vec();
+    let id = bitmaps.create_from_rgba(1, 4, rgba, &defaults()).unwrap();
+    bitmaps
+        .blt(id, 0, 1, id, Rect::new(0, 0, 1, 3), 255)
+        .unwrap();
+    assert_eq!(bitmaps.rgba(id).unwrap(), [rows[0]; 4].as_flattened());
+
+    let rgba = rows.as_flattened().to_vec();
+    let id = bitmaps.create_from_rgba(1, 4, rgba, &defaults()).unwrap();
+    bitmaps
+        .blt(id, 0, 0, id, Rect::new(0, 1, 1, 3), 255)
+        .unwrap();
+    let expected = [rows[1], rows[2], rows[3], rows[3]];
+    assert_eq!(bitmaps.rgba(id).unwrap(), expected.as_flattened());
+}
+
+/// The base bitmap of the self transfer probe: 12 by 12 pixels, opaque or with the alpha
+/// pattern.
+fn selfblt_base(bitmaps: &mut Bitmaps, alpha: bool) -> BitmapId {
+    let mut rgba = Vec::new();
+    for y in 0..12u32 {
+        for x in 0..12u32 {
+            let a = if alpha {
+                40 + (x * 7 + y * 13) % 200
+            } else {
+                255
+            };
+            rgba.extend([x * 20 + 5, y * 20 + 5, x + y * 12, a].map(|v| v as u8));
+        }
+    }
+    bitmaps.create_from_rgba(12, 12, rgba, &defaults()).unwrap()
+}
+
+/// Carries out the call of the self transfer probe that the name line of a case states and
+/// returns the bitmap; `None` for a name the probe does not write.
+fn selfblt_case(bitmaps: &mut Bitmaps, name: &str) -> Option<BitmapId> {
+    let (name, shift) = match name.split_once(" d=") {
+        Some((name, shift)) => {
+            let (dx, dy) = shift.split_once(',')?;
+            (name, (dx.parse().ok()?, dy.parse().ok()?))
+        }
+        None => (name, (0, 0)),
+    };
+    let (dx, dy): (i32, i32) = shift;
+    let mut words: Vec<&str> = name.split(' ').collect();
+    let last = words.pop()?;
+    if words == ["base"] {
+        return Some(selfblt_base(bitmaps, last == "alpha"));
+    }
+    let opacity: u8 = last.parse().ok()?;
+    let b = selfblt_base(bitmaps, words.pop()? == "alpha");
+    match words.join(" ").as_str() {
+        "blt" => bitmaps.blt(b, 3 + dx, 3 + dy, b, Rect::new(3, 3, 6, 6), opacity),
+        "blt whole" => bitmaps.blt(b, dx, dy, b, Rect::new(0, 0, 12, 12), opacity),
+        "blt mirror" => bitmaps.blt(b, 3, 3, b, Rect::new(9, 3, -6, 6), opacity),
+        "stretch same" => {
+            let dst = Rect::new(3 + dx, 3 + dy, 6, 6);
+            bitmaps.stretch_blt(b, dst, b, Rect::new(3, 3, 6, 6), opacity)
+        }
+        "stretch 2x" => {
+            let dst = Rect::new(2 + dx, 2 + dy, 8, 8);
+            bitmaps.stretch_blt(b, dst, b, Rect::new(4, 4, 4, 4), opacity)
+        }
+        "stretch half" => {
+            let dst = Rect::new(4 + dx, 4 + dy, 4, 4);
+            bitmaps.stretch_blt(b, dst, b, Rect::new(2, 2, 8, 8), opacity)
+        }
+        _ => return None,
+    }
+    .unwrap();
+    Some(b)
+}
+
+/// Provenance: oracle measurement, RGSS103J, self transfer probe: the file the probe wrote
+/// in the original runtime, with the calls of the probe.
+#[test]
+fn transfers_within_one_bitmap_give_the_measured_pixels() {
+    let samples = include_str!("../../tests/data/selfblt-samples.txt");
+    let lines: Vec<&str> = samples
+        .lines()
+        .filter(|line| !line.starts_with('#') && !line.trim().is_empty())
+        .collect();
+    let mut bitmaps = Bitmaps::new();
+    let mut transfers = 0;
+    for case in lines.chunks(13) {
+        let name = case[0];
+        let measured: Vec<u8> = case[1..]
+            .iter()
+            .flat_map(|row| row.split_whitespace())
+            .flat_map(|pixel| u32::from_str_radix(pixel, 16).unwrap().to_be_bytes())
+            .collect();
+        assert_eq!(measured.len(), 12 * 12 * 4, "{name}");
+        let id = selfblt_case(&mut bitmaps, name).unwrap_or_else(|| panic!("{name}"));
+        assert_eq!(bitmaps.rgba(id).unwrap(), measured, "{name}");
+        transfers += usize::from(!name.starts_with("base"));
+    }
+    assert_eq!(transfers, 197);
 }
