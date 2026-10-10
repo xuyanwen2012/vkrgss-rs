@@ -5,9 +5,10 @@
 //! Everything the guest (script thread) and the host (window, GPU, audio) exchange is defined
 //! here. The types are self-contained values: no handles, no references, no floating point.
 //! Inside one process they move through channels as they are; [`codec`] gives them a versioned
-//! binary form for recordings, test fixtures and a later process split. [`link`] is the pair of
-//! endpoints the two threads hold. [`tiles`] is the numbering of the tiles of a tilemap, which
-//! the guest and every backend read alike.
+//! binary form for recordings and test fixtures, and [`framing`] puts single messages of that
+//! form on a byte stream. [`link`] is the pair of endpoints the two sides hold, with a guest
+//! end over a Unix stream socket for a guest in a process of its own. [`tiles`] is the
+//! numbering of the tiles of a tilemap, which the guest and every backend read alike.
 //!
 //! This is protocol version 7. Over version 1 a [`FramePacket`] carries the guest's
 //! [`FrameRate`], a [`Quad`] carries a tone and a colour for its own texels, the messages
@@ -27,6 +28,7 @@
 #![forbid(unsafe_code)]
 
 pub mod codec;
+pub mod framing;
 pub mod link;
 pub mod recording;
 pub mod tiles;

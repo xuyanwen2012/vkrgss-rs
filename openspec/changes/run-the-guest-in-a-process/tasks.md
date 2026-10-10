@@ -2,8 +2,8 @@
 
 ## 1. Framing and stream transport (`vkxp-proto`)
 
-- [ ] 1.1 Add the framing module (write and read one message on `Write` / `Read`). Verify: the scenarios of "Stream framing" in `specs/guest-host-protocol/spec.md` as tests; `cargo test -p vkxp-proto --locked` passes.
-- [ ] 1.2 Give `GuestEnd` the Unix stream transport. Verify: the scenarios of "Guest end over a stream socket" as tests on a socket pair; `cargo test -p vkxp-proto --locked` passes.
+- [x] 1.1 Add the framing module (write and read one message on `Write` / `Read`). Verify: the scenarios of "Stream framing" in `specs/guest-host-protocol/spec.md` as tests; `cargo test -p vkxp-proto --locked` passes.
+- [x] 1.2 Give `GuestEnd` the Unix stream transport. Verify: the scenarios of "Guest end over a stream socket" as tests on a socket pair; `cargo test -p vkxp-proto --locked` passes.
 
 ## 2. Guest process (`vkxp`)
 
