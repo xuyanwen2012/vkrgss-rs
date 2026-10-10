@@ -2,7 +2,7 @@
 
 ## 1. Indices and include (`vkxp-vk`)
 
-- [ ] 1.1 Name the word indices, write the encoder through them, and move the struct declarations into an include. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk --locked` passes with no frame changed.
+- [x] 1.1 Name the word indices, write the encoder through them, and move the struct declarations into an include. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk --locked` passes with no frame changed.
 
 ## 2. Layout test (`vkxp-vk`)
 

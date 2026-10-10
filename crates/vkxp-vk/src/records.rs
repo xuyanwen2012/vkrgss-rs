@@ -15,12 +15,59 @@ use crate::tables::TableStore;
 
 pub(crate) use vkxp_proto::MAX_LOGICAL_DIMENSION;
 
-/// Number of 32-bit words in one record; `OpRecord` in `shaders/compose.comp` has this layout.
+/// Number of 32-bit words in one record; `OpRecord` in `shaders/records.glsl` has this layout.
 pub(crate) const RECORD_WORDS: usize = shared::RECORD_WORDS as usize;
 
 /// Number of 32-bit words in the record of a tilemap layer; `TilemapRecord` in
-/// `shaders/compose.comp` has this layout.
+/// `shaders/records.glsl` has this layout.
 pub(crate) const TILEMAP_WORDS: usize = shared::TILEMAP_WORDS as usize;
+
+// The word each field of an op record is in. The encoder writes through these names, and a
+// test shows that the field of the same name of the GLSL `OpRecord` is read from that word.
+pub(crate) const OP_KIND: usize = 0;
+pub(crate) const OP_CLIP_X0: usize = 1;
+pub(crate) const OP_CLIP_Y0: usize = 2;
+pub(crate) const OP_CLIP_X1: usize = 3;
+pub(crate) const OP_CLIP_Y1: usize = 4;
+pub(crate) const OP_BITMAP: usize = 5;
+pub(crate) const OP_SRC_X: usize = 6;
+pub(crate) const OP_SRC_Y: usize = 7;
+pub(crate) const OP_SRC_WIDTH: usize = 8;
+pub(crate) const OP_SRC_HEIGHT: usize = 9;
+/// The first of the [`TRANSFORM_WORDS`] words of `transform`: `xx`, `xy`, `yx`, `yy`, `tx`,
+/// `ty`.
+pub(crate) const OP_TRANSFORM: usize = 10;
+pub(crate) const OP_OPACITY: usize = 16;
+pub(crate) const OP_BLEND: usize = 17;
+pub(crate) const OP_COLOR: usize = 18;
+pub(crate) const OP_TONE_RED: usize = 19;
+pub(crate) const OP_TONE_GREEN: usize = 20;
+pub(crate) const OP_TONE_BLUE: usize = 21;
+pub(crate) const OP_TONE_GRAY: usize = 22;
+pub(crate) const OP_SAMPLING: usize = 23;
+
+/// Number of words of the `transform` field of an op record.
+pub(crate) const TRANSFORM_WORDS: usize = 6;
+
+// The word each field of a tilemap record is in, checked like those of an op record.
+pub(crate) const TILEMAP_MAP_OFFSET: usize = 0;
+pub(crate) const TILEMAP_MAP_XSIZE: usize = 1;
+pub(crate) const TILEMAP_MAP_YSIZE: usize = 2;
+pub(crate) const TILEMAP_PRIORITIES_OFFSET: usize = 3;
+pub(crate) const TILEMAP_PRIORITIES_COUNT: usize = 4;
+pub(crate) const TILEMAP_PRIORITY: usize = 5;
+pub(crate) const TILEMAP_CELL_X: usize = 6;
+pub(crate) const TILEMAP_CELL_Y: usize = 7;
+pub(crate) const TILEMAP_SUB_X: usize = 8;
+pub(crate) const TILEMAP_SUB_Y: usize = 9;
+pub(crate) const TILEMAP_TILESET: usize = 10;
+/// The first of the [`AUTOTILES`] words of `autotiles`.
+pub(crate) const TILEMAP_AUTOTILES: usize = 11;
+/// The first of the [`AUTOTILES`] words of `frames`.
+pub(crate) const TILEMAP_FRAMES: usize = 18;
+
+/// Number of autotiles of a tilemap layer.
+pub(crate) const AUTOTILES: usize = 7;
 
 /// What a tilemap layer op reads besides its clip, as the shader reads it: in this order, the
 /// index of the first element of the map's layer in the table buffer, the map's width and
@@ -106,18 +153,22 @@ pub(crate) struct OpRecord {
 impl OpRecord {
     fn new(kind: u32, clip: ClipRect) -> OpRecord {
         let mut words = [0; RECORD_WORDS];
-        words[0] = kind;
-        words[1..5].copy_from_slice(&[clip.x0, clip.y0, clip.x1, clip.y1]);
+        words[OP_KIND] = kind;
+        words[OP_CLIP_X0] = clip.x0;
+        words[OP_CLIP_Y0] = clip.y0;
+        words[OP_CLIP_X1] = clip.x1;
+        words[OP_CLIP_Y1] = clip.y1;
         OpRecord { clip, words }
     }
 
     /// Fills the colour word and the four tone words, which a quad and a rectangle effect share.
     fn set_tone_and_color(&mut self, tone: Tone, color: Color) {
-        self.words[18] = u32::from_le_bytes(color.to_rgba());
+        self.words[OP_COLOR] = u32::from_le_bytes(color.to_rgba());
         // Sign-extended: the shader reads these three words as signed integers.
-        let offsets = [tone.red, tone.green, tone.blue];
-        self.words[19..22].copy_from_slice(&offsets.map(|c| i32::from(c) as u32));
-        self.words[22] = u32::from(tone.gray);
+        self.words[OP_TONE_RED] = i32::from(tone.red) as u32;
+        self.words[OP_TONE_GREEN] = i32::from(tone.green) as u32;
+        self.words[OP_TONE_BLUE] = i32::from(tone.blue) as u32;
+        self.words[OP_TONE_GRAY] = u32::from(tone.gray);
     }
 
     /// The record's words, in the order of the fields of the GLSL `OpRecord`.
@@ -170,7 +221,7 @@ fn encode_tilemap(
             .map_err(|source| VkError::InvalidOpTable { index, source })
     };
     let tileset = sheet(layer.tileset)?;
-    let mut autotiles = [None; 7];
+    let mut autotiles = [None; AUTOTILES];
     for (found, id) in autotiles.iter_mut().zip(layer.autotiles) {
         *found = sheet(id)?;
     }
@@ -191,22 +242,20 @@ fn encode_tilemap(
     let mut record = [0; TILEMAP_WORDS];
     // Offsets and lengths are below the length of the table buffer, which `u32` holds for
     // every store within the device's limit; beyond it no frame is drawn.
-    record[..11].copy_from_slice(&[
-        (map.offset + cells * u64::from(layer.layer)) as u32,
-        map.xsize,
-        map.ysize,
-        priorities.offset as u32,
-        u64::from(priorities.xsize).min(priorities.len()) as u32,
-        u32::from(layer.priority),
-        cell_x,
-        cell_y,
-        sub_x,
-        sub_y,
-        tileset.map_or(NO_BITMAP, |(slot, _)| slot),
-    ]);
+    record[TILEMAP_MAP_OFFSET] = (map.offset + cells * u64::from(layer.layer)) as u32;
+    record[TILEMAP_MAP_XSIZE] = map.xsize;
+    record[TILEMAP_MAP_YSIZE] = map.ysize;
+    record[TILEMAP_PRIORITIES_OFFSET] = priorities.offset as u32;
+    record[TILEMAP_PRIORITIES_COUNT] = u64::from(priorities.xsize).min(priorities.len()) as u32;
+    record[TILEMAP_PRIORITY] = u32::from(layer.priority);
+    record[TILEMAP_CELL_X] = cell_x;
+    record[TILEMAP_CELL_Y] = cell_y;
+    record[TILEMAP_SUB_X] = sub_x;
+    record[TILEMAP_SUB_Y] = sub_y;
+    record[TILEMAP_TILESET] = tileset.map_or(NO_BITMAP, |(slot, _)| slot);
     for (slot, autotile) in autotiles.into_iter().enumerate() {
         let Some((bitmap, entry)) = autotile else {
-            record[11 + slot] = NO_BITMAP;
+            record[TILEMAP_AUTOTILES + slot] = NO_BITMAP;
             continue;
         };
         let (width, flag) = if entry.height <= 32 {
@@ -215,9 +264,9 @@ fn encode_tilemap(
             (96, 0)
         };
         let frames = u64::from((entry.width / width).max(1));
-        record[11 + slot] = bitmap;
+        record[TILEMAP_AUTOTILES + slot] = bitmap;
         // Less than the number of frames, which is far below the flag.
-        record[18 + slot] = (layer.animation_step % frames) as u32 | flag;
+        record[TILEMAP_FRAMES + slot] = (layer.animation_step % frames) as u32 | flag;
     }
     Ok(Some(record))
 }
@@ -246,7 +295,7 @@ pub(crate) fn encode_frame(
             Op::Clear { color, .. } => {
                 let Some(clip) = clip else { continue };
                 let mut record = OpRecord::new(shared::OP_CLEAR, clip);
-                record.words[18] = u32::from_le_bytes(color.to_rgba());
+                record.words[OP_COLOR] = u32::from_le_bytes(color.to_rgba());
                 records.push(record);
             }
             Op::Quad(quad) => {
@@ -297,19 +346,18 @@ pub(crate) fn encode_frame(
                     }
                 };
                 let mut record = OpRecord::new(shared::OP_QUAD, clip);
-                record.words[5] = quad.bitmap.index;
+                record.words[OP_BITMAP] = quad.bitmap.index;
                 // Inside the bitmap and not empty, so the origin is not negative and every
                 // value is at most the largest image dimension.
-                record.words[6..10].copy_from_slice(&[
-                    src.x as u32,
-                    src.y as u32,
-                    src.width,
-                    src.height,
-                ]);
-                record.words[10..16].copy_from_slice(&geometry);
-                record.words[23] = kind;
-                record.words[16] = u32::from(quad.opacity);
-                record.words[17] = blend_mode(quad.blend);
+                record.words[OP_SRC_X] = src.x as u32;
+                record.words[OP_SRC_Y] = src.y as u32;
+                record.words[OP_SRC_WIDTH] = src.width;
+                record.words[OP_SRC_HEIGHT] = src.height;
+                record.words[OP_TRANSFORM..OP_TRANSFORM + TRANSFORM_WORDS]
+                    .copy_from_slice(&geometry);
+                record.words[OP_SAMPLING] = kind;
+                record.words[OP_OPACITY] = u32::from(quad.opacity);
+                record.words[OP_BLEND] = blend_mode(quad.blend);
                 record.set_tone_and_color(quad.tone, quad.color);
                 records.push(record);
             }
@@ -325,7 +373,7 @@ pub(crate) fn encode_frame(
                     continue;
                 };
                 let mut record = OpRecord::new(shared::OP_TILEMAP, clip);
-                record.words[5] = tilemaps.len() as u32;
+                record.words[OP_BITMAP] = tilemaps.len() as u32;
                 tilemaps.push(tilemap);
                 records.push(record);
             }
