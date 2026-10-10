@@ -322,11 +322,9 @@ fn swapchain_extent(capabilities: &vk::SurfaceCapabilitiesKHR, requested: Size) 
     }
 }
 
-/// A render pass for one target format and the pipeline that draws in it.
-struct Pass {
+/// The pipeline that draws into a target of one format.
+struct FormatPipeline {
     format: vk::Format,
-    final_layout: vk::ImageLayout,
-    render_pass: vk::RenderPass,
     pipeline: vk::Pipeline,
 }
 
@@ -337,10 +335,10 @@ struct Swapchain {
     /// The window size the swapchain was made for.
     requested: Size,
     srgb: bool,
-    render_pass: vk::RenderPass,
     pipeline: vk::Pipeline,
+    images: Vec<vk::Image>,
+    /// Per image: the view the pass draws through.
     views: Vec<vk::ImageView>,
-    framebuffers: Vec<vk::Framebuffer>,
     /// Signalled when an image has been acquired; waited for by the draw.
     acquired: vk::Semaphore,
     /// Per image: signalled by the draw, waited for by the presentation engine.
@@ -358,9 +356,6 @@ impl Swapchain {
         // this device for this swapchain and is consumed here. Destroying a swapchain also
         // releases an image that was acquired and not presented.
         unsafe {
-            for framebuffer in self.framebuffers {
-                device.destroy_framebuffer(framebuffer, None);
-            }
             for view in self.views {
                 device.destroy_image_view(view, None);
             }
@@ -382,8 +377,8 @@ pub(super) struct Presenter {
     descriptors: vk::DescriptorSet,
     vertex: vk::ShaderModule,
     fragment: vk::ShaderModule,
-    /// One pass per target format in use: the off-screen one and the swapchain's.
-    passes: Vec<Pass>,
+    /// One pipeline per target format in use: the off-screen one and the swapchain's.
+    pipelines: Vec<FormatPipeline>,
     /// The held frame, in the `SHADER_READ_ONLY_OPTIMAL` layout between submissions. It has
     /// the size of the frame it was captured from, which later frames need not share, and
     /// lives until the next capture. Black, at the size of the first frame, until a freeze.
@@ -420,7 +415,7 @@ impl Presenter {
             descriptors: vk::DescriptorSet::null(),
             vertex: vk::ShaderModule::null(),
             fragment: vk::ShaderModule::null(),
-            passes: Vec::new(),
+            pipelines: Vec::new(),
             held: None,
             no_mask: None,
             bound: None,
@@ -483,52 +478,16 @@ impl Presenter {
         Ok(())
     }
 
-    /// The render pass and pipeline for a target of `format` that is left in `final_layout`,
-    /// made on first use.
-    fn pass(
+    /// The pipeline that draws into a target of `format`, made on first use.
+    fn pipeline(
         &mut self,
         device: &ash::Device,
         format: vk::Format,
-        final_layout: vk::ImageLayout,
-    ) -> Result<(vk::RenderPass, vk::Pipeline), VkError> {
-        let known = self
-            .passes
-            .iter()
-            .find(|pass| pass.format == format && pass.final_layout == final_layout);
-        if let Some(pass) = known {
-            return Ok((pass.render_pass, pass.pipeline));
+    ) -> Result<vk::Pipeline, VkError> {
+        let known = self.pipelines.iter().find(|known| known.format == format);
+        if let Some(known) = known {
+            return Ok(known.pipeline);
         }
-
-        let attachments = [vk::AttachmentDescription::default()
-            .format(format)
-            .samples(vk::SampleCountFlags::TYPE_1)
-            .load_op(vk::AttachmentLoadOp::CLEAR)
-            .store_op(vk::AttachmentStoreOp::STORE)
-            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
-            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
-            .initial_layout(vk::ImageLayout::UNDEFINED)
-            .final_layout(final_layout)];
-        let color = [vk::AttachmentReference::default()
-            .attachment(0)
-            .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)];
-        let subpasses = [vk::SubpassDescription::default()
-            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
-            .color_attachments(&color)];
-        // The layout change at the start of the pass waits at the stage where a swapchain
-        // image becomes available to the draw.
-        let dependencies = [vk::SubpassDependency::default()
-            .src_subpass(vk::SUBPASS_EXTERNAL)
-            .dst_subpass(0)
-            .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
-            .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
-            .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)];
-        let pass_info = vk::RenderPassCreateInfo::default()
-            .attachments(&attachments)
-            .subpasses(&subpasses)
-            .dependencies(&dependencies);
-        // SAFETY: the device is live and the description is a valid single-subpass pass.
-        let render_pass = unsafe { device.create_render_pass(&pass_info, None) }
-            .map_err(VkError::vulkan("vkCreateRenderPass"))?;
 
         let stages = [
             vk::PipelineShaderStageCreateInfo::default()
@@ -559,7 +518,11 @@ impl Presenter {
             vk::PipelineColorBlendStateCreateInfo::default().attachments(&blend_attachments);
         let dynamic_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
         let dynamic = vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
+        let formats = [format];
+        let mut rendering =
+            vk::PipelineRenderingCreateInfo::default().color_attachment_formats(&formats);
         let pipeline_info = [vk::GraphicsPipelineCreateInfo::default()
+            .push_next(&mut rendering)
             .stages(&stages)
             .vertex_input_state(&vertex_input)
             .input_assembly_state(&assembly)
@@ -568,33 +531,19 @@ impl Presenter {
             .multisample_state(&multisample)
             .color_blend_state(&blend)
             .dynamic_state(&dynamic)
-            .layout(self.pipeline_layout)
-            .render_pass(render_pass)
-            .subpass(0)];
+            .layout(self.pipeline_layout)];
         // SAFETY: the modules hold a vertex and a fragment shader with entry point `main`
         // whose interfaces match each other, the pipeline layout and the one colour attachment
-        // of the pass, which was just created from this device.
+        // of `format` that the pipeline is made to render into without a render pass object.
         let pipelines = unsafe {
             device.create_graphics_pipelines(vk::PipelineCache::null(), &pipeline_info, None)
         };
-        let pipeline = match pipelines {
-            Ok(pipelines) => pipelines[0],
-            Err((_, result)) => {
-                // SAFETY: the pass is unused and not referenced anywhere else.
-                unsafe { device.destroy_render_pass(render_pass, None) };
-                return Err(VkError::Vulkan {
-                    call: "vkCreateGraphicsPipelines",
-                    result,
-                });
-            }
-        };
-        self.passes.push(Pass {
-            format,
-            final_layout,
-            render_pass,
-            pipeline,
-        });
-        Ok((render_pass, pipeline))
+        let pipeline = pipelines.map_err(|(_, result)| VkError::Vulkan {
+            call: "vkCreateGraphicsPipelines",
+            result,
+        })?[0];
+        self.pipelines.push(FormatPipeline { format, pipeline });
+        Ok(pipeline)
     }
 
     /// Points the descriptor set at the views of the newest frame, the held frame and the
@@ -658,9 +607,8 @@ impl Presenter {
         // SAFETY: the caller guarantees that nothing is in use; each handle was created from
         // this device or is null, and none is used again.
         unsafe {
-            for pass in self.passes.drain(..) {
-                device.destroy_pipeline(pass.pipeline, None);
-                device.destroy_render_pass(pass.render_pass, None);
+            for known in self.pipelines.drain(..) {
+                device.destroy_pipeline(known.pipeline, None);
             }
             device.destroy_shader_module(self.fragment, None);
             device.destroy_shader_module(self.vertex, None);
@@ -672,60 +620,64 @@ impl Presenter {
     }
 }
 
-/// Creates a framebuffer of `extent` pixels over one view.
-fn create_framebuffer(
-    device: &ash::Device,
-    render_pass: vk::RenderPass,
+/// What one pass draws into.
+struct PassTarget {
+    image: vk::Image,
+    /// A view of the whole image, in the format the pipeline was made for.
     view: vk::ImageView,
     extent: vk::Extent2D,
-) -> Result<vk::Framebuffer, VkError> {
-    let attachments = [view];
-    let info = vk::FramebufferCreateInfo::default()
-        .render_pass(render_pass)
-        .attachments(&attachments)
-        .width(extent.width)
-        .height(extent.height)
-        .layers(1);
-    // SAFETY: the pass and the view belong to this device, the view has the format of the
-    // pass's attachment, and its image is at least `extent` pixels large.
-    unsafe { device.create_framebuffer(&info, None) }
-        .map_err(VkError::vulkan("vkCreateFramebuffer"))
+    /// How the image was last used. Its contents are not kept.
+    before: ImageUse,
+    /// The use the image is left to after the pass.
+    after: ImageUse,
 }
 
-/// Records one render pass over the whole framebuffer: a clear to black, then the frame when
-/// there is one to draw.
+/// Records one pass over the whole target: a clear to black, then the frame when there is one
+/// to draw, between the barriers that make the target the colour attachment and hand it on.
 ///
 /// # Safety
 ///
-/// `commands` must be a command buffer of `device` in the recording state. `render_pass` and
-/// `framebuffer` must be live, match each other and be `extent` pixels large. For a draw, the
-/// pipeline must have been made for `render_pass`, and the images behind the descriptor set
-/// must be live and in the layouts the set names when the commands execute.
+/// `commands` must be a command buffer of `device` in the recording state, of a queue family
+/// that draws. The image and the view of `target` must be live, belong to each other, be
+/// `extent` pixels large and in the layout of `before`. For a draw, the pipeline must have
+/// been made for the format of the view, and the images behind the descriptor set must be
+/// live and in the layouts the set names, left there for the fragment stage to read, when the
+/// commands execute.
 unsafe fn record_pass(
     device: &ash::Device,
     commands: vk::CommandBuffer,
-    render_pass: vk::RenderPass,
-    framebuffer: vk::Framebuffer,
-    extent: vk::Extent2D,
+    target: &PassTarget,
     draw: Option<&DrawCall>,
 ) {
+    let extent = target.extent;
     let area = vk::Rect2D {
         offset: vk::Offset2D::default(),
         extent,
     };
-    let clear = [vk::ClearValue {
-        color: vk::ClearColorValue {
-            float32: [0.0, 0.0, 0.0, 1.0],
-        },
-    }];
-    let begin = vk::RenderPassBeginInfo::default()
-        .render_pass(render_pass)
-        .framebuffer(framebuffer)
+    let attachments = [vk::RenderingAttachmentInfo::default()
+        .image_view(target.view)
+        .image_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+        .load_op(vk::AttachmentLoadOp::CLEAR)
+        .store_op(vk::AttachmentStoreOp::STORE)
+        .clear_value(vk::ClearValue {
+            color: vk::ClearColorValue {
+                float32: [0.0, 0.0, 0.0, 1.0],
+            },
+        })];
+    let rendering = vk::RenderingInfo::default()
         .render_area(area)
-        .clear_values(&clear);
+        .layer_count(1)
+        .color_attachments(&attachments);
     // SAFETY: guaranteed by the caller.
     unsafe {
-        device.cmd_begin_render_pass(commands, &begin, vk::SubpassContents::INLINE);
+        transition(
+            device,
+            commands,
+            target.image,
+            target.before,
+            ImageUse::COLOR_ATTACHMENT_WRITE,
+        );
+        device.cmd_begin_rendering(commands, &rendering);
         if let Some(draw) = draw {
             let viewport = vk::Viewport {
                 x: 0.0,
@@ -755,7 +707,14 @@ unsafe fn record_pass(
             );
             device.cmd_draw(commands, 3, 1, 0, 0);
         }
-        device.cmd_end_render_pass(commands);
+        device.cmd_end_rendering(commands);
+        transition(
+            device,
+            commands,
+            target.image,
+            ImageUse::COLOR_ATTACHMENT_WRITE,
+            target.after,
+        );
     }
 }
 
@@ -1018,11 +977,7 @@ impl VkCompositor {
         let source = self.prepare_sources()?;
         let device = &self.gpu.device;
         let presenter = self.presenter.as_mut().expect("made with the sources");
-        let (render_pass, pipeline) = presenter.pass(
-            device,
-            OFFSCREEN_FORMAT,
-            vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-        )?;
+        let pipeline = presenter.pipeline(device, OFFSCREEN_FORMAT)?;
         let draw = source.and_then(|sources| {
             Some(DrawCall {
                 pipeline,
@@ -1050,37 +1005,36 @@ impl VkCompositor {
             vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_SRC,
             vk::ImageCreateFlags::empty(),
         )?;
-        let framebuffer = match create_framebuffer(device, render_pass, image.view, extent) {
-            Ok(framebuffer) => framebuffer,
-            Err(error) => {
-                image.destroy(device, &mut self.allocator);
-                return Err(error);
-            }
+        let target = PassTarget {
+            image: image.image,
+            view: image.view,
+            extent,
+            before: ImageUse::UNDEFINED,
+            after: ImageUse::TRANSFER_READ,
         };
 
         let drawn = self.submit_or_idle(|compositor| {
             compositor.begin_commands()?;
-            // SAFETY: the command buffer is recording. The pass, the framebuffer and the image
-            // behind it were made above for each other and for `extent`, and live until this
-            // submission has been waited for. A draw call only exists when a frame does, in
-            // which case `prepare_sources` pointed the set at the frame target (`GENERAL`),
-            // the held frame and the mask (`SHADER_READ_ONLY_OPTIMAL`).
+            // SAFETY: the command buffer is recording, on a queue that draws since there is a
+            // presenter. The image and its view were made above for `extent` and the format
+            // of the pipeline, are new, and live until this submission has been waited for. A
+            // draw call only exists when a frame does, in which case `prepare_sources`
+            // pointed the set at the frame target (`GENERAL`), the held frame and the mask
+            // (`SHADER_READ_ONLY_OPTIMAL`), each left to the fragment stage by its last
+            // barrier.
             unsafe {
                 record_pass(
                     &compositor.gpu.device,
                     compositor.commands,
-                    render_pass,
-                    framebuffer,
-                    extent,
+                    &target,
                     draw.as_ref(),
                 );
             }
             compositor.submit_and_wait()
         });
         let result = drawn.and_then(|()| then(self, image.image));
-        // SAFETY: every submission that used the framebuffer was waited for, or the device was
-        // idled after a failure; the handle is not used again.
-        unsafe { self.gpu.device.destroy_framebuffer(framebuffer, None) };
+        // Every submission that used the image was waited for, or the device was idled after
+        // a failure.
         image.destroy(&self.gpu.device, &mut self.allocator);
         result
     }
@@ -1197,8 +1151,14 @@ impl VkCompositor {
                 }
             };
             let (handle, extent) = (chain.handle, chain.extent);
-            let (render_pass, framebuffer) =
-                (chain.render_pass, chain.framebuffers[index as usize]);
+            // An image that comes round again was presented; what it holds is not wanted.
+            let pass_target = PassTarget {
+                image: chain.images[index as usize],
+                view: chain.views[index as usize],
+                extent,
+                before: ImageUse::ACQUIRED,
+                after: ImageUse::PRESENT,
+            };
             let (wait, signal) = (chain.acquired, chain.drawn[index as usize]);
             let target = Size::new(extent.width, extent.height);
             let draw = source.and_then(|sources| {
@@ -1212,18 +1172,19 @@ impl VkCompositor {
 
             let drawn = self.submit_or_idle(|compositor| {
                 compositor.begin_commands()?;
-                // SAFETY: the command buffer is recording. The pass and the framebuffer belong
-                // to the live swapchain and are `extent` pixels large. A draw call only exists
+                // SAFETY: the command buffer is recording, on the queue that presents and
+                // draws. The image and its view belong to the live swapchain, which is
+                // `extent` pixels large and has the format of the pipeline; the image was
+                // just acquired, so it may be taken from `UNDEFINED`. A draw call only exists
                 // when a frame does, in which case `prepare_sources` pointed the set at the
                 // frame target (`GENERAL`), the held frame and the mask
-                // (`SHADER_READ_ONLY_OPTIMAL`).
+                // (`SHADER_READ_ONLY_OPTIMAL`), each left to the fragment stage by its last
+                // barrier.
                 unsafe {
                     record_pass(
                         &compositor.gpu.device,
                         compositor.commands,
-                        render_pass,
-                        framebuffer,
-                        extent,
+                        &pass_target,
                         draw.as_ref(),
                     );
                 }
@@ -1566,8 +1527,7 @@ impl VkCompositor {
             call: "vkGetPhysicalDeviceSurfaceFormatsKHR",
             result: vk::Result::ERROR_FORMAT_NOT_SUPPORTED,
         })?;
-        let (render_pass, pipeline) =
-            presenter.pass(device, format.format, vk::ImageLayout::PRESENT_SRC_KHR)?;
+        let pipeline = presenter.pipeline(device, format.format)?;
 
         let mut image_count = capabilities.min_image_count + 1;
         if capabilities.max_image_count > 0 {
@@ -1676,10 +1636,9 @@ impl VkCompositor {
             extent,
             requested,
             srgb,
-            render_pass,
             pipeline,
+            images: Vec::new(),
             views: Vec::new(),
-            framebuffers: Vec::new(),
             acquired: vk::Semaphore::null(),
             drawn: Vec::new(),
             stale: false,
@@ -1687,7 +1646,7 @@ impl VkCompositor {
         };
         let filled = (|| {
             // SAFETY: the swapchain was just created from this device.
-            let images = unsafe { loader.get_swapchain_images(chain.handle) }
+            chain.images = unsafe { loader.get_swapchain_images(chain.handle) }
                 .map_err(VkError::vulkan("vkGetSwapchainImagesKHR"))?;
             let semaphore = || {
                 // SAFETY: the device is live.
@@ -1695,7 +1654,7 @@ impl VkCompositor {
                     .map_err(VkError::vulkan("vkCreateSemaphore"))
             };
             chain.acquired = semaphore()?;
-            for image in images {
+            for &image in &chain.images {
                 let view_info = vk::ImageViewCreateInfo::default()
                     .image(image)
                     .view_type(vk::ImageViewType::TYPE_2D)
@@ -1706,9 +1665,6 @@ impl VkCompositor {
                 let view = unsafe { device.create_image_view(&view_info, None) }
                     .map_err(VkError::vulkan("vkCreateImageView"))?;
                 chain.views.push(view);
-                chain
-                    .framebuffers
-                    .push(create_framebuffer(device, render_pass, view, extent)?);
                 chain.drawn.push(semaphore()?);
             }
             Ok(())

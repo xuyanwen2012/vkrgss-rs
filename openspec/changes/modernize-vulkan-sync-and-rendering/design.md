@@ -74,6 +74,9 @@ Synchronisation validation, on llvmpipe (Mesa lavapipe) with `VK_LAYER_KHRONOS_v
   `vkCmdDispatch(): WRITE_AFTER_WRITE hazard detected`; without the two settings the same
   fault passes unnoticed.
 - Result after the barriers of task 2.1: all 218 tests pass, no message.
+- The same run after task 3.1, with the passes rendered by dynamic rendering and the layouts
+  of the swapchain image and the off-screen target changed by this crate's barriers: all 218
+  tests pass, no message.
 - Limit of the check: the code before this change also passes it (run on the commit of task
   1.1). Every submission is waited for through its fence before the next one is recorded, and
   the layer then takes the earlier accesses as finished, so the stages that the old barriers

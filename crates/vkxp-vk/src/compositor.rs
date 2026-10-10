@@ -792,12 +792,11 @@ impl VkCompositor {
             &mut self.allocator,
             "frame target",
             (size.width, size.height),
-            // Sampled for the presentation pass to come, which will view the image as
-            // `R8G8B8A8_UNORM`; that view is what the mutable format is for.
+            // Sampled by the presentation pass.
             vk::ImageUsageFlags::STORAGE
                 | vk::ImageUsageFlags::TRANSFER_SRC
                 | vk::ImageUsageFlags::SAMPLED,
-            vk::ImageCreateFlags::MUTABLE_FORMAT,
+            vk::ImageCreateFlags::empty(),
         )?;
         let info = [vk::DescriptorImageInfo::default()
             .image_view(target.view)

@@ -11,7 +11,7 @@
 
 ## 3. Dynamic rendering (`vkxp-vk`)
 
-- [ ] 3.1 Render the presentation pass and the off-screen scaling pass with dynamic rendering; remove render passes, their cache and framebuffers; drop the unused image flag. Verify: the scenarios of `specs/vulkan-presentation/spec.md`; no `create_render_pass` and no `create_framebuffer` remain.
+- [x] 3.1 Render the presentation pass and the off-screen scaling pass with dynamic rendering; remove render passes, their cache and framebuffers; drop the unused image flag. Verify: the scenarios of `specs/vulkan-presentation/spec.md`; no `create_render_pass` and no `create_framebuffer` remain.
 
 ## 4. Integration check
 

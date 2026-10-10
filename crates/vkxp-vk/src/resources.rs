@@ -319,6 +319,28 @@ impl ImageUse {
         access: vk::AccessFlags2::SHADER_SAMPLED_READ,
         layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
     };
+    /// Drawn into as the colour attachment of a pass.
+    pub(crate) const COLOR_ATTACHMENT_WRITE: ImageUse = ImageUse {
+        stage: vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT,
+        access: vk::AccessFlags2::COLOR_ATTACHMENT_WRITE,
+        layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+    };
+
+    /// A swapchain image that was just acquired and whose old contents are not wanted. The
+    /// stage is the one at which the submission waits for the acquire, so that the layout
+    /// change comes after it.
+    pub(crate) const ACQUIRED: ImageUse = ImageUse {
+        stage: vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT,
+        access: vk::AccessFlags2::NONE,
+        layout: vk::ImageLayout::UNDEFINED,
+    };
+    /// Handed to the presentation engine, which no command of the device follows.
+    pub(crate) const PRESENT: ImageUse = ImageUse {
+        stage: vk::PipelineStageFlags2::NONE,
+        access: vk::AccessFlags2::NONE,
+        layout: vk::ImageLayout::PRESENT_SRC_KHR,
+    };
+
     /// This use together with `other`, for an image that both stages use in the layout of
     /// this one.
     pub(crate) fn and(self, other: ImageUse) -> ImageUse {
