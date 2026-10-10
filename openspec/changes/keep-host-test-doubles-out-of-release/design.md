@@ -25,6 +25,20 @@
   does not list `vkxp-host feature "testing"`, as a test in `xtask` next to the dependency
   rules or as a documented command; the test is preferred if it is a few lines.
 
+## Outcome
+
+- The first option was used: cargo accepts the crate as its own development dependency, so no
+  target has `required-features` and the gate's commands are unchanged.
+- `Cargo.lock` is outside the named scope and changed by one line: the package `vkxp-host`
+  now lists itself as a dependency, which `--locked` needs.
+- The crate documentation of `vkxp-host` names the two modules in plain code text instead of
+  linking them, because `cargo doc` builds the library without the feature and a link to a
+  module that is not compiled is a warning the gate denies.
+- No item of the production modules exists only for the doubles, so nothing else got the
+  `cfg`.
+- The check is the test `the_executable_is_built_without_the_test_doubles_of_the_host` in
+  `xtask/src/deps.rs`.
+
 ## Risks / Trade-offs
 
 - [Feature unification turns the feature on for the executable in a workspace build] → With

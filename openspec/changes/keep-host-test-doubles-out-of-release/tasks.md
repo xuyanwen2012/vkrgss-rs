@@ -2,7 +2,7 @@
 
 ## 1. Feature (`vkxp-host`)
 
-- [ ] 1.1 Put the two modules behind the feature and make tests and examples enable it. Verify: the scenarios of `specs/workspace-structure/spec.md`.
+- [x] 1.1 Put the two modules behind the feature and make tests and examples enable it. Verify: the scenarios of `specs/workspace-structure/spec.md`.
 
 ## 2. Documents
 

@@ -665,4 +665,19 @@ mod tests {
             assert!(violations.is_empty(), "{}", report.join("\n"));
         }
     }
+
+    /// The test doubles of `vkxp-host` are behind its feature `testing`, which only its own
+    /// development dependency on itself enables: the executable is built without it.
+    #[test]
+    fn the_executable_is_built_without_the_test_doubles_of_the_host() {
+        let output = Command::new(crate::cargo())
+            .args(["tree", "-p", "vkxp", "-e", "features", "--locked"])
+            .current_dir(crate::workspace_root())
+            .output()
+            .expect("cargo tree for the executable");
+        assert!(output.status.success());
+        let tree = String::from_utf8_lossy(&output.stdout);
+        assert!(tree.contains("vkxp-host feature \"default\""), "{tree}");
+        assert!(!tree.contains("vkxp-host feature \"testing\""), "{tree}");
+    }
 }

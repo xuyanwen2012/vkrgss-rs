@@ -11,6 +11,11 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+# The test doubles (`testing`) and the demo guest (`demo`). The crate's own tests and examples
+# enable it through the development dependency below; the executable does not.
+testing = []
+
 [dependencies]
 gilrs.workspace = true
 png.workspace = true
@@ -26,3 +31,5 @@ winit = { workspace = true, features = ["serde"] }
 [dev-dependencies]
 tempfile.workspace = true
 vkxp-compose-ref.workspace = true
+# The crate itself with its test doubles, for the integration tests and the examples.
+vkxp-host = { path = ".", features = ["testing"] }

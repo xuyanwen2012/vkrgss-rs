@@ -8,7 +8,7 @@
 //!    messages and the user's input and produces host messages, the time of the next wake-up
 //!    and requests to a [`Display`]. It holds no window, thread or GPU, and reads time from a
 //!    [`Clock`], so every pacing, input and transition rule is tested with a fake clock and a
-//!    recording display (see [`testing`]).
+//!    recording display (see `testing`).
 //! 2. The runners drive a session: one in a window on `winit` with the real clock, one headless
 //!    on a virtual clock with scripted input and frame dumps. The windowed one reads the
 //!    gamepads ([`Gamepads`]); a headless run reads none. Either can record the input of
@@ -19,8 +19,9 @@
 //! Audio commands go to the session's [`AudioSink`]: the output of `vkxp-audio` in a window
 //! unless audio is disabled, [`NullSink`] otherwise and in every headless run.
 //!
-//! [`demo`] is a guest written in Rust, used by the tests and the examples until the Ruby side
-//! exists.
+//! `demo` is a guest written in Rust, used by the tests and the examples until the Ruby side
+//! exists. It and `testing` are compiled only for tests and with the feature `testing`, which
+//! the executable does not enable.
 
 #![forbid(unsafe_code)]
 
@@ -36,7 +37,9 @@ mod script;
 mod session;
 mod windowed;
 
+#[cfg(any(test, feature = "testing"))]
 pub mod demo;
+#[cfg(any(test, feature = "testing"))]
 pub mod testing;
 
 pub use audio::{AudioOptions, AudioSink, NullSink};

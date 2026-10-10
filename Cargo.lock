@@ -2513,6 +2513,7 @@ dependencies = [
  "tracing",
  "vkxp-audio",
  "vkxp-compose-ref",
+ "vkxp-host",
  "vkxp-proto",
  "vkxp-vk",
  "winit",
