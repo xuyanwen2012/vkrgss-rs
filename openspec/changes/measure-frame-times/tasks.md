@@ -11,7 +11,7 @@
 
 ## 3. Documents
 
-- [ ] 3.1 Describe the option, the rows and the profiling recipe in `README.md` and the usage text. Verify: the usage text test.
+- [x] 3.1 Describe the option, the rows and the profiling recipe in `README.md` and the usage text. Verify: the usage text test.
 
 ## 4. Integration check
 

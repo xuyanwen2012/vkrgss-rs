@@ -30,6 +30,9 @@ usage: vkxp [GAME_DIR] [OPTIONS]
   --fullscreen              start in borderless fullscreen; Alt+Enter or F11 toggles
   --present-stats           write the intervals between the frames shown to the error
                             stream, every 600 frames and at exit
+  --frame-stats             write where the frames spend their time to the error stream,
+                            per stage: every 600 frames and at exit in a window, once
+                            at the end of a headless run
   --verbose                 also write informational and debug messages to the error
                             stream; the environment variable VKXP_LOG sets a level
                             (off, error, warn, info, debug or trace) or a filter such
@@ -360,6 +363,7 @@ mod tests {
         assert_eq!(options.game_dir, Some("games/demo".into()));
         let options = parse_words(&["games/demo", "--headless", "--frame-stats"]).unwrap();
         assert!(options.frame_stats && options.headless);
+        assert!(USAGE.contains("--frame-stats"));
     }
 
     #[test]

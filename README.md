@@ -162,6 +162,8 @@ Paths on the command line are relative to the directory the program was started 
 | `--debug` | Debug mode: `$DEBUG` is `true`. |
 | `--allow-process-functions` | Lets `system`, backticks, `exec`, `fork`, `syscall` and `IO.popen` start processes. Without it they do nothing. |
 | `--log-p` | `p` only writes to the error stream: no message panel is shown and the game does not wait. See *Messages*. |
+| `--present-stats` | Write the intervals between the frames shown to the error stream. See *Window*. |
+| `--frame-stats` | Write where the frames spend their time to the error stream. See *Frame times*. |
 | `--verbose` | Also write informational and debug messages to the error stream. See *Diagnostics*. |
 | `--no-audio` | Run without sound. No audio device is opened. |
 | `--soundfont FILE` | The SoundFont that MIDI music is played with. A file that does not exist ends the program with an error before any window opens. |
@@ -202,8 +204,8 @@ the usage message and status 2. There is no key for the level in a configuration
 
 What the game itself writes (`print`, `p`, the report of a script error), the usage message
 and the message of an error that ends the program are not diagnostics and are shown whatever
-the level. The intervals that `--present-stats` asks for are warnings, so they need no
-`--verbose`.
+the level. The intervals that `--present-stats` asks for and the frame times that
+`--frame-stats` asks for are warnings, so they need no `--verbose`.
 
 ### Configuration files
 
@@ -366,6 +368,65 @@ game then goes on without showing its frames: a present waits at most a tenth of
 an image, and the ones after it do not wait at all until the window gives images again. Where
 the device offers `VK_EXT_swapchain_maintenance1`, it is used to replace the swapchain, as
 after a resize, without idling the whole device.
+
+### Frame times
+
+`--frame-stats` measures where each frame's time goes and writes a summary to the error
+stream: every 600 frames and at exit in a window, once at the end of a headless run. Nothing
+is measured without the option, and measuring changes neither a frame nor when it is shown.
+
+```text
+vkxp: frame times over 600 frame(s):
+vkxp:   guest: 600 frame(s), mean 3.412 ms, smallest 2.870 ms, largest 9.105 ms
+vkxp:   encode: 600 frame(s), mean 0.031 ms, smallest 0.024 ms, largest 0.112 ms
+vkxp:   bin: 600 frame(s), mean 0.018 ms, smallest 0.012 ms, largest 0.094 ms
+vkxp:   upload: 600 frame(s), mean 0.142 ms, smallest 0.021 ms, largest 4.730 ms
+vkxp:   submit: 600 frame(s), mean 0.655 ms, smallest 0.580 ms, largest 1.904 ms
+vkxp:   present: 600 frame(s), mean 0.410 ms, smallest 0.352 ms, largest 1.218 ms
+vkxp:   compose (device): 600 frame(s), mean 0.207 ms, smallest 0.180 ms, largest 0.655 ms
+vkxp:   present (device): 600 frame(s), mean 0.058 ms, smallest 0.049 ms, largest 0.201 ms
+```
+
+The numbers above only show the layout. Each row gives the number of frames the stage was
+measured for and its mean, smallest and largest duration in milliseconds:
+
+| Row | What it measures |
+|---|---|
+| `guest` | The host's wait from answering a frame to receiving the next one: the game's scripts, its bitmap operations and the extraction of the frame. The host holds back its answer until the frame's period is over, so the game's side never sleeps and this is its work alone, in a window as in a headless run. The first frame follows no answer and is not counted. |
+| `encode` | Checking the frame's ops and encoding them for the shader. |
+| `bin` | Assigning the ops to the 16x16 tiles they touch. |
+| `upload` | Copying the changed bitmap pixels and the frame's data into buffers and recording the commands. |
+| `submit` | Submitting the commands and waiting until the device has finished them: the bitmap uploads and the compose dispatch. |
+| `present` | Recording the pass that scales the frame into the window, submitting it and waiting for it. It does not include the wait for a swapchain image or for the frame's turn on the display. |
+| `compose (device)` | Time on the device from the start to the end of the compose dispatch, from timestamps the device writes. |
+| `present (device)` | The same for the pass that scales the frame into the window. |
+
+The first five stages after `guest` are processor time on the host's thread. The two device
+rows count no frames on a device whose queue has no timestamps, and a headless run presents
+nothing, so its `present` rows count none either. On llvmpipe the device is the processor
+and its timestamps say little.
+
+The `guest` row is not split further. To see where the game's side spends its time, build
+with the `profiling` profile, which is the release build with full debug information, and
+use a profiler. With `perf`, on a headless run, which does not wait between frames:
+
+```sh
+cargo build -p vkxp --profile profiling
+VK_LOADER_DRIVERS_SELECT='*lvp*' perf record --call-graph dwarf -o target/perf.data \
+    target/profiling/vkxp <game directory> --rtp Standard=<RTP directory> \
+    --headless --frames 600
+perf report -i target/perf.data --sort dso,symbol
+```
+
+The interpreter's thread, `ruby`, carries the scripts, the bitmap operations and the frame
+extraction; with llvmpipe the compositing shows up as well, on its own worker threads, and is
+no measure of a GPU.
+
+When `VK_EXT_debug_utils` is installed, the backend names its Vulkan objects (the frame
+target, the held frame, the frame's buffers, the pipelines, the swapchain images and each
+bitmap image by its slot) and labels the upload, compose and present parts of its command
+buffers, so a capture in RenderDoc and the messages of the validation layer show names
+instead of handles.
 
 ### Audio
 
