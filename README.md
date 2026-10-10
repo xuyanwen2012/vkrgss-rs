@@ -435,6 +435,8 @@ time too.
 | `guest extraction` | Extracting the frame from the scene, with the changed bitmap pixels, and handing it to the host. |
 
 A call inside another measured call belongs to the outer one, so no time is counted twice.
+A measured call that runs across a frame update, which the conversion of an argument can
+cause, gives each frame the part that lies in it, without the wait for the tick.
 For what the game's side costs, read these four rows: the host's `guest` row is a wait seen
 from the other side, and in a headless run the guest is often ahead of the host, so that row
 is smaller than their sum. The clock is read for this report only; no script can see it.

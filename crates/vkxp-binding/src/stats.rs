@@ -110,7 +110,7 @@ struct Measuring {
     parts: [Duration; 3],
     /// How many measured calls are running, one inside the other.
     depth: usize,
-    /// The outermost of them and when it began.
+    /// The outermost of them and when it began, or when the frame began if that was later.
     span: Option<(Part, Instant)>,
 }
 
@@ -152,6 +152,11 @@ pub(crate) fn start(requested: bool) {
 /// is over. What came before the first wait is not a frame and is not counted.
 pub(crate) fn frame_ends() {
     measuring(|measuring| {
+        // A measured call that is still running, because it called into a script that
+        // updates the frame, gives this frame its time up to here.
+        if let Some((part, began)) = measuring.span {
+            measuring.parts[part as usize] += began.elapsed();
+        }
         let parts = std::mem::take(&mut measuring.parts);
         if let Some(began) = measuring.frame.take() {
             measuring.rows.add_frame(began.elapsed(), parts);
@@ -162,9 +167,16 @@ pub(crate) fn frame_ends() {
     });
 }
 
-/// The tick wait has returned: a frame begins.
+/// The tick wait has returned: a frame begins. A measured call that is still running goes on
+/// from here, so the wait belongs to no part.
 pub(crate) fn frame_begins() {
-    measuring(|measuring| measuring.frame = Some(Instant::now()));
+    measuring(|measuring| {
+        let now = Instant::now();
+        measuring.frame = Some(now);
+        if let Some((_, began)) = &mut measuring.span {
+            *began = now;
+        }
+    });
 }
 
 /// The guest has ended: the summary of a run that had none yet, or of the frames since the
@@ -253,6 +265,44 @@ mod tests {
         });
         frame_ends();
         MEASURING.with(|cell| assert_eq!(cell.borrow().as_ref().unwrap().rows.frames(), 1));
+        start(false);
+    }
+
+    /// A measured call can run a script, through the conversion of an argument, that updates
+    /// the frame: each frame gets the part of the call that lies in it, and the tick wait
+    /// belongs to none.
+    #[test]
+    fn call_across_a_tick_wait_is_split_at_the_frames_and_leaves_the_wait_out() {
+        const WAIT: Duration = Duration::from_millis(60);
+        start(true);
+        // Before the first frame: not counted.
+        let outer = Span::enter(Part::Bitmap);
+        std::thread::sleep(2 * MS);
+        frame_ends();
+        frame_begins();
+        for _ in 0..2 {
+            std::thread::sleep(2 * MS);
+            drop(Span::enter(Part::Text));
+            frame_ends();
+            std::thread::sleep(WAIT);
+            frame_begins();
+        }
+        std::thread::sleep(2 * MS);
+        drop(outer);
+        frame_ends();
+        MEASURING.with(|cell| {
+            let cell = cell.borrow();
+            let measuring = cell.as_ref().unwrap();
+            let [scripts, bitmap, text, _] = measuring.rows.0;
+            assert_eq!(measuring.rows.frames(), 3);
+            assert!(bitmap.smallest >= 2_000_000, "{bitmap:?}");
+            assert!(Duration::from_nanos(bitmap.largest) < WAIT, "{bitmap:?}");
+            // The whole of each frame lay inside the call.
+            assert!(Duration::from_nanos(scripts.largest) < MS, "{scripts:?}");
+            assert_eq!(text.total, 0);
+            assert_eq!(measuring.depth, 0);
+            assert!(measuring.span.is_none());
+        });
         start(false);
     }
 
