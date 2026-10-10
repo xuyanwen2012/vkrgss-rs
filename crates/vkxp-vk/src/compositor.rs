@@ -149,6 +149,15 @@ pub struct VkCompositor {
     /// Failure injection: whether the draw of the next present fails.
     #[cfg(test)]
     fail_draw: bool,
+    /// The number of presents handed over with a present fence.
+    #[cfg(test)]
+    fenced_presents: u32,
+    /// The number of times the device was idled to replace a swapchain.
+    #[cfg(test)]
+    swapchain_idles: u32,
+    /// Stands in for the pacing extensions of the swapchain when the presents are planned.
+    #[cfg(test)]
+    timing_stand_in: Option<Box<dyn pacer::TimingCalls>>,
     /// Failure injection: the number of frame buffers that may still be created or grown
     /// before one such allocation fails, once.
     #[cfg(test)]
@@ -294,6 +303,12 @@ impl VkCompositor {
             ignore_maintenance: false,
             #[cfg(test)]
             fail_draw: false,
+            #[cfg(test)]
+            fenced_presents: 0,
+            #[cfg(test)]
+            swapchain_idles: 0,
+            #[cfg(test)]
+            timing_stand_in: None,
             #[cfg(test)]
             frame_buffer_failure: None,
             #[cfg(test)]

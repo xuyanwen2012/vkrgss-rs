@@ -1356,13 +1356,14 @@ fn present_resize_and_tear_down(ignore_maintenance: bool) {
     compositor.resize_surface(Size::new(64, 48));
     assert_eq!(compositor.present(), Ok(true));
     assert_eq!(compositor.swapchain_extent(), Some((64, 48)));
-    let fences = compositor.presents_with_fences();
+    let fences = compositor.uses_swapchain_maintenance();
     eprintln!(
         "{}: presents {} fences",
         compositor.device(),
         if fences { "carry" } else { "carry no" }
     );
     assert!(!(ignore_maintenance && fences));
+    assert_eq!(compositor.fenced_presents(), u32::from(fences));
 
     for color in [WHITE, [200, 100, 50, 255], [1, 2, 3, 255]] {
         compositor.render(&flat(SIZE, color)).unwrap();
@@ -1386,6 +1387,19 @@ fn present_resize_and_tear_down(ignore_maintenance: bool) {
     compositor.invalidate_swapchain();
     assert_eq!(compositor.present(), Ok(true));
     assert_eq!(compositor.swapchain_extent(), Some((100, 75)));
+    // Two swapchains were replaced and eight presents went out. With swapchain maintenance
+    // each present carried a fence and the device was never idled for a replacement;
+    // without it no present did and each replacement idled the device.
+    match fences {
+        true => assert_eq!(
+            (compositor.fenced_presents(), compositor.swapchain_idles()),
+            (8, 0)
+        ),
+        false => assert_eq!(
+            (compositor.fenced_presents(), compositor.swapchain_idles()),
+            (0, 2)
+        ),
+    }
 
     // Freeze and a transition while presenting.
     compositor.freeze().unwrap();

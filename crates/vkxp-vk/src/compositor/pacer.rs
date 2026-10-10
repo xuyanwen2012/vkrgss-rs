@@ -628,6 +628,56 @@ mod tests {
         plan
     }
 
+    /// A present that finds no swapchain image shows nothing and plans nothing: the frame
+    /// it could not show gets the target one period after the frame before it, however many
+    /// presents found no image in between.
+    #[test]
+    fn presents_without_an_image_do_not_move_the_target_on() {
+        use crate::tests::harness::{assert_clean, test_device};
+        use crate::{ValidationLog, VkCompositor};
+        use vkxp_proto::{FramePacket, FrameRate, Size};
+
+        let log = ValidationLog::new();
+        let mut compositor =
+            VkCompositor::with_headless_surface(test_device(), Some(&log)).unwrap();
+        // A fixed clock; no ids and no results, so the presents themselves go out plain.
+        compositor.timing_stand_in = Some(Box::new(StandIn {
+            now: 1000 * MS,
+            ..StandIn::default()
+        }));
+        compositor.set_frame_rate(40);
+        compositor.resize_surface(Size::new(64, 48));
+        let packet = FramePacket {
+            frame_index: 0,
+            logical_size: Size::new(20, 18),
+            frame_rate: FrameRate::DEFAULT,
+            tables: vec![],
+            bitmaps: vec![],
+            ops: vec![],
+        };
+        let target = |compositor: &VkCompositor| compositor.pacer.schedule.current();
+
+        compositor.render(&packet).unwrap();
+        assert_eq!(compositor.present(), Ok(true));
+        assert_eq!(target(&compositor), Some(1000 * MS));
+
+        compositor.render(&packet).unwrap();
+        compositor.fail_acquires(2);
+        for _ in 0..2 {
+            assert_eq!(compositor.present(), Ok(false));
+            assert_eq!(target(&compositor), Some(1000 * MS));
+        }
+        assert_eq!(compositor.present(), Ok(true));
+        assert_eq!(target(&compositor), Some(1025 * MS));
+        // The frame was shown; a present that repeats it keeps its target.
+        assert_eq!(compositor.present(), Ok(true));
+        assert_eq!(target(&compositor), Some(1025 * MS));
+
+        assert_clean(&log, "while presenting with a stand-in clock");
+        drop(compositor);
+        assert_clean(&log, "while the compositor was dropped");
+    }
+
     #[test]
     fn frames_get_targets_one_period_apart_and_ids_that_the_next_present_waits_for() {
         let mut pacer = Pacer::new();

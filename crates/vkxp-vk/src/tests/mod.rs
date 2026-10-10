@@ -4,7 +4,7 @@ mod bitmaps;
 mod compositing;
 mod differential;
 mod fixtures;
-mod harness;
+pub(crate) mod harness;
 mod presentation;
 mod properties;
 mod shaders;
