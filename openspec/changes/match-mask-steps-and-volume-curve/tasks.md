@@ -11,7 +11,7 @@
 
 ## 3. Documentation
 
-- [ ] 3.1 Correct what `README.md` and the crates' documentation say about the transition threshold, the default vagueness and the volume. Verify: `grep -rn "vague = 40\|255 \* s - 1" README.md crates --include=*.rs --include=*.md` prints nothing that describes current behaviour.
+- [x] 3.1 Correct what `README.md` and the crates' documentation say about the transition threshold, the default vagueness and the volume. Verify: `grep -rn "vague = 40\|255 \* s - 1" README.md crates --include=*.rs --include=*.md` prints nothing that describes current behaviour.
 
 ## 4. Integration check
 

@@ -475,8 +475,9 @@ installs one); it is loaded when the first MIDI file is played.
 Nothing about audio stops a game. A file that cannot be decoded, MIDI music without a
 SoundFont and an output device that cannot be opened are each reported once on the error
 stream, and the game runs on without that sound. A headless run plays nothing and opens no
-audio device. Volume is a linear factor for now, not the original's curve, and the loop
-markers of MIDI files are not followed: a track loops from its beginning.
+audio device. Volume follows the original's curve, 0.35 dB below full for every unit under
+100 and silence at 0, and a fade lowers it evenly. The loop markers of MIDI files are not
+followed: a track loops from its beginning.
 
 ### Headless
 
