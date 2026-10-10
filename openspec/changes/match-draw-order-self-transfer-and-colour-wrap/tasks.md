@@ -10,8 +10,8 @@
 
 ## 3. Colour conversion and notes (`vkxp-core`)
 
-- [ ] 3.1 Wrap negative red, green and blue in `Color::to_proto`. Verify: the scenarios of `specs/core-values/spec.md`; `cargo test -p vkxp-core --locked` passes.
-- [ ] 3.2 Reword the confirmed notes named in `design.md`. Verify: `grep -n PLACEHOLDER crates/vkxp-core/src/geometry.rs crates/vkxp-core/src/color.rs crates/vkxp-core/src/scene.rs crates/vkxp-core/src/bitmap.rs` prints nothing and `sort` in `extract.rs` has no such note.
+- [x] 3.1 Wrap negative red, green and blue in `Color::to_proto`. Verify: the scenarios of `specs/core-values/spec.md`; `cargo test -p vkxp-core --locked` passes.
+- [x] 3.2 Reword the confirmed notes named in `design.md`. Verify: `grep -n PLACEHOLDER crates/vkxp-core/src/geometry.rs crates/vkxp-core/src/color.rs crates/vkxp-core/src/scene.rs crates/vkxp-core/src/bitmap.rs` prints nothing and `sort` in `extract.rs` has no such note.
 
 ## 4. Integration check
 

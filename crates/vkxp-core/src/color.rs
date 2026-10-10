@@ -130,18 +130,17 @@ impl Color {
         ]
     }
 
-    /// The colour as integers for the protocol, each component clamped to 0 to 255 with its
-    /// fraction discarded. This is the colour sent to the host.
+    /// The colour as integers for the protocol: every component with its fraction discarded
+    /// (toward zero), then red, green and blue taken modulo 256 and a negative alpha taken
+    /// as 0, as in [`Color::to_pixel`]. Red -1 is sent as 255, red -100.7 as 156 and red -0.5
+    /// as 0. This is the colour sent to the host.
     ///
-    /// PLACEHOLDER: discarding the fraction is not yet checked against the original runtime.
+    /// Provenance: oracle measurement, RGSS103J, fraction probe
+    /// (`ph-scene-fraction-probe.rb`: 936 blocks of colours, tones and flashes of sprites,
+    /// viewports and planes, all consistent with this rule).
     pub fn to_proto(self) -> vkxp_proto::Color {
-        // `as` discards the fraction and takes a negative component to 0.
-        vkxp_proto::Color::new(
-            self.red as u8,
-            self.green as u8,
-            self.blue as u8,
-            self.alpha as u8,
-        )
+        let [r, g, b, a] = self.to_pixel();
+        vkxp_proto::Color::new(r, g, b, a)
     }
 
     /// The colour with the integer components of a protocol colour.
@@ -246,10 +245,11 @@ impl Tone {
         self.set_gray(gray);
     }
 
-    /// The tone as integers, each component with its fraction discarded (toward zero). This is
-    /// the tone sent to the host.
+    /// The tone as integers, each component with its fraction discarded (toward zero), without
+    /// wrapping. This is the tone sent to the host.
     ///
-    /// PLACEHOLDER: discarding the fraction is not yet checked against the original runtime.
+    /// Provenance: oracle measurement, RGSS103J, fraction probe
+    /// (`ph-scene-fraction-probe.rb`: 936 blocks, all consistent with truncation).
     pub fn to_proto(self) -> vkxp_proto::Tone {
         // Components are within their ranges, where `as` discards the fraction.
         vkxp_proto::Tone::new(
@@ -340,9 +340,21 @@ mod tests {
     }
 
     #[test]
-    fn protocol_colour_is_clamped_at_both_bounds() {
+    fn protocol_colour_wraps_negative_red_green_and_blue() {
         let color = Color::new(-5.0, 300.0, -0.5, -1.0);
-        assert_eq!(color.to_proto(), vkxp_proto::Color::new(0, 255, 0, 0));
+        assert_eq!(color.to_proto(), vkxp_proto::Color::new(251, 255, 0, 0));
+        // The measured values.
+        for (red, sent) in [(-1.0, 255), (-1.5, 255), (-5.0, 251), (-100.7, 156)] {
+            assert_eq!(Color::rgb(red, 0.0, 0.0).to_proto().r, sent, "{red}");
+            assert_eq!(Color::rgb(0.0, red, 0.0).to_proto().g, sent, "{red}");
+            assert_eq!(Color::rgb(0.0, 0.0, red).to_proto().b, sent, "{red}");
+        }
+        for red in [-0.5, -0.9] {
+            assert_eq!(Color::rgb(red, 0.0, 0.0).to_proto().r, 0, "{red}");
+        }
+        for alpha in [-1.0, -1.5, -5.0, -100.7] {
+            assert_eq!(Color::new(0.0, 0.0, 0.0, alpha).to_proto().a, 0);
+        }
     }
 
     #[test]

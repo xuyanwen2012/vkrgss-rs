@@ -56,8 +56,11 @@ impl Geometry {
     /// `None` when the placement draws nothing or cannot be expressed: a zoom of 0, a value
     /// that is not a number, or a coefficient outside the fixed-point range.
     ///
-    /// PLACEHOLDER: what a negative zoom draws through a transform (here: the flipped image) is
-    /// not yet checked against the original runtime.
+    /// A negative zoom goes into the coefficients with its sign, which flips the image. No
+    /// sprite reaches this with one: measured on the original runtime (RGSS103J, negative
+    /// zoom probe `ph-scene-negzoom-probe.rb`, 96 cases without a differing pixel), a sprite
+    /// at angle 0 with a zoom of 0 or less draws nothing, and a turned sprite follows
+    /// [`Geometry::turned_box`] with the signed zoom.
     pub(crate) fn transform(
         &self,
         src_width: f64,
@@ -128,7 +131,9 @@ impl Geometry {
     /// Provenance: oracle measurement 2026-10-09, RGSS104E, sprite angle probe (36 whole
     /// frames without a differing pixel); the routine is at 0x10021960 of that DLL.
     ///
-    /// PLACEHOLDER: what a negative zoom draws through this rule is not measured.
+    /// A negative zoom takes part with its sign and flips the sprite about its origin:
+    /// oracle measurement, RGSS103J, negative zoom probe (`ph-scene-negzoom-probe.rb`: 96
+    /// cases without a differing pixel).
     pub(crate) fn turned_box(&self, width: i32, height: i32) -> Option<TurnedBox> {
         if self.zoom_x == 0.0 || self.zoom_y == 0.0 || width <= 0 || height <= 0 {
             return None;
