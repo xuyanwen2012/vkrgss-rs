@@ -88,9 +88,7 @@ The requested size SHALL be the height in pixels of the cell the text is set in.
 be set at a whole number of pixels per em: `round(upm * size / box)`, lowered by one when
 `round(box * ppem / upm)` exceeds the size, where `box` is the selected font's own ascent plus
 descent, or the line box of a replaced family when that applies. The measured height of any
-non-empty string SHALL be the rounded ascent plus the rounded descent at that size. Bold and
-italic requests SHALL select a matching face when one is available and otherwise synthesise
-the style from the regular face.
+non-empty string SHALL be the rounded ascent plus the rounded descent at that size.
 
 #### Scenario: Height equals size
 - **WHEN** strings are measured at sizes 12, 22 and 52 in a font whose line box equals its em
@@ -99,6 +97,10 @@ the style from the regular face.
 #### Scenario: Height from rounded metrics, measured
 - **WHEN** each committed size sample measured on the original runtime for the two test fonts is evaluated
 - **THEN** pixels per em and text height equal the measured values, for example 15 and 21 at size 22 in the first font
+
+### Requirement: Bold and italic faces
+Bold and italic requests SHALL select a matching face when one is available and otherwise
+synthesise the style from the regular face.
 
 #### Scenario: Bold face present
 - **WHEN** a bold request is made for a family that has a bold face
@@ -111,8 +113,7 @@ the style from the regular face.
 ### Requirement: Measurement
 The width of a string SHALL be the sum of its characters' advance widths, each rounded to a
 whole pixel at the font's whole pixels per em, without kerning or shaping, plus the amount by
-which the first glyph reaches left of the pen. A character the selected font lacks and a
-fallback font has SHALL be measured with the fallback font's advance at the same pixel size. A
+which the first glyph reaches left of the pen. A
 line break, any other control character and a character no font has SHALL be measured as the
 selected font's missing glyph and SHALL NOT start a new line. An empty string SHALL have width
 0 and height 0.
@@ -132,6 +133,10 @@ selected font's missing glyph and SHALL NOT start a new line. An empty string SH
 #### Scenario: Left overhang
 - **WHEN** a string that starts with a glyph reaching left of the pen is measured
 - **THEN** its width is the sum of the advances plus that overhang
+
+### Requirement: Advance of fallback glyphs
+A character that the selected font lacks and a fallback font has SHALL be measured, and set
+when drawn, with the fallback font's advance at the same pixel size.
 
 #### Scenario: Fallback glyphs do not overlap
 - **WHEN** two characters that only a fallback font has are drawn with a selected font whose missing-glyph advance is narrower than those glyphs

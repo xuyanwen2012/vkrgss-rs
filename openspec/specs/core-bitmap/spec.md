@@ -168,10 +168,8 @@ measured integer arithmetic, leaving alpha unchanged. An angle of 0 SHALL change
 Drawing text SHALL place a string inside a rectangle using the bitmap's font and a text
 rasteriser supplied by the embedder: its top at `y + max(0, (h - th) div 2)` for a text height
 `th`, aligned left, centre or right by the drawn width, which is the measured width plus the
-last glyph's right overhang, and cut to the rectangle and the bitmap. The whole text cell
-SHALL be blended with the `blt` arithmetic at a source alpha of
-`(coverage * colour_alpha + 127) / 255`. Text wider than the rectangle SHALL be squeezed as
-the requirement "Text squeezing" says.
+last glyph's right overhang, and cut to the rectangle and the bitmap. The text cell SHALL be blended as "Text
+blending" says, and text wider than the rectangle squeezed as "Text squeezing" says.
 
 #### Scenario: Alignment
 - **WHEN** text narrower than its rectangle is drawn left, centre and right aligned
@@ -189,10 +187,6 @@ the requirement "Text squeezing" says.
 - **WHEN** text is wider than the rectangle even at the 60 percent step
 - **THEN** it is drawn at that step from the rectangle's left edge for every alignment, and clipped
 
-#### Scenario: Coverage and colour alpha
-- **WHEN** the font colour has alpha 0
-- **THEN** nothing is drawn; and with a colour alpha above 0, a pixel of the text cell with coverage 0 is unchanged where the destination's alpha is above 0 and takes the font colour with alpha 0 where it is 0
-
 #### Scenario: Rectangle lower than the text
 - **WHEN** text of height 21 is drawn in a rectangle of height 10
 - **THEN** the top 10 rows of the text cell appear, not its middle
@@ -200,6 +194,14 @@ the requirement "Text squeezing" says.
 #### Scenario: Measured placement
 - **WHEN** each committed vertical and alignment sample measured on the original runtime is drawn
 - **THEN** the rows and columns of the text cell equal the measured ones
+
+### Requirement: Text blending
+The whole text cell SHALL be blended into the bitmap with the `blt` arithmetic at a source
+alpha of `(coverage * colour_alpha + 127) / 255`.
+
+#### Scenario: Coverage and colour alpha
+- **WHEN** the font colour has alpha 0
+- **THEN** nothing is drawn; and with a colour alpha above 0, a pixel of the text cell with coverage 0 is unchanged where the destination's alpha is above 0 and takes the font colour with alpha 0 where it is 0
 
 ### Requirement: Text measurement
 Measuring text SHALL return the width and height the rasteriser reports for the string in the

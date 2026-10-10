@@ -92,11 +92,11 @@ disconnects, the session SHALL end.
 
 ### Requirement: Freeze and transition
 After a freeze message the host SHALL keep showing the frame then on screen while still
-rendering and answering the frames that follow. After a transition message of duration N the
+rendering and answering later frames. After a transition message of duration N the
 k-th following frame SHALL be shown at step k-1 of N equal steps from the held frame to the
 newest, and frames SHALL be shown normally from the frame after the N-th. The transition SHALL
 be a cross-fade, or with a mask bitmap the presenter's masked mix. When nothing is frozen, the
-picture on screen SHALL stay for those N frames.
+picture on screen SHALL stay for those frames.
 
 #### Scenario: Frozen display
 - **WHEN** a freeze is followed by three frames with different contents

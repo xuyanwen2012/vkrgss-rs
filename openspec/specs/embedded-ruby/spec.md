@@ -185,8 +185,7 @@ exported by an executable that links it.
 32 bits by the generator's single-integer initialisation, and SHALL return the previous seed.
 The generator's real number SHALL be one 32-bit output divided by 2^32. `rand(n)` for an
 integer `n` other than zero SHALL return that real number multiplied by the absolute value of
-`n` and truncated, and `rand` and `rand(0)` SHALL return that real number. The deviation from
-the vendored version SHALL be recorded with the other patches.
+`n` and truncated, and `rand` and `rand(0)` SHALL return that real number.
 
 #### Scenario: Values measured on the original
 - **WHEN** `srand(1234); (1..12).map { rand(1000) }` is evaluated
@@ -203,6 +202,10 @@ the vendored version SHALL be recorded with the other patches.
 #### Scenario: Previous seed
 - **WHEN** `srand(3); srand(4)` is evaluated
 - **THEN** the second call returns `3`
+
+### Requirement: Random number patch is recorded
+The deviation of the random number functions from the vendored version SHALL be recorded with
+the other patches.
 
 #### Scenario: Recorded
 - **WHEN** the manifest test of the vendored tree runs

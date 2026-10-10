@@ -102,8 +102,7 @@ stay alive as long as the element refers to it. Assigning a bitmap to a sprite S
 SHALL report it. Any other method of a disposed element SHALL raise `RGSSError` with the
 message `disposed sprite`, `disposed viewport`, `disposed window`, `disposed plane` or
 `disposed tilemap`, except `Sprite#bitmap` and `Tilemap#autotiles`, which SHALL keep returning
-their object. Disposing a sprite, plane or window SHALL NOT dispose its bitmaps. Disposing a
-viewport SHALL dispose every sprite, plane, window and tilemap created in it.
+their object. Disposing a sprite, plane or window SHALL NOT dispose its bitmaps.
 
 #### Scenario: Use after dispose
 - **WHEN** `s = Sprite.new; s.dispose; s.x` is evaluated
@@ -124,6 +123,10 @@ viewport SHALL dispose every sprite, plane, window and tilemap created in it.
 #### Scenario: Autotiles of a disposed tilemap
 - **WHEN** `t = Tilemap.new; t.dispose; t.autotiles` is evaluated
 - **THEN** the autotile list is returned
+
+### Requirement: Viewport disposal
+Disposing a viewport SHALL dispose every sprite, plane, window and tilemap created in it, and
+SHALL leave elements outside it untouched.
 
 #### Scenario: Viewport takes its elements along, measured on the original
 - **WHEN** a sprite, a plane, a window and a tilemap are created in a viewport, a second sprite is created without one, and the viewport is disposed
