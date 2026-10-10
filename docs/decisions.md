@@ -88,8 +88,9 @@ settled; change one only through an OpenSpec change that says so.
 - Exposed surface matches the original: core library only, plus `Zlib` (extension compiled in,
   `Zlib.crc_table` fixed for 64-bit, zlib linked statically) and a `Win32API` shim. Load path
   cleared and `$KCODE='U'` at start.
-- Regex: the original uses Oniguruma. M1 starts on the stock 1.8.7 engine (no lookbehind, no
-  named groups) while a spike integrates Oniguruma.
+- Regex: the original uses Oniguruma, and so does vkxp: Oniguruma 5.9.6 is vendored and built
+  in place of the interpreter's own engine (change `embed-oniguruma`); a probe of 65 patterns
+  gives the original's results except one error message.
 - The interpreter runs only on the script thread, with a large dedicated stack
   (`RUBY_INIT_STACK` at thread entry, `ruby_set_stack_size()` after init). Host signal handlers
   are restored after `ruby_init`. FFI declarations are hand-written.
@@ -172,6 +173,7 @@ the rules have not been measured with the fonts of Windows itself.
 - The original DLL is ASProtect-protected; whether it runs under Wine is unverified.
 - Pixel exactness requires reverse engineering every inner loop and will arrive incrementally.
 - Ruby 1.8.7's conservative GC depends on compiler behaviour; aarch64 is untested.
-- Oniguruma integration is unverified.
+- The vendored Oniguruma (5.9.6) is newer than the one inside the original; differences beyond
+  the probed patterns are possible.
 - Substitute fonts will not reproduce the original's advance widths.
 - MIDI timbre will differ from the original's Windows synthesiser.
