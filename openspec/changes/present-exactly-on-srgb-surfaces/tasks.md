@@ -2,7 +2,7 @@
 
 ## 1. Selection (`vkxp-vk`)
 
-- [ ] 1.1 Enable the extension where offered and extend the format choice. Verify: the scenarios "sRGB only, views supported", "sRGB only, views not supported" and "Unknown formats" of `specs/vulkan-presentation/spec.md` as unit tests.
+- [x] 1.1 Enable the extension where offered and extend the format choice. Verify: the scenarios "sRGB only, views supported", "sRGB only, views not supported" and "Unknown formats" of `specs/vulkan-presentation/spec.md` as unit tests.
 
 ## 2. Swapchain and pass (`vkxp-vk`)
 

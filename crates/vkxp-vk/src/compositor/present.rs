@@ -281,34 +281,87 @@ enum Placement {
     Fill,
 }
 
-/// The surface format to present in, and whether it is an sRGB format.
+/// The format a swapchain is created with and how the frame's values get into its images.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PresentFormat {
+    /// The surface format the swapchain is created with.
+    surface: vk::SurfaceFormatKHR,
+    /// The format of the views the pass draws through and of the pipeline. Where it is not
+    /// the surface's, the swapchain is created for views in both.
+    view: vk::Format,
+    /// Whether the views encode what is written to them, so that the shader applies the
+    /// inverse.
+    srgb_target: bool,
+}
+
+impl PresentFormat {
+    /// The surface format as it is, drawn through views of the same format.
+    fn plain(surface: vk::SurfaceFormatKHR, srgb_target: bool) -> PresentFormat {
+        PresentFormat {
+            surface,
+            view: surface.format,
+            srgb_target,
+        }
+    }
+
+    /// Whether the pass draws through views of another format than the swapchain's.
+    fn is_mutable(&self) -> bool {
+        self.view != self.surface.format
+    }
+}
+
+/// The `UNORM` formats that pass the frame's values through, in order of preference.
+const UNORM_FORMATS: [vk::Format; 3] = [
+    vk::Format::B8G8R8A8_UNORM,
+    vk::Format::R8G8B8A8_UNORM,
+    vk::Format::A8B8G8R8_UNORM_PACK32,
+];
+
+/// The sRGB twin of each of [`UNORM_FORMATS`], at the same index.
+const SRGB_FORMATS: [vk::Format; 3] = [
+    vk::Format::B8G8R8A8_SRGB,
+    vk::Format::R8G8B8A8_SRGB,
+    vk::Format::A8B8G8R8_SRGB_PACK32,
+];
+
+/// The surface format to present in and the format to draw through, on a device that has
+/// `VK_KHR_swapchain_mutable_format` enabled or not.
 ///
 /// A `UNORM` format passes the frame's values through unchanged and is preferred. With only
-/// sRGB formats on offer the shader undoes the encoding the format applies. Anything else is
-/// taken as it comes.
-fn choose_format(formats: &[vk::SurfaceFormatKHR]) -> Option<(vk::SurfaceFormatKHR, bool)> {
-    const UNORM: [vk::Format; 3] = [
-        vk::Format::B8G8R8A8_UNORM,
-        vk::Format::R8G8B8A8_UNORM,
-        vk::Format::A8B8G8R8_UNORM_PACK32,
-    ];
-    const SRGB: [vk::Format; 3] = [
-        vk::Format::B8G8R8A8_SRGB,
-        vk::Format::R8G8B8A8_SRGB,
-        vk::Format::A8B8G8R8_SRGB_PACK32,
-    ];
-    let find = |wanted: &[vk::Format]| {
-        wanted.iter().find_map(|format| {
-            formats.iter().copied().find(|offered| {
-                offered.format == *format
-                    && offered.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR
-            })
+/// sRGB formats on offer the pass draws through a `UNORM` view of the image where the device
+/// has the extension, which stores the values as they are; without it the shader undoes the
+/// encoding the format applies. Of anything else the first format in the sRGB non-linear
+/// colour space is taken, then the first of any, as it comes.
+fn choose_format(formats: &[vk::SurfaceFormatKHR], mutable_format: bool) -> Option<PresentFormat> {
+    let offered = |format: vk::Format| {
+        formats.iter().copied().find(|offered| {
+            offered.format == format && offered.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR
         })
     };
-    find(&UNORM)
-        .map(|format| (format, false))
-        .or_else(|| find(&SRGB).map(|format| (format, true)))
-        .or_else(|| formats.first().map(|format| (*format, false)))
+    let unorm = || {
+        let surface = UNORM_FORMATS.into_iter().find_map(offered)?;
+        Some(PresentFormat::plain(surface, false))
+    };
+    let srgb = || {
+        let (surface, twin) = std::iter::zip(SRGB_FORMATS, UNORM_FORMATS)
+            .find_map(|(srgb, twin)| Some((offered(srgb)?, twin)))?;
+        Some(match mutable_format {
+            true => PresentFormat {
+                surface,
+                view: twin,
+                srgb_target: false,
+            },
+            false => PresentFormat::plain(surface, true),
+        })
+    };
+    let last_resort = || {
+        let surface = formats
+            .iter()
+            .find(|offered| offered.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR)
+            .or(formats.first())?;
+        Some(PresentFormat::plain(*surface, false))
+    };
+    unorm().or_else(srgb).or_else(last_resort)
 }
 
 /// The extent of a swapchain for a surface with `capabilities` in a window of `requested`
@@ -1812,11 +1865,12 @@ impl VkCompositor {
                 .get_physical_device_surface_formats(self.gpu.physical, surface.handle)
         }
         .map_err(VkError::vulkan("vkGetPhysicalDeviceSurfaceFormatsKHR"))?;
-        let (format, srgb) = choose_format(&formats).ok_or(VkError::Vulkan {
+        let chosen = choose_format(&formats, false).ok_or(VkError::Vulkan {
             call: "vkGetPhysicalDeviceSurfaceFormatsKHR",
             result: vk::Result::ERROR_FORMAT_NOT_SUPPORTED,
         })?;
-        let pipeline = presenter.pipeline(&self.gpu, format.format)?;
+        let (format, srgb) = (chosen.surface, chosen.srgb_target);
+        let pipeline = presenter.pipeline(&self.gpu, chosen.view)?;
 
         let mut image_count = capabilities.min_image_count + 1;
         if capabilities.max_image_count > 0 {
@@ -2268,6 +2322,10 @@ mod tests {
         }
     }
 
+    fn plain(surface: vk::Format) -> Option<PresentFormat> {
+        Some(PresentFormat::plain(format(surface), false))
+    }
+
     #[test]
     fn unorm_surface_format_is_preferred_over_srgb() {
         let offered = [
@@ -2275,25 +2333,63 @@ mod tests {
             format(vk::Format::R8G8B8A8_UNORM),
             format(vk::Format::B8G8R8A8_UNORM),
         ];
-        assert_eq!(
-            choose_format(&offered),
-            Some((format(vk::Format::B8G8R8A8_UNORM), false))
-        );
-        assert_eq!(
-            choose_format(&offered[..2]),
-            Some((format(vk::Format::R8G8B8A8_UNORM), false))
-        );
+        // The same with and without the extension: nothing changes where a UNORM format is.
+        for mutable_format in [false, true] {
+            assert_eq!(
+                choose_format(&offered, mutable_format),
+                plain(vk::Format::B8G8R8A8_UNORM)
+            );
+            assert_eq!(
+                choose_format(&offered[..2], mutable_format),
+                plain(vk::Format::R8G8B8A8_UNORM)
+            );
+        }
     }
 
+    /// Scenario "sRGB only, views supported".
     #[test]
-    fn srgb_surface_format_is_taken_with_the_inverse_transfer_when_nothing_else_is_offered() {
+    fn srgb_surface_format_is_drawn_through_its_unorm_twin_with_the_extension() {
+        let chosen = choose_format(&[format(vk::Format::B8G8R8A8_SRGB)], true).unwrap();
+        assert_eq!(
+            chosen,
+            PresentFormat {
+                surface: format(vk::Format::B8G8R8A8_SRGB),
+                view: vk::Format::B8G8R8A8_UNORM,
+                srgb_target: false,
+            }
+        );
+        assert!(chosen.is_mutable());
+
+        for (srgb, twin) in std::iter::zip(SRGB_FORMATS, UNORM_FORMATS) {
+            let offered = [format(vk::Format::R16G16B16A16_SFLOAT), format(srgb)];
+            let chosen = choose_format(&offered, true).unwrap();
+            assert_eq!(
+                (chosen.surface, chosen.view, chosen.srgb_target),
+                (format(srgb), twin, false)
+            );
+        }
+    }
+
+    /// Scenario "sRGB only, views not supported".
+    #[test]
+    fn srgb_surface_format_is_taken_with_the_inverse_transfer_without_the_extension() {
+        let chosen = choose_format(&[format(vk::Format::B8G8R8A8_SRGB)], false).unwrap();
+        assert_eq!(
+            chosen,
+            PresentFormat::plain(format(vk::Format::B8G8R8A8_SRGB), true)
+        );
+        assert!(!chosen.is_mutable());
+
         let offered = [
             format(vk::Format::R16G16B16A16_SFLOAT),
             format(vk::Format::R8G8B8A8_SRGB),
         ];
         assert_eq!(
-            choose_format(&offered),
-            Some((format(vk::Format::R8G8B8A8_SRGB), true))
+            choose_format(&offered, false),
+            Some(PresentFormat::plain(
+                format(vk::Format::R8G8B8A8_SRGB),
+                true
+            ))
         );
         // A UNORM format in another colour space is not the pass-through one.
         let wide = vk::SurfaceFormatKHR {
@@ -2301,11 +2397,33 @@ mod tests {
             color_space: vk::ColorSpaceKHR::DISPLAY_P3_NONLINEAR_EXT,
         };
         assert_eq!(
-            choose_format(&[wide, format(vk::Format::B8G8R8A8_SRGB)]),
-            Some((format(vk::Format::B8G8R8A8_SRGB), true))
+            choose_format(&[wide, format(vk::Format::B8G8R8A8_SRGB)], false),
+            Some(PresentFormat::plain(
+                format(vk::Format::B8G8R8A8_SRGB),
+                true
+            ))
         );
-        assert_eq!(choose_format(&[wide]), Some((wide, false)));
-        assert_eq!(choose_format(&[]), None);
+    }
+
+    /// Scenario "Unknown formats".
+    #[test]
+    fn last_resort_prefers_a_format_in_the_srgb_non_linear_colour_space() {
+        let wide = vk::SurfaceFormatKHR {
+            format: vk::Format::R16G16B16A16_SFLOAT,
+            color_space: vk::ColorSpaceKHR::EXTENDED_SRGB_LINEAR_EXT,
+        };
+        let ten_bit = format(vk::Format::A2B10G10R10_UNORM_PACK32);
+        for mutable_format in [false, true] {
+            assert_eq!(
+                choose_format(&[wide, ten_bit], mutable_format),
+                Some(PresentFormat::plain(ten_bit, false))
+            );
+            assert_eq!(
+                choose_format(&[wide], mutable_format),
+                Some(PresentFormat::plain(wide, false))
+            );
+            assert_eq!(choose_format(&[], mutable_format), None);
+        }
     }
 
     #[test]

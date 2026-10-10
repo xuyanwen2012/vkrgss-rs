@@ -6,7 +6,8 @@
 //! `VK_KHR_swapchain`, and its queue also draws and presents to that surface. Such a device
 //! also gets `VK_EXT_present_timing` and `VK_KHR_present_wait2` with what they depend on,
 //! when it has them; see [`pacing_support`]. It gets `VK_EXT_swapchain_maintenance1` too
-//! where it and the instance offer it.
+//! where it and the instance offer it, and `VK_KHR_swapchain_mutable_format` where it lists
+//! it.
 //!
 //! Every instance gets `VK_EXT_debug_utils` when the installation lists it, so that the
 //! objects of the backend have names and its command buffers have labels in a capture; see
@@ -789,6 +790,18 @@ impl Instance {
         };
         Ok(maintenance.swapchain_maintenance1 == vk::TRUE)
     }
+
+    /// Whether the device lists `VK_KHR_swapchain_mutable_format`. What the extension depends
+    /// on is core in the Vulkan version a suitable device has.
+    fn swapchain_mutable_format(&self, physical: vk::PhysicalDevice) -> Result<bool, VkError> {
+        // SAFETY: the physical device was enumerated from this live instance.
+        let extensions = unsafe { self.raw.enumerate_device_extension_properties(physical) }
+            .map_err(VkError::vulkan("vkEnumerateDeviceExtensionProperties"))?;
+        Ok(extensions.iter().any(|extension| {
+            extension.extension_name_as_c_str().ok()
+                == Some(ash::khr::swapchain_mutable_format::NAME)
+        }))
+    }
 }
 
 impl Drop for Instance {
@@ -873,6 +886,9 @@ pub(crate) struct Gpu {
     /// Whether the device was created with `VK_EXT_swapchain_maintenance1`. Never without a
     /// surface.
     pub swapchain_maintenance: bool,
+    /// Whether the device was created with `VK_KHR_swapchain_mutable_format`, so that the
+    /// images of a swapchain can be viewed in another format. Never without a surface.
+    pub swapchain_mutable_format: bool,
     /// How the timestamps of the queue are read, or `None` for a queue family that has none
     /// (`timestampValidBits` of 0).
     pub timestamps: Option<Timestamps>,
@@ -1022,6 +1038,10 @@ impl Gpu {
             Some(_) => instance.swapchain_maintenance(candidate.physical)?,
             None => false,
         };
+        let swapchain_mutable_format = match surface {
+            Some(_) => instance.swapchain_mutable_format(candidate.physical)?,
+            None => false,
+        };
         let mut extensions: Vec<*const c_char> = Vec::new();
         if surface.is_some() {
             extensions.push(ash::khr::swapchain::NAME.as_ptr());
@@ -1070,6 +1090,9 @@ impl Gpu {
         if swapchain_maintenance {
             extensions.push(ash::ext::swapchain_maintenance1::NAME.as_ptr());
         }
+        if swapchain_mutable_format {
+            extensions.push(ash::khr::swapchain_mutable_format::NAME.as_ptr());
+        }
         let mut info = vk::DeviceCreateInfo::default()
             .queue_create_infos(&queues)
             .enabled_extension_names(&extensions)
@@ -1082,8 +1105,8 @@ impl Gpu {
         // were reported as supported, the swapchain extension is only requested for a device
         // that lists it, as are the pacing extensions, whose feature structures behind
         // `features12` are live and have the layout of the header, and the swapchain
-        // maintenance extension, whose instance extension the instance has, and `info` is
-        // valid for the call.
+        // maintenance extension, whose instance extension the instance has, and the mutable
+        // format extension, and `info` is valid for the call.
         let created = unsafe { instance.raw.create_device(candidate.physical, &info, None) };
         let device = match created {
             Ok(device) => device,
@@ -1121,6 +1144,7 @@ impl Gpu {
             surface,
             pacing,
             swapchain_maintenance,
+            swapchain_mutable_format,
             timestamps,
             debug,
             instance,
