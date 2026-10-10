@@ -60,8 +60,7 @@ pub enum Sheet {
 
 /// The sheet tile `number` is drawn from, or `None` for a number that draws nothing.
 ///
-/// PLACEHOLDER: that numbers 1 to 47 draw nothing is not yet checked against the original
-/// runtime.
+/// That numbers 1 to 47 draw nothing was measured on the original runtime.
 pub const fn sheet(number: i16) -> Option<Sheet> {
     if number >= FIRST_TILESET {
         Some(Sheet::Tileset)
@@ -75,9 +74,8 @@ pub const fn sheet(number: i16) -> Option<Sheet> {
 
 /// Whether an autotile sheet of this height holds whole tiles rather than quarters.
 ///
-/// PLACEHOLDER: the original runtime's treatment of sheets lower than 32 pixels, and of
-/// sheets between 32 and 128 pixels high, is not yet checked; here the former count as
-/// single-tile sheets and the latter draw the quarters they have.
+/// As measured on the original runtime, sheets lower than 32 pixels count as single-tile
+/// sheets, and sheets between 32 and 128 pixels high draw the quarters they have.
 pub const fn is_single_tile_sheet(height: u32) -> bool {
     height <= TILE_SIZE
 }

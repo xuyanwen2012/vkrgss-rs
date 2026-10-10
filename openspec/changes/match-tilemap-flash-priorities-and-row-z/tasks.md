@@ -11,7 +11,7 @@
 
 ## 3. Notes
 
-- [ ] 3.1 Reword the settled and confirmed notes. Verify: `grep -n PLACEHOLDER crates/vkxp-core/src/tilemap.rs crates/vkxp-proto/src/tiles.rs` prints nothing.
+- [x] 3.1 Reword the settled and confirmed notes. Verify: `grep -n PLACEHOLDER crates/vkxp-core/src/tilemap.rs crates/vkxp-proto/src/tiles.rs` prints nothing.
 
 ## 4. Integration check
 

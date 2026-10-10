@@ -420,8 +420,8 @@ impl Tilemap {
             ((start.rem_euclid(tile) + i64::from(length) + tile - 1) / tile) as i32
         };
         let (columns, shown_rows) = (shown(left, clip.width), shown(top, clip.height));
-        // PLACEHOLDER: that the map repeats beyond its edges is assumed, not yet checked
-        // against the original runtime.
+        // As measured on the original runtime, the map repeats beyond its edges in both
+        // directions, tiles with a priority included.
         let priorities = self.priorities.as_ref().map(|table| table.read());
         let mut ground = [false; LAYERS];
         let mut rows: [[Vec<i32>; LAYERS]; MAX_PRIORITY] = Default::default();
