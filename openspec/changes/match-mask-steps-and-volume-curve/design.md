@@ -58,6 +58,9 @@ This was read from the code of RGSS104E, not measured by ear or by recording.
 
 - Step 0 of a masked transition is given to the display as a mix that shows the held frame
   alone, by whatever value of `Mix` already means that; the presenter does not change.
+  As implemented: `Mix::HELD` means that only without a mask (under a mask with a vagueness
+  the threshold 0 shows the new picture where the mask is 0), so the session gives the
+  display `Mix::HELD` at step 0 and tells it the mask from step 1 on.
 - The mixer applies the curve to the product of volume and fade, so a fade is even in
   decibels: half-way through a fade of a track at volume 100 the gain is that of volume 50.
   The fade factor is taken as the continuous fraction of the fade time, not rounded to

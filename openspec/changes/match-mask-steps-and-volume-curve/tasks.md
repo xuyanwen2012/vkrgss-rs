@@ -2,8 +2,8 @@
 
 ## 1. Transition steps (`vkxp-host`, `vkxp-binding`)
 
-- [ ] 1.1 Compute the mask threshold as measured and show the held frame alone at step 0. Verify: the scenarios of `specs/host-session/spec.md` and the table of T in `design.md` (durations 2, 3, 5, 8, 20 and the first ten of 50) as tests; `cargo test -p vkxp-host --locked` passes with `VK_LOADER_DRIVERS_SELECT='*lvp*'`.
-- [ ] 1.2 Default vagueness 20. Verify: the scenario "Default vagueness"; `cargo test -p vkxp-binding --locked` passes.
+- [x] 1.1 Compute the mask threshold as measured and show the held frame alone at step 0. Verify: the scenarios of `specs/host-session/spec.md` and the table of T in `design.md` (durations 2, 3, 5, 8, 20 and the first ten of 50) as tests; `cargo test -p vkxp-host --locked` passes with `VK_LOADER_DRIVERS_SELECT='*lvp*'`.
+- [x] 1.2 Default vagueness 20. Verify: the scenario "Default vagueness"; `cargo test -p vkxp-binding --locked` passes.
 
 ## 2. Volume curve (`vkxp-audio`)
 

@@ -212,6 +212,9 @@ pub struct Session<D: Display, C: Clock> {
     mix: Mix,
     /// The mask bitmap and the vagueness of the transition under way, if it has a mask.
     mask: Option<(BitmapId, u32)>,
+    /// The mask the display was told last. It is that of the transition from step 1 on:
+    /// step 0 shows the held frame alone, which no threshold does under a mask.
+    display_mask: Option<(BitmapId, u32)>,
     title: String,
     fps: Option<FpsCounter>,
     frames: u64,
@@ -257,6 +260,7 @@ impl<D: Display, C: Clock> Session<D, C> {
             fade: Fade::Normal,
             mix: Mix::Newest,
             mask: None,
+            display_mask: None,
             title: String::new(),
             fps: None,
             frames: 0,
@@ -624,8 +628,12 @@ impl<D: Display, C: Clock> Session<D, C> {
             }
             Fade::Normal | Fade::Frozen => None,
         };
-        if let Some((_, _, _, mix)) = step {
+        let mask_before = self.display_mask;
+        if let Some((shown, duration, _, mix)) = step {
             self.display.set_mix(mix);
+            if (1..duration).contains(&shown) {
+                self.show_mask(self.mask);
+            }
         }
         let restart = std::mem::take(&mut self.pacing_restart);
         if restart || self.frame_reset || self.fast_forward() {
@@ -655,10 +663,10 @@ impl<D: Display, C: Clock> Session<D, C> {
                                 id.index, id.generation
                             ),
                         );
-                        self.set_mask(None);
+                        self.drop_mask();
                     }
                     self.fade = if shown >= duration {
-                        self.set_mask(None);
+                        self.drop_mask();
                         Fade::Normal
                     } else {
                         Fade::Fading {
@@ -674,6 +682,7 @@ impl<D: Display, C: Clock> Session<D, C> {
                     // The image on screen stays, so its mix does too: a redraw must not show
                     // the frame before in the mix meant for this one.
                     self.display.set_mix(self.mix);
+                    self.show_mask(mask_before);
                 }
                 self.report(
                     Severity::Error,
@@ -747,7 +756,7 @@ impl<D: Display, C: Clock> Session<D, C> {
             );
         }
         self.set_mix(Mix::HELD);
-        self.set_mask(None);
+        self.drop_mask();
         self.fade = Fade::Frozen;
     }
 
@@ -777,15 +786,22 @@ impl<D: Display, C: Clock> Session<D, C> {
                     duration,
                     still: false,
                 };
-                self.set_mask(mask.filter(|_| duration > 0));
+                // The display is told at step 1: step 0 shows the held frame alone.
+                self.mask = mask.filter(|_| duration > 0);
             }
         }
     }
 
-    /// Sets the mask of the transition under way, telling the display when it changes.
-    fn set_mask(&mut self, mask: Option<(BitmapId, u32)>) {
-        if self.mask != mask {
-            self.mask = mask;
+    /// Drops the mask of the transition under way, on the display too.
+    fn drop_mask(&mut self) {
+        self.mask = None;
+        self.show_mask(None);
+    }
+
+    /// Tells the display the mask when it changes.
+    fn show_mask(&mut self, mask: Option<(BitmapId, u32)>) {
+        if self.display_mask != mask {
+            self.display_mask = mask;
             self.display.set_mask(mask);
         }
     }
@@ -888,17 +904,15 @@ impl<D: Display, C: Clock> Drop for Session<D, C> {
 
 /// The mix of step `step` of a transition of `duration` frames, `step` below `duration`: the
 /// cross-fade weight `255 * step / duration` and the mask threshold
-/// `(255 * step - 1) / duration`, which is 0 at step 0.
-///
-/// PLACEHOLDER for the steps before the last: the original could only be measured at the step
-/// its `Graphics.transition` returns at, `duration - 1`.
+/// `256 * step / duration - 1`, floored at 0, as measured on the original. Step 0 is
+/// [`Mix::HELD`].
 fn step_mix(step: u32, duration: u32) -> Mix {
-    let scaled = 255 * u64::from(step);
+    let step = u64::from(step);
     let duration = u64::from(duration);
     // Both are below 255, since the step is below the duration.
     Mix::Step {
-        weight: (scaled / duration) as u8,
-        threshold: (scaled.saturating_sub(1) / duration) as u8,
+        weight: (255 * step / duration) as u8,
+        threshold: (256 * step / duration).saturating_sub(1) as u8,
     }
 }
 

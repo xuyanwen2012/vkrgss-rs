@@ -809,6 +809,47 @@ fn transition_cross_fades_one_step_behind_its_frames_then_shows_frames_normally(
     );
 }
 
+/// The thresholds of the steps from 1 on.
+fn thresholds(duration: u32) -> Vec<u8> {
+    (1..duration)
+        .map(|at| match step_mix(at, duration) {
+            Mix::Step { threshold, .. } => threshold,
+            Mix::Newest => panic!("step {at} of {duration} is no step"),
+        })
+        .collect()
+}
+
+/// Scenario "Intermediate thresholds", and the table of the design.
+#[test]
+fn intermediate_steps_have_the_thresholds_measured_on_the_original() {
+    assert_eq!(thresholds(2), [127]);
+    assert_eq!(thresholds(3), [84, 169]);
+    assert_eq!(thresholds(5), [50, 101, 152, 203]);
+    assert_eq!(thresholds(8), [31, 63, 95, 127, 159, 191, 223]);
+    assert_eq!(
+        thresholds(20),
+        [
+            11, 24, 37, 50, 63, 75, 88, 101, 114, 127, 139, 152, 165, 178, 191, 203, 216, 229, 242
+        ]
+    );
+    assert_eq!(thresholds(50)[..10], [4, 9, 14, 19, 24, 29, 34, 39, 45, 50]);
+}
+
+/// Scenario "First step of a masked transition".
+#[test]
+fn first_step_of_a_masked_transition_is_the_held_frame_alone() {
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    rig.send(GuestToHost::Freeze);
+    rig.send(masked_transition(5, 40));
+    rig.frame(frame_with_mask(1));
+    // The display has the mask bitmap and is not told to use it yet.
+    assert_eq!(rig.shown(), Shown::Frame(0));
+    rig.frame(frame(2));
+    assert_eq!(rig.shown(), masked(2, 50, 40));
+    assert_eq!(rig.errors.text(), "");
+}
+
 /// Scenario "Last step" of the transition step values.
 #[test]
 fn last_step_has_the_weight_and_the_threshold_measured_on_the_original() {
@@ -819,6 +860,8 @@ fn last_step_has_the_weight_and_the_threshold_measured_on_the_original() {
     // The first step shows the held frame, and no duration overflows.
     assert_eq!(step_mix(0, 8), Mix::HELD);
     assert_eq!(step_mix(u32::MAX - 1, u32::MAX), step(254));
+    // Above 256 the formula is below 0 at the first steps: the threshold is floored.
+    assert!(matches!(step_mix(1, 300), Mix::Step { threshold: 0, .. }));
 
     // The eighth frame of a transition of duration 8 is shown with them.
     let mut rig = Rig::new();
@@ -984,7 +1027,7 @@ fn masked_transition_is_the_masked_mix_with_the_mask_and_the_vagueness() {
     rig.send(masked_transition(4, 40));
     // The mask arrives with the first frame after the transition message.
     rig.frame(frame_with_mask(1));
-    assert_eq!(rig.shown(), masked(1, 0, 40));
+    assert_eq!(rig.shown(), Shown::Frame(0), "the held frame alone");
     rig.frame(frame(2));
     assert_eq!(rig.shown(), masked(2, 63, 40));
     rig.frame(frame(3));

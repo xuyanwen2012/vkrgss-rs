@@ -129,7 +129,7 @@ fn freeze_and_the_default_transition() {
         GuestToHost::Transition {
             duration: 8,
             mask: None,
-            vague: 40
+            vague: 20
         }
     );
     assert_eq!(record.frames().len(), 8);
@@ -144,7 +144,7 @@ fn a_transition_of_no_frames() {
         [GuestToHost::Transition {
             duration: 0,
             mask: None,
-            vague: 40
+            vague: 20
         }]
     );
     // A picture is not announced when no frame would carry it, and does not stay behind.
@@ -162,6 +162,20 @@ fn a_transition_of_no_frames() {
     assert_eq!(testing::bitmap_count(), before);
 }
 
+/// Scenario "Default vagueness".
+#[test]
+fn a_transition_without_a_vagueness_passes_20() {
+    let (_, record) = eval("Graphics.transition(5, 'Graphics/Transitions/004-Blind04')");
+    assert!(matches!(
+        record.received[0],
+        GuestToHost::Transition {
+            duration: 5,
+            mask: Some(_),
+            vague: 20
+        }
+    ));
+}
+
 #[test]
 fn a_transition_picture_is_created_in_the_first_frame() {
     let (value, record) = eval(
@@ -172,7 +186,7 @@ fn a_transition_picture_is_created_in_the_first_frame() {
     let GuestToHost::Transition {
         duration: 40,
         mask: Some(mask),
-        vague: 40,
+        vague: 20,
     } = record.received[0]
     else {
         panic!("{:?} is not the transition", record.received[0]);

@@ -76,7 +76,7 @@ fn load_mask(ruby: &Ruby, path: &str) -> Result<BitmapId, Raise> {
     .map_err(|error| error::to_raise(ruby, error))
 }
 
-/// `transition(duration = 8, filename = nil, vague = 40)`.
+/// `transition(duration = 8, filename = nil, vague = 20)`.
 fn transition(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     rb::check_count(ruby, args, 0, 3)?;
     let duration = match args.first() {
@@ -89,7 +89,7 @@ fn transition(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     };
     let vague = match args.get(2) {
         Some(&vague) => rb::int(ruby, vague)?.clamp(0, i32::from(u16::MAX)) as u16,
-        None => 40,
+        None => 20,
     };
     let loaded = match filename {
         Some(path) => Some(load_mask(ruby, &path)?),
