@@ -1,0 +1,32 @@
+# Configuration of `cargo deny`, run as `cargo xtask audit`.
+
+[advisories]
+# A security vulnerability in any dependency fails the check. A crate that is merely
+# unmaintained is reported anywhere in the graph, and `cargo xtask audit` lowers that report
+# to a warning on the command line (`--warn unmaintained`).
+unmaintained = "all"
+
+[licenses]
+# The licences the dependency graph has today. Each allows distribution as part of an MIT
+# project; MPL-2.0 (symphonia) asks only that the source of its own files stays available.
+# A new licence fails the check until it is judged and added here.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "MPL-2.0",
+    "Unicode-3.0",
+]
+
+[bans]
+# Defaults.
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

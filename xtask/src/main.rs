@@ -2,6 +2,8 @@
 //!
 //! - `gate`: the merge gate (formatting, lints, tests, documentation, OpenSpec validation).
 //! - `deps`: the dependency-direction rules on their own.
+//! - `audit`: checks the dependencies against security advisories and the licence allow-list
+//!   with `cargo deny`. Not a step of the gate.
 //! - `extract-rpg <DLL> <OUTPUT>`: copies the built-in `RPG` scripts out of an RGSS DLL.
 //! - `oracle <GAME_DIR> --frames N[,N...] [OPTIONS]`: compares frames of a game between the
 //!   original runtime and vkxp.
@@ -10,6 +12,7 @@
 
 #![forbid(unsafe_code)]
 
+mod audit;
 mod deps;
 mod extract;
 mod gate;
@@ -19,7 +22,7 @@ mod rgssad;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-const USAGE: &str = "usage: cargo xtask <gate|deps|extract-rpg <DLL> <OUTPUT>|\
+const USAGE: &str = "usage: cargo xtask <gate|deps|audit|extract-rpg <DLL> <OUTPUT>|\
                      oracle <GAME_DIR> [OPTIONS]|pack-rgssad <GAME_DIR>>";
 
 fn main() -> ExitCode {
@@ -28,6 +31,7 @@ fn main() -> ExitCode {
     let result = match args[..] {
         ["gate"] => gate::run(&workspace_root()),
         ["deps"] => deps::run(&workspace_root()),
+        ["audit"] => audit::run(&cargo(), &workspace_root()),
         ["extract-rpg", dll, output] => extract::run(Path::new(dll), Path::new(output)),
         ["pack-rgssad", game] => rgssad::pack(Path::new(game)),
         ["oracle", ref arguments @ ..] => {

@@ -6,7 +6,7 @@
 
 ## 2. Audit (`xtask`, `deny.toml`)
 
-- [ ] 2.1 Add `deny.toml` and `cargo xtask audit`. Verify: the scenarios of `specs/workspace-structure/spec.md` as unit tests in `xtask`; the note under "Checked" in `design.md` on whether the check was run and what it reported.
+- [x] 2.1 Add `deny.toml` and `cargo xtask audit`. Verify: the scenarios of `specs/workspace-structure/spec.md` as unit tests in `xtask`; the note under "Checked" in `design.md` on whether the check was run and what it reported.
 
 ## 3. Sanitizer run (`vkxp-ruby-sys`)
 

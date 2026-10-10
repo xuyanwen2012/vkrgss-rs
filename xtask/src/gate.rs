@@ -137,6 +137,14 @@ mod tests {
     }
 
     #[test]
+    fn the_audit_is_not_a_step() {
+        for step in steps() {
+            assert!(!step.args.contains(&"deny"), "{}", step.name);
+            assert!(!step.args.contains(&"audit"), "{}", step.name);
+        }
+    }
+
+    #[test]
     fn the_steps_that_resolve_dependencies_hold_the_lock_file() {
         for step in steps() {
             let resolves = matches!(step.name, "clippy" | "test" | "doc");

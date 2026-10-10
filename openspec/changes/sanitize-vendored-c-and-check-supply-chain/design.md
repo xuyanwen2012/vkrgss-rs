@@ -59,7 +59,10 @@
 - `deny.toml` at the root: advisories (deny vulnerabilities, warn unmaintained), licences
   (an allow-list made from what the dependency graph has today, which must stay compatible
   with MIT distribution), sources (crates.io only), bans left at defaults.
-- `cargo xtask audit` runs `cargo deny --locked check`. When `cargo-deny` is not installed it
+- `cargo xtask audit` runs `cargo deny --locked check --warn unmaintained`: `cargo-deny`
+  0.20 no longer takes a level for unmaintained crates in its configuration (the key selects
+  which part of the graph is looked at), so the warning level is given on the command line.
+  When `cargo-deny` is not installed it
   ends with a message that says how to install it. It is not a gate step.
 - If the tool or the network is not available in the run that implements this, the command
   and the configuration are still written, the unit test covers how the command is built and
@@ -75,3 +78,22 @@
 
 - Findings that are not fixed here.
 - Running the audit on a schedule once the repository has a remote.
+
+## Checked
+
+### Archive property tests
+
+- The three properties and the fixed case of a four-gigabyte length in a one-kilobyte file
+  pass. The parser already compared every declared length with the bytes left in the file
+  before allocating; nothing in it was changed.
+
+### Audit
+
+- `cargo-deny` 0.20.2 was installed for this run into the ignored `local/` directory (not
+  into the owner's cargo home) and the check was run on 2026-10-10 with the network:
+  `advisories ok, bans ok, licenses ok, sources ok`, exit status 0.
+- It reported no vulnerability. Warnings: `ttf-parser` 0.25.1 is unmaintained
+  (RUSTSEC-2026-0192; it comes in through `winit` → `sctk-adwaita` → `ab_glyph`), and
+  fifteen crates are present in two or three versions.
+- Without `cargo-deny` on the path, `cargo xtask audit` printed the install hint and ended
+  with status 1.
