@@ -7,16 +7,19 @@ use ash::vk;
 use gpu_allocator::MemoryLocation;
 use gpu_allocator::vulkan::{Allocator, AllocatorCreateDesc};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
-use vkxp_proto::{BitmapDelta, FramePacket, GuestToHost, Rect, Size};
+use vkxp_proto::{BitmapDelta, FramePacket, GuestToHost, Rect, Size, TableDelta};
 
 use crate::binning::{TileLists, bin};
 use crate::bitmaps::{BitmapTable, Change};
 use crate::device::{BITMAP_SLOTS, Gpu, SurfaceSource};
-use crate::records::{ClipRect, OpRecord, RECORD_WORDS, check_logical_size, encode_ops};
+use crate::records::{
+    ClipRect, RECORD_WORDS, Records, TILEMAP_WORDS, check_logical_size, encode_frame,
+};
 use crate::resources::{
     COLOR_LAYERS, COLOR_RANGE, GpuBuffer, GpuImage, create_shader_module, make_host_readable,
     transition, write_words,
 };
+use crate::tables::TableStore;
 use crate::{DeviceChoice, DeviceInfo, Limit, ValidationLog, VkError};
 
 /// The compositing shader, compiled and validated by the build script.
@@ -29,6 +32,8 @@ mod binding {
     pub const OPS: u32 = 2;
     pub const TILE_HEADERS: u32 = 3;
     pub const TILE_OPS: u32 = 4;
+    pub const TILEMAPS: u32 = 5;
+    pub const TABLES: u32 = 6;
 }
 
 /// Bytes of the push constants: logical width, logical height, tile grid width.
@@ -59,6 +64,11 @@ pub struct VkCompositor {
     /// The image of every live bitmap that has pixels, by slot. Between submissions each is in
     /// the `SHADER_READ_ONLY_OPTIMAL` layout.
     images: HashMap<u32, GpuImage>,
+    /// The tables the guest has announced.
+    tables: TableStore,
+    /// The buffer that holds every table for the shader, with the revision of the store it
+    /// was written from. Made for the first frame and anew when a table has changed since.
+    table_buffer: Option<(GpuBuffer, u64)>,
     /// The frame target, in the `GENERAL` layout, sized for the last packet that got as far as
     /// drawing. It stays on the device; `read_frame` copies it out as a separate step.
     target: Option<GpuImage>,
@@ -116,7 +126,7 @@ struct Pending<'a> {
 /// Everything the shader reads for one frame.
 struct FrameData {
     size: Size,
-    records: Vec<OpRecord>,
+    records: Records,
     tiles: TileLists,
 }
 
@@ -203,6 +213,8 @@ impl VkCompositor {
         let mut compositor = VkCompositor {
             table: BitmapTable::new(gpu.max_image_dimension),
             images: HashMap::new(),
+            tables: TableStore::new(),
+            table_buffer: None,
             target: None,
             has_frame: false,
             set_layout: vk::DescriptorSetLayout::null(),
@@ -250,7 +262,7 @@ impl VkCompositor {
             .map_err(VkError::vulkan("vkCreateFence"))?;
 
         // One set: the bitmap array is partially bound and updated after bind; the frame
-        // target and the three per-frame buffers are plain bindings.
+        // target, the four per-frame buffers and the table buffer are plain bindings.
         let storage_buffer = |binding| {
             vk::DescriptorSetLayoutBinding::default()
                 .binding(binding)
@@ -272,8 +284,10 @@ impl VkCompositor {
             storage_buffer(binding::OPS),
             storage_buffer(binding::TILE_HEADERS),
             storage_buffer(binding::TILE_OPS),
+            storage_buffer(binding::TILEMAPS),
+            storage_buffer(binding::TABLES),
         ];
-        let mut binding_flags = [vk::DescriptorBindingFlags::empty(); 5];
+        let mut binding_flags = [vk::DescriptorBindingFlags::empty(); 7];
         binding_flags[binding::BITMAPS as usize] = vk::DescriptorBindingFlags::PARTIALLY_BOUND
             | vk::DescriptorBindingFlags::UPDATE_AFTER_BIND;
         let mut flags_info =
@@ -329,7 +343,7 @@ impl VkCompositor {
                 .descriptor_count(1),
             vk::DescriptorPoolSize::default()
                 .ty(vk::DescriptorType::STORAGE_BUFFER)
-                .descriptor_count(3),
+                .descriptor_count(5),
         ];
         let pool_info = vk::DescriptorPoolCreateInfo::default()
             .flags(vk::DescriptorPoolCreateFlags::UPDATE_AFTER_BIND)
@@ -368,7 +382,8 @@ impl VkCompositor {
         }
     }
 
-    /// Applies the packet's bitmap deltas, then draws its ops into the frame target.
+    /// Applies the packet's bitmap deltas and then its table deltas, then draws its ops into
+    /// the frame target.
     ///
     /// Either a complete frame is rendered or an error is returned and the frame target keeps
     /// the previous frame. Bitmap state after an error is that of the reference compositor:
@@ -383,6 +398,7 @@ impl VkCompositor {
         let mut pending = Pending::default();
         let prepared = self
             .queue_deltas(&packet.bitmaps, &mut pending)
+            .and_then(|()| self.apply_table_deltas(&packet.tables))
             .and_then(|()| self.prepare_frame(packet));
         match prepared {
             Ok(frame) => {
@@ -410,7 +426,7 @@ impl VkCompositor {
     }
 
     /// Makes one allocation of a per-submission buffer (the bitmap staging buffer, then the
-    /// three storage buffers of a frame) fail, after `successes` more of them have succeeded.
+    /// four storage buffers of a frame) fail, after `successes` more of them have succeeded.
     #[cfg(test)]
     pub(crate) fn fail_temporary_buffer_after(&mut self, successes: u32) {
         self.temporary_buffer_failure = Some(successes);
@@ -425,11 +441,22 @@ impl VkCompositor {
         checked
     }
 
-    /// Checks the ops against the bitmaps as they are after the packet's deltas, and builds
+    /// Checks each table delta and applies it to the store. The buffer follows when the next
+    /// frame is drawn.
+    fn apply_table_deltas(&mut self, deltas: &[TableDelta]) -> Result<(), VkError> {
+        for (index, delta) in deltas.iter().enumerate() {
+            self.tables
+                .apply(delta)
+                .map_err(|source| VkError::InvalidTableDelta { index, source })?;
+        }
+        Ok(())
+    }
+
+    /// Checks the ops against the bitmaps and tables as they are after the packet's deltas, and builds
     /// everything the shader reads. Nothing on the device is touched.
     fn prepare_frame(&self, packet: &FramePacket) -> Result<FrameData, VkError> {
         let size = packet.logical_size;
-        let records = encode_ops(&self.table, size, &packet.ops)?;
+        let records = encode_frame(&self.table, &self.tables, size, &packet.ops)?;
 
         // From here on the packet is valid; what remains are limits.
         let longest = size.width.max(size.height);
@@ -446,11 +473,22 @@ impl VkCompositor {
             requested,
             maximum: max_bytes,
         };
-        let record_bytes = records.len() as u64 * RECORD_WORDS as u64 * 4;
-        if record_bytes > max_bytes {
-            return Err(data_limit(record_bytes));
+        let table_bytes = self.tables.words() * 4;
+        if table_bytes > max_bytes {
+            return Err(VkError::Limit {
+                limit: Limit::TableBytes,
+                requested: table_bytes,
+                maximum: max_bytes,
+            });
         }
-        let clips: Vec<ClipRect> = records.iter().map(|record| record.clip).collect();
+        let record_bytes = records.ops.len() as u64 * RECORD_WORDS as u64 * 4;
+        let tilemap_bytes = records.tilemaps.len() as u64 * TILEMAP_WORDS as u64 * 4;
+        for bytes in [record_bytes, tilemap_bytes] {
+            if bytes > max_bytes {
+                return Err(data_limit(bytes));
+            }
+        }
+        let clips: Vec<ClipRect> = records.ops.iter().map(|record| record.clip).collect();
         let tiles = bin(size, &clips, max_bytes / 4).map_err(|entries| data_limit(entries * 4))?;
         Ok(FrameData {
             size,
@@ -636,7 +674,7 @@ impl VkCompositor {
         Ok(buffer.buffer)
     }
 
-    /// Makes everything a frame needs besides its commands: the three buffers the shader
+    /// Makes everything a frame needs besides its commands: the five buffers the shader
     /// reads, their descriptors and the frame target. Returns whether the target is a new
     /// image, which is then in the `UNDEFINED` layout.
     fn prepare_frame_resources(
@@ -650,8 +688,8 @@ impl VkCompositor {
                 self.storage_buffer(
                     temporary,
                     "op records",
-                    frame.records.len() * RECORD_WORDS,
-                    frame.records.iter().map(|record| &record.words()[..]),
+                    frame.records.ops.len() * RECORD_WORDS,
+                    frame.records.ops.iter().map(|record| &record.words()[..]),
                 )?,
             ),
             (
@@ -672,6 +710,16 @@ impl VkCompositor {
                     std::iter::once(&frame.tiles.indices[..]),
                 )?,
             ),
+            (
+                binding::TILEMAPS,
+                self.storage_buffer(
+                    temporary,
+                    "tilemap records",
+                    frame.records.tilemaps.len() * TILEMAP_WORDS,
+                    frame.records.tilemaps.iter().map(|record| &record[..]),
+                )?,
+            ),
+            (binding::TABLES, self.current_table_buffer()?),
         ];
         let infos = buffers.map(|(_, buffer)| {
             [vk::DescriptorBufferInfo::default()
@@ -692,6 +740,38 @@ impl VkCompositor {
         // SAFETY: the set and the buffers are live and no command buffer is pending.
         unsafe { self.gpu.device.update_descriptor_sets(&writes, &[]) };
         self.ensure_target(frame.size)
+    }
+
+    /// The buffer that holds every table as the store has them now, written anew when a
+    /// table changed since it was made. Nothing is pending, so the buffer it replaces is idle.
+    fn current_table_buffer(&mut self) -> Result<vk::Buffer, VkError> {
+        let revision = self.tables.revision();
+        if let Some((buffer, written)) = &self.table_buffer
+            && *written == revision
+        {
+            return Ok(buffer.buffer);
+        }
+        // One zero word when there is no element, because a buffer cannot be empty. The
+        // length was checked against the device's limit with the frame.
+        let mut buffer = GpuBuffer::new(
+            &self.gpu.device,
+            &mut self.allocator,
+            "tables",
+            self.tables.words().max(1) * 4,
+            vk::BufferUsageFlags::STORAGE_BUFFER,
+            MemoryLocation::CpuToGpu,
+        )?;
+        let bytes = buffer.bytes_mut();
+        bytes[..4].fill(0);
+        let words = bytes.as_chunks_mut::<4>().0.iter_mut();
+        for (target, word) in words.zip(self.tables.buffer_words()) {
+            *target = word.to_ne_bytes();
+        }
+        let handle = buffer.buffer;
+        if let Some((old, _)) = self.table_buffer.replace((buffer, revision)) {
+            old.destroy(&self.gpu.device, &mut self.allocator);
+        }
+        Ok(handle)
     }
 
     /// Makes the frame target `size` pixels large. Returns whether it is a new image, which is
@@ -873,11 +953,12 @@ impl VkCompositor {
             );
             // SAFETY: the command buffer is recording. The pipeline, its layout and the set
             // belong to this device and match each other. Every descriptor the shader can use
-            // is valid: the three buffers and the target were written by
-            // `prepare_frame_resources`, and a quad record
+            // is valid: the five buffers and the target were written by
+            // `prepare_frame_resources`, and a quad or tilemap record
             // only names a slot whose image is live and, after the steps above, in
             // `SHADER_READ_ONLY_OPTIMAL`. The buffers hold what the tile headers and indices
-            // address, the target has the size in the push constants, and the tile grid is
+            // address, the table buffer holds every element a tilemap record's offsets and
+            // sizes reach, the target has the size in the push constants, and the tile grid is
             // within the dispatch limits every device has.
             unsafe {
                 if new_target {
@@ -1059,6 +1140,9 @@ impl Drop for VkCompositor {
             }
             for (_, image) in self.images.drain() {
                 image.destroy(device, &mut self.allocator);
+            }
+            if let Some((buffer, _)) = self.table_buffer.take() {
+                buffer.destroy(device, &mut self.allocator);
             }
             if let Some(target) = self.target.take() {
                 target.destroy(device, &mut self.allocator);

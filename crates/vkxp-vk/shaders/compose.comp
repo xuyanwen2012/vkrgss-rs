@@ -18,6 +18,7 @@ layout(local_size_x = 16, local_size_y = 16) in;
 const uint OP_CLEAR = 0u;
 const uint OP_QUAD = 1u;
 const uint OP_RECT_EFFECT = 2u;
+const uint OP_TILEMAP = 3u;
 
 // Values of `OpRecord.blend`. They match `blend_mode` in `src/records.rs`.
 const uint BLEND_NORMAL = 0u;
@@ -40,6 +41,7 @@ struct OpRecord {
     int clip_x1;
     int clip_y1;
     // Quad: bitmap slot and source rectangle, which lies inside the bitmap and is not empty.
+    // Tilemap layer: `bitmap` is the index of its record in `tilemaps`.
     uint bitmap;
     int src_x;
     int src_y;
@@ -64,6 +66,57 @@ struct OpRecord {
     uint sampling;
 };
 
+// The slot of a sheet a tilemap layer goes without. It matches `NO_BITMAP` in
+// `src/records.rs`.
+const uint NO_BITMAP = 0xFFFFFFFFu;
+// Set in the frame word of an autotile whose sheet holds whole tiles, one per frame of 32
+// pixels. It matches `WHOLE_TILES` in `src/records.rs`.
+const uint WHOLE_TILES = 0x80000000u;
+
+// What a tilemap layer op reads, as `TilemapRecord` in `src/records.rs` lays it out: 25 words
+// of 32 bits (`TILEMAP_WORDS`).
+struct TilemapRecord {
+    // The first element of the map's layer in `table_words`, and the map's size in cells,
+    // neither of which is 0.
+    uint map_offset;
+    uint map_xsize;
+    uint map_ysize;
+    // The first priority in `table_words` and how many there are.
+    uint priorities_offset;
+    uint priorities_count;
+    // The priority drawn.
+    int priority;
+    // The cell under the top-left pixel of the screen, inside the map, and the place of that
+    // pixel in the cell, from 0 to 31.
+    uint cell_x;
+    uint cell_y;
+    uint sub_x;
+    uint sub_y;
+    // Bitmap slots, or `NO_BITMAP`. A slot named here holds an image.
+    uint tileset;
+    uint autotiles[7];
+    // The animation frame each autotile is drawn at, with `WHOLE_TILES`.
+    uint frames[7];
+};
+
+// For each autotile pattern, its top-left, top-right, bottom-left and bottom-right quarter,
+// numbered from 1 row by row over the 6 by 8 grid of a frame. A copy of `AUTOTILE_QUARTERS`
+// of the reference compositor; a test compares the two.
+const uint AUTOTILE_QUARTERS[192] = uint[192](
+    27, 28, 33, 34,   5, 28, 33, 34,  27,  6, 33, 34,   5,  6, 33, 34,
+    27, 28, 33, 12,   5, 28, 33, 12,  27,  6, 33, 12,   5,  6, 33, 12,
+    27, 28, 11, 34,   5, 28, 11, 34,  27,  6, 11, 34,   5,  6, 11, 34,
+    27, 28, 11, 12,   5, 28, 11, 12,  27,  6, 11, 12,   5,  6, 11, 12,
+    25, 26, 31, 32,  25,  6, 31, 32,  25, 26, 31, 12,  25,  6, 31, 12,
+    15, 16, 21, 22,  15, 16, 21, 12,  15, 16, 11, 22,  15, 16, 11, 12,
+    29, 30, 35, 36,  29, 30, 11, 36,   5, 30, 35, 36,   5, 30, 11, 36,
+    39, 40, 45, 46,   5, 40, 45, 46,  39,  6, 45, 46,   5,  6, 45, 46,
+    25, 30, 31, 36,  15, 16, 45, 46,  13, 14, 19, 20,  13, 14, 19, 12,
+    17, 18, 23, 24,  17, 18, 11, 24,  41, 42, 47, 48,   5, 42, 47, 48,
+    37, 38, 43, 44,  37,  6, 43, 44,  13, 18, 19, 24,  13, 14, 43, 44,
+    37, 42, 43, 48,  17, 18, 47, 48,  13, 18, 43, 48,   1,  2,  7,  8
+);
+
 layout(set = 0, binding = 0) uniform utexture2D bitmaps[];
 layout(set = 0, binding = 1, rgba8ui) uniform writeonly uimage2D frame;
 
@@ -79,6 +132,16 @@ layout(std430, set = 0, binding = 3) readonly buffer TileHeaders {
 // Indices into `ops`, tile after tile, each list in op order.
 layout(std430, set = 0, binding = 4) readonly buffer TileOps {
     uint tile_ops[];
+};
+
+// The records of the frame's tilemap layer ops.
+layout(std430, set = 0, binding = 5) readonly buffer Tilemaps {
+    TilemapRecord tilemaps[];
+};
+
+// Every table, one after the other, each element widened to 32 bits.
+layout(std430, set = 0, binding = 6) readonly buffer Tables {
+    int table_words[];
 };
 
 layout(push_constant) uniform FrameConstants {
@@ -121,6 +184,52 @@ bool is_window_tail(OpRecord op, ivec2 position) {
     return position.x == high - 1 && ((high - low) & 1) == 1;
 }
 
+// The value of screen pixel `position` after the tilemap layer `layer`, given its value
+// before. Mirrors `Layer::texel` of the reference compositor: the cell under the pixel, its
+// tile number, the priority test, the texel of the tile, a normal blend at full opacity.
+uvec4 apply_tilemap(TilemapRecord layer, uvec4 pixel, ivec2 position) {
+    uvec2 place = uvec2(position) + uvec2(layer.sub_x, layer.sub_y);
+    uvec2 cell = (uvec2(layer.cell_x, layer.cell_y) + place / 32u)
+        % uvec2(layer.map_xsize, layer.map_ysize);
+    int number = table_words[layer.map_offset + cell.y * layer.map_xsize + cell.x];
+    int priority = 0;
+    if (number >= 0 && uint(number) < layer.priorities_count) {
+        priority = table_words[layer.priorities_offset + uint(number)];
+    }
+    if (priority != layer.priority || number < 48) {
+        return pixel;
+    }
+    uvec2 within = place % 32u;
+    uint slot;
+    uvec2 texel;
+    if (number >= 384) {
+        uint index = uint(number) - 384u;
+        slot = layer.tileset;
+        texel = uvec2(index % 8u, index / 8u) * 32u + within;
+    } else {
+        // Numbers 48 to 383 give 0 to 6.
+        uint autotile = uint(number) / 48u - 1u;
+        slot = layer.autotiles[autotile];
+        uint shown = layer.frames[autotile];
+        if ((shown & WHOLE_TILES) != 0u) {
+            texel = uvec2((shown & ~WHOLE_TILES) * 32u + within.x, within.y);
+        } else {
+            uint corner = within.y / 16u * 2u + within.x / 16u;
+            uint quarter = AUTOTILE_QUARTERS[uint(number) % 48u * 4u + corner] - 1u;
+            texel = uvec2(shown * 96u + quarter % 6u * 16u, quarter / 6u * 16u) + within % 16u;
+        }
+    }
+    if (slot == NO_BITMAP) {
+        return pixel;
+    }
+    uvec2 size = uvec2(textureSize(bitmaps[nonuniformEXT(slot)], 0));
+    if (texel.x >= size.x || texel.y >= size.y) {
+        return pixel;
+    }
+    uvec4 source = texelFetch(bitmaps[nonuniformEXT(slot)], ivec2(texel), 0);
+    return blend_normal(pixel, source, 255u);
+}
+
 // The value of screen pixel `position` after `op`, given its value before.
 uvec4 apply_op(OpRecord op, uvec4 pixel, ivec2 position) {
     if (position.x < op.clip_x0 || position.x >= op.clip_x1
@@ -155,6 +264,8 @@ uvec4 apply_op(OpRecord op, uvec4 pixel, ivec2 position) {
             return blend_sub(pixel, source, op.opacity);
         }
     }
+    case OP_TILEMAP:
+        return apply_tilemap(tilemaps[op.bitmap], pixel, position);
     default: {
         uvec4 toned = apply_tone(pixel, op.tone_red, op.tone_green, op.tone_blue, op.tone_gray);
         return blend_color(toned, unpack_color(op.color));

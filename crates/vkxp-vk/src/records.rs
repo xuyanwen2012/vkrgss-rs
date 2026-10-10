@@ -4,10 +4,13 @@
 //! and their order are those of the reference compositor, so both reject the same packets with
 //! the same error. The shader then never sees an invalid slot or source rectangle.
 
-use vkxp_proto::{BlendMode, Color, Op, Rect, Sampling, Size, Tone, stretch_step};
+use vkxp_proto::{
+    BitmapId, BlendMode, Color, Op, Rect, Sampling, Size, TilemapLayer, Tone, stretch_step,
+};
 
 use crate::VkError;
-use crate::bitmaps::BitmapTable;
+use crate::bitmaps::{BitmapTable, Entry};
+use crate::tables::TableStore;
 
 /// Largest logical width or height a compositor accepts.
 pub(crate) const MAX_LOGICAL_DIMENSION: u32 = 16384;
@@ -20,7 +23,28 @@ mod op_kind {
     pub const CLEAR: u32 = 0;
     pub const QUAD: u32 = 1;
     pub const RECT_EFFECT: u32 = 2;
+    pub const TILEMAP: u32 = 3;
 }
+
+/// Number of 32-bit words in the record of a tilemap layer; `TilemapRecord` in
+/// `shaders/compose.comp` has this layout.
+pub(crate) const TILEMAP_WORDS: usize = 25;
+
+/// The slot word of a sheet a tilemap layer goes without. It matches `NO_BITMAP` in
+/// `shaders/compose.comp`.
+const NO_BITMAP: u32 = u32::MAX;
+
+/// Set in the frame word of an autotile whose sheet holds whole tiles. It matches
+/// `WHOLE_TILES` in `shaders/compose.comp`.
+const WHOLE_TILES: u32 = 1 << 31;
+
+/// What a tilemap layer op reads besides its clip, as the shader reads it: in this order, the
+/// index of the first element of the map's layer in the table buffer, the map's width and
+/// height in cells, the index of the first priority and the number of priorities, the
+/// priority drawn, the cell under the screen's top-left pixel (wrapped into the map) and the
+/// place of that pixel in the cell, the slot of the tileset, the slots of the seven
+/// autotiles, and the animation frame of each autotile.
+pub(crate) type TilemapRecord = [u32; TILEMAP_WORDS];
 
 /// Values of the `sampling` word of a quad. They match the `SAMPLING_*` constants in
 /// `shaders/compose.comp`.
@@ -126,21 +150,120 @@ impl OpRecord {
     }
 }
 
-/// Checks every op, in order, and encodes those that can change a pixel.
-///
-/// An op whose clip misses the screen, and a quad with an empty source rectangle, is checked
-/// like any other but yields no record: it covers no pixel. So a record's clip is never empty
-/// and a quad record always names a slot that holds an image.
-///
-/// A stretch quad covers exactly its destination rectangle, so its record's clip is the part
-/// of the clip inside that rectangle, and the shader needs no test of its own. The two steps
-/// are divided here, where 64-bit integers are at hand.
+/// The records of one frame.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct Records {
+    pub ops: Vec<OpRecord>,
+    /// The record of a tilemap layer op names one of these by its index.
+    pub tilemaps: Vec<TilemapRecord>,
+}
+
+/// [`encode_frame`] without tables, for ops that name none.
+#[cfg(test)]
 pub(crate) fn encode_ops(
     table: &BitmapTable,
     size: Size,
     ops: &[Op],
 ) -> Result<Vec<OpRecord>, VkError> {
+    encode_frame(table, &TableStore::new(), size, ops).map(|records| records.ops)
+}
+
+/// Checks a tilemap layer op and encodes what it reads, or `None` when it cannot draw: its
+/// map has no cells or lacks the layer.
+///
+/// Everything that needs 64-bit integers or the size of a sheet is worked out here: the
+/// origin becomes a cell inside the map and a place inside that cell, and the animation step
+/// becomes a frame of each autotile.
+fn encode_tilemap(
+    bitmaps: &BitmapTable,
+    tables: &TableStore,
+    index: usize,
+    layer: &TilemapLayer,
+) -> Result<Option<TilemapRecord>, VkError> {
+    // A sheet without pixels has no image; nothing can be read from it.
+    let sheet = |id: Option<BitmapId>| -> Result<Option<(u32, &Entry)>, VkError> {
+        let Some(id) = id else { return Ok(None) };
+        let entry = bitmaps
+            .get(id)
+            .map_err(|source| VkError::InvalidOpBitmap { index, source })?;
+        Ok((entry.width > 0 && entry.height > 0).then_some((id.index, entry)))
+    };
+    let table = |id| {
+        tables
+            .get(id)
+            .map_err(|source| VkError::InvalidOpTable { index, source })
+    };
+    let tileset = sheet(layer.tileset)?;
+    let mut autotiles = [None; 7];
+    for (found, id) in autotiles.iter_mut().zip(layer.autotiles) {
+        *found = sheet(id)?;
+    }
+    let (map, priorities) = (table(layer.map)?, table(layer.priorities)?);
+    if map.xsize == 0 || map.ysize == 0 || u32::from(layer.layer) >= map.zsize {
+        return Ok(None);
+    }
+
+    let cells = u64::from(map.xsize) * u64::from(map.ysize);
+    let along = |origin: i32, size: u32| {
+        let origin = i64::from(origin);
+        // A remainder of a `u32`, and one of 32.
+        let cell = origin.div_euclid(32).rem_euclid(i64::from(size)) as u32;
+        (cell, origin.rem_euclid(32) as u32)
+    };
+    let (cell_x, sub_x) = along(layer.origin.0, map.xsize);
+    let (cell_y, sub_y) = along(layer.origin.1, map.ysize);
+    let mut record = [0; TILEMAP_WORDS];
+    // Offsets and lengths are below the length of the table buffer, which `u32` holds for
+    // every store within the device's limit; beyond it no frame is drawn.
+    record[..11].copy_from_slice(&[
+        (map.offset + cells * u64::from(layer.layer)) as u32,
+        map.xsize,
+        map.ysize,
+        priorities.offset as u32,
+        u64::from(priorities.xsize).min(priorities.len()) as u32,
+        u32::from(layer.priority),
+        cell_x,
+        cell_y,
+        sub_x,
+        sub_y,
+        tileset.map_or(NO_BITMAP, |(slot, _)| slot),
+    ]);
+    for (slot, autotile) in autotiles.into_iter().enumerate() {
+        let Some((bitmap, entry)) = autotile else {
+            record[11 + slot] = NO_BITMAP;
+            continue;
+        };
+        let (width, flag) = if entry.height <= 32 {
+            (32, WHOLE_TILES)
+        } else {
+            (96, 0)
+        };
+        let frames = u64::from((entry.width / width).max(1));
+        record[11 + slot] = bitmap;
+        // Less than the number of frames, which is far below the flag.
+        record[18 + slot] = (layer.animation_step % frames) as u32 | flag;
+    }
+    Ok(Some(record))
+}
+
+/// Checks every op, in order, and encodes those that can change a pixel.
+///
+/// An op whose clip misses the screen, a quad with an empty source rectangle and a tilemap
+/// layer whose map has no cell for it is checked like any other but yields no record: it
+/// changes no pixel. So a record's clip is never empty
+/// and a quad record always names a slot that holds an image.
+///
+/// A stretch quad covers exactly its destination rectangle, so its record's clip is the part
+/// of the clip inside that rectangle, and the shader needs no test of its own. The two steps
+/// are divided here, where 64-bit integers are at hand.
+pub(crate) fn encode_frame(
+    table: &BitmapTable,
+    tables: &TableStore,
+    size: Size,
+    ops: &[Op],
+) -> Result<Records, VkError> {
     let mut records = Vec::with_capacity(ops.len());
+    let mut tilemaps = Vec::new();
     for (index, op) in ops.iter().enumerate() {
         let clip = ClipRect::on_screen(op.clip(), size);
         match op {
@@ -220,7 +343,17 @@ pub(crate) fn encode_ops(
                 record.set_tone_and_color(effect.tone, effect.color);
                 records.push(record);
             }
-            Op::Plane { .. } | Op::TilemapLayer(_) => {
+            Op::TilemapLayer(layer) => {
+                let tilemap = encode_tilemap(table, tables, index, layer)?;
+                let (Some(clip), Some(tilemap)) = (clip, tilemap) else {
+                    continue;
+                };
+                let mut record = OpRecord::new(op_kind::TILEMAP, clip);
+                record.words[5] = tilemaps.len() as u32;
+                tilemaps.push(tilemap);
+                records.push(record);
+            }
+            Op::Plane { .. } => {
                 return Err(VkError::UnsupportedOp {
                     kind: op.kind(),
                     index,
@@ -228,7 +361,10 @@ pub(crate) fn encode_ops(
             }
         }
     }
-    Ok(records)
+    Ok(Records {
+        ops: records,
+        tilemaps,
+    })
 }
 
 #[cfg(test)]

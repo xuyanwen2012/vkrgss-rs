@@ -3,7 +3,8 @@
 use vkxp_pixel::Rgba;
 use vkxp_proto::{BlendMode, FramePacket, GuestToHost, Op, Quad, Rect, RectEffect, Size};
 
-use crate::{Bitmap, BitmapStore, ComposeError};
+use crate::tilemap::Layer;
+use crate::{Bitmap, BitmapStore, ComposeError, TableStore};
 
 /// The colour every pixel starts from before the first op: opaque black.
 pub const BACKGROUND: Rgba = [0, 0, 0, 255];
@@ -39,10 +40,12 @@ impl Frame {
     }
 }
 
-/// The CPU reference compositor: a bitmap store plus the evaluation of frame packets.
+/// The CPU reference compositor: a bitmap store, a table store and the evaluation of frame
+/// packets.
 #[derive(Debug, Clone, Default)]
 pub struct Compositor {
     bitmaps: BitmapStore,
+    tables: TableStore,
 }
 
 impl Compositor {
@@ -55,6 +58,11 @@ impl Compositor {
         &self.bitmaps
     }
 
+    /// The tables currently known.
+    pub fn tables(&self) -> &TableStore {
+        &self.tables
+    }
+
     /// Handles one message. A `Frame` message yields its frame; every other message yields
     /// `None`. Freeze, transition, audio, modal and title messages are outside what this
     /// compositor models and have no effect on later frames.
@@ -65,10 +73,10 @@ impl Compositor {
         }
     }
 
-    /// Applies the packet's bitmap deltas, then draws its ops.
+    /// Applies the packet's bitmap deltas and then its table deltas, then draws its ops.
     ///
     /// Either a complete frame is returned or an error and no frame. Deltas applied before an
-    /// error stay applied, so the store keeps following the guest.
+    /// error stay applied, so the stores keep following the guest.
     pub fn render(&mut self, packet: &FramePacket) -> Result<Frame, ComposeError> {
         let size = packet.logical_size;
         let valid = 1..=MAX_LOGICAL_DIMENSION;
@@ -82,6 +90,11 @@ impl Compositor {
             self.bitmaps
                 .apply(delta)
                 .map_err(|source| ComposeError::InvalidDelta { index, source })?;
+        }
+        for (index, delta) in packet.tables.iter().enumerate() {
+            self.tables
+                .apply(delta)
+                .map_err(|source| ComposeError::InvalidTableDelta { index, source })?;
         }
         let steps = self.prepare(&packet.ops)?;
 
@@ -98,7 +111,7 @@ impl Compositor {
         Ok(Frame { size, rgba })
     }
 
-    /// Checks every op and resolves its bitmap, so drawing itself cannot fail.
+    /// Checks every op and resolves its bitmaps and tables, so drawing itself cannot fail.
     fn prepare<'a>(&'a self, ops: &'a [Op]) -> Result<Vec<Step<'a>>, ComposeError> {
         let mut steps = Vec::with_capacity(ops.len());
         for (index, op) in ops.iter().enumerate() {
@@ -124,7 +137,31 @@ impl Compositor {
                     Step::Quad { quad, bitmap }
                 }
                 Op::RectEffect(effect) => Step::RectEffect(effect),
-                Op::Plane { .. } | Op::TilemapLayer(_) => {
+                Op::TilemapLayer(layer) => {
+                    let bitmap = |id| {
+                        self.bitmaps
+                            .get(id)
+                            .map_err(|source| ComposeError::InvalidOpBitmap { index, source })
+                    };
+                    let table = |id| {
+                        self.tables
+                            .get(id)
+                            .map_err(|source| ComposeError::InvalidOpTable { index, source })
+                    };
+                    let tileset = layer.tileset.map(bitmap).transpose()?;
+                    let mut autotiles = [None; 7];
+                    for (found, id) in autotiles.iter_mut().zip(layer.autotiles) {
+                        *found = id.map(bitmap).transpose()?;
+                    }
+                    Step::Tilemap(Layer {
+                        op: layer,
+                        map: table(layer.map)?,
+                        priorities: table(layer.priorities)?,
+                        tileset,
+                        autotiles,
+                    })
+                }
+                Op::Plane { .. } => {
                     return Err(ComposeError::UnsupportedOp {
                         kind: op.kind(),
                         index,
@@ -141,6 +178,7 @@ enum Step<'a> {
     Clear { clip: Rect, color: Rgba },
     Quad { quad: &'a Quad, bitmap: &'a Bitmap },
     RectEffect(&'a RectEffect),
+    Tilemap(Layer<'a>),
 }
 
 impl Step<'_> {
@@ -176,6 +214,15 @@ impl Step<'_> {
                         vkxp_pixel::blend_normal(pixel, texel, quad.opacity)
                     }
                     BlendMode::Window => vkxp_pixel::blend_window(pixel, texel, quad.opacity),
+                }
+            }
+            Step::Tilemap(layer) => {
+                if !layer.op.clip.contains(x, y) {
+                    return pixel;
+                }
+                match layer.texel(px, py) {
+                    Some(texel) => vkxp_pixel::blend_normal(pixel, texel, 255),
+                    None => pixel,
                 }
             }
             Step::RectEffect(effect) => {

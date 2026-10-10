@@ -5,7 +5,7 @@ use vkxp_compose_ref as reference;
 use vkxp_proto::GuestToHost;
 
 use super::harness::TestCompositor;
-use crate::{BitmapError, Frame, SlotState, VkError};
+use crate::{BitmapError, Frame, SlotState, TableError, VkError};
 
 /// The error this backend must return where the reference returns `error`: the same kind with
 /// the same indices, ids and values.
@@ -34,7 +34,35 @@ pub(crate) fn expected_error(error: &reference::ComposeError) -> VkError {
             index,
             source: expected_bitmap_error(source),
         },
+        E::InvalidOpTable { index, source } => VkError::InvalidOpTable {
+            index,
+            source: expected_table_error(source),
+        },
+        E::InvalidTableDelta { index, source } => VkError::InvalidTableDelta {
+            index,
+            source: expected_table_error(source),
+        },
         E::InvalidLogicalSize { size, limit } => VkError::InvalidLogicalSize { size, limit },
+    }
+}
+
+fn expected_table_error(error: reference::TableError) -> TableError {
+    use reference::TableError as E;
+    match error {
+        E::Unknown { id } => TableError::Unknown { id },
+        E::LengthMismatch {
+            id,
+            xsize,
+            ysize,
+            zsize,
+            found,
+        } => TableError::LengthMismatch {
+            id,
+            xsize,
+            ysize,
+            zsize,
+            found,
+        },
     }
 }
 

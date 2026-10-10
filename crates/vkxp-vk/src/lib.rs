@@ -32,6 +32,7 @@ mod pacing;
 mod present_timing;
 mod records;
 mod resources;
+mod tables;
 mod validation;
 
 #[cfg(test)]
@@ -39,6 +40,6 @@ mod tests;
 
 pub use compositor::{Filter, Frame, Mix, VkCompositor, letterbox};
 pub use device::{DeviceChoice, DeviceInfo, DeviceKind, available_devices};
-pub use error::{BitmapError, DeviceError, Limit, SlotState, VkError};
+pub use error::{BitmapError, DeviceError, Limit, SlotState, TableError, VkError};
 pub use pacing::{IntervalSummary, PresentSchedule, PresentStats, STATS_INTERVALS};
 pub use validation::ValidationLog;

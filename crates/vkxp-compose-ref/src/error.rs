@@ -1,7 +1,7 @@
 //! Errors of the bitmap store and the compositor.
 
 use thiserror::Error;
-use vkxp_proto::{BitmapId, OpKind, Rect, Size};
+use vkxp_proto::{BitmapId, OpKind, Rect, Size, TableId};
 
 /// What a bitmap slot holds, reported when a reference does not match it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,6 +54,22 @@ pub enum BitmapError {
     },
 }
 
+/// A table delta or lookup that the store refused.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum TableError {
+    /// The id names no table: it was never set, or was destroyed.
+    #[error("unknown table {id}")]
+    Unknown { id: TableId },
+    #[error("table {id} of {xsize}x{ysize}x{zsize} elements carries {found}")]
+    LengthMismatch {
+        id: TableId,
+        xsize: u32,
+        ysize: u32,
+        zsize: u32,
+        found: usize,
+    },
+}
+
 /// Why a frame packet produced no frame.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ComposeError {
@@ -70,8 +86,12 @@ pub enum ComposeError {
         width: u32,
         height: u32,
     },
+    #[error("op {index} is invalid: {source}")]
+    InvalidOpTable { index: usize, source: TableError },
     #[error("bitmap delta {index} is invalid: {source}")]
     InvalidDelta { index: usize, source: BitmapError },
+    #[error("table delta {index} is invalid: {source}")]
+    InvalidTableDelta { index: usize, source: TableError },
     #[error(
         "logical size {}x{} is not between 1x1 and {limit}x{limit}",
         size.width,

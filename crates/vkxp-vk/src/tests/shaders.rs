@@ -4,7 +4,7 @@
 use vkxp_proto::{Fixed, Transform};
 
 use super::harness::{Rng, TestCompositor};
-use crate::records::RECORD_WORDS;
+use crate::records::{RECORD_WORDS, TILEMAP_WORDS};
 use crate::resources::read_words;
 
 const PIXEL_GLSL: &str = include_str!("../../shaders/pixel.glsl");
@@ -90,8 +90,18 @@ fn array_strides(spirv: &[u8]) -> Vec<u32> {
 fn shader_reads_op_records_at_the_stride_they_are_written_with() {
     let mut strides = array_strides(COMPOSE_SPIRV);
     strides.sort_unstable();
-    // Tile op indices, tile headers, op records.
-    assert_eq!(strides, [4, 8, RECORD_WORDS as u32 * 4]);
+    // Of 4: tile op indices, table elements and the arrays inside a tilemap record. Then
+    // tile headers, op records, tilemap records.
+    let words: Vec<u32> = strides
+        .iter()
+        .copied()
+        .filter(|&stride| stride != 4)
+        .collect();
+    assert!(strides.len() - words.len() >= 3, "{strides:?}");
+    assert_eq!(
+        words,
+        [8, RECORD_WORDS as u32 * 4, TILEMAP_WORDS as u32 * 4]
+    );
 }
 
 /// One input of the transform test shader.

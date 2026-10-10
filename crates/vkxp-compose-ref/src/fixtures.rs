@@ -7,7 +7,7 @@
 
 use vkxp_proto::{
     BitmapDelta, BitmapId, BlendMode, Color, Fixed, FramePacket, FrameRate, GuestToHost, Op, Quad,
-    Rect, RectEffect, Sampling, Size, Tone, Transform,
+    Rect, RectEffect, Sampling, Size, TableDelta, TableId, TilemapLayer, Tone, Transform,
 };
 
 /// Logical screen size of every fixture.
@@ -441,4 +441,311 @@ fn quad_tone_fixture(name: &'static str, blend: BlendMode) -> Fixture {
 fn quad_color_fixture(name: &'static str, blend: BlendMode) -> Fixture {
     let color = Color::new(40, 96, 255, 144);
     recoloured_fixture(name, blend, Tone::NEUTRAL, color)
+}
+
+// Tilemap scenes. They have no committed frames: their pixels are checked by the scenario
+// tests of this crate and compared between backends.
+
+/// Pixel (`x`, `y`) of the tileset of the tilemap scenes: opaque, naming its tile and its
+/// place in the tile.
+pub fn tileset_pixel(x: u32, y: u32) -> Color {
+    let tile = x / 32 + y / 32 * 8;
+    Color::new(tile as u8 + 1, (x % 32) as u8 * 8, (y % 32) as u8 * 8, 255)
+}
+
+/// A tileset of 8 by `rows` tiles of [`tileset_pixel`]s.
+pub fn tileset(rows: u32) -> Vec<u8> {
+    pattern(256, rows * 32, tileset_pixel)
+}
+
+/// Pixel (`x`, `y`) of an autotile sheet of the tilemap scenes: opaque, naming its animation
+/// frame, its 16 by 16 quarter and its place in the quarter.
+pub fn autotile_pixel(x: u32, y: u32) -> Color {
+    let quarter = x % 96 / 16 + y / 16 * 6;
+    Color::new(
+        quarter as u8 + 1,
+        (x % 16) as u8 * 16 + (y % 16) as u8,
+        (x / 96) as u8 + 100,
+        255,
+    )
+}
+
+/// An autotile sheet of [`autotile_pixel`]s.
+pub fn autotile_sheet(width: u32, height: u32) -> Vec<u8> {
+    pattern(width, height, autotile_pixel)
+}
+
+/// The delta that sets table `id` to `data`, with the sizes of its three dimensions.
+pub fn table(id: TableId, sizes: (u32, u32, u32), data: Vec<i16>) -> TableDelta {
+    TableDelta::Set {
+        id,
+        xsize: sizes.0,
+        ysize: sizes.1,
+        zsize: sizes.2,
+        data,
+    }
+}
+
+/// A tilemap layer op over the whole of a screen of `size`: layer 0, priority 0, at the
+/// origin, without a sheet.
+pub fn tilemap_layer(size: Size, map: TableId, priorities: TableId) -> TilemapLayer {
+    TilemapLayer {
+        clip: Rect::from_size(size),
+        tileset: None,
+        autotiles: [None; 7],
+        map,
+        priorities,
+        origin: (0, 0),
+        layer: 0,
+        priority: 0,
+        animation_step: 0,
+    }
+}
+
+const MAP: TableId = TableId::new(0);
+const PRIORITIES: TableId = TableId::new(1);
+const NO_PRIORITIES: TableId = TableId::new(2);
+const TILESET: BitmapId = BitmapId::new(0, 0);
+const AUTOTILE: BitmapId = BitmapId::new(1, 0);
+const OTHER_AUTOTILE: BitmapId = BitmapId::new(2, 0);
+
+fn scene(name: &'static str, size: Size, frames: Vec<SceneFrame>) -> Fixture {
+    let messages = frames.into_iter().enumerate().map(|(index, frame)| {
+        let mut ops = vec![Op::Clear {
+            clip: Rect::from_size(size),
+            color: Color::new(40, 90, 160, 255),
+        }];
+        ops.extend(frame.2.into_iter().map(Op::TilemapLayer));
+        GuestToHost::Frame(FramePacket {
+            frame_index: index as u64,
+            logical_size: size,
+            frame_rate: FrameRate::DEFAULT,
+            tables: frame.1,
+            bitmaps: frame.0,
+            ops,
+        })
+    });
+    Fixture {
+        name,
+        messages: messages.collect(),
+    }
+}
+
+/// The bitmap deltas, table deltas and tilemap ops of one frame of a scene.
+type SceneFrame = (Vec<BitmapDelta>, Vec<TableDelta>, Vec<TilemapLayer>);
+
+/// Streams of frames drawn with tilemap layer ops: every autotile pattern and animation,
+/// wrapped origins, priorities, translucent stacked tiles and the inputs that draw nothing.
+pub fn tilemap_scenes() -> Vec<Fixture> {
+    vec![
+        tilemap_patterns(),
+        tilemap_wrap(),
+        tilemap_priorities(),
+        tilemap_translucent(),
+        tilemap_edges(),
+    ]
+}
+
+/// All 48 patterns of two autotiles, one of them animated, at several animation steps.
+fn tilemap_patterns() -> Fixture {
+    let size = Size::new(256, 192);
+    let mut bitmaps = bitmap(AUTOTILE, 384, 128, autotile_sheet(384, 128)).to_vec();
+    bitmaps.extend(bitmap(OTHER_AUTOTILE, 96, 128, autotile_sheet(96, 128)));
+    // Layer 0 holds the patterns of the first autotile, layer 1 those of the seventh.
+    let cells = (0..48).map(|p| 48 + p).chain((0..48).map(|p| 7 * 48 + p));
+    let tables = vec![
+        table(MAP, (8, 6, 2), cells.collect()),
+        table(NO_PRIORITIES, (0, 1, 1), vec![]),
+    ];
+    let layer = |layer, animation_step| TilemapLayer {
+        autotiles: [
+            Some(AUTOTILE),
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(OTHER_AUTOTILE),
+        ],
+        layer,
+        animation_step,
+        ..tilemap_layer(size, MAP, NO_PRIORITIES)
+    };
+    let mut frames = vec![(bitmaps, tables, vec![layer(0, 0)])];
+    for step in [1, 3, 5, u64::MAX] {
+        frames.push((vec![], vec![], vec![layer(0, step)]));
+    }
+    frames.push((vec![], vec![], vec![layer(1, 2)]));
+    scene("tilemap_patterns", size, frames)
+}
+
+/// A map of tileset tiles at origins inside, beyond and before the map.
+fn tilemap_wrap() -> Fixture {
+    let size = Size::new(100, 70);
+    let cells = (0..5 * 4).map(|cell| 384 + cell * 3 % 40);
+    let tables = vec![
+        table(MAP, (5, 4, 1), cells.collect()),
+        table(NO_PRIORITIES, (1, 1, 1), vec![0]),
+    ];
+    let at = |origin| TilemapLayer {
+        tileset: Some(TILESET),
+        origin,
+        ..tilemap_layer(size, MAP, NO_PRIORITIES)
+    };
+    let bitmaps = bitmap(TILESET, 256, 160, tileset(5)).to_vec();
+    let mut frames = vec![(bitmaps, tables, vec![at((0, 0))])];
+    for origin in [
+        (7, 13),
+        (160, 128),
+        (-1, -1),
+        (-333, 1000),
+        (i32::MAX, i32::MIN),
+        (i32::MIN, i32::MAX),
+    ] {
+        frames.push((vec![], vec![], vec![at(origin)]));
+    }
+    scene("tilemap_wrap", size, frames)
+}
+
+/// Three layers of tiles of every priority, drawn priority by priority and, from priority 1
+/// on, row by row.
+fn tilemap_priorities() -> Fixture {
+    let size = Size::new(96, 96);
+    // The priority of tile 384 + n is n mod 7: 6 is one no op draws.
+    let priorities = (0..400).map(|id| if id < 384 { 0 } else { (id - 384) % 7 });
+    let cells = (0..4 * 4 * 3).map(|cell| 384 + cell * 5 % 31);
+    let tables = vec![
+        table(MAP, (4, 4, 3), cells.collect()),
+        table(PRIORITIES, (400, 1, 1), priorities.collect()),
+    ];
+    let mut ops = Vec::new();
+    for priority in 0..=5 {
+        for row in 0..3 {
+            for layer in 0..3 {
+                let clip = match priority {
+                    0 if row > 0 => continue,
+                    0 => Rect::from_size(size),
+                    _ => Rect::new(0, row * 32 - 5, 96, 32),
+                };
+                ops.push(TilemapLayer {
+                    clip,
+                    tileset: Some(TILESET),
+                    origin: (3, 5),
+                    layer,
+                    priority,
+                    ..tilemap_layer(size, MAP, PRIORITIES)
+                });
+            }
+        }
+    }
+    let bitmaps = bitmap(TILESET, 256, 160, tileset(5)).to_vec();
+    scene("tilemap_priorities", size, vec![(bitmaps, tables, ops)])
+}
+
+/// Translucent tiles of one priority stacked in three layers.
+fn tilemap_translucent() -> Fixture {
+    let size = Size::new(64, 64);
+    let translucent = pattern(256, 64, |x, y| {
+        let opaque = tileset_pixel(x, y);
+        let alpha = [142, 0, 255, 1, 254, 77][(x / 32 + y / 32 + x % 3) as usize % 6];
+        Color::new(opaque.r * 9, opaque.g, opaque.b, alpha)
+    });
+    let cells = (0..2 * 2 * 3).map(|cell| 384 + cell * 7 % 16);
+    let tables = vec![
+        table(MAP, (2, 2, 3), cells.collect()),
+        table(NO_PRIORITIES, (0, 0, 0), vec![]),
+    ];
+    let ops = (0..3).map(|layer| TilemapLayer {
+        tileset: Some(TILESET),
+        layer,
+        ..tilemap_layer(size, MAP, NO_PRIORITIES)
+    });
+    let bitmaps = bitmap(TILESET, 256, 64, translucent).to_vec();
+    scene(
+        "tilemap_translucent",
+        size,
+        vec![(bitmaps, tables, ops.collect())],
+    )
+}
+
+/// What draws nothing or only in part: tile numbers below 48, tiles beyond a short or narrow
+/// tileset, absent and empty sheets, a layer the map does not have, an empty map; and the
+/// sheets of whole tiles, 32 pixels high or less.
+fn tilemap_edges() -> Fixture {
+    let size = Size::new(128, 96);
+    let (strip, low, narrow, empty) = (
+        BitmapId::new(3, 0),
+        BitmapId::new(4, 0),
+        BitmapId::new(5, 0),
+        BitmapId::new(6, 0),
+    );
+    let mut bitmaps = bitmap(TILESET, 200, 48, pattern(200, 48, tileset_pixel)).to_vec();
+    bitmaps.extend(bitmap(AUTOTILE, 96, 64, autotile_sheet(96, 64)));
+    bitmaps.extend(bitmap(strip, 100, 32, autotile_sheet(100, 32)));
+    bitmaps.extend(bitmap(low, 70, 20, autotile_sheet(70, 20)));
+    bitmaps.extend(bitmap(narrow, 50, 128, autotile_sheet(50, 128)));
+    bitmaps.push(BitmapDelta::Create {
+        id: empty,
+        width: 0,
+        height: 7,
+    });
+    #[rustfmt::skip]
+    let cells = vec![
+        0, 47, -1, i16::MIN,
+        384, 384 + 6, 384 + 7, 384 + 8,
+        384 + 14, 384 + 16, i16::MAX, 48 + 47,
+        // A second layer: every autotile.
+        48, 96 + 5, 144 + 9, 192 + 47,
+        240 + 20, 288 + 33, 336 + 46, 383,
+        95, 143, 191, 239,
+    ];
+    let empty_map = TableId::new(7);
+    let tables = vec![
+        table(MAP, (4, 3, 2), cells),
+        table(NO_PRIORITIES, (3, 0, 1), vec![]),
+        table(empty_map, (0, 4, 1), vec![]),
+    ];
+    let layer = |layer, animation_step| TilemapLayer {
+        tileset: Some(TILESET),
+        autotiles: [
+            Some(AUTOTILE),
+            Some(strip),
+            Some(low),
+            Some(narrow),
+            None,
+            Some(empty),
+            Some(strip),
+        ],
+        layer,
+        animation_step,
+        ..tilemap_layer(size, MAP, NO_PRIORITIES)
+    };
+    let frames = vec![
+        (bitmaps, tables, vec![layer(0, 0), layer(1, 0)]),
+        (
+            vec![],
+            vec![],
+            vec![layer(1, 1), layer(2, 0), layer(255, 0)],
+        ),
+        (vec![], vec![], vec![layer(1, 5)]),
+        (
+            vec![],
+            vec![],
+            vec![
+                TilemapLayer {
+                    tileset: Some(empty),
+                    ..layer(0, 0)
+                },
+                TilemapLayer {
+                    map: empty_map,
+                    ..layer(0, 0)
+                },
+                TilemapLayer {
+                    priority: 1,
+                    ..layer(0, 0)
+                },
+            ],
+        ),
+    ];
+    scene("tilemap_edges", size, frames)
 }

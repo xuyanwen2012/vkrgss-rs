@@ -7,7 +7,7 @@
 
 use ash::vk;
 use thiserror::Error;
-use vkxp_proto::{BitmapId, OpKind, Rect, Size};
+use vkxp_proto::{BitmapId, OpKind, Rect, Size, TableId};
 
 use crate::DeviceInfo;
 
@@ -62,6 +62,22 @@ pub enum BitmapError {
     },
 }
 
+/// A table delta or lookup that the table store refused.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum TableError {
+    /// The id names no table: it was never set, or was destroyed.
+    #[error("unknown table {id}")]
+    Unknown { id: TableId },
+    #[error("table {id} of {xsize}x{ysize}x{zsize} elements carries {found}")]
+    LengthMismatch {
+        id: TableId,
+        xsize: u32,
+        ysize: u32,
+        zsize: u32,
+        found: usize,
+    },
+}
+
 /// A limit of the device or of this backend that a valid packet can exceed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Limit {
@@ -73,6 +89,8 @@ pub enum Limit {
     FrameDimension,
     /// Bytes of per-frame data (op records or tile lists) in one buffer.
     FrameDataBytes,
+    /// Bytes of all tables together, which share one buffer.
+    TableBytes,
 }
 
 impl std::fmt::Display for Limit {
@@ -82,6 +100,7 @@ impl std::fmt::Display for Limit {
             Limit::BitmapDimension => "bitmap width or height",
             Limit::FrameDimension => "frame width or height",
             Limit::FrameDataBytes => "per-frame data size in bytes",
+            Limit::TableBytes => "size of all tables in bytes",
         })
     }
 }
@@ -102,8 +121,12 @@ pub enum VkError {
         width: u32,
         height: u32,
     },
+    #[error("op {index} is invalid: {source}")]
+    InvalidOpTable { index: usize, source: TableError },
     #[error("bitmap delta {index} is invalid: {source}")]
     InvalidDelta { index: usize, source: BitmapError },
+    #[error("table delta {index} is invalid: {source}")]
+    InvalidTableDelta { index: usize, source: TableError },
     #[error(
         "logical size {}x{} is not between 1x1 and {limit}x{limit}",
         size.width,

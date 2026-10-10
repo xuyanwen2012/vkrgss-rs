@@ -336,14 +336,16 @@ fn reserved_op_is_an_unsupported_op_error_naming_kind_and_index() {
     let size = Size::new(20, 20);
     let screen = Rect::from_size(size);
     let mut compositor = TestCompositor::new();
-    for (op, kind) in [(Op::Plane { clip: screen }, OpKind::Plane)] {
-        let ops = vec![clear(screen, [1, 1, 1, 1]), clear(screen, [2, 2, 2, 2]), op];
-        assert_eq!(
-            compositor.render(&packet(size, vec![], ops)),
-            Err(VkError::UnsupportedOp { kind, index: 2 })
-        );
-        assert_eq!(compositor.read_frame(), Ok(None), "no frame");
-    }
+    let op = Op::Plane { clip: screen };
+    let ops = vec![clear(screen, [1, 1, 1, 1]), clear(screen, [2, 2, 2, 2]), op];
+    assert_eq!(
+        compositor.render(&packet(size, vec![], ops)),
+        Err(VkError::UnsupportedOp {
+            kind: OpKind::Plane,
+            index: 2
+        })
+    );
+    assert_eq!(compositor.read_frame(), Ok(None), "no frame");
 }
 
 /// A destroyed bitmap whose slot was reused: the old id is an error, and the new occupant is
@@ -631,7 +633,7 @@ fn renders_without_a_window_system_connection() {
 // Requirement: Clean under validation, on the failure paths too
 
 /// A packet with uploads and ops needs four buffers for its one submission: the bitmap staging
-/// buffer and the three storage buffers of the frame. Whichever allocation fails, the buffers
+/// buffer and the four storage buffers of the frame. Whichever allocation fails, the buffers
 /// made before it must be released: every compositor here is dropped under the harness, which
 /// fails the test when the validation layer reports a leaked object. The backend also has to
 /// stay usable, with the frame it had and the bitmaps in a drawable state.
@@ -661,6 +663,7 @@ fn failed_buffer_allocation_releases_the_buffers_before_it() {
         "op records",
         "tile headers",
         "tile op indices",
+        "tilemap records",
     ];
     for (successes, what) in buffers.into_iter().enumerate() {
         let mut compositor = TestCompositor::new();
@@ -701,13 +704,13 @@ fn failed_buffer_allocation_releases_the_buffers_before_it() {
     }
 }
 
-/// The same for a packet without uploads, where the op records are the first of only three
+/// The same for a packet without uploads, where the op records are the first of only four
 /// buffers, and with no earlier frame to fall back on.
 #[test]
 fn failed_frame_buffer_allocation_without_uploads_leaks_nothing() {
     let size = Size::new(33, 17);
     let ops = vec![clear(Rect::from_size(size), [1, 2, 3, 4])];
-    for successes in 0..3 {
+    for successes in 0..4 {
         let mut compositor = TestCompositor::new();
         compositor.fail_temporary_buffer_after(successes);
         assert!(matches!(
