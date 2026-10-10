@@ -1,6 +1,7 @@
 //! The scenarios of `specs/vulkan-presentation/spec.md`: scaling and mixing through the
 //! off-screen target, and the swapchain on a headless surface. No test opens a window.
 
+use ash::vk;
 use vkxp_compose_ref as reference;
 use vkxp_compose_ref::fixtures::{self, bitmap, sprite};
 use vkxp_proto::{BitmapId, Color, FramePacket, FrameRate, Op, Rect, Size};
@@ -1421,6 +1422,67 @@ fn present_resize_and_tear_down(ignore_maintenance: bool) {
     // What was presented is what the off-screen path gives for the same window.
     let shown = compositor.scale_frame(Size::new(100, 75)).unwrap();
     assert_eq!(shown.size, Size::new(100, 75));
+
+    drop(compositor);
+    assert_clean(&log, "while the presenting compositor was dropped");
+}
+
+/// Scenario "Forced path under validation": the presenter takes an sRGB format of the surface
+/// although it has a `UNORM` one, and draws through the `UNORM` view where the device has
+/// `VK_KHR_swapchain_mutable_format`.
+#[test]
+fn frames_are_presented_and_resized_on_a_forced_srgb_swapchain() {
+    let log = ValidationLog::new();
+    let mut compositor = surface_compositor(&log);
+    if !log.is_active() {
+        eprintln!("validation layer not installed; presenting unvalidated");
+    }
+    compositor.force_srgb_surface_format();
+
+    compositor.resize_surface(Size::new(64, 48));
+    assert_eq!(compositor.present(), Ok(true));
+    let (image, view) = compositor.swapchain_formats().expect("just presented");
+    let srgb = [
+        vk::Format::B8G8R8A8_SRGB,
+        vk::Format::R8G8B8A8_SRGB,
+        vk::Format::A8B8G8R8_SRGB_PACK32,
+    ];
+    if !srgb.contains(&image) {
+        eprintln!(
+            "{}: skipped, the headless surface offers no sRGB format (took {image:?})",
+            compositor.device()
+        );
+        return;
+    }
+    // Without the extension the forced format is presented with the inverse transfer.
+    let mutable = compositor.has_swapchain_mutable_format();
+    eprintln!(
+        "{}: swapchain of {image:?} drawn through views of {view:?}, {} the mutable format \
+         extension",
+        compositor.device(),
+        if mutable { "with" } else { "without" }
+    );
+    assert_eq!(view != image, mutable);
+    if mutable {
+        assert!(format!("{view:?}").contains("UNORM"), "{view:?}");
+    }
+
+    for color in [WHITE, [200, 100, 50, 255], [1, 2, 3, 255]] {
+        compositor.render(&flat(SIZE, color)).unwrap();
+        assert_eq!(compositor.present(), Ok(true));
+    }
+    assert_clean(&log, "while presenting");
+
+    compositor.resize_surface(Size::new(100, 75));
+    compositor.render(&gradient(SIZE)).unwrap();
+    assert_eq!(compositor.present(), Ok(true));
+    assert_eq!(compositor.swapchain_extent(), Some((100, 75)));
+    assert_eq!(compositor.swapchain_formats(), Some((image, view)));
+    compositor.freeze().unwrap();
+    compositor.set_mix(fade(128));
+    compositor.render(&flat(SIZE, WHITE)).unwrap();
+    assert_eq!(compositor.present(), Ok(true));
+    assert_clean(&log, "after a resize");
 
     drop(compositor);
     assert_clean(&log, "while the presenting compositor was dropped");

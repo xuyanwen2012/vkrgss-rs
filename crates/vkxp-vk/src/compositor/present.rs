@@ -364,6 +364,24 @@ fn choose_format(formats: &[vk::SurfaceFormatKHR], mutable_format: bool) -> Opti
     unorm().or_else(srgb).or_else(last_resort)
 }
 
+/// The sRGB formats among `formats` that [`choose_format`] knows, or all of `formats` when
+/// there is none: what a surface without a `UNORM` format would offer.
+#[cfg(test)]
+fn srgb_formats_only(formats: Vec<vk::SurfaceFormatKHR>) -> Vec<vk::SurfaceFormatKHR> {
+    let srgb: Vec<_> = formats
+        .iter()
+        .copied()
+        .filter(|offered| {
+            SRGB_FORMATS.contains(&offered.format)
+                && offered.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR
+        })
+        .collect();
+    match srgb.is_empty() {
+        true => formats,
+        false => srgb,
+    }
+}
+
 /// The extent of a swapchain for a surface with `capabilities` in a window of `requested`
 /// pixels. A zero dimension means nothing can be presented now.
 fn swapchain_extent(capabilities: &vk::SurfaceCapabilitiesKHR, requested: Size) -> vk::Extent2D {
@@ -392,10 +410,10 @@ struct Swapchain {
     extent: vk::Extent2D,
     /// The window size the swapchain was made for.
     requested: Size,
-    srgb: bool,
+    format: PresentFormat,
     pipeline: vk::Pipeline,
     images: Vec<vk::Image>,
-    /// Per image: the view the pass draws through.
+    /// Per image: the view the pass draws through, in the view format of `format`.
     views: Vec<vk::ImageView>,
     /// Signalled when an image has been acquired; waited for by the draw.
     acquired: vk::Semaphore,
@@ -1327,7 +1345,13 @@ impl VkCompositor {
                     pipeline: chain.pipeline,
                     pipeline_layout: presenter.pipeline_layout,
                     descriptors: presenter.descriptors,
-                    constants: push_constants(sources, target, self.mix, chain.srgb, self.filter)?,
+                    constants: push_constants(
+                        sources,
+                        target,
+                        self.mix,
+                        chain.format.srgb_target,
+                        self.filter,
+                    )?,
                 })
             });
 
@@ -1343,7 +1367,7 @@ impl VkCompositor {
                 compositor.begin_commands()?;
                 // SAFETY: the command buffer is recording, on the queue that presents and
                 // draws. The image and its view belong to the live swapchain, which is
-                // `extent` pixels large and has the format of the pipeline; the image was
+                // `extent` pixels large, and the view has the format of the pipeline; the image was
                 // just acquired, so it may be taken from `UNDEFINED`. A draw call only exists
                 // when a frame does, in which case `prepare_sources` pointed the set at the
                 // frame target (`GENERAL`), the held frame and the mask
@@ -1490,6 +1514,20 @@ impl VkCompositor {
     #[cfg(test)]
     pub(crate) fn ignore_swapchain_maintenance(&mut self) {
         self.ignore_maintenance = true;
+    }
+
+    /// Makes the swapchains created from now on take an sRGB format of the surface when it
+    /// has one, as on a surface that offers no `UNORM` format.
+    #[cfg(test)]
+    pub(crate) fn force_srgb_surface_format(&mut self) {
+        self.force_srgb = true;
+    }
+
+    /// The format of the swapchain's images and that of the views the pass draws through.
+    #[cfg(test)]
+    pub(crate) fn swapchain_formats(&self) -> Option<(vk::Format, vk::Format)> {
+        let chain = self.presenter.as_ref()?.swapchain.as_ref()?;
+        Some((chain.format.surface.format, chain.format.view))
     }
 
     /// The number of presents handed over with a fence so far.
@@ -1865,12 +1903,17 @@ impl VkCompositor {
                 .get_physical_device_surface_formats(self.gpu.physical, surface.handle)
         }
         .map_err(VkError::vulkan("vkGetPhysicalDeviceSurfaceFormatsKHR"))?;
-        let chosen = choose_format(&formats, false).ok_or(VkError::Vulkan {
-            call: "vkGetPhysicalDeviceSurfaceFormatsKHR",
-            result: vk::Result::ERROR_FORMAT_NOT_SUPPORTED,
-        })?;
-        let (format, srgb) = (chosen.surface, chosen.srgb_target);
-        let pipeline = presenter.pipeline(&self.gpu, chosen.view)?;
+        #[cfg(test)]
+        let formats = match self.force_srgb {
+            true => srgb_formats_only(formats),
+            false => formats,
+        };
+        let format =
+            choose_format(&formats, self.gpu.swapchain_mutable_format).ok_or(VkError::Vulkan {
+                call: "vkGetPhysicalDeviceSurfaceFormatsKHR",
+                result: vk::Result::ERROR_FORMAT_NOT_SUPPORTED,
+            })?;
+        let pipeline = presenter.pipeline(&self.gpu, format.view)?;
 
         let mut image_count = capabilities.min_image_count + 1;
         if capabilities.max_image_count > 0 {
@@ -1943,17 +1986,24 @@ impl VkCompositor {
                 }
             }
         }
-        let flags = pacing
+        let mut flags = pacing
             .as_ref()
             .map_or(vk::SwapchainCreateFlagsKHR::empty(), |(pacing, _)| {
                 pacing.swapchain_flags()
             });
-        let info = vk::SwapchainCreateInfoKHR::default()
+        // The formats the images are viewed in, when the pass draws through another one than
+        // the swapchain's.
+        let view_formats = [format.surface.format, format.view];
+        let mut format_list = vk::ImageFormatListCreateInfo::default().view_formats(&view_formats);
+        if format.is_mutable() {
+            flags |= vk::SwapchainCreateFlagsKHR::MUTABLE_FORMAT;
+        }
+        let mut info = vk::SwapchainCreateInfoKHR::default()
             .flags(flags)
             .surface(surface.handle)
             .min_image_count(image_count)
-            .image_format(format.format)
-            .image_color_space(format.color_space)
+            .image_format(format.surface.format)
+            .image_color_space(format.surface.color_space)
             .image_extent(extent)
             .image_array_layers(1)
             .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
@@ -1967,10 +2017,15 @@ impl VkCompositor {
                 old.as_ref()
                     .map_or(vk::SwapchainKHR::null(), |old| old.handle),
             );
+        if format.is_mutable() {
+            info = info.push_next(&mut format_list);
+        }
         // SAFETY: the surface belongs to the instance of this device, which was created with
         // the swapchain extension and whose queue can present to it. The values come from the
         // surface's own capabilities and formats; the flags are those of extensions the
-        // device was created with and the surface reports support for. Every submission was
+        // device was created with and the surface reports support for. The format list is
+        // only chained, with the flag for it, on a device with the mutable format extension,
+        // and names the swapchain's format and its `UNORM` twin. Every submission was
         // waited for, so the old swapchain, if any, is idle and is retired by this call.
         let created = unsafe { loader.create_swapchain(&info, None) };
         if let Some(old) = old {
@@ -1992,7 +2047,7 @@ impl VkCompositor {
             handle,
             extent,
             requested,
-            srgb,
+            format,
             pipeline,
             images: Vec::new(),
             views: Vec::new(),
@@ -2018,10 +2073,11 @@ impl VkCompositor {
                 let view_info = vk::ImageViewCreateInfo::default()
                     .image(image)
                     .view_type(vk::ImageViewType::TYPE_2D)
-                    .format(format.format)
+                    .format(format.view)
                     .subresource_range(COLOR_RANGE);
                 // SAFETY: the image belongs to the live swapchain and the view matches its
-                // format and its single colour subresource.
+                // single colour subresource and has its format, or one the swapchain was
+                // created for views in.
                 let view = unsafe { device.create_image_view(&view_info, None) }
                     .map_err(VkError::vulkan("vkCreateImageView"))?;
                 chain.views.push(view);

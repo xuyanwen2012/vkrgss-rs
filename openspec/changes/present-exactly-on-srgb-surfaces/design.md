@@ -39,3 +39,20 @@
 ## Follow-ups
 
 - Removing the inverse-transfer path once no supported driver needs it.
+
+## Checked
+
+Run on 2026-10-10 with Mesa 26.2.4 and the validation layer active, on a headless surface
+(`VK_EXT_headless_surface`).
+
+| | llvmpipe (`VK_LOADER_DRIVERS_SELECT='*lvp*'`) | AMD GPU, RADV (`VK_LOADER_DRIVERS_SELECT='*radeon*' VKXP_TEST_DEVICE=RADV`) |
+|---|---|---|
+| `VK_KHR_swapchain_mutable_format` offered and enabled | yes | yes |
+| sRGB format on the headless surface | yes, `B8G8R8A8_SRGB` | yes, `B8G8R8A8_SRGB` |
+| Forced test `frames_are_presented_and_resized_on_a_forced_srgb_swapchain` | ran, passed: swapchain of `B8G8R8A8_SRGB` drawn through views of `B8G8R8A8_UNORM`, no validation message | ran, passed: the same formats, no validation message |
+
+- Both surfaces also offer a `UNORM` format, so without the test switch neither reaches the
+  sRGB path, and what is presented there is unchanged.
+- The inverse-transfer fallback was not run on a device: both devices have the extension. Its
+  selection is covered by the unit tests of `choose_format`.
+- The forced test does not read the swapchain image back, as decided above.

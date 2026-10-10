@@ -160,6 +160,9 @@ pub struct VkCompositor {
     /// Makes swapchains present as on a device without swapchain maintenance.
     #[cfg(test)]
     ignore_maintenance: bool,
+    /// Makes swapchains take an sRGB format of the surface when it has one.
+    #[cfg(test)]
+    force_srgb: bool,
     /// Failure injection: whether the draw of the next present fails.
     #[cfg(test)]
     fail_draw: bool,
@@ -321,6 +324,8 @@ impl VkCompositor {
             acquire_timeouts: 0,
             #[cfg(test)]
             ignore_maintenance: false,
+            #[cfg(test)]
+            force_srgb: false,
             #[cfg(test)]
             fail_draw: false,
             #[cfg(test)]
@@ -569,6 +574,12 @@ impl VkCompositor {
         }
         .ok()?;
         Some(Duration::from_nanos(timestamps.nanos(ticks[0], ticks[1])))
+    }
+
+    /// Whether the device was created with `VK_KHR_swapchain_mutable_format`.
+    #[cfg(test)]
+    pub(crate) fn has_swapchain_mutable_format(&self) -> bool {
+        self.gpu.swapchain_mutable_format
     }
 
     /// Whether the queue of the device has timestamps.
