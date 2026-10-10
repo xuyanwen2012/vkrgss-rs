@@ -16,4 +16,5 @@ encoding_rs.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+proptest.workspace = true
 tempfile.workspace = true

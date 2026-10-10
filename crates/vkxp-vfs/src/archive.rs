@@ -200,6 +200,8 @@ impl Archive {
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use proptest::prelude::*;
+
     use super::*;
 
     /// The key as it stands, which is then advanced.
@@ -347,6 +349,77 @@ pub(crate) mod tests {
                 "{length}"
             );
             assert!(error.to_string().contains("Game.rgssad"));
+        }
+    }
+
+    #[test]
+    fn huge_declared_length() {
+        // One entry named `A` that declares four gigabytes of data, in a file of one kilobyte.
+        let mut bytes = build(&[("A", b"")]);
+        let size = bytes.len() - 4;
+        for byte in &mut bytes[size..] {
+            *byte ^= 0xFF;
+        }
+        bytes.resize(1024, 0);
+        let (_dir, archive) = open(&bytes);
+        assert!(matches!(
+            archive.unwrap_err(),
+            VfsError::DamagedArchive { .. }
+        ));
+    }
+
+    /// Opens `bytes` as an archive and reads every entry it lists. Each step may fail; none
+    /// may panic, and no entry may be longer than the file.
+    fn open_and_read_all(bytes: &[u8]) -> Result<(), TestCaseError> {
+        let (_dir, archive) = open(bytes);
+        let Ok(archive) = archive else {
+            return Ok(());
+        };
+        for entry in archive.entries.values() {
+            prop_assert!(entry.size as usize <= bytes.len());
+            if let Ok(data) = archive.read(*entry) {
+                prop_assert_eq!(data.len(), entry.size as usize);
+            }
+        }
+        Ok(())
+    }
+
+    /// A valid archive of a few entries with short names and contents.
+    fn valid_archive() -> impl Strategy<Value = Vec<u8>> {
+        let entry = ("[A-Za-z]{1,8}", prop::collection::vec(any::<u8>(), 0..40));
+        prop::collection::vec(entry, 1..5).prop_map(|entries| {
+            let entries: Vec<(&str, &[u8])> = entries
+                .iter()
+                .map(|(name, contents)| (name.as_str(), contents.as_slice()))
+                .collect();
+            build(&entries)
+        })
+    }
+
+    proptest! {
+        #[test]
+        fn random_bytes_behind_the_header(tail in prop::collection::vec(any::<u8>(), 0..600)) {
+            open_and_read_all(&[&HEADER[..], &tail].concat())?;
+        }
+
+        #[test]
+        fn flipped_bytes_in_a_valid_archive(
+            mut bytes in valid_archive(),
+            flips in prop::collection::vec((any::<prop::sample::Index>(), 1..=255u8), 1..4),
+        ) {
+            for (at, mask) in flips {
+                let at = at.index(bytes.len());
+                bytes[at] ^= mask;
+            }
+            open_and_read_all(&bytes)?;
+        }
+
+        #[test]
+        fn valid_archive_cut_short(
+            bytes in valid_archive(),
+            cut in any::<prop::sample::Index>(),
+        ) {
+            open_and_read_all(&bytes[..cut.index(bytes.len() + 1)])?;
         }
     }
 }

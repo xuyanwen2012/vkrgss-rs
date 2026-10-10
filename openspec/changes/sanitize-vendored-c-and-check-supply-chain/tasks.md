@@ -2,7 +2,7 @@
 
 ## 1. Archive property tests (`vkxp-vfs`)
 
-- [ ] 1.1 Add the property tests and fix what they find. Verify: the scenarios of `specs/game-files/spec.md`; `cargo test -p vkxp-vfs --locked` passes.
+- [x] 1.1 Add the property tests and fix what they find. Verify: the scenarios of `specs/game-files/spec.md`; `cargo test -p vkxp-vfs --locked` passes.
 
 ## 2. Audit (`xtask`, `deny.toml`)
 
