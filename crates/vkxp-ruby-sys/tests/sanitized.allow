@@ -1,0 +1,22 @@
+# Sanitizer reports that the sanitized run accepts.
+#
+# An entry is a reason, written as comment lines, followed by one or more patterns. A report
+# is accepted when one pattern occurs in its line as the run prints it: the location
+# relative to `third_party/`, then the sanitizer's message. A `*` in a pattern stands for any
+# text. Entries are separated by blank lines, and an entry without a reason fails a test.
+
+# Oniguruma reads the operands of its compiled pattern (lengths, addresses, group numbers,
+# bit sets, code point ranges) from a byte stream at whatever offset they have. It does so
+# on purpose where the processor allows unaligned access (`PLATFORM_UNALIGNED_WORD_ACCESS`
+# in `regint.h`, defined for x86 and x86-64); on other processors it copies the bytes.
+oniguruma-5.9.6/regexec.c:*: runtime error: load of misaligned address
+oniguruma-5.9.6/regcomp.c:*: runtime error: load of misaligned address
+
+# `memcpy` and `memcmp` are given a null pointer together with a length of zero: an empty
+# array or string has no buffer. The C standard calls that undefined, and no byte is read
+# or written. Each line is one such call.
+ruby-1.8.7/array.c:1367:5: runtime error: null pointer passed as argument 2
+ruby-1.8.7/array.c:2475:5: runtime error: null pointer passed as argument 2
+ruby-1.8.7/array.c:2476:5: runtime error: null pointer passed as argument 2
+ruby-1.8.7/eval.c:5775:2: runtime error: null pointer passed as argument 2
+ruby-1.8.7/string.c:2309:13: runtime error: null pointer passed as argument 1

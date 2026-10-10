@@ -76,7 +76,15 @@
 
 ## Follow-ups
 
-- Findings that are not fixed here.
+- The sanitized run found nothing that was left unfixed for its size. What it accepts is in
+  `crates/vkxp-ruby-sys/tests/sanitized.allow`; whether the zero-length `memcpy` calls with
+  a null pointer should be guarded in the vendored tree instead is open.
+- The run covers what the upstream suites execute. `-fwrapv` makes signed overflow defined,
+  so that check of UndefinedBehaviorSanitizer reports nothing by construction, and the
+  function-type check is off (see "Checked").
+- The sanitized run uses `clang`, because the development machine has no sanitizer runtime
+  for GCC (`libasan`, `libubsan`). Running it with the compiler of the normal build as well
+  would need those packages.
 - Running the audit on a schedule once the repository has a remote.
 
 ## Checked
@@ -97,3 +105,45 @@
   fifteen crates are present in two or three versions.
 - Without `cargo-deny` on the path, `cargo xtask audit` printed the install hint and ended
   with status 1.
+
+### Sanitizer run
+
+Run on 2026-10-10 with clang 22.1.8 on x86-64:
+`cargo test -p vkxp-ruby-sys --test sanitized -- --ignored`, three times, each passing in
+35 to 70 seconds. The build has both sanitizers; the fallback to
+UndefinedBehaviorSanitizer alone was not needed. `test/ruby` (625 tests), `test/zlib` (45)
+and `sample/test.rb` (912 checks) pass, and no report is outside the allow-list.
+
+How the run differs from the plain reading of "Decisions", and why:
+
+- The compiler is `clang`, not the exported one: the machine has the sanitizer runtimes of
+  clang only. The exported flags are used, with the three `-Wno-error` flags the build
+  script already adds for clang. The build script exports its two lists of C files and two
+  more directories so that the test compiles exactly the files of the normal build.
+- `-fno-sanitize=function` is added. Clang's function-type check compares prototypes, and
+  the interpreter calls K&R definitions through prototyped pointers everywhere, which
+  `gnu89` allows; the first such report came before the first line of Ruby ran.
+- A second exclusion besides the collector's scan: a thread switch copies the machine stack
+  out and back with `memcpy`, red zones included, and stopped the run at the first switch.
+  The copied range is declared addressable before each copy (patch 19). Frames that are
+  live at a switch lose their red zones, so an overflow inside them can be missed; no false
+  report can come of it.
+- Each process writes its reports to a file (`log_path`), because the suites compare what
+  child interpreters print. The test reads the files afterwards.
+- The suite runner moved from `tests/upstream.rs` into `tests/common/mod.rs` so that both
+  tests use it; the gate's run of the upstream suites is unchanged.
+
+Findings, all in the Ruby tree:
+
+| Finding | Report | Outcome |
+|---|---|---|
+| `rb_make_exception` reads `argv[1]` of a one-element array on `raise SomeError` | AddressSanitizer: stack-buffer-overflow, READ of size 8, `eval.c:4763` | Fixed, patch 20 |
+| `rb_intern("")`, reached from `:"="`, tests `name[-1]` | AddressSanitizer: dynamic-stack-buffer-overflow, READ of size 1, `parse.y:6272` | Fixed, patches 21 and 22 |
+| The collector's stack scan reads red zones | AddressSanitizer: stack-buffer-overflow in `mark_locations_array`, `gc.c:682` | Not a defect; excluded, patch 18 |
+| The thread switch copies red zones | AddressSanitizer: stack-buffer-underflow in `memcpy` from `rb_thread_save_context` | Not a defect; excluded, patch 19 |
+| Oniguruma reads operands of the compiled pattern unaligned, 19 places in `regexec.c` and `regcomp.c` | UndefinedBehaviorSanitizer: load of misaligned address | Deliberate on x86 (`PLATFORM_UNALIGNED_WORD_ACCESS`); allow-listed |
+| `memcpy`/`memcmp` with a null pointer and length zero: `array.c:1367`, `array.c:2475`, `array.c:2476`, `eval.c:5775`, `string.c:2309` | UndefinedBehaviorSanitizer: null pointer passed as argument declared to never be null | No byte is accessed; allow-listed |
+
+Both fixed reads were of memory next to the buffer whose value was then not used, so no
+result changes and no test other than the sanitized run can show them. The vendored-source
+checks (`tests/manifest.rs`) pass with the five new entries of `PATCHES.md`.

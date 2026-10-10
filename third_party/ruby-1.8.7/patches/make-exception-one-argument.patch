@@ -1,0 +1,17 @@
+--- a/eval.c
++++ b/eval.c
+@@ -4760,7 +4760,13 @@
+ 	if (!rb_respond_to(argv[0], exception)) {
+ 	    rb_raise(rb_eTypeError, "exception class/object expected");
+ 	}
+-	mesg = rb_funcall(argv[0], exception, n, argv[1]);
++	/* vkxp: with one argument there is no argv[1] to read */
++	if (n == 0) {
++	    mesg = rb_funcall(argv[0], exception, 0);
++	}
++	else {
++	    mesg = rb_funcall(argv[0], exception, 1, argv[1]);
++	}
+ 	break;
+       default:
+ 	rb_raise(rb_eArgError, "wrong number of arguments");

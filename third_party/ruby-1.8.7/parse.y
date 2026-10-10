@@ -6269,7 +6269,8 @@ rb_intern(name)
 	    }
 	}
 
-	if (name[last] == '=') {
+	/* vkxp: an empty name has no last character */
+	if (last >= 0 && name[last] == '=') {
 	    /* attribute assignment */
 	    char *buf = ALLOCA_N(char,last+1);
 

@@ -109,7 +109,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `eval.c`
 - Patch: `patches/class-redefinition-ruby-181.patch`
-- Patched SHA-256: `672916f463210a2bef18be3285bf627e9c9f7dbeb8f68e1f6852837b8aaa894d`
+- Patched SHA-256: `5305d4212e520e8f167962b8843338384608117760f310f613c2187973d01579`
 - Reason: measured on the original runtime, a `class` statement that names an existing class
   with an explicit superclass other than that class's own defines a new class and binds the
   constant to it; the old class object and its instances stay as they were. 1.8.7 raises
@@ -123,7 +123,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `parse.y`
 - Patch: `patches/symbol-ids-ruby-181.patch`
-- Patched SHA-256: `24c7b3f636054f214471dd51ae0d4c16af4d96f8b3d594c90e0870908db40565`
+- Patched SHA-256: `fb02a7390c14219383d4cb5877fc31108e61fb373435b3cadb5f8bd4639c2656`
 - Reason: a symbol's number decides the order of instance variables and of hashes with
   symbol keys, and so the bytes of a save file. 1.8.7 and vkxp's binding intern another set of
   names at start-up than the original runtime's Ruby 1.8.1, so every name a game creates had
@@ -142,7 +142,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `parse.c`
 - Patch: `patches/symbol-ids-ruby-181-generated.patch`
-- Patched SHA-256: `d79dd3b2b63263556c46121176becd46e6682a553e7bd1bf7084b7100c04fb86`
+- Patched SHA-256: `63b8a233f54ba4174fd5ce424991e9ab7eab977591ad71bf805b462bb16c6d7d`
 - Reason: follows patch 11. `parse.c` is the release's pre-generated parser and the file the
   build compiles; the changed code is in the part of `parse.y` that the generator copies
   verbatim, so the same three hunks are applied to it by hand, at an offset of 5947 lines.
@@ -184,7 +184,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `parse.y`
 - Patch: `patches/oniguruma-engine-parser.patch`
-- Patched SHA-256: `24c7b3f636054f214471dd51ae0d4c16af4d96f8b3d594c90e0870908db40565`
+- Patched SHA-256: `fb02a7390c14219383d4cb5877fc31108e61fb373435b3cadb5f8bd4639c2656`
 - Reason: follows patch 14 and applies after patch 11. The parser includes `regex.h` itself,
   for `ismbchar` and `mbclen`; it includes `vkxp_regex.h` instead.
 
@@ -192,7 +192,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `parse.c`
 - Patch: `patches/oniguruma-engine-parser-generated.patch`
-- Patched SHA-256: `d79dd3b2b63263556c46121176becd46e6682a553e7bd1bf7084b7100c04fb86`
+- Patched SHA-256: `63b8a233f54ba4174fd5ce424991e9ab7eab977591ad71bf805b462bb16c6d7d`
 - Reason: follows patch 15 and applies after patch 12. The same line of the pre-generated
   parser, changed by hand.
 
@@ -206,3 +206,55 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
   `test_unescape`, `\x` without a digit was an error and is accepted. In
   `test_parse_curly_brace`, `(?!x){0,1}` matched and is an error ("target of repeat operator
   is invalid").
+
+## 18. asan-conservative-scan
+
+- File: `gc.c`
+- Patch: `patches/asan-conservative-scan.patch`
+- Patched SHA-256: `6f80288a5d41d15de6ba29ab24461e9bee7f512eda4cfb69462ea8e4c0afcbb8`
+- Reason: for the sanitized run of the upstream suites (`tests/sanitized.rs` of
+  `vkxp-ruby-sys`). The collector is conservative: `mark_locations_array` reads every word of
+  the machine stack and of the saved registers, the red zones that AddressSanitizer puts
+  around local variables included, and the sanitizer stopped the first collection. The
+  function carries the compiler's `no_sanitize_address` attribute. Without the sanitizer the
+  attribute changes nothing.
+
+## 19. asan-thread-switch
+
+- File: `eval.c`
+- Patch: `patches/asan-thread-switch.patch`
+- Patched SHA-256: `5305d4212e520e8f167962b8843338384608117760f310f613c2187973d01579`
+- Reason: for the same run. A thread switch (and a continuation) copies the machine stack to
+  the heap in `rb_thread_save_context` and back in `rb_thread_restore_context_0`, red zones
+  included, and the sanitizer's `memcpy` stopped the first switch. Under AddressSanitizer the
+  copied range is declared addressable before each copy
+  (`__asan_unpoison_memory_region`); the frames that are live at a switch lose their red
+  zones, so the run can miss a stack overflow in them and cannot report a false one. In any
+  other build the macro is empty.
+
+## 20. make-exception-one-argument
+
+- File: `eval.c`
+- Patch: `patches/make-exception-one-argument.patch`
+- Patched SHA-256: `5305d4212e520e8f167962b8843338384608117760f310f613c2187973d01579`
+- Reason: found by the sanitized run. With one argument that is not a string, as in
+  `raise SomeError`, `rb_make_exception` passed `argv[1]` to a call that takes no argument
+  from it: a read of one word past the end of the argument array. The value was never used.
+  The call with no argument no longer reads it.
+
+## 21. intern-empty-name
+
+- File: `parse.y`
+- Patch: `patches/intern-empty-name.patch`
+- Patched SHA-256: `fb02a7390c14219383d4cb5877fc31108e61fb373435b3cadb5f8bd4639c2656`
+- Reason: found by the sanitized run. `rb_intern` of a name that consists of `=` alone
+  interns the name without its last character, the empty string, and for that one tested
+  `name[-1]`, the byte before the buffer; had that byte been `=`, a copy of length -1 would
+  have followed. The test is made only for a name that has a last character.
+
+## 22. intern-empty-name-generated
+
+- File: `parse.c`
+- Patch: `patches/intern-empty-name-generated.patch`
+- Patched SHA-256: `63b8a233f54ba4174fd5ce424991e9ab7eab977591ad71bf805b462bb16c6d7d`
+- Reason: follows patch 21. The same line of the pre-generated parser, changed by hand.

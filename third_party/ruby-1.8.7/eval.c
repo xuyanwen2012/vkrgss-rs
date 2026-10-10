@@ -4760,7 +4760,13 @@ rb_make_exception(argc, argv)
 	if (!rb_respond_to(argv[0], exception)) {
 	    rb_raise(rb_eTypeError, "exception class/object expected");
 	}
-	mesg = rb_funcall(argv[0], exception, n, argv[1]);
+	/* vkxp: with one argument there is no argv[1] to read */
+	if (n == 0) {
+	    mesg = rb_funcall(argv[0], exception, 0);
+	}
+	else {
+	    mesg = rb_funcall(argv[0], exception, 1, argv[1]);
+	}
 	break;
       default:
 	rb_raise(rb_eArgError, "wrong number of arguments");
@@ -10619,6 +10625,24 @@ extern VALUE *rb_gc_stack_start;
 extern VALUE *rb_gc_register_stack_start;
 #endif
 
+/* vkxp: a thread switch copies the machine stack out and later back in, whatever lies
+   there, red zones of AddressSanitizer included. Under that sanitizer the range is declared
+   addressable before each copy; in any other build this is nothing. */
+#if defined(__SANITIZE_ADDRESS__)
+# define VKXP_ADDRESS_SANITIZER 1
+#elif defined(__has_feature)
+# if __has_feature(address_sanitizer)
+#  define VKXP_ADDRESS_SANITIZER 1
+# endif
+#endif
+#ifdef VKXP_ADDRESS_SANITIZER
+void __asan_unpoison_memory_region(void const volatile *addr, size_t size);
+# define VKXP_STACK_ADDRESSABLE(pos, len) \
+    __asan_unpoison_memory_region((pos), sizeof(VALUE) * (len))
+#else
+# define VKXP_STACK_ADDRESSABLE(pos, len)
+#endif
+
 static void
 rb_thread_save_context(th)
     rb_thread_t th;
@@ -10638,6 +10662,7 @@ rb_thread_save_context(th)
     }
     th->stk_len = len;
     FLUSH_REGISTER_WINDOWS;
+    VKXP_STACK_ADDRESSABLE(th->stk_pos, th->stk_len);
     MEMCPY(th->stk_ptr, th->stk_pos, VALUE, th->stk_len);
 #ifdef __ia64
     th->bstr_pos = rb_gc_register_stack_start;
@@ -10767,6 +10792,7 @@ rb_thread_restore_context_0(rb_thread_t th, int exit)
     tmp = th;
     ex = exit;
     FLUSH_REGISTER_WINDOWS;
+    VKXP_STACK_ADDRESSABLE(tmp->stk_pos, tmp->stk_len);
     MEMCPY(tmp->stk_pos, tmp->stk_ptr, VALUE, tmp->stk_len);
 #ifdef __ia64
     MEMCPY(tmp->bstr_pos, tmp->bstr_ptr, VALUE, tmp->bstr_len);

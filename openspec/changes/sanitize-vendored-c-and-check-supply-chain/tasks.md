@@ -10,8 +10,8 @@
 
 ## 3. Sanitizer run (`vkxp-ruby-sys`)
 
-- [ ] 3.1 Add the opt-in sanitized build and run, the exclusion of the collector's scan and the allow-list. Verify: the scenarios of `specs/embedded-ruby/spec.md`; the vendored-source checks of the crate still pass.
-- [ ] 3.2 Fix the small findings, list the others, and write the outcome under "Checked" in `design.md`. Verify: the notes are there; `cargo test -p vkxp-ruby-sys --locked` passes.
+- [x] 3.1 Add the opt-in sanitized build and run, the exclusion of the collector's scan and the allow-list. Verify: the scenarios of `specs/embedded-ruby/spec.md`; the vendored-source checks of the crate still pass.
+- [x] 3.2 Fix the small findings, list the others, and write the outcome under "Checked" in `design.md`. Verify: the notes are there; `cargo test -p vkxp-ruby-sys --locked` passes.
 
 ## 4. Documents
 

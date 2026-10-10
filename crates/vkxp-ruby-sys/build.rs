@@ -263,6 +263,28 @@ fn main() {
         args.iter().all(|arg| !arg.contains(char::is_whitespace)),
         "a compiler argument contains white space and cannot be passed on: {args:?}"
     );
+    // And what the opt-in sanitized run needs to compile the same files itself, with a
+    // compiler that has the sanitizer runtimes.
+    println!(
+        "cargo:rustc-env=VKXP_RUBY_CORE_SOURCES={}",
+        CORE_SOURCES.join(" ")
+    );
+    println!(
+        "cargo:rustc-env=VKXP_RUBY_ONIG_SOURCES={}",
+        ONIGURUMA_SOURCES.join(" ")
+    );
+    println!(
+        "cargo:rustc-env=VKXP_RUBY_CLANG_CFLAGS={}",
+        CLANG_FLAGS.join(" ")
+    );
+    println!(
+        "cargo:rustc-env=VKXP_RUBY_GENERATED_DIR={}",
+        utf8(&generated_dir)
+    );
+    println!(
+        "cargo:rustc-env=VKXP_RUBY_ZLIB_INCLUDE_DIR={}",
+        utf8(&zlib_include)
+    );
     println!("cargo:rustc-env=VKXP_RUBY_CC={}", utf8(compiler.path()));
     println!("cargo:rustc-env=VKXP_RUBY_CFLAGS={}", args.join(" "));
     println!("cargo:rustc-env=VKXP_RUBY_CONFIG_DIR={}", utf8(&config_dir));

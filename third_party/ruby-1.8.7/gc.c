@@ -672,6 +672,11 @@ is_pointer_to_heap(ptr)
     return Qfalse;
 }
 
+/* vkxp: the conservative scan reads every word of the machine stack and of the saved
+   registers, whatever lies there; AddressSanitizer must not check these reads */
+#if defined(__GNUC__)
+__attribute__((no_sanitize_address))
+#endif
 static void
 mark_locations_array(x, n)
     register VALUE *x;
