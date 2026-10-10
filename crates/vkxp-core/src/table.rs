@@ -109,8 +109,7 @@ impl Table {
     /// Writes the low 16 bits of `value` to the element at (`x`, `y`, `z`). Outside the table
     /// nothing changes.
     ///
-    /// PLACEHOLDER: keeping the low 16 bits (rather than clamping) is not yet checked against
-    /// the original runtime.
+    /// Keeping the low 16 bits (rather than clamping) was measured on the original runtime.
     pub fn set(&mut self, x: i32, y: i32, z: i32, value: i64) {
         if let Some(offset) = self.offset(x, y, z) {
             self.data[offset] = value as i16;

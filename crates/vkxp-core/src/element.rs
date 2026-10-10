@@ -352,7 +352,8 @@ impl Window {
     /// Makes the window active or inactive. Making it inactive puts the cursor blink at its
     /// twelfth step at once, where it stays until the window is active and updated again.
     ///
-    /// PLACEHOLDER: that `true` for an active window leaves the blink alone is not measured.
+    /// That `true` for an active window leaves the blink alone was measured on the original
+    /// runtime.
     pub fn set_active(&mut self, active: bool) {
         self.follow_flags();
         self.active = active;
@@ -361,8 +362,8 @@ impl Window {
 
     /// Shows or hides the pause sign. A change starts its animation over.
     ///
-    /// PLACEHOLDER: that `true` for a pausing window leaves the animation alone is not
-    /// measured.
+    /// That `true` for a pausing window leaves the animation alone was measured on the
+    /// original runtime.
     pub fn set_pause(&mut self, pause: bool) {
         self.follow_flags();
         self.pause = pause;
@@ -513,8 +514,7 @@ impl Tilemap {
     /// One step of the autotile animation and of the pulse of the flash data: every 16
     /// updates each animated autotile shows its next frame.
     ///
-    /// PLACEHOLDER: the speed of 16 updates per frame is not yet checked against the original
-    /// runtime.
+    /// The speed of 16 updates per frame was measured on the original runtime.
     pub fn update(&mut self) {
         // The count does not wrap within the lifetime of a process.
         self.updates += 1;

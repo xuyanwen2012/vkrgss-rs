@@ -19,6 +19,13 @@ module OracleProbe
   @captured = 0
   # By the value of a button, the number of updates it has been held for.
   @held = Hash.new(0)
+  # The one button that repeats, the one triggered most recently, and the number of updates
+  # it has been held for since.
+  @rep_button = nil
+  @rep_count = 0
+  # Which direction a diagonal gives `dir4`: 0 the horizontal one, 1 the vertical one.
+  @axis_flag = 0
+  @dir4 = 0
 
   def self.frame
     @frame
@@ -45,42 +52,70 @@ module OracleProbe
   def self.update_input
     names = []
     SCHEDULE.each { |entry| names = entry[1] if entry[0] <= @frame }
+    # In ascending order of the buttons' numbers: of several triggered in one update the
+    # highest is the one that repeats.
     BUTTONS.each do |name|
       button = Input.const_get(name)
       @held[button] = names.include?(name) ? @held[button] + 1 : 0
+      if @held[button] == 1
+        @rep_button = button
+        @rep_count = 0
+      end
     end
+    if @rep_button && @held[@rep_button] > 0
+      @rep_count += 1
+    else
+      @rep_button = nil
+      @rep_count = 0
+    end
+    update_dir4
   end
 
   def self.held(button)
     @held[button]
   end
 
-  # The direction of one axis: opposite directions cancel.
+  def self.repeat?(button)
+    return false if button != @rep_button
+    @rep_count == 1 || (@rep_count >= 16 && (@rep_count - 16) % 4 == 0)
+  end
+
+  # The direction held on one axis, or nil: opposite directions cancel.
   def self.axis(low, high)
-    low_held = @held[Input.const_get(low)]
-    high_held = @held[Input.const_get(high)]
-    return [0, 0] if low_held > 0 && high_held > 0
-    return [low, low_held] if low_held > 0
-    return [high, high_held] if high_held > 0
-    [0, 0]
+    low_held = @held[Input.const_get(low)] > 0
+    high_held = @held[Input.const_get(high)] > 0
+    return nil if low_held == high_held
+    low_held ? low : high
   end
 
   DIRECTIONS = { :DOWN => 2, :LEFT => 4, :RIGHT => 6, :UP => 8 }
 
+  # A diagonal gives the direction the flag chooses and leaves the flag alone; a horizontal
+  # direction held alone sets the flag and a vertical one clears it.
+  def self.update_dir4
+    horizontal = axis(:LEFT, :RIGHT)
+    vertical = axis(:DOWN, :UP)
+    if horizontal && vertical
+      @dir4 = DIRECTIONS[@axis_flag == 0 ? horizontal : vertical]
+    elsif horizontal
+      @axis_flag = 1
+      @dir4 = DIRECTIONS[horizontal]
+    elsif vertical
+      @axis_flag = 0
+      @dir4 = DIRECTIONS[vertical]
+    else
+      @dir4 = 0
+    end
+  end
+
   def self.dir4
-    horizontal, horizontal_held = axis(:LEFT, :RIGHT)
-    vertical, vertical_held = axis(:DOWN, :UP)
-    return DIRECTIONS[vertical] if horizontal == 0 && vertical != 0
-    return DIRECTIONS[horizontal] if vertical == 0 && horizontal != 0
-    return 0 if horizontal == 0
-    # Of two perpendicular directions, the one pressed more recently.
-    horizontal_held < vertical_held ? DIRECTIONS[horizontal] : DIRECTIONS[vertical]
+    @dir4
   end
 
   def self.dir8
-    horizontal = axis(:LEFT, :RIGHT)[0]
-    vertical = axis(:DOWN, :UP)[0]
-    return dir4 if horizontal == 0 || vertical == 0
+    horizontal = axis(:LEFT, :RIGHT)
+    vertical = axis(:DOWN, :UP)
+    return dir4 if horizontal.nil? || vertical.nil?
     (vertical == :DOWN ? 0 : 6) + (horizontal == :LEFT ? 1 : 3)
   end
 end
@@ -119,8 +154,7 @@ class << Input
   end
 
   def repeat?(button)
-    held = OracleProbe.held(button)
-    held == 1 || (held >= 16 && (held - 16) % 4 == 0)
+    OracleProbe.repeat?(button)
   end
 
   def dir4

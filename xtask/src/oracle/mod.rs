@@ -508,6 +508,7 @@ log = [OracleProbe.frame.to_s]
   Input.update
   right = Input::RIGHT
   answers = [Input.press?(right), Input.trigger?(right), Input.repeat?(right)]
+  answers << Input.repeat?(Input::DOWN)
   marks = answers.map { |answer| answer ? '1' : '0' }.join
   log << \"#{OracleProbe.frame} #{marks} #{Input.dir4} #{Input.dir8} #{Input.press?(Input::C)}\"
 end
@@ -525,13 +526,14 @@ loop { Graphics.update }
         let mut frames = 5..;
         for (line, frame) in lines.zip(&mut frames) {
             let pressed = (60..100).contains(&frame);
-            let held = frame - 59;
-            let repeated = pressed && (held == 1 || (held >= 16 && (held - 16) % 4 == 0));
-            let marks: String = [pressed, frame == 60, repeated]
+            // RIGHT repeats at its 1st, 16th and 20th update. Then DOWN takes the repeat for
+            // the ten frames it is held, and RIGHT does not get it back.
+            let right_repeated = matches!(frame, 60 | 75 | 79);
+            let marks: String = [pressed, frame == 60, right_repeated, frame == 80]
                 .map(|answer| if answer { '1' } else { '0' })
                 .into_iter()
                 .collect();
-            // DOWN is pressed after RIGHT, so it is the direction while both are held.
+            // RIGHT was held alone last, so DOWN is the direction while both are held.
             let (dir4, dir8) = match frame {
                 80..90 => (2, 3),
                 60..100 => (6, 6),

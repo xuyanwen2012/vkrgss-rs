@@ -52,8 +52,7 @@ impl Rect {
 
     /// The serialized form: x, y, width and height as little-endian `i32`, 16 bytes.
     ///
-    /// PLACEHOLDER: the commonly documented layout, not yet checked against a data file of the
-    /// original runtime.
+    /// The layout was measured on the original runtime.
     pub fn to_bytes(&self) -> [u8; SERIALIZED_LEN] {
         let mut bytes = [0; SERIALIZED_LEN];
         let values = [self.x, self.y, self.width, self.height];

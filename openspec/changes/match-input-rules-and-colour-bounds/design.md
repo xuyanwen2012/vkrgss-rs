@@ -103,4 +103,8 @@ implemented already and does not change.
 
 ## Follow-ups
 
-(none yet)
+- `openspec/specs/core-bitmap/spec.md`, requirement "Colour components stored as in the
+  original", still says that `Color` and `Tone` clamp only the upper bound of their components.
+  Its two scenarios hold as before (red -5 is kept and stored as 251), but the sentence is
+  superseded by the bounds of this change and no delta of this change covers `core-bitmap`. It
+  needs a delta of its own; no task of this change depends on it.

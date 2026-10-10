@@ -11,8 +11,8 @@
 
 ## 3. Oracle probe and notes
 
-- [ ] 3.1 Make `xtask/src/oracle/probe.rb` answer `repeat?` and `dir4` by the same rules. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p xtask --locked` passes, with a test of the vkxp side that holds two buttons in a schedule.
-- [ ] 3.2 Reword the confirmed notes named in the proposal. Verify: `grep -n PLACEHOLDER crates/vkxp-core/src/rect.rs crates/vkxp-core/src/table.rs crates/vkxp-core/src/input.rs` prints nothing, and `crates/vkxp-core/src/element.rs` has no `PLACEHOLDER` at the window's `active` and `pause` setters or at the tilemap's update.
+- [x] 3.1 Make `xtask/src/oracle/probe.rb` answer `repeat?` and `dir4` by the same rules. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p xtask --locked` passes, with a test of the vkxp side that holds two buttons in a schedule.
+- [x] 3.2 Reword the confirmed notes named in the proposal. Verify: `grep -n PLACEHOLDER crates/vkxp-core/src/rect.rs crates/vkxp-core/src/table.rs crates/vkxp-core/src/input.rs` prints nothing, and `crates/vkxp-core/src/element.rs` has no `PLACEHOLDER` at the window's `active` and `pause` setters or at the tilemap's update.
 
 ## 4. Integration check
 
