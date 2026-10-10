@@ -369,8 +369,6 @@ impl Scene {
     pub fn dispose_tilemap(&mut self, id: TilemapId, bitmaps: &mut Bitmaps) {
         if let Some(mut tilemap) = self.tilemaps.remove(id.0) {
             tilemap.cache.dispose(bitmaps);
-            #[cfg(test)]
-            tilemap.cached.cache.dispose(bitmaps);
         }
     }
 }

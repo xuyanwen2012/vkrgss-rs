@@ -28,9 +28,6 @@ use crate::extract::{Assembly, Level, Look, rows};
 use crate::geometry::Geometry;
 use crate::{Bitmaps, Color, FontDefaults, Rect, SharedTable, Table, Tilemap};
 
-#[cfg(test)]
-pub(crate) mod cached;
-
 /// Side of a tile.
 const TILE: i32 = TILE_SIZE as i32;
 /// Number of layers of a map.
@@ -365,10 +362,6 @@ impl Tilemap {
         level: Option<&Level>,
         tables: &mut SentTables,
     ) {
-        #[cfg(test)]
-        if self.cached.active {
-            return self.refresh_cached(bitmaps, level);
-        }
         if let Some(map) = &self.map_data {
             tables.hold(map, Role::Map);
         }
@@ -494,10 +487,6 @@ impl Tilemap {
     /// viewport plus 32 for each step of priority and 32 more, is not yet checked against the
     /// original runtime; neither is that a sprite created after the tilemap wins a tie.
     pub(crate) fn strips(&self, scroll: i64) -> Vec<(i64, Strip)> {
-        #[cfg(test)]
-        if self.cached.active {
-            return self.cached_strips(scroll).collect();
-        }
         let Some(view) = self.cache.view.as_ref().filter(|_| self.visible) else {
             return Vec::new();
         };
@@ -539,10 +528,6 @@ impl Assembly<'_> {
     /// tile of the piece, in the order of the layers, so that every tile is blended onto the
     /// frame by itself.
     pub(crate) fn tiles(&mut self, tilemap: &Tilemap, strip: Strip, level: &Level) {
-        #[cfg(test)]
-        if tilemap.cached.active {
-            return self.cached_tiles(tilemap, strip, level);
-        }
         let Some(view) = tilemap.cache.view.as_ref().filter(|_| tilemap.visible) else {
             return;
         };

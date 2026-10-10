@@ -111,8 +111,6 @@ mod table;
 pub mod test_support;
 mod text;
 mod tilemap;
-#[cfg(test)]
-mod tiles;
 mod turned;
 mod window;
 

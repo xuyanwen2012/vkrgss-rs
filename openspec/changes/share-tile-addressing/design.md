@@ -57,6 +57,28 @@
 - [A conflict with the change that rewrites `vkxp-vk`] → Only one constant and one test file
   are touched there.
 
+## Implementation notes
+
+- Pinned expectations: `crates/vkxp-core/tests/data/tilemap-frames.txt` holds, per tilemap
+  test, one FNV-1a digest for each frame the test stage drew of a scene with a tilemap. The
+  digests were recorded while every such frame was still compared with the cached-bitmap
+  composition. `VKXP_BLESS=1 cargo test -p vkxp-core` rewrites them. The two tests of
+  stacked translucent tiles, which render their packet by hand, draw one more frame through
+  the stage so that they are pinned too. The test of table deltas and the two that only
+  extract packets draw no frame of a tilemap through the stage and have no line.
+- `vkxp_proto::tiles::texel` takes the size of the sheet and the animation step, and also
+  answers whether the texel lies inside the sheet. The guest's test of whether a tile draws
+  anything asks it for the first texel of each of the tile's four quarters, which is what
+  the former `pieces(..).next().is_none()` tested. Nothing remained in `tiles.rs` of
+  `vkxp-core`, so the file is gone.
+- `stretch_index`: `vkxp-pixel` now depends on `vkxp-proto` and its `stretch_index` calls
+  `vkxp_proto::stretch_index` at `vkxp_proto::stretch_step`. `cargo xtask deps` allows the
+  edge. The other direction would have needed a new public function in `vkxp-pixel`.
+- Outside the crates named in the scope, `Cargo.lock` gained one line for that dependency.
+- `vkxp-compose-ref` no longer exports `AUTOTILE_QUARTERS` and `MAX_LOGICAL_DIMENSION`;
+  `vkxp-core` re-exports the constant of `vkxp-proto` under its former path, and
+  `records.rs` of `vkxp-vk` does the same inside its crate.
+
 ## Follow-ups
 
 - Generating the shader's constants and table from the Rust definition.

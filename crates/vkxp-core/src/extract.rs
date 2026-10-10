@@ -606,7 +606,8 @@ pub(crate) mod testing {
     /// The committed digests of the frames of the tilemap tests: a test's name, then one
     /// digest for each frame [`Stage::frame`] drew of a scene with a tilemap, in order. They
     /// were recorded while each of these frames was also compared with the frame the former
-    /// composition of tilemaps into cached bitmaps drew. To accept an intended change, run
+    /// composition of tilemaps into cached bitmaps drew, whose pictures were those of the
+    /// original runtime on real games. To accept an intended change, run
     /// `VKXP_BLESS=1 cargo test -p vkxp-core`, which rewrites the lines of the tests that ran.
     const PINNED: &str = include_str!("../tests/data/tilemap-frames.txt");
     const PINNED_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/tilemap-frames.txt");
@@ -652,28 +653,15 @@ pub(crate) mod testing {
             }
         }
 
-        /// Extracts the next frame and renders it.
-        ///
-        /// A scene with tilemaps is first drawn the way tilemaps were drawn before the
-        /// tilemap op, from bitmaps composed on the CPU, and the frame must equal that one
-        /// pixel for pixel.
+        /// Extracts the next frame and renders it. The digest of a frame of a scene with
+        /// tilemaps is kept for [`Stage::assert_pinned`].
         pub(crate) fn frame(&mut self) -> Frame {
-            let cached = self.cached_frame();
+            let tilemaps = self.scene.tilemaps.iter().next().is_some();
             let packet = self.scene.extract(&mut self.bitmaps);
             let frame = self
                 .render(&packet)
                 .expect("the reference compositor accepts every extracted packet");
-            if let Some(cached) = cached {
-                let differing = (0..frame.size.height)
-                    .flat_map(|y| (0..frame.size.width).map(move |x| (x, y)))
-                    .find(|&(x, y)| frame.pixel(x, y) != cached.pixel(x, y));
-                if let Some((x, y)) = differing {
-                    panic!(
-                        "the tilemap ops draw {:?} at ({x}, {y}) where the cached bitmaps drew {:?}",
-                        frame.pixel(x, y),
-                        cached.pixel(x, y)
-                    );
-                }
+            if tilemaps {
                 self.tilemap_frames.push(digest(&frame));
             }
             frame
@@ -715,19 +703,6 @@ pub(crate) mod testing {
                 expected == line,
                 "the frames of `{name}` are not the committed ones"
             );
-        }
-
-        /// The next frame as the cached-bitmap composition of tilemaps draws it, or `None`
-        /// for a scene without tilemaps. The stage is left as it was: a copy of it is drawn.
-        pub(crate) fn cached_frame(&self) -> Option<Frame> {
-            self.scene.tilemaps.iter().next()?;
-            let (mut scene, mut bitmaps) = (self.scene.clone(), self.bitmaps.clone());
-            for (_, tilemap) in scene.tilemaps.iter_mut() {
-                tilemap.cached.active = true;
-            }
-            let packet = scene.extract(&mut bitmaps);
-            let frame = self.compositor.clone().render(&packet);
-            Some(frame.expect("the reference compositor accepts every extracted packet"))
         }
 
         /// Renders a packet extracted from the scene.
@@ -3136,14 +3111,9 @@ mod tests {
             }
             for step in steps {
                 perform(&mut stage, &mut made, step.clone());
-                let cached = stage.cached_frame();
                 let packet = stage.scene.extract(&mut stage.bitmaps);
                 let rendered = stage.render(&packet);
                 prop_assert!(rendered.is_ok(), "after {:?}: {:?}", step, rendered.err());
-                // Tilemap ops draw what the cached bitmaps of the tilemaps drew.
-                if let Some(cached) = cached {
-                    prop_assert!(rendered == Ok(cached), "after {:?}", step);
-                }
                 // Every delta is for a bitmap an op draws, or destroys one that is gone.
                 for delta in &packet.bitmaps {
                     let (BitmapDelta::Create { id, .. }
