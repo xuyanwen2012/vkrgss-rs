@@ -1,10 +1,19 @@
-//! The GLSL arithmetic on its own: that the pixel include covers `vkxp-pixel`, and that the
-//! 32-bit-word transform evaluation equals `Transform::source_position` on the device.
+//! The GLSL on its own: that the pixel include covers `vkxp-pixel`, that the 32-bit-word
+//! transform evaluation equals `Transform::source_position` on the device, and that the shader
+//! reads each field of a record from the word it is written to.
 
 use vkxp_proto::{Fixed, Transform};
 
 use super::harness::{Rng, TestCompositor};
-use crate::records::{RECORD_WORDS, TILEMAP_WORDS};
+use crate::records::{
+    AUTOTILES, OP_BITMAP, OP_BLEND, OP_CLIP_X0, OP_CLIP_X1, OP_CLIP_Y0, OP_CLIP_Y1, OP_COLOR,
+    OP_KIND, OP_OPACITY, OP_SAMPLING, OP_SRC_HEIGHT, OP_SRC_WIDTH, OP_SRC_X, OP_SRC_Y,
+    OP_TONE_BLUE, OP_TONE_GRAY, OP_TONE_GREEN, OP_TONE_RED, OP_TRANSFORM, RECORD_WORDS,
+    TILEMAP_AUTOTILES, TILEMAP_CELL_X, TILEMAP_CELL_Y, TILEMAP_FRAMES, TILEMAP_MAP_OFFSET,
+    TILEMAP_MAP_XSIZE, TILEMAP_MAP_YSIZE, TILEMAP_PRIORITIES_COUNT, TILEMAP_PRIORITIES_OFFSET,
+    TILEMAP_PRIORITY, TILEMAP_SUB_X, TILEMAP_SUB_Y, TILEMAP_TILESET, TILEMAP_WORDS,
+    TRANSFORM_WORDS,
+};
 use crate::resources::read_words;
 
 const SHARED_RS: &str = include_str!("../shared.rs");
@@ -13,6 +22,8 @@ const PIXEL_GLSL: &str = include_str!("../../shaders/pixel.glsl");
 const COMPOSE_SPIRV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/compose.comp.spv"));
 const TRANSFORM_TEST_SPIRV: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/transform_test.comp.spv"));
+const RECORD_LAYOUT_TEST_SPIRV: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/record_layout_test.comp.spv"));
 
 /// The list in `build.rs` names every constant of `src/shared.rs`: each is in the include the
 /// build generated.
@@ -122,6 +133,143 @@ fn shader_reads_op_records_at_the_stride_they_are_written_with() {
         words,
         [8, RECORD_WORDS as u32 * 4, TILEMAP_WORDS as u32 * 4]
     );
+}
+
+/// A field of a record, or one element of an array field: how the Rust side names its word,
+/// and that word.
+type Field = (&'static str, usize);
+
+/// Each expression with its own text.
+macro_rules! fields {
+    ($($word:expr),* $(,)?) => {
+        [$((stringify!($word), $word)),*]
+    };
+}
+
+/// The fields of the GLSL `OpRecord` in the order `record_layout_test.comp` writes them.
+const OP_FIELDS: [Field; RECORD_WORDS] = fields![
+    OP_KIND,
+    OP_CLIP_X0,
+    OP_CLIP_Y0,
+    OP_CLIP_X1,
+    OP_CLIP_Y1,
+    OP_BITMAP,
+    OP_SRC_X,
+    OP_SRC_Y,
+    OP_SRC_WIDTH,
+    OP_SRC_HEIGHT,
+    OP_TRANSFORM + 0,
+    OP_TRANSFORM + 1,
+    OP_TRANSFORM + 2,
+    OP_TRANSFORM + 3,
+    OP_TRANSFORM + 4,
+    OP_TRANSFORM + 5,
+    OP_OPACITY,
+    OP_BLEND,
+    OP_COLOR,
+    OP_TONE_RED,
+    OP_TONE_GREEN,
+    OP_TONE_BLUE,
+    OP_TONE_GRAY,
+    OP_SAMPLING,
+];
+
+/// The fields of the GLSL `TilemapRecord` in the order `record_layout_test.comp` writes them.
+const TILEMAP_FIELDS: [Field; TILEMAP_WORDS] = fields![
+    TILEMAP_MAP_OFFSET,
+    TILEMAP_MAP_XSIZE,
+    TILEMAP_MAP_YSIZE,
+    TILEMAP_PRIORITIES_OFFSET,
+    TILEMAP_PRIORITIES_COUNT,
+    TILEMAP_PRIORITY,
+    TILEMAP_CELL_X,
+    TILEMAP_CELL_Y,
+    TILEMAP_SUB_X,
+    TILEMAP_SUB_Y,
+    TILEMAP_TILESET,
+    TILEMAP_AUTOTILES + 0,
+    TILEMAP_AUTOTILES + 1,
+    TILEMAP_AUTOTILES + 2,
+    TILEMAP_AUTOTILES + 3,
+    TILEMAP_AUTOTILES + 4,
+    TILEMAP_AUTOTILES + 5,
+    TILEMAP_AUTOTILES + 6,
+    TILEMAP_FRAMES + 0,
+    TILEMAP_FRAMES + 1,
+    TILEMAP_FRAMES + 2,
+    TILEMAP_FRAMES + 3,
+    TILEMAP_FRAMES + 4,
+    TILEMAP_FRAMES + 5,
+    TILEMAP_FRAMES + 6,
+];
+
+/// What the word `word` of the test's op record holds, and of its tilemap record: a value no
+/// other word of either holds.
+const fn op_value(word: usize) -> u32 {
+    0x0100 + word as u32
+}
+const fn tilemap_value(word: usize) -> u32 {
+    0x0200 + word as u32
+}
+
+/// Compares what the shader read for each field of one record with the word named for it,
+/// and returns a line for each field that differs.
+fn misplaced_fields(fields: &[Field], read: &[u32], value: fn(usize) -> u32) -> Vec<String> {
+    let mut lines = Vec::new();
+    for (&(name, word), &got) in fields.iter().zip(read) {
+        if got == value(word) {
+            continue;
+        }
+        // The word the value came from, and the name the list has for that word.
+        let source = (0..fields.len()).find(|&other| value(other) == got);
+        let from = match source {
+            Some(other) => {
+                let named = fields.iter().find(|field| field.1 == other);
+                format!(
+                    "word {other} (`{}`)",
+                    named.map_or("unnamed", |field| field.0)
+                )
+            }
+            None => format!("no word of the record (value {got:#x})"),
+        };
+        lines.push(format!(
+            "`{name}` is written to word {word}, but the shader reads the field from {from}"
+        ));
+    }
+    lines
+}
+
+/// The layout of both records is written twice, in `src/records.rs` and in
+/// `shaders/records.glsl`. A field moved on one side only would draw wrong frames; here it is
+/// named.
+#[test]
+fn shader_reads_each_record_field_from_the_word_it_is_written_to() {
+    assert_eq!((TRANSFORM_WORDS, AUTOTILES), (6, 7));
+    // The lists name every word of each record exactly once.
+    for (fields, words) in [
+        (&OP_FIELDS[..], RECORD_WORDS),
+        (&TILEMAP_FIELDS[..], TILEMAP_WORDS),
+    ] {
+        let mut named: Vec<usize> = fields.iter().map(|field| field.1).collect();
+        named.sort_unstable();
+        assert_eq!(named, (0..words).collect::<Vec<_>>(), "{fields:?}");
+    }
+
+    let input: Vec<u32> = (0..RECORD_WORDS)
+        .map(op_value)
+        .chain((0..TILEMAP_WORDS).map(tilemap_value))
+        .collect();
+    let mut compositor = TestCompositor::new();
+    let output = compositor.run_buffer_shader(RECORD_LAYOUT_TEST_SPIRV, &input, input.len(), 1, 1);
+
+    let (op, tilemap) = output.split_at(RECORD_WORDS);
+    let mut misplaced = misplaced_fields(&OP_FIELDS, op, op_value);
+    misplaced.extend(misplaced_fields(&TILEMAP_FIELDS, tilemap, tilemap_value));
+    assert!(misplaced.is_empty(), "{}", misplaced.join("\n"));
+    // The shader wrote every word of both records exactly once.
+    let mut read = output;
+    read.sort_unstable();
+    assert_eq!(read, input);
 }
 
 /// One input of the transform test shader.

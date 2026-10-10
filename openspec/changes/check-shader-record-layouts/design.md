@@ -25,6 +25,10 @@
   position; a field added to a struct and not to the list is caught by a count: the outputs
   must cover every word of both records exactly once.
 - Frames do not change: the differential tests stay as they are.
+- As built: a field of several words (`transform`, `autotiles`, `frames`) has one constant,
+  the index of its first word, and the test's list names each of its words as that constant
+  plus an offset. The test shader reads both records from one input buffer, the op record
+  first, because the existing runner binds one input and one output.
 
 ## Risks / Trade-offs
 

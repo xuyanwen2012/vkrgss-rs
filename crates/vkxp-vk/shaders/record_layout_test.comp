@@ -1,0 +1,66 @@
+#version 460
+
+// Test only: reads one op record and one tilemap record through the declarations the
+// compositor uses and writes every field of both to a buffer, in the order of the lists in
+// `src/tests/shaders.rs`, so that a test can compare the word each field is read from with
+// the word `src/records.rs` names for it. Not used by the compositor.
+
+#include "records.glsl"
+
+layout(local_size_x = 1) in;
+
+layout(std430, set = 0, binding = 0) readonly buffer Records {
+    OpRecord op;
+    TilemapRecord tilemap;
+};
+
+layout(std430, set = 0, binding = 1) writeonly buffer Fields {
+    uint fields[];
+};
+
+void main() {
+    uint next = 0;
+
+    fields[next++] = uint(op.kind);
+    fields[next++] = uint(op.clip_x0);
+    fields[next++] = uint(op.clip_y0);
+    fields[next++] = uint(op.clip_x1);
+    fields[next++] = uint(op.clip_y1);
+    fields[next++] = uint(op.bitmap);
+    fields[next++] = uint(op.src_x);
+    fields[next++] = uint(op.src_y);
+    fields[next++] = uint(op.src_width);
+    fields[next++] = uint(op.src_height);
+    fields[next++] = uint(op.transform.xx);
+    fields[next++] = uint(op.transform.xy);
+    fields[next++] = uint(op.transform.yx);
+    fields[next++] = uint(op.transform.yy);
+    fields[next++] = uint(op.transform.tx);
+    fields[next++] = uint(op.transform.ty);
+    fields[next++] = uint(op.opacity);
+    fields[next++] = uint(op.blend);
+    fields[next++] = uint(op.color);
+    fields[next++] = uint(op.tone_red);
+    fields[next++] = uint(op.tone_green);
+    fields[next++] = uint(op.tone_blue);
+    fields[next++] = uint(op.tone_gray);
+    fields[next++] = uint(op.sampling);
+
+    fields[next++] = uint(tilemap.map_offset);
+    fields[next++] = uint(tilemap.map_xsize);
+    fields[next++] = uint(tilemap.map_ysize);
+    fields[next++] = uint(tilemap.priorities_offset);
+    fields[next++] = uint(tilemap.priorities_count);
+    fields[next++] = uint(tilemap.priority);
+    fields[next++] = uint(tilemap.cell_x);
+    fields[next++] = uint(tilemap.cell_y);
+    fields[next++] = uint(tilemap.sub_x);
+    fields[next++] = uint(tilemap.sub_y);
+    fields[next++] = uint(tilemap.tileset);
+    for (int slot = 0; slot < tilemap.autotiles.length(); slot++) {
+        fields[next++] = uint(tilemap.autotiles[slot]);
+    }
+    for (int slot = 0; slot < tilemap.frames.length(); slot++) {
+        fields[next++] = uint(tilemap.frames[slot]);
+    }
+}

@@ -6,7 +6,7 @@
 
 ## 2. Layout test (`vkxp-vk`)
 
-- [ ] 2.1 Add the test shader and the test. Verify: the scenarios of `specs/vulkan-compositor/spec.md`; for "A field moved on one side", swap two fields locally, see the test fail with their names, and undo the swap.
+- [x] 2.1 Add the test shader and the test. Verify: the scenarios of `specs/vulkan-compositor/spec.md`; for "A field moved on one side", swap two fields locally, see the test fail with their names, and undo the swap.
 
 ## 3. Integration check
 
