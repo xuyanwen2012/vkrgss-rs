@@ -30,6 +30,10 @@ usage: vkxp [GAME_DIR] [OPTIONS]
   --fullscreen              start in borderless fullscreen; Alt+Enter or F11 toggles
   --present-stats           write the intervals between the frames shown to the error
                             stream, every 600 frames and at exit
+  --verbose                 also write informational and debug messages to the error
+                            stream; the environment variable VKXP_LOG sets a level
+                            (off, error, warn, info, debug or trace) or a filter such
+                            as vkxp_host=trace, and comes before this option
   --no-audio                run without sound: no audio device is opened
   --soundfont FILE          the SoundFont that MIDI music is played with;
                             default: the first found in /usr/share/soundfonts
@@ -82,6 +86,8 @@ pub(crate) struct Options {
     pub fullscreen: bool,
     /// Whether the intervals between the frames shown are reported.
     pub present_stats: bool,
+    /// Whether informational and debug messages are written too.
+    pub verbose: bool,
     /// Whether the audio output stays closed.
     pub no_audio: bool,
     /// The SoundFont for MIDI, instead of the system's.
@@ -191,6 +197,7 @@ pub(crate) fn parse(arguments: &[String]) -> Result<Options, String> {
             "--debug" => options.debug = true,
             "--allow-process-functions" => options.process_functions = true,
             "--log-p" => options.log_p = true,
+            "--verbose" => options.verbose = true,
             "--no-audio" => options.no_audio = true,
             "--soundfont" => options.soundfont = Some(PathBuf::from(value()?)),
             "--seed" => {
@@ -339,6 +346,16 @@ mod tests {
         // The flag takes no value.
         let options = parse_words(&["--present-stats", "games/demo"]).unwrap();
         assert_eq!(options.game_dir, Some("games/demo".into()));
+    }
+
+    #[test]
+    fn verbose_is_a_flag() {
+        assert!(!parse_words(&[]).unwrap().verbose);
+        let options = parse_words(&["--verbose", "games/demo"]).unwrap();
+        assert!(options.verbose);
+        assert_eq!(options.game_dir, Some("games/demo".into()));
+        assert!(USAGE.contains("--verbose"));
+        assert!(USAGE.contains("VKXP_LOG"));
     }
 
     #[test]

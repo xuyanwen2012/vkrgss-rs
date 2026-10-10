@@ -2,7 +2,7 @@
 
 ## 1. Subscriber and options (`vkxp`)
 
-- [ ] 1.1 Add `tracing` and `tracing-subscriber`, install the subscriber, add `--verbose` and `VKXP_LOG`. Verify: the scenarios "Default level", "Level from the environment" and "Malformed filter" of `specs/game-launch/spec.md` as tests of the executable; the option parser's unit tests.
+- [x] 1.1 Add `tracing` and `tracing-subscriber`, install the subscriber, add `--verbose` and `VKXP_LOG`. Verify: the scenarios "Default level", "Level from the environment" and "Malformed filter" of `specs/game-launch/spec.md` as tests of the executable; the option parser's unit tests.
 
 ## 2. Events (`vkxp`, `vkxp-host`, `vkxp-audio`, `vkxp-binding`)
 

@@ -8,7 +8,9 @@
 //! with the protocol link between them:
 //!
 //! 1. The arguments are parsed (`args`); a mistake there ends with the usage message and
-//!    status 2.
+//!    status 2. The subscriber that writes diagnostics to the error stream is installed
+//!    (`log`), at the level `--verbose` and the environment variable `VKXP_LOG` ask for; a
+//!    value of the variable that cannot be parsed ends the program the same way.
 //! 2. The configuration files are read and the command line is put over them (`config`);
 //!    settings that do not go together end with the usage message and status 2. `Game.ini` is read, the run-time packages it names are looked up in the `--rtp` table,
 //!    the built-in scripts file is found and a SoundFont named with `--soundfont` is checked
@@ -36,6 +38,7 @@
 mod args;
 mod config;
 mod font;
+mod log;
 mod signals;
 
 use std::path::{Path, PathBuf, absolute};
@@ -75,6 +78,12 @@ fn main() -> ExitCode {
         Ok(options) => options,
         Err(message) => return usage(message),
     };
+    // Nothing before this emits an event: a mistake on the command line is written directly.
+    let variable = std::env::var(log::VARIABLE).ok();
+    match log::level(variable.as_deref(), options.verbose) {
+        Ok(level) => log::install(level),
+        Err(message) => return usage(message),
+    }
     let (game_dir, mut settings) = match settings(options) {
         Ok(settled) => settled,
         Err(error) => {

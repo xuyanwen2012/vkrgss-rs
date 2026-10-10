@@ -94,5 +94,7 @@ symphonia = { version = "0.5", default-features = false, features = ["ogg", "vor
 tempfile = "3"
 thiserror = "2"
 toml = { version = "1", default-features = false, features = ["parse", "serde", "std"] }
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["env-filter", "fmt", "std"] }
 winit = "0.30"
 x11rb = "0.13"

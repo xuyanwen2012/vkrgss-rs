@@ -109,13 +109,23 @@ fn vkxp(arguments: &[&str]) -> Ran {
 /// Runs the executable in `work`, which is also where it looks for the user's data and
 /// configuration.
 fn vkxp_in(work: TempDir, arguments: &[&str]) -> Ran {
+    vkxp_logging(work, arguments, None)
+}
+
+/// Runs the executable as [`vkxp_in`] does, with the environment variable `VKXP_LOG` set to
+/// `log` or, without one, not set.
+fn vkxp_logging(work: TempDir, arguments: &[&str], log: Option<&str>) -> Ran {
     let restriction = isolation();
     let mut command = Command::new(env!("CARGO_BIN_EXE_vkxp"));
     command
         .args(arguments)
         .current_dir(work.path())
         .env("XDG_DATA_HOME", work.path())
-        .env("XDG_CONFIG_HOME", work.path());
+        .env("XDG_CONFIG_HOME", work.path())
+        .env_remove("VKXP_LOG");
+    if let Some(log) = log {
+        command.env("VKXP_LOG", log);
+    }
     for (name, value) in restriction {
         command.env(name, value);
     }
@@ -134,6 +144,11 @@ fn headless(game: &Game, arguments: &[&str]) -> Ran {
 
 /// Runs `game` headless as [`headless`] does, started in `work`.
 fn headless_in(work: TempDir, game: &Game, arguments: &[&str]) -> Ran {
+    headless_logging(work, game, arguments, None)
+}
+
+/// Runs `game` headless as [`headless`] does, with `VKXP_LOG` set to `log`.
+fn headless_logging(work: TempDir, game: &Game, arguments: &[&str], log: Option<&str>) -> Ran {
     let dir = game.dir().to_string_lossy().into_owned();
     let builtin = game.builtin_scripts().to_string_lossy().into_owned();
     let device = device();
@@ -146,7 +161,7 @@ fn headless_in(work: TempDir, game: &Game, arguments: &[&str]) -> Ran {
         &device,
     ];
     all.extend_from_slice(arguments);
-    vkxp_in(work, &all)
+    vkxp_logging(work, &all, log)
 }
 
 /// A dumped frame.
@@ -1028,4 +1043,51 @@ fn a_damaged_archive_is_an_error_naming_it() {
     ran.assert_failure();
     assert!(ran.stderr().contains("Game.rgssad"), "{}", ran.stderr());
     assert!(!ran.file("out.png").exists());
+}
+
+/// A game that shows three frames and ends.
+fn quiet_game(name: &str) -> Game {
+    Game::new(name, "Quiet", &[("Main", "3.times { Graphics.update }")])
+}
+
+/// Whether the error stream of a run has a line of an informational event. Such a line names
+/// its level.
+fn has_informational_line(stderr: &str) -> bool {
+    stderr.lines().any(|line| line.starts_with("vkxp: INFO "))
+}
+
+/// Scenario "Default level".
+#[test]
+fn a_run_without_verbose_writes_no_informational_line() {
+    let game = quiet_game("e2e-log-default");
+    let ran = headless(&game, &[]);
+    ran.assert_success();
+    let stderr = ran.stderr();
+    assert!(!has_informational_line(&stderr), "{stderr}");
+    assert!(!stderr.contains("built-in scripts"), "{stderr}");
+}
+
+/// Scenario "Level from the environment".
+#[test]
+fn the_level_of_the_environment_comes_before_verbose() {
+    let game = quiet_game("e2e-log-environment");
+    let work = tempfile::tempdir().expect("a temporary directory");
+    let ran = headless_logging(work, &game, &["--verbose"], Some("error"));
+    ran.assert_success();
+    let stderr = ran.stderr();
+    assert!(!has_informational_line(&stderr), "{stderr}");
+    assert!(!stderr.contains("built-in scripts"), "{stderr}");
+}
+
+/// Scenario "Malformed filter".
+#[test]
+fn a_malformed_filter_ends_the_program_naming_the_variable() {
+    let game = quiet_game("e2e-log-malformed");
+    let work = tempfile::tempdir().expect("a temporary directory");
+    let ran = headless_logging(work, &game, &[], Some("="));
+    ran.assert_failure();
+    assert_eq!(ran.output.status.code(), Some(2));
+    let stderr = ran.stderr();
+    assert!(stderr.contains("VKXP_LOG"), "{stderr}");
+    assert!(stderr.contains("usage: vkxp"), "{stderr}");
 }
