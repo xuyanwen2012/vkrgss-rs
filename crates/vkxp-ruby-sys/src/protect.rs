@@ -24,13 +24,21 @@ pub struct Raised {
     pub exception: VALUE,
 }
 
-/// Runs `body(data)` under `rb_protect`.
+/// Runs `body(data)` under `rb_protect`: a jump out of `body` ends inside C and comes back as
+/// a [`Raised`], with `$!` cleared, instead of crossing the caller's frames.
+///
+/// `data` is the plain data of the operation, inputs and the outputs that are not values;
+/// `body` receives its address as the argument and returns the value of the operation.
 ///
 /// # Safety
 ///
-/// Interpreter thread only. `body` must cast its argument back to `*mut T`, must not unwind,
-/// and must hold no value with a destructor while it calls anything that can raise.
-pub(crate) unsafe fn protect<T>(
+/// - The caller is on the interpreter thread.
+/// - `body` casts its argument back to `*mut T` and uses it as nothing else. Every `VALUE`
+///   and pointer it reads from there is live for the call.
+/// - `body` does not unwind: it does not panic and calls nothing that can.
+/// - `body` holds no value with a destructor while it calls anything that can raise, since
+///   the jump frees its frame without running anything in it.
+pub unsafe fn protect<T>(
     data: &mut T,
     body: unsafe extern "C" fn(VALUE) -> VALUE,
 ) -> Result<VALUE, Raised> {

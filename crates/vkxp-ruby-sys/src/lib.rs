@@ -47,7 +47,10 @@
 //!    [`Ruby::funcall`], [`Ruby::inspect`], [`Ruby::str_new`], [`Ruby::root`] and the
 //!    `define_*` methods do this and return a `Result`: the error
 //!    is a [`Raised`] (the exception object, as plain data) or a [`RubyError`] (class name,
-//!    message and backtrace, copied into host memory). Calling [`ffi`] directly is allowed
+//!    message and backtrace, copied into host memory). [`protect`] is what they are built
+//!    on, and another crate uses it for C-API calls of its own: the plain data of the
+//!    operation in a struct, and an `extern "C"` function that performs it and holds nothing
+//!    with a destructor. Calling [`ffi`] directly is allowed
 //!    where no Rust value with a destructor is alive in any frame the jump could cross, which
 //!    is the caller's proof to make; most functions of the C API can raise, if only
 //!    `NoMemoryError` or a `TypeError` for an argument of the wrong type.
@@ -121,6 +124,6 @@ mod signals;
 pub use call::RubyError;
 pub use host::{Arity, HostResult, Raise};
 pub use interp::{Interpreter, MIN_STACK_SIZE, Options, Ruby, STACK_HEADROOM, StartError};
-pub use protect::Raised;
+pub use protect::{Raised, protect};
 pub use root::Root;
 pub use signals::SIGNALS_TAKEN_BY_RUBY;

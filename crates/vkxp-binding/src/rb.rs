@@ -11,7 +11,7 @@
 //! receiver, an argument, or a value one of these functions returned during the same call
 //! and that has been in a local since, where the collector's stack scan finds it.
 
-use std::ffi::{CStr, c_char, c_int, c_long};
+use std::ffi::{CStr, c_char, c_long};
 
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{Arity, HostResult, Raise, Raised, Ruby};
@@ -110,7 +110,7 @@ unsafe extern "C" fn call_body(data: VALUE) -> VALUE {
     }
 }
 
-/// Performs `op` under `rb_protect` and returns its value and outputs.
+/// Performs `op` under the interpreter's protection and returns its value and outputs.
 fn perform(_ruby: &Ruby, op: Op) -> Result<(VALUE, Call), Raised> {
     let mut call = Call {
         op,
@@ -118,32 +118,11 @@ fn perform(_ruby: &Ruby, op: Op) -> Result<(VALUE, Call), Raised> {
         double: 0.0,
         name: std::ptr::null(),
     };
-    let mut state: c_int = 0;
-    // SAFETY: `&Ruby` proves the interpreter thread. `call` outlives the call and
-    // `call_body` treats its argument as a pointer to it; `rb_protect` returns normally
-    // whatever the body does.
-    let value = unsafe {
-        ffi::rb_protect(
-            call_body,
-            std::ptr::from_mut(&mut call) as VALUE,
-            &mut state,
-        )
-    };
-    if state == 0 {
-        return Ok((value, call));
-    }
-    // SAFETY: on the interpreter thread `ruby_errinfo` is only touched by the interpreter,
-    // which is not running now. Taking the exception out leaves `$!` clean.
-    let exception = unsafe {
-        let pending = ffi::ruby_errinfo;
-        ffi::ruby_errinfo = ffi::Qnil;
-        pending
-    };
-    let is_raise = state == ffi::TAG_RAISE || state == ffi::TAG_FATAL;
-    Err(Raised {
-        state,
-        exception: if is_raise { exception } else { ffi::Qnil },
-    })
+    // SAFETY: `&Ruby` proves the interpreter thread, and `call_body` fits the contract of
+    // `protect`: it treats its argument as a pointer to `call` and holds nothing with a
+    // destructor.
+    let value = unsafe { vkxp_ruby_sys::protect(&mut call, call_body) }?;
+    Ok((value, call))
 }
 
 // --- Exception classes ------------------------------------------------------------------------
