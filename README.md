@@ -35,10 +35,13 @@ defined in `vkxp-proto`.
 `xtask` holds repository automation and the tool that extracts the built-in scripts; it is not
 part of the runtime.
 
-The protocol is at version 7; an encoded stream of another version is rejected. A frame packet
+The protocol is at version 8; an encoded stream of another version is rejected. A frame packet
 carries the changes to bitmaps and tables and an ordered list of ops of four kinds: `Clear`,
 `Quad`, `RectEffect` and `TilemapLayer`. Sprites, planes and the parts of a window are quads.
-Both compositors evaluate every kind.
+Both compositors evaluate every kind. Version 8 added the messages of the save states: the
+requests to save and to load a state, the order to a parked copy of the guest process to
+resume, the attachment of a guest process, the outcome of a game, and the answers saved,
+loaded and failed.
 
 ## Third-party source
 
@@ -176,11 +179,12 @@ Paths on the command line are relative to the directory the program was started 
 | `--preload FILE` | A Ruby file evaluated after the built-in scripts and before the game's first script, and again after a reset. Repeatable, in the order given. |
 | `--record FILE` | Write the input of every frame and the seed to `FILE`. |
 | `--replay FILE` | Play the input of a recording back instead of the keyboard. Not together with `--record` or `--input`. |
-| `--guest thread\|process` | Where the game's scripts run: on a thread of the program, which is the default, or in a process of their own. See *Guest process*. |
+| `--guest thread\|process` | Where the game's scripts run: on a thread of the program or in a process of their own, which the save states need. Without a choice it is a process in a window and a thread in a headless run. See *Guest process* and *Save states*. |
 | `--headless` | Run without a window, on a virtual clock that never waits. |
 | `--frames N` | Headless: stop after N frames if the game has not ended. |
 | `--input SCRIPT\|@FILE` | Headless: the buttons held from given frames on, in the syntax described under *Running the demo*, or a file that holds such a script. |
 | `--dump FRAME=FILE` | Headless: write frame `FRAME`, counted from 0, as a PNG file. Repeatable. |
+| `--states SCHEDULE` | Headless, with `--guest process`: save and load states at given frames, for example `"120:save 0, 200:load 0"`. See *Save states*. |
 
 An unknown option or a malformed value, a malformed input script file included, ends the
 program with the usage message and status 2.
@@ -299,7 +303,7 @@ refused. A key is named as the key codes of `winit` are
 (`winit::keyboard::KeyCode`): `KeyA` to `KeyZ`, `Digit0` to `Digit9`, `Numpad0` to `Numpad9`,
 `F1` to `F12`, `ArrowUp`, `Space`, `Enter`, `Escape`, `ShiftLeft`, `ControlRight` and so on.
 They name the position of a key, not the letter a keyboard layout puts on it. The host keys
-(F12, F2, F11, Tab, Alt+Enter) are not part of the map.
+(F12, F2, F3, F4, F11, Tab, Alt+Enter) are not part of the map.
 
 ### Gamepads
 
@@ -328,8 +332,9 @@ on the AMD integrated GPU, or the same on the CPU with `VK_LOADER_DRIVERS_SELECT
 `--device llvmpipe`.
 
 The host keys are those of the demo: F12 (reset), Alt+Enter or F11 (borderless fullscreen),
-F2 (frame rate in the title) and Tab held (fast-forward). Closing the window asks the game to
-quit.
+F2 (frame rate in the title) and Tab held (fast-forward), and the keys of the save states: F3
+saves, F4 loads, and with Shift they choose the slot (see *Save states*). Closing the window
+asks the game to quit.
 
 ### Messages
 
@@ -501,8 +506,10 @@ to run while the loader is not restricted, and it passes the restriction on to t
 ### Guest process
 
 The game's scripts, with the interpreter, the bitmaps and the game's files, are the guest;
-the window, the GPU, the audio device and the input are the host. By default the guest is a
-thread of the program. With `--guest process` it is a child process:
+the window, the GPU, the audio device and the input are the host. The guest is a thread of
+the program or a child process. Without a choice it is a process in a window, where the keys
+of the save states need it, and a thread in a headless run. `--guest thread` and
+`--guest process` choose:
 
 ```sh
 VK_LOADER_DRIVERS_SELECT='*radeon*' \
@@ -528,7 +535,54 @@ stream, the same exit status. What differs:
 - With `--frame-stats` the guest's own rows are written by the guest process.
 - A bitmap that changes is copied through the socket instead of handed over.
 
-Save states and a sandbox for the guest process build on this form and do not exist yet.
+The save states, below, build on this form. A sandbox for the guest process would too and
+does not exist yet.
+
+### Save states
+
+A state is the game as it is at one frame: everything the scripts hold, whatever the game's
+own save system would keep or not. It works in any game, because a state is a copy of the
+guest process, made with `fork` at a frame boundary and kept in memory until it is loaded. So states need the guest in a process, which is what a window has
+unless `--guest thread` says otherwise.
+
+| Key | |
+|---|---|
+| F3 | Save a state into the chosen slot. |
+| F4 | Load the state of the chosen slot. |
+| Shift+F3 | Choose the next slot. |
+| Shift+F4 | Choose the slot before. |
+
+There are ten slots, 0 to 9, and slot 0 is chosen at the start. What became of a request, and
+the slot that was chosen, is shown in the window title for two seconds and logged at the level
+`info`. A state is saved at the next frame at which it can be: not between `Graphics.freeze`
+and the end of the transition that follows, and not while a message panel is shown. A slot
+can be loaded any number of times. Loading starts the display, the audio and the pacing
+afresh for the game that goes on from the state.
+
+The keys only show a notice when the guest is a thread, and while input is recorded or
+replayed, since a load would make the recording describe another run. With
+`--allow-process-functions` no state is saved: a game that starts processes has to wait for
+them, and a guest that keeps copies of itself cannot.
+
+A headless run takes its requests from `--states`, for the tests: entries `frame:save N` and
+`frame:load N` separated by commas, made when that frame of the run arrives. The frames of a
+run keep counting through a load, so after `--states "60:save 0, 100:load 0"` frame 101 is
+the frame that followed frame 60. Without `--guest process` the option is an error.
+
+```sh
+VK_LOADER_DRIVERS_SELECT='*lvp*' cargo run -p vkxp -- <game directory> \
+    --rtp Standard=<RTP directory> --headless --guest process --frames 140 \
+    --states "60:save 0, 100:load 0" --dump 101=target/frame.png
+```
+
+Limits:
+
+- States live in memory and end with the run. Nothing is written to disk.
+- Files the game wrote after a state was saved stay as they are, its own saves included; a
+  file a script holds open across frames shares its position with the copies.
+- Music and background sound start over after a load.
+- Each state costs the memory pages the game has changed since it was saved.
+- States need `fork`, which the one platform of vkxp, Linux, has.
 
 ### Seed, preload scripts and input recordings
 

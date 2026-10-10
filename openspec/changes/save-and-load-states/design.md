@@ -111,6 +111,44 @@ as a thread it is an error at start that names `--guest process`.
 `--guest` keeps its values. Without a choice the guest is a process in a window and a thread
 in a headless run.
 
+## Notes from the implementation
+
+- **When a request is served.** The guest notes a request when it arrives and has itself
+  copied when it next *enters* a wait for a tick that qualifies, right after sending the
+  frame of that wait. A request that arrives during the wait of frame 60 is so served in
+  the wait of frame 61, and the copy sends frame 61 again when it is resumed. With the
+  requests of a headless schedule given when their frame arrives, ahead of its tick like the
+  input script's entries, this is what makes frame 100 + k of the scenario "Back to the
+  saved frame" equal frame 60 + k.
+- **No tick while a load is asked for.** From `LoadState` to its answer the session sends no
+  tick (and drops a second `LoadState`). A tick sent in between would answer a frame of the
+  guest that the load ends and reach the resumed copy, which would take it for the tick of
+  the frame it sends again. On `StateLoaded` the pending tick is dropped.
+- **Order at the relay.** A guest process that forks waits, through a pipe, until its copy
+  has written its `Attach`, and the relay takes the processes that have connected before it
+  reads a message of the running guest. So the relay knows a copy before anything its maker
+  sent after making it, and the copy a resumed guest leaves of itself (which is not
+  announced with `StateSaved`) fills the slot before that guest's first frame.
+- **The outcome.** The binding sends `Outcome` before `Shutdown` in every form of the guest;
+  a session ignores it. So that a guest whose host has stopped sending can still report it,
+  the guest keeps its link when it reads the end of it and only takes that as a request to
+  quit, and the relay closes just its sending side of the connection when the host has
+  gone. The relay then waits for the guest process to end, as long as the program waited
+  for it before.
+- **Ending processes.** The relay ends the processes whose connections it holds, and not a
+  process whose connection has ended: its number may belong to another process by then. A
+  copy that is replaced in its slot exits by itself on the end of its connection. The relay
+  waits up to two seconds for all of them to be gone.
+- **The interpreter's thread timer.** Interval timers are not inherited through `fork`, so a
+  copy calls `rb_thread_start_timer`, as the interpreter does after its own `fork`.
+- **Edits outside the named files, a few lines each.** `crates/vkxp-core/src/bitmap.rs`: an
+  iterator over the live bitmaps, which `delta.rs` cannot reach otherwise (the table
+  bookkeeping already had `Scene::resend_tables`). `crates/vkxp-vk`: `forget_resources` of
+  the compositor, built from the deltas that destroy each bitmap and table, and the two
+  iterators over their ids. `crates/vkxp-host/src/report.rs` and `crates/vkxp/src/log.rs`:
+  the severity `Info` for the notices. `crates/vkxp-binding/src/graphics.rs`: the flag that
+  the display holds a picture.
+
 ## Limits (stated in the README)
 
 - States live in memory and end with the run.
@@ -121,4 +159,15 @@ in a headless run.
 
 ## Follow-ups
 
-(none yet)
+- A notice leaves the title when the session next looks at its clock, which is at the next
+  tick. A game that sends no frame for a while (a script that loads for seconds) keeps the
+  notice that long. A timer of its own for the notice was not built.
+- The time a save and a load take has not been measured; the proposal's "a few
+  milliseconds" is an expectation.
+- The state keys were exercised through the session's tests and the headless schedule, not
+  by a person in a window.
+- `StateFailed` does not say whether it answers a save or a load. The session takes it for
+  the answer to the load it waits for when the slot is the same, which is wrong for a save
+  into that very slot that fails at the same moment.
+- A state whose copy died (for example ended by the kernel for lack of memory) is found out
+  when it is loaded and answered with `StateFailed`; nothing reports it earlier.

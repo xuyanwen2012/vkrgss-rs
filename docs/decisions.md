@@ -24,11 +24,17 @@ settled; change one only through an OpenSpec change that says so.
 - **Host** (main thread plus audio thread): winit event loop, Vulkan, audio device, input.
 - Only plain data crosses the boundary: frame packets, audio commands, input snapshots, modal
   message requests. The guest never holds a GPU, window or audio handle.
-- The guest is a thread of the host's process by default. On request (`--guest process`, the
-  environment variable `VKXP_GUEST`, the configuration key `guest`) it runs in a child process
-  and the same messages cross a Unix stream socket (change `run-the-guest-in-a-process`). The
-  process form is what fork-based in-memory save states and an OS-level sandbox need; both are
-  still to come.
+- The guest is a thread of the host's process or a child process, with which the same
+  messages cross a Unix stream socket (change `run-the-guest-in-a-process`). It is chosen by
+  `--guest thread` or `--guest process`, the environment variable `VKXP_GUEST` and the
+  configuration key `guest`. Without a choice it is a process in a window and a thread in a
+  headless run (change `save-and-load-states`).
+- Save states are copies of the guest process: the guest forks at a frame boundary and the
+  copy is parked, in memory, until it is loaded; to load, the running guest is ended and the
+  copy resumed, which first leaves a new copy of itself (change `save-and-load-states`). F3
+  saves and F4 loads, with Shift they choose one of ten slots. States end with the run, and
+  the music starts over after a load. An OS-level sandbox for the guest process needs the
+  process form too and is still to come.
 - The guest is deterministic: time comes from frame ticks and a host-provided clock, input is
   sampled once per `Input.update`, the random seed can be injected. Input record and replay is a
   first-version test facility.
@@ -133,7 +139,8 @@ settled; change one only through an OpenSpec change that says so.
   and replay.
 - Reserved in the design, not implemented: higher internal resolution, post-process filters
   (planned route: RetroArch slang presets via `librashader`, to be verified), frame
-  interpolation, widescreen through a run-time logical resolution, save states.
+  interpolation, widescreen through a run-time logical resolution.
+- Added after the first version: save states (F3 and F4), see "Guest / host split".
 - Not planned: rewind.
 
 ## Process

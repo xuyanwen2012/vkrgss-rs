@@ -22,7 +22,7 @@
 
 ## 5. Documentation
 
-- [ ] 5.1 README: the keys, `--states`, the limits of `design.md`, protocol version 8; `docs/decisions.md`: save states move from "reserved" to implemented, with the default form of the guest. Verify: both texts name F3 and F4.
+- [x] 5.1 README: the keys, `--states`, the limits of `design.md`, protocol version 8; `docs/decisions.md`: save states move from "reserved" to implemented, with the default form of the guest. Verify: both texts name F3 and F4.
 
 ## 6. Integration check
 
