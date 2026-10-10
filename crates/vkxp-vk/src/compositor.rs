@@ -143,6 +143,12 @@ pub struct VkCompositor {
     /// Failure injection: the number of acquires that still report a timeout.
     #[cfg(test)]
     acquire_timeouts: u32,
+    /// Makes swapchains present as on a device without swapchain maintenance.
+    #[cfg(test)]
+    ignore_maintenance: bool,
+    /// Failure injection: whether the draw of the next present fails.
+    #[cfg(test)]
+    fail_draw: bool,
     /// Failure injection: the number of frame buffers that may still be created or grown
     /// before one such allocation fails, once.
     #[cfg(test)]
@@ -284,6 +290,10 @@ impl VkCompositor {
             starved: false,
             #[cfg(test)]
             acquire_timeouts: 0,
+            #[cfg(test)]
+            ignore_maintenance: false,
+            #[cfg(test)]
+            fail_draw: false,
             #[cfg(test)]
             frame_buffer_failure: None,
             #[cfg(test)]

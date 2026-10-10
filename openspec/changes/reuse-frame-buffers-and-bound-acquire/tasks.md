@@ -10,8 +10,8 @@
 
 ## 3. Swapchain maintenance (`vkxp-vk`)
 
-- [ ] 3.1 Enable the extension where offered, add present fences, replace the swapchain without idling the device, release images on the failed-draw path, keep the path without the extension. Verify: the scenarios of "Swapchain lifetime".
-- [ ] 3.2 Note under "Checked" in `design.md` what llvmpipe offered and the result of the presentation tests on the AMD GPU. Verify: the notes are there.
+- [x] 3.1 Enable the extension where offered, add present fences, replace the swapchain without idling the device, release images on the failed-draw path, keep the path without the extension. Verify: the scenarios of "Swapchain lifetime".
+- [x] 3.2 Note under "Checked" in `design.md` what llvmpipe offered and the result of the presentation tests on the AMD GPU. Verify: the notes are there.
 
 ## 4. Integration check
 

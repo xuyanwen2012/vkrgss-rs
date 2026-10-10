@@ -84,6 +84,10 @@ const OFFSCREEN_FORMAT: vk::Format = vk::Format::R8G8B8A8_UNORM;
 /// window may, must not stop the game.
 const ACQUIRE_TIMEOUT: u64 = 100_000_000;
 
+/// How long the replacement of a swapchain waits for the fences of its presents, in
+/// nanoseconds, before it idles the device instead. A lost surface may never signal them.
+const PRESENT_FENCE_TIMEOUT: u64 = ACQUIRE_TIMEOUT;
+
 /// What the held frame and an empty target are cleared to: opaque black.
 const BLACK: [u32; 4] = [0, 0, 0, 255];
 
@@ -352,10 +356,50 @@ struct Swapchain {
     stale: bool,
     /// The pacing extensions on this swapchain, when it was created for them.
     timing: Option<SwapchainTiming>,
+    /// With swapchain maintenance, per image: the fence that the presents of the image
+    /// carry, which is signalled once the presentation engine has let go of what the present
+    /// used. `None` on a swapchain that presents without the extension.
+    present_fences: Option<Vec<PresentFence>>,
+    /// Whether a present went out without a fence although the others carry one, so that
+    /// the fences do not tell when the presentation engine has let go of everything.
+    unfenced: bool,
+}
+
+/// The fence of the presents of one swapchain image.
+struct PresentFence {
+    fence: vk::Fence,
+    /// Whether a present carried the fence and it has not been seen signalled since.
+    outstanding: bool,
 }
 
 impl Swapchain {
-    /// Destroys the swapchain and everything made for it. The device must be idle.
+    /// Waits, for a bounded time, until the presentation engine has let go of what the
+    /// presents of this swapchain used. Returns whether it has, which only the fences of
+    /// swapchain maintenance tell: `false` without them, when a present went out without
+    /// one, and when one is not signalled in time.
+    fn settle_presents(&self, device: &ash::Device) -> bool {
+        let Some(fences) = &self.present_fences else {
+            return false;
+        };
+        let outstanding: Vec<vk::Fence> = fences
+            .iter()
+            .filter(|present| present.outstanding)
+            .map(|present| present.fence)
+            .collect();
+        if !outstanding.is_empty() {
+            // SAFETY: the fences are live and belong to this device.
+            let waited =
+                unsafe { device.wait_for_fences(&outstanding, true, PRESENT_FENCE_TIMEOUT) };
+            if waited.is_err() {
+                return false;
+            }
+        }
+        !self.unfenced
+    }
+
+    /// Destroys the swapchain and everything made for it. Every submission must have been
+    /// waited for, and the presentation engine must have let go of the presents: their
+    /// fences were waited for, or the device is idle.
     fn destroy(self, device: &ash::Device, loader: &ash::khr::swapchain::Device) {
         // SAFETY: the caller guarantees that nothing is in use; every handle was created from
         // this device for this swapchain and is consumed here. Destroying a swapchain also
@@ -369,6 +413,9 @@ impl Swapchain {
             }
             device.destroy_semaphore(self.acquired, None);
             loader.destroy_swapchain(self.handle, None);
+            for present in self.present_fences.into_iter().flatten() {
+                device.destroy_fence(present.fence, None);
+            }
         }
     }
 }
@@ -395,6 +442,9 @@ pub(super) struct Presenter {
     /// points at.
     bound: Option<[vk::ImageView; 3]>,
     swapchain_loader: Option<ash::khr::swapchain::Device>,
+    /// The commands of `VK_EXT_swapchain_maintenance1`, loaded with the first swapchain that
+    /// uses them.
+    maintenance_loader: Option<ash::ext::swapchain_maintenance1::Device>,
     /// The commands of the pacing extensions, loaded with the first swapchain that is
     /// created for them.
     timing_commands: Option<(ffi::Commands, ash::khr::calibrated_timestamps::Device)>,
@@ -425,6 +475,7 @@ impl Presenter {
             no_mask: None,
             bound: None,
             swapchain_loader: None,
+            maintenance_loader: None,
             timing_commands: None,
             swapchain: None,
         };
@@ -601,6 +652,8 @@ impl Presenter {
     /// Destroys everything. The device must be idle.
     pub(super) fn destroy(mut self, device: &ash::Device, allocator: &mut Allocator) {
         if let (Some(swapchain), Some(loader)) = (self.swapchain.take(), &self.swapchain_loader) {
+            // The device is idle either way; this only gives the fences the time to signal.
+            swapchain.settle_presents(device);
             swapchain.destroy(device, loader);
         }
         if let Some(held) = self.held.take() {
@@ -1211,6 +1264,13 @@ impl VkCompositor {
             });
 
             let drawn = self.submit_or_idle(|compositor| {
+                #[cfg(test)]
+                if std::mem::take(&mut compositor.fail_draw) {
+                    return Err(VkError::Memory {
+                        what: "the draw",
+                        message: "injected failure".to_owned(),
+                    });
+                }
                 compositor.begin_commands()?;
                 // SAFETY: the command buffer is recording, on the queue that presents and
                 // draws. The image and its view belong to the live swapchain, which is
@@ -1231,8 +1291,12 @@ impl VkCompositor {
                 compositor.submit_drawn(wait, signal)
             });
             if let Err(error) = drawn {
-                // The semaphores are in an unknown state; a new swapchain brings new ones.
-                self.mark_swapchain_stale();
+                // The image is acquired and the two semaphores are in an unknown state. With
+                // swapchain maintenance the image is given back and the semaphores are
+                // replaced; otherwise a new swapchain brings new ones.
+                if !self.release_undrawn(index) {
+                    self.mark_swapchain_stale();
+                }
                 return Err(error);
             }
 
@@ -1241,6 +1305,21 @@ impl VkCompositor {
                 .wait_semaphores(&waits)
                 .swapchains(&swapchains)
                 .image_indices(&indices);
+            // With swapchain maintenance the present carries the fence of its image, unless
+            // the present of the image before has not let go of it yet.
+            let present_fences = match self.take_present_fence(index) {
+                Ok(fence) => [fence],
+                Err(error) => {
+                    // The image is drawn and its semaphore signalled, and neither is used.
+                    self.mark_swapchain_stale();
+                    return Err(error);
+                }
+            };
+            let mut fence_info =
+                vk::SwapchainPresentFenceInfoEXT::default().fences(&present_fences);
+            if present_fences[0] != vk::Fence::null() {
+                info = info.push_next(&mut fence_info);
+            }
             // The structures of the pacing extensions, chained in when the present is paced.
             let present_ids = [plan.and_then(|plan| plan.present_id).unwrap_or(0)];
             let mut id_info = ffi::PresentId2 {
@@ -1267,7 +1346,9 @@ impl VkCompositor {
             // have the layout of the header, only exist for a swapchain that was created with
             // the flags of their extensions on a device that has them enabled; they and what
             // they point to live until the call returns; the target time is in a time domain
-            // of the swapchain and the present id is greater than every one before it.
+            // of the swapchain and the present id is greater than every one before it. A
+            // fence is only chained on a device with swapchain maintenance, belongs to this
+            // device, is unsignalled and is carried by no other present.
             match unsafe { loader.queue_present(self.gpu.queue, &info) } {
                 Ok(suboptimal) => {
                     self.pacer.presented(plan.as_ref(), frame);
@@ -1319,6 +1400,116 @@ impl VkCompositor {
     #[cfg(test)]
     pub(crate) fn invalidate_swapchain(&mut self) {
         self.mark_swapchain_stale();
+    }
+
+    /// Makes the swapchains created from now on present without swapchain maintenance, as on
+    /// a device that lacks the extension.
+    #[cfg(test)]
+    pub(crate) fn ignore_swapchain_maintenance(&mut self) {
+        self.ignore_maintenance = true;
+    }
+
+    /// Whether the current swapchain's presents carry a fence.
+    #[cfg(test)]
+    pub(crate) fn presents_with_fences(&self) -> bool {
+        let chain = self.presenter.as_ref().and_then(|p| p.swapchain.as_ref());
+        chain.is_some_and(|chain| chain.present_fences.is_some())
+    }
+
+    /// Makes the draw of the next present fail before anything is submitted, with an image
+    /// acquired.
+    #[cfg(test)]
+    pub(crate) fn fail_next_draw(&mut self) {
+        self.fail_draw = true;
+    }
+
+    /// Whether a swapchain created now uses `VK_EXT_swapchain_maintenance1`.
+    fn uses_swapchain_maintenance(&self) -> bool {
+        #[cfg(test)]
+        if self.ignore_maintenance {
+            return false;
+        }
+        self.gpu.swapchain_maintenance
+    }
+
+    /// The fence the present of image `index` carries: null on a swapchain without swapchain
+    /// maintenance, and when the fence of the image is still held by the present before,
+    /// in which case this present goes out without one. A fence that is handed out is
+    /// unsignalled and counts as outstanding from here on, whatever the present returns:
+    /// the presentation engine may have taken it even then.
+    fn take_present_fence(&mut self, index: u32) -> Result<vk::Fence, VkError> {
+        let device = &self.gpu.device;
+        let presenter = self.presenter.as_mut().expect("made with the sources");
+        let chain = presenter.swapchain.as_mut().expect("presenting into it");
+        let Some(fences) = &mut chain.present_fences else {
+            return Ok(vk::Fence::null());
+        };
+        let present = &mut fences[index as usize];
+        if present.outstanding {
+            // SAFETY: the fence is live and belongs to this device.
+            let signalled = unsafe { device.get_fence_status(present.fence) }
+                .map_err(VkError::vulkan("vkGetFenceStatus"))?;
+            if !signalled {
+                chain.unfenced = true;
+                return Ok(vk::Fence::null());
+            }
+            // SAFETY: the fence is signalled, so the present that carried it is done with it.
+            unsafe { device.reset_fences(&[present.fence]) }
+                .map_err(VkError::vulkan("vkResetFences"))?;
+        }
+        present.outstanding = true;
+        Ok(present.fence)
+    }
+
+    /// After a draw that failed: gives the acquired image `index` back to the swapchain and
+    /// replaces the two semaphores of the draw, so that the swapchain can go on. Returns
+    /// `false` when that is not possible, without swapchain maintenance or because a call
+    /// failed, and the swapchain has to be replaced.
+    fn release_undrawn(&mut self, index: u32) -> bool {
+        let device = &self.gpu.device;
+        let Some(presenter) = self.presenter.as_mut() else {
+            return false;
+        };
+        let (Some(chain), Some(loader)) =
+            (presenter.swapchain.as_mut(), &presenter.maintenance_loader)
+        else {
+            return false;
+        };
+        if chain.present_fences.is_none() {
+            return false;
+        }
+        let semaphore = || {
+            // SAFETY: the device is live.
+            unsafe { device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None) }.ok()
+        };
+        let Some(acquired) = semaphore() else {
+            return false;
+        };
+        let Some(drawn) = semaphore() else {
+            // SAFETY: the semaphore was just created and is not used.
+            unsafe { device.destroy_semaphore(acquired, None) };
+            return false;
+        };
+        let indices = [index];
+        let info = vk::ReleaseSwapchainImagesInfoEXT::default()
+            .swapchain(chain.handle)
+            .image_indices(&indices);
+        // SAFETY: the device has swapchain maintenance and the swapchain is live. The image
+        // was acquired from it and not presented, and nothing uses it: the device was idled
+        // after the failure. For the same reason the old semaphores, which belong to this
+        // device and are not used again, can be destroyed.
+        unsafe {
+            if loader.release_swapchain_images(&info).is_err() {
+                device.destroy_semaphore(acquired, None);
+                device.destroy_semaphore(drawn, None);
+                return false;
+            }
+            device.destroy_semaphore(chain.acquired, None);
+            device.destroy_semaphore(chain.drawn[index as usize], None);
+        }
+        chain.acquired = acquired;
+        chain.drawn[index as usize] = drawn;
+        true
     }
 
     fn mark_swapchain_stale(&mut self) {
@@ -1548,6 +1739,7 @@ impl VkCompositor {
     /// the surface has no pixels now, in which case there is nothing to present into.
     fn ensure_swapchain(&mut self) -> Result<bool, VkError> {
         let requested = self.surface_size;
+        let maintenance = self.uses_swapchain_maintenance();
         let device = &self.gpu.device;
         let surface = self.gpu.surface.as_ref().expect("checked by the caller");
         let presenter = self.presenter.as_mut().expect("made by the caller");
@@ -1599,11 +1791,21 @@ impl VkCompositor {
         let loader = presenter
             .swapchain_loader
             .get_or_insert_with(|| ash::khr::swapchain::Device::new(self.gpu.instance(), device));
-        if presenter.swapchain.is_some() {
-            // The presentation engine may still hold the semaphore of the last present. A
-            // fence wait does not cover that; idling the device does.
+        if let Some(old) = &presenter.swapchain
+            && !old.settle_presents(device)
+        {
+            // The presentation engine may still hold the semaphore of the last present. The
+            // fence of a submission does not cover that. The fences of the presents do, where
+            // swapchain maintenance gives them; without them, and when they are not
+            // signalled in time, idling the device does.
             // SAFETY: the device is live.
             unsafe { device.device_wait_idle() }.map_err(VkError::vulkan("vkDeviceWaitIdle"))?;
+        }
+        if maintenance && presenter.maintenance_loader.is_none() {
+            presenter.maintenance_loader = Some(ash::ext::swapchain_maintenance1::Device::new(
+                self.gpu.instance(),
+                device,
+            ));
         }
         let old = presenter.swapchain.take();
         if old.is_some() {
@@ -1696,6 +1898,8 @@ impl VkCompositor {
             drawn: Vec::new(),
             stale: false,
             timing,
+            present_fences: maintenance.then(Vec::new),
+            unfenced: false,
         };
         let filled = (|| {
             // SAFETY: the swapchain was just created from this device.
@@ -1719,6 +1923,16 @@ impl VkCompositor {
                     .map_err(VkError::vulkan("vkCreateImageView"))?;
                 chain.views.push(view);
                 chain.drawn.push(semaphore()?);
+                if let Some(fences) = &mut chain.present_fences {
+                    // SAFETY: the device is live.
+                    let fence =
+                        unsafe { device.create_fence(&vk::FenceCreateInfo::default(), None) }
+                            .map_err(VkError::vulkan("vkCreateFence"))?;
+                    fences.push(PresentFence {
+                        fence,
+                        outstanding: false,
+                    });
+                }
             }
             Ok(())
         })();

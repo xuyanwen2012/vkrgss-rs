@@ -77,3 +77,30 @@
 ## Follow-ups
 
 - Telling the host that the window is not being shown, so that it could lower its work.
+- `VK_KHR_swapchain_maintenance1` once the `ash` in use names it (see "Checked").
+- A present whose image still has the fence of its present before outstanding goes out
+  without a fence, and the replacement of that swapchain then idles the device as without
+  the extension. A fence per present instead of per image would avoid that; it was not
+  observed on llvmpipe or RADV.
+
+## Checked
+
+Run on 2026-10-10, Mesa 26.2.4.
+
+- `ash` 0.38.0 (Vulkan headers 1.3.281) has no name for `VK_KHR_swapchain_maintenance1`, so
+  only `VK_EXT_swapchain_maintenance1` is enabled, with `VK_EXT_surface_maintenance1` on the
+  instance. Both drivers below list the `KHR` and the `EXT` extension.
+- llvmpipe (LLVM 22.1.8) offered the extension with its feature on the headless surface: the
+  presents of the tests carry fences, a replaced swapchain was waited for through them
+  without idling the device, and the image of a failed draw was released and the swapchain
+  kept. With the test switch that ignores the extension the same tests take the path that
+  idles the device and replaces the swapchain. `cargo test -p vkxp-vk` passes: 223 tests.
+- AMD GPU, `VK_LOADER_DRIVERS_SELECT='*radeon*' VKXP_TEST_DEVICE=RADV cargo test -p vkxp-vk
+  presentation` (RADV RAPHAEL_MENDOCINO): 57 passed, none failed; the extension was offered
+  and used there as well, and both paths ran.
+- The test of the failed-draw path needs a draw that fails with an image acquired. A
+  `#[cfg(test)]` hook (`fail_next_draw`) provides it, next to the hooks for the acquire and
+  the buffers; without it neither the release of the image nor the existing replacement
+  after a failed draw would be exercised.
+- The descriptor of the table buffer is now written when that buffer is made, like those of
+  the frame buffers, since nothing rewrites the descriptors per frame any more.

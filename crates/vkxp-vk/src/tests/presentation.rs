@@ -1326,12 +1326,26 @@ fn surface_compositor(log: &ValidationLog) -> VkCompositor {
     })
 }
 
+/// Scenarios "Resize" and "Teardown", with swapchain maintenance where the device has it.
 #[test]
 fn frames_are_presented_resized_presented_again_and_torn_down_cleanly() {
+    present_resize_and_tear_down(false);
+}
+
+/// Scenario "Resize without swapchain maintenance".
+#[test]
+fn frames_are_presented_and_resized_without_swapchain_maintenance() {
+    present_resize_and_tear_down(true);
+}
+
+fn present_resize_and_tear_down(ignore_maintenance: bool) {
     let log = ValidationLog::new();
     let mut compositor = surface_compositor(&log);
     if !log.is_active() {
         eprintln!("validation layer not installed; presenting unvalidated");
+    }
+    if ignore_maintenance {
+        compositor.ignore_swapchain_maintenance();
     }
 
     // No size yet: nothing to present into, and no error.
@@ -1342,6 +1356,13 @@ fn frames_are_presented_resized_presented_again_and_torn_down_cleanly() {
     compositor.resize_surface(Size::new(64, 48));
     assert_eq!(compositor.present(), Ok(true));
     assert_eq!(compositor.swapchain_extent(), Some((64, 48)));
+    let fences = compositor.presents_with_fences();
+    eprintln!(
+        "{}: presents {} fences",
+        compositor.device(),
+        if fences { "carry" } else { "carry no" }
+    );
+    assert!(!(ignore_maintenance && fences));
 
     for color in [WHITE, [200, 100, 50, 255], [1, 2, 3, 255]] {
         compositor.render(&flat(SIZE, color)).unwrap();
@@ -1390,6 +1411,43 @@ fn frames_are_presented_resized_presented_again_and_torn_down_cleanly() {
 
     drop(compositor);
     assert_clean(&log, "while the presenting compositor was dropped");
+}
+
+/// A draw that fails with an image acquired: the error is returned, and presenting goes on,
+/// on the same swapchain with the image released where the device has swapchain maintenance
+/// and on a new one without it.
+#[test]
+fn present_after_a_failed_draw_succeeds_with_and_without_swapchain_maintenance() {
+    for ignore_maintenance in [false, true] {
+        let log = ValidationLog::new();
+        let mut compositor = surface_compositor(&log);
+        if ignore_maintenance {
+            compositor.ignore_swapchain_maintenance();
+        }
+        compositor.resize_surface(Size::new(64, 48));
+        compositor.render(&flat(SIZE, WHITE)).unwrap();
+        assert_eq!(compositor.present(), Ok(true));
+
+        // More failures than the swapchain has images, so that each image is given back.
+        for round in 0..6 {
+            compositor.fail_next_draw();
+            assert!(
+                matches!(compositor.present(), Err(VkError::Memory { .. })),
+                "round {round}"
+            );
+            compositor
+                .render(&flat(SIZE, [round * 40, 0, 0, 255]))
+                .unwrap();
+            assert_eq!(compositor.present(), Ok(true), "round {round}");
+        }
+        compositor.resize_surface(Size::new(100, 75));
+        assert_eq!(compositor.present(), Ok(true));
+        assert_eq!(compositor.swapchain_extent(), Some((100, 75)));
+
+        assert_clean(&log, "around failed draws");
+        drop(compositor);
+        assert_clean(&log, "while the compositor was dropped");
+    }
 }
 
 #[test]

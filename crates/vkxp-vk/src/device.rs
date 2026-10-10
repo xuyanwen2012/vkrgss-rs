@@ -5,7 +5,8 @@
 //! opens a device for a surface: the instance gets the surface extensions, the device gets
 //! `VK_KHR_swapchain`, and its queue also draws and presents to that surface. Such a device
 //! also gets `VK_EXT_present_timing` and `VK_KHR_present_wait2` with what they depend on,
-//! when it has them; see [`pacing_support`].
+//! when it has them; see [`pacing_support`]. It gets `VK_EXT_swapchain_maintenance1` too
+//! where it and the instance offer it.
 
 use std::any::Any;
 use std::ffi::{CStr, c_char};
@@ -367,6 +368,9 @@ struct Instance {
     /// Whether the instance was created with `VK_KHR_get_surface_capabilities2`, which an
     /// instance for a surface gets when the installation offers it.
     surface_capabilities2: bool,
+    /// Whether the instance was created with `VK_EXT_surface_maintenance1`, which
+    /// `VK_EXT_swapchain_maintenance1` on a device needs.
+    surface_maintenance1: bool,
     // The messenger's callback points into the log; holding it here keeps that target alive
     // until `drop` has destroyed the instance.
     _log: Option<ValidationLog>,
@@ -409,6 +413,7 @@ impl Instance {
         let log = log.filter(|_| validate).cloned();
 
         let mut surface_capabilities2 = false;
+        let mut surface_maintenance1 = false;
         if !surface_extensions.is_empty() {
             // SAFETY: the entry points are loaded and the call takes no handle.
             let offered = unsafe { entry.enumerate_instance_extension_properties(None) }
@@ -418,6 +423,12 @@ impl Instance {
                 extension.extension_name_as_c_str().ok()
                     == Some(ash::khr::get_surface_capabilities2::NAME)
             });
+            // Optional: for swapchain maintenance on the device. It depends on the one above.
+            surface_maintenance1 = surface_capabilities2
+                && offered.iter().any(|extension| {
+                    extension.extension_name_as_c_str().ok()
+                        == Some(ash::ext::surface_maintenance1::NAME)
+                });
             for wanted in surface_extensions {
                 let found = offered
                     .iter()
@@ -442,6 +453,9 @@ impl Instance {
         if surface_capabilities2 {
             extensions.push(ash::khr::get_surface_capabilities2::NAME.as_ptr());
         }
+        if surface_maintenance1 {
+            extensions.push(ash::ext::surface_maintenance1::NAME.as_ptr());
+        }
         let mut messenger_info = log.as_ref().map(ValidationLog::messenger_info);
         if messenger_info.is_some() {
             extensions.push(ash::ext::debug_utils::NAME.as_ptr());
@@ -463,6 +477,7 @@ impl Instance {
             raw,
             messenger: None,
             surface_capabilities2,
+            surface_maintenance1,
             _log: log.clone(),
         };
         if let Some(log) = &log {
@@ -708,6 +723,34 @@ impl Instance {
     }
 }
 
+impl Instance {
+    /// Whether the device can be opened with `VK_EXT_swapchain_maintenance1`: the instance
+    /// has the surface extension it needs, and the device lists it and reports its feature.
+    fn swapchain_maintenance(&self, physical: vk::PhysicalDevice) -> Result<bool, VkError> {
+        if !self.surface_maintenance1 {
+            return Ok(false);
+        }
+        // SAFETY: the physical device was enumerated from this live instance.
+        let extensions = unsafe { self.raw.enumerate_device_extension_properties(physical) }
+            .map_err(VkError::vulkan("vkEnumerateDeviceExtensionProperties"))?;
+        let listed = extensions.iter().any(|extension| {
+            extension.extension_name_as_c_str().ok() == Some(ash::ext::swapchain_maintenance1::NAME)
+        });
+        if !listed {
+            return Ok(false);
+        }
+        let mut maintenance = vk::PhysicalDeviceSwapchainMaintenance1FeaturesEXT::default();
+        let mut features = vk::PhysicalDeviceFeatures2::default().push_next(&mut maintenance);
+        // SAFETY: `physical` is valid, a suitable device is of Vulkan 1.3, and the chained
+        // structure is that of an extension the device lists.
+        unsafe {
+            self.raw
+                .get_physical_device_features2(physical, &mut features)
+        };
+        Ok(maintenance.swapchain_maintenance1 == vk::TRUE)
+    }
+}
+
 impl Drop for Instance {
     fn drop(&mut self) {
         // SAFETY: every object created from the instance has been destroyed by its owner, the
@@ -787,6 +830,9 @@ pub(crate) struct Gpu {
     pub surface: Option<Surface>,
     /// The pacing extensions the device was created with. None without a surface.
     pub pacing: PacingSupport,
+    /// Whether the device was created with `VK_EXT_swapchain_maintenance1`. Never without a
+    /// surface.
+    pub swapchain_maintenance: bool,
     // After `device` in declaration order only for clarity; `drop` destroys the device before
     // the fields are dropped, which then happens in this order: the surface, then the instance.
     instance: Instance,
@@ -905,8 +951,8 @@ impl Gpu {
     }
 
     /// Creates the logical device with one queue of `queue_family`, and with the swapchain
-    /// extension when there is a surface, together with the pacing extensions the device
-    /// supports.
+    /// extension when there is a surface, together with the pacing extensions and the
+    /// swapchain maintenance extension where the device supports them.
     fn open(
         instance: Instance,
         candidate: Candidate,
@@ -926,10 +972,17 @@ impl Gpu {
             Some(_) => pacing_support(&instance.pacing_caps(candidate.physical)?),
             None => PacingSupport::default(),
         };
+        let swapchain_maintenance = match surface {
+            Some(_) => instance.swapchain_maintenance(candidate.physical)?,
+            None => false,
+        };
         let mut extensions: Vec<*const c_char> = Vec::new();
         if surface.is_some() {
             extensions.push(ash::khr::swapchain::NAME.as_ptr());
         }
+        let mut maintenance_features =
+            vk::PhysicalDeviceSwapchainMaintenance1FeaturesEXT::default()
+                .swapchain_maintenance1(true);
         let mut timing_features = timing::PhysicalDevicePresentTimingFeatures {
             present_timing: vk::TRUE,
             present_at_absolute_time: vk::TRUE,
@@ -968,16 +1021,23 @@ impl Gpu {
             wait_features.p_next = features12.p_next;
             features12.p_next = (&raw mut wait_features).cast();
         }
-        let info = vk::DeviceCreateInfo::default()
+        if swapchain_maintenance {
+            extensions.push(ash::ext::swapchain_maintenance1::NAME.as_ptr());
+        }
+        let mut info = vk::DeviceCreateInfo::default()
             .queue_create_infos(&queues)
             .enabled_extension_names(&extensions)
             .push_next(&mut features12)
             .push_next(&mut features13);
+        if swapchain_maintenance {
+            info = info.push_next(&mut maintenance_features);
+        }
         // SAFETY: the physical device belongs to the live instance, the requested features
         // were reported as supported, the swapchain extension is only requested for a device
         // that lists it, as are the pacing extensions, whose feature structures behind
-        // `features12` are live and have the layout of the header, and `info` is valid for
-        // the call.
+        // `features12` are live and have the layout of the header, and the swapchain
+        // maintenance extension, whose instance extension the instance has, and `info` is
+        // valid for the call.
         let created = unsafe { instance.raw.create_device(candidate.physical, &info, None) };
         let device = match created {
             Ok(device) => device,
@@ -1004,6 +1064,7 @@ impl Gpu {
             max_storage_buffer_range: candidate.max_storage_buffer_range,
             surface,
             pacing,
+            swapchain_maintenance,
             instance,
         })
     }

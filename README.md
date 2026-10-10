@@ -359,6 +359,12 @@ host's timer alone. `--present-stats` writes the intervals between the frames sh
 600 frames and at exit, as their count, mean, smallest and largest in milliseconds, and says
 whether the times are those the extension reports or those of the host's own clock.
 
+A window that is hidden, or a locked session, may stop handing out images to draw into. The
+game then goes on without showing its frames: a present waits at most a tenth of a second for
+an image, and the ones after it do not wait at all until the window gives images again. Where
+the device offers `VK_EXT_swapchain_maintenance1`, it is used to replace the swapchain, as
+after a resize, without idling the whole device.
+
 ### Audio
 
 A windowed run plays music, background sounds, music effects and sound effects on the default
