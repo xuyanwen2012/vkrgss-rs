@@ -15,7 +15,7 @@
 
 ## 4. Documents
 
-- [ ] 4.1 Correct `docs/decisions.md`, `README.md`, and the gate line of `AGENTS.md` and `CLAUDE.md` as `design.md` says. Verify: `diff AGENTS.md CLAUDE.md` prints nothing; the README's gate table matches `xtask/src/gate.rs`.
+- [x] 4.1 Correct `docs/decisions.md`, `README.md`, and the gate line of `AGENTS.md` and `CLAUDE.md` as `design.md` says. Verify: `diff AGENTS.md CLAUDE.md` prints nothing; the README's gate table matches `xtask/src/gate.rs`.
 
 ## 5. Integration check
 

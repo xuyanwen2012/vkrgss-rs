@@ -15,8 +15,9 @@ changing anything; it records decisions that are settled.
 - Never commit anything from `../ref` or `../games`, any original DLL, RTP asset, or Enterbrain
   Ruby source. Tests use procedurally generated images only.
 - Gate before declaring done: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` (format
-  check, clippy with warnings denied, workspace tests, `openspec validate --all`). The Vulkan
-  tests refuse to run unless the loader is restricted to chosen drivers.
+  check, clippy with warnings denied, workspace tests, documentation with warnings denied,
+  `openspec validate --all`). The Vulkan tests refuse to run unless the loader is restricted to
+  chosen drivers.
 - Chat with the owner in Chinese; everything written to the repository stays English.
 
 ## Scope and proportion

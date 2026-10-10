@@ -112,6 +112,10 @@ frame equals what the CPU reference compositor produces for the same messages.
 
 ## Running a game
 
+The commands below use `cargo run`, which builds the development profile.
+`cargo build --release -p vkxp` produces the optimised executable, `target/release/vkxp`, which
+takes the same arguments.
+
 ### The built-in scripts
 
 A game expects the `RPG` module of the original runtime: the data classes, `RPG::Cache`,
@@ -557,16 +561,20 @@ loader restriction described under Prerequisites is part of it:
 VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate
 ```
 
-It runs these steps in order, stops at the first failure and names the step that failed:
+It runs these steps in order, stops at the first failure and names the step that failed. It
+prints how long each step took, after the step and once more for all of them at the end:
 
 | Step | Command |
 |---|---|
 | `fmt` | `cargo fmt --all --check` |
-| `clippy` | `cargo clippy --workspace --all-targets -- -D warnings` |
-| `test` | `cargo test --workspace` |
+| `clippy` | `cargo clippy --workspace --all-targets --locked -- -D warnings` |
+| `test` | `cargo test --workspace --locked` |
+| `doc` | `cargo doc --workspace --no-deps --locked` with `RUSTDOCFLAGS=-D warnings` |
 | `openspec` | `openspec validate --all` |
 
-The toolchain is pinned in `rust-toolchain.toml`. The `openspec` CLI must be on `PATH`.
+`--locked` makes a step fail, without rewriting `Cargo.lock`, when a manifest asks for something
+the lock file does not hold. The toolchain is pinned in `rust-toolchain.toml`. The `openspec`
+CLI must be on `PATH`.
 
 ## Dependency rules
 

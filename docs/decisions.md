@@ -42,7 +42,8 @@ settled; change one only through an OpenSpec change that says so.
 - Freeze and transition are a final per-pixel mix. A fragment pass scales the result to the
   swapchain.
 - A pure-Rust CPU reference compositor evaluates the same op list and must match the GPU output
-  bit for bit. It is selectable at run time for debugging.
+  bit for bit. It is a library used by the tests and tools; a switch in the executable that
+  renders with it is reserved, not implemented.
 - Arithmetic starts with textbook formulas and is tightened op by op as reverse-engineering
   specs of the original's inner loops land.
 - Blending is done on non-linear values (UNORM formats, not SRGB formats), as the original does.
@@ -71,8 +72,8 @@ settled; change one only through an OpenSpec change that says so.
 | `vkxp-compose-ref` | CPU reference compositor | host and tests |
 | `vkxp-vk` | Vulkan backend: binning, compositing, presentation, pacing | host |
 | `vkxp-audio` | Mixer, decoding, MIDI synthesis | host |
-| `vkxp-host` | Event loop, input mapping, thread orchestration, configuration | host |
-| `vkxp` | Executable | |
+| `vkxp-host` | Event loop, input mapping, thread orchestration | host |
+| `vkxp` | Executable: command line, configuration files | |
 
 `vkxp-core` does no file I/O and depends on neither Ruby nor Vulkan.
 
@@ -141,7 +142,7 @@ settled; change one only through an OpenSpec change that says so.
 - `unsafe` only in `vkxp-vk`, `vkxp-ruby-sys`, `vkxp-binding` and platform code.
   `thiserror` in libraries, `anyhow` in the binary, `tracing` for logs.
 - Merge gate: `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test`,
-  `openspec validate`.
+  `cargo doc` with warnings denied, `openspec validate`.
 - OpenSpec proposals are drafted interactively and reviewed by the owner. Each change is
   implemented in its own branch and worktree by an actor/reviewer flow that the owner launches.
   At most three non-overlapping module changes run in parallel.
