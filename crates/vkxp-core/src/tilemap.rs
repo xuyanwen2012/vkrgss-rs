@@ -1,35 +1,35 @@
-//! Tilemaps: the visible tiles composed into cached bitmaps, and the quads that show them.
+//! Tilemaps: the tilemap layer ops that draw them, and the tables those ops read.
 //!
-//! A tilemap is not drawn tile by tile every frame. The cells that can show in its area, and
-//! one more column and row so that the origin can move within a tile, are composed with the
-//! operations of the bitmap arena into bitmaps of the scene's own: one for each priority from
-//! 0 to 5 and each of the three layers of the map that a visible tile has. They are composed
-//! again only when what they show changes: a scroll across a tile boundary, a change of the
-//! area's size, of a table, of a sheet, or of the animation frame of a visible autotile.
+//! A tilemap is not drawn tile by tile, and nothing of it is composed here: the compositor
+//! evaluates a tilemap layer op per pixel, from the map's tile numbers, the priorities and
+//! the sheets. What a frame needs from this module is which ops to emit. The cells that show
+//! in the tilemap's area are scanned once per frame to find which priorities occur in which
+//! layers of the map and, from priority 1 on, in which rows.
 //!
-//! The layers of the map are kept apart because the original runtime blends every tile onto
-//! the screen by itself, in ascending priority and, within a priority, in the order of the
-//! layers. No two tiles of one bitmap overlap, so drawing the bitmaps of a priority one after
-//! the other in layer order does the same; composing them into one first would not, where a
-//! translucent tile lies on another translucent tile of its priority.
+//! The original runtime blends every tile onto the screen by itself, in ascending priority
+//! and, within a priority, in the order of the layers. So a frame draws, for priority 0, the
+//! ground, one op for each layer of the map that holds such a tile, at z 0; and for every
+//! higher priority one op for each row of cells and layer that holds such a tile, clipped to
+//! the row and at the z that ranks the row among sprites.
 //!
-//! A frame then draws the bitmaps of priority 0, the ground, as one quad each at z 0, and of
-//! every bitmap of a higher priority one quad for each row of cells in which it holds a
-//! tile, at the z that ranks the row among sprites.
+//! The two tables of a tilemap are sent to the compositor when an op first reads them and
+//! again only when they were written to; scrolling and animation send nothing. The
+//! priorities are sent brought into 0 to 5, which is all an op tells apart.
 //!
 //! The cells the flash data marks are filled with their colour, at the alpha of the pulse,
-//! in one more bitmap of the same size, which is drawn additively right above the ground. It
-//! is filled again when the flash data, the first cell or the pulse changes.
-//!
-//! This is a stand-in for the tilemap op of `docs/decisions.md`, which is to replace the
-//! cache without changing what the tilemap looks like from outside.
+//! in a bitmap of the scene's own that covers the visible cells and one more column and row,
+//! which is drawn additively right above the ground. It is filled again when the flash data,
+//! the first cell or the pulse changes.
 
-use vkxp_proto::{BitmapId, BlendMode};
+use vkxp_proto::{BitmapId, BlendMode, Op, TableDelta, TableId, TilemapLayer};
 
-use crate::extract::{Assembly, Level, Look};
+use crate::extract::{Assembly, Level, Look, rows};
 use crate::geometry::Geometry;
 use crate::tiles::{Sheet, TILE, frames, pieces, sheet};
 use crate::{Bitmaps, Color, FontDefaults, Rect, SharedTable, Table, Tilemap};
+
+#[cfg(test)]
+pub(crate) mod cached;
 
 /// Number of layers of a map.
 const LAYERS: usize = 3;
@@ -40,23 +40,147 @@ const ANIMATION_PERIOD: u64 = 16;
 /// Number of updates one pulse of the flash data takes.
 const FLASH_PERIOD: u64 = 32;
 
-/// A table and the revision it had.
-type TableState = (SharedTable, u64);
-/// A live bitmap and the revision it had.
-type SheetState = (BitmapId, u64);
+/// What a table is to the tilemap it was sent for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Role {
+    /// The tile numbers, sent as they are.
+    Map,
+    /// The priorities, of which the first row is sent, brought into 0 to 5.
+    Priorities,
+}
 
-/// What the cached bitmaps were composed from, apart from the animation.
-#[derive(Debug, Clone, PartialEq)]
-struct Key {
-    /// The cell in the top-left corner of the cache. Cells are counted across the whole
-    /// plane, not wrapped into the map.
-    first: (i64, i64),
-    /// Columns and rows of cells.
-    cells: (i32, i32),
-    map: TableState,
-    priorities: Option<TableState>,
-    tileset: Option<SheetState>,
-    autotiles: [Option<SheetState>; 7],
+/// A table the compositor has.
+#[derive(Debug, Clone)]
+struct SentTable {
+    id: TableId,
+    table: SharedTable,
+    role: Role,
+    /// The revision that was sent.
+    revision: u64,
+    /// Whether a tilemap still has the table, as far as this frame has looked.
+    held: bool,
+}
+
+/// The tables the compositor has of a scene's tilemaps, and the deltas that bring it up to
+/// date.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct SentTables {
+    sent: Vec<SentTable>,
+    /// The table without elements that a tilemap without priorities names.
+    empty: Option<TableId>,
+    /// Ids that were given back.
+    free: Vec<TableId>,
+    /// The id to give out when none is free.
+    next: u32,
+    deltas: Vec<TableDelta>,
+}
+
+impl SentTables {
+    fn allocate(&mut self) -> TableId {
+        self.free.pop().unwrap_or_else(|| {
+            let id = TableId::new(self.next);
+            self.next += 1;
+            id
+        })
+    }
+
+    /// The delta that sends `table` as `id`.
+    fn set(id: TableId, table: &Table, role: Role) -> TableDelta {
+        // Sizes of a table are not negative.
+        let (xsize, ysize, zsize) = (
+            table.xsize().unsigned_abs(),
+            table.ysize().unsigned_abs(),
+            table.zsize().unsigned_abs(),
+        );
+        match role {
+            Role::Map => TableDelta::Set {
+                id,
+                xsize,
+                ysize,
+                zsize,
+                data: table.data().to_vec(),
+            },
+            Role::Priorities => {
+                let entries = (0..table.xsize()).map_while(|id| table.get(id, 0, 0));
+                let data: Vec<i16> = entries
+                    .map(|entry| entry.clamp(0, MAX_PRIORITY as i16))
+                    .collect();
+                TableDelta::Set {
+                    id,
+                    xsize: data.len() as u32,
+                    ysize: 1,
+                    zsize: 1,
+                    data,
+                }
+            }
+        }
+    }
+
+    /// Notes that a tilemap has `table` in `role`, so that the compositor keeps it.
+    fn hold(&mut self, table: &SharedTable, role: Role) {
+        let found = self.sent.iter_mut();
+        for sent in found.filter(|sent| sent.role == role && sent.table == *table) {
+            sent.held = true;
+        }
+    }
+
+    /// The id under which the compositor has `table` in `role` as it is now, sending it when
+    /// it is new or was written to since it was sent.
+    fn current(&mut self, table: &SharedTable, role: Role) -> TableId {
+        let revision = table.revision();
+        let mut found = self.sent.iter_mut();
+        if let Some(sent) = found.find(|sent| sent.role == role && sent.table == *table) {
+            sent.held = true;
+            if sent.revision != revision {
+                sent.revision = revision;
+                self.deltas
+                    .push(SentTables::set(sent.id, &table.read(), role));
+            }
+            return sent.id;
+        }
+        let id = self.allocate();
+        self.deltas.push(SentTables::set(id, &table.read(), role));
+        self.sent.push(SentTable {
+            id,
+            table: table.clone(),
+            role,
+            revision,
+            held: true,
+        });
+        id
+    }
+
+    /// The id of a table without elements, for a tilemap without priorities.
+    fn empty(&mut self) -> TableId {
+        if let Some(id) = self.empty {
+            return id;
+        }
+        let id = self.allocate();
+        self.deltas.push(TableDelta::Set {
+            id,
+            xsize: 0,
+            ysize: 1,
+            zsize: 1,
+            data: Vec::new(),
+        });
+        self.empty = Some(id);
+        id
+    }
+
+    /// The deltas of this frame, the destruction of every table no tilemap has any more
+    /// among them. The caller must deliver them.
+    pub(crate) fn finish(&mut self) -> Vec<TableDelta> {
+        let (free, deltas) = (&mut self.free, &mut self.deltas);
+        self.sent.retain_mut(|sent| {
+            let held = std::mem::take(&mut sent.held);
+            if !held {
+                deltas.push(TableDelta::Destroy { id: sent.id });
+                free.push(sent.id);
+            }
+            held
+        });
+        std::mem::take(deltas)
+    }
 }
 
 /// What the flash overlay was filled from.
@@ -64,70 +188,54 @@ struct Key {
 struct FlashKey {
     first: (i64, i64),
     cells: (i32, i32),
-    table: TableState,
+    table: (SharedTable, u64),
     alpha: u8,
 }
 
-/// The bitmaps a tilemap keeps in the bitmap arena.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub(crate) struct TileCache {
-    /// What the bitmaps were composed from, or would have been had there been anything.
-    key: Option<Key>,
-    /// The animation frame each autotile was drawn at; `None` for one no visible tile uses.
-    frames: [Option<u32>; 7],
-    /// `layers[p][l]` holds the tiles of priority `p` of layer `l` of the map; the bitmaps of
-    /// priority 0 are the ground.
-    layers: [[Option<BitmapId>; LAYERS]; MAX_PRIORITY + 1],
-    /// For each priority from 1 on and each layer of the map, the rows of cells that hold a
-    /// tile of them, ascending.
+/// What this frame draws of a tilemap.
+#[derive(Debug, Clone, PartialEq)]
+struct View {
+    /// The cell in the top-left corner of the area. Cells are counted across the whole
+    /// plane, not wrapped into the map.
+    first: (i64, i64),
+    /// Columns and rows of cells the flash overlay covers.
+    cells: (i32, i32),
+    /// Width and height of the map in pixels, after which it repeats.
+    period: (i64, i64),
+    /// The tables of the ops: tile numbers and priorities. `None` when no op is drawn.
+    tables: Option<(TableId, TableId)>,
+    /// The live sheets.
+    tileset: Option<BitmapId>,
+    autotiles: [Option<BitmapId>; 7],
+    animation_step: u64,
+    /// The layers of the map that show a tile of priority 0.
+    ground: [bool; LAYERS],
+    /// For each priority from 1 on and each layer of the map, the rows of cells, counted
+    /// from `first`, that show a tile of them, ascending.
     rows: [[Vec<i32>; LAYERS]; MAX_PRIORITY],
-    /// What `flash` was filled from; `None` without flash data.
-    flash_key: Option<FlashKey>,
-    /// The colours of the flashing cells, when there is one among the cached cells.
-    flash: Option<BitmapId>,
 }
 
-/// One visible tile.
-struct Tile {
-    column: i32,
-    row: i32,
-    id: i16,
-    /// The layer of the map.
-    layer: usize,
-    priority: usize,
-    sheet: BitmapId,
-    /// Width and height of the sheet.
-    size: (i32, i32),
-    frame: u32,
+/// What a tilemap keeps from frame to frame.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(crate) struct TileCache {
+    /// What the frame draws; `None` for a tilemap that is not drawn.
+    view: Option<View>,
+    /// What `flash` was filled from; `None` without flash data.
+    flash_key: Option<FlashKey>,
+    /// The colours of the flashing cells, when there is one among the covered cells.
+    flash: Option<BitmapId>,
 }
 
 impl TileCache {
     pub(crate) fn dispose(&mut self, bitmaps: &mut Bitmaps) {
-        for layer in self.layers.iter_mut().flatten().chain([&mut self.flash]) {
-            if let Some(id) = layer.take() {
-                bitmaps.dispose(id);
-            }
+        if let Some(id) = self.flash.take() {
+            bitmaps.dispose(id);
         }
         *self = TileCache::default();
     }
 
-    /// Whether a bitmap of the cache was disposed behind its back.
-    fn lost(&self, bitmaps: &Bitmaps) -> bool {
-        let layers = self.layers.iter().flatten().flatten();
-        layers.into_iter().any(|&id| bitmaps.is_disposed(id))
-    }
-
-    /// Whether the cache shows what `key` and the current animation frames describe.
-    fn fresh(&self, key: &Key, frames: &[u32; 7]) -> bool {
-        let drawn = self.frames.iter().zip(frames);
-        self.key.as_ref() == Some(key)
-            && drawn
-                .into_iter()
-                .all(|(drawn, now)| drawn.is_none_or(|drawn| drawn == *now))
-    }
-
     /// Makes `layer` an empty bitmap of `width` by `height` pixels if `wanted`, and gives its
-    /// bitmap back otherwise. A cache too large for a bitmap goes without the layer.
+    /// bitmap back otherwise. An overlay too large for a bitmap is gone without.
     fn prepare(
         layer: &mut Option<BitmapId>,
         bitmaps: &mut Bitmaps,
@@ -150,45 +258,6 @@ impl TileCache {
             *layer = bitmaps
                 .create(width.unsigned_abs(), height.unsigned_abs(), &defaults)
                 .ok();
-        }
-    }
-
-    /// Composes every layer anew from `tiles`.
-    fn compose(&mut self, bitmaps: &mut Bitmaps, key: Key, tiles: &[Tile]) {
-        let (columns, rows) = key.cells;
-        self.key = Some(key);
-        self.frames = [None; 7];
-        self.rows = Default::default();
-        for priority in 0..=MAX_PRIORITY {
-            for layer in 0..LAYERS {
-                let wanted = tiles
-                    .iter()
-                    .any(|tile| tile.priority == priority && tile.layer == layer);
-                // A side is at most the screen's and two tiles more.
-                let bitmap = &mut self.layers[priority][layer];
-                TileCache::prepare(bitmap, bitmaps, wanted, columns * TILE, rows * TILE);
-            }
-        }
-        for tile in tiles {
-            if let Some(Sheet::Autotile(index)) = sheet(tile.id) {
-                self.frames[index] = Some(tile.frame);
-            }
-            let Some(layer) = self.layers[tile.priority][tile.layer] else {
-                continue;
-            };
-            let (width, height) = tile.size;
-            for piece in pieces(tile.id, width, height, tile.frame) {
-                let (x, y) = (tile.column * TILE + piece.x, tile.row * TILE + piece.y);
-                // Both bitmaps were found live when the tiles were collected.
-                let _ = bitmaps.blt(layer, x, y, tile.sheet, piece.src, 255);
-            }
-            // Tiles come row by row.
-            if tile.priority > 0 {
-                let rows = &mut self.rows[tile.priority - 1][tile.layer];
-                if rows.last() != Some(&tile.row) {
-                    rows.push(tile.row);
-                }
-            }
         }
     }
 }
@@ -215,7 +284,7 @@ fn flash_alpha(updates: u64) -> u8 {
 }
 
 impl Tilemap {
-    /// Brings the flash overlay up to date for the `cells` cached from cell `first` on.
+    /// Brings the flash overlay up to date for the `cells` covered from cell `first` on.
     fn refresh_flash(&mut self, bitmaps: &mut Bitmaps, first: (i64, i64), cells: (i32, i32)) {
         let key = self.flash_data.as_ref().map(|table| FlashKey {
             first,
@@ -269,15 +338,32 @@ impl Tilemap {
         self.cache.flash_key = key;
     }
 
-    /// Brings the cached bitmaps up to date with what this frame shows in `level`. An
-    /// invisible tilemap gives them back; one that has no `level`, because its viewport is
-    /// not drawn, keeps what it has.
-    pub(crate) fn refresh_cache(&mut self, bitmaps: &mut Bitmaps, level: Option<&Level>) {
+    /// Finds what this frame draws of the tilemap in `level`, sends its tables where the
+    /// compositor lacks them and brings the flash overlay up to date. An invisible tilemap
+    /// gives the overlay back; one that has no `level`, because its viewport is not drawn,
+    /// keeps it.
+    pub(crate) fn refresh(
+        &mut self,
+        bitmaps: &mut Bitmaps,
+        level: Option<&Level>,
+        tables: &mut SentTables,
+    ) {
+        #[cfg(test)]
+        if self.cached.active {
+            return self.refresh_cached(bitmaps, level);
+        }
+        if let Some(map) = &self.map_data {
+            tables.hold(map, Role::Map);
+        }
+        if let Some(priorities) = &self.priorities {
+            tables.hold(priorities, Role::Priorities);
+        }
         if !self.visible {
             self.cache.dispose(bitmaps);
             return;
         }
         let Some(level) = level else {
+            self.cache.view = None;
             return;
         };
         let Some(map) = self.map_data.clone() else {
@@ -292,8 +378,8 @@ impl Tilemap {
         }
 
         // The pixel of the map under the top-left pixel of the area, and from it the cells
-        // the area can show while the origin moves within a tile: the area rounded up to
-        // whole tiles and one more.
+        // the flash overlay covers, which are those the area can show while the origin moves
+        // within a tile: the area rounded up to whole tiles and one more.
         let clip = level.clip;
         let tile = i64::from(TILE);
         let left = i64::from(clip.x) - level.dx + i64::from(self.ox);
@@ -304,77 +390,88 @@ impl Tilemap {
             clip.width.div_ceil(TILE as u32) as i32 + 1,
             clip.height.div_ceil(TILE as u32) as i32 + 1,
         );
-
         self.refresh_flash(bitmaps, first, cells);
 
-        let live = |id: Option<BitmapId>| id.and_then(|id| Some((id, bitmaps.revision(id).ok()?)));
-        let size = |id: Option<BitmapId>| {
+        let live = |id: Option<BitmapId>| {
             let rect = bitmaps.rect(id?).ok()?;
-            Some((rect.width, rect.height))
+            Some((id?, (rect.width, rect.height)))
         };
-        let autotile_sizes = self.autotiles.map(size);
-        let now = self.updates / ANIMATION_PERIOD;
-        let current = autotile_sizes.map(|size| {
-            let (width, height) = size.unwrap_or((0, 0));
+        let tileset = live(self.tileset);
+        let autotiles = self.autotiles.map(live);
+        let animation_step = self.updates / ANIMATION_PERIOD;
+        let current = autotiles.map(|sheet| {
+            let (width, height) = sheet.map_or((0, 0), |(_, size)| size);
             // Less than the number of frames, which is a `u32`.
-            (now % u64::from(frames(width, height))) as u32
+            (animation_step % u64::from(frames(width, height))) as u32
         });
-        let key = Key {
-            first,
-            cells,
-            map: (map.clone(), map.revision()),
-            priorities: self
-                .priorities
-                .as_ref()
-                .map(|table| (table.clone(), table.revision())),
-            tileset: live(self.tileset),
-            autotiles: self.autotiles.map(live),
-        };
-        if self.cache.fresh(&key, &current) && !self.cache.lost(bitmaps) {
-            return;
-        }
 
+        // The cells that show: those the area reaches as the origin stands.
+        let shown = |start: i64, length: u32| {
+            ((start.rem_euclid(tile) + i64::from(length) + tile - 1) / tile) as i32
+        };
+        let (columns, shown_rows) = (shown(left, clip.width), shown(top, clip.height));
         // PLACEHOLDER: that the map repeats beyond its edges is assumed, not yet checked
         // against the original runtime.
         let priorities = self.priorities.as_ref().map(|table| table.read());
-        let tileset = self.tileset.zip(size(self.tileset));
-        let mut tiles = Vec::new();
-        for row in 0..cells.1 {
+        let mut ground = [false; LAYERS];
+        let mut rows: [[Vec<i32>; LAYERS]; MAX_PRIORITY] = Default::default();
+        for row in 0..shown_rows {
             // Remainders of sizes that are `i32`.
             let y = (first.1 + i64::from(row)).rem_euclid(i64::from(ysize)) as i32;
-            for column in 0..cells.0 {
+            for column in 0..columns {
                 let x = (first.0 + i64::from(column)).rem_euclid(i64::from(xsize)) as i32;
-                for layer in 0..LAYERS {
+                for (layer, ground) in ground.iter_mut().enumerate() {
                     let Some(id) = map_table.get(x, y, layer as i32) else {
                         continue;
                     };
                     let found = match sheet(id) {
                         None => None,
-                        Some(Sheet::Tileset) => tileset.map(|(sheet, size)| (sheet, size, 0)),
-                        Some(Sheet::Autotile(index)) => self.autotiles[index]
-                            .zip(autotile_sizes[index])
-                            .map(|(sheet, size)| (sheet, size, current[index])),
+                        Some(Sheet::Tileset) => tileset.map(|(_, size)| (size, 0)),
+                        Some(Sheet::Autotile(index)) => {
+                            autotiles[index].map(|(_, size)| (size, current[index]))
+                        }
                     };
-                    let Some((sheet, size, frame)) = found else {
+                    let Some((size, frame)) = found else {
                         continue;
                     };
                     if pieces(id, size.0, size.1, frame).next().is_none() {
                         continue;
                     }
-                    tiles.push(Tile {
-                        column,
-                        row,
-                        id,
-                        layer,
-                        priority: priority(priorities.as_deref(), id),
-                        sheet,
-                        size,
-                        frame,
-                    });
+                    match priority(priorities.as_deref(), id) {
+                        0 => *ground = true,
+                        priority => {
+                            // Cells come row by row.
+                            let rows = &mut rows[priority - 1][layer];
+                            if rows.last() != Some(&row) {
+                                rows.push(row);
+                            }
+                        }
+                    }
                 }
             }
         }
-        self.cache.compose(bitmaps, key, &tiles);
+        drop(priorities);
+        drop(map_table);
+
+        let drawn = ground.contains(&true) || rows.iter().flatten().any(|rows| !rows.is_empty());
+        let sent = drawn.then(|| {
+            let priorities = match &self.priorities {
+                Some(priorities) => tables.current(priorities, Role::Priorities),
+                None => tables.empty(),
+            };
+            (tables.current(&map, Role::Map), priorities)
+        });
+        self.cache.view = Some(View {
+            first,
+            cells,
+            period: (i64::from(xsize) * tile, i64::from(ysize) * tile),
+            tables: sent,
+            tileset: tileset.map(|(id, _)| id),
+            autotiles: autotiles.map(|sheet| sheet.map(|(id, _)| id)),
+            animation_step,
+            ground,
+            rows,
+        });
     }
 
     /// The pieces this frame draws the tilemap with, each with its z. `scroll` is the vertical
@@ -384,30 +481,32 @@ impl Tilemap {
     /// PLACEHOLDER: the z of the tiles of priority 1 to 5, the y of their top edge in the
     /// viewport plus 32 for each step of priority and 32 more, is not yet checked against the
     /// original runtime; neither is that a sprite created after the tilemap wins a tie.
-    pub(crate) fn strips(&self, scroll: i64) -> impl Iterator<Item = (i64, Strip)> {
-        let key = self.cache.key.as_ref().filter(|_| self.visible);
-        let top = key.map_or(0, |key| {
-            key.first.1 * i64::from(TILE) - i64::from(self.oy) - scroll
-        });
-        let ground = key.map(|_| (0, Strip::Ground));
+    pub(crate) fn strips(&self, scroll: i64) -> Vec<(i64, Strip)> {
+        #[cfg(test)]
+        if self.cached.active {
+            return self.cached_strips(scroll).collect();
+        }
+        let Some(view) = self.cache.view.as_ref().filter(|_| self.visible) else {
+            return Vec::new();
+        };
+        let top = view.first.1 * i64::from(TILE) - i64::from(self.oy) - scroll;
+        let mut strips = vec![(0, Strip::Ground)];
         // In the same place of the order as the ground, and after it.
-        let flash = key
-            .filter(|_| self.cache.flash.is_some())
-            .map(|_| (0, Strip::Flash));
-        let rows = (1..=MAX_PRIORITY)
-            .filter(move |_| key.is_some())
-            .flat_map(move |priority| {
-                // The rows that hold a tile of this priority in any layer of the map.
-                let mut rows: Vec<i32> = self.cache.rows[priority - 1].concat();
-                rows.sort_unstable();
-                rows.dedup();
-                rows.into_iter().map(move |row| {
-                    let y = top + i64::from(row) * i64::from(TILE);
-                    let z = y + (priority as i64 + 1) * i64::from(TILE);
-                    (z, Strip::Row { priority, row })
-                })
-            });
-        ground.into_iter().chain(flash).chain(rows)
+        if self.cache.flash.is_some() {
+            strips.push((0, Strip::Flash));
+        }
+        for priority in 1..=MAX_PRIORITY {
+            // The rows that hold a tile of this priority in any layer of the map.
+            let mut rows: Vec<i32> = view.rows[priority - 1].concat();
+            rows.sort_unstable();
+            rows.dedup();
+            strips.extend(rows.into_iter().map(|row| {
+                let y = top + i64::from(row) * i64::from(TILE);
+                let z = y + (priority as i64 + 1) * i64::from(TILE);
+                (z, Strip::Row { priority, row })
+            }));
+        }
+        strips
     }
 }
 
@@ -418,28 +517,31 @@ pub(crate) enum Strip {
     Ground,
     /// The colours of the flashing cells.
     Flash,
-    /// The tiles of one priority from 1 on in one row of cells of the cache, layer by layer of
-    /// the map.
+    /// The tiles of one priority from 1 on in one row of cells, counted from the first row
+    /// that shows, layer by layer of the map.
     Row { priority: usize, row: i32 },
 }
 
 impl Assembly<'_> {
-    /// One piece of a tilemap, from its cached bitmaps: one quad for each layer of the map
-    /// that holds a tile of the piece, in the order of the layers, so that every tile is
-    /// blended onto the frame by itself.
+    /// One piece of a tilemap: one tilemap layer op for each layer of the map that holds a
+    /// tile of the piece, in the order of the layers, so that every tile is blended onto the
+    /// frame by itself.
     pub(crate) fn tiles(&mut self, tilemap: &Tilemap, strip: Strip, level: &Level) {
-        let Some(key) = tilemap.cache.key.as_ref().filter(|_| tilemap.visible) else {
+        #[cfg(test)]
+        if tilemap.cached.active {
+            return self.cached_tiles(tilemap, strip, level);
+        }
+        let Some(view) = tilemap.cache.view.as_ref().filter(|_| tilemap.visible) else {
             return;
         };
         let tile = i64::from(TILE);
-        // Where the first cell of the cache is on the screen: at most a tile left of and
-        // above the clip.
-        let x = level.dx + key.first.0 * tile - i64::from(tilemap.ox);
-        let y = level.dy + key.first.1 * tile - i64::from(tilemap.oy);
+        // Where the first cell is on the screen: at most a tile left of and above the clip.
+        let x = level.dx + view.first.0 * tile - i64::from(tilemap.ox);
+        let y = level.dy + view.first.1 * tile - i64::from(tilemap.oy);
         match strip {
             Strip::Ground => {
-                for bitmap in tilemap.cache.layers[0].into_iter().flatten() {
-                    self.whole(bitmap, x, y, level.clip, 255);
+                for layer in (0..LAYERS).filter(|&layer| view.ground[layer]) {
+                    self.tilemap_layer(tilemap, view, level, level.clip, layer, 0);
                 }
             }
             Strip::Flash => {
@@ -448,21 +550,61 @@ impl Assembly<'_> {
                         blend: BlendMode::Add,
                         ..Look::plain(255)
                     };
-                    let src = Rect::new(0, 0, key.cells.0 * TILE, key.cells.1 * TILE);
+                    let src = Rect::new(0, 0, view.cells.0 * TILE, view.cells.1 * TILE);
                     self.quad(bitmap, src, &Geometry::at(x, y), level.clip, look);
                 }
             }
             Strip::Row { priority, row } => {
-                let src = Rect::new(0, row * TILE, key.cells.0 * TILE, TILE);
-                let geometry = Geometry::at(x, y + i64::from(row) * tile);
-                let layers = tilemap.cache.layers[priority].iter();
-                for (bitmap, rows) in layers.zip(&tilemap.cache.rows[priority - 1]) {
-                    if let Some(bitmap) = bitmap.filter(|_| rows.binary_search(&row).is_ok()) {
-                        self.quad(bitmap, src, &geometry, level.clip, Look::plain(255));
+                let top = y + i64::from(row) * tile;
+                let band = rows(level.clip, top, top + tile);
+                for (layer, rows) in view.rows[priority - 1].iter().enumerate() {
+                    if rows.binary_search(&row).is_ok() {
+                        self.tilemap_layer(tilemap, view, level, band, layer, priority);
                     }
                 }
             }
         }
+    }
+
+    /// The op that draws the tiles of `priority` of `layer` of the map inside `clip`.
+    fn tilemap_layer(
+        &mut self,
+        tilemap: &Tilemap,
+        view: &View,
+        level: &Level,
+        clip: vkxp_proto::Rect,
+        layer: usize,
+        priority: usize,
+    ) {
+        let Some((map, priorities)) = view.tables.filter(|_| !clip.is_empty()) else {
+            return;
+        };
+        // The map pixel under the top-left pixel of the screen. The map repeats, so an
+        // origin that `i32` does not hold is replaced by the one inside the map that shows
+        // the same.
+        let along = |origin: i32, offset: i64, period: i64| {
+            let origin = i64::from(origin) - offset;
+            i32::try_from(origin)
+                .or_else(|_| i32::try_from(origin.rem_euclid(period)))
+                .unwrap_or(i32::MAX)
+        };
+        let sheets = view.autotiles.into_iter().chain([view.tileset]);
+        self.referenced.extend(sheets.flatten());
+        self.ops.push(Op::TilemapLayer(TilemapLayer {
+            clip,
+            tileset: view.tileset,
+            autotiles: view.autotiles,
+            map,
+            priorities,
+            origin: (
+                along(tilemap.ox, level.dx, view.period.0),
+                along(tilemap.oy, level.dy, view.period.1),
+            ),
+            // Below 3 and at most 5.
+            layer: layer as u8,
+            priority: priority as u8,
+            animation_step: view.animation_step,
+        }));
     }
 }
 
@@ -470,6 +612,7 @@ impl Assembly<'_> {
 mod tests {
     use vkxp_compose_ref::Frame;
     use vkxp_pixel::Rgba;
+    use vkxp_proto::FramePacket;
 
     use super::*;
     use crate::bitmap::testing::color;
@@ -849,23 +992,31 @@ mod tests {
     }
 
     #[test]
-    fn scrolling_within_a_tile_composes_nothing_anew() {
+    fn scrolling_uploads_nothing() {
         let mut stage = Stage::new();
         let id = tilemap(&mut stage, &full_map());
-        // The deltas of the frame after the origin is set to `ox`.
-        let mut uploads = |ox: i32| {
+        let autotile = painted(&mut stage, 384, 128, autotile_pixel);
+        let priorities = SharedTable::new(Table::new(1000).unwrap());
+        let tilemap = stage.scene.tilemap_mut(id).unwrap();
+        tilemap.autotiles[0] = Some(autotile);
+        tilemap.priorities = Some(priorities);
+        // The packet of the frame after the origin is set to `ox`.
+        let mut packet = |ox: i32| {
             stage.scene.tilemap_mut(id).unwrap().ox = ox;
             let packet = stage.scene.extract(&mut stage.bitmaps);
             let frame = stage.render(&packet).unwrap();
             assert!(shows_full_map(&frame, (ox, 0), SCREEN), "{ox}");
-            packet.bitmaps.len()
+            packet
         };
-        assert_ne!(uploads(64), 0);
-        for ox in [65, 80, 95, 64] {
-            assert_eq!(uploads(ox), 0, "{ox}");
+        let first = packet(0);
+        assert_eq!(first.tables.len(), 2, "tile numbers and priorities");
+        assert!(!first.bitmaps.is_empty(), "the sheets");
+        // 100 pixels in ten frames, across three tile boundaries.
+        for frame in 1..=10 {
+            let packet = packet(frame * 10);
+            assert_eq!(packet.tables, [], "frame {frame}");
+            assert_eq!(packet.bitmaps, [], "frame {frame}");
         }
-        assert_ne!(uploads(96), 0);
-        assert_ne!(uploads(63), 0);
     }
 
     #[test]
@@ -1106,6 +1257,10 @@ mod tests {
         let tilemap = stage.scene.tilemap_mut(id).unwrap();
         tilemap.tileset = Some(tileset);
         tilemap.map_data = Some(map);
+        // The one bitmap a tilemap has of its own is the overlay of its flashing cells.
+        let flash = SharedTable::new(Table::new_2d(5, 5).unwrap());
+        flash.set(1, 1, 0, 0xf00);
+        tilemap.flash_data = Some(flash);
         let before = stage.bitmaps.len();
         stage.frame();
         assert_eq!(stage.bitmaps.len(), before + 1);
@@ -1294,7 +1449,7 @@ mod tests {
     }
 
     #[test]
-    fn cached_bitmaps_are_disposed_with_the_tilemap_or_when_it_is_invisible() {
+    fn tiles_are_drawn_without_bitmaps_of_the_scene() {
         let mut stage = Stage::sized(160, 160);
         let map = map(5, 5);
         map.set(0, 0, 0, 384);
@@ -1307,45 +1462,213 @@ mod tests {
         stage.scene.tilemap_mut(id).unwrap().priorities = Some(priorities.clone());
         let before = stage.bitmaps.len();
         assert_eq!(before, 1, "the tileset");
-        stage.frame();
-        assert_eq!(stage.bitmaps.len(), before + 3, "ground and two priorities");
-
-        // Composing anew does not let bitmaps pile up; a tile on another layer of the map
-        // gets a bitmap of its own, and a priority no visible tile has any more gives its
-        // bitmap back.
-        stage.scene.tilemap_mut(id).unwrap().ox = 32;
-        stage.frame();
-        assert_eq!(stage.bitmaps.len(), before + 3);
-        map.set(4, 4, 1, 387);
-        stage.frame();
-        assert_eq!(stage.bitmaps.len(), before + 4, "the ground of two layers");
-        map.set(4, 4, 1, 0);
-        stage.frame();
-        assert_eq!(stage.bitmaps.len(), before + 3);
-        priorities.set(386, 0, 0, 1);
-        stage.frame();
-        assert_eq!(stage.bitmaps.len(), before + 2);
-
-        // An invisible tilemap keeps none.
+        for ox in [0, 32, 45] {
+            stage.scene.tilemap_mut(id).unwrap().ox = ox;
+            assert!(!all(&stage.frame(), BLACK));
+            assert_eq!(stage.bitmaps.len(), before);
+        }
         stage.scene.tilemap_mut(id).unwrap().visible = false;
         assert!(all(&stage.frame(), BLACK));
-        assert_eq!(stage.bitmaps.len(), before);
         stage.scene.tilemap_mut(id).unwrap().visible = true;
         assert!(!all(&stage.frame(), BLACK));
-        assert_eq!(stage.bitmaps.len(), before + 2);
+        assert_eq!(stage.bitmaps.len(), before);
+    }
+
+    /// The tilemap layer ops of a packet.
+    fn layers(packet: &FramePacket) -> Vec<TilemapLayer> {
+        let ops = packet.ops.iter().filter_map(|op| match op {
+            Op::TilemapLayer(layer) => Some(*layer),
+            _ => None,
+        });
+        ops.collect()
+    }
+
+    #[test]
+    fn a_tilemap_is_one_op_per_layer_of_the_ground_and_per_row_and_layer_above() {
+        let mut stage = Stage::sized(96, 96);
+        let map = map(3, 3);
+        // Ground on layers 0 and 2; priority 1 in row 1 on layers 0 and 1 and in row 2 on
+        // layer 1; priority 3 in row 0 on layer 2.
+        map.set(0, 0, 0, 384);
+        map.set(2, 2, 2, 385);
+        map.set(1, 1, 0, 386);
+        map.set(2, 1, 1, 386);
+        map.set(0, 2, 1, 386);
+        map.set(1, 0, 2, 387);
+        let priorities = SharedTable::new(Table::new(400).unwrap());
+        priorities.set(386, 0, 0, 1);
+        priorities.set(387, 0, 0, 3);
+        let id = tilemap(&mut stage, &map);
+        let tilemap = stage.scene.tilemap_mut(id).unwrap();
+        tilemap.priorities = Some(priorities);
+        (tilemap.ox, tilemap.oy) = (5, -7);
+        let tileset = tilemap.tileset;
+        stage.frame();
+        let packet = stage.scene.extract(&mut stage.bitmaps);
+        let found = layers(&packet);
+        assert_eq!(found.len(), packet.ops.len());
+        let screen = vkxp_proto::Rect::new(0, 0, 96, 96);
+        let row = |row: i32| vkxp_proto::Rect::new(0, row * 32 + 7, 96, 32);
+        // In draw order: the ground at z 0, then the rows by their z, which is 64 more than
+        // their top edge for priority 1 and 128 more for priority 3. The map repeats: its
+        // last row shows once more in the seven rows of pixels above its first.
+        let expected = [
+            (screen, 0, 0),
+            (screen, 2, 0),
+            (vkxp_proto::Rect::new(0, 0, 96, 7), 1, 1),
+            (row(1), 0, 1),
+            (row(1), 1, 1),
+            (row(2), 1, 1),
+            (row(0), 2, 3),
+        ];
+        let pieces: Vec<_> = found
+            .iter()
+            .map(|layer| (layer.clip, layer.layer, layer.priority))
+            .collect();
+        // The last row reaches below the screen and is clipped to it.
+        let mut expected = expected.to_vec();
+        expected[5].0 = vkxp_proto::Rect::new(0, 71, 96, 25);
+        assert_eq!(expected[5].0.y, row(2).y);
+        assert_eq!(pieces, expected);
+        for layer in &found {
+            assert_eq!(layer.origin, (5, -7));
+            assert_eq!(layer.tileset, tileset);
+            assert_eq!(
+                (layer.map, layer.priorities),
+                (found[0].map, found[0].priorities)
+            );
+            assert_ne!(layer.map, layer.priorities);
+        }
+    }
+
+    #[test]
+    fn a_changed_table_is_sent_again_and_a_table_no_tilemap_has_is_destroyed() {
+        let mut stage = Stage::new();
+        let map = full_map();
+        let priorities = SharedTable::new(Table::new(1000).unwrap());
+        let id = tilemap(&mut stage, &map);
+        stage.scene.tilemap_mut(id).unwrap().priorities = Some(priorities.clone());
+        let first = stage.scene.extract(&mut stage.bitmaps);
+        stage.render(&first).unwrap();
+        let op = layers(&first)[0];
+        assert_eq!(first.tables.len(), 2);
+
+        // One cell is changed through the handle the script kept: that table is replaced.
+        map.set(3, 2, 0, 384 + 300);
+        let packet = stage.scene.extract(&mut stage.bitmaps);
+        let expected = TableDelta::Set {
+            id: op.map,
+            xsize: 20,
+            ysize: 15,
+            zsize: 3,
+            data: map.read().data().to_vec(),
+        };
+        assert_eq!(packet.tables, [expected]);
+        let frame = stage.render(&packet).unwrap();
+        assert!(tile_shows(&frame, 96, 64, |x, y| tile_pixel(
+            384 + 300,
+            x,
+            y
+        )));
+
+        // A priority outside 0 to 5 is sent as the nearest of them.
+        priorities.set(384, 0, 0, 9);
+        priorities.set(385, 0, 0, -3);
+        let packet = stage.scene.extract(&mut stage.bitmaps);
+        let [
+            TableDelta::Set {
+                id: sent,
+                xsize,
+                data,
+                ..
+            },
+        ] = &packet.tables[..]
+        else {
+            panic!("{:?}", packet.tables);
+        };
+        assert_eq!((*sent, *xsize), (op.priorities, 1000));
+        assert_eq!(data[384..386], [5, 0]);
+        stage.render(&packet).unwrap();
+
+        // Invisible, the tilemap keeps its tables with the compositor.
+        stage.scene.tilemap_mut(id).unwrap().visible = false;
+        assert_eq!(stage.scene.extract(&mut stage.bitmaps).tables, []);
+        stage.scene.tilemap_mut(id).unwrap().visible = true;
+        assert_eq!(stage.scene.extract(&mut stage.bitmaps).tables, []);
+
+        // Without its priorities it names a table without entries, and the old one goes.
+        stage.scene.tilemap_mut(id).unwrap().priorities = None;
+        let packet = stage.scene.extract(&mut stage.bitmaps);
+        let destroyed = TableDelta::Destroy { id: op.priorities };
+        assert_eq!(packet.tables.len(), 2);
+        assert!(packet.tables.contains(&destroyed));
+        assert!(all_layers_name(&packet, op.map));
+        stage.render(&packet).unwrap();
 
         stage.scene.dispose_tilemap(id, &mut stage.bitmaps);
-        assert_eq!(stage.bitmaps.len(), before);
+        let packet = stage.scene.extract(&mut stage.bitmaps);
+        assert_eq!(packet.tables, [TableDelta::Destroy { id: op.map }]);
         // The compositor is told, and accepts the frame that follows.
+        assert!(all(&stage.render(&packet).unwrap(), BLACK));
         assert!(all(&stage.frame(), BLACK));
     }
 
-    /// Not a check: prints how long composing the cache takes for a screen of 640 by 480,
-    /// which is 21 by 16 cells, with three full layers. Run it in the release profile:
-    /// `cargo test --release -p vkxp-core measure_a_rebuild -- --ignored --nocapture`.
+    fn all_layers_name(packet: &FramePacket, map: TableId) -> bool {
+        let layers = layers(packet);
+        !layers.is_empty() && layers.iter().all(|layer| layer.map == map)
+    }
+
+    #[test]
+    fn two_tilemaps_share_the_tables_they_share() {
+        let mut stage = Stage::sized(96, 64);
+        let map = map(3, 2);
+        map.set(0, 0, 0, 384);
+        let first = tilemap(&mut stage, &map);
+        let second = tilemap(&mut stage, &map);
+        stage.scene.tilemap_mut(second).unwrap().ox = 32;
+        let packet = stage.scene.extract(&mut stage.bitmaps);
+        assert_eq!(packet.tables.len(), 2, "the map and the empty priorities");
+        let layers = layers(&packet);
+        assert_eq!(layers.len(), 2);
+        assert_eq!(layers[0].map, layers[1].map);
+        stage.render(&packet).unwrap();
+        // One of them disposed, the other still has the table.
+        stage.scene.dispose_tilemap(first, &mut stage.bitmaps);
+        assert_eq!(stage.scene.extract(&mut stage.bitmaps).tables, []);
+    }
+
+    #[test]
+    fn a_sprite_between_two_rows_is_in_front_of_the_upper_and_behind_the_lower() {
+        let mut stage = Stage::sized(96, 96);
+        let map = map(3, 3);
+        map.set(0, 0, 0, 384);
+        map.set(0, 1, 0, 384);
+        let priorities = SharedTable::new(Table::new(400).unwrap());
+        priorities.set(384, 0, 0, 1);
+        let id = tilemap(&mut stage, &map);
+        stage.scene.tilemap_mut(id).unwrap().priorities = Some(priorities);
+        // The rows rank at 64 and 96; the sprite covers both cells from in between.
+        let blue = stage.solid(32, 64, BLUE);
+        let sprite = stage.scene.create_sprite(None).unwrap();
+        stage.scene.set_sprite_z(sprite, 80).unwrap();
+        let sprite = stage.scene.sprite_mut(sprite).unwrap();
+        sprite.set_bitmap(Some(blue), &stage.bitmaps);
+        let frame = stage.frame();
+        assert!(tile_shows(&frame, 0, 0, |_, _| BLUE));
+        assert!(tile_shows(&frame, 0, 32, |x, y| tile_pixel(384, x, y)));
+    }
+
+    #[test]
+    fn the_pattern_table_is_the_one_the_compositors_draw_with() {
+        assert_eq!(AUTOTILES, vkxp_compose_ref::AUTOTILE_QUARTERS);
+    }
+
+    /// Not a check: prints how long extracting a frame takes for a screen of 640 by 480,
+    /// which shows 21 by 16 cells, with three full layers. Run it in the release profile:
+    /// `cargo test --release -p vkxp-core measure_an_extraction -- --ignored --nocapture`.
     #[test]
     #[ignore = "a measurement, run on request"]
-    fn measure_a_rebuild() {
+    fn measure_an_extraction() {
         let mut stage = Stage::new();
         let map = map(40, 30);
         for y in 0..30 {
@@ -1368,35 +1691,18 @@ mod tests {
         stage.scene.tilemap_mut(id).unwrap().priorities = Some(priorities);
         stage.frame();
 
-        let screen = Level {
-            clip: vkxp_proto::Rect::new(0, 0, 640, 480),
-            dx: 0,
-            dy: 0,
-        };
-        let mut compose = Vec::new();
         let mut extract = Vec::new();
         for step in 1..=20 {
-            // Each step scrolls across a tile boundary, so everything is composed anew.
             let tilemap = stage.scene.tilemap_mut(id).unwrap();
-            tilemap.ox = step * 32;
-            let start = std::time::Instant::now();
-            tilemap.refresh_cache(&mut stage.bitmaps, Some(&screen));
-            compose.push(start.elapsed());
-
-            stage.scene.tilemap_mut(id).unwrap().oy = step * 32;
+            (tilemap.ox, tilemap.oy) = (step * 32, step * 32);
             let start = std::time::Instant::now();
             let packet = stage.scene.extract(&mut stage.bitmaps);
             extract.push(start.elapsed());
-            assert_eq!(packet.bitmaps.len(), 6, "ground and five priorities");
+            assert!(packet.bitmaps.is_empty() && packet.tables.is_empty());
         }
-        compose.sort();
         extract.sort();
         println!(
-            "composing 21 by 16 cells in three layers: median {:?}",
-            compose[10]
-        );
-        println!(
-            "extracting the frame with its uploads: median {:?}",
+            "extracting a frame of 21 by 16 cells in three layers: median {:?}",
             extract[10]
         );
     }
@@ -1572,6 +1878,6 @@ mod tests {
         stage.frame();
         stage.scene.tilemap_mut(id).unwrap().visible = false;
         stage.frame();
-        assert_eq!(stage.bitmaps.len(), without - 1, "ground and overlay");
+        assert_eq!(stage.bitmaps.len(), without, "the overlay");
     }
 }

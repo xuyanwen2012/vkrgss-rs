@@ -428,18 +428,6 @@ impl Window {
 }
 
 impl Assembly<'_> {
-    /// Draws the whole of `bitmap` unscaled with its top-left corner at (`x`, `y`).
-    pub(crate) fn whole(
-        &mut self,
-        bitmap: BitmapId,
-        x: i64,
-        y: i64,
-        clip: vkxp_proto::Rect,
-        opacity: u8,
-    ) {
-        self.whole_as(bitmap, x, y, clip, Look::plain(opacity));
-    }
-
     /// Draws the whole of `bitmap` unscaled with its top-left corner at (`x`, `y`), looking
     /// as `look` says.
     fn whole_as(&mut self, bitmap: BitmapId, x: i64, y: i64, clip: vkxp_proto::Rect, look: Look) {

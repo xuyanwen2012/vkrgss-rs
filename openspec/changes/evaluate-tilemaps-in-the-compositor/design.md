@@ -49,3 +49,22 @@
   operations per layer; the binning keeps ops off tiles they do not touch.
 - [Pixel regressions] → The comparison with the cached implementation in the tests, and the
   coordinator's regression run against the original on seven games after the merge.
+
+## Follow-ups
+
+- The autotile requirement names only sheets of quarters. The cached composition also drew a
+  sheet at most 32 pixels high as whole tiles, one per frame of 32 pixels, and games use such
+  sheets, so the op does the same in both compositors to keep the pictures. Should the
+  requirement say so?
+- A priority outside 0 to 5 was brought into that range by the cached composition (a
+  placeholder in `vkxp-core`). The op compares entry and priority as the requirement says, and
+  `vkxp-core` sends the priorities already brought into range, so nothing changes on screen.
+  What the original runtime does with such a priority is still unmeasured.
+- `tileset` in the op is optional, like the autotiles: a tilemap without a tileset can still
+  show autotiles.
+- The origin of the op is a pair of `i32`. An origin that the viewport's offset pushes beyond
+  that range is sent as the equivalent origin inside the map.
+- A written table is sent whole, as the design says. A script that writes to a large map every
+  frame pays for the whole map every frame; a partial update would be a protocol addition.
+- All tables share one storage buffer, so their total size is bounded by the device's storage
+  buffer range and reported as a limit beyond it.

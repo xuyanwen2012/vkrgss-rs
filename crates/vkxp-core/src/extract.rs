@@ -66,7 +66,7 @@ pub(crate) fn level_of(
 
 /// The rows of `clip` from `top` up to `bottom`; a rectangle without pixels when there are
 /// none.
-fn rows(clip: vkxp_proto::Rect, top: i64, bottom: i64) -> vkxp_proto::Rect {
+pub(crate) fn rows(clip: vkxp_proto::Rect, top: i64, bottom: i64) -> vkxp_proto::Rect {
     let first = top.max(i64::from(clip.y));
     let end = bottom.min(i64::from(clip.y) + i64::from(clip.height));
     if first < end {
@@ -150,7 +150,7 @@ impl Look {
 pub(crate) struct Assembly<'a> {
     pub(crate) bitmaps: &'a Bitmaps,
     pub(crate) ops: Vec<Op>,
-    /// The bitmap of every quad in `ops`.
+    /// The bitmap of every quad and the sheets of every tilemap layer in `ops`.
     pub(crate) referenced: Vec<BitmapId>,
 }
 
@@ -364,7 +364,8 @@ impl Assembly<'_> {
 enum Item {
     Sprite(Key),
     Plane(Key),
-    /// One piece of a tilemap: its ground, or a row of tiles of one priority.
+    /// One piece of a tilemap: its ground, its flashing cells, or a row of tiles of one
+    /// priority.
     Tiles(Key, Strip),
     /// The frame and background of a window.
     WindowBack(Key),
@@ -421,10 +422,11 @@ impl Scene {
     }
 
     /// Assembles the next frame: the ops of every visible element in draw order, and before
-    /// them the bitmap deltas for exactly the bitmaps those ops refer to.
+    /// them the bitmap deltas for exactly the bitmaps those ops refer to and the table deltas
+    /// for the tables the tilemap ops read.
     ///
     /// The packets of one scene must reach a compositor in the order they were extracted,
-    /// because the bitmap arena takes every delta it hands out to be delivered.
+    /// because the bitmap arena and the scene take every delta they hand out to be delivered.
     pub fn extract(&mut self, bitmaps: &mut Bitmaps) -> FramePacket {
         for (_, window) in self.windows.iter_mut() {
             window.refresh_caches(bitmaps);
@@ -440,14 +442,15 @@ impl Scene {
         }
         for (_, tilemap) in self.tilemaps.iter_mut() {
             let level = level_of(&self.viewports, self.logical_size, tilemap.viewport);
-            tilemap.refresh_cache(bitmaps, level.as_ref());
+            tilemap.refresh(bitmaps, level.as_ref(), &mut self.tables);
         }
         for (_, plane) in self.planes.iter_mut() {
             let level = level_of(&self.viewports, self.logical_size, plane.viewport);
             plane.refresh_cache(bitmaps, level.as_ref());
         }
+        let tables = self.tables.finish();
         let (ops, referenced) = self.ops(bitmaps);
-        // Every quad was checked to name a live bitmap, which is all `deltas` requires.
+        // Every op was checked to name live bitmaps only, which is all `deltas` requires.
         let deltas = bitmaps.deltas(&referenced).unwrap_or_default();
 
         let frame_index = self.frame_index;
@@ -457,7 +460,7 @@ impl Scene {
             frame_index,
             logical_size: self.logical_size,
             frame_rate: self.frame_rate,
-            tables: vec![],
+            tables,
             bitmaps: deltas,
             ops,
         }
@@ -621,10 +624,42 @@ pub(crate) mod testing {
         }
 
         /// Extracts the next frame and renders it.
+        ///
+        /// A scene with tilemaps is first drawn the way tilemaps were drawn before the
+        /// tilemap op, from bitmaps composed on the CPU, and the frame must equal that one
+        /// pixel for pixel.
         pub(crate) fn frame(&mut self) -> Frame {
+            let cached = self.cached_frame();
             let packet = self.scene.extract(&mut self.bitmaps);
-            self.render(&packet)
-                .expect("the reference compositor accepts every extracted packet")
+            let frame = self
+                .render(&packet)
+                .expect("the reference compositor accepts every extracted packet");
+            if let Some(cached) = cached {
+                let differing = (0..frame.size.height)
+                    .flat_map(|y| (0..frame.size.width).map(move |x| (x, y)))
+                    .find(|&(x, y)| frame.pixel(x, y) != cached.pixel(x, y));
+                if let Some((x, y)) = differing {
+                    panic!(
+                        "the tilemap ops draw {:?} at ({x}, {y}) where the cached bitmaps drew {:?}",
+                        frame.pixel(x, y),
+                        cached.pixel(x, y)
+                    );
+                }
+            }
+            frame
+        }
+
+        /// The next frame as the cached-bitmap composition of tilemaps draws it, or `None`
+        /// for a scene without tilemaps. The stage is left as it was: a copy of it is drawn.
+        pub(crate) fn cached_frame(&self) -> Option<Frame> {
+            self.scene.tilemaps.iter().next()?;
+            let (mut scene, mut bitmaps) = (self.scene.clone(), self.bitmaps.clone());
+            for (_, tilemap) in scene.tilemaps.iter_mut() {
+                tilemap.cached.active = true;
+            }
+            let packet = scene.extract(&mut bitmaps);
+            let frame = self.compositor.clone().render(&packet);
+            Some(frame.expect("the reference compositor accepts every extracted packet"))
         }
 
         /// Renders a packet extracted from the scene.
@@ -3033,18 +3068,28 @@ mod tests {
             }
             for step in steps {
                 perform(&mut stage, &mut made, step.clone());
+                let cached = stage.cached_frame();
                 let packet = stage.scene.extract(&mut stage.bitmaps);
                 let rendered = stage.render(&packet);
                 prop_assert!(rendered.is_ok(), "after {:?}: {:?}", step, rendered.err());
+                // Tilemap ops draw what the cached bitmaps of the tilemaps drew.
+                if let Some(cached) = cached {
+                    prop_assert!(rendered == Ok(cached), "after {:?}", step);
+                }
                 // Every delta is for a bitmap an op draws, or destroys one that is gone.
                 for delta in &packet.bitmaps {
                     let (BitmapDelta::Create { id, .. }
                     | BitmapDelta::Update { id, .. }
                     | BitmapDelta::Destroy { id }) = delta;
                     let destroyed = matches!(delta, BitmapDelta::Destroy { .. });
-                    let drawn = packet.ops.iter().any(
-                        |op| matches!(op, vkxp_proto::Op::Quad(quad) if quad.bitmap == *id),
-                    );
+                    let drawn = packet.ops.iter().any(|op| match op {
+                        vkxp_proto::Op::Quad(quad) => quad.bitmap == *id,
+                        vkxp_proto::Op::TilemapLayer(layer) => {
+                            let sheets = layer.autotiles.iter().chain([&layer.tileset]);
+                            sheets.flatten().any(|sheet| sheet == id)
+                        }
+                        _ => false,
+                    });
                     prop_assert_eq!(drawn, !destroyed, "{:?} after {:?}", id, step);
                 }
             }

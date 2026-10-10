@@ -3,6 +3,7 @@
 use vkxp_proto::{FrameRate, Size};
 
 use crate::element::Order;
+use crate::tilemap::SentTables;
 use crate::{Bitmaps, ElementKind, Plane, Rect, SceneError, Sprite, Tilemap, Viewport, Window};
 
 /// Largest logical width or height of a scene, the limit of the compositors.
@@ -198,6 +199,8 @@ pub struct Scene {
     pub(crate) windows: Arena<Window>,
     pub(crate) planes: Arena<Plane>,
     pub(crate) tilemaps: Arena<Tilemap>,
+    /// The tables of the tilemaps that the compositor has.
+    pub(crate) tables: SentTables,
     /// Bitmaps of the scene's own whose sprite was disposed; the next extraction disposes
     /// them.
     pub(crate) released: Vec<vkxp_proto::BitmapId>,
@@ -234,6 +237,7 @@ impl Scene {
             windows: Arena::default(),
             planes: Arena::default(),
             tilemaps: Arena::default(),
+            tables: SentTables::default(),
             released: Vec::new(),
             stamp: 0,
             frame_count: 0,
@@ -362,11 +366,13 @@ impl Scene {
         }
     }
 
-    /// Disposes a tilemap, and with it the bitmaps the scene composed its tiles into, which
-    /// live in `bitmaps`. Disposing a disposed tilemap does nothing.
+    /// Disposes a tilemap, and with it the bitmap the scene filled with its flashing cells,
+    /// which lives in `bitmaps`. Disposing a disposed tilemap does nothing.
     pub fn dispose_tilemap(&mut self, id: TilemapId, bitmaps: &mut Bitmaps) {
         if let Some(mut tilemap) = self.tilemaps.remove(id.0) {
             tilemap.cache.dispose(bitmaps);
+            #[cfg(test)]
+            tilemap.cached.cache.dispose(bitmaps);
         }
     }
 }

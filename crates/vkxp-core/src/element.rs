@@ -483,8 +483,11 @@ pub struct Tilemap {
     pub(crate) order: Order,
     /// Number of updates so far, which the autotile animation follows.
     pub(crate) updates: u64,
-    /// The bitmaps the visible tiles are composed into.
+    /// What the last frame drew of the tilemap, and the flash overlay.
     pub(crate) cache: TileCache,
+    /// The cached-bitmap composition the tests compare the tilemap ops with.
+    #[cfg(test)]
+    pub(crate) cached: crate::tilemap::cached::Cached,
 }
 
 impl Tilemap {
@@ -502,6 +505,8 @@ impl Tilemap {
             order: Order { z: 0, stamp },
             updates: 0,
             cache: TileCache::default(),
+            #[cfg(test)]
+            cached: Default::default(),
         }
     }
 

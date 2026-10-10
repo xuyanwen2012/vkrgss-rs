@@ -50,16 +50,14 @@
 //!   cursor size changes, plus its contents, pause sign and scroll arrows. A plane is one
 //!   stretch quad per repeat of its tile, on a grid of whole pixels, and draws from a
 //!   pre-tiled bitmap of the scene's own when its bitmap is small against the area and the
-//!   zoom lets copies in a row stretch as one. A tilemap is drawn from
-//!   bitmaps of the scene's own as well: its visible tiles are composed on the CPU into one
-//!   bitmap for each priority and layer of the map, so that every tile meets the frame by
-//!   itself; those of priority 0 are shown as one quad each at z 0 and the others as one quad
-//!   per row of tiles at the z that ranks the row among sprites, in the order of the layers,
-//!   and composed again when a scroll crosses a tile boundary or a table, a sheet or a visible
-//!   autotile's animation frame changes. This stands in for the tilemap op of
-//!   `docs/decisions.md`. The scene also holds `Graphics` bookkeeping: frame count, frame
-//!   rate and the logical size (640 by 480 unless given, at most [`MAX_LOGICAL_DIMENSION`] a
-//!   side).
+//!   zoom lets copies in a row stretch as one. A tilemap is drawn by the compositor, from
+//!   tilemap layer ops that name its sheets and its two tables: for the tiles of priority 0
+//!   one op for each layer of the map that shows such a tile, at z 0, and for every higher
+//!   priority one op per row of tiles and layer, at the z that ranks the row among sprites,
+//!   so that every tile meets the frame by itself. The tables are sent when an op first
+//!   reads them and again when they were written to. The scene also holds `Graphics`
+//!   bookkeeping: frame count, frame rate and the logical size (640 by 480 unless given, at
+//!   most [`MAX_LOGICAL_DIMENSION`] a side).
 //! - Input. [`InputState`] takes the protocol's input snapshots as they arrive and latches
 //!   the newest one per update, from which it answers pressed, triggered, repeated and the
 //!   four- and eight-way direction queries. The same snapshots always give the same answers.
@@ -91,7 +89,7 @@
 //! | `window` | the bitmaps cached from a window skin, windows as ops |
 //! | `plane` | planes as tiled quads, the pre-tiled bitmap of a small pattern |
 //! | `tiles` | the autotile table, tile identifiers as source rectangles |
-//! | `tilemap` | the bitmaps a tilemap composes its visible tiles into, tilemaps as ops |
+//! | `tilemap` | tilemaps as ops, the tables sent for them, the overlay of flashing cells |
 //! | `input` | [`InputState`] |
 //! | `error` | [`BitmapError`], [`CreateFailure`], [`DecodeError`], [`TableError`], [`SceneError`], [`ElementKind`] |
 //! | `test_support` | stand-ins for tests, such as a rasteriser with fixed-size cells |

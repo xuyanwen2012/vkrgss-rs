@@ -11,8 +11,8 @@
 
 ## 3. Scene (`vkxp-core`)
 
-- [ ] 3.1 Extract tilemaps as tilemap ops with table uploads on change, keeping the cached composition as the test reference. Verify: the four scenarios of `specs/core-scene/spec.md`.
-- [ ] 3.2 Delete the paragraph about the temporary deviation from `docs/decisions.md`. Verify: the Compositor section states the op without it.
+- [x] 3.1 Extract tilemaps as tilemap ops with table uploads on change, keeping the cached composition as the test reference. Verify: the four scenarios of `specs/core-scene/spec.md`.
+- [x] 3.2 Delete the paragraph about the temporary deviation from `docs/decisions.md`. Verify: the Compositor section states the op without it.
 
 ## 4. Integration check
 

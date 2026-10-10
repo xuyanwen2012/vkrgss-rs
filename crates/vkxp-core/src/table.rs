@@ -85,6 +85,11 @@ impl Table {
         self.zsize
     }
 
+    /// All elements, with x varying fastest, then y, then z.
+    pub(crate) fn data(&self) -> &[i16] {
+        &self.data
+    }
+
     /// Position of an element in `data`, or `None` outside the table.
     fn offset(&self, x: i32, y: i32, z: i32) -> Option<usize> {
         let inside = |index: i32, size: i32| index >= 0 && index < size;
