@@ -8,13 +8,12 @@ use std::io::Cursor;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use symphonia::core::audio::SampleBuffer;
-use symphonia::core::codecs::{CODEC_TYPE_NULL, Decoder, DecoderOptions};
+use symphonia::core::codecs::audio::{AudioDecoder, AudioDecoderOptions};
 use symphonia::core::errors::Error as SymphoniaError;
-use symphonia::core::formats::{FormatOptions, FormatReader};
+use symphonia::core::formats::probe::Hint;
+use symphonia::core::formats::{FormatOptions, FormatReader, TrackType};
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
-use symphonia::core::probe::Hint;
 
 use crate::midi::{self, SoundFonts};
 
@@ -77,7 +76,7 @@ pub fn open(
 /// The demuxer and decoder of one sampled file.
 struct Stream {
     format: Box<dyn FormatReader>,
-    decoder: Box<dyn Decoder>,
+    decoder: Box<dyn AudioDecoder>,
     track: u32,
 }
 
@@ -85,27 +84,27 @@ impl Stream {
     fn open(data: Arc<[u8]>) -> Result<Stream, DecodeError> {
         let unsupported = |error: SymphoniaError| DecodeError::Unsupported(error.to_string());
         let stream = MediaSourceStream::new(Box::new(Cursor::new(data)), Default::default());
-        let format_options = FormatOptions {
-            // Leaves out the padding an MP3 encoder adds, so a loop has no gap.
-            enable_gapless: true,
-            ..FormatOptions::default()
-        };
         let format = symphonia::default::get_probe()
-            .format(
+            .probe(
                 &Hint::new(),
                 stream,
-                &format_options,
-                &MetadataOptions::default(),
+                FormatOptions::default(),
+                MetadataOptions::default(),
             )
-            .map_err(unsupported)?
-            .format;
+            .map_err(unsupported)?;
+        let no_track = || DecodeError::Unsupported("no audio track".to_owned());
         let track = format
-            .tracks()
-            .iter()
-            .find(|track| track.codec_params.codec != CODEC_TYPE_NULL)
-            .ok_or_else(|| DecodeError::Unsupported("no audio track".to_owned()))?;
+            .default_track(TrackType::Audio)
+            .ok_or_else(no_track)?;
+        let params = track
+            .codec_params
+            .as_ref()
+            .and_then(|params| params.audio())
+            .ok_or_else(no_track)?;
+        // Leaves out the padding an MP3 encoder adds, so a loop has no gap.
+        let decoder_options = AudioDecoderOptions::default().gapless(true);
         let decoder = symphonia::default::get_codecs()
-            .make(&track.codec_params, &DecoderOptions::default())
+            .make_audio_decoder(params, &decoder_options)
             .map_err(unsupported)?;
         Ok(Stream {
             track: track.id,
@@ -120,15 +119,16 @@ impl Stream {
     /// the reason when the sound ends for anything but the end of its data.
     fn next_block(
         &mut self,
-        samples: &mut Option<SampleBuffer<f32>>,
+        samples: &mut Vec<f32>,
         frames: &mut Vec<f32>,
         damage: &mut Option<String>,
     ) -> Option<u32> {
         loop {
             let packet = match self.format.next_packet() {
-                Ok(packet) => packet,
-                // This is how the library says that the data has ended, also when a file
-                // was cut short.
+                Ok(Some(packet)) => packet,
+                Ok(None) => return None,
+                // This is how the library says that the data of a file that was cut short
+                // has ended.
                 Err(SymphoniaError::IoError(error))
                     if error.kind() == std::io::ErrorKind::UnexpectedEof =>
                 {
@@ -139,7 +139,7 @@ impl Stream {
                     return None;
                 }
             };
-            if packet.track_id() != self.track {
+            if packet.track_id != self.track {
                 continue;
             }
             let decoded = match self.decoder.decode(&packet) {
@@ -153,22 +153,18 @@ impl Stream {
                     return None;
                 }
             };
-            let spec = *decoded.spec();
-            let channels = spec.channels.count();
+            let rate = decoded.spec().rate();
+            let channels = decoded.spec().channels().count();
             if decoded.frames() == 0 || channels == 0 {
                 continue;
             }
-            let buffer = match samples {
-                Some(buffer) if buffer.capacity() >= decoded.capacity() * channels => buffer,
-                _ => samples.insert(SampleBuffer::new(decoded.capacity() as u64, spec)),
-            };
-            buffer.copy_interleaved_ref(decoded);
-            for frame in buffer.samples().chunks_exact(channels) {
+            decoded.copy_to_vec_interleaved(samples);
+            for frame in samples.chunks_exact(channels) {
                 // Mono goes to both sides; of more than two channels the first two are kept.
                 frames.push(frame[0]);
                 frames.push(frame[channels.min(2) - 1]);
             }
-            return Some(spec.rate);
+            return Some(rate);
         }
     }
 }
@@ -178,7 +174,8 @@ struct Sampled {
     data: Arc<[u8]>,
     sample_rate: u32,
     stream: Option<Stream>,
-    samples: Option<SampleBuffer<f32>>,
+    /// The last decoded block, interleaved as the file has it.
+    samples: Vec<f32>,
     /// Decoded stereo frames not yet consumed.
     frames: Vec<f32>,
     /// The position of the next output frame in `frames`, in frames.
@@ -196,7 +193,7 @@ impl Sampled {
             data,
             sample_rate,
             stream: Some(stream),
-            samples: None,
+            samples: Vec::new(),
             frames: Vec::new(),
             position: 0.0,
             step: 1.0,
