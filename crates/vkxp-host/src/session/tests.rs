@@ -1829,13 +1829,84 @@ fn display_restarts_its_pacing_with_the_frame_after_a_modal_wait() {
     assert_eq!(pacing(&mut rig), [RATE_40, RATE_40]);
 }
 
-/// Sends `frames` frames, each answered with its tick a period after the one before.
+/// Sends `frames` frames, each answered with its tick a period after the one before. The
+/// tick of each frame is handed over before the next frame comes, as the handshake has it,
+/// and nothing else is.
 fn run_frames(rig: &mut Rig, frames: u64) {
     for index in 0..frames {
         rig.session.handle_message(frame(index));
         rig.clock.advance(ms(25));
         rig.session.poll();
+        assert_eq!(rig.session.take_messages(), [HostToGuest::Tick]);
     }
+}
+
+/// The mean of the `guest` row of the one summary in `text`, in milliseconds, with the
+/// number of frames the row counts.
+fn guest_row(text: &str) -> (u64, f64) {
+    let row = text
+        .lines()
+        .find_map(|line| line.strip_prefix("vkxp:   guest: "))
+        .unwrap_or_else(|| panic!("no guest row in: {text}"));
+    let (count, rest) = row.split_once(" frame(s), mean ").expect("a measured row");
+    let mean = rest.split(' ').next().unwrap().parse().unwrap();
+    (count.parse().unwrap(), mean)
+}
+
+/// Two frames with `before` between queueing the first frame's tick and handing it over,
+/// and `after` between handing it over and the second frame. Returns the `guest` row.
+fn guest_wait(before: Duration, after: Duration) -> (u64, f64) {
+    let mut rig = Rig::with_options(SessionOptions {
+        frame_stats: true,
+        ..SessionOptions::default()
+    });
+    rig.session.handle_message(frame(0));
+    std::thread::sleep(before);
+    assert_eq!(rig.session.take_messages(), [HostToGuest::Tick]);
+    std::thread::sleep(after);
+    rig.session.handle_message(frame(1));
+    drop(rig.session);
+    guest_row(&rig.errors.text())
+}
+
+#[test]
+fn host_work_before_a_tick_is_handed_over_is_not_the_guests_time() {
+    let (count, mean) = guest_wait(ms(200), ms(0));
+    assert_eq!(count, 1);
+    assert!(mean < 100.0, "the host's 200 ms were counted: {mean} ms");
+}
+
+#[test]
+fn time_from_handing_a_tick_over_to_the_next_frame_is_the_guests() {
+    let (count, mean) = guest_wait(ms(0), ms(60));
+    assert_eq!(count, 1);
+    assert!(
+        mean >= 60.0,
+        "the guest's 60 ms were not counted: {mean} ms"
+    );
+}
+
+#[test]
+fn guest_wait_is_measured_from_the_send_when_the_session_runs_against_its_link() {
+    let (guest, host) = link(|| {});
+    let mut rig = Rig::with_options(SessionOptions {
+        frame_stats: true,
+        ..SessionOptions::default()
+    });
+    guest.send(frame(0)).unwrap();
+    rig.session
+        .handle_message(host.try_recv().unwrap().unwrap());
+    // The tick is queued; the host is busy before it sends it.
+    std::thread::sleep(ms(200));
+    rig.session.pump(&host);
+    assert_eq!(guest.try_recv(), Ok(Some(HostToGuest::Tick)));
+    std::thread::sleep(ms(60));
+    guest.send(frame(1)).unwrap();
+    rig.session.pump(&host);
+    drop(rig.session);
+    let (count, mean) = guest_row(&rig.errors.text());
+    assert_eq!(count, 1);
+    assert!((60.0..160.0).contains(&mean), "{mean} ms");
 }
 
 #[test]
@@ -1846,9 +1917,6 @@ fn frame_statistics_are_written_once_when_the_session_ends() {
     });
     run_frames(&mut rig, 5);
     assert_eq!(rig.errors.text(), "", "nothing before the end");
-    let ticks = rig.session.take_messages();
-    assert_eq!(ticks.len(), 5, "the guest sees nothing else");
-    assert!(ticks.iter().all(|message| *message == HostToGuest::Tick));
     drop(rig.session);
     let text = rig.errors.text();
     let lines: Vec<&str> = text.lines().collect();
@@ -1908,9 +1976,10 @@ fn frame_statistics_do_not_move_a_tick() {
         let mut due = Vec::new();
         for index in 0..4 {
             rig.session.handle_message(frame(index));
-            due.push(rig.session.next_wake());
+            due.push((rig.session.next_wake(), rig.session.take_messages()));
             rig.clock.advance(ms(30));
             rig.session.poll();
+            due.push((rig.session.next_wake(), rig.session.take_messages()));
         }
         due
     };

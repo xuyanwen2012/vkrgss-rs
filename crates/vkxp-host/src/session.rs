@@ -102,8 +102,10 @@ struct Measuring {
     stats: FrameStats,
     /// The frames after which a summary is written, besides the one at the end.
     interval: Option<usize>,
-    /// When the frame before was answered, on the host's monotonic clock and not on the
-    /// session's, which a headless run moves by hand. `None` before the first answer.
+    /// When the tick that answers the frame before was handed over for the guest, on the
+    /// host's monotonic clock and not on the session's, which a headless run moves by hand.
+    /// `None` until that tick has left the session: what the host does between queueing a
+    /// tick and handing it over, such as writing a dump, is not the guest's time.
     answered: Option<Instant>,
     /// Whether a summary has been written.
     reported: bool,
@@ -156,7 +158,9 @@ struct FpsCounter {
 /// # Frame time statistics
 ///
 /// A session that was asked to (see [`SessionOptions::frame_stats`]) measures the time from
-/// answering a frame to receiving the next frame packet, and takes what its display measured
+/// answering a frame, which is when its tick leaves the session through
+/// [`take_messages`](Session::take_messages) or [`pump`](Session::pump), to receiving the
+/// next frame packet, and takes what its display measured
 /// of each frame it rendered. That reads the host's clock and nothing else: no tick is due
 /// earlier or later for it and the guest is sent nothing else.
 pub struct Session<D: Display, C: Clock> {
@@ -312,7 +316,19 @@ impl<D: Display, C: Clock> Session<D, C> {
 
     /// The messages for the guest produced so far, oldest first, removing them.
     pub fn take_messages(&mut self) -> Vec<HostToGuest> {
-        self.outbox.drain(..).collect()
+        let messages: Vec<HostToGuest> = self.outbox.drain(..).collect();
+        if messages.contains(&HostToGuest::Tick) {
+            self.tick_delivered();
+        }
+        messages
+    }
+
+    /// The tick that answers a frame has left the session: the wait for the guest's next
+    /// frame starts here, when it is measured.
+    fn tick_delivered(&mut self) {
+        if let Some(measuring) = &mut self.measuring {
+            measuring.answered = Some(Instant::now());
+        }
     }
 
     /// Handles one message from the guest.
@@ -686,9 +702,6 @@ impl<D: Display, C: Clock> Session<D, C> {
         self.pending_tick = None;
         self.previous_tick = Some(now);
         self.outbox.push_back(HostToGuest::Tick);
-        if let Some(measuring) = &mut self.measuring {
-            measuring.answered = Some(Instant::now());
-        }
         if self.failing {
             // The rejected frame has its one tick; nothing else is answered.
             self.end = Some(SessionEnd::Failed);
@@ -809,9 +822,12 @@ impl<D: Display, C: Clock> Session<D, C> {
     /// Hands the messages produced so far to the link.
     fn flush(&mut self, link: &HostEnd) {
         while let Some(message) = self.outbox.pop_front() {
+            let tick = message == HostToGuest::Tick;
             if self.guest_gone || link.send(message).is_err() {
                 self.guest_gone = true;
                 self.outbox.clear();
+            } else if tick {
+                self.tick_delivered();
             }
         }
     }
