@@ -13,7 +13,7 @@ use vkxp_host::demo::TRANSITION_FRAMES;
 use vkxp_host::testing::ErrorBuffer;
 use vkxp_host::{
     HeadlessEnd, HeadlessError, HeadlessOptions, HeadlessReport, HostLink, InputScript, Severity,
-    headless_link, run_headless,
+    StateSchedule, headless_link, run_headless,
 };
 use vkxp_proto::link::{Disconnected, GuestEnd};
 use vkxp_proto::{
@@ -740,4 +740,175 @@ fn frame_statistics_do_not_change_a_dumped_frame() {
         fs::read(path).unwrap()
     };
     assert_eq!(dumped(true), dumped(false));
+}
+
+// The states schedule.
+
+/// Scenario "a scheduled request reaching the guest at its frame".
+#[test]
+fn scheduled_state_requests_reach_the_guest_before_the_tick_of_their_frame() {
+    let schedule = StateSchedule::parse("2:save 3, 4:save 0, 4:save 1").unwrap();
+    let (result, received) = run_with(
+        HeadlessOptions {
+            states: schedule,
+            ..options()
+        },
+        counting_guest(6),
+    );
+    assert_eq!(result.unwrap().frames, 6);
+    let save = |slot| HostToGuest::SaveState { slot };
+    let expected: Received = vec![
+        vec![],
+        vec![],
+        vec![save(3)],
+        vec![],
+        vec![save(0), save(1)],
+        vec![],
+    ];
+    assert_eq!(received, expected);
+}
+
+/// A frame that draws the bitmap 1 of generation 0 through the table-less ops of a sprite,
+/// and first creates that bitmap when `create` says so.
+fn sprite_frame(index: u64, create: bool) -> GuestToHost {
+    use vkxp_compose_ref::fixtures;
+    let id = BitmapId::new(1, 0);
+    let size = Size::new(16, 16);
+    let rgba = [index as u8 * 60 + 40, 200, 30, 255].repeat(16);
+    GuestToHost::Frame(vkxp_proto::FramePacket {
+        frame_index: index,
+        logical_size: size,
+        frame_rate: vkxp_proto::FrameRate::DEFAULT,
+        tables: if create {
+            vec![vkxp_proto::TableDelta::Set {
+                id: vkxp_proto::TableId::new(0),
+                xsize: 2,
+                ysize: 1,
+                zsize: 1,
+                data: vec![1, 2],
+            }]
+        } else {
+            vec![]
+        },
+        bitmaps: if create {
+            fixtures::bitmap(id, 4, 4, rgba).to_vec()
+        } else {
+            vec![]
+        },
+        ops: vec![
+            Op::Clear {
+                clip: Rect::from_size(size),
+                color: Color::new(0, 0, 0, 255),
+            },
+            Op::Quad(fixtures::sprite(id, 4, 4, 3, 5)),
+        ],
+    })
+}
+
+/// Waits for the tick of a frame and returns what arrived before it.
+fn until_tick(link: &GuestEnd) -> Vec<HostToGuest> {
+    let mut before = Vec::new();
+    loop {
+        match link.recv().unwrap() {
+            HostToGuest::Tick => return before,
+            other => before.push(other),
+        }
+    }
+}
+
+/// Scenario "Stale resources": a guest, and what keeps its states, that loads a state when
+/// asked: from there on it sends as a guest of which the host holds nothing.
+#[test]
+fn after_a_loaded_state_a_frame_creates_the_bitmaps_and_tables_the_display_held() {
+    let directory = tempfile::tempdir().unwrap();
+    let dumps = [0, 2].map(|frame| (frame, directory.path().join(format!("{frame}.png"))));
+    let guest = |link: GuestEnd| {
+        link.send(sprite_frame(0, true)).unwrap();
+        assert_eq!(until_tick(&link), []);
+        link.send(sprite_frame(1, false)).unwrap();
+        // No tick answers the frame at which the state is loaded.
+        assert_eq!(link.recv(), Ok(HostToGuest::LoadState { slot: 2 }));
+        link.send(GuestToHost::StateLoaded { slot: 2 }).unwrap();
+        link.send(sprite_frame(0, true)).unwrap();
+        let before = until_tick(&link);
+        link.send(GuestToHost::Shutdown).unwrap();
+        before
+    };
+    let errors = ErrorBuffer::new();
+    let (result, before) = run_with(
+        HeadlessOptions {
+            states: StateSchedule::parse("1:load 2").unwrap(),
+            dumps: dumps.to_vec(),
+            errors: Box::new(errors.clone()),
+            ..options()
+        },
+        guest,
+    );
+    let report = result.unwrap_or_else(|error| panic!("{error}: {}", errors.text()));
+    assert_eq!(report.frames, 3);
+    // The current input is sent again for the guest that goes on.
+    assert_eq!(before, [HostToGuest::Input(InputSnapshot::EMPTY)]);
+    assert_eq!(read_png(&dumps[0].1), read_png(&dumps[1].1));
+    assert_eq!(errors.severities("was rejected"), []);
+    assert_eq!(
+        errors.severities("state loaded from slot 2"),
+        [Severity::Info]
+    );
+}
+
+/// Without the load the same frame is rejected: the display has the bitmap.
+#[test]
+fn a_frame_that_creates_a_bitmap_the_display_holds_is_rejected() {
+    let guest = |link: GuestEnd| {
+        link.send(sprite_frame(0, true)).unwrap();
+        until_tick(&link);
+        link.send(sprite_frame(0, true)).unwrap();
+        until_tick(&link);
+    };
+    let errors = ErrorBuffer::new();
+    let (result, ()) = run_with(
+        HeadlessOptions {
+            errors: Box::new(errors.clone()),
+            ..options()
+        },
+        guest,
+    );
+    assert!(matches!(
+        result,
+        Err(HeadlessError::FrameRejected { frame: 1 })
+    ));
+}
+
+/// Scenario "Empty slot", as far as the host goes.
+#[test]
+fn a_load_that_fails_is_reported_and_the_run_goes_on() {
+    let guest = |link: GuestEnd| {
+        for index in 0..4 {
+            link.send(small_frame(index)).unwrap();
+            // The tick of the frame waits for the answer.
+            loop {
+                match link.recv().unwrap() {
+                    HostToGuest::Tick => break,
+                    HostToGuest::LoadState { slot } => {
+                        assert_eq!(index, 1);
+                        link.send(GuestToHost::StateFailed { slot }).unwrap();
+                    }
+                    other => panic!("{other:?} is not a request to load"),
+                }
+            }
+        }
+        link.send(GuestToHost::Shutdown).unwrap();
+    };
+    let errors = ErrorBuffer::new();
+    let (result, ()) = run_with(
+        HeadlessOptions {
+            states: StateSchedule::parse("1:load 3").unwrap(),
+            errors: Box::new(errors.clone()),
+            ..options()
+        },
+        guest,
+    );
+    let report = result.unwrap();
+    assert_eq!((report.end, report.frames), (HeadlessEnd::Shutdown, 4));
+    assert_eq!(errors.severities("slot 3 holds no state"), [Severity::Info]);
 }

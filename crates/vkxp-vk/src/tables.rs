@@ -49,6 +49,11 @@ impl TableStore {
         self.tables.get(&id).ok_or(TableError::Unknown { id })
     }
 
+    /// The ids of the live tables.
+    pub(crate) fn ids(&self) -> impl Iterator<Item = TableId> {
+        self.tables.keys().copied()
+    }
+
     /// Number of elements of all tables: the length of the buffer in words.
     pub(crate) fn words(&self) -> u64 {
         self.words

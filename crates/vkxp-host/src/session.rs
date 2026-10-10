@@ -4,7 +4,10 @@ use std::collections::{HashSet, VecDeque};
 use std::time::{Duration, Instant};
 
 use vkxp_proto::link::HostEnd;
-use vkxp_proto::{BitmapId, Button, FramePacket, GuestToHost, HostToGuest, InputSnapshot, Size};
+use vkxp_proto::{
+    AudioChannel, AudioCommand, BitmapId, Button, FramePacket, GuestToHost, HostToGuest,
+    InputSnapshot, Size,
+};
 use vkxp_vk::Mix;
 use winit::event::MouseButton;
 use winit::keyboard::KeyCode;
@@ -22,6 +25,15 @@ const FPS_KEY: KeyCode = KeyCode::F2;
 const FULLSCREEN_KEY: KeyCode = KeyCode::F11;
 /// The key that engages fast-forward while it is held. A placeholder until the key is settled.
 const FAST_FORWARD_KEY: KeyCode = KeyCode::Tab;
+
+/// The key that saves a state into the chosen slot, and with Shift chooses the next slot.
+const SAVE_STATE_KEY: KeyCode = KeyCode::F3;
+/// The key that loads the state of the chosen slot, and with Shift chooses the slot before.
+const LOAD_STATE_KEY: KeyCode = KeyCode::F4;
+/// The number of state slots.
+const STATE_SLOTS: u8 = 10;
+/// How long a notice about states stays in the title.
+const NOTICE_TIME: Duration = Duration::from_secs(2);
 
 /// How often the frame rate in the title is refreshed.
 const FPS_INTERVAL: Duration = Duration::from_secs(1);
@@ -80,6 +92,9 @@ pub struct SessionOptions {
     /// With `frame_stats`: the summary is also written after every so many frames, and the
     /// statistics start anew each time.
     pub frame_stats_interval: Option<usize>,
+    /// Whether the guest can be saved and loaded: it runs in a process of its own, behind
+    /// something that keeps its states. Without it the state keys only say so.
+    pub states: bool,
 }
 
 impl Default for SessionOptions {
@@ -93,6 +108,7 @@ impl Default for SessionOptions {
             input: None,
             frame_stats: false,
             frame_stats_interval: None,
+            states: false,
         }
     }
 }
@@ -163,6 +179,24 @@ struct FpsCounter {
 /// next frame packet, and takes what its display measured
 /// of each frame it rendered. That reads the host's clock and nothing else: no tick is due
 /// earlier or later for it and the guest is sent nothing else.
+///
+/// # States
+///
+/// The session has ten state slots, 0 to 9, and starts with slot 0 chosen. F3 asks the guest
+/// to save a state into the chosen slot and F4 asks for the state of that slot to be loaded
+/// ([`save_state`](Session::save_state), [`load_state`](Session::load_state)); with Shift
+/// they choose the next and the previous slot. What became of a request, and a change of
+/// slot, is shown in the title for two seconds and reported as [`Severity::Info`]. The keys
+/// send nothing, and the title says why, in a session whose guest cannot be saved
+/// ([`SessionOptions::states`]) and in one that records or replays its input. While a modal
+/// message waits they do nothing.
+///
+/// From a request to load until its answer no tick is sent: a tick sent then would answer
+/// a frame of the guest that the load ends, and reach the one that takes its place. When a
+/// state was loaded the session holds nothing of the guest that goes on from it: the display
+/// forgets every bitmap and table, a freeze or transition ends, a modal message is dropped,
+/// the four audio channels stop, the pacing starts anew as after a frame reset and the
+/// guest is sent the current input again.
 pub struct Session<D: Display, C: Clock> {
     display: D,
     clock: C,
@@ -227,6 +261,14 @@ pub struct Session<D: Display, C: Clock> {
     end: Option<SessionEnd>,
     /// The frame time statistics, when the session collects them.
     measuring: Option<Measuring>,
+    /// Whether the guest can be saved and loaded.
+    states: bool,
+    /// The chosen state slot.
+    slot: u8,
+    /// The slot of the request to load a state that has not been answered yet.
+    loading: Option<u8>,
+    /// Until when the title shows a notice about states.
+    notice: Option<Duration>,
 }
 
 impl<D: Display, C: Clock> Session<D, C> {
@@ -273,6 +315,10 @@ impl<D: Display, C: Clock> Session<D, C> {
                 answered: None,
                 reported: false,
             }),
+            states: options.states,
+            slot: 0,
+            loading: None,
+            notice: None,
         }
     }
 
@@ -301,9 +347,11 @@ impl<D: Display, C: Clock> Session<D, C> {
     }
 
     /// When [`poll`](Session::poll) next has something to do, on the session's clock, or
-    /// `None` when only a guest message or user input can move the session on.
+    /// `None` when only a guest message or user input can move the session on, as while a
+    /// request to load a state waits for its answer.
     pub fn next_wake(&self) -> Option<Duration> {
-        self.pending_tick.filter(|_| self.end.is_none())
+        self.pending_tick
+            .filter(|_| self.end.is_none() && self.loading.is_none())
     }
 
     /// Whether fast-forward is engaged.
@@ -362,6 +410,7 @@ impl<D: Display, C: Clock> Session<D, C> {
             }
             GuestToHost::SetTitle { title } => {
                 self.title = title;
+                self.notice = None;
                 self.display.set_title(&self.title);
                 if let Some(fps) = &mut self.fps {
                     // The rate reappears in the title at the next refresh.
@@ -373,11 +422,21 @@ impl<D: Display, C: Clock> Session<D, C> {
             }
             GuestToHost::Shutdown => self.end = Some(SessionEnd::Shutdown),
             GuestToHost::FrameReset => self.frame_reset = true,
-            GuestToHost::Attach { .. }
-            | GuestToHost::Outcome { .. }
-            | GuestToHost::StateSaved { .. }
-            | GuestToHost::StateLoaded { .. }
-            | GuestToHost::StateFailed { .. } => {}
+            // What stands between the session and a guest in a process keeps these.
+            GuestToHost::Attach { .. } | GuestToHost::Outcome { .. } => {}
+            GuestToHost::StateSaved { slot } => {
+                self.show_notice(format_args!("state saved into slot {slot}"));
+            }
+            GuestToHost::StateLoaded { slot } => self.state_loaded(slot),
+            GuestToHost::StateFailed { slot } if self.loading == Some(slot) => {
+                self.loading = None;
+                self.show_notice(format_args!("slot {slot} holds no state"));
+                // The tick that waited for the answer may be due.
+                self.poll();
+            }
+            GuestToHost::StateFailed { slot } => {
+                self.show_notice(format_args!("no state could be saved into slot {slot}"));
+            }
         }
     }
 
@@ -392,9 +451,105 @@ impl<D: Display, C: Clock> Session<D, C> {
             return;
         }
         let now = self.clock.now();
-        if self.pending_tick.is_some_and(|due| due <= now) {
+        if self.notice.is_some_and(|until| until <= now) {
+            self.notice = None;
+            // The frame rate comes back at its next refresh.
+            self.display.set_title(&self.title);
+        }
+        // No tick while a request to load a state waits for its answer; see "States".
+        if self.loading.is_none() && self.pending_tick.is_some_and(|due| due <= now) {
             self.send_tick(now);
         }
+    }
+
+    /// Asks the guest to save a state into `slot`, as F3 does for the chosen slot. The
+    /// answer is shown as a notice. Nothing is asked while a modal message waits, and a
+    /// session whose guest cannot be saved shows why instead.
+    pub fn save_state(&mut self, slot: u8) {
+        if self.states_offered() {
+            self.outbox.push_back(HostToGuest::SaveState { slot });
+        }
+    }
+
+    /// Asks for the state of `slot` to be loaded, as F4 does for the chosen slot, under the
+    /// conditions of [`save_state`](Session::save_state). No tick is sent until the answer
+    /// has arrived, and while it has not, another request to load is dropped.
+    pub fn load_state(&mut self, slot: u8) {
+        if self.loading.is_none() && self.states_offered() {
+            self.loading = Some(slot);
+            self.outbox.push_back(HostToGuest::LoadState { slot });
+        }
+    }
+
+    /// The chosen state slot.
+    pub fn state_slot(&self) -> u8 {
+        self.slot
+    }
+
+    /// Whether a state request can be made now. When the session has no states to offer,
+    /// a notice says why.
+    fn states_offered(&mut self) -> bool {
+        if self.end.is_some() || self.pending_modal {
+            return false;
+        }
+        let reason = if !self.states {
+            "states need the guest in a process of its own (--guest process)"
+        } else if self.input.is_some() {
+            "no states while input is recorded or replayed"
+        } else {
+            return true;
+        };
+        self.show_notice(format_args!("{reason}"));
+        false
+    }
+
+    /// Chooses the slot `step` after the chosen one, wrapping around.
+    fn choose_slot(&mut self, step: u8) {
+        if self.pending_modal {
+            return;
+        }
+        self.slot = (self.slot + step) % STATE_SLOTS;
+        let slot = self.slot;
+        self.show_notice(format_args!("state slot {slot}"));
+    }
+
+    /// Shows `notice` in the title for [`NOTICE_TIME`] and reports it.
+    fn show_notice(&mut self, notice: std::fmt::Arguments<'_>) {
+        let notice = notice.to_string();
+        self.notice = Some(self.clock.now() + NOTICE_TIME);
+        let title = format!("{} - {notice}", self.title);
+        self.display.set_title(&title);
+        self.report(Severity::Info, format_args!("{notice}"));
+    }
+
+    /// The state of `slot` was loaded: the guest that sends from here on is one the session
+    /// holds nothing of. See "States".
+    fn state_loaded(&mut self, slot: u8) {
+        self.loading = None;
+        if let Err(error) = self.display.forget_resources() {
+            self.report(
+                Severity::Error,
+                format_args!("cannot forget the bitmaps and tables of the display: {error}"),
+            );
+        }
+        self.fade = Fade::Normal;
+        self.set_mix(Mix::Newest);
+        self.drop_mask();
+        self.pending_modal = false;
+        for channel in [
+            AudioChannel::Bgm,
+            AudioChannel::Bgs,
+            AudioChannel::Me,
+            AudioChannel::Se,
+        ] {
+            self.audio.command(AudioCommand::Stop { channel });
+        }
+        // The frame that waited for its tick was one of the guest that is gone.
+        self.pending_tick = None;
+        self.waiting_frame = None;
+        self.frame_reset = true;
+        self.outbox.push_back(HostToGuest::Input(self.buttons));
+        self.show_notice(format_args!("state loaded from slot {slot}"));
     }
 
     /// Runs the session against its link as far as it can go without waiting: sends what is
@@ -454,6 +609,9 @@ impl<D: Display, C: Clock> Session<D, C> {
             let alt = [KeyCode::AltLeft, KeyCode::AltRight]
                 .iter()
                 .any(|alt| self.held_keys.contains(alt));
+            let shift = [KeyCode::ShiftLeft, KeyCode::ShiftRight]
+                .iter()
+                .any(|shift| self.held_keys.contains(shift));
             match key {
                 RESET_KEY => self.outbox.push_back(HostToGuest::Reset),
                 // Whatever the key map says of these keys, this press holds no button.
@@ -473,6 +631,15 @@ impl<D: Display, C: Clock> Session<D, C> {
                     self.dismiss_modal();
                 }
                 FPS_KEY => self.toggle_fps(),
+                SAVE_STATE_KEY | LOAD_STATE_KEY => {
+                    self.swallowed_keys.insert(key);
+                    match (key == SAVE_STATE_KEY, shift) {
+                        (true, false) => self.save_state(self.slot),
+                        (false, false) => self.load_state(self.slot),
+                        (true, true) => self.choose_slot(1),
+                        (false, true) => self.choose_slot(STATE_SLOTS - 1),
+                    }
+                }
                 FAST_FORWARD_KEY => {
                     self.fast_forward_key = true;
                     self.pacing_restart = true;
@@ -737,8 +904,10 @@ impl<D: Display, C: Clock> Session<D, C> {
                     since: now,
                     ticks: 0,
                 };
-                let title = format!("{} - {rate:.1} FPS", self.title);
-                self.display.set_title(&title);
+                if self.notice.is_none() {
+                    let title = format!("{} - {rate:.1} FPS", self.title);
+                    self.display.set_title(&title);
+                }
             }
         }
     }

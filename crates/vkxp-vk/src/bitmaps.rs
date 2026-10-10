@@ -117,6 +117,12 @@ impl BitmapTable {
         }
     }
 
+    /// The ids of the live bitmaps.
+    pub(crate) fn ids(&self) -> impl Iterator<Item = BitmapId> {
+        let ids = self.slots.iter();
+        ids.map(|(&slot, entry)| BitmapId::new(slot, entry.generation))
+    }
+
     /// Checks one delta and applies it. On error the table is unchanged.
     ///
     /// The checks every backend makes come first, in the reference's order, so a delta that is

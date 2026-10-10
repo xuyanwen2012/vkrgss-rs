@@ -2081,3 +2081,262 @@ fn frame_statistics_do_not_move_a_tick() {
     };
     assert_eq!(due(true), due(false));
 }
+
+// States.
+
+/// A windowed session whose guest can be saved.
+fn states_rig() -> Rig {
+    Rig::with_options(SessionOptions {
+        states: true,
+        wait_for_modal: true,
+        ..SessionOptions::default()
+    })
+}
+
+impl Rig {
+    /// Presses and releases a key and returns what the guest was sent that is no snapshot.
+    fn tap(&mut self, key: KeyCode) -> Vec<HostToGuest> {
+        self.session.key(key, true);
+        self.session.key(key, false);
+        let mut messages = self.session.take_messages();
+        messages.retain(|message| !matches!(message, HostToGuest::Input(_)));
+        messages
+    }
+
+    fn title(&self) -> &str {
+        self.session.display().title()
+    }
+}
+
+/// Scenario "Save and load keys".
+#[test]
+fn the_state_keys_ask_for_a_save_and_a_load_of_slot_0_and_hold_no_button() {
+    let mut rig = states_rig();
+    rig.frame(frame(0));
+    // `taken` keeps every snapshot in which the buttons changed.
+    assert_eq!(
+        rig.key(KeyCode::F3, true),
+        [HostToGuest::SaveState { slot: 0 }]
+    );
+    assert_eq!(rig.key(KeyCode::F3, false), []);
+    assert_eq!(
+        rig.key(KeyCode::F4, true),
+        [HostToGuest::LoadState { slot: 0 }]
+    );
+    assert_eq!(rig.key(KeyCode::F4, false), []);
+    assert_eq!(rig.last.buttons, InputSnapshot::EMPTY.buttons);
+    assert_eq!(rig.session.state_slot(), 0);
+}
+
+/// Scenario "Choosing a slot".
+#[test]
+fn shift_with_the_state_keys_chooses_the_slot() {
+    let mut rig = states_rig();
+    rig.send(GuestToHost::SetTitle {
+        title: "Game".to_owned(),
+    });
+    rig.session.key(KeyCode::ShiftLeft, true);
+    assert_eq!(rig.tap(KeyCode::F3), []);
+    assert_eq!(rig.tap(KeyCode::F3), []);
+    assert_eq!(rig.title(), "Game - state slot 2");
+    rig.session.key(KeyCode::ShiftLeft, false);
+    assert_eq!(rig.tap(KeyCode::F3), [HostToGuest::SaveState { slot: 2 }]);
+
+    // The slots wrap around in both directions.
+    rig.session.key(KeyCode::ShiftRight, true);
+    for expected in [1, 0, 9, 8] {
+        assert_eq!(rig.tap(KeyCode::F4), []);
+        assert_eq!(rig.session.state_slot(), expected);
+    }
+    assert_eq!(rig.tap(KeyCode::F3), []);
+    assert_eq!(rig.tap(KeyCode::F3), []);
+    assert_eq!(rig.session.state_slot(), 0);
+    assert_eq!(rig.errors.severities("state slot").len(), 8);
+    assert_eq!(rig.errors.severities("state slot 8"), [Severity::Info]);
+}
+
+/// Scenario "Not available".
+#[test]
+fn the_state_keys_send_nothing_and_say_why_when_states_are_not_offered() {
+    // The guest is a thread.
+    let mut rig = Rig::windowed();
+    rig.send(GuestToHost::SetTitle {
+        title: "Game".to_owned(),
+    });
+    assert_eq!(rig.tap(KeyCode::F3), []);
+    assert!(rig.title().contains("--guest process"), "{}", rig.title());
+    assert_eq!(rig.tap(KeyCode::F4), []);
+
+    // The input is recorded or replayed.
+    let dir = tempfile::tempdir().unwrap();
+    let recorder = crate::Recorder::create(&dir.path().join("input.rec"), 1).unwrap();
+    let clock = ManualClock::new();
+    let options = SessionOptions {
+        states: true,
+        input: Some(Box::new(recorder)),
+        errors: Box::new(ErrorBuffer::new()),
+        ..SessionOptions::default()
+    };
+    let mut session = Session::new(RecordingDisplay::new(), clock, options);
+    for key in [KeyCode::F3, KeyCode::F4] {
+        session.key(key, true);
+        session.key(key, false);
+        assert_eq!(session.take_messages(), []);
+        let title = session.display().title();
+        assert!(title.contains("recorded or replayed"), "{title}");
+    }
+}
+
+/// Scenario "Modal message".
+#[test]
+fn the_state_keys_do_nothing_while_a_modal_message_is_shown() {
+    let mut rig = states_rig();
+    rig.send(GuestToHost::SetTitle {
+        title: "Game".to_owned(),
+    });
+    rig.send(GuestToHost::Modal {
+        text: "wait".to_owned(),
+    });
+    assert_eq!(rig.tap(KeyCode::F3), []);
+    assert_eq!(rig.tap(KeyCode::F4), []);
+    rig.session.key(KeyCode::ShiftLeft, true);
+    assert_eq!(rig.tap(KeyCode::F3), []);
+    assert_eq!(rig.session.state_slot(), 0);
+    assert_eq!(rig.title(), "Game");
+}
+
+#[test]
+fn the_answers_are_shown_in_the_title_for_two_seconds_and_reported() {
+    let mut rig = states_rig();
+    rig.send(GuestToHost::SetTitle {
+        title: "Game".to_owned(),
+    });
+    rig.frame(frame(0));
+    rig.send(GuestToHost::StateSaved { slot: 4 });
+    assert_eq!(rig.title(), "Game - state saved into slot 4");
+    rig.clock.advance(ms(1999));
+    rig.session.poll();
+    assert_eq!(rig.title(), "Game - state saved into slot 4");
+    rig.clock.advance(ms(1));
+    rig.session.poll();
+    assert_eq!(rig.title(), "Game");
+
+    rig.send(GuestToHost::StateFailed { slot: 5 });
+    assert_eq!(rig.title(), "Game - no state could be saved into slot 5");
+    rig.send(GuestToHost::StateLoaded { slot: 6 });
+    assert_eq!(rig.title(), "Game - state loaded from slot 6");
+    for notice in ["saved into slot 4", "saved into slot 5", "from slot 6"] {
+        assert_eq!(rig.errors.severities(notice), [Severity::Info], "{notice}");
+    }
+}
+
+#[test]
+fn no_tick_is_sent_between_a_request_to_load_and_its_answer() {
+    let mut rig = states_rig();
+    rig.frame(frame(0));
+    assert_eq!(rig.send(frame(1)), []);
+    assert_eq!(rig.tap(KeyCode::F4), [HostToGuest::LoadState { slot: 0 }]);
+    // A second request waits for the answer to the first.
+    assert_eq!(rig.tap(KeyCode::F4), []);
+    rig.clock.advance(ms(100));
+    rig.session.poll();
+    assert_eq!(rig.taken(), []);
+
+    // The slot is empty: the guest goes on and its frame is answered.
+    assert_eq!(
+        rig.send(GuestToHost::StateFailed { slot: 0 }),
+        [HostToGuest::Tick]
+    );
+    assert!(rig.title().ends_with("slot 0 holds no state"));
+    rig.frame(frame(2));
+}
+
+/// Scenarios "Mid transition" and the reset of "Loading a state resets the host's side".
+#[test]
+fn a_loaded_state_resets_what_the_session_holds_of_the_guest() {
+    let sink = RecordingSink::new();
+    let mut rig = Rig::with_options(SessionOptions {
+        states: true,
+        wait_for_modal: true,
+        audio: Box::new(sink.clone()),
+        ..SessionOptions::default()
+    });
+    rig.frame(frame(0));
+    rig.send(GuestToHost::Freeze);
+    rig.send(transition(8));
+    rig.frame(frame(1));
+    rig.frame(frame(2));
+    assert_ne!(rig.shown(), Shown::Frame(2), "a transition is running");
+    rig.send(GuestToHost::Modal {
+        text: "wait".to_owned(),
+    });
+    rig.key(KeyCode::ArrowRight, true);
+    // The tick of this frame is pending when the state is loaded.
+    assert_eq!(rig.send(frame(3)), []);
+    rig.session.load_state(7);
+    assert_eq!(rig.taken(), []);
+    rig.session.load_state(7);
+    assert_eq!(rig.taken(), [], "the modal message keeps the request back");
+    rig.key(KeyCode::Enter, true);
+    rig.key(KeyCode::Enter, false);
+    rig.send(GuestToHost::Modal {
+        text: "again".to_owned(),
+    });
+
+    rig.session.display_mut().events.clear();
+    rig.session.display_mut().pacing.clear();
+    rig.session.loading = Some(7);
+    let sent = rig.send(GuestToHost::StateLoaded { slot: 7 });
+    // The current input again, and no tick for the frame of the guest that is gone.
+    assert_eq!(sent, [held(&[Button::Right])]);
+    assert_eq!(rig.session.next_wake(), None);
+    let events = &rig.session.display().events;
+    assert!(events.contains(&DisplayEvent::Forget), "{events:?}");
+    assert!(
+        events.contains(&DisplayEvent::Mix(Mix::Newest)),
+        "{events:?}"
+    );
+    assert_eq!(
+        sink.commands(),
+        [
+            AudioChannel::Bgm,
+            AudioChannel::Bgs,
+            AudioChannel::Me,
+            AudioChannel::Se
+        ]
+        .map(|channel| AudioCommand::Stop { channel })
+    );
+    // The modal message is dropped: the state keys work again.
+    assert_eq!(rig.tap(KeyCode::F3), [HostToGuest::SaveState { slot: 0 }]);
+
+    // The next frame is shown alone, at its own time: a period after it arrived.
+    rig.clock.advance(ms(500));
+    let arrival = rig.clock.now();
+    assert_eq!(rig.send(frame(4)), []);
+    assert_eq!(rig.shown(), Shown::Frame(4));
+    assert_eq!(rig.session.next_wake(), Some(arrival + ms(25)));
+    assert_eq!(
+        rig.session.display().pacing,
+        [PacingEvent::Restart, PacingEvent::Rate(40)]
+    );
+    rig.wait_for_tick();
+    rig.frame(frame(5));
+    assert_eq!(rig.shown(), Shown::Frame(5));
+}
+
+/// Scenario "Stale resources", as far as the session goes; `tests/headless.rs` has it with
+/// the compositor.
+#[test]
+fn a_loaded_state_makes_the_display_forget_its_bitmaps() {
+    let mut rig = states_rig();
+    let mut first = packet(0, 40);
+    first.bitmaps = vec![BitmapDelta::Create {
+        id: BitmapId::new(3, 0),
+        width: 1,
+        height: 1,
+    }];
+    rig.frame(GuestToHost::Frame(first));
+    assert!(rig.session.display().has_bitmap(BitmapId::new(3, 0)));
+    rig.send(GuestToHost::StateLoaded { slot: 0 });
+    assert!(!rig.session.display().has_bitmap(BitmapId::new(3, 0)));
+}

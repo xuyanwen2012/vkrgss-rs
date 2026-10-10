@@ -22,7 +22,7 @@ use vkxp_vk::{DeviceChoice, Frame, FrameTiming, Mix, VkCompositor, VkError};
 use crate::report::ErrorStream;
 use crate::{
     Clock, Display, InputScript, InputSource, ManualClock, Reporter, Session, SessionEnd,
-    SessionOptions,
+    SessionOptions, StateRequest, StateSchedule,
 };
 
 /// The device a headless run uses unless told otherwise: the CPU rasteriser, so that a run
@@ -77,6 +77,9 @@ pub struct HeadlessOptions {
     /// A recorder or a replayer of the input. The script is the live input a recorder writes
     /// down, and what applies after the last frame of a replayed recording.
     pub input: Option<Box<dyn InputSource>>,
+    /// The states to save and to load at given frames. A run with a schedule takes its
+    /// guest to be one that can be saved: one in a process of its own.
+    pub states: StateSchedule,
     /// Frames to write as PNG files, by frame number.
     pub dumps: Vec<(u64, PathBuf)>,
     /// Whether the frame time statistics are collected and their summary written to
@@ -93,6 +96,7 @@ impl Default for HeadlessOptions {
             frames: None,
             script: InputScript::new(),
             input: None,
+            states: StateSchedule::new(),
             dumps: Vec::new(),
             frame_stats: false,
             errors: Box::new(ErrorStream),
@@ -216,6 +220,10 @@ impl Display for HeadlessDisplay {
         self.compositor.has_bitmap(id)
     }
 
+    fn forget_resources(&mut self) -> Result<(), VkError> {
+        self.compositor.forget_resources()
+    }
+
     fn take_frame_timing(&mut self) -> Option<FrameTiming> {
         self.compositor.take_frame_timing()
     }
@@ -232,7 +240,10 @@ impl Display for HeadlessDisplay {
 /// Runs a session against `link` without a window, until the guest shuts down or the frame
 /// limit is reached. See the module documentation.
 ///
-/// The snapshot of the script's entry for frame `n` is sent before that frame's tick. After
+/// The snapshot of the script's entry for frame `n` is sent before that frame's tick, and so
+/// are the requests of the states schedule for frame `n`, as if the state keys had been
+/// pressed when the frame arrived. The frame after a state was loaded is the next frame of
+/// the run: the frames keep their numbers in the order they arrive. After
 /// the last frame of a limited run the guest gets that frame's tick and then a quit request,
 /// and the run ends without waiting for the guest's answer.
 ///
@@ -247,6 +258,7 @@ pub fn run_headless(
         frames: limit,
         script,
         input,
+        states,
         dumps,
         frame_stats,
         errors,
@@ -265,6 +277,7 @@ pub fn run_headless(
         errors,
         input,
         frame_stats,
+        states: !states.is_empty(),
         ..SessionOptions::default()
     };
     let mut session = Session::new(display, clock.clone(), session_options);
@@ -298,6 +311,15 @@ pub fn run_headless(
             // Queued ahead of the tick that handling the frame produces.
             session.set_buttons(buttons);
         }
+        if is_frame {
+            // Ahead of the tick too; a request to load keeps the tick back.
+            for request in states.at(frames) {
+                match request {
+                    StateRequest::Save(slot) => session.save_state(slot),
+                    StateRequest::Load(slot) => session.load_state(slot),
+                }
+            }
+        }
         session.handle_message(message);
 
         // The number of the frame just handled, if it was one.
@@ -311,11 +333,13 @@ pub fn run_headless(
                 }
             }
             frames += 1;
-            if let Some(due) = session.next_wake() {
-                // The virtual clock never waits: it is moved to the tick.
-                clock.advance_to(due);
-                session.poll();
-            }
+        }
+        // Also after the answer that a state could not be loaded, which the tick of a frame
+        // waited for.
+        if let Some(due) = session.next_wake() {
+            // The virtual clock never waits: it is moved to the tick.
+            clock.advance_to(due);
+            session.poll();
         }
         // Everything the session produced goes out before the run looks at how it stands, so
         // a rejected frame has its tick before the run fails and the guest is cut off.

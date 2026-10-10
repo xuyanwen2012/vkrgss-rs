@@ -7,6 +7,8 @@ pub enum Severity {
     Error,
     /// A degradation the run continues with.
     Warning,
+    /// A notice of what became of something the player asked for.
+    Info,
     /// Text that the game or an option asked for, which is shown at every level.
     Always,
 }

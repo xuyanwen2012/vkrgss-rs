@@ -122,6 +122,11 @@ impl Reporter for HostReporter {
                     tracing::warn!(target: "vkxp_host", "{line}");
                 }
             }
+            Severity::Info => {
+                for line in text.split('\n') {
+                    tracing::info!(target: "vkxp_host", "{line}");
+                }
+            }
             Severity::Always => eprint!("{}", always_lines(text)),
         }
     }

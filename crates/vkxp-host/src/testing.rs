@@ -29,6 +29,8 @@ pub enum DisplayEvent {
     Mask(Option<(BitmapId, u32)>),
     Redraw,
     Title(String),
+    /// Every bitmap and table was forgotten.
+    Forget,
 }
 
 /// What a [`RecordingDisplay`] was told about the pacing of its frames.
@@ -238,6 +240,12 @@ impl Display for RecordingDisplay {
 
     fn has_bitmap(&self, id: BitmapId) -> bool {
         self.bitmaps.contains(&id)
+    }
+
+    fn forget_resources(&mut self) -> Result<(), Rejected> {
+        self.events.push(DisplayEvent::Forget);
+        self.bitmaps.clear();
+        Ok(())
     }
 
     fn set_frame_rate(&mut self, rate: FrameRate) {

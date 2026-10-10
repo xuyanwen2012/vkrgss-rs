@@ -11,8 +11,8 @@
 
 ## 3. Host (`vkxp-host`)
 
-- [ ] 3.1 Slots, keys, notices, and the reset on a loaded state; the display trait learns to forget its resources (in `vkxp-vk` or `vkxp-compose-ref` only what that needs). Verify: the scenarios of "State slots and keys" and "Loading a state resets the host's side"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-host --locked` passes.
-- [ ] 3.2 The schedule of the headless runner. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-host --locked` passes with a test of a scheduled request reaching the guest at its frame.
+- [x] 3.1 Slots, keys, notices, and the reset on a loaded state; the display trait learns to forget its resources (in `vkxp-vk` or `vkxp-compose-ref` only what that needs). Verify: the scenarios of "State slots and keys" and "Loading a state resets the host's side"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-host --locked` passes.
+- [x] 3.2 The schedule of the headless runner. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-host --locked` passes with a test of a scheduled request reaching the guest at its frame.
 
 ## 4. Processes (`vkxp`)
 

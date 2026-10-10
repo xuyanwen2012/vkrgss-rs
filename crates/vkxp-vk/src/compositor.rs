@@ -649,6 +649,32 @@ impl VkCompositor {
         }
     }
 
+    /// Forgets every bitmap and table, as the deltas that destroy each of them would. The
+    /// frame target and what the presenter holds stay. For a guest that starts sending anew:
+    /// the next packet may create any bitmap and set any table.
+    pub fn forget_resources(&mut self) -> Result<(), VkError> {
+        let bitmaps: Vec<BitmapDelta> = self
+            .table
+            .ids()
+            .collect::<Vec<_>>()
+            .into_iter()
+            .map(|id| BitmapDelta::Destroy { id })
+            .collect();
+        let tables: Vec<TableDelta> = self
+            .tables
+            .ids()
+            .collect::<Vec<_>>()
+            .into_iter()
+            .map(|id| TableDelta::Destroy { id })
+            .collect();
+        let mut pending = Pending::default();
+        let checked = self
+            .queue_deltas(&bitmaps, &mut pending)
+            .and_then(|()| self.apply_table_deltas(&tables));
+        self.execute(pending, None)?;
+        checked
+    }
+
     /// The most recently rendered frame, copied from the device, or `None` before the first
     /// successful [`render`](VkCompositor::render).
     pub fn read_frame(&mut self) -> Result<Option<Frame>, VkError> {

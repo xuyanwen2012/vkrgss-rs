@@ -37,6 +37,10 @@ pub trait Display {
     /// Whether the display has the bitmap `id`, from the packets rendered so far.
     fn has_bitmap(&self, id: BitmapId) -> bool;
 
+    /// Forgets every bitmap and table, as if no packet had been rendered. The newest and
+    /// the held frame stay. For a guest that starts sending anew.
+    fn forget_resources(&mut self) -> Result<(), Self::Error>;
+
     /// Tells the display the frame rate of the packet it is about to render. A display that
     /// can ask for the time a frame appears on screen spaces its frames by the period of
     /// that rate; the others ignore it.

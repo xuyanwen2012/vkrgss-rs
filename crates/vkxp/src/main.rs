@@ -465,6 +465,7 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
             frames: options.frames,
             script,
             input,
+            states: vkxp_host::StateSchedule::new(),
             dumps,
             frame_stats: options.frame_stats,
             errors: Box::new(log::HostReporter),

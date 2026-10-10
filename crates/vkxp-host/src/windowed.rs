@@ -57,6 +57,9 @@ pub struct WindowedOptions {
     /// Whether the frame time statistics are collected and their summary written to
     /// `errors`, every [`STATS_INTERVALS`] frames and when the session ends.
     pub frame_stats: bool,
+    /// Whether the guest can be saved and loaded with the state keys: it runs in a process
+    /// of its own, behind something that keeps its states.
+    pub states: bool,
     /// Where the session reports modal texts and errors, which it takes when it starts.
     pub errors: Box<dyn Reporter>,
     /// Where the audio side reports sounds that cannot be played, taken likewise.
@@ -78,6 +81,7 @@ impl WindowedOptions {
             input: None,
             present_stats: false,
             frame_stats: false,
+            states: false,
             errors: Box::new(ErrorStream),
             audio_errors: Box::new(std::io::stderr()),
         }
@@ -291,6 +295,10 @@ impl Display for VulkanDisplay {
         self.compositor.has_bitmap(id)
     }
 
+    fn forget_resources(&mut self) -> Result<(), VkError> {
+        self.compositor.forget_resources()
+    }
+
     fn take_frame_timing(&mut self) -> Option<FrameTiming> {
         self.compositor.take_frame_timing()
     }
@@ -397,6 +405,7 @@ impl App {
             wait_for_modal: true,
             frame_stats: self.options.frame_stats,
             frame_stats_interval: Some(STATS_INTERVALS),
+            states: self.options.states,
             // The options keep a reporter that nothing is given to.
             errors: std::mem::replace(&mut self.options.errors, Box::new(ErrorStream)),
             ..SessionOptions::default()
