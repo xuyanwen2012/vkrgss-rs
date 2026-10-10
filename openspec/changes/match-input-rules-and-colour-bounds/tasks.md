@@ -7,7 +7,7 @@
 
 ## 2. Colour bounds (`vkxp-core`, tests of `vkxp-binding`)
 
-- [ ] 2.1 Clamp colour components as measured. Verify: the scenarios of `specs/core-values/spec.md` and `specs/rgss-values/spec.md`; `cargo test -p vkxp-core -p vkxp-binding --locked` passes with `VK_LOADER_DRIVERS_SELECT='*lvp*'`.
+- [x] 2.1 Clamp colour components as measured. Verify: the scenarios of `specs/core-values/spec.md` and `specs/rgss-values/spec.md`; `cargo test -p vkxp-core -p vkxp-binding --locked` passes with `VK_LOADER_DRIVERS_SELECT='*lvp*'`.
 
 ## 3. Oracle probe and notes
 

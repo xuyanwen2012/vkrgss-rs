@@ -133,14 +133,15 @@ pub(crate) const VALUE_SURFACE: &[Case] = &[
 pub(crate) const COLOR_AND_TONE: &[Case] = &[
     value(
         "construction and clamping",
-        "c = Color.new(300, -5, 12.5); [c.red, c.green, c.blue, c.alpha]",
-        "[255.0, -5.0, 12.5, 255.0]",
+        "c = Color.new(300, -300, 12.5, -7); [c.red, c.green, c.blue, c.alpha]",
+        "[255.0, -255.0, 12.5, 0.0]",
     ),
     value(
-        "only the upper bound of a colour is clamped, both bounds of a tone",
-        "c = Color.new(300, -5, 0); t = Tone.new(300, -300, 0); c.blue = -20; c.alpha = 999; \
+        "both bounds of a colour and of a tone are clamped, by the setters as well",
+        "c = Color.new(300, -5, 0); t = Tone.new(300, -300, 0); \
+         c.red = 1000; c.green = -1000; c.blue = -20; c.alpha = -3.5; \
          [c.red, c.green, c.blue, c.alpha, t.red, t.green]",
-        "[255.0, -5.0, -20.0, 255.0, 255.0, -255.0]",
+        "[255.0, -255.0, -20.0, 0.0, 255.0, -255.0]",
     ),
     value(
         "a negative red is kept by the colour and stored modulo 256",
