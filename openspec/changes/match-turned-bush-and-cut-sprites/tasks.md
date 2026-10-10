@@ -2,9 +2,9 @@
 
 ## 1. Turned sprites (`vkxp-core`)
 
-- [ ] 1.1 Compute the box of a turned sprite in a viewport from the position less the viewport's origin and the source positions from the position itself. Verify: scenario "Viewport with an origin" on the cases of topics `turnedvp` and `geom2` in `ph-scene-geom-samples.txt`, copied into the crate's test data; `cargo test -p vkxp-core --locked` passes.
-- [ ] 1.2 Make the lowest rows of the unclipped box the faint ones. Verify: scenario "Turned bush rows" and the cases of topic `bush`; the test at `extract/tests.rs` that states the old rule is rewritten; `cargo test -p vkxp-core --locked` passes.
-- [ ] 1.3 Draw nothing of a turned sprite whose source rectangle leaves its bitmap. Verify: scenario "Source rectangle leaving the bitmap"; `cargo test -p vkxp-core --locked` passes.
+- [x] 1.1 Compute the box of a turned sprite in a viewport from the position less the viewport's origin and the source positions from the position itself. Verify: scenario "Viewport with an origin" on the cases of topics `turnedvp` and `geom2` in `ph-scene-geom-samples.txt`, copied into the crate's test data; `cargo test -p vkxp-core --locked` passes.
+- [x] 1.2 Make the lowest rows of the unclipped box the faint ones. Verify: scenario "Turned bush rows" and the cases of topic `bush`; the test at `extract/tests.rs` that states the old rule is rewritten; `cargo test -p vkxp-core --locked` passes.
+- [x] 1.3 Draw nothing of a turned sprite whose source rectangle leaves its bitmap. Verify: scenario "Source rectangle leaving the bitmap"; `cargo test -p vkxp-core --locked` passes.
 
 ## 2. Unrotated sprites (`vkxp-core`)
 

@@ -38,6 +38,9 @@ pub(crate) struct Level {
     /// Added to the position of every element.
     pub(crate) dx: i64,
     pub(crate) dy: i64,
+    /// The origin of the viewport, which `dx` and `dy` hold subtracted; 0 for the screen.
+    pub(crate) ox: i64,
+    pub(crate) oy: i64,
 }
 
 /// Where the elements of `viewport` are drawn, or of the screen for `None`. No level when
@@ -53,6 +56,8 @@ pub(crate) fn level_of(
             clip: screen,
             dx: 0,
             dy: 0,
+            ox: 0,
+            oy: 0,
         });
     };
     let viewport = viewports.get(id.0)?;
@@ -61,6 +66,8 @@ pub(crate) fn level_of(
         clip,
         dx: i64::from(viewport.rect.x) - i64::from(viewport.ox),
         dy: i64::from(viewport.rect.y) - i64::from(viewport.oy),
+        ox: i64::from(viewport.ox),
+        oy: i64::from(viewport.oy),
     })
 }
 
@@ -743,3 +750,6 @@ pub(crate) mod testing {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod samples;

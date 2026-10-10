@@ -939,36 +939,39 @@ fn a_bush_depth_beyond_the_source_height_covers_the_whole_sprite() {
     }
 }
 
-/// PLACEHOLDER: not measured; the lowest rows of the source rectangle of a turned sprite
-/// are faint, wherever they are on the screen.
+/// The lowest rows of the box of a turned sprite are the faint ones, whatever texels they
+/// show: after a half turn those are the top rows of the source.
 #[test]
-fn the_bush_depth_of_a_turned_sprite_counts_rows_of_its_source() {
+fn the_bush_depth_of_a_turned_sprite_counts_rows_of_its_box() {
     let mut stage = Stage::sized(64, 64);
     let bitmap = grid(&mut stage, 6, 6);
     let id = sprite(&mut stage, bitmap, 30, 30);
     let sprite = stage.scene.sprite_mut(id).unwrap();
-    (sprite.ox, sprite.oy) = (2, 5);
-    (sprite.zoom_x, sprite.zoom_y) = (3.0, 2.5);
-    sprite.angle = 30.0;
-    sprite.mirror = true;
+    (sprite.zoom_x, sprite.zoom_y) = (3.0, 2.0);
+    sprite.angle = 180.0;
     let plain = drawn(&stage.frame());
-    stage.scene.sprite_mut(id).unwrap().bush_depth = 2;
+    stage.scene.sprite_mut(id).unwrap().bush_depth = 3;
     let bushy = drawn(&stage.frame());
-    assert!(plain.len() > 200);
+    assert!(plain.len() > 150);
     assert_eq!(plain.len(), bushy.len());
+    // The box ends at the position of the sprite, row 30, which is not drawn.
+    assert_eq!(plain.iter().map(|pixel| pixel.1).max(), Some(29));
+    let top_rows: Vec<Rgba> = (0..2)
+        .flat_map(|y| (0..6).map(move |x| cell(x, y)))
+        .collect();
     let mut faint = 0;
     for (full, found) in plain.iter().zip(&bushy) {
         let pixel = full.2;
-        // The rows 4 and 5 of the grid.
-        let expected = if pixel[1] >= cell(0, 4)[1] {
+        let expected = if full.1 >= 27 {
             faint += 1;
-            vkxp_pixel::blend_normal(BLACK, [pixel[0], pixel[1], pixel[2], 127], 255)
+            assert!(top_rows.contains(&pixel), "{full:?}");
+            vkxp_pixel::blend_normal(BLACK, pixel, 127)
         } else {
             pixel
         };
         assert_eq!(*found, (full.0, full.1, expected));
     }
-    assert!(faint > 60, "{faint}");
+    assert!(faint > 30, "{faint}");
 }
 
 #[test]
