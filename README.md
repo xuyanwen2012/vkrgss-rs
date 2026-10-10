@@ -176,6 +176,7 @@ Paths on the command line are relative to the directory the program was started 
 | `--preload FILE` | A Ruby file evaluated after the built-in scripts and before the game's first script, and again after a reset. Repeatable, in the order given. |
 | `--record FILE` | Write the input of every frame and the seed to `FILE`. |
 | `--replay FILE` | Play the input of a recording back instead of the keyboard. Not together with `--record` or `--input`. |
+| `--guest thread\|process` | Where the game's scripts run: on a thread of the program, which is the default, or in a process of their own. See *Guest process*. |
 | `--headless` | Run without a window, on a virtual clock that never waits. |
 | `--frames N` | Headless: stop after N frames if the game has not ended. |
 | `--input SCRIPT\|@FILE` | Headless: the buttons held from given frames on, in the syntax described under *Running the demo*, or a file that holds such a script. |
@@ -253,6 +254,7 @@ frames = 600                                 # --frames
 input = "40:C, 42:"                          # --input; "@keys.txt" names a file
 dump = ["100=frame.png"]                     # --dump FRAME=FILE, one entry per frame
 record = "session.txt"                       # --record
+guest = "thread"                             # --guest: "thread" or "process"
 # replay = "session.txt"                     # --replay; not together with record or input
 
 [rtp]                                        # --rtp NAME=DIR
@@ -495,6 +497,38 @@ then ends with a message and a non-zero status.
 The end-to-end test of the `vkxp` crate runs the built program this way on games it assembles
 itself, with a stand-in for the built-in scripts. Like the other tests that render, it refuses
 to run while the loader is not restricted, and it passes the restriction on to the program.
+
+### Guest process
+
+The game's scripts, with the interpreter, the bitmaps and the game's files, are the guest;
+the window, the GPU, the audio device and the input are the host. By default the guest is a
+thread of the program. With `--guest process` it is a child process:
+
+```sh
+VK_LOADER_DRIVERS_SELECT='*radeon*' \
+    cargo run -p vkxp -- <game directory> --rtp Standard=<RTP directory> --guest process
+```
+
+The environment variable `VKXP_GUEST` and the key `guest` of a configuration file name the
+form too; the command line comes before the environment and the environment before the
+files. Any value but `thread` and `process` is an error.
+
+The program starts itself again for the guest, with its own arguments, and the two exchange
+the messages of the protocol over a Unix stream socket in a directory only the user can
+enter, below `$XDG_RUNTIME_DIR` or, without that variable, below the temporary directory. The
+directory is removed when the run ends. The guest process opens no window, no Vulkan device
+and no audio device.
+
+A run does and shows the same in both forms: the same frames, the same reports on the error
+stream, the same exit status. What differs:
+
+- A crash of the interpreter ends the guest process and not the window with it; the program
+  reports the signal that ended the guest and exits with a non-zero status.
+- The guest process is ended by the kernel should the program itself be killed.
+- With `--frame-stats` the guest's own rows are written by the guest process.
+- A bitmap that changes is copied through the socket instead of handed over.
+
+Save states and a sandbox for the guest process build on this form and do not exist yet.
 
 ### Seed, preload scripts and input recordings
 

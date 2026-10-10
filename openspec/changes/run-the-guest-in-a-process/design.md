@@ -85,6 +85,62 @@ that names the two.
 - Two processes write to one error stream; lines are written whole, so they interleave by
   line.
 
+## Notes from the implementation
+
+- The relay serves the two directions of one `GuestEnd` on two threads, and the host only
+  sees the guest as gone when the sending direction is dropped while the other may still
+  wait. `GuestEnd::split` in `vkxp_proto::link` gives the two directions (`GuestSender`,
+  `GuestReceiver`) for that; the guest process does not use it.
+- The receive that does not wait puts the socket into non-blocking mode for the time of the
+  call, because `vkxp-proto` forbids `unsafe` and the standard library has no other way.
+  The guest process uses its end from one thread, so no send meets that mode.
+- The bound of the framing is 1 GiB. A reader allocates as bytes arrive, not what a length
+  states.
+- The hidden option is `--guest-role SEED=SOCKET`.
+- The parent looks up what the guest needs (`Game.ini`, run-time packages, the built-in
+  scripts file) before it starts the child, so those errors are reported once and before a
+  window opens, as in the thread form. The child connects once the game's files are open and
+  the interpreter runs; the parent's time limit for that is 30 seconds, and a child that
+  exits before it connects ends the wait at once.
+- The parent starts the child on the main thread: the parent-death signal follows the thread
+  that started the process, and the windowed runner runs the relay on a thread of its own.
+- `--frame-stats` needed no change in `vkxp-binding`: the guest already writes its own rows
+  to the error stream of the process it runs in.
+- The end-to-end tests set `XDG_RUNTIME_DIR` to their work directory, as they do with the
+  other XDG directories.
+
+## Checked
+
+Headless runs of 600 frames on llvmpipe with `--frame-stats`, of two games generated for the
+measurement (kept under `local/`, not committed), release build, mean times in milliseconds.
+`full` fills a bitmap of 640 by 480 pixels with a new colour every frame, so every frame
+carries 1.2 MiB of pixels; `small` moves a sprite of 32 by 32 pixels and carries none.
+
+| Game | Form | `guest` (host's row) | `guest extraction` | `guest scripts` | `guest bitmap operations` | `submit` |
+|---|---|---|---|---|---|---|
+| `full` | thread | 0.039 | 0.021 | 0.002 | 0.013 | 1.120 |
+| `full` | process | 1.542 | 0.826 | 0.003 | 0.014 | 1.138 |
+| `small` | thread | 0.007 | 0.001 | 0.001 | 0.000 | 0.644 |
+| `small` | process | 0.011 | 0.001 | 0.001 | 0.000 | 0.638 |
+
+The largest `guest` time of `full` was 0.428 ms as a thread and 2.276 ms as a process. A
+frame that replaces every pixel of the screen costs about 1.5 ms more in a process, against
+the budget of 25 ms; a frame without bitmap changes costs a few microseconds more.
+
+The development build (`cargo build` without `--release`) is slower at the same thing: `full`
+as a process has a `guest` mean of 8.461 ms there (0.092 ms as a thread), nearly all of it in
+`guest extraction` (7.558 ms), where the frame is encoded. Encoding that frame packet alone
+takes 7.2 ms in the development build and 0.37 ms in the release build.
+
+Not run: the process form in a window. The end-to-end tests and the measurement are headless;
+the windowed runner is given the same relay as its guest.
+
 ## Follow-ups
 
-(none yet)
+- The pixels of a bitmap change are encoded byte by byte through `serde`. Encoding them as
+  one byte string (the bytes on the stream stay the same in `postcard`) would take most of
+  the 7 ms of a development build and part of the 0.8 ms of a release build away. It changes
+  `vkxp-proto`'s frame types or adds a dependency, which this change does not name.
+- When `$XDG_RUNTIME_DIR` is set but cannot be written to, the run with `--guest process`
+  ends with an error that names the directory. Whether it should go on to the temporary
+  directory instead is open; the design names that directory only for an unset variable.

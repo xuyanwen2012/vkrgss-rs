@@ -14,8 +14,8 @@
 
 ## 3. Documentation and measurement
 
-- [ ] 3.1 Describe the option in `README.md` and replace the sentence of `docs/decisions.md` that says both sides are threads of one process by what holds now (thread by default, process on request, save states still to come). Verify: `cargo xtask gate` checks pass for documentation; the texts name `--guest`.
-- [ ] 3.2 Measure a headless run of a generated game of at least 300 frames with `--frame-stats` in both forms on llvmpipe and record the two summaries under a heading "Checked" in `design.md`. Verify: the heading exists with both sets of numbers.
+- [x] 3.1 Describe the option in `README.md` and replace the sentence of `docs/decisions.md` that says both sides are threads of one process by what holds now (thread by default, process on request, save states still to come). Verify: `cargo xtask gate` checks pass for documentation; the texts name `--guest`.
+- [x] 3.2 Measure a headless run of a generated game of at least 300 frames with `--frame-stats` in both forms on llvmpipe and record the two summaries under a heading "Checked" in `design.md`. Verify: the heading exists with both sets of numbers.
 
 ## 4. Integration check
 

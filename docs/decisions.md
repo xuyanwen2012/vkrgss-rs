@@ -24,8 +24,11 @@ settled; change one only through an OpenSpec change that says so.
 - **Host** (main thread plus audio thread): winit event loop, Vulkan, audio device, input.
 - Only plain data crosses the boundary: frame packets, audio commands, input snapshots, modal
   message requests. The guest never holds a GPU, window or audio handle.
-- In the first version both sides are threads in one process. The discipline exists so the guest
-  can later move into its own process (fork-based in-memory save states, OS-level sandbox).
+- The guest is a thread of the host's process by default. On request (`--guest process`, the
+  environment variable `VKXP_GUEST`, the configuration key `guest`) it runs in a child process
+  and the same messages cross a Unix stream socket (change `run-the-guest-in-a-process`). The
+  process form is what fork-based in-memory save states and an OS-level sandbox need; both are
+  still to come.
 - The guest is deterministic: time comes from frame ticks and a host-provided clock, input is
   sampled once per `Input.update`, the random seed can be injected. Input record and replay is a
   first-version test facility.
