@@ -154,6 +154,9 @@ settled; change one only through an OpenSpec change that says so.
 Status as of 2026-10-09. "Evidence" names what was checked; "Not covered" is what the status
 does not claim.
 
+The owner confirmed on 2026-10-09 that all milestones M0 to M6 are complete as recorded here,
+accepting the limits listed under "Not covered". Work beyond them is new work.
+
 | | Outcome | Status | Evidence | Not covered |
 |---|---|---|---|---|
 | M0 | Workspace skeleton, guest/host protocol, oracle harness | Done | `cargo xtask oracle` compares a game frame by frame with the original runtime under Wine; used on eight game set-ups | |
