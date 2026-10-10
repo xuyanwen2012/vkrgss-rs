@@ -1305,9 +1305,8 @@ fn rejected_packet_leaves_what_is_shown_unchanged() {
     let (mut compositor, frame) = rendered(&gradient(SIZE));
     let invalid = packet(
         SIZE,
-        vec![Op::Plane {
-            clip: Rect::from_size(SIZE),
-        }],
+        // A quad of a bitmap that does not exist.
+        vec![Op::Quad(sprite(BitmapId::new(9, 0), 1, 1, 0, 0))],
     );
     assert!(compositor.render(&invalid).is_err());
     assert_eq!(compositor.scale_frame(SIZE).unwrap(), frame);

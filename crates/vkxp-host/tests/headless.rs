@@ -16,7 +16,10 @@ use vkxp_host::{
     headless_link, run_headless,
 };
 use vkxp_proto::link::{Disconnected, GuestEnd};
-use vkxp_proto::{Button, Color, GuestToHost, HostToGuest, InputSnapshot, Op, Rect, Size};
+use vkxp_proto::{
+    BitmapId, BlendMode, Button, Color, GuestToHost, HostToGuest, InputSnapshot, Op, Quad, Rect,
+    Sampling, Size, Tone,
+};
 use vkxp_vk::DeviceChoice;
 
 #[test]
@@ -30,6 +33,20 @@ fn unrestricted_loader_is_refused_before_any_vulkan_call() {
     );
     let restricted = |name: &str| (name == "VK_LOADER_DRIVERS_SELECT").then(|| "*lvp*".to_owned());
     assert_eq!(common::isolation_error(restricted), None);
+}
+
+/// An op that every compositor rejects: a quad of a bitmap that does not exist.
+fn invalid_op() -> Op {
+    Op::Quad(Quad {
+        clip: Rect::new(0, 0, 4, 4),
+        bitmap: BitmapId::new(900, 0),
+        src: Rect::new(0, 0, 1, 1),
+        sampling: Sampling::place_at(0, 0),
+        tone: Tone::NEUTRAL,
+        color: Color::new(0, 0, 0, 0),
+        opacity: 255,
+        blend: BlendMode::Normal,
+    })
 }
 
 fn options() -> HeadlessOptions {
@@ -426,9 +443,7 @@ fn rejected_frame_gets_its_tick_and_then_fails_the_run_with_the_error_reported()
             for index in 0..3 {
                 let mut frame = small_frame(index);
                 if let (2, GuestToHost::Frame(packet)) = (index, &mut frame) {
-                    packet.ops.push(Op::Plane {
-                        clip: Rect::new(0, 0, 4, 4),
-                    });
+                    packet.ops.push(invalid_op());
                 }
                 link.send(frame)
                     .expect("the host is there for the first three frames");
@@ -468,10 +483,7 @@ fn rejected_frame_gets_its_tick_and_then_fails_the_run_with_the_error_reported()
     );
     let text = errors.text();
     assert!(text.contains("frame 2 was rejected"), "{text}");
-    assert!(
-        text.contains("unsupported op kind `Plane` (op 1)"),
-        "{text}"
-    );
+    assert!(text.contains("op 1 is invalid"), "{text}");
     assert!(!dump.exists(), "a rejected frame is not dumped");
 }
 
@@ -488,9 +500,7 @@ fn input_scripted_for_a_rejected_frame_still_arrives_before_its_tick() {
                 unreachable!("small_frame makes a frame");
             };
             packet.ops.clear();
-            packet.ops.push(Op::Plane {
-                clip: Rect::new(0, 0, 4, 4),
-            });
+            packet.ops.push(invalid_op());
             link.send(GuestToHost::Frame(packet)).unwrap();
             [link.recv(), link.recv(), link.recv()]
         },

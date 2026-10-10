@@ -7,7 +7,7 @@
 
 use ash::vk;
 use thiserror::Error;
-use vkxp_proto::{BitmapId, OpKind, Rect, Size, TableId};
+use vkxp_proto::{BitmapId, Rect, Size, TableId};
 
 use crate::DeviceInfo;
 
@@ -108,9 +108,6 @@ impl std::fmt::Display for Limit {
 /// Why the backend could not start, or why a frame packet produced no frame.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum VkError {
-    /// The op kind is declared in the protocol but not implemented by this backend.
-    #[error("unsupported op kind `{kind}` (op {index})")]
-    UnsupportedOp { kind: OpKind, index: usize },
     #[error("op {index} is invalid: {source}")]
     InvalidOpBitmap { index: usize, source: BitmapError },
     #[error("op {index} reads {src:?} of bitmap {bitmap}, outside its {width}x{height} pixels")]

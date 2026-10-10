@@ -1,13 +1,14 @@
 //! One test per scenario of `specs/frame-composition/spec.md`, plus the bitmap-reference and
-//! reserved-op scenarios of `specs/guest-host-protocol/spec.md` that a backend has to honour.
+//! op-kind scenarios of `specs/guest-host-protocol/spec.md` that a backend has to honour.
 //!
 //! Expected values are written out by hand here, independently of the committed fixture images.
 
 use vkxp_compose_ref::fixtures::{self, bitmap, sprite};
 use vkxp_compose_ref::{BACKGROUND, BitmapError, ComposeError, Compositor, Frame, SlotState};
 use vkxp_pixel::Rgba;
+use vkxp_proto::codec::{decode_stream, encode_stream};
 use vkxp_proto::{
-    BitmapDelta, BitmapId, BlendMode, Color, FramePacket, FrameRate, Op, OpKind, Quad, Rect,
+    BitmapDelta, BitmapId, BlendMode, Color, FramePacket, FrameRate, GuestToHost, Op, Quad, Rect,
     RectEffect, Sampling, Size, Tone,
 };
 
@@ -790,33 +791,15 @@ fn destroyed_bitmap_without_reuse_is_an_invalid_reference() {
     );
 }
 
-// guest-host-protocol, Requirement: Reserved ops are rejected explicitly
+// guest-host-protocol, Requirement: Every op kind is implemented
 
 #[test]
-fn reserved_op_kind_gets_a_typed_error_and_no_frame() {
-    let reserved = [(Op::Plane { clip: SCREEN }, OpKind::Plane, "Plane")];
-    for (op, kind, name) in reserved {
-        // Valid ops before and after do not rescue the frame.
-        let result = Compositor::new().render(&packet(vec![], vec![clear(GREY), op, clear(RED)]));
-        let error = result.unwrap_err();
-        assert_eq!(error, ComposeError::UnsupportedOp { kind, index: 1 });
-        assert!(error.to_string().contains(name), "{error}");
-    }
-}
-
-#[test]
-fn reserved_op_in_a_stream_stops_it_without_a_frame() {
-    let messages = [vkxp_proto::GuestToHost::Frame(packet(
-        vec![],
-        vec![Op::Plane { clip: SCREEN }],
-    ))];
-    assert_eq!(
-        vkxp_compose_ref::render_stream(&messages),
-        Err(ComposeError::UnsupportedOp {
-            kind: OpKind::Plane,
-            index: 0,
-        })
-    );
+fn one_op_of_each_kind_round_trips_and_is_accepted() {
+    let messages = [fixtures::one_op_of_each_kind()];
+    let bytes = encode_stream(&messages).unwrap();
+    let decoded = decode_stream::<GuestToHost>(&bytes).unwrap();
+    assert_eq!(decoded, messages);
+    vkxp_compose_ref::render_stream(&decoded).unwrap();
 }
 
 // Rejected input

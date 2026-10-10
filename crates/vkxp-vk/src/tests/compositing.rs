@@ -7,7 +7,7 @@
 use vkxp_compose_ref::fixtures::{self, bitmap, sprite};
 use vkxp_proto::{
     AudioChannel, AudioCommand, BitmapDelta, BitmapId, Color, FramePacket, FrameRate, GuestToHost,
-    Op, OpKind, Rect, Size,
+    Op, Rect, Size,
 };
 
 use super::differential::{Pair, assert_stream_matches};
@@ -18,6 +18,8 @@ const SIZE: Size = Size::new(20, 18);
 const SCREEN: Rect = Rect::from_size(SIZE);
 const BLACK: [u8; 4] = [0, 0, 0, 255];
 const ID: BitmapId = BitmapId::new(0, 0);
+/// A bitmap that no packet of these tests creates.
+const MISSING: BitmapId = BitmapId::new(9, 0);
 
 fn packet(bitmaps: Vec<BitmapDelta>, ops: Vec<Op>) -> FramePacket {
     FramePacket {
@@ -32,6 +34,11 @@ fn packet(bitmaps: Vec<BitmapDelta>, ops: Vec<Op>) -> FramePacket {
 
 fn frame(bitmaps: Vec<BitmapDelta>, ops: Vec<Op>) -> GuestToHost {
     GuestToHost::Frame(packet(bitmaps, ops))
+}
+
+/// An op that fails its packet: a quad of a bitmap that does not exist.
+fn invalid_op() -> Op {
+    Op::Quad(sprite(MISSING, 1, 1, 0, 0))
 }
 
 fn clear(color: [u8; 4]) -> Op {
@@ -151,10 +158,10 @@ fn op_error_after_valid_deltas_keeps_the_bitmap() {
     let failed = pair
         .step(&frame(
             bitmap(ID, 4, 4, red).into(),
-            vec![clear([1, 2, 3, 255]), Op::Plane { clip: SCREEN }],
+            vec![clear([1, 2, 3, 255]), invalid_op()],
         ))
         .unwrap();
-    assert!(failed.is_err(), "the reserved op must fail the packet");
+    assert!(failed.is_err(), "the invalid op must fail the packet");
 
     // The next packet draws the bitmap the failed packet created.
     let drawn = pair
@@ -170,10 +177,13 @@ fn op_error_after_valid_deltas_keeps_the_bitmap() {
 fn op_error_produces_no_frame() {
     let mut compositor = TestCompositor::new();
     assert_eq!(
-        compositor.render(&packet(vec![], vec![Op::Plane { clip: SCREEN }])),
-        Err(VkError::UnsupportedOp {
-            kind: OpKind::Plane,
-            index: 0
+        compositor.render(&packet(vec![], vec![invalid_op()])),
+        Err(VkError::InvalidOpBitmap {
+            index: 0,
+            source: BitmapError::InvalidReference {
+                id: MISSING,
+                slot: SlotState::Empty
+            },
         })
     );
     assert_eq!(compositor.read_frame(), Ok(None));
@@ -184,10 +194,7 @@ fn op_error_produces_no_frame() {
         .unwrap();
     assert!(
         compositor
-            .render(&packet(
-                vec![],
-                vec![clear([9, 9, 9, 9]), Op::Plane { clip: SCREEN }]
-            ))
+            .render(&packet(vec![], vec![clear([9, 9, 9, 9]), invalid_op()]))
             .is_err()
     );
     assert_pixels(&compositor.read_frame().unwrap().unwrap(), |_, _| {
@@ -257,7 +264,7 @@ fn delta_error_is_reported_before_any_op_error() {
     assert_eq!(
         compositor.render(&packet(
             vec![BitmapDelta::Destroy { id }],
-            vec![Op::Plane { clip: SCREEN }]
+            vec![invalid_op()]
         )),
         Err(VkError::InvalidDelta {
             index: 0,
@@ -363,7 +370,7 @@ fn non_frame_messages_are_ignored_as_in_the_reference() {
     }
     // An invalid frame message is an error from `handle`, as from `render`.
     assert!(
-        pair.step(&frame(vec![], vec![Op::Plane { clip: SCREEN }]))
+        pair.step(&frame(vec![], vec![invalid_op()]))
             .unwrap()
             .is_err()
     );

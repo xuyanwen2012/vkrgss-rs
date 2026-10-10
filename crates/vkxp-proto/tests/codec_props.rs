@@ -95,7 +95,6 @@ fn op() -> impl Strategy<Value = Op> {
             tone,
             color
         })),
-        rect().prop_map(|clip| Op::Plane { clip }),
         tilemap_layer().prop_map(Op::TilemapLayer),
     ]
 }

@@ -6,8 +6,8 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use vkxp_compose_ref::fixtures;
+use vkxp_proto::GuestToHost;
 use vkxp_proto::codec::encode_stream;
-use vkxp_proto::{FramePacket, FrameRate, GuestToHost, Op, Rect, Size};
 
 /// The example binary, which `cargo test` builds next to the test binaries.
 fn example() -> PathBuf {
@@ -75,26 +75,6 @@ fn example_rejects_a_stream_of_another_protocol_version() {
     assert!(!wrote_output);
     let stderr = String::from_utf8_lossy(&run.stderr);
     assert!(stderr.contains("unsupported protocol version"), "{stderr}");
-}
-
-#[test]
-fn example_reports_a_reserved_op_and_writes_nothing() {
-    let size = Size::new(4, 4);
-    let messages = [GuestToHost::Frame(FramePacket {
-        frame_index: 0,
-        logical_size: size,
-        frame_rate: FrameRate::DEFAULT,
-        tables: vec![],
-        bitmaps: vec![],
-        ops: vec![Op::Plane {
-            clip: Rect::from_size(size),
-        }],
-    })];
-    let (run, wrote_output) = run_on(&encode_stream(&messages).unwrap());
-    assert_eq!(run.status.code(), Some(1));
-    assert!(!wrote_output);
-    let stderr = String::from_utf8_lossy(&run.stderr);
-    assert!(stderr.contains("unsupported op kind `Plane`"), "{stderr}");
 }
 
 #[test]

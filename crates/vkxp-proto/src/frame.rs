@@ -148,8 +148,6 @@ pub enum Op {
     Quad(Quad),
     /// Changes the pixels already present in a rectangle.
     RectEffect(RectEffect),
-    /// Reserved for planes. Not specified yet; backends reject it.
-    Plane { clip: Rect },
     /// Draws the tiles of one priority of one layer of a map.
     TilemapLayer(TilemapLayer),
 }
@@ -161,7 +159,6 @@ impl Op {
             Op::Clear { .. } => OpKind::Clear,
             Op::Quad(_) => OpKind::Quad,
             Op::RectEffect(_) => OpKind::RectEffect,
-            Op::Plane { .. } => OpKind::Plane,
             Op::TilemapLayer(_) => OpKind::TilemapLayer,
         }
     }
@@ -169,7 +166,7 @@ impl Op {
     /// The clip rectangle of this op.
     pub const fn clip(&self) -> Rect {
         match self {
-            Op::Clear { clip, .. } | Op::Plane { clip } => *clip,
+            Op::Clear { clip, .. } => *clip,
             Op::Quad(quad) => quad.clip,
             Op::TilemapLayer(layer) => layer.clip,
             Op::RectEffect(effect) => effect.clip,
@@ -183,15 +180,7 @@ pub enum OpKind {
     Clear,
     Quad,
     RectEffect,
-    Plane,
     TilemapLayer,
-}
-
-impl OpKind {
-    /// Whether the kind is only a reserved name, with no specified behaviour yet.
-    pub const fn is_reserved(self) -> bool {
-        matches!(self, OpKind::Plane)
-    }
 }
 
 impl std::fmt::Display for OpKind {
@@ -200,7 +189,6 @@ impl std::fmt::Display for OpKind {
             OpKind::Clear => "Clear",
             OpKind::Quad => "Quad",
             OpKind::RectEffect => "RectEffect",
-            OpKind::Plane => "Plane",
             OpKind::TilemapLayer => "TilemapLayer",
         })
     }
@@ -520,7 +508,6 @@ mod tests {
             ),
             (Op::Quad(quad), OpKind::Quad, "Quad"),
             (Op::RectEffect(effect), OpKind::RectEffect, "RectEffect"),
-            (Op::Plane { clip }, OpKind::Plane, "Plane"),
             (
                 Op::TilemapLayer(TilemapLayer {
                     clip,
@@ -542,15 +529,6 @@ mod tests {
             assert_eq!(op.clip(), clip);
             assert_eq!(kind.to_string(), name);
         }
-    }
-
-    #[test]
-    fn only_plane_is_reserved() {
-        assert!(OpKind::Plane.is_reserved());
-        assert!(!OpKind::TilemapLayer.is_reserved());
-        assert!(!OpKind::Clear.is_reserved());
-        assert!(!OpKind::Quad.is_reserved());
-        assert!(!OpKind::RectEffect.is_reserved());
     }
 
     #[test]

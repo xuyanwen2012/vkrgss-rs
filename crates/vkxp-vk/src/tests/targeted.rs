@@ -5,8 +5,8 @@ use std::process::Command;
 use vkxp_compose_ref as reference;
 use vkxp_compose_ref::fixtures::{self, bitmap, sprite};
 use vkxp_proto::{
-    BitmapDelta, BitmapId, BlendMode, Color, Fixed, FramePacket, FrameRate, GuestToHost, Op,
-    OpKind, Quad, Rect, RectEffect, Sampling, Size, Tone, Transform,
+    BitmapDelta, BitmapId, BlendMode, Color, Fixed, FramePacket, FrameRate, GuestToHost, Op, Quad,
+    Rect, RectEffect, Sampling, Size, Tone, Transform,
 };
 
 use super::differential::{Pair, assert_stream_matches, frame_difference};
@@ -329,24 +329,16 @@ fn extreme_coefficients_select_the_reference_texels() {
     assert_ne!(rendered.pixel(0, 0), [0, 0, 0, 0]);
 }
 
-// Requirement: Errors match the reference
+// guest-host-protocol, Requirement: Every op kind is implemented
 
 #[test]
-fn reserved_op_is_an_unsupported_op_error_naming_kind_and_index() {
-    let size = Size::new(20, 20);
-    let screen = Rect::from_size(size);
-    let mut compositor = TestCompositor::new();
-    let op = Op::Plane { clip: screen };
-    let ops = vec![clear(screen, [1, 1, 1, 1]), clear(screen, [2, 2, 2, 2]), op];
-    assert_eq!(
-        compositor.render(&packet(size, vec![], ops)),
-        Err(VkError::UnsupportedOp {
-            kind: OpKind::Plane,
-            index: 2
-        })
-    );
-    assert_eq!(compositor.read_frame(), Ok(None), "no frame");
+fn packet_with_one_op_of_each_kind_is_accepted_and_matches_the_reference() {
+    let message = fixtures::one_op_of_each_kind();
+    let mut pair = Pair::new();
+    assert!(pair.step(&message).unwrap().unwrap().is_some());
 }
+
+// Requirement: Errors match the reference
 
 /// A destroyed bitmap whose slot was reused: the old id is an error, and the new occupant is
 /// not drawn in its place.

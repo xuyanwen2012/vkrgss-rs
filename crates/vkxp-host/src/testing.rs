@@ -9,7 +9,7 @@ use std::io::Write;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use vkxp_proto::{AudioCommand, BitmapDelta, BitmapId, FramePacket, FrameRate};
+use vkxp_proto::{AudioCommand, BitmapDelta, BitmapId, FramePacket, FrameRate, Op};
 use vkxp_vk::Mix;
 
 use crate::{AudioSink, Display, ManualClock};
@@ -80,18 +80,19 @@ impl Shown {
 /// Why a [`RecordingDisplay`] rejected a packet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rejected {
-    /// Position of the op that is not supported.
+    /// Position of the op that draws a bitmap that does not exist.
     pub op: usize,
 }
 
 impl std::fmt::Display for Rejected {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "op {} is of a reserved kind", self.op)
+        write!(f, "op {} draws an unknown bitmap", self.op)
     }
 }
 
 /// A display that renders nothing. It records every request and models which frame would be
-/// on screen. Like the compositors, it rejects a packet that contains an op of a reserved kind.
+/// on screen. Like the compositors, it rejects a packet that contains a quad of a bitmap that
+/// does not exist.
 #[derive(Debug, Clone)]
 pub struct RecordingDisplay {
     /// Every request, oldest first.
@@ -208,7 +209,9 @@ impl Display for RecordingDisplay {
                 BitmapDelta::Update { .. } => {}
             }
         }
-        if let Some(op) = packet.ops.iter().position(|op| op.kind().is_reserved()) {
+        let unknown =
+            |op: &Op| matches!(op, Op::Quad(quad) if !self.bitmaps.contains(&quad.bitmap));
+        if let Some(op) = packet.ops.iter().position(unknown) {
             self.events.push(DisplayEvent::Rejected { frame_index });
             return Err(Rejected { op });
         }

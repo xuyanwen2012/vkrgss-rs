@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use vkxp_proto::link::{GuestEnd, HostEnd, link};
 use vkxp_proto::{
-    AudioChannel, AudioCommand, BitmapDelta, BitmapId, Button, Color, FramePacket, FrameRate,
-    GuestToHost, HostToGuest, InputSnapshot, Op, Rect, Size,
+    AudioChannel, AudioCommand, BitmapDelta, BitmapId, BlendMode, Button, Color, FramePacket,
+    FrameRate, GuestToHost, HostToGuest, InputSnapshot, Op, Quad, Rect, Sampling, Size, Tone,
 };
 use winit::keyboard::KeyCode;
 
@@ -55,9 +55,16 @@ fn frame_at_rate(frame_index: u64, rate: u8) -> GuestToHost {
 /// A frame whose packet every compositor rejects.
 fn invalid_frame(frame_index: u64) -> GuestToHost {
     let mut packet = packet(frame_index, 40);
-    packet.ops.push(Op::Plane {
+    packet.ops.push(Op::Quad(Quad {
         clip: Rect::from_size(SIZE),
-    });
+        bitmap: BitmapId::new(900, 0),
+        src: Rect::new(0, 0, 1, 1),
+        sampling: Sampling::place_at(0, 0),
+        tone: Tone::NEUTRAL,
+        color: Color::new(0, 0, 0, 0),
+        opacity: 255,
+        blend: BlendMode::Normal,
+    }));
     GuestToHost::Frame(packet)
 }
 
@@ -1396,7 +1403,7 @@ fn rejected_frame_is_reported_keeps_the_image_and_still_gets_its_tick() {
     assert_eq!(rig.session.end(), None);
     let errors = rig.errors.text();
     assert!(errors.contains("frame 1 was rejected"), "{errors}");
-    assert!(errors.contains("op 1 is of a reserved kind"), "{errors}");
+    assert!(errors.contains("op 1 draws an unknown bitmap"), "{errors}");
 
     assert_eq!(rig.frame(frame(2)), ms(50));
     assert_eq!(rig.shown(), Shown::Frame(2));
@@ -1417,7 +1424,7 @@ fn rejected_frame_ends_a_session_that_does_not_continue_with_failure() {
     assert!(!end.is_success());
     let errors = rig.errors.text();
     assert!(errors.contains("frame 1 was rejected"), "{errors}");
-    assert!(errors.contains("reserved kind"), "{errors}");
+    assert!(errors.contains("unknown bitmap"), "{errors}");
 }
 
 #[test]

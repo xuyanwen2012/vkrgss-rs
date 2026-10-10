@@ -12,7 +12,6 @@ use crate::{BitmapError, Frame, SlotState, TableError, VkError};
 pub(crate) fn expected_error(error: &reference::ComposeError) -> VkError {
     use reference::ComposeError as E;
     match error.clone() {
-        E::UnsupportedOp { kind, index } => VkError::UnsupportedOp { kind, index },
         E::InvalidOpBitmap { index, source } => VkError::InvalidOpBitmap {
             index,
             source: expected_bitmap_error(source),

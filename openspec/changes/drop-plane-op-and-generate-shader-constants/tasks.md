@@ -2,7 +2,7 @@
 
 ## 1. The op (`vkxp-proto`, `vkxp-compose-ref`, `vkxp-vk`)
 
-- [ ] 1.1 Remove the op kind and the reserved notion, raise the protocol version, and adjust the backends and tests. Verify: the scenarios of `specs/guest-host-protocol/spec.md`; `grep -rn "Op::Plane\|OpKind::Plane\|is_reserved" crates` prints nothing; the workspace tests pass.
+- [x] 1.1 Remove the op kind and the reserved notion, raise the protocol version, and adjust the backends and tests. Verify: the scenarios of `specs/guest-host-protocol/spec.md`; `grep -rn "Op::Plane\|OpKind::Plane\|is_reserved" crates` prints nothing; the workspace tests pass.
 
 ## 2. The constants (`vkxp-vk`)
 

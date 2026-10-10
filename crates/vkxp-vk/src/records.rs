@@ -352,12 +352,6 @@ pub(crate) fn encode_frame(
                 tilemaps.push(tilemap);
                 records.push(record);
             }
-            Op::Plane { .. } => {
-                return Err(VkError::UnsupportedOp {
-                    kind: op.kind(),
-                    index,
-                });
-            }
         }
     }
     Ok(Records {
@@ -369,7 +363,7 @@ pub(crate) fn encode_frame(
 #[cfg(test)]
 mod tests {
     use vkxp_proto::{
-        BitmapDelta, BitmapId, Color, Fixed, OpKind, Quad, RectEffect, Sampling, Tone, Transform,
+        BitmapDelta, BitmapId, Color, Fixed, Quad, RectEffect, Sampling, Tone, Transform,
     };
 
     use super::*;
@@ -511,22 +505,9 @@ mod tests {
     }
 
     #[test]
-    fn reserved_ops_are_unsupported_and_name_kind_and_index() {
-        let cases = [(Op::Plane { clip: SCREEN }, OpKind::Plane)];
-        for (op, kind) in cases {
-            let ops = [clear(SCREEN), op];
-            assert_eq!(
-                encode_ops(&table(), SIZE, &ops),
-                Err(VkError::UnsupportedOp { kind, index: 1 })
-            );
-        }
-    }
-
-    #[test]
     fn the_first_invalid_op_is_the_one_reported() {
         let ops = [
             quad(ID, Rect::new(0, 0, 9, 9)),
-            Op::Plane { clip: SCREEN },
             quad(BitmapId::new(9, 0), SCREEN),
         ];
         assert!(matches!(
@@ -573,13 +554,6 @@ mod tests {
             encode_ops(&table(), SIZE, &invalid),
             Err(VkError::InvalidOpBitmap { index: 0, .. })
         ));
-        assert_eq!(
-            encode_ops(&table(), SIZE, &[Op::Plane { clip: off }]),
-            Err(VkError::UnsupportedOp {
-                kind: OpKind::Plane,
-                index: 0
-            })
-        );
     }
 
     /// An empty source rectangle is inside any bitmap wherever it lies, and draws nothing.

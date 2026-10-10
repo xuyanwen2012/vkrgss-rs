@@ -534,6 +534,39 @@ fn scene(name: &'static str, size: Size, frames: Vec<SceneFrame>) -> Fixture {
 /// The bitmap deltas, table deltas and tilemap ops of one frame of a scene.
 type SceneFrame = (Vec<BitmapDelta>, Vec<TableDelta>, Vec<TilemapLayer>);
 
+/// A frame that holds one op of each kind the protocol has, all of them valid.
+pub fn one_op_of_each_kind() -> GuestToHost {
+    let size = Size::new(96, 96);
+    let mut bitmaps = bitmap(TILESET, 256, 160, tileset(5)).to_vec();
+    bitmaps.extend(bitmap(AUTOTILE, 8, 8, gradient(8, 8)));
+    GuestToHost::Frame(FramePacket {
+        frame_index: 0,
+        logical_size: size,
+        frame_rate: FrameRate::DEFAULT,
+        tables: vec![
+            table(MAP, (4, 4, 1), (384..400).collect()),
+            table(NO_PRIORITIES, (1, 1, 1), vec![0]),
+        ],
+        bitmaps,
+        ops: vec![
+            Op::Clear {
+                clip: Rect::from_size(size),
+                color: DARK,
+            },
+            Op::TilemapLayer(TilemapLayer {
+                tileset: Some(TILESET),
+                ..tilemap_layer(size, MAP, NO_PRIORITIES)
+            }),
+            Op::Quad(sprite(AUTOTILE, 8, 8, 20, 30)),
+            Op::RectEffect(RectEffect {
+                clip: Rect::new(8, 8, 40, 40),
+                tone: Tone::new(40, -40, 0, 128),
+                color: Color::new(255, 255, 0, 64),
+            }),
+        ],
+    })
+}
+
 /// Streams of frames drawn with tilemap layer ops: every autotile pattern and animation,
 /// wrapped origins, priorities, translucent stacked tiles and the inputs that draw nothing.
 pub fn tilemap_scenes() -> Vec<Fixture> {

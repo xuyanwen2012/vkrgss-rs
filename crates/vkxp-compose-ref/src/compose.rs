@@ -160,12 +160,6 @@ impl Compositor {
                         autotiles,
                     })
                 }
-                Op::Plane { .. } => {
-                    return Err(ComposeError::UnsupportedOp {
-                        kind: op.kind(),
-                        index,
-                    });
-                }
             });
         }
         Ok(steps)

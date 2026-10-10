@@ -44,3 +44,11 @@
 ## Follow-ups
 
 - Generating the record layouts too.
+- The codec has no explicit tag per op kind: postcard encodes an enum variant by its position,
+  so removing `Plane` moves `TilemapLayer` from position 4 to 3. Keeping the old positions
+  needs a hand-written wire form of `Op`, which this design does not name; it was not built.
+  Nothing can observe the difference, because streams of version 6 are rejected by the
+  version check before any op is decoded.
+- The fake display of `vkxp-host` (`src/testing.rs`) and the host tests used the reserved op
+  as "a packet every compositor rejects". They now use a quad of a bitmap that does not
+  exist, which both compositors and the fake display reject.
