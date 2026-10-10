@@ -301,14 +301,24 @@ fn a_script_error_is_reported_and_fails_the_run() {
         "Error",
         &[("Setup", "$x = 1"), ("Main", source)],
     );
-    let ran = headless(&game, &[]);
-    ran.assert_failure();
-    let stderr = ran.stderr();
-    assert!(
-        stderr.contains("Script 'Main' line 2: RuntimeError occurred."),
-        "{stderr}"
-    );
-    assert!(stderr.contains("boom"), "{stderr}");
+    // The level changes nothing: the report is shown at every one.
+    for log in [None, Some("error")] {
+        let work = tempfile::tempdir().expect("a temporary directory");
+        let ran = headless_logging(work, &game, &[], log);
+        ran.assert_failure();
+        // The guest writes the report as it is and the host writes it once more, each line
+        // of it after the prefix, the empty one too. Nothing else is written.
+        assert_eq!(
+            ran.stderr(),
+            "Script 'Main' line 2: RuntimeError occurred.\n\
+             \n\
+             boom\n\
+             vkxp: Script 'Main' line 2: RuntimeError occurred.\n\
+             vkxp: \n\
+             vkxp: boom\n",
+            "{log:?}"
+        );
+    }
 }
 
 #[test]

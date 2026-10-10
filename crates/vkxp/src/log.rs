@@ -122,9 +122,25 @@ impl Reporter for HostReporter {
                     tracing::warn!(target: "vkxp_host", "{line}");
                 }
             }
-            Severity::Always => eprintln!("{PREFIX}{text}"),
+            Severity::Always => eprint!("{}", always_lines(text)),
         }
     }
+}
+
+/// What is written for text that is shown at every level: each of its lines, an empty one
+/// too, after the prefix. A line that has the prefix already does not get a second one.
+fn always_lines(text: &str) -> String {
+    let mut lines = String::new();
+    for (index, line) in text.split('\n').enumerate() {
+        let line = match index {
+            0 => line,
+            _ => line.strip_prefix(PREFIX).unwrap_or(line),
+        };
+        lines.push_str(PREFIX);
+        lines.push_str(line);
+        lines.push('\n');
+    }
+    lines
 }
 
 /// A stream that emits each completed line written to it as a warning, in place of the error
@@ -263,6 +279,15 @@ mod tests {
             HostReporter.report(Severity::Error, "first\nsecond");
         });
         assert_eq!(text, "vkxp: first\nvkxp: second\n");
+    }
+
+    #[test]
+    fn text_shown_at_every_level_has_the_prefix_on_each_line() {
+        assert_eq!(always_lines("one"), "vkxp: one\n");
+        assert_eq!(
+            always_lines("first\n\nthird\nvkxp: fourth"),
+            "vkxp: first\nvkxp: \nvkxp: third\nvkxp: fourth\n"
+        );
     }
 
     /// Scenario "Rejected frame at error level" of `specs/host-session/spec.md`, for what the

@@ -45,7 +45,8 @@
 - "The way option-requested lines are written today" is read with the proposal ("shown at
   every level"): the executable writes an `Always` line to the error stream directly, as
   `vkxp: <text>`, like the other text the game produces (see the module documentation of
-  `log.rs`). At the default level the line is the one written before. With `--verbose` or a
+  `log.rs`). Each line of a text of several lines has the prefix, an empty line too, as the
+  line adapter wrote it before, so at the default level the output is the one written before. With `--verbose` or a
   filter it no longer has the level and the target in front of it, because it is not an
   event.
 - A session that is given no reporter (the default of the options, used by the examples and
