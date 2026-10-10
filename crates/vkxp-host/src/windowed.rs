@@ -23,9 +23,10 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::PhysicalKey;
 use winit::window::{Fullscreen, Window, WindowId};
 
+use crate::report::ErrorStream;
 use crate::{
     AudioOptions, AudioSink, Clock, Display, GamepadMap, Gamepads, InputSource, KeyAction, KeyMap,
-    NullSink, Session, SessionEnd, SessionOptions, SystemClock, frame_pointer,
+    NullSink, Reporter, Session, SessionEnd, SessionOptions, SystemClock, frame_pointer,
 };
 
 /// How a windowed session is set up.
@@ -56,8 +57,8 @@ pub struct WindowedOptions {
     /// Whether the frame time statistics are collected and their summary written to
     /// `errors`, every [`STATS_INTERVALS`] frames and when the session ends.
     pub frame_stats: bool,
-    /// Where the session writes modal texts and errors, which it takes when it starts.
-    pub errors: Box<dyn Write + Send>,
+    /// Where the session reports modal texts and errors, which it takes when it starts.
+    pub errors: Box<dyn Reporter>,
     /// Where the audio side reports sounds that cannot be played, taken likewise.
     pub audio_errors: Box<dyn Write + Send>,
 }
@@ -77,7 +78,7 @@ impl WindowedOptions {
             input: None,
             present_stats: false,
             frame_stats: false,
-            errors: Box::new(std::io::stderr()),
+            errors: Box::new(ErrorStream),
             audio_errors: Box::new(std::io::stderr()),
         }
     }
@@ -396,7 +397,8 @@ impl App {
             wait_for_modal: true,
             frame_stats: self.options.frame_stats,
             frame_stats_interval: Some(STATS_INTERVALS),
-            errors: take_stream(&mut self.options.errors),
+            // The options keep a reporter that nothing is given to.
+            errors: std::mem::replace(&mut self.options.errors, Box::new(ErrorStream)),
             ..SessionOptions::default()
         };
         let link = self.link.take().expect("the session starts once");

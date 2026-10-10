@@ -346,7 +346,7 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
             input,
             dumps,
             frame_stats: options.frame_stats,
-            errors: log::EventLines::host(),
+            errors: Box::new(log::HostReporter),
         };
         let (guest_end, link) = headless_link();
         let guest_thread = thread::Builder::new()
@@ -376,7 +376,7 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
             pads,
             audio,
             input,
-            errors: log::EventLines::host(),
+            errors: Box::new(log::HostReporter),
             audio_errors: log::EventLines::audio(),
             ..WindowedOptions::new(device.unwrap_or_default())
         };

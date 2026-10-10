@@ -12,7 +12,7 @@ use common::{SMALL_DEMO, drive_demo, small_frame, spawn_demo, test_device};
 use vkxp_host::demo::TRANSITION_FRAMES;
 use vkxp_host::testing::ErrorBuffer;
 use vkxp_host::{
-    HeadlessEnd, HeadlessError, HeadlessOptions, HeadlessReport, HostLink, InputScript,
+    HeadlessEnd, HeadlessError, HeadlessOptions, HeadlessReport, HostLink, InputScript, Severity,
     headless_link, run_headless,
 };
 use vkxp_proto::link::{Disconnected, GuestEnd};
@@ -484,6 +484,7 @@ fn rejected_frame_gets_its_tick_and_then_fails_the_run_with_the_error_reported()
     let text = errors.text();
     assert!(text.contains("frame 2 was rejected"), "{text}");
     assert!(text.contains("op 1 is invalid"), "{text}");
+    assert_eq!(errors.severities("was rejected"), [Severity::Error]);
     assert!(!dump.exists(), "a rejected frame is not dumped");
 }
 
@@ -729,7 +730,7 @@ fn frame_statistics_do_not_change_a_dumped_frame() {
                 script: InputScript::parse("2:RIGHT, 6:").unwrap(),
                 dumps: vec![(12, path.clone())],
                 frame_stats,
-                errors: Box::new(std::io::sink()),
+                errors: Box::new(ErrorBuffer::new()),
                 ..options()
             },
             host,

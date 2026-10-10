@@ -1,18 +1,17 @@
 //! Fakes for testing a [`Session`](crate::Session) without a window, a GPU or an audio device:
 //! a display that records what it was asked to do, an audio sink that records its commands,
-//! and an error stream that can be read back.
+//! and a reporter whose reports can be read back.
 //!
 //! The fake clock is [`ManualClock`], which the headless runner uses too.
 
 use std::collections::HashSet;
-use std::io::Write;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use vkxp_proto::{AudioCommand, BitmapDelta, BitmapId, FramePacket, FrameRate, Op};
 use vkxp_vk::Mix;
 
-use crate::{AudioSink, Display, ManualClock};
+use crate::{AudioSink, Display, ManualClock, Reporter, Severity};
 
 /// One request a [`RecordingDisplay`] received.
 #[derive(Debug, Clone, PartialEq)]
@@ -288,10 +287,10 @@ impl AudioSink for RecordingSink {
     }
 }
 
-/// An error stream that keeps what is written to it. Clones share one buffer.
+/// A reporter that keeps what is reported to it. Clones share one buffer.
 #[derive(Debug, Clone, Default)]
 pub struct ErrorBuffer {
-    bytes: Arc<Mutex<Vec<u8>>>,
+    reports: Arc<Mutex<Vec<(Severity, String)>>>,
 }
 
 impl ErrorBuffer {
@@ -299,23 +298,30 @@ impl ErrorBuffer {
         ErrorBuffer::default()
     }
 
-    /// Everything written so far.
+    /// Everything reported so far, as the lines `vkxp: <text>` of an error stream.
     pub fn text(&self) -> String {
-        String::from_utf8_lossy(&self.lock()).into_owned()
+        self.lock()
+            .iter()
+            .map(|(_, text)| format!("vkxp: {text}\n"))
+            .collect()
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, Vec<u8>> {
-        self.bytes.lock().unwrap_or_else(PoisonError::into_inner)
+    /// The severity of each report so far whose text contains `part`, in order.
+    pub fn severities(&self, part: &str) -> Vec<Severity> {
+        self.lock()
+            .iter()
+            .filter(|(_, text)| text.contains(part))
+            .map(|(severity, _)| *severity)
+            .collect()
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, Vec<(Severity, String)>> {
+        self.reports.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
-impl Write for ErrorBuffer {
-    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-        self.lock().extend_from_slice(bytes);
-        Ok(bytes.len())
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
+impl Reporter for ErrorBuffer {
+    fn report(&mut self, severity: Severity, text: &str) {
+        self.lock().push((severity, text.to_owned()));
     }
 }

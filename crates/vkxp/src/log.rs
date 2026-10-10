@@ -4,7 +4,8 @@
 //!
 //! What the game itself produces (`p`, `print`, the report of a script error) and the
 //! program's usage and fatal error message are not events: they are written to the error
-//! stream directly and shown at every level.
+//! stream directly and shown at every level. So is what a session reports because the game or
+//! an option asked for it.
 
 use std::fmt;
 use std::io::Write;
@@ -17,6 +18,7 @@ use tracing_subscriber::fmt::{FmtContext, FormatEvent, FormatFields};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::util::SubscriberInitExt;
+use vkxp_host::{Reporter, Severity};
 
 /// The environment variable that sets the level or a filter.
 pub(crate) const VARIABLE: &str = "VKXP_LOG";
@@ -101,36 +103,43 @@ pub(crate) fn install(level: Level) {
         .init();
 }
 
-/// The side whose lines an [`EventLines`] takes, which is the target of its events.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Side {
-    Host,
-    Audio,
+/// The reporter of a session or a headless run: an error or a warning is an event of that
+/// level with the host's target, one for each line of its text, and text that is shown at
+/// every level is written to the error stream directly.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct HostReporter;
+
+impl Reporter for HostReporter {
+    fn report(&mut self, severity: Severity, text: &str) {
+        match severity {
+            Severity::Error => {
+                for line in text.split('\n') {
+                    tracing::error!(target: "vkxp_host", "{line}");
+                }
+            }
+            Severity::Warning => {
+                for line in text.split('\n') {
+                    tracing::warn!(target: "vkxp_host", "{line}");
+                }
+            }
+            Severity::Always => eprintln!("{PREFIX}{text}"),
+        }
+    }
 }
 
 /// A stream that emits each completed line written to it as a warning, in place of the error
-/// stream that a session, a headless run and the mixer write their reports to. The prefix
-/// `vkxp: ` of a line is left out, because the subscriber writes it.
+/// stream that the mixer writes its reports to. The prefix `vkxp: ` of a line is left out,
+/// because the subscriber writes it.
 #[derive(Debug)]
 pub(crate) struct EventLines {
-    side: Side,
     /// What was written since the last end of a line.
     pending: Vec<u8>,
 }
 
 impl EventLines {
-    /// The stream for the reports of a session or a headless run.
-    pub(crate) fn host() -> Box<EventLines> {
-        Box::new(EventLines {
-            side: Side::Host,
-            pending: Vec::new(),
-        })
-    }
-
     /// The stream for the reports of the mixer.
     pub(crate) fn audio() -> Box<EventLines> {
         Box::new(EventLines {
-            side: Side::Audio,
             pending: Vec::new(),
         })
     }
@@ -138,11 +147,7 @@ impl EventLines {
     fn emit(&self, line: &[u8]) {
         let line = String::from_utf8_lossy(line);
         let text = line.strip_prefix(PREFIX).unwrap_or(&line);
-        // The target of an event is part of its call site, so each side has its own.
-        match self.side {
-            Side::Host => tracing::warn!(target: "vkxp_host", "{text}"),
-            Side::Audio => tracing::warn!(target: "vkxp_audio", "{text}"),
-        }
+        tracing::warn!(target: "vkxp_audio", "{text}");
     }
 }
 
@@ -219,7 +224,7 @@ mod tests {
     #[test]
     fn written_lines_become_events_without_a_second_prefix() {
         let text = written(false, || {
-            let mut lines = EventLines::host();
+            let mut lines = EventLines::audio();
             write!(lines, "vkxp: frame 3 ").unwrap();
             writeln!(lines, "was rejected").unwrap();
             writeln!(lines, "vkxp: first\nsecond").unwrap();
@@ -237,6 +242,49 @@ mod tests {
             writeln!(EventLines::audio(), "vkxp: audio: silent").unwrap();
         });
         assert_eq!(text, "vkxp: WARN vkxp_audio: audio: silent\n");
+    }
+
+    #[test]
+    fn a_report_is_an_event_of_its_severity_with_the_target_of_the_host() {
+        let text = written(true, || {
+            HostReporter.report(Severity::Error, "frame 3 was rejected: why");
+            HostReporter.report(Severity::Warning, "the mask does not exist");
+        });
+        assert_eq!(
+            text,
+            "vkxp: ERROR vkxp_host: frame 3 was rejected: why\n\
+             vkxp: WARN vkxp_host: the mask does not exist\n"
+        );
+    }
+
+    #[test]
+    fn a_report_of_several_lines_is_an_event_for_each() {
+        let text = written(false, || {
+            HostReporter.report(Severity::Error, "first\nsecond");
+        });
+        assert_eq!(text, "vkxp: first\nvkxp: second\n");
+    }
+
+    /// Scenario "Rejected frame at error level" of `specs/host-session/spec.md`, for what the
+    /// program does with the report; that the session reports a rejected frame as an error
+    /// is tested in `vkxp-host`.
+    #[test]
+    fn at_the_level_of_errors_a_rejected_frame_is_shown_and_a_degradation_is_not() {
+        let written = Written::default();
+        let Level { filter, detailed } = level(Some("error"), false).unwrap();
+        let lines = tracing_subscriber::fmt::layer()
+            .with_writer(written.clone())
+            .event_format(Line { detailed });
+        let subscriber = tracing_subscriber::registry().with(filter).with(lines);
+        tracing::subscriber::with_default(subscriber, || {
+            HostReporter.report(Severity::Error, "frame 3 was rejected: why");
+            HostReporter.report(Severity::Warning, "the mask does not exist");
+        });
+        let bytes = written.0.lock().unwrap().clone();
+        assert_eq!(
+            String::from_utf8(bytes).unwrap(),
+            "vkxp: ERROR vkxp_host: frame 3 was rejected: why\n"
+        );
     }
 
     /// The most verbose level that `level` shows of any target.

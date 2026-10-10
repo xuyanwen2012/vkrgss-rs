@@ -27,6 +27,34 @@
   helper's callers by the same rule and list them under "Checked".
 - Report texts do not change.
 
+## Checked
+
+- The headless run writes no report of its own. `headless.rs` has no helper that writes
+  lines: the closure named `report` in `run_headless` builds the `HeadlessReport` the run
+  returns, and its three callers (the frame limit of 0, the shutdown, the frame limit) write
+  nothing. Every line of a headless run comes from its session, which is given the run's
+  reporter, so the classification of the session is the classification of the run:
+  - `frame <n> was rejected: <error>`: error.
+  - `cannot freeze the display: <error>` (both callers): error.
+  - `the transition's mask, bitmap <i> of generation <g>, does not exist; showing a plain
+    cross-fade`: warning.
+  - a script's message text: `Always`.
+  - the lines of the frame statistics: `Always`.
+  What `run_headless` returns as an error (`HeadlessError`) is written by the executable
+  directly, as before.
+- "The way option-requested lines are written today" is read with the proposal ("shown at
+  every level"): the executable writes an `Always` line to the error stream directly, as
+  `vkxp: <text>`, like the other text the game produces (see the module documentation of
+  `log.rs`). At the default level the line is the one written before. With `--verbose` or a
+  filter it no longer has the level and the target in front of it, because it is not an
+  event.
+- A session that is given no reporter (the default of the options, used by the examples and
+  the tests) writes every report to the error stream as `vkxp: <text>`, as before.
+- Scenario "Rejected frame at error level" is covered in two halves, because no game can make
+  the backend reject a frame from a script: `vkxp-host/tests/headless.rs` checks that the
+  headless run reports the rejected frame as an error, and `vkxp/src/log.rs` checks that the
+  executable's reporter shows an error and no warning under `VKXP_LOG=error`.
+
 ## Risks / Trade-offs
 
 - [A public type of `vkxp-host` changes] → The only user outside the crate is `vkxp`.
@@ -34,3 +62,7 @@
 ## Follow-ups
 
 - Severity for the mixer's reports, if one of them turns out to be a failure.
+- The presentation statistics (`--present-stats`) and the pacing report of the windowed
+  display are option-requested lines too, but they are `tracing::warn!` events of
+  `windowed.rs` and do not go through the session's reporter, so they still vanish with
+  `VKXP_LOG=error`. Whether they should be shown at every level is not decided here.

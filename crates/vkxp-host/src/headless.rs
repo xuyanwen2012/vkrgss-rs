@@ -10,7 +10,7 @@
 //! counts its frames from 0 is the packet's `frame_index`.
 
 use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, channel};
 
@@ -19,8 +19,10 @@ use vkxp_proto::link::{Disconnected, GuestEnd, HostEnd, link};
 use vkxp_proto::{BitmapId, FramePacket, GuestToHost, HostToGuest, Size};
 use vkxp_vk::{DeviceChoice, Frame, FrameTiming, Mix, VkCompositor, VkError};
 
+use crate::report::ErrorStream;
 use crate::{
-    Clock, Display, InputScript, InputSource, ManualClock, Session, SessionEnd, SessionOptions,
+    Clock, Display, InputScript, InputSource, ManualClock, Reporter, Session, SessionEnd,
+    SessionOptions,
 };
 
 /// The device a headless run uses unless told otherwise: the CPU rasteriser, so that a run
@@ -80,8 +82,8 @@ pub struct HeadlessOptions {
     /// Whether the frame time statistics are collected and their summary written to
     /// `errors` when the run ends.
     pub frame_stats: bool,
-    /// Where modal texts and errors are written.
-    pub errors: Box<dyn Write + Send>,
+    /// Where modal texts and errors are reported.
+    pub errors: Box<dyn Reporter>,
 }
 
 impl Default for HeadlessOptions {
@@ -93,7 +95,7 @@ impl Default for HeadlessOptions {
             input: None,
             dumps: Vec::new(),
             frame_stats: false,
-            errors: Box::new(std::io::stderr()),
+            errors: Box::new(ErrorStream),
         }
     }
 }
@@ -234,7 +236,7 @@ impl Display for HeadlessDisplay {
 /// the last frame of a limited run the guest gets that frame's tick and then a quit request,
 /// and the run ends without waiting for the guest's answer.
 ///
-/// A rejected frame fails the run: its error is written to the error stream, the guest gets
+/// A rejected frame fails the run: its error is reported, the guest gets
 /// that frame's tick like any other, and then the run ends and the guest is disconnected.
 pub fn run_headless(
     options: HeadlessOptions,

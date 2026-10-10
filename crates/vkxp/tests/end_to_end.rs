@@ -352,6 +352,21 @@ fn frame_statistics_of_a_headless_run_are_written_to_the_error_stream() {
         assert!(stderr.contains(row), "no `{row}` in: {stderr}");
     }
 
+    // The option asked for the summary, so it is shown at every level.
+    let work = tempfile::tempdir().expect("a temporary directory");
+    let ran = headless_logging(
+        work,
+        &game,
+        &["--frames", "10", "--frame-stats"],
+        Some("error"),
+    );
+    ran.assert_success();
+    let stderr = ran.stderr();
+    assert!(
+        stderr.contains("vkxp: frame times over 10 frame(s):"),
+        "{stderr}"
+    );
+
     // Without the option there is no summary.
     let ran = headless(&game, &["--frames", "10"]);
     ran.assert_success();

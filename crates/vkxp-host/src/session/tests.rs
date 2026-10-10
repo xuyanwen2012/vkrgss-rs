@@ -1063,6 +1063,7 @@ fn transition_with_an_unknown_mask_is_a_cross_fade_and_is_reported_once() {
     rig.frame(frame(5));
     assert_eq!(rig.shown(), Shown::Frame(5));
     assert_eq!(rig.errors.text().matches("mask").count(), 1);
+    assert_eq!(rig.errors.severities("mask"), [Severity::Warning]);
 }
 
 #[test]
@@ -1221,6 +1222,7 @@ fn windowed_modal_waits_for_the_confirm_key_and_hides_that_press() {
     let mut rig = Rig::windowed();
     assert_eq!(rig.send(modal("Save failed.")), []);
     assert!(rig.errors.text().contains("Save failed."));
+    assert_eq!(rig.errors.severities("Save failed."), [Severity::Always]);
     // Frames are shown and answered while the message is pending.
     for index in 0..3 {
         rig.frame(frame(index));
@@ -1404,6 +1406,7 @@ fn rejected_frame_is_reported_keeps_the_image_and_still_gets_its_tick() {
     let errors = rig.errors.text();
     assert!(errors.contains("frame 1 was rejected"), "{errors}");
     assert!(errors.contains("op 1 draws an unknown bitmap"), "{errors}");
+    assert_eq!(rig.errors.severities("was rejected"), [Severity::Error]);
 
     assert_eq!(rig.frame(frame(2)), ms(50));
     assert_eq!(rig.shown(), Shown::Frame(2));

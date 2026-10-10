@@ -1,7 +1,6 @@
 //! The session: what the host does with guest messages and user input.
 
 use std::collections::{HashSet, VecDeque};
-use std::io::Write;
 use std::time::{Duration, Instant};
 
 use vkxp_proto::link::HostEnd;
@@ -11,8 +10,9 @@ use winit::event::MouseButton;
 use winit::keyboard::KeyCode;
 
 use crate::raw::with_raw_keys;
+use crate::report::ErrorStream;
 use crate::stats::FrameStats;
-use crate::{AudioSink, Clock, Display, InputSource, KeyMap, NullSink};
+use crate::{AudioSink, Clock, Display, InputSource, KeyMap, NullSink, Reporter, Severity};
 
 /// The key that asks the guest to restart.
 const RESET_KEY: KeyCode = KeyCode::F12;
@@ -64,8 +64,8 @@ pub struct SessionOptions {
     /// Whether a modal message stays pending until the player dismisses it, as a windowed
     /// session wants, instead of being dismissed at once.
     pub wait_for_modal: bool,
-    /// Where modal texts and errors are written.
-    pub errors: Box<dyn Write + Send>,
+    /// Where modal texts and errors are reported.
+    pub errors: Box<dyn Reporter>,
     /// Where audio commands go.
     pub audio: Box<dyn AudioSink>,
     /// Where the input snapshot of each frame comes from: a recorder or a replayer. With a
@@ -88,7 +88,7 @@ impl Default for SessionOptions {
             keys: KeyMap::default(),
             fail_on_rejected_frame: false,
             wait_for_modal: false,
-            errors: Box::new(std::io::stderr()),
+            errors: Box::new(ErrorStream),
             audio: Box::new(NullSink),
             input: None,
             frame_stats: false,
@@ -171,7 +171,7 @@ pub struct Session<D: Display, C: Clock> {
     wait_for_modal: bool,
     /// Whether a modal message waits for the player to dismiss it.
     pending_modal: bool,
-    errors: Box<dyn Write + Send>,
+    errors: Box<dyn Reporter>,
     audio: Box<dyn AudioSink>,
     /// Messages for the guest that have not been handed to the link yet.
     outbox: VecDeque<HostToGuest>,
@@ -349,7 +349,7 @@ impl<D: Display, C: Clock> Session<D, C> {
             }
             GuestToHost::Audio(command) => self.audio.command(command),
             GuestToHost::Modal { text } => {
-                self.report(format_args!("{text}"));
+                self.report(Severity::Always, format_args!("{text}"));
                 if self.wait_for_modal {
                     self.pending_modal = true;
                 } else {
@@ -647,11 +647,14 @@ impl<D: Display, C: Clock> Session<D, C> {
                         && let Some((id, _)) = self.mask
                         && !self.display.has_bitmap(id)
                     {
-                        self.report(format_args!(
-                            "the transition's mask, bitmap {} of generation {}, does not \
-                             exist; showing a plain cross-fade",
-                            id.index, id.generation
-                        ));
+                        self.report(
+                            Severity::Warning,
+                            format_args!(
+                                "the transition's mask, bitmap {} of generation {}, does not \
+                                 exist; showing a plain cross-fade",
+                                id.index, id.generation
+                            ),
+                        );
                         self.set_mask(None);
                     }
                     self.fade = if shown >= duration {
@@ -672,10 +675,10 @@ impl<D: Display, C: Clock> Session<D, C> {
                     // the frame before in the mix meant for this one.
                     self.display.set_mix(self.mix);
                 }
-                self.report(format_args!(
-                    "frame {} was rejected: {error}",
-                    packet.frame_index
-                ));
+                self.report(
+                    Severity::Error,
+                    format_args!("frame {} was rejected: {error}", packet.frame_index),
+                );
                 // The frame is answered with its tick all the same; see `send_tick`.
                 self.failing |= self.fail_on_rejected_frame;
             }
@@ -738,7 +741,10 @@ impl<D: Display, C: Clock> Session<D, C> {
         }
         // In the middle of a cross-fade this captures the mixed image on screen.
         if let Err(error) = self.display.hold() {
-            self.report(format_args!("cannot freeze the display: {error}"));
+            self.report(
+                Severity::Error,
+                format_args!("cannot freeze the display: {error}"),
+            );
         }
         self.set_mix(Mix::HELD);
         self.set_mask(None);
@@ -751,7 +757,10 @@ impl<D: Display, C: Clock> Session<D, C> {
             // Nothing is frozen: the picture on screen stays for the transition's frames.
             Fade::Normal => {
                 if let Err(error) = self.display.hold() {
-                    self.report(format_args!("cannot freeze the display: {error}"));
+                    self.report(
+                        Severity::Error,
+                        format_args!("cannot freeze the display: {error}"),
+                    );
                 }
                 self.set_mix(Mix::HELD);
                 self.fade = Fade::Fading {
@@ -832,9 +841,8 @@ impl<D: Display, C: Clock> Session<D, C> {
         }
     }
 
-    fn report(&mut self, message: std::fmt::Arguments<'_>) {
-        // Nothing useful can be done when the error stream itself fails.
-        let _ = writeln!(self.errors, "vkxp: {message}");
+    fn report(&mut self, severity: Severity, message: std::fmt::Arguments<'_>) {
+        self.errors.report(severity, &message.to_string());
     }
 
     /// Adds the frame just rendered to the statistics, and writes their summary when the
@@ -860,7 +868,7 @@ impl<D: Display, C: Clock> Session<D, C> {
         };
         measuring.reported = true;
         for line in std::mem::take(&mut measuring.stats).lines() {
-            self.report(format_args!("{line}"));
+            self.report(Severity::Always, format_args!("{line}"));
         }
     }
 }
