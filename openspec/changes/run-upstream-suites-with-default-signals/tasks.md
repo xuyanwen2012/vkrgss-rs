@@ -6,4 +6,4 @@
 
 ## 2. Integration check
 
-- [ ] 2.1 Run the full gate with SIGINT ignored. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' env --ignore-signal=INT cargo xtask gate` exits 0 and `openspec validate run-upstream-suites-with-default-signals --strict` passes.
+- [x] 2.1 Run the full gate with SIGINT ignored. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' env --ignore-signal=INT cargo xtask gate` exits 0 and `openspec validate run-upstream-suites-with-default-signals --strict` passes.
