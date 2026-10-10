@@ -65,6 +65,8 @@ change, to be reviewed before committing.
 The host can also be driven without Ruby, by a guest written in Rust, `vkxp_host::demo`. It
 moves a sprite with the arrow keys (faster with Shift), tints the middle of the screen while
 Space, Enter or C is held, and swaps the background with a transition on Escape or X.
+The module is compiled only with the feature `testing` of `vkxp-host`, which the crate's examples
+and tests enable by themselves: the commands below need no flag.
 
 In a window:
 

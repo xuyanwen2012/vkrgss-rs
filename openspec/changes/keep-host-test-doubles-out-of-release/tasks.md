@@ -6,7 +6,7 @@
 
 ## 2. Documents
 
-- [ ] 2.1 Adjust the README where it runs the demo examples, if the command changes. Verify: the commands in the README run as written.
+- [x] 2.1 Adjust the README where it runs the demo examples, if the command changes. Verify: the commands in the README run as written.
 
 ## 3. Integration check
 
