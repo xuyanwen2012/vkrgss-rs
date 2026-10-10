@@ -2340,3 +2340,33 @@ fn a_loaded_state_makes_the_display_forget_its_bitmaps() {
     rig.send(GuestToHost::StateLoaded { slot: 0 });
     assert!(!rig.session.display().has_bitmap(BitmapId::new(3, 0)));
 }
+
+/// A resumed guest sends its title right after the answer that its state was loaded: the
+/// notice stays for its two seconds, behind whatever title the guest sets.
+#[test]
+fn a_title_sent_after_a_notice_keeps_the_notice_until_it_is_over() {
+    let mut rig = states_rig();
+    let title = |text: &str| GuestToHost::SetTitle {
+        title: text.to_owned(),
+    };
+    rig.send(title("Game"));
+    rig.send(GuestToHost::StateLoaded { slot: 0 });
+    rig.send(title("Game"));
+    assert_eq!(rig.title(), "Game - state loaded from slot 0");
+    // The guest may change the title under the notice.
+    rig.clock.advance(ms(1000));
+    rig.send(title("Chapter 2"));
+    assert_eq!(rig.title(), "Chapter 2 - state loaded from slot 0");
+    rig.clock.advance(ms(999));
+    rig.session.poll();
+    assert_eq!(rig.title(), "Chapter 2 - state loaded from slot 0");
+    rig.clock.advance(ms(1));
+    rig.session.poll();
+    assert_eq!(rig.title(), "Chapter 2");
+
+    // A title that arrives when the notice is over, before the session looked, ends it.
+    rig.send(GuestToHost::StateSaved { slot: 1 });
+    rig.clock.advance(ms(2000));
+    rig.send(title("Chapter 3"));
+    assert_eq!(rig.title(), "Chapter 3");
+}

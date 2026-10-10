@@ -267,8 +267,8 @@ pub struct Session<D: Display, C: Clock> {
     slot: u8,
     /// The slot of the request to load a state that has not been answered yet.
     loading: Option<u8>,
-    /// Until when the title shows a notice about states.
-    notice: Option<Duration>,
+    /// The notice about states that the title shows, and until when.
+    notice: Option<(String, Duration)>,
 }
 
 impl<D: Display, C: Clock> Session<D, C> {
@@ -410,8 +410,17 @@ impl<D: Display, C: Clock> Session<D, C> {
             }
             GuestToHost::SetTitle { title } => {
                 self.title = title;
-                self.notice = None;
-                self.display.set_title(&self.title);
+                // A notice that is not over stays behind the new title: a resumed guest
+                // sends its title right after the answer that its state was loaded.
+                let now = self.clock.now();
+                self.notice.take_if(|(_, until)| *until <= now);
+                match &self.notice {
+                    Some((notice, _)) => {
+                        let title = format!("{} - {notice}", self.title);
+                        self.display.set_title(&title);
+                    }
+                    None => self.display.set_title(&self.title),
+                }
                 if let Some(fps) = &mut self.fps {
                     // The rate reappears in the title at the next refresh.
                     *fps = FpsCounter {
@@ -451,7 +460,7 @@ impl<D: Display, C: Clock> Session<D, C> {
             return;
         }
         let now = self.clock.now();
-        if self.notice.is_some_and(|until| until <= now) {
+        if self.notice.as_ref().is_some_and(|(_, until)| *until <= now) {
             self.notice = None;
             // The frame rate comes back at its next refresh.
             self.display.set_title(&self.title);
@@ -516,10 +525,10 @@ impl<D: Display, C: Clock> Session<D, C> {
     /// Shows `notice` in the title for [`NOTICE_TIME`] and reports it.
     fn show_notice(&mut self, notice: std::fmt::Arguments<'_>) {
         let notice = notice.to_string();
-        self.notice = Some(self.clock.now() + NOTICE_TIME);
         let title = format!("{} - {notice}", self.title);
         self.display.set_title(&title);
         self.report(Severity::Info, format_args!("{notice}"));
+        self.notice = Some((notice, self.clock.now() + NOTICE_TIME));
     }
 
     /// The state of `slot` was loaded: the guest that sends from here on is one the session
