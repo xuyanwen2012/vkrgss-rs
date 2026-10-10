@@ -78,15 +78,12 @@
 - Spans and frame timings (`measure-frame-times`).
 - Events from `vkxp-vk` and the guest crates.
 - The two diagnostics of `vkxp-binding` (a process function that is turned off, a `Win32API`
-  call that is not emulated) are not events yet, and the crate has no `tracing` dependency.
-  The Ruby prelude writes them to the script's `$stderr` as lines `vkxp: <text>`, and the
-  tests `tests/prelude.rs` and `tests/win32api.rs` read them from a `$stderr` they replaced.
-  As events they would no longer reach a replaced `$stderr`, so those tests could not pass
-  unchanged, which task 2.1 asks for; keeping both would need a second path beside the
-  event, which this design does not name. Today they are shown at every level, with the
-  default format's prefix, `VKXP_LOG=off` included. Open question: should they become
-  warnings through a host function, with the tests changed to match? Task 2.1 stays
-  unticked until this is answered.
+  call that is not emulated) stay lines that the Ruby prelude writes to the script's
+  `$stderr`, decided by the owner's coordinator when this change was merged: a script can
+  replace `$stderr` and the tests `tests/prelude.rs` and `tests/win32api.rs` read them there,
+  so they are text produced inside the interpreter, like the output of `p`, and are shown at
+  every level. `vkxp-binding` gets no `tracing` dependency in this change. Making them
+  warnings through a host function is possible later.
 - A line that comes through the adapter is a warning whatever it says. A rejected frame, or
   a display that cannot be frozen, would be an error if the session emitted events itself;
   that means the session's tests reading events instead of an injected stream.
