@@ -3,7 +3,6 @@
 pub use vkxp_proto::MAX_LOGICAL_DIMENSION;
 use vkxp_proto::{FrameRate, Size};
 
-use crate::element::Order;
 use crate::tilemap::SentTables;
 use crate::{Bitmaps, ElementKind, Plane, Rect, SceneError, Sprite, Tilemap, Viewport, Window};
 
@@ -182,12 +181,13 @@ pub struct DisposedElements {
 /// An element is created with or without a viewport and keeps it for life: disposing the
 /// viewport disposes it, and an element created in a disposed viewport is alive and never
 /// drawn. Elements are drawn
-/// in ascending order of z; among equal z, the element created, or last given a different z,
-/// more recently is in front. A viewport takes one place in that order for all its elements,
-/// which are ordered among themselves in the same way.
+/// in ascending order of z; among equal z, the element created more recently is in front, and
+/// assigning a z never changes the order among equals. A viewport takes one place in that
+/// order for all its elements, by its own z and its own creation; its elements are ordered
+/// among themselves in the same way.
 ///
-/// PLACEHOLDER: the order among elements with equal z, in particular after a z change, is not
-/// yet checked against the original runtime.
+/// Provenance: oracle measurement, RGSS103J, z order probe (`ph-scene-zorder-probe.rb`: 109
+/// observations of sprites, planes, windows, viewports and a tilemap, none mismatching).
 ///
 /// [`Scene::extract`] turns the scene into the frame packet a compositor draws.
 #[derive(Debug, Clone)]
@@ -445,19 +445,15 @@ access!(
     is_tilemap_disposed
 );
 
-/// Setting z: a value different from the current one moves the element in front of every
-/// other element with that z; the current value changes nothing.
+/// Setting z. The place among the elements with the same z is that of creation, whatever
+/// is assigned.
 macro_rules! set_z {
     ($id:ident, $get_mut:ident, $set_z:ident) => {
         impl Scene {
-            /// Sets z. A value other than the current one also puts the element in front of
-            /// the others that have that z; the current value changes nothing.
+            /// Sets z. Among the elements that have that z the element keeps the place its
+            /// creation gave it.
             pub fn $set_z(&mut self, id: $id, z: i32) -> Result<(), SceneError> {
-                if self.$get_mut(id)?.order.z == z {
-                    return Ok(());
-                }
-                let stamp = self.next_stamp();
-                self.$get_mut(id)?.order = Order { z, stamp };
+                self.$get_mut(id)?.order.z = z;
                 Ok(())
             }
         }

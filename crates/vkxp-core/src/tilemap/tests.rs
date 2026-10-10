@@ -552,10 +552,10 @@ fn a_tile_of_priority_1_ranks_with_the_sprites_one_row_below_it() {
     assert_eq!(in_front(&mut stage), (true, false));
     stage.scene.set_sprite_z(sprite, 192).unwrap();
     assert_eq!(in_front(&mut stage), (false, false));
-    // At the z of the tile the newer of the two is in front: here the sprite, which was
-    // given its z after the tilemap was created.
+    // At the z of the tile the newer of the two is in front: here the tilemap, which was
+    // created after the sprite.
     stage.scene.set_sprite_z(sprite, 160).unwrap();
-    assert_eq!(in_front(&mut stage), (false, false));
+    assert_eq!(in_front(&mut stage), (true, false));
     stage.scene.set_sprite_z(sprite, 161).unwrap();
     assert_eq!(in_front(&mut stage), (false, false));
     stage.assert_pinned("a_tile_of_priority_1_ranks_with_the_sprites_one_row_below_it");

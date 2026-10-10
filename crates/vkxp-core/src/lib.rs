@@ -33,7 +33,7 @@
 //!   element is a property holder with its RGSS1 defaults, reached through the scene
 //!   (`scene.sprite(id)`, `scene.sprite_mut(id)`); z is set through the scene
 //!   (`scene.set_sprite_z`), because it decides the draw order: ascending z, and among equal z
-//!   the element created or last given a different z more recently in front. Using a disposed
+//!   the element created more recently in front. Using a disposed
 //!   element fails with [`SceneError::Disposed`], which names the [`ElementKind`].
 //! - Extraction. [`Scene::extract`] is the only place a frame is assembled: it returns the
 //!   protocol `FramePacket` with the ops of every visible element in draw order and the

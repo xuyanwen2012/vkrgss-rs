@@ -214,6 +214,17 @@ for it and goes on, which is kept.
   as they are: the original has no translucent destination for them, so there is nothing to
   match, and frame composition never reaches them.
 
+## Edits outside the named files
+
+- Draw order: three tests outside the named files stated the old order and were corrected
+  in the lines that stated it: `tilemap/tests.rs`
+  (`a_tile_of_priority_1_ranks_with_the_sprites_one_row_below_it`: at the z of the tile the
+  tilemap, created after the sprite, is in front) with its line of
+  `tests/data/tilemap-frames.txt`, recorded again (its third digest is now that of the frame
+  with the tile in front); `window/tests.rs` (`a_sprite_can_stand_between_frame_and_contents`:
+  a window z taken away and back leaves the younger sprite in front of the contents); and the
+  sentence on the draw order in the crate documentation of `lib.rs`.
+
 ## Follow-ups
 
 (none yet)

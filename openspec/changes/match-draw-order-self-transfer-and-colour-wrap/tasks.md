@@ -2,7 +2,7 @@
 
 ## 1. Draw order (`vkxp-core`)
 
-- [ ] 1.1 Give the stamp once at creation and never renew it. Verify: the scenarios of `specs/core-scene/spec.md` with every row of the unit-test table of item 4 in `design.md` as a test; `cargo test -p vkxp-core --locked` passes.
+- [x] 1.1 Give the stamp once at creation and never renew it. Verify: the scenarios of `specs/core-scene/spec.md` with every row of the unit-test table of item 4 in `design.md` as a test; `cargo test -p vkxp-core --locked` passes.
 
 ## 2. Transfers within one bitmap (`vkxp-core`)
 

@@ -531,13 +531,14 @@ fn a_sprite_can_stand_between_frame_and_contents() {
     assert_eq!(frame.pixel(0, 0), GREEN);
     assert_eq!(frame.pixel(20, 40), GREEN);
 
-    // At the z of the contents, the one given its z later is in front.
+    // At the z of the contents, the one created later is in front, whichever was given its
+    // z last.
     stage.scene.set_sprite_z(sprite, 102).unwrap();
     assert_eq!(stage.frame().pixel(20, 40), GREEN);
     stage.scene.set_window_z(id, 0).unwrap();
     stage.scene.set_window_z(id, 100).unwrap();
     let frame = stage.frame();
-    assert_eq!(frame.pixel(20, 40), WHITE);
+    assert_eq!(frame.pixel(20, 40), GREEN);
     assert_eq!(frame.pixel(100, 40), GREEN);
 }
 

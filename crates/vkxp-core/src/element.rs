@@ -18,8 +18,8 @@ fn clamp_opacity(value: i32) -> u8 {
     value.clamp(0, 255) as u8
 }
 
-/// Where an element stands in the draw order: its z, and the stamp it got when it was created
-/// or last given a different z.
+/// Where an element stands in the draw order: its z, and the stamp it got when it was
+/// created, which is never renewed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Order {
     pub(crate) z: i32,

@@ -439,3 +439,255 @@ fn the_logical_size_is_640_by_480_unless_given() {
     let scene = Scene::with_logical_size(Size::new(0, 100_000));
     assert_eq!(scene.logical_size(), Size::new(1, MAX_LOGICAL_DIMENSION));
 }
+
+/// The measured draw orders among elements with equal z: every row of the table of the z
+/// order probe of the original runtime (RGSS103J), where all elements start at z 0.
+mod measured_order {
+    use vkxp_pixel::Rgba;
+
+    use super::*;
+    use crate::extract::testing::*;
+
+    /// The pixel every element of a row covers.
+    const AT: (u32, u32) = (20, 20);
+
+    /// An element of a row, which shows one colour of its own at [`AT`].
+    #[derive(Clone, Copy)]
+    enum Element {
+        Sprite(SpriteId),
+        Plane(PlaneId),
+        /// A window without a skin: its contents are all it shows.
+        Window(WindowId),
+    }
+
+    /// The elements of a row with their names, on a stage.
+    struct Row {
+        stage: Stage,
+        elements: Vec<(char, Rgba, Element)>,
+    }
+
+    impl Row {
+        fn new() -> Row {
+            Row {
+                stage: Stage::sized(64, 48),
+                elements: Vec::new(),
+            }
+        }
+
+        /// A bitmap of a colour no other element of the row has.
+        fn colour(&mut self) -> (Rgba, vkxp_proto::BitmapId) {
+            let colour = [40 * (self.elements.len() as u8 + 1), 0, 0, 255];
+            (colour, self.stage.solid(32, 32, colour))
+        }
+
+        fn sprite(&mut self, name: char, viewport: Option<ViewportId>) -> SpriteId {
+            let (colour, bitmap) = self.colour();
+            let id = self.stage.scene.create_sprite(viewport).unwrap();
+            let sprite = self.stage.scene.sprite_mut(id).unwrap();
+            sprite.set_bitmap(Some(bitmap), &self.stage.bitmaps);
+            self.elements.push((name, colour, Element::Sprite(id)));
+            id
+        }
+
+        fn sprites<const N: usize>(&mut self, names: [char; N]) -> [SpriteId; N] {
+            names.map(|name| self.sprite(name, None))
+        }
+
+        fn plane(&mut self, name: char) -> PlaneId {
+            let (colour, bitmap) = self.colour();
+            let id = self.stage.scene.create_plane(None).unwrap();
+            self.stage.scene.plane_mut(id).unwrap().bitmap = Some(bitmap);
+            self.elements.push((name, colour, Element::Plane(id)));
+            id
+        }
+
+        fn window(&mut self, name: char) -> WindowId {
+            let (colour, bitmap) = self.colour();
+            let id = self.stage.scene.create_window(None).unwrap();
+            let window = self.stage.scene.window_mut(id).unwrap();
+            (window.width, window.height) = (64, 48);
+            window.contents = Some(bitmap);
+            self.elements.push((name, colour, Element::Window(id)));
+            id
+        }
+
+        fn viewport(&mut self) -> ViewportId {
+            let rect = Rect::new(0, 0, 64, 48);
+            self.stage.scene.create_viewport(rect).unwrap()
+        }
+
+        fn z(&mut self, sprite: SpriteId, z: i32) {
+            self.stage.scene.set_sprite_z(sprite, z).unwrap();
+        }
+
+        /// A z taken away and back.
+        fn away_and_back(&mut self, sprite: SpriteId, z: i32) {
+            self.z(sprite, z);
+            self.z(sprite, 0);
+        }
+
+        /// The names of the elements from the bottom to the top: the one in front is read
+        /// off the frame and hidden, which does not change the order of the others.
+        fn order(&mut self) -> String {
+            let mut names = Vec::new();
+            for _ in 0..self.elements.len() {
+                let shown = self.stage.frame().pixel(AT.0, AT.1);
+                let &(name, _, element) = self
+                    .elements
+                    .iter()
+                    .find(|(_, colour, _)| *colour == shown)
+                    .expect("an element of the row is shown");
+                let scene = &mut self.stage.scene;
+                match element {
+                    Element::Sprite(id) => scene.sprite_mut(id).unwrap().visible = false,
+                    Element::Plane(id) => scene.plane_mut(id).unwrap().visible = false,
+                    Element::Window(id) => scene.window_mut(id).unwrap().visible = false,
+                }
+                names.push(name);
+            }
+            names.iter().rev().collect()
+        }
+    }
+
+    #[test]
+    fn sprites_are_drawn_in_the_order_of_creation() {
+        let mut row = Row::new();
+        row.sprites(['A', 'B', 'C']);
+        assert_eq!(row.order(), "ABC");
+    }
+
+    #[test]
+    fn a_z_taken_away_and_back_keeps_the_place() {
+        let mut row = Row::new();
+        let [a, _, _] = row.sprites(['A', 'B', 'C']);
+        row.away_and_back(a, 5);
+        assert_eq!(row.order(), "ABC", "A.z = 5; A.z = 0");
+
+        let mut row = Row::new();
+        let [_, _, c] = row.sprites(['A', 'B', 'C']);
+        row.away_and_back(c, -5);
+        assert_eq!(row.order(), "ABC", "C.z = -5; C.z = 0");
+
+        let mut row = Row::new();
+        let [_, b, _] = row.sprites(['A', 'B', 'C']);
+        row.away_and_back(b, -5);
+        assert_eq!(row.order(), "ABC", "B.z = -5; B.z = 0");
+    }
+
+    #[test]
+    fn the_order_of_the_z_assignments_does_not_count() {
+        let mut row = Row::new();
+        let [a, b, c] = row.sprites(['A', 'B', 'C']);
+        for sprite in [c, b, a] {
+            row.z(sprite, 10);
+        }
+        assert_eq!(row.order(), "ABC");
+
+        let mut row = Row::new();
+        let [a, b, c, _] = row.sprites(['A', 'B', 'C', 'D']);
+        for sprite in [a, b, c] {
+            row.z(sprite, 3);
+        }
+        assert_eq!(row.order(), "DABC");
+
+        let mut row = Row::new();
+        let [_, b, c, d] = row.sprites(['A', 'B', 'C', 'D']);
+        for sprite in [d, c, b] {
+            row.z(sprite, -3);
+        }
+        assert_eq!(row.order(), "BCDA");
+    }
+
+    #[test]
+    fn a_frame_drawn_in_between_changes_nothing() {
+        let mut row = Row::new();
+        let [a, _, _] = row.sprites(['A', 'B', 'C']);
+        row.stage.frame();
+        row.away_and_back(a, 5);
+        assert_eq!(row.order(), "ABC");
+    }
+
+    #[test]
+    fn a_plane_keeps_its_place() {
+        let mut row = Row::new();
+        let a = row.plane('A');
+        row.sprite('B', None);
+        row.stage.scene.set_plane_z(a, 5).unwrap();
+        row.stage.scene.set_plane_z(a, 0).unwrap();
+        assert_eq!(row.order(), "AB");
+    }
+
+    #[test]
+    fn a_window_keeps_its_place() {
+        let mut row = Row::new();
+        let a = row.window('A');
+        row.window('B');
+        row.stage.scene.set_window_z(a, 5).unwrap();
+        row.stage.scene.set_window_z(a, 0).unwrap();
+        assert_eq!(row.order(), "AB", "the contents of A are below those of B");
+    }
+
+    #[test]
+    fn a_viewport_keeps_its_place() {
+        let mut row = Row::new();
+        let (v, w) = (row.viewport(), row.viewport());
+        row.sprite('A', Some(v));
+        row.sprite('B', Some(w));
+        row.stage.scene.set_viewport_z(v, 5).unwrap();
+        row.stage.scene.set_viewport_z(v, 0).unwrap();
+        assert_eq!(row.order(), "AB");
+
+        let mut row = Row::new();
+        let v = row.viewport();
+        row.sprite('A', Some(v));
+        row.sprite('B', None);
+        row.stage.scene.set_viewport_z(v, 5).unwrap();
+        row.stage.scene.set_viewport_z(v, 0).unwrap();
+        assert_eq!(row.order(), "AB");
+    }
+
+    #[test]
+    fn a_viewport_ranks_by_its_own_creation_not_that_of_its_elements() {
+        let mut row = Row::new();
+        let v = row.viewport();
+        row.sprite('B', None);
+        row.sprite('A', Some(v));
+        assert_eq!(row.order(), "AB", "the viewport is older than B");
+
+        let mut row = Row::new();
+        row.sprite('B', None);
+        let v = row.viewport();
+        row.sprite('A', Some(v));
+        assert_eq!(row.order(), "BA");
+    }
+
+    #[test]
+    fn a_sprite_older_than_a_tilemap_stays_behind_its_ground_tiles() {
+        let mut row = Row::new();
+        let s = row.sprite('S', None);
+        // A map of one cell, which repeats over the screen, of a white tile of priority 0.
+        let tileset = row.stage.solid(256, 32, WHITE);
+        let map = SharedTable::new(Table::new_3d(1, 1, 3).unwrap());
+        map.set(0, 0, 0, 384);
+        let id = row.stage.scene.create_tilemap(None).unwrap();
+        let tilemap = row.stage.scene.tilemap_mut(id).unwrap();
+        tilemap.tileset = Some(tileset);
+        tilemap.map_data = Some(map);
+        assert_eq!(row.stage.frame().pixel(AT.0, AT.1), WHITE);
+
+        row.z(s, 5);
+        assert_ne!(
+            row.stage.frame().pixel(AT.0, AT.1),
+            WHITE,
+            "z 5 is in front"
+        );
+        row.z(s, 0);
+        assert_eq!(
+            row.stage.frame().pixel(AT.0, AT.1),
+            WHITE,
+            "S.z = 5; S.z = 0"
+        );
+        row.away_and_back(s, -5);
+        assert_eq!(row.stage.frame().pixel(AT.0, AT.1), WHITE);
+    }
+}

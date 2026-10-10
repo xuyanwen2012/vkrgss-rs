@@ -394,8 +394,10 @@ impl Entry {
 
 /// Sorts into draw order: ascending z, and among equal z ascending stamp.
 ///
-/// PLACEHOLDER: the order among elements with equal z is not yet checked against the original
-/// runtime.
+/// The stamp is that of creation, so among equal z the element created later is in front.
+///
+/// Provenance: oracle measurement, RGSS103J, z order probe (`ph-scene-zorder-probe.rb`): the
+/// key (z, creation) predicts all 109 observations; keys that follow z assignments do not.
 fn sort(entries: &mut [Entry]) {
     entries.sort_by_key(|entry| (entry.z, entry.stamp));
 }

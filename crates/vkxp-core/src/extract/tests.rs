@@ -73,18 +73,19 @@ fn with_equal_z_the_later_created_is_in_front() {
     let (red, green) = red_then_green(&mut stage);
     stage.scene.set_sprite_z(green, 5).unwrap();
     stage.scene.set_sprite_z(red, 5).unwrap();
-    // Red was the last to be given a different z.
-    assert_eq!(stage.frame().pixel(4, 4), RED);
+    // Red was the last to be given a z, which does not count.
+    assert_eq!(stage.frame().pixel(4, 4), GREEN);
 }
 
 #[test]
-fn moving_to_an_occupied_z_puts_the_element_in_front() {
+fn moving_to_an_occupied_z_keeps_the_order_of_creation() {
     let mut stage = Stage::sized(16, 16);
     let (red, _) = red_then_green(&mut stage);
     assert_eq!(stage.frame().pixel(4, 4), GREEN);
     stage.scene.set_sprite_z(red, 7).unwrap();
-    stage.scene.set_sprite_z(red, 0).unwrap();
     assert_eq!(stage.frame().pixel(4, 4), RED);
+    stage.scene.set_sprite_z(red, 0).unwrap();
+    assert_eq!(stage.frame().pixel(4, 4), GREEN);
 }
 
 #[test]
@@ -115,7 +116,23 @@ fn viewports_take_part_in_the_order_of_the_screen() {
     assert_eq!(stage.frame().pixel(4, 4), RED, "larger z");
 
     stage.scene.set_viewport_z(viewport, 0).unwrap();
-    assert_eq!(stage.frame().pixel(4, 4), RED, "moved to an occupied z");
+    assert_eq!(stage.frame().pixel(4, 4), GREEN, "back at the shared z");
+}
+
+#[test]
+fn a_viewport_older_than_a_screen_sprite_is_behind_it() {
+    // The viewport is created first, the green screen sprite next, the red sprite of the
+    // viewport last: the viewport's creation counts, not that of its sprite.
+    let mut stage = Stage::sized(16, 16);
+    let red = stage.solid(4, 4, RED);
+    let green = stage.solid(4, 4, GREEN);
+    let viewport = stage
+        .scene
+        .create_viewport(Rect::new(0, 0, 16, 16))
+        .unwrap();
+    sprite(&mut stage, green, 4, 4);
+    sprite_in(&mut stage, Some(viewport), red, 2, 2);
+    assert_eq!(stage.frame().pixel(4, 4), GREEN);
 }
 
 #[test]
