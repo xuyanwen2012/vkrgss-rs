@@ -1,8 +1,9 @@
 //! Tilemap layer ops: the scenes of the reference compositor rendered by both backends, the
-//! table errors, and the copy of the pattern table in the shader.
+//! table errors, and the copy of the shared pattern table in the shader.
 
+use vkxp_compose_ref as reference;
 use vkxp_compose_ref::fixtures::{self, bitmap, table, tilemap_layer, tileset};
-use vkxp_compose_ref::{self as reference, AUTOTILE_QUARTERS};
+use vkxp_proto::tiles::AUTOTILE_QUARTERS;
 use vkxp_proto::{
     BitmapId, FramePacket, FrameRate, GuestToHost, Op, Rect, Size, TableDelta, TableId,
     TilemapLayer,
@@ -38,7 +39,7 @@ fn every_tilemap_scene_is_byte_identical() {
 }
 
 #[test]
-fn shader_has_the_pattern_table_of_the_reference() {
+fn shader_has_the_shared_pattern_table() {
     let start = COMPOSE_GLSL
         .find("const uint AUTOTILE_QUARTERS[192] = uint[192](")
         .expect("the shader declares the table");

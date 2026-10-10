@@ -24,9 +24,8 @@ mod store;
 mod tables;
 mod tilemap;
 
-pub use compose::{BACKGROUND, Compositor, Frame, MAX_LOGICAL_DIMENSION, render_stream};
+pub use compose::{BACKGROUND, Compositor, Frame, render_stream};
 pub use error::{BitmapError, ComposeError, SlotState, TableError};
 pub use png_out::encode_png;
 pub use store::{Bitmap, BitmapStore, MAX_BITMAP_PIXELS};
 pub use tables::{Table, TableStore};
-pub use tilemap::AUTOTILE_QUARTERS;

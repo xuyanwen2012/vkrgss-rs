@@ -14,10 +14,10 @@
 
 use vkxp_proto::{BitmapId, BlendMode};
 
-use super::{ANIMATION_PERIOD, LAYERS, MAX_PRIORITY, Strip, flash_alpha, priority};
+use super::{ANIMATION_PERIOD, LAYERS, MAX_PRIORITY, Strip, TILE, flash_alpha, priority};
 use crate::extract::{Assembly, Level, Look};
 use crate::geometry::Geometry;
-use crate::tiles::{Sheet, TILE, frames, pieces, sheet};
+use crate::tiles::{Sheet, frames, pieces, sheet};
 use crate::{Bitmaps, Color, FontDefaults, Rect, SharedTable, Tilemap};
 
 /// The state of the cached composition of one tilemap.

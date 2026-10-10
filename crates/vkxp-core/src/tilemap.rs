@@ -21,16 +21,18 @@
 //! which is drawn additively right above the ground. It is filled again when the flash data,
 //! the first cell or the pulse changes.
 
-use vkxp_proto::{BitmapId, BlendMode, Op, TableDelta, TableId, TilemapLayer};
+use vkxp_proto::tiles::{self, QUARTER_SIZE, Sheet, TILE_SIZE};
+use vkxp_proto::{BitmapId, BlendMode, Op, Size, TableDelta, TableId, TilemapLayer};
 
 use crate::extract::{Assembly, Level, Look, rows};
 use crate::geometry::Geometry;
-use crate::tiles::{Sheet, TILE, frames, pieces, sheet};
 use crate::{Bitmaps, Color, FontDefaults, Rect, SharedTable, Table, Tilemap};
 
 #[cfg(test)]
 pub(crate) mod cached;
 
+/// Side of a tile.
+const TILE: i32 = TILE_SIZE as i32;
 /// Number of layers of a map.
 const LAYERS: usize = 3;
 /// The highest priority a tile can have.
@@ -271,6 +273,21 @@ fn priority(priorities: Option<&Table>, id: i16) -> usize {
     value.unwrap_or(0).clamp(0, MAX_PRIORITY as i16) as usize
 }
 
+/// Whether tile `id` draws a pixel from its sheet of the size `sheet` at the animation step
+/// `animation_step`: whether one of its four quarters starts inside the sheet.
+fn shows(id: i16, sheet: Size, animation_step: u64) -> bool {
+    let corners = [
+        (0, 0),
+        (QUARTER_SIZE, 0),
+        (0, QUARTER_SIZE),
+        (QUARTER_SIZE, QUARTER_SIZE),
+    ];
+    let mut texels = corners
+        .into_iter()
+        .map(|(x, y)| tiles::texel(id, x, y, sheet, animation_step));
+    texels.any(|texel| texel.is_some())
+}
+
 /// The alpha the flashing cells are drawn with after `updates` updates: it rises from 0 to
 /// 255 in 16 updates and falls back in 16 more.
 ///
@@ -394,16 +411,13 @@ impl Tilemap {
 
         let live = |id: Option<BitmapId>| {
             let rect = bitmaps.rect(id?).ok()?;
-            Some((id?, (rect.width, rect.height)))
+            // Sizes of a bitmap are not negative.
+            let size = Size::new(rect.width.unsigned_abs(), rect.height.unsigned_abs());
+            Some((id?, size))
         };
         let tileset = live(self.tileset);
         let autotiles = self.autotiles.map(live);
         let animation_step = self.updates / ANIMATION_PERIOD;
-        let current = autotiles.map(|sheet| {
-            let (width, height) = sheet.map_or((0, 0), |(_, size)| size);
-            // Less than the number of frames, which is a `u32`.
-            (animation_step % u64::from(frames(width, height))) as u32
-        });
 
         // The cells that show: those the area reaches as the origin stands.
         let shown = |start: i64, length: u32| {
@@ -424,17 +438,15 @@ impl Tilemap {
                     let Some(id) = map_table.get(x, y, layer as i32) else {
                         continue;
                     };
-                    let found = match sheet(id) {
+                    let found = match tiles::sheet(id) {
                         None => None,
-                        Some(Sheet::Tileset) => tileset.map(|(_, size)| (size, 0)),
-                        Some(Sheet::Autotile(index)) => {
-                            autotiles[index].map(|(_, size)| (size, current[index]))
-                        }
+                        Some(Sheet::Tileset) => tileset,
+                        Some(Sheet::Autotile(index)) => autotiles[index],
                     };
-                    let Some((size, frame)) = found else {
+                    let Some((_, size)) = found else {
                         continue;
                     };
-                    if pieces(id, size.0, size.1, frame).next().is_none() {
+                    if !shows(id, size, animation_step) {
                         continue;
                     }
                     match priority(priorities.as_deref(), id) {
@@ -617,8 +629,8 @@ mod tests {
     use super::*;
     use crate::bitmap::testing::color;
     use crate::extract::testing::*;
-    use crate::tiles::AUTOTILES;
     use crate::{SpriteId, TilemapId};
+    use vkxp_proto::tiles::AUTOTILE_QUARTERS;
 
     /// Number of tiles of the tileset of the tests: 8 columns, 40 rows.
     const TILES: i32 = 320;
@@ -827,7 +839,7 @@ mod tests {
         (0..48u32).all(|pattern| {
             let (left, top) = (pattern % 8 * 32, pattern / 8 * 32);
             (0..4u32).all(|corner| {
-                let quarter = u32::from(AUTOTILES[pattern as usize][corner as usize]) - 1;
+                let quarter = u32::from(AUTOTILE_QUARTERS[pattern as usize][corner as usize]) - 1;
                 let (sheet_x, sheet_y) = (shown * 96 + quarter % 6 * 16, quarter / 6 * 16);
                 let (x, y) = (left + corner % 2 * 16, top + corner / 2 * 16);
                 (0..16).all(|py| {
@@ -1700,11 +1712,6 @@ mod tests {
         stage.assert_pinned(
             "a_sprite_between_two_rows_is_in_front_of_the_upper_and_behind_the_lower",
         );
-    }
-
-    #[test]
-    fn the_pattern_table_is_the_one_the_compositors_draw_with() {
-        assert_eq!(AUTOTILES, vkxp_compose_ref::AUTOTILE_QUARTERS);
     }
 
     /// Not a check: prints how long extracting a frame takes for a screen of 640 by 480,

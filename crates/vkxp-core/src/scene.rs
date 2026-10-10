@@ -1,13 +1,11 @@
 //! `Scene`: the arena that owns every sprite, viewport, window, plane and tilemap.
 
+pub use vkxp_proto::MAX_LOGICAL_DIMENSION;
 use vkxp_proto::{FrameRate, Size};
 
 use crate::element::Order;
 use crate::tilemap::SentTables;
 use crate::{Bitmaps, ElementKind, Plane, Rect, SceneError, Sprite, Tilemap, Viewport, Window};
-
-/// Largest logical width or height of a scene, the limit of the compositors.
-pub const MAX_LOGICAL_DIMENSION: u32 = 16384;
 
 /// Names one occupant of one slot of an arena.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -915,9 +913,5 @@ mod tests {
         assert_eq!(scene.logical_size(), Size::new(320, 240));
         let scene = Scene::with_logical_size(Size::new(0, 100_000));
         assert_eq!(scene.logical_size(), Size::new(1, MAX_LOGICAL_DIMENSION));
-        assert_eq!(
-            MAX_LOGICAL_DIMENSION,
-            vkxp_compose_ref::MAX_LOGICAL_DIMENSION
-        );
     }
 }

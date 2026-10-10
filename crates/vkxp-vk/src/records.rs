@@ -12,8 +12,7 @@ use crate::VkError;
 use crate::bitmaps::{BitmapTable, Entry};
 use crate::tables::TableStore;
 
-/// Largest logical width or height a compositor accepts.
-pub(crate) const MAX_LOGICAL_DIMENSION: u32 = 16384;
+pub(crate) use vkxp_proto::MAX_LOGICAL_DIMENSION;
 
 /// Number of 32-bit words in one record; `OpRecord` in `shaders/compose.comp` has this layout.
 pub(crate) const RECORD_WORDS: usize = 24;

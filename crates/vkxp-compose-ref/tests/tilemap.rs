@@ -7,8 +7,9 @@
 use vkxp_compose_ref::fixtures::{
     self, autotile_pixel, autotile_sheet, bitmap, table, tilemap_layer, tileset, tileset_pixel,
 };
-use vkxp_compose_ref::{AUTOTILE_QUARTERS, ComposeError, Compositor, Frame, TableError};
+use vkxp_compose_ref::{ComposeError, Compositor, Frame, TableError};
 use vkxp_pixel::Rgba;
+use vkxp_proto::tiles::AUTOTILE_QUARTERS;
 use vkxp_proto::{
     BitmapDelta, BitmapId, BlendMode, Color, FramePacket, FrameRate, Op, Quad, Rect, Sampling,
     Size, TableDelta, TableId, TilemapLayer, Tone,

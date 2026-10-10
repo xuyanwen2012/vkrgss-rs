@@ -10,7 +10,8 @@ use crate::{BitmapId, Color, Fixed, Rect, Size, TableId, Tone};
 pub struct FramePacket {
     /// Counts frames from the start of the guest.
     pub frame_index: u64,
-    /// Size of the logical screen in pixels. Op coordinates are in this space.
+    /// Size of the logical screen in pixels, from 1 to [`MAX_LOGICAL_DIMENSION`] a side. Op
+    /// coordinates are in this space.
     pub logical_size: Size,
     /// The frame rate the guest runs at. Compositors ignore it; the host paces to it.
     pub frame_rate: FrameRate,
@@ -327,6 +328,10 @@ impl Sampling {
         }
     }
 }
+
+/// Largest width or height of a logical screen: the guest keeps its scene within it and the
+/// compositors refuse a packet beyond it.
+pub const MAX_LOGICAL_DIMENSION: u32 = 16384;
 
 /// Number of fractional bits of a stretch step.
 pub const STRETCH_FRAC_BITS: u32 = 20;

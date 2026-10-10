@@ -88,8 +88,7 @@
 //! | `turned` | the bitmap a turned sprite is rendered into |
 //! | `window` | the bitmaps cached from a window skin, windows as ops |
 //! | `plane` | planes as tiled quads, the pre-tiled bitmap of a small pattern |
-//! | `tiles` | the autotile table, tile identifiers as source rectangles |
-//! | `tilemap` | tilemaps as ops, the tables sent for them, the overlay of flashing cells |
+//! | `tilemap` | tilemaps as ops, the tables sent for them, the overlay of flashing cells; the tile numbering is `vkxp_proto::tiles` |
 //! | `input` | [`InputState`] |
 //! | `error` | [`BitmapError`], [`CreateFailure`], [`DecodeError`], [`TableError`], [`SceneError`], [`ElementKind`] |
 //! | `test_support` | stand-ins for tests, such as a rasteriser with fixed-size cells |
@@ -112,6 +111,7 @@ mod table;
 pub mod test_support;
 mod text;
 mod tilemap;
+#[cfg(test)]
 mod tiles;
 mod turned;
 mod window;

@@ -1,16 +1,15 @@
 //! Per-pixel, in-order evaluation of the op list.
 
 use vkxp_pixel::Rgba;
-use vkxp_proto::{BlendMode, FramePacket, GuestToHost, Op, Quad, Rect, RectEffect, Size};
+use vkxp_proto::{
+    BlendMode, FramePacket, GuestToHost, MAX_LOGICAL_DIMENSION, Op, Quad, Rect, RectEffect, Size,
+};
 
 use crate::tilemap::Layer;
 use crate::{Bitmap, BitmapStore, ComposeError, TableStore};
 
 /// The colour every pixel starts from before the first op: opaque black.
 pub const BACKGROUND: Rgba = [0, 0, 0, 255];
-
-/// Largest logical width or height the compositor accepts.
-pub const MAX_LOGICAL_DIMENSION: u32 = 16384;
 
 /// A composited frame: RGBA8 in row order, `size.width * size.height` pixels.
 #[derive(Debug, Clone, PartialEq, Eq)]

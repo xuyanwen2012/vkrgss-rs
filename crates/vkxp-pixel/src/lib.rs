@@ -12,9 +12,10 @@
 //! placeholders, replaced one by one as measurements and reverse-engineering specs of the
 //! original runtime's inner loops land. [`PROVENANCE`] lists the current state.
 //!
-//! Arithmetic that only the guest's bitmap operations use (hue rotation, stretch sampling) runs
-//! on the CPU alone and has no GLSL counterpart. It is listed separately, in
-//! [`BITMAP_PROVENANCE`].
+//! The arithmetic of the guest's bitmap operations (hue rotation, stretch sampling) is listed
+//! separately, in [`BITMAP_PROVENANCE`]. Hue rotation runs on the CPU alone and has no GLSL
+//! counterpart. Stretch sampling is defined in `vkxp-proto`, where every backend, the compute
+//! shader included, takes it for stretched quads; [`stretch_index`] calls that definition.
 
 #![forbid(unsafe_code)]
 
@@ -69,8 +70,8 @@ pub fn provenance() -> &'static [ArithmeticFn] {
     PROVENANCE
 }
 
-/// The provenance of the arithmetic of bitmap operations, in declaration order. These functions
-/// run only on the CPU; none of them appears in [`provenance`], the list GPU backends mirror.
+/// The provenance of the arithmetic of bitmap operations, in declaration order. None of these
+/// functions appears in [`provenance`], the list of blending functions GPU backends mirror.
 pub fn bitmap_provenance() -> &'static [ArithmeticFn] {
     BITMAP_PROVENANCE
 }

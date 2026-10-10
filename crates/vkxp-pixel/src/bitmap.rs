@@ -1,8 +1,10 @@
-//! Arithmetic of bitmap operations that run only on the CPU. Every `pub fn` in this file has
-//! an entry in [`BITMAP_PROVENANCE`]; a test reads this file and fails if one is missing.
+//! Arithmetic of the guest's bitmap operations. Every `pub fn` in this file has an entry in
+//! [`BITMAP_PROVENANCE`]; a test reads this file and fails if one is missing.
 //!
-//! Nothing here is mirrored by a shader, which is why these functions are listed apart from
-//! the compositing functions of `arith.rs`.
+//! These functions are listed apart from the compositing functions of `arith.rs`, which a
+//! shader mirrors one by one. Hue rotation runs on the CPU alone. Stretch sampling is the
+//! rule of `vkxp_proto::stretch_step` and `vkxp_proto::stretch_index`, which the compositors
+//! apply to stretched quads, the compute shader among them; [`stretch_index`] calls them.
 //!
 //! Notation used in the formulas: channels are integers from 0 to 255 and `/` is integer
 //! division rounding down.
@@ -42,7 +44,8 @@ pub const BITMAP_PROVENANCE: &[ArithmeticFn] = &[
 /// destination span of `dst_len` takes from a source span of `src_len`.
 ///
 /// Formula: `s = (i * step) >> 20` with the fixed-point step `(src_len << 20) / dst_len`, in
-/// 64-bit arithmetic. No interpolation and no pixel centres. The step is rounded down, so a
+/// 64-bit arithmetic: `vkxp_proto::stretch_index` at `vkxp_proto::stretch_step`, the one
+/// definition of the rule, which the compositors use for stretched quads. No interpolation and no pixel centres. The step is rounded down, so a
 /// ratio that is not a binary fraction lands one index low where the exact product is a whole
 /// number: 16 stretched to 24 takes 0, 0, 1, 1, 2, 3.
 ///
@@ -56,8 +59,7 @@ pub const BITMAP_PROVENANCE: &[ArithmeticFn] = &[
 /// PROVENANCE: ReverseEngineered (oracle measurement 2026-10-09, RGSS103J, bitmap stretch
 /// probe).
 pub const fn stretch_index(i: u32, src_len: u32, dst_len: u32) -> u32 {
-    let step = ((src_len as u64) << 20) / dst_len as u64;
-    ((i as u64).wrapping_mul(step) >> 20) as u32
+    vkxp_proto::stretch_index(i, vkxp_proto::stretch_step(src_len, dst_len))
 }
 
 /// Rotates the hue of a pixel by `degrees`, keeping its alpha, as the original runtime's
