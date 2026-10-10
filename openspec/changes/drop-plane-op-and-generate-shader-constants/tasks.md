@@ -10,7 +10,7 @@
 
 ## 3. Documents
 
-- [ ] 3.1 Bring `README.md` in line (protocol version, op list). Verify: the README names version 7 and no reserved op.
+- [x] 3.1 Bring `README.md` in line (protocol version, op list). Verify: the README names version 7 and no reserved op.
 
 ## 4. Integration check
 

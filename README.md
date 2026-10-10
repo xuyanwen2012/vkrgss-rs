@@ -35,6 +35,11 @@ defined in `vkxp-proto`.
 `xtask` holds repository automation and the tool that extracts the built-in scripts; it is not
 part of the runtime.
 
+The protocol is at version 7; an encoded stream of another version is rejected. A frame packet
+carries the changes to bitmaps and tables and an ordered list of ops of four kinds: `Clear`,
+`Quad`, `RectEffect` and `TilemapLayer`. Sprites, planes and the parts of a window are quads.
+Both compositors evaluate every kind.
+
 ## Third-party source
 
 `third_party/ruby-1.8.7/` holds the part of the Ruby 1.8.7-p374 release that `vkxp-ruby-sys`
