@@ -1487,3 +1487,208 @@ fn the_form_of_the_guest_comes_from_the_command_line_the_environment_or_a_file()
         "{stderr}"
     );
 }
+
+// Save states: the scenarios of `specs/host-session/spec.md` and `specs/game-launch/spec.md`
+// that need the processes.
+
+/// A game that draws from a counter and from `rand`, without an end: the red sprite goes
+/// right by the counter and is put at a height that `rand` gives, and one pixel of its
+/// bitmap is painted in a colour that `rand` gives.
+fn counter_and_rand_game(name: &str) -> Game {
+    let main = "\
+counter = 0
+loop do
+  counter += 1
+  $sprite.x = counter * 3
+  $sprite.y = rand(400)
+  $sprite.bitmap.set_pixel(rand(32), rand(32), Color.new(0, rand(256), counter % 256))
+  Graphics.update
+end
+";
+    Game::new(name, "States", &[("Sprite", RED_SPRITE), ("Main", main)])
+}
+
+/// Runs `game` headless with the guest in a process for `frames` frames, with the states
+/// schedule `states` unless it is empty, and writes every frame of `dumped`.
+fn states_run(game: &Game, frames: u64, states: &str, dumped: &[u64]) -> Ran {
+    let frames = frames.to_string();
+    let names: Vec<String> = dumped
+        .iter()
+        .map(|index| format!("{index}={index}.png"))
+        .collect();
+    let mut arguments = vec!["--guest", "process", "--frames", &frames];
+    if !states.is_empty() {
+        arguments.extend(["--states", states]);
+    }
+    arguments.extend(names.iter().flat_map(|name| ["--dump", name.as_str()]));
+    let work = tempfile::tempdir().expect("a temporary directory");
+    let ran = headless_logging(work, game, &arguments, Some("info"));
+    ran.assert_success();
+    ran
+}
+
+fn dumped_bytes(ran: &Ran, index: u64) -> Vec<u8> {
+    fs::read(ran.file(&format!("{index}.png"))).expect("a dumped frame")
+}
+
+/// Scenario "Back to the saved frame".
+#[test]
+fn a_loaded_state_goes_back_to_the_saved_frame() {
+    let game = counter_and_rand_game("e2e-states-back");
+    let plain_frames: Vec<u64> = (61..=90).collect();
+    let plain = states_run(&game, 91, "", &plain_frames);
+    let loaded_frames: Vec<u64> = (100..=130).collect();
+    let loaded = states_run(&game, 131, "60:save 0, 100:load 0", &loaded_frames);
+    for k in 1..=30 {
+        assert!(
+            dumped_bytes(&loaded, 100 + k) == dumped_bytes(&plain, 60 + k),
+            "frame {} is not frame {} of the run without states",
+            100 + k,
+            60 + k
+        );
+    }
+    // The run did go on to frame 100 before it went back, and its frames do differ.
+    assert!(dumped_bytes(&loaded, 100) != dumped_bytes(&loaded, 101));
+    assert!(dumped_bytes(&plain, 61) != dumped_bytes(&plain, 62));
+    let stderr = loaded.stderr();
+    assert!(stderr.contains("state saved into slot 0"), "{stderr}");
+    assert!(stderr.contains("state loaded from slot 0"), "{stderr}");
+}
+
+/// Scenario "Loading twice".
+#[test]
+fn a_state_can_be_loaded_twice() {
+    let game = counter_and_rand_game("e2e-states-twice");
+    let ran = states_run(
+        &game,
+        151,
+        "60:save 0, 100:load 0, 140:load 0",
+        &[109, 110, 150],
+    );
+    assert!(dumped_bytes(&ran, 110) == dumped_bytes(&ran, 150));
+    assert!(dumped_bytes(&ran, 109) != dumped_bytes(&ran, 110));
+    let stderr = ran.stderr();
+    assert_eq!(stderr.matches("state loaded from slot 0").count(), 2);
+    assert_eq!(stderr.matches("state saved into slot 0").count(), 1);
+}
+
+/// Scenario "Empty slot".
+#[test]
+fn loading_an_empty_slot_is_reported_and_the_run_goes_on() {
+    let game = counter_and_rand_game("e2e-states-empty");
+    let ran = states_run(&game, 20, "5:load 3", &[19]);
+    assert!(
+        ran.stderr().contains("slot 3 holds no state"),
+        "{}",
+        ran.stderr()
+    );
+}
+
+/// The numbers of the guest processes that attached during a run, from its informational
+/// lines.
+fn attached_processes(stderr: &str) -> Vec<u32> {
+    let numbers = stderr.lines().filter_map(|line| {
+        let (_, rest) = line.split_once("guest process ")?;
+        let (number, rest) = rest.split_once(' ')?;
+        rest.starts_with("attached").then(|| number.parse().ok())?
+    });
+    numbers.collect()
+}
+
+/// Scenario "Nothing left behind".
+#[test]
+fn no_process_of_a_run_with_states_is_left_when_it_ends() {
+    let game = counter_and_rand_game("e2e-states-left");
+    let schedule = "5:save 0, 8:save 1, 11:save 2, 14:save 1, 20:load 2";
+    let ran = states_run(&game, 30, schedule, &[]);
+    let attached = attached_processes(&ran.stderr());
+    // The child, four copies for the saves, and the copy the resumed one left of itself.
+    assert_eq!(attached.len(), 6, "{}", ran.stderr());
+    for pid in attached {
+        assert!(
+            !Path::new(&format!("/proc/{pid}")).exists(),
+            "the guest process {pid} is still there"
+        );
+    }
+    // Neither is the directory of the socket.
+    let left: Vec<_> = fs::read_dir(ran.work.path())
+        .expect("the work directory")
+        .flatten()
+        .map(|entry| entry.file_name())
+        .collect();
+    assert!(left.is_empty(), "{left:?}");
+}
+
+/// Scenario "Script error after a load". The game leaves a file behind after the state was
+/// saved, which the game that goes on from the state finds.
+#[test]
+fn a_script_error_after_a_load_is_reported_and_fails_the_run() {
+    let main = "\
+counter = 0
+loop do
+  counter += 1
+  File.open('mark.txt', 'w') { |file| file.write('x') } if counter == 20
+  raise 'after the load' if counter == 15 && File.exist?('mark.txt')
+  Graphics.update
+end
+";
+    let game = Game::new("e2e-states-error", "Error", &[("Main", main)]);
+    let ran = headless(
+        &game,
+        &["--guest", "process", "--states", "10:save 4, 30:load 4"],
+    );
+    ran.assert_failure();
+    let stderr = ran.stderr();
+    assert!(stderr.contains("after the load"), "{stderr}");
+    assert!(stderr.contains("RuntimeError"), "{stderr}");
+}
+
+/// Scenario "Thread form".
+#[test]
+fn a_states_schedule_with_the_guest_on_a_thread_is_an_error_naming_the_option() {
+    let game = counter_and_rand_game("e2e-states-thread");
+    for form in [&[][..], &["--guest", "thread"]] {
+        let mut arguments = vec!["--states", "5:save 0", "--frames", "8"];
+        arguments.extend_from_slice(form);
+        let ran = headless(&game, &arguments);
+        assert_eq!(ran.output.status.code(), Some(2));
+        assert!(ran.stderr().contains("--guest process"), "{}", ran.stderr());
+    }
+}
+
+/// Scenario "Malformed schedule".
+#[test]
+fn a_malformed_states_schedule_is_an_error_naming_the_entry() {
+    for entry in ["5:keep 0", "5:save 10"] {
+        let ran = vkxp(&["--headless", "--guest", "process", "--states", entry]);
+        assert_eq!(ran.output.status.code(), Some(2));
+        let stderr = ran.stderr();
+        assert!(stderr.contains(&format!("`{entry}`")), "{stderr}");
+        assert!(stderr.contains("--states"), "{stderr}");
+    }
+}
+
+/// With the functions that start processes there are no states: a save is answered with
+/// the failure.
+#[test]
+fn a_guest_that_may_start_processes_saves_no_state() {
+    let game = counter_and_rand_game("e2e-states-functions");
+    let work = tempfile::tempdir().expect("a temporary directory");
+    let arguments = [
+        "--guest",
+        "process",
+        "--allow-process-functions",
+        "--frames",
+        "12",
+        "--states",
+        "3:save 0, 6:load 0",
+    ];
+    let ran = headless_logging(work, &game, &arguments, Some("info"));
+    ran.assert_success();
+    let stderr = ran.stderr();
+    assert!(
+        stderr.contains("no state could be saved into slot 0"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("slot 0 holds no state"), "{stderr}");
+}

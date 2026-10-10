@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use vkxp_host::{Filter, InputScript};
+use vkxp_host::{Filter, InputScript, StateSchedule};
 use vkxp_vfs::Encoding;
 
 /// What is printed with every command-line error.
@@ -47,13 +47,17 @@ usage: vkxp [GAME_DIR] [OPTIONS]
   --record FILE             write the input of every frame and the seed to FILE
   --replay FILE             play the input of a recording back instead of the keyboard
   --guest thread|process    where the game's scripts run: on a thread of the program or
-                            in a process of their own; default: thread; the
-                            environment variable VKXP_GUEST sets it too, and comes
-                            after this option
+                            in a process of their own, which save states need (F3
+                            saves, F4 loads, with Shift they choose the slot);
+                            default: process in a window, thread in a headless run;
+                            the environment variable VKXP_GUEST sets it too, and
+                            comes after this option
   --headless                run without a window, on a virtual clock
   --frames N                headless: stop after N frames
   --input SCRIPT|@FILE      headless: held buttons, for example \"2:RIGHT, 6:\"
-  --dump FRAME=FILE         headless: write frame FRAME as a PNG file; repeatable";
+  --dump FRAME=FILE         headless: write frame FRAME as a PNG file; repeatable
+  --states SCHEDULE         headless, with --guest process: save and load states at
+                            given frames, for example \"120:save 0, 200:load 0\"";
 
 /// Where the input script of a headless run comes from.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -144,6 +148,8 @@ pub(crate) struct Options {
     pub input: Option<Input>,
     /// Frames to write as PNG files, by frame number.
     pub dumps: Vec<(u64, PathBuf)>,
+    /// The states to save and to load at given frames of a headless run.
+    pub states: StateSchedule,
 }
 
 /// `NAME=VALUE` with neither part empty.
@@ -306,6 +312,10 @@ pub(crate) fn parse(arguments: &[String]) -> Result<Options, String> {
                 let dump = dump(value()?).map_err(|error| format!("--dump: {error}"))?;
                 options.dumps.push(dump);
             }
+            "--states" => {
+                options.states =
+                    StateSchedule::parse(value()?).map_err(|error| format!("--states: {error}"))?;
+            }
             option if option.starts_with('-') => return Err(format!("unknown option `{option}`")),
             _ if options.game_dir.is_some() => {
                 return Err(format!("unexpected argument `{argument}`"));
@@ -328,10 +338,15 @@ pub(crate) fn check(options: &Options) -> Result<(), String> {
             (options.frames.is_some(), "--frames"),
             (options.input.is_some(), "--input"),
             (!options.dumps.is_empty(), "--dump"),
+            (!options.states.is_empty(), "--states"),
         ];
         if let Some((_, option)) = headless_only.iter().find(|(given, _)| *given) {
             return Err(format!("{option} needs --headless"));
         }
+    }
+    // States are copies of the guest process: a guest on a thread has none.
+    if !options.states.is_empty() && options.guest != Some(GuestForm::Process) {
+        return Err("--states needs the guest in a process: add --guest process".to_owned());
     }
     if options.replay.is_some() {
         // A replay stands in for every other input.
@@ -461,6 +476,34 @@ mod tests {
             "{error}"
         );
         assert!(parse_words(&["--guest"]).is_err());
+    }
+
+    /// Scenarios "Thread form" and "Malformed schedule".
+    #[test]
+    fn a_states_schedule_is_for_a_headless_run_with_the_guest_in_a_process() {
+        let words = ["--headless", "--guest", "process", "--states"];
+        let with = |schedule: &'static str| parse_words(&[&words[..], &[schedule]].concat());
+        let options = with("120:save 0, 200:load 0").unwrap();
+        assert_eq!(
+            options.states,
+            StateSchedule::parse("120:save 0, 200:load 0").unwrap()
+        );
+        assert!(parse_words(&[]).unwrap().states.is_empty());
+        assert!(USAGE.contains("--states SCHEDULE"));
+
+        for entry in ["5:keep 0", "5:save 10"] {
+            let error = with(entry).unwrap_err();
+            assert!(error.contains("--states"), "{error}");
+            assert!(error.contains(&format!("`{entry}`")), "{error}");
+        }
+        // The guest on a thread, by default or by choice, has no states.
+        for form in [&[][..], &["--guest", "thread"]] {
+            let error =
+                parse_words(&[&["--headless", "--states", "5:save 0"], form].concat()).unwrap_err();
+            assert!(error.contains("--guest process"), "{error}");
+        }
+        let error = parse_words(&["--guest", "process", "--states", "5:save 0"]).unwrap_err();
+        assert_eq!(error, "--states needs --headless");
     }
 
     #[test]

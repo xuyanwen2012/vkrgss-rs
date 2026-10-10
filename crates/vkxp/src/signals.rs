@@ -41,3 +41,11 @@ pub(crate) fn die_with_parent() {
     let status = unsafe { libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) };
     assert_eq!(status, 0, "prctl cannot set the parent-death signal");
 }
+
+/// Makes the kernel take the children of this process away when they end, so that none of
+/// them stays behind as a zombie; for a guest process, whose children are its copies.
+pub(crate) fn ignore_children() {
+    // SAFETY: `SIG_IGN` is a valid disposition for SIGCHLD, and setting it runs no handler.
+    let previous = unsafe { libc::signal(libc::SIGCHLD, libc::SIG_IGN) };
+    assert_ne!(previous, libc::SIG_ERR, "signal cannot ignore SIGCHLD");
+}

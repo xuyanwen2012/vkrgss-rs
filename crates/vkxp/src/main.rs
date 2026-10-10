@@ -35,15 +35,22 @@
 //! request. After a headless run has ended, the program waits [`GUEST_WAIT`] for the game
 //! and then exits with a message and a non-zero status.
 //!
-//! With `--guest process` the game's scripts run in a child process instead of on a thread
+//! With the guest in a process (`--guest process`, and in a window unless `--guest thread`
+//! says otherwise) the game's scripts run in a child process instead of on a thread
 //! (`process`). The program then does the steps above without the interpreter: it checks
 //! what the game needs, starts itself again in the guest role, and gives the host a relay
 //! to that process as its guest. The child does the steps 1 to 5, opens no window, device
-//! or recording, plays the game over the socket of its parent and exits with status 0 only
-//! if the game ended without a failure.
+//! or recording, attaches to the socket of its parent, plays the game over it and reports
+//! how the game went, which is what the status of the program follows.
+//!
+//! A guest in a process can be saved and loaded: a state is a copy of that process, made
+//! with `fork` and parked until it is loaded (`copier` in the guest process, the relay of
+//! `process` in the program). F3 and F4 ask for it in a window, `--states` in a headless
+//! run. With `--allow-process-functions` there are no states.
 
 mod args;
 mod config;
+mod copier;
 mod font;
 mod log;
 mod process;
@@ -52,22 +59,26 @@ mod signals;
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf, absolute};
 use std::process::ExitCode;
+use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, anyhow, bail};
-use vkxp_binding::{Config, RunConfig, RunError, run_game};
+use vkxp_binding::{Config, Copier, RunConfig, RunError, run_game};
 use vkxp_host::{
     AudioOptions, HeadlessOptions, InputScript, InputSource, Recorder, Recording, Replayer,
     WindowedOptions, device_from_text, headless_link, run_headless, run_windowed,
 };
+use vkxp_proto::GuestToHost;
+use vkxp_proto::framing::write_message;
 use vkxp_proto::link::GuestEnd;
 use vkxp_ruby_sys::Interpreter;
 use vkxp_vfs::{GameFiles, GameIni, VfsError, resolve_rtps};
 
 use crate::args::{GuestForm, GuestRole, Input, Options};
 use crate::config::Settings;
+use crate::copier::ForkCopier;
 use crate::font::FontBackend;
 use crate::process::GuestProcess;
 
@@ -374,8 +385,8 @@ fn guest_config(
 enum Guest {
     /// The interpreter thread of this process, and what the guest thread reports.
     Thread(Receiver<Result<(), RunError>>),
-    /// A child process.
-    Process(GuestProcess),
+    /// A child process and its copies, and what the relay to them reports.
+    Process(Receiver<bool>),
 }
 
 impl Guest {
@@ -384,7 +395,9 @@ impl Guest {
     fn ended(self) -> Result<bool> {
         match self {
             Guest::Thread(outcome) => game_ended(&outcome),
-            Guest::Process(process) => process.wait(),
+            Guest::Process(outcome) => outcome
+                .recv()
+                .map_err(|_| anyhow!("the guest thread panicked")),
         }
     }
 }
@@ -394,22 +407,37 @@ impl Guest {
 fn run_guest(game_dir: PathBuf, options: Options, role: &GuestRole) -> Result<bool> {
     signals::die_with_parent();
     let inputs = guest_inputs(&game_dir, &options)?;
-    let config = guest_config(&game_dir, &options, inputs, role.seed)?;
+    let mut config = guest_config(&game_dir, &options, inputs, role.seed)?;
     let interpreter = Interpreter::start(vkxp_ruby_sys::Options::default())?;
-    let stream = UnixStream::connect(&role.socket).with_context(|| {
+    let mut stream = UnixStream::connect(&role.socket).with_context(|| {
         format!(
             "cannot connect to the socket {} of the parent process",
             role.socket.display()
         )
     })?;
+    let attach = GuestToHost::Attach {
+        pid: std::process::id(),
+        parked: None,
+    };
+    write_message(&mut stream, &attach).context("cannot attach to the parent process")?;
+    // The functions that start processes need the children of this process to be waited
+    // for, and states need them not to be: with those functions there are no states.
+    if !options.process_functions {
+        signals::ignore_children();
+        let copier: Arc<dyn Copier> = Arc::new(ForkCopier::new(role.socket.clone(), &stream));
+        config.run.copier = Some(copier);
+    }
     // The interpreter thread reads and writes the socket itself.
     let link = GuestEnd::over_stream(stream);
-    let result = interpreter.run(move |ruby| {
+    let ok = interpreter.run(move |ruby| {
         signals::unblock_virtual_timer();
-        run_game(ruby, config, link)
+        let ok = game_succeeded(run_game(ruby, config, link));
+        // A copy of the guest process has no other thread to go back to.
+        copier::exit_if_copy(ok);
+        ok
     });
     drop(interpreter);
-    Ok(game_succeeded(result))
+    Ok(ok)
 }
 
 /// Runs the game in `game_dir` as the settings describe, headless with the input `script`.
@@ -430,33 +458,41 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
     let (seed, input) = seed_and_input(&options)?;
     let title = inputs.ini.title.clone();
 
+    // Without a choice the guest is a process in a window, where the state keys need it.
+    let form = options.guest.unwrap_or(if options.headless {
+        GuestForm::Thread
+    } else {
+        GuestForm::Process
+    });
     // What the guest thread does, and what the program waits for once the host has ended.
-    let (guest, waited): (Box<dyn FnOnce(GuestEnd) + Send>, Guest) =
-        match options.guest.unwrap_or_default() {
-            GuestForm::Thread => {
-                let config = guest_config(&game_dir, &options, inputs, seed)?;
-                let interpreter = Interpreter::start(vkxp_ruby_sys::Options::default())?;
-                // It sends the game to the interpreter thread, waits for it, reports how
-                // it went and lets go of the interpreter.
-                let (done, outcome) = mpsc::channel();
-                let guest = move |link: GuestEnd| {
-                    let result = interpreter.run(move |ruby| {
-                        signals::unblock_virtual_timer();
-                        run_game(ruby, config, link)
-                    });
-                    // Nobody listens once the program has given up waiting.
-                    let _ = done.send(result);
-                    drop(interpreter);
-                };
-                (Box::new(guest), Guest::Thread(outcome))
-            }
-            GuestForm::Process => {
-                // The child does what `guest_config` does; this process has no interpreter.
-                let (process, stream) = GuestProcess::start(seed)?;
-                let guest = move |link: GuestEnd| process::relay(link, stream);
-                (Box::new(guest), Guest::Process(process))
-            }
-        };
+    let (guest, waited): (Box<dyn FnOnce(GuestEnd) + Send>, Guest) = match form {
+        GuestForm::Thread => {
+            let config = guest_config(&game_dir, &options, inputs, seed)?;
+            let interpreter = Interpreter::start(vkxp_ruby_sys::Options::default())?;
+            // It sends the game to the interpreter thread, waits for it, reports how
+            // it went and lets go of the interpreter.
+            let (done, outcome) = mpsc::channel();
+            let guest = move |link: GuestEnd| {
+                let result = interpreter.run(move |ruby| {
+                    signals::unblock_virtual_timer();
+                    run_game(ruby, config, link)
+                });
+                // Nobody listens once the program has given up waiting.
+                let _ = done.send(result);
+                drop(interpreter);
+            };
+            (Box::new(guest), Guest::Thread(outcome))
+        }
+        GuestForm::Process => {
+            // The child does what `guest_config` does; this process has no interpreter.
+            let process = GuestProcess::start(seed)?;
+            let (done, outcome) = mpsc::channel();
+            let guest = move |link: GuestEnd| {
+                let _ = done.send(process.relay(link));
+            };
+            (Box::new(guest), Guest::Process(outcome))
+        }
+    };
 
     let device = options.device.as_deref().map(device_from_text);
     if options.headless {
@@ -465,7 +501,7 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
             frames: options.frames,
             script,
             input,
-            states: vkxp_host::StateSchedule::new(),
+            states: options.states.clone(),
             dumps,
             frame_stats: options.frame_stats,
             errors: Box::new(log::HostReporter),
@@ -498,6 +534,7 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
             pads,
             audio,
             input,
+            states: form == GuestForm::Process,
             errors: Box::new(log::HostReporter),
             audio_errors: log::EventLines::audio(),
             ..WindowedOptions::new(device.unwrap_or_default())

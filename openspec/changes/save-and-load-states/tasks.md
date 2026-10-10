@@ -16,9 +16,9 @@
 
 ## 4. Processes (`vkxp`)
 
-- [ ] 4.1 The copier (fork, new connection, `Attach`, park, resume, `_exit` on the end of the connection, signals) and the relay with several connections (slots, ending the running process, `Resume`, `Outcome`, ending every attached process at exit). Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` passes.
-- [ ] 4.2 `--states`, the default form by kind of run. Verify: scenarios "Thread form", "Malformed schedule" and "Headless default".
-- [ ] 4.3 End-to-end tests for "Back to the saved frame", "Loading twice", "Empty slot", "Nothing left behind" and "Script error after a load". Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` passes.
+- [x] 4.1 The copier (fork, new connection, `Attach`, park, resume, `_exit` on the end of the connection, signals) and the relay with several connections (slots, ending the running process, `Resume`, `Outcome`, ending every attached process at exit). Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` passes.
+- [x] 4.2 `--states`, the default form by kind of run. Verify: scenarios "Thread form", "Malformed schedule" and "Headless default".
+- [x] 4.3 End-to-end tests for "Back to the saved frame", "Loading twice", "Empty slot", "Nothing left behind" and "Script error after a load". Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` passes.
 
 ## 5. Documentation
 
