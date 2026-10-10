@@ -61,6 +61,17 @@
 
 - Dependency advisories and licences (`cargo deny`), in a later change.
 - `missing_docs`, once the number of reports is known.
+- The entry point of the gate does not hold the lock file. `cargo xtask` is the alias
+  `run --quiet --package xtask --` in `.cargo/config.toml`, so the outer cargo resolves the
+  workspace, and rewrites `Cargo.lock` when a manifest has moved, before `xtask` starts; the
+  `--locked` of the `clippy`, `test` and `doc` steps then finds a lock file that is already up
+  to date. With a path dependency added to `xtask/Cargo.toml` and not to the lock file,
+  `cargo xtask gate` exits 0 and `Cargo.lock` is rewritten, so the scenario "Lock file out of
+  date" is not met through the public command; it holds only when the built `xtask` binary is
+  started directly. The alias has to pass `--locked` itself. `.cargo/config.toml` is outside
+  the files this change may touch, so the question is whether the scope is extended to it.
+  Task 2.1 stays open until the alias is locked and the scenario is verified with the real
+  `cargo xtask gate`.
 
 ## Measured
 

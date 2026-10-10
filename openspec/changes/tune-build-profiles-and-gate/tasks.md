@@ -7,7 +7,7 @@
 
 ## 2. Gate (`xtask`)
 
-- [x] 2.1 Add the documentation step, `--locked`, and the durations; fix what the documentation step reports. Verify: the scenarios of "Single merge gate"; unit tests in `xtask` for the step list and the report.
+- [ ] 2.1 Add the documentation step, `--locked`, and the durations; fix what the documentation step reports. Verify: the scenarios of "Single merge gate"; unit tests in `xtask` for the step list and the report.
 
 ## 3. Lints (root `Cargo.toml`, crates as reported)
 
