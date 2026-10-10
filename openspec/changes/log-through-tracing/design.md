@@ -84,8 +84,9 @@
   As events they would no longer reach a replaced `$stderr`, so those tests could not pass
   unchanged, which task 2.1 asks for; keeping both would need a second path beside the
   event, which this design does not name. Today they are shown at every level, with the
-  default format's prefix. Open question: should they become warnings through a host
-  function, with the tests changed to match?
+  default format's prefix, `VKXP_LOG=off` included. Open question: should they become
+  warnings through a host function, with the tests changed to match? Task 2.1 stays
+  unticked until this is answered.
 - A line that comes through the adapter is a warning whatever it says. A rejected frame, or
   a display that cannot be frozen, would be an error if the session emitted events itself;
   that means the session's tests reading events instead of an injected stream.

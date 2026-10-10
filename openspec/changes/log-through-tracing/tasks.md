@@ -6,7 +6,7 @@
 
 ## 2. Events (`vkxp`, `vkxp-host`, `vkxp-audio`, `vkxp-binding`)
 
-- [x] 2.1 Turn the run-time diagnostics into events with the levels of `design.md`, and pass the line adapter where the executable passed the error stream. Verify: no `eprintln!` remains in the `src` directories of the four crates except for the two kinds `design.md` keeps direct; the existing tests of the four crates pass unchanged; the scenario "Script error at every level".
+- [ ] 2.1 Turn the run-time diagnostics into events with the levels of `design.md`, and pass the line adapter where the executable passed the error stream. Verify: no `eprintln!` remains in the `src` directories of the four crates except for the two kinds `design.md` keeps direct; the existing tests of the four crates pass unchanged; the scenario "Script error at every level".
 - [x] 2.2 Add the informational events the proposal lists. Verify: the scenario "Verbose".
 
 ## 3. Documents
