@@ -373,6 +373,11 @@ impl<D: Display, C: Clock> Session<D, C> {
             }
             GuestToHost::Shutdown => self.end = Some(SessionEnd::Shutdown),
             GuestToHost::FrameReset => self.frame_reset = true,
+            GuestToHost::Attach { .. }
+            | GuestToHost::Outcome { .. }
+            | GuestToHost::StateSaved { .. }
+            | GuestToHost::StateLoaded { .. }
+            | GuestToHost::StateFailed { .. } => {}
         }
     }
 

@@ -23,7 +23,7 @@ use crate::{GuestToHost, HostToGuest, InputSnapshot};
 pub const MAGIC: [u8; 4] = *b"VKXP";
 
 /// Version of the message types and their encoding. Any change to either increments it.
-pub const PROTOCOL_VERSION: u16 = 7;
+pub const PROTOCOL_VERSION: u16 = 8;
 
 /// Length of the stream header in bytes.
 pub const HEADER_LEN: usize = 7;
@@ -232,8 +232,8 @@ mod tests {
 
     #[test]
     fn older_streams_are_rejected_naming_both_versions() {
-        assert_eq!(PROTOCOL_VERSION, 7);
-        for found in [1u16, 2, 3, 4, 5, 6] {
+        assert_eq!(PROTOCOL_VERSION, 8);
+        for found in [1u16, 2, 3, 4, 5, 6, 7] {
             let mut bytes = encode_stream(&sample()).unwrap();
             bytes[4..6].copy_from_slice(&found.to_le_bytes());
 
@@ -242,12 +242,12 @@ mod tests {
                 error,
                 DecodeError::UnsupportedVersion {
                     found,
-                    supported: 7,
+                    supported: 8,
                 }
             );
             assert_eq!(
                 error.to_string(),
-                format!("unsupported protocol version: found {found}, supported 7")
+                format!("unsupported protocol version: found {found}, supported 8")
             );
         }
     }
@@ -436,6 +436,14 @@ mod tests {
             },
             GuestToHost::Shutdown,
             GuestToHost::FrameReset,
+            GuestToHost::Attach {
+                pid: 4711,
+                parked: Some(9),
+            },
+            GuestToHost::Outcome { ok: true },
+            GuestToHost::StateSaved { slot: 0 },
+            GuestToHost::StateLoaded { slot: 3 },
+            GuestToHost::StateFailed { slot: 9 },
         ];
         // Fails to compile when a kind is added without extending the list above.
         for message in &guest {
@@ -447,12 +455,17 @@ mod tests {
                 | GuestToHost::Modal { .. }
                 | GuestToHost::SetTitle { .. }
                 | GuestToHost::Shutdown
-                | GuestToHost::FrameReset => {}
+                | GuestToHost::FrameReset
+                | GuestToHost::Attach { .. }
+                | GuestToHost::Outcome { .. }
+                | GuestToHost::StateSaved { .. }
+                | GuestToHost::StateLoaded { .. }
+                | GuestToHost::StateFailed { .. } => {}
             }
         }
         let kinds: std::collections::HashSet<_> =
             guest.iter().map(std::mem::discriminant).collect();
-        assert_eq!(kinds.len(), 8);
+        assert_eq!(kinds.len(), 13);
         let bytes = encode_stream(&guest).unwrap();
         assert_eq!(decode_stream::<GuestToHost>(&bytes), Ok(guest));
 
@@ -462,6 +475,9 @@ mod tests {
             HostToGuest::Tick,
             HostToGuest::Quit,
             HostToGuest::Reset,
+            HostToGuest::SaveState { slot: 2 },
+            HostToGuest::LoadState { slot: 2 },
+            HostToGuest::Resume,
         ];
         for message in &host {
             match message {
@@ -469,11 +485,14 @@ mod tests {
                 | HostToGuest::ModalDismissed
                 | HostToGuest::Tick
                 | HostToGuest::Quit
-                | HostToGuest::Reset => {}
+                | HostToGuest::Reset
+                | HostToGuest::SaveState { .. }
+                | HostToGuest::LoadState { .. }
+                | HostToGuest::Resume => {}
             }
         }
         let kinds: std::collections::HashSet<_> = host.iter().map(std::mem::discriminant).collect();
-        assert_eq!(kinds.len(), 5);
+        assert_eq!(kinds.len(), 8);
         let bytes = encode_stream(&host).unwrap();
         assert_eq!(decode_stream::<HostToGuest>(&bytes), Ok(host));
     }

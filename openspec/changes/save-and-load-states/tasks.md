@@ -2,7 +2,7 @@
 
 ## 1. Protocol (`vkxp-proto`)
 
-- [ ] 1.1 Add the state messages and raise the version to 8; fixtures and expected files that carry the version are regenerated. Verify: the scenarios of `specs/guest-host-protocol/spec.md`; `cargo test -p vkxp-proto -p vkxp-compose-ref --locked` passes.
+- [x] 1.1 Add the state messages and raise the version to 8; fixtures and expected files that carry the version are regenerated. Verify: the scenarios of `specs/guest-host-protocol/spec.md`; `cargo test -p vkxp-proto -p vkxp-compose-ref --locked` passes.
 
 ## 2. Guest (`vkxp-core`, `vkxp-binding`)
 

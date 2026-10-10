@@ -6,6 +6,15 @@
 //! when the time of that frame has passed. The guest does not send its next `Frame` before it
 //! has received that `Tick`. A `Tick` carries no data, so what the guest does never depends on
 //! wall-clock time, only on the number of ticks it has seen.
+//!
+//! # States
+//!
+//! A guest in a process of its own can be saved: it leaves a copy of its process behind, which
+//! is parked until it is told to resume. Every guest process opens its connection with
+//! [`GuestToHost::Attach`]. Whatever stands between the host and the guest processes keeps
+//! the parked copies by slot; it takes [`HostToGuest::LoadState`] for itself, sends
+//! [`HostToGuest::Resume`] to a parked copy, keeps [`GuestToHost::Outcome`], and makes the
+//! answers [`GuestToHost::StateSaved`] and [`GuestToHost::StateLoaded`].
 
 use serde::{Deserialize, Serialize};
 
@@ -40,6 +49,27 @@ pub enum GuestToHost {
     /// frame from the moment it handles this message instead of catching up on time the guest
     /// spent elsewhere, for example loading.
     FrameReset,
+    /// The first message of a guest process on its connection.
+    Attach {
+        /// The id of the process.
+        pid: u32,
+        /// The slot whose state this process is: a copy that waits to be resumed. `None`
+        /// for a process that runs.
+        parked: Option<u8>,
+    },
+    /// How the game went, sent by a guest whose game has ended, before its
+    /// [`GuestToHost::Shutdown`].
+    Outcome {
+        /// Whether the game ended without a failure.
+        ok: bool,
+    },
+    /// A state was saved into `slot`.
+    StateSaved { slot: u8 },
+    /// The state of `slot` was loaded: what the guest sends from here on comes from it, and
+    /// the host holds nothing of it yet.
+    StateLoaded { slot: u8 },
+    /// A state could not be saved into `slot` or loaded from it.
+    StateFailed { slot: u8 },
 }
 
 /// A message from the host to the guest.
@@ -58,4 +88,11 @@ pub enum HostToGuest {
     /// The user asked to restart the game (F12). The guest restarts at its next frame boundary
     /// and keeps running; unlike [`HostToGuest::Quit`] it does not shut down.
     Reset,
+    /// Save the game as it is at a frame boundary into `slot`.
+    SaveState { slot: u8 },
+    /// Go back to the state of `slot`. It is answered with [`GuestToHost::StateLoaded`] or
+    /// [`GuestToHost::StateFailed`] and never reaches a guest that can be saved.
+    LoadState { slot: u8 },
+    /// To a parked copy: go on from where the copy was made.
+    Resume,
 }

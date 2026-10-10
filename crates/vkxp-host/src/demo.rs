@@ -112,8 +112,12 @@ pub fn run(link: &GuestEnd, options: DemoOptions) -> Result<(), Disconnected> {
                 HostToGuest::Tick => break,
                 HostToGuest::Input(snapshot) => input = snapshot,
                 HostToGuest::Reset => reset = true,
-                HostToGuest::ModalDismissed => {}
+                HostToGuest::ModalDismissed | HostToGuest::Resume => {}
                 HostToGuest::Quit => return link.send(GuestToHost::Shutdown),
+                // A guest that cannot be copied.
+                HostToGuest::SaveState { slot } | HostToGuest::LoadState { slot } => {
+                    link.send(GuestToHost::StateFailed { slot })?;
+                }
             }
         }
 

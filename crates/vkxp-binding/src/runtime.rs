@@ -215,6 +215,8 @@ impl Guest {
                     self.runtime.pending.get_or_insert(Pending::Reset);
                 }
                 HostToGuest::Quit => self.runtime.pending = Some(Pending::Quit),
+                HostToGuest::SaveState { .. } | HostToGuest::LoadState { .. } => {}
+                HostToGuest::Resume => {}
             }
         }
     }

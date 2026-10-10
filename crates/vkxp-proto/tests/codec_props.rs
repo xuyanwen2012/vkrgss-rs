@@ -227,6 +227,11 @@ fn guest_to_host() -> impl Strategy<Value = GuestToHost> {
         any::<String>().prop_map(|title| GuestToHost::SetTitle { title }),
         Just(GuestToHost::Shutdown),
         Just(GuestToHost::FrameReset),
+        any::<(u32, Option<u8>)>().prop_map(|(pid, parked)| GuestToHost::Attach { pid, parked }),
+        any::<bool>().prop_map(|ok| GuestToHost::Outcome { ok }),
+        any::<u8>().prop_map(|slot| GuestToHost::StateSaved { slot }),
+        any::<u8>().prop_map(|slot| GuestToHost::StateLoaded { slot }),
+        any::<u8>().prop_map(|slot| GuestToHost::StateFailed { slot }),
     ]
 }
 
@@ -247,6 +252,9 @@ fn host_to_guest() -> impl Strategy<Value = HostToGuest> {
         Just(HostToGuest::Tick),
         Just(HostToGuest::Quit),
         Just(HostToGuest::Reset),
+        any::<u8>().prop_map(|slot| HostToGuest::SaveState { slot }),
+        any::<u8>().prop_map(|slot| HostToGuest::LoadState { slot }),
+        Just(HostToGuest::Resume),
     ]
 }
 
