@@ -13,13 +13,13 @@ use vkxp_text::{FontSources, TextEngine, TextRequest};
 ///
 /// The binding's interface takes `&self` and the engine fills caches through `&mut self`;
 /// everything runs on the interpreter thread, so a `RefCell` joins the two.
-pub struct FontBackend {
+pub(crate) struct FontBackend {
     engine: RefCell<TextEngine>,
 }
 
 impl FontBackend {
     /// A backend over the fonts of `sources`.
-    pub fn new(sources: &FontSources) -> FontBackend {
+    pub(crate) fn new(sources: &FontSources) -> FontBackend {
         FontBackend {
             engine: RefCell::new(TextEngine::new(sources)),
         }
@@ -28,7 +28,11 @@ impl FontBackend {
     /// The backend of a game: the fonts of `font_dirs` first, then those of the game's
     /// `Fonts` directory if it has one, then the fonts installed on the system. With
     /// `own_metrics` a font that replaces another is sized by its own line box.
-    pub fn for_game(game_dir: &Path, font_dirs: &[PathBuf], own_metrics: bool) -> FontBackend {
+    pub(crate) fn for_game(
+        game_dir: &Path,
+        font_dirs: &[PathBuf],
+        own_metrics: bool,
+    ) -> FontBackend {
         let mut directories = font_dirs.to_vec();
         let game_fonts = game_dir.join("Fonts");
         if game_fonts.is_dir() {

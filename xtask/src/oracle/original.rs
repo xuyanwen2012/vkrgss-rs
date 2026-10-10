@@ -23,7 +23,7 @@ use super::report::{self, HEIGHT, Picture, WIDTH};
 const SETTLE: Duration = Duration::from_millis(200);
 
 /// What a run of the original needs besides the game.
-pub struct Run<'a> {
+pub(super) struct Run<'a> {
     /// The RGSS DLL, which is copied into the game copy.
     pub dll: &'a Path,
     /// The directory of each run-time package, by its name.
@@ -39,7 +39,7 @@ pub struct Run<'a> {
 }
 
 /// What must be there before the original side can run, checked before anything is started.
-pub fn check_prerequisites(game: &Path, dll: &Path) -> Result<()> {
+pub(super) fn check_prerequisites(game: &Path, dll: &Path) -> Result<()> {
     ensure!(
         dll.is_file(),
         "{}: the RGSS DLL does not exist",
@@ -69,7 +69,13 @@ impl Run<'_> {
     /// Runs the game copy `game`, into which the probe of the original side was put, and
     /// writes each of `frames`, which are in ascending order, as the picture `out` holds
     /// for the original. `log` receives what Wine and the game print.
-    pub fn capture(&self, game: &Path, frames: &[u64], out: &Path, log: &Path) -> Result<()> {
+    pub(super) fn capture(
+        &self,
+        game: &Path,
+        frames: &[u64],
+        out: &Path,
+        log: &Path,
+    ) -> Result<()> {
         let dll_name = self.dll.file_name().context("the DLL path has no name")?;
         fs::copy(self.dll, game.join(dll_name)).with_context(|| self.dll.display().to_string())?;
 

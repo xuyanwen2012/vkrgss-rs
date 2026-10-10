@@ -27,10 +27,13 @@ publish = false
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
+unreachable_pub = "warn"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
 undocumented_unsafe_blocks = "warn"
+dbg_macro = "warn"
+todo = "warn"
 
 # Development and test builds: debug assertions and overflow checks stay on, as `dev` has
 # them, and `test` inherits from `dev`.

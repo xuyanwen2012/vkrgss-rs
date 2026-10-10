@@ -27,13 +27,13 @@ const COMPOSE_SPIRV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/compose.c
 
 /// Bindings of the one descriptor set, as `shaders/compose.comp` declares them.
 mod binding {
-    pub const BITMAPS: u32 = 0;
-    pub const FRAME: u32 = 1;
-    pub const OPS: u32 = 2;
-    pub const TILE_HEADERS: u32 = 3;
-    pub const TILE_OPS: u32 = 4;
-    pub const TILEMAPS: u32 = 5;
-    pub const TABLES: u32 = 6;
+    pub(super) const BITMAPS: u32 = 0;
+    pub(super) const FRAME: u32 = 1;
+    pub(super) const OPS: u32 = 2;
+    pub(super) const TILE_HEADERS: u32 = 3;
+    pub(super) const TILE_OPS: u32 = 4;
+    pub(super) const TILEMAPS: u32 = 5;
+    pub(super) const TABLES: u32 = 6;
 }
 
 /// Bytes of the push constants: logical width, logical height, tile grid width.

@@ -777,7 +777,7 @@ pub(crate) struct Gpu {
 impl Gpu {
     /// Opens the device `choice` selects. With a log, the validation layer is enabled when it
     /// is installed and its errors are recorded there.
-    pub fn new(choice: &DeviceChoice, log: Option<&ValidationLog>) -> Result<Gpu, VkError> {
+    pub(crate) fn new(choice: &DeviceChoice, log: Option<&ValidationLog>) -> Result<Gpu, VkError> {
         let instance = Instance::new(log, &[])?;
         let mut candidates = instance.physical_devices()?;
         let infos: Vec<DeviceInfo> = candidates.iter().map(|c| c.info.clone()).collect();
@@ -793,7 +793,7 @@ impl Gpu {
     /// An explicit choice is checked against the surface and fails when that device cannot
     /// present to it; the automatic choice takes the most preferred device that can. Only the
     /// devices tried are asked about the surface.
-    pub fn with_surface(
+    pub(crate) fn with_surface(
         choice: &DeviceChoice,
         log: Option<&ValidationLog>,
         source: SurfaceSource,
@@ -987,7 +987,7 @@ impl Gpu {
     }
 
     /// The instance the device belongs to.
-    pub fn instance(&self) -> &ash::Instance {
+    pub(crate) fn instance(&self) -> &ash::Instance {
         &self.instance.raw
     }
 }

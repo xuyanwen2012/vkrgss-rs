@@ -174,7 +174,7 @@ pub fn mouse_key(button: MouseButton) -> Option<u8> {
 /// `snapshot` with the virtual key `key` held and, for the left or right one of Shift,
 /// Control and Alt, the code of the modifier whichever side it is on.
 #[must_use]
-pub fn with_virtual_key(snapshot: InputSnapshot, key: u8) -> InputSnapshot {
+pub(crate) fn with_virtual_key(snapshot: InputSnapshot, key: u8) -> InputSnapshot {
     let snapshot = snapshot.with_key(key);
     match key {
         0xA0 | 0xA1 => snapshot.with_key(0x10),
@@ -187,7 +187,7 @@ pub fn with_virtual_key(snapshot: InputSnapshot, key: u8) -> InputSnapshot {
 /// `snapshot` with the virtual keys of the physical keys `keys` and the mouse buttons
 /// `buttons` held.
 #[must_use]
-pub fn with_raw_keys(
+pub(crate) fn with_raw_keys(
     snapshot: InputSnapshot,
     keys: impl IntoIterator<Item = KeyCode>,
     buttons: impl IntoIterator<Item = MouseButton>,

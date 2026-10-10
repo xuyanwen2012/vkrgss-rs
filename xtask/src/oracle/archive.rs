@@ -14,7 +14,7 @@ use flate2::write::ZlibEncoder;
 
 /// One script of an archive.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Entry {
+pub(super) struct Entry {
     /// The identifier as stored: the `Marshal` bytes of a Fixnum or a Bignum, with the type.
     pub id: Vec<u8>,
     /// The name as stored, in the encoding of the editor that wrote it.
@@ -25,7 +25,7 @@ pub struct Entry {
 
 impl Entry {
     /// An entry holding `source`.
-    pub fn new(id: i32, name: &str, source: &str) -> Entry {
+    pub(super) fn new(id: i32, name: &str, source: &str) -> Entry {
         let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
         encoder
             .write_all(source.as_bytes())
@@ -41,7 +41,7 @@ impl Entry {
 }
 
 /// Reads an archive.
-pub fn read(bytes: &[u8]) -> Result<Vec<Entry>> {
+pub(super) fn read(bytes: &[u8]) -> Result<Vec<Entry>> {
     let mut reader = Reader { bytes, at: 0 };
     ensure!(
         reader.take(2)? == [4, 8],
@@ -66,7 +66,7 @@ pub fn read(bytes: &[u8]) -> Result<Vec<Entry>> {
 }
 
 /// Writes an archive, as Ruby 1.8 does.
-pub fn write(entries: &[Entry]) -> Vec<u8> {
+pub(super) fn write(entries: &[Entry]) -> Vec<u8> {
     let mut bytes = vec![4, 8, b'['];
     let count = i32::try_from(entries.len()).expect("an archive has few scripts");
     write_long(&mut bytes, count);
@@ -85,7 +85,7 @@ pub fn write(entries: &[Entry]) -> Vec<u8> {
 
 /// The archive `bytes` with one more script in front of the others, which are kept as they
 /// are stored.
-pub fn with_first(bytes: &[u8], name: &str, source: &str) -> Result<Vec<u8>> {
+pub(super) fn with_first(bytes: &[u8], name: &str, source: &str) -> Result<Vec<u8>> {
     let mut entries = read(bytes)?;
     entries.insert(0, Entry::new(0, name, source));
     Ok(write(&entries))

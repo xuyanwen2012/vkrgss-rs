@@ -24,7 +24,7 @@ use anyhow::{Context, Result, bail, ensure};
 use probe::{Schedule, Side};
 
 /// The usage of the command, printed with every error in its arguments.
-pub const USAGE: &str = "\
+pub(crate) const USAGE: &str = "\
 usage: cargo xtask oracle <GAME_DIR> --frames N[,N...] [OPTIONS]
 
   GAME_DIR                the game directory; it is copied, never changed
@@ -43,7 +43,7 @@ usage: cargo xtask oracle <GAME_DIR> --frames N[,N...] [OPTIONS]
 
 /// The parsed arguments of the command.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Options {
+pub(crate) struct Options {
     pub game: PathBuf,
     /// The frames to capture, in ascending order.
     pub frames: Vec<u64>,
@@ -61,7 +61,7 @@ pub struct Options {
 
 /// Reads the arguments that follow `oracle`. Paths are taken relative to the directory the
 /// command was started in, except the default output directory, which is below `root`.
-pub fn parse(arguments: &[&str], root: &Path) -> Result<Options> {
+pub(crate) fn parse(arguments: &[&str], root: &Path) -> Result<Options> {
     let mut game = None;
     let mut frames = None;
     let mut options = Options {
@@ -147,7 +147,7 @@ fn capture_original(options: &Options, dll: &Path, fonts: Option<&fonts::Shared>
 }
 
 /// Runs the comparison. `root` is the workspace, whose `vkxp` is built and run.
-pub fn run(options: &Options, root: &Path) -> Result<()> {
+pub(crate) fn run(options: &Options, root: &Path) -> Result<()> {
     let Options {
         game, out, frames, ..
     } = options;

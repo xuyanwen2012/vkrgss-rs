@@ -47,7 +47,7 @@ fn blocks(bytes: &[u8]) -> Vec<&[u8]> {
 
 /// The `extract-rpg` command: writes the blocks found in `dll` to `output`, each followed by
 /// a line break. Fails without writing anything when there is none.
-pub fn run(dll: &Path, output: &Path) -> Result<()> {
+pub(crate) fn run(dll: &Path, output: &Path) -> Result<()> {
     let bytes = fs::read(dll).with_context(|| format!("cannot read {}", dll.display()))?;
     let blocks = blocks(&bytes);
     if blocks.is_empty() {

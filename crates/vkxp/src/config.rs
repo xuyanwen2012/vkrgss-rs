@@ -17,12 +17,12 @@ use vkxp_host::{GamepadMap, KeyMap};
 use crate::args::{self, Input, Options};
 
 /// The name of the configuration file in a game directory.
-pub const GAME_FILE: &str = "vkxp.toml";
+pub(crate) const GAME_FILE: &str = "vkxp.toml";
 
 /// What one configuration file holds. Everything is optional.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct File {
+pub(crate) struct File {
     /// The directory of each run-time package, by its name.
     #[serde(default)]
     rtp: BTreeMap<String, PathBuf>,
@@ -89,7 +89,7 @@ fn by_button(table: BTreeMap<String, Vec<String>>) -> Result<BTreeMap<String, Ve
 
 impl File {
     /// Reads and checks the file at `path`. Every error names the file.
-    pub fn read(path: &Path) -> Result<File> {
+    pub(crate) fn read(path: &Path) -> Result<File> {
         let named = || format!("in the configuration file {}", path.display());
         let text = std::fs::read_to_string(path)
             .with_context(|| format!("cannot read the configuration file {}", path.display()))?;
@@ -191,7 +191,7 @@ fn default_user_file() -> Option<PathBuf> {
 
 /// Reads the configuration files of a run of the game in `game_dir`: the user's and the
 /// game's, as far as they exist, as one. A file named with `--config` has to exist.
-pub fn load(options: &Options, game_dir: &Path) -> Result<File> {
+pub(crate) fn load(options: &Options, game_dir: &Path) -> Result<File> {
     if options.no_config {
         return Ok(File::default());
     }
@@ -209,7 +209,7 @@ pub fn load(options: &Options, game_dir: &Path) -> Result<File> {
 
 /// What a run is set up with: the command line over the configuration files.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Settings {
+pub(crate) struct Settings {
     pub options: Options,
     pub keys: KeyMap,
     pub pads: GamepadMap,
@@ -218,7 +218,7 @@ pub struct Settings {
 /// Puts the command line over what the configuration files hold. A list given on the command
 /// line replaces the list of the files, and a run-time package given there the one of that
 /// name.
-pub fn settle(file: File, mut options: Options) -> Result<Settings> {
+pub(crate) fn settle(file: File, mut options: Options) -> Result<Settings> {
     for (name, dir) in file.rtp {
         options.rtps.entry(name).or_insert(dir);
     }

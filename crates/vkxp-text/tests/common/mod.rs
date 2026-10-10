@@ -7,44 +7,44 @@ use std::path::{Path, PathBuf};
 use swash::FontRef;
 use vkxp_text::{FontSources, TextEngine, TextMask, TextRequest};
 
-pub const LIBERATION: &str = "Liberation Sans";
-pub const LIBERATION_FILE: &str = "LiberationSans-Regular.ttf";
-pub const SYMBOLS: &str = "Noto Sans Symbols 2";
-pub const SYMBOLS_FILE: &str = "NotoSansSymbols2-Regular.ttf";
+pub(crate) const LIBERATION: &str = "Liberation Sans";
+pub(crate) const LIBERATION_FILE: &str = "LiberationSans-Regular.ttf";
+pub(crate) const SYMBOLS: &str = "Noto Sans Symbols 2";
+pub(crate) const SYMBOLS_FILE: &str = "NotoSansSymbols2-Regular.ttf";
 
 /// A character Noto Sans Symbols 2 has and Liberation Sans lacks.
-pub const SYMBOL: char = '\u{2BC5}';
+pub(crate) const SYMBOL: char = '\u{2BC5}';
 /// A character neither test font has.
-pub const NOWHERE: char = '\u{4E2D}';
+pub(crate) const NOWHERE: char = '\u{4E2D}';
 
 /// The directory of the committed test fonts.
-pub fn fonts_dir() -> PathBuf {
+pub(crate) fn fonts_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fonts")
 }
 
 /// The sources of an engine that knows the two test fonts and nothing else.
-pub fn test_sources() -> FontSources {
+pub(crate) fn test_sources() -> FontSources {
     FontSources::directories_only([fonts_dir()])
 }
 
 /// An engine that knows the two test fonts and nothing else.
-pub fn engine() -> TextEngine {
+pub(crate) fn engine() -> TextEngine {
     TextEngine::new(&test_sources())
 }
 
 /// Copies one of the test fonts into `directory` and returns the copy's path.
-pub fn copy_font(directory: &Path, file: &str) -> PathBuf {
+pub(crate) fn copy_font(directory: &Path, file: &str) -> PathBuf {
     let target = directory.join(file);
     std::fs::copy(fonts_dir().join(file), &target).expect("copy test font");
     target.canonicalize().expect("canonical path of the copy")
 }
 
-pub fn request(family: &str, size: u32) -> TextRequest {
+pub(crate) fn request(family: &str, size: u32) -> TextRequest {
     TextRequest::new([family], size)
 }
 
 /// The family a request for `families` resolves to.
-pub fn resolved_family(engine: &mut TextEngine, families: &[&str]) -> String {
+pub(crate) fn resolved_family(engine: &mut TextEngine, families: &[&str]) -> String {
     engine
         .resolve(&TextRequest::new(families.iter().copied(), 22))
         .expect("the engine has fonts")
@@ -52,12 +52,12 @@ pub fn resolved_family(engine: &mut TextEngine, families: &[&str]) -> String {
 }
 
 /// Values read straight from a test font file, independently of the engine.
-pub struct RawFont {
+pub(crate) struct RawFont {
     data: Vec<u8>,
 }
 
 impl RawFont {
-    pub fn load(file: &str) -> Self {
+    pub(crate) fn load(file: &str) -> Self {
         Self {
             data: std::fs::read(fonts_dir().join(file)).expect("read test font"),
         }
@@ -67,16 +67,16 @@ impl RawFont {
         FontRef::from_index(&self.data, 0).expect("test font parses")
     }
 
-    pub fn has(&self, ch: char) -> bool {
+    pub(crate) fn has(&self, ch: char) -> bool {
         self.font().charmap().map(ch) != 0
     }
 
-    pub fn units_per_em(&self) -> u32 {
+    pub(crate) fn units_per_em(&self) -> u32 {
         u32::from(self.font().metrics(&[]).units_per_em)
     }
 
     /// The OS/2 `usWinAscent` and `usWinDescent`.
-    pub fn win_metrics(&self) -> (u32, u32) {
+    pub(crate) fn win_metrics(&self) -> (u32, u32) {
         let table = self
             .font()
             .table(swash::tag_from_bytes(b"OS/2"))
@@ -87,7 +87,7 @@ impl RawFont {
 
     /// The whole pixels per em at which this font is set for `size`: the line box scaled to
     /// the size, one less when the box would then be higher than the size.
-    pub fn pixels_per_em(&self, size: u32) -> u32 {
+    pub(crate) fn pixels_per_em(&self, size: u32) -> u32 {
         let (ascent, descent) = self.win_metrics();
         let (units, em) = (ascent + descent, self.units_per_em());
         let pixels_per_em = (em * size + units / 2) / units;
@@ -99,7 +99,7 @@ impl RawFont {
     }
 
     /// The rounded ascent and descent of this font at `size`.
-    pub fn cell(&self, size: u32) -> (u32, u32) {
+    pub(crate) fn cell(&self, size: u32) -> (u32, u32) {
         let (ascent, descent) = self.win_metrics();
         let (pixels_per_em, em) = (self.pixels_per_em(size), self.units_per_em());
         let scaled = |units: u32| (units * pixels_per_em + em / 2) / em;
@@ -108,7 +108,7 @@ impl RawFont {
 
     /// The advance of `ch` (of the missing-glyph box when the font lacks it) at
     /// `pixels_per_em`, in whole pixels: rounded to 1/64 pixel and then to a pixel.
-    pub fn advance(&self, ch: char, pixels_per_em: u32) -> u32 {
+    pub(crate) fn advance(&self, ch: char, pixels_per_em: u32) -> u32 {
         let font = self.font();
         let glyph = font.charmap().map(ch);
         let units = font.glyph_metrics(&[]).advance_width(glyph) as u64;
@@ -119,7 +119,7 @@ impl RawFont {
 }
 
 /// The largest coverage value in the columns `columns` of `mask`.
-pub fn max_coverage(mask: &TextMask, columns: std::ops::Range<u32>) -> u8 {
+pub(crate) fn max_coverage(mask: &TextMask, columns: std::ops::Range<u32>) -> u8 {
     let mut max = 0;
     for y in 0..mask.height {
         for x in columns.clone() {
@@ -130,16 +130,16 @@ pub fn max_coverage(mask: &TextMask, columns: std::ops::Range<u32>) -> u8 {
 }
 
 /// Windows language IDs for names added by [`derive_font`].
-pub const ENGLISH_US: u16 = 0x0409;
-pub const CHINESE_PRC: u16 = 0x0804;
+pub(crate) const ENGLISH_US: u16 = 0x0409;
+pub(crate) const CHINESE_PRC: u16 = 0x0804;
 
 /// Name IDs of the legacy and the typographic family name.
-pub const NAME_FAMILY: u16 = 1;
-pub const NAME_TYPOGRAPHIC_FAMILY: u16 = 16;
+pub(crate) const NAME_FAMILY: u16 = 1;
+pub(crate) const NAME_TYPOGRAPHIC_FAMILY: u16 = 16;
 
 /// How a font derived from a committed test font differs from it.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Derivation<'a> {
+pub(crate) struct Derivation<'a> {
     /// Records added to the `name` table: name ID, Windows language ID, text.
     pub names: &'a [(u16, u16, &'a str)],
     /// The OS/2 weight class; 600 and above also sets the bold flags.
@@ -166,7 +166,7 @@ fn put_u16(bytes: &mut [u8], at: usize, value: u16) {
 
 /// Writes a variant of the test font `file` to `target` and returns its path. The variant is
 /// made in memory from the committed file, so no further font needs to be committed.
-pub fn derive_font(file: &str, target: &Path, change: Derivation<'_>) -> PathBuf {
+pub(crate) fn derive_font(file: &str, target: &Path, change: Derivation<'_>) -> PathBuf {
     let source = std::fs::read(fonts_dir().join(file)).expect("read test font");
     let table_count = usize::from(u16_at(&source, 4));
     let mut tables: Vec<([u8; 4], Vec<u8>)> = (0..table_count)

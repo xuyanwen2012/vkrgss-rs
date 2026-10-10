@@ -12,7 +12,7 @@ use vkxp_binding::testing;
 
 /// What a snippet evaluates to.
 #[derive(Debug, Clone, Copy)]
-pub enum Expect {
+pub(crate) enum Expect {
     /// `inspect` of its value.
     Value(&'static str),
     /// It raises an exception of this class.
@@ -23,7 +23,7 @@ pub enum Expect {
 
 /// A snippet and its expected outcome.
 #[derive(Debug, Clone, Copy)]
-pub struct Case {
+pub(crate) struct Case {
     pub name: &'static str,
     pub source: &'static str,
     pub expect: Expect,
@@ -60,7 +60,7 @@ const fn raises_with(
 
 /// Evaluates each case's source after `wrap` has had its way with it and returns what is
 /// wrong, one entry per failed case.
-pub fn failures(cases: &[Case], wrap: impl Fn(&str) -> String) -> Vec<String> {
+pub(crate) fn failures(cases: &[Case], wrap: impl Fn(&str) -> String) -> Vec<String> {
     cases
         .iter()
         .filter_map(|case| {
@@ -85,7 +85,7 @@ pub fn failures(cases: &[Case], wrap: impl Fn(&str) -> String) -> Vec<String> {
 }
 
 /// Every group of cases, by name.
-pub const GROUPS: &[(&str, &[Case])] = &[
+pub(crate) const GROUPS: &[(&str, &[Case])] = &[
     ("value method surface", VALUE_SURFACE),
     ("color and tone", COLOR_AND_TONE),
     ("rect", RECT),
@@ -103,12 +103,12 @@ pub const GROUPS: &[(&str, &[Case])] = &[
 
 /// Creates ten thousand bitmaps without keeping or disposing any, collecting now and then;
 /// the arena must not keep them. The count is checked from Rust.
-pub const UNREACHABLE_BITMAPS: &str =
+pub(crate) const UNREACHABLE_BITMAPS: &str =
     "10_000.times { |i| Bitmap.new(1, 1); GC.start if i % 500 == 499 }; GC.start; nil";
 
 // --- rgss-values: Method surface of the value classes -----------------------------------------
 
-pub const VALUE_SURFACE: &[Case] = &[
+pub(crate) const VALUE_SURFACE: &[Case] = &[
     raises_with(
         "wrong number of arguments",
         "Rect.new(0, 0, 1, 1).send(:x=, 1, 2)",
@@ -130,7 +130,7 @@ pub const VALUE_SURFACE: &[Case] = &[
 
 // --- rgss-values: Color and Tone --------------------------------------------------------------
 
-pub const COLOR_AND_TONE: &[Case] = &[
+pub(crate) const COLOR_AND_TONE: &[Case] = &[
     value(
         "construction and clamping",
         "c = Color.new(300, -5, 12.5); [c.red, c.green, c.blue, c.alpha]",
@@ -214,7 +214,7 @@ pub const COLOR_AND_TONE: &[Case] = &[
 
 // --- rgss-values: Rect ------------------------------------------------------------------------
 
-pub const RECT: &[Case] = &[
+pub(crate) const RECT: &[Case] = &[
     raises(
         "four arguments required",
         "Rect.new(1, 2, 3)",
@@ -266,7 +266,7 @@ pub const RECT: &[Case] = &[
 
 // --- rgss-values: Table -----------------------------------------------------------------------
 
-pub const TABLE: &[Case] = &[
+pub(crate) const TABLE: &[Case] = &[
     value(
         "read and write",
         "t = Table.new(4, 3); t[1, 2] = 7; [t[1, 2], t[0, 0], t[4, 0]]",
@@ -322,7 +322,7 @@ pub const TABLE: &[Case] = &[
 
 // --- rgss-values: Marshal forms ---------------------------------------------------------------
 
-pub const MARSHAL: &[Case] = &[
+pub(crate) const MARSHAL: &[Case] = &[
     value(
         "round trip through Marshal",
         "a = [Color.new(1, 2, 3, 4), Tone.new(-1, 2, 3, 4), Rect.new(1, 2, 3, 4)]; \
@@ -389,7 +389,7 @@ pub const MARSHAL: &[Case] = &[
 
 // --- rgss-values: Font ------------------------------------------------------------------------
 
-pub const FONT: &[Case] = &[
+pub(crate) const FONT: &[Case] = &[
     raises_with(
         "a size below 6",
         "Font.new.size = 5",
@@ -498,7 +498,7 @@ pub const FONT: &[Case] = &[
 
 // --- rgss-values: Copies are independent ------------------------------------------------------
 
-pub const VALUE_COPIES: &[Case] = &[
+pub(crate) const VALUE_COPIES: &[Case] = &[
     value(
         "cloned table",
         "a = Table.new(2); b = a.clone; b[0] = 5; a[0]",
@@ -542,7 +542,7 @@ pub const VALUE_COPIES: &[Case] = &[
 
 // --- rgss-bitmap: Creation from a size --------------------------------------------------------
 
-pub const BITMAP_FROM_SIZE: &[Case] = &[
+pub(crate) const BITMAP_FROM_SIZE: &[Case] = &[
     value(
         "blank bitmap",
         "b = Bitmap.new(32, 16); [b.width, b.height, b.rect == Rect.new(0, 0, 32, 16), \
@@ -583,7 +583,7 @@ pub const BITMAP_FROM_SIZE: &[Case] = &[
 
 // --- rgss-bitmap: Creation from a file --------------------------------------------------------
 
-pub const BITMAP_FROM_FILE: &[Case] = &[
+pub(crate) const BITMAP_FROM_FILE: &[Case] = &[
     value(
         "file from the game directory",
         r#"b = Bitmap.new("graphics\\pictures\\dot"); [b.width, b.height] + [[0, 0], [1, 0], [0, 1], [1, 1]].map { |x, y| c = b.get_pixel(x, y); [c.red, c.green, c.blue, c.alpha] }"#,
@@ -626,7 +626,7 @@ pub const BITMAP_FROM_FILE: &[Case] = &[
 
 // --- rgss-bitmap: Disposal --------------------------------------------------------------------
 
-pub const BITMAP_DISPOSAL: &[Case] = &[
+pub(crate) const BITMAP_DISPOSAL: &[Case] = &[
     raises_with(
         "use after dispose",
         "b = Bitmap.new(1, 1); b.dispose; b.width",
@@ -654,7 +654,7 @@ pub const BITMAP_DISPOSAL: &[Case] = &[
 
 // --- rgss-bitmap: Drawing methods -------------------------------------------------------------
 
-pub const BITMAP_DRAWING: &[Case] = &[
+pub(crate) const BITMAP_DRAWING: &[Case] = &[
     value(
         "fill and read",
         "b = Bitmap.new(4, 4); b.fill_rect(1, 1, 2, 2, Color.new(255, 0, 0)); \
@@ -761,7 +761,7 @@ pub const BITMAP_DRAWING: &[Case] = &[
 // The harness's text backend draws every character as a cell half the font size wide and
 // the font size high, fully inked except for spaces; at size 22 that is 11 by 22 pixels, and
 // a line is centred vertically in its rectangle.
-pub const BITMAP_TEXT: &[Case] = &[
+pub(crate) const BITMAP_TEXT: &[Case] = &[
     value(
         "text leaves ink",
         r#"b = Bitmap.new(200, 40); b.draw_text(0, 0, 200, 40, "Hello"); inked = (0...200).select { |x| b.get_pixel(x, 20).alpha > 0 }; p = b.get_pixel(inked.first, 20); [inked.size > 0, [p.red, p.green, p.blue] == [b.font.color.red, b.font.color.green, b.font.color.blue], inked.first, inked.last, b.get_pixel(0, 2).alpha]"#,
@@ -848,7 +848,7 @@ pub const BITMAP_TEXT: &[Case] = &[
 
 // --- rgss-bitmap: Copying ---------------------------------------------------------------------
 
-pub const BITMAP_COPYING: &[Case] = &[
+pub(crate) const BITMAP_COPYING: &[Case] = &[
     value(
         "independent copy",
         "a = Bitmap.new(2, 2); b = a.clone; b.set_pixel(0, 0, Color.new(1, 2, 3)); a.dispose; \

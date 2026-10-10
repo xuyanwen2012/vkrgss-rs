@@ -8,15 +8,15 @@ use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 
 /// The size of a frame of the original runtime.
-pub const WIDTH: u32 = 640;
-pub const HEIGHT: u32 = 480;
+pub(super) const WIDTH: u32 = 640;
+pub(super) const HEIGHT: u32 = 480;
 
 /// A difference of 1 is drawn as this much, so that small differences can be seen.
 const AMPLIFICATION: u8 = 32;
 
 /// A picture as RGBA bytes.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Picture {
+pub(super) struct Picture {
     pub width: u32,
     pub height: u32,
     pub rgba: Vec<u8>,
@@ -24,7 +24,7 @@ pub struct Picture {
 
 impl Picture {
     /// Reads a PNG file of 8-bit RGB or RGBA.
-    pub fn read(path: &Path) -> Result<Picture> {
+    pub(super) fn read(path: &Path) -> Result<Picture> {
         let name = || path.display().to_string();
         let file = fs::File::open(path).with_context(name)?;
         let mut reader = png::Decoder::new(BufReader::new(file))
@@ -59,7 +59,7 @@ impl Picture {
         })
     }
 
-    pub fn write(&self, path: &Path) -> Result<()> {
+    pub(super) fn write(&self, path: &Path) -> Result<()> {
         let name = || path.display().to_string();
         let file = fs::File::create(path).with_context(name)?;
         let mut encoder = png::Encoder::new(BufWriter::new(file), self.width, self.height);
@@ -73,7 +73,7 @@ impl Picture {
 
 /// How two pictures of one frame differ.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Difference {
+pub(super) struct Difference {
     /// The number of pixels that differ in red, green or blue.
     pub differing_pixels: u64,
     /// The largest difference of any of these channels.
@@ -84,7 +84,7 @@ pub struct Difference {
 
 /// Compares the colours of two pictures of the same size. Alpha is not compared: a picture
 /// of a screen has none.
-pub fn compare(original: &Picture, vkxp: &Picture) -> Result<Difference> {
+pub(super) fn compare(original: &Picture, vkxp: &Picture) -> Result<Difference> {
     ensure!(
         (original.width, original.height) == (vkxp.width, vkxp.height),
         "the pictures differ in size: {} by {} in the original, {} by {} in vkxp",
@@ -121,11 +121,11 @@ pub fn compare(original: &Picture, vkxp: &Picture) -> Result<Difference> {
 }
 
 /// The file names of one frame, below the output directory.
-pub fn original_file(frame: u64) -> String {
+pub(super) fn original_file(frame: u64) -> String {
     format!("frames/{frame}-original.png")
 }
 
-pub fn vkxp_file(frame: u64) -> String {
+pub(super) fn vkxp_file(frame: u64) -> String {
     format!("frames/{frame}-vkxp.png")
 }
 
@@ -136,7 +136,7 @@ fn diff_file(frame: u64) -> String {
 /// Compares the pictures of `frames` that both runs left below `out`, writes the difference
 /// pictures and `summary.json`, and prints the table. With `vkxp_only` there is nothing to
 /// compare and the summary lists the pictures of vkxp.
-pub fn write(out: &Path, frames: &[u64], vkxp_only: bool) -> Result<()> {
+pub(super) fn write(out: &Path, frames: &[u64], vkxp_only: bool) -> Result<()> {
     let mut rows = Vec::new();
     if !vkxp_only {
         println!(

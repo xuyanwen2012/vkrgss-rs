@@ -40,7 +40,7 @@ const INSTALLED_PREFIX: &str = "vkxp-oracle-";
 
 /// The fonts of one run, copied below its output directory.
 #[derive(Debug)]
-pub struct Shared {
+pub(super) struct Shared {
     /// The family name of the first file, which the game font names are mapped to.
     pub family: String,
     /// The directory that holds the copies, for vkxp.
@@ -51,7 +51,7 @@ pub struct Shared {
 
 /// Checks that every one of `fonts` is a font file and copies them into `<out>/fonts`.
 /// Nothing is written unless all of them are fonts. Without fonts there is nothing to share.
-pub fn share(fonts: &[PathBuf], out: &Path) -> Result<Option<Shared>> {
+pub(super) fn share(fonts: &[PathBuf], out: &Path) -> Result<Option<Shared>> {
     let mut read: Vec<(&str, String, Vec<u8>)> = Vec::new();
     for font in fonts {
         let data = fs::read(font)
@@ -89,7 +89,7 @@ pub fn share(fonts: &[PathBuf], out: &Path) -> Result<Option<Shared>> {
 }
 
 /// The line of the output that says whether the text of the two sides can be compared.
-pub fn notice(shared: Option<&Shared>) -> String {
+pub(super) fn notice(shared: Option<&Shared>) -> String {
     match shared {
         Some(shared) => format!("fonts: both sides draw text with {}", shared.family),
         None => "fonts: text is not comparable, because each side draws it with a font of \
@@ -100,7 +100,7 @@ pub fn notice(shared: Option<&Shared>) -> String {
 
 /// Puts the files of `shared` into `fonts_dir`, the font directory of a Wine prefix, in place
 /// of those an earlier run put there, and returns their names in that directory.
-pub fn install(shared: Option<&Shared>, fonts_dir: &Path) -> Result<Vec<String>> {
+pub(super) fn install(shared: Option<&Shared>, fonts_dir: &Path) -> Result<Vec<String>> {
     fs::create_dir_all(fonts_dir).with_context(|| fonts_dir.display().to_string())?;
     for entry in fs::read_dir(fonts_dir).with_context(|| fonts_dir.display().to_string())? {
         let entry = entry.with_context(|| fonts_dir.display().to_string())?;
@@ -128,7 +128,7 @@ pub fn install(shared: Option<&Shared>, fonts_dir: &Path) -> Result<Vec<String>>
 /// The registry script of a prefix: the replacements of the game font names, by `family` if
 /// fonts are shared, and the registration of the `installed` files of the font directory, so
 /// that GDI enumerates them whether or not fontconfig knows them.
-pub fn registry_script(family: Option<&str>, installed: &[String]) -> String {
+pub(super) fn registry_script(family: Option<&str>, installed: &[String]) -> String {
     let quoted = |text: &str| format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""));
     let mut script = "Windows Registry Editor Version 5.00\r\n\r\n\
                       [HKEY_CURRENT_USER\\Software\\Wine\\Fonts\\Replacements]\r\n"
@@ -147,7 +147,7 @@ pub fn registry_script(family: Option<&str>, installed: &[String]) -> String {
 }
 
 /// A registry script as `regedit` reads it: UTF-16, little endian, with a byte order mark.
-pub fn encode_script(script: &str) -> Vec<u8> {
+pub(super) fn encode_script(script: &str) -> Vec<u8> {
     "\u{feff}"
         .encode_utf16()
         .chain(script.encode_utf16())
@@ -161,7 +161,7 @@ pub fn encode_script(script: &str) -> Vec<u8> {
 /// The family is record 1, or record 16 where there is no record 1; a record of the Windows
 /// platform is preferred, the English one first, then one of the Unicode platform, then a
 /// Macintosh Roman one.
-pub fn family_name(data: &[u8]) -> Option<String> {
+pub(super) fn family_name(data: &[u8]) -> Option<String> {
     let u16_at = |at: usize| {
         Some(usize::from(u16::from_be_bytes(
             *data.get(at..)?.first_chunk()?,
@@ -229,7 +229,7 @@ pub fn family_name(data: &[u8]) -> Option<String> {
 /// A font file that holds nothing but a `name` table with these records of the Windows
 /// platform, each a name identifier, a language and a text.
 #[cfg(test)]
-pub fn minimal_font(records: &[(u16, u16, &str)]) -> Vec<u8> {
+pub(super) fn minimal_font(records: &[(u16, u16, &str)]) -> Vec<u8> {
     let mut entries = Vec::new();
     let mut strings = Vec::new();
     for &(id, language, text) in records {

@@ -20,10 +20,10 @@ pub(crate) const RECORD_WORDS: usize = 24;
 
 /// Values of the `kind` word. They match the `OP_*` constants in `shaders/compose.comp`.
 mod op_kind {
-    pub const CLEAR: u32 = 0;
-    pub const QUAD: u32 = 1;
-    pub const RECT_EFFECT: u32 = 2;
-    pub const TILEMAP: u32 = 3;
+    pub(super) const CLEAR: u32 = 0;
+    pub(super) const QUAD: u32 = 1;
+    pub(super) const RECT_EFFECT: u32 = 2;
+    pub(super) const TILEMAP: u32 = 3;
 }
 
 /// Number of 32-bit words in the record of a tilemap layer; `TilemapRecord` in
@@ -49,9 +49,9 @@ pub(crate) type TilemapRecord = [u32; TILEMAP_WORDS];
 /// Values of the `sampling` word of a quad. They match the `SAMPLING_*` constants in
 /// `shaders/compose.comp`.
 mod sampling_kind {
-    pub const AFFINE: u32 = 0;
-    pub const STRETCH: u32 = 1;
-    pub const STRETCH_MIRRORED: u32 = 2;
+    pub(super) const AFFINE: u32 = 0;
+    pub(super) const STRETCH: u32 = 1;
+    pub(super) const STRETCH_MIRRORED: u32 = 2;
 }
 
 /// The `blend` word of a quad. It matches the `BLEND_*` constants in `shaders/compose.comp`.
@@ -88,7 +88,7 @@ pub(crate) struct ClipRect {
 
 impl ClipRect {
     /// The part of `clip` on a screen of `size`, or `None` when no pixel is.
-    pub fn on_screen(clip: Rect, size: Size) -> Option<ClipRect> {
+    pub(crate) fn on_screen(clip: Rect, size: Size) -> Option<ClipRect> {
         let span = |start: i32, length: u32, limit: u32| {
             let start = i64::from(start);
             let low = start.max(0);
@@ -114,7 +114,7 @@ impl ClipRect {
     }
 
     #[cfg(test)]
-    pub fn contains(&self, x: u32, y: u32) -> bool {
+    pub(crate) fn contains(&self, x: u32, y: u32) -> bool {
         (self.x0..self.x1).contains(&x) && (self.y0..self.y1).contains(&y)
     }
 }
@@ -145,7 +145,7 @@ impl OpRecord {
     }
 
     /// The record's words, in the order of the fields of the GLSL `OpRecord`.
-    pub fn words(&self) -> &[u32; RECORD_WORDS] {
+    pub(crate) fn words(&self) -> &[u32; RECORD_WORDS] {
         &self.words
     }
 }

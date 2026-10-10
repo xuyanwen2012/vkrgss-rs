@@ -26,7 +26,7 @@ pub(crate) struct Entry {
 
 impl Entry {
     /// The rectangle covering the whole bitmap.
-    pub fn bounds(&self) -> Rect {
+    pub(crate) fn bounds(&self) -> Rect {
         Rect::new(0, 0, self.width, self.height)
     }
 }
@@ -59,7 +59,7 @@ pub(crate) enum DeltaError {
 
 impl DeltaError {
     /// The packet-level error for the delta at `index`.
-    pub fn at(self, index: usize) -> VkError {
+    pub(crate) fn at(self, index: usize) -> VkError {
         match self {
             DeltaError::Invalid(source) => VkError::InvalidDelta { index, source },
             DeltaError::Limit {
@@ -88,7 +88,7 @@ pub(crate) struct BitmapTable {
 }
 
 impl BitmapTable {
-    pub fn new(max_dimension: u32) -> BitmapTable {
+    pub(crate) fn new(max_dimension: u32) -> BitmapTable {
         BitmapTable {
             slots: BTreeMap::new(),
             max_dimension,
@@ -97,12 +97,12 @@ impl BitmapTable {
 
     /// Number of live bitmaps.
     #[cfg(test)]
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.slots.len()
     }
 
     /// The live bitmap `id` names, or an invalid-reference error.
-    pub fn get(&self, id: BitmapId) -> Result<&Entry, BitmapError> {
+    pub(crate) fn get(&self, id: BitmapId) -> Result<&Entry, BitmapError> {
         match self.slots.get(&id.index) {
             Some(entry) if entry.generation == id.generation => Ok(entry),
             other => Err(BitmapError::InvalidReference {
@@ -121,7 +121,7 @@ impl BitmapTable {
     ///
     /// The checks every backend makes come first, in the reference's order, so a delta that is
     /// invalid for the reference is reported as invalid here too, never as a limit.
-    pub fn apply(&mut self, delta: &BitmapDelta) -> Result<Change, DeltaError> {
+    pub(crate) fn apply(&mut self, delta: &BitmapDelta) -> Result<Change, DeltaError> {
         match delta {
             BitmapDelta::Create { id, width, height } => self.create(*id, *width, *height),
             BitmapDelta::Update { id, rect, rgba } => {
@@ -136,7 +136,7 @@ impl BitmapTable {
     }
 
     /// Takes back a `Created` change whose image could not be made.
-    pub fn forget(&mut self, slot: u32) {
+    pub(crate) fn forget(&mut self, slot: u32) {
         self.slots.remove(&slot);
     }
 

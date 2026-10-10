@@ -24,11 +24,11 @@ fn change_virtual_timer(how: libc::c_int) {
 }
 
 /// Blocks SIGVTALRM in the calling thread and in every thread it spawns from now on.
-pub fn block_virtual_timer() {
+pub(crate) fn block_virtual_timer() {
     change_virtual_timer(libc::SIG_BLOCK);
 }
 
 /// Lets SIGVTALRM reach the calling thread again; for the interpreter thread.
-pub fn unblock_virtual_timer() {
+pub(crate) fn unblock_virtual_timer() {
     change_virtual_timer(libc::SIG_UNBLOCK);
 }

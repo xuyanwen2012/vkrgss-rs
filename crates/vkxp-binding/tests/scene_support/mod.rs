@@ -110,7 +110,7 @@ fn frame() -> Frame {
 /// The arena is shared by the tests of a binary, so a recording can start with the disposal
 /// of bitmaps an earlier test made. Those were never announced to this compositor and are
 /// left out.
-pub fn rendered(packets: &[&FramePacket]) -> Vec<Frame> {
+pub(crate) fn rendered(packets: &[&FramePacket]) -> Vec<Frame> {
     let mut compositor = Compositor::new();
     let mut created = Vec::new();
     packets
@@ -163,7 +163,7 @@ fn scene_count(_ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
 }
 
 /// Defines `pixel`, `solid` and `scene_count` in the harness's interpreter, once.
-pub fn install() {
+pub(crate) fn install() {
     static INSTALLED: OnceLock<()> = OnceLock::new();
     INSTALLED.get_or_init(|| {
         testing::run(|ruby| {

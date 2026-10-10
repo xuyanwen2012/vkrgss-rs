@@ -6,14 +6,14 @@ use std::io::Write;
 use std::sync::{Arc, Mutex};
 
 /// The committed fixtures: one second of a 440 Hz tone each. See `data/README.md`.
-pub const OGG: &[u8] = include_bytes!("../data/tone.ogg");
-pub const MP3: &[u8] = include_bytes!("../data/tone.mp3");
+pub(crate) const OGG: &[u8] = include_bytes!("../data/tone.ogg");
+pub(crate) const MP3: &[u8] = include_bytes!("../data/tone.mp3");
 
 /// The peak of the tones generated here.
-pub const AMPLITUDE: f32 = 0.5;
+pub(crate) const AMPLITUDE: f32 = 0.5;
 
 /// A mono 16-bit PCM WAV file holding `samples`.
-pub fn wav_of(sample_rate: u32, samples: &[i16]) -> Vec<u8> {
+pub(crate) fn wav_of(sample_rate: u32, samples: &[i16]) -> Vec<u8> {
     let data_len = samples.len() as u32 * 2;
     let mut wav = Vec::new();
     wav.extend_from_slice(b"RIFF");
@@ -35,7 +35,7 @@ pub fn wav_of(sample_rate: u32, samples: &[i16]) -> Vec<u8> {
 }
 
 /// A mono 16-bit WAV file with a sine tone of [`AMPLITUDE`].
-pub fn tone_wav(sample_rate: u32, frequency: f32, seconds: f32) -> Vec<u8> {
+pub(crate) fn tone_wav(sample_rate: u32, frequency: f32, seconds: f32) -> Vec<u8> {
     let count = (sample_rate as f32 * seconds).round() as usize;
     let samples: Vec<i16> = (0..count)
         .map(|index| {
@@ -58,7 +58,7 @@ fn variable_length(mut value: u32, out: &mut Vec<u8>) {
 }
 
 /// A Standard MIDI file with one note, middle A on a piano, that sounds for `seconds`.
-pub fn one_note_midi(seconds: u32) -> Vec<u8> {
+pub(crate) fn one_note_midi(seconds: u32) -> Vec<u8> {
     // 480 ticks to the quarter note at the default tempo of 120: 960 ticks to the second.
     let mut track = vec![0x00, 0xc0, 0x00, 0x00, 0x90, 69, 100];
     variable_length(960 * seconds, &mut track);
@@ -102,7 +102,7 @@ fn mp3_frames() -> Vec<usize> {
 /// [`MP3`] with every frame from the frame `first` on damaged: the frame headers stay, so
 /// the file is still found to be MP3, and the side information behind each is overwritten,
 /// so the frame does not decode.
-pub fn damaged_mp3(first: usize) -> Vec<u8> {
+pub(crate) fn damaged_mp3(first: usize) -> Vec<u8> {
     let mut data = MP3.to_vec();
     let frames = mp3_frames();
     assert!(frames.len() > 30, "{} frames", frames.len());
@@ -116,18 +116,18 @@ pub fn damaged_mp3(first: usize) -> Vec<u8> {
 }
 
 /// One side of an interleaved stereo buffer: 0 is left, 1 is right.
-pub fn side(stereo: &[f32], side: usize) -> Vec<f32> {
+pub(crate) fn side(stereo: &[f32], side: usize) -> Vec<f32> {
     stereo.iter().skip(side).step_by(2).copied().collect()
 }
 
-pub fn peak(samples: &[f32]) -> f32 {
+pub(crate) fn peak(samples: &[f32]) -> f32 {
     samples
         .iter()
         .fold(0.0, |peak, sample| peak.max(sample.abs()))
 }
 
 /// The frequency of a tone, from the number of times it crosses zero upwards.
-pub fn frequency(samples: &[f32], sample_rate: u32) -> f32 {
+pub(crate) fn frequency(samples: &[f32], sample_rate: u32) -> f32 {
     let crossings = samples
         .windows(2)
         .filter(|pair| pair[0] < 0.0 && pair[1] >= 0.0)
@@ -136,7 +136,7 @@ pub fn frequency(samples: &[f32], sample_rate: u32) -> f32 {
 }
 
 /// The amplitude of the part of `samples` that is a tone of `frequency`.
-pub fn level(samples: &[f32], sample_rate: u32, frequency: f32) -> f32 {
+pub(crate) fn level(samples: &[f32], sample_rate: u32, frequency: f32) -> f32 {
     let (mut sine, mut cosine) = (0.0f64, 0.0f64);
     for (index, sample) in samples.iter().enumerate() {
         let phase = f64::from(TAU * frequency) * index as f64 / f64::from(sample_rate);
@@ -147,21 +147,21 @@ pub fn level(samples: &[f32], sample_rate: u32, frequency: f32) -> f32 {
 }
 
 /// The time in seconds after which `stereo` stays silent.
-pub fn sounding_seconds(stereo: &[f32], sample_rate: u32) -> f32 {
+pub(crate) fn sounding_seconds(stereo: &[f32], sample_rate: u32) -> f32 {
     let last = stereo.iter().rposition(|sample| sample.abs() > 1e-3);
     last.map_or(0.0, |index| (index / 2 + 1) as f32 / sample_rate as f32)
 }
 
 /// An error stream that can be read back.
 #[derive(Clone, Default)]
-pub struct Reports(Arc<Mutex<Vec<u8>>>);
+pub(crate) struct Reports(Arc<Mutex<Vec<u8>>>);
 
 impl Reports {
-    pub fn text(&self) -> String {
+    pub(crate) fn text(&self) -> String {
         String::from_utf8(self.0.lock().unwrap().clone()).unwrap()
     }
 
-    pub fn lines(&self) -> usize {
+    pub(crate) fn lines(&self) -> usize {
         self.text().lines().count()
     }
 }

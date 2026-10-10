@@ -10,7 +10,7 @@ use crate::rgssad;
 
 /// Copies the game directory `source` to `copy`, replacing what is there, and adds `probe`
 /// as the first script of the copy's archive.
-pub fn prepare(source: &Path, copy: &Path, probe: &str) -> Result<()> {
+pub(super) fn prepare(source: &Path, copy: &Path, probe: &str) -> Result<()> {
     if copy.exists() {
         fs::remove_dir_all(copy).with_context(|| copy.display().to_string())?;
     }

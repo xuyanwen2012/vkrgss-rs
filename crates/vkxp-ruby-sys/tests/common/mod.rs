@@ -8,12 +8,12 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// The vendored Ruby tree.
-pub fn source_dir() -> PathBuf {
+pub(crate) fn source_dir() -> PathBuf {
     PathBuf::from(env!("VKXP_RUBY_SOURCE_DIR"))
 }
 
 /// A fresh, empty directory for one test, below cargo's directory for test files.
-pub fn scratch_dir(name: &str) -> PathBuf {
+pub(crate) fn scratch_dir(name: &str) -> PathBuf {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
     if dir.exists() {
         fs::remove_dir_all(&dir).unwrap_or_else(|error| panic!("{}: {error}", dir.display()));
@@ -25,7 +25,7 @@ pub fn scratch_dir(name: &str) -> PathBuf {
 /// The compiler with the flags and defines the interpreter was built with, the include paths
 /// of `config.h`, the vendored tree and what its `re.h` includes, and a temporary directory
 /// that is surely writable.
-pub fn compiler(scratch: &Path) -> Command {
+pub(crate) fn compiler(scratch: &Path) -> Command {
     let mut command = Command::new(env!("VKXP_RUBY_CC"));
     command
         .args(
@@ -47,7 +47,7 @@ pub fn compiler(scratch: &Path) -> Command {
 
 /// Runs a command to completion and returns its standard output; panics with both output
 /// streams if it fails.
-pub fn run(command: &mut Command) -> String {
+pub(crate) fn run(command: &mut Command) -> String {
     let output = command
         .output()
         .unwrap_or_else(|error| panic!("could not start {command:?}: {error}"));
@@ -62,7 +62,7 @@ pub fn run(command: &mut Command) -> String {
 }
 
 /// Compiles one C file to an object file in `scratch` and returns the object's path.
-pub fn compile_object(scratch: &Path, source: &Path) -> PathBuf {
+pub(crate) fn compile_object(scratch: &Path, source: &Path) -> PathBuf {
     let stem = source.file_stem().expect("a file name");
     let object = scratch.join(stem).with_extension("o");
     run(compiler(scratch)
@@ -78,7 +78,7 @@ pub fn compile_object(scratch: &Path, source: &Path) -> PathBuf {
 /// that registers them and `Zlib`. `-rdynamic` exports every symbol of default visibility, as
 /// a real `ruby` does, which is also what makes the executable a probe for leaked symbols:
 /// `vkxp_export_probe` is the one symbol given default visibility on purpose, to show that.
-pub fn build_ruby_executable(scratch: &Path) -> PathBuf {
+pub(crate) fn build_ruby_executable(scratch: &Path) -> PathBuf {
     let source = source_dir();
     let init_ext = scratch.join("extinit.c");
     fs::write(
@@ -126,7 +126,7 @@ pub fn build_ruby_executable(scratch: &Path) -> PathBuf {
 /// exception as `Err`. For tests that must not depend on the crate's own evaluation helpers.
 ///
 /// Call it only inside a closure given to `Interpreter::run`.
-pub fn eval_inspect(source: &str) -> Result<String, String> {
+pub(crate) fn eval_inspect(source: &str) -> Result<String, String> {
     use std::ffi::{CString, c_int};
     use vkxp_ruby_sys::ffi;
 
@@ -151,7 +151,7 @@ pub fn eval_inspect(source: &str) -> Result<String, String> {
 
 /// The three ways a script recurses without end: a method that calls itself, a block that
 /// yields to itself, and a string that evaluates itself.
-pub const UNBOUNDED_RECURSIONS: [&str; 3] = [
+pub(crate) const UNBOUNDED_RECURSIONS: [&str; 3] = [
     "def vkxp_rec_method; vkxp_rec_method; end; vkxp_rec_method",
     "def vkxp_rec_block; [1].each { vkxp_rec_block }; end; vkxp_rec_block",
     "$vkxp_rec_source = 'eval($vkxp_rec_source)'; eval($vkxp_rec_source)",
@@ -159,7 +159,7 @@ pub const UNBOUNDED_RECURSIONS: [&str; 3] = [
 
 /// Runs each unbounded recursion several times and checks that it raises `SystemStackError`
 /// and that the interpreter still computes afterwards.
-pub fn assert_recursion_is_bounded(interpreter: &vkxp_ruby_sys::Interpreter) {
+pub(crate) fn assert_recursion_is_bounded(interpreter: &vkxp_ruby_sys::Interpreter) {
     for source in UNBOUNDED_RECURSIONS {
         for round in 0..3 {
             let outcome = interpreter.run(move |_| eval_inspect(source));
@@ -181,7 +181,7 @@ pub fn assert_recursion_is_bounded(interpreter: &vkxp_ruby_sys::Interpreter) {
 }
 
 /// The current disposition of each signal Ruby takes, as (signal, handler, flags, mask).
-pub fn dispositions() -> Vec<(libc::c_int, usize, libc::c_int, Vec<libc::c_int>)> {
+pub(crate) fn dispositions() -> Vec<(libc::c_int, usize, libc::c_int, Vec<libc::c_int>)> {
     vkxp_ruby_sys::SIGNALS_TAKEN_BY_RUBY
         .iter()
         .map(|&signal| {

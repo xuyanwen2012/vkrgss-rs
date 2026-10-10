@@ -3,14 +3,14 @@
 use std::path::PathBuf;
 
 /// Path of the committed expected image of a fixture.
-pub fn expected_path(name: &str) -> PathBuf {
+pub(crate) fn expected_path(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/expected")
         .join(format!("{name}.png"))
 }
 
 /// The committed expected image of a fixture, as PNG bytes.
-pub fn expected_png(name: &str) -> Vec<u8> {
+pub(crate) fn expected_png(name: &str) -> Vec<u8> {
     let path = expected_path(name);
     std::fs::read(&path).unwrap_or_else(|error| {
         panic!(

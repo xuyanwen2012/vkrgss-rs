@@ -24,7 +24,7 @@ pub(crate) struct Entry {
 
 impl Entry {
     /// Number of elements.
-    pub fn len(&self) -> u64 {
+    pub(crate) fn len(&self) -> u64 {
         self.data.len() as u64
     }
 }
@@ -40,34 +40,34 @@ pub(crate) struct TableStore {
 }
 
 impl TableStore {
-    pub fn new() -> TableStore {
+    pub(crate) fn new() -> TableStore {
         TableStore::default()
     }
 
     /// The table `id` names, or an unknown-table error.
-    pub fn get(&self, id: TableId) -> Result<&Entry, TableError> {
+    pub(crate) fn get(&self, id: TableId) -> Result<&Entry, TableError> {
         self.tables.get(&id).ok_or(TableError::Unknown { id })
     }
 
     /// Number of elements of all tables: the length of the buffer in words.
-    pub fn words(&self) -> u64 {
+    pub(crate) fn words(&self) -> u64 {
         self.words
     }
 
     /// A number that differs whenever the buffer's contents may.
-    pub fn revision(&self) -> u64 {
+    pub(crate) fn revision(&self) -> u64 {
         self.revision
     }
 
     /// The elements of all tables in buffer order, widened to the words the shader reads.
-    pub fn buffer_words(&self) -> impl Iterator<Item = u32> {
+    pub(crate) fn buffer_words(&self) -> impl Iterator<Item = u32> {
         let elements = self.tables.values().flat_map(|entry| &entry.data);
         // Sign-extended: the shader reads signed integers.
         elements.map(|&element| i32::from(element) as u32)
     }
 
     /// Checks one delta and applies it. On error the store is unchanged.
-    pub fn apply(&mut self, delta: &TableDelta) -> Result<(), TableError> {
+    pub(crate) fn apply(&mut self, delta: &TableDelta) -> Result<(), TableError> {
         match delta {
             TableDelta::Set {
                 id,

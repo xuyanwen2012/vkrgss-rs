@@ -35,7 +35,7 @@ pub(crate) struct GpuBuffer {
 
 impl GpuBuffer {
     /// Creates a buffer of `size` bytes, which must not be 0.
-    pub fn new(
+    pub(crate) fn new(
         device: &ash::Device,
         allocator: &mut Allocator,
         name: &'static str,
@@ -85,20 +85,20 @@ impl GpuBuffer {
     }
 
     /// The mapped contents. The memory is host-coherent, so no flush is needed.
-    pub fn bytes(&self) -> &[u8] {
+    pub(crate) fn bytes(&self) -> &[u8] {
         self.allocation
             .mapped_slice()
             .expect("host-visible allocations are mapped")
     }
 
-    pub fn bytes_mut(&mut self) -> &mut [u8] {
+    pub(crate) fn bytes_mut(&mut self) -> &mut [u8] {
         self.allocation
             .mapped_slice_mut()
             .expect("host-visible allocations are mapped")
     }
 
     /// Destroys the buffer and frees its memory. The device must no longer be using it.
-    pub fn destroy(self, device: &ash::Device, allocator: &mut Allocator) {
+    pub(crate) fn destroy(self, device: &ash::Device, allocator: &mut Allocator) {
         // SAFETY: the caller guarantees the buffer is idle; it is consumed here.
         unsafe { device.destroy_buffer(self.buffer, None) };
         // Freeing only fails for an allocation the allocator does not know.
@@ -118,7 +118,7 @@ pub(crate) struct GpuImage {
 
 impl GpuImage {
     /// Creates an image of `width` by `height` pixels, neither of which may be 0.
-    pub fn new(
+    pub(crate) fn new(
         device: &ash::Device,
         allocator: &mut Allocator,
         name: &'static str,
@@ -131,7 +131,7 @@ impl GpuImage {
 
     /// Like [`GpuImage::new`], but with `format` for the image and its view instead of
     /// [`PIXEL_FORMAT`]. The device must support the format with this usage.
-    pub fn with_format(
+    pub(crate) fn with_format(
         device: &ash::Device,
         allocator: &mut Allocator,
         name: &'static str,
@@ -223,7 +223,7 @@ impl GpuImage {
 
     /// Destroys the view and the image and frees the memory. The device must no longer be
     /// using them.
-    pub fn destroy(self, device: &ash::Device, allocator: &mut Allocator) {
+    pub(crate) fn destroy(self, device: &ash::Device, allocator: &mut Allocator) {
         // SAFETY: the caller guarantees the image is idle; it is consumed here. The view may be
         // null when creation failed part way, which is a no-op.
         unsafe {

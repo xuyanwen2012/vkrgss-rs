@@ -11,7 +11,7 @@
 
 ## 3. Lints (root `Cargo.toml`, crates as reported)
 
-- [ ] 3.1 Add the three lints and fix the reports. Verify: the scenario of "Workspace lints"; `cargo clippy --workspace --all-targets --locked -- -D warnings` is clean.
+- [x] 3.1 Add the three lints and fix the reports. Verify: the scenario of "Workspace lints"; `cargo clippy --workspace --all-targets --locked -- -D warnings` is clean.
 
 ## 4. Documents
 

@@ -7,7 +7,7 @@ use vkxp_host::{Filter, InputScript};
 use vkxp_vfs::Encoding;
 
 /// What is printed with every command-line error.
-pub const USAGE: &str = "\
+pub(crate) const USAGE: &str = "\
 usage: vkxp [GAME_DIR] [OPTIONS]
 
   GAME_DIR                  the game directory; the current directory if absent
@@ -46,7 +46,7 @@ usage: vkxp [GAME_DIR] [OPTIONS]
 
 /// Where the input script of a headless run comes from.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Input {
+pub(crate) enum Input {
     /// A script given on the command line.
     Script(InputScript),
     /// A file that holds the script.
@@ -55,7 +55,7 @@ pub enum Input {
 
 /// The parsed command line.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Options {
+pub(crate) struct Options {
     /// The game directory, if one was given.
     pub game_dir: Option<PathBuf>,
     /// The user's configuration file, instead of the default location.
@@ -109,7 +109,7 @@ fn pair<'a>(text: &'a str, form: &str) -> Result<(&'a str, &'a str), String> {
 }
 
 /// An input script as it is given: the script itself, or `@FILE` for a file that holds it.
-pub fn input(text: &str) -> Result<Input, String> {
+pub(crate) fn input(text: &str) -> Result<Input, String> {
     match text.strip_prefix('@') {
         Some(file) => Ok(Input::File(PathBuf::from(file))),
         None => InputScript::parse(text)
@@ -119,7 +119,7 @@ pub fn input(text: &str) -> Result<Input, String> {
 }
 
 /// A frame to dump as it is given: `FRAME=FILE`.
-pub fn dump(text: &str) -> Result<(u64, PathBuf), String> {
+pub(crate) fn dump(text: &str) -> Result<(u64, PathBuf), String> {
     let (frame, file) = pair(text, "FRAME=FILE")?;
     let frame = frame
         .parse()
@@ -128,7 +128,7 @@ pub fn dump(text: &str) -> Result<(u64, PathBuf), String> {
 }
 
 /// The encoding with this name, in either case. The error says what the names are.
-pub fn encoding(text: &str) -> Result<Encoding, String> {
+pub(crate) fn encoding(text: &str) -> Result<Encoding, String> {
     match text.to_ascii_lowercase().as_str() {
         "utf-8" => Ok(Encoding::Utf8),
         "gbk" => Ok(Encoding::Gbk),
@@ -141,7 +141,7 @@ pub fn encoding(text: &str) -> Result<Encoding, String> {
 }
 
 /// The scaling filter with this name, in either case. The error says what the names are.
-pub fn filter(text: &str) -> Result<Filter, String> {
+pub(crate) fn filter(text: &str) -> Result<Filter, String> {
     match text.to_ascii_lowercase().as_str() {
         "auto" => Ok(Filter::Auto),
         "nearest" => Ok(Filter::Nearest),
@@ -156,7 +156,7 @@ pub fn filter(text: &str) -> Result<Filter, String> {
 /// Reads the arguments that follow the program name. The error is a message for the user,
 /// to be printed with [`USAGE`]. Whether the options go together is for [`check`] to say,
 /// once the configuration files have been put under them.
-pub fn parse(arguments: &[String]) -> Result<Options, String> {
+pub(crate) fn parse(arguments: &[String]) -> Result<Options, String> {
     let mut options = Options::default();
     let mut arguments = arguments.iter();
     while let Some(argument) = arguments.next() {
@@ -235,7 +235,7 @@ pub fn parse(arguments: &[String]) -> Result<Options, String> {
 /// Whether the settings of a run go together, whichever of them came from the command line
 /// and whichever from a configuration file. The error is a message for the user, to be
 /// printed with [`USAGE`].
-pub fn check(options: &Options) -> Result<(), String> {
+pub(crate) fn check(options: &Options) -> Result<(), String> {
     if !options.headless {
         let headless_only = [
             (options.frames.is_some(), "--frames"),

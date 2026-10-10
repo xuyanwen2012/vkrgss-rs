@@ -49,7 +49,7 @@ pub(crate) struct Layer<'a> {
 impl Layer<'_> {
     /// The texel the op blends over screen pixel (`px`, `py`), or `None` when it draws
     /// nothing there. The clip is the caller's business.
-    pub fn texel(&self, px: u16, py: u16) -> Option<Rgba> {
+    pub(crate) fn texel(&self, px: u16, py: u16) -> Option<Rgba> {
         let (map, op) = (self.map, self.op);
         let (xsize, ysize) = (i64::from(map.xsize()), i64::from(map.ysize()));
         let layer = i64::from(op.layer);

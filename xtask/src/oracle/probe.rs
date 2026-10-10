@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result, bail, ensure};
 
 /// The name of the probe in the script archive.
-pub const NAME: &str = "vkxp oracle probe";
+pub(super) const NAME: &str = "vkxp oracle probe";
 
 /// The seed both runtimes start their random numbers from.
 const SEED: u32 = 20_261_009;
@@ -20,7 +20,7 @@ const BUTTONS: [&str; 20] = [
 
 /// The runtime a probe is generated for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Side {
+pub(super) enum Side {
     /// The original runtime: the probe holds the game at the capture frames and ends it
     /// after the last one.
     Original,
@@ -30,14 +30,14 @@ pub enum Side {
 
 /// The buttons held from given frames on.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Schedule {
+pub(crate) struct Schedule {
     entries: BTreeMap<u64, Vec<&'static str>>,
 }
 
 impl Schedule {
     /// Reads the syntax of `vkxp --input`: `frame:BUTTONS` entries separated by commas or
     /// line breaks, `BUTTONS` being button names joined by `+`, or nothing.
-    pub fn parse(text: &str) -> Result<Schedule> {
+    pub(crate) fn parse(text: &str) -> Result<Schedule> {
         let mut entries = BTreeMap::new();
         for entry in text.split([',', '\n']).map(str::trim) {
             if entry.is_empty() {
@@ -69,7 +69,7 @@ impl Schedule {
 }
 
 /// The source of the probe for one side. `captures` are the frames to capture.
-pub fn generate(side: Side, schedule: &Schedule, captures: &[u64]) -> String {
+pub(super) fn generate(side: Side, schedule: &Schedule, captures: &[u64]) -> String {
     let side = match side {
         Side::Original => "original",
         Side::Vkxp => "vkxp",
@@ -92,7 +92,7 @@ pub fn generate(side: Side, schedule: &Schedule, captures: &[u64]) -> String {
 
 /// Reads the list of frames of `--frames`: numbers separated by commas. The result is in
 /// ascending order without repetitions.
-pub fn parse_frames(text: &str) -> Result<Vec<u64>> {
+pub(super) fn parse_frames(text: &str) -> Result<Vec<u64>> {
     let mut frames = Vec::new();
     for part in text.split(',').map(str::trim) {
         let frame = part

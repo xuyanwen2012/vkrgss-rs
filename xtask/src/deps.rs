@@ -24,7 +24,7 @@ use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
 /// Crates that run on the script thread.
-pub const GUEST_CRATES: &[&str] = &[
+pub(crate) const GUEST_CRATES: &[&str] = &[
     "vkxp-core",
     "vkxp-image",
     "vkxp-text",
@@ -34,18 +34,19 @@ pub const GUEST_CRATES: &[&str] = &[
 ];
 
 /// Crates that own the window, the GPU or the audio device.
-pub const HOST_CRATES: &[&str] = &["vkxp-vk", "vkxp-audio", "vkxp-host"];
+pub(crate) const HOST_CRATES: &[&str] = &["vkxp-vk", "vkxp-audio", "vkxp-host"];
 
 /// Crates that must not reach a guest crate: the host crates and the reference compositor,
 /// which runs on the host and in tests.
-pub const HOST_SIDE_CRATES: &[&str] = &["vkxp-vk", "vkxp-audio", "vkxp-host", "vkxp-compose-ref"];
+pub(crate) const HOST_SIDE_CRATES: &[&str] =
+    &["vkxp-vk", "vkxp-audio", "vkxp-host", "vkxp-compose-ref"];
 
 /// The crate that must stay free of I/O, Ruby and Vulkan.
-pub const CORE_CRATE: &str = "vkxp-core";
+pub(crate) const CORE_CRATE: &str = "vkxp-core";
 
 /// Everything `vkxp-core` may reach: the two shared crates, then pure crates (no I/O, no FFI
 /// to Ruby, Vulkan, windowing or audio) that those need.
-pub const CORE_ALLOW_LIST: &[&str] = &[
+pub(crate) const CORE_ALLOW_LIST: &[&str] = &[
     "vkxp-proto",
     "vkxp-pixel",
     // Serialization of protocol types.
@@ -71,11 +72,11 @@ pub const CORE_ALLOW_LIST: &[&str] = &[
 ];
 
 /// Crate name to the names of its normal and build dependencies.
-pub type Graph = BTreeMap<String, BTreeSet<String>>;
+pub(crate) type Graph = BTreeMap<String, BTreeSet<String>>;
 
 /// A broken dependency rule, with the dependency path that breaks it.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Violation {
+pub(crate) enum Violation {
     /// A guest crate reaches a host crate. The path starts at the guest crate and ends at the
     /// host crate.
     GuestReachesHost { path: Vec<String> },
@@ -134,7 +135,7 @@ fn paths_from(graph: &Graph, start: &str) -> BTreeMap<String, Vec<String>> {
 }
 
 /// Checks every rule and returns every violation, in a stable order.
-pub fn check(graph: &Graph) -> Vec<Violation> {
+pub(crate) fn check(graph: &Graph) -> Vec<Violation> {
     let mut violations = Vec::new();
     for guest in GUEST_CRATES {
         let paths = paths_from(graph, guest);
@@ -166,7 +167,7 @@ fn outside_allow_list(graph: &Graph, start: &str) -> Vec<Violation> {
 }
 
 /// Builds the graph from the JSON printed by `cargo metadata --format-version 1`.
-pub fn graph_from_metadata(metadata: &Value) -> Result<Graph> {
+pub(crate) fn graph_from_metadata(metadata: &Value) -> Result<Graph> {
     let packages = metadata["packages"]
         .as_array()
         .context("metadata has no `packages` array")?;
@@ -206,7 +207,7 @@ pub fn graph_from_metadata(metadata: &Value) -> Result<Graph> {
 
 /// Runs `cargo metadata` for the workspace at `root`, with all features of its members
 /// enabled, and builds its graph.
-pub fn workspace_graph(root: &Path) -> Result<Graph> {
+pub(crate) fn workspace_graph(root: &Path) -> Result<Graph> {
     let output = Command::new(crate::cargo())
         .args(["metadata", "--format-version", "1", "--all-features"])
         .arg("--manifest-path")
@@ -224,7 +225,7 @@ pub fn workspace_graph(root: &Path) -> Result<Graph> {
 }
 
 /// The `deps` command: prints every violation and fails if there is one.
-pub fn run(root: &Path) -> Result<()> {
+pub(crate) fn run(root: &Path) -> Result<()> {
     let violations = check(&workspace_graph(root)?);
     for violation in &violations {
         eprintln!("deps: {violation}");

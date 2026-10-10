@@ -16,14 +16,14 @@ const ISOLATION_VARIABLES: [&str; 3] = [
 ];
 
 /// Whether the environment restricts the Vulkan loader to chosen drivers.
-pub fn loader_is_restricted() -> bool {
+pub(super) fn loader_is_restricted() -> bool {
     ISOLATION_VARIABLES
         .iter()
         .any(|name| std::env::var(name).is_ok_and(|value| !value.trim().is_empty()))
 }
 
 /// Builds the `vkxp` executable of this workspace and returns its path.
-pub fn build(root: &Path) -> Result<PathBuf> {
+pub(super) fn build(root: &Path) -> Result<PathBuf> {
     let output = Command::new(crate::cargo())
         .args(["build", "--package", "vkxp", "--message-format=json"])
         .current_dir(root)
@@ -45,7 +45,7 @@ pub fn build(root: &Path) -> Result<PathBuf> {
 }
 
 /// What a run of vkxp needs besides the game.
-pub struct Run<'a> {
+pub(super) struct Run<'a> {
     pub executable: &'a Path,
     /// The directory of each run-time package, by its name.
     pub rtps: &'a [(String, PathBuf)],
@@ -58,7 +58,7 @@ pub struct Run<'a> {
 impl Run<'_> {
     /// Runs the game in `game` headless and writes each of `frames`, which are in ascending
     /// order, as the picture `out` holds for vkxp.
-    pub fn capture(&self, game: &Path, frames: &[u64], out: &Path) -> Result<()> {
+    pub(super) fn capture(&self, game: &Path, frames: &[u64], out: &Path) -> Result<()> {
         let status = self
             .command(game, frames, out)?
             .status()
@@ -70,7 +70,7 @@ impl Run<'_> {
     }
 
     /// The command of the run that `capture` describes.
-    pub fn command(&self, game: &Path, frames: &[u64], out: &Path) -> Result<Command> {
+    pub(super) fn command(&self, game: &Path, frames: &[u64], out: &Path) -> Result<Command> {
         let mut command = Command::new(self.executable);
         command.arg(game).arg("--headless");
         for (name, dir) in self.rtps {

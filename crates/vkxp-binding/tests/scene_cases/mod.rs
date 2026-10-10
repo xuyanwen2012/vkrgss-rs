@@ -42,7 +42,7 @@ const fn raises_with(
 }
 
 /// Every group of cases, by name.
-pub const GROUPS: &[(&str, &[Case])] = &[
+pub(crate) const GROUPS: &[(&str, &[Case])] = &[
     ("viewport", VIEWPORT),
     ("sprite construction and plain properties", SPRITE_PLAIN),
     ("sprite object properties", SPRITE_OBJECTS),
@@ -58,7 +58,7 @@ pub const GROUPS: &[(&str, &[Case])] = &[
 
 // --- Viewport ---------------------------------------------------------------------------------
 
-pub const VIEWPORT: &[Case] = &[
+pub(crate) const VIEWPORT: &[Case] = &[
     value(
         "from four numbers",
         "v = Viewport.new(1, 2, 3, 4); r = v.rect; v.dispose; [r.x, r.y, r.width, r.height]",
@@ -197,7 +197,7 @@ pub const VIEWPORT: &[Case] = &[
 
 // --- Sprite -----------------------------------------------------------------------------------
 
-pub const SPRITE_PLAIN: &[Case] = &[
+pub(crate) const SPRITE_PLAIN: &[Case] = &[
     value(
         "in a viewport",
         "v = Viewport.new(0, 0, 100, 100); s = Sprite.new(v); r = s.viewport.equal?(v); \
@@ -269,7 +269,7 @@ pub const SPRITE_PLAIN: &[Case] = &[
     ),
 ];
 
-pub const SPRITE_OBJECTS: &[Case] = &[
+pub(crate) const SPRITE_OBJECTS: &[Case] = &[
     value(
         "changing in place",
         "b = solid(1, 1, 255, 255, 255); s = Sprite.new; s.bitmap = b; s.x = 90; \
@@ -340,7 +340,7 @@ pub const SPRITE_OBJECTS: &[Case] = &[
     ),
 ];
 
-pub const SPRITE_BITMAP: &[Case] = &[
+pub(crate) const SPRITE_BITMAP: &[Case] = &[
     value(
         "same object back",
         "b = Bitmap.new(8, 8); s = Sprite.new; s.bitmap = b; \
@@ -375,7 +375,7 @@ pub const SPRITE_BITMAP: &[Case] = &[
     raises("no bitmap", "Sprite.new.bitmap = 5", "TypeError"),
 ];
 
-pub const SPRITE_DISPOSAL: &[Case] = &[
+pub(crate) const SPRITE_DISPOSAL: &[Case] = &[
     raises_with(
         "use after dispose",
         "s = Sprite.new; s.dispose; s.x",
@@ -439,7 +439,7 @@ pub const SPRITE_DISPOSAL: &[Case] = &[
     ),
 ];
 
-pub const SPRITE_FLASH: &[Case] = &[
+pub(crate) const SPRITE_FLASH: &[Case] = &[
     value(
         "flash with nil",
         "b = solid(1, 1, 255, 0, 0); s = Sprite.new; s.bitmap = b; s.x = 120; \
@@ -463,7 +463,7 @@ pub const SPRITE_FLASH: &[Case] = &[
 
 // --- Plane ------------------------------------------------------------------------------------
 
-pub const PLANE: &[Case] = &[
+pub(crate) const PLANE: &[Case] = &[
     value(
         "a plane with a bitmap tiles the screen",
         "b = solid(4, 4, 255, 0, 0); b.set_pixel(0, 0, Color.new(0, 0, 255)); p = Plane.new; \
@@ -545,7 +545,7 @@ macro_rules! skin {
     };
 }
 
-pub const WINDOW: &[Case] = &[
+pub(crate) const WINDOW: &[Case] = &[
     value(
         "construction and defaults",
         "v = Viewport.new(0, 0, 1, 1); w = Window.new(v); u = Window.new; \
@@ -675,7 +675,7 @@ macro_rules! map {
     };
 }
 
-pub const TILEMAP: &[Case] = &[
+pub(crate) const TILEMAP: &[Case] = &[
     value(
         "construction and defaults",
         "v = Viewport.new(0, 0, 1, 1); t = Tilemap.new(v); u = Tilemap.new; \
@@ -810,7 +810,7 @@ pub const TILEMAP: &[Case] = &[
 
 // --- Copies and collection --------------------------------------------------------------------
 
-pub const NO_COPIES: &[Case] = &[
+pub(crate) const NO_COPIES: &[Case] = &[
     raises_with(
         "clone",
         "Sprite.new.clone",
@@ -844,7 +844,7 @@ pub const NO_COPIES: &[Case] = &[
     ),
 ];
 
-pub const LIFETIME: &[Case] = &[
+pub(crate) const LIFETIME: &[Case] = &[
     value(
         "forgotten sprites",
         "1000.times { |i| Sprite.new; GC.start if i % 100 == 99 }; GC.start; \

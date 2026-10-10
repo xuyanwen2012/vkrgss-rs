@@ -29,9 +29,9 @@ const FRAGMENT_SPIRV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/present.
 
 /// Bindings of the presenter's descriptor set, as `shaders/present.frag` declares them.
 mod binding {
-    pub const NEWEST: u32 = 0;
-    pub const HELD: u32 = 1;
-    pub const MASK: u32 = 2;
+    pub(super) const NEWEST: u32 = 0;
+    pub(super) const HELD: u32 = 1;
+    pub(super) const MASK: u32 = 2;
 }
 
 /// Bytes of the push constants: for the newest and then the held frame the letterbox origin

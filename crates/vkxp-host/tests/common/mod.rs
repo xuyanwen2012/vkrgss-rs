@@ -22,7 +22,7 @@ const ISOLATION_VARIABLES: [&str; 3] = [
 
 /// Why the tests may not touch Vulkan in an environment where `variable` reads the loader's
 /// variables, or `None` when one of them restricts the loader.
-pub fn isolation_error(variable: impl Fn(&str) -> Option<String>) -> Option<String> {
+pub(crate) fn isolation_error(variable: impl Fn(&str) -> Option<String>) -> Option<String> {
     let restricted = ISOLATION_VARIABLES
         .iter()
         .any(|name| variable(name).is_some_and(|value| !value.trim().is_empty()));
@@ -39,7 +39,7 @@ pub fn isolation_error(variable: impl Fn(&str) -> Option<String>) -> Option<Stri
 /// Fails the test before anything is asked of the Vulkan loader unless the loader has been
 /// restricted. Every test that reaches Vulkan goes through this, most of them by way of
 /// [`test_device`].
-pub fn require_isolation() {
+pub(crate) fn require_isolation() {
     if let Some(error) = isolation_error(|name| std::env::var(name).ok()) {
         panic!("{error}");
     }
@@ -48,7 +48,7 @@ pub fn require_isolation() {
 /// The device the tests composite on: llvmpipe, unless `VKXP_TEST_DEVICE` names another one by
 /// index or by part of its name, as for the tests of `vkxp-vk`. Like those, the tests refuse
 /// to start while the loader is not restricted to chosen drivers.
-pub fn test_device() -> DeviceChoice {
+pub(crate) fn test_device() -> DeviceChoice {
     require_isolation();
     match std::env::var("VKXP_TEST_DEVICE") {
         Ok(value) if !value.is_empty() => vkxp_host::device_from_text(&value),
@@ -57,13 +57,13 @@ pub fn test_device() -> DeviceChoice {
 }
 
 /// A demo small enough to composite quickly on the CPU, also with the reference.
-pub const SMALL_DEMO: DemoOptions = DemoOptions {
+pub(crate) const SMALL_DEMO: DemoOptions = DemoOptions {
     size: Size::new(160, 120),
     frame_rate: FrameRate::DEFAULT,
 };
 
 /// Starts the demo on its own thread and returns the host's end of its link.
-pub fn spawn_demo(
+pub(crate) fn spawn_demo(
     options: DemoOptions,
 ) -> (HostLink, thread::JoinHandle<Result<(), Disconnected>>) {
     let (guest, host) = headless_link();
@@ -74,7 +74,11 @@ pub fn spawn_demo(
 /// Plays host for the demo by hand: feeds it `script` the way a headless run does, the entry
 /// for frame `n` before the tick of frame `n`, for `frames` frames, then asks it to quit.
 /// Returns every message the demo sent before the quit request.
-pub fn drive_demo(options: DemoOptions, script: &InputScript, frames: u64) -> Vec<GuestToHost> {
+pub(crate) fn drive_demo(
+    options: DemoOptions,
+    script: &InputScript,
+    frames: u64,
+) -> Vec<GuestToHost> {
     let (host, demo) = spawn_demo(options);
     let mut messages = Vec::new();
     let mut count = 0;
@@ -102,7 +106,7 @@ pub fn drive_demo(options: DemoOptions, script: &InputScript, frames: u64) -> Ve
 }
 
 /// A tiny frame of one colour, for guests written in the tests.
-pub fn small_frame(frame_index: u64) -> GuestToHost {
+pub(crate) fn small_frame(frame_index: u64) -> GuestToHost {
     let size = Size::new(16, 12);
     GuestToHost::Frame(FramePacket {
         frame_index,

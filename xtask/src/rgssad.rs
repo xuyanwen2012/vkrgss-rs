@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail, ensure};
 
 /// The name of the archive in a game directory.
-pub const FILE_NAME: &str = "Game.rgssad";
+pub(crate) const FILE_NAME: &str = "Game.rgssad";
 
 const HEADER: [u8; 8] = *b"RGSSAD\0\x01";
 const INITIAL_KEY: u32 = 0xDEAD_CAFE;
@@ -26,7 +26,7 @@ const PACKED_FOLDERS: [&str; 2] = ["Data", "Graphics"];
 
 /// One file of an archive.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Entry {
+pub(crate) struct Entry {
     /// The name as stored: a path with backslashes, usually UTF-8.
     pub name: Vec<u8>,
     pub data: Vec<u8>,
@@ -48,7 +48,7 @@ fn crypt(data: &[u8], mut key: u32) -> impl Iterator<Item = u8> {
 }
 
 /// Reads an archive. The entries are in the order of the file.
-pub fn read(bytes: &[u8]) -> Result<Vec<Entry>> {
+pub(crate) fn read(bytes: &[u8]) -> Result<Vec<Entry>> {
     ensure!(
         bytes.starts_with(&HEADER),
         "not an RGSSAD version 1 archive"
@@ -81,7 +81,7 @@ pub fn read(bytes: &[u8]) -> Result<Vec<Entry>> {
 }
 
 /// Writes an archive holding `entries` in their order.
-pub fn write(entries: &[Entry]) -> Vec<u8> {
+pub(crate) fn write(entries: &[Entry]) -> Vec<u8> {
     let mut key = INITIAL_KEY;
     let mut bytes = HEADER.to_vec();
     for entry in entries {
@@ -97,7 +97,7 @@ pub fn write(entries: &[Entry]) -> Vec<u8> {
 
 /// Whether the entry name `stored` is the path `wanted`, without regard to the case of the
 /// letters and with either separator.
-pub fn names_match(stored: &[u8], wanted: &str) -> bool {
+pub(crate) fn names_match(stored: &[u8], wanted: &str) -> bool {
     let normal = |name: &str| name.replace('/', "\\").to_lowercase();
     normal(&String::from_utf8_lossy(stored)) == normal(wanted)
 }
@@ -105,7 +105,7 @@ pub fn names_match(stored: &[u8], wanted: &str) -> bool {
 /// `cargo xtask pack-rgssad`: packs the `Data` and `Graphics` folders of the game in `game`
 /// into `Game.rgssad` and removes them. The directory is changed in place, so it is meant to
 /// be a copy.
-pub fn pack(game: &Path) -> Result<()> {
+pub(crate) fn pack(game: &Path) -> Result<()> {
     let children = children(game)?;
     let child = |name: &str| {
         children
