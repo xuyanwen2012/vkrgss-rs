@@ -130,9 +130,20 @@ struct Fade {
     total: u32,
 }
 
+/// The gain of the volume `v`, 0 to 100: 0.35 dB below full for every unit under 100, as the
+/// original asks of its audio back end (read from the code of RGSS104E), and silence at 0.
+fn gain(v: f32) -> f32 {
+    if v <= 0.0 {
+        0.0
+    } else {
+        10f32.powf(-0.0175 * (100.0 - v))
+    }
+}
+
 /// One sound on a channel.
 struct Voice {
     source: Box<dyn Source>,
+    /// The volume, 0 to 100, which a fade lowers in proportion.
     volume: f32,
     looping: bool,
     fade: Option<Fade>,
@@ -142,7 +153,7 @@ impl Voice {
     fn new(source: Box<dyn Source>, volume: u8, looping: bool) -> Voice {
         Voice {
             source,
-            volume: f32::from(volume.min(100)) / 100.0,
+            volume: f32::from(volume.min(100)),
             looping,
             fade: None,
         }
@@ -165,17 +176,18 @@ impl Voice {
             self.source.rewind();
             rewound = true;
         }
+        let steady = gain(self.volume);
         let pairs = out.as_chunks_mut::<2>().0.iter_mut();
         for (index, (frame, sound)) in pairs.zip(scratch.as_chunks::<2>().0).enumerate() {
             if index == filled {
                 break;
             }
-            let mut gain = self.volume;
+            let mut gain = steady;
             if let Some(fade) = &mut self.fade {
                 if fade.remaining == 0 {
                     return index;
                 }
-                gain *= fade.remaining as f32 / fade.total as f32;
+                gain = self::gain(self.volume * fade.remaining as f32 / fade.total as f32);
                 fade.remaining -= 1;
             }
             frame[0] += sound[0] * gain;
@@ -303,8 +315,9 @@ impl Channels {
 /// The four channels of RGSS: music and background sound loop, a music effect pauses the
 /// music while it plays, sound effects overlap.
 ///
-/// Volume is a linear factor (PLACEHOLDER: the original maps volume to decibels), pitch a
-/// resampling ratio and a fade a linear ramp. The mixer has no thread and no device, and
+/// Volume is a gain in decibels, 0.35 dB below full for every unit under 100, as in the
+/// original; pitch is a resampling ratio; a fade lowers the volume evenly, so its ramp is
+/// even in decibels until it ends in silence. The mixer has no thread and no device, and
 /// what it renders depends only on the commands and the number of frames rendered.
 pub struct Mixer {
     loader: Loader,

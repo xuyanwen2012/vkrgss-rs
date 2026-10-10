@@ -7,7 +7,7 @@
 
 ## 2. Volume curve (`vkxp-audio`)
 
-- [ ] 2.1 Turn volume and fade into the gain of `design.md`. Verify: the scenarios of `specs/audio-playback/spec.md` and the gain table of `design.md` as tests; `cargo test -p vkxp-audio --locked` passes; the note at the mixer no longer says `PLACEHOLDER`.
+- [x] 2.1 Turn volume and fade into the gain of `design.md`. Verify: the scenarios of `specs/audio-playback/spec.md` and the gain table of `design.md` as tests; `cargo test -p vkxp-audio --locked` passes; the note at the mixer no longer says `PLACEHOLDER`.
 
 ## 3. Documentation
 

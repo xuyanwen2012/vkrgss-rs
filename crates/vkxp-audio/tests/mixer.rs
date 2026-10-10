@@ -187,15 +187,26 @@ fn a_play_command_replaces_what_its_channel_played() {
     }
 }
 
+/// Scenario "Volume curve", and the gain table of the design.
 #[test]
-fn volume_scales_the_amplitude() {
-    for (volume, expected) in [(0, 0.0), (50, AMPLITUDE / 2.0), (100, AMPLITUDE)] {
+fn volume_sets_the_gain_in_decibels() {
+    let gains = [
+        (100, 1.0),
+        (90, 0.668),
+        (80, 0.447),
+        (50, 0.133),
+        (20, 0.0398),
+        (1, 0.0185),
+        (0, 0.0),
+    ];
+    for (volume, gain) in gains {
         let mut mixer = mixer();
         mixer.apply(play_with(AudioChannel::Bgm, &tone(440.0, 0.5), volume, 100));
         let out = side(&render(&mut mixer, 0.5), 0);
+        let heard = level(&out, RATE, 440.0) / AMPLITUDE;
         assert!(
-            (level(&out, RATE, 440.0) - expected).abs() < 0.005,
-            "{volume}"
+            (heard - gain).abs() < gain * 0.01 + 0.0005,
+            "{volume}: {heard}"
         );
         if volume == 0 {
             assert_eq!(peak(&out), 0.0);
@@ -245,6 +256,7 @@ fn stop_silences_its_channel_at_once() {
     }
 }
 
+/// Scenario "Fade".
 #[test]
 fn a_fade_lowers_the_volume_evenly_and_then_stops() {
     let mut mixer = mixer();
@@ -260,9 +272,10 @@ fn a_fade_lowers_the_volume_evenly_and_then_stops() {
         let frame = (RATE as f32 * seconds) as usize;
         peak(&fading[(frame - 220) * 2..(frame + 220) * 2])
     };
-    assert!((around(0.25) / before - 0.75).abs() < 0.02);
-    assert!((around(0.5) / before - 0.5).abs() < 0.02);
-    assert!((around(0.75) / before - 0.25).abs() < 0.02);
+    // Even in decibels: the gains of the volumes 75, 50 and 25.
+    assert!((around(0.25) / before - 0.365).abs() < 0.02);
+    assert!((around(0.5) / before - 0.133).abs() < 0.01);
+    assert!((around(0.75) / before - 0.0487).abs() < 0.005);
     assert_eq!(peak(&render(&mut mixer, 1.0)), 0.0, "stopped: no loop");
 
     // The channel plays again afterwards.
