@@ -10,7 +10,7 @@
 
 ## 3. Leftovers
 
-- [ ] 3.1 The pass of `design.md`, with "Found" filled in. Verify: `cargo build --workspace --all-targets --locked` passes (or with an updated lock file committed if a dependency was removed).
+- [x] 3.1 The pass of `design.md`, with "Found" filled in. Verify: `cargo build --workspace --all-targets --locked` passes (or with an updated lock file committed if a dependency was removed).
 
 ## 4. Integration check
 

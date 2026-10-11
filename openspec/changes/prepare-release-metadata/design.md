@@ -37,7 +37,25 @@ the audit is not run and that is said under "Found".
 
 ## Found
 
-To be filled in.
+Nothing was removed; the pass changed no file.
+
+- Output: no `dbg!` anywhere. Every `eprintln!`/`println!` outside tests is part of an
+  interface: the `vkxp: ...` diagnostics and the usage text of the executable (`main.rs`,
+  `process.rs`), the default reporter of a session in `vkxp-host` (`report.rs`), the report of
+  a script error that `vkxp-binding` writes to the error stream as `docs/decisions.md` asks
+  (`runtime.rs`), the `cargo:` directives of the two build scripts, and the progress and
+  result lines of the `xtask` commands. The others are in tests (`vkxp-core`'s tilemap timing
+  test, the note of a skipped test in `vkxp`'s `font.rs`).
+- Commented-out code: none. The comments that look like code are the C declarations beside
+  the layout assertions in `vkxp-vk`'s `present_timing.rs`, which document what is asserted.
+- Dependencies: every entry of every manifest is named by a path in the sources it is for
+  (`src` for dependencies, `build.rs` for build dependencies, `src`, `tests` and `examples`
+  for development dependencies), and every entry of `[workspace.dependencies]` is used by a
+  manifest. `libz-sys` in `vkxp-ruby-sys` is used through `extern crate` alone, which is what
+  links zlib. The two crates that depend on themselves as a development dependency do so to
+  enable their `testing` feature. `Cargo.lock` is unchanged. `cargo machete` is not
+  installed and was not run.
+- `cargo-deny` is not installed, so `cargo xtask audit` was not run.
 
 ## Follow-ups
 
