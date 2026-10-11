@@ -67,3 +67,11 @@ Nothing was removed; the pass changed no file.
   returning before the log, the configuration or the game directory are touched. Whether
   `--help` should become an option that prints to the standard output with status 0 is left
   to the owner; it was not built here.
+- A test that this change does not touch fails now and then when the whole end-to-end suite
+  of `vkxp` runs in parallel: `the_guest_splits_its_frame_time_when_statistics_are_requested`
+  finds no `vkxp: guest frame times over` line in the error stream of the run with
+  `--guest process`. It failed in 1 of 12 runs of the suite on the commit this branch starts
+  from, in 1 of 6 on this branch, and in none of 20 runs of the test alone, so the rows of a
+  guest process seem to be lost sometimes when the machine is busy. The first run of the gate
+  for this change stopped on it; the gate was run again. Finding the cause is outside this
+  change.
