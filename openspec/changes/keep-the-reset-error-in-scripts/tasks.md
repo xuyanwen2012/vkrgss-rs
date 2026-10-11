@@ -6,7 +6,7 @@
 
 ## 2. Documentation
 
-- [ ] 2.1 README: where it describes the reset, one sentence on `$!` and `$@` and the idiom it serves. Verify: the README names `unless $@`.
+- [x] 2.1 README: where it describes the reset, one sentence on `$!` and `$@` and the idiom it serves. Verify: the README names `unless $@`.
 
 ## 3. Integration check
 

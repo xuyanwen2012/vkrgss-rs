@@ -336,6 +336,10 @@ F2 (frame rate in the title) and Tab held (fast-forward), and the keys of the sa
 saves, F4 loads, and with Shift they choose the slot (see *Save states*). Closing the window
 asks the game to quit.
 
+After a reset the scripts are evaluated again with the `Reset` exception as `$!` and its
+backtrace as `$@`, as in the original runtime, so that the common guard
+`alias old_name name unless $@` makes its alias only once.
+
 ### Messages
 
 `print`, `p` and the report of an uncaught script error are written to the error stream and
