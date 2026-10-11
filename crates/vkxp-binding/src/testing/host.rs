@@ -381,7 +381,8 @@ pub struct Played {
 /// The process has one interpreter and the harness's guest is installed on it, so this is
 /// `run_game` from its second step on, on that guest: what an earlier game left is disposed,
 /// and the guest gets the files of `game` (without run-time packages), an empty scene and
-/// `run`. Classes, constants and global variables of earlier games stay.
+/// `run`, and the current error is cleared. Classes, constants and global variables of
+/// earlier games stay.
 pub fn run_game(game: &Game, run: RunConfig, script: Script, after: &str) -> Played {
     let (link, host) = scripted_host(script);
     let files = GameFiles::new(game.dir(), []);
@@ -389,6 +390,8 @@ pub fn run_game(game: &Game, run: RunConfig, script: Script, after: &str) -> Pla
     let (outcome, after) = super::run(move |ruby| {
         ruby.eval_protected("Graphics._reset", "testing", 1)
             .expect("what the previous game left is disposed");
+        // SAFETY: `nil` is a special constant.
+        unsafe { ruby.set_current_error(vkxp_ruby_sys::ffi::Qnil) };
         Guest::with(|guest| {
             guest.files = files;
             guest.scene = Scene::new();

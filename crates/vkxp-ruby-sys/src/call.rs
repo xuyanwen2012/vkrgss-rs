@@ -235,6 +235,18 @@ impl Ruby {
         }
     }
 
+    /// Makes `exception` the current error, `$!`, whose backtrace is `$@`. `nil` clears it.
+    ///
+    /// # Safety
+    ///
+    /// `exception` must be `nil` or a live exception object.
+    pub unsafe fn set_current_error(&self, exception: VALUE) {
+        // SAFETY: `&self` proves the thread, on which `ruby_errinfo` is only touched by the
+        // interpreter, which is not running now. The caller guarantees the value, and the
+        // variable is one the collector marks.
+        unsafe { ffi::ruby_errinfo = exception };
+    }
+
     /// A new Ruby string with these bytes. The error is the `NoMemoryError` of a failed
     /// allocation.
     pub fn str_new(&self, bytes: &[u8]) -> Result<VALUE, Raised> {

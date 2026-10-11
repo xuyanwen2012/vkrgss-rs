@@ -659,7 +659,9 @@ fn reset(ruby: &Ruby) -> Result<(), Raised> {
 
 /// Evaluates the preload scripts and then the `count` scripts of `$RGSS_SCRIPTS` in order,
 /// each of the latter under the name `Section` and its index, again from the first preload
-/// script after a reset, until the last returns or one exits.
+/// script after a reset, until the last returns or one exits. The runs after a reset start
+/// with the `Reset` that ended the one before as the current error, as in the original
+/// runtime: `alias old new unless $@` relies on it.
 fn run_scripts(ruby: &Ruby, preload: &[Preload], count: usize) -> Result<(), RunError> {
     let mut index = 0;
     while index < preload.len() + count {
@@ -680,7 +682,12 @@ fn run_scripts(ruby: &Ruby, preload: &[Preload], count: usize) -> Result<(), Run
         match ended(ruby, raised) {
             Ended::Exit => break,
             Ended::Reset => match reset(ruby) {
-                Ok(()) => index = 0,
+                Ok(()) => {
+                    // SAFETY: the exception has been in the local `raised` since it was
+                    // raised.
+                    unsafe { ruby.set_current_error(raised.exception) };
+                    index = 0;
+                }
                 Err(raised) => {
                     if let Ended::Failed(report) = ended(ruby, raised) {
                         return Err(RunError::Script(report));

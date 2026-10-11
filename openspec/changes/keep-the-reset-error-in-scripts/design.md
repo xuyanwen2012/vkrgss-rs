@@ -20,6 +20,12 @@ exception it holds, through a small safe-to-call function of the interpreter wra
 `unsafe` stays in `vkxp-ruby-sys` or the wrapper that owns the other accesses). Before the
 first run nothing is set.
 
+As built: the function is `Ruby::set_current_error`, in `vkxp-ruby-sys` next to the other
+calls. It is an `unsafe fn` like `funcall` and `describe`, because the value it takes must be
+`nil` or a live exception; the access to `ruby_errinfo` itself stays in `vkxp-ruby-sys`. The
+test harness of `vkxp-binding` plays many games on one interpreter, so its `run_game` clears
+the current error with the same function before each game, which is what a new process is.
+
 ### A protected call puts back the error it found
 
 `protect` restores `ruby_errinfo` to the value it had before the call instead of nil. For

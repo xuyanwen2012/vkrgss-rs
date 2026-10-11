@@ -25,7 +25,7 @@ pub struct Raised {
 }
 
 /// Runs `body(data)` under `rb_protect`: a jump out of `body` ends inside C and comes back as
-/// a [`Raised`], with `$!` cleared, instead of crossing the caller's frames.
+/// a [`Raised`], with `$!` as it was before the call, instead of crossing the caller's frames.
 ///
 /// `data` is the plain data of the operation, inputs and the outputs that are not values;
 /// `body` receives its address as the argument and returns the value of the operation.
@@ -43,17 +43,20 @@ pub unsafe fn protect<T>(
     body: unsafe extern "C" fn(VALUE) -> VALUE,
 ) -> Result<VALUE, Raised> {
     let mut state: c_int = 0;
+    // SAFETY: on the interpreter thread `ruby_errinfo` is only touched by the interpreter,
+    // which is not running now.
+    let before = unsafe { ffi::ruby_errinfo };
     // SAFETY: `data` outlives the call, and `body` treats the argument as `*mut T` by the
     // contract of this function. `rb_protect` returns normally whatever `body` does.
     let value = unsafe { ffi::rb_protect(body, std::ptr::from_mut(data) as VALUE, &mut state) };
     if state == 0 {
         return Ok(value);
     }
-    // SAFETY: on the interpreter thread `ruby_errinfo` is only touched by the interpreter,
-    // which is not running now. Taking the exception out leaves `$!` clean for what follows.
+    // SAFETY: as above. Taking the exception out leaves `$!` as the call found it, which is
+    // what a `rescue` that ends does; `before` has been in a local since it was read.
     let exception = unsafe {
         let pending = ffi::ruby_errinfo;
-        ffi::ruby_errinfo = ffi::Qnil;
+        ffi::ruby_errinfo = before;
         pending
     };
     let is_raise = state == ffi::TAG_RAISE || state == ffi::TAG_FATAL;

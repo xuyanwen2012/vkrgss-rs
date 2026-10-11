@@ -100,3 +100,28 @@ fn body_that_raises_gives_the_exception_as_a_value() {
         assert_eq!(drops.get(), 1);
     });
 }
+
+#[test]
+fn body_that_raises_leaves_the_error_it_found() {
+    interpreter().run(|ruby| {
+        let mut sum = Sum {
+            left: 0,
+            right: 0,
+            finished: false,
+        };
+        // SAFETY: on the interpreter thread; the exception stays in the local `earlier` and,
+        // as the current error, in a variable the collector marks. `raise_body` fits the
+        // contract of `protect`.
+        unsafe {
+            let earlier = ffi::rb_exc_new2(ffi::rb_eArgError, c"earlier".as_ptr());
+            ruby.set_current_error(earlier);
+            let raised = protect(&mut sum, raise_body).expect_err("the body raises");
+            assert_ne!(raised.exception, earlier);
+            let current = ffi::ruby_errinfo;
+            assert_eq!(current, earlier);
+            ruby.set_current_error(ffi::Qnil);
+            let current = ffi::ruby_errinfo;
+            assert_eq!(current, ffi::Qnil);
+        }
+    });
+}

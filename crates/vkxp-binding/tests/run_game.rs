@@ -359,6 +359,115 @@ fn a_reset_request_starts_the_scripts_over() {
 }
 
 #[test]
+fn the_first_run_has_no_current_error() {
+    let game = Game::new(
+        "error_first",
+        "Reset",
+        &[("Main", "$vkxp_error_first = [$!, $@]")],
+    );
+    let played = run(&game, Script::new(), "$vkxp_error_first");
+    assert!(played.outcome.is_ok(), "{:?}", played.outcome);
+    assert_eq!(played.after.as_deref(), Ok("[nil, nil]"));
+}
+
+#[test]
+fn the_run_after_a_reset_has_the_reset_as_the_current_error() {
+    let game = Game::new(
+        "error_reset",
+        "Reset",
+        &[
+            ("Record", "($vkxp_error_reset ||= []) << [$!.class, $@]"),
+            (
+                "Main",
+                "loop { Graphics.update } if $vkxp_error_reset.size == 1",
+            ),
+        ],
+    );
+    let played = run(
+        &game,
+        Script::new().after_frame(2, HostToGuest::Reset),
+        "[$vkxp_error_reset.size, $vkxp_error_reset[0], $vkxp_error_reset[1][0], \
+         $vkxp_error_reset[1][1].class, $vkxp_error_reset[1][1][0] =~ /in `update'/]",
+    );
+    assert!(played.outcome.is_ok(), "{:?}", played.outcome);
+    let after = played.after.expect("the snippet evaluates");
+    assert!(
+        after.starts_with("[2, [NilClass, nil], Reset, Array, ") && !after.ends_with("nil]"),
+        "{after}"
+    );
+}
+
+#[test]
+fn an_alias_guarded_by_the_backtrace_is_made_once() {
+    let game = Game::new(
+        "error_alias",
+        "Reset",
+        &[
+            (
+                "Guarded",
+                "class Sprite
+                   alias vkxp_error_alias_dispose dispose unless $@
+                   def dispose
+                     vkxp_error_alias_dispose
+                   end
+                 end",
+            ),
+            (
+                "Main",
+                "$vkxp_error_alias_runs = ($vkxp_error_alias_runs || 0) + 1
+                 loop { Graphics.update } if $vkxp_error_alias_runs < 3
+                 sprite = Sprite.new
+                 sprite.dispose
+                 $vkxp_error_alias = sprite.disposed?",
+            ),
+        ],
+    );
+    let played = run(
+        &game,
+        Script::new()
+            .after_frame(2, HostToGuest::Reset)
+            .after_frame(4, HostToGuest::Reset),
+        "[$vkxp_error_alias_runs, $vkxp_error_alias]",
+    );
+    assert!(played.outcome.is_ok(), "{:?}", played.outcome);
+    assert_eq!(played.after.as_deref(), Ok("[3, true]"));
+}
+
+#[test]
+fn a_rescue_in_the_run_after_a_reset_leaves_the_reset() {
+    let game = Game::new(
+        "error_rescue",
+        "Reset",
+        &[
+            (
+                "Count",
+                "$vkxp_error_rescue_runs = ($vkxp_error_rescue_runs || 0) + 1",
+            ),
+            (
+                "Rescue",
+                "begin
+                   raise 'own'
+                 rescue
+                   $vkxp_error_rescue_own = $!.class
+                 end",
+            ),
+            (
+                "Main",
+                "$vkxp_error_rescue = $!.class
+                 loop { Graphics.update } if $vkxp_error_rescue_runs == 1",
+            ),
+        ],
+    );
+    let played = run(
+        &game,
+        Script::new().after_frame(2, HostToGuest::Reset),
+        "[$vkxp_error_rescue_runs, $vkxp_error_rescue_own, $vkxp_error_rescue]",
+    );
+    assert!(played.outcome.is_ok(), "{:?}", played.outcome);
+    assert_eq!(played.after.as_deref(), Ok("[2, RuntimeError, Reset]"));
+}
+
+#[test]
 fn a_quit_request_ends_the_game() {
     let game = Game::new(
         "quit",

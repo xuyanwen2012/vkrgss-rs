@@ -2,7 +2,7 @@
 
 ## 1. The current error after a reset
 
-- [ ] 1.1 `protect` puts back the error it found; the loop over the scripts sets the `Reset` after a reset, as in `design.md`. Verify: the four scenarios of `specs/rgss-runtime/spec.md` as tests; `cargo test -p vkxp-ruby-sys -p vkxp-binding --locked` passes.
+- [x] 1.1 `protect` puts back the error it found; the loop over the scripts sets the `Reset` after a reset, as in `design.md`. Verify: the four scenarios of `specs/rgss-runtime/spec.md` as tests; `cargo test -p vkxp-ruby-sys -p vkxp-binding --locked` passes.
 
 ## 2. Documentation
 
