@@ -635,7 +635,7 @@ loop { Graphics.update }
     /// three as absolute paths.
     /// Everything is written below `target/oracle-test`.
     #[test]
-    #[ignore = "needs Wine, Xvfb and the original runtime; see the README"]
+    #[ignore = "needs Wine, Xvfb and the original runtime; see docs/development.md"]
     fn the_original_is_captured_at_the_frames_asked_for() {
         let variable =
             |name: &str| std::env::var(name).unwrap_or_else(|_| panic!("{name} is not set"));

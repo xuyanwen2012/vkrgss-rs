@@ -1027,7 +1027,7 @@ impl Gpu {
             .queue_priorities(&priorities)];
         let pacing = match surface {
             // On by default; `VKXP_PRESENT_TIMING=0` switches it off. Checked live on RADV in a
-            // headless mutter at 60, 120 and 144 Hz (see README).
+            // headless mutter at 60, 120 and 144 Hz (see docs/decisions.md, milestone M5).
             Some(_) if std::env::var_os("VKXP_PRESENT_TIMING").is_some_and(|v| v == "0") => {
                 PacingSupport::default()
             }

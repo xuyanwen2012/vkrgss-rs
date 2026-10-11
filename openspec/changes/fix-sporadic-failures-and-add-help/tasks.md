@@ -11,7 +11,7 @@
 
 ## 3. Comments and the notice file
 
-- [ ] 3.1 As in `design.md`. Verify: `git grep -n -i "development machine" -- crates xtask` prints nothing; `cargo test -p xtask --locked` (the link check) passes.
+- [x] 3.1 As in `design.md`. Verify: `git grep -n -i "development machine" -- crates xtask` prints nothing; `cargo test -p xtask --locked` (the link check) passes.
 
 ## 4. Integration check
 

@@ -24,6 +24,22 @@ licence; the text is [`COPYING`](third_party/oniguruma-5.9.6/COPYING). Its
 [`README.vkxp.md`](third_party/oniguruma-5.9.6/README.vkxp.md) states the origin, and
 `MANIFEST.sha256` the upstream hash of every file.
 
+## Fonts used by tests
+
+[`crates/vkxp-text/tests/fonts`](crates/vkxp-text/tests/fonts) holds two fonts that the tests
+of `vkxp-text` read. They are not part of the executable.
+
+- `LiberationSans-Regular.ttf`, Liberation Sans 2.1.5, under the SIL Open Font License 1.1;
+  [`LICENSE.LiberationSans.txt`](crates/vkxp-text/tests/fonts/LICENSE.LiberationSans.txt)
+  holds its copyright notices and the text of the licence.
+- `NotoSansSymbols2-Regular.ttf`, Noto Sans Symbols 2 version 2.008, which names the SIL Open
+  Font License 1.1 in its `name` table;
+  [`LICENSE.NotoSansSymbols2.txt`](crates/vkxp-text/tests/fonts/LICENSE.NotoSansSymbols2.txt)
+  is the licence file received with it and holds the text of the Apache License 2.0, under
+  which earlier Noto releases were published.
+
+The [`README.md`](crates/vkxp-text/tests/fonts/README.md) beside them states their origins.
+
 ## Rust crates
 
 The Rust dependencies are not bundled. `Cargo.lock` names every crate and its version,

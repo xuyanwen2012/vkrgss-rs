@@ -109,6 +109,13 @@ are made afresh when it starts, so two runs of one test executable at the same t
 a loop in the same target directory would bring about, remove each other's files. That is
 no part of the two failures above, which showed in single runs of the suite.
 
+### Comments
+
+No file under `docs/` states the rule of
+`crates/vkxp-core/tests/data/sprite-rotation-samples.txt`, and the README never did. The
+comment now names `docs/compatibility.md`, whose section "What is exact" says where the
+measured rules are recorded, and the specification that holds this one.
+
 ## Follow-ups
 
 - Two runs of one test executable at the same time share its generated game directories

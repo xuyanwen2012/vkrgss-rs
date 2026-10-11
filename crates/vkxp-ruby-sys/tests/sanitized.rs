@@ -26,8 +26,9 @@ use std::time::Duration;
 
 use common::Suites;
 
-/// The compiler of the sanitized build. The development machine has the sanitizer runtimes
-/// of clang only, so this is not the compiler the build script used.
+/// The compiler of the sanitized build. A distribution may package the sanitizer runtimes
+/// of clang only, as Fedora does with `compiler-rt`, so this is not necessarily the compiler
+/// the build script used.
 const COMPILER: &str = "clang";
 
 /// What the sanitized build adds to the flags of the build script.

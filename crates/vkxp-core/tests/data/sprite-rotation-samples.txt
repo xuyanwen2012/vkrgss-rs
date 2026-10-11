@@ -1,6 +1,6 @@
 # Sprite angle sampling on screen, measured on RGSS103J.dll (sprite-rotation-hue-probe.rb): 200x150 bitmap, texel (x,y) coloured (x,y,100),
 # sprite at screen (320,240). Lines: angle ox oy zoom_x zoom_y mirror | dx dy -> u v   (dx,dy = screen pixel - (320,240); u v = texel shown, or "-" = not covered)
-# Rule that fits generic angles (see README): U = ox + (dx*cos a - dy*sin a)/zoom_x, V = oy + (dx*sin a + dy*cos a)/zoom_y, mirror: U = w-1-U;
+# Rule that fits generic angles (see docs/compatibility.md, "What is exact", and the requirement it leads to in openspec/specs/core-scene/spec.md): U = ox + (dx*cos a - dy*sin a)/zoom_x, V = oy + (dx*sin a + dy*cos a)/zoom_y, mirror: U = w-1-U;
 # texel = floor(U), floor(V) when inside the bitmap. At exact texel boundaries (all pixels for 90/180/270) float noise decides; those lines are data, not rule.
 # A selection of the measured lines: the angles 1, 30 and 45, where the rule holds, without the pixel at the sprite's own position,
 # which lies on a texel boundary. The lines of 90, 180 and 270 degrees, all on texel boundaries, are left out.
