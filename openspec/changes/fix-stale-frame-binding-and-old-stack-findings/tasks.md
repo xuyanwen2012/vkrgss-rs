@@ -12,4 +12,4 @@
 
 ## 3. Integration check
 
-- [ ] 3.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate fix-stale-frame-binding-and-old-stack-findings --strict` passes.
+- [x] 3.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate fix-stale-frame-binding-and-old-stack-findings --strict` passes.
