@@ -10,7 +10,7 @@
 
 ## 3. Documentation
 
-- [ ] 3.1 "Testing with another compiler" in `docs/development.md`. Verify: `cargo test -p xtask --locked` (the link check) passes.
+- [x] 3.1 "Testing with another compiler" in `docs/development.md`. Verify: `cargo test -p xtask --locked` (the link check) passes.
 
 ## 4. Integration check
 

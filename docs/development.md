@@ -59,6 +59,36 @@ database. A vulnerability, a licence that is not on the list or a crate from any
 crates.io fails it; an unmaintained crate is a warning. Without `cargo-deny` the command
 says how to install it (`cargo install --locked cargo-deny`) and fails.
 
+## Testing with another compiler
+
+The interpreter's collector scans the machine stack, so whether a value survives a
+collection can depend on what the compiler keeps there: a fault of that kind showed with
+gcc 13.3 on the CI runner and not with the gcc of the development machine. Two ways to
+build and test the interpreter with a compiler other than the default one.
+
+With clang, which the build script takes from `CC`, in a target directory of its own:
+
+```sh
+CC=clang CARGO_TARGET_DIR=target/clang cargo test -p vkxp-binding -p vkxp-ruby-sys --locked
+```
+
+With the gcc of the CI runner, in a container of Ubuntu 24.04 that uses the Rust toolchain
+and the cargo cache of the machine:
+
+```sh
+podman run --rm --security-opt label=disable -v "$PWD":/src \
+    -v "$HOME/.cargo":/cargo -v "$HOME/.rustup":/rustup:ro ubuntu:24.04 \
+    bash -c 'apt-get update -qq && apt-get install -y -qq --no-install-recommends \
+        build-essential libcrypt-dev ca-certificates >/dev/null &&
+      export PATH=/cargo/bin:$PATH CARGO_HOME=/cargo RUSTUP_HOME=/rustup \
+        CARGO_TARGET_DIR=/src/target/ubuntu-gcc && cd /src &&
+      cargo test -p vkxp-binding -p vkxp-ruby-sys --locked --offline'
+```
+
+The collection stress test of `vkxp-binding` (`tests/stress.rs`) is the one that finds such
+faults; a fix is a `RB_GC_GUARD` recorded as a patch in
+[third_party/ruby-1.8.7/PATCHES.md](../third_party/ruby-1.8.7/PATCHES.md).
+
 ## Comparing with the original runtime
 
 `cargo xtask oracle` runs one game in the original runtime and in vkxp under the same
