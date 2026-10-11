@@ -108,8 +108,9 @@ pub struct Sprite {
     /// Rotation about the origin in degrees, counter-clockwise on screen.
     pub angle: f64,
     pub mirror: bool,
-    /// Number of rows at the bottom of the source rectangle that are drawn with half the
-    /// opacity; 0 or less for none.
+    /// The lowest screen rows of the box the sprite covers, as many as the depth, are drawn
+    /// with half the opacity; 0 or less for none. See the requirements "Sprite bush depth"
+    /// and "Bush rows of zoomed and turned sprites".
     pub bush_depth: i32,
     /// 1 adds, 2 subtracts, every other value blends normally.
     pub blend_type: i32,

@@ -682,8 +682,7 @@ fn row_z(height: i32, row: i64, priority: i64, oy: i32, viewport: Option<(i32, i
 
     let tilemap = stage.scene.tilemap(id).unwrap();
     let first = tilemap.cache.view.as_ref().unwrap().first.1;
-    let scroll = viewport.map_or(0, |id| stage.scene.viewport(id).unwrap().oy);
-    let strips = tilemap.strips(i64::from(scroll)).into_iter();
+    let strips = tilemap.strips().into_iter();
     let mut found = strips.filter_map(|(z, strip)| match strip {
         Strip::Ground => (priority == 0).then_some(z),
         Strip::Row { row: shown, .. } => (first + i64::from(shown) == row).then_some(z),

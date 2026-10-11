@@ -584,10 +584,7 @@ impl Scene {
             place(plane.viewport, Entry::new(plane.order, Item::Plane(key)));
         }
         for (key, tilemap) in self.tilemaps.iter() {
-            // Rows rank by where they are in the viewport, which its origin scrolls.
-            let viewport = tilemap.viewport.and_then(|id| self.viewports.get(id.0));
-            let scroll = viewport.map_or(0, |viewport| i64::from(viewport.oy));
-            for (z, strip) in tilemap.strips(scroll) {
+            for (z, strip) in tilemap.strips() {
                 let entry = Entry {
                     z,
                     stamp: tilemap.order.stamp,

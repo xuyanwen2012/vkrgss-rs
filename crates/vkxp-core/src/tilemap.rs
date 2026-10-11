@@ -483,14 +483,13 @@ impl Tilemap {
         });
     }
 
-    /// The pieces this frame draws the tilemap with, each with its z. `_scroll` is the
-    /// vertical origin of the tilemap's viewport, which moves the picture and not the z.
+    /// The pieces this frame draws the tilemap with, each with its z.
     ///
     /// As measured on the original runtime, the z of the tiles of priority 1 to 5 is the y
     /// of their row's top edge, 32 times the row less the tilemap's origin, plus 32 for each
     /// step of priority and 32 more; neither the origin nor the rectangle of the viewport
     /// enters.
-    pub(crate) fn strips(&self, _scroll: i64) -> Vec<(i64, Strip)> {
+    pub(crate) fn strips(&self) -> Vec<(i64, Strip)> {
         let Some(view) = self.cache.view.as_ref().filter(|_| self.visible) else {
             return Vec::new();
         };

@@ -2,7 +2,7 @@
 
 ## 1. Leftovers in `vkxp-core`
 
-- [ ] 1.1 `Tilemap::strips` without its parameter; the comment on `Sprite::bush_depth` as in `design.md`. Verify: `cargo test -p vkxp-core --locked` passes.
+- [x] 1.1 `Tilemap::strips` without its parameter; the comment on `Sprite::bush_depth` as in `design.md`. Verify: `cargo test -p vkxp-core --locked` passes.
 
 ## 2. Protocol and its users
 
