@@ -11,6 +11,17 @@ root file (otherwise only on `vkxp`), `keywords = ["rpg-maker", "rgss", "vulkan"
 inherit them. A crate without a `description` gets one sentence taken from the crate table of
 the README. `publish = false` stays: nothing goes to crates.io.
 
+One file outside the scope given for this change was edited: `xtask/Cargo.toml`, lines 9 to
+13. The scope names `Cargo.toml`, the manifests under `crates/` and, in `xtask`, only
+`src/deps.rs` or a test file. The edit adds five lines, `repository.workspace = true`,
+`homepage.workspace = true`, `readme.workspace = true`, `keywords.workspace = true` and
+`categories.workspace = true`, and nothing else in the file changed. It is needed because
+`xtask` is a package of the workspace: the requirement "Package metadata" asks the repository
+address of every crate of the workspace, and `cargo metadata --no-deps` lists `xtask` among
+the packages, so without the inherited `repository` the scenario "Metadata of every crate"
+and the test that checks it fail on `xtask`. The other four lines keep its metadata the same
+as that of the thirteen crates under `crates/`.
+
 ### Version option
 
 `--version` and `-V` are handled where `--help` is: they print `vkxp <version>` from
