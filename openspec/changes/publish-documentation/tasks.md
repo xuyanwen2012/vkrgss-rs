@@ -15,7 +15,7 @@
 
 ## 4. Link check
 
-- [ ] 4.1 `xtask/tests/doc_links.rs`. Verify: the scenarios of "Links of the documents resolve"; `cargo test -p xtask --locked` passes.
+- [x] 4.1 `xtask/tests/doc_links.rs`. Verify: the scenarios of "Links of the documents resolve"; `cargo test -p xtask --locked` passes.
 
 ## 5. Integration check
 
