@@ -6,7 +6,7 @@
 
 ## 2. The package command
 
-- [ ] 2.1 The variable, the two checks and their tests in `cargo xtask dist`. Verify: scenarios "Needed libraries of the package" and "Static library missing"; `cargo test -p xtask --locked` passes.
+- [x] 2.1 The variable, the two checks and their tests in `cargo xtask dist`. Verify: scenarios "Needed libraries of the package" and "Static library missing"; `cargo test -p xtask --locked` passes.
 
 ## 3. Texts
 

@@ -1,6 +1,11 @@
 //! The release package: the release executable with the documents and licence texts that
 //! accompany it, in one archive under `target/dist/`, and the archive's SHA-256 checksum
 //! beside it. The archive is written by `tar` and the checksum by `sha256sum`.
+//!
+//! The executable is built with libcrypt linked statically (`VKXP_STATIC_CRYPT=1`, read by
+//! the build script of `vkxp-ruby-sys`), because the shared library has a different name on
+//! Ubuntu and on Fedora. The command looks for the static library before the build and reads
+//! the needed libraries of the executable with `readelf` after it.
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
@@ -14,6 +19,12 @@ const TARGET: &str = "x86_64-unknown-linux-gnu";
 
 /// The arguments of the build, after the cargo executable.
 const BUILD: [&str; 5] = ["build", "--release", "--locked", "-p", "vkxp"];
+
+/// The variable that makes the build script of `vkxp-ruby-sys` link libcrypt statically.
+const STATIC_CRYPT: (&str, &str) = ("VKXP_STATIC_CRYPT", "1");
+
+/// The static library the build needs.
+const CRYPT_ARCHIVE: &str = "libcrypt.a";
 
 /// Where the build leaves the executable, below the workspace root.
 const EXECUTABLE: &str = "target/release/vkxp";
@@ -53,16 +64,27 @@ pub(crate) fn run(cargo: &str, root: &Path) -> Result<()> {
     for (source, _) in FILES.iter().filter(|(source, _)| *source != EXECUTABLE) {
         require(root, source)?;
     }
+    let mut cc = Command::new("cc");
+    let printed = tool("cc", cc.arg(format!("-print-file-name={CRYPT_ARCHIVE}")))?;
+    require_static_crypt(&String::from_utf8_lossy(&printed))?;
     let command_line = format!("cargo {}", BUILD.join(" "));
     eprintln!("dist: running `{command_line}`");
     let status = Command::new(cargo)
         .args(BUILD)
+        .env(STATIC_CRYPT.0, STATIC_CRYPT.1)
         .current_dir(root)
         .status()
         .with_context(|| format!("dist: could not start `{command_line}`"))?;
     if !status.success() {
         bail!("dist: `{command_line}` ended with {status}");
     }
+    // The messages of `readelf` are parsed, so they are not translated.
+    let mut readelf = Command::new("readelf");
+    readelf.arg("--dynamic").arg(root.join(EXECUTABLE));
+    let dynamic = tool("readelf", readelf.env("LC_ALL", "C"))?;
+    let needed = needed_libraries(&String::from_utf8_lossy(&dynamic));
+    eprintln!("dist: the executable needs {}", needed.join(", "));
+    refuse_shared_crypt(&needed)?;
     let archive = package(root, &root.join("target/dist"))?;
     eprintln!("dist: wrote {} and its .sha256", archive.display());
     Ok(())
@@ -75,6 +97,42 @@ fn require(root: &Path, source: &str) -> Result<PathBuf> {
         bail!("dist: `{source}` is missing");
     }
     Ok(path)
+}
+
+/// Checks what `cc -print-file-name=libcrypt.a` printed: the path of the library when the
+/// compiler finds it, and the bare name when it does not.
+fn require_static_crypt(printed: &str) -> Result<()> {
+    if Path::new(printed.trim()).is_absolute() {
+        return Ok(());
+    }
+    bail!(
+        "dist: the static library `{CRYPT_ARCHIVE}` is missing; it is in the package \
+         `libcrypt-dev` on Debian and Ubuntu and `libxcrypt-static` on Fedora"
+    );
+}
+
+/// The names of the needed libraries in a dynamic section as `readelf --dynamic` prints it:
+/// `0x... (NEEDED)  Shared library: [libc.so.6]`.
+fn needed_libraries(dynamic: &str) -> Vec<String> {
+    dynamic
+        .lines()
+        .filter(|line| line.contains("(NEEDED)"))
+        .filter_map(|line| {
+            let (_, rest) = line.split_once('[')?;
+            let (name, _) = rest.split_once(']')?;
+            Some(name.to_owned())
+        })
+        .collect()
+}
+
+/// Fails when one of the needed libraries is a libcrypt, and names it.
+fn refuse_shared_crypt(needed: &[String]) -> Result<()> {
+    if let Some(name) = needed.iter().find(|name| name.starts_with("libcrypt.so")) {
+        bail!(
+            "dist: the executable needs `{name}` at run time; libcrypt must be linked statically"
+        );
+    }
+    Ok(())
 }
 
 /// Copies the files of the package from `root` into a directory below `dist`, packs that
@@ -230,6 +288,39 @@ mod tests {
             let error = package(root.path(), &dist).unwrap_err().to_string();
             assert_eq!(error, format!("dist: `{missing}` is missing"));
         }
+    }
+
+    #[test]
+    fn a_needed_libcrypt_fails_the_command_with_its_name() {
+        let dynamic = "
+Dynamic section at offset 0x1f3a2d0 contains 33 entries:
+  Tag        Type                         Name/Value
+ 0x0000000000000001 (NEEDED)             Shared library: [libcrypt.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x000000000000000c (INIT)               0x1a9000
+";
+        let needed = needed_libraries(dynamic);
+        assert_eq!(needed, ["libcrypt.so.1", "libm.so.6", "libc.so.6"]);
+        let error = refuse_shared_crypt(&needed).unwrap_err().to_string();
+        assert_eq!(
+            error,
+            "dist: the executable needs `libcrypt.so.1` at run time; libcrypt must be linked \
+             statically"
+        );
+        refuse_shared_crypt(&needed[1..]).unwrap();
+    }
+
+    #[test]
+    fn a_missing_static_library_is_named_with_its_packages() {
+        // The compiler prints the bare name when it does not find the file.
+        let error = require_static_crypt("libcrypt.a\n").unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "dist: the static library `libcrypt.a` is missing; it is in the package \
+             `libcrypt-dev` on Debian and Ubuntu and `libxcrypt-static` on Fedora"
+        );
+        require_static_crypt("/usr/lib/x86_64-linux-gnu/libcrypt.a\n").unwrap();
     }
 
     #[test]
