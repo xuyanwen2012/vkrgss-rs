@@ -1,16 +1,22 @@
 ## ADDED Requirements
 
-### Requirement: Hyphen after a class in a character class
-In a character class of a regular expression, a hyphen that follows a class such as `\d`,
-`\w` or `\s` SHALL be the literal character `-`, whichever compiler built the interpreter.
+### Requirement: A range that starts with a class is an error
+In a character class of a regular expression, a range whose start is a class such as `\d`,
+`\w` or `\s` SHALL be a `SyntaxError` with the message of the original runtime, "mismatch
+multibyte code length in char-class range", whichever compiler built the interpreter. A
+hyphen that ends the character class SHALL stay a literal hyphen.
 
 #### Scenario: Class, hyphen, letter
-- **WHEN** `"1-z"`, `"A"` and `"5"` are matched against `/\A[\d-z]+\z/`
-- **THEN** the first and the third match and the second does not
+- **WHEN** `/[\d-z]+/` is evaluated
+- **THEN** a `SyntaxError` is raised whose message holds "mismatch multibyte code length in char-class range"
+
+#### Scenario: Hyphen at the end
+- **WHEN** `"1-"` is matched against `/\A[\d-]+\z/`
+- **THEN** it matches
 
 #### Scenario: Measured sample
 - **WHEN** the samples of regular expressions measured on the original runtime are evaluated
-- **THEN** every result equals the measured one
+- **THEN** every result equals the measured one, the one for `/[\d-z]+/` without an adjustment of its message
 
 #### Scenario: Patch is recorded
 - **WHEN** the manifest test of the vendored Oniguruma runs

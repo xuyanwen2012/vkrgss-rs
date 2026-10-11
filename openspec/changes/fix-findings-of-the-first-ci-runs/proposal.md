@@ -6,8 +6,8 @@ The gate was run for the first time on a GitHub runner and in a container of Ubu
 (gcc 13.3). Two findings, neither of which shows on the development machine:
 
 - `results_equal_those_measured_on_the_original` (`crates/vkxp-ruby-sys/tests/regex.rs`):
-  `/[\d-z]+/` is a `SyntaxError: empty range in char class`, where the original runtime and
-  the build of the development machine match `"1-z"` with it. In `parse_char_class` of
+  `/[\d-z]+/` matches `"1-z"` there, where the original runtime raises a `SyntaxError` and so
+  does the build of the development machine. In `parse_char_class` of
   Oniguruma 5.9.6 a class such as `\d` leaves the state `CCS_VALUE` with the type
   `CCV_CLASS` and never sets `vs`; a following `-` makes the state `CCS_RANGE`, and the next
   character reaches `next_state_val`, which reads `*vs` as the start of the range. `vs` is
@@ -21,9 +21,8 @@ The gate was run for the first time on a GitHub runner and in a container of Ubu
 
 ## What Changes
 
-- A hyphen after a class in a character class is a literal hyphen, as later versions of
-  Oniguruma decide it and as the measurement on the original shows for the one sample there
-  is; no uninitialised value is read.
+- A range that starts with a class is the error the original runtime gives, with its
+  message; no uninitialised value is read.
 - The audit tests start their fake tool in a way that cannot meet a file still open for
   writing.
 - The C files of the interpreter and of Oniguruma that the build compiles are compiled once
@@ -37,7 +36,7 @@ None.
 
 ### Modified Capabilities
 
-- `embedded-ruby`: a hyphen after a class in a character class.
+- `embedded-ruby`: a range that starts with a class in a character class.
 
 ## Impact
 
