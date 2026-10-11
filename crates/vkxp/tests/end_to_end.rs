@@ -679,6 +679,30 @@ fn an_unknown_option_prints_the_usage_message() {
 }
 
 #[test]
+fn the_version_is_printed_without_a_driver_or_a_game() {
+    for option in ["--version", "-V"] {
+        let work = tempfile::tempdir().expect("a temporary directory");
+        let mut command = command(work.path(), &[option]);
+        // A pattern that selects no driver: the loader would find no device.
+        for name in ISOLATION_VARIABLES {
+            command.env_remove(name);
+        }
+        command.env("VK_LOADER_DRIVERS_SELECT", "no-such-driver");
+        let output = command.output().expect("the program starts");
+        assert_eq!(output.status.code(), Some(0), "{option}");
+        assert_eq!(output.stdout, b"vkxp 0.1.0\n", "{option}");
+    }
+}
+
+#[test]
+fn the_usage_message_of_help_lists_the_version_option() {
+    let ran = vkxp(&["--help"]);
+    let stderr = ran.stderr();
+    assert!(stderr.contains("usage: vkxp"), "{stderr}");
+    assert!(stderr.contains("--version"), "{stderr}");
+}
+
+#[test]
 fn a_malformed_input_script_file_prints_the_usage_message() {
     let game = Game::new("e2e-bad-input", "Input", &[("Main", "Graphics.update")]);
     let keys = tempfile::tempdir().unwrap();

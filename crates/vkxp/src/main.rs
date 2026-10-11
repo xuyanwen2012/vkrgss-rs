@@ -99,6 +99,10 @@ fn main() -> ExitCode {
         Ok(options) => options,
         Err(message) => return usage(message),
     };
+    if options.version {
+        println!("{}", args::VERSION);
+        return ExitCode::SUCCESS;
+    }
     // Nothing before this emits an event: a mistake on the command line is written directly.
     let variable = std::env::var(log::VARIABLE).ok();
     match log::level(variable.as_deref(), options.verbose) {

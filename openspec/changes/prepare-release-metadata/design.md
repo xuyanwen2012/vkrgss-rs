@@ -41,4 +41,11 @@ To be filled in.
 
 ## Follow-ups
 
-None yet.
+- `--help` is not an option of its own. The design says the version option is handled "where
+  `--help` is", but the program has never had one: `vkxp --help` is an unknown option, which
+  prints the usage text to the error stream and exits with status 2. That text lists
+  `--version`, so the scenario "Listed in the usage" holds as written, and the version option
+  is handled where every other option is, in `args::parse`, with `main` printing and
+  returning before the log, the configuration or the game directory are touched. Whether
+  `--help` should become an option that prints to the standard output with status 0 is left
+  to the owner; it was not built here.
