@@ -2,7 +2,7 @@
 
 ## 1. The switch
 
-- [ ] 1.1 `VKXP_STATIC_CRYPT` in the build script. Verify: scenario "Development build"; `cargo test -p vkxp-ruby-sys --locked` passes.
+- [x] 1.1 `VKXP_STATIC_CRYPT` in the build script. Verify: scenario "Development build"; `cargo test -p vkxp-ruby-sys --locked` passes.
 
 ## 2. The package command
 

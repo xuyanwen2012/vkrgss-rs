@@ -170,6 +170,41 @@ fn generate_symbol_table(data: &Path, header: &Path) {
     fs::write(header, out).unwrap_or_else(|error| panic!("{}: {error}", header.display()));
 }
 
+/// Links libcrypt, which `String#crypt` needs: dynamically, or statically when
+/// `VKXP_STATIC_CRYPT` is `1`, as `cargo xtask dist` sets it, because the shared library has
+/// a different name on Ubuntu (`libcrypt.so.1`) and on Fedora (`libcrypt.so.2`).
+fn link_crypt(base: &cc::Build) {
+    println!("cargo:rerun-if-env-changed=VKXP_STATIC_CRYPT");
+    let value = env::var("VKXP_STATIC_CRYPT").unwrap_or_default();
+    match value.as_str() {
+        "" | "0" => println!("cargo:rustc-link-lib=crypt"),
+        "1" => {
+            // rustc looks for a static library only in its own search paths, so it is given
+            // the directory in which the C compiler finds the library.
+            let compiler = base.get_compiler();
+            let output = compiler
+                .to_command()
+                .arg("-print-file-name=libcrypt.a")
+                .output()
+                .unwrap_or_else(|error| panic!("{}: {error}", compiler.path().display()));
+            let printed = String::from_utf8_lossy(&output.stdout);
+            let directory = Path::new(printed.trim())
+                .parent()
+                .filter(|directory| directory.is_dir())
+                .unwrap_or_else(|| {
+                    panic!(
+                        "VKXP_STATIC_CRYPT=1 needs the static library `libcrypt.a`, which the \
+                         C compiler does not find. It is in the package `libcrypt-dev` on \
+                         Debian and Ubuntu and `libxcrypt-static` on Fedora."
+                    )
+                });
+            println!("cargo:rustc-link-search=native={}", utf8(directory));
+            println!("cargo:rustc-link-lib=static=crypt");
+        }
+        other => panic!("VKXP_STATIC_CRYPT is `{other}`; it must be unset, empty, `0` or `1`"),
+    }
+}
+
 fn main() {
     let target = env::var("TARGET").expect("cargo sets TARGET");
     if !SUPPORTED_TARGETS.contains(&target.as_str()) {
@@ -248,7 +283,7 @@ fn main() {
     }
     onig.compile("vkxp-ruby-onig");
 
-    println!("cargo:rustc-link-lib=crypt");
+    link_crypt(&base);
     println!("cargo:rustc-link-lib=m");
 
     // What the tests need to build Ruby's own test executable exactly as the library was

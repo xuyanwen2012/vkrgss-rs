@@ -10,6 +10,13 @@ otherwise `cargo:rustc-link-lib=crypt` as today. Any other value than unset, emp
 `1` stops the build with a message. Development builds and the gate do not set it, so
 nothing changes for them and no static library is needed to work on the project.
 
+Found while implementing: rustc looks for a `static` library only in its own search paths,
+not in those of the C compiler, so `static=crypt` alone ends with "could not find native
+static library `crypt`". For `1` the build script therefore also prints
+`cargo:rustc-link-search=native=` with the directory of the path that
+`-print-file-name=libcrypt.a` of its C compiler returns, and stops with the message that
+names the file and the packages when the compiler does not find it.
+
 libxcrypt is under the LGPL 2.1 or later. The package already carries the text of the LGPL
 for the interpreter (`licenses/ruby-1.8.7/LGPL`), and the source of everything else that is
 linked is public, so relinking stays possible; `THIRD-PARTY.md` gains a paragraph that the
