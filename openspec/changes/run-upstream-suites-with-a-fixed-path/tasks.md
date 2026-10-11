@@ -2,7 +2,7 @@
 
 ## 1. Search path
 
-- [ ] 1.1 The fixed search path and its test. Verify: the scenario of `specs/embedded-ruby/spec.md`; `cargo test -p vkxp-ruby-sys --locked` passes.
+- [x] 1.1 The fixed search path and its test. Verify: the scenario of `specs/embedded-ruby/spec.md`; `cargo test -p vkxp-ruby-sys --locked` passes.
 
 ## 2. Gate
 

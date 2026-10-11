@@ -211,6 +211,7 @@ impl Suites {
     /// Runs the executable in a working directory of its own, the way `make test-all` sets it
     /// up: `./ruby` and `./miniruby` in the current directory, `RUBY` pointing at the former, a
     /// scratch `HOME` and `TMPDIR`, and a load path that ends at the vendored `lib` and `ext`.
+    /// The search path is that directory, `/usr/bin` and `/bin`.
     ///
     /// SIGINT gets its default disposition whatever this process inherited: the suites start
     /// interpreters that send it to themselves, and an ignored disposition would be inherited
@@ -226,9 +227,9 @@ impl Suites {
         symlink(&self.ruby, &ruby).expect("link to the executable");
         symlink(&self.ruby, dir.join("miniruby")).expect("link to the executable");
 
-        let path = std::env::var_os("PATH").unwrap_or_default();
-        let mut search = vec![dir.clone()];
-        search.extend(std::env::split_paths(&path));
+        // Not the caller's `PATH`: Ruby warns about a directory in it that everybody may
+        // write whenever it starts a program, and the suites compare error streams.
+        let search = [dir.as_path(), Path::new("/usr/bin"), Path::new("/bin")];
         let log = fs::File::create(dir.join("output.log")).expect("log file");
         let mut command = Command::new(&ruby);
         // SAFETY: the closure runs in the child between `fork` and `exec` and only calls
