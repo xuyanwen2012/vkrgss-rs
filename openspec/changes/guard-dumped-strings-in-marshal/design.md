@@ -51,7 +51,72 @@ test is still added, and "Found" says that only the container shows the failure.
 
 ## Found
 
-To be filled in.
+### The container
+
+The sandbox of the run cannot start a container: `podman run` ends with `acquiring runtime
+init lock: open /run/user/1000/libpod/tmp/alive.lck: permission denied`. The scenario
+"Table under stress" was therefore not run with gcc 13; the tests were run with the local
+gcc 16.2.1 and with clang 22.1.8 (`CC=clang`, its own `CARGO_TARGET_DIR`), and the owner
+runs the command of "Reproduction with another compiler" after the run.
+
+### When the collection happens
+
+`ruby_xrealloc` collects only with `GC.stress` on or when `realloc` fails; `ruby_xmalloc`
+and `rb_newobj` collect in normal operation. Growing the dump buffer is a `realloc`, so a
+dump to a string loses the `_dump` result only under stress. A dump to a port hands the
+buffer to `write` whenever it holds `BUFSIZ` (8192) bytes, and `write` is Ruby code that
+allocates: when that point falls on the length written in front of the `_dump` result, the
+string can be lost without stress. That is the case a saved game can meet.
+
+### `marshal.c`, read completely
+
+Guarded (patch 23, `marshal-gc-guard`):
+
+- `w_object`, `_dump` result `v`: the known place. The guard stands after `w_ivar`, because
+  the instance variables written there can be those of `v`.
+- `w_object`, cases `T_CLASS` and `T_MODULE`, `path`: as in "The patch".
+- `w_class` and `w_uclass`, the result of `class2path`: the same form, with the value now
+  held in a local. The class holds its path in an instance variable, so these two were not
+  reachable; they are guarded so that the file has one form.
+- `r_symreal`, the name read by `r_bytes` and passed to `rb_intern`: `rb_intern` copies a
+  new name with `ruby_strdup`, which allocates before it copies, and nothing refers to the
+  string. A symbol loaded for the first time while a collection runs got a name of freed
+  bytes. This one fails with the local gcc and with clang as well.
+- `marshal_load`, `port`: `struct load_arg` is heap memory that `mark_load_arg` does not
+  mark for `src`, so when the source is the result of `to_str` only the local refers to it.
+
+Clean:
+
+- `w_object`, case `T_STRING` (`obj`): `obj` is not used afterwards, but it was entered in
+  `arg->data` at the top of the branch, and `mark_dump_arg` marks the keys of that table
+  through the wrapper that `marshal_dump` guards. The same holds for the buffers of
+  `T_REGEXP`, `T_BIGNUM` and `T_ARRAY`. No guard.
+- `w_object`, `marshal_dump` result and `_dump_data` result: passed as values to
+  `w_object`, which enters them in `arg->data`.
+- `w_object`, case `T_STRUCT` (`mem`) and `r_object0`, case `TYPE_STRUCT` (`mem`): used in
+  every round of the loop, and held by the class.
+- `class2path`: `path` is returned. `w_extended`, `w_symbol`, `r_unique`: names from
+  `rb_class2name` and `rb_id2name`, which the class and the symbol table hold.
+- `w_nbyte`, `marshal_dump`: `arg->str` is marked by `mark_dump_arg`, the port is returned.
+- `r_byte`, `r_bytes0`: read `arg->src` (see `port` above) or return the string they read.
+- `r_object0`: `TYPE_FLOAT` does not allocate before the last read of the string;
+  `TYPE_BIGNUM`, `TYPE_REGEXP`, `TYPE_MODULE_OLD`, `TYPE_CLASS` and `TYPE_MODULE` hold the
+  string in a `volatile VALUE`, the form of this release; `TYPE_USERDEF` passes the string
+  to `_load` as a value; every object made is entered in `arg->data` by `r_entry`, whose
+  values `mark_load_arg` marks.
+
+### The test
+
+`a_dumped_string_survives_a_collection_while_it_is_written` and
+`a_loaded_symbol_survives_a_collection_while_it_is_interned` in
+`crates/vkxp-binding/tests/stress.rs`. Without the patch the second fails with the local
+gcc and with clang. The first passes without the patch with both, to a string under stress
+and to a port that collects in `write`: both compilers keep `v` alive, so only the
+container shows that failure.
+
+While writing the port: `Marshal.dump` passes its buffer to `write` as a string without a
+class, so a `write` in Ruby that calls a method on its argument raises "method called on
+terminated object". That is the behaviour of the release and not touched.
 
 ## Follow-ups
 

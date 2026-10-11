@@ -2,7 +2,7 @@
 
 ## 1. The patch to `marshal.c`
 
-- [ ] 1.1 Guards as in `design.md`, with the diff, the entry in `PATCHES.md` and the test of `design.md`. Verify: the scenarios of `specs/embedded-ruby/spec.md` (the first in the container if one can be started); `cargo test -p vkxp-ruby-sys -p vkxp-binding --locked` passes with the local gcc and with `CC=clang` (a separate `CARGO_TARGET_DIR`).
+- [x] 1.1 Guards as in `design.md`, with the diff, the entry in `PATCHES.md` and the test of `design.md`. Verify: the scenarios of `specs/embedded-ruby/spec.md` (the first in the container if one can be started); `cargo test -p vkxp-ruby-sys -p vkxp-binding --locked` passes with the local gcc and with `CC=clang` (a separate `CARGO_TARGET_DIR`).
 
 ## 2. The audit
 

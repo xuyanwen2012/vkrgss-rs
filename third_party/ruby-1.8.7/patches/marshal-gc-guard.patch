@@ -1,0 +1,77 @@
+--- a/marshal.c
++++ b/marshal.c
+@@ -426,13 +426,14 @@
+     struct dump_arg *arg;
+     int check;
+ {
+-    char *path;
++    VALUE path;
+ 
+     VALUE klass = CLASS_OF(obj);
+     w_extended(klass, arg, check);
+     w_byte(type, arg);
+-    path = RSTRING(class2path(rb_class_real(klass)))->ptr;
+-    w_unique(path, arg);
++    path = class2path(rb_class_real(klass));
++    w_unique(RSTRING(path)->ptr, arg);
++    RB_GC_GUARD(path);
+ }
+ 
+ static void
+@@ -445,8 +446,11 @@
+     w_extended(klass, arg, Qtrue);
+     klass = rb_class_real(klass);
+     if (klass != base_klass) {
++	VALUE path = class2path(klass);
++
+ 	w_byte(TYPE_UCLASS, arg);
+-	w_unique(RSTRING(class2path(klass))->ptr, arg);
++	w_unique(RSTRING(path)->ptr, arg);
++	RB_GC_GUARD(path);
+     }
+ }
+ 
+@@ -558,6 +562,7 @@
+ 	    if (ivtbl) {
+ 		w_ivar(ivtbl, &c_arg);
+ 	    }
++	    RB_GC_GUARD(v);
+ 	    return;
+ 	}
+ 
+@@ -570,6 +575,7 @@
+ 	    {
+ 		VALUE path = class2path(obj);
+ 		w_bytes(RSTRING(path)->ptr, RSTRING(path)->len, arg);
++		RB_GC_GUARD(path);
+ 	    }
+ 	    break;
+ 
+@@ -578,6 +584,7 @@
+ 	    {
+ 		VALUE path = class2path(obj);
+ 		w_bytes(RSTRING(path)->ptr, RSTRING(path)->len, arg);
++		RB_GC_GUARD(path);
+ 	    }
+ 	    break;
+ 
+@@ -974,8 +981,10 @@
+     struct load_arg *arg;
+ {
+     ID id;
++    VALUE name = r_bytes(arg);
+ 
+-    id = rb_intern(RSTRING(r_bytes(arg))->ptr);
++    id = rb_intern(RSTRING(name)->ptr);
++    RB_GC_GUARD(name);
+     st_insert(arg->symbols, arg->symbols->num_entries, id);
+ 
+     return id;
+@@ -1494,6 +1503,7 @@
+     v = r_object(arg);
+     clear_load_arg(arg);
+     RB_GC_GUARD(wrapper);
++    RB_GC_GUARD(port);
+ 
+     return v;
+ }

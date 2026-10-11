@@ -258,3 +258,21 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 - Patch: `patches/intern-empty-name-generated.patch`
 - Patched SHA-256: `63b8a233f54ba4174fd5ce424991e9ab7eab977591ad71bf805b462bb16c6d7d`
 - Reason: follows patch 21. The same line of the pre-generated parser, changed by hand.
+
+## 23. marshal-gc-guard
+
+- File: `marshal.c`
+- Patch: `patches/marshal-gc-guard.patch`
+- Patched SHA-256: `f11ad0ab56d01ede86e4ba14b4c49557db77faed63b6b55ad7bac2e52ef77d9d`
+- Reason: found by the collection stress test of `vkxp-binding` on a build with gcc 13.3,
+  which read `[980748292, 1650545674, ...]` where a dumped `Table` has its sizes. `w_object`
+  hands `RSTRING(v)->ptr` of the string a `_dump` method returned to `w_bytes` and does not
+  use `v` again; the collector is conservative, so once the compiler has dropped `v` a
+  collection inside `w_bytes` frees the string and the bytes copied afterwards are whatever
+  the allocator left there. `RB_GC_GUARD` after the last use of the buffer keeps the value
+  on the stack, as later Ruby versions do. Guarded the same way: the class path in
+  `w_class`, `w_uclass` and the two cases that dump a class or a module; the name that
+  `r_symreal` passes to `rb_intern`, which copies it after an allocation, so that a symbol
+  loaded for the first time during a collection got a name of freed bytes; and the source of
+  `marshal_load`, which is otherwise held only by the unmarked `struct load_arg` when it is
+  the result of `to_str`.
