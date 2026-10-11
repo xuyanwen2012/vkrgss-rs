@@ -1,0 +1,34 @@
+--- a/ext/zlib/zlib.c
++++ b/ext/zlib/zlib.c
+@@ -1278,6 +1278,7 @@
+     if (flush != Z_NO_FLUSH || RSTRING(src)->len > 0) { /* prevent BUF_ERROR */
+ 	zstream_run(z, RSTRING(src)->ptr, RSTRING(src)->len, flush);
+     }
++    RB_GC_GUARD(src);
+ }
+ 
+ /*
+@@ -1536,6 +1537,7 @@
+     if (RSTRING(src)->len > 0) { /* prevent Z_BUF_ERROR */
+ 	zstream_run(z, RSTRING(src)->ptr, RSTRING(src)->len, Z_SYNC_FLUSH);
+     }
++    RB_GC_GUARD(src);
+ }
+ 
+ /*
+@@ -1568,6 +1570,7 @@
+ 	else {
+ 	    StringValue(src);
+ 	    zstream_append_buffer2(z, src);
++	    RB_GC_GUARD(src);
+ 	    dst = rb_str_new(0, 0);
+ 	}
+     }
+@@ -1602,6 +1605,7 @@
+ 	if (!NIL_P(src)) {
+ 	    StringValue(src);
+ 	    zstream_append_buffer2(z, src);
++	    RB_GC_GUARD(src);
+ 	}
+     }
+     else {

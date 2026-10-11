@@ -118,6 +118,68 @@ While writing the port: `Marshal.dump` passes its buffer to `write` as a string 
 class, so a `write` in Ruby that calls a method on its argument raises "method called on
 terminated object". That is the behaviour of the release and not touched.
 
+### The other files
+
+Patched:
+
+- `pack.c` (patch 24, `pack-gc-guard`). `pack_pack`, directive `w`, `buf`: a local that
+  nothing else refers to, read by `rb_str_buf_cat` after the result has grown. The one
+  place outside `marshal.c` with the full pattern; growing is a `realloc`, so it needs
+  stress or a failed allocation.
+- `pack.c`, same patch: `pack_pack`, `from` of the directives `a A Z b B h H`, `u m` and
+  `M` (through `qpencode`), and `pack_unpack`, `fmt`. Each matters only when the value was
+  converted from another object, and each is a local whose address was passed to
+  `rb_string_value`, which a compiler that compiles one file at a time has to keep in its
+  slot. Guarded so that this does not rest on how the files are compiled.
+- `ext/zlib/zlib.c` (patch 25, `zlib-gc-guard`): `do_deflate` and `do_inflate`, `src`
+  handed to `zstream_run` as the last statement; `rb_inflate_inflate` and
+  `rb_inflate_addstr`, `src` handed to `zstream_append_buffer` on a finished stream. The
+  same condition and the same reservation as `from` above.
+
+Read and found clean:
+
+- `pack.c`: `pack_pack` otherwise (`fmt` is used at the end; elements are read again from
+  the array by each `NEXTFROM`; `from` of `p P` is kept in `associates`; `res` is
+  returned); `encodes` (reads its source before the one `rb_str_buf_cat`); `pack_unpack`
+  otherwise (`str` is the receiver; `bitstr` and `buf` are pushed or used after the last
+  read of their buffer); `infected_str_new`.
+- `string.c`: `rb_str_new`, `str_new`, `str_alloc`, `rb_str_buf_new`, `rb_str_buf_cat`,
+  `str_buf_cat`, `rb_str_resize`, `rb_str_modify`, `str_independent`,
+  `str_make_independent`, `rb_string_value`, `rb_string_value_ptr`,
+  `rb_string_value_cstr`, `rb_str_to_str`, `rb_check_string_type`, `rb_str_associate`,
+  `rb_str_associated`. Each uses or returns its own string after it allocates and reads
+  the buffer pointer again. `str_new` and `str_buf_cat` read the pointer they were given
+  after they allocate, which is why their callers have to keep the value.
+- `io.c`: `rb_io_write`, `io_write`, `rb_io_fwrite`, `io_fwrite` (reads `RSTRING(str)->ptr`
+  again at every write and uses `str` for the retry), `rb_io_binmode`, `rb_io_getc`,
+  `io_read`, `read_all`, `io_fread`, `read_buffered_data`, `rb_io_print`, `rb_io_puts`,
+  `io_puts_ary`.
+- `ext/zlib/zlib.c`: `rb_deflate_s_deflate` with `deflate_run`, `rb_inflate_s_inflate`
+  with `inflate_run` (`src` is in the argument array on the stack and used after
+  `rb_ensure`; the stream is on the stack), `rb_deflate_deflate`, `zstream_run` (copies the
+  input into `z->input` first; `next_in` is held by its `volatile VALUE guard`),
+  `zstream_append_input`, `zstream_append_buffer`, `zstream_expand_buffer`,
+  `zstream_detach_buffer`, `zstream_shift_buffer`, `zstream_passthrough_input`,
+  `zstream_reset`, `zstream_end`, `rb_zstream_finish`, `rb_zstream_flush_next_out`.
+- Callees of `marshal.c` that were read for what they do with the pointer: `rb_intern`
+  (`parse.y`; reads the name after `ruby_strdup` allocated), `rb_reg_new` (`re.c`; reads
+  the source after it allocated the object), `rb_path2class` (`variable.c`; reads the path
+  between allocations). Their callers in `marshal.c` are listed above.
+
+After patches 24 and 25 the tests of both crates pass with the local gcc and with clang,
+the upstream suites `test/ruby` and `test/zlib` included.
+
 ## Follow-ups
 
-None yet.
+- The owner runs the container command of "Reproduction with another compiler": the
+  sandbox could not start one, so "Table under stress" is unconfirmed for gcc 13.
+- The proposal says that outside the stress test the collection needs the allocation
+  counter to pass its limit. For a dump to a string that is not so (see "When the
+  collection happens"); the case without stress is a dump to a port. The proposal was left
+  as written.
+- Outside the bound of the audit, not read: the other callers of `rb_intern`, `rb_reg_new`
+  and `rb_path2class` with the buffer of a temporary string, in the files the build
+  compiles.
+- `zstream_run` relies on a `volatile VALUE` for `next_in` on its error path, and
+  `str_buf_cat` would read a stale pointer if a caller appended a shared string's own
+  buffer to it. No caller that was read does; neither is patched.

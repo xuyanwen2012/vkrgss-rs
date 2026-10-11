@@ -6,7 +6,7 @@
 
 ## 2. The audit
 
-- [ ] 2.1 The reading of `design.md`, with "Found" filled in and what it finds patched. Verify: the same tests pass; the upstream suites that `vkxp-ruby-sys` runs pass.
+- [x] 2.1 The reading of `design.md`, with "Found" filled in and what it finds patched. Verify: the same tests pass; the upstream suites that `vkxp-ruby-sys` runs pass.
 
 ## 3. Documentation
 

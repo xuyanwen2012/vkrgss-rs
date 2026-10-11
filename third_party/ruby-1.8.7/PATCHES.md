@@ -13,7 +13,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `ext/zlib/zlib.c`
 - Patch: `patches/zlib-crc-table-64bit.patch`
-- Patched SHA-256: `0051500303cd272e76cb50cd1bb029716c7ee99074b239f14df8ca0cad75a164`
+- Patched SHA-256: `a0f5f9000fdd78ad0ea6cc0404fae44f26ae89eea16e8070222a77e8b28e4efc`
 - Reason: `Zlib.crc_table` read zlib's table of 32-bit values through `const unsigned long *`.
   Where `long` has 64 bits that returns wrong values and reads past the end of the table. The
   pointer type becomes zlib's own `const z_crc_t *`.
@@ -276,3 +276,32 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
   loaded for the first time during a collection got a name of freed bytes; and the source of
   `marshal_load`, which is otherwise held only by the unmarked `struct load_arg` when it is
   the result of `to_str`.
+
+## 24. pack-gc-guard
+
+- File: `pack.c`
+- Patch: `patches/pack-gc-guard.patch`
+- Patched SHA-256: `bbd02ec3e5657b9d530ad3443705b1e698a42997ee29eccfe2839a95550179e4`
+- Reason: found by the reading that followed patch 23, the same fault. In `pack_pack` the
+  directive `w` builds each number in a string `buf` of its own and appends
+  `RSTRING(buf)->ptr` to the result with `rb_str_buf_cat`, which grows the result before it
+  copies and does not use `buf` again; a collection at that point (growing collects under
+  `GC.stress` or when memory is short) frees `buf`. `RB_GC_GUARD(buf)` follows the call.
+  Guarded as well, though each is a local whose address `StringValue` has passed on, so
+  that a compiler that does not look across files keeps it: the element `from` of the
+  directives `a A Z b B h H u m M`, whose buffer is read while the result grows, and the
+  format `fmt` of `pack_unpack`, which is read to the end of the loop. These matter only
+  for an argument that is not a string and is converted by `to_str` or `to_s`.
+
+## 25. zlib-gc-guard
+
+- File: `ext/zlib/zlib.c`
+- Patch: `patches/zlib-gc-guard.patch`
+- Patched SHA-256: `a0f5f9000fdd78ad0ea6cc0404fae44f26ae89eea16e8070222a77e8b28e4efc`
+- Reason: applies after patch 1; the same reading. `do_deflate` and `do_inflate` pass
+  `RSTRING(src)->ptr` to `zstream_run` as their last statement, which allocates the input
+  string before it copies from the pointer; `Zlib::Inflate#inflate` and `#<<` do the same
+  with `zstream_append_buffer` on a finished stream. `src` is not used afterwards. A string
+  argument is held by the caller's arguments; the result of `to_str` for another object is
+  held only by the parameter, whose address `StringValue` has passed on. `RB_GC_GUARD(src)`
+  follows each call.
