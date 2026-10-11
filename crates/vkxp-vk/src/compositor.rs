@@ -1053,6 +1053,11 @@ impl VkCompositor {
         if let Some(old) = self.target.take() {
             // Nothing is pending, so the old target is idle.
             old.destroy(&self.gpu.device, &mut self.allocator);
+            // The presentation set still points at the view that is gone, and the new one
+            // may get its handle.
+            if let Some(presenter) = self.presenter.as_mut() {
+                presenter.forget_bound();
+            }
         }
         let target = GpuImage::new(
             &self.gpu.device,

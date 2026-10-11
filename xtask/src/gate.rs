@@ -15,7 +15,7 @@ struct Step {
     env: &'static [(&'static str, &'static str)],
 }
 
-fn steps() -> [Step; 5] {
+fn steps() -> [Step; 6] {
     [
         Step {
             name: "fmt",
@@ -42,6 +42,15 @@ fn steps() -> [Step; 5] {
             program: "cargo",
             args: &["test", "--workspace", "--locked"],
             env: &[],
+        },
+        // The Vulkan tests once more without the validation layer, as players run: the layer
+        // wraps handles in unique numbers and so hides a fault that needs a handle to repeat.
+        // The loader does not load a disabled layer although it is installed.
+        Step {
+            name: "test-unvalidated",
+            program: "cargo",
+            args: &["test", "-p", "vkxp-vk", "-p", "vkxp-host", "--locked"],
+            env: &[("VK_LOADER_LAYERS_DISABLE", "*validation*")],
         },
         Step {
             name: "doc",
@@ -118,7 +127,7 @@ fn run_step(step: &Step, root: &Path) -> Result<()> {
 fn report(durations: &[(&str, Duration)]) -> String {
     durations
         .iter()
-        .map(|(name, duration)| format!("gate: {name:<8} {:>8}\n", format_duration(*duration)))
+        .map(|(name, duration)| format!("gate: {name:<16} {:>8}\n", format_duration(*duration)))
         .collect()
 }
 
@@ -131,9 +140,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_steps_are_the_five_checks_in_order() {
+    fn the_steps_are_the_six_checks_in_order() {
         let names: Vec<&str> = steps().iter().map(|step| step.name).collect();
-        assert_eq!(names, ["fmt", "clippy", "test", "doc", "openspec"]);
+        assert_eq!(
+            names,
+            [
+                "fmt",
+                "clippy",
+                "test",
+                "test-unvalidated",
+                "doc",
+                "openspec"
+            ]
+        );
     }
 
     #[test]
@@ -147,7 +166,7 @@ mod tests {
     #[test]
     fn the_steps_that_resolve_dependencies_hold_the_lock_file() {
         for step in steps() {
-            let resolves = matches!(step.name, "clippy" | "test" | "doc");
+            let resolves = matches!(step.name, "clippy" | "test" | "test-unvalidated" | "doc");
             assert_eq!(step.args.contains(&"--locked"), resolves, "{}", step.name);
         }
     }
@@ -158,9 +177,23 @@ mod tests {
         let doc = steps.iter().find(|step| step.name == "doc").unwrap();
         assert_eq!(doc.args, ["doc", "--workspace", "--no-deps", "--locked"]);
         assert_eq!(doc.env, [("RUSTDOCFLAGS", "-D warnings")]);
-        for step in steps.iter().filter(|step| step.name != "doc") {
+        let others = |step: &&Step| !matches!(step.name, "doc" | "test-unvalidated");
+        for step in steps.iter().filter(others) {
             assert!(step.env.is_empty(), "{}", step.name);
         }
+    }
+
+    #[test]
+    fn the_vulkan_tests_run_again_without_the_validation_layer() {
+        let steps = steps();
+        let position = |name| steps.iter().position(|step| step.name == name).unwrap();
+        assert_eq!(position("test-unvalidated"), position("test") + 1);
+        let step = &steps[position("test-unvalidated")];
+        assert_eq!(
+            step.args,
+            ["test", "-p", "vkxp-vk", "-p", "vkxp-host", "--locked"]
+        );
+        assert_eq!(step.env, [("VK_LOADER_LAYERS_DISABLE", "*validation*")]);
     }
 
     #[test]
@@ -171,7 +204,7 @@ mod tests {
         ];
         assert_eq!(
             report(&durations),
-            "gate: fmt         0.4 s\ngate: clippy     61.3 s\n"
+            "gate: fmt                 0.4 s\ngate: clippy             61.3 s\n"
         );
     }
 }

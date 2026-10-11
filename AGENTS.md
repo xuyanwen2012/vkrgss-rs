@@ -17,8 +17,8 @@ changing anything; it records decisions that are settled.
 - Reference material of the original runtime (its DLLs, the RTP, games) lives outside the
   repository and is never committed.
 - Gate before declaring done: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` (format
-  check, clippy with warnings denied, workspace tests, documentation with warnings denied,
-  `openspec validate --all`).
+  check, clippy with warnings denied, workspace tests, the Vulkan tests again without the
+  validation layer, documentation with warnings denied, `openspec validate --all`).
 - The Vulkan tests refuse to run unless the loader is restricted to chosen drivers with
   `VK_LOADER_DRIVERS_SELECT`, because the loader loads every installed driver; see
   [docs/building.md](docs/building.md).

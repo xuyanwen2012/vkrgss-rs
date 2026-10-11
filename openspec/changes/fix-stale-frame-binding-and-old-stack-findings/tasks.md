@@ -2,8 +2,8 @@
 
 ## 1. The stale binding
 
-- [ ] 1.1 `forget_bound` and its call in `ensure_target`. Verify: `VK_LOADER_LAYERS_DISABLE='*validation*' VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk --locked` passes (it fails in two tests before the fix), and so does the same command without `VK_LOADER_LAYERS_DISABLE`.
-- [ ] 1.2 The gate step `test-unvalidated` and the texts that list the steps. Verify: the scenarios of `specs/workspace-structure/spec.md`; `cargo test -p xtask --locked` passes.
+- [x] 1.1 `forget_bound` and its call in `ensure_target`. Verify: `VK_LOADER_LAYERS_DISABLE='*validation*' VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk --locked` passes (it fails in two tests before the fix), and so does the same command without `VK_LOADER_LAYERS_DISABLE`.
+- [x] 1.2 The gate step `test-unvalidated` and the texts that list the steps. Verify: the scenarios of `specs/workspace-structure/spec.md`; `cargo test -p xtask --locked` passes.
 
 ## 2. The older stack
 

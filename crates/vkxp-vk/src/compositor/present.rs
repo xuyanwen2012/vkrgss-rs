@@ -712,6 +712,13 @@ impl Presenter {
         self.bound = Some([newest, held, mask]);
     }
 
+    /// Forgets what the descriptor set points at, so that the next [`Presenter::bind`]
+    /// writes it. For when a view it holds was destroyed: a new view may get the handle of
+    /// the old one, and the comparison in `bind` would then take the set for current.
+    pub(super) fn forget_bound(&mut self) {
+        self.bound = None;
+    }
+
     /// Destroys everything. The device must be idle.
     pub(super) fn destroy(mut self, device: &ash::Device, allocator: &mut Allocator) {
         if let (Some(swapchain), Some(loader)) = (self.swapchain.take(), &self.swapchain_loader) {

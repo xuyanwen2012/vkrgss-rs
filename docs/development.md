@@ -2,7 +2,7 @@
 
 ## Merge gate
 
-One command checks everything a change must pass. Its `test` step renders with Vulkan, so the
+One command checks everything a change must pass. Its test steps render with Vulkan, so the
 loader restriction described under [Prerequisites](building.md#prerequisites) is part of it:
 
 ```sh
@@ -17,11 +17,19 @@ prints how long each step took, after the step and once more for all of them at 
 | `fmt` | `cargo fmt --all --check` |
 | `clippy` | `cargo clippy --workspace --all-targets --locked -- -D warnings` |
 | `test` | `cargo test --workspace --locked` |
+| `test-unvalidated` | `cargo test -p vkxp-vk -p vkxp-host --locked` with `VK_LOADER_LAYERS_DISABLE='*validation*'` |
 | `doc` | `cargo doc --workspace --no-deps --locked` with `RUSTDOCFLAGS=-D warnings` |
 | `openspec` | `openspec validate --all` |
 
-The `cargo xtask` alias and the `clippy`, `test` and `doc` steps pass `--locked`, so the gate
-does not rewrite `Cargo.lock` and fails when the lock file is out of date.
+The `cargo xtask` alias and the `clippy`, `test`, `test-unvalidated` and `doc` steps pass
+`--locked`, so the gate does not rewrite `Cargo.lock` and fails when the lock file is out of
+date.
+
+`test-unvalidated` runs the Vulkan tests again as players run, without the validation layer:
+the loader does not load a disabled layer although it is installed. The layer wraps every
+handle in a unique number, so a fault that needs a driver to hand out the handle of a
+destroyed object again, such as a descriptor that is not rewritten, cannot show while the
+layer is loaded.
 
 The toolchain is pinned in `rust-toolchain.toml`. The `openspec` CLI must be on `PATH`.
 

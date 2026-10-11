@@ -232,7 +232,7 @@ fn deliberate_validation_error_is_recorded() {
         let caught = std::panic::catch_unwind(|| assert_clean(&log, "in a deliberate error"));
         assert!(caught.is_err(), "the harness must fail on a recorded error");
     } else {
-        eprintln!("validation layer not installed; nothing to record");
+        eprintln!("validation layer not installed or disabled; nothing to record");
     }
 }
 
