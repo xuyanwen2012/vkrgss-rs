@@ -53,8 +53,9 @@ jobs:
             target/dist/*.tar.gz
             target/dist/*.tar.gz.sha256
           if-no-files-found: error
+      # Only a pushed tag publishes: a run started by hand on a tag only builds.
       - name: Create the release
-        if: github.ref_type == 'tag'
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
