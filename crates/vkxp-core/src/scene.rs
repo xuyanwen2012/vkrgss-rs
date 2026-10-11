@@ -91,6 +91,15 @@ impl<T> Arena<T> {
         Some(value)
     }
 
+    /// Takes every element out. The keys handed out so far stay used.
+    fn clear(&mut self) {
+        for (index, slot) in self.slots.iter_mut().enumerate() {
+            if slot.value.take().is_some() && slot.generation < u32::MAX {
+                self.free.push(index as u32);
+            }
+        }
+    }
+
     /// Number of slots, live or empty: one more than the largest index a key can have.
     pub(crate) fn slots(&self) -> usize {
         self.slots.len()
@@ -251,6 +260,26 @@ impl Scene {
     /// The size of the logical screen in pixels.
     pub fn logical_size(&self) -> Size {
         self.logical_size
+    }
+
+    /// Makes the scene what [`Scene::new`] returns, except that the handles handed out so
+    /// far stay used: one of an element from before names nothing, and no new element gets
+    /// it. The bitmaps the scene made for its elements stay in their arena, as when a scene
+    /// is dropped.
+    pub fn clear(&mut self) {
+        self.sprites.clear();
+        self.viewports.clear();
+        self.windows.clear();
+        self.planes.clear();
+        self.tilemaps.clear();
+        *self = Scene {
+            sprites: std::mem::take(&mut self.sprites),
+            viewports: std::mem::take(&mut self.viewports),
+            windows: std::mem::take(&mut self.windows),
+            planes: std::mem::take(&mut self.planes),
+            tilemaps: std::mem::take(&mut self.tilemaps),
+            ..Scene::new()
+        };
     }
 
     /// The next stamp of the draw order.

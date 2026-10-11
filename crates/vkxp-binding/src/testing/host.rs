@@ -24,7 +24,6 @@ use std::sync::mpsc;
 use std::sync::{Mutex, Once, PoisonError};
 use std::thread::{self, JoinHandle};
 
-use vkxp_core::Scene;
 use vkxp_proto::link::{GuestEnd, link};
 use vkxp_proto::{FramePacket, GuestToHost, HostToGuest};
 use vkxp_ruby_sys::{Ruby, RubyError};
@@ -394,7 +393,9 @@ pub fn run_game(game: &Game, run: RunConfig, script: Script, after: &str) -> Pla
         unsafe { ruby.set_current_error(vkxp_ruby_sys::ffi::Qnil) };
         Guest::with(|guest| {
             guest.files = files;
-            guest.scene = Scene::new();
+            // Not a new scene: the element objects of earlier games are collected while
+            // this one plays, and their handles must not be those of its elements.
+            guest.scene.clear();
             guest.runtime.run = run;
         });
         let outcome = runtime::play(ruby, link);
@@ -430,6 +431,26 @@ mod tests {
         assert_eq!(record.frames().len(), 3);
         assert_eq!(record.received.len(), 3);
         assert_eq!(record.ticks, 3);
+    }
+
+    /// The objects of an earlier game are collected while a later one plays. Their handles
+    /// name nothing in its scene: none of its elements is disposed with them.
+    #[test]
+    fn the_collected_objects_of_an_earlier_game_dispose_nothing_of_a_later_one() {
+        let earlier = "sprites = (0...200).map { Sprite.new }
+                       Graphics.update";
+        let later = "sprites = (0...200).map { Sprite.new }
+                     GC.start
+                     Graphics.update
+                     $vkxp_disposed = sprites.select { |sprite| sprite.disposed? }.size";
+        for (name, main) in [("host_earlier", earlier), ("host_later", later)] {
+            let game = Game::new(name, "Collected", &[("Main", main)]);
+            let played = run_game(&game, game.run_config(), Script::new(), "$vkxp_disposed");
+            assert!(played.outcome.is_ok(), "{:?}", played.outcome);
+            if name == "host_later" {
+                assert_eq!(played.after.as_deref(), Ok("0"));
+            }
+        }
     }
 
     #[test]

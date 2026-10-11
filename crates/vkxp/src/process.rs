@@ -269,19 +269,29 @@ impl GuestProcess {
     /// Returns once the host has gone and the running guest process has ended, and says
     /// whether the game ended without a failure. A guest process that is still there
     /// [`GUEST_WAIT`] after the host went is ended, which is a failure if it has not
-    /// reported how its game went. Every process of the run is gone when
-    /// this returns.
+    /// reported how its game went. A guest process that has closed its connection ends by
+    /// itself and is waited for, for as long again at most: it may still be writing to the
+    /// error stream, its frame time statistics for one. Every process of the run is gone
+    /// when this returns.
     pub(crate) fn relay(mut self, link: GuestEnd) -> bool {
         let first = self.first.take();
         let relayed = relay(link, &self.listener, first, self.child.id());
         let Relayed {
             outcome,
             stuck,
+            left,
             last,
             mut gone,
         } = relayed;
         let first_ran_last = last == self.child.id();
 
+        if left && first_ran_last {
+            // Ending it now would cut off what it writes after its last message.
+            let deadline = Instant::now() + GUEST_WAIT;
+            while matches!(self.child.try_wait(), Ok(None)) && Instant::now() < deadline {
+                thread::sleep(POLL);
+            }
+        }
         let _ = self.child.kill();
         let status = self.child.wait();
         gone.retain(|pid| *pid != self.child.id());
@@ -322,6 +332,8 @@ struct Relayed {
     outcome: Option<bool>,
     /// Whether the guest was given up on: the host had gone and the guest had not reported.
     stuck: bool,
+    /// Whether the running guest closed its connection, or ended, by itself.
+    left: bool,
     /// The process that was the running guest last.
     last: u32,
     /// The processes that the relay ended or told to exit.
@@ -367,10 +379,12 @@ fn relay(
         false
     });
     let last = relay.last;
+    let left = relay.running.is_none();
     let (outcome, gone) = relay.finish();
     Relayed {
         outcome,
         stuck,
+        left,
         last,
         gone,
     }
@@ -663,6 +677,7 @@ mod tests {
         let relayed = relay.join().unwrap();
         assert_eq!(relayed.outcome, Some(true));
         assert!(!relayed.stuck);
+        assert!(relayed.left);
         assert_eq!(relayed.last, process.id());
         // A guest that has closed its connection is not ended by its number.
         assert_eq!(process.try_wait().unwrap(), None);
@@ -684,6 +699,39 @@ mod tests {
         assert_eq!(relayed.outcome, Some(false));
         process.kill().unwrap();
         process.wait().unwrap();
+    }
+
+    /// A guest process writes after its last message, its frame time statistics for one.
+    /// The marker stands for that: without the wait the process is ended long before it
+    /// is written.
+    #[test]
+    fn a_guest_process_that_has_closed_its_connection_is_left_to_end_by_itself() {
+        let dir = tempfile::tempdir().unwrap();
+        let marker = dir.path().join("written");
+        let child = Command::new("sh")
+            .args(["-c", "sleep 0.3 && : > \"$0\""])
+            .arg(&marker)
+            .stdin(Stdio::null())
+            .spawn()
+            .expect("sh starts");
+        let listener = UnixListener::bind(dir.path().join("guest.sock")).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let (near, far) = UnixStream::pair().unwrap();
+        let pid = child.id();
+        let process = GuestProcess {
+            child,
+            dir: dir.path().join("sockets"),
+            listener,
+            first: Some(Attached { stream: near, pid }),
+        };
+        let (guest_end, host) = headless_link();
+        drop(host);
+        let guest = GuestEnd::over_stream(far);
+        guest.send(GuestToHost::Outcome { ok: true }).unwrap();
+        drop(guest);
+
+        assert!(process.relay(guest_end));
+        assert!(marker.is_file());
     }
 
     /// A copy that attaches as the state of `slot` under the number of `process`.

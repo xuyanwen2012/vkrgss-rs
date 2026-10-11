@@ -22,6 +22,37 @@ fn a_disposed_sprite_fails_every_operation_but_disposal() {
 }
 
 #[test]
+fn a_cleared_scene_is_a_new_one_whose_handles_go_on() {
+    let mut scene = Scene::with_logical_size(Size::new(320, 240));
+    let disposed = scene.create_sprite(None).unwrap();
+    scene.dispose_sprite(disposed);
+    let before = [
+        scene.create_sprite(None).unwrap(),
+        scene.create_sprite(None).unwrap(),
+    ];
+    let viewport = scene.create_viewport(Rect::new(0, 0, 10, 10)).unwrap();
+    scene.frame_count = 7;
+    scene.clear();
+
+    assert_eq!(scene.logical_size(), Scene::DEFAULT_SIZE);
+    assert_eq!(scene.frame_count, 0);
+    assert_eq!(scene.sprites.iter().count(), 0);
+    let after = [
+        scene.create_sprite(None).unwrap(),
+        scene.create_sprite(None).unwrap(),
+        scene.create_sprite(None).unwrap(),
+    ];
+    assert_eq!(scene.sprites.iter().count(), 3);
+    let again = scene.create_viewport(Rect::new(0, 0, 10, 10)).unwrap();
+    for old in before.into_iter().chain([disposed]) {
+        assert!(scene.is_sprite_disposed(old));
+        assert!(!after.contains(&old));
+    }
+    assert!(scene.is_viewport_disposed(viewport));
+    assert_ne!(again, viewport);
+}
+
+#[test]
 fn a_disposed_viewport_fails_every_operation_but_disposal() {
     let error = SceneError::Disposed(ElementKind::Viewport);
     let mut scene = Scene::new();
