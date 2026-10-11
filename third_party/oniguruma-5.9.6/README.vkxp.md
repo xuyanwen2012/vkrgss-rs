@@ -11,9 +11,10 @@ interpreter, as the original runtime's Ruby was built with Oniguruma.
   `d5642010336a6f68b7f2e34b1f1cb14be333e4d95c2ac02b38c162caf44e47a7`
 
 `MANIFEST.sha256` lists the upstream SHA-256 of every vendored file, in the format of
-`sha256sum`. No file is patched. A test in `vkxp-ruby-sys` checks the tree against the
-manifest: no file may be added, removed or changed without a record. The two files that vkxp
-adds (`MANIFEST.sha256` and `README.vkxp.md`) are not part of the release.
+`sha256sum`. `PATCHES.md` lists the local patches, each with its diff under `patches/`. A test
+in `vkxp-ruby-sys` checks the tree against the manifest and the patch list: no file may be
+added, removed or changed without a record. The files that vkxp adds (`MANIFEST.sha256`,
+`PATCHES.md`, `README.vkxp.md` and `patches/`) are not part of the release.
 
 ## Licence
 

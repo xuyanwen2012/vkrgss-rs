@@ -81,3 +81,7 @@ passed to `next_state_val`, which ends this analysis in both.
 - The test of task 2.1 retries the whole of `run`, which starts the tool twice. "Text file
   busy" can only meet the first start, before anything is written, so the retry repeats
   nothing.
+- Task 1.1 leaves two sentences that the patch makes stale, both outside the scope of this
+  change: the follow-up about line 40 in the archived design of `embed-oniguruma`, and "a
+  probe of 65 patterns gives the original's results except one error message" under "Ruby" in
+  `docs/decisions.md`. The probe now gives the original's results without that exception.

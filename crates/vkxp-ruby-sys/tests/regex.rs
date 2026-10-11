@@ -24,19 +24,15 @@ fn eval(source: String) -> Result<String, String> {
 /// the subject are read from the measured line, which shows them with `inspect`; a `#` in
 /// them is text, because the `inspect` of Ruby 1.8.1 does not escape it.
 ///
-/// Two measured lines are adjusted before the comparison, and only as said here:
+/// One measured line is adjusted before the comparison, and only as said here:
 ///
 /// - Line 17: the capture is the two bytes `\346\265`, an incomplete character. The `inspect`
 ///   of Ruby 1.8.1 prints them raw together with the byte that follows the string; 1.8.7
 ///   prints them as escapes. The captured bytes are the same.
-/// - Line 40: Oniguruma 5.9.6 rejects `[\d-z]` as the original's older Oniguruma does, with
-///   another message. See "Follow-ups" in the design of the change `embed-oniguruma`.
 const PROBE: &str = r##"
 $KCODE = "UTF8"
 vkxp_measured = File.open(VKXP_MEASURED, "rb") { |f| f.read }.split(/\r?\n/)
 vkxp_measured[16] = vkxp_measured[16].sub("\346\265\0", "\\\\346\\\\265")
-vkxp_measured[39] = vkxp_measured[39].sub(
-  "mismatch multibyte code length in char-class range", "empty range in char class")
 vkxp_result = lambda do |pat, subj|
   begin
     r = eval(pat)
@@ -77,6 +73,49 @@ fn results_equal_those_measured_on_the_original() {
     let data = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/regex.original.txt");
     let differences = eval(format!("VKXP_MEASURED = {data:?}\n{PROBE}"));
     assert_eq!(differences, Ok("[66, []]".to_owned()));
+}
+
+/// The start of such a range was read from an uninitialised variable, so the outcome depended
+/// on the compiler; patch 1 of `third_party/oniguruma-5.9.6/PATCHES.md`.
+#[test]
+fn a_range_that_starts_with_a_class_is_the_error_of_the_original() {
+    let source = r#"
+['[\d-z]', '[\w-%]', '[\s-a]', '[a\d-z]', '[\d-z]+'].map do |pat|
+  begin
+    Regexp.new(pat)
+    "accepted"
+  rescue Exception => e
+    [e.class, e.message.include?("mismatch multibyte code length in char-class range")]
+  end
+end
+"#;
+    let error = "[RegexpError, true]";
+    assert_eq!(
+        eval(source.to_owned()),
+        Ok(format!("[{error}, {error}, {error}, {error}, {error}]"))
+    );
+    let literal = r#"
+begin
+  eval('/[\d-z]+/')
+rescue SyntaxError => e
+  e.message.include?("mismatch multibyte code length in char-class range")
+end
+"#;
+    assert_eq!(eval(literal.to_owned()), Ok("true".to_owned()));
+}
+
+#[test]
+fn a_hyphen_after_a_class_that_ends_the_class_stays_literal() {
+    let source = r#"
+[
+  "1-" =~ /\A[\d-]+\z/, "a" =~ /[\d-]/, "x-7" =~ /[\d-&&\d]/, "x-7" =~ /[\d-&&-]/,
+  "m5-" =~ /\A[a-z\d]+/, $~[0]
+]
+"#;
+    assert_eq!(
+        eval(source.to_owned()),
+        Ok(r#"[0, nil, 2, 1, 0, "m5"]"#.to_owned())
+    );
 }
 
 #[test]

@@ -2,7 +2,7 @@
 
 ## 1. Character classes
 
-- [ ] 1.1 The patch to `regparse.c`, its record, and the test of `design.md`. Verify: the scenarios of `specs/embedded-ruby/spec.md`; `cargo test -p vkxp-ruby-sys --locked` passes with the local gcc and with `CC=clang` (a separate `CARGO_TARGET_DIR`).
+- [x] 1.1 The patch to `regparse.c`, its record, and the test of `design.md`. Verify: the scenarios of `specs/embedded-ruby/spec.md`; `cargo test -p vkxp-ruby-sys --locked` passes with the local gcc and with `CC=clang` (a separate `CARGO_TARGET_DIR`).
 
 ## 2. Audit tests
 

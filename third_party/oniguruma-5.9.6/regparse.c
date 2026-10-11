@@ -4092,6 +4092,9 @@ next_state_val(CClassNode* cc, OnigCodePoint *vs, OnigCodePoint v,
     break;
 
   case CCS_RANGE:
+    if (*type == CCV_CLASS)
+      return ONIGERR_MISMATCH_CODE_LENGTH_IN_CLASS_RANGE;
+
     if (intype == *type) {
       if (intype == CCV_SB) {
         if (*vs > 0xff || v > 0xff)
