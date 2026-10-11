@@ -35,13 +35,13 @@ defined in `vkxp-proto`.
 `xtask` holds repository automation and the tool that extracts the built-in scripts; it is not
 part of the runtime.
 
-The protocol is at version 8; an encoded stream of another version is rejected. A frame packet
+The protocol is at version 9; an encoded stream of another version is rejected. A frame packet
 carries the changes to bitmaps and tables and an ordered list of ops of four kinds: `Clear`,
 `Quad`, `RectEffect` and `TilemapLayer`. Sprites, planes and the parts of a window are quads.
 Both compositors evaluate every kind. Version 8 added the messages of the save states: the
 requests to save and to load a state, the order to a parked copy of the guest process to
 resume, the attachment of a guest process, the outcome of a game, and the answers saved,
-loaded and failed.
+loaded and failed. Version 9 added to the failed answer whether a save or a load failed.
 
 ## Third-party source
 
@@ -523,7 +523,8 @@ files. Any value but `thread` and `process` is an error.
 The program starts itself again for the guest, with its own arguments, and the two exchange
 the messages of the protocol over a Unix stream socket in a directory only the user can
 enter, below `$XDG_RUNTIME_DIR` or, without that variable, below the temporary directory. The
-directory is removed when the run ends. The guest process opens no window, no Vulkan device
+directory is removed when the run ends; one that a run ended by a signal left behind is
+removed the next time a guest process starts. The guest process opens no window, no Vulkan device
 and no audio device.
 
 A run does and shows the same in both forms: the same frames, the same reports on the error

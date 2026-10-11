@@ -18,7 +18,7 @@
 
 ## 5. Documentation
 
-- [ ] 5.1 README: protocol version 9 and what it added; the sentence about the socket directory mentions the removal at the next start. Verify: the README names version 9 and no longer says the protocol is at version 8.
+- [x] 5.1 README: protocol version 9 and what it added; the sentence about the socket directory mentions the removal at the next start. Verify: the README names version 9 and no longer says the protocol is at version 8.
 
 ## 6. Integration check
 
