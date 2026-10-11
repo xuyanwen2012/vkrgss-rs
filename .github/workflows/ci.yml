@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      # The packages docs/building.md names.
+      - name: Install the prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential libcrypt-dev glslc spirv-tools libasound2-dev libudev-dev \
+            mesa-vulkan-drivers vulkan-validationlayers
+      # Installs the toolchain that rust-toolchain.toml pins.
+      - name: Install the Rust toolchain
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - name: Install the OpenSpec CLI
+        run: npm install -g @fission-ai/openspec
+      # The tests render with Vulkan on lavapipe, the software rasteriser of Mesa.
+      - name: Merge gate
+        run: VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate

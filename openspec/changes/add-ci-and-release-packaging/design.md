@@ -66,6 +66,24 @@ that parses them is not added; `python3 -c 'import yaml'` or an equivalent by ha
 enough) and against this design by the reviewer. The owner corrects what the first real run
 shows.
 
+### Notes from the implementation
+
+- The lock file has `flate2` but not `tar`, so `cargo xtask dist` runs `tar` and
+  `sha256sum`. `tar` compresses through `gzip -n`, which leaves the time out of the gzip
+  header.
+- The release workflow has the preparation of the other one without the OpenSpec CLI,
+  which `cargo xtask dist` does not use.
+- vkxp has no option `--log-level`; the bug report template asks for the output with
+  `--verbose` (or `VKXP_LOG=debug`), as `CONTRIBUTING.md` does.
+- The executable also needs libcrypt at run time (`libcrypt.so.1` when built on Ubuntu),
+  which the embedded Ruby links; `docs/releasing.md` and the notes name it with the others.
+
 ## Follow-ups
 
-None yet.
+- The workflows have not run: the action versions (`actions/checkout@v5`,
+  `actions/upload-artifact@v4`, `Swatinem/rust-cache@v2`), the package names and
+  `rustup show` installing the pinned toolchain are to be confirmed by the first run on
+  GitHub.
+- A distribution whose libcrypt is `libcrypt.so.2` only (Fedora without `libxcrypt-compat`)
+  cannot start the package. Whether to link libcrypt statically or drop the dependency is
+  not decided here.

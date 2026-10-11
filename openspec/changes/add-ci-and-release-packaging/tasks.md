@@ -6,8 +6,8 @@
 
 ## 2. Workflows and templates
 
-- [ ] 2.1 `.github/workflows/ci.yml` and `release.yml`. Verify: both parse as YAML; the scenarios of "Workflows".
-- [ ] 2.2 The issue and pull request templates. Verify: the files exist with the fields of `design.md`.
+- [x] 2.1 `.github/workflows/ci.yml` and `release.yml`. Verify: both parse as YAML; the scenarios of "Workflows".
+- [x] 2.2 The issue and pull request templates. Verify: the files exist with the fields of `design.md`.
 
 ## 3. Documentation
 

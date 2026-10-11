@@ -1,0 +1,82 @@
+name: Release
+
+# A tag v<version> builds the package and publishes the GitHub release. Started by hand,
+# the workflow only builds the package and keeps it as an artifact.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      # The packages docs/building.md names.
+      - name: Install the prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential libcrypt-dev glslc spirv-tools libasound2-dev libudev-dev \
+            mesa-vulkan-drivers vulkan-validationlayers
+      # Installs the toolchain that rust-toolchain.toml pins.
+      - name: Install the Rust toolchain
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - name: Read the version of the workspace
+        id: version
+        run: |
+          version=$(cargo metadata --locked --no-deps --format-version 1 |
+            jq --raw-output '.packages[] | select(.name == "vkxp") | .version')
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Check that the tag is the version
+        if: github.ref_type == 'tag'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [ "$GITHUB_REF_NAME" != "v$VERSION" ]; then
+            echo "::error::the tag $GITHUB_REF_NAME is not v$VERSION, the version of the workspace"
+            exit 1
+          fi
+      - name: Build the package
+        run: cargo xtask dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vkxp-${{ steps.version.outputs.version }}-x86_64-unknown-linux-gnu
+          path: |
+            target/dist/*.tar.gz
+            target/dist/*.tar.gz.sha256
+          if-no-files-found: error
+      - name: Create the release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # The section of this version in the changelog, without its heading.
+          awk -v heading="## [$VERSION]" '
+            index($0, "## [") == 1 { inside = index($0, heading) == 1; next }
+            inside
+          ' CHANGELOG.md > target/dist/notes.md
+          grep --quiet '[^[:space:]]' target/dist/notes.md || {
+            echo "::error::CHANGELOG.md has no section for $VERSION"
+            exit 1
+          }
+          cat >> target/dist/notes.md <<'NOTES'
+
+          ### Requirements
+
+          The package is built for Linux x86_64 on Ubuntu 24.04 and needs glibc 2.39 or
+          newer. At run time it needs the Vulkan loader with a Vulkan 1.3 driver, ALSA
+          (`libasound.so.2`), libudev (`libudev.so.1`) and libcrypt (`libcrypt.so.1`).
+          Check the download with `sha256sum -c vkxp-*.tar.gz.sha256`.
+          NOTES
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "vkxp $VERSION" \
+            --notes-file target/dist/notes.md \
+            target/dist/*.tar.gz target/dist/*.tar.gz.sha256
