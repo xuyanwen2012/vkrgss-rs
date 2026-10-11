@@ -115,8 +115,11 @@ pub fn run(link: &GuestEnd, options: DemoOptions) -> Result<(), Disconnected> {
                 HostToGuest::ModalDismissed | HostToGuest::Resume => {}
                 HostToGuest::Quit => return link.send(GuestToHost::Shutdown),
                 // A guest that cannot be copied.
-                HostToGuest::SaveState { slot } | HostToGuest::LoadState { slot } => {
-                    link.send(GuestToHost::StateFailed { slot })?;
+                HostToGuest::SaveState { slot } => {
+                    link.send(GuestToHost::StateFailed { slot, load: false })?;
+                }
+                HostToGuest::LoadState { slot } => {
+                    link.send(GuestToHost::StateFailed { slot, load: true })?;
                 }
             }
         }

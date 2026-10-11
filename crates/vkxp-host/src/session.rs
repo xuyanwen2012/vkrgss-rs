@@ -437,13 +437,15 @@ impl<D: Display, C: Clock> Session<D, C> {
                 self.show_notice(format_args!("state saved into slot {slot}"));
             }
             GuestToHost::StateLoaded { slot } => self.state_loaded(slot),
-            GuestToHost::StateFailed { slot } if self.loading == Some(slot) => {
-                self.loading = None;
+            GuestToHost::StateFailed { slot, load: true } => {
                 self.show_notice(format_args!("slot {slot} holds no state"));
-                // The tick that waited for the answer may be due.
-                self.poll();
+                if self.loading == Some(slot) {
+                    self.loading = None;
+                    // The tick that waited for the answer may be due.
+                    self.poll();
+                }
             }
-            GuestToHost::StateFailed { slot } => {
+            GuestToHost::StateFailed { slot, load: false } => {
                 self.show_notice(format_args!("no state could be saved into slot {slot}"));
             }
         }

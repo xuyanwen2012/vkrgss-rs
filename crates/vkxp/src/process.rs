@@ -495,7 +495,7 @@ impl Relay<'_> {
         let parked = self.slots.get_mut(usize::from(slot)).and_then(Option::take);
         // A copy that is gone has closed its connection, which a parked one never writes to.
         let Some(parked) = parked.filter(|parked| !readable(parked.stream.as_fd())) else {
-            self.tell_host(GuestToHost::StateFailed { slot });
+            self.tell_host(GuestToHost::StateFailed { slot, load: true });
             return;
         };
         // Killed, not asked to quit: nothing of the game runs after the decision to load.
@@ -675,7 +675,13 @@ mod tests {
 
         // An empty slot.
         host.send(HostToGuest::LoadState { slot: 3 }).unwrap();
-        assert_eq!(host.recv(), Ok(GuestToHost::StateFailed { slot: 3 }));
+        assert_eq!(
+            host.recv(),
+            Ok(GuestToHost::StateFailed {
+                slot: 3,
+                load: true
+            })
+        );
         // A request to save goes to the guest, whose copy attaches.
         host.send(HostToGuest::SaveState { slot: 3 }).unwrap();
         assert_eq!(guest.recv(), Ok(HostToGuest::SaveState { slot: 3 }));

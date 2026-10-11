@@ -69,7 +69,11 @@ pub enum GuestToHost {
     /// the host holds nothing of it yet.
     StateLoaded { slot: u8 },
     /// A state could not be saved into `slot` or loaded from it.
-    StateFailed { slot: u8 },
+    StateFailed {
+        slot: u8,
+        /// Whether a load failed; false for a save.
+        load: bool,
+    },
 }
 
 /// A message from the host to the guest.

@@ -6,7 +6,7 @@
 
 ## 2. Protocol and its users
 
-- [ ] 2.1 `StateFailed { slot, load }`, version 9, every sender and the session as in `design.md`; fixtures and expected files that carry the version are regenerated. Verify: the scenarios of `specs/guest-host-protocol/spec.md` and "Failed save while a load waits" and "Failed load"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-proto -p vkxp-compose-ref -p vkxp-binding -p vkxp-host -p vkxp --locked` passes.
+- [x] 2.1 `StateFailed { slot, load }`, version 9, every sender and the session as in `design.md`; fixtures and expected files that carry the version are regenerated. Verify: the scenarios of `specs/guest-host-protocol/spec.md` and "Failed save while a load waits" and "Failed load"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-proto -p vkxp-compose-ref -p vkxp-binding -p vkxp-host -p vkxp --locked` passes.
 
 ## 3. Notices
 

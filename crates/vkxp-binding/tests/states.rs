@@ -211,8 +211,14 @@ fn a_guest_without_a_copier_answers_with_the_failure_and_goes_on() {
     assert_eq!(
         failed,
         [
-            &GuestToHost::StateFailed { slot: 4 },
-            &GuestToHost::StateFailed { slot: 6 }
+            &GuestToHost::StateFailed {
+                slot: 4,
+                load: false
+            },
+            &GuestToHost::StateFailed {
+                slot: 6,
+                load: true
+            }
         ]
     );
 }
@@ -225,12 +231,10 @@ fn a_copier_that_fails_is_answered_with_the_failure() {
     let played = run(&game, Some(copier.clone()), script);
     assert_eq!(copier.slots(), [3]);
     assert_eq!(played.record.frames().len(), 5);
-    assert!(
-        played
-            .record
-            .others()
-            .contains(&&GuestToHost::StateFailed { slot: 3 })
-    );
+    assert!(played.record.others().contains(&&GuestToHost::StateFailed {
+        slot: 3,
+        load: false
+    }));
 }
 
 /// Scenarios "Complete frame" and "Music".

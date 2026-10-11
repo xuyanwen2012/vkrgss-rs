@@ -23,7 +23,7 @@ use crate::{GuestToHost, HostToGuest, InputSnapshot};
 pub const MAGIC: [u8; 4] = *b"VKXP";
 
 /// Version of the message types and their encoding. Any change to either increments it.
-pub const PROTOCOL_VERSION: u16 = 8;
+pub const PROTOCOL_VERSION: u16 = 9;
 
 /// Length of the stream header in bytes.
 pub const HEADER_LEN: usize = 7;
@@ -232,8 +232,8 @@ mod tests {
 
     #[test]
     fn older_streams_are_rejected_naming_both_versions() {
-        assert_eq!(PROTOCOL_VERSION, 8);
-        for found in [1u16, 2, 3, 4, 5, 6, 7] {
+        assert_eq!(PROTOCOL_VERSION, 9);
+        for found in [1u16, 2, 3, 4, 5, 6, 7, 8] {
             let mut bytes = encode_stream(&sample()).unwrap();
             bytes[4..6].copy_from_slice(&found.to_le_bytes());
 
@@ -242,12 +242,12 @@ mod tests {
                 error,
                 DecodeError::UnsupportedVersion {
                     found,
-                    supported: 8,
+                    supported: 9,
                 }
             );
             assert_eq!(
                 error.to_string(),
-                format!("unsupported protocol version: found {found}, supported 8")
+                format!("unsupported protocol version: found {found}, supported 9")
             );
         }
     }
@@ -443,7 +443,14 @@ mod tests {
             GuestToHost::Outcome { ok: true },
             GuestToHost::StateSaved { slot: 0 },
             GuestToHost::StateLoaded { slot: 3 },
-            GuestToHost::StateFailed { slot: 9 },
+            GuestToHost::StateFailed {
+                slot: 9,
+                load: false,
+            },
+            GuestToHost::StateFailed {
+                slot: 9,
+                load: true,
+            },
         ];
         // Fails to compile when a kind is added without extending the list above.
         for message in &guest {

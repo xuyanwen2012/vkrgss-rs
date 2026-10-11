@@ -279,8 +279,11 @@ impl Guest {
                     self.runtime.saves.push(slot);
                 }
                 // A guest that cannot be copied has no states either.
-                HostToGuest::SaveState { slot } | HostToGuest::LoadState { slot } => {
-                    self.send(GuestToHost::StateFailed { slot });
+                HostToGuest::SaveState { slot } => {
+                    self.send(GuestToHost::StateFailed { slot, load: false });
+                }
+                HostToGuest::LoadState { slot } => {
+                    self.send(GuestToHost::StateFailed { slot, load: true });
                 }
                 // Only a parked copy is told to resume, and it is not here while it waits.
                 HostToGuest::Resume => {}
@@ -303,7 +306,7 @@ impl Guest {
                 Ok(Copied::WentOn) => {}
                 // The requests that still waited are those of the guest that goes on.
                 Ok(Copied::Resumed(link)) => return self.resume(link),
-                Err(CopyFailed) => self.send(GuestToHost::StateFailed { slot }),
+                Err(CopyFailed) => self.send(GuestToHost::StateFailed { slot, load: false }),
             }
         }
     }

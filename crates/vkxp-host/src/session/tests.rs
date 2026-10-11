@@ -2221,7 +2221,10 @@ fn the_answers_are_shown_in_the_title_for_two_seconds_and_reported() {
     rig.session.poll();
     assert_eq!(rig.title(), "Game");
 
-    rig.send(GuestToHost::StateFailed { slot: 5 });
+    rig.send(GuestToHost::StateFailed {
+        slot: 5,
+        load: false,
+    });
     assert_eq!(rig.title(), "Game - no state could be saved into slot 5");
     rig.send(GuestToHost::StateLoaded { slot: 6 });
     assert_eq!(rig.title(), "Game - state loaded from slot 6");
@@ -2230,6 +2233,7 @@ fn the_answers_are_shown_in_the_title_for_two_seconds_and_reported() {
     }
 }
 
+/// Scenario "Failed load", with slot 0.
 #[test]
 fn no_tick_is_sent_between_a_request_to_load_and_its_answer() {
     let mut rig = states_rig();
@@ -2244,11 +2248,47 @@ fn no_tick_is_sent_between_a_request_to_load_and_its_answer() {
 
     // The slot is empty: the guest goes on and its frame is answered.
     assert_eq!(
-        rig.send(GuestToHost::StateFailed { slot: 0 }),
+        rig.send(GuestToHost::StateFailed {
+            slot: 0,
+            load: true
+        }),
         [HostToGuest::Tick]
     );
     assert!(rig.title().ends_with("slot 0 holds no state"));
     rig.frame(frame(2));
+}
+
+/// Scenario "Failed save while a load waits".
+#[test]
+fn a_failed_save_leaves_a_waiting_load_alone() {
+    let mut rig = states_rig();
+    rig.frame(frame(0));
+    assert_eq!(rig.send(frame(1)), []);
+    rig.session.key(KeyCode::ShiftLeft, true);
+    for _ in 0..3 {
+        rig.tap(KeyCode::F3);
+    }
+    rig.session.key(KeyCode::ShiftLeft, false);
+    assert_eq!(rig.session.state_slot(), 3);
+    assert_eq!(rig.tap(KeyCode::F4), [HostToGuest::LoadState { slot: 3 }]);
+
+    rig.clock.advance(ms(100));
+    let sent = rig.send(GuestToHost::StateFailed {
+        slot: 3,
+        load: false,
+    });
+    assert_eq!(sent, [], "the load still waits");
+    assert!(rig.title().ends_with("no state could be saved into slot 3"));
+    rig.session.poll();
+    assert_eq!(rig.taken(), []);
+
+    rig.session.display_mut().events.clear();
+    let sent = rig.send(GuestToHost::StateLoaded { slot: 3 });
+    assert_eq!(sent, [held(&[])]);
+    let events = &rig.session.display().events;
+    assert!(events.contains(&DisplayEvent::Forget), "{events:?}");
+    assert!(rig.title().ends_with("state loaded from slot 3"));
+    rig.frame(frame(0));
 }
 
 /// Scenarios "Mid transition" and the reset of "Loading a state resets the host's side".

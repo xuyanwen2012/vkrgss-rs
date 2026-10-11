@@ -891,7 +891,8 @@ fn a_load_that_fails_is_reported_and_the_run_goes_on() {
                     HostToGuest::Tick => break,
                     HostToGuest::LoadState { slot } => {
                         assert_eq!(index, 1);
-                        link.send(GuestToHost::StateFailed { slot }).unwrap();
+                        link.send(GuestToHost::StateFailed { slot, load: true })
+                            .unwrap();
                     }
                     other => panic!("{other:?} is not a request to load"),
                 }
