@@ -2010,6 +2010,7 @@ time_mload(time, str)
     }
 
     if ((p & (1UL<<31)) == 0) {
+	gmt = 0;
 	sec = p;
 	usec = s;
     }

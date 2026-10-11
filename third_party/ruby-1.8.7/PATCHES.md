@@ -305,3 +305,15 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
   argument is held by the caller's arguments; the result of `to_str` for another object is
   held only by the parameter, whose address `StringValue` has passed on. `RB_GC_GUARD(src)`
   follows each call.
+
+## 26. time-mload-old-format-gmt
+
+- File: `time.c`
+- Patch: `patches/time-mload-old-format-gmt.patch`
+- Patched SHA-256: `8c0f49822f74791f017e98f8851d8c6a124cde8648f1bea7cd4ed9e6c8a6bc6f`
+- Reason: found by compiling with the warnings for uninitialised variables (change
+  `fix-findings-of-the-first-ci-runs`). `time_mload` reads two formats. For the older one,
+  seconds and microseconds with the top bit of the first word clear, it never set `gmt` and
+  then stored the indeterminate value in the object, so whether such a `Time` loaded with
+  `Marshal.load` was in UTC depended on what the compiler left on the stack. The older format
+  has no flag for UTC; `gmt` is 0 for it, which is local time.

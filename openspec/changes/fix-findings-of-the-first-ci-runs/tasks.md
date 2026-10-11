@@ -10,7 +10,7 @@
 
 ## 3. Warnings
 
-- [ ] 3.1 The two compilations of `design.md`, with "Found" filled in and real findings patched. Verify: `cargo test -p vkxp-ruby-sys -p vkxp-binding --locked` passes.
+- [x] 3.1 The two compilations of `design.md`, with "Found" filled in and real findings patched. Verify: `cargo test -p vkxp-ruby-sys -p vkxp-binding --locked` passes.
 
 ## 4. Integration check
 
