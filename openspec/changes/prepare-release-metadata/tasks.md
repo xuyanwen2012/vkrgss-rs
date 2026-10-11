@@ -2,7 +2,7 @@
 
 ## 1. Metadata
 
-- [ ] 1.1 Workspace and crate metadata as in `design.md`, with a test in `xtask` beside the dependency rules that checks the scenario "Metadata of every crate" against `cargo metadata`. Verify: `cargo test -p xtask --locked` passes.
+- [x] 1.1 Workspace and crate metadata as in `design.md`, with a test in `xtask` beside the dependency rules that checks the scenario "Metadata of every crate" against `cargo metadata`. Verify: `cargo test -p xtask --locked` passes.
 
 ## 2. Version option
 

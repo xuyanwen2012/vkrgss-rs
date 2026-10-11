@@ -680,4 +680,45 @@ mod tests {
         assert!(tree.contains("vkxp-host feature \"default\""), "{tree}");
         assert!(!tree.contains("vkxp-host feature \"testing\""), "{tree}");
     }
+
+    /// The address every crate gives as its repository.
+    const REPOSITORY: &str = "https://github.com/xuyanwen2012/vkxp";
+
+    /// What a reader of a published project expects of every crate, and nothing that could
+    /// be sent to a registry.
+    #[test]
+    fn every_crate_has_the_package_metadata() {
+        let output = Command::new(crate::cargo())
+            .args(["metadata", "--format-version", "1", "--no-deps", "--locked"])
+            .current_dir(crate::workspace_root())
+            .output()
+            .expect("cargo metadata for the workspace");
+        assert!(output.status.success());
+        let metadata: Value = serde_json::from_slice(&output.stdout).expect("metadata JSON");
+        let packages = metadata["packages"].as_array().expect("the packages");
+        assert!(!packages.is_empty());
+        for package in packages {
+            let name = package["name"].as_str().expect("a name");
+            let description = package["description"].as_str().unwrap_or_default();
+            assert!(
+                !description.trim().is_empty(),
+                "`{name}` has no description"
+            );
+            assert_eq!(package["license"], "MIT", "the licence of `{name}`");
+            assert_eq!(
+                package["repository"], REPOSITORY,
+                "the repository of `{name}`"
+            );
+            assert_eq!(
+                package["version"],
+                env!("CARGO_PKG_VERSION"),
+                "the version of `{name}`"
+            );
+            assert_eq!(
+                package["publish"],
+                serde_json::json!([]),
+                "`{name}` can be published"
+            );
+        }
+    }
 }

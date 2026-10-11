@@ -23,6 +23,11 @@ edition = "2024"
 rust-version = "1.99"
 license = "MIT"
 authors = ["Yanwen Xu"]
+repository = "https://github.com/xuyanwen2012/vkxp"
+homepage = "https://github.com/xuyanwen2012/vkxp"
+readme = "README.md"
+keywords = ["rpg-maker", "rgss", "vulkan", "game-engine", "emulation"]
+categories = ["game-engines", "emulators"]
 publish = false
 
 [workspace.lints.rust]
