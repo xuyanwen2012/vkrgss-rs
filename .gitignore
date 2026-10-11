@@ -2,3 +2,5 @@
 /wt
 *.spv
 /local/
+/.claude/
+/.agents/
