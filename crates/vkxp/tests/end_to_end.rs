@@ -672,7 +672,7 @@ fn an_unknown_filter_prints_the_usage_message() {
 #[test]
 fn an_unknown_option_prints_the_usage_message() {
     let ran = vkxp(&["--no-such-option"]);
-    ran.assert_failure();
+    assert_eq!(ran.output.status.code(), Some(2));
     let stderr = ran.stderr();
     assert!(stderr.contains("--no-such-option"), "{stderr}");
     assert!(stderr.contains("usage: vkxp"), "{stderr}");
@@ -694,12 +694,25 @@ fn the_version_is_printed_without_a_driver_or_a_game() {
     }
 }
 
+/// Scenario "Help" of the requirement "Help option" of `specs/game-launch/spec.md`.
 #[test]
-fn the_usage_message_of_help_lists_the_version_option() {
-    let ran = vkxp(&["--help"]);
-    let stderr = ran.stderr();
-    assert!(stderr.contains("usage: vkxp"), "{stderr}");
-    assert!(stderr.contains("--version"), "{stderr}");
+fn the_usage_text_is_printed_without_a_driver_or_a_game() {
+    for option in ["--help", "-h"] {
+        let work = tempfile::tempdir().expect("a temporary directory");
+        let mut command = command(work.path(), &[option]);
+        // A pattern that selects no driver: the loader would find no device.
+        for name in ISOLATION_VARIABLES {
+            command.env_remove(name);
+        }
+        command.env("VK_LOADER_DRIVERS_SELECT", "no-such-driver");
+        let output = command.output().expect("the program starts");
+        assert_eq!(output.status.code(), Some(0), "{option}");
+        let stdout = String::from_utf8(output.stdout).expect("the usage text is UTF-8");
+        assert!(stdout.starts_with("usage: vkxp"), "{stdout}");
+        assert!(stdout.contains("--help"), "{stdout}");
+        assert!(stdout.contains("--version"), "{stdout}");
+        assert_eq!(output.stderr, b"", "{option}");
+    }
 }
 
 #[test]

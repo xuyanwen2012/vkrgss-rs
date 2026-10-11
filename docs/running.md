@@ -68,6 +68,8 @@ Paths on the command line are relative to the directory the program was started 
 | `--input SCRIPT\|@FILE` | Headless: the buttons held from given frames on, in the syntax described under *Running the demo*, or a file that holds such a script. |
 | `--dump FRAME=FILE` | Headless: write frame `FRAME`, counted from 0, as a PNG file. Repeatable. |
 | `--states SCHEDULE` | Headless, with `--guest process`: save and load states at given frames, for example `"120:save 0, 200:load 0"`. See *Save states*. |
+| `--version`, `-V` | Print the name and the version to the standard output and exit. |
+| `--help`, `-h` | Print the usage text to the standard output and exit. |
 
 An unknown option or a malformed value, a malformed input script file included, ends the
 program with the usage message and status 2.

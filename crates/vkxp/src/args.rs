@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use vkxp_host::{Filter, InputScript, StateSchedule};
 use vkxp_vfs::Encoding;
 
-/// What is printed with every command-line error.
+/// What `--help` prints, and what is printed with every command-line error.
 pub(crate) const USAGE: &str = "\
 usage: vkxp [GAME_DIR] [OPTIONS]
 
@@ -58,7 +58,8 @@ usage: vkxp [GAME_DIR] [OPTIONS]
   --dump FRAME=FILE         headless: write frame FRAME as a PNG file; repeatable
   --states SCHEDULE         headless, with --guest process: save and load states at
                             given frames, for example \"120:save 0, 200:load 0\"
-  --version, -V             print the name and the version and exit";
+  --version, -V             print the name and the version and exit
+  --help, -h                print this text and exit";
 
 /// What `--version` prints: the name of the program and the version of its package.
 pub(crate) const VERSION: &str = concat!("vkxp ", env!("CARGO_PKG_VERSION"));
@@ -156,6 +157,8 @@ pub(crate) struct Options {
     pub states: StateSchedule,
     /// Whether only the version is printed.
     pub version: bool,
+    /// Whether only the usage text is printed.
+    pub help: bool,
 }
 
 /// `NAME=VALUE` with neither part empty.
@@ -323,6 +326,7 @@ pub(crate) fn parse(arguments: &[String]) -> Result<Options, String> {
                     StateSchedule::parse(value()?).map_err(|error| format!("--states: {error}"))?;
             }
             "--version" | "-V" => options.version = true,
+            "--help" | "-h" => options.help = true,
             option if option.starts_with('-') => return Err(format!("unknown option `{option}`")),
             _ if options.game_dir.is_some() => {
                 return Err(format!("unexpected argument `{argument}`"));
@@ -552,6 +556,14 @@ mod tests {
         assert!(parse_words(&["-V"]).unwrap().version);
         assert_eq!(VERSION, "vkxp 0.1.0");
         assert!(USAGE.contains("--version, -V"));
+    }
+
+    #[test]
+    fn help_is_asked_for_with_either_spelling() {
+        assert!(!parse_words(&[]).unwrap().help);
+        assert!(parse_words(&["--help"]).unwrap().help);
+        assert!(parse_words(&["-h"]).unwrap().help);
+        assert!(USAGE.contains("--help, -h"));
     }
 
     #[test]

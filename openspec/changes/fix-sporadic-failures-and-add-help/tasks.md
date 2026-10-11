@@ -7,7 +7,7 @@
 
 ## 2. Help option
 
-- [ ] 2.1 `--help` and `-h`. Verify: the scenarios of `specs/game-launch/spec.md` as tests; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` passes.
+- [x] 2.1 `--help` and `-h`. Verify: the scenarios of `specs/game-launch/spec.md` as tests; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` passes.
 
 ## 3. Comments and the notice file
 

@@ -99,6 +99,10 @@ fn main() -> ExitCode {
         Ok(options) => options,
         Err(message) => return usage(message),
     };
+    if options.help {
+        println!("{}", args::USAGE);
+        return ExitCode::SUCCESS;
+    }
     if options.version {
         println!("{}", args::VERSION);
         return ExitCode::SUCCESS;
