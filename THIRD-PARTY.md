@@ -24,6 +24,17 @@ licence; the text is [`COPYING`](third_party/oniguruma-5.9.6/COPYING). Its
 [`README.vkxp.md`](third_party/oniguruma-5.9.6/README.vkxp.md) states the origin, and
 `MANIFEST.sha256` the upstream hash of every file.
 
+## libxcrypt
+
+The executable of the release package, which `cargo xtask dist` builds, links libcrypt
+statically: the libxcrypt of the distribution the package is built on, Ubuntu 24.04. No
+other build does, and its source is not in this repository. libxcrypt is under the GNU
+Lesser General Public License version 2.1 or later, whose text the package carries as
+`licenses/ruby-1.8.7/LGPL`. Its source is at <https://github.com/besser82/libxcrypt>, and
+that of the version in the package is the source package `libxcrypt` of Ubuntu 24.04. The
+source of everything else that is linked is public, so the executable can be linked again
+with another libxcrypt.
+
 ## Fonts used by tests
 
 [`crates/vkxp-text/tests/fonts`](crates/vkxp-text/tests/fonts) holds two fonts that the tests

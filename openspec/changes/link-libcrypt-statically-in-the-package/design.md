@@ -48,6 +48,12 @@ The development machine has no `libcrypt.a` (`libxcrypt-static` is not installed
 `cargo xtask dist` cannot build the package in this run; its early failure with the message
 is what can be shown. The owner runs the release workflow by hand afterwards.
 
+What was shown instead: with a stand-in `libcrypt.a` (one `crypt` function, found through
+`LIBRARY_PATH`) and `VKXP_STATIC_CRYPT=1`, `cargo build -p vkxp` links and the executable
+needs no libcrypt; without the variable it needs `libcrypt.so.2` as before. That the
+`libcrypt.a` of Ubuntu 24.04 links into the position-independent executable is first seen
+in the run of the workflow.
+
 ## Follow-ups
 
 None yet.

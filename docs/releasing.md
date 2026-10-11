@@ -41,8 +41,9 @@ before a tag.
 
 The executable is linked against the C library of Ubuntu 24.04, so it needs glibc 2.39 or
 newer. At run time it also needs the Vulkan loader with a Vulkan 1.3 driver, ALSA
-(`libasound.so.2`), libudev (`libudev.so.1`) and libcrypt (`libcrypt.so.1`). The notes of
-the release say so.
+(`libasound.so.2`) and libudev (`libudev.so.1`). The notes of the release say so. libcrypt
+is linked statically, because its shared library has a different name on Ubuntu
+(`libcrypt.so.1`) and on Fedora (`libcrypt.so.2`).
 
 ## Building the package locally
 
@@ -51,9 +52,13 @@ cargo xtask dist
 ```
 
 builds the release executable with `cargo build --release --locked -p vkxp` and writes the
-same two files under `target/dist/`. It needs `tar`, `gzip` and `sha256sum`, and fails
-with the name of a file of the package that is missing. A package built this way is linked
-against the libraries of the machine that built it.
+same two files under `target/dist/`. It needs `tar`, `gzip`, `sha256sum` and `readelf`, and
+fails with the name of a file of the package that is missing. It sets `VKXP_STATIC_CRYPT=1`
+for the build, so it also needs the static library `libcrypt.a` (`libcrypt-dev` on Debian
+and Ubuntu, `libxcrypt-static` on Fedora) and fails before the build when the C compiler
+does not find it. After the build it prints the libraries the executable needs and fails
+when a libcrypt is among them. A package built this way is linked against the other
+libraries of the machine that built it.
 
 ## Checking a package
 

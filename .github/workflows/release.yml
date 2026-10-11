@@ -75,7 +75,7 @@ jobs:
 
           The package is built for Linux x86_64 on Ubuntu 24.04 and needs glibc 2.39 or
           newer. At run time it needs the Vulkan loader with a Vulkan 1.3 driver, ALSA
-          (`libasound.so.2`), libudev (`libudev.so.1`) and libcrypt (`libcrypt.so.1`).
+          (`libasound.so.2`) and libudev (`libudev.so.1`).
           Check the download with `sha256sum -c vkxp-*.tar.gz.sha256`.
           NOTES
           gh release create "$GITHUB_REF_NAME" --verify-tag --title "vkxp $VERSION" \

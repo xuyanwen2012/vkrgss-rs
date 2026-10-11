@@ -10,7 +10,7 @@
 
 ## 3. Texts
 
-- [ ] 3.1 `THIRD-PARTY.md`, `docs/releasing.md`, `docs/building.md` and the notes in `release.yml`. Verify: none of them lists libcrypt as a run-time need of the package; `cargo test -p xtask --locked` (the link check) passes.
+- [x] 3.1 `THIRD-PARTY.md`, `docs/releasing.md`, `docs/building.md` and the notes in `release.yml`. Verify: none of them lists libcrypt as a run-time need of the package; `cargo test -p xtask --locked` (the link check) passes.
 
 ## 4. Integration check
 
