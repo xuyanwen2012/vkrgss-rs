@@ -66,6 +66,10 @@ each step took.
 - **WHEN** a test of the Vulkan backend passes only because the validation layer is loaded
 - **THEN** the gate fails at the step that runs without the layer
 
+#### Scenario: Two failing test binaries
+- **WHEN** tests of two crates fail
+- **THEN** the output of the gate names both
+
 ### Requirement: Host crates do not depend on guest crates
 No host crate (`vkxp-vk`, `vkxp-audio`, `vkxp-host`) and not the reference compositor
 `vkxp-compose-ref` SHALL depend, directly or transitively, on a guest crate (`vkxp-core`,
