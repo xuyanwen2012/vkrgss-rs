@@ -2,7 +2,7 @@
 
 ## 1. The manual
 
-- [ ] 1.1 Move the sections of the README to the files under `docs/` as in `design.md`, and write `docs/compatibility.md`. Verify: scenario "Manual kept".
+- [x] 1.1 Move the sections of the README to the files under `docs/` as in `design.md`, and write `docs/compatibility.md`. Verify: scenario "Manual kept".
 
 ## 2. Landing page and the other documents
 

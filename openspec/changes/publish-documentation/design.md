@@ -97,6 +97,31 @@ scan for `](`.
 - A sentence may be lost in the move. The reviewer compares the section headings of the old
   README with those of the new files.
 
+## Notes from the implementation
+
+- One file outside the scope of the change was edited, by a few lines: the test
+  `the_example_of_the_readme_loads` in `crates/vkxp/src/config.rs` read the configuration
+  example from `README.md`. The example moved to `docs/running.md` with the section
+  "Configuration files", so the test, now `the_example_of_the_manual_loads`, reads it there.
+  Without the edit the `test` step of the gate fails.
+- The scenario "Manual kept" was checked by looking for every heading of the old README as a
+  heading of a file under `docs/`. The title `# vkxp` stays the title of the README and is
+  not a section of the manual; `docs/running.md` is titled "Running vkxp".
+- The scenario "Machine rules" was checked with
+  `git grep -l B580 -- . ':!openspec/changes/archive' ':!openspec/changes/publish-documentation'`.
+  This change's own `design.md` and delta specification name the string to state the check;
+  they state no rule of a machine.
+- Frame 10 of the command without input shows only the background and the sprite at rest, so
+  the picture is frame 12 of a run with `--input`; `docs/running.md` states the command.
+
 ## Follow-ups
 
-None yet.
+- The delta specification, once synced to `openspec/specs/workspace-structure/spec.md`,
+  will itself contain the string `B580` that its scenario "Machine rules" searches for.
+  Whether the scenario is to exclude the specifications or to be worded without the string
+  is for the owner to decide before archiving.
+- Comments that still say "see the README" for text that is now under `docs/`
+  (`crates/vkxp-vk/src/device.rs`, `xtask/src/oracle/mod.rs`,
+  `crates/vkxp-core/tests/data/sprite-rotation-samples.txt`) and two mentions of "the
+  development machine" (`crates/vkxp-ruby-sys/tests/sanitized.rs`,
+  `openspec/specs/embedded-ruby/spec.md`) are outside the scope of this change.

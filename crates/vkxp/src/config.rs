@@ -787,14 +787,14 @@ mod tests {
         }
     }
 
-    /// The example of the README is a complete file, and its two maps are the defaults.
+    /// The example of the manual is a complete file, and its two maps are the defaults.
     #[test]
-    fn the_example_of_the_readme_loads() {
-        let readme = concat!(env!("CARGO_MANIFEST_DIR"), "/../../README.md");
-        let readme = std::fs::read_to_string(readme).unwrap();
-        let (_, rest) = readme
+    fn the_example_of_the_manual_loads() {
+        let manual = concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/running.md");
+        let manual = std::fs::read_to_string(manual).unwrap();
+        let (_, rest) = manual
             .split_once("```toml\n")
-            .expect("the README has an example");
+            .expect("the manual has an example");
         let (example, _) = rest.split_once("```").unwrap();
 
         let files = Files::new().user(example);
