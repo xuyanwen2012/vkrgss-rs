@@ -107,19 +107,22 @@ scan for `](`.
 - The scenario "Manual kept" was checked by looking for every heading of the old README as a
   heading of a file under `docs/`. The title `# vkxp` stays the title of the README and is
   not a section of the manual; `docs/running.md` is titled "Running vkxp".
-- The scenario "Machine rules" was checked with
-  `git grep -l B580 -- . ':!openspec/changes/archive' ':!openspec/changes/publish-documentation'`.
-  This change's own `design.md` and delta specification name the string to state the check;
-  they state no rule of a machine.
+- The scenario "Machine rules" is not established; see "Follow-ups". Task 3.1 stays
+  unticked for that reason alone: its other verifications pass.
 - Frame 10 of the command without input shows only the background and the sprite at rest, so
   the picture is frame 12 of a run with `--input`; `docs/running.md` states the command.
 
 ## Follow-ups
 
-- The delta specification, once synced to `openspec/specs/workspace-structure/spec.md`,
-  will itself contain the string `B580` that its scenario "Machine rules" searches for.
-  Whether the scenario is to exclude the specifications or to be worded without the string
-  is for the owner to decide before archiving.
+- Open question that blocks the verification of task 3.1 now: the scenario "Machine rules"
+  is self-referential. `git grep -n B580 -- . ':!openspec/changes/archive'` finds the string
+  in this change's own `design.md` and in its delta specification, which name it to state
+  the check, and in no other tracked file. The scenario as written therefore does not hold
+  while those two files say what they say, and it will not hold after the delta
+  specification is synced to `openspec/specs/workspace-structure/spec.md` either. Whether
+  the scenario is to exclude the specifications and the change, or to be worded without the
+  string, is for the owner to decide; the implementation neither rewords the scenario nor
+  narrows the search.
 - Comments that still say "see the README" for text that is now under `docs/`
   (`crates/vkxp-vk/src/device.rs`, `xtask/src/oracle/mod.rs`,
   `crates/vkxp-core/tests/data/sprite-rotation-samples.txt`) and two mentions of "the

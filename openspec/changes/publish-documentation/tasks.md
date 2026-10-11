@@ -11,7 +11,7 @@
 
 ## 3. Agent files
 
-- [x] 3.1 `AGENTS.md`, `CLAUDE.md`, `.gitignore`, and `.claude/` and `.agents/` out of the index. Verify: scenario "Machine rules"; `git ls-files .claude .agents` prints nothing and the directories still exist on disk.
+- [ ] 3.1 `AGENTS.md`, `CLAUDE.md`, `.gitignore`, and `.claude/` and `.agents/` out of the index. Verify: scenario "Machine rules"; `git ls-files .claude .agents` prints nothing and the directories still exist on disk.
 
 ## 4. Link check
 
