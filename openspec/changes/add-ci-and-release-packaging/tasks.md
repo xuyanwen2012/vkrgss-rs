@@ -2,7 +2,7 @@
 
 ## 1. Package command
 
-- [ ] 1.1 `cargo xtask dist` as in `design.md`, with tests of the list of files and of the missing file. Verify: the scenarios of "Release package command"; the unpacked `vkxp --version` prints `vkxp 0.1.0`; `cargo test -p xtask --locked` passes.
+- [x] 1.1 `cargo xtask dist` as in `design.md`, with tests of the list of files and of the missing file. Verify: the scenarios of "Release package command"; the unpacked `vkxp --version` prints `vkxp 0.1.0`; `cargo test -p xtask --locked` passes.
 
 ## 2. Workflows and templates
 
