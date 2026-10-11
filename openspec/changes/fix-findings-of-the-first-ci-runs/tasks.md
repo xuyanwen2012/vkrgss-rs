@@ -6,7 +6,7 @@
 
 ## 2. Audit tests
 
-- [ ] 2.1 The lock and the bounded retry in the tests of `xtask/src/audit.rs`. Verify: `cargo test -p xtask --locked` passes 50 times in a row.
+- [x] 2.1 The lock and the bounded retry in the tests of `xtask/src/audit.rs`. Verify: `cargo test -p xtask --locked` passes 50 times in a row.
 
 ## 3. Warnings
 
