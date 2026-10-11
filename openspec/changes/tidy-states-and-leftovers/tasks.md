@@ -10,7 +10,7 @@
 
 ## 3. Notices
 
-- [ ] 3.1 The session's next deadline and its use in the window loop. Verify: scenario "No frames"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-host --locked` passes.
+- [x] 3.1 The session's next deadline and its use in the window loop. Verify: scenario "No frames"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-host --locked` passes.
 
 ## 4. Socket directories
 

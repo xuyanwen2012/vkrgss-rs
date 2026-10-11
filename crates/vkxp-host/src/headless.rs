@@ -336,8 +336,9 @@ pub fn run_headless(
         }
         // Also after the answer that a state could not be loaded, which the tick of a frame
         // waited for.
-        if let Some(due) = session.next_wake() {
-            // The virtual clock never waits: it is moved to the tick.
+        while let Some(due) = session.next_wake() {
+            // The virtual clock never waits: it is moved to the tick, by way of the end of a
+            // notice that is over before it.
             clock.advance_to(due);
             session.poll();
         }

@@ -346,12 +346,18 @@ impl<D: Display, C: Clock> Session<D, C> {
         self.frames
     }
 
-    /// When [`poll`](Session::poll) next has something to do, on the session's clock, or
-    /// `None` when only a guest message or user input can move the session on, as while a
-    /// request to load a state waits for its answer.
+    /// When [`poll`](Session::poll) next has something to do, on the session's clock: the
+    /// earlier of the time the pending tick is due and the end of the notice in the title.
+    /// `None` when only a guest message or user input can move the session on. While a
+    /// request to load a state waits for its answer the pending tick is not due, but the
+    /// end of a notice still is.
     pub fn next_wake(&self) -> Option<Duration> {
-        self.pending_tick
-            .filter(|_| self.end.is_none() && self.loading.is_none())
+        if self.end.is_some() {
+            return None;
+        }
+        let tick = self.pending_tick.filter(|_| self.loading.is_none());
+        let notice = self.notice.as_ref().map(|(_, until)| *until);
+        tick.into_iter().chain(notice).min()
     }
 
     /// Whether fast-forward is engaged.

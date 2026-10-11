@@ -2233,6 +2233,42 @@ fn the_answers_are_shown_in_the_title_for_two_seconds_and_reported() {
     }
 }
 
+/// Scenario "No frames".
+#[test]
+fn a_notice_ends_at_the_next_deadline_without_a_frame() {
+    let mut rig = states_rig();
+    rig.send(GuestToHost::SetTitle {
+        title: "Game".to_owned(),
+    });
+    rig.frame(frame(0));
+    assert_eq!(rig.session.next_wake(), None);
+    rig.clock.advance(ms(10));
+    rig.send(GuestToHost::StateSaved { slot: 4 });
+    assert_eq!(rig.title(), "Game - state saved into slot 4");
+
+    let due = rig.session.next_wake().expect("the notice ends");
+    assert_eq!(due, rig.clock.now() + NOTICE_TIME);
+    rig.clock.advance_to(due);
+    rig.session.poll();
+    assert_eq!(rig.title(), "Game");
+    assert_eq!(rig.taken(), []);
+    assert_eq!(rig.session.next_wake(), None);
+}
+
+/// The earlier of the two is named, and a tick that waits for a load is not one of them.
+#[test]
+fn the_next_deadline_is_the_tick_or_the_end_of_the_notice() {
+    let mut rig = states_rig();
+    rig.frame(frame(0));
+    assert_eq!(rig.send(frame(1)), []);
+    let tick = rig.session.next_wake().expect("a tick is pending");
+    rig.send(GuestToHost::StateSaved { slot: 4 });
+    assert_eq!(rig.session.next_wake(), Some(tick));
+
+    assert_eq!(rig.tap(KeyCode::F4), [HostToGuest::LoadState { slot: 0 }]);
+    assert_eq!(rig.session.next_wake(), Some(rig.clock.now() + NOTICE_TIME));
+}
+
 /// Scenario "Failed load", with slot 0.
 #[test]
 fn no_tick_is_sent_between_a_request_to_load_and_its_answer() {
@@ -2329,7 +2365,8 @@ fn a_loaded_state_resets_what_the_session_holds_of_the_guest() {
     let sent = rig.send(GuestToHost::StateLoaded { slot: 7 });
     // The current input again, and no tick for the frame of the guest that is gone.
     assert_eq!(sent, [held(&[Button::Right])]);
-    assert_eq!(rig.session.next_wake(), None);
+    // Only the notice has an end to wait for.
+    assert_eq!(rig.session.next_wake(), Some(rig.clock.now() + NOTICE_TIME));
     let events = &rig.session.display().events;
     assert!(events.contains(&DisplayEvent::Forget), "{events:?}");
     assert!(
