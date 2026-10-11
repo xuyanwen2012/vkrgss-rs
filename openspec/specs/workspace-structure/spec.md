@@ -37,7 +37,7 @@ audio or file-system crates.
 
 ### Requirement: Single merge gate
 The repository SHALL provide one command that checks formatting, lints with warnings denied,
-runs all workspace tests, builds the workspace's documentation with warnings denied and
+runs all workspace tests, runs the Vulkan tests again without the validation layer, builds the workspace's documentation with warnings denied and
 validates OpenSpec artifacts, and exits non-zero if any step fails. The steps that resolve
 dependencies SHALL use the committed lock file unchanged. The command SHALL report how long
 each step took.
@@ -47,7 +47,7 @@ each step took.
 - **THEN** it exits with status zero
 
 #### Scenario: Gate reports the failing step
-- **WHEN** any one of the five checks fails
+- **WHEN** any one of the six checks fails
 - **THEN** the gate exits non-zero and identifies which check failed
 
 #### Scenario: Broken documentation link
@@ -61,6 +61,10 @@ each step took.
 #### Scenario: Durations
 - **WHEN** the gate finishes, passing or failing
 - **THEN** its output names each step that ran with the time it took
+
+#### Scenario: Fault hidden by the validation layer
+- **WHEN** a test of the Vulkan backend passes only because the validation layer is loaded
+- **THEN** the gate fails at the step that runs without the layer
 
 ### Requirement: Host crates do not depend on guest crates
 No host crate (`vkxp-vk`, `vkxp-audio`, `vkxp-host`) and not the reference compositor
