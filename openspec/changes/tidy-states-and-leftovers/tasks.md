@@ -14,7 +14,7 @@
 
 ## 4. Socket directories
 
-- [ ] 4.1 The sweep in `GuestProcess::start`. Verify: scenario "Left by a killed run" as a test with the base directory in a temporary directory; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` passes.
+- [x] 4.1 The sweep in `GuestProcess::start`. Verify: scenario "Left by a killed run" as a test with the base directory in a temporary directory; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` passes.
 
 ## 5. Documentation
 

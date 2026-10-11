@@ -27,10 +27,10 @@
 //! those and the ones it let go of before are gone.
 
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
-use std::os::unix::fs::DirBuilderExt;
+use std::os::unix::fs::{DirBuilderExt, MetadataExt};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::os::unix::process::ExitStatusExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -108,6 +108,35 @@ fn exists(pid: u32) -> bool {
     found == 0 || std::io::Error::last_os_error().raw_os_error() != Some(libc::ESRCH)
 }
 
+/// Removes the socket directories in `base` that earlier runs of this user left behind:
+/// the directories named `vkxp-<pid>-<8 hex digits>` that the user owns and whose process no
+/// longer exists. Housekeeping: what cannot be read or removed is left.
+fn sweep(base: &Path) {
+    let Ok(entries) = std::fs::read_dir(base) else {
+        return;
+    };
+    // SAFETY: `geteuid` takes nothing and cannot fail.
+    let user = unsafe { libc::geteuid() };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let pid = name.to_str().and_then(|name| {
+            let (pid, stamp) = name.strip_prefix("vkxp-")?.split_once('-')?;
+            let stamp = stamp.len() == 8 && stamp.bytes().all(|byte| byte.is_ascii_hexdigit());
+            let pid = pid.bytes().all(|byte| byte.is_ascii_digit()).then_some(pid);
+            pid.filter(|_| stamp)?.parse::<u32>().ok()
+        });
+        if pid.is_none_or(exists) {
+            continue;
+        }
+        // Of the entry itself: a link is not followed.
+        let ours = std::fs::symlink_metadata(entry.path())
+            .is_ok_and(|entry| entry.is_dir() && entry.uid() == user);
+        if ours {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
+    }
+}
+
 /// Waits until one of `descriptors` can be read, or has ended, or `timeout` has passed, and
 /// says of each whether it can.
 fn wait_readable<const N: usize>(
@@ -165,6 +194,7 @@ impl GuestProcess {
     pub(crate) fn start(seed: u64) -> Result<GuestProcess> {
         let variable = std::env::var_os("XDG_RUNTIME_DIR").filter(|value| !value.is_empty());
         let base = variable.map_or_else(std::env::temp_dir, PathBuf::from);
+        sweep(&base);
         let stamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |since| since.subsec_nanos());
@@ -665,6 +695,31 @@ mod tests {
         };
         write_message(&mut stream, &attach).unwrap();
         stream
+    }
+
+    /// Scenario "Left by a killed run".
+    #[test]
+    fn the_socket_directories_of_ended_runs_are_removed() {
+        let base = tempfile::tempdir().unwrap();
+        // A process that has ended and been waited for: its id names nobody.
+        let mut ended = idle();
+        ended.kill().unwrap();
+        ended.wait().unwrap();
+        let left = base.path().join(format!("vkxp-{}-0000abcd", ended.id()));
+        let running = base
+            .path()
+            .join(format!("vkxp-{}-0000abcd", std::process::id()));
+        let other = base.path().join("vkxp-notes");
+        for dir in [&left, &running] {
+            std::fs::create_dir(dir).unwrap();
+            std::fs::write(dir.join("guest.sock"), b"").unwrap();
+        }
+        std::fs::write(&other, b"kept").unwrap();
+
+        sweep(base.path());
+        assert!(!left.exists());
+        assert!(running.join("guest.sock").exists());
+        assert!(other.exists());
     }
 
     #[test]
