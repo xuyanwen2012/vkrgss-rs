@@ -37,10 +37,11 @@ fn steps() -> [Step; 6] {
             ],
             env: &[],
         },
+        // `--no-fail-fast`: every test binary runs, so one run shows all that fail.
         Step {
             name: "test",
             program: "cargo",
-            args: &["test", "--workspace", "--locked"],
+            args: &["test", "--workspace", "--locked", "--no-fail-fast"],
             env: &[],
         },
         // The Vulkan tests once more without the validation layer, as players run: the layer
@@ -49,7 +50,15 @@ fn steps() -> [Step; 6] {
         Step {
             name: "test-unvalidated",
             program: "cargo",
-            args: &["test", "-p", "vkxp-vk", "-p", "vkxp-host", "--locked"],
+            args: &[
+                "test",
+                "-p",
+                "vkxp-vk",
+                "-p",
+                "vkxp-host",
+                "--locked",
+                "--no-fail-fast",
+            ],
             env: &[("VK_LOADER_LAYERS_DISABLE", "*validation*")],
         },
         Step {
@@ -191,9 +200,30 @@ mod tests {
         let step = &steps[position("test-unvalidated")];
         assert_eq!(
             step.args,
-            ["test", "-p", "vkxp-vk", "-p", "vkxp-host", "--locked"]
+            [
+                "test",
+                "-p",
+                "vkxp-vk",
+                "-p",
+                "vkxp-host",
+                "--locked",
+                "--no-fail-fast"
+            ]
         );
         assert_eq!(step.env, [("VK_LOADER_LAYERS_DISABLE", "*validation*")]);
+    }
+
+    #[test]
+    fn the_test_steps_run_every_test_binary() {
+        for step in steps() {
+            let tests = matches!(step.name, "test" | "test-unvalidated");
+            assert_eq!(
+                step.args.contains(&"--no-fail-fast"),
+                tests,
+                "{}",
+                step.name
+            );
+        }
     }
 
     #[test]

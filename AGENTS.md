@@ -18,7 +18,8 @@ changing anything; it records decisions that are settled.
   repository and is never committed.
 - Gate before declaring done: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` (format
   check, clippy with warnings denied, workspace tests, the Vulkan tests again without the
-  validation layer, documentation with warnings denied, `openspec validate --all`).
+  validation layer, documentation with warnings denied, `openspec validate --all`). The test
+  steps run every test binary and report all that fail.
 - The Vulkan tests refuse to run unless the loader is restricted to chosen drivers with
   `VK_LOADER_DRIVERS_SELECT`, because the loader loads every installed driver; see
   [docs/building.md](docs/building.md).

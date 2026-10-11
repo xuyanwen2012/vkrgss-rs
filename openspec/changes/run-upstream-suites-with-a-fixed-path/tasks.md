@@ -6,7 +6,7 @@
 
 ## 2. Gate
 
-- [ ] 2.1 `--no-fail-fast` in the two test steps and the texts that quote them. Verify: `cargo test -p xtask --locked` passes.
+- [x] 2.1 `--no-fail-fast` in the two test steps and the texts that quote them. Verify: `cargo test -p xtask --locked` passes.
 
 ## 3. Integration check
 

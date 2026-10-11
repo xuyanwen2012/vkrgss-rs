@@ -16,14 +16,17 @@ prints how long each step took, after the step and once more for all of them at 
 |---|---|
 | `fmt` | `cargo fmt --all --check` |
 | `clippy` | `cargo clippy --workspace --all-targets --locked -- -D warnings` |
-| `test` | `cargo test --workspace --locked` |
-| `test-unvalidated` | `cargo test -p vkxp-vk -p vkxp-host --locked` with `VK_LOADER_LAYERS_DISABLE='*validation*'` |
+| `test` | `cargo test --workspace --locked --no-fail-fast` |
+| `test-unvalidated` | `cargo test -p vkxp-vk -p vkxp-host --locked --no-fail-fast` with `VK_LOADER_LAYERS_DISABLE='*validation*'` |
 | `doc` | `cargo doc --workspace --no-deps --locked` with `RUSTDOCFLAGS=-D warnings` |
 | `openspec` | `openspec validate --all` |
 
 The `cargo xtask` alias and the `clippy`, `test`, `test-unvalidated` and `doc` steps pass
 `--locked`, so the gate does not rewrite `Cargo.lock` and fails when the lock file is out of
 date.
+
+The `test` and `test-unvalidated` steps pass `--no-fail-fast`: every test binary runs although
+an earlier one failed, so the output of one run names all that fail. The step still fails.
 
 `test-unvalidated` runs the Vulkan tests again as players run, without the validation layer:
 the loader does not load a disabled layer although it is installed. The layer wraps every
