@@ -15,8 +15,8 @@ topic files under `docs/`. It SHALL have `CHANGELOG.md`, `CONTRIBUTING.md` and
 - **THEN** each is found, apart from "Third-party source", whose text is in `THIRD-PARTY.md`
 
 #### Scenario: Machine rules
-- **WHEN** the tracked files outside `openspec/changes/archive` are searched for `B580`
-- **THEN** nothing is found
+- **WHEN** `AGENTS.md`, `CLAUDE.md`, `README.md`, `CONTRIBUTING.md` and the files under `docs/` are read
+- **THEN** none of them names a graphics card of one developer's machine, the language of a chat or a directory outside the repository
 
 ### Requirement: Links of the documents resolve
 A test SHALL fail when a relative link or image of `README.md`, `CHANGELOG.md`,

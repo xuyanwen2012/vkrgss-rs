@@ -114,15 +114,9 @@ scan for `](`.
 
 ## Follow-ups
 
-- Open question that blocks the verification of task 3.1 now: the scenario "Machine rules"
-  is self-referential. `git grep -n B580 -- . ':!openspec/changes/archive'` finds the string
-  in this change's own `design.md` and in its delta specification, which name it to state
-  the check, and in no other tracked file. The scenario as written therefore does not hold
-  while those two files say what they say, and it will not hold after the delta
-  specification is synced to `openspec/specs/workspace-structure/spec.md` either. Whether
-  the scenario is to exclude the specifications and the change, or to be worded without the
-  string, is for the owner to decide; the implementation neither rewords the scenario nor
-  narrows the search.
+- Settled by the owner's side after the run: the scenario "Machine rules" named the string
+  it forbade and so could not hold. It now names the documents and what they must not state;
+  task 3.1 is ticked on that wording.
 - Comments that still say "see the README" for text that is now under `docs/`
   (`crates/vkxp-vk/src/device.rs`, `xtask/src/oracle/mod.rs`,
   `crates/vkxp-core/tests/data/sprite-rotation-samples.txt`) and two mentions of "the
