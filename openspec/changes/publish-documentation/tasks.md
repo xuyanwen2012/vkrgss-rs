@@ -6,8 +6,8 @@
 
 ## 2. Landing page and the other documents
 
-- [ ] 2.1 `docs/images/demo.png` and the new `README.md`. Verify: scenario "Landing page"; the picture is the output of the stated command.
-- [ ] 2.2 `THIRD-PARTY.md`, `CHANGELOG.md`, `CONTRIBUTING.md`. Verify: each exists and states what `design.md` lists.
+- [x] 2.1 `docs/images/demo.png` and the new `README.md`. Verify: scenario "Landing page"; the picture is the output of the stated command.
+- [x] 2.2 `THIRD-PARTY.md`, `CHANGELOG.md`, `CONTRIBUTING.md`. Verify: each exists and states what `design.md` lists.
 
 ## 3. Agent files
 
