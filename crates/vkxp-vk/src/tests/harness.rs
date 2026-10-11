@@ -101,9 +101,62 @@ impl Rng {
     }
 }
 
-/// Panics with the recorded messages unless the log is empty.
+/// The report that validation layers without tracking of present fences make when the wait
+/// semaphores of a present are destroyed after its present fence has signalled, which the
+/// specification allows (issues 8578 and 9587 of Vulkan-ValidationLayers).
+const PRESENT_FENCE_REPORT: &str = "VUID-vkDestroySemaphore-semaphore-05149";
+
+/// The first specification version of the validation layer that is known to track present
+/// fences.
+const LAYER_TRACKING_PRESENT_FENCES: u32 = vk::make_api_version(0, 1, 4, 313);
+
+/// Whether `message` is the false report of a validation layer of specification version
+/// `layer` about a backend whose presents do or do not carry fences.
+fn is_false_report(message: &str, layer: Option<u32>, present_fences: bool) -> bool {
+    present_fences
+        && message.contains(PRESENT_FENCE_REPORT)
+        && layer.is_some_and(|version| version < LAYER_TRACKING_PRESENT_FENCES)
+}
+
+/// The specification version of the installed validation layer, or `None` without one.
+fn layer_version() -> Option<u32> {
+    static VERSION: OnceLock<Option<u32>> = OnceLock::new();
+    *VERSION.get_or_init(|| {
+        require_isolation();
+        // SAFETY: loading the system's Vulkan library runs its initialisers and has no
+        // other precondition; the call after it takes no handle.
+        let layers = unsafe {
+            ash::Entry::load()
+                .ok()?
+                .enumerate_instance_layer_properties()
+        };
+        layers
+            .ok()?
+            .iter()
+            .find(|layer| layer.layer_name_as_c_str().ok() == Some(crate::validation::LAYER_NAME))
+            .map(|layer| layer.spec_version)
+    })
+}
+
+/// Panics with the recorded messages unless the log is empty, apart from the false report
+/// of an old validation layer (see [`is_false_report`]), which is dropped with a note.
 pub(crate) fn assert_clean(log: &ValidationLog, when: &str) {
-    let errors = log.errors();
+    let mut errors = log.errors();
+    // The layer is only asked for when the report is there.
+    if log.uses_present_fences() && errors.iter().any(|e| e.contains(PRESENT_FENCE_REPORT)) {
+        let layer = layer_version();
+        let before = errors.len();
+        errors.retain(|error| !is_false_report(error, layer, true));
+        if errors.len() < before {
+            eprintln!(
+                "dropped {} report(s) of {PRESENT_FENCE_REPORT} {when}: this validation layer \
+                 ({}) does not track present fences and takes the semaphores of a present \
+                 whose fence has signalled for still in use",
+                before - errors.len(),
+                layer.map_or_else(String::new, version_text),
+            );
+        }
+    }
     assert!(
         errors.is_empty(),
         "{} validation error(s) {when}:\n{}",
@@ -159,6 +212,52 @@ impl Drop for TestCompositor {
         self.compositor = None;
         assert_clean(&self.log, "while the compositor was dropped");
     }
+}
+
+fn version_text(version: u32) -> String {
+    format!(
+        "{}.{}.{}",
+        vk::api_version_major(version),
+        vk::api_version_minor(version),
+        vk::api_version_patch(version)
+    )
+}
+
+#[test]
+fn only_the_false_report_of_a_layer_without_present_fence_tracking_is_dropped() {
+    let old = Some(vk::make_api_version(0, 1, 3, 275));
+    let report = format!(
+        "Validation Error: [ {PRESENT_FENCE_REPORT} ] Object 0: handle = 0x1 | \
+         vkDestroySemaphore(): can't be called on VkSemaphore 0x1 that is currently in use"
+    );
+    assert!(is_false_report(&report, old, true));
+    assert!(is_false_report(
+        &report,
+        Some(vk::make_api_version(0, 1, 4, 312)),
+        true
+    ));
+    // A layer that tracks present fences means it, and so does any layer about a backend
+    // that presents without fences.
+    assert!(!is_false_report(
+        &report,
+        Some(LAYER_TRACKING_PRESENT_FENCES),
+        true
+    ));
+    assert!(!is_false_report(
+        &report,
+        Some(vk::make_api_version(0, 1, 4, 341)),
+        true
+    ));
+    assert!(!is_false_report(&report, old, false));
+    assert!(!is_false_report(&report, None, true));
+    // Every other report counts.
+    let other = "Validation Error: [ VUID-vkDestroySemaphore-semaphore-parameter ] invalid";
+    assert!(!is_false_report(other, old, true));
+    assert!(!is_false_report(
+        "vkCreateBuffer(): pCreateInfo->usage is zero.",
+        old,
+        true
+    ));
 }
 
 #[test]

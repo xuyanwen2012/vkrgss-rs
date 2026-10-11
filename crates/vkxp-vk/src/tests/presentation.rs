@@ -1499,6 +1499,16 @@ fn present_after_a_failed_draw_succeeds_with_and_without_swapchain_maintenance()
         if ignore_maintenance {
             compositor.ignore_swapchain_maintenance();
         }
+        eprintln!(
+            "after a failed draw on {}: {}",
+            compositor.device(),
+            match compositor.releases_undrawn_images() {
+                true => "the image is released",
+                false if compositor.uses_swapchain_maintenance() =>
+                    "the swapchain is replaced, the driver cannot release for this surface",
+                false => "the swapchain is replaced, without swapchain maintenance",
+            }
+        );
         compositor.resize_surface(Size::new(64, 48));
         compositor.render(&flat(SIZE, WHITE)).unwrap();
         assert_eq!(compositor.present(), Ok(true));

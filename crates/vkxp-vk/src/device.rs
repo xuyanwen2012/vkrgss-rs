@@ -393,6 +393,8 @@ struct Candidate {
     families: Vec<vk::QueueFlags>,
     max_image_dimension: u32,
     max_storage_buffer_range: u32,
+    /// `driverVersion` of the device, in the driver's own encoding.
+    driver_version: u32,
     /// `timestampValidBits` of each queue family.
     timestamp_bits: Vec<u32>,
     /// `timestampPeriod` of the device: the nanoseconds of one tick of a timestamp.
@@ -654,6 +656,7 @@ impl Instance {
                 })
                 .collect(),
             max_image_dimension: properties.limits.max_image_dimension2_d,
+            driver_version: properties.driver_version,
             max_storage_buffer_range: properties.limits.max_storage_buffer_range,
             timestamp_bits: families
                 .iter()
@@ -827,6 +830,19 @@ fn c_chars(chars: &[std::ffi::c_char]) -> String {
     }
 }
 
+/// Whether a driver that offers swapchain maintenance can release the images of a swapchain
+/// of a surface. `driver` is the name and information the driver reports and
+/// `driver_version` its `driverVersion`.
+///
+/// Mesa before 25.3.4 advertises swapchain maintenance for headless surfaces and has no
+/// `release_images` for them, so `vkReleaseSwapchainImagesEXT` calls a null pointer there
+/// (fixed by Mesa commit c3763b12). Its other surfaces implement the call. Mesa names itself
+/// in the driver information and packs the version as `VK_MAKE_VERSION(major, minor, patch)`.
+pub(crate) fn releases_undrawn_images(headless: bool, driver: &str, driver_version: u32) -> bool {
+    const FIXED_IN: u32 = vk::make_api_version(0, 25, 3, 4);
+    !(headless && driver.contains("Mesa") && driver_version < FIXED_IN)
+}
+
 /// Where a surface comes from.
 pub(crate) enum SurfaceSource {
     /// A surface without any window system behind it (`VK_EXT_headless_surface`).
@@ -850,6 +866,8 @@ pub(crate) struct Surface {
     /// The functions of `VK_KHR_get_surface_capabilities2`, when the instance has it.
     pub capabilities2: Option<ash::khr::get_surface_capabilities2::Instance>,
     pub handle: vk::SurfaceKHR,
+    /// Whether the surface was made for `VK_EXT_headless_surface`.
+    pub headless: bool,
     // After the handle in declaration order: the window outlives its surface.
     _window: Option<Box<dyn SurfaceWindow>>,
 }
@@ -879,6 +897,8 @@ pub(crate) struct Gpu {
     pub max_image_dimension: u32,
     /// `maxStorageBufferRange` of the device.
     pub max_storage_buffer_range: u32,
+    /// `driverVersion` of the device, in the driver's own encoding.
+    pub driver_version: u32,
     /// The surface the device presents to, when it was opened for one.
     pub surface: Option<Surface>,
     /// The pacing extensions the device was created with. None without a surface.
@@ -985,6 +1005,7 @@ impl Gpu {
                 ash::khr::get_surface_capabilities2::Instance::new(&instance._entry, &instance.raw)
             }),
             handle,
+            headless: matches!(source, SurfaceSource::Headless),
             _window: match source {
                 SurfaceSource::Headless => None,
                 SurfaceSource::Window(window) => Some(window),
@@ -1141,6 +1162,7 @@ impl Gpu {
             info: candidate.info,
             max_image_dimension: candidate.max_image_dimension,
             max_storage_buffer_range: candidate.max_storage_buffer_range,
+            driver_version: candidate.driver_version,
             surface,
             pacing,
             swapchain_maintenance,
@@ -1149,6 +1171,23 @@ impl Gpu {
             debug,
             instance,
         })
+    }
+
+    /// Whether an acquired image that was not drawn can be given back to a swapchain of the
+    /// device's surface with swapchain maintenance (see [`releases_undrawn_images`]).
+    pub(crate) fn releases_undrawn_images(&self) -> bool {
+        let headless = self
+            .surface
+            .as_ref()
+            .is_some_and(|surface| surface.headless);
+        releases_undrawn_images(headless, &self.info.driver, self.driver_version)
+    }
+
+    /// Tells the validation log, when there is one, that presents carry fences.
+    pub(crate) fn note_present_fences(&self) {
+        if let Some(log) = &self.instance._log {
+            log.set_present_fences();
+        }
     }
 
     /// Gives `handle`, an object of this device, a name for captures and validation
@@ -1217,6 +1256,36 @@ impl Drop for Gpu {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Scenario "Decision by driver".
+    #[test]
+    fn undrawn_images_are_not_released_on_a_headless_surface_of_an_old_mesa() {
+        let mesa = |major, minor, patch| {
+            (
+                format!("llvmpipe Mesa {major}.{minor}.{patch} (LLVM 20.1.2)"),
+                vk::make_api_version(0, major, minor, patch),
+            )
+        };
+        for (version, expected) in [
+            ((25, 2, 8), false),
+            ((25, 3, 3), false),
+            ((25, 3, 4), true),
+            ((26, 2, 4), true),
+        ] {
+            let (driver, packed) = mesa(version.0, version.1, version.2);
+            assert_eq!(
+                releases_undrawn_images(true, &driver, packed),
+                expected,
+                "{driver}"
+            );
+        }
+        // Another driver encodes its version in its own way; the number says nothing.
+        assert!(releases_undrawn_images(true, "NVIDIA 550.54.14", 1));
+        assert!(releases_undrawn_images(true, "", 0));
+        // The window surfaces of the old Mesa implement the call.
+        let (driver, packed) = mesa(25, 2, 8);
+        assert!(releases_undrawn_images(false, &driver, packed));
+    }
 
     /// A device that meets every requirement.
     const CAPABLE: DeviceCaps = DeviceCaps {

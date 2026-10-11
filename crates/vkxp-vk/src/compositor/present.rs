@@ -1556,6 +1556,13 @@ impl VkCompositor {
         self.fail_draw = true;
     }
 
+    /// Whether an image left undrawn by a failed draw is given back to a swapchain created
+    /// now, and the swapchain is not replaced.
+    #[cfg(test)]
+    pub(crate) fn releases_undrawn_images(&self) -> bool {
+        self.uses_swapchain_maintenance() && self.gpu.releases_undrawn_images()
+    }
+
     /// Whether a swapchain created now uses `VK_EXT_swapchain_maintenance1`.
     pub(crate) fn uses_swapchain_maintenance(&self) -> bool {
         #[cfg(test)]
@@ -1618,6 +1625,10 @@ impl VkCompositor {
             return false;
         };
         if chain.present_fences.is_none() {
+            return false;
+        }
+        // Not asked of a driver that cannot do it for this surface.
+        if !self.gpu.releases_undrawn_images() {
             return false;
         }
         let semaphore = || {
@@ -2050,6 +2061,9 @@ impl VkCompositor {
             timing.map_err(|failure| self.pacer.fail(failure)).ok()
         });
 
+        if maintenance {
+            self.gpu.note_present_fences();
+        }
         let mut chain = Swapchain {
             handle,
             extent,

@@ -45,6 +45,11 @@ test uses present fences, and the harness prints one line that it dropped it and
 `vkDeviceWaitIdle` is added to the compositor for the layer's sake: it would undo what the
 fences are for, and the test asserts that the swapchain was not idled.
 
+The harness judges a log, often after the compositor was dropped, so the compositor leaves
+the one fact it needs there: `ValidationLog` records that a swapchain whose presents carry
+fences was made. Nothing outside the tests reads it. The id is looked for in the message
+text, which holds it with the old layers (in the prefix) and with the new ones (in the link).
+
 ### What cannot be verified in this run
 
 The second and third decision concern a stack that is not on the development machine and

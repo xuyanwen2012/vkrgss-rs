@@ -22,6 +22,7 @@ pub struct ValidationLog {
 #[derive(Debug, Default)]
 struct Inner {
     active: AtomicBool,
+    present_fences: AtomicBool,
     errors: Mutex<Vec<String>>,
 }
 
@@ -38,6 +39,17 @@ impl ValidationLog {
     /// The error messages recorded so far, oldest first.
     pub fn errors(&self) -> Vec<String> {
         self.lock().clone()
+    }
+
+    /// Whether a backend reporting into this log made a swapchain whose presents carry
+    /// fences.
+    #[cfg_attr(not(test), expect(dead_code, reason = "read by the test harness"))]
+    pub(crate) fn uses_present_fences(&self) -> bool {
+        self.inner.present_fences.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn set_present_fences(&self) {
+        self.inner.present_fences.store(true, Ordering::Relaxed);
     }
 
     pub(crate) fn set_active(&self) {

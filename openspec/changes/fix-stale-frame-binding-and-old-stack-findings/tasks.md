@@ -7,8 +7,8 @@
 
 ## 2. The older stack
 
-- [ ] 2.1 The decision not to release on a headless surface of Mesa older than 25.3.4, with its unit test. Verify: scenario "Decision by driver"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk --locked` passes.
-- [ ] 2.2 The harness drops the false report of layers below 1.4.313 and says so, with a unit test of the decision. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk --locked` passes.
+- [x] 2.1 The decision not to release on a headless surface of Mesa older than 25.3.4, with its unit test. Verify: scenario "Decision by driver"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk --locked` passes.
+- [x] 2.2 The harness drops the false report of layers below 1.4.313 and says so, with a unit test of the decision. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk --locked` passes.
 
 ## 3. Integration check
 
