@@ -126,6 +126,7 @@ message stream with both and require byte-identical frames.
   comparing with the original runtime, and the OpenSpec workflow.
 - [docs/compatibility.md](docs/compatibility.md): what is exact and the known differences.
 - [docs/decisions.md](docs/decisions.md): the settled design decisions.
+- [docs/releasing.md](docs/releasing.md): making a release and checking its package.
 - [CHANGELOG.md](CHANGELOG.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Legal

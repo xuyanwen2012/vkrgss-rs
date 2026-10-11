@@ -11,7 +11,7 @@
 
 ## 3. Documentation
 
-- [ ] 3.1 `docs/releasing.md`, linked from `docs/development.md` and the README's list of documents. Verify: `cargo test -p xtask --locked` (the link check) passes.
+- [x] 3.1 `docs/releasing.md`, linked from `docs/development.md` and the README's list of documents. Verify: `cargo test -p xtask --locked` (the link check) passes.
 
 ## 4. Integration check
 

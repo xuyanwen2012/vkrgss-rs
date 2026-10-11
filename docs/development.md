@@ -25,6 +25,9 @@ does not rewrite `Cargo.lock` and fails when the lock file is out of date.
 
 The toolchain is pinned in `rust-toolchain.toml`. The `openspec` CLI must be on `PATH`.
 
+The workflow `.github/workflows/ci.yml` runs the gate on GitHub for every push to `main` and
+every pull request; [releasing.md](releasing.md) describes the release package.
+
 ## Checks outside the gate
 
 Two checks are run by hand, because one is slow and needs another compiler and the other
