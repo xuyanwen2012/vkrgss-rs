@@ -100,7 +100,7 @@ settled; change one only through an OpenSpec change that says so.
   cleared and `$KCODE='U'` at start.
 - Regex: the original uses Oniguruma, and so does vkxp: Oniguruma 5.9.6 is vendored and built
   in place of the interpreter's own engine (change `embed-oniguruma`); a probe of 65 patterns
-  gives the original's results except one error message.
+  gives the original's results.
 - The interpreter runs only on the script thread, with a large dedicated stack
   (`RUBY_INIT_STACK` at thread entry, `ruby_set_stack_size()` after init). Host signal handlers
   are restored after `ruby_init`. FFI declarations are hand-written.
