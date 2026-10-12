@@ -76,5 +76,6 @@ None yet.
 
 ## Checked
 
-To be filled by the run that implements this: what the guest process is told to write by
-options, the Landlock ABI of the machine, and whether the tests ran or were skipped.
+- Task 1.1 names `cargo test -p vkxp --locked --lib --bins`. The package has no library
+  target, so cargo refuses `--lib` before it builds anything, on the commit before this
+  change as well. `cargo test -p vkxp --locked --bins` runs the same unit tests and passes.

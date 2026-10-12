@@ -2,7 +2,7 @@
 
 ## 1. The option
 
-- [ ] 1.1 `--sandbox`, `VKXP_SANDBOX`, the key `sandbox`, the help text. Verify: scenario "Unknown value" and tests of the precedence beside those of `--guest`; `cargo test -p vkxp --locked --lib --bins` passes.
+- [x] 1.1 `--sandbox`, `VKXP_SANDBOX`, the key `sandbox`, the help text. Verify: scenario "Unknown value" and tests of the precedence beside those of `--guest`; `cargo test -p vkxp --locked --lib --bins` passes.
 
 ## 2. The restriction
 

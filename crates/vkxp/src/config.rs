@@ -46,6 +46,8 @@ pub(crate) struct File {
     replay: Option<PathBuf>,
     /// Where the guest runs, by the name of the form.
     guest: Option<String>,
+    /// Whether a guest process confines itself.
+    sandbox: Option<bool>,
     headless: Option<bool>,
     frames: Option<u64>,
     /// An input script or `@FILE`, as `--input` takes it.
@@ -176,6 +178,7 @@ impl File {
             record: over.record.or(self.record),
             replay: over.replay.or(self.replay),
             guest: over.guest.or(self.guest),
+            sandbox: over.sandbox.or(self.sandbox),
             headless: over.headless.or(self.headless),
             frames: over.frames.or(self.frames),
             input: over.input.or(self.input),
@@ -261,6 +264,7 @@ pub(crate) fn settle(file: File, mut options: Options) -> Result<Settings> {
         let guest = file.guest.as_deref().map(args::guest_form).transpose();
         options.guest = guest.map_err(|error| anyhow!("guest: {error}"))?;
     }
+    options.sandbox = options.sandbox.or(file.sandbox);
     options.headless |= file.headless == Some(true);
     options.frames = options.frames.or(file.frames);
     options.input = options.input.or(file.input);
@@ -629,6 +633,27 @@ mod tests {
             error.contains("thread") && error.contains("process"),
             "{error}"
         );
+    }
+
+    /// Requirement "Sandbox option": the files come after the command line and the
+    /// environment.
+    #[test]
+    fn the_sandbox_of_a_file_is_used_unless_the_command_line_gives_one() {
+        let files = Files::new().user("sandbox = true").game("sandbox = false");
+        let settings = files.settle(Options::default()).unwrap();
+        assert_eq!(settings.options.sandbox, Some(false));
+        // The environment is put into the options before the files are, like the command
+        // line.
+        let given = Options {
+            sandbox: Some(true),
+            ..Options::default()
+        };
+        assert_eq!(files.settle(given).unwrap().options.sandbox, Some(true));
+        assert_eq!(files_without_guest().options.sandbox, None);
+
+        let files = Files::new().user("sandbox = \"maybe\"");
+        let error = format!("{:#}", files.settle(Options::default()).unwrap_err());
+        assert!(error.contains("user.toml"), "{error}");
     }
 
     fn files_without_guest() -> Settings {

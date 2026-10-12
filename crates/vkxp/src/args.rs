@@ -52,6 +52,11 @@ usage: vkxp [GAME_DIR] [OPTIONS]
                             default: process in a window, thread in a headless run;
                             the environment variable VKXP_GUEST sets it too, and
                             comes after this option
+  --sandbox on|off          whether a guest process confines itself before the first
+                            script runs: it then writes only below the game
+                            directory, executes nothing and opens no TCP connection;
+                            default: on; the environment variable VKXP_SANDBOX sets
+                            it too, and comes after this option
   --headless                run without a window, on a virtual clock
   --frames N                headless: stop after N frames
   --input SCRIPT|@FILE      headless: held buttons, for example \"2:RIGHT, 6:\"
@@ -98,6 +103,9 @@ pub(crate) const GUEST_ROLE: &str = "--guest-role";
 
 /// The environment variable that says where the guest runs.
 pub(crate) const GUEST_VARIABLE: &str = "VKXP_GUEST";
+
+/// The environment variable that says whether a guest process confines itself.
+pub(crate) const SANDBOX_VARIABLE: &str = "VKXP_SANDBOX";
 
 /// The parsed command line.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -146,6 +154,8 @@ pub(crate) struct Options {
     pub replay: Option<PathBuf>,
     /// Where the guest runs, if that was given.
     pub guest: Option<GuestForm>,
+    /// Whether a guest process confines itself, if that was given.
+    pub sandbox: Option<bool>,
     /// Whether this process is the guest process of another, and of which.
     pub guest_role: Option<GuestRole>,
     pub headless: bool,
@@ -232,6 +242,26 @@ pub(crate) fn guest_of_environment(value: Option<&str>) -> Result<Option<GuestFo
         .map_err(|error| format!("{GUEST_VARIABLE}: {error}"))
 }
 
+/// Whether a guest process confines itself, by the word for it, in either case. The error
+/// says what the words are.
+pub(crate) fn sandbox(text: &str) -> Result<bool, String> {
+    match text.to_ascii_lowercase().as_str() {
+        "on" => Ok(true),
+        "off" => Ok(false),
+        _ => Err(format!("`{text}` is not one of on, off")),
+    }
+}
+
+/// What the value of [`SANDBOX_VARIABLE`] asks for; nothing when the variable is not set or
+/// empty. The error is a message for the user that names the variable.
+pub(crate) fn sandbox_of_environment(value: Option<&str>) -> Result<Option<bool>, String> {
+    value
+        .filter(|value| !value.is_empty())
+        .map(sandbox)
+        .transpose()
+        .map_err(|error| format!("{SANDBOX_VARIABLE}: {error}"))
+}
+
 /// The value of [`GUEST_ROLE`]: `SEED=SOCKET`.
 fn guest_role(text: &str) -> Result<GuestRole, String> {
     let (seed, socket) = pair(text, "SEED=SOCKET")?;
@@ -299,6 +329,10 @@ pub(crate) fn parse(arguments: &[String]) -> Result<Options, String> {
             "--guest" => {
                 let form = guest_form(value()?).map_err(|error| format!("--guest: {error}"))?;
                 options.guest = Some(form);
+            }
+            "--sandbox" => {
+                let on = sandbox(value()?).map_err(|error| format!("--sandbox: {error}"))?;
+                options.sandbox = Some(on);
             }
             GUEST_ROLE => {
                 let role =
@@ -515,6 +549,38 @@ mod tests {
         }
         let error = parse_words(&["--guest", "process", "--states", "5:save 0"]).unwrap_err();
         assert_eq!(error, "--states needs --headless");
+    }
+
+    /// Scenario "Unknown value" of the sandbox option, and the option itself.
+    #[test]
+    fn the_sandbox_is_on_or_off() {
+        assert_eq!(parse_words(&[]).unwrap().sandbox, None);
+        let options = parse_words(&["--sandbox", "off", "games/demo"]).unwrap();
+        assert_eq!(options.sandbox, Some(false));
+        assert_eq!(options.game_dir, Some("games/demo".into()));
+        assert_eq!(
+            parse_words(&["--sandbox", "On"]).unwrap().sandbox,
+            Some(true)
+        );
+        assert!(USAGE.contains("--sandbox on|off"));
+        assert!(USAGE.contains(SANDBOX_VARIABLE));
+
+        let error = parse_words(&["--sandbox", "maybe"]).unwrap_err();
+        assert!(error.contains("--sandbox"), "{error}");
+        assert!(error.contains("maybe"), "{error}");
+        assert!(error.contains("on") && error.contains("off"), "{error}");
+        assert!(parse_words(&["--sandbox"]).is_err());
+    }
+
+    #[test]
+    fn the_environment_says_whether_the_guest_is_confined() {
+        assert_eq!(sandbox_of_environment(None), Ok(None));
+        assert_eq!(sandbox_of_environment(Some("")), Ok(None));
+        assert_eq!(sandbox_of_environment(Some("off")), Ok(Some(false)));
+        assert_eq!(sandbox_of_environment(Some("on")), Ok(Some(true)));
+        let error = sandbox_of_environment(Some("maybe")).unwrap_err();
+        assert!(error.contains(SANDBOX_VARIABLE), "{error}");
+        assert!(error.contains("on, off"), "{error}");
     }
 
     #[test]

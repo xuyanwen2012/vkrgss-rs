@@ -118,8 +118,14 @@ fn main() -> ExitCode {
         Ok(form) => form,
         Err(message) => return usage(message),
     };
+    let variable = std::env::var(args::SANDBOX_VARIABLE).ok();
+    let sandbox = match args::sandbox_of_environment(variable.as_deref()) {
+        Ok(sandbox) => sandbox,
+        Err(message) => return usage(message),
+    };
     let options = Options {
         guest: options.guest.or(from_environment),
+        sandbox: options.sandbox.or(sandbox),
         ..options
     };
     let (game_dir, mut settings) = match settings(options) {
