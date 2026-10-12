@@ -67,3 +67,7 @@ two runtimes' interpreters.
   (`1e290` is finite); what vkxp and the original of XP give was not compared on the same
   day. To be measured on both originals.
 - The assumptions of the last decision, probed on the original of VX.
+- The patch files recorded after the two of the symbol numbers (21, 28, 30 for `parse.y`;
+  22, 29, 31 for `parse.c`) were not regenerated: their hunks below the changed code apply
+  at an offset of 19 lines, which `PATCHES.md` says. Regenerating them is for the next
+  change that touches those patches.

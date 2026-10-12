@@ -7,7 +7,7 @@
 
 ## 2. Record
 
-- [ ] 2.1 The two patch files of the symbol numbers regenerated, the hashes of `PATCHES.md` and of the test of the vendored source updated, the section on shared patches, `README.vkxp.md`. Verify: the test of "Vendored source matches upstream" passes.
+- [x] 2.1 The two patch files of the symbol numbers regenerated, the hashes of `PATCHES.md` and of the test of the vendored source updated, the section on shared patches, `README.vkxp.md`. Verify: the test of "Vendored source matches upstream" passes.
 
 ## 3. Integration check
 

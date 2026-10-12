@@ -1,27 +1,29 @@
 --- a/parse.c
 +++ b/parse.c
-@@ -11983,12 +11983,78 @@
+@@ -11983,12 +11983,97 @@
      sym_rev_tbl = st_init_numtable_with_size(200);
  }
  
 -static ID last_id = tLAST_TOKEN;
 +/* Symbol numbers as in the original runtime (Ruby 1.8.1).  A name of the
-+   measured table, which the build generates from the data file of
-+   vkxp-ruby-sys, has the number it has there at start-up.  Until the host
-+   marks the start of the game's scripts, any other name is numbered from a
-+   provisional counter far above the table; from the mark on, new names
-+   continue the original's sequence in last_id, and the first rb_intern of a
-+   provisional name advances that sequence once and keeps the name's
-+   number. */
++   measured table of the selected runtime, which the build generates from
++   the data files of vkxp-ruby-sys, has the number it has there at start-up.
++   Until the host marks the start of the game's scripts, any other name is
++   numbered from a provisional counter far above the table; from the mark
++   on, new names continue the original's sequence in last_id, and the first
++   rb_intern of a provisional name advances that sequence once and keeps the
++   name's number. */
 +#include "vkxp_symbol_table.h"
 +
 +#define VKXP_FIRST_PROVISIONAL ((ID)1 << 24)
 +
-+static ID last_id = VKXP_LAST_MEASURED;
++static const struct vkxp_symbol_table *symbol_table = &vkxp_symbol_tables[0];
++static ID last_id = VKXP_LAST_MEASURED_DEFAULT;
 +static ID provisional_id = VKXP_FIRST_PROVISIONAL - 1;
 +static char *provisional_seen;
 +static ID provisional_capa;
 +static int scripts_marked;
++static int symbols_numbered;
 +
 +void
 +ruby_vkxp_mark_game_scripts()
@@ -29,18 +31,35 @@
 +    scripts_marked = 1;
 +}
 +
++/* Selects the measured table by its index in vkxp_symbol_tables, 0 without
++   a call.  Only before ruby_init, which interns names. */
++void
++ruby_vkxp_select_symbols(table)
++    int table;
++{
++    if (symbols_numbered) {
++	rb_bug("vkxp symbol table: selected after a name was interned");
++    }
++    if (table < 0 ||
++	table >= (int)(sizeof(vkxp_symbol_tables) / sizeof(vkxp_symbol_tables[0]))) {
++	rb_bug("vkxp symbol table: there is no table %d", table);
++    }
++    symbol_table = &vkxp_symbol_tables[table];
++    last_id = symbol_table->last;
++}
++
 +static ID
 +vkxp_measured_id(name)
 +    const char *name;
 +{
 +    int low = 0;
-+    int high = sizeof(vkxp_symbol_table) / sizeof(vkxp_symbol_table[0]);
++    int high = symbol_table->length;
 +
 +    while (low < high) {
 +	int mid = (low + high) / 2;
-+	int order = strcmp(name, vkxp_symbol_table[mid].name);
++	int order = strcmp(name, symbol_table->symbols[mid].name);
 +
-+	if (order == 0) return vkxp_symbol_table[mid].id;
++	if (order == 0) return symbol_table->symbols[mid].id;
 +	if (order < 0) high = mid;
 +	else low = mid + 1;
 +    }
@@ -81,7 +100,7 @@
  }
  
  static int
-@@ -12107,8 +12173,17 @@
+@@ -12107,8 +12192,17 @@
      ID id;
      int last;
  
@@ -100,7 +119,7 @@
  
      last = strlen(name)-1;
      id = 0;
-@@ -12169,17 +12244,20 @@
+@@ -12169,18 +12263,22 @@
      }
      if (*m) id = ID_JUNK;
    new_id:
@@ -126,5 +145,7 @@
      }
 -    id |= ++last_id << ID_SCOPE_SHIFT;
    id_regist:
++    symbols_numbered = 1;
      name = strdup(name);
      st_add_direct(sym_tbl, (st_data_t)name, id);
+     st_add_direct(sym_rev_tbl, id, (st_data_t)name);
