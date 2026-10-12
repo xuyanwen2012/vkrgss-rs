@@ -31,6 +31,12 @@ The samples file moves to `crates/vkxp-vk/src/tests/data/` beside the existing o
 test that reads the `lum` lines of the old file reads both. The comment at the head of the
 old file that says only colours the old formula reproduces were selected is corrected.
 
+The scenario "Measured colours" names (5, 231, 0) with 137, which the 382 lines did not hold.
+The line was added to the moved file from the measurement report, where it is listed among
+the colours the old formula had one low. The test shows the level itself, with a threshold
+of 0 and a vagueness of 255, because the probe of the old file (the level less 127) cannot
+show a level below 127.
+
 ### One formula for the additive and the subtractive blend
 
 `blend_add` and `blend_sub` lose their branch: for every destination,
@@ -48,6 +54,9 @@ blend function is a placeholder; tests of the removed functions go.
 
 The threshold of a masked step is `max(0, 256 * step / duration - 1)`. The formula gives -1
 only at step 1 of a transition longer than 256 frames; one such case was measured.
+
+`step_mix` turned out to floor the threshold already, with a saturating subtraction. The
+code is unchanged; the measured case of 257 frames got its test and the comment names it.
 
 ## Risks
 

@@ -40,10 +40,10 @@ source. What remains under `crates/`:
   later than on Windows when a script injects and updates in the same frame. These rules
   and those of `ShowCursor` and `SetKeyboardState` follow the documentation of Windows and
   were not measured on the original.
-- **Blending onto a translucent bitmap.** Addition and subtraction onto a destination whose
-  alpha is below 255 use the textbook formula.
-- **Transition masks.** The level of a coloured mask pixel is one lower than the original's
-  for a few colours; a grey mask is exact.
+
+The level of a transition mask pixel follows the original's rule, which was measured with PNG
+masks of 24 and 32 bits; masks with a palette, in grey of 8 or 16 bits, and JPEG masks were
+not measured.
 
 Besides these, WMA sounds are decoded by the `ffmpeg` program, which has to be installed:
 without it they stay silent. vkxp runs on Linux x86_64 only.

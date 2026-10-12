@@ -14,7 +14,7 @@
 
 ## 4. Documentation
 
-- [ ] 4.1 `docs/compatibility.md`: the entries "Blending onto a translucent bitmap" and "Transition masks" go; a sentence says which mask file formats were measured. Verify: `grep -rn PLACEHOLDER crates/vkxp-vk crates/vkxp-pixel` shows neither the mask level nor the two blends.
+- [x] 4.1 `docs/compatibility.md`: the entries "Blending onto a translucent bitmap" and "Transition masks" go; a sentence says which mask file formats were measured. Verify: `grep -rn PLACEHOLDER crates/vkxp-vk crates/vkxp-pixel` shows neither the mask level nor the two blends.
 
 ## 5. Integration check
 
