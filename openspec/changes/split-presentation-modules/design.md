@@ -21,6 +21,10 @@ The `mod tests` of `compositor/present.rs`, `device.rs` and `compositor.rs` each
 file `tests.rs` beside the module (or a file under the existing `src/tests/` directory where
 that is where their neighbours are), declared with `#[cfg(test)] mod tests;`.
 
+As built: `compositor.rs` had no `mod tests` of its own (its tests already live under
+`src/tests/`), so two modules moved: `device/tests.rs` and `compositor/present/tests.rs`.
+The paths of the tests (`device::tests::…`, `compositor::present::tests::…`) are unchanged.
+
 ### Modules by concern
 
 `compositor/present.rs` becomes a directory module. The split follows the sections the file

@@ -2,7 +2,7 @@
 
 ## 1. Tests out of line
 
-- [ ] 1.1 Move the `mod tests` of `compositor/present.rs`, `device.rs` and `compositor.rs` into files of their own. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk --locked` passes with the same number of tests as before the move (state both numbers in the commit message).
+- [x] 1.1 Move the `mod tests` of `compositor/present.rs`, `device.rs` and `compositor.rs` into files of their own. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk --locked` passes with the same number of tests as before the move (state both numbers in the commit message).
 
 ## 2. Presenter
 
