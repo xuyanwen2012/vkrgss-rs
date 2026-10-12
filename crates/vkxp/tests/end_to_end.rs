@@ -1526,6 +1526,67 @@ fn the_form_of_the_guest_comes_from_the_command_line_the_environment_or_a_file()
     );
 }
 
+/// Requirement "Sandbox option": the default, and the order of the three places the sandbox
+/// is chosen in. Whether a guest process was confined is seen by what became of a file it
+/// wrote beside the game directory.
+#[test]
+fn the_sandbox_comes_from_the_command_line_the_environment_or_a_file() {
+    let name = "the_sandbox_comes_from_the_command_line_the_environment_or_a_file";
+    let missing = landlock_missing();
+    if let Some(reason) = &missing {
+        eprintln!(
+            "{name}: the runs that are confined are skipped, a guest process cannot confine \
+             itself here. {reason}"
+        );
+    }
+    // The environment, the user file, the command line, and whether the guest is confined.
+    let cases: [(Option<&str>, &str, &[&str], bool); 9] = [
+        (None, "", &[], true),
+        (None, "sandbox = false", &[], false),
+        (None, "sandbox = true", &[], true),
+        (Some("off"), "", &[], false),
+        (Some("on"), "sandbox = false", &[], true),
+        (Some("off"), "sandbox = true", &[], false),
+        (Some("off"), "", &["--sandbox", "on"], true),
+        (Some("on"), "", &["--sandbox", "off"], false),
+        (Some("on"), "sandbox = true", &["--sandbox", "off"], false),
+    ];
+    for (variable, file, arguments, confined) in cases {
+        if confined && missing.is_some() {
+            continue;
+        }
+        let case = format!("VKXP_SANDBOX {variable:?}, file `{file}`, arguments {arguments:?}");
+        let outside = tempfile::tempdir().expect("a temporary directory");
+        let game = outside_game("e2e-sandbox-option", outside.path());
+        let work = work_with_user_config(file);
+        let dir = game.dir().to_string_lossy().into_owned();
+        let builtin = game.builtin_scripts().to_string_lossy().into_owned();
+        let device = device();
+        let mut all = vec![
+            dir.as_str(),
+            "--builtin-scripts",
+            &builtin,
+            "--headless",
+            "--device",
+            &device,
+            "--guest",
+            "process",
+        ];
+        all.extend_from_slice(arguments);
+        let mut command = command(work.path(), &all);
+        if let Some(variable) = variable {
+            command.env("VKXP_SANDBOX", variable);
+        }
+        let output = command.output().expect("the program starts");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{case}: {stderr}");
+        let result = fs::read_to_string(game.dir().join("result.txt")).expect("the game ran");
+        let expected = if confined { "Errno::EACCES" } else { "written" };
+        assert_eq!(result, expected, "{case}");
+        assert_eq!(outside.path().join("out.txt").exists(), !confined, "{case}");
+    }
+}
+
 // Save states: the scenarios of `specs/host-session/spec.md` and `specs/game-launch/spec.md`
 // that need the processes.
 
