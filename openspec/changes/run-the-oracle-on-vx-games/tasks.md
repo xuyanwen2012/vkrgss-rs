@@ -2,7 +2,7 @@
 
 ## 1. Runtime of the game
 
-- [ ] 1.1 The runtime from `Scripts=` or `--runtime`; frame size, archive name, registry key and package names by runtime; a report that copes with pictures of different sizes. Verify: scenarios of "Runtime of the game", "Games with an encrypted archive" and "Frame capture" that need no original; `cargo test -p xtask --locked` passes.
+- [x] 1.1 The runtime from `Scripts=` or `--runtime`; frame size, archive name, registry key and package names by runtime; a report that copes with pictures of different sizes. Verify: scenarios of "Runtime of the game", "Games with an encrypted archive" and "Frame capture" that need no original; `cargo test -p xtask --locked` passes.
 
 ## 2. Probe of RGSS2
 

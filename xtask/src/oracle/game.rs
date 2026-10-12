@@ -5,18 +5,36 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
+use super::runtime::Runtime;
 use super::{archive, probe};
 use crate::rgssad;
 
+/// The runtime of the game in `game`: `chosen` if the command line named one, else what the
+/// extension of the script archive tells.
+pub(super) fn runtime(game: &Path, chosen: Option<Runtime>) -> Result<Runtime> {
+    if let Some(runtime) = chosen {
+        return Ok(runtime);
+    }
+    let name = scripts_name(game)?;
+    Runtime::of_scripts(&name).with_context(|| {
+        format!(
+            "{}: `Scripts={name}` of Game.ini does not tell the runtime of the game; \
+             name it with --runtime rgss1 or --runtime rgss2",
+            game.display()
+        )
+    })
+}
+
 /// Copies the game directory `source` to `copy`, replacing what is there, and adds `probe`
-/// as the first script of the copy's archive.
-pub(super) fn prepare(source: &Path, copy: &Path, probe: &str) -> Result<()> {
+/// as the first script of the copy's archive. `runtime` gives the name of the encrypted
+/// archive that the game may have.
+pub(super) fn prepare(source: &Path, copy: &Path, runtime: Runtime, probe: &str) -> Result<()> {
     if copy.exists() {
         fs::remove_dir_all(copy).with_context(|| copy.display().to_string())?;
     }
     copy_dir(source, copy)?;
     let name = scripts_name(copy)?;
-    if let Some(packed) = child(copy, rgssad::FILE_NAME) {
+    if let Some(packed) = child(copy, runtime.archive_name()) {
         // The original reads its scripts only from the archive when there is one.
         return probe_packed(&packed, &name, probe).with_context(|| packed.display().to_string());
     }

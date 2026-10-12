@@ -1,4 +1,5 @@
-//! The encrypted archive of a game (`Game.rgssad`, RGSSAD version 1), and
+//! The encrypted archive of a game (`Game.rgssad`, or `Game.rgss2a` of RGSS2, both RGSSAD
+//! version 1), and
 //! `cargo xtask pack-rgssad`, which packs a copy of a game into one.
 //!
 //! After the eight bytes of the header the file is a sequence of entries. A 32-bit key
@@ -17,6 +18,9 @@ use anyhow::{Context, Result, bail, ensure};
 
 /// The name of the archive in a game directory.
 pub(crate) const FILE_NAME: &str = "Game.rgssad";
+
+/// The name of the archive in the directory of a game of RGSS2. Its format is the same.
+pub(crate) const FILE_NAME_RGSS2: &str = "Game.rgss2a";
 
 const HEADER: [u8; 8] = *b"RGSSAD\0\x01";
 const INITIAL_KEY: u32 = 0xDEAD_CAFE;

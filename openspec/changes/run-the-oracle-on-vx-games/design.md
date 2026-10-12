@@ -86,6 +86,18 @@ the probe's input model; audio; anything in vkxp itself.
   told apart by a run without captures inside them.
 - `--no-threads` changes the game. It is the same on both sides, and the report says so.
 
+## Notes on the implementation
+
+- The directories of the run-time packages are written into the prefix with its registry
+  script, the one that already held the fonts (now `vkxp-oracle.reg`), instead of one
+  `reg add` per package. The script names the 32-bit view itself: `Software\Wow6432Node\...`
+  when the prefix has a `syswow64` directory, `Software\...` otherwise.
+- The values under the key have the names given with `--rtp`, as before. The harness does not
+  read `RTP1` to `RTP3` or `RTP` from `Game.ini`; the runtime only decides the key.
+- `summary.json` of a comparison has `totals` (equal, different, not comparable), so that a
+  frame that is not comparable has something to stay out of. A frame whose two pictures
+  differ in size is listed with `not_comparable` like a late frame, with the sizes as reason.
+
 ## Follow-ups
 
 - Windows that change size; `snap_to_bitmap` as a second capture that checks the grab.

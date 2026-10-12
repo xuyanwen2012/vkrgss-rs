@@ -17,13 +17,17 @@ use x11rb::connection::Connection;
 use x11rb::protocol::xproto::{ConnectionExt, ImageFormat, ImageOrder, MapState};
 
 use super::fonts;
-use super::report::{self, HEIGHT, Picture, WIDTH};
+use super::report::{self, Picture};
+use super::runtime::Runtime;
 
 /// How long the picture of a held frame is given to reach the display.
 const SETTLE: Duration = Duration::from_millis(200);
 
 /// What a run of the original needs besides the game.
 pub(super) struct Run<'a> {
+    /// The runtime of the game, for the size of its window and the registry key of its
+    /// run-time packages.
+    pub runtime: Runtime,
     /// The RGSS DLL, which is copied into the game copy.
     pub dll: &'a Path,
     /// The directory of each run-time package, by its name.
@@ -68,14 +72,16 @@ fn on_path(program: &str) -> bool {
 impl Run<'_> {
     /// Runs the game copy `game`, into which the probe of the original side was put, and
     /// writes each of `frames`, which are in ascending order, as the picture `out` holds
-    /// for the original. `log` receives what Wine and the game print.
+    /// for the original. `log` receives what Wine and the game print. Returns the frames
+    /// that the probe marked as late: their picture is the one after the transition they
+    /// fall inside.
     pub(super) fn capture(
         &self,
         game: &Path,
         frames: &[u64],
         out: &Path,
         log: &Path,
-    ) -> Result<()> {
+    ) -> Result<Vec<u64>> {
         let dll_name = self.dll.file_name().context("the DLL path has no name")?;
         fs::copy(self.dll, game.join(dll_name)).with_context(|| self.dll.display().to_string())?;
 
@@ -95,6 +101,7 @@ impl Run<'_> {
                 .spawn()
                 .context("could not start `wine`")?,
         );
+        let mut late = Vec::new();
         for &frame in frames {
             let request = game.join(format!("capture-{frame}.request"));
             let deadline = Instant::now() + self.timeout;
@@ -115,11 +122,16 @@ impl Run<'_> {
                 );
             }
             sleep(SETTLE);
-            let picture = grab(&display.name).with_context(|| format!("frame {frame}"))?;
+            let picture = grab(&display.name, self.runtime.frame_size())
+                .with_context(|| format!("frame {frame}"))?;
             picture.write(&out.join(report::original_file(frame)))?;
+            let record = fs::read(&request).with_context(|| request.display().to_string())?;
+            if request_says_late(&record) {
+                late.push(frame);
+            }
             fs::remove_file(&request).with_context(|| request.display().to_string())?;
         }
-        Ok(())
+        Ok(late)
     }
 
     /// A Wine program with the environment of the run.
@@ -155,20 +167,16 @@ impl Run<'_> {
         let windows = self.prefix.join("drive_c/windows");
         let installed = fonts::install(self.fonts, &windows.join("Fonts"))?;
         let family = self.fonts.map(|shared| shared.family.as_str());
-        let script = self.prefix.join("drive_c/vkxp-oracle-fonts.reg");
-        let text = fonts::registry_script(family, &installed);
+        let script = self.prefix.join("drive_c/vkxp-oracle.reg");
+        // A prefix of 64 bits keeps the 32-bit view of the registry below a node of its own.
+        let wow64 = windows.join("syswow64").is_dir();
+        let text = fonts::registry_script(family, &installed)
+            + &rtp_registry_script(self.runtime, self.rtps, wow64);
         fs::write(&script, fonts::encode_script(&text))
             .with_context(|| script.display().to_string())?;
         let mut regedit = self.wine("wine", display);
-        regedit.args(["regedit", "/S", "C:\\vkxp-oracle-fonts.reg"]);
+        regedit.args(["regedit", "/S", "C:\\vkxp-oracle.reg"]);
         run(&mut regedit, "wine regedit")?;
-
-        // The runtime reads the directory of a run-time package from the 32-bit view.
-        for (name, dir) in self.rtps {
-            let key = "HKLM\\Software\\Enterbrain\\RGSS\\RTP";
-            let dir = format!("Z:{}", dir.display()).replace('/', "\\");
-            self.registry_value(display, key, name, &dir, Some("/reg:32"))?;
-        }
 
         // The runtime refuses to start unless system32\D3D8.DLL exists, and a Wine without
         // 32-bit Direct3D 8 has none. Only the existence of the file is checked, so another
@@ -199,23 +207,32 @@ impl Run<'_> {
         let _ = self.wine("wineserver", display).arg("-k").status();
         let _ = self.wine("wineserver", display).arg("-w").status();
     }
+}
 
-    /// Sets a string value in the registry of the prefix with `reg add`.
-    fn registry_value(
-        &self,
-        display: &str,
-        key: &str,
-        name: &str,
-        value: &str,
-        view: Option<&str>,
-    ) -> Result<()> {
-        let mut reg = self.wine("wine", display);
-        reg.args([
-            "reg", "add", key, "/v", name, "/t", "REG_SZ", "/d", value, "/f",
-        ]);
-        reg.args(view);
-        run(&mut reg, "wine reg add")
+/// Whether the request file of a capture, as the probe wrote it, marks the frame as late.
+fn request_says_late(record: &[u8]) -> bool {
+    String::from_utf8_lossy(record)
+        .split_whitespace()
+        .any(|word| word == "late")
+}
+
+/// The part of the registry script of a prefix that names the directory of each run-time
+/// package, which the runtime reads from the 32-bit view of the registry. `wow64` says that
+/// the prefix is one of 64 bits.
+pub(super) fn rtp_registry_script(
+    runtime: Runtime,
+    rtps: &[(String, PathBuf)],
+    wow64: bool,
+) -> String {
+    let quoted = |text: &str| format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""));
+    let view = if wow64 { "Wow6432Node\\" } else { "" };
+    let key = runtime.rtp_key();
+    let mut script = format!("\r\n[HKEY_LOCAL_MACHINE\\Software\\{view}{key}]\r\n");
+    for (name, dir) in rtps {
+        let dir = format!("Z:{}", dir.display()).replace('/', "\\");
+        script += &format!("{}={}\r\n", quoted(name), quoted(&dir));
     }
+    script
 }
 
 fn run(command: &mut Command, name: &str) -> Result<()> {
@@ -315,8 +332,9 @@ impl Xvfb {
     }
 }
 
-/// Reads the picture of the game window, the top-level window of 640 by 480, from `display`.
-fn grab(display: &str) -> Result<Picture> {
+/// Reads the picture of the game window, the top-level window of `width` by `height`, from
+/// `display`.
+fn grab(display: &str, (width, height): (u32, u32)) -> Result<Picture> {
     let (connection, screen) =
         x11rb::connect(Some(display)).with_context(|| format!("the display {display}"))?;
     let setup = connection.setup();
@@ -331,7 +349,7 @@ fn grab(display: &str) -> Result<Picture> {
         let Ok(attributes) = connection.get_window_attributes(child)?.reply() else {
             continue;
         };
-        if (u32::from(geometry.width), u32::from(geometry.height)) == (WIDTH, HEIGHT)
+        if (u32::from(geometry.width), u32::from(geometry.height)) == (width, height)
             && attributes.map_state == MapState::VIEWABLE
         {
             window = Some(child);
@@ -339,15 +357,15 @@ fn grab(display: &str) -> Result<Picture> {
         }
     }
     let window =
-        window.with_context(|| format!("no window of {WIDTH} by {HEIGHT} on the display"))?;
+        window.with_context(|| format!("no window of {width} by {height} on the display"))?;
     let image = connection
         .get_image(
             ImageFormat::Z_PIXMAP,
             window,
             0,
             0,
-            WIDTH as u16,
-            HEIGHT as u16,
+            width as u16,
+            height as u16,
             !0,
         )?
         .reply()
@@ -369,12 +387,12 @@ fn grab(display: &str) -> Result<Picture> {
         .flat_map(|bgrx| [bgrx[2], bgrx[1], bgrx[0], 255])
         .collect();
     ensure!(
-        rgba.len() == (WIDTH * HEIGHT * 4) as usize,
+        rgba.len() == (width * height * 4) as usize,
         "the picture of the game window is incomplete"
     );
     Ok(Picture {
-        width: WIDTH,
-        height: HEIGHT,
+        width,
+        height,
         rgba,
     })
 }
@@ -390,6 +408,33 @@ mod tests {
         let mut shell = Command::new("sh");
         shell.args(["-c", &format!("{find}{script}"), "sh"]);
         shell
+    }
+
+    /// The registry part of the VX-game scenario of `oracle-harness`, and the key of XP.
+    #[test]
+    fn the_registry_script_names_the_packages_under_the_key_of_the_runtime() {
+        let rtps = [("RPGVX".to_owned(), PathBuf::from("/ref/vx/rtp"))];
+        let script = rtp_registry_script(Runtime::Rgss2, &rtps, true);
+        assert_eq!(
+            script,
+            "\r\n[HKEY_LOCAL_MACHINE\\Software\\Wow6432Node\\Enterbrain\\RGSS2\\RTP]\r\n\
+             \"RPGVX\"=\"Z:\\\\ref\\\\vx\\\\rtp\"\r\n"
+        );
+
+        let rtps = [("Standard".to_owned(), PathBuf::from("/rtp"))];
+        let script = rtp_registry_script(Runtime::Rgss1, &rtps, false);
+        assert_eq!(
+            script,
+            "\r\n[HKEY_LOCAL_MACHINE\\Software\\Enterbrain\\RGSS\\RTP]\r\n\
+             \"Standard\"=\"Z:\\\\rtp\"\r\n"
+        );
+    }
+
+    #[test]
+    fn a_request_marks_its_frame_as_late_with_a_word() {
+        assert!(request_says_late(b"10 late"));
+        assert!(!request_says_late(b"10"));
+        assert!(!request_says_late(b""));
     }
 
     #[test]

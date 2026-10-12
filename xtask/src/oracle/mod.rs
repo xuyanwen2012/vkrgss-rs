@@ -13,6 +13,7 @@ mod game;
 mod original;
 mod probe;
 mod report;
+mod runtime;
 mod vkxp;
 
 use std::fs;
@@ -22,6 +23,8 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail, ensure};
 
 use probe::{Schedule, Side};
+use report::Sides;
+use runtime::Runtime;
 
 /// The usage of the command, printed with every error in its arguments.
 pub(crate) const USAGE: &str = "\
@@ -30,6 +33,8 @@ usage: cargo xtask oracle <GAME_DIR> --frames N[,N...] [OPTIONS]
   GAME_DIR                the game directory; it is copied, never changed
   --frames N[,N...]       the frames to capture, numbered from 0 as `vkxp --dump` numbers them
   --dll FILE              the RGSS DLL the game's Game.ini names; needed without --vkxp-only
+  --runtime rgss1|rgss2   the runtime of the game, when the file its Scripts= names is
+                          neither a .rxdata (rgss1) nor a .rvdata (rgss2)
   --rtp NAME=DIR          the directory of the run-time package NAME; repeatable
   --input SCHEDULE|@FILE  held buttons in the syntax of `vkxp --input`, for example
                           \"60:RIGHT, 100:\", or a file that holds such a schedule
@@ -48,6 +53,8 @@ pub(crate) struct Options {
     /// The frames to capture, in ascending order.
     pub frames: Vec<u64>,
     pub dll: Option<PathBuf>,
+    /// The runtime of the game, if the command line names it.
+    pub runtime: Option<Runtime>,
     pub rtps: Vec<(String, PathBuf)>,
     pub schedule: Schedule,
     /// The font files that both runtimes draw text with.
@@ -68,6 +75,7 @@ pub(crate) fn parse(arguments: &[&str], root: &Path) -> Result<Options> {
         game: PathBuf::new(),
         frames: Vec::new(),
         dll: None,
+        runtime: None,
         rtps: Vec::new(),
         schedule: Schedule::default(),
         fonts: Vec::new(),
@@ -88,6 +96,7 @@ pub(crate) fn parse(arguments: &[&str], root: &Path) -> Result<Options> {
         match argument {
             "--frames" => frames = Some(probe::parse_frames(value()?).context("--frames")?),
             "--dll" => options.dll = Some(path(value()?)?),
+            "--runtime" => options.runtime = Some(Runtime::parse(value()?)?),
             "--rtp" => {
                 let text = value()?;
                 let (name, dir) = text
@@ -127,15 +136,25 @@ pub(crate) fn parse(arguments: &[&str], root: &Path) -> Result<Options> {
     Ok(options)
 }
 
+/// Makes the copy of the game at `copy` that one side runs, with the probe of that side.
+fn prepare_copy(options: &Options, runtime: Runtime, side: Side, copy: &Path) -> Result<()> {
+    let source = probe::generate(runtime, side, &options.schedule, &options.frames);
+    game::prepare(&options.game, copy, runtime, &source)
+}
+
 /// Runs a copy of the game with the probe in the original runtime and writes its frames.
-fn capture_original(options: &Options, dll: &Path, fonts: Option<&fonts::Shared>) -> Result<()> {
-    let Options {
-        game, out, frames, ..
-    } = options;
+/// Returns the frames that were captured late.
+fn capture_original(
+    options: &Options,
+    runtime: Runtime,
+    dll: &Path,
+    fonts: Option<&fonts::Shared>,
+) -> Result<Vec<u64>> {
+    let Options { out, frames, .. } = options;
     let copy = out.join("original").join("game");
-    let source = probe::generate(Side::Original, &options.schedule, frames);
-    game::prepare(game, &copy, &source)?;
+    prepare_copy(options, runtime, Side::Original, &copy)?;
     original::Run {
+        runtime,
         dll,
         rtps: &options.rtps,
         fonts,
@@ -178,6 +197,7 @@ pub(crate) fn run(options: &Options, root: &Path) -> Result<()> {
         "the output directory {} is inside the game directory",
         out.display()
     );
+    let runtime = game::runtime(game, options.runtime)?;
     // Before either runtime is started: a file that is no font ends the run here.
     let shared = fonts::share(&options.fonts, out)?;
     let executable = vkxp::build(root)?;
@@ -189,14 +209,14 @@ pub(crate) fn run(options: &Options, root: &Path) -> Result<()> {
     }
     fs::create_dir_all(&frames_dir).with_context(|| frames_dir.display().to_string())?;
 
+    let mut late = Vec::new();
     if let Some(dll) = dll {
         eprintln!("oracle: running the original");
-        capture_original(options, dll, shared.as_ref())?;
+        late = capture_original(options, runtime, dll, shared.as_ref())?;
     }
 
     let copy = out.join("vkxp").join("game");
-    let source = probe::generate(Side::Vkxp, &options.schedule, frames);
-    game::prepare(game, &copy, &source)?;
+    prepare_copy(options, runtime, Side::Vkxp, &copy)?;
     eprintln!("oracle: running vkxp");
     vkxp::Run {
         executable: &executable,
@@ -205,9 +225,14 @@ pub(crate) fn run(options: &Options, root: &Path) -> Result<()> {
         builtin_scripts: options.builtin_scripts.as_deref(),
     }
     .capture(&copy, frames, out)?;
-
     println!("{}", fonts::notice(shared.as_ref()));
-    report::write(out, frames, dll.is_none())
+
+    let sides = match dll {
+        Some(_) => Sides::Both,
+        None => Sides::VkxpOnly,
+    };
+    let run = report::Run { sides, late: &late };
+    report::write(out, frames, &run)
 }
 
 #[cfg(test)]
@@ -240,21 +265,29 @@ end
     }
 
     impl Generated {
-        /// A game whose archive, written by the harness's writer, holds `scripts` as pairs
-        /// of name and source.
+        /// A game of RGSS1 whose archive, written by the harness's writer, holds `scripts`
+        /// as pairs of name and source.
         fn new(scripts: &[(&str, &str)]) -> Generated {
+            Generated::named("Scripts.rxdata", "", scripts)
+        }
+
+        /// A game whose archive is the file `archive` of its `Data` folder. `lines` are
+        /// further lines of its `Game.ini`.
+        fn named(archive: &str, lines: &str, scripts: &[(&str, &str)]) -> Generated {
             let dir = tempfile::tempdir().expect("a temporary directory");
             let generated = Generated { dir };
             let game = generated.game();
             fs::create_dir_all(game.join("Data")).unwrap();
-            let ini = "[Game]\r\nLibrary=RGSS104E.dll\r\nScripts=Data\\Scripts.rxdata\r\n\
-                       Title=Generated\r\n";
+            let ini = format!(
+                "[Game]\r\nLibrary=RGSS104E.dll\r\nScripts=Data\\{archive}\r\n\
+                 Title=Generated\r\n{lines}"
+            );
             fs::write(game.join("Game.ini"), ini).unwrap();
             let entries: Vec<_> = (1..)
                 .zip(scripts)
                 .map(|(id, (name, source))| archive::Entry::new(id, name, source))
                 .collect();
-            fs::write(game.join("Data/Scripts.rxdata"), archive::write(&entries)).unwrap();
+            fs::write(game.join("Data").join(archive), archive::write(&entries)).unwrap();
             fs::write(generated.builtin_scripts(), RPG_STAND_IN).unwrap();
             generated
         }
@@ -374,9 +407,14 @@ end
         assert_eq!(options.locale, "ja_JP.UTF-8");
         assert_eq!(options.timeout, Duration::from_secs(30));
         assert!(!options.vkxp_only);
+        assert_eq!(options.runtime, None);
+
+        let more = ["/games/one", "--frames", "1", "--runtime", "rgss2"];
+        assert_eq!(parse(&more, root).unwrap().runtime, Some(Runtime::Rgss2));
 
         for wrong in [
-            &["--frames", "1"][..],
+            &["/games/one", "--frames", "1", "--runtime", "rgss3"][..],
+            &["--frames", "1"],
             &["/games/one"],
             &["/games/one", "--frames"],
             &["/games/one", "--frames", "1", "--rtp", "Standard"],
@@ -459,7 +497,7 @@ end
         let packed = rgssad::read(&before[&game.join(rgssad::FILE_NAME)]).unwrap();
         let copy = generated.out().join("game");
 
-        game::prepare(&game, &copy, "$probed = true").unwrap();
+        game::prepare(&game, &copy, Runtime::Rgss1, "$probed = true").unwrap();
 
         assert_eq!(generated.files(), before);
         assert!(!copy.join("Data").exists());
@@ -542,6 +580,100 @@ loop { Graphics.update }
             assert_eq!(line, format!("{frame} {marks} {dir4} {dir8} false"));
         }
         assert_eq!(frames.next(), Some(131), "every frame was logged");
+    }
+
+    /// The VX-game and XP-game scenarios of `oracle-harness`; the registry script itself is
+    /// covered in `original`.
+    #[test]
+    fn the_runtime_of_the_game_chooses_the_probe_and_the_registry_key() {
+        let first_script = |generated: &Generated, runtime| {
+            let mut options = generated.options("10", "");
+            options.rtps = vec![("RPGVX".to_owned(), PathBuf::from("/rtp"))];
+            let copy = generated.out().join("game");
+            prepare_copy(&options, runtime, Side::Original, &copy).unwrap();
+            let name = game::runtime(&options.game, None).unwrap();
+            assert_eq!(name, runtime);
+            let file = match runtime {
+                Runtime::Rgss1 => "Data/Scripts.rxdata",
+                Runtime::Rgss2 => "Data/Scripts.rvdata",
+            };
+            let scripts = archive::read(&fs::read(copy.join(file)).unwrap()).unwrap();
+            assert_eq!(scripts.len(), 2);
+            (scripts[0].clone(), options)
+        };
+        let probe = |runtime, options: &Options| {
+            let source = probe::generate(runtime, Side::Original, &options.schedule, &[10]);
+            archive::Entry::new(0, probe::NAME, &source)
+        };
+
+        let vx = Generated::named("Scripts.rvdata", "RTP=RPGVX\r\n", &[("Main", "")]);
+        let (script, options) = first_script(&vx, Runtime::Rgss2);
+        assert!(script == probe(Runtime::Rgss2, &options));
+        assert!(script != probe(Runtime::Rgss1, &options));
+        let registry = original::rtp_registry_script(Runtime::Rgss2, &options.rtps, true);
+        assert!(registry.contains("\\Enterbrain\\RGSS2\\RTP]\r\n\"RPGVX\"=\"Z:\\\\rtp\"\r\n"));
+
+        let xp = Generated::new(&[("Main", "")]);
+        let (script, options) = first_script(&xp, Runtime::Rgss1);
+        assert!(script == probe(Runtime::Rgss1, &options));
+        let registry = original::rtp_registry_script(Runtime::Rgss1, &options.rtps, true);
+        assert!(
+            registry.contains("\\Enterbrain\\RGSS\\RTP]\r\n"),
+            "{registry}"
+        );
+    }
+
+    /// The unknown-extension scenario of `oracle-harness`.
+    #[test]
+    fn a_script_archive_of_another_extension_needs_the_option() {
+        let generated = Generated::named("Code.bin", "", &[("Main", MOVING_SQUARE)]);
+        let mut options = generated.options("1", "");
+        let error = run(&options, &crate::workspace_root()).unwrap_err();
+        assert!(format!("{error:#}").contains("--runtime"), "{error:#}");
+        assert!(!generated.out().exists(), "nothing was started");
+
+        options.runtime = Some(Runtime::Rgss1);
+        run(&options, &crate::workspace_root()).unwrap();
+        assert!(generated.out().join(report::vkxp_file(1)).is_file());
+    }
+
+    /// The archive-of-VX scenario of `oracle-harness`.
+    #[test]
+    fn the_probe_is_added_inside_the_archive_of_a_packed_game_of_rgss2() {
+        use crate::rgssad;
+
+        let generated = Generated::named("Scripts.rvdata", "RTP=\r\n", &[("Main", "")]);
+        let game = generated.game();
+        fs::write(game.join("Data/Map001.rvdata"), [4, 8, b'0']).unwrap();
+        generated.pack();
+        fs::rename(
+            game.join(rgssad::FILE_NAME),
+            game.join(rgssad::FILE_NAME_RGSS2),
+        )
+        .unwrap();
+        let before = generated.files();
+        let packed = rgssad::read(&before[&game.join(rgssad::FILE_NAME_RGSS2)]).unwrap();
+        let copy = generated.out().join("game");
+
+        let runtime = game::runtime(&game, None).unwrap();
+        game::prepare(&game, &copy, runtime, "$probed = true").unwrap();
+
+        assert_eq!(runtime, Runtime::Rgss2);
+        assert_eq!(generated.files(), before);
+        assert!(!copy.join("Data").exists());
+        let probed = fs::read(copy.join(rgssad::FILE_NAME_RGSS2)).unwrap();
+        let probed = rgssad::read(&probed).unwrap();
+        assert_eq!(probed.len(), 2);
+        for (probed, packed) in probed.iter().zip(&packed) {
+            assert_eq!(probed.name, packed.name);
+            if probed.name != b"Data\\Scripts.rvdata" {
+                assert_eq!(probed, packed);
+                continue;
+            }
+            let scripts = archive::read(&probed.data).unwrap();
+            assert_eq!(scripts[0].name, probe::NAME.as_bytes());
+            assert_eq!(scripts[1..], archive::read(&packed.data).unwrap());
+        }
     }
 
     /// The family-name scenario of `oracle-harness`, on the side of vkxp; the registry script
@@ -650,7 +782,7 @@ loop { Graphics.update }
         original::check_prerequisites(&options.game, &dll).unwrap();
         fs::create_dir_all(out.join("frames")).unwrap();
 
-        capture_original(&options, &dll, None).unwrap();
+        capture_original(&options, Runtime::Rgss1, &dll, None).unwrap();
 
         for frame in [10, 20] {
             let picture = report::Picture::read(&out.join(report::original_file(frame))).unwrap();

@@ -7,10 +7,6 @@ use std::path::Path;
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 
-/// The size of a frame of the original runtime.
-pub(super) const WIDTH: u32 = 640;
-pub(super) const HEIGHT: u32 = 480;
-
 /// A difference of 1 is drawn as this much, so that small differences can be seen.
 const AMPLIFICATION: u8 = 32;
 
@@ -133,38 +129,87 @@ fn diff_file(frame: u64) -> String {
     format!("frames/{frame}-diff.png")
 }
 
+/// Which runtimes a run of the harness ran.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Sides {
+    Both,
+    VkxpOnly,
+}
+
+/// What a report says about the run besides its pictures.
+pub(super) struct Run<'a> {
+    pub sides: Sides,
+    /// The frames whose picture of the original was taken late, after the transition they
+    /// fall inside.
+    pub late: &'a [u64],
+}
+
+/// Why the picture of a late frame is not compared.
+const LATE: &str = "inside a transition";
+
 /// Compares the pictures of `frames` that both runs left below `out`, writes the difference
-/// pictures and `summary.json`, and prints the table. With `vkxp_only` there is nothing to
-/// compare and the summary lists the pictures of vkxp.
-pub(super) fn write(out: &Path, frames: &[u64], vkxp_only: bool) -> Result<()> {
-    let mut rows = Vec::new();
-    if !vkxp_only {
+/// pictures and `summary.json`, and prints the table. A late frame and a frame whose two
+/// pictures differ in size are listed as not comparable and counted neither as equal nor as
+/// different. When only vkxp ran there is nothing to compare, and the summary lists its
+/// pictures.
+pub(super) fn write(out: &Path, frames: &[u64], run: &Run) -> Result<()> {
+    let both = run.sides == Sides::Both;
+    if both {
         println!(
             "{:>8}  {:>16}  {:>18}",
             "frame", "differing pixels", "largest difference"
         );
     }
+    let (mut equal, mut different, mut not_comparable) = (0u64, 0u64, 0u64);
+    let mut rows = Vec::new();
     for &frame in frames {
         let mut row = json!({ "frame": frame, "vkxp": vkxp_file(frame) });
-        if !vkxp_only {
+        if run.sides != Sides::VkxpOnly {
+            row["original"] = Value::from(original_file(frame));
+        }
+        let late = run.sides != Sides::VkxpOnly && run.late.contains(&frame);
+        let mut reason = late.then(|| LATE.to_owned());
+        if both && reason.is_none() {
             let original = Picture::read(&out.join(original_file(frame)))?;
             let vkxp = Picture::read(&out.join(vkxp_file(frame)))?;
-            let difference = compare(&original, &vkxp).with_context(|| format!("frame {frame}"))?;
-            difference.picture.write(&out.join(diff_file(frame)))?;
-            println!(
-                "{frame:>8}  {:>16}  {:>18}",
-                difference.differing_pixels, difference.largest_difference
-            );
-            row["original"] = Value::from(original_file(frame));
-            row["diff"] = Value::from(diff_file(frame));
-            row["differing_pixels"] = Value::from(difference.differing_pixels);
-            row["largest_difference"] = Value::from(difference.largest_difference);
+            match compare(&original, &vkxp) {
+                Ok(difference) => {
+                    difference.picture.write(&out.join(diff_file(frame)))?;
+                    println!(
+                        "{frame:>8}  {:>16}  {:>18}",
+                        difference.differing_pixels, difference.largest_difference
+                    );
+                    row["diff"] = Value::from(diff_file(frame));
+                    row["differing_pixels"] = Value::from(difference.differing_pixels);
+                    row["largest_difference"] = Value::from(difference.largest_difference);
+                    if difference.differing_pixels == 0 {
+                        equal += 1;
+                    } else {
+                        different += 1;
+                    }
+                }
+                // The only failure of a comparison is that the sizes differ.
+                Err(error) => reason = Some(error.to_string()),
+            }
+        }
+        if let Some(reason) = reason {
+            println!("{frame:>8}  not comparable: {reason}");
+            row["not_comparable"] = Value::from(reason);
+            not_comparable += 1;
         }
         rows.push(row);
     }
+    let mut report = json!({ "frames": rows });
+    if both {
+        println!("equal: {equal}, different: {different}, not comparable: {not_comparable}");
+        report["totals"] = json!({
+            "equal": equal,
+            "different": different,
+            "not_comparable": not_comparable,
+        });
+    }
     let summary = out.join("summary.json");
-    let text = serde_json::to_string_pretty(&json!({ "frames": rows }))
-        .context("the summary is plain data")?;
+    let text = serde_json::to_string_pretty(&report).context("the summary is plain data")?;
     fs::write(&summary, text + "\n").with_context(|| summary.display().to_string())?;
     println!("report: {}", summary.display());
     Ok(())
@@ -233,13 +278,17 @@ mod tests {
         gradient().write(&out.path().join(vkxp_file(10))).unwrap();
         other.write(&out.path().join(vkxp_file(20))).unwrap();
 
-        write(out.path(), &[10, 20], false).unwrap();
+        let run = Run {
+            sides: Sides::Both,
+            late: &[],
+        };
+        write(out.path(), &[10, 20], &run).unwrap();
 
         let summary = fs::read_to_string(out.path().join("summary.json")).unwrap();
         let summary: Value = serde_json::from_str(&summary).unwrap();
         assert_eq!(
             summary,
-            json!({ "frames": [
+            json!({ "totals": { "equal": 1, "different": 1, "not_comparable": 0 }, "frames": [
                 {
                     "frame": 10,
                     "original": "frames/10-original.png",
@@ -260,5 +309,51 @@ mod tests {
         );
         let diff = Picture::read(&out.path().join("frames/20-diff.png")).unwrap();
         assert_eq!(diff.rgba[..4], [96, 0, 0, 255]);
+    }
+
+    /// The late-frame scenario of `oracle-harness`, and a frame whose pictures differ in size.
+    #[test]
+    fn a_late_frame_and_pictures_of_different_sizes_are_listed_as_not_comparable() {
+        let out = tempfile::tempdir().unwrap();
+        fs::create_dir(out.path().join("frames")).unwrap();
+        let mut other = gradient();
+        other.rgba[0] += 3;
+        let mut turned = gradient();
+        (turned.width, turned.height) = (4, 8);
+        for (frame, vkxp) in [(5, gradient()), (10, other), (20, turned)] {
+            gradient()
+                .write(&out.path().join(original_file(frame)))
+                .unwrap();
+            vkxp.write(&out.path().join(vkxp_file(frame))).unwrap();
+        }
+
+        let run = Run {
+            sides: Sides::Both,
+            late: &[10],
+        };
+        write(out.path(), &[5, 10, 20], &run).unwrap();
+
+        let summary = fs::read_to_string(out.path().join("summary.json")).unwrap();
+        let summary: Value = serde_json::from_str(&summary).unwrap();
+        assert_eq!(
+            summary["totals"],
+            json!({ "equal": 1, "different": 0, "not_comparable": 2 })
+        );
+        assert_eq!(
+            summary["frames"][1],
+            json!({
+                "frame": 10,
+                "original": "frames/10-original.png",
+                "vkxp": "frames/10-vkxp.png",
+                "not_comparable": "inside a transition",
+            })
+        );
+        let sizes = summary["frames"][2]["not_comparable"].as_str().unwrap();
+        assert!(
+            sizes.contains("8 by 4") && sizes.contains("4 by 8"),
+            "{sizes}"
+        );
+        assert!(summary["frames"][2].get("differing_pixels").is_none());
+        assert!(!out.path().join("frames/10-diff.png").exists());
     }
 }

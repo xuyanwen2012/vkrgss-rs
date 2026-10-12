@@ -4,6 +4,8 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, bail, ensure};
 
+use super::runtime::Runtime;
+
 /// The name of the probe in the script archive.
 pub(super) const NAME: &str = "vkxp oracle probe";
 
@@ -11,6 +13,9 @@ pub(super) const NAME: &str = "vkxp oracle probe";
 const SEED: u32 = 20_261_009;
 
 const TEMPLATE: &str = include_str!("probe.rb");
+
+/// The probe for games of RGSS2: its frame counting and the repeat rule of its input differ.
+const TEMPLATE_RGSS2: &str = include_str!("probe_rgss2.rb");
 
 /// The buttons a schedule may name, as `vkxp --input` names them.
 const BUTTONS: [&str; 20] = [
@@ -68,8 +73,13 @@ impl Schedule {
     }
 }
 
-/// The source of the probe for one side. `captures` are the frames to capture.
-pub(super) fn generate(side: Side, schedule: &Schedule, captures: &[u64]) -> String {
+/// The source of the probe of `runtime` for one side. `captures` are the frames to capture.
+pub(super) fn generate(
+    runtime: Runtime,
+    side: Side,
+    schedule: &Schedule,
+    captures: &[u64],
+) -> String {
     let side = match side {
         Side::Original => "original",
         Side::Vkxp => "vkxp",
@@ -83,7 +93,11 @@ pub(super) fn generate(side: Side, schedule: &Schedule, captures: &[u64]) -> Str
         })
         .collect();
     let captures: Vec<String> = captures.iter().map(u64::to_string).collect();
-    TEMPLATE
+    let template = match runtime {
+        Runtime::Rgss1 => TEMPLATE,
+        Runtime::Rgss2 => TEMPLATE_RGSS2,
+    };
+    template
         .replace("__SIDE__", side)
         .replace("__SCHEDULE__", &schedule.join(", "))
         .replace("__CAPTURES__", &captures.join(", "))
@@ -132,7 +146,7 @@ mod tests {
     #[test]
     fn the_probe_holds_the_schedule_the_frames_and_the_side() {
         let schedule = Schedule::parse("60:RIGHT+C, 100:").unwrap();
-        let original = generate(Side::Original, &schedule, &[10, 20]);
+        let original = generate(Runtime::Rgss1, Side::Original, &schedule, &[10, 20]);
         assert!(original.contains("SIDE = \"original\"\n"), "{original}");
         assert!(
             original.contains("SCHEDULE = [[60, [:RIGHT, :C]], [100, []]]\n"),
@@ -142,9 +156,23 @@ mod tests {
         assert!(original.contains("srand(20261009)\n"), "{original}");
         assert!(!original.contains("__"), "{original}");
 
-        let vkxp = generate(Side::Vkxp, &Schedule::default(), &[3]);
+        let vkxp = generate(Runtime::Rgss1, Side::Vkxp, &Schedule::default(), &[3]);
         assert!(vkxp.contains("SIDE = \"vkxp\"\n"), "{vkxp}");
         assert!(vkxp.contains("SCHEDULE = []\n"), "{vkxp}");
+    }
+
+    #[test]
+    fn the_probe_of_rgss2_is_another_text_with_the_same_values() {
+        let schedule = Schedule::parse("0:DOWN").unwrap();
+        let probe = generate(Runtime::Rgss2, Side::Original, &schedule, &[10]);
+        assert!(probe.contains("SIDE = \"original\"\n"), "{probe}");
+        assert!(probe.contains("SCHEDULE = [[0, [:DOWN]]]\n"), "{probe}");
+        assert!(probe.contains("CAPTURES = [10]\n"), "{probe}");
+        assert!(probe.contains("srand(20261009)\n"), "{probe}");
+        assert!(probe.contains("oracle_probe_fadeout"), "{probe}");
+        assert!(!probe.contains("__"), "{probe}");
+        let xp = generate(Runtime::Rgss1, Side::Original, &schedule, &[10]);
+        assert!(!xp.contains("oracle_probe_fadeout"), "{xp}");
     }
 
     #[test]
