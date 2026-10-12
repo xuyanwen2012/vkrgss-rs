@@ -29,7 +29,7 @@ records the decisions and changes no code.
 ### New Capabilities
 
 - `supported-runtimes`: which RPG Maker runtimes the project covers, to what standard, in
-  what order, and how the documents state it.
+  what order, and how the documents state what works at a given time.
 
 ### Modified Capabilities
 

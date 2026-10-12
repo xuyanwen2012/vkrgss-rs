@@ -15,12 +15,16 @@ fidelity standard of XP.
 
 ### Requirement: Order and milestones of VX
 `docs/decisions.md` SHALL state that VX comes before VX Ace, SHALL list the milestones V0 to
-V3 of VX with their status, and SHALL state that no change implementing VX is drafted before
-V0 has passed.
+V3 of VX with a status that matches the evidence recorded for each, and SHALL state that no
+change implementing VX in the guest is drafted before V0 has passed.
 
 #### Scenario: Milestone table
 - **WHEN** the section "Milestones" is read
-- **THEN** it has the rows V0 to V3, each with its outcome and the status "Not started", below the rows of XP, which are unchanged
+- **THEN** it has the rows V0 to V3 with outcome, status, evidence and what is not covered, below the rows of XP, which are unchanged
+
+#### Scenario: Status follows evidence
+- **WHEN** a row says a milestone is done
+- **THEN** its evidence names the games, their DLLs, the input schedules and the compared frames; a milestone without such a record says "Not started" or "In progress"
 
 ### Requirement: Recorded decisions on several runtimes
 `docs/decisions.md` SHALL record the decisions of this change on the structure of the
@@ -32,10 +36,15 @@ process.
 - **THEN** every decision of that section is stated in the document
 
 ### Requirement: Documents say what is supported
-The README, the agent guide and `docs/compatibility.md` SHALL say that RPG Maker XP is
-supported and that VX and VX Ace are planned, and SHALL NOT say that a VX or VX Ace game runs
-before a change makes that true.
+The README, the agent guide and `docs/compatibility.md` SHALL state for each runtime in
+scope whether it is supported, experimental or planned, and that statement SHALL match the
+milestones recorded in `docs/decisions.md`: a runtime is supported when its milestones are
+done, experimental while its games start but its milestones are open, planned before.
 
 #### Scenario: README
 - **WHEN** the first paragraph of `README.md` is read
-- **THEN** it names XP as supported and VX and VX Ace as planned
+- **THEN** it gives the state of XP, VX and VX Ace, each as the milestone table has it
+
+#### Scenario: Agent guide and compatibility
+- **WHEN** the first sentence of `AGENTS.md` and the opening of `docs/compatibility.md` are read
+- **THEN** neither says more about VX or VX Ace than the milestone table supports
