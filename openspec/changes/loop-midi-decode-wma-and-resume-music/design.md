@@ -5,7 +5,9 @@
 - `crates/vkxp-audio/src/midi.rs` reads a file with `MidiFile::new` and plays it with
   `MidiFileSequencer::play(&file, false)`; a looping voice calls `Source::rewind` at the
   end. `rustysynth` 1.3 has `MidiFile::new_with_loop_type` with
-  `MidiFileLoopType::RpgMaker`, which takes the first controller 111 as the loop start.
+  `MidiFileLoopType::RpgMaker`, which takes controller 111 as the loop start: its
+  sequencer moves the loop start at every controller 111 it passes, so with several at
+  different times it is the last one played, not the first (see "Follow-ups").
 - `decode::open` recognises MIDI by its header and gives everything else to `symphonia`,
   which has no WMA decoder. Data nothing can play is `DecodeError::Unsupported`, which the
   mixer reports and which is not fatal.
@@ -77,11 +79,20 @@ output device.
 
 ## Follow-ups
 
-- A track with more than one controller 111. `rustysynth` moves its loop start at every
-  controller 111 it passes, so such a track continues at the last marker it played, not at
-  the first as the requirement says. With one marker, or several at the same time (one for
+- OPEN, task 1.1 stays unticked: a track with more than one controller 111. `rustysynth`
+  moves its loop start at every controller 111 it passes, so such a track continues at the
+  last marker it played, not at the first as the requirement says. With one marker, or several at the same time (one for
   each MIDI channel), the two are the same. Following the first would need the file to be
   rewritten in front of the library, which this design does not name; it was not built.
+  The scenarios "Marker" and "No marker" pass. The owner decides whether the requirement
+  is to say "the last controller 111 it played" or the design is to name a way to the
+  first.
+- The report that WMA needs `ffmpeg` is made once, apart from the report of other data
+  that does not decode, so that the one does not keep the other back. The mixer tells the
+  two apart by how the reason of `Unsupported` starts.
+- `Cargo.lock` gained one line, outside the files this change names: `vkxp-audio` now has
+  the development dependency `tempfile`, which the workspace already used, for the
+  directory of the stand-in program of the WMA test.
 - "The name the play command gave". A play command carries the data of its file and no
   name, and the protocol does not change, so the mixer tells files apart by their data: a
   slot keeps the bytes of the two files, and a play command names the remembered file when
