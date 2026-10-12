@@ -63,6 +63,7 @@ Paths on the command line are relative to the directory the program was started 
 | `--record FILE` | Write the input of every frame and the seed to `FILE`. |
 | `--replay FILE` | Play the input of a recording back instead of the keyboard. Not together with `--record` or `--input`. |
 | `--guest thread\|process` | Where the game's scripts run: on a thread of the program or in a process of their own, which the save states need. Without a choice it is a process in a window and a thread in a headless run. See *Guest process* and *Save states*. |
+| `--sandbox on\|off` | Whether a guest process confines itself before the first script runs: it then writes only below the game directory, executes nothing and opens no TCP connection. On unless it is said otherwise. See *Sandbox*. |
 | `--headless` | Run without a window, on a virtual clock that never waits. |
 | `--frames N` | Headless: stop after N frames if the game has not ended. |
 | `--input SCRIPT\|@FILE` | Headless: the buttons held from given frames on, in the syntax described under *Running the demo*, or a file that holds such a script. |
@@ -144,6 +145,7 @@ input = "40:C, 42:"                          # --input; "@keys.txt" names a file
 dump = ["100=frame.png"]                     # --dump FRAME=FILE, one entry per frame
 record = "session.txt"                       # --record
 guest = "thread"                             # --guest: "thread" or "process"
+sandbox = true                               # --sandbox: true is on, false is off
 # replay = "session.txt"                     # --replay; not together with record or input
 
 [rtp]                                        # --rtp NAME=DIR
@@ -428,8 +430,43 @@ stream, the same exit status. What differs:
 - With `--frame-stats` the guest's own rows are written by the guest process.
 - A bitmap that changes is copied through the socket instead of handed over.
 
-The save states, below, build on this form. A sandbox for the guest process would too and
-does not exist yet.
+The save states and the sandbox, below, build on this form.
+
+### Sandbox
+
+A game is a program, and its scripts run with the rights of the user who starts it. A guest
+process therefore confines itself with Landlock before the first script runs, the preload
+scripts included. From then on it
+
+- reads and lists every file as before;
+- writes, creates, removes and renames only below the game directory, where the saves go,
+  and may write the device `/dev/null`;
+- executes no file;
+- neither binds nor connects a TCP socket.
+
+A script that opens a file for writing anywhere else gets `Errno::EACCES`. The states of the
+guest process are confined as it is. The program itself, with the window, the GPU and the
+audio device, is not restricted.
+
+`--sandbox off` leaves the guest process as it was, for a game that writes outside its
+directory on purpose; `sandbox = false` in the `vkxp.toml` of that game does it for that game
+alone. The environment variable `VKXP_SANDBOX` takes `on` and `off` too; the command line
+comes before the environment and the environment before the files. Any value but `on` and
+`off` is an error.
+
+Nothing is confined, and the run says so once among its informational messages
+(`--verbose`), in two cases:
+
+- With `--allow-process-functions`, whatever `--sandbox` says: a program the game starts
+  would inherit the restriction and fail in ways that look like defects of that program.
+- With the guest on a thread, which is the default of a headless run: the restriction would
+  bind the thread and not the files the two sides share.
+
+The restriction is as strong as the kernel allows. On a kernel without Landlock (before
+Linux 5.13, or with it switched off) the run warns once that the guest process is not
+confined and goes on. An older kernel that has Landlock but not all of its rules, those for
+truncating files (before 6.2) or for TCP (before 6.7), is named among the informational
+messages with what it does not restrict.
 
 ### Save states
 

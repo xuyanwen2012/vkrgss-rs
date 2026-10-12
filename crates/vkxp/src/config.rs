@@ -860,6 +860,7 @@ mod tests {
         assert!(file.allow_process_functions.is_some());
         assert!(file.log_p.is_some());
         assert!(file.font_own_metrics.is_some());
+        assert_eq!(file.sandbox, Some(true));
         assert!(!file.gamepad.is_empty());
 
         // The one setting the example can only show as a comment, because it does not go

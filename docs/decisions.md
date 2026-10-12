@@ -33,8 +33,9 @@ settled; change one only through an OpenSpec change that says so.
   copy is parked, in memory, until it is loaded; to load, the running guest is ended and the
   copy resumed, which first leaves a new copy of itself (change `save-and-load-states`). F3
   saves and F4 loads, with Shift they choose one of ten slots. States end with the run, and
-  the music starts over after a load. An OS-level sandbox for the guest process needs the
-  process form too and is still to come.
+  the music starts over after a load. The guest process confines itself with Landlock
+  before the first script runs: it writes only below the game directory, executes nothing
+  and opens no TCP connection (change `confine-the-guest-process`).
 - The guest is deterministic: time comes from frame ticks and a host-provided clock, input is
   sampled once per `Input.update`, the random seed can be injected. Input record and replay is a
   first-version test facility.

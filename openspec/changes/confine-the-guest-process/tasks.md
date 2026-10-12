@@ -10,7 +10,7 @@
 
 ## 3. Documentation
 
-- [ ] 3.1 `docs/running.md` (a section "Sandbox" beside "Guest process", the option in the table, the sentence that a sandbox does not exist yet goes), `docs/decisions.md` (the sentence that the sandbox is still to come names this change), `README.md` where it lists options. Verify: the tests of `xtask` that check the documents pass; no document says that the sandbox does not exist.
+- [x] 3.1 `docs/running.md` (a section "Sandbox" beside "Guest process", the option in the table, the sentence that a sandbox does not exist yet goes), `docs/decisions.md` (the sentence that the sandbox is still to come names this change), `README.md` where it lists options. Verify: the tests of `xtask` that check the documents pass; no document says that the sandbox does not exist.
 
 ## 4. Integration check
 
