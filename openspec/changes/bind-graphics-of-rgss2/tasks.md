@@ -10,7 +10,7 @@
 
 ## 3. Snapshot
 
-- [ ] 3.1 `Graphics.snap_to_bitmap` in RGSS2 only. Verify: the scenarios of "Snapshot of the scene"; `cargo test -p vkxp-core -p vkxp-binding --locked` passes.
+- [x] 3.1 `Graphics.snap_to_bitmap` in RGSS2 only. Verify: the scenarios of "Snapshot of the scene"; `cargo test -p vkxp-core -p vkxp-binding --locked` passes.
 
 ## 4. End to end and documentation
 

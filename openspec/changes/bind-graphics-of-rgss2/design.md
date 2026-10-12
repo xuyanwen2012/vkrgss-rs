@@ -74,3 +74,22 @@ read as today); the repeat timing of `Input`.
 - A scene with a tilemap or many large bitmaps makes the one-off packet large. Games call
   the function once per menu or battle start; measured cost is a follow-up, not a reason
   for machinery now.
+
+## Notes of the implementation
+
+- `vkxp-core` gained `Scene::snapshot`: the ops of the scene now with every bitmap and table
+  they refer to sent whole, without counting a frame and without taking a delta as delivered.
+- `vkxp-binding` depends on `vkxp-compose-ref` as a library now, not only in its tests, as
+  the decision on the snapshot asks.
+- The harness of the tests starts as a game of RGSS2 with `testing::start_as`; the tests of
+  the new functions are a binary of their own (`tests/graphics_rgss2.rs`).
+- The functions are defined, and `Graphics.transition` follows RGSS2, for every runtime that
+  is not RGSS1, which is how `Graphics.width` and `height` were already decided.
+
+## Follow-ups
+
+- `README.md` and the crate documentation of `vkxp-compose-ref` say that the reference
+  compositor is on the side of "host and tests". The guest uses it for a snapshot now. Both
+  texts are outside the scope of this change and were left as they are.
+- The measured cost of a snapshot of a scene with a tilemap or many large bitmaps (see
+  "Risks / Trade-offs").

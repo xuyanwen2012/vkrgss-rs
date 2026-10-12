@@ -5,13 +5,15 @@
 
 use std::ffi::c_long;
 
+use vkxp_compose_ref::Compositor;
 use vkxp_proto::{BitmapDelta, BitmapId, GuestToHost, TransitionRule};
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{HostResult, Raise, Raised, Ruby};
 use vkxp_vfs::{FileKind, Runtime};
 
+use crate::bitmap;
 use crate::error::{self, Error};
-use crate::guest::Guest;
+use crate::guest::{self, Guest};
 use crate::rb;
 use crate::runtime::{self, Await};
 use crate::stats::{Part, Span};
@@ -265,6 +267,38 @@ fn height(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
     Ok(ffi::long2fix(size.height.into()))
 }
 
+/// `Graphics.snap_to_bitmap` of RGSS2: a new bitmap of the size of the frame with the scene
+/// as its objects are now, shown or not, frozen or not, darkened by the brightness, with an
+/// alpha of 255 everywhere. No frame is shown and the frame count stays.
+///
+/// The scene is drawn here in the guest by the reference compositor, in one of its own that
+/// lives for this call, from a packet that takes nothing from what the host is sent next.
+///
+/// Provenance: oracle measurement 2026-10-12, RGSS202E versions 2.0.0.1 and 2.0.2.1,
+/// `vx-v0-REPORT.md` section 6.
+fn snap_to_bitmap(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
+    let created = Guest::with(|guest| -> Option<Result<BitmapId, Error>> {
+        let packet = guest.scene.snapshot(&mut guest.bitmaps);
+        let mut frame = Compositor::new().render(&packet).ok()?;
+        for pixel in frame.rgba.as_chunks_mut::<4>().0 {
+            pixel[3] = 255;
+        }
+        let (width, height) = (frame.size.width, frame.size.height);
+        let bitmaps = &mut guest.bitmaps;
+        let id = bitmaps.create_from_rgba(width, height, frame.rgba, &guest.font_defaults);
+        Some(id.map_err(Error::from))
+    });
+    match created {
+        Some(Ok(id)) => bitmap::bitmap_new(ruby, id),
+        Some(Err(error)) => Err(error::to_raise(ruby, error)),
+        // The reference accepts every packet of a scene; a packet it refuses gives no bitmap.
+        None => Err(Raise::new(
+            guest::classes().errors.rgss_error,
+            "failed to create bitmap",
+        )),
+    }
+}
+
 /// `Graphics.visible`: a stored flag without an effect.
 fn visible(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
     Ok(rb::boolean(Guest::with(|guest| guest.runtime.visible)))
@@ -297,6 +331,7 @@ pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
         rb::class_method(ruby, module, c"wait", 1, wait)?;
         rb::class_method(ruby, module, c"fadeout", 1, fadeout)?;
         rb::class_method(ruby, module, c"fadein", 1, fadein)?;
+        rb::class_method(ruby, module, c"snap_to_bitmap", 0, snap_to_bitmap)?;
     }
     ruby.eval(RESET, "Graphics", 1)?;
     Ok(())

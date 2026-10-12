@@ -4,6 +4,8 @@
 //! [`Bitmaps::deltas`] turns that, for the bitmaps a frame refers to, into the smallest list of
 //! [`BitmapDelta`]s that brings a compositor's bitmap store up to date.
 
+use std::collections::HashSet;
+
 use vkxp_proto::{BitmapDelta, BitmapId};
 
 use crate::bitmap::{Area, Bitmap};
@@ -110,6 +112,28 @@ impl Bitmaps {
             }
         }
         Ok(deltas)
+    }
+
+    /// The deltas that give a compositor that holds nothing the live bitmaps among
+    /// `referenced` as they are now: `Create` and an `Update` of the whole bitmap for each,
+    /// once. What the host is taken to have does not change.
+    pub(crate) fn whole(&self, referenced: &[BitmapId]) -> Vec<BitmapDelta> {
+        let mut seen = HashSet::new();
+        let mut deltas = Vec::new();
+        for &id in referenced {
+            let Ok(bitmap) = self.get(id) else {
+                continue;
+            };
+            if seen.insert(id) {
+                deltas.push(BitmapDelta::Create {
+                    id,
+                    width: bitmap.width as u32,
+                    height: bitmap.height as u32,
+                });
+                deltas.push(update(id, bitmap, bitmap.bounds()));
+            }
+        }
+        deltas
     }
 }
 

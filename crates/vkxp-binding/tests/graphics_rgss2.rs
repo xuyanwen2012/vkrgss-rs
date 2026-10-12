@@ -2,13 +2,16 @@
 //! host, and what that host saw. A binary of its own, because `Graphics` is defined once, as
 //! the runtime the harness starts with has it.
 
+mod scene_support;
+
+use vkxp_binding::testing;
 use vkxp_binding::testing::host::{self, Record, Script};
-use vkxp_binding::testing::{self};
-use vkxp_proto::{GuestToHost, TransitionRule};
+use vkxp_proto::{BitmapDelta, GuestToHost, Rect, TransitionRule};
 use vkxp_vfs::Runtime;
 
 /// The value of a snippet, or its exception as `Class: message`, and what the host saw. The
-/// brightness is 255 and nothing is frozen when the snippet starts.
+/// brightness is 255 and nothing is frozen when the snippet starts. The scene is shared by the
+/// tests, so a snippet disposes what it made before it ends.
 fn eval(source: &str) -> (String, Record) {
     testing::start_as(Runtime::Rgss2);
     let source = format!("Graphics.brightness = 255\n{source}");
@@ -218,4 +221,125 @@ fn the_frames_of_a_transition_are_at_full_brightness() {
             rule: TransitionRule::Rgss2,
         }
     ));
+}
+
+// --- Snapshot of the scene --------------------------------------------------------------------
+
+/// Scenario "Brightness, measured on the original".
+#[test]
+fn a_snapshot_has_the_size_of_the_frame_and_is_darkened_by_the_brightness() {
+    let (value, record) = eval(
+        "bitmap = Bitmap.new(544, 416)
+         bitmap.fill_rect(0, 0, 544, 416, Color.new(200, 200, 200))
+         sprite = Sprite.new
+         sprite.bitmap = bitmap
+         Graphics.brightness = 100
+         count = Graphics.frame_count
+         shot = Graphics.snap_to_bitmap
+         colors = [shot.get_pixel(0, 0), shot.get_pixel(543, 415)].map do |color|
+           [color.red, color.green, color.blue, color.alpha]
+         end
+         result = [shot.class, shot.width, shot.height, colors, shot.font.class,
+                   Graphics.frame_count - count]
+         [shot, sprite, bitmap].each { |object| object.dispose }
+         result",
+    );
+    let pixel = "[78.0, 78.0, 78.0, 255.0]";
+    assert_eq!(
+        value,
+        format!("[Bitmap, 544, 416, [{pixel}, {pixel}], Font, 0]")
+    );
+    assert!(record.received.is_empty());
+}
+
+/// The alpha is 255 also where nothing is drawn and where the scene is translucent.
+#[test]
+fn a_snapshot_is_opaque_everywhere() {
+    let (value, _) = eval(
+        "bitmap = Bitmap.new(8, 8)
+         bitmap.fill_rect(0, 0, 8, 8, Color.new(255, 255, 255, 128))
+         sprite = Sprite.new
+         sprite.bitmap = bitmap
+         shot = Graphics.snap_to_bitmap
+         result = [shot.get_pixel(4, 4).alpha, shot.get_pixel(100, 100).alpha]
+         [shot, sprite, bitmap].each { |object| object.dispose }
+         result",
+    );
+    assert_eq!(value, "[255.0, 255.0]");
+}
+
+/// Scenario "Changes not yet shown and a freeze, measured on the original".
+#[test]
+fn a_snapshot_holds_the_scene_as_its_objects_are_also_after_a_freeze() {
+    let (value, record) = eval(
+        "bitmap = Bitmap.new(32, 32)
+         bitmap.fill_rect(0, 0, 32, 32, Color.new(255, 0, 0))
+         sprite = Sprite.new
+         sprite.bitmap = bitmap
+         Graphics.update
+         Graphics.freeze
+         bitmap.fill_rect(0, 0, 32, 32, Color.new(0, 0, 255))
+         shot = Graphics.snap_to_bitmap
+         colors = [shot.get_pixel(5, 5), shot.get_pixel(40, 5)].map do |color|
+           [color.red, color.green, color.blue, color.alpha]
+         end
+         [shot, sprite, bitmap].each { |object| object.dispose }
+         colors",
+    );
+    assert_eq!(value, "[[0.0, 0.0, 255.0, 255.0], [0.0, 0.0, 0.0, 255.0]]");
+    assert_eq!(record.frames().len(), 1);
+    assert_eq!(record.received.len(), 2);
+}
+
+/// Scenario "Nothing owed to the host is lost".
+#[test]
+fn a_snapshot_takes_nothing_from_the_next_frame() {
+    let script = |snapshot: &str| {
+        format!(
+            "bitmap = Bitmap.new(32, 32)
+             bitmap.fill_rect(0, 0, 32, 32, Color.new(255, 0, 0))
+             sprite = Sprite.new
+             sprite.bitmap = bitmap
+             Graphics.update
+             bitmap.fill_rect(0, 0, 16, 16, Color.new(0, 0, 255))
+             count = Graphics.frame_count
+             {snapshot}
+             Graphics.update
+             [sprite, bitmap].each {{ |object| object.dispose }}
+             Graphics.frame_count - count"
+        )
+    };
+    let (value, with) = eval(&script("Graphics.snap_to_bitmap.dispose"));
+    assert_eq!(value, "1");
+    let (value, without) = eval(&script(""));
+    assert_eq!(value, "1");
+
+    let frames = with.frames();
+    assert_eq!(with.received.len(), 2);
+    assert_eq!(frames[1].frame_index, frames[0].frame_index + 1);
+    let changes: Vec<_> = frames[1]
+        .bitmaps
+        .iter()
+        .filter_map(|delta| match delta {
+            BitmapDelta::Update { rect, rgba, .. } => Some((*rect, rgba.clone())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        changes,
+        [(Rect::new(0, 0, 16, 16), [0, 0, 255, 255].repeat(256))]
+    );
+    // The bitmap of the snapshot itself never reaches the host.
+    for frame in &frames {
+        let creations = |delta: &&BitmapDelta| matches!(delta, BitmapDelta::Create { .. });
+        assert!(frame.bitmaps.iter().filter(creations).count() <= 1);
+    }
+
+    let shown = scene_support::rendered(&frames);
+    let expected = scene_support::rendered(&without.frames());
+    assert_eq!(shown[1].pixel(5, 5), [0, 0, 255, 255]);
+    assert_eq!(shown[1].pixel(20, 20), [255, 0, 0, 255]);
+    for (shown, expected) in shown.iter().zip(&expected) {
+        assert_eq!(shown.rgba, expected.rgba);
+    }
 }

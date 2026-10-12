@@ -759,3 +759,64 @@ fn after_resending_the_next_frame_carries_every_bitmap_and_table_whole() {
     assert_eq!(alone.rgba, second.rgba);
     assert_eq!(alone.size, second.size);
 }
+
+// A snapshot.
+
+/// The packet of a snapshot stands alone and shows the scene as it is, and the host is sent
+/// afterwards what it would have been sent without the snapshot.
+#[test]
+fn a_snapshot_stands_alone_and_leaves_what_the_host_is_owed() {
+    let (mut stage, ids) = sprites_and_a_tilemap();
+    let gone = stage.solid(2, 2, RED);
+    let sprite = stage.scene.create_sprite(None).unwrap();
+    stage.scene.set_sprite_z(sprite, 600).unwrap();
+    let sprite = stage.scene.sprite_mut(sprite).unwrap();
+    sprite.set_bitmap(Some(gone), &stage.bitmaps);
+    stage.frame();
+    // Changes the host has not seen: a pixel, a tile, the brightness and a bitmap that goes.
+    stage
+        .bitmaps
+        .set_pixel(ids[1], 0, 0, Color::rgb(9.0, 9.0, 9.0))
+        .unwrap();
+    let map = stage
+        .scene
+        .tilemaps
+        .iter()
+        .next()
+        .unwrap()
+        .1
+        .map_data
+        .clone();
+    map.unwrap().set(0, 1, 0, 391);
+    stage.scene.set_brightness(100);
+    stage.bitmaps.dispose(gone);
+
+    // What the host is sent next without a snapshot.
+    let (mut scene, mut bitmaps) = (stage.scene.clone(), stage.bitmaps.clone());
+    let expected = scene.extract(&mut bitmaps);
+    assert_eq!(
+        expected.bitmaps.len(),
+        2,
+        "a destroy and a part of a bitmap"
+    );
+    assert_eq!(expected.tables.len(), 1);
+
+    let (count, index) = (stage.scene.frame_count(), expected.frame_index);
+    let snapshot = stage.scene.snapshot(&mut stage.bitmaps);
+    assert_eq!(stage.scene.frame_count(), count);
+    assert_eq!((snapshot.frame_index, snapshot.brightness), (index, 100));
+    assert_eq!(snapshot.bitmaps.len(), 8, "four bitmaps created and sent");
+    assert_eq!(snapshot.tables.len(), 2);
+    let alone = vkxp_compose_ref::Compositor::new()
+        .render(&snapshot)
+        .expect("the packet needs nothing the compositor does not get from it");
+
+    // A second snapshot is the first, and the host's packet is the one without them.
+    assert_eq!(stage.scene.snapshot(&mut stage.bitmaps), snapshot);
+    let packet = stage.scene.extract(&mut stage.bitmaps);
+    assert_eq!(packet, expected);
+    assert_eq!(stage.scene.frame_count(), count + 1);
+    let shown = stage.render(&packet).unwrap();
+    assert_eq!(alone.rgba, shown.rgba);
+    assert_eq!(alone.size, shown.size);
+}

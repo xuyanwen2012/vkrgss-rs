@@ -87,6 +87,21 @@ fn adopt(ruby: &Ruby, recv: VALUE, id: BitmapId) -> Result<(), Raise> {
     Ok(())
 }
 
+/// A new `Bitmap` object of the bitmap `id` of the arena, with a font of its own as
+/// `Bitmap.new` gives one. The bitmap is disposed when the object cannot be made.
+pub(crate) fn bitmap_new(ruby: &Ruby, id: BitmapId) -> HostResult {
+    let made = wrap::new_object(ruby, BitmapData { id: Some(id) }).and_then(|object| {
+        let font = font_new_default(ruby)?;
+        rb::ivar_set(ruby, object, FONT, font)?;
+        Ok(object)
+    });
+    // An object that was made owns the bitmap, and gives it back when it is collected.
+    if made.is_err() {
+        Guest::with(|guest| guest.bitmaps.dispose(id));
+    }
+    made
+}
+
 /// An opacity argument, limited to 0 to 255.
 fn opacity_arg(ruby: &Ruby, value: Option<&VALUE>) -> Result<u8, Raise> {
     match value {

@@ -314,7 +314,7 @@
 //! for a test.
 //! The `scene_testing` module, behind the same feature, gives tests the guest's scene and
 //! counts the elements the element classes made. The tests of the scene classes draw the
-//! scene with the reference compositor, a development dependency, instead of sending frames
+//! scene with the reference compositor instead of sending frames
 //! (`tests/scene_support`).
 
 mod audio;

@@ -531,6 +531,57 @@ impl Scene {
     /// The packets of one scene must reach a compositor in the order they were extracted,
     /// because the bitmap arena and the scene take every delta they hand out to be delivered.
     pub fn extract(&mut self, bitmaps: &mut Bitmaps) -> FramePacket {
+        self.refresh(bitmaps);
+        let tables = self.tables.finish();
+        let (ops, referenced) = self.ops(bitmaps);
+        // Every op was checked to name live bitmaps only, which is all `deltas` requires.
+        let deltas = bitmaps.deltas(&referenced).unwrap_or_default();
+
+        let frame_index = self.frame_index;
+        self.frame_index += 1;
+        self.frame_count = self.frame_count.wrapping_add(1);
+        FramePacket {
+            frame_index,
+            logical_size: self.logical_size,
+            frame_rate: self.frame_rate,
+            brightness: self.brightness,
+            tables,
+            bitmaps: deltas,
+            ops,
+        }
+    }
+
+    /// The scene as it is now in a packet that stands alone: the ops and the brightness of
+    /// the frame [`Scene::extract`] would assemble, with every bitmap and table they refer
+    /// to created and sent whole, for a compositor that holds nothing and is not the one the
+    /// extracted packets go to.
+    ///
+    /// Nothing that compositor is owed changes: the frame count and the index of the next
+    /// packet stay, no bitmap or table is taken to be delivered, and the next extracted
+    /// packet is the one it would have been. The packet carries the index of that next
+    /// packet.
+    pub fn snapshot(&mut self, bitmaps: &mut Bitmaps) -> FramePacket {
+        // With no table taken to be sent, every table an op reads is sent whole. The ops
+        // name the tables by the ids of this packet; the next refresh names them anew.
+        let sent = std::mem::take(&mut self.tables);
+        self.refresh(bitmaps);
+        let tables = std::mem::replace(&mut self.tables, sent).finish();
+        let (ops, referenced) = self.ops(bitmaps);
+        FramePacket {
+            frame_index: self.frame_index,
+            logical_size: self.logical_size,
+            frame_rate: self.frame_rate,
+            brightness: self.brightness,
+            tables,
+            bitmaps: bitmaps.whole(&referenced),
+            ops,
+        }
+    }
+
+    /// Brings what the elements keep for drawing up to date: the pictures of windows, turned
+    /// sprites and planes, and what each tilemap shows, with its tables noted in
+    /// `self.tables`.
+    fn refresh(&mut self, bitmaps: &mut Bitmaps) {
         for (_, window) in self.windows.iter_mut() {
             window.refresh_caches(bitmaps);
         }
@@ -550,23 +601,6 @@ impl Scene {
         for (_, plane) in self.planes.iter_mut() {
             let level = level_of(&self.viewports, self.logical_size, plane.viewport);
             plane.refresh_cache(bitmaps, level.as_ref());
-        }
-        let tables = self.tables.finish();
-        let (ops, referenced) = self.ops(bitmaps);
-        // Every op was checked to name live bitmaps only, which is all `deltas` requires.
-        let deltas = bitmaps.deltas(&referenced).unwrap_or_default();
-
-        let frame_index = self.frame_index;
-        self.frame_index += 1;
-        self.frame_count = self.frame_count.wrapping_add(1);
-        FramePacket {
-            frame_index,
-            logical_size: self.logical_size,
-            frame_rate: self.frame_rate,
-            brightness: self.brightness,
-            tables,
-            bitmaps: deltas,
-            ops,
         }
     }
 }
