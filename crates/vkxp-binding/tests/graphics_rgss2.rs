@@ -4,6 +4,7 @@
 
 use vkxp_binding::testing::host::{self, Record, Script};
 use vkxp_binding::testing::{self};
+use vkxp_proto::{GuestToHost, TransitionRule};
 use vkxp_vfs::Runtime;
 
 /// The value of a snippet, or its exception as `Class: message`, and what the host saw. The
@@ -125,4 +126,96 @@ fn waits_and_fades_do_not_call_a_redefined_update() {
     );
     assert_eq!(value, "0");
     assert_eq!(record.frames().len(), 10);
+}
+
+// --- Transition of RGSS2 ----------------------------------------------------------------------
+
+/// Scenario "Default, measured on the original".
+#[test]
+fn freeze_and_the_default_transition() {
+    let (value, record) = eval("Graphics.freeze; Graphics.transition");
+    assert_eq!(value, "nil");
+    assert_eq!(record.received.len(), 12);
+    assert_eq!(record.received[0], GuestToHost::Freeze);
+    assert_eq!(
+        record.received[1],
+        GuestToHost::Transition {
+            duration: 10,
+            mask: None,
+            vague: 20,
+            rule: TransitionRule::Rgss2,
+        }
+    );
+    assert_eq!(record.frames().len(), 10);
+    assert_eq!(record.ticks, 10);
+}
+
+/// Scenario "Nothing frozen, measured on the original". The picture is not looked for
+/// either, and the transition that ended leaves nothing frozen.
+#[test]
+fn a_transition_with_nothing_frozen_does_nothing() {
+    let (value, record) = eval(
+        "Graphics.brightness = 100
+         count = Graphics.frame_count
+         shown = [Graphics.transition(20), Graphics.transition(20, 'Graphics/Transitions/Nope')]
+         [shown, Graphics.frame_count - count, Graphics.brightness]",
+    );
+    assert_eq!(value, "[[nil, nil], 0, 100]");
+    assert!(record.received.is_empty());
+
+    let (value, record) = eval(
+        "Graphics.freeze
+         Graphics.transition(2)
+         Graphics.brightness = 100
+         Graphics.transition(3)
+         Graphics.brightness",
+    );
+    assert_eq!(value, "100");
+    assert_eq!(record.frames().len(), 2);
+    assert_eq!(record.others().len(), 2);
+}
+
+/// Scenario "Brightness after a freeze, measured on the original".
+#[test]
+fn a_transition_after_a_freeze_sets_the_brightness_to_255() {
+    let (value, record) = eval(
+        "Graphics.fadeout(1)
+         Graphics.freeze
+         Graphics.transition(0)
+         Graphics.brightness",
+    );
+    assert_eq!(value, "255");
+    assert_eq!(levels(&record), [0]);
+    assert_eq!(
+        record.received[1..],
+        [
+            GuestToHost::Freeze,
+            GuestToHost::Transition {
+                duration: 0,
+                mask: None,
+                vague: 20,
+                rule: TransitionRule::Rgss2,
+            }
+        ]
+    );
+}
+
+/// The frames of a transition carry the brightness it set.
+#[test]
+fn the_frames_of_a_transition_are_at_full_brightness() {
+    let (_, record) = eval(
+        "Graphics.brightness = 40
+         Graphics.freeze
+         Graphics.transition(3, 'Graphics/Transitions/004-Blind04')",
+    );
+    assert_eq!(levels(&record), [255, 255, 255]);
+    assert!(matches!(
+        record.received[1],
+        GuestToHost::Transition {
+            duration: 3,
+            mask: Some(_),
+            vague: 20,
+            rule: TransitionRule::Rgss2,
+        }
+    ));
 }

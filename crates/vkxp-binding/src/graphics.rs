@@ -140,12 +140,32 @@ fn load_mask(ruby: &Ruby, path: &str) -> Result<BitmapId, Raise> {
     .map_err(|error| error::to_raise(ruby, error))
 }
 
-/// `transition(duration = 8, filename = nil, vague = 20)`.
+/// `transition(duration, filename = nil, vague = 20)`, by the runtime of the run.
+///
+/// RGSS1: the duration defaults to 8, and the transition is shown whether or not the display
+/// was frozen.
+///
+/// RGSS2: the duration defaults to 10. With nothing frozen the function returns at once: no
+/// message, no frame, the brightness as it is, and the picture is not loaded (the last was
+/// not measured). After a freeze the brightness becomes 255, also for a duration of 0, and
+/// the host steps the transition by the rule of RGSS2.
+///
+/// Provenance: oracle measurement 2026-10-12, RGSS202E versions 2.0.0.1 and 2.0.2.1,
+/// `vx-v0-REPORT.md` section 6.
 fn transition(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     rb::check_count(ruby, args, 0, 3)?;
+    let rgss1 = Guest::with(|guest| guest.runtime.run.runtime) == Runtime::Rgss1;
+    let (default_duration, rule) = if rgss1 {
+        (8, TransitionRule::Rgss1)
+    } else {
+        if !Guest::with(|guest| guest.runtime.held) {
+            return Ok(ffi::Qnil);
+        }
+        (10, TransitionRule::Rgss2)
+    };
     let duration = match args.first() {
         Some(&duration) => rb::int(ruby, duration)?.max(0).unsigned_abs(),
-        None => 8,
+        None => default_duration,
     };
     let filename = match args.get(1) {
         Some(&filename) if !ffi::nil_p(filename) => Some(rb::text(ruby, filename)?),
@@ -172,11 +192,14 @@ fn transition(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
         };
         // The display holds a picture until the last frame of the transition.
         guest.runtime.held = true;
+        if !rgss1 {
+            guest.scene.set_brightness(255);
+        }
         guest.send(GuestToHost::Transition {
             duration,
             mask,
             vague,
-            rule: TransitionRule::Rgss1,
+            rule,
         });
         (mask, mask_deltas)
     });

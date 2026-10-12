@@ -6,7 +6,7 @@
 
 ## 2. Transition
 
-- [ ] 2.1 `Graphics.transition` by runtime. Verify: the scenarios of "Freeze and transition"; the same test command passes.
+- [x] 2.1 `Graphics.transition` by runtime. Verify: the scenarios of "Freeze and transition"; the same test command passes.
 
 ## 3. Snapshot
 
