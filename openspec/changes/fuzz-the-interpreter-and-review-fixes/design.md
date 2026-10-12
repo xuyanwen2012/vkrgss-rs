@@ -81,9 +81,124 @@ sources were not consulted.
 
 ## Follow-ups
 
-None yet.
+Findings and open points that this change lists and does not fix:
+
+- **Text that is not valid in the encoding, in Oniguruma.** The engine assumes that a
+  pattern and a subject are valid in their encoding, and upstream never changed that. The
+  patches of this change bound the reads that the targets reached, for UTF-8, and refuse a
+  pattern that ends inside a multibyte character (upstream's own fix). Reads a few bytes
+  past a string remain possible elsewhere for bytes that are no character, in Shift_JIS and
+  EUC-JP in particular: the targets set `$KCODE` to UTF-8 as vkxp does and never select
+  another encoding. A target per encoding, or a check of validity in front of the engine,
+  would be new machinery; the second would also refuse patterns the original accepts.
+- **Two new errors are not measured on the original runtime.** A pattern that ends inside
+  a multibyte character is now a `RegexpError` ("too short multibyte code string"), and an
+  octal escape above `\377` is one too ("too big number"); the vendored engine read out of
+  bounds for both. What the older engine of the original does with them was not measured.
+  `tests/regex.rs` and the other measured-rule tests pass unchanged.
+- **Stack exhaustion in the engine.** `(\2)(\1)` recurses without end when it is compiled
+  (upstream 7fe8c3f, a rewrite of about 540 lines), and nothing limits the nesting of
+  groups (upstream 6b68ebe and CVE-2019-16163, a limit with a new error code over four
+  files). Both exhaust the stack and end the process. Stack exhaustion is not a finding of
+  this change; the rows of `docs/vendored-security.md` say "left".
+- **The backward search reads one byte after the subject** (`String#rindex` with a
+  pattern, found by the review, not by a target). For a Ruby string that byte is the
+  terminator. Upstream's fix is part of the rewritten search of 6.x, and a smaller one
+  moves where the backward search starts, which was never measured on the original.
+- **`code_to_mbc` of EUC-JP** has the shape upstream fixed in 86f9fc7; no pattern was found
+  that reaches it with a code point outside the encoding, and nothing here tests EUC-JP.
+- **CVE-2018-8780 and CVE-2019-15845 are left**: a path, and a pattern of `File.fnmatch`,
+  are used up to their first NUL byte, as in all of Ruby 1.8. The reason given in
+  `docs/vendored-security.md` (scripts pass buffers filled by `Win32API`) is an argument,
+  not a measurement on the original.
+- **Two defects without a published fix for 1.8**, seen while reading for the review and
+  reached only by a script: the width arithmetic of `sprintf` (`"%2147483647f"` skips the
+  growth of the buffer; upstream r59410 is related), and the `alloca` of `encodes` in
+  `pack.c`, whose size comes from the count of `m` and `u` (fixed for 1.9 in r19139).
+- **One report was seen once and not explained.** Early in the first run, before the
+  parser fixes of patches 30 and 31, the `parse` target ended on a corrupted free list of
+  the collector (`gc.c`, `rb_newobj`: a misaligned next pointer, equal to the name of a
+  source file). The input alone did not reproduce it, nor did the corpus of that time in
+  one process. After the fixes the target ran 20 minutes with `rb_gc_force_recycle` made
+  to abort on an object that is already free, which is how a double recycle would corrupt
+  the list, and did not abort; the out-of-bounds write of `yyerror` that patch 30 removes
+  is the likely cause, but that was not shown.
+- **The parser does not free the tables of the scopes a syntax error leaves open**, about
+  260 bytes for each failed compilation, and a symbol is never freed. A process of the
+  `parse` target therefore reaches libFuzzer's memory limit after a few hundred thousand
+  inputs and is replaced; that is the interpreter's own behaviour and stays.
+- **libFuzzer's fork mode is not used.** With `-fork=1` the parent process of clang 22.1.8
+  ended with a segmentation fault in its own code after a few jobs, with and without an
+  interpreter started in it. The test that runs a target starts a new process itself when
+  one ends on the time or memory limit.
+- **`cargo test -p vkxp-ruby-sys --test sanitized -- --ignored`**, the verification of task
+  3.1, includes a test that fails unless `VKXP_GC_STRESS` is set, as it did before this
+  change; it was run with `VKXP_GC_STRESS=32`, the value `cargo xtask stress` sets.
 
 ## Checked
 
-To be filled by the run that implements this: the time and the number of executions of
-each target, the findings and their outcome, and how the review's sources were consulted.
+By the run that implemented this, on 2026-10-12, on the development machine (12 hardware
+threads, clang 22.1.8 with `compiler-rt`), in the sanitized build.
+
+### How the targets run
+
+- A target is one C file in `crates/vkxp-ruby-sys/fuzz/`; the start of the interpreter and
+  the options of the sanitizers are in `harness.h`, which the three include. The ignored
+  test of `tests/fuzz.rs` builds and runs a target, and `cargo xtask fuzz` runs that test,
+  as `cargo xtask stress` runs the stressed tests.
+- Limits: inputs of 4096 bytes for `marshal` and `parse` and 512 bytes for `regex`; 10
+  seconds for one input, 3 for `regex`; libFuzzer's memory limit of 2 GiB; one allocation
+  of at most 256 MiB.
+- A process that ends on the time limit or on the memory limit is not a finding; the test
+  starts the next one (see "Follow-ups" for fork mode).
+- Undefined behaviour ends a run. Two checks are off: a null pointer given to `memcpy`
+  with a length of zero, and, in the files of the engine, misaligned loads; the allow-list
+  of the sanitized run accepts both with its reasons.
+- Stack exhaustion by nesting, measured with the built targets and a stack of 8 MiB:
+  `Marshal.load` at 21,815 nested arrays (an input of 43,633 bytes) and at 21,665 nested
+  hashes; the engine at 3,190 nested groups (6,383 bytes) and 3,490 nested classes; the
+  parser not at all up to 262,144 nested parentheses, brackets or unary operators, because
+  its own stack limit makes a syntax error first. The input limits keep every target below
+  2,048 levels.
+
+### First run
+
+Each target found defects within seconds of its first start, so the run was a series: a
+run until the first report, the fix, the next run. About twelve such runs of 20 seconds to
+4 minutes per target came before the run of 20 minutes that the design asks for, which
+each target then completed without a finding:
+
+| Target | Time | Inputs run | Put aside, not findings |
+|---|---|---|---|
+| `marshal` | 1201 s | 1,765,738 | none |
+| `parse` | 1201 s | 4,187,341 | 16 processes at the memory limit |
+| `regex` | 1215 s | 1,164,877 | 61 inputs at the time limit of 3 s |
+
+The second run, 5 minutes per target with `cargo xtask fuzz <target> --seconds 300` on the
+final trees, while the sanitized suites ran under collector stress on the same machine:
+`marshal` 178,374 inputs, `parse` 560,308 (2 processes at the memory limit), `regex`
+135,901 (8 inputs at the time limit); each ended with status 0. `cargo xtask fuzz <target>
+--seconds 30` ended with status 0 after 35, 36 and 48 seconds, and `cargo xtask fuzz
+nothing` with status 2 and the names of the three targets.
+
+### Findings and their outcome
+
+All are fixed by recorded patches; the numbers are those of `PATCHES.md` of each tree.
+
+| Found by | Defect | Patch |
+|---|---|---|
+| `marshal`, `parse` | `rb_intern` reads past a name that ends inside a multibyte character | Ruby 28, 29 |
+| `marshal` | `is_special_global_name` (and `rb_symname_p`, by reading) the same | Ruby 30, 31 |
+| `parse` | `yyerror` copies and marks past the line of the error | Ruby 30, 31 |
+| `parse` | the rules of `..` and `...` and `assign_in_cond` read a null operand | Ruby 30, 31 |
+| `regex`, `marshal` | `rb_reg_expr_str` copies past the source of a pattern | Ruby 32 |
+| all three | `mbc_to_code` of UTF-8 and the parser's `PFETCH` read past a pattern that ends inside a character (upstream #16, #17, #19) | Oniguruma 2 to 5 |
+| `parse` | an octal escape above 255 in a class writes outside the bit set (CVE-2017-9226) | Oniguruma 5 |
+| `marshal`, `parse` | string compilation and case folding read past a piece of text that ends inside a character | Oniguruma 6, 8 |
+| `regex` | `OP_PUSH_IF_PEEK_NEXT` and `OP_PUSH_OR_JUMP_EXACT1` read the subject before checking its end | Oniguruma 7 |
+
+Each input, reduced, is under `crates/vkxp-ruby-sys/fuzz/fixed/`, and
+`the_inputs_of_fixed_findings_no_longer_fail` of `tests/fuzz.rs` runs them in the normal
+test step. Every one of them was run through targets built from the trees before the
+fixes and gave its report there; that test and `tests/backports.rs` end with a
+segmentation fault on those trees. One report was not explained; it is under "Follow-ups".

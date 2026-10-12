@@ -294,7 +294,9 @@ rb_reg_expr_str(str, s, len)
 	p = s; 
 	while (p<pend) {
 	    if (*p == '\\') {
-		int n = mbclen(p[1]) + 1;
+		/* vkxp: a backslash or an incomplete character at the end */
+		int n = p + 1 < pend ? mbclen(p[1]) + 1 : 1;
+		if (n > pend - p) n = pend - p;
 		rb_str_buf_cat(str, p, n);
 		p += n;
 		continue;
@@ -305,8 +307,10 @@ rb_reg_expr_str(str, s, len)
 		rb_str_buf_cat(str, p, 1);
 	    }
 	    else if (ismbchar(*p)) {
-	    	rb_str_buf_cat(str, p, mbclen(*p));
-		p += mbclen(*p);
+		int n = mbclen(*p);
+		if (n > pend - p) n = pend - p;	/* vkxp: incomplete at the end */
+		rb_str_buf_cat(str, p, n);
+		p += n;
 		continue;
 	    }
 	    else if (ISPRINT(*p)) {

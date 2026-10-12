@@ -1,0 +1,177 @@
+--- a/regexec.c
++++ b/regexec.c
+@@ -1425,14 +1425,9 @@
+       break;
+ 
+     case OP_EXACT1:  MOP_IN(OP_EXACT1);
+-#if 0
+       DATA_ENSURE(1);
+       if (*p != *s) goto fail;
+       p++; s++;
+-#endif
+-      if (*p != *s++) goto fail;
+-      DATA_ENSURE(0);
+-      p++;
+       MOP_OUT;
+       break;
+ 
+@@ -1649,6 +1644,7 @@
+       break;
+ 
+     case OP_CCLASS_MB:  MOP_IN(OP_CCLASS_MB);
++      DATA_ENSURE(1);
+       if (! ONIGENC_IS_MBC_HEAD(encode, s)) goto fail;
+ 
+     cclass_mb:
+@@ -2102,8 +2098,12 @@
+     case OP_MEMORY_END_PUSH_REC:  MOP_IN(OP_MEMORY_END_PUSH_REC);
+       GET_MEMNUM_INC(mem, p);
+       STACK_GET_MEM_START(mem, stkp); /* should be before push mem-end. */
+-      STACK_PUSH_MEM_END(mem, s);
+-      mem_start_stk[mem] = GET_STACK_INDEX(stkp);
++      {
++	/* the push may move the stack, and stkp points into it */
++	OnigStackIndex si = GET_STACK_INDEX(stkp);
++	STACK_PUSH_MEM_END(mem, s);
++	mem_start_stk[mem] = si;
++      }
+       MOP_OUT;
+       continue;
+       break;
+@@ -2159,8 +2159,10 @@
+ 	DATA_ENSURE(n);
+ 	sprev = s;
+ 	STRING_CMP(pstart, s, n);
+-	while (sprev + (len = enclen(encode, sprev)) < s)
+-	  sprev += len;
++	if (sprev < s) {
++	  while (sprev + (len = enclen(encode, sprev)) < s)
++	    sprev += len;
++	}
+ 
+ 	MOP_OUT;
+ 	continue;
+@@ -2191,8 +2193,10 @@
+ 	DATA_ENSURE(n);
+ 	sprev = s;
+ 	STRING_CMP_IC(case_fold_flag, pstart, &s, n);
+-	while (sprev + (len = enclen(encode, sprev)) < s)
+-	  sprev += len;
++	if (sprev < s) {
++	  while (sprev + (len = enclen(encode, sprev)) < s)
++	    sprev += len;
++	}
+ 
+ 	MOP_OUT;
+ 	continue;
+@@ -2226,8 +2230,10 @@
+ 	  STRING_CMP_VALUE(pstart, swork, n, is_fail);
+ 	  if (is_fail) continue;
+ 	  s = swork;
+-	  while (sprev + (len = enclen(encode, sprev)) < s)
+-	    sprev += len;
++	  if (sprev < s) {
++	    while (sprev + (len = enclen(encode, sprev)) < s)
++	      sprev += len;
++	  }
+ 
+ 	  p += (SIZE_MEMNUM * (tlen - i - 1));
+ 	  break; /* success */
+@@ -2265,8 +2271,10 @@
+ 	  STRING_CMP_VALUE_IC(case_fold_flag, pstart, &swork, n, is_fail);
+ 	  if (is_fail) continue;
+ 	  s = swork;
+-	  while (sprev + (len = enclen(encode, sprev)) < s)
+-	    sprev += len;
++	  if (sprev < s) {
++	    while (sprev + (len = enclen(encode, sprev)) < s)
++	      sprev += len;
++	  }
+ 
+ 	  p += (SIZE_MEMNUM * (tlen - i - 1));
+ 	  break; /* success */
+@@ -2291,9 +2299,10 @@
+ 	sprev = s;
+ 	if (backref_match_at_nested_level(reg, stk, stk_base, ic
+ 		  , case_fold_flag, (int )level, (int )tlen, p, &s, end)) {
+-	  while (sprev + (len = enclen(encode, sprev)) < s)
+-	    sprev += len;
+-
++	  if (sprev < end) {
++	    while (sprev + (len = enclen(encode, sprev)) < s)
++	      sprev += len;
++	  }
+ 	  p += (SIZE_MEMNUM * tlen);
+ 	}
+ 	else
+@@ -2473,7 +2482,7 @@
+ 
+     case OP_PUSH_OR_JUMP_EXACT1:  MOP_IN(OP_PUSH_OR_JUMP_EXACT1);
+       GET_RELADDR_INC(addr, p);
+-      if (*p == *s && DATA_ENSURE_CHECK1) {
++      if (DATA_ENSURE_CHECK1 && *p == *s) {
+ 	p++;
+ 	STACK_PUSH_ALT(p + addr, s, sprev);
+ 	MOP_OUT;
+@@ -2486,7 +2495,7 @@
+ 
+     case OP_PUSH_IF_PEEK_NEXT:  MOP_IN(OP_PUSH_IF_PEEK_NEXT);
+       GET_RELADDR_INC(addr, p);
+-      if (*p == *s) {
++      if (DATA_ENSURE_CHECK1 && *p == *s) {
+ 	p++;
+ 	STACK_PUSH_ALT(p + addr, s, sprev);
+ 	MOP_OUT;
+@@ -2780,6 +2789,7 @@
+     lowlen = ONIGENC_MBC_CASE_FOLD(enc, case_fold_flag, &p, end, lowbuf);
+     q = lowbuf;
+     while (lowlen > 0) {
++      if (t >= tend)    return 0;
+       if (*t++ != *q++)	return 0;
+       lowlen--;
+     }
+@@ -3128,6 +3138,8 @@
+     }
+     else {
+       UChar *q = p + reg->dmin;
++
++      if (q >= end) return 0; /* fail */
+       while (p < q) p += enclen(reg->enc, p);
+     }
+   }
+@@ -3207,18 +3219,25 @@
+     }
+     else {
+       if (reg->dmax != ONIG_INFINITE_DISTANCE) {
+-	*low = p - reg->dmax;
+-	if (*low > s) {
+-	  *low = onigenc_get_right_adjust_char_head_with_prev(reg->enc, s,
+-							      *low, (const UChar** )low_prev);
+-	  if (low_prev && IS_NULL(*low_prev))
+-	    *low_prev = onigenc_get_prev_char_head(reg->enc,
+-						   (pprev ? pprev : s), *low);
++	if (p - str < reg->dmax) {
++	  *low = (UChar* )str;
++	  if (low_prev)
++	    *low_prev = onigenc_get_prev_char_head(reg->enc, str, *low);
+ 	}
+ 	else {
+-	  if (low_prev)
+-	    *low_prev = onigenc_get_prev_char_head(reg->enc,
+-					       (pprev ? pprev : str), *low);
++	  *low = p - reg->dmax;
++	  if (*low > s) {
++	    *low = onigenc_get_right_adjust_char_head_with_prev(reg->enc, s,
++							      *low, (const UChar** )low_prev);
++	    if (low_prev && IS_NULL(*low_prev))
++	      *low_prev = onigenc_get_prev_char_head(reg->enc,
++						     (pprev ? pprev : s), *low);
++	  }
++	  else {
++	    if (low_prev)
++	      *low_prev = onigenc_get_prev_char_head(reg->enc,
++						 (pprev ? pprev : str), *low);
++	  }
+ 	}
+       }
+     }

@@ -1,0 +1,12 @@
+--- a/parse.c
++++ b/parse.c
+@@ -12243,7 +12243,8 @@
+ 	    m += mbclen(*m);
+ 	}
+     }
+-    if (*m) id = ID_JUNK;
++    /* vkxp: an incomplete multibyte character at the end steps past the terminator */
++    if (m <= name + last && *m) id = ID_JUNK;
+   new_id:
+     {
+ 	ID measured = vkxp_measured_id(name);

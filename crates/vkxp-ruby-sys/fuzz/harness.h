@@ -19,14 +19,15 @@ void ruby_init_stack _((VALUE *));
 
 /*
  * As in the sanitized run of the suites: nothing is freed at exit, and the "fake stack" of
- * use-after-return detection would hide values from the conservative collector. An
- * allocation the machine cannot serve returns a null pointer, as without the sanitizer, and
- * the interpreter raises NoMemoryError.
+ * use-after-return detection would hide values from the conservative collector. A single
+ * allocation of more than 256 MiB, which a length field of a few bytes can ask for, gets a
+ * null pointer, and the interpreter raises NoMemoryError as it does when memory is short.
  */
 const char *
 __asan_default_options(void)
 {
-    return "detect_stack_use_after_return=0:detect_leaks=0:allocator_may_return_null=1";
+    return "detect_stack_use_after_return=0:detect_leaks=0:"
+           "allocator_may_return_null=1:max_allocation_size_mb=256";
 }
 
 const char *

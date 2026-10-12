@@ -252,22 +252,24 @@ strdup_with_null(OnigEncoding enc, UChar* s, UChar* end)
 #define PFETCH_READY  UChar* pfetch_prev
 #define PEND         (p < end ?  0 : 1)
 #define PUNFETCH     p = pfetch_prev
+/* vkxp: as PFETCH, PINC and PINC_S stay inside a pattern that ends in an
+   incomplete multibyte character */
 #define PINC       do { \
   pfetch_prev = p; \
-  p += ONIGENC_MBC_ENC_LEN(enc, p); \
+  p += ONIGENC_MBC_ENC_LEN_END(enc, p, end); \
 } while (0)
 #define PFETCH(c)  do { \
   c = ONIGENC_MBC_TO_CODE(enc, p, end); \
   pfetch_prev = p; \
-  p += ONIGENC_MBC_ENC_LEN(enc, p); \
+  p += ONIGENC_MBC_ENC_LEN_END(enc, p, end); \
 } while (0)
 
 #define PINC_S     do { \
-  p += ONIGENC_MBC_ENC_LEN(enc, p); \
+  p += ONIGENC_MBC_ENC_LEN_END(enc, p, end); \
 } while (0)
 #define PFETCH_S(c) do { \
   c = ONIGENC_MBC_TO_CODE(enc, p, end); \
-  p += ONIGENC_MBC_ENC_LEN(enc, p); \
+  p += ONIGENC_MBC_ENC_LEN_END(enc, p, end); \
 } while (0)
 
 #define PPEEK        (p < end ? ONIGENC_MBC_TO_CODE(enc, p, end) : PEND_VALUE)
@@ -2570,6 +2572,10 @@ fetch_name_with_level(OnigCodePoint start_code, UChar** src, UChar* end,
       int level;
       int flag = (c == '-' ? -1 : 1);
 
+      if (PEND) {
+	r = ONIGERR_INVALID_CHAR_IN_GROUP_NAME;
+	goto end;
+      }
       PFETCH(c);
       if (! ONIGENC_IS_CODE_DIGIT(enc, c)) goto err;
       PUNFETCH;
@@ -2578,9 +2584,11 @@ fetch_name_with_level(OnigCodePoint start_code, UChar** src, UChar* end,
       *rlevel = (level * flag);
       exist_level = 1;
 
-      PFETCH(c);
-      if (c == end_code)
-	goto end;
+      if (!PEND) {
+	PFETCH(c);
+	if (c == end_code)
+	  goto end;
+      }
     }
 
   err:
@@ -2987,6 +2995,8 @@ fetch_token_in_cc(OnigToken* tok, UChar** src, UChar* end, ScanEnv* env)
 
     case 'p':
     case 'P':
+      if (PEND) break;
+
       c2 = PPEEK;
       if (c2 == '{' &&
 	  IS_SYNTAX_OP2(syn, ONIG_SYN_OP2_ESC_P_BRACE_CHAR_PROPERTY)) {
@@ -2994,7 +3004,7 @@ fetch_token_in_cc(OnigToken* tok, UChar** src, UChar* end, ScanEnv* env)
 	tok->type = TK_CHAR_PROPERTY;
 	tok->u.prop.not = (c == 'P' ? 1 : 0);
 
-	if (IS_SYNTAX_OP2(syn, ONIG_SYN_OP2_ESC_P_BRACE_CIRCUMFLEX_NOT)) {
+	if (!PEND && IS_SYNTAX_OP2(syn, ONIG_SYN_OP2_ESC_P_BRACE_CIRCUMFLEX_NOT)) {
 	  PFETCH(c2);
 	  if (c2 == '^') {
 	    tok->u.prop.not = (tok->u.prop.not == 0 ? 1 : 0);
@@ -3064,7 +3074,7 @@ fetch_token_in_cc(OnigToken* tok, UChar** src, UChar* end, ScanEnv* env)
 	PUNFETCH;
 	prev = p;
 	num = scan_unsigned_octal_number(&p, end, 3, enc);
-	if (num < 0) return ONIGERR_TOO_BIG_NUMBER;
+	if (num < 0 || num >= 256) return ONIGERR_TOO_BIG_NUMBER;
 	if (p == prev) {  /* can't read nothing. */
 	  num = 0; /* but, it's not error */
 	}
@@ -3436,7 +3446,7 @@ fetch_token(OnigToken* tok, UChar** src, UChar* end, ScanEnv* env)
       if (IS_SYNTAX_OP(syn, ONIG_SYN_OP_ESC_OCTAL3)) {
 	prev = p;
 	num = scan_unsigned_octal_number(&p, end, (c == '0' ? 2:3), enc);
-	if (num < 0) return ONIGERR_TOO_BIG_NUMBER;
+	if (num < 0 || num >= 256) return ONIGERR_TOO_BIG_NUMBER;
 	if (p == prev) {  /* can't read nothing. */
 	  num = 0; /* but, it's not error */
 	}
@@ -3451,7 +3461,7 @@ fetch_token(OnigToken* tok, UChar** src, UChar* end, ScanEnv* env)
 
 #ifdef USE_NAMED_GROUP
     case 'k':
-      if (IS_SYNTAX_OP2(syn, ONIG_SYN_OP2_ESC_K_NAMED_BACKREF)) {
+      if (!PEND && IS_SYNTAX_OP2(syn, ONIG_SYN_OP2_ESC_K_NAMED_BACKREF)) {
 	PFETCH(c);
 	if (c == '<' || c == '\'') {
 	  UChar* name_end;
@@ -3524,7 +3534,7 @@ fetch_token(OnigToken* tok, UChar** src, UChar* end, ScanEnv* env)
 
 #ifdef USE_SUBEXP_CALL
     case 'g':
-      if (IS_SYNTAX_OP2(syn, ONIG_SYN_OP2_ESC_G_SUBEXP_CALL)) {
+      if (!PEND && IS_SYNTAX_OP2(syn, ONIG_SYN_OP2_ESC_G_SUBEXP_CALL)) {
 	PFETCH(c);
 	if (c == '<' || c == '\'') {
 	  int gnum;
@@ -3553,13 +3563,14 @@ fetch_token(OnigToken* tok, UChar** src, UChar* end, ScanEnv* env)
 
     case 'p':
     case 'P':
-      if (PPEEK_IS('{') &&
+      if (!PEND && PPEEK_IS('{') &&
 	  IS_SYNTAX_OP2(syn, ONIG_SYN_OP2_ESC_P_BRACE_CHAR_PROPERTY)) {
 	PINC;
 	tok->type = TK_CHAR_PROPERTY;
 	tok->u.prop.not = (c == 'P' ? 1 : 0);
 
-	if (IS_SYNTAX_OP2(syn, ONIG_SYN_OP2_ESC_P_BRACE_CIRCUMFLEX_NOT)) {
+	if (!PEND &&
+	    IS_SYNTAX_OP2(syn, ONIG_SYN_OP2_ESC_P_BRACE_CIRCUMFLEX_NOT)) {
 	  PFETCH(c);
 	  if (c == '^') {
 	    tok->u.prop.not = (tok->u.prop.not == 0 ? 1 : 0);
@@ -3669,10 +3680,10 @@ fetch_token(OnigToken* tok, UChar** src, UChar* end, ScanEnv* env)
       break;
 
     case '(':
-      if (PPEEK_IS('?') &&
+      if (!PEND && PPEEK_IS('?') &&
           IS_SYNTAX_OP2(syn, ONIG_SYN_OP2_QMARK_GROUP_EFFECT)) {
         PINC;
-        if (PPEEK_IS('#')) {
+        if (!PEND && PPEEK_IS('#')) {
           PFETCH(c);
           while (1) {
             if (PEND) return ONIGERR_END_PATTERN_IN_GROUP;
@@ -4083,8 +4094,12 @@ next_state_val(CClassNode* cc, OnigCodePoint *vs, OnigCodePoint v,
 
   switch (*state) {
   case CCS_VALUE:
-    if (*type == CCV_SB)
+    if (*type == CCV_SB) {
+      if (*vs > 0xff)
+          return ONIGERR_INVALID_CODE_POINT_VALUE;
+
       BITSET_SET_BIT(cc->bs, (int )(*vs));
+    }
     else if (*type == CCV_CODE_POINT) {
       r = add_code_range(&(cc->mbuf), env, *vs, *vs);
       if (r < 0) return r;
@@ -4221,6 +4236,7 @@ parse_char_class(Node** np, OnigToken* tok, UChar** src, UChar* end,
     fetched = 0;
     switch (r) {
     case TK_CHAR:
+    any_char_in:
       len = ONIGENC_CODE_TO_MBCLEN(env->enc, tok->u.c);
       if (len > 1) {
 	in_type = CCV_CODE_POINT;
@@ -4230,7 +4246,7 @@ parse_char_class(Node** np, OnigToken* tok, UChar** src, UChar* end,
 	goto err;
       }
       else {
-      sb_char:
+        /* sb_char: */
 	in_type = CCV_SB;
       }
       v = (OnigCodePoint )tok->u.c;
@@ -4376,7 +4392,7 @@ parse_char_class(Node** np, OnigToken* tok, UChar** src, UChar* end,
       }
       else if (state == CCS_RANGE) {
 	CC_ESC_WARN(env, (UChar* )"-");
-	goto sb_char;  /* [!--x] is allowed */
+	goto any_char_in;  /* [!--x] is allowed */
       }
       else { /* CCS_COMPLETE */
 	r = fetch_token_in_cc(tok, &p, end, env);
@@ -4390,7 +4406,7 @@ parse_char_class(Node** np, OnigToken* tok, UChar** src, UChar* end,
 	
 	if (IS_SYNTAX_BV(env->syntax, ONIG_SYN_ALLOW_DOUBLE_RANGE_OP_IN_CC)) {
 	  CC_ESC_WARN(env, (UChar* )"-");
-	  goto sb_char;   /* [0-9-a] is allowed as [0-9\-a] */
+	  goto any_char_in;   /* [0-9-a] is allowed as [0-9\-a] */
 	}
 	r = ONIGERR_UNMATCHED_RANGE_SPECIFIER_IN_CHAR_CLASS;
 	goto err;
@@ -4563,6 +4579,7 @@ parse_enclose(Node** np, OnigToken* tok, int term, UChar** src, UChar* end,
 #endif
 
     case '<':   /* look behind (?<=...), (?<!...) */
+      if (PEND) return ONIGERR_END_PATTERN_WITH_UNMATCHED_PARENTHESIS;
       PFETCH(c);
       if (c == '=')
 	*np = onig_node_new_anchor(ANCHOR_LOOK_BEHIND);
@@ -5521,6 +5538,19 @@ parse_regexp(Node** top, UChar** src, UChar* end, ScanEnv* env)
   return 0;
 }
 
+static int
+check_incomplete_multibyte_string(OnigEncoding enc, const UChar* p, const UChar* end)
+{
+  while (p < end) {
+    p += enclen(enc, p);
+  }
+
+  if (p != end)
+    return -1;
+  else
+    return 0;
+}
+
 extern int
 onig_parse_make_tree(Node** root, const UChar* pattern, const UChar* end,
 		     regex_t* reg, ScanEnv* env)
@@ -5542,6 +5572,10 @@ onig_parse_make_tree(Node** root, const UChar* pattern, const UChar* end,
   env->reg            = reg;
 
   *root = NULL;
+
+  if (check_incomplete_multibyte_string(env->enc, pattern, end) != 0)
+    return ONIGERR_TOO_SHORT_MULTI_BYTE_STRING;
+
   p = (UChar* )pattern;
   r = parse_regexp(root, &p, (UChar* )end, env);
   reg->num_mem = env->num_mem;

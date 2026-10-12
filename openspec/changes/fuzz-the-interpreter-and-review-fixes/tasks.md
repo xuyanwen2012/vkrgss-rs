@@ -2,11 +2,11 @@
 
 ## 1. Targets and command
 
-- [ ] 1.1 The three harnesses, their seeds, and `cargo xtask fuzz`. Verify: scenarios "A short run" (for each target) and "Unknown target"; `cargo test -p xtask --locked` passes.
+- [x] 1.1 The three harnesses, their seeds, and `cargo xtask fuzz`. Verify: scenarios "A short run" (for each target) and "Unknown target"; `cargo test -p xtask --locked` passes.
 
 ## 2. First run
 
-- [ ] 2.1 Run each target for 20 minutes, fix or list what is found as `design.md` says, add the inputs of fixed findings as tests, fill "Checked". Verify: a second run of 5 minutes per target ends without a finding that is not listed; `cargo test -p vkxp-ruby-sys --locked` passes, the vendored-source checks included.
+- [x] 2.1 Run each target for 20 minutes, fix or list what is found as `design.md` says, add the inputs of fixed findings as tests, fill "Checked". Verify: a second run of 5 minutes per target ends without a finding that is not listed; `cargo test -p vkxp-ruby-sys --locked` passes, the vendored-source checks included.
 
 ## 3. Review
 

@@ -1,0 +1,105 @@
+--- a/parse.c
++++ b/parse.c
+@@ -5800,8 +5800,9 @@
+ 			value_expr((yyvsp[(1) - (3)].node));
+ 			value_expr((yyvsp[(3) - (3)].node));
+ 			(yyval.node) = NEW_DOT2((yyvsp[(1) - (3)].node), (yyvsp[(3) - (3)].node));
+-			if (nd_type((yyvsp[(1) - (3)].node)) == NODE_LIT && FIXNUM_P((yyvsp[(1) - (3)].node)->nd_lit) &&
+-			    nd_type((yyvsp[(3) - (3)].node)) == NODE_LIT && FIXNUM_P((yyvsp[(3) - (3)].node)->nd_lit)) {
++			/* vkxp: an operand is null after a syntax error */
++			if ((yyvsp[(1) - (3)].node) && nd_type((yyvsp[(1) - (3)].node)) == NODE_LIT && FIXNUM_P((yyvsp[(1) - (3)].node)->nd_lit) &&
++			    (yyvsp[(3) - (3)].node) && nd_type((yyvsp[(3) - (3)].node)) == NODE_LIT && FIXNUM_P((yyvsp[(3) - (3)].node)->nd_lit)) {
+ 			    deferred_nodes = list_append(deferred_nodes, (yyval.node));
+ 			}
+ 		    }
+@@ -5815,8 +5816,9 @@
+ 			value_expr((yyvsp[(1) - (3)].node));
+ 			value_expr((yyvsp[(3) - (3)].node));
+ 			(yyval.node) = NEW_DOT3((yyvsp[(1) - (3)].node), (yyvsp[(3) - (3)].node));
+-			if (nd_type((yyvsp[(1) - (3)].node)) == NODE_LIT && FIXNUM_P((yyvsp[(1) - (3)].node)->nd_lit) &&
+-			    nd_type((yyvsp[(3) - (3)].node)) == NODE_LIT && FIXNUM_P((yyvsp[(3) - (3)].node)->nd_lit)) {
++			/* vkxp: an operand is null after a syntax error */
++			if ((yyvsp[(1) - (3)].node) && nd_type((yyvsp[(1) - (3)].node)) == NODE_LIT && FIXNUM_P((yyvsp[(1) - (3)].node)->nd_lit) &&
++			    (yyvsp[(3) - (3)].node) && nd_type((yyvsp[(3) - (3)].node)) == NODE_LIT && FIXNUM_P((yyvsp[(3) - (3)].node)->nd_lit)) {
+ 			    deferred_nodes = list_append(deferred_nodes, (yyval.node));
+ 			}
+ 		    }
+@@ -8540,6 +8542,8 @@
+ 
+     rb_compile_error("%s", msg);
+     p = lex_p;
++    /* vkxp: after an incomplete multibyte character lex_p is past the line */
++    if (p > lex_pend) p = lex_pend;
+     while (lex_pbeg <= p) {
+ 	if (*p == '\n') break;
+ 	p--;
+@@ -8551,6 +8555,7 @@
+ 	if (*pe == '\n') break;
+ 	pe++;
+     }
++    if (pe > lex_pend) pe = lex_pend;	/* vkxp */
+ 
+     len = pe - p;
+     if (len > 4) {
+@@ -8567,6 +8572,7 @@
+ 		pe = lex_p + re_mbc_startpos(lex_p, len, max_line_margin, 1);
+ 		post = "...";
+ 	    }
++	    if (pe > lex_pend) pe = lex_pend;	/* vkxp */
+ 	    len = pe - p;
+ 	}
+ 	buf = ALLOCA_N(char, len+2);
+@@ -8575,6 +8581,7 @@
+ 	rb_compile_error_append("%s%s%s", pre, buf, post);
+ 
+ 	i = lex_p - p;
++	if (i > len) i = len;	/* vkxp */
+ 	p2 = buf; pe = buf + len;
+ 
+ 	while (p2 < pe) {
+@@ -11275,6 +11282,8 @@
+ 	return 0;
+     }
+ 
++    /* vkxp: the value is null after a syntax error in it */
++    if (!node->nd_value) return 1;
+     switch (nd_type(node->nd_value)) {
+       case NODE_LIT:
+       case NODE_STR:
+@@ -12057,6 +12066,18 @@
+     return ID_INTERNAL | (vkxp_next_counter(0) << ID_SCOPE_SHIFT);
+ }
+ 
++/* vkxp: the end of the character at m, or the terminator when the character is
++   incomplete */
++static const char *
++vkxp_char_end(m)
++    const char *m;
++{
++    int n = mbclen(*m);
++
++    while (n-- > 0 && *m) m++;
++    return m;
++}
++
+ static int
+ is_special_global_name(m)
+     const char *m;
+@@ -12071,7 +12092,7 @@
+ 	break;
+       case '-':
+ 	++m;
+-	if (is_identchar(*m)) m += mbclen(*m);
++	if (is_identchar(*m)) m = vkxp_char_end(m);
+ 	break;
+       default:
+ 	if (!ISDIGIT(*m)) return 0;
+@@ -12143,7 +12164,7 @@
+ 	localid = !ISUPPER(*m);
+       id:
+ 	if (*m != '_' && !ISALPHA(*m) && !ismbchar(*m)) return Qfalse;
+-	while (is_identchar(*m)) m += mbclen(*m);
++	while (is_identchar(*m)) m = vkxp_char_end(m);
+ 	if (localid) {
+ 	    switch (*m) {
+ 	      case '!': case '?': case '=': ++m;

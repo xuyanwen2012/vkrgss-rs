@@ -123,7 +123,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `parse.y`
 - Patch: `patches/symbol-ids-ruby-181.patch`
-- Patched SHA-256: `fb02a7390c14219383d4cb5877fc31108e61fb373435b3cadb5f8bd4639c2656`
+- Patched SHA-256: `ed38d409059cbbcee58ec7991446f41406f87123b0dc1ae2db9bc4b2bcc0d5d5`
 - Reason: a symbol's number decides the order of instance variables and of hashes with
   symbol keys, and so the bytes of a save file. 1.8.7 and vkxp's binding intern another set of
   names at start-up than the original runtime's Ruby 1.8.1, so every name a game creates had
@@ -142,7 +142,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `parse.c`
 - Patch: `patches/symbol-ids-ruby-181-generated.patch`
-- Patched SHA-256: `63b8a233f54ba4174fd5ce424991e9ab7eab977591ad71bf805b462bb16c6d7d`
+- Patched SHA-256: `bef97ac617211c1ab9eff4daf7d9fe9bd3e66f875010ebdbecd8e2d140b0dfc7`
 - Reason: follows patch 11. `parse.c` is the release's pre-generated parser and the file the
   build compiles; the changed code is in the part of `parse.y` that the generator copies
   verbatim, so the same three hunks are applied to it by hand, at an offset of 5947 lines.
@@ -151,7 +151,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `re.c`
 - Patch: `patches/oniguruma-engine.patch`
-- Patched SHA-256: `79aceaf7eb1fcc444e58d1c1c95f4f5ea4ba0edc0885e85b09ac5d30b30034c4`
+- Patched SHA-256: `9609a1b0fbce194822cee13ae4115736fd516bbfcf54fc102e967cb7d87e96d2`
 - Reason: the original runtime's Ruby 1.8.1 is built with the Oniguruma regular expression
   engine, and scripts use what only that engine accepts (a character class inside another,
   named groups, look-behind, possessive quantifiers). `re.c` now calls Oniguruma 5.9.6
@@ -184,7 +184,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `parse.y`
 - Patch: `patches/oniguruma-engine-parser.patch`
-- Patched SHA-256: `fb02a7390c14219383d4cb5877fc31108e61fb373435b3cadb5f8bd4639c2656`
+- Patched SHA-256: `ed38d409059cbbcee58ec7991446f41406f87123b0dc1ae2db9bc4b2bcc0d5d5`
 - Reason: follows patch 14 and applies after patch 11. The parser includes `regex.h` itself,
   for `ismbchar` and `mbclen`; it includes `vkxp_regex.h` instead.
 
@@ -192,7 +192,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `parse.c`
 - Patch: `patches/oniguruma-engine-parser-generated.patch`
-- Patched SHA-256: `63b8a233f54ba4174fd5ce424991e9ab7eab977591ad71bf805b462bb16c6d7d`
+- Patched SHA-256: `bef97ac617211c1ab9eff4daf7d9fe9bd3e66f875010ebdbecd8e2d140b0dfc7`
 - Reason: follows patch 15 and applies after patch 12. The same line of the pre-generated
   parser, changed by hand.
 
@@ -246,7 +246,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `parse.y`
 - Patch: `patches/intern-empty-name.patch`
-- Patched SHA-256: `fb02a7390c14219383d4cb5877fc31108e61fb373435b3cadb5f8bd4639c2656`
+- Patched SHA-256: `ed38d409059cbbcee58ec7991446f41406f87123b0dc1ae2db9bc4b2bcc0d5d5`
 - Reason: found by the sanitized run. `rb_intern` of a name that consists of `=` alone
   interns the name without its last character, the empty string, and for that one tested
   `name[-1]`, the byte before the buffer; had that byte been `=`, a copy of length -1 would
@@ -256,7 +256,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `parse.c`
 - Patch: `patches/intern-empty-name-generated.patch`
-- Patched SHA-256: `63b8a233f54ba4174fd5ce424991e9ab7eab977591ad71bf805b462bb16c6d7d`
+- Patched SHA-256: `bef97ac617211c1ab9eff4daf7d9fe9bd3e66f875010ebdbecd8e2d140b0dfc7`
 - Reason: follows patch 21. The same line of the pre-generated parser, changed by hand.
 
 ## 23. marshal-gc-guard
@@ -333,3 +333,65 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
   while collections are disabled or one is running does not happen, as before.
   `ruby_vkxp_gc_count` counts the collections that ran, for the tests: this Ruby has no
   `GC.count`.
+
+## 28. intern-incomplete-character
+
+- File: `parse.y`
+- Patch: `patches/intern-incomplete-character.patch`
+- Patched SHA-256: `ed38d409059cbbcee58ec7991446f41406f87123b0dc1ae2db9bc4b2bcc0d5d5`
+- Reason: found by the fuzz targets `marshal` and `parse` (change
+  `fuzz-the-interpreter-and-review-fixes`). `rb_intern` walks a name character by
+  character with the length the lead byte announces. A name that ends in an incomplete
+  multibyte character, such as the one byte `\xfa` under `$KCODE = 'U'`, moved the
+  pointer past the terminating NUL, and the test that follows read a byte after the end of
+  the buffer to decide whether the name has a junk tail. The test is made only while the
+  pointer is inside the name. A dumped symbol reaches it through `Marshal.load`, and an
+  identifier of a script through the lexer. Input:
+  `crates/vkxp-ruby-sys/fuzz/fixed/marshal/symbol-incomplete-character.bin`.
+
+## 29. intern-incomplete-character-generated
+
+- File: `parse.c`
+- Patch: `patches/intern-incomplete-character-generated.patch`
+- Patched SHA-256: `bef97ac617211c1ab9eff4daf7d9fe9bd3e66f875010ebdbecd8e2d140b0dfc7`
+- Reason: follows patch 28. The same line of the pre-generated parser, changed by hand.
+
+## 30. parser-bounds-and-null-operands
+
+- File: `parse.y`
+- Patch: `patches/parser-bounds-and-null-operands.patch`
+- Patched SHA-256: `ed38d409059cbbcee58ec7991446f41406f87123b0dc1ae2db9bc4b2bcc0d5d5`
+- Reason: applies after patch 28; found by the fuzz targets `parse` and `marshal` (change `fuzz-the-interpreter-and-review-fixes`).
+  Four defects of the parser on input that is no valid script:
+  `is_special_global_name` and `rb_symname_p` stepped over a name by the length its lead
+  bytes announce, so a name that ends in an incomplete multibyte character (`$-` and one
+  byte `\xf3`) was read past its terminator; both now stop at the terminator
+  (`vkxp_char_end`). `yyerror` copies the line of the error for the message: after an
+  incomplete multibyte character the lexer's position is past the end of the line, and the
+  copy read past the line and the `^` mark was written past the copy; the start, the end
+  and the mark are kept inside the line. The rules of `..` and `...` and `assign_in_cond`
+  looked at the type of an operand that is a null pointer when the operand had a syntax
+  error of its own (`1 .. A::B += 1`, `if g = __FILE__ = 1`), which ends the process; they
+  test the pointer first, as later Rubies do. Inputs:
+  `crates/vkxp-ruby-sys/fuzz/fixed/marshal/global-name-incomplete-character.bin` and
+  `fuzz/fixed/parse/{error-line-incomplete-character,range-null-operand,condition-null-value}.rb`.
+
+## 31. parser-bounds-and-null-operands-generated
+
+- File: `parse.c`
+- Patch: `patches/parser-bounds-and-null-operands-generated.patch`
+- Patched SHA-256: `bef97ac617211c1ab9eff4daf7d9fe9bd3e66f875010ebdbecd8e2d140b0dfc7`
+- Reason: follows patch 30. The same lines of the pre-generated parser, changed by hand.
+
+## 32. regexp-source-incomplete-character
+
+- File: `re.c`
+- Patch: `patches/regexp-source-incomplete-character.patch`
+- Patched SHA-256: `9609a1b0fbce194822cee13ae4115736fd516bbfcf54fc102e967cb7d87e96d2`
+- Reason: applies after patch 13; found by the fuzz targets `regex` and `marshal` (change `fuzz-the-interpreter-and-review-fixes`).
+  `rb_reg_expr_str` writes the source of a pattern into `inspect` and into the message of a
+  `RegexpError`. It copied a multibyte character, and the character after a backslash, with
+  the length the lead byte announces, past the end of a source that ends inside the
+  character. Both copies stop at the end of the source. Inputs:
+  `crates/vkxp-ruby-sys/fuzz/fixed/regex/error-message-incomplete-character.txt` and
+  `fuzz/fixed/marshal/regexp-error-incomplete-character.bin`.

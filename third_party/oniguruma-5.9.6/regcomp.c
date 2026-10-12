@@ -469,13 +469,13 @@ compile_length_string_node(Node* node, regex_t* reg)
   ambig = NSTRING_IS_AMBIG(node);
 
   p = prev = sn->s;
-  prev_len = enclen(enc, p);
+  prev_len = onigenc_mbc_enc_len_end(enc, p, sn->end);
   p += prev_len;
   slen = 1;
   rlen = 0;
 
   for (; p < sn->end; ) {
-    len = enclen(enc, p);
+    len = onigenc_mbc_enc_len_end(enc, p, sn->end);
     if (len == prev_len) {
       slen++;
     }
@@ -518,12 +518,12 @@ compile_string_node(Node* node, regex_t* reg)
   ambig = NSTRING_IS_AMBIG(node);
 
   p = prev = sn->s;
-  prev_len = enclen(enc, p);
+  prev_len = onigenc_mbc_enc_len_end(enc, p, sn->end);
   p += prev_len;
   slen = 1;
 
   for (; p < end; ) {
-    len = enclen(enc, p);
+    len = onigenc_mbc_enc_len_end(enc, p, sn->end);
     if (len == prev_len) {
       slen++;
     }
@@ -1850,6 +1850,11 @@ renumber_by_map(Node* node, GroupNumRemap* map)
 
   case NT_BREF:
     r = renumber_node_backref(node, map);
+    break;
+
+  case NT_ANCHOR:
+    if (NANCHOR(node)->target)
+      r = renumber_by_map(NANCHOR(node)->target, map);
     break;
 
   default:
@@ -3390,7 +3395,7 @@ expand_case_fold_string(Node* node, regex_t* reg)
       goto err;
     }
 
-    len = enclen(reg->enc, p);
+    len = onigenc_mbc_enc_len_end(reg->enc, p, end);
 
     if (n == 0) {
       if (IS_NULL(snode)) {
@@ -4015,12 +4020,12 @@ distance_value(MinMaxLen* mm)
       11,   11,   11,   11,   11,   10,   10,   10,   10,   10
   };
 
-  int d;
+  OnigDistance d;
 
   if (mm->max == ONIG_INFINITE_DISTANCE) return 0;
 
   d = mm->max - mm->min;
-  if (d < (int )(sizeof(dist_vals)/sizeof(dist_vals[0])))
+  if (d < (OnigDistance )(sizeof(dist_vals)/sizeof(dist_vals[0])))
     /* return dist_vals[d] * 16 / (mm->min + 12); */
     return (int )dist_vals[d];
   else
