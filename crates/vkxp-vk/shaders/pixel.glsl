@@ -17,12 +17,6 @@ uint div255(uint value) {
     return (value + 127u) / 255u;
 }
 
-// Mirrors `scale` in vkxp-pixel: the share of a source channel that is added or subtracted to a
-// translucent destination.
-uint scale(uint channel, uint alpha) {
-    return div255(channel * alpha);
-}
-
 // Mirrors `share` in vkxp-pixel: the share of a signed value that an alpha lets through.
 int share(int value, uint alpha) {
     return (value * (int(alpha) + 1)) >> 8;
@@ -102,21 +96,8 @@ uint saturating_sub(uint channel, uint amount) {
     return channel - min(channel, amount);
 }
 
-// Mirrors `vkxp_pixel::blend_add_translucent`.
-uvec4 blend_add_translucent(uvec4 dst, uvec4 src, uint opacity) {
-    uint a = effective_alpha(src.a, opacity);
-    return uvec4(
-        saturating_add(dst.r, scale(src.r, a)),
-        saturating_add(dst.g, scale(src.g, a)),
-        saturating_add(dst.b, scale(src.b, a)),
-        dst.a);
-}
-
 // Mirrors `vkxp_pixel::blend_add`.
 uvec4 blend_add(uvec4 dst, uvec4 src, uint opacity) {
-    if (dst.a != 255u) {
-        return blend_add_translucent(dst, src, opacity);
-    }
     uint a = effective_alpha(src.a, opacity);
     if (a == 0u) {
         return dst;
@@ -128,21 +109,8 @@ uvec4 blend_add(uvec4 dst, uvec4 src, uint opacity) {
         dst.a);
 }
 
-// Mirrors `vkxp_pixel::blend_sub_translucent`.
-uvec4 blend_sub_translucent(uvec4 dst, uvec4 src, uint opacity) {
-    uint a = effective_alpha(src.a, opacity);
-    return uvec4(
-        saturating_sub(dst.r, scale(src.r, a)),
-        saturating_sub(dst.g, scale(src.g, a)),
-        saturating_sub(dst.b, scale(src.b, a)),
-        dst.a);
-}
-
 // Mirrors `vkxp_pixel::blend_sub`.
 uvec4 blend_sub(uvec4 dst, uvec4 src, uint opacity) {
-    if (dst.a != 255u) {
-        return blend_sub_translucent(dst, src, opacity);
-    }
     uint a = effective_alpha(src.a, opacity);
     if (a == 0u) {
         return dst;

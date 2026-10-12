@@ -59,27 +59,19 @@ pub const PROVENANCE: &[ArithmeticFn] = &[
     },
     ArithmeticFn {
         name: "blend_add",
-        formula: "for dst.a = 255: a = effective_alpha(src.a, opacity), \
-                  c = min(255, dst.c + ((src.c * (a + 1)) >> 8)), out = dst when a = 0; \
-                  for dst.a < 255: blend_add_translucent",
+        formula: "a = effective_alpha(src.a, opacity), \
+                  c = min(255, dst.c + ((src.c * (a + 1)) >> 8)), out.a = dst.a, \
+                  out = dst when a = 0; \
+                  measured on opaque destinations; the original's screen has no other",
         provenance: MEASURED,
-    },
-    ArithmeticFn {
-        name: "blend_add_translucent",
-        formula: "c = min(255, dst.c + div255(src.c * a)), a = effective_alpha(src.a, opacity)",
-        provenance: Provenance::Textbook,
     },
     ArithmeticFn {
         name: "blend_sub",
-        formula: "for dst.a = 255: a = effective_alpha(src.a, opacity), \
-                  c = max(0, dst.c - ((src.c * (a + 1)) >> 8)), out = dst when a = 0; \
-                  for dst.a < 255: blend_sub_translucent",
+        formula: "a = effective_alpha(src.a, opacity), \
+                  c = max(0, dst.c - ((src.c * (a + 1)) >> 8)), out.a = dst.a, \
+                  out = dst when a = 0; \
+                  measured on opaque destinations; the original's screen has no other",
         provenance: MEASURED,
-    },
-    ArithmeticFn {
-        name: "blend_sub_translucent",
-        formula: "c = max(0, dst.c - div255(src.c * a)), a = effective_alpha(src.a, opacity)",
-        provenance: Provenance::Textbook,
     },
     ArithmeticFn {
         name: "blend_window",
@@ -112,12 +104,6 @@ pub const PROVENANCE: &[ArithmeticFn] = &[
 /// Division by 255, rounded to nearest.
 const fn div255(value: u32) -> u32 {
     (value + 127) / 255
-}
-
-/// `div255(channel * alpha)`: the share of a source channel that is added or subtracted to a
-/// translucent destination.
-const fn scale(channel: u8, alpha: u8) -> u8 {
-    div255(channel as u32 * alpha as u32) as u8
 }
 
 /// `(value * (alpha + 1)) >> 8`: the share of a signed value that an alpha lets through, as the
@@ -239,16 +225,13 @@ pub const fn blend_normal_translucent(dst: Rgba, src: Rgba, opacity: u8) -> Rgba
 /// Additive blend of `src` onto `dst` at `opacity`, saturating at 255. The destination alpha
 /// is kept.
 ///
-/// Formula for an opaque destination, per colour channel `c`, with
+/// Formula for every destination, per colour channel `c`, with
 /// `a = effective_alpha(src.a, opacity)`: `c = min(255, dst.c + ((src.c * (a + 1)) >> 8))`, and
-/// `dst` unchanged when `a = 0`. A destination with an alpha below 255 is blended by
-/// [`blend_add_translucent`], which is not measured yet.
+/// `dst` unchanged when `a = 0`. It was measured on opaque destinations; the original's
+/// screen has no other.
 ///
 /// PROVENANCE: ReverseEngineered (oracle measurement 2026-10-09, RGSS103J, screen blend probe).
 pub const fn blend_add(dst: Rgba, src: Rgba, opacity: u8) -> Rgba {
-    if dst[3] != 255 {
-        return blend_add_translucent(dst, src, opacity);
-    }
     let a = effective_alpha(src[3], opacity);
     if a == 0 {
         return dst;
@@ -261,36 +244,16 @@ pub const fn blend_add(dst: Rgba, src: Rgba, opacity: u8) -> Rgba {
     ]
 }
 
-/// Additive blend onto a destination of any alpha, which is kept. This is what `blend_add`
-/// computes for a destination alpha below 255.
-///
-/// Formula, per colour channel `c`, with `a = effective_alpha(src.a, opacity)`:
-/// `c = min(255, dst.c + div255(src.c * a))`.
-///
-/// PROVENANCE: Textbook.
-pub const fn blend_add_translucent(dst: Rgba, src: Rgba, opacity: u8) -> Rgba {
-    let a = effective_alpha(src[3], opacity);
-    [
-        dst[0].saturating_add(scale(src[0], a)),
-        dst[1].saturating_add(scale(src[1], a)),
-        dst[2].saturating_add(scale(src[2], a)),
-        dst[3],
-    ]
-}
-
 /// Subtractive blend of `src` from `dst` at `opacity`, saturating at 0. The destination alpha
 /// is kept.
 ///
-/// Formula for an opaque destination, per colour channel `c`, with
+/// Formula for every destination, per colour channel `c`, with
 /// `a = effective_alpha(src.a, opacity)`: `c = max(0, dst.c - ((src.c * (a + 1)) >> 8))`, and
-/// `dst` unchanged when `a = 0`. A destination with an alpha below 255 is blended by
-/// [`blend_sub_translucent`], which is not measured yet.
+/// `dst` unchanged when `a = 0`. It was measured on opaque destinations; the original's
+/// screen has no other.
 ///
 /// PROVENANCE: ReverseEngineered (oracle measurement 2026-10-09, RGSS103J, screen blend probe).
 pub const fn blend_sub(dst: Rgba, src: Rgba, opacity: u8) -> Rgba {
-    if dst[3] != 255 {
-        return blend_sub_translucent(dst, src, opacity);
-    }
     let a = effective_alpha(src[3], opacity);
     if a == 0 {
         return dst;
@@ -299,23 +262,6 @@ pub const fn blend_sub(dst: Rgba, src: Rgba, opacity: u8) -> Rgba {
         dst[0].saturating_sub(share(src[0] as i32, a) as u8),
         dst[1].saturating_sub(share(src[1] as i32, a) as u8),
         dst[2].saturating_sub(share(src[2] as i32, a) as u8),
-        dst[3],
-    ]
-}
-
-/// Subtractive blend from a destination of any alpha, which is kept. This is what `blend_sub`
-/// computes for a destination alpha below 255.
-///
-/// Formula, per colour channel `c`, with `a = effective_alpha(src.a, opacity)`:
-/// `c = max(0, dst.c - div255(src.c * a))`.
-///
-/// PROVENANCE: Textbook.
-pub const fn blend_sub_translucent(dst: Rgba, src: Rgba, opacity: u8) -> Rgba {
-    let a = effective_alpha(src[3], opacity);
-    [
-        dst[0].saturating_sub(scale(src[0], a)),
-        dst[1].saturating_sub(scale(src[1], a)),
-        dst[2].saturating_sub(scale(src[2], a)),
         dst[3],
     ]
 }
@@ -682,7 +628,7 @@ mod tests {
     }
 
     #[test]
-    fn a_translucent_destination_takes_the_path_for_a_destination_with_alpha() {
+    fn normal_blend_onto_a_translucent_destination_takes_the_path_for_a_destination_with_alpha() {
         for dst in SAMPLES {
             for src in SAMPLES {
                 if dst[3] == 255 {
@@ -692,14 +638,32 @@ mod tests {
                     blend_normal(dst, src, 200),
                     blend_normal_translucent(dst, src, 200)
                 );
-                assert_eq!(
-                    blend_add(dst, src, 200),
-                    blend_add_translucent(dst, src, 200)
-                );
-                assert_eq!(
-                    blend_sub(dst, src, 200),
-                    blend_sub_translucent(dst, src, 200)
-                );
+            }
+        }
+    }
+
+    /// The additive and the subtractive blend have one formula, whatever the destination's
+    /// alpha, which they keep.
+    #[test]
+    fn add_and_sub_use_the_measured_formula_for_a_destination_with_alpha() {
+        assert_eq!(
+            blend_add([10, 20, 30, 100], [200, 100, 255, 128], 255),
+            [110, 70, 158, 100]
+        );
+        assert_eq!(
+            blend_sub([110, 70, 158, 100], [200, 100, 255, 128], 255),
+            [10, 20, 30, 100]
+        );
+        for dst in SAMPLES {
+            for src in SAMPLES {
+                for alpha in [0, 1, 100, 254] {
+                    let opaque = [dst[0], dst[1], dst[2], 255];
+                    let [r, g, b, _] = blend_add(opaque, src, 200);
+                    let translucent = [dst[0], dst[1], dst[2], alpha];
+                    assert_eq!(blend_add(translucent, src, 200), [r, g, b, alpha]);
+                    let [r, g, b, _] = blend_sub(opaque, src, 200);
+                    assert_eq!(blend_sub(translucent, src, 200), [r, g, b, alpha]);
+                }
             }
         }
     }
@@ -909,39 +873,29 @@ mod tests {
     #[test]
     fn every_public_function_is_listed_once_in_order() {
         let functions = public_functions();
-        assert_eq!(functions.len(), 11, "found {functions:?}");
+        assert_eq!(functions.len(), 9, "found {functions:?}");
         let listed: Vec<&str> = crate::provenance().iter().map(|entry| entry.name).collect();
         assert_eq!(listed, functions);
     }
 
     #[test]
-    fn measured_functions_name_the_measurement_and_the_rest_are_placeholders() {
-        const PLACEHOLDERS: [&str; 2] = ["blend_add_translucent", "blend_sub_translucent"];
+    fn measured_functions_name_the_measurement_and_none_is_a_placeholder() {
         for entry in crate::provenance() {
             assert!(!entry.formula.is_empty(), "{}", entry.name);
-            if PLACEHOLDERS.contains(&entry.name) {
-                assert_eq!(entry.provenance, Provenance::Textbook, "{}", entry.name);
-                assert!(entry.provenance.is_placeholder(), "{}", entry.name);
-            } else {
-                let probe = match entry.name {
-                    "blend_normal_translucent" => "bitmap blt probe",
-                    "apply_gray" => "tone probe",
-                    "blend_window" => "window probes",
-                    _ => "screen blend probe",
-                };
-                assert_eq!(
-                    entry.provenance.to_string(),
-                    format!("reverse-engineered: oracle measurement 2026-10-09, RGSS103J, {probe}"),
-                    "{}",
-                    entry.name
-                );
-            }
+            assert!(!entry.provenance.is_placeholder(), "{}", entry.name);
+            let probe = match entry.name {
+                "blend_normal_translucent" => "bitmap blt probe",
+                "apply_gray" => "tone probe",
+                "blend_window" => "window probes",
+                _ => "screen blend probe",
+            };
+            assert_eq!(
+                entry.provenance.to_string(),
+                format!("reverse-engineered: oracle measurement 2026-10-09, RGSS103J, {probe}"),
+                "{}",
+                entry.name
+            );
         }
-        let placeholders = crate::provenance()
-            .iter()
-            .filter(|entry| entry.provenance.is_placeholder())
-            .count();
-        assert_eq!(placeholders, PLACEHOLDERS.len());
     }
 
     #[test]

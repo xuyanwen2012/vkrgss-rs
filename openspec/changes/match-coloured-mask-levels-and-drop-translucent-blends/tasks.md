@@ -6,7 +6,7 @@
 
 ## 2. Blends
 
-- [ ] 2.1 One formula in `arith.rs` and `pixel.glsl`, the provenance list, the tests in `vkxp-pixel` and `vkxp-compose-ref`. Verify: the scenarios of `specs/frame-composition/spec.md`; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-pixel -p vkxp-compose-ref -p vkxp-vk --locked` passes with no expected frame regenerated.
+- [x] 2.1 One formula in `arith.rs` and `pixel.glsl`, the provenance list, the tests in `vkxp-pixel` and `vkxp-compose-ref`. Verify: the scenarios of `specs/frame-composition/spec.md`; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-pixel -p vkxp-compose-ref -p vkxp-vk --locked` passes with no expected frame regenerated.
 
 ## 3. Threshold
 

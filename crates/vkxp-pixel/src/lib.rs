@@ -6,11 +6,8 @@
 //! and the guest's bitmap operations call them, and the GLSL of the Vulkan backend mirrors them
 //! line for line, so this crate is the single definition of what a blended pixel is.
 //!
-//! Each function declares where its formula comes from. Blending onto an opaque destination,
-//! the normal blend onto a destination with alpha, the colour, the tone, stretch sampling and
-//! the hue rotation follow measurements of the original runtime; the rest are textbook
-//! placeholders, replaced one by one as measurements and reverse-engineering specs of the
-//! original runtime's inner loops land. [`PROVENANCE`] lists the current state.
+//! Each function declares where its formula comes from. All follow measurements of the
+//! original runtime: none is a textbook placeholder. [`PROVENANCE`] lists the current state.
 //!
 //! The arithmetic of the guest's bitmap operations (hue rotation, stretch sampling) is listed
 //! separately, in [`BITMAP_PROVENANCE`]. Hue rotation runs on the CPU alone and has no GLSL
@@ -23,9 +20,8 @@ mod arith;
 mod bitmap;
 
 pub use arith::{
-    PROVENANCE, Rgba, apply_gray, apply_tone, blend_add, blend_add_translucent, blend_color,
-    blend_normal, blend_normal_translucent, blend_sub, blend_sub_translucent, blend_window,
-    effective_alpha,
+    PROVENANCE, Rgba, apply_gray, apply_tone, blend_add, blend_color, blend_normal,
+    blend_normal_translucent, blend_sub, blend_window, effective_alpha,
 };
 pub use bitmap::{BITMAP_PROVENANCE, rotate_hue, stretch_index};
 

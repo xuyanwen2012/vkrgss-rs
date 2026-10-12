@@ -677,7 +677,7 @@ fn deterministic_reference_output() {
 // Requirement: Arithmetic provenance
 
 #[test]
-fn listing_tells_measured_functions_from_placeholders() {
+fn listing_names_the_measurement_and_no_blend_function_is_a_placeholder() {
     let listing = vkxp_pixel::provenance();
     let entry = |name: &str| {
         listing
@@ -701,11 +701,11 @@ fn listing_tells_measured_functions_from_placeholders() {
             "{used}"
         );
     }
-    for unmeasured in ["blend_add_translucent", "blend_sub_translucent"] {
-        assert!(
-            entry(unmeasured).provenance.is_placeholder(),
-            "{unmeasured}"
-        );
+    // No blend function is a placeholder.
+    for listed in vkxp_pixel::provenance() {
+        if listed.name.starts_with("blend_") {
+            assert!(!listed.provenance.is_placeholder(), "{}", listed.name);
+        }
     }
 }
 
