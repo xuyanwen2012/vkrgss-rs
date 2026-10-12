@@ -100,8 +100,8 @@ data defined in `vkxp-proto`, and the guest runs as a thread or as a process of 
 guest process confines itself with Landlock before the first script runs: it writes only
 below the game directory, executes nothing and opens no TCP connection; `--sandbox off`
 turns that off.
-The protocol is at version 10, which added the keys a script presses for the player with
-`keybd_event` and `mouse_event` and the hiding of the pointer with `ShowCursor`.
+The protocol is at version 11, which added the brightness of a frame and the rule by which
+a transition is stepped (that of RGSS1 or that of RGSS2).
 
 | Crate | Responsibility | Side |
 |---|---|---|
