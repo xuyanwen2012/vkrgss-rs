@@ -79,3 +79,22 @@ None yet.
 - Task 1.1 names `cargo test -p vkxp --locked --lib --bins`. The package has no library
   target, so cargo refuses `--lib` before it builds anything, on the commit before this
   change as well. `cargo test -p vkxp --locked --bins` runs the same unit tests and passes.
+- What options tell the guest process to write: only the guest's rows of `--frame-stats`
+  and the diagnostics of `--verbose` and `VKXP_LOG`, and both go to the error stream, which
+  the guest inherits open. Nothing is opened early and no directory besides the game
+  directory is granted. `--record` and `--dump` are written by the host process.
+- The rights handled are `Execute` and every right of writing that Landlock ABI 4 knows
+  (write, the removals, the creations, `Refer`, `Truncate`), and the two TCP rights. The
+  game directory is granted all of them but `Execute`, so a rename between two of its
+  directories works. `/dev/null` is granted write and truncate, because Ruby opens a file
+  for writing with `O_TRUNC`.
+- Landlock ABI 5 added a right for requests to devices and ABI 9 one for connecting to a
+  Unix socket by its path. Neither is handled, so both stay as they are: the second is what
+  the copies of the guest process need to reach the socket of the program.
+- This machine: Linux 7.2.9, Landlock ABI 10; `landlock` 0.4.7 knows up to ABI 9 and
+  reports the rules as fully enforced.
+- The four end-to-end tests of the restriction ran here and passed; none was skipped. The
+  test of "Off" needs no Landlock and always runs.
+- `landlock` and the two crates it brings (`enumflags2`, `enumflags2_derive`) are MIT or
+  Apache-2.0, which `deny.toml` allows already; it is unchanged. `cargo-deny` is not
+  installed here, so `cargo xtask audit` was not run; `cargo xtask deps` passes.

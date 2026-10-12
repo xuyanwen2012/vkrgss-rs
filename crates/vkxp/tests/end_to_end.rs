@@ -124,7 +124,7 @@ fn vkxp_logging(work: TempDir, arguments: &[&str], log: Option<&str>) -> Ran {
 }
 
 /// The executable with these arguments, to be started in `work`, with the loader restricted
-/// as this process is and neither `VKXP_LOG` nor `VKXP_GUEST` set. `work` also stands in for
+/// as this process is and none of `VKXP_LOG`, `VKXP_GUEST` and `VKXP_SANDBOX` set. `work` also stands in for
 /// the user's run-time directory, where the socket of a guest process is made.
 fn command(work: &Path, arguments: &[&str]) -> Command {
     let restriction = isolation();
@@ -136,7 +136,8 @@ fn command(work: &Path, arguments: &[&str]) -> Command {
         .env("XDG_CONFIG_HOME", work)
         .env("XDG_RUNTIME_DIR", work)
         .env_remove("VKXP_LOG")
-        .env_remove("VKXP_GUEST");
+        .env_remove("VKXP_GUEST")
+        .env_remove("VKXP_SANDBOX");
     for (name, value) in restriction {
         command.env(name, value);
     }
@@ -1728,4 +1729,193 @@ fn a_guest_that_may_start_processes_saves_no_state() {
         "{stderr}"
     );
     assert!(stderr.contains("slot 0 holds no state"), "{stderr}");
+}
+
+// The confined guest process: the scenarios of the requirements "Confined guest process" and
+// "Sandbox option".
+
+/// Why a guest process cannot confine itself here, if it cannot: the kernel has no Landlock,
+/// or the environment the tests run in does not let it be used. A thread that is made for
+/// it puts a restriction without consequence on itself.
+fn landlock_missing() -> Option<String> {
+    use landlock::{AccessFs, Ruleset, RulesetAttr, RulesetStatus};
+
+    let probe = || {
+        Ruleset::default()
+            .handle_access(AccessFs::MakeBlock)?
+            .create()?
+            .restrict_self()
+    };
+    match std::thread::spawn(probe).join().expect("the probe ends") {
+        Ok(status) if status.ruleset == RulesetStatus::NotEnforced => {
+            Some(format!("Landlock is not available: {:?}", status.landlock))
+        }
+        Ok(_) => None,
+        Err(error) => Some(format!("Landlock cannot be used: {error}")),
+    }
+}
+
+/// Whether the test that calls this is skipped, with the reason printed.
+fn skipped_without_landlock(test: &str) -> bool {
+    let missing = landlock_missing();
+    if let Some(reason) = &missing {
+        eprintln!("{test}: skipped, a guest process cannot confine itself here. {reason}");
+    }
+    missing.is_some()
+}
+
+/// A game that opens `out.txt` in the directory `outside` for writing and notes in
+/// `result.txt` in the game directory how that went.
+fn outside_game(name: &str, outside: &Path) -> Game {
+    let main = format!(
+        "result = begin\n\
+           File.open('{}/out.txt', 'w') {{ |file| file.write('x') }}\n\
+           'written'\n\
+         rescue SystemCallError => error\n\
+           error.class.name\n\
+         end\n\
+         File.open('result.txt', 'w') {{ |file| file.write(result) }}\n\
+         Graphics.update\n",
+        outside.display()
+    );
+    Game::new(name, "Outside", &[("Main", &main)])
+}
+
+/// Scenario "Write inside".
+#[test]
+fn a_confined_guest_writes_below_the_game_directory() {
+    if skipped_without_landlock("a_confined_guest_writes_below_the_game_directory") {
+        return;
+    }
+    let main = "\
+Dir.mkdir('saves')
+File.open('saves/one.tmp', 'w') { |file| file.write('saved') }
+File.rename('saves/one.tmp', 'Save1.rxdata')
+File.open('/dev/null', 'w') { |file| file.write('nothing') }
+Graphics.update
+";
+    let game = Game::new("e2e-sandbox-inside", "Inside", &[("Main", main)]);
+    let work = tempfile::tempdir().expect("a temporary directory");
+    let ran = headless_logging(work, &game, &["--guest", "process"], Some("info"));
+    ran.assert_success();
+    let saved = fs::read_to_string(game.dir().join("Save1.rxdata")).expect("the file was written");
+    assert_eq!(saved, "saved");
+    let stderr = ran.stderr();
+    assert!(
+        stderr.contains("the guest process is confined with Landlock"),
+        "{stderr}"
+    );
+}
+
+/// Scenario "Write outside".
+#[test]
+fn a_confined_guest_cannot_write_beside_the_game_directory() {
+    if skipped_without_landlock("a_confined_guest_cannot_write_beside_the_game_directory") {
+        return;
+    }
+    let outside = tempfile::tempdir().expect("a temporary directory");
+    let game = outside_game("e2e-sandbox-outside", outside.path());
+    let ran = headless(&game, &["--guest", "process"]);
+    ran.assert_success();
+    let result = fs::read_to_string(game.dir().join("result.txt")).expect("the game ran");
+    assert_eq!(result, "Errno::EACCES");
+    assert!(!outside.path().join("out.txt").exists());
+}
+
+/// Scenario "Off", and the two runs that are not confined whatever the option says, which
+/// say so.
+#[test]
+fn a_guest_that_is_not_confined_writes_beside_the_game_directory() {
+    let not_confined: [(&[&str], Option<&str>); 3] = [
+        (&["--guest", "process", "--sandbox", "off"], None),
+        (
+            &["--guest", "process", "--allow-process-functions"],
+            Some("the guest process is not confined: --allow-process-functions is given"),
+        ),
+        (
+            &["--guest", "thread", "--sandbox", "on"],
+            Some("the guest is a thread and is not confined"),
+        ),
+    ];
+    for (arguments, said) in not_confined {
+        let outside = tempfile::tempdir().expect("a temporary directory");
+        let game = outside_game("e2e-sandbox-off", outside.path());
+        let work = tempfile::tempdir().expect("a temporary directory");
+        let ran = headless_logging(work, &game, arguments, Some("info"));
+        ran.assert_success();
+        let result = fs::read_to_string(game.dir().join("result.txt")).expect("the game ran");
+        assert_eq!(result, "written", "{arguments:?}");
+        assert!(outside.path().join("out.txt").is_file(), "{arguments:?}");
+        let stderr = ran.stderr();
+        assert!(!stderr.contains("is confined"), "{arguments:?}: {stderr}");
+        if let Some(said) = said {
+            assert_eq!(stderr.matches(said).count(), 1, "{arguments:?}: {stderr}");
+        }
+    }
+}
+
+/// Scenario "States" of the requirement "Confined guest process".
+#[test]
+fn a_confined_guest_saves_and_loads_states_as_one_that_is_not() {
+    if skipped_without_landlock("a_confined_guest_saves_and_loads_states_as_one_that_is_not") {
+        return;
+    }
+    let dumped = [39, 40, 41, 79, 80, 81, 82, 100];
+    let names: Vec<String> = dumped
+        .iter()
+        .map(|index| format!("{index}={index}.png"))
+        .collect();
+    let run = |sandbox: &'static str| {
+        let game = counter_and_rand_game("e2e-sandbox-states");
+        let mut arguments = vec!["--guest", "process", "--sandbox", sandbox];
+        arguments.extend(["--frames", "101", "--states", "40:save 0, 80:load 0"]);
+        arguments.extend(names.iter().flat_map(|name| ["--dump", name.as_str()]));
+        let work = tempfile::tempdir().expect("a temporary directory");
+        let ran = headless_logging(work, &game, &arguments, Some("info"));
+        ran.assert_success();
+        let stderr = ran.stderr();
+        assert!(stderr.contains("state saved into slot 0"), "{stderr}");
+        assert!(stderr.contains("state loaded from slot 0"), "{stderr}");
+        assert_eq!(
+            stderr.contains("the guest process is confined with Landlock"),
+            sandbox == "on",
+            "{stderr}"
+        );
+        ran
+    };
+    let (confined, free) = (run("on"), run("off"));
+    for index in dumped {
+        assert!(
+            dumped_bytes(&confined, index) == dumped_bytes(&free, index),
+            "frame {index} differs under the restriction"
+        );
+    }
+    // The load did go back: the frame after it is the one after the save.
+    assert!(dumped_bytes(&confined, 81) == dumped_bytes(&confined, 41));
+    assert!(dumped_bytes(&confined, 80) != dumped_bytes(&confined, 81));
+}
+
+/// Scenario "Unknown value" of the requirement "Sandbox option".
+#[test]
+fn an_unknown_value_of_the_sandbox_option_prints_the_usage_message() {
+    let ran = vkxp(&["--sandbox", "maybe"]);
+    assert_eq!(ran.output.status.code(), Some(2));
+    let stderr = ran.stderr();
+    assert!(
+        stderr.contains("--sandbox: `maybe` is not one of on, off"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("usage: vkxp"), "{stderr}");
+
+    let work = tempfile::tempdir().expect("a temporary directory");
+    let output = command(work.path(), &[])
+        .env("VKXP_SANDBOX", "maybe")
+        .output()
+        .expect("the program starts");
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("VKXP_SANDBOX: `maybe` is not one of on, off"),
+        "{stderr}"
+    );
 }

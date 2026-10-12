@@ -6,7 +6,7 @@
 
 ## 2. The restriction
 
-- [ ] 2.1 The `landlock` dependency and the rules of `design.md` in the guest's start, with the reports of the best-effort mode. Verify: scenarios "Write inside", "Write outside", "Off" and "States" as end-to-end tests that skip with a printed reason where Landlock cannot be used; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` passes; `cargo xtask deps` passes; "Checked" is filled.
+- [x] 2.1 The `landlock` dependency and the rules of `design.md` in the guest's start, with the reports of the best-effort mode. Verify: scenarios "Write inside", "Write outside", "Off" and "States" as end-to-end tests that skip with a printed reason where Landlock cannot be used; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` passes; `cargo xtask deps` passes; "Checked" is filled.
 
 ## 3. Documentation
 

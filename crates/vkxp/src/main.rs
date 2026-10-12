@@ -47,6 +47,10 @@
 //! with `fork` and parked until it is loaded (`copier` in the guest process, the relay of
 //! `process` in the program). F3 and F4 ask for it in a window, `--states` in a headless
 //! run. With `--allow-process-functions` there are no states.
+//!
+//! A guest process confines itself before the first script runs (`sandbox`), unless
+//! `--sandbox off` or `--allow-process-functions` is given. A guest on a thread is not
+//! confined, and neither is the program itself.
 
 mod args;
 mod config;
@@ -54,6 +58,7 @@ mod copier;
 mod font;
 mod log;
 mod process;
+mod sandbox;
 mod signals;
 
 use std::os::unix::net::UnixStream;
@@ -405,6 +410,12 @@ fn guest_form(chosen: Option<GuestForm>, headless: bool) -> GuestForm {
     })
 }
 
+/// Whether a guest process confines itself: unless the setting says no, and never with the
+/// functions that start processes.
+fn confined(sandbox: Option<bool>, process_functions: bool) -> bool {
+    sandbox.unwrap_or(true) && !process_functions
+}
+
 /// The guest of a run, as the host is given it and as the program waits for it.
 enum Guest {
     /// The interpreter thread of this process, and what the guest thread reports.
@@ -451,10 +462,18 @@ fn run_guest(game_dir: PathBuf, options: Options, role: &GuestRole) -> Result<bo
         let copier: Arc<dyn Copier> = Arc::new(ForkCopier::new(role.socket.clone(), &stream));
         config.run.copier = Some(copier);
     }
+    let confined = confined(options.sandbox, options.process_functions);
+    if options.sandbox != Some(false) && !confined {
+        // A program the game starts would inherit the restriction.
+        tracing::info!("the guest process is not confined: --allow-process-functions is given");
+    }
     // The interpreter thread reads and writes the socket itself.
     let link = GuestEnd::over_stream(stream);
     let ok = interpreter.run(move |ruby| {
         signals::unblock_virtual_timer();
+        if confined {
+            sandbox::confine(&game_dir);
+        }
         let ok = game_succeeded(run_game(ruby, config, link));
         // A copy of the guest process has no other thread to go back to.
         copier::exit_if_copy(ok);
@@ -486,6 +505,10 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
     // What the guest thread does, and what the program waits for once the host has ended.
     let (guest, waited): (Box<dyn FnOnce(GuestEnd) + Send>, Guest) = match form {
         GuestForm::Thread => {
+            if options.sandbox != Some(false) {
+                // The restriction would bind the thread and not the files both sides share.
+                tracing::info!("the guest is a thread and is not confined");
+            }
             let config = guest_config(&game_dir, &options, inputs, seed)?;
             let interpreter = Interpreter::start(vkxp_ruby_sys::Options::default())?;
             // It sends the game to the interpreter thread, waits for it, reports how
@@ -622,6 +645,17 @@ mod tests {
             for form in [GuestForm::Thread, GuestForm::Process] {
                 assert_eq!(guest_form(Some(form), headless), form);
             }
+        }
+    }
+
+    /// Requirement "Sandbox option": the default, and the functions that start processes.
+    #[test]
+    fn a_guest_process_is_confined_unless_told_otherwise() {
+        assert!(confined(None, false));
+        assert!(confined(Some(true), false));
+        assert!(!confined(Some(false), false));
+        for sandbox in [None, Some(true), Some(false)] {
+            assert!(!confined(sandbox, true));
         }
     }
 
