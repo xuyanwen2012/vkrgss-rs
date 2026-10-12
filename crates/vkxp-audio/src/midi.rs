@@ -93,6 +93,8 @@ pub(crate) struct MidiSource {
     file: Arc<MidiFile>,
     sequencer: MidiFileSequencer,
     looping: bool,
+    /// How many frames were rendered since the start of the track.
+    rendered: u64,
     left: Vec<f32>,
     right: Vec<f32>,
 }
@@ -116,6 +118,7 @@ impl MidiSource {
             file,
             sequencer,
             looping,
+            rendered: 0,
             left: vec![0.0; BLOCK],
             right: vec![0.0; BLOCK],
         })
@@ -138,10 +141,16 @@ impl Source for MidiSource {
             }
             written += frames;
         }
+        self.rendered += written as u64;
         written
     }
 
     fn rewind(&mut self) {
         self.sequencer.play(&self.file, self.looping);
+        self.rendered = 0;
+    }
+
+    fn position(&self) -> u64 {
+        self.rendered
     }
 }

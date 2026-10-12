@@ -88,4 +88,12 @@ impl Source for Decoded {
     fn rewind(&mut self) {
         self.next = 0;
     }
+
+    fn position(&self) -> u64 {
+        self.next as u64
+    }
+
+    fn start_from(&mut self, position: u64) {
+        self.next = (self.frames.len() / 2).min(position.try_into().unwrap_or(usize::MAX));
+    }
 }

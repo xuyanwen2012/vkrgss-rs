@@ -52,6 +52,28 @@ pub trait Source: Send {
 
     /// Starts again from the beginning.
     fn rewind(&mut self);
+
+    /// The position of the next frame [`read`](Source::read) gives: in frames at the rate
+    /// of the source, from the start of the data for sampled data, and for a MIDI file as
+    /// the number of frames rendered since its start, loops included.
+    fn position(&self) -> u64;
+
+    /// Makes a source that has given no frame yet start at `position` instead of at the
+    /// beginning. This decodes what lies before the position, so it belongs where files are
+    /// opened, not where they are mixed. A position behind the end leaves the source at its
+    /// end.
+    fn start_from(&mut self, position: u64) {
+        let mut discarded = [0.0; 2 * 1024];
+        let mut left = position;
+        while left > 0 {
+            let frames = left.min(discarded.len() as u64 / 2) as usize;
+            let read = self.read(&mut discarded[..frames * 2]);
+            left -= read as u64;
+            if read < frames {
+                break;
+            }
+        }
+    }
 }
 
 /// Where a source reports damage it meets while it plays: [`DecodeError::Damaged`], at most
@@ -195,6 +217,8 @@ struct Sampled {
     position: f64,
     /// Input frames per output frame.
     step: f64,
+    /// How many frames were given since the start of the data.
+    given: u64,
     /// Where damage is reported, until it has been.
     report: Option<Report>,
 }
@@ -210,6 +234,7 @@ impl Sampled {
             frames: Vec::new(),
             position: 0.0,
             step: 1.0,
+            given: 0,
             report: Some(report),
         };
         // The first block is decoded here, so that it is not decoded where the sound is mixed.
@@ -275,6 +300,7 @@ impl Source for Sampled {
             self.position += self.step;
             written += 1;
         }
+        self.given += written as u64;
         written
     }
 
@@ -283,8 +309,13 @@ impl Source for Sampled {
         self.stream = Stream::open(self.data.clone()).ok();
         self.frames.clear();
         self.position = 0.0;
+        self.given = 0;
         if let Some(damage) = self.refill() {
             self.damaged(damage);
         }
+    }
+
+    fn position(&self) -> u64 {
+        self.given
     }
 }

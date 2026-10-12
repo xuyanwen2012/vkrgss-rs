@@ -5,9 +5,15 @@
 //! prepared commands and render. [`Mixer`] runs both in place, which is what the tests use;
 //! [`Output`](crate::Output) runs the loader on a worker thread and the channels in the
 //! callback of the device.
+//!
+//! The loader is also what remembers where the music and the background sound are, for the
+//! save states: it opened their sources, and each voice tells it its position through a
+//! number the two share.
 
+use std::collections::HashMap;
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use vkxp_proto::{AudioChannel, AudioCommand};
@@ -45,6 +51,8 @@ pub(crate) enum Prepared {
         /// `None` when the data cannot be played: the channel is then silent.
         source: Option<Box<dyn Source>>,
         volume: u8,
+        /// Where the voice writes its position, on the channels that are remembered.
+        position: Option<Arc<AtomicU64>>,
     },
     Stop {
         channel: AudioChannel,
@@ -85,6 +93,28 @@ impl Reports {
     }
 }
 
+/// What the loader gave a channel to play.
+struct Playing {
+    /// The file of the play command, which is what tells one file from another: the command
+    /// carries no name.
+    data: Arc<[u8]>,
+    /// The position of the voice, which the voice writes. The voice holds the other
+    /// reference to it, so a count of one says that the voice is gone.
+    position: Arc<AtomicU64>,
+}
+
+/// A file and a position in it, or nothing for a channel that was silent.
+type Remembered = Option<(Arc<[u8]>, u64)>;
+
+/// The place of a channel among the two that are remembered.
+fn remembered(channel: AudioChannel) -> Option<usize> {
+    match channel {
+        AudioChannel::Bgm => Some(0),
+        AudioChannel::Bgs => Some(1),
+        AudioChannel::Me | AudioChannel::Se => None,
+    }
+}
+
 /// Opens the sources of play commands and reports the failures, each kind once: its own and,
 /// through the same [`Report`], the damage a source meets later while it plays.
 pub(crate) struct Loader {
@@ -92,9 +122,33 @@ pub(crate) struct Loader {
     soundfonts: SoundFonts,
     ffmpeg: PathBuf,
     report: Report,
+    /// What the music and the background sound play.
+    playing: [Option<Playing>; 2],
+    /// What each slot remembers of the two.
+    slots: HashMap<u8, [Remembered; 2]>,
+    /// What the next play command of each of the two starts from, if it plays that file.
+    armed: [Remembered; 2],
 }
 
 impl Loader {
+    /// Stores under `slot` what the music and the background sound play and where they are.
+    pub(crate) fn remember(&mut self, slot: u8) {
+        let playing = self.playing.each_ref().map(|playing| {
+            let playing = playing.as_ref()?;
+            // A voice that a fade ended, or that failed to start, left its number behind.
+            (Arc::strong_count(&playing.position) > 1).then(|| {
+                let position = playing.position.load(Ordering::Relaxed);
+                (playing.data.clone(), position)
+            })
+        });
+        self.slots.insert(slot, playing);
+    }
+
+    /// Arms the music and the background sound with what `slot` holds.
+    pub(crate) fn recall(&mut self, slot: u8) {
+        self.armed = self.slots.get(&slot).cloned().unwrap_or_default();
+    }
+
     pub(crate) fn prepare(&mut self, command: AudioCommand) -> Prepared {
         match command {
             AudioCommand::Play {
@@ -107,22 +161,47 @@ impl Loader {
                 // output's, is faster or slower by their ratio. That is the pitch.
                 let pitch = u64::from(pitch.clamp(*PITCH.start(), *PITCH.end()));
                 let rate = (u64::from(self.sample_rate) * 100 + pitch / 2) / pitch;
+                let data: Arc<[u8]> = data.into();
                 let opened = decode::open(
-                    data.into(),
+                    data.clone(),
                     rate as u32,
                     loops(channel),
                     &mut self.soundfonts,
                     &self.ffmpeg,
                     &self.report,
                 );
-                let source = opened.map_err(|error| (self.report)(&error)).ok();
+                let mut source = opened.map_err(|error| (self.report)(&error)).ok();
+                let mut position = None;
+                if let Some(index) = remembered(channel) {
+                    // Whatever the command plays, the channel is armed no longer.
+                    let armed = self.armed[index].take();
+                    self.playing[index] = source.as_mut().map(|source| {
+                        if let Some((file, start)) = armed
+                            && file == data
+                        {
+                            source.start_from(start);
+                        }
+                        let shared = Arc::new(AtomicU64::new(source.position()));
+                        position = Some(shared.clone());
+                        Playing {
+                            data,
+                            position: shared,
+                        }
+                    });
+                }
                 Prepared::Play {
                     channel,
                     source,
                     volume,
+                    position,
                 }
             }
-            AudioCommand::Stop { channel } => Prepared::Stop { channel },
+            AudioCommand::Stop { channel } => {
+                if let Some(index) = remembered(channel) {
+                    self.playing[index] = None;
+                }
+                Prepared::Stop { channel }
+            }
             AudioCommand::Fade {
                 channel,
                 duration_ms,
@@ -163,15 +242,23 @@ struct Voice {
     volume: f32,
     looping: bool,
     fade: Option<Fade>,
+    /// Where the position of the source is written each time the voice was mixed.
+    position: Option<Arc<AtomicU64>>,
 }
 
 impl Voice {
-    fn new(source: Box<dyn Source>, volume: u8, looping: bool) -> Voice {
+    fn new(
+        source: Box<dyn Source>,
+        volume: u8,
+        looping: bool,
+        position: Option<Arc<AtomicU64>>,
+    ) -> Voice {
         Voice {
             source,
             volume: f32::from(volume.min(100)),
             looping,
             fade: None,
+            position,
         }
     }
 
@@ -191,6 +278,9 @@ impl Voice {
             }
             self.source.rewind();
             rewound = true;
+        }
+        if let Some(position) = &self.position {
+            position.store(self.source.position(), Ordering::Relaxed);
         }
         let steady = gain(self.volume);
         let pairs = out.as_chunks_mut::<2>().0.iter_mut();
@@ -255,8 +345,10 @@ impl Channels {
                 channel,
                 source,
                 volume,
+                position,
             } => {
-                let voice = source.map(|source| Voice::new(source, volume, loops(channel)));
+                let voice =
+                    source.map(|source| Voice::new(source, volume, loops(channel), position));
                 match channel {
                     AudioChannel::Bgm => self.bgm = voice,
                     AudioChannel::Bgs => self.bgs = voice,
@@ -334,6 +426,10 @@ impl Channels {
 /// original; pitch is a resampling ratio; a fade lowers the volume evenly, so its ramp is
 /// even in decibels until it ends in silence. The mixer has no thread and no device, and
 /// what it renders depends only on the commands and the number of frames rendered.
+///
+/// For the save states it remembers where the music and the background sound are, see
+/// [`remember`](Mixer::remember) and [`recall`](Mixer::recall). What it remembers lives as
+/// long as it does.
 pub struct Mixer {
     loader: Loader,
     channels: Channels,
@@ -357,6 +453,9 @@ impl Mixer {
                 soundfonts: options.soundfonts,
                 ffmpeg: options.ffmpeg,
                 report,
+                playing: [None, None],
+                slots: HashMap::new(),
+                armed: [None, None],
             },
             channels: Channels {
                 sample_rate,
@@ -379,6 +478,21 @@ impl Mixer {
     /// Fills `out`, interleaved stereo, with the next frames of the mix.
     pub fn render(&mut self, out: &mut [f32]) {
         self.channels.render(out);
+    }
+
+    /// Remembers under `slot`, in place of what it held, the file and the position of the
+    /// music and of the background sound, or that the channel is silent. The music effect
+    /// and the sound effects are not remembered.
+    pub fn remember(&mut self, slot: u8) {
+        self.loader.remember(slot);
+    }
+
+    /// Arms the music and the background sound with what `slot` holds. The next play
+    /// command on each of the two disarms it, and starts at the remembered position if its
+    /// file is the remembered one; its volume and pitch are its own, and a fade is not
+    /// brought back.
+    pub fn recall(&mut self, slot: u8) {
+        self.loader.recall(slot);
     }
 
     pub(crate) fn into_parts(self) -> (Loader, Channels) {

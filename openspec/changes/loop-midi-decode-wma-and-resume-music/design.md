@@ -82,3 +82,12 @@ output device.
   the first as the requirement says. With one marker, or several at the same time (one for
   each MIDI channel), the two are the same. Following the first would need the file to be
   rewritten in front of the library, which this design does not name; it was not built.
+- "The name the play command gave". A play command carries the data of its file and no
+  name, and the protocol does not change, so the mixer tells files apart by their data: a
+  slot keeps the bytes of the two files, and a play command names the remembered file when
+  its bytes are the same. A name in the command would spare the memory and the comparison;
+  that is a change of the protocol.
+- The position of a voice is counted at the rate its source was opened for, which depends
+  on the pitch of its play command. A play command that names the remembered file with
+  another pitch starts at the same number of frames, which is then another place in the
+  file. A game that goes on from a state sends the pitch it sent before.

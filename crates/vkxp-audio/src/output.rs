@@ -43,10 +43,17 @@ impl Write for Errors {
     }
 }
 
+/// What the worker thread is asked for, in the order it is asked.
+enum Request {
+    Command(AudioCommand),
+    Remember(u8),
+    Recall(u8),
+}
+
 /// Sound on an audio device, or nothing where no device could be opened.
 pub struct Output {
     /// The way to the worker thread; `None` without a device.
-    commands: Option<Sender<AudioCommand>>,
+    commands: Option<Sender<Request>>,
     /// The open device. Dropping it ends the sound.
     _device: Option<Box<dyn Any>>,
 }
@@ -69,7 +76,7 @@ impl Output {
         let mut errors = Errors(Arc::new(Mutex::new(options.errors)));
         let soundfonts = options.soundfonts;
         let ffmpeg = options.ffmpeg;
-        let (commands, received) = mpsc::channel::<AudioCommand>();
+        let (commands, received) = mpsc::channel::<Request>();
         let worker_errors = errors.clone();
         let start: Start = Box::new(move |sample_rate| {
             let mut errors = worker_errors.clone();
@@ -83,9 +90,15 @@ impl Output {
             let worker = thread::Builder::new()
                 .name("vkxp-audio".to_owned())
                 .spawn(move || {
-                    for command in received {
-                        if prepared.send(loader.prepare(command)).is_err() {
-                            break;
+                    for request in received {
+                        match request {
+                            Request::Command(command) => {
+                                if prepared.send(loader.prepare(command)).is_err() {
+                                    break;
+                                }
+                            }
+                            Request::Remember(slot) => loader.remember(slot),
+                            Request::Recall(slot) => loader.recall(slot),
                         }
                     }
                 });
@@ -126,9 +139,24 @@ impl Output {
 
     /// Hands a command to the audio side without waiting for it.
     pub fn command(&self, command: AudioCommand) {
+        self.request(Request::Command(command));
+    }
+
+    /// Like [`Mixer::remember`], without waiting for it. The positions are those the
+    /// device callback last mixed up to.
+    pub fn remember(&self, slot: u8) {
+        self.request(Request::Remember(slot));
+    }
+
+    /// Like [`Mixer::recall`], without waiting for it.
+    pub fn recall(&self, slot: u8) {
+        self.request(Request::Recall(slot));
+    }
+
+    fn request(&self, request: Request) {
         if let Some(commands) = &self.commands {
             // The worker thread only ends with the output.
-            let _ = commands.send(command);
+            let _ = commands.send(request);
         }
     }
 }

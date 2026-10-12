@@ -534,3 +534,135 @@ fn wma_that_the_program_does_not_decode_is_reported_and_silent() {
         assert!(reports.text().contains("ffmpeg"), "{}", reports.text());
     }
 }
+
+const BGM: AudioChannel = AudioChannel::Bgm;
+const BGS: AudioChannel = AudioChannel::Bgs;
+
+fn stop(channel: AudioChannel) -> AudioCommand {
+    AudioCommand::Stop { channel }
+}
+
+/// The next `frames` frames of the mix, interleaved.
+fn frames(mixer: &mut Mixer, frames: usize) -> Vec<f32> {
+    let mut out = vec![0.0; frames * 2];
+    mixer.render(&mut out);
+    out
+}
+
+/// A second in which every frame tells where in the file it is.
+fn ramp() -> Vec<u8> {
+    let ramp: Vec<i16> = (0..RATE).map(|frame| (frame / 2) as i16).collect();
+    wav_of(RATE, &ramp)
+}
+
+/// Scenarios "Same file" and "Another file".
+#[test]
+fn a_recalled_position_is_where_the_same_file_starts() {
+    let (ramp, other) = (ramp(), tone(440.0, 0.5));
+    let mut mixer = mixer();
+    mixer.apply(play(BGM, &ramp));
+    frames(&mut mixer, 1000);
+    mixer.remember(0);
+    mixer.apply(stop(BGM));
+
+    // What the file sounds like from its beginning.
+    let mut whole = self::mixer();
+    whole.apply(play(BGM, &ramp));
+    let start = frames(&mut whole, 1000);
+    let from_1000 = frames(&mut whole, 1000);
+    assert_eq!(from_1000[0], 500.0 / 32768.0, "frame 1000 of the ramp");
+
+    mixer.recall(0);
+    mixer.apply(play(BGM, &ramp));
+    assert_eq!(frames(&mut mixer, 1000), from_1000);
+    mixer.apply(play(BGM, &ramp));
+    assert_eq!(frames(&mut mixer, 1000), start, "one command only");
+
+    // Another file, and the remembered one behind it, start at their beginnings.
+    mixer.recall(0);
+    mixer.apply(play(BGM, &other));
+    let mut other_alone = self::mixer();
+    other_alone.apply(play(BGM, &other));
+    assert_eq!(frames(&mut mixer, 1000), frames(&mut other_alone, 1000));
+    mixer.apply(play(BGM, &ramp));
+    assert_eq!(frames(&mut mixer, 1000), start);
+
+    // Volume and pitch are those of the command.
+    mixer.recall(0);
+    mixer.apply(play_with(BGM, &ramp, 0, 100));
+    assert_eq!(peak(&frames(&mut mixer, 1000)), 0.0);
+}
+
+/// Scenario "Silent channel", and a slot is remembered anew each time.
+#[test]
+fn a_channel_remembered_silent_starts_at_the_beginning() {
+    let ramp = ramp();
+    let mut whole = mixer();
+    whole.apply(play(BGS, &ramp));
+    let start = frames(&mut whole, 1000);
+    let from_1000 = frames(&mut whole, 1000);
+
+    let mut mixer = mixer();
+    mixer.apply(play(BGM, &ramp));
+    frames(&mut mixer, 1000);
+    mixer.remember(0);
+    mixer.apply(stop(BGM));
+    mixer.recall(0);
+    mixer.apply(play(BGS, &ramp));
+    assert_eq!(frames(&mut mixer, 1000), start, "only the music played");
+
+    // The background sound is at frame 1000 now: remembered, then remembered as stopped.
+    mixer.remember(0);
+    mixer.apply(stop(BGS));
+    mixer.recall(0);
+    mixer.apply(play(BGS, &ramp));
+    assert_eq!(frames(&mut mixer, 1000), from_1000);
+    mixer.apply(stop(BGS));
+    mixer.remember(0);
+    mixer.recall(0);
+    mixer.apply(play(BGS, &ramp));
+    assert_eq!(frames(&mut mixer, 1000), start);
+
+    // A voice that a fade ended is silence too, and so is a slot that holds nothing.
+    mixer.apply(AudioCommand::Fade {
+        channel: BGS,
+        duration_ms: 10,
+    });
+    frames(&mut mixer, 1000);
+    mixer.remember(0);
+    mixer.recall(0);
+    mixer.apply(play(BGS, &ramp));
+    assert_eq!(frames(&mut mixer, 1000), start);
+    mixer.recall(9);
+    mixer.apply(play(BGS, &ramp));
+    assert_eq!(frames(&mut mixer, 1000), start);
+}
+
+/// Scenario "Same file" with a MIDI file, whose position is counted through its loops.
+/// Runs only where one of the system SoundFont locations exists.
+#[test]
+fn a_recalled_position_is_where_the_same_midi_file_starts() {
+    let reports = Reports::default();
+    let (Some(mut mixer), Some(mut whole)) = (
+        mixer_with_soundfont(&reports),
+        mixer_with_soundfont(&reports),
+    ) else {
+        return;
+    };
+    let midi = two_note_midi(true);
+    // Two and a half seconds: in the second round, which began at the marker.
+    let played = RATE as usize * 5 / 2;
+    whole.apply(play(BGM, &midi));
+    frames(&mut whole, played);
+    let from_there = frames(&mut whole, 4000);
+    assert!(peak(&from_there) > 0.01);
+
+    mixer.apply(play(BGM, &midi));
+    frames(&mut mixer, played);
+    mixer.remember(3);
+    mixer.apply(stop(BGM));
+    mixer.recall(3);
+    mixer.apply(play(BGM, &midi));
+    assert_eq!(frames(&mut mixer, 4000), from_there);
+    assert_eq!(reports.text(), "");
+}
