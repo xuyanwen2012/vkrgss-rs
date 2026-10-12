@@ -3,17 +3,35 @@
 Record of the decisions settled on 2026-10-08 before any code was written. Treat these as
 settled; change one only through an OpenSpec change that says so.
 
+The change `extend-scope-to-vx-and-vx-ace` changed the scope on 2026-10-12, by decisions of
+the owner taken that day: from RPG Maker XP alone to RGSS1, RGSS2 and RGSS3. It rewrote "Goal
+and scope" and added "Several runtimes" and the rows V0 to V3 of "Milestones".
+
 ## Goal and scope
 
-- vkxp is a from-scratch runtime for RPG Maker XP (RGSS1) games, built to a 2026 standard.
-- Personal project, MIT licence. RGSS2/RGSS3 (VX, VX Ace) are out of scope.
+- vkxp is a from-scratch runtime for the games of RPG Maker XP, VX and VX Ace, built to a
+  2026 standard.
+- In scope: RGSS1, RGSS2, RGSS3. Out of scope: RPG Maker MV and MZ (JavaScript on a browser
+  engine) and 2000 and 2003 (not Ruby; EasyRPG Player exists).
+- VX and VX Ace are held to the standard of XP: compared frames are pixel-identical to the
+  original runtime except for text glyphs, a save written at the same frame is identical
+  byte for byte, and runs are deterministic.
+- Rules of VX are measured on `RGSS202E.dll`; a game of the corpus is compared with the DLL
+  it ships. A difference between minor versions is recorded and gets no branch of its own;
+  where one shows in a comparison, V3 is reached only after the owner has accepted that
+  difference explicitly. Recording it is not a passing comparison.
+- Text glyphs are excluded as for XP: layout and advance widths are compared, glyph pixels
+  are not. Where an operation of VX spreads glyph pixels (a snapshot of the screen, a
+  blur), the comparison says how the affected area is left out.
+- Personal project, MIT licence.
 - Linux is the primary platform. Android is deferred. macOS is a distant maybe.
 - Compatibility bar: games using the default scripts or common community scripts run
   unmodified. Games that depend heavily on Windows may need patches.
 - Fidelity: bitmap operations, blending and tone are pixel-exact against the original runtime.
   Text only needs matching layout and advance widths, not identical glyph rasters.
-- Target behaviour is RGSS 1.04. `Library=` in `Game.ini` is ignored except that a trailing `J`
-  or `E` selects the default font and error-message language.
+- Target behaviour of XP is RGSS 1.04. `Library=` in `Game.ini` is planned to tell the runtime
+  too (see "The runtime of a game" under "Several runtimes"); today it is ignored except that
+  a trailing `J` or `E` selects the default font and error-message language.
 
 ## Architecture
 
@@ -161,13 +179,115 @@ settled; change one only through an OpenSpec change that says so.
   images; screenshots containing RTP or game art stay local.
 - Reverse engineering uses Ghidra headless; there is no restriction on reading the original DLL.
 
+## Several runtimes
+
+Decisions of the owner of 2026-10-12, recorded by the change `extend-scope-to-vx-and-vx-ace`.
+
+### Order and milestones
+
+- VX first, then VX Ace. The open items of XP (text with the fonts of Windows, a long game
+  played through by a person) go on beside this and neither waits for the other.
+- Milestones of VX:
+  - V0: the original runtime of VX starts under Wine, takes a schedule of input, and gives
+    the same captures at the same frame numbers in repeated runs; how waits and fades of VX
+    count as frames is established. This is a proof of the original's side only, done by
+    the owner's coordinating session directly; the oracle tool may be adapted for it (frame
+    size, the probe script). No change that implements VX in the guest is drafted before it
+    has passed. Comparing with vkxp begins at V1.
+  - V1: title screen and menu.
+  - V2: walking on a map.
+  - V3: battle, saving and loading.
+- A milestone is reached when the games of the corpus are identical to the original on
+  compared frames that show that milestone's outcome, and for V3 also in a save written at
+  the same frame. Before a milestone is declared reached, the record names the games and
+  their revisions, the DLL of each, the seeds, the input schedules, the compared frames and
+  the points at which saves were written, and that a repeated run gave the same.
+- Audio, configuration, the sandbox and the save states get no milestones of their own.
+  Their contracts apply to VX as they are, and are checked where the runtime behaves
+  differently or the guest holds new kinds of resources (a state must bring them back; the
+  music resumes differently after a music effect in VX). A measured difference in audio is
+  implemented or recorded as an accepted limit.
+- Version 0.2.0 is released when V3 is reached; it does not wait for VX Ace.
+
+### VX Ace
+
+- VX Ace: after VX; an own fork of Ruby 1.9.2 is vendored and patched to the behaviour
+  measured on the original, as was done with Ruby 1.8.7; its guest is an executable of its
+  own, which keeps the two interpreters' symbols and global state apart. How it is
+  packaged and chosen, what `--guest thread` means for it, and everything else about
+  VX Ace is decided after V3.
+
+### Several runtimes in one program
+
+- One repository, and the name stays for now.
+- One program. The RGSS version is a value known at run time; XP and VX share one build of
+  the embedded interpreter. Where the interpreter itself behaves by runtime (the symbol
+  numbers at start-up, which decide the order of instance variables in a save, are those
+  of XP today), the runtime is chosen before the interpreter is initialised. What is
+  measured for VX does not replace the behaviour of XP. The first change that implements VX
+  says which recorded patches are shared and which are chosen by runtime.
+- The requirements of the main specifications that state behaviour of XP (the default frame
+  rate of 40, a viewport that disposes of its elements, `$DEBUG`) are contracts of RGSS1.
+  A change that implements VX qualifies the requirements it touches by runtime and adds
+  scenarios for RGSS2; the scenarios of XP stay. The requirements on the protocol, the
+  boundary and the purity of the core apply to every runtime.
+- The code of VX goes into the existing crates, told apart by a version value. Only the
+  bindings of another interpreter get a crate of their own.
+- The runtime of a game: an option of the command line decides when given. Otherwise it is
+  taken from a recognised `Library=` of `Game.ini` and from the extension of the file that
+  `Scripts=` names (`.rxdata`, `.rvdata`, `.rvdata2`), in a directory or in an archive
+  alike; other files are not looked at. When the two disagree, or neither says anything,
+  the run ends with a message that asks for the option.
+- Starting a game is by runtime where it differs: the key `RTP=` of VX beside `RTP1` to
+  `RTP3`, the archive `Game.rgss2a` beside `Game.rgssad` (the same encoding; the archive of
+  VX Ace is another), and a file of built-in scripts for each runtime, extracted from the
+  user's own DLL and never committed. These are settled before V1.
+- The tile system of VX is an op kind that the CPU reference and the compute shader both
+  evaluate from the start; no cache of composed maps comes first.
+- The runtime gives the logical size of the frame and the frame rate at the start. The
+  setters of RGSS itself (`Graphics.resize_screen`, `Graphics.frame_rate=`) change them
+  within the limits of that runtime, and a reset restores the runtime's values. These are
+  part of VX, not tricks.
+
+### Corpus
+
+- Both run-time packages are fetched from their publisher's pages into the reference
+  directory outside the repository.
+- At least three games for each runtime, by different authors: the owner's own first, then
+  well-known free games, whose list the owner sees before anything is fetched. A game is
+  kept outside the repository and only a copy of it is run: by vkxp in the confined guest
+  process, by the original under Wine, whose prefix is not that sandbox.
+- What is built beyond the default scripts follows the corpus: it decides which further
+  `Win32API` calls are emulated and which patches are written. The limit that games which
+  depend heavily on Windows may need patches stays. A DLL that a game ships and that would
+  have to be executed, a script that reads or writes the memory of the runtime, and a
+  change of resolution made past the functions of RGSS each get a decision of their own on
+  whether and how.
+
+### Before VX is done
+
+- VX work is merged to `main` change by change. A VX game is run as far as the code goes,
+  and the run says once that support for VX is experimental.
+- Until V3 the documents say: XP is supported; VX is experimental or planned, whichever is
+  true at that time; VX Ace is planned.
+
+### Process
+
+- As before: OpenSpec changes implemented by flows, at most three in parallel. The owner's
+  standing go-ahead covers drafting, launching, merging and archiving up to V3 and does not
+  cover VX Ace. Pushing to the public repository is asked for each time.
+
 ## Milestones
 
 Status as of 2026-10-09. "Evidence" names what was checked; "Not covered" is what the status
 does not claim.
 
 The owner confirmed on 2026-10-09 that all milestones M0 to M6 are complete as recorded here,
-accepting the limits listed under "Not covered". Work beyond them is new work.
+accepting the limits listed under "Not covered". Work beyond them is new work. That
+confirmation concerns M0 to M6 only. The rows V0 to V3 are the milestones of VX, decided on
+2026-10-12 (see "Order and milestones"); each is "Not started" as of the change
+`extend-scope-to-vx-and-vx-ace`, and a row is set to "Done" only with the record that section
+asks for.
 
 | | Outcome | Status | Evidence | Not covered |
 |---|---|---|---|---|
@@ -178,6 +298,10 @@ accepting the limits listed under "Not covered". Work beyond them is new work.
 | M4 | Full play-through: battle, menus, save/load, F12 reset | Done | Battle course, menu and a save written at the same frame (byte for byte) equal the original; reset is covered by tests of vkxp alone | A complete play-through of a long game by a person; F12 cannot be injected into the original for comparison |
 | M5 | Modernisation: filters, present-timing pacing, configuration, gamepad | Done | Scaling filters, fullscreen, layered TOML configuration, gamepads, input recording and replay; `VK_EXT_present_timing` pacing runs on the AMD GPU at 60, 120 and 144 Hz with a mean interval of 25.0 ms | Whether present-timing pacing looks smoother than timer pacing on a physical display has not been judged by a person |
 | M6 | Wider compatibility: encrypted archives, `Win32API` shims, more games | Done | A packed game is identical to the original on every compared frame with both runtimes reading only the archive; common `Win32API` calls and raw key state are emulated; 20 of 23 further XP games start and the three others stop on files missing from the projects | An archive written by the original packing tool; custom DLLs that games ship |
+| V0 | The original runtime of VX under Wine: a schedule of input, the same captures at the same frame numbers in repeated runs, how waits and fades count as frames | Not started | None | Comparing with vkxp, which begins at V1 |
+| V1 | VX: title screen and menu | Not started | None | |
+| V2 | VX: walking on a map | Not started | None | |
+| V3 | VX: battle, saving and loading | Not started | None | |
 
 Text: positions, widths and line placement follow rules measured on the original under Wine
 with an open font; glyph shapes are not compared, as the scope in "Goal and scope" says, and
@@ -192,3 +316,28 @@ the rules have not been measured with the fonts of Windows itself.
   the probed patterns are possible.
 - Substitute fonts will not reproduce the original's advance widths.
 - MIDI timbre will differ from the original's Windows synthesiser.
+
+Risks of the extension to VX and VX Ace, each with what answers it (change
+`extend-scope-to-vx-and-vx-ace`):
+
+- The original runtime of VX does not run under Wine, or its frames cannot be captured
+  exactly. V0 comes first and alone; without it the standard of "Goal and scope" cannot be
+  checked.
+- No VX game by the owner exists and free games are few. The list is made and shown before
+  V0; a thin corpus is said in the milestone table, as for XP.
+- Rules measured for XP are assumed for VX. Each is measured again on `RGSS202E.dll` before
+  it is relied on; the probes exist.
+- A change to shared arithmetic or to the interpreter breaks XP. A change that touches shared
+  code names the probes and games of XP it was checked against; the seven-game comparison is
+  run at its merge.
+- At 60 frames per second a frame has 16.7 ms, and waves, blur and snapshots are new costs.
+  Frame times of representative VX scenes are measured before 0.2.0.
+- Ruby 1.9.2 differs in encodings, in what it serialises and in how it is embedded. These
+  are checked for feasibility when VX Ace is planned; sharing the rest of vkxp does not
+  settle them.
+
+Open, to be decided before the change that implements it is drafted: how
+`Graphics.snap_to_bitmap` of VX gets the pixels of the scene as it is, also while the display
+is frozen, without a frame going by. Composition happens on the host today and no message
+brings pixels back to the guest. The decision keeps the plain-data boundary and the purity of
+the core, and names the messages it adds or its use of the reference compositor.
