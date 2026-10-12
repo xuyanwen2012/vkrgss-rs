@@ -16,7 +16,7 @@
 
 ## 4. Documentation
 
-- [ ] 4.1 `docs/development.md`: the oracle on a VX game, the two options, what a late frame is, the limits (threads, transitions, a fixed window size). Verify: the usage text of the command and the document name the same options.
+- [x] 4.1 `docs/development.md`: the oracle on a VX game, the two options, what a late frame is, the limits (threads, transitions, a fixed window size). Verify: the usage text of the command and the document name the same options.
 
 ## 5. Integration check
 

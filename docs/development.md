@@ -190,11 +190,15 @@ cargo xtask oracle <game directory> --frames 10,20,200 \
 |---|---|
 | `--frames N[,N...]` | The frames to capture, numbered from 0 as `vkxp --dump` numbers them. Required. |
 | `--dll FILE` | The RGSS DLL that the game's `Game.ini` names with `Library=`. Required unless `--vkxp-only` is given. |
-| `--rtp NAME=DIR` | The directory of the run-time package that `Game.ini` names `NAME`. Repeatable. |
+| `--runtime rgss1\|rgss2` | The runtime of the game. Only needed when the file that `Scripts=` of `Game.ini` names is neither a `.rxdata` (RGSS1, RPG Maker XP) nor a `.rvdata` (RGSS2, RPG Maker VX). |
+| `--rtp NAME=DIR` | The directory of the run-time package that `Game.ini` names `NAME`, with `RTP1` to `RTP3` in a game of XP and with `RTP` in a game of VX. Repeatable. |
 | `--input SCHEDULE\|@FILE` | The buttons held from given frames on, in the syntax described under [Running the demo](running.md#running-the-demo), or a file that holds such a schedule. |
+| `--font FILE` | A font file that both runtimes draw text with, as described below. Repeatable. |
 | `--builtin-scripts FILE` | The built-in scripts file for vkxp, instead of its default location. |
 | `--out DIR` | Where everything is written. Defaults to `target/oracle`. |
 | `--vkxp-only` | Run only vkxp. Needs neither Wine nor Xvfb nor the DLL. |
+| `--original-only` | Run only the original. Nothing is compared, and vkxp is not built. Not together with `--vkxp-only`. |
+| `--no-threads` | On both sides, make `Thread.new` run its block at once in the caller and `sleep` return at once inside such a block. For a game whose Ruby threads end the original under Wine. |
 | `--locale LOCALE` | `LC_ALL` of the original, which decides the code page its file names are read in: `zh_CN.UTF-8`, the default, for a Chinese game, `ja_JP.UTF-8` for a Japanese one. |
 | `--timeout SECONDS` | How long the original may take to reach one frame. Defaults to 120. |
 
@@ -205,7 +209,19 @@ a fixed value, answers `Input.press?`, `Input.trigger?`, `Input.repeat?`, `Input
 does: one for every `Graphics.update` and `d` for `Graphics.transition(d)`. The game directory
 given is never written to, and the output directory may not be inside it.
 
-A game that ships its data in `Game.rgssad` (RGSSAD version 1) is compared as it is: the
+A game of RPG Maker VX is run in the same way, with what its runtime has differently: the
+window and the pictures are 544 by 416, the run-time package is registered for RGSS2 (for
+example `--rtp RPGVX=<directory>`), the encrypted archive is `Game.rgss2a`, and the probe is
+another one. That probe repeats a held button at its 24th update and then at every 6th, and
+it counts frames as the original of VX advances `Graphics.frame_count`: one for `update`, `n`
+for `wait(n)`, `fadeout(n)` and `fadein(n)`, and `n` for `transition(n)` after a `freeze` but
+none without one. On the original's side it runs `wait`, `fadeout` and `fadein` as loops of
+updates that were measured to show the same pictures, so that a frame inside them can be held,
+and it calls `Graphics.frame_reset` around a hold, because the original does not draw the
+updates that follow a stall. vkxp does not run games of VX yet; until it does, its side of
+such a run fails, and `--original-only` runs the other side alone.
+
+A game that ships its data in `Game.rgssad`, or `Game.rgss2a` (both RGSSAD version 1), is compared as it is: the
 probe is added to the script archive inside the encrypted archive of each copy, every other
 entry is written back unchanged, and no loose script archive is added, because the original
 reads its scripts only from the archive when there is one. To make such a game from an
@@ -221,7 +237,10 @@ replacements for common game fonts in it, and runs `Game.exe` with software rend
 At each frame asked for the probe holds the game until the command has read the picture of
 the game window from the display; after the last one the game ends. A frame that falls
 inside a transition is captured when the transition has ended, because the original cannot
-be held in the middle of one. What Wine and the game print is in `<out>/original/wine.log`,
+be held in the middle of one. In a game of VX such a frame is a late frame, unless it is the
+last frame of the transition, whose picture is the one the transition ends with: the picture
+of the original is kept, the report lists the frame as "not comparable: inside a transition",
+and it counts neither as equal nor as different. What Wine and the game print is in `<out>/original/wine.log`,
 which is where to look when the command reports that a frame was not reached. vkxp runs
 headless on the CPU device unless the Vulkan loader is already restricted to other drivers.
 
@@ -242,11 +261,23 @@ The command prints one line per frame and writes:
 | `<out>/frames/<n>-original.png` | frame `n` of the original |
 | `<out>/frames/<n>-vkxp.png` | frame `n` of vkxp |
 | `<out>/frames/<n>-diff.png` | the absolute difference of red, green and blue, multiplied by 32 |
-| `<out>/summary.json` | for every frame the three file names, `differing_pixels` and `largest_difference` (of any colour channel) |
+| `<out>/summary.json` | for every frame the three file names, `differing_pixels` and `largest_difference` (of any colour channel), or `not_comparable` with the reason: a late frame, or two pictures of different sizes; `totals` with the numbers of frames that are equal, different and not comparable; `no_threads` when that option was used |
 
 It exits with status 0 when both runs completed, whatever the differences are; a missing
 prerequisite or a run that fails is an error that names what was missing or what happened.
-With `--vkxp-only` there is nothing to compare, and the summary lists the pictures of vkxp.
+With `--vkxp-only` or `--original-only` there is nothing to compare, and the summary lists
+the pictures of the side that ran.
+
+The limits of the original's side:
+
+- A Ruby thread ends the original under Wine, in XP and in VX. `--no-threads` lets such a game
+  go on, but changes it: what the thread did over time happens at once. The option applies to
+  both sides, and the report says that it was used.
+- A frame inside a transition cannot be held. In a game of VX it is a late frame, as above; in
+  a game of XP its picture is whatever the window shows when the transition has ended.
+- The game window is looked for by the frame size of the runtime. A game that changes the
+  size of its window (`Graphics.resize_screen`, a resizer of its own) cannot be captured
+  after that.
 The pictures show the game's and the run-time package's art, so they stay out of the
 repository, like everything else below `target/`.
 
