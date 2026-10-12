@@ -211,7 +211,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `gc.c`
 - Patch: `patches/asan-conservative-scan.patch`
-- Patched SHA-256: `6f80288a5d41d15de6ba29ab24461e9bee7f512eda4cfb69462ea8e4c0afcbb8`
+- Patched SHA-256: `74048030ef7c2198d7299ea1deeb9161e1fb44a06504a5f6f5704067bf34192e`
 - Reason: for the sanitized run of the upstream suites (`tests/sanitized.rs` of
   `vkxp-ruby-sys`). The collector is conservative: `mark_locations_array` reads every word of
   the machine stack and of the saved registers, the red zones that AddressSanitizer puts
@@ -317,3 +317,19 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
   then stored the indeterminate value in the object, so whether such a `Time` loaded with
   `Marshal.load` was in UTC depended on what the compiler left on the stack. The older format
   has no flag for UTC; `gmt` is 0 for it, which is local time.
+
+## 27. gc-stress-every-nth
+
+- File: `gc.c`
+- Patch: `patches/gc-stress-every-nth.patch`
+- Patched SHA-256: `74048030ef7c2198d7299ea1deeb9161e1fb44a06504a5f6f5704067bf34192e`
+- Reason: applies after patch 18; for the runs under collector stress (change
+  `stress-the-collector-and-try-aarch64`). `GC.stress` collects at every allocation, which
+  is too slow for whole suites, and a script has to set it. `ruby_vkxp_gc_stress(n)` makes
+  the collector run at every n-th allocation instead, counting `rb_newobj`, `ruby_xmalloc`
+  and `ruby_xrealloc` together; `vkxp-ruby-sys` calls it at start-up when the environment
+  variable `VKXP_GC_STRESS` holds a number of 1 or more. With 0, the initial value, each of
+  the three places tests one variable more and nothing else changes. A collection asked for
+  while collections are disabled or one is running does not happen, as before.
+  `ruby_vkxp_gc_count` counts the collections that ran, for the tests: this Ruby has no
+  `GC.count`.

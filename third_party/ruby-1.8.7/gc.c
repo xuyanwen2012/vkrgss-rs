@@ -78,6 +78,23 @@ static void garbage_collect();
 
 int ruby_gc_stress = 0;
 
+/* vkxp: collector stress for tests. With `every` of 1 or more the collector runs at every
+   `every`-th allocation, counting objects, `ruby_xmalloc` and `ruby_xrealloc` together;
+   `ruby_vkxp_gc_count` counts the collections that ran. */
+static unsigned long vkxp_gc_stress_every = 0;
+static unsigned long vkxp_gc_stress_left = 0;
+unsigned long ruby_vkxp_gc_count = 0;
+
+void
+ruby_vkxp_gc_stress(every)
+    unsigned long every;
+{
+    vkxp_gc_stress_every = vkxp_gc_stress_left = every;
+}
+
+#define VKXP_GC_STRESS_DUE() (vkxp_gc_stress_every && --vkxp_gc_stress_left == 0 && \
+			      (vkxp_gc_stress_left = vkxp_gc_stress_every))
+
 NORETURN(void rb_exc_jump _((VALUE)));
 
 void
@@ -143,7 +160,7 @@ ruby_xmalloc(size)
     }
     if (size == 0) size = 1;
 
-    if (ruby_gc_stress || (malloc_increase+size) > malloc_limit) {
+    if (VKXP_GC_STRESS_DUE() || ruby_gc_stress || (malloc_increase+size) > malloc_limit) {
 	garbage_collect();
     }
     RUBY_CRITICAL(mem = malloc(size));
@@ -183,7 +200,7 @@ ruby_xrealloc(ptr, size)
     }
     if (!ptr) return xmalloc(size);
     if (size == 0) size = 1;
-    if (ruby_gc_stress) garbage_collect();
+    if (VKXP_GC_STRESS_DUE() || ruby_gc_stress) garbage_collect();
     RUBY_CRITICAL(mem = realloc(ptr, size));
     if (!mem) {
 	garbage_collect();
@@ -433,7 +450,7 @@ rb_newobj()
     if (during_gc)
 	rb_bug("object allocation during garbage collection phase");
 
-    if (ruby_gc_stress || !freelist) garbage_collect();
+    if (VKXP_GC_STRESS_DUE() || ruby_gc_stress || !freelist) garbage_collect();
 
     obj = (VALUE)freelist;
     freelist = freelist->as.free.next;
@@ -1451,6 +1468,7 @@ garbage_collect()
     }
     if (during_gc) return;
     during_gc++;
+    ruby_vkxp_gc_count++;
 
     init_mark_stack();
 

@@ -410,6 +410,24 @@ pub(crate) fn eval_inspect(source: &str) -> Result<String, String> {
     }
 }
 
+/// A script that allocates 100 objects and returns how many it made.
+pub(crate) const HUNDRED_OBJECTS: &str = "made = 0; 100.times { Object.new; made += 1 }; made";
+
+/// Evaluates `source` as [`eval_inspect`] does and returns with its result the number of
+/// collections that ran meanwhile.
+///
+/// Call it only inside a closure given to `Interpreter::run`.
+pub(crate) fn collections_during(source: &str) -> (u64, Result<String, String>) {
+    use vkxp_ruby_sys::ffi;
+
+    // SAFETY: the caller is on the interpreter thread, the only one that writes the counter.
+    let before = unsafe { ffi::ruby_vkxp_gc_count };
+    let result = eval_inspect(source);
+    // SAFETY: as above.
+    let after = unsafe { ffi::ruby_vkxp_gc_count };
+    (after - before, result)
+}
+
 /// The three ways a script recurses without end: a method that calls itself, a block that
 /// yields to itself, and a string that evaluates itself.
 pub(crate) const UNBOUNDED_RECURSIONS: [&str; 3] = [

@@ -123,7 +123,9 @@ mod signals;
 
 pub use call::RubyError;
 pub use host::{Arity, HostResult, Raise};
-pub use interp::{Interpreter, MIN_STACK_SIZE, Options, Ruby, STACK_HEADROOM, StartError};
+pub use interp::{
+    GC_STRESS_VARIABLE, Interpreter, MIN_STACK_SIZE, Options, Ruby, STACK_HEADROOM, StartError,
+};
 pub use protect::{Raised, protect};
 pub use root::Root;
 pub use signals::SIGNALS_TAKEN_BY_RUBY;

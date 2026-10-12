@@ -2,7 +2,7 @@
 
 ## 1. The switch
 
-- [ ] 1.1 `VKXP_GC_STRESS` as in `design.md`: the patch to `gc.c` with its entry in `PATCHES.md`, the reading at start-up, tests for the scenarios "Every allocation" and "Off". Verify: `cargo test -p vkxp-ruby-sys --locked` passes, including the vendored-source checks.
+- [x] 1.1 `VKXP_GC_STRESS` as in `design.md`: the patch to `gc.c` with its entry in `PATCHES.md`, the reading at start-up, tests for the scenarios "Every allocation" and "Off". Verify: `cargo test -p vkxp-ruby-sys --locked` passes, including the vendored-source checks.
 
 ## 2. The command and the first run
 

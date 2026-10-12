@@ -474,6 +474,11 @@ unsafe extern "C" {
     /// Sets the stack depth, in bytes below the base, at which `SystemStackError` is raised.
     /// Exported by `gc.c` but declared in no header.
     pub fn ruby_set_stack_size(size: usize);
+    /// Makes the collector run at every `every`-th allocation of an object or of memory; 0
+    /// turns that off. Added to `gc.c` by a vkxp patch.
+    pub fn ruby_vkxp_gc_stress(every: c_ulong);
+    /// The number of collections that ran. Added to `gc.c` by a vkxp patch.
+    pub static ruby_vkxp_gc_count: c_ulong;
     /// Marks the start of the game's scripts for symbol numbering: names first interned from
     /// here on continue the original runtime's sequence. Added to `parse.c` by a vkxp patch.
     pub fn ruby_vkxp_mark_game_scripts();

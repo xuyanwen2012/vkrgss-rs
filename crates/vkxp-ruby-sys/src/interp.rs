@@ -1,6 +1,6 @@
 //! The interpreter thread: start-up, the queue of work, shutdown.
 
-use std::ffi::CString;
+use std::ffi::{CString, c_ulong};
 use std::marker::PhantomData;
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -23,6 +23,24 @@ pub const STACK_HEADROOM: usize = 1 << 20;
 /// Set when an interpreter has been started in this process. Never cleared once `ruby_init`
 /// has run: Ruby 1.8 cannot be initialised twice, not even after it was finalised.
 static STARTED: AtomicBool = AtomicBool::new(false);
+
+/// The environment variable of the collector stress: a number `n` of 1 or more makes the
+/// collector run at every n-th allocation of an object or of memory. Unset, empty or 0
+/// changes nothing. It is for finding values that the conservative collector loses and
+/// makes everything very slow.
+pub const GC_STRESS_VARIABLE: &str = "VKXP_GC_STRESS";
+
+/// Reads [`GC_STRESS_VARIABLE`]: the `n` of the collector stress, 0 for none.
+fn gc_stress_from_environment() -> Result<c_ulong, StartError> {
+    match std::env::var_os(GC_STRESS_VARIABLE) {
+        None => Ok(0),
+        Some(value) if value.is_empty() => Ok(0),
+        Some(value) => value
+            .to_str()
+            .and_then(|text| text.parse().ok())
+            .ok_or_else(|| StartError::InvalidGcStress(value.to_string_lossy().into_owned())),
+    }
+}
 
 /// How to start the interpreter.
 #[derive(Debug, Clone)]
@@ -53,6 +71,9 @@ pub enum StartError {
     /// The script name contains a NUL byte.
     #[error("the script name contains a NUL byte")]
     InvalidScriptName,
+    /// The environment variable `VKXP_GC_STRESS` holds something other than a number.
+    #[error("VKXP_GC_STRESS is `{0}`; it must be unset, empty or a number")]
+    InvalidGcStress(String),
     /// The operating system did not create the interpreter thread.
     #[error("the interpreter thread could not be created")]
     Spawn(#[source] std::io::Error),
@@ -123,9 +144,13 @@ impl Interpreter {
     /// minus [`STACK_HEADROOM`], `Zlib` is registered as if `zlib` had been required, `$0` is
     /// set, `$stdout` and `$stderr` are made synchronous, and the recorded dispositions are
     /// put back. The load path stays empty.
+    ///
+    /// The environment variable [`GC_STRESS_VARIABLE`] is read once, here, and takes effect
+    /// right after `ruby_init`.
     pub fn start(options: Options) -> Result<Self, StartError> {
         let script_name =
             CString::new(options.script_name).map_err(|_| StartError::InvalidScriptName)?;
+        let gc_stress = gc_stress_from_environment()?;
         let stack_size = options.stack_size.max(MIN_STACK_SIZE);
         if STARTED.swap(true, Ordering::SeqCst) {
             return Err(StartError::AlreadyStarted);
@@ -136,7 +161,7 @@ impl Interpreter {
         let thread = thread::Builder::new()
             .name("ruby".to_owned())
             .stack_size(stack_size)
-            .spawn(move || thread_main(stack_size, &script_name, queue, ready));
+            .spawn(move || thread_main(stack_size, gc_stress, &script_name, queue, ready));
         let thread = match thread {
             Ok(thread) => thread,
             Err(error) => {
@@ -219,6 +244,7 @@ impl Drop for Interpreter {
 /// every frame that ever holds a Ruby value: all of them are below [`serve`].
 fn thread_main(
     stack_size: usize,
+    gc_stress: c_ulong,
     script_name: &CString,
     queue: Receiver<Job>,
     ready: SyncSender<Result<(), StartError>>,
@@ -228,7 +254,7 @@ fn thread_main(
     // SAFETY: `anchor` lives until this function returns, which is after `serve` has
     // finalised the interpreter, and no interpreter exists yet in this process (`STARTED`).
     unsafe { ffi::ruby_init_stack(&mut anchor) };
-    serve(stack_size, script_name, &saved, queue, ready);
+    serve(stack_size, gc_stress, script_name, &saved, queue, ready);
     std::hint::black_box(&mut anchor);
 }
 
@@ -259,6 +285,7 @@ unsafe extern "C" fn setup_body(data: VALUE) -> VALUE {
 #[inline(never)]
 fn serve(
     stack_size: usize,
+    gc_stress: c_ulong,
     script_name: &CString,
     saved: &Dispositions,
     queue: Receiver<Job>,
@@ -270,10 +297,12 @@ fn serve(
     };
     // SAFETY: this is the one interpreter thread of the process, its stack is anchored in
     // the caller's frame, and nothing of Ruby ran before. `ruby_set_stack_size` only stores
-    // the limit. `setup_body` fits the contract of `protect`.
+    // the limit, and `ruby_vkxp_gc_stress` the number. `setup_body` fits the contract of
+    // `protect`.
     let started = unsafe {
         ffi::ruby_init();
         ffi::ruby_set_stack_size(stack_size - STACK_HEADROOM);
+        ffi::ruby_vkxp_gc_stress(gc_stress);
         protect::protect(&mut setup, setup_body)
     };
     // Ruby took the signals during `ruby_init`; the process gets them back.
