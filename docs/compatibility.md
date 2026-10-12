@@ -33,9 +33,13 @@ source. What remains under `crates/`:
   text differ while its layout and advance widths are kept. A character the selected font
   lacks is drawn from another font; the original, measured under Wine, draws the missing
   glyph.
-- **Win32API shims.** `ShowCursor` keeps its count but does not hide the pointer,
-  `GetKeyState` never reports the toggle state of a lock key, and `keybd_event`,
-  `mouse_event` and `SetKeyboardState` inject nothing.
+- **Win32API shims.** The toggle bits that `GetKeyState` and `GetKeyboardState` report
+  start at 0: the lock keys of the machine start off, whatever their state is.
+  `mouse_event` presses and releases buttons but does not move the pointer or turn the
+  wheel. A key injected with `keybd_event` or `mouse_event` is seen one `Input.update`
+  later than on Windows when a script injects and updates in the same frame. These rules
+  and those of `ShowCursor` and `SetKeyboardState` follow the documentation of Windows and
+  were not measured on the original.
 - **Blending onto a translucent bitmap.** Addition and subtraction onto a destination whose
   alpha is below 255 use the textbook formula.
 - **Transition masks.** The level of a coloured mask pixel is one lower than the original's

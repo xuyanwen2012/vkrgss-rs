@@ -15,7 +15,7 @@
 
 ## 4. Documentation
 
-- [ ] 4.1 `docs/compatibility.md` (the paragraph on the shims says what is left: lock keys start off, movement by `mouse_event`, the one-update delay), `docs/architecture.md` and `README.md` (version 10 and what it added). Verify: `grep -rn PLACEHOLDER crates/vkxp-binding/src/win32api.rs` shows no line that says nothing is done; the documents name version 10.
+- [x] 4.1 `docs/compatibility.md` (the paragraph on the shims says what is left: lock keys start off, movement by `mouse_event`, the one-update delay), `docs/architecture.md` and `README.md` (version 10 and what it added). Verify: `grep -rn PLACEHOLDER crates/vkxp-binding/src/win32api.rs` shows no line that says nothing is done; the documents name version 10.
 
 ## 5. Integration check
 

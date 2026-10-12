@@ -27,13 +27,16 @@ defined in `vkxp-proto`.
 `xtask` holds repository automation and the tool that extracts the built-in scripts; it is not
 part of the runtime.
 
-The protocol is at version 9; an encoded stream of another version is rejected. A frame packet
+The protocol is at version 10; an encoded stream of another version is rejected. A frame packet
 carries the changes to bitmaps and tables and an ordered list of ops of four kinds: `Clear`,
 `Quad`, `RectEffect` and `TilemapLayer`. Sprites, planes and the parts of a window are quads.
 Both compositors evaluate every kind. Version 8 added the messages of the save states: the
 requests to save and to load a state, the order to a parked copy of the guest process to
 resume, the attachment of a guest process, the outcome of a game, and the answers saved,
 loaded and failed. Version 9 added to the failed answer whether a save or a load failed.
+Version 10 added two messages from the guest: a key that is pressed or released for the
+player, which the session treats as the physical key of that Windows virtual-key code, and
+whether the pointer is to be seen over the picture.
 
 ## Headless proof
 

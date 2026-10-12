@@ -95,6 +95,8 @@ Every option, the configuration files and the key maps are in
 The game's scripts, with the interpreter, the bitmaps and the game's files, are the guest;
 the window, the GPU, the audio device and the input are the host. The two exchange only plain
 data defined in `vkxp-proto`, and the guest runs as a thread or as a process of its own.
+The protocol is at version 10, which added the keys a script presses for the player with
+`keybd_event` and `mouse_event` and the hiding of the pointer with `ShowCursor`.
 
 | Crate | Responsibility | Side |
 |---|---|---|
