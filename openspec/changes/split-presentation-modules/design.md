@@ -1,0 +1,63 @@
+# Design
+
+## Context
+
+See the proposal. `move-core-tests-out-of-line` did the first step of this for `vkxp-core`.
+The tests of `vkxp-vk` compare every frame of the backend with the CPU reference byte for
+byte, so a move that changes behaviour shows.
+
+## Decisions
+
+### This is a move
+
+Code is moved between files and visibility is widened only as far as the move needs
+(`pub(super)`, `pub(crate)`). No function body is rewritten, no name of a public item
+changes, no test is dropped or weakened. A defect found on the way is listed under
+"Follow-ups" and left as it is.
+
+### Tests out of line
+
+The `mod tests` of `compositor/present.rs`, `device.rs` and `compositor.rs` each become a
+file `tests.rs` beside the module (or a file under the existing `src/tests/` directory where
+that is where their neighbours are), declared with `#[cfg(test)] mod tests;`.
+
+### Modules by concern
+
+`compositor/present.rs` becomes a directory module. The split follows the sections the file
+already has; the names below are the intended ones and may be adjusted where a boundary
+turns out to lie elsewhere:
+
+- `scaling`: `Mix`, `Filter`, `letterbox`, the whole-factor test and the encoding of the push
+  constants;
+- `format`: `PresentFormat`, the choice of the surface format, the swapchain extent;
+- `swapchain`: `Swapchain`, `PresentFence`, the per-format pipelines;
+- `presenter`: `Presenter`, `DrawCall`, `PassTarget`;
+- the `impl VkCompositor` block, in two or more files by what the methods do (for example
+  the state of the mix and the mask, showing a frame, and reading a frame back).
+
+`compositor.rs` is split the same way, by the sections it has. `device.rs` needs no split
+once its tests are out.
+
+After the change no file under `crates/vkxp-vk/src` is longer than 1000 lines, except files
+that hold only tests.
+
+### One probe per module
+
+Fields, counters and records that exist only for tests become fields of one probe type per
+module (`present` and `compositor`), defined in a file of its own. The type exists in every
+build; in a build without tests it has no fields and its methods are empty and inlined, so
+the production code calls `self.probe.something()` without an attribute. Methods that only
+tests call move into an `impl` block marked `#[cfg(test)]` in the probe's file or the test
+file. After the change `#[cfg(test)]` stands in the non-test files of `compositor/` and in
+`compositor.rs` only on `mod` declarations and whole `impl` blocks, and inside the probe
+files. A hook that cannot move without changing behaviour stays, and is listed here with the
+reason.
+
+## Risks
+
+- [A moved function captures something else by name] → the compiler and the byte-exact
+  tests catch it; the Vulkan tests are also run on the AMD GPU by the owner at the merge.
+
+## Follow-ups
+
+None yet.
