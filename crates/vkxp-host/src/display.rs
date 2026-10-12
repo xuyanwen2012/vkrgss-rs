@@ -61,4 +61,7 @@ pub trait Display {
 
     /// Sets the window title.
     fn set_title(&mut self, title: &str);
+
+    /// Hides or shows the pointer over the picture. A display without a window ignores it.
+    fn set_pointer_visible(&mut self, _visible: bool) {}
 }

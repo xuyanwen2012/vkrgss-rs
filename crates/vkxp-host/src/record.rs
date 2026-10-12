@@ -47,6 +47,12 @@ pub trait InputSource: Debug + Send {
     /// The snapshot to deliver for the next frame. `live` is what the keyboard, or the input
     /// script of a headless run, holds at that frame.
     fn next(&mut self, live: InputSnapshot) -> InputSnapshot;
+
+    /// Whether the snapshots are those of a recording, which has the keys the guest injected
+    /// when it was made.
+    fn replays(&self) -> bool {
+        false
+    }
 }
 
 /// Why a file could not be used as a recording.
@@ -323,6 +329,10 @@ impl InputSource for Replayer {
             self.runs.pop();
         }
         snapshot
+    }
+
+    fn replays(&self) -> bool {
+        true
     }
 }
 

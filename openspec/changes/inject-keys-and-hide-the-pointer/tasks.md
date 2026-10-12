@@ -10,8 +10,8 @@
 
 ## 3. Host
 
-- [ ] 3.1 The session's injected keys, with replay, load and reset. Verify: scenarios "Raw key and button", "Release", "Full screen" and "Replay"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-host --locked` passes.
-- [ ] 3.2 Pointer visibility through the display to the window; the guest sends its value after a loaded answer. Verify: scenario "Hidden"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-host -p vkxp --locked` passes.
+- [x] 3.1 The session's injected keys, with replay, load and reset. Verify: scenarios "Raw key and button", "Release", "Full screen" and "Replay"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-host --locked` passes.
+- [x] 3.2 Pointer visibility through the display to the window; the guest sends its value after a loaded answer. Verify: scenario "Hidden"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-host -p vkxp --locked` passes.
 
 ## 4. Documentation
 

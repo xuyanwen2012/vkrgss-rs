@@ -313,7 +313,7 @@ impl Guest {
 
     /// What a copy does when it is resumed, in the wait for a tick it was made in: `link`
     /// becomes its link, and it sends the host, which holds nothing of this guest, the
-    /// title, the play commands of the music and the background sound it remembers, and the
+    /// title, whether the pointer is to be seen, the play commands of the music and the background sound it remembers, and the
     /// frame of the wait again with every live bitmap and table whole.
     fn resume(&mut self, link: GuestEnd) {
         self.runtime.link = Some(link);
@@ -323,6 +323,8 @@ impl Guest {
         self.scene.resend_tables();
         let title = self.runtime.run.ini.title.clone();
         self.send(GuestToHost::SetTitle { title });
+        let visible = self.win32api.pointer_visible();
+        self.send(GuestToHost::PointerVisible { visible });
         let looping = [
             (AudioChannel::Bgm, self.runtime.music.clone()),
             (AudioChannel::Bgs, self.runtime.background_sound.clone()),

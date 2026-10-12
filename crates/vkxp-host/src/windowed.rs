@@ -158,6 +158,11 @@ impl<D: Display, C: Clock> Driver<D, C> {
         action
     }
 
+    /// What the keys the guest injected ask of the window, since the last call.
+    pub fn take_actions(&mut self) -> Vec<KeyAction> {
+        self.session.take_actions()
+    }
+
     /// A mouse button was clicked.
     pub fn click(&mut self) {
         self.session.click();
@@ -310,6 +315,10 @@ impl Display for VulkanDisplay {
     fn set_title(&mut self, title: &str) {
         self.window.set_title(title);
     }
+
+    fn set_pointer_visible(&mut self, visible: bool) {
+        self.window.set_cursor_visible(visible);
+    }
 }
 
 impl Drop for VulkanDisplay {
@@ -431,6 +440,9 @@ impl App {
             running.driver.session_mut().pad_buttons(held);
         }
         let next = running.driver.wake();
+        for action in running.driver.take_actions() {
+            act(&running.window, action);
+        }
         if let Some(end) = running.driver.end() {
             self.outcome = Some(Ok(end));
             event_loop.exit();
@@ -440,6 +452,19 @@ impl App {
             Some(due) => ControlFlow::WaitUntil(running.clock.instant_at(due)),
             None => ControlFlow::Wait,
         });
+    }
+}
+
+/// Does what a key asks of the window.
+fn act(window: &Window, action: KeyAction) {
+    match action {
+        KeyAction::None => {}
+        // Borderless on the monitor the window is on; the window system gives the window its
+        // earlier size back when it leaves.
+        KeyAction::ToggleFullscreen => window.set_fullscreen(match window.fullscreen() {
+            Some(_) => None,
+            None => Some(Fullscreen::Borderless(None)),
+        }),
     }
 }
 
@@ -469,15 +494,7 @@ impl ApplicationHandler<GuestSpoke> for App {
             WindowEvent::CloseRequested => running.driver.close_requested(),
             WindowEvent::KeyboardInput { event, .. } => {
                 let action = running.driver.key(event.physical_key, event.state);
-                if action == KeyAction::ToggleFullscreen {
-                    // Borderless on the monitor the window is on; the window system gives
-                    // the window its earlier size back when it leaves.
-                    let window = &running.window;
-                    window.set_fullscreen(match window.fullscreen() {
-                        Some(_) => None,
-                        None => Some(Fullscreen::Borderless(None)),
-                    });
-                }
+                act(&running.window, action);
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 running.driver.mouse_button(button, state);

@@ -4,159 +4,188 @@
 use vkxp_proto::{InputSnapshot, Size};
 use winit::event::MouseButton;
 use winit::keyboard::KeyCode;
+use winit::keyboard::KeyCode as K;
+
+/// Runs of keys whose codes follow one another, each with the code of its first key.
+const KEY_RANGES: [(&[KeyCode], u8); 4] = [
+    (
+        &[
+            K::KeyA,
+            K::KeyB,
+            K::KeyC,
+            K::KeyD,
+            K::KeyE,
+            K::KeyF,
+            K::KeyG,
+            K::KeyH,
+            K::KeyI,
+            K::KeyJ,
+            K::KeyK,
+            K::KeyL,
+            K::KeyM,
+            K::KeyN,
+            K::KeyO,
+            K::KeyP,
+            K::KeyQ,
+            K::KeyR,
+            K::KeyS,
+            K::KeyT,
+            K::KeyU,
+            K::KeyV,
+            K::KeyW,
+            K::KeyX,
+            K::KeyY,
+            K::KeyZ,
+        ],
+        0x41,
+    ),
+    (
+        &[
+            K::Digit0,
+            K::Digit1,
+            K::Digit2,
+            K::Digit3,
+            K::Digit4,
+            K::Digit5,
+            K::Digit6,
+            K::Digit7,
+            K::Digit8,
+            K::Digit9,
+        ],
+        0x30,
+    ),
+    (
+        &[
+            K::Numpad0,
+            K::Numpad1,
+            K::Numpad2,
+            K::Numpad3,
+            K::Numpad4,
+            K::Numpad5,
+            K::Numpad6,
+            K::Numpad7,
+            K::Numpad8,
+            K::Numpad9,
+            K::NumpadMultiply,
+            K::NumpadAdd,
+            // The separator key, 0x6C.
+            K::NumpadComma,
+            K::NumpadSubtract,
+            K::NumpadDecimal,
+            K::NumpadDivide,
+        ],
+        0x60,
+    ),
+    (
+        &[
+            K::F1,
+            K::F2,
+            K::F3,
+            K::F4,
+            K::F5,
+            K::F6,
+            K::F7,
+            K::F8,
+            K::F9,
+            K::F10,
+            K::F11,
+            K::F12,
+            K::F13,
+            K::F14,
+            K::F15,
+            K::F16,
+            K::F17,
+            K::F18,
+            K::F19,
+            K::F20,
+            K::F21,
+            K::F22,
+            K::F23,
+            K::F24,
+        ],
+        0x70,
+    ),
+];
+
+/// The other keys with their codes.
+const KEYS: [(KeyCode, u8); 42] = [
+    (K::Backspace, 0x08),
+    (K::Tab, 0x09),
+    (K::Enter, 0x0D),
+    (K::NumpadEnter, 0x0D),
+    (K::Pause, 0x13),
+    (K::CapsLock, 0x14),
+    (K::Escape, 0x1B),
+    (K::Space, 0x20),
+    (K::PageUp, 0x21),
+    (K::PageDown, 0x22),
+    (K::End, 0x23),
+    (K::Home, 0x24),
+    (K::ArrowLeft, 0x25),
+    (K::ArrowUp, 0x26),
+    (K::ArrowRight, 0x27),
+    (K::ArrowDown, 0x28),
+    (K::PrintScreen, 0x2C),
+    (K::Insert, 0x2D),
+    (K::Delete, 0x2E),
+    (K::SuperLeft, 0x5B),
+    (K::SuperRight, 0x5C),
+    (K::ContextMenu, 0x5D),
+    (K::NumLock, 0x90),
+    (K::ScrollLock, 0x91),
+    (K::ShiftLeft, 0xA0),
+    (K::ShiftRight, 0xA1),
+    (K::ControlLeft, 0xA2),
+    (K::ControlRight, 0xA3),
+    (K::AltLeft, 0xA4),
+    (K::AltRight, 0xA5),
+    (K::Semicolon, 0xBA),
+    (K::Equal, 0xBB),
+    (K::Comma, 0xBC),
+    (K::Minus, 0xBD),
+    (K::Period, 0xBE),
+    (K::Slash, 0xBF),
+    (K::Backquote, 0xC0),
+    (K::BracketLeft, 0xDB),
+    (K::Backslash, 0xDC),
+    (K::BracketRight, 0xDD),
+    (K::Quote, 0xDE),
+    (K::IntlBackslash, 0xE2),
+];
 
 /// The Windows virtual-key code of a physical key, by the key's place on a US keyboard, or
 /// `None` for a key Windows has no code for here.
 pub fn virtual_key(key: KeyCode) -> Option<u8> {
-    use KeyCode as K;
-    let ranges: [(&[KeyCode], u8); 4] = [
-        (
-            &[
-                K::KeyA,
-                K::KeyB,
-                K::KeyC,
-                K::KeyD,
-                K::KeyE,
-                K::KeyF,
-                K::KeyG,
-                K::KeyH,
-                K::KeyI,
-                K::KeyJ,
-                K::KeyK,
-                K::KeyL,
-                K::KeyM,
-                K::KeyN,
-                K::KeyO,
-                K::KeyP,
-                K::KeyQ,
-                K::KeyR,
-                K::KeyS,
-                K::KeyT,
-                K::KeyU,
-                K::KeyV,
-                K::KeyW,
-                K::KeyX,
-                K::KeyY,
-                K::KeyZ,
-            ],
-            0x41,
-        ),
-        (
-            &[
-                K::Digit0,
-                K::Digit1,
-                K::Digit2,
-                K::Digit3,
-                K::Digit4,
-                K::Digit5,
-                K::Digit6,
-                K::Digit7,
-                K::Digit8,
-                K::Digit9,
-            ],
-            0x30,
-        ),
-        (
-            &[
-                K::Numpad0,
-                K::Numpad1,
-                K::Numpad2,
-                K::Numpad3,
-                K::Numpad4,
-                K::Numpad5,
-                K::Numpad6,
-                K::Numpad7,
-                K::Numpad8,
-                K::Numpad9,
-                K::NumpadMultiply,
-                K::NumpadAdd,
-                // The separator key, 0x6C.
-                K::NumpadComma,
-                K::NumpadSubtract,
-                K::NumpadDecimal,
-                K::NumpadDivide,
-            ],
-            0x60,
-        ),
-        (
-            &[
-                K::F1,
-                K::F2,
-                K::F3,
-                K::F4,
-                K::F5,
-                K::F6,
-                K::F7,
-                K::F8,
-                K::F9,
-                K::F10,
-                K::F11,
-                K::F12,
-                K::F13,
-                K::F14,
-                K::F15,
-                K::F16,
-                K::F17,
-                K::F18,
-                K::F19,
-                K::F20,
-                K::F21,
-                K::F22,
-                K::F23,
-                K::F24,
-            ],
-            0x70,
-        ),
-    ];
-    for (keys, first) in ranges {
+    for (keys, first) in KEY_RANGES {
         if let Some(index) = keys.iter().position(|in_range| *in_range == key) {
             return Some(first + index as u8);
         }
     }
-    Some(match key {
-        K::Backspace => 0x08,
-        K::Tab => 0x09,
-        K::Enter | K::NumpadEnter => 0x0D,
-        K::Pause => 0x13,
-        K::CapsLock => 0x14,
-        K::Escape => 0x1B,
-        K::Space => 0x20,
-        K::PageUp => 0x21,
-        K::PageDown => 0x22,
-        K::End => 0x23,
-        K::Home => 0x24,
-        K::ArrowLeft => 0x25,
-        K::ArrowUp => 0x26,
-        K::ArrowRight => 0x27,
-        K::ArrowDown => 0x28,
-        K::PrintScreen => 0x2C,
-        K::Insert => 0x2D,
-        K::Delete => 0x2E,
-        K::SuperLeft => 0x5B,
-        K::SuperRight => 0x5C,
-        K::ContextMenu => 0x5D,
-        K::NumLock => 0x90,
-        K::ScrollLock => 0x91,
-        K::ShiftLeft => 0xA0,
-        K::ShiftRight => 0xA1,
-        K::ControlLeft => 0xA2,
-        K::ControlRight => 0xA3,
-        K::AltLeft => 0xA4,
-        K::AltRight => 0xA5,
-        K::Semicolon => 0xBA,
-        K::Equal => 0xBB,
-        K::Comma => 0xBC,
-        K::Minus => 0xBD,
-        K::Period => 0xBE,
-        K::Slash => 0xBF,
-        K::Backquote => 0xC0,
-        K::BracketLeft => 0xDB,
-        K::Backslash => 0xDC,
-        K::BracketRight => 0xDD,
-        K::Quote => 0xDE,
-        K::IntlBackslash => 0xE2,
-        _ => return None,
-    })
+    let (_, code) = KEYS.iter().find(|(with_code, _)| *with_code == key)?;
+    Some(*code)
+}
+
+/// The physical key that has the Windows virtual-key code `code`: the inverse of
+/// [`virtual_key`]. A code that a left and a right key share, and the code of Shift, Control
+/// or Alt of either side, is that of the left key, and 0x0D is the Enter of the main block.
+/// `None` for a code no key has, such as that of a mouse button.
+pub(crate) fn physical_key(code: u8) -> Option<KeyCode> {
+    match code {
+        0x10 => return Some(K::ShiftLeft),
+        0x11 => return Some(K::ControlLeft),
+        0x12 => return Some(K::AltLeft),
+        _ => {}
+    }
+    for (keys, first) in KEY_RANGES {
+        if let Some(key) = code
+            .checked_sub(first)
+            .and_then(|index| keys.get(usize::from(index)))
+        {
+            return Some(*key);
+        }
+    }
+    let (key, _) = KEYS.iter().find(|(_, of_key)| *of_key == code)?;
+    Some(*key)
 }
 
 /// The Windows virtual-key code of a mouse button.
@@ -266,6 +295,36 @@ mod tests {
             assert_eq!(virtual_key(key), Some(code), "{key:?}");
         }
         assert_eq!(virtual_key(K::Fn), None);
+    }
+
+    #[test]
+    fn a_code_has_the_key_that_has_it_and_the_left_one_of_two() {
+        for code in 0..=255u8 {
+            if let Some(key) = physical_key(code) {
+                let expected = match code {
+                    0x10 => 0xA0,
+                    0x11 => 0xA2,
+                    0x12 => 0xA4,
+                    code => code,
+                };
+                assert_eq!(virtual_key(key), Some(expected), "{code:#04x}");
+            }
+        }
+        for (code, key) in [
+            (0x0D, K::Enter),
+            (0x10, K::ShiftLeft),
+            (0x11, K::ControlLeft),
+            (0x12, K::AltLeft),
+            (0xA5, K::AltRight),
+            (0x41, K::KeyA),
+            (0x7B, K::F12),
+            (0x6F, K::NumpadDivide),
+        ] {
+            assert_eq!(physical_key(code), Some(key), "{code:#04x}");
+        }
+        for code in [0x00, 0x01, 0x02, 0x04, 0x3A, 0x5F, 0x88, 0xFF] {
+            assert_eq!(physical_key(code), None, "{code:#04x}");
+        }
     }
 
     #[test]

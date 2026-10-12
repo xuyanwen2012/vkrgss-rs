@@ -12,7 +12,7 @@ use vkxp_vk::Mix;
 use winit::event::MouseButton;
 use winit::keyboard::KeyCode;
 
-use crate::raw::with_raw_keys;
+use crate::raw::{physical_key, with_raw_keys, with_virtual_key};
 use crate::report::ErrorStream;
 use crate::stats::FrameStats;
 use crate::{AudioSink, Clock, Display, InputSource, KeyMap, NullSink, Reporter, Severity};
@@ -57,7 +57,9 @@ impl SessionEnd {
     }
 }
 
-/// Something a key press asks of the window, which the session itself has no access to.
+/// Something a key press asks of the window, which the session itself has no access to. The
+/// press of a physical key returns it from [`Session::key`]; that of a key the guest injected
+/// is kept for [`Session::take_actions`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyAction {
     None,
@@ -83,7 +85,7 @@ pub struct SessionOptions {
     /// Where the input snapshot of each frame comes from: a recorder or a replayer. With a
     /// source the guest is sent the source's snapshot for a frame, if it differs from the
     /// one before, ahead of that frame's tick and at no other time. Without one, live input
-    /// is sent as it changes.
+    /// is sent as it changes. A session with a replayer ignores the keys the guest injects.
     pub input: Option<Box<dyn InputSource>>,
     /// Whether the session collects the frame time statistics: how long it waits for the
     /// guest between frames, and what the display measures of each frame. Their summary is
@@ -201,6 +203,19 @@ struct FpsCounter {
 /// The audio sink is asked to remember a slot when a state was saved into it, and to recall
 /// it when its state was loaded, behind the stop of the channels: the music and the
 /// background sound that the guest then plays again go on where they were.
+///
+/// # Injected keys
+///
+/// A key the guest presses for the player ([`GuestToHost::InjectKey`]) is down until the
+/// guest releases it, a state is loaded or the guest is asked to reset. While it is down the
+/// physical key that has its code counts as down: it holds the buttons the key map gives
+/// that key and its code in the raw keys of the snapshots, on top of what
+/// [`set_buttons`](Session::set_buttons) was given, and its press does what a press of that
+/// key does. What that asks of the window is kept for
+/// [`take_actions`](Session::take_actions). The code of Shift, Control or Alt of either side
+/// and a code that two keys share stand for the left key; a code no key has, such as that
+/// of a mouse button, is only held in the raw keys. A session that replays a recording
+/// ignores these messages: the recording has the snapshots as they were delivered.
 pub struct Session<D: Display, C: Clock> {
     display: D,
     clock: C,
@@ -231,6 +246,12 @@ pub struct Session<D: Display, C: Clock> {
     held_keys: HashSet<KeyCode>,
     /// Keys that are down as part of a host shortcut and hold no button until released.
     swallowed_keys: HashSet<KeyCode>,
+    /// The virtual-key codes the guest injected that are down.
+    injected: HashSet<u8>,
+    /// What the presses of injected keys asked of the window and nobody has taken yet.
+    actions: Vec<KeyAction>,
+    /// What live input holds apart from the injected keys.
+    uninjected: InputSnapshot,
     /// Mouse buttons currently down.
     held_mouse: HashSet<MouseButton>,
     /// Where the pointer is in the frame, when it is over the picture.
@@ -296,6 +317,9 @@ impl<D: Display, C: Clock> Session<D, C> {
             fast_forward_forced: false,
             held_keys: HashSet::new(),
             swallowed_keys: HashSet::new(),
+            injected: HashSet::new(),
+            actions: Vec::new(),
+            uninjected: InputSnapshot::EMPTY,
             held_mouse: HashSet::new(),
             pointer: None,
             frame_size: None,
@@ -459,7 +483,8 @@ impl<D: Display, C: Clock> Session<D, C> {
             GuestToHost::StateFailed { slot, load: false } => {
                 self.show_notice(format_args!("no state could be saved into slot {slot}"));
             }
-            GuestToHost::InjectKey { .. } | GuestToHost::PointerVisible { .. } => {}
+            GuestToHost::InjectKey { key, down } => self.inject_key(key, down),
+            GuestToHost::PointerVisible { visible } => self.display.set_pointer_visible(visible),
         }
     }
 
@@ -573,6 +598,7 @@ impl<D: Display, C: Clock> Session<D, C> {
         self.pending_tick = None;
         self.waiting_frame = None;
         self.frame_reset = true;
+        self.clear_injected();
         self.outbox.push_back(HostToGuest::Input(self.buttons));
         self.show_notice(format_args!("state loaded from slot {slot}"));
     }
@@ -627,61 +653,141 @@ impl<D: Display, C: Clock> Session<D, C> {
             return KeyAction::None;
         }
         let mut action = KeyAction::None;
+        // A key the guest holds down by injection is down already, and stays down.
+        let injected = self.injected_holds(key);
         if pressed {
             if !self.held_keys.insert(key) {
                 return KeyAction::None;
             }
-            let alt = [KeyCode::AltLeft, KeyCode::AltRight]
-                .iter()
-                .any(|alt| self.held_keys.contains(alt));
-            let shift = [KeyCode::ShiftLeft, KeyCode::ShiftRight]
-                .iter()
-                .any(|shift| self.held_keys.contains(shift));
-            match key {
-                RESET_KEY => self.outbox.push_back(HostToGuest::Reset),
-                // Whatever the key map says of these keys, this press holds no button.
-                FULLSCREEN_KEY => {
-                    self.swallowed_keys.insert(key);
-                    action = KeyAction::ToggleFullscreen;
-                }
-                KeyCode::Enter | KeyCode::NumpadEnter if alt => {
-                    self.swallowed_keys.insert(key);
-                    action = KeyAction::ToggleFullscreen;
-                }
-                // The press that dismisses a modal message holds no button either, and is
-                // not the shortcut the key otherwise is: the key map may put C or B on the
-                // keys below.
-                _ if self.pending_modal && self.dismisses(key) => {
-                    self.swallowed_keys.insert(key);
-                    self.dismiss_modal();
-                }
-                FPS_KEY => self.toggle_fps(),
-                SAVE_STATE_KEY | LOAD_STATE_KEY => {
-                    self.swallowed_keys.insert(key);
-                    match (key == SAVE_STATE_KEY, shift) {
-                        (true, false) => self.save_state(self.slot),
-                        (false, false) => self.load_state(self.slot),
-                        (true, true) => self.choose_slot(1),
-                        (false, true) => self.choose_slot(STATE_SLOTS - 1),
-                    }
-                }
-                FAST_FORWARD_KEY => {
-                    self.fast_forward_key = true;
-                    self.pacing_restart = true;
-                    self.hurry();
-                }
-                _ => {}
+            if !injected {
+                action = self.key_pressed(key);
             }
         } else {
             self.held_keys.remove(&key);
-            self.swallowed_keys.remove(&key);
-            if key == FAST_FORWARD_KEY {
-                self.fast_forward_key = false;
-                self.pacing_restart = true;
+            if !injected {
+                self.key_released(key);
             }
         }
         self.update_buttons();
         action
+    }
+
+    /// What the window is asked for by the presses of injected keys since the last call,
+    /// oldest first.
+    pub fn take_actions(&mut self) -> Vec<KeyAction> {
+        std::mem::take(&mut self.actions)
+    }
+
+    /// Whether the guest holds `key` down by injection.
+    fn injected_holds(&self, key: KeyCode) -> bool {
+        self.injected
+            .iter()
+            .any(|code| physical_key(*code) == Some(key))
+    }
+
+    /// Whether one of `keys` is down, physically or by injection.
+    fn any_down(&self, keys: [KeyCode; 2]) -> bool {
+        keys.iter()
+            .any(|key| self.held_keys.contains(key) || self.injected_holds(*key))
+    }
+
+    /// `key`, which was up, is down: what the session does at the press of a key.
+    fn key_pressed(&mut self, key: KeyCode) -> KeyAction {
+        let alt = self.any_down([KeyCode::AltLeft, KeyCode::AltRight]);
+        let shift = self.any_down([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
+        let mut action = KeyAction::None;
+        match key {
+            RESET_KEY => {
+                self.outbox.push_back(HostToGuest::Reset);
+                // The game that starts again holds no key down.
+                self.clear_injected();
+            }
+            // Whatever the key map says of these keys, this press holds no button.
+            FULLSCREEN_KEY => {
+                self.swallowed_keys.insert(key);
+                action = KeyAction::ToggleFullscreen;
+            }
+            KeyCode::Enter | KeyCode::NumpadEnter if alt => {
+                self.swallowed_keys.insert(key);
+                action = KeyAction::ToggleFullscreen;
+            }
+            // The press that dismisses a modal message holds no button either, and is
+            // not the shortcut the key otherwise is: the key map may put C or B on the
+            // keys below.
+            _ if self.pending_modal && self.dismisses(key) => {
+                self.swallowed_keys.insert(key);
+                self.dismiss_modal();
+            }
+            FPS_KEY => self.toggle_fps(),
+            SAVE_STATE_KEY | LOAD_STATE_KEY => {
+                self.swallowed_keys.insert(key);
+                match (key == SAVE_STATE_KEY, shift) {
+                    (true, false) => self.save_state(self.slot),
+                    (false, false) => self.load_state(self.slot),
+                    (true, true) => self.choose_slot(1),
+                    (false, true) => self.choose_slot(STATE_SLOTS - 1),
+                }
+            }
+            FAST_FORWARD_KEY => {
+                self.fast_forward_key = true;
+                self.pacing_restart = true;
+                self.hurry();
+            }
+            _ => {}
+        }
+        action
+    }
+
+    /// `key`, which was down, is up.
+    fn key_released(&mut self, key: KeyCode) {
+        self.swallowed_keys.remove(&key);
+        if key == FAST_FORWARD_KEY {
+            self.fast_forward_key = false;
+            self.pacing_restart = true;
+        }
+    }
+
+    /// The guest pressed or released the key with the virtual-key code `code` for the
+    /// player. See "Injected keys".
+    fn inject_key(&mut self, code: u8, down: bool) {
+        if self.input.as_ref().is_some_and(|input| input.replays()) {
+            return;
+        }
+        let key = physical_key(code);
+        let was_down =
+            key.is_some_and(|key| self.held_keys.contains(&key) || self.injected_holds(key));
+        let changed = if down {
+            self.injected.insert(code)
+        } else {
+            self.injected.remove(&code)
+        };
+        if !changed {
+            return;
+        }
+        if let Some(key) = key {
+            let is_down = self.held_keys.contains(&key) || self.injected_holds(key);
+            if is_down && !was_down {
+                match self.key_pressed(key) {
+                    KeyAction::None => {}
+                    action => self.actions.push(action),
+                }
+            } else if was_down && !is_down {
+                self.key_released(key);
+            }
+        }
+        self.refresh_live();
+    }
+
+    /// Releases every injected key.
+    fn clear_injected(&mut self) {
+        for code in std::mem::take(&mut self.injected) {
+            if let Some(key) = physical_key(code)
+                && !self.held_keys.contains(&key)
+            {
+                self.key_released(key);
+            }
+        }
+        self.refresh_live();
     }
 
     /// A mouse button was clicked.
@@ -739,7 +845,13 @@ impl<D: Display, C: Clock> Session<D, C> {
     pub fn focus_lost(&mut self) {
         self.held_keys.clear();
         self.held_mouse.clear();
-        self.swallowed_keys.clear();
+        // The keys the guest holds down by injection stay down.
+        let injected: HashSet<KeyCode> = self
+            .injected
+            .iter()
+            .filter_map(|code| physical_key(*code))
+            .collect();
+        self.swallowed_keys.retain(|key| injected.contains(key));
         self.pacing_restart |= self.fast_forward_key;
         self.fast_forward_key = false;
         self.update_buttons();
@@ -753,8 +865,30 @@ impl<D: Display, C: Clock> Session<D, C> {
         }
     }
 
-    /// Sets the held buttons directly, bypassing the key map, as a scripted run does.
+    /// Sets the held buttons directly, bypassing the key map, as a scripted run does. The
+    /// keys the guest injected are held on top of them.
     pub fn set_buttons(&mut self, snapshot: InputSnapshot) {
+        self.uninjected = snapshot;
+        self.refresh_live();
+    }
+
+    /// Makes the live input what was set with the injected keys on top, and sends it to the
+    /// guest when no input source stands between.
+    fn refresh_live(&mut self) {
+        let keys = || self.injected.iter().filter_map(|code| physical_key(*code));
+        let buttons = keys()
+            .filter(|key| !self.swallowed_keys.contains(key))
+            .flat_map(|key| self.keys.buttons(key))
+            .fold(
+                self.uninjected,
+                |snapshot: InputSnapshot, button: Button| snapshot.with(button),
+            );
+        let snapshot = with_raw_keys(buttons, keys(), []);
+        // A code no key has is held in the raw keys alone.
+        let snapshot = self
+            .injected
+            .iter()
+            .fold(snapshot, |snapshot, code| with_virtual_key(snapshot, *code));
         self.live = snapshot;
         if self.input.is_none() {
             self.deliver(snapshot);

@@ -2474,3 +2474,178 @@ fn a_title_sent_after_a_notice_keeps_the_notice_until_it_is_over() {
     rig.send(title("Chapter 3"));
     assert_eq!(rig.title(), "Chapter 3");
 }
+
+// Injected keys.
+
+fn inject(key: u8, down: bool) -> GuestToHost {
+    GuestToHost::InjectKey { key, down }
+}
+
+/// A snapshot with `buttons` and the raw keys `keys` held.
+fn holding(buttons: &[Button], keys: &[u8]) -> HostToGuest {
+    let snapshot = buttons
+        .iter()
+        .fold(InputSnapshot::EMPTY, |snapshot, button| {
+            snapshot.with(*button)
+        });
+    HostToGuest::Input(
+        keys.iter()
+            .fold(snapshot, |snapshot, key| snapshot.with_key(*key)),
+    )
+}
+
+impl Rig {
+    /// Handles a message and returns what the guest is sent, with the snapshots whole.
+    fn send_whole(&mut self, message: GuestToHost) -> Vec<HostToGuest> {
+        self.session.handle_message(message);
+        self.session.take_messages()
+    }
+}
+
+/// Scenarios "Raw key and button" and "Release".
+#[test]
+fn an_injected_key_is_held_in_the_raw_keys_and_presses_its_buttons_until_released() {
+    let mut rig = Rig::new();
+    let mut sent = rig.send_whole(inject(0x0D, true));
+    sent.extend(rig.send_whole(frame(0)));
+    assert_eq!(sent, [holding(&[Button::C], &[0x0D]), HostToGuest::Tick]);
+    // A press of a key that is down changes nothing.
+    assert_eq!(rig.send_whole(inject(0x0D, true)), []);
+
+    let mut sent = rig.send_whole(inject(0x0D, false));
+    sent.extend(rig.send_whole(frame(1)));
+    rig.wait_for_tick();
+    assert_eq!(sent, [holding(&[], &[])]);
+    assert_eq!(rig.send_whole(inject(0x0D, false)), []);
+    assert_eq!(rig.session.take_actions(), []);
+}
+
+/// Scenario "Full screen".
+#[test]
+fn injected_alt_and_enter_switch_full_screen_once() {
+    let mut rig = Rig::new();
+    assert_eq!(
+        rig.send_whole(inject(0x12, true)),
+        [holding(&[Button::Alt], &[0x12, 0xA4])]
+    );
+    assert_eq!(rig.session.take_actions(), []);
+    // Enter is the shortcut and holds no button.
+    assert_eq!(
+        rig.send_whole(inject(0x0D, true)),
+        [holding(&[Button::Alt], &[0x12, 0xA4, 0x0D])]
+    );
+    rig.send_whole(inject(0x0D, true));
+    assert_eq!(rig.session.take_actions(), [KeyAction::ToggleFullscreen]);
+    assert_eq!(rig.session.take_actions(), []);
+
+    rig.send_whole(inject(0x12, false));
+    assert_eq!(rig.send_whole(inject(0x0D, false)), [holding(&[], &[])]);
+    // Without Alt, Enter is the button again.
+    assert_eq!(
+        rig.send_whole(inject(0x0D, true)),
+        [holding(&[Button::C], &[0x0D])]
+    );
+    assert_eq!(rig.session.take_actions(), []);
+}
+
+/// Scenario "Replay".
+#[test]
+fn a_session_that_replays_ignores_injected_keys() {
+    let text = "vkxp-input 2 seed=0\n2x C\n1x\n";
+    let recording = crate::Recording::parse(text).unwrap();
+    let mut rig = Rig::with_input(crate::Replayer::new(recording));
+    assert_eq!(rig.send_whole(inject(0x12, true)), []);
+    assert_eq!(rig.send_whole(inject(0x0D, true)), []);
+    assert_eq!(rig.send_whole(inject(0x25, true)), []);
+    assert_eq!(rig.session.take_actions(), []);
+    assert_eq!(rig.frame_input(0), [held(&[Button::C])]);
+    assert_eq!(rig.frame_input(1), []);
+    assert_eq!(rig.frame_input(2), [held(&[])]);
+    // After the recording live input applies, and no injected key is in it.
+    assert_eq!(rig.frame_input(3), []);
+}
+
+#[test]
+fn a_recorder_takes_the_injected_keys_with_the_live_input() {
+    let dir = tempfile::tempdir().unwrap();
+    let recorder = crate::Recorder::create(&dir.path().join("input.rec"), 1).unwrap();
+    let mut rig = Rig::with_input(recorder);
+    assert_eq!(rig.send_whole(inject(0x0D, true)), []);
+    assert_eq!(
+        rig.send_whole(frame(0)),
+        [holding(&[Button::C], &[0x0D]), HostToGuest::Tick]
+    );
+}
+
+#[test]
+fn an_injected_key_is_held_with_what_is_held_otherwise() {
+    let mut rig = Rig::new();
+    // A code no key has is held in the raw keys alone.
+    assert_eq!(rig.send_whole(inject(0x01, true)), [holding(&[], &[0x01])]);
+    rig.session.key(KeyCode::ArrowDown, true);
+    assert_eq!(
+        rig.session.take_messages(),
+        [holding(&[Button::Down], &[0x01, 0x28])]
+    );
+    // The physical key and the injected one are one key: it is up when both are.
+    assert_eq!(rig.send_whole(inject(0x28, true)), []);
+    rig.session.key(KeyCode::ArrowDown, false);
+    assert_eq!(rig.session.take_messages(), []);
+    assert_eq!(rig.send_whole(inject(0x28, false)), [holding(&[], &[0x01])]);
+    // Losing the focus releases the physical keys only.
+    rig.session.key(KeyCode::KeyX, true);
+    rig.session.take_messages();
+    rig.session.focus_lost();
+    assert_eq!(rig.session.take_messages(), [holding(&[], &[0x01])]);
+    // The buttons of a scripted run stay under the injected keys.
+    rig.session
+        .set_buttons(InputSnapshot::EMPTY.with(Button::Left));
+    assert_eq!(
+        rig.session.take_messages(),
+        [holding(&[Button::Left], &[0x01])]
+    );
+    assert_eq!(
+        rig.send_whole(inject(0x01, false)),
+        [holding(&[Button::Left], &[])]
+    );
+}
+
+#[test]
+fn a_loaded_state_and_a_reset_release_the_injected_keys() {
+    let mut rig = states_rig();
+    rig.send_whole(inject(0x41, true));
+    rig.session.loading = Some(2);
+    let sent = rig.send_whole(GuestToHost::StateLoaded { slot: 2 });
+    assert_eq!(sent, [holding(&[], &[]), holding(&[], &[])]);
+
+    assert_eq!(
+        rig.send_whole(inject(0x41, true)),
+        [holding(&[Button::X], &[0x41])]
+    );
+    rig.session.key(KeyCode::F12, true);
+    assert_eq!(
+        rig.session.take_messages(),
+        [HostToGuest::Reset, holding(&[], &[]), holding(&[], &[0x7B])]
+    );
+
+    // An injected F12 resets too, and is released by it.
+    rig.session.key(KeyCode::F12, false);
+    rig.session.take_messages();
+    assert_eq!(rig.send_whole(inject(0x7B, true)), [HostToGuest::Reset]);
+    assert_eq!(rig.send_whole(inject(0x7B, true)), [HostToGuest::Reset]);
+}
+
+// The pointer.
+
+/// Scenario "Hidden".
+#[test]
+fn the_display_is_told_whether_the_pointer_is_to_be_seen() {
+    let mut rig = Rig::new();
+    assert_eq!(rig.send(GuestToHost::PointerVisible { visible: false }), []);
+    assert_eq!(rig.session.display().events, [DisplayEvent::Pointer(false)]);
+    rig.send(GuestToHost::PointerVisible { visible: true });
+    assert_eq!(
+        rig.session.display().events,
+        [DisplayEvent::Pointer(false), DisplayEvent::Pointer(true)]
+    );
+}

@@ -29,6 +29,8 @@ pub enum DisplayEvent {
     Mask(Option<(BitmapId, u32)>),
     Redraw,
     Title(String),
+    /// Whether the pointer is to be seen.
+    Pointer(bool),
     /// Every bitmap and table was forgotten.
     Forget,
 }
@@ -265,6 +267,10 @@ impl Display for RecordingDisplay {
     fn set_title(&mut self, title: &str) {
         self.events.push(DisplayEvent::Title(title.to_owned()));
         self.title = title.to_owned();
+    }
+
+    fn set_pointer_visible(&mut self, visible: bool) {
+        self.events.push(DisplayEvent::Pointer(visible));
     }
 }
 

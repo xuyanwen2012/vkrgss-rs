@@ -239,7 +239,7 @@ fn a_copier_that_fails_is_answered_with_the_failure() {
 
 /// Scenarios "Complete frame" and "Music".
 #[test]
-fn a_resumed_copy_sends_its_title_its_music_and_a_complete_frame() {
+fn a_resumed_copy_sends_its_title_its_pointer_its_music_and_a_complete_frame() {
     let main = "bitmaps = [8, 12, 16].map do |side|
                   bitmap = Bitmap.new(side, side)
                   bitmap.fill_rect(0, 0, side, side, Color.new(side * 10, 255 - side, side))
@@ -266,6 +266,7 @@ fn a_resumed_copy_sends_its_title_its_music_and_a_complete_frame() {
                 tilemap.map_data = map
                 tilemap.priorities = Table.new(400)
                 Audio.bgm_play('Audio/BGM/theme', 80, 110)
+                Win32API.new('user32', 'ShowCursor', 'i', 'i').call(0)
                 6.times do |i|
                   sprites[0].x += 5
                   bitmaps[1].set_pixel(i, i, Color.new(0, 0, 255))
@@ -288,7 +289,7 @@ fn a_resumed_copy_sends_its_title_its_music_and_a_complete_frame() {
     let before = pictures(&played.record);
     assert_eq!(before.len(), 4);
 
-    // Title, music, then the frame.
+    // Title, the pointer that the game hid, music, then the frame.
     assert_eq!(
         resumed.received[0],
         GuestToHost::SetTitle {
@@ -297,6 +298,10 @@ fn a_resumed_copy_sends_its_title_its_music_and_a_complete_frame() {
     );
     assert_eq!(
         resumed.received[1],
+        GuestToHost::PointerVisible { visible: false }
+    );
+    assert_eq!(
+        resumed.received[2],
         GuestToHost::Audio(AudioCommand::Play {
             channel: AudioChannel::Bgm,
             data: music,
@@ -304,8 +309,8 @@ fn a_resumed_copy_sends_its_title_its_music_and_a_complete_frame() {
             pitch: 110,
         })
     );
-    let GuestToHost::Frame(first) = &resumed.received[2] else {
-        panic!("{:?} is not a frame", resumed.received[2]);
+    let GuestToHost::Frame(first) = &resumed.received[3] else {
+        panic!("{:?} is not a frame", resumed.received[3]);
     };
 
     // The three bitmaps of the sprites and the tileset are created and filled whole.
