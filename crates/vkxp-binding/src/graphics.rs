@@ -56,6 +56,67 @@ fn update(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
     Ok(ffi::Qnil)
 }
 
+/// Shows `frames` frames as `Graphics.update` shows one, without calling the Ruby method of
+/// that name. `before` runs ahead of each frame with its number, counted from 1. A request of
+/// the host ends the frames and is raised.
+fn frames(ruby: &Ruby, frames: i32, mut before: impl FnMut(i64)) -> Result<(), Raise> {
+    for number in 1..=i64::from(frames) {
+        before(number);
+        frame(Vec::new());
+        runtime::raise_pending(ruby)?;
+    }
+    Ok(())
+}
+
+/// `Graphics.wait(duration)` of RGSS2: that many frames, none for a duration below 1.
+fn wait(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
+    let duration = rb::int(ruby, args[0])?;
+    frames(ruby, duration, |_| {})?;
+    Ok(ffi::Qnil)
+}
+
+/// A fade of RGSS2 from the brightness as it is to `end`: frame k of `duration` shows the
+/// scene at `b0 + (end - b0) * k / duration` in integer division, and the brightness is `end`
+/// afterwards, also without a frame. A duration below 0 is taken as 0, which was not
+/// measured.
+///
+/// Provenance: oracle measurement 2026-10-12, RGSS202E versions 2.0.0.1 and 2.0.2.1,
+/// `vx-v0-REPORT.md` section 6.
+fn fade(ruby: &Ruby, duration: VALUE, end: i64) -> HostResult {
+    let duration = rb::int(ruby, duration)?.max(0);
+    let start = i64::from(Guest::with(|guest| guest.scene.brightness()));
+    // The quotient is rounded towards zero from either side, as `b0 - b0 * k / n` is.
+    frames(ruby, duration, |number| {
+        let level = start + (end - start) * number / i64::from(duration);
+        Guest::with(|guest| guest.scene.set_brightness(level));
+    })?;
+    Guest::with(|guest| guest.scene.set_brightness(end));
+    Ok(ffi::Qnil)
+}
+
+/// `Graphics.fadeout(duration)` of RGSS2.
+fn fadeout(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
+    fade(ruby, args[0], 0)
+}
+
+/// `Graphics.fadein(duration)` of RGSS2.
+fn fadein(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
+    fade(ruby, args[0], 255)
+}
+
+/// `Graphics.brightness` of RGSS2: the brightness of the scene.
+fn brightness(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
+    let brightness = Guest::with(|guest| guest.scene.brightness());
+    Ok(rb::fix(i32::from(brightness)))
+}
+
+/// `Graphics.brightness=` of RGSS2, limited to 0 to 255.
+fn set_brightness(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
+    let brightness = rb::long(ruby, args[0])?;
+    Guest::with(|guest| guest.scene.set_brightness(brightness));
+    Ok(args[0])
+}
+
 fn freeze(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
     Guest::with(|guest| {
         guest.runtime.held = true;
@@ -208,6 +269,11 @@ pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
     if Guest::with(|guest| guest.runtime.run.runtime) != Runtime::Rgss1 {
         rb::class_method(ruby, module, c"width", 0, width)?;
         rb::class_method(ruby, module, c"height", 0, height)?;
+        rb::class_method(ruby, module, c"brightness", 0, brightness)?;
+        rb::class_method(ruby, module, c"brightness=", 1, set_brightness)?;
+        rb::class_method(ruby, module, c"wait", 1, wait)?;
+        rb::class_method(ruby, module, c"fadeout", 1, fadeout)?;
+        rb::class_method(ruby, module, c"fadein", 1, fadein)?;
     }
     ruby.eval(RESET, "Graphics", 1)?;
     Ok(())

@@ -274,13 +274,15 @@
 //! The modules `Graphics`, `Input` and `Audio` and the functions above talk to the host
 //! through the guest: `Guest::send` for what goes out, and one place that consumes what
 //! comes in, `Guest::pump`. It is called by `Graphics.update` and by every frame of
-//! `Graphics.transition` (waiting for the tick of the frame just sent), by `Input.update`
+//! `Graphics.transition` and, in RGSS2, of `Graphics.wait`, `fadeout` and `fadein` (waiting
+//! for the tick of the frame just sent), by `Input.update`
 //! (taking only what has arrived) and by `print`, `p` and the error report (waiting for the
 //! dismissal). Whatever it waits for, it keeps the latest input snapshot for the next
 //! `Input.update` and records a reset or quit request. The request is raised, as `Reset` or
-//! `SystemExit`, by `Graphics.update` or `Graphics.transition` after the pump has returned
-//! and the guest is released, which is the raise rule of the interpreter crate. A host that
-//! has gone counts as a quit request, so a guest never waits for a host that is not there.
+//! `SystemExit`, by the function of `Graphics` that showed the frame, after the pump has
+//! returned and the guest is released, which is the raise rule of the interpreter crate. A
+//! host that has gone counts as a quit request, so a guest never waits for a host that is
+//! not there.
 //!
 //! Music and background sound remember the description they were started with (file name,
 //! volume, pitch): `Audio.bgm_play` and `Audio.bgs_play` with the same description send

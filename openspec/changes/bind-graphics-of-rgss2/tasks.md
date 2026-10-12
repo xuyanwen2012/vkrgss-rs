@@ -2,7 +2,7 @@
 
 ## 1. Brightness, waits and fades
 
-- [ ] 1.1 `Graphics.brightness`, `brightness=`, `wait`, `fadeout`, `fadein` in RGSS2 only. Verify: the scenarios of "Brightness of RGSS2" and "Waits and fades of RGSS2"; `cargo test -p vkxp-binding --locked` passes.
+- [x] 1.1 `Graphics.brightness`, `brightness=`, `wait`, `fadeout`, `fadein` in RGSS2 only. Verify: the scenarios of "Brightness of RGSS2" and "Waits and fades of RGSS2"; `cargo test -p vkxp-binding --locked` passes.
 
 ## 2. Transition
 

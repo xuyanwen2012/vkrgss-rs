@@ -3,7 +3,8 @@
 //! Only one interpreter can exist per process, so the harness starts one the first time it
 //! is used and keeps it; the tests of one test binary run on it one after another. State
 //! that Ruby code changes survives from test to test: tests use fresh objects and put back
-//! the font defaults they change.
+//! the font defaults they change. The guest is that of a game of RGSS1 unless [`start_as`]
+//! came first.
 //!
 //! The guest is installed over a generated game directory, below the directory of the test
 //! executable, with these files:
@@ -23,8 +24,8 @@ use std::sync::OnceLock;
 
 use vkxp_core::test_support::CellRasterizer;
 use vkxp_core::{Font, Mask, TextMetrics, TextRasterizer};
-use vkxp_ruby_sys::{Interpreter, Options, Ruby, RubyError};
-use vkxp_vfs::GameFiles;
+use vkxp_ruby_sys::{Interpreter, Options, Ruby, RubyError, SymbolTable};
+use vkxp_vfs::{GameFiles, Runtime};
 
 use crate::{Config, Guest, TextBackend};
 
@@ -86,6 +87,7 @@ impl TextBackend for CellBackend {
 struct Harness {
     interpreter: Interpreter,
     game_dir: PathBuf,
+    runtime: Runtime,
 }
 
 /// A PNG file of these pixels.
@@ -131,18 +133,49 @@ fn generate_files() -> PathBuf {
     root
 }
 
+/// The runtime [`start_as`] asked for.
+static RUNTIME: OnceLock<Runtime> = OnceLock::new();
+
+/// Starts the harness with the guest of a game of `runtime`: its symbol table, its frame and
+/// its functions. A test binary calls this before anything else of the harness, because the
+/// one interpreter of the process is started once; without it the runtime is RGSS1.
+///
+/// # Panics
+///
+/// Panics when the harness was started with another runtime.
+pub fn start_as(runtime: Runtime) {
+    assert_eq!(
+        *RUNTIME.get_or_init(|| runtime),
+        runtime,
+        "the harness was asked for another runtime before"
+    );
+    let started = harness().runtime;
+    assert_eq!(started, runtime, "the harness was started before");
+}
+
 fn harness() -> &'static Harness {
     static SHARED: OnceLock<Harness> = OnceLock::new();
     SHARED.get_or_init(|| {
         let root = generate_files();
         let game_dir = root.join("game");
+        let runtime = RUNTIME.get().copied().unwrap_or(Runtime::Rgss1);
         let config = Config {
             files: GameFiles::new(game_dir.clone(), [root.join("rtp")]),
             font_names: vec![FONT_FAMILIES[0].to_owned()],
             text: Box::new(CellBackend::new(FONT_FAMILIES.iter().copied())),
-            run: crate::RunConfig::default(),
+            run: crate::RunConfig {
+                runtime,
+                ..crate::RunConfig::default()
+            },
         };
-        let interpreter = Interpreter::start(Options::default()).expect("the interpreter starts");
+        let options = Options {
+            symbols: match runtime {
+                Runtime::Rgss1 => SymbolTable::Rgss1,
+                Runtime::Rgss2 | Runtime::Rgss3 => SymbolTable::Rgss2,
+            },
+            ..Options::default()
+        };
+        let interpreter = Interpreter::start(options).expect("the interpreter starts");
         interpreter
             .run(move |ruby| {
                 Guest::install(ruby, config).map_err(|raised| {
@@ -155,6 +188,7 @@ fn harness() -> &'static Harness {
         Harness {
             interpreter,
             game_dir,
+            runtime,
         }
     })
 }

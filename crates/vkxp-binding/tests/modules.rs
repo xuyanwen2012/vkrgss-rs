@@ -260,6 +260,21 @@ fn transition_counts_its_arguments() {
     assert_eq!(value, "ArgumentError: wrong number of arguments (4 for 3)");
 }
 
+/// Scenario "Not in XP", and the same of the other functions RGSS2 adds.
+#[test]
+fn the_functions_of_rgss2_are_not_defined() {
+    let (value, record) = eval("Graphics.brightness");
+    assert!(value.starts_with("NoMethodError: "), "{value}");
+    assert!(record.received.is_empty());
+    let (value, record) = eval(
+        "[:brightness, :brightness=, :wait, :fadeout, :fadein, :snap_to_bitmap].select do |name|
+           Graphics.respond_to?(name)
+         end",
+    );
+    assert_eq!(value, "[]");
+    assert!(record.received.is_empty());
+}
+
 #[test]
 fn visible_is_a_stored_flag() {
     let (value, _) = eval(
