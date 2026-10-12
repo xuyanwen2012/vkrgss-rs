@@ -145,6 +145,179 @@ pub(crate) fn build_ruby_executable(scratch: &Path) -> PathBuf {
     executable
 }
 
+/// The compiler of the instrumented builds (the sanitized run and the fuzz targets). A
+/// distribution may package the sanitizer runtimes of clang only, as Fedora does with
+/// `compiler-rt`, so this is not necessarily the compiler the build script used.
+pub(crate) const INSTRUMENTED_COMPILER: &str = "clang";
+
+/// One C file to compile: the command and the object file it writes.
+pub(crate) struct Job {
+    command: Command,
+    object: PathBuf,
+}
+
+/// The instrumented compiler with the flags of the build script, the instrumentation flags
+/// `flags` and the include paths given.
+pub(crate) fn instrumented_compiler(scratch: &Path, includes: &[&Path], flags: &[&str]) -> Command {
+    let mut command = Command::new(INSTRUMENTED_COMPILER);
+    command
+        .args(
+            env!("VKXP_RUBY_CFLAGS")
+                .split(' ')
+                .chain(env!("VKXP_RUBY_CLANG_CFLAGS").split(' '))
+                .filter(|arg| !arg.is_empty()),
+        )
+        .args(flags)
+        .env("TMPDIR", scratch);
+    for include in includes {
+        command.arg("-I").arg(include);
+    }
+    command
+}
+
+/// The job that compiles `source` into the directory `objects` with the flags `flags`.
+pub(crate) fn job(
+    scratch: &Path,
+    objects: &Path,
+    source: &Path,
+    includes: &[&Path],
+    flags: &[&str],
+) -> Job {
+    let stem = source.file_stem().expect("a file name");
+    let object = objects.join(stem).with_extension("o");
+    let mut command = instrumented_compiler(scratch, includes, flags);
+    command.arg("-c").arg(source).arg("-o").arg(&object);
+    Job { command, object }
+}
+
+/// Runs the jobs, several at a time, and returns the object files in the order of the jobs.
+pub(crate) fn compile_jobs(jobs: Vec<Job>) -> Vec<PathBuf> {
+    let objects = jobs.iter().map(|job| job.object.clone()).collect();
+    let queue = Mutex::new(VecDeque::from(jobs));
+    let workers = thread::available_parallelism().map_or(4, |count| count.get());
+    thread::scope(|scope| {
+        for _ in 0..workers {
+            scope.spawn(|| {
+                loop {
+                    let Some(mut job) = queue.lock().unwrap().pop_front() else {
+                        break;
+                    };
+                    run(&mut job.command);
+                }
+            });
+        }
+    });
+    objects
+}
+
+/// Puts object files into a static library in `scratch`.
+fn archive(scratch: &Path, name: &str, objects: &[PathBuf]) -> PathBuf {
+    let library = scratch.join(name);
+    run(Command::new("ar").arg("rcs").arg(&library).args(objects));
+    library
+}
+
+/// The interpreter and the engine compiled with instrumentation, and what a C file that
+/// uses them is compiled with.
+pub(crate) struct InstrumentedLibraries {
+    /// The interpreter with its `Zlib` extension.
+    pub(crate) ruby: PathBuf,
+    /// The regular expression engine.
+    pub(crate) onig: PathBuf,
+    /// The include paths of the interpreter's files.
+    pub(crate) includes: Vec<PathBuf>,
+}
+
+impl InstrumentedLibraries {
+    /// What follows the objects of an executable on the linker's command line.
+    pub(crate) fn link_arguments(&self) -> Vec<PathBuf> {
+        vec![
+            self.ruby.clone(),
+            self.onig.clone(),
+            Path::new(env!("VKXP_RUBY_ZLIB_LIB_DIR")).join("libz.a"),
+            PathBuf::from("-lcrypt"),
+            PathBuf::from("-lm"),
+        ]
+    }
+}
+
+/// Compiles the files of the build script, with its include paths, into two static
+/// libraries in `scratch`. Every file gets `flags`; the files of the engine get
+/// `onig_flags` after them.
+pub(crate) fn build_instrumented_libraries(
+    scratch: &Path,
+    flags: &[&str],
+    onig_flags: &[&str],
+) -> InstrumentedLibraries {
+    let source = source_dir();
+    let config = Path::new(env!("VKXP_RUBY_CONFIG_DIR"));
+    let onig = Path::new(env!("VKXP_RUBY_ONIG_DIR"));
+    let onig_config = config.join("oniguruma");
+    let directory = |name: &str| {
+        let dir = scratch.join(name);
+        fs::create_dir_all(&dir).unwrap_or_else(|error| panic!("{}: {error}", dir.display()));
+        dir
+    };
+    let (core_dir, onig_dir) = (directory("core"), directory("onig"));
+
+    let core_includes = [
+        config,
+        &source,
+        Path::new(env!("VKXP_RUBY_GENERATED_DIR")),
+        Path::new(env!("VKXP_RUBY_COMPAT_DIR")),
+        onig,
+    ];
+    let zlib_includes = [
+        config,
+        &source,
+        Path::new(env!("VKXP_RUBY_ZLIB_INCLUDE_DIR")),
+    ];
+    let zlib_flags: Vec<&str> = flags
+        .iter()
+        .copied()
+        .chain(["-DHAVE_ZLIB_H", "-DOS_CODE=OS_UNIX"])
+        .collect();
+    let onig_flags: Vec<&str> = flags.iter().chain(onig_flags).copied().collect();
+
+    let mut core_jobs: Vec<Job> = env!("VKXP_RUBY_CORE_SOURCES")
+        .split(' ')
+        .map(|name| source.join(format!("{name}.c")))
+        .map(|file| job(scratch, &core_dir, &file, &core_includes, flags))
+        .collect();
+    core_jobs.push(job(
+        scratch,
+        &core_dir,
+        &source.join("ext/zlib/zlib.c"),
+        &zlib_includes,
+        &zlib_flags,
+    ));
+    let onig_jobs: Vec<Job> = env!("VKXP_RUBY_ONIG_SOURCES")
+        .split(' ')
+        .map(|name| onig.join(format!("{name}.c")))
+        .map(|file| {
+            job(
+                scratch,
+                &onig_dir,
+                &file,
+                &[&onig_config, onig],
+                &onig_flags,
+            )
+        })
+        .collect();
+
+    let core_count = core_jobs.len();
+    let mut objects = compile_jobs(core_jobs.into_iter().chain(onig_jobs).collect());
+    let onig_objects = objects.split_off(core_count);
+    InstrumentedLibraries {
+        ruby: archive(scratch, "libruby-instrumented.a", &objects),
+        onig: archive(scratch, "libonig-instrumented.a", &onig_objects),
+        includes: core_includes
+            .iter()
+            .map(|path| path.to_path_buf())
+            .collect(),
+    }
+}
+
 /// The number of tests in `test/ruby` of the release.
 pub(crate) const CORE_TESTS: u64 = 625;
 

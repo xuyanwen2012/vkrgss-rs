@@ -7,6 +7,9 @@
 //! - `stress`: runs the upstream Ruby suites in the sanitized build, the tests of the binding
 //!   and the tests of the executable that start a guest, each under collector stress. Not a
 //!   step of the gate.
+//! - `fuzz <target> [--seconds N]`: builds one of the fuzz targets of the embedded interpreter
+//!   (`marshal`, `parse`, `regex`) with libFuzzer and the sanitizers and runs it. Not a step
+//!   of the gate.
 //! - `dist`: builds the release executable and packs it with the licence texts into an archive
 //!   with a checksum under `target/dist/`.
 //! - `extract-rpg <DLL> <OUTPUT>`: copies the built-in `RPG` scripts out of an RGSS DLL.
@@ -21,6 +24,7 @@ mod audit;
 mod deps;
 mod dist;
 mod extract;
+mod fuzz;
 mod gate;
 mod oracle;
 mod rgssad;
@@ -29,8 +33,8 @@ mod stress;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-const USAGE: &str = "usage: cargo xtask <gate|deps|audit|stress|dist|extract-rpg <DLL> <OUTPUT>|\
-                     oracle <GAME_DIR> [OPTIONS]|pack-rgssad <GAME_DIR>>";
+const USAGE: &str = "usage: cargo xtask <gate|deps|audit|stress|fuzz <TARGET> [--seconds N]|dist|\
+                     extract-rpg <DLL> <OUTPUT>|oracle <GAME_DIR> [OPTIONS]|pack-rgssad <GAME_DIR>>";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -43,6 +47,13 @@ fn main() -> ExitCode {
         ["dist"] => dist::run(&cargo(), &workspace_root()),
         ["extract-rpg", dll, output] => extract::run(Path::new(dll), Path::new(output)),
         ["pack-rgssad", game] => rgssad::pack(Path::new(game)),
+        ["fuzz", ref arguments @ ..] => match fuzz::parse(arguments) {
+            Ok(options) => fuzz::run(&options, &workspace_root()),
+            Err(error) => {
+                eprintln!("{error:#}\n{}", fuzz::USAGE);
+                return ExitCode::from(2);
+            }
+        },
         ["oracle", ref arguments @ ..] => {
             let root = workspace_root();
             match oracle::parse(arguments, &root) {

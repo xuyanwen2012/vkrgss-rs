@@ -173,6 +173,14 @@ mod tests {
     }
 
     #[test]
+    fn the_fuzz_run_is_not_a_step() {
+        for step in steps() {
+            assert!(!step.args.contains(&"fuzz"), "{}", step.name);
+            assert!(!step.args.contains(&"--ignored"), "{}", step.name);
+        }
+    }
+
+    #[test]
     fn the_stress_run_is_not_a_step() {
         for step in steps() {
             assert!(!step.args.contains(&"stress"), "{}", step.name);

@@ -20,21 +20,14 @@
 
 mod common;
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::BTreeMap;
 use std::fs;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::{Mutex, OnceLock};
-use std::thread;
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use common::Suites;
-
-/// The compiler of the sanitized build. A distribution may package the sanitizer runtimes
-/// of clang only, as Fedora does with `compiler-rt`, so this is not necessarily the compiler
-/// the build script used.
-const COMPILER: &str = "clang";
 
 /// What the sanitized build adds to the flags of the build script.
 ///
@@ -177,148 +170,36 @@ fn collect_reports(dir: &Path) -> BTreeMap<String, usize> {
     reports
 }
 
-/// One C file to compile: the command and the object file it writes.
-struct Job {
-    command: Command,
-    object: PathBuf,
-}
-
-/// The sanitized compiler with the flags of the build script and the include paths given.
-fn compiler(scratch: &Path, includes: &[&Path]) -> Command {
-    let mut command = Command::new(COMPILER);
-    command
-        .args(
-            env!("VKXP_RUBY_CFLAGS")
-                .split(' ')
-                .chain(env!("VKXP_RUBY_CLANG_CFLAGS").split(' '))
-                .filter(|arg| !arg.is_empty()),
-        )
-        .args(SANITIZER_FLAGS)
-        .env("TMPDIR", scratch);
-    for include in includes {
-        command.arg("-I").arg(include);
-    }
-    command
-}
-
-/// The job that compiles `source` into the directory `objects`.
-fn job(scratch: &Path, objects: &Path, source: &Path, includes: &[&Path], more: &[&str]) -> Job {
-    let stem = source.file_stem().expect("a file name");
-    let object = objects.join(stem).with_extension("o");
-    let mut command = compiler(scratch, includes);
-    command
-        .args(more)
-        .arg("-c")
-        .arg(source)
-        .arg("-o")
-        .arg(&object);
-    Job { command, object }
-}
-
-/// Runs the jobs, several at a time, and returns the object files in the order of the jobs.
-fn compile(jobs: Vec<Job>) -> Vec<PathBuf> {
-    let objects = jobs.iter().map(|job| job.object.clone()).collect();
-    let queue = Mutex::new(VecDeque::from(jobs));
-    let workers = thread::available_parallelism().map_or(4, |count| count.get());
-    thread::scope(|scope| {
-        for _ in 0..workers {
-            scope.spawn(|| {
-                loop {
-                    let Some(mut job) = queue.lock().unwrap().pop_front() else {
-                        break;
-                    };
-                    common::run(&mut job.command);
-                }
-            });
-        }
-    });
-    objects
-}
-
-/// Puts object files into a static library in `scratch`.
-fn archive(scratch: &Path, name: &str, objects: &[PathBuf]) -> PathBuf {
-    let library = scratch.join(name);
-    common::run(Command::new("ar").arg("rcs").arg(&library).args(objects));
-    library
-}
-
-/// Builds the sanitized `ruby` in `scratch`: the files and include paths of the build
-/// script, and the test executable of `common::build_ruby_executable`, all compiled here.
+/// Builds the sanitized `ruby` in `scratch`: the libraries of
+/// `common::build_instrumented_libraries` and the test executable of
+/// `common::build_ruby_executable`, all compiled here.
 fn build_sanitized_executable(scratch: &Path) -> PathBuf {
     let source = common::source_dir();
-    let config = Path::new(env!("VKXP_RUBY_CONFIG_DIR"));
-    let onig = Path::new(env!("VKXP_RUBY_ONIG_DIR"));
-    let onig_config = config.join("oniguruma");
-    let directory = |name: &str| {
-        let dir = scratch.join(name);
-        fs::create_dir_all(&dir).unwrap_or_else(|error| panic!("{}: {error}", dir.display()));
-        dir
-    };
-    let (core_dir, onig_dir, top_dir) = (directory("core"), directory("onig"), directory("top"));
-
-    let core_includes = [
-        config,
-        &source,
-        Path::new(env!("VKXP_RUBY_GENERATED_DIR")),
-        Path::new(env!("VKXP_RUBY_COMPAT_DIR")),
-        onig,
-    ];
-    let zlib_includes = [
-        config,
-        &source,
-        Path::new(env!("VKXP_RUBY_ZLIB_INCLUDE_DIR")),
-    ];
+    let libraries = common::build_instrumented_libraries(scratch, SANITIZER_FLAGS, &[]);
+    let top_dir = scratch.join("top");
+    fs::create_dir_all(&top_dir).unwrap_or_else(|error| panic!("{}: {error}", top_dir.display()));
     let init_ext = common::write_init_ext_with(scratch, INIT_EXT_DEFINITIONS, INIT_EXT_STATEMENTS);
-
-    let mut core_jobs: Vec<Job> = env!("VKXP_RUBY_CORE_SOURCES")
-        .split(' ')
-        .map(|name| source.join(format!("{name}.c")))
-        .map(|file| job(scratch, &core_dir, &file, &core_includes, &[]))
-        .collect();
-    core_jobs.push(job(
-        scratch,
-        &core_dir,
-        &source.join("ext/zlib/zlib.c"),
-        &zlib_includes,
-        &["-DHAVE_ZLIB_H", "-DOS_CODE=OS_UNIX"],
-    ));
-    let onig_jobs: Vec<Job> = env!("VKXP_RUBY_ONIG_SOURCES")
-        .split(' ')
-        .map(|name| onig.join(format!("{name}.c")))
-        .map(|file| job(scratch, &onig_dir, &file, &[&onig_config, onig], &[]))
-        .collect();
-    let top_jobs: Vec<Job> = [
-        source.join("main.c"),
-        init_ext,
-        source.join("ext/fcntl/fcntl.c"),
-        source.join("ext/stringio/stringio.c"),
-    ]
-    .iter()
-    .map(|file| job(scratch, &top_dir, file, &core_includes, &[]))
-    .collect();
-
-    let (core_count, onig_count) = (core_jobs.len(), onig_jobs.len());
-    let mut objects = compile(
-        core_jobs
-            .into_iter()
-            .chain(onig_jobs)
-            .chain(top_jobs)
-            .collect(),
+    let includes: Vec<&Path> = libraries.includes.iter().map(PathBuf::as_path).collect();
+    let top_objects = common::compile_jobs(
+        [
+            source.join("main.c"),
+            init_ext,
+            source.join("ext/fcntl/fcntl.c"),
+            source.join("ext/stringio/stringio.c"),
+        ]
+        .iter()
+        .map(|file| common::job(scratch, &top_dir, file, &includes, SANITIZER_FLAGS))
+        .collect(),
     );
-    let top_objects = objects.split_off(core_count + onig_count);
-    let onig_objects = objects.split_off(core_count);
 
     // As in the unsanitized executable: the objects first, so that their `Init_ext` wins, and
     // the engine as a library, so that only what the interpreter refers to is linked.
     let executable = scratch.join("ruby");
     common::run(
-        compiler(scratch, &[])
+        common::instrumented_compiler(scratch, &[], SANITIZER_FLAGS)
             .arg("-rdynamic")
             .args(&top_objects)
-            .arg(archive(scratch, "libruby-sanitized.a", &objects))
-            .arg(archive(scratch, "libonig-sanitized.a", &onig_objects))
-            .arg(Path::new(env!("VKXP_RUBY_ZLIB_LIB_DIR")).join("libz.a"))
-            .args(["-lcrypt", "-lm"])
+            .args(libraries.link_arguments())
             .arg("-o")
             .arg(&executable),
     );

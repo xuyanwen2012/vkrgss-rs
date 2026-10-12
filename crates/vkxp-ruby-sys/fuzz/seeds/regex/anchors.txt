@@ -1,0 +1,2 @@
+\A\s*(\S+)\s*\z|\bx\B|\Gy
+ word 
