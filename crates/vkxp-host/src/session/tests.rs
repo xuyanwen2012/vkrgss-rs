@@ -891,6 +891,72 @@ fn transition_of_duration_one_shows_the_held_frame_then_the_newest() {
     assert_eq!(rig.shown(), Shown::Frame(2));
 }
 
+fn transition_of_rgss2(duration: u32) -> GuestToHost {
+    GuestToHost::Transition {
+        duration,
+        mask: None,
+        vague: 0,
+        rule: TransitionRule::Rgss2,
+    }
+}
+
+/// Requirement "Transition steps of RGSS2": the frames are at the steps 1 to 4 of 4.
+#[test]
+fn transition_of_rgss2_is_one_step_ahead_and_ends_with_its_last_frame() {
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    rig.send(GuestToHost::Freeze);
+    rig.send(transition_of_rgss2(4));
+    assert_eq!(rig.shown(), Shown::Frame(0));
+
+    let mix = |newest, weight| Shown::mix(Shown::Frame(0), newest, weight);
+    rig.frame(frame(1));
+    assert_eq!(rig.shown(), mix(1, 63));
+    rig.frame(frame(2));
+    assert_eq!(rig.shown(), mix(2, 127));
+    rig.frame(frame(3));
+    assert_eq!(rig.shown(), mix(3, 191));
+    rig.frame(frame(4));
+    assert_eq!(rig.shown(), Shown::Frame(4), "the newest frame alone");
+    // The transition has ended: a freeze holds the frame on screen.
+    rig.send(GuestToHost::Freeze);
+    rig.frame(frame(5));
+    assert_eq!(rig.shown(), Shown::Frame(4));
+}
+
+/// Scenario "Duration one".
+#[test]
+fn transition_of_rgss2_of_duration_one_shows_the_newest_frame_alone() {
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    rig.send(GuestToHost::Freeze);
+    rig.send(transition_of_rgss2(1));
+    rig.frame(frame(1));
+    assert_eq!(rig.shown(), Shown::Frame(1));
+    rig.frame(frame(2));
+    assert_eq!(rig.shown(), Shown::Frame(2));
+}
+
+/// Duration 0 and a transition without a freeze are the same under both rules.
+#[test]
+fn transition_of_rgss2_of_duration_zero_or_without_freeze_is_as_under_rgss1() {
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    rig.send(GuestToHost::Freeze);
+    rig.send(transition_of_rgss2(0));
+    assert_eq!(rig.shown(), Shown::Frame(0));
+    rig.frame(frame(1));
+    assert_eq!(rig.shown(), Shown::Frame(1));
+
+    rig.send(transition_of_rgss2(2));
+    rig.frame(frame(2));
+    assert_eq!(rig.shown(), Shown::Frame(1));
+    rig.frame(frame(3));
+    assert_eq!(rig.shown(), Shown::Frame(1));
+    rig.frame(frame(4));
+    assert_eq!(rig.shown(), Shown::Frame(4));
+}
+
 #[test]
 fn frames_between_freeze_and_transition_do_not_advance_the_fade() {
     let mut rig = Rig::new();
@@ -1066,6 +1132,29 @@ fn masked_transition_is_the_masked_mix_with_the_mask_and_the_vagueness() {
             &DisplayEvent::Mask(None)
         ]
     );
+}
+
+/// A masked transition of RGSS2: the first frame is at step 1, under the mask it brings.
+#[test]
+fn masked_transition_of_rgss2_is_masked_from_its_first_frame() {
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Transition {
+        duration: 4,
+        mask: Some(MASK),
+        vague: 40,
+        rule: TransitionRule::Rgss2,
+    });
+    rig.frame(frame_with_mask(1));
+    assert_eq!(rig.shown(), masked(1, 63, 40));
+    rig.frame(frame(2));
+    assert_eq!(rig.shown(), masked(2, 127, 40));
+    rig.frame(frame(3));
+    assert_eq!(rig.shown(), masked(3, 191, 40));
+    rig.frame(frame(4));
+    assert_eq!(rig.shown(), Shown::Frame(4));
+    assert_eq!(rig.errors.text(), "");
 }
 
 /// A transition that arrives before the frame that would end a masked one: its step 0 is the

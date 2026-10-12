@@ -200,6 +200,11 @@ fn grey_frame(frame_index: u64, level: u8) -> GuestToHost {
 /// shuts down, with every frame dumped. Returns the red channel of each dump, which is a
 /// frame of one colour.
 fn dumped_levels(between: Vec<GuestToHost>, black: u64) -> Vec<u8> {
+    dumped_levels_after(grey_frame(0, 255), between, black)
+}
+
+/// The same after `first` in place of the white frame.
+fn dumped_levels_after(first: GuestToHost, between: Vec<GuestToHost>, black: u64) -> Vec<u8> {
     let directory = tempfile::tempdir().unwrap();
     let path = |index: u64| directory.path().join(format!("frame-{index}.png"));
     let frames = 1 + black;
@@ -208,7 +213,7 @@ fn dumped_levels(between: Vec<GuestToHost>, black: u64) -> Vec<u8> {
             link.send(message).unwrap();
             assert_eq!(link.recv(), Ok(HostToGuest::Tick));
         };
-        show(grey_frame(0, 255));
+        show(first);
         for message in between {
             link.send(message).unwrap();
         }
@@ -252,6 +257,49 @@ fn transition(duration: u32) -> GuestToHost {
         vague: 40,
         rule: TransitionRule::Rgss1,
     }
+}
+
+fn transition_of_rgss2(duration: u32) -> GuestToHost {
+    GuestToHost::Transition {
+        duration,
+        mask: None,
+        vague: 40,
+        rule: TransitionRule::Rgss2,
+    }
+}
+
+/// Scenario "Cross-fade, measured on the original runtime of VX".
+#[test]
+fn transition_of_rgss2_shows_the_steps_one_to_its_duration() {
+    let levels = dumped_levels(vec![GuestToHost::Freeze, transition_of_rgss2(4)], 5);
+    // The black frames are at steps 1 to 4 of 4, with the weights 63, 127 and 191 and then
+    // alone; the held frame is not shown again.
+    assert_eq!(levels, [255, 192, 128, 64, 0, 0]);
+}
+
+/// Scenario "The same frames under the rule of RGSS1".
+#[test]
+fn the_same_transition_of_rgss1_shows_the_held_frame_first() {
+    let levels = dumped_levels(vec![GuestToHost::Freeze, transition(4)], 5);
+    assert_eq!(levels, [255, 255, 192, 128, 64, 0]);
+}
+
+/// Scenario "Duration one".
+#[test]
+fn transition_of_rgss2_of_duration_one_shows_its_frame_alone() {
+    let levels = dumped_levels(vec![GuestToHost::Freeze, transition_of_rgss2(1)], 2);
+    assert_eq!(levels, [255, 0, 0]);
+}
+
+/// Scenario "Held frame keeps its brightness".
+#[test]
+fn held_frame_keeps_the_brightness_it_was_composed_with() {
+    let GuestToHost::Frame(mut first) = grey_frame(0, 200) else {
+        unreachable!("a grey frame is a frame");
+    };
+    first.brightness = 100;
+    let levels = dumped_levels_after(GuestToHost::Frame(first), vec![GuestToHost::Freeze], 3);
+    assert_eq!(levels, [78, 78, 78, 78]);
 }
 
 #[test]

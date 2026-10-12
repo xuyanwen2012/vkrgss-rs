@@ -11,7 +11,7 @@
 
 ## 3. Session
 
-- [ ] 3.1 The steps of a transition by its rule. Verify: the scenarios of `specs/host-session/spec.md`; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-host --locked` passes.
+- [x] 3.1 The steps of a transition by its rule. Verify: the scenarios of `specs/host-session/spec.md`; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-host --locked` passes.
 
 ## 4. Documentation
 

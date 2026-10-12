@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use vkxp_proto::link::HostEnd;
 use vkxp_proto::{
     AudioChannel, AudioCommand, BitmapId, Button, FramePacket, GuestToHost, HostToGuest,
-    InputSnapshot, Size,
+    InputSnapshot, Size, TransitionRule,
 };
 use vkxp_vk::Mix;
 use winit::event::MouseButton;
@@ -141,10 +141,13 @@ enum Fade {
     /// [`step_mix`], and the one after the `duration`-th is shown alone and ends the
     /// transition. A `still` transition,
     /// one that arrived while nothing was frozen, shows the held frame at every step.
+    /// By the rule of RGSS2 a transition that is not still is one step ahead: the next frame
+    /// is shown at step `shown + 1`, so the `duration`-th is shown alone and ends it.
     Fading {
         shown: u32,
         duration: u32,
         still: bool,
+        rule: TransitionRule,
     },
 }
 
@@ -429,10 +432,10 @@ impl<D: Display, C: Clock> Session<D, C> {
                 duration,
                 mask,
                 vague,
-                rule: _,
+                rule,
             } => {
                 let mask = mask.map(|id| (id, u32::from(vague)));
-                self.transition(duration, mask);
+                self.transition(duration, mask, rule);
             }
             GuestToHost::Audio(command) => self.audio.command(command),
             GuestToHost::Modal { text } => {
@@ -950,26 +953,32 @@ impl<D: Display, C: Clock> Session<D, C> {
                 shown,
                 duration,
                 still,
+                rule,
             } => {
-                let mix = if shown >= duration {
+                // The step this frame is shown at.
+                let at = match rule {
+                    TransitionRule::Rgss2 if !still => shown.saturating_add(1),
+                    TransitionRule::Rgss1 | TransitionRule::Rgss2 => shown,
+                };
+                let mix = if at >= duration {
                     Mix::Newest
                 } else if still {
                     Mix::HELD
                 } else {
-                    step_mix(shown, duration)
+                    step_mix(at, duration)
                 };
-                Some((shown, duration, still, mix))
+                Some((at, shown, duration, still, rule, mix))
             }
             Fade::Normal | Fade::Frozen => None,
         };
         let mask_before = self.display_mask;
-        if let Some((shown, duration, _, mix)) = step {
+        if let Some((at, _, duration, _, _, mix)) = step {
             self.display.set_mix(mix);
             // Step 0 shows the held frame alone, so not under the mask of a transition that
             // this one took over from either.
-            if shown == 0 {
+            if at == 0 {
                 self.show_mask(None);
-            } else if shown < duration {
+            } else if at < duration {
                 self.show_mask(self.mask);
             }
         }
@@ -983,13 +992,13 @@ impl<D: Display, C: Clock> Session<D, C> {
                 if self.measuring.is_some() {
                     self.frame_measured();
                 }
-                if let Some((shown, duration, still, mix)) = step {
+                if let Some((at, shown, duration, still, rule, mix)) = step {
                     self.mix = mix;
                     // The mask comes with the frames after the transition message, so only
                     // now is it known whether there is one. Without it the display shows a
                     // cross-fade. The frame past the last step is shown alone, and the guest
                     // has disposed of the mask by then.
-                    if shown < duration
+                    if at < duration
                         && let Some((id, _)) = self.mask
                         && !self.display.has_bitmap(id)
                     {
@@ -1003,7 +1012,7 @@ impl<D: Display, C: Clock> Session<D, C> {
                         );
                         self.drop_mask();
                     }
-                    self.fade = if shown >= duration {
+                    self.fade = if at >= duration {
                         self.drop_mask();
                         Fade::Normal
                     } else {
@@ -1011,6 +1020,7 @@ impl<D: Display, C: Clock> Session<D, C> {
                             shown: shown + 1,
                             duration,
                             still,
+                            rule,
                         }
                     };
                 }
@@ -1100,7 +1110,7 @@ impl<D: Display, C: Clock> Session<D, C> {
         self.fade = Fade::Frozen;
     }
 
-    fn transition(&mut self, duration: u32, mask: Option<(BitmapId, u32)>) {
+    fn transition(&mut self, duration: u32, mask: Option<(BitmapId, u32)>, rule: TransitionRule) {
         match self.fade {
             Fade::Normal if duration == 0 => {}
             // Nothing is frozen: the picture on screen stays for the transition's frames.
@@ -1116,6 +1126,7 @@ impl<D: Display, C: Clock> Session<D, C> {
                     shown: 0,
                     duration,
                     still: true,
+                    rule,
                 };
             }
             // With duration 0 nothing changes on the display: the next frame is past the
@@ -1125,6 +1136,7 @@ impl<D: Display, C: Clock> Session<D, C> {
                     shown: 0,
                     duration,
                     still: false,
+                    rule,
                 };
                 // The display is told at step 1: step 0 shows the held frame alone.
                 self.mask = mask.filter(|_| duration > 0);
@@ -1247,6 +1259,10 @@ impl<D: Display, C: Clock> Drop for Session<D, C> {
 /// `max(0, 256 * step / duration - 1)`, as measured on the original. The formula gives -1
 /// only at step 1 of a transition longer than 256 frames, where the original was seen at 0.
 /// Step 0 is [`Mix::HELD`].
+///
+/// A transition of RGSS2 is counted from step 1 and takes its values from here too.
+// PLACEHOLDER: the weight is measured on the original of VX; the threshold is the formula
+// of RGSS1, not measured for RGSS2.
 fn step_mix(step: u32, duration: u32) -> Mix {
     let step = u64::from(step);
     let duration = u64::from(duration);
