@@ -26,7 +26,8 @@ usage: vkxp [GAME_DIR] [OPTIONS]
   --font-dir DIR            a directory of fonts, searched before the system's; repeatable
   --font-own-metrics        size every font by its own line box, a replacement included
   --encoding ENCODING       the text encoding of Game.ini: utf-8, gbk, shift-jis or big5
-  --debug                   debug mode: $DEBUG is true, in a game of rgss2 $TEST
+  --debug                   debug mode: sets $DEBUG to true for RGSS1; for RGSS2 sets
+                            $TEST to true and leaves $DEBUG false
   --allow-process-functions let scripts start processes (system, exec and the like)
   --log-p                   p only writes to the error stream and shows no message panel
   --filter FILTER           how the frame is scaled into the window: auto, nearest,

@@ -33,7 +33,7 @@ What follows the runtime:
 | Run-time packages in `Game.ini` | `RTP1`, `RTP2`, `RTP3` | `RTP` |
 | Encrypted archive | `Game.rgssad` | `Game.rgss2a` |
 | Default built-in scripts file | `rpg_builtin.rb` | `rpg_builtin_rgss2.rb` |
-| `--debug` sets | `$DEBUG` | `$TEST` |
+| `--debug` sets | `$DEBUG` | `$TEST`; `$DEBUG` stays `false` |
 
 A game of VX names the package `RPGVX`, so it is run with `--rtp RPGVX=<RTP directory>`; a
 game whose `RTP` is empty needs no package. The archive of the other runtime is ignored if
@@ -107,7 +107,7 @@ Paths on the command line are relative to the directory the program was started 
 | `--encoding ENCODING` | The text encoding of `Game.ini`: `utf-8`, `gbk`, `shift-jis` or `big5`. Without it UTF-8 is tried, then those three in that order. |
 | `--filter FILTER` | How the frame is scaled into the window: `auto`, `nearest`, `linear` or `sharp`. See *Window*. |
 | `--fullscreen` | Start in borderless fullscreen. |
-| `--debug` | Debug mode: `$DEBUG` is `true`, and in a game of RGSS2 `$TEST` is. |
+| `--debug` | Debug mode: sets `$DEBUG` to `true` for RGSS1; for RGSS2 sets `$TEST` to `true` and leaves `$DEBUG` `false`. |
 | `--allow-process-functions` | Lets `system`, backticks, `exec`, `fork`, `syscall` and `IO.popen` start processes. Without it they do nothing. |
 | `--log-p` | `p` only writes to the error stream: no message panel is shown and the game does not wait. See *Messages*. |
 | `--present-stats` | Write the intervals between the frames shown to the error stream. See *Window*. |
