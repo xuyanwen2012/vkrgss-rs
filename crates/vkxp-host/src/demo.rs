@@ -16,6 +16,7 @@ use vkxp_proto::link::{Disconnected, GuestEnd};
 use vkxp_proto::{
     BitmapDelta, BitmapId, BlendMode, Button, Color, FramePacket, FrameRate, GuestToHost,
     HostToGuest, InputSnapshot, Op, Quad, Rect, RectEffect, Sampling, Size, Tone, Transform,
+    TransitionRule,
 };
 
 /// The window title the demo sets.
@@ -100,6 +101,7 @@ pub fn run(link: &GuestEnd, options: DemoOptions) -> Result<(), Disconnected> {
             frame_index,
             logical_size: size,
             frame_rate: options.frame_rate,
+            brightness: 255,
             tables: vec![],
             bitmaps,
             ops: ops(size, &state, frame_index, input),
@@ -148,6 +150,7 @@ pub fn run(link: &GuestEnd, options: DemoOptions) -> Result<(), Disconnected> {
                 duration: TRANSITION_FRAMES,
                 mask: None,
                 vague: 0,
+                rule: TransitionRule::Rgss1,
             })?;
         }
         previous = input;

@@ -150,6 +150,7 @@ fn frame(frame_index: u64, bitmaps: Vec<BitmapDelta>, ops: Vec<Op>) -> GuestToHo
         frame_index,
         logical_size: SIZE,
         frame_rate: FrameRate::DEFAULT,
+        brightness: 255,
         tables: vec![],
         bitmaps,
         ops,
@@ -520,6 +521,7 @@ fn scene(name: &'static str, size: Size, frames: Vec<SceneFrame>) -> Fixture {
             frame_index: index as u64,
             logical_size: size,
             frame_rate: FrameRate::DEFAULT,
+            brightness: 255,
             tables: frame.1,
             bitmaps: frame.0,
             ops,
@@ -543,6 +545,7 @@ pub fn one_op_of_each_kind() -> GuestToHost {
         frame_index: 0,
         logical_size: size,
         frame_rate: FrameRate::DEFAULT,
+        brightness: 255,
         tables: vec![
             table(MAP, (4, 4, 1), (384..400).collect()),
             table(NO_PRIORITIES, (1, 1, 1), vec![0]),

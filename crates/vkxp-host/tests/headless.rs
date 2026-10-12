@@ -18,7 +18,7 @@ use vkxp_host::{
 use vkxp_proto::link::{Disconnected, GuestEnd};
 use vkxp_proto::{
     BitmapId, BlendMode, Button, Color, GuestToHost, HostToGuest, InputSnapshot, Op, Quad, Rect,
-    Sampling, Size, Tone,
+    Sampling, Size, Tone, TransitionRule,
 };
 use vkxp_vk::DeviceChoice;
 
@@ -250,6 +250,7 @@ fn transition(duration: u32) -> GuestToHost {
         duration,
         mask: None,
         vague: 40,
+        rule: TransitionRule::Rgss1,
     }
 }
 
@@ -779,6 +780,7 @@ fn sprite_frame(index: u64, create: bool) -> GuestToHost {
         frame_index: index,
         logical_size: size,
         frame_rate: vkxp_proto::FrameRate::DEFAULT,
+        brightness: 255,
         tables: if create {
             vec![vkxp_proto::TableDelta::Set {
                 id: vkxp_proto::TableId::new(0),

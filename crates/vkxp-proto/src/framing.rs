@@ -121,6 +121,7 @@ mod tests {
             frame_index: 3,
             logical_size: Size::new(640, 480),
             frame_rate: FrameRate::DEFAULT,
+            brightness: 255,
             bitmaps: vec![
                 BitmapDelta::Create {
                     id,

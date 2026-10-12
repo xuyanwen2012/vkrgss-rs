@@ -8,7 +8,7 @@ use vkxp_proto::codec::{Message, decode_stream, encode_stream};
 use vkxp_proto::{
     AudioChannel, AudioCommand, BitmapDelta, BitmapId, BlendMode, Color, Fixed, FramePacket,
     FrameRate, GuestToHost, HostToGuest, InputSnapshot, Op, Quad, Rect, RectEffect, Sampling, Size,
-    TableDelta, TableId, TilemapLayer, Tone, Transform,
+    TableDelta, TableId, TilemapLayer, Tone, Transform, TransitionRule,
 };
 
 fn fixed() -> impl Strategy<Value = Fixed> {
@@ -164,18 +164,22 @@ fn frame_packet() -> impl Strategy<Value = FramePacket> {
         any::<u64>(),
         any::<(u32, u32)>(),
         frame_rate(),
+        any::<u8>(),
         vec(bitmap_delta(), 0..6),
         vec(table_delta(), 0..4),
         vec(op(), 0..8),
     )
         .prop_map(
-            |(frame_index, (width, height), frame_rate, bitmaps, tables, ops)| FramePacket {
-                frame_index,
-                logical_size: Size::new(width, height),
-                frame_rate,
-                tables,
-                bitmaps,
-                ops,
+            |(frame_index, (width, height), frame_rate, brightness, bitmaps, tables, ops)| {
+                FramePacket {
+                    frame_index,
+                    logical_size: Size::new(width, height),
+                    frame_rate,
+                    brightness,
+                    tables,
+                    bitmaps,
+                    ops,
+                }
             },
         )
 }
@@ -215,13 +219,18 @@ fn guest_to_host() -> impl Strategy<Value = GuestToHost> {
     prop_oneof![
         frame_packet().prop_map(GuestToHost::Frame),
         Just(GuestToHost::Freeze),
-        (any::<u32>(), option::of(bitmap_id()), any::<u16>()).prop_map(
-            |(duration, mask, vague)| GuestToHost::Transition {
+        (
+            any::<u32>(),
+            option::of(bitmap_id()),
+            any::<u16>(),
+            prop_oneof![Just(TransitionRule::Rgss1), Just(TransitionRule::Rgss2)]
+        )
+            .prop_map(|(duration, mask, vague, rule)| GuestToHost::Transition {
                 duration,
                 mask,
                 vague,
-            }
-        ),
+                rule,
+            }),
         audio_command().prop_map(GuestToHost::Audio),
         any::<String>().prop_map(|text| GuestToHost::Modal { text }),
         any::<String>().prop_map(|title| GuestToHost::SetTitle { title }),

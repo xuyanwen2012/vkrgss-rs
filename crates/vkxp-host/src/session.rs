@@ -429,6 +429,7 @@ impl<D: Display, C: Clock> Session<D, C> {
                 duration,
                 mask,
                 vague,
+                rule: _,
             } => {
                 let mask = mask.map(|id| (id, u32::from(vague)));
                 self.transition(duration, mask);

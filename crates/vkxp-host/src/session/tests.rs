@@ -7,6 +7,7 @@ use vkxp_proto::link::{GuestEnd, HostEnd, link};
 use vkxp_proto::{
     AudioChannel, AudioCommand, BitmapDelta, BitmapId, BlendMode, Button, Color, FramePacket,
     FrameRate, GuestToHost, HostToGuest, InputSnapshot, Op, Quad, Rect, Sampling, Size, Tone,
+    TransitionRule,
 };
 use winit::keyboard::KeyCode;
 
@@ -35,6 +36,7 @@ fn packet(frame_index: u64, rate: u8) -> FramePacket {
         frame_index,
         logical_size: SIZE,
         frame_rate: FrameRate::new(rate).unwrap(),
+        brightness: 255,
         tables: vec![],
         bitmaps: Vec::new(),
         ops: vec![Op::Clear {
@@ -73,6 +75,7 @@ fn transition(duration: u32) -> GuestToHost {
         duration,
         mask: None,
         vague: 0,
+        rule: TransitionRule::Rgss1,
     }
 }
 
@@ -980,6 +983,7 @@ fn masked_transition(duration: u32, vague: u16) -> GuestToHost {
         duration,
         mask: Some(MASK),
         vague,
+        rule: TransitionRule::Rgss1,
     }
 }
 

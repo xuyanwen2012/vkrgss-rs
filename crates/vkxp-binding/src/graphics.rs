@@ -5,7 +5,7 @@
 
 use std::ffi::c_long;
 
-use vkxp_proto::{BitmapDelta, BitmapId, GuestToHost};
+use vkxp_proto::{BitmapDelta, BitmapId, GuestToHost, TransitionRule};
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{HostResult, Raise, Raised, Ruby};
 use vkxp_vfs::{FileKind, Runtime};
@@ -115,6 +115,7 @@ fn transition(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
             duration,
             mask,
             vague,
+            rule: TransitionRule::Rgss1,
         });
         (mask, mask_deltas)
     });

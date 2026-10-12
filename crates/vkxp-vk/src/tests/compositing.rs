@@ -7,7 +7,7 @@
 use vkxp_compose_ref::fixtures::{self, bitmap, sprite};
 use vkxp_proto::{
     AudioChannel, AudioCommand, BitmapDelta, BitmapId, Color, FramePacket, FrameRate, GuestToHost,
-    Op, Rect, Size,
+    Op, Rect, Size, TransitionRule,
 };
 
 use super::differential::{Pair, assert_stream_matches};
@@ -26,6 +26,7 @@ fn packet(bitmaps: Vec<BitmapDelta>, ops: Vec<Op>) -> FramePacket {
         frame_index: 0,
         logical_size: SIZE,
         frame_rate: FrameRate::DEFAULT,
+        brightness: 255,
         tables: vec![],
         bitmaps,
         ops,
@@ -138,6 +139,7 @@ fn frame_follows_a_change_of_logical_size() {
             frame_index: 0,
             logical_size: Size::new(width, height),
             frame_rate: FrameRate::DEFAULT,
+            brightness: 255,
             tables: vec![],
             bitmaps: vec![],
             ops: vec![Op::Clear {
@@ -284,6 +286,7 @@ fn invalid_logical_size_is_rejected_before_the_deltas_are_applied() {
             frame_index: 0,
             logical_size: size,
             frame_rate: FrameRate::DEFAULT,
+            brightness: 255,
             tables: vec![],
             bitmaps: vec![BitmapDelta::Create {
                 id: ID,
@@ -314,11 +317,13 @@ fn non_frame_messages_are_ignored_as_in_the_reference() {
             duration: 20,
             mask: Some(ID),
             vague: 40,
+            rule: TransitionRule::Rgss1,
         },
         GuestToHost::Transition {
             duration: 0,
             mask: None,
             vague: 0,
+            rule: TransitionRule::Rgss1,
         },
         GuestToHost::Audio(AudioCommand::Play {
             channel: AudioChannel::Bgm,

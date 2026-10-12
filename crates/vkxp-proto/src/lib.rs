@@ -10,7 +10,7 @@
 //! end over a Unix stream socket for a guest in a process of its own. [`tiles`] is the
 //! numbering of the tiles of a tilemap, which the guest and every backend read alike.
 //!
-//! This is protocol version 10. Over version 1 a [`FramePacket`] carries the guest's
+//! This is protocol version 11. Over version 1 a [`FramePacket`] carries the guest's
 //! [`FrameRate`], a [`Quad`] carries a tone and a colour for its own texels, the messages
 //! [`GuestToHost::FrameReset`] and [`HostToGuest::Reset`] exist, and [`Button`] has F9. Over
 //! version 2 a [`Quad`] states its [`Sampling`]: the affine transform it always had, or a
@@ -25,7 +25,8 @@
 //! [`GuestToHost::StateFailed`]. Over version 8 [`GuestToHost::StateFailed`] says whether a
 //! save or a load failed. Over version 9 the guest presses and releases keys for the player
 //! with [`GuestToHost::InjectKey`] and says with [`GuestToHost::PointerVisible`] whether the
-//! pointer is to be seen.
+//! pointer is to be seen. Over version 10 a [`FramePacket`] carries a brightness and
+//! [`GuestToHost::Transition`] names the [`TransitionRule`] its frames are stepped by.
 //! Streams of older versions are rejected.
 //!
 //! The binary form encodes enum variants by position, so reordering or removing variants, or
@@ -54,5 +55,5 @@ pub use frame::{
     stretch_index, stretch_step,
 };
 pub use input::{Button, InputSnapshot};
-pub use message::{GuestToHost, HostToGuest};
+pub use message::{GuestToHost, HostToGuest, TransitionRule};
 pub use types::{BitmapId, Color, Rect, Size, TableId, Tone};

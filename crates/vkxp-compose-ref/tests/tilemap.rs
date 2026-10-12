@@ -37,6 +37,7 @@ fn packet(
         frame_index: 0,
         logical_size: size,
         frame_rate: FrameRate::DEFAULT,
+        brightness: 255,
         tables,
         bitmaps,
         ops,

@@ -2,7 +2,7 @@
 
 ## 1. Protocol and scene
 
-- [ ] 1.1 `FramePacket::brightness`, `TransitionRule` in the transition message, the protocol version; the scene keeps and extracts the brightness; the binding compiles and sends the rule of RGSS1. Verify: the scenarios of `specs/guest-host-protocol/spec.md` and `specs/core-scene/spec.md`; `cargo test -p vkxp-proto -p vkxp-core -p vkxp-binding --locked` passes.
+- [x] 1.1 `FramePacket::brightness`, `TransitionRule` in the transition message, the protocol version; the scene keeps and extracts the brightness; the binding compiles and sends the rule of RGSS1. Verify: the scenarios of `specs/guest-host-protocol/spec.md` and `specs/core-scene/spec.md`; `cargo test -p vkxp-proto -p vkxp-core -p vkxp-binding --locked` passes.
 
 ## 2. Compositors
 

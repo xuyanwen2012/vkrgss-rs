@@ -20,6 +20,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::{AudioCommand, BitmapId, FramePacket, InputSnapshot};
 
+/// The rule by which the frames of a transition are stepped.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TransitionRule {
+    /// RGSS1: the frames of a transition of N show the steps 0 to N-1, the first of which is
+    /// the held frame alone.
+    Rgss1,
+    /// RGSS2: the frames of a transition of N show the steps 1 to N, the last of which is
+    /// the new frame alone.
+    Rgss2,
+}
+
 /// A message from the guest (script thread) to the host.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GuestToHost {
@@ -36,6 +47,8 @@ pub enum GuestToHost {
         mask: Option<BitmapId>,
         /// Softness of the boundary when a mask is used.
         vague: u16,
+        /// How the frames of the transition are stepped.
+        rule: TransitionRule,
     },
     /// An audio request.
     Audio(AudioCommand),

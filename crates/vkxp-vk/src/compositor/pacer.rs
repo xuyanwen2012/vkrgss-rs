@@ -651,6 +651,7 @@ mod tests {
             frame_index: 0,
             logical_size: Size::new(20, 18),
             frame_rate: FrameRate::DEFAULT,
+            brightness: 255,
             tables: vec![],
             bitmaps: vec![],
             ops: vec![],

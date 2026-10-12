@@ -217,6 +217,8 @@ pub struct Scene {
     /// Number of frames extracted so far.
     pub(crate) frame_index: u64,
     pub(crate) frame_rate: FrameRate,
+    /// The brightness of the whole screen, from 0 to 255.
+    pub(crate) brightness: u8,
     pub(crate) logical_size: Size,
 }
 
@@ -250,6 +252,7 @@ impl Scene {
             frame_count: 0,
             frame_index: 0,
             frame_rate: FrameRate::DEFAULT,
+            brightness: 255,
             logical_size: Size::new(
                 size.width.clamp(1, MAX_LOGICAL_DIMENSION),
                 size.height.clamp(1, MAX_LOGICAL_DIMENSION),

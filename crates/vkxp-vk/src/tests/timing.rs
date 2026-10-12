@@ -18,6 +18,7 @@ fn frame_with_an_upload() -> FramePacket {
         frame_index: 0,
         logical_size: SIZE,
         frame_rate: FrameRate::DEFAULT,
+        brightness: 255,
         tables: vec![],
         bitmaps: bitmap(
             ID,

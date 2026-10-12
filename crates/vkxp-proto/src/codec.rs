@@ -23,7 +23,7 @@ use crate::{GuestToHost, HostToGuest, InputSnapshot};
 pub const MAGIC: [u8; 4] = *b"VKXP";
 
 /// Version of the message types and their encoding. Any change to either increments it.
-pub const PROTOCOL_VERSION: u16 = 10;
+pub const PROTOCOL_VERSION: u16 = 11;
 
 /// Length of the stream header in bytes.
 pub const HEADER_LEN: usize = 7;
@@ -154,7 +154,9 @@ pub fn decode_stream<T: Message>(bytes: &[u8]) -> Result<Vec<T>, DecodeError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{AudioChannel, AudioCommand, BitmapId, Button, FramePacket, FrameRate, Size};
+    use crate::{
+        AudioChannel, AudioCommand, BitmapId, Button, FramePacket, FrameRate, Size, TransitionRule,
+    };
 
     fn sample() -> Vec<GuestToHost> {
         vec![
@@ -165,6 +167,7 @@ mod tests {
                 frame_index: 1,
                 logical_size: Size::new(640, 480),
                 frame_rate: FrameRate::DEFAULT,
+                brightness: 255,
                 tables: vec![],
                 bitmaps: vec![],
                 ops: vec![],
@@ -232,8 +235,8 @@ mod tests {
 
     #[test]
     fn older_streams_are_rejected_naming_both_versions() {
-        assert_eq!(PROTOCOL_VERSION, 10);
-        for found in [1u16, 2, 3, 4, 5, 6, 7, 8, 9] {
+        assert_eq!(PROTOCOL_VERSION, 11);
+        for found in [1u16, 2, 3, 4, 5, 6, 7, 8, 9, 10] {
             let mut bytes = encode_stream(&sample()).unwrap();
             bytes[4..6].copy_from_slice(&found.to_le_bytes());
 
@@ -242,12 +245,12 @@ mod tests {
                 error,
                 DecodeError::UnsupportedVersion {
                     found,
-                    supported: 10,
+                    supported: 11,
                 }
             );
             assert_eq!(
                 error.to_string(),
-                format!("unsupported protocol version: found {found}, supported 10")
+                format!("unsupported protocol version: found {found}, supported 11")
             );
         }
     }
@@ -285,6 +288,7 @@ mod tests {
             frame_index: 3,
             logical_size: Size::new(640, 480),
             frame_rate: FrameRate::DEFAULT,
+            brightness: 255,
             tables: vec![],
             bitmaps: vec![],
             ops: vec![
@@ -309,6 +313,7 @@ mod tests {
             frame_index: 9,
             logical_size: Size::new(640, 480),
             frame_rate: FrameRate::DEFAULT,
+            brightness: 255,
             tables: vec![
                 TableDelta::Set {
                     id: map,
@@ -358,6 +363,7 @@ mod tests {
             frame_index,
             logical_size: Size::new(640, 480),
             frame_rate,
+            brightness: 255,
             tables: vec![],
             bitmaps: vec![],
             ops: vec![],
@@ -381,6 +387,49 @@ mod tests {
             })
             .collect();
         assert_eq!(rates, [40, 120, 10]);
+    }
+
+    /// Scenario "Brightness travels with every packet".
+    #[test]
+    fn brightness_travels_with_every_packet() {
+        let packet = |frame_index, brightness| {
+            let GuestToHost::Frame(packet) = packet_at(frame_index, FrameRate::DEFAULT) else {
+                unreachable!("packet_at builds a frame");
+            };
+            GuestToHost::Frame(FramePacket {
+                brightness,
+                ..packet
+            })
+        };
+        let messages = [packet(0, 255), packet(1, 100)];
+        let bytes = encode_stream(&messages).unwrap();
+        let decoded = decode_stream::<GuestToHost>(&bytes).unwrap();
+        let levels: Vec<u8> = decoded
+            .iter()
+            .map(|message| match message {
+                GuestToHost::Frame(packet) => packet.brightness,
+                other => panic!("not a frame: {other:?}"),
+            })
+            .collect();
+        assert_eq!(levels, [255, 100]);
+    }
+
+    /// Scenario "Rule travels with the message".
+    #[test]
+    fn rule_travels_with_the_transition_message() {
+        let transition = |rule| GuestToHost::Transition {
+            duration: 8,
+            mask: None,
+            vague: 20,
+            rule,
+        };
+        let messages = [
+            transition(TransitionRule::Rgss1),
+            transition(TransitionRule::Rgss2),
+        ];
+        let bytes = encode_stream(&messages).unwrap();
+        assert_eq!(decode_stream::<GuestToHost>(&bytes).unwrap(), messages);
+        assert_ne!(messages[0], messages[1]);
     }
 
     /// The stream of one empty packet whose frame-rate byte is replaced by `fps`.
@@ -424,6 +473,7 @@ mod tests {
                 duration: 20,
                 mask: Some(BitmapId::new(4, 1)),
                 vague: 40,
+                rule: TransitionRule::Rgss1,
             },
             GuestToHost::Audio(AudioCommand::Stop {
                 channel: AudioChannel::Bgm,

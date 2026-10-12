@@ -1652,6 +1652,23 @@ fn the_frame_count_follows_the_extracted_frames_and_can_be_set() {
     assert_eq!(scene.frame_count(), i64::MIN);
 }
 
+/// Scenarios "Default", "Limits" and "Carried by the packet" of "Brightness of the scene".
+#[test]
+fn the_brightness_is_clamped_and_carried_by_every_packet() {
+    let mut scene = Scene::new();
+    let mut bitmaps = Bitmaps::new();
+    assert_eq!(scene.brightness(), 255);
+    assert_eq!(scene.extract(&mut bitmaps).brightness, 255);
+    scene.set_brightness(-5);
+    assert_eq!(scene.brightness(), 0);
+    scene.set_brightness(300);
+    assert_eq!(scene.brightness(), 255);
+    assert_eq!(scene.extract(&mut bitmaps).brightness, 255);
+    scene.set_brightness(100);
+    assert_eq!(scene.extract(&mut bitmaps).brightness, 100);
+    assert_eq!(scene.extract(&mut bitmaps).brightness, 100);
+}
+
 #[test]
 fn the_frame_rate_is_clamped_and_carried_by_every_packet() {
     let mut scene = Scene::new();

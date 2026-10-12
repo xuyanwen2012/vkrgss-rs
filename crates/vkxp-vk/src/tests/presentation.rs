@@ -21,6 +21,7 @@ fn packet(size: Size, ops: Vec<Op>) -> FramePacket {
         frame_index: 0,
         logical_size: size,
         frame_rate: FrameRate::DEFAULT,
+        brightness: 255,
         tables: vec![],
         bitmaps: Vec::new(),
         ops,

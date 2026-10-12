@@ -5,6 +5,7 @@ use vkxp_binding::testing::host::{self, Record, SOUND_BYTES, Script, with_error_
 use vkxp_binding::testing::{self, DOT_PIXELS};
 use vkxp_proto::{
     AudioChannel, AudioCommand, BitmapDelta, Button, GuestToHost, HostToGuest, InputSnapshot,
+    TransitionRule,
 };
 
 /// The value of a snippet, or its exception as `Class: message`, and what the host saw.
@@ -129,7 +130,8 @@ fn freeze_and_the_default_transition() {
         GuestToHost::Transition {
             duration: 8,
             mask: None,
-            vague: 20
+            vague: 20,
+            rule: TransitionRule::Rgss1,
         }
     );
     assert_eq!(record.frames().len(), 8);
@@ -144,7 +146,8 @@ fn a_transition_of_no_frames() {
         [GuestToHost::Transition {
             duration: 0,
             mask: None,
-            vague: 20
+            vague: 20,
+            rule: TransitionRule::Rgss1,
         }]
     );
     // A picture is not announced when no frame would carry it, and does not stay behind.
@@ -156,7 +159,8 @@ fn a_transition_of_no_frames() {
         [GuestToHost::Transition {
             duration: 0,
             mask: None,
-            vague: 7
+            vague: 7,
+            rule: TransitionRule::Rgss1,
         }]
     );
     assert_eq!(testing::bitmap_count(), before);
@@ -171,7 +175,8 @@ fn a_transition_without_a_vagueness_passes_20() {
         GuestToHost::Transition {
             duration: 5,
             mask: Some(_),
-            vague: 20
+            vague: 20,
+            rule: TransitionRule::Rgss1,
         }
     ));
 }
@@ -187,6 +192,7 @@ fn a_transition_picture_is_created_in_the_first_frame() {
         duration: 40,
         mask: Some(mask),
         vague: 20,
+        rule: TransitionRule::Rgss1,
     } = record.received[0]
     else {
         panic!("{:?} is not the transition", record.received[0]);

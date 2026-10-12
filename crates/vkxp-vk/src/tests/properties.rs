@@ -636,6 +636,7 @@ fn build(plans: &[PacketPlan], faults: bool) -> Vec<GuestToHost> {
             frame_index: frame_index as u64,
             logical_size,
             frame_rate: FrameRate::DEFAULT,
+            brightness: 255,
             tables: vec![],
             bitmaps,
             ops,

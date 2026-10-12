@@ -15,6 +15,9 @@ pub struct FramePacket {
     pub logical_size: Size,
     /// The frame rate the guest runs at. Compositors ignore it; the host paces to it.
     pub frame_rate: FrameRate,
+    /// The brightness of the whole frame, from 0 to 255. Compositors darken the composed
+    /// frame by it after the last op; 255 shows the frame as composed.
+    pub brightness: u8,
     /// Bitmap changes since the previous packet, applied in order before any op is drawn.
     pub bitmaps: Vec<BitmapDelta>,
     /// Table changes since the previous packet, applied in order before any op is drawn.

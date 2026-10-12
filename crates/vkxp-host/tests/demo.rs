@@ -8,7 +8,7 @@ use vkxp_host::demo::{self, DemoOptions, SPRITE_SIZE, TITLE, TRANSITION_FRAMES};
 use vkxp_proto::link::Disconnected;
 use vkxp_proto::{
     BitmapDelta, Button, FramePacket, FrameRate, GuestToHost, HostToGuest, InputSnapshot, Op,
-    OpKind, Sampling, Size, Transform,
+    OpKind, Sampling, Size, Transform, TransitionRule,
 };
 
 fn packets(messages: &[GuestToHost]) -> Vec<&FramePacket> {
@@ -180,7 +180,8 @@ fn b_pressed_freezes_swaps_the_background_and_starts_a_transition_once() {
     assert!(messages.contains(&GuestToHost::Transition {
         duration: TRANSITION_FRAMES,
         mask: None,
-        vague: 0
+        vague: 0,
+        rule: TransitionRule::Rgss1,
     }));
 
     let background = |packet: &FramePacket| match &packet.ops[0] {

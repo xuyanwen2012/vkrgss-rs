@@ -508,6 +508,16 @@ impl Scene {
         self.frame_rate = FrameRate::clamped(fps);
     }
 
+    /// The brightness every extracted packet carries, 255 until it is set.
+    pub fn brightness(&self) -> u8 {
+        self.brightness
+    }
+
+    /// Sets the brightness, clamped to 0 to 255.
+    pub fn set_brightness(&mut self, brightness: i64) {
+        self.brightness = brightness.clamp(0, 255) as u8;
+    }
+
     /// Takes the compositor to have none of the scene's tables, so that the next frame sends
     /// every table its tilemap ops read. For a compositor that starts anew.
     pub fn resend_tables(&mut self) {
@@ -553,6 +563,7 @@ impl Scene {
             frame_index,
             logical_size: self.logical_size,
             frame_rate: self.frame_rate,
+            brightness: self.brightness,
             tables,
             bitmaps: deltas,
             ops,
