@@ -351,5 +351,5 @@ pub mod scene_testing;
 
 pub use error::Error;
 pub use guest::{Config, Guest};
-pub use runtime::{Copied, Copier, CopyFailed, RunConfig, RunError, run_game};
+pub use runtime::{Copied, Copier, CopyFailed, RunConfig, RunError, frame_size, run_game};
 pub use text::TextBackend;

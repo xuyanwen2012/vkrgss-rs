@@ -582,6 +582,8 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
     let (seed, input) = seed_and_input(&options)?;
     let title = inputs.ini.title.clone();
 
+    let frame_size = vkxp_binding::frame_size(inputs.runtime);
+
     let form = guest_form(options.guest, options.headless);
     // What the guest thread does, and what the program waits for once the host has ended.
     let (guest, waited): (Box<dyn FnOnce(GuestEnd) + Send>, Guest) = match form {
@@ -649,6 +651,7 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
     } else {
         let host_options = WindowedOptions {
             title,
+            logical_size: frame_size,
             filter: options.filter.unwrap_or_default(),
             fullscreen: options.fullscreen,
             present_stats: options.present_stats,

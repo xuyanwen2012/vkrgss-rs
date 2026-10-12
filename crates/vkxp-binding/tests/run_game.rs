@@ -8,7 +8,7 @@ use std::fs;
 
 use vkxp_binding::testing::host::{self, Game, Played, Script};
 use vkxp_binding::{RunConfig, RunError, testing};
-use vkxp_proto::{AudioChannel, AudioCommand, GuestToHost, HostToGuest};
+use vkxp_proto::{AudioChannel, AudioCommand, GuestToHost, HostToGuest, Size};
 use vkxp_vfs::Runtime;
 
 fn run(game: &Game, script: Script, after: &str) -> Played {
@@ -103,6 +103,31 @@ fn the_globals_of_test_mode_of_vx_are_those_of_the_original() {
         assert!(played.outcome.is_ok(), "{:?}", played.outcome);
         assert_eq!(played.after.as_deref(), Ok(globals));
     }
+}
+
+/// Scenarios "Starting rate of XP", "Size of XP" and "No such function in XP".
+#[test]
+fn a_game_of_xp_starts_at_640_by_480_and_40_without_the_size_functions() {
+    let source = "$vkxp_frame_of_xp = [Graphics.frame_rate]
+        Graphics.update
+        [:width, :height].each do |name|
+          begin
+            Graphics.send(name)
+          rescue NoMethodError => error
+            $vkxp_frame_of_xp << error.class
+          end
+        end";
+    let game = Game::new("frame_of_xp", "Frame", &[("Main", source)]);
+    let played = run(&game, Script::new(), "$vkxp_frame_of_xp");
+    assert!(played.outcome.is_ok(), "{:?}", played.outcome);
+    assert_eq!(
+        played.after.as_deref(),
+        Ok("[40, NoMethodError, NoMethodError]")
+    );
+    let frames = played.record.frames();
+    assert_eq!(frames.len(), 1);
+    assert_eq!(frames[0].logical_size, Size::new(640, 480));
+    assert_eq!(frames[0].frame_rate.get(), 40);
 }
 
 #[test]

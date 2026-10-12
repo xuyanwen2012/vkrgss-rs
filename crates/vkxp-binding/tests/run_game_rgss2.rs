@@ -1,18 +1,21 @@
 //! A game of RGSS2 through `run_game`, in a process of its own, because the symbol table of
-//! an interpreter is chosen when it starts: the twin of `run_game_symbols.rs`.
+//! an interpreter is chosen when it starts and `Graphics` is defined once: the twin of
+//! `run_game_symbols.rs`, and the frame a game of RGSS2 starts with.
 
 use std::fs;
 
 use vkxp_binding::testing::host::{RPG_STAND_IN, Script, ruby_literal, scripted_host};
 use vkxp_binding::testing::{CellBackend, FONT_FAMILIES};
 use vkxp_binding::{Config, RunConfig, run_game};
+use vkxp_proto::Size;
 use vkxp_ruby_sys::{Interpreter, Options, SymbolTable};
 use vkxp_vfs::{GameFiles, GameIni, Runtime};
 
-/// Scenarios "First new names of a game of VX, measured on the original" and "Known names
-/// of a game of VX, measured on the original".
+/// Scenarios "First new names of a game of VX, measured on the original", "Known names of a
+/// game of VX, measured on the original", "Starting rate of VX, measured on the original" and
+/// "Size of VX, measured on the original".
 #[test]
-fn the_first_script_of_a_game_of_vx_sees_the_measured_numbers() {
+fn the_first_script_of_a_game_of_vx_sees_the_measured_numbers_and_frame() {
     let executable = std::env::current_exe().unwrap();
     let root = executable.with_extension("vkxp-run-game-rgss2");
     if root.exists() {
@@ -31,8 +34,14 @@ fn the_first_script_of_a_game_of_vx_sees_the_measured_numbers() {
     let main = format!(
         "zz_first = 1; zz_second = 2
          File.open({}, 'wb') {{ |file| file.write([
-           [:zz_first.to_i, :zz_second.to_i], [:initialize.to_i, :to_s.to_i, :update.to_i]
-         ].inspect) }}",
+           [:zz_first.to_i, :zz_second.to_i], [:initialize.to_i, :to_s.to_i, :update.to_i],
+           Graphics.frame_rate, [Graphics.width, Graphics.height]
+         ].inspect) }}
+         Graphics.update
+         Graphics.frame_rate = 5
+         Graphics.update
+         Graphics.frame_rate = 500
+         Graphics.update",
         ruby_literal(&result.to_string_lossy())
     );
     let assemble = format!(
@@ -67,9 +76,15 @@ fn the_first_script_of_a_game_of_vx_sees_the_measured_numbers() {
         run_game(ruby, config, link)
     });
     assert!(outcome.is_ok(), "{outcome:?}");
-    host.finish();
+    let record = host.finish();
     assert_eq!(
         fs::read_to_string(result).unwrap(),
-        "[[16089, 16097], [2961, 3161, 6481]]"
+        "[[16089, 16097], [2961, 3161, 6481], 60, [544, 416]]"
     );
+    let frames = record.frames();
+    let rates: Vec<u8> = frames.iter().map(|frame| frame.frame_rate.get()).collect();
+    assert_eq!(rates, [60, 10, 120]);
+    for frame in frames {
+        assert_eq!(frame.logical_size, Size::new(544, 416));
+    }
 }

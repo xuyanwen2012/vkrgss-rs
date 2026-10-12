@@ -393,7 +393,9 @@ pub struct Played {
 /// `run_game` from its second step on, on that guest: what an earlier game left is disposed,
 /// and the guest gets the files of `game` (without run-time packages), an empty scene and
 /// `run`, and the current error is cleared. Classes, constants and global variables of
-/// earlier games stay.
+/// earlier games stay, and so do the functions of `Graphics` and the frame, which are those
+/// of RGSS1 whatever the runtime of `run` is: what a game of another runtime starts with is
+/// tested through `run_game` of the crate, in a process of its own.
 pub fn run_game(game: &Game, run: RunConfig, script: Script, after: &str) -> Played {
     let (link, host) = scripted_host(script);
     let files = GameFiles::new(game.dir(), []);

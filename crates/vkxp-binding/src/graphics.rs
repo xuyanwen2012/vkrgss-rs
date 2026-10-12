@@ -8,7 +8,7 @@ use std::ffi::c_long;
 use vkxp_proto::{BitmapDelta, BitmapId, GuestToHost};
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{HostResult, Raise, Raised, Ruby};
-use vkxp_vfs::FileKind;
+use vkxp_vfs::{FileKind, Runtime};
 
 use crate::error::{self, Error};
 use crate::guest::Guest;
@@ -168,6 +168,18 @@ fn set_frame_count(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     Ok(args[0])
 }
 
+/// `Graphics.width` of RGSS2: the width of the frame.
+fn width(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
+    let size = Guest::with(|guest| guest.scene.logical_size());
+    Ok(ffi::long2fix(size.width.into()))
+}
+
+/// `Graphics.height` of RGSS2: the height of the frame.
+fn height(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
+    let size = Guest::with(|guest| guest.scene.logical_size());
+    Ok(ffi::long2fix(size.height.into()))
+}
+
 /// `Graphics.visible`: a stored flag without an effect.
 fn visible(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
     Ok(rb::boolean(Guest::with(|guest| guest.runtime.visible)))
@@ -179,7 +191,7 @@ fn set_visible(_ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     Ok(args[0])
 }
 
-/// Defines `Graphics`.
+/// Defines `Graphics` as the runtime of the run has it.
 pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
     let module = ruby.define_module(c"Graphics")?;
     rb::class_method(ruby, module, c"update", 0, update)?;
@@ -192,6 +204,10 @@ pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
     rb::class_method(ruby, module, c"frame_count=", 1, set_frame_count)?;
     rb::class_method(ruby, module, c"visible", 0, visible)?;
     rb::class_method(ruby, module, c"visible=", 1, set_visible)?;
+    if Guest::with(|guest| guest.runtime.run.runtime) != Runtime::Rgss1 {
+        rb::class_method(ruby, module, c"width", 0, width)?;
+        rb::class_method(ruby, module, c"height", 0, height)?;
+    }
     ruby.eval(RESET, "Graphics", 1)?;
     Ok(())
 }

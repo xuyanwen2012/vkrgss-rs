@@ -6,7 +6,7 @@
 
 ## 2. Frame size and rate
 
-- [ ] 2.1 The scene of the guest by runtime; the starting size of the window; `Graphics.width` and `Graphics.height` in RGSS2 only. Verify: the scenarios of `specs/rgss-modules/spec.md` and `specs/game-launch/spec.md`; the same two test commands pass.
+- [x] 2.1 The scene of the guest by runtime; the starting size of the window; `Graphics.width` and `Graphics.height` in RGSS2 only. Verify: the scenarios of `specs/rgss-modules/spec.md` and `specs/game-launch/spec.md`; the same two test commands pass.
 
 ## 3. Documentation
 

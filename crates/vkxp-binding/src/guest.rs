@@ -74,7 +74,7 @@ impl Guest {
             font_names_listed,
             files: config.files,
             text: config.text,
-            scene: Scene::new(),
+            scene: runtime::new_scene(config.run.runtime),
             input: InputState::new(),
             runtime: runtime::State::new(config.run),
             win32api: win32api::State::default(),

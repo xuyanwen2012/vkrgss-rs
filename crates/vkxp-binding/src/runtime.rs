@@ -21,9 +21,9 @@ use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use vkxp_core::InputState;
+use vkxp_core::{InputState, Scene};
 use vkxp_proto::link::GuestEnd;
-use vkxp_proto::{AudioChannel, AudioCommand, GuestToHost, HostToGuest};
+use vkxp_proto::{AudioChannel, AudioCommand, GuestToHost, HostToGuest, Size};
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{Raise, Raised, Ruby, RubyError};
 use vkxp_vfs::{FileKind, GameIni, Runtime};
@@ -460,6 +460,34 @@ fn test_mode_globals(runtime: Runtime, debug: bool, battle_test: bool) -> String
             debug || battle_test
         ),
     }
+}
+
+/// The size of the frame of a game of RGSS1.
+const RGSS1_FRAME_SIZE: Size = Size::new(640, 480);
+/// The frame rate a game of RGSS1 starts with.
+const RGSS1_FRAME_RATE: i64 = 40;
+/// The size of the frame of a game of RGSS2, measured on the original runtime.
+const RGSS2_FRAME_SIZE: Size = Size::new(544, 416);
+/// The frame rate a game of RGSS2 starts with, measured on the original runtime.
+const RGSS2_FRAME_RATE: i64 = 60;
+
+/// The size of the frame a game of `runtime` starts with, which is the logical size of its
+/// frame messages.
+pub fn frame_size(runtime: Runtime) -> Size {
+    match runtime {
+        Runtime::Rgss1 => RGSS1_FRAME_SIZE,
+        Runtime::Rgss2 | Runtime::Rgss3 => RGSS2_FRAME_SIZE,
+    }
+}
+
+/// The empty scene a game of `runtime` starts with: its frame size and its frame rate.
+pub(crate) fn new_scene(runtime: Runtime) -> Scene {
+    let mut scene = Scene::with_logical_size(frame_size(runtime));
+    scene.set_frame_rate(match runtime {
+        Runtime::Rgss1 => RGSS1_FRAME_RATE,
+        Runtime::Rgss2 | Runtime::Rgss3 => RGSS2_FRAME_RATE,
+    });
+    scene
 }
 
 /// The file name the built-in scripts are reported under.

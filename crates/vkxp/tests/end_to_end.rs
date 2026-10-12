@@ -1324,6 +1324,24 @@ fn the_scripts_of_a_game_of_vx_see_the_symbol_numbers_of_rgss2() {
     }
 }
 
+/// Requirement "Frame size of the run", scenarios "Dump of a game of VX" and "Dump of a
+/// game of XP".
+#[test]
+fn the_dump_of_the_first_frame_has_the_frame_size_of_the_runtime() {
+    for (runtime, name, size) in [
+        (Runtime::Rgss2, "e2e-size-vx", (544, 416)),
+        (Runtime::Rgss1, "e2e-size-xp", (640, 480)),
+    ] {
+        let game = Game::of(runtime, name, "Size", &[("Main", "Graphics.update")]);
+        for form in FORMS {
+            let ran = headless(&game, &["--guest", form, "--dump", "0=first.png"]);
+            ran.assert_success();
+            let frame = ran.frame("first.png");
+            assert_eq!((frame.width, frame.height), size, "{name}, {form}");
+        }
+    }
+}
+
 /// The lines of the error stream that say a runtime is experimental.
 fn experimental_lines(stderr: &str) -> Vec<&str> {
     stderr
