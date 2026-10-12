@@ -1,6 +1,6 @@
 //! The interpreter thread: start-up, the queue of work, shutdown.
 
-use std::ffi::{CString, c_ulong};
+use std::ffi::{CString, c_int, c_ulong};
 use std::marker::PhantomData;
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -42,6 +42,27 @@ fn gc_stress_from_environment() -> Result<c_ulong, StartError> {
     }
 }
 
+/// The measured start-up table that numbers the symbols: the names the original runtime has
+/// before its first game script, and where its sequence continues.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SymbolTable {
+    /// The table of RGSS1, the runtime of RPG Maker XP.
+    #[default]
+    Rgss1,
+    /// The table of RGSS2, the runtime of RPG Maker VX.
+    Rgss2,
+}
+
+impl SymbolTable {
+    /// The number `ruby_vkxp_select_symbols` knows the table by.
+    fn index(self) -> c_int {
+        match self {
+            Self::Rgss1 => 0,
+            Self::Rgss2 => 1,
+        }
+    }
+}
+
 /// How to start the interpreter.
 #[derive(Debug, Clone)]
 pub struct Options {
@@ -50,6 +71,9 @@ pub struct Options {
     pub stack_size: usize,
     /// What Ruby reports as `$0`.
     pub script_name: String,
+    /// The table of symbol numbers. It is applied before Ruby is initialised and cannot
+    /// change afterwards.
+    pub symbols: SymbolTable,
 }
 
 impl Default for Options {
@@ -57,6 +81,7 @@ impl Default for Options {
         Self {
             stack_size: MIN_STACK_SIZE,
             script_name: "vkxp".to_owned(),
+            symbols: SymbolTable::default(),
         }
     }
 }
@@ -140,7 +165,7 @@ impl Interpreter {
     ///
     /// On that thread, in this order: the dispositions of
     /// [`SIGNALS_TAKEN_BY_RUBY`](crate::SIGNALS_TAKEN_BY_RUBY) are recorded, the stack is
-    /// anchored for the collector, `ruby_init` runs, the stack limit is set to the stack size
+    /// anchored for the collector, the table of symbol numbers is selected, `ruby_init` runs, the stack limit is set to the stack size
     /// minus [`STACK_HEADROOM`], `Zlib` is registered as if `zlib` had been required, `$0` is
     /// set, `$stdout` and `$stderr` are made synchronous, and the recorded dispositions are
     /// put back. The load path stays empty.
@@ -152,6 +177,7 @@ impl Interpreter {
             CString::new(options.script_name).map_err(|_| StartError::InvalidScriptName)?;
         let gc_stress = gc_stress_from_environment()?;
         let stack_size = options.stack_size.max(MIN_STACK_SIZE);
+        let symbols = options.symbols;
         if STARTED.swap(true, Ordering::SeqCst) {
             return Err(StartError::AlreadyStarted);
         }
@@ -161,7 +187,7 @@ impl Interpreter {
         let thread = thread::Builder::new()
             .name("ruby".to_owned())
             .stack_size(stack_size)
-            .spawn(move || thread_main(stack_size, gc_stress, &script_name, queue, ready));
+            .spawn(move || thread_main(stack_size, gc_stress, symbols, &script_name, queue, ready));
         let thread = match thread {
             Ok(thread) => thread,
             Err(error) => {
@@ -245,6 +271,7 @@ impl Drop for Interpreter {
 fn thread_main(
     stack_size: usize,
     gc_stress: c_ulong,
+    symbols: SymbolTable,
     script_name: &CString,
     queue: Receiver<Job>,
     ready: SyncSender<Result<(), StartError>>,
@@ -254,7 +281,15 @@ fn thread_main(
     // SAFETY: `anchor` lives until this function returns, which is after `serve` has
     // finalised the interpreter, and no interpreter exists yet in this process (`STARTED`).
     unsafe { ffi::ruby_init_stack(&mut anchor) };
-    serve(stack_size, gc_stress, script_name, &saved, queue, ready);
+    serve(
+        stack_size,
+        gc_stress,
+        symbols,
+        script_name,
+        &saved,
+        queue,
+        ready,
+    );
     std::hint::black_box(&mut anchor);
 }
 
@@ -286,6 +321,7 @@ unsafe extern "C" fn setup_body(data: VALUE) -> VALUE {
 fn serve(
     stack_size: usize,
     gc_stress: c_ulong,
+    symbols: SymbolTable,
     script_name: &CString,
     saved: &Dispositions,
     queue: Receiver<Job>,
@@ -297,9 +333,11 @@ fn serve(
     };
     // SAFETY: this is the one interpreter thread of the process, its stack is anchored in
     // the caller's frame, and nothing of Ruby ran before. `ruby_set_stack_size` only stores
-    // the limit, and `ruby_vkxp_gc_stress` the number. `setup_body` fits the contract of
+    // the limit, and `ruby_vkxp_gc_stress` the number. `ruby_vkxp_select_symbols` gets a
+    // number it knows, before any name is interned. `setup_body` fits the contract of
     // `protect`.
     let started = unsafe {
+        ffi::ruby_vkxp_select_symbols(symbols.index());
         ffi::ruby_init();
         ffi::ruby_set_stack_size(stack_size - STACK_HEADROOM);
         ffi::ruby_vkxp_gc_stress(gc_stress);

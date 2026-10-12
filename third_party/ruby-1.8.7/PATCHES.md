@@ -123,7 +123,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `parse.y`
 - Patch: `patches/symbol-ids-ruby-181.patch`
-- Patched SHA-256: `ed38d409059cbbcee58ec7991446f41406f87123b0dc1ae2db9bc4b2bcc0d5d5`
+- Patched SHA-256: `a8ce8aad956dfd46d31478ce78424911dd75b868705eff757acd5b0e7b0d331e`
 - Reason: a symbol's number decides the order of instance variables and of hashes with
   symbol keys, and so the bytes of a save file. 1.8.7 and vkxp's binding intern another set of
   names at start-up than the original runtime's Ruby 1.8.1, so every name a game creates had
@@ -142,7 +142,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `parse.c`
 - Patch: `patches/symbol-ids-ruby-181-generated.patch`
-- Patched SHA-256: `bef97ac617211c1ab9eff4daf7d9fe9bd3e66f875010ebdbecd8e2d140b0dfc7`
+- Patched SHA-256: `ffa1bec927af6d455ee8bb5e9f87013afeb5d379731ea918aad439dd5bc2da01`
 - Reason: follows patch 11. `parse.c` is the release's pre-generated parser and the file the
   build compiles; the changed code is in the part of `parse.y` that the generator copies
   verbatim, so the same three hunks are applied to it by hand, at an offset of 5947 lines.
@@ -184,7 +184,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `parse.y`
 - Patch: `patches/oniguruma-engine-parser.patch`
-- Patched SHA-256: `ed38d409059cbbcee58ec7991446f41406f87123b0dc1ae2db9bc4b2bcc0d5d5`
+- Patched SHA-256: `a8ce8aad956dfd46d31478ce78424911dd75b868705eff757acd5b0e7b0d331e`
 - Reason: follows patch 14 and applies after patch 11. The parser includes `regex.h` itself,
   for `ismbchar` and `mbclen`; it includes `vkxp_regex.h` instead.
 
@@ -192,7 +192,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `parse.c`
 - Patch: `patches/oniguruma-engine-parser-generated.patch`
-- Patched SHA-256: `bef97ac617211c1ab9eff4daf7d9fe9bd3e66f875010ebdbecd8e2d140b0dfc7`
+- Patched SHA-256: `ffa1bec927af6d455ee8bb5e9f87013afeb5d379731ea918aad439dd5bc2da01`
 - Reason: follows patch 15 and applies after patch 12. The same line of the pre-generated
   parser, changed by hand.
 
@@ -246,7 +246,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `parse.y`
 - Patch: `patches/intern-empty-name.patch`
-- Patched SHA-256: `ed38d409059cbbcee58ec7991446f41406f87123b0dc1ae2db9bc4b2bcc0d5d5`
+- Patched SHA-256: `a8ce8aad956dfd46d31478ce78424911dd75b868705eff757acd5b0e7b0d331e`
 - Reason: found by the sanitized run. `rb_intern` of a name that consists of `=` alone
   interns the name without its last character, the empty string, and for that one tested
   `name[-1]`, the byte before the buffer; had that byte been `=`, a copy of length -1 would
@@ -256,7 +256,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `parse.c`
 - Patch: `patches/intern-empty-name-generated.patch`
-- Patched SHA-256: `bef97ac617211c1ab9eff4daf7d9fe9bd3e66f875010ebdbecd8e2d140b0dfc7`
+- Patched SHA-256: `ffa1bec927af6d455ee8bb5e9f87013afeb5d379731ea918aad439dd5bc2da01`
 - Reason: follows patch 21. The same line of the pre-generated parser, changed by hand.
 
 ## 23. marshal-gc-guard
@@ -338,7 +338,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `parse.y`
 - Patch: `patches/intern-incomplete-character.patch`
-- Patched SHA-256: `ed38d409059cbbcee58ec7991446f41406f87123b0dc1ae2db9bc4b2bcc0d5d5`
+- Patched SHA-256: `a8ce8aad956dfd46d31478ce78424911dd75b868705eff757acd5b0e7b0d331e`
 - Reason: found by the fuzz targets `marshal` and `parse` (change
   `fuzz-the-interpreter-and-review-fixes`). `rb_intern` walks a name character by
   character with the length the lead byte announces. A name that ends in an incomplete
@@ -353,14 +353,14 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `parse.c`
 - Patch: `patches/intern-incomplete-character-generated.patch`
-- Patched SHA-256: `bef97ac617211c1ab9eff4daf7d9fe9bd3e66f875010ebdbecd8e2d140b0dfc7`
+- Patched SHA-256: `ffa1bec927af6d455ee8bb5e9f87013afeb5d379731ea918aad439dd5bc2da01`
 - Reason: follows patch 28. The same line of the pre-generated parser, changed by hand.
 
 ## 30. parser-bounds-and-null-operands
 
 - File: `parse.y`
 - Patch: `patches/parser-bounds-and-null-operands.patch`
-- Patched SHA-256: `ed38d409059cbbcee58ec7991446f41406f87123b0dc1ae2db9bc4b2bcc0d5d5`
+- Patched SHA-256: `a8ce8aad956dfd46d31478ce78424911dd75b868705eff757acd5b0e7b0d331e`
 - Reason: applies after patch 28; found by the fuzz targets `parse` and `marshal` (change `fuzz-the-interpreter-and-review-fixes`).
   Four defects of the parser on input that is no valid script:
   `is_special_global_name` and `rb_symname_p` stepped over a name by the length its lead
@@ -380,7 +380,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `parse.c`
 - Patch: `patches/parser-bounds-and-null-operands-generated.patch`
-- Patched SHA-256: `bef97ac617211c1ab9eff4daf7d9fe9bd3e66f875010ebdbecd8e2d140b0dfc7`
+- Patched SHA-256: `ffa1bec927af6d455ee8bb5e9f87013afeb5d379731ea918aad439dd5bc2da01`
 - Reason: follows patch 30. The same lines of the pre-generated parser, changed by hand.
 
 ## 32. regexp-source-incomplete-character

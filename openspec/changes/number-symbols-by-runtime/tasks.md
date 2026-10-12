@@ -2,8 +2,8 @@
 
 ## 1. Tables
 
-- [ ] 1.1 `build.rs` generates both tables with their largest counters; the C side selects one before start-up; `Options::symbols`. Verify: the existing tests of the symbol numbers pass unchanged; `cargo test -p vkxp-ruby-sys --locked` passes.
-- [ ] 1.2 The tests of RGSS2 in a test file of their own. Verify: the scenarios of RGSS2 in `specs/embedded-ruby/spec.md`.
+- [x] 1.1 `build.rs` generates both tables with their largest counters; the C side selects one before start-up; `Options::symbols`. Verify: the existing tests of the symbol numbers pass unchanged; `cargo test -p vkxp-ruby-sys --locked` passes.
+- [x] 1.2 The tests of RGSS2 in a test file of their own. Verify: the scenarios of RGSS2 in `specs/embedded-ruby/spec.md`.
 
 ## 2. Record
 

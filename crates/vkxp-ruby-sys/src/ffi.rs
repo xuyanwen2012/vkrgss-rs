@@ -482,6 +482,10 @@ unsafe extern "C" {
     /// Marks the start of the game's scripts for symbol numbering: names first interned from
     /// here on continue the original runtime's sequence. Added to `parse.c` by a vkxp patch.
     pub fn ruby_vkxp_mark_game_scripts();
+    /// Selects the measured start-up table of the symbol numbers: 0 for RGSS1, which is also
+    /// what holds without a call, 1 for RGSS2. Only before `ruby_init`; after the first
+    /// `rb_intern`, or with another number, it ends the process with `rb_bug`.
+    pub fn ruby_vkxp_select_symbols(table: c_int);
     /// Runs the initialisation function of a compiled-in extension as if `name` had been
     /// required, and marks `name` as loaded. Exported by `eval.c` but declared in no header.
     pub fn ruby_init_ext(name: *const c_char, init: unsafe extern "C" fn());
