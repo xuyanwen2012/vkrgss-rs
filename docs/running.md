@@ -362,17 +362,21 @@ instead of handles.
 
 A windowed run plays music, background sounds, music effects and sound effects on the default
 output device. The format of a file is recognised from its content: Ogg Vorbis, WAV (PCM) and
-MP3 are decoded, and a Standard MIDI file is played with a SoundFont. Without `--soundfont`
-the first of `/usr/share/soundfonts/default.sf2`, `/usr/share/soundfonts/FluidR3_GM.sf2` and
-`/usr/share/sounds/sf2/FluidR3_GM.sf2` that exists is used (the package `fluid-soundfont-gm`
-installs one); it is loaded when the first MIDI file is played.
+MP3 are decoded, a Standard MIDI file is played with a SoundFont, and WMA is decoded by the
+`ffmpeg` program, which is looked up on the search path each time such a file is played.
+Without `--soundfont` the first of `/usr/share/soundfonts/default.sf2`,
+`/usr/share/soundfonts/FluidR3_GM.sf2` and `/usr/share/sounds/sf2/FluidR3_GM.sf2` that exists
+is used (the package `fluid-soundfont-gm` installs one); it is loaded when the first MIDI
+file is played.
 
-Nothing about audio stops a game. A file that cannot be decoded, MIDI music without a
-SoundFont and an output device that cannot be opened are each reported once on the error
-stream, and the game runs on without that sound. A headless run plays nothing and opens no
-audio device. Volume follows the original's curve, 0.35 dB below full for every unit under
-100 and silence at 0, and a fade lowers it evenly. The loop markers of MIDI files are not
-followed: a track loops from its beginning.
+Nothing about audio stops a game. A file that cannot be decoded, which a WMA file is without
+`ffmpeg`, MIDI music without a SoundFont and an output device that cannot be opened are each
+reported once on the error stream, and the game runs on without that sound. A headless run
+plays nothing and opens no audio device. Volume follows the original's curve, 0.35 dB below
+full for every unit under 100 and silence at 0, and a fade lowers it evenly. Music and
+background sound loop; a MIDI track that marks the start of its loop with controller 111, as
+music written for RPG Maker does, continues there, and one without the marker at its
+beginning.
 
 ### Headless
 
@@ -445,8 +449,9 @@ There are ten slots, 0 to 9, and slot 0 is chosen at the start. What became of a
 the slot that was chosen, is shown in the window title for two seconds and logged at the level
 `info`. A state is saved at the next frame at which it can be: not between `Graphics.freeze`
 and the end of the transition that follows, and not while a message panel is shown. A slot
-can be loaded any number of times. Loading starts the display, the audio and the pacing
-afresh for the game that goes on from the state.
+can be loaded any number of times. Loading starts the display and the pacing afresh for the
+game that goes on from the state, and the music and the background sound go on where they
+were when the state was saved; a fade that was running then is not brought back.
 
 The keys only show a notice when the guest is a thread, and while input is recorded or
 replayed, since a load would make the recording describe another run. With
@@ -469,7 +474,6 @@ Limits:
 - States live in memory and end with the run. Nothing is written to disk.
 - Files the game wrote after a state was saved stay as they are, its own saves included; a
   file a script holds open across frames shares its position with the copies.
-- Music and background sound start over after a load.
 - Each state costs the memory pages the game has changed since it was saved.
 - States need `fork`, which the one platform of vkxp, Linux, has.
 

@@ -23,7 +23,7 @@ What works:
 
 - A window with integer or filtered scaling and borderless fullscreen, and frame pacing at
   the game's frame rate.
-- Audio: Ogg Vorbis, WAV, MP3 and, with a SoundFont, MIDI.
+- Audio: Ogg Vorbis, WAV, MP3, with a SoundFont MIDI, and with `ffmpeg` installed WMA.
 - Keyboard and gamepads, with key maps that can be changed.
 - Encrypted archives (`Game.rgssad`).
 - Configuration files for the user and for a game, besides the command line.

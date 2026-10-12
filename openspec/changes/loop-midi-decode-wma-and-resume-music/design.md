@@ -91,3 +91,6 @@ output device.
   on the pitch of its play command. A play command that names the remembered file with
   another pitch starts at the same number of frames, which is then another place in the
   file. A game that goes on from a state sends the pitch it sent before.
+- `docs/decisions.md` still says that the music starts over after a load ("Guest / host
+  split") and lists MIDI loop markers and WMA as not covered by milestone M3. The file is
+  outside what this change may edit.

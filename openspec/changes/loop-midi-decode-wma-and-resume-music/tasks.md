@@ -15,7 +15,7 @@
 
 ## 4. Documentation
 
-- [ ] 4.1 `docs/compatibility.md`: the sentence about MIDI loop markers and the limit "music and background sound start over after a load" go; WMA is listed with its need of `ffmpeg`. `docs/running.md` (audio, save states) and the list of formats in `README.md` say the same. Verify: the documents no longer say that MIDI loop markers are not followed or that music starts over after a load; the tests of `xtask` that check the documents pass.
+- [x] 4.1 `docs/compatibility.md`: the sentence about MIDI loop markers and the limit "music and background sound start over after a load" go; WMA is listed with its need of `ffmpeg`. `docs/running.md` (audio, save states) and the list of formats in `README.md` say the same. Verify: the documents no longer say that MIDI loop markers are not followed or that music starts over after a load; the tests of `xtask` that check the documents pass.
 
 ## 5. Integration check
 

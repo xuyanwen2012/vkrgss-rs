@@ -41,8 +41,8 @@ source. What remains under `crates/`:
 - **Transition masks.** The level of a coloured mask pixel is one lower than the original's
   for a few colours; a grey mask is exact.
 
-Besides these, the loop markers of MIDI files are not followed: a track loops from its
-beginning. vkxp runs on Linux x86_64 only.
+Besides these, WMA sounds are decoded by the `ffmpeg` program, which has to be installed:
+without it they stay silent. vkxp runs on Linux x86_64 only.
 
 ## Limits of save states
 
@@ -51,7 +51,6 @@ Save states are described under [Save states](running.md#save-states). Their lim
 - States live in memory and end with the run. Nothing is written to disk.
 - Files the game wrote after a state was saved stay as they are, its own saves included; a
   file a script holds open across frames shares its position with the copies.
-- Music and background sound start over after a load.
 - Each state costs the memory pages the game has changed since it was saved.
 - States need the guest in a process, and no state is saved with
   `--allow-process-functions`.
