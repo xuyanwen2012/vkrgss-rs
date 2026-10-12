@@ -11,6 +11,22 @@ use crate::{Bitmap, BitmapStore, ComposeError, TableStore};
 /// The colour every pixel starts from before the first op: opaque black.
 pub const BACKGROUND: Rgba = [0, 0, 0, 255];
 
+/// A pixel of the frame at `brightness`: each colour channel `v` becomes
+/// `(v * brightness) >> 8`, and the alpha stays. 255 is the identity and is not multiplied.
+/// Measured on the original runtime of VX: the level 200 at brightness 100 shows 78.
+fn darken(pixel: Rgba, brightness: u8) -> Rgba {
+    if brightness == 255 {
+        return pixel;
+    }
+    let channel = |value: u8| ((u16::from(value) * u16::from(brightness)) >> 8) as u8;
+    [
+        channel(pixel[0]),
+        channel(pixel[1]),
+        channel(pixel[2]),
+        pixel[3],
+    ]
+}
+
 /// A composited frame: RGBA8 in row order, `size.width * size.height` pixels.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Frame {
@@ -72,7 +88,8 @@ impl Compositor {
         }
     }
 
-    /// Applies the packet's bitmap deltas and then its table deltas, then draws its ops.
+    /// Applies the packet's bitmap deltas and then its table deltas, then draws its ops and
+    /// darkens the result by the packet's brightness.
     ///
     /// Either a complete frame is returned or an error and no frame. Deltas applied before an
     /// error stay applied, so the stores keep following the guest.
@@ -104,7 +121,7 @@ impl Compositor {
                 for step in &steps {
                     pixel = step.apply(pixel, size, px, py);
                 }
-                rgba.extend_from_slice(&pixel);
+                rgba.extend_from_slice(&darken(pixel, packet.brightness));
             }
         }
         Ok(Frame { size, rgba })

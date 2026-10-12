@@ -40,6 +40,7 @@ pub fn all() -> Vec<Fixture> {
         quad_color_fixture("quad_color_normal", BlendMode::Normal),
         quad_color_fixture("quad_color_add", BlendMode::Add),
         quad_color_fixture("quad_color_subtract", BlendMode::Subtract),
+        brightness_fixture(),
     ]
 }
 
@@ -178,6 +179,64 @@ fn gradient_background() -> (Vec<BitmapDelta>, Op) {
 }
 
 // Fixtures.
+
+/// Frames at several brightness values, the last of which is a gradient on a translucent
+/// background at brightness 100.
+fn brightness_fixture() -> Fixture {
+    let (deltas, gradient) = gradient_background();
+    let ops = |translucent: bool| {
+        let mut ops = vec![clear(Color::new(250, 130, 10, 77))];
+        if !translucent {
+            ops.push(gradient.clone());
+        }
+        ops.push(Op::Quad(Quad {
+            clip: Rect::new(8, 6, 48, 36),
+            opacity: 128,
+            ..sprite(BitmapId::new(0, 0), SIZE.width, SIZE.height, 0, 0)
+        }));
+        ops
+    };
+    let at = |frame_index, brightness, bitmaps, ops| {
+        GuestToHost::Frame(FramePacket {
+            frame_index,
+            logical_size: SIZE,
+            frame_rate: FrameRate::DEFAULT,
+            brightness,
+            tables: vec![],
+            bitmaps,
+            ops,
+        })
+    };
+    Fixture {
+        name: "brightness",
+        messages: vec![
+            at(0, 0, deltas, ops(false)),
+            at(1, 254, vec![], ops(false)),
+            at(2, 255, vec![], ops(true)),
+            at(3, 1, vec![], ops(false)),
+            at(4, 100, vec![], ops(true)),
+        ],
+    }
+}
+
+/// A frame of 16 by 16 pixels at `brightness` whose colour channels hold every value from 0
+/// to 255, each in a different order, over alphas that differ too.
+pub fn every_level(brightness: u8) -> GuestToHost {
+    let size = Size::new(16, 16);
+    let ops = (0..=255u8).map(|level| Op::Clear {
+        clip: Rect::new(i32::from(level % 16), i32::from(level / 16), 1, 1),
+        color: Color::new(level, 255 - level, level.wrapping_mul(77), level ^ 0x5A),
+    });
+    GuestToHost::Frame(FramePacket {
+        frame_index: 0,
+        logical_size: size,
+        frame_rate: FrameRate::DEFAULT,
+        brightness,
+        tables: vec![],
+        bitmaps: vec![],
+        ops: ops.collect(),
+    })
+}
 
 /// A checkerboard sprite on a cleared screen: identity copy at an integer position.
 fn checkerboard_fixture() -> Fixture {

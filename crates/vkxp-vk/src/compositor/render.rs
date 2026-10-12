@@ -22,7 +22,7 @@ impl VkCompositor {
     }
 
     /// Applies the packet's bitmap deltas and then its table deltas, then draws its ops into
-    /// the frame target.
+    /// the frame target, darkened by the packet's brightness.
     ///
     /// Either a complete frame is rendered or an error is returned and the frame target keeps
     /// the previous frame. Bitmap state after an error is that of the reference compositor:
@@ -158,6 +158,7 @@ impl VkCompositor {
         let bin = started.map(|started| started.elapsed());
         Ok(FrameData {
             size,
+            brightness: packet.brightness,
             records,
             tiles,
             encode,

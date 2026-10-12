@@ -126,6 +126,7 @@ fn fixture_names_are_unique_and_cover_the_required_cases() {
         "quad_color_normal",
         "quad_color_add",
         "quad_color_subtract",
+        "brightness",
     ] {
         assert!(names.contains(required), "fixture `{required}` is missing");
         assert_eq!(fixtures::by_name(required).unwrap().name, required);

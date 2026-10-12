@@ -1205,3 +1205,70 @@ fn window_blend_of_a_scaled_quad_has_no_exception() {
         assert_eq!(frame.pixel(x, 0), [158, 158, 158, 255], "pixel {x}");
     }
 }
+
+/// The frame of `ops` at `brightness`.
+fn render_at(brightness: u8, ops: Vec<Op>) -> Frame {
+    let packet = FramePacket {
+        brightness,
+        ..packet(vec![], ops)
+    };
+    Compositor::new().render(&packet).unwrap()
+}
+
+/// Scenario "Measured on the original runtime of VX".
+#[test]
+fn level_200_at_brightness_100_is_78() {
+    let frame = render_at(100, vec![clear([200, 200, 200, 255])]);
+    assert_pixels(&frame, |_, _| [78, 78, 78, 255]);
+}
+
+/// Scenario "Identity": brightness 255 is not multiplied, which would darken.
+#[test]
+fn brightness_255_leaves_the_frame_as_composed() {
+    let ops = vec![clear([255, 200, 1, 77])];
+    assert_eq!(render_at(255, ops.clone()), render(vec![], ops));
+    assert_pixels(&render_at(255, vec![]), |_, _| BACKGROUND);
+    let GuestToHost::Frame(packet) = fixtures::every_level(255) else {
+        unreachable!("a frame");
+    };
+    let frame = Compositor::new().render(&packet).unwrap();
+    for level in 0..=255u8 {
+        let expected = [level, 255 - level, level.wrapping_mul(77), level ^ 0x5A];
+        assert_eq!(
+            frame.pixel(u32::from(level % 16), u32::from(level / 16)),
+            expected
+        );
+    }
+}
+
+/// Scenario "Black". The alpha of the frame stays.
+#[test]
+fn brightness_0_is_black_and_keeps_the_alpha() {
+    let frame = render_at(0, vec![clear([255, 200, 1, 77])]);
+    assert_pixels(&frame, |_, _| [0, 0, 0, 77]);
+}
+
+/// Scenario "Every level", for the reference.
+#[test]
+fn every_level_at_every_brightness_is_the_product_shifted() {
+    for brightness in 0..=254u8 {
+        let GuestToHost::Frame(packet) = fixtures::every_level(brightness) else {
+            unreachable!("a frame");
+        };
+        let frame = Compositor::new().render(&packet).unwrap();
+        let dark = |value: u8| ((u32::from(value) * u32::from(brightness)) >> 8) as u8;
+        for level in 0..=255u8 {
+            let expected = [
+                dark(level),
+                dark(255 - level),
+                dark(level.wrapping_mul(77)),
+                level ^ 0x5A,
+            ];
+            assert_eq!(
+                frame.pixel(u32::from(level % 16), u32::from(level / 16)),
+                expected,
+                "level {level} at brightness {brightness}"
+            );
+        }
+    }
+}

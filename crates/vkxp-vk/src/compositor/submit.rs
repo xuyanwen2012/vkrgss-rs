@@ -149,7 +149,12 @@ impl VkCompositor {
             let mut constants = [0; PUSH_CONSTANT_BYTES as usize];
             write_words(
                 &mut constants,
-                &[frame.size.width, frame.size.height, frame.tiles.tiles_x],
+                &[
+                    frame.size.width,
+                    frame.size.height,
+                    frame.tiles.tiles_x,
+                    u32::from(frame.brightness),
+                ],
             );
             // SAFETY: the command buffer is recording. The pipeline, its layout and the set
             // belong to this device and match each other. Every descriptor the shader can use

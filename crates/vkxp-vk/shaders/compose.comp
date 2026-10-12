@@ -5,7 +5,8 @@
 #extension GL_EXT_samplerless_texture_functions : require
 
 // The compositor: one workgroup per 16x16 tile, one invocation per pixel. Each invocation
-// starts from opaque black and applies, in order, the ops binned to its tile. All arithmetic
+// starts from opaque black and applies, in order, the ops binned to its tile, then darkens
+// the pixel by the brightness of the frame. All arithmetic
 // is on integers and texels are fetched, never filtered, so the result is the same on every
 // device and equal to the CPU reference compositor.
 
@@ -70,6 +71,8 @@ layout(push_constant) uniform FrameConstants {
     uvec2 size;
     // Width of the tile grid.
     uint tiles_x;
+    // Brightness of the frame, from 0 to 255.
+    uint brightness;
 } frame_constants;
 
 uvec4 unpack_color(uint color) {
@@ -204,6 +207,11 @@ void main() {
     uvec4 pixel = uvec4(0u, 0u, 0u, 255u);
     for (uint i = 0u; i < tile.y; ++i) {
         pixel = apply_op(ops[tile_ops[tile.x + i]], pixel, ivec2(position));
+    }
+    // Mirrors `darken` of the reference compositor: 255 is the identity and is not
+    // multiplied, and the alpha stays.
+    if (frame_constants.brightness != 255u) {
+        pixel.rgb = (pixel.rgb * frame_constants.brightness) >> 8;
     }
     imageStore(frame, ivec2(position), pixel);
 }

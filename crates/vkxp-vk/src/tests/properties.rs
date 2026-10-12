@@ -148,6 +148,7 @@ struct PacketPlan {
     bad_size: bool,
     deltas: Vec<DeltaPlan>,
     ops: Vec<OpPlan>,
+    brightness: u8,
 }
 
 // Strategies.
@@ -278,18 +279,25 @@ fn logical_size() -> impl Strategy<Value = (u32, u32)> {
     ]
 }
 
+/// A brightness: as composed in half of the packets, any value in the others.
+fn brightness() -> impl Strategy<Value = u8> {
+    prop_oneof![Just(255u8), any::<u8>()]
+}
+
 /// A packet in which everything is valid.
 fn valid_packet() -> impl Strategy<Value = PacketPlan> {
     (
         logical_size(),
         prop::collection::vec(delta_plan(), 0..=5),
         prop::collection::vec(op_plan(), 0..=10),
+        brightness(),
     )
-        .prop_map(|(size, deltas, ops)| PacketPlan {
+        .prop_map(|(size, deltas, ops, brightness)| PacketPlan {
             size,
             bad_size: false,
             deltas,
             ops,
+            brightness,
         })
 }
 
@@ -308,12 +316,14 @@ fn faulty_packet() -> impl Strategy<Value = PacketPlan> {
         prop::bool::weighted(0.05),
         prop::collection::vec(delta, 0..=5),
         prop::collection::vec(op, 0..=8),
+        brightness(),
     )
-        .prop_map(|(size, bad_size, deltas, ops)| PacketPlan {
+        .prop_map(|(size, bad_size, deltas, ops, brightness)| PacketPlan {
             size,
             bad_size,
             deltas,
             ops,
+            brightness,
         })
 }
 
@@ -636,7 +646,7 @@ fn build(plans: &[PacketPlan], faults: bool) -> Vec<GuestToHost> {
             frame_index: frame_index as u64,
             logical_size,
             frame_rate: FrameRate::DEFAULT,
-            brightness: 255,
+            brightness: plan.brightness,
             tables: vec![],
             bitmaps,
             ops,
@@ -672,6 +682,8 @@ proptest! {
 #[derive(Debug, Default)]
 struct Coverage {
     frames: u32,
+    /// Frames at a brightness other than 255.
+    darkened_frames: u32,
     clears: u32,
     effects: u32,
     quads_by_blend: [u32; 4],
@@ -719,6 +731,7 @@ fn coverage(strategy: impl Strategy<Value = Vec<PacketPlan>>, faults: bool) -> C
             match compositor.handle(&message) {
                 Ok(_) => {
                     coverage.frames += 1;
+                    coverage.darkened_frames += u32::from(packet.brightness != 255);
                     coverage.frames_after_a_failure += u32::from(failed);
                     let size = packet.logical_size;
                     coverage.odd_sizes += u32::from(size.width % 16 != 0 || size.height % 16 != 0);
@@ -776,6 +789,7 @@ fn generated_sequences_cover_what_the_properties_claim() {
     );
     assert!(valid.frames >= CASES);
     for count in [
+        valid.darkened_frames,
         valid.clears,
         valid.effects,
         valid.quads_by_blend[0],

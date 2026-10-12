@@ -8,7 +8,7 @@
 //! source varies along x and each row is its own quad. This is what catches a GLSL formula
 //! drifting from `vkxp-pixel`.
 
-use vkxp_compose_ref::fixtures::bitmap;
+use vkxp_compose_ref::fixtures::{self, bitmap};
 use vkxp_proto::{
     BitmapDelta, BitmapId, BlendMode, Color, FramePacket, FrameRate, GuestToHost, Op, Quad, Rect,
     RectEffect, Sampling, Size, Tone, Transform,
@@ -451,4 +451,36 @@ fn quad_tone_and_color_sweep_is_byte_identical_in_additive_mode() {
 #[test]
 fn quad_tone_and_color_sweep_is_byte_identical_in_subtractive_mode() {
     quad_tone_and_color_sweep(BlendMode::Subtract);
+}
+
+/// Scenario "Every level" of "Brightness of the frame": every channel value at every
+/// brightness, on both backends, against the formula written out here.
+#[test]
+fn every_level_at_every_brightness_matches_the_reference() {
+    let mut pair = Pair::new();
+    for brightness in 0..=255u8 {
+        let message = fixtures::every_level(brightness);
+        let frame = match pair.step(&message) {
+            Ok(Ok(Some(frame))) => frame,
+            Ok(other) => panic!("brightness {brightness}: no frame: {other:?}"),
+            Err(difference) => panic!("brightness {brightness}: {difference}"),
+        };
+        let dark = |value: u8| match brightness {
+            255 => value,
+            _ => ((u32::from(value) * u32::from(brightness)) >> 8) as u8,
+        };
+        for level in 0..=255u8 {
+            let expected = [
+                dark(level),
+                dark(255 - level),
+                dark(level.wrapping_mul(77)),
+                level ^ 0x5A,
+            ];
+            assert_eq!(
+                frame.pixel(u32::from(level % 16), u32::from(level / 16)),
+                expected,
+                "level {level} at brightness {brightness}"
+            );
+        }
+    }
 }

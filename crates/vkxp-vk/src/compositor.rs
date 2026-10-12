@@ -74,8 +74,8 @@ mod query {
     pub(super) const COUNT: u32 = 4;
 }
 
-/// Bytes of the push constants: logical width, logical height, tile grid width.
-const PUSH_CONSTANT_BYTES: u32 = 12;
+/// Bytes of the push constants: logical width, logical height, tile grid width, brightness.
+const PUSH_CONSTANT_BYTES: u32 = 16;
 
 /// A composited frame: RGBA8 in row order, `size.width * size.height` pixels.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -183,6 +183,8 @@ struct Pending<'a> {
 /// Everything the shader reads for one frame.
 struct FrameData {
     size: Size,
+    /// The brightness of the packet.
+    brightness: u8,
     records: Records,
     tiles: TileLists,
     /// How long encoding and binning took, when frames are measured.

@@ -6,8 +6,8 @@
 
 ## 2. Compositors
 
-- [ ] 2.1 The CPU reference applies the brightness as the last step of a frame. Verify: the scenarios of `specs/frame-composition/spec.md`; `cargo test -p vkxp-compose-ref --locked` passes.
-- [ ] 2.2 The Vulkan compositor does the same; the fixtures and the generated packets that compare it with the reference cover brightness values other than 255. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk --locked` passes, and so does `VK_LOADER_DRIVERS_SELECT='*radeon*' VKXP_TEST_DEVICE=RADV cargo test -p vkxp-vk --locked`.
+- [x] 2.1 The CPU reference applies the brightness as the last step of a frame. Verify: the scenarios of `specs/frame-composition/spec.md`; `cargo test -p vkxp-compose-ref --locked` passes.
+- [x] 2.2 The Vulkan compositor does the same; the fixtures and the generated packets that compare it with the reference cover brightness values other than 255. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk --locked` passes, and so does `VK_LOADER_DRIVERS_SELECT='*radeon*' VKXP_TEST_DEVICE=RADV cargo test -p vkxp-vk --locked`.
 
 ## 3. Session
 
