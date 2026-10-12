@@ -280,8 +280,8 @@ return 1.
 virtual key is held in the snapshot latched by the last `Input.update`, and
 `GetAsyncKeyState` SHALL also set bit 0 when the key was not held in the snapshot before it.
 `GetKeyboardState` SHALL fill a 256-byte buffer with 0x80 for each held key. `GetKeyState`
-and `GetKeyboardState` SHALL also report in bit 0 a toggle of the key, 0 at the start, that
-flips each time a latched snapshot has the key held and the one before had not.
+and `GetKeyboardState` SHALL also report in bit 0 a toggle, 0 at the start, that flips each
+time a latched snapshot newly has the key held.
 
 #### Scenario: Held key
 - **WHEN** the latched snapshot has virtual key 0x0D held and `GetAsyncKeyState.call(0x0D) & 0x8000` is evaluated
