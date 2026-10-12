@@ -1,7 +1,8 @@
 # supported-runtimes Specification
 
 ## Purpose
-TBD - created by archiving change extend-scope-to-vx-and-vx-ace. Update Purpose after archive.
+Defines which RPG Maker runtimes the project covers, to what standard and in what order, and
+how the documents state what works at a given time.
 
 ## Requirements
 
