@@ -18,4 +18,4 @@
 
 ## 5. Integration check
 
-- [ ] 5.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate match-coloured-mask-levels-and-drop-translucent-blends --strict` passes.
+- [x] 5.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate match-coloured-mask-levels-and-drop-translucent-blends --strict` passes.
