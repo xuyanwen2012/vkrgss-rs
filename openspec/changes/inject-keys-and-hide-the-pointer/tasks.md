@@ -2,7 +2,7 @@
 
 ## 1. Protocol
 
-- [ ] 1.1 The two messages, version 10, fixtures and expected files that carry the version regenerated, every `match` on the messages completed. Verify: the scenarios of `specs/guest-host-protocol/spec.md`; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-proto -p vkxp-compose-ref --locked` passes and the workspace builds.
+- [x] 1.1 The two messages, version 10, fixtures and expected files that carry the version regenerated, every `match` on the messages completed. Verify: the scenarios of `specs/guest-host-protocol/spec.md`; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-proto -p vkxp-compose-ref --locked` passes and the workspace builds.
 
 ## 2. Guest
 

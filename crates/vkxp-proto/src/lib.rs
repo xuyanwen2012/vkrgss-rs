@@ -10,7 +10,7 @@
 //! end over a Unix stream socket for a guest in a process of its own. [`tiles`] is the
 //! numbering of the tiles of a tilemap, which the guest and every backend read alike.
 //!
-//! This is protocol version 9. Over version 1 a [`FramePacket`] carries the guest's
+//! This is protocol version 10. Over version 1 a [`FramePacket`] carries the guest's
 //! [`FrameRate`], a [`Quad`] carries a tone and a colour for its own texels, the messages
 //! [`GuestToHost::FrameReset`] and [`HostToGuest::Reset`] exist, and [`Button`] has F9. Over
 //! version 2 a [`Quad`] states its [`Sampling`]: the affine transform it always had, or a
@@ -23,7 +23,9 @@
 //! [`HostToGuest::LoadState`] and [`HostToGuest::Resume`], and [`GuestToHost::Attach`],
 //! [`GuestToHost::Outcome`], [`GuestToHost::StateSaved`], [`GuestToHost::StateLoaded`] and
 //! [`GuestToHost::StateFailed`]. Over version 8 [`GuestToHost::StateFailed`] says whether a
-//! save or a load failed.
+//! save or a load failed. Over version 9 the guest presses and releases keys for the player
+//! with [`GuestToHost::InjectKey`] and says with [`GuestToHost::PointerVisible`] whether the
+//! pointer is to be seen.
 //! Streams of older versions are rejected.
 //!
 //! The binary form encodes enum variants by position, so reordering or removing variants, or

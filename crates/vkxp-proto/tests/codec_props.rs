@@ -232,6 +232,8 @@ fn guest_to_host() -> impl Strategy<Value = GuestToHost> {
         any::<u8>().prop_map(|slot| GuestToHost::StateSaved { slot }),
         any::<u8>().prop_map(|slot| GuestToHost::StateLoaded { slot }),
         any::<(u8, bool)>().prop_map(|(slot, load)| GuestToHost::StateFailed { slot, load }),
+        any::<(u8, bool)>().prop_map(|(key, down)| GuestToHost::InjectKey { key, down }),
+        any::<bool>().prop_map(|visible| GuestToHost::PointerVisible { visible }),
     ]
 }
 

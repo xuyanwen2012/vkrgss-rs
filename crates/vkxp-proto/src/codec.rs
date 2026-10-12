@@ -23,7 +23,7 @@ use crate::{GuestToHost, HostToGuest, InputSnapshot};
 pub const MAGIC: [u8; 4] = *b"VKXP";
 
 /// Version of the message types and their encoding. Any change to either increments it.
-pub const PROTOCOL_VERSION: u16 = 9;
+pub const PROTOCOL_VERSION: u16 = 10;
 
 /// Length of the stream header in bytes.
 pub const HEADER_LEN: usize = 7;
@@ -232,8 +232,8 @@ mod tests {
 
     #[test]
     fn older_streams_are_rejected_naming_both_versions() {
-        assert_eq!(PROTOCOL_VERSION, 9);
-        for found in [1u16, 2, 3, 4, 5, 6, 7, 8] {
+        assert_eq!(PROTOCOL_VERSION, 10);
+        for found in [1u16, 2, 3, 4, 5, 6, 7, 8, 9] {
             let mut bytes = encode_stream(&sample()).unwrap();
             bytes[4..6].copy_from_slice(&found.to_le_bytes());
 
@@ -242,12 +242,12 @@ mod tests {
                 error,
                 DecodeError::UnsupportedVersion {
                     found,
-                    supported: 9,
+                    supported: 10,
                 }
             );
             assert_eq!(
                 error.to_string(),
-                format!("unsupported protocol version: found {found}, supported 9")
+                format!("unsupported protocol version: found {found}, supported 10")
             );
         }
     }
@@ -451,6 +451,16 @@ mod tests {
                 slot: 9,
                 load: true,
             },
+            GuestToHost::InjectKey {
+                key: 0x0D,
+                down: true,
+            },
+            GuestToHost::InjectKey {
+                key: 0x01,
+                down: false,
+            },
+            GuestToHost::PointerVisible { visible: false },
+            GuestToHost::PointerVisible { visible: true },
         ];
         // Fails to compile when a kind is added without extending the list above.
         for message in &guest {
@@ -467,12 +477,14 @@ mod tests {
                 | GuestToHost::Outcome { .. }
                 | GuestToHost::StateSaved { .. }
                 | GuestToHost::StateLoaded { .. }
-                | GuestToHost::StateFailed { .. } => {}
+                | GuestToHost::StateFailed { .. }
+                | GuestToHost::InjectKey { .. }
+                | GuestToHost::PointerVisible { .. } => {}
             }
         }
         let kinds: std::collections::HashSet<_> =
             guest.iter().map(std::mem::discriminant).collect();
-        assert_eq!(kinds.len(), 13);
+        assert_eq!(kinds.len(), 15);
         let bytes = encode_stream(&guest).unwrap();
         assert_eq!(decode_stream::<GuestToHost>(&bytes), Ok(guest));
 

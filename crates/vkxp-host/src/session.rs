@@ -459,6 +459,7 @@ impl<D: Display, C: Clock> Session<D, C> {
             GuestToHost::StateFailed { slot, load: false } => {
                 self.show_notice(format_args!("no state could be saved into slot {slot}"));
             }
+            GuestToHost::InjectKey { .. } | GuestToHost::PointerVisible { .. } => {}
         }
     }
 

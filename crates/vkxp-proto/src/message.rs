@@ -74,6 +74,16 @@ pub enum GuestToHost {
         /// Whether a load failed; false for a save.
         load: bool,
     },
+    /// A key is pressed or released on the player's behalf, as `keybd_event` does. The host
+    /// treats it as the physical key of that code.
+    InjectKey {
+        /// The Windows virtual-key code.
+        key: u8,
+        /// Whether the key goes down; false for a release.
+        down: bool,
+    },
+    /// Whether the pointer is to be seen over the picture.
+    PointerVisible { visible: bool },
 }
 
 /// A message from the host to the guest.
