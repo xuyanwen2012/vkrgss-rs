@@ -11,4 +11,4 @@
 
 ## 3. Integration check
 
-- [ ] 3.1 Run the gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 (the checks of the documents and their links included) and `openspec validate extend-scope-to-vx-and-vx-ace --strict` passes.
+- [x] 3.1 Run the gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 (the checks of the documents and their links included) and `openspec validate extend-scope-to-vx-and-vx-ace --strict` passes.
