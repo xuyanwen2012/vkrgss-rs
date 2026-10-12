@@ -15,7 +15,7 @@
 
 ## 4. Documentation
 
-- [ ] 4.1 `docs/running.md`: the option, how the runtime is found, `--rtp RPGVX=...`, the built-in scripts file of RGSS2 and how it is made today, and that a VX game does not get far yet. Verify: the help text of the program and the document name the same option and file names.
+- [x] 4.1 `docs/running.md`: the option, how the runtime is found, `--rtp RPGVX=...`, the built-in scripts file of RGSS2 and how it is made today, and that a VX game does not get far yet. Verify: the help text of the program and the document name the same option and file names.
 
 ## 5. Integration check
 

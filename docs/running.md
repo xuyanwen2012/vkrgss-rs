@@ -9,6 +9,41 @@ The commands below use `cargo run`, which builds the development profile.
 `cargo build --release -p vkxp` produces the optimised executable, `target/release/vkxp`, which
 takes the same arguments.
 
+### The runtime of a game
+
+`vkxp` runs the games of RPG Maker XP, whose runtime is RGSS1. Support for RPG Maker VX
+(RGSS2) is experimental, and RPG Maker VX Ace (RGSS3) is planned and not supported.
+
+The runtime of a game is taken from two values of its `Game.ini`, and from nothing else:
+
+- `Library`, when its file name is `RGSS`, a digit 1 to 3, two more digits, an optional
+  letter and `.dll`, as in `RGSS104E.dll`, `RGSS202E.dll` or `System\RGSS301.dll`. The first
+  digit is the runtime.
+- `Scripts`, by its extension: `.rxdata` is RGSS1, `.rvdata` is RGSS2 and `.rvdata2` is RGSS3.
+
+Letter case does not matter. One of the two is enough, and a value that is not recognised
+says nothing. When the two name different runtimes, or neither names one, the program ends
+before any window opens with a message that shows both values and names the option
+`--runtime rgss1|rgss2|rgss3`, which decides without looking at the file.
+
+What follows the runtime:
+
+| | RGSS1 (XP) | RGSS2 (VX) |
+|---|---|---|
+| Run-time packages in `Game.ini` | `RTP1`, `RTP2`, `RTP3` | `RTP` |
+| Encrypted archive | `Game.rgssad` | `Game.rgss2a` |
+| Default built-in scripts file | `rpg_builtin.rb` | `rpg_builtin_rgss2.rb` |
+| `--debug` sets | `$DEBUG` | `$TEST` |
+
+A game of VX names the package `RPGVX`, so it is run with `--rtp RPGVX=<RTP directory>`; a
+game whose `RTP` is empty needs no package. The archive of the other runtime is ignored if
+the game directory holds one.
+
+A game of VX does not get far yet. It is started with the classes and functions of RGSS1 and
+its scripts stop at the first thing that only RGSS2 has; the frame is still 640 by 480 at 40
+frames per second. Every such run writes one warning that support for RPG Maker VX is
+experimental. A game of VX Ace ends at once with a message that says it is not supported.
+
 ### The built-in scripts
 
 A game expects the `RPG` module of the original runtime: the data classes, `RPG::Cache`,
@@ -28,6 +63,27 @@ writes nothing; an unpacked copy of such a DLL works. `vkxp` looks for the file 
 `XDG_DATA_HOME` is set, or takes the file named with `--builtin-scripts`. Without the file it
 ends with a message that names the command above.
 
+### The built-in scripts of RPG Maker VX
+
+A game of VX needs the built-in scripts of RGSS2, which are one block that starts with
+`module RPG;` and defines the `RPG` data classes. `vkxp` looks for them at
+`$XDG_DATA_HOME/vkxp/rpg_builtin_rgss2.rb`, or takes the file named with `--builtin-scripts`.
+Without the file a run of a VX game ends with a message that names it and this section.
+
+No DLL of VX holds that text as it is: the files are packed, and the text exists only in the
+memory of the running original. Today the file is made by hand in two steps:
+
+1. Start a game with the original `Game.exe` (under Wine on Linux) and, while it runs, write
+   the memory that the RGSS2 DLL occupies in that process to a file, with a debugger or
+   another tool that can dump a range of a process's memory.
+2. Give that file to the same command as for XP, which looks for the block in any file:
+
+   ```sh
+   cargo xtask extract-rpg <memory image> ~/.local/share/vkxp/rpg_builtin_rgss2.rb
+   ```
+
+There is no tool yet that does the first step for you.
+
 ### Options
 
 ```text
@@ -42,15 +98,16 @@ Paths on the command line are relative to the directory the program was started 
 |---|---|
 | `--config FILE` | The user's configuration file, instead of the default location. See *Configuration files*. |
 | `--no-config` | Read no configuration file. Not together with `--config`. |
-| `--rtp NAME=DIR` | The directory of the run-time package that `Game.ini` names `NAME`. Repeatable. A game that names a package without this option does not start. |
-| `--builtin-scripts FILE` | The built-in scripts file, instead of the default location. |
+| `--runtime RUNTIME` | The runtime of the game: `rgss1`, `rgss2` or `rgss3`. Without it `Library` and `Scripts` of `Game.ini` tell it. See *The runtime of a game*. |
+| `--rtp NAME=DIR` | The directory of the run-time package that `Game.ini` names `NAME`: `--rtp Standard=DIR` for most games of XP, `--rtp RPGVX=DIR` for a game of VX. Repeatable. A game that names a package without this option does not start. |
+| `--builtin-scripts FILE` | The built-in scripts file of the game's runtime, instead of the default location: `rpg_builtin.rb` for RGSS1 and `rpg_builtin_rgss2.rb` for RGSS2, in `$XDG_DATA_HOME/vkxp`. |
 | `--device INDEX\|NAME` | The Vulkan device: its index or a part of its name, as `vulkaninfo --summary` prints them. In a window the default is the first discrete GPU, then an integrated one; headless it is `llvmpipe`. |
 | `--font-dir DIR` | A directory of fonts. Repeatable; earlier directories come first, then the game's `Fonts` directory, then the fonts installed on the system. |
 | `--font-own-metrics` | Size every font by its own line box. Without it a font that replaces a Windows font is scaled to the line box of the font it replaces. Meant for comparing text with the original when both draw with the same font file. |
 | `--encoding ENCODING` | The text encoding of `Game.ini`: `utf-8`, `gbk`, `shift-jis` or `big5`. Without it UTF-8 is tried, then those three in that order. |
 | `--filter FILTER` | How the frame is scaled into the window: `auto`, `nearest`, `linear` or `sharp`. See *Window*. |
 | `--fullscreen` | Start in borderless fullscreen. |
-| `--debug` | Debug mode: `$DEBUG` is `true`. |
+| `--debug` | Debug mode: `$DEBUG` is `true`, and in a game of RGSS2 `$TEST` is. |
 | `--allow-process-functions` | Lets `system`, backticks, `exec`, `fork`, `syscall` and `IO.popen` start processes. Without it they do nothing. |
 | `--log-p` | `p` only writes to the error stream: no message panel is shown and the game does not wait. See *Messages*. |
 | `--present-stats` | Write the intervals between the frames shown to the error stream. See *Window*. |
