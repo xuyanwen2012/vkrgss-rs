@@ -11,4 +11,4 @@
 
 ## 3. Integration check
 
-- [ ] 3.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate number-symbols-by-runtime --strict` passes.
+- [x] 3.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate number-symbols-by-runtime --strict` passes.
