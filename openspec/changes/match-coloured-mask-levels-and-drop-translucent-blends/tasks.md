@@ -10,7 +10,7 @@
 
 ## 3. Threshold
 
-- [ ] 3.1 The lower bound in `step_mix`. Verify: scenario "Long transition"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-host --locked` passes.
+- [x] 3.1 The lower bound in `step_mix`. Verify: scenario "Long transition"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-host --locked` passes.
 
 ## 4. Documentation
 

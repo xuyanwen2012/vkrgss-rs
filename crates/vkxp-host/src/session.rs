@@ -1243,8 +1243,9 @@ impl<D: Display, C: Clock> Drop for Session<D, C> {
 
 /// The mix of step `step` of a transition of `duration` frames, `step` below `duration`: the
 /// cross-fade weight `255 * step / duration` and the mask threshold
-/// `256 * step / duration - 1`, floored at 0, as measured on the original. Step 0 is
-/// [`Mix::HELD`].
+/// `max(0, 256 * step / duration - 1)`, as measured on the original. The formula gives -1
+/// only at step 1 of a transition longer than 256 frames, where the original was seen at 0.
+/// Step 0 is [`Mix::HELD`].
 fn step_mix(step: u32, duration: u32) -> Mix {
     let step = u64::from(step);
     let duration = u64::from(duration);

@@ -862,6 +862,8 @@ fn last_step_has_the_weight_and_the_threshold_measured_on_the_original() {
     assert_eq!(step_mix(u32::MAX - 1, u32::MAX), step(254));
     // Above 256 the formula is below 0 at the first steps: the threshold is floored.
     assert!(matches!(step_mix(1, 300), Mix::Step { threshold: 0, .. }));
+    // Scenario "Long transition": step 1 of 257 frames, where the original was measured.
+    assert!(matches!(step_mix(1, 257), Mix::Step { threshold: 0, .. }));
 
     // The eighth frame of a transition of duration 8 is shown with them.
     let mut rig = Rig::new();
