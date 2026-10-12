@@ -37,12 +37,15 @@ layer is loaded.
 The toolchain is pinned in `rust-toolchain.toml`. The `openspec` CLI must be on `PATH`.
 
 The workflow `.github/workflows/ci.yml` runs the gate on GitHub for every push to `main` and
-every pull request; [releasing.md](releasing.md) describes the release package.
+every pull request; [releasing.md](releasing.md) describes the release package. Beside the
+job `gate` on x86_64 it has the job `gate-aarch64`, the same steps on an aarch64 runner
+(`ubuntu-24.04-arm`). aarch64 is not supported: that job is allowed to fail, does not fail
+the workflow, and its log is where the state of aarch64 can be seen.
 
 ## Checks outside the gate
 
-Two checks are run by hand, because one is slow and needs another compiler and the other
-needs the network. Neither is a step of the merge gate.
+Three checks are run by hand, because two are slow and need another compiler and the third
+needs the network. None is a step of the merge gate.
 
 **The upstream Ruby suites under sanitizers.** The interpreter, Oniguruma and Ruby's own test
 executable are compiled again with AddressSanitizer and UndefinedBehaviorSanitizer, and the
@@ -50,13 +53,42 @@ suites the gate runs for their results are run for invalid memory accesses and u
 behaviour:
 
 ```sh
-cargo test -p vkxp-ruby-sys --test sanitized -- --ignored
+cargo test -p vkxp-ruby-sys --test sanitized -- --ignored upstream_suites_pass_under_the_sanitizers
 ```
 
 It needs `clang` with its sanitizer runtimes (`compiler-rt` on Fedora) and takes about a
 minute. It fails on a suite that does not pass and on every sanitizer report that
 `crates/vkxp-ruby-sys/tests/sanitized.allow` does not list; an entry there states why the
 report is harmless. The full reports are left in `target/tmp/sanitized/reports/`.
+
+**The tests under collector stress.** The interpreter's collector is conservative: a value
+stays alive only while a copy of it lies on the machine stack, in a register or in a
+reachable object. Code that holds a value only through a pointer into it, the buffer of a
+string or the slots of an array, loses it when a collection comes at the wrong moment, which
+depends on the compiler and on the machine. The environment variable `VKXP_GC_STRESS=<n>`,
+with `n` of 1 or more, makes every interpreter that `vkxp-ruby-sys` starts collect at every
+n-th allocation of an object or of memory, so that such a fault shows at once; unset, empty
+or 0 changes nothing. The variable is read in every build, also by the release executable,
+so a game can be run under it, very slowly: `VKXP_GC_STRESS=1 vkxp <game directory>`.
+
+```sh
+VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask stress
+```
+
+runs three steps under the variable, goes on after one that fails and names all that failed:
+
+| Step | What runs | `n` |
+|---|---|---|
+| `suites` | the upstream Ruby suites in the sanitized build, where the use of the buffer of a collected string is a report of AddressSanitizer, and a test that such a report appears for code that keeps only the buffer pointer of a fresh string (`cargo test -p vkxp-ruby-sys --locked --test sanitized -- --ignored under_collector_stress`) | 32 |
+| `binding` | `cargo test -p vkxp-binding --locked --no-fail-fast` | 1 |
+| `guest` | the tests of the executable that start a guest, `cargo test -p vkxp --locked --test end_to_end` | 1 |
+
+The values of `n` are constants in `xtask/src/stress.rs`. The command needs what the
+sanitized run needs and takes about half an hour on the development machine. A test
+that is left out is named in `xtask/src/stress.skip` with the reason. A lost value is a
+defect also without the variable; it is fixed with a guard (`RB_GC_GUARD` in the vendored
+tree, recorded as a patch, or a root in the binding). The reports of the first step are left
+in `target/tmp/sanitized/stress/reports/`.
 
 **The dependency audit.** `cargo deny` checks every crate of `Cargo.lock` against the
 security advisory database, the licence allow-list and the allowed sources in `deny.toml`:

@@ -25,8 +25,11 @@ the build directory only.
 
 The interpreter is built from `third_party/ruby-1.8.7/` by the build script of `vkxp-ruby-sys`
 with a fixed file list and fixed flags. No installed Ruby, `configure`, `make` or system zlib is
-involved, and the only supported target is `x86_64-unknown-linux-gnu`; any other stops the build
-with a message naming it. `CC` selects the compiler. Because a wrong flag gives an interpreter
+involved, and the only supported target is `x86_64-unknown-linux-gnu`. The build script also
+accepts `aarch64-unknown-linux-gnu`, which is not supported: it is built with the
+configuration header of x86_64, so that the CI job `gate-aarch64` can show what works there
+(see [development.md](development.md#merge-gate)). Any other target stops the build with a
+message naming it. `CC` selects the compiler. Because a wrong flag gives an interpreter
 that builds and then computes wrong results, the tests of `vkxp-ruby-sys` compile a Ruby
 executable from the same objects and run Ruby's own test suites against it, which is why the
 tests need the C compiler too.

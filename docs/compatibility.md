@@ -46,7 +46,9 @@ masks of 24 and 32 bits; masks with a palette, in grey of 8 or 16 bits, and JPEG
 not measured.
 
 Besides these, WMA sounds are decoded by the `ffmpeg` program, which has to be installed:
-without it they stay silent. vkxp runs on Linux x86_64 only.
+without it they stay silent. vkxp runs on Linux, and x86_64 is the supported architecture;
+the job `gate-aarch64` of the [CI workflow](../.github/workflows/ci.yml) shows what works on
+aarch64.
 
 ## Limits of save states
 

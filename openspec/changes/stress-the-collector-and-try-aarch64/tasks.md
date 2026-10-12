@@ -11,7 +11,7 @@
 
 ## 3. aarch64 job and documents
 
-- [ ] 3.1 The job `gate-aarch64`; `docs/compatibility.md`, `docs/building.md` and `docs/development.md` (the switch, the command, the job). Verify: the scenarios of `specs/workspace-structure/spec.md`; the tests of `xtask` that check the workflows and the links of the documents pass.
+- [x] 3.1 The job `gate-aarch64`; `docs/compatibility.md`, `docs/building.md` and `docs/development.md` (the switch, the command, the job). Verify: the scenarios of `specs/workspace-structure/spec.md`; the tests of `xtask` that check the workflows and the links of the documents pass.
 
 ## 4. Integration check
 
