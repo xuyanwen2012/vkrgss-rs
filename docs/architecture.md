@@ -27,7 +27,7 @@ defined in `vkxp-proto`.
 `xtask` holds repository automation and the tool that extracts the built-in scripts; it is not
 part of the runtime.
 
-The protocol is at version 10; an encoded stream of another version is rejected. A frame packet
+The protocol is at version 11; an encoded stream of another version is rejected. A frame packet
 carries the changes to bitmaps and tables and an ordered list of ops of four kinds: `Clear`,
 `Quad`, `RectEffect` and `TilemapLayer`. Sprites, planes and the parts of a window are quads.
 Both compositors evaluate every kind. Version 8 added the messages of the save states: the
@@ -36,7 +36,19 @@ resume, the attachment of a guest process, the outcome of a game, and the answer
 loaded and failed. Version 9 added to the failed answer whether a save or a load failed.
 Version 10 added two messages from the guest: a key that is pressed or released for the
 player, which the session treats as the physical key of that Windows virtual-key code, and
-whether the pointer is to be seen over the picture.
+whether the pointer is to be seen over the picture. Version 11 added `FramePacket::brightness`
+and the field `rule` of `GuestToHost::Transition`.
+
+`FramePacket::brightness` is a value from 0 to 255 that the scene keeps and writes into every
+packet. Both compositors apply it after the last op: each colour channel `v` of the frame
+becomes `(v * brightness) >> 8`, the alpha stays, and 255 leaves the frame as composed. A
+frame that the display holds keeps the brightness it was composed with.
+
+`GuestToHost::Transition` carries a `TransitionRule` in `rule`. With `TransitionRule::Rgss1`
+the frames of a transition of N are shown at the steps 0 to N-1, the first of which is the
+held frame alone, and the frame after them is shown alone. With `TransitionRule::Rgss2` they
+are shown at the steps 1 to N, and the N-th is the newest frame alone and ends the
+transition. The binding sends `TransitionRule::Rgss1` and sets no brightness.
 
 ## Headless proof
 

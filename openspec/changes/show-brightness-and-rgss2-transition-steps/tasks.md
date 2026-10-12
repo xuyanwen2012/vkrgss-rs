@@ -15,7 +15,7 @@
 
 ## 4. Documentation
 
-- [ ] 4.1 `docs/architecture.md`: the brightness of a packet and the rule of a transition, where the packet and the transition are described. Verify: the text names the fields as the code does.
+- [x] 4.1 `docs/architecture.md`: the brightness of a packet and the rule of a transition, where the packet and the transition are described. Verify: the text names the fields as the code does.
 
 ## 5. Integration check
 

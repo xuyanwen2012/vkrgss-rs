@@ -63,3 +63,13 @@ masked transition of RGSS2.
 
 - The Vulkan compositor gets one more step per pixel. It is skipped at brightness 255 by
   the same condition as in the reference, so frames of XP cost what they cost today.
+
+## Follow-ups
+
+- `README.md` still says that the protocol is at version 10. The file is outside the scope
+  of this change, which the parallel change `start-vx-games-at-their-size-and-rate` may
+  touch; the sentence is to be brought to version 11 when the two are merged.
+- The mark "not measured for RGSS2" on the mask threshold is a `PLACEHOLDER` comment at
+  `step_mix` in `crates/vkxp-host/src/session.rs`. The provenance list of `vkxp-pixel`
+  lists pixel arithmetic only and that crate is outside the scope, so the threshold has no
+  entry there.
