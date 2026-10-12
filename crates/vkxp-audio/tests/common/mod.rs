@@ -63,6 +63,30 @@ pub(crate) fn one_note_midi(seconds: u32) -> Vec<u8> {
     let mut track = vec![0x00, 0xc0, 0x00, 0x00, 0x90, 69, 100];
     variable_length(960 * seconds, &mut track);
     track.extend_from_slice(&[0x80, 69, 0, 0x00, 0xff, 0x2f, 0x00]);
+    midi_of(&track)
+}
+
+/// The notes of [`two_note_midi`] and their frequencies: neither is an overtone of the other.
+pub(crate) const FIRST_NOTE: (u8, f32) = (69, 440.0);
+pub(crate) const SECOND_NOTE: (u8, f32) = (74, 587.33);
+
+/// A Standard MIDI file of two seconds: [`FIRST_NOTE`] on an organ for the first second and
+/// [`SECOND_NOTE`] for the other. With `marker`, a controller 111 stands between the two.
+pub(crate) fn two_note_midi(marker: bool) -> Vec<u8> {
+    let mut track = vec![0x00, 0xc0, 19, 0x00, 0x90, FIRST_NOTE.0, 100];
+    variable_length(960, &mut track);
+    track.extend_from_slice(&[0x80, FIRST_NOTE.0, 0]);
+    if marker {
+        track.extend_from_slice(&[0x00, 0xb0, 111, 0]);
+    }
+    track.extend_from_slice(&[0x00, 0x90, SECOND_NOTE.0, 100]);
+    variable_length(960, &mut track);
+    track.extend_from_slice(&[0x80, SECOND_NOTE.0, 0, 0x00, 0xff, 0x2f, 0x00]);
+    midi_of(&track)
+}
+
+/// A Standard MIDI file with the one track `track`, 480 ticks to the quarter note.
+fn midi_of(track: &[u8]) -> Vec<u8> {
     let mut midi = Vec::new();
     midi.extend_from_slice(b"MThd");
     midi.extend_from_slice(&6u32.to_be_bytes());
@@ -71,7 +95,7 @@ pub(crate) fn one_note_midi(seconds: u32) -> Vec<u8> {
     midi.extend_from_slice(&480u16.to_be_bytes());
     midi.extend_from_slice(b"MTrk");
     midi.extend_from_slice(&(track.len() as u32).to_be_bytes());
-    midi.extend_from_slice(&track);
+    midi.extend_from_slice(track);
     midi
 }
 

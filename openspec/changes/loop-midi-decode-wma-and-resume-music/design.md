@@ -77,4 +77,8 @@ output device.
 
 ## Follow-ups
 
-None yet.
+- A track with more than one controller 111. `rustysynth` moves its loop start at every
+  controller 111 it passes, so such a track continues at the last marker it played, not at
+  the first as the requirement says. With one marker, or several at the same time (one for
+  each MIDI channel), the two are the same. Following the first would need the file to be
+  rewritten in front of the library, which this design does not name; it was not built.

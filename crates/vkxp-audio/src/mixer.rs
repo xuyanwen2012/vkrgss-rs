@@ -102,8 +102,13 @@ impl Loader {
                 // output's, is faster or slower by their ratio. That is the pitch.
                 let pitch = u64::from(pitch.clamp(*PITCH.start(), *PITCH.end()));
                 let rate = (u64::from(self.sample_rate) * 100 + pitch / 2) / pitch;
-                let opened =
-                    decode::open(data.into(), rate as u32, &mut self.soundfonts, &self.report);
+                let opened = decode::open(
+                    data.into(),
+                    rate as u32,
+                    loops(channel),
+                    &mut self.soundfonts,
+                    &self.report,
+                );
                 let source = opened.map_err(|error| (self.report)(&error)).ok();
                 Prepared::Play {
                     channel,
@@ -121,6 +126,11 @@ impl Loader {
             },
         }
     }
+}
+
+/// Whether what plays on `channel` starts again when it ends.
+fn loops(channel: AudioChannel) -> bool {
+    matches!(channel, AudioChannel::Bgm | AudioChannel::Bgs)
 }
 
 /// A fade to silence: `remaining` of `total` frames are left.
@@ -240,8 +250,7 @@ impl Channels {
                 source,
                 volume,
             } => {
-                let looping = matches!(channel, AudioChannel::Bgm | AudioChannel::Bgs);
-                let voice = source.map(|source| Voice::new(source, volume, looping));
+                let voice = source.map(|source| Voice::new(source, volume, loops(channel)));
                 match channel {
                     AudioChannel::Bgm => self.bgm = voice,
                     AudioChannel::Bgs => self.bgs = voice,

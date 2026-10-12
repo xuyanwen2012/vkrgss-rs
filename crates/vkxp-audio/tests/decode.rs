@@ -21,7 +21,7 @@ fn open(
     soundfonts: &mut SoundFonts,
 ) -> Result<Box<dyn Source>, DecodeError> {
     let report: Report = Arc::new(|error: &DecodeError| panic!("reported: {error}"));
-    decode::open(data, sample_rate, soundfonts, &report)
+    decode::open(data, sample_rate, false, soundfonts, &report)
 }
 
 /// A report that keeps what it is told.
@@ -106,6 +106,7 @@ fn data_of_which_nothing_decodes_is_unsupported_with_the_reason() {
         let result = decode::open(
             damaged_mp3(first).into(),
             48000,
+            false,
             &mut no_soundfont(),
             &report,
         );
@@ -121,8 +122,14 @@ fn data_of_which_nothing_decodes_is_unsupported_with_the_reason() {
 #[test]
 fn damage_behind_the_first_block_is_reported_once_and_the_rest_is_played() {
     let (report, reported) = collecting();
-    let mut source =
-        decode::open(damaged_mp3(20).into(), 48000, &mut no_soundfont(), &report).unwrap();
+    let mut source = decode::open(
+        damaged_mp3(20).into(),
+        48000,
+        false,
+        &mut no_soundfont(),
+        &report,
+    )
+    .unwrap();
     assert_eq!(*reported.lock().unwrap(), [], "the first block is whole");
 
     let stereo = read_all(source.as_mut());

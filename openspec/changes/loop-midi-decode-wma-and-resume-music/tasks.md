@@ -2,7 +2,7 @@
 
 ## 1. MIDI loop
 
-- [ ] 1.1 The loop marker as in `design.md`. Verify: scenarios "Marker" and "No marker"; `cargo test -p vkxp-audio --locked` passes.
+- [x] 1.1 The loop marker as in `design.md`. Verify: scenarios "Marker" and "No marker"; `cargo test -p vkxp-audio --locked` passes.
 
 ## 2. WMA
 

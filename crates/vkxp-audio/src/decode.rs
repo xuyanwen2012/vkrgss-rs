@@ -56,17 +56,20 @@ pub trait Source: Send {
 /// once for each source. It is called where the source is read, so it must not wait.
 pub type Report = Arc<dyn Fn(&DecodeError) + Send + Sync>;
 
-/// Opens `data` as a source of frames at `sample_rate`. `soundfonts` is consulted, and its
-/// file loaded, only when the data is a MIDI file. Data of which nothing can be played is an
-/// error; data of which a part cannot is played without it and told to `report`.
+/// Opens `data` as a source of frames at `sample_rate`. `looping` says that the sound is one
+/// that starts again when it ends: a MIDI file then continues at its loop marker by itself
+/// and never ends, and other data is rewound by its reader. `soundfonts` is consulted, and
+/// its file loaded, only when the data is a MIDI file. Data of which nothing can be played
+/// is an error; data of which a part cannot is played without it and told to `report`.
 pub fn open(
     data: Arc<[u8]>,
     sample_rate: u32,
+    looping: bool,
     soundfonts: &mut SoundFonts,
     report: &Report,
 ) -> Result<Box<dyn Source>, DecodeError> {
     if midi::is_midi(&data) {
-        let source = midi::MidiSource::new(&data, sample_rate, soundfonts.get()?)?;
+        let source = midi::MidiSource::new(&data, sample_rate, soundfonts.get()?, looping)?;
         Ok(Box::new(source))
     } else {
         Ok(Box::new(Sampled::new(data, sample_rate, report.clone())?))

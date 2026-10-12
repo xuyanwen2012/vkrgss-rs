@@ -5,7 +5,9 @@ use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use rustysynth::{MidiFile, MidiFileSequencer, SoundFont, Synthesizer, SynthesizerSettings};
+use rustysynth::{
+    MidiFile, MidiFileLoopType, MidiFileSequencer, SoundFont, Synthesizer, SynthesizerSettings,
+};
 
 use crate::decode::{DecodeError, Source};
 
@@ -84,10 +86,13 @@ fn load(path: &Path) -> Result<SoundFont, String> {
     SoundFont::new(&mut BufReader::new(file)).map_err(|error| error.to_string())
 }
 
-/// A MIDI file played by a synthesiser that runs at the requested sample rate.
+/// A MIDI file played by a synthesiser that runs at the requested sample rate. One that
+/// loops never ends: at the end of the track it continues at the track's controller 111,
+/// the loop marker of RPG Maker, or at the beginning of a track without one.
 pub(crate) struct MidiSource {
     file: Arc<MidiFile>,
     sequencer: MidiFileSequencer,
+    looping: bool,
     left: Vec<f32>,
     right: Vec<f32>,
 }
@@ -97,18 +102,20 @@ impl MidiSource {
         mut data: &[u8],
         sample_rate: u32,
         soundfont: Arc<SoundFont>,
+        looping: bool,
     ) -> Result<MidiSource, DecodeError> {
-        let file = MidiFile::new(&mut data)
+        let file = MidiFile::new_with_loop_type(&mut data, MidiFileLoopType::RpgMaker)
             .map_err(|error| DecodeError::Unsupported(format!("MIDI: {error}")))?;
         let file = Arc::new(file);
         let settings = SynthesizerSettings::new(sample_rate as i32);
         let synthesizer = Synthesizer::new(&soundfont, &settings)
             .map_err(|error| DecodeError::Unsupported(format!("MIDI: {error}")))?;
         let mut sequencer = MidiFileSequencer::new(synthesizer);
-        sequencer.play(&file, false);
+        sequencer.play(&file, looping);
         Ok(MidiSource {
             file,
             sequencer,
+            looping,
             left: vec![0.0; BLOCK],
             right: vec![0.0; BLOCK],
         })
@@ -135,6 +142,6 @@ impl Source for MidiSource {
     }
 
     fn rewind(&mut self) {
-        self.sequencer.play(&self.file, false);
+        self.sequencer.play(&self.file, self.looping);
     }
 }

@@ -5,8 +5,8 @@ mod common;
 use std::path::Path;
 
 use common::{
-    AMPLITUDE, MP3, OGG, Reports, damaged_mp3, frequency, level, one_note_midi, peak, side,
-    sounding_seconds, tone_wav, wav_of,
+    AMPLITUDE, FIRST_NOTE, MP3, OGG, Reports, SECOND_NOTE, damaged_mp3, frequency, level,
+    one_note_midi, peak, side, sounding_seconds, tone_wav, two_note_midi, wav_of,
 };
 use vkxp_audio::{Mixer, MixerOptions, SYSTEM_SOUNDFONTS, SoundFonts};
 use vkxp_proto::{AudioChannel, AudioCommand};
@@ -83,28 +83,89 @@ fn the_ogg_and_mp3_fixtures_are_heard_for_their_second() {
     }
 }
 
-/// Runs only where one of the system SoundFont locations exists.
-#[test]
-fn a_midi_note_is_heard_while_it_sounds() {
+/// A mixer with the system SoundFont, or `None`, with a note that the test is skipped,
+/// where none of the system SoundFont locations exists.
+fn mixer_with_soundfont(reports: &Reports) -> Option<Mixer> {
     if !SYSTEM_SOUNDFONTS
         .iter()
         .any(|path| Path::new(path).is_file())
     {
         eprintln!("skipped: no system SoundFont");
-        return;
+        return None;
     }
-    let reports = Reports::default();
     let options = MixerOptions {
         soundfonts: SoundFonts::configured(None),
         errors: Box::new(reports.clone()),
     };
-    let mut mixer = Mixer::new(RATE, options);
+    Some(Mixer::new(RATE, options))
+}
+
+/// Runs only where one of the system SoundFont locations exists.
+#[test]
+fn a_midi_note_is_heard_while_it_sounds() {
+    let reports = Reports::default();
+    let Some(mut mixer) = mixer_with_soundfont(&reports) else {
+        return;
+    };
     mixer.apply(play(AudioChannel::Bgm, &one_note_midi(1)));
     let out = render(&mut mixer, 1.0);
     for (index, tenth) in out.chunks(RATE as usize / 5).enumerate() {
         assert!(peak(tenth) > 0.01, "silent in tenth {index}");
     }
     assert_eq!(reports.text(), "");
+}
+
+/// Which of the two notes of [`two_note_midi`] sounds in each second of four, the file
+/// played as music: `false` is the first note.
+fn notes_heard(marker: bool) -> Option<[bool; 4]> {
+    let reports = Reports::default();
+    let mut mixer = mixer_with_soundfont(&reports)?;
+    mixer.apply(play(AudioChannel::Bgm, &two_note_midi(marker)));
+    let out = render(&mut mixer, 4.0);
+    assert_eq!(reports.text(), "");
+    let mut heard = [false; 4];
+    for (second, heard) in heard.iter_mut().enumerate() {
+        // A tenth of a second late in the second, when the note before has died away.
+        let from = (second * 4 + 3) * RATE as usize / 4;
+        let middle = side(&out[from * 2..(from + RATE as usize / 10) * 2], 0);
+        let first = level(&middle, RATE, FIRST_NOTE.1);
+        let second_note = level(&middle, RATE, SECOND_NOTE.1);
+        assert!(
+            first.max(second_note) > 0.002 && first.max(second_note) > 5.0 * first.min(second_note),
+            "second {second}: {first} and {second_note}"
+        );
+        *heard = second_note > first;
+    }
+    Some(heard)
+}
+
+/// Scenario "Marker". Runs only where one of the system SoundFont locations exists.
+#[test]
+fn looping_midi_continues_at_its_loop_marker() {
+    if let Some(heard) = notes_heard(true) {
+        assert_eq!(heard, [false, true, true, true]);
+    }
+}
+
+/// Scenario "No marker". Runs only where one of the system SoundFont locations exists.
+#[test]
+fn looping_midi_without_a_marker_starts_again() {
+    if let Some(heard) = notes_heard(false) {
+        assert_eq!(heard, [false, true, false, true]);
+    }
+}
+
+/// A MIDI file that does not loop ends at its end, marker or not.
+#[test]
+fn midi_as_an_effect_ends_at_its_end() {
+    let reports = Reports::default();
+    let Some(mut mixer) = mixer_with_soundfont(&reports) else {
+        return;
+    };
+    mixer.apply(play(AudioChannel::Me, &two_note_midi(true)));
+    let out = render(&mut mixer, 4.0);
+    assert!(peak(&out[..RATE as usize * 4]) > 0.01);
+    assert_eq!(peak(&out[RATE as usize * 5..]), 0.0);
 }
 
 #[test]
