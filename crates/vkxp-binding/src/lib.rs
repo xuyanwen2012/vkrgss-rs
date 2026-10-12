@@ -251,7 +251,7 @@
 //! | `user32` | `GetSystemMetrics` | the logical width for 0 and height for 1, otherwise 0 |
 //! | `user32` | `FindWindowA`, `GetActiveWindow`, `GetForegroundWindow` | the fixed handle `0x00010001` of the game window |
 //! | `user32` | `GetWindowRect`, `GetClientRect` | for that handle, the rectangle 0, 0, width, height of the logical size as four 32-bit integers; 1, otherwise 0 |
-//! | `user32` | `ShowCursor` | keeps the display count and returns it; the pointer does not change yet |
+//! | `user32` | `ShowCursor` | keeps the display count and returns it; tells the host to hide the pointer when the count falls below 0 and to show it when it is 0 again |
 //!
 //! **Profile files.** A file name is taken relative to the game directory and found without
 //! regard to letter case. An absolute path, a drive or `..` beyond the top names a file

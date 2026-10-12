@@ -13,6 +13,7 @@ fn update(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
     Guest::with(|guest| {
         guest.pump(Await::Nothing);
         guest.input.update();
+        guest.win32api.input_updated(&guest.input);
     });
     Ok(ffi::Qnil)
 }

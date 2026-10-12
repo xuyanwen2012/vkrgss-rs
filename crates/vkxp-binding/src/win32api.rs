@@ -14,6 +14,8 @@ use std::ffi::c_long;
 use std::path::PathBuf;
 
 use encoding_rs::Encoding;
+use vkxp_core::InputState;
+use vkxp_proto::GuestToHost;
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{Arity, HostResult, Raised, Ruby};
 use vkxp_vfs::FileKind;
@@ -62,8 +64,8 @@ const TABLE: &[(&str, &str, Shim)] = &[
     ("user32", "GetKeyState", key_state),
     ("user32", "GetKeyboardState", keyboard_state),
     ("user32", "SetKeyboardState", set_keyboard_state),
-    ("user32", "keybd_event", inject_event),
-    ("user32", "mouse_event", inject_event),
+    ("user32", "keybd_event", keybd_event),
+    ("user32", "mouse_event", mouse_event),
     ("user32", "GetCursorPos", cursor_pos),
     ("user32", "ScreenToClient", screen_to_client),
 ];
@@ -81,6 +83,26 @@ pub(crate) struct State {
     remainder: u64,
     /// The display count of `ShowCursor`.
     cursor: i64,
+    /// The toggle bit of each virtual key, which `GetKeyState` and `GetKeyboardState` report.
+    toggles: KeySet,
+    /// The keys `SetKeyboardState` said are down, until the next `Input.update`.
+    set_down: Option<KeySet>,
+}
+
+/// One bit for each of the 256 virtual-key codes.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+struct KeySet([u64; 4]);
+
+impl KeySet {
+    fn has(&self, key: u8) -> bool {
+        self.0[usize::from(key >> 6)] & (1 << (key & 63)) != 0
+    }
+
+    fn set(&mut self, key: u8, on: bool) {
+        let bit = 1 << (key & 63);
+        let word = &mut self.0[usize::from(key >> 6)];
+        *word = if on { *word | bit } else { *word & !bit };
+    }
 }
 
 impl State {
@@ -91,6 +113,23 @@ impl State {
         self.remainder += 1000;
         self.milliseconds += self.remainder / frame_rate.max(1);
         self.remainder %= frame_rate.max(1);
+    }
+
+    /// `Input.update` has latched a snapshot into `input`: the toggle of every key that is
+    /// down in it and was not in the one before flips, and what `SetKeyboardState` said is
+    /// down is over.
+    pub(crate) fn input_updated(&mut self, input: &InputState) {
+        for key in 0..=255u8 {
+            if input.is_key_new(key) {
+                self.toggles.set(key, !self.toggles.has(key));
+            }
+        }
+        self.set_down = None;
+    }
+
+    /// Whether the pointer is to be seen: while the display count is 0 or more.
+    pub(crate) fn pointer_visible(&self) -> bool {
+        self.cursor >= 0
     }
 }
 
@@ -576,10 +615,17 @@ fn window_rect(guest: &mut Guest, args: &mut [Arg]) -> i64 {
     1
 }
 
-/// `ShowCursor(show)`: the new display count.
-// PLACEHOLDER: the count is kept, but the host is not told to hide the pointer.
+/// `ShowCursor(show)`: the new display count. The pointer is to be seen while the count is
+/// 0 or more, and the host is told when a call changes that.
+// PLACEHOLDER: the count starts at 0 and follows the documentation of Windows; it was not
+// measured on the original.
 fn show_cursor(guest: &mut Guest, args: &mut [Arg]) -> i64 {
+    let before = guest.win32api.pointer_visible();
     guest.win32api.cursor += if int(args, 0) != 0 { 1 } else { -1 };
+    let visible = guest.win32api.pointer_visible();
+    if visible != before {
+        guest.send(GuestToHost::PointerVisible { visible });
+    }
     guest.win32api.cursor
 }
 
@@ -602,43 +648,92 @@ fn async_key_state(guest: &mut Guest, args: &mut [Arg]) -> i64 {
     }
 }
 
-/// `GetKeyState(key)`: the sign bit and bit 7 while the key is held, in a 16-bit integer
-/// with its sign, as on Windows.
-// PLACEHOLDER: bit 0, the toggle state of a lock key, is always 0.
-fn key_state(guest: &mut Guest, args: &mut [Arg]) -> i64 {
-    match virtual_key(args, 0) {
-        Some(key) if guest.input.is_key_down(key) => -0x80,
-        _ => 0,
+/// Whether `GetKeyState` and `GetKeyboardState` report `key` as down: as the snapshot
+/// `Input.update` latched has it, or as `SetKeyboardState` said since.
+fn reported_down(guest: &Guest, key: u8) -> bool {
+    match &guest.win32api.set_down {
+        Some(down) => down.has(key),
+        None => guest.input.is_key_down(key),
     }
 }
 
-/// `GetKeyboardState(buffer)`: 0x80 for each held key and 0 for the others, in one byte per
-/// virtual-key code.
+/// `GetKeyState(key)`: the sign bit and bit 7 while the key is held and the toggle of the key
+/// in bit 0, in a 16-bit integer with its sign, as on Windows.
+// PLACEHOLDER: the toggle flips when `Input.update` latches a press, by the documentation of
+// Windows, and starts at 0: the state of the lock keys of the machine is not read.
+fn key_state(guest: &mut Guest, args: &mut [Arg]) -> i64 {
+    let Some(key) = virtual_key(args, 0) else {
+        return 0;
+    };
+    let down = if reported_down(guest, key) { -0x80 } else { 0 };
+    down | i64::from(guest.win32api.toggles.has(key))
+}
+
+/// `GetKeyboardState(buffer)`: in one byte per virtual-key code, 0x80 for a held key and the
+/// toggle of the key in bit 0.
 fn keyboard_state(guest: &mut Guest, args: &mut [Arg]) -> i64 {
     let Some(buffer) = buffer_mut(args, 0) else {
         return 0;
     };
     for (key, state) in (0..=255u8).zip(buffer.iter_mut()) {
-        *state = if guest.input.is_key_down(key) {
-            0x80
-        } else {
-            0
-        };
+        let down = if reported_down(guest, key) { 0x80 } else { 0 };
+        *state = down | u8::from(guest.win32api.toggles.has(key));
     }
     1
 }
 
-/// `keybd_event(key, scan, flags, extra)` and `mouse_event(flags, dx, dy, data, extra)`:
-/// nothing is done.
-// PLACEHOLDER: no key or button is injected into the state `GetAsyncKeyState` reports; a
-// game that injects a key to read it back would need that.
-fn inject_event(_guest: &mut Guest, _args: &mut [Arg]) -> i64 {
+/// `keybd_event(key, scan, flags, extra)`: the host is told that the key is pressed for the
+/// player, or released when bit 1 of the flags (`KEYEVENTF_KEYUP`) is set. A code above 255
+/// sends nothing.
+// PLACEHOLDER: the guest sees the key in the snapshot of the next tick, one `Input.update`
+// later than on Windows when a script injects and updates in the same frame.
+fn keybd_event(guest: &mut Guest, args: &mut [Arg]) -> i64 {
+    if let Some(key) = virtual_key(args, 0) {
+        let down = int(args, 2) & 0x02 == 0;
+        guest.send(GuestToHost::InjectKey { key, down });
+    }
     0
 }
 
-/// `SetKeyboardState(buffer)`: nothing is done, and that succeeds.
-// PLACEHOLDER: the key state is left as it is, as for `keybd_event`.
-fn set_keyboard_state(_guest: &mut Guest, _args: &mut [Arg]) -> i64 {
+/// The button flags of `mouse_event`: the flag, the virtual key of its button and whether
+/// the button goes down.
+const MOUSE_BUTTON_FLAGS: [(i64, u8, bool); 6] = [
+    (0x02, 0x01, true),
+    (0x04, 0x01, false),
+    (0x08, 0x02, true),
+    (0x10, 0x02, false),
+    (0x20, 0x04, true),
+    (0x40, 0x04, false),
+];
+
+/// `mouse_event(flags, dx, dy, data, extra)`: the host is told of a press or release for
+/// each button flag, as of a key.
+// PLACEHOLDER: movement and the wheel are ignored.
+fn mouse_event(guest: &mut Guest, args: &mut [Arg]) -> i64 {
+    let flags = int(args, 0);
+    for (flag, key, down) in MOUSE_BUTTON_FLAGS {
+        if flags & flag != 0 {
+            guest.send(GuestToHost::InjectKey { key, down });
+        }
+    }
+    0
+}
+
+/// `SetKeyboardState(buffer)`: the 256 bytes replace what `GetKeyState` and
+/// `GetKeyboardState` report, bit 7 of a byte as the key being down, until the next
+/// `Input.update`, and bit 0 as its toggle. `GetAsyncKeyState` and `Input` are not affected.
+/// A shorter buffer changes nothing and fails.
+// PLACEHOLDER: by the documentation of Windows, not measured on the original.
+fn set_keyboard_state(guest: &mut Guest, args: &mut [Arg]) -> i64 {
+    let Some(states) = buffer(args, 0).and_then(|buffer| buffer.get(..256)) else {
+        return 0;
+    };
+    let mut down = KeySet::default();
+    for (key, state) in (0..=255u8).zip(states) {
+        down.set(key, state & 0x80 != 0);
+        guest.win32api.toggles.set(key, state & 1 != 0);
+    }
+    guest.win32api.set_down = Some(down);
     1
 }
 

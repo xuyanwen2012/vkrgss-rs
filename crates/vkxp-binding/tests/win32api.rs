@@ -6,7 +6,7 @@ use std::sync::Once;
 
 use vkxp_binding::testing;
 use vkxp_binding::testing::host::{self, Script, with_error_stream};
-use vkxp_proto::{HostToGuest, InputSnapshot};
+use vkxp_proto::{GuestToHost, HostToGuest, InputSnapshot};
 
 /// The bytes of `测试` in GBK.
 const TITLE_GBK: [u8; 4] = [0xB2, 0xE2, 0xCA, 0xD4];
@@ -36,6 +36,36 @@ fn eval_with(source: &str, script: Script) -> String {
     }
 }
 
+/// Ruby source that clears the toggles the tests before left in the guest, which the tests
+/// of one binary share.
+const CLEAR_TOGGLES: &str =
+    "Win32API.new('user32', 'SetKeyboardState', 'p', 'i').call(\"\\0\" * 256)\n";
+
+/// The value of a snippet played against a scripted host, and the messages the guest sent
+/// that inject a key or say whether the pointer is to be seen.
+fn eval_sending(source: &str, script: Script) -> (String, Vec<GuestToHost>) {
+    let (outcome, record) = host::play(source, script);
+    let value = match outcome {
+        Ok(inspect) => inspect,
+        Err(error) => format!("{}: {}", error.class_name, error.message),
+    };
+    let sent = record
+        .received
+        .into_iter()
+        .filter(|message| {
+            matches!(
+                message,
+                GuestToHost::InjectKey { .. } | GuestToHost::PointerVisible { .. }
+            )
+        })
+        .collect();
+    (value, sent)
+}
+
+fn inject(key: u8, down: bool) -> GuestToHost {
+    GuestToHost::InjectKey { key, down }
+}
+
 /// A host that has sent `snapshot` before the snippet starts.
 fn holding(snapshot: InputSnapshot) -> Script {
     Script::new().at_start(HostToGuest::Input(snapshot))
@@ -47,13 +77,14 @@ fn a_held_key_has_bit_15_and_a_key_that_is_not_held_is_zero() {
     let held = holding(InputSnapshot::EMPTY.with_key(0x0D));
     assert_eq!(
         eval_with(
-            "async = Win32API.new('user32', 'GetAsyncKeyState', 'i', 'i')
+            &(CLEAR_TOGGLES.to_owned()
+                + "async = Win32API.new('user32', 'GetAsyncKeyState', 'i', 'i')
              state = Win32API.new('user32.dll', 'GetKeyState', 'i', 'i')
              before = [async.call(0x0D), state.call(0x0D)]
              Input.update
              [before, async.call(0x0D) & 0x8000 == 0x8000, async.call(0x41) & 0x8000,
               state.call(0x0D) & 0x8000 == 0x8000, state.call(0x41), async.call(0x10D),
-              async.call(-1), state.call(256)]",
+              async.call(-1), state.call(256)]"),
             held
         ),
         "[[0, 0], true, 0, true, 0, 0, 0, 0]"
@@ -68,7 +99,8 @@ fn bit_0_of_the_asynchronous_state_is_set_at_the_update_a_key_goes_down() {
     );
     assert_eq!(
         eval_with(
-            "async = Win32API.new('user32', 'GetAsyncKeyState', 'i', 'i')
+            &(CLEAR_TOGGLES.to_owned()
+                + "async = Win32API.new('user32', 'GetAsyncKeyState', 'i', 'i')
              state = Win32API.new('user32', 'GetKeyState', 'i', 'i')
              bits = proc { |key| [async.call(key) & 0x8000 != 0, async.call(key) & 1] }
              Input.update
@@ -77,58 +109,144 @@ fn bit_0_of_the_asynchronous_state_is_set_at_the_update_a_key_goes_down() {
              second = bits.call(0x41)
              Graphics.update
              Input.update
-             [first, second, bits.call(0x41), bits.call(0x01), bits.call(0x02)]",
+             [first, second, bits.call(0x41), bits.call(0x01), bits.call(0x02)]"),
             script
         ),
-        "[[[true, 1], [true, 1], 0], [true, 0], [true, 0], [true, 1], [false, 0]]"
+        "[[[true, 1], [true, 1], 1], [true, 0], [true, 0], [true, 1], [false, 0]]"
+    );
+}
+
+/// Scenario "Toggle".
+#[test]
+fn the_toggle_of_a_key_flips_at_each_latched_press() {
+    let caps = InputSnapshot::EMPTY.with_key(0x14);
+    let script = holding(caps)
+        .after_frame(1, HostToGuest::Input(InputSnapshot::EMPTY))
+        .after_frame(2, HostToGuest::Input(caps));
+    assert_eq!(
+        eval_with(
+            &(CLEAR_TOGGLES.to_owned()
+                + "state = Win32API.new('user32', 'GetKeyState', 'i', 'i')
+             get = Win32API.new('user32', 'GetKeyboardState', 'p', 'i')
+             before = state.call(0x14)
+             Input.update
+             first = [state.call(0x14) & 1, state.call(0x14) & 0x8000 != 0]
+             Input.update
+             same = state.call(0x14) & 1
+             Graphics.update
+             Input.update
+             second = [state.call(0x14) & 1, state.call(0x14)]
+             Graphics.update
+             Input.update
+             buffer = \"\\0\" * 256
+             get.call(buffer)
+             [before, first, same, second, state.call(0x14) & 1, buffer[0x14], state.call(0x41)]"),
+            script
+        ),
+        "[0, [1, true], 1, [1, 1], 0, 128, 0]"
     );
 }
 
 /// Scenario "keybd_event".
 #[test]
-fn key_injection_is_accepted_and_leaves_the_key_state() {
-    assert_eq!(
-        eval_with(
-            &with_error_stream(
-                "async = Win32API.new('user32', 'GetAsyncKeyState', 'i', 'i')
-                 get = Win32API.new('user32', 'GetKeyboardState', 'p', 'i')
-                 state = proc do
-                   buffer = \"\\0\" * 256
-                   get.call(buffer)
-                   [async.call(0x0D), async.call(0x41), buffer]
-                 end
-                 Input.update
-                 before = state.call
-                 results = [
-                   Win32API.new(\"user32.dll\", \"keybd_event\", \"iiii\", \"v\").call(0x0D, 0, 0, 0),
-                   Win32API.new('user32', 'keybd_event', 'iiii', 'v').call(0x41, 0, 2, 0),
-                   Win32API.new('user32', 'mouse_event', 'iiiii', 'v').call(2, 0, 0, 0, 0),
-                   Win32API.new('user32', 'SetKeyboardState', 'p', 'i').call(\"\\x80\" * 256)]
-                 unchanged = state.call == before
-                 Input.update
-                 [results, unchanged, state.call == before, before[0, 2]]"
-            ),
-            holding(InputSnapshot::EMPTY.with_key(0x41))
+fn keybd_event_sends_a_press_and_a_release() {
+    let (value, sent) = eval_sending(
+        &with_error_stream(
+            "event = Win32API.new(\"user32.dll\", \"keybd_event\", \"iiii\", \"v\")
+             [event.call(0x0D, 0, 0, 0), event.call(0x0D, 0, 2, 0), event.call(0x10D, 0, 0, 0),
+              event.call(0xA4, 0x38, 1, 0), event.call(0xA4, 0x38, 3, 0)]",
         ),
-        r#"[[[0, 0, 0, 1], true, false, [0, -32767]], ""]"#
+        Script::new(),
+    );
+    assert_eq!(value, r#"[[0, 0, 0, 0, 0], ""]"#);
+    assert_eq!(
+        sent,
+        [
+            inject(0x0D, true),
+            inject(0x0D, false),
+            inject(0xA4, true),
+            inject(0xA4, false)
+        ]
     );
 }
 
+/// Scenario "mouse_event".
 #[test]
-fn the_keyboard_state_has_0x80_for_each_held_key() {
+fn mouse_event_sends_a_press_or_release_for_each_button_flag() {
+    let (value, sent) = eval_sending(
+        &with_error_stream(
+            "event = Win32API.new('user32', 'mouse_event', 'iiiii', 'v')
+             [event.call(0x02 | 0x10, 0, 0, 0, 0), event.call(0x01 | 0x0800, 5, 5, 120, 0),
+              event.call(0x04 | 0x08 | 0x20 | 0x40, 0, 0, 0, 0)]",
+        ),
+        Script::new(),
+    );
+    assert_eq!(value, r#"[[0, 0, 0], ""]"#);
+    assert_eq!(
+        sent,
+        [
+            inject(0x01, true),
+            inject(0x02, false),
+            inject(0x01, false),
+            inject(0x02, true),
+            inject(0x04, true),
+            inject(0x04, false)
+        ]
+    );
+}
+
+/// Scenario "SetKeyboardState".
+#[test]
+fn set_keyboard_state_replaces_what_is_reported_until_the_next_update() {
     assert_eq!(
         eval_with(
-            "state = Win32API.new('user32', 'GetKeyboardState', 'p', 'i')
+            &with_error_stream(
+                "set = Win32API.new('user32', 'SetKeyboardState', 'p', 'i')
+                 get = Win32API.new('user32', 'GetKeyboardState', 'p', 'i')
+                 state = Win32API.new('user32', 'GetKeyState', 'i', 'i')
+                 async = Win32API.new('user32', 'GetAsyncKeyState', 'i', 'i')
+                 Input.update
+                 buffer = \"\\0\" * 256
+                 buffer[0x41] = 0x80
+                 buffer[0x14] = 0x01
+                 result = set.call(buffer)
+                 read = \"\\xff\" * 256
+                 get.call(read)
+                 set_state = [state.call(0x41) & 0x8000 != 0, state.call(0x10), state.call(0x14),
+                              read == buffer, async.call(0x10) & 0x8000 != 0, async.call(0x41),
+                              Input.press?(Input::SHIFT)]
+                 Input.update
+                 [result, set_state, state.call(0x41), state.call(0x10) & 0x8000 != 0,
+                  state.call(0x10) & 1, state.call(0x14), set.call(\"\\x80\" * 255),
+                  state.call(0x41), set.call(\"\\0\" * 256)]"
+            ),
+            holding(
+                InputSnapshot::EMPTY
+                    .with_key(0x10)
+                    .with(vkxp_proto::Button::Shift)
+            )
+        ),
+        r#"[[1, [true, 0, 1, true, true, 0, true], 0, true, 0, 1, 0, 0, 1], ""]"#
+    );
+}
+
+/// Scenario "Keyboard state".
+#[test]
+fn the_keyboard_state_has_0x81_for_a_key_held_for_the_first_time() {
+    assert_eq!(
+        eval_with(
+            &(CLEAR_TOGGLES.to_owned()
+                + "state = Win32API.new('user32', 'GetKeyboardState', 'p', 'i')
              buffer = \"\\xff\" * 256
              Input.update
              result = state.call(buffer)
              held = (0...256).select { |key| buffer[key] != 0 }
              short = \"\\xff\" * 0x42
              state.call(short)
-             [result, buffer.size, buffer[0x41], held, short.size, short[0x41], state.call(0)]",
+             [result, buffer.size, buffer[0x41], held, short.size, short[0x41], state.call(0)]"),
             holding(InputSnapshot::EMPTY.with_key(0x41))
         ),
-        "[1, 256, 128, [65], 66, 128, 0]"
+        "[1, 256, 129, [65], 66, 129, 0]"
     );
 }
 
@@ -392,6 +510,25 @@ fn the_game_window_has_a_handle_and_a_rectangle() {
         ),
         "[true, true, true, true, [1, 1, 0], [0, 0, 640, 480], [0, 0, 640, 480], \
          [255, 255, 255, 255]]"
+    );
+}
+
+/// Scenario "Hide and show".
+#[test]
+fn the_host_is_told_when_the_cursor_count_crosses_zero() {
+    let (value, sent) = eval_sending(
+        "show = Win32API.new('user32', 'ShowCursor', 'i', 'i')
+         start = show.call(1) - 1
+         [start, show.call(0), show.call(0), show.call(0), show.call(1), show.call(1)]",
+        Script::new(),
+    );
+    assert_eq!(value, "[0, 0, -1, -2, -1, 0]");
+    assert_eq!(
+        sent,
+        [
+            GuestToHost::PointerVisible { visible: false },
+            GuestToHost::PointerVisible { visible: true }
+        ]
     );
 }
 

@@ -6,7 +6,7 @@
 
 ## 2. Guest
 
-- [ ] 2.1 `keybd_event`, `mouse_event`, `ShowCursor` send their messages; the toggle bits and `SetKeyboardState` as in `design.md`. Verify: the scenarios of `specs/rgss-runtime/spec.md`; `cargo test -p vkxp-binding --locked` passes.
+- [x] 2.1 `keybd_event`, `mouse_event`, `ShowCursor` send their messages; the toggle bits and `SetKeyboardState` as in `design.md`. Verify: the scenarios of `specs/rgss-runtime/spec.md`; `cargo test -p vkxp-binding --locked` passes.
 
 ## 3. Host
 
