@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use crate::archive::Archive;
 use crate::dir::Listing;
 use crate::error::VfsError;
+use crate::runtime::Runtime;
 
 /// What a script asks for. The kind selects the extensions that are tried and whether the
 /// run-time packages are searched.
@@ -104,19 +105,24 @@ impl GameFiles {
     }
 
     /// Creates a resolver as [`GameFiles::new`] does, over the encrypted archive of the game
-    /// first if `game_dir` holds a file `Game.rgssad` under any letter case. An archive that
-    /// is damaged or cannot be read is an error that names it.
+    /// first if `game_dir` holds the archive of `runtime` under any letter case:
+    /// `Game.rgssad` for RGSS1, `Game.rgss2a` for RGSS2. The archive of another runtime is
+    /// not looked at. An archive that is damaged or cannot be read is an error that names
+    /// it.
     pub fn open(
         game_dir: impl Into<PathBuf>,
         rtp_dirs: impl IntoIterator<Item = PathBuf>,
+        runtime: Runtime,
     ) -> Result<Self, VfsError> {
         let mut files = Self::new(game_dir, rtp_dirs);
-        let archive = files
-            .listing(files.game_dir())
-            .matches("Game.rgssad")
-            .into_iter()
-            .map(|real| files.game_dir().join(real))
-            .find(|path| path.is_file());
+        let archive = runtime.archive_name().and_then(|name| {
+            files
+                .listing(files.game_dir())
+                .matches(name)
+                .into_iter()
+                .map(|real| files.game_dir().join(real))
+                .find(|path| path.is_file())
+        });
         if let Some(path) = archive {
             files.archive = Some(Archive::open(path)?);
         }
@@ -541,22 +547,28 @@ mod tests {
         );
     }
 
-    /// Writes an archive holding `entries` as `name` into `game` and opens the game's files.
-    fn with_archive(game: &Path, name: &str, entries: &[(&str, &[u8])]) -> GameFiles {
+    /// Writes an archive holding `entries` as `name` into `game` and opens the game's files
+    /// as those of a game of `runtime`.
+    fn with_archive(
+        game: &Path,
+        name: &str,
+        runtime: Runtime,
+        entries: &[(&str, &[u8])],
+    ) -> GameFiles {
         std::fs::write(game.join(name), crate::archive::tests::build(entries)).unwrap();
-        GameFiles::open(game, []).unwrap()
+        GameFiles::open(game, [], runtime).unwrap()
     }
 
     #[test]
     fn data_from_the_archive() {
         let game = tempfile::tempdir().unwrap();
         let entries: [(&str, &[u8]); 1] = [("Data\\Scripts.rxdata", b"scripts")];
-        let files = with_archive(game.path(), "Game.rgssad", &entries);
+        let files = with_archive(game.path(), "Game.rgssad", Runtime::Rgss1, &entries);
         let bytes = files.read(FileKind::Data, "Data/Scripts.rxdata");
         assert_eq!(bytes.unwrap(), b"scripts");
         // The archive's own name is matched without regard to case.
         let other = tempfile::tempdir().unwrap();
-        let files = with_archive(other.path(), "game.RGSSAD", &entries);
+        let files = with_archive(other.path(), "game.RGSSAD", Runtime::Rgss1, &entries);
         let bytes = files.read(FileKind::Data, "data\\scripts.RXDATA");
         assert_eq!(bytes.unwrap(), b"scripts");
     }
@@ -567,6 +579,7 @@ mod tests {
         let files = with_archive(
             game.path(),
             "Game.rgssad",
+            Runtime::Rgss1,
             &[("Graphics\\Titles\\Title.png", b"picture")],
         );
         let bytes = files.read(FileKind::Image, "graphics/titles/title");
@@ -594,7 +607,7 @@ mod tests {
             ("Graphics\\Fogs\\Fog.bmp", b"archive fog"),
         ]);
         std::fs::write(game.path().join("Game.rgssad"), archive).unwrap();
-        let files = GameFiles::open(game.path(), [rtp.path().to_owned()]).unwrap();
+        let files = GameFiles::open(game.path(), [rtp.path().to_owned()], Runtime::Rgss1).unwrap();
         let read = |kind, path| files.read(kind, path).unwrap();
         assert_eq!(read(FileKind::Data, "Data/Map001.rxdata"), b"archive");
         assert_eq!(read(FileKind::Data, "Data/Map002.rxdata"), b"loose only");
@@ -602,7 +615,7 @@ mod tests {
         assert_eq!(read(FileKind::Image, "Graphics/Fogs/Mist"), b"package mist");
         // Without the archive, loose files still come before the package.
         std::fs::remove_file(game.path().join("Game.rgssad")).unwrap();
-        let files = GameFiles::open(game.path(), [rtp.path().to_owned()]).unwrap();
+        let files = GameFiles::open(game.path(), [rtp.path().to_owned()], Runtime::Rgss1).unwrap();
         assert_eq!(
             files.read(FileKind::Image, "Graphics/Fogs/Fog").unwrap(),
             b"loose fog"
@@ -615,7 +628,7 @@ mod tests {
         let rtp = tempfile::tempdir().unwrap();
         let own = put(game.path(), "Data/Scripts.rxdata", b"own");
         let packaged = put(rtp.path(), "Graphics/Titles/Title.png", b"package");
-        let files = GameFiles::open(game.path(), [rtp.path().to_owned()]).unwrap();
+        let files = GameFiles::open(game.path(), [rtp.path().to_owned()], Runtime::Rgss1).unwrap();
         let found = files.resolve(FileKind::Data, "data\\scripts.rxdata");
         assert_eq!(found.unwrap(), own);
         let found = files.resolve(FileKind::Image, "Graphics/Titles/Title");
@@ -629,7 +642,39 @@ mod tests {
             .unwrap_err();
         assert!(matches!(error, VfsError::NotFound { .. }));
         // A game directory that does not exist has no archive either.
-        assert!(GameFiles::open(game.path().join("absent"), []).is_ok());
+        assert!(GameFiles::open(game.path().join("absent"), [], Runtime::Rgss1).is_ok());
+    }
+
+    #[test]
+    fn archive_of_vx() {
+        let game = tempfile::tempdir().unwrap();
+        let entries: [(&str, &[u8]); 1] = [("Data\\Scripts.rvdata", b"scripts")];
+        let files = with_archive(game.path(), "Game.rgss2a", Runtime::Rgss2, &entries);
+        let bytes = files.read(FileKind::Data, "Data/Scripts.rvdata");
+        assert_eq!(bytes.unwrap(), b"scripts");
+    }
+
+    #[test]
+    fn archive_of_another_runtime_is_ignored() {
+        let game = tempfile::tempdir().unwrap();
+        let own = put(game.path(), "Data/Scripts.rxdata", b"own");
+        // Not an archive at all: it is not even opened.
+        std::fs::write(game.path().join("Game.rgss2a"), b"other").unwrap();
+        let files = GameFiles::open(game.path(), [], Runtime::Rgss1).unwrap();
+        let found = files.resolve(FileKind::Data, "Data/Scripts.rxdata");
+        assert_eq!(found.unwrap(), own);
+        assert_eq!(
+            files.read(FileKind::Data, "Data/Scripts.rxdata").unwrap(),
+            b"own"
+        );
+        std::fs::rename(
+            game.path().join("Game.rgss2a"),
+            game.path().join("Game.rgssad"),
+        )
+        .unwrap();
+        for runtime in [Runtime::Rgss2, Runtime::Rgss3] {
+            assert!(GameFiles::open(game.path(), [], runtime).is_ok());
+        }
     }
 
     #[test]
@@ -639,7 +684,7 @@ mod tests {
         let whole = crate::archive::tests::build(&[("Data\\Scripts.rxdata", b"scripts")]);
         for bytes in [b"not an archive at all", &whole[..whole.len() - 3]] {
             std::fs::write(&path, bytes).unwrap();
-            let error = GameFiles::open(game.path(), []).unwrap_err();
+            let error = GameFiles::open(game.path(), [], Runtime::Rgss1).unwrap_err();
             assert!(
                 matches!(&error, VfsError::DamagedArchive { path: named, .. } if *named == path)
             );

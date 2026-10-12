@@ -2,7 +2,7 @@
 
 ## 1. Game files
 
-- [ ] 1.1 The runtime value and its detection; the key `RTP`; the names of the run-time packages by runtime; the archive name by runtime. Verify: the scenarios of `specs/game-files/spec.md`; `cargo test -p vkxp-vfs --locked` passes.
+- [x] 1.1 The runtime value and its detection; the key `RTP`; the names of the run-time packages by runtime; the archive name by runtime. Verify: the scenarios of `specs/game-files/spec.md`; `cargo test -p vkxp-vfs --locked` passes.
 
 ## 2. Guest
 

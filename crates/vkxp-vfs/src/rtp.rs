@@ -60,6 +60,21 @@ mod tests {
     }
 
     #[test]
+    fn package_of_vx() {
+        use crate::{GameIni, Runtime};
+
+        let dir = tempfile::tempdir().unwrap();
+        let table = BTreeMap::from([("RPGVX".to_owned(), dir.path().to_owned())]);
+        let text = "[Game]\nRTP=RPGVX\nRTP1=Standard\nScripts=Data\\Scripts.rvdata\n";
+        let ini = GameIni::parse(text.as_bytes(), None).unwrap();
+        let dirs = resolve_rtps(ini.rtp_names(Runtime::Rgss2), &table).unwrap();
+        assert_eq!(dirs, [dir.path()]);
+        // As a game of RGSS1 it names `Standard`, which the table does not hold.
+        let error = resolve_rtps(ini.rtp_names(Runtime::Rgss1), &table).unwrap_err();
+        assert!(matches!(&error, VfsError::UnknownRtp { name } if name == "Standard"));
+    }
+
+    #[test]
     fn unknown_package() {
         let dir = tempfile::tempdir().unwrap();
         let table = BTreeMap::from([("Standard".to_owned(), dir.path().to_owned())]);

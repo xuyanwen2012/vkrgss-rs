@@ -18,6 +18,13 @@ pub enum VfsError {
     /// encodings tried.
     #[error("Game.ini cannot be decoded as {tried}")]
     IniEncoding { tried: String },
+    /// `Library` and `Scripts` of the configuration file name different runtimes, or neither
+    /// names one.
+    #[error(
+        "Game.ini does not tell the runtime of the game: `Library={library}` and \
+         `Scripts={scripts}` name different runtimes or none"
+    )]
+    UndecidedRuntime { library: String, scripts: String },
     /// The configuration file names a run-time package that the caller's table does not contain.
     #[error("run-time package `{name}` is not configured")]
     UnknownRtp { name: String },

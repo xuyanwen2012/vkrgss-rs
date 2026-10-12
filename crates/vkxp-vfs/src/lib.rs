@@ -9,6 +9,8 @@
 //!
 //! - [`GameIni`] reads `Game.ini`: the script archive, the window title and the names of the
 //!   run-time packages. Its text is UTF-8 or one of the legacy encodings in [`Encoding`].
+//! - [`Runtime`] is the RGSS a game was made for; [`Runtime::detect`] tells it from the
+//!   configuration file. The names of the run-time packages and of the archive follow it.
 //! - [`resolve_rtps`] maps those names to directories through a table the caller supplies,
 //!   standing in for the Windows registry.
 //! - [`GameFiles`] resolves script-style paths against the game directory and then the
@@ -16,15 +18,15 @@
 //!   resolves to a file outside the directory it is searched in, whether through `..` or
 //!   through a symbolic link.
 //!
-//! [`GameFiles::open`] also reads the encrypted archive of the game (`Game.rgssad`, RGSSAD
-//! version 1), whose entries come before loose files. Nothing here writes files: saves go
+//! [`GameFiles::open`] also reads the encrypted archive of the game (`Game.rgssad` or
+//! `Game.rgss2a`, RGSSAD version 1), whose entries come before loose files. Nothing here writes files: saves go
 //! through Ruby's own file API.
 //!
 //! # Example
 //!
 //! ```
 //! use std::collections::BTreeMap;
-//! use vkxp_vfs::{FileKind, GameFiles, GameIni, VfsError, resolve_rtps};
+//! use vkxp_vfs::{FileKind, GameFiles, GameIni, Runtime, VfsError, resolve_rtps};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! // A game that takes its title picture from the run-time package.
@@ -41,7 +43,9 @@
 //! assert_eq!(ini.title, "Example");
 //!
 //! let table = BTreeMap::from([("Standard".to_owned(), rtp.path().to_owned())]);
-//! let files = GameFiles::new(game.path(), resolve_rtps(&ini.rtp, &table)?);
+//! let runtime = Runtime::detect(&ini)?;
+//! assert_eq!(runtime, Runtime::Rgss1);
+//! let files = GameFiles::new(game.path(), resolve_rtps(ini.rtp_names(runtime), &table)?);
 //!
 //! // Wrong case, a backslash and no extension, as scripts write it.
 //! let path = files.resolve(FileKind::Image, "graphics\\titles/001-title01")?;
@@ -63,8 +67,10 @@ mod error;
 mod files;
 mod ini;
 mod rtp;
+mod runtime;
 
 pub use error::VfsError;
 pub use files::{FileKind, GameFiles};
 pub use ini::{Encoding, GameIni};
 pub use rtp::resolve_rtps;
+pub use runtime::Runtime;

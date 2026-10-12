@@ -5,6 +5,7 @@ use std::path::Path;
 
 use crate::dir::Listing;
 use crate::error::VfsError;
+use crate::runtime::Runtime;
 
 /// A text encoding the configuration file can be stored in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -82,11 +83,24 @@ pub struct GameIni {
     pub scripts: String,
     /// `Title`: the window title. Empty if absent.
     pub title: String,
-    /// `RTP1`, `RTP2` and `RTP3`: names of the run-time packages. Empty where absent.
-    pub rtp: [String; 3],
+    /// `RTP`: the name of the run-time package of a game of RGSS2. Empty if absent.
+    pub rtp: String,
+    /// `RTP1`, `RTP2` and `RTP3`: names of the run-time packages of a game of RGSS1. Empty
+    /// where absent.
+    pub rtps: [String; 3],
 }
 
 impl GameIni {
+    /// The names of the run-time packages of the game, in order, as a game of `runtime`
+    /// names them: `RTP1` to `RTP3` in RGSS1 and the one value `RTP` otherwise. Empty names
+    /// are among them.
+    pub fn rtp_names(&self, runtime: Runtime) -> &[String] {
+        match runtime {
+            Runtime::Rgss1 => &self.rtps,
+            Runtime::Rgss2 | Runtime::Rgss3 => std::slice::from_ref(&self.rtp),
+        }
+    }
+
     /// Reads `Game.ini` from `game_dir`, whatever the letter case of its name. `encoding`
     /// overrides the detection of the text encoding.
     pub fn read(game_dir: &Path, encoding: Option<Encoding>) -> Result<Self, VfsError> {
@@ -121,9 +135,10 @@ impl GameIni {
             library: String::new(),
             scripts: String::new(),
             title: String::new(),
-            rtp: Default::default(),
+            rtp: String::new(),
+            rtps: Default::default(),
         };
-        let mut seen = [false; 6];
+        let mut seen = [false; 7];
         let mut in_game_section = false;
         for line in text.lines() {
             let line = line.trim();
@@ -141,12 +156,13 @@ impl GameIni {
             if !in_game_section {
                 continue;
             }
-            let slots: [(&str, &mut String); 6] = {
-                let [rtp1, rtp2, rtp3] = &mut ini.rtp;
+            let slots: [(&str, &mut String); 7] = {
+                let [rtp1, rtp2, rtp3] = &mut ini.rtps;
                 [
                     ("Library", &mut ini.library),
                     ("Scripts", &mut ini.scripts),
                     ("Title", &mut ini.title),
+                    ("RTP", &mut ini.rtp),
                     ("RTP1", rtp1),
                     ("RTP2", rtp2),
                     ("RTP3", rtp3),
@@ -178,7 +194,8 @@ mod tests {
             library: "RGSS103J.dll".into(),
             scripts: "Data\\Scripts.rxdata".into(),
             title: "Project1".into(),
-            rtp: ["Standard".into(), String::new(), String::new()],
+            rtp: String::new(),
+            rtps: ["Standard".into(), String::new(), String::new()],
         }
     }
 
@@ -194,6 +211,19 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("Game.ini"), TYPICAL).unwrap();
         assert_eq!(GameIni::read(dir.path(), None).unwrap(), typical());
+    }
+
+    #[test]
+    fn file_of_vx() {
+        let text =
+            "[Game]\r\nRTP=RPGVX\r\nLibrary=RGSS202E.dll\r\nScripts=Data\\Scripts.rvdata\r\n";
+        let ini = GameIni::parse(text.as_bytes(), None).unwrap();
+        assert_eq!(ini.rtp, "RPGVX");
+        assert_eq!(ini.rtps, [const { String::new() }; 3]);
+        assert_eq!(ini.library, "RGSS202E.dll");
+        assert_eq!(ini.scripts, "Data\\Scripts.rvdata");
+        assert_eq!(ini.rtp_names(Runtime::Rgss2), ["RPGVX"]);
+        assert_eq!(ini.rtp_names(Runtime::Rgss1), ["", "", ""]);
     }
 
     #[test]

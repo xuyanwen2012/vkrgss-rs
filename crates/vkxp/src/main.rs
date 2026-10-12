@@ -323,7 +323,7 @@ fn guest_inputs(game_dir: &Path, options: &Options) -> Result<GuestInputs> {
         .iter()
         .map(|(name, dir)| Ok((name.clone(), absolute(dir)?)))
         .collect::<Result<_>>()?;
-    let rtp_dirs = resolve_rtps(&ini.rtp, &rtp_table).map_err(|error| match error {
+    let rtp_dirs = resolve_rtps(&ini.rtps, &rtp_table).map_err(|error| match error {
         VfsError::UnknownRtp { name } => anyhow!(
             "the game needs the run-time package `{name}`; pass its directory with --rtp \
              {name}=DIR or name it under [rtp] in a configuration file"
@@ -369,7 +369,7 @@ fn guest_config(
         font_dirs,
         preload,
     } = inputs;
-    let files = GameFiles::open(game_dir.to_owned(), rtp_dirs)?;
+    let files = GameFiles::open(game_dir.to_owned(), rtp_dirs, vkxp_vfs::Runtime::Rgss1)?;
     if let Some(archive) = archive(game_dir) {
         tracing::info!("encrypted archive: {}", archive.display());
     }
