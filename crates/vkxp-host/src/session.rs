@@ -197,6 +197,10 @@ struct FpsCounter {
 /// forgets every bitmap and table, a freeze or transition ends, a modal message is dropped,
 /// the four audio channels stop, the pacing starts anew as after a frame reset and the
 /// guest is sent the current input again.
+///
+/// The audio sink is asked to remember a slot when a state was saved into it, and to recall
+/// it when its state was loaded, behind the stop of the channels: the music and the
+/// background sound that the guest then plays again go on where they were.
 pub struct Session<D: Display, C: Clock> {
     display: D,
     clock: C,
@@ -440,6 +444,7 @@ impl<D: Display, C: Clock> Session<D, C> {
             // What stands between the session and a guest in a process keeps these.
             GuestToHost::Attach { .. } | GuestToHost::Outcome { .. } => {}
             GuestToHost::StateSaved { slot } => {
+                self.audio.remember(slot);
                 self.show_notice(format_args!("state saved into slot {slot}"));
             }
             GuestToHost::StateLoaded { slot } => self.state_loaded(slot),
@@ -561,6 +566,8 @@ impl<D: Display, C: Clock> Session<D, C> {
         ] {
             self.audio.command(AudioCommand::Stop { channel });
         }
+        // The guest that goes on plays its music again, which then goes on too.
+        self.audio.recall(slot);
         // The frame that waited for its tick was one of the guest that is gone.
         self.pending_tick = None;
         self.waiting_frame = None;

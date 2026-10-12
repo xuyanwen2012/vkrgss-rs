@@ -11,7 +11,7 @@
 ## 3. Positions
 
 - [x] 3.1 Position and start-from on `Source`; `remember` and `recall` in the mixer. Verify: the three scenarios of "Remembered positions", one of them also with a generated MIDI file and a SoundFont the test generates or the existing MIDI test uses; `cargo test -p vkxp-audio --locked` passes.
-- [ ] 3.2 `AudioSink::remember` and `recall`, the test doubles, and the two calls of the session. Verify: scenario "Save, then load"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-host -p vkxp --locked` passes.
+- [x] 3.2 `AudioSink::remember` and `recall`, the test doubles, and the two calls of the session. Verify: scenario "Save, then load"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-host -p vkxp --locked` passes.
 
 ## 4. Documentation
 

@@ -10,6 +10,15 @@ use vkxp_proto::AudioCommand;
 pub trait AudioSink {
     /// Takes a command. It must not wait: the session calls it between frames.
     fn command(&mut self, command: AudioCommand);
+
+    /// Remembers under `slot`, in place of what it held, what the music and the background
+    /// sound play and where they are. It must not wait either.
+    fn remember(&mut self, slot: u8);
+
+    /// Arms the music and the background sound with what `slot` holds: the next play
+    /// command of each starts where the slot remembers it, if it plays the remembered file.
+    /// It must not wait either.
+    fn recall(&mut self, slot: u8);
 }
 
 /// A sink that plays nothing and reports nothing, for headless runs.
@@ -18,11 +27,23 @@ pub struct NullSink;
 
 impl AudioSink for NullSink {
     fn command(&mut self, _command: AudioCommand) {}
+
+    fn remember(&mut self, _slot: u8) {}
+
+    fn recall(&mut self, _slot: u8) {}
 }
 
 impl AudioSink for Output {
     fn command(&mut self, command: AudioCommand) {
         Output::command(self, command);
+    }
+
+    fn remember(&mut self, slot: u8) {
+        Output::remember(self, slot);
+    }
+
+    fn recall(&mut self, slot: u8) {
+        Output::recall(self, slot);
     }
 }
 

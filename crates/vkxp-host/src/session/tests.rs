@@ -13,7 +13,7 @@ use winit::keyboard::KeyCode;
 use super::*;
 use crate::ManualClock;
 use crate::testing::{
-    DisplayEvent, ErrorBuffer, PacingEvent, RecordingDisplay, RecordingSink, Shown,
+    DisplayEvent, ErrorBuffer, PacingEvent, RecordingDisplay, RecordingSink, Shown, SinkEvent,
 };
 
 /// A step of a transition whose weight and threshold are both `value`.
@@ -2325,6 +2325,33 @@ fn a_failed_save_leaves_a_waiting_load_alone() {
     assert!(events.contains(&DisplayEvent::Forget), "{events:?}");
     assert!(rig.title().ends_with("state loaded from slot 3"));
     rig.frame(frame(0));
+}
+
+/// Scenario "Save, then load" of the requirement "Music goes on after a load".
+#[test]
+fn the_sink_remembers_a_saved_slot_and_recalls_a_loaded_one() {
+    let sink = RecordingSink::new();
+    let mut rig = Rig::with_options(SessionOptions {
+        states: true,
+        audio: Box::new(sink.clone()),
+        ..SessionOptions::default()
+    });
+    rig.frame(frame(0));
+    rig.send(GuestToHost::StateSaved { slot: 2 });
+    assert_eq!(sink.events(), [SinkEvent::Remember(2)]);
+
+    rig.send(GuestToHost::StateLoaded { slot: 2 });
+    let stops = [
+        AudioChannel::Bgm,
+        AudioChannel::Bgs,
+        AudioChannel::Me,
+        AudioChannel::Se,
+    ]
+    .map(|channel| SinkEvent::Command(AudioCommand::Stop { channel }));
+    let mut expected = vec![SinkEvent::Remember(2)];
+    expected.extend(stops);
+    expected.push(SinkEvent::Recall(2));
+    assert_eq!(sink.events(), expected);
 }
 
 /// Scenarios "Mid transition" and the reset of "Loading a state resets the host's side".

@@ -268,10 +268,18 @@ impl Display for RecordingDisplay {
     }
 }
 
-/// An audio sink that keeps the commands it is sent and plays nothing. Clones share one list.
+/// One thing a [`RecordingSink`] was asked for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SinkEvent {
+    Command(AudioCommand),
+    Remember(u8),
+    Recall(u8),
+}
+
+/// An audio sink that keeps what it is asked for and plays nothing. Clones share one list.
 #[derive(Debug, Clone, Default)]
 pub struct RecordingSink {
-    commands: Arc<Mutex<Vec<AudioCommand>>>,
+    events: Arc<Mutex<Vec<SinkEvent>>>,
 }
 
 impl RecordingSink {
@@ -281,17 +289,35 @@ impl RecordingSink {
 
     /// Every command received so far, oldest first.
     pub fn commands(&self) -> Vec<AudioCommand> {
+        let events = self.lock();
+        let commands = events.iter().filter_map(|event| match event {
+            SinkEvent::Command(command) => Some(command.clone()),
+            SinkEvent::Remember(_) | SinkEvent::Recall(_) => None,
+        });
+        commands.collect()
+    }
+
+    /// Everything the sink was asked for so far, oldest first.
+    pub fn events(&self) -> Vec<SinkEvent> {
         self.lock().clone()
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, Vec<AudioCommand>> {
-        self.commands.lock().unwrap_or_else(PoisonError::into_inner)
+    fn lock(&self) -> std::sync::MutexGuard<'_, Vec<SinkEvent>> {
+        self.events.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
 impl AudioSink for RecordingSink {
     fn command(&mut self, command: AudioCommand) {
-        self.lock().push(command);
+        self.lock().push(SinkEvent::Command(command));
+    }
+
+    fn remember(&mut self, slot: u8) {
+        self.lock().push(SinkEvent::Remember(slot));
+    }
+
+    fn recall(&mut self, slot: u8) {
+        self.lock().push(SinkEvent::Recall(slot));
     }
 }
 
