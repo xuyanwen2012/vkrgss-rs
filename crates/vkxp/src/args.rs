@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use vkxp_host::{Filter, InputScript, StateSchedule};
-use vkxp_vfs::Encoding;
+use vkxp_vfs::{Encoding, Runtime};
 
 /// What `--help` prints, and what is printed with every command-line error.
 pub(crate) const USAGE: &str = "\
@@ -14,14 +14,19 @@ usage: vkxp [GAME_DIR] [OPTIONS]
   --config FILE             the user's configuration file;
                             default: $XDG_CONFIG_HOME/vkxp/config.toml
   --no-config               read neither that file nor vkxp.toml in the game directory
+  --runtime RUNTIME         the runtime of the game: rgss1 (RPG Maker XP), rgss2 (RPG
+                            Maker VX, experimental) or rgss3 (RPG Maker VX Ace, not
+                            supported yet); default: what Library and Scripts of
+                            Game.ini say
   --rtp NAME=DIR            the directory of the run-time package NAME; repeatable
   --builtin-scripts FILE    the built-in scripts file, made by `cargo xtask extract-rpg`;
-                            default: $XDG_DATA_HOME/vkxp/rpg_builtin.rb
+                            default: $XDG_DATA_HOME/vkxp/rpg_builtin.rb, and
+                            $XDG_DATA_HOME/vkxp/rpg_builtin_rgss2.rb for rgss2
   --device INDEX|NAME       the Vulkan device, by index or by a part of its name
   --font-dir DIR            a directory of fonts, searched before the system's; repeatable
   --font-own-metrics        size every font by its own line box, a replacement included
   --encoding ENCODING       the text encoding of Game.ini: utf-8, gbk, shift-jis or big5
-  --debug                   debug mode: $DEBUG is true
+  --debug                   debug mode: $DEBUG is true, in a game of rgss2 $TEST
   --allow-process-functions let scripts start processes (system, exec and the like)
   --log-p                   p only writes to the error stream and shows no message panel
   --filter FILTER           how the frame is scaled into the window: auto, nearest,
@@ -116,6 +121,8 @@ pub(crate) struct Options {
     pub config: Option<PathBuf>,
     /// Whether no configuration file is read.
     pub no_config: bool,
+    /// The runtime of the game, if one was given; otherwise `Game.ini` tells it.
+    pub runtime: Option<Runtime>,
     /// The directory of each run-time package, by its name.
     pub rtps: BTreeMap<String, PathBuf>,
     pub builtin_scripts: Option<PathBuf>,
@@ -210,6 +217,14 @@ pub(crate) fn encoding(text: &str) -> Result<Encoding, String> {
     }
 }
 
+/// The runtime with this name, in either case. The error says what the names are.
+pub(crate) fn runtime(text: &str) -> Result<Runtime, String> {
+    Runtime::ALL
+        .into_iter()
+        .find(|runtime| text.eq_ignore_ascii_case(runtime.name()))
+        .ok_or_else(|| format!("`{text}` is not one of rgss1, rgss2, rgss3"))
+}
+
 /// The scaling filter with this name, in either case. The error says what the names are.
 pub(crate) fn filter(text: &str) -> Result<Filter, String> {
     match text.to_ascii_lowercase().as_str() {
@@ -291,6 +306,10 @@ pub(crate) fn parse(arguments: &[String]) -> Result<Options, String> {
                 let (name, dir) =
                     pair(value()?, "NAME=DIR").map_err(|error| format!("--rtp: {error}"))?;
                 options.rtps.insert(name.to_owned(), PathBuf::from(dir));
+            }
+            "--runtime" => {
+                let runtime = runtime(value()?).map_err(|error| format!("--runtime: {error}"))?;
+                options.runtime = Some(runtime);
             }
             "--builtin-scripts" => options.builtin_scripts = Some(PathBuf::from(value()?)),
             "--device" => options.device = Some(value()?.clone()),
@@ -767,6 +786,26 @@ mod tests {
             "{error}"
         );
         assert!(parse_words(&["--filter"]).is_err());
+    }
+
+    #[test]
+    fn every_runtime_has_a_name() {
+        assert_eq!(parse_words(&[]).unwrap().runtime, None);
+        for (name, runtime) in [
+            ("rgss1", Runtime::Rgss1),
+            ("rgss2", Runtime::Rgss2),
+            ("RGSS3", Runtime::Rgss3),
+        ] {
+            let options = parse_words(&["--runtime", name]).unwrap();
+            assert_eq!(options.runtime, Some(runtime));
+            assert!(USAGE.contains(runtime.name()));
+        }
+        let error = parse_words(&["--runtime", "vx"]).unwrap_err();
+        assert!(
+            error.contains("--runtime") && error.contains("vx"),
+            "{error}"
+        );
+        assert!(parse_words(&["--runtime"]).is_err());
     }
 
     #[test]

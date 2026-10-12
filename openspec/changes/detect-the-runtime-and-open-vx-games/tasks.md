@@ -10,8 +10,8 @@
 
 ## 3. Program
 
-- [ ] 3.1 The option `--runtime`, detection before anything else, the error for a conflict, the end of a VX Ace run. Verify: scenarios of "Runtime of the run" and "VX Ace is refused"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` passes.
-- [ ] 3.2 The built-in scripts file by runtime, the run-time package of a VX game, `Game.rgss2a`, the experimental notice. Verify: the scenarios of "Built-in scripts file", "Encrypted archive of the game" and "Experimental runtime"; the same test command passes.
+- [x] 3.1 The option `--runtime`, detection before anything else, the error for a conflict, the end of a VX Ace run. Verify: scenarios of "Runtime of the run" and "VX Ace is refused"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` passes.
+- [x] 3.2 The built-in scripts file by runtime, the run-time package of a VX game, `Game.rgss2a`, the experimental notice. Verify: the scenarios of "Built-in scripts file", "Encrypted archive of the game" and "Experimental runtime"; the same test command passes.
 
 ## 4. Documentation
 

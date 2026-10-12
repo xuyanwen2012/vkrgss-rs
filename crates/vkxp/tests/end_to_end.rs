@@ -15,6 +15,7 @@ use std::time::{Duration, Instant};
 
 use tempfile::TempDir;
 use vkxp_binding::testing::host::Game;
+use vkxp_vfs::Runtime;
 
 /// Environment variables that restrict which drivers the Vulkan loader loads. Naming a
 /// device does not do that: the loader loads every installed driver to enumerate the devices.
@@ -516,6 +517,27 @@ fn a_run_time_package_that_is_not_given_is_an_error_naming_it_and_the_option() {
     assert!(!game.dir().join("size.txt").exists());
 }
 
+/// Requirement "Run-time package directories", for a game of VX: `RTP` names the package and
+/// `RTP1` is not read.
+#[test]
+fn a_game_of_vx_names_its_run_time_package_with_the_key_rtp() {
+    let (xp, rtp) = rtp_game("e2e-rtp-vx-source");
+    let source = "\
+picture = Bitmap.new('Graphics/Pictures/RtpOnly')
+File.open('size.txt', 'w') { |file| file.write(\"#{picture.width}x#{picture.height}\") }
+";
+    drop(xp);
+    let game = Game::of(Runtime::Rgss2, "e2e-rtp-vx", "Package", &[("Main", source)]);
+    let ini = "[Game]\r\nRTP=RPGVX\r\nLibrary=RGSS202E.dll\r\nScripts=Data\\Scripts.rvdata\r\n\
+               Title=Package\r\nRTP1=Standard\r\n";
+    fs::write(game.dir().join("Game.ini"), ini).unwrap();
+    let table = format!("RPGVX={}", rtp.path().display());
+    let ran = headless(&game, &["--rtp", &table]);
+    ran.assert_success();
+    let size = fs::read_to_string(game.dir().join("size.txt")).expect("the script ran");
+    assert_eq!(size, "3x2");
+}
+
 /// A fresh directory for a run with `text` as the user's configuration file at its default
 /// location below it.
 fn work_with_user_config(text: &str) -> TempDir {
@@ -958,6 +980,45 @@ fn a_missing_built_in_scripts_file_names_the_tool_that_creates_it() {
     assert!(stderr.contains("rpg_builtin.rb"), "{stderr}");
 }
 
+/// Scenario "Missing file of VX".
+#[test]
+fn a_missing_built_in_scripts_file_of_vx_names_the_file_and_the_document() {
+    let game = Game::of(
+        Runtime::Rgss2,
+        "e2e-builtin-vx",
+        "Builtin",
+        &[("Main", "Graphics.update")],
+    );
+    let ran = vkxp(&[&game.dir().to_string_lossy(), "--headless"]);
+    ran.assert_failure();
+    let stderr = ran.stderr();
+    assert!(stderr.contains("rpg_builtin_rgss2.rb"), "{stderr}");
+    assert!(stderr.contains("docs/running.md"), "{stderr}");
+}
+
+/// The built-in scripts file of RGSS2 has a default location of its own.
+#[test]
+fn the_built_in_scripts_file_of_vx_is_loaded_from_its_default_location() {
+    let source = "File.open('rpg.txt', 'w') { |file| file.write(RPG::Cache.class.to_s) }";
+    let game = Game::of(
+        Runtime::Rgss2,
+        "e2e-default-vx",
+        "Default",
+        &[("Main", source)],
+    );
+    let work = tempfile::tempdir().unwrap();
+    let data = work.path().join("vkxp");
+    fs::create_dir_all(&data).unwrap();
+    fs::copy(game.builtin_scripts(), data.join("rpg_builtin_rgss2.rb")).unwrap();
+    let dir = game.dir().to_string_lossy().into_owned();
+    let ran = vkxp_in(work, &[&dir, "--headless", "--device", &device()]);
+    ran.assert_success();
+    assert_eq!(
+        fs::read_to_string(game.dir().join("rpg.txt")).unwrap(),
+        "Module"
+    );
+}
+
 /// The run is headless, so that this test opens neither a window nor an audio device
 /// whatever the program does with the option.
 #[test]
@@ -1204,6 +1265,144 @@ fn a_game_whose_data_is_in_the_archive_runs_like_the_one_with_loose_files() {
         fs::read(loose.file("out.png")).unwrap(),
         fs::read(archived.file("out.png")).unwrap()
     );
+}
+
+/// Scenario "Game of VX in an archive".
+#[test]
+fn a_game_of_vx_whose_data_is_in_the_archive_runs_like_the_one_with_loose_files() {
+    let main = format!("{RED_SPRITE}$sprite.x = 300\n3.times {{ Graphics.update }}\n");
+    let game = Game::of(
+        Runtime::Rgss2,
+        "e2e-archive-vx",
+        "Archive",
+        &[("Main", &main)],
+    );
+    let loose = headless(&game, &["--dump", "2=out.png"]);
+    loose.assert_success();
+
+    let data = game.dir().join("Data");
+    let scripts = fs::read(data.join("Scripts.rvdata")).unwrap();
+    fs::write(
+        game.dir().join("Game.rgss2a"),
+        rgssad(&[("Data\\Scripts.rvdata", &scripts)]),
+    )
+    .unwrap();
+    fs::remove_dir_all(&data).unwrap();
+    let archived = headless(&game, &["--dump", "2=out.png"]);
+    archived.assert_success();
+    assert_eq!(archived.frame("out.png").leftmost(RED), Some(300));
+    assert_eq!(
+        fs::read(loose.file("out.png")).unwrap(),
+        fs::read(archived.file("out.png")).unwrap()
+    );
+}
+
+/// The lines of the error stream that say a runtime is experimental.
+fn experimental_lines(stderr: &str) -> Vec<&str> {
+    stderr
+        .lines()
+        .filter(|line| line.contains("experimental"))
+        .collect()
+}
+
+/// Requirement "Experimental runtime", scenario "VX": once, as a warning, whether the guest
+/// is a thread or a process, which settles the runtime a second time.
+#[test]
+fn a_run_of_vx_says_once_that_it_is_experimental() {
+    let game = Game::of(Runtime::Rgss2, "e2e-vx-notice", "VX", &[("Main", "nil")]);
+    for form in ["thread", "process"] {
+        let ran = headless(&game, &["--guest", form]);
+        ran.assert_success();
+        let stderr = ran.stderr();
+        let lines = experimental_lines(&stderr);
+        assert_eq!(lines.len(), 1, "{form}: {stderr}");
+        assert!(lines[0].contains("RPG Maker VX"), "{stderr}");
+    }
+    // The level of a line shows when the lines are detailed.
+    let ran = headless(&game, &["--verbose"]);
+    ran.assert_success();
+    let stderr = ran.stderr();
+    let lines = experimental_lines(&stderr);
+    assert_eq!(lines.len(), 1, "{stderr}");
+    assert!(lines[0].starts_with("vkxp: WARN "), "{stderr}");
+}
+
+/// Requirement "Experimental runtime", scenario "XP", and "Runtime of the run", scenario
+/// "Detected".
+#[test]
+fn a_run_of_xp_does_not_say_that_it_is_experimental() {
+    let source = "File.open('modes.txt', 'w') { |file| file.write([$TEST, $DEBUG].inspect) }";
+    let game = Game::new("e2e-xp-notice", "XP", &[("Main", source)]);
+    let ran = headless(&game, &["--debug"]);
+    ran.assert_success();
+    assert!(
+        experimental_lines(&ran.stderr()).is_empty(),
+        "{}",
+        ran.stderr()
+    );
+    let modes = fs::read_to_string(game.dir().join("modes.txt")).expect("the script ran");
+    assert_eq!(modes, "[nil, true]");
+}
+
+/// A game whose `Library` is that of XP and whose scripts file is that of VX. Its script
+/// writes the globals of test mode to `modes.txt`.
+fn conflicting_game(name: &str) -> Game {
+    let source = "File.open('modes.txt', 'w') { |file| file.write([$TEST, $DEBUG].inspect) }";
+    let game = Game::of(Runtime::Rgss2, name, "Conflict", &[("Main", source)]);
+    let ini =
+        "[Game]\r\nLibrary=RGSS104E.dll\r\nScripts=Data\\Scripts.rvdata\r\nTitle=Conflict\r\n";
+    fs::write(game.dir().join("Game.ini"), ini).unwrap();
+    game
+}
+
+/// Requirement "Runtime of the run", scenario "Conflict".
+#[test]
+fn a_game_that_does_not_tell_its_runtime_is_an_error_naming_the_option() {
+    let game = conflicting_game("e2e-runtime-conflict");
+    let ran = headless(&game, &[]);
+    ran.assert_failure();
+    let stderr = ran.stderr();
+    assert!(stderr.contains("--runtime"), "{stderr}");
+    assert!(stderr.contains("RGSS104E.dll"), "{stderr}");
+    assert!(stderr.contains("Scripts.rvdata"), "{stderr}");
+    assert!(!game.dir().join("modes.txt").exists());
+}
+
+/// Requirement "Runtime of the run", scenario "Option decides".
+#[test]
+fn the_runtime_option_decides_for_a_game_that_does_not_tell_it() {
+    let game = conflicting_game("e2e-runtime-option");
+    let ran = headless(&game, &["--runtime", "rgss2", "--debug"]);
+    ran.assert_success();
+    let stderr = ran.stderr();
+    assert!(!stderr.contains("--runtime"), "{stderr}");
+    assert_eq!(experimental_lines(&stderr).len(), 1, "{stderr}");
+    let modes = fs::read_to_string(game.dir().join("modes.txt")).expect("the script ran");
+    assert_eq!(modes, "[true, false]");
+}
+
+/// Requirement "Runtime of the run", scenario "Bad value".
+#[test]
+fn an_unknown_runtime_prints_the_usage_message() {
+    let ran = vkxp(&["--runtime", "vx"]);
+    assert_eq!(ran.output.status.code(), Some(2));
+    let stderr = ran.stderr();
+    assert!(stderr.contains("`vx`"), "{stderr}");
+    assert!(stderr.contains("usage: vkxp"), "{stderr}");
+}
+
+/// Requirement "VX Ace is refused", scenario "Ace game".
+#[test]
+fn a_game_of_vx_ace_ends_before_any_script_runs() {
+    let source = "File.open('ran.txt', 'w') { |file| file.write('ran') }";
+    let game = Game::of(Runtime::Rgss3, "e2e-ace", "Ace", &[("Main", source)]);
+    let ran = headless(&game, &[]);
+    ran.assert_failure();
+    let stderr = ran.stderr();
+    assert!(stderr.contains("RPG Maker VX Ace"), "{stderr}");
+    assert!(stderr.contains("not supported"), "{stderr}");
+    assert!(stderr.contains("planned"), "{stderr}");
+    assert!(!game.dir().join("ran.txt").exists());
 }
 
 #[test]
