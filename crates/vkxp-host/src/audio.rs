@@ -40,6 +40,7 @@ impl AudioOptions {
         Box::new(Output::open(OutputOptions {
             soundfonts: SoundFonts::configured(self.soundfont.clone()),
             errors,
+            ..OutputOptions::default()
         }))
     }
 }

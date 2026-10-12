@@ -2,7 +2,9 @@
 
 mod common;
 
-use std::path::Path;
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use common::{
     AMPLITUDE, FIRST_NOTE, MP3, OGG, Reports, SECOND_NOTE, damaged_mp3, frequency, level,
@@ -17,6 +19,7 @@ fn mixer_reporting_to(reports: &Reports) -> Mixer {
     let options = MixerOptions {
         soundfonts: SoundFonts::new(Vec::new()),
         errors: Box::new(reports.clone()),
+        ..MixerOptions::default()
     };
     Mixer::new(RATE, options)
 }
@@ -96,6 +99,7 @@ fn mixer_with_soundfont(reports: &Reports) -> Option<Mixer> {
     let options = MixerOptions {
         soundfonts: SoundFonts::configured(None),
         errors: Box::new(reports.clone()),
+        ..MixerOptions::default()
     };
     Some(Mixer::new(RATE, options))
 }
@@ -440,4 +444,93 @@ fn midi_without_a_soundfont_is_reported_once_and_silent() {
 
     mixer.apply(play(AudioChannel::Se, &tone(440.0, 0.5)));
     assert!(peak(&render(&mut mixer, 0.2)) > 0.1);
+}
+
+/// Data that starts as an ASF file does, which is all that is looked at before the program
+/// is run.
+fn wma() -> Vec<u8> {
+    let mut data = vec![
+        0x30, 0x26, 0xb2, 0x75, 0x8e, 0x66, 0xcf, 0x11, 0xa6, 0xd9, 0x00, 0xaa, 0x00, 0x62, 0xce,
+        0x6c,
+    ];
+    data.extend_from_slice(&[0x5a; 100_000]);
+    data
+}
+
+fn mixer_with_ffmpeg(program: PathBuf, reports: &Reports) -> Mixer {
+    let options = MixerOptions {
+        soundfonts: SoundFonts::new(Vec::new()),
+        errors: Box::new(reports.clone()),
+        ffmpeg: program,
+    };
+    Mixer::new(RATE, options)
+}
+
+/// Held by the tests that run a program: a program written while another test starts one
+/// may be held open by that one for a moment, and then cannot be run.
+static PROGRAMS: Mutex<()> = Mutex::new(());
+
+/// Scenario "Program present". The stand-in reads the data, notes its arguments and writes
+/// the file that lies next to it.
+#[test]
+fn wma_is_decoded_by_the_program_of_the_options() {
+    let _programs = PROGRAMS.lock().unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    let program = directory.path().join("stand-in");
+    let script = "#!/bin/sh\ncat > /dev/null\necho \"$@\" > \"$0.arguments\"\ncat \"$0.frames\"\n";
+    std::fs::write(&program, script).unwrap();
+    std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
+    // A ramp that rises on the left and falls on the right.
+    let signal: Vec<f32> = (0..2000)
+        .flat_map(|frame| [frame as f32 / 4000.0, -(frame as f32) / 4000.0])
+        .collect();
+    let bytes: Vec<u8> = signal
+        .iter()
+        .flat_map(|sample| sample.to_le_bytes())
+        .collect();
+    std::fs::write(directory.path().join("stand-in.frames"), bytes).unwrap();
+
+    let reports = Reports::default();
+    let mut mixer = mixer_with_ffmpeg(program, &reports);
+    mixer.apply(play(AudioChannel::Se, &wma()));
+    let mut out = vec![0.0; 2 * 3000];
+    mixer.render(&mut out);
+    assert_eq!(out[..signal.len()], signal);
+    assert_eq!(peak(&out[signal.len()..]), 0.0);
+    assert_eq!(reports.text(), "");
+    let arguments = std::fs::read_to_string(directory.path().join("stand-in.arguments")).unwrap();
+    assert_eq!(
+        arguments.trim_end(),
+        "-v error -i pipe:0 -f f32le -ac 2 -ar 44100 pipe:1"
+    );
+}
+
+/// Scenario "Program absent".
+#[test]
+fn wma_without_the_program_is_reported_and_silent() {
+    let _programs = PROGRAMS.lock().unwrap();
+    let reports = Reports::default();
+    let program = PathBuf::from("/nonexistent/vkxp-test-ffmpeg");
+    let mut mixer = mixer_with_ffmpeg(program, &reports);
+    mixer.apply(play(AudioChannel::Bgm, &wma()));
+    assert_eq!(peak(&render(&mut mixer, 0.2)), 0.0);
+    assert_eq!(reports.lines(), 1, "{}", reports.text());
+    assert!(reports.text().contains("ffmpeg"), "{}", reports.text());
+
+    mixer.apply(play(AudioChannel::Bgm, &tone(440.0, 0.5)));
+    let out = side(&render(&mut mixer, 0.5), 0);
+    assert!((level(&out, RATE, 440.0) - AMPLITUDE).abs() < 0.01);
+}
+
+/// A program that fails, or returns nothing, is as good as none.
+#[test]
+fn wma_that_the_program_does_not_decode_is_reported_and_silent() {
+    for program in ["false", "true"] {
+        let _programs = PROGRAMS.lock().unwrap();
+        let reports = Reports::default();
+        let mut mixer = mixer_with_ffmpeg(PathBuf::from(program), &reports);
+        mixer.apply(play(AudioChannel::Se, &wma()));
+        assert_eq!(peak(&render(&mut mixer, 0.2)), 0.0, "{program}");
+        assert!(reports.text().contains("ffmpeg"), "{}", reports.text());
+    }
 }

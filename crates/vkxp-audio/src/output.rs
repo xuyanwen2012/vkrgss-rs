@@ -68,6 +68,7 @@ impl Output {
     ) -> Output {
         let mut errors = Errors(Arc::new(Mutex::new(options.errors)));
         let soundfonts = options.soundfonts;
+        let ffmpeg = options.ffmpeg;
         let (commands, received) = mpsc::channel::<AudioCommand>();
         let worker_errors = errors.clone();
         let start: Start = Box::new(move |sample_rate| {
@@ -75,6 +76,7 @@ impl Output {
             let options = MixerOptions {
                 soundfonts,
                 errors: Box::new(worker_errors),
+                ffmpeg,
             };
             let (mut loader, mut channels) = Mixer::new(sample_rate, options).into_parts();
             let (prepared, ready) = mpsc::channel();

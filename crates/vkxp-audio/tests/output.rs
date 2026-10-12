@@ -14,6 +14,7 @@ fn options(reports: &Reports) -> OutputOptions {
     OutputOptions {
         soundfonts: SoundFonts::new(Vec::new()),
         errors: Box::new(reports.clone()),
+        ..OutputOptions::default()
     }
 }
 

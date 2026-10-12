@@ -7,6 +7,7 @@
 //! callback of the device.
 
 use std::io::Write;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use vkxp_proto::{AudioChannel, AudioCommand};
@@ -23,6 +24,8 @@ pub struct MixerOptions {
     pub soundfonts: SoundFonts,
     /// Where sounds that cannot be played are reported.
     pub errors: Box<dyn Write + Send>,
+    /// The program that decodes WMA: `ffmpeg`, looked up on the search path, or a path.
+    pub ffmpeg: PathBuf,
 }
 
 impl Default for MixerOptions {
@@ -30,6 +33,7 @@ impl Default for MixerOptions {
         MixerOptions {
             soundfonts: SoundFonts::configured(None),
             errors: Box::new(std::io::stderr()),
+            ffmpeg: PathBuf::from("ffmpeg"),
         }
     }
 }
@@ -86,6 +90,7 @@ impl Reports {
 pub(crate) struct Loader {
     sample_rate: u32,
     soundfonts: SoundFonts,
+    ffmpeg: PathBuf,
     report: Report,
 }
 
@@ -107,6 +112,7 @@ impl Loader {
                     rate as u32,
                     loops(channel),
                     &mut self.soundfonts,
+                    &self.ffmpeg,
                     &self.report,
                 );
                 let source = opened.map_err(|error| (self.report)(&error)).ok();
@@ -349,6 +355,7 @@ impl Mixer {
             loader: Loader {
                 sample_rate,
                 soundfonts: options.soundfonts,
+                ffmpeg: options.ffmpeg,
                 report,
             },
             channels: Channels {

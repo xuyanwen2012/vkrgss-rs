@@ -2479,6 +2479,7 @@ dependencies = [
  "cpal",
  "rustysynth",
  "symphonia",
+ "tempfile",
  "thiserror 2.0.21",
  "tracing",
  "vkxp-proto",

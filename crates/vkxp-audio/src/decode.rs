@@ -1,11 +1,12 @@
 //! Decoding: [`Source`] values that yield interleaved stereo `f32` frames at a requested
 //! sample rate.
 //!
-//! The format is recognised from the bytes: a Standard MIDI file by its `MThd` header,
-//! everything else by `symphonia`'s probe (Ogg Vorbis, WAV, MP3).
+//! The format is recognised from the bytes: a Standard MIDI file by its `MThd` header, WMA
+//! by the header of an ASF file, everything else by `symphonia`'s probe (Ogg Vorbis, WAV,
+//! MP3).
 
 use std::io::Cursor;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use symphonia::core::codecs::audio::{AudioDecoder, AudioDecoderOptions};
@@ -16,6 +17,7 @@ use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 
 use crate::midi::{self, SoundFonts};
+use crate::wma;
 
 /// Why a sound cannot be played.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -59,18 +61,26 @@ pub type Report = Arc<dyn Fn(&DecodeError) + Send + Sync>;
 /// Opens `data` as a source of frames at `sample_rate`. `looping` says that the sound is one
 /// that starts again when it ends: a MIDI file then continues at its loop marker by itself
 /// and never ends, and other data is rewound by its reader. `soundfonts` is consulted, and
-/// its file loaded, only when the data is a MIDI file. Data of which nothing can be played
-/// is an error; data of which a part cannot is played without it and told to `report`.
+/// its file loaded, only when the data is a MIDI file; `ffmpeg` is the program that is run,
+/// and waited for, only when the data is WMA. Data of which nothing can be played is an
+/// error; data of which a part cannot is played without it and told to `report`.
 pub fn open(
     data: Arc<[u8]>,
     sample_rate: u32,
     looping: bool,
     soundfonts: &mut SoundFonts,
+    ffmpeg: &Path,
     report: &Report,
 ) -> Result<Box<dyn Source>, DecodeError> {
     if midi::is_midi(&data) {
         let source = midi::MidiSource::new(&data, sample_rate, soundfonts.get()?, looping)?;
         Ok(Box::new(source))
+    } else if wma::is_asf(&data) {
+        Ok(Box::new(wma::Decoded::by_ffmpeg(
+            &data,
+            sample_rate,
+            ffmpeg,
+        )?))
     } else {
         Ok(Box::new(Sampled::new(data, sample_rate, report.clone())?))
     }

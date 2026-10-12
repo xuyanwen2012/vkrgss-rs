@@ -21,7 +21,14 @@ fn open(
     soundfonts: &mut SoundFonts,
 ) -> Result<Box<dyn Source>, DecodeError> {
     let report: Report = Arc::new(|error: &DecodeError| panic!("reported: {error}"));
-    decode::open(data, sample_rate, false, soundfonts, &report)
+    decode::open(
+        data,
+        sample_rate,
+        false,
+        soundfonts,
+        Path::new("ffmpeg"),
+        &report,
+    )
 }
 
 /// A report that keeps what it is told.
@@ -108,6 +115,7 @@ fn data_of_which_nothing_decodes_is_unsupported_with_the_reason() {
             48000,
             false,
             &mut no_soundfont(),
+            Path::new("ffmpeg"),
             &report,
         );
         match result {
@@ -127,6 +135,7 @@ fn damage_behind_the_first_block_is_reported_once_and_the_rest_is_played() {
         48000,
         false,
         &mut no_soundfont(),
+        Path::new("ffmpeg"),
         &report,
     )
     .unwrap();

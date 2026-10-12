@@ -6,7 +6,7 @@
 
 ## 2. WMA
 
-- [ ] 2.1 The ASF check and the decoding through the program of `MixerOptions`. Verify: scenarios "Program present" (with a stand-in script the test writes into a temporary directory) and "Program absent"; `cargo test -p vkxp-audio --locked` passes.
+- [x] 2.1 The ASF check and the decoding through the program of `MixerOptions`. Verify: scenarios "Program present" (with a stand-in script the test writes into a temporary directory) and "Program absent"; `cargo test -p vkxp-audio --locked` passes.
 
 ## 3. Positions
 

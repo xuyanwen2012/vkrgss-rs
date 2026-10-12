@@ -23,3 +23,6 @@ symphonia.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 vkxp-proto.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
