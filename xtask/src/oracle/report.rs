@@ -134,6 +134,7 @@ fn diff_file(frame: u64) -> String {
 pub(super) enum Sides {
     Both,
     VkxpOnly,
+    OriginalOnly,
 }
 
 /// What a report says about the run besides its pictures.
@@ -142,6 +143,8 @@ pub(super) struct Run<'a> {
     /// The frames whose picture of the original was taken late, after the transition they
     /// fall inside.
     pub late: &'a [u64],
+    /// Whether the probe replaced `Thread.new`.
+    pub no_threads: bool,
 }
 
 /// Why the picture of a late frame is not compared.
@@ -150,8 +153,8 @@ const LATE: &str = "inside a transition";
 /// Compares the pictures of `frames` that both runs left below `out`, writes the difference
 /// pictures and `summary.json`, and prints the table. A late frame and a frame whose two
 /// pictures differ in size are listed as not comparable and counted neither as equal nor as
-/// different. When only vkxp ran there is nothing to compare, and the summary lists its
-/// pictures.
+/// different. When only one side ran there is nothing to compare, and the summary lists the
+/// pictures of that side.
 pub(super) fn write(out: &Path, frames: &[u64], run: &Run) -> Result<()> {
     let both = run.sides == Sides::Both;
     if both {
@@ -163,7 +166,10 @@ pub(super) fn write(out: &Path, frames: &[u64], run: &Run) -> Result<()> {
     let (mut equal, mut different, mut not_comparable) = (0u64, 0u64, 0u64);
     let mut rows = Vec::new();
     for &frame in frames {
-        let mut row = json!({ "frame": frame, "vkxp": vkxp_file(frame) });
+        let mut row = json!({ "frame": frame });
+        if run.sides != Sides::OriginalOnly {
+            row["vkxp"] = Value::from(vkxp_file(frame));
+        }
         if run.sides != Sides::VkxpOnly {
             row["original"] = Value::from(original_file(frame));
         }
@@ -207,6 +213,10 @@ pub(super) fn write(out: &Path, frames: &[u64], run: &Run) -> Result<()> {
             "different": different,
             "not_comparable": not_comparable,
         });
+    }
+    if run.no_threads {
+        println!("--no-threads was used: Thread.new ran its block at once in the caller");
+        report["no_threads"] = Value::from(true);
     }
     let summary = out.join("summary.json");
     let text = serde_json::to_string_pretty(&report).context("the summary is plain data")?;
@@ -281,6 +291,7 @@ mod tests {
         let run = Run {
             sides: Sides::Both,
             late: &[],
+            no_threads: false,
         };
         write(out.path(), &[10, 20], &run).unwrap();
 
@@ -330,6 +341,7 @@ mod tests {
         let run = Run {
             sides: Sides::Both,
             late: &[10],
+            no_threads: true,
         };
         write(out.path(), &[5, 10, 20], &run).unwrap();
 
@@ -339,6 +351,7 @@ mod tests {
             summary["totals"],
             json!({ "equal": 1, "different": 0, "not_comparable": 2 })
         );
+        assert_eq!(summary["no_threads"], json!(true));
         assert_eq!(
             summary["frames"][1],
             json!({
@@ -355,5 +368,32 @@ mod tests {
         );
         assert!(summary["frames"][2].get("differing_pixels").is_none());
         assert!(!out.path().join("frames/10-diff.png").exists());
+    }
+
+    /// The report of `--original-only`: the pictures are listed and nothing is compared.
+    #[test]
+    fn the_summary_of_the_original_alone_lists_its_pictures() {
+        let out = tempfile::tempdir().unwrap();
+        let run = Run {
+            sides: Sides::OriginalOnly,
+            late: &[20],
+            no_threads: false,
+        };
+        // No picture is read, so none has to be there.
+        write(out.path(), &[10, 20], &run).unwrap();
+
+        let summary = fs::read_to_string(out.path().join("summary.json")).unwrap();
+        let summary: Value = serde_json::from_str(&summary).unwrap();
+        assert_eq!(
+            summary,
+            json!({ "frames": [
+                { "frame": 10, "original": "frames/10-original.png" },
+                {
+                    "frame": 20,
+                    "original": "frames/20-original.png",
+                    "not_comparable": "inside a transition",
+                },
+            ] })
+        );
     }
 }

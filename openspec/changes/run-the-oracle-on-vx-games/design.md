@@ -97,6 +97,14 @@ the probe's input model; audio; anything in vkxp itself.
 - `summary.json` of a comparison has `totals` (equal, different, not comparable), so that a
   frame that is not comparable has something to stay out of. A frame whose two pictures
   differ in size is listed with `not_comparable` like a late frame, with the sizes as reason.
+- The probe's record of a late frame is the request file of that frame: it holds the frame
+  number followed by the word `late`, and the harness reads it before removing the file.
+- The last frame of a transition is not late: the picture the transition ends with is the
+  picture of that frame, so it is captured and compared like any other.
+- The scenarios stated on the model of the probe of RGSS2 are tested by running that probe
+  in vkxp, in a generated game of RGSS1 whose first script defines the functions of
+  `Graphics` that only RGSS2 has; the side of the original is tested the same way, with the
+  test answering the requests in the place of the harness.
 
 ## Follow-ups
 

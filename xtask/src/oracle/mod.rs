@@ -42,6 +42,9 @@ usage: cargo xtask oracle <GAME_DIR> --frames N[,N...] [OPTIONS]
   --builtin-scripts FILE  the built-in scripts file for vkxp, instead of its default location
   --out DIR               where everything is written; default: target/oracle
   --vkxp-only             run only vkxp; needs neither Wine nor Xvfb nor the DLL
+  --original-only         run only the original; its pictures are listed, not compared
+  --no-threads            make Thread.new run its block at once in the caller on both sides,
+                          for a game whose Ruby threads end the original under Wine
   --locale LOCALE         LC_ALL of the original, for the code page of the game's file
                           names; default: zh_CN.UTF-8
   --timeout SECONDS       how long the original may take to reach one frame; default: 120";
@@ -62,6 +65,8 @@ pub(crate) struct Options {
     pub builtin_scripts: Option<PathBuf>,
     pub out: PathBuf,
     pub vkxp_only: bool,
+    pub original_only: bool,
+    pub no_threads: bool,
     pub locale: String,
     pub timeout: Duration,
 }
@@ -82,6 +87,8 @@ pub(crate) fn parse(arguments: &[&str], root: &Path) -> Result<Options> {
         builtin_scripts: None,
         out: root.join("target").join("oracle"),
         vkxp_only: false,
+        original_only: false,
+        no_threads: false,
         locale: "zh_CN.UTF-8".to_owned(),
         timeout: Duration::from_secs(120),
     };
@@ -117,6 +124,8 @@ pub(crate) fn parse(arguments: &[&str], root: &Path) -> Result<Options> {
             "--builtin-scripts" => options.builtin_scripts = Some(path(value()?)?),
             "--out" => options.out = path(value()?)?,
             "--vkxp-only" => options.vkxp_only = true,
+            "--original-only" => options.original_only = true,
+            "--no-threads" => options.no_threads = true,
             "--locale" => options.locale = value()?.to_owned(),
             "--timeout" => {
                 let text = value()?;
@@ -131,6 +140,10 @@ pub(crate) fn parse(arguments: &[&str], root: &Path) -> Result<Options> {
             _ => bail!("more than one game directory"),
         }
     }
+    ensure!(
+        !(options.vkxp_only && options.original_only),
+        "--vkxp-only and --original-only exclude each other"
+    );
     options.game = game.context("no game directory")?;
     options.frames = frames.context("--frames is missing")?;
     Ok(options)
@@ -138,7 +151,13 @@ pub(crate) fn parse(arguments: &[&str], root: &Path) -> Result<Options> {
 
 /// Makes the copy of the game at `copy` that one side runs, with the probe of that side.
 fn prepare_copy(options: &Options, runtime: Runtime, side: Side, copy: &Path) -> Result<()> {
-    let source = probe::generate(runtime, side, &options.schedule, &options.frames);
+    let source = probe::generate(
+        runtime,
+        side,
+        &options.schedule,
+        &options.frames,
+        options.no_threads,
+    );
     game::prepare(&options.game, copy, runtime, &source)
 }
 
@@ -200,7 +219,10 @@ pub(crate) fn run(options: &Options, root: &Path) -> Result<()> {
     let runtime = game::runtime(game, options.runtime)?;
     // Before either runtime is started: a file that is no font ends the run here.
     let shared = fonts::share(&options.fonts, out)?;
-    let executable = vkxp::build(root)?;
+    let executable = match options.original_only {
+        true => None,
+        false => Some(vkxp::build(root)?),
+    };
 
     let frames_dir = out.join("frames");
     if frames_dir.exists() {
@@ -215,23 +237,30 @@ pub(crate) fn run(options: &Options, root: &Path) -> Result<()> {
         late = capture_original(options, runtime, dll, shared.as_ref())?;
     }
 
-    let copy = out.join("vkxp").join("game");
-    prepare_copy(options, runtime, Side::Vkxp, &copy)?;
-    eprintln!("oracle: running vkxp");
-    vkxp::Run {
-        executable: &executable,
-        rtps: &options.rtps,
-        font_dir: shared.as_ref().map(|shared| shared.dir.as_path()),
-        builtin_scripts: options.builtin_scripts.as_deref(),
+    if let Some(executable) = &executable {
+        let copy = out.join("vkxp").join("game");
+        prepare_copy(options, runtime, Side::Vkxp, &copy)?;
+        eprintln!("oracle: running vkxp");
+        vkxp::Run {
+            executable,
+            rtps: &options.rtps,
+            font_dir: shared.as_ref().map(|shared| shared.dir.as_path()),
+            builtin_scripts: options.builtin_scripts.as_deref(),
+        }
+        .capture(&copy, frames, out)?;
+        println!("{}", fonts::notice(shared.as_ref()));
     }
-    .capture(&copy, frames, out)?;
-    println!("{}", fonts::notice(shared.as_ref()));
 
-    let sides = match dll {
-        Some(_) => Sides::Both,
-        None => Sides::VkxpOnly,
+    let sides = match (options.vkxp_only, options.original_only) {
+        (true, _) => Sides::VkxpOnly,
+        (_, true) => Sides::OriginalOnly,
+        _ => Sides::Both,
     };
-    let run = report::Run { sides, late: &late };
+    let run = report::Run {
+        sides,
+        late: &late,
+        no_threads: options.no_threads,
+    };
     report::write(out, frames, &run)
 }
 
@@ -406,14 +435,28 @@ end
         assert_eq!(options.out, Path::new("/workspace/target/oracle"));
         assert_eq!(options.locale, "ja_JP.UTF-8");
         assert_eq!(options.timeout, Duration::from_secs(30));
-        assert!(!options.vkxp_only);
+        assert!(!options.vkxp_only && !options.original_only && !options.no_threads);
         assert_eq!(options.runtime, None);
 
         let more = ["/games/one", "--frames", "1", "--runtime", "rgss2"];
-        assert_eq!(parse(&more, root).unwrap().runtime, Some(Runtime::Rgss2));
+        let options = parse(
+            &[&more[..], &["--original-only", "--no-threads"]].concat(),
+            root,
+        );
+        let options = options.unwrap();
+        assert_eq!(options.runtime, Some(Runtime::Rgss2));
+        assert!(options.original_only && options.no_threads && !options.vkxp_only);
 
         for wrong in [
-            &["/games/one", "--frames", "1", "--runtime", "rgss3"][..],
+            // The both-options scenario of `oracle-harness`: the command then prints the usage.
+            &[
+                "/games/one",
+                "--frames",
+                "1",
+                "--original-only",
+                "--vkxp-only",
+            ][..],
+            &["/games/one", "--frames", "1", "--runtime", "rgss3"],
             &["--frames", "1"],
             &["/games/one"],
             &["/games/one", "--frames"],
@@ -602,7 +645,7 @@ loop { Graphics.update }
             (scripts[0].clone(), options)
         };
         let probe = |runtime, options: &Options| {
-            let source = probe::generate(runtime, Side::Original, &options.schedule, &[10]);
+            let source = probe::generate(runtime, Side::Original, &options.schedule, &[10], false);
             archive::Entry::new(0, probe::NAME, &source)
         };
 
@@ -674,6 +717,138 @@ loop { Graphics.update }
             assert_eq!(scripts[0].name, probe::NAME.as_bytes());
             assert_eq!(scripts[1..], archive::read(&packed.data).unwrap());
         }
+    }
+
+    /// What RGSS2 has and the `Graphics` of vkxp, which runs these games as RGSS1, has not,
+    /// so that the probe of RGSS2 can be run: the functions show nothing here.
+    const RGSS2_STAND_IN: &str = "\
+class << Graphics
+  def wait(duration)
+  end
+
+  def fadeout(duration)
+  end
+
+  def fadein(duration)
+  end
+
+  def brightness
+    @oracle_test_brightness || 255
+  end
+
+  def brightness=(value)
+    @oracle_test_brightness = value
+  end
+end
+";
+
+    /// The scenarios of `oracle-harness` that are stated on the model of the probe of RGSS2:
+    /// its repeat rule and its frame numbers.
+    #[test]
+    fn the_probe_of_rgss2_repeats_and_counts_frames_as_measured() {
+        let main = "\
+repeats = []
+(1..40).each do |update|
+  Input.update
+  repeats << update if Input.repeat?(Input::DOWN)
+  Graphics.update
+end
+counts = []
+mark = OracleProbe.frame
+[proc { Graphics.wait(5) }, proc { Graphics.fadeout(3) }, proc { Graphics.transition(20) },
+ proc { Graphics.freeze }, proc { Graphics.transition(20) }].each do |call|
+  call.call
+  counts << OracleProbe.frame - mark
+  mark = OracleProbe.frame
+end
+File.open('model.log', 'w') { |file| file.write(repeats.join(' ') + '|' + counts.join(' ')) }
+";
+        let schedule = Schedule::parse("0:DOWN").unwrap();
+        let probe = probe::generate(Runtime::Rgss2, Side::Vkxp, &schedule, &[], false);
+        let generated = Generated::new(&[
+            ("Stand-in", RGSS2_STAND_IN),
+            (probe::NAME, &probe),
+            ("Main", main),
+        ]);
+
+        generated.plain_run(&[]);
+
+        let log = fs::read_to_string(generated.game().join("model.log")).unwrap();
+        assert_eq!(log, "1 24 30 36|5 3 0 0 20");
+    }
+
+    /// The probe of RGSS2 on the original's side, run in vkxp with this test in the place of
+    /// the harness: frames inside `wait` and a fade are held at their frame, and a frame
+    /// inside a transition is held after it and marked as late, unless it is its last.
+    #[test]
+    fn the_probe_of_rgss2_holds_inside_waits_and_marks_frames_in_a_transition_as_late() {
+        // Frame 0, then 1 to 4, 5 to 8, 9 to 18, and updates from 19 on.
+        let main = "\
+Graphics.update
+Graphics.wait(4)
+Graphics.fadeout(4)
+Graphics.freeze
+Graphics.transition(10)
+loop { Graphics.update }
+";
+        let captures = [2, 7, 12, 18, 20];
+        let schedule = Schedule::default();
+        let probe = probe::generate(Runtime::Rgss2, Side::Original, &schedule, &captures, false);
+        let generated = Generated::new(&[
+            ("Stand-in", RGSS2_STAND_IN),
+            (probe::NAME, &probe),
+            ("Main", main),
+        ]);
+        let game = generated.game();
+
+        let deadline = std::time::Instant::now() + Duration::from_secs(120);
+        let mut requests = Vec::new();
+        std::thread::scope(|scope| {
+            let runner = scope.spawn(|| generated.plain_run(&[]));
+            while !runner.is_finished() {
+                assert!(std::time::Instant::now() < deadline, "{requests:?}");
+                std::thread::sleep(Duration::from_millis(2));
+                for entry in fs::read_dir(&game).unwrap() {
+                    let path = entry.unwrap().path();
+                    if path
+                        .extension()
+                        .is_none_or(|extension| extension != "request")
+                    {
+                        continue;
+                    }
+                    let record = fs::read_to_string(&path).unwrap();
+                    // An empty file is one that the probe has not written yet.
+                    if !record.is_empty() {
+                        requests.push(record);
+                        fs::remove_file(&path).unwrap();
+                    }
+                }
+            }
+        });
+
+        assert_eq!(requests, ["2", "7", "12 late", "18", "20"]);
+    }
+
+    /// The block-runs-at-once scenario of `oracle-harness`, and the report of the option.
+    #[test]
+    fn with_the_option_the_block_of_a_thread_runs_at_once_in_the_caller() {
+        let main = "\
+started = Time.now
+x = 0
+Thread.new { sleep(5); x = 1 }
+File.open('threads.log', 'w') { |file| file.write(\"#{x} #{Time.now - started < 4}\") }
+loop { Graphics.update }
+";
+        let generated = Generated::new(&[("Main", main)]);
+        let mut options = generated.options("1", "");
+        options.no_threads = true;
+
+        run(&options, &crate::workspace_root()).unwrap();
+
+        let log = fs::read_to_string(generated.out().join("vkxp/game/threads.log")).unwrap();
+        assert_eq!(log, "1 true");
+        let summary = fs::read_to_string(generated.out().join("summary.json")).unwrap();
+        assert!(summary.contains("\"no_threads\": true"), "{summary}");
     }
 
     /// The family-name scenario of `oracle-harness`, on the side of vkxp; the registry script

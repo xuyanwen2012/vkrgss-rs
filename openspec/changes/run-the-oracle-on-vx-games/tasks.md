@@ -6,8 +6,8 @@
 
 ## 2. Probe of RGSS2
 
-- [ ] 2.1 `probe_rgss2.rb`: seed, input model with the repeat rule of RGSS2, own frame number, the loops and `frame_reset` on the original's side, late frames. Verify: the scenarios of "Same conditions on both sides" and "Frames inside a transition" that are stated on the probe's model; `cargo test -p xtask --locked` passes.
-- [ ] 2.2 `--original-only` and `--no-threads`. Verify: scenarios of "Original alone" and "Games that start threads" that need no original.
+- [x] 2.1 `probe_rgss2.rb`: seed, input model with the repeat rule of RGSS2, own frame number, the loops and `frame_reset` on the original's side, late frames. Verify: the scenarios of "Same conditions on both sides" and "Frames inside a transition" that are stated on the probe's model; `cargo test -p xtask --locked` passes.
+- [x] 2.2 `--original-only` and `--no-threads`. Verify: scenarios of "Original alone" and "Games that start threads" that need no original.
 
 ## 3. On the original
 

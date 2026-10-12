@@ -17,6 +17,9 @@ const TEMPLATE: &str = include_str!("probe.rb");
 /// The probe for games of RGSS2: its frame counting and the repeat rule of its input differ.
 const TEMPLATE_RGSS2: &str = include_str!("probe_rgss2.rb");
 
+/// What `--no-threads` adds to either probe.
+const THREADS: &str = include_str!("probe_threads.rb");
+
 /// The buttons a schedule may name, as `vkxp --input` names them.
 const BUTTONS: [&str; 20] = [
     "DOWN", "LEFT", "RIGHT", "UP", "A", "B", "C", "X", "Y", "Z", "L", "R", "SHIFT", "CTRL", "ALT",
@@ -74,11 +77,13 @@ impl Schedule {
 }
 
 /// The source of the probe of `runtime` for one side. `captures` are the frames to capture.
+/// With `no_threads` the probe also replaces `Thread.new`.
 pub(super) fn generate(
     runtime: Runtime,
     side: Side,
     schedule: &Schedule,
     captures: &[u64],
+    no_threads: bool,
 ) -> String {
     let side = match side {
         Side::Original => "original",
@@ -97,11 +102,12 @@ pub(super) fn generate(
         Runtime::Rgss1 => TEMPLATE,
         Runtime::Rgss2 => TEMPLATE_RGSS2,
     };
-    template
+    let probe = template
         .replace("__SIDE__", side)
         .replace("__SCHEDULE__", &schedule.join(", "))
         .replace("__CAPTURES__", &captures.join(", "))
-        .replace("__SEED__", &SEED.to_string())
+        .replace("__SEED__", &SEED.to_string());
+    if no_threads { probe + THREADS } else { probe }
 }
 
 /// Reads the list of frames of `--frames`: numbers separated by commas. The result is in
@@ -146,7 +152,7 @@ mod tests {
     #[test]
     fn the_probe_holds_the_schedule_the_frames_and_the_side() {
         let schedule = Schedule::parse("60:RIGHT+C, 100:").unwrap();
-        let original = generate(Runtime::Rgss1, Side::Original, &schedule, &[10, 20]);
+        let original = generate(Runtime::Rgss1, Side::Original, &schedule, &[10, 20], false);
         assert!(original.contains("SIDE = \"original\"\n"), "{original}");
         assert!(
             original.contains("SCHEDULE = [[60, [:RIGHT, :C]], [100, []]]\n"),
@@ -156,7 +162,13 @@ mod tests {
         assert!(original.contains("srand(20261009)\n"), "{original}");
         assert!(!original.contains("__"), "{original}");
 
-        let vkxp = generate(Runtime::Rgss1, Side::Vkxp, &Schedule::default(), &[3]);
+        let vkxp = generate(
+            Runtime::Rgss1,
+            Side::Vkxp,
+            &Schedule::default(),
+            &[3],
+            false,
+        );
         assert!(vkxp.contains("SIDE = \"vkxp\"\n"), "{vkxp}");
         assert!(vkxp.contains("SCHEDULE = []\n"), "{vkxp}");
     }
@@ -164,15 +176,29 @@ mod tests {
     #[test]
     fn the_probe_of_rgss2_is_another_text_with_the_same_values() {
         let schedule = Schedule::parse("0:DOWN").unwrap();
-        let probe = generate(Runtime::Rgss2, Side::Original, &schedule, &[10]);
+        let probe = generate(Runtime::Rgss2, Side::Original, &schedule, &[10], false);
         assert!(probe.contains("SIDE = \"original\"\n"), "{probe}");
         assert!(probe.contains("SCHEDULE = [[0, [:DOWN]]]\n"), "{probe}");
         assert!(probe.contains("CAPTURES = [10]\n"), "{probe}");
         assert!(probe.contains("srand(20261009)\n"), "{probe}");
         assert!(probe.contains("oracle_probe_fadeout"), "{probe}");
         assert!(!probe.contains("__"), "{probe}");
-        let xp = generate(Runtime::Rgss1, Side::Original, &schedule, &[10]);
+        let xp = generate(Runtime::Rgss1, Side::Original, &schedule, &[10], false);
         assert!(!xp.contains("oracle_probe_fadeout"), "{xp}");
+    }
+
+    /// The without-the-option scenario of `oracle-harness`, and what the option adds.
+    #[test]
+    fn the_probe_redefines_threads_only_with_the_option() {
+        for runtime in [Runtime::Rgss1, Runtime::Rgss2] {
+            for side in [Side::Original, Side::Vkxp] {
+                let plain = generate(runtime, side, &Schedule::default(), &[3], false);
+                assert!(!plain.contains("Thread"), "{plain}");
+                let with = generate(runtime, side, &Schedule::default(), &[3], true);
+                assert!(with.starts_with(&plain));
+                assert!(with.contains("class Thread\n"), "{with}");
+            }
+        }
     }
 
     #[test]
