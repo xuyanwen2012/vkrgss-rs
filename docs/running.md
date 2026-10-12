@@ -565,12 +565,11 @@ a `+`-joined list of button names (`DOWN`, `LEFT`, `RIGHT`, `UP`, `A`, `B`, `C`,
 from that frame on. Two runs with the same options write byte-identical files, and a dumped
 frame equals what the CPU reference compositor produces for the same messages.
 
-The picture at the top of the README, [images/demo.png](images/demo.png), is frame 12 of this
-run: the sprite has moved, the screen is in the middle of the transition after B, and C tints
-the middle of the screen.
+For example, frame 12 of this run shows the sprite after it has moved, the screen in the
+middle of the transition after B, and the tint of C over the middle of the screen:
 
 ```sh
 VK_LOADER_DRIVERS_SELECT='*lvp*' \
     cargo run -p vkxp-host --example demo-headless -- --frames 30 \
-    --input "0:RIGHT+UP+SHIFT, 6:B, 7:RIGHT+C" --dump 12=docs/images/demo.png
+    --input "0:RIGHT+UP+SHIFT, 6:B, 7:RIGHT+C" --dump 12=target/demo.png
 ```

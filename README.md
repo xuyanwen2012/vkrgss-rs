@@ -7,10 +7,13 @@ the frames of a Vulkan compositor in a window, or writes them to files in a head
 [![CI](https://github.com/xuyanwen2012/vkxp/actions/workflows/ci.yml/badge.svg)](https://github.com/xuyanwen2012/vkxp/actions/workflows/ci.yml)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
 
-![A frame of the built-in demo: a sprite over a checkerboard, a tinted rectangle and a transition](docs/images/demo.png)
+<p align="center">
+  <img src="docs/images/legendary-warband-title.png" width="49%" alt="The title screen of Legendary Warband running in vkxp">
+  <img src="docs/images/legendary-warband-battle.png" width="49%" alt="The start of a battle of Legendary Warband running in vkxp">
+</p>
 
-The picture is a frame of the built-in demo, which needs no game; see
-[Running the demo](docs/running.md#running-the-demo).
+The pictures are frames of [Legendary Warband](https://github.com/xuyanwen2012/XP-MBBS-7.0),
+an RPG Maker XP game, as vkxp renders them in a headless run.
 
 ## Status
 
