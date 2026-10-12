@@ -463,8 +463,9 @@ fn run_guest(game_dir: PathBuf, options: Options, role: &GuestRole) -> Result<bo
         config.run.copier = Some(copier);
     }
     let confined = confined(options.sandbox, options.process_functions);
-    if options.sandbox != Some(false) && !confined {
-        // A program the game starts would inherit the restriction.
+    if options.process_functions {
+        // A program the game starts would inherit the restriction. Said whatever the
+        // setting of the sandbox is.
         tracing::info!("the guest process is not confined: --allow-process-functions is given");
     }
     // The interpreter thread reads and writes the socket itself.
@@ -505,10 +506,9 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
     // What the guest thread does, and what the program waits for once the host has ended.
     let (guest, waited): (Box<dyn FnOnce(GuestEnd) + Send>, Guest) = match form {
         GuestForm::Thread => {
-            if options.sandbox != Some(false) {
-                // The restriction would bind the thread and not the files both sides share.
-                tracing::info!("the guest is a thread and is not confined");
-            }
+            // The restriction would bind the thread and not the files both sides share.
+            // Said whatever the setting of the sandbox is.
+            tracing::info!("the guest is a thread and is not confined");
             let config = guest_config(&game_dir, &options, inputs, seed)?;
             let interpreter = Interpreter::start(vkxp_ruby_sys::Options::default())?;
             // It sends the game to the interpreter thread, waits for it, reports how

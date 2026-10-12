@@ -1826,16 +1826,27 @@ fn a_confined_guest_cannot_write_beside_the_game_directory() {
 /// say so.
 #[test]
 fn a_guest_that_is_not_confined_writes_beside_the_game_directory() {
-    let not_confined: [(&[&str], Option<&str>); 3] = [
+    let functions = "the guest process is not confined: --allow-process-functions is given";
+    let thread = "the guest is a thread and is not confined";
+    let not_confined: [(&[&str], Option<&str>); 5] = [
         (&["--guest", "process", "--sandbox", "off"], None),
         (
             &["--guest", "process", "--allow-process-functions"],
-            Some("the guest process is not confined: --allow-process-functions is given"),
+            Some(functions),
         ),
+        (&["--guest", "thread", "--sandbox", "on"], Some(thread)),
+        // The two say so with the sandbox off as well.
         (
-            &["--guest", "thread", "--sandbox", "on"],
-            Some("the guest is a thread and is not confined"),
+            &[
+                "--sandbox",
+                "off",
+                "--guest",
+                "process",
+                "--allow-process-functions",
+            ],
+            Some(functions),
         ),
+        (&["--sandbox", "off", "--guest", "thread"], Some(thread)),
     ];
     for (arguments, said) in not_confined {
         let outside = tempfile::tempdir().expect("a temporary directory");
@@ -1848,8 +1859,13 @@ fn a_guest_that_is_not_confined_writes_beside_the_game_directory() {
         assert!(outside.path().join("out.txt").is_file(), "{arguments:?}");
         let stderr = ran.stderr();
         assert!(!stderr.contains("is confined"), "{arguments:?}: {stderr}");
-        if let Some(said) = said {
-            assert_eq!(stderr.matches(said).count(), 1, "{arguments:?}: {stderr}");
+        for message in [functions, thread] {
+            let times = usize::from(said == Some(message));
+            assert_eq!(
+                stderr.matches(message).count(),
+                times,
+                "{arguments:?}: {stderr}"
+            );
         }
     }
 }
