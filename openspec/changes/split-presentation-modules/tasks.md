@@ -6,7 +6,7 @@
 
 ## 2. Presenter
 
-- [ ] 2.1 Split `compositor/present.rs` into the modules of `design.md`. Verify: the test command of 1.1 passes; `git diff --stat` of the commit shows no file outside `crates/vkxp-vk/src`.
+- [x] 2.1 Split `compositor/present.rs` into the modules of `design.md`. Verify: the test command of 1.1 passes; `git diff --stat` of the commit shows no file outside `crates/vkxp-vk/src`.
 
 ## 3. Compositor
 

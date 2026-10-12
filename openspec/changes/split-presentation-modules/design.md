@@ -39,6 +39,27 @@ turns out to lie elsewhere:
 - the `impl VkCompositor` block, in two or more files by what the methods do (for example
   the state of the mix and the mask, showing a frame, and reading a frame back).
 
+As built, under `compositor/present/`, with `present.rs` keeping the module documentation
+and the re-exports:
+
+- `scaling`: as above, with `Mask`, `Sources` and `Placement`;
+- `format`: as above;
+- `swapchain`: `Swapchain`, `PresentFence`, `FormatPipeline`, the two timeouts, and the
+  methods of `VkCompositor` that make, replace and repair the swapchain
+  (`ensure_swapchain`, `take_present_fence`, `release_undrawn`, `mark_swapchain_stale`,
+  `uses_swapchain_maintenance`);
+- `presenter`: `Presenter`, `DrawCall`, `PassTarget`, `record_pass`, and the methods that
+  every draw starts with (`ensure_presenter`, `prepare_sources`, `submit_or_idle`);
+- `state`: the mix, the filter, the mask, the frame rate and the window size;
+- `held`: `freeze` and the held frame and the stand-in of the mask;
+- `readback`: `scale_frame` and the off-screen draw;
+- `show`: `present` and `submit_drawn`.
+
+What was `pub(super)` in `present.rs` and is used by `compositor.rs` (`Presenter`, `Mask`,
+`Presenter::forget_bound`, `Presenter::destroy`) is now `pub(in crate::compositor)`, which
+is the same visibility one level further down; what the sibling modules and the tests use
+of each other is `pub(super)`.
+
 `compositor.rs` is split the same way, by the sections it has. `device.rs` needs no split
 once its tests are out.
 

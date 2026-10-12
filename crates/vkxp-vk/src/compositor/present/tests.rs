@@ -1,4 +1,9 @@
-use super::*;
+use ash::vk;
+use vkxp_proto::{Rect, Size};
+
+use super::format::*;
+use super::scaling::*;
+use crate::shared::*;
 
 #[test]
 fn frame_that_fits_exactly_fills_the_window() {
