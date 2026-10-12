@@ -483,3 +483,10 @@ says so, and a window SHALL hide or show the pointer over its picture accordingl
 #### Scenario: Hidden
 - **WHEN** the guest says the pointer is not to be seen
 - **THEN** the display was told to hide it, once
+
+### Requirement: Mask threshold is not negative
+The threshold of a step of a masked transition SHALL NOT be below 0.
+
+#### Scenario: Long transition
+- **WHEN** step 1 of a masked transition of 257 frames is shown
+- **THEN** its threshold is 0
