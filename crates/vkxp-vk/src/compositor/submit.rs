@@ -228,7 +228,7 @@ impl VkCompositor {
     /// How the image of a bitmap is used between its uploads: the compute dispatch fetches
     /// from it, and so does the fragment shader of the presentation pass while the bitmap is a
     /// transition mask, which only a queue that can draw gets to.
-    fn bitmap_use(&self) -> ImageUse {
+    pub(super) fn bitmap_use(&self) -> ImageUse {
         match self.gpu.can_draw {
             true => ImageUse::COMPUTE_SAMPLED_READ.and(ImageUse::FRAGMENT_SAMPLED_READ),
             false => ImageUse::COMPUTE_SAMPLED_READ,
@@ -354,19 +354,5 @@ impl VkCompositor {
             }
         }
         self.submit_and_wait()
-    }
-
-    /// The pixels of a live bitmap, read back from its image.
-    #[cfg(test)]
-    pub(crate) fn read_bitmap(&mut self, id: vkxp_proto::BitmapId) -> Result<Vec<u8>, VkError> {
-        self.table
-            .get(id)
-            .map_err(|source| VkError::InvalidOpBitmap { index: 0, source })?;
-        match self.images.get(&id.index) {
-            Some(image) => {
-                self.read_image(image.image, (image.width, image.height), self.bitmap_use())
-            }
-            None => Ok(Vec::new()),
-        }
     }
 }

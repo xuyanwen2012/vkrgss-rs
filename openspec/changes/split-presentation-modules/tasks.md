@@ -14,7 +14,7 @@
 
 ## 4. Probes
 
-- [ ] 4.1 Gather the test-only fields, records and methods in one probe type per module as in `design.md`. Verify: scenario "Test attributes" with `grep -rn '#\[cfg(test)\]' crates/vkxp-vk/src/compositor.rs crates/vkxp-vk/src/compositor`; the test command of 1.1 passes; `cargo build -p vkxp --release --locked` succeeds.
+- [x] 4.1 Gather the test-only fields, records and methods in one probe type per module as in `design.md`. Verify: scenario "Test attributes" with `grep -rn '#\[cfg(test)\]' crates/vkxp-vk/src/compositor.rs crates/vkxp-vk/src/compositor`; the test command of 1.1 passes; `cargo build -p vkxp --release --locked` succeeds.
 
 ## 5. Integration check
 

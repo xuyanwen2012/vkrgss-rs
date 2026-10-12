@@ -4,8 +4,6 @@
 use ash::vk;
 use vkxp_proto::Size;
 
-#[cfg(test)]
-use super::format::srgb_formats_only;
 use super::format::{PresentFormat, choose_format, swapchain_extent};
 use crate::VkError;
 use crate::compositor::VkCompositor;
@@ -112,8 +110,7 @@ impl Swapchain {
 impl VkCompositor {
     /// Whether a swapchain created now uses `VK_EXT_swapchain_maintenance1`.
     pub(crate) fn uses_swapchain_maintenance(&self) -> bool {
-        #[cfg(test)]
-        if self.ignore_maintenance {
+        if self.present_probe.ignores_maintenance() {
             return false;
         }
         self.gpu.swapchain_maintenance
@@ -251,11 +248,7 @@ impl VkCompositor {
                 .get_physical_device_surface_formats(self.gpu.physical, surface.handle)
         }
         .map_err(VkError::vulkan("vkGetPhysicalDeviceSurfaceFormatsKHR"))?;
-        #[cfg(test)]
-        let formats = match self.force_srgb {
-            true => srgb_formats_only(formats),
-            false => formats,
-        };
+        let formats = self.present_probe.surface_formats(formats);
         let format =
             choose_format(&formats, self.gpu.swapchain_mutable_format).ok_or(VkError::Vulkan {
                 call: "vkGetPhysicalDeviceSurfaceFormatsKHR",
@@ -289,10 +282,7 @@ impl VkCompositor {
             // signalled in time, idling the device does.
             // SAFETY: the device is live.
             unsafe { device.device_wait_idle() }.map_err(VkError::vulkan("vkDeviceWaitIdle"))?;
-            #[cfg(test)]
-            {
-                self.swapchain_idles += 1;
-            }
+            self.present_probe.swapchain_idled();
         }
         if maintenance && presenter.maintenance_loader.is_none() {
             presenter.maintenance_loader = Some(ash::ext::swapchain_maintenance1::Device::new(

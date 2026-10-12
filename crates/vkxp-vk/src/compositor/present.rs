@@ -14,6 +14,7 @@
 mod format;
 mod held;
 mod presenter;
+mod probe;
 mod readback;
 mod scaling;
 mod show;
@@ -23,5 +24,6 @@ mod swapchain;
 mod tests;
 
 pub(super) use presenter::Presenter;
+pub(super) use probe::Probe;
 pub(super) use scaling::Mask;
 pub use scaling::{Filter, Mix, letterbox};

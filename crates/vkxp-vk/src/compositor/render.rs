@@ -103,29 +103,6 @@ impl VkCompositor {
         Ok(Some(Frame { size, rgba }))
     }
 
-    /// Makes one creation of a frame buffer (the bitmap staging buffer, then the four storage
-    /// buffers of a frame), a first one or a larger one, fail, after `successes` more of them
-    /// have succeeded.
-    #[cfg(test)]
-    pub(crate) fn fail_frame_buffer_after(&mut self, successes: u32) {
-        self.frame_buffer_failure = Some(successes);
-    }
-
-    /// The number of frame buffers created so far.
-    #[cfg(test)]
-    pub(crate) fn frame_buffers_created(&self) -> u32 {
-        self.frame_buffers_created
-    }
-
-    /// Applies bitmap deltas in order and carries out their GPU work, without drawing.
-    #[cfg(test)]
-    pub(crate) fn apply_bitmaps(&mut self, deltas: &[BitmapDelta]) -> Result<(), VkError> {
-        let mut pending = Pending::default();
-        let checked = self.queue_deltas(deltas, &mut pending);
-        self.execute(pending, None)?;
-        checked
-    }
-
     /// Checks each table delta and applies it to the store. The buffer follows when the next
     /// frame is drawn.
     fn apply_table_deltas(&mut self, deltas: &[TableDelta]) -> Result<(), VkError> {
@@ -189,7 +166,7 @@ impl VkCompositor {
     }
 
     /// Checks each delta against the table, applies it there and queues its GPU work.
-    fn queue_deltas<'a>(
+    pub(super) fn queue_deltas<'a>(
         &mut self,
         deltas: &'a [BitmapDelta],
         pending: &mut Pending<'a>,
@@ -256,7 +233,11 @@ impl VkCompositor {
     /// Carries out queued bitmap work and, when there is one, the frame: one submission,
     /// waited for, then the release of everything the work was the last user of. That release
     /// happens on every path, so a failure leaks nothing.
-    fn execute(&mut self, pending: Pending<'_>, frame: Option<&FrameData>) -> Result<(), VkError> {
+    pub(super) fn execute(
+        &mut self,
+        pending: Pending<'_>,
+        frame: Option<&FrameData>,
+    ) -> Result<(), VkError> {
         self.write_bitmap_descriptors(&pending.touched);
         let result = self.submit(&pending, frame);
         if result.is_err() {

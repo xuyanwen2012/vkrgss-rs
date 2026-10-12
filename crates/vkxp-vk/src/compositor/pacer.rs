@@ -641,7 +641,7 @@ mod tests {
         let mut compositor =
             VkCompositor::with_headless_surface(test_device(), Some(&log)).unwrap();
         // A fixed clock; no ids and no results, so the presents themselves go out plain.
-        compositor.timing_stand_in = Some(Box::new(StandIn {
+        compositor.present_probe.timing_stand_in = Some(Box::new(StandIn {
             now: 1000 * MS,
             ..StandIn::default()
         }));

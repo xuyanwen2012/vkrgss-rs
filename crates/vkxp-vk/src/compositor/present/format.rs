@@ -89,24 +89,6 @@ pub(super) fn choose_format(
     unorm().or_else(srgb).or_else(last_resort)
 }
 
-/// The sRGB formats among `formats` that [`choose_format`] knows, or all of `formats` when
-/// there is none: what a surface without a `UNORM` format would offer.
-#[cfg(test)]
-pub(super) fn srgb_formats_only(formats: Vec<vk::SurfaceFormatKHR>) -> Vec<vk::SurfaceFormatKHR> {
-    let srgb: Vec<_> = formats
-        .iter()
-        .copied()
-        .filter(|offered| {
-            SRGB_FORMATS.contains(&offered.format)
-                && offered.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR
-        })
-        .collect();
-    match srgb.is_empty() {
-        true => formats,
-        false => srgb,
-    }
-}
-
 /// The extent of a swapchain for a surface with `capabilities` in a window of `requested`
 /// pixels. A zero dimension means nothing can be presented now.
 pub(super) fn swapchain_extent(

@@ -95,6 +95,17 @@ file. After the change `#[cfg(test)]` stands in the non-test files of `composito
 files. A hook that cannot move without changing behaviour stays, and is listed here with the
 reason.
 
+As built: `compositor/probe.rs` and `compositor/present/probe.rs` each define a `Probe`,
+held by `VkCompositor` as `probe` and `present_probe`. The one of the presenter is a field
+of the compositor and not of `Presenter`, which is made on first use, after a test has
+already set what it injects. Each file has the methods twice, in an `impl` block for the
+tests and in an empty one for every other build, and the `#[cfg(test)] impl VkCompositor`
+block with the methods that only tests call; `srgb_formats_only` moved to the probe of the
+presenter with them. The attributed statements in `show`, `swapchain` and
+`buffers` became ten calls of the probes, which is the only place where a function body
+changed. No hook stayed behind. To be called from the probe's file, `queue_deltas`,
+`execute` and `bitmap_use` became `pub(super)`.
+
 ## Risks
 
 - [A moved function captures something else by name] → the compiler and the byte-exact

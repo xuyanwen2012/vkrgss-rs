@@ -108,24 +108,8 @@ impl VkCompositor {
             timing_on: false,
             frame_timing: None,
             query_pool: vk::QueryPool::null(),
-            #[cfg(test)]
-            acquire_timeouts: 0,
-            #[cfg(test)]
-            ignore_maintenance: false,
-            #[cfg(test)]
-            force_srgb: false,
-            #[cfg(test)]
-            fail_draw: false,
-            #[cfg(test)]
-            fenced_presents: 0,
-            #[cfg(test)]
-            swapchain_idles: 0,
-            #[cfg(test)]
-            timing_stand_in: None,
-            #[cfg(test)]
-            frame_buffer_failure: None,
-            #[cfg(test)]
-            frame_buffers_created: 0,
+            probe: Default::default(),
+            present_probe: Default::default(),
             allocator: ManuallyDrop::new(allocator),
             pool: vk::CommandPool::null(),
             commands: vk::CommandBuffer::null(),
@@ -267,24 +251,6 @@ impl VkCompositor {
     /// The device the compositor runs on.
     pub fn device(&self) -> &DeviceInfo {
         &self.gpu.info
-    }
-
-    /// Whether the device was created with `VK_KHR_swapchain_mutable_format`.
-    #[cfg(test)]
-    pub(crate) fn has_swapchain_mutable_format(&self) -> bool {
-        self.gpu.swapchain_mutable_format
-    }
-
-    /// Whether the queue of the device has timestamps.
-    #[cfg(test)]
-    pub(crate) fn has_timestamps(&self) -> bool {
-        self.gpu.timestamps.is_some()
-    }
-
-    /// Largest width or height of an image on the device.
-    #[cfg(test)]
-    pub(crate) fn max_image_dimension(&self) -> u32 {
-        self.gpu.max_image_dimension
     }
 }
 

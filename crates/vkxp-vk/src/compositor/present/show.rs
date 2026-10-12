@@ -58,15 +58,7 @@ impl VkCompositor {
                 true => 0,
                 false => ACQUIRE_TIMEOUT,
             };
-            #[cfg(test)]
-            let injected = self.acquire_timeouts > 0;
-            #[cfg(not(test))]
-            let injected = false;
-            let acquired = if injected {
-                #[cfg(test)]
-                {
-                    self.acquire_timeouts -= 1;
-                }
+            let acquired = if self.present_probe.acquire_times_out() {
                 Err(vk::Result::TIMEOUT)
             } else {
                 // SAFETY: the swapchain and the semaphore are live and belong to this device,
@@ -109,19 +101,12 @@ impl VkCompositor {
             // Only now that there is an image to show the frame in: a present that shows
             // nothing must not move the target times on. This may wait for the frame before
             // to be shown.
-            #[cfg(test)]
-            let stand_in = self.timing_stand_in.is_some();
-            #[cfg(not(test))]
-            let stand_in = false;
+            let stand_in = self.present_probe.has_timing_stand_in();
             let calls = chain
                 .timing
                 .as_mut()
                 .map(|timing| timing as &mut dyn TimingCalls);
-            #[cfg(test)]
-            let calls = match &mut self.timing_stand_in {
-                Some(calls) => Some(&mut **calls as &mut dyn TimingCalls),
-                None => calls,
-            };
+            let calls = self.present_probe.timing_calls(calls);
             let plan = self.pacer.plan(calls, frame);
             // The target of a stand-in is on no clock of the swapchain and is not sent.
             let timing_info = plan
@@ -157,13 +142,7 @@ impl VkCompositor {
 
             let started = self.stage_start();
             let drawn = self.submit_or_idle(|compositor| {
-                #[cfg(test)]
-                if std::mem::take(&mut compositor.fail_draw) {
-                    return Err(VkError::Memory {
-                        what: "the draw",
-                        message: "injected failure".to_owned(),
-                    });
-                }
+                compositor.present_probe.before_draw()?;
                 compositor.begin_commands()?;
                 // SAFETY: the command buffer is recording, on the queue that presents and
                 // draws. The image and its view belong to the live swapchain, which is
@@ -222,10 +201,7 @@ impl VkCompositor {
                 vk::SwapchainPresentFenceInfoEXT::default().fences(&present_fences);
             if present_fences[0] != vk::Fence::null() {
                 info = info.push_next(&mut fence_info);
-                #[cfg(test)]
-                {
-                    self.fenced_presents += 1;
-                }
+                self.present_probe.present_fenced();
             }
             // The structures of the pacing extensions, chained in when the present is paced.
             let present_ids = [plan.and_then(|plan| plan.present_id).unwrap_or(0)];

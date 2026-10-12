@@ -60,18 +60,7 @@ impl VkCompositor {
         let slot = role as usize;
         let kept = self.frame_buffers[slot].as_ref().map(|(_, bytes)| *bytes);
         if kept.is_none_or(|bytes| bytes < size) {
-            #[cfg(test)]
-            match self.frame_buffer_failure {
-                Some(0) => {
-                    self.frame_buffer_failure = None;
-                    return Err(VkError::Memory {
-                        what: role.name(),
-                        message: "injected failure".to_owned(),
-                    });
-                }
-                Some(remaining) => self.frame_buffer_failure = Some(remaining - 1),
-                None => {}
-            }
+            self.probe.before_frame_buffer(role.name())?;
             // The descriptor of a storage buffer names all of it, so it stays within the
             // range the device allows, which `size` was checked against with the frame.
             let (usage, limit) = match role.binding() {
@@ -98,10 +87,7 @@ impl VkCompositor {
             if let Some((old, _)) = self.frame_buffers[slot].replace((buffer, bytes)) {
                 old.destroy(&self.gpu.device, &mut self.allocator);
             }
-            #[cfg(test)]
-            {
-                self.frame_buffers_created += 1;
-            }
+            self.probe.frame_buffer_created();
         }
         let (buffer, _) = self.frame_buffers[slot].as_mut().expect("just ensured");
         Ok(buffer)

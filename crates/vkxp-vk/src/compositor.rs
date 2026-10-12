@@ -88,6 +88,7 @@ mod buffers;
 mod measure;
 mod pacer;
 mod present;
+mod probe;
 mod render;
 mod setup;
 mod submit;
@@ -152,34 +153,10 @@ pub struct VkCompositor {
     frame_timing: Option<FrameTiming>,
     /// The timestamp queries of the device durations, or null on a queue without timestamps.
     query_pool: vk::QueryPool,
-    /// Failure injection: the number of acquires that still report a timeout.
-    #[cfg(test)]
-    acquire_timeouts: u32,
-    /// Makes swapchains present as on a device without swapchain maintenance.
-    #[cfg(test)]
-    ignore_maintenance: bool,
-    /// Makes swapchains take an sRGB format of the surface when it has one.
-    #[cfg(test)]
-    force_srgb: bool,
-    /// Failure injection: whether the draw of the next present fails.
-    #[cfg(test)]
-    fail_draw: bool,
-    /// The number of presents handed over with a present fence.
-    #[cfg(test)]
-    fenced_presents: u32,
-    /// The number of times the device was idled to replace a swapchain.
-    #[cfg(test)]
-    swapchain_idles: u32,
-    /// Stands in for the pacing extensions of the swapchain when the presents are planned.
-    #[cfg(test)]
-    timing_stand_in: Option<Box<dyn pacer::TimingCalls>>,
-    /// Failure injection: the number of frame buffers that may still be created or grown
-    /// before one such allocation fails, once.
-    #[cfg(test)]
-    frame_buffer_failure: Option<u32>,
-    /// The number of frame buffers created so far, first ones and larger ones alike.
-    #[cfg(test)]
-    frame_buffers_created: u32,
+    /// What the tests record of rendering and inject into it.
+    probe: probe::Probe,
+    /// What the tests record of presentation and inject into it.
+    present_probe: present::Probe,
     allocator: ManuallyDrop<Allocator>,
     pool: vk::CommandPool,
     commands: vk::CommandBuffer,
