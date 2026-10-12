@@ -13,6 +13,10 @@ const ASF_HEADER: [u8; 16] = [
     0x30, 0x26, 0xb2, 0x75, 0x8e, 0x66, 0xcf, 0x11, 0xa6, 0xd9, 0x00, 0xaa, 0x00, 0x62, 0xce, 0x6c,
 ];
 
+/// How the reason of [`DecodeError::Unsupported`] starts when the program is what is missing
+/// or failed. The mixer tells this failure from other data it cannot play by it.
+pub(crate) const NEEDS_FFMPEG: &str = "WMA needs the ffmpeg program";
+
 /// Whether `data` is an ASF file.
 pub(crate) fn is_asf(data: &[u8]) -> bool {
     data.starts_with(&ASF_HEADER)
@@ -33,9 +37,7 @@ impl Decoded {
         sample_rate: u32,
         program: &Path,
     ) -> Result<Decoded, DecodeError> {
-        let failed = |reason: String| {
-            DecodeError::Unsupported(format!("WMA needs the ffmpeg program: {reason}"))
-        };
+        let failed = |reason: String| DecodeError::Unsupported(format!("{NEEDS_FFMPEG}: {reason}"));
         let mut child = Command::new(program)
             .args([
                 "-v", "error", "-i", "pipe:0", "-f", "f32le", "-ac", "2", "-ar",

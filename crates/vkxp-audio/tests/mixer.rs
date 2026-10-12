@@ -522,6 +522,32 @@ fn wma_without_the_program_is_reported_and_silent() {
     assert!((level(&out, RATE, 440.0) - AMPLITUDE).abs() < 0.01);
 }
 
+/// What WMA needs is said once, whatever else was reported before as not decodable.
+#[test]
+fn wma_without_the_program_is_reported_behind_other_undecodable_data() {
+    let _programs = PROGRAMS.lock().unwrap();
+    let reports = Reports::default();
+    let program = PathBuf::from("/nonexistent/vkxp-test-ffmpeg");
+    let mut mixer = mixer_with_ffmpeg(program, &reports);
+    mixer.apply(play(AudioChannel::Se, b"these bytes are no audio file"));
+    assert_eq!(reports.lines(), 1, "{}", reports.text());
+    assert!(!reports.text().contains("ffmpeg"), "{}", reports.text());
+
+    mixer.apply(play(AudioChannel::Se, &wma()));
+    assert_eq!(reports.lines(), 2, "{}", reports.text());
+    assert!(reports.text().contains("ffmpeg"), "{}", reports.text());
+
+    // Each of the two kinds again adds nothing.
+    mixer.apply(play(AudioChannel::Bgm, &wma()));
+    mixer.apply(play(AudioChannel::Se, b"these bytes are no audio file"));
+    assert_eq!(peak(&render(&mut mixer, 0.2)), 0.0);
+    assert_eq!(reports.lines(), 2, "{}", reports.text());
+
+    mixer.apply(play(AudioChannel::Bgm, &tone(440.0, 0.5)));
+    let out = side(&render(&mut mixer, 0.5), 0);
+    assert!((level(&out, RATE, 440.0) - AMPLITUDE).abs() < 0.01);
+}
+
 /// A program that fails, or returns nothing, is as good as none.
 #[test]
 fn wma_that_the_program_does_not_decode_is_reported_and_silent() {

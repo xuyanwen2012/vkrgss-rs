@@ -20,6 +20,7 @@ use vkxp_proto::{AudioChannel, AudioCommand};
 
 use crate::decode::{self, DecodeError, Report, Source};
 use crate::midi::SoundFonts;
+use crate::wma;
 
 /// The range of the pitch of a play command, in percent.
 const PITCH: std::ops::RangeInclusive<u16> = 50..=150;
@@ -67,6 +68,7 @@ pub(crate) enum Prepared {
 struct Reports {
     errors: Box<dyn Write + Send>,
     undecodable_reported: bool,
+    ffmpeg_reported: bool,
     soundfont_reported: bool,
 }
 
@@ -74,6 +76,10 @@ impl Reports {
     /// Writes the report of `error` unless one of its kind has been written.
     fn report(&mut self, error: &DecodeError) {
         let (reported, consequence) = match error {
+            // Its own kind: other data that does not decode must not hide what WMA needs.
+            DecodeError::Unsupported(reason) if reason.starts_with(wma::NEEDS_FFMPEG) => {
+                (&mut self.ffmpeg_reported, "WMA sounds stay silent")
+            }
             DecodeError::Unsupported(_) => (
                 &mut self.undecodable_reported,
                 "sounds that cannot be decoded stay silent",
@@ -441,6 +447,7 @@ impl Mixer {
         let reports = Mutex::new(Reports {
             errors: options.errors,
             undecodable_reported: false,
+            ffmpeg_reported: false,
             soundfont_reported: false,
         });
         let report: Report = Arc::new(move |error: &DecodeError| {
