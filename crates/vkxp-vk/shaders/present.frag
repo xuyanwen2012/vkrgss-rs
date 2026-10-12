@@ -59,10 +59,12 @@ layout(location = 0) out vec4 color;
 // The weight of the held frame, 0 to 255, at the pixel `position` of the newest frame under
 // the mask, which is tiled from the frame's corner.
 int held_weight(ivec2 position) {
-    ivec3 texel = ivec3(texelFetch(mask, position % textureSize(mask, 0), 0).rgb);
-    // PLACEHOLDER: floor(0.2989 r + 0.5866 g + 0.1145 b). Exact for a grey mask; the original
-    // is one higher for a few colours whose sum lies just below a whole number.
-    int level = (2989 * texel.r + 5866 * texel.g + 1145 * texel.b) / 10000;
+    uvec3 texel = texelFetch(mask, position % textureSize(mask, 0), 0).rgb;
+    // Read from the code of RGSS104E and measured on RGSS103J and RGSS104E, 2026-10-12, with
+    // PNG masks of 24 and 32 bits. Nothing is added before the shift and alpha is not used.
+    // The sum reaches 255 * 2^24, which fits a uint and not an int; the weights sum to 2^24,
+    // so a grey pixel keeps its value.
+    int level = int((5014911u * texel.r + 9841699u * texel.g + 1920606u * texel.b) >> 24);
     if (constants.vagueness == 0) {
         return level >= constants.threshold ? 255 : 0;
     }

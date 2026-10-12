@@ -620,6 +620,7 @@ fn vagueness_of_zero_is_a_hard_edge_that_keeps_the_threshold_level() {
 
 const FADE_SAMPLES: &str = include_str!("data/transition-samples.txt");
 const MASK_SAMPLES: &str = include_str!("data/transition-mask-samples.txt");
+const MASK_COLOUR_SAMPLES: &str = include_str!("data/transition-mask-colour-samples.txt");
 
 /// The numbers of each sample line of `text` whose first word is `kind`, or of every sample
 /// line when `kind` is empty. Comment lines start with `#`.
@@ -748,26 +749,50 @@ fn masked_mix_equals_every_measured_sample_of_a_grey_mask() {
     }
 }
 
+/// The mask values of the colours `mask`, as the white to black row of the probe shows them.
+fn mask_values(mask: &[[u8; 3]]) -> Vec<u8> {
+    let mut compositor = TestCompositor::new();
+    masked_last_step(&mut compositor, MASK, (2, 255), mask, PROBE);
+    // With a threshold of 0 and a vagueness of 255 the first row shows the mask value.
+    compositor.set_mix(Mix::Step {
+        weight: 0,
+        threshold: 0,
+    });
+    let shown = compositor
+        .scale_frame(Size::new(mask.len() as u32, 2))
+        .unwrap();
+    (0..mask.len() as u32)
+        .map(|x| {
+            let [r, g, b, a] = pixel(&shown, x, 0);
+            assert_eq!([g, b, a], [r, r, 255], "column {x}");
+            r
+        })
+        .collect()
+}
+
 #[test]
-fn mask_value_equals_every_selected_sample_of_a_coloured_mask() {
+fn mask_value_equals_every_measured_sample_of_a_coloured_mask() {
     // lum r g b -> L
-    let all = samples(MASK_SAMPLES, "lum");
-    assert!(all.len() >= 100, "{} samples", all.len());
+    let mut all = samples(MASK_SAMPLES, "lum");
+    all.extend(samples(MASK_COLOUR_SAMPLES, "lum"));
+    assert!(all.len() >= 500, "{} samples", all.len());
+    for named in [[5, 231, 0, 137], [0, 3, 203, 24]] {
+        assert!(all.iter().any(|line| line[..] == named), "{named:?}");
+    }
     let mask: Vec<[u8; 3]> = all
         .iter()
         .map(|line| [line[0] as u8, line[1] as u8, line[2] as u8])
         .collect();
-    let mut compositor = TestCompositor::new();
-    // With a duration of 2 and a vagueness of 255 the first row shows the mask value less 127.
-    let shown = masked_last_step(&mut compositor, MASK, (2, 255), &mask, PROBE);
-    for (x, line) in all.iter().enumerate() {
-        let expected = (line[3] - 127) as u8;
-        assert_eq!(
-            pixel(&shown, x as u32, 0),
-            [expected, expected, expected, 255],
-            "{line:?}"
-        );
+    for (line, value) in all.iter().zip(mask_values(&mask)) {
+        assert_eq!(u32::from(value), line[3], "{line:?}");
     }
+}
+
+#[test]
+fn mask_value_of_a_grey_pixel_is_its_grey() {
+    let greys: Vec<u8> = (0..=255).collect();
+    let mask: Vec<[u8; 3]> = greys.iter().map(|&v| [v; 3]).collect();
+    assert_eq!(mask_values(&mask), greys);
 }
 
 #[test]

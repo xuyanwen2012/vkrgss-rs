@@ -5,8 +5,9 @@
 #   rule: T = (255*(N-1)-1)/N; vague 0: w = 255 if L>=T else 0; else w = 0 if L<=T else
 #         min(255,(L-T)*255/vague); result = new if w==0 else new + (((old-new)*(w+1))>>8)
 # "lum r g b -> L": the mask value of a coloured mask pixel, from N=2, vague=255, where the
-#   result for old=255, new=0 is L-127. Only colours that floor(0.2989r+0.5866g+0.1145b)
-#   reproduces are selected; the original is one higher for a few others.
+#   result for old=255, new=0 is L-127. Every line equals
+#   (5014911*r + 9841699*g + 1920606*b) >> 24, the original's rule; more colours are in
+#   transition-mask-colour-samples.txt.
 w 2 0 0 -> 0 | 50 200 255
 w 2 0 126 -> 0 | 50 200 255
 w 2 0 127 -> 255 | 200 50 0

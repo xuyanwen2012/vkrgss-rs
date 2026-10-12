@@ -2,7 +2,7 @@
 
 ## 1. Mask level
 
-- [ ] 1.1 The rule in `present.frag`, the samples file moved beside the old one and read by the test, the corrected comment. Verify: scenarios "Grey" and "Measured colours"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk --locked` passes.
+- [x] 1.1 The rule in `present.frag`, the samples file moved beside the old one and read by the test, the corrected comment. Verify: scenarios "Grey" and "Measured colours"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk --locked` passes.
 
 ## 2. Blends
 
