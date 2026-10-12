@@ -6,7 +6,7 @@
 
 ## 2. Guest
 
-- [ ] 2.1 `RunConfig` carries the runtime; the globals of test mode follow it. Verify: the scenarios of `specs/rgss-runtime/spec.md`; `cargo test -p vkxp-binding --locked` passes.
+- [x] 2.1 `RunConfig` carries the runtime; the globals of test mode follow it. Verify: the scenarios of `specs/rgss-runtime/spec.md`; `cargo test -p vkxp-binding --locked` passes.
 
 ## 3. Program
 

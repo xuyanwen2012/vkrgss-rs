@@ -156,8 +156,8 @@
 //! `Game.ini` and resolved the run-time packages, whose errors it reports before a window
 //! exists, and has made the game directory the working directory, because scripts write
 //! their saves through Ruby's own file API. The [`RunConfig`] inside the `Config` carries
-//! the configuration file, the path of the built-in scripts file, the debug and battle-test
-//! flags, the switch for the process functions, the random seed and the preload scripts.
+//! the configuration file, the runtime of the game, the path of the built-in scripts file,
+//! the debug and battle-test flags, the switch for the process functions, the random seed and the preload scripts.
 //!
 //! ```no_run
 //! use vkxp_binding::{Config, RunConfig, run_game};
@@ -210,7 +210,7 @@
 //! (`src/prelude.rb`), on top of a few host functions whose names start with `vkxp_`:
 //!
 //! - `$KCODE` is `"UTF8"`, the load path is empty, `$DEBUG` and `$BTEST` follow the
-//!   [`RunConfig`].
+//!   [`RunConfig`]; in a game of RGSS2 `$TEST` and `$BTEST` do.
 //! - `Reset` and `Hangup` are subclasses of `Exception`, so a bare `rescue` lets them pass.
 //! - `save_data` writes a `Marshal` dump through Ruby's `File`. `load_data` is a host
 //!   function that finds the file through the game's files, without regard to letter case.

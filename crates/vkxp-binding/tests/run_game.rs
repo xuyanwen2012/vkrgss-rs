@@ -9,6 +9,7 @@ use std::fs;
 use vkxp_binding::testing::host::{self, Game, Played, Script};
 use vkxp_binding::{RunConfig, RunError, testing};
 use vkxp_proto::{AudioChannel, AudioCommand, GuestToHost, HostToGuest};
+use vkxp_vfs::Runtime;
 
 fn run(game: &Game, script: Script, after: &str) -> Played {
     host::run_game(game, game.run_config(), script, after)
@@ -76,6 +77,32 @@ fn debug_and_battle_test_mode_are_the_callers() {
     };
     let played = host::run_game(&game, config, Script::new(), "$vkxp_modes");
     assert_eq!(played.after.as_deref(), Ok("[true, true]"));
+}
+
+/// Scenario "Globals of VX, measured on the original".
+#[test]
+fn the_globals_of_test_mode_of_vx_are_those_of_the_original() {
+    let game = Game::of(
+        Runtime::Rgss2,
+        "modes_of_vx",
+        "Modes",
+        &[("Main", "$vkxp_modes_of_vx = [$TEST, $BTEST, $DEBUG]")],
+    );
+    assert_eq!(game.run_config().runtime, Runtime::Rgss2);
+    for (debug, battle_test, globals) in [
+        (false, false, "[false, false, false]"),
+        (true, false, "[true, false, false]"),
+        (false, true, "[true, true, false]"),
+    ] {
+        let config = RunConfig {
+            debug,
+            battle_test,
+            ..game.run_config()
+        };
+        let played = host::run_game(&game, config, Script::new(), "$vkxp_modes_of_vx");
+        assert!(played.outcome.is_ok(), "{:?}", played.outcome);
+        assert_eq!(played.after.as_deref(), Ok(globals));
+    }
 }
 
 #[test]

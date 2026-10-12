@@ -26,7 +26,7 @@ use vkxp_proto::link::GuestEnd;
 use vkxp_proto::{AudioChannel, AudioCommand, GuestToHost, HostToGuest};
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{Raise, Raised, Ruby, RubyError};
-use vkxp_vfs::{FileKind, GameIni};
+use vkxp_vfs::{FileKind, GameIni, Runtime};
 
 use crate::guest::{Config, Guest};
 use crate::panel::Panel;
@@ -72,11 +72,13 @@ pub struct RunConfig {
     /// The game's configuration file, read by the caller: the window title and the path of
     /// the script archive come from it.
     pub ini: GameIni,
+    /// The runtime the game was made for, settled by the caller.
+    pub runtime: Runtime,
     /// The file of the built-in `RPG` scripts, extracted from the original runtime's DLL.
     pub builtin_scripts: PathBuf,
-    /// Debug mode: `$DEBUG` is `true`.
+    /// Debug mode: `$DEBUG` is `true` in RGSS1, `$TEST` in the later runtimes.
     pub debug: bool,
-    /// Battle-test mode: `$BTEST` is `true`.
+    /// Battle-test mode: `$BTEST` is `true`, and in the runtimes after RGSS1 `$TEST` too.
     pub battle_test: bool,
     /// Whether `system`, backticks, `exec`, `fork`, `syscall` and `IO.popen` start processes.
     /// They do nothing when this is `false`.
@@ -102,8 +104,8 @@ pub struct RunConfig {
 }
 
 impl Default for RunConfig {
-    /// A game without a title whose scripts are in `Data/Scripts.rxdata`, with no built-in
-    /// scripts file and every switch off.
+    /// A game of RGSS1 without a title whose scripts are in `Data/Scripts.rxdata`, with no
+    /// built-in scripts file and every switch off.
     fn default() -> RunConfig {
         RunConfig {
             ini: GameIni {
@@ -113,6 +115,7 @@ impl Default for RunConfig {
                 rtp: String::new(),
                 rtps: Default::default(),
             },
+            runtime: Runtime::Rgss1,
             builtin_scripts: PathBuf::new(),
             debug: false,
             battle_test: false,
@@ -424,21 +427,39 @@ pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
 }
 
 /// Prepares the interpreter as the original runtime does before a game's scripts run:
-/// evaluates the prelude, sets `$DEBUG` and `$BTEST` from the guest's [`RunConfig`], and
+/// evaluates the prelude, sets the globals of test mode from the guest's [`RunConfig`], and
 /// turns the process functions off unless it enables them.
 pub(crate) fn prepare(ruby: &Ruby) -> Result<(), RubyError> {
-    let (debug, battle_test, process_functions) = Guest::with(|guest| {
+    let (runtime, debug, battle_test, process_functions) = Guest::with(|guest| {
         let run = &guest.runtime.run;
-        (run.debug, run.battle_test, run.process_functions)
+        (
+            run.runtime,
+            run.debug,
+            run.battle_test,
+            run.process_functions,
+        )
     });
     ruby.eval_protected(PRELUDE, PRELUDE_NAME, 1)?;
     if !process_functions {
         ruby.eval_protected(PROCESS_FUNCTIONS_OFF, PRELUDE_NAME, 1)?;
     }
     // Last, so that debug mode does not report the exceptions the prelude itself may meet.
-    let flags = format!("$DEBUG = {debug}\n$BTEST = {battle_test}\n");
+    let flags = test_mode_globals(runtime, debug, battle_test);
     ruby.eval_protected(&flags, PRELUDE_NAME, 1)?;
     Ok(())
+}
+
+/// The source that sets the globals of test mode. RGSS1 has `$DEBUG` and `$BTEST`. The
+/// later runtimes have `$TEST` instead of `$DEBUG`, which stays `false`, and a battle test
+/// sets `$TEST` as well: measured on the original runtime of VX.
+fn test_mode_globals(runtime: Runtime, debug: bool, battle_test: bool) -> String {
+    match runtime {
+        Runtime::Rgss1 => format!("$DEBUG = {debug}\n$BTEST = {battle_test}\n"),
+        Runtime::Rgss2 | Runtime::Rgss3 => format!(
+            "$DEBUG = false\n$TEST = {}\n$BTEST = {battle_test}\n",
+            debug || battle_test
+        ),
+    }
 }
 
 /// The file name the built-in scripts are reported under.

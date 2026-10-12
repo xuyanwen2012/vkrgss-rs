@@ -27,7 +27,7 @@ use std::thread::{self, JoinHandle};
 use vkxp_proto::link::{GuestEnd, link};
 use vkxp_proto::{FramePacket, GuestToHost, HostToGuest};
 use vkxp_ruby_sys::{Ruby, RubyError};
-use vkxp_vfs::{GameFiles, GameIni};
+use vkxp_vfs::{GameFiles, GameIni, Runtime};
 
 use crate::{Guest, RunConfig, RunError, runtime};
 
@@ -308,17 +308,27 @@ impl Game {
     /// `title` and its archive, `Data/Scripts.rxdata`, holds `scripts` as pairs of name and
     /// source, assembled with `Marshal` and `Zlib` of the interpreter.
     pub fn new(name: &str, title: &str, scripts: &[(&str, &str)]) -> Game {
+        Game::of(Runtime::Rgss1, name, title, scripts)
+    }
+
+    /// Creates a game as [`Game::new`] does, as the editor of `runtime` lays it out: the
+    /// library and the name of the archive in `Game.ini` are those of that runtime.
+    pub fn of(runtime: Runtime, name: &str, title: &str, scripts: &[(&str, &str)]) -> Game {
+        let (library, archive) = match runtime {
+            Runtime::Rgss1 => ("RGSS104E.dll", "Scripts.rxdata"),
+            Runtime::Rgss2 => ("RGSS202E.dll", "Scripts.rvdata"),
+            Runtime::Rgss3 => ("System\\RGSS301.dll", "Scripts.rvdata2"),
+        };
         let dir = super::game_dir().with_file_name("games").join(name);
         if dir.exists() {
             fs::remove_dir_all(&dir).unwrap_or_else(|error| panic!("{}: {error}", dir.display()));
         }
         let game = Game { dir };
-        let ini = format!(
-            "[Game]\r\nLibrary=RGSS104E.dll\r\nScripts=Data\\Scripts.rxdata\r\nTitle={title}\r\n"
-        );
+        let ini =
+            format!("[Game]\r\nLibrary={library}\r\nScripts=Data\\{archive}\r\nTitle={title}\r\n");
         super::write(&game.dir.join("Game.ini"), ini.as_bytes());
         super::write(&game.builtin_scripts(), RPG_STAND_IN.as_bytes());
-        let archive = game.dir.join("Data").join("Scripts.rxdata");
+        let archive = game.dir.join("Data").join(archive);
         super::write(&archive, b"");
         let entries: Vec<String> = scripts
             .iter()
@@ -352,11 +362,13 @@ impl Game {
     }
 
     /// What running this game needs, as a caller of `run_game` puts it together: the
-    /// configuration file read from the directory, the built-in scripts file, and every
-    /// switch off.
+    /// configuration file read from the directory, the runtime it tells, the built-in
+    /// scripts file, and every switch off.
     pub fn run_config(&self) -> RunConfig {
+        let ini = GameIni::read(&self.dir, None).expect("the game has a Game.ini");
         RunConfig {
-            ini: GameIni::read(&self.dir, None).expect("the game has a Game.ini"),
+            runtime: Runtime::detect(&ini).expect("the game tells its runtime"),
+            ini,
             builtin_scripts: self.builtin_scripts(),
             ..RunConfig::default()
         }
