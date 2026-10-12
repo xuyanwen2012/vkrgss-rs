@@ -1,8 +1,8 @@
 ## ADDED Requirements
 
 ### Requirement: MIDI loop marker
-A MIDI track that loops SHALL continue, when it ends, at its first controller 111, and at
-its beginning when it has none. A MIDI track that does not loop SHALL end at its end.
+A MIDI track that loops SHALL continue, when it ends, at the last controller 111 it has
+played, and at its beginning when it has none. A MIDI track that does not loop SHALL end at its end.
 
 #### Scenario: Marker
 - **WHEN** a generated MIDI file with a note before a controller 111 and a different note after it plays as music for twice its length

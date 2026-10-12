@@ -79,14 +79,11 @@ output device.
 
 ## Follow-ups
 
-- OPEN, task 1.1 stays unticked: a track with more than one controller 111. `rustysynth`
-  moves its loop start at every controller 111 it passes, so such a track continues at the
-  last marker it played, not at the first as the requirement says. With one marker, or several at the same time (one for
-  each MIDI channel), the two are the same. Following the first would need the file to be
-  rewritten in front of the library, which this design does not name; it was not built.
-  The scenarios "Marker" and "No marker" pass. The owner decides whether the requirement
-  is to say "the last controller 111 it played" or the design is to name a way to the
-  first.
+- Settled at the merge on 2026-10-12: a track with more than one controller 111
+  continues at the last marker it has played, which is what `rustysynth` does, and the
+  requirement says so. With one marker, or several at the same time, that is the first.
+  What the original runtime does with several markers was not measured. Nothing is built
+  in front of the library.
 - The report that WMA needs `ffmpeg` is made once, apart from the report of other data
   that does not decode, so that the one does not keep the other back. The mixer tells the
   two apart by how the reason of `Unsupported` starts.
