@@ -1297,6 +1297,33 @@ fn a_game_of_vx_whose_data_is_in_the_archive_runs_like_the_one_with_loose_files(
     );
 }
 
+/// Requirement "Symbol numbers follow the runtime": the numbers measured on the original
+/// runtime of VX, whether the interpreter is started for a thread or in a guest process.
+#[test]
+fn the_scripts_of_a_game_of_vx_see_the_symbol_numbers_of_rgss2() {
+    let source = "zz_first = 1; zz_second = 2
+        File.open('symbols.txt', 'w') { |file| file.write([
+          [:zz_first.to_i, :zz_second.to_i], [:initialize.to_i, :to_s.to_i, :update.to_i]
+        ].inspect) }";
+    let game = Game::of(
+        Runtime::Rgss2,
+        "e2e-symbols-vx",
+        "Symbols",
+        &[("Main", source)],
+    );
+    for form in FORMS {
+        let written = game.dir().join("symbols.txt");
+        let _ = fs::remove_file(&written);
+        let ran = headless(&game, &["--guest", form]);
+        ran.assert_success();
+        assert_eq!(
+            fs::read_to_string(written).unwrap(),
+            "[[16089, 16097], [2961, 3161, 6481]]",
+            "{form}"
+        );
+    }
+}
+
 /// The lines of the error stream that say a runtime is experimental.
 fn experimental_lines(stderr: &str) -> Vec<&str> {
     stderr

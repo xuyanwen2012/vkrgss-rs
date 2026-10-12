@@ -82,7 +82,7 @@ use vkxp_host::{
 use vkxp_proto::GuestToHost;
 use vkxp_proto::framing::write_message;
 use vkxp_proto::link::GuestEnd;
-use vkxp_ruby_sys::Interpreter;
+use vkxp_ruby_sys::{Interpreter, SymbolTable};
 use vkxp_vfs::{GameFiles, GameIni, Runtime, VfsError, resolve_rtps};
 
 use crate::args::{GuestForm, GuestRole, Input, Options};
@@ -184,6 +184,24 @@ fn builtin_scripts_name(runtime: Runtime) -> &'static str {
         Runtime::Rgss2 => "rpg_builtin_rgss2.rb",
         Runtime::Rgss3 => "rpg_builtin_rgss3.rb",
     }
+}
+
+/// The start-up symbol table of `runtime`, which numbers the symbols as its original does.
+/// A game of RGSS3 ends before an interpreter is started.
+fn symbol_table(runtime: Runtime) -> SymbolTable {
+    match runtime {
+        Runtime::Rgss1 => SymbolTable::Rgss1,
+        Runtime::Rgss2 | Runtime::Rgss3 => SymbolTable::Rgss2,
+    }
+}
+
+/// Starts the interpreter of a game of `runtime`.
+fn start_interpreter(runtime: Runtime) -> Result<Interpreter> {
+    let options = vkxp_ruby_sys::Options {
+        symbols: symbol_table(runtime),
+        ..vkxp_ruby_sys::Options::default()
+    };
+    Ok(Interpreter::start(options)?)
 }
 
 /// The built-in scripts file of `runtime`: the one named on the command line, or the default
@@ -496,8 +514,9 @@ impl Guest {
 fn run_guest(game_dir: PathBuf, options: Options, role: &GuestRole) -> Result<bool> {
     signals::die_with_parent();
     let inputs = guest_inputs(&game_dir, &options)?;
+    let runtime = inputs.runtime;
     let mut config = guest_config(&game_dir, &options, inputs, role.seed)?;
-    let interpreter = Interpreter::start(vkxp_ruby_sys::Options::default())?;
+    let interpreter = start_interpreter(runtime)?;
     let mut stream = UnixStream::connect(&role.socket).with_context(|| {
         format!(
             "cannot connect to the socket {} of the parent process",
@@ -570,8 +589,9 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
             // The restriction would bind the thread and not the files both sides share.
             // Said whatever the setting of the sandbox is.
             tracing::info!("the guest is a thread and is not confined");
+            let runtime = inputs.runtime;
             let config = guest_config(&game_dir, &options, inputs, seed)?;
-            let interpreter = Interpreter::start(vkxp_ruby_sys::Options::default())?;
+            let interpreter = start_interpreter(runtime)?;
             // It sends the game to the interpreter thread, waits for it, reports how
             // it went and lets go of the interpreter.
             let (done, outcome) = mpsc::channel();

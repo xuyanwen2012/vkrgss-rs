@@ -2,7 +2,7 @@
 
 ## 1. Interpreter
 
-- [ ] 1.1 The program starts the interpreter with the symbol table of the run's runtime, in both places. Verify: the scenarios of `specs/rgss-runtime/spec.md`; `cargo test -p vkxp-binding --locked` and `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` pass.
+- [x] 1.1 The program starts the interpreter with the symbol table of the run's runtime, in both places. Verify: the scenarios of `specs/rgss-runtime/spec.md`; `cargo test -p vkxp-binding --locked` and `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` pass.
 
 ## 2. Frame size and rate
 
