@@ -363,8 +363,8 @@ instead of handles.
 ### Audio
 
 A windowed run plays music, background sounds, music effects and sound effects on the default
-output device. The format of a file is recognised from its content: Ogg Vorbis, WAV (PCM) and
-MP3 are decoded, a Standard MIDI file is played with a SoundFont, and WMA is decoded by the
+output device. The format of a file is recognised from its content: Ogg Vorbis, WAV (PCM),
+MP3 and MPEG audio layer II are decoded, a Standard MIDI file is played with a SoundFont, and WMA is decoded by the
 `ffmpeg` program, which is looked up on the search path each time such a file is played.
 Without `--soundfont` the first of `/usr/share/soundfonts/default.sf2`,
 `/usr/share/soundfonts/FluidR3_GM.sf2` and `/usr/share/sounds/sf2/FluidR3_GM.sf2` that exists

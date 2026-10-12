@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use common::{
-    AMPLITUDE, FIRST_NOTE, MP3, OGG, Reports, SECOND_NOTE, damaged_mp3, frequency, level,
+    AMPLITUDE, FIRST_NOTE, MP2, MP3, OGG, Reports, SECOND_NOTE, damaged_mp3, frequency, level,
     one_note_midi, peak, side, sounding_seconds, tone_wav, two_note_midi, wav_of,
 };
 use vkxp_audio::{Mixer, MixerOptions, SYSTEM_SOUNDFONTS, SoundFonts};
@@ -73,8 +73,8 @@ fn a_wav_tone_is_heard_on_both_output_channels() {
 }
 
 #[test]
-fn the_ogg_and_mp3_fixtures_are_heard_for_their_second() {
-    for (name, data) in [("ogg", OGG), ("mp3", MP3)] {
+fn the_ogg_mp3_and_layer_ii_fixtures_are_heard_for_their_second() {
+    for (name, data) in [("ogg", OGG), ("mp3", MP3), ("mp2", MP2)] {
         let reports = Reports::default();
         let mut mixer = mixer_reporting_to(&reports);
         mixer.apply(play(AudioChannel::Se, data));

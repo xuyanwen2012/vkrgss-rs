@@ -6,7 +6,9 @@ use std::path::{Path, PathBuf};
 
 use std::sync::{Arc, Mutex};
 
-use common::{AMPLITUDE, MP3, OGG, damaged_mp3, frequency, one_note_midi, peak, side, tone_wav};
+use common::{
+    AMPLITUDE, MP2, MP3, OGG, damaged_mp3, frequency, one_note_midi, peak, side, tone_wav,
+};
 use vkxp_audio::decode::{self, DecodeError, Report, Source};
 use vkxp_audio::{SYSTEM_SOUNDFONTS, SoundFonts};
 
@@ -69,8 +71,8 @@ fn a_wav_tone_is_the_same_tone_on_both_sides() {
 }
 
 #[test]
-fn the_ogg_and_mp3_fixtures_sound_for_their_second() {
-    for (name, data) in [("ogg", OGG), ("mp3", MP3)] {
+fn the_ogg_mp3_and_layer_ii_fixtures_sound_for_their_second() {
+    for (name, data) in [("ogg", OGG), ("mp3", MP3), ("mp2", MP2)] {
         let mut source = open(data.into(), 48000, &mut no_soundfont()).unwrap();
         let stereo = read_all(source.as_mut());
         let seconds = stereo.len() as f32 / 2.0 / 48000.0;

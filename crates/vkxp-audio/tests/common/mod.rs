@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 /// The committed fixtures: one second of a 440 Hz tone each. See `data/README.md`.
 pub(crate) const OGG: &[u8] = include_bytes!("../data/tone.ogg");
 pub(crate) const MP3: &[u8] = include_bytes!("../data/tone.mp3");
+pub(crate) const MP2: &[u8] = include_bytes!("../data/tone.mp2");
 
 /// The peak of the tones generated here.
 pub(crate) const AMPLITUDE: f32 = 0.5;
