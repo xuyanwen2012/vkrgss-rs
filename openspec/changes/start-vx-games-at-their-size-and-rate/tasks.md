@@ -10,7 +10,7 @@
 
 ## 3. Documentation
 
-- [ ] 3.1 `docs/running.md`: what a game of VX gets today (size, rate, symbol numbers) in the part that says how far it runs. Verify: the text names nothing that the code does not do.
+- [x] 3.1 `docs/running.md`: what a game of VX gets today (size, rate, symbol numbers) in the part that says how far it runs. Verify: the text names nothing that the code does not do.
 
 ## 4. Integration check
 

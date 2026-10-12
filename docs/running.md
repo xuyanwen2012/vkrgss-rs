@@ -34,15 +34,21 @@ What follows the runtime:
 | Encrypted archive | `Game.rgssad` | `Game.rgss2a` |
 | Default built-in scripts file | `rpg_builtin.rb` | `rpg_builtin_rgss2.rb` |
 | `--debug` sets | `$DEBUG` | `$TEST`; `$DEBUG` stays `false` |
+| Frame and starting window size | 640 by 480 | 544 by 416 |
+| Starting frame rate | 40 | 60 |
+| Symbol numbers (`Symbol#to_i`) | those of RGSS1 | those of RGSS2 |
 
 A game of VX names the package `RPGVX`, so it is run with `--rtp RPGVX=<RTP directory>`; a
 game whose `RTP` is empty needs no package. The archive of the other runtime is ignored if
 the game directory holds one.
 
-A game of VX does not get far yet. It is started with the classes and functions of RGSS1 and
-its scripts stop at the first thing that only RGSS2 has; the frame is still 640 by 480 at 40
-frames per second. Every such run writes one warning that support for RPG Maker VX is
-experimental. A game of VX Ace ends at once with a message that says it is not supported.
+A game of VX does not get far yet. It starts as the original starts it in three things: its
+frame is 544 by 416, in the window and in a dumped frame alike, its frame rate starts at 60,
+and its scripts see the symbol numbers of RGSS2. `Graphics.width` and `Graphics.height` give
+the size of the frame. Everything else is still the classes and functions of RGSS1, and the
+scripts stop at the first other thing that only RGSS2 has. Every such run writes one warning
+that support for RPG Maker VX is experimental. A game of VX Ace ends at once with a message
+that says it is not supported.
 
 ### The built-in scripts
 
@@ -309,8 +315,8 @@ bilinear) is nearest except in a band one window pixel wide along the borders be
 pixels, where it interpolates. `auto`, the default, is `nearest` when the scale is a whole
 number and `sharp` otherwise. A headless run has no window and ignores both options.
 
-Frames are shown at the game's frame rate, 40 per second unless the game changes it. Where
-the Vulkan device and the window system support `VK_EXT_present_timing`, every frame is given
+Frames are shown at the game's frame rate, 40 per second for a game of XP and 60 for one of
+VX unless the game changes it. Where the Vulkan device and the window system support `VK_EXT_present_timing`, every frame is given
 the time it is to appear on screen, one frame period after the frame before it, so that on a
 display whose refresh rate is no multiple of the frame rate each frame stays up for as even a
 time as the display allows; with `VK_KHR_present_wait2` as well, a frame is only handed over
