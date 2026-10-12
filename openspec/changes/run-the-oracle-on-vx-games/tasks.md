@@ -11,8 +11,8 @@
 
 ## 3. On the original
 
-- [ ] 3.1 Run `cargo xtask oracle ../../games/vx-visions-and-voices --original-only --no-threads` twice with the DLL the game ships, `--rtp RPGVX=../../ref/vx/rtp`, the schedule of `../../ref/tools/oracle/measurements/vx-v0-vv-input.txt` and the frames 100, 260, 1000, 3500, 6600, 11300, 11580, 11700, 11900, output under `target/`. Verify: both runs end with status 0 and give the same nine pictures byte for byte; frame 260 lies inside a fade and is captured; record in `design.md` under "Measured" the SHA-256 of the pictures and whether they equal those of `vx-v0-vv-sha256.txt` for the frames both have (a difference is recorded with its likely reason, not hidden; it does not fail the task).
-- [ ] 3.2 Run the harness with the original on the XP game `../../games/群战示范工程` (a copy is made by the harness; DLL from `../../ref/sys`, `--rtp Standard=../../ref/app`, frames 10, 60 and 200, no input), once with the `xtask` of `main` before this change and once with this change. Verify: the pictures of the original are equal byte for byte in both.
+- [x] 3.1 Run `cargo xtask oracle ../../games/vx-visions-and-voices --original-only --no-threads` twice with the DLL the game ships, `--rtp RPGVX=../../ref/vx/rtp`, the schedule of `../../ref/tools/oracle/measurements/vx-v0-vv-input.txt` and the frames 100, 260, 1000, 3500, 6600, 11300, 11580, 11700, 11900, output under `target/`. Verify: both runs end with status 0 and give the same nine pictures byte for byte; frame 260 lies inside a fade and is captured; record in `design.md` under "Measured" the SHA-256 of the pictures and whether they equal those of `vx-v0-vv-sha256.txt` for the frames both have (a difference is recorded with its likely reason, not hidden; it does not fail the task).
+- [x] 3.2 Run the harness with the original on the XP game `../../games/群战示范工程` (a copy is made by the harness; DLL from `../../ref/sys`, `--rtp Standard=../../ref/app`, frames 10, 60 and 200, no input), once with the `xtask` of `main` before this change and once with this change. Verify: the pictures of the original are equal byte for byte in both.
 
 ## 4. Documentation
 

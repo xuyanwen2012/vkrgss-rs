@@ -106,6 +106,54 @@ the probe's input model; audio; anything in vkxp itself.
   `Graphics` that only RGSS2 has; the side of the original is tested the same way, with the
   test answering the requests in the place of the harness.
 
+## Measured
+
+Task 3.1, 2026-10-12, Wine 11.0 Staging, through `cargo xtask oracle` only: Visions & Voices
+with the DLL it ships (2.0.0.1 under the name `RGSS202E.dll`), `--original-only --no-threads
+--rtp RPGVX=<run-time package> --input @vx-v0-vv-input.txt --locale en_US.UTF-8 --timeout 300`
+and the nine frames, twice into the same output directory with the pictures copied aside
+after each run. Both runs ended with status 0, and the nine pictures of the second run equal
+those of the first byte for byte. No frame was late. Frame 260 lies inside the `fadeout(60)`
+of the title and was captured. While the game ran, its Wine processes had mapped
+`libvulkan_lvp.so` and no other Vulkan driver.
+
+The files of V0 are the bytes b, g, r, x of the window, so the third column is the SHA-256
+of a picture written that way (x is 255), next to that of the PNG file the harness wrote.
+
+| frame | SHA-256 of the PNG file | SHA-256 as b g r x bytes | equals `vx-v0-vv-sha256.txt` |
+|---|---|---|---|
+| 100 | `24f2635c7ba740abed6266c3c136897d2411ab911b0e880b176d9adff4abb61f` | `46adcb8a305c8eb736892fffd3e30ff7e219ee200b6068c5435d014c5c70c048` | both lists |
+| 260 | `32391230c883d8fcdfba4324e4a350f11600d14a9bbce01d1a8c236742f7b4be` | `57c7555060c95e480bac4c40c6bd4e874c87e037d5c3a440c633cb0e5ec417f9` | `vv-final-a` |
+| 1000 | `0d1e6da9aa931d5c94a6e51fb5bb44061f3965bcd632a7fcf271581105204636` | `1d86771106095ea6db35cf02230e0863e7597fdcb6c8bc607137a8452a9af68c` | both lists |
+| 3500 | `2a19ba5806ab87ea6c875c241680c1a47867c100731407362fdbb71a4efbdf99` | `8fc28d607efc91553faa42ea2cbff199b94efdc4e50c032aa572014b173605f4` | `vv-run-a` |
+| 6600 | `6df7a477ee5f2045cc1c985831a2e736cd3c3c62c1e08e7a23f0a046b28c0213` | `3607e6cac9bf51ccb3f5ad6f0da2792db5bca9f3b06dae327516f33dc839a7d1` | `vv-run-a` |
+| 11300 | `fdf591df2ee1aa2febac0dc626ff59b61c6286b5825faf2db4125ca42f3b086d` | `88309dfe14cf07ba78de1eb1366d428e4aba797711dc20aa60dced0f0d9a86ab` | `vv-run-a` |
+| 11580 | `dc8d08654ffafa4f3bff15d95de7cfee52613830edb7df2978b17a42d3957651` | `6a057ddd1923508c09533e20a4f0caaf5d03cfa5ed97a3e3d96f79f4ba37d056` | `vv-run-a` |
+| 11700 | `2a15f2c40dbe0664308e6fc5b7f1cfbd6ee7fe4f0b2214d54cdf212195daa590` | `85bdbf840155d34e8e3bd277ce2e7ea90433533df5e7a22a4de03bb74f1c6d49` | `vv-run-a` |
+| 11900 | `b7739a1113b3fef78e4e205f4f5646dd694ab5369e5e93bbf54ed1d4bf1fdd22` | `fbb1fff08a80ef49b58d0c4c788fdee563d885d1e7675e9fc1cb3d606c8d90fa` | `vv-run-a` |
+
+All nine equal a picture of V0. The eight frames that `vv-run-a` has (seed 20261009, the seed
+of the harness, native `wait` and fades, real key presses) are equal to it, although the
+harness answers `Input` from its model and runs `wait` and the fades as loops. Frame 260 is
+not in `vv-run-a` and equals `vv-final-a` (seed 1, loops), as do frames 100 and 1000. From
+frame 3500 on the pictures differ from `vv-final-a`; the reason is its seed, as V0 found
+between its own runs (every frame from 2800 on differs between the two seeds).
+
+Task 3.2, same day: `../../games/群战示范工程` with `RGSS103J.dll`, `--rtp Standard=<RTP>`,
+frames 10, 60 and 200 and no input, once with the `xtask` of the commit before this change
+(69648b3) and once with this change, each with a prefix of its own. The three pictures of the
+original are equal byte for byte in both:
+
+| frame | SHA-256 of the PNG file |
+|---|---|
+| 10 | `4efd73cfeb6c8094769ffcb91430cd955c079a37a26b6f77e135f7e1e376aa3f` |
+| 60 | `de475792415f687e01d872e0cc12dbc6c324c341e2ee14a00dcf3d467ed469f0` |
+| 200 | `adcde666313d37047c434633089457a6d6902ec0190b2bfc9d68a4cd5947326f` |
+
+The registry of the new prefix holds `Standard` under
+`Software\Wow6432Node\Enterbrain\RGSS\RTP`, and that of the prefix of task 3.1 holds `RPGVX`
+under `...\RGSS2\RTP`, so the registry script reaches the 32-bit view.
+
 ## Follow-ups
 
 - Windows that change size; `snap_to_bitmap` as a second capture that checks the grab.
