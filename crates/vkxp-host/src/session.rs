@@ -852,8 +852,10 @@ impl<D: Display, C: Clock> Session<D, C> {
             .filter_map(|code| physical_key(*code))
             .collect();
         self.swallowed_keys.retain(|key| injected.contains(key));
-        self.pacing_restart |= self.fast_forward_key;
-        self.fast_forward_key = false;
+        if self.fast_forward_key && !injected.contains(&FAST_FORWARD_KEY) {
+            self.fast_forward_key = false;
+            self.pacing_restart = true;
+        }
         self.update_buttons();
     }
 

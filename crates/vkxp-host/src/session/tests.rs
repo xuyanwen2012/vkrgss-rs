@@ -2649,3 +2649,29 @@ fn the_display_is_told_whether_the_pointer_is_to_be_seen() {
         [DisplayEvent::Pointer(false), DisplayEvent::Pointer(true)]
     );
 }
+
+#[test]
+fn losing_focus_leaves_the_fast_forward_of_an_injected_key() {
+    let mut rig = Rig::new();
+    rig.send_whole(inject(0x09, true));
+    assert!(rig.session.fast_forward());
+    rig.session.focus_lost();
+    assert!(rig.session.fast_forward(), "the injected key is still down");
+    rig.frame(frame(0));
+    assert_eq!(rig.send(frame(1)), [HostToGuest::Tick]);
+    // The physical key beside it is released by the loss of focus, the injected one not.
+    rig.session.key(KeyCode::Tab, true);
+    rig.session.focus_lost();
+    assert!(rig.session.fast_forward());
+    rig.send_whole(inject(0x09, false));
+    assert!(!rig.session.fast_forward());
+    assert_eq!(rig.send(frame(2)), []);
+    rig.wait_for_tick();
+
+    // The physical key alone is released by the loss of focus, as before.
+    rig.session.key(KeyCode::Tab, true);
+    assert!(rig.session.fast_forward());
+    rig.session.focus_lost();
+    assert!(!rig.session.fast_forward());
+    assert_eq!(rig.send(frame(3)), []);
+}
