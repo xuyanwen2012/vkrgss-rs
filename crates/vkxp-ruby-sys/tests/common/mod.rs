@@ -82,21 +82,31 @@ pub(crate) fn compile_object(scratch: &Path, source: &Path) -> PathBuf {
 /// Writes the `Init_ext` of Ruby's test executable into `scratch` and returns its path: it
 /// registers `Zlib` and the `fcntl` and `stringio` extensions that Ruby's tests load.
 pub(crate) fn write_init_ext(scratch: &Path) -> PathBuf {
+    write_init_ext_with(scratch, "", "")
+}
+
+/// As [`write_init_ext`], with more C definitions in front of `Init_ext` and more statements
+/// at its end.
+pub(crate) fn write_init_ext_with(scratch: &Path, definitions: &str, statements: &str) -> PathBuf {
     let init_ext = scratch.join("extinit.c");
     fs::write(
         &init_ext,
-        "#include \"ruby.h\"\n\
-         void ruby_init_ext _((const char *name, void (*init)(void)));\n\
-         void Init_zlib _((void));\n\
-         void Init_fcntl _((void));\n\
-         void Init_stringio _((void));\n\
-         __attribute__((visibility(\"default\"))) int vkxp_export_probe = 1;\n\
-         void Init_ext _((void))\n\
-         {\n\
-         \x20   ruby_init_ext(\"zlib.so\", Init_zlib);\n\
-         \x20   ruby_init_ext(\"fcntl.so\", Init_fcntl);\n\
-         \x20   ruby_init_ext(\"stringio.so\", Init_stringio);\n\
-         }\n",
+        format!(
+            "#include \"ruby.h\"\n\
+             void ruby_init_ext _((const char *name, void (*init)(void)));\n\
+             void Init_zlib _((void));\n\
+             void Init_fcntl _((void));\n\
+             void Init_stringio _((void));\n\
+             __attribute__((visibility(\"default\"))) int vkxp_export_probe = 1;\n\
+             {definitions}\
+             void Init_ext _((void))\n\
+             {{\n\
+             \x20   ruby_init_ext(\"zlib.so\", Init_zlib);\n\
+             \x20   ruby_init_ext(\"fcntl.so\", Init_fcntl);\n\
+             \x20   ruby_init_ext(\"stringio.so\", Init_stringio);\n\
+             {statements}\
+             }}\n"
+        ),
     )
     .expect("extinit.c is writable");
     init_ext
@@ -294,6 +304,16 @@ impl Suites {
 
     /// Runs one file of a `test/unit` suite through `test/runner.rb`.
     pub(crate) fn run_unit_file(&self, suite: &str, file: &str) -> Result<Totals, String> {
+        self.run_unit_file_without(suite, file, &[])
+    }
+
+    /// As [`run_unit_file`](Self::run_unit_file), leaving out the test methods named.
+    fn run_unit_file_without(
+        &self,
+        suite: &str,
+        file: &str,
+        methods: &[&str],
+    ) -> Result<Totals, String> {
         let source = source_dir();
         let runner = source.join("test/runner.rb");
         let basedir = format!("--basedir={}", source.join("test").display());
@@ -306,6 +326,8 @@ impl Suites {
                 runner.to_str().expect("UTF-8 path"),
                 &basedir,
                 "--runner=console",
+                // Every method but those named. Without one the pattern matches every name.
+                &format!("--name=/\\A(?!(?:{})\\z)/", methods.join("|")),
                 &target,
             ],
         );
@@ -319,7 +341,21 @@ impl Suites {
 
     /// Runs every file of a suite as its own process, several at a time, and sums the totals.
     pub(crate) fn run_unit_suite(&self, suite: &str) -> Totals {
-        let files = test_files(suite);
+        self.run_unit_suite_without(suite, &[])
+    }
+
+    /// As [`run_unit_suite`](Self::run_unit_suite), leaving out what `skip` names: a file as
+    /// `<suite>/<file>`, one test method as `<suite>/<file>#<method>`.
+    pub(crate) fn run_unit_suite_without(&self, suite: &str, skip: &[String]) -> Totals {
+        let skipped = |file: &str| -> Vec<&str> {
+            let prefix = format!("{suite}/{file}");
+            skip.iter()
+                .filter_map(|entry| entry.strip_prefix(&prefix))
+                .filter_map(|rest| rest.strip_prefix('#').or(rest.is_empty().then_some("")))
+                .collect()
+        };
+        let mut files = test_files(suite);
+        files.retain(|file| !skipped(file).contains(&""));
         assert!(!files.is_empty(), "no test files in test/{suite}");
         let queue = Mutex::new(VecDeque::from(files));
         let results: Mutex<Vec<Result<Totals, String>>> = Mutex::new(Vec::new());
@@ -331,7 +367,7 @@ impl Suites {
                         let Some(file) = queue.lock().unwrap().pop_front() else {
                             break;
                         };
-                        let result = self.run_unit_file(suite, &file);
+                        let result = self.run_unit_file_without(suite, &file, &skipped(&file));
                         results.lock().unwrap().push(result);
                     }
                 });

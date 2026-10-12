@@ -10,8 +10,13 @@
 //! part of the merge gate:
 //!
 //! ```text
-//! cargo test -p vkxp-ruby-sys --test sanitized -- --ignored
+//! cargo test -p vkxp-ruby-sys --test sanitized -- --ignored upstream_suites_pass_under_the_sanitizers
 //! ```
+//!
+//! Two more ignored tests run the same build under collector stress, where the collector
+//! runs at every n-th allocation (`VKXP_GC_STRESS`): a value that is kept alive only by a
+//! pointer into it is then collected, and the use of a freed string buffer is a report of
+//! AddressSanitizer. `cargo xtask stress` runs them and sets the variables they read.
 
 mod common;
 
@@ -20,7 +25,7 @@ use std::fs;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
 
@@ -54,6 +59,43 @@ const UBSAN_OPTIONS: &str = "print_stacktrace=1:halt_on_error=0";
 
 /// How long one test process may run. The sanitized interpreter is several times slower.
 const PROCESS_TIMEOUT: Duration = Duration::from_secs(900);
+
+/// How long one test process may run under collector stress.
+const STRESSED_PROCESS_TIMEOUT: Duration = Duration::from_secs(2700);
+
+/// The variable of the collector stress, which the executable built here reads in its
+/// `Init_ext`, as `vkxp-ruby-sys` reads it when it starts an interpreter.
+const GC_STRESS_VARIABLE: &str = "VKXP_GC_STRESS";
+
+/// What the stressed run leaves out, separated by white space: `<suite>/<file>` for a file
+/// of a suite, `<suite>/<file>#<method>` for one test method, `sample` for `sample/test.rb`.
+/// `cargo xtask stress` sets it from its skip list.
+const GC_STRESS_SKIP_VARIABLE: &str = "VKXP_GC_STRESS_SKIP";
+
+/// C definitions for the `Init_ext` of the sanitized executable: the function that the test
+/// of a lost value calls. It keeps only the buffer pointer of a fresh string across
+/// allocations, which is the fault the stressed runs are there to find.
+const INIT_EXT_DEFINITIONS: &str = r#"
+#include <stdlib.h>
+void ruby_vkxp_gc_stress _((unsigned long));
+__attribute__((noinline)) static char *vkxp_fresh_buffer()
+{
+    return RSTRING(rb_str_new2("only the buffer pointer of this string is kept"))->ptr;
+}
+static VALUE vkxp_lost_buffer(self)
+    VALUE self;
+{
+    char *buffer = vkxp_fresh_buffer();
+    rb_eval_string("[1, 2, 3].map { |number| number.to_s }");
+    return rb_str_new2(buffer);
+}
+"#;
+
+/// C statements for the end of that `Init_ext`.
+const INIT_EXT_STATEMENTS: &str = r#"
+    if (getenv("VKXP_GC_STRESS")) ruby_vkxp_gc_stress(strtoul(getenv("VKXP_GC_STRESS"), 0, 10));
+    rb_define_global_function("vkxp_lost_buffer", vkxp_lost_buffer, 0);
+"#;
 
 const ALLOW_LIST: &str = include_str!("sanitized.allow");
 
@@ -226,7 +268,7 @@ fn build_sanitized_executable(scratch: &Path) -> PathBuf {
         &source,
         Path::new(env!("VKXP_RUBY_ZLIB_INCLUDE_DIR")),
     ];
-    let init_ext = common::write_init_ext(scratch);
+    let init_ext = common::write_init_ext_with(scratch, INIT_EXT_DEFINITIONS, INIT_EXT_STATEMENTS);
 
     let mut core_jobs: Vec<Job> = env!("VKXP_RUBY_CORE_SOURCES")
         .split(' ')
@@ -347,51 +389,63 @@ SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior /home/x/third_party/ruby
     );
 }
 
-#[test]
-#[ignore = "opt-in: builds the interpreter with sanitizers and runs the upstream suites"]
-fn upstream_suites_pass_under_the_sanitizers() {
-    let scratch = common::scratch_dir("sanitized");
-    let reports = scratch.join("reports");
+/// The scratch directory of this file and the sanitized executable in it, built once for
+/// all tests of the process.
+fn built() -> &'static (PathBuf, PathBuf) {
+    static BUILT: OnceLock<(PathBuf, PathBuf)> = OnceLock::new();
+    BUILT.get_or_init(|| {
+        let scratch = common::scratch_dir("sanitized");
+        let ruby = build_sanitized_executable(&scratch);
+        (scratch, ruby)
+    })
+}
+
+/// The sanitized executable with a directory `dir` for its runs, and the directory in which
+/// each of its processes writes its reports to a file of its own: the suites compare what
+/// child interpreters print, which the reports must stay out of.
+fn sanitized_suites(dir: PathBuf, timeout: Duration) -> (Suites, PathBuf) {
+    let reports = dir.join("reports");
     fs::create_dir_all(&reports).expect("report directory");
-    // Each process writes its reports to a file of its own here; the suites compare what
-    // child interpreters print, which the reports must stay out of.
     let log_path = format!("log_path={}", reports.join("report").display());
     let suites = Suites {
-        ruby: build_sanitized_executable(&scratch),
-        scratch,
+        ruby: built().1.clone(),
+        scratch: dir,
         env: vec![
             ("ASAN_OPTIONS", format!("{ASAN_OPTIONS}:{log_path}")),
             ("UBSAN_OPTIONS", format!("{UBSAN_OPTIONS}:{log_path}")),
         ],
-        timeout: PROCESS_TIMEOUT,
+        timeout,
     };
+    (suites, reports)
+}
 
+/// Runs the suites without what `skip` names (see [`GC_STRESS_SKIP_VARIABLE`]) and fails
+/// on a suite that does not pass and on a sanitizer report outside the allow-list.
+fn run_suites(suites: &Suites, reports: &Path, skip: &[String]) {
+    let skips = |suite: &str| skip.iter().any(|entry| entry.starts_with(suite));
     // The reports are read even when a suite fails: a failure is then most often a report.
     let outcome = catch_unwind(AssertUnwindSafe(|| {
-        let core = suites.run_unit_suite("ruby");
-        let zlib = suites.run_unit_suite("zlib");
-        suites.run_sample();
+        let core = suites.run_unit_suite_without("ruby", skip);
+        let zlib = suites.run_unit_suite_without("zlib", skip);
+        if !skips("sample") {
+            suites.run_sample();
+        }
         eprintln!("test/ruby: {core:?}\ntest/zlib: {zlib:?}");
-        assert_eq!(
-            (core.tests, core.failures, core.errors),
-            (common::CORE_TESTS, 0, 0)
-        );
-        assert_eq!(
-            (zlib.tests, zlib.failures, zlib.errors),
-            (common::ZLIB_TESTS, 0, 0)
-        );
+        assert_eq!((core.failures, core.errors), (0, 0));
+        assert_eq!((zlib.failures, zlib.errors), (0, 0));
+        // The number of tests is known for a suite of which nothing is left out.
+        assert!(skips("ruby/") || core.tests == common::CORE_TESTS);
+        assert!(skips("zlib/") || zlib.tests == common::ZLIB_TESTS);
     }));
 
     let allowed = parse_allow_list(ALLOW_LIST);
     let (accepted, refused): (Vec<_>, Vec<_>) =
-        collect_reports(&reports)
-            .into_iter()
-            .partition(|(line, _)| {
-                allowed
-                    .iter()
-                    .flat_map(|entry| &entry.patterns)
-                    .any(|pattern| matches(line, pattern))
-            });
+        collect_reports(reports).into_iter().partition(|(line, _)| {
+            allowed
+                .iter()
+                .flat_map(|entry| &entry.patterns)
+                .any(|pattern| matches(line, pattern))
+        });
     eprintln!(
         "{} distinct report(s) accepted by the allow-list",
         accepted.len()
@@ -410,5 +464,61 @@ fn upstream_suites_pass_under_the_sanitizers() {
     assert!(
         outcome.is_ok(),
         "the suites did not pass under the sanitizers"
+    );
+}
+
+#[test]
+#[ignore = "opt-in: builds the interpreter with sanitizers and runs the upstream suites"]
+fn upstream_suites_pass_under_the_sanitizers() {
+    let (mut suites, reports) = sanitized_suites(built().0.clone(), PROCESS_TIMEOUT);
+    // Whatever the caller has set: this run is the one without collector stress.
+    suites.env.push((GC_STRESS_VARIABLE, String::new()));
+    run_suites(&suites, &reports, &[]);
+}
+
+#[test]
+#[ignore = "opt-in and slow: run by `cargo xtask stress`, which sets VKXP_GC_STRESS"]
+fn upstream_suites_pass_under_collector_stress() {
+    let every = std::env::var(GC_STRESS_VARIABLE).unwrap_or_default();
+    assert!(
+        every.parse::<u64>().is_ok_and(|every| every >= 1),
+        "{GC_STRESS_VARIABLE} is `{every}`; this test needs a number of 1 or more, which \
+         `cargo xtask stress` sets"
+    );
+    let skip: Vec<String> = std::env::var(GC_STRESS_SKIP_VARIABLE)
+        .unwrap_or_default()
+        .split_whitespace()
+        .map(str::to_owned)
+        .collect();
+    // The test processes and the interpreters they start inherit the variable.
+    let (suites, reports) = sanitized_suites(built().0.join("stress"), STRESSED_PROCESS_TIMEOUT);
+    run_suites(&suites, &reports, &skip);
+}
+
+#[test]
+#[ignore = "opt-in: builds the interpreter with sanitizers"]
+fn a_lost_value_is_reported_under_collector_stress() {
+    let (mut suites, reports) = sanitized_suites(built().0.join("lost"), PROCESS_TIMEOUT);
+    suites.env.push((GC_STRESS_VARIABLE, "1".to_owned()));
+    let finished = suites.run_ruby("lost", &["-e", "p vkxp_lost_buffer"]);
+    let found = collect_reports(&reports);
+    assert!(
+        !finished.success
+            && found
+                .keys()
+                .any(|line| line.contains("AddressSanitizer: heap-use-after-free")),
+        "success {}, reports {found:?}\n{}",
+        finished.success,
+        finished.output
+    );
+
+    // And the same code passes where the collector runs only when it has to.
+    let (mut suites, reports) = sanitized_suites(built().0.join("kept"), PROCESS_TIMEOUT);
+    suites.env.push((GC_STRESS_VARIABLE, String::new()));
+    let finished = suites.run_ruby("kept", &["-e", "p vkxp_lost_buffer"]);
+    assert!(
+        finished.success && collect_reports(&reports).is_empty(),
+        "{}",
+        finished.output
     );
 }

@@ -1,0 +1,7 @@
+# Tests that `cargo xtask stress` leaves out.
+#
+# An entry is a reason, written as comment lines, followed by one or more lines of a step
+# and a test: `suites` with a file of an upstream suite (`ruby/test_x.rb`), one of its test
+# methods (`ruby/test_x.rb#test_y`) or `sample`; `binding` or `guest` with the full name of
+# a test as `cargo test` prints it. Entries are separated by blank lines, and an entry
+# without a reason fails a test.

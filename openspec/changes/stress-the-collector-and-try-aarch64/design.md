@@ -73,9 +73,62 @@ x86_64 is the supported architecture and that the aarch64 job shows what works t
 
 ## Follow-ups
 
-None yet.
+- The runs find a lost value only where a test executes the code and only where the loss
+  is visible: a freed string buffer under AddressSanitizer in the first step, a wrong
+  result or a crash in the other two, which are not sanitized. The slot of a collected
+  object is not poisoned ("The runs"), and the binding's tests were not run in a sanitized
+  build. That no finding came out of the first run says this much and no more about the 42
+  `unsafe` places of `vkxp-binding`.
+- The stressed runs used one compiler each (gcc for the binding and the executable, clang
+  for the sanitized build). What a collector finds on the stack depends on the compiler;
+  `docs/development.md`, "Testing with another compiler", has the commands to combine with
+  `VKXP_GC_STRESS`.
 
 ## Checked
 
-To be filled by the run that implements this: the values of `n`, the time of each step, the
-findings and their outcome, and that the aarch64 job was not run.
+By the run that implemented this, on 2026-10-12, on the development machine (12 hardware
+threads, gcc for the workspace, clang for the sanitized build).
+
+The switch:
+
+- `rb_newobj` of this patch level already collects under `GC.stress`, other than "Context"
+  says; the patch (27, `gc-stress-every-nth`) therefore adds only the counting, in
+  `rb_newobj`, `ruby_xmalloc` and `ruby_xrealloc`. `ruby_xrealloc` is counted as well
+  because it is an allocation of memory in the words of the requirement and collects under
+  `GC.stress`: growing a string is where patch 24 found its fault.
+- This Ruby has no `GC.count`; the patch adds the counter `ruby_vkxp_gc_count`, which the
+  tests `gc_stress_on` and `gc_stress_off` of `vkxp-ruby-sys` read. With the switch on, 100
+  objects give at least 100 collections; without it, none.
+- A value of the variable that is not a number is refused when the interpreter starts
+  (`StartError::InvalidGcStress`), so that a mistyped value is not a run without stress.
+- The sanitized executable is Ruby's own command line, which `vkxp-ruby-sys` does not
+  start; the `Init_ext` that the test writes for it reads the variable and calls the same
+  function.
+
+The runs, `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask stress`, all steps passed:
+
+| Step | `n` | Time |
+|---|---|---|
+| `suites` | 32 | 1603.6 s |
+| `binding` | 1 | 30.7 s |
+| `guest` | 1 | 5.6 s |
+
+- `n` of the first step: one file decides its time, `test/ruby/test_integer.rb`, a single
+  process with 1.6 million assertions on big numbers. Alone it took 417 s with `n` of 512,
+  483 s with 256, 655 s with 128 and 991 s with 64; in the step, beside the other files,
+  1518 s with 32. With 16 it would take about 50 minutes. Every other file ends within ten
+  minutes with 64. The time limit of one test process is 45 minutes in the stressed test.
+- "A lost value shows": `a_lost_value_is_reported_under_collector_stress` in
+  `tests/sanitized.rs` calls a C function of the test executable that keeps only the buffer
+  pointer of a fresh string across an evaluation. With `VKXP_GC_STRESS=1` the process ends
+  with `AddressSanitizer: heap-use-after-free`; without the switch it prints the string.
+  The first step of the command runs this test too.
+- Whether the switch reaches a guest process was checked with a value that is not a number:
+  51 of the 59 tests of `end_to_end` then fail at the start of the interpreter.
+
+Findings: none. No test failed under stress and the sanitizers reported nothing outside the
+allow-list, so no guard was added, `vkxp-binding` is unchanged and the skip list
+(`xtask/src/stress.skip`) is empty. What the runs do not show is under "Follow-ups".
+
+Without the switch, `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-ruby-sys
+-p vkxp-binding -p vkxp --locked` passes, and so does the sanitized run without stress.
