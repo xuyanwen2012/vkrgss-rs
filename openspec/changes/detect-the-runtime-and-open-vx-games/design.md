@@ -69,6 +69,20 @@ archive format of VX Ace; a configuration-file key for the runtime.
   classes. The game's scripts stop at the first thing that RGSS2 has and RGSS1 has not.
   That is what "run as far as the code goes" means until the next changes.
 
+## Notes of the implementation
+
+- `GameIni::rtp` is the value of `RTP`; the three names `RTP1` to `RTP3`, which were
+  `rtp`, are now `rtps`. `GameIni::rtp_names` gives the names of a runtime.
+- `GameFiles::open` takes the runtime. RGSS3 has no archive name, so nothing of an archive
+  is read for it.
+- `$TEST` is not assigned in a game of RGSS1 and stays `nil` there, as in the original
+  runtime of XP: the behaviour of an XP game does not change.
+- The experimental notice is written by the program itself and not by a guest process,
+  which settles the runtime a second time from the same arguments: once a run in both forms
+  of the guest.
+- Beside `runtime.rs`, the testing host and the tests, the documentation of the crate in
+  `crates/vkxp-binding/src/lib.rs` names the runtime in two sentences.
+
 ## Risks / Trade-offs
 
 - A game with a renamed DLL and an unusual script file name is not detected. The message
