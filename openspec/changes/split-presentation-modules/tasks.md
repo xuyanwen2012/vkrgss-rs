@@ -10,7 +10,7 @@
 
 ## 3. Compositor
 
-- [ ] 3.1 Split `compositor.rs` by its sections. Verify: the test command of 1.1 passes; scenario "File lengths" (`find crates/vkxp-vk/src -name '*.rs' | xargs wc -l`, each file over 1000 lines holds only tests).
+- [x] 3.1 Split `compositor.rs` by its sections. Verify: the test command of 1.1 passes; scenario "File lengths" (`find crates/vkxp-vk/src -name '*.rs' | xargs wc -l`, each file over 1000 lines holds only tests).
 
 ## 4. Probes
 

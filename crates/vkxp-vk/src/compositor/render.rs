@@ -1,0 +1,273 @@
+//! Rendering a packet: its deltas, the data of its frame, and reading the frame back.
+
+use ash::vk;
+use vkxp_proto::{BitmapDelta, FramePacket, GuestToHost, Size, TableDelta};
+
+use super::{Frame, FrameData, Pending, Step, VkCompositor};
+use crate::binning::bin;
+use crate::bitmaps::Change;
+use crate::records::{ClipRect, RECORD_WORDS, TILEMAP_WORDS, check_logical_size, encode_frame};
+use crate::resources::GpuImage;
+use crate::{FrameTiming, Limit, VkError};
+
+impl VkCompositor {
+    /// Handles one message. A `Frame` message is rendered and yields `true`; every other
+    /// message yields `false`. Freeze, transition, audio, modal and title messages are outside
+    /// what this compositor models and have no effect on later frames.
+    pub fn handle(&mut self, message: &GuestToHost) -> Result<bool, VkError> {
+        match message {
+            GuestToHost::Frame(packet) => self.render(packet).map(|()| true),
+            _ => Ok(false),
+        }
+    }
+
+    /// Applies the packet's bitmap deltas and then its table deltas, then draws its ops into
+    /// the frame target.
+    ///
+    /// Either a complete frame is rendered or an error is returned and the frame target keeps
+    /// the previous frame. Bitmap state after an error is that of the reference compositor:
+    /// the deltas before an invalid delta stay applied and the ones after it do not, and an
+    /// invalid op leaves every delta applied.
+    ///
+    /// A [`VkError::Limit`] is returned for a packet that is valid but beyond the device or
+    /// this backend. A limit met by a delta behaves like an invalid delta; a limit met by the
+    /// frame as a whole leaves every delta applied.
+    pub fn render(&mut self, packet: &FramePacket) -> Result<(), VkError> {
+        // What an earlier frame left is not this frame's, also when this one is refused.
+        self.frame_timing = None;
+        check_logical_size(packet.logical_size)?;
+        let mut pending = Pending::default();
+        let prepared = self
+            .queue_deltas(&packet.bitmaps, &mut pending)
+            .and_then(|()| self.apply_table_deltas(&packet.tables))
+            .and_then(|()| self.prepare_frame(packet));
+        match prepared {
+            Ok(frame) => {
+                if self.timing_on {
+                    self.frame_timing = Some(FrameTiming {
+                        encode: frame.encode,
+                        bin: frame.bin,
+                        ..FrameTiming::default()
+                    });
+                }
+                let executed = self.execute(pending, Some(&frame));
+                if executed.is_err() {
+                    self.frame_timing = None;
+                }
+                executed?;
+                self.unshown_frame = true;
+                Ok(())
+            }
+            Err(error) => {
+                // A failure of the device outranks an invalid packet.
+                self.execute(pending, None)?;
+                Err(error)
+            }
+        }
+    }
+
+    /// Forgets every bitmap and table, as the deltas that destroy each of them would. The
+    /// frame target and what the presenter holds stay. For a guest that starts sending anew:
+    /// the next packet may create any bitmap and set any table.
+    pub fn forget_resources(&mut self) -> Result<(), VkError> {
+        let bitmaps: Vec<BitmapDelta> = self
+            .table
+            .ids()
+            .collect::<Vec<_>>()
+            .into_iter()
+            .map(|id| BitmapDelta::Destroy { id })
+            .collect();
+        let tables: Vec<TableDelta> = self
+            .tables
+            .ids()
+            .collect::<Vec<_>>()
+            .into_iter()
+            .map(|id| TableDelta::Destroy { id })
+            .collect();
+        let mut pending = Pending::default();
+        let checked = self
+            .queue_deltas(&bitmaps, &mut pending)
+            .and_then(|()| self.apply_table_deltas(&tables));
+        self.execute(pending, None)?;
+        checked
+    }
+
+    /// The most recently rendered frame, copied from the device, or `None` before the first
+    /// successful [`render`](VkCompositor::render).
+    pub fn read_frame(&mut self) -> Result<Option<Frame>, VkError> {
+        let Some(target) = self.target.as_ref().filter(|_| self.has_frame) else {
+            return Ok(None);
+        };
+        let (image, size) = (target.image, Size::new(target.width, target.height));
+        let rgba = self.read_image(image, (size.width, size.height), self.frame_use())?;
+        Ok(Some(Frame { size, rgba }))
+    }
+
+    /// Makes one creation of a frame buffer (the bitmap staging buffer, then the four storage
+    /// buffers of a frame), a first one or a larger one, fail, after `successes` more of them
+    /// have succeeded.
+    #[cfg(test)]
+    pub(crate) fn fail_frame_buffer_after(&mut self, successes: u32) {
+        self.frame_buffer_failure = Some(successes);
+    }
+
+    /// The number of frame buffers created so far.
+    #[cfg(test)]
+    pub(crate) fn frame_buffers_created(&self) -> u32 {
+        self.frame_buffers_created
+    }
+
+    /// Applies bitmap deltas in order and carries out their GPU work, without drawing.
+    #[cfg(test)]
+    pub(crate) fn apply_bitmaps(&mut self, deltas: &[BitmapDelta]) -> Result<(), VkError> {
+        let mut pending = Pending::default();
+        let checked = self.queue_deltas(deltas, &mut pending);
+        self.execute(pending, None)?;
+        checked
+    }
+
+    /// Checks each table delta and applies it to the store. The buffer follows when the next
+    /// frame is drawn.
+    fn apply_table_deltas(&mut self, deltas: &[TableDelta]) -> Result<(), VkError> {
+        for (index, delta) in deltas.iter().enumerate() {
+            self.tables
+                .apply(delta)
+                .map_err(|source| VkError::InvalidTableDelta { index, source })?;
+        }
+        Ok(())
+    }
+
+    /// Checks the ops against the bitmaps and tables as they are after the packet's deltas, and builds
+    /// everything the shader reads. Nothing on the device is touched.
+    fn prepare_frame(&self, packet: &FramePacket) -> Result<FrameData, VkError> {
+        let size = packet.logical_size;
+        let started = self.stage_start();
+        let records = encode_frame(&self.table, &self.tables, size, &packet.ops)?;
+        let encode = started.map(|started| started.elapsed());
+
+        // From here on the packet is valid; what remains are limits.
+        let longest = size.width.max(size.height);
+        if longest > self.gpu.max_image_dimension {
+            return Err(VkError::Limit {
+                limit: Limit::FrameDimension,
+                requested: u64::from(longest),
+                maximum: u64::from(self.gpu.max_image_dimension),
+            });
+        }
+        let max_bytes = u64::from(self.gpu.max_storage_buffer_range);
+        let data_limit = |requested: u64| VkError::Limit {
+            limit: Limit::FrameDataBytes,
+            requested,
+            maximum: max_bytes,
+        };
+        let table_bytes = self.tables.words() * 4;
+        if table_bytes > max_bytes {
+            return Err(VkError::Limit {
+                limit: Limit::TableBytes,
+                requested: table_bytes,
+                maximum: max_bytes,
+            });
+        }
+        let record_bytes = records.ops.len() as u64 * RECORD_WORDS as u64 * 4;
+        let tilemap_bytes = records.tilemaps.len() as u64 * TILEMAP_WORDS as u64 * 4;
+        for bytes in [record_bytes, tilemap_bytes] {
+            if bytes > max_bytes {
+                return Err(data_limit(bytes));
+            }
+        }
+        let started = self.stage_start();
+        let clips: Vec<ClipRect> = records.ops.iter().map(|record| record.clip).collect();
+        let tiles = bin(size, &clips, max_bytes / 4).map_err(|entries| data_limit(entries * 4))?;
+        let bin = started.map(|started| started.elapsed());
+        Ok(FrameData {
+            size,
+            records,
+            tiles,
+            encode,
+            bin,
+        })
+    }
+
+    /// Checks each delta against the table, applies it there and queues its GPU work.
+    fn queue_deltas<'a>(
+        &mut self,
+        deltas: &'a [BitmapDelta],
+        pending: &mut Pending<'a>,
+    ) -> Result<(), VkError> {
+        for (index, delta) in deltas.iter().enumerate() {
+            match self.table.apply(delta).map_err(|error| error.at(index))? {
+                Change::Created {
+                    slot,
+                    width,
+                    height,
+                } => {
+                    pending.touched.insert(slot);
+                    if width == 0 || height == 0 {
+                        // No pixels, so no image; nothing can sample this bitmap.
+                        continue;
+                    }
+                    let image = GpuImage::new(
+                        &self.gpu.device,
+                        &mut self.allocator,
+                        "bitmap",
+                        (width, height),
+                        // Transfer source only for the readback the tests use.
+                        vk::ImageUsageFlags::SAMPLED
+                            | vk::ImageUsageFlags::TRANSFER_DST
+                            | vk::ImageUsageFlags::TRANSFER_SRC,
+                        vk::ImageCreateFlags::empty(),
+                    );
+                    match image {
+                        Ok(image) => {
+                            self.gpu.name_object(image.image, &format!("bitmap {slot}"));
+                            pending.steps.push(Step::Clear { image: image.image });
+                            self.images.insert(slot, image);
+                        }
+                        Err(error) => {
+                            self.table.forget(slot);
+                            return Err(error);
+                        }
+                    }
+                }
+                Change::Updated { slot, rect } => {
+                    let BitmapDelta::Update { rgba, .. } = delta else {
+                        unreachable!("only an update delta yields an update");
+                    };
+                    let image = self.images[&slot].image;
+                    pending.steps.push(Step::Upload {
+                        image,
+                        rect,
+                        offset: pending.staging_len,
+                        rgba,
+                    });
+                    pending.staging_len += rgba.len() as u64;
+                }
+                Change::Destroyed { slot } => {
+                    pending.touched.insert(slot);
+                    // The image may still be the target of steps queued by this packet.
+                    pending.retired.extend(self.images.remove(&slot));
+                }
+                Change::Nothing => {}
+            }
+        }
+        Ok(())
+    }
+
+    /// Carries out queued bitmap work and, when there is one, the frame: one submission,
+    /// waited for, then the release of everything the work was the last user of. That release
+    /// happens on every path, so a failure leaks nothing.
+    fn execute(&mut self, pending: Pending<'_>, frame: Option<&FrameData>) -> Result<(), VkError> {
+        self.write_bitmap_descriptors(&pending.touched);
+        let result = self.submit(&pending, frame);
+        if result.is_err() {
+            // SAFETY: the device is live. Whatever was submitted has to finish before the
+            // objects below are destroyed and the frame buffers are written again; if this
+            // fails too the device is lost.
+            let _ = unsafe { self.gpu.device.device_wait_idle() };
+        }
+        for image in pending.retired {
+            image.destroy(&self.gpu.device, &mut self.allocator);
+        }
+        result
+    }
+}

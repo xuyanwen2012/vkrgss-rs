@@ -63,6 +63,23 @@ of each other is `pub(super)`.
 `compositor.rs` is split the same way, by the sections it has. `device.rs` needs no split
 once its tests are out.
 
+As built, `compositor.rs` keeps the constants, `VkCompositor` and the types of a packet's
+work, and its `impl` block goes to five files under `compositor/`:
+
+- `setup`: the constructors, `init`, and `Drop`;
+- `measure`: the frame timing and the timestamp queries;
+- `render`: `handle`, `render`, `forget_resources`, `read_frame`, the deltas and the data of
+  a frame;
+- `buffers`: the bitmap descriptors, the frame buffers, the table buffer and the frame target;
+- `submit`: the commands of a packet, their submission and the copy of an image to the host.
+
+`device.rs` did need a split: without its tests it is 1257 lines, not under 1000 as the
+proposal took it to be, and the requirement counts it. `Instance`, `Candidate` and
+`c_chars` moved to `device/instance.rs`, which leaves 811 lines.
+
+One line of documentation changed: the link to `Filter::Auto` in the documentation of
+`freeze` got a target, because `held.rs` does not import the name.
+
 After the change no file under `crates/vkxp-vk/src` is longer than 1000 lines, except files
 that hold only tests.
 

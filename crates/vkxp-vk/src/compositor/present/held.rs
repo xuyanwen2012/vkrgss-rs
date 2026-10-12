@@ -39,6 +39,8 @@ impl VkCompositor {
     ///   window is taken, bars included.
     ///
     /// If nothing has been shown yet the mix is taken at the size of the newest frame.
+    ///
+    /// [`Filter::Auto`]: crate::Filter::Auto
     pub fn freeze(&mut self) -> Result<(), VkError> {
         self.ensure_presenter()?;
         let target = self
