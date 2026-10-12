@@ -1,7 +1,8 @@
 # Compatibility
 
 vkxp aims at the behaviour of the original runtime of RPG Maker XP, RGSS 1.04. Games that
-use the default scripts or common community scripts are meant to run unmodified.
+use the default scripts or common community scripts are meant to run unmodified. RPG Maker
+VX and VX Ace are planned and not supported yet; everything below is about XP.
 
 ## What is exact
 

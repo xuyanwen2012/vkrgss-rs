@@ -7,7 +7,7 @@
 
 ## 2. Public documents
 
-- [ ] 2.1 The first paragraph of `README.md`, the first sentence of `AGENTS.md` and one sentence of `docs/compatibility.md`. As of this change: XP supported, VX and VX Ace planned. Verify: scenarios "README" and "Agent guide and compatibility", by reading the three places.
+- [x] 2.1 The first paragraph of `README.md`, the first sentence of `AGENTS.md` and one sentence of `docs/compatibility.md`. As of this change: XP supported, VX and VX Ace planned. Verify: scenarios "README" and "Agent guide and compatibility", by reading the three places.
 
 ## 3. Integration check
 

@@ -1,8 +1,9 @@
 # vkxp
 
-A Rust + Vulkan runtime for RPG Maker XP (RGSS1) games on Linux. `vkxp <game directory>` runs
-the game's scripts in an embedded Ruby 1.8.7 interpreter against the RGSS classes and shows
-the frames of a Vulkan compositor in a window, or writes them to files in a headless run.
+A Rust + Vulkan runtime for RPG Maker games on Linux. RPG Maker XP (RGSS1) is supported; VX
+(RGSS2) and VX Ace (RGSS3) are planned and do not run yet. `vkxp <game directory>` runs the
+game's scripts in an embedded Ruby 1.8.7 interpreter against the RGSS classes and shows the
+frames of a Vulkan compositor in a window, or writes them to files in a headless run.
 
 [![CI](https://github.com/xuyanwen2012/vkxp/actions/workflows/ci.yml/badge.svg)](https://github.com/xuyanwen2012/vkxp/actions/workflows/ci.yml)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
