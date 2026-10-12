@@ -285,9 +285,8 @@ does not claim.
 The owner confirmed on 2026-10-09 that all milestones M0 to M6 are complete as recorded here,
 accepting the limits listed under "Not covered". Work beyond them is new work. That
 confirmation concerns M0 to M6 only. The rows V0 to V3 are the milestones of VX, decided on
-2026-10-12 (see "Order and milestones"); each is "Not started" as of the change
-`extend-scope-to-vx-and-vx-ace`, and a row is set to "Done" only with the record that section
-asks for.
+2026-10-12 (see "Order and milestones"); a row is set to "Done" only with the record that
+section asks for. V0 is a proof of the original's side alone and was done on 2026-10-12.
 
 | | Outcome | Status | Evidence | Not covered |
 |---|---|---|---|---|
@@ -298,7 +297,7 @@ asks for.
 | M4 | Full play-through: battle, menus, save/load, F12 reset | Done | Battle course, menu and a save written at the same frame (byte for byte) equal the original; reset is covered by tests of vkxp alone | A complete play-through of a long game by a person; F12 cannot be injected into the original for comparison |
 | M5 | Modernisation: filters, present-timing pacing, configuration, gamepad | Done | Scaling filters, fullscreen, layered TOML configuration, gamepads, input recording and replay; `VK_EXT_present_timing` pacing runs on the AMD GPU at 60, 120 and 144 Hz with a mean interval of 25.0 ms | Whether present-timing pacing looks smoother than timer pacing on a physical display has not been judged by a person |
 | M6 | Wider compatibility: encrypted archives, `Win32API` shims, more games | Done | A packed game is identical to the original on every compared frame with both runtimes reading only the archive; common `Win32API` calls and raw key state are emulated; 20 of 23 further XP games start and the three others stop on files missing from the projects | An archive written by the original packing tool; custom DLLs that games ship |
-| V0 | The original runtime of VX under Wine: a schedule of input, the same captures at the same frame numbers in repeated runs, how waits and fades count as frames | Not started | None | Comparing with vkxp, which begins at V1 |
+| V0 | The original runtime of VX under Wine: a schedule of input, the same captures at the same frame numbers in repeated runs, how waits and fades count as frames | Done | 2026-10-12, Visions & Voices (its DLL is version 2.0.0.1 under the name `RGSS202E.dll`), seed 1, a schedule of 11901 frames through title, name input, a battle, walking and the menu: 17 window captures and 9 snapshots byte for byte equal in two runs, and again with seed 20261009. The frame rules of `Graphics.update`, `wait`, `fadeout`, `fadein`, `freeze` and `transition` hold on 331 frames of a probe game with no wrong pixel, on that DLL and on version 2.0.2.1. The Witch's House starts from its archive with the probe inside | A Ruby thread ends the original under Wine, so the game was run with thread blocks executed at once; a frame inside a transition cannot be held, only the one after it; mask transitions were recorded, not fitted; audio; the third game of the corpus is not unpacked |
 | V1 | VX: title screen and menu | Not started | None | |
 | V2 | VX: walking on a map | Not started | None | |
 | V3 | VX: battle, saving and loading | Not started | None | |
