@@ -202,3 +202,20 @@ Each input, reduced, is under `crates/vkxp-ruby-sys/fuzz/fixed/`, and
 test step. Every one of them was run through targets built from the trees before the
 fixes and gave its report there; that test and `tests/backports.rs` end with a
 segmentation fault on those trees. One report was not explained; it is under "Follow-ups".
+
+### The review
+
+The network was reachable, and the sources the design names were consulted: the security
+index of ruby-lang.org (2013-06 to 2026-08), the branch `ruby_1_8_7` after p374, the
+`debian/patches` of `ruby1.8` in wheezy and squeeze-lts with the CVE list of Debian's
+tracker, the source package `ruby-1.8.7.374-5.el6` of Red Hat, and a clone of
+`kkos/oniguruma` with its whole history. Not reached: the errata pages of Red Hat (the
+changelog of the package was used) and the page of `ruby1.8` in Debian's tracker (the
+tracker's data was used). `docs/vendored-security.md` has 12 rows for built code of Ruby,
+of which 2 are backported (patches 33, 34), 3 left and 7 do not apply; 45 rows for code
+that is not built; and 58 rows for Oniguruma, of which 20 are backported (patches 1 to 8),
+3 left and 35 do not apply (one of those, CVE-2019-19012, also names a related read that
+is left). The backports of Oniguruma that no target had reached were
+checked by the tests of `tests/backports.rs`; the three found by reading upstream's history
+(9574bc1, 6d248fe, 1cb2c31) were reproduced first with the engine alone under
+AddressSanitizer.

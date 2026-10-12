@@ -10,7 +10,7 @@
 
 ## 3. Review
 
-- [ ] 3.1 `docs/vendored-security.md` and the backports. Verify: the scenarios of "Later security fixes are reviewed"; `cargo test -p vkxp-ruby-sys -p vkxp-binding --locked` passes; `cargo test -p vkxp-ruby-sys --test sanitized -- --ignored` passes.
+- [x] 3.1 `docs/vendored-security.md` and the backports. Verify: the scenarios of "Later security fixes are reviewed"; `cargo test -p vkxp-ruby-sys -p vkxp-binding --locked` passes; `cargo test -p vkxp-ruby-sys --test sanitized -- --ignored` passes.
 
 ## 4. Documentation
 

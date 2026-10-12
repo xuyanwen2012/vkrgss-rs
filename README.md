@@ -133,6 +133,8 @@ message stream with both and require byte-identical frames.
   rules.
 - [docs/development.md](docs/development.md): the merge gate, the checks outside it,
   comparing with the original runtime, and the OpenSpec workflow.
+- [docs/vendored-security.md](docs/vendored-security.md): the security fixes published for
+  the vendored Ruby and Oniguruma after their releases, and what was done about each.
 - [docs/compatibility.md](docs/compatibility.md): what is exact and the known differences.
 - [docs/decisions.md](docs/decisions.md): the settled design decisions.
 - [docs/releasing.md](docs/releasing.md): making a release and checking its package.

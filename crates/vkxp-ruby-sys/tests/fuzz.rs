@@ -28,8 +28,8 @@ struct Target {
 }
 
 /// The targets. An input is limited in size because nesting recurses in `Marshal.load` and
-/// in the parser, and a deep enough input exhausts the machine stack, which this run does
-/// not count as a finding; see `docs/development.md` for the depths.
+/// in the regular expression engine, and a deep enough input exhausts the machine stack,
+/// which this run does not count as a finding; see `docs/development.md` for the depths.
 const TARGETS: [Target; 3] = [
     Target {
         name: "marshal",

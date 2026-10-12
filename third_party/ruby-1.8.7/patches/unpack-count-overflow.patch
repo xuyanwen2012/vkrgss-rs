@@ -1,0 +1,23 @@
+--- a/pack.c
++++ b/pack.c
+@@ -13,6 +13,7 @@
+ #include "ruby.h"
+ #include <sys/types.h>
+ #include <ctype.h>
++#include <errno.h>
+ 
+ #define GCC_VERSION_SINCE(major, minor, patchlevel) \
+   (defined(__GNUC__) && !defined(__INTEL_COMPILER) && \
+@@ -1393,7 +1394,12 @@
+ 	    p++;
+ 	}
+ 	else if (ISDIGIT(*p)) {
++	    errno = 0;
+ 	    len = strtoul(p, (char**)&p, 10);
++	    if (len < 0 || errno) {
++		rb_raise(rb_eRangeError, "pack length too big");
++	    }
++
+ 	}
+ 	else {
+ 	    len = (type != '@');

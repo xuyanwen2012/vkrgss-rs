@@ -281,7 +281,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `pack.c`
 - Patch: `patches/pack-gc-guard.patch`
-- Patched SHA-256: `bbd02ec3e5657b9d530ad3443705b1e698a42997ee29eccfe2839a95550179e4`
+- Patched SHA-256: `36faf0e8d683993d436ecb7928acaebe7bf1474c0f4fe45be714d6dd982ad7c8`
 - Reason: found by the reading that followed patch 23, the same fault. In `pack_pack` the
   directive `w` builds each number in a string `buf` of its own and appends
   `RSTRING(buf)->ptr` to the result with `rb_str_buf_cat`, which grows the result before it
@@ -395,3 +395,31 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
   character. Both copies stop at the end of the source. Inputs:
   `crates/vkxp-ruby-sys/fuzz/fixed/regex/error-message-incomplete-character.txt` and
   `fuzz/fixed/marshal/regexp-error-incomplete-character.bin`.
+
+## 33. strtod-long-digit-string
+
+- File: `util.c`
+- Patch: `patches/strtod-long-digit-string.patch`
+- Patched SHA-256: `d994dccad3748b29369f5fa0e4d9d879fd2f6a59af066cc77e37c21831781795`
+- Reason: CVE-2013-4164, backported for the review of later security fixes (change `fuzz-the-interpreter-and-review-fixes`,
+  `docs/vendored-security.md`). `ruby_strtod` allocated its big numbers through `Balloc`,
+  whose free list has `Kmax + 1` entries; a digit string long enough asked for a larger
+  one, and `Balloc` and `Bfree` indexed the list past its end: a heap overflow that
+  `Marshal.load` of a dumped Float reaches, as `String#to_f` does. This is the `util.c`
+  part of the patch Debian carried for `ruby1.8` (the fix of Ruby 1.9.3-p484): sizes above
+  `Kmax` are allocated and freed outside the list, and fraction digits after the first
+  `DBL_DIG * 4` are skipped, which no double can tell apart. The test of the release is not
+  changed; `tests/backports.rs` of `vkxp-ruby-sys` has one.
+
+## 34. unpack-count-overflow
+
+- File: `pack.c`
+- Patch: `patches/unpack-count-overflow.patch`
+- Patched SHA-256: `36faf0e8d683993d436ecb7928acaebe7bf1474c0f4fe45be714d6dd982ad7c8`
+- Reason: applies after patch 24; CVE-2018-8778, backported for the review of later security
+  fixes (change `fuzz-the-interpreter-and-review-fixes`, `docs/vendored-security.md`). `String#unpack` read a count with `strtoul`
+  into a `long`; a count above `LONG_MAX` became negative, passed the range tests of `@`,
+  `X` and `x`, and moved the read position out of the string. This is the `pack.c` part of
+  the patch Debian carried for `ruby1.8`: such a count raises `RangeError` ("pack length
+  too big"). The test of the release is not changed; `tests/backports.rs` of
+  `vkxp-ruby-sys` has one.
