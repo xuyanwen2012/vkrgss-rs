@@ -19,4 +19,4 @@
 
 ## 5. Integration check
 
-- [ ] 5.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate inject-keys-and-hide-the-pointer --strict` passes.
+- [x] 5.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate inject-keys-and-hide-the-pointer --strict` passes.

@@ -74,6 +74,23 @@ documentation and not measured; the ones for "nothing is done" go.
 - [A script holds a key down by injection and never releases it] → as on Windows.
 - [The version bump invalidates streams of version 9] → only fixtures store streams.
 
+## Edits beside the named files
+
+In `vkxp-binding`, besides `win32api.rs` and its tests, a few lines that the requirements
+need:
+
+- `input.rs`: `Input.update` tells the shims' state that a snapshot was latched, for the
+  toggle bits and the end of what `SetKeyboardState` said is down. The toggle bits live in
+  the state of `win32api.rs`, not in `vkxp-core`.
+- `runtime.rs`: a resumed copy sends `PointerVisible` behind its title; `tests/states.rs`
+  expects it there.
+- `lib.rs`: the row of `ShowCursor` in the table of the shims.
+
+In `vkxp-host`, the press of an injected key cannot return its action as `Session::key`
+does, so the session keeps it for `Session::take_actions`, which the window loop reads
+after each run of the session. `InputSource::replays` tells the session that its source is
+a replayer, and `Display::set_pointer_visible` is the display's part of the pointer.
+
 ## Follow-ups
 
-None yet.
+None.
