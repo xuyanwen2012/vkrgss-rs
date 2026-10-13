@@ -426,6 +426,8 @@ fn draw_text_as(ruby: &Ruby, recv: VALUE, args: &[VALUE], runtime: Runtime) -> H
 /// `text_size(string)`: a `Rect` at 0, 0 with the size the text has in the bitmap's font.
 /// Text that is not a `String` raises `TypeError`.
 fn text_size(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    // A disposed bitmap is reported before the text is looked at.
+    id_arg(ruby, recv)?;
     let text = rb::text(ruby, args[0])?;
     text_size_of(ruby, recv, &text)
 }

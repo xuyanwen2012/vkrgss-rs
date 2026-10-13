@@ -855,6 +855,24 @@ pub(crate) const BITMAP_TEXT: &[Case] = &[
         r#"Bitmap.new(1, 1).draw_text("a", "b")"#,
         "TypeError",
     ),
+    raises_with(
+        "text_size of a disposed bitmap with text that is not a string",
+        r#"b = Bitmap.new(1, 1); b.dispose; b.text_size(123)"#,
+        "RGSSError",
+        "disposed bitmap",
+    ),
+    raises_with(
+        "text_size of a disposed bitmap with nil",
+        r#"b = Bitmap.new(1, 1); b.dispose; b.text_size(nil)"#,
+        "RGSSError",
+        "disposed bitmap",
+    ),
+    raises_with(
+        "draw_text of a disposed bitmap with text that is not a string",
+        r#"b = Bitmap.new(1, 1); b.dispose; b.draw_text(0, 0, 1, 1, 123)"#,
+        "RGSSError",
+        "disposed bitmap",
+    ),
 ];
 
 // --- rgss-bitmap: Copying ---------------------------------------------------------------------
