@@ -398,18 +398,6 @@ values it read and the option.
 - **WHEN** the program is run with `--runtime vx`
 - **THEN** it prints a usage message and exits with a non-zero status
 
-### Requirement: Experimental runtime
-A run of RGSS2 SHALL say once, as a warning of the program's diagnostics, that support for
-RPG Maker VX is experimental. A run of RGSS1 SHALL NOT say it.
-
-#### Scenario: VX
-- **WHEN** a generated game of RGSS2 whose only script returns at once is run headless
-- **THEN** the diagnostics hold one line that says VX is experimental, and the exit status is 0
-
-#### Scenario: XP
-- **WHEN** a generated game of RGSS1 is run headless
-- **THEN** the diagnostics hold no such line
-
 ### Requirement: VX Ace is refused
 A run whose runtime is RGSS3 SHALL end before the guest starts, with a non-zero status and a
 message that names RPG Maker VX Ace and says that it is planned and not supported.
@@ -429,3 +417,15 @@ starts with, and a frame dumped by a headless run SHALL have the size of the gam
 #### Scenario: Dump of a game of XP
 - **WHEN** a generated game of RGSS1 runs the same way
 - **THEN** the written picture is 640 by 480
+
+### Requirement: Supported runtimes say nothing about their state
+A run of RGSS1 or of RGSS2 SHALL NOT say that support for its runtime is experimental, and
+the usage message SHALL name `rgss1` and `rgss2` without such a word.
+
+#### Scenario: VX
+- **WHEN** a generated game of RGSS2 whose only script returns at once is run headless
+- **THEN** the diagnostics hold no line with the word "experimental", and the exit status is 0
+
+#### Scenario: Usage
+- **WHEN** the usage message is read
+- **THEN** the line of `--runtime` says of `rgss2` only that it is RPG Maker VX, and of `rgss3` that it is not supported yet
