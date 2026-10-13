@@ -95,8 +95,7 @@ The program SHALL load the built-in scripts of the run's runtime from the file g
 option, or from a default location under the user's data directory: `rpg_builtin.rb` for
 RGSS1, `rpg_builtin_rgss2.rb` for RGSS2 and `rpg_builtin_rgss3.rb` for RGSS3. When neither
 exists it SHALL end with an error that names the file and how it is made. The repository
-SHALL NOT contain the built-in scripts of an original runtime. In a run of RGSS3, which ends
-before a guest starts, the file SHALL be found and SHALL NOT be evaluated.
+SHALL NOT contain such scripts. In a run of RGSS3 the file SHALL be found and not evaluated.
 
 #### Scenario: Missing file
 - **WHEN** the program is run without the option and no file exists at the default location
@@ -116,9 +115,8 @@ before a guest starts, the file SHALL be found and SHALL NOT be evaluated.
 
 ### Requirement: Extraction tool
 `cargo xtask extract-rpg <DLL> <OUTPUT>` SHALL find the built-in Ruby script blocks stored as
-plain text in the file it is given, an RGSS DLL or the image of one as it lies in the memory
-of the running original, in the order they appear, and write them to the output file as Ruby
-source. A block SHALL be a NUL-terminated string of text that starts with `module RPG;`,
+plain text in the file it is given, an RGSS DLL or its image in the memory of the running
+original, in their order, and write them to the output file as Ruby source. A block SHALL be a NUL-terminated string of text that starts with `module RPG;`,
 `def rgss_main` or `def rgss_stop`. It SHALL fail with a clear message when the file contains
 no such block, as a DLL still compressed by its protector does.
 
@@ -430,12 +428,10 @@ values it read and the option.
 ### Requirement: VX Ace is refused
 A run whose runtime is RGSS3 SHALL end before a guest, an interpreter, a window or a device is
 started, with a non-zero status and a message that names RPG Maker VX Ace and says that it is
-planned and not supported. Before that message the program SHALL do, in this order, what it
-does for a game of any runtime before a guest starts: resolve the run-time package that `RTP`
-names, find the built-in scripts file of RGSS3, open the game's files with `Game.rgss3a` when
-the directory holds it, and read the file that `Scripts` names from them. When one of these
-steps fails, the run SHALL end with that step's error and a non-zero status, and the message
-SHALL NOT be printed.
+planned and not supported. Before it the program SHALL, in this order, resolve the run-time package,
+find the built-in scripts file, open the game's files with `Game.rgss3a` when there is one,
+and read the file that `Scripts` names. A step that fails SHALL end the run with its own
+error and without that message.
 
 #### Scenario: Ace game
 - **WHEN** a generated game with `Library=System\RGSS301.dll`, `Scripts=Data\Scripts.rvdata2`, an empty `RTP`, a loose script archive and a built-in scripts file named with the option is run headless

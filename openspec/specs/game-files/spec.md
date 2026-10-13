@@ -140,10 +140,9 @@ file.
 - **THEN** the bytes returned equal the file's contents
 
 ### Requirement: Encrypted archive
-When the game directory holds the archive of the game's runtime, `Game.rgssad` for RGSS1,
-`Game.rgss2a` for RGSS2 and `Game.rgss3a` for RGSS3 (name compared without regard to case),
-the game's files SHALL include the entries of that archive, decrypted: an RGSSAD version 1
-archive for RGSS1 and RGSS2, an RGSSAD version 3 archive for RGSS3. Entry names SHALL be
+When the game directory holds the archive of the game's runtime (`Game.rgssad`, `Game.rgss2a`
+or `Game.rgss3a`, name compared without regard to case), the game's files SHALL include its
+entries, decrypted: RGSSAD version 1 for RGSS1 and RGSS2, version 3 for RGSS3. Entry names SHALL be
 matched like loose file names. An entry SHALL take precedence over a loose file of the same
 name, and loose files over the RTPs. The archive of another runtime SHALL be ignored.
 
