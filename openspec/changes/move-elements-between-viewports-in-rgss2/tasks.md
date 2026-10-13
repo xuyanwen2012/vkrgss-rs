@@ -11,7 +11,7 @@
 
 ## 3. Method list
 
-- [ ] 3.1 The committed method list of RGSS2 and its test with the two lists of pending names. Verify: the scenarios of "Method surface of the scene classes"; the same command passes.
+- [x] 3.1 The committed method list of RGSS2 and its test with the two lists of pending names. Verify: the scenarios of "Method surface of the scene classes"; the same command passes.
 
 ## 4. Integration check
 

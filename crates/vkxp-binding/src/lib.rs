@@ -8,7 +8,9 @@
 //! are `Color`, `Tone`, `Rect`, `Table`, `Font` and `Bitmap`, the scene classes `Sprite`,
 //! `Viewport`, `Window`, `Plane`, `Tilemap` and `TilemapAutotiles`, and the exception `RGSSError`.
 //! Every method the original runtime defines for them exists with the original arity;
-//! `tests/data/rgss1_api.txt` is the list, and `tests/arity.rs` checks it.
+//! `tests/data/rgss1_api.txt` is the list, and `tests/arity.rs` checks it. In a game of RGSS2
+//! the scene classes are those of `tests/data/rgss2_api.txt`, which `tests/arity_rgss2.rs`
+//! checks except for the methods it names as pending.
 //!
 //! ```no_run
 //! use vkxp_binding::{Config, Guest};

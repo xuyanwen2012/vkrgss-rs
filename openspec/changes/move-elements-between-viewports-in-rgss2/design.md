@@ -61,3 +61,25 @@ and `TilemapAutotiles` (each comes with the change that implements its drawing);
   with the changes that add them. Names that RGSS2 lacks and vkxp still defines there
   (`Tilemap#tileset`, `autotiles`, `priorities`, `TilemapAutotiles`) are a second such
   list.
+
+## Notes of the implementation
+
+- Edits in `crates/vkxp-binding` beside the element classes, each a few lines that the
+  requirements need: `guest.rs` passes the runtime of the run to the definition of the
+  scene classes; `runtime.rs` evaluates `prelude_rgss1.rb`, which now holds `Hangup`, in a
+  game of RGSS1 only; `bitmap.rs` has `new_blank`, which makes the contents bitmap of a new
+  window; `testing.rs` has `start_as`, with which a test binary makes the harness a game of
+  RGSS2 (`tests/scene_rgss2.rs`, `tests/arity_rgss2.rs`).
+- The parser of the method lists moved from `tests/arity.rs` to `tests/method_list/`, so
+  that the test of RGSS2 shares it; the tests of `arity.rs` are as they were.
+- The test of the list of RGSS2 also fails when one of the six classes has a public method
+  that is neither in the list nor in the second list, which is what keeps that list exact.
+
+## Follow-ups
+
+- How the original orders a moved element among elements of equal z is not measured (see
+  "Decisions"); `Scene::set_sprite_viewport` and its siblings mark it.
+- `Plane#visible` on a disposed plane in RGSS2 was not measured; it raises `RGSSError` as
+  the other readers do.
+- `tests/data/rgss2_api.txt` holds the scene classes only. The other classes of RGSS2
+  (`Bitmap`, `Font`, `Graphics` and so on) are added by the changes that bind them.
