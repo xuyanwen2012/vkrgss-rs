@@ -6,6 +6,9 @@
 //! the font is used. The class-level defaults are the guest's [`FontDefaults`], with the
 //! default colour as a `Color` object kept by the class in the same way.
 //!
+//! In a game of RGSS2 the defaults are those of that runtime and a font has a shadow:
+//! `Font#shadow` and `Font.default_shadow` are defined there only.
+//!
 //! [`FontDefaults`]: vkxp_core::FontDefaults
 
 use std::ffi::CStr;
@@ -13,6 +16,7 @@ use std::ffi::CStr;
 use vkxp_core::{Color, Font, FontDefaults};
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{HostResult, Raise, Raised, Ruby};
+use vkxp_vfs::Runtime;
 
 use crate::color::{color_arg, color_new, color_set};
 use crate::guest::{self, Classes, Guest};
@@ -134,6 +138,30 @@ pub(crate) fn font_arg(ruby: &Ruby, value: VALUE) -> Result<Font, Raise> {
     Ok(font)
 }
 
+/// The font defaults a game of `runtime` starts with. RGSS1 takes its family names from
+/// the configuration, by the language of the game; RGSS2 has names of its own.
+pub(crate) fn initial_defaults(runtime: Runtime, names: Vec<String>) -> FontDefaults {
+    match runtime {
+        Runtime::Rgss1 => FontDefaults::new(names),
+        Runtime::Rgss2 | Runtime::Rgss3 => FontDefaults::rgss2(),
+    }
+}
+
+/// `Bitmap#font=` of RGSS2: copies the name, the size, bold, italic and the colour of the
+/// font `given` into the font `own`, which keeps its shadow, as measured on the original.
+/// Anything but a `Font` raises `TypeError`.
+pub(crate) fn font_assign(ruby: &Ruby, own: VALUE, given: VALUE) -> Result<(), Raise> {
+    let data = this(ruby, given)?.get();
+    let color = font_arg(ruby, given)?.color;
+    this(ruby, own)?.with(|own| {
+        let shadow = own.font.shadow;
+        *own = data;
+        own.font.shadow = shadow;
+    });
+    let assigned = color_new(ruby, color)?;
+    assign_color(ruby, own, COLOR, assigned)
+}
+
 /// A new `Font` object with the current defaults.
 pub(crate) fn font_new_default(ruby: &Ruby) -> HostResult {
     let (defaults, names_listed) = defaults(ruby)?;
@@ -230,6 +258,19 @@ fn set_italic(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     Ok(args[0])
 }
 
+/// `shadow` of RGSS2: true or false.
+fn shadow(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
+    Ok(rb::boolean(this(ruby, recv)?.with(|data| data.font.shadow)))
+}
+
+/// `shadow=` of RGSS2 takes any object: `false` and `nil` turn the shadow off, everything
+/// else, 0 included, turns it on.
+fn set_shadow(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let shadow = rb::truthy(args[0]);
+    this(ruby, recv)?.with(|data| data.font.shadow = shadow);
+    Ok(args[0])
+}
+
 /// The font's own `Color` object.
 fn color(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
     this(ruby, recv)?;
@@ -287,6 +328,16 @@ fn set_default_italic(_ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult
     Ok(args[0])
 }
 
+fn default_shadow(_ruby: &Ruby, _class: VALUE, _args: &[VALUE]) -> HostResult {
+    Ok(rb::boolean(Guest::with(|guest| guest.font_defaults.shadow)))
+}
+
+fn set_default_shadow(_ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
+    let shadow = rb::truthy(args[0]);
+    Guest::with(|guest| guest.font_defaults.shadow = shadow);
+    Ok(args[0])
+}
+
 /// The `Color` object new fonts copy their colour from.
 fn default_color(ruby: &Ruby, _class: VALUE, _args: &[VALUE]) -> HostResult {
     Ok(rb::ivar_get(ruby, guest::classes().font, DEFAULT_COLOR)?)
@@ -317,8 +368,8 @@ pub(crate) fn install_default_color(ruby: &Ruby) -> Result<(), Raised> {
     rb::ivar_set(ruby, classes.font, DEFAULT_COLOR, object)
 }
 
-/// Defines `Font`.
-pub(crate) fn define(ruby: &Ruby) -> Result<VALUE, Raised> {
+/// Defines `Font` as a game of `runtime` has it: the shadow exists from RGSS2 on.
+pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
     let class = wrap::define_class::<FontData>(ruby, c"Font")?;
     rb::method(ruby, class, c"initialize", -1, initialize)?;
     rb::method(ruby, class, c"initialize_copy", 1, initialize_copy)?;
@@ -343,5 +394,11 @@ pub(crate) fn define(ruby: &Ruby) -> Result<VALUE, Raised> {
     rb::class_method(ruby, class, c"default_color", 0, default_color)?;
     rb::class_method(ruby, class, c"default_color=", 1, set_default_color)?;
     rb::class_method(ruby, class, c"exist?", 1, exist)?;
+    if runtime != Runtime::Rgss1 {
+        rb::method(ruby, class, c"shadow", 0, shadow)?;
+        rb::method(ruby, class, c"shadow=", 1, set_shadow)?;
+        rb::class_method(ruby, class, c"default_shadow", 0, default_shadow)?;
+        rb::class_method(ruby, class, c"default_shadow=", 1, set_default_shadow)?;
+    }
     Ok(class)
 }

@@ -495,6 +495,11 @@ pub(crate) const FONT: &[Case] = &[
         "Font.default_name = nil",
         "TypeError",
     ),
+    value(
+        "the shadow of RGSS2 is not defined and the defaults are those of RGSS1",
+        "[Font.new.respond_to?(:shadow), Font.new.respond_to?(:shadow=), Font.respond_to?(:default_shadow), Font.default_size]",
+        "[false, false, false, 22]",
+    ),
 ];
 
 // --- rgss-values: Copies are independent ------------------------------------------------------
@@ -754,6 +759,11 @@ pub(crate) const BITMAP_DRAWING: &[Case] = &[
         "b = Bitmap.new(1, 1); b.blt(0, 0, b)",
         "ArgumentError",
         "wrong number of arguments (3 for 4)",
+    ),
+    value(
+        "the bitmap methods of RGSS2 are not defined",
+        "b = Bitmap.new(1, 1); [:blur, :radial_blur, :clear_rect, :gradient_fill_rect].map { |name| b.respond_to?(name) }",
+        "[false, false, false, false]",
     ),
 ];
 

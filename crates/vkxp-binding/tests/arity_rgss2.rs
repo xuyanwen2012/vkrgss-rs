@@ -1,9 +1,11 @@
-//! The method surface of the scene classes in a game of RGSS2. A binary of its own, because
-//! the classes are defined once per process, as the runtime of the run has them.
+//! The method surface of the scene classes, `Bitmap` and `Font` in a game of RGSS2. A binary
+//! of its own, because the classes are defined once per process, as the runtime of the run
+//! has them.
 //!
-//! `data/rgss2_api.txt` is the method list of `Sprite`, `Viewport`, `Window`, `Plane`,
-//! `Tilemap` and `Tilemap::BitmapArray` as measured on the original runtime of VX, in the
-//! form of `data/rgss1_api.txt`. The other classes of RGSS2 are not in it yet.
+//! `data/rgss2_api.txt` is the method list of `Bitmap`, `Font`, `Sprite`, `Viewport`,
+//! `Window`, `Plane`, `Tilemap` and `Tilemap::BitmapArray` as measured on the original
+//! runtime of VX, in the form of `data/rgss1_api.txt`. The other classes of RGSS2 are not in
+//! it yet.
 
 mod method_list;
 
@@ -15,6 +17,8 @@ const METHOD_LIST: &str = include_str!("data/rgss2_api.txt");
 
 /// The classes of the list.
 const CLASSES: &[&str] = &[
+    "Bitmap",
+    "Font",
     "Plane",
     "Sprite",
     "Tilemap",
@@ -73,9 +77,15 @@ fn is_pending(entry: &Entry<'_>) -> bool {
 #[test]
 fn the_method_list_parses() {
     let entries = parse(METHOD_LIST);
-    assert_eq!(entries.len(), 168);
-    assert_eq!(entries.iter().filter(|entry| entry.arity == -1).count(), 5);
-    assert!(entries.iter().all(|entry| !entry.class_level));
+    assert_eq!(entries.len(), 217);
+    assert_eq!(entries.iter().filter(|entry| entry.arity == -1).count(), 13);
+    // Only `Font` has methods of the class itself.
+    assert_eq!(entries.iter().filter(|entry| entry.class_level).count(), 13);
+    assert!(
+        entries
+            .iter()
+            .all(|entry| !entry.class_level || entry.class == "Font")
+    );
     for class in CLASSES {
         assert!(
             entries.iter().any(|entry| entry.class == *class),

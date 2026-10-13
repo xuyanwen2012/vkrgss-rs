@@ -99,3 +99,23 @@ Each is a few lines that a requirement needs.
 
 - `crates/vkxp-core/src/lib.rs`: the export of `Squeeze`, which the binding passes to the
   text routine to choose the squeeze of the runtime.
+- `crates/vkxp-binding/src/guest.rs`: `Bitmap` and `Font` are defined with the runtime of
+  the run, and the guest starts with the font defaults of that runtime (`font_names` of the
+  configuration is what RGSS1 starts with).
+- `crates/vkxp-binding/tests/cases/mod.rs`: two cases for the scenarios "XP" (no `blur`,
+  no `shadow`, the default size 22). The scenarios of RGSS2 are in a test binary of their
+  own, `tests/bitmap_rgss2.rs`.
+
+## Follow-ups
+
+- The provenance entries of rules 1 to 4 are a list of their own in `vkxp-pixel`
+  (`BITMAP_RGSS2_PROVENANCE`), beside the list of the bitmap arithmetic of XP, whose test
+  names its two entries; that test and its expected value stay as they were.
+- The message panel of vkxp (`crates/vkxp-binding/src/panel.rs`) takes its font from the
+  font defaults of the game, so in a game of RGSS2 its text has size 20 and a shadow. Not
+  measured against anything; whether the panel should have a font of its own is open.
+- `Font.default_name` of RGSS2 is the list of the English DLL whatever `Library=` says;
+  the Japanese DLLs were not measured (open point 2 of the report).
+- The errors of a wrong count in the four new methods carry the message of the original
+  (`wrong # of arguments (4 for 2)`); the older methods of `Bitmap` keep Ruby's message in
+  RGSS2 as in RGSS1.

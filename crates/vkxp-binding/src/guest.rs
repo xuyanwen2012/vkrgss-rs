@@ -18,7 +18,8 @@ use crate::{bitmap, color, font, rect, table, win32api};
 pub struct Config {
     /// The game's files: its directory and its run-time package directories.
     pub files: GameFiles,
-    /// The family names `Font.default_name` starts with, tried in order.
+    /// The family names `Font.default_name` starts with in RGSS1, tried in order. A game of
+    /// RGSS2 starts with the font defaults of its runtime instead.
     pub font_names: Vec<String>,
     /// Where glyphs and the knowledge of installed fonts come from.
     pub text: Box<dyn TextBackend + Send>,
@@ -67,10 +68,11 @@ thread_local! {
 
 impl Guest {
     fn new(config: Config) -> Guest {
-        let font_names_listed = config.font_names.len() != 1;
+        let font_defaults = font::initial_defaults(config.run.runtime, config.font_names);
+        let font_names_listed = font_defaults.names.len() != 1;
         Guest {
             bitmaps: Bitmaps::new(),
-            font_defaults: FontDefaults::new(config.font_names),
+            font_defaults,
             font_names_listed,
             files: config.files,
             text: config.text,
@@ -100,8 +102,8 @@ impl Guest {
             tone: color::define_tone(ruby)?,
             rect: rect::define(ruby)?,
             table: table::define(ruby)?,
-            font: font::define(ruby)?,
-            bitmap: bitmap::define(ruby)?,
+            font: font::define(ruby, config.run.runtime)?,
+            bitmap: bitmap::define(ruby, config.run.runtime)?,
             scene: element::define(ruby, config.run.runtime)?,
         };
         CLASSES.set(Some(classes));

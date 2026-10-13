@@ -11,7 +11,7 @@
 
 ## 3. Classes
 
-- [ ] 3.1 The four methods of `Bitmap`, `Font#shadow` and `Font.default_shadow`, the font defaults, the text argument, `Bitmap.new` and `font=` by runtime; the method list and its pending list. Verify: the scenarios of `specs/rgss-bitmap/spec.md`; `cargo test -p vkxp-binding --locked` passes.
+- [x] 3.1 The four methods of `Bitmap`, `Font#shadow` and `Font.default_shadow`, the font defaults, the text argument, `Bitmap.new` and `font=` by runtime; the method list and its pending list. Verify: the scenarios of `specs/rgss-bitmap/spec.md`; `cargo test -p vkxp-binding --locked` passes.
 
 ## 4. Documentation
 

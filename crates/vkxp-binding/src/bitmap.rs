@@ -4,23 +4,27 @@
 //! Its font is a `Font` object kept in an instance variable of the bitmap, so that
 //! `bitmap.font.size = 30` changes how the bitmap draws: the attributes of that object are
 //! copied into the arena's bitmap before text is drawn or measured.
+//!
+//! In a game of RGSS2 the class has four more methods (`blur`, `radial_blur`, `clear_rect`,
+//! `gradient_fill_rect`) and differs in `Bitmap.new`, `font=`, `draw_text` and `text_size`,
+//! as measured on the original runtime of VX.
 
 use std::ffi::CStr;
 
-use vkxp_core::{Align, BitmapError, Rect};
+use vkxp_core::{Align, BitmapError, Color, CreateFailure, Rect, Squeeze};
 use vkxp_proto::BitmapId;
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{HostResult, Raise, Raised, Ruby};
-use vkxp_vfs::FileKind;
+use vkxp_vfs::{FileKind, Runtime};
 
 use crate::color::{color_arg, color_new};
 use crate::error::{self, Error};
-use crate::font::{font_arg, font_copy, font_new_default};
+use crate::font::{font_arg, font_assign, font_copy, font_new_default};
 use crate::guest::{self, Classes, Guest};
 use crate::rb;
 use crate::rect::{rect_arg, rect_new};
 use crate::stats::{Part, Span};
-use crate::wrap::{self, Handle, Wrapped};
+use crate::wrap::{self, Handle, Owned, Wrapped};
 
 /// The instance variable of a bitmap that holds its `Font` object. Without `@`, so scripts
 /// do not see it.
@@ -129,9 +133,23 @@ fn rect_of(ruby: &Ruby, args: &[VALUE]) -> Result<Rect, Raise> {
     ))
 }
 
-/// `initialize(width, height)` creates a transparent bitmap; `initialize(path)` loads an
-/// image found through the game's files.
+/// Largest bitmap `Bitmap.new(width, height)` of RGSS2 makes, in pixels, as measured on the
+/// original: 2048 by 2048 works and 2049 by 2048 does not. A picture file may be larger.
+const RGSS2_MAX_NEW_PIXELS: u64 = 4_194_304;
+
+/// `initialize` of RGSS1.
 fn initialize(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    initialize_with(ruby, recv, args, None)
+}
+
+/// `initialize` of RGSS2: a size above [`RGSS2_MAX_NEW_PIXELS`] raises `RGSSError`.
+fn initialize_rgss2(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    initialize_with(ruby, recv, args, Some(RGSS2_MAX_NEW_PIXELS))
+}
+
+/// `initialize(width, height)` creates a transparent bitmap, of at most `limit` pixels when
+/// there is one; `initialize(path)` loads an image found through the game's files.
+fn initialize_with(ruby: &Ruby, recv: VALUE, args: &[VALUE], limit: Option<u64>) -> HostResult {
     rb::check_count(ruby, args, 1, 2)?;
     this(ruby, recv)?;
     let id = if let [path] = args {
@@ -151,6 +169,16 @@ fn initialize(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
         let width = rb::int(ruby, args[0])?.max(0).unsigned_abs();
         let height = rb::int(ruby, args[1])?.max(0).unsigned_abs();
         operate(ruby, |guest| {
+            if let Some(limit) = limit
+                && u64::from(width) * u64::from(height) > limit
+            {
+                let too_large = CreateFailure::TooLarge {
+                    width,
+                    height,
+                    limit,
+                };
+                return Err(BitmapError::from(too_large).into());
+            }
             Ok(guest.bitmaps.create(width, height, &guest.font_defaults)?)
         })?
     };
@@ -321,6 +349,31 @@ fn set_font(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     Ok(args[0])
 }
 
+/// `font=` of RGSS2: the name, the size, bold, italic and the colour of the font given are
+/// copied into the bitmap's own `Font` object, which keeps its shadow.
+fn set_font_rgss2(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    id_arg(ruby, recv)?;
+    font_arg(ruby, args[0])?;
+    let own = rb::ivar_get(ruby, recv, FONT)?;
+    if ffi::nil_p(own) {
+        let copy = font_copy(ruby, args[0])?;
+        rb::ivar_set(ruby, recv, FONT, copy)?;
+    } else {
+        font_assign(ruby, own, args[0])?;
+    }
+    Ok(args[0])
+}
+
+/// A text argument of RGSS2: any object, as its `to_s`.
+fn text_of(ruby: &Ruby, value: VALUE) -> Result<String, Raise> {
+    if rb::string_bytes(ruby, value).is_some() {
+        return rb::text(ruby, value);
+    }
+    // SAFETY: `value` is an argument of the running method, and so live.
+    let string = unsafe { ruby.funcall(value, c"to_s", &[]) }?;
+    rb::text(ruby, string)
+}
+
 /// Copies the attributes of the bitmap's `Font` object into the arena's bitmap, which is
 /// where drawing and measuring take them from.
 fn apply_font(ruby: &Ruby, recv: VALUE, id: BitmapId) -> Result<(), Raise> {
@@ -332,9 +385,19 @@ fn apply_font(ruby: &Ruby, recv: VALUE, id: BitmapId) -> Result<(), Raise> {
     operate(ruby, |guest| Ok(guest.bitmaps.set_font(id, font)?))
 }
 
-/// `draw_text(x, y, width, height, string, align = 0)` or `draw_text(rect, string, align = 0)`.
-/// Text that is not a `String` raises `TypeError`, as in the original.
+/// `draw_text` of RGSS1. Text that is not a `String` raises `TypeError`, as in the original.
 fn draw_text(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    draw_text_as(ruby, recv, args, Runtime::Rgss1)
+}
+
+/// `draw_text` of RGSS2: the text is the `to_s` of any object, and it is squeezed by the
+/// rule of RGSS2.
+fn draw_text_rgss2(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    draw_text_as(ruby, recv, args, Runtime::Rgss2)
+}
+
+/// `draw_text(x, y, width, height, string, align = 0)` or `draw_text(rect, string, align = 0)`.
+fn draw_text_as(ruby: &Ruby, recv: VALUE, args: &[VALUE], runtime: Runtime) -> HostResult {
     let _span = Span::enter(Part::Text);
     let id = id_arg(ruby, recv)?;
     let (rect, rest) = match args.len() {
@@ -342,7 +405,10 @@ fn draw_text(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
         5 | 6 => (rect_of(ruby, &args[..4])?, &args[4..]),
         _ => return Err(rb::count_error(ruby, args, &[2, 3, 5, 6])),
     };
-    let text = rb::text(ruby, rest[0])?;
+    let (text, squeeze) = match runtime {
+        Runtime::Rgss1 => (rb::text(ruby, rest[0])?, Squeeze::Rgss1),
+        Runtime::Rgss2 | Runtime::Rgss3 => (text_of(ruby, rest[0])?, Squeeze::Rgss2),
+    };
     let align = match rest.get(1).map(|&align| rb::int(ruby, align)).transpose()? {
         Some(1) => Align::Center,
         Some(2) => Align::Right,
@@ -352,7 +418,7 @@ fn draw_text(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     operate(ruby, |guest| {
         Ok(guest
             .bitmaps
-            .draw_text(id, rect, &text, align, &*guest.text)?)
+            .draw_text_squeezed(id, rect, &text, align, squeeze, &*guest.text)?)
     })?;
     Ok(ffi::Qnil)
 }
@@ -360,20 +426,132 @@ fn draw_text(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
 /// `text_size(string)`: a `Rect` at 0, 0 with the size the text has in the bitmap's font.
 /// Text that is not a `String` raises `TypeError`.
 fn text_size(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let text = rb::text(ruby, args[0])?;
+    text_size_of(ruby, recv, &text)
+}
+
+/// `text_size` of RGSS2: the text is the `to_s` of any object. The shadow does not count.
+fn text_size_rgss2(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    // A disposed bitmap is reported before the text is converted.
+    id_arg(ruby, recv)?;
+    let text = text_of(ruby, args[0])?;
+    text_size_of(ruby, recv, &text)
+}
+
+fn text_size_of(ruby: &Ruby, recv: VALUE, text: &str) -> HostResult {
     let _span = Span::enter(Part::Text);
     let id = id_arg(ruby, recv)?;
-    let text = rb::text(ruby, args[0])?;
     apply_font(ruby, recv, id)?;
     let size = operate(ruby, |guest| {
-        Ok(guest.bitmaps.text_size(id, &text, &*guest.text)?)
+        Ok(guest.bitmaps.text_size(id, text, &*guest.text)?)
     })?;
     rect_new(ruby, size)
 }
 
-/// Defines `Bitmap`.
-pub(crate) fn define(ruby: &Ruby) -> Result<VALUE, Raised> {
+/// The `ArgumentError` of the methods RGSS2 adds, with the message of the original, which
+/// names the count it expects first and the count given second.
+fn rgss2_count_error(ruby: &Ruby, expected: usize, given: usize) -> Raise {
+    Raise::new(
+        rb::arg_error(ruby),
+        format!("wrong # of arguments ({expected} for {given})"),
+    )
+}
+
+/// Whether a value is a `Rect`.
+fn is_rect(ruby: &Ruby, value: VALUE) -> bool {
+    wrap::find::<Owned<Rect>>(ruby, value).is_some()
+}
+
+/// A colour argument of `gradient_fill_rect`. Anything but a `Color` raises `TypeError`
+/// with the message of the original.
+fn gradient_color_arg(ruby: &Ruby, value: VALUE) -> Result<Color, Raise> {
+    if wrap::find::<Owned<Color>>(ruby, value).is_none() {
+        return Err(rb::wrong_type(ruby, value, |class| {
+            format!("can't convert {class} into Color")
+        }));
+    }
+    color_arg(ruby, value)
+}
+
+/// `blur` of RGSS2.
+fn blur(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
+    let _span = Span::enter(Part::Bitmap);
+    let id = id_arg(ruby, recv)?;
+    operate(ruby, |guest| Ok(guest.bitmaps.blur(id)?))?;
+    Ok(ffi::Qnil)
+}
+
+/// `radial_blur(angle, division)` of RGSS2: two integers, limited inside to 0 to 360 and 2
+/// to 100.
+fn radial_blur(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let _span = Span::enter(Part::Bitmap);
+    let id = id_arg(ruby, recv)?;
+    let angle = rb::int(ruby, args[0])?;
+    let division = rb::int(ruby, args[1])?;
+    operate(ruby, |guest| {
+        Ok(guest.bitmaps.radial_blur(id, angle, division)?)
+    })?;
+    Ok(ffi::Qnil)
+}
+
+/// `clear_rect(rect)` or `clear_rect(x, y, width, height)` of RGSS2. A single argument that
+/// is not a `Rect` is a wrong count, as in the original. With no argument the original ends
+/// with a page fault; here it is a wrong count too.
+fn clear_rect(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let _span = Span::enter(Part::Bitmap);
+    let id = id_arg(ruby, recv)?;
+    let rect = match args {
+        [rect] if is_rect(ruby, *rect) => rect_arg(ruby, *rect)?,
+        [first, ..] if is_rect(ruby, *first) => {
+            return Err(rgss2_count_error(ruby, 1, args.len()));
+        }
+        [_, _, _, _] => rect_of(ruby, args)?,
+        _ => return Err(rgss2_count_error(ruby, 4, args.len())),
+    };
+    operate(ruby, |guest| Ok(guest.bitmaps.clear_rect(id, rect)?))?;
+    Ok(ffi::Qnil)
+}
+
+/// `gradient_fill_rect(rect, color1, color2, vertical = false)` or
+/// `gradient_fill_rect(x, y, width, height, color1, color2, vertical = false)` of RGSS2.
+///
+/// With seven arguments the gradient is vertical whatever the seventh is, `false` and `nil`
+/// included: this is the behaviour of the original, which tests another argument in its
+/// place. With a `Rect` the last argument works as documented. With no argument the
+/// original ends with a page fault; here it is a wrong count.
+fn gradient_fill_rect(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let _span = Span::enter(Part::Bitmap);
+    let id = id_arg(ruby, recv)?;
+    let given = args.len();
+    if given < 3 {
+        return Err(rgss2_count_error(ruby, 3, given));
+    }
+    let (rect, colors, vertical) = if is_rect(ruby, args[0]) {
+        if given > 4 {
+            return Err(rgss2_count_error(ruby, 4, given));
+        }
+        let vertical = args.get(3).is_some_and(|&flag| rb::truthy(flag));
+        (rect_arg(ruby, args[0])?, &args[1..3], vertical)
+    } else {
+        match given {
+            6 | 7 => (rect_of(ruby, &args[..4])?, &args[4..6], given == 7),
+            0..6 => return Err(rgss2_count_error(ruby, 6, given)),
+            _ => return Err(rgss2_count_error(ruby, 7, given)),
+        }
+    };
+    let from = gradient_color_arg(ruby, colors[0])?;
+    let to = gradient_color_arg(ruby, colors[1])?;
+    operate(ruby, |guest| {
+        Ok(guest
+            .bitmaps
+            .gradient_fill_rect(id, rect, from, to, vertical)?)
+    })?;
+    Ok(ffi::Qnil)
+}
+
+/// Defines `Bitmap` as a game of `runtime` has it.
+pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
     let class = wrap::define_class::<BitmapData>(ruby, c"Bitmap")?;
-    rb::method(ruby, class, c"initialize", -1, initialize)?;
     rb::method(ruby, class, c"initialize_copy", 1, initialize_copy)?;
     rb::method(ruby, class, c"dispose", 0, dispose)?;
     rb::method(ruby, class, c"disposed?", 0, disposed)?;
@@ -388,8 +566,20 @@ pub(crate) fn define(ruby: &Ruby) -> Result<VALUE, Raised> {
     rb::method(ruby, class, c"set_pixel", 3, set_pixel)?;
     rb::method(ruby, class, c"hue_change", 1, hue_change)?;
     rb::method(ruby, class, c"font", 0, font)?;
-    rb::method(ruby, class, c"font=", 1, set_font)?;
-    rb::method(ruby, class, c"draw_text", -1, draw_text)?;
-    rb::method(ruby, class, c"text_size", 1, text_size)?;
+    if runtime == Runtime::Rgss1 {
+        rb::method(ruby, class, c"initialize", -1, initialize)?;
+        rb::method(ruby, class, c"font=", 1, set_font)?;
+        rb::method(ruby, class, c"draw_text", -1, draw_text)?;
+        rb::method(ruby, class, c"text_size", 1, text_size)?;
+    } else {
+        rb::method(ruby, class, c"initialize", -1, initialize_rgss2)?;
+        rb::method(ruby, class, c"font=", 1, set_font_rgss2)?;
+        rb::method(ruby, class, c"draw_text", -1, draw_text_rgss2)?;
+        rb::method(ruby, class, c"text_size", 1, text_size_rgss2)?;
+        rb::method(ruby, class, c"clear_rect", -1, clear_rect)?;
+        rb::method(ruby, class, c"gradient_fill_rect", -1, gradient_fill_rect)?;
+        rb::method(ruby, class, c"blur", 0, blur)?;
+        rb::method(ruby, class, c"radial_blur", 2, radial_blur)?;
+    }
     Ok(class)
 }
