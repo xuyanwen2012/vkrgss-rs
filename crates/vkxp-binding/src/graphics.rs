@@ -6,7 +6,7 @@
 use std::ffi::c_long;
 
 use vkxp_compose_ref::Compositor;
-use vkxp_proto::{BitmapDelta, BitmapId, GuestToHost, TransitionRule};
+use vkxp_proto::{BitmapDelta, BitmapId, GuestToHost, Size, TransitionRule};
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{HostResult, Raise, Raised, Ruby};
 use vkxp_vfs::{FileKind, Runtime};
@@ -270,6 +270,23 @@ fn height(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
     Ok(ffi::long2fix(size.height.into()))
 }
 
+/// The largest frame `Graphics.resize_screen` of RGSS2 sets.
+const RGSS2_LARGEST_FRAME: (i32, i32) = (640, 480);
+
+/// `Graphics.resize_screen(width, height)` of RGSS2: the size of the frame, the width
+/// limited to 1 to 640 and the height to 1 to 480. No frame is shown; the following frames
+/// and snapshots have the size.
+///
+/// Provenance: oracle measurement 2026-10-12, RGSS202E versions 2.0.0.1 and 2.0.2.1,
+/// `vx-v1-api-REPORT.md` section 3.2.
+fn resize_screen(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
+    let width = rb::int(ruby, args[0])?.clamp(1, RGSS2_LARGEST_FRAME.0);
+    let height = rb::int(ruby, args[1])?.clamp(1, RGSS2_LARGEST_FRAME.1);
+    let size = Size::new(width.unsigned_abs(), height.unsigned_abs());
+    Guest::with(|guest| guest.scene.set_logical_size(size));
+    Ok(ffi::Qnil)
+}
+
 /// `Graphics.snap_to_bitmap` of RGSS2: a new bitmap of the size of the frame with the scene
 /// as its objects are now, shown or not, frozen or not, darkened by the brightness, with an
 /// alpha of 255 everywhere. No frame is shown and the frame count stays.
@@ -329,6 +346,7 @@ pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
     if Guest::with(|guest| guest.runtime.run.runtime) != Runtime::Rgss1 {
         rb::class_method(ruby, module, c"width", 0, width)?;
         rb::class_method(ruby, module, c"height", 0, height)?;
+        rb::class_method(ruby, module, c"resize_screen", 2, resize_screen)?;
         rb::class_method(ruby, module, c"brightness", 0, brightness)?;
         rb::class_method(ruby, module, c"brightness=", 1, set_brightness)?;
         rb::class_method(ruby, module, c"wait", 1, wait)?;

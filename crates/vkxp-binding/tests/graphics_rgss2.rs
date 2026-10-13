@@ -6,7 +6,7 @@ mod scene_support;
 
 use vkxp_binding::testing;
 use vkxp_binding::testing::host::{self, Record, Script};
-use vkxp_proto::{BitmapDelta, GuestToHost, Rect, TransitionRule};
+use vkxp_proto::{BitmapDelta, GuestToHost, Rect, Size, TransitionRule};
 use vkxp_vfs::Runtime;
 
 /// The value of a snippet, or its exception as `Class: message`, and what the host saw. The
@@ -342,4 +342,63 @@ fn a_snapshot_takes_nothing_from_the_next_frame() {
     for (shown, expected) in shown.iter().zip(&expected) {
         assert_eq!(shown.rgba, expected.rgba);
     }
+}
+
+// --- Resizing the screen ----------------------------------------------------------------------
+
+/// A snippet that gives the frame the size of the start back when it ends, because the scene
+/// is shared by the tests.
+fn resizing(source: &str) -> (String, Record) {
+    eval(&format!(
+        "begin\n{source}\nensure\nGraphics.resize_screen(544, 416)\nend"
+    ))
+}
+
+/// Scenario "Limits, measured on the original".
+#[test]
+fn resize_screen_limits_each_side() {
+    let (value, record) = resizing(
+        "[[641, 481], [1000, 1000], [0, 0], [-1, -1], [100, 50], [640, 1]].map do |w, h|
+           [Graphics.resize_screen(w, h), Graphics.width, Graphics.height]
+         end",
+    );
+    assert_eq!(
+        value,
+        "[[nil, 640, 480], [nil, 640, 480], [nil, 1, 1], [nil, 1, 1], [nil, 100, 50], \
+         [nil, 640, 1]]"
+    );
+    assert!(record.received.is_empty());
+}
+
+/// Scenario "Frames and snapshot, measured on the original".
+#[test]
+fn frames_and_snapshots_follow_the_size_set() {
+    let (value, record) = resizing(
+        "count = Graphics.frame_count
+         Graphics.resize_screen(320, 240)
+         shot = Graphics.snap_to_bitmap
+         size = [shot.width, shot.height]
+         shot.dispose
+         Graphics.update
+         [size, Graphics.frame_count - count]",
+    );
+    assert_eq!(value, "[[320, 240], 1]");
+    let frames = record.frames();
+    assert_eq!(frames.len(), 1);
+    assert_eq!(frames[0].logical_size, Size::new(320, 240));
+    assert_eq!(record.received.len(), 1);
+}
+
+/// Scenario "Arguments, measured on the original".
+#[test]
+fn resize_screen_takes_two_integers() {
+    let (value, _) = resizing("Graphics.resize_screen(640)");
+    assert!(value.starts_with("ArgumentError: "), "{value}");
+    let (value, _) = resizing("Graphics.resize_screen(nil, 480)");
+    assert!(value.starts_with("TypeError: "), "{value}");
+    let (value, _) = resizing(
+        "Graphics.resize_screen(100.9, 50.9)
+         [Graphics.width, Graphics.height]",
+    );
+    assert_eq!(value, "[100, 50]");
 }

@@ -275,6 +275,14 @@ fn the_functions_of_rgss2_are_not_defined() {
     assert!(record.received.is_empty());
 }
 
+/// Requirement "Resizing the screen", scenario "XP".
+#[test]
+fn resize_screen_is_not_defined() {
+    let (value, record) = eval("Graphics.resize_screen(640, 480)");
+    assert!(value.starts_with("NoMethodError: "), "{value}");
+    assert!(record.received.is_empty());
+}
+
 #[test]
 fn visible_is_a_stored_flag() {
     let (value, _) = eval(

@@ -223,6 +223,14 @@ pub struct Scene {
     pub(crate) logical_size: Size,
 }
 
+/// `size` with each side brought into 1 to [`MAX_LOGICAL_DIMENSION`].
+fn limited(size: Size) -> Size {
+    Size::new(
+        size.width.clamp(1, MAX_LOGICAL_DIMENSION),
+        size.height.clamp(1, MAX_LOGICAL_DIMENSION),
+    )
+}
+
 impl Default for Scene {
     fn default() -> Scene {
         Scene::new()
@@ -254,16 +262,20 @@ impl Scene {
             frame_index: 0,
             frame_rate: FrameRate::DEFAULT,
             brightness: 255,
-            logical_size: Size::new(
-                size.width.clamp(1, MAX_LOGICAL_DIMENSION),
-                size.height.clamp(1, MAX_LOGICAL_DIMENSION),
-            ),
+            logical_size: limited(size),
         }
     }
 
     /// The size of the logical screen in pixels.
     pub fn logical_size(&self) -> Size {
         self.logical_size
+    }
+
+    /// Sets the size of the logical screen, each side brought into 1 to
+    /// [`MAX_LOGICAL_DIMENSION`]; the caller applies the limits of its runtime. Elements keep
+    /// their coordinates, and the next extracted packet carries the size.
+    pub fn set_logical_size(&mut self, size: Size) {
+        self.logical_size = limited(size);
     }
 
     /// Makes the scene what [`Scene::new`] returns, except that the handles handed out so

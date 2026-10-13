@@ -2,7 +2,7 @@
 
 ## 1. Function
 
-- [ ] 1.1 `Graphics.resize_screen` in RGSS2 only; the size of the scene can change. Verify: the scenarios of "Resizing the screen" except the dump; `cargo test -p vkxp-core -p vkxp-binding --locked` passes.
+- [x] 1.1 `Graphics.resize_screen` in RGSS2 only; the size of the scene can change. Verify: the scenarios of "Resizing the screen" except the dump; `cargo test -p vkxp-core -p vkxp-binding --locked` passes.
 
 ## 2. Shown frames
 

@@ -471,6 +471,24 @@ fn the_logical_size_is_640_by_480_unless_given() {
     assert_eq!(scene.logical_size(), Size::new(1, MAX_LOGICAL_DIMENSION));
 }
 
+#[test]
+fn the_logical_size_can_be_set_and_the_next_packet_carries_it() {
+    let mut scene = Scene::with_logical_size(Size::new(544, 416));
+    let mut bitmaps = crate::Bitmaps::new();
+    assert_eq!(
+        scene.extract(&mut bitmaps).logical_size,
+        Size::new(544, 416)
+    );
+    scene.set_logical_size(Size::new(640, 480));
+    assert_eq!(scene.logical_size(), Size::new(640, 480));
+    assert_eq!(
+        scene.extract(&mut bitmaps).logical_size,
+        Size::new(640, 480)
+    );
+    scene.set_logical_size(Size::new(0, 100_000));
+    assert_eq!(scene.logical_size(), Size::new(1, MAX_LOGICAL_DIMENSION));
+}
+
 /// The measured draw orders among elements with equal z: every row of the table of the z
 /// order probe of the original runtime (RGSS103J), where all elements start at z 0.
 mod measured_order {
