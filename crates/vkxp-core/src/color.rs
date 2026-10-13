@@ -171,6 +171,26 @@ impl From<Color> for vkxp_proto::Color {
     }
 }
 
+/// The colour made without components, `Color.new` of RGSS3: all four are 0.
+impl Default for Color {
+    fn default() -> Color {
+        Color::TRANSPARENT
+    }
+}
+
+/// The four numbers of a tone in order, as `color.set(tone)` of RGSS3 copies them: the grey
+/// amount becomes the alpha. Both classes have the same limits, so nothing is clamped.
+impl From<Tone> for Color {
+    fn from(tone: Tone) -> Color {
+        Color {
+            red: tone.red,
+            green: tone.green,
+            blue: tone.blue,
+            alpha: tone.gray,
+        }
+    }
+}
+
 /// A tone: offsets for red, green and blue from -255 to 255 and a grey amount from 0 to 255,
 /// with fractions kept.
 ///
@@ -275,6 +295,26 @@ impl Tone {
 impl From<Tone> for vkxp_proto::Tone {
     fn from(tone: Tone) -> vkxp_proto::Tone {
         tone.to_proto()
+    }
+}
+
+/// The tone made without components, `Tone.new` of RGSS3: all four are 0.
+impl Default for Tone {
+    fn default() -> Tone {
+        Tone::NEUTRAL
+    }
+}
+
+/// The four numbers of a colour in order, as `tone.set(color)` of RGSS3 copies them: the
+/// alpha becomes the grey amount.
+impl From<Color> for Tone {
+    fn from(color: Color) -> Tone {
+        Tone {
+            red: color.red,
+            green: color.green,
+            blue: color.blue,
+            gray: color.alpha,
+        }
     }
 }
 
@@ -419,6 +459,29 @@ mod tests {
         );
         tone.set_gray(300.0);
         assert_eq!(tone.gray(), 255.0);
+    }
+
+    #[test]
+    fn without_components_everything_is_0() {
+        assert_eq!(Color::default(), Color::new(0.0, 0.0, 0.0, 0.0));
+        assert_eq!(Tone::default(), Tone::new(0.0, 0.0, 0.0, 0.0));
+        assert_eq!(crate::Rect::default(), crate::Rect::new(0, 0, 0, 0));
+    }
+
+    #[test]
+    fn colour_and_tone_copy_their_four_numbers() {
+        assert_eq!(
+            Color::from(Tone::new(1.0, 2.0, 3.0, 4.0)),
+            Color::new(1.0, 2.0, 3.0, 4.0)
+        );
+        assert_eq!(
+            Tone::from(Color::new(1.0, 2.0, 3.0, 4.0)),
+            Tone::new(1.0, 2.0, 3.0, 4.0)
+        );
+        let color = Color::new(-9.0, 255.0, 2.5, 77.0);
+        let tone = Tone::from(color);
+        assert_eq!(tone, Tone::new(-9.0, 255.0, 2.5, 77.0));
+        assert_eq!(Color::from(tone), color);
     }
 
     #[test]

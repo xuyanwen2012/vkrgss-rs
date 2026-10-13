@@ -56,6 +56,8 @@ impl Wrapped for FontData {
                 italic: false,
                 color: Color::rgb(255.0, 255.0, 255.0),
                 shadow: false,
+                outline: false,
+                out_color: Color::new(0.0, 0.0, 0.0, 128.0),
             },
             names_listed: true,
         }

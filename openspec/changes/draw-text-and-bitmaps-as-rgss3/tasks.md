@@ -2,8 +2,8 @@
 
 ## 1. Values
 
-- [ ] 1.1 `outline` and `out_color` in `Font` and `FontDefaults`, `FontDefaults::rgss3()`, the two fields where the binding writes a `Font` out. Verify: the scenarios of "Outline attributes of a font" and "Font defaults of RGSS3"; `initial_defaults` and `initial_defaults_of_rgss2` pass unchanged; `cargo test -p vkxp-core -p vkxp-binding --locked` passes.
-- [ ] 1.2 The empty colour and tone and the conversions between them. Verify: the scenarios of "Empty colour and tone, and copies between them"; `cargo test -p vkxp-core --locked` passes.
+- [x] 1.1 `outline` and `out_color` in `Font` and `FontDefaults`, `FontDefaults::rgss3()`, the two fields where the binding writes a `Font` out. Verify: the scenarios of "Outline attributes of a font" and "Font defaults of RGSS3"; `initial_defaults` and `initial_defaults_of_rgss2` pass unchanged; `cargo test -p vkxp-core -p vkxp-binding --locked` passes.
+- [x] 1.2 The empty colour and tone and the conversions between them. Verify: the scenarios of "Empty colour and tone, and copies between them"; `cargo test -p vkxp-core --locked` passes.
 
 ## 2. Masks and names
 
