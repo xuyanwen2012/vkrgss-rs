@@ -3,6 +3,8 @@
 
 use crate::{Font, Mask, TextMetrics, TextRasterizer};
 
+pub mod window_cases;
+
 /// A deterministic stand-in for a font rasteriser.
 ///
 /// Every character is a cell: `size / 2` pixels wide (one more when bold) and `size` pixels

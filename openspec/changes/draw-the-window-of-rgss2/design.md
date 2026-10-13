@@ -105,3 +105,32 @@ than 64; text.
   sequences are committed as numbers. A skin smaller than 64 follows the model and is
   marked as not measured.
 - `openness` leaves the pending list of the method test.
+
+### As implemented
+
+- No rule needed an addition to the protocol or to a compositor; the protocol version stays.
+- A window of RGSS2 is created with `Scene::create_window_rgss2`. Its properties that latch
+  something, and `update`, go through `Window::call` with a `WindowCall`; on a window of RGSS1
+  the same calls are plain assignments, so the binding has one set of writers.
+- The background bitmap has the size of the window and keeps the margin of 2 transparent.
+  One bitmap then serves both states: the open window draws its rectangle
+  (2, 2, W - 3, H - 4), whose last column is the transparent one that rule 3 counts, and the
+  opening window stretches all H rows into the n rows shown, which is the row sampling of
+  rule 4 for background and frame alike.
+- "Outside the skin is transparent": a skin smaller than 128 by 128 is copied into a
+  transparent bitmap of that size for the moment a part is built, so that every piece is
+  taken by the operations of RGSS1 as the layout names it. Arrows and pause sign are read
+  from the skin when drawn; where the skin holds only a part of their rectangle and the row
+  goes on beyond that part, the part is drawn as a stretch of its own size, which takes the
+  window blend in every column, because the original counts the columns of the whole
+  rectangle for the odd-column rule and a quad would count those of the part.
+- The fixtures are text: `vkxp_core::test_support::window_cases` reads the statements of a
+  scene (the calls of the measurement's case files) and makes every bitmap by the pixel
+  functions of the measurement; the expected picture of a frame is committed as the FNV-1a
+  digest of the picture the measurement's model draws. `tests/data/window-rgss2-cases.txt`
+  of `vkxp-core` holds 27 scenes (87 frames) of the case files g1 to g17, and names the two
+  that hold a skin smaller than 64 as not measured.
+- Left out of the fixtures, because they are non-goals: scenes in which the y key of a
+  sprite of equal z decides a pixel, and scenes with a tone or colour of a viewport. A scene
+  is left out by the first rule when the model draws another picture with the creation
+  order alone among equal z.

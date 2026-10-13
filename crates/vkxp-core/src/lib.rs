@@ -86,12 +86,12 @@
 //! | `geometry` | the fixed-point transform of a quad, the rectangle of a stretch, the walk of a turned sprite |
 //! | `extract` | [`Scene::extract`], the draw order, sprites and viewports as ops |
 //! | `turned` | the bitmap a turned sprite is rendered into |
-//! | `window` | the bitmaps cached from a window skin, windows as ops |
+//! | `window` | the bitmaps cached from a window skin, windows as ops; the window of RGSS2 with [`WindowCall`] |
 //! | `plane` | planes as tiled quads, the pre-tiled bitmap of a small pattern |
 //! | `tilemap` | tilemaps as ops, the tables sent for them, the overlay of flashing cells; the tile numbering is `vkxp_proto::tiles` |
 //! | `input` | [`InputState`] |
 //! | `error` | [`BitmapError`], [`CreateFailure`], [`DecodeError`], [`TableError`], [`SceneError`], [`ElementKind`] |
-//! | `test_support` | stand-ins for tests, such as a rasteriser with fixed-size cells |
+//! | `test_support` | stand-ins for tests, such as a rasteriser with fixed-size cells; scenes of windows of RGSS2 as text |
 
 #![forbid(unsafe_code)]
 
@@ -127,3 +127,4 @@ pub use scene::{
 };
 pub use table::{SharedTable, Table};
 pub use text::{Align, Mask, SQUEEZE_STEPS, TextMetrics, TextRasterizer};
+pub use window::rgss2::WindowCall;

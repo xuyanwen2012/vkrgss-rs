@@ -333,6 +333,21 @@ impl Scene {
             .ok_or(SceneError::Full(ElementKind::Window))
     }
 
+    /// Creates a window of RGSS2 with its defaults and without contents, in `viewport` or
+    /// directly on the screen: one element at its z, drawn by the rules of RGSS2, whose
+    /// properties are assigned through [`Window::call`]. In a disposed viewport the window
+    /// is alive and not drawn.
+    pub fn create_window_rgss2(
+        &mut self,
+        viewport: Option<ViewportId>,
+    ) -> Result<WindowId, SceneError> {
+        let stamp = self.next_stamp();
+        self.windows
+            .insert(Window::new_rgss2(viewport, stamp))
+            .map(WindowId)
+            .ok_or(SceneError::Full(ElementKind::Window))
+    }
+
     /// Creates a plane with the RGSS1 defaults, in `viewport` or directly on the screen.
     /// In a disposed viewport the plane is alive and not drawn.
     pub fn create_plane(&mut self, viewport: Option<ViewportId>) -> Result<PlaneId, SceneError> {

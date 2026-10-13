@@ -456,6 +456,8 @@ enum Item {
     WindowBack(Key),
     /// What a window shows inside: cursor, contents, pause sign and arrows.
     WindowFront(Key),
+    /// A window of RGSS2, which is one element.
+    Window(Key),
     Viewport(Key),
 }
 
@@ -639,6 +641,11 @@ impl Scene {
             }
         }
         for (key, window) in self.windows.iter() {
+            if window.is_rgss2() {
+                let whole = Entry::new(window.order, Item::Window(key));
+                place(window.viewport, whole);
+                continue;
+            }
             let back = Entry::new(window.order, Item::WindowBack(key));
             let front = Entry {
                 z: back.z + 2,
@@ -709,6 +716,11 @@ impl Scene {
             Item::WindowFront(key) => {
                 if let Some(window) = self.windows.get(key) {
                     assembly.window_front(window, level);
+                }
+            }
+            Item::Window(key) => {
+                if let Some(window) = self.windows.get(key) {
+                    assembly.window_rgss2(window, level);
                 }
             }
             Item::Viewport(_) => {}

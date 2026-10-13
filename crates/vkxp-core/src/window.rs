@@ -93,6 +93,16 @@ impl Cache {
         });
     }
 
+    /// Draws the bitmap anew from `wanted`, also when it was drawn from the same before.
+    fn rebuild(&mut self, bitmaps: &mut Bitmaps, wanted: Option<Key>, draw: Draw) {
+        if wanted.is_none() {
+            self.dispose(bitmaps);
+            return;
+        }
+        self.key = None;
+        self.refresh(bitmaps, wanted, draw);
+    }
+
     pub(crate) fn dispose(&mut self, bitmaps: &mut Bitmaps) {
         if let Some(id) = self.bitmap.take() {
             bitmaps.dispose(id);
@@ -255,18 +265,30 @@ fn draw_frame(
     height: i32,
     _stretch: bool,
 ) -> Result<(), BitmapError> {
-    let (left, top) = FRAME;
+    frame_pieces(bitmaps, dst, skin, (width, height), FRAME, EDGE_START)
+}
+
+/// The frame of `size` from the frame area at `corner` of the skin, its edges running from
+/// `edge_start` pixels inside the window to as many before its far side.
+fn frame_pieces(
+    bitmaps: &mut Bitmaps,
+    dst: BitmapId,
+    skin: BitmapId,
+    (width, height): (i32, i32),
+    (left, top): (i32, i32),
+    edge_start: i32,
+) -> Result<(), BitmapError> {
     let (far_x, far_y) = (left + CORNER + EDGE, top + CORNER + EDGE);
     for (y, skin_y) in [(0, top), (height - CORNER, far_y)] {
-        for x in (EDGE_START..width - EDGE_START).step_by(EDGE as usize) {
-            let length = EDGE.min(width - EDGE_START - x);
+        for x in (edge_start..width - edge_start).step_by(EDGE as usize) {
+            let length = EDGE.min(width - edge_start - x);
             let piece = Rect::new(left + CORNER, skin_y, length, CORNER);
             bitmaps.blt(dst, x, y, skin, piece, 255)?;
         }
     }
     for (x, skin_x) in [(0, left), (width - CORNER, far_x)] {
-        for y in (EDGE_START..height - EDGE_START).step_by(EDGE as usize) {
-            let length = EDGE.min(height - EDGE_START - y);
+        for y in (edge_start..height - edge_start).step_by(EDGE as usize) {
+            let length = EDGE.min(height - edge_start - y);
             let piece = Rect::new(skin_x, top + CORNER, CORNER, length);
             bitmaps.blt(dst, x, y, skin, piece, 255)?;
         }
@@ -295,10 +317,21 @@ fn draw_cursor(
     height: i32,
     _stretch: bool,
 ) -> Result<(), BitmapError> {
+    cursor_pieces(bitmaps, dst, skin, (width, height), CURSOR)
+}
+
+/// The cursor of `size` from the cursor image `cursor` of the skin.
+fn cursor_pieces(
+    bitmaps: &mut Bitmaps,
+    dst: BitmapId,
+    skin: BitmapId,
+    (width, height): (i32, i32),
+    cursor: Rect,
+) -> Result<(), BitmapError> {
     let border = CURSOR_BORDER;
     let (inner_width, inner_height) = (width - 2 * border, height - 2 * border);
-    let image = CURSOR.width - 2 * border;
-    let (near_x, near_y) = (CURSOR.x, CURSOR.y);
+    let image = cursor.width - 2 * border;
+    let (near_x, near_y) = (cursor.x, cursor.y);
     let (far_x, far_y) = (near_x + border + image, near_y + border + image);
     if inner_width > 0 && inner_height > 0 {
         let corner = (near_x + border, near_y + border);
@@ -395,6 +428,10 @@ impl Window {
     /// Brings the cached bitmaps this frame draws up to date. What is not drawn this frame
     /// is left as it is.
     pub(crate) fn refresh_caches(&mut self, bitmaps: &mut Bitmaps) {
+        // A window of RGSS2 builds its bitmaps at its calls, not for a frame.
+        if self.rgss2.is_some() {
+            return;
+        }
         self.follow_flags();
         if !self.visible {
             return;
@@ -544,6 +581,8 @@ impl Assembly<'_> {
         }
     }
 }
+
+pub(crate) mod rgss2;
 
 #[cfg(test)]
 mod tests;

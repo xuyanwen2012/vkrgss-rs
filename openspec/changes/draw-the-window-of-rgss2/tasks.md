@@ -2,10 +2,10 @@
 
 ## 1. Window of RGSS2 in the scene
 
-- [ ] 1.1 Skin layout, background and frame bitmaps, their place and alpha on the screen. Verify: the scenarios of "Background and frame of a window of RGSS2"; `cargo test -p vkxp-core --locked` passes.
-- [ ] 1.2 Openness. Verify: the scenarios of "Openness of a window of RGSS2"; the same command.
-- [ ] 1.3 Contents, cursor with its blink, pause sign, arrows. Verify: the scenarios of "Contents and cursor of a window of RGSS2" and "Pause sign and arrows of a window of RGSS2"; the same command.
-- [ ] 1.4 The latched state. Verify: the scenarios of "Latched state of a window of RGSS2"; the same command.
+- [x] 1.1 Skin layout, background and frame bitmaps, their place and alpha on the screen. Verify: the scenarios of "Background and frame of a window of RGSS2"; `cargo test -p vkxp-core --locked` passes.
+- [x] 1.2 Openness. Verify: the scenarios of "Openness of a window of RGSS2"; the same command.
+- [x] 1.3 Contents, cursor with its blink, pause sign, arrows. Verify: the scenarios of "Contents and cursor of a window of RGSS2" and "Pause sign and arrows of a window of RGSS2"; the same command.
+- [x] 1.4 The latched state. Verify: the scenarios of "Latched state of a window of RGSS2"; the same command.
 
 ## 2. Class
 

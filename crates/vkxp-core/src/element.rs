@@ -281,6 +281,8 @@ pub struct Window {
     counted: (bool, bool),
     /// The bitmaps drawn from the window skin.
     pub(crate) caches: Caches,
+    /// What a window of RGSS2 keeps beside its properties; `None` in a window of RGSS1.
+    pub(crate) rgss2: Option<crate::window::rgss2::State>,
 }
 
 impl Window {
@@ -308,6 +310,16 @@ impl Window {
             pause_step: 0,
             counted: (true, false),
             caches: Caches::default(),
+            rgss2: None,
+        }
+    }
+
+    /// A window of RGSS2: its properties are assigned and it is updated through
+    /// [`Window::call`].
+    pub(crate) fn new_rgss2(viewport: Option<ViewportId>, stamp: u64) -> Window {
+        Window {
+            rgss2: Some(crate::window::rgss2::State::new()),
+            ..Window::new(viewport, stamp)
         }
     }
 
@@ -371,8 +383,12 @@ impl Window {
         self.follow_flags();
     }
 
-    /// Lets the counters follow `active` and `pause` when their fields were assigned.
+    /// Lets the counters follow `active` and `pause` when their fields were assigned. In a
+    /// window of RGSS2 they follow the calls instead.
     pub(crate) fn follow_flags(&mut self) {
+        if self.rgss2.is_some() {
+            return;
+        }
         let (active, pause) = self.counted;
         if self.active != active && !self.active {
             self.cursor_step = 12;
@@ -386,6 +402,9 @@ impl Window {
     /// Advances the cursor blink while the window is active, and the pause sign while the
     /// pause flag is set, as measured on the original runtime. Both run whether the window
     /// is visible or not.
+    ///
+    /// This is the update of a window of RGSS1; one of RGSS2 is updated through
+    /// [`Window::call`].
     pub fn update(&mut self) {
         self.follow_flags();
         if self.active {
