@@ -8,7 +8,7 @@
 
 ## 2. The copier and the entry functions
 
-- [ ] 2.1 `vkxp-ruby-sys`: the public function that restarts the timer of the interpreter's threads in a copy of the process, with the safety comment of `copier.rs`. Move `copier.rs` into the library with its own result of `park` and the `restart_timer` function in place of the C declaration. Add `Attached` and the two `play` functions as in `design.md`. Verify: `cargo test -p vkxp-guest --locked` passes; `cargo xtask deps` passes.
+- [x] 2.1 `vkxp-ruby-sys`: the public function that restarts the timer of the interpreter's threads in a copy of the process, with the safety comment of `copier.rs`. Move `copier.rs` into the library with its own result of `park` and the `restart_timer` function in place of the C declaration. Add `Attached` and the two `play` functions as in `design.md`. Verify: `cargo test -p vkxp-guest --locked` passes; `cargo xtask deps` passes.
 - [ ] 2.2 Gather the guest's glue of `main.rs` in `guest.rs` with `GuestSettings`, as in `design.md`: `run_guest` and the guest on a thread call the library in the order of the table "Order of a guest process"; the wrapper of the copier implements `Copier` of the binding. Verify: scenario "The program holds no copy of the role" (`grep -rn 'libc::fork\|libc::prctl\|landlock' crates/vkxp/src crates/vkxp/Cargo.toml` finds nothing); `grep -n 'vkxp_host\|crate::args\|crate::config\|crate::process\|crate::log' crates/vkxp/src/guest.rs crates/vkxp/src/font.rs` finds nothing; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` passes with the test names of the kept list; `git diff main -- crates/vkxp/tests` is empty.
 
 ## 3. Version and executable

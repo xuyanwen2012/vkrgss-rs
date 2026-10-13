@@ -1,12 +1,12 @@
 //! States as copies of the guest process: the guest's side of it.
 //!
 //! This is platform code for Linux. A guest process that is asked to save a state calls
-//! `fork` on its interpreter thread, in a wait for a tick ([`ForkCopier`], which the binding
-//! calls through its `Copier` trait). The process that asked goes on. The copy connects to
+//! `fork` on its interpreter thread, in a wait for a tick ([`ForkCopier::park`], which the
+//! executable calls from the copier it gives its binding). The process that asked goes on. The copy connects to
 //! the socket of the program by itself, says with its first message which slot it is the
 //! state of, and waits: it is parked. A parked copy that is told to resume first leaves a
 //! copy of itself behind in the same way, so that the slot can be loaded again, and then
-//! comes back to the binding with its connection as the new link. One whose connection ends
+//! comes back with its connection as the new link ([`Parked::Resumed`]). One whose connection ends
 //! exits at once.
 //!
 //! In a copy only the thread that called `fork` exists. So a copy never returns to the main
@@ -19,27 +19,37 @@ use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 
-use vkxp_binding::{Copied, Copier, CopyFailed};
 use vkxp_proto::framing::{read_message, write_message};
 use vkxp_proto::link::GuestEnd;
 use vkxp_proto::{GuestToHost, HostToGuest};
 
-unsafe extern "C" {
-    /// Arms the timer that switches the interpreter's threads, if the game has made any.
-    /// The interpreter calls it itself after its own `fork`.
-    fn rb_thread_start_timer();
-}
-
 /// Whether this process is a copy of the guest process that was parked and resumed.
 static COPY: AtomicBool = AtomicBool::new(false);
 
+/// Where [`ForkCopier::park`] came back.
+#[derive(Debug)]
+pub enum Parked {
+    /// In the guest that asked, which goes on. A copy of it is parked.
+    WentOn,
+    /// In a copy that was parked and has been told to resume, with its link to the host,
+    /// which holds nothing of the guest it was copied from.
+    Resumed(GuestEnd),
+}
+
+/// No copy could be made.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("the guest process could not be copied")]
+pub struct ParkFailed;
+
 /// Copies the guest process with `fork`.
 #[derive(Debug)]
-pub(crate) struct ForkCopier {
+pub struct ForkCopier {
     /// The socket of the program, which a copy connects to.
     socket: PathBuf,
     /// The descriptor that the link of the binding owns in this process.
     connection: AtomicI32,
+    /// What a copy calls to get the timer of the interpreter's threads back.
+    restart_timer: fn(),
 }
 
 /// Where a call of `fork` came back.
@@ -52,11 +62,13 @@ enum Forked {
 
 impl ForkCopier {
     /// A copier for the guest whose link is `connection`, which was made by connecting to
-    /// `socket`.
-    pub(crate) fn new(socket: PathBuf, connection: &UnixStream) -> ForkCopier {
+    /// `socket`. A copy calls `restart_timer` on its one thread, the interpreter's, before
+    /// it connects.
+    pub(crate) fn new(socket: PathBuf, connection: &UnixStream, restart_timer: fn()) -> ForkCopier {
         ForkCopier {
             socket,
             connection: AtomicI32::new(connection.as_raw_fd()),
+            restart_timer,
         }
     }
 
@@ -106,13 +118,11 @@ impl ForkCopier {
     /// so that the descriptor the binding's link still holds is not one of another guest.
     fn attach(&self, slot: u8) -> Option<UnixStream> {
         COPY.store(true, Ordering::SeqCst);
-        // SAFETY: `PR_SET_PDEATHSIG` with 0 clears a setting of the calling process, and
-        // `rb_thread_start_timer` is called on the interpreter thread, as the interpreter
-        // itself calls it after a `fork`: timers are not inherited.
-        unsafe {
-            libc::prctl(libc::PR_SET_PDEATHSIG, 0);
-            rb_thread_start_timer();
-        }
+        // SAFETY: `PR_SET_PDEATHSIG` with 0 clears a setting of the calling process.
+        unsafe { libc::prctl(libc::PR_SET_PDEATHSIG, 0) };
+        // On the interpreter thread, as the interpreter itself restarts its timer after a
+        // `fork`: timers are not inherited.
+        (self.restart_timer)();
         let mut stream = UnixStream::connect(&self.socket).ok()?;
         let inherited = self.connection.load(Ordering::SeqCst);
         // SAFETY: both descriptors are open in this process: `stream` is alive, and
@@ -131,8 +141,11 @@ impl ForkCopier {
     }
 }
 
-impl Copier for ForkCopier {
-    fn park(&self, slot: u8) -> Result<Copied, CopyFailed> {
+impl ForkCopier {
+    /// Parks a copy of the guest process as the state of `slot`. To be called on the
+    /// interpreter thread, in a wait for a tick. Returns [`Parked::WentOn`] in the guest
+    /// that asked and, in a copy that was resumed, the new link.
+    pub fn park(&self, slot: u8) -> Result<Parked, ParkFailed> {
         // The connection of this process if it is a copy that was told to resume.
         let mut resumed: Option<UnixStream> = None;
         loop {
@@ -142,10 +155,10 @@ impl Copier for ForkCopier {
                         // Without a new copy the slot is empty from here on.
                         Some(stream) => {
                             self.connection.store(stream.as_raw_fd(), Ordering::SeqCst);
-                            Ok(Copied::Resumed(GuestEnd::over_stream(stream)))
+                            Ok(Parked::Resumed(GuestEnd::over_stream(stream)))
                         }
-                        None if attached => Ok(Copied::WentOn),
-                        None => Err(CopyFailed),
+                        None if attached => Ok(Parked::WentOn),
+                        None => Err(ParkFailed),
                     };
                 }
                 Forked::Copy(stream) => {
@@ -171,7 +184,7 @@ impl Copier for ForkCopier {
 /// Ends the process if it is a copy that was resumed, with the status of a game that went
 /// `ok`. Called on the interpreter thread when the game has ended; a copy has no other
 /// thread to return to.
-pub(crate) fn exit_if_copy(ok: bool) {
+pub fn exit_if_copy(ok: bool) {
     if COPY.load(Ordering::SeqCst) {
         // SAFETY: flushes the output streams of the C library, which takes no pointer of
         // ours, and ends the process without running the exit handlers, which belong to

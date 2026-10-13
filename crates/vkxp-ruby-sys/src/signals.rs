@@ -23,6 +23,22 @@ pub const SIGNALS_TAKEN_BY_RUBY: [c_int; 10] = [
     libc::SIGPIPE,
 ];
 
+unsafe extern "C" {
+    /// Arms the timer that switches the interpreter's threads, if the game has made any.
+    /// The interpreter calls it itself after its own `fork`.
+    fn rb_thread_start_timer();
+}
+
+/// Restarts the timer of the interpreter's threads in a copy of the process that `fork` has
+/// just made: timers are not inherited. To be called in the copy on the interpreter thread,
+/// which is the one thread a copy has. Without a second thread of the interpreter it does
+/// nothing.
+pub fn restart_thread_timer() {
+    // SAFETY: `rb_thread_start_timer` is called on the interpreter thread, as the
+    // interpreter itself calls it after a `fork`: timers are not inherited.
+    unsafe { rb_thread_start_timer() }
+}
+
 /// `struct sigaction` as the x86_64 Linux kernel defines it for `rt_sigaction`.
 ///
 /// The dispositions go through the system call directly instead of through `sigaction` of

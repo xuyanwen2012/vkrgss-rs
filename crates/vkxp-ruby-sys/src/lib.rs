@@ -99,7 +99,8 @@
 //! then fail with `EINTR`. Every thread other than the interpreter's should therefore block
 //! SIGVTALRM, most simply by blocking it before any thread is spawned and unblocking it at
 //! the start of the closure that runs the game. Dropping the interpreter disarms the timer
-//! and restores the disposition of SIGVTALRM.
+//! and restores the disposition of SIGVTALRM. A copy of the process made with `fork` has no
+//! timer: [`restart_thread_timer`] arms it again there.
 //!
 //! # Start-up state
 //!
@@ -129,4 +130,4 @@ pub use interp::{
 };
 pub use protect::{Raised, protect};
 pub use root::Root;
-pub use signals::SIGNALS_TAKEN_BY_RUBY;
+pub use signals::{SIGNALS_TAKEN_BY_RUBY, restart_thread_timer};
