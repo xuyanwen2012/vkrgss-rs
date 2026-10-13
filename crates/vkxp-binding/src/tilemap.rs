@@ -38,7 +38,8 @@ const MAP_DATA: &CStr = c"map_data";
 const FLASH_DATA: &CStr = c"flash_data";
 const PRIORITIES: &CStr = c"priorities";
 
-/// The instance variable that holds the `Tilemap::BitmapArray` object of a tilemap of RGSS2.
+/// The instance variable that holds the `Tilemap::BitmapArray` object of a tilemap of RGSS2,
+/// and the one of that object that holds its `Tilemap` object.
 const BITMAPS: &CStr = c"bitmaps";
 /// The instance variable that holds the passages `Table` object of a tilemap of RGSS2, or
 /// `nil`.
@@ -59,10 +60,13 @@ const AUTOTILE: [&CStr; 7] = [
 ];
 
 /// The instance variables of a `Tilemap::BitmapArray` object that hold its `Bitmap` objects,
-/// or `nil`.
+/// or `nil`. The names are the original's, and as there each is interned at the first read
+/// or write of its slot, where it takes the next number of the symbol sequence.
+///
+/// Provenance: oracle measurement 2026-10-12, RGSS202E version 2.0.2.1, `vx-v3-save-REPORT.md`
+/// section 2.
 const SHEET: [&CStr; 9] = [
-    c"bitmap0", c"bitmap1", c"bitmap2", c"bitmap3", c"bitmap4", c"bitmap5", c"bitmap6", c"bitmap7",
-    c"bitmap8",
+    c"bmp0", c"bmp1", c"bmp2", c"bmp3", c"bmp4", c"bmp5", c"bmp6", c"bmp7", c"bmp8",
 ];
 
 /// The data of a `TilemapAutotiles` object, and of a `Tilemap::BitmapArray` object.
@@ -105,8 +109,9 @@ fn initialize_rgss2(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     })?;
     let bitmaps = wrap::new_object(ruby, Autotiles { tilemap: Some(id) })?;
     rb::ivar_set(ruby, recv, BITMAPS, bitmaps)?;
-    // The array keeps its tilemap alive, as the tilemap keeps the array.
-    rb::ivar_set(ruby, bitmaps, TILEMAP, recv)?;
+    // The array keeps its tilemap alive, as the tilemap keeps the array. The variable has a
+    // name of the start-up symbol table, because `Tilemap.new` of the original interns none.
+    rb::ivar_set(ruby, bitmaps, BITMAPS, recv)?;
     Ok(recv)
 }
 

@@ -17,6 +17,7 @@ use crate::guest::{self, Guest};
 use crate::rb;
 use crate::runtime::{self, Await};
 use crate::stats::{Part, Span};
+use crate::wrap;
 
 /// `Graphics._reset`, in Ruby because it goes through the objects of the scripts: every
 /// sprite, viewport, window, plane, tilemap and bitmap is disposed by the `dispose` of its
@@ -297,6 +298,7 @@ fn resize_screen(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
 /// Provenance: oracle measurement 2026-10-12, RGSS202E versions 2.0.0.1 and 2.0.2.1,
 /// `vx-v0-REPORT.md` section 6.
 fn snap_to_bitmap(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
+    wrap::intern_owner_names(ruby)?;
     let created = Guest::with(|guest| -> Option<Result<BitmapId, Error>> {
         let packet = guest.scene.snapshot(&mut guest.bitmaps);
         let mut frame = Compositor::new().render(&packet).ok()?;

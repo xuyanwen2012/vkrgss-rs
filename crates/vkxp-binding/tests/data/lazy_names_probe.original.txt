@@ -1,0 +1,181 @@
+# index|label|number: the number of the marker symbol after each step of
+# `lazy_names_probe.rb`, shifted right by 3, measured on the original runtime of VX
+# (RGSS202E 2.0.2.1) on 2026-10-12.
+0|nothing|2081
+1|nothing again|2082
+2|raise and rescue|2083
+3|raise NoMethodError|2085
+4|raise NameError|2086
+5|raise ZeroDivisionError|2087
+6|raise TypeError|2088
+7|raise ArgumentError|2089
+8|raise Errno::ENOENT|2090
+9|catch throw|2091
+10|string ops|2092
+11|array ops|2093
+12|hash ops|2094
+13|numeric ops|2095
+14|object ops|2096
+15|struct ops|2097
+16|module ops|2098
+17|marshal plain|2099
+18|marshal to file|2100
+19|file ops|2101
+20|time ops|2102
+21|zlib|2103
+22|regexp ops|2104
+23|sleep|2105
+24|at_exit|2106
+25|require missing|2107
+26|ObjectSpace.each_object|2108
+27|method_missing|2109
+28|singleton and define_method|2111
+29|exception details|2112
+30|ensure retry redo next break|2113
+31|Color.new|2114
+32|Color ops|2117
+33|Color marshal|2118
+34|Color _dump _load|2119
+35|Tone.new|2120
+36|Tone ops|2121
+37|Tone marshal|2122
+38|Rect.new|2123
+39|Rect ops|2124
+40|Rect marshal|2125
+41|Table.new|2126
+42|Table ops|2127
+43|Table marshal|2128
+44|Font.new|2129
+45|Font.new name size|2130
+46|Font readers|2131
+47|Font#color|2132
+48|Font#color=|2133
+49|Font writers|2134
+50|Font defaults read|2135
+51|Font defaults write|2136
+52|Font.exist?|2137
+53|Font dup inspect|2138
+54|Font marshal|2139
+55|Bitmap.new w h|2140
+56|Bitmap.new w h again|2141
+57|Bitmap.new file|2142
+58|Bitmap.new missing file|2143
+59|Bitmap size readers|2144
+60|Bitmap#rect|2145
+61|Bitmap#font|2146
+62|Bitmap#font.color|2147
+63|Bitmap#font=|2148
+64|Bitmap#font.color=|2149
+65|Bitmap pixels|2150
+66|Bitmap fills|2151
+67|Bitmap blt|2152
+68|Bitmap text_size|2153
+69|Bitmap draw_text|2154
+70|Bitmap effects|2155
+71|Bitmap dup clone|2156
+72|Bitmap inspect|2157
+73|Bitmap marshal|2158
+74|Bitmap dispose|2159
+75|Bitmap disposed use|2160
+76|Graphics readers|2161
+77|Graphics writers|2162
+78|Graphics.update|2163
+79|Graphics.update again|2164
+80|Graphics.frame_reset|2165
+81|Graphics.wait|2166
+82|Graphics.freeze|2167
+83|Graphics.transition|2168
+84|Graphics.transition file|2169
+85|Graphics.fadeout fadein|2170
+86|Graphics.snap_to_bitmap|2171
+87|Graphics.resize_screen|2172
+88|Viewport.new 4|2173
+89|Viewport.new rect|2174
+90|Viewport#rect|2175
+91|Viewport#rect=|2176
+92|Viewport#color|2177
+93|Viewport#color=|2178
+94|Viewport#tone|2179
+95|Viewport#tone=|2180
+96|Viewport numbers|2181
+97|Viewport flash update|2182
+98|Viewport inspect|2183
+99|Viewport dispose|2184
+100|Sprite.new|2185
+101|Sprite.new viewport|2186
+102|Sprite#bitmap nil|2187
+103|Sprite#bitmap=|2188
+104|Sprite#bitmap|2189
+105|Sprite#src_rect|2190
+106|Sprite#src_rect=|2191
+107|Sprite#viewport|2192
+108|Sprite#viewport=|2193
+109|Sprite#color|2194
+110|Sprite#color=|2195
+111|Sprite#tone|2196
+112|Sprite#tone=|2197
+113|Sprite numbers|2198
+114|Sprite readers|2199
+115|Sprite flash update|2200
+116|Sprite inspect|2201
+117|Sprite subclass|2202
+118|Sprite draw|2203
+119|Sprite dispose|2204
+120|Sprite disposed use|2205
+121|Plane.new|2206
+122|Plane.new viewport|2207
+123|Plane#bitmap=|2208
+124|Plane#viewport|2209
+125|Plane#color tone|2210
+126|Plane numbers|2211
+127|Plane draw dispose|2212
+128|Window.new|2213
+129|Window.new viewport|2214
+130|Window#windowskin|2215
+131|Window#windowskin=|2216
+132|Window#contents|2217
+133|Window#contents=|2218
+134|Window#cursor_rect|2219
+135|Window#cursor_rect=|2220
+136|Window#viewport|2221
+137|Window numbers|2222
+138|Window readers|2223
+139|Window update draw|2224
+140|Window subclass|2225
+141|Window inspect|2226
+142|Window dispose|2227
+143|Tilemap.new|2228
+144|Tilemap.new viewport|2229
+145|Tilemap#bitmaps|2230
+146|Tilemap#bitmaps[0]|2232
+147|Tilemap#bitmaps[0]=|2233
+148|Tilemap#bitmaps[8]=|2235
+149|Tilemap#map_data|2236
+150|Tilemap#map_data=|2237
+151|Tilemap#flash_data=|2238
+152|Tilemap#passages=|2239
+153|Tilemap#viewport|2240
+154|Tilemap numbers|2241
+155|Tilemap update draw|2242
+156|Tilemap inspect|2243
+157|Tilemap dispose|2244
+158|Input.update|2245
+159|Input queries|2246
+160|Audio stops|2247
+161|Audio fades|2248
+162|Audio.se_play|2249
+163|Audio.bgm_play missing|2250
+164|Audio.bgs_play me_play missing|2251
+165|save_data|2252
+166|load_data|2253
+167|load_data missing|2254
+168|Win32API.new|2261
+169|Win32API#call|2262
+170|Win32API.new second|2263
+171|RPG classes|2264
+172|RPG::BGM play stop|2265
+173|RPG marshal|2269
+174|NKF|2270
+175|globals|2271
+176|Graphics after all|2272
+177|nothing at the end|2273

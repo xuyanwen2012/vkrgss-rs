@@ -12,7 +12,7 @@ use vkxp_vfs::Runtime;
 use crate::color::{color_arg, color_of, color_set, tone_arg, tone_of, tone_set};
 use crate::element::{self, field, kept, object, reader, writer};
 use crate::rb;
-use crate::wrap::Owner;
+use crate::wrap::{self, Owner};
 
 /// The instance variable that holds the plane's `Bitmap` object, or `nil`.
 const BITMAP: &CStr = c"bitmap";
@@ -22,6 +22,7 @@ const TONE: &CStr = c"tone";
 
 /// `initialize(viewport = nil)`.
 fn initialize(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    wrap::intern_owner_names(ruby)?;
     let viewport = element::viewport_arg(ruby, args)?;
     let id = element::create(ruby, recv, args.first(), |scene| {
         scene.create_plane(viewport)

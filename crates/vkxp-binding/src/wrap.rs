@@ -220,6 +220,23 @@ impl Property for Rect {
     }
 }
 
+/// Interns `owner` and then `observer` when a game of RGSS2 has not done so yet. The original
+/// runtime of VX interns the two at the first change of a `Color`, `Tone` or `Rect` (`set`, a
+/// writer, `Rect#empty`) and at the first `Font.new`, `Bitmap.new`, `Sprite.new`,
+/// `Viewport.new`, `Window.new`, `Plane.new` or `Graphics.snap_to_bitmap`, and they take the
+/// next numbers of the symbol sequence; those functions call this first. vkxp keeps an owner
+/// in [`Owned`] and has no use for the names.
+///
+/// Provenance: oracle measurement 2026-10-12, RGSS202E version 2.0.2.1, `vx-v3-save-REPORT.md`
+/// section 2. Not inside [`Guest::with`].
+pub(crate) fn intern_owner_names(ruby: &Ruby) -> Result<(), Raised> {
+    if Guest::with(|guest| std::mem::take(&mut guest.owner_names_pending)) {
+        rb::intern(ruby, c"owner")?;
+        rb::intern(ruby, c"observer")?;
+    }
+    Ok(())
+}
+
 /// The data of a `Color`, `Tone` or `Rect` object: the value, and the owner a change of the
 /// value is passed on to.
 ///

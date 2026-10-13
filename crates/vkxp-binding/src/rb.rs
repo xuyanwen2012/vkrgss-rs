@@ -39,6 +39,8 @@ enum Op {
         object: VALUE,
         name: *const c_char,
     },
+    /// `rb_intern`, which raises when the numbers of symbols run out.
+    Intern(*const c_char),
     /// The class or module at a path such as `Errno::ENOENT`.
     ClassAt(*const c_char),
     /// The name of the value's class, into [`Call::name`]. Naming an anonymous class
@@ -87,6 +89,10 @@ unsafe extern "C" fn call_body(data: VALUE) -> VALUE {
                 value,
             } => ffi::rb_ivar_set(object, ffi::rb_intern(name), value),
             Op::IvarGet { object, name } => ffi::rb_attr_get(object, ffi::rb_intern(name)),
+            Op::Intern(name) => {
+                ffi::rb_intern(name);
+                ffi::Qnil
+            }
             Op::ClassAt(path) => ffi::rb_path2class(path),
             Op::ClassName(value) => {
                 call.name = ffi::rb_obj_classname(value);
@@ -368,6 +374,12 @@ pub(crate) fn ivar_set(
         value,
     };
     perform(ruby, op).map(|_| ())
+}
+
+/// Interns `name`, as the original runtime does with names of its own at the first use of
+/// some functions: a name that is new takes the next number of the symbol sequence.
+pub(crate) fn intern(ruby: &Ruby, name: &CStr) -> Result<(), Raised> {
+    perform(ruby, Op::Intern(name.as_ptr())).map(|_| ())
 }
 
 /// An instance variable, `nil` when it is not set.

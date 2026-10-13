@@ -18,7 +18,7 @@ use crate::color::{color_arg, color_of, color_set, tone_arg, tone_of, tone_set};
 use crate::element::{self, field, kept_after_dispose, object, reader, writer};
 use crate::rb;
 use crate::rect::{rect_arg, rect_of, rect_set};
-use crate::wrap::Owner;
+use crate::wrap::{self, Owner};
 
 /// The instance variable that holds the sprite's `Bitmap` object, or `nil`.
 const BITMAP: &CStr = c"bitmap";
@@ -29,6 +29,7 @@ const TONE: &CStr = c"tone";
 
 /// `initialize(viewport = nil)`.
 fn initialize(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    wrap::intern_owner_names(ruby)?;
     let viewport = element::viewport_arg(ruby, args)?;
     let id = element::create(ruby, recv, args.first(), |scene| {
         scene.create_sprite(viewport)

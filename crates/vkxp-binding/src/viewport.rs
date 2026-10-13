@@ -13,7 +13,7 @@ use crate::color::{color_arg, color_of, color_set, tone_arg, tone_of, tone_set};
 use crate::element::{self, field, object, reader, writer};
 use crate::rb;
 use crate::rect::{rect_arg, rect_of, rect_set};
-use crate::wrap::Owner;
+use crate::wrap::{self, Owner};
 
 /// The instance variables that hold the viewport's own `Rect`, `Color` and `Tone` objects.
 const RECT: &CStr = c"rect";
@@ -22,6 +22,7 @@ const TONE: &CStr = c"tone";
 
 /// `initialize(x, y, width, height)` or `initialize(rect)`.
 fn initialize(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    wrap::intern_owner_names(ruby)?;
     let rect = match args {
         [rect] => rect_arg(ruby, *rect)?,
         [_, _, _, _] => element::rect_of_ints(ruby, args)?,

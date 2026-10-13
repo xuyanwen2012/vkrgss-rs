@@ -44,6 +44,7 @@ class Win32API
     @vkxp_dll = dll.to_s
     @vkxp_function = function.to_s
     @vkxp_name = "#{dll} #{function}"
+    vkxp_win32api_names
   end
 
   def call(*args)

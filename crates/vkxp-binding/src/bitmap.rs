@@ -150,6 +150,7 @@ fn initialize_rgss2(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
 /// `initialize(width, height)` creates a transparent bitmap, of at most `limit` pixels when
 /// there is one; `initialize(path)` loads an image found through the game's files.
 fn initialize_with(ruby: &Ruby, recv: VALUE, args: &[VALUE], limit: Option<u64>) -> HostResult {
+    wrap::intern_owner_names(ruby)?;
     rb::check_count(ruby, args, 1, 2)?;
     this(ruby, recv)?;
     let id = if let [path] = args {

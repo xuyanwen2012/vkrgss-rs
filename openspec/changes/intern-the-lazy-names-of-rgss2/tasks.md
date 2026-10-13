@@ -6,8 +6,8 @@
 
 ## 2. Binding
 
-- [ ] 2.1 `owner` and `observer` at the measured triggers; the six names of `Win32API`; the names of the tilemap. Verify: the scenarios "First uses" and "Tilemap" of `specs/rgss-runtime/spec.md`; `cargo test -p vkxp-binding --locked` passes.
-- [ ] 2.2 The test of the measured steps. Verify: the scenario "Every measured step"; the same command.
+- [x] 2.1 `owner` and `observer` at the measured triggers; the six names of `Win32API`; the names of the tilemap. Verify: the scenarios "First uses" and "Tilemap" of `specs/rgss-runtime/spec.md`; `cargo test -p vkxp-binding --locked` passes.
+- [x] 2.2 The test of the measured steps. Verify: the scenario "Every measured step"; the same command.
 
 ## 3. Integration check
 

@@ -18,7 +18,7 @@ use vkxp_vfs::Runtime;
 
 use crate::element::{self, field, kept, object, reader, writer};
 use crate::rect::{rect_arg, rect_of, rect_set};
-use crate::wrap::Owner;
+use crate::wrap::{self, Owner};
 use crate::{bitmap, rb};
 
 /// The instance variables that hold the window's `Bitmap` objects, or `nil`.
@@ -50,6 +50,7 @@ fn initialize(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
 /// `initialize(viewport = nil)` of RGSS2: the window is a window of RGSS2 and starts with a
 /// contents bitmap of 1 by 1, an ordinary bitmap that outlives the window.
 fn initialize_rgss2(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    wrap::intern_owner_names(ruby)?;
     create(ruby, recv, args, Scene::create_window_rgss2)?;
     let contents = bitmap::new_blank(ruby, 1, 1)?;
     set_contents(ruby, recv, &[contents])?;

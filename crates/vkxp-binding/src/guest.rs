@@ -6,7 +6,7 @@ use vkxp_core::{Bitmaps, FontDefaults, InputState, Scene};
 use vkxp_proto::BitmapId;
 use vkxp_ruby_sys::ffi::VALUE;
 use vkxp_ruby_sys::{Raised, Ruby};
-use vkxp_vfs::GameFiles;
+use vkxp_vfs::{GameFiles, Runtime};
 
 use crate::element::{self, SceneClasses};
 use crate::error::{self, ErrorClasses};
@@ -44,6 +44,10 @@ pub struct Guest {
     pub(crate) runtime: runtime::State,
     /// What the emulated `Win32API` functions keep between calls.
     pub(crate) win32api: win32api::State,
+    /// Whether `owner` and `observer` are still to be interned: in a game of RGSS2 until the
+    /// first of the calls at which the original runtime interns them (see
+    /// [`wrap::intern_owner_names`](crate::wrap::intern_owner_names)).
+    pub(crate) owner_names_pending: bool,
 }
 
 /// The Ruby classes this crate defines, and the ones it raises.
@@ -78,6 +82,7 @@ impl Guest {
             text: config.text,
             scene: runtime::new_scene(config.run.runtime),
             input: InputState::with_rules(runtime::rules(config.run.runtime)),
+            owner_names_pending: config.run.runtime == Runtime::Rgss2,
             runtime: runtime::State::new(config.run),
             win32api: win32api::State::default(),
         }

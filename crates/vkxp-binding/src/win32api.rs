@@ -10,7 +10,7 @@
 //! copy that was changed is put back into the very string object, so a script finds the
 //! result in the buffer it passed.
 
-use std::ffi::c_long;
+use std::ffi::{CStr, c_long};
 use std::path::PathBuf;
 
 use encoding_rs::Encoding;
@@ -18,7 +18,7 @@ use vkxp_core::InputState;
 use vkxp_proto::GuestToHost;
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{Arity, HostResult, Raised, Ruby};
-use vkxp_vfs::FileKind;
+use vkxp_vfs::{FileKind, Runtime};
 
 use crate::guest::Guest;
 use crate::rb;
@@ -827,8 +827,37 @@ fn call(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     Ok(ffi::long2fix(result as c_long))
 }
 
-/// Defines the host function the prelude's `Win32API` builds on.
+/// The names of the instance variables in which the `Win32API` of the original runtime of VX
+/// keeps the library, the function and the argument types, in the order it interns them.
+const NAMES: [&CStr; 6] = [
+    c"__hdll__",
+    c"__dll__",
+    c"__dllname__",
+    c"__proc__",
+    c"__import__",
+    c"__export__",
+];
+
+/// `vkxp_win32api_names`: called by `Win32API#initialize`. In a game of RGSS2 it interns the
+/// six names the original interns at the first `Win32API.new` that loads its library, where
+/// they take the next numbers of the symbol sequence. vkxp loads no library and keeps what
+/// it needs in variables of its own, so it has no use for any of the six; they are interned
+/// only so that the names a game makes afterwards have the numbers of the original.
+///
+/// Provenance: oracle measurement 2026-10-12, RGSS202E version 2.0.2.1, `vx-v3-save-REPORT.md`
+/// section 2.
+fn names(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
+    if Guest::with(|guest| guest.runtime.run.runtime) == Runtime::Rgss2 {
+        for name in NAMES {
+            rb::intern(ruby, name)?;
+        }
+    }
+    Ok(ffi::Qnil)
+}
+
+/// Defines the host functions the prelude's `Win32API` builds on.
 pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
+    ruby.define_global_function_with_arity(c"vkxp_win32api_names", Arity::Fixed(0), names)?;
     ruby.define_global_function_with_arity(c"vkxp_win32api", Arity::Any, call)
 }
 

@@ -58,6 +58,12 @@ fn set(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     Ok(recv)
 }
 
+/// `set(x, y, width, height)`.
+fn set_again(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    wrap::intern_owner_names(ruby)?;
+    set(ruby, recv, args)
+}
+
 fn initialize_copy(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     let rect = rect_arg(ruby, args[0])?;
     this(ruby, recv)?.with(|data| data.set(rect));
@@ -65,6 +71,7 @@ fn initialize_copy(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
 }
 
 fn empty(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
+    wrap::intern_owner_names(ruby)?;
     this(ruby, recv)?.with(|data| {
         let mut rect = data.value();
         rect.empty();
@@ -85,6 +92,7 @@ fn part<const I: usize>(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult
 
 /// The writer of value `I`.
 fn set_part<const I: usize>(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    wrap::intern_owner_names(ruby)?;
     let value = rb::int(ruby, args[0])?;
     this(ruby, recv)?.with(|data| {
         let mut values = parts(data.value());
@@ -125,7 +133,7 @@ pub(crate) fn define(ruby: &Ruby) -> Result<VALUE, Raised> {
     let class = wrap::define_class::<Owned<Rect>>(ruby, c"Rect")?;
     rb::method(ruby, class, c"initialize", 4, set)?;
     rb::method(ruby, class, c"initialize_copy", 1, initialize_copy)?;
-    rb::method(ruby, class, c"set", 4, set)?;
+    rb::method(ruby, class, c"set", 4, set_again)?;
     rb::method(ruby, class, c"empty", 0, empty)?;
     rb::method(ruby, class, c"to_s", 0, to_s)?;
     rb::method(ruby, class, c"_dump", 1, dump)?;

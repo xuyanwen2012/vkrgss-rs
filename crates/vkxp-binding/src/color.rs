@@ -150,7 +150,16 @@ fn parts_of<Q: Quad>(ruby: &Ruby, args: &[VALUE]) -> Result<[f64; 4], Raise> {
     Ok(parts)
 }
 
-/// `initialize(red, green, blue, fourth = default)` and `set` with the same arguments.
+/// `set(red, green, blue, fourth = default)`.
+fn set_again<Q: Quad>(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult
+where
+    Owned<Q>: Wrapped,
+{
+    wrap::intern_owner_names(ruby)?;
+    set::<Q>(ruby, recv, args)
+}
+
+/// `initialize(red, green, blue, fourth = default)`, and `set` after its first step.
 fn set<Q: Quad>(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult
 where
     Owned<Q>: Wrapped,
@@ -183,6 +192,7 @@ fn set_component<Q: Quad, const I: usize>(ruby: &Ruby, recv: VALUE, args: &[VALU
 where
     Owned<Q>: Wrapped,
 {
+    wrap::intern_owner_names(ruby)?;
     let part = rb::float(ruby, args[0])?;
     this::<Q>(ruby, recv)?.with(|data| {
         let mut parts = data.value().parts();
@@ -238,7 +248,7 @@ where
 {
     rb::method(ruby, class, c"initialize", -1, set::<Q>)?;
     rb::method(ruby, class, c"initialize_copy", 1, initialize_copy::<Q>)?;
-    rb::method(ruby, class, c"set", -1, set::<Q>)?;
+    rb::method(ruby, class, c"set", -1, set_again::<Q>)?;
     rb::method(ruby, class, c"to_s", 0, to_s::<Q>)?;
     rb::method(ruby, class, c"_dump", 1, dump::<Q>)?;
     rb::class_method(ruby, class, c"_load", 1, load::<Q>)?;

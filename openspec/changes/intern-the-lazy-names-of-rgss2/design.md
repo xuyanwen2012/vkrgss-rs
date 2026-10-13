@@ -63,3 +63,19 @@ the measured save is identical.
   binding and compares the number after each step with the committed numbers of the
   original (names of the probe's own and numbers only). Steps whose trigger is a non-goal
   are listed in the test with the reason.
+
+## Implementation notes
+
+- The prelude is one file for RGSS1 and RGSS2 and cannot tell them apart, so
+  `Win32API#initialize` calls a host function, `vkxp_win32api_names`, which interns the six
+  names in a game of RGSS2 and does nothing in RGSS1. vkxp loads no library, so every
+  `Win32API.new` counts as one that found its library (the missing library is a non-goal).
+- The back reference of the bitmap array is kept under `bitmaps`, a name of the start-up
+  table of RGSS2.
+- The test of the measured steps compares the numbers themselves, not differences: the game
+  of the test starts at the original's number (2081) and ends at 2273, and no step is left
+  out. Its built-in scripts are a stand-in of its own with `RPG::Map`, `RPG::BGM` and
+  `RPG::BGS`, because the step "RPG marshal" interns the three class paths on the original
+  and the built-in scripts of the original are not in the repository. What a step ends with
+  (`ok` or an exception class) is not compared.
+

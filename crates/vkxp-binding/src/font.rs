@@ -183,6 +183,7 @@ pub(crate) fn font_copy(ruby: &Ruby, original: VALUE) -> HostResult {
 
 /// `initialize(name = Font.default_name, size = Font.default_size)`.
 fn initialize(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    wrap::intern_owner_names(ruby)?;
     rb::check_count(ruby, args, 0, 2)?;
     let names = args.first().map(|&arg| names_arg(ruby, arg)).transpose()?;
     let size = args.get(1).map(|&arg| rb::int(ruby, arg)).transpose()?;
