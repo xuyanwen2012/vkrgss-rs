@@ -1,7 +1,7 @@
 # vkxp agent guide
 
-vkxp is a Rust + Vulkan runtime for RPG Maker games: XP (RGSS1) is supported, VX (RGSS2) and
-VX Ace (RGSS3) are planned. Read `docs/decisions.md` before
+vkxp is a Rust + Vulkan runtime for RPG Maker games: XP (RGSS1) is supported, VX (RGSS2) is
+experimental and VX Ace (RGSS3) is planned. Read `docs/decisions.md` before
 changing anything; it records decisions that are settled.
 
 ## Rules
