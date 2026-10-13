@@ -25,8 +25,8 @@
 
 ## 5. Upstream suites
 
-- [ ] 5.1 The test executable, the test libraries under `tests/testlib/` and the harness (decision 10); `bootstraptest`. Verify: the scenario "Bootstrap tests"; `cargo test -p vkxp-ruby192-sys --locked --test upstream bootstrap` passes.
-- [ ] 5.2 The selection of `test/ruby` and `tests/upstream.allow`. Verify: the scenarios "Core suite", "Reasons" and "SIGINT ignored by the caller"; `cargo test -p vkxp-ruby192-sys --locked --test upstream --test upstream_signals` passes, also when started with SIGINT ignored; every entry of the list has one of the reasons of decision 10.
+- [x] 5.1 The test executable, the test libraries under `tests/testlib/` and the harness (decision 10); `bootstraptest`. Verify: the scenario "Bootstrap tests"; `cargo test -p vkxp-ruby192-sys --locked --test upstream bootstrap` passes.
+- [x] 5.2 The selection of `test/ruby` and `tests/upstream.allow`. Verify: the scenarios "Core suite", "Reasons" and "SIGINT ignored by the caller"; `cargo test -p vkxp-ruby192-sys --locked --test upstream --test upstream_signals` passes, also when started with SIGINT ignored; every entry of the list has one of the reasons of decision 10.
 
 ## 6. Collector stress and copies of the process
 

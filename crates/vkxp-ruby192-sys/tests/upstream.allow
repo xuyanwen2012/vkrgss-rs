@@ -1,0 +1,86 @@
+# Files and tests of the release's own suites that vkxp leaves out.
+#
+# An entry is a reason, written as comment lines, followed by one or more lines that each
+# name a file (`ruby/test_x.rb` of `test/ruby`, `bootstraptest/test_x.rb`) or one test method
+# (`ruby/test_x.rb#test_y`). Entries are separated by blank lines, and an entry without a
+# reason fails a test. A reason is a cause in the environment or in thread scheduling that
+# the study of 2026-10-13 explains, or something vkxp does not link, which the reason names.
+
+# `fork` from a Ruby thread that is not the main one: the child hangs in
+# `pthread_cond_destroy` with the C library of today.
+bootstraptest/test_fork.rb
+bootstraptest/test_thread.rb
+
+# Requires the loadable extension `io/nonblock`, which is not linked into the test
+# executable, so the file does not load and reports no test. (This is why the study's log
+# of the stressed run shows "0 tests" for it.)
+ruby/test_io.rb
+
+# Most tests of these files name encodings or transcoders that are not linked: EUC-JP,
+# ISO-2022-JP, UTF-16BE, UTF-32, Big5, GB18030, EUC-KR, the further single-byte encodings and
+# the transcoder libraries `japanese`, `japanese_euc`, `iso2022`, `korean`, `chinese`.
+ruby/test_m17n.rb
+ruby/test_m17n_comb.rb
+ruby/test_transcode.rb
+ruby/test_econv.rb
+ruby/test_io_m17n.rb
+ruby/test_dir_m17n.rb
+
+# The file's magic comment names the encoding by its alias CP932, which `encdb` would
+# declare; `encdb` is not linked.
+ruby/test_mixed_unicode_escapes.rb
+
+# Name the encoding EUC-JP, which is not linked.
+ruby/test_encoding.rb#test_find
+ruby/test_encoding.rb#test_marshal
+ruby/test_marshal.rb#test_marshal_encoding_encoding
+ruby/test_marshal.rb#test_marshal_regexp_encoding
+ruby/test_marshal.rb#test_marshal_string_encoding
+ruby/test_marshal.rb#test_userdef_encoding
+ruby/test_rubyoptions.rb#test_kanji
+ruby/test_unicode_escape.rb#test_regexp
+
+# Name the encoding ISO-2022-JP, which is not linked.
+ruby/test_encoding.rb#test_dummy_p
+ruby/test_encoding.rb#test_replicate
+ruby/test_string.rb#test_clear_nonasciicompat
+ruby/test_string.rb#test_compare_different_encoding_string
+ruby/test_string.rb#test_rstrip
+
+# Name the encoding UTF-16BE, which is not linked.
+ruby/test_encoding.rb#test_ascii_compatible_p
+ruby/test_string.rb#test_ascii_incomat_inspect
+ruby/test_string.rb#test_strip
+ruby/test_symbol.rb#test_ascii_incomat_inspect
+
+# Names the encoding GB18030, which is not linked.
+ruby/test_string.rb#test_LSHIFT
+
+# Starts an interpreter in the C locale and expects its script to be read as US-ASCII. The
+# locale's name of that encoding, ANSI_X3.4-1968, is an alias that `encdb` would declare;
+# `encdb` is not linked.
+ruby/test_rubyoptions.rb#test_encoding
+
+# The time zone database has changed since 2010 (Singapore 1981, Tokyo 1951, Moscow 1992,
+# Kiritimati 1994).
+ruby/test_time_tz.rb#test_asia_singapore
+ruby/test_time_tz.rb#test_asia_tokyo
+ruby/test_time_tz.rb#test_europe_moscow
+ruby/test_time_tz.rb#test_pacific_kiritimati
+ruby/test_time_tz.rb#test_zdump
+
+# `lchmod` exists in the C library of today and fails with EOPNOTSUPP; the tests expect it
+# to be absent.
+ruby/test_notimp.rb#test_call_lchmod
+ruby/test_notimp.rb#test_respond_to_lchmod
+
+# Load an extension from a file; the test executable has its extensions linked in.
+ruby/test_require.rb#test_define_class_under
+ruby/test_require.rb#test_define_module
+
+# Expects `(65536 ** 65536).to_s` to take longer than a second.
+ruby/test_bignum.rb#test_interrupt
+
+# A thread in a busy loop starves the main thread for more than a second on the kernel of
+# today (the interpreter hands the lock over with `sched_yield`), and the test times out.
+ruby/test_thread.rb#test_list

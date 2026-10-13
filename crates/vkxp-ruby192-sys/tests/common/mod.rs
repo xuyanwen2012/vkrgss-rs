@@ -290,3 +290,5 @@ pub(crate) fn thread_count() -> usize {
         .expect("the threads of the process are listed")
         .count()
 }
+
+pub(crate) mod suites;

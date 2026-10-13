@@ -375,6 +375,12 @@ Non-goals:
   it is continued or described; and the message of a wrong argument count of a fixed-arity
   host function is the release's `wrong number of arguments(1 for 2)`, without the space
   that `Ruby::check_arity` and `rb_scan_args` put there.
+- `test_io.rb` (decision 11): the cause of its "0 tests" is found. The file requires the
+  loadable extension `io/nonblock`, which is not among the extensions decision 1 gives the
+  test executable; `test/unit` reports the `LoadError` and goes on with no test, with and
+  without stress. `tests/upstream.allow` leaves the file out with that reason, for the plain
+  and the stressed runs alike. Linking `ext/io/nonblock` into the test executable would
+  bring its 100 or so tests back.
 - The capability `workspace-structure` lists the crates of the workspace and of the guest
   side by name; `vkxp-ruby192-sys` and the binding package over it are to be added there
   by the change that adds that package.
