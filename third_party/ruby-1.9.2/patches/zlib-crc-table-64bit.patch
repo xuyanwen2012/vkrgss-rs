@@ -1,0 +1,11 @@
+--- a/ext/zlib/zlib.c
++++ b/ext/zlib/zlib.c
+@@ -390,7 +390,7 @@
+ static VALUE
+ rb_zlib_crc_table(VALUE obj)
+ {
+-    const unsigned long *crctbl;
++    const z_crc_t *crctbl;
+     VALUE dst;
+     int i;
+ 

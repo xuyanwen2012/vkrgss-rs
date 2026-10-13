@@ -2,9 +2,9 @@
 
 ## 1. Vendored tree (`third_party/ruby-1.9.2`)
 
-- [ ] 1.1 Check the SHA-256 of `../../ref/tools/ruby192-feasibility/ruby-1.9.2-p0.tar.gz` against the specification and copy the subset of decision 1 at its release paths: the files the build opens, the files of the upstream tests, the provenance files, the licence files. Verify: `sha256sum` prints the hash of the requirement "Vendored source matches upstream"; no file of `enc/` other than those of decisions 3 and 5 and their headers is present.
-- [ ] 1.2 Write `MANIFEST.sha256` (upstream hashes), apply the eight patches of the study, and write `PATCHES.md` and `patches/` in the format of 1.8.7: one entry per file, the names of decision 2, each with its reason. Add the test function for this tree to `crates/vkxp-ruby-sys/tests/manifest.rs`. Verify: `cargo test -p vkxp-ruby-sys --locked --test manifest` passes, and fails naming the file when one vendored file is changed by hand and when a file is added (both undone afterwards).
-- [ ] 1.3 Write `third_party/ruby-1.9.2/README.vkxp.md` and the section of `THIRD-PARTY.md`. Verify: both name the release, its hash, the terms, the parts with terms of their own and the three record files; every link of the new section resolves.
+- [x] 1.1 Check the SHA-256 of `../../ref/tools/ruby192-feasibility/ruby-1.9.2-p0.tar.gz` against the specification and copy the subset of decision 1 at its release paths: the files the build opens, the files of the upstream tests, the provenance files, the licence files. Verify: `sha256sum` prints the hash of the requirement "Vendored source matches upstream"; no file of `enc/` other than those of decisions 3 and 5 and their headers is present.
+- [x] 1.2 Write `MANIFEST.sha256` (upstream hashes), apply the eight patches of the study, and write `PATCHES.md` and `patches/` in the format of 1.8.7: one entry per file, the names of decision 2, each with its reason. Add the test function for this tree to `crates/vkxp-ruby-sys/tests/manifest.rs`. Verify: `cargo test -p vkxp-ruby-sys --locked --test manifest` passes, and fails naming the file when one vendored file is changed by hand and when a file is added (both undone afterwards).
+- [x] 1.3 Write `third_party/ruby-1.9.2/README.vkxp.md` and the section of `THIRD-PARTY.md`. Verify: both name the release, its hash, the terms, the parts with terms of their own and the three record files; every link of the new section resolves.
 
 ## 2. Crate and build (`crates/vkxp-ruby192-sys`, `xtask`)
 

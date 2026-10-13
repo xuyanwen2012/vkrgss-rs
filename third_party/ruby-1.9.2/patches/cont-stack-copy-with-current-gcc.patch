@@ -1,0 +1,65 @@
+--- a/cont.c
++++ b/cont.c
+@@ -304,10 +304,10 @@
+ void rb_vm_stack_to_heap(rb_thread_t *th);
+ 
+ static VALUE
+-cont_capture(volatile int *stat)
++cont_capture(volatile int *volatile stat)
+ {
+-    rb_context_t *cont;
+-    rb_thread_t *th = GET_THREAD(), *sth;
++    rb_context_t *volatile cont;
++    rb_thread_t *volatile th = GET_THREAD(), *sth;
+     volatile VALUE contval;
+ 
+     THREAD_MUST_BE_RUNNING(th);
+@@ -328,6 +328,11 @@
+ #endif
+     sth->stack = 0;
+ 
++#ifdef __GNUC__
++    /* vkxp: every callee-saved register goes into this frame, which is part
++     * of the copied stack; the jump buffer is not marked, and glibc scrambles rbp in it. */
++    __builtin_unwind_init();
++#endif
+     cont_save_machine_stack(th, cont);
+ 
+     if (ruby_setjmp(cont->jmpbuf)) {
+@@ -475,7 +480,7 @@
+ 	    if (&space[0] > end) {
+ # ifdef HAVE_ALLOCA
+ 		volatile VALUE *sp = ALLOCA_N(VALUE, &space[0] - end);
+-		(void)sp;
++		space[0] = *sp;
+ # else
+ 		cont_restore_0(cont, &space[0]);
+ # endif
+@@ -491,7 +496,7 @@
+ 	    if (&space[STACK_PAD_SIZE] < end) {
+ # ifdef HAVE_ALLOCA
+ 		volatile VALUE *sp = ALLOCA_N(VALUE, end - &space[STACK_PAD_SIZE]);
+-		(void)sp;
++		space[0] = *sp;
+ # else
+ 		cont_restore_0(cont, &space[STACK_PAD_SIZE-1]);
+ # endif
+@@ -901,7 +906,7 @@
+ static VALUE
+ fiber_store(rb_fiber_t *next_fib)
+ {
+-    rb_thread_t *th = GET_THREAD();
++    rb_thread_t *volatile th = GET_THREAD();
+     rb_fiber_t *fib;
+ 
+     if (th->fiber) {
+@@ -914,6 +919,9 @@
+ 	th->root_fiber = th->fiber = fib->cont.self;
+     }
+ 
++#ifdef __GNUC__
++    __builtin_unwind_init(); /* vkxp: see cont_capture */
++#endif
+     cont_save_machine_stack(th, &fib->cont);
+ 
+     if (ruby_setjmp(fib->cont.jmpbuf)) {

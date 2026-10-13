@@ -1,0 +1,52 @@
+--- a/proc.c
++++ b/proc.c
+@@ -540,6 +540,8 @@
+     rb_proc_t *proc;
+     rb_block_t *blockptr = 0;
+     rb_iseq_t *iseq;
++    volatile VALUE passed_procval = Qnil; /* vkxp: see below */
++    VALUE result;
+     GetProcPtr(procval, proc);
+ 
+     iseq = proc->block.iseq;
+@@ -548,13 +550,19 @@
+ 	    rb_proc_t *proc;
+ 	    VALUE procval;
+ 	    procval = rb_block_proc();
++	    passed_procval = procval;
+ 	    GetProcPtr(procval, proc);
+ 	    blockptr = &proc->block;
+ 	}
+     }
+ 
+-    return rb_vm_invoke_proc(GET_THREAD(), proc, proc->block.self,
+-			     argc, argv, blockptr);
++    /* vkxp: `blockptr` points into the Proc that rb_block_proc() made and
++     * nothing else refers to that Proc; it was collected during the call (found under
++     * GC.stress with GCC 16 -O2, test_curry of test/ruby/test_proc.rb). */
++    result = rb_vm_invoke_proc(GET_THREAD(), proc, proc->block.self,
++			       argc, argv, blockptr);
++    RB_GC_GUARD(passed_procval);
++    return result;
+ }
+ 
+ #if SIZEOF_LONG > SIZEOF_INT
+@@ -593,8 +601,16 @@
+ 	block = &pass_proc->block;
+     }
+ 
+-    return rb_vm_invoke_proc(GET_THREAD(), proc, proc->block.self,
+-			     argc, argv, block);
++    {
++	/* vkxp: `block` points into the Proc of the passed block and the call
++	 * below was a sibling call; nothing else kept that Proc alive (found under GC.stress
++	 * with GCC 16 -O2, test_curry). */
++	VALUE result = rb_vm_invoke_proc(GET_THREAD(), proc, proc->block.self,
++					 argc, argv, block);
++	RB_GC_GUARD(pass_procval);
++	RB_GC_GUARD(self);
++	return result;
++    }
+ }
+ 
+ /*

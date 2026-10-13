@@ -1,0 +1,22 @@
+--- a/random.c
++++ b/random.c
+@@ -1147,6 +1147,8 @@
+ }
+ 
+ static st_index_t hashseed;
++int ruby_vkxp_hashseed_fixed = 0;
++unsigned long ruby_vkxp_hashseed = 0;
+ 
+ static VALUE
+ init_randomseed(struct MT *mt, unsigned int initial[DEFAULT_SEED_CNT])
+@@ -1181,6 +1183,10 @@
+     hashseed |= genrand_int32(mt);
+ #endif
+ 
++    /* vkxp: a host that wants String#hash and the like to be the same in
++     * every run sets ruby_vkxp_hashseed_fixed before ruby_init(). */
++    if (ruby_vkxp_hashseed_fixed) hashseed = (st_index_t)ruby_vkxp_hashseed;
++
+     rb_global_variable(&r->seed);
+     r->seed = seed;
+ }

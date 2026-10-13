@@ -1,0 +1,21 @@
+--- a/thread_pthread.c
++++ b/thread_pthread.c
+@@ -799,12 +799,17 @@
+     return NULL;
+ }
+ 
++/* vkxp: when the host sets this before ruby_init(), the timer thread is not
++ * started until a second Ruby thread exists; a program with one Ruby thread then has one
++ * OS thread and nothing in it depends on time. */
++int ruby_vkxp_lazy_timer_thread = 0;
++
+ static void
+ rb_thread_create_timer_thread(void)
+ {
+     rb_enable_interrupt();
+ 
+-    if (!timer_thread_id) {
++    if (!timer_thread_id && !(ruby_vkxp_lazy_timer_thread && rb_thread_alone())) {
+ 	pthread_attr_t attr;
+ 	int err;
+ 

@@ -16,6 +16,25 @@ Its [`README.vkxp.md`](third_party/ruby-1.8.7/README.vkxp.md) states the origin 
 subset was chosen, `MANIFEST.sha256` the upstream hash of every file and
 [`PATCHES.md`](third_party/ruby-1.8.7/PATCHES.md) every local change.
 
+## Ruby 1.9.2-p0
+
+[`third_party/ruby-1.9.2`](third_party/ruby-1.9.2) holds the part of the Ruby 1.9.2-p0
+release (`ruby-1.9.2-p0.tar.gz`, SHA-256
+`8c0c4e261a921b5c406bf9e76ac23bf3c915651534e9d1b9e8c5d0bee4a7285c`) that `vkxp-ruby192-sys`
+builds into the interpreter for RGSS3, and the files its own tests need. It stays under
+Ruby's own terms: the Ruby licence or the GPL version 2, with the exceptions its `LEGAL`
+file lists. Oniguruma, the regular expression engine with the encodings, is part of this
+release and is built in under its BSD terms; `parse.c`, `util.c`, `random.c`, `st.c`,
+`vsnprintf.c` and `strftime.c` have the terms that `LEGAL` or the file gives for them. No
+file under the LGPL is involved. The texts are [`COPYING`](third_party/ruby-1.9.2/COPYING),
+[`GPL`](third_party/ruby-1.9.2/GPL) and [`LEGAL`](third_party/ruby-1.9.2/LEGAL). No
+executable of vkxp links this interpreter yet.
+
+Its [`README.vkxp.md`](third_party/ruby-1.9.2/README.vkxp.md) states the origin, the parts
+with terms of their own and how the subset was chosen,
+[`MANIFEST.sha256`](third_party/ruby-1.9.2/MANIFEST.sha256) the upstream hash of every file
+and [`PATCHES.md`](third_party/ruby-1.9.2/PATCHES.md) every local change.
+
 ## Oniguruma 5.9.6
 
 [`third_party/oniguruma-5.9.6`](third_party/oniguruma-5.9.6) holds the part of the Oniguruma

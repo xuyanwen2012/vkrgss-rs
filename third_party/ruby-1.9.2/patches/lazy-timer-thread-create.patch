@@ -1,0 +1,10 @@
+--- a/thread.c
++++ b/thread.c
+@@ -556,6 +556,7 @@
+ 
+     /* kick thread */
+     st_insert(th->vm->living_threads, thval, (st_data_t) th->thread_id);
++    rb_thread_create_timer_thread(); /* vkxp: see ruby_vkxp_lazy_timer_thread */
+     err = native_thread_create(th);
+     if (err) {
+ 	st_delete_wrap(th->vm->living_threads, th->self);

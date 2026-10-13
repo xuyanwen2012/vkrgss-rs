@@ -1,0 +1,13 @@
+--- a/class.c
++++ b/class.c
+@@ -132,6 +132,10 @@
+ 	rb_iseq_t *iseq;
+ 	GetISeqPtr(newiseqval, iseq);
+ 	rb_add_method(data->klass, mid, VM_METHOD_TYPE_ISEQ, iseq, me->flag);
++	/* vkxp: only `iseq`, a pointer into the new object, was live while
++	 * rb_add_method allocated; the object was collected before the method referred to
++	 * it (found under GC.stress, test_public_class_method of test/ruby/test_module.rb). */
++	RB_GC_GUARD(newiseqval);
+     }
+     else {
+ 	rb_method_entry_set(data->klass, mid, me, me->flag);

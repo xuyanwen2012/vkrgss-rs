@@ -1,0 +1,14 @@
+--- a/gc.c
++++ b/gc.c
+@@ -2115,6 +2115,11 @@
+     VALUE *stack_start, *stack_end;
+ 
+     FLUSH_REGISTER_WINDOWS;
++#ifdef __GNUC__
++    /* vkxp: glibc scrambles rbp in the jmp_buf; this puts every callee-saved
++     * register into this frame, above the stack end taken below. */
++    __builtin_unwind_init();
++#endif
+     /* This assumes that all registers are saved into the jmp_buf (and stack) */
+     rb_setjmp(save_regs_gc_mark);
+ 

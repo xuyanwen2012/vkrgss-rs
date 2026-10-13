@@ -228,3 +228,10 @@ fn manifest_and_patch_log_describe_the_vendored_tree() {
 fn manifest_describes_the_vendored_engine() {
     check_tree("oniguruma-5.9.6");
 }
+
+/// The tree that `vkxp-ruby192-sys` builds. The check is here because it links no
+/// interpreter, so it also runs on a target for which that crate is empty.
+#[test]
+fn manifest_and_patch_log_describe_the_vendored_ruby_1_9_2() {
+    check_tree("ruby-1.9.2");
+}
