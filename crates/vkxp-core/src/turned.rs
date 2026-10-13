@@ -514,7 +514,8 @@ impl Sprite {
 impl Assembly<'_> {
     /// A turned sprite: the bitmap it was rendered into, unscaled, where the rendered part
     /// of its box lies. The lowest rows of the whole box, as many as the bush depth
-    /// whatever texels they show, are drawn with half the opacity.
+    /// whatever texels they show, are drawn with half the opacity, and in RGSS2 as its bush
+    /// rows are ([`Sprite::bush_look_rgss2`]).
     ///
     /// Provenance: oracle measurement 2026-10-10, RGSS103J, probes `bush` and `geom2` (51
     /// turned sprites with a bush depth, without a differing pixel; opaque texels at
@@ -531,9 +532,12 @@ impl Assembly<'_> {
         };
         let bottom = placement.bounds.bottom + placement.corner.1;
         let split = bottom - i64::from(sprite.bush_depth.max(0));
-        let faint = Look {
-            opacity: look.opacity >> 1,
-            ..look
+        let faint = match sprite.rules {
+            Rules::Rgss1 => Some(Look {
+                opacity: look.opacity >> 1,
+                ..look
+            }),
+            Rules::Rgss2 => sprite.bush_look_rgss2(look),
         };
         self.picture(bitmap, placement.part, split, level.clip, look, faint);
     }
@@ -557,11 +561,11 @@ impl Assembly<'_> {
             opacity: look.opacity >> 1,
             ..look
         };
-        self.picture(bitmap, cut.part, split, level.clip, look, faint);
+        self.picture(bitmap, cut.part, split, level.clip, look, Some(faint));
     }
 
     /// The whole of `bitmap`, unscaled, at `part`: the rows above `split` as `look` says and
-    /// those from it on, the faint rows, as `faint` says.
+    /// those from it on, the faint rows, as `faint` says, or not at all without it.
     pub(crate) fn picture(
         &mut self,
         bitmap: BitmapId,
@@ -569,12 +573,14 @@ impl Assembly<'_> {
         split: i64,
         clip: vkxp_proto::Rect,
         look: Look,
-        faint: Look,
+        faint: Option<Look>,
     ) {
         let src = Rect::new(0, 0, part.width as i32, part.height as i32);
         let above = rows(clip, i64::MIN, split);
         let below = rows(clip, split, i64::MAX);
         self.stretched(bitmap, src, part, false, above, look);
-        self.stretched(bitmap, src, part, false, below, faint);
+        if let Some(faint) = faint {
+            self.stretched(bitmap, src, part, false, below, faint);
+        }
     }
 }

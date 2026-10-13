@@ -8,6 +8,11 @@
 //! and mirrored inside what is left. The blit, the stretch walk and its cut rule are those
 //! of RGSS1.
 //!
+//! The bush rows are drawn at the opacity `opacity * bush_opacity / 255`, without the
+//! sprite's tone, colour and flash colour and, on a sprite that is not turned, without its
+//! mirror ([`Sprite::bush_look_rgss2`]); a bush depth beyond the height stretches rows from
+//! above the source rectangle ([`Sprite::rows_rgss2`]).
+//!
 //! A sprite becomes stretch quads where they draw exactly the measured texels, and is
 //! otherwise rendered into a bitmap of the scene's own, like the cut sprite of RGSS1
 //! ([`crate::turned`]).
@@ -19,7 +24,7 @@
 
 use vkxp_proto::BitmapId;
 
-use super::{Assembly, Bush, Level, Look, Rows, intersect};
+use super::{Assembly, Level, Look, intersect};
 use crate::geometry;
 use crate::turned::Span;
 use crate::{Bitmaps, Rect, Sprite};
@@ -76,6 +81,8 @@ impl Run {
 pub(crate) struct Shape {
     /// The pixels the sprite covers.
     pub(crate) size: (u32, u32),
+    /// The columns of the rows that are not faint. The faint rows show the same columns
+    /// without the mirror.
     pub(crate) across: Run,
     /// The rows above the faint ones, or all rows when none is faint, and the faint rows.
     pub(crate) down: [Option<Run>; 2],
@@ -87,6 +94,14 @@ pub(crate) struct Shape {
 }
 
 impl Shape {
+    /// The columns of the faint rows.
+    fn faint_across(&self) -> Run {
+        Run {
+            mirror: false,
+            ..self.across
+        }
+    }
+
     /// Whether stretch quads draw the sprite, for `bitmap`, the rectangle of its bitmap.
     pub(crate) fn is_quads(&self, bitmap: Rect) -> bool {
         self.across.is_quad(bitmap.width)
@@ -142,24 +157,74 @@ impl Placed {
 }
 
 impl Sprite {
+    /// The look of the bush rows of a sprite of RGSS2 that is drawn with `look`, or `None`
+    /// when they are not drawn:
+    ///
+    /// ```text
+    /// op = opacity * bush_opacity / 255     truncated; bush_opacity as it was written
+    /// op < 0 or op > 255: the rows are not drawn
+    /// ```
+    ///
+    /// with the sprite's blend type and without its tone, its colour and a flash colour.
+    /// An opacity of 255 at a bush opacity of 128 gives 128, 161 at 300 gives 189, and 255
+    /// at 256 draws nothing.
+    ///
+    /// Provenance: oracle measurement 2026-10-12, RGSS202E, topics `bushop` and `edge`
+    /// (227 combinations of opacity and bush opacity, blend types, tone, colour and flash,
+    /// on sprites turned and not, without a differing pixel).
+    pub(crate) fn bush_look_rgss2(&self, look: Look) -> Option<Look> {
+        let opacity = i64::from(self.opacity) * i64::from(self.bush_opacity) / 255;
+        let opacity = u8::try_from(opacity).ok()?;
+        Some(Look {
+            blend: look.blend,
+            ..Look::plain(opacity)
+        })
+    }
+
     /// The rows of the sprite, drawn `height` pixels high, as its bush depth splits them,
-    /// and the number of faint rows.
+    /// and the number of faint rows. With `h` the rows of the source rectangle and `dh`
+    /// the height:
+    ///
+    /// ```text
+    /// bd = min(depth, dh)      the faint rows; none for a depth of 0 or less
+    /// sb = depth * h / dh      the source rows they are taken from, not limited
+    /// rows [0, dh - bd): the source rows [0, h - sb) stretched into dh - bd rows
+    /// rows [dh - bd, dh): the source rows [h - sb, h) stretched into depth rows that end
+    ///                     at the sprite's bottom; those above its top are not drawn
+    /// ```
+    ///
+    /// each cut by the bitmap as `outside` says. Up to a depth of `dh` this is the split
+    /// of RGSS1 ([`Bush::new`](super::Bush::new)); beyond it the faint rows begin above the
+    /// source rectangle: 16 rows at a zoom of 2.25 with a depth of 41 show the rows
+    /// `0 0 1 1 2 2 3 3 3 4 ...`. With `sb` of 0 the faint rows are not drawn.
+    ///
+    /// Provenance: oracle measurement 2026-10-12, RGSS202E, topic `bushbig` (108 depths
+    /// near and beyond the height, with and without a source rectangle, without a
+    /// differing pixel), and the held-out scenes.
     fn rows_rgss2(&self, height: u32, outside: Outside) -> ([Option<Run>; 2], u32) {
-        let bush = Bush::new(self.src_rect, height, self.bush_depth);
-        let outside = if bush.faint == 0 {
-            outside
-        } else {
-            Outside::LeftOut
+        let src = self.src_rect;
+        let (top, h, dh) = (i64::from(src.y), i64::from(src.height), i64::from(height));
+        let depth = i64::from(self.bush_depth);
+        let run = |start: i64, length: i64, first: i64, pixels: i64| {
+            let (length, pixels) = (u32::try_from(length).ok()?, u32::try_from(pixels).ok()?);
+            (length > 0 && pixels > 0).then_some(Run {
+                start,
+                length,
+                first,
+                pixels,
+                mirror: false,
+                outside,
+            })
         };
-        let run = |rows: Rows| Run {
-            start: rows.start,
-            length: rows.length,
-            first: i64::from(rows.first),
-            pixels: rows.pixels,
-            mirror: false,
-            outside,
-        };
-        ([bush.upper.map(run), bush.lower.map(run)], bush.faint)
+        let faint = depth.clamp(0, dh);
+        if faint == 0 {
+            return ([run(top, h, 0, dh), None], 0);
+        }
+        let shown = depth * h / dh;
+        let upper = run(top, h - shown, 0, dh - faint);
+        let lower = run(top + h - shown, shown, dh - depth, depth);
+        // At most the height.
+        ([upper, lower], faint as u32)
     }
 
     /// The sprite, not turned, by the rules of RGSS2, or `None` when it draws nothing: a
@@ -237,16 +302,21 @@ impl Sprite {
         let (left, top, width, height) = placed.offsets();
         let (width, height) = (width as usize, height as usize);
         let mut rgba = vec![0; width * height * 4];
-        let columns: Vec<Option<usize>> = (i64::from(left)..)
-            .take(width)
-            .map(|i| shape.across.texel(i, source.width))
-            .collect();
+        let columns = |across: Run| -> Vec<Option<usize>> {
+            (i64::from(left)..)
+                .take(width)
+                .map(|i| across.texel(i, source.width))
+                .collect()
+        };
+        let columns = [columns(shape.across), columns(shape.faint_across())];
+        let faint_from = i64::from(shape.size.1 - shape.bush);
         for (j, pixels) in (i64::from(top)..).zip(rgba.chunks_exact_mut(width * 4)) {
-            let runs = shape.down.iter().flatten();
-            let Some(v) = runs.filter_map(|run| run.texel(j, source.height)).next() else {
+            let faint = usize::from(shape.bush > 0 && j >= faint_from);
+            let Some(v) = shape.down[faint].and_then(|run| run.texel(j, source.height)) else {
                 continue;
             };
-            for (pixel, u) in pixels.as_chunks_mut::<4>().0.iter_mut().zip(&columns) {
+            let columns = &columns[faint];
+            for (pixel, u) in pixels.as_chunks_mut::<4>().0.iter_mut().zip(columns) {
                 if let Some(u) = *u {
                     *pixel = source.pixel(u, v);
                 }
@@ -269,10 +339,7 @@ impl Assembly<'_> {
         let Ok(bounds) = self.bitmaps.rect(bitmap) else {
             return;
         };
-        let faint = Look {
-            opacity: look.opacity >> 1,
-            ..look
-        };
+        let faint = sprite.bush_look_rgss2(look);
         if sprite.is_pictured_rgss2(bounds) {
             let (Some(picture), Some(placed)) =
                 (sprite.turned.bitmap, sprite.placed_rgss2(level, bounds))
@@ -304,8 +371,12 @@ impl Assembly<'_> {
         }
         // The rows before the sprite's first are not drawn.
         let clip = intersect(level.clip, dest);
-        for (run, look) in [(shape.down[0], look), (shape.down[1], faint)] {
-            let Some(run) = run else {
+        let mirror = shape.across.mirror;
+        for (run, look, mirror) in [
+            (shape.down[0], Some(look), mirror),
+            (shape.down[1], faint, false),
+        ] {
+            let (Some(run), Some(look)) = (run, look) else {
                 continue;
             };
             // Rows that begin beyond the coordinates of a rectangle are not drawn.
@@ -318,7 +389,7 @@ impl Assembly<'_> {
             };
             let part = Rect::new(left, top, columns, rows);
             let into = vkxp_proto::Rect::new(x, y, width, run.pixels);
-            self.stretched(bitmap, part, into, shape.across.mirror, clip, look);
+            self.stretched(bitmap, part, into, mirror, clip, look);
         }
     }
 }

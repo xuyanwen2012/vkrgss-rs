@@ -112,6 +112,9 @@ pub struct Sprite {
     /// with half the opacity; 0 or less for none. See the requirements "Sprite bush depth"
     /// and "Bush rows of zoomed and turned sprites".
     pub bush_depth: i32,
+    /// The opacity of the bush rows in RGSS2, of 255, kept as it is written; a sprite of
+    /// RGSS1 does not look at it. See the requirement "Bush rows of RGSS2".
+    pub bush_opacity: i32,
     /// 1 adds, 2 subtracts, every other value blends normally.
     pub blend_type: i32,
     pub color: Color,
@@ -143,6 +146,7 @@ impl Sprite {
             angle: 0.0,
             mirror: false,
             bush_depth: 0,
+            bush_opacity: 128,
             blend_type: 0,
             color: Color::TRANSPARENT,
             tone: Tone::NEUTRAL,

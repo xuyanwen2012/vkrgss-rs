@@ -248,6 +248,7 @@ impl Run {
             "mirror" => sprite.mirror = flag,
             "visible" => sprite.visible = flag,
             "bush_depth" => sprite.bush_depth = whole(value),
+            "bush_opacity" => sprite.bush_opacity = whole(value),
             "opacity" => sprite.set_opacity(whole(value)),
             "blend_type" => sprite.blend_type = whole(value),
             "color" => sprite.color = color(value),

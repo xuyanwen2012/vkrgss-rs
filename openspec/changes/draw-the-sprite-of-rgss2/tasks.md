@@ -6,7 +6,7 @@
 
 ## 2. Bush
 
-- [ ] 2.1 Rule 3 and `bush_opacity`. Verify: the scenarios of "Bush rows of RGSS2"; the same command.
+- [x] 2.1 Rule 3 and `bush_opacity`. Verify: the scenarios of "Bush rows of RGSS2"; the same command.
 
 ## 3. Wave
 

@@ -219,3 +219,158 @@ fn the_cases_of_place_and_size_are_the_expected_pictures() {
         14,
     );
 }
+
+/// The opacities of the quads of the next frame, in draw order.
+fn opacities(stage: &mut Stage) -> Vec<u8> {
+    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let quads = packet.ops.iter().filter_map(|op| match op {
+        Op::Quad(quad) => Some(quad.opacity),
+        _ => None,
+    });
+    quads.collect()
+}
+
+/// Scenario "Opacity, measured on the original".
+#[test]
+fn the_bush_rows_are_drawn_at_the_product_of_the_two_opacities() {
+    for (opacity, bush_opacity, expected) in [
+        (255, 128, Some(128)),
+        (161, 300, Some(189)),
+        (255, 256, None),
+        (255, -1, None),
+        (100, 255, Some(100)),
+    ] {
+        let mut stage = Stage::rgss2(32, 32);
+        coded(&mut stage, 8, 8, |sprite| {
+            sprite.set_opacity(opacity);
+            sprite.bush_depth = 3;
+            sprite.bush_opacity = bush_opacity;
+        });
+        let mut drawn = vec![opacity as u8];
+        drawn.extend(expected);
+        assert_eq!(opacities(&mut stage), drawn, "{opacity} {bush_opacity}");
+    }
+    // RGSS1 halves the opacity and does not look at the bush opacity.
+    let mut stage = Stage::sized(32, 32);
+    coded(&mut stage, 8, 8, |sprite| {
+        sprite.bush_depth = 3;
+        sprite.bush_opacity = 300;
+    });
+    assert_eq!(opacities(&mut stage), [255, 127]);
+}
+
+/// The rows of a bitmap of 16 rows that the 36 rows of a sprite at a zoom of 2.25 show
+/// with a bush depth of 41 and of 37: topic `bushbig` of the measurement of 2026-10-12 on
+/// the original runtime of VX.
+const ROWS_AT_41: [u8; 36] = [
+    0, 0, 1, 1, 2, 2, 3, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 7, 8, 8, 9, 9, 10, 10, 10, 11, 11, 12, 12,
+    13, 13, 14, 14, 14, 15, 15,
+];
+const ROWS_AT_37: [u8; 36] = [
+    0, 0, 1, 1, 2, 2, 3, 3, 3, 4, 4, 5, 5, 6, 6, 6, 7, 7, 8, 8, 9, 9, 9, 10, 10, 11, 11, 12, 12,
+    12, 13, 13, 14, 14, 15, 15,
+];
+
+/// Scenario "Depth beyond the height, measured on the original".
+#[test]
+fn a_bush_depth_beyond_the_height_stretches_rows_from_above_the_sprite() {
+    for (depth, expected) in [(41, ROWS_AT_41), (37, ROWS_AT_37)] {
+        let mut stage = Stage::rgss2(16, 48);
+        coded(&mut stage, 8, 16, |sprite| {
+            sprite.y = 4;
+            sprite.zoom_y = 2.25;
+            sprite.bush_depth = depth;
+            sprite.bush_opacity = 255;
+        });
+        let frame = stage.frame();
+        let rows: Vec<u8> = (4..40).map(|y| frame.pixel(3, y)[1]).collect();
+        assert_eq!(rows, expected, "depth {depth}");
+        // Nothing is drawn above the sprite's top or below its bottom.
+        assert_eq!(frame.pixel(3, 3), BLACK);
+        assert_eq!(frame.pixel(3, 40), BLACK);
+    }
+}
+
+/// A depth beyond the height of a sprite that is not stretched takes the rows above the
+/// source rectangle one to one.
+#[test]
+fn a_bush_depth_beyond_the_height_of_an_unstretched_sprite_shifts_no_row() {
+    let mut stage = Stage::rgss2(16, 16);
+    coded(&mut stage, 8, 12, |sprite| {
+        sprite.src_rect = Rect::new(0, 4, 8, 6);
+        sprite.bush_depth = 9;
+        sprite.bush_opacity = 255;
+    });
+    let frame = stage.frame();
+    let rows: Vec<u8> = (0..6).map(|y| frame.pixel(0, y)[1]).collect();
+    assert_eq!(rows, [4, 5, 6, 7, 8, 9]);
+    assert_eq!(frame.pixel(0, 6), BLACK);
+}
+
+/// Scenario "No tone on bush rows, measured on the original", with the mirror.
+#[test]
+fn the_bush_rows_have_no_tone_no_colour_and_no_mirror() {
+    let mut stage = Stage::rgss2(16, 16);
+    let id = coded(&mut stage, 8, 8, |sprite| {
+        sprite.tone = crate::Tone::new(0.0, 0.0, -200.0, 0.0);
+        sprite.color = crate::Color::new(255.0, 255.0, 255.0, 255.0);
+        sprite.mirror = true;
+        sprite.bush_depth = 2;
+        sprite.bush_opacity = 255;
+    });
+    let frame = stage.frame();
+    // The upper rows show the colour, the bush rows the texels where they stand.
+    assert_eq!(frame.pixel(1, 5), WHITE);
+    assert_eq!(frame.pixel(1, 6), [1, 6, 200, 255]);
+    assert_eq!(frame.pixel(6, 7), [6, 7, 200, 255]);
+    // Without the colour the upper rows show the tone and the mirror.
+    stage.scene.sprite_mut(id).unwrap().color = crate::Color::TRANSPARENT;
+    let frame = stage.frame();
+    assert_eq!(frame.pixel(1, 5), [6, 5, 0, 255]);
+    assert_eq!(frame.pixel(1, 6), [1, 6, 200, 255]);
+    // A flash colour does not reach the bush rows either.
+    let sprite = stage.scene.sprite_mut(id).unwrap();
+    sprite.flash(Some(crate::Color::new(255.0, 0.0, 0.0, 255.0)), 4);
+    let frame = stage.frame();
+    assert_eq!(frame.pixel(1, 5), RED);
+    assert_eq!(frame.pixel(1, 6), [1, 6, 200, 255]);
+}
+
+/// A turned sprite keeps its mirror on the bush rows, and loses tone and colour there.
+#[test]
+fn the_bush_rows_of_a_turned_sprite_keep_the_mirror() {
+    let turned = |depth: i32, color: crate::Color| {
+        let mut stage = Stage::rgss2(16, 16);
+        coded(&mut stage, 8, 8, |sprite| {
+            sprite.x = 8;
+            sprite.y = 8;
+            sprite.angle = 180.0;
+            sprite.mirror = true;
+            sprite.color = color;
+            sprite.bush_depth = depth;
+            sprite.bush_opacity = 255;
+        });
+        stage.frame()
+    };
+    // At a bush opacity of 255 the bush rows show what the rows show without a depth.
+    let plain = turned(0, crate::Color::TRANSPARENT);
+    assert_eq!(turned(2, crate::Color::TRANSPARENT).rgba, plain.rgba);
+    assert_eq!(plain.pixel(2, 7)[0] + 1, plain.pixel(3, 7)[0]);
+    let white = crate::Color::new(255.0, 255.0, 255.0, 255.0);
+    let frame = turned(2, white);
+    // The columns the turned sprite covers.
+    let covered: Vec<u32> = (0..16).filter(|x| plain.pixel(*x, 5) != BLACK).collect();
+    assert!(covered.len() >= 6);
+    for x in covered {
+        assert_eq!(frame.pixel(x, 5), WHITE);
+        assert_eq!(frame.pixel(x, 6), plain.pixel(x, 6));
+        assert_eq!(frame.pixel(x, 7), plain.pixel(x, 7));
+    }
+}
+
+/// Scenarios of the measurement for "Bush rows of RGSS2": the topics `bushbig` and
+/// `bushop`.
+#[test]
+fn the_cases_of_bush_rows_are_the_expected_pictures() {
+    compare(include_str!("../../../tests/data/sprite-rgss2-bush.txt"), 5);
+}
