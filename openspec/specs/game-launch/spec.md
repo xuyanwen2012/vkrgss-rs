@@ -427,8 +427,8 @@ values it read and the option.
 
 ### Requirement: VX Ace is refused
 A run whose runtime is RGSS3 SHALL end before a guest, an interpreter, a window or a device is
-started, with a non-zero status and a message that names RPG Maker VX Ace and says that it is
-planned and not supported. Before it the program SHALL, in this order, resolve the run-time package,
+started, with a non-zero status and a message that names RPG Maker VX Ace as planned and not
+supported. Before it the program SHALL, in this order, resolve the run-time package,
 find the built-in scripts file, open the game's files with `Game.rgss3a` when there is one,
 and read the file that `Scripts` names. A step that fails SHALL end the run with its own
 error and without that message.
