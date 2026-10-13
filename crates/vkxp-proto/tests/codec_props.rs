@@ -7,8 +7,9 @@ use proptest::prelude::*;
 use vkxp_proto::codec::{Message, decode_stream, encode_stream};
 use vkxp_proto::{
     AudioChannel, AudioCommand, BitmapDelta, BitmapId, BlendMode, Color, Fixed, FramePacket,
-    FrameRate, GuestToHost, HostToGuest, InputSnapshot, Op, Quad, Rect, RectEffect, Sampling, Size,
-    TableDelta, TableId, TilemapLayer, Tone, Transform, TransitionRule,
+    FrameRate, GuestToHost, HostToGuest, InputSnapshot, Op, Plane, Quad, Rect, RectEffect,
+    Sampling, Size, TableDelta, TableId, TilemapLayer, TilemapPlane, Tone, Transform,
+    TransitionRule,
 };
 
 fn fixed() -> impl Strategy<Value = Fixed> {
@@ -96,6 +97,7 @@ fn op() -> impl Strategy<Value = Op> {
             color
         })),
         tilemap_layer().prop_map(Op::TilemapLayer),
+        tilemap_plane().prop_map(Op::TilemapPlane),
     ]
 }
 
@@ -123,6 +125,34 @@ fn tilemap_layer() -> impl Strategy<Value = TilemapLayer> {
                 layer: numbers.0,
                 priority: numbers.1,
                 animation_step: numbers.2,
+            },
+        )
+}
+
+fn tilemap_plane() -> impl Strategy<Value = TilemapPlane> {
+    (
+        rect(),
+        any::<bool>(),
+        any::<(i32, i32)>(),
+        any::<(u32, u32)>(),
+        any::<(u64, u8)>(),
+        (table_id(), option::of(table_id()), option::of(table_id())),
+        proptest::array::uniform9(option::of(bitmap_id())),
+    )
+        .prop_map(
+            |(clip, upper, corner, first_cell, numbers, (map, passages, flash), bitmaps)| {
+                TilemapPlane {
+                    clip,
+                    plane: if upper { Plane::Upper } else { Plane::Lower },
+                    corner,
+                    first_cell,
+                    animation_step: numbers.0,
+                    flash_level: numbers.1,
+                    map,
+                    passages,
+                    flash,
+                    bitmaps,
+                }
             },
         )
 }

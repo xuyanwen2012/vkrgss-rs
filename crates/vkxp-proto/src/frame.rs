@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{BitmapId, Color, Fixed, Rect, Size, TableId, Tone};
+use crate::{BitmapId, Color, Fixed, Rect, Size, TableId, Tone, tiles_rgss2};
 
 /// Everything a backend needs to produce one frame.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -153,6 +153,8 @@ pub enum Op {
     RectEffect(RectEffect),
     /// Draws the tiles of one priority of one layer of a map.
     TilemapLayer(TilemapLayer),
+    /// Draws one of the two planes of a tilemap of RGSS2.
+    TilemapPlane(TilemapPlane),
 }
 
 impl Op {
@@ -163,6 +165,7 @@ impl Op {
             Op::Quad(_) => OpKind::Quad,
             Op::RectEffect(_) => OpKind::RectEffect,
             Op::TilemapLayer(_) => OpKind::TilemapLayer,
+            Op::TilemapPlane(_) => OpKind::TilemapPlane,
         }
     }
 
@@ -172,6 +175,7 @@ impl Op {
             Op::Clear { clip, .. } => *clip,
             Op::Quad(quad) => quad.clip,
             Op::TilemapLayer(layer) => layer.clip,
+            Op::TilemapPlane(plane) => plane.clip,
             Op::RectEffect(effect) => effect.clip,
         }
     }
@@ -184,6 +188,7 @@ pub enum OpKind {
     Quad,
     RectEffect,
     TilemapLayer,
+    TilemapPlane,
 }
 
 impl std::fmt::Display for OpKind {
@@ -193,6 +198,7 @@ impl std::fmt::Display for OpKind {
             OpKind::Quad => "Quad",
             OpKind::RectEffect => "RectEffect",
             OpKind::TilemapLayer => "TilemapLayer",
+            OpKind::TilemapPlane => "TilemapPlane",
         })
     }
 }
@@ -466,6 +472,100 @@ pub struct TilemapLayer {
     pub animation_step: u64,
 }
 
+/// Which of the two planes of a tilemap of RGSS2 an op draws.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Plane {
+    /// Every tile whose entry of the passages table lacks the bit [`tiles_rgss2::STAR`],
+    /// with the shadows and the edges under tables.
+    Lower,
+    /// The tiles of the third layer whose entry has the bit.
+    Upper,
+}
+
+/// Draws, inside `clip`, one plane of a tilemap of RGSS2: [`tiles_rgss2::PLANE_COLUMNS`] by
+/// [`tiles_rgss2::PLANE_ROWS`] cells of 32 by 32 pixels whose top-left pixel is the screen
+/// pixel `corner`. Nothing is drawn outside the plane.
+///
+/// The cell at column `c` and row `r` of the plane shows the cell
+/// (`(first_cell.0 + c) mod xsize`, `(first_cell.1 + r) mod ysize`) of `map`: the map repeats
+/// in both directions. A map without cells draws nothing, a layer the map does not have is
+/// empty, and layers beyond the third are not read.
+///
+/// What a pixel of a cell becomes is what these steps make of it, in this order. A tile is
+/// resolved by [`tiles_rgss2::tile`] at `animation_step`; its entry of `passages` is the
+/// element at its number, 0 when there is none or no table. The lower plane draws the tiles
+/// whose entry lacks the bit [`tiles_rgss2::STAR`]; the upper plane draws those of the third
+/// layer that have it.
+///
+/// 1. In the first [`tiles_rgss2::OVERHANG`] rows of a cell that is not in the first row of
+///    the plane, [`tiles_rgss2::Tile::overhang`] of each drawn tile of the cell above, layer
+///    by layer, but only in the rows before the next screen row below the cell's top whose
+///    coordinate is a multiple of 8: all eight when the top is at a multiple of 8.
+/// 2. Layer by layer, the [`tiles_rgss2::Tile::texels`] of each drawn tile of the cell.
+/// 3. In the lower plane only, after the first layer whether its tile was drawn or not: a
+///    shadow, [`tiles_rgss2::shadow`] on each colour channel, on the left half of a cell
+///    whose tile of the first layer [`tiles_rgss2::takes_shadow`] while the tiles of the
+///    first layer of the map cells to its left and to its upper left are both
+///    [`tiles_rgss2::is_wall`]; then, in the first eight rows of a cell whose tile of the
+///    first layer is neither a wall nor a table, [`tiles_rgss2::Tile::edge`] of the tile of
+///    the first layer of the map cell above. These neighbours are cells of the map and are
+///    not wrapped: beyond the map's edge there is no tile.
+/// 4. The flash: where the element of `flash` at
+///    (`(first_cell.0 + c) mod xsize`, `(first_cell.1 + r) mod ysize`), with the sizes of the
+///    flash table, gives [`tiles_rgss2::flash_amounts`] at `flash_level`, these are added to
+///    the channels, each limited to 255.
+///
+/// A texel is blended over the pixel as in [`BlendMode::Window`] at opacity 255, and as in
+/// [`BlendMode::Normal`] where [`TilemapPlane::is_tail`] says so. A texel outside its sheet
+/// and a tile whose sheet is absent draw nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TilemapPlane {
+    pub clip: Rect,
+    pub plane: Plane,
+    /// The screen pixel of the plane's top-left pixel.
+    pub corner: (i32, i32),
+    /// The cell of the map in the plane's first column and row.
+    pub first_cell: (u32, u32),
+    /// Counts the animation frames of the autotiles of the first sheet.
+    pub animation_step: u64,
+    /// What a nibble of a flash entry is multiplied by.
+    pub flash_level: u8,
+    /// The tile numbers: one element per cell and layer of the map.
+    pub map: TableId,
+    /// The flags of each tile number.
+    pub passages: Option<TableId>,
+    /// The flash entry of each cell.
+    pub flash: Option<TableId>,
+    /// The sheets, in the order of `Tilemap#bitmaps`.
+    pub bitmaps: [Option<BitmapId>; tiles_rgss2::SHEETS],
+}
+
+impl TilemapPlane {
+    /// Whether screen pixel column `px` is the one pixel that a row of a transfer blends as
+    /// in [`BlendMode::Normal`]: the last column of the row's visible part, when that part has
+    /// an odd number of columns. The row covers `width` screen columns from `left`, the width
+    /// being [`tiles_rgss2::Tile::span`] and `left` the left edge of the tile or of the
+    /// quarter that `px` is in; its visible part is what lies inside the clip and a frame of
+    /// `frame` pixels, and `px` is a column of it. Every backend must match this.
+    pub const fn is_tail(&self, frame: Size, left: i64, width: u32, px: u16) -> bool {
+        let clip_low = self.clip.x as i64;
+        let clip_high = clip_low + self.clip.width as i64;
+        let mut low = if clip_low > 0 { clip_low } else { 0 };
+        if left > low {
+            low = left;
+        }
+        let mut high = if clip_high < frame.width as i64 {
+            clip_high
+        } else {
+            frame.width as i64
+        };
+        if left + (width as i64) < high {
+            high = left + width as i64;
+        }
+        px as i64 == high - 1 && (high - low) & 1 == 1
+    }
+}
+
 /// Changes the pixels already present inside `clip`: first the tone, then the colour blended
 /// over the result with the colour's alpha. No bitmap is read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -525,6 +625,22 @@ mod tests {
                 }),
                 OpKind::TilemapLayer,
                 "TilemapLayer",
+            ),
+            (
+                Op::TilemapPlane(TilemapPlane {
+                    clip,
+                    plane: Plane::Upper,
+                    corner: (0, 0),
+                    first_cell: (0, 0),
+                    animation_step: 0,
+                    flash_level: 4,
+                    map: TableId::new(0),
+                    passages: None,
+                    flash: None,
+                    bitmaps: [None; 9],
+                }),
+                OpKind::TilemapPlane,
+                "TilemapPlane",
             ),
         ];
         for (op, kind, name) in cases {
@@ -737,5 +853,40 @@ mod tests {
             mirror: false,
         };
         assert_eq!(tails(quad(screen, 5, stretch)), []);
+    }
+
+    #[test]
+    fn plane_tail_is_the_last_column_of_an_odd_visible_row() {
+        let frame = Size::new(40, 30);
+        let plane = |clip| TilemapPlane {
+            clip,
+            plane: Plane::Lower,
+            corner: (0, 0),
+            first_cell: (0, 0),
+            animation_step: 0,
+            flash_level: 4,
+            map: TableId::new(0),
+            passages: None,
+            flash: None,
+            bitmaps: [None; 9],
+        };
+        let tails = |plane: TilemapPlane, left, width| -> Vec<u16> {
+            (0..frame.width as u16)
+                .filter(|&px| plane.is_tail(frame, left, width, px))
+                .collect()
+        };
+        let screen = plane(Rect::from_size(frame));
+        // Whole rows of 16 and 32 pixels have no such pixel.
+        assert_eq!(tails(screen, 3, 16), []);
+        assert_eq!(tails(screen, 3, 32), []);
+        // Cut by the frame on the left and on the right.
+        assert_eq!(tails(screen, -13, 16), [2]);
+        assert_eq!(tails(screen, -12, 16), []);
+        assert_eq!(tails(screen, 27, 16), [39]);
+        // Cut by the clip.
+        let clipped = plane(Rect::new(5, 0, 20, 30));
+        assert_eq!(tails(clipped, 0, 16), [15]);
+        assert_eq!(tails(clipped, 10, 16), [24]);
+        assert_eq!(tails(clipped, 6, 16), []);
     }
 }

@@ -2,8 +2,8 @@
 
 ## 1. Protocol and reference
 
-- [ ] 1.1 The op of a tilemap plane of RGSS2 in the protocol, the version, the one definition of numbering and shapes. Verify: the scenarios of `specs/guest-host-protocol/spec.md`; `cargo test -p vkxp-proto --locked` passes.
-- [ ] 1.2 The CPU reference evaluates the op: tiles, shapes, animation, planes, tables, shadows, flash, blend. Verify: the scenarios of `specs/frame-composition/spec.md`; `cargo test -p vkxp-compose-ref --locked` passes.
+- [x] 1.1 The op of a tilemap plane of RGSS2 in the protocol, the version, the one definition of numbering and shapes. Verify: the scenarios of `specs/guest-host-protocol/spec.md`; `cargo test -p vkxp-proto --locked` passes.
+- [x] 1.2 The CPU reference evaluates the op: tiles, shapes, animation, planes, tables, shadows, flash, blend. Verify: the scenarios of `specs/frame-composition/spec.md`; `cargo test -p vkxp-compose-ref --locked` passes.
 
 ## 2. Scene and class
 

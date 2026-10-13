@@ -23,7 +23,7 @@ use crate::{GuestToHost, HostToGuest, InputSnapshot};
 pub const MAGIC: [u8; 4] = *b"VKXP";
 
 /// Version of the message types and their encoding. Any change to either increments it.
-pub const PROTOCOL_VERSION: u16 = 11;
+pub const PROTOCOL_VERSION: u16 = 12;
 
 /// Length of the stream header in bytes.
 pub const HEADER_LEN: usize = 7;
@@ -235,8 +235,8 @@ mod tests {
 
     #[test]
     fn older_streams_are_rejected_naming_both_versions() {
-        assert_eq!(PROTOCOL_VERSION, 11);
-        for found in [1u16, 2, 3, 4, 5, 6, 7, 8, 9, 10] {
+        assert_eq!(PROTOCOL_VERSION, 12);
+        for found in [1u16, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] {
             let mut bytes = encode_stream(&sample()).unwrap();
             bytes[4..6].copy_from_slice(&found.to_le_bytes());
 
@@ -245,12 +245,12 @@ mod tests {
                 error,
                 DecodeError::UnsupportedVersion {
                     found,
-                    supported: 11,
+                    supported: 12,
                 }
             );
             assert_eq!(
                 error.to_string(),
-                format!("unsupported protocol version: found {found}, supported 11")
+                format!("unsupported protocol version: found {found}, supported 12")
             );
         }
     }
@@ -353,6 +353,52 @@ mod tests {
                 priority: 5,
                 animation_step: u64::MAX,
             })],
+        })];
+        let bytes = encode_stream(&messages).unwrap();
+        assert_eq!(decode_stream::<GuestToHost>(&bytes).unwrap(), messages);
+    }
+
+    /// Scenario "Round trip" of the tilemap plane op of RGSS2.
+    #[test]
+    fn tilemap_planes_survive_a_round_trip() {
+        use crate::{Op, Plane, Rect, TableId, TilemapPlane};
+
+        let lower = TilemapPlane {
+            clip: Rect::new(-3, 7, 544, 416),
+            plane: Plane::Lower,
+            corner: (i32::MIN, i32::MAX),
+            first_cell: (u32::MAX, 3),
+            animation_step: u64::MAX,
+            flash_level: 8,
+            map: TableId::new(4),
+            passages: Some(TableId::new(u32::MAX)),
+            flash: None,
+            bitmaps: [
+                Some(BitmapId::new(5, 0)),
+                None,
+                Some(BitmapId::new(u32::MAX, u32::MAX)),
+                None,
+                None,
+                Some(BitmapId::new(6, 2)),
+                None,
+                None,
+                Some(BitmapId::new(0, 1)),
+            ],
+        };
+        let upper = TilemapPlane {
+            plane: Plane::Upper,
+            passages: None,
+            flash: Some(TableId::new(0)),
+            ..lower
+        };
+        let messages = vec![GuestToHost::Frame(FramePacket {
+            frame_index: 2,
+            logical_size: Size::new(544, 416),
+            frame_rate: FrameRate::MAX,
+            brightness: 255,
+            tables: vec![],
+            bitmaps: vec![],
+            ops: vec![Op::TilemapPlane(lower), Op::TilemapPlane(upper)],
         })];
         let bytes = encode_stream(&messages).unwrap();
         assert_eq!(decode_stream::<GuestToHost>(&bytes).unwrap(), messages);

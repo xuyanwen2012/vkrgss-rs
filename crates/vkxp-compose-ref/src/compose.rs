@@ -6,6 +6,7 @@ use vkxp_proto::{
 };
 
 use crate::tilemap::Layer;
+use crate::tilemap_rgss2::PlaneStep;
 use crate::{Bitmap, BitmapStore, ComposeError, TableStore};
 
 /// The colour every pixel starts from before the first op: opaque black.
@@ -177,6 +178,26 @@ impl Compositor {
                         autotiles,
                     })
                 }
+                Op::TilemapPlane(plane) => {
+                    let table = |id| {
+                        self.tables
+                            .get(id)
+                            .map_err(|source| ComposeError::InvalidOpTable { index, source })
+                    };
+                    let mut bitmaps = [None; 9];
+                    for (found, id) in bitmaps.iter_mut().zip(plane.bitmaps) {
+                        let bitmap = id.map(|id| self.bitmaps.get(id)).transpose();
+                        *found = bitmap
+                            .map_err(|source| ComposeError::InvalidOpBitmap { index, source })?;
+                    }
+                    Step::TilemapPlane(PlaneStep {
+                        op: plane,
+                        map: table(plane.map)?,
+                        passages: plane.passages.map(table).transpose()?,
+                        flash: plane.flash.map(table).transpose()?,
+                        bitmaps,
+                    })
+                }
             });
         }
         Ok(steps)
@@ -189,6 +210,7 @@ enum Step<'a> {
     Quad { quad: &'a Quad, bitmap: &'a Bitmap },
     RectEffect(&'a RectEffect),
     Tilemap(Layer<'a>),
+    TilemapPlane(PlaneStep<'a>),
 }
 
 impl Step<'_> {
@@ -234,6 +256,12 @@ impl Step<'_> {
                     Some(texel) => vkxp_pixel::blend_normal(pixel, texel, 255),
                     None => pixel,
                 }
+            }
+            Step::TilemapPlane(plane) => {
+                if !plane.op.clip.contains(x, y) {
+                    return pixel;
+                }
+                plane.apply(pixel, frame, px, py)
             }
             Step::RectEffect(effect) => {
                 if !effect.clip.contains(x, y) {

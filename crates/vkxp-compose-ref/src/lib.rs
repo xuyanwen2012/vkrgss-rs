@@ -23,6 +23,7 @@ mod png_out;
 mod store;
 mod tables;
 mod tilemap;
+mod tilemap_rgss2;
 
 pub use compose::{BACKGROUND, Compositor, Frame, render_stream};
 pub use error::{BitmapError, ComposeError, SlotState, TableError};

@@ -377,6 +377,8 @@ pub(crate) fn encode_frame(
                 tilemaps.push(tilemap);
                 records.push(record);
             }
+            // Not drawn yet.
+            Op::TilemapPlane(_) => {}
         }
     }
     Ok(Records {

@@ -8,9 +8,10 @@
 //! binary form for recordings and test fixtures, and [`framing`] puts single messages of that
 //! form on a byte stream. [`link`] is the pair of endpoints the two sides hold, with a guest
 //! end over a Unix stream socket for a guest in a process of its own. [`tiles`] is the
-//! numbering of the tiles of a tilemap, which the guest and every backend read alike.
+//! numbering of the tiles of a tilemap of RGSS1, which the guest and every backend read
+//! alike, and [`tiles_rgss2`] that of RGSS2.
 //!
-//! This is protocol version 11. Over version 1 a [`FramePacket`] carries the guest's
+//! This is protocol version 12. Over version 1 a [`FramePacket`] carries the guest's
 //! [`FrameRate`], a [`Quad`] carries a tone and a colour for its own texels, the messages
 //! [`GuestToHost::FrameReset`] and [`HostToGuest::Reset`] exist, and [`Button`] has F9. Over
 //! version 2 a [`Quad`] states its [`Sampling`]: the affine transform it always had, or a
@@ -26,8 +27,9 @@
 //! save or a load failed. Over version 9 the guest presses and releases keys for the player
 //! with [`GuestToHost::InjectKey`] and says with [`GuestToHost::PointerVisible`] whether the
 //! pointer is to be seen. Over version 10 a [`FramePacket`] carries a brightness and
-//! [`GuestToHost::Transition`] names the [`TransitionRule`] its frames are stepped by.
-//! Streams of older versions are rejected.
+//! [`GuestToHost::Transition`] names the [`TransitionRule`] its frames are stepped by. Over
+//! version 11 the op [`Op::TilemapPlane`] draws a plane of a tilemap of RGSS2, by the tile
+//! numbering of [`tiles_rgss2`]. Streams of older versions are rejected.
 //!
 //! The binary form encodes enum variants by position, so reordering or removing variants, or
 //! changing fields, requires a new [`codec::PROTOCOL_VERSION`].
@@ -39,6 +41,7 @@ pub mod framing;
 pub mod link;
 pub mod recording;
 pub mod tiles;
+pub mod tiles_rgss2;
 
 mod audio;
 mod fixed;
@@ -51,8 +54,8 @@ pub use audio::{AudioChannel, AudioCommand};
 pub use fixed::Fixed;
 pub use frame::{
     BitmapDelta, BlendMode, FramePacket, FrameRate, FrameRateOutOfRange, MAX_LOGICAL_DIMENSION, Op,
-    OpKind, Quad, RectEffect, STRETCH_FRAC_BITS, Sampling, TableDelta, TilemapLayer, Transform,
-    stretch_index, stretch_step,
+    OpKind, Plane, Quad, RectEffect, STRETCH_FRAC_BITS, Sampling, TableDelta, TilemapLayer,
+    TilemapPlane, Transform, stretch_index, stretch_step,
 };
 pub use input::{Button, InputSnapshot};
 pub use message::{GuestToHost, HostToGuest, TransitionRule};

@@ -10,6 +10,8 @@ use vkxp_proto::{
     Rect, RectEffect, Sampling, Size, TableDelta, TableId, TilemapLayer, Tone, Transform,
 };
 
+pub mod tilemap_rgss2;
+
 /// Logical screen size of every fixture.
 pub const SIZE: Size = Size::new(64, 48);
 
