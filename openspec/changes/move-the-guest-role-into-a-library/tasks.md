@@ -18,4 +18,4 @@
 
 ## 4. Integration check
 
-- [ ] 4.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate move-the-guest-role-into-a-library --strict` passes; scenario "Nothing else changes" (`git diff main -- crates/vkxp/tests crates/vkxp-binding crates/vkxp-proto crates/vkxp-host` is empty).
+- [x] 4.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate move-the-guest-role-into-a-library --strict` passes; scenario "Nothing else changes" (`git diff main -- crates/vkxp/tests crates/vkxp-binding crates/vkxp-proto crates/vkxp-host` is empty).

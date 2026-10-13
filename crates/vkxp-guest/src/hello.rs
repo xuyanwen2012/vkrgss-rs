@@ -6,7 +6,7 @@
 //! line feed, [`MAX_LEN`] bytes at most. It is a line outside the messages of the protocol,
 //! which carry the version of their encoding themselves.
 //!
-//! [`write`] is the guest's side and [`read`] the program's.
+//! [`write()`] is the guest's side and [`read()`] the program's.
 
 use std::io::{Read, Write};
 
