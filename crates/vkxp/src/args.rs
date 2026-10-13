@@ -639,7 +639,7 @@ mod tests {
         assert!(!parse_words(&[]).unwrap().version);
         assert!(parse_words(&["--version"]).unwrap().version);
         assert!(parse_words(&["-V"]).unwrap().version);
-        assert_eq!(VERSION, "vkxp 0.1.0");
+        assert_eq!(VERSION, "vkxp 0.2.0");
         assert!(USAGE.contains("--version, -V"));
     }
 

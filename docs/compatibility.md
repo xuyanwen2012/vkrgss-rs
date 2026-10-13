@@ -1,9 +1,10 @@
 # Compatibility
 
-vkxp aims at the behaviour of the original runtime of RPG Maker XP, RGSS 1.04. Games that
-use the default scripts or common community scripts are meant to run unmodified. RPG Maker
-VX is experimental, see [RPG Maker VX](#rpg-maker-vx); VX Ace is planned and not supported
-yet. Everything else below is about XP.
+vkxp aims at the behaviour of the original runtimes of RPG Maker XP, RGSS 1.04, and of RPG
+Maker VX, RGSS2: both are supported. Games that use the default scripts or common
+community scripts are meant to run unmodified. VX Ace is planned and not supported yet. What
+a game of VX has differently is under [RPG Maker VX](#rpg-maker-vx); everything else below is
+about XP.
 
 ## What is exact
 
@@ -54,8 +55,12 @@ aarch64.
 
 ## RPG Maker VX
 
-Support for games of RPG Maker VX (RGSS2) is experimental. Of the module `Graphics`, a game
-of VX has what follows, each measured on the original runtime of VX (`RGSS202E.dll`,
+Games of RPG Maker VX (RGSS2) are supported. Two games were compared with the original
+runtime, Visions & Voices and The Witch's House; the rows V0 to V3 of the milestone table in
+[decisions.md](decisions.md#milestones) say which frames and which save, and what the
+comparison does not cover.
+
+Of the module `Graphics`, a game of VX has what follows, each measured on the original runtime of VX (`RGSS202E.dll`,
 versions 2.0.0.1 and 2.0.2.1) under Wine:
 
 - The frame is 544 by 416 pixels and the frame rate starts at 60. `Graphics.width` and

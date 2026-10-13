@@ -271,6 +271,10 @@ Decisions of the owner of 2026-10-12, recorded by the change `extend-scope-to-vx
 - Until V3 the documents say: XP is supported; VX is experimental or planned, whichever is
   true at that time; VX Ace is planned.
 
+V3 was reached on 2026-10-12, and with it this rule has ended: VX is supported, a run of a VX
+game no longer says that its support is experimental, and version 0.2.0 is the release that
+"Order and milestones" names (change `release-0-2-0`).
+
 ### Process
 
 - As before: OpenSpec changes implemented by flows, at most three in parallel. The owner's
@@ -331,6 +335,38 @@ Risks of the extension to VX and VX Ace, each with what answers it (change
   run at its merge.
 - At 60 frames per second a frame has 16.7 ms, and waves, blur and snapshots are new costs.
   Frame times of representative VX scenes are measured before 0.2.0.
+
+  Measured on 2026-10-13 (change `release-0-2-0`): a release build of `main` at `0bf50cf`,
+  run with `--headless --no-audio --frame-stats`, which neither waits between frames nor
+  presents; AMD Ryzen 5 9600X, its integrated GPU with RADV (Mesa 26.2.4), frames of 544 by
+  416. The stages are those `docs/running.md` describes under "Frame times"; times are in
+  milliseconds.
+
+  | Run | Frames | `guest` mean | `guest` largest | `submit` mean | `submit` largest | `compose (device)` mean | `compose (device)` largest |
+  |---|---|---|---|---|---|---|---|
+  | Visions & Voices: title, name input, maps with messages and weather, a battle, walking, the menu over its blurred snapshot | 13500 | 0.208 | 39.611 | 0.742 | 2.937 | 0.689 | 1.890 |
+  | The Witch's House: title, opening, walking on its first map | 3200 | 0.394 | 32.654 | 0.825 | 2.814 | 0.751 | 1.738 |
+
+  `encode`, `bin` and `upload` together have a mean below 0.01 ms in both runs and a largest
+  single value of 1.215 ms (`upload`). Of the guest's own rows, which are written per 600
+  frames:
+
+  - `guest scripts`: the highest mean of a block is 0.543 ms (Visions & Voices, the battle)
+    and 0.409 ms (The Witch's House, walking). The largest single frames are 37.8 ms,
+    28.6 ms and 26.4 ms in Visions & Voices and 28.4 ms in The Witch's House, each in a
+    block in which a scene is entered (the name input, the menu and the return from it, the
+    start of the game). The statistics give the largest value of a block and not the frame
+    it belongs to, so that these are the frames of the scene changes is an inference.
+  - `guest bitmap operations`: largest 11.6 ms in the block in which the battle begins, and
+    2.2 ms in the blocks in which the menu takes and blurs its snapshot; the mean of every
+    block is below 0.01 ms.
+  - `guest text`: largest 8.0 ms; the mean of every block is below 0.02 ms.
+  - `guest extraction`: largest 1.9 ms; the mean of every block is below 0.02 ms.
+
+  A frame costs about 1 ms in the mean on this machine, a sixteenth of the 16.7 ms it has.
+  Single frames in which a scene is built take more than one frame's time on the game's
+  side, up to 40 ms. Not measured: how long the original takes for the same frames, a slower
+  processor, and a run with a window. No performance requirement is made of these numbers.
 - Ruby 1.9.2 differs in encodings, in what it serialises and in how it is embedded. These
   are checked for feasibility when VX Ace is planned; sharing the rest of vkxp does not
   settle them.

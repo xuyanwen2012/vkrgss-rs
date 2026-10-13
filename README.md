@@ -1,9 +1,9 @@
 # vkxp
 
-A Rust + Vulkan runtime for RPG Maker games on Linux. RPG Maker XP (RGSS1) is supported; VX
-(RGSS2) is experimental, and VX Ace (RGSS3) is planned and does not run yet. `vkxp <game directory>` runs the
-game's scripts in an embedded Ruby 1.8.7 interpreter against the RGSS classes and shows the
-frames of a Vulkan compositor in a window, or writes them to files in a headless run.
+A Rust + Vulkan runtime for RPG Maker games on Linux. RPG Maker XP (RGSS1) and VX (RGSS2)
+are supported; VX Ace (RGSS3) is planned and does not run yet. `vkxp <game directory>` runs
+the game's scripts in an embedded Ruby 1.8.7 interpreter against the RGSS classes and shows
+the frames of a Vulkan compositor in a window, or writes them to files in a headless run.
 
 [![CI](https://github.com/xuyanwen2012/vkxp/actions/workflows/ci.yml/badge.svg)](https://github.com/xuyanwen2012/vkxp/actions/workflows/ci.yml)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
@@ -18,29 +18,38 @@ an RPG Maker XP game, as vkxp renders them in a headless run.
 
 ## Status
 
-Version 0.1.0 is the first public release.
+Version 0.2.0 adds RPG Maker VX (RGSS2) to RPG Maker XP (RGSS1), which version 0.1.0
+supported.
 
 What works:
+
+- Games of RPG Maker XP and of RPG Maker VX; the runtime is taken from the game's
+  `Game.ini`.
 
 - A window with integer or filtered scaling and borderless fullscreen, and frame pacing at
   the game's frame rate.
 - Audio: Ogg Vorbis, WAV, MP3 and MPEG layer II, with a SoundFont MIDI, and with `ffmpeg`
   installed WMA.
 - Keyboard and gamepads, with key maps that can be changed.
-- Encrypted archives (`Game.rgssad`).
+- Encrypted archives (`Game.rgssad`, `Game.rgss2a`).
 - Configuration files for the user and for a game, besides the command line.
 - Fast-forward, input recording and replay, and save states that work in any game.
 - A headless mode that writes chosen frames as PNG files and is reproducible byte for byte.
 
 Exactness: frames are compared with those of the original runtime, which `cargo xtask oracle`
 runs under Wine. On the seven community-made games used as the regression corpus, the frames
-compared are pixel-identical except for text glyphs. Many rules were measured on the original
-runtime; the specifications under [`openspec/specs`](openspec/specs) record them.
+compared are pixel-identical except for text glyphs. Two games of RPG Maker VX were compared
+in the same way, Visions & Voices and The Witch's House: the title, the menu, maps, a battle
+and the screens of saving and loading equal the original outside the rectangles of text, and
+a save of The Witch's House written at the same frame is byte for byte that of the original.
+Many rules were measured on the original runtime; the specifications under
+[`openspec/specs`](openspec/specs) record them.
 
 Known gaps:
 
 - Text glyphs are not rasterised as Windows GDI rasterises them, so the pixels of text
   differ; layout and advance widths are kept.
+- RPG Maker VX Ace (RGSS3) does not run yet.
 - Linux x86_64 only.
 
 [docs/compatibility.md](docs/compatibility.md) has the full list.

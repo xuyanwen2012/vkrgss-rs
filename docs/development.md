@@ -218,8 +218,7 @@ for `wait(n)`, `fadeout(n)` and `fadein(n)`, and `n` for `transition(n)` after a
 none without one. On the original's side it runs `wait`, `fadeout` and `fadein` as loops of
 updates that were measured to show the same pictures, so that a frame inside them can be held,
 and it calls `Graphics.frame_reset` around a hold, because the original does not draw the
-updates that follow a stall. vkxp does not run games of VX yet; until it does, its side of
-such a run fails, and `--original-only` runs the other side alone.
+updates that follow a stall. `--original-only` runs the side of the original alone.
 
 A game that ships its data in `Game.rgssad`, or `Game.rgss2a` (both RGSSAD version 1), is compared as it is: the
 probe is added to the script archive inside the encrypted archive of each copy, every other

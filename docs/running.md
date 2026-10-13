@@ -11,8 +11,8 @@ takes the same arguments.
 
 ### The runtime of a game
 
-`vkxp` runs the games of RPG Maker XP, whose runtime is RGSS1. Support for RPG Maker VX
-(RGSS2) is experimental, and RPG Maker VX Ace (RGSS3) is planned and not supported.
+`vkxp` runs the games of RPG Maker XP, whose runtime is RGSS1, and of RPG Maker VX, whose
+runtime is RGSS2: both are supported. RPG Maker VX Ace (RGSS3) is planned and not supported.
 
 The runtime of a game is taken from two values of its `Game.ini`, and from nothing else:
 
@@ -43,13 +43,11 @@ A game of VX names the package `RPGVX`, so it is run with `--rtp RPGVX=<RTP dire
 game whose `RTP` is empty needs no package. The archive of the other runtime is ignored if
 the game directory holds one.
 
-A game of VX does not get far yet. It starts as the original starts it in three things: its
-frame is 544 by 416, in the window and in a dumped frame alike, its frame rate starts at 60,
-and its scripts see the symbol numbers of RGSS2. `Graphics.width` and `Graphics.height` give
-the size of the frame. Everything else is still the classes and functions of RGSS1, and the
-scripts stop at the first other thing that only RGSS2 has. Every such run writes one warning
-that support for RPG Maker VX is experimental. A game of VX Ace ends at once with a message
-that says it is not supported.
+A game of VX starts as the original starts it: its frame is 544 by 416, in the window and in
+a dumped frame alike, its frame rate starts at 60, and its scripts see the symbol numbers and
+the classes and functions of RGSS2; [compatibility.md](compatibility.md#rpg-maker-vx) says
+what was measured of them and what was not. A game of VX Ace ends at once with a message that
+says it is not supported.
 
 ### The built-in scripts
 

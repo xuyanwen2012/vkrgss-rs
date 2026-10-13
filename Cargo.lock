@@ -2484,7 +2484,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vkxp"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "landlock",
@@ -2506,7 +2506,7 @@ dependencies = [
 
 [[package]]
 name = "vkxp-audio"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cpal",
  "rustysynth",
@@ -2519,7 +2519,7 @@ dependencies = [
 
 [[package]]
 name = "vkxp-binding"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "encoding_rs",
  "png",
@@ -2535,7 +2535,7 @@ dependencies = [
 
 [[package]]
 name = "vkxp-compose-ref"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "png",
  "tempfile",
@@ -2546,7 +2546,7 @@ dependencies = [
 
 [[package]]
 name = "vkxp-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "libm",
  "proptest",
@@ -2558,7 +2558,7 @@ dependencies = [
 
 [[package]]
 name = "vkxp-host"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "gilrs",
  "png",
@@ -2576,7 +2576,7 @@ dependencies = [
 
 [[package]]
 name = "vkxp-image"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "jpeg-decoder",
  "jpeg-encoder",
@@ -2587,7 +2587,7 @@ dependencies = [
 
 [[package]]
 name = "vkxp-pixel"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "proptest",
  "vkxp-proto",
@@ -2595,7 +2595,7 @@ dependencies = [
 
 [[package]]
 name = "vkxp-proto"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "postcard",
  "proptest",
@@ -2606,7 +2606,7 @@ dependencies = [
 
 [[package]]
 name = "vkxp-ruby-sys"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cc",
  "libc",
@@ -2617,7 +2617,7 @@ dependencies = [
 
 [[package]]
 name = "vkxp-text"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "fontdb",
  "swash",
@@ -2626,7 +2626,7 @@ dependencies = [
 
 [[package]]
 name = "vkxp-vfs"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "encoding_rs",
  "proptest",
@@ -2636,7 +2636,7 @@ dependencies = [
 
 [[package]]
 name = "vkxp-vk"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ash",
  "ash-window",
@@ -3217,7 +3217,7 @@ checksum = "b9cc00251562a284751c9973bace760d86c0276c471b4be569fe6b068ee97a56"
 
 [[package]]
 name = "xtask"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "flate2",
