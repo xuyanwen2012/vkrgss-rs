@@ -722,3 +722,154 @@ mod measured_order {
         assert_eq!(row.stage.frame().pixel(AT.0, AT.1), WHITE);
     }
 }
+
+/// Moving an element to another viewport, as RGSS2 allows.
+mod moving {
+    use super::*;
+    use crate::extract::testing::*;
+
+    /// Scenario "Seen by the scene".
+    #[test]
+    fn a_moved_sprite_is_drawn_in_its_new_viewport() {
+        let mut stage = Stage::sized(64, 48);
+        let red = stage.solid(8, 8, RED);
+        let sprite = stage.scene.create_sprite(None).unwrap();
+        let bitmap = &stage.bitmaps;
+        stage
+            .scene
+            .sprite_mut(sprite)
+            .unwrap()
+            .set_bitmap(Some(red), bitmap);
+        assert_eq!(stage.frame().pixel(0, 0), RED);
+
+        let viewport = stage
+            .scene
+            .create_viewport(Rect::new(20, 30, 16, 16))
+            .unwrap();
+        stage
+            .scene
+            .set_sprite_viewport(sprite, Some(viewport))
+            .unwrap();
+        assert_eq!(
+            stage.scene.sprite(sprite).unwrap().viewport(),
+            Some(viewport)
+        );
+        let frame = stage.frame();
+        assert_eq!(frame.pixel(20, 30), RED);
+        assert_ne!(frame.pixel(0, 0), RED);
+
+        stage.scene.set_sprite_viewport(sprite, None).unwrap();
+        let frame = stage.frame();
+        assert_eq!(frame.pixel(0, 0), RED);
+        assert_ne!(frame.pixel(20, 30), RED);
+    }
+
+    #[test]
+    fn every_kind_moves_and_follows_its_new_viewport() {
+        let mut scene = Scene::new();
+        let mut bitmaps = Bitmaps::new();
+        let old = scene.create_viewport(Rect::new(0, 0, 10, 10)).unwrap();
+        let new = scene.create_viewport(Rect::new(0, 0, 10, 10)).unwrap();
+        let sprite = scene.create_sprite(Some(old)).unwrap();
+        let window = scene.create_window(Some(old)).unwrap();
+        let plane = scene.create_plane(Some(old)).unwrap();
+        let tilemap = scene.create_tilemap(Some(old)).unwrap();
+        let stays = scene.create_sprite(Some(old)).unwrap();
+        let free = scene.create_sprite(Some(old)).unwrap();
+
+        scene.set_sprite_viewport(sprite, Some(new)).unwrap();
+        scene.set_window_viewport(window, Some(new)).unwrap();
+        scene.set_plane_viewport(plane, Some(new)).unwrap();
+        scene.set_tilemap_viewport(tilemap, Some(new)).unwrap();
+        scene.set_sprite_viewport(free, None).unwrap();
+        assert_eq!(scene.sprite(sprite).unwrap().viewport(), Some(new));
+        assert_eq!(scene.window(window).unwrap().viewport(), Some(new));
+        assert_eq!(scene.plane(plane).unwrap().viewport(), Some(new));
+        assert_eq!(scene.tilemap(tilemap).unwrap().viewport(), Some(new));
+        assert_eq!(scene.sprite(free).unwrap().viewport(), None);
+
+        // The old viewport takes along only what is still in it.
+        let disposed = scene.dispose_viewport(old, &mut bitmaps);
+        assert_eq!(disposed.sprites, 1);
+        assert!(scene.is_sprite_disposed(stays));
+        assert!(!scene.is_sprite_disposed(sprite) && !scene.is_sprite_disposed(free));
+        let disposed = scene.dispose_viewport(new, &mut bitmaps);
+        assert_eq!(
+            disposed,
+            DisposedElements {
+                sprites: 1,
+                windows: 1,
+                planes: 1,
+                tilemaps: 1,
+            }
+        );
+    }
+
+    #[test]
+    fn a_disposed_viewport_or_element_moves_nothing() {
+        let mut scene = Scene::new();
+        let mut bitmaps = Bitmaps::new();
+        let gone = scene.create_viewport(Rect::new(0, 0, 10, 10)).unwrap();
+        scene.dispose_viewport(gone, &mut bitmaps);
+        let disposed_viewport = Err(SceneError::Disposed(ElementKind::Viewport));
+
+        let sprite = scene.create_sprite(None).unwrap();
+        let window = scene.create_window(None).unwrap();
+        let plane = scene.create_plane(None).unwrap();
+        let tilemap = scene.create_tilemap(None).unwrap();
+        assert_eq!(
+            scene.set_sprite_viewport(sprite, Some(gone)),
+            disposed_viewport
+        );
+        assert_eq!(
+            scene.set_window_viewport(window, Some(gone)),
+            disposed_viewport
+        );
+        assert_eq!(
+            scene.set_plane_viewport(plane, Some(gone)),
+            disposed_viewport
+        );
+        assert_eq!(
+            scene.set_tilemap_viewport(tilemap, Some(gone)),
+            disposed_viewport
+        );
+        assert_eq!(scene.sprite(sprite).unwrap().viewport(), None);
+
+        scene.dispose_sprite(sprite);
+        assert_eq!(
+            scene.set_sprite_viewport(sprite, None),
+            Err(DISPOSED_SPRITE)
+        );
+    }
+
+    /// The place among equal z is that of creation, also after a move. Not measured on the
+    /// original runtime.
+    #[test]
+    fn a_moved_sprite_keeps_its_place_among_equal_z() {
+        let mut stage = Stage::sized(16, 16);
+        let viewport = stage
+            .scene
+            .create_viewport(Rect::new(0, 0, 16, 16))
+            .unwrap();
+        let red = stage.solid(8, 8, RED);
+        let green = stage.solid(8, 8, GREEN);
+        let first = stage.scene.create_sprite(None).unwrap();
+        let second = stage.scene.create_sprite(Some(viewport)).unwrap();
+        let bitmap = &stage.bitmaps;
+        stage
+            .scene
+            .sprite_mut(first)
+            .unwrap()
+            .set_bitmap(Some(red), bitmap);
+        stage
+            .scene
+            .sprite_mut(second)
+            .unwrap()
+            .set_bitmap(Some(green), bitmap);
+        stage
+            .scene
+            .set_sprite_viewport(first, Some(viewport))
+            .unwrap();
+        assert_eq!(stage.frame().pixel(4, 4), GREEN);
+    }
+}

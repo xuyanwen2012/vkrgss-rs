@@ -187,9 +187,10 @@ pub struct DisposedElements {
 /// disposed names nothing: reading or changing it fails with [`SceneError::Disposed`], and
 /// only disposing it again and asking whether it is disposed still work.
 ///
-/// An element is created with or without a viewport and keeps it for life: disposing the
-/// viewport disposes it, and an element created in a disposed viewport is alive and never
-/// drawn. Elements are drawn
+/// An element is created with or without a viewport and belongs to it until it is moved to
+/// another (`set_sprite_viewport` and the like, which RGSS2 has): disposing the viewport
+/// disposes it, and an element created in a disposed viewport is alive and never drawn.
+/// Elements are drawn
 /// in ascending order of z; among equal z, the element created more recently is in front, and
 /// assigning a z never changes the order among equals. A viewport takes one place in that
 /// order for all its elements, by its own z and its own creation; its elements are ordered
@@ -496,6 +497,38 @@ set_z!(SpriteId, sprite_mut, set_sprite_z);
 set_z!(ViewportId, viewport_mut, set_viewport_z);
 set_z!(WindowId, window_mut, set_window_z);
 set_z!(PlaneId, plane_mut, set_plane_z);
+
+/// Moving an element to another viewport, which RGSS2 allows.
+macro_rules! set_viewport {
+    ($id:ident, $get_mut:ident, $set_viewport:ident) => {
+        impl Scene {
+            /// Moves the element into `viewport`, or out of any for `None`. It keeps
+            /// everything else, including the place its creation gave it among elements of
+            /// equal z. A disposed viewport fails with [`SceneError::Disposed`] and moves
+            /// nothing.
+            ///
+            /// Not measured: how the original runtime orders a moved element among elements
+            /// of equal z.
+            pub fn $set_viewport(
+                &mut self,
+                id: $id,
+                viewport: Option<ViewportId>,
+            ) -> Result<(), SceneError> {
+                self.$get_mut(id)?;
+                if viewport.is_some_and(|viewport| self.viewports.get(viewport.0).is_none()) {
+                    return Err(SceneError::Disposed(ElementKind::Viewport));
+                }
+                self.$get_mut(id)?.viewport = viewport;
+                Ok(())
+            }
+        }
+    };
+}
+
+set_viewport!(SpriteId, sprite_mut, set_sprite_viewport);
+set_viewport!(WindowId, window_mut, set_window_viewport);
+set_viewport!(PlaneId, plane_mut, set_plane_viewport);
+set_viewport!(TilemapId, tilemap_mut, set_tilemap_viewport);
 
 #[cfg(test)]
 mod tests;

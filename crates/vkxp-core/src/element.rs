@@ -154,7 +154,7 @@ impl Sprite {
         }
     }
 
-    /// The viewport the sprite was created in.
+    /// The viewport the sprite belongs to: the one it was created in or moved to last.
     pub fn viewport(&self) -> Option<ViewportId> {
         self.viewport
     }
@@ -311,7 +311,7 @@ impl Window {
         }
     }
 
-    /// The viewport the window was created in.
+    /// The viewport the window belongs to: the one it was created in or moved to last.
     pub fn viewport(&self) -> Option<ViewportId> {
         self.viewport
     }
@@ -439,7 +439,7 @@ impl Plane {
         }
     }
 
-    /// The viewport the plane was created in.
+    /// The viewport the plane belongs to: the one it was created in or moved to last.
     pub fn viewport(&self) -> Option<ViewportId> {
         self.viewport
     }
@@ -507,7 +507,7 @@ impl Tilemap {
         }
     }
 
-    /// The viewport the tilemap was created in.
+    /// The viewport the tilemap belongs to: the one it was created in or moved to last.
     pub fn viewport(&self) -> Option<ViewportId> {
         self.viewport
     }

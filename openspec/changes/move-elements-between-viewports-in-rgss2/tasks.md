@@ -2,7 +2,7 @@
 
 ## 1. Core
 
-- [ ] 1.1 A sprite, a window, a plane and a tilemap can change their viewport. Verify: the scenario "Seen by the scene" of "Moving an element to another viewport" at the level of the scene; `cargo test -p vkxp-core --locked` passes.
+- [x] 1.1 A sprite, a window, a plane and a tilemap can change their viewport. Verify: the scenario "Seen by the scene" of "Moving an element to another viewport" at the level of the scene; `cargo test -p vkxp-core --locked` passes.
 
 ## 2. Classes of RGSS2
 
