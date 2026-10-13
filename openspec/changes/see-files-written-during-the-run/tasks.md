@@ -2,7 +2,7 @@
 
 ## 1. File layer
 
-- [ ] 1.1 Cached listings are checked against the directory's modification time; missing directories are not cached. Verify: the scenarios of `specs/game-files/spec.md` at the level of `GameFiles`; `cargo test -p vkxp-vfs --locked` passes.
+- [x] 1.1 Cached listings are checked against the directory's modification time; missing directories are not cached. Verify: the scenarios of `specs/game-files/spec.md` at the level of `GameFiles`; `cargo test -p vkxp-vfs --locked` passes.
 
 ## 2. Through a game
 

@@ -3,18 +3,22 @@
 use std::collections::HashMap;
 use std::io;
 use std::path::Path;
+use std::time::SystemTime;
 
 /// The entries of one directory, indexed by lower-cased name.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct Listing {
     /// Lower-cased name to the real names that fold to it, sorted.
     by_lower: HashMap<String, Vec<String>>,
+    /// The modification time of the directory, read just before its entries were.
+    modified: SystemTime,
 }
 
 impl Listing {
     /// Lists `dir`. Entries whose names are not valid Unicode are left out: no script path can
     /// name them.
     pub(crate) fn read(dir: &Path) -> io::Result<Self> {
+        let modified = modified(dir)?;
         let mut by_lower: HashMap<String, Vec<String>> = HashMap::new();
         for entry in std::fs::read_dir(dir)? {
             if let Ok(name) = entry?.file_name().into_string() {
@@ -24,7 +28,21 @@ impl Listing {
         for names in by_lower.values_mut() {
             names.sort_unstable();
         }
-        Ok(Self { by_lower })
+        Ok(Self { by_lower, modified })
+    }
+
+    /// A listing without entries, for something that cannot be listed.
+    pub(crate) fn empty() -> Self {
+        Self {
+            by_lower: HashMap::new(),
+            modified: SystemTime::UNIX_EPOCH,
+        }
+    }
+
+    /// Whether `dir`, the directory this listing was read from, still has the modification
+    /// time it had then. Adding, removing and renaming an entry all change it.
+    pub(crate) fn is_current(&self, dir: &Path) -> bool {
+        modified(dir).is_ok_and(|now| now == self.modified)
     }
 
     /// Real names that match `name` without regard to case: the exact match first if there is
@@ -37,4 +55,8 @@ impl Listing {
         let others = names.iter().filter(|real| *real != name);
         exact.chain(others).map(String::as_str).collect()
     }
+}
+
+fn modified(dir: &Path) -> io::Result<SystemTime> {
+    std::fs::metadata(dir)?.modified()
 }

@@ -80,8 +80,11 @@ fn stays_inside(root: &Path, path: &Path) -> bool {
 /// The files of one game: its encrypted archive if it was opened with one, then its own
 /// directory, then its run-time package directories.
 ///
-/// Directory listings are cached, since games do not add assets while running; see
-/// [`GameFiles::refresh`].
+/// Directory listings are cached, and a cached listing is used only while its directory still
+/// has the modification time it was read at, so a file or directory that a script makes,
+/// removes or renames is seen by the next lookup. Two changes within the resolution of the
+/// file system's time stamps could hide the second; the writers the binding knows of call
+/// [`GameFiles::refresh`], which makes them safe from that.
 #[derive(Debug)]
 pub struct GameFiles {
     /// Search roots in order: the game directory first.
@@ -218,15 +221,26 @@ impl GameFiles {
         }
     }
 
-    /// The listing of `dir`, read once. Something that cannot be listed has no entries.
+    /// The listing of `dir`, read anew unless the cached one is still current. Something that
+    /// cannot be listed has no entries and is not cached, so a directory made later is seen.
     fn listing(&self, dir: &Path) -> Arc<Listing> {
         let mut cache = self.cache.lock().unwrap_or_else(PoisonError::into_inner);
-        if let Some(listing) = cache.get(dir) {
+        if let Some(listing) = cache.get(dir)
+            && listing.is_current(dir)
+        {
             return Arc::clone(listing);
         }
-        let listing = Arc::new(Listing::read(dir).unwrap_or_default());
-        cache.insert(dir.to_owned(), Arc::clone(&listing));
-        listing
+        match Listing::read(dir) {
+            Ok(listing) => {
+                let listing = Arc::new(listing);
+                cache.insert(dir.to_owned(), Arc::clone(&listing));
+                listing
+            }
+            Err(_) => {
+                cache.remove(dir);
+                Arc::new(Listing::empty())
+            }
+        }
     }
 }
 
@@ -398,15 +412,70 @@ mod tests {
         assert_eq!(found, packaged);
     }
 
+    /// Lets the clock pass the resolution of the file system's time stamps, so that the next
+    /// change of a directory gives it a modification time of its own.
+    fn let_time_stamps_advance() {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+
+    /// Scenario "New file in a directory already looked into".
     #[test]
-    fn listings_are_cached_until_refresh() {
+    fn a_new_file_in_a_directory_already_looked_into_is_found() {
         let game = tempfile::tempdir().unwrap();
-        put(game.path(), "Graphics/old.png", b"");
+        let a = put(game.path(), "Graphics/Pictures/a.png", b"");
         let files = game_only(game.path());
-        assert!(files.resolve(FileKind::Image, "Graphics/new").is_err());
-        let new = put(game.path(), "Graphics/new.png", b"");
-        assert!(files.resolve(FileKind::Image, "Graphics/new").is_err());
-        files.refresh();
+        let found = files.resolve(FileKind::Image, "Graphics/Pictures/a");
+        assert_eq!(found.unwrap(), a);
+        let_time_stamps_advance();
+        let b = put(game.path(), "Graphics/Pictures/b.png", b"");
+        let found = files.resolve(FileKind::Image, "Graphics/Pictures/b");
+        assert_eq!(found.unwrap(), b);
+    }
+
+    /// Scenario "New directory".
+    #[test]
+    fn a_new_directory_is_found() {
+        let game = tempfile::tempdir().unwrap();
+        let files = game_only(game.path());
+        assert!(matches!(
+            files.resolve(FileKind::Image, "Save/1"),
+            Err(VfsError::NotFound { .. })
+        ));
+        let_time_stamps_advance();
+        let file = put(game.path(), "Save/1.cdat", b"");
+        let found = files.resolve(FileKind::Image, "Save/1.cdat");
+        assert_eq!(found.unwrap(), file);
+    }
+
+    /// Scenario "Removed file".
+    #[test]
+    fn a_removed_file_is_missing() {
+        let game = tempfile::tempdir().unwrap();
+        let file = put(game.path(), "Graphics/Pictures/a.png", b"");
+        let files = game_only(game.path());
+        let found = files.resolve(FileKind::Image, "Graphics/Pictures/a");
+        assert_eq!(found.unwrap(), file);
+        let_time_stamps_advance();
+        std::fs::remove_file(file).unwrap();
+        let error = files
+            .resolve(FileKind::Image, "Graphics/Pictures/a")
+            .unwrap_err();
+        assert!(
+            matches!(&error, VfsError::NotFound { path } if path == "Graphics/Pictures/a"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn a_file_renamed_away_is_missing_and_found_under_its_new_name() {
+        let game = tempfile::tempdir().unwrap();
+        let old = put(game.path(), "Graphics/old.png", b"");
+        let files = game_only(game.path());
+        assert_eq!(files.resolve(FileKind::Image, "Graphics/old").unwrap(), old);
+        let_time_stamps_advance();
+        let new = game.path().join("Graphics/new.png");
+        std::fs::rename(old, &new).unwrap();
+        assert!(files.resolve(FileKind::Image, "Graphics/old").is_err());
         assert_eq!(files.resolve(FileKind::Image, "Graphics/new").unwrap(), new);
     }
 
