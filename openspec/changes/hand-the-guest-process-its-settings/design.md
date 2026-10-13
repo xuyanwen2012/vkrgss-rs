@@ -360,6 +360,14 @@ declares `vkxp-ruby-sys` or `vkxp-text`, outside its development dependencies.
 - The change `vendor-ruby-1-9-2` is open and edits `xtask/src/deps.rs`, `Cargo.toml` and
   `AGENTS.md` too. This change adds one name to `GUEST_CRATES`, one member and one entry of
   `[workspace.dependencies]`, and does not edit `AGENTS.md`.
+- As built: the function of `role` is `record_path`; the two inputs of the level are the
+  type `Diagnostics` of `record`; what `GuestProcess::start` takes beside the runtime is
+  the type `Handed` of `process.rs`, and `guest_command` writes the record and builds the
+  command. A body that is followed by further bytes is not a record. A value of the level
+  in a record that cannot be parsed, which the program refuses before it writes one, ends
+  the guest process with its message and status 1. The manifest of `vkxp` also drops
+  `vkxp-core`, which it no longer names, and keeps `tracing-subscriber` among its
+  development dependencies only.
 
 ## Risks
 

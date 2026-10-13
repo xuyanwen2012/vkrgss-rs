@@ -19,4 +19,4 @@
 
 ## 4. Integration check
 
-- [ ] 4.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate hand-the-guest-process-its-settings --strict` passes; scenario "XP and VX as before" against the kept list; `git diff --numstat main -- crates/vkxp/tests/end_to_end.rs` reports no removed line; `git diff main -- crates/vkxp-binding crates/vkxp-proto crates/vkxp-host crates/vkxp-vfs crates/vkxp-text crates/vkxp-ruby-sys` is empty.
+- [x] 4.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate hand-the-guest-process-its-settings --strict` passes; scenario "XP and VX as before" against the kept list; `git diff --numstat main -- crates/vkxp/tests/end_to_end.rs` reports no removed line; `git diff main -- crates/vkxp-binding crates/vkxp-proto crates/vkxp-host crates/vkxp-vfs crates/vkxp-text crates/vkxp-ruby-sys` is empty.
