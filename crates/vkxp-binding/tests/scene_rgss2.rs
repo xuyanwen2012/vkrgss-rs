@@ -1,5 +1,5 @@
 //! The scene classes in a game of RGSS2: the scenarios "Moving an element to another
-//! viewport" and "Small differences of RGSS2" of `rgss-scene-classes`. A binary of its own,
+//! viewport", "Small differences of RGSS2" and "Openness" of `rgss-scene-classes`. A binary of its own,
 //! because the classes are defined once per process, as the runtime of the run has them.
 //!
 //! A snippet is one evaluation and disposes what it drew before it ends, as in `scene.rs`.
@@ -255,4 +255,86 @@ fn stretch_and_hangup_are_not_defined() {
         Script::new(),
     );
     assert_eq!(value.as_deref(), Ok("[false, true]"));
+}
+
+/// Scenario "Limits, measured on the original" of "Openness".
+#[test]
+fn openness_starts_at_255_and_is_truncated_and_clamped() {
+    assert_eq!(
+        eval_with(
+            "made << (w = Window.new)",
+            "[w.openness] + [-1, 256, 100000, -1.7, 128.9].map { |v| w.openness = v; w.openness }"
+        ),
+        "[255, 0, 255, 255, 0, 128]"
+    );
+}
+
+/// Scenario "Errors, measured on the original" of "Openness".
+#[test]
+fn openness_refuses_nil_and_a_disposed_window() {
+    let refused = eval_with("made << (w = Window.new)", "w.openness = nil");
+    assert!(refused.starts_with("TypeError: "), "{refused}");
+    for source in [
+        "d = Window.new; d.dispose; d.openness",
+        "d = Window.new; d.dispose; d.openness = 5",
+        // A disposed window raises before its argument is looked at, as every writer.
+        "d = Window.new; d.dispose; d.openness = nil",
+    ] {
+        assert_eq!(eval(source), "RGSSError: disposed window", "{source}");
+    }
+}
+
+/// A skin of 128 by 128 whose background is blue and whose frame is green, and a window of
+/// 64 by 64 at the corner of the screen with it.
+const WINDOW: &str = "made << (skin = Bitmap.new(128, 128)) << (w = Window.new); \
+     skin.fill_rect(0, 0, 64, 64, Color.new(0, 0, 255)); \
+     skin.fill_rect(64, 0, 64, 64, Color.new(0, 255, 0)); \
+     w.windowskin = skin; w.width = 64; w.height = 64";
+
+const BLUE: &str = "[0, 0, 255, 255]";
+const GREEN: &str = "[0, 255, 0, 255]";
+
+/// The window of a game of RGSS2 is the window of RGSS2: it opens by rows, 32 of 64 at an
+/// openness of 128, from row 15 on.
+#[test]
+fn a_window_opens_by_its_openness() {
+    assert_eq!(
+        eval_with(
+            WINDOW,
+            "open = [pixel(30, 5), pixel(30, 30)]; w.openness = 128; \
+             half = [pixel(30, 14), pixel(30, 15), pixel(30, 30), pixel(30, 46), pixel(30, 47)]; \
+             w.openness = 0; [open, half, pixel(30, 30)]"
+        ),
+        format!("[[{GREEN}, {BLUE}], [{BLACK}, {GREEN}, {BLUE}, {GREEN}, {BLACK}], {BLACK}]")
+    );
+}
+
+/// Scenario "Contents given while hidden, measured on the original" of `core-scene`, through
+/// the classes: the binding passes the calls on and the scene latches.
+#[test]
+fn contents_given_to_a_hidden_window_show_after_an_update() {
+    assert_eq!(
+        eval_with(
+            &format!("{WINDOW}; made << (c = solid(32, 32, 255, 0, 0))"),
+            "w.visible = false; w.contents = c; w.visible = true; hidden = pixel(20, 20); \
+             w.update; [hidden, pixel(20, 20)]"
+        ),
+        format!("[{BLUE}, {RED}]")
+    );
+}
+
+/// The skin is read when it is assigned and when the width is: pixels drawn into it later
+/// show after `width = width`. The cursor rectangle reaches the scene through its own
+/// methods as well.
+#[test]
+fn the_skin_is_read_at_the_calls_that_build_the_window() {
+    assert_eq!(
+        eval_with(
+            WINDOW,
+            "skin.fill_rect(0, 0, 128, 128, Color.new(255, 0, 0)); before = pixel(30, 30); \
+             w.cursor_rect.set(0, 0, 16, 16); cursor = pixel(20, 20); \
+             w.width = w.width; [before, cursor, pixel(30, 30), pixel(3, 3)]"
+        ),
+        format!("[{BLUE}, {RED}, {RED}, {RED}]")
+    );
 }

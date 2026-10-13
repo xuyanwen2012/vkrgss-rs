@@ -9,7 +9,7 @@
 
 ## 2. Class
 
-- [ ] 2.1 `Window#openness` and `openness=`; the window of a game of RGSS2 is the window of RGSS2; the pending list. Verify: the scenarios of `specs/rgss-scene-classes/spec.md`; `cargo test -p vkxp-binding --locked` passes.
+- [x] 2.1 `Window#openness` and `openness=`; the window of a game of RGSS2 is the window of RGSS2; the pending list. Verify: the scenarios of `specs/rgss-scene-classes/spec.md`; `cargo test -p vkxp-binding --locked` passes.
 
 ## 3. Whole scenes
 

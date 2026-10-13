@@ -3,10 +3,15 @@
 //! See [`element`] for what the scene classes share. A window keeps the `Bitmap` objects
 //! given as its window skin and its contents, and its cursor rectangle is an object of its
 //! own.
+//!
+//! In a game of RGSS2 the window is the window of RGSS2 of the scene, which is drawn by
+//! other rules and latches part of what it shows at certain calls. The binding does not
+//! imitate that: `update` and every assignment the scene has a call for are passed to
+//! [`vkxp_core::Window::call`], in both runtimes.
 
 use std::ffi::CStr;
 
-use vkxp_core::WindowId;
+use vkxp_core::{Scene, SceneError, ViewportId, WindowCall, WindowId};
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{HostResult, Raised, Ruby};
 use vkxp_vfs::Runtime;
@@ -22,31 +27,51 @@ const CONTENTS: &CStr = c"contents";
 /// The instance variable that holds the window's own `Rect` object.
 const CURSOR_RECT: &CStr = c"cursor_rect";
 
-/// `initialize(viewport = nil)`.
-fn initialize(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+/// Creates the window of `recv` with `create` and its cursor rectangle.
+fn create(
+    ruby: &Ruby,
+    recv: VALUE,
+    args: &[VALUE],
+    create: fn(&mut Scene, Option<ViewportId>) -> Result<WindowId, SceneError>,
+) -> HostResult {
     let viewport = element::viewport_arg(ruby, args)?;
-    let id = element::create(ruby, recv, args.first(), |scene| {
-        scene.create_window(viewport)
-    })?;
+    let id = element::create(ruby, recv, args.first(), |scene| create(scene, viewport))?;
     let cursor_rect = element::operate(ruby, |guest| Ok(guest.scene.window(id)?.cursor_rect))?;
     let cursor_rect = rect_of(ruby, cursor_rect, Owner::WindowCursorRect(id))?;
     rb::ivar_set(ruby, recv, CURSOR_RECT, cursor_rect)?;
     Ok(recv)
 }
 
-/// `initialize(viewport = nil)` of RGSS2: the window starts with a contents bitmap of 1 by
-/// 1, an ordinary bitmap that outlives the window.
+/// `initialize(viewport = nil)`.
+fn initialize(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    create(ruby, recv, args, Scene::create_window)
+}
+
+/// `initialize(viewport = nil)` of RGSS2: the window is a window of RGSS2 and starts with a
+/// contents bitmap of 1 by 1, an ordinary bitmap that outlives the window.
 fn initialize_rgss2(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
-    initialize(ruby, recv, args)?;
+    create(ruby, recv, args, Scene::create_window_rgss2)?;
     let contents = bitmap::new_blank(ruby, 1, 1)?;
     set_contents(ruby, recv, &[contents])?;
     Ok(recv)
 }
 
+/// Defines the writer `$name` of a property that the window takes as the call `$call`: in
+/// RGSS2 an assignment can latch what the window shows, which the scene sees to.
+macro_rules! called {
+    ($name:ident, $call:ident: $type:ty) => {
+        writer!($name, WindowId, |guest, id, value: $type| guest
+            .scene
+            .window_mut(id)?
+            .call(&mut guest.bitmaps, WindowCall::$call(value)));
+    };
+}
+
 fn update(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
     let id = element::id::<WindowId>(ruby, recv)?;
     element::operate(ruby, |guest| {
-        guest.scene.window_mut(id)?.update();
+        let window = guest.scene.window_mut(id)?;
+        window.call(&mut guest.bitmaps, WindowCall::Update);
         Ok(())
     })?;
     Ok(ffi::Qnil)
@@ -59,7 +84,8 @@ fn set_windowskin(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     let id = element::live::<WindowId>(ruby, recv)?;
     let bitmap = element::bitmap_ref(ruby, args[0])?;
     element::operate(ruby, |guest| {
-        guest.scene.window_mut(id)?.windowskin = bitmap;
+        let window = guest.scene.window_mut(id)?;
+        window.call(&mut guest.bitmaps, WindowCall::Windowskin(bitmap));
         Ok(())
     })?;
     rb::ivar_set(ruby, recv, WINDOWSKIN, args[0])?;
@@ -73,7 +99,8 @@ fn set_contents(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     let id = element::live::<WindowId>(ruby, recv)?;
     let bitmap = element::bitmap_ref(ruby, args[0])?;
     element::operate(ruby, |guest| {
-        guest.scene.window_mut(id)?.contents = bitmap;
+        let window = guest.scene.window_mut(id)?;
+        window.call(&mut guest.bitmaps, WindowCall::Contents(bitmap));
         Ok(())
     })?;
     rb::ivar_set(ruby, recv, CONTENTS, args[0])?;
@@ -90,22 +117,22 @@ object!(
 );
 field!(stretch, set_stretch, WindowId, window, window_mut, stretch: bool);
 reader!(active, WindowId, |guest, id| guest.scene.window(id)?.active);
-writer!(set_active, WindowId, |guest, id, value: bool| guest
-    .scene
-    .window_mut(id)?
-    .set_active(value));
+called!(set_active, Active: bool);
 field!(visible, set_visible, WindowId, window, window_mut, visible: bool);
 reader!(pause, WindowId, |guest, id| guest.scene.window(id)?.pause);
-writer!(set_pause, WindowId, |guest, id, value: bool| guest
-    .scene
-    .window_mut(id)?
-    .set_pause(value));
-field!(x, set_x, WindowId, window, window_mut, x: i32);
-field!(y, set_y, WindowId, window, window_mut, y: i32);
-field!(width, set_width, WindowId, window, window_mut, width: i32);
-field!(height, set_height, WindowId, window, window_mut, height: i32);
-field!(ox, set_ox, WindowId, window, window_mut, ox: i32);
-field!(oy, set_oy, WindowId, window, window_mut, oy: i32);
+called!(set_pause, Pause: bool);
+reader!(x, WindowId, |guest, id| guest.scene.window(id)?.x);
+called!(set_x, X: i32);
+reader!(y, WindowId, |guest, id| guest.scene.window(id)?.y);
+called!(set_y, Y: i32);
+reader!(width, WindowId, |guest, id| guest.scene.window(id)?.width);
+called!(set_width, Width: i32);
+reader!(height, WindowId, |guest, id| guest.scene.window(id)?.height);
+called!(set_height, Height: i32);
+reader!(ox, WindowId, |guest, id| guest.scene.window(id)?.ox);
+called!(set_ox, Ox: i32);
+reader!(oy, WindowId, |guest, id| guest.scene.window(id)?.oy);
+called!(set_oy, Oy: i32);
 reader!(z, WindowId, |guest, id| guest.scene.window(id)?.z());
 writer!(set_z, WindowId, |guest, id, z: i32| guest
     .scene
@@ -127,12 +154,14 @@ writer!(set_back_opacity, WindowId, |guest, id, opacity: i32| guest
 reader!(contents_opacity, WindowId, |guest, id| i32::from(
     guest.scene.window(id)?.contents_opacity()
 ));
-writer!(set_contents_opacity, WindowId, |guest, id, opacity: i32| {
-    guest.scene.window_mut(id)?.set_contents_opacity(opacity)
-});
+called!(set_contents_opacity, ContentsOpacity: i32);
+reader!(openness, WindowId, |guest, id| i32::from(
+    guest.scene.window(id)?.openness()
+));
+called!(set_openness, Openness: i32);
 
-/// Defines `Window` as `runtime` has it: in RGSS2 with `viewport=`, a contents bitmap
-/// from the start and no `stretch`.
+/// Defines `Window` as `runtime` has it: in RGSS2 the window of RGSS2, with `viewport=`,
+/// `openness`, a contents bitmap from the start and no `stretch`.
 pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
     let class = element::define_class::<WindowId>(ruby, c"Window")?;
     element::define_in_viewport::<WindowId>(ruby, class, runtime)?;
@@ -142,6 +171,8 @@ pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
         rb::method(ruby, class, c"stretch=", 1, set_stretch)?;
     } else {
         rb::method(ruby, class, c"initialize", -1, initialize_rgss2)?;
+        rb::method(ruby, class, c"openness", 0, openness)?;
+        rb::method(ruby, class, c"openness=", 1, set_openness)?;
     }
     rb::method(ruby, class, c"update", 0, update)?;
     rb::method(ruby, class, c"windowskin", 0, windowskin)?;

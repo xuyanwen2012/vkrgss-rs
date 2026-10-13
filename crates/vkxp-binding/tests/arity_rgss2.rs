@@ -42,8 +42,6 @@ const PENDING: &[(&str, &str)] = &[
     ("Tilemap", "passages="),
     ("Tilemap::BitmapArray", "[]"),
     ("Tilemap::BitmapArray", "[]="),
-    ("Window", "openness"),
-    ("Window", "openness="),
 ];
 
 /// The methods RGSS2 lacks and vkxp still defines in a game of RGSS2, until the tilemap of

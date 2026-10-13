@@ -134,3 +134,7 @@ than 64; text.
   sprite of equal z decides a pixel, and scenes with a tone or colour of a viewport. A scene
   is left out by the first rule when the model draws another picture with the creation
   order alone among equal z.
+- Outside the scope named for the binding, `crates/vkxp-binding/src/wrap.rs`: the owner of a
+  value object now gets the bitmap arena with the scene (`Property::store`), a change of a
+  few lines. Rule 9 needs it: a change of `cursor_rect` through the methods of its `Rect`
+  is a call on the window like an assignment, and may build the cursor bitmap.

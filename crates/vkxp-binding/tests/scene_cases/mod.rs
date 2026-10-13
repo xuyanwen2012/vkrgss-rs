@@ -558,6 +558,11 @@ pub(crate) const WINDOW: &[Case] = &[
     ),
     raises("wrong argument", "Window.new(:viewport)", "TypeError"),
     value(
+        "no openness in RGSS1",
+        "w = Window.new; r = [w.respond_to?(:openness), w.respond_to?(:openness=)]; w.dispose; r",
+        "[false, false]",
+    ),
+    value(
         "flags, positions, sizes and opacities",
         "w = Window.new; w.stretch = false; w.active = nil; w.visible = false; w.pause = 1; \
          w.x = 1; w.y = 2; w.width = 3; w.height = 4; w.z = 5; w.ox = 6; w.oy = 7; \

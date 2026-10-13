@@ -11,7 +11,9 @@
 use std::ffi::{CStr, c_void};
 use std::ptr::NonNull;
 
-use vkxp_core::{Color, PlaneId, Rect, Scene, SpriteId, Tone, ViewportId, WindowId};
+use vkxp_core::{
+    Bitmaps, Color, PlaneId, Rect, Scene, SpriteId, Tone, ViewportId, WindowCall, WindowId,
+};
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{Raise, Raised, Ruby};
 
@@ -147,12 +149,13 @@ pub(crate) enum Owner {
 /// A value that can be a property of a scene element.
 pub(crate) trait Property: Copy {
     /// Makes this the value of the property `owner` names. A disposed element, and a
-    /// property of another type, are left alone.
-    fn store(self, owner: Owner, scene: &mut Scene);
+    /// property of another type, are left alone. `bitmaps` is for the property whose
+    /// assignment draws: the cursor rectangle of a window of RGSS2.
+    fn store(self, owner: Owner, scene: &mut Scene, bitmaps: &mut Bitmaps);
 }
 
 impl Property for Color {
-    fn store(self, owner: Owner, scene: &mut Scene) {
+    fn store(self, owner: Owner, scene: &mut Scene, _bitmaps: &mut Bitmaps) {
         match owner {
             Owner::SpriteColor(id) => {
                 let _ = scene.sprite_mut(id).map(|sprite| sprite.color = self);
@@ -169,7 +172,7 @@ impl Property for Color {
 }
 
 impl Property for Tone {
-    fn store(self, owner: Owner, scene: &mut Scene) {
+    fn store(self, owner: Owner, scene: &mut Scene, _bitmaps: &mut Bitmaps) {
         match owner {
             Owner::SpriteTone(id) => {
                 let _ = scene.sprite_mut(id).map(|sprite| sprite.tone = self);
@@ -186,7 +189,7 @@ impl Property for Tone {
 }
 
 impl Property for Rect {
-    fn store(self, owner: Owner, scene: &mut Scene) {
+    fn store(self, owner: Owner, scene: &mut Scene, bitmaps: &mut Bitmaps) {
         match owner {
             Owner::SpriteSrcRect(id) => {
                 let _ = scene.sprite_mut(id).map(|sprite| sprite.src_rect = self);
@@ -195,7 +198,9 @@ impl Property for Rect {
                 let _ = scene.viewport_mut(id).map(|viewport| viewport.rect = self);
             }
             Owner::WindowCursorRect(id) => {
-                let _ = scene.window_mut(id).map(|window| window.cursor_rect = self);
+                let _ = scene
+                    .window_mut(id)
+                    .map(|window| window.call(bitmaps, WindowCall::CursorRect(self)));
             }
             _ => {}
         }
@@ -236,7 +241,7 @@ impl<T: Property> Owned<T> {
     pub(crate) fn set(&mut self, value: T) {
         self.value = value;
         if let Some(owner) = self.owner {
-            Guest::with(|guest| value.store(owner, &mut guest.scene));
+            Guest::with(|guest| value.store(owner, &mut guest.scene, &mut guest.bitmaps));
         }
     }
 }
@@ -269,7 +274,8 @@ mod tests {
         let rect = testing::run(|_ruby| {
             Guest::with(|guest| {
                 let sprite = guest.scene.create_sprite(None).unwrap();
-                Rect::new(1, 2, 3, 4).store(Owner::SpriteColor(sprite), &mut guest.scene);
+                let color = Owner::SpriteColor(sprite);
+                Rect::new(1, 2, 3, 4).store(color, &mut guest.scene, &mut guest.bitmaps);
                 let rect = guest.scene.sprite(sprite).unwrap().src_rect;
                 guest.scene.dispose_sprite(sprite);
                 rect
