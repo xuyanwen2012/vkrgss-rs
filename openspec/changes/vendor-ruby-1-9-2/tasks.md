@@ -36,7 +36,7 @@
 
 ## 7. Documentation
 
-- [ ] 7.1 `AGENTS.md` (the crates that may hold `unsafe`), `README.md` (the table of crates), `docs/building.md` (the second interpreter, its target), `docs/development.md` (the stressed selection in the tests, the step `suites-1.9.2`). Verify: each names `vkxp-ruby192-sys`; none says that a game of VX Ace runs; `cargo xtask stress` is described with the new step and without a need for sanitizers in it.
+- [x] 7.1 `AGENTS.md` (the crates that may hold `unsafe`), `README.md` (the table of crates), `docs/building.md` (the second interpreter, its target), `docs/development.md` (the stressed selection in the tests, the step `suites-1.9.2`). Verify: each names `vkxp-ruby192-sys`; none says that a game of VX Ace runs; `cargo xtask stress` is described with the new step and without a need for sanitizers in it.
 
 ## 8. Integration check
 

@@ -34,6 +34,24 @@ that builds and then computes wrong results, the tests of `vkxp-ruby-sys` compil
 executable from the same objects and run Ruby's own test suites against it, which is why the
 tests need the C compiler too.
 
+A second interpreter is built beside it: Ruby 1.9.2-p0, the release that the original runtime
+of RPG Maker VX Ace embeds, from `third_party/ruby-1.9.2/` by the build script of
+`vkxp-ruby192-sys`, in the same way: a fixed file list, the flags `-std=gnu89 -fwrapv
+-fno-strict-aliasing`, a checked-in `ruby/config.h`, the zlib of `libz-sys`, and nothing
+generated at build time. It is linked with the encodings the original runtime has
+(UTF-16LE, Shift_JIS with Windows-31J, ISO-8859-1) and no other. Its tests compile a Ruby
+executable too and run the release's `bootstraptest` and a selection of its `test/ruby`,
+once plainly and once with `GC.stress = true`; `crates/vkxp-ruby192-sys/tests/upstream.allow`
+names what is left out, with the reasons. No executable links this interpreter yet, and no
+package may link both: they define the same symbols, which a dependency rule checks.
+
+`vkxp-ruby192-sys` is for the target `x86_64-unknown-linux-gnu` alone. For any other target,
+`aarch64-unknown-linux-gnu` included, its build script compiles nothing and prints a warning
+that names the target, and the crate and its tests are empty; the rest of the workspace
+builds as before. Unlike `vkxp-ruby-sys` it is not built on aarch64 with the header of
+x86_64: an interpreter with native threads and copied Fiber stacks is not offered on a
+guess.
+
 The tests of `vkxp-vk` render every message stream with both the CPU reference compositor and
 the Vulkan backend and require byte-identical frames. By default they run on the CPU device
 (llvmpipe), so the result does not depend on the hardware in the machine, and they fail rather

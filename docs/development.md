@@ -75,20 +75,38 @@ so a game can be run under it, very slowly: `VKXP_GC_STRESS=1 vkxp <game directo
 VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask stress
 ```
 
-runs three steps under the variable, goes on after one that fails and names all that failed:
+runs four steps, the first three under the variable, goes on after one that fails and names
+all that failed:
 
 | Step | What runs | `n` |
 |---|---|---|
 | `suites` | the upstream Ruby suites in the sanitized build, where the use of the buffer of a collected string is a report of AddressSanitizer, and a test that such a report appears for code that keeps only the buffer pointer of a fresh string (`cargo test -p vkxp-ruby-sys --locked --test sanitized -- --ignored under_collector_stress`) | 32 |
 | `binding` | `cargo test -p vkxp-binding --locked --no-fail-fast` | 1 |
 | `guest` | the tests of the executable that start a guest, `cargo test -p vkxp --locked --test end_to_end` | 1 |
+| `suites-1.9.2` | the files of `test/ruby` of Ruby 1.9.2 that are slow under `GC.stress = true` (`cargo test -p vkxp-ruby192-sys --locked --test upstream_stress -- --ignored`) | every allocation |
 
-The values of `n` are constants in `xtask/src/stress.rs`. The command needs what the
-sanitized run needs and takes about half an hour on the development machine. A test
+The values of `n` are constants in `xtask/src/stress.rs`. The first step needs what the
+sanitized run needs; the last one needs no sanitizer and runs the ordinary build. The
+command takes about three quarters of an hour on the development machine. A test
 that is left out is named in `xtask/src/stress.skip` with the reason. A lost value is a
 defect also without the variable; it is fixed with a guard (`RB_GC_GUARD` in the vendored
 tree, recorded as a patch, or a root in the binding). The reports of the first step are left
 in `target/tmp/sanitized/stress/reports/`.
+
+The second interpreter, Ruby 1.9.2 of `vkxp-ruby192-sys`, has the stress of the release
+itself, `GC.stress = true`, which collects at every allocation; `VKXP_GC_STRESS` set to a
+number of 1 or more switches it on in an interpreter that the crate starts, and there is no
+"every n-th" form. Its stressed selection of `test/ruby` is not a check outside the gate:
+the files that take under a minute run with the workspace tests
+(`cargo test -p vkxp-ruby192-sys --test upstream_stress`, about three minutes), together
+with a copy of the process made by `fork` between two frames of a script with Fibers and a
+host function that is suspended with its Fiber, both under stress. Only the seven slow files
+(`test_array.rb`, `test_assignment.rb`, `test_fiber.rb`, `test_literal.rb`,
+`test_process.rb`, `test_sprintf_comb.rb`, `test_system.rb`) are left to the step
+`suites-1.9.2` above. `test_integer_comb.rb`, `test_m17n_comb.rb` and `test_yield.rb` did
+not finish in 14 minutes under stress when the release was studied and are named in
+`xtask/src/stress.skip`. A value lost in this interpreter is fixed with a guard recorded in
+[third_party/ruby-1.9.2/PATCHES.md](../third_party/ruby-1.9.2/PATCHES.md).
 
 **The fuzz targets.** Three parts of the vendored C code read what comes with a game:
 `Marshal.load` reads save files and `.rxdata` files, the parser reads the scripts, and the

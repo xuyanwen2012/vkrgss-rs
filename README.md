@@ -121,6 +121,7 @@ draws a plane of a tilemap.
 | `vkxp-text` | Font lookup, substitution table, glyph rasterisation | guest |
 | `vkxp-vfs` | Path resolution, RTP lookup, encrypted archive | guest |
 | `vkxp-ruby-sys` | Build of the embedded Ruby and raw FFI | guest |
+| `vkxp-ruby192-sys` | Build of the embedded Ruby 1.9.2 for RGSS3 and raw FFI; no executable links it yet | guest |
 | `vkxp-binding` | RGSS Ruby API on top of core | guest |
 | `vkxp-compose-ref` | CPU reference compositor | host and tests |
 | `vkxp-vk` | Vulkan backend | host |
