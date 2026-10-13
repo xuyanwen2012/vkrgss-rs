@@ -212,6 +212,7 @@
 //! - `$KCODE` is `"UTF8"`, the load path is empty, `$DEBUG` and `$BTEST` follow the
 //!   [`RunConfig`]; in a game of RGSS2 `$TEST` and `$BTEST` do.
 //! - `Reset` and `Hangup` are subclasses of `Exception`, so a bare `rescue` lets them pass.
+//!   `Hangup` is defined in a game of RGSS1 only (`src/prelude_rgss1.rb`).
 //! - `save_data` writes a `Marshal` dump through Ruby's `File`. `load_data` is a host
 //!   function that finds the file through the game's files, without regard to letter case.
 //! - `print` and `p` write their text to `$stderr` and show it as a modal message, and return

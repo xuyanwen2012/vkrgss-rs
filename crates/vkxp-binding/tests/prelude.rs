@@ -32,6 +32,8 @@ fn reset_and_hangup_are_exceptions_outside_standard_error() {
         eval("[Hangup.ancestors.include?(Exception), Hangup.ancestors.include?(StandardError)]"),
         "[true, false]"
     );
+    // The scenario "XP" of "Small differences of RGSS2".
+    assert_eq!(eval("Object.const_defined?(:Hangup)"), "true");
 }
 
 #[test]

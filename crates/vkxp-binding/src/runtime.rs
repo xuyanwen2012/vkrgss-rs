@@ -33,9 +33,12 @@ use crate::panel::Panel;
 use crate::stats::{self, Part, Span};
 use crate::{audio, graphics, input, kernel, rb, win32api};
 
-/// The Ruby part of the preparation: globals, `Reset` and `Hangup`, `save_data`, `Win32API`,
-/// and `require` and `load` limited to the game directory.
+/// The Ruby part of the preparation: globals, `Reset`, `save_data`, `Win32API`, and
+/// `require` and `load` limited to the game directory.
 const PRELUDE: &str = include_str!("prelude.rb");
+
+/// What the prelude has in RGSS1 only: `Hangup`.
+const PRELUDE_RGSS1: &str = include_str!("prelude_rgss1.rb");
 
 /// The Ruby definitions that turn the functions that start processes off.
 const PROCESS_FUNCTIONS_OFF: &str = include_str!("prelude_process_off.rb");
@@ -440,6 +443,9 @@ pub(crate) fn prepare(ruby: &Ruby) -> Result<(), RubyError> {
         )
     });
     ruby.eval_protected(PRELUDE, PRELUDE_NAME, 1)?;
+    if runtime == Runtime::Rgss1 {
+        ruby.eval_protected(PRELUDE_RGSS1, PRELUDE_NAME, 1)?;
+    }
     if !process_functions {
         ruby.eval_protected(PROCESS_FUNCTIONS_OFF, PRELUDE_NAME, 1)?;
     }
@@ -792,7 +798,7 @@ pub(crate) fn play(ruby: &Ruby, link: GuestEnd) -> Result<(), RunError> {
 /// 1. Installs the guest of `config` ([`Guest::install`]) and sends the host the window
 ///    title of the game's configuration file.
 /// 2. Prepares the interpreter with the prelude of this crate: `$KCODE`, an empty load path,
-///    `$DEBUG` and `$BTEST`, `Reset` and `Hangup`, `save_data`, `print` and `p`, `Win32API`,
+///    `$DEBUG` and `$BTEST`, `Reset` and in RGSS1 `Hangup`, `save_data`, `print` and `p`, `Win32API`,
 ///    the process functions and `require` and `load`.
 /// 3. Reads the preload scripts, seeds the random number generator when the configuration
 ///    has a seed, and evaluates the built-in scripts file under the name `(builtin)`.

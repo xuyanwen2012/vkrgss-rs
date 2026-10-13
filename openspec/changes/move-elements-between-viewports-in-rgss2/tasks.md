@@ -6,8 +6,8 @@
 
 ## 2. Classes of RGSS2
 
-- [ ] 2.1 The three writers and `Plane#viewport(v)`. Verify: the scenarios of "Moving an element to another viewport"; `cargo test -p vkxp-binding --locked` passes.
-- [ ] 2.2 `Sprite#width` and `height`, `Plane#visible`, the contents of a new window, no `Window#stretch`, no `Hangup`. Verify: the scenarios of "Small differences of RGSS2"; the same command passes.
+- [x] 2.1 The three writers and `Plane#viewport(v)`. Verify: the scenarios of "Moving an element to another viewport"; `cargo test -p vkxp-binding --locked` passes.
+- [x] 2.2 `Sprite#width` and `height`, `Plane#visible`, the contents of a new window, no `Window#stretch`, no `Hangup`. Verify: the scenarios of "Small differences of RGSS2"; the same command passes.
 
 ## 3. Method list
 

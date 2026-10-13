@@ -17,6 +17,8 @@
 //!
 //! `rtp` is the one run-time package directory. Text comes from [`CellBackend`], which knows
 //! the families of [`FONT_FAMILIES`]; the default font name is the first of them.
+//!
+//! The game is one of RGSS1 unless the test binary calls [`start_as`] before anything else.
 
 use std::fs;
 use std::path::{Path, PathBuf};

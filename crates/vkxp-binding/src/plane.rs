@@ -7,6 +7,7 @@ use std::ffi::CStr;
 use vkxp_core::PlaneId;
 use vkxp_ruby_sys::ffi::VALUE;
 use vkxp_ruby_sys::{HostResult, Raised, Ruby};
+use vkxp_vfs::Runtime;
 
 use crate::color::{color_arg, color_of, color_set, tone_arg, tone_of, tone_set};
 use crate::element::{self, field, kept, object, reader, writer};
@@ -53,6 +54,14 @@ fn set_bitmap(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
 object!(color, set_color, PlaneId, COLOR, color_arg, color_set);
 object!(tone, set_tone, PlaneId, TONE, tone_arg, tone_set);
 field!(visible, set_visible, PlaneId, plane, plane_mut, visible: bool);
+
+/// `visible` of RGSS2, which reads `true` whatever was set, as measured on the original
+/// runtime. The writer hides the plane all the same.
+fn visible_rgss2(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
+    element::live::<PlaneId>(ruby, recv)?;
+    Ok(rb::boolean(true))
+}
+
 field!(ox, set_ox, PlaneId, plane, plane_mut, ox: i32);
 field!(oy, set_oy, PlaneId, plane, plane_mut, oy: i32);
 field!(zoom_x, set_zoom_x, PlaneId, plane, plane_mut, zoom_x: f64);
@@ -70,14 +79,19 @@ writer!(set_opacity, PlaneId, |guest, id, opacity: i32| guest
     .plane_mut(id)?
     .set_opacity(opacity));
 
-/// Defines `Plane`.
-pub(crate) fn define(ruby: &Ruby) -> Result<VALUE, Raised> {
+/// Defines `Plane` as `runtime` has it: in RGSS2 `viewport` takes the viewport to move to
+/// and `visible` reads `true` always.
+pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
     let class = element::define_class::<PlaneId>(ruby, c"Plane")?;
-    element::define_in_viewport::<PlaneId>(ruby, class)?;
+    element::define_plane_viewport(ruby, class, runtime)?;
     rb::method(ruby, class, c"initialize", -1, initialize)?;
     rb::method(ruby, class, c"bitmap", 0, bitmap)?;
     rb::method(ruby, class, c"bitmap=", 1, set_bitmap)?;
-    rb::method(ruby, class, c"visible", 0, visible)?;
+    if runtime == Runtime::Rgss1 {
+        rb::method(ruby, class, c"visible", 0, visible)?;
+    } else {
+        rb::method(ruby, class, c"visible", 0, visible_rgss2)?;
+    }
     rb::method(ruby, class, c"visible=", 1, set_visible)?;
     rb::method(ruby, class, c"z", 0, z)?;
     rb::method(ruby, class, c"z=", 1, set_z)?;

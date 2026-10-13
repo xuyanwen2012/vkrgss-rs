@@ -102,7 +102,7 @@ impl Guest {
             table: table::define(ruby)?,
             font: font::define(ruby)?,
             bitmap: bitmap::define(ruby)?,
-            scene: element::define(ruby)?,
+            scene: element::define(ruby, config.run.runtime)?,
         };
         CLASSES.set(Some(classes));
         enter(Guest::new(config));

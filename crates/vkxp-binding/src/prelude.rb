@@ -8,10 +8,6 @@ $:.clear
 class Reset < Exception
 end
 
-# Raised by the original runtime's hang watchdog, which vkxp does not have.
-class Hangup < Exception
-end
-
 def save_data(object, filename)
   File.open(filename, "wb") { |file| Marshal.dump(object, file) }
 end

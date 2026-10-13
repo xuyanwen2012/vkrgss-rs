@@ -9,6 +9,7 @@ use std::ffi::CStr;
 use vkxp_core::SpriteId;
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{HostResult, Raised, Ruby};
+use vkxp_vfs::Runtime;
 
 use crate::color::{color_arg, color_of, color_set, tone_arg, tone_of, tone_set};
 use crate::element::{self, field, kept_after_dispose, object, reader, writer};
@@ -112,11 +113,23 @@ writer!(set_opacity, SpriteId, |guest, id, opacity: i32| guest
     .scene
     .sprite_mut(id)?
     .set_opacity(opacity));
+// `width` and `height` of RGSS2: those of the source rectangle, whatever they are.
+reader!(width, SpriteId, |guest, id| guest
+    .scene
+    .sprite(id)?
+    .src_rect
+    .width);
+reader!(height, SpriteId, |guest, id| guest
+    .scene
+    .sprite(id)?
+    .src_rect
+    .height);
 
-/// Defines `Sprite`.
-pub(crate) fn define(ruby: &Ruby) -> Result<VALUE, Raised> {
+/// Defines `Sprite` as `runtime` has it: with `viewport=`, `width` and `height` in
+/// RGSS2.
+pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
     let class = element::define_class::<SpriteId>(ruby, c"Sprite")?;
-    element::define_in_viewport::<SpriteId>(ruby, class)?;
+    element::define_in_viewport::<SpriteId>(ruby, class, runtime)?;
     rb::method(ruby, class, c"initialize", -1, initialize)?;
     rb::method(ruby, class, c"flash", 2, flash)?;
     rb::method(ruby, class, c"update", 0, update)?;
@@ -154,5 +167,9 @@ pub(crate) fn define(ruby: &Ruby) -> Result<VALUE, Raised> {
     rb::method(ruby, class, c"color=", 1, set_color)?;
     rb::method(ruby, class, c"tone", 0, tone)?;
     rb::method(ruby, class, c"tone=", 1, set_tone)?;
+    if runtime != Runtime::Rgss1 {
+        rb::method(ruby, class, c"width", 0, width)?;
+        rb::method(ruby, class, c"height", 0, height)?;
+    }
     Ok(class)
 }

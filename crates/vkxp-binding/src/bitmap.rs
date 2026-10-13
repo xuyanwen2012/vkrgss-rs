@@ -102,6 +102,15 @@ pub(crate) fn bitmap_new(ruby: &Ruby, id: BitmapId) -> HostResult {
     made
 }
 
+/// A new `Bitmap` object of `width` by `height` transparent pixels, as `Bitmap.new` makes
+/// one.
+pub(crate) fn new_blank(ruby: &Ruby, width: u32, height: u32) -> HostResult {
+    let id = operate(ruby, |guest| {
+        Ok(guest.bitmaps.create(width, height, &guest.font_defaults)?)
+    })?;
+    bitmap_new(ruby, id)
+}
+
 /// An opacity argument, limited to 0 to 255.
 fn opacity_arg(ruby: &Ruby, value: Option<&VALUE>) -> Result<u8, Raise> {
     match value {

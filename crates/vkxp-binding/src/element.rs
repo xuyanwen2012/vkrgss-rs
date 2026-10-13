@@ -19,6 +19,10 @@
 //! collector frees an element object that was not disposed, its handle goes to a queue, as
 //! the bitmap of a collected `Bitmap` does, and the element is disposed the next time the
 //! guest is entered.
+//!
+//! The classes are defined as the runtime of the run has them. In RGSS2 an element can be
+//! moved to another viewport: `Sprite`, `Window` and `Tilemap` have `viewport=`, and
+//! `Plane#viewport` takes the viewport and has no reader.
 
 use std::cell::RefCell;
 
@@ -27,6 +31,7 @@ use vkxp_core::{ViewportId, WindowId};
 use vkxp_proto::BitmapId;
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{HostResult, Raise, Raised, Ruby};
+use vkxp_vfs::Runtime;
 
 use crate::bitmap::bitmap_arg;
 use crate::color::color_arg;
@@ -50,14 +55,14 @@ pub(crate) struct SceneClasses {
     pub(crate) autotiles: VALUE,
 }
 
-/// Defines the scene classes.
-pub(crate) fn define(ruby: &Ruby) -> Result<SceneClasses, Raised> {
+/// Defines the scene classes as `runtime` has them.
+pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<SceneClasses, Raised> {
     Ok(SceneClasses {
-        sprite: sprite::define(ruby)?,
+        sprite: sprite::define(ruby, runtime)?,
         viewport: viewport::define(ruby)?,
-        window: window::define(ruby)?,
-        plane: plane::define(ruby)?,
-        tilemap: tilemap::define(ruby)?,
+        window: window::define(ruby, runtime)?,
+        plane: plane::define(ruby, runtime)?,
+        tilemap: tilemap::define(ruby, runtime)?,
         autotiles: tilemap::define_autotiles(ruby)?,
     })
 }
@@ -150,7 +155,32 @@ kind!(
     |id, guest| guest.scene.dispose_tilemap(id, &mut guest.bitmaps)
 );
 
-/// Disposes a viewport, and with it the elements that were created in it.
+/// The handle of a kind of element that belongs to a viewport or to none.
+pub(crate) trait InViewport: Kind {
+    /// Moves the element into `viewport`, or out of any.
+    fn move_to(self, scene: &mut Scene, viewport: Option<ViewportId>) -> Result<(), SceneError>;
+}
+
+macro_rules! in_viewport {
+    ($id:ident, $set_viewport:ident) => {
+        impl InViewport for $id {
+            fn move_to(
+                self,
+                scene: &mut Scene,
+                viewport: Option<ViewportId>,
+            ) -> Result<(), SceneError> {
+                scene.$set_viewport(self, viewport)
+            }
+        }
+    };
+}
+
+in_viewport!(SpriteId, set_sprite_viewport);
+in_viewport!(WindowId, set_window_viewport);
+in_viewport!(PlaneId, set_plane_viewport);
+in_viewport!(TilemapId, set_tilemap_viewport);
+
+/// Disposes a viewport, and with it the elements that are in it.
 fn dispose_viewport(id: ViewportId, guest: &mut Guest) {
     let _disposed = guest.scene.dispose_viewport(id, &mut guest.bitmaps);
     #[cfg(feature = "testing")]
@@ -330,10 +360,34 @@ fn initialize_copy(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
     Err(refuse(ruby, recv, "clone"))
 }
 
-/// `viewport`: the `Viewport` object the element was created in, or `nil`.
+/// `viewport`: the `Viewport` object the element was created in or given last, or `nil`.
 fn viewport_of<K: Kind>(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
     live::<K>(ruby, recv)?;
     Ok(rb::ivar_get(ruby, recv, VIEWPORT)?)
+}
+
+/// `viewport = viewport_or_nil` of RGSS2, and `Plane#viewport(viewport_or_nil)`: moves the
+/// element and keeps the object. Another object raises `TypeError` in the words of the
+/// original runtime.
+///
+/// A disposed viewport raises `RGSSError`, where the original runtime ends with a page
+/// fault.
+pub(crate) fn set_viewport<K: InViewport>(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let id = live::<K>(ruby, recv)?;
+    let viewport = if ffi::nil_p(args[0]) {
+        None
+    } else {
+        let data = wrap::find::<Element<ViewportId>>(ruby, args[0]).ok_or_else(|| {
+            rb::wrong_type(ruby, args[0], |class| {
+                format!("can't convert {class} into Viewport")
+            })
+        })?;
+        let viewport = data.get().id;
+        Some(viewport.ok_or_else(|| disposed_error::<ViewportId>(ruby))?)
+    };
+    operate(ruby, |guest| id.move_to(&mut guest.scene, viewport))?;
+    rb::ivar_set(ruby, recv, VIEWPORT, args[0])?;
+    Ok(args[0])
 }
 
 /// Defines the top-level class `name` of the elements of kind `K` with the methods every
@@ -347,10 +401,35 @@ pub(crate) fn define_class<K: Kind>(ruby: &Ruby, name: &std::ffi::CStr) -> Resul
     Ok(class)
 }
 
-/// Defines `disposed?` and `viewport`, which every element class but `Viewport` has.
-pub(crate) fn define_in_viewport<K: Kind>(ruby: &Ruby, class: VALUE) -> Result<(), Raised> {
+/// Defines `disposed?` and `viewport`, which every element class but `Viewport` has, and in
+/// RGSS2 `viewport=`.
+pub(crate) fn define_in_viewport<K: InViewport>(
+    ruby: &Ruby,
+    class: VALUE,
+    runtime: Runtime,
+) -> Result<(), Raised> {
     rb::method(ruby, class, c"disposed?", 0, disposed::<K>)?;
-    rb::method(ruby, class, c"viewport", 0, viewport_of::<K>)
+    rb::method(ruby, class, c"viewport", 0, viewport_of::<K>)?;
+    if runtime != Runtime::Rgss1 {
+        rb::method(ruby, class, c"viewport=", 1, set_viewport::<K>)?;
+    }
+    Ok(())
+}
+
+/// Defines `disposed?` and the `viewport` of `Plane`: the reader in RGSS1, and in RGSS2 the
+/// method of one argument that sets the viewport, beside which there is no reader and no
+/// `viewport=`.
+pub(crate) fn define_plane_viewport(
+    ruby: &Ruby,
+    class: VALUE,
+    runtime: Runtime,
+) -> Result<(), Raised> {
+    rb::method(ruby, class, c"disposed?", 0, disposed::<PlaneId>)?;
+    if runtime == Runtime::Rgss1 {
+        rb::method(ruby, class, c"viewport", 0, viewport_of::<PlaneId>)
+    } else {
+        rb::method(ruby, class, c"viewport", 1, set_viewport::<PlaneId>)
+    }
 }
 
 /// A bitmap an element is given to draw from: `nil` for none, or a `Bitmap`, whose arena id

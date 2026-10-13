@@ -14,6 +14,7 @@ use std::ffi::CStr;
 use vkxp_core::{SharedTable, Tilemap, TilemapId};
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{HostResult, Raise, Raised, Ruby};
+use vkxp_vfs::Runtime;
 
 use crate::element::{self, field, kept, kept_after_dispose};
 use crate::guest::{Classes, Guest};
@@ -186,10 +187,10 @@ fn set_autotile(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     Ok(args[1])
 }
 
-/// Defines `Tilemap`.
-pub(crate) fn define(ruby: &Ruby) -> Result<VALUE, Raised> {
+/// Defines `Tilemap` as `runtime` has it: with `viewport=` in RGSS2.
+pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
     let class = element::define_class::<TilemapId>(ruby, c"Tilemap")?;
-    element::define_in_viewport::<TilemapId>(ruby, class)?;
+    element::define_in_viewport::<TilemapId>(ruby, class, runtime)?;
     rb::method(ruby, class, c"initialize", -1, initialize)?;
     rb::method(ruby, class, c"update", 0, update)?;
     rb::method(ruby, class, c"tileset", 0, tileset)?;

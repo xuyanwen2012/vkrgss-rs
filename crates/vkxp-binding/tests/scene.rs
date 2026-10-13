@@ -71,6 +71,25 @@ fn lifetime() {
     check(scene_cases::LIFETIME);
 }
 
+/// The scenarios "XP" of "Moving an element to another viewport" and of "Small differences
+/// of RGSS2": the classes of a game of RGSS1 have none of the names RGSS2 adds.
+#[test]
+fn the_classes_of_rgss1_lack_what_rgss2_adds() {
+    scene_support::install();
+    assert_eq!(
+        testing::eval(
+            "s = Sprite.new; pl = Plane.new; w = Window.new; t = Tilemap.new; \
+             r = [s.respond_to?(:viewport=), w.respond_to?(:viewport=), \
+                  t.respond_to?(:viewport=), pl.respond_to?(:viewport=), pl.viewport, \
+                  w.contents, s.respond_to?(:width), s.respond_to?(:height), \
+                  w.respond_to?(:stretch), w.stretch]; \
+             pl.visible = false; r << pl.visible; [s, pl, w, t].each { |o| o.dispose }; r"
+        )
+        .as_deref(),
+        Ok("[false, false, false, false, nil, nil, false, false, true, true, false]")
+    );
+}
+
 #[test]
 fn every_group_is_tested_here() {
     // One test function per group above: a group added to the list must get one too.

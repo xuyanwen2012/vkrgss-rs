@@ -9,11 +9,12 @@ use std::ffi::CStr;
 use vkxp_core::WindowId;
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{HostResult, Raised, Ruby};
+use vkxp_vfs::Runtime;
 
 use crate::element::{self, field, kept, object, reader, writer};
-use crate::rb;
 use crate::rect::{rect_arg, rect_of, rect_set};
 use crate::wrap::Owner;
+use crate::{bitmap, rb};
 
 /// The instance variables that hold the window's `Bitmap` objects, or `nil`.
 const WINDOWSKIN: &CStr = c"windowskin";
@@ -30,6 +31,15 @@ fn initialize(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     let cursor_rect = element::operate(ruby, |guest| Ok(guest.scene.window(id)?.cursor_rect))?;
     let cursor_rect = rect_of(ruby, cursor_rect, Owner::WindowCursorRect(id))?;
     rb::ivar_set(ruby, recv, CURSOR_RECT, cursor_rect)?;
+    Ok(recv)
+}
+
+/// `initialize(viewport = nil)` of RGSS2: the window starts with a contents bitmap of 1 by
+/// 1, an ordinary bitmap that outlives the window.
+fn initialize_rgss2(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    initialize(ruby, recv, args)?;
+    let contents = bitmap::new_blank(ruby, 1, 1)?;
+    set_contents(ruby, recv, &[contents])?;
     Ok(recv)
 }
 
@@ -121,18 +131,23 @@ writer!(set_contents_opacity, WindowId, |guest, id, opacity: i32| {
     guest.scene.window_mut(id)?.set_contents_opacity(opacity)
 });
 
-/// Defines `Window`.
-pub(crate) fn define(ruby: &Ruby) -> Result<VALUE, Raised> {
+/// Defines `Window` as `runtime` has it: in RGSS2 with `viewport=`, a contents bitmap
+/// from the start and no `stretch`.
+pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
     let class = element::define_class::<WindowId>(ruby, c"Window")?;
-    element::define_in_viewport::<WindowId>(ruby, class)?;
-    rb::method(ruby, class, c"initialize", -1, initialize)?;
+    element::define_in_viewport::<WindowId>(ruby, class, runtime)?;
+    if runtime == Runtime::Rgss1 {
+        rb::method(ruby, class, c"initialize", -1, initialize)?;
+        rb::method(ruby, class, c"stretch", 0, stretch)?;
+        rb::method(ruby, class, c"stretch=", 1, set_stretch)?;
+    } else {
+        rb::method(ruby, class, c"initialize", -1, initialize_rgss2)?;
+    }
     rb::method(ruby, class, c"update", 0, update)?;
     rb::method(ruby, class, c"windowskin", 0, windowskin)?;
     rb::method(ruby, class, c"windowskin=", 1, set_windowskin)?;
     rb::method(ruby, class, c"contents", 0, contents)?;
     rb::method(ruby, class, c"contents=", 1, set_contents)?;
-    rb::method(ruby, class, c"stretch", 0, stretch)?;
-    rb::method(ruby, class, c"stretch=", 1, set_stretch)?;
     rb::method(ruby, class, c"cursor_rect", 0, cursor_rect)?;
     rb::method(ruby, class, c"cursor_rect=", 1, set_cursor_rect)?;
     rb::method(ruby, class, c"active", 0, active)?;
