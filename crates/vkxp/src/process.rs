@@ -1,10 +1,13 @@
 //! The guest in a process of its own: the parent's side of it.
 //!
-//! The program starts itself again with the hidden option [`GUEST_ROLE`], which names a Unix
-//! stream socket the parent listens on, in a directory only the user can enter, and carries
-//! the seed of the run; the option and its value are those of `vkxp-guest`. The child settles its configuration from the same arguments, sets
-//! the game up as the guest thread of the other form does, connects, and plays the game with
-//! the socket as its link.
+//! The program makes a directory only the user can enter and listens on a Unix stream
+//! socket in it. Beside the socket it writes the guest record of `vkxp-guest`: the game
+//! directory, the settings a guest reads, the seed, the socket and the inputs of the
+//! diagnostic level. Then it starts itself again with the hidden option [`GUEST_ROLE`] and
+//! the path of the record, and with no other argument. The child reads the record and
+//! neither the command line of the program nor a configuration file, sets the game up as
+//! the guest thread of the other form does, connects, and plays the game with the socket as
+//! its link. The record is removed with the directory, when the run ends.
 //!
 //! This is platform code for Linux: it waits on several connections at once and ends
 //! processes by their number.
@@ -38,7 +41,9 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
 use vkxp_guest::hello;
+use vkxp_guest::record::{Diagnostics, GuestRecord};
 use vkxp_guest::role::{GUEST_ROLE, GuestRole};
+use vkxp_guest::settings::GuestSettings;
 use vkxp_proto::framing::{read_message, write_message};
 use vkxp_proto::link::{GuestEnd, GuestSender};
 use vkxp_proto::{GuestToHost, HostToGuest};
@@ -192,6 +197,41 @@ fn guest_executable(runtime: Runtime) -> std::io::Result<PathBuf> {
     }
 }
 
+/// What the program hands a guest process beside the socket: the rest of the guest record.
+/// Every path is absolute.
+pub(crate) struct Handed<'a> {
+    /// The seed of the run.
+    pub(crate) seed: u64,
+    pub(crate) game_dir: &'a Path,
+    /// What a guest reads of the settled options.
+    pub(crate) settings: &'a GuestSettings,
+    /// The inputs of the diagnostic level of the program.
+    pub(crate) diagnostics: Diagnostics,
+}
+
+/// Writes the guest record of a guest process that connects to `socket`, as the file
+/// `guest.record` beside the socket, and returns the command that starts `program` as that
+/// guest process: with the hidden option and the path of the record, and no other argument.
+fn guest_command(program: PathBuf, socket: PathBuf, handed: Handed<'_>) -> Result<Command> {
+    let path = socket.with_file_name("guest.record");
+    let record = GuestRecord {
+        role: GuestRole {
+            seed: handed.seed,
+            socket,
+        },
+        game_dir: handed.game_dir.to_owned(),
+        settings: handed.settings.clone(),
+        diagnostics: handed.diagnostics,
+    };
+    // Written whole before the child exists, which so never sees a part of it.
+    record
+        .write(&path, VERSION)
+        .with_context(|| format!("cannot write the guest record {}", path.display()))?;
+    let mut command = Command::new(program);
+    command.arg(GUEST_ROLE).arg(path);
+    Ok(command)
+}
+
 /// A running guest process, the socket its copies connect to, and the directory of that
 /// socket. Dropping it ends the process if it still runs and removes the directory.
 pub(crate) struct GuestProcess {
@@ -203,13 +243,11 @@ pub(crate) struct GuestProcess {
 }
 
 impl GuestProcess {
-    /// Starts the guest process of a run with this seed, for a game of `runtime`, and waits
-    /// for it to connect; one that states another version than the program's fails the
-    /// start. To be
-    /// called on the main thread, before the working directory changes: the child reads the
-    /// arguments of this process as this process did, and it is ended by the kernel when
-    /// the thread that started it ends.
-    pub(crate) fn start(seed: u64, runtime: Runtime) -> Result<GuestProcess> {
+    /// Starts the guest process of a run, for a game of `runtime`, hands it `handed` and the
+    /// socket in the guest record, and waits for it to connect; one that states another
+    /// version than the program's fails the start. To be called on the main thread: the
+    /// child is ended by the kernel when the thread that started it ends.
+    pub(crate) fn start(runtime: Runtime, handed: Handed<'_>) -> Result<GuestProcess> {
         let variable = std::env::var_os("XDG_RUNTIME_DIR").filter(|value| !value.is_empty());
         let base = variable.map_or_else(std::env::temp_dir, PathBuf::from);
         sweep(&base);
@@ -232,17 +270,10 @@ impl GuestProcess {
             .and_then(|listener| listener.set_nonblocking(true).map(|()| listener))
             .with_context(|| format!("cannot listen on the socket {}", socket.display()))
             .map_err(remove)?;
-        let role = GuestRole { seed, socket }
-            .value()
-            .map_err(|error| remove(error.into()))?;
         let child = guest_executable(runtime)
-            .and_then(|program| {
-                Command::new(program)
-                    .args(std::env::args_os().skip(1))
-                    .args([GUEST_ROLE, &role])
-                    .spawn()
-            })
             .context("cannot start the guest process")
+            .and_then(|program| guest_command(program, socket, handed))
+            .and_then(|mut command| command.spawn().context("cannot start the guest process"))
             .map_err(remove)?;
         let mut process = GuestProcess {
             child,
@@ -826,6 +857,42 @@ mod tests {
         for runtime in [Runtime::Rgss1, Runtime::Rgss2] {
             assert_eq!(guest_executable(runtime).unwrap(), program);
         }
+    }
+
+    /// Scenario "Arguments of the guest process".
+    #[test]
+    fn the_guest_process_is_started_with_the_option_and_its_record_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket = dir.path().join("guest.sock");
+        let settings = GuestSettings {
+            preload: vec![dir.path().join("patch.rb")],
+            log_p: true,
+            ..GuestSettings::default()
+        };
+        let diagnostics = Diagnostics {
+            variable: Some("info".to_owned()),
+            verbose: true,
+        };
+        let handed = Handed {
+            seed: 7,
+            game_dir: dir.path(),
+            settings: &settings,
+            diagnostics: diagnostics.clone(),
+        };
+        let command = guest_command("/opt/vkxp/guest".into(), socket.clone(), handed).unwrap();
+        assert_eq!(command.get_program(), "/opt/vkxp/guest");
+        let record = dir.path().join("guest.record");
+        let arguments: Vec<_> = command.get_args().collect();
+        assert_eq!(arguments, [GUEST_ROLE.as_ref(), record.as_os_str()]);
+        // The file is there before the process is, and holds what was handed.
+        let role = GuestRole { seed: 7, socket };
+        let written = GuestRecord {
+            role,
+            game_dir: dir.path().to_owned(),
+            settings,
+            diagnostics,
+        };
+        assert_eq!(GuestRecord::read(&record, VERSION).unwrap(), written);
     }
 
     /// Scenario "Left by a killed run".

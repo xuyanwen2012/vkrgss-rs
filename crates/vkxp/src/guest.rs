@@ -4,7 +4,7 @@
 //! library `vkxp-guest`. This module is the part that names the binding and the sys crate:
 //! what a guest is set up with ([`guest_inputs`], which the program also calls as a check
 //! before anything starts), the guest on a thread ([`guest_on_thread`]) and the guest
-//! process ([`run_guest`]), which call the library in the order its documentation gives.
+//! process ([`guest_process`]), which call the library in the order its documentation gives.
 //!
 //! The module and `font` name nothing of the host and nothing of the command line, the
 //! configuration files or the diagnostics of the program: they are what an executable of
@@ -12,15 +12,17 @@
 //! options is [`GuestSettings`] of `vkxp-guest`.
 
 use std::path::{Path, PathBuf, absolute};
+use std::process::ExitCode;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
 
 use anyhow::{Context, Result, anyhow, bail};
 use vkxp_binding::{Config, Copied, Copier, CopyFailed, RunConfig, RunError, run_game};
 use vkxp_guest::copier::{ForkCopier, Parked};
-use vkxp_guest::role::GuestRole;
+use vkxp_guest::record::{Diagnostics, GuestRecord};
+use vkxp_guest::role::{self, GuestRole};
 use vkxp_guest::settings::GuestSettings;
-use vkxp_guest::{Attached, play_in_process, play_on_thread, signals};
+use vkxp_guest::{Attached, diagnostics, play_in_process, play_on_thread, signals};
 use vkxp_proto::link::GuestEnd;
 use vkxp_ruby_sys::{Interpreter, SymbolTable};
 use vkxp_vfs::{FileKind, GameFiles, GameIni, Runtime, VfsError, resolve_rtps};
@@ -324,12 +326,50 @@ pub(crate) fn guest_on_thread(
     Ok((guest, outcome))
 }
 
-/// The guest role: plays the game in `game_dir` over the socket of the parent process.
-/// `Ok(false)` is a game that failed and has said why.
-pub(crate) fn run_guest(
+/// Makes the executable that calls it the guest process of a program, when the first of its
+/// arguments is the hidden option of the guest role; `None` otherwise, and the executable
+/// goes on as what it is. `version` is the package version of the executable.
+///
+/// A guest process reads the guest record the option names, installs the subscriber of the
+/// diagnostics from it and plays the game of the record over the socket of the program. It
+/// reads nothing else of its command line and no configuration file. The status is 0 for a
+/// game that ended without a failure and 1 otherwise; a record that cannot be used and a
+/// start that failed are a line on the error stream first.
+pub(crate) fn guest_process(version: &str) -> Option<ExitCode> {
+    let record = role::record_path(std::env::args_os().skip(1))?
+        .and_then(|path| GuestRecord::read(&path, version));
+    let fatal = |message: &dyn std::fmt::Display| {
+        eprintln!("vkxp: {message}");
+        Some(ExitCode::FAILURE)
+    };
+    let GuestRecord {
+        role,
+        game_dir,
+        settings,
+        diagnostics: Diagnostics { variable, verbose },
+    } = match record {
+        Ok(record) => record,
+        Err(error) => return fatal(&error),
+    };
+    // Nothing before this emits an event.
+    match diagnostics::level(variable.as_deref(), verbose) {
+        Ok(level) => diagnostics::install(level),
+        Err(message) => return fatal(&message),
+    }
+    match run_guest(game_dir, &settings, &role, version) {
+        Ok(true) => Some(ExitCode::SUCCESS),
+        Ok(false) => Some(ExitCode::FAILURE),
+        Err(error) => fatal(&format_args!("{error:#}")),
+    }
+}
+
+/// The guest role: plays the game in `game_dir` over the socket of the parent process, as
+/// an executable of `version`. `Ok(false)` is a game that failed and has said why.
+fn run_guest(
     game_dir: PathBuf,
     settings: &GuestSettings,
     role: &GuestRole,
+    version: &str,
 ) -> Result<bool> {
     signals::die_with_parent();
     let inputs = guest_inputs(&game_dir, settings)?;
@@ -337,7 +377,7 @@ pub(crate) fn run_guest(
     let runtime = inputs.runtime;
     let mut config = guest_config(&game_dir, settings, inputs, role.seed)?;
     let interpreter = start_interpreter(runtime)?;
-    let attached = Attached::connect(role, env!("CARGO_PKG_VERSION"))?;
+    let attached = Attached::connect(role, version)?;
     // The functions that start processes need the children of this process to be waited
     // for, and states need them not to be: with those functions there are no states.
     if !settings.process_functions {

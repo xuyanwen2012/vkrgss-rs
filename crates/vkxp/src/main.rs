@@ -5,11 +5,16 @@
 //! This is the one crate that depends on both sides and joins them. It reads the command
 //! line and the game's configuration, starts the interpreter, and then runs the host on the
 //! main thread, in a window or headless, and the game's scripts on the interpreter thread,
-//! with the protocol link between them:
+//! with the protocol link between them.
+//!
+//! Before anything else, an executable whose first argument is the hidden option of the
+//! guest role is a guest process (`guest::guest_process`): it reads the guest record that
+//! the option names and nothing else of its command line, and none of the steps below.
+//! Otherwise:
 //!
 //! 1. The arguments are parsed (`args`); a mistake there ends with the usage message and
 //!    status 2. The subscriber that writes diagnostics to the error stream is installed
-//!    (`log`), at the level `--verbose` and the environment variable `VKXP_LOG` ask for; a
+//!    (the diagnostics of `vkxp-guest`), at the level `--verbose` and the environment variable `VKXP_LOG` ask for; a
 //!    value of the variable that cannot be parsed ends the program the same way.
 //! 2. The configuration files are read and the command line is put over them (`config`);
 //!    settings that do not go together end with the usage message and status 2. `Game.ini`
@@ -41,9 +46,12 @@
 //! With the guest in a process (`--guest process`, and in a window unless `--guest thread`
 //! says otherwise) the game's scripts run in a child process instead of on a thread
 //! (`process`). The program then does the steps above without the interpreter: it checks
-//! what the game needs, starts itself again in the guest role, and gives the host a relay
-//! to that process as its guest. The child does the steps 1 to 5, opens no window, device
-//! or recording, attaches to the socket of its parent, plays the game over it and reports
+//! what the game needs, writes what a guest needs of the settled run into the guest record
+//! of `vkxp-guest`, starts itself again in the guest role with that record as its only
+//! argument, and gives the host a relay to that process as its guest. The child parses no
+//! command line and reads no configuration file: it installs the subscriber from the
+//! record, looks the game up and does the steps 3 to 5 with the settings of the record,
+//! opens no window, device or recording, attaches to the socket of its parent, plays the game over it and reports
 //! how the game went, which is what the status of the program follows.
 //!
 //! A guest in a process can be saved and loaded: a state is a copy of that process, made
@@ -79,17 +87,20 @@ use vkxp_proto::link::GuestEnd;
 use crate::args::{GuestForm, Input, Options};
 use crate::config::Settings;
 use vkxp_guest::diagnostics;
+use vkxp_guest::record::Diagnostics;
 use vkxp_guest::settings::GuestSettings;
 
-use crate::guest::{
-    Outcome, game_succeeded, guest_inputs, guest_on_thread, refuse_rgss3, run_guest,
-};
-use crate::process::GuestProcess;
+use crate::guest::{Outcome, game_succeeded, guest_inputs, guest_on_thread, refuse_rgss3};
+use crate::process::{GuestProcess, Handed};
 
 /// How long the program waits for the game's scripts to end after the host has.
 const GUEST_WAIT: Duration = Duration::from_secs(5);
 
 fn main() -> ExitCode {
+    // A guest process reads its record and nothing of what follows.
+    if let Some(status) = guest::guest_process(env!("CARGO_PKG_VERSION")) {
+        return status;
+    }
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     let usage = |message: String| {
         eprintln!("vkxp: {message}");
@@ -114,6 +125,11 @@ fn main() -> ExitCode {
         Ok(level) => diagnostics::install(level),
         Err(message) => return usage(message),
     }
+    // A guest process takes its level from the same two values.
+    let diagnostics = Diagnostics {
+        variable,
+        verbose: options.verbose,
+    };
     let variable = std::env::var(args::GUEST_VARIABLE).ok();
     let from_environment = match args::guest_of_environment(variable.as_deref()) {
         Ok(form) => form,
@@ -140,21 +156,16 @@ fn main() -> ExitCode {
     if let Err(message) = args::check(&settings.options) {
         return usage(message);
     }
-    let ran = match settings.options.guest_role.take() {
-        Some(role) => run_guest(game_dir, &guest_settings(&settings.options), &role),
-        None => {
-            // A script in a file is a value like one given in place.
-            let script = match input_script(settings.options.input.take()) {
-                Ok(script) => script,
-                Err(InputError::Malformed(message)) => return usage(message),
-                Err(InputError::Unreadable(message)) => {
-                    eprintln!("vkxp: {message}");
-                    return ExitCode::FAILURE;
-                }
-            };
-            run(game_dir, settings, script)
+    // A script in a file is a value like one given in place.
+    let script = match input_script(settings.options.input.take()) {
+        Ok(script) => script,
+        Err(InputError::Malformed(message)) => return usage(message),
+        Err(InputError::Unreadable(message)) => {
+            eprintln!("vkxp: {message}");
+            return ExitCode::FAILURE;
         }
     };
+    let ran = run(game_dir, settings, script, diagnostics);
     match ran {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::FAILURE,
@@ -259,6 +270,23 @@ fn guest_settings(options: &Options) -> GuestSettings {
     }
 }
 
+/// `settings` with every path made absolute, as the guest record holds them: a record does
+/// not depend on the working directory of whoever reads it.
+fn absolute_settings(settings: GuestSettings) -> std::io::Result<GuestSettings> {
+    let all = |paths: Vec<PathBuf>| paths.iter().map(absolute).collect::<std::io::Result<_>>();
+    Ok(GuestSettings {
+        rtps: settings
+            .rtps
+            .into_iter()
+            .map(|(name, dir)| Ok((name, absolute(dir)?)))
+            .collect::<std::io::Result<_>>()?,
+        builtin_scripts: settings.builtin_scripts.map(absolute).transpose()?,
+        font_dirs: all(settings.font_dirs)?,
+        preload: all(settings.preload)?,
+        ..settings
+    })
+}
+
 /// The form of the guest of a run: the one that was chosen, and without a choice a process
 /// in a window, where the state keys need it, and a thread in a headless run.
 fn guest_form(chosen: Option<GuestForm>, headless: bool) -> GuestForm {
@@ -291,8 +319,14 @@ impl Guest {
 }
 
 /// Runs the game in `game_dir` as the settings describe, headless with the input `script`.
+/// `diagnostics` are the inputs of the level of this run, which a guest process is handed.
 /// `Ok(false)` is a run that failed and has said why.
-fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<bool> {
+fn run(
+    game_dir: PathBuf,
+    settings: Settings,
+    script: InputScript,
+    diagnostics: Diagnostics,
+) -> Result<bool> {
     let guest_settings = guest_settings(&settings.options);
     let inputs = guest_inputs(&game_dir, &guest_settings)?;
     refuse_rgss3(&game_dir, &inputs)?;
@@ -321,8 +355,16 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
             (Box::new(guest), Guest::Thread(outcome))
         }
         GuestForm::Process => {
-            // The child sets the guest up itself; this process has no interpreter.
-            let process = GuestProcess::start(seed, inputs.runtime)?;
+            // The child sets the guest up itself, from the record of what this process has
+            // settled; this process has no interpreter.
+            let settings = absolute_settings(guest_settings)?;
+            let handed = Handed {
+                seed,
+                game_dir: &game_dir,
+                settings: &settings,
+                diagnostics,
+            };
+            let process = GuestProcess::start(inputs.runtime, handed)?;
             let (done, outcome) = mpsc::channel();
             let guest = move |link: GuestEnd| {
                 let _ = done.send(process.relay(link));

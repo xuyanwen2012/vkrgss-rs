@@ -2,8 +2,8 @@
 //!
 //! Side: guest.
 //!
-//! A game's scripts can run in a process of their own, which a program starts and which
-//! plays the game over a socket of that program. This crate is what such a process does
+//! A game's scripts can run in a process of their own, which a program starts, hands a
+//! record of its settings, and which plays the game over a socket of that program. This crate is what such a process does
 //! apart from running the game, so that an executable other than the program can be a
 //! guest too:
 //!
@@ -26,6 +26,11 @@
 //! The steps of the executable and of this crate alternate, and no type enforces their
 //! order. A guest process does this, on its main thread unless said otherwise:
 //!
+//! 0. [`role::record_path`] on the arguments of the executable, [`record::GuestRecord::read`]
+//!    with the package version of the executable, and [`diagnostics::install`] at the level
+//!    of the record. The executable reads nothing else of its command line, and no
+//!    configuration file: the game directory, the settings and the role are those of the
+//!    record.
 //! 1. [`signals::die_with_parent`].
 //! 2. The executable opens the game's files, enters the game directory, calls
 //!    [`signals::block_virtual_timer`] while the main thread is the only one, and starts its

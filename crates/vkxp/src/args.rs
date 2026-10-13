@@ -3,7 +3,6 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use vkxp_guest::role::{GUEST_ROLE, GuestRole};
 use vkxp_host::{Filter, InputScript, StateSchedule};
 use vkxp_vfs::{Encoding, Runtime};
 
@@ -152,8 +151,6 @@ pub(crate) struct Options {
     pub guest: Option<GuestForm>,
     /// Whether a guest process confines itself, if that was given.
     pub sandbox: Option<bool>,
-    /// Whether this process is the guest process of another, and of which.
-    pub guest_role: Option<GuestRole>,
     pub headless: bool,
     pub frames: Option<u64>,
     pub input: Option<Input>,
@@ -329,11 +326,6 @@ pub(crate) fn parse(arguments: &[String]) -> Result<Options, String> {
             "--sandbox" => {
                 let on = sandbox(value()?).map_err(|error| format!("--sandbox: {error}"))?;
                 options.sandbox = Some(on);
-            }
-            GUEST_ROLE => {
-                let role =
-                    GuestRole::parse(value()?).map_err(|error| format!("{GUEST_ROLE}: {error}"))?;
-                options.guest_role = Some(role);
             }
             "--headless" => options.headless = true,
             "--frames" => {
@@ -593,22 +585,6 @@ mod tests {
             error.contains("thread") && error.contains("process"),
             "{error}"
         );
-    }
-
-    #[test]
-    fn the_guest_role_is_a_hidden_option_with_a_seed_and_a_socket() {
-        let options =
-            parse_words(&["game", GUEST_ROLE, "7=/run/user/1/vkxp-1/guest.sock"]).unwrap();
-        assert_eq!(
-            options.guest_role,
-            Some(GuestRole {
-                seed: 7,
-                socket: "/run/user/1/vkxp-1/guest.sock".into(),
-            })
-        );
-        assert!(!USAGE.contains(GUEST_ROLE));
-        assert!(parse_words(&[GUEST_ROLE, "seven=/s"]).is_err());
-        assert!(parse_words(&[GUEST_ROLE, "/s"]).is_err());
     }
 
     #[test]

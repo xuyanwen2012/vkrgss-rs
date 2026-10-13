@@ -1,17 +1,20 @@
 //! The hidden option that makes an executable the guest process of a program.
 //!
-//! The program gives it to the executable it starts as its guest, with the value
-//! `SEED=SOCKET`: the seed of the run and the Unix stream socket the program listens on.
-//! Both sides of that convention are here: [`GuestRole::parse`] reads the value and
-//! [`GuestRole::value`] writes it.
+//! The program gives it to the executable it starts as its guest, as the first argument,
+//! with the path of the guest record ([`crate::record`]) as the only other one. The record
+//! holds the role itself: the seed of the run and the Unix stream socket the program
+//! listens on.
 
+use std::ffi::OsString;
 use std::path::PathBuf;
 
-/// The option a program gives the executable it starts as its guest process, with the value
-/// `SEED=SOCKET`. It is not part of a usage message.
+use crate::record::RecordError;
+
+/// The option a program gives the executable it starts as its guest process, with the path
+/// of the guest record. It is not part of a usage message.
 pub const GUEST_ROLE: &str = "--guest-role";
 
-/// What makes an executable the guest process of a program: the value of [`GUEST_ROLE`].
+/// What makes an executable the guest process of a program.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GuestRole {
     /// The seed the parent settled on.
@@ -20,67 +23,59 @@ pub struct GuestRole {
     pub socket: PathBuf,
 }
 
-/// A value of [`GUEST_ROLE`] that cannot be read or written.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum RoleError {
-    /// The value is not two parts around a `=`.
-    #[error("`{0}` is not of the form SEED=SOCKET")]
-    Form(String),
-    /// The first part is not a number from 0 on.
-    #[error("`{0}` is not a seed")]
-    Seed(String),
-    /// The socket cannot be an argument that is read as text.
-    #[error("the socket path {} is not UTF-8", .0.display())]
-    Socket(PathBuf),
-}
-
-impl GuestRole {
-    /// Reads the value of [`GUEST_ROLE`]: `SEED=SOCKET` with neither part empty.
-    pub fn parse(text: &str) -> Result<GuestRole, RoleError> {
-        let (seed, socket) = text
-            .split_once('=')
-            .filter(|(seed, socket)| !seed.is_empty() && !socket.is_empty())
-            .ok_or_else(|| RoleError::Form(text.to_owned()))?;
-        let seed = seed.parse().map_err(|_| RoleError::Seed(seed.to_owned()))?;
-        Ok(GuestRole {
-            seed,
-            socket: PathBuf::from(socket),
-        })
+/// The path of the guest record that `arguments` name: the arguments of an executable
+/// without its own name. `None` when the first of them is not [`GUEST_ROLE`], which is an
+/// executable that is not a guest process. The option takes exactly one more argument, and
+/// nothing is read as text: a path need not be UTF-8.
+pub fn record_path(
+    arguments: impl IntoIterator<Item = OsString>,
+) -> Option<Result<PathBuf, RecordError>> {
+    let mut arguments = arguments.into_iter();
+    if arguments.next()? != GUEST_ROLE {
+        return None;
     }
-
-    /// The value of [`GUEST_ROLE`] that [`GuestRole::parse`] reads as this role.
-    pub fn value(&self) -> Result<String, RoleError> {
-        let socket = self
-            .socket
-            .to_str()
-            .ok_or_else(|| RoleError::Socket(self.socket.clone()))?;
-        Ok(format!("{}={socket}", self.seed))
-    }
+    Some(match (arguments.next(), arguments.next()) {
+        (Some(path), None) => Ok(PathBuf::from(path)),
+        _ => Err(RecordError::Arguments),
+    })
 }
 
 #[cfg(test)]
 mod tests {
+    use std::os::unix::ffi::OsStringExt;
+
     use super::*;
 
+    fn words(words: &[&str]) -> Vec<OsString> {
+        words.iter().map(OsString::from).collect()
+    }
+
     #[test]
-    fn the_guest_role_is_a_hidden_option_with_a_seed_and_a_socket() {
-        let role = GuestRole {
-            seed: 7,
-            socket: "/run/user/1/vkxp-1/guest.sock".into(),
-        };
-        assert_eq!(
-            GuestRole::parse("7=/run/user/1/vkxp-1/guest.sock"),
-            Ok(role.clone())
-        );
-        assert_eq!(role.value().unwrap(), "7=/run/user/1/vkxp-1/guest.sock");
-        assert_eq!(GuestRole::parse(&role.value().unwrap()), Ok(role));
-        assert_eq!(
-            GuestRole::parse("seven=/s"),
-            Err(RoleError::Seed("seven".to_owned()))
-        );
-        assert_eq!(
-            GuestRole::parse("/s"),
-            Err(RoleError::Form("/s".to_owned()))
-        );
+    fn the_guest_role_is_the_first_argument_and_names_a_record() {
+        let named = record_path(words(&[GUEST_ROLE, "/run/user/1/vkxp-1/guest.record"]));
+        let path = named.unwrap().unwrap();
+        assert_eq!(path, PathBuf::from("/run/user/1/vkxp-1/guest.record"));
+        // A path is taken as it is.
+        let bytes = OsString::from_vec(b"/run/sch\xf6n/guest.record".to_vec());
+        let named = record_path([OsString::from(GUEST_ROLE), bytes.clone()]);
+        assert_eq!(named.unwrap().unwrap(), PathBuf::from(bytes));
+
+        // An executable that is not a guest process.
+        assert!(record_path(words(&[])).is_none());
+        assert!(record_path(words(&["game"])).is_none());
+        assert!(record_path(words(&["game", GUEST_ROLE, "/r"])).is_none());
+    }
+
+    #[test]
+    fn the_guest_role_takes_one_argument_and_nothing_else() {
+        for arguments in [
+            words(&[GUEST_ROLE]),
+            words(&[GUEST_ROLE, "/r", "--verbose"]),
+            words(&[GUEST_ROLE, "/r", "game"]),
+        ] {
+            let error = record_path(arguments).unwrap().unwrap_err();
+            assert!(matches!(error, RecordError::Arguments), "{error:?}");
+            assert!(error.to_string().contains(GUEST_ROLE), "{error}");
+        }
     }
 }

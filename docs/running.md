@@ -535,11 +535,23 @@ The environment variable `VKXP_GUEST` and the key `guest` of a configuration fil
 form too; the command line comes before the environment and the environment before the
 files. Any value but `thread` and `process` is an error.
 
-The program starts itself again for the guest, with its own arguments, and the two exchange
+The program starts itself again for the guest and hands it a guest record: a file,
+`guest.record`, that holds what the guest needs of the run, which is the game directory, the
+settings a guest reads (the runtime, the run-time packages, the fonts, the preload scripts
+and the like), the seed, the socket and the level of the diagnostics. The guest process is
+started with the hidden option `--guest-role` and the path of that file, and with no other
+argument: it reads neither the command line of the program nor a configuration file, and
+not `VKXP_LOG`, `VKXP_GUEST` or `VKXP_SANDBOX` either, whose values the program has settled.
+The record starts with a line that states the version of the program, and an executable
+given a record of another version, or a file that is no record, ends with a message that
+names the file and a non-zero status. The option is the program's to give; anywhere but as
+the first argument it is an unknown option.
+
+The two exchange
 the messages of the protocol over a Unix stream socket. A guest process, and each copy of it
 that is a state, first states the version of its executable on its connection, in one line,
 and the program refuses one of another version than its own with an error that names both.
-The socket is in a directory only the user can enter, below `$XDG_RUNTIME_DIR` or, without
+The socket and the record are in a directory only the user can enter, below `$XDG_RUNTIME_DIR` or, without
 that variable, below the temporary directory. The directory is removed when the run ends; one that a run ended by a signal left behind is
 removed the next time a guest process starts. The guest process opens no window, no Vulkan device
 and no audio device.

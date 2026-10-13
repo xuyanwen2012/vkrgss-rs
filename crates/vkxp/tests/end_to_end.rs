@@ -2486,3 +2486,68 @@ fn an_unknown_value_of_the_sandbox_option_prints_the_usage_message() {
         "{stderr}"
     );
 }
+
+// The guest record: the scenarios of the requirement "Record of a guest process" that run
+// the program.
+
+/// Scenario "Configuration files are read once": the guest process reads none.
+#[test]
+fn a_guest_process_does_not_read_the_configuration_files_again() {
+    let game = quiet_game("e2e-record-config");
+    let work = work_with_user_config("seed = 1\n");
+    let ran = headless_in(work, &game, &["--guest", "process", "--verbose"]);
+    ran.assert_success();
+    let stderr = ran.stderr();
+    let read = stderr
+        .lines()
+        .filter(|line| line.contains("read the configuration file"))
+        .count();
+    assert_eq!(read, 1, "{stderr}");
+}
+
+/// Scenario "Settings of the run": a directory and a file, the file by a relative path,
+/// reach a guest process as they reach a guest on a thread.
+#[test]
+fn a_guest_process_is_handed_the_settings_of_the_run() {
+    let (game, rtp) = rtp_game("e2e-record-rtp");
+    let table = format!("Standard={}", rtp.path().display());
+    let ran = headless(&game, &["--guest", "process", "--rtp", &table]);
+    ran.assert_success();
+    let size = fs::read_to_string(game.dir().join("size.txt")).expect("the script ran");
+    assert_eq!(size, "3x2");
+
+    let main = format!("{RED_SPRITE}$sprite.x = PATCHED_X\n3.times {{ Graphics.update }}\n");
+    let game = Game::new("e2e-record-preload", "Preload", &[("Main", &main)]);
+    let work = tempfile::tempdir().unwrap();
+    fs::write(work.path().join("patch.rb"), "PATCHED_X = 200\n").unwrap();
+    let arguments = [
+        "--guest",
+        "process",
+        "--preload",
+        "patch.rb",
+        "--dump",
+        "2=out.png",
+    ];
+    let ran = headless_in(work, &game, &arguments);
+    ran.assert_success();
+    assert_eq!(ran.frame("out.png").leftmost(RED), Some(200));
+}
+
+/// Scenario "Level of the guest process": `--verbose` reaches it without `VKXP_LOG`.
+#[test]
+fn a_guest_process_takes_the_level_of_verbose() {
+    let game = quiet_game("e2e-record-verbose");
+    let arguments = [
+        "--guest",
+        "process",
+        "--allow-process-functions",
+        "--verbose",
+    ];
+    let ran = headless(&game, &arguments);
+    ran.assert_success();
+    let stderr = ran.stderr();
+    let said = stderr.lines().any(|line| {
+        line.starts_with("vkxp: INFO ") && line.contains("the guest process is not confined")
+    });
+    assert!(said, "{stderr}");
+}
