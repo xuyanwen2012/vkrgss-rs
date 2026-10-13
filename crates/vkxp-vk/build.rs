@@ -38,6 +38,7 @@ const SHARED: &[(&str, u32)] = &shared![
     OP_QUAD,
     OP_RECT_EFFECT,
     OP_TILEMAP,
+    OP_TILEMAP_PLANE,
     BLEND_NORMAL,
     BLEND_ADD,
     BLEND_SUBTRACT,

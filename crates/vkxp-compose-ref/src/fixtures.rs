@@ -6,8 +6,9 @@
 //! exactly those pixels.
 
 use vkxp_proto::{
-    BitmapDelta, BitmapId, BlendMode, Color, Fixed, FramePacket, FrameRate, GuestToHost, Op, Quad,
-    Rect, RectEffect, Sampling, Size, TableDelta, TableId, TilemapLayer, Tone, Transform,
+    BitmapDelta, BitmapId, BlendMode, Color, Fixed, FramePacket, FrameRate, GuestToHost, Op, Plane,
+    Quad, Rect, RectEffect, Sampling, Size, TableDelta, TableId, TilemapLayer, TilemapPlane, Tone,
+    Transform,
 };
 
 pub mod tilemap_rgss2;
@@ -626,6 +627,22 @@ pub fn one_op_of_each_kind() -> GuestToHost {
                 clip: Rect::new(8, 8, 40, 40),
                 tone: Tone::new(40, -40, 0, 128),
                 color: Color::new(255, 255, 0, 64),
+            }),
+            // In RGSS2 the numbers of the map name tiles of the second sheet of whole tiles.
+            Op::TilemapPlane(TilemapPlane {
+                clip: Rect::new(48, 48, 48, 48),
+                bitmaps: [
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(TILESET),
+                    None,
+                    None,
+                ],
+                ..tilemap_rgss2::tilemap_plane(Plane::Lower, MAP)
             }),
         ],
     })

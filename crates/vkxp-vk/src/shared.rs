@@ -15,6 +15,7 @@ pub const OP_CLEAR: u32 = 0;
 pub const OP_QUAD: u32 = 1;
 pub const OP_RECT_EFFECT: u32 = 2;
 pub const OP_TILEMAP: u32 = 3;
+pub const OP_TILEMAP_PLANE: u32 = 4;
 
 /// Values of the `blend` word of a quad.
 pub const BLEND_NORMAL: u32 = 0;

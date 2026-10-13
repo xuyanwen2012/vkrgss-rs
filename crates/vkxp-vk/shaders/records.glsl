@@ -17,7 +17,7 @@ struct OpRecord {
     int clip_x1;
     int clip_y1;
     // Quad: bitmap slot and source rectangle, which lies inside the bitmap and is not empty.
-    // Tilemap layer: `bitmap` is the index of its record in `tilemaps`.
+    // Tilemap layer and tilemap plane: `bitmap` is the index of its record in `tilemaps`.
     uint bitmap;
     int src_x;
     int src_y;
@@ -44,6 +44,25 @@ struct OpRecord {
 
 // What a tilemap layer op reads, as `TilemapRecord` in `src/records.rs` lays it out: 25 words
 // of 32 bits (`TILEMAP_WORDS`).
+//
+// A tilemap plane op of RGSS2 has a record of the same words, read anew (`encode_plane` in
+// `src/records.rs`); its clip lies inside the plane:
+// - `map_offset`, `map_xsize`, `map_ysize`: the first element of the map's first layer and
+//   the map's size in cells, neither of which is 0;
+// - `priorities_offset`, `priorities_count`: the first entry of the passages table and how
+//   many there are, 0 without one;
+// - `priority`: bit 0 is set for the upper plane; bits 1 and 2 are the number of layers the
+//   map has, 3 at most; bits 8 to 15 are the flash level; bits 16 and 17 are how many times
+//   64 pixels the block of an animated floor of the first sheet is moved right, bits 18 and
+//   19 how many times 32 pixels the block of a waterfall is moved down;
+// - `cell_x`, `cell_y`: the cell of the map in the plane's first column and row, inside the
+//   map;
+// - `sub_x`, `sub_y`: the screen pixel of the plane's corner, signed;
+// - `tileset`, `autotiles`, `frames[0]`: the slots of the nine sheets, or `NO_BITMAP`;
+// - `frames[1]` to `frames[3]`: the first element of the flash table and its width and
+//   height, both 0 without one or for one without elements;
+// - `frames[4]`, `frames[5]`: the cell of the flash table in the plane's first column and
+//   row, inside the table; `frames[6]`: 0.
 struct TilemapRecord {
     // The first element of the map's layer in `table_words`, and the map's size in cells,
     // neither of which is 0.

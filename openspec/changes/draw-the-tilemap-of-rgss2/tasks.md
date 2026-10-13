@@ -12,7 +12,7 @@
 
 ## 3. Vulkan
 
-- [ ] 3.1 The Vulkan compositor evaluates the op and agrees with the reference on the fixtures and on generated packets. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk --locked` passes, and so does `VK_LOADER_DRIVERS_SELECT='*radeon*' VKXP_TEST_DEVICE=RADV cargo test -p vkxp-vk --locked`.
+- [x] 3.1 The Vulkan compositor evaluates the op and agrees with the reference on the fixtures and on generated packets. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk --locked` passes, and so does `VK_LOADER_DRIVERS_SELECT='*radeon*' VKXP_TEST_DEVICE=RADV cargo test -p vkxp-vk --locked`.
 
 ## 4. Documentation
 

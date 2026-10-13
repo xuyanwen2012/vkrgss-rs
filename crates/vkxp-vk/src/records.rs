@@ -5,7 +5,8 @@
 //! the same error. The shader then never sees an invalid slot or source rectangle.
 
 use vkxp_proto::{
-    BitmapId, BlendMode, Color, Op, Rect, Sampling, Size, TilemapLayer, Tone, stretch_step,
+    BitmapId, BlendMode, Color, Op, Plane, Rect, Sampling, Size, TilemapLayer, TilemapPlane, Tone,
+    stretch_step, tiles_rgss2,
 };
 
 use crate::VkError;
@@ -181,7 +182,8 @@ impl OpRecord {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct Records {
     pub ops: Vec<OpRecord>,
-    /// The record of a tilemap layer op names one of these by its index.
+    /// The record of a tilemap layer op, and of a tilemap plane op, names one of these by
+    /// its index.
     pub tilemaps: Vec<TilemapRecord>,
 }
 
@@ -271,10 +273,84 @@ fn encode_tilemap(
     Ok(Some(record))
 }
 
+/// Checks a tilemap plane op of RGSS2 and encodes what it reads, in the words of a
+/// [`TilemapRecord`] as `shaders/records.glsl` says a plane reads them, or `None` when it
+/// cannot draw: its map has no cells.
+///
+/// The sheets are checked first, then the map, the passages and the flash table, as the
+/// reference compositor checks them. Everything that needs 64-bit integers is worked out
+/// here: the first cell inside the map and inside the flash table, and the animation step
+/// as the frames it selects.
+fn encode_plane(
+    bitmaps: &BitmapTable,
+    tables: &TableStore,
+    index: usize,
+    plane: &TilemapPlane,
+) -> Result<Option<TilemapRecord>, VkError> {
+    let mut slots = [NO_BITMAP; tiles_rgss2::SHEETS];
+    for (slot, id) in slots.iter_mut().zip(plane.bitmaps) {
+        let Some(id) = id else { continue };
+        let entry = bitmaps
+            .get(id)
+            .map_err(|source| VkError::InvalidOpBitmap { index, source })?;
+        // A sheet without pixels has no image; nothing can be read from it.
+        if entry.width > 0 && entry.height > 0 {
+            *slot = id.index;
+        }
+    }
+    let table = |id| {
+        tables
+            .get(id)
+            .map_err(|source| VkError::InvalidOpTable { index, source })
+    };
+    let map = table(plane.map)?;
+    let passages = plane.passages.map(table).transpose()?;
+    let flash = plane.flash.map(table).transpose()?;
+    if map.xsize == 0 || map.ysize == 0 {
+        return Ok(None);
+    }
+
+    // Remainders of sizes that are `u32`.
+    let inside = |first: u32, size: u32| (u64::from(first) % u64::from(size)) as u32;
+    let step = plane.animation_step;
+    let flags = u32::from(plane.plane == Plane::Upper)
+        | map.zsize.min(3) << 1
+        | u32::from(plane.flash_level) << 8
+        | tiles_rgss2::FLOOR_FRAMES[(step % 4) as usize] << 16
+        | ((step % 3) as u32) << 18;
+    let mut record = [0; TILEMAP_WORDS];
+    // Offsets and lengths are below the length of the table buffer, which `u32` holds for
+    // every store within the device's limit; beyond it no frame is drawn.
+    record[TILEMAP_MAP_OFFSET] = map.offset as u32;
+    record[TILEMAP_MAP_XSIZE] = map.xsize;
+    record[TILEMAP_MAP_YSIZE] = map.ysize;
+    if let Some(passages) = passages {
+        record[TILEMAP_PRIORITIES_OFFSET] = passages.offset as u32;
+        record[TILEMAP_PRIORITIES_COUNT] = u64::from(passages.xsize).min(passages.len()) as u32;
+    }
+    record[TILEMAP_PRIORITY] = flags;
+    record[TILEMAP_CELL_X] = inside(plane.first_cell.0, map.xsize);
+    record[TILEMAP_CELL_Y] = inside(plane.first_cell.1, map.ysize);
+    record[TILEMAP_SUB_X] = plane.corner.0 as u32;
+    record[TILEMAP_SUB_Y] = plane.corner.1 as u32;
+    record[TILEMAP_TILESET] = slots[0];
+    record[TILEMAP_AUTOTILES..TILEMAP_AUTOTILES + AUTOTILES].copy_from_slice(&slots[1..8]);
+    record[TILEMAP_FRAMES] = slots[8];
+    if let Some(flash) = flash.filter(|flash| flash.len() > 0) {
+        record[TILEMAP_FRAMES + 1] = flash.offset as u32;
+        record[TILEMAP_FRAMES + 2] = flash.xsize;
+        record[TILEMAP_FRAMES + 3] = flash.ysize;
+        record[TILEMAP_FRAMES + 4] = inside(plane.first_cell.0, flash.xsize);
+        record[TILEMAP_FRAMES + 5] = inside(plane.first_cell.1, flash.ysize);
+    }
+    Ok(Some(record))
+}
+
 /// Checks every op, in order, and encodes those that can change a pixel.
 ///
-/// An op whose clip misses the screen, a quad with an empty source rectangle and a tilemap
-/// layer whose map has no cell for it is checked like any other but yields no record: it
+/// An op whose clip misses the screen, a quad with an empty source rectangle, a tilemap
+/// layer whose map has no cell for it and a tilemap plane whose map has no cells or which
+/// lies beside its clip is checked like any other but yields no record: it
 /// changes no pixel. So a record's clip is never empty
 /// and a quad record always names a slot that holds an image.
 ///
@@ -377,8 +453,24 @@ pub(crate) fn encode_frame(
                 tilemaps.push(tilemap);
                 records.push(record);
             }
-            // Not drawn yet.
-            Op::TilemapPlane(_) => {}
+            Op::TilemapPlane(plane) => {
+                let tilemap = encode_plane(table, tables, index, plane)?;
+                // The record's clip is the part of the clip inside the plane.
+                let area = Rect::new(
+                    plane.corner.0,
+                    plane.corner.1,
+                    tiles_rgss2::PLANE_WIDTH,
+                    tiles_rgss2::PLANE_HEIGHT,
+                );
+                let clip = clip.and_then(|clip| clip.within(area));
+                let (Some(clip), Some(tilemap)) = (clip, tilemap) else {
+                    continue;
+                };
+                let mut record = OpRecord::new(shared::OP_TILEMAP_PLANE, clip);
+                record.words[OP_BITMAP] = tilemaps.len() as u32;
+                tilemaps.push(tilemap);
+                records.push(record);
+            }
         }
     }
     Ok(Records {

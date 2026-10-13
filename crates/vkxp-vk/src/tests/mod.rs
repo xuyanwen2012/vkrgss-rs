@@ -11,5 +11,6 @@ mod shaders;
 mod sweeps;
 mod targeted;
 mod tilemap;
+mod tilemap_rgss2;
 mod timing;
 mod windows;
