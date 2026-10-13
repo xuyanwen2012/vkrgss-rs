@@ -773,3 +773,126 @@ change of the viewport's ox or oy; assigning another viewport SHALL NOT refresh.
 #### Scenario: Other viewport, measured on the original
 - **WHEN** a tilemap in a viewport with ox 0 is assigned a viewport with ox 16 and a frame is taken, then `ox = ox` is evaluated and another is taken
 - **THEN** the first frame shows the map at the origin of the old viewport and the second moved by 16
+
+### Requirement: Draw order of RGSS2
+In a scene of RGSS2 elements SHALL be drawn in ascending order of (z, y, creation), where y is
+the integer y of a sprite and 0 for every other element, and creation is the order in which
+the elements were made, which nothing renews. A viewport SHALL take its place among the
+top-level elements by (its z, 0, its creation), and its own elements SHALL be ordered by the
+same key among themselves. A scene of RGSS1 SHALL keep "Draw order".
+
+#### Scenario: y breaks the tie, measured on the original
+- **WHEN** two overlapping sprites of equal z are made, the first with y 9 and the second with y 0
+- **THEN** the first is drawn over the second
+
+#### Scenario: The property, not the place, measured on the original
+- **WHEN** an older sprite has `y = 20, oy = 20` and a younger one of equal z has `y = 0`
+- **THEN** the older is drawn over the younger
+
+#### Scenario: Viewport, measured on the original
+- **WHEN** a sprite in a viewport has y 50 and a younger top-level sprite of the viewport's z has y 0
+- **THEN** the top-level sprite is drawn over the one in the viewport
+
+#### Scenario: Window, measured on the original
+- **WHEN** an older sprite with y 50 and a younger window have equal z, and likewise with y -50
+- **THEN** the sprite is over the window in the first case and under it in the second
+
+#### Scenario: Cases of the measurement
+- **WHEN** each committed case of the measurement's order topic is extracted and composed
+- **THEN** every pixel equals the expected picture, and the same scenes in RGSS1 keep the order of RGSS1
+
+### Requirement: Viewport flash of RGSS2
+In a scene of RGSS2 a flashing viewport SHALL apply its tone, then its colour, then the flash
+colour at its current alpha, and a flash without a colour SHALL, while it lasts, draw none of
+the viewport's elements and apply neither its tone nor its colour. A scene of RGSS1 SHALL keep
+"Viewport effects".
+
+#### Scenario: Colour and flash, measured on the original
+- **WHEN** each committed case of a viewport with a colour and a flash is composed
+- **THEN** every pixel equals the expected picture
+
+#### Scenario: Flash without a colour, measured on the original
+- **WHEN** a viewport with a tone and a sprite flashes with `nil` for 5 updates
+- **THEN** the frames of those updates show what is behind the viewport unchanged
+
+### Requirement: Plane tile size of RGSS2
+In a scene of RGSS2 the tile of a plane SHALL be `floor(w * zoom_x)` by `floor(h * zoom_y)`
+pixels computed in double precision. A scene of RGSS1 SHALL keep "Planes tile a stretched
+tile".
+
+#### Scenario: Measured on the original
+- **WHEN** a plane of a bitmap 90 high has `zoom_y = 0.7`
+- **THEN** it repeats every 62 rows in RGSS2 and every 63 rows in RGSS1
+
+### Requirement: Sprite placement of RGSS2
+In a scene of RGSS2 an unrotated sprite SHALL start at `x0 = trunc(x - ox * zoom_x)` and be
+`dw = floor(x0 + w * zoom_x) - x0` wide, likewise in y, in double precision and in the
+coordinates of its viewport, and SHALL draw nothing when a zoom or a size is 0 or less. An
+unstretched mirrored sprite whose source rectangle leaves the bitmap SHALL be cut first and
+mirrored inside what remains. A scene of RGSS1 SHALL keep its rules.
+
+#### Scenario: Truncation, measured on the original
+- **WHEN** a sprite has `x = 0, ox = 5, zoom_x = 2.5`
+- **THEN** its left edge is at -12 in RGSS2 and at -13 in RGSS1
+
+#### Scenario: Width depends on the place, measured on the original
+- **WHEN** a sprite 90 wide with `zoom_x = 0.7` stands at x 0 and another at x 272
+- **THEN** the first is 62 and the second 63 pixels wide
+
+#### Scenario: Mirrored cut, measured on the original
+- **WHEN** a sprite of a bitmap 24 by 16 has `src_rect = Rect.new(-5, 6, 18, 17)` and `mirror = true`
+- **THEN** its columns 5 to 17 show the texels 12 down to 0 and the other columns nothing
+
+#### Scenario: Cases of the measurement
+- **WHEN** each committed case of placement and size is extracted and composed
+- **THEN** every pixel equals the expected picture
+
+### Requirement: Bush rows of RGSS2
+In a scene of RGSS2 the bush rows of a sprite SHALL be drawn at the opacity
+`opacity * bush_opacity / 255`, truncated, and not at all when that is below 0 or above 255,
+without the sprite's tone, colour and flash colour and, when the sprite is unrotated, without
+its mirror, from the source rows rule 3 of this change's design names. A scene of RGSS1 SHALL
+keep its rules.
+
+#### Scenario: Opacity, measured on the original
+- **WHEN** bush rows are drawn at `opacity 255, bush_opacity 128`, at `161, 300` and at `255, 256`
+- **THEN** their opacity is 128, 189, and they are not drawn
+
+#### Scenario: Depth beyond the height, measured on the original
+- **WHEN** a sprite of 16 rows at `zoom_y = 2.25` has `bush_depth` 41 and then 37
+- **THEN** its 36 rows show the source rows of the two committed measured sequences
+
+#### Scenario: No tone on bush rows, measured on the original
+- **WHEN** a sprite with a tone, a colour and a bush depth is composed
+- **THEN** the bush rows show the texels without tone and colour and the other rows with them
+
+### Requirement: Wave of a sprite of RGSS2
+In a scene of RGSS2 each screen row of an unrotated sprite with a positive wave amplitude
+SHALL be moved horizontally by the offset rule 5 of this change's design gives, with the texel
+rows of that rule, and a negative amplitude SHALL squeeze the sprite as that rule says. The
+sprite's update SHALL add `wave_speed / wave_length` to the phase modulo 360, also at
+amplitude 0 and when invisible, and SHALL leave the phase when the length is 0.
+
+#### Scenario: Offsets, measured on the original
+- **WHEN** the offset is computed for each committed row of the wave samples measured on the original runtime of VX
+- **THEN** every offset equals the measured value
+
+#### Scenario: Exact half
+- **WHEN** the amplitude is 13 at 330 degrees, and 21 at 30 degrees
+- **THEN** the offsets are -6 and 10
+
+#### Scenario: Phase
+- **WHEN** a sprite with the defaults is updated once, and one with `wave_length = 64`
+- **THEN** the phases are 2.0 and 5.625
+
+#### Scenario: Cases of the measurement
+- **WHEN** each committed wave case (zoom, mirror, source rectangle, viewports, bush, negative amplitude) is extracted and composed
+- **THEN** every pixel equals the expected picture
+
+### Requirement: Whole sprites of RGSS2 as measured
+The CPU reference and the Vulkan backend SHALL draw scenes of sprites of RGSS2 as the model of
+the measurement does.
+
+#### Scenario: Random scenes
+- **WHEN** twenty committed scenes of the measurement's held-out generator are composed by both backends
+- **THEN** every frame equals its expected picture, byte for byte
