@@ -2,7 +2,7 @@
 
 ## 1. Decisions
 
-- [ ] 1.1 `docs/decisions.md`: the section "VX Ace", "Process", the rows A0 to A3 and the risks. Verify: the scenarios of `specs/supported-runtimes/spec.md`.
+- [x] 1.1 `docs/decisions.md`: the section "VX Ace", "Process", the rows A0 to A3 and the risks. Verify: the scenarios of `specs/supported-runtimes/spec.md`.
 
 ## 2. Integration check
 

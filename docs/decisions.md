@@ -7,6 +7,10 @@ The change `extend-scope-to-vx-and-vx-ace` changed the scope on 2026-10-12, by d
 the owner taken that day: from RPG Maker XP alone to RGSS1, RGSS2 and RGSS3. It rewrote "Goal
 and scope" and added "Several runtimes" and the rows V0 to V3 of "Milestones".
 
+The change `plan-vx-ace` recorded the decisions of the owner of 2026-10-13 on VX Ace, taken
+after V3: it rewrote "VX Ace" and "Process" under "Several runtimes" and added the rows A0 to
+A3 of "Milestones" and the risks of VX Ace.
+
 ## Goal and scope
 
 - vkxp is a from-scratch runtime for the games of RPG Maker XP, VX and VX Ace, built to a
@@ -211,11 +215,70 @@ Decisions of the owner of 2026-10-12, recorded by the change `extend-scope-to-vx
 
 ### VX Ace
 
-- VX Ace: after VX; an own fork of Ruby 1.9.2 is vendored and patched to the behaviour
-  measured on the original, as was done with Ruby 1.8.7; its guest is an executable of its
-  own, which keeps the two interpreters' symbols and global state apart. How it is
-  packaged and chosen, what `--guest thread` means for it, and everything else about
-  VX Ace is decided after V3.
+Decisions of the owner of 2026-10-13, recorded by the change `plan-vx-ace`. That day the
+original runtime of VX Ace was measured under Wine (the row A0 of "Milestones") and the
+embedding of Ruby 1.9.2 was studied; both studies are kept outside the repository with their
+tools and logs. The first two decisions were taken by choice among laid-out options, the
+others by accepting the direction of the studies under the goal the owner set that day: VX
+Ace finished and published.
+
+- Milestones of VX Ace:
+  - A0: the original runtime of VX Ace starts under Wine, takes a schedule of input, and
+    gives the same captures at the same frame numbers in repeated runs; how its waits and
+    fades count as frames is established. As V0, a proof of the original's side only. Done
+    on 2026-10-13, with limits.
+  - A1: title screen and menu.
+  - A2: walking on a map.
+  - A3: battle, saving and loading.
+
+  The standard is that of "Goal and scope", and the rule of when a milestone is reached and
+  what its record names is that of V1 to V3 in "Order and milestones". Version 0.3.0 is
+  released when A3 is reached.
+- Guest executable: a game of RGSS3 runs in a guest executable of its own,
+  `vkxp-guest-rgss3`, beside `vkxp`: the binding over Ruby 1.9.2 and the guest role, no
+  window, no Vulkan, no audio. This keeps the two interpreters' symbols and global state
+  apart (868 global symbols are defined by both). The program knows the runtime before it
+  starts a guest and starts that executable instead of itself, found beside its own path;
+  when the guest attaches, the program checks that it is of its own version. The release
+  archive holds both files.
+- `--guest thread` with a game of RGSS3 is refused with a message that names
+  `--guest process`. Without the option a headless run of RGSS3 uses a process.
+- Interpreter: ruby-1.9.2-p0, the release the original embeds (it says `ruby 1.9.2p0
+  (2010-08-18 revision 29036) [i386-mswin32_90]`), is vendored under
+  `third_party/ruby-1.9.2/` as 1.8.7 is: a subset with a manifest, a patch log and a
+  checked-in `config.h`, built without `configure` or a bootstrap Ruby by a sys crate of its
+  own, `vkxp-ruby192-sys`, which offers the Rust API of `vkxp-ruby-sys`. It needs
+  `-std=gnu89 -fwrapv`. It is our fork, patched to the behaviour measured on the original,
+  as was done with Ruby 1.8.7. The stress run of the collector is part of the gate for it
+  from the start.
+- Binding: one source for the RGSS classes. `vkxp-binding` is compiled a second time, as a
+  package of its own over `vkxp-ruby192-sys`; what differs by interpreter is behind the API
+  of the sys crates or a runtime check. There is no second copy of the classes.
+- Encodings: only what the original has is linked and listed, and an encoding the original
+  does not know is unknown in vkxp too. The original lists four (ASCII-8BIT, UTF-8,
+  UTF-16LE, US-ASCII), with UTF-8 as the default external and source encoding; which
+  encodings exactly, transcoding included, is measured on the original before the change
+  that implements it.
+- Hash seed: `String#hash` gets a fixed seed in vkxp. The original's differs in every
+  process, so there is no value to reproduce, and a run of vkxp stays reproducible.
+- Script threads: Ruby threads of RGSS3 are native threads. They run; a run with a live
+  script thread is not claimed to be reproducible, and a save state is refused while one is
+  alive. The timer thread of the interpreter is not started before a script makes a thread.
+- Word size: the guest stays a 64-bit build against a 32-bit original. Differences a script
+  can see (`2**30` is a Fixnum, `1.size`) are recorded as known differences unless a game
+  of the corpus depends on one.
+- Order of work: vendoring and the sys crate, then the binding, are one chain. Beside it,
+  at once: the guest role as a library, runtime detection with the archive `Game.rgss3a`
+  and the built-in scripts, and the parts of the RGSS3 surface that live in `vkxp-core`.
+  Behaviour of the RGSS3 classes is measured on the original before it is implemented, as
+  for VX.
+- The original side of every comparison runs without GPU device nodes and without network
+  (change `run-the-original-without-device-nodes`).
+- Corpus: Crysalis (unencrypted, DLL 3.0.0.1, the main test game), In Search of Immortality
+  (`Game.rgss3a`, DLL 3.0.1.1, resizes its screen to 640x480) and Capella's Promise 1.09
+  (`Game.rgss3a`, DLL 3.0.1.1). Each ships its DLL in `System/`; the run-time package holds
+  none. A game is compared with the DLL it ships, as for VX.
+- The process of this work is in "Process" below.
 
 ### Several runtimes in one program
 
@@ -278,8 +341,9 @@ game no longer says that its support is experimental, and version 0.2.0 is the r
 ### Process
 
 - As before: OpenSpec changes implemented by flows, at most three in parallel. The owner's
-  standing go-ahead covers drafting, launching, merging and archiving up to V3 and does not
-  cover VX Ace. Pushing to the public repository is asked for each time.
+  standing go-ahead, which until 2026-10-13 ended at V3 and did not cover VX Ace, covers
+  VX Ace through the release of 0.3.0, pushing for that release included (change
+  `plan-vx-ace`).
 
 ## Milestones
 
@@ -291,6 +355,9 @@ accepting the limits listed under "Not covered". Work beyond them is new work. T
 confirmation concerns M0 to M6 only. The rows V0 to V3 are the milestones of VX, decided on
 2026-10-12 (see "Order and milestones"); a row is set to "Done" only with the record that
 section asks for. V0 is a proof of the original's side alone and was done on 2026-10-12.
+The rows A0 to A3 are the milestones of VX Ace, decided on 2026-10-13 (see "VX Ace"), under
+the same rule; A0 is, like V0, a proof of the original's side alone and was done on
+2026-10-13.
 
 | | Outcome | Status | Evidence | Not covered |
 |---|---|---|---|---|
@@ -305,6 +372,10 @@ section asks for. V0 is a proof of the original's side alone and was done on 202
 | V1 | VX: title screen and menu | Done | 2026-10-12, Visions & Voices with the DLL it ships (2.0.0.1), `cargo xtask oracle` with `--no-threads`, seed of the harness, the input schedule of V0 extended by the keys that open the menu: the title (frames 100 and 261, the second inside its fade-out) and the menu over its blurred snapshot (frames 12100 to 12550) equal the original outside the rectangles of text; frame 261 has no differing pixel | The owner accepted on 2026-10-12 that frames with text differ in the pixels of the glyphs. The harness does not leave the pixels of text out: every frame with text counts as different, and each of the 25 such frames of these runs was judged by its picture of differences. In the menu of The Witch's House the two sides drew with different fonts (the game asks for `ＭＳ Ｐ明朝` first, which the prefix lacks and vkxp replaces), so the layout of its text was not compared; The Witch's House 1.09a from its archive with the DLL it ships (2.0.2.1) was compared on its title only (frames 300, 590: text alone differs); the run of Visions & Voices over 11901 frames was repeated and gave the same 13 pictures on each side byte for byte; the name scene was compared (frames 3500, 3630), the load screen and the other screens of the menu were not |
 | V2 | VX: walking on a map | Done | The same run: maps with events, weather and messages (frames 1000, 2800, 11300, 11580) equal the original outside the rectangles of text, and five frames of walking without text (11700, 11760, 11900, 11950, 12700) have no differing pixel, after a battle with random numbers. The Witch's House from its archive, a schedule that starts the game and walks: eight frames of its intro and first map (700 to 2150) have no differing pixel, and two frames with its menu (2300, 2400) differ in text alone, where the two sides also chose different fonts | As V1; a map with animated water or a table edge of the game was not looked for among the frames |
 | V3 | VX: battle, saving and loading | Done | The same run: two frames of the side-view battle of the game (6600, 7000) equal the original outside the rectangles of text. The Witch's House, a schedule that walks to its save point and saves to file 1 (frames 2055 to 2700 compared, three without text have no differing pixel): the save `Save/1.rvdata` (76577 bytes) and the thumbnail `Save/1.cdat` the game writes beside it are byte for byte those of the original. The same schedule continued: the save is loaded from the game's menu (frames 2700 to 3300; the load screen with the thumbnail differs in text alone, and the five frames without text, three of them after the load, have no differing pixel) | No save of Visions & Voices (its menu has no save command; it saves at events further into the game than the schedule goes); a game name that vkxp or Ruby 1.8.7 made first keeps a provisional symbol number, which can order a dumped hash another way (not met in this save); in the battle of Visions & Voices the window of a "Missed!" notice is one pixel wider on the original (frame 7000): both sides drew with the game's own font, so the measured width of that text differs by one pixel, which is layout and not glyph pixels; the owner accepted it on 2026-10-12 as a known limit like that of XP, the width of the original being that of GDI under Wine; on the save and load screens of The Witch's House the box around "File 1" follows the width of text drawn with different fonts; as V1 |
+| A0 | The original runtime of VX Ace under Wine: a schedule of input, the same captures at the same frame numbers in repeated runs, how waits and fades count as frames | Done | 2026-10-13, Crysalis (a sample game of the publisher, unencrypted) with the DLL it ships (version 3.0.0.1, `RGSS300.dll`), a schedule of 6551 frames through the title, the introduction with its messages, the menu, walking with a transfer between maps, a battle and walking again: 31 window captures and 13 snapshots byte for byte equal in two runs with seed 1 (waits and fades run as loops of `Graphics.update`) and in two runs with seed 20261009 (native waits and fades); where a capture and a snapshot were taken of the same frame at a brightness above 0 they are equal, 13 of 13 in each run with seed 1. The frame rules of `Graphics.update`, `wait`, `fadeout`, `fadein`, `freeze` and `transition` are those of RGSS2: 331 frames of a probe game, 85729 sampled pixels, none wrong, on version 3.0.0.1 and on 3.0.1.1; frame rate and sizes are those of RGSS2 too. In Search of Immortality (version 3.0.1.1, `RGSS301.dll`, 640 by 480) and Capella's Promise 1.09 (version 3.0.1.1 under the name `RGSS300.dll`) start from their archives `Game.rgss3a` with the probe inside: 1501 frames each with the confirm key every 50 frames, 15 captures and 4 snapshots each. Of the interpreter: 2170 symbols exist before the first script and the next serial is 2086; `Marshal` is 4.8; there is no prelude; a method calling itself inside a Fiber reaches depth 284 | A frame inside a transition cannot be held, only the one after it; saving, loading and reset were not measured; the two encrypted games ran once each, without a repeated run; in sequences that call `Input.update` several times without a `Graphics.update`, one of two runs saw a key one update later, so the rule of when a key is seen holds for the frame loop only; no game of the corpus has a name input scene; mask transitions were recorded, not fitted; audio and movies; `String#hash` differs in every process, and Ruby threads run at times that are not repeatable against frames |
+| A1 | VX Ace: title screen and menu | Not started | | |
+| A2 | VX Ace: walking on a map | Not started | | |
+| A3 | VX Ace: battle, saving and loading | Not started | | |
 
 Text: positions, widths and line placement follow rules measured on the original under Wine
 with an open font; glyph shapes are not compared, as the scope in "Goal and scope" says, and
@@ -369,7 +440,26 @@ Risks of the extension to VX and VX Ace, each with what answers it (change
   processor, and a run with a window. No performance requirement is made of these numbers.
 - Ruby 1.9.2 differs in encodings, in what it serialises and in how it is embedded. These
   are checked for feasibility when VX Ace is planned; sharing the rest of vkxp does not
-  settle them.
+  settle them. They were checked on 2026-10-13: the release builds as a static library and
+  embeds, with the risks below.
+
+Risks of VX Ace, named by the study of 2026-10-13, each with what answers it (change
+`plan-vx-ace`):
+
+- Ruby 1.9.2-p0 does not work with a current compiler as it is: Fibers needed fixes, and
+  two values were lost to the conservative collector. More lost values must be expected.
+  The stress run of the collector is part of the gate from the start.
+- Ruby threads are native threads: a copy made by `fork` has none of the other threads, and
+  when a thread runs is not repeatable. A save state is refused while a script thread is
+  alive, and such a run is not claimed to be reproducible ("VX Ace").
+- Strings have encodings throughout the binding: every string it creates has to be
+  labelled, and the original knows fewer encodings than the release. This is work, not a
+  doubt; what the original has is measured first.
+- Glyph shapes differ, as before; text is compared by layout and advance widths.
+- `DL` lets a script reach into the memory of the runtime. It gets a decision of its own
+  when a game needs it ("Corpus").
+- `pow` of glibc differs from the C runtime of the DLL in the last bit for `10.0**23`. The
+  rest of `Math` is not surveyed.
 
 Open, to be decided before the change that implements it is drafted: how
 `Graphics.snap_to_bitmap` of VX gets the pixels of the scene as it is, also while the display
