@@ -3,6 +3,7 @@
 
 use crate::{Font, Mask, TextMetrics, TextRasterizer};
 
+pub mod sprite_cases;
 pub mod window_cases;
 
 /// A deterministic stand-in for a font rasteriser.

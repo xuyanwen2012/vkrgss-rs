@@ -78,3 +78,20 @@ colour and mirror (not measured on XP).
   `wave6` and twenty scenes of the held-out generator, rebuilt by formula with expected
   pictures or digests from the report's model; the wave rows of
   `vx-v1-sprite-wave-samples.txt` as numbers.
+
+## Notes of the implementation
+
+- `order-elements-and-read-input-as-rgss2` was not merged when this change was implemented,
+  so the scene had no value for the rules of its runtime. This change adds it under the
+  names that change uses: `Rules { Rgss1, Rgss2 }`, `Scene::with_rules(rules, size)` and
+  `Scene::rules()`, kept by `Scene::clear`. A sprite takes the rules of its scene when it is
+  created.
+- The sprite of RGSS2 is `crates/vkxp-core/src/extract/rgss2.rs`. It is drawn with stretch
+  quads where they show exactly the measured texels, and from a picture of its own (the
+  bitmap `turned.rs` keeps for the cut sprite of RGSS1) where they do not: a stretch cut by
+  the bitmap's edge. The protocol and the compositors are unchanged.
+- The cases are committed as text scenes with the digests of the model's pictures
+  (`crates/vkxp-core/tests/data/sprite-rgss2-*.txt`, read by
+  `vkxp_core::test_support::sprite_cases`), as the windows of RGSS2 are. The planes of
+  `size2` and their viewports are left out of its scenes, because the size of a plane's tile
+  belongs to the other change; the sprites of those frames are all there.

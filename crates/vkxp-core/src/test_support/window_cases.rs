@@ -372,7 +372,12 @@ impl Run {
     }
 }
 
-impl Case<'_> {
+impl<'a> Case<'a> {
+    /// The statements of the scene, in order.
+    pub fn statements(&self) -> &[&'a str] {
+        &self.statements
+    }
+
     /// Runs the scene: the packet of every frame, in the order a compositor must get them,
     /// each with the digest of the picture it must draw.
     ///

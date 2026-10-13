@@ -268,6 +268,42 @@ pub(crate) fn stretch_start(position: i32, origin: i32, zoom: f64) -> Option<i32
         .then_some(start as i32)
 }
 
+/// Beyond this a length in double precision has no place in a rectangle.
+const F64_U32_END: f64 = 4_294_967_296.0;
+
+/// The first pixel and the number of pixels of an unrotated sprite of RGSS2 along one axis,
+/// in the coordinates of its viewport, as the original runtime of VX finds them in double
+/// precision:
+///
+/// ```text
+/// start  = trunc(position - origin * zoom)       toward zero
+/// pixels = floor(start + length * zoom) - start
+/// ```
+///
+/// `None` when nothing is drawn: a zoom or a length of 0 or less, a zoom that is not a
+/// number, no pixel, or a result beyond the coordinates of a rectangle.
+///
+/// The sum is rounded to a double before its floor, so the size depends on the place: 90
+/// texels at a zoom of 0.7 are 62 pixels at 0 and 63 at 272.
+///
+/// Provenance: oracle measurement 2026-10-12, RGSS202E (2.0.2.1 and 2.0.0.1), topics
+/// `clip3`, `zoom`, `size`, `size2` and `viewport` of `vx-v1-sprite-REPORT.md`, without a
+/// differing pixel.
+pub(crate) fn stretch_span_rgss2(
+    position: i32,
+    origin: i32,
+    length: i32,
+    zoom: f64,
+) -> Option<(i32, u32)> {
+    if zoom.is_nan() || zoom <= 0.0 || length <= 0 {
+        return None;
+    }
+    let start = (f64::from(position) - f64::from(origin) * zoom).trunc();
+    let pixels = (start + f64::from(length) * zoom).floor() - start;
+    let placed = (f64::from(i32::MIN)..=f64::from(i32::MAX)).contains(&start);
+    (placed && (1.0..F64_U32_END).contains(&pixels)).then_some((start as i32, pixels as u32))
+}
+
 /// Sine and cosine of an angle in degrees. Multiples of 90 degrees give exactly 0, 1 and -1.
 fn sin_cos(degrees: f64) -> (f64, f64) {
     // The remainder of a floating-point division is exact.
@@ -532,6 +568,37 @@ mod tests {
         assert_eq!(stretch_start(0, 1, f64::NAN), None);
         assert_eq!(stretch_start(i32::MIN, 0, 1.0), Some(i32::MIN));
         assert_eq!(stretch_start(i32::MAX, 0, 1.0), None);
+    }
+
+    /// Scenarios "Truncation" and "Width depends on the place" of "Sprite placement of
+    /// RGSS2".
+    #[test]
+    fn spans_of_rgss2_are_truncated_and_sized_in_double_precision() {
+        assert_eq!(stretch_span_rgss2(0, 5, 24, 2.5), Some((-12, 60)));
+        assert_eq!(stretch_start(0, 5, 2.5), Some(-13));
+        assert_eq!(stretch_span_rgss2(0, 0, 90, 0.7), Some((0, 62)));
+        assert_eq!(stretch_span_rgss2(272, 0, 90, 0.7), Some((272, 63)));
+        assert_eq!(stretch_length(90, 0.7), Some(63));
+        assert_eq!(stretch_span_rgss2(7, 3, 16, 1.0), Some((4, 16)));
+        // A start right of 0 is rounded down as in RGSS1.
+        assert_eq!(stretch_span_rgss2(10, 1, 16, 1.5), Some((8, 24)));
+        for (length, zoom) in [
+            (16, 0.0),
+            (16, -1.0),
+            (16, f64::NAN),
+            (16, f64::INFINITY),
+            (16, 0.06),
+            (0, 3.0),
+            (-16, 3.0),
+            (16, 1e30),
+        ] {
+            assert_eq!(
+                stretch_span_rgss2(0, 0, length, zoom),
+                None,
+                "{length} at {zoom}"
+            );
+        }
+        assert_eq!(stretch_span_rgss2(0, 1, 16, 1e30), None);
     }
 
     #[test]

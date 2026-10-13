@@ -390,7 +390,10 @@ impl Assembly<'_> {
         };
         // Only an angle of exactly 0 is not turned: a full turn is.
         if sprite.angle == 0.0 {
-            self.upright_sprite(sprite, bitmap, level, look);
+            match sprite.rules {
+                Rules::Rgss1 => self.upright_sprite(sprite, bitmap, level, look),
+                Rules::Rgss2 => self.upright_sprite_rgss2(sprite, bitmap, level, look),
+            }
         } else {
             self.turned_sprite(sprite, level, look);
         }
@@ -778,6 +781,8 @@ impl Scene {
     }
 }
 
+pub(crate) mod rgss2;
+
 #[cfg(test)]
 pub(crate) mod testing {
     use vkxp_compose_ref::{ComposeError, Compositor, Frame};
@@ -838,6 +843,12 @@ pub(crate) mod testing {
         /// A stage whose scene follows `rules`.
         pub(crate) fn with_rules(rules: crate::Rules, width: u32, height: u32) -> Stage {
             Stage::with(Scene::with_rules(rules, Size::new(width, height)))
+        }
+
+        /// A stage with a small screen and the rules of RGSS2.
+        pub(crate) fn rgss2(width: u32, height: u32) -> Stage {
+            let size = Size::new(width, height);
+            Stage::with(Scene::with_rules(crate::Rules::Rgss2, size))
         }
 
         fn with(scene: Scene) -> Stage {

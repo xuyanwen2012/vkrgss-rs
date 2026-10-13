@@ -19,6 +19,17 @@ pub enum Rules {
     Rgss2,
 }
 
+/// Which runtime's measured rules a scene and an input state follow where the runtimes
+/// differ.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum Rules {
+    /// RGSS1, of RPG Maker XP.
+    #[default]
+    Rgss1,
+    /// RGSS2, of RPG Maker VX.
+    Rgss2,
+}
+
 /// Names one occupant of one slot of an arena.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct Key {
@@ -337,12 +348,12 @@ impl Scene {
         self.stamp
     }
 
-    /// Creates a sprite with the RGSS1 defaults, in `viewport` or directly on the screen.
-    /// In a disposed viewport the sprite is alive and not drawn.
+    /// Creates a sprite with the defaults of the scene's runtime, in `viewport` or directly
+    /// on the screen. In a disposed viewport the sprite is alive and not drawn.
     pub fn create_sprite(&mut self, viewport: Option<ViewportId>) -> Result<SpriteId, SceneError> {
         let stamp = self.next_stamp();
         self.sprites
-            .insert(Sprite::new(viewport, stamp))
+            .insert(Sprite::new(viewport, stamp, self.rules))
             .map(SpriteId)
             .ok_or(SceneError::Full(ElementKind::Sprite))
     }

@@ -17,15 +17,27 @@
 
 use vkxp_proto::{BitmapId, STRETCH_FRAC_BITS, stretch_step};
 
+use crate::extract::rgss2::{Placed, Shape};
 use crate::extract::{Assembly, Bush, Level, Look, Rows, intersect, rows};
 use crate::geometry::{self, Geometry, TurnedBox};
-use crate::{Bitmaps, FontDefaults, MAX_BITMAP_PIXELS, Rect, Sprite};
+use crate::{Bitmaps, FontDefaults, MAX_BITMAP_PIXELS, Rect, Rules, Sprite};
 
 /// What the bitmap of a sprite was rendered from.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Key {
     Turned(TurnedKey),
     Cut(CutKey),
+    Upright(UprightKey),
+}
+
+/// What the bitmap of an unrotated sprite of RGSS2 was rendered from.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct UprightKey {
+    source: BitmapId,
+    revision: u64,
+    shape: Shape,
+    /// Left and top of the rendered part, from the corner of the sprite, and its size.
+    part: (u32, u32, u32, u32),
 }
 
 /// What the bitmap of a stretched sprite with a cut source rectangle was rendered from.
@@ -89,16 +101,16 @@ fn inside(src: Rect, bitmap: Rect) -> bool {
 /// One stretch along one axis of a sprite that is not turned: `length` texels from `start`
 /// on, drawn into `pixels` pixels from pixel `first` of the sprite on. Neither is 0.
 #[derive(Debug, Clone, Copy)]
-struct Span {
-    start: i64,
-    length: u32,
-    first: u32,
-    pixels: u32,
+pub(crate) struct Span {
+    pub(crate) start: i64,
+    pub(crate) length: u32,
+    pub(crate) first: u32,
+    pub(crate) pixels: u32,
     /// Counts the texels from the far end.
-    mirror: bool,
+    pub(crate) mirror: bool,
     /// Whether the texels outside the bitmap cut the stretch as they cut a `stretch_blt`,
     /// or are only left out of it.
-    cut: bool,
+    pub(crate) cut: bool,
 }
 
 impl Span {
@@ -134,7 +146,7 @@ impl Span {
     ///
     /// Provenance: oracle measurement 2026-10-10, RGSS103J, probes `srcrect` and `srcrect2`
     /// (112 sprites that are not turned, without a differing pixel).
-    fn texel(&self, i: u32, size: usize) -> Option<usize> {
+    pub(crate) fn texel(&self, i: u32, size: usize) -> Option<usize> {
         let i = i128::from(i.checked_sub(self.first).filter(|i| *i < self.pixels)?);
         let (start, w, dw) = (
             i128::from(self.start),
@@ -189,6 +201,7 @@ struct Cut {
 enum Picture {
     Turned(Placement),
     Cut(Cut),
+    Upright(Placed),
 }
 
 impl Picture {
@@ -197,6 +210,7 @@ impl Picture {
         match self {
             Picture::Turned(placement) => placement.part,
             Picture::Cut(cut) => cut.part,
+            Picture::Upright(placed) => placed.part,
         }
     }
 }
@@ -328,6 +342,16 @@ impl Sprite {
         let source = self.bitmap?;
         let revision = bitmaps.revision(source).ok()?;
         let bitmap = bitmaps.rect(source).ok()?;
+        if self.angle == 0.0 && self.rules == Rules::Rgss2 {
+            let placed = self.placed_rgss2(level, bitmap)?;
+            let key = UprightKey {
+                source,
+                revision,
+                shape: placed.shape,
+                part: placed.offsets(),
+            };
+            return Some((Key::Upright(key), Picture::Upright(placed)));
+        }
         if self.angle == 0.0 {
             let cut = self.cut_placement(level, bitmap)?;
             let (dest, part) = (cut.dest, cut.part);
@@ -383,7 +407,11 @@ impl Sprite {
     /// what it has.
     pub(crate) fn refresh_turned(&mut self, bitmaps: &mut Bitmaps, level: Option<&Level>) {
         let source = self.bitmap.and_then(|id| bitmaps.rect(id).ok());
-        let pictured = self.angle != 0.0 || source.is_some_and(|bitmap| self.is_cut(bitmap));
+        let pictured = self.angle != 0.0
+            || source.is_some_and(|bitmap| match self.rules {
+                Rules::Rgss1 => self.is_cut(bitmap),
+                Rules::Rgss2 => self.is_pictured_rgss2(bitmap),
+            });
         if !self.visible || !pictured {
             self.turned.dispose(bitmaps);
             return;
@@ -402,6 +430,7 @@ impl Sprite {
         let rgba = match &picture {
             Picture::Turned(placement) => self.render_turned(bitmaps, placement),
             Picture::Cut(cut) => self.render_cut(bitmaps, cut),
+            Picture::Upright(placed) => self.render_rgss2(bitmaps, placed),
         };
         let part = picture.part();
         let size = Rect::new(0, 0, part.width as i32, part.height as i32);
@@ -502,7 +531,11 @@ impl Assembly<'_> {
         };
         let bottom = placement.bounds.bottom + placement.corner.1;
         let split = bottom - i64::from(sprite.bush_depth.max(0));
-        self.picture(bitmap, placement.part, split, level.clip, look);
+        let faint = Look {
+            opacity: look.opacity >> 1,
+            ..look
+        };
+        self.picture(bitmap, placement.part, split, level.clip, look, faint);
     }
 
     /// A stretched sprite whose source rectangle leaves its bitmap: the bitmap it was
@@ -520,24 +553,25 @@ impl Assembly<'_> {
         };
         let bottom = i64::from(cut.dest.y) + i64::from(cut.dest.height);
         let split = bottom - i64::from(cut.bush);
-        self.picture(bitmap, cut.part, split, level.clip, look);
+        let faint = Look {
+            opacity: look.opacity >> 1,
+            ..look
+        };
+        self.picture(bitmap, cut.part, split, level.clip, look, faint);
     }
 
     /// The whole of `bitmap`, unscaled, at `part`: the rows above `split` as `look` says and
-    /// those from it on with half the opacity.
-    fn picture(
+    /// those from it on, the faint rows, as `faint` says.
+    pub(crate) fn picture(
         &mut self,
         bitmap: BitmapId,
         part: vkxp_proto::Rect,
         split: i64,
         clip: vkxp_proto::Rect,
         look: Look,
+        faint: Look,
     ) {
         let src = Rect::new(0, 0, part.width as i32, part.height as i32);
-        let faint = Look {
-            opacity: look.opacity >> 1,
-            ..look
-        };
         let above = rows(clip, i64::MIN, split);
         let below = rows(clip, split, i64::MAX);
         self.stretched(bitmap, src, part, false, above, look);

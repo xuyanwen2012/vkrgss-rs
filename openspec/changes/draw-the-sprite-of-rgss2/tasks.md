@@ -2,7 +2,7 @@
 
 ## 1. Place, size and cut
 
-- [ ] 1.1 Rules 1, 2 and 4. Verify: the scenarios of "Sprite placement of RGSS2"; `cargo test -p vkxp-core --locked` passes.
+- [x] 1.1 Rules 1, 2 and 4. Verify: the scenarios of "Sprite placement of RGSS2"; `cargo test -p vkxp-core --locked` passes.
 
 ## 2. Bush
 

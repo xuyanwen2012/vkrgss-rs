@@ -7,7 +7,7 @@
 
 use vkxp_proto::BitmapId;
 
-use crate::scene::ViewportId;
+use crate::scene::{Rules, ViewportId};
 use crate::tilemap::TileCache;
 use crate::turned::Turned;
 use crate::window::{Cache, Caches};
@@ -126,10 +126,12 @@ pub struct Sprite {
     pub(crate) flash: Flash,
     /// The bitmap the sprite is drawn from while it is turned.
     pub(crate) turned: Turned,
+    /// The rules of the scene the sprite was created in.
+    pub(crate) rules: Rules,
 }
 
 impl Sprite {
-    pub(crate) fn new(viewport: Option<ViewportId>, stamp: u64) -> Sprite {
+    pub(crate) fn new(viewport: Option<ViewportId>, stamp: u64, rules: Rules) -> Sprite {
         Sprite {
             visible: true,
             x: 0,
@@ -151,6 +153,7 @@ impl Sprite {
             opacity: 255,
             flash: Flash::default(),
             turned: Turned::default(),
+            rules,
         }
     }
 
@@ -169,8 +172,14 @@ impl Sprite {
     }
 
     /// Assigns a bitmap, or none. Assigning a live bitmap sets the source rectangle to the
-    /// whole bitmap; otherwise the source rectangle stays as it is.
+    /// whole bitmap; otherwise the source rectangle stays as it is. In RGSS2 it also stays
+    /// when the bitmap is the one the sprite has already.
+    ///
+    /// Provenance of the rule of RGSS2: oracle measurement 2026-10-12, RGSS202E.
     pub fn set_bitmap(&mut self, bitmap: Option<BitmapId>, bitmaps: &Bitmaps) {
+        if self.rules == Rules::Rgss2 && bitmap == self.bitmap {
+            return;
+        }
         self.bitmap = bitmap;
         if let Some(Ok(rect)) = bitmap.map(|id| bitmaps.rect(id)) {
             self.src_rect = rect;
@@ -621,7 +630,7 @@ mod tests {
         );
         // The same state serves sprites and viewports.
         let red = Color::new(255.0, 0.0, 0.0, 255.0);
-        let mut sprite = Sprite::new(None, 0);
+        let mut sprite = Sprite::new(None, 0, Rules::Rgss1);
         sprite.flash(Some(red), i32::MAX);
         sprite.update();
         let mut viewport = Viewport::new(Rect::new(0, 0, 8, 8), 0);

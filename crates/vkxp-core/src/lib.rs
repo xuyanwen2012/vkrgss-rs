@@ -99,7 +99,7 @@
 //! | `tilemap` | tilemaps as ops, the tables sent for them, the overlay of flashing cells; the tile numbering is `vkxp_proto::tiles` |
 //! | `input` | [`InputState`] |
 //! | `error` | [`BitmapError`], [`CreateFailure`], [`DecodeError`], [`TableError`], [`SceneError`], [`ElementKind`] |
-//! | `test_support` | stand-ins for tests, such as a rasteriser with fixed-size cells; scenes of windows of RGSS2 as text |
+//! | `test_support` | stand-ins for tests, such as a rasteriser with fixed-size cells; scenes of windows and of sprites of RGSS2 as text |
 
 #![forbid(unsafe_code)]
 
