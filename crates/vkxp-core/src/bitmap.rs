@@ -5,6 +5,8 @@ use vkxp_proto::BitmapId;
 
 use crate::{BitmapError, Color, CreateFailure, Font, FontDefaults, Rect};
 
+mod rgss2;
+
 /// Largest bitmap that can be created, in pixels. It equals the limit of the compositors'
 /// bitmap stores, so every bitmap created here can be uploaded.
 pub const MAX_BITMAP_PIXELS: u64 = 1 << 28;

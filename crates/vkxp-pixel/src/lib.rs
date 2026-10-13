@@ -13,17 +13,25 @@
 //! separately, in [`BITMAP_PROVENANCE`]. Hue rotation runs on the CPU alone and has no GLSL
 //! counterpart. Stretch sampling is defined in `vkxp-proto`, where every backend, the compute
 //! shader included, takes it for stretched quads; [`stretch_index`] calls that definition.
+//!
+//! The arithmetic of the bitmap operations RGSS2 adds (blur, radial blur, gradient, clearing)
+//! is listed in [`BITMAP_RGSS2_PROVENANCE`]. It runs on the CPU alone too.
 
 #![forbid(unsafe_code)]
 
 mod arith;
 mod bitmap;
+mod bitmap_rgss2;
 
 pub use arith::{
     PROVENANCE, Rgba, apply_gray, apply_tone, blend_add, blend_color, blend_normal,
     blend_normal_translucent, blend_sub, blend_window, effective_alpha,
 };
 pub use bitmap::{BITMAP_PROVENANCE, rotate_hue, stretch_index};
+pub use bitmap_rgss2::{
+    BITMAP_RGSS2_PROVENANCE, cleared_pixel, gradient_color, radial_blur_source, radial_blur_turns,
+    truncated_mean,
+};
 
 /// Where the formula of an arithmetic function comes from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -70,4 +78,10 @@ pub fn provenance() -> &'static [ArithmeticFn] {
 /// functions appears in [`provenance`], the list of blending functions GPU backends mirror.
 pub fn bitmap_provenance() -> &'static [ArithmeticFn] {
     BITMAP_PROVENANCE
+}
+
+/// The provenance of the arithmetic of the bitmap operations RGSS2 adds, in declaration
+/// order. None of these functions appears in [`provenance`] or [`bitmap_provenance`].
+pub fn bitmap_rgss2_provenance() -> &'static [ArithmeticFn] {
+    BITMAP_RGSS2_PROVENANCE
 }

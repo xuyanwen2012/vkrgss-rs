@@ -2,8 +2,8 @@
 
 ## 1. Pixel operations
 
-- [ ] 1.1 `blur`, `gradient_fill_rect`, `clear_rect`: arithmetic, provenance entries, core functions. Verify: the scenarios of "Blur of RGSS2", "Gradient of RGSS2" and "Clearing a rectangle"; `cargo test -p vkxp-pixel -p vkxp-core --locked` passes.
-- [ ] 1.2 `radial_blur`. Verify: the scenarios of "Radial blur of RGSS2"; the same command.
+- [x] 1.1 `blur`, `gradient_fill_rect`, `clear_rect`: arithmetic, provenance entries, core functions. Verify: the scenarios of "Blur of RGSS2", "Gradient of RGSS2" and "Clearing a rectangle"; `cargo test -p vkxp-pixel -p vkxp-core --locked` passes.
+- [x] 1.2 `radial_blur`. Verify: the scenarios of "Radial blur of RGSS2"; the same command.
 
 ## 2. Text
 
