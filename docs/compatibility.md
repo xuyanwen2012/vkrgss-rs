@@ -122,10 +122,6 @@ Not measured, or not there yet:
 - A skin or a contents bitmap that is disposed while the window has it: vkxp goes on
   drawing the background, frame and cursor it built, and draws no contents, arrows or pause
   sign from a disposed bitmap.
-- Among elements of equal `z` vkxp draws in the order of creation. The original puts a
-  sprite before or behind a window of its `z` by the sprite's `y`; that order comes with the
-  sprites of VX.
-- A tone or a colour of a viewport over a window follows the rules of XP.
 - Windows larger than 600 pixels and origins beyond 1000 were not measured.
 
 In a game of XP the window is drawn as before and has no `openness`.
@@ -163,13 +159,29 @@ Not measured, or different from the original:
   the columns can be one pixel off.
 - A negative `wave_length`. With a `wave_length` of 0 `Sprite#update` of the original does
   not return; vkxp leaves the phase and draws the sprite without a wave.
-- `blend_type=` with a value other than 0, 1 and 2 raises `ArgumentError` on the original
-  and blends normally in vkxp.
-- Among sprites of equal `z` the original draws the one with the larger `y` in front; vkxp
-  draws in the order of creation.
 
 In a game of XP a sprite is drawn as before and has none of `bush_opacity`, `wave_amp`,
 `wave_length`, `wave_speed` and `wave_phase`.
+
+### Order, viewports, planes and input of VX
+
+Measured on the same two versions of the original runtime and reproduced without a wrong
+pixel or value:
+
+- Elements are drawn in ascending order of (`z`, `y`, creation). `y` is that of a sprite and
+  0 for a window, a plane, a viewport and the planes of a tilemap; a viewport takes its place
+  by its own `z` and creation.
+- A flashing viewport applies its tone, its colour and then the flash colour. A flash
+  without a colour draws nothing of the viewport and applies neither tone nor colour.
+- The tile of a plane is sized in double precision.
+- `blend_type=` of a sprite and a plane raises `ArgumentError` for a value other than 0, 1
+  and 2.
+- `Input` repeats a held button after 24 updates and then every 6. The keys are those of VX
+  (`docs/running.md`).
+- The vagueness of a masked transition defaults to 40; the thresholds are those of XP,
+  stepped from 1.
+
+Not measured: gamepads and the F1 dialog of VX; a negative vagueness is taken as 0.
 
 ### Bitmap and Font of VX
 
