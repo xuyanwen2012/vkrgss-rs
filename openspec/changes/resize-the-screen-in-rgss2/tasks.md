@@ -6,7 +6,7 @@
 
 ## 2. Shown frames
 
-- [ ] 2.1 A run whose frames change their size is shown and dumped correctly, headless and on both compositors. Verify: the scenario "Dump after a resize"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-host -p vkxp-vk -p vkxp --locked` passes.
+- [x] 2.1 A run whose frames change their size is shown and dumped correctly, headless and on both compositors. Verify: the scenario "Dump after a resize"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-host -p vkxp-vk -p vkxp --locked` passes.
 
 ## 3. Integration check
 

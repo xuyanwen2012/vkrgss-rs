@@ -1385,6 +1385,39 @@ fn the_dump_of_the_first_frame_has_the_frame_size_of_the_runtime() {
     }
 }
 
+/// Requirement "Resizing the screen", scenario "Dump after a resize".
+#[test]
+fn dumped_frames_of_a_game_of_vx_follow_a_resize_of_the_screen() {
+    let main = "\
+sprite = Sprite.new
+sprite.bitmap = Bitmap.new(8, 8)
+sprite.bitmap.fill_rect(0, 0, 8, 8, Color.new(255, 0, 0))
+sprite.x = 600
+sprite.y = 440
+Graphics.update
+Graphics.resize_screen(640, 480)
+Graphics.update
+";
+    let game = Game::of(Runtime::Rgss2, "e2e-resize-vx", "Resize", &[("Main", main)]);
+    for form in FORMS {
+        let dumps = ["--dump", "0=before.png", "--dump", "1=after.png"];
+        let ran = headless(&game, &[&["--guest", form], &dumps[..]].concat());
+        ran.assert_success();
+
+        let before = ran.frame("before.png");
+        assert_eq!((before.width, before.height), (544, 416), "{form}");
+        assert_eq!(before.leftmost(RED), None, "{form}");
+
+        let after = ran.frame("after.png");
+        assert_eq!((after.width, after.height), (640, 480), "{form}");
+        assert_eq!(after.pixel(600, 440), RED, "{form}");
+        assert_eq!(after.pixel(607, 447), RED, "{form}");
+        assert_eq!(after.pixel(599, 440), [0, 0, 0, 255], "{form}");
+        assert_eq!(after.pixel(608, 447), [0, 0, 0, 255], "{form}");
+        assert_eq!(after.pixel(543, 415), [0, 0, 0, 255], "{form}");
+    }
+}
+
 /// The lines of the error stream that say a runtime is experimental.
 fn experimental_lines(stderr: &str) -> Vec<&str> {
     stderr

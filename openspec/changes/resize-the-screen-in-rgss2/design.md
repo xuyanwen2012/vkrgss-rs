@@ -32,3 +32,26 @@ desktop when the game calls the function.
   Vulkan backend keeps something sized by the first frame, it is made to follow the
   packet, and that is recorded here.
 - The function is defined in RGSS2 only.
+
+## Implementation notes
+
+- Neither `crates/vkxp-host` nor `crates/vkxp-vk` was changed: nothing there is sized by the
+  first frame. The Vulkan compositor makes a new frame target when a packet has another
+  size, the headless display and the session take the size from each packet, and the
+  reference compositor draws every packet on its own. Tests that were there already cover
+  it: `frame_follows_a_change_of_logical_size` of `vkxp-vk` compares a stream of four sizes
+  with the reference compositor, and a presenting test shows a frame of another size in
+  the middle of a session. The new test of the program
+  (`dumped_frames_of_a_game_of_vx_follow_a_resize_of_the_screen`) runs the scenario "Dump
+  after a resize" with the guest on a thread and in a process.
+- Outside the listed scope, `docs/compatibility.md` was edited: its line that said
+  `Graphics.resize_screen` is not defined became wrong, and the function is described there
+  now.
+
+## Follow-ups
+
+- The first window is sized by the frame of the runtime (544 by 416 for VX); after a
+  resize to 640 by 480 the frame is scaled into that window, at a factor that is no whole
+  number. A window that follows the game is a non-goal here.
+- A reset with F12 leaves the size set, while `docs/decisions.md` says a reset restores the
+  runtime's values. What the original does on F12 is not measured (see Non-Goals).

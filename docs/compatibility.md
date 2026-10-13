@@ -73,10 +73,14 @@ versions 2.0.0.1 and 2.0.2.1) under Wine:
   It shows no frame. The scene is drawn on the CPU for it.
 - `wait`, `fadeout`, `fadein` and `transition` do not call a `Graphics.update` that a
   script redefined.
+- `Graphics.resize_screen(width, height)` sets the size of the frame, the width limited to
+  1 to 640 and the height to 1 to 480, and shows no frame. Elements keep their coordinates.
+  The window on the desktop keeps its size and shows the frame scaled into it.
 
 Not there or not measured yet:
 
-- `Graphics.resize_screen` is not defined.
+- What the window of the original does when the size of the frame changes, and a reset
+  with F12 after a resize: the size set stays.
 - A transition with a picture reads its arguments as in XP: the default vagueness and the
   thresholds of RGSS2 are not measured.
 - A fade with a count below 0 is taken as one of 0 frames, and a transition with nothing
@@ -84,7 +88,7 @@ Not there or not measured yet:
   measured.
 
 In a game of XP none of `brightness`, `brightness=`, `wait`, `fadeout`, `fadein`,
-`snap_to_bitmap`, `width` and `height` is defined, as on the original.
+`snap_to_bitmap`, `resize_screen`, `width` and `height` is defined, as on the original.
 
 ## Limits of save states
 
