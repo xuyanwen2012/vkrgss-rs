@@ -1260,9 +1260,13 @@ impl<D: Display, C: Clock> Drop for Session<D, C> {
 /// only at step 1 of a transition longer than 256 frames, where the original was seen at 0.
 /// Step 0 is [`Mix::HELD`].
 ///
-/// A transition of RGSS2 is counted from step 1 and takes its values from here too.
-// PLACEHOLDER: the weight is measured on the original of VX; the threshold is the formula
-// of RGSS1, not measured for RGSS2.
+/// A transition of RGSS2 is counted from step 1 and takes its values from here too: both
+/// formulas were measured on the original runtime of VX as well.
+///
+/// Provenance of RGSS2: oracle measurement 2026-10-12, RGSS202E versions 2.0.0.1 and 2.0.2.1,
+/// `vx-v1-sprite-REPORT.md` sections 5 and 6 (36 transitions, plain and masked, every frame of
+/// each: 1109760 pixels without a differing one). Step 1 of a masked transition longer than
+/// 256 frames was not measured there.
 fn step_mix(step: u32, duration: u32) -> Mix {
     let step = u64::from(step);
     let duration = u64::from(duration);

@@ -148,3 +148,17 @@ fn elements_are_counted_by_kind() {
         Ok("[true, true]")
     );
 }
+
+/// Scenario "XP" of "Small rules of RGSS2 in the modules and elements": in RGSS1
+/// `blend_type=` takes any value.
+#[test]
+fn blend_type_takes_any_value_in_rgss1() {
+    scene_support::install();
+    for class in ["Sprite", "Plane"] {
+        let source = format!(
+            "s = {class}.new; begin; s.blend_type = 3; three = s.blend_type; \
+             s.blend_type = -1; [three, s.blend_type]; ensure; s.dispose; end"
+        );
+        assert_eq!(testing::eval(&source).unwrap(), "[3, -1]", "{class}");
+    }
+}

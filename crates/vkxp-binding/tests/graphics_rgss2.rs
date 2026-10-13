@@ -145,7 +145,7 @@ fn freeze_and_the_default_transition() {
         GuestToHost::Transition {
             duration: 10,
             mask: None,
-            vague: 20,
+            vague: 40,
             rule: TransitionRule::Rgss2,
         }
     );
@@ -196,14 +196,15 @@ fn a_transition_after_a_freeze_sets_the_brightness_to_255() {
             GuestToHost::Transition {
                 duration: 0,
                 mask: None,
-                vague: 20,
+                vague: 40,
                 rule: TransitionRule::Rgss2,
             }
         ]
     );
 }
 
-/// The frames of a transition carry the brightness it set.
+/// The frames of a transition carry the brightness it set. Scenario "Default vagueness,
+/// measured on the original": a masked transition without a vagueness carries 40.
 #[test]
 fn the_frames_of_a_transition_are_at_full_brightness() {
     let (_, record) = eval(
@@ -217,8 +218,25 @@ fn the_frames_of_a_transition_are_at_full_brightness() {
         GuestToHost::Transition {
             duration: 3,
             mask: Some(_),
-            vague: 20,
+            vague: 40,
             rule: TransitionRule::Rgss2,
+        }
+    ));
+}
+
+/// A vagueness that is given is the one the transition carries.
+#[test]
+fn a_transition_carries_the_vagueness_it_is_given() {
+    let (_, record) = eval(
+        "Graphics.freeze
+         Graphics.transition(1, 'Graphics/Transitions/004-Blind04', 7)",
+    );
+    assert!(matches!(
+        record.received[1],
+        GuestToHost::Transition {
+            mask: Some(_),
+            vague: 7,
+            ..
         }
     ));
 }

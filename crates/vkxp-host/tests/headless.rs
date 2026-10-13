@@ -17,8 +17,8 @@ use vkxp_host::{
 };
 use vkxp_proto::link::{Disconnected, GuestEnd};
 use vkxp_proto::{
-    BitmapId, BlendMode, Button, Color, GuestToHost, HostToGuest, InputSnapshot, Op, Quad, Rect,
-    Sampling, Size, Tone, TransitionRule,
+    BitmapDelta, BitmapId, BlendMode, Button, Color, GuestToHost, HostToGuest, InputSnapshot, Op,
+    Quad, Rect, Sampling, Size, Tone, TransitionRule,
 };
 use vkxp_vk::DeviceChoice;
 
@@ -289,6 +289,161 @@ fn the_same_transition_of_rgss1_shows_the_held_frame_first() {
 fn transition_of_rgss2_of_duration_one_shows_its_frame_alone() {
     let levels = dumped_levels(vec![GuestToHost::Freeze, transition_of_rgss2(1)], 2);
     assert_eq!(levels, [255, 0, 0]);
+}
+
+const MASK_SAMPLES: &str = include_str!("data/rgss2-mask-samples.txt");
+
+/// The vagueness a transition of RGSS2 has when the script gives none, which the binding
+/// sends.
+const DEFAULT_VAGUE_OF_RGSS2: u16 = 40;
+
+/// One step of a masked transition measured on the original runtime of VX.
+struct MaskSample {
+    duration: u32,
+    vague: u16,
+    step: u32,
+    /// The lowest mask level that shows more than black, and what it and the five levels
+    /// after it show.
+    first: Option<(usize, Vec<u8>)>,
+    /// The lowest mask level that shows white.
+    full: Option<usize>,
+}
+
+fn mask_samples() -> Vec<MaskSample> {
+    let lines = MASK_SAMPLES.lines().filter(|line| !line.starts_with('#'));
+    lines
+        .map(|line| {
+            let words: Vec<&str> = line.split(' ').collect();
+            let level = |word: &str| (word != "-").then(|| word.parse::<usize>().unwrap());
+            let next = || {
+                words[6..]
+                    .iter()
+                    .map(|word| word.parse().unwrap())
+                    .collect()
+            };
+            let vague = match words[1] {
+                "default" => DEFAULT_VAGUE_OF_RGSS2,
+                vague => vague.parse().unwrap(),
+            };
+            MaskSample {
+                duration: words[0].parse().unwrap(),
+                vague,
+                step: words[2].parse().unwrap(),
+                first: level(words[3]).map(|first| (first, next())),
+                full: level(words[5]),
+            }
+        })
+        .collect()
+}
+
+/// A frame of 256 by 1 pixels of one grey level. The first carries the mask: a bitmap of
+/// the same size whose level is its column.
+fn ramp_frame(frame_index: u64, level: u8, mask: Option<BitmapId>) -> GuestToHost {
+    let size = Size::new(256, 1);
+    let GuestToHost::Frame(mut packet) = grey_frame(frame_index, level) else {
+        unreachable!("a grey frame is a frame");
+    };
+    packet.logical_size = size;
+    packet.ops = vec![Op::Clear {
+        clip: Rect::from_size(size),
+        color: Color::new(level, level, level, 255),
+    }];
+    if let Some(id) = mask {
+        let rgba = (0..=255).flat_map(|x: u8| [x, x, x, 255]).collect();
+        let (width, height) = (size.width, size.height);
+        let rect = Rect::from_size(size);
+        packet.bitmaps = vec![
+            BitmapDelta::Create { id, width, height },
+            BitmapDelta::Update { id, rect, rgba },
+        ];
+    }
+    GuestToHost::Frame(packet)
+}
+
+/// Scenario "Measured samples" of "Mask thresholds of RGSS2": every measured transition is
+/// shown from white to black under the ramp mask, and each of its frames compared.
+#[test]
+fn masked_transitions_of_rgss2_show_the_measured_values() {
+    let samples = mask_samples();
+    assert_eq!(samples.len(), 286);
+    // The transitions, in the order of the samples, as duration and vagueness.
+    let mut transitions: Vec<(u32, u16)> = Vec::new();
+    for sample in &samples {
+        if sample.step == 1 {
+            transitions.push((sample.duration, sample.vague));
+        }
+    }
+    assert_eq!(transitions.len(), 29);
+    let frames: u64 = transitions.iter().map(|(n, _)| 1 + u64::from(*n)).sum();
+
+    let directory = tempfile::tempdir().unwrap();
+    let path = |index: u64| directory.path().join(format!("frame-{index}.png"));
+    let mask = BitmapId::new(9, 0);
+    let shown = transitions.clone();
+    let guest = move |link: GuestEnd| {
+        let show = |message| {
+            link.send(message).unwrap();
+            assert_eq!(link.recv(), Ok(HostToGuest::Tick));
+        };
+        let mut index = 0;
+        for (duration, vague) in shown {
+            show(ramp_frame(index, 255, (index == 0).then_some(mask)));
+            index += 1;
+            link.send(GuestToHost::Freeze).unwrap();
+            link.send(GuestToHost::Transition {
+                duration,
+                mask: Some(mask),
+                vague,
+                rule: TransitionRule::Rgss2,
+            })
+            .unwrap();
+            for _ in 0..duration {
+                show(ramp_frame(index, 0, None));
+                index += 1;
+            }
+        }
+        link.send(GuestToHost::Shutdown).unwrap();
+    };
+    let errors = ErrorBuffer::new();
+    let (result, ()) = run_with(
+        HeadlessOptions {
+            dumps: (0..frames).map(|index| (index, path(index))).collect(),
+            errors: Box::new(errors.clone()),
+            ..options()
+        },
+        guest,
+    );
+    assert_eq!(result.unwrap().frames, frames);
+    assert_eq!(errors.text(), "");
+
+    // The first frame of the transition a sample belongs to.
+    let mut start = 0;
+    for sample in &samples {
+        let MaskSample {
+            duration,
+            vague,
+            step,
+            ..
+        } = *sample;
+        let (size, rgba) = read_png(&path(start + u64::from(step)));
+        assert_eq!(size, Size::new(256, 1));
+        let levels: Vec<u8> = rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|pixel| pixel[0])
+            .collect();
+        let first = levels.iter().position(|level| *level > 0);
+        let first = first.map(|at| (at, levels[at..(at + 6).min(256)].to_vec()));
+        let full = levels.iter().position(|level| *level == 255);
+        let name = format!("step {step} of {duration} with a vagueness of {vague}");
+        assert_eq!(first, sample.first, "{name}");
+        assert_eq!(full, sample.full, "{name}");
+        if step == duration {
+            start += 1 + u64::from(duration);
+        }
+    }
+    assert_eq!(start, frames);
 }
 
 /// Scenario "Held frame keeps its brightness".

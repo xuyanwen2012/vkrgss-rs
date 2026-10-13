@@ -537,6 +537,39 @@ macro_rules! writer {
     };
 }
 
+/// The blend type `blend_type=` of RGSS2 takes: the argument as an integer, a `Float`
+/// truncated, which is 0, 1 or 2, or else `ArgumentError: bad value for blend_type`.
+///
+/// Provenance: oracle measurement 2026-10-12, RGSS202E versions 2.0.0.1 and 2.0.2.1,
+/// `vx-v1-sprite-REPORT.md` section 1.
+pub(crate) fn blend_type_rgss2(ruby: &Ruby, value: VALUE) -> Result<i32, Raise> {
+    match rb::int(ruby, value)? {
+        blend_type @ 0..=2 => Ok(blend_type),
+        _ => Err(Raise::new(rb::arg_error(ruby), "bad value for blend_type")),
+    }
+}
+
+/// Defines `$name`, the `blend_type=` of RGSS2 of the elements with the handle `$id`, which
+/// refuses a value other than 0, 1 and 2 ([`blend_type_rgss2`]) and leaves the property as
+/// it is then.
+macro_rules! blend_type_writer_rgss2 {
+    ($name:ident, $id:ty, $get_mut:ident) => {
+        fn $name(
+            ruby: &vkxp_ruby_sys::Ruby,
+            recv: vkxp_ruby_sys::ffi::VALUE,
+            args: &[vkxp_ruby_sys::ffi::VALUE],
+        ) -> vkxp_ruby_sys::HostResult {
+            let id = $crate::element::live::<$id>(ruby, recv)?;
+            let blend_type = $crate::element::blend_type_rgss2(ruby, args[0])?;
+            $crate::element::operate(ruby, |guest| {
+                guest.scene.$get_mut(id)?.blend_type = blend_type;
+                Ok(())
+            })?;
+            Ok(args[0])
+        }
+    };
+}
+
 /// Defines the reader and the writer of a property that is a public field of the element.
 macro_rules! field {
     ($reader:ident, $writer:ident, $id:ty, $get:ident, $get_mut:ident, $field:ident: $type:ty) => {
@@ -599,4 +632,4 @@ macro_rules! object {
     };
 }
 
-pub(crate) use {field, kept, kept_after_dispose, object, reader, writer};
+pub(crate) use {blend_type_writer_rgss2, field, kept, kept_after_dispose, object, reader, writer};

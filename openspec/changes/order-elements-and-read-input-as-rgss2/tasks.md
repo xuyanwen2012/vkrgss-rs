@@ -11,7 +11,7 @@
 
 ## 3. Modules
 
-- [ ] 3.1 Default vagueness, the provenance of the mask threshold, `blend_type=`. Verify: the scenarios of `specs/rgss-modules/spec.md` and "Mask thresholds of RGSS2"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-binding -p vkxp-host --locked` passes.
+- [x] 3.1 Default vagueness, the provenance of the mask threshold, `blend_type=`. Verify: the scenarios of `specs/rgss-modules/spec.md` and "Mask thresholds of RGSS2"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-binding -p vkxp-host --locked` passes.
 
 ## 4. Documentation
 

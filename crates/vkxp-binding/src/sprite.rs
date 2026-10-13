@@ -102,6 +102,7 @@ field!(angle, set_angle, SpriteId, sprite, sprite_mut, angle: f64);
 field!(mirror, set_mirror, SpriteId, sprite, sprite_mut, mirror: bool);
 field!(bush_depth, set_bush_depth, SpriteId, sprite, sprite_mut, bush_depth: i32);
 field!(blend_type, set_blend_type, SpriteId, sprite, sprite_mut, blend_type: i32);
+element::blend_type_writer_rgss2!(set_blend_type_rgss2, SpriteId, sprite_mut);
 reader!(z, SpriteId, |guest, id| guest.scene.sprite(id)?.z());
 writer!(set_z, SpriteId, |guest, id, z: i32| guest
     .scene
@@ -126,7 +127,7 @@ reader!(height, SpriteId, |guest, id| guest
     .height);
 
 /// Defines `Sprite` as `runtime` has it: with `viewport=`, `width` and `height` in
-/// RGSS2.
+/// RGSS2, where `blend_type=` refuses a value other than 0, 1 and 2.
 pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
     let class = element::define_class::<SpriteId>(ruby, c"Sprite")?;
     element::define_in_viewport::<SpriteId>(ruby, class, runtime)?;
@@ -162,7 +163,11 @@ pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
     rb::method(ruby, class, c"opacity", 0, opacity)?;
     rb::method(ruby, class, c"opacity=", 1, set_opacity)?;
     rb::method(ruby, class, c"blend_type", 0, blend_type)?;
-    rb::method(ruby, class, c"blend_type=", 1, set_blend_type)?;
+    if runtime == Runtime::Rgss1 {
+        rb::method(ruby, class, c"blend_type=", 1, set_blend_type)?;
+    } else {
+        rb::method(ruby, class, c"blend_type=", 1, set_blend_type_rgss2)?;
+    }
     rb::method(ruby, class, c"color", 0, color)?;
     rb::method(ruby, class, c"color=", 1, set_color)?;
     rb::method(ruby, class, c"tone", 0, tone)?;

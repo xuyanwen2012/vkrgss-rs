@@ -338,3 +338,28 @@ fn the_skin_is_read_at_the_calls_that_build_the_window() {
         format!("[{BLUE}, {RED}, {RED}, {RED}]")
     );
 }
+
+/// Scenario "Blend type, measured on the original" of `rgss-modules`: a `Float` is
+/// truncated, and a value other than 0, 1 and 2 raises and leaves the property as it is.
+#[test]
+fn blend_type_takes_0_1_and_2_only() {
+    for class in ["Sprite", "Plane"] {
+        assert_eq!(
+            eval_with(
+                &format!("made << (s = {class}.new)"),
+                "s.blend_type = 1.9; truncated = s.blend_type; \
+                 kept = [0, 1, 2, 2.9].map { |value| s.blend_type = value; s.blend_type }; \
+                 raised = [3, -1, 3.5, 100].map { |value| \
+                   begin; s.blend_type = value; rescue ArgumentError => e; e.message; end }; \
+                 [truncated, kept, raised.uniq, s.blend_type]"
+            ),
+            "[1, [0, 1, 2, 2], [\"bad value for blend_type\"], 2]",
+            "{class}"
+        );
+        assert_eq!(
+            eval_with(&format!("made << (s = {class}.new)"), "s.blend_type = 3"),
+            "ArgumentError: bad value for blend_type",
+            "{class}"
+        );
+    }
+}

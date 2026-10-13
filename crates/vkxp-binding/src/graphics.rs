@@ -143,12 +143,12 @@ fn load_mask(ruby: &Ruby, path: &str) -> Result<BitmapId, Raise> {
     .map_err(|error| error::to_raise(ruby, error))
 }
 
-/// `transition(duration, filename = nil, vague = 20)`, by the runtime of the run.
+/// `transition(duration, filename = nil, vague)`, by the runtime of the run.
 ///
-/// RGSS1: the duration defaults to 8, and the transition is shown whether or not the display
-/// was frozen.
+/// RGSS1: the duration defaults to 8 and the vagueness to 20, and the transition is shown
+/// whether or not the display was frozen.
 ///
-/// RGSS2: the duration defaults to 10. With nothing frozen the function returns at once: no
+/// RGSS2: the duration defaults to 10 and the vagueness to 40. With nothing frozen the function returns at once: no
 /// message, no frame, the brightness as it is. After a freeze the brightness becomes 255,
 /// also for a duration of 0, and the host steps the transition by the rule of RGSS2.
 ///
@@ -156,17 +156,17 @@ fn load_mask(ruby: &Ruby, path: &str) -> Result<BitmapId, Raise> {
 /// not loaded, so a missing picture raises nothing; that was not measured.
 ///
 /// Provenance: oracle measurement 2026-10-12, RGSS202E versions 2.0.0.1 and 2.0.2.1,
-/// `vx-v0-REPORT.md` section 6.
+/// `vx-v0-REPORT.md` section 6; the default vagueness `vx-v1-sprite-REPORT.md` section 5.
 fn transition(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     rb::check_count(ruby, args, 0, 3)?;
     let rgss1 = Guest::with(|guest| guest.runtime.run.runtime) == Runtime::Rgss1;
-    let (default_duration, rule) = if rgss1 {
-        (8, TransitionRule::Rgss1)
+    let (default_duration, default_vague, rule) = if rgss1 {
+        (8, 20, TransitionRule::Rgss1)
     } else {
         if !Guest::with(|guest| guest.runtime.held) {
             return Ok(ffi::Qnil);
         }
-        (10, TransitionRule::Rgss2)
+        (10, 40, TransitionRule::Rgss2)
     };
     let duration = match args.first() {
         Some(&duration) => rb::int(ruby, duration)?.max(0).unsigned_abs(),
@@ -178,7 +178,7 @@ fn transition(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     };
     let vague = match args.get(2) {
         Some(&vague) => rb::int(ruby, vague)?.clamp(0, i32::from(u16::MAX)) as u16,
-        None => 20,
+        None => default_vague,
     };
     let loaded = match filename {
         Some(path) => Some(load_mask(ruby, &path)?),

@@ -67,6 +67,7 @@ field!(oy, set_oy, PlaneId, plane, plane_mut, oy: i32);
 field!(zoom_x, set_zoom_x, PlaneId, plane, plane_mut, zoom_x: f64);
 field!(zoom_y, set_zoom_y, PlaneId, plane, plane_mut, zoom_y: f64);
 field!(blend_type, set_blend_type, PlaneId, plane, plane_mut, blend_type: i32);
+element::blend_type_writer_rgss2!(set_blend_type_rgss2, PlaneId, plane_mut);
 reader!(z, PlaneId, |guest, id| guest.scene.plane(id)?.z());
 writer!(set_z, PlaneId, |guest, id, z: i32| guest
     .scene
@@ -79,8 +80,8 @@ writer!(set_opacity, PlaneId, |guest, id, opacity: i32| guest
     .plane_mut(id)?
     .set_opacity(opacity));
 
-/// Defines `Plane` as `runtime` has it: in RGSS2 `viewport` takes the viewport to move to
-/// and `visible` reads `true` always.
+/// Defines `Plane` as `runtime` has it: in RGSS2 `viewport` takes the viewport to move to,
+/// `visible` reads `true` always and `blend_type=` refuses a value other than 0, 1 and 2.
 pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
     let class = element::define_class::<PlaneId>(ruby, c"Plane")?;
     element::define_plane_viewport(ruby, class, runtime)?;
@@ -106,7 +107,11 @@ pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
     rb::method(ruby, class, c"opacity", 0, opacity)?;
     rb::method(ruby, class, c"opacity=", 1, set_opacity)?;
     rb::method(ruby, class, c"blend_type", 0, blend_type)?;
-    rb::method(ruby, class, c"blend_type=", 1, set_blend_type)?;
+    if runtime == Runtime::Rgss1 {
+        rb::method(ruby, class, c"blend_type=", 1, set_blend_type)?;
+    } else {
+        rb::method(ruby, class, c"blend_type=", 1, set_blend_type_rgss2)?;
+    }
     rb::method(ruby, class, c"color", 0, color)?;
     rb::method(ruby, class, c"color=", 1, set_color)?;
     rb::method(ruby, class, c"tone", 0, tone)?;

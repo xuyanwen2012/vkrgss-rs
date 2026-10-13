@@ -58,3 +58,37 @@ rules 2 and 6 (XP was not measured for them; a later measurement decides).
 - Tests: committed cases of the report's `order`, `viewport`, `flash`, `plane`, `size2`
   topics as scenes built by formula with expected pictures or digests from the model; the
   input sequences as numbers.
+
+## Notes of the implementation
+
+- `Scene::rules()` returns `Rules { Rgss1, Rgss2 }` of `vkxp-core`, set by
+  `Scene::with_rules(rules, size)`; `Scene::new` and `Scene::with_logical_size` make a scene
+  of RGSS1, and `Scene::clear` keeps the rules. `InputState::with_rules` takes the same value.
+- The host does not know the runtimes (`vkxp-host` does not depend on `vkxp-vfs`), so the key
+  map of VX is `KeyMap::vx()` and `KeyMap::of(KeyDefaults::Vx, overrides)`. The settings of
+  the program are settled before `Game.ini` is read, so they hold both maps, each with the
+  keys of `[keys]` over its defaults, and the run takes the one of the game's runtime.
+- The committed scene cases (`crates/vkxp-core/tests/data/rgss2-scene-cases.txt`) are the
+  topics `order`, `viewport`, `flash` and `plane` of the report with the digests of the
+  frames of the original. Left out, because their sprites are sized and placed by the rules
+  that `draw-the-sprite-of-rgss2` implements: the two last frames of `viewport` (zoomed and
+  turned sprites) and the sprites of `size2`, whose planes are compared with the report's
+  model instead. The frames of `order` by the rules of RGSS1 are also from that model.
+- The mask samples (`crates/vkxp-host/tests/data/rgss2-mask-samples.txt`) are the per-step
+  values of `vx-v1-mask-steps.txt`; a headless run on llvmpipe shows every measured
+  transition and compares its frames.
+- Three tests of `crates/vkxp-binding/tests/graphics_rgss2.rs` expected the vagueness 20 of
+  a transition of RGSS2 without one. That was the default of RGSS1 standing in; they expect
+  the measured 40 now. No expected value of a test of RGSS1 changed.
+- `docs/running.md` also names the keys that dismiss a message, which follow the map.
+
+## Follow-ups
+
+- A negative vagueness: the measurement shows the new scene from the first step (rule 5),
+  in RGSS2 and, by the report of RGSS1 it cites, in RGSS1. `Graphics.transition` limits the
+  vagueness to 0 and up, which gives the hard threshold instead. No requirement of this
+  change covers it, and the transition message carries an unsigned vagueness.
+- The settings printed as the example of `docs/running.md` and the gamepad map are those of
+  XP for every runtime; the gamepad and the F1 dialog of VX were not measured.
+- Whether RGSS1 shares the viewport rules and the check of `blend_type=` waits for a
+  measurement on XP, as the design says.
