@@ -489,7 +489,7 @@ pub enum PlaneRules {
     #[default]
     Rgss2,
     /// The tilemap of RGSS3: what [`TilemapPlane`] says of this rule set, with
-    /// [`tiles_rgss3`].
+    /// [`crate::tiles_rgss3`].
     Rgss3,
 }
 

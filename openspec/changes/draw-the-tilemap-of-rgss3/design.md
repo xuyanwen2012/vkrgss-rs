@@ -241,3 +241,7 @@ None of these leaves a requirement of this change unmet.
   nothing to draw, as for RGSS2.
 - The field `passages` of the op and of the scene holds the flags of RGSS3 under its old
   name; a rename would touch the binding and is left to the binding change.
+- Found while implementing: `a_reset_request_starts_the_scripts_over` of
+  `crates/vkxp-binding/tests/run_game.rs` failed once in eight runs of that test binary and
+  passed in the others. It runs no tilemap and nothing it uses was edited; it is not looked
+  into here.

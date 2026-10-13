@@ -286,6 +286,21 @@ Ace finished and published.
   (`Game.rgss3a`, DLL 3.0.1.1, resizes its screen to 640x480) and Capella's Promise 1.09
   (`Game.rgss3a`, DLL 3.0.1.1). Each ships its DLL in `System/`; the run-time package holds
   none. A game is compared with the DLL it ships, as for VX.
+- Tilemap, where the original reads outside its arrays (measured on 2026-10-13 on the DLL
+  versions 3.0.0.1 and 3.0.1.1, recorded by the change `draw-the-tilemap-of-rgss3`): vkxp
+  reads nothing outside its tables.
+  - The tile numbers 1024 to 1535 draw nothing. On the original 1024 to 1244 drew nothing
+    and a page with 1245 to 1535 ended both DLLs with a page fault.
+  - Negative tile numbers draw nothing.
+  - A layer that a map lacks is empty, the shadow layer among them, so a map of three
+    layers draws without shadows; layers beyond the fourth are not read.
+
+  Known differences that follow: the five multiples of -256 from -256 to -1280 draw the
+  block at (0, 0) of A5, A4, A3, A2 and A1 on the original and nothing in vkxp; a map of
+  fewer than three layers (two layers, one layer, two dimensions, one dimension) draws its
+  layers in vkxp where the original draws other things, differently on the two DLLs, or
+  faults, and where the original faults vkxp goes on. A map of three layers drew on the
+  original as with an empty fourth, as it does in vkxp.
 - The process of this work is in "Process" below.
 
 Text and bitmaps of RGSS3, recorded by the change `draw-text-and-bitmaps-as-rgss3` after the

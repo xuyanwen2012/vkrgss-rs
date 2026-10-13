@@ -64,8 +64,11 @@
 //!   priority one op per row of tiles and layer, at the z that ranks the row among sprites,
 //!   so that every tile meets the frame by itself. A tilemap of RGSS2
 //!   ([`TilemapRgss2`]) is two tilemap plane ops, the lower at z 0 and the upper at z 200,
-//!   which name its nine sheets and its map, passages and flash tables. The tables are sent
-//!   when an op first reads them and again when they were written to. The scene also holds `Graphics`
+//!   which name its nine sheets and its map, passages and flash tables. A tilemap of RGSS3
+//!   ([`Scene::create_tilemap_rgss3`]) is the same two ops with the rule set of RGSS3, its
+//!   flags table in the place of the passages table, and none while it is not visible. The
+//!   tables are sent when an op first reads them and again when they were written to. The
+//!   scene also holds `Graphics`
 //!   bookkeeping: frame count, frame rate and the logical size (640 by 480 unless given, at
 //!   most [`MAX_LOGICAL_DIMENSION`] a side).
 //! - Input. [`InputState`] takes the protocol's input snapshots as they arrive and latches

@@ -19,7 +19,7 @@
 
 ## 5. Documentation
 
-- [ ] 5.1 `README.md` and `docs/architecture.md` (the protocol version and what it added), `docs/decisions.md` (section "VX Ace": the undefined cases and the known differences), the documentation of the crates touched. Verify: the scenario "Documents name the version" of `specs/guest-host-protocol/spec.md` and the scenarios of `specs/supported-runtimes/spec.md`; `git diff --stat` against the start of the change names no file under `docs/` but `architecture.md` and `decisions.md`.
+- [x] 5.1 `README.md` and `docs/architecture.md` (the protocol version and what it added), `docs/decisions.md` (section "VX Ace": the undefined cases and the known differences), the documentation of the crates touched. Verify: the scenario "Documents name the version" of `specs/guest-host-protocol/spec.md` and the scenarios of `specs/supported-runtimes/spec.md`; `git diff --stat` against the start of the change names no file under `docs/` but `architecture.md` and `decisions.md`.
 
 ## 6. Integration check
 

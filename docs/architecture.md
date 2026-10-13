@@ -29,7 +29,7 @@ defined in `vkxp-proto`.
 `xtask` holds repository automation and the tool that extracts the built-in scripts; it is not
 part of the runtime.
 
-The protocol is at version 12; an encoded stream of another version is rejected. A frame packet
+The protocol is at version 13; an encoded stream of another version is rejected. A frame packet
 carries the changes to bitmaps and tables and an ordered list of ops of five kinds: `Clear`,
 `Quad`, `RectEffect`, `TilemapLayer` and `TilemapPlane`. Sprites, planes and the parts of a
 window are quads.
@@ -41,6 +41,8 @@ Version 10 added two messages from the guest: a key that is pressed or released 
 player, which the session treats as the physical key of that Windows virtual-key code, and
 whether the pointer is to be seen over the picture. Version 11 added `FramePacket::brightness`
 and the field `rule` of `GuestToHost::Transition`. Version 12 added the op `TilemapPlane`.
+Version 13 added the rule set of the tilemap plane op, `TilemapPlane::rules`: the tilemap of
+RGSS2 or that of RGSS3.
 
 `FramePacket::brightness` is a value from 0 to 255 that the scene keeps and writes into every
 packet. Both compositors apply it after the last op: each colour channel `v` of the frame

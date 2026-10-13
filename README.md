@@ -109,7 +109,8 @@ data defined in `vkxp-proto`, and the guest runs as a thread or as a process of 
 guest process confines itself with Landlock before the first script runs: it writes only
 below the game directory, executes nothing and opens no TCP connection; `--sandbox off`
 turns that off.
-The protocol is at version 12, which added the op that draws a plane of a tilemap of RGSS2.
+The protocol is at version 13, which added the rule set, of RGSS2 or of RGSS3, to the op that
+draws a plane of a tilemap.
 
 | Crate | Responsibility | Side |
 |---|---|---|
