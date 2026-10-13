@@ -15,7 +15,8 @@
 //!
 //! A sprite with a positive wave amplitude that is not turned is drawn row by row, every
 //! row moved horizontally ([`wave_offset`], [`Assembly::waving_sprite_rgss2`]); a negative
-//! amplitude squeezes it instead ([`Sprite::upright_rgss2`]).
+//! amplitude squeezes it instead ([`Sprite::upright_rgss2`]). At a wave length of 0 the
+//! amplitude counts as 0 ([`Sprite::drawn_wave_amp`]).
 //!
 //! Not measured, and drawn as said where each is handled: a wave on a turned sprite (drawn
 //! without the wave), a wave on a sprite stretched in x whose source rectangle leaves the
@@ -235,6 +236,18 @@ impl Sprite {
         ([upper, lower], faint as u32)
     }
 
+    /// The wave amplitude the sprite is drawn with: its `wave_amp`, and 0 at a wave length
+    /// of 0, with which the sprite is drawn as one without a wave, neither waved nor
+    /// squeezed. The original runtime does not return from the update of such a sprite, so
+    /// nothing was measured there.
+    pub(crate) fn drawn_wave_amp(&self) -> i32 {
+        if self.wave_length == 0 {
+            0
+        } else {
+            self.wave_amp
+        }
+    }
+
     /// The sprite, not turned, by the rules of RGSS2, or `None` when it draws nothing: a
     /// zoom or a side of the source rectangle of 0 or less, or no pixel.
     ///
@@ -262,9 +275,10 @@ impl Sprite {
         } else {
             Outside::LeftOut
         };
-        let squeezed = self.wave_amp < 0;
+        let amp = self.drawn_wave_amp();
+        let squeezed = amp < 0;
         let (x, width) = if squeezed {
-            let amp = i64::from(self.wave_amp);
+            let amp = i64::from(amp);
             let width = u32::try_from(i64::from(width) + 2 * amp).ok()?;
             (i32::try_from(i64::from(x) - amp).ok()?, width)
         } else {
@@ -299,7 +313,7 @@ impl Sprite {
     /// stretch quads do not draw what it shows of `bitmap`, the rectangle of its bitmap.
     pub(crate) fn is_pictured_rgss2(&self, bitmap: Rect) -> bool {
         self.angle == 0.0
-            && self.wave_amp <= 0
+            && self.drawn_wave_amp() <= 0
             && self
                 .upright_rgss2()
                 .is_some_and(|upright| !upright.shape.is_quads(bitmap))
@@ -366,7 +380,7 @@ impl Assembly<'_> {
         let Ok(bounds) = self.bitmaps.rect(bitmap) else {
             return;
         };
-        if sprite.wave_amp > 0 {
+        if sprite.drawn_wave_amp() > 0 {
             self.waving_sprite_rgss2(sprite, bitmap, level, look);
             return;
         }
@@ -447,7 +461,8 @@ fn wave_sine(degrees: u32) -> f32 {
 /// in double precision, with the sines of whole degrees in single precision. The offset
 /// is therefore the same over a band of 8 screen rows, except where the small term carries
 /// the angle over a whole degree. The order of the operations decides the rows that sit
-/// exactly on a degree. A length of 0 gives no offset.
+/// exactly on a degree. A length of 0 gives no offset; no sprite is drawn with one
+/// ([`Sprite::drawn_wave_amp`]).
 ///
 /// Provenance: oracle measurement 2026-10-12, RGSS202E, topics `wave1` to `wave6` (78400
 /// rows of 196 sprites with amplitudes of 1 to 30 and 250 and 20 lengths, and amplitudes up

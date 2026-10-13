@@ -581,6 +581,68 @@ fn a_waving_sprite_shows_exact_rows_and_plain_bush_rows() {
     assert_eq!(turned(-2), turned(0));
 }
 
+/// At a wave length of 0 a sprite is drawn as one without a wave, whatever its amplitude:
+/// not waved, not squeezed, with the rows and the bush rows of an ordinary sprite, also
+/// where it is drawn from a picture of its own. The properties stay as they were written.
+#[test]
+fn a_wave_length_of_zero_draws_the_sprite_without_a_wave() {
+    type Setup = fn(&mut Sprite);
+    let setups: [(&str, Setup); 4] = [
+        ("plain", |_| {}),
+        ("zoomed with bush rows", |sprite| {
+            sprite.zoom_y = 1.5;
+            sprite.bush_depth = 3;
+            sprite.bush_opacity = 255;
+        }),
+        ("mirrored and cut, not stretched", |sprite| {
+            sprite.src_rect = Rect::new(-3, 2, 10, 9);
+            sprite.mirror = true;
+        }),
+        ("stretched and cut, from a picture", |sprite| {
+            sprite.src_rect = Rect::new(-3, -2, 10, 12);
+            sprite.zoom_x = 2.0;
+            sprite.zoom_y = 1.5;
+            sprite.mirror = true;
+            sprite.bush_depth = 5;
+        }),
+    ];
+    for (name, setup) in setups {
+        let draw = |amp: i32, length: i32| {
+            let mut stage = Stage::rgss2(48, 32);
+            let id = coded(&mut stage, 8, 8, |sprite| {
+                sprite.x = 12;
+                sprite.y = 5;
+                setup(sprite);
+                sprite.wave_amp = amp;
+                sprite.wave_length = length;
+                sprite.wave_phase = 90.0;
+            });
+            let frame = stage.frame();
+            let sprite = stage.scene.sprite(id).unwrap();
+            assert_eq!((sprite.wave_amp, sprite.wave_length), (amp, length));
+            assert_eq!(sprite.wave_phase(), 90.0);
+            (frame.rgba, sprite.turned.bitmap.is_some())
+        };
+        let (ordinary, pictured) = draw(0, 180);
+        assert!(
+            ordinary
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .any(|pixel| *pixel != BLACK)
+        );
+        assert_eq!(pictured, name.ends_with("picture"), "{name}");
+        for amp in [1, 4, -1, -3, -100] {
+            let (drawn, from_picture) = draw(amp, 0);
+            assert!(drawn == ordinary, "{name}, amplitude {amp}");
+            assert_eq!(from_picture, pictured, "{name}, amplitude {amp}");
+        }
+        // The amplitudes do change the picture at a length other than 0.
+        assert!(draw(4, 16).0 != ordinary, "{name}");
+        assert!(draw(-3, 16).0 != ordinary, "{name}");
+    }
+}
+
 /// Scenario "Cases of the measurement" of "Wave of a sprite of RGSS2": the topics `wave1`
 /// to `wave6`.
 #[test]
