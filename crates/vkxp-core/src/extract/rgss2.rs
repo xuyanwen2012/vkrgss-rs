@@ -13,6 +13,14 @@
 //! mirror ([`Sprite::bush_look_rgss2`]); a bush depth beyond the height stretches rows from
 //! above the source rectangle ([`Sprite::rows_rgss2`]).
 //!
+//! A sprite with a positive wave amplitude that is not turned is drawn row by row, every
+//! row moved horizontally ([`wave_offset`], [`Assembly::waving_sprite_rgss2`]); a negative
+//! amplitude squeezes it instead ([`Sprite::upright_rgss2`]).
+//!
+//! Not measured, and drawn as said where each is handled: a wave on a turned sprite (drawn
+//! without the wave), a wave on a sprite stretched in x whose source rectangle leaves the
+//! bitmap, a negative wave length, and a wave length of 0.
+//!
 //! A sprite becomes stretch quads where they draw exactly the measured texels, and is
 //! otherwise rendered into a bitmap of the scene's own, like the cut sprite of RGSS1
 //! ([`crate::turned`]).
@@ -235,6 +243,13 @@ impl Sprite {
     /// and when it is mirrored the texels that are left are mirrored where they stand:
     /// with `[a, b)` the columns inside the bitmap, column `i` of them shows texel
     /// `src.x + (a + b - 1 - i)`.
+    ///
+    /// A negative wave amplitude makes no wave: the sprite is squeezed into
+    /// `width + 2 * wave_amp` columns that begin `-wave_amp` pixels further right, nothing
+    /// when that is no column, and its columns only lose the texels outside the bitmap,
+    /// mirrored first (topic `wave6` of the measurement).
+    ///
+    /// A positive amplitude is not drawn from this ([`Assembly::waving_sprite_rgss2`]).
     pub(crate) fn upright_rgss2(&self) -> Option<Upright> {
         let src = self.src_rect;
         let (x, width) = geometry::stretch_span_rgss2(self.x, self.ox, src.width, self.zoom_x)?;
@@ -247,13 +262,24 @@ impl Sprite {
         } else {
             Outside::LeftOut
         };
+        let squeezed = self.wave_amp < 0;
+        let (x, width) = if squeezed {
+            let amp = i64::from(self.wave_amp);
+            let width = u32::try_from(i64::from(width) + 2 * amp).ok()?;
+            (i32::try_from(i64::from(x) - amp).ok()?, width)
+        } else {
+            (x, width)
+        };
+        if width == 0 {
+            return None;
+        }
         let across = Run {
             start: i64::from(src.x),
             length: w,
             first: 0,
             pixels: width,
             mirror: self.mirror,
-            outside,
+            outside: if squeezed { Outside::LeftOut } else { outside },
         };
         let (down, bush) = self.rows_rgss2(height, outside);
         Some(Upright {
@@ -262,7 +288,7 @@ impl Sprite {
                 across,
                 down,
                 bush,
-                in_place: self.mirror && !stretched,
+                in_place: self.mirror && !stretched && !squeezed,
             },
             x,
             y,
@@ -273,6 +299,7 @@ impl Sprite {
     /// stretch quads do not draw what it shows of `bitmap`, the rectangle of its bitmap.
     pub(crate) fn is_pictured_rgss2(&self, bitmap: Rect) -> bool {
         self.angle == 0.0
+            && self.wave_amp <= 0
             && self
                 .upright_rgss2()
                 .is_some_and(|upright| !upright.shape.is_quads(bitmap))
@@ -339,6 +366,10 @@ impl Assembly<'_> {
         let Ok(bounds) = self.bitmaps.rect(bitmap) else {
             return;
         };
+        if sprite.wave_amp > 0 {
+            self.waving_sprite_rgss2(sprite, bitmap, level, look);
+            return;
+        }
         let faint = sprite.bush_look_rgss2(look);
         if sprite.is_pictured_rgss2(bounds) {
             let (Some(picture), Some(placed)) =
@@ -390,6 +421,183 @@ impl Assembly<'_> {
             let part = Rect::new(left, top, columns, rows);
             let into = vkxp_proto::Rect::new(x, y, width, run.pixels);
             self.stretched(bitmap, part, into, mirror, clip, look);
+        }
+    }
+}
+
+/// The sine of a whole number of degrees as the wave of a sprite takes it: in single
+/// precision.
+fn wave_sine(degrees: u32) -> f32 {
+    libm::sin(f64::from(degrees).to_radians()) as f32
+}
+
+/// The number of pixels a row of a waving sprite of RGSS2 is moved to the right by. `row`
+/// counts the rows of the sprite from its top row, `screen_row` is where that row stands
+/// on the screen and `clip_top` the first screen row its viewport, or the screen, lets it
+/// draw.
+///
+/// ```text
+/// band: the screen rows are grouped by screen_row div 8
+/// r0 = the first row of the band that is drawn, counted like `row`: the first of the
+///      band, of the sprite or of the clip, whichever is lowest on the screen
+/// t  = phase + r0 * (360.0 / length), then (row - r0) times t = t + 1.0 / length
+/// dx = round(amp * SIN[floor(t) mod 360]), an exact half toward zero
+/// ```
+///
+/// in double precision, with the sines of whole degrees in single precision. The offset
+/// is therefore the same over a band of 8 screen rows, except where the small term carries
+/// the angle over a whole degree. The order of the operations decides the rows that sit
+/// exactly on a degree. A length of 0 gives no offset.
+///
+/// Provenance: oracle measurement 2026-10-12, RGSS202E, topics `wave1` to `wave6` (78400
+/// rows of 196 sprites with amplitudes of 1 to 30 and 250 and 20 lengths, and amplitudes up
+/// to 3000 near 0 degrees, without a differing pixel); the rows of
+/// `tests/data/sprite-rgss2-wave-samples.txt` are those at which the offset changes. Not
+/// measured: a negative length, for which the angle is taken modulo 360 here.
+pub(crate) fn wave_offset(
+    amp: i32,
+    length: i32,
+    phase: f64,
+    row: i64,
+    screen_row: i64,
+    clip_top: i64,
+) -> i64 {
+    if length == 0 {
+        return 0;
+    }
+    let band = screen_row - screen_row.rem_euclid(8);
+    let first = (row - (screen_row - band.max(clip_top))).max(0);
+    let length = f64::from(length);
+    let mut t = phase + first as f64 * (360.0 / length);
+    let step = 1.0 / length;
+    for _ in first..row {
+        t += step;
+    }
+    // Less than 360.
+    let degrees = (t.floor() as i64).rem_euclid(360) as u32;
+    let value = f64::from(amp) * f64::from(wave_sine(degrees));
+    let whole = value.abs().floor();
+    let rounded = if value.abs() - whole > 0.5 {
+        whole + 1.0
+    } else {
+        whole
+    };
+    // At most the amplitude.
+    (if value < 0.0 { -rounded } else { rounded }) as i64
+}
+
+/// Rows of a waving sprite that one stretch quad draws: `rows` screen rows from row `first`
+/// of the sprite on, all moved by `dx`, faint or not, which show the texel row `texel` and
+/// then either the same row again or the next row each (`step`, open while there is one
+/// row).
+#[derive(Debug, Clone, Copy)]
+struct Strip {
+    first: i64,
+    rows: u32,
+    texel: i64,
+    step: Option<i64>,
+    dx: i64,
+    faint: bool,
+}
+
+impl Strip {
+    /// Takes the next row of the sprite, if it goes on as the strip does.
+    fn take(&mut self, texel: i64, dx: i64, faint: bool) -> bool {
+        let last = self.texel + self.step.unwrap_or(0) * i64::from(self.rows - 1);
+        let step = texel - last;
+        let fits = match self.step {
+            None => step == 0 || step == 1,
+            Some(known) => step == known,
+        };
+        if !fits || dx != self.dx || faint != self.faint {
+            return false;
+        }
+        self.step = Some(step);
+        self.rows += 1;
+        true
+    }
+}
+
+impl Assembly<'_> {
+    /// A sprite of RGSS2 with a positive wave amplitude that is not turned: every screen
+    /// row is moved by [`wave_offset`] inside the clip of its level and shows
+    ///
+    /// ```text
+    /// rows:    src.y + (j * h) div dh for row j, instead of the stretch walk
+    /// columns: the stretch walk, mirrored; texels outside the bitmap are only left out
+    /// bush:    the lowest min(bush_depth, dh) rows are bush rows; the rows are not split
+    /// ```
+    ///
+    /// It becomes one stretch quad for each run of rows that share the offset and show
+    /// either one row of the bitmap or one row each.
+    ///
+    /// Not measured: a sprite stretched in x whose source rectangle leaves the bitmap. The
+    /// model of the measurement leaves the texels outside out of the walk and is known to
+    /// be wrong by a column there; here the walk starts anew at the bitmap's edge, as a
+    /// stretch quad draws it.
+    pub(crate) fn waving_sprite_rgss2(
+        &mut self,
+        sprite: &Sprite,
+        bitmap: BitmapId,
+        level: &Level,
+        look: Look,
+    ) {
+        let src = sprite.src_rect;
+        let across = geometry::stretch_span_rgss2(sprite.x, sprite.ox, src.width, sprite.zoom_x);
+        let down = geometry::stretch_span_rgss2(sprite.y, sprite.oy, src.height, sprite.zoom_y);
+        let (Some((x, width)), Some((y, height))) = (across, down) else {
+            return;
+        };
+        let (h, dh) = (i64::from(src.height), i64::from(height));
+        let faint_from = dh - i64::from(sprite.bush_depth).clamp(0, dh);
+        let faint = sprite.bush_look_rgss2(look);
+        let (left, top) = (i64::from(x) + level.dx, i64::from(y) + level.dy);
+        let clip = level.clip;
+        let clip_top = i64::from(clip.y);
+        let mut draw = |strip: Strip| {
+            let look = if strip.faint { faint } else { Some(look) };
+            let texels = if strip.step == Some(1) { strip.rows } else { 1 };
+            // Rows that begin beyond the coordinates of a rectangle are not drawn.
+            let (Some(look), Ok(texel), Ok(texels), Ok(x), Ok(y)) = (
+                look,
+                i32::try_from(strip.texel),
+                i32::try_from(texels),
+                i32::try_from(left + strip.dx),
+                i32::try_from(top + strip.first),
+            ) else {
+                return;
+            };
+            let part = Rect::new(src.x, texel, src.width, texels);
+            let into = vkxp_proto::Rect::new(x, y, width, strip.rows);
+            let mirror = sprite.mirror && !strip.faint;
+            self.stretched(bitmap, part, into, mirror, clip, look);
+        };
+        let mut strip: Option<Strip> = None;
+        let rows = (clip_top - top).max(0)..(clip_top + i64::from(clip.height) - top).min(dh);
+        for j in rows {
+            let (amp, length, phase) = (sprite.wave_amp, sprite.wave_length, sprite.wave_phase);
+            let dx = wave_offset(amp, length, phase, j, top + j, clip_top);
+            let (texel, faint) = (i64::from(src.y) + j * h / dh, j >= faint_from);
+            if strip
+                .as_mut()
+                .is_some_and(|strip| strip.take(texel, dx, faint))
+            {
+                continue;
+            }
+            let next = Strip {
+                first: j,
+                rows: 1,
+                texel,
+                step: None,
+                dx,
+                faint,
+            };
+            if let Some(done) = strip.replace(next) {
+                draw(done);
+            }
+        }
+        if let Some(done) = strip {
+            draw(done);
         }
     }
 }

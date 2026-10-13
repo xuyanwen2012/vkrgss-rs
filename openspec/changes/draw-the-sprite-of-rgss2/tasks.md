@@ -10,7 +10,7 @@
 
 ## 3. Wave
 
-- [ ] 3.1 Rule 5 and the wave properties. Verify: the scenarios of "Wave of a sprite of RGSS2"; the same command.
+- [x] 3.1 Rule 5 and the wave properties. Verify: the scenarios of "Wave of a sprite of RGSS2"; the same command.
 
 ## 4. Class and whole scenes
 

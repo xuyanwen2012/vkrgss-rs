@@ -2,6 +2,7 @@ use vkxp_compose_ref::Compositor;
 use vkxp_pixel::Rgba;
 use vkxp_proto::{Op, Sampling};
 
+use super::wave_offset;
 use crate::extract::testing::*;
 use crate::test_support::sprite_cases::{cases, digest, frames};
 use crate::{Rect, Rules, Scene, Sprite, SpriteId};
@@ -373,4 +374,219 @@ fn the_bush_rows_of_a_turned_sprite_keep_the_mirror() {
 #[test]
 fn the_cases_of_bush_rows_are_the_expected_pictures() {
     compare(include_str!("../../../tests/data/sprite-rgss2-bush.txt"), 5);
+}
+
+/// Scenario "Offsets, measured on the original".
+#[test]
+fn the_offsets_of_the_measured_rows_are_those_of_the_original() {
+    let text = include_str!("../../../tests/data/sprite-rgss2-wave-samples.txt");
+    let lines = text.lines().filter(|line| !line.starts_with('#'));
+    // The sprite of the line before, with the next row to look at and the offset there.
+    let mut before: Option<([&str; 4], i64, i64)> = None;
+    let mut rows = 0;
+    for line in lines {
+        let words: Vec<&str> = line.split(' ').collect();
+        let sprite: [&str; 4] = [words[0], words[1], words[2], words[3]];
+        let (amp, length): (i32, i32) = (sprite[0].parse().unwrap(), sprite[1].parse().unwrap());
+        let (phase, y): (f64, i64) = (sprite[2].parse().unwrap(), sprite[3].parse().unwrap());
+        let (row, expected): (i64, i64) = (words[4].parse().unwrap(), words[5].parse().unwrap());
+        // Between two listed rows of a sprite the offset is that of the first.
+        if let Some((_, from, kept)) = before.filter(|(same, ..)| *same == sprite) {
+            for between in from..row {
+                let offset = wave_offset(amp, length, phase, between, y + between, 0);
+                assert_eq!(offset, kept, "`{line}`, row {between}");
+            }
+        }
+        assert_eq!(
+            wave_offset(amp, length, phase, row, y + row, 0),
+            expected,
+            "`{line}`"
+        );
+        before = Some((sprite, row + 1, expected));
+        rows += 1;
+    }
+    assert_eq!(rows, 9318);
+}
+
+/// Scenario "Exact half".
+#[test]
+fn an_exact_half_is_rounded_toward_zero() {
+    assert_eq!(wave_offset(13, 180, 330.0, 0, 0, 0), -6);
+    assert_eq!(wave_offset(21, 180, 30.0, 0, 0, 0), 10);
+    assert_eq!(wave_offset(13, 180, 30.0, 0, 0, 0), 6);
+    assert_eq!(wave_offset(21, 180, 210.0, 0, 0, 0), -10);
+    // Other values go to the nearest whole number.
+    assert_eq!(wave_offset(10, 180, 90.0, 0, 0, 0), 10);
+    assert_eq!(wave_offset(10, 180, 45.0, 0, 0, 0), 7);
+    assert_eq!(wave_offset(10, 180, 225.0, 0, 0, 0), -7);
+}
+
+/// The rows of a band of 8 screen rows share the angle of the first row that is drawn.
+#[test]
+fn the_angle_is_that_of_the_first_drawn_row_of_the_band() {
+    // 45 degrees a row: a sprite at screen row 3 has 5 rows in its first band, and the next
+    // bands begin with its rows 5 and 13, at 225 and 585 degrees.
+    let offsets = |clip_top: i64| -> Vec<i64> {
+        (0..14)
+            .map(|row| wave_offset(100, 8, 0.0, row, 3 + row, clip_top))
+            .collect()
+    };
+    assert_eq!(
+        offsets(0),
+        [0, 0, 0, 0, 0, -71, -71, -71, -71, -71, -71, -71, -71, -71]
+    );
+    // A clip that begins inside the band begins the band's angle anew: row 7 stands at
+    // screen row 10.
+    assert_eq!(offsets(10)[7..13], [-71; 6]);
+    assert_eq!(wave_offset(100, 8, 0.0, 7, 10, 10), -71);
+    assert_eq!(wave_offset(100, 8, 0.0, 6, 9, 9), -100);
+    // A length of 0 makes no wave.
+    assert_eq!(wave_offset(100, 0, 90.0, 5, 5, 0), 0);
+}
+
+/// Scenario "Phase", and the rest of the requirement on the update.
+#[test]
+fn an_update_advances_the_phase() {
+    let mut scene = Scene::with_rules(Rules::Rgss2, Scene::DEFAULT_SIZE);
+    let id = scene.create_sprite(None).unwrap();
+    let sprite = scene.sprite_mut(id).unwrap();
+    assert_eq!(
+        (sprite.wave_amp, sprite.wave_length, sprite.wave_speed),
+        (0, 180, 360)
+    );
+    assert_eq!(sprite.wave_phase(), 0.0);
+    sprite.update();
+    assert_eq!(sprite.wave_phase(), 2.0);
+    sprite.set_wave_phase(0.0);
+    sprite.wave_length = 64;
+    sprite.update();
+    assert_eq!(sprite.wave_phase(), 5.625);
+    // Also when invisible, and modulo 360 in both directions.
+    sprite.visible = false;
+    sprite.wave_speed = 64 * 400;
+    sprite.update();
+    assert_eq!(sprite.wave_phase(), 45.625);
+    sprite.wave_speed = -64 * 50;
+    sprite.update();
+    assert_eq!(sprite.wave_phase(), 355.625);
+    // A length of 0 leaves the phase.
+    sprite.wave_length = 0;
+    sprite.update();
+    assert_eq!(sprite.wave_phase(), 355.625);
+    for (set, kept) in [(370.5, 10.5), (-1.0, 359.0), (1000.0, 280.0), (-1e-20, 0.0)] {
+        sprite.set_wave_phase(set);
+        assert_eq!(sprite.wave_phase(), kept);
+    }
+    // A sprite of RGSS1 has no wave.
+    let mut scene = Scene::new();
+    let id = scene.create_sprite(None).unwrap();
+    let sprite = scene.sprite_mut(id).unwrap();
+    sprite.update();
+    assert_eq!(sprite.wave_phase(), 0.0);
+}
+
+/// The columns of every row of the next frame that are not black, as first column and
+/// count.
+fn spans(stage: &mut Stage) -> Vec<(u32, u32)> {
+    let frame = stage.frame();
+    (0..frame.size.height)
+        .map(|y| {
+            let drawn: Vec<u32> = (0..frame.size.width)
+                .filter(|x| frame.pixel(*x, y) != BLACK)
+                .collect();
+            (drawn.first().copied().unwrap_or(0), drawn.len() as u32)
+        })
+        .collect()
+}
+
+/// A waving sprite moves its rows, a negative amplitude squeezes it, and a sprite of RGSS1
+/// does neither.
+#[test]
+fn a_wave_moves_the_rows_and_a_negative_amplitude_squeezes_the_sprite() {
+    let wave = |amp: i32| {
+        move |sprite: &mut Sprite| {
+            sprite.x = 10;
+            sprite.wave_amp = amp;
+            sprite.wave_length = 8;
+        }
+    };
+    // 45 degrees a row: the offsets of the bands are those of 0 and 360 degrees, then 0.
+    let mut stage = Stage::rgss2(32, 16);
+    coded(&mut stage, 8, 16, wave(4));
+    let mut expected = vec![(10, 8); 8];
+    expected.extend([(10, 8); 8]);
+    assert_eq!(spans(&mut stage), expected);
+    let mut stage = Stage::rgss2(32, 16);
+    let id = coded(&mut stage, 8, 16, wave(4));
+    let sprite = stage.scene.sprite_mut(id).unwrap();
+    sprite.y = -3;
+    sprite.wave_length = 16;
+    // 22.5 degrees a row. The first band begins with row 3 of the sprite, the first that
+    // is drawn, at 67 degrees, and the second with row 11, at 247 degrees.
+    let mut expected = vec![(14, 8); 8];
+    expected.extend([(6, 8); 5]);
+    expected.extend([(0, 0); 3]);
+    assert_eq!(spans(&mut stage), expected);
+
+    let mut stage = Stage::rgss2(32, 16);
+    coded(&mut stage, 8, 16, wave(-3));
+    assert_eq!(spans(&mut stage), [(13, 2); 16]);
+    // The two columns show the texels 0 and 4.
+    let frame = stage.frame();
+    assert_eq!(frame.pixel(13, 5), [0, 5, 200, 255]);
+    assert_eq!(frame.pixel(14, 5), [4, 5, 200, 255]);
+    let mut stage = Stage::rgss2(32, 16);
+    coded(&mut stage, 8, 16, wave(-4));
+    assert!(all(&stage.frame(), BLACK));
+
+    let mut stage = Stage::sized(32, 16);
+    let id = coded(&mut stage, 8, 16, wave(4));
+    stage.scene.sprite_mut(id).unwrap().y = -3;
+    let mut expected = vec![(10, 8); 13];
+    expected.extend([(0, 0); 3]);
+    assert_eq!(spans(&mut stage), expected);
+}
+
+/// With a wave the rows are `j * h / dh`, the bush rows are the lowest rows and are not
+/// mirrored, and a turned sprite does not wave.
+#[test]
+fn a_waving_sprite_shows_exact_rows_and_plain_bush_rows() {
+    let mut stage = Stage::rgss2(32, 16);
+    coded(&mut stage, 8, 8, |sprite| {
+        sprite.zoom_y = 1.5;
+        sprite.mirror = true;
+        sprite.wave_amp = 1;
+        sprite.wave_length = 100_000;
+        sprite.bush_depth = 3;
+        sprite.bush_opacity = 255;
+    });
+    let frame = stage.frame();
+    let rows: Vec<u8> = (0..12).map(|y| frame.pixel(1, y)[1]).collect();
+    assert_eq!(rows, [0, 0, 1, 2, 2, 3, 4, 4, 5, 6, 6, 7]);
+    let columns: Vec<u8> = (0..12).map(|y| frame.pixel(1, y)[0]).collect();
+    assert_eq!(columns, [6, 6, 6, 6, 6, 6, 6, 6, 6, 1, 1, 1]);
+
+    let turned = |amp: i32| {
+        let mut stage = Stage::rgss2(32, 32);
+        coded(&mut stage, 8, 8, |sprite| {
+            sprite.x = 16;
+            sprite.y = 16;
+            sprite.angle = 30.0;
+            sprite.wave_amp = amp;
+            sprite.wave_length = 8;
+        });
+        stage.frame().rgba
+    };
+    assert_eq!(turned(5), turned(0));
+    assert_eq!(turned(-2), turned(0));
+}
+
+/// Scenario "Cases of the measurement" of "Wave of a sprite of RGSS2": the topics `wave1`
+/// to `wave6`.
+#[test]
+fn the_cases_of_waves_are_the_expected_pictures() {
+    compare(
+        include_str!("../../../tests/data/sprite-rgss2-wave.txt"),
+        98,
+    );
 }

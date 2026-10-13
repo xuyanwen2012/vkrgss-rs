@@ -115,6 +115,13 @@ pub struct Sprite {
     /// The opacity of the bush rows in RGSS2, of 255, kept as it is written; a sprite of
     /// RGSS1 does not look at it. See the requirement "Bush rows of RGSS2".
     pub bush_opacity: i32,
+    /// The wave of a sprite of RGSS2, kept as written: the number of pixels its rows are
+    /// moved by at most, the number of rows of one period, and what an update adds to the
+    /// phase, as `wave_speed / wave_length` degrees. A sprite of RGSS1 does not look at
+    /// them. See the requirement "Wave of a sprite of RGSS2".
+    pub wave_amp: i32,
+    pub wave_length: i32,
+    pub wave_speed: i32,
     /// 1 adds, 2 subtracts, every other value blends normally.
     pub blend_type: i32,
     pub color: Color,
@@ -126,6 +133,8 @@ pub struct Sprite {
     pub(crate) viewport: Option<ViewportId>,
     pub(crate) bitmap: Option<BitmapId>,
     pub(crate) opacity: u8,
+    /// The phase of the wave in degrees, from 0 up to 360.
+    pub(crate) wave_phase: f64,
     pub(crate) flash: Flash,
     /// The bitmap the sprite is drawn from while it is turned.
     pub(crate) turned: Turned,
@@ -147,6 +156,9 @@ impl Sprite {
             mirror: false,
             bush_depth: 0,
             bush_opacity: 128,
+            wave_amp: 0,
+            wave_length: 180,
+            wave_speed: 360,
             blend_type: 0,
             color: Color::TRANSPARENT,
             tone: Tone::NEUTRAL,
@@ -155,6 +167,7 @@ impl Sprite {
             viewport,
             bitmap: None,
             opacity: 255,
+            wave_phase: 0.0,
             flash: Flash::default(),
             turned: Turned::default(),
             rules,
@@ -206,9 +219,30 @@ impl Sprite {
         self.flash.start(color, duration);
     }
 
-    /// Advances the flash by one step.
+    /// The phase of the wave in degrees.
+    pub fn wave_phase(&self) -> f64 {
+        self.wave_phase
+    }
+
+    /// Sets the phase of the wave, kept modulo 360 from 0 up to 360.
+    pub fn set_wave_phase(&mut self, phase: f64) {
+        let phase = phase.rem_euclid(360.0);
+        // A remainder rounded up to 360, and what is not a number, are 0.
+        self.wave_phase = if phase < 360.0 { phase } else { 0.0 };
+    }
+
+    /// Advances the flash by one step, and in RGSS2 the phase of the wave by
+    /// `wave_speed / wave_length` degrees, whatever the amplitude and whether the sprite is
+    /// visible or not. A wave length of 0 leaves the phase: the original runtime does not
+    /// return from that update.
+    ///
+    /// Provenance of the wave: oracle measurement 2026-10-12, RGSS202E, topic `wave6`.
     pub fn update(&mut self) {
         self.flash.advance();
+        if self.rules == Rules::Rgss2 && self.wave_length != 0 {
+            let step = f64::from(self.wave_speed) / f64::from(self.wave_length);
+            self.set_wave_phase(self.wave_phase + step);
+        }
     }
 }
 

@@ -1,0 +1,713 @@
+# Waves of sprites of RGSS2: the topics `wave1` to `wave6` (amplitude, length, phase,
+# place, zoom, mirror, source rectangle, viewports, bush rows, negative amplitudes,
+# updates).
+#
+# Measured on the original runtime of VX on 2026-10-12 (RGSS202E.dll 2.0.2.1 and 2.0.0.1, the
+# same pictures). The scenes are those of the probes, made by formulas; the digest of a frame
+# is that of the picture the model of the measurement draws, which is the picture of the
+# original unless said otherwise. The format is that of
+# `vkxp_core::test_support::sprite_cases`.
+scene wave1-00
+sprite 1 - bitmap=pat_20_90_o_1 x=30 wave_amp=8 wave_length=180 y=0
+sprite 2 - bitmap=pat_20_90_o_1 x=88 wave_amp=8 wave_length=180 y=1
+sprite 3 - bitmap=pat_20_90_o_1 x=146 wave_amp=8 wave_length=180 y=3
+sprite 4 - bitmap=pat_20_90_o_1 x=204 wave_amp=8 wave_length=180 y=7
+sprite 5 - bitmap=pat_20_90_o_1 x=262 wave_amp=8 wave_length=180 y=8
+sprite 6 - bitmap=pat_20_90_o_1 x=320 wave_amp=8 wave_length=180 y=13
+sprite 7 - bitmap=pat_20_90_o_1 x=378 wave_amp=8 wave_length=180 y=100
+sprite 8 - bitmap=pat_20_90_o_1 x=436 wave_amp=8 wave_length=180 y=201
+sprite 9 - bitmap=pat_20_90_o_1 x=494 wave_amp=8 wave_length=180 y=330
+frame 1a657d145f2aadf4
+end
+scene wave1-01
+sprite 1 - bitmap=pat_20_90_o_1 x=30 wave_amp=1 wave_length=64 y=5 wave_phase=0
+sprite 2 - bitmap=pat_20_90_o_1 x=88 wave_amp=2 wave_length=64 y=6 wave_phase=30
+sprite 3 - bitmap=pat_20_90_o_1 x=146 wave_amp=3 wave_length=64 y=7 wave_phase=45
+sprite 4 - bitmap=pat_20_90_o_1 x=204 wave_amp=5 wave_length=64 y=8 wave_phase=90
+sprite 5 - bitmap=pat_20_90_o_1 x=262 wave_amp=8 wave_length=64 y=9 wave_phase=180
+sprite 6 - bitmap=pat_20_90_o_1 x=320 wave_amp=13 wave_length=64 y=10 wave_phase=270
+sprite 7 - bitmap=pat_20_90_o_1 x=378 wave_amp=20 wave_length=64 y=11 wave_phase=359.5
+sprite 8 - bitmap=pat_20_90_o_1 x=436 wave_amp=28 wave_length=64 y=12 wave_phase=12.25
+sprite 9 - bitmap=pat_20_90_o_1 x=494 wave_amp=4 wave_length=64 y=13 wave_phase=100
+frame 954ed9494f80ebbc
+end
+scene wave1-02
+sprite 1 - bitmap=pat_20_90_o_1 x=30 wave_amp=10 wave_length=8 y=20
+sprite 2 - bitmap=pat_20_90_o_1 x=88 wave_amp=10 wave_length=16 y=23
+sprite 3 - bitmap=pat_20_90_o_1 x=146 wave_amp=10 wave_length=20 y=26
+sprite 4 - bitmap=pat_20_90_o_1 x=204 wave_amp=10 wave_length=33 y=29
+sprite 5 - bitmap=pat_20_90_o_1 x=262 wave_amp=10 wave_length=64 y=32
+sprite 6 - bitmap=pat_20_90_o_1 x=320 wave_amp=10 wave_length=90 y=35
+sprite 7 - bitmap=pat_20_90_o_1 x=378 wave_amp=10 wave_length=180 y=38
+sprite 8 - bitmap=pat_20_90_o_1 x=436 wave_amp=10 wave_length=360 y=41
+sprite 9 - bitmap=pat_20_90_o_1 x=494 wave_amp=10 wave_length=1000 y=44
+frame 5f723d448a60ce4c
+end
+scene wave1-03
+sprite 1 - bitmap=pat_20_90_o_1 x=30 wave_amp=6 wave_length=250 y=214 wave_phase=228.59997854569943
+sprite 2 - bitmap=pat_20_90_o_1 x=88 wave_amp=26 wave_length=3 y=262 wave_phase=66.08926670126834
+sprite 3 - bitmap=pat_20_90_o_1 x=146 wave_amp=26 wave_length=7 y=7 wave_phase=299.0
+sprite 4 - bitmap=pat_20_90_o_1 x=204 wave_amp=3 wave_length=24 y=118 wave_phase=331.7382025999589
+sprite 5 - bitmap=pat_20_90_o_1 x=262 wave_amp=14 wave_length=250 y=315 wave_phase=168.0
+sprite 6 - bitmap=pat_20_90_o_1 x=320 wave_amp=23 wave_length=12 y=188 wave_phase=8.360695360099513
+sprite 7 - bitmap=pat_20_90_o_1 x=378 wave_amp=26 wave_length=7 y=232 wave_phase=175.0
+sprite 8 - bitmap=pat_20_90_o_1 x=436 wave_amp=16 wave_length=24 y=95 wave_phase=239.43891594834804
+sprite 9 - bitmap=pat_20_90_o_1 x=494 wave_amp=3 wave_length=40 y=106 wave_phase=242.5659691449764
+frame 27c65253d1ff76ac
+end
+scene wave1-04
+sprite 1 - bitmap=bg z=-1000
+sprite 2 - bitmap=pat_20_90_a_2 x=30 wave_amp=4 wave_length=1 y=243 wave_phase=201.21933324431262
+sprite 3 - bitmap=pat_20_90_a_2 x=88 wave_amp=11 wave_length=24 y=274 wave_phase=186.0
+sprite 4 - bitmap=pat_20_90_a_2 x=146 wave_amp=17 wave_length=250 y=162 wave_phase=197.0
+sprite 5 - bitmap=pat_20_90_a_2 x=204 wave_amp=1 wave_length=12 y=81 wave_phase=258.51332379698204
+sprite 6 - bitmap=pat_20_90_a_2 x=262 wave_amp=16 wave_length=12 y=281 wave_phase=215.77609978127006
+sprite 7 - bitmap=pat_20_90_a_2 x=320 wave_amp=19 wave_length=2 y=163 wave_phase=200.33532047866464
+sprite 8 - bitmap=pat_20_90_a_2 x=378 wave_amp=6 wave_length=500 y=87 wave_phase=170.0
+sprite 9 - bitmap=pat_20_90_a_2 x=436 wave_amp=25 wave_length=2 y=156 wave_phase=88.47554800792308
+sprite 10 - bitmap=pat_20_90_a_2 x=494 wave_amp=27 wave_length=24 y=219 wave_phase=134.95519949166942
+frame 1683c95d9e2c042a
+end
+scene wave1-05
+sprite 1 - bitmap=pat_20_90_o_1 x=30 wave_amp=22 wave_length=1 y=123 wave_phase=146.5252775728864
+sprite 2 - bitmap=pat_20_90_o_1 x=88 wave_amp=12 wave_length=3 y=259 wave_phase=135.2016529448108
+sprite 3 - bitmap=pat_20_90_o_1 x=146 wave_amp=6 wave_length=1 y=35 wave_phase=208.0
+sprite 4 - bitmap=pat_20_90_o_1 x=204 wave_amp=2 wave_length=77 y=26 wave_phase=337.0
+sprite 5 - bitmap=pat_20_90_o_1 x=262 wave_amp=2 wave_length=250 y=127 wave_phase=35.0
+sprite 6 - bitmap=pat_20_90_o_1 x=320 wave_amp=21 wave_length=24 y=77 wave_phase=268.5051827300319
+sprite 7 - bitmap=pat_20_90_o_1 x=378 wave_amp=9 wave_length=24 y=269 wave_phase=328.12026606722964
+sprite 8 - bitmap=pat_20_90_o_1 x=436 wave_amp=7 wave_length=123 y=78 wave_phase=307.0
+sprite 9 - bitmap=pat_20_90_o_1 x=494 wave_amp=16 wave_length=2 y=244 wave_phase=273.0
+frame 8f703e65c7b92c04
+end
+scene wave1-06
+sprite 1 - bitmap=bg z=-1000
+sprite 2 - bitmap=pat_20_90_a_2 x=30 wave_amp=5 wave_length=7 y=195 wave_phase=12.0
+sprite 3 - bitmap=pat_20_90_a_2 x=88 wave_amp=19 wave_length=123 y=127 wave_phase=299.0
+sprite 4 - bitmap=pat_20_90_a_2 x=146 wave_amp=9 wave_length=500 y=207 wave_phase=270.5892034257699
+sprite 5 - bitmap=pat_20_90_a_2 x=204 wave_amp=5 wave_length=12 y=203 wave_phase=12.0
+sprite 6 - bitmap=pat_20_90_a_2 x=262 wave_amp=26 wave_length=24 y=36 wave_phase=335.0
+sprite 7 - bitmap=pat_20_90_a_2 x=320 wave_amp=5 wave_length=77 y=275 wave_phase=202.0
+sprite 8 - bitmap=pat_20_90_a_2 x=378 wave_amp=8 wave_length=2 y=85 wave_phase=65.36711324914923
+sprite 9 - bitmap=pat_20_90_a_2 x=436 wave_amp=23 wave_length=1 y=23 wave_phase=217.40327787336238
+sprite 10 - bitmap=pat_20_90_a_2 x=494 wave_amp=26 wave_length=7 y=198 wave_phase=32.0
+frame 471f0bf340570f7a
+end
+scene wave1-07
+sprite 1 - bitmap=pat_20_90_o_1 x=30 wave_amp=25 wave_length=2 y=89 wave_phase=119.0
+sprite 2 - bitmap=pat_20_90_o_1 x=88 wave_amp=23 wave_length=2 y=160 wave_phase=125.0
+sprite 3 - bitmap=pat_20_90_o_1 x=146 wave_amp=5 wave_length=77 y=151 wave_phase=281.0
+sprite 4 - bitmap=pat_20_90_o_1 x=204 wave_amp=19 wave_length=12 y=279 wave_phase=260.0
+sprite 5 - bitmap=pat_20_90_o_1 x=262 wave_amp=17 wave_length=77 y=149 wave_phase=251.80082995371262
+sprite 6 - bitmap=pat_20_90_o_1 x=320 wave_amp=3 wave_length=2 y=166 wave_phase=351.6651728188698
+sprite 7 - bitmap=pat_20_90_o_1 x=378 wave_amp=11 wave_length=500 y=215 wave_phase=38.73822445026904
+sprite 8 - bitmap=pat_20_90_o_1 x=436 wave_amp=21 wave_length=3 y=258 wave_phase=10.0
+sprite 9 - bitmap=pat_20_90_o_1 x=494 wave_amp=16 wave_length=1 y=262 wave_phase=140.1845916750962
+frame 7e0ce0608a9c25dc
+end
+scene wave1-08
+sprite 1 - bitmap=bg z=-1000
+sprite 2 - bitmap=pat_20_90_a_2 x=30 wave_amp=8 wave_length=7 y=24 wave_phase=238.1401002124676
+sprite 3 - bitmap=pat_20_90_a_2 x=88 wave_amp=9 wave_length=2 y=207 wave_phase=260.55348898273775
+sprite 4 - bitmap=pat_20_90_a_2 x=146 wave_amp=13 wave_length=250 y=167 wave_phase=175.24247260393327
+sprite 5 - bitmap=pat_20_90_a_2 x=204 wave_amp=2 wave_length=3 y=88 wave_phase=177.0785684458164
+sprite 6 - bitmap=pat_20_90_a_2 x=262 wave_amp=25 wave_length=3 y=320 wave_phase=317.0
+sprite 7 - bitmap=pat_20_90_a_2 x=320 wave_amp=8 wave_length=3 y=255 wave_phase=314.0
+sprite 8 - bitmap=pat_20_90_a_2 x=378 wave_amp=27 wave_length=1 y=3 wave_phase=103.0
+sprite 9 - bitmap=pat_20_90_a_2 x=436 wave_amp=13 wave_length=24 y=46 wave_phase=40.0
+sprite 10 - bitmap=pat_20_90_a_2 x=494 wave_amp=20 wave_length=250 y=236 wave_phase=85.0
+frame 645d09d71ec2f672
+end
+scene wave2-00
+sprite 1 - bitmap=pat_20_90_o_1 x=30 wave_amp=9 wave_length=50 wave_phase=20 y=11 zoom_y=2
+sprite 2 - bitmap=pat_20_90_o_1 x=88 wave_amp=9 wave_length=50 wave_phase=20 y=11 zoom_y=0.5
+sprite 3 - bitmap=pat_20_90_o_1 x=146 wave_amp=9 wave_length=50 wave_phase=20 y=11 zoom_y=1.5
+sprite 4 - bitmap=pat_20_90_o_1 x=204 wave_amp=9 wave_length=50 wave_phase=20 y=11 zoom_x=2
+sprite 5 - bitmap=pat_20_90_o_1 x=262 wave_amp=9 wave_length=50 wave_phase=20 y=11 zoom_x=0.5 zoom_y=3.3
+sprite 6 - bitmap=pat_20_90_o_1 x=320 wave_amp=9 wave_length=50 wave_phase=20 y=11 mirror=true
+sprite 7 - bitmap=pat_20_90_o_1 x=378 wave_amp=9 wave_length=50 wave_phase=20 y=11 src_rect=3,10,12,50
+sprite 8 - bitmap=pat_20_90_o_1 x=436 wave_amp=9 wave_length=50 wave_phase=20 y=40 oy=20
+sprite 9 - bitmap=pat_20_90_o_1 x=494 wave_amp=9 wave_length=50 wave_phase=20 y=41 ox=7 oy=33 zoom_y=2
+frame c6b8b8ea1e4d9194
+end
+scene wave2-01
+sprite 1 - bitmap=pat_20_90_o_1 x=30 wave_amp=9 wave_length=50 wave_phase=20 y=-13
+sprite 2 - bitmap=pat_20_90_o_1 x=88 wave_amp=9 wave_length=50 wave_phase=20 y=-40 zoom_y=2
+sprite 3 - bitmap=pat_20_90_o_1 x=146 wave_amp=9 wave_length=50 wave_phase=20 y=380
+sprite 4 - bitmap=pat_20_90_o_1 x=2 wave_amp=9 wave_length=50 wave_phase=20 y=100
+sprite 5 - bitmap=pat_20_90_o_1 x=535 wave_amp=9 wave_length=50 wave_phase=20 y=200
+sprite 6 - bitmap=pat_20_90_o_1 x=320 wave_amp=-9 wave_length=50 wave_phase=20 y=10
+sprite 7 - bitmap=pat_20_90_o_1 x=378 wave_amp=9 wave_length=50 wave_phase=20 y=300 bush_depth=20
+sprite 8 - bitmap=pat_20_90_o_1 x=436 wave_amp=9 wave_length=50 wave_phase=20 y=205 opacity=120 color=255,0,0,90
+sprite 9 - bitmap=pat_20_90_o_1 x=494 wave_amp=40 wave_length=30 wave_phase=20 y=100
+frame 1530f50c6c967d02
+end
+scene wave2-02
+viewport 1 30 3 50 100 ox=0 oy=0
+sprite 2 1 bitmap=pat_20_90_o_1 x=10 wave_amp=9 wave_length=50 wave_phase=20 y=5
+viewport 3 90 13 50 100 ox=0 oy=0
+sprite 4 3 bitmap=pat_20_90_o_1 x=10 wave_amp=9 wave_length=50 wave_phase=20 y=5
+viewport 5 150 21 50 100 ox=0 oy=5
+sprite 6 5 bitmap=pat_20_90_o_1 x=10 wave_amp=9 wave_length=50 wave_phase=20 y=5
+viewport 7 210 50 50 100 ox=7 oy=0
+sprite 8 7 bitmap=pat_20_90_o_1 x=20 wave_amp=9 wave_length=50 wave_phase=20 y=-7
+viewport 9 270 6 30 60 ox=0 oy=0
+sprite 10 9 bitmap=pat_20_90_o_1 x=2 wave_amp=9 wave_length=50 wave_phase=20 y=30
+viewport 11 330 6 50 60 ox=20 oy=11
+sprite 12 11 bitmap=pat_20_90_o_1 x=30 wave_amp=9 wave_length=50 wave_phase=20 y=30
+viewport 13 400 100 60 200 ox=-9 oy=-9
+sprite 14 13 bitmap=pat_20_90_o_1 x=0 wave_amp=9 wave_length=50 wave_phase=20 y=0 zoom_y=2
+viewport 15 480 1 60 100 ox=0 oy=0
+sprite 16 15 bitmap=pat_20_90_o_1 x=10 wave_amp=9 wave_length=50 wave_phase=20 y=3 mirror=true ox=5
+frame 3317ce25d385d5ec
+end
+scene wave3-00
+sprite 1 - bitmap=pat_20_400_o_1 x=40 y=2 wave_amp=21 wave_length=64 wave_phase=245.0
+sprite 2 - bitmap=pat_20_400_o_1 x=130 y=2 wave_amp=21 wave_length=61 wave_phase=164.0
+sprite 3 - bitmap=pat_20_400_o_1 x=220 y=7 wave_amp=15 wave_length=77 wave_phase=325.0
+sprite 4 - bitmap=pat_20_400_o_1 x=310 y=6 wave_amp=10 wave_length=250 wave_phase=311.0
+sprite 5 - bitmap=pat_20_400_o_1 x=400 y=6 wave_amp=27 wave_length=37 wave_phase=284.0
+sprite 6 - bitmap=pat_20_400_o_1 x=490 y=3 wave_amp=4 wave_length=37 wave_phase=20.16703959519063
+frame e8a91e16546ca184
+end
+scene wave3-01
+sprite 1 - bitmap=pat_20_400_o_1 x=40 y=5 wave_amp=4 wave_length=400 wave_phase=124.0
+sprite 2 - bitmap=pat_20_400_o_1 x=130 y=5 wave_amp=1 wave_length=100 wave_phase=155.0
+sprite 3 - bitmap=pat_20_400_o_1 x=220 y=6 wave_amp=6 wave_length=400 wave_phase=186.5
+sprite 4 - bitmap=pat_20_400_o_1 x=310 y=1 wave_amp=3 wave_length=40 wave_phase=33.575482391379694
+sprite 5 - bitmap=pat_20_400_o_1 x=400 y=6 wave_amp=9 wave_length=100 wave_phase=346.5
+sprite 6 - bitmap=pat_20_400_o_1 x=490 y=6 wave_amp=15 wave_length=360 wave_phase=301.5
+frame 3552b363972a9a6c
+end
+scene wave3-02
+sprite 1 - bitmap=pat_20_400_o_1 x=40 y=7 wave_amp=26 wave_length=37 wave_phase=35.0
+sprite 2 - bitmap=pat_20_400_o_1 x=130 y=6 wave_amp=13 wave_length=1000 wave_phase=280.9821609419245
+sprite 3 - bitmap=pat_20_400_o_1 x=220 y=0 wave_amp=30 wave_length=250 wave_phase=228.49025517474905
+sprite 4 - bitmap=pat_20_400_o_1 x=310 y=7 wave_amp=24 wave_length=360 wave_phase=44.5
+sprite 5 - bitmap=pat_20_400_o_1 x=400 y=4 wave_amp=15 wave_length=77 wave_phase=259.0
+sprite 6 - bitmap=pat_20_400_o_1 x=490 y=7 wave_amp=29 wave_length=360 wave_phase=346.23085791408363
+frame cef278ac0e24a384
+end
+scene wave3-03
+sprite 1 - bitmap=pat_20_400_o_1 x=40 y=6 wave_amp=11 wave_length=1000 wave_phase=344.5287564172118
+sprite 2 - bitmap=pat_20_400_o_1 x=130 y=5 wave_amp=20 wave_length=77 wave_phase=88.0
+sprite 3 - bitmap=pat_20_400_o_1 x=220 y=6 wave_amp=30 wave_length=1000 wave_phase=188.5
+sprite 4 - bitmap=pat_20_400_o_1 x=310 y=0 wave_amp=28 wave_length=512 wave_phase=6.0
+sprite 5 - bitmap=pat_20_400_o_1 x=400 y=1 wave_amp=26 wave_length=77 wave_phase=305.2293739468891
+sprite 6 - bitmap=pat_20_400_o_1 x=490 y=3 wave_amp=28 wave_length=64 wave_phase=71.66191922154856
+frame baf07095b93f43dc
+end
+scene wave3-04
+sprite 1 - bitmap=pat_20_400_o_1 x=40 y=0 wave_amp=19 wave_length=123 wave_phase=358.4073352078029
+sprite 2 - bitmap=pat_20_400_o_1 x=130 y=2 wave_amp=14 wave_length=16 wave_phase=329.9795850522808
+sprite 3 - bitmap=pat_20_400_o_1 x=220 y=0 wave_amp=19 wave_length=1000 wave_phase=116.5
+sprite 4 - bitmap=pat_20_400_o_1 x=310 y=1 wave_amp=11 wave_length=100 wave_phase=31.942949650899305
+sprite 5 - bitmap=pat_20_400_o_1 x=400 y=0 wave_amp=26 wave_length=16 wave_phase=148.0
+sprite 6 - bitmap=pat_20_400_o_1 x=490 y=5 wave_amp=17 wave_length=40 wave_phase=50.0
+frame b38400a2842308b4
+end
+scene wave3-05
+sprite 1 - bitmap=pat_20_400_o_1 x=40 y=7 wave_amp=25 wave_length=180 wave_phase=97.6230906903357
+sprite 2 - bitmap=pat_20_400_o_1 x=130 y=2 wave_amp=9 wave_length=24 wave_phase=62.46282062847082
+sprite 3 - bitmap=pat_20_400_o_1 x=220 y=7 wave_amp=18 wave_length=180 wave_phase=165.63229766914162
+sprite 4 - bitmap=pat_20_400_o_1 x=310 y=0 wave_amp=1 wave_length=24 wave_phase=184.5
+sprite 5 - bitmap=pat_20_400_o_1 x=400 y=4 wave_amp=8 wave_length=77 wave_phase=4.0
+sprite 6 - bitmap=pat_20_400_o_1 x=490 y=6 wave_amp=19 wave_length=77 wave_phase=344.7050564061035
+frame f3ee8b0195d1758c
+end
+scene wave3-06
+sprite 1 - bitmap=pat_20_400_o_1 x=40 y=4 wave_amp=6 wave_length=123 wave_phase=352.201949430295
+sprite 2 - bitmap=pat_20_400_o_1 x=130 y=3 wave_amp=21 wave_length=123 wave_phase=119.2948192847197
+sprite 3 - bitmap=pat_20_400_o_1 x=220 y=2 wave_amp=17 wave_length=40 wave_phase=284.1864392884805
+sprite 4 - bitmap=pat_20_400_o_1 x=310 y=7 wave_amp=7 wave_length=1000 wave_phase=220.0
+sprite 5 - bitmap=pat_20_400_o_1 x=400 y=6 wave_amp=30 wave_length=77 wave_phase=300.5
+sprite 6 - bitmap=pat_20_400_o_1 x=490 y=6 wave_amp=26 wave_length=180 wave_phase=204.0
+frame ca6c63b9da912ef4
+end
+scene wave3-07
+sprite 1 - bitmap=pat_20_400_o_1 x=40 y=7 wave_amp=6 wave_length=77 wave_phase=78.64490521746289
+sprite 2 - bitmap=pat_20_400_o_1 x=130 y=2 wave_amp=13 wave_length=100 wave_phase=171.5896249418239
+sprite 3 - bitmap=pat_20_400_o_1 x=220 y=3 wave_amp=4 wave_length=1000 wave_phase=48.741045749168904
+sprite 4 - bitmap=pat_20_400_o_1 x=310 y=1 wave_amp=26 wave_length=37 wave_phase=289.0
+sprite 5 - bitmap=pat_20_400_o_1 x=400 y=7 wave_amp=13 wave_length=16 wave_phase=211.2963449565225
+sprite 6 - bitmap=pat_20_400_o_1 x=490 y=4 wave_amp=6 wave_length=250 wave_phase=144.5
+frame 53c5fd6b4eb06adc
+end
+scene wave3-08
+sprite 1 - bitmap=pat_20_400_o_1 x=40 y=7 wave_amp=30 wave_length=61 wave_phase=243.95570550071903
+sprite 2 - bitmap=pat_20_400_o_1 x=130 y=4 wave_amp=6 wave_length=37 wave_phase=7.0
+sprite 3 - bitmap=pat_20_400_o_1 x=220 y=3 wave_amp=10 wave_length=180 wave_phase=129.0
+sprite 4 - bitmap=pat_20_400_o_1 x=310 y=6 wave_amp=28 wave_length=250 wave_phase=336.07749143149465
+sprite 5 - bitmap=pat_20_400_o_1 x=400 y=3 wave_amp=1 wave_length=123 wave_phase=143.5
+sprite 6 - bitmap=pat_20_400_o_1 x=490 y=5 wave_amp=27 wave_length=400 wave_phase=94.47405164161536
+frame 261f8d3df86b12c4
+end
+scene wave3-09
+sprite 1 - bitmap=pat_20_400_o_1 x=40 y=2 wave_amp=26 wave_length=250 wave_phase=324.13637961557816
+sprite 2 - bitmap=pat_20_400_o_1 x=130 y=6 wave_amp=17 wave_length=100 wave_phase=221.5
+sprite 3 - bitmap=pat_20_400_o_1 x=220 y=5 wave_amp=26 wave_length=77 wave_phase=126.30992507625753
+sprite 4 - bitmap=pat_20_400_o_1 x=310 y=7 wave_amp=24 wave_length=37 wave_phase=132.0
+sprite 5 - bitmap=pat_20_400_o_1 x=400 y=1 wave_amp=11 wave_length=123 wave_phase=219.20706510644249
+sprite 6 - bitmap=pat_20_400_o_1 x=490 y=4 wave_amp=5 wave_length=512 wave_phase=190.0
+frame 37f2b3856c1dde94
+end
+scene wave3-10
+sprite 1 - bitmap=pat_20_400_o_1 x=40 y=4 wave_amp=10 wave_length=100 wave_phase=239.96000894892381
+sprite 2 - bitmap=pat_20_400_o_1 x=130 y=1 wave_amp=14 wave_length=250 wave_phase=263.52239437507694
+sprite 3 - bitmap=pat_20_400_o_1 x=220 y=7 wave_amp=22 wave_length=40 wave_phase=84.0
+sprite 4 - bitmap=pat_20_400_o_1 x=310 y=2 wave_amp=14 wave_length=250 wave_phase=346.0
+sprite 5 - bitmap=pat_20_400_o_1 x=400 y=1 wave_amp=1 wave_length=360 wave_phase=98.0
+sprite 6 - bitmap=pat_20_400_o_1 x=490 y=4 wave_amp=20 wave_length=100 wave_phase=177.0
+frame cb10c8088b954b6c
+end
+scene wave3-11
+sprite 1 - bitmap=pat_20_400_o_1 x=40 y=2 wave_amp=23 wave_length=400 wave_phase=308.2202636437811
+sprite 2 - bitmap=pat_20_400_o_1 x=130 y=0 wave_amp=30 wave_length=40 wave_phase=281.0
+sprite 3 - bitmap=pat_20_400_o_1 x=220 y=1 wave_amp=21 wave_length=180 wave_phase=317.5
+sprite 4 - bitmap=pat_20_400_o_1 x=310 y=6 wave_amp=13 wave_length=16 wave_phase=187.0
+sprite 5 - bitmap=pat_20_400_o_1 x=400 y=1 wave_amp=29 wave_length=64 wave_phase=354.0
+sprite 6 - bitmap=pat_20_400_o_1 x=490 y=4 wave_amp=21 wave_length=100 wave_phase=107.5
+frame de7e4eaf6d94e2ec
+end
+scene wave3-12
+sprite 1 - bitmap=pat_20_400_o_1 x=40 y=2 wave_amp=7 wave_length=360 wave_phase=164.5
+sprite 2 - bitmap=pat_20_400_o_1 x=130 y=3 wave_amp=26 wave_length=40 wave_phase=115.5
+sprite 3 - bitmap=pat_20_400_o_1 x=220 y=6 wave_amp=25 wave_length=180 wave_phase=352.0
+sprite 4 - bitmap=pat_20_400_o_1 x=310 y=4 wave_amp=13 wave_length=100 wave_phase=187.50165449307767
+sprite 5 - bitmap=pat_20_400_o_1 x=400 y=5 wave_amp=5 wave_length=400 wave_phase=98.5852205069668
+sprite 6 - bitmap=pat_20_400_o_1 x=490 y=5 wave_amp=14 wave_length=40 wave_phase=286.0
+frame 0c0ac9950499fabc
+end
+scene wave3-13
+sprite 1 - bitmap=pat_20_400_o_1 x=40 y=1 wave_amp=1 wave_length=123 wave_phase=173.0
+sprite 2 - bitmap=pat_20_400_o_1 x=130 y=6 wave_amp=29 wave_length=100 wave_phase=58.0
+sprite 3 - bitmap=pat_20_400_o_1 x=220 y=6 wave_amp=6 wave_length=24 wave_phase=157.0
+sprite 4 - bitmap=pat_20_400_o_1 x=310 y=0 wave_amp=24 wave_length=250 wave_phase=290.0
+sprite 5 - bitmap=pat_20_400_o_1 x=400 y=7 wave_amp=13 wave_length=77 wave_phase=281.72765256978215
+sprite 6 - bitmap=pat_20_400_o_1 x=490 y=3 wave_amp=13 wave_length=1000 wave_phase=269.0
+frame ad540150e3e1135c
+end
+scene wave3-14
+sprite 1 - bitmap=pat_20_400_o_1 x=40 y=2 wave_amp=23 wave_length=100 wave_phase=89.0
+sprite 2 - bitmap=pat_20_400_o_1 x=130 y=5 wave_amp=13 wave_length=100 wave_phase=61.0
+sprite 3 - bitmap=pat_20_400_o_1 x=220 y=5 wave_amp=12 wave_length=1000 wave_phase=94.0
+sprite 4 - bitmap=pat_20_400_o_1 x=310 y=0 wave_amp=13 wave_length=1000 wave_phase=114.5
+sprite 5 - bitmap=pat_20_400_o_1 x=400 y=1 wave_amp=25 wave_length=64 wave_phase=264.0
+sprite 6 - bitmap=pat_20_400_o_1 x=490 y=4 wave_amp=22 wave_length=1000 wave_phase=271.90979261541145
+frame 71b8bd16c6f4a204
+end
+scene wave3-15
+sprite 1 - bitmap=pat_20_400_o_1 x=40 y=0 wave_amp=27 wave_length=400 wave_phase=302.0
+sprite 2 - bitmap=pat_20_400_o_1 x=130 y=2 wave_amp=20 wave_length=123 wave_phase=3.0
+sprite 3 - bitmap=pat_20_400_o_1 x=220 y=0 wave_amp=15 wave_length=61 wave_phase=327.5650108399871
+sprite 4 - bitmap=pat_20_400_o_1 x=310 y=5 wave_amp=7 wave_length=400 wave_phase=225.0
+sprite 5 - bitmap=pat_20_400_o_1 x=400 y=0 wave_amp=20 wave_length=16 wave_phase=170.0
+sprite 6 - bitmap=pat_20_400_o_1 x=490 y=2 wave_amp=9 wave_length=250 wave_phase=67.0
+frame b0d572d27821c8b4
+end
+scene wave3-16
+sprite 1 - bitmap=pat_20_400_o_1 x=40 y=2 wave_amp=2 wave_length=1000 wave_phase=131.5
+sprite 2 - bitmap=pat_20_400_o_1 x=130 y=2 wave_amp=26 wave_length=100 wave_phase=317.7746595654663
+sprite 3 - bitmap=pat_20_400_o_1 x=220 y=3 wave_amp=26 wave_length=61 wave_phase=210.55238874634202
+sprite 4 - bitmap=pat_20_400_o_1 x=310 y=7 wave_amp=24 wave_length=1000 wave_phase=88.5
+sprite 5 - bitmap=pat_20_400_o_1 x=400 y=5 wave_amp=2 wave_length=180 wave_phase=55.880339185310454
+sprite 6 - bitmap=pat_20_400_o_1 x=490 y=0 wave_amp=6 wave_length=360 wave_phase=270.0
+frame 20677333e7f21294
+end
+scene wave3-17
+sprite 1 - bitmap=pat_20_400_o_1 x=40 y=2 wave_amp=20 wave_length=24 wave_phase=105.7994550340278
+sprite 2 - bitmap=pat_20_400_o_1 x=130 y=7 wave_amp=15 wave_length=360 wave_phase=188.0
+sprite 3 - bitmap=pat_20_400_o_1 x=220 y=6 wave_amp=22 wave_length=512 wave_phase=67.0
+sprite 4 - bitmap=pat_20_400_o_1 x=310 y=3 wave_amp=29 wave_length=123 wave_phase=264.0
+sprite 5 - bitmap=pat_20_400_o_1 x=400 y=3 wave_amp=18 wave_length=40 wave_phase=130.39391097586355
+sprite 6 - bitmap=pat_20_400_o_1 x=490 y=6 wave_amp=12 wave_length=360 wave_phase=44.0
+frame 017a95932f9d9d94
+end
+scene wave3-18
+sprite 1 - bitmap=pat_20_400_o_1 x=40 y=1 wave_amp=9 wave_length=40 wave_phase=192.0
+sprite 2 - bitmap=pat_20_400_o_1 x=130 y=4 wave_amp=26 wave_length=100 wave_phase=70.54626779618803
+sprite 3 - bitmap=pat_20_400_o_1 x=220 y=5 wave_amp=3 wave_length=64 wave_phase=250.1120059485852
+sprite 4 - bitmap=pat_20_400_o_1 x=310 y=6 wave_amp=3 wave_length=100 wave_phase=158.0
+sprite 5 - bitmap=pat_20_400_o_1 x=400 y=2 wave_amp=1 wave_length=1000 wave_phase=340.0
+sprite 6 - bitmap=pat_20_400_o_1 x=490 y=2 wave_amp=6 wave_length=512 wave_phase=194.5
+frame add04cf63c92a5bc
+end
+scene wave3-19
+sprite 1 - bitmap=pat_20_400_o_1 x=40 y=0 wave_amp=25 wave_length=40 wave_phase=225.9742742092025
+sprite 2 - bitmap=pat_20_400_o_1 x=130 y=6 wave_amp=5 wave_length=37 wave_phase=138.0
+sprite 3 - bitmap=pat_20_400_o_1 x=220 y=3 wave_amp=11 wave_length=400 wave_phase=216.6810353487599
+sprite 4 - bitmap=pat_20_400_o_1 x=310 y=5 wave_amp=16 wave_length=100 wave_phase=71.5
+sprite 5 - bitmap=pat_20_400_o_1 x=400 y=3 wave_amp=13 wave_length=512 wave_phase=142.0
+sprite 6 - bitmap=pat_20_400_o_1 x=490 y=6 wave_amp=3 wave_length=123 wave_phase=332.9609948983757
+frame d2dadd20939936d4
+end
+scene wave3-20
+sprite 1 - bitmap=pat_20_400_o_1 x=40 y=3 wave_amp=25 wave_length=77 wave_phase=35.04305129873646
+sprite 2 - bitmap=pat_20_400_o_1 x=130 y=2 wave_amp=29 wave_length=1000 wave_phase=61.5
+sprite 3 - bitmap=pat_20_400_o_1 x=220 y=3 wave_amp=29 wave_length=400 wave_phase=354.0
+sprite 4 - bitmap=pat_20_400_o_1 x=310 y=1 wave_amp=21 wave_length=1000 wave_phase=6.0
+sprite 5 - bitmap=pat_20_400_o_1 x=400 y=4 wave_amp=3 wave_length=360 wave_phase=139.8745997933849
+sprite 6 - bitmap=pat_20_400_o_1 x=490 y=2 wave_amp=1 wave_length=61 wave_phase=289.8033997503915
+frame 039f0c7e866a8a9c
+end
+scene wave3-21
+sprite 1 - bitmap=pat_20_400_o_1 x=40 y=7 wave_amp=9 wave_length=400 wave_phase=326.0
+sprite 2 - bitmap=pat_20_400_o_1 x=130 y=6 wave_amp=3 wave_length=16 wave_phase=217.5
+sprite 3 - bitmap=pat_20_400_o_1 x=220 y=0 wave_amp=6 wave_length=180 wave_phase=141.5245792828117
+sprite 4 - bitmap=pat_20_400_o_1 x=310 y=3 wave_amp=10 wave_length=77 wave_phase=30.5
+sprite 5 - bitmap=pat_20_400_o_1 x=400 y=4 wave_amp=7 wave_length=400 wave_phase=74.00738488930881
+sprite 6 - bitmap=pat_20_400_o_1 x=490 y=0 wave_amp=16 wave_length=400 wave_phase=310.0
+frame a6cf5939182d906c
+end
+scene wave3-22
+sprite 1 - bitmap=pat_20_400_o_1 x=40 y=3 wave_amp=20 wave_length=61 wave_phase=98.0
+sprite 2 - bitmap=pat_20_400_o_1 x=130 y=2 wave_amp=14 wave_length=360 wave_phase=53.64740027388093
+sprite 3 - bitmap=pat_20_400_o_1 x=220 y=6 wave_amp=30 wave_length=40 wave_phase=258.52989218652914
+sprite 4 - bitmap=pat_20_400_o_1 x=310 y=2 wave_amp=10 wave_length=1000 wave_phase=160.0
+sprite 5 - bitmap=pat_20_400_o_1 x=400 y=5 wave_amp=11 wave_length=37 wave_phase=76.5
+sprite 6 - bitmap=pat_20_400_o_1 x=490 y=4 wave_amp=24 wave_length=64 wave_phase=170.0
+frame 23850b4e434d3ebc
+end
+scene wave3-23
+sprite 1 - bitmap=pat_20_400_o_1 x=40 y=6 wave_amp=28 wave_length=123 wave_phase=10.783352523744973
+sprite 2 - bitmap=pat_20_400_o_1 x=130 y=2 wave_amp=7 wave_length=61 wave_phase=274.0
+sprite 3 - bitmap=pat_20_400_o_1 x=220 y=3 wave_amp=2 wave_length=40 wave_phase=155.5
+sprite 4 - bitmap=pat_20_400_o_1 x=310 y=4 wave_amp=23 wave_length=250 wave_phase=294.0
+sprite 5 - bitmap=pat_20_400_o_1 x=400 y=7 wave_amp=26 wave_length=24 wave_phase=125.0
+sprite 6 - bitmap=pat_20_400_o_1 x=490 y=5 wave_amp=22 wave_length=1000 wave_phase=187.0
+frame c09f61672b7701cc
+end
+scene wave4-00
+sprite 1 - bitmap=pat_20_400_o_1 x=260 y=3 wave_amp=1000 wave_length=8000 wave_phase=350.0
+frame cc634e55888318e4
+end
+scene wave4-01
+sprite 1 - bitmap=pat_20_400_o_1 x=260 y=0 wave_amp=1000 wave_length=8000 wave_phase=350.0
+frame 94f39bf61b905174
+end
+scene wave4-02
+sprite 1 - bitmap=pat_20_400_o_1 x=260 y=5 wave_amp=3000 wave_length=30000 wave_phase=358.0
+frame 43607cd6a8a10594
+end
+scene wave4-03
+sprite 1 - bitmap=pat_20_400_o_1 x=260 y=5 wave_amp=200 wave_length=800 wave_phase=280.0
+frame a60fe693da7d1584
+end
+scene wave4-04
+sprite 1 - bitmap=pat_20_400_o_1 x=260 y=5 wave_amp=200 wave_length=800 wave_phase=100.0
+frame ca356f89a915f004
+end
+scene wave4-05
+sprite 1 - bitmap=pat_20_400_o_1 x=260 y=6 wave_amp=100 wave_length=300 wave_phase=17.3
+frame 2b01198d7e987a24
+end
+scene wave5-00
+sprite 1 - bitmap=colx_256_400 x=144 y=3 wave_amp=250 wave_length=37 wave_phase=46.0
+frame bbd31d6d77c09f9d
+end
+scene wave5-01
+sprite 1 - bitmap=colx_256_400 x=144 y=3 wave_amp=250 wave_length=37 wave_phase=136.0
+frame b0326ee8bd008f49
+end
+scene wave5-02
+sprite 1 - bitmap=colx_256_400 x=144 y=4 wave_amp=250 wave_length=77 wave_phase=76.0
+frame cee5f084674287ec
+end
+scene wave5-03
+sprite 1 - bitmap=colx_256_400 x=144 y=4 wave_amp=250 wave_length=77 wave_phase=166.0
+frame c8f0fd70da2d4135
+end
+scene wave5-04
+sprite 1 - bitmap=colx_256_400 x=144 y=2 wave_amp=250 wave_length=123 wave_phase=40.0
+frame 2f75bf76cf6d3a8f
+end
+scene wave5-05
+sprite 1 - bitmap=colx_256_400 x=144 y=2 wave_amp=250 wave_length=123 wave_phase=130.0
+frame 7a02a17b2e2ca1ea
+end
+scene wave5-06
+sprite 1 - bitmap=colx_256_400 x=144 y=1 wave_amp=250 wave_length=61 wave_phase=154.0
+frame d79e454ec88b9d2f
+end
+scene wave5-07
+sprite 1 - bitmap=colx_256_400 x=144 y=1 wave_amp=250 wave_length=61 wave_phase=244.0
+frame a0f06f2aa7d05323
+end
+scene wave5-08
+sprite 1 - bitmap=colx_256_400 x=144 y=7 wave_amp=250 wave_length=100 wave_phase=180.0
+frame 00349ad916f5e984
+end
+scene wave5-09
+sprite 1 - bitmap=colx_256_400 x=144 y=7 wave_amp=250 wave_length=100 wave_phase=270.0
+frame 64049b79aaec54a7
+end
+scene wave5-10
+sprite 1 - bitmap=colx_256_400 x=144 y=6 wave_amp=250 wave_length=7 wave_phase=276.0
+frame 8e6211e7b1517e86
+end
+scene wave5-11
+sprite 1 - bitmap=colx_256_400 x=144 y=6 wave_amp=250 wave_length=7 wave_phase=6.0
+frame f33b5f6cf05854fb
+end
+scene wave5-12
+sprite 1 - bitmap=colx_256_400 x=144 y=6 wave_amp=250 wave_length=13 wave_phase=198.0
+frame eb941926584dd3df
+end
+scene wave5-13
+sprite 1 - bitmap=colx_256_400 x=144 y=6 wave_amp=250 wave_length=13 wave_phase=288.0
+frame c675082aea6c7b04
+end
+scene wave5-14
+sprite 1 - bitmap=colx_256_400 x=144 y=6 wave_amp=250 wave_length=250 wave_phase=162.0
+frame e5de286363528f64
+end
+scene wave5-15
+sprite 1 - bitmap=colx_256_400 x=144 y=6 wave_amp=250 wave_length=250 wave_phase=252.0
+frame 901fd5a9a6360d48
+end
+scene wave5-16
+sprite 1 - bitmap=colx_256_400 x=144 y=0 wave_amp=250 wave_length=1000 wave_phase=273.0
+frame 0d2d2e8b6bac02d4
+end
+scene wave5-17
+sprite 1 - bitmap=colx_256_400 x=144 y=0 wave_amp=250 wave_length=1000 wave_phase=3.0
+frame bfdad196cf141914
+end
+scene wave5-18
+sprite 1 - bitmap=colx_256_400 x=144 y=4 wave_amp=250 wave_length=360 wave_phase=323.0
+frame 69c0a36018092b5c
+end
+scene wave5-19
+sprite 1 - bitmap=colx_256_400 x=144 y=4 wave_amp=250 wave_length=360 wave_phase=53.0
+frame 989dc3d25f5129bc
+end
+scene wave5-20
+sprite 1 - bitmap=colx_256_400 x=144 y=3 wave_amp=250 wave_length=180 wave_phase=21.0
+frame 1073ce51a8f9a49b
+end
+scene wave5-21
+sprite 1 - bitmap=colx_256_400 x=144 y=3 wave_amp=250 wave_length=180 wave_phase=111.0
+frame c2eeacda872b3e3b
+end
+scene wave5-22
+sprite 1 - bitmap=colx_256_400 x=144 y=0 wave_amp=250 wave_length=90 wave_phase=262.0
+frame 4a6e180c9e880034
+end
+scene wave5-23
+sprite 1 - bitmap=colx_256_400 x=144 y=0 wave_amp=250 wave_length=90 wave_phase=352.0
+frame 1ddceb57fe869534
+end
+scene wave5-24
+sprite 1 - bitmap=colx_256_400 x=144 y=7 wave_amp=250 wave_length=3 wave_phase=292.0
+frame 832802a60e54eaf9
+end
+scene wave5-25
+sprite 1 - bitmap=colx_256_400 x=144 y=7 wave_amp=250 wave_length=3 wave_phase=22.0
+frame 355eb62a1793bcfb
+end
+scene wave5-26
+sprite 1 - bitmap=colx_256_400 x=144 y=0 wave_amp=250 wave_length=64 wave_phase=114.0
+frame 1e8434cf6b7ef564
+end
+scene wave5-27
+sprite 1 - bitmap=colx_256_400 x=144 y=0 wave_amp=250 wave_length=64 wave_phase=204.0
+frame 71d99bb231d059e4
+end
+scene wave5-28
+sprite 1 - bitmap=colx_256_400 x=144 y=3 wave_amp=250 wave_length=128 wave_phase=193.0
+frame 0f2462f7f3c29299
+end
+scene wave5-29
+sprite 1 - bitmap=colx_256_400 x=144 y=3 wave_amp=250 wave_length=128 wave_phase=283.0
+frame 831a497f87643164
+end
+scene wave5-30
+sprite 1 - bitmap=colx_256_400 x=144 y=6 wave_amp=250 wave_length=45 wave_phase=45.0
+frame 9e54e550b3d6f630
+end
+scene wave5-31
+sprite 1 - bitmap=colx_256_400 x=144 y=6 wave_amp=250 wave_length=45 wave_phase=135.0
+frame 67b5ff1ddb1360d4
+end
+scene wave5-32
+sprite 1 - bitmap=colx_256_400 x=144 y=3 wave_amp=250 wave_length=24 wave_phase=99.0
+frame 436d6b5a4b9e4181
+end
+scene wave5-33
+sprite 1 - bitmap=colx_256_400 x=144 y=3 wave_amp=250 wave_length=24 wave_phase=189.0
+frame 9429b3ea2d9c6264
+end
+scene wave5-34
+sprite 1 - bitmap=colx_256_400 x=144 y=6 wave_amp=250 wave_length=300 wave_phase=105.0
+frame e91a0cdda8b9b4f0
+end
+scene wave5-35
+sprite 1 - bitmap=colx_256_400 x=144 y=6 wave_amp=250 wave_length=300 wave_phase=195.0
+frame dd3f293a51191b64
+end
+scene wave5-36
+sprite 1 - bitmap=colx_256_400 x=144 y=4 wave_amp=250 wave_length=99 wave_phase=87.0
+frame e5132f6f0ff3e454
+end
+scene wave5-37
+sprite 1 - bitmap=colx_256_400 x=144 y=4 wave_amp=250 wave_length=99 wave_phase=177.0
+frame 727cf6440ac214a4
+end
+scene wave5-38
+sprite 1 - bitmap=colx_256_400 x=144 y=0 wave_amp=250 wave_length=11 wave_phase=169.0
+frame c612ab83cab8e350
+end
+scene wave5-39
+sprite 1 - bitmap=colx_256_400 x=144 y=0 wave_amp=250 wave_length=11 wave_phase=259.0
+frame bbb3fd7ce833d651
+end
+scene wave5-40
+sprite 1 - bitmap=colx_256_400 x=144 y=6 wave_amp=250 wave_length=37 wave_phase=38.56624109538527
+frame 2b63b3cef5a2056e
+end
+scene wave5-41
+sprite 1 - bitmap=colx_256_400 x=144 y=6 wave_amp=250 wave_length=37 wave_phase=128.56624109538527
+frame c1699d69e7c13a9d
+end
+scene wave5-42
+sprite 1 - bitmap=colx_256_400 x=144 y=5 wave_amp=250 wave_length=77 wave_phase=111.7888346084982
+frame 791037d8623542db
+end
+scene wave5-43
+sprite 1 - bitmap=colx_256_400 x=144 y=5 wave_amp=250 wave_length=77 wave_phase=201.7888346084982
+frame 35dce3b632a674c4
+end
+scene wave5-44
+sprite 1 - bitmap=colx_256_400 x=144 y=3 wave_amp=250 wave_length=100 wave_phase=222.86616379848036
+frame 050b4c5679815b5b
+end
+scene wave5-45
+sprite 1 - bitmap=colx_256_400 x=144 y=3 wave_amp=250 wave_length=100 wave_phase=312.86616379848033
+frame 0d00a1f1754d9a86
+end
+scene wave5-46
+sprite 1 - bitmap=colx_256_400 x=144 y=2 wave_amp=250 wave_length=250 wave_phase=168.47507672804736
+frame 4bd6c718b6d11d50
+end
+scene wave5-47
+sprite 1 - bitmap=colx_256_400 x=144 y=2 wave_amp=250 wave_length=250 wave_phase=258.4750767280474
+frame 9d157d64846ce314
+end
+scene wave5-48
+sprite 1 - bitmap=colx_256_400 x=144 y=2 wave_amp=250 wave_length=64 wave_phase=79.58404445101614
+frame a7e9c9790d6eb174
+end
+scene wave5-49
+sprite 1 - bitmap=colx_256_400 x=144 y=2 wave_amp=250 wave_length=64 wave_phase=169.58404445101615
+frame 81ac3737304af2e4
+end
+scene wave5-50
+sprite 1 - bitmap=colx_256_400 x=144 y=4 wave_amp=250 wave_length=13 wave_phase=158.48060813076245
+frame b033b751b16eafa3
+end
+scene wave5-51
+sprite 1 - bitmap=colx_256_400 x=144 y=4 wave_amp=250 wave_length=13 wave_phase=248.48060813076245
+frame 2b6213a7966bbb99
+end
+scene wave6-00
+sprite 1 - bitmap=pat_20_90_o_1 x=30 wave_length=50 wave_phase=20 y=10 wave_amp=-1
+sprite 2 - bitmap=pat_20_90_o_1 x=88 wave_length=50 wave_phase=20 y=10 wave_amp=-3
+sprite 3 - bitmap=pat_20_90_o_1 x=146 wave_length=50 wave_phase=20 y=10 wave_amp=-9
+sprite 4 - bitmap=pat_20_90_o_1 x=204 wave_length=50 wave_phase=20 y=10 wave_amp=-10
+sprite 5 - bitmap=pat_20_90_o_1 x=262 wave_length=50 wave_phase=20 y=10 wave_amp=-15
+sprite 6 - bitmap=pat_20_90_o_1 x=320 wave_length=50 wave_phase=20 y=10 wave_amp=-9 zoom_x=2
+sprite 7 - bitmap=pat_20_90_o_1 x=378 wave_length=50 wave_phase=20 y=10 wave_amp=-4 mirror=true zoom_y=1.5
+sprite 8 - bitmap=pat_20_90_o_1 x=440 wave_length=50 wave_phase=20 y=10 wave_amp=-5 ox=7
+sprite 9 - bitmap=pat_20_90_o_1 x=500 wave_length=50 wave_phase=20 y=10 wave_amp=-6 bush_depth=30
+frame b93e8a35d1abb139
+end
+scene wave6-01
+sprite 1 - bitmap=pat_20_90_o_1 x=30 wave_length=50 wave_phase=359.99 y=10 wave_amp=9
+sprite 2 - bitmap=pat_20_90_o_1 x=88 wave_length=1 wave_phase=20 y=10 wave_amp=9
+sprite 3 - bitmap=pat_20_90_o_1 x=146 wave_length=100000 wave_phase=20 y=10 wave_amp=9
+sprite 4 - bitmap=pat_20_90_o_1 x=204 wave_length=2 wave_phase=20 y=10 wave_amp=1
+sprite 5 - bitmap=pat_20_90_o_1 x=262 wave_length=9 wave_phase=20 y=10 wave_amp=25
+frame 9454c499fcb5dd04
+end
+scene wave6-02
+sprite 1 - bitmap=bg z=-1000
+sprite 2 - bitmap=pat_20_90_a_2 x=30 wave_length=50 wave_phase=20 y=10 wave_amp=6 bush_depth=25 tone=60,-40,0,100 color=0,0,255,90
+sprite 3 - bitmap=pat_20_90_a_2 x=88 wave_length=50 wave_phase=20 y=10 wave_amp=6 bush_depth=25 bush_opacity=40 opacity=150 blend_type=1
+sprite 4 - bitmap=pat_20_90_o_1 x=146 wave_length=50 wave_phase=20 y=10 wave_amp=6 src_rect=-5,-8,30,110
+sprite 5 - bitmap=pat_20_90_o_1 x=204 wave_length=50 wave_phase=20 y=10 wave_amp=6 src_rect=5,30,30,110 zoom_y=1.5
+viewport 6 340 5 60 150 ox=13 oy=9
+sprite 7 6 bitmap=pat_20_90_o_1 x=20 wave_length=50 wave_phase=20 y=10 wave_amp=7
+viewport 8 410 20 60 150 ox=-5 oy=30
+sprite 9 8 bitmap=pat_20_90_o_1 x=20 wave_length=50 wave_phase=20 y=-30 wave_amp=7 zoom_y=2
+sprite 10 - bitmap=pat_20_90_o_1 x=497 wave_length=50 wave_phase=20 y=10 wave_amp=7 zoom_x=2.25 ox=3
+frame 0bce6cf0790349d4
+end
+scene wave6-03
+sprite 1 - bitmap=pat_20_90_o_1 x=30 y=7 wave_amp=8 wave_length=40 wave_speed=360
+sprite 2 - bitmap=pat_20_90_o_1 x=88 y=7 wave_amp=8 wave_length=40 wave_speed=100
+sprite 3 - bitmap=pat_20_90_o_1 x=146 y=7 wave_amp=8 wave_length=40 wave_speed=-777
+sprite 4 - bitmap=pat_20_90_o_1 x=204 y=7 wave_amp=0 wave_length=40 wave_speed=360
+sprite 5 - bitmap=pat_20_90_o_1 x=262 y=7 wave_amp=5 wave_length=40 wave_speed=12
+sprite 6 - bitmap=pat_20_90_o_1 x=320 y=7 wave_amp=12 wave_length=40 wave_speed=2000
+sprite 7 - bitmap=pat_20_90_o_1 x=378 y=7 wave_amp=8 wave_length=40 wave_speed=360
+sprite 8 - bitmap=pat_20_90_o_1 x=436 y=7 wave_amp=8 wave_length=40 wave_speed=360
+set 7 visible=false
+frame 03728ce23784776c
+update 1
+update 2
+update 3
+update 4
+update 5
+update 6
+update 7
+frame 2ff1ce0c1156d2c4
+update 1
+update 2
+update 3
+update 4
+update 5
+update 6
+update 7
+frame ad7564db44f4aff4
+update 1
+update 2
+update 3
+update 4
+update 5
+update 6
+update 7
+frame 748d8641da5e569c
+update 1
+update 2
+update 3
+update 4
+update 5
+update 6
+update 7
+set 7 visible=true
+set 4 wave_amp=8
+frame 8f54121fa85198b4
+update 1
+update 2
+update 3
+update 4
+update 5
+update 6
+update 7
+frame 33d39cccec540ae4
+update 1
+update 2
+update 3
+update 4
+update 5
+update 6
+update 7
+frame 56c6b0af0366610c
+update 1
+update 2
+update 3
+update 4
+update 5
+update 6
+update 7
+end

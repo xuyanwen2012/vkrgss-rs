@@ -95,3 +95,14 @@ colour and mirror (not measured on XP).
   `vkxp_core::test_support::sprite_cases`), as the windows of RGSS2 are. The planes of
   `size2` and their viewports are left out of its scenes, because the size of a plane's tile
   belongs to the other change; the sprites of those frames are all there.
+- A waving sprite needs no addition to the protocol: one stretch quad draws a run of rows
+  that share the offset and show either one row of the bitmap or one row each, which says
+  the texel rows `sy + (j * h) div dh` exactly. The sine is taken from the pure-Rust `libm`,
+  as every sine of `vkxp-core` is, and narrowed to `f32`; the 9318 measured rows hold.
+- The open case "a wave on a sprite stretched in x whose source rectangle leaves the
+  bitmap" is drawn with the stretch walk starting anew at the bitmap's edge, which is what
+  a stretch quad draws, and not as the report's model draws it (the texels outside left out
+  of one walk). The model is wrong by a column there in ways that differ between the five
+  measured cases, so neither is the original's picture. Drawing the model's columns would
+  need a picture of the whole unclipped sprite or one quad per texel column; see
+  "Follow-ups".
