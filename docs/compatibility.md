@@ -178,6 +178,37 @@ In a game of XP none of `blur`, `radial_blur`, `gradient_fill_rect`, `clear_rect
 `Font#shadow` and `Font.default_shadow` is defined, and text, the font defaults and
 `Bitmap.new` are as before.
 
+The class `Tilemap` of a game of VX is the one of RGSS2, measured on the same two versions
+and drawn pixel for pixel as the original draws it on every measured frame:
+
+- `bitmaps` is a `Tilemap::BitmapArray` of nine slots (the sheets A1 to A5 and B to E) and
+  `passages` a table; `tileset`, `autotiles`, `priorities` and the class `TilemapAutotiles`
+  are not defined. A slot outside 0 to 8 reads `nil` and stores nothing. Once a table is
+  set, `map_data = nil` and `passages = nil` raise `TypeError`. `bitmaps` goes on working on
+  a disposed tilemap.
+- A tilemap is two planes of 672 by 512 pixels from the corner of its viewport, the lower at
+  z 0 and the upper at z 200. The upper plane shows the tiles of the third layer whose entry
+  of `passages` has the bit 0x10; such a tile in the first or second layer is not drawn.
+- The three kinds of autotiles (floors, walls, waterfalls), the animation of the sheet A1
+  every 30 calls of `update`, the tables with their lower edge, and the shadows beside walls
+  are drawn by the class, as on the original.
+- `visible = false` hides nothing, as on the original. The ox and oy of the viewport add to
+  those of the tilemap, as they were when the tilemap was last written to or updated or when
+  they last changed; giving the tilemap another viewport does not take the new ones.
+- `flash_data` adds its colour to a cell once with each plane.
+
+Where the original reads outside its arrays, vkxp draws nothing: for the tile numbers 1024
+to 1535, for negative tile numbers, and for the layers a map with fewer than three does not
+have. The original shows garbage or ends with a page fault there.
+
+Not measured: a tilemap under `Viewport#flash`, a freeze or a transition beyond what follows
+from its being an element; how a plane and a sprite of the same z are ordered by the y of
+the sprite, where vkxp orders by creation alone; frame sizes other than 544 by 416 and 640
+by 480.
+
+In a game of XP `Tilemap` is as it was: none of `bitmaps`, `passages` and
+`Tilemap::BitmapArray` is defined.
+
 ## Limits of save states
 
 Save states are described under [Save states](running.md#save-states). Their limits:

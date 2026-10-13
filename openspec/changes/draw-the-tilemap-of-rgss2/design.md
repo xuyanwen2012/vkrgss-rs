@@ -124,3 +124,16 @@ a freeze or a transition beyond what follows from being an element.
     "XP".
   - `crates/vkxp-vk/src/tests/targeted.rs` and `crates/vkxp-compose-ref/tests/scenarios.rs`
     are not edited; the fixture `one_op_of_each_kind` they use gained the new op.
+
+## Follow-ups
+
+None of these leaves a requirement of this change unmet.
+
+- The frame time of the two plane ops on hardware at 60 frames per second is not measured;
+  the decisions ask for frame times of representative scenes of VX before 0.2.0.
+- Both planes are emitted for every tilemap that has a map, also an upper plane without a
+  tile or a flash to draw. Leaving it out would need a scan of the map in the guest, which
+  this design does not name.
+- The y key among elements of equal z stays a non-goal: the scene orders a plane and a
+  sprite of the same z by creation alone. The fixtures of the reference compositor order
+  them as the measurement does, because they build their ops themselves.

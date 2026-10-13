@@ -16,7 +16,7 @@
 
 ## 4. Documentation
 
-- [ ] 4.1 `README.md` (protocol version), `docs/architecture.md` (the op), `docs/compatibility.md` (the tilemap of VX and what vkxp defines where the original is undefined). Verify: the texts name the fields and the version as the code does.
+- [x] 4.1 `README.md` (protocol version), `docs/architecture.md` (the op), `docs/compatibility.md` (the tilemap of VX and what vkxp defines where the original is undefined). Verify: the texts name the fields and the version as the code does.
 
 ## 5. Integration check
 
