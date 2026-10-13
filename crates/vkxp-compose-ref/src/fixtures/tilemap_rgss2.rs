@@ -46,7 +46,7 @@ pub enum Set {
     Flat,
 }
 
-const SETS: [Set; 4] = [Set::Code, Set::Alpha, Set::Half, Set::Flat];
+pub(super) const SETS: [Set; 4] = [Set::Code, Set::Alpha, Set::Half, Set::Flat];
 
 /// The pixel at (`x`, `y`) of sheet `sheet` of a set.
 pub fn sheet_pixel(set: Set, sheet: usize, x: u32, y: u32) -> Color {
@@ -205,9 +205,9 @@ impl PyRandom {
 
 /// A table as a scene holds it.
 #[derive(Debug, Clone)]
-struct Table {
-    sizes: (u32, u32, u32),
-    data: Vec<i16>,
+pub(super) struct Table {
+    pub(super) sizes: (u32, u32, u32),
+    pub(super) data: Vec<i16>,
 }
 
 /// A map of 17 by 13 cells and three layers from the cells given as ((x, y, layer), number).
@@ -223,13 +223,13 @@ fn grid(cells: impl IntoIterator<Item = ((usize, usize, usize), i16)>) -> Table 
 }
 
 #[derive(Debug, Clone)]
-struct Viewport {
+pub(super) struct Viewport {
     rect: Rect,
-    ox: i32,
-    oy: i32,
-    z: i32,
-    color: Color,
-    tone: Tone,
+    pub(super) ox: i32,
+    pub(super) oy: i32,
+    pub(super) z: i32,
+    pub(super) color: Color,
+    pub(super) tone: Tone,
 }
 
 #[derive(Debug, Clone)]
@@ -244,15 +244,17 @@ struct Sprite {
 }
 
 #[derive(Debug, Clone)]
-struct Tilemap {
+pub(super) struct Tilemap {
     viewport: Option<usize>,
+    rules: PlaneRules,
     sheets: [Option<Set>; tiles::SHEETS],
-    map: Option<Table>,
-    passages: Option<Table>,
-    flash: Option<Table>,
-    ox: i32,
-    oy: i32,
-    updates: u64,
+    pub(super) map: Option<Table>,
+    /// The passages table, the flags table of RGSS3.
+    pub(super) passages: Option<Table>,
+    pub(super) flash: Option<Table>,
+    pub(super) ox: i32,
+    pub(super) oy: i32,
+    pub(super) updates: u64,
     /// The ox and oy of the viewport as the last refresh found them.
     latched: (i32, i32),
 }
@@ -268,9 +270,9 @@ enum Element {
 /// The scene of a topic: the objects a script of the measurement made, in the order it made
 /// them, and the frames captured so far.
 #[derive(Debug, Default)]
-struct Scene {
+pub(super) struct Scene {
     elements: Vec<Element>,
-    frames: Vec<GuestToHost>,
+    pub(super) frames: Vec<GuestToHost>,
     /// The sheets created so far, by the index of their bitmap.
     sheets: Vec<u32>,
     /// The one-pixel bitmaps of the sprites of the last frame.
@@ -291,7 +293,7 @@ impl Scene {
         self.elements.len() - 1
     }
 
-    fn viewport(&mut self, rect: Rect) -> usize {
+    pub(super) fn viewport(&mut self, rect: Rect) -> usize {
         self.add(Element::Viewport(Viewport {
             rect,
             ox: 0,
@@ -302,7 +304,7 @@ impl Scene {
         }))
     }
 
-    fn viewport_mut(&mut self, id: usize) -> &mut Viewport {
+    pub(super) fn viewport_mut(&mut self, id: usize) -> &mut Viewport {
         match &mut self.elements[id] {
             Element::Viewport(viewport) => viewport,
             other => panic!("not a viewport: {other:?}"),
@@ -310,7 +312,7 @@ impl Scene {
     }
 
     #[expect(clippy::too_many_arguments, reason = "the arguments of the script")]
-    fn sprite(
+    pub(super) fn sprite(
         &mut self,
         viewport: Option<usize>,
         x: i32,
@@ -341,8 +343,19 @@ impl Scene {
     }
 
     fn tilemap(&mut self, viewport: Option<usize>, sheets: [Option<Set>; tiles::SHEETS]) -> usize {
+        self.tilemap_of(PlaneRules::Rgss2, viewport, sheets)
+    }
+
+    /// A tilemap of the rule set `rules`.
+    pub(super) fn tilemap_of(
+        &mut self,
+        rules: PlaneRules,
+        viewport: Option<usize>,
+        sheets: [Option<Set>; tiles::SHEETS],
+    ) -> usize {
         self.add(Element::Tilemap(Tilemap {
             viewport,
+            rules,
             sheets,
             map: None,
             passages: None,
@@ -356,7 +369,7 @@ impl Scene {
 
     /// Changes a tilemap as a setter or `update` does, and refreshes it: the origin of its
     /// viewport is latched, once the tilemap has a map.
-    fn set(&mut self, id: usize, change: impl FnOnce(&mut Tilemap)) {
+    pub(super) fn set(&mut self, id: usize, change: impl FnOnce(&mut Tilemap)) {
         let origin = |elements: &[Element], viewport: Option<usize>| match viewport {
             Some(viewport) => match &elements[viewport] {
                 Element::Viewport(viewport) => (viewport.ox, viewport.oy),
@@ -381,7 +394,7 @@ impl Scene {
         self.elements[id] = Element::Disposed;
     }
 
-    fn clear(&mut self) {
+    pub(super) fn clear(&mut self) {
         self.elements.clear();
     }
 
@@ -394,7 +407,7 @@ impl Scene {
 
     /// Shows one frame: the ops of the scene as it is, in the order of z, then y, then
     /// creation, where only a sprite has a y.
-    fn capture(&mut self) {
+    pub(super) fn capture(&mut self) {
         let mut frame = Capture {
             bitmaps: Vec::new(),
             tables: Vec::new(),
@@ -558,7 +571,7 @@ impl Capture {
                 self.ops.push(Op::TilemapPlane(TilemapPlane {
                     clip,
                     plane,
-                    rules: PlaneRules::Rgss2,
+                    rules: tilemap.rules,
                     corner: (corner.0 - x.rem_euclid(32), corner.1 - y.rem_euclid(32)),
                     first_cell,
                     animation_step: tiles::animation_step(tilemap.updates),
@@ -826,7 +839,7 @@ fn anim(scene: &mut Scene) {
 }
 
 /// A random tile number, as the measurement drew them.
-fn random_number(random: &mut PyRandom) -> i16 {
+pub(super) fn random_number(random: &mut PyRandom) -> i16 {
     let choice = random.random();
     let number = if choice < 0.10 {
         0
@@ -867,7 +880,7 @@ fn random_map(random: &mut PyRandom, width: u32, height: u32, fill: [f64; 3]) ->
 }
 
 /// A random passages table.
-fn random_passages(random: &mut PyRandom) -> Table {
+pub(super) fn random_passages(random: &mut PyRandom) -> Table {
     let flags = [
         0, 0, 0x10, 0x10, 0x80, 0x90, 0x0f, 0x1f, 0x40, 0x20, 0xff, 0x100, -1,
     ];
@@ -1011,10 +1024,35 @@ fn flash1(scene: &mut Scene) {
     }
 }
 
+/// What the random scenes of the measurement of RGSS3 changed in those of RGSS2.
+pub(super) struct Variation {
+    pub(super) rules: PlaneRules,
+    /// The sets the sheets are drawn from.
+    pub(super) sets: &'static [Set],
+    /// The map and the passages table of a map of the size given.
+    pub(super) tables: fn(&mut PyRandom, u32, u32) -> (Table, Table),
+    /// The share of the scenes whose tilemap has its passages table, and a flash table.
+    pub(super) with_passages: f64,
+    pub(super) with_flash: f64,
+}
+
+/// The random scenes of the measurement of RGSS2.
+const RGSS2: Variation = Variation {
+    rules: PlaneRules::Rgss2,
+    sets: &SETS,
+    tables: |random, width, height| {
+        let fill = [random.choice(&[1.0, 0.8]), random.random(), random.random()];
+        let map = random_map(random, width, height, fill);
+        (map, random_passages(random))
+    },
+    with_passages: 0.9,
+    with_flash: 0.5,
+};
+
 /// One random scene: a map of any size, perhaps in a viewport with an origin, a colour, a
 /// tone and a z, over a ground or not, with sheets of any set or none, a flash table,
 /// scrolled, updated, among sprites.
-fn random_scene(scene: &mut Scene, random: &mut PyRandom) {
+pub(super) fn random_scene(scene: &mut Scene, random: &mut PyRandom, variation: &Variation) {
     let sizes = [
         (17, 13),
         (20, 15),
@@ -1027,9 +1065,7 @@ fn random_scene(scene: &mut Scene, random: &mut PyRandom) {
         (100, 100),
     ];
     let (width, height) = random.choice(&sizes);
-    let fill = [random.choice(&[1.0, 0.8]), random.random(), random.random()];
-    let map = random_map(random, width, height, fill);
-    let passages = random_passages(random);
+    let (map, passages) = (variation.tables)(random, width, height);
     let mut viewport = None;
     if random.random() < 0.5 {
         let rect = Rect::new(
@@ -1072,18 +1108,18 @@ fn random_scene(scene: &mut Scene, random: &mut PyRandom) {
     if random.random() < 0.5 {
         for sheet in &mut sheets {
             if random.random() < 0.93 {
-                *sheet = Some(random.choice(&SETS));
+                *sheet = Some(random.choice(variation.sets));
             }
         }
     } else {
-        sheets = [Some(random.choice(&SETS)); tiles::SHEETS];
+        sheets = [Some(random.choice(variation.sets)); tiles::SHEETS];
     }
-    let tilemap = scene.tilemap(viewport, sheets);
-    if random.random() < 0.9 {
+    let tilemap = scene.tilemap_of(variation.rules, viewport, sheets);
+    if random.random() < variation.with_passages {
         scene.set(tilemap, |tilemap| tilemap.passages = Some(passages));
     }
     scene.set(tilemap, |tilemap| tilemap.map = Some(map));
-    if random.random() < 0.5 {
+    if random.random() < variation.with_flash {
         let (width, height) = random.choice(&[(width, height), (5, 4), (17, 13)]);
         let flash = random_flash(random, width, height);
         scene.set(tilemap, |tilemap| tilemap.flash = Some(flash));
@@ -1122,7 +1158,7 @@ fn random_scene(scene: &mut Scene, random: &mut PyRandom) {
 fn rand1(scene: &mut Scene) {
     let mut random = PyRandom::new(20_261_012);
     for _ in 0..40 {
-        random_scene(scene, &mut random);
+        random_scene(scene, &mut random, &RGSS2);
     }
 }
 

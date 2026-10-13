@@ -7,7 +7,7 @@
 
 ## 2. Topics of the measurement
 
-- [ ] 2.1 The topics `tables2`, `shadow3`, `edge1` and `rand4` rebuilt by formula in the fixtures of the reference compositor, and their digests from the model of the measurement in `crates/vkxp-compose-ref/tests/data/tilemap-rgss3-digests.txt`. Verify: the scenarios of "Whole tilemaps of RGSS3 as measured"; the head of the file says which model made the digests; the script that drove the model is under `local/` and not committed; `tests/data/tilemap-rgss2-digests.txt` is unchanged; `cargo test -p vkxp-compose-ref --locked` passes.
+- [x] 2.1 The topics `tables2`, `shadow3`, `edge1` and `rand4` rebuilt by formula in the fixtures of the reference compositor, and their digests from the model of the measurement in `crates/vkxp-compose-ref/tests/data/tilemap-rgss3-digests.txt`. Verify: the scenarios of "Whole tilemaps of RGSS3 as measured"; the head of the file says which model made the digests; the script that drove the model is under `local/` and not committed; `tests/data/tilemap-rgss2-digests.txt` is unchanged; `cargo test -p vkxp-compose-ref --locked` passes.
 
 ## 3. Scene
 

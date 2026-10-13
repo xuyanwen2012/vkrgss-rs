@@ -1,18 +1,99 @@
 //! The scenarios of the tilemap plane op of the rule set of RGSS3 of
 //! `specs/frame-composition/spec.md`.
 //!
-//! Every test builds the small map of the scenarios, 4 by 3 cells and four layers, and
-//! derives its expected pixels here from the patterns of the generated sheets or from the
-//! stated arithmetic.
+//! The topics are compared with digests of the frames that the model of the measurement
+//! renders (`tests/data/tilemap-rgss3-digests.txt`: topic, frame, digest). Every other test
+//! builds the small map of the scenarios, 4 by 3 cells and four layers, and derives its
+//! expected pixels here from the patterns of the generated sheets or from the stated
+//! arithmetic.
 
 use vkxp_compose_ref::fixtures::table;
-use vkxp_compose_ref::fixtures::tilemap_rgss2::{SIZE, Set, sheet, sheet_pixel, tilemap_plane};
+use vkxp_compose_ref::fixtures::tilemap_rgss2::{
+    SIZE, Set, digest, sheet, sheet_pixel, tilemap_plane,
+};
+use vkxp_compose_ref::fixtures::tilemap_rgss3 as scenes;
 use vkxp_compose_ref::{Compositor, Frame};
 use vkxp_pixel::Rgba;
 use vkxp_proto::{
     BitmapDelta, BitmapId, Color, FramePacket, FrameRate, Op, Plane, PlaneRules, Rect, TableDelta,
     TableId, TilemapPlane,
 };
+
+const EXPECTED: &str = include_str!("data/tilemap-rgss3-digests.txt");
+
+/// The committed digests of a topic, in frame order.
+fn expected(topic: &str) -> Vec<u64> {
+    let mut digests = Vec::new();
+    for line in EXPECTED.lines().filter(|line| !line.starts_with('#')) {
+        let mut words = line.split(' ');
+        if words.next() != Some(topic) {
+            continue;
+        }
+        let frame: usize = words.next().unwrap().parse().unwrap();
+        assert_eq!(frame, digests.len(), "{line}");
+        digests.push(u64::from_str_radix(words.next().unwrap(), 16).unwrap());
+    }
+    digests
+}
+
+/// Renders every frame of a topic and compares it with the model's.
+fn assert_topic(name: &str, frames: usize) {
+    let topic = scenes::topic(name);
+    let expected = expected(name);
+    assert_eq!((topic.frames.len(), expected.len()), (frames, frames));
+    let mut compositor = Compositor::new();
+    let mut wrong = Vec::new();
+    for (index, (message, expected)) in topic.frames.iter().zip(expected).enumerate() {
+        let frame = compositor
+            .handle(message)
+            .unwrap_or_else(|error| panic!("frame {index} of `{name}` failed: {error}"))
+            .expect("a frame message");
+        assert_eq!(frame.size, SIZE);
+        if digest(&frame.rgba) != expected {
+            wrong.push(index);
+        }
+    }
+    assert!(wrong.is_empty(), "frames of `{name}` differ: {wrong:?}");
+}
+
+// Requirement: Whole tilemaps of RGSS3 as measured. Scenario "Topics".
+
+#[test]
+fn tables_by_flag_are_drawn_as_measured() {
+    assert_topic("tables2", 6);
+}
+
+#[test]
+fn the_shadow_mask_is_drawn_as_measured() {
+    assert_topic("shadow3", 22);
+}
+
+#[test]
+fn edges_under_tables_are_drawn_as_measured() {
+    assert_topic("edge1", 48);
+}
+
+#[test]
+fn forty_random_scenes_are_drawn_as_measured() {
+    assert_topic("rand4", 40);
+}
+
+/// Scenario "Nothing of the original": the file of digests holds only comments, topic
+/// names, frame numbers and digests.
+#[test]
+fn the_file_of_digests_holds_only_topics_frames_and_digests() {
+    let mut lines = 0;
+    for line in EXPECTED.lines().filter(|line| !line.starts_with('#')) {
+        let words: Vec<&str> = line.split(' ').collect();
+        assert_eq!(words.len(), 3, "{line}");
+        assert!(scenes::TOPICS.contains(&words[0]), "{line}");
+        assert!(words[1].parse::<usize>().is_ok(), "{line}");
+        assert_eq!(words[2].len(), 16, "{line}");
+        assert!(u64::from_str_radix(words[2], 16).is_ok(), "{line}");
+        lines += 1;
+    }
+    assert_eq!(lines, 6 + 22 + 48 + 40);
+}
 
 const MAP: TableId = TableId::new(0);
 const FLAGS: TableId = TableId::new(1);

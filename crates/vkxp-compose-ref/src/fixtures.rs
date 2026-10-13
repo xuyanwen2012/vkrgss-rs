@@ -12,6 +12,7 @@ use vkxp_proto::{
 };
 
 pub mod tilemap_rgss2;
+pub mod tilemap_rgss3;
 
 /// Logical screen size of every fixture.
 pub const SIZE: Size = Size::new(64, 48);
