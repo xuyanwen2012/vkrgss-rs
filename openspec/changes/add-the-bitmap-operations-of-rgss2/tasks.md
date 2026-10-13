@@ -15,7 +15,7 @@
 
 ## 4. Documentation
 
-- [ ] 4.1 `docs/compatibility.md`: the bitmap and text rules of VX and what is outside the standard. Verify: the text names nothing that the code does not do.
+- [x] 4.1 `docs/compatibility.md`: the bitmap and text rules of VX and what is outside the standard. Verify: the text names nothing that the code does not do.
 
 ## 5. Integration check
 

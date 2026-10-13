@@ -130,6 +130,54 @@ Not measured, or not there yet:
 
 In a game of XP the window is drawn as before and has no `openness`.
 
+### Bitmap and Font of VX
+
+Of `Bitmap` and `Font`, a game of VX has what follows, measured on the same two versions of
+the original runtime. Every sample of the measurement was reproduced by the rule given.
+
+- `Bitmap#blur`: one pass of a 3 by 3 box, each of red, green, blue and alpha the sum of
+  nine divided by 9, the edge pixel repeated beyond the edges. A transparent pixel counts
+  with the colour it holds. A bitmap narrower or lower than 3 pixels is left as it is.
+- `Bitmap#radial_blur(angle, division)`: the mean of `division` samples turned about the
+  centre over `angle` degrees, nearest pixels, mirrored at the edges. The angle is limited
+  to 0 to 360 and the division to 2 to 100.
+- `Bitmap#gradient_fill_rect` with a `Rect` or four integers, two colours and a flag for a
+  vertical gradient. It overwrites, alpha included. With seven arguments the gradient is
+  vertical whatever the seventh is, `false` and `nil` included, as on the original.
+- `Bitmap#clear_rect` with a `Rect` or four integers.
+- `Bitmap.new(width, height)` raises `RGSSError` above 4194304 pixels. `Bitmap.new(path)`
+  raises `RGSSError` for a file that is empty or holds no picture.
+- The font defaults are the names "Verdana", "Arial" and "Courier New", size 20 and a
+  shadow. `Font#shadow` and `Font.default_shadow` take any object and read true or false.
+- `Bitmap#draw_text` draws the shadow first: the text in black with the alpha of the font
+  colour, one pixel to the right and one down, clipped by the bitmap and not by the
+  rectangle. `Bitmap#text_size` does not count it.
+- Text wider than its rectangle is squeezed in five steps, to 50 percent, where XP has four.
+- `Bitmap#draw_text` and `Bitmap#text_size` take a text of any class and use its `to_s`.
+- `Bitmap#font=` copies the name, the size, bold, italic and the colour into the bitmap's
+  own font and leaves its shadow: `bitmap.font.shadow = false` turns the shadow off. `dup`
+  and `clone` of a bitmap copy the shadow.
+
+Outside the standard, or not there:
+
+- The glyphs of the shadow are those of the text, so they differ from Windows as the text
+  does. "Verdana" and "Arial" are looked up and replaced like every other font name.
+- The widths a font gets at a squeeze step are those of the rule of XP, measured under Wine.
+- `Bitmap#radial_blur` computes in double precision with the sine and cosine of the system.
+  No measured pixel depends on their last bit; one that did could differ from the original.
+- A call of `clear_rect` or `gradient_fill_rect` with no argument ends the original with a
+  page fault; here it raises `ArgumentError`.
+- `Font.default_shadow`, like `Font.default_bold`, reads true or false and not the object
+  it was given. The default names are those of the English runtime whatever `Library=`
+  says; the Japanese runtime was not measured.
+- The pixels without ink that `draw_text` touches follow the text cell of the draw, as in
+  XP, and not the work area the original keeps between calls. They are transparent, but a
+  blur mixes their colour into its result.
+
+In a game of XP none of `blur`, `radial_blur`, `gradient_fill_rect`, `clear_rect`,
+`Font#shadow` and `Font.default_shadow` is defined, and text, the font defaults and
+`Bitmap.new` are as before.
+
 ## Limits of save states
 
 Save states are described under [Save states](running.md#save-states). Their limits:
