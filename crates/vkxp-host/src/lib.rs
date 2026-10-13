@@ -55,7 +55,7 @@ pub use headless::{
     DEFAULT_DEVICE, HeadlessDisplay, HeadlessEnd, HeadlessError, HeadlessOptions, HeadlessReport,
     HostLink, headless_link, run_headless,
 };
-pub use keys::{KeyMap, MapError};
+pub use keys::{KeyDefaults, KeyMap, MapError};
 pub use raw::{frame_pointer, mouse_key, virtual_key};
 pub use record::{InputSource, Recorder, Recording, RecordingError, Replayer};
 pub use report::{Reporter, Severity};

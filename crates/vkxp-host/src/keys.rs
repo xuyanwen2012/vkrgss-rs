@@ -1,4 +1,4 @@
-//! The map from physical keys to RGSS1 buttons.
+//! The map from physical keys to the buttons of `Input`, with the defaults of each runtime.
 
 use std::collections::BTreeMap;
 
@@ -70,7 +70,26 @@ impl PartialEq for KeyMap {
 
 impl Eq for KeyMap {}
 
-/// The default bindings, those of the original runtime.
+/// Which original runtime's keys a map starts from.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum KeyDefaults {
+    /// Those of RPG Maker XP (RGSS1).
+    #[default]
+    Xp,
+    /// Those of RPG Maker VX (RGSS2).
+    Vx,
+}
+
+impl KeyDefaults {
+    fn bindings(self) -> &'static [(KeyCode, Button)] {
+        match self {
+            KeyDefaults::Xp => &DEFAULTS,
+            KeyDefaults::Vx => &DEFAULTS_VX,
+        }
+    }
+}
+
+/// The default bindings of a game of RGSS1, those of the original runtime.
 const DEFAULTS: [(KeyCode, Button); 37] = [
     (KeyCode::ArrowDown, Button::Down),
     (KeyCode::ArrowLeft, Button::Left),
@@ -111,6 +130,53 @@ const DEFAULTS: [(KeyCode, Button); 37] = [
     (KeyCode::F9, Button::F9),
 ];
 
+/// The default bindings of a game of RGSS2: every key that holds a button in the original
+/// runtime of VX, and no other. Against those of RGSS1, Z confirms and the C key holds
+/// nothing. Shift holds A and SHIFT together, as measured.
+///
+/// Provenance: oracle measurement 2026-10-12, RGSS202E versions 2.0.0.1 and 2.0.2.1,
+/// `vx-v1-sprite-REPORT.md` section 7 (`vx-v1-input-keys.txt`: every virtual key from 8 to
+/// 254 but F1, F12, the Windows keys and PrintScreen, one at a time). The Enter key of the
+/// numeric pad has the virtual key of Enter.
+const DEFAULTS_VX: [(KeyCode, Button); 36] = [
+    (KeyCode::ArrowDown, Button::Down),
+    (KeyCode::ArrowLeft, Button::Left),
+    (KeyCode::ArrowRight, Button::Right),
+    (KeyCode::ArrowUp, Button::Up),
+    (KeyCode::Numpad2, Button::Down),
+    (KeyCode::Numpad4, Button::Left),
+    (KeyCode::Numpad6, Button::Right),
+    (KeyCode::Numpad8, Button::Up),
+    (KeyCode::Enter, Button::C),
+    (KeyCode::NumpadEnter, Button::C),
+    (KeyCode::Space, Button::C),
+    (KeyCode::KeyZ, Button::C),
+    (KeyCode::Escape, Button::B),
+    (KeyCode::Insert, Button::B),
+    (KeyCode::KeyX, Button::B),
+    (KeyCode::Numpad0, Button::B),
+    (KeyCode::ShiftLeft, Button::A),
+    (KeyCode::ShiftRight, Button::A),
+    (KeyCode::KeyA, Button::X),
+    (KeyCode::KeyS, Button::Y),
+    (KeyCode::KeyD, Button::Z),
+    (KeyCode::KeyQ, Button::L),
+    (KeyCode::PageUp, Button::L),
+    (KeyCode::KeyW, Button::R),
+    (KeyCode::PageDown, Button::R),
+    (KeyCode::ShiftLeft, Button::Shift),
+    (KeyCode::ShiftRight, Button::Shift),
+    (KeyCode::ControlLeft, Button::Ctrl),
+    (KeyCode::ControlRight, Button::Ctrl),
+    (KeyCode::AltLeft, Button::Alt),
+    (KeyCode::AltRight, Button::Alt),
+    (KeyCode::F5, Button::F5),
+    (KeyCode::F6, Button::F6),
+    (KeyCode::F7, Button::F7),
+    (KeyCode::F8, Button::F8),
+    (KeyCode::F9, Button::F9),
+];
+
 impl KeyMap {
     /// A map without any binding.
     pub fn empty() -> KeyMap {
@@ -119,14 +185,31 @@ impl KeyMap {
         }
     }
 
-    /// The default map with the keys of every button in `overrides` replaced: the button, by
-    /// its `Input` name, is held by exactly the keys listed for it, by the names of the
-    /// windowing library's key codes. Buttons that are not mentioned keep their default keys.
+    /// The default map of a game of RGSS1 with the keys of every button in `overrides`
+    /// replaced: the button, by its `Input` name, is held by exactly the keys listed for it,
+    /// by the names of the windowing library's key codes. Buttons that are not mentioned keep
+    /// their default keys.
     pub fn with_overrides(overrides: &BTreeMap<String, Vec<String>>) -> Result<KeyMap, MapError> {
-        let bindings = with_overrides(&DEFAULTS, overrides, |name| {
+        KeyMap::of(KeyDefaults::Xp, overrides)
+    }
+
+    /// The map `defaults` with the keys of every button in `overrides` replaced, as
+    /// [`KeyMap::with_overrides`] replaces them.
+    pub fn of(
+        defaults: KeyDefaults,
+        overrides: &BTreeMap<String, Vec<String>>,
+    ) -> Result<KeyMap, MapError> {
+        let bindings = with_overrides(defaults.bindings(), overrides, |name| {
             key_named(name).ok_or_else(|| MapError::UnknownKey(name.to_owned()))
         })?;
         Ok(KeyMap { bindings })
+    }
+
+    /// The default map of a game of RGSS2: the keys of the original runtime of VX.
+    pub fn vx() -> KeyMap {
+        KeyMap {
+            bindings: DEFAULTS_VX.to_vec(),
+        }
     }
 
     /// Makes `key` hold `button`, in addition to whatever it holds already.
@@ -197,6 +280,70 @@ mod tests {
         for (key, button) in function_keys {
             assert_eq!(buttons(key), [button], "{key:?}");
         }
+    }
+
+    /// Requirement "Keys of VX": the keys the original runtime of VX maps, and no other.
+    #[test]
+    fn the_map_of_vx_matches_the_specification() {
+        use Button as B;
+        use KeyCode as K;
+        let map = KeyMap::vx();
+        let held = |key| map.buttons(key).collect::<Vec<_>>();
+        let expected: [(&[KeyCode], &[Button]); 14] = [
+            (&[K::ArrowDown, K::Numpad2], &[B::Down]),
+            (&[K::ArrowLeft, K::Numpad4], &[B::Left]),
+            (&[K::ArrowRight, K::Numpad6], &[B::Right]),
+            (&[K::ArrowUp, K::Numpad8], &[B::Up]),
+            (&[K::Enter, K::NumpadEnter, K::Space, K::KeyZ], &[B::C]),
+            (&[K::Escape, K::Insert, K::KeyX, K::Numpad0], &[B::B]),
+            (&[K::ShiftLeft, K::ShiftRight], &[B::A, B::Shift]),
+            (&[K::KeyA], &[B::X]),
+            (&[K::KeyS], &[B::Y]),
+            (&[K::KeyD], &[B::Z]),
+            (&[K::KeyQ, K::PageUp], &[B::L]),
+            (&[K::KeyW, K::PageDown], &[B::R]),
+            (&[K::ControlLeft, K::ControlRight], &[B::Ctrl]),
+            (&[K::AltLeft, K::AltRight], &[B::Alt]),
+        ];
+        let mut bound = 0;
+        for (keys, buttons) in expected {
+            for key in keys {
+                assert_eq!(held(*key), buttons, "{key:?}");
+                bound += buttons.len();
+            }
+        }
+        let function_keys = [
+            (K::F5, B::F5),
+            (K::F6, B::F6),
+            (K::F7, B::F7),
+            (K::F8, B::F8),
+            (K::F9, B::F9),
+        ];
+        for (key, button) in function_keys {
+            assert_eq!(held(key), [button], "{key:?}");
+            bound += 1;
+        }
+        assert_eq!(map.bindings.len(), bound, "no other key holds a button");
+        // Keys measured to hold nothing, among them the C key that confirms in XP.
+        for key in [K::KeyC, K::KeyV, K::KeyB, K::Numpad1, K::Numpad5, K::Tab] {
+            assert_eq!(held(key), [], "{key:?}");
+        }
+        for button in Button::ALL {
+            assert!(map.bindings.iter().any(|(_, bound)| *bound == button));
+        }
+    }
+
+    #[test]
+    fn overrides_replace_the_keys_of_the_chosen_defaults() {
+        let none = BTreeMap::new();
+        assert_eq!(KeyMap::of(KeyDefaults::Vx, &none), Ok(KeyMap::vx()));
+        assert_eq!(KeyMap::of(KeyDefaults::Xp, &none), Ok(KeyMap::default()));
+        assert_ne!(KeyMap::vx(), KeyMap::default());
+        let map = KeyMap::of(KeyDefaults::Vx, &overrides(&[("C", &["KeyJ"])])).unwrap();
+        let held = |key| map.buttons(key).collect::<Vec<_>>();
+        assert_eq!(held(KeyCode::KeyJ), [Button::C]);
+        assert_eq!(held(KeyCode::KeyZ), []);
+        assert_eq!(held(KeyCode::KeyX), [Button::B]);
     }
 
     #[test]

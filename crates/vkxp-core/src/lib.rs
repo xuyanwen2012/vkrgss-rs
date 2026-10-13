@@ -67,6 +67,8 @@
 //! - Input. [`InputState`] takes the protocol's input snapshots as they arrive and latches
 //!   the newest one per update, from which it answers pressed, triggered, repeated and the
 //!   four- and eight-way direction queries. The same snapshots always give the same answers.
+//!   The repeat timing is that of its [`Rules`]: after 16 updates and then every 4 in RGSS1,
+//!   after 24 and then every 6 in RGSS2.
 //!
 //! Nothing here talks to the host: sending packets, waiting for frame ticks and receiving
 //! snapshots is the binding's part.

@@ -7,7 +7,7 @@
 
 ## 2. Input
 
-- [ ] 2.1 Repeat timing by runtime in the core; the key map of VX in the host, chosen by the program. Verify: the scenarios of `specs/core-input/spec.md` and of "Keys of VX"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-core -p vkxp-host -p vkxp --locked` passes.
+- [x] 2.1 Repeat timing by runtime in the core; the key map of VX in the host, chosen by the program. Verify: the scenarios of `specs/core-input/spec.md` and of "Keys of VX"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-core -p vkxp-host -p vkxp --locked` passes.
 
 ## 3. Modules
 

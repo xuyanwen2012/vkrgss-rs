@@ -402,3 +402,20 @@ fn resize_screen_takes_two_integers() {
     );
     assert_eq!(value, "[100, 50]");
 }
+
+// --- Input of RGSS2 ---------------------------------------------------------------------------
+
+/// Scenario "Repeat pattern, measured on the original" of `core-input`, through the module.
+#[test]
+fn a_held_button_repeats_after_24_updates_and_then_every_6() {
+    use vkxp_proto::{Button, HostToGuest, InputSnapshot};
+    testing::start_as(Runtime::Rgss2);
+    let held = HostToGuest::Input(InputSnapshot::EMPTY.with(Button::C));
+    let (outcome, _) = host::play(
+        "repeats = (1..36).select { Input.update; Input.repeat?(Input::C) }
+         Input.update
+         repeats",
+        Script::new().at_start(held),
+    );
+    assert_eq!(outcome.unwrap(), "[1, 24, 30, 36]");
+}

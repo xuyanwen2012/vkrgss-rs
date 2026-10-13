@@ -478,3 +478,91 @@ fn the_same_snapshots_give_the_same_answers() {
         [(2, 2), (2, 2), (6, 3), (6, 3), (6, 6), (0, 0), (8, 7)]
     );
 }
+
+// The timing of RGSS2.
+
+/// The updates, counted from 1, at which `button` held alone repeats within `updates`.
+fn repeating_updates(rules: Rules, updates: u32) -> Vec<u32> {
+    let mut input = InputState::with_rules(rules);
+    input.receive(holding(&[Button::C]));
+    (1..=updates)
+        .filter(|_| {
+            input.update();
+            input.is_repeated(Button::C)
+        })
+        .collect()
+}
+
+/// Scenarios "Repeat pattern, measured on the original" and "XP" of "Repeat timing of
+/// RGSS2".
+#[test]
+fn the_repeat_timing_is_that_of_the_rules() {
+    assert_eq!(repeating_updates(Rules::Rgss2, 36), [1, 24, 30, 36]);
+    assert_eq!(repeating_updates(Rules::Rgss1, 24), [1, 16, 20, 24]);
+    assert_eq!(InputState::new().rules(), Rules::Rgss1);
+    assert_eq!(InputState::default().rules(), Rules::Rgss1);
+}
+
+const RGSS2_SAMPLES: &str = include_str!("../../tests/data/rgss2-input-samples.txt");
+
+/// The buttons the digits of the samples stand for, in their order.
+const SAMPLED: [Button; 9] = [
+    Button::Down,
+    Button::Left,
+    Button::Right,
+    Button::Up,
+    Button::C,
+    Button::B,
+    Button::A,
+    Button::X,
+    Button::Shift,
+];
+
+/// One digit for each sampled button that `answer` holds for.
+fn digits(answer: impl Fn(Button) -> bool) -> String {
+    let digit = |button: &Button| if answer(*button) { '1' } else { '0' };
+    SAMPLED.iter().map(digit).collect()
+}
+
+/// Scenario "Sequences of the measurement".
+#[test]
+fn the_sequences_measured_on_the_original_of_vx_give_the_measured_answers() {
+    let mut input = InputState::with_rules(Rules::Rgss2);
+    let mut stream = "";
+    let mut checked = 0;
+    for line in RGSS2_SAMPLES.lines().filter(|line| !line.starts_with('#')) {
+        if let Some(name) = line.strip_prefix("stream ") {
+            stream = name;
+            input.receive(InputSnapshot::EMPTY);
+            for _ in 0..8 {
+                input.update();
+            }
+            continue;
+        }
+        let words: Vec<&str> = line.split(' ').collect();
+        let times = words.get(6).map_or(1, |times| times[1..].parse().unwrap());
+        for _ in 0..times {
+            if words[0] == "update" {
+                let held = SAMPLED.iter().zip(words[1].chars());
+                let held: Vec<Button> = held
+                    .filter(|(_, digit)| *digit == '1')
+                    .map(|(button, _)| *button)
+                    .collect();
+                input.receive(holding(&held));
+                input.update();
+            } else {
+                assert_eq!(words[0], "keep", "{line}");
+            }
+            let found = [
+                digits(|button| input.is_pressed(button)),
+                digits(|button| input.is_triggered(button)),
+                digits(|button| input.is_repeated(button)),
+                input.dir4().to_string(),
+                input.dir8().to_string(),
+            ];
+            assert_eq!(found[..], words[1..6], "update {checked}, in `{stream}`");
+            checked += 1;
+        }
+    }
+    assert_eq!(checked, 12084);
+}

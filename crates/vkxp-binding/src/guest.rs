@@ -77,7 +77,7 @@ impl Guest {
             files: config.files,
             text: config.text,
             scene: runtime::new_scene(config.run.runtime),
-            input: InputState::new(),
+            input: InputState::with_rules(runtime::rules(config.run.runtime)),
             runtime: runtime::State::new(config.run),
             win32api: win32api::State::default(),
         }

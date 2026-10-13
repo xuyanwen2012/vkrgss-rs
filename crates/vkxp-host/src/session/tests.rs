@@ -1473,6 +1473,36 @@ fn windowed_modal_is_dismissed_by_a_host_key_remapped_to_confirm_or_cancel() {
     }
 }
 
+/// A session with the key map of a game of RGSS2, which the program gives it.
+fn rig_of_vx() -> Rig {
+    Rig::with_options(SessionOptions {
+        keys: KeyMap::vx(),
+        ..SessionOptions::default()
+    })
+}
+
+/// Scenario "Z confirms in VX".
+#[test]
+fn the_key_z_confirms_in_a_session_of_rgss2_and_holds_a_in_one_of_rgss1() {
+    let mut rig = rig_of_vx();
+    assert_eq!(rig.key(KeyCode::KeyZ, true), [held(&[Button::C])]);
+    assert_eq!(rig.key(KeyCode::KeyZ, false), [held(&[])]);
+    // The C key of XP holds nothing in VX.
+    assert_eq!(rig.key(KeyCode::KeyC, true), []);
+
+    let mut rig = Rig::new();
+    assert_eq!(rig.key(KeyCode::KeyZ, true), [held(&[Button::A])]);
+}
+
+/// Scenario "Shift, measured on the original".
+#[test]
+fn shift_holds_a_and_shift_in_a_session_of_rgss2() {
+    for key in [KeyCode::ShiftLeft, KeyCode::ShiftRight] {
+        let mut rig = rig_of_vx();
+        assert_eq!(rig.key(key, true), [held(&[Button::A, Button::Shift])]);
+    }
+}
+
 #[test]
 fn reset_key_mapped_to_confirm_still_asks_for_a_reset_while_a_modal_waits() {
     let mut keys = KeyMap::default();

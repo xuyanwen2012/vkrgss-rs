@@ -12,7 +12,8 @@ use std::path::{Path, PathBuf, absolute};
 use anyhow::{Context, Result, anyhow};
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer};
-use vkxp_host::{GamepadMap, KeyMap};
+use vkxp_host::{GamepadMap, KeyDefaults, KeyMap};
+use vkxp_vfs::Runtime;
 
 use crate::args::{self, Input, Options};
 
@@ -223,8 +224,21 @@ pub(crate) fn load(options: &Options, game_dir: &Path) -> Result<File> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Settings {
     pub options: Options,
+    /// The key map of a game of RGSS1: the keys of XP with those of `[keys]` over them.
     pub keys: KeyMap,
+    /// The key map of a game of RGSS2: the keys of VX with those of `[keys]` over them.
+    pub keys_vx: KeyMap,
     pub pads: GamepadMap,
+}
+
+impl Settings {
+    /// The key map of a game of `runtime`, which is known only once its `Game.ini` is read.
+    pub(crate) fn keys_of(&self, runtime: Runtime) -> &KeyMap {
+        match runtime {
+            Runtime::Rgss1 => &self.keys,
+            Runtime::Rgss2 | Runtime::Rgss3 => &self.keys_vx,
+        }
+    }
 }
 
 /// Puts the command line over what the configuration files hold. A list given on the command
@@ -274,6 +288,7 @@ pub(crate) fn settle(file: File, mut options: Options) -> Result<Settings> {
     Ok(Settings {
         options,
         keys: KeyMap::with_overrides(&file.keys)?,
+        keys_vx: KeyMap::of(KeyDefaults::Vx, &file.keys)?,
         pads: GamepadMap::with_overrides(&file.gamepad)?,
     })
 }
@@ -361,6 +376,7 @@ mod tests {
             Settings {
                 options,
                 keys: KeyMap::default(),
+                keys_vx: KeyMap::vx(),
                 pads: GamepadMap::default(),
             }
         );
@@ -749,6 +765,21 @@ mod tests {
             settings.pads,
             GamepadMap::with_overrides(&table(&[("C", "East"), ("B", "South")])).unwrap()
         );
+        // The same entries over the keys of VX, for a game of RGSS2.
+        let keys_vx = table(&[("C", "KeyL"), ("B", "KeyK")]);
+        assert_eq!(
+            settings.keys_vx,
+            KeyMap::of(KeyDefaults::Vx, &keys_vx).unwrap()
+        );
+    }
+
+    /// Requirement "Keys of VX": the program gives the host the map of the game's runtime.
+    #[test]
+    fn the_key_map_is_that_of_the_runtime_of_the_game() {
+        let settings = settle(File::default(), Options::default()).unwrap();
+        assert_eq!(settings.keys_of(Runtime::Rgss1), &KeyMap::default());
+        assert_eq!(settings.keys_of(Runtime::Rgss2), &KeyMap::vx());
+        assert_ne!(KeyMap::vx(), KeyMap::default());
     }
 
     /// A button is the same button however a file spells its name.

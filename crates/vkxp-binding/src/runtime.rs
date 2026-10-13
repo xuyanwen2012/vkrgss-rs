@@ -211,7 +211,7 @@ impl Guest {
         self.runtime.modal = false;
         self.runtime.music = None;
         self.runtime.background_sound = None;
-        self.input = InputState::new();
+        self.input = InputState::with_rules(self.input.rules());
     }
 
     /// Drops the link, which tells the host that the guest has gone.
@@ -718,7 +718,7 @@ fn reset(ruby: &Ruby) -> Result<(), Raised> {
     // SAFETY: the module is kept alive by its constant.
     unsafe { ruby.funcall(graphics, c"_reset", &[]) }?;
     Guest::with(|guest| {
-        guest.input = InputState::new();
+        guest.input = InputState::with_rules(guest.input.rules());
         guest.runtime.pending = None;
     });
     seed(ruby)

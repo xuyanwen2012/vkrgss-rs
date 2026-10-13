@@ -2,10 +2,20 @@
 
 use vkxp_proto::{Button, InputSnapshot};
 
-/// Number of consecutive updates the repeating button is held before it starts to repeat.
-const REPEAT_DELAY: u64 = 16;
-/// Number of updates between two repeats.
-const REPEAT_INTERVAL: u64 = 4;
+use crate::Rules;
+
+/// The repeat timing of `rules`: the number of consecutive updates the repeating button is
+/// held before it starts to repeat, and the number of updates between two repeats.
+///
+/// Provenance of RGSS2: oracle measurement 2026-10-12, RGSS202E versions 2.0.0.1 and 2.0.2.1,
+/// `vx-v1-sprite-REPORT.md` section 7 (12084 updates without a mismatch; the timing of RGSS1
+/// leaves 821 mismatches of `repeat?`).
+fn repeat_timing(rules: Rules) -> (u64, u64) {
+    match rules {
+        Rules::Rgss1 => (16, 4),
+        Rules::Rgss2 => (24, 6),
+    }
+}
 
 /// One counter per bit of a snapshot; the discriminant of a [`Button`] is its bit.
 const BUTTON_BITS: usize = 32;
@@ -36,12 +46,27 @@ pub struct InputState {
     axis_flag: bool,
     /// The four-way direction as of the last update.
     dir4: u8,
+    /// The runtime whose repeat timing the state follows.
+    rules: Rules,
 }
 
 impl InputState {
-    /// The state before any input: nothing held.
+    /// The state before any input: nothing held. It follows the rules of RGSS1.
     pub fn new() -> InputState {
         InputState::default()
+    }
+
+    /// The state before any input, which follows `rules`.
+    pub fn with_rules(rules: Rules) -> InputState {
+        InputState {
+            rules,
+            ..InputState::default()
+        }
+    }
+
+    /// The runtime whose rules the state follows.
+    pub fn rules(&self) -> Rules {
+        self.rules
     }
 
     /// Takes a snapshot from the host. It has no effect until the next update, and only the
@@ -139,17 +164,17 @@ impl InputState {
     }
 
     /// Whether `button` is the repeating button and repeats at the last update: on the update
-    /// in which it was triggered, on the 15th update after that, and on every 4th after that.
+    /// in which it was triggered, on the 15th update after that, and on every 4th after that;
+    /// by the rules of RGSS2 on the 23rd update after it and on every 6th after that.
     /// Only one button repeats at a time: the one triggered most recently, and of several
     /// triggered in the same update the one with the highest number. A button that lost the
     /// repeat to another does not get it back while it stays held. Measured on the original
     /// runtime.
     pub fn is_repeated(&self, button: Button) -> bool {
         let count = self.rep_count;
+        let (delay, interval) = repeat_timing(self.rules);
         self.rep_button == Some(button)
-            && (count == 1
-                || (count >= REPEAT_DELAY
-                    && (count - REPEAT_DELAY).is_multiple_of(REPEAT_INTERVAL)))
+            && (count == 1 || (count >= delay && (count - delay).is_multiple_of(interval)))
     }
 
     /// Of two opposite directions, the one held alone.

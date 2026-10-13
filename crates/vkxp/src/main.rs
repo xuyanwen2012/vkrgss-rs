@@ -560,12 +560,10 @@ fn run_guest(game_dir: PathBuf, options: Options, role: &GuestRole) -> Result<bo
 /// Runs the game in `game_dir` as the settings describe, headless with the input `script`.
 /// `Ok(false)` is a run that failed and has said why.
 fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<bool> {
-    let Settings {
-        options,
-        keys,
-        pads,
-    } = settings;
-    let inputs = guest_inputs(&game_dir, &options)?;
+    let inputs = guest_inputs(&game_dir, &settings.options)?;
+    // The keyboard maps to the buttons as the original runtime of the game does.
+    let keys = settings.keys_of(inputs.runtime).clone();
+    let Settings { options, pads, .. } = settings;
     // Said here and not by a guest process, which settles the runtime again: once a run.
     if inputs.runtime == Runtime::Rgss2 {
         tracing::warn!(
