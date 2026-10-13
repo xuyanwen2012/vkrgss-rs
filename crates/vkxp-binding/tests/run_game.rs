@@ -702,3 +702,32 @@ fn a_missing_preload_script_fails_before_any_script() {
     assert_eq!(played.after.as_deref(), Ok("nil"));
     assert_eq!(played.record.received[1..], ending_of(false));
 }
+
+/// Scenario "A picture a script wrote".
+#[test]
+fn a_picture_a_script_wrote_is_loaded() {
+    let picture = testing::game_dir().join("Graphics/Pictures/Dot.png");
+    // The first `Bitmap.new` looks into the game directory before `Save` exists. The game is
+    // not started in its directory here, as the executable starts it, so the script goes
+    // there itself.
+    let source = format!(
+        "bytes = File.open({}, 'rb') {{ |file| file.read }}
+         Dir.chdir($vkxp_written_dir) do
+           $vkxp_written = [(Bitmap.new('Save/1.cdat') rescue $!.class)]
+           Dir.mkdir('Save')
+           File.open('Save/1.cdat', 'wb') {{ |file| file.write(bytes) }}
+           bitmap = Bitmap.new('Save/1.cdat')
+           $vkxp_written << bitmap.width << bitmap.height
+         end",
+        host::ruby_literal(&picture.to_string_lossy())
+    );
+    let game = Game::new("written_picture", "Written", &[("Main", &source)]);
+    let dir = host::ruby_literal(&game.dir().to_string_lossy());
+    testing::eval(&format!("$vkxp_written_dir = {dir}")).unwrap();
+    // The game directory was last changed when the game was made: the directory `Save` gets
+    // a later time stamp whatever the resolution of the file system's.
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    let played = run(&game, Script::new(), "$vkxp_written");
+    assert!(played.outcome.is_ok(), "{:?}", played.outcome);
+    assert_eq!(played.after.as_deref(), Ok("[Errno::ENOENT, 2, 2]"));
+}

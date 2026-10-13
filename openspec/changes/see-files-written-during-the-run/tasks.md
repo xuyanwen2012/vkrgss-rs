@@ -6,7 +6,7 @@
 
 ## 2. Through a game
 
-- [ ] 2.1 A generated game that makes a directory with `Dir.mkdir`, writes a picture into it with `File.open`, and loads it with `Bitmap.new` under a name with an unknown extension. Verify: the scenario "A picture a script wrote"; `cargo test -p vkxp-binding --locked` passes.
+- [x] 2.1 A generated game that makes a directory with `Dir.mkdir`, writes a picture into it with `File.open`, and loads it with `Bitmap.new` under a name with an unknown extension. Verify: the scenario "A picture a script wrote"; `cargo test -p vkxp-binding --locked` passes.
 
 ## 3. Integration check
 
