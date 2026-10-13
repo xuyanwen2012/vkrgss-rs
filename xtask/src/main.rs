@@ -12,7 +12,8 @@
 //!   of the gate.
 //! - `dist`: builds the release executable and packs it with the licence texts into an archive
 //!   with a checksum under `target/dist/`.
-//! - `extract-rpg <DLL> <OUTPUT>`: copies the built-in `RPG` scripts out of an RGSS DLL.
+//! - `extract-rpg <DLL> <OUTPUT>`: copies the built-in scripts out of an RGSS DLL, or out of
+//!   the image of one as it lies in the memory of the running original.
 //! - `oracle <GAME_DIR> --frames N[,N...] [OPTIONS]`: compares frames of a game between the
 //!   original runtime and vkxp.
 //! - `pack-rgssad <GAME_DIR>`: packs the `Data` and `Graphics` folders of a copy of a game

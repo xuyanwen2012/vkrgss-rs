@@ -7,7 +7,7 @@
 
 ## 2. Extraction tool
 
-- [ ] 2.1 `cargo xtask extract-rpg` finds the blocks that start with `def rgss_main` and `def rgss_stop` beside those of `module RPG;`; the message for a file without a block names the memory image and `docs/running.md`. Tests on generated images only. Verify: the scenarios of "Extraction tool" in `specs/game-launch/spec.md`; the tests of `extract.rs` that exist pass unchanged; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p xtask --locked` passes.
+- [x] 2.1 `cargo xtask extract-rpg` finds the blocks that start with `def rgss_main` and `def rgss_stop` beside those of `module RPG;`; the message for a file without a block names the memory image and `docs/running.md`. Tests on generated images only. Verify: the scenarios of "Extraction tool" in `specs/game-launch/spec.md`; the tests of `extract.rs` that exist pass unchanged; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p xtask --locked` passes.
 
 ## 3. Program
 
