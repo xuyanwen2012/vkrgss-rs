@@ -10,4 +10,4 @@
 
 ## 3. Integration check
 
-- [ ] 3.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate see-files-written-during-the-run --strict` passes.
+- [x] 3.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate see-files-written-during-the-run --strict` passes.
