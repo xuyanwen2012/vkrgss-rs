@@ -106,3 +106,7 @@ colour and mirror (not measured on XP).
   measured cases, so neither is the original's picture. Drawing the model's columns would
   need a picture of the whole unclipped sprite or one quad per texel column; see
   "Follow-ups".
+- Outside the files the proposal names, `crates/vkxp-binding/src/runtime.rs` makes the
+  scene of a game with the rules of its runtime (`new_scene`, four lines); without it no
+  game of RGSS2 would reach the rules of this change. The other change makes the same
+  edit.

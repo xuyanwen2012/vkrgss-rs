@@ -2,7 +2,10 @@
 //!
 //! See [`element`] for what the scene classes share. A sprite keeps the `Bitmap` object it
 //! was given, and assigning one sets the sprite's own `src_rect` object to the bitmap's
-//! rectangle.
+//! rectangle; in RGSS2 only when it is another bitmap than the sprite has.
+//!
+//! RGSS2 adds `bush_opacity`, `wave_amp`, `wave_length` and `wave_speed`, integers kept as
+//! they are written, and `wave_phase`, a Float kept modulo 360.
 
 use std::ffi::CStr;
 
@@ -65,7 +68,7 @@ fn update(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
 kept_after_dispose!(bitmap, SpriteId, BITMAP);
 
 /// `bitmap = bitmap_or_nil`: keeps the object, and a live bitmap also becomes the whole
-/// source rectangle.
+/// source rectangle, as the scene decides for its runtime.
 fn set_bitmap(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     let id = element::live::<SpriteId>(ruby, recv)?;
     let bitmap = element::bitmap_ref(ruby, args[0])?;
@@ -126,8 +129,23 @@ reader!(height, SpriteId, |guest, id| guest
     .src_rect
     .height);
 
-/// Defines `Sprite` as `runtime` has it: with `viewport=`, `width` and `height` in
-/// RGSS2, where `blend_type=` refuses a value other than 0, 1 and 2.
+// The properties of RGSS2 alone.
+field!(bush_opacity, set_bush_opacity, SpriteId, sprite, sprite_mut, bush_opacity: i32);
+field!(wave_amp, set_wave_amp, SpriteId, sprite, sprite_mut, wave_amp: i32);
+field!(wave_length, set_wave_length, SpriteId, sprite, sprite_mut, wave_length: i32);
+field!(wave_speed, set_wave_speed, SpriteId, sprite, sprite_mut, wave_speed: i32);
+reader!(wave_phase, SpriteId, |guest, id| guest
+    .scene
+    .sprite(id)?
+    .wave_phase());
+writer!(set_wave_phase, SpriteId, |guest, id, phase: f64| guest
+    .scene
+    .sprite_mut(id)?
+    .set_wave_phase(phase));
+
+/// Defines `Sprite` as `runtime` has it: with `viewport=`, `width`, `height`,
+/// `bush_opacity` and the properties of the wave in RGSS2, where `blend_type=` refuses a
+/// value other than 0, 1 and 2.
 pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
     let class = element::define_class::<SpriteId>(ruby, c"Sprite")?;
     element::define_in_viewport::<SpriteId>(ruby, class, runtime)?;
@@ -175,6 +193,16 @@ pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
     if runtime != Runtime::Rgss1 {
         rb::method(ruby, class, c"width", 0, width)?;
         rb::method(ruby, class, c"height", 0, height)?;
+        rb::method(ruby, class, c"bush_opacity", 0, bush_opacity)?;
+        rb::method(ruby, class, c"bush_opacity=", 1, set_bush_opacity)?;
+        rb::method(ruby, class, c"wave_amp", 0, wave_amp)?;
+        rb::method(ruby, class, c"wave_amp=", 1, set_wave_amp)?;
+        rb::method(ruby, class, c"wave_length", 0, wave_length)?;
+        rb::method(ruby, class, c"wave_length=", 1, set_wave_length)?;
+        rb::method(ruby, class, c"wave_speed", 0, wave_speed)?;
+        rb::method(ruby, class, c"wave_speed=", 1, set_wave_speed)?;
+        rb::method(ruby, class, c"wave_phase", 0, wave_phase)?;
+        rb::method(ruby, class, c"wave_phase=", 1, set_wave_phase)?;
     }
     Ok(class)
 }

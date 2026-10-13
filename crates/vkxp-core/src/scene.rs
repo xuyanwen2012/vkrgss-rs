@@ -19,17 +19,6 @@ pub enum Rules {
     Rgss2,
 }
 
-/// Which runtime's measured rules a scene and an input state follow where the runtimes
-/// differ.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
-pub enum Rules {
-    /// RGSS1, of RPG Maker XP.
-    #[default]
-    Rgss1,
-    /// RGSS2, of RPG Maker VX.
-    Rgss2,
-}
-
 /// Names one occupant of one slot of an arena.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct Key {

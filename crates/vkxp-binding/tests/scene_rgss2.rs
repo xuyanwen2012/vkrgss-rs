@@ -1,5 +1,6 @@
 //! The scene classes in a game of RGSS2: the scenarios "Moving an element to another
-//! viewport", "Small differences of RGSS2" and "Openness" of `rgss-scene-classes`. A binary of its own,
+//! viewport", "Small differences of RGSS2", "Openness" and "Sprite properties of RGSS2" of
+//! `rgss-scene-classes`. A binary of its own,
 //! because the classes are defined once per process, as the runtime of the run has them.
 //!
 //! A snippet is one evaluation and disposes what it drew before it ends, as in `scene.rs`.
@@ -362,4 +363,65 @@ fn blend_type_takes_0_1_and_2_only() {
             "{class}"
         );
     }
+}
+
+/// Scenario "Kept as written, measured on the original", with the defaults.
+#[test]
+fn the_wave_and_the_bush_opacity_are_kept_as_written() {
+    assert_eq!(
+        eval_with(
+            "made << (s = Sprite.new)",
+            "defaults = [s.bush_opacity, s.wave_amp, s.wave_length, s.wave_speed, s.wave_phase]; \
+             s.bush_opacity = 300; s.wave_amp = -1000; s.wave_length = 0; s.wave_speed = 77.9; \
+             [defaults, s.bush_opacity, s.wave_amp, s.wave_length, s.wave_speed]"
+        ),
+        "[[128, 0, 180, 360, 0.0], 300, -1000, 0, 77]"
+    );
+}
+
+/// Scenario "Phase, measured on the original", and the update of the requirement "Wave of
+/// a sprite of RGSS2" through the class.
+#[test]
+fn the_phase_is_kept_modulo_360() {
+    assert_eq!(
+        eval_with(
+            "made << (s = Sprite.new)",
+            "r = [370.5, -1, 1000].map { |phase| s.wave_phase = phase; s.wave_phase }; \
+             s.wave_phase = 0; s.update; r << s.wave_phase; \
+             s.wave_phase = 0; s.wave_length = 64; s.visible = false; s.update; \
+             r << s.wave_phase; s.wave_length = 0; s.update; r << s.wave_phase"
+        ),
+        "[10.5, 359.0, 280.0, 2.0, 5.625, 5.625]"
+    );
+}
+
+/// Scenario "Same bitmap, measured on the original".
+#[test]
+fn the_same_bitmap_keeps_the_source_rectangle() {
+    assert_eq!(
+        eval_with(
+            "made << (b = solid(8, 8, 255, 0, 0)) << (c = solid(6, 5, 255, 0, 0)) \
+             << (s = Sprite.new)",
+            "rect = lambda { r = s.src_rect; [r.x, r.y, r.width, r.height] }; \
+             s.bitmap = b; s.src_rect.set(1, 2, 3, 4); s.bitmap = b; same = rect.call; \
+             s.bitmap = nil; none = rect.call; s.bitmap = c; [same, none, rect.call]"
+        ),
+        "[[1, 2, 3, 4], [1, 2, 3, 4], [0, 0, 6, 5]]"
+    );
+}
+
+/// The properties reach the scene: a wave moves the rows of the sprite, and the bush rows
+/// are drawn at the bush opacity without the sprite's colour.
+#[test]
+fn the_wave_and_the_bush_opacity_are_drawn() {
+    assert_eq!(
+        eval_with(
+            "made << (b = solid(8, 16, 255, 0, 0)) << (s = Sprite.new); s.bitmap = b; s.x = 10",
+            "s.wave_amp = 4; s.wave_length = 16; s.wave_phase = 90; \
+             waved = [pixel(10, 0), pixel(14, 0), pixel(21, 0), pixel(22, 0)]; \
+             s.wave_amp = 0; s.color = Color.new(0, 0, 255, 255); s.bush_depth = 2; \
+             s.bush_opacity = 255; [waved, pixel(10, 13), pixel(10, 14)]"
+        ),
+        format!("[[{BLACK}, {RED}, {RED}, {BLACK}], [0, 0, 255, 255], {RED}]")
+    );
 }

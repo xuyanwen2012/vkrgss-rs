@@ -90,6 +90,20 @@ fn the_classes_of_rgss1_lack_what_rgss2_adds() {
     );
 }
 
+/// Scenario "XP" of "Sprite properties of RGSS2": a sprite of RGSS1 has none of the five,
+/// and `bitmap=` with the bitmap it has sets its source rectangle again.
+#[test]
+fn a_sprite_of_rgss1_has_no_wave_and_no_bush_opacity() {
+    scene_support::install();
+    assert_eq!(
+        testing::eval(
+            "s = Sprite.new; b = Bitmap.new(8, 8);              r = [:wave_amp, :wave_length, :wave_speed, :wave_phase, :bush_opacity].map { |m|                s.respond_to?(m) || s.respond_to?(\"#{m}=\") };              r << Sprite.new.respond_to?(:wave_amp);              s.bitmap = b; s.src_rect.set(1, 2, 3, 4); s.bitmap = b;              r << [s.src_rect.x, s.src_rect.y, s.src_rect.width, s.src_rect.height];              s.dispose; b.dispose; r"
+        )
+        .as_deref(),
+        Ok("[false, false, false, false, false, false, [0, 0, 8, 8]]")
+    );
+}
+
 #[test]
 fn every_group_is_tested_here() {
     // One test function per group above: a group added to the list must get one too.

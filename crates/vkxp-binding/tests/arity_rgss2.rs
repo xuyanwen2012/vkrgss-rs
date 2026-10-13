@@ -31,16 +31,6 @@ const CLASSES: &[&str] = &[
 /// stands here with its reader and its writer. Each comes with the change that implements
 /// its drawing, which takes it off this list: the test fails when one of them exists.
 const PENDING: &[(&str, &str)] = &[
-    ("Sprite", "bush_opacity"),
-    ("Sprite", "bush_opacity="),
-    ("Sprite", "wave_amp"),
-    ("Sprite", "wave_amp="),
-    ("Sprite", "wave_length"),
-    ("Sprite", "wave_length="),
-    ("Sprite", "wave_speed"),
-    ("Sprite", "wave_speed="),
-    ("Sprite", "wave_phase"),
-    ("Sprite", "wave_phase="),
 ];
 
 /// The class of RGSS1 that RGSS2 does not have.
