@@ -20,8 +20,7 @@
 //!    random seed is settled, and the game's files are opened, with the encrypted archive
 //!    of the runtime (`Game.rgssad`, `Game.rgss2a`) if there is one. A failure is a message
 //!    and status 1, before any window or interpreter exists; a game of RPG Maker VX Ace
-//!    ends there too, and one of RPG Maker VX goes on with a warning that its support is
-//!    experimental.
+//!    ends there too.
 //! 3. The game directory becomes the working directory, because scripts write their saves
 //!    with relative names. Paths given on the command line are made absolute first.
 //! 4. SIGVTALRM is blocked while the main thread is still the only one (`signals`); the
@@ -564,13 +563,6 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
     // The keyboard maps to the buttons as the original runtime of the game does.
     let keys = settings.keys_of(inputs.runtime).clone();
     let Settings { options, pads, .. } = settings;
-    // Said here and not by a guest process, which settles the runtime again: once a run.
-    if inputs.runtime == Runtime::Rgss2 {
-        tracing::warn!(
-            "support for {} is experimental: the game runs as far as vkxp goes",
-            inputs.runtime.product()
-        );
-    }
     let audio = audio_options(options.no_audio, options.soundfont.as_deref())?;
     let dumps = options
         .dumps

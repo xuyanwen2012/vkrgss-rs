@@ -2,7 +2,7 @@
 
 ## 1. Program
 
-- [ ] 1.1 Remove the warning of an experimental runtime, its doc comment and the word in the usage message; replace its tests by one of the scenario "VX". Verify: the scenarios of `specs/game-launch/spec.md`; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` passes.
+- [x] 1.1 Remove the warning of an experimental runtime, its doc comment and the word in the usage message; replace its tests by one of the scenario "VX". Verify: the scenarios of `specs/game-launch/spec.md`; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` passes.
 
 ## 2. Documents and version
 

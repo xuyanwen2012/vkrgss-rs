@@ -15,9 +15,8 @@ usage: vkxp [GAME_DIR] [OPTIONS]
                             default: $XDG_CONFIG_HOME/vkxp/config.toml
   --no-config               read neither that file nor vkxp.toml in the game directory
   --runtime RUNTIME         the runtime of the game: rgss1 (RPG Maker XP), rgss2 (RPG
-                            Maker VX, experimental) or rgss3 (RPG Maker VX Ace, not
-                            supported yet); default: what Library and Scripts of
-                            Game.ini say
+                            Maker VX) or rgss3 (RPG Maker VX Ace, not supported yet);
+                            default: what Library and Scripts of Game.ini say
   --rtp NAME=DIR            the directory of the run-time package NAME; repeatable
   --builtin-scripts FILE    the built-in scripts file, made by `cargo xtask extract-rpg`;
                             default: $XDG_DATA_HOME/vkxp/rpg_builtin.rb, and

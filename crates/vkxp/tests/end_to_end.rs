@@ -1426,41 +1426,26 @@ fn experimental_lines(stderr: &str) -> Vec<&str> {
         .collect()
 }
 
-/// Requirement "Experimental runtime", scenario "VX": once, as a warning, whether the guest
-/// is a thread or a process, which settles the runtime a second time.
+/// Requirement "Supported runtimes say nothing about their state", scenario "VX", whether
+/// the guest is a thread or a process.
 #[test]
-fn a_run_of_vx_says_once_that_it_is_experimental() {
+fn a_run_of_vx_does_not_say_that_it_is_experimental() {
     let game = Game::of(Runtime::Rgss2, "e2e-vx-notice", "VX", &[("Main", "nil")]);
     for form in ["thread", "process"] {
         let ran = headless(&game, &["--guest", form]);
         ran.assert_success();
         let stderr = ran.stderr();
-        let lines = experimental_lines(&stderr);
-        assert_eq!(lines.len(), 1, "{form}: {stderr}");
-        assert!(lines[0].contains("RPG Maker VX"), "{stderr}");
+        assert!(experimental_lines(&stderr).is_empty(), "{form}: {stderr}");
     }
-    // The level of a line shows when the lines are detailed.
-    let ran = headless(&game, &["--verbose"]);
-    ran.assert_success();
-    let stderr = ran.stderr();
-    let lines = experimental_lines(&stderr);
-    assert_eq!(lines.len(), 1, "{stderr}");
-    assert!(lines[0].starts_with("vkxp: WARN "), "{stderr}");
 }
 
-/// Requirement "Experimental runtime", scenario "XP", and "Runtime of the run", scenario
-/// "Detected".
+/// Requirement "Runtime of the run", scenario "Detected".
 #[test]
-fn a_run_of_xp_does_not_say_that_it_is_experimental() {
+fn a_run_of_xp_sets_the_globals_of_debug_mode_of_rgss1() {
     let source = "File.open('modes.txt', 'w') { |file| file.write([$TEST, $DEBUG].inspect) }";
     let game = Game::new("e2e-xp-notice", "XP", &[("Main", source)]);
     let ran = headless(&game, &["--debug"]);
     ran.assert_success();
-    assert!(
-        experimental_lines(&ran.stderr()).is_empty(),
-        "{}",
-        ran.stderr()
-    );
     let modes = fs::read_to_string(game.dir().join("modes.txt")).expect("the script ran");
     assert_eq!(modes, "[nil, true]");
 }
@@ -1497,7 +1482,6 @@ fn the_runtime_option_decides_for_a_game_that_does_not_tell_it() {
     ran.assert_success();
     let stderr = ran.stderr();
     assert!(!stderr.contains("--runtime"), "{stderr}");
-    assert_eq!(experimental_lines(&stderr).len(), 1, "{stderr}");
     let modes = fs::read_to_string(game.dir().join("modes.txt")).expect("the script ran");
     assert_eq!(modes, "[true, false]");
 }
