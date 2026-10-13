@@ -30,8 +30,7 @@ const CLASSES: &[&str] = &[
 /// The entries of the list that are not implemented yet, by class and method; a property
 /// stands here with its reader and its writer. Each comes with the change that implements
 /// its drawing, which takes it off this list: the test fails when one of them exists.
-const PENDING: &[(&str, &str)] = &[
-];
+const PENDING: &[(&str, &str)] = &[];
 
 /// The class of RGSS1 that RGSS2 does not have.
 const CLASS_NOT_IN_RGSS2: &str = "TilemapAutotiles";
