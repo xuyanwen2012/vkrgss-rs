@@ -22,6 +22,9 @@ that the host selects at start-up, and the behaviour of XP stays the default.
   numbers of patches 2 and 4, `String#hash` of patch 5 and `Float#hash` of patch 7. `rand`
   after `srand`, the hashes of the nine strings of `tests/hashes.rs` and `1.5.hash` equal
   those of XP.
+- Shared, measured on the original of VX alone (`RGSS202E.dll` 2.0.2.1): `recv` of patch 35
+  and the member name of patch 36, whose names the start-up tables of both runtimes lack or
+  hold alike.
 - Shared by assumption, to be probed on the original of VX before a milestone relies on
   them: class redefinition with another superclass (patch 10), the regular expression
   behaviours and the range that starts with a class (patch 13), and the remaining patches.
@@ -450,3 +453,32 @@ that the host selects at start-up, and the behaviour of XP stays the default.
   the patch Debian carried for `ruby1.8`: such a count raises `RangeError` ("pack length
   too big"). The test of the release is not changed; `tests/backports.rs` of
   `vkxp-ruby-sys` has one.
+
+## 35. name-error-interns-recv
+
+- File: `error.c`
+- Patch: `patches/name-error-interns-recv.patch`
+- Patched SHA-256: `762b3ae0c0f085ce1a93ee2f2291dac8da13352e84c52bdb7babe69ff3dcff65`
+- Reason: measured on the original runtime of VX on 2026-10-12 (`RGSS202E.dll` 2.0.2.1,
+  change `intern-the-lazy-names-of-rgss2`): the first `NoMethodError` or `NameError` that
+  method dispatch raises (`nil.x`, an undefined local name, a private call, `super` without
+  a method, `1 + nil`) interns `recv`, which takes the next number of the symbol sequence;
+  `raise` and an undefined constant do not. Ruby 1.8.7 keeps the receiver of such an error
+  in a C structure and interns nothing, so every name a game made afterwards had a number
+  one lower than on the original, and a save listed instance variables in another order.
+  `name_err_mesg_new`, which builds the message object of exactly these errors, interns the
+  name. Shared by XP and VX: the start-up tables of both lack `recv`; the original of XP
+  was not measured.
+
+## 36. struct-member-name-ruby-181
+
+- File: `struct.c`
+- Patch: `patches/struct-member-name-ruby-181.patch`
+- Patched SHA-256: `94747553ae1a9642d1bbe0675adb46fb8989caf0b07fc7db8ff7498c86af5f28`
+- Reason: the start-up symbol tables of both original runtimes hold `__member__` (8785),
+  the name under which Ruby 1.8.1 keeps the members of a `Struct` class; Ruby 1.8.7 names
+  it `__members__`. That name was interned while the interpreter started and was missing
+  from the tables, so the first `Struct.new` of a game took a number of the symbol sequence
+  that the original does not give (measured on the original runtime of VX on 2026-10-12,
+  `RGSS202E.dll` 2.0.2.1, change `intern-the-lazy-names-of-rgss2`). The hidden variable has
+  the name of 1.8.1 again; no script can see it.

@@ -2,7 +2,7 @@
 
 ## 1. Interpreter
 
-- [ ] 1.1 `recv` at a name error of method dispatch; `__member__` in `struct.c`; the patch log and chain. Verify: the scenarios of `specs/embedded-ruby/spec.md`; `cargo test -p vkxp-ruby-sys --locked` passes.
+- [x] 1.1 `recv` at a name error of method dispatch; `__member__` in `struct.c`; the patch log and chain. Verify: the scenarios of `specs/embedded-ruby/spec.md`; `cargo test -p vkxp-ruby-sys --locked` passes.
 
 ## 2. Binding
 

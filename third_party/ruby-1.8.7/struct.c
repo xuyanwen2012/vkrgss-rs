@@ -38,7 +38,8 @@ VALUE
 rb_struct_s_members(klass)
     VALUE klass;
 {
-    VALUE members = rb_struct_iv_get(klass, "__members__");
+    /* vkxp: the name of Ruby 1.8.1, where 1.8.7 has "__members__" */
+    VALUE members = rb_struct_iv_get(klass, "__member__");
 
     if (NIL_P(members)) {
 	rb_raise(rb_eTypeError, "uninitialized struct");
@@ -207,7 +208,7 @@ make_struct(name, members, klass)
 	nstr = rb_define_class_under(klass, rb_id2name(id), klass);
     }
     rb_iv_set(nstr, "__size__", LONG2NUM(RARRAY(members)->len));
-    rb_iv_set(nstr, "__members__", members);
+    rb_iv_set(nstr, "__member__", members);
 
     rb_define_alloc_func(nstr, struct_alloc);
     rb_define_singleton_method(nstr, "new", rb_class_new_instance, -1);

@@ -705,6 +705,8 @@ name_err_mesg_new(obj, mesg, recv, method)
 {
     VALUE *ptr = ALLOC_N(VALUE, 3);
 
+    /* vkxp: Ruby 1.8.1 keeps the receiver under this name and interns it here */
+    rb_intern("recv");
     ptr[0] = mesg;
     ptr[1] = recv;
     ptr[2] = method;
