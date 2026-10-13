@@ -28,26 +28,39 @@ before any window opens with a message that shows both values and names the opti
 
 What follows the runtime:
 
-| | RGSS1 (XP) | RGSS2 (VX) |
-|---|---|---|
-| Run-time packages in `Game.ini` | `RTP1`, `RTP2`, `RTP3` | `RTP` |
-| Encrypted archive | `Game.rgssad` | `Game.rgss2a` |
-| Default built-in scripts file | `rpg_builtin.rb` | `rpg_builtin_rgss2.rb` |
-| `--debug` sets | `$DEBUG` | `$TEST`; `$DEBUG` stays `false` |
-| Frame and starting window size | 640 by 480 | 544 by 416 |
-| Starting frame rate | 40 | 60 |
-| Symbol numbers (`Symbol#to_i`) | those of RGSS1 | those of RGSS2 |
-| Default keys and repeat of `Input` | those of XP | those of VX (see *The keys of a game of VX*) |
+| | RGSS1 (XP) | RGSS2 (VX) | RGSS3 (VX Ace) |
+|---|---|---|---|
+| Run-time packages in `Game.ini` | `RTP1`, `RTP2`, `RTP3` | `RTP` | `RTP` |
+| Encrypted archive | `Game.rgssad` | `Game.rgss2a` | `Game.rgss3a` |
+| Default built-in scripts file | `rpg_builtin.rb` | `rpg_builtin_rgss2.rb` | `rpg_builtin_rgss3.rb` |
+| `--debug` sets | `$DEBUG` | `$TEST`; `$DEBUG` stays `false` | comes with the guest |
+| Frame and starting window size | 640 by 480 | 544 by 416 | comes with the guest |
+| Starting frame rate | 40 | 60 | comes with the guest |
+| Symbol numbers (`Symbol#to_i`) | those of RGSS1 | those of RGSS2 | come with the guest |
+| Default keys and repeat of `Input` | those of XP | those of VX (see *The keys of a game of VX*) | come with the guest |
 
-A game of VX names the package `RPGVX`, so it is run with `--rtp RPGVX=<RTP directory>`; a
-game whose `RTP` is empty needs no package. The archive of the other runtime is ignored if
-the game directory holds one.
+A game of VX names the package `RPGVX`, so it is run with `--rtp RPGVX=<RTP directory>`, and
+a game of VX Ace names `RPGVXAce`, so it is run with `--rtp RPGVXAce=<RTP directory>`; a
+game whose `RTP` is empty needs no package. The archive of another runtime is ignored if
+the game directory holds one. `Game.rgssad` and `Game.rgss2a` are read as RGSSAD version 1
+and `Game.rgss3a` as version 3, whatever the header of the file says: an archive of the
+other version under that name is reported as damaged.
 
 A game of VX starts as the original starts it: its frame is 544 by 416, in the window and in
 a dumped frame alike, its frame rate starts at 60, and its scripts see the symbol numbers and
 the classes and functions of RGSS2; [compatibility.md](compatibility.md#rpg-maker-vx) says
-what was measured of them and what was not. A game of VX Ace ends at once with a message that
-says it is not supported.
+what was measured of them and what was not.
+
+A game of VX Ace does not run yet. The program does for it what it does for any game before
+the scripts start, and then ends with a message that says VX Ace is planned and not
+supported, and with a failure status. In this order it resolves the run-time package that
+`RTP` names, looks for the built-in scripts file of RGSS3 (see *The built-in scripts of RPG
+Maker VX Ace*), opens `Game.rgss3a` when the game directory holds it, and reads the file
+that `Scripts` names, from the archive or from the directory, without looking into it. When
+one of these fails, the run ends with that error instead of the message: a game that names
+`RPGVXAce` needs `--rtp RPGVXAce=DIR`, and the built-in scripts file has to exist, before the
+program says that the game will not run yet. With `--verbose` the run names the package
+directory, the built-in scripts file, the archive and the script archive with its size.
 
 ### The built-in scripts
 
@@ -89,6 +102,27 @@ memory of the running original. Today the file is made by hand in two steps:
 
 There is no tool yet that does the first step for you.
 
+### The built-in scripts of RPG Maker VX Ace
+
+The built-in scripts of RGSS3 are three blocks: one that starts with `module RPG;` and
+defines the `RPG` data classes, one that starts with `def rgss_main` and one that starts
+with `def rgss_stop`. `vkxp` looks for them at `$XDG_DATA_HOME/vkxp/rpg_builtin_rgss3.rb`,
+or takes the file named with `--builtin-scripts`. Without the file a run of a VX Ace game
+ends with a message that names it and this section. A game of VX Ace does not run yet (see
+*The runtime of a game*): today the file only has to exist, and nothing of it is evaluated.
+
+As for VX, no DLL of VX Ace holds that text as it is, and the file is made in the same two
+steps, from the memory that the RGSS3 DLL (`System\RGSS300.dll` or `System\RGSS301.dll` of
+the game) occupies in the running original:
+
+```sh
+cargo xtask extract-rpg <memory image> ~/.local/share/vkxp/rpg_builtin_rgss3.rb
+```
+
+The command says how many blocks it wrote. For an image of RGSS3 that is three; fewer means
+that the image is incomplete. Given the DLL file itself, the command finds nothing and says
+so.
+
 ### Options
 
 ```text
@@ -104,8 +138,8 @@ Paths on the command line are relative to the directory the program was started 
 | `--config FILE` | The user's configuration file, instead of the default location. See *Configuration files*. |
 | `--no-config` | Read no configuration file. Not together with `--config`. |
 | `--runtime RUNTIME` | The runtime of the game: `rgss1`, `rgss2` or `rgss3`. Without it `Library` and `Scripts` of `Game.ini` tell it. See *The runtime of a game*. |
-| `--rtp NAME=DIR` | The directory of the run-time package that `Game.ini` names `NAME`: `--rtp Standard=DIR` for most games of XP, `--rtp RPGVX=DIR` for a game of VX. Repeatable. A game that names a package without this option does not start. |
-| `--builtin-scripts FILE` | The built-in scripts file of the game's runtime, instead of the default location: `rpg_builtin.rb` for RGSS1 and `rpg_builtin_rgss2.rb` for RGSS2, in `$XDG_DATA_HOME/vkxp`. |
+| `--rtp NAME=DIR` | The directory of the run-time package that `Game.ini` names `NAME`: `--rtp Standard=DIR` for most games of XP, `--rtp RPGVX=DIR` for a game of VX, `--rtp RPGVXAce=DIR` for a game of VX Ace. Repeatable. A game that names a package without this option does not start. |
+| `--builtin-scripts FILE` | The built-in scripts file of the game's runtime, instead of the default location: `rpg_builtin.rb` for RGSS1, `rpg_builtin_rgss2.rb` for RGSS2 and `rpg_builtin_rgss3.rb` for RGSS3, in `$XDG_DATA_HOME/vkxp`. |
 | `--device INDEX\|NAME` | The Vulkan device: its index or a part of its name, as `vulkaninfo --summary` prints them. In a window the default is the first discrete GPU, then an integrated one; headless it is `llvmpipe`. |
 | `--font-dir DIR` | A directory of fonts. Repeatable; earlier directories come first, then the game's `Fonts` directory, then the fonts installed on the system. |
 | `--font-own-metrics` | Size every font by its own line box. Without it a font that replaces a Windows font is scaled to the line box of the font it replaces. Meant for comparing text with the original when both draw with the same font file. |

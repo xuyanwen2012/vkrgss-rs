@@ -16,7 +16,7 @@
 
 ## 4. Documentation
 
-- [ ] 4.1 `docs/running.md`: what follows the runtime for RGSS3 (the key `RTP`, `Game.rgss3a`, `rpg_builtin_rgss3.rb`), `--rtp RPGVXAce=DIR`, the section "The built-in scripts of RPG Maker VX Ace", the rows of `--rtp` and `--builtin-scripts`, and what a run of a game of VX Ace does today. Verify: the usage text of the program, the message for a missing file of RGSS3 and the document name the same file and section; the document still says that VX Ace is planned and not supported.
+- [x] 4.1 `docs/running.md`: what follows the runtime for RGSS3 (the key `RTP`, `Game.rgss3a`, `rpg_builtin_rgss3.rb`), `--rtp RPGVXAce=DIR`, the section "The built-in scripts of RPG Maker VX Ace", the rows of `--rtp` and `--builtin-scripts`, and what a run of a game of VX Ace does today. Verify: the usage text of the program, the message for a missing file of RGSS3 and the document name the same file and section; the document still says that VX Ace is planned and not supported.
 
 ## 5. Integration check
 
