@@ -162,9 +162,10 @@ impl Suites {
     /// this crate and the vendored `lib`. The search path is that directory, `/usr/bin` and
     /// `/bin`, not the caller's.
     ///
-    /// SIGINT gets its default disposition whatever this process inherited: the suites start
-    /// interpreters that send it to themselves, and an ignored disposition would be inherited
-    /// by all of them.
+    /// SIGINT and SIGQUIT get their default dispositions whatever this process inherited: the
+    /// suites start interpreters that are to be ended by them, and an ignored disposition,
+    /// which a shell gives both signals in a command it starts in the background, would be
+    /// inherited by all of them.
     pub(crate) fn run_ruby(&self, name: &str, args: &[&str]) -> Finished {
         let source = source_dir();
         let dir = self.scratch.join("run").join(name);
@@ -183,8 +184,10 @@ impl Suites {
         // `signal` and `setpgid`, which are async-signal-safe.
         unsafe {
             command.pre_exec(|| {
-                if libc::signal(libc::SIGINT, libc::SIG_DFL) == libc::SIG_ERR {
-                    return Err(std::io::Error::last_os_error());
+                for signal in [libc::SIGINT, libc::SIGQUIT] {
+                    if libc::signal(signal, libc::SIG_DFL) == libc::SIG_ERR {
+                        return Err(std::io::Error::last_os_error());
+                    }
                 }
                 // A group of its own, so that a run that hits the time limit can be ended
                 // with the interpreters it started.

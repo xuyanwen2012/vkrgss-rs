@@ -3,5 +3,15 @@
 # An entry is a reason, written as comment lines, followed by one or more lines of a step
 # and a test: `suites` with a file of an upstream suite (`ruby/test_x.rb`), one of its test
 # methods (`ruby/test_x.rb#test_y`) or `sample`; `binding` or `guest` with the full name of
-# a test as `cargo test` prints it. Entries are separated by blank lines, and an entry
+# a test as `cargo test` prints it; `suites-1.9.2` with a file of `test/ruby` of Ruby 1.9.2
+# (`ruby/test_x.rb`) or one of its test methods, which the stressed tests of
+# `vkxp-ruby192-sys` read from here. Entries are separated by blank lines, and an entry
 # without a reason fails a test.
+
+# The collector stress of Ruby 1.9.2 (`GC.stress = true`), step `suites-1.9.2`: these files
+# did not finish in 14 minutes under stress in the feasibility study of 2026-10-13
+# (combinatorial tests) and are unexamined there. No stressed run of `vkxp-ruby192-sys`
+# includes them, neither that of the workspace tests nor the step.
+suites-1.9.2 ruby/test_integer_comb.rb
+suites-1.9.2 ruby/test_m17n_comb.rb
+suites-1.9.2 ruby/test_yield.rb

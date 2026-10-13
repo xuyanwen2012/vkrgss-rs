@@ -381,6 +381,15 @@ Non-goals:
   without stress. `tests/upstream.allow` leaves the file out with that reason, for the plain
   and the stressed runs alike. Linking `ext/io/nonblock` into the test executable would
   bring its 100 or so tests back.
+- The harness of decision 10 gives the test processes the default disposition of SIGQUIT as
+  well as of SIGINT: `test_status_kill` ends a child with SIGQUIT, and a shell ignores both
+  signals in a command it starts in the background, which is how the slow stressed files
+  were first run here.
+- Documents outside the scope of this change that list the crates or the dependency rules
+  and were not edited: `docs/architecture.md` (the table of crates, "Three rules", the list
+  of guest crates) and `docs/decisions.md` (the table of crates, the crates that may hold
+  `unsafe`). They are to be brought up to date by the change that decides how the guest of
+  RGSS3 is packaged, with the capability `workspace-structure`.
 - The capability `workspace-structure` lists the crates of the workspace and of the guest
   side by name; `vkxp-ruby192-sys` and the binding package over it are to be added there
   by the change that adds that package.

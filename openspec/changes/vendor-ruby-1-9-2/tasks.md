@@ -30,9 +30,9 @@
 
 ## 6. Collector stress and copies of the process
 
-- [ ] 6.1 The switch `VKXP_GC_STRESS`. Verify: the scenarios "Every allocation" and "Off"; `cargo test -p vkxp-ruby192-sys --locked --test gc_stress_on --test gc_stress_off` passes.
-- [ ] 6.2 The stressed selection in the workspace tests, the step `suites-1.9.2` of `cargo xtask stress` and the entries of `xtask/src/stress.skip` (decision 11). Verify: the scenarios "Stressed selection in the workspace tests" and "Slow files"; `cargo test -p vkxp-ruby192-sys --locked --test upstream_stress` passes; `cargo test -p vkxp-ruby192-sys --locked --test upstream_stress -- --ignored` passes on the development machine; `cargo test -p xtask --locked` passes, `the_stress_run_is_not_a_step` among it unchanged.
-- [ ] 6.3 The tests `fiber_host_frames`, `fork_frames` and `fork_frames_stressed`. Verify: the scenario "Host frames across Fiber switches" and both scenarios of "A copy of the process between two frames"; `cargo test -p vkxp-ruby192-sys --locked --test fiber_host_frames --test fork_frames --test fork_frames_stressed` passes ten times in a row.
+- [x] 6.1 The switch `VKXP_GC_STRESS`. Verify: the scenarios "Every allocation" and "Off"; `cargo test -p vkxp-ruby192-sys --locked --test gc_stress_on --test gc_stress_off` passes.
+- [x] 6.2 The stressed selection in the workspace tests, the step `suites-1.9.2` of `cargo xtask stress` and the entries of `xtask/src/stress.skip` (decision 11). Verify: the scenarios "Stressed selection in the workspace tests" and "Slow files"; `cargo test -p vkxp-ruby192-sys --locked --test upstream_stress` passes; `cargo test -p vkxp-ruby192-sys --locked --test upstream_stress -- --ignored` passes on the development machine; `cargo test -p xtask --locked` passes, `the_stress_run_is_not_a_step` among it unchanged.
+- [x] 6.3 The tests `fiber_host_frames`, `fork_frames` and `fork_frames_stressed`. Verify: the scenario "Host frames across Fiber switches" and both scenarios of "A copy of the process between two frames"; `cargo test -p vkxp-ruby192-sys --locked --test fiber_host_frames --test fork_frames --test fork_frames_stressed` passes ten times in a row.
 
 ## 7. Documentation
 

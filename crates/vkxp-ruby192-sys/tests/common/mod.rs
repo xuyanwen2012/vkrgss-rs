@@ -206,6 +206,18 @@ pub(crate) fn eval_inspect(ruby: &vkxp_ruby192_sys::Ruby, source: &str) -> Resul
 pub(crate) const COLLECTIONS_FOR_HUNDRED_OBJECTS: &str =
     "before = GC.count; made = 0; 100.times { Object.new; made += 1 }; [made, GC.count - before]";
 
+/// The two integers of an inspected pair, such as `[100, 3]`.
+pub(crate) fn parse_pair(text: &str) -> (u64, u64) {
+    let (first, second) = text
+        .trim_matches(|character| character == '[' || character == ']')
+        .split_once(", ")
+        .unwrap_or_else(|| panic!("not a pair: {text}"));
+    (
+        first.parse().expect("an integer"),
+        second.parse().expect("an integer"),
+    )
+}
+
 /// The four ways a script recurses without end: a method that calls itself, a block that
 /// yields to itself, a lambda that calls itself, and a string that evaluates itself.
 pub(crate) const UNBOUNDED_RECURSIONS: [&str; 4] = [
@@ -292,3 +304,5 @@ pub(crate) fn thread_count() -> usize {
 }
 
 pub(crate) mod suites;
+
+pub(crate) mod frames;

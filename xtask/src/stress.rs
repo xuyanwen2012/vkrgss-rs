@@ -2,7 +2,8 @@
 //!
 //! With `VKXP_GC_STRESS=<n>` the embedded interpreter collects at every n-th allocation, so
 //! a value that C or Rust code keeps alive only through a pointer into it is lost at once
-//! instead of on some other machine. See `docs/development.md`.
+//! instead of on some other machine. The last step is the same for the second interpreter,
+//! Ruby 1.9.2, whose own `GC.stress` does the collecting. See `docs/development.md`.
 
 use std::path::Path;
 use std::process::Command;
@@ -74,10 +75,14 @@ struct Step {
     env: Vec<(&'static str, String)>,
 }
 
-/// The three runs. Everything else of the environment is inherited, so the restriction of
+/// The name of the step that runs the slow files of the stressed selection of
+/// `vkxp-ruby192-sys`. The test reads the skip list itself, for the lines of this step.
+const SUITES_192: &str = "suites-1.9.2";
+
+/// The four runs. Everything else of the environment is inherited, so the restriction of
 /// the Vulkan loader (`VK_LOADER_DRIVERS_SELECT`) that the tests of the executable ask for
 /// reaches them.
-fn steps(skipped: &[Skipped]) -> [Step; 3] {
+fn steps(skipped: &[Skipped]) -> [Step; 4] {
     let tests_of = |step: &str| -> Vec<&str> {
         skipped
             .iter()
@@ -135,6 +140,25 @@ fn steps(skipped: &[Skipped]) -> [Step; 3] {
                 "guest",
             ),
             env: vec![(VARIABLE, GUEST_EVERY.to_string())],
+        },
+        // The files of Ruby 1.9.2's own suite that are too slow under `GC.stress = true` for
+        // the workspace tests, where the quick ones run. The ordinary build: no sanitizer,
+        // and no variable, because every test process switches the stress on itself.
+        Step {
+            name: SUITES_192,
+            args: [
+                "test",
+                "-p",
+                "vkxp-ruby192-sys",
+                "--locked",
+                "--test",
+                "upstream_stress",
+                "--",
+                "--ignored",
+            ]
+            .map(str::to_owned)
+            .to_vec(),
+            env: Vec::new(),
         },
     ]
 }
@@ -205,10 +229,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_steps_are_the_three_runs_in_order_each_under_the_switch() {
+    fn the_steps_are_the_four_runs_in_order_three_of_them_under_the_switch() {
         let steps = steps(&[]);
         let names: Vec<&str> = steps.iter().map(|step| step.name).collect();
-        assert_eq!(names, ["suites", "binding", "guest"]);
+        assert_eq!(names, ["suites", "binding", "guest", "suites-1.9.2"]);
         for (step, every) in steps.iter().zip([SUITES_EVERY, BINDING_EVERY, GUEST_EVERY]) {
             assert!(every >= 1, "{}", step.name);
             assert!(
@@ -226,6 +250,43 @@ mod tests {
             steps[2].args,
             ["test", "-p", "vkxp", "--locked", "--test", "end_to_end"]
         );
+    }
+
+    /// The step of Ruby 1.9.2 runs the ignored test of the stressed selection in the
+    /// ordinary build, without the switch of the other interpreter.
+    #[test]
+    fn the_step_of_ruby_1_9_2_runs_the_slow_files_of_the_stressed_selection() {
+        let [.., suites_192] = steps(&[]);
+        assert_eq!(
+            suites_192.args,
+            [
+                "test",
+                "-p",
+                "vkxp-ruby192-sys",
+                "--locked",
+                "--test",
+                "upstream_stress",
+                "--",
+                "--ignored"
+            ]
+        );
+        assert!(suites_192.env.is_empty());
+    }
+
+    /// The files that did not finish under stress in the study are named for that step.
+    #[test]
+    fn the_committed_skip_list_names_the_unfinished_files_of_ruby_1_9_2() {
+        let skipped = parse_skip_list(SKIP_LIST).unwrap();
+        for file in ["test_integer_comb.rb", "test_m17n_comb.rb", "test_yield.rb"] {
+            let entry = skipped
+                .iter()
+                .find(|entry| entry.step == SUITES_192 && entry.test == format!("ruby/{file}"))
+                .unwrap_or_else(|| panic!("{file} is not named for the step"));
+            assert!(
+                entry.reason.contains("did not finish in 14 minutes"),
+                "{entry:?}"
+            );
+        }
     }
 
     #[test]
@@ -259,7 +320,7 @@ mod tests {
         assert_eq!(skipped[1].reason, "Measures time, so it fails.");
         assert_eq!(skipped[3].reason, "Another reason.");
 
-        let [suites, binding, guest] = steps(&skipped);
+        let [suites, binding, guest, _] = steps(&skipped);
         assert!(
             suites
                 .env
@@ -281,7 +342,7 @@ mod tests {
     fn the_committed_skip_list_names_known_steps_and_gives_reasons() {
         for entry in parse_skip_list(SKIP_LIST).unwrap() {
             assert!(
-                ["suites", "binding", "guest"].contains(&entry.step.as_str()),
+                ["suites", "binding", "guest", SUITES_192].contains(&entry.step.as_str()),
                 "{entry:?}"
             );
             assert!(!entry.reason.is_empty(), "{entry:?}");
