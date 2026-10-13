@@ -5,7 +5,7 @@
 //! enforces the constraint. `z` is the exception: it is read here and set through the scene,
 //! because a change of z moves the element in the draw order of the whole scene.
 
-use vkxp_proto::BitmapId;
+use vkxp_proto::{BitmapId, PlaneRules};
 
 use crate::scene::{Rules, ViewportId};
 use crate::tilemap::TileCache;
@@ -525,18 +525,25 @@ impl Plane {
     }
 }
 
-/// What a tilemap of RGSS2 has in place of the tileset, the autotiles and the priorities.
+/// What a tilemap of RGSS2 or of RGSS3 has in place of the tileset, the autotiles and the
+/// priorities.
 ///
 /// Such a tilemap is drawn as two planes of 21 by 16 cells from the corner of its viewport's
-/// rectangle, the lower at z 0 and the upper at z 200, whatever its `visible` is: measured
-/// on the original runtime of VX.
+/// rectangle, the lower at z 0 and the upper at z 200. One of RGSS2 is drawn whatever its
+/// `visible` is, and one of RGSS3 only while it is visible: measured on the original
+/// runtimes of VX and of VX Ace.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct TilemapRgss2 {
+    /// The rule set the planes are drawn by: that of RGSS2 unless the tilemap was created
+    /// with [`Scene::create_tilemap_rgss3`](crate::Scene::create_tilemap_rgss3).
+    pub(crate) rules: PlaneRules,
     /// The nine sheets: A1 to A5, then B to E. A disposed bitmap draws nothing.
     pub bitmaps: [Option<BitmapId>; 9],
-    /// The flags of every tile number, shared like the map data. A tile whose entry has the
-    /// bit 0x10 is drawn by the upper plane when it lies in the third layer, and not at all
-    /// otherwise.
+    /// The flags of every tile number, shared like the map data: the passages table of
+    /// RGSS2, the flags table of RGSS3. In RGSS2 a tile whose entry has the bit 0x10 is
+    /// drawn by the upper plane when it lies in the third layer, and not at all otherwise;
+    /// in RGSS3 the lower plane draws it in the first two layers, and a tile of A2 whose
+    /// entry has the bit 0x80 is a table.
     pub passages: Option<SharedTable>,
     /// The ox and oy of the viewport as the last refresh of the tilemap found them, which
     /// are added to the tilemap's own. See [`Scene::refresh_tilemap`](crate::Scene).

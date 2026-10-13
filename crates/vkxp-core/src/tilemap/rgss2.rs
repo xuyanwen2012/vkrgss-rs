@@ -1,4 +1,4 @@
-//! Tilemaps of RGSS2: the two tilemap plane ops that draw one.
+//! Tilemaps of RGSS2 and of RGSS3: the two tilemap plane ops that draw one.
 //!
 //! As measured on the original runtime of VX, such a tilemap is two planes of 21 by 16
 //! cells among the elements of its viewport, the lower at z 0 and the upper at z 200, both
@@ -6,6 +6,10 @@
 //! tilemap's `visible` is. The planes start at the corner of the viewport's rectangle, less
 //! what the map is scrolled by within a cell; the ox and oy of the viewport only add to the
 //! tilemap's own, as the last refresh of the tilemap found them.
+//!
+//! As measured on the original runtime of VX Ace, a tilemap of RGSS3 is the same with two
+//! differences: its ops name the rule set of RGSS3, which reads the flags table where that
+//! of RGSS2 reads the passages table, and while its `visible` is false it has no planes.
 
 use vkxp_proto::tiles_rgss2 as tiles;
 use vkxp_proto::{BitmapId, Op, Plane, PlaneRules, TableId, TilemapPlane};
@@ -20,6 +24,7 @@ const UPPER_Z: i64 = 200;
 /// What this frame draws of a tilemap of RGSS2: what its two ops share.
 #[derive(Debug, Clone, PartialEq)]
 pub(super) struct Planes {
+    rules: PlaneRules,
     corner: (i32, i32),
     first_cell: (u32, u32),
     animation_step: u64,
@@ -32,7 +37,7 @@ pub(super) struct Planes {
 }
 
 impl Tilemap {
-    /// Finds what this frame draws of a tilemap of RGSS2 in `level` and sends its tables
+    /// Finds what this frame draws of a tilemap of RGSS2 or of RGSS3 in `level` and sends its tables
     /// where the compositor lacks them. Without a `level`, because its viewport is not
     /// drawn, and without cells in its map data it draws nothing.
     pub(super) fn refresh_planes(
@@ -46,6 +51,10 @@ impl Tilemap {
         let held = [&self.map_data, &rgss2.passages, &self.flash_data];
         for table in held.into_iter().flatten() {
             tables.hold(table, Role::Map);
+        }
+        // A hidden tilemap of RGSS3 keeps its tables and draws nothing.
+        if rgss2.rules == PlaneRules::Rgss3 && !self.visible {
+            return;
         }
         let (Some(level), Some(map)) = (level, &self.map_data) else {
             return;
@@ -70,6 +79,7 @@ impl Tilemap {
         let first = |origin: i64, size: i64| origin.div_euclid(tile).rem_euclid(size) as u32;
         let mut current = |table| tables.current(table, Role::Map);
         self.cache.planes = Some(Planes {
+            rules: rgss2.rules,
             corner: (
                 corner(level.dx + level.ox, x),
                 corner(level.dy + level.oy, y),
@@ -108,7 +118,7 @@ impl Assembly<'_> {
         self.ops.push(Op::TilemapPlane(TilemapPlane {
             clip: level.clip,
             plane,
-            rules: PlaneRules::Rgss2,
+            rules: planes.rules,
             corner: planes.corner,
             first_cell: planes.first_cell,
             animation_step: planes.animation_step,

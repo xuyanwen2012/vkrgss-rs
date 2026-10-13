@@ -1,6 +1,6 @@
-//! The scenarios of the tilemap of RGSS2 of `specs/core-scene/spec.md`.
+//! The scenarios of the tilemaps of RGSS2 and of RGSS3 of `specs/core-scene/spec.md`.
 
-use vkxp_proto::{FramePacket, Op, Plane, TableDelta, TilemapPlane};
+use vkxp_proto::{FramePacket, Op, Plane, PlaneRules, TableDelta, TilemapPlane};
 
 use crate::extract::testing::*;
 use crate::{Rect, SharedTable, Table, TilemapId, ViewportId};
@@ -296,4 +296,201 @@ fn a_tilemap_of_rgss1_stays_as_it_is() {
     stage.scene.refresh_tilemap(id).unwrap();
     let packet = stage.scene.extract(&mut stage.bitmaps);
     assert!(planes(&packet).is_empty());
+}
+
+/// Scenario "Rule set of RGSS2".
+#[test]
+fn a_tilemap_of_rgss2_names_the_rule_set_of_rgss2() {
+    let mut stage = Stage::sized(96, 64);
+    tilemap(&mut stage, None);
+    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let rules: Vec<PlaneRules> = planes(&packet).iter().map(|plane| plane.rules).collect();
+    assert_eq!(rules, [PlaneRules::Rgss2; 2]);
+}
+
+/// A tilemap of RGSS3 with a map of `width` by `height` cells and four layers, a flags table
+/// of 8192 elements and one sheet of one colour in every slot.
+fn tilemap_rgss3(
+    stage: &mut Stage,
+    viewport: Option<ViewportId>,
+    (width, height): (i32, i32),
+) -> (TilemapId, SharedTable, SharedTable) {
+    let sheet = stage.solid(512, 512, GREEN);
+    let map = SharedTable::new(Table::new_3d(width, height, 4).unwrap());
+    let flags = SharedTable::new(Table::new(8192).unwrap());
+    let id = stage.scene.create_tilemap_rgss3(viewport).unwrap();
+    let tilemap = stage.scene.tilemap_mut(id).unwrap();
+    let rgss2 = tilemap.rgss2.as_mut().unwrap();
+    rgss2.bitmaps = [Some(sheet); 9];
+    rgss2.passages = Some(flags.clone());
+    tilemap.map_data = Some(map.clone());
+    stage.scene.refresh_tilemap(id).unwrap();
+    (id, map, flags)
+}
+
+/// A sprite of one colour over the whole screen at `z`.
+fn cover(stage: &mut Stage, size: (u32, u32), z: i32, pixel: vkxp_pixel::Rgba) {
+    let bitmap = stage.solid(size.0, size.1, pixel);
+    let sprite = stage.scene.create_sprite(None).unwrap();
+    let sprite_mut = stage.scene.sprite_mut(sprite).unwrap();
+    sprite_mut.set_bitmap(Some(bitmap), &stage.bitmaps);
+    stage.scene.set_sprite_z(sprite, z).unwrap();
+}
+
+/// Scenario "Two planes of the rule set of RGSS3".
+#[test]
+fn a_tilemap_of_rgss3_is_two_planes_of_the_rule_set_of_rgss3() {
+    let mut stage = Stage::sized(128, 96);
+    let (_, map, _) = tilemap_rgss3(&mut stage, None, (4, 3));
+    map.set(3, 2, 3, 15);
+    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let [lower, upper] = planes(&packet)[..] else {
+        panic!("two planes");
+    };
+    assert_eq!((lower.plane, upper.plane), (Plane::Lower, Plane::Upper));
+    assert_eq!(
+        (lower.rules, upper.rules),
+        (PlaneRules::Rgss3, PlaneRules::Rgss3)
+    );
+    assert!(lower.passages.is_some());
+    assert_eq!((lower.map, lower.passages), (upper.map, upper.passages));
+    let sent = |id| {
+        let found = packet.tables.iter().find_map(|delta| match delta {
+            TableDelta::Set {
+                id: set,
+                xsize,
+                ysize,
+                zsize,
+                data,
+            } if *set == id => Some(((*xsize, *ysize, *zsize), data.clone())),
+            _ => None,
+        });
+        found.expect("the table is sent")
+    };
+    let (sizes, data) = sent(lower.map);
+    assert_eq!((sizes, data.len()), ((4, 3, 4), 48));
+    assert_eq!((data[47], data[..47].iter().all(|&e| e == 0)), (15, true));
+    assert_eq!(sent(lower.passages.unwrap()).0, (8192, 1, 1));
+}
+
+/// Scenario "Star tiles among sprites, measured on the original".
+#[test]
+fn a_star_tile_of_rgss3_is_above_a_sprite_only_from_the_third_layer() {
+    let mut stage = Stage::sized(96, 64);
+    let (_, map, flags) = tilemap_rgss3(&mut stage, None, (4, 3));
+    map.set(0, 0, 2, 300);
+    map.set(1, 0, 0, 300);
+    flags.set(300, 0, 0, 0x10);
+    for (z, pixel) in [(100, RED), (300, BLUE)] {
+        cover(&mut stage, (96, 64), z, pixel);
+        let packet = stage.scene.extract(&mut stage.bitmaps);
+        let frame = stage.render(&packet).unwrap();
+        // The first sprite is under the tile of the third layer and over the tile of the
+        // first; the second is over both.
+        let expected = if z == 100 { [GREEN, RED] } else { [BLUE, BLUE] };
+        assert_eq!([frame.pixel(5, 5), frame.pixel(40, 5)], expected);
+    }
+}
+
+/// Scenario "A shadow from layer 3, measured on the original".
+#[test]
+fn the_fourth_layer_of_rgss3_darkens_what_lies_under_the_tilemap() {
+    let mut stage = Stage::sized(128, 96);
+    cover(&mut stage, (128, 96), -10, [200, 200, 200, 255]);
+    let (_, map, _) = tilemap_rgss3(&mut stage, None, (4, 3));
+    map.set(1, 1, 3, 15);
+    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let frame = stage.render(&packet).unwrap();
+    for y in 0..96 {
+        for x in 0..128 {
+            let level = if (32..64).contains(&x) && (32..64).contains(&y) {
+                99
+            } else {
+                200
+            };
+            assert_eq!(frame.pixel(x, y), [level, level, level, 255], "({x}, {y})");
+        }
+    }
+}
+
+/// Scenario "Counter and scrolling as RGSS2".
+#[test]
+fn a_tilemap_of_rgss3_scrolls_and_counts_as_one_of_rgss2() {
+    let mut stage = Stage::sized(96, 64);
+    let (id, _, _) = tilemap_rgss3(&mut stage, None, (5, 4));
+    let tilemap = stage.scene.tilemap_mut(id).unwrap();
+    tilemap.ox = -40;
+    for _ in 0..30 {
+        tilemap.update();
+    }
+    stage.scene.refresh_tilemap(id).unwrap();
+    let packet = stage.scene.extract(&mut stage.bitmaps);
+    for plane in planes(&packet) {
+        assert_eq!((plane.first_cell, plane.corner), ((3, 0), (-24, 0)));
+        assert_eq!(plane.animation_step, 1);
+    }
+}
+
+/// Scenario "Latch as RGSS2, measured on the original".
+#[test]
+fn another_viewport_is_not_a_refresh_of_a_tilemap_of_rgss3() {
+    let mut stage = Stage::sized(200, 150);
+    let old = stage.scene.create_viewport(Rect::new(0, 0, 100, 80));
+    let new = stage.scene.create_viewport(Rect::new(40, 30, 100, 80));
+    let (old, new) = (old.unwrap(), new.unwrap());
+    stage.scene.viewport_mut(new).unwrap().ox = 16;
+    let (id, _, _) = tilemap_rgss3(&mut stage, Some(old), (5, 4));
+    stage.scene.set_tilemap_viewport(id, Some(new)).unwrap();
+    let corner = |stage: &mut Stage| planes(&stage.scene.extract(&mut stage.bitmaps))[0].corner;
+    assert_eq!(corner(&mut stage), (40, 30));
+    stage.scene.refresh_tilemap(id).unwrap();
+    assert_eq!(corner(&mut stage), (24, 30));
+}
+
+/// Scenarios "Hidden, measured on the original" and "Back, measured on the original".
+#[test]
+fn a_hidden_tilemap_of_rgss3_has_no_planes_and_counts_on() {
+    let mut stage = Stage::sized(128, 96);
+    cover(&mut stage, (128, 96), -10, [200, 200, 200, 255]);
+    let (id, map, flags) = tilemap_rgss3(&mut stage, None, (4, 3));
+    map.set(0, 0, 0, 37);
+    map.set(1, 0, 2, 300);
+    flags.set(300, 0, 0, 0x10);
+    map.set(2, 0, 3, 15);
+    let flash = SharedTable::new(Table::new_2d(4, 3).unwrap());
+    flash.set(3, 0, 0, 0xf00);
+    stage.scene.tilemap_mut(id).unwrap().flash_data = Some(flash);
+    stage.scene.refresh_tilemap(id).unwrap();
+
+    let shown = stage.scene.extract(&mut stage.bitmaps);
+    assert_eq!(planes(&shown).len(), 2);
+    let frame = stage.render(&shown).unwrap();
+    let cells = [5, 40, 70, 100].map(|x| frame.pixel(x, 5));
+    assert_eq!(
+        cells,
+        [GREEN, GREEN, [99, 99, 99, 255], [255, 200, 200, 255]]
+    );
+
+    stage.scene.tilemap_mut(id).unwrap().visible = false;
+    stage.scene.refresh_tilemap(id).unwrap();
+    let hidden = stage.scene.extract(&mut stage.bitmaps);
+    assert!(planes(&hidden).is_empty());
+    // The tables stay with the compositor.
+    assert!(hidden.tables.is_empty());
+    let frame = stage.render(&hidden).unwrap();
+    assert_eq!(
+        [5, 40, 70, 100].map(|x| frame.pixel(x, 5)),
+        [[200, 200, 200, 255]; 4]
+    );
+
+    let tilemap = stage.scene.tilemap_mut(id).unwrap();
+    for _ in 0..30 {
+        tilemap.update();
+    }
+    tilemap.visible = true;
+    stage.scene.refresh_tilemap(id).unwrap();
+    let back = stage.scene.extract(&mut stage.bitmaps);
+    let steps: Vec<u64> = planes(&back).iter().map(|p| p.animation_step).collect();
+    assert_eq!(steps, [1, 1]);
+    assert!(back.tables.is_empty());
 }

@@ -11,7 +11,7 @@
 
 ## 3. Scene
 
-- [ ] 3.1 The tilemap of RGSS3 in the scene: its creation, its rule set in the plane ops, no plane op while it is not visible. Verify: the scenarios of `specs/core-scene/spec.md`; no file of `crates/vkxp-binding` is edited beyond what "Implementation notes" of `design.md` allows; `cargo test -p vkxp-core --locked` and `cargo test -p vkxp-binding --locked` pass.
+- [x] 3.1 The tilemap of RGSS3 in the scene: its creation, its rule set in the plane ops, no plane op while it is not visible. Verify: the scenarios of `specs/core-scene/spec.md`; no file of `crates/vkxp-binding` is edited beyond what "Implementation notes" of `design.md` allows; `cargo test -p vkxp-core --locked` and `cargo test -p vkxp-binding --locked` pass.
 
 ## 4. Vulkan
 

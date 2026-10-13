@@ -1,7 +1,7 @@
 //! `Scene`: the arena that owns every sprite, viewport, window, plane and tilemap.
 
 pub use vkxp_proto::MAX_LOGICAL_DIMENSION;
-use vkxp_proto::{FrameRate, Size};
+use vkxp_proto::{FrameRate, PlaneRules, Size};
 
 use crate::tilemap::SentTables;
 use crate::{
@@ -420,18 +420,33 @@ impl Scene {
         Ok(id)
     }
 
+    /// Creates a tilemap of RGSS3, in `viewport` or directly on the screen: one of RGSS2
+    /// whose planes are drawn by the rule set of RGSS3, from a map of four layers and a
+    /// flags table in the place of the passages table, and only while it is visible.
+    pub fn create_tilemap_rgss3(
+        &mut self,
+        viewport: Option<ViewportId>,
+    ) -> Result<TilemapId, SceneError> {
+        let id = self.create_tilemap_rgss2(viewport)?;
+        if let Some(rgss2) = &mut self.tilemap_mut(id)?.rgss2 {
+            rgss2.rules = PlaneRules::Rgss3;
+        }
+        Ok(id)
+    }
+
     /// The ox and oy of a viewport; 0 without one and for a disposed one.
     fn viewport_origin(&self, viewport: Option<ViewportId>) -> (i32, i32) {
         let viewport = viewport.and_then(|id| self.viewports.get(id.0));
         viewport.map_or((0, 0), |viewport| (viewport.ox, viewport.oy))
     }
 
-    /// Refreshes a tilemap of RGSS2: once it has map data, the ox and oy of its viewport as
+    /// Refreshes a tilemap of RGSS2 or of RGSS3: once it has map data, the ox and oy of its viewport as
     /// they are now are the ones added to its own until the next refresh. A tilemap of RGSS1
     /// has no such state.
     ///
-    /// As measured on the original runtime of VX, a tilemap is refreshed by a write of `ox`,
-    /// `oy`, `map_data`, `flash_data`, `passages` or a slot of `bitmaps`, by a write of
+    /// As measured on the original runtimes of VX and of VX Ace, a tilemap is refreshed by a
+    /// write of `ox`, `oy`, `map_data`, `flash_data`, `passages` (`flags` in RGSS3) or a slot
+    /// of `bitmaps`, by a write of
     /// `visible` that changes it, by `update`, and when the ox or oy of its viewport changes,
     /// but not when it is given another viewport. The caller refreshes after the writes and
     /// the update; for the change of a viewport see [`Scene::notice_viewport_origins`].

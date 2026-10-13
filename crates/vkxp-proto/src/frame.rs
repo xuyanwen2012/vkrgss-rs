@@ -483,9 +483,10 @@ pub enum Plane {
 }
 
 /// The rule set a [`TilemapPlane`] is evaluated by.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PlaneRules {
     /// The tilemap of RGSS2, as the documentation of [`TilemapPlane`] gives it.
+    #[default]
     Rgss2,
     /// The tilemap of RGSS3: what [`TilemapPlane`] says of this rule set, with
     /// [`tiles_rgss3`].
