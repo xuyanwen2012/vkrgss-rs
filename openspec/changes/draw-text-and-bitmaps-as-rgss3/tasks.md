@@ -19,7 +19,7 @@
 
 ## 4. Version of the library
 
-- [ ] 4.1 The version of a DLL from its bytes in `vkxp-vfs`, tested on bytes built in the test. Verify: the scenarios of "Version of the library of RGSS3"; no file of a game or of `ref/` is read by a test; `cargo test -p vkxp-vfs --locked` passes.
+- [x] 4.1 The version of a DLL from its bytes in `vkxp-vfs`, tested on bytes built in the test. Verify: the scenarios of "Version of the library of RGSS3"; no file of a game or of `ref/` is read by a test; `cargo test -p vkxp-vfs --locked` passes.
 
 ## 5. Decisions
 

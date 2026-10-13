@@ -11,6 +11,8 @@
 //!   run-time packages. Its text is UTF-8 or one of the legacy encodings in [`Encoding`].
 //! - [`Runtime`] is the RGSS a game was made for; [`Runtime::detect`] tells it from the
 //!   configuration file. The names of the run-time packages and of the archive follow it.
+//! - [`LibraryVersion`] is the version of a runtime DLL, read from the bytes of the file,
+//!   because the name of the file does not tell it.
 //! - [`resolve_rtps`] maps those names to directories through a table the caller supplies,
 //!   standing in for the Windows registry.
 //! - [`GameFiles`] resolves script-style paths against the game directory and then the
@@ -66,11 +68,13 @@ mod dir;
 mod error;
 mod files;
 mod ini;
+mod library_version;
 mod rtp;
 mod runtime;
 
 pub use error::VfsError;
 pub use files::{FileKind, GameFiles};
 pub use ini::{Encoding, GameIni};
+pub use library_version::LibraryVersion;
 pub use rtp::resolve_rtps;
 pub use runtime::Runtime;
