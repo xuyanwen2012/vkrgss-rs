@@ -318,7 +318,7 @@ fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<boo
         }
         GuestForm::Process => {
             // The child sets the guest up itself; this process has no interpreter.
-            let process = GuestProcess::start(seed)?;
+            let process = GuestProcess::start(seed, inputs.runtime)?;
             let (done, outcome) = mpsc::channel();
             let guest = move |link: GuestEnd| {
                 let _ = done.send(process.relay(link));

@@ -9,6 +9,7 @@
 //!
 //! - [`role`]: the hidden option that names the program's socket and carries the seed.
 //! - [`Attached`]: the attachment to that socket.
+//! - [`hello`]: the statement of the version that every connection of a guest starts with.
 //! - [`copier`]: the copies of the process that are its states.
 //! - [`sandbox`]: the restriction a guest process puts on itself.
 //! - [`signals`]: the signal settings of a guest.
@@ -26,7 +27,7 @@
 //! 2. The executable opens the game's files, enters the game directory, calls
 //!    [`signals::block_virtual_timer`] while the main thread is the only one, and starts its
 //!    interpreter.
-//! 3. [`Attached::connect`].
+//! 3. [`Attached::connect`], with the package version of the executable.
 //! 4. Unless the game may start processes: [`Attached::copier`], which the executable gives
 //!    its binding.
 //! 5. [`Attached::into_link`], which the game is played over.
@@ -41,6 +42,7 @@
 
 #[allow(unsafe_code)]
 pub mod copier;
+pub mod hello;
 pub mod role;
 pub mod sandbox;
 #[allow(unsafe_code)]
@@ -67,9 +69,24 @@ pub enum AttachError {
         /// What the system said.
         source: std::io::Error,
     },
+    /// The statement of the version could not be written.
+    #[error("cannot attach to the parent process")]
+    Statement(#[source] std::io::Error),
     /// The first message could not be written.
     #[error("cannot attach to the parent process")]
     Attach(#[source] FramingError),
+}
+
+/// Opens a connection of a guest process to the program that listens on `socket`, and
+/// states `version` on it. Every connection of a guest process and of its copies is opened
+/// here; the first message is the caller's to write.
+fn open(socket: &Path, version: &str) -> Result<UnixStream, AttachError> {
+    let mut stream = UnixStream::connect(socket).map_err(|source| AttachError::Connect {
+        socket: socket.to_owned(),
+        source,
+    })?;
+    hello::write(&mut stream, version).map_err(AttachError::Statement)?;
+    Ok(stream)
 }
 
 /// A guest process that has attached to its program, and its connection.
@@ -77,17 +94,14 @@ pub enum AttachError {
 pub struct Attached {
     stream: UnixStream,
     socket: PathBuf,
+    version: String,
 }
 
 impl Attached {
-    /// Connects to the socket of `role` and attaches as the guest process the program has
-    /// started.
-    pub fn connect(role: &GuestRole) -> Result<Attached, AttachError> {
-        let mut stream =
-            UnixStream::connect(&role.socket).map_err(|source| AttachError::Connect {
-                socket: role.socket.clone(),
-                source,
-            })?;
+    /// Connects to the socket of `role`, states `version`, which is the package version of
+    /// the executable, and attaches as the guest process the program has started.
+    pub fn connect(role: &GuestRole, version: &str) -> Result<Attached, AttachError> {
+        let mut stream = open(&role.socket, version)?;
         let attach = GuestToHost::Attach {
             pid: std::process::id(),
             parked: None,
@@ -96,6 +110,7 @@ impl Attached {
         Ok(Attached {
             stream,
             socket: role.socket.clone(),
+            version: version.to_owned(),
         })
     }
 
@@ -106,7 +121,12 @@ impl Attached {
     /// executable needs after a `fork`.
     pub fn copier(&self, restart_timer: fn()) -> ForkCopier {
         signals::ignore_children();
-        ForkCopier::new(self.socket.clone(), &self.stream, restart_timer)
+        ForkCopier::new(
+            self.socket.clone(),
+            self.version.clone(),
+            &self.stream,
+            restart_timer,
+        )
     }
 
     /// The link the game is played over. The thread that plays reads and writes the socket
@@ -153,7 +173,7 @@ mod tests {
             seed: 0,
             socket: dir.join("guest.sock"),
         };
-        let error = Attached::connect(&role).unwrap_err();
+        let error = Attached::connect(&role, "0.2.0").unwrap_err();
         assert_eq!(
             error.to_string(),
             format!(

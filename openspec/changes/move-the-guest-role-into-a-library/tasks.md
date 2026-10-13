@@ -13,8 +13,8 @@
 
 ## 3. Version and executable
 
-- [ ] 3.1 The statement of the version: written by `Attached::connect` and by a copy before `Attach`, read and checked by `attached` in `process.rs`; the relay tests that attach by hand write it. Verify: scenarios "Other version", "No statement" and "Statement and message in one write" as unit tests over a pair of sockets; scenario "Same version" with `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` (the tests of states in `end_to_end.rs`, unchanged).
-- [ ] 3.2 `GuestProcess::start` takes the runtime and asks the function of `design.md` for the executable. `docs/running.md`, section "Guest process": the statement of the version. Verify: scenario "XP and VX" as a unit test; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` passes.
+- [x] 3.1 The statement of the version: written by `Attached::connect` and by a copy before `Attach`, read and checked by `attached` in `process.rs`; the relay tests that attach by hand write it. Verify: scenarios "Other version", "No statement" and "Statement and message in one write" as unit tests over a pair of sockets; scenario "Same version" with `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` (the tests of states in `end_to_end.rs`, unchanged).
+- [x] 3.2 `GuestProcess::start` takes the runtime and asks the function of `design.md` for the executable. `docs/running.md`, section "Guest process": the statement of the version. Verify: scenario "XP and VX" as a unit test; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` passes.
 
 ## 4. Integration check
 

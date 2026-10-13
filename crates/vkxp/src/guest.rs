@@ -339,7 +339,7 @@ pub(crate) fn run_guest(
     let runtime = inputs.runtime;
     let mut config = guest_config(&game_dir, settings, inputs, role.seed)?;
     let interpreter = start_interpreter(runtime)?;
-    let attached = Attached::connect(role)?;
+    let attached = Attached::connect(role, env!("CARGO_PKG_VERSION"))?;
     // The functions that start processes need the children of this process to be waited
     // for, and states need them not to be: with those functions there are no states.
     if !settings.process_functions {

@@ -502,9 +502,11 @@ form too; the command line comes before the environment and the environment befo
 files. Any value but `thread` and `process` is an error.
 
 The program starts itself again for the guest, with its own arguments, and the two exchange
-the messages of the protocol over a Unix stream socket in a directory only the user can
-enter, below `$XDG_RUNTIME_DIR` or, without that variable, below the temporary directory. The
-directory is removed when the run ends; one that a run ended by a signal left behind is
+the messages of the protocol over a Unix stream socket. A guest process, and each copy of it
+that is a state, first states the version of its executable on its connection, in one line,
+and the program refuses one of another version than its own with an error that names both.
+The socket is in a directory only the user can enter, below `$XDG_RUNTIME_DIR` or, without
+that variable, below the temporary directory. The directory is removed when the run ends; one that a run ended by a signal left behind is
 removed the next time a guest process starts. The guest process opens no window, no Vulkan device
 and no audio device.
 

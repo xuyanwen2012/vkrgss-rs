@@ -3,8 +3,8 @@
 //! This is platform code for Linux. A guest process that is asked to save a state calls
 //! `fork` on its interpreter thread, in a wait for a tick ([`ForkCopier::park`], which the
 //! executable calls from the copier it gives its binding). The process that asked goes on. The copy connects to
-//! the socket of the program by itself, says with its first message which slot it is the
-//! state of, and waits: it is parked. A parked copy that is told to resume first leaves a
+//! the socket of the program by itself, states its version as every guest does, says with
+//! its first message which slot it is the state of, and waits: it is parked. A parked copy that is told to resume first leaves a
 //! copy of itself behind in the same way, so that the slot can be loaded again, and then
 //! comes back with its connection as the new link ([`Parked::Resumed`]). One whose connection ends
 //! exits at once.
@@ -46,6 +46,8 @@ pub struct ParkFailed;
 pub struct ForkCopier {
     /// The socket of the program, which a copy connects to.
     socket: PathBuf,
+    /// The version of the executable, which a copy states on its connection.
+    version: String,
     /// The descriptor that the link of the binding owns in this process.
     connection: AtomicI32,
     /// What a copy calls to get the timer of the interpreter's threads back.
@@ -64,9 +66,15 @@ impl ForkCopier {
     /// A copier for the guest whose link is `connection`, which was made by connecting to
     /// `socket`. A copy calls `restart_timer` on its one thread, the interpreter's, before
     /// it connects.
-    pub(crate) fn new(socket: PathBuf, connection: &UnixStream, restart_timer: fn()) -> ForkCopier {
+    pub(crate) fn new(
+        socket: PathBuf,
+        version: String,
+        connection: &UnixStream,
+        restart_timer: fn(),
+    ) -> ForkCopier {
         ForkCopier {
             socket,
+            version,
             connection: AtomicI32::new(connection.as_raw_fd()),
             restart_timer,
         }
@@ -123,7 +131,7 @@ impl ForkCopier {
         // On the interpreter thread, as the interpreter itself restarts its timer after a
         // `fork`: timers are not inherited.
         (self.restart_timer)();
-        let mut stream = UnixStream::connect(&self.socket).ok()?;
+        let mut stream = crate::open(&self.socket, &self.version).ok()?;
         let inherited = self.connection.load(Ordering::SeqCst);
         // SAFETY: both descriptors are open in this process: `stream` is alive, and
         // `inherited` is owned by the link of the binding, which closes it when it takes

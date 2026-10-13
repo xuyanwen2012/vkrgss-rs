@@ -2,7 +2,7 @@
 //!
 //! The program starts itself again with the hidden option [`GUEST_ROLE`], which names a Unix
 //! stream socket the parent listens on, in a directory only the user can enter, and carries
-//! the seed of the run. The child settles its configuration from the same arguments, sets
+//! the seed of the run; the option and its value are those of `vkxp-guest`. The child settles its configuration from the same arguments, sets
 //! the game up as the guest thread of the other form does, connects, and plays the game with
 //! the socket as its link.
 //!
@@ -15,8 +15,9 @@
 //!
 //! # States
 //!
-//! A state is a copy of the guest process that is parked (`copier`). Every guest process
-//! opens its connection with `Attach`, a parked copy with the slot it is the state of, and
+//! A state is a copy of the guest process that is parked (the copier of `vkxp-guest`). Every
+//! guest process opens its connection with the statement of its version, which has to be the
+//! version of the program, and then `Attach`, a parked copy with the slot it is the state of, and
 //! the relay keeps the connection of the newest copy of each slot. A request to load a
 //! state does not reach a guest: the relay ends the process of the running guest, tells the
 //! parked copy of the slot to resume, and hands on what that one sends from then on. The
@@ -36,10 +37,12 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
+use vkxp_guest::hello;
 use vkxp_guest::role::{GUEST_ROLE, GuestRole};
 use vkxp_proto::framing::{read_message, write_message};
 use vkxp_proto::link::{GuestEnd, GuestSender};
 use vkxp_proto::{GuestToHost, HostToGuest};
+use vkxp_vfs::Runtime;
 
 use crate::GUEST_WAIT;
 
@@ -55,6 +58,9 @@ const GONE_WAIT: Duration = Duration::from_secs(2);
 
 /// How often a wait looks at the guest process.
 const POLL: Duration = Duration::from_millis(5);
+
+/// The version of the program, which a guest process has to state.
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The number of state slots.
 const SLOTS: usize = 10;
@@ -164,15 +170,25 @@ fn readable(descriptor: BorrowedFd<'_>) -> bool {
     wait_readable([Some(descriptor)], Some(Duration::ZERO))[0]
 }
 
-/// Takes the first message of a process that has connected: what it is.
+/// Takes the statement of the version and the first message of a process that has
+/// connected: what it is. One of another version than the program's is refused.
 fn attached(stream: UnixStream) -> Result<(Attached, Option<u8>)> {
     stream.set_nonblocking(false)?;
     stream.set_read_timeout(Some(ATTACH_WAIT))?;
+    hello::read(&mut &stream, VERSION)?;
     let first = read_message::<GuestToHost>(&mut &stream)?;
     stream.set_read_timeout(None)?;
     match first {
         Some(GuestToHost::Attach { pid, parked }) => Ok((Attached { stream, pid }, parked)),
         other => bail!("a process connected and did not attach: its first message is {other:?}"),
+    }
+}
+
+/// The executable the program starts as the guest process of a game of `runtime`: the
+/// program itself, for every runtime.
+fn guest_executable(runtime: Runtime) -> std::io::Result<PathBuf> {
+    match runtime {
+        Runtime::Rgss1 | Runtime::Rgss2 | Runtime::Rgss3 => std::env::current_exe(),
     }
 }
 
@@ -187,11 +203,13 @@ pub(crate) struct GuestProcess {
 }
 
 impl GuestProcess {
-    /// Starts the guest process of a run with this seed and waits for it to connect. To be
+    /// Starts the guest process of a run with this seed, for a game of `runtime`, and waits
+    /// for it to connect; one that states another version than the program's fails the
+    /// start. To be
     /// called on the main thread, before the working directory changes: the child reads the
     /// arguments of this process as this process did, and it is ended by the kernel when
     /// the thread that started it ends.
-    pub(crate) fn start(seed: u64) -> Result<GuestProcess> {
+    pub(crate) fn start(seed: u64, runtime: Runtime) -> Result<GuestProcess> {
         let variable = std::env::var_os("XDG_RUNTIME_DIR").filter(|value| !value.is_empty());
         let base = variable.map_or_else(std::env::temp_dir, PathBuf::from);
         sweep(&base);
@@ -217,7 +235,7 @@ impl GuestProcess {
         let role = GuestRole { seed, socket }
             .value()
             .map_err(|error| remove(error.into()))?;
-        let child = std::env::current_exe()
+        let child = guest_executable(runtime)
             .and_then(|program| {
                 Command::new(program)
                     .args(std::env::args_os().skip(1))
@@ -735,12 +753,79 @@ mod tests {
     /// A copy that attaches as the state of `slot` under the number of `process`.
     fn park(dir: &std::path::Path, process: &Child, slot: u8) -> UnixStream {
         let mut stream = UnixStream::connect(dir.join("guest.sock")).unwrap();
+        hello::write(&mut stream, VERSION).unwrap();
         let attach = GuestToHost::Attach {
             pid: process.id(),
             parked: Some(slot),
         };
         write_message(&mut stream, &attach).unwrap();
         stream
+    }
+
+    /// The attachment of a process `pid` that is not parked, framed.
+    fn attachment(pid: u32) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        let attach = GuestToHost::Attach { pid, parked: None };
+        write_message(&mut bytes, &attach).unwrap();
+        bytes
+    }
+
+    /// Why what was written to one side of a pair of sockets is refused at the other.
+    fn refused(written: &[u8]) -> String {
+        use std::io::Write;
+
+        let (mut guest, program) = UnixStream::pair().unwrap();
+        guest.write_all(written).unwrap();
+        match attached(program) {
+            Ok((attached, _)) => panic!("process {} attached", attached.pid),
+            Err(error) => format!("{error:#}"),
+        }
+    }
+
+    /// Scenario "Other version".
+    #[test]
+    fn a_guest_process_of_another_version_is_refused_naming_both() {
+        let mut written = Vec::new();
+        hello::write(&mut written, "0.0.0").unwrap();
+        written.extend(attachment(7));
+        let error = refused(&written);
+        assert!(error.contains("0.0.0"), "{error}");
+        assert!(error.contains(VERSION), "{error}");
+    }
+
+    /// Scenario "No statement".
+    #[test]
+    fn a_process_that_states_no_version_is_refused_naming_the_version_of_the_program() {
+        let error = refused(&attachment(7));
+        assert!(error.contains(VERSION), "{error}");
+        assert!(error.contains("without stating"), "{error}");
+    }
+
+    /// Scenario "Statement and message in one write".
+    #[test]
+    fn a_statement_and_an_attachment_written_at_once_are_both_read() {
+        use std::io::Write;
+
+        let (mut guest, program) = UnixStream::pair().unwrap();
+        let mut written = Vec::new();
+        hello::write(&mut written, VERSION).unwrap();
+        written.extend(attachment(7));
+        // What a guest sends after it has attached is not taken with them.
+        write_message(&mut written, &GuestToHost::Freeze).unwrap();
+        guest.write_all(&written).unwrap();
+        let (attached, parked) = attached(program).unwrap_or_else(|error| panic!("{error:#}"));
+        assert_eq!((attached.pid, parked), (7, None));
+        let next = read_message::<GuestToHost>(&mut &attached.stream).unwrap();
+        assert_eq!(next, Some(GuestToHost::Freeze));
+    }
+
+    /// Scenario "XP and VX".
+    #[test]
+    fn the_guest_executable_of_xp_and_vx_is_the_program_itself() {
+        let program = std::env::current_exe().unwrap();
+        for runtime in [Runtime::Rgss1, Runtime::Rgss2] {
+            assert_eq!(guest_executable(runtime).unwrap(), program);
+        }
     }
 
     /// Scenario "Left by a killed run".
