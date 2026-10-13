@@ -482,9 +482,21 @@ pub enum Plane {
     Upper,
 }
 
-/// Draws, inside `clip`, one plane of a tilemap of RGSS2: [`tiles_rgss2::PLANE_COLUMNS`] by
+/// The rule set a [`TilemapPlane`] is evaluated by.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum PlaneRules {
+    /// The tilemap of RGSS2, as the documentation of [`TilemapPlane`] gives it.
+    Rgss2,
+    /// The tilemap of RGSS3: what [`TilemapPlane`] says of this rule set, with
+    /// [`tiles_rgss3`].
+    Rgss3,
+}
+
+/// Draws, inside `clip`, one plane of a tilemap of RGSS2 or RGSS3:
+/// [`tiles_rgss2::PLANE_COLUMNS`] by
 /// [`tiles_rgss2::PLANE_ROWS`] cells of 32 by 32 pixels whose top-left pixel is the screen
-/// pixel `corner`. Nothing is drawn outside the plane.
+/// pixel `corner`. Nothing is drawn outside the plane. The steps below are those of
+/// [`PlaneRules::Rgss2`]; what [`PlaneRules::Rgss3`] changes follows them.
 ///
 /// The cell at column `c` and row `r` of the plane shows the cell
 /// (`(first_cell.0 + c) mod xsize`, `(first_cell.1 + r) mod ysize`) of `map`: the map repeats
@@ -518,10 +530,24 @@ pub enum Plane {
 /// A texel is blended over the pixel as in [`BlendMode::Window`] at opacity 255, and as in
 /// [`BlendMode::Normal`] where [`TilemapPlane::is_tail`] says so. A texel outside its sheet
 /// and a tile whose sheet is absent draw nothing.
+///
+/// With [`PlaneRules::Rgss3`], `passages` names the flags table and a tile is resolved by
+/// [`crate::tiles_rgss3::tile`] with its entry of that table, so that a table is a tile of A2 whose
+/// entry has the bit [`crate::tiles_rgss3::TABLE`]. The map has [`crate::tiles_rgss3::LAYERS`] layers and
+/// layers beyond the fourth are not read. The upper plane draws the tiles of the third layer
+/// whose entry has the bit [`tiles_rgss2::STAR`] and the lower plane every other tile, those
+/// of the first two layers with the bit among them. Step 3 is replaced by this, in the lower
+/// plane only, after the second layer and before the third: [`tiles_rgss2::shadow`] on each
+/// colour channel where [`crate::tiles_rgss3::shadow_covers`] says so of the cell's element of the
+/// layer [`crate::tiles_rgss3::SHADOW_LAYER`]; then, in the first eight rows of a cell whose tile
+/// of the second layer is no table and whose tile of the first layer is no
+/// [`tiles_rgss2::is_wall`], [`tiles_rgss2::Tile::edge`] of the tile of the second layer of
+/// the map cell above, which is not wrapped.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TilemapPlane {
     pub clip: Rect,
     pub plane: Plane,
+    pub rules: PlaneRules,
     /// The screen pixel of the plane's top-left pixel.
     pub corner: (i32, i32),
     /// The cell of the map in the plane's first column and row.
@@ -532,7 +558,8 @@ pub struct TilemapPlane {
     pub flash_level: u8,
     /// The tile numbers: one element per cell and layer of the map.
     pub map: TableId,
-    /// The flags of each tile number.
+    /// The flags of each tile number: the passages table of RGSS2, the flags table of
+    /// RGSS3.
     pub passages: Option<TableId>,
     /// The flash entry of each cell.
     pub flash: Option<TableId>,
@@ -630,6 +657,7 @@ mod tests {
                 Op::TilemapPlane(TilemapPlane {
                     clip,
                     plane: Plane::Upper,
+                    rules: PlaneRules::Rgss2,
                     corner: (0, 0),
                     first_cell: (0, 0),
                     animation_step: 0,
@@ -861,6 +889,7 @@ mod tests {
         let plane = |clip| TilemapPlane {
             clip,
             plane: Plane::Lower,
+            rules: PlaneRules::Rgss2,
             corner: (0, 0),
             first_cell: (0, 0),
             animation_step: 0,

@@ -12,8 +12,8 @@
 
 use vkxp_proto::tiles_rgss2 as tiles;
 use vkxp_proto::{
-    BitmapDelta, BitmapId, BlendMode, Color, FramePacket, FrameRate, GuestToHost, Op, Plane, Quad,
-    Rect, RectEffect, Sampling, Size, TableDelta, TableId, TilemapPlane, Tone,
+    BitmapDelta, BitmapId, BlendMode, Color, FramePacket, FrameRate, GuestToHost, Op, Plane,
+    PlaneRules, Quad, Rect, RectEffect, Sampling, Size, TableDelta, TableId, TilemapPlane, Tone,
 };
 
 /// Logical screen size of every frame: that of VX.
@@ -90,6 +90,7 @@ pub fn tilemap_plane(plane: Plane, map: TableId) -> TilemapPlane {
     TilemapPlane {
         clip: Rect::from_size(SIZE),
         plane,
+        rules: PlaneRules::Rgss2,
         corner: (0, 0),
         first_cell: (0, 0),
         animation_step: 0,
@@ -557,6 +558,7 @@ impl Capture {
                 self.ops.push(Op::TilemapPlane(TilemapPlane {
                     clip,
                     plane,
+                    rules: PlaneRules::Rgss2,
                     corner: (corner.0 - x.rem_euclid(32), corner.1 - y.rem_euclid(32)),
                     first_cell,
                     animation_step: tiles::animation_step(tilemap.updates),

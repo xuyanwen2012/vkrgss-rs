@@ -1,8 +1,9 @@
-//! What a tilemap plane op of RGSS2 makes of a pixel.
+//! What a tilemap plane op makes of a pixel, by the rule set of RGSS2 or of RGSS3.
 
 use vkxp_pixel::Rgba;
 use vkxp_proto::tiles_rgss2::{self as tiles, OVERHANG, QUARTER_SIZE, SHEETS, TILE_SIZE, Tile};
-use vkxp_proto::{Plane, Size, TilemapPlane};
+use vkxp_proto::tiles_rgss3;
+use vkxp_proto::{Plane, PlaneRules, Size, TilemapPlane};
 
 use crate::{Bitmap, Table};
 
@@ -45,7 +46,7 @@ impl PlaneStep<'_> {
         if ty < OVERHANG && row > 0 && i64::from(py) / 8 * 8 <= top {
             let above = ((u64::from(op.first_cell.1) + row - 1) % ysize) as i64;
             for layer in layers.clone() {
-                let tile = self.drawn(self.number(cell_x, above, layer));
+                let tile = self.drawn(self.number(cell_x, above, layer), layer);
                 if let Some(tile) = tile
                     && let Some(texel) = tile.overhang(tx, ty)
                 {
@@ -55,12 +56,39 @@ impl PlaneStep<'_> {
         }
         for layer in layers {
             let number = self.number(cell_x, cell_y, layer);
-            if let Some(tile) = self.drawn(number) {
+            if let Some(tile) = self.drawn(number, layer) {
                 for texel in tile.texels(tx, ty).into_iter().flatten() {
                     pixel = self.blend(pixel, &tile, texel, frame, left, tx, px);
                 }
             }
-            if layer != 0 || upper {
+            if upper {
+                continue;
+            }
+            if op.rules == PlaneRules::Rgss3 {
+                if layer != 1 {
+                    continue;
+                }
+                let mask = self.number(cell_x, cell_y, tiles_rgss3::SHADOW_LAYER);
+                if tiles_rgss3::shadow_covers(mask, tx, ty) {
+                    for channel in &mut pixel[..3] {
+                        *channel = tiles::shadow(*channel);
+                    }
+                }
+                if ty < OVERHANG
+                    && !tiles_rgss3::is_table(number, self.flags(number))
+                    && !tiles::is_wall(self.number(cell_x, cell_y, 0))
+                {
+                    let above = self.number(cell_x, cell_y - 1, 1);
+                    let table = tiles_rgss3::tile(above, self.flags(above), op.animation_step);
+                    if let Some(tile) = table
+                        && let Some(texel) = tile.edge(tx, ty)
+                    {
+                        pixel = self.blend(pixel, &tile, texel, frame, left, tx, px);
+                    }
+                }
+                continue;
+            }
+            if layer != 0 {
                 continue;
             }
             if tx < QUARTER_SIZE
@@ -111,17 +139,30 @@ impl PlaneStep<'_> {
         map.data()[((i64::from(layer) * ysize + y) * xsize + x) as usize]
     }
 
-    /// Tile `number` when this plane draws it.
-    fn drawn(&self, number: i16) -> Option<Tile> {
+    /// The entry of tile `number` in the passages table, the flags table of RGSS3: the
+    /// element at the number, 0 when there is none or no table.
+    fn flags(&self, number: i16) -> i16 {
         let entry = self.passages.and_then(|passages| {
             let index = usize::try_from(number).ok()?;
             (index < passages.xsize() as usize).then(|| passages.data().get(index))?
         });
-        let star = entry.copied().unwrap_or(0) & tiles::STAR != 0;
-        if star != (self.op.plane == Plane::Upper) {
-            return None;
+        entry.copied().unwrap_or(0)
+    }
+
+    /// Tile `number` of layer `layer` when this plane draws it.
+    fn drawn(&self, number: i16, layer: u32) -> Option<Tile> {
+        let flags = self.flags(number);
+        let upper = self.op.plane == Plane::Upper;
+        let step = self.op.animation_step;
+        match self.op.rules {
+            PlaneRules::Rgss2 => {
+                ((flags & tiles::STAR != 0) == upper).then(|| tiles::tile(number, step))?
+            }
+            PlaneRules::Rgss3 => {
+                let star = layer == 2 && flags & tiles::STAR != 0;
+                (star == upper).then(|| tiles_rgss3::tile(number, flags, step))?
+            }
         }
-        tiles::tile(number, self.op.animation_step)
     }
 
     /// `pixel` with the texel `texel` of the tile's sheet blended over it, for the screen

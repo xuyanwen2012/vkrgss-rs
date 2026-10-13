@@ -23,7 +23,7 @@ use crate::{GuestToHost, HostToGuest, InputSnapshot};
 pub const MAGIC: [u8; 4] = *b"VKXP";
 
 /// Version of the message types and their encoding. Any change to either increments it.
-pub const PROTOCOL_VERSION: u16 = 12;
+pub const PROTOCOL_VERSION: u16 = 13;
 
 /// Length of the stream header in bytes.
 pub const HEADER_LEN: usize = 7;
@@ -235,8 +235,8 @@ mod tests {
 
     #[test]
     fn older_streams_are_rejected_naming_both_versions() {
-        assert_eq!(PROTOCOL_VERSION, 12);
-        for found in [1u16, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] {
+        assert_eq!(PROTOCOL_VERSION, 13);
+        for found in [1u16, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] {
             let mut bytes = encode_stream(&sample()).unwrap();
             bytes[4..6].copy_from_slice(&found.to_le_bytes());
 
@@ -245,12 +245,12 @@ mod tests {
                 error,
                 DecodeError::UnsupportedVersion {
                     found,
-                    supported: 12,
+                    supported: 13,
                 }
             );
             assert_eq!(
                 error.to_string(),
-                format!("unsupported protocol version: found {found}, supported 12")
+                format!("unsupported protocol version: found {found}, supported 13")
             );
         }
     }
@@ -358,14 +358,15 @@ mod tests {
         assert_eq!(decode_stream::<GuestToHost>(&bytes).unwrap(), messages);
     }
 
-    /// Scenario "Round trip" of the tilemap plane op of RGSS2.
+    /// Scenario "Round trip" of the tilemap plane op, with both rule sets.
     #[test]
     fn tilemap_planes_survive_a_round_trip() {
-        use crate::{Op, Plane, Rect, TableId, TilemapPlane};
+        use crate::{Op, Plane, PlaneRules, Rect, TableId, TilemapPlane};
 
         let lower = TilemapPlane {
             clip: Rect::new(-3, 7, 544, 416),
             plane: Plane::Lower,
+            rules: PlaneRules::Rgss2,
             corner: (i32::MIN, i32::MAX),
             first_cell: (u32::MAX, 3),
             animation_step: u64::MAX,
@@ -387,6 +388,7 @@ mod tests {
         };
         let upper = TilemapPlane {
             plane: Plane::Upper,
+            rules: PlaneRules::Rgss3,
             passages: None,
             flash: Some(TableId::new(0)),
             ..lower
@@ -402,6 +404,51 @@ mod tests {
         })];
         let bytes = encode_stream(&messages).unwrap();
         assert_eq!(decode_stream::<GuestToHost>(&bytes).unwrap(), messages);
+    }
+
+    /// Scenario "Four layers".
+    #[test]
+    fn a_map_of_four_layers_survives_a_round_trip() {
+        use crate::{Op, Plane, PlaneRules, Rect, TableDelta, TableId, TilemapPlane};
+
+        let data: Vec<i16> = (0..48).map(|index| index * 173 - 4000).collect();
+        let messages = vec![GuestToHost::Frame(FramePacket {
+            frame_index: 0,
+            logical_size: Size::new(544, 416),
+            frame_rate: FrameRate::MAX,
+            brightness: 255,
+            tables: vec![TableDelta::Set {
+                id: TableId::new(1),
+                xsize: 4,
+                ysize: 3,
+                zsize: 4,
+                data: data.clone(),
+            }],
+            bitmaps: vec![],
+            ops: vec![Op::TilemapPlane(TilemapPlane {
+                clip: Rect::new(0, 0, 544, 416),
+                plane: Plane::Lower,
+                rules: PlaneRules::Rgss3,
+                corner: (0, 0),
+                first_cell: (0, 0),
+                animation_step: 0,
+                flash_level: 4,
+                map: TableId::new(1),
+                passages: None,
+                flash: None,
+                bitmaps: [None; 9],
+            })],
+        })];
+        let bytes = encode_stream(&messages).unwrap();
+        let decoded = decode_stream::<GuestToHost>(&bytes).unwrap();
+        assert_eq!(decoded, messages);
+        let GuestToHost::Frame(packet) = &decoded[0] else {
+            panic!("a frame");
+        };
+        let TableDelta::Set { data: found, .. } = &packet.tables[0] else {
+            panic!("a table");
+        };
+        assert_eq!(found, &data);
     }
 
     fn packet_at(frame_index: u64, frame_rate: FrameRate) -> GuestToHost {

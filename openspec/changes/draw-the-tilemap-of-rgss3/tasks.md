@@ -2,8 +2,8 @@
 
 ## 1. Protocol and reference
 
-- [ ] 1.1 The rule set of the tilemap plane op, the protocol version, the one definition of what the numbering of RGSS3 adds; the new field with the value of RGSS2 in every existing literal of the workspace. Verify: the scenarios of `specs/guest-host-protocol/spec.md` except "Documents name the version"; `cargo test -p vkxp-proto --locked` passes and `cargo check --workspace --all-targets --locked` succeeds.
-- [ ] 1.2 The CPU reference evaluates plane ops of the rule set of RGSS3: tables by flag, the edge under a table, the shadow mask, star tiles, the undefined cases. Verify: the scenarios of `specs/frame-composition/spec.md` except those of "Whole tilemaps of RGSS3 as measured", each as a test that derives its expected pixels from the generated sheets; `git diff --stat` names no file under `crates/vkxp-compose-ref/tests/data/`; `cargo test -p vkxp-compose-ref --locked` passes.
+- [x] 1.1 The rule set of the tilemap plane op, the protocol version, the one definition of what the numbering of RGSS3 adds; the new field with the value of RGSS2 in every existing literal of the workspace. Verify: the scenarios of `specs/guest-host-protocol/spec.md` except "Documents name the version"; `cargo test -p vkxp-proto --locked` passes and `cargo check --workspace --all-targets --locked` succeeds.
+- [x] 1.2 The CPU reference evaluates plane ops of the rule set of RGSS3: tables by flag, the edge under a table, the shadow mask, star tiles, the undefined cases. Verify: the scenarios of `specs/frame-composition/spec.md` except those of "Whole tilemaps of RGSS3 as measured", each as a test that derives its expected pixels from the generated sheets; `git diff --stat` names no file under `crates/vkxp-compose-ref/tests/data/`; `cargo test -p vkxp-compose-ref --locked` passes.
 
 ## 2. Topics of the measurement
 

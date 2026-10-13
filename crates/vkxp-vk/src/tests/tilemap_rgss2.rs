@@ -5,8 +5,8 @@ use vkxp_compose_ref::fixtures::tilemap_rgss2::{self as scenes, tilemap_plane};
 use vkxp_compose_ref::fixtures::{bitmap, table};
 use vkxp_proto::tiles_rgss2::{FALL_SHAPES, FLOOR_SHAPES, WALL_SHAPES};
 use vkxp_proto::{
-    BitmapDelta, BitmapId, Color, FramePacket, FrameRate, GuestToHost, Op, Plane, Rect, Size,
-    TableDelta, TableId, TilemapPlane,
+    BitmapDelta, BitmapId, Color, FramePacket, FrameRate, GuestToHost, Op, Plane, PlaneRules, Rect,
+    Size, TableDelta, TableId, TilemapPlane,
 };
 
 use super::differential::Pair;
@@ -247,6 +247,7 @@ fn generated_planes_match_the_reference() {
             ops.push(Op::TilemapPlane(TilemapPlane {
                 clip,
                 plane,
+                rules: PlaneRules::Rgss2,
                 corner,
                 first_cell,
                 animation_step,

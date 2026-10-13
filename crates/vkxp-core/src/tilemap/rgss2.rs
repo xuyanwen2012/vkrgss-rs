@@ -8,7 +8,7 @@
 //! tilemap's own, as the last refresh of the tilemap found them.
 
 use vkxp_proto::tiles_rgss2 as tiles;
-use vkxp_proto::{BitmapId, Op, Plane, TableId, TilemapPlane};
+use vkxp_proto::{BitmapId, Op, Plane, PlaneRules, TableId, TilemapPlane};
 
 use super::{Role, SentTables, Strip};
 use crate::extract::{Assembly, Level};
@@ -108,6 +108,7 @@ impl Assembly<'_> {
         self.ops.push(Op::TilemapPlane(TilemapPlane {
             clip: level.clip,
             plane,
+            rules: PlaneRules::Rgss2,
             corner: planes.corner,
             first_cell: planes.first_cell,
             animation_step: planes.animation_step,
