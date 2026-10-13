@@ -40,4 +40,4 @@
 
 ## 8. Integration check
 
-- [ ] 8.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate vendor-ruby-1-9-2 --strict` passes.
+- [x] 8.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate vendor-ruby-1-9-2 --strict` passes.

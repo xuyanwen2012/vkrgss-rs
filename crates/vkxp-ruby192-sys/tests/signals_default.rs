@@ -22,15 +22,30 @@ fn all_dispositions() -> Vec<(libc::c_int, usize, libc::c_int, Vec<libc::c_int>)
 
 #[test]
 fn dispositions_and_mask_survive_start_and_shutdown() {
+    // The process gets the default disposition of every signal Ruby takes, whatever it
+    // inherited: a shell ignores SIGINT and SIGQUIT in a background command, and `nohup`
+    // ignores SIGHUP. SIGSEGV, SIGBUS and SIGPIPE stay as the Rust runtime set them up before
+    // `main` (handlers for its stack guard, and "ignore").
+    for signal in [
+        libc::SIGHUP,
+        libc::SIGINT,
+        libc::SIGQUIT,
+        libc::SIGUSR1,
+        libc::SIGUSR2,
+        libc::SIGALRM,
+        libc::SIGTERM,
+        libc::SIGCHLD,
+        libc::SIGVTALRM,
+    ] {
+        // SAFETY: the default disposition installs no handler, and this process has one
+        // test, so nothing else depends on these dispositions.
+        let previous = unsafe { libc::signal(signal, libc::SIG_DFL) };
+        assert_ne!(previous, libc::SIG_ERR, "signal {signal}");
+        assert_eq!(common::disposition(signal).0, libc::SIG_DFL, "{signal}");
+    }
     let before = all_dispositions();
     // The interpreter thread starts with the mask of the thread that creates it.
     let mask_before = common::blocked_signals();
-    // What the test relies on: this process has the defaults for what Ruby takes, apart from
-    // what the Rust runtime set up before `main` (it ignores SIGPIPE and handles SIGSEGV and
-    // SIGBUS for its stack guard).
-    for signal in [libc::SIGHUP, libc::SIGQUIT, libc::SIGTERM, libc::SIGUSR1] {
-        assert_eq!(common::disposition(signal).0, libc::SIG_DFL, "{signal}");
-    }
 
     let interpreter = Interpreter::start(Options::default()).expect("the interpreter starts");
     assert_eq!(all_dispositions(), before, "after start");
