@@ -4,6 +4,7 @@
 //! copy; the picture of the game window is then read from the display and the request is
 //! removed.
 
+use std::ffi::OsStr;
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -22,6 +23,27 @@ use super::runtime::Runtime;
 
 /// How long the picture of a held frame is given to reach the display.
 const SETTLE: Duration = Duration::from_millis(200);
+
+/// The program every Wine command runs inside.
+const SANDBOX: &str = "bwrap";
+
+/// The sandbox of a Wine command: the file system as it is, except that `/dev/dri` is an
+/// empty directory, so that no library of the run can open a GPU device node, and no network.
+/// No process-id namespace of its own: an `Xvfb` inside one takes the display lock files of
+/// other processes for stale.
+const SANDBOX_ARGUMENTS: [&str; 8] = [
+    "--dev-bind",
+    "/",
+    "/",
+    "--tmpfs",
+    "/dev/dri",
+    "--unshare-net",
+    "--die-with-parent",
+    "--",
+];
+
+/// A directory that does not exist, where VA-API is sent to look for its drivers.
+const NO_VA_DRIVERS: &str = "/nonexistent/vkxp-oracle-no-va-drivers";
 
 /// What a run of the original needs besides the game.
 pub(super) struct Run<'a> {
@@ -54,19 +76,22 @@ pub(super) fn check_prerequisites(game: &Path, dll: &Path) -> Result<()> {
         "{}: the game has no Game.exe to run in the original runtime",
         game.display()
     );
-    for program in ["wine", "wineboot", "wineserver", "Xvfb"] {
+    check_programs(std::env::var_os("PATH").as_deref())
+}
+
+/// The programs of the original side, which must all be in a directory of `path`, the value
+/// of `PATH`.
+fn check_programs(path: Option<&OsStr>) -> Result<()> {
+    for program in ["wine", "wineboot", "wineserver", "Xvfb", SANDBOX] {
         ensure!(
-            on_path(program),
-            "`{program}` is not on PATH; the original side needs Wine and Xvfb \
+            path.is_some_and(|path| {
+                std::env::split_paths(path).any(|dir| dir.join(program).is_file())
+            }),
+            "`{program}` is not on PATH; the original side needs Wine, Xvfb and bwrap \
              (--vkxp-only runs without them)"
         );
     }
     Ok(())
-}
-
-fn on_path(program: &str) -> bool {
-    std::env::var_os("PATH")
-        .is_some_and(|path| std::env::split_paths(&path).any(|dir| dir.join(program).is_file()))
 }
 
 impl Run<'_> {
@@ -134,10 +159,13 @@ impl Run<'_> {
         Ok(late)
     }
 
-    /// A Wine program with the environment of the run.
+    /// A Wine program inside the sandbox, with the environment of the run, which the
+    /// sandbox hands on.
     fn wine(&self, program: &str, display: &str) -> Command {
-        let mut command = Command::new(program);
+        let mut command = Command::new(SANDBOX);
         command
+            .args(SANDBOX_ARGUMENTS)
+            .arg(program)
             .env("WINEPREFIX", self.prefix)
             .env("WINEDEBUG", "err+all,+msgbox")
             // No Mono or Gecko installer, and no menu entries in the user's home directory.
@@ -147,6 +175,10 @@ impl Run<'_> {
             // Software rendering only: Wine must not open a GPU of the machine.
             .env("LIBGL_ALWAYS_SOFTWARE", "1")
             .env("VK_LOADER_DRIVERS_SELECT", "*lvp*")
+            // The hardware plugins of GStreamer, which plays Ogg and MP3 for Wine, probe
+            // VA-API: it finds no driver even where the sandbox would fail.
+            .env("LIBVA_DRIVERS_PATH", NO_VA_DRIVERS)
+            .env("LIBVA_DRIVER_NAME", "vkxp-oracle-none")
             // The runtime uses the ANSI file functions, so the locale decides which file
             // names of the game resolve.
             .env("LC_ALL", self.locale);
@@ -428,6 +460,61 @@ mod tests {
             "\r\n[HKEY_LOCAL_MACHINE\\Software\\Enterbrain\\RGSS\\RTP]\r\n\
              \"Standard\"=\"Z:\\\\rtp\"\r\n"
         );
+    }
+
+    /// The command-that-is-built and VA-API scenarios of `oracle-harness`.
+    #[test]
+    fn every_wine_command_runs_in_the_sandbox_without_a_driver_of_va_api() {
+        let run = Run {
+            runtime: Runtime::Rgss1,
+            dll: Path::new("RGSS104E.dll"),
+            rtps: &[],
+            fonts: None,
+            prefix: Path::new("prefix"),
+            locale: "zh_CN.UTF-8",
+            timeout: Duration::from_secs(1),
+        };
+        for program in ["wine", "wineboot", "wineserver"] {
+            let command = run.wine(program, ":104");
+            assert_eq!(command.get_program(), "bwrap");
+            let arguments: Vec<_> = command.get_args().map(|a| a.to_str().unwrap()).collect();
+            assert_eq!(
+                arguments,
+                [
+                    "--dev-bind",
+                    "/",
+                    "/",
+                    "--tmpfs",
+                    "/dev/dri",
+                    "--unshare-net",
+                    "--die-with-parent",
+                    "--",
+                    program
+                ]
+            );
+            assert!(!arguments.contains(&"--unshare-pid"));
+
+            let variable = |name: &str| {
+                let (_, value) = command.get_envs().find(|(key, _)| *key == name).unwrap();
+                value.unwrap().to_str().unwrap()
+            };
+            assert!(!Path::new(variable("LIBVA_DRIVERS_PATH")).exists());
+            assert!(!variable("LIBVA_DRIVER_NAME").is_empty());
+        }
+    }
+
+    /// The bwrap-is-missing scenario of `oracle-harness`.
+    #[test]
+    fn a_path_without_bwrap_is_an_error_naming_it() {
+        let dir = tempfile::tempdir().unwrap();
+        for program in ["wine", "wineboot", "wineserver", "Xvfb"] {
+            fs::write(dir.path().join(program), b"").unwrap();
+        }
+        let error = check_programs(Some(dir.path().as_os_str())).unwrap_err();
+        assert!(error.to_string().contains("`bwrap`"), "{error}");
+
+        fs::write(dir.path().join("bwrap"), b"").unwrap();
+        check_programs(Some(dir.path().as_os_str())).unwrap();
     }
 
     #[test]

@@ -229,8 +229,13 @@ directory's `Data` and `Graphics` folders into `Game.rgssad`, under its path wit
 backslashes, and then removes the two folders. It changes the directory it is given, so give
 it a copy; it refuses a directory that already has an archive or has no `Game.ini`.
 
-The original side needs `wine`, `wineboot`, `wineserver` and `Xvfb` on `PATH` and a game that
-has its `Game.exe`. The command starts a virtual display of its own, makes a Wine prefix at
+The original side needs `wine`, `wineboot`, `wineserver`, `Xvfb` and `bwrap` on `PATH` and a
+game that has its `Game.exe`. Every Wine process runs inside a `bwrap` sandbox in which
+`/dev/dri` is an empty directory and there is no network: software rendering alone does not
+keep the run from the GPUs of the machine, because a game that plays Ogg or MP3 does it
+through GStreamer, whose hardware plugins probe VA-API. VA-API is also pointed at a driver
+directory that does not exist. A game that needs the network on the original side is not
+compared. The command starts a virtual display of its own, makes a Wine prefix at
 `<out>/prefix` on the first run (which takes a while), registers the run-time packages and
 replacements for common game fonts in it, and runs `Game.exe` with software rendering only.
 At each frame asked for the probe holds the game until the command has read the picture of
@@ -281,7 +286,7 @@ The pictures show the game's and the run-time package's art, so they stay out of
 repository, like everything else below `target/`.
 
 The tests of the harness run the vkxp side on games they generate. The one test of the
-original side is ignored by default, because it needs Wine, Xvfb and files that are not in the
+original side is ignored by default, because it needs Wine, Xvfb, `bwrap` and files that are not in the
 repository; it captures frames 10 and 20 of a real game below `target/oracle-test`. Its three
 variables hold absolute paths:
 
