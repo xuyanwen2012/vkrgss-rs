@@ -1,0 +1,31 @@
+[package]
+name = "vkxp-ruby192-sys"
+description = "Embedded Ruby 1.9.2 build and raw FFI for vkxp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+build = "build.rs"
+links = "vkxp_ruby192"
+
+[lints]
+workspace = true
+
+# The crate is empty on every other target, and a build for one needs no C compiler for zlib.
+[target.'cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))'.dependencies]
+thiserror.workspace = true
+libc.workspace = true
+libz-sys.workspace = true
+
+[build-dependencies]
+cc.workspace = true
+
+[target.'cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))'.dev-dependencies]
+libc.workspace = true

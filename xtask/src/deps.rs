@@ -6,16 +6,19 @@
 //! 2. No host crate, and not the reference compositor, reaches a guest crate, directly or
 //!    transitively.
 //! 3. Everything `vkxp-core` reaches is on its allow-list of pure crates.
-//! 4. The guest role, `vkxp-guest`, reaches neither `vkxp-ruby-sys` nor `vkxp-binding`,
+//! 4. The guest role, `vkxp-guest`, reaches no interpreter crate and not `vkxp-binding`,
 //!    directly or transitively: it links no interpreter.
+//! 5. No package reaches both `vkxp-ruby-sys` and `vkxp-ruby192-sys`: the two interpreters
+//!    define the same symbols and cannot be linked into one program. For this rule alone
+//!    development dependencies count as well, because a test binary links them.
 //!
 //! The `vkxp` binary is on neither side: it is the one crate that may depend on both.
 //!
 //! The graph is taken with every feature of every workspace crate enabled, so a forbidden
 //! dependency cannot hide behind an optional dependency or a feature that is off by default.
 //!
-//! Only normal and build dependencies count. Dev-dependencies are not linked into either side,
-//! so they do not cross the guest/host boundary.
+//! For the first three rules only normal and build dependencies count. Dev-dependencies are
+//! not linked into either side, so they do not cross the guest/host boundary.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt;
@@ -32,6 +35,7 @@ pub(crate) const GUEST_CRATES: &[&str] = &[
     "vkxp-text",
     "vkxp-vfs",
     "vkxp-ruby-sys",
+    "vkxp-ruby192-sys",
     "vkxp-binding",
     "vkxp-guest",
     "vkxp-guest-main",
@@ -49,7 +53,8 @@ pub(crate) const HOST_SIDE_CRATES: &[&str] =
 pub(crate) const GUEST_ROLE_CRATE: &str = "vkxp-guest";
 
 /// Crates that link an interpreter, which the guest role must not reach.
-pub(crate) const INTERPRETER_CRATES: &[&str] = &["vkxp-ruby-sys", "vkxp-binding"];
+pub(crate) const INTERPRETER_CRATES: &[&str] =
+    &["vkxp-ruby-sys", "vkxp-ruby192-sys", "vkxp-binding"];
 
 /// The crate that must stay free of I/O, Ruby and Vulkan.
 pub(crate) const CORE_CRATE: &str = "vkxp-core";
@@ -99,6 +104,9 @@ pub(crate) enum Violation {
     /// `vkxp-guest` reaches a crate that links an interpreter. The path starts at
     /// `vkxp-guest` and ends at that crate.
     GuestRoleReachesInterpreter { path: Vec<String> },
+    /// A package reaches both interpreters. Both paths start at the package; the first ends
+    /// at `vkxp-ruby-sys`, the second at `vkxp-ruby192-sys`.
+    BothInterpreters { paths: [Vec<String>; 2] },
 }
 
 impl fmt::Display for Violation {
@@ -129,6 +137,14 @@ impl fmt::Display for Violation {
                 "`{GUEST_ROLE_CRATE}` reaches `{}`, which links an interpreter: {}",
                 path.last().map_or("", String::as_str),
                 path.join(" -> ")
+            ),
+            Violation::BothInterpreters { paths } => write!(
+                f,
+                "`{}` reaches both interpreters, which cannot be linked into one program: \
+                 {} and {}",
+                paths[0].first().map_or("", String::as_str),
+                paths[0].join(" -> "),
+                paths[1].join(" -> ")
             ),
         }
     }
@@ -191,8 +207,48 @@ fn outside_allow_list(graph: &Graph, start: &str) -> Vec<Violation> {
         .collect()
 }
 
+/// The two crates that each build an interpreter, in the order of the paths of
+/// [`Violation::BothInterpreters`].
+pub(crate) const INTERPRETER_SYS_CRATES: [&str; 2] = ["vkxp-ruby-sys", "vkxp-ruby192-sys"];
+
+/// Checks the rule on the two interpreters over a graph in which development dependencies
+/// count (see [`linked_graph_from_metadata`]), and returns every violation, in a stable
+/// order.
+pub(crate) fn check_interpreters(linked: &Graph) -> Vec<Violation> {
+    let mut violations = Vec::new();
+    for package in linked.keys() {
+        let paths = paths_from(linked, package);
+        let path_to = |interpreter: &str| -> Option<Vec<String>> {
+            if package == interpreter {
+                Some(vec![package.clone()])
+            } else {
+                paths.get(interpreter).cloned()
+            }
+        };
+        if let (Some(first), Some(second)) = (
+            path_to(INTERPRETER_SYS_CRATES[0]),
+            path_to(INTERPRETER_SYS_CRATES[1]),
+        ) {
+            violations.push(Violation::BothInterpreters {
+                paths: [first, second],
+            });
+        }
+    }
+    violations
+}
+
 /// Builds the graph from the JSON printed by `cargo metadata --format-version 1`.
 pub(crate) fn graph_from_metadata(metadata: &Value) -> Result<Graph> {
+    graph_of_kinds(metadata, false)
+}
+
+/// As [`graph_from_metadata`], with development dependencies as edges too: what a test
+/// binary of a package links.
+pub(crate) fn linked_graph_from_metadata(metadata: &Value) -> Result<Graph> {
+    graph_of_kinds(metadata, true)
+}
+
+fn graph_of_kinds(metadata: &Value, development: bool) -> Result<Graph> {
     let packages = metadata["packages"]
         .as_array()
         .context("metadata has no `packages` array")?;
@@ -221,7 +277,7 @@ pub(crate) fn graph_from_metadata(metadata: &Value) -> Result<Graph> {
             let dev_only = kinds.is_some_and(|kinds| {
                 !kinds.is_empty() && kinds.iter().all(|kind| kind["kind"] == "dev")
             });
-            if !dev_only {
+            if development || !dev_only {
                 let pkg = dep["pkg"].as_str().context("dependency without `pkg`")?;
                 edges.insert(name_of(pkg)?);
             }
@@ -233,6 +289,15 @@ pub(crate) fn graph_from_metadata(metadata: &Value) -> Result<Graph> {
 /// Runs `cargo metadata` for the workspace at `root`, with all features of its members
 /// enabled, and builds its graph.
 pub(crate) fn workspace_graph(root: &Path) -> Result<Graph> {
+    graph_from_metadata(&workspace_metadata(root)?)
+}
+
+/// As [`workspace_graph`], with development dependencies as edges too.
+pub(crate) fn linked_workspace_graph(root: &Path) -> Result<Graph> {
+    linked_graph_from_metadata(&workspace_metadata(root)?)
+}
+
+fn workspace_metadata(root: &Path) -> Result<Value> {
     let output = Command::new(crate::cargo())
         .args(["metadata", "--format-version", "1", "--all-features"])
         .arg("--manifest-path")
@@ -245,13 +310,13 @@ pub(crate) fn workspace_graph(root: &Path) -> Result<Graph> {
             String::from_utf8_lossy(&output.stderr)
         );
     }
-    let metadata = serde_json::from_slice(&output.stdout).context("invalid metadata JSON")?;
-    graph_from_metadata(&metadata)
+    serde_json::from_slice(&output.stdout).context("invalid metadata JSON")
 }
 
 /// The `deps` command: prints every violation and fails if there is one.
 pub(crate) fn run(root: &Path) -> Result<()> {
-    let violations = check(&workspace_graph(root)?);
+    let mut violations = check(&workspace_graph(root)?);
+    violations.extend(check_interpreters(&linked_workspace_graph(root)?));
     for violation in &violations {
         eprintln!("deps: {violation}");
     }
@@ -783,6 +848,83 @@ mod tests {
         let violations = check(&real_graph());
         let report: Vec<String> = violations.iter().map(Violation::to_string).collect();
         assert!(violations.is_empty(), "{}", report.join("\n"));
+    }
+
+    /// No test binary and no executable of the workspace links both interpreters.
+    #[test]
+    fn real_workspace_links_one_interpreter_per_package() {
+        let linked = linked_workspace_graph(&crate::workspace_root())
+            .expect("cargo metadata for the workspace");
+        for interpreter in INTERPRETER_SYS_CRATES {
+            assert!(
+                linked.contains_key(interpreter),
+                "`{interpreter}` is missing"
+            );
+        }
+        let violations = check_interpreters(&linked);
+        let report: Vec<String> = violations.iter().map(Violation::to_string).collect();
+        assert!(violations.is_empty(), "{}", report.join("\n"));
+    }
+
+    /// One interpreter through a normal dependency and the other through a development
+    /// dependency: the package is named with both paths.
+    #[test]
+    fn a_package_that_reaches_both_interpreters_is_reported_with_both_paths() {
+        let metadata = serde_json::json!({
+            "packages": [
+                { "id": "both 0.1", "name": "both" },
+                { "id": "binding 0.1", "name": "vkxp-binding" },
+                { "id": "sys 0.1", "name": "vkxp-ruby-sys" },
+                { "id": "sys192 0.1", "name": "vkxp-ruby192-sys" },
+            ],
+            "resolve": { "nodes": [
+                { "id": "both 0.1", "deps": [
+                    { "pkg": "binding 0.1", "dep_kinds": [{ "kind": null }] },
+                    { "pkg": "sys192 0.1", "dep_kinds": [{ "kind": "dev" }] },
+                ] },
+                { "id": "binding 0.1", "deps": [
+                    { "pkg": "sys 0.1", "dep_kinds": [{ "kind": null }] },
+                ] },
+                { "id": "sys 0.1", "deps": [] },
+                { "id": "sys192 0.1", "deps": [] },
+            ] },
+        });
+        let violations = check_interpreters(&linked_graph_from_metadata(&metadata).unwrap());
+        assert_eq!(
+            violations,
+            vec![Violation::BothInterpreters {
+                paths: [
+                    path(&["both", "vkxp-binding", "vkxp-ruby-sys"]),
+                    path(&["both", "vkxp-ruby192-sys"]),
+                ],
+            }]
+        );
+        assert_eq!(
+            violations[0].to_string(),
+            "`both` reaches both interpreters, which cannot be linked into one program: \
+             both -> vkxp-binding -> vkxp-ruby-sys and both -> vkxp-ruby192-sys"
+        );
+        // Without the development dependency the graph of the other rules has no such
+        // package, and neither interpreter alone is a violation.
+        assert_eq!(
+            check_interpreters(&graph_from_metadata(&metadata).unwrap()),
+            vec![]
+        );
+    }
+
+    /// An interpreter crate that depends on the other one reaches both.
+    #[test]
+    fn an_interpreter_that_reaches_the_other_is_reported() {
+        let graph = graph(&[("vkxp-ruby192-sys", "vkxp-ruby-sys")]);
+        assert_eq!(
+            check_interpreters(&graph),
+            vec![Violation::BothInterpreters {
+                paths: [
+                    path(&["vkxp-ruby192-sys", "vkxp-ruby-sys"]),
+                    path(&["vkxp-ruby192-sys"]),
+                ],
+            }]
+        );
     }
 
     /// `vkxp-core` is allowed to depend on the shared crates, so whatever they pull in has to

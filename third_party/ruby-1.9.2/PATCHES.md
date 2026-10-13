@@ -121,3 +121,29 @@ the interpreter behave as vkxp embeds it. None changes what a script computes.
   `clone_method` the cloned instruction sequence is held only through its data pointer while
   `rb_add_method` allocates, and the object was collected before the method referred to it.
   `RB_GC_GUARD` keeps the object until after the call.
+
+## 10. static-encodings
+
+- File: `encoding.c`
+- Patch: `patches/static-encodings.patch`
+- Patched SHA-256: `cc6c62548576ce0b8990cbcf41e94f74c9bb9216b90dfb59bbaba35dba2fd71d`
+- Reason: the release loads an encoding that is not registered with
+  `require "enc/<name>.so"`. vkxp links the encodings the original runtime has and loads no
+  file. `load_encoding` normalises the name as before (lower case, every other character than
+  a letter or digit an underscore) and asks `ruby_vkxp_static_encoding`, a function of the
+  embedder (`crates/vkxp-ruby192-sys/encodings.c`), for the `Init_` function of that name; it
+  calls the function, or the name stays unknown. An encoding is so registered at the first
+  look-up of its name, as measured on the original runtime, whose `Encoding.list` has four
+  entries at start-up although Shift_JIS, Windows-31J and ISO-8859-1 are usable. `require_enc`
+  is no longer used and is removed. Patch 11 does the same for transcoders.
+
+## 11. static-encodings-transcoders
+
+- File: `transcode.c`
+- Patch: `patches/static-encodings-transcoders.patch`
+- Patched SHA-256: `ffb77ade6ecc607d26bfd020667cce31f29836d2f5418995f3eef71b1259d228`
+- Reason: follows patch 10. `load_transcoder_entry` loaded a transcoder that is only
+  declared by the name of its library with `require "enc/trans/<lib>.so"`. The transcoders
+  vkxp links are registered at start-up by their `Init_` functions and `transdb` is not
+  linked, so nothing is declared by name; such an entry now gives no transcoder and no file
+  is looked for.

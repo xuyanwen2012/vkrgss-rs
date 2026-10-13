@@ -8,6 +8,7 @@ members = [
     "crates/vkxp-text",
     "crates/vkxp-vfs",
     "crates/vkxp-ruby-sys",
+    "crates/vkxp-ruby192-sys",
     "crates/vkxp-binding",
     "crates/vkxp-guest",
     "crates/vkxp-guest-main",

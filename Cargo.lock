@@ -2647,6 +2647,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "vkxp-ruby192-sys"
+version = "0.2.0"
+dependencies = [
+ "cc",
+ "libc",
+ "libz-sys",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "vkxp-text"
 version = "0.2.0"
 dependencies = [

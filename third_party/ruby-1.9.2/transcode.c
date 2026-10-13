@@ -361,18 +361,11 @@ load_transcoder_entry(transcoder_entry_t *entry)
         return entry->transcoder;
 
     if (entry->lib) {
-        const char *lib = entry->lib;
-        size_t len = strlen(lib);
-        char path[sizeof(transcoder_lib_prefix) + MAX_TRANSCODER_LIBNAME_LEN];
-
+        /* vkxp: transcoders are linked statically and registered at start-up by their
+         * Init_ functions; a transcoder that is only declared by the name of its library
+         * is not linked, and no file is looked for. */
         entry->lib = NULL;
-
-        if (len > MAX_TRANSCODER_LIBNAME_LEN)
-            return NULL;
-        memcpy(path, transcoder_lib_prefix, sizeof(transcoder_lib_prefix) - 1);
-        memcpy(path + sizeof(transcoder_lib_prefix) - 1, lib, len + 1);
-        if (!rb_require(path))
-            return NULL;
+        return NULL;
     }
 
     if (entry->transcoder)

@@ -8,10 +8,10 @@
 
 ## 2. Crate and build (`crates/vkxp-ruby192-sys`, `xtask`)
 
-- [ ] 2.1 Add the package to the workspace with `links = "vkxp_ruby192"`, the configuration header and the build script of decision 3; add patch `static-encodings` and the crate's table of decision 5 with their log entries. Verify: the scenario "No Ruby on the machine"; `cargo build -p vkxp-ruby192-sys --locked` succeeds with `PATH` holding no `ruby`; `cargo test -p vkxp-ruby-sys --locked --test manifest` still passes.
-- [ ] 2.2 Make the crate empty on other targets (decision 4). Verify: the scenario "Another target"; `cargo check -p vkxp-ruby192-sys --locked --target aarch64-unknown-linux-gnu` succeeds and prints the warning where that Rust target is installed, and where it is not, the task says so in its commit message and the CI job `gate-aarch64` is the check.
-- [ ] 2.3 Write `ffi.rs` (decision 6) and the tests `layout` and `symbols`. Verify: the scenarios "Headers and declarations agree" and "Exported symbols of a linked executable"; `cargo test -p vkxp-ruby192-sys --locked --test layout --test symbols` passes.
-- [ ] 2.4 Add the rule on the two interpreters and the new guest crate to `xtask/src/deps.rs`. Verify: both scenarios of "The two interpreters are never linked together"; `cargo test -p xtask --locked deps` passes.
+- [x] 2.1 Add the package to the workspace with `links = "vkxp_ruby192"`, the configuration header and the build script of decision 3; add patch `static-encodings` and the crate's table of decision 5 with their log entries. Verify: the scenario "No Ruby on the machine"; `cargo build -p vkxp-ruby192-sys --locked` succeeds with `PATH` holding no `ruby`; `cargo test -p vkxp-ruby-sys --locked --test manifest` still passes.
+- [x] 2.2 Make the crate empty on other targets (decision 4). Verify: the scenario "Another target"; `cargo check -p vkxp-ruby192-sys --locked --target aarch64-unknown-linux-gnu` succeeds and prints the warning where that Rust target is installed, and where it is not, the task says so in its commit message and the CI job `gate-aarch64` is the check.
+- [x] 2.3 Write `ffi.rs` (decision 6) and the tests `layout` and `symbols`. Verify: the scenarios "Headers and declarations agree" and "Exported symbols of a linked executable"; `cargo test -p vkxp-ruby192-sys --locked --test layout --test symbols` passes.
+- [x] 2.4 Add the rule on the two interpreters and the new guest crate to `xtask/src/deps.rs`. Verify: both scenarios of "The two interpreters are never linked together"; `cargo test -p xtask --locked deps` passes.
 
 ## 3. Start-up and the safe layer
 

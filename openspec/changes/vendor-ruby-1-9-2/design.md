@@ -336,9 +336,23 @@ Non-goals:
 - Measure on the original (probe `scripts/ace-probe-interpreter.rb` of the study):
   `Encoding.list` after the first use of Shift_JIS, the six names of `Encoding.name_list`,
   `Encoding.aliases`, the order of the list, `Encoding.find("filesystem")` (ASCII-8BIT
-  there) and `"locale"` (raises there), which further names convert. Then the change that
-  matches them. Until then vkxp knows `BINARY` and the other aliases of the built-in
-  encodings, which the original does not.
+  there) and `"locale"` (raises there), which further names convert, and `Encoding.constants`.
+  Then the change that matches them.
+- Found while implementing decision 5: in the release the aliases (`BINARY`, `CP932`, `SJIS`,
+  `ASCII`), the replicas (Windows-31J of Shift_JIS, Windows-1252 of ISO-8859-1) and the
+  constants of the three encodings of the core (`Encoding::ASCII_8BIT`, `Encoding::UTF_8`,
+  `Encoding::US_ASCII`) are all declared by `encdb.h`, which is not linked. So, differently
+  from what decision 5 and the paragraph above it assume: (1) `enc/shift_jis.c` registers
+  Shift_JIS alone, and the table's entry for `shift_jis` and `windows_31j` is a function of
+  `encodings.c` that calls `Init_shift_jis` and then `rb_enc_replicate("Windows-31J", ...)`,
+  not `Init_shift_jis` itself; (2) vkxp knows no alias at all, `BINARY` included, as on the
+  original; (3) `Encoding::UTF_8`, `Encoding::ASCII_8BIT` and `Encoding::US_ASCII` are
+  undefined in the library (`Encoding::UTF_16LE` is defined, and `Encoding::Shift_JIS`,
+  `Encoding::Windows_31J` and `Encoding::ISO_8859_1` once their names were looked up).
+  Whether the original defines these constants is not in the two reports; if it does, the
+  crate declares them at start-up (`rb_encdb_declare`). The test executable of decision 10
+  declares the three constants in its `Init_ext` and looks the three lazy names up in
+  `test_prelude.rb`, because the suites name encodings by constant throughout.
 - The capability `workspace-structure` lists the crates of the workspace and of the guest
   side by name; `vkxp-ruby192-sys` and the binding package over it are to be added there
   by the change that adds that package.

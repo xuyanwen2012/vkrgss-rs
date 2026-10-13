@@ -1,0 +1,54 @@
+--- a/encoding.c
++++ b/encoding.c
+@@ -517,35 +517,29 @@
+     return -1;
+ }
+ 
+-static VALUE
+-require_enc(VALUE enclib)
+-{
+-    return rb_require_safe(enclib, rb_safe_level());
+-}
++/* vkxp: encodings are linked statically and no file is looked for. The embedder provides
++ * this function: it returns the Init_ function of the encoding whose normalised name
++ * (lower case, every other character than a letter or digit an underscore) it is given, or
++ * 0 for a name it does not link. */
++extern void (*ruby_vkxp_static_encoding(const char *name))(void);
+ 
+ static int
+ load_encoding(const char *name)
+ {
+-    VALUE enclib = rb_sprintf("enc/%s.so", name);
+-    VALUE verbose = ruby_verbose;
+-    VALUE debug = ruby_debug;
+-    VALUE loaded;
+-    char *s = RSTRING_PTR(enclib) + 4, *e = RSTRING_END(enclib) - 3;
++    char lib[64];
++    size_t len = strlen(name), i;
++    void (*init)(void);
+     int idx;
+ 
+-    while (s < e) {
+-	if (!ISALNUM(*s)) *s = '_';
+-	else if (ISUPPER(*s)) *s = TOLOWER(*s);
+-	++s;
++    if (len >= sizeof(lib)) return -1;
++    for (i = 0; i < len; i++) {
++	if (!ISALNUM(name[i])) lib[i] = '_';
++	else if (ISUPPER(name[i])) lib[i] = TOLOWER(name[i]);
++	else lib[i] = name[i];
+     }
+-    OBJ_FREEZE(enclib);
+-    ruby_verbose = Qfalse;
+-    ruby_debug = Qfalse;
+-    loaded = rb_protect(require_enc, enclib, 0);
+-    ruby_verbose = verbose;
+-    ruby_debug = debug;
+-    rb_set_errinfo(Qnil);
+-    if (NIL_P(loaded)) return -1;
++    lib[len] = '\0';
++    if (!(init = ruby_vkxp_static_encoding(lib))) return -1;
++    (*init)();
+     if ((idx = rb_enc_registered(name)) < 0) return -1;
+     if (enc_autoload_p(enc_table.list[idx].enc)) return -1;
+     return idx;
