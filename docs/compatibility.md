@@ -105,12 +105,15 @@ six others hold a skin smaller than 64 pixels. The tests compare a selection of 
 - `Window#openness` and `openness=`, limited to 0 to 255. Below 255 the window shows part of
   its rows around its middle, without contents, cursor, arrows and pause sign.
 - The cursor blinks over 40 updates and the pause sign changes its image every 16.
-- Background, frame and cursor are built when the skin, the size or the size of the cursor
-  rectangle is assigned, and do not follow pixels drawn into the skin later; assigning
-  `width` or `height` again builds them anew. Whether the contents show and which arrows are
-  drawn is decided by `update` and by the assignments the original decides them in, so the
-  contents of a window that was updated or given contents while invisible appear at its
-  next `update`.
+- Background, frame and cursor are bitmaps of the window and do not follow pixels drawn into
+  the skin later. Background and frame are built when another `windowskin` object is
+  assigned and at every assignment of `width` and `height`, also of the value they have. The
+  cursor is built when another `windowskin` object is assigned and when the width or height
+  of the cursor rectangle changes; an assignment of `width` or `height` does not build it.
+  Assigning the skin the window already has builds none of them.
+- Whether the contents show and which arrows are drawn is decided by `update` and by the
+  assignments the original decides them in, so the contents of a window that was updated or
+  given contents while invisible appear at its next `update`.
 
 Not measured, or not there yet:
 
