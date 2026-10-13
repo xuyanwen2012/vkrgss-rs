@@ -21,7 +21,7 @@
 
 ## 4. Values of the original
 
-- [ ] 4.1 The test `original`: identity, `Marshal`, random numbers, float text and rounding. Verify: the scenarios of "Interpreter identity", "Marshal as the original runtime writes it", "Random numbers as the original runtime gives them" and "Float text and rounding as the original runtime gives them", with every expected value copied from the specification; `cargo test -p vkxp-ruby192-sys --locked --test original` passes.
+- [x] 4.1 The test `original`: identity, `Marshal`, random numbers, float text and rounding. Verify: the scenarios of "Interpreter identity", "Marshal as the original runtime writes it", "Random numbers as the original runtime gives them" and "Float text and rounding as the original runtime gives them", with every expected value copied from the specification; `cargo test -p vkxp-ruby192-sys --locked --test original` passes.
 
 ## 5. Upstream suites
 
