@@ -90,6 +90,43 @@ Not there or not measured yet:
 In a game of XP none of `brightness`, `brightness=`, `wait`, `fadeout`, `fadein`,
 `snap_to_bitmap`, `resize_screen`, `width` and `height` is defined, as on the original.
 
+### The window of VX
+
+In a game of VX a `Window` is drawn by the rules of RGSS2, measured on the same two files.
+The rules reproduce 490 of the 496 pictures of that measurement without a wrong pixel; the
+six others hold a skin smaller than 64 pixels. The tests compare a selection of them.
+
+- The skin is read as 128 by 128: the background (0, 0, 64, 64) is stretched to the window
+  less a margin of 2 and the pattern (0, 64, 64, 64) is tiled over it; the frame is built
+  from the corners and edges at (64, 0, 64, 64); cursor, pause sign and scroll arrows come
+  from their places in the skin.
+- A window is one element at its `z`: contents, cursor, arrows and pause sign have no z of
+  their own, so a sprite above the window's `z` covers all of it.
+- `Window#openness` and `openness=`, limited to 0 to 255. Below 255 the window shows part of
+  its rows around its middle, without contents, cursor, arrows and pause sign.
+- The cursor blinks over 40 updates and the pause sign changes its image every 16.
+- Background, frame and cursor are built when the skin, the size or the size of the cursor
+  rectangle is assigned, and do not follow pixels drawn into the skin later; assigning
+  `width` or `height` again builds them anew. Whether the contents show and which arrows are
+  drawn is decided by `update` and by the assignments the original decides them in, so the
+  contents of a window that was updated or given contents while invisible appear at its
+  next `update`.
+
+Not measured, or not there yet:
+
+- A skin narrower or lower than 64 pixels: the original draws less of the background than
+  vkxp does.
+- A skin or a contents bitmap that is disposed while the window has it: vkxp goes on
+  drawing the background, frame and cursor it built, and draws no contents, arrows or pause
+  sign from a disposed bitmap.
+- Among elements of equal `z` vkxp draws in the order of creation. The original puts a
+  sprite before or behind a window of its `z` by the sprite's `y`; that order comes with the
+  sprites of VX.
+- A tone or a colour of a viewport over a window follows the rules of XP.
+- Windows larger than 600 pixels and origins beyond 1000 were not measured.
+
+In a game of XP the window is drawn as before and has no `openness`.
+
 ## Limits of save states
 
 Save states are described under [Save states](running.md#save-states). Their limits:

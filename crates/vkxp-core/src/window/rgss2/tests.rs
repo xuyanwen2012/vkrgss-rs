@@ -169,6 +169,14 @@ fn the_cases_of_the_measurement_are_drawn_as_the_original_draws_them() {
     assert_frames(CASES);
 }
 
+/// Thirty scenes of the random generator of the measurement, from its held-out set.
+#[test]
+fn the_random_scenes_of_the_measurement_are_drawn_as_the_original_draws_them() {
+    let text = include_str!("../../../tests/data/window-rgss2-random.txt");
+    assert_eq!(cases(text).len(), 30);
+    assert_frames(text);
+}
+
 #[test]
 fn the_pattern_gives_the_background_its_colour_and_keeps_the_alpha() {
     let mut stage = Stage::sized(8, 8);

@@ -28,3 +28,6 @@ vkxp-proto.workspace = true
 [dev-dependencies]
 proptest.workspace = true
 vkxp-compose-ref.workspace = true
+# The scenes of windows of RGSS2 are extracted from the scene of the guest; only the tests
+# reach it.
+vkxp-core.workspace = true

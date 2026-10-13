@@ -13,8 +13,8 @@
 
 ## 3. Whole scenes
 
-- [ ] 3.1 The fixtures of the random scenes and of one case per rule, compared in the CPU reference and in the Vulkan backend. Verify: the scenario "Random scenes"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-core -p vkxp-compose-ref -p vkxp-vk --locked` passes.
-- [ ] 3.2 `docs/compatibility.md`: the window of VX, and what is not measured. Verify: the text names nothing that the code does not do.
+- [x] 3.1 The fixtures of the random scenes and of one case per rule, compared in the CPU reference and in the Vulkan backend. Verify: the scenario "Random scenes"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-core -p vkxp-compose-ref -p vkxp-vk --locked` passes.
+- [x] 3.2 `docs/compatibility.md`: the window of VX, and what is not measured. Verify: the text names nothing that the code does not do.
 
 ## 4. Integration check
 

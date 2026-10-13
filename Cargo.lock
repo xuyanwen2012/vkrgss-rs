@@ -2645,6 +2645,7 @@ dependencies = [
  "raw-window-handle",
  "thiserror 2.0.21",
  "vkxp-compose-ref",
+ "vkxp-core",
  "vkxp-pixel",
  "vkxp-proto",
 ]

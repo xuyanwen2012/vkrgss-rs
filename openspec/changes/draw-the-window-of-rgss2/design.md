@@ -138,3 +138,15 @@ than 64; text.
   value object now gets the bitmap arena with the scene (`Property::store`), a change of a
   few lines. Rule 9 needs it: a change of `cursor_rect` through the methods of its `Rect`
   is a call on the window like an assignment, and may build the cursor bitmap.
+- The random scenes are `tests/data/window-rgss2-random.txt` of `vkxp-core`: the first thirty
+  scenes (60 frames) of the held-out set of seed 2 that the rule above does not leave out,
+  which are scenes 0 to 31 without 8 and 11. `vkxp-core` compares both files in the CPU
+  reference with the digests; `vkxp-vk` composes the same packets with both backends, which
+  must agree byte for byte and with the digests.
+- Outside the scope named for the tests: `vkxp-vk` gets `vkxp-core` as a dev-dependency
+  (one line of its `Cargo.toml`, one of `Cargo.lock`), because the packets of these scenes
+  come from the extraction of the guest. Dev-dependencies do not count for the
+  dependency-direction rules, which the gate checks. `vkxp-compose-ref` has no test of its
+  own for these scenes: it cannot depend on the crate that extracts them, and it draws them
+  in the tests of the two other crates.
+
