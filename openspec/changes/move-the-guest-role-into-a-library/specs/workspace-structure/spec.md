@@ -48,7 +48,7 @@ the signal settings of a guest. `unsafe` in `vkxp-guest` SHALL be allowed only i
 modules of the copier and of the signals.
 
 #### Scenario: The program holds no copy of the role
-- **WHEN** `libc::fork`, `libc::prctl` and `landlock` are searched in `crates/vkxp/src` and in the manifest of `vkxp`
+- **WHEN** `libc::fork`, `libc::prctl` and `landlock` are searched in `crates/vkxp/src` and in the `[dependencies]` of the manifest of `vkxp`
 - **THEN** there is no match
 
 #### Scenario: Unsafe elsewhere in the library

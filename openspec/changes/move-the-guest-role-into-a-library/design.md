@@ -295,3 +295,8 @@ selects them, and no test reads a target of these events.
   `crates/vkxp/Cargo.toml` (and nothing in `crates/vkxp/src`), so the scenario is not met as
   it is written. To decide: the scenario is about `[dependencies]` only, or the probe of the
   test moves behind a function of `vkxp-guest` and the test file changes.
+
+Decided at the merge (2026-10-13): the scenario "The program holds no copy of the role" is
+about `[dependencies]` of the manifest. `landlock` under `[dev-dependencies]`, for the probe
+of the unchanged test file, is not a copy of the role; the scenario says so now and task 2.2
+is ticked.
