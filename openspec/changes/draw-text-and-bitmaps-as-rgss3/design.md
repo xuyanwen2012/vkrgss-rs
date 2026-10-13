@@ -333,3 +333,8 @@ Open after this change, whoever takes it:
   `Fonts` directory of the run-time package of VX Ace is among the font directories of a
   run, is for the change that starts a game of RGSS3.
 - All of decision 9 on Windows.
+- `a_reset_request_starts_the_scripts_over` of `crates/vkxp-binding/tests/run_game.rs` failed
+  once in the first run of the gate of this change (`testing::bitmap_count()` was 1, not 0)
+  and passed in five runs of its binary alone and in the second run of the gate. The count
+  is of the whole process and the tests of the binary run side by side. This change does
+  not touch it.
