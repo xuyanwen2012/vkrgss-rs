@@ -7,8 +7,8 @@
 
 ## 2. Scene and class
 
-- [ ] 2.1 The tilemap of RGSS2 in the scene and its extraction into two plane ops. Verify: the scenarios of `specs/core-scene/spec.md`; `cargo test -p vkxp-core --locked` passes.
-- [ ] 2.2 The class in RGSS2; the pending lists. Verify: the scenarios of `specs/rgss-scene-classes/spec.md`; `cargo test -p vkxp-binding --locked` passes.
+- [x] 2.1 The tilemap of RGSS2 in the scene and its extraction into two plane ops. Verify: the scenarios of `specs/core-scene/spec.md`; `cargo test -p vkxp-core --locked` passes.
+- [x] 2.2 The class in RGSS2; the pending lists. Verify: the scenarios of `specs/rgss-scene-classes/spec.md`; `cargo test -p vkxp-binding --locked` passes.
 
 ## 3. Vulkan
 

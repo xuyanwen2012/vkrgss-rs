@@ -63,6 +63,19 @@ pub(crate) fn define_class<T: Wrapped>(ruby: &Ruby, name: &CStr) -> Result<VALUE
     Ok(class)
 }
 
+/// Defines the class `name` inside the class or module `outer`, whose instances wrap a `T`.
+pub(crate) fn define_class_under<T: Wrapped>(
+    ruby: &Ruby,
+    outer: VALUE,
+    name: &CStr,
+) -> Result<VALUE, Raised> {
+    // SAFETY: `outer` is a live class or module by the condition of `rb`, and `Object` is a
+    // live class.
+    let class = unsafe { ruby.define_class_under(outer, name, rb::object_class(ruby)) }?;
+    rb::define_alloc(ruby, class, alloc::<T>)?;
+    Ok(class)
+}
+
 /// The way to the Rust data of one live Ruby object.
 pub(crate) struct Handle<T> {
     data: NonNull<T>,

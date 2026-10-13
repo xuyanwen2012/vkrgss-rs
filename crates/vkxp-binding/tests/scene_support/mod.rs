@@ -69,12 +69,14 @@ fn frame() -> Frame {
         let mut referenced = Vec::new();
         for op in &packet.ops {
             let (quad, sheets) = match op {
-                Op::Quad(quad) => (Some(quad.bitmap), [None; 8]),
+                Op::Quad(quad) => (Some(quad.bitmap), [None; 9]),
                 Op::TilemapLayer(layer) => {
-                    let mut sheets = [layer.tileset; 8];
-                    sheets[1..].copy_from_slice(&layer.autotiles);
+                    let mut sheets = [None; 9];
+                    sheets[0] = layer.tileset;
+                    sheets[1..8].copy_from_slice(&layer.autotiles);
                     (None, sheets)
                 }
+                Op::TilemapPlane(plane) => (None, plane.bitmaps),
                 _ => continue,
             };
             for id in sheets.into_iter().flatten().chain(quad) {

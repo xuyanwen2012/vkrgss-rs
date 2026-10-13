@@ -596,6 +596,7 @@ impl Scene {
             let level = level_of(&self.viewports, self.logical_size, sprite.viewport);
             sprite.refresh_turned(bitmaps, level.as_ref());
         }
+        self.notice_viewport_origins();
         for (_, tilemap) in self.tilemaps.iter_mut() {
             let level = level_of(&self.viewports, self.logical_size, tilemap.viewport);
             tilemap.refresh(bitmaps, level.as_ref(), &mut self.tables);

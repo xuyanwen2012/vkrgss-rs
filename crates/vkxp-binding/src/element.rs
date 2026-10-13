@@ -63,7 +63,7 @@ pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<SceneClasses, Rais
         window: window::define(ruby, runtime)?,
         plane: plane::define(ruby, runtime)?,
         tilemap: tilemap::define(ruby, runtime)?,
-        autotiles: tilemap::define_autotiles(ruby)?,
+        autotiles: tilemap::define_autotiles(ruby, runtime)?,
     })
 }
 

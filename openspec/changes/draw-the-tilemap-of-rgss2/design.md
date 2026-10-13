@@ -97,3 +97,30 @@ a freeze or a transition beyond what follows from being an element.
   tile number range and every shape of each kind, the animation steps, tables, shadows,
   the flash sequence, scrolling with wrap, and forty frames of the random generator. The
   CPU reference is checked against them and the Vulkan backend against the reference.
+
+## Notes of the implementation
+
+- The latch of rule 5 is `Scene::refresh_tilemap` of `vkxp-core`, which the class calls
+  after every write and update; `visible=` calls it when the value changes, as the report
+  states and the list above leaves out. A change of a viewport's ox or oy is found by
+  comparing with what the tilemap last saw (`Scene::notice_viewport_origins`), when the
+  viewport is written through the class, when the tilemap is moved and when a frame is
+  extracted.
+- The record of a plane for the compute shader takes the words of the record of a tilemap
+  layer of RGSS1, read anew, so the compositor gets no further buffer.
+- Edits outside the files the proposal names, each of a few lines and needed by a
+  requirement:
+  - `crates/vkxp-core/src/element.rs`, `scene.rs`, `extract.rs`, `lib.rs`: the state of a
+    tilemap of RGSS2 is part of the element `Tilemap`, which lives there; its creation, its
+    refresh and its move are functions of the scene.
+  - `crates/vkxp-core/src/tilemap/tests.rs`: one more arm in a `match` of a helper; no
+    expected value changed.
+  - `crates/vkxp-binding/src/element.rs`: the runtime is passed on to the definition of the
+    list of sheets. `crates/vkxp-binding/src/wrap.rs`: a wrapped class inside another class,
+    for `Tilemap::BitmapArray`. `crates/vkxp-binding/src/viewport.rs`: `ox=` and `oy=` tell
+    the scene to look, so that every change of a viewport's origin refreshes its tilemaps.
+  - `crates/vkxp-binding/tests/scene_support/mod.rs`: the sheets of a plane op are uploaded
+    for `pixel`. `crates/vkxp-binding/tests/scene_cases/mod.rs`: the case of the scenario
+    "XP".
+  - `crates/vkxp-vk/src/tests/targeted.rs` and `crates/vkxp-compose-ref/tests/scenarios.rs`
+    are not edited; the fixture `one_op_of_each_kind` they use gained the new op.

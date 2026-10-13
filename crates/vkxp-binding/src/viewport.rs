@@ -64,8 +64,18 @@ object!(rect, set_rect, ViewportId, RECT, rect_arg, rect_set);
 object!(color, set_color, ViewportId, COLOR, color_arg, color_set);
 object!(tone, set_tone, ViewportId, TONE, tone_arg, tone_set);
 field!(visible, set_visible, ViewportId, viewport, viewport_mut, visible: bool);
-field!(ox, set_ox, ViewportId, viewport, viewport_mut, ox: i32);
-field!(oy, set_oy, ViewportId, viewport, viewport_mut, oy: i32);
+// A tilemap of RGSS2 takes the origin of its viewport when that changes: the scene is told
+// to look after every write.
+reader!(ox, ViewportId, |guest, id| guest.scene.viewport(id)?.ox);
+writer!(set_ox, ViewportId, |guest, id, ox: i32| {
+    guest.scene.viewport_mut(id)?.ox = ox;
+    guest.scene.notice_viewport_origins();
+});
+reader!(oy, ViewportId, |guest, id| guest.scene.viewport(id)?.oy);
+writer!(set_oy, ViewportId, |guest, id, oy: i32| {
+    guest.scene.viewport_mut(id)?.oy = oy;
+    guest.scene.notice_viewport_origins();
+});
 reader!(z, ViewportId, |guest, id| guest.scene.viewport(id)?.z());
 writer!(set_z, ViewportId, |guest, id, z: i32| guest
     .scene

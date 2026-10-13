@@ -4,7 +4,9 @@ pub use vkxp_proto::MAX_LOGICAL_DIMENSION;
 use vkxp_proto::{FrameRate, Size};
 
 use crate::tilemap::SentTables;
-use crate::{Bitmaps, ElementKind, Plane, Rect, SceneError, Sprite, Tilemap, Viewport, Window};
+use crate::{
+    Bitmaps, ElementKind, Plane, Rect, SceneError, Sprite, Tilemap, TilemapRgss2, Viewport, Window,
+};
 
 /// Names one occupant of one slot of an arena.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -371,6 +373,65 @@ impl Scene {
             .ok_or(SceneError::Full(ElementKind::Tilemap))
     }
 
+    /// Creates a tilemap of RGSS2, in `viewport` or directly on the screen: one that draws
+    /// from nine sheets and a passages table. In a disposed viewport the tilemap is alive and
+    /// not drawn.
+    pub fn create_tilemap_rgss2(
+        &mut self,
+        viewport: Option<ViewportId>,
+    ) -> Result<TilemapId, SceneError> {
+        let id = self.create_tilemap(viewport)?;
+        let seen = self.viewport_origin(viewport);
+        self.tilemap_mut(id)?.rgss2 = Some(TilemapRgss2 {
+            seen,
+            ..TilemapRgss2::default()
+        });
+        Ok(id)
+    }
+
+    /// The ox and oy of a viewport; 0 without one and for a disposed one.
+    fn viewport_origin(&self, viewport: Option<ViewportId>) -> (i32, i32) {
+        let viewport = viewport.and_then(|id| self.viewports.get(id.0));
+        viewport.map_or((0, 0), |viewport| (viewport.ox, viewport.oy))
+    }
+
+    /// Refreshes a tilemap of RGSS2: once it has map data, the ox and oy of its viewport as
+    /// they are now are the ones added to its own until the next refresh. A tilemap of RGSS1
+    /// has no such state.
+    ///
+    /// As measured on the original runtime of VX, a tilemap is refreshed by a write of `ox`,
+    /// `oy`, `map_data`, `flash_data`, `passages` or a slot of `bitmaps`, by a write of
+    /// `visible` that changes it, by `update`, and when the ox or oy of its viewport changes,
+    /// but not when it is given another viewport. The caller refreshes after the writes and
+    /// the update; for the change of a viewport see [`Scene::notice_viewport_origins`].
+    pub fn refresh_tilemap(&mut self, id: TilemapId) -> Result<(), SceneError> {
+        let origin = self.viewport_origin(self.tilemap(id)?.viewport);
+        let tilemap = self.tilemap_mut(id)?;
+        let has_map = tilemap.map_data.is_some();
+        if let Some(rgss2) = &mut tilemap.rgss2 {
+            rgss2.seen = origin;
+            if has_map {
+                rgss2.latched = origin;
+            }
+        }
+        Ok(())
+    }
+
+    /// Refreshes every tilemap of RGSS2 whose viewport has another ox or oy than when the
+    /// scene last looked. The scene looks by itself when a tilemap is moved and when a frame
+    /// is extracted; a caller that looks after every write of a viewport's ox or oy makes
+    /// each of them count, also one that a later write takes back.
+    pub fn notice_viewport_origins(&mut self) {
+        let moved = keys_of(&self.tilemaps, |tilemap| {
+            let seen = tilemap.rgss2.as_ref().map(|rgss2| rgss2.seen);
+            seen.is_some_and(|seen| seen != self.viewport_origin(tilemap.viewport))
+        });
+        for key in moved {
+            // The key was just found.
+            let _ = self.refresh_tilemap(TilemapId(key));
+        }
+    }
+
     /// Disposes a sprite. Disposing a disposed sprite does nothing. The bitmap the scene
     /// rendered for a turned sprite is disposed by the next [`Scene::extract`].
     pub fn dispose_sprite(&mut self, id: SpriteId) {
@@ -555,7 +616,32 @@ macro_rules! set_viewport {
 set_viewport!(SpriteId, sprite_mut, set_sprite_viewport);
 set_viewport!(WindowId, window_mut, set_window_viewport);
 set_viewport!(PlaneId, plane_mut, set_plane_viewport);
-set_viewport!(TilemapId, tilemap_mut, set_tilemap_viewport);
+
+impl Scene {
+    /// Moves the tilemap into `viewport`, or out of any for `None`, as the other elements
+    /// are moved. A tilemap of RGSS2 is not refreshed by it: it goes on adding the ox and oy
+    /// it took from the viewport it leaves, as measured on the original runtime of VX.
+    pub fn set_tilemap_viewport(
+        &mut self,
+        id: TilemapId,
+        viewport: Option<ViewportId>,
+    ) -> Result<(), SceneError> {
+        self.tilemap_mut(id)?;
+        if viewport.is_some_and(|viewport| self.viewports.get(viewport.0).is_none()) {
+            return Err(SceneError::Disposed(ElementKind::Viewport));
+        }
+        // A change of the viewport it leaves is noticed first, and none of the new one is
+        // taken for one.
+        self.notice_viewport_origins();
+        let seen = self.viewport_origin(viewport);
+        let tilemap = self.tilemap_mut(id)?;
+        tilemap.viewport = viewport;
+        if let Some(rgss2) = &mut tilemap.rgss2 {
+            rgss2.seen = seen;
+        }
+        Ok(())
+    }
+}
 
 #[cfg(test)]
 mod tests;

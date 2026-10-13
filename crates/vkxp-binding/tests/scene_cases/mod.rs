@@ -691,6 +691,11 @@ pub(crate) const TILEMAP: &[Case] = &[
     ),
     raises("wrong argument", "Tilemap.new(0)", "TypeError"),
     value(
+        "the names of RGSS2 are not defined",
+        "t = Tilemap.new; r = [t.respond_to?(:bitmaps), t.respond_to?(:passages)]; t.dispose; r",
+        "[false, false]",
+    ),
+    value(
         "plain properties",
         "t = Tilemap.new; t.visible = false; t.ox = 33; t.oy = -2; \
          r = [t.visible, t.ox, t.oy]; t.dispose; r",

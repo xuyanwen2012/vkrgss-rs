@@ -20,6 +20,9 @@
 //! pulse, in a bitmap of the scene's own that covers the visible cells and one more column
 //! and row, which is drawn additively right above the ground. It is filled again when the
 //! flash data, the first cell or the pulse changes.
+//!
+//! A tilemap of RGSS2 is two tilemap plane ops and no bitmap of the scene's own: see the
+//! submodule `rgss2`.
 
 use vkxp_proto::tiles::{self, QUARTER_SIZE, Sheet, TILE_SIZE};
 use vkxp_proto::{BitmapId, BlendMode, Op, Size, TableDelta, TableId, TilemapLayer};
@@ -44,7 +47,7 @@ const FLASH_STEP: u64 = 4;
 /// What a table is to the tilemap it was sent for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Role {
-    /// The tile numbers, sent as they are.
+    /// The tile numbers, sent as they are, and every table of a tilemap of RGSS2.
     Map,
     /// The priorities, of which the first row is sent.
     Priorities,
@@ -220,6 +223,8 @@ struct View {
 pub(crate) struct TileCache {
     /// What the frame draws; `None` for a tilemap that is not drawn.
     view: Option<View>,
+    /// What the frame draws of a tilemap of RGSS2; `None` when it is not drawn.
+    planes: Option<rgss2::Planes>,
     /// What `flash` was filled from; `None` without flash data.
     flash_key: Option<FlashKey>,
     /// The colours of the flashing cells, when there is one among the covered cells.
@@ -361,6 +366,10 @@ impl Tilemap {
         level: Option<&Level>,
         tables: &mut SentTables,
     ) {
+        if self.rgss2.is_some() {
+            self.refresh_planes(bitmaps, level, tables);
+            return;
+        }
         if let Some(map) = &self.map_data {
             tables.hold(map, Role::Map);
         }
@@ -490,6 +499,9 @@ impl Tilemap {
     /// step of priority and 32 more; neither the origin nor the rectangle of the viewport
     /// enters.
     pub(crate) fn strips(&self) -> Vec<(i64, Strip)> {
+        if self.rgss2.is_some() {
+            return self.plane_strips();
+        }
         let Some(view) = self.cache.view.as_ref().filter(|_| self.visible) else {
             return Vec::new();
         };
@@ -524,6 +536,8 @@ pub(crate) enum Strip {
     /// The tiles of one priority from 1 on in one row of cells, counted from the first row
     /// that shows, layer by layer of the map.
     Row { priority: usize, row: i32 },
+    /// One plane of a tilemap of RGSS2.
+    Plane(vkxp_proto::Plane),
 }
 
 impl Assembly<'_> {
@@ -531,6 +545,10 @@ impl Assembly<'_> {
     /// tile of the piece, in the order of the layers, so that every tile is blended onto the
     /// frame by itself.
     pub(crate) fn tiles(&mut self, tilemap: &Tilemap, strip: Strip, level: &Level) {
+        if let Strip::Plane(plane) = strip {
+            self.tilemap_plane(tilemap, plane, level);
+            return;
+        }
         let Some(view) = tilemap.cache.view.as_ref().filter(|_| tilemap.visible) else {
             return;
         };
@@ -554,6 +572,7 @@ impl Assembly<'_> {
                     self.quad(bitmap, src, &Geometry::at(x, y), level.clip, look);
                 }
             }
+            Strip::Plane(_) => {}
             Strip::Row { priority, row } => {
                 let top = y + i64::from(row) * tile;
                 let band = rows(level.clip, top, top + tile);
@@ -607,6 +626,8 @@ impl Assembly<'_> {
         }));
     }
 }
+
+mod rgss2;
 
 #[cfg(test)]
 mod tests;

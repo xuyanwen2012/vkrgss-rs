@@ -41,25 +41,9 @@ const PENDING: &[(&str, &str)] = &[
     ("Sprite", "wave_speed="),
     ("Sprite", "wave_phase"),
     ("Sprite", "wave_phase="),
-    ("Tilemap", "bitmaps"),
-    ("Tilemap", "passages"),
-    ("Tilemap", "passages="),
-    ("Tilemap::BitmapArray", "[]"),
-    ("Tilemap::BitmapArray", "[]="),
 ];
 
-/// The methods RGSS2 lacks and vkxp still defines in a game of RGSS2, until the tilemap of
-/// RGSS2 takes their place. The test fails when one of them is gone, and when a class has a
-/// public method that is neither in the list nor here.
-const NOT_IN_RGSS2: &[(&str, &str)] = &[
-    ("Tilemap", "tileset"),
-    ("Tilemap", "tileset="),
-    ("Tilemap", "autotiles"),
-    ("Tilemap", "priorities"),
-    ("Tilemap", "priorities="),
-];
-
-/// The class RGSS2 lacks and vkxp still defines there, with `NOT_IN_RGSS2`.
+/// The class of RGSS1 that RGSS2 does not have.
 const CLASS_NOT_IN_RGSS2: &str = "TilemapAutotiles";
 
 fn eval(source: &str) -> String {
@@ -138,33 +122,31 @@ fn no_pending_method_exists() {
     );
 }
 
+/// Scenario "Names of RGSS1, measured on the original": no class has a public method the
+/// list of RGSS2 does not have, `Tilemap` those of RGSS1 among them, and `TilemapAutotiles`
+/// is not defined.
 #[test]
-fn the_names_rgss2_lacks_are_exactly_the_recorded_ones() {
-    for (class, method) in NOT_IN_RGSS2 {
-        assert_eq!(
-            eval(&format!("{class}.method_defined?(:{method:?})")),
-            "true",
-            "{class}#{method} is gone: take it off the list"
-        );
-    }
+fn no_class_has_a_method_the_list_lacks() {
     assert_eq!(
         eval(&format!("Object.const_defined?(:{CLASS_NOT_IN_RGSS2})")),
-        "true"
+        "false"
+    );
+    assert_eq!(
+        eval("t = Tilemap.new; r = t.respond_to?(:tileset); t.dispose; r"),
+        "false"
+    );
+    assert!(
+        !PENDING
+            .iter()
+            .any(|(class, _)| class.starts_with("Tilemap"))
     );
     let entries = parse(METHOD_LIST);
-    for class in CLASSES.iter().filter(|class| !class.contains("::")) {
-        let mut known: Vec<&str> = entries
+    for class in CLASSES {
+        let known: Vec<String> = entries
             .iter()
             .filter(|entry| entry.class == *class)
-            .map(|entry| entry.method)
+            .map(|entry| format!("{:?}", entry.method))
             .collect();
-        known.extend(
-            NOT_IN_RGSS2
-                .iter()
-                .filter(|(of, _)| of == class)
-                .map(|(_, method)| *method),
-        );
-        let known: Vec<String> = known.iter().map(|method| format!("{method:?}")).collect();
         assert_eq!(
             eval(&format!(
                 "({class}.public_instance_methods(false) - [{}]).sort",

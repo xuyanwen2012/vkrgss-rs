@@ -478,6 +478,26 @@ impl Plane {
     }
 }
 
+/// What a tilemap of RGSS2 has in place of the tileset, the autotiles and the priorities.
+///
+/// Such a tilemap is drawn as two planes of 21 by 16 cells from the corner of its viewport's
+/// rectangle, the lower at z 0 and the upper at z 200, whatever its `visible` is: measured
+/// on the original runtime of VX.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TilemapRgss2 {
+    /// The nine sheets: A1 to A5, then B to E. A disposed bitmap draws nothing.
+    pub bitmaps: [Option<BitmapId>; 9],
+    /// The flags of every tile number, shared like the map data. A tile whose entry has the
+    /// bit 0x10 is drawn by the upper plane when it lies in the third layer, and not at all
+    /// otherwise.
+    pub passages: Option<SharedTable>,
+    /// The ox and oy of the viewport as the last refresh of the tilemap found them, which
+    /// are added to the tilemap's own. See [`Scene::refresh_tilemap`](crate::Scene).
+    pub(crate) latched: (i32, i32),
+    /// The ox and oy of the viewport when the scene last looked, to notice their change.
+    pub(crate) seen: (i32, i32),
+}
+
 /// A tilemap: a tileset, autotiles and the tables that say which tile goes where, drawn as
 /// three layers of 32 by 32 tiles over its viewport's rectangle, or over the screen.
 ///
@@ -495,6 +515,9 @@ pub struct Tilemap {
     pub flash_data: Option<SharedTable>,
     /// The priority of every tile identifier, shared like the map data.
     pub priorities: Option<SharedTable>,
+    /// `Some` for a tilemap of RGSS2, which then draws from this and not from the tileset,
+    /// the autotiles and the priorities.
+    pub rgss2: Option<TilemapRgss2>,
     pub visible: bool,
     /// The pixel of the map at the top-left corner of the area.
     pub ox: i32,
@@ -516,6 +539,7 @@ impl Tilemap {
             map_data: None,
             flash_data: None,
             priorities: None,
+            rgss2: None,
             visible: true,
             ox: 0,
             oy: 0,
@@ -532,9 +556,9 @@ impl Tilemap {
     }
 
     /// One step of the autotile animation and of the pulse of the flash data: every 16
-    /// updates each animated autotile shows its next frame.
+    /// updates each animated autotile shows its next frame; in a tilemap of RGSS2 every 30.
     ///
-    /// The speed of 16 updates per frame was measured on the original runtime.
+    /// Both speeds were measured on the original runtimes.
     pub fn update(&mut self) {
         // The count does not wrap within the lifetime of a process.
         self.updates += 1;

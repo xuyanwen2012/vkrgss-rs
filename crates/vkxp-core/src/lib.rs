@@ -54,8 +54,10 @@
 //!   tilemap layer ops that name its sheets and its two tables: for the tiles of priority 0
 //!   one op for each layer of the map that shows such a tile, at z 0, and for every higher
 //!   priority one op per row of tiles and layer, at the z that ranks the row among sprites,
-//!   so that every tile meets the frame by itself. The tables are sent when an op first
-//!   reads them and again when they were written to. The scene also holds `Graphics`
+//!   so that every tile meets the frame by itself. A tilemap of RGSS2
+//!   ([`TilemapRgss2`]) is two tilemap plane ops, the lower at z 0 and the upper at z 200,
+//!   which name its nine sheets and its map, passages and flash tables. The tables are sent
+//!   when an op first reads them and again when they were written to. The scene also holds `Graphics`
 //!   bookkeeping: frame count, frame rate and the logical size (640 by 480 unless given, at
 //!   most [`MAX_LOGICAL_DIMENSION`] a side).
 //! - Input. [`InputState`] takes the protocol's input snapshots as they arrive and latches
@@ -116,7 +118,7 @@ mod window;
 
 pub use bitmap::{Bitmaps, MAX_BITMAP_PIXELS};
 pub use color::{Color, Tone};
-pub use element::{Plane, Sprite, Tilemap, Viewport, Window};
+pub use element::{Plane, Sprite, Tilemap, TilemapRgss2, Viewport, Window};
 pub use error::{BitmapError, CreateFailure, DecodeError, ElementKind, SceneError, TableError};
 pub use font::{Font, FontDefaults};
 pub use input::InputState;

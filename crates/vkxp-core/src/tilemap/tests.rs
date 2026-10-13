@@ -686,7 +686,7 @@ fn row_z(height: i32, row: i64, priority: i64, oy: i32, viewport: Option<(i32, i
     let mut found = strips.filter_map(|(z, strip)| match strip {
         Strip::Ground => (priority == 0).then_some(z),
         Strip::Row { row: shown, .. } => (first + i64::from(shown) == row).then_some(z),
-        Strip::Flash => None,
+        Strip::Flash | Strip::Plane(_) => None,
     });
     found.next().expect("the row shows")
 }
