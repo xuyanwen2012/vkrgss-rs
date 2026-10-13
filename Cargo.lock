@@ -2496,12 +2496,10 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "vkxp-binding",
- "vkxp-core",
  "vkxp-guest",
+ "vkxp-guest-main",
  "vkxp-host",
  "vkxp-proto",
- "vkxp-ruby-sys",
- "vkxp-text",
  "vkxp-vfs",
 ]
 
@@ -2570,6 +2568,22 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "vkxp-proto",
+ "vkxp-vfs",
+]
+
+[[package]]
+name = "vkxp-guest-main"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "tempfile",
+ "tracing",
+ "vkxp-binding",
+ "vkxp-core",
+ "vkxp-guest",
+ "vkxp-proto",
+ "vkxp-ruby-sys",
+ "vkxp-text",
  "vkxp-vfs",
 ]
 

@@ -1,6 +1,6 @@
 //! The text backend of a running game: the binding's interface over the font engine.
 //!
-//! It lives in the binary so that the binding does not depend on the font engine.
+//! It lives outside the binding so that the binding does not depend on the font engine.
 
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};

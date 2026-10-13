@@ -34,6 +34,7 @@ pub(crate) const GUEST_CRATES: &[&str] = &[
     "vkxp-ruby-sys",
     "vkxp-binding",
     "vkxp-guest",
+    "vkxp-guest-main",
 ];
 
 /// Crates that own the window, the GPU or the audio device.
@@ -500,6 +501,44 @@ mod tests {
     }
 
     /// Scenario "Interpreter dependency is rejected".
+    /// Scenario "The main of a guest".
+    #[test]
+    fn the_main_of_a_guest_reaching_a_host_crate_is_reported() {
+        for host in HOST_CRATES {
+            let reaching = graph(&[("vkxp-guest-main", "helper"), ("helper", host)]);
+            let violations = check(&reaching);
+            assert_eq!(
+                violations,
+                vec![Violation::GuestReachesHost {
+                    path: path(&["vkxp-guest-main", "helper", host]),
+                }]
+            );
+            assert_eq!(
+                violations[0].to_string(),
+                format!(
+                    "guest crate `vkxp-guest-main` reaches host crate `{host}`: \
+                     vkxp-guest-main -> helper -> {host}"
+                )
+            );
+
+            let reached = graph(&[(host, "vkxp-guest-main")]);
+            assert_eq!(
+                check(&reached),
+                vec![Violation::HostReachesGuest {
+                    path: path(&[host, "vkxp-guest-main"]),
+                }]
+            );
+        }
+        // It is what links the interpreter, and the program links it beside the host.
+        let allowed = graph(&[
+            ("vkxp-guest-main", "vkxp-binding"),
+            ("vkxp-guest-main", "vkxp-guest"),
+            ("vkxp", "vkxp-guest-main"),
+            ("vkxp", "vkxp-host"),
+        ]);
+        assert_eq!(check(&allowed), vec![]);
+    }
+
     #[test]
     fn the_guest_role_reaching_an_interpreter_is_reported() {
         for interpreter in INTERPRETER_CRATES {

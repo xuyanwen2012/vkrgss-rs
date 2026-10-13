@@ -8,7 +8,7 @@
 //! with the protocol link between them.
 //!
 //! Before anything else, an executable whose first argument is the hidden option of the
-//! guest role is a guest process (`guest::guest_process`): it reads the guest record that
+//! guest role is a guest process (`guest_process` of `vkxp-guest-main`): it reads the guest record that
 //! the option names and nothing else of its command line, and none of the steps below.
 //! Otherwise:
 //!
@@ -30,8 +30,8 @@
 //!    with relative names. Paths given on the command line are made absolute first.
 //! 4. SIGVTALRM is blocked while the main thread is still the only one; the library of the
 //!    guest role, `vkxp-guest`, unblocks it on the interpreter thread before the game runs.
-//! 5. The text backend over the font engine (`font`) and the binding's configuration are
-//!    built and the interpreter is started (`guest`).
+//! 5. The text backend over the font engine and the binding's configuration are built and
+//!    the interpreter is started (the main of a guest, `vkxp-guest-main`).
 //! 6. The host runs on the main thread. In a window it plays the game's audio on the default
 //!    output device unless `--no-audio` is given; headless it opens none. The guest thread, which the windowed runner spawns
 //!    and the headless mode spawns itself, sends the game to the interpreter thread and
@@ -66,8 +66,6 @@
 
 mod args;
 mod config;
-mod font;
-mod guest;
 mod log;
 mod process;
 
@@ -89,8 +87,8 @@ use crate::config::Settings;
 use vkxp_guest::diagnostics;
 use vkxp_guest::record::Diagnostics;
 use vkxp_guest::settings::GuestSettings;
+use vkxp_guest_main::{Outcome, game_succeeded, guest_inputs, guest_on_thread, refuse_rgss3};
 
-use crate::guest::{Outcome, game_succeeded, guest_inputs, guest_on_thread, refuse_rgss3};
 use crate::process::{GuestProcess, Handed};
 
 /// How long the program waits for the game's scripts to end after the host has.
@@ -98,7 +96,7 @@ const GUEST_WAIT: Duration = Duration::from_secs(5);
 
 fn main() -> ExitCode {
     // A guest process reads its record and nothing of what follows.
-    if let Some(status) = guest::guest_process(env!("CARGO_PKG_VERSION")) {
+    if let Some(status) = vkxp_guest_main::guest_process(env!("CARGO_PKG_VERSION")) {
         return status;
     }
     let arguments: Vec<String> = std::env::args().skip(1).collect();
@@ -489,7 +487,7 @@ mod tests {
     /// Requirement "Built-in scripts file": the default file of each runtime.
     #[test]
     fn the_default_built_in_scripts_file_follows_the_runtime() {
-        let names = vkxp_vfs::Runtime::ALL.map(guest::builtin_scripts_name);
+        let names = vkxp_vfs::Runtime::ALL.map(vkxp_guest_main::builtin_scripts_name);
         let expected = [
             "rpg_builtin.rb",
             "rpg_builtin_rgss2.rb",

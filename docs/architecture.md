@@ -18,7 +18,8 @@ defined in `vkxp-proto`.
 | `vkxp-vfs` | Path resolution, RTP lookup, encrypted archive | guest |
 | `vkxp-ruby-sys` | Build of the embedded Ruby and raw FFI | guest |
 | `vkxp-binding` | RGSS Ruby API on top of core | guest |
-| `vkxp-guest` | The guest role: the hidden option, the attachment, the copies that are states, the sandbox and the signal settings of a guest process | guest |
+| `vkxp-guest` | The guest role: the hidden option, the guest record and the settings in it, the subscriber of the diagnostics, the attachment, the copies that are states, the sandbox and the signal settings of a guest process | guest |
+| `vkxp-guest-main` | The main of a guest: what a guest is set up with, the text backend over the font engine, the guest on a thread, and the function that makes an executable a guest process | guest |
 | `vkxp-compose-ref` | CPU reference compositor | host and tests |
 | `vkxp-vk` | Vulkan backend | host |
 | `vkxp-audio` | Mixer, decoding, MIDI synthesis | host |
@@ -94,11 +95,11 @@ Four rules keep the guest/host boundary intact. A test in `xtask` checks them ag
 violation is reported with the full dependency path that causes it.
 
 1. **Guest crates do not reach host crates.** None of `vkxp-core`, `vkxp-image`, `vkxp-text`,
-   `vkxp-vfs`, `vkxp-ruby-sys`, `vkxp-binding`, `vkxp-guest` may depend, directly or
-   transitively, on `vkxp-vk`, `vkxp-audio` or `vkxp-host`.
+   `vkxp-vfs`, `vkxp-ruby-sys`, `vkxp-binding`, `vkxp-guest`, `vkxp-guest-main` may depend,
+   directly or transitively, on `vkxp-vk`, `vkxp-audio` or `vkxp-host`.
 2. **Host crates do not reach guest crates.** None of `vkxp-vk`, `vkxp-audio`, `vkxp-host`, and
    not the reference compositor `vkxp-compose-ref` either, may depend, directly or transitively,
-   on a guest crate, `vkxp-guest` included. The `vkxp` binary is exempt from both directions: it is the one crate that
+   on a guest crate, `vkxp-guest` and `vkxp-guest-main` included. The `vkxp` binary is exempt from both directions: it is the one crate that
    depends on both sides and joins them.
 3. **`vkxp-core` stays pure.** Everything `vkxp-core` reaches, directly or transitively, must be
    on its allow-list: `vkxp-proto`, `vkxp-pixel` and the pure crates those need. The list is
@@ -113,5 +114,6 @@ or an off-by-default feature cannot hide a forbidden path. Only normal and build
 count; dev-dependencies are not linked into either side.
 
 In addition, `vkxp-proto`, `vkxp-pixel`, `vkxp-core` and `vkxp-compose-ref` carry
-`#![forbid(unsafe_code)]`, so `unsafe` in them does not compile. `vkxp-guest` denies `unsafe`
+`#![forbid(unsafe_code)]`, so `unsafe` in them does not compile, and so does `vkxp-guest-main`.
+`vkxp-guest` denies `unsafe`
 at its root and allows it in the modules of the copier and of the signals only.

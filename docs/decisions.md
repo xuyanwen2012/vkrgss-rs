@@ -101,7 +101,8 @@ A3 of "Milestones" and the risks of VX Ace.
 | `vkxp-vfs` | Path resolution, RTP lookup, encrypted archive | guest |
 | `vkxp-ruby-sys` | Build of the embedded Ruby and raw FFI | guest |
 | `vkxp-binding` | RGSS Ruby API on top of core | guest |
-| `vkxp-guest` | The guest role: the hidden option, the attachment, the copies that are states, the sandbox and the signal settings of a guest process; links no interpreter | guest |
+| `vkxp-guest` | The guest role: the hidden option, the guest record and the settings in it, the subscriber of the diagnostics, the attachment, the copies that are states, the sandbox and the signal settings of a guest process; links no interpreter | guest |
+| `vkxp-guest-main` | The main of a guest: what a guest is set up with, the text backend over the font engine, the guest on a thread, and the function that makes an executable a guest process | guest |
 | `vkxp-compose-ref` | CPU reference compositor | host and tests |
 | `vkxp-vk` | Vulkan backend: binning, compositing, presentation, pacing | host |
 | `vkxp-audio` | Mixer, decoding, MIDI synthesis | host |
@@ -175,7 +176,8 @@ A3 of "Milestones" and the risks of VX Ace.
 - Everything in the repository is English. Rust edition 2024, toolchain pinned.
 - `unsafe` only in `vkxp-vk`, `vkxp-ruby-sys`, `vkxp-binding`, `vkxp-guest` and platform
   code.
-  `thiserror` in libraries, `anyhow` in the binary, `tracing` for logs.
+  `thiserror` in libraries, `anyhow` in the binary and in `vkxp-guest-main`, which is the
+  body of the `main` of a guest executable, `tracing` for logs.
 - Merge gate: `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test`,
   `cargo doc` with warnings denied, `openspec validate`.
 - OpenSpec proposals are drafted interactively and reviewed by the owner. Each change is

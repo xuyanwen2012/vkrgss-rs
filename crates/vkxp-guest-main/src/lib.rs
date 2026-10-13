@@ -1,15 +1,26 @@
-//! The guest of the program: what it needs of the binding and of the interpreter.
+//! The main of a guest: what a guest does with its binding and its interpreter.
+//!
+//! Side: guest.
 //!
 //! The guest role itself, which is the same for an executable of any interpreter, is the
-//! library `vkxp-guest`. This module is the part that names the binding and the sys crate:
+//! library `vkxp-guest`. This crate is the part that names the binding and the sys crate:
 //! what a guest is set up with ([`guest_inputs`], which the program also calls as a check
-//! before anything starts), the guest on a thread ([`guest_on_thread`]) and the guest
-//! process ([`guest_process`]), which call the library in the order its documentation gives.
+//! before anything starts), the text backend over the font engine (`font`), the guest on a
+//! thread ([`guest_on_thread`]) and the guest process ([`guest_process`]), which call the
+//! library in the order its documentation gives.
 //!
-//! The module and `font` name nothing of the host and nothing of the command line, the
-//! configuration files or the diagnostics of the program: they are what an executable of
-//! another interpreter compiles against its own binding. What a guest reads of the settled
-//! options is [`GuestSettings`] of `vkxp-guest`.
+//! It is the body of the `main` of a guest executable, kept in a library so that every such
+//! executable has it: the first statement of `main` is a call of [`guest_process`]. The
+//! crate names nothing of the host and nothing of the command line or the configuration
+//! files of the program, and it names the binding and the sys crate only as `vkxp_binding`
+//! and `vkxp_ruby_sys`: an executable of another interpreter compiles the same source
+//! against its own. What a guest reads of the settled options is `GuestSettings` of
+//! `vkxp-guest`. Its errors are written to the error stream with their causes and matched
+//! by nobody, so it uses `anyhow`.
+
+#![forbid(unsafe_code)]
+
+mod font;
 
 use std::path::{Path, PathBuf, absolute};
 use std::process::ExitCode;
@@ -41,7 +52,7 @@ const RGSS3_BUILTIN_GUIDE: &str =
     "docs/running.md, section \"The built-in scripts of RPG Maker VX Ace\"";
 
 /// The name of the built-in scripts file of `runtime` at the default location.
-pub(crate) fn builtin_scripts_name(runtime: Runtime) -> &'static str {
+pub fn builtin_scripts_name(runtime: Runtime) -> &'static str {
     match runtime {
         Runtime::Rgss1 => "rpg_builtin.rb",
         Runtime::Rgss2 => "rpg_builtin_rgss2.rb",
@@ -141,9 +152,11 @@ fn default_font_names(library: &str) -> Vec<String> {
 
 /// What the guest of a run is set up with, as far as it is looked up before any game file
 /// is opened.
-pub(crate) struct GuestInputs {
-    pub(crate) ini: GameIni,
-    pub(crate) runtime: Runtime,
+pub struct GuestInputs {
+    /// The configuration file of the game.
+    pub ini: GameIni,
+    /// The runtime of the game.
+    pub runtime: Runtime,
     rtp_dirs: Vec<PathBuf>,
     builtin_scripts: PathBuf,
     font_dirs: Vec<PathBuf>,
@@ -165,7 +178,7 @@ fn runtime_of(ini: &GameIni, named: Option<Runtime>) -> Result<Runtime> {
 /// the program does with the files of any game before a guest starts is done first: the
 /// game's files are opened, with the archive when there is one, and the script archive is
 /// read from them. A failure of that is the error instead of the refusal.
-pub(crate) fn refuse_rgss3(game_dir: &Path, inputs: &GuestInputs) -> Result<()> {
+pub fn refuse_rgss3(game_dir: &Path, inputs: &GuestInputs) -> Result<()> {
     let runtime = inputs.runtime;
     if runtime != Runtime::Rgss3 {
         return Ok(());
@@ -190,7 +203,7 @@ pub(crate) fn refuse_rgss3(game_dir: &Path, inputs: &GuestInputs) -> Result<()> 
 
 /// Reads `Game.ini`, settles the runtime of the game, looks the run-time packages it names
 /// up in the table of the settings and finds the built-in scripts file.
-pub(crate) fn guest_inputs(game_dir: &Path, settings: &GuestSettings) -> Result<GuestInputs> {
+pub fn guest_inputs(game_dir: &Path, settings: &GuestSettings) -> Result<GuestInputs> {
     let ini = GameIni::read(game_dir, settings.encoding)?;
     let runtime = runtime_of(&ini, settings.runtime)?;
     tracing::info!("runtime: {} ({})", runtime.name(), runtime.product());
@@ -287,7 +300,7 @@ fn confined(sandbox: Option<bool>, process_functions: bool) -> bool {
 }
 
 /// Where the guest on a thread reports how its game went.
-pub(crate) type Outcome = Receiver<Result<(), RunError>>;
+pub type Outcome = Receiver<Result<(), RunError>>;
 
 /// The copier of the library as the copier of the binding.
 #[derive(Debug)]
@@ -307,7 +320,7 @@ impl Copier for ProcessCopier {
 /// what the guest thread does with its link, and where that reports how the game went. It
 /// sends the game to the interpreter thread, waits for it, reports and lets go of the
 /// interpreter.
-pub(crate) fn guest_on_thread(
+pub fn guest_on_thread(
     game_dir: &Path,
     settings: &GuestSettings,
     inputs: GuestInputs,
@@ -335,7 +348,7 @@ pub(crate) fn guest_on_thread(
 /// reads nothing else of its command line and no configuration file. The status is 0 for a
 /// game that ended without a failure and 1 otherwise; a record that cannot be used and a
 /// start that failed are a line on the error stream first.
-pub(crate) fn guest_process(version: &str) -> Option<ExitCode> {
+pub fn guest_process(version: &str) -> Option<ExitCode> {
     let record = role::record_path(std::env::args_os().skip(1))?
         .and_then(|path| GuestRecord::read(&path, version));
     let fatal = |message: &dyn std::fmt::Display| {
@@ -404,7 +417,7 @@ fn run_guest(
 
 /// Whether the game ended without a failure. A failure that is not on the error stream yet
 /// is written there.
-pub(crate) fn game_succeeded(result: Result<(), RunError>) -> bool {
+pub fn game_succeeded(result: Result<(), RunError>) -> bool {
     match result {
         Ok(()) => true,
         // The report of a script error is on the error stream already.

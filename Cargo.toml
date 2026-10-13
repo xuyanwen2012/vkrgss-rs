@@ -10,6 +10,7 @@ members = [
     "crates/vkxp-ruby-sys",
     "crates/vkxp-binding",
     "crates/vkxp-guest",
+    "crates/vkxp-guest-main",
     "crates/vkxp-compose-ref",
     "crates/vkxp-vk",
     "crates/vkxp-audio",
@@ -68,6 +69,7 @@ vkxp-vfs = { path = "crates/vkxp-vfs" }
 vkxp-ruby-sys = { path = "crates/vkxp-ruby-sys" }
 vkxp-binding = { path = "crates/vkxp-binding" }
 vkxp-guest = { path = "crates/vkxp-guest" }
+vkxp-guest-main = { path = "crates/vkxp-guest-main" }
 vkxp-compose-ref = { path = "crates/vkxp-compose-ref" }
 vkxp-vk = { path = "crates/vkxp-vk" }
 vkxp-audio = { path = "crates/vkxp-audio" }
