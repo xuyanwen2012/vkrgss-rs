@@ -2,7 +2,8 @@
 
 vkxp aims at the behaviour of the original runtime of RPG Maker XP, RGSS 1.04. Games that
 use the default scripts or common community scripts are meant to run unmodified. RPG Maker
-VX and VX Ace are planned and not supported yet; everything below is about XP.
+VX is experimental, see [RPG Maker VX](#rpg-maker-vx); VX Ace is planned and not supported
+yet. Everything else below is about XP.
 
 ## What is exact
 
@@ -50,6 +51,40 @@ Besides these, WMA sounds are decoded by the `ffmpeg` program, which has to be i
 without it they stay silent. vkxp runs on Linux, and x86_64 is the supported architecture;
 the job `gate-aarch64` of the [CI workflow](../.github/workflows/ci.yml) shows what works on
 aarch64.
+
+## RPG Maker VX
+
+Support for games of RPG Maker VX (RGSS2) is experimental. Of the module `Graphics`, a game
+of VX has what follows, each measured on the original runtime of VX (`RGSS202E.dll`,
+versions 2.0.0.1 and 2.0.2.1) under Wine:
+
+- The frame is 544 by 416 pixels and the frame rate starts at 60. `Graphics.width` and
+  `Graphics.height` return the size of the frame.
+- `Graphics.brightness` and `Graphics.brightness=`, limited to 0 to 255. Every frame is
+  darkened by it.
+- `Graphics.wait(n)` shows n frames, none for n below 1.
+- `Graphics.fadeout(n)` and `Graphics.fadein(n)` show n frames at the brightness
+  `b0 - b0 * k / n` and `b0 + (255 - b0) * k / n` and leave 0 and 255, also for n = 0.
+- `Graphics.transition` defaults to 10 frames. With nothing frozen it shows nothing and
+  returns at once. After `Graphics.freeze` it sets the brightness to 255 and steps the
+  transition by the weights of RGSS2.
+- `Graphics.snap_to_bitmap` returns a bitmap of the size of the frame with the scene as its
+  objects are at that moment, darkened by the brightness, with an alpha of 255 everywhere.
+  It shows no frame. The scene is drawn on the CPU for it.
+- `wait`, `fadeout`, `fadein` and `transition` do not call a `Graphics.update` that a
+  script redefined.
+
+Not there or not measured yet:
+
+- `Graphics.resize_screen` is not defined.
+- A transition with a picture reads its arguments as in XP: the default vagueness and the
+  thresholds of RGSS2 are not measured.
+- A fade with a count below 0 is taken as one of 0 frames, and a transition with nothing
+  frozen does not look for its picture, so a missing file raises nothing. Neither case was
+  measured.
+
+In a game of XP none of `brightness`, `brightness=`, `wait`, `fadeout`, `fadein`,
+`snap_to_bitmap`, `width` and `height` is defined, as on the original.
 
 ## Limits of save states
 

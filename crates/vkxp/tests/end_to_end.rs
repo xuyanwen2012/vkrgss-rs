@@ -805,6 +805,49 @@ Graphics.update
     }
 }
 
+/// Requirement "Frames of a game of RGSS2 as shown", scenario "Dumped frames of a game": the
+/// first ten frames, which the program counts from 0.
+#[test]
+fn dumped_frames_of_a_game_of_vx_show_a_fade_and_a_transition_after_a_freeze() {
+    let main = "\
+sprite = Sprite.new
+sprite.bitmap = Bitmap.new(544, 416)
+sprite.bitmap.fill_rect(0, 0, 544, 416, Color.new(255, 255, 255))
+Graphics.update
+Graphics.fadeout(4)
+Graphics.freeze
+Graphics.transition(4)
+Graphics.update
+";
+    let game = Game::of(Runtime::Rgss2, "e2e-fade-vx", "Fade", &[("Main", main)]);
+    let names: Vec<String> = (0..10)
+        .map(|index| format!("{index}={index}.png"))
+        .collect();
+    let dumps: Vec<&str> = names.iter().flat_map(|name| ["--dump", name]).collect();
+    let ran = headless(&game, &dumps);
+    ran.assert_success();
+
+    // The frame of the update, the four of the fade from white, the four of the transition
+    // from the black that was frozen to the scene at the brightness 255, and the frame after.
+    let expected = [255, 191, 127, 63, 0, 62, 126, 190, 255, 255];
+    for (index, level) in expected.into_iter().enumerate() {
+        let frame = ran.frame(&format!("{index}.png"));
+        assert_eq!((frame.width, frame.height), (544, 416));
+        let first = frame.pixel(0, 0);
+        assert_eq!(first[0], level, "frame {index}: {first:?}");
+        assert_eq!([first[1], first[2], first[3]], [first[0], first[0], 255]);
+        assert!(
+            frame
+                .rgba
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .all(|pixel| *pixel == first),
+            "frame {index} is of one colour"
+        );
+    }
+}
+
 /// Writes a grey picture of `width` by `height` pixels as an RGB PNG file: `level(x, y)` in
 /// every channel.
 fn write_grey_png(path: &Path, width: u32, height: u32, level: impl Fn(u32, u32) -> u8) {

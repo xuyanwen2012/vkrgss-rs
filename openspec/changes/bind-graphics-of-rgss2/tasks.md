@@ -14,8 +14,8 @@
 
 ## 4. End to end and documentation
 
-- [ ] 4.1 A generated game of RGSS2 run by the program, headless, with dumped frames: a fade and a transition after a freeze. Verify: the scenario "Dumped frames of a game"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` passes.
-- [ ] 4.2 `docs/compatibility.md`: what of `Graphics` works for VX. Verify: the text names nothing that the code does not do.
+- [x] 4.1 A generated game of RGSS2 run by the program, headless, with dumped frames: a fade and a transition after a freeze. Verify: the scenario "Dumped frames of a game"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` passes.
+- [x] 4.2 `docs/compatibility.md`: what of `Graphics` works for VX. Verify: the text names nothing that the code does not do.
 
 ## 5. Integration check
 

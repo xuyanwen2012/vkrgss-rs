@@ -79,8 +79,9 @@ fn wait(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
 
 /// A fade of RGSS2 from the brightness as it is to `end`: frame k of `duration` shows the
 /// scene at `b0 + (end - b0) * k / duration` in integer division, and the brightness is `end`
-/// afterwards, also without a frame. A duration below 0 is taken as 0, which was not
-/// measured.
+/// afterwards, also without a frame.
+///
+/// PLACEHOLDER: a duration below 0 is taken as 0; that case was not measured.
 ///
 /// Provenance: oracle measurement 2026-10-12, RGSS202E versions 2.0.0.1 and 2.0.2.1,
 /// `vx-v0-REPORT.md` section 6.
@@ -148,9 +149,11 @@ fn load_mask(ruby: &Ruby, path: &str) -> Result<BitmapId, Raise> {
 /// was frozen.
 ///
 /// RGSS2: the duration defaults to 10. With nothing frozen the function returns at once: no
-/// message, no frame, the brightness as it is, and the picture is not loaded (the last was
-/// not measured). After a freeze the brightness becomes 255, also for a duration of 0, and
-/// the host steps the transition by the rule of RGSS2.
+/// message, no frame, the brightness as it is. After a freeze the brightness becomes 255,
+/// also for a duration of 0, and the host steps the transition by the rule of RGSS2.
+///
+/// PLACEHOLDER: with nothing frozen in RGSS2 the arguments are not read and the picture is
+/// not loaded, so a missing picture raises nothing; that was not measured.
 ///
 /// Provenance: oracle measurement 2026-10-12, RGSS202E versions 2.0.0.1 and 2.0.2.1,
 /// `vx-v0-REPORT.md` section 6.
