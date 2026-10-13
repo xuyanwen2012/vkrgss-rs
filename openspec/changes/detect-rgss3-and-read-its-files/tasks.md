@@ -2,8 +2,8 @@
 
 ## 1. Game files
 
-- [ ] 1.1 The reader of RGSSAD version 3 in `vkxp-vfs`, the archive name `Game.rgss3a` for RGSS3 and the version read by runtime; a builder of version 3 archives in the test code, written from the layout in `design.md`. Verify: the scenarios of "Table of RGSSAD version 3", "Entry data of RGSSAD version 3", "Encrypted archive" and "Damaged archive" in `specs/game-files/spec.md`; `cargo test -p vkxp-vfs --locked` passes.
-- [ ] 1.2 Property tests of version 3 beside those of version 1; tests of the run-time package of RGSS3 and of detection with `Library=System\RGSS300.dll` and `System\RGSS301.dll`; the documentation of the crate names the third archive. Verify: the scenarios of "Arbitrary archive bytes" and "Run-time package directories"; `cargo test -p vkxp-vfs --locked` and `cargo doc -p vkxp-vfs --no-deps --locked` pass.
+- [x] 1.1 The reader of RGSSAD version 3 in `vkxp-vfs`, the archive name `Game.rgss3a` for RGSS3 and the version read by runtime; a builder of version 3 archives in the test code, written from the layout in `design.md`. Verify: the scenarios of "Table of RGSSAD version 3", "Entry data of RGSSAD version 3", "Encrypted archive" and "Damaged archive" in `specs/game-files/spec.md`; `cargo test -p vkxp-vfs --locked` passes.
+- [x] 1.2 Property tests of version 3 beside those of version 1; tests of the run-time package of RGSS3 and of detection with `Library=System\RGSS300.dll` and `System\RGSS301.dll`; the documentation of the crate names the third archive. Verify: the scenarios of "Arbitrary archive bytes" and "Run-time package directories"; `cargo test -p vkxp-vfs --locked` and `cargo doc -p vkxp-vfs --no-deps --locked` pass.
 
 ## 2. Extraction tool
 

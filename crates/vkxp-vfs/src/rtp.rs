@@ -75,6 +75,33 @@ mod tests {
     }
 
     #[test]
+    fn package_of_vx_ace() {
+        use crate::{GameIni, Runtime};
+
+        let dir = tempfile::tempdir().unwrap();
+        let table = BTreeMap::from([("RPGVXAce".to_owned(), dir.path().to_owned())]);
+        let text = "[Game]\nRTP=RPGVXAce\nRTP1=Standard\nLibrary=System\\RGSS301.dll\n\
+                    Scripts=Data\\Scripts.rvdata2\n";
+        let ini = GameIni::parse(text.as_bytes(), None).unwrap();
+        let dirs = resolve_rtps(ini.rtp_names(Runtime::Rgss3), &table).unwrap();
+        assert_eq!(dirs, [dir.path()]);
+        // A package that is named and not in the table is an error, as the original does
+        // not start such a game.
+        let error = resolve_rtps(ini.rtp_names(Runtime::Rgss3), &BTreeMap::new()).unwrap_err();
+        assert!(matches!(&error, VfsError::UnknownRtp { name } if name == "RPGVXAce"));
+    }
+
+    #[test]
+    fn game_of_vx_ace_without_a_package() {
+        use crate::{GameIni, Runtime};
+
+        let text = "[Game]\nRTP=\nLibrary=System\\RGSS300.dll\nScripts=Data\\Scripts.rvdata2\n";
+        let ini = GameIni::parse(text.as_bytes(), None).unwrap();
+        let dirs = resolve_rtps(ini.rtp_names(Runtime::Rgss3), &BTreeMap::new()).unwrap();
+        assert!(dirs.is_empty());
+    }
+
+    #[test]
     fn unknown_package() {
         let dir = tempfile::tempdir().unwrap();
         let table = BTreeMap::from([("Standard".to_owned(), dir.path().to_owned())]);

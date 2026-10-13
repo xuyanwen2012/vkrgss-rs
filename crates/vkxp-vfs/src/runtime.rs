@@ -36,13 +36,13 @@ impl Runtime {
         }
     }
 
-    /// The name of the encrypted archive of a game of this runtime that the reader of
-    /// RGSSAD version 1 reads. The archive of RGSS3 is another format and has none.
-    pub fn archive_name(self) -> Option<&'static str> {
+    /// The name of the encrypted archive of a game of this runtime: RGSSAD version 1 for
+    /// RGSS1 and RGSS2, version 3 for RGSS3.
+    pub fn archive_name(self) -> &'static str {
         match self {
-            Runtime::Rgss1 => Some("Game.rgssad"),
-            Runtime::Rgss2 => Some("Game.rgss2a"),
-            Runtime::Rgss3 => None,
+            Runtime::Rgss1 => "Game.rgssad",
+            Runtime::Rgss2 => "Game.rgss2a",
+            Runtime::Rgss3 => "Game.rgss3a",
         }
     }
 
@@ -132,6 +132,19 @@ mod tests {
         assert_eq!(runtime.unwrap(), Runtime::Rgss3);
         let runtime = detect("System/RGSS300.dll", "Data\\Code.bin");
         assert_eq!(runtime.unwrap(), Runtime::Rgss3);
+    }
+
+    #[test]
+    fn libraries_of_vx_ace() {
+        // The two names the games of VX Ace ship their DLL under; the digits after the
+        // first tell nothing.
+        for library in ["System\\RGSS300.dll", "System\\RGSS301.dll"] {
+            let runtime = detect(library, "Data\\Scripts.rvdata2");
+            assert_eq!(runtime.unwrap(), Runtime::Rgss3, "{library}");
+            let runtime = detect(library, "Data\\Code.bin");
+            assert_eq!(runtime.unwrap(), Runtime::Rgss3, "{library}");
+        }
+        assert_eq!(Runtime::Rgss3.archive_name(), "Game.rgss3a");
     }
 
     #[test]

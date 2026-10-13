@@ -35,7 +35,8 @@ pub enum VfsError {
     /// exactly as it was requested.
     #[error("file not found: {path}")]
     NotFound { path: String },
-    /// The encrypted archive of the game is not a complete RGSSAD version 1 archive.
+    /// The encrypted archive of the game is not a complete RGSSAD archive of the version
+    /// its runtime reads.
     #[error("damaged archive {}: {reason}", path.display())]
     DamagedArchive { path: PathBuf, reason: &'static str },
     /// The file or directory exists but could not be read.

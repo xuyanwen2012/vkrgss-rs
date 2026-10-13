@@ -133,7 +133,7 @@ fn builtin_scripts(named: Option<PathBuf>, runtime: Runtime) -> Result<PathBuf> 
 /// The encrypted archive of the game in `game_dir`, which the game's files are opened with:
 /// a file with the archive name of `runtime` under any letter case.
 fn archive(game_dir: &Path, runtime: Runtime) -> Option<PathBuf> {
-    let archive_name = runtime.archive_name()?;
+    let archive_name = runtime.archive_name();
     std::fs::read_dir(game_dir)
         .ok()?
         .flatten()

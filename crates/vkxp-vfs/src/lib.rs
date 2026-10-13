@@ -19,8 +19,8 @@
 //!   through a symbolic link.
 //!
 //! [`GameFiles::open`] also reads the encrypted archive of the game (`Game.rgssad` or
-//! `Game.rgss2a`, RGSSAD version 1), whose entries come before loose files. Nothing here writes files: saves go
-//! through Ruby's own file API.
+//! `Game.rgss2a`, RGSSAD version 1, or `Game.rgss3a`, RGSSAD version 3), whose entries come
+//! before loose files. Nothing here writes files: saves go through Ruby's own file API.
 //!
 //! # Example
 //!
