@@ -218,13 +218,6 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
             }
         }
     }
-    // The fourth byte of 32-bit pixels is alpha only if some pixel uses it; files that leave
-    // it zero throughout are opaque.
-    if header.bits == 32 && pixels_mut(&mut rgba).iter().all(|pixel| pixel[3] == 0) {
-        for pixel in pixels_mut(&mut rgba) {
-            pixel[3] = 255;
-        }
-    }
     Ok(DecodedImage {
         width,
         height,
@@ -460,6 +453,7 @@ mod tests {
 
     #[test]
     fn thirty_two_bits_without_alpha() {
+        // Measured on the originals: fourth bytes that are all 0 are alpha all the same.
         let mut stored = pattern(3, 2, 4);
         for pixel in stored.as_chunks_mut::<4>().0 {
             pixel[3] = 0;
@@ -469,14 +463,14 @@ mod tests {
             .as_chunks::<4>()
             .0
             .iter()
-            .flat_map(|pixel| [pixel[2], pixel[1], pixel[0], 255])
+            .flat_map(|pixel| [pixel[2], pixel[1], pixel[0], 0])
             .collect();
         assert_eq!(decode_ok(&bytes, 3, 2), expected);
     }
 
     #[test]
     fn thirty_two_bits_with_alpha() {
-        // One pixel with a non-zero fourth byte makes every fourth byte alpha, zeros included.
+        // Every fourth byte is alpha, zeros included.
         let stored = vec![1, 2, 3, 0, 4, 5, 6, 0, 7, 8, 9, 128, 10, 11, 12, 0];
         let bytes = Bmp::new(2, -2, 32, stored).build();
         let expected = [3, 2, 1, 0, 6, 5, 4, 0, 9, 8, 7, 128, 12, 11, 10, 0];

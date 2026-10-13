@@ -82,5 +82,13 @@ its own); `Tone`.
   asserts the names of `BITMAP_PROVENANCE`, which got two entries. Now
   `every_function_is_listed_and_none_is_a_placeholder`. It asserts no behaviour of the five
   rules; it changed because the list did.
+- `crates/vkxp-image/src/bmp.rs`, `thirty_two_bits_without_alpha`: expected alpha 255. Now
+  alpha 0 (rule 4).
 
 No existing test asserted that an opacity above 255 is limited (rule 1).
+
+Rule 5 needed no change of code: `Color` of `vkxp-core` has limited red, green and blue from
+below since the commit "Clamp colour components from below as well", and the binding builds
+every `Color` through it. The existing tests of both ends pass unchanged; the scenario
+"Lower bound, measured on the originals" got a test in `vkxp-core` and a case in the
+binding.

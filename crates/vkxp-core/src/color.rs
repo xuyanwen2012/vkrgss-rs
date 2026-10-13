@@ -308,6 +308,20 @@ mod tests {
         );
     }
 
+    /// Measured on the originals of XP and VX on 2026-10-12.
+    #[test]
+    fn the_lower_bound_of_a_colour_is_minus_255() {
+        let mut color = Color::new(-300.0, 0.0, 0.0, -5.0);
+        assert_eq!((color.red(), color.alpha()), (-255.0, 0.0));
+        color.set_red(-1000.0);
+        assert_eq!((color.red(), color.alpha()), (-255.0, 0.0));
+        let color = Color::new(-300.0, 300.0, 7.6, -7.0);
+        assert_eq!(
+            (color.red(), color.green(), color.blue(), color.alpha()),
+            (-255.0, 255.0, 7.6, 0.0)
+        );
+    }
+
     #[test]
     fn negative_colour_components_are_kept() {
         let mut color = Color::rgb(0.0, -5.0, 0.0);

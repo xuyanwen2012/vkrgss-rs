@@ -144,6 +144,11 @@ pub(crate) const COLOR_AND_TONE: &[Case] = &[
         "[255.0, -255.0, -20.0, 0.0, 255.0, -255.0]",
     ),
     value(
+        "the lower bound of a colour, as measured",
+        "c = Color.new(-300, 0, 0, -5); a = [c.red, c.alpha]; c.red = -1000; a + [c.red, c.alpha]",
+        "[-255.0, 0.0, -255.0, 0.0]",
+    ),
+    value(
         "a negative red is kept by the colour and stored modulo 256",
         "c = Color.new(-5, 0, 0); b = Bitmap.new(1, 1); b.set_pixel(0, 0, c); \
          [c.red, b.get_pixel(0, 0).red]",

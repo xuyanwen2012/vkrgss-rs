@@ -7,8 +7,8 @@
 
 ## 2. Values and decoding
 
-- [ ] 2.1 The limits of `Color`. Verify: the scenarios of "Colour components stored as in the original"; the same command.
-- [ ] 2.2 The alpha of a 32-bit BMP. Verify: the scenarios of "BMP"; `cargo test -p vkxp-image --locked` passes.
+- [x] 2.1 The limits of `Color`. Verify: the scenarios of "Colour components stored as in the original"; the same command.
+- [x] 2.2 The alpha of a 32-bit BMP. Verify: the scenarios of "BMP"; `cargo test -p vkxp-image --locked` passes.
 
 ## 3. Integration check
 

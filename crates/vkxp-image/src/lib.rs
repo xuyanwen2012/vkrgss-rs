@@ -14,7 +14,8 @@
 //!   subsampling; always opaque. Greyscale, and colour with chroma at full resolution or
 //!   halved horizontally or in both directions, decode to the pixels of the original runtime.
 //! - **BMP**: uncompressed, 1, 4, 8, 24 or 32 bits per pixel, bottom-up or top-down. The
-//!   fourth byte of 32-bit pixels is alpha only if some pixel has it non-zero.
+//!   fourth byte of 32-bit pixels is alpha, also when it is 0 in every pixel, as measured on the
+//!   original runtime.
 //!
 //! File contents are untrusted. Every failure is an [`ImageError`]; no input makes a decoder
 //! panic or return part of an image, and an image above [`MAX_PIXELS`] is refused from its
