@@ -7,8 +7,11 @@
 //! apart from running the game, so that an executable other than the program can be a
 //! guest too:
 //!
-//! - [`role`]: the hidden option that names the program's socket and carries the seed.
-//! - [`Attached`]: the attachment to that socket.
+//! - [`role`]: the hidden option that names the guest record.
+//! - [`record`]: the guest record, which the program writes and the guest process reads,
+//!   and [`settings`]: what a guest reads of the settled options of a run.
+//! - [`diagnostics`]: the subscriber that writes the diagnostics of an executable.
+//! - [`Attached`]: the attachment to the program's socket.
 //! - [`hello`]: the statement of the version that every connection of a guest starts with.
 //! - [`copier`]: the copies of the process that are its states.
 //! - [`sandbox`]: the restriction a guest process puts on itself.
@@ -42,9 +45,12 @@
 
 #[allow(unsafe_code)]
 pub mod copier;
+pub mod diagnostics;
 pub mod hello;
+pub mod record;
 pub mod role;
 pub mod sandbox;
+pub mod settings;
 #[allow(unsafe_code)]
 pub mod signals;
 

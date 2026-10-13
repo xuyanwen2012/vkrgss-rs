@@ -19,6 +19,13 @@ workspace = true
 [dependencies]
 landlock.workspace = true
 libc.workspace = true
+postcard.workspace = true
+serde.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+tracing-subscriber.workspace = true
 vkxp-proto.workspace = true
+vkxp-vfs.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

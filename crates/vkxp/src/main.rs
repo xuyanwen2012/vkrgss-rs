@@ -78,8 +78,11 @@ use vkxp_proto::link::GuestEnd;
 
 use crate::args::{GuestForm, Input, Options};
 use crate::config::Settings;
+use vkxp_guest::diagnostics;
+use vkxp_guest::settings::GuestSettings;
+
 use crate::guest::{
-    GuestSettings, Outcome, game_succeeded, guest_inputs, guest_on_thread, refuse_rgss3, run_guest,
+    Outcome, game_succeeded, guest_inputs, guest_on_thread, refuse_rgss3, run_guest,
 };
 use crate::process::GuestProcess;
 
@@ -106,9 +109,9 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     // Nothing before this emits an event: a mistake on the command line is written directly.
-    let variable = std::env::var(log::VARIABLE).ok();
-    match log::level(variable.as_deref(), options.verbose) {
-        Ok(level) => log::install(level),
+    let variable = std::env::var(diagnostics::VARIABLE).ok();
+    match diagnostics::level(variable.as_deref(), options.verbose) {
+        Ok(level) => diagnostics::install(level),
         Err(message) => return usage(message),
     }
     let variable = std::env::var(args::GUEST_VARIABLE).ok();

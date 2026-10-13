@@ -2563,9 +2563,14 @@ version = "0.2.0"
 dependencies = [
  "landlock",
  "libc",
+ "postcard",
+ "serde",
+ "tempfile",
  "thiserror 2.0.21",
  "tracing",
+ "tracing-subscriber",
  "vkxp-proto",
+ "vkxp-vfs",
 ]
 
 [[package]]

@@ -9,9 +9,8 @@
 //! The module and `font` name nothing of the host and nothing of the command line, the
 //! configuration files or the diagnostics of the program: they are what an executable of
 //! another interpreter compiles against its own binding. What a guest reads of the settled
-//! options is [`GuestSettings`].
+//! options is [`GuestSettings`] of `vkxp-guest`.
 
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf, absolute};
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
@@ -20,10 +19,11 @@ use anyhow::{Context, Result, anyhow, bail};
 use vkxp_binding::{Config, Copied, Copier, CopyFailed, RunConfig, RunError, run_game};
 use vkxp_guest::copier::{ForkCopier, Parked};
 use vkxp_guest::role::GuestRole;
+use vkxp_guest::settings::GuestSettings;
 use vkxp_guest::{Attached, play_in_process, play_on_thread, signals};
 use vkxp_proto::link::GuestEnd;
 use vkxp_ruby_sys::{Interpreter, SymbolTable};
-use vkxp_vfs::{Encoding, FileKind, GameFiles, GameIni, Runtime, VfsError, resolve_rtps};
+use vkxp_vfs::{FileKind, GameFiles, GameIni, Runtime, VfsError, resolve_rtps};
 
 use crate::font::FontBackend;
 
@@ -37,34 +37,6 @@ const RGSS2_BUILTIN_GUIDE: &str =
 /// Where it is written how the built-in scripts file of RGSS3 is made.
 const RGSS3_BUILTIN_GUIDE: &str =
     "docs/running.md, section \"The built-in scripts of RPG Maker VX Ace\"";
-
-/// What a guest reads of the settled options of a run.
-#[derive(Debug, Clone, Default)]
-pub(crate) struct GuestSettings {
-    /// The encoding of `Game.ini`, if one was given.
-    pub(crate) encoding: Option<Encoding>,
-    /// The runtime of the game, if one was given; otherwise `Game.ini` tells it.
-    pub(crate) runtime: Option<Runtime>,
-    /// The directory of each run-time package, by its name.
-    pub(crate) rtps: BTreeMap<String, PathBuf>,
-    /// The built-in scripts file, instead of the default location.
-    pub(crate) builtin_scripts: Option<PathBuf>,
-    /// Font directories, in the order given.
-    pub(crate) font_dirs: Vec<PathBuf>,
-    /// Whether a font that replaces another keeps its own line box.
-    pub(crate) font_own_metrics: bool,
-    /// Preload scripts, in the order given.
-    pub(crate) preload: Vec<PathBuf>,
-    pub(crate) debug: bool,
-    /// Whether the functions that start processes do so.
-    pub(crate) process_functions: bool,
-    /// Whether `p` is log-only.
-    pub(crate) log_p: bool,
-    /// Whether the frame time statistics are reported.
-    pub(crate) frame_stats: bool,
-    /// Whether a guest process confines itself, if that was given.
-    pub(crate) sandbox: Option<bool>,
-}
 
 /// The name of the built-in scripts file of `runtime` at the default location.
 pub(crate) fn builtin_scripts_name(runtime: Runtime) -> &'static str {
