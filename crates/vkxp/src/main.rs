@@ -61,8 +61,6 @@ mod copier;
 mod font;
 mod log;
 mod process;
-mod sandbox;
-mod signals;
 
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf, absolute};
@@ -74,6 +72,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, anyhow, bail};
 use vkxp_binding::{Config, Copier, RunConfig, RunError, run_game};
+use vkxp_guest::role::GuestRole;
+use vkxp_guest::{sandbox, signals};
 use vkxp_host::{
     AudioOptions, HeadlessOptions, InputScript, InputSource, Recorder, Recording, Replayer,
     WindowedOptions, device_from_text, headless_link, run_headless, run_windowed,
@@ -84,7 +84,7 @@ use vkxp_proto::link::GuestEnd;
 use vkxp_ruby_sys::{Interpreter, SymbolTable};
 use vkxp_vfs::{GameFiles, GameIni, Runtime, VfsError, resolve_rtps};
 
-use crate::args::{GuestForm, GuestRole, Input, Options};
+use crate::args::{GuestForm, Input, Options};
 use crate::config::Settings;
 use crate::copier::ForkCopier;
 use crate::font::FontBackend;

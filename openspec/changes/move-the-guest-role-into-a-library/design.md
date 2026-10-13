@@ -285,3 +285,13 @@ selects them, and no test reads a target of these events.
   can move when it is needed.
 - **Requirement "State messages" of `guest-host-protocol`** says the protocol version is 10;
   the code and `docs/architecture.md` say 12. Not touched here.
+- **`landlock` in the manifest of `vkxp`: open, and the reason task 2.2 is not ticked.**
+  `crates/vkxp/tests/end_to_end.rs` names the crate itself: `landlock_missing` asks the
+  kernel whether a process can confine itself, to skip the tests of the sandbox where it
+  cannot. That file may not change (scenario "Nothing else changes"), so the test target of
+  `vkxp` needs `landlock` in its manifest. It left `[dependencies]` and is under
+  `[dev-dependencies]`: the program links it only through `vkxp-guest`. The search of
+  scenario "The program holds no copy of the role" still finds that one line of
+  `crates/vkxp/Cargo.toml` (and nothing in `crates/vkxp/src`), so the scenario is not met as
+  it is written. To decide: the scenario is about `[dependencies]` only, or the probe of the
+  test moves behind a function of `vkxp-guest` and the test file changes.

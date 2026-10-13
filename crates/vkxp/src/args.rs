@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use vkxp_guest::role::{GUEST_ROLE, GuestRole};
 use vkxp_host::{Filter, InputScript, StateSchedule};
 use vkxp_vfs::{Encoding, Runtime};
 
@@ -92,19 +93,6 @@ pub(crate) enum GuestForm {
     /// In a child process.
     Process,
 }
-
-/// What makes the program the guest process of another: the hidden option [`GUEST_ROLE`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct GuestRole {
-    /// The seed the parent settled on.
-    pub seed: u64,
-    /// The socket the parent listens on.
-    pub socket: PathBuf,
-}
-
-/// The option the program gives itself when it starts its guest process, with the value
-/// `SEED=SOCKET`. It is not part of the usage message.
-pub(crate) const GUEST_ROLE: &str = "--guest-role";
 
 /// The environment variable that says where the guest runs.
 pub(crate) const GUEST_VARIABLE: &str = "VKXP_GUEST";
@@ -277,18 +265,6 @@ pub(crate) fn sandbox_of_environment(value: Option<&str>) -> Result<Option<bool>
         .map_err(|error| format!("{SANDBOX_VARIABLE}: {error}"))
 }
 
-/// The value of [`GUEST_ROLE`]: `SEED=SOCKET`.
-fn guest_role(text: &str) -> Result<GuestRole, String> {
-    let (seed, socket) = pair(text, "SEED=SOCKET")?;
-    let seed = seed
-        .parse()
-        .map_err(|_| format!("`{seed}` is not a seed"))?;
-    Ok(GuestRole {
-        seed,
-        socket: PathBuf::from(socket),
-    })
-}
-
 /// Reads the arguments that follow the program name. The error is a message for the user,
 /// to be printed with [`USAGE`]. Whether the options go together is for [`check`] to say,
 /// once the configuration files have been put under them.
@@ -355,7 +331,7 @@ pub(crate) fn parse(arguments: &[String]) -> Result<Options, String> {
             }
             GUEST_ROLE => {
                 let role =
-                    guest_role(value()?).map_err(|error| format!("{GUEST_ROLE}: {error}"))?;
+                    GuestRole::parse(value()?).map_err(|error| format!("{GUEST_ROLE}: {error}"))?;
                 options.guest_role = Some(role);
             }
             "--headless" => options.headless = true,

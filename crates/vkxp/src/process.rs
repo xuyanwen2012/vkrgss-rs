@@ -35,13 +35,13 @@ use std::process::{Child, Command, ExitStatus};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, bail};
+use vkxp_guest::role::{GUEST_ROLE, GuestRole};
 use vkxp_proto::framing::{read_message, write_message};
 use vkxp_proto::link::{GuestEnd, GuestSender};
 use vkxp_proto::{GuestToHost, HostToGuest};
 
 use crate::GUEST_WAIT;
-use crate::args::GUEST_ROLE;
 
 /// How long the parent waits for the guest process to connect. The guest connects once the
 /// game's files are open and the interpreter runs.
@@ -214,11 +214,9 @@ impl GuestProcess {
             .and_then(|listener| listener.set_nonblocking(true).map(|()| listener))
             .with_context(|| format!("cannot listen on the socket {}", socket.display()))
             .map_err(remove)?;
-        let role = socket
-            .to_str()
-            .map(|socket| format!("{seed}={socket}"))
-            .ok_or_else(|| anyhow!("the socket path {} is not UTF-8", socket.display()))
-            .map_err(remove)?;
+        let role = GuestRole { seed, socket }
+            .value()
+            .map_err(|error| remove(error.into()))?;
         let child = std::env::current_exe()
             .and_then(|program| {
                 Command::new(program)

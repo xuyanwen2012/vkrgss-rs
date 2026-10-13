@@ -10,10 +10,9 @@
 
 use std::path::Path;
 
-use anyhow::Result;
 use landlock::{
-    ABI, AccessFs, AccessNet, LandlockStatus, PathBeneath, PathFd, RestrictionStatus, Ruleset,
-    RulesetAttr, RulesetCreatedAttr, RulesetStatus, path_beneath_rules,
+    ABI, AccessFs, AccessNet, LandlockStatus, PathBeneath, PathFd, PathFdError, RestrictionStatus,
+    Ruleset, RulesetAttr, RulesetCreatedAttr, RulesetError, RulesetStatus, path_beneath_rules,
 };
 
 /// The device every process may write.
@@ -22,16 +21,36 @@ const NULL_DEVICE: &str = "/dev/null";
 /// Restricts the calling thread, which has to be the one that will run the interpreter, and
 /// reports once what the kernel could not do. Without Landlock, or when a call fails, the
 /// guest runs unconfined.
-pub(crate) fn confine(game_dir: &Path) {
+pub fn confine(game_dir: &Path) {
     match restrict(game_dir) {
         Ok(status) => report(&status),
         Err(error) => {
-            tracing::warn!("the guest process is not confined: {error:#}");
+            tracing::warn!("the guest process is not confined: {}", chain(&error));
         }
     }
 }
 
-fn restrict(game_dir: &Path) -> Result<RestrictionStatus> {
+/// Why the rules could not be made or put on the thread.
+#[derive(Debug, thiserror::Error)]
+enum RestrictError {
+    #[error(transparent)]
+    Ruleset(#[from] RulesetError),
+    #[error(transparent)]
+    Path(#[from] PathFdError),
+}
+
+/// An error and its causes in one line, each after a colon.
+fn chain(error: &dyn std::error::Error) -> String {
+    let mut text = error.to_string();
+    let mut cause = error.source();
+    while let Some(error) = cause {
+        text.push_str(&format!(": {error}"));
+        cause = error.source();
+    }
+    text
+}
+
+fn restrict(game_dir: &Path) -> Result<RestrictionStatus, RestrictError> {
     // Writing in every form the fourth ABI knows: later ones add rights for device
     // requests and for connecting to Unix sockets, which stay as they are.
     let writing = AccessFs::from_write(ABI::V4);

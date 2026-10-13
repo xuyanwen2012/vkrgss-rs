@@ -1,4 +1,5 @@
-//! The signal mask of the program's threads.
+//! The signal settings of a guest: the mask of the threads beside the interpreter's, and what
+//! a guest process asks of the kernel.
 //!
 //! This is platform code for Linux, the one platform the interpreter builds for.
 //!
@@ -24,18 +25,18 @@ fn change_virtual_timer(how: libc::c_int) {
 }
 
 /// Blocks SIGVTALRM in the calling thread and in every thread it spawns from now on.
-pub(crate) fn block_virtual_timer() {
+pub fn block_virtual_timer() {
     change_virtual_timer(libc::SIG_BLOCK);
 }
 
 /// Lets SIGVTALRM reach the calling thread again; for the interpreter thread.
-pub(crate) fn unblock_virtual_timer() {
+pub fn unblock_virtual_timer() {
     change_virtual_timer(libc::SIG_UNBLOCK);
 }
 
 /// Asks the kernel to end this process when the thread of the parent process that started it
 /// ends; for the guest process, whose game may be caught in a loop.
-pub(crate) fn die_with_parent() {
+pub fn die_with_parent() {
     // SAFETY: `PR_SET_PDEATHSIG` takes a signal number as its one argument and changes only
     // a setting of the calling process.
     let status = unsafe { libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) };
@@ -44,7 +45,7 @@ pub(crate) fn die_with_parent() {
 
 /// Makes the kernel take the children of this process away when they end, so that none of
 /// them stays behind as a zombie; for a guest process, whose children are its copies.
-pub(crate) fn ignore_children() {
+pub fn ignore_children() {
     // SAFETY: `SIG_IGN` is a valid disposition for SIGCHLD, and setting it runs no handler.
     let previous = unsafe { libc::signal(libc::SIGCHLD, libc::SIG_IGN) };
     assert_ne!(previous, libc::SIG_ERR, "signal cannot ignore SIGCHLD");

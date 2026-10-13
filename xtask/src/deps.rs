@@ -1,11 +1,13 @@
 //! Dependency-direction rules, checked over `cargo metadata`.
 //!
-//! Three rules hold for the workspace:
+//! Four rules hold for the workspace:
 //!
 //! 1. No guest crate reaches a host crate, directly or transitively.
 //! 2. No host crate, and not the reference compositor, reaches a guest crate, directly or
 //!    transitively.
 //! 3. Everything `vkxp-core` reaches is on its allow-list of pure crates.
+//! 4. The guest role, `vkxp-guest`, reaches neither `vkxp-ruby-sys` nor `vkxp-binding`,
+//!    directly or transitively: it links no interpreter.
 //!
 //! The `vkxp` binary is on neither side: it is the one crate that may depend on both.
 //!
@@ -31,6 +33,7 @@ pub(crate) const GUEST_CRATES: &[&str] = &[
     "vkxp-vfs",
     "vkxp-ruby-sys",
     "vkxp-binding",
+    "vkxp-guest",
 ];
 
 /// Crates that own the window, the GPU or the audio device.
@@ -40,6 +43,12 @@ pub(crate) const HOST_CRATES: &[&str] = &["vkxp-vk", "vkxp-audio", "vkxp-host"];
 /// which runs on the host and in tests.
 pub(crate) const HOST_SIDE_CRATES: &[&str] =
     &["vkxp-vk", "vkxp-audio", "vkxp-host", "vkxp-compose-ref"];
+
+/// The crate of the guest role, which an executable of any interpreter links.
+pub(crate) const GUEST_ROLE_CRATE: &str = "vkxp-guest";
+
+/// Crates that link an interpreter, which the guest role must not reach.
+pub(crate) const INTERPRETER_CRATES: &[&str] = &["vkxp-ruby-sys", "vkxp-binding"];
 
 /// The crate that must stay free of I/O, Ruby and Vulkan.
 pub(crate) const CORE_CRATE: &str = "vkxp-core";
@@ -86,6 +95,9 @@ pub(crate) enum Violation {
     /// `vkxp-core` reaches a crate outside its allow-list. The path starts at `vkxp-core` and
     /// ends at the offending dependency.
     CoreDependency { path: Vec<String> },
+    /// `vkxp-guest` reaches a crate that links an interpreter. The path starts at
+    /// `vkxp-guest` and ends at that crate.
+    GuestRoleReachesInterpreter { path: Vec<String> },
 }
 
 impl fmt::Display for Violation {
@@ -108,6 +120,12 @@ impl fmt::Display for Violation {
             Violation::CoreDependency { path } => write!(
                 f,
                 "`{CORE_CRATE}` depends on `{}`, which is not on its allow-list: {}",
+                path.last().map_or("", String::as_str),
+                path.join(" -> ")
+            ),
+            Violation::GuestRoleReachesInterpreter { path } => write!(
+                f,
+                "`{GUEST_ROLE_CRATE}` reaches `{}`, which links an interpreter: {}",
                 path.last().map_or("", String::as_str),
                 path.join(" -> ")
             ),
@@ -154,6 +172,12 @@ pub(crate) fn check(graph: &Graph) -> Vec<Violation> {
         }
     }
     violations.extend(outside_allow_list(graph, CORE_CRATE));
+    let paths = paths_from(graph, GUEST_ROLE_CRATE);
+    for interpreter in INTERPRETER_CRATES {
+        if let Some(path) = paths.get(*interpreter) {
+            violations.push(Violation::GuestRoleReachesInterpreter { path: path.clone() });
+        }
+    }
     violations
 }
 
@@ -447,6 +471,74 @@ mod tests {
                 },
             ]
         );
+    }
+
+    /// Scenario "The guest role".
+    #[test]
+    fn the_guest_role_reaching_a_host_crate_is_reported() {
+        let reaching = graph(&[("vkxp-guest", "helper"), ("helper", "vkxp-host")]);
+        let violations = check(&reaching);
+        assert_eq!(
+            violations,
+            vec![Violation::GuestReachesHost {
+                path: path(&["vkxp-guest", "helper", "vkxp-host"]),
+            }]
+        );
+        assert_eq!(
+            violations[0].to_string(),
+            "guest crate `vkxp-guest` reaches host crate `vkxp-host`: \
+             vkxp-guest -> helper -> vkxp-host"
+        );
+        // And no host crate reaches it.
+        let reached = graph(&[("vkxp-host", "vkxp-guest")]);
+        assert_eq!(
+            check(&reached),
+            vec![Violation::HostReachesGuest {
+                path: path(&["vkxp-host", "vkxp-guest"]),
+            }]
+        );
+    }
+
+    /// Scenario "Interpreter dependency is rejected".
+    #[test]
+    fn the_guest_role_reaching_an_interpreter_is_reported() {
+        for interpreter in INTERPRETER_CRATES {
+            let direct = graph(&[("vkxp-guest", interpreter)]);
+            let violations = check(&direct);
+            assert_eq!(
+                violations,
+                vec![Violation::GuestRoleReachesInterpreter {
+                    path: path(&["vkxp-guest", interpreter]),
+                }]
+            );
+            assert_eq!(
+                violations[0].to_string(),
+                format!(
+                    "`vkxp-guest` reaches `{interpreter}`, which links an interpreter: \
+                     vkxp-guest -> {interpreter}"
+                )
+            );
+        }
+        // The binding reaches the sys crate: both are reported, each with its own path.
+        let through = graph(&[
+            ("vkxp-guest", "glue"),
+            ("glue", "vkxp-binding"),
+            ("vkxp-binding", "vkxp-ruby-sys"),
+        ]);
+        assert_eq!(
+            check(&through),
+            vec![
+                Violation::GuestRoleReachesInterpreter {
+                    path: path(&["vkxp-guest", "glue", "vkxp-binding", "vkxp-ruby-sys"]),
+                },
+                Violation::GuestRoleReachesInterpreter {
+                    path: path(&["vkxp-guest", "glue", "vkxp-binding"]),
+                },
+            ]
+        );
+        // The executable links the role and an interpreter side by side.
+        let beside = graph(&[("vkxp", "vkxp-guest"), ("vkxp", "vkxp-binding")]);
+        assert_eq!(check(&beside), vec![]);
     }
 
     #[test]

@@ -2497,6 +2497,7 @@ dependencies = [
  "tracing-subscriber",
  "vkxp-binding",
  "vkxp-core",
+ "vkxp-guest",
  "vkxp-host",
  "vkxp-proto",
  "vkxp-ruby-sys",
@@ -2553,6 +2554,17 @@ dependencies = [
  "thiserror 2.0.21",
  "vkxp-compose-ref",
  "vkxp-pixel",
+ "vkxp-proto",
+]
+
+[[package]]
+name = "vkxp-guest"
+version = "0.2.0"
+dependencies = [
+ "landlock",
+ "libc",
+ "thiserror 2.0.21",
+ "tracing",
  "vkxp-proto",
 ]
 

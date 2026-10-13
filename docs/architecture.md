@@ -18,6 +18,7 @@ defined in `vkxp-proto`.
 | `vkxp-vfs` | Path resolution, RTP lookup, encrypted archive | guest |
 | `vkxp-ruby-sys` | Build of the embedded Ruby and raw FFI | guest |
 | `vkxp-binding` | RGSS Ruby API on top of core | guest |
+| `vkxp-guest` | The guest role: the hidden option, the attachment, the copies that are states, the sandbox and the signal settings of a guest process | guest |
 | `vkxp-compose-ref` | CPU reference compositor | host and tests |
 | `vkxp-vk` | Vulkan backend | host |
 | `vkxp-audio` | Mixer, decoding, MIDI synthesis | host |
@@ -88,25 +89,29 @@ the model of that measurement and are not rewritten from a compositor of this re
 
 ## Dependency rules
 
-Three rules keep the guest/host boundary intact. A test in `xtask` checks them against
+Four rules keep the guest/host boundary intact. A test in `xtask` checks them against
 `cargo metadata` as part of the `test` step, and `cargo xtask deps` runs the check alone. A
 violation is reported with the full dependency path that causes it.
 
 1. **Guest crates do not reach host crates.** None of `vkxp-core`, `vkxp-image`, `vkxp-text`,
-   `vkxp-vfs`, `vkxp-ruby-sys`, `vkxp-binding` may depend, directly or transitively, on
-   `vkxp-vk`, `vkxp-audio` or `vkxp-host`.
+   `vkxp-vfs`, `vkxp-ruby-sys`, `vkxp-binding`, `vkxp-guest` may depend, directly or
+   transitively, on `vkxp-vk`, `vkxp-audio` or `vkxp-host`.
 2. **Host crates do not reach guest crates.** None of `vkxp-vk`, `vkxp-audio`, `vkxp-host`, and
    not the reference compositor `vkxp-compose-ref` either, may depend, directly or transitively,
-   on a guest crate. The `vkxp` binary is exempt from both directions: it is the one crate that
+   on a guest crate, `vkxp-guest` included. The `vkxp` binary is exempt from both directions: it is the one crate that
    depends on both sides and joins them.
 3. **`vkxp-core` stays pure.** Everything `vkxp-core` reaches, directly or transitively, must be
    on its allow-list: `vkxp-proto`, `vkxp-pixel` and the pure crates those need. The list is
    `CORE_ALLOW_LIST` in `xtask/src/deps.rs`; adding to it is a reviewed decision, and nothing
    that does file I/O or binds Ruby, Vulkan, windowing or audio belongs there.
+4. **The guest role links no interpreter.** `vkxp-guest` may not depend, directly or
+   transitively, on `vkxp-ruby-sys` or `vkxp-binding`: an executable of another interpreter
+   links it too, and gives it the function that runs the game.
 
 The check runs with every feature of every workspace crate enabled, so an optional dependency
 or an off-by-default feature cannot hide a forbidden path. Only normal and build dependencies
 count; dev-dependencies are not linked into either side.
 
 In addition, `vkxp-proto`, `vkxp-pixel`, `vkxp-core` and `vkxp-compose-ref` carry
-`#![forbid(unsafe_code)]`, so `unsafe` in them does not compile.
+`#![forbid(unsafe_code)]`, so `unsafe` in them does not compile. `vkxp-guest` denies `unsafe`
+at its root and allows it in the modules of the copier and of the signals only.
