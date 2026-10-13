@@ -46,3 +46,41 @@ its own); `Tone`.
 - The committed samples are taken from the report's sample files (inputs by formula,
   outputs of the originals) and cover every branch of rule 2.
 - The provenance list of `vkxp-pixel` gets the entries.
+
+## Implementation notes
+
+- `vkxp-pixel` gets `transfer_opacity` (rule 1) and `block_span` with its result `BlockSpan`
+  (rule 2), both listed in `BITMAP_PROVENANCE`. `block_span` does the unmirrored clips as
+  well, so a transfer of equal sizes goes through it whole and `transfer_axis` of `vkxp-core`
+  keeps the scaled transfers only.
+- `Bitmaps::blt` and `Bitmaps::stretch_blt` take the opacity as `impl Into<i32>` and the
+  source as `impl Into<Option<BitmapId>>`. The callers outside the scope of this change
+  (`window.rs`, `plane.rs`, the tests of `delta`) pass a byte and an id as before and compile
+  unchanged; the binding passes the integer of the script and `None` for a `Bitmap` object
+  that was disposed, which has no id any more.
+- A disposed source is the transfer of the destination rectangle onto itself, in place, as
+  the original does it (report, section 5a). A destination rectangle with a width or height
+  of 0 or less draws nothing then as well; a negative one was not measured.
+- The committed samples are `crates/vkxp-pixel/tests/data/bitmap-transfer-samples.txt`: all
+  78 records of the opacity argument, 300 of the mirrored transfers of equal sizes along
+  one axis (216 `blt`, 84 `stretch_blt`; they take every combination of the four clips that
+  the probe reached, 13), the 8 `blt` cases mirrored or cut along both axes, and the 9 cases
+  of a disposed source with their destinations before and after.
+
+### Existing tests changed to the measured behaviour
+
+- `crates/vkxp-core/src/bitmap/tests.rs`, `disposed_source_fails_and_leaves_the_destination`:
+  asserted the disposed error. Now `disposed_source_blends_the_destination_onto_itself`
+  (rule 3).
+- `crates/vkxp-core/src/bitmap/tests.rs`, `naive_blt`, the model behind
+  `blt_matches_the_naive_model` and `transfer_within_one_bitmap_reads_the_live_pixels`:
+  mirrored first and clipped afterwards. Its mirrored axis now has the four clips (rule 2).
+  The two tests themselves are unchanged.
+- `crates/vkxp-binding/tests/cases/mod.rs`, the case "disposed source" of `BITMAP_DRAWING`:
+  expected `RGSSError`. Now the measured pixels (rule 3).
+- `crates/vkxp-pixel/src/bitmap.rs`, `both_functions_are_listed_and_neither_is_a_placeholder`:
+  asserts the names of `BITMAP_PROVENANCE`, which got two entries. Now
+  `every_function_is_listed_and_none_is_a_placeholder`. It asserts no behaviour of the five
+  rules; it changed because the list did.
+
+No existing test asserted that an opacity above 255 is limited (rule 1).

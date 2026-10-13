@@ -9,9 +9,9 @@
 //! Each function declares where its formula comes from. All follow measurements of the
 //! original runtime: none is a textbook placeholder. [`PROVENANCE`] lists the current state.
 //!
-//! The arithmetic of the guest's bitmap operations (hue rotation, stretch sampling) is listed
-//! separately, in [`BITMAP_PROVENANCE`]. Hue rotation runs on the CPU alone and has no GLSL
-//! counterpart. Stretch sampling is defined in `vkxp-proto`, where every backend, the compute
+//! The arithmetic of the guest's bitmap operations (hue rotation, stretch sampling, the opacity
+//! and the clip of a transfer) is listed separately, in [`BITMAP_PROVENANCE`]. Hue rotation and
+//! the rules of a transfer run on the CPU alone and have no GLSL counterpart. Stretch sampling is defined in `vkxp-proto`, where every backend, the compute
 //! shader included, takes it for stretched quads; [`stretch_index`] calls that definition.
 //!
 //! The arithmetic of the bitmap operations RGSS2 adds (blur, radial blur, gradient, clearing)
@@ -27,7 +27,9 @@ pub use arith::{
     PROVENANCE, Rgba, apply_gray, apply_tone, blend_add, blend_color, blend_normal,
     blend_normal_translucent, blend_sub, blend_window, effective_alpha,
 };
-pub use bitmap::{BITMAP_PROVENANCE, rotate_hue, stretch_index};
+pub use bitmap::{
+    BITMAP_PROVENANCE, BlockSpan, block_span, rotate_hue, stretch_index, transfer_opacity,
+};
 pub use bitmap_rgss2::{
     BITMAP_RGSS2_PROVENANCE, cleared_pixel, gradient_color, radial_blur_source, radial_blur_turns,
     truncated_mean,

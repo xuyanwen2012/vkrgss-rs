@@ -2,7 +2,8 @@
 //! them is reproduced exactly. The comment lines of each file describe its columns.
 
 use vkxp_pixel::{
-    apply_tone, blend_add, blend_color, blend_normal, blend_sub, rotate_hue, stretch_index,
+    apply_tone, blend_add, blend_color, blend_normal, blend_sub, block_span, rotate_hue,
+    stretch_index, transfer_opacity,
 };
 
 const SAMPLES: &str = include_str!("data/screen-blend-samples.txt");
@@ -203,6 +204,84 @@ fn stretch_step_reproduces_the_measured_samples() {
         }
     }
     assert!(count > 80, "{count} rows");
+}
+
+/// The source index a destination position takes, or `None` for an untouched position, for
+/// every position of a destination `dst_size` long.
+fn block_cells(
+    dst_pos: i32,
+    dst_size: u32,
+    src_pos: i32,
+    src_len: i32,
+    src_size: u32,
+) -> Vec<Option<u32>> {
+    let mut cells = vec![None; dst_size as usize];
+    if let Some(span) = block_span(dst_pos, dst_size, src_pos, src_len, src_size) {
+        for i in 0..span.len {
+            let src = if span.mirrored {
+                span.src - i
+            } else {
+                span.src + i
+            };
+            cells[(span.dst + i) as usize] = Some(src);
+        }
+    }
+    cells
+}
+
+/// The cells of a sample: a source index, or `None` for an untouched position.
+fn cells(text: &str) -> Vec<Option<u32>> {
+    text.split_whitespace()
+        .map(|cell| (cell != ".").then(|| cell.parse().expect("an index")))
+        .collect()
+}
+
+/// `bitmap-transfer-samples.txt`: mirrored transfers of equal sizes whose source rectangle
+/// leaves the source, along one axis and along both, and the opacity argument. The pixels,
+/// and the samples of a disposed source, are evaluated by the bitmap operations of
+/// `vkxp-core`.
+#[test]
+fn transfer_rules_reproduce_the_measured_samples() {
+    let samples = include_str!("data/bitmap-transfer-samples.txt");
+    let mut counts = [0; 3];
+    for line in samples.lines().filter(|line| !line.starts_with('#')) {
+        let parts: Vec<&str> = line.split('|').collect();
+        let (kind, arguments) = parts[0].split_once(' ').expect("a kind");
+        match kind {
+            "mirror" => {
+                let [_axis, dst_pos, src_pos, src_len] = numbers(arguments)[..] else {
+                    panic!("{line}");
+                };
+                let measured = cells(parts[1]);
+                assert_eq!(measured.len(), 48, "{line}");
+                assert_eq!(
+                    block_cells(dst_pos, 48, src_pos, src_len, 16),
+                    measured,
+                    "{line}"
+                );
+                counts[0] += 1;
+            }
+            "both" => {
+                let [x, y, sx, sy, sw, sh] = numbers(arguments)[..] else {
+                    panic!("{line}");
+                };
+                assert_eq!(block_cells(x, 32, sx, sw, 16), cells(parts[1]), "{line}");
+                assert_eq!(block_cells(y, 32, sy, sh, 16), cells(parts[2]), "{line}");
+                counts[1] += 1;
+            }
+            "opacity" => {
+                let opacity = arguments.split(' ').nth(1).expect("an opacity");
+                // A Float is truncated first.
+                let opacity = opacity.parse::<f64>().expect("a number") as i32;
+                let unchanged = numbers(parts[1]) == [10, 20, 30, 255, 10, 20, 30, 90];
+                assert_eq!(transfer_opacity(opacity).is_none(), unchanged, "{line}");
+                counts[2] += 1;
+            }
+            "disposed" => {}
+            _ => panic!("{line}"),
+        }
+    }
+    assert_eq!(counts, [300, 8, 78]);
 }
 
 /// `hue-samples.txt`: `Bitmap#hue_change` on single colours.

@@ -683,11 +683,24 @@ pub(crate) const BITMAP_DRAWING: &[Case] = &[
         r#"b = Bitmap.new(2, 2); b.blt(0, 0, "not a bitmap", Rect.new(0, 0, 1, 1))"#,
         "TypeError",
     ),
-    raises_with(
-        "disposed source",
-        "b = Bitmap.new(2, 2); s = Bitmap.new(2, 2); s.dispose; b.blt(0, 0, s, Rect.new(0, 0, 1, 1))",
-        "RGSSError",
-        "disposed bitmap",
+    value(
+        "a disposed source raises nothing and blends the destination onto itself, as measured",
+        "b = Bitmap.new(3, 2); b.fill_rect(b.rect, Color.new(10, 20, 30, 128)); \
+         s = Bitmap.new(2, 2); s.dispose; r = b.blt(0, 0, s, Rect.new(0, 0, 2, 2)); \
+         t = Bitmap.new(2, 1); t.fill_rect(t.rect, Color.new(1, 2, 3, 128)); \
+         t.stretch_blt(Rect.new(1, 0, 1, 1), s, Rect.new(0, 0, 2, 2)); \
+         [r, (0...6).map { |i| b.get_pixel(i % 3, i / 3).to_s }.uniq, b.get_pixel(2, 0).alpha, \
+          b.get_pixel(1, 1).alpha, t.get_pixel(0, 0).alpha, t.get_pixel(1, 0).alpha]",
+        r#"[nil, ["(10.000000, 20.000000, 30.000000, 191.000000)", "(10.000000, 20.000000, 30.000000, 128.000000)"], 128.0, 191.0, 128.0, 191.0]"#,
+    ),
+    value(
+        "an opacity above 255 draws nothing and a Float is truncated first, as measured",
+        "s = Bitmap.new(1, 1); s.set_pixel(0, 0, Color.new(200, 100, 50)); d = Bitmap.new(3, 1); \
+         d.blt(0, 0, s, s.rect, 256); d.blt(1, 0, s, s.rect, 255.9); \
+         d.stretch_blt(Rect.new(2, 0, 1, 1), s, s.rect, 65536); \
+         d.stretch_blt(Rect.new(0, 0, 3, 1), s, s.rect, 300); \
+         (0...3).map { |x| d.get_pixel(x, 0).to_s }",
+        r#"["(0.000000, 0.000000, 0.000000, 0.000000)", "(200.000000, 100.000000, 50.000000, 255.000000)", "(0.000000, 0.000000, 0.000000, 0.000000)"]"#,
     ),
     value(
         "clear",

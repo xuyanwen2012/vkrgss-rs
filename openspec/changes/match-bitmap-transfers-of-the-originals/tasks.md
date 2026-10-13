@@ -2,8 +2,8 @@
 
 ## 1. Transfers
 
-- [ ] 1.1 Opacity above 255; the clip of a mirrored transfer of equal sizes. Verify: the scenarios of "Block transfer"; `cargo test -p vkxp-pixel -p vkxp-core --locked` passes.
-- [ ] 1.2 A disposed source in the core and in `blt` and `stretch_blt`. Verify: the scenarios of "Disposal" and of "Drawing methods"; `cargo test -p vkxp-core -p vkxp-binding --locked` passes.
+- [x] 1.1 Opacity above 255; the clip of a mirrored transfer of equal sizes. Verify: the scenarios of "Block transfer"; `cargo test -p vkxp-pixel -p vkxp-core --locked` passes.
+- [x] 1.2 A disposed source in the core and in `blt` and `stretch_blt`. Verify: the scenarios of "Disposal" and of "Drawing methods"; `cargo test -p vkxp-core -p vkxp-binding --locked` passes.
 
 ## 2. Values and decoding
 

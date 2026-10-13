@@ -115,10 +115,10 @@ pub(crate) fn new_blank(ruby: &Ruby, width: u32, height: u32) -> HostResult {
     bitmap_new(ruby, id)
 }
 
-/// An opacity argument, limited to 0 to 255.
-fn opacity_arg(ruby: &Ruby, value: Option<&VALUE>) -> Result<u8, Raise> {
+/// An opacity argument: the integer given, which the transfer does not limit to 255.
+fn opacity_arg(ruby: &Ruby, value: Option<&VALUE>) -> Result<i32, Raise> {
     match value {
-        Some(&value) => Ok(rb::int(ruby, value)?.clamp(0, 255) as u8),
+        Some(&value) => rb::int(ruby, value),
         None => Ok(255),
     }
 }
@@ -256,7 +256,8 @@ fn blt(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     let id = id_arg(ruby, recv)?;
     let x = rb::int(ruby, args[0])?;
     let y = rb::int(ruby, args[1])?;
-    let source = id_arg(ruby, args[2])?;
+    // A disposed source raises nothing: the transfer has a rule for it.
+    let source = bitmap_arg(ruby, args[2])?;
     let source_rect = rect_arg(ruby, args[3])?;
     let opacity = opacity_arg(ruby, args.get(4))?;
     operate(ruby, |guest| {
@@ -271,7 +272,7 @@ fn stretch_blt(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     rb::check_count(ruby, args, 3, 4)?;
     let id = id_arg(ruby, recv)?;
     let dest_rect = rect_arg(ruby, args[0])?;
-    let source = id_arg(ruby, args[1])?;
+    let source = bitmap_arg(ruby, args[1])?;
     let source_rect = rect_arg(ruby, args[2])?;
     let opacity = opacity_arg(ruby, args.get(3))?;
     operate(ruby, |guest| {

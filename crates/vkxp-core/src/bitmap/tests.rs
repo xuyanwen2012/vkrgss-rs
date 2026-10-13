@@ -3,6 +3,39 @@ use proptest::prelude::*;
 use super::testing::*;
 use super::*;
 
+/// A model of one axis of the block transfer: the destination and source coordinates of the
+/// positions drawn. An unmirrored span draws the positions that exist on both sides. A span
+/// with a negative `len` is clipped before it is mirrored, by the four clips measured on the
+/// originals.
+fn naive_axis(dst_pos: i32, dst_size: u32, pos: i32, len: i32, src_size: u32) -> Vec<(i64, i64)> {
+    let (dst_size, src_size) = (i64::from(dst_size), i64::from(src_size));
+    let (mut dl, mut dr) = (
+        i64::from(dst_pos),
+        i64::from(dst_pos) + i64::from(len).abs(),
+    );
+    if len >= 0 {
+        return (0..i64::from(len))
+            .map(|i| (dl + i, i64::from(pos) + i))
+            .filter(|(dst, src)| (0..dst_size).contains(dst) && (0..src_size).contains(src))
+            .collect();
+    }
+    let (sl, mut sh) = (i64::from(pos) + i64::from(len), i64::from(pos));
+    if sl < 0 {
+        dl += -sl;
+    }
+    if dl < 0 {
+        sh += dl;
+        dl = 0;
+    }
+    if sh > src_size {
+        dr += src_size - sh;
+        sh = src_size;
+    }
+    // The last clip raises the low end of the source, which the mirrored walk never reaches.
+    dr = dr.min(dst_size);
+    (0..dr - dl).map(|i| (dl + i, sh - 1 - i)).collect()
+}
+
 /// A model of the block transfer, one pixel at a time from the top row down and from left to
 /// right, reading from `src` as given, or, without one, from `dst` as it is at that moment: a
 /// transfer within one bitmap.
@@ -17,25 +50,9 @@ fn naive_blt(
     rect: Rect,
     opacity: u8,
 ) {
-    // A negative width or height mirrors.
-    let walk = |pos: i32, len: i32, i: i64| {
-        if len < 0 {
-            i64::from(pos) - 1 - i
-        } else {
-            i64::from(pos) + i
-        }
-    };
-    for j in 0..i64::from(rect.height).abs() {
-        for i in 0..i64::from(rect.width).abs() {
-            let (sx, sy) = (walk(rect.x, rect.width, i), walk(rect.y, rect.height, j));
-            let (dx, dy) = (i64::from(x) + i, i64::from(y) + j);
-            let in_src =
-                (0..i64::from(src_width)).contains(&sx) && (0..i64::from(src_height)).contains(&sy);
-            let in_dst =
-                (0..i64::from(dst_width)).contains(&dx) && (0..i64::from(dst_height)).contains(&dy);
-            if !(in_src && in_dst) {
-                continue;
-            }
+    let columns = naive_axis(x, dst_width, rect.x, rect.width, src_width);
+    for (dy, sy) in naive_axis(y, dst_height, rect.y, rect.height, src_height) {
+        for &(dx, sx) in &columns {
             let source = at(src.unwrap_or(dst), src_width, sx as u32, sy as u32);
             let offset = ((dy as u32 * dst_width + dx as u32) * 4) as usize;
             let target: Rgba = dst[offset..offset + 4].try_into().unwrap();
@@ -235,31 +252,53 @@ fn every_operation_on_a_disposed_bitmap_fails() {
     assert_eq!(bitmaps.rgba(live).unwrap(), pattern(2, 2, 1));
 }
 
+/// A disposed source is no error, as measured on the originals: the destination rectangle
+/// is blended onto itself.
 #[test]
-fn disposed_source_fails_and_leaves_the_destination() {
+fn disposed_source_blends_the_destination_onto_itself() {
     let mut bitmaps = Bitmaps::new();
+    let pixels: [Rgba; 4] = [
+        [10, 20, 30, 0],
+        [40, 50, 60, 128],
+        [70, 80, 90, 255],
+        [1, 2, 3, 128],
+    ];
     let dst = bitmaps
-        .create_from_rgba(2, 2, pattern(2, 2, 1), &defaults())
+        .create_from_rgba(4, 1, pixels.concat(), &defaults())
         .unwrap();
     let src = bitmaps
         .create_from_rgba(2, 2, pattern(2, 2, 9), &defaults())
         .unwrap();
     bitmaps.dispose(src);
-    let rect = Rect::new(0, 0, 2, 2);
+    // The position of the source rectangle is not used, and its size is taken absolute.
+    let rect = Rect::new(7, -5, -3, 1);
+    assert_eq!(bitmaps.blt(dst, 0, 0, src, rect, 255), Ok(()));
+    let after: [Rgba; 4] = [
+        [10, 20, 30, 0],
+        [40, 50, 60, 191],
+        [70, 80, 90, 255],
+        pixels[3],
+    ];
+    assert_eq!(bitmaps.rgba(dst).unwrap(), after.concat());
+
+    // `stretch_blt` blends its destination rectangle, clipped to the bitmap.
+    let all = Rect::new(-2, -2, 9, 9);
+    assert_eq!(bitmaps.stretch_blt(dst, all, src, rect, 255), Ok(()));
+    let twice = blend_normal(after[1], after[1], 255);
+    let after: [Rgba; 4] = [after[0], twice, after[2], [1, 2, 3, 191]];
+    assert_eq!(bitmaps.rgba(dst).unwrap(), after.concat());
+
+    // An opacity that draws nothing and an empty rectangle change nothing.
+    for opacity in [0, -1, 256] {
+        assert_eq!(bitmaps.blt(dst, 0, 0, src, rect, opacity), Ok(()));
+    }
     assert_eq!(
-        bitmaps.blt(dst, 0, 0, src, rect, 255),
-        Err(BitmapError::Disposed)
+        bitmaps.blt(dst, 0, 0, src, Rect::new(0, 0, 0, 1), 255),
+        Ok(())
     );
-    assert_eq!(
-        bitmaps.stretch_blt(dst, rect, src, rect, 255),
-        Err(BitmapError::Disposed)
-    );
-    // Even a transfer that would draw nothing reports the disposed source.
-    assert_eq!(
-        bitmaps.blt(dst, 0, 0, src, rect, 0),
-        Err(BitmapError::Disposed)
-    );
-    assert_eq!(bitmaps.rgba(dst).unwrap(), pattern(2, 2, 1));
+    let empty = Rect::new(0, 0, -4, 1);
+    assert_eq!(bitmaps.stretch_blt(dst, empty, src, rect, 255), Ok(()));
+    assert_eq!(bitmaps.rgba(dst).unwrap(), after.concat());
 
     // A new occupant of the slot does not revive the old id.
     let reused = bitmaps
@@ -267,10 +306,25 @@ fn disposed_source_fails_and_leaves_the_destination() {
         .unwrap();
     assert_eq!(reused.index, src.index);
     assert_eq!(
+        bitmaps.blt(dst, 3, 0, src, Rect::new(0, 0, 1, 1), 255),
+        Ok(())
+    );
+    let twice = blend_normal(after[3], after[3], 255);
+    assert_eq!(
+        bitmaps.rgba(dst).unwrap(),
+        [after[0], after[1], after[2], twice].concat()
+    );
+
+    // A disposed destination fails, whatever the source is.
+    bitmaps.dispose(dst);
+    assert_eq!(
         bitmaps.blt(dst, 0, 0, src, rect, 255),
         Err(BitmapError::Disposed)
     );
-    assert_eq!(bitmaps.rgba(dst).unwrap(), pattern(2, 2, 1));
+    assert_eq!(
+        bitmaps.stretch_blt(dst, all, src, rect, 255),
+        Err(BitmapError::Disposed)
+    );
 }
 
 #[test]
@@ -516,6 +570,27 @@ fn zero_opacity_changes_nothing() {
         .blt(dst, 1, 1, src, Rect::new(0, 0, 3, 2), 0)
         .unwrap();
     assert_eq!(bitmaps.rgba(dst).unwrap(), pattern(5, 4, 77));
+}
+
+/// Measured on the originals: an opacity above 255 is not limited to 255.
+#[test]
+fn opacity_above_255_changes_nothing() {
+    let mut bitmaps = Bitmaps::new();
+    let src = bitmaps
+        .create_from_rgba(3, 3, pattern(3, 3, 5), &defaults())
+        .unwrap();
+    let before = pattern(3, 3, 60);
+    let dst = bitmaps
+        .create_from_rgba(3, 3, before.clone(), &defaults())
+        .unwrap();
+    let rect = Rect::new(0, 0, 3, 3);
+    for opacity in [256, 300, 65536, 1073741823, -1, i32::MIN] {
+        bitmaps.blt(dst, 0, 0, src, rect, opacity).unwrap();
+        bitmaps.stretch_blt(dst, rect, src, rect, opacity).unwrap();
+        let half = Rect::new(0, 0, 2, 2);
+        bitmaps.stretch_blt(dst, rect, src, half, opacity).unwrap();
+        assert_eq!(bitmaps.rgba(dst).unwrap(), before, "opacity {opacity}");
+    }
 }
 
 #[test]
@@ -936,6 +1011,163 @@ fn transfers_blend_as_the_measured_samples() {
         bitmaps.stretch_blt(dst, all, src, one, opacity).unwrap();
         assert_eq!(at(bitmaps.rgba(dst).unwrap(), 2, 1, 1), result, "{line}");
     }
+}
+
+/// The bitmap of the clip probe: pixel (x, y) of 16 by 16 holds (x * 10 + 5, y * 10 + 5, 77,
+/// 255).
+fn clip_source(bitmaps: &mut Bitmaps) -> BitmapId {
+    let mut rgba = Vec::new();
+    for y in 0..16u8 {
+        for x in 0..16u8 {
+            rgba.extend([x * 10 + 5, y * 10 + 5, 77, 255]);
+        }
+    }
+    bitmaps.create_from_rgba(16, 16, rgba, &defaults()).unwrap()
+}
+
+/// Asserts every pixel of `id` against the measured source column and row of its position
+/// in the bitmap of [`clip_source`]; a position without either is untouched.
+fn assert_clipped(
+    bitmaps: &Bitmaps,
+    id: BitmapId,
+    columns: &[Option<u32>],
+    rows: &[Option<u32>],
+    case: &str,
+) {
+    let rgba = bitmaps.rgba(id).unwrap();
+    let width = bitmaps.width(id).unwrap();
+    assert_eq!(columns.len(), width as usize, "{case}");
+    assert_eq!(rows.len(), bitmaps.height(id).unwrap() as usize, "{case}");
+    for (y, row) in rows.iter().enumerate() {
+        for (x, column) in columns.iter().enumerate() {
+            let expected = match (column, row) {
+                (Some(column), Some(row)) => [*column as u8 * 10 + 5, *row as u8 * 10 + 5, 77, 255],
+                _ => [0; 4],
+            };
+            assert_eq!(
+                at(rgba, width, x as u32, y as u32),
+                expected,
+                "{case} ({x}, {y})"
+            );
+        }
+    }
+}
+
+/// Pixels written as `rrggbbaa` words.
+fn hex_pixels(text: &str) -> Vec<u8> {
+    text.split_whitespace()
+        .flat_map(|word| u32::from_str_radix(word, 16).unwrap().to_be_bytes())
+        .collect()
+}
+
+/// Every committed sample of `bitmap-transfer-samples.txt`, measured on the originals of XP
+/// and VX with the same bytes: the opacity argument, mirrored transfers of equal sizes whose
+/// source rectangle leaves the source along each axis and along both, and transfers from a
+/// disposed source.
+#[test]
+fn transfers_reproduce_the_samples_measured_on_both_originals() {
+    let samples = include_str!("../../../vkxp-pixel/tests/data/bitmap-transfer-samples.txt");
+    let mut bitmaps = Bitmaps::new();
+    let clip = clip_source(&mut bitmaps);
+    let gone = bitmaps.create(8, 6, &defaults()).unwrap();
+    bitmaps.dispose(gone);
+    let mut counts = [0; 4];
+    for line in samples.lines().filter(|line| !line.starts_with('#')) {
+        let parts: Vec<&str> = line.split('|').map(str::trim).collect();
+        let words: Vec<&str> = parts[0].split(' ').collect();
+        let stretch = words[1] == "stretch";
+        match words[0] {
+            "opacity" => {
+                // A Float is truncated before it gets here.
+                let opacity = words[2].parse::<f64>().unwrap() as i32;
+                let src = bitmaps
+                    .create_from_rgba(1, 1, vec![200, 100, 50, 200], &defaults())
+                    .unwrap();
+                let before = [10, 20, 30, 255, 10, 20, 30, 90].to_vec();
+                let dst = bitmaps.create_from_rgba(2, 1, before, &defaults()).unwrap();
+                let one = Rect::new(0, 0, 1, 1);
+                if stretch {
+                    let both = Rect::new(0, 0, 2, 1);
+                    bitmaps.stretch_blt(dst, both, src, one, opacity).unwrap();
+                } else {
+                    bitmaps.blt(dst, 0, 0, src, one, opacity).unwrap();
+                    bitmaps.blt(dst, 1, 0, src, one, opacity).unwrap();
+                }
+                let measured: Vec<u8> = parts[1].split(' ').map(|n| n.parse().unwrap()).collect();
+                assert_eq!(bitmaps.rgba(dst).unwrap(), measured, "{line}");
+                bitmaps.dispose(src);
+                bitmaps.dispose(dst);
+                counts[0] += 1;
+            }
+            "mirror" => {
+                let n: Vec<i32> = words[2..].iter().map(|n| n.parse().unwrap()).collect();
+                let [axis, pos, src_pos, src_len] = n[..] else {
+                    panic!("{line}");
+                };
+                // Along the axis the measured cells; across it source lines 1 to 3.
+                let along = cells(parts[1]);
+                let across = [Some(1), Some(2), Some(3)];
+                let (dst, dst_rect, src_rect) = if axis == 0 {
+                    (
+                        bitmaps.create(48, 3, &defaults()).unwrap(),
+                        Rect::new(pos, 0, src_len.abs(), 3),
+                        Rect::new(src_pos, 1, src_len, 3),
+                    )
+                } else {
+                    (
+                        bitmaps.create(3, 48, &defaults()).unwrap(),
+                        Rect::new(0, pos, 3, src_len.abs()),
+                        Rect::new(1, src_pos, 3, src_len),
+                    )
+                };
+                if stretch {
+                    bitmaps
+                        .stretch_blt(dst, dst_rect, clip, src_rect, 255)
+                        .unwrap();
+                } else {
+                    bitmaps
+                        .blt(dst, dst_rect.x, dst_rect.y, clip, src_rect, 255)
+                        .unwrap();
+                }
+                if axis == 0 {
+                    assert_clipped(&bitmaps, dst, &along, &across, line);
+                } else {
+                    assert_clipped(&bitmaps, dst, &across, &along, line);
+                }
+                bitmaps.dispose(dst);
+                counts[1] += 1;
+            }
+            "both" => {
+                let n: Vec<i32> = words[1..].iter().map(|n| n.parse().unwrap()).collect();
+                let dst = bitmaps.create(32, 32, &defaults()).unwrap();
+                let src_rect = Rect::new(n[2], n[3], n[4], n[5]);
+                bitmaps.blt(dst, n[0], n[1], clip, src_rect, 255).unwrap();
+                assert_clipped(&bitmaps, dst, &cells(parts[1]), &cells(parts[2]), line);
+                bitmaps.dispose(dst);
+                counts[2] += 1;
+            }
+            "disposed" => {
+                let n: Vec<i32> = words[2..].iter().map(|n| n.parse().unwrap()).collect();
+                let dst = bitmaps
+                    .create_from_rgba(8, 6, hex_pixels(parts[1]), &defaults())
+                    .unwrap();
+                let transferred = if stretch {
+                    let dst_rect = Rect::new(n[0], n[1], n[2], n[3]);
+                    let src_rect = Rect::new(n[4], n[5], n[6], n[7]);
+                    bitmaps.stretch_blt(dst, dst_rect, gone, src_rect, n[8])
+                } else {
+                    let src_rect = Rect::new(n[2], n[3], n[4], n[5]);
+                    bitmaps.blt(dst, n[0], n[1], gone, src_rect, n[6])
+                };
+                assert_eq!(transferred, Ok(()), "{line}");
+                assert_eq!(bitmaps.rgba(dst).unwrap(), hex_pixels(parts[2]), "{line}");
+                bitmaps.dispose(dst);
+                counts[3] += 1;
+            }
+            _ => panic!("{line}"),
+        }
+    }
+    assert_eq!(counts, [78, 300, 8, 9]);
 }
 
 // Hue.

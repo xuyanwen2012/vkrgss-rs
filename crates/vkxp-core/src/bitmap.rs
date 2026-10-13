@@ -1,6 +1,6 @@
 //! `Bitmaps`: the arena that owns every bitmap, and the operations that draw into them.
 
-use vkxp_pixel::{Rgba, blend_normal, rotate_hue, stretch_index};
+use vkxp_pixel::{Rgba, blend_normal, block_span, rotate_hue, stretch_index, transfer_opacity};
 use vkxp_proto::BitmapId;
 
 use crate::{BitmapError, Color, CreateFailure, Font, FontDefaults, Rect};
@@ -125,8 +125,9 @@ struct Slot {
     bitmap: Option<Bitmap>,
 }
 
-/// For each position of a destination span that a transfer draws, the destination coordinate
-/// and the source coordinate it takes, as measured on the original runtime.
+/// For each position of a destination span that a scaled transfer draws, the destination
+/// coordinate and the source coordinate it takes, as measured on the original runtime. A
+/// transfer of equal sizes goes through [`block_axis`] instead.
 ///
 /// A `dst_len` of 0 or less and a `src_len` of 0 draw nothing. Otherwise the source span is
 /// walked over `span = |src_len|` texels, from `src_pos` upward, or from `src_pos - 1` downward
@@ -138,15 +139,13 @@ struct Slot {
 ///   `c * dst_len / span`, and the steps are counted again from 0 there, at the first texel of
 ///   the source.
 /// - When only the first `v` texels of the walk exist, with `v` below `span`, positions stop
-///   before `(v * dst_len - 1) / span`. A block transfer (`block`, both spans of both axes of
-///   equal length) loses nothing instead: it stops before `v`.
+///   before `(v * dst_len - 1) / span`.
 ///
 /// Clipping by `0..dst_size` leaves `i` counted from the unclipped start. The destination
 /// coordinates of the result are consecutive.
 fn transfer_axis(
     (dst_pos, dst_len, dst_size): (i32, i32, usize),
     (src_pos, src_len, src_size): (i32, i32, usize),
-    block: bool,
 ) -> Vec<(usize, usize)> {
     if src_len == 0 {
         return Vec::new();
@@ -168,8 +167,6 @@ fn transfer_axis(
     let first = before * dst_len / span;
     let stop = if valid >= span {
         dst_len
-    } else if block {
-        valid
     } else {
         (valid * dst_len - 1).div_euclid(span)
     };
@@ -192,8 +189,31 @@ fn transfer_axis(
         .collect()
 }
 
+/// One axis of a transfer of equal sizes: the pairs of [`transfer_axis`], by the clips of the
+/// original ([`vkxp_pixel::block_span`]). A span with a negative `src_len` is clipped before
+/// it is mirrored.
+fn block_axis(
+    (dst_pos, dst_size): (i32, usize),
+    (src_pos, src_len, src_size): (i32, i32, usize),
+) -> Vec<(usize, usize)> {
+    // Sides are at most `MAX_BITMAP_PIXELS`, which fits `u32`.
+    let Some(span) = block_span(dst_pos, dst_size as u32, src_pos, src_len, src_size as u32) else {
+        return Vec::new();
+    };
+    (0..span.len)
+        .map(|i| {
+            let src = if span.mirrored {
+                span.src - i
+            } else {
+                span.src + i
+            };
+            ((span.dst + i) as usize, src as usize)
+        })
+        .collect()
+}
+
 /// Blends source pixels onto `dst` at `opacity`, row by row from the top and from left to
-/// right within a row. `columns` and `rows` come from [`transfer_axis`]; `source` is called
+/// right within a row. `columns` and `rows` come from [`transfer_axis`] or [`block_axis`]; `source` is called
 /// with `dst` as it is at that moment and with indices into them.
 fn blend_into(
     dst: &mut Bitmap,
@@ -228,7 +248,8 @@ fn blend_into(
 /// increases every time a slot gets a new occupant, so no two bitmaps of one arena ever share
 /// an id. An id whose slot is empty or holds another generation names a disposed bitmap, and
 /// every operation on it other than [`Bitmaps::dispose`] and [`Bitmaps::is_disposed`] fails
-/// with [`BitmapError::Disposed`] without changing anything.
+/// with [`BitmapError::Disposed`] without changing anything. As the source of a transfer a
+/// disposed bitmap is no error ([`Bitmaps::blt`]).
 ///
 /// Coordinates and rectangles are in pixels with the origin at the top left corner.
 #[derive(Debug, Clone, Default)]
@@ -475,10 +496,21 @@ impl Bitmaps {
     /// `dst`, at `opacity`, combining with the blend the original runtime uses for a
     /// destination with alpha ([`vkxp_pixel::blend_normal`]).
     ///
+    /// `opacity` is the integer a script gave: 1 to 255 draw, anything else draws nothing,
+    /// values above 255 included ([`vkxp_pixel::transfer_opacity`]).
+    ///
     /// Only the part of `src_rect` inside the source bitmap is drawn, at the offset it has
     /// within the rectangle, and only where it lands inside the destination. A negative width
     /// mirrors: column `i` takes source column `src_rect.x - 1 - i`; a negative height
-    /// likewise.
+    /// likewise. A mirrored rectangle that leaves the source bitmap is clipped before it is
+    /// mirrored ([`vkxp_pixel::block_span`]): the part that exists is drawn mirrored within
+    /// itself, where the unmirrored part would be.
+    ///
+    /// A disposed `src`, or `None` for a bitmap that has no id any more, is no error. The original then takes the destination as the source
+    /// and the destination rectangle as the source rectangle: every pixel of the rectangle
+    /// at (`x`, `y`) with the absolute size of `src_rect`, inside `dst`, is blended onto
+    /// itself at `opacity`, which keeps its colour and raises its alpha. The position of
+    /// `src_rect` is not used. A disposed `dst` fails as everywhere.
     ///
     /// `src` may be `dst`: the transfer then works in place. It writes the rows from top to
     /// bottom and the pixels of a row from left to right, and reads each source pixel as the
@@ -486,15 +518,17 @@ impl Bitmaps {
     /// the right or downwards therefore repeats the first columns or rows.
     ///
     /// Provenance: oracle measurement, RGSS103J, self transfer probe
-    /// (`ph-scene-selfblt-probe.rb`: 197 cases of `blt` and `stretch_blt`, every pixel equal).
+    /// (`ph-scene-selfblt-probe.rb`: 197 cases of `blt` and `stretch_blt`, every pixel equal);
+    /// the opacity, the mirrored clip and the disposed source: oracle measurement 2026-10-12,
+    /// RGSS103J and RGSS202E, the same bytes on both.
     pub fn blt(
         &mut self,
         dst: BitmapId,
         x: i32,
         y: i32,
-        src: BitmapId,
+        src: impl Into<Option<BitmapId>>,
         src_rect: Rect,
-        opacity: u8,
+        opacity: impl Into<i32>,
     ) -> Result<(), BitmapError> {
         let dst_rect = Rect::new(
             x,
@@ -502,7 +536,7 @@ impl Bitmaps {
             src_rect.width.saturating_abs(),
             src_rect.height.saturating_abs(),
         );
-        self.transfer(dst, dst_rect, src, src_rect, opacity, true)
+        self.transfer(dst, dst_rect, src.into(), src_rect, opacity.into(), true)
     }
 
     /// Stretched transfer: draws `src_rect` of `src` scaled into `dst_rect` of `dst` without
@@ -517,54 +551,75 @@ impl Bitmaps {
     /// it starts `c` texels before the bitmap, the first column drawn is
     /// `c * dst_rect.width / src_rect.width` and takes the bitmap's first column, with `i`
     /// counted from there; where only its first `v` columns exist, columns stop before
-    /// `(v * dst_rect.width - 1) / src_rect.width`. When both rectangles have the same size the
-    /// transfer is a block transfer and loses no column.
+    /// `(v * dst_rect.width - 1) / src_rect.width`. When both rectangles have the same absolute
+    /// size the transfer is a block transfer, clipped as [`Bitmaps::blt`] is. A disposed `src`
+    /// is treated as there, with `dst_rect` as the rectangle.
     pub fn stretch_blt(
         &mut self,
         dst: BitmapId,
         dst_rect: Rect,
-        src: BitmapId,
+        src: impl Into<Option<BitmapId>>,
         src_rect: Rect,
-        opacity: u8,
+        opacity: impl Into<i32>,
     ) -> Result<(), BitmapError> {
         let block = i64::from(dst_rect.width) == i64::from(src_rect.width).abs()
             && i64::from(dst_rect.height) == i64::from(src_rect.height).abs();
-        self.transfer(dst, dst_rect, src, src_rect, opacity, block)
+        self.transfer(dst, dst_rect, src.into(), src_rect, opacity.into(), block)
     }
 
-    /// The transfer behind [`Bitmaps::blt`] and [`Bitmaps::stretch_blt`]; `block` is that of
-    /// [`transfer_axis`].
+    /// The transfer behind [`Bitmaps::blt`] and [`Bitmaps::stretch_blt`]; `block` says that
+    /// both rectangles have the same absolute size.
     fn transfer(
         &mut self,
         dst: BitmapId,
         dst_rect: Rect,
-        src: BitmapId,
+        src: Option<BitmapId>,
         src_rect: Rect,
-        opacity: u8,
+        opacity: i32,
         block: bool,
     ) -> Result<(), BitmapError> {
         let (dst_width, dst_height) = {
             let bitmap = self.get(dst)?;
             (bitmap.width, bitmap.height)
         };
+        // A disposed source: the destination rectangle is blended onto itself.
+        let (src, src_rect, block) = match src.filter(|&src| !self.is_disposed(src)) {
+            Some(src) => (src, src_rect, block),
+            None => (dst, dst_rect, true),
+        };
         let (src_width, src_height) = {
             let bitmap = self.get(src)?;
             (bitmap.width, bitmap.height)
         };
-        // Opacity 0 leaves the destination unchanged.
-        if opacity == 0 {
+        let Some(opacity) = transfer_opacity(opacity) else {
+            return Ok(());
+        };
+        if dst_rect.width <= 0 || dst_rect.height <= 0 {
             return Ok(());
         }
-        let columns = transfer_axis(
-            (dst_rect.x, dst_rect.width, dst_width),
-            (src_rect.x, src_rect.width, src_width),
-            block,
-        );
-        let rows = transfer_axis(
-            (dst_rect.y, dst_rect.height, dst_height),
-            (src_rect.y, src_rect.height, src_height),
-            block,
-        );
+        let (columns, rows) = if block {
+            (
+                block_axis(
+                    (dst_rect.x, dst_width),
+                    (src_rect.x, src_rect.width, src_width),
+                ),
+                block_axis(
+                    (dst_rect.y, dst_height),
+                    (src_rect.y, src_rect.height, src_height),
+                ),
+            )
+        } else {
+            (
+                transfer_axis(
+                    (dst_rect.x, dst_rect.width, dst_width),
+                    (src_rect.x, src_rect.width, src_width),
+                ),
+                transfer_axis(
+                    (dst_rect.y, dst_rect.height, dst_height),
+                    (src_rect.y, src_rect.height, src_height),
+                ),
+            )
+        };
         if columns.is_empty() || rows.is_empty() {
             return Ok(());
         }
