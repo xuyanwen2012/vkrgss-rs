@@ -261,6 +261,11 @@ draws and not fitted); a font without a name; the image-file size limit;
   out field by field (`FontData::blank`); it gets `outline: false` and an out colour. That
   is all the binding gets. If another crate turns out to build a `Font` or a
   `FontDefaults` by its fields, it gets the same two fields and nothing more.
+- **As built.** `squeeze_width_rgss3` returns `None` for a text that fits (`E <= w`), where
+  the samples write an `lfWidth` of 0. The version of a DLL is `LibraryVersion` of
+  `vkxp-vfs`, in the new module `library_version`. The tests of RGSS3 in `vkxp-core` are in
+  `src/text/rgss3_tests.rs`, the test of the largest bitmap among them. No file outside the
+  scope of the proposal was edited.
 - The cost of a draw of RGSS3 is the work rectangle times the passes, at most 640 by 480
   six times. The pixels without ink cannot be skipped: a destination pixel of alpha 0
   takes the colour of the pass with alpha 0, which a later `blur` or `get_pixel` sees.

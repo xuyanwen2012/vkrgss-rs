@@ -11,6 +11,10 @@ The change `plan-vx-ace` recorded the decisions of the owner of 2026-10-13 on VX
 after V3: it rewrote "VX Ace" and "Process" under "Several runtimes" and added the rows A0 to
 A3 of "Milestones" and the risks of VX Ace.
 
+The change `draw-text-and-bitmaps-as-rgss3` added "Text and bitmaps of RGSS3" under "VX Ace"
+on 2026-10-13: which DLL version vkxp follows, the largest bitmap, and what stands for the
+answers of GDI.
+
 ## Goal and scope
 
 - vkxp is a from-scratch runtime for the games of RPG Maker XP, VX and VX Ace, built to a
@@ -283,6 +287,75 @@ Ace finished and published.
   (`Game.rgss3a`, DLL 3.0.1.1). Each ships its DLL in `System/`; the run-time package holds
   none. A game is compared with the DLL it ships, as for VX.
 - The process of this work is in "Process" below.
+
+Text and bitmaps of RGSS3, recorded by the change `draw-text-and-bitmaps-as-rgss3` after the
+measurement of 2026-10-13 on the DLLs 3.0.1.1 and 3.0.0.1 under Wine 11.0 (kept outside the
+repository). The first decision may be overruled by the owner.
+
+- DLL version: vkxp follows 3.0.1.1, and the glyph rule of 3.0.0.1 is selected by the DLL
+  the game ships.
+  - The two versions differ in two things only. Where glyphs overlap in a mask, 3.0.1.1
+    lets a later glyph replace earlier values where its own value is above 0, and 3.0.0.1
+    over its whole black box, zeros included, so that a glyph erases what its left
+    neighbour drew inside its box. And `Color#==` with an object that is no `Color` returns
+    false on 3.0.1.1 and raises `TypeError` on 3.0.0.1.
+  - 3.0.1.1 is the default because it is the later release, two of the three games of the
+    corpus ship it, and the overwrite of 3.0.0.1 is a fault its publisher removed. The rule
+    of 3.0.0.1 is built all the same, because the main test game ships 3.0.0.1 and a game
+    is compared with the DLL it ships. It shows only where the box of a glyph reaches into
+    its left neighbour's ink (italic styles, a few pairs of regular letters), and text
+    glyphs are outside the pixel-exact standard with either rule.
+  - The version is read from the version record of the DLL (`VS_FIXEDFILEINFO`, found by
+    its signature), not from the file name: one game of the corpus ships 3.0.1.1 as
+    `RGSS300.dll`. A hash would know only the files that were measured.
+  - The table from version to rule:
+
+    | DLL of the game | Glyph rule |
+    |---|---|
+    | a version whose first three numbers are 3.0.0 | that of 3.0.0.1 |
+    | every other version | that of 3.0.1.1 |
+    | a file without a version record | that of 3.0.1.1 |
+    | no DLL | that of 3.0.1.1 |
+
+    Applying the table is the guest's work and waits for the binding over Ruby 1.9.2.
+  - Known difference: `Color#==` of 3.0.0.1 is not followed on any DLL. vkxp returns false,
+    as 3.0.1.1 does; raising where a comparison is false is a fault no script can rely on
+    without rescuing it.
+- Largest bitmap of RGSS3: the limit vkxp has for every bitmap, 268435456 pixels (1 GiB of
+  pixels), the limit of the compositors' bitmap stores, and no limit of 4194304 pixels as in
+  RGSS2. The original has no rule to reproduce, only the free address space of a 32-bit
+  process: 16384 by 16384, exactly this limit, was created, 32768 by 32768 and 20000 by
+  20000 were not. Every size the measurement saw created is created, and a bitmap that
+  could not be uploaded is refused before memory is taken. Known difference: the original
+  created 8192 by 44954 in one run, which vkxp refuses.
+- What stands for the answers of GDI. vkxp does not reproduce the glyph shapes of GDI; it
+  holds layout, advances, placement and blending to the original, and supplies itself what
+  GDI answers there. All of these were Wine's answers in the measurement; none was measured
+  on Windows.
+  - The advance of a glyph (`gmCellIncX`): the advance of the face at the whole pixels per
+    em, rounded as FreeType rounds it.
+  - The left-bearing correction: the left overhang of the first glyph. The original also
+    moves the pen when a later glyph would start left of column 0; vkxp does not. Accepted
+    limit.
+  - `tmHeight` and `tmAscent`: the rounded ascent plus the rounded descent, and the rounded
+    ascent, at that pixels per em. The decrement in the choice of pixels per em stays a
+    placeholder of Wine.
+  - The right overhang of the last glyph: the glyph's box against its advance.
+  - Bold without a bold face: every advance one pixel wider. The original adds 1 per UTF-16
+    unit and vkxp 1 per character, which is the same inside the Basic Multilingual Plane;
+    outside it, accepted limit.
+  - Italic without an italic face: the regular advances and the overhangs of the slanted
+    box.
+  - The 65 levels of coverage: the coverage `c` of the rasteriser, 0 to 255, becomes the
+    level `c * 65 / 256`, and the mask holds `trunc(level * 255 / 64)`. The second step is
+    measured; the first is a placeholder for GDI's own 65-level answer.
+  - The width a font gets for an `lfWidth`: the model vkxp has for a font of a given
+    average width. Accepted limit: today's Wine gives other widths for one measured font,
+    and the model needs a measurement of its own for all three runtimes before it changes.
+  - The average character width and the height of the System font, by which RGSS3
+    squeezes: the constants 7 and 16, Wine's values. A Windows of another language has
+    another System font.
+  - The font chosen for a missing name: the substitution table and the fallback families.
 
 ### Several runtimes in one program
 

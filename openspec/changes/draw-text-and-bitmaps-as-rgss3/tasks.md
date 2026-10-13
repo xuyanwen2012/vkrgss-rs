@@ -23,7 +23,7 @@
 
 ## 5. Decisions
 
-- [ ] 5.1 `docs/decisions.md`, section "VX Ace": the decisions 2, 7 and 9 of `design.md`. Verify: the scenarios of "Recorded decisions on text and bitmaps of RGSS3"; `git diff --stat` names no file under `docs/` but `decisions.md`.
+- [x] 5.1 `docs/decisions.md`, section "VX Ace": the decisions 2, 7 and 9 of `design.md`. Verify: the scenarios of "Recorded decisions on text and bitmaps of RGSS3"; `git diff --stat` names no file under `docs/` but `decisions.md`.
 
 ## 6. Integration check
 
