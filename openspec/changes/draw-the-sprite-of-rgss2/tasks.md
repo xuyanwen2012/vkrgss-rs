@@ -15,7 +15,7 @@
 ## 4. Class and whole scenes
 
 - [x] 4.1 The properties in RGSS2 only; the pending list. Verify: the scenarios of `specs/rgss-scene-classes/spec.md`; `cargo test -p vkxp-binding --locked` passes.
-- [ ] 4.2 The held-out scenes in both compositors; `docs/compatibility.md`. Verify: the scenario "Random scenes"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-core -p vkxp-compose-ref -p vkxp-vk --locked` passes.
+- [x] 4.2 The held-out scenes in both compositors; `docs/compatibility.md`. Verify: the scenario "Random scenes"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-core -p vkxp-compose-ref -p vkxp-vk --locked` passes.
 
 ## 5. Integration check
 

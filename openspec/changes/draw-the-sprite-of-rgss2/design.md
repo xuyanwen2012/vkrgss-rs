@@ -110,3 +110,26 @@ colour and mirror (not measured on XP).
   scene of a game with the rules of its runtime (`new_scene`, four lines); without it no
   game of RGSS2 would reach the rules of this change. The other change makes the same
   edit.
+- The twenty random scenes are scenes of the held-out generator in which no rule of
+  `order-elements-and-read-input-as-rgss2` decides a pixel (the order among equal z, the
+  flash of a viewport, the size of a plane's tile), chosen as the random scenes of the
+  window of RGSS2 were: the 12 such scenes of the measured sets `held2` and `held3`, whose
+  digests are those of the frames of the original, and the first 8 such scenes the
+  generator gives after `held3` on its seed, which were not run on the original and whose
+  pictures are the model's. 28 of the 40 measured scenes need the rules of the other change.
+  Both backends draw all twenty as expected.
+
+## Follow-ups
+
+- Once `order-elements-and-read-input-as-rgss2` is merged, the random scenes can be the
+  twenty of `held3` as they were measured, and the planes of `size2` can come back. The
+  generator of the files is not committed (it runs the model under `ref/`); the files say
+  which scenes they hold.
+- A wave on a sprite stretched in x whose source rectangle leaves the bitmap is drawn with
+  the walk starting anew at the bitmap's edge, not as the model draws it (see "Notes of the
+  implementation"). Both are unmeasured; a rule needs a measurement first.
+- `blend_type=` raises `ArgumentError` for values other than 0, 1 and 2 on the original of
+  VX (difference D1 of the report). It is no rule of this change and is not bound;
+  `docs/compatibility.md` records it.
+- `docs/compatibility.md` says under "The sprite of VX" that sprites of equal `z` are drawn
+  in the order of creation. That line goes when the other change is merged.

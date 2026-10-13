@@ -43,7 +43,8 @@
 //!   protocol `FramePacket` with the ops of every visible element in draw order and the
 //!   deltas for exactly the bitmaps those ops refer to, and counts the frame. A sprite that is
 //!   not turned becomes a stretch quad: its source rectangle stretched into a rectangle of
-//!   whole pixels, found in `f32` as the original runtime finds it. A sprite with an angle
+//!   whole pixels, found in `f32` as the original runtime finds it, and in a scene with the
+//!   rules of RGSS2 in `f64` with the bush rows and the wave of that runtime. A sprite with an angle
 //!   other than exactly 0 is rendered by the rule measured on the original runtime, in `f64`
 //!   with sines and cosines from the pure-Rust `libm`, into a bitmap of the scene's own that
 //!   is drawn as an unscaled quad and rendered again only when what it shows changes. A
@@ -92,7 +93,7 @@
 //! | `scene` | [`Scene`], [`Rules`], the element arenas and their handles, creation and disposal |
 //! | `element` | [`Sprite`], [`Viewport`], [`Window`], [`Plane`], [`Tilemap`], flashes |
 //! | `geometry` | the fixed-point transform of a quad, the rectangle of a stretch, the walk of a turned sprite |
-//! | `extract` | [`Scene::extract`], the draw order, sprites and viewports as ops |
+//! | `extract` | [`Scene::extract`], the draw order, sprites and viewports as ops; the sprite of RGSS2 |
 //! | `turned` | the bitmap a turned sprite is rendered into |
 //! | `window` | the bitmaps cached from a window skin, windows as ops; the window of RGSS2 with [`WindowCall`] |
 //! | `plane` | planes as tiled quads, the pre-tiled bitmap of a small pattern |

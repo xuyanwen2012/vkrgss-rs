@@ -590,3 +590,13 @@ fn the_cases_of_waves_are_the_expected_pictures() {
         98,
     );
 }
+
+/// Scenario "Random scenes" of "Whole sprites of RGSS2 as measured", with the reference
+/// compositor; `vkxp-vk` composes the same scenes with both backends.
+#[test]
+fn the_random_scenes_are_the_expected_pictures() {
+    compare(
+        include_str!("../../../tests/data/sprite-rgss2-random.txt"),
+        20,
+    );
+}

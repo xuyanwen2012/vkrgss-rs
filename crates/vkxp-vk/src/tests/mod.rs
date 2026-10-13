@@ -8,6 +8,7 @@ pub(crate) mod harness;
 mod presentation;
 mod properties;
 mod shaders;
+mod sprites;
 mod sweeps;
 mod targeted;
 mod tilemap;

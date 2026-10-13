@@ -130,6 +130,47 @@ Not measured, or not there yet:
 
 In a game of XP the window is drawn as before and has no `openness`.
 
+### The sprite of VX
+
+In a game of VX a `Sprite` is drawn by the rules of RGSS2, measured on the same two files:
+325 frames and a held-out set of random scenes without a wrong pixel. The blit, the blend
+types, tone, colour, flash, the stretch and the rotation are those of XP. What differs:
+
+- A sprite that is not turned starts at `x - ox * zoom_x` rounded toward zero and ends at
+  the floor of that start plus `width * zoom_x`, in double precision and in the coordinates
+  of its viewport; likewise in y. XP rounds down, in single precision. A sprite 90 wide at a
+  zoom of 0.7 is 62 pixels wide at x 0 and 63 at x 272.
+- `Sprite#bush_opacity`, 128 at first and kept as it is written. The bush rows are drawn at
+  the opacity `opacity * bush_opacity / 255`, and not at all when that is below 0 or above
+  255. They get no tone, no colour and no flash colour, and on a sprite that is not turned
+  no mirror. A bush depth beyond the height of the sprite stretches rows from above the
+  source rectangle.
+- `Sprite#wave_amp`, `wave_length`, `wave_speed` and `wave_phase` (0, 180, 360 and 0.0 at
+  first; the phase is kept modulo 360). `Sprite#update` adds `wave_speed / wave_length` to
+  the phase, also at an amplitude of 0 and when the sprite is invisible. A sprite that is
+  not turned and has a positive amplitude has every screen row moved horizontally, by the
+  same number of pixels over a band of 8 screen rows. A negative amplitude squeezes the
+  sprite by twice the amplitude instead.
+- A mirrored sprite that is not stretched and whose source rectangle leaves the bitmap is
+  cut first and mirrored inside what is left.
+- `bitmap=` with the bitmap the sprite has already keeps `src_rect`.
+
+Not measured, or different from the original:
+
+- A wave on a turned sprite: the original draws shifted bands that no rule was found for;
+  vkxp draws the turned sprite without its wave.
+- A wave on a sprite that is stretched in x and whose source rectangle leaves the bitmap:
+  the columns can be one pixel off.
+- A negative `wave_length`. With a `wave_length` of 0 `Sprite#update` of the original does
+  not return; vkxp leaves the phase and draws the sprite without a wave.
+- `blend_type=` with a value other than 0, 1 and 2 raises `ArgumentError` on the original
+  and blends normally in vkxp.
+- Among sprites of equal `z` the original draws the one with the larger `y` in front; vkxp
+  draws in the order of creation.
+
+In a game of XP a sprite is drawn as before and has none of `bush_opacity`, `wave_amp`,
+`wave_length`, `wave_speed` and `wave_phase`.
+
 ### Bitmap and Font of VX
 
 Of `Bitmap` and `Font`, a game of VX has what follows, measured on the same two versions of
