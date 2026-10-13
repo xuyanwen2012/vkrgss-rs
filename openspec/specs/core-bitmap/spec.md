@@ -46,7 +46,9 @@ font.
 ### Requirement: Disposal
 After a bitmap is disposed, every operation on it other than disposing it again and asking
 whether it is disposed SHALL fail with a disposed error and SHALL change nothing. Using a
-disposed bitmap as the source of a transfer SHALL fail in the same way.
+disposed bitmap as the source of a transfer SHALL NOT fail: every pixel of the destination
+rectangle inside the destination SHALL be blended onto itself at the given opacity by the
+arithmetic of the block transfer.
 
 #### Scenario: Disposing twice
 - **WHEN** a disposed bitmap is disposed again
@@ -57,8 +59,12 @@ disposed bitmap as the source of a transfer SHALL fail in the same way.
 - **THEN** the operation fails with a disposed error
 
 #### Scenario: Disposed source
-- **WHEN** a disposed bitmap is used as the source of a block transfer
-- **THEN** the operation fails with a disposed error and the destination is unchanged
+- **WHEN** a disposed bitmap is used as the source of a block transfer at opacity 255 onto pixels of alpha 0, 128 and 255
+- **THEN** no error is reported, the colours are unchanged and the alphas are 0, 191 and 255
+
+#### Scenario: Samples of a disposed source
+- **WHEN** each committed sample of a transfer from a disposed source measured on the originals is evaluated
+- **THEN** every channel of every pixel equals the measured value
 
 ### Requirement: Pixel access
 Reading a pixel SHALL return its colour, and reading outside the bitmap SHALL return the colour
@@ -307,8 +313,8 @@ and source rectangles that leave the source bitmap SHALL follow the measured cli
 ### Requirement: Colour components stored as in the original
 A colour component written by `fill_rect`, `set_pixel` or text drawing SHALL be truncated
 toward zero and taken modulo 256 for red, green and blue, and an alpha below 0 SHALL be stored
-as 0. `Color` and `Tone` SHALL clamp only the upper bound of their components on construction
-and assignment, keeping negative colour components.
+as 0. `Color` SHALL limit red, green and blue to -255 to 255 and alpha to 0 to 255 on
+construction and assignment, and `Tone` SHALL keep its limits.
 
 #### Scenario: Negative red
 - **WHEN** `Color.new(-5, 0, 0)` is created and written with `set_pixel`
@@ -317,6 +323,10 @@ and assignment, keeping negative colour components.
 #### Scenario: Upper bound
 - **WHEN** `Color.new(300, -5, 0)` and `Tone.new(300, -300, 0)` are created
 - **THEN** their first two components are 255 and -5, and 255 and -255
+
+#### Scenario: Lower bound, measured on the originals
+- **WHEN** `Color.new(-300, 0, 0, -5)` is created and its red is then set to -1000
+- **THEN** its red is `-255.0` both times and its alpha `0.0`
 
 ### Requirement: Text squeezing
 Text whose drawn width exceeds the rectangle SHALL be set again in a narrower form of the font
@@ -431,3 +441,18 @@ and cut off. RGSS1 SHALL keep the rule of "Text squeezing".
 #### Scenario: Steps, measured on the original
 - **WHEN** rectangles of decreasing width are given for one text
 - **THEN** the chosen step changes at the widths the loop gives, through all five steps
+
+### Requirement: Opacity limit and mirrored clip of a transfer
+A transfer with an opacity above 255 SHALL draw nothing. A transfer of equal sizes with a
+negative source width or height SHALL be clipped before it is mirrored: per axis the low end
+of the source span is cut at 0 and the destination span moved with it, then the destination is
+cut at 0, then the source at its size, then the destination at its size, and what remains is
+drawn mirrored within itself.
+
+#### Scenario: Opacity above 255, measured on the originals
+- **WHEN** a rectangle is transferred at opacity 256, 300 and 65536
+- **THEN** the destination is unchanged each time
+
+#### Scenario: Mirrored and cut, measured on the originals
+- **WHEN** each committed sample of a mirrored transfer of equal sizes whose source rectangle leaves the source bitmap is evaluated, along each axis and along both
+- **THEN** every pixel equals the measured value
