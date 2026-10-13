@@ -8,7 +8,7 @@
 //! state.
 //!
 //! - Value types with RGSS1 semantics. [`Color`] and [`Tone`] hold floating-point components
-//!   that clamp when set; [`Rect`] stores four integers as given; [`Table`] is a one- to
+//!   that clamp when set, are all 0 by default as in RGSS3, and convert into each other; [`Rect`] stores four integers as given; [`Table`] is a one- to
 //!   three-dimensional array of 16-bit integers; [`Font`] holds the attributes text is drawn
 //!   with and [`FontDefaults`] the values new fonts copy. They are plain values without
 //!   identity; [`SharedTable`] is the one handle with identity, a reference-counted [`Table`]
@@ -24,6 +24,9 @@
 //! - Text. `draw_text` and `text_size` lay text out and blend it; the measurements
 //!   ([`TextMetrics`]) and the glyph coverage (a [`Mask`]) come from a [`TextRasterizer`]
 //!   that the embedder supplies. [`test_support`] has a deterministic stand-in for tests.
+//!   `draw_text_as` draws by the [`TextRules`] of a runtime: those of RGSS3 blend the whole
+//!   rectangle given, squeeze in one step ([`squeeze_width_rgss3`]) and draw the outline of
+//!   a font that has one.
 //! - Deltas. Every drawing operation records the rectangle it may have changed, and
 //!   [`Bitmaps::deltas`] turns that into the `BitmapDelta`s (create, update, destroy) a
 //!   compositor needs for the bitmaps a frame refers to.
@@ -88,7 +91,7 @@
 //! | `table` | [`Table`], [`SharedTable`] |
 //! | `font` | [`Font`], [`FontDefaults`] |
 //! | `bitmap` | [`Bitmaps`], [`MAX_BITMAP_PIXELS`], the drawing operations |
-//! | `text` | [`TextRasterizer`], [`TextMetrics`], [`Mask`], [`Align`], `draw_text`, `text_size` |
+//! | `text` | [`TextRasterizer`], [`TextMetrics`], [`Mask`], [`Align`], [`TextRules`], `draw_text`, `draw_text_as`, `text_size` |
 //! | `delta` | changed rectangles and [`Bitmaps::deltas`] |
 //! | `scene` | [`Scene`], [`Rules`], the element arenas and their handles, creation and disposal |
 //! | `element` | [`Sprite`], [`Viewport`], [`Window`], [`Plane`], [`Tilemap`], flashes |
@@ -135,5 +138,8 @@ pub use scene::{
     ViewportId, WindowId,
 };
 pub use table::{SharedTable, Table};
-pub use text::{Align, Mask, SQUEEZE_STEPS, Squeeze, TextMetrics, TextRasterizer};
+pub use text::{
+    Align, Mask, SQUEEZE_STEPS, Squeeze, TextMetrics, TextRasterizer, TextRules,
+    squeeze_width_rgss3,
+};
 pub use window::rgss2::WindowCall;

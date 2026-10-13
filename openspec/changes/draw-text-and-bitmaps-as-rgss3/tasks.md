@@ -12,10 +12,10 @@
 
 ## 3. Text of RGSS3
 
-- [ ] 3.1 `TextRules`, `draw_text_as`, and `squeeze_width_rgss3` with the committed sweep pairs. Verify: the scenarios of "Text rules by runtime" and "Text squeezing of RGSS3"; the existing tests of `crates/vkxp-core/src/text/tests.rs` pass with their expected values unchanged; `cargo test -p vkxp-core --locked` passes.
-- [ ] 3.2 Placement and the work rectangle, with the committed lines of the edge probes. Verify: the scenarios of "Text placement of RGSS3", "Work rectangle of RGSS3" and "Text measurement of RGSS3"; the same command.
-- [ ] 3.3 The passes: outline, shadow, text, with the committed draws of the solid glyphs. Verify: the scenarios of "Text passes of RGSS3" and "Outline of RGSS3"; the same command.
-- [ ] 3.4 The largest bitmap. Verify: the scenarios of "Largest bitmap of RGSS3"; the same command.
+- [x] 3.1 `TextRules`, `draw_text_as`, and `squeeze_width_rgss3` with the committed sweep pairs. Verify: the scenarios of "Text rules by runtime" and "Text squeezing of RGSS3"; the existing tests of `crates/vkxp-core/src/text/tests.rs` pass with their expected values unchanged; `cargo test -p vkxp-core --locked` passes.
+- [x] 3.2 Placement and the work rectangle, with the committed lines of the edge probes. Verify: the scenarios of "Text placement of RGSS3", "Work rectangle of RGSS3" and "Text measurement of RGSS3"; the same command.
+- [x] 3.3 The passes: outline, shadow, text, with the committed draws of the solid glyphs. Verify: the scenarios of "Text passes of RGSS3" and "Outline of RGSS3"; the same command.
+- [x] 3.4 The largest bitmap. Verify: the scenarios of "Largest bitmap of RGSS3"; the same command.
 
 ## 4. Version of the library
 

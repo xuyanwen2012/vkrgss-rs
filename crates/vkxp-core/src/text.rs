@@ -6,9 +6,14 @@
 //! The layout rules are those measured on the original runtime. Text is placed by its drawn
 //! width, the measured width plus the last glyph's right overhang. Text wider than its
 //! rectangle is not scaled: it is set again in a narrower form of the font, at the first of
-//! four steps that fits, or of five in RGSS2 ([`Squeeze`]). A font with a shadow, which only
-//! RGSS2 has, draws the text twice: a black layer one pixel to the right and down, then the
-//! text.
+//! four steps that fits, or of five in RGSS2 ([`Squeeze`]). A font with a shadow, which
+//! RGSS1 has not, draws the text twice: a black layer one pixel to the right and down, then
+//! the text.
+//!
+//! [`TextRules`] names the runtime whose rules a draw follows. RGSS3 differs from the two
+//! others in most of the above: it squeezes in one step ([`squeeze_width_rgss3`]), blends the
+//! whole rectangle it was given and not the cell of the text, and draws a font with an
+//! outline in four more passes; see [`Bitmaps::draw_text_as`].
 
 use vkxp_pixel::{blend_normal, effective_alpha};
 use vkxp_proto::BitmapId;
@@ -151,6 +156,64 @@ pub enum Squeeze {
     Rgss2,
 }
 
+/// The runtime whose measured rules a text is drawn by.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum TextRules {
+    /// RGSS1: the text cell, squeezed by [`Squeeze::Rgss1`].
+    #[default]
+    Rgss1,
+    /// RGSS2: the text cell, squeezed by [`Squeeze::Rgss2`].
+    Rgss2,
+    /// RGSS3: the work rectangle, the one-step squeeze and the outline.
+    Rgss3,
+}
+
+impl From<Squeeze> for TextRules {
+    fn from(squeeze: Squeeze) -> TextRules {
+        match squeeze {
+            Squeeze::Rgss1 => TextRules::Rgss1,
+            Squeeze::Rgss2 => TextRules::Rgss2,
+        }
+    }
+}
+
+/// The average character width and the height of the stock System font, whose metrics RGSS3
+/// squeezes by instead of those of the text's font.
+///
+/// PLACEHOLDER: the values of Wine, under which the original runtime was measured. A Windows
+/// of another language has another System font.
+const SYSTEM_FONT_AVERAGE_WIDTH: f64 = 7.0;
+const SYSTEM_FONT_HEIGHT: f64 = 16.0;
+
+/// The width and height of the work surface of RGSS3, which bound the work rectangle of a
+/// draw.
+///
+/// Provenance: oracle measurement 2026-10-13, RGSS301 3.0.1.1, edge probes (a rectangle 800
+/// wide touches 640 columns, one 1200 high 480 rows).
+const WORK_SURFACE: (i64, i64) = (640, 480);
+
+/// The average character width RGSS3 asks its font for when a text of the drawn width
+/// `drawn` (the outline's 2 included) at the font size `size` goes into a rectangle `width`
+/// wide; `None` when the text fits and is not squeezed.
+///
+/// The original computes, in double precision and in this order, `r = width / drawn - 0.15`,
+/// at least 0.6, and `trunc(size * r * A / H)` with the average character width `A` and the
+/// height `H` of the System font. There is one step and no check that the text then fits.
+///
+/// Provenance: oracle measurement 2026-10-13, RGSS301 3.0.1.1 and RGSS300 3.0.0.1, gdi probe
+/// (24 sweeps, 2330 rectangle widths); the code is at 0x1001f360 of version 3.0.1.1.
+pub fn squeeze_width_rgss3(size: u32, width: u32, drawn: u32) -> Option<u32> {
+    if drawn <= width {
+        return None;
+    }
+    let mut r = f64::from(width) / f64::from(drawn) - 0.15;
+    if r < 0.6 {
+        r = 0.6;
+    }
+    // `as` truncates toward zero.
+    Some((f64::from(size) * r * SYSTEM_FONT_AVERAGE_WIDTH / SYSTEM_FONT_HEIGHT) as u32)
+}
+
 impl TextMetrics {
     /// The advances of this text squeezed to step `step` (one of [`SQUEEZE_STEPS`]) of a
     /// font of size `size`, and the fraction of its natural width each glyph is condensed
@@ -266,7 +329,207 @@ fn blend_layer(
     })
 }
 
+/// The work rectangle of a draw of RGSS3: the coverage of a text put at a place of the
+/// bitmap, and the pixels of it a pass blends.
+struct WorkRectangle<'a> {
+    mask: &'a Mask,
+    /// Where pixel (0, 0) of the mask lies in the bitmap.
+    origin: (i64, i64),
+    /// The pixels `(u, v)` a pass reads, `columns.0 <= u < columns.1` and
+    /// `rows.0 <= v < rows.1`; they may lie outside the mask, where the coverage is 0.
+    columns: (i64, i64),
+    rows: (i64, i64),
+}
+
+impl WorkRectangle<'_> {
+    /// One pass of RGSS3: every pixel of the work rectangle blended onto the pixel `shift`
+    /// away from its place, in the colour `rgb` at the alpha `alpha`, as a block transfer
+    /// blends, also where the coverage is 0. The pass is cut by the bitmap, and a pass of
+    /// alpha 0 does nothing. Returns the area it touched.
+    fn pass(
+        &self,
+        bitmap: &mut Bitmap,
+        shift: (i64, i64),
+        rgb: [u8; 3],
+        alpha: u8,
+    ) -> Option<Area> {
+        if alpha == 0 {
+            return None;
+        }
+        // The pixels of the bitmap the pass reaches, and from them the pixels it reads.
+        let span = |range: (i64, i64), origin: i64, shift: i64, size: usize| {
+            let first = (origin + range.0 + shift).max(0);
+            let end = (origin + range.1 + shift).min(size as i64);
+            (first < end).then_some((first as usize, end as usize))
+        };
+        let (left, right) = span(self.columns, self.origin.0, shift.0, bitmap.width)?;
+        let (top, bottom) = span(self.rows, self.origin.1, shift.1, bitmap.height)?;
+        let (mask_width, mask_height) = (i64::from(self.mask.width), i64::from(self.mask.height));
+        for y in top..bottom {
+            let v = y as i64 - shift.1 - self.origin.1;
+            for x in left..right {
+                let u = x as i64 - shift.0 - self.origin.0;
+                let coverage = if u < mask_width && v < mask_height {
+                    self.mask.get(u as u32, v as u32)
+                } else {
+                    0
+                };
+                let source = [rgb[0], rgb[1], rgb[2], effective_alpha(coverage, alpha)];
+                let blended = blend_normal(bitmap.pixel(x, y), source, 255);
+                bitmap.put(x, y, blended);
+            }
+        }
+        Some(Area {
+            left,
+            top,
+            right,
+            bottom,
+        })
+    }
+}
+
 impl Bitmaps {
+    /// Draws `text` inside `rect` with the bitmap's font by the rules of a runtime.
+    ///
+    /// With [`TextRules::Rgss1`] and [`TextRules::Rgss2`] this is
+    /// [`Bitmaps::draw_text_squeezed`] with the squeeze of that runtime. With
+    /// [`TextRules::Rgss3`] the draw follows the rules measured on the original runtime of
+    /// VX Ace, all in integers that truncate toward zero:
+    ///
+    /// - The text is placed by `E` and `th`: its drawn width (the measured width plus the
+    ///   last glyph's right overhang) and its height, each 2 larger when the font has the
+    ///   outline. A text whose `E` exceeds the width `w` of the rectangle is set again once,
+    ///   in a font of the average character width [`squeeze_width_rgss3`] gives, and `E` is
+    ///   then the width of that; it is drawn fitting or not. An `E` of 0 or less draws
+    ///   nothing.
+    /// - Its top is `y + max(0, (h - th) / 2)`. Its left is `x` when left aligned,
+    ///   `x + max(0, (w - E + o) / 2)` when centred, with `o` 1 for a font with the outline,
+    ///   and `max(x, x + w - E)` when right aligned.
+    /// - What is blended is the work rectangle, not the cell of the text: the pixels
+    ///   `(u, v)` with `0 <= u < min(w, 640)` and `0 <= v < min(h, 480)` at
+    ///   `(left + u, top + v)`, with the coverage the text has there and 0 where it has
+    ///   none. It reaches right of the rectangle when the text is centred or right aligned
+    ///   and below it when the text is centred vertically; only the bitmap cuts it.
+    /// - A pass at `(dx, dy)` in a colour at an alpha `a` blends every such pixel onto the
+    ///   pixel `(dx, dy)` away, as a block transfer blends ([`vkxp_pixel::blend_normal`]),
+    ///   with the source alpha `effective_alpha(coverage, a)`; a pass of alpha 0 does
+    ///   nothing. Without the outline the passes are the shadow, at (1, 1) in black, if the
+    ///   font has one, and the text at (0, 0), both at the alpha of the font colour.
+    /// - With the outline only the pixels with `1 <= u < w - 1` and `1 <= v < h - 1` are
+    ///   blended, the mask staying where it is, and four passes come first, in the out
+    ///   colour at the alpha `out alpha * colour alpha / 255`: at (-1, -1), (1, -1), (1, 1)
+    ///   and (-1, 1). Then the shadow, then the text.
+    ///
+    /// A rectangle without width or height and an empty string draw nothing. Nothing is
+    /// kept between draws.
+    ///
+    /// Provenance: oracle measurement 2026-10-13, RGSS301 3.0.1.1 and RGSS300 3.0.0.1, draw
+    /// probe (1136 draws, every pixel as predicted from the glyph coverage) and edge probes.
+    pub fn draw_text_as(
+        &mut self,
+        id: BitmapId,
+        rect: Rect,
+        text: &str,
+        align: Align,
+        rules: TextRules,
+        rasterizer: &dyn TextRasterizer,
+    ) -> Result<(), BitmapError> {
+        match rules {
+            TextRules::Rgss1 => {
+                self.draw_text_in_cell(id, rect, text, align, Squeeze::Rgss1, rasterizer)
+            }
+            TextRules::Rgss2 => {
+                self.draw_text_in_cell(id, rect, text, align, Squeeze::Rgss2, rasterizer)
+            }
+            TextRules::Rgss3 => self.draw_text_rgss3(id, rect, text, align, rasterizer),
+        }
+    }
+
+    /// [`Bitmaps::draw_text_as`] with [`TextRules::Rgss3`].
+    fn draw_text_rgss3(
+        &mut self,
+        id: BitmapId,
+        rect: Rect,
+        text: &str,
+        align: Align,
+        rasterizer: &dyn TextRasterizer,
+    ) -> Result<(), BitmapError> {
+        let bitmap = self.get_mut(id)?;
+        if rect.width <= 0 || rect.height <= 0 {
+            return Ok(());
+        }
+        let [red, green, blue, color_alpha] = bitmap.font.color.to_pixel();
+        // Every pass has the alpha of the colour as a factor.
+        if color_alpha == 0 {
+            return Ok(());
+        }
+        let outline = bitmap.font.outline;
+        let shadow = bitmap.font.shadow;
+        let [out_red, out_green, out_blue, out_alpha] = bitmap.font.out_color.to_pixel();
+        let metrics = rasterizer.metrics(&bitmap.font, text);
+        if metrics.advances.is_empty() {
+            return Ok(());
+        }
+
+        // The rectangle is not empty here, so its sizes are positive.
+        let width = rect.width.unsigned_abs();
+        let grown = if outline { 2 } else { 0 };
+        let natural = metrics
+            .width()
+            .saturating_add(metrics.right_overhang)
+            .saturating_add(grown);
+        let size = bitmap.font.size.max(0).unsigned_abs();
+        let mask = match squeeze_width_rgss3(size, width, natural) {
+            None => rasterizer.rasterize(&bitmap.font, text, &metrics.advances, None),
+            Some(asked) => {
+                let (advances, condense) = metrics.narrowed(u64::from(asked));
+                rasterizer.rasterize(&bitmap.font, text, &advances, Some(condense))
+            }
+        };
+        let drawn = i64::from(mask.width) + i64::from(grown);
+        if drawn <= 0 {
+            return Ok(());
+        }
+        let text_height = i64::from(metrics.height) + i64::from(grown);
+
+        let (x, y) = (i64::from(rect.x), i64::from(rect.y));
+        let (w, h) = (i64::from(rect.width), i64::from(rect.height));
+        let left = match align {
+            Align::Left => x,
+            Align::Center => x + ((w - drawn + i64::from(outline)) / 2).max(0),
+            Align::Right => x.max(x + w - drawn),
+        };
+        let top = y + ((h - text_height) / 2).max(0);
+
+        let border = i64::from(outline);
+        let work = WorkRectangle {
+            mask: &mask,
+            origin: (left, top),
+            columns: (border, w.min(WORK_SURFACE.0).min(w - border)),
+            rows: (border, h.min(WORK_SURFACE.1).min(h - border)),
+        };
+        let mut touched: Option<Area> = None;
+        let mut pass = |shift: (i64, i64), rgb: [u8; 3], alpha: u8| {
+            if let Some(area) = work.pass(bitmap, shift, rgb, alpha) {
+                touched = Some(touched.map_or(area, |all| all.union(area)));
+            }
+        };
+        if outline {
+            let alpha = (u32::from(out_alpha) * u32::from(color_alpha) / 255) as u8;
+            for shift in [(-1, -1), (1, -1), (1, 1), (-1, 1)] {
+                pass(shift, [out_red, out_green, out_blue], alpha);
+            }
+        }
+        if shadow {
+            pass((1, 1), [0, 0, 0], color_alpha);
+        }
+        pass((0, 0), [red, green, blue], color_alpha);
+        if let Some(area) = touched {
+            bitmap.mark(area);
+        }
+        Ok(())
+    }
+
     /// Draws `text` inside `rect` with the bitmap's font, squeezed by the rule of RGSS1:
     /// [`Bitmaps::draw_text_squeezed`] with [`Squeeze::Rgss1`].
     pub fn draw_text(
@@ -309,6 +572,19 @@ impl Bitmaps {
     /// Provenance of the shadow: oracle measurement 2026-10-12, RGSS202E, text probe 2 (936
     /// shadowed draws, every pixel as predicted from the glyph coverage).
     pub fn draw_text_squeezed(
+        &mut self,
+        id: BitmapId,
+        rect: Rect,
+        text: &str,
+        align: Align,
+        squeeze: Squeeze,
+        rasterizer: &dyn TextRasterizer,
+    ) -> Result<(), BitmapError> {
+        self.draw_text_as(id, rect, text, align, squeeze.into(), rasterizer)
+    }
+
+    /// [`Bitmaps::draw_text_squeezed`]: the draw of RGSS1 and of RGSS2.
+    fn draw_text_in_cell(
         &mut self,
         id: BitmapId,
         rect: Rect,
@@ -413,7 +689,8 @@ impl Bitmaps {
 
     /// The size `text` has in the bitmap's font, as a rectangle at the origin: the advances
     /// plus the first glyph's left overhang, and the text height. Nothing is drawn. An
-    /// empty string has width 0 and height 0.
+    /// empty string has width 0 and height 0. This is the size in every runtime: in RGSS3
+    /// neither the outline's 2 nor the shadow is counted.
     pub fn text_size(
         &self,
         id: BitmapId,
@@ -434,5 +711,7 @@ impl Bitmaps {
     }
 }
 
+#[cfg(test)]
+mod rgss3_tests;
 #[cfg(test)]
 mod tests;
