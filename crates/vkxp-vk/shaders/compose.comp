@@ -154,9 +154,9 @@ uvec4 apply_tilemap(TilemapRecord layer, uvec4 pixel, ivec2 position) {
     return blend_normal(pixel, source, 255u);
 }
 
-// A tilemap plane of RGSS2. The functions from here to `apply_plane` mirror
-// `vkxp_proto::tiles_rgss2` and `PlaneStep::apply` of the reference compositor, in their
-// order; the three shape tables are copies of those of `tiles_rgss2`, and a test compares
+// A tilemap plane of RGSS2 or of RGSS3. The functions from here to `apply_plane` mirror
+// `vkxp_proto::tiles_rgss2`, `vkxp_proto::tiles_rgss3` and `PlaneStep::apply` of the
+// reference compositor, in their order; the three shape tables are copies of those of `tiles_rgss2`, and a test compares
 // them. Each holds, shape after shape and quarter after quarter (top-left, top-right,
 // bottom-left, bottom-right), the x and the y of the quarter's piece inside the block of
 // the autotile.
@@ -228,6 +228,11 @@ bool plane_is_wall(int number) {
 // Mirrors `tiles_rgss2::is_table`.
 bool plane_is_table(int number) {
     return number >= 2816 && number < 4352 && (number - 2048) / 48 % 8 == 7;
+}
+
+// Mirrors `tiles_rgss3::is_table`: `entry` is the tile's entry of the flags table.
+bool plane_is_table_rgss3(int number, int entry) {
+    return number >= 2816 && number < 4352 && (entry & 128) != 0;
 }
 
 // Mirrors `tiles_rgss2::takes_shadow`.
@@ -321,7 +326,7 @@ const uint PLANE_FILLING[4] = uint[4](0u, 48u, 32u, 16u);
 // Mirrors `PlaneStep::number`: the tile number at a cell of a layer of the map, 0 outside
 // the map and for a layer it does not have.
 int plane_number(TilemapRecord plane, ivec2 cell, uint layer) {
-    uint layers = (uint(plane.priority) >> 1) & 3u;
+    uint layers = (uint(plane.priority) >> 1) & 7u;
     if (cell.x < 0 || uint(cell.x) >= plane.map_xsize
             || cell.y < 0 || uint(cell.y) >= plane.map_ysize || layer >= layers) {
         return 0;
@@ -330,17 +335,41 @@ int plane_number(TilemapRecord plane, ivec2 cell, uint layer) {
         + (layer * plane.map_ysize + uint(cell.y)) * plane.map_xsize + uint(cell.x)];
 }
 
-// Mirrors `PlaneStep::drawn`: tile `number` when this plane draws it.
-PlaneTile plane_drawn(TilemapRecord plane, int number) {
-    uint flags = uint(plane.priority);
-    bool star = false;
+// Whether the plane is drawn by the rule set of RGSS3.
+bool plane_rgss3(TilemapRecord plane) {
+    return (uint(plane.priority) & 16u) != 0u;
+}
+
+// Mirrors `PlaneStep::flags`: the entry of tile `number` in the passages table, the flags
+// table of RGSS3, 0 when there is none.
+int plane_entry(TilemapRecord plane, int number) {
     if (number >= 0 && uint(number) < plane.priorities_count) {
-        star = (table_words[plane.priorities_offset + uint(number)] & 16) != 0;
+        return table_words[plane.priorities_offset + uint(number)];
+    }
+    return 0;
+}
+
+// Mirrors `tiles_rgss3::tile` for a plane of RGSS3 and `tiles_rgss2::tile` otherwise.
+PlaneTile plane_resolved(TilemapRecord plane, int number, uvec2 shift) {
+    PlaneTile tile = plane_tile(number, shift);
+    if (plane_rgss3(plane)) {
+        tile.table = plane_is_table_rgss3(number, plane_entry(plane, number));
+    }
+    return tile;
+}
+
+// Mirrors `PlaneStep::drawn`: tile `number` of layer `layer` when this plane draws it.
+PlaneTile plane_drawn(TilemapRecord plane, int number, uint layer) {
+    uint flags = uint(plane.priority);
+    bool star = (plane_entry(plane, number) & 16) != 0;
+    if (plane_rgss3(plane)) {
+        star = star && layer == 2u;
     }
     if (star != ((flags & 1u) != 0u)) {
         return PlaneTile(SHAPES_NONE, 0u, uvec2(0u), 0u, false);
     }
-    return plane_tile(number, uvec2((flags >> 16) & 3u, (flags >> 18) & 3u) * uvec2(64u, 32u));
+    return plane_resolved(
+        plane, number, uvec2((flags >> 16) & 3u, (flags >> 18) & 3u) * uvec2(64u, 32u));
 }
 
 // Mirrors `PlaneStep::blend`: `pixel` with the texel `texel` of the tile's sheet over it.
@@ -368,6 +397,19 @@ uvec4 plane_blend(TilemapRecord plane, PlaneTile tile, uvec2 texel, uvec4 pixel,
         : blend_window(pixel, source, 255u);
 }
 
+// Mirrors `Tile::edge`: `pixel` with the edge that the tile `table` shows on the cell below
+// over it, for the pixel at `within` of that cell. The other arguments are those of
+// `plane_blend`.
+uvec4 plane_edge(TilemapRecord plane, PlaneTile table, uvec4 pixel, int column, ivec2 clip,
+        int left, uvec2 within) {
+    if (!table.table || plane_piece(table, 2u).y != 80u) {
+        return pixel;
+    }
+    uvec2 piece = plane_piece(table, 2u + within.x / 16u);
+    uvec2 texel = table.block + uvec2(piece.x + within.x % 16u, 88u + within.y);
+    return plane_blend(plane, table, texel, pixel, column, clip, left, within.x);
+}
+
 // The value of screen pixel `position` after the tilemap plane `plane`, given its value
 // before. Mirrors `PlaneStep::apply` of the reference compositor. `clip` is as for
 // `plane_blend`; the record's clip lies inside the plane.
@@ -378,6 +420,7 @@ uvec4 apply_plane(TilemapRecord plane, uvec4 pixel, ivec2 position, ivec2 clip) 
     uvec2 quarter = within % 16u;
     uint flags = uint(plane.priority);
     bool upper = (flags & 1u) != 0u;
+    bool rgss3 = plane_rgss3(plane);
     uint first_layer = upper ? 2u : 0u;
     ivec2 map_cell = ivec2(
         (uvec2(plane.cell_x, plane.cell_y) + cell) % uvec2(plane.map_xsize, plane.map_ysize));
@@ -387,7 +430,8 @@ uvec4 apply_plane(TilemapRecord plane, uvec4 pixel, ivec2 position, ivec2 clip) 
     if (within.y < 8u && cell.y > 0u && position.y / 8 * 8 <= top) {
         int above = int((plane.cell_y + cell.y - 1u) % plane.map_ysize);
         for (uint layer = first_layer; layer < 3u; ++layer) {
-            PlaneTile tile = plane_drawn(plane, plane_number(plane, ivec2(map_cell.x, above), layer));
+            PlaneTile tile = plane_drawn(
+                plane, plane_number(plane, ivec2(map_cell.x, above), layer), layer);
             if (tile.shapes == SHAPES_NONE || tile.shapes == SHAPES_WHOLE) {
                 continue;
             }
@@ -400,7 +444,7 @@ uvec4 apply_plane(TilemapRecord plane, uvec4 pixel, ivec2 position, ivec2 clip) 
     }
     for (uint layer = first_layer; layer < 3u; ++layer) {
         int number = plane_number(plane, map_cell, layer);
-        PlaneTile tile = plane_drawn(plane, number);
+        PlaneTile tile = plane_drawn(plane, number, layer);
         if (tile.shapes == SHAPES_WHOLE) {
             pixel = plane_blend(
                 plane, tile, tile.block + within, pixel, position.x, clip, left, within.x);
@@ -420,7 +464,27 @@ uvec4 apply_plane(TilemapRecord plane, uvec4 pixel, ivec2 position, ivec2 clip) 
                 }
             }
         }
-        if (layer != 0u || upper) {
+        if (upper) {
+            continue;
+        }
+        if (rgss3) {
+            if (layer != 1u) {
+                continue;
+            }
+            // Mirrors `tiles_rgss3::shadow_covers` and `tiles_rgss2::shadow`.
+            int mask = plane_number(plane, map_cell, 3u);
+            if (((mask >> (within.y / 16u * 2u + within.x / 16u)) & 1) != 0) {
+                pixel.rgb = (pixel.rgb * 127u) >> 8;
+            }
+            if (within.y < 8u && !plane_is_table_rgss3(number, plane_entry(plane, number))
+                    && !plane_is_wall(plane_number(plane, map_cell, 0u))) {
+                PlaneTile table = plane_resolved(
+                    plane, plane_number(plane, map_cell + ivec2(0, -1), 1u), uvec2(0u));
+                pixel = plane_edge(plane, table, pixel, position.x, clip, left, within);
+            }
+            continue;
+        }
+        if (layer != 0u) {
             continue;
         }
         if (within.x < 16u && plane_takes_shadow(number)
@@ -430,13 +494,8 @@ uvec4 apply_plane(TilemapRecord plane, uvec4 pixel, ivec2 position, ivec2 clip) 
             pixel.rgb = (pixel.rgb * 127u) >> 8;
         }
         if (within.y < 8u && !plane_is_wall(number) && !plane_is_table(number)) {
-            // Mirrors `Tile::edge`.
             PlaneTile table = plane_tile(plane_number(plane, map_cell + ivec2(0, -1), 0u), uvec2(0u));
-            if (table.table && plane_piece(table, 2u).y == 80u) {
-                uvec2 piece = plane_piece(table, 2u + within.x / 16u);
-                uvec2 texel = table.block + uvec2(piece.x + quarter.x, 88u + within.y);
-                pixel = plane_blend(plane, table, texel, pixel, position.x, clip, left, within.x);
-            }
+            pixel = plane_edge(plane, table, pixel, position.x, clip, left, within);
         }
     }
 

@@ -109,7 +109,7 @@ const MAP: TableId = TableId::new(3);
 const PASSAGES: TableId = TableId::new(1);
 const FLASH: TableId = TableId::new(7);
 
-fn packet(
+pub(super) fn packet(
     size: Size,
     bitmaps: Vec<BitmapDelta>,
     tables: Vec<TableDelta>,
@@ -127,7 +127,7 @@ fn packet(
 }
 
 /// Pixels that differ from texel to texel, with every alpha.
-fn noise(random: &mut Rng, width: u32, height: u32) -> Vec<u8> {
+pub(super) fn noise(random: &mut Rng, width: u32, height: u32) -> Vec<u8> {
     let mut rgba = Vec::with_capacity((width * height * 4) as usize);
     for _ in 0..width * height {
         let [red, green, blue, alpha] = random.next_u32().to_le_bytes();
@@ -143,7 +143,7 @@ fn noise(random: &mut Rng, width: u32, height: u32) -> Vec<u8> {
 }
 
 /// A tile number of any range, the undefined ones and those beyond the sheets among them.
-fn number(random: &mut Rng) -> i16 {
+pub(super) fn number(random: &mut Rng) -> i16 {
     match random.below(12) {
         0 => 0,
         1 => random.next_u32() as i16,

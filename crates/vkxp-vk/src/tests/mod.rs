@@ -13,5 +13,6 @@ mod sweeps;
 mod targeted;
 mod tilemap;
 mod tilemap_rgss2;
+mod tilemap_rgss3;
 mod timing;
 mod windows;

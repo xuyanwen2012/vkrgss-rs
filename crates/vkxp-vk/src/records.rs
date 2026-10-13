@@ -5,8 +5,8 @@
 //! the same error. The shader then never sees an invalid slot or source rectangle.
 
 use vkxp_proto::{
-    BitmapId, BlendMode, Color, Op, Plane, Rect, Sampling, Size, TilemapLayer, TilemapPlane, Tone,
-    stretch_step, tiles_rgss2,
+    BitmapId, BlendMode, Color, Op, Plane, PlaneRules, Rect, Sampling, Size, TilemapLayer,
+    TilemapPlane, Tone, stretch_step, tiles_rgss2, tiles_rgss3,
 };
 
 use crate::VkError;
@@ -273,7 +273,7 @@ fn encode_tilemap(
     Ok(Some(record))
 }
 
-/// Checks a tilemap plane op of RGSS2 and encodes what it reads, in the words of a
+/// Checks a tilemap plane op, of RGSS2 or of RGSS3, and encodes what it reads, in the words of a
 /// [`TilemapRecord`] as `shaders/records.glsl` says a plane reads them, or `None` when it
 /// cannot draw: its map has no cells.
 ///
@@ -313,8 +313,13 @@ fn encode_plane(
     // Remainders of sizes that are `u32`.
     let inside = |first: u32, size: u32| (u64::from(first) % u64::from(size)) as u32;
     let step = plane.animation_step;
+    // The layers the rule set reads, and the rule set, in bits 1 to 4.
+    let rules = match plane.rules {
+        PlaneRules::Rgss2 => map.zsize.min(3) << 1,
+        PlaneRules::Rgss3 => map.zsize.min(tiles_rgss3::LAYERS) << 1 | 1 << 4,
+    };
     let flags = u32::from(plane.plane == Plane::Upper)
-        | map.zsize.min(3) << 1
+        | rules
         | u32::from(plane.flash_level) << 8
         | tiles_rgss2::FLOOR_FRAMES[(step % 4) as usize] << 16
         | ((step % 3) as u32) << 18;

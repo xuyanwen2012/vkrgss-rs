@@ -15,7 +15,7 @@
 
 ## 4. Vulkan
 
-- [ ] 4.1 The Vulkan compositor evaluates the rule set of RGSS3 and agrees with the reference on the topics, on generated packets and on clipped planes. Verify: the scenarios of `specs/vulkan-compositor/spec.md`; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk --locked` passes, and so does one run of `VK_LOADER_DRIVERS_SELECT='*radeon*' VKXP_TEST_DEVICE=RADV cargo test -p vkxp-vk --locked`.
+- [x] 4.1 The Vulkan compositor evaluates the rule set of RGSS3 and agrees with the reference on the topics, on generated packets and on clipped planes. Verify: the scenarios of `specs/vulkan-compositor/spec.md`; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk --locked` passes, and so does one run of `VK_LOADER_DRIVERS_SELECT='*radeon*' VKXP_TEST_DEVICE=RADV cargo test -p vkxp-vk --locked`.
 
 ## 5. Documentation
 
