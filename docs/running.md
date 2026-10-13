@@ -37,6 +37,7 @@ What follows the runtime:
 | Frame and starting window size | 640 by 480 | 544 by 416 |
 | Starting frame rate | 40 | 60 |
 | Symbol numbers (`Symbol#to_i`) | those of RGSS1 | those of RGSS2 |
+| Default keys and repeat of `Input` | those of XP | those of VX (see *The keys of a game of VX*) |
 
 A game of VX names the package `RPGVX`, so it is run with `--rtp RPGVX=<RTP directory>`; a
 game whose `RTP` is empty needs no package. The archive of the other runtime is ignored if
@@ -184,8 +185,9 @@ need a headless run, whether `headless = true` or `--headless` makes it one, and
 goes with neither `record` nor `input`, wherever each of them is set.
 
 This example holds every setting; `replay` is a comment in it because it does not go together
-with `record` and `input`. Its `[keys]` and `[gamepad]` tables are the default maps, so
-leaving them out changes nothing:
+with `record` and `input`. Its `[keys]` and `[gamepad]` tables are the default maps of a
+game of XP, so leaving them out changes nothing there; the keys of a game of VX are under
+*The keys of a game of VX*:
 
 ```toml
 builtin_scripts = "rpg_builtin.rb"           # --builtin-scripts
@@ -255,6 +257,30 @@ refused. A key is named as the key codes of `winit` are
 They name the position of a key, not the letter a keyboard layout puts on it. The host keys
 (F12, F2, F3, F4, F11, Tab, Alt+Enter) are not part of the map.
 
+### The keys of a game of VX
+
+A game of VX (RGSS2) starts from the keys of the original runtime of VX instead, and `[keys]`
+replaces the keys of a button in the same way:
+
+| Button | Keys |
+|---|---|
+| `DOWN`, `LEFT`, `RIGHT`, `UP` | `ArrowDown`, `ArrowLeft`, `ArrowRight`, `ArrowUp`; `Numpad2`, `Numpad4`, `Numpad6`, `Numpad8` |
+| `A` | `ShiftLeft`, `ShiftRight` |
+| `B` | `Escape`, `Insert`, `KeyX`, `Numpad0` |
+| `C` | `Enter`, `NumpadEnter`, `Space`, `KeyZ` |
+| `X`, `Y`, `Z` | `KeyA`, `KeyS`, `KeyD` |
+| `L` | `KeyQ`, `PageUp` |
+| `R` | `KeyW`, `PageDown` |
+| `SHIFT` | `ShiftLeft`, `ShiftRight` |
+| `CTRL` | `ControlLeft`, `ControlRight` |
+| `ALT` | `AltLeft`, `AltRight` |
+| `F5` to `F9` | `F5` to `F9` |
+
+Against the keys of XP, Z confirms where it held `A`, and the C key holds nothing. Shift
+holds `A` and `SHIFT` together, as in the original. `Input.repeat?` of VX repeats a held
+button after 24 updates and then every 6, where XP repeats after 16 and then every 4. The
+gamepad map is the same for both.
+
 ### Gamepads
 
 A windowed run reads every connected gamepad together with the keyboard: a button is held
@@ -295,7 +321,7 @@ backtrace as `$@`, as in the original runtime, so that the common guard
 shown in a panel over the picture: white text in a dark box in the middle of the screen,
 wrapped to the box and cut with `...` when it has more lines than fit. The game waits until
 the message is dismissed with a key that holds C or B (by default Space, Enter, C, Escape, X
-and so on) or a mouse click. That press does not reach the game. A headless run dismisses
+and so on; in a game of VX Z in place of C) or a mouse click. That press does not reach the game. A headless run dismisses
 every message at once. With `--log-p`, `p` writes to the error stream only and the game goes
 on. While the screen is frozen (`Graphics.freeze`) the panel is not visible; the message is
 still on the error stream and still waits for its dismissal.

@@ -15,7 +15,7 @@
 
 ## 4. Documentation
 
-- [ ] 4.1 `docs/running.md`: the keys of a game of VX. Verify: the table equals the key map in the code.
+- [x] 4.1 `docs/running.md`: the keys of a game of VX. Verify: the table equals the key map in the code.
 
 ## 5. Integration check
 
