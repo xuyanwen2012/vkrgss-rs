@@ -22,7 +22,7 @@ pub(crate) struct Area {
 
 impl Area {
     /// The smallest area containing both.
-    fn union(self, other: Area) -> Area {
+    pub(crate) fn union(self, other: Area) -> Area {
         Area {
             left: self.left.min(other.left),
             top: self.top.min(other.top),

@@ -7,7 +7,7 @@
 
 ## 2. Text
 
-- [ ] 2.1 The shadow layer and the squeeze of RGSS2. Verify: the scenarios of "Text shadow of RGSS2" and "Text squeezing of RGSS2"; `cargo test -p vkxp-core -p vkxp-text --locked` passes.
+- [x] 2.1 The shadow layer and the squeeze of RGSS2. Verify: the scenarios of "Text shadow of RGSS2" and "Text squeezing of RGSS2"; `cargo test -p vkxp-core -p vkxp-text --locked` passes.
 
 ## 3. Classes
 

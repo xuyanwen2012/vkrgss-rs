@@ -126,5 +126,5 @@ pub use scene::{
     WindowId,
 };
 pub use table::{SharedTable, Table};
-pub use text::{Align, Mask, SQUEEZE_STEPS, TextMetrics, TextRasterizer};
+pub use text::{Align, Mask, SQUEEZE_STEPS, Squeeze, TextMetrics, TextRasterizer};
 pub use window::rgss2::WindowCall;

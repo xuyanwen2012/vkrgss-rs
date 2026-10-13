@@ -92,3 +92,10 @@ without ink (the work area of section 6e); the loose storage of `Font.default_*`
   shadow layer and the chosen step, not glyph pixels of Windows.
 - The names this change adds leave the pending list of the method test; the method list
   of RGSS2 gains `Bitmap` and `Font`.
+
+## Edits outside the named files
+
+Each is a few lines that a requirement needs.
+
+- `crates/vkxp-core/src/lib.rs`: the export of `Squeeze`, which the binding passes to the
+  text routine to choose the squeeze of the runtime.

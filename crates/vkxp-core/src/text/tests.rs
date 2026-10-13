@@ -648,3 +648,376 @@ fn empty_string_measures_nothing() {
         );
     }
 }
+
+// Requirement: Text shadow of RGSS2
+
+/// Defaults of a font with a shadow that the stand-in draws with cells of 5 by 10 pixels.
+fn shadowed() -> FontDefaults {
+    let mut defaults = small();
+    defaults.shadow = true;
+    defaults
+}
+
+/// What a shadowed draw must leave in a bitmap that held `before`, by the measured rule:
+/// for every pixel of the text cell inside the rectangle, first black with the alpha of the
+/// coverage one pixel to the right and down, then the text as [`model`] draws it.
+fn shadow_model(
+    before: &[u8],
+    (width, height): (u32, u32),
+    rect: Rect,
+    mask: &Mask,
+    offset: u32,
+    color: Rgba,
+) -> Vec<u8> {
+    let mut after = before.to_vec();
+    let left = rect.x + offset as i32;
+    let top = rect.y + ((rect.height - mask.height() as i32) / 2).max(0);
+    for v in 0..mask.height() as i32 {
+        for u in 0..mask.width() as i32 {
+            let (cell_x, cell_y) = (left + u, top + v);
+            let in_rect = (rect.x..rect.x + rect.width).contains(&cell_x)
+                && (rect.y..rect.y + rect.height).contains(&cell_y);
+            let (x, y) = (cell_x + 1, cell_y + 1);
+            if !in_rect || !(0..width as i32).contains(&x) || !(0..height as i32).contains(&y) {
+                continue;
+            }
+            let alpha = effective_alpha(mask.get(u as u32, v as u32), color[3]);
+            let offset = ((y as u32 * width + x as u32) * 4) as usize;
+            let target: Rgba = after[offset..offset + 4].try_into().unwrap();
+            after[offset..offset + 4].copy_from_slice(&blend_normal(target, [0, 0, 0, alpha], 255));
+        }
+    }
+    model(&after, (width, height), rect, mask, offset, color)
+}
+
+/// Scenario "Layer from the coverage".
+#[test]
+fn the_shadow_is_the_coverage_in_black_one_pixel_right_and_down() {
+    let rasterizer = CellRasterizer;
+    let rect = Rect::new(2, 1, 20, 12);
+    // The coverage, from a draw without the shadow: the colour is opaque, so on a
+    // transparent bitmap the alpha of a pixel is its coverage.
+    let mut bitmaps = Bitmaps::new();
+    let plain = bitmaps.create(24, 16, &small()).unwrap();
+    bitmaps
+        .draw_text(plain, rect, "A B", Align::Left, &rasterizer)
+        .unwrap();
+    let coverage = bitmaps.rgba(plain).unwrap().to_vec();
+
+    let id = bitmaps.create(24, 16, &shadowed()).unwrap();
+    bitmaps
+        .draw_text_squeezed(id, rect, "A B", Align::Left, Squeeze::Rgss2, &rasterizer)
+        .unwrap();
+    let rgba = bitmaps.rgba(id).unwrap();
+    let (mut shadow_only, mut both) = (0, 0);
+    for y in 0..16 {
+        for x in 0..24 {
+            let cell = |x: u32, y: u32| (2..17).contains(&x) && (2..12).contains(&y);
+            let mut expected = [0; 4];
+            if x > 0 && y > 0 && cell(x - 1, y - 1) {
+                let alpha = at(&coverage, 24, x - 1, y - 1)[3];
+                expected = blend_normal(expected, [0, 0, 0, alpha], 255);
+            }
+            if cell(x, y) {
+                let alpha = at(&coverage, 24, x, y)[3];
+                expected = blend_normal(expected, [255, 255, 255, alpha], 255);
+                both += 1;
+            } else if expected[3] != 0 {
+                shadow_only += 1;
+            }
+            assert_eq!(at(rgba, 24, x, y), expected, "({x}, {y})");
+        }
+    }
+    assert_eq!(both, 150);
+    // Below the last row of the text and right of its last column, where there is ink.
+    assert!(shadow_only >= 10, "{shadow_only}");
+    // Under the space the shadow of the first letter shows through the transparent text.
+    assert_eq!(at(rgba, 24, 7, 6)[..3], [0, 0, 0]);
+    assert_ne!(at(rgba, 24, 7, 6)[3], 0);
+}
+
+#[test]
+fn the_shadow_follows_the_colour_alpha_and_is_blended_before_the_text() {
+    let rasterizer = CellRasterizer;
+    let color: Rgba = [200, 100, 50, 128];
+    let cases = [
+        (Rect::new(2, 1, 30, 14), "ABC", Align::Center, 5, 7),
+        // Squeezed, and partly left of and above the bitmap.
+        (Rect::new(-3, -2, 12, 9), "ABCD", Align::Right, 3, 0),
+        // Reaches the right and the bottom edge of the bitmap.
+        (Rect::new(26, 8, 10, 10), "AB", Align::Left, 5, 0),
+    ];
+    for (rect, text, align, advance, offset) in cases {
+        let mut bitmaps = Bitmaps::new();
+        let before = pattern(36, 18, 8);
+        let id = bitmaps
+            .create_from_rgba(36, 18, before.clone(), &shadowed())
+            .unwrap();
+        bitmaps.font_mut(id).unwrap().color = crate::bitmap::testing::color(color);
+        let font = bitmaps.font(id).unwrap().clone();
+        let advances = vec![advance; text.chars().count()];
+        let mask = rasterizer.rasterize(&font, text, &advances, None);
+        bitmaps
+            .draw_text_squeezed(id, rect, text, align, Squeeze::Rgss2, &rasterizer)
+            .unwrap();
+        let expected = shadow_model(&before, (36, 18), rect, &mask, offset, color);
+        assert!(bitmaps.rgba(id).unwrap() == expected, "{rect:?}");
+        let unshadowed = model(&before, (36, 18), rect, &mask, offset, color);
+        assert!(expected != unshadowed, "{rect:?} draws a shadow");
+    }
+}
+
+/// Scenario "Outside the rectangle".
+#[test]
+fn the_shadow_leaves_the_rectangle_and_not_the_bitmap() {
+    let rasterizer = CellRasterizer;
+    let mut bitmaps = Bitmaps::new();
+    let id = bitmaps.create(20, 16, &shadowed()).unwrap();
+    // Two cells of 5 by 10 fill the rectangle exactly.
+    let rect = Rect::new(4, 3, 10, 10);
+    bitmaps
+        .draw_text_squeezed(id, rect, "AB", Align::Left, Squeeze::Rgss2, &rasterizer)
+        .unwrap();
+    let rgba = bitmaps.rgba(id).unwrap();
+    // Column 14 and row 13 are one pixel beyond the rectangle: shadow alone.
+    for y in 4..14 {
+        let pixel = at(rgba, 20, 14, y);
+        assert_eq!(pixel[..3], [0, 0, 0], "row {y}");
+        assert_ne!(pixel[3], 0, "row {y}");
+    }
+    for x in 5..15 {
+        let pixel = at(rgba, 20, x, 13);
+        assert_eq!(pixel[..3], [0, 0, 0], "column {x}");
+        assert_ne!(pixel[3], 0, "column {x}");
+    }
+    // Nothing further out, and nothing left of or above the rectangle.
+    assert_eq!(drawn_columns(rgba, 20, 8), (4..15).collect::<Vec<u32>>());
+    assert_eq!(drawn_rows(rgba, 20, 16, 8), (3..14).collect::<Vec<u32>>());
+    assert_eq!(at(rgba, 20, 14, 3), [0; 4]);
+    assert_eq!(at(rgba, 20, 4, 13), [0; 4]);
+
+    // At the edges of the bitmap the shadow is cut off.
+    let tight = bitmaps.create(10, 10, &shadowed()).unwrap();
+    bitmaps
+        .draw_text_squeezed(
+            tight,
+            Rect::new(0, 0, 10, 10),
+            "AB",
+            Align::Left,
+            Squeeze::Rgss2,
+            &rasterizer,
+        )
+        .unwrap();
+    let rgba = bitmaps.rgba(tight).unwrap();
+    assert_eq!(drawn_columns(rgba, 10, 9), (0..10).collect::<Vec<u32>>());
+    assert_eq!(at(rgba, 10, 0, 0)[..3], [255, 255, 255]);
+
+    // A rectangle that ends at the left edge of the bitmap still casts its last column.
+    let beside = bitmaps.create(4, 12, &shadowed()).unwrap();
+    bitmaps
+        .draw_text_squeezed(
+            beside,
+            Rect::new(-10, 0, 10, 10),
+            "AB",
+            Align::Left,
+            Squeeze::Rgss2,
+            &rasterizer,
+        )
+        .unwrap();
+    let rgba = bitmaps.rgba(beside).unwrap();
+    assert_eq!(drawn_rows(rgba, 4, 12, 0), (1..11).collect::<Vec<u32>>());
+    assert_eq!(drawn_columns(rgba, 4, 5), [0]);
+}
+
+/// Scenario "Shadow off".
+#[test]
+fn without_the_shadow_the_draw_is_that_of_rgss1() {
+    let rasterizer = CellRasterizer;
+    for (rect, text, align) in [
+        (Rect::new(2, 1, 30, 14), "ABC", Align::Center),
+        (Rect::new(-3, -2, 40, 9), "ABCD", Align::Right),
+        // Squeezed to a step both runtimes have.
+        (Rect::new(1, 1, 16, 12), "ABCD", Align::Left),
+    ] {
+        let mut bitmaps = Bitmaps::new();
+        let before = pattern(36, 18, 8);
+        let mut off = shadowed();
+        off.shadow = false;
+        let rgss2 = bitmaps
+            .create_from_rgba(36, 18, before.clone(), &off)
+            .unwrap();
+        let rgss1 = bitmaps
+            .create_from_rgba(36, 18, before.clone(), &small())
+            .unwrap();
+        bitmaps
+            .draw_text_squeezed(rgss2, rect, text, align, Squeeze::Rgss2, &rasterizer)
+            .unwrap();
+        bitmaps
+            .draw_text(rgss1, rect, text, align, &rasterizer)
+            .unwrap();
+        assert!(bitmaps.rgba(rgss2).unwrap() != before, "{rect:?}");
+        assert!(
+            bitmaps.rgba(rgss2).unwrap() == bitmaps.rgba(rgss1).unwrap(),
+            "{rect:?}"
+        );
+    }
+}
+
+#[test]
+fn zero_colour_alpha_draws_no_shadow_either() {
+    let rasterizer = CellRasterizer;
+    let mut bitmaps = Bitmaps::new();
+    let before = pattern(15, 12, 2);
+    let id = bitmaps
+        .create_from_rgba(15, 12, before.clone(), &shadowed())
+        .unwrap();
+    bitmaps.font_mut(id).unwrap().color = Color::new(255.0, 255.0, 255.0, 0.9);
+    bitmaps
+        .draw_text_squeezed(
+            id,
+            Rect::new(0, 0, 15, 10),
+            "ABC",
+            Align::Left,
+            Squeeze::Rgss2,
+            &rasterizer,
+        )
+        .unwrap();
+    assert_eq!(bitmaps.rgba(id).unwrap(), before);
+}
+
+#[test]
+fn the_measured_size_does_not_count_the_shadow() {
+    let rasterizer = CellRasterizer;
+    let mut bitmaps = Bitmaps::new();
+    let with = bitmaps.create(1, 1, &shadowed()).unwrap();
+    let without = bitmaps.create(1, 1, &small()).unwrap();
+    for text in ["", "A", "Hello"] {
+        assert_eq!(
+            bitmaps.text_size(with, text, &rasterizer),
+            bitmaps.text_size(without, text, &rasterizer),
+            "{text:?}"
+        );
+    }
+    assert_eq!(
+        bitmaps.text_size(with, "Hello", &rasterizer),
+        Ok(Rect::new(0, 0, 25, 10))
+    );
+}
+
+// Requirement: Text squeezing of RGSS2
+
+/// Defaults of the size RGSS2 starts with: the stand-in draws cells of 10 by 20 pixels.
+fn twenty() -> FontDefaults {
+    let mut defaults = defaults();
+    defaults.size = 20;
+    defaults
+}
+
+/// The columns of row 5 that `TEN` leaves in a rectangle `width` wide at the left edge of
+/// a bitmap of 120 by 20, and the coverage along that row.
+fn squeezed_row(width: i32, align: Align, squeeze: Squeeze) -> (Vec<u32>, Vec<u8>) {
+    let mut bitmaps = Bitmaps::new();
+    let id = bitmaps.create(120, 20, &twenty()).unwrap();
+    bitmaps
+        .draw_text_squeezed(
+            id,
+            Rect::new(0, 0, width, 20),
+            TEN,
+            align,
+            squeeze,
+            &CellRasterizer,
+        )
+        .unwrap();
+    let rgba = bitmaps.rgba(id).unwrap();
+    let alphas = (0..120).map(|x| at(rgba, 120, x, 5)[3]).collect();
+    (drawn_columns(rgba, 120, 5), alphas)
+}
+
+/// Row 5 of `TEN` set with every character `advance` wide.
+fn step_row(advance: u32) -> Vec<u8> {
+    let font = Font::new(&twenty());
+    let mask = CellRasterizer.rasterize(&font, TEN, &[advance; 10], None);
+    (0..mask.width()).map(|x| mask.get(x, 5)).collect()
+}
+
+#[test]
+fn the_loop_of_rgss2_gives_five_forms() {
+    // Size 20, average width 10, height 20: the average widths 9, 8, 7, 6 and 5.
+    let forms = metrics(&[10; 3], 20, 10, 0).squeezed_rgss2(20);
+    let expected: Vec<(Vec<u32>, (u32, u32))> = [9, 8, 7, 6, 5]
+        .iter()
+        .map(|&k| (vec![k; 3], (k, 10)))
+        .collect();
+    assert_eq!(forms, expected);
+    // The first four are the steps of RGSS1.
+    for (form, step) in forms.iter().zip(SQUEEZE_STEPS) {
+        assert_eq!(*form, metrics(&[10; 3], 20, 10, 0).squeezed(20, step));
+    }
+    // A small average width gives the same form twice: at size 12 with the average 6 in
+    // a height of 12 the widths asked for are 5, 4, 4, 3 and 3.
+    let small: Vec<u32> = metrics(&[6], 12, 6, 0)
+        .squeezed_rgss2(12)
+        .iter()
+        .map(|(_, condense)| condense.0)
+        .collect();
+    assert_eq!(small, [5, 4, 4, 3, 3]);
+}
+
+/// Scenario "Fifth step".
+#[test]
+fn a_text_that_needs_55_percent_takes_the_fifth_step_in_rgss2() {
+    // Ten characters of advance 10 in a rectangle of 55.
+    let (columns, alphas) = squeezed_row(55, Align::Right, Squeeze::Rgss2);
+    // 50 wide at the 50 percent step, placed by that width.
+    assert_eq!(columns, (5..55).collect::<Vec<u32>>());
+    assert_eq!(alphas[5..55], step_row(5));
+
+    // RGSS1 has no such step: its last, 60 wide, from the left edge and cut off.
+    let (columns, alphas) = squeezed_row(55, Align::Right, Squeeze::Rgss1);
+    assert_eq!(columns, (0..55).collect::<Vec<u32>>());
+    assert_eq!(alphas[..55], step_row(6)[..55]);
+}
+
+/// Scenario "Steps, measured on the original": the widths at which the step changes are
+/// those the loop gives; the widths a font gets at a step are the stand-in's.
+#[test]
+fn the_step_changes_at_the_widths_the_loop_gives() {
+    for width in (1..=102).rev() {
+        // The first form that fits: natural, then 90, 80, 70, 60 and 50 wide.
+        let advance = match width {
+            100.. => 10,
+            90..100 => 9,
+            80..90 => 8,
+            70..80 => 7,
+            60..70 => 6,
+            _ => 5,
+        };
+        let drawn = (advance * 10).min(width as u32);
+        let (columns, alphas) = squeezed_row(width, Align::Left, Squeeze::Rgss2);
+        assert_eq!(columns, (0..drawn).collect::<Vec<u32>>(), "width {width}");
+        assert_eq!(
+            alphas[..drawn as usize],
+            step_row(advance)[..drawn as usize],
+            "width {width}"
+        );
+        // RGSS1 is the same down to its last step and stays there.
+        let (columns, alphas) = squeezed_row(width, Align::Left, Squeeze::Rgss1);
+        let advance = advance.max(6);
+        let drawn = (advance * 10).min(width as u32);
+        assert_eq!(columns, (0..drawn).collect::<Vec<u32>>(), "width {width}");
+        assert_eq!(
+            alphas[..drawn as usize],
+            step_row(advance)[..drawn as usize],
+            "width {width}"
+        );
+    }
+}
+
+#[test]
+fn below_the_last_step_of_rgss2_the_text_starts_at_the_left_edge() {
+    for align in [Align::Left, Align::Center, Align::Right] {
+        let (columns, alphas) = squeezed_row(40, align, Squeeze::Rgss2);
+        assert_eq!(columns, (0..40).collect::<Vec<u32>>(), "{align:?}");
+        assert_eq!(alphas[..40], step_row(5)[..40], "{align:?}");
+    }
+}
