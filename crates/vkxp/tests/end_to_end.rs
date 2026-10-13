@@ -1510,6 +1510,192 @@ fn a_game_of_vx_ace_ends_before_any_script_runs() {
     assert!(!game.dir().join("ran.txt").exists());
 }
 
+/// An RGSSAD version 3 archive of these entries, in the format `vkxp-vfs` documents: after
+/// the header a seed, then a table of records XORed with the key seed * 9 + 3 (the offset
+/// of the data, its size, its key, the length of the name, and the name), a word that
+/// decrypts to 0, and the data, each XORed word by word with a key that starts at the key
+/// of its record. The seed and the keys are those the editor wrote in the measured archives.
+fn rgss3a(entries: &[(&str, &[u8])]) -> Vec<u8> {
+    const SEED: u32 = 0x2A38;
+    const FILE_KEYS: [u32; 3] = [41, 18467, 6334];
+    let key = SEED.wrapping_mul(9).wrapping_add(3);
+    let table: usize = entries.iter().map(|(name, _)| 16 + name.len()).sum();
+    let mut offset = 12 + table + 4;
+    let mut archive = b"RGSSAD\0\x03".to_vec();
+    archive.extend(SEED.to_le_bytes());
+    for ((name, contents), file_key) in entries.iter().zip(FILE_KEYS) {
+        for word in [offset, contents.len(), file_key as usize, name.len()] {
+            archive.extend((u32::try_from(word).unwrap() ^ key).to_le_bytes());
+        }
+        let mask = key.to_le_bytes();
+        archive.extend(name.bytes().enumerate().map(|(i, byte)| byte ^ mask[i % 4]));
+        offset += contents.len();
+    }
+    archive.extend(key.to_le_bytes());
+    for ((_, contents), mut data_key) in entries.iter().zip(FILE_KEYS) {
+        for word in contents.chunks(4) {
+            let mask = data_key.to_le_bytes();
+            data_key = data_key.wrapping_mul(7).wrapping_add(3);
+            archive.extend(word.iter().zip(mask).map(|(byte, mask)| byte ^ mask));
+        }
+    }
+    archive
+}
+
+/// A generated game of RGSS3 whose one script would leave `ran.txt` in the game directory.
+fn ace_game(name: &str) -> Game {
+    let source = "File.open('ran.txt', 'w') { |file| file.write('ran') }";
+    Game::of(Runtime::Rgss3, name, "Ace", &[("Main", source)])
+}
+
+/// Asserts that the run ended with the message that VX Ace is planned and not supported,
+/// and that no script of `game` ran.
+#[track_caller]
+fn assert_refused(ran: &Ran, game: &Game) {
+    ran.assert_failure();
+    let stderr = ran.stderr();
+    assert!(stderr.contains("RPG Maker VX Ace"), "{stderr}");
+    assert!(stderr.contains("not supported"), "{stderr}");
+    assert!(stderr.contains("planned"), "{stderr}");
+    assert!(!game.dir().join("ran.txt").exists());
+}
+
+/// Asserts that the run ended with an error that names each of `named` and is not the
+/// message that VX Ace is planned.
+#[track_caller]
+fn assert_failed_before_the_refusal(ran: &Ran, named: &[&str]) {
+    ran.assert_failure();
+    let stderr = ran.stderr();
+    for name in named {
+        assert!(stderr.contains(name), "{name}: {stderr}");
+    }
+    assert!(!stderr.contains("planned"), "{stderr}");
+}
+
+/// Requirement "VX Ace is refused", scenario "Library under the other name".
+#[test]
+fn a_game_of_vx_ace_with_the_library_under_the_other_name_ends_the_same_way() {
+    let game = ace_game("e2e-ace-300");
+    let ini = "[Game]\r\nRTP=\r\nLibrary=System\\RGSS300.dll\r\n\
+               Scripts=Data\\Scripts.rvdata2\r\nTitle=Ace\r\n";
+    fs::write(game.dir().join("Game.ini"), ini).unwrap();
+    assert_refused(&headless(&game, &[]), &game);
+}
+
+/// Requirement "VX Ace is refused", scenarios "Run-time package not given" and "Run-time
+/// package given".
+#[test]
+fn a_game_of_vx_ace_needs_the_run_time_package_it_names() {
+    let game = ace_game("e2e-ace-rtp");
+    let ini = "[Game]\r\nRTP=RPGVXAce\r\nLibrary=System\\RGSS301.dll\r\n\
+               Scripts=Data\\Scripts.rvdata2\r\nTitle=Ace\r\n";
+    fs::write(game.dir().join("Game.ini"), ini).unwrap();
+    assert_failed_before_the_refusal(&headless(&game, &[]), &["RPGVXAce", "--rtp"]);
+
+    let rtp = tempfile::tempdir().unwrap();
+    let table = format!("RPGVXAce={}", rtp.path().display());
+    assert_refused(&headless(&game, &["--rtp", &table]), &game);
+}
+
+/// Requirement "VX Ace is refused", scenario "No script archive".
+#[test]
+fn a_game_of_vx_ace_without_a_script_archive_is_an_error_naming_it() {
+    let game = ace_game("e2e-ace-no-scripts");
+    fs::remove_dir_all(game.dir().join("Data")).unwrap();
+    assert_failed_before_the_refusal(&headless(&game, &[]), &["Data\\Scripts.rvdata2"]);
+    // Nor does an archive that holds something else supply it.
+    let archive = rgss3a(&[("Data\\Actors.rvdata2", b"actors")]);
+    fs::write(game.dir().join("Game.rgss3a"), archive).unwrap();
+    assert_failed_before_the_refusal(&headless(&game, &[]), &["Data\\Scripts.rvdata2"]);
+}
+
+/// Requirement "VX Ace is refused", scenario "Runtime named by the option".
+#[test]
+fn a_game_run_as_one_of_vx_ace_ends_before_any_script_runs() {
+    let source = "File.open('ran.txt', 'w') { |file| file.write('ran') }";
+    let game = Game::new("e2e-ace-named", "Named", &[("Main", source)]);
+    assert_refused(&headless(&game, &["--runtime", "rgss3"]), &game);
+}
+
+/// Requirement "Built-in scripts file", scenarios "Missing file of VX Ace" and "Default
+/// location of VX Ace".
+#[test]
+fn the_built_in_scripts_file_of_vx_ace_is_found_at_its_default_location() {
+    let game = ace_game("e2e-builtin-ace");
+    let dir = game.dir().to_string_lossy().into_owned();
+    let ran = vkxp(&[&dir, "--headless"]);
+    assert_failed_before_the_refusal(
+        &ran,
+        &[
+            "rpg_builtin_rgss3.rb",
+            "docs/running.md",
+            "The built-in scripts of RPG Maker VX Ace",
+        ],
+    );
+
+    let work = tempfile::tempdir().unwrap();
+    let data = work.path().join("vkxp");
+    fs::create_dir_all(&data).unwrap();
+    // The file is found and not evaluated: this one is not Ruby.
+    fs::write(data.join("rpg_builtin_rgss3.rb"), "not ) Ruby").unwrap();
+    let ran = vkxp_in(work, &[&dir, "--headless"]);
+    assert_refused(&ran, &game);
+    assert!(
+        !ran.stderr().contains("built-in scripts"),
+        "{}",
+        ran.stderr()
+    );
+}
+
+/// Requirement "Encrypted archive of the game", scenario "Game of VX Ace in an archive".
+#[test]
+fn a_game_of_vx_ace_whose_data_is_in_the_archive_ends_like_the_one_with_loose_files() {
+    let game = ace_game("e2e-archive-ace");
+    let loose = headless(&game, &["--verbose"]);
+    assert_refused(&loose, &game);
+    let info = |ran: &Ran, text: &str| {
+        let stderr = ran.stderr();
+        stderr
+            .lines()
+            .any(|line| line.starts_with("vkxp: INFO ") && line.contains(text))
+    };
+    assert!(!info(&loose, "Game.rgss3a"), "{}", loose.stderr());
+
+    let data = game.dir().join("Data");
+    let scripts = fs::read(data.join("Scripts.rvdata2")).unwrap();
+    let archive = rgss3a(&[
+        ("Data\\Actors.rvdata2", b"actors"),
+        ("Data\\Scripts.rvdata2", &scripts),
+    ]);
+    fs::write(game.dir().join("Game.rgss3a"), archive).unwrap();
+    fs::remove_dir_all(&data).unwrap();
+    let archived = headless(&game, &["--verbose"]);
+    assert_refused(&archived, &game);
+    let stderr = archived.stderr();
+    assert!(!stderr.contains("not found"), "{stderr}");
+    // The archive and the script archive read from it are named, with its size.
+    assert!(info(&archived, "Game.rgss3a"), "{stderr}");
+    let read = format!("Data\\Scripts.rvdata2 ({} bytes)", scripts.len());
+    assert!(info(&archived, &read), "{stderr}");
+    assert!(info(&loose, &read), "{}", loose.stderr());
+}
+
+/// Requirement "Encrypted archive of the game", scenario "Damaged archive of VX Ace".
+#[test]
+fn a_damaged_archive_of_vx_ace_is_an_error_naming_it() {
+    let game = ace_game("e2e-damaged-archive-ace");
+    let scripts = fs::read(game.dir().join("Data").join("Scripts.rvdata2")).unwrap();
+    let mut archive = rgss3a(&[("Data\\Scripts.rvdata2", &scripts)]);
+    // Inside the name of the one record of the table.
+    archive.truncate(12 + 16 + 7);
+    fs::write(game.dir().join("Game.rgss3a"), archive).unwrap();
+    assert_failed_before_the_refusal(&headless(&game, &[]), &["Game.rgss3a"]);
+    // An archive of version 1 under that name is damaged too.
+    let archive = rgssad(&[("Data\\Scripts.rvdata2", &scripts)]);
+    fs::write(game.dir().join("Game.rgss3a"), archive).unwrap();
+    assert_failed_before_the_refusal(&headless(&game, &[]), &["Game.rgss3a"]);
+}
+
 #[test]
 fn a_damaged_archive_is_an_error_naming_it() {
     let game = Game::new(

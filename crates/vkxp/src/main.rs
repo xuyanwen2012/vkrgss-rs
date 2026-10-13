@@ -79,7 +79,7 @@ use vkxp_proto::link::GuestEnd;
 use crate::args::{GuestForm, Input, Options};
 use crate::config::Settings;
 use crate::guest::{
-    GuestSettings, Outcome, game_succeeded, guest_inputs, guest_on_thread, run_guest,
+    GuestSettings, Outcome, game_succeeded, guest_inputs, guest_on_thread, refuse_rgss3, run_guest,
 };
 use crate::process::GuestProcess;
 
@@ -292,6 +292,7 @@ impl Guest {
 fn run(game_dir: PathBuf, settings: Settings, script: InputScript) -> Result<bool> {
     let guest_settings = guest_settings(&settings.options);
     let inputs = guest_inputs(&game_dir, &guest_settings)?;
+    refuse_rgss3(&game_dir, &inputs)?;
     // The keyboard maps to the buttons as the original runtime of the game does.
     let keys = settings.keys_of(inputs.runtime).clone();
     let Settings { options, pads, .. } = settings;
@@ -438,6 +439,23 @@ mod tests {
         let absent = Input::File(dir.path().join("absent.txt"));
         let error = input_script(Some(absent)).unwrap_err();
         assert!(matches!(error, InputError::Unreadable(_)), "{error:?}");
+    }
+
+    /// Requirement "Built-in scripts file": the default file of each runtime.
+    #[test]
+    fn the_default_built_in_scripts_file_follows_the_runtime() {
+        let names = vkxp_vfs::Runtime::ALL.map(guest::builtin_scripts_name);
+        let expected = [
+            "rpg_builtin.rb",
+            "rpg_builtin_rgss2.rb",
+            "rpg_builtin_rgss3.rb",
+        ];
+        assert_eq!(names, expected);
+        // The usage text names all three.
+        for name in expected {
+            let named = format!("$XDG_DATA_HOME/vkxp/{name}");
+            assert!(args::USAGE.contains(&named), "{name}");
+        }
     }
 
     /// Scenario "Disabled": without audio options the windowed runner opens no device.

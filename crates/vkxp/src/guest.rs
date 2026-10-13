@@ -23,7 +23,7 @@ use vkxp_guest::role::GuestRole;
 use vkxp_guest::{Attached, play_in_process, play_on_thread, signals};
 use vkxp_proto::link::GuestEnd;
 use vkxp_ruby_sys::{Interpreter, SymbolTable};
-use vkxp_vfs::{Encoding, GameFiles, GameIni, Runtime, VfsError, resolve_rtps};
+use vkxp_vfs::{Encoding, FileKind, GameFiles, GameIni, Runtime, VfsError, resolve_rtps};
 
 use crate::font::FontBackend;
 
@@ -33,6 +33,10 @@ const EXTRACTION_TOOL: &str = "cargo xtask extract-rpg";
 /// Where it is written how the built-in scripts file of RGSS2 is made.
 const RGSS2_BUILTIN_GUIDE: &str =
     "docs/running.md, section \"The built-in scripts of RPG Maker VX\"";
+
+/// Where it is written how the built-in scripts file of RGSS3 is made.
+const RGSS3_BUILTIN_GUIDE: &str =
+    "docs/running.md, section \"The built-in scripts of RPG Maker VX Ace\"";
 
 /// What a guest reads of the settled options of a run.
 #[derive(Debug, Clone, Default)]
@@ -63,7 +67,7 @@ pub(crate) struct GuestSettings {
 }
 
 /// The name of the built-in scripts file of `runtime` at the default location.
-fn builtin_scripts_name(runtime: Runtime) -> &'static str {
+pub(crate) fn builtin_scripts_name(runtime: Runtime) -> &'static str {
     match runtime {
         Runtime::Rgss1 => "rpg_builtin.rb",
         Runtime::Rgss2 => "rpg_builtin_rgss2.rb",
@@ -72,7 +76,7 @@ fn builtin_scripts_name(runtime: Runtime) -> &'static str {
 }
 
 /// The start-up symbol table of `runtime`, which numbers the symbols as its original does.
-/// A game of RGSS3 ends before an interpreter is started.
+/// A run of RGSS3 ends before an interpreter is started.
 fn symbol_table(runtime: Runtime) -> SymbolTable {
     match runtime {
         Runtime::Rgss1 => SymbolTable::Rgss1,
@@ -108,26 +112,28 @@ fn builtin_scripts(named: Option<PathBuf>, runtime: Runtime) -> Result<PathBuf> 
             data.join("vkxp").join(builtin_scripts_name(runtime))
         }
     };
-    if !path.is_file() && runtime != Runtime::Rgss1 {
-        bail!(
-            "the built-in scripts file {path} does not exist. It holds the RPG scripts of the \
-             original runtime of {product}, which are not part of vkxp: \
-             {RGSS2_BUILTIN_GUIDE}, says how it is made from your own copy of that runtime; \
-             or name another file with --builtin-scripts",
-            path = path.display(),
-            product = runtime.product()
-        );
+    if path.is_file() {
+        return Ok(path);
     }
-    if !path.is_file() {
-        bail!(
+    let guide = match runtime {
+        Runtime::Rgss1 => bail!(
             "the built-in scripts file {path} does not exist. It holds the RPG scripts of the \
              original runtime, which are not part of vkxp: create it from your own RGSS DLL \
              with `{EXTRACTION_TOOL} <DLL> {path}`, or name another file with \
              --builtin-scripts",
             path = path.display()
-        );
-    }
-    Ok(path)
+        ),
+        Runtime::Rgss2 => RGSS2_BUILTIN_GUIDE,
+        Runtime::Rgss3 => RGSS3_BUILTIN_GUIDE,
+    };
+    bail!(
+        "the built-in scripts file {path} does not exist. It holds the RPG scripts of the \
+         original runtime of {product}, which are not part of vkxp: {guide}, says how it is \
+         made from your own copy of that runtime; or name another file with \
+         --builtin-scripts",
+        path = path.display(),
+        product = runtime.product()
+    )
 }
 
 /// The encrypted archive of the game in `game_dir`, which the game's files are opened with:
@@ -171,22 +177,41 @@ pub(crate) struct GuestInputs {
 }
 
 /// The runtime of the game whose configuration file is `ini`: the one the option names, and
-/// without the option what the file says. A game of RGSS3 is refused here.
+/// without the option what the file says.
 fn runtime_of(ini: &GameIni, named: Option<Runtime>) -> Result<Runtime> {
-    let runtime = match named {
-        Some(runtime) => runtime,
+    match named {
+        Some(runtime) => Ok(runtime),
         None => Runtime::detect(ini).map_err(|error| {
             anyhow!("{error}; name the runtime with --runtime rgss1, rgss2 or rgss3")
-        })?,
-    };
-    if runtime == Runtime::Rgss3 {
-        bail!(
-            "this is a game of {} ({}), which is planned and not supported yet",
-            runtime.product(),
-            runtime.name()
-        );
+        }),
     }
-    Ok(runtime)
+}
+
+/// Ends a run of RGSS3, which has no guest yet, and does nothing for another runtime. What
+/// the program does with the files of any game before a guest starts is done first: the
+/// game's files are opened, with the archive when there is one, and the script archive is
+/// read from them. A failure of that is the error instead of the refusal.
+pub(crate) fn refuse_rgss3(game_dir: &Path, inputs: &GuestInputs) -> Result<()> {
+    let runtime = inputs.runtime;
+    if runtime != Runtime::Rgss3 {
+        return Ok(());
+    }
+    let files = GameFiles::open(game_dir.to_owned(), inputs.rtp_dirs.clone(), runtime)?;
+    if let Some(archive) = archive(game_dir, runtime) {
+        tracing::info!("encrypted archive: {}", archive.display());
+    }
+    // Only the guest looks into the script archive, with the `Marshal` of its interpreter.
+    let scripts = files.read(FileKind::Data, &inputs.ini.scripts)?;
+    tracing::info!(
+        "script archive: {} ({} bytes)",
+        inputs.ini.scripts,
+        scripts.len()
+    );
+    bail!(
+        "this is a game of {} ({}), which is planned and not supported yet",
+        runtime.product(),
+        runtime.name()
+    );
 }
 
 /// Reads `Game.ini`, settles the runtime of the game, looks the run-time packages it names
@@ -336,6 +361,7 @@ pub(crate) fn run_guest(
 ) -> Result<bool> {
     signals::die_with_parent();
     let inputs = guest_inputs(&game_dir, settings)?;
+    refuse_rgss3(&game_dir, &inputs)?;
     let runtime = inputs.runtime;
     let mut config = guest_config(&game_dir, settings, inputs, role.seed)?;
     let interpreter = start_interpreter(runtime)?;
@@ -414,6 +440,15 @@ mod tests {
         let message = error.to_string();
         assert!(message.contains("docs/running.md"), "{message}");
         assert!(message.contains("absent.rb"), "{message}");
+        assert!(message.contains("of RPG Maker VX\""), "{message}");
+        // Nor is that of RGSS3, which has a section of its own.
+        let absent = dir.path().join("absent.rb");
+        let error = builtin_scripts(Some(absent), Runtime::Rgss3).unwrap_err();
+        let message = error.to_string();
+        assert!(message.contains("docs/running.md"), "{message}");
+        assert!(message.contains("absent.rb"), "{message}");
+        assert!(message.contains("of RPG Maker VX Ace\""), "{message}");
+        assert!(!message.contains("planned"), "{message}");
     }
 
     fn ini(library: &str, scripts: &str) -> GameIni {
@@ -438,18 +473,68 @@ mod tests {
         assert!(message.contains("Data\\Scripts.rvdata"), "{message}");
         let named = runtime_of(&conflict, Some(Runtime::Rgss2));
         assert_eq!(named.unwrap(), Runtime::Rgss2);
+
+        // RGSS3 is a runtime like the others here; the run is refused later.
+        for library in ["System\\RGSS300.dll", "System\\RGSS301.dll"] {
+            let ace = ini(library, "Data\\Scripts.rvdata2");
+            assert_eq!(runtime_of(&ace, None).unwrap(), Runtime::Rgss3);
+        }
+        assert_eq!(
+            runtime_of(&xp, Some(Runtime::Rgss3)).unwrap(),
+            Runtime::Rgss3
+        );
+    }
+
+    /// What `guest_inputs` gives for a game in `game_dir` whose configuration file names
+    /// `scripts`, as a game of `runtime`.
+    fn inputs(game_dir: &Path, runtime: Runtime, scripts: &str) -> GuestInputs {
+        let text = format!("[Game]\nScripts={scripts}\n");
+        std::fs::write(game_dir.join("Game.ini"), &text).unwrap();
+        GuestInputs {
+            ini: GameIni::parse(text.as_bytes(), None).unwrap(),
+            runtime,
+            rtp_dirs: Vec::new(),
+            builtin_scripts: game_dir.join("rpg.rb"),
+            font_dirs: Vec::new(),
+            preload: Vec::new(),
+        }
     }
 
     /// Requirement "VX Ace is refused".
     #[test]
-    fn a_game_of_vx_ace_is_refused_however_its_runtime_is_known() {
-        let ace = ini("System\\RGSS301.dll", "Data\\Scripts.rvdata2");
-        let xp = ini("RGSS104E.dll", "Data\\Scripts.rxdata");
-        for (ini, named) in [(&ace, None), (&xp, Some(Runtime::Rgss3))] {
-            let message = runtime_of(ini, named).unwrap_err().to_string();
-            assert!(message.contains("RPG Maker VX Ace"), "{message}");
-            assert!(message.contains("not supported"), "{message}");
-            assert!(message.contains("planned"), "{message}");
+    fn a_game_of_vx_ace_is_refused_once_its_script_archive_is_read() {
+        let game = tempfile::tempdir().unwrap();
+        let ace = inputs(game.path(), Runtime::Rgss3, "Data\\Scripts.rvdata2");
+        // Without the script archive the error is that of the missing file.
+        let message = refuse_rgss3(game.path(), &ace).unwrap_err().to_string();
+        assert!(message.contains("Data\\Scripts.rvdata2"), "{message}");
+        assert!(!message.contains("planned"), "{message}");
+
+        std::fs::create_dir(game.path().join("Data")).unwrap();
+        std::fs::write(game.path().join("Data/Scripts.rvdata2"), b"\x04\x08[\x00").unwrap();
+        let message = refuse_rgss3(game.path(), &ace).unwrap_err().to_string();
+        assert!(message.contains("RPG Maker VX Ace"), "{message}");
+        assert!(message.contains("rgss3"), "{message}");
+        assert!(message.contains("not supported"), "{message}");
+        assert!(message.contains("planned"), "{message}");
+
+        // A damaged archive is reported instead.
+        std::fs::write(game.path().join("Game.rgss3a"), b"RGSSAD\0\x01").unwrap();
+        let message = refuse_rgss3(game.path(), &ace).unwrap_err().to_string();
+        assert!(message.contains("Game.rgss3a"), "{message}");
+        assert!(!message.contains("planned"), "{message}");
+    }
+
+    #[test]
+    fn a_game_of_another_runtime_is_not_refused() {
+        // Nothing of the game is looked at: the directory holds no script archive.
+        let game = tempfile::tempdir().unwrap();
+        for (runtime, scripts) in [
+            (Runtime::Rgss1, "Data\\Scripts.rxdata"),
+            (Runtime::Rgss2, "Data\\Scripts.rvdata"),
+        ] {
+            let inputs = inputs(game.path(), runtime, scripts);
+            assert!(refuse_rgss3(game.path(), &inputs).is_ok());
         }
     }
 
@@ -458,7 +543,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("rpg.rb");
         std::fs::write(&file, "module RPG;end\n").unwrap();
-        for runtime in [Runtime::Rgss1, Runtime::Rgss2] {
+        for runtime in Runtime::ALL {
             assert_eq!(builtin_scripts(Some(file.clone()), runtime).unwrap(), file);
         }
     }

@@ -11,8 +11,8 @@
 
 ## 3. Program
 
-- [ ] 3.1 The built-in scripts file of RGSS3: the default `rpg_builtin_rgss3.rb`, the message for a missing file, the usage text. The refusal of RGSS3 leaves `runtime_of` for one function that the program and a guest process call after `guest_inputs`. Verify: the scenarios of "Built-in scripts file"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` passes.
-- [ ] 3.2 A run of RGSS3 opens the game's files with `Game.rgss3a`, reads the file that `Scripts=` names and then ends with the message; end-to-end tests on generated games of RGSS3, with a builder of version 3 archives of their own. Verify: the scenarios of "VX Ace is refused" and "Encrypted archive of the game"; the tests of XP and VX in `crates/vkxp/tests/end_to_end.rs` pass unchanged; the same test command passes.
+- [x] 3.1 The built-in scripts file of RGSS3: the default `rpg_builtin_rgss3.rb`, the message for a missing file, the usage text. The refusal of RGSS3 leaves `runtime_of` for one function that the program and a guest process call after `guest_inputs`. Verify: the scenarios of "Built-in scripts file"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp --locked` passes.
+- [x] 3.2 A run of RGSS3 opens the game's files with `Game.rgss3a`, reads the file that `Scripts=` names and then ends with the message; end-to-end tests on generated games of RGSS3, with a builder of version 3 archives of their own. Verify: the scenarios of "VX Ace is refused" and "Encrypted archive of the game"; the tests of XP and VX in `crates/vkxp/tests/end_to_end.rs` pass unchanged; the same test command passes.
 
 ## 4. Documentation
 

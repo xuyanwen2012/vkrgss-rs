@@ -20,8 +20,9 @@ usage: vkxp [GAME_DIR] [OPTIONS]
                             default: what Library and Scripts of Game.ini say
   --rtp NAME=DIR            the directory of the run-time package NAME; repeatable
   --builtin-scripts FILE    the built-in scripts file, made by `cargo xtask extract-rpg`;
-                            default: $XDG_DATA_HOME/vkxp/rpg_builtin.rb, and
-                            $XDG_DATA_HOME/vkxp/rpg_builtin_rgss2.rb for rgss2
+                            default: $XDG_DATA_HOME/vkxp/rpg_builtin.rb,
+                            $XDG_DATA_HOME/vkxp/rpg_builtin_rgss2.rb for rgss2 and
+                            $XDG_DATA_HOME/vkxp/rpg_builtin_rgss3.rb for rgss3
   --device INDEX|NAME       the Vulkan device, by index or by a part of its name
   --font-dir DIR            a directory of fonts, searched before the system's; repeatable
   --font-own-metrics        size every font by its own line box, a replacement included
