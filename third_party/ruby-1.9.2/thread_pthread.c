@@ -277,6 +277,12 @@ static struct {
 extern void *STACK_END_ADDRESS;
 #endif
 
+/* vkxp: when the host sets this before ruby_init_stack(), it is the size of the machine
+ * stack that the interpreter may use, in bytes below the address it is given. The limit
+ * then follows the stack of the thread the host created, not RLIMIT_STACK of the process,
+ * which says nothing about that thread. */
+size_t ruby_vkxp_stack_size = 0;
+
 #undef ruby_init_stack
 void
 ruby_init_stack(volatile VALUE *addr
@@ -316,6 +322,9 @@ ruby_init_stack(volatile VALUE *addr
 #endif
 	space = size > 5 * 1024 * 1024 ? 1024 * 1024 : size / 5;
 	native_main_thread.stack_maxsize = size - space;
+	if (ruby_vkxp_stack_size) {
+	    native_main_thread.stack_maxsize = ruby_vkxp_stack_size;
+	}
     }
 }
 
@@ -827,6 +836,15 @@ rb_thread_create_timer_thread(void)
 	}
 	native_cond_wait(&timer_thread_cond, &timer_thread_lock);
 	native_mutex_unlock(&timer_thread_lock);
+	if (ruby_vkxp_lazy_timer_thread) {
+	    /* vkxp: a Ruby thread that blocks is woken with SIGVTALRM (ubf_select), for
+	     * which Init_native_thread installed an empty handler. A host that sets
+	     * ruby_vkxp_lazy_timer_thread takes its signal dispositions back after
+	     * ruby_init(), and the default action of SIGVTALRM ends the process. The
+	     * handler is installed again here, when the second Ruby thread appears;
+	     * with one Ruby thread the signal is never sent. */
+	    posix_signal(SIGVTALRM, null_func);
+	}
     }
     rb_disable_interrupt(); /* only timer thread recieve signal */
 }

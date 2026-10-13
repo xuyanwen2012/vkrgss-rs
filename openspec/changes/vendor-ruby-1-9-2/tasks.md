@@ -15,9 +15,9 @@
 
 ## 3. Start-up and the safe layer
 
-- [ ] 3.1 Add patch `host-stack-limit` with its log entry; write `interp.rs` and `signals.rs` with the start-up of decision 7. Verify: the scenarios of "Start-up state", "Dedicated thread and bounded recursion", "Process signals are left alone", "Fixed hash seed" and "No timer thread before a script creates a thread"; `cargo test -p vkxp-ruby192-sys --locked --test interpreter --test stack_limit --test signals_default --test signals_host --test hash_seed --test timer_thread` passes.
-- [ ] 3.2 Write `protect.rs`, `call.rs`, `host.rs`, `root.rs` and the crate documentation with the table of differences. Verify: the scenarios of "The Rust API of vkxp-ruby-sys" other than "Headers and declarations agree", and of "Zlib is correct on 64-bit"; `cargo test -p vkxp-ruby192-sys --locked --test protect --test calling --test classes` passes and `RUSTDOCFLAGS='-D warnings' cargo doc -p vkxp-ruby192-sys --no-deps --locked` succeeds.
-- [ ] 3.3 Encodings at start-up and at first use. Verify: the scenarios of "Encodings as the original runtime has them"; `cargo test -p vkxp-ruby192-sys --locked --test encodings` passes.
+- [x] 3.1 Add patch `host-stack-limit` with its log entry; write `interp.rs` and `signals.rs` with the start-up of decision 7. Verify: the scenarios of "Start-up state", "Dedicated thread and bounded recursion", "Process signals are left alone", "Fixed hash seed" and "No timer thread before a script creates a thread"; `cargo test -p vkxp-ruby192-sys --locked --test interpreter --test stack_limit --test signals_default --test signals_host --test hash_seed --test timer_thread` passes.
+- [x] 3.2 Write `protect.rs`, `call.rs`, `host.rs`, `root.rs` and the crate documentation with the table of differences. Verify: the scenarios of "The Rust API of vkxp-ruby-sys" other than "Headers and declarations agree", and of "Zlib is correct on 64-bit"; `cargo test -p vkxp-ruby192-sys --locked --test protect --test calling --test classes` passes and `RUSTDOCFLAGS='-D warnings' cargo doc -p vkxp-ruby192-sys --no-deps --locked` succeeds.
+- [x] 3.3 Encodings at start-up and at first use. Verify: the scenarios of "Encodings as the original runtime has them"; `cargo test -p vkxp-ruby192-sys --locked --test encodings` passes.
 
 ## 4. Values of the original
 

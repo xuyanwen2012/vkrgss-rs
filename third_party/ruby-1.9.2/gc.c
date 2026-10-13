@@ -1222,10 +1222,18 @@ stack_check(void)
     return ret;
 }
 
+/* vkxp: see ruby_stack_check */
+extern size_t ruby_vkxp_stack_size;
+
 int
 ruby_stack_check(void)
 {
 #if defined(POSIX_SIGNAL) && defined(SIGSEGV) && defined(HAVE_SIGALTSTACK)
+    /* vkxp: the release does not compare the depth of the machine stack with its limit
+     * here; it waits for the segmentation fault and raises SystemStackError from the
+     * signal handler. A host that set ruby_vkxp_stack_size has taken the signal
+     * dispositions back, so for it the depth is compared. */
+    if (ruby_vkxp_stack_size) return stack_check();
     return 0;
 #else
     return stack_check();

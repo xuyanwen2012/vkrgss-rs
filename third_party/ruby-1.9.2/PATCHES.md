@@ -58,7 +58,7 @@ the interpreter behave as vkxp embeds it. None changes what a script computes.
 
 - File: `thread_pthread.c`
 - Patch: `patches/lazy-timer-thread.patch`
-- Patched SHA-256: `02ff792c8fb519cf2ac982cfd474792ddc8b243d155be482b32943b2ad01bfbb`
+- Patched SHA-256: `bbc3d12cd81578209e7535503cd9e19a15696a925eaa155399444799aa062569`
 - Reason: the release starts a timer thread in `ruby_init`, a thread of the process that
   the host did not create and that wakes every 10 ms. With `ruby_vkxp_lazy_timer_thread` set
   before `ruby_init`, `rb_thread_create_timer_thread` creates no thread while the main thread
@@ -93,7 +93,7 @@ the interpreter behave as vkxp embeds it. None changes what a script computes.
 
 - File: `gc.c`
 - Patch: `patches/gc-mark-callee-saved-registers.patch`
-- Patched SHA-256: `08a4e5b9086b6f5185881a00f4708580315d57c97da39bf5f126e02468476526`
+- Patched SHA-256: `d257c2c90cde8caa186b96c84c07661bbdd9dcefc6794420ef02528125f100e4`
 - Reason: `mark_current_machine_context` relies on `setjmp` to put the registers where
   the stack scan finds them, and glibc scrambles `rbp` (and `rsp` and the program counter) in
   a jump buffer. A value held only in `rbp` was not marked. `__builtin_unwind_init()` puts
@@ -147,3 +147,46 @@ the interpreter behave as vkxp embeds it. None changes what a script computes.
   vkxp links are registered at start-up by their `Init_` functions and `transdb` is not
   linked, so nothing is declared by name; such an entry now gives no transcoder and no file
   is looked for.
+
+## 12. host-stack-limit
+
+- File: `thread_pthread.c`
+- Patch: `patches/host-stack-limit.patch`
+- Patched SHA-256: `bbc3d12cd81578209e7535503cd9e19a15696a925eaa155399444799aa062569`
+- Reason: applies after patch 4. `ruby_init_stack` takes the size of the machine stack
+  from `RLIMIT_STACK`, which describes the main thread of the process. vkxp runs the
+  interpreter on a thread it creates: with a limit larger than that thread's stack a deep
+  recursion would overrun the stack before the interpreter notices, and the depth of a
+  recursion would depend on the user's shell. When `ruby_vkxp_stack_size` is set before
+  `ruby_init_stack`, it is the size of the machine stack. Without it the release's behaviour
+  is unchanged.
+
+## 13. host-stack-limit-check
+
+- File: `gc.c`
+- Patch: `patches/host-stack-limit-check.patch`
+- Patched SHA-256: `d257c2c90cde8caa186b96c84c07661bbdd9dcefc6794420ef02528125f100e4`
+- Reason: applies after patch 7, and belongs to patch 12. Where the platform has an
+  alternate signal stack, `ruby_stack_check` of the release returns 0 without looking: the
+  release waits for the segmentation fault of a stack overflow and raises `SystemStackError`
+  from its signal handler. vkxp gives the disposition of SIGSEGV back to the host, so a
+  recursion that is deep in the machine stack and shallow in Ruby's own stack (one through a
+  host function that calls back into the script) ran off the thread's stack and ended the
+  process; a test of the stack limit showed it. When `ruby_vkxp_stack_size` is set, the
+  function compares the depth with the limit that patch 12 sets, and such a recursion raises
+  `SystemStackError`. Without the variable the release's behaviour is unchanged.
+
+## 14. thread-wakeup-signal-with-first-thread
+
+- File: `thread_pthread.c`
+- Patch: `patches/thread-wakeup-signal-with-first-thread.patch`
+- Patched SHA-256: `bbc3d12cd81578209e7535503cd9e19a15696a925eaa155399444799aa062569`
+- Reason: applies after patches 4 and 12, and belongs to patch 4. The interpreter wakes
+  a Ruby thread that blocks by sending it SIGVTALRM (`ubf_select`), for which
+  `Init_native_thread` installs an empty handler. vkxp puts the signal dispositions of the
+  process back after `ruby_init`, and the default action of SIGVTALRM ends the process: the
+  test of the signal dispositions showed the handler, and killing a sleeping thread would
+  have ended the program. With `ruby_vkxp_lazy_timer_thread` set, the handler is installed
+  again where the timer thread is created, which is when a script creates its first Ruby
+  thread; while the main thread is the only Ruby thread the signal is never sent, and the
+  process keeps the disposition the host gave it.

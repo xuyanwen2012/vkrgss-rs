@@ -1,0 +1,25 @@
+--- a/thread_pthread.c
++++ b/thread_pthread.c
+@@ -277,6 +277,12 @@
+ extern void *STACK_END_ADDRESS;
+ #endif
+ 
++/* vkxp: when the host sets this before ruby_init_stack(), it is the size of the machine
++ * stack that the interpreter may use, in bytes below the address it is given. The limit
++ * then follows the stack of the thread the host created, not RLIMIT_STACK of the process,
++ * which says nothing about that thread. */
++size_t ruby_vkxp_stack_size = 0;
++
+ #undef ruby_init_stack
+ void
+ ruby_init_stack(volatile VALUE *addr
+@@ -316,6 +322,9 @@
+ #endif
+ 	space = size > 5 * 1024 * 1024 ? 1024 * 1024 : size / 5;
+ 	native_main_thread.stack_maxsize = size - space;
++	if (ruby_vkxp_stack_size) {
++	    native_main_thread.stack_maxsize = ruby_vkxp_stack_size;
++	}
+     }
+ }
+ 

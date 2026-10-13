@@ -618,6 +618,10 @@ unsafe extern "C" {
     pub static mut ruby_vkxp_hashseed_fixed: c_int;
     /// The fixed seed of the hashes. Added to `random.c` by a vkxp patch.
     pub static mut ruby_vkxp_hashseed: c_ulong;
+    /// When not 0 before [`ruby_init_stack`]: the size of the machine stack the interpreter
+    /// may use, in bytes below the address given there. Added to `thread_pthread.c` by a vkxp
+    /// patch.
+    pub static mut ruby_vkxp_stack_size: usize;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -627,8 +631,9 @@ unsafe extern "C" {
 unsafe extern "C" {
     // --- Start and stop -----------------------------------------------------------------------
 
-    /// Records the address as the base of the stack that the collector scans. It must lie in
-    /// a frame that encloses every frame that will ever hold a Ruby value.
+    /// Records the address as the base of the stack that the collector scans, and the size
+    /// of that stack (see [`ruby_vkxp_stack_size`]). It must lie in a frame that encloses
+    /// every frame that will ever hold a Ruby value.
     pub fn ruby_init_stack(addr: *mut VALUE);
     /// Initialises the interpreter. Replaces the process's signal handlers and blocks every
     /// signal on the calling thread.

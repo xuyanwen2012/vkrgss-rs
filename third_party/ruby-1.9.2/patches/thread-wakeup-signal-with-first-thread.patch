@@ -1,0 +1,18 @@
+--- a/thread_pthread.c
++++ b/thread_pthread.c
+@@ -836,6 +836,15 @@
+ 	}
+ 	native_cond_wait(&timer_thread_cond, &timer_thread_lock);
+ 	native_mutex_unlock(&timer_thread_lock);
++	if (ruby_vkxp_lazy_timer_thread) {
++	    /* vkxp: a Ruby thread that blocks is woken with SIGVTALRM (ubf_select), for
++	     * which Init_native_thread installed an empty handler. A host that sets
++	     * ruby_vkxp_lazy_timer_thread takes its signal dispositions back after
++	     * ruby_init(), and the default action of SIGVTALRM ends the process. The
++	     * handler is installed again here, when the second Ruby thread appears;
++	     * with one Ruby thread the signal is never sent. */
++	    posix_signal(SIGVTALRM, null_func);
++	}
+     }
+     rb_disable_interrupt(); /* only timer thread recieve signal */
+ }

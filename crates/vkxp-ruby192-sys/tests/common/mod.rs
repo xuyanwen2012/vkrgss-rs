@@ -190,3 +190,103 @@ pub(crate) fn build_ruby_executable(scratch: &Path) -> PathBuf {
         .arg(&executable));
     executable
 }
+
+/// Evaluates Ruby source through the crate's helpers and returns `inspect` of the result, or
+/// the exception as `Class: message`.
+pub(crate) fn eval_inspect(ruby: &vkxp_ruby192_sys::Ruby, source: &str) -> Result<String, String> {
+    let value = ruby
+        .eval_protected(source, "test", 1)
+        .map_err(|error| format!("{}: {}", error.class_name, error.message))?;
+    // SAFETY: `value` was just returned by the interpreter and is held in a local.
+    let text = unsafe { ruby.inspect(value) };
+    text.map_err(|_| "inspect raised".to_owned())
+}
+
+/// A script that allocates 100 objects and returns how many collections ran meanwhile.
+pub(crate) const COLLECTIONS_FOR_HUNDRED_OBJECTS: &str =
+    "before = GC.count; made = 0; 100.times { Object.new; made += 1 }; [made, GC.count - before]";
+
+/// The four ways a script recurses without end: a method that calls itself, a block that
+/// yields to itself, a lambda that calls itself, and a string that evaluates itself.
+pub(crate) const UNBOUNDED_RECURSIONS: [&str; 4] = [
+    "def vkxp_rec_method; vkxp_rec_method; end; vkxp_rec_method",
+    "def vkxp_rec_block; [1].each { vkxp_rec_block }; end; vkxp_rec_block",
+    "$vkxp_rec_lambda = lambda { $vkxp_rec_lambda.call }; $vkxp_rec_lambda.call",
+    "$vkxp_rec_source = 'eval($vkxp_rec_source)'; eval($vkxp_rec_source)",
+];
+
+/// Runs each unbounded recursion several times, in the main program and inside a Fiber, and
+/// checks that it raises `SystemStackError` and that the interpreter still computes
+/// afterwards.
+pub(crate) fn assert_recursion_is_bounded(interpreter: &vkxp_ruby192_sys::Interpreter) {
+    for source in UNBOUNDED_RECURSIONS {
+        for (place, source) in [
+            ("the main program", source.to_owned()),
+            ("a Fiber", format!("Fiber.new {{ {source} }}.resume")),
+        ] {
+            for round in 0..3 {
+                let script = source.clone();
+                let outcome = interpreter.run(move |ruby| eval_inspect(ruby, &script));
+                let error = outcome.expect_err("unbounded recursion cannot return");
+                assert!(
+                    error.starts_with("SystemStackError: "),
+                    "round {round} of {source:?} in {place} raised {error}"
+                );
+                let after = interpreter.run(|ruby| eval_inspect(ruby, "1 + 1"));
+                assert_eq!(
+                    after,
+                    Ok("2".to_owned()),
+                    "after round {round} of {source:?} in {place}"
+                );
+            }
+        }
+    }
+}
+
+/// The current disposition of a signal, as (handler, flags, mask).
+pub(crate) fn disposition(signal: libc::c_int) -> (usize, libc::c_int, Vec<libc::c_int>) {
+    // SAFETY: a null new action only queries, and a zeroed `sigaction` is a valid buffer for
+    // the old one. `sigismember` reads the mask that was just filled in.
+    unsafe {
+        let mut action: libc::sigaction = std::mem::zeroed();
+        assert_eq!(libc::sigaction(signal, std::ptr::null(), &mut action), 0);
+        let mask = (1..=64)
+            .filter(|&other| libc::sigismember(&action.sa_mask, other) == 1)
+            .collect();
+        (action.sa_sigaction, action.sa_flags, mask)
+    }
+}
+
+/// The current disposition of each signal Ruby takes, as (signal, handler, flags, mask).
+pub(crate) fn dispositions() -> Vec<(libc::c_int, usize, libc::c_int, Vec<libc::c_int>)> {
+    vkxp_ruby192_sys::SIGNALS_TAKEN_BY_RUBY
+        .iter()
+        .map(|&signal| {
+            let (handler, flags, mask) = disposition(signal);
+            (signal, handler, flags, mask)
+        })
+        .collect()
+}
+
+/// The signals from 1 to 64 that the calling thread blocks.
+pub(crate) fn blocked_signals() -> Vec<libc::c_int> {
+    // SAFETY: a null new set only queries, and a zeroed set is a valid buffer for the old
+    // one. `sigismember` reads the set that was just filled in.
+    unsafe {
+        let mut mask: libc::sigset_t = std::mem::zeroed();
+        assert_eq!(
+            libc::pthread_sigmask(libc::SIG_SETMASK, std::ptr::null(), &mut mask),
+            0
+        );
+        (1..=64)
+            .filter(|&signal| libc::sigismember(&mask, signal) == 1)
+            .collect()
+    }
+}
+
+/// How many threads the process has, as the kernel counts them.
+pub(crate) fn thread_count() -> usize {
+    fs::read_dir("/proc/self/task")
+        .expect("the threads of the process are listed")
+        .count()
+}

@@ -353,6 +353,28 @@ Non-goals:
   crate declares them at start-up (`rb_encdb_declare`). The test executable of decision 10
   declares the three constants in its `Init_ext` and looks the three lazy names up in
   `test_prelude.rb`, because the suites name encodings by constant throughout.
+- Found while implementing decision 7, each shown by a test of this change and patched as
+  decision 2 allows; the patch log has two more entries than the decisions name:
+  (1) `host-stack-limit-check` (`gc.c`). With an alternate signal stack `ruby_stack_check`
+  of the release returns 0 without looking and leaves a stack overflow to its SIGSEGV
+  handler, which vkxp gives back to the host. The limit that patch `host-stack-limit` sets
+  was therefore never compared with the depth: a recursion through a host function that
+  calls back into the script ran off the thread's stack (the four recursions of the
+  specification end at Ruby's own stack first and passed without it). With
+  `ruby_vkxp_stack_size` set the depth is compared; `tests/stack_limit.rs` has that
+  recursion. (2) `thread-wakeup-signal-with-first-thread` (`thread_pthread.c`). The release
+  installs an empty handler for SIGVTALRM, with which it wakes a Ruby thread that blocks;
+  it is not among the signals of `Init_signal`. The crate gives that disposition back to
+  the host like the others, so that all 31 are as before after start-up, and the patch
+  installs the handler again where the timer thread is created. From the first script
+  thread on SIGVTALRM is therefore Ruby's, until the interpreter is dropped; whether the
+  guest role should keep it away from the host's threads is for the change that adds it.
+- For the binding over this crate: a backtrace of `Ruby::eval` ends with the frame of the
+  `eval` call itself (``vkxp:in `eval'``), which 1.8.7 does not show; a `Raised` of a
+  `throw` or `break` leaves what the jump carries as the interpreter's current error until
+  it is continued or described; and the message of a wrong argument count of a fixed-arity
+  host function is the release's `wrong number of arguments(1 for 2)`, without the space
+  that `Ruby::check_arity` and `rb_scan_args` put there.
 - The capability `workspace-structure` lists the crates of the workspace and of the guest
   side by name; `vkxp-ruby192-sys` and the binding package over it are to be added there
   by the change that adds that package.
