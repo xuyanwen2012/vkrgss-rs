@@ -2,8 +2,8 @@
 
 ## 1. Scene
 
-- [ ] 1.1 The order of elements by runtime. Verify: the scenarios of "Draw order of RGSS2"; `cargo test -p vkxp-core --locked` passes.
-- [ ] 1.2 Viewport flash and plane tile size by runtime. Verify: the scenarios of "Viewport flash of RGSS2" and "Plane tile size of RGSS2"; the same command.
+- [x] 1.1 The order of elements by runtime. Verify: the scenarios of "Draw order of RGSS2"; `cargo test -p vkxp-core --locked` passes.
+- [x] 1.2 Viewport flash and plane tile size by runtime. Verify: the scenarios of "Viewport flash of RGSS2" and "Plane tile size of RGSS2"; the same command.
 
 ## 2. Input
 

@@ -1,0 +1,4443 @@
+# Scenes of RGSS2 measured on the original runtime of VX (RGSS202E 2.0.2.1 and 2.0.0.1,
+# 2026-10-12, report vx-v1-sprite-REPORT.md sections 3 and 4), as programs with the digest of
+# every frame they show. The frames are 544 by 416 pixels over black.
+#
+# Topics `order`, `viewport`, `flash` and `plane` are those of the measurement, and every
+# digest is that of the frame the original runtime showed. Of `viewport` the frames with
+# zoomed and turned sprites are left out, and `size2` holds the planes of that topic without
+# its sprites, with the digests of the measurement's model, which predicts every pixel of
+# the frames of the original. The second digest of a frame of `order` is the frame by the
+# rules of RGSS1, from the same model.
+#
+#   topic NAME
+#   sprite ID VIEWPORT|-          plane ID VIEWPORT|-          viewport ID X Y WIDTH HEIGHT
+#   set ID PROPERTY VALUE...      a number is truncated where the property holds an integer
+#   flash ID DURATION nil|R G B A
+#   update ID
+#   clear                         disposes everything
+#   frame DIGEST [DIGEST]         FNV-1a, 64 bits, over red, green and blue of every pixel
+#
+# Bitmaps, by name (x and y of a texel; `&` on the low 8 bits):
+#   bg                 544 by 416, with X = x & 63, Y = y & 63:
+#                      (X * 4 + Y, Y * 4 + 17 * X, X * Y + 3 * X + 60, 255)
+#   cb_o, cb_a         256 by 8; row y is the y-th of (x, 0, 0), (0, x, 0), (0, 0, x),
+#                      (x, 255 - x, 128), (x, x / 2, 255 - x), (255 - x, x, x * 3), (x, x, x),
+#                      (x * 7, x * 13, x * 29); alpha 255 for `o`, x * 5 + y * 37 for `a`
+#   pat_W_H_K_S        (x * 9 + y * 3 + S * 31 + 10, y * 13 + x * 2 + S * 17 + 20,
+#                      x * 5 + y * 7 + S * 11 + 90), alpha 255 for K `o`,
+#                      x * 29 + y * 53 + S * 7 + 40 for K `a`
+#   solid_W_H_R_G_B_A  one colour
+#   colx_W_H           (x, 255 - x, 128, 255)
+#   rowy_W_H           (y, 255 - y, 128, 255)
+topic order
+sprite 1 -
+set 1 bitmap solid_40_40_220_30_30_255
+set 1 x 34
+set 1 ox 0
+set 1 y 0
+set 1 oy -24
+sprite 2 -
+set 2 bitmap solid_40_40_30_220_30_255
+set 2 x 46
+set 2 ox 0
+set 2 y 0
+set 2 oy -36
+sprite 3 -
+set 3 bitmap solid_40_40_30_30_220_255
+set 3 x 58
+set 3 ox 0
+set 3 y 0
+set 3 oy -48
+sprite 4 -
+set 4 bitmap solid_40_40_220_30_30_255
+set 4 x 194
+set 4 ox 0
+set 4 y 5
+set 4 oy -19
+sprite 5 -
+set 5 bitmap solid_40_40_30_220_30_255
+set 5 x 206
+set 5 ox 0
+set 5 y 3
+set 5 oy -33
+sprite 6 -
+set 6 bitmap solid_40_40_30_30_220_255
+set 6 x 218
+set 6 ox 0
+set 6 y 1
+set 6 oy -47
+sprite 7 -
+set 7 bitmap solid_40_40_220_30_30_255
+set 7 x 354
+set 7 ox 0
+set 7 y 1
+set 7 oy -23
+sprite 8 -
+set 8 bitmap solid_40_40_30_220_30_255
+set 8 x 366
+set 8 ox 0
+set 8 y 3
+set 8 oy -33
+sprite 9 -
+set 9 bitmap solid_40_40_30_30_220_255
+set 9 x 378
+set 9 ox 0
+set 9 y 5
+set 9 oy -43
+sprite 10 -
+set 10 bitmap solid_40_40_220_30_30_255
+set 10 x 34
+set 10 ox 0
+set 10 y 0
+set 10 oy -144
+sprite 11 -
+set 11 bitmap solid_40_40_30_220_30_255
+set 11 x 46
+set 11 ox 0
+set 11 y 0
+set 11 oy -156
+sprite 12 -
+set 12 bitmap solid_40_40_30_30_220_255
+set 12 x 58
+set 12 ox 0
+set 12 y 0
+set 12 oy -168
+set 10 y 9
+sprite 13 -
+set 13 bitmap solid_40_40_220_30_30_255
+set 13 x 194
+set 13 ox 0
+set 13 y 0
+set 13 oy -144
+sprite 14 -
+set 14 bitmap solid_40_40_30_220_30_255
+set 14 x 206
+set 14 ox 0
+set 14 y 0
+set 14 oy -156
+sprite 15 -
+set 15 bitmap solid_40_40_30_30_220_255
+set 15 x 218
+set 15 ox 0
+set 15 y 0
+set 15 oy -168
+set 13 z 5
+set 13 z 0
+sprite 16 -
+set 16 bitmap solid_40_40_220_30_30_255
+set 16 x 354
+set 16 ox 0
+set 16 y 0
+set 16 oy -144
+sprite 17 -
+set 17 bitmap solid_40_40_30_220_30_255
+set 17 x 366
+set 17 ox 0
+set 17 y 0
+set 17 oy -156
+sprite 18 -
+set 18 bitmap solid_40_40_30_30_220_255
+set 18 x 378
+set 18 ox 0
+set 18 y 0
+set 18 oy -168
+set 18 z -5
+set 18 z 0
+sprite 19 -
+set 19 bitmap solid_40_40_220_30_30_255
+set 19 x 34
+set 19 ox 0
+set 19 y 0
+set 19 oy -264
+sprite 20 -
+set 20 bitmap solid_40_40_30_220_30_255
+set 20 x 46
+set 20 ox 0
+set 20 y 0
+set 20 oy -276
+sprite 21 -
+set 21 bitmap solid_40_40_30_30_220_255
+set 21 x 58
+set 21 ox 0
+set 21 y 0
+set 21 oy -288
+set 20 z 0
+sprite 22 -
+set 22 bitmap solid_40_40_220_30_30_255
+set 22 x 194
+set 22 ox 0
+set 22 z 1
+set 22 y 0
+set 22 oy -264
+sprite 23 -
+set 23 bitmap solid_40_40_30_220_30_255
+set 23 x 206
+set 23 ox 0
+set 23 y 30
+set 23 oy -246
+sprite 24 -
+set 24 bitmap solid_40_40_30_30_220_255
+set 24 x 218
+set 24 ox 0
+set 24 y 20
+set 24 oy -268
+sprite 25 -
+set 25 bitmap solid_40_40_220_30_30_255
+set 25 x 354
+set 25 ox 0
+set 25 y 7
+set 25 oy -257
+sprite 26 -
+set 26 bitmap solid_40_40_30_220_30_255
+set 26 x 366
+set 26 ox 0
+set 26 y 7
+set 26 oy -269
+sprite 27 -
+set 27 bitmap solid_40_40_30_30_220_255
+set 27 x 378
+set 27 ox 0
+set 27 y 6
+set 27 oy -282
+frame 4a4c108d0baf5c35 1142fd028ccba2f5
+clear
+sprite 28 -
+set 28 bitmap solid_40_40_220_30_30_255
+set 28 x 34
+set 28 ox 0
+set 28 y -3
+set 28 oy -27
+sprite 29 -
+set 29 bitmap solid_40_40_30_220_30_255
+set 29 x 46
+set 29 ox 0
+set 29 y -5
+set 29 oy -41
+sprite 30 -
+set 30 bitmap solid_40_40_30_30_220_255
+set 30 x 58
+set 30 ox 0
+set 30 y -4
+set 30 oy -52
+sprite 31 -
+set 31 bitmap solid_40_40_220_30_30_255
+set 31 x 194
+set 31 ox 0
+set 31 oy 20
+set 31 y 20
+set 31 oy -4
+sprite 32 -
+set 32 bitmap solid_40_40_30_220_30_255
+set 32 x 206
+set 32 ox 0
+set 32 oy 10
+set 32 y 10
+set 32 oy -26
+sprite 33 -
+set 33 bitmap solid_40_40_30_30_220_255
+set 33 x 218
+set 33 ox 0
+set 33 y 0
+set 33 oy -48
+viewport 34 324 4 150 110
+sprite 35 34
+set 35 bitmap solid_40_40_220_30_30_255
+set 35 x 30
+set 35 ox 0
+set 35 y 5
+set 35 oy -15
+sprite 36 34
+set 36 bitmap solid_40_40_30_220_30_255
+set 36 x 42
+set 36 ox 0
+set 36 y 3
+set 36 oy -29
+sprite 37 34
+set 37 bitmap solid_40_40_30_30_220_255
+set 37 x 54
+set 37 ox 0
+set 37 y 4
+set 37 oy -40
+viewport 38 4 124 150 110
+sprite 39 -
+set 39 bitmap solid_40_40_30_220_30_255
+set 39 x 46
+set 39 ox 0
+set 39 y 0
+set 39 oy -156
+sprite 40 38
+set 40 bitmap solid_40_40_220_30_30_255
+set 40 x 30
+set 40 ox 0
+set 40 y 0
+set 40 oy -20
+sprite 41 -
+set 41 bitmap solid_40_40_30_220_30_255
+set 41 x 206
+set 41 ox 0
+set 41 y 0
+set 41 oy -156
+viewport 42 164 124 150 110
+sprite 43 42
+set 43 bitmap solid_40_40_220_30_30_255
+set 43 x 30
+set 43 ox 0
+set 43 y 0
+set 43 oy -20
+viewport 44 324 124 150 110
+sprite 45 -
+set 45 bitmap solid_40_40_30_220_30_255
+set 45 x 366
+set 45 ox 0
+set 45 y 0
+set 45 oy -156
+sprite 46 44
+set 46 bitmap solid_40_40_220_30_30_255
+set 46 x 30
+set 46 ox 0
+set 46 y 50
+set 46 oy 30
+sprite 47 -
+set 47 bitmap solid_40_40_30_220_30_255
+set 47 x 46
+set 47 ox 0
+set 47 y 9
+set 47 oy -267
+viewport 48 4 244 150 110
+sprite 49 48
+set 49 bitmap solid_40_40_220_30_30_255
+set 49 x 30
+set 49 ox 0
+set 49 y 0
+set 49 oy -20
+viewport 50 164 244 150 110
+viewport 51 164 244 150 110
+sprite 52 50
+set 52 bitmap solid_40_40_220_30_30_255
+set 52 x 30
+set 52 ox 0
+set 52 y 0
+set 52 oy -20
+sprite 53 51
+set 53 bitmap solid_40_40_30_220_30_255
+set 53 x 42
+set 53 ox 0
+set 53 y 0
+set 53 oy -32
+set 50 z 5
+set 50 z 0
+viewport 54 340 300 50 40
+plane 55 54
+set 55 bitmap solid_40_40_220_30_30_255
+sprite 56 -
+set 56 bitmap solid_40_40_30_220_30_255
+set 56 x 366
+set 56 ox 0
+set 56 y 0
+set 56 oy -276
+sprite 57 -
+set 57 bitmap solid_40_40_30_30_220_255
+set 57 x 378
+set 57 ox 0
+set 57 y 0
+set 57 oy -288
+set 56 y 4
+frame d1062912a71b60a5 2afe0b76dbc0c3a5
+clear
+sprite 58 -
+set 58 bitmap solid_40_40_30_220_30_255
+set 58 x 46
+set 58 ox 0
+set 58 y 4
+set 58 oy -32
+viewport 59 20 60 50 40
+plane 60 59
+set 60 bitmap solid_40_40_220_30_30_255
+sprite 61 -
+set 61 bitmap solid_40_40_30_30_220_255
+set 61 x 58
+set 61 ox 0
+set 61 y 0
+set 61 oy -48
+sprite 62 -
+set 62 bitmap solid_40_40_220_30_30_255
+set 62 x 194
+set 62 ox 0
+set 62 y 0
+set 62 oy -24
+sprite 63 -
+set 63 bitmap solid_40_40_30_220_30_255
+set 63 x 206
+set 63 ox 0
+set 63 y 0
+set 63 oy -36
+sprite 64 -
+set 64 bitmap solid_40_40_220_30_30_255
+set 64 x 354
+set 64 ox 0
+set 64 y 3
+set 64 oy -21
+sprite 65 -
+set 65 bitmap solid_40_40_30_220_30_255
+set 65 x 366
+set 65 ox 0
+set 65 y 0
+set 65 oy -36
+viewport 66 4 124 150 110
+viewport 67 4 124 150 110
+sprite 68 66
+set 68 bitmap solid_40_40_220_30_30_255
+set 68 x 30
+set 68 ox 0
+set 68 y 0
+set 68 oy -20
+sprite 69 67
+set 69 bitmap solid_40_40_30_220_30_255
+set 69 x 42
+set 69 ox 0
+set 69 y 0
+set 69 oy -32
+sprite 70 66
+set 70 bitmap solid_40_40_30_30_220_255
+set 70 x 54
+set 70 ox 0
+set 70 y 0
+set 70 oy -44
+viewport 71 164 124 150 110
+sprite 72 -
+set 72 bitmap solid_40_40_220_30_30_255
+set 72 x 194
+set 72 ox 0
+set 72 y 0
+set 72 oy -144
+sprite 73 71
+set 73 bitmap solid_40_40_30_220_30_255
+set 73 x 42
+set 73 ox 0
+set 73 y 0
+set 73 oy -32
+set 72 viewport 71
+viewport 74 324 124 150 110
+sprite 75 74
+set 75 bitmap solid_40_40_220_30_30_255
+set 75 x 30
+set 75 ox 0
+set 75 y 0
+set 75 oy -20
+sprite 76 -
+set 76 bitmap solid_40_40_30_220_30_255
+set 76 x 366
+set 76 ox 0
+set 76 y 0
+set 76 oy -156
+sprite 77 -
+set 77 bitmap solid_40_40_30_30_220_255
+set 77 x 378
+set 77 ox 0
+set 77 y 0
+set 77 oy -168
+set 75 viewport -
+viewport 78 4 244 150 110
+viewport 79 4 244 150 110
+sprite 80 78
+set 80 bitmap solid_40_40_220_30_30_255
+set 80 x 30
+set 80 ox 0
+set 80 y 0
+set 80 oy -20
+sprite 81 79
+set 81 bitmap solid_40_40_30_220_30_255
+set 81 x 42
+set 81 ox 0
+set 81 y 0
+set 81 oy -32
+set 80 viewport 79
+sprite 82 -
+set 82 bitmap solid_40_40_220_30_30_255
+set 82 x 194
+set 82 ox 0
+set 82 y 2.9
+set 82 oy -261.1
+sprite 83 -
+set 83 bitmap solid_40_40_30_220_30_255
+set 83 x 206
+set 83 ox 0
+set 83 y 2
+set 83 oy -274
+sprite 84 -
+set 84 bitmap solid_40_40_30_30_220_255
+set 84 x 218
+set 84 ox 0
+set 84 y 2.5
+set 84 oy -285.5
+sprite 85 -
+set 85 bitmap solid_40_40_220_30_30_255
+set 85 x 354
+set 85 ox 0
+set 85 y 1
+set 85 oy -263
+sprite 86 -
+set 86 bitmap solid_40_40_30_220_30_255
+set 86 x 366
+set 86 ox 0
+set 86 z 1
+set 86 y 0
+set 86 oy -276
+sprite 87 -
+set 87 bitmap solid_40_40_30_30_220_255
+set 87 x 378
+set 87 ox 0
+set 87 z 1
+set 87 y 2
+set 87 oy -286
+sprite 88 -
+set 88 bitmap solid_40_40_220_220_30_255
+set 88 x 390
+set 88 ox 0
+set 88 z 0.5
+set 88 y 0
+set 88 oy -300
+frame 203cc160d647c665 26d28550851b5de5
+set 62 y 3
+set 64 y 0
+frame 3a24aa38175125e5 c3279bbd230180a5
+clear
+sprite 89 -
+set 89 bitmap solid_40_40_220_30_30_255
+set 89 x 34
+set 89 ox 0
+set 89 y 0
+set 89 oy -24
+sprite 90 -
+set 90 bitmap solid_40_40_30_220_30_255
+set 90 x 46
+set 90 ox 0
+set 90 visible false
+set 90 y 0
+set 90 oy -36
+sprite 91 -
+set 91 bitmap solid_40_40_30_30_220_255
+set 91 x 58
+set 91 ox 0
+set 91 y 0
+set 91 oy -48
+set 90 visible true
+viewport 92 164 4 150 110
+set 92 z 0
+sprite 93 92
+set 93 bitmap solid_40_40_220_30_30_255
+set 93 x 30
+set 93 ox 0
+set 93 z 100
+set 93 y 0
+set 93 oy -20
+sprite 94 -
+set 94 bitmap solid_40_40_30_220_30_255
+set 94 x 206
+set 94 ox 0
+set 94 z 50
+set 94 y 0
+set 94 oy -36
+viewport 95 324 4 150 110
+set 95 z 60
+sprite 96 95
+set 96 bitmap solid_40_40_220_30_30_255
+set 96 x 30
+set 96 ox 0
+set 96 z -100
+set 96 y 0
+set 96 oy -20
+sprite 97 -
+set 97 bitmap solid_40_40_30_220_30_255
+set 97 x 366
+set 97 ox 0
+set 97 z 50
+set 97 y 0
+set 97 oy -36
+viewport 98 4 124 150 110
+sprite 99 98
+set 99 bitmap solid_40_40_220_30_30_255
+set 99 x 30
+set 99 ox 0
+set 99 y 8
+set 99 oy -12
+sprite 100 -
+set 100 bitmap solid_40_40_30_220_30_255
+set 100 x 46
+set 100 ox 0
+set 100 y 4
+set 100 oy -152
+sprite 101 -
+set 101 bitmap solid_40_40_30_30_220_255
+set 101 x 58
+set 101 ox 0
+set 101 y 12
+set 101 oy -156
+sprite 102 -
+set 102 bitmap solid_40_40_30_220_30_255
+set 102 x 206
+set 102 ox 0
+set 102 y 4
+set 102 oy -152
+sprite 103 -
+set 103 bitmap solid_40_40_30_30_220_255
+set 103 x 218
+set 103 ox 0
+set 103 y 12
+set 103 oy -156
+viewport 104 164 124 150 110
+sprite 105 104
+set 105 bitmap solid_40_40_220_30_30_255
+set 105 x 30
+set 105 ox 0
+set 105 y 8
+set 105 oy -12
+viewport 106 324 124 150 110
+sprite 107 106
+set 107 bitmap solid_40_40_220_30_30_255
+set 107 x 30
+set 107 ox 0
+set 107 y 0
+set 107 oy -20
+sprite 108 -
+set 108 bitmap solid_40_40_30_220_30_255
+set 108 x 366
+set 108 ox 0
+set 108 y 0
+set 108 oy -156
+set 106 oy -8
+viewport 109 4 244 150 110
+viewport 110 4 244 150 110
+sprite 111 109
+set 111 bitmap solid_40_40_220_30_30_255
+set 111 x 30
+set 111 ox 0
+set 111 y 0
+set 111 oy -20
+sprite 112 110
+set 112 bitmap solid_40_40_30_220_30_255
+set 112 x 42
+set 112 ox 0
+set 112 y 0
+set 112 oy -32
+set 109 rect 4 254 150 100
+viewport 113 180 300 50 40
+plane 114 113
+set 114 bitmap solid_40_40_220_30_30_255
+viewport 115 194 290 50 40
+plane 116 115
+set 116 bitmap solid_40_40_30_220_30_255
+viewport 117 208 280 50 40
+plane 118 117
+set 118 bitmap solid_40_40_30_30_220_255
+viewport 119 340 300 50 40
+plane 120 119
+set 120 bitmap solid_40_40_220_30_30_255
+set 120 z 1
+viewport 121 354 290 50 40
+plane 122 121
+set 122 bitmap solid_40_40_30_220_30_255
+sprite 123 -
+set 123 bitmap solid_40_40_30_30_220_255
+set 123 x 378
+set 123 ox 0
+set 123 z 1
+set 123 y 0
+set 123 oy -288
+frame e7e118062f71fb35 08919a2933588e35
+clear
+clear
+topic viewport
+sprite 1 -
+set 1 bitmap bg
+set 1 z -1000
+viewport 2 0 0 256 8
+set 2 tone 0 0 0 0
+sprite 3 2
+set 3 bitmap cb_o
+viewport 4 0 8 256 8
+set 4 tone 0 0 0 5
+sprite 5 4
+set 5 bitmap cb_o
+viewport 6 0 16 256 8
+set 6 tone 0 0 0 10
+sprite 7 6
+set 7 bitmap cb_o
+viewport 8 0 24 256 8
+set 8 tone 0 0 0 15
+sprite 9 8
+set 9 bitmap cb_o
+viewport 10 0 32 256 8
+set 10 tone 0 0 0 20
+sprite 11 10
+set 11 bitmap cb_o
+viewport 12 0 40 256 8
+set 12 tone 0 0 0 25
+sprite 13 12
+set 13 bitmap cb_o
+viewport 14 0 48 256 8
+set 14 tone 0 0 0 30
+sprite 15 14
+set 15 bitmap cb_o
+viewport 16 0 56 256 8
+set 16 tone 0 0 0 35
+sprite 17 16
+set 17 bitmap cb_o
+viewport 18 0 64 256 8
+set 18 tone 0 0 0 40
+sprite 19 18
+set 19 bitmap cb_o
+viewport 20 0 72 256 8
+set 20 tone 0 0 0 45
+sprite 21 20
+set 21 bitmap cb_o
+viewport 22 0 80 256 8
+set 22 tone 0 0 0 50
+sprite 23 22
+set 23 bitmap cb_o
+viewport 24 0 88 256 8
+set 24 tone 0 0 0 55
+sprite 25 24
+set 25 bitmap cb_o
+viewport 26 0 96 256 8
+set 26 tone 0 0 0 60
+sprite 27 26
+set 27 bitmap cb_o
+viewport 28 0 104 256 8
+set 28 tone 0 0 0 65
+sprite 29 28
+set 29 bitmap cb_o
+viewport 30 0 112 256 8
+set 30 tone 0 0 0 70
+sprite 31 30
+set 31 bitmap cb_o
+viewport 32 0 120 256 8
+set 32 tone 0 0 0 75
+sprite 33 32
+set 33 bitmap cb_o
+viewport 34 0 128 256 8
+set 34 tone 0 0 0 80
+sprite 35 34
+set 35 bitmap cb_o
+viewport 36 0 136 256 8
+set 36 tone 0 0 0 85
+sprite 37 36
+set 37 bitmap cb_o
+viewport 38 0 144 256 8
+set 38 tone 0 0 0 90
+sprite 39 38
+set 39 bitmap cb_o
+viewport 40 0 152 256 8
+set 40 tone 0 0 0 95
+sprite 41 40
+set 41 bitmap cb_o
+viewport 42 0 160 256 8
+set 42 tone -211 221 -48 47
+sprite 43 42
+set 43 bitmap cb_o
+viewport 44 0 168 256 8
+set 44 tone -207 -85 -187 0
+sprite 45 44
+set 45 bitmap cb_o
+viewport 46 0 176 256 8
+set 46 tone 196 80 86 46
+sprite 47 46
+set 47 bitmap cb_o
+viewport 48 0 184 256 8
+set 48 tone -252 -164 82 255
+sprite 49 48
+set 49 bitmap cb_o
+viewport 50 0 192 256 8
+set 50 tone 214 4 119 67
+sprite 51 50
+set 51 bitmap cb_o
+viewport 52 0 200 256 8
+set 52 tone 126 -119 29 128
+sprite 53 52
+set 53 bitmap cb_o
+viewport 54 0 208 256 8
+set 54 tone 223 162 201 0
+sprite 55 54
+set 55 bitmap cb_o
+viewport 56 0 216 256 8
+set 56 tone -116 -207 -38 219
+sprite 57 56
+set 57 bitmap cb_o
+viewport 58 0 224 256 8
+set 58 tone -172 25 185 56
+sprite 59 58
+set 59 bitmap cb_o
+viewport 60 0 232 256 8
+set 60 tone 144 -146 169 15
+sprite 61 60
+set 61 bitmap cb_o
+viewport 62 0 240 256 8
+set 62 tone -91 -77 84 128
+sprite 63 62
+set 63 bitmap cb_o
+viewport 64 0 248 256 8
+set 64 tone 249 158 -147 237
+sprite 65 64
+set 65 bitmap cb_o
+viewport 66 0 256 256 8
+set 66 tone -123 -126 4 100
+sprite 67 66
+set 67 bitmap cb_o
+viewport 68 0 264 256 8
+set 68 tone -234 -182 -74 0
+sprite 69 68
+set 69 bitmap cb_o
+viewport 70 0 272 256 8
+set 70 tone -8 249 -33 52
+sprite 71 70
+set 71 bitmap cb_o
+viewport 72 0 280 256 8
+set 72 tone -76 239 45 139
+sprite 73 72
+set 73 bitmap cb_o
+viewport 74 0 288 256 8
+set 74 tone -104 36 -32 144
+sprite 75 74
+set 75 bitmap cb_o
+viewport 76 0 296 256 8
+set 76 tone -247 109 96 43
+sprite 77 76
+set 77 bitmap cb_o
+viewport 78 0 304 256 8
+set 78 tone 27 -209 247 0
+sprite 79 78
+set 79 bitmap cb_o
+viewport 80 0 312 256 8
+set 80 tone -126 -194 -46 255
+sprite 81 80
+set 81 bitmap cb_o
+viewport 82 0 320 256 8
+set 82 tone -45 142 100 101
+sprite 83 82
+set 83 bitmap cb_o
+viewport 84 0 328 256 8
+set 84 tone 89 -148 -43 0
+sprite 85 84
+set 85 bitmap cb_o
+viewport 86 0 336 256 8
+set 86 tone -186 104 -47 0
+sprite 87 86
+set 87 bitmap cb_o
+viewport 88 0 344 256 8
+set 88 tone -22 8 -195 238
+sprite 89 88
+set 89 bitmap cb_o
+viewport 90 0 352 256 8
+set 90 tone 13 200 212 106
+sprite 91 90
+set 91 bitmap cb_o
+viewport 92 0 360 256 8
+set 92 tone 88 -8 -39 0
+sprite 93 92
+set 93 bitmap cb_o
+viewport 94 0 368 256 8
+set 94 tone -27 -68 -67 55
+sprite 95 94
+set 95 bitmap cb_o
+viewport 96 0 376 256 8
+set 96 tone 171 48 217 255
+sprite 97 96
+set 97 bitmap cb_o
+viewport 98 0 384 256 8
+set 98 tone 44 207 -233 255
+sprite 99 98
+set 99 bitmap cb_o
+viewport 100 0 392 256 8
+set 100 tone -99 226 107 39
+sprite 101 100
+set 101 bitmap cb_o
+viewport 102 0 400 256 8
+set 102 tone 43 -238 197 255
+sprite 103 102
+set 103 bitmap cb_o
+viewport 104 0 408 256 8
+set 104 tone -200 67 -133 0
+sprite 105 104
+set 105 bitmap cb_o
+viewport 106 272 0 256 8
+set 106 color 250 218 252 0
+sprite 107 106
+set 107 bitmap cb_o
+viewport 108 272 8 256 8
+set 108 color 254 7 234 115
+sprite 109 108
+set 109 bitmap cb_o
+viewport 110 272 16 256 8
+set 110 color 201 8 134 72
+sprite 111 110
+set 111 bitmap cb_o
+viewport 112 272 24 256 8
+set 112 color 43 225 179 217
+sprite 113 112
+set 113 bitmap cb_o
+viewport 114 272 32 256 8
+set 114 color 221 182 208 255
+sprite 115 114
+set 115 bitmap cb_o
+viewport 116 272 40 256 8
+set 116 color 228 92 182 255
+sprite 117 116
+set 117 bitmap cb_o
+viewport 118 272 48 256 8
+set 118 color 209 238 83 250
+sprite 119 118
+set 119 bitmap cb_o
+viewport 120 272 56 256 8
+set 120 color 45 251 46 112
+sprite 121 120
+set 121 bitmap cb_o
+viewport 122 272 64 256 8
+set 122 color 10 78 247 255
+sprite 123 122
+set 123 bitmap cb_o
+viewport 124 272 72 256 8
+set 124 color 79 6 123 248
+sprite 125 124
+set 125 bitmap cb_o
+viewport 126 272 80 256 8
+set 126 color 125 78 52 88
+sprite 127 126
+set 127 bitmap cb_o
+viewport 128 272 88 256 8
+set 128 color 7 208 106 0
+sprite 129 128
+set 129 bitmap cb_o
+viewport 130 272 96 256 8
+set 130 color 175 248 218 84
+sprite 131 130
+set 131 bitmap cb_o
+viewport 132 272 104 256 8
+set 132 color 198 214 136 41
+sprite 133 132
+set 133 bitmap cb_o
+viewport 134 272 112 256 8
+set 134 color 165 241 117 255
+sprite 135 134
+set 135 bitmap cb_o
+viewport 136 272 120 256 8
+set 136 color 205 53 78 48
+sprite 137 136
+set 137 bitmap cb_o
+viewport 138 272 128 256 8
+set 138 color 52 249 167 255
+sprite 139 138
+set 139 bitmap cb_o
+viewport 140 272 136 256 8
+set 140 color 146 111 6 253
+sprite 141 140
+set 141 bitmap cb_o
+viewport 142 272 144 256 8
+set 142 color 102 36 57 32
+sprite 143 142
+set 143 bitmap cb_o
+viewport 144 272 152 256 8
+set 144 color 21 49 222 39
+sprite 145 144
+set 145 bitmap cb_o
+viewport 146 272 160 256 8
+set 146 color 181 93 229 228
+sprite 147 146
+set 147 bitmap cb_o
+viewport 148 272 168 256 8
+set 148 color 108 7 152 63
+sprite 149 148
+set 149 bitmap cb_o
+viewport 150 272 176 256 8
+set 150 color 234 127 250 255
+sprite 151 150
+set 151 bitmap cb_o
+viewport 152 272 184 256 8
+set 152 color 86 13 17 216
+sprite 153 152
+set 153 bitmap cb_o
+viewport 154 272 192 256 8
+set 154 color 189 5 46 0
+sprite 155 154
+set 155 bitmap cb_o
+viewport 156 272 200 256 8
+set 156 color 195 243 159 255
+sprite 157 156
+set 157 bitmap cb_o
+viewport 158 272 208 256 8
+set 158 color 127 203 131 173
+sprite 159 158
+set 159 bitmap cb_o
+viewport 160 272 216 256 8
+set 160 color 54 241 227 14
+sprite 161 160
+set 161 bitmap cb_o
+viewport 162 272 224 256 8
+set 162 color 52 80 148 253
+sprite 163 162
+set 163 bitmap cb_o
+viewport 164 272 232 256 8
+set 164 color 177 92 253 87
+sprite 165 164
+set 165 bitmap cb_o
+viewport 166 272 240 256 8
+set 166 color 100 235 63 0
+sprite 167 166
+set 167 bitmap cb_o
+viewport 168 272 248 256 8
+set 168 color 209 203 37 117
+sprite 169 168
+set 169 bitmap cb_o
+viewport 170 272 256 256 8
+set 170 color 211 245 48 0
+sprite 171 170
+set 171 bitmap cb_o
+viewport 172 272 264 256 8
+set 172 color 234 7 237 17
+sprite 173 172
+set 173 bitmap cb_o
+viewport 174 272 272 256 8
+set 174 color 232 184 7 92
+sprite 175 174
+set 175 bitmap cb_o
+viewport 176 272 280 256 8
+set 176 color 101 248 70 255
+sprite 177 176
+set 177 bitmap cb_o
+viewport 178 272 288 256 8
+set 178 color 39 139 233 255
+sprite 179 178
+set 179 bitmap cb_o
+viewport 180 272 296 256 8
+set 180 color 240 157 235 0
+sprite 181 180
+set 181 bitmap cb_o
+viewport 182 272 304 256 8
+set 182 color 66 95 50 255
+sprite 183 182
+set 183 bitmap cb_o
+viewport 184 272 312 256 8
+set 184 color 249 153 40 156
+sprite 185 184
+set 185 bitmap cb_o
+viewport 186 272 320 256 8
+set 186 color 240 80 196 255
+sprite 187 186
+set 187 bitmap cb_o
+viewport 188 272 328 256 8
+set 188 color 111 117 162 34
+sprite 189 188
+set 189 bitmap cb_o
+viewport 190 272 336 256 8
+set 190 color 47 121 248 0
+sprite 191 190
+set 191 bitmap cb_o
+viewport 192 272 344 256 8
+set 192 color 20 86 85 0
+sprite 193 192
+set 193 bitmap cb_o
+viewport 194 272 352 256 8
+set 194 color 230 143 182 0
+sprite 195 194
+set 195 bitmap cb_o
+viewport 196 272 360 256 8
+set 196 color 230 137 181 255
+sprite 197 196
+set 197 bitmap cb_o
+viewport 198 272 368 256 8
+set 198 color 72 172 88 0
+sprite 199 198
+set 199 bitmap cb_o
+viewport 200 272 376 256 8
+set 200 color 19 195 156 255
+sprite 201 200
+set 201 bitmap cb_o
+viewport 202 272 384 256 8
+set 202 color 61 87 25 0
+sprite 203 202
+set 203 bitmap cb_o
+viewport 204 272 392 256 8
+set 204 color 75 218 111 255
+sprite 205 204
+set 205 bitmap cb_o
+viewport 206 272 400 256 8
+set 206 color 18 159 194 0
+sprite 207 206
+set 207 bitmap cb_o
+viewport 208 272 408 256 8
+set 208 color 70 112 234 0
+sprite 209 208
+set 209 bitmap cb_o
+frame 614f26bdcf70e0cb
+clear
+sprite 210 -
+set 210 bitmap bg
+set 210 z -1000
+viewport 211 0 0 256 8
+set 211 tone 173 -209 225 14
+set 211 color 101 118 208 131
+sprite 212 211
+set 212 bitmap cb_a
+set 212 opacity 249
+viewport 213 0 8 256 8
+set 213 tone 121 166 -220 128
+set 213 color 41 220 62 177
+sprite 214 213
+set 214 bitmap cb_a
+set 214 opacity 255
+viewport 215 0 16 256 8
+set 215 tone -99 -40 227 1
+set 215 color 192 164 243 0
+sprite 216 215
+set 216 bitmap cb_a
+set 216 opacity 89
+viewport 217 0 24 256 8
+set 217 tone 171 -113 240 65
+set 217 color 227 80 173 255
+sprite 218 217
+set 218 bitmap cb_a
+set 218 opacity 58
+viewport 219 0 32 256 8
+set 219 tone 168 -61 69 128
+set 219 color 59 252 124 0
+sprite 220 219
+set 220 bitmap cb_a
+set 220 opacity 248
+viewport 221 0 40 256 8
+set 221 tone 101 136 19 0
+set 221 color 20 201 94 29
+sprite 222 221
+set 222 bitmap cb_a
+set 222 opacity 88
+viewport 223 0 48 256 8
+set 223 tone -29 103 -233 128
+set 223 color 12 69 250 238
+sprite 224 223
+set 224 bitmap cb_a
+set 224 opacity 56
+viewport 225 0 56 256 8
+set 225 tone -206 -233 -156 0
+set 225 color 192 184 23 255
+sprite 226 225
+set 226 bitmap cb_a
+set 226 opacity 148
+viewport 227 0 64 256 8
+set 227 tone 160 -157 -27 255
+set 227 color 60 147 146 255
+sprite 228 227
+set 228 bitmap cb_a
+set 228 opacity 255
+viewport 229 0 72 256 8
+set 229 tone 250 -160 -41 35
+set 229 color 166 208 250 237
+sprite 230 229
+set 230 bitmap cb_a
+set 230 opacity 255
+viewport 231 0 80 256 8
+set 231 tone 126 183 203 0
+set 231 color 175 149 9 255
+sprite 232 231
+set 232 bitmap cb_a
+set 232 opacity 255
+viewport 233 0 88 256 8
+set 233 tone -203 -63 -175 166
+set 233 color 73 16 58 16
+sprite 234 233
+set 234 bitmap cb_a
+set 234 opacity 213
+viewport 235 0 96 256 8
+set 235 tone 28 41 -255 255
+set 235 color 184 234 121 255
+sprite 236 235
+set 236 bitmap cb_a
+set 236 opacity 246
+viewport 237 0 104 256 8
+set 237 tone 218 -183 95 128
+set 237 color 41 55 190 117
+sprite 238 237
+set 238 bitmap cb_a
+set 238 opacity 86
+viewport 239 0 112 256 8
+set 239 tone -230 -48 -177 91
+set 239 color 193 149 100 165
+sprite 240 239
+set 240 bitmap cb_a
+set 240 opacity 242
+viewport 241 0 120 256 8
+set 241 tone -194 253 -100 255
+set 241 color 207 178 68 255
+sprite 242 241
+set 242 bitmap cb_a
+set 242 opacity 255
+viewport 243 0 128 256 8
+set 243 tone -136 -195 151 252
+set 243 color 119 90 120 77
+sprite 244 243
+set 244 bitmap cb_a
+set 244 opacity 113
+viewport 245 0 136 256 8
+set 245 tone -128 -38 174 66
+set 245 color 255 135 236 255
+sprite 246 245
+set 246 bitmap cb_a
+set 246 opacity 103
+viewport 247 0 144 256 8
+set 247 tone 72 243 106 0
+set 247 color 166 136 31 152
+sprite 248 247
+set 248 bitmap cb_a
+set 248 opacity 255
+viewport 249 0 152 256 8
+set 249 tone -106 -202 73 203
+set 249 color 167 90 233 255
+sprite 250 249
+set 250 bitmap cb_a
+set 250 opacity 126
+viewport 251 0 160 256 8
+set 251 tone -179 -26 250 0
+set 251 color 248 70 226 0
+sprite 252 251
+set 252 bitmap cb_a
+set 252 opacity 255
+viewport 253 0 168 256 8
+set 253 tone -77 -18 -82 167
+set 253 color 15 121 128 0
+sprite 254 253
+set 254 bitmap cb_a
+set 254 opacity 255
+viewport 255 0 176 256 8
+set 255 tone 29 -22 -102 154
+set 255 color 113 201 46 255
+sprite 256 255
+set 256 bitmap cb_a
+set 256 opacity 255
+viewport 257 0 184 256 8
+set 257 tone 70 147 92 128
+set 257 color 238 37 58 255
+sprite 258 257
+set 258 bitmap cb_a
+set 258 opacity 75
+viewport 259 0 192 256 8
+set 259 tone 86 -113 -201 39
+set 259 color 120 9 199 0
+sprite 260 259
+set 260 bitmap cb_a
+set 260 opacity 255
+viewport 261 0 200 256 8
+set 261 tone 128 -56 -109 189
+set 261 color 215 163 151 255
+sprite 262 261
+set 262 bitmap cb_a
+set 262 opacity 78
+viewport 263 0 208 256 8
+set 263 tone -122 -6 1 128
+set 263 color 133 66 39 255
+sprite 264 263
+set 264 bitmap cb_a
+set 264 opacity 181
+viewport 265 0 216 256 8
+set 265 tone -178 134 207 80
+set 265 color 190 59 179 82
+sprite 266 265
+set 266 bitmap cb_a
+set 266 opacity 107
+viewport 267 0 224 256 8
+set 267 tone 39 102 5 128
+set 267 color 35 140 218 66
+sprite 268 267
+set 268 bitmap cb_a
+set 268 opacity 231
+viewport 269 0 232 256 8
+set 269 tone -115 101 -205 210
+set 269 color 191 77 69 255
+sprite 270 269
+set 270 bitmap cb_a
+set 270 opacity 255
+viewport 271 0 240 256 8
+set 271 tone -205 100 -219 16
+set 271 color 84 69 161 0
+sprite 272 271
+set 272 bitmap cb_a
+set 272 opacity 255
+viewport 273 0 248 256 8
+set 273 tone 13 -252 -141 255
+set 273 color 116 49 181 162
+sprite 274 273
+set 274 bitmap cb_a
+set 274 opacity 243
+viewport 275 0 256 256 8
+set 275 tone -48 111 -194 236
+set 275 color 88 105 3 0
+sprite 276 275
+set 276 bitmap cb_a
+set 276 opacity 4
+viewport 277 0 264 256 8
+set 277 tone 34 -180 -252 0
+set 277 color 149 133 139 0
+sprite 278 277
+set 278 bitmap cb_a
+set 278 opacity 83
+viewport 279 0 272 256 8
+set 279 tone -218 159 253 146
+set 279 color 18 101 25 0
+sprite 280 279
+set 280 bitmap cb_a
+set 280 opacity 255
+viewport 281 0 280 256 8
+set 281 tone 76 -96 -100 128
+set 281 color 109 38 246 255
+sprite 282 281
+set 282 bitmap cb_a
+set 282 opacity 57
+viewport 283 0 288 256 8
+set 283 tone -72 166 -201 128
+set 283 color 28 198 90 161
+sprite 284 283
+set 284 bitmap cb_a
+set 284 opacity 255
+viewport 285 0 296 256 8
+set 285 tone -139 -76 208 255
+set 285 color 182 92 146 0
+sprite 286 285
+set 286 bitmap cb_a
+set 286 opacity 214
+viewport 287 0 304 256 8
+set 287 tone -225 -76 226 255
+set 287 color 17 253 237 0
+sprite 288 287
+set 288 bitmap cb_a
+set 288 opacity 255
+viewport 289 0 312 256 8
+set 289 tone 76 222 -4 0
+set 289 color 179 56 228 255
+sprite 290 289
+set 290 bitmap cb_a
+set 290 opacity 255
+viewport 291 0 320 256 8
+set 291 tone -49 -63 -131 255
+set 291 color 79 52 159 0
+sprite 292 291
+set 292 bitmap cb_a
+set 292 opacity 255
+viewport 293 0 328 256 8
+set 293 tone -163 200 -83 255
+set 293 color 157 219 169 2
+sprite 294 293
+set 294 bitmap cb_a
+set 294 opacity 255
+viewport 295 0 336 256 8
+set 295 tone 3 55 127 0
+set 295 color 208 48 15 0
+sprite 296 295
+set 296 bitmap cb_a
+set 296 opacity 117
+viewport 297 0 344 256 8
+set 297 tone -223 99 -248 255
+set 297 color 176 151 196 255
+sprite 298 297
+set 298 bitmap cb_a
+set 298 opacity 108
+viewport 299 0 352 256 8
+set 299 tone 146 1 -164 250
+set 299 color 202 79 23 255
+sprite 300 299
+set 300 bitmap cb_a
+set 300 opacity 255
+viewport 301 0 360 256 8
+set 301 tone 61 -108 67 128
+set 301 color 236 149 37 152
+sprite 302 301
+set 302 bitmap cb_a
+set 302 opacity 5
+viewport 303 0 368 256 8
+set 303 tone -7 -139 92 61
+set 303 color 5 183 250 223
+sprite 304 303
+set 304 bitmap cb_a
+set 304 opacity 255
+viewport 305 0 376 256 8
+set 305 tone 82 63 -28 128
+set 305 color 174 210 86 241
+sprite 306 305
+set 306 bitmap cb_a
+set 306 opacity 233
+viewport 307 0 384 256 8
+set 307 tone -16 -197 -60 255
+set 307 color 3 7 49 0
+sprite 308 307
+set 308 bitmap cb_a
+set 308 opacity 36
+viewport 309 0 392 256 8
+set 309 tone 3 -87 112 255
+set 309 color 114 56 132 53
+sprite 310 309
+set 310 bitmap cb_a
+set 310 opacity 255
+viewport 311 0 400 256 8
+set 311 tone 240 8 134 255
+set 311 color 232 124 171 111
+sprite 312 311
+set 312 bitmap cb_a
+set 312 opacity 218
+viewport 313 0 408 256 8
+set 313 tone -37 191 182 128
+set 313 color 247 99 233 0
+sprite 314 313
+set 314 bitmap cb_a
+set 314 opacity 255
+viewport 315 272 0 256 8
+set 315 tone -102 -220 -250 128
+set 315 color 131 133 64 0
+sprite 316 315
+set 316 bitmap cb_a
+set 316 tone 204 -11 13 160
+set 316 color 126 214 69 0
+set 316 blend_type 0
+viewport 317 272 8 256 8
+set 317 tone 96 -67 -114 255
+set 317 color 103 41 164 236
+sprite 318 317
+set 318 bitmap cb_a
+set 318 tone -33 31 131 255
+set 318 color 6 122 82 255
+set 318 blend_type 1
+viewport 319 272 16 256 8
+set 319 tone 169 140 -185 64
+set 319 color 106 210 171 159
+sprite 320 319
+set 320 bitmap cb_a
+set 320 tone 39 -151 6 146
+set 320 color 93 91 45 0
+set 320 blend_type 2
+viewport 321 272 24 256 8
+set 321 tone 86 214 187 0
+set 321 color 230 146 64 251
+sprite 322 321
+set 322 bitmap cb_a
+set 322 tone 77 -247 6 119
+set 322 color 48 92 194 255
+set 322 blend_type 0
+viewport 323 272 32 256 8
+set 323 tone -4 -150 98 0
+set 323 color 34 204 221 251
+sprite 324 323
+set 324 bitmap cb_a
+set 324 tone 221 -211 133 255
+set 324 color 242 120 103 74
+set 324 blend_type 1
+viewport 325 272 40 256 8
+set 325 tone -244 -126 -196 128
+set 325 color 233 238 147 186
+sprite 326 325
+set 326 bitmap cb_a
+set 326 tone -243 188 232 194
+set 326 color 185 44 6 0
+set 326 blend_type 2
+viewport 327 272 48 256 8
+set 327 tone -71 74 -61 128
+set 327 color 104 248 222 0
+sprite 328 327
+set 328 bitmap cb_a
+set 328 tone 203 -89 249 128
+set 328 color 71 18 137 0
+set 328 blend_type 0
+viewport 329 272 56 256 8
+set 329 tone -164 152 -70 18
+set 329 color 247 60 18 77
+sprite 330 329
+set 330 bitmap cb_a
+set 330 tone 42 167 226 124
+set 330 color 163 14 84 84
+set 330 blend_type 1
+viewport 331 272 64 256 8
+set 331 tone -206 -88 -29 122
+set 331 color 241 130 78 177
+sprite 332 331
+set 332 bitmap cb_a
+set 332 tone -3 45 182 248
+set 332 color 242 242 108 13
+set 332 blend_type 2
+viewport 333 272 72 256 8
+set 333 tone 29 -69 78 128
+set 333 color 133 101 53 27
+sprite 334 333
+set 334 bitmap cb_a
+set 334 tone -41 166 -33 207
+set 334 color 111 112 254 173
+set 334 blend_type 0
+viewport 335 272 80 256 8
+set 335 tone 93 64 -200 132
+set 335 color 194 177 225 255
+sprite 336 335
+set 336 bitmap cb_a
+set 336 tone -64 -77 -138 0
+set 336 color 157 107 225 0
+set 336 blend_type 1
+viewport 337 272 88 256 8
+set 337 tone 192 200 181 128
+set 337 color 125 37 7 0
+sprite 338 337
+set 338 bitmap cb_a
+set 338 tone -240 206 -139 255
+set 338 color 40 254 133 168
+set 338 blend_type 2
+viewport 339 272 96 256 8
+set 339 tone 8 63 -13 128
+set 339 color 33 71 219 0
+sprite 340 339
+set 340 bitmap cb_a
+set 340 tone -251 21 -109 0
+set 340 color 186 19 167 255
+set 340 blend_type 0
+viewport 341 272 104 256 8
+set 341 tone 79 -230 -80 178
+set 341 color 69 114 65 47
+sprite 342 341
+set 342 bitmap cb_a
+set 342 tone 127 84 -77 0
+set 342 color 0 248 110 73
+set 342 blend_type 1
+viewport 343 272 112 256 8
+set 343 tone 90 -62 143 255
+set 343 color 218 56 145 138
+sprite 344 343
+set 344 bitmap cb_a
+set 344 tone 29 38 -33 37
+set 344 color 13 151 193 0
+set 344 blend_type 2
+viewport 345 272 120 256 8
+set 345 tone 134 86 6 128
+set 345 color 138 200 169 255
+sprite 346 345
+set 346 bitmap cb_a
+set 346 tone 159 -137 109 128
+set 346 color 11 162 36 225
+set 346 blend_type 0
+viewport 347 272 128 256 8
+set 347 tone 14 182 210 128
+set 347 color 90 210 124 204
+sprite 348 347
+set 348 bitmap cb_a
+set 348 tone 101 95 115 128
+set 348 color 89 242 11 247
+set 348 blend_type 1
+viewport 349 272 136 256 8
+set 349 tone 189 -222 -209 255
+set 349 color 125 119 186 175
+sprite 350 349
+set 350 bitmap cb_a
+set 350 tone -121 61 43 0
+set 350 color 167 219 250 0
+set 350 blend_type 2
+viewport 351 272 144 256 8
+set 351 tone 70 236 -154 255
+set 351 color 62 240 79 0
+sprite 352 351
+set 352 bitmap cb_a
+set 352 tone -232 -214 238 255
+set 352 color 8 54 53 0
+set 352 blend_type 0
+viewport 353 272 152 256 8
+set 353 tone 195 -227 103 0
+set 353 color 196 190 255 239
+sprite 354 353
+set 354 bitmap cb_a
+set 354 tone 159 -56 90 128
+set 354 color 14 39 33 0
+set 354 blend_type 1
+viewport 355 272 160 256 8
+set 355 tone -52 58 0 255
+set 355 color 172 44 84 53
+sprite 356 355
+set 356 bitmap cb_a
+set 356 tone 208 -5 -173 255
+set 356 color 36 160 205 118
+set 356 blend_type 2
+viewport 357 272 168 256 8
+set 357 tone -127 -7 -172 0
+set 357 color 86 218 37 167
+sprite 358 357
+set 358 bitmap cb_a
+set 358 tone -123 151 85 223
+set 358 color 160 183 40 108
+set 358 blend_type 0
+viewport 359 272 176 256 8
+set 359 tone 95 -230 -185 0
+set 359 color 84 90 34 243
+sprite 360 359
+set 360 bitmap cb_a
+set 360 tone -187 -19 5 215
+set 360 color 215 158 240 255
+set 360 blend_type 1
+viewport 361 272 184 256 8
+set 361 tone 189 154 72 255
+set 361 color 40 68 147 255
+sprite 362 361
+set 362 bitmap cb_a
+set 362 tone 189 -196 -82 128
+set 362 color 77 167 173 163
+set 362 blend_type 2
+viewport 363 272 192 256 8
+set 363 tone 231 -70 146 241
+set 363 color 55 240 52 54
+sprite 364 363
+set 364 bitmap cb_a
+set 364 tone 63 53 -182 255
+set 364 color 42 188 74 0
+set 364 blend_type 0
+viewport 365 272 200 256 8
+set 365 tone 8 -7 145 66
+set 365 color 63 217 86 0
+sprite 366 365
+set 366 bitmap cb_a
+set 366 tone 103 186 -44 128
+set 366 color 80 195 242 175
+set 366 blend_type 1
+viewport 367 272 208 256 8
+set 367 tone -38 -122 -216 128
+set 367 color 30 202 178 16
+sprite 368 367
+set 368 bitmap cb_a
+set 368 tone -22 151 -2 128
+set 368 color 192 81 145 210
+set 368 blend_type 2
+viewport 369 272 216 256 8
+set 369 tone 72 40 245 128
+set 369 color 189 70 235 249
+sprite 370 369
+set 370 bitmap cb_a
+set 370 tone -234 -128 86 0
+set 370 color 57 177 169 255
+set 370 blend_type 0
+viewport 371 272 224 256 8
+set 371 tone -17 225 -85 255
+set 371 color 2 108 40 158
+sprite 372 371
+set 372 bitmap cb_a
+set 372 tone 20 -222 179 150
+set 372 color 210 225 54 176
+set 372 blend_type 1
+viewport 373 272 232 256 8
+set 373 tone 183 57 24 255
+set 373 color 175 166 156 255
+sprite 374 373
+set 374 bitmap cb_a
+set 374 tone 255 206 170 255
+set 374 color 183 184 44 255
+set 374 blend_type 2
+viewport 375 272 240 256 8
+set 375 tone 164 -228 -27 0
+set 375 color 34 245 240 196
+sprite 376 375
+set 376 bitmap cb_a
+set 376 tone -185 4 52 0
+set 376 color 136 51 115 193
+set 376 blend_type 0
+viewport 377 272 248 256 8
+set 377 tone -219 128 22 128
+set 377 color 157 112 44 255
+sprite 378 377
+set 378 bitmap cb_a
+set 378 tone 110 -166 204 0
+set 378 color 24 205 184 255
+set 378 blend_type 1
+viewport 379 272 256 256 8
+set 379 tone -64 225 92 208
+set 379 color 145 130 108 106
+sprite 380 379
+set 380 bitmap cb_a
+set 380 tone 203 -137 -117 128
+set 380 color 20 110 214 255
+set 380 blend_type 2
+viewport 381 272 264 256 8
+set 381 tone -42 -252 187 128
+set 381 color 187 250 236 226
+sprite 382 381
+set 382 bitmap cb_a
+set 382 tone -140 38 90 128
+set 382 color 142 62 177 0
+set 382 blend_type 0
+viewport 383 272 272 256 8
+set 383 tone 212 215 41 255
+set 383 color 206 87 189 71
+sprite 384 383
+set 384 bitmap cb_a
+set 384 tone 120 -103 22 255
+set 384 color 22 155 45 87
+set 384 blend_type 1
+viewport 385 272 280 256 8
+set 385 tone 144 -136 164 0
+set 385 color 74 100 14 27
+sprite 386 385
+set 386 bitmap cb_a
+set 386 tone 68 -154 183 0
+set 386 color 179 54 44 255
+set 386 blend_type 2
+viewport 387 272 288 256 8
+set 387 tone -7 251 132 0
+set 387 color 139 154 97 170
+sprite 388 387
+set 388 bitmap cb_a
+set 388 tone 158 174 -211 119
+set 388 color 102 135 124 0
+set 388 blend_type 0
+viewport 389 272 296 256 8
+set 389 tone -163 -44 246 255
+set 389 color 204 216 110 185
+sprite 390 389
+set 390 bitmap cb_a
+set 390 tone 100 -129 -76 255
+set 390 color 174 183 121 221
+set 390 blend_type 1
+viewport 391 272 304 256 8
+set 391 tone -184 -56 -79 255
+set 391 color 181 180 84 255
+sprite 392 391
+set 392 bitmap cb_a
+set 392 tone -228 44 -22 255
+set 392 color 174 200 253 0
+set 392 blend_type 2
+viewport 393 272 312 256 8
+set 393 tone -202 231 111 181
+set 393 color 182 171 91 255
+sprite 394 393
+set 394 bitmap cb_a
+set 394 tone 149 77 222 147
+set 394 color 62 121 233 255
+set 394 blend_type 0
+viewport 395 272 320 256 8
+set 395 tone 126 174 48 128
+set 395 color 179 239 83 255
+sprite 396 395
+set 396 bitmap cb_a
+set 396 tone -249 -116 1 255
+set 396 color 65 213 192 74
+set 396 blend_type 1
+viewport 397 272 328 256 8
+set 397 tone 25 99 -82 55
+set 397 color 5 164 253 8
+sprite 398 397
+set 398 bitmap cb_a
+set 398 tone -238 181 226 105
+set 398 color 53 201 200 87
+set 398 blend_type 2
+viewport 399 272 336 256 8
+set 399 tone 164 195 48 228
+set 399 color 251 65 82 131
+sprite 400 399
+set 400 bitmap cb_a
+set 400 tone -97 -251 -83 128
+set 400 color 73 124 33 132
+set 400 blend_type 0
+viewport 401 272 344 256 8
+set 401 tone 254 -196 -78 166
+set 401 color 19 235 158 0
+sprite 402 401
+set 402 bitmap cb_a
+set 402 tone 240 78 226 132
+set 402 color 224 125 42 255
+set 402 blend_type 1
+viewport 403 272 352 256 8
+set 403 tone -225 -226 -198 171
+set 403 color 165 146 144 255
+sprite 404 403
+set 404 bitmap cb_a
+set 404 tone 45 -126 -147 0
+set 404 color 210 25 123 255
+set 404 blend_type 2
+viewport 405 272 360 256 8
+set 405 tone 26 -164 -178 255
+set 405 color 121 188 199 120
+sprite 406 405
+set 406 bitmap cb_a
+set 406 tone -55 175 135 255
+set 406 color 226 104 253 255
+set 406 blend_type 0
+viewport 407 272 368 256 8
+set 407 tone 218 27 -99 128
+set 407 color 164 223 75 0
+sprite 408 407
+set 408 bitmap cb_a
+set 408 tone 223 77 161 255
+set 408 color 36 52 174 126
+set 408 blend_type 1
+viewport 409 272 376 256 8
+set 409 tone 71 -137 62 204
+set 409 color 186 80 20 0
+sprite 410 409
+set 410 bitmap cb_a
+set 410 tone -223 105 -134 0
+set 410 color 66 59 125 127
+set 410 blend_type 2
+viewport 411 272 384 256 8
+set 411 tone -216 -121 -10 255
+set 411 color 161 124 71 108
+sprite 412 411
+set 412 bitmap cb_a
+set 412 tone 57 -52 146 128
+set 412 color 31 193 82 0
+set 412 blend_type 0
+viewport 413 272 392 256 8
+set 413 tone -71 7 -22 59
+set 413 color 221 120 192 120
+sprite 414 413
+set 414 bitmap cb_a
+set 414 tone -137 -233 232 170
+set 414 color 171 202 54 255
+set 414 blend_type 1
+viewport 415 272 400 256 8
+set 415 tone -100 29 229 129
+set 415 color 72 85 69 50
+sprite 416 415
+set 416 bitmap cb_a
+set 416 tone -187 -85 180 100
+set 416 color 116 25 137 255
+set 416 blend_type 2
+viewport 417 272 408 256 8
+set 417 tone -111 62 -181 255
+set 417 color 147 4 99 157
+sprite 418 417
+set 418 bitmap cb_a
+set 418 tone -175 -165 96 211
+set 418 color 139 175 18 0
+set 418 blend_type 0
+frame 626f1bc55b865489
+clear
+sprite 419 -
+set 419 bitmap bg
+set 419 z -1000
+viewport 420 0 0 256 8
+set 420 color 52 86 95 255
+viewport 421 272 0 256 8
+set 421 tone 132 34 251 255
+set 421 color 141 244 136 255
+sprite 422 -
+set 422 bitmap cb_a
+set 422 x 300
+set 422 y 0
+set 422 z 1
+viewport 423 0 8 256 8
+set 423 tone -211 -12 77 255
+viewport 424 272 8 256 8
+set 424 tone -237 -125 87 220
+set 424 color 67 205 39 255
+sprite 425 -
+set 425 bitmap cb_a
+set 425 x 300
+set 425 y 8
+set 425 z -1
+viewport 426 0 16 256 8
+set 426 color 123 243 98 255
+viewport 427 272 16 256 8
+set 427 tone 3 -255 -245 0
+set 427 color 108 220 15 87
+viewport 428 0 24 256 8
+set 428 tone 37 133 48 128
+viewport 429 272 24 256 8
+set 429 tone 88 -233 74 0
+set 429 color 224 229 231 0
+viewport 430 0 32 256 8
+set 430 color 146 253 88 1
+viewport 431 272 32 256 8
+set 431 tone 71 239 44 255
+set 431 color 196 216 133 0
+sprite 432 -
+set 432 bitmap cb_a
+set 432 x 300
+set 432 y 32
+set 432 z 1
+viewport 433 0 40 256 8
+set 433 tone -99 3 -47 39
+viewport 434 272 40 256 8
+set 434 tone -84 99 195 102
+set 434 color 81 239 128 0
+sprite 435 -
+set 435 bitmap cb_a
+set 435 x 300
+set 435 y 40
+set 435 z -1
+viewport 436 0 48 256 8
+set 436 color 35 74 148 27
+viewport 437 272 48 256 8
+set 437 tone -136 -57 -121 128
+set 437 color 114 82 83 166
+viewport 438 0 56 256 8
+set 438 tone 166 -64 38 128
+viewport 439 272 56 256 8
+set 439 tone 77 99 65 255
+set 439 color 152 189 254 255
+viewport 440 0 64 256 8
+set 440 color 5 37 37 0
+viewport 441 272 64 256 8
+set 441 tone 68 254 -129 253
+set 441 color 254 84 103 152
+sprite 442 -
+set 442 bitmap cb_a
+set 442 x 300
+set 442 y 64
+set 442 z 1
+viewport 443 0 72 256 8
+set 443 tone -237 98 57 42
+viewport 444 272 72 256 8
+set 444 tone -129 26 46 83
+set 444 color 48 65 79 104
+sprite 445 -
+set 445 bitmap cb_a
+set 445 x 300
+set 445 y 72
+set 445 z -1
+viewport 446 0 80 256 8
+set 446 color 152 185 71 61
+viewport 447 272 80 256 8
+set 447 tone 181 243 -15 73
+set 447 color 181 185 52 162
+viewport 448 0 88 256 8
+set 448 tone -67 -193 -12 255
+viewport 449 272 88 256 8
+set 449 tone 224 -79 -184 71
+set 449 color 241 83 110 214
+viewport 450 0 96 256 8
+set 450 color 229 53 10 0
+viewport 451 272 96 256 8
+set 451 tone -204 -31 138 0
+set 451 color 186 222 230 255
+sprite 452 -
+set 452 bitmap cb_a
+set 452 x 300
+set 452 y 96
+set 452 z 1
+viewport 453 0 104 256 8
+set 453 tone 29 169 47 255
+viewport 454 272 104 256 8
+set 454 tone -149 -166 -6 225
+set 454 color 154 173 230 255
+sprite 455 -
+set 455 bitmap cb_a
+set 455 x 300
+set 455 y 104
+set 455 z -1
+viewport 456 0 112 256 8
+set 456 color 171 26 124 207
+viewport 457 272 112 256 8
+set 457 tone -231 16 -217 0
+set 457 color 117 21 151 255
+viewport 458 0 120 256 8
+set 458 tone -82 -5 -106 0
+viewport 459 272 120 256 8
+set 459 tone 58 124 35 128
+set 459 color 191 199 237 188
+viewport 460 0 128 256 8
+set 460 color 2 120 20 0
+viewport 461 272 128 256 8
+set 461 tone -117 -146 -192 251
+set 461 color 119 136 132 246
+sprite 462 -
+set 462 bitmap cb_a
+set 462 x 300
+set 462 y 128
+set 462 z 1
+viewport 463 0 136 256 8
+set 463 tone -149 -182 -55 233
+viewport 464 272 136 256 8
+set 464 tone 231 -25 -99 89
+set 464 color 220 194 105 46
+sprite 465 -
+set 465 bitmap cb_a
+set 465 x 300
+set 465 y 136
+set 465 z -1
+viewport 466 0 144 256 8
+set 466 color 182 131 173 0
+viewport 467 272 144 256 8
+set 467 tone 196 -95 -22 255
+set 467 color 183 184 80 22
+viewport 468 0 152 256 8
+set 468 tone -5 52 222 201
+viewport 469 272 152 256 8
+set 469 tone -75 45 -55 81
+set 469 color 71 95 120 0
+viewport 470 0 160 256 8
+set 470 color 78 24 62 126
+viewport 471 272 160 256 8
+set 471 tone 68 -120 92 5
+set 471 color 95 186 164 77
+sprite 472 -
+set 472 bitmap cb_a
+set 472 x 300
+set 472 y 160
+set 472 z 1
+viewport 473 0 168 256 8
+set 473 tone 216 83 175 0
+viewport 474 272 168 256 8
+set 474 tone -5 188 -132 139
+set 474 color 50 17 123 255
+sprite 475 -
+set 475 bitmap cb_a
+set 475 x 300
+set 475 y 168
+set 475 z -1
+viewport 476 0 176 256 8
+set 476 color 212 54 154 206
+viewport 477 272 176 256 8
+set 477 tone -108 66 -1 247
+set 477 color 95 11 47 254
+viewport 478 0 184 256 8
+set 478 tone -145 137 64 255
+viewport 479 272 184 256 8
+set 479 tone 193 189 -139 0
+set 479 color 131 190 130 0
+viewport 480 0 192 256 8
+set 480 color 4 3 184 253
+viewport 481 272 192 256 8
+set 481 tone -255 229 38 88
+set 481 color 234 70 104 255
+sprite 482 -
+set 482 bitmap cb_a
+set 482 x 300
+set 482 y 192
+set 482 z 1
+viewport 483 0 200 256 8
+set 483 tone -136 25 248 151
+viewport 484 272 200 256 8
+set 484 tone 206 -125 -69 175
+set 484 color 129 173 100 255
+sprite 485 -
+set 485 bitmap cb_a
+set 485 x 300
+set 485 y 200
+set 485 z -1
+viewport 486 0 208 256 8
+set 486 color 12 113 132 42
+viewport 487 272 208 256 8
+set 487 tone 61 -243 -200 74
+set 487 color 190 234 13 169
+viewport 488 0 216 256 8
+set 488 tone 166 203 -77 255
+viewport 489 272 216 256 8
+set 489 tone -13 113 -206 92
+set 489 color 119 202 64 42
+viewport 490 0 224 256 8
+set 490 color 26 220 106 116
+viewport 491 272 224 256 8
+set 491 tone -177 -87 251 223
+set 491 color 201 233 251 255
+sprite 492 -
+set 492 bitmap cb_a
+set 492 x 300
+set 492 y 224
+set 492 z 1
+viewport 493 0 232 256 8
+set 493 tone 41 104 -36 113
+viewport 494 272 232 256 8
+set 494 tone 179 21 170 255
+set 494 color 99 52 205 255
+sprite 495 -
+set 495 bitmap cb_a
+set 495 x 300
+set 495 y 232
+set 495 z -1
+viewport 496 0 240 256 8
+set 496 color 131 32 207 177
+viewport 497 272 240 256 8
+set 497 tone -132 -5 -168 128
+set 497 color 82 23 25 255
+viewport 498 0 248 256 8
+set 498 tone 108 98 -230 3
+viewport 499 272 248 256 8
+set 499 tone -180 -65 147 62
+set 499 color 167 75 32 255
+viewport 500 0 256 256 8
+set 500 color 35 123 17 0
+viewport 501 272 256 256 8
+set 501 tone -52 81 43 0
+set 501 color 23 187 127 255
+sprite 502 -
+set 502 bitmap cb_a
+set 502 x 300
+set 502 y 256
+set 502 z 1
+viewport 503 0 264 256 8
+set 503 tone -108 -10 131 128
+viewport 504 272 264 256 8
+set 504 tone -14 -70 32 49
+set 504 color 138 215 0 12
+sprite 505 -
+set 505 bitmap cb_a
+set 505 x 300
+set 505 y 264
+set 505 z -1
+viewport 506 0 272 256 8
+set 506 color 195 109 58 227
+viewport 507 272 272 256 8
+set 507 tone -130 -100 -234 128
+set 507 color 161 243 29 255
+viewport 508 0 280 256 8
+set 508 tone 147 -112 143 16
+viewport 509 272 280 256 8
+set 509 tone -24 250 -225 0
+set 509 color 55 204 223 216
+viewport 510 0 288 256 8
+set 510 color 73 208 194 191
+viewport 511 272 288 256 8
+set 511 tone 28 24 -4 255
+set 511 color 110 197 129 27
+sprite 512 -
+set 512 bitmap cb_a
+set 512 x 300
+set 512 y 288
+set 512 z 1
+viewport 513 0 296 256 8
+set 513 tone -22 108 -51 128
+viewport 514 272 296 256 8
+set 514 tone 165 -39 -26 128
+set 514 color 122 90 9 255
+sprite 515 -
+set 515 bitmap cb_a
+set 515 x 300
+set 515 y 296
+set 515 z -1
+viewport 516 0 304 256 8
+set 516 color 113 210 255 94
+viewport 517 272 304 256 8
+set 517 tone 8 -145 203 255
+set 517 color 141 3 223 0
+viewport 518 0 312 256 8
+set 518 tone -235 26 180 0
+viewport 519 272 312 256 8
+set 519 tone 13 63 -248 233
+set 519 color 81 12 160 0
+viewport 520 0 320 256 8
+set 520 color 47 190 101 106
+viewport 521 272 320 256 8
+set 521 tone -60 127 -170 0
+set 521 color 88 92 32 255
+sprite 522 -
+set 522 bitmap cb_a
+set 522 x 300
+set 522 y 320
+set 522 z 1
+viewport 523 0 328 256 8
+set 523 tone -253 149 141 100
+viewport 524 272 328 256 8
+set 524 tone 224 -79 -229 133
+set 524 color 22 88 162 255
+sprite 525 -
+set 525 bitmap cb_a
+set 525 x 300
+set 525 y 328
+set 525 z -1
+viewport 526 0 336 256 8
+set 526 color 109 55 103 255
+viewport 527 272 336 256 8
+set 527 tone 21 -3 -227 128
+set 527 color 241 80 232 255
+viewport 528 0 344 256 8
+set 528 tone 116 -151 -42 255
+viewport 529 272 344 256 8
+set 529 tone -86 255 -148 128
+set 529 color 99 250 199 0
+viewport 530 0 352 256 8
+set 530 color 133 225 148 215
+viewport 531 272 352 256 8
+set 531 tone -131 -190 167 42
+set 531 color 24 21 176 0
+sprite 532 -
+set 532 bitmap cb_a
+set 532 x 300
+set 532 y 352
+set 532 z 1
+viewport 533 0 360 256 8
+set 533 tone -22 -82 171 210
+viewport 534 272 360 256 8
+set 534 tone -224 244 128 255
+set 534 color 152 67 254 0
+sprite 535 -
+set 535 bitmap cb_a
+set 535 x 300
+set 535 y 360
+set 535 z -1
+viewport 536 0 368 256 8
+set 536 color 32 233 46 40
+viewport 537 272 368 256 8
+set 537 tone -170 177 137 255
+set 537 color 186 243 0 255
+viewport 538 0 376 256 8
+set 538 tone 160 194 90 0
+viewport 539 272 376 256 8
+set 539 tone -8 -92 86 197
+set 539 color 36 6 42 59
+viewport 540 0 384 256 8
+set 540 color 233 220 191 187
+viewport 541 272 384 256 8
+set 541 tone -134 -6 -157 98
+set 541 color 82 167 119 255
+sprite 542 -
+set 542 bitmap cb_a
+set 542 x 300
+set 542 y 384
+set 542 z 1
+viewport 543 0 392 256 8
+set 543 tone 169 -255 -124 128
+viewport 544 272 392 256 8
+set 544 tone -27 225 204 0
+set 544 color 31 191 76 105
+sprite 545 -
+set 545 bitmap cb_a
+set 545 x 300
+set 545 y 392
+set 545 z -1
+viewport 546 0 400 256 8
+set 546 color 40 6 207 255
+viewport 547 272 400 256 8
+set 547 tone -244 195 -37 140
+set 547 color 148 142 149 31
+viewport 548 0 408 256 8
+set 548 tone 111 7 -195 255
+viewport 549 272 408 256 8
+set 549 tone -157 226 116 20
+set 549 color 193 252 60 229
+frame db4635dee06bee7f
+clear
+sprite 550 -
+set 550 bitmap bg
+set 550 z -1000
+viewport 551 0 0 256 8
+set 551 color 0 0 0 0
+flash 551 8 86 92 182 87
+viewport 552 0 8 256 8
+set 552 color 170 56 233 209
+sprite 553 552
+set 553 bitmap cb_a
+flash 552 4 151 202 103 255
+viewport 554 0 16 256 8
+set 554 color 160 80 171 0
+flash 554 5 43 83 134 116
+viewport 555 0 24 256 8
+set 555 color 0 0 0 0
+set 555 tone 144 24 202 164
+sprite 556 555
+set 556 bitmap cb_a
+flash 555 5 191 240 52 255
+viewport 557 0 32 256 8
+set 557 color 155 38 43 112
+flash 557 8 55 87 57 255
+viewport 558 0 40 256 8
+set 558 color 114 70 45 255
+sprite 559 558
+set 559 bitmap cb_a
+flash 558 5 157 255 68 254
+viewport 560 0 48 256 8
+set 560 color 0 0 0 0
+flash 560 4 103 156 76 213
+viewport 561 0 56 256 8
+set 561 color 167 79 231 0
+set 561 tone -169 -207 179 242
+sprite 562 561
+set 562 bitmap cb_a
+flash 561 4 60 63 27 255
+viewport 563 0 64 256 8
+set 563 color 207 201 105 255
+flash 563 8 3 130 255 111
+viewport 564 0 72 256 8
+set 564 color 0 0 0 0
+sprite 565 564
+set 565 bitmap cb_a
+flash 564 3 171 12 48 255
+viewport 566 0 80 256 8
+set 566 color 37 109 248 185
+flash 566 8 225 168 12 0
+viewport 567 0 88 256 8
+set 567 color 204 15 241 148
+set 567 tone 57 -119 -207 0
+sprite 568 567
+set 568 bitmap cb_a
+flash 567 3 169 206 69 128
+viewport 569 0 96 256 8
+set 569 color 0 0 0 0
+flash 569 4 nil
+viewport 570 0 104 256 8
+set 570 color 48 173 101 0
+sprite 571 570
+set 571 bitmap cb_a
+flash 570 3 46 228 176 255
+viewport 572 0 112 256 8
+set 572 color 108 30 81 255
+flash 572 3 255 52 81 0
+viewport 573 0 120 256 8
+set 573 color 0 0 0 0
+set 573 tone 0 -238 136 0
+sprite 574 573
+set 574 bitmap cb_a
+flash 573 8 148 145 121 255
+viewport 575 0 128 256 8
+set 575 color 55 138 104 0
+flash 575 4 168 51 197 184
+viewport 576 0 136 256 8
+set 576 color 36 254 109 0
+sprite 577 576
+set 577 bitmap cb_a
+flash 576 1 91 199 98 153
+viewport 578 0 144 256 8
+set 578 color 0 0 0 0
+flash 578 1 134 186 193 24
+viewport 579 0 152 256 8
+set 579 color 221 29 104 0
+set 579 tone -66 -240 -194 0
+sprite 580 579
+set 580 bitmap cb_a
+flash 579 5 26 72 239 255
+viewport 581 0 160 256 8
+set 581 color 31 111 49 204
+flash 581 3 224 69 110 63
+viewport 582 0 168 256 8
+set 582 color 0 0 0 0
+sprite 583 582
+set 583 bitmap cb_a
+flash 582 3 28 156 192 168
+viewport 584 0 176 256 8
+set 584 color 4 67 253 240
+flash 584 4 105 138 129 0
+viewport 585 0 184 256 8
+set 585 color 174 232 175 255
+set 585 tone 69 190 110 255
+sprite 586 585
+set 586 bitmap cb_a
+flash 585 4 38 160 94 0
+viewport 587 0 192 256 8
+set 587 color 0 0 0 0
+flash 587 1 232 114 12 255
+viewport 588 0 200 256 8
+set 588 color 221 57 195 255
+sprite 589 588
+set 589 bitmap cb_a
+flash 588 4 nil
+viewport 590 0 208 256 8
+set 590 color 97 251 230 255
+flash 590 4 191 99 159 201
+viewport 591 0 216 256 8
+set 591 color 0 0 0 0
+set 591 tone 110 40 20 0
+sprite 592 591
+set 592 bitmap cb_a
+flash 591 4 146 137 95 64
+viewport 593 0 224 256 8
+set 593 color 157 74 122 156
+flash 593 1 18 243 104 255
+viewport 594 0 232 256 8
+set 594 color 12 117 164 0
+sprite 595 594
+set 595 bitmap cb_a
+flash 594 5 231 247 232 185
+viewport 596 0 240 256 8
+set 596 color 0 0 0 0
+flash 596 3 147 124 163 139
+viewport 597 0 248 256 8
+set 597 color 36 152 35 63
+set 597 tone 135 -154 -121 51
+sprite 598 597
+set 598 bitmap cb_a
+flash 597 1 201 211 53 255
+viewport 599 0 256 256 8
+set 599 color 111 182 240 0
+flash 599 5 255 114 143 255
+viewport 600 0 264 256 8
+set 600 color 0 0 0 0
+sprite 601 600
+set 601 bitmap cb_a
+flash 600 8 230 245 50 0
+viewport 602 0 272 256 8
+set 602 color 208 243 204 167
+flash 602 4 249 195 233 152
+viewport 603 0 280 256 8
+set 603 color 31 71 62 97
+set 603 tone 176 74 -83 255
+sprite 604 603
+set 604 bitmap cb_a
+flash 603 3 113 112 240 98
+viewport 605 0 288 256 8
+set 605 color 0 0 0 0
+flash 605 1 128 7 189 165
+viewport 606 0 296 256 8
+set 606 color 35 238 107 142
+sprite 607 606
+set 607 bitmap cb_a
+flash 606 5 232 69 25 255
+viewport 608 0 304 256 8
+set 608 color 215 69 14 14
+flash 608 4 nil
+viewport 609 0 312 256 8
+set 609 color 0 0 0 0
+set 609 tone 79 -77 -103 88
+sprite 610 609
+set 610 bitmap cb_a
+flash 609 3 156 2 24 0
+viewport 611 0 320 256 8
+set 611 color 60 53 184 0
+flash 611 1 185 76 79 97
+viewport 612 0 328 256 8
+set 612 color 124 87 196 0
+sprite 613 612
+set 613 bitmap cb_a
+flash 612 1 131 67 244 108
+viewport 614 0 336 256 8
+set 614 color 0 0 0 0
+flash 614 1 17 46 51 133
+viewport 615 0 344 256 8
+set 615 color 221 44 178 106
+set 615 tone 159 208 92 47
+sprite 616 615
+set 616 bitmap cb_a
+flash 615 3 56 127 150 35
+viewport 617 0 352 256 8
+set 617 color 48 93 17 227
+flash 617 1 186 125 133 255
+viewport 618 0 360 256 8
+set 618 color 0 0 0 0
+sprite 619 618
+set 619 bitmap cb_a
+flash 618 5 182 46 107 255
+viewport 620 0 368 256 8
+set 620 color 203 35 163 220
+flash 620 5 106 55 74 21
+viewport 621 0 376 256 8
+set 621 color 199 65 0 225
+set 621 tone -211 192 69 87
+sprite 622 621
+set 622 bitmap cb_a
+flash 621 4 98 89 74 149
+viewport 623 0 384 256 8
+set 623 color 0 0 0 0
+flash 623 5 183 12 196 0
+viewport 624 0 392 256 8
+set 624 color 217 27 252 0
+sprite 625 624
+set 625 bitmap cb_a
+flash 624 1 31 3 133 255
+viewport 626 0 400 256 8
+set 626 color 146 195 24 16
+flash 626 1 22 36 113 248
+viewport 627 0 408 256 8
+set 627 color 0 0 0 0
+set 627 tone 203 17 98 37
+sprite 628 627
+set 628 bitmap cb_a
+flash 627 8 nil
+frame d79cdcc902926272
+update 551
+update 552
+update 554
+update 555
+update 557
+update 558
+update 560
+update 561
+update 563
+update 564
+update 566
+update 567
+update 569
+update 570
+update 572
+update 573
+update 575
+update 576
+update 578
+update 579
+update 581
+update 582
+update 584
+update 585
+update 587
+update 588
+update 590
+update 591
+update 593
+update 594
+update 596
+update 597
+update 599
+update 600
+update 602
+update 603
+update 605
+update 606
+update 608
+update 609
+update 611
+update 612
+update 614
+update 615
+update 617
+update 618
+update 620
+update 621
+update 623
+update 624
+update 626
+update 627
+frame 4ca6be1e134cbd9c
+update 551
+update 552
+update 554
+update 555
+update 557
+update 558
+update 560
+update 561
+update 563
+update 564
+update 566
+update 567
+update 569
+update 570
+update 572
+update 573
+update 575
+update 576
+update 578
+update 579
+update 581
+update 582
+update 584
+update 585
+update 587
+update 588
+update 590
+update 591
+update 593
+update 594
+update 596
+update 597
+update 599
+update 600
+update 602
+update 603
+update 605
+update 606
+update 608
+update 609
+update 611
+update 612
+update 614
+update 615
+update 617
+update 618
+update 620
+update 621
+update 623
+update 624
+update 626
+update 627
+frame 5d7484d49dfba0e8
+update 551
+update 552
+update 554
+update 555
+update 557
+update 558
+update 560
+update 561
+update 563
+update 564
+update 566
+update 567
+update 569
+update 570
+update 572
+update 573
+update 575
+update 576
+update 578
+update 579
+update 581
+update 582
+update 584
+update 585
+update 587
+update 588
+update 590
+update 591
+update 593
+update 594
+update 596
+update 597
+update 599
+update 600
+update 602
+update 603
+update 605
+update 606
+update 608
+update 609
+update 611
+update 612
+update 614
+update 615
+update 617
+update 618
+update 620
+update 621
+update 623
+update 624
+update 626
+update 627
+frame f6724358348c7a7e
+update 551
+update 552
+update 554
+update 555
+update 557
+update 558
+update 560
+update 561
+update 563
+update 564
+update 566
+update 567
+update 569
+update 570
+update 572
+update 573
+update 575
+update 576
+update 578
+update 579
+update 581
+update 582
+update 584
+update 585
+update 587
+update 588
+update 590
+update 591
+update 593
+update 594
+update 596
+update 597
+update 599
+update 600
+update 602
+update 603
+update 605
+update 606
+update 608
+update 609
+update 611
+update 612
+update 614
+update 615
+update 617
+update 618
+update 620
+update 621
+update 623
+update 624
+update 626
+update 627
+frame a2df1161c9a378e8
+update 551
+update 552
+update 554
+update 555
+update 557
+update 558
+update 560
+update 561
+update 563
+update 564
+update 566
+update 567
+update 569
+update 570
+update 572
+update 573
+update 575
+update 576
+update 578
+update 579
+update 581
+update 582
+update 584
+update 585
+update 587
+update 588
+update 590
+update 591
+update 593
+update 594
+update 596
+update 597
+update 599
+update 600
+update 602
+update 603
+update 605
+update 606
+update 608
+update 609
+update 611
+update 612
+update 614
+update 615
+update 617
+update 618
+update 620
+update 621
+update 623
+update 624
+update 626
+update 627
+frame 9f16247530e9655c
+clear
+topic flash
+sprite 1 -
+set 1 bitmap bg
+set 1 z -1000
+sprite 2 -
+set 2 bitmap cb_o
+set 2 y 0
+flash 2 8 255 0 0 255
+sprite 3 -
+set 3 bitmap cb_o
+set 3 y 8
+flash 3 5 0 255 0 128
+sprite 4 -
+set 4 bitmap cb_o
+set 4 y 16
+flash 4 4 nil
+sprite 5 -
+set 5 bitmap cb_o
+set 5 y 24
+set 5 color 0 0 255 100
+flash 5 10 255 255 255 200
+sprite 6 -
+set 6 bitmap cb_o
+set 6 y 32
+flash 6 1 255 0 0 255
+sprite 7 -
+set 7 bitmap cb_a
+set 7 y 40
+flash 7 6 255 255 0 255
+viewport 8 0 48 256 8
+sprite 9 8
+set 9 bitmap cb_o
+flash 8 8 255 0 0 255
+viewport 10 0 56 256 8
+sprite 11 10
+set 11 bitmap cb_o
+flash 10 4 nil
+viewport 12 0 64 256 8
+sprite 13 12
+set 13 bitmap cb_a
+flash 12 3 0 255 255 100
+sprite 14 -
+set 14 bitmap cb_o
+set 14 y 72
+set 14 tone 50 -50 0 128
+flash 14 8 255 0 0 255
+sprite 15 -
+set 15 bitmap cb_o
+set 15 y 80
+set 15 opacity 128
+flash 15 8 255 0 0 255
+sprite 16 -
+set 16 bitmap cb_o
+set 16 y 88
+flash 16 16 255 255 255 255
+sprite 17 -
+set 17 bitmap cb_o
+set 17 y 96
+flash 17 8 255 0 0 255
+sprite 18 -
+set 18 bitmap cb_o
+set 18 y 104
+flash 18 8 255 0 0 255
+sprite 19 -
+set 19 bitmap cb_o
+set 19 y 112
+set 19 blend_type 1
+flash 19 8 255 0 0 255
+sprite 20 -
+set 20 bitmap cb_o
+set 20 y 120
+flash 20 0 255 0 0 255
+sprite 21 -
+set 21 bitmap cb_o
+set 21 y 128
+set 21 color 0 0 255 128
+flash 21 6 255 255 255 128
+sprite 22 -
+set 22 bitmap cb_o
+set 22 y 136
+set 22 color 0 0 255 200
+flash 22 6 255 255 255 100
+sprite 23 -
+set 23 bitmap cb_o
+set 23 y 144
+flash 23 7 10 200 77 201
+sprite 24 -
+set 24 bitmap cb_a
+set 24 y 152
+set 24 blend_type 2
+set 24 opacity 180
+flash 24 9 90 20 177 250
+sprite 25 -
+set 25 bitmap cb_o
+set 25 y 160
+flash 25 10 255 0 0 127.9
+sprite 26 -
+set 26 bitmap cb_o
+set 26 y 168
+flash 26 0 nil
+sprite 27 -
+set 27 bitmap cb_o
+set 27 y 176
+flash 27 -3 0 255 0 255
+viewport 28 0 184 256 8
+set 28 color 0 0 255 128
+set 28 tone 40 -40 0 100
+sprite 29 28
+set 29 bitmap cb_o
+flash 28 6 255 255 0 200
+viewport 30 0 192 256 8
+flash 30 5 255 255 255 180
+frame fd3a98f7f8c09c6b
+update 2
+update 3
+update 4
+update 5
+update 6
+update 7
+update 14
+update 15
+update 16
+update 17
+update 19
+update 20
+update 21
+update 22
+update 23
+update 24
+update 25
+update 26
+update 27
+update 8
+update 10
+update 12
+update 28
+update 30
+frame ce10e261486d3ae4
+update 2
+update 3
+update 4
+update 5
+update 6
+update 7
+update 14
+update 15
+update 16
+update 17
+update 19
+update 20
+update 21
+update 22
+update 23
+update 24
+update 25
+update 26
+update 27
+update 8
+update 10
+update 12
+update 28
+update 30
+frame 6c737b14e3c55350
+update 2
+update 3
+update 4
+update 5
+update 6
+update 7
+update 14
+update 15
+update 16
+update 17
+update 19
+update 20
+update 21
+update 22
+update 23
+update 24
+update 25
+update 26
+update 27
+update 8
+update 10
+update 12
+update 28
+update 30
+frame 83648d6b71169959
+update 2
+update 3
+update 4
+update 5
+update 6
+update 7
+update 14
+update 15
+update 16
+update 17
+update 19
+update 20
+update 21
+update 22
+update 23
+update 24
+update 25
+update 26
+update 27
+update 8
+update 10
+update 12
+update 28
+update 30
+flash 17 4 0 0 255 255
+frame aa3289b7cd1061e9
+update 2
+update 3
+update 4
+update 5
+update 6
+update 7
+update 14
+update 15
+update 16
+update 17
+update 19
+update 20
+update 21
+update 22
+update 23
+update 24
+update 25
+update 26
+update 27
+update 8
+update 10
+update 12
+update 28
+update 30
+frame f7a07e100148c34c
+update 2
+update 3
+update 4
+update 5
+update 6
+update 7
+update 14
+update 15
+update 16
+update 17
+update 19
+update 20
+update 21
+update 22
+update 23
+update 24
+update 25
+update 26
+update 27
+update 8
+update 10
+update 12
+update 28
+update 30
+flash 4 2 nil
+frame 50ca5fd1e8b3c01a
+update 2
+update 3
+update 4
+update 5
+update 6
+update 7
+update 14
+update 15
+update 16
+update 17
+update 19
+update 20
+update 21
+update 22
+update 23
+update 24
+update 25
+update 26
+update 27
+update 8
+update 10
+update 12
+update 28
+update 30
+frame 73e45f12cee0011d
+update 2
+update 3
+update 4
+update 5
+update 6
+update 7
+update 14
+update 15
+update 16
+update 17
+update 19
+update 20
+update 21
+update 22
+update 23
+update 24
+update 25
+update 26
+update 27
+update 8
+update 10
+update 12
+update 28
+update 30
+frame 921727d5e6fad50c
+update 2
+update 3
+update 4
+update 5
+update 6
+update 7
+update 14
+update 15
+update 16
+update 17
+update 19
+update 20
+update 21
+update 22
+update 23
+update 24
+update 25
+update 26
+update 27
+update 8
+update 10
+update 12
+update 28
+update 30
+frame 00a9890c215d2542
+update 2
+update 3
+update 4
+update 5
+update 6
+update 7
+update 14
+update 15
+update 16
+update 17
+update 19
+update 20
+update 21
+update 22
+update 23
+update 24
+update 25
+update 26
+update 27
+update 8
+update 10
+update 12
+update 28
+update 30
+frame 25a68bf4110699b4
+update 2
+update 3
+update 4
+update 5
+update 6
+update 7
+update 14
+update 15
+update 16
+update 17
+update 19
+update 20
+update 21
+update 22
+update 23
+update 24
+update 25
+update 26
+update 27
+update 8
+update 10
+update 12
+update 28
+update 30
+frame a433ffdcbcaf89f4
+update 2
+update 3
+update 4
+update 5
+update 6
+update 7
+update 14
+update 15
+update 16
+update 17
+update 19
+update 20
+update 21
+update 22
+update 23
+update 24
+update 25
+update 26
+update 27
+update 8
+update 10
+update 12
+update 28
+update 30
+frame e0a80daa14a0dcd4
+update 2
+update 3
+update 4
+update 5
+update 6
+update 7
+update 14
+update 15
+update 16
+update 17
+update 19
+update 20
+update 21
+update 22
+update 23
+update 24
+update 25
+update 26
+update 27
+update 8
+update 10
+update 12
+update 28
+update 30
+frame 8f7c383bf7f82254
+clear
+clear
+topic plane
+viewport 1 4 6 119 87
+set 1 ox 7
+set 1 oy -11
+plane 2 1
+set 2 bitmap pat_24_16_a_3
+set 2 ox 24
+set 2 oy -777
+set 2 zoom_x 4.01
+set 2 zoom_y 3.3
+viewport 3 162 8 139 95
+set 3 ox 100
+set 3 oy 64
+plane 4 3
+set 4 bitmap pat_20_90_a_2
+set 4 ox 1000
+set 4 oy 0
+set 4 zoom_x 3.3
+set 4 zoom_y 4.01
+viewport 5 329 5 107 71
+set 5 ox 7
+set 5 oy 5
+plane 6 5
+set 6 bitmap pat_24_16_o_0
+set 6 ox 3
+set 6 oy 0
+set 6 zoom_x 0.7
+set 6 zoom_y 4.01
+viewport 7 6 122 124 89
+set 7 ox 7
+set 7 oy 5
+plane 8 7
+set 8 bitmap pat_24_16_o_0
+set 8 ox -5
+set 8 oy 2
+set 8 zoom_x 4.01
+set 8 zoom_y 2
+viewport 9 168 131 127 95
+set 9 ox 7
+set 9 oy 5
+plane 10 9
+set 10 bitmap pat_24_16_o_0
+set 10 ox 3
+set 10 oy 2
+set 10 zoom_x 3.3
+set 10 zoom_y 0.7
+viewport 11 332 122 133 91
+set 11 ox 100
+set 11 oy 5
+plane 12 11
+set 12 bitmap pat_20_90_a_2
+set 12 ox 0
+set 12 oy -7
+set 12 zoom_x 0.7
+set 12 zoom_y 4.01
+viewport 13 10 251 107 103
+set 13 ox -13
+set 13 oy 0
+plane 14 13
+set 14 bitmap pat_20_90_a_2
+set 14 ox 1000
+set 14 oy 15
+set 14 zoom_x 3.3
+set 14 zoom_y 2.5
+viewport 15 169 245 135 104
+set 15 ox 0
+set 15 oy -11
+plane 16 15
+set 16 bitmap pat_20_90_a_2
+set 16 ox -1000
+set 16 oy 777
+set 16 zoom_x 2
+set 16 zoom_y 2.5
+viewport 17 330 248 100 81
+set 17 ox 7
+set 17 oy 5
+plane 18 17
+set 18 bitmap pat_24_16_o_0
+set 18 ox -5
+set 18 oy 0
+set 18 zoom_x 1.3
+set 18 zoom_y 2
+frame 4dc6c9e852bd489b
+clear
+sprite 19 -
+set 19 bitmap bg
+set 19 z -1000
+viewport 20 9 9 113 77
+set 20 ox 100
+set 20 oy -11
+plane 21 20
+set 21 bitmap pat_24_16_o_0
+set 21 ox 1000
+set 21 oy 0
+set 21 zoom_x 1
+set 21 zoom_y 4.01
+viewport 22 166 2 130 91
+set 22 ox 0
+set 22 oy -11
+plane 23 22
+set 23 bitmap pat_20_90_a_2
+set 23 ox 3
+set 23 oy 0
+set 23 zoom_x 1.3
+set 23 zoom_y 1
+viewport 24 329 10 112 104
+set 24 ox -13
+set 24 oy 0
+plane 25 24
+set 25 bitmap pat_20_90_a_2
+set 25 ox 24
+set 25 oy 15
+set 25 zoom_x 1.5
+set 25 zoom_y 2
+viewport 26 12 124 108 94
+set 26 ox 100
+set 26 oy 5
+plane 27 26
+set 27 bitmap pat_24_16_o_0
+set 27 ox 24
+set 27 oy 16
+set 27 zoom_x 1.5
+set 27 zoom_y 1
+viewport 28 164 130 125 99
+set 28 ox 0
+set 28 oy 0
+plane 29 28
+set 29 bitmap pat_24_16_o_0
+set 29 ox -1000
+set 29 oy 15
+set 29 zoom_x 1
+set 29 zoom_y 0.5
+viewport 30 330 130 125 89
+set 30 ox 7
+set 30 oy 5
+plane 31 30
+set 31 bitmap pat_24_16_a_3
+set 31 ox 24
+set 31 oy 0
+set 31 zoom_x 2
+set 31 zoom_y 0.5
+viewport 32 7 245 131 91
+set 32 ox 0
+set 32 oy 5
+plane 33 32
+set 33 bitmap pat_24_16_a_3
+set 33 ox 0
+set 33 oy -7
+set 33 zoom_x 0.7
+set 33 zoom_y 1
+viewport 34 172 244 101 85
+set 34 ox 0
+set 34 oy 64
+plane 35 34
+set 35 bitmap pat_24_16_o_0
+set 35 ox 1000
+set 35 oy 2
+set 35 zoom_x 1.3
+set 35 zoom_y 1.5
+viewport 36 325 245 120 104
+set 36 ox 7
+set 36 oy 0
+plane 37 36
+set 37 bitmap pat_20_90_a_2
+set 37 ox 0
+set 37 oy -7
+set 37 zoom_x 4.01
+set 37 zoom_y 2.5
+frame 5d9497139006f18c
+clear
+viewport 38 6 11 138 74
+set 38 ox 0
+set 38 oy 0
+plane 39 38
+set 39 bitmap pat_24_16_o_0
+set 39 ox -1000
+set 39 oy 15
+set 39 zoom_x 4.01
+set 39 zoom_y 0.7
+set 39 opacity 255
+set 39 blend_type 2
+set 39 color 164 128 175 31
+set 39 tone -123 -130 -89 255
+viewport 40 169 9 127 84
+set 40 ox 7
+set 40 oy 5
+plane 41 40
+set 41 bitmap pat_24_16_a_3
+set 41 ox -5
+set 41 oy 0
+set 41 zoom_x 2
+set 41 zoom_y 3.3
+set 41 opacity 255
+set 41 blend_type 0
+set 41 color 43 255 75 88
+set 41 tone -135 -253 193 247
+viewport 42 331 7 115 93
+set 42 ox -13
+set 42 oy 64
+plane 43 42
+set 43 bitmap pat_24_16_a_3
+set 43 ox 0
+set 43 oy 0
+set 43 zoom_x 2
+set 43 zoom_y 2.5
+set 43 opacity 236
+set 43 blend_type 2
+set 43 color 89 103 176 0
+set 43 tone -114 -51 190 157
+viewport 44 3 122 106 99
+set 44 ox 0
+set 44 oy 0
+plane 45 44
+set 45 bitmap pat_24_16_a_3
+set 45 ox 1000
+set 45 oy -7
+set 45 zoom_x 1.5
+set 45 zoom_y 1.5
+set 45 opacity 61
+set 45 blend_type 1
+set 45 color 55 31 149 226
+set 45 tone -137 -106 42 0
+viewport 46 166 129 122 93
+set 46 ox -13
+set 46 oy -11
+plane 47 46
+set 47 bitmap pat_20_90_a_2
+set 47 ox 1000
+set 47 oy 2
+set 47 zoom_x 1.5
+set 47 zoom_y 2
+set 47 opacity 47
+set 47 blend_type 1
+set 47 color 238 245 53 206
+set 47 tone 63 -44 14 255
+viewport 48 327 127 102 105
+set 48 ox 0
+set 48 oy 0
+plane 49 48
+set 49 bitmap pat_20_90_a_2
+set 49 ox 23
+set 49 oy 16
+set 49 zoom_x 3.3
+set 49 zoom_y 1
+set 49 opacity 178
+set 49 blend_type 2
+set 49 color 74 45 37 0
+set 49 tone 206 141 187 255
+viewport 50 4 252 137 81
+set 50 ox 100
+set 50 oy 5
+plane 51 50
+set 51 bitmap pat_24_16_o_0
+set 51 ox 24
+set 51 oy -7
+set 51 zoom_x 1
+set 51 zoom_y 3.3
+set 51 opacity 234
+set 51 blend_type 1
+set 51 color 8 21 57 255
+set 51 tone 210 -47 7 128
+viewport 52 170 242 140 75
+set 52 ox 0
+set 52 oy 0
+plane 53 52
+set 53 bitmap pat_20_90_a_2
+set 53 ox 3
+set 53 oy 777
+set 53 zoom_x 2.5
+set 53 zoom_y 1.5
+set 53 opacity 171
+set 53 blend_type 2
+set 53 color 106 106 231 179
+set 53 tone 197 -97 -194 38
+viewport 54 322 244 134 77
+set 54 ox 0
+set 54 oy 0
+plane 55 54
+set 55 bitmap pat_24_16_o_0
+set 55 ox -1000
+set 55 oy 0
+set 55 zoom_x 1
+set 55 zoom_y 1.3
+set 55 opacity 178
+set 55 blend_type 2
+set 55 color 141 66 236 185
+set 55 tone 163 -182 -202 77
+frame 154db5d189cd0bd9
+clear
+sprite 56 -
+set 56 bitmap bg
+set 56 z -1000
+viewport 57 12 7 113 84
+set 57 ox -13
+set 57 oy 64
+plane 58 57
+set 58 bitmap pat_20_90_a_2
+set 58 ox 1000
+set 58 oy 2
+set 58 zoom_x 4.01
+set 58 zoom_y 1
+set 58 opacity 213
+set 58 blend_type 2
+set 58 color 27 222 43 255
+set 58 tone 216 -193 -215 128
+viewport 59 166 9 103 97
+set 59 ox 0
+set 59 oy 0
+plane 60 59
+set 60 bitmap pat_24_16_o_0
+set 60 ox 3
+set 60 oy 15
+set 60 zoom_x 1
+set 60 zoom_y 0.7
+set 60 opacity 255
+set 60 blend_type 1
+set 60 color 135 169 174 179
+set 60 tone -203 144 80 0
+viewport 61 329 10 113 76
+set 61 ox -13
+set 61 oy 0
+plane 62 61
+set 62 bitmap pat_20_90_a_2
+set 62 ox 3
+set 62 oy 0
+set 62 zoom_x 1
+set 62 zoom_y 4.01
+set 62 opacity 116
+set 62 blend_type 2
+set 62 color 246 197 207 0
+set 62 tone 190 237 -240 53
+viewport 63 5 130 107 89
+set 63 ox 7
+set 63 oy 64
+plane 64 63
+set 64 bitmap pat_24_16_o_0
+set 64 ox 23
+set 64 oy -777
+set 64 zoom_x 0.5
+set 64 zoom_y 0.5
+set 64 opacity 255
+set 64 blend_type 0
+set 64 color 197 189 253 255
+set 64 tone 0 -60 184 0
+viewport 65 170 132 145 81
+set 65 ox 0
+set 65 oy -11
+plane 66 65
+set 66 bitmap pat_24_16_a_3
+set 66 ox -5
+set 66 oy 2
+set 66 zoom_x 3.3
+set 66 zoom_y 4.01
+set 66 opacity 255
+set 66 blend_type 1
+set 66 color 107 152 221 0
+set 66 tone -140 -229 -155 233
+viewport 67 322 129 144 80
+set 67 ox 0
+set 67 oy 5
+plane 68 67
+set 68 bitmap pat_24_16_a_3
+set 68 ox 0
+set 68 oy -777
+set 68 zoom_x 1
+set 68 zoom_y 3.3
+set 68 opacity 191
+set 68 blend_type 2
+set 68 color 218 221 96 0
+set 68 tone 196 186 -232 255
+viewport 69 11 252 101 99
+set 69 ox 7
+set 69 oy 0
+plane 70 69
+set 70 bitmap pat_24_16_o_0
+set 70 ox 3
+set 70 oy -777
+set 70 zoom_x 1
+set 70 zoom_y 2.5
+set 70 opacity 255
+set 70 blend_type 1
+set 70 color 42 148 95 0
+set 70 tone -9 -5 -87 94
+viewport 71 165 250 120 71
+set 71 ox 0
+set 71 oy 0
+plane 72 71
+set 72 bitmap pat_24_16_a_3
+set 72 ox -5
+set 72 oy 16
+set 72 zoom_x 0.7
+set 72 zoom_y 0.5
+set 72 opacity 255
+set 72 blend_type 2
+set 72 color 80 243 142 255
+set 72 tone -74 80 -155 0
+viewport 73 330 242 141 71
+set 73 ox -13
+set 73 oy 0
+plane 74 73
+set 74 bitmap pat_20_90_a_2
+set 74 ox -1000
+set 74 oy 16
+set 74 zoom_x 4.01
+set 74 zoom_y 2.5
+set 74 opacity 255
+set 74 blend_type 2
+set 74 color 65 250 180 255
+set 74 tone 110 18 -219 212
+frame eb942be80961793e
+clear
+sprite 75 -
+set 75 bitmap bg
+set 75 z -1000
+plane 76 -
+set 76 bitmap pat_24_16_o_0
+set 76 ox 0
+set 76 oy 0
+set 76 zoom_x 1
+set 76 zoom_y 1
+set 76 opacity 255
+frame 2a27ed4a013b27e5
+clear
+sprite 77 -
+set 77 bitmap bg
+set 77 z -1000
+plane 78 -
+set 78 bitmap pat_20_90_a_2
+set 78 ox -7
+set 78 oy 33
+set 78 zoom_x 2.5
+set 78 zoom_y 1.5
+set 78 opacity 255
+frame 465dab7f051c54ce
+clear
+sprite 79 -
+set 79 bitmap bg
+set 79 z -1000
+plane 80 -
+set 80 bitmap pat_24_16_a_3
+set 80 ox 5
+set 80 oy 5
+set 80 zoom_x 3.3
+set 80 zoom_y 0.7
+set 80 opacity 200
+frame 96fb207dcc4cc305
+clear
+sprite 81 -
+set 81 bitmap bg
+set 81 z -1000
+plane 82 -
+set 82 bitmap bg
+set 82 ox 10
+set 82 oy 20
+set 82 zoom_x 1
+set 82 zoom_y 1
+set 82 opacity 255
+frame 455a03eab9101da5
+clear
+sprite 83 -
+set 83 bitmap bg
+set 83 z -1000
+plane 84 -
+set 84 bitmap bg
+set 84 ox -100
+set 84 oy 500
+set 84 zoom_x 0.5
+set 84 zoom_y 2
+set 84 opacity 128
+frame 42672393620fe366
+clear
+sprite 85 -
+set 85 bitmap bg
+set 85 z -1000
+viewport 86 5 5 140 100
+plane 87 86
+set 87 bitmap pat_24_16_o_0
+set 87 zoom_x 0
+set 87 zoom_y 1
+viewport 88 165 5 140 100
+plane 89 88
+set 89 bitmap pat_24_16_o_0
+set 89 zoom_x 1
+set 89 zoom_y 0
+viewport 90 325 5 140 100
+plane 91 90
+set 91 bitmap pat_24_16_o_0
+set 91 zoom_x 0.01
+set 91 zoom_y 1
+viewport 92 5 125 140 100
+plane 93 92
+set 93 bitmap pat_24_16_o_0
+set 93 zoom_x 1
+set 93 zoom_y 0.01
+viewport 94 165 125 140 100
+plane 95 94
+set 95 bitmap pat_24_16_o_0
+set 95 zoom_x 0.05
+set 95 zoom_y 0.07
+viewport 96 325 125 140 100
+plane 97 96
+set 97 bitmap pat_24_16_o_0
+set 97 zoom_x 1
+set 97 zoom_y 1
+frame e20f0e8590465ded
+clear
+clear
+topic size2
+viewport 1 0 0 270 8
+plane 2 1
+set 2 bitmap colx_100_8
+set 2 zoom_x 0.29
+viewport 3 0 8 270 8
+plane 4 3
+set 4 bitmap colx_180_8
+set 4 zoom_x 0.35
+viewport 5 0 16 270 8
+plane 6 5
+set 6 bitmap colx_150_8
+set 6 zoom_x 0.42
+viewport 7 0 24 270 8
+plane 8 7
+set 8 bitmap colx_100_8
+set 8 zoom_x 0.53
+viewport 9 0 32 270 8
+plane 10 9
+set 10 bitmap colx_100_8
+set 10 zoom_x 0.57
+viewport 11 0 40 270 8
+plane 12 11
+set 12 bitmap colx_50_8
+set 12 zoom_x 0.58
+viewport 13 0 48 270 8
+plane 14 13
+set 14 bitmap colx_100_8
+set 14 zoom_x 0.58
+viewport 15 0 56 270 8
+plane 16 15
+set 16 bitmap colx_100_8
+set 16 zoom_x 0.59
+viewport 17 0 64 270 8
+plane 18 17
+set 18 bitmap colx_180_8
+set 18 zoom_x 0.65
+viewport 19 0 72 270 8
+plane 20 19
+set 20 bitmap colx_90_8
+set 20 zoom_x 0.7
+viewport 21 0 80 270 8
+plane 22 21
+set 22 bitmap colx_170_8
+set 22 zoom_x 0.7
+viewport 23 0 88 270 8
+plane 24 23
+set 24 bitmap colx_180_8
+set 24 zoom_x 0.7
+viewport 25 0 96 270 8
+plane 26 25
+set 26 bitmap colx_150_8
+set 26 zoom_x 0.78
+viewport 27 0 104 270 8
+plane 28 27
+set 28 bitmap colx_150_8
+set 28 zoom_x 0.82
+viewport 29 0 112 270 8
+plane 30 29
+set 30 bitmap colx_75_8
+set 30 zoom_x 0.84
+viewport 31 0 120 270 8
+plane 32 31
+set 32 bitmap colx_150_8
+set 32 zoom_x 0.84
+viewport 33 0 128 270 8
+plane 34 33
+set 34 bitmap colx_60_8
+set 34 zoom_x 1.05
+viewport 35 0 136 270 8
+plane 36 35
+set 36 bitmap colx_100_8
+set 36 zoom_x 1.05
+viewport 37 0 144 270 8
+plane 38 37
+set 38 bitmap colx_120_8
+set 38 zoom_x 1.05
+viewport 39 0 152 270 8
+plane 40 39
+set 40 bitmap colx_180_8
+set 40 zoom_x 1.05
+viewport 41 0 160 270 8
+plane 42 41
+set 42 bitmap colx_50_8
+set 42 zoom_x 1.06
+viewport 43 0 168 270 8
+plane 44 43
+set 44 bitmap colx_100_8
+set 44 zoom_x 1.06
+viewport 45 0 176 270 8
+plane 46 45
+set 46 bitmap colx_150_8
+set 46 zoom_x 1.06
+viewport 47 0 184 270 8
+plane 48 47
+set 48 bitmap colx_100_8
+set 48 zoom_x 1.13
+viewport 49 0 192 270 8
+plane 50 49
+set 50 bitmap colx_50_8
+set 50 zoom_x 1.14
+viewport 51 0 200 270 8
+plane 52 51
+set 52 bitmap colx_100_8
+set 52 zoom_x 1.14
+viewport 53 0 208 270 8
+plane 54 53
+set 54 bitmap colx_150_8
+set 54 zoom_x 1.14
+viewport 55 0 216 270 8
+plane 56 55
+set 56 bitmap colx_100_8
+set 56 zoom_x 1.15
+viewport 57 0 224 270 8
+plane 58 57
+set 58 bitmap colx_180_8
+set 58 zoom_x 1.15
+viewport 59 0 232 270 8
+plane 60 59
+set 60 bitmap colx_25_8
+set 60 zoom_x 1.16
+viewport 61 0 240 270 8
+plane 62 61
+set 62 bitmap colx_50_8
+set 62 zoom_x 1.16
+viewport 63 0 248 270 8
+plane 64 63
+set 64 bitmap colx_100_8
+set 64 zoom_x 1.16
+viewport 65 0 256 270 8
+plane 66 65
+set 66 bitmap colx_100_8
+set 66 zoom_x 1.17
+viewport 67 0 264 270 8
+plane 68 67
+set 68 bitmap colx_50_8
+set 68 zoom_x 1.18
+viewport 69 0 272 270 8
+plane 70 69
+set 70 bitmap colx_100_8
+set 70 zoom_x 1.18
+viewport 71 0 280 270 8
+plane 72 71
+set 72 bitmap colx_150_8
+set 72 zoom_x 1.18
+viewport 73 0 288 270 8
+plane 74 73
+set 74 bitmap colx_90_8
+set 74 zoom_x 1.3
+viewport 75 0 296 270 8
+plane 76 75
+set 76 bitmap colx_170_8
+set 76 zoom_x 1.3
+viewport 77 0 304 270 8
+plane 78 77
+set 78 bitmap colx_180_8
+set 78 zoom_x 1.3
+viewport 79 0 312 270 8
+plane 80 79
+set 80 bitmap colx_190_8
+set 80 zoom_x 1.3
+viewport 81 0 320 270 8
+plane 82 81
+set 82 bitmap colx_150_8
+set 82 zoom_x 1.38
+viewport 83 0 328 270 8
+plane 84 83
+set 84 bitmap colx_45_8
+set 84 zoom_x 1.4
+viewport 85 0 336 270 8
+plane 86 85
+set 86 bitmap colx_85_8
+set 86 zoom_x 1.4
+viewport 87 0 344 270 8
+plane 88 87
+set 88 bitmap colx_90_8
+set 88 zoom_x 1.4
+viewport 89 0 352 270 8
+plane 90 89
+set 90 bitmap colx_165_8
+set 90 zoom_x 1.4
+viewport 91 0 360 270 8
+plane 92 91
+set 92 bitmap colx_170_8
+set 92 zoom_x 1.4
+viewport 93 0 368 270 8
+plane 94 93
+set 94 bitmap colx_175_8
+set 94 zoom_x 1.4
+viewport 95 0 376 270 8
+plane 96 95
+set 96 bitmap colx_75_8
+set 96 zoom_x 1.56
+viewport 97 0 384 270 8
+plane 98 97
+set 98 bitmap colx_150_8
+set 98 zoom_x 1.56
+viewport 99 0 392 270 8
+plane 100 99
+set 100 bitmap colx_75_8
+set 100 zoom_x 1.64
+viewport 101 0 400 270 8
+plane 102 101
+set 102 bitmap colx_150_8
+set 102 zoom_x 1.64
+viewport 103 0 408 270 8
+plane 104 103
+set 104 bitmap colx_75_8
+set 104 zoom_x 1.68
+frame a83a4d070fbdf325
+clear
+viewport 105 0 0 270 8
+plane 106 105
+set 106 bitmap colx_100_8
+set 106 zoom_x 2.01
+viewport 107 0 8 270 8
+plane 108 107
+set 108 bitmap colx_100_8
+set 108 zoom_x 2.03
+viewport 109 0 16 270 8
+plane 110 109
+set 110 bitmap colx_60_8
+set 110 zoom_x 2.05
+viewport 111 0 24 270 8
+plane 112 111
+set 112 bitmap colx_100_8
+set 112 zoom_x 2.05
+viewport 113 0 32 270 8
+plane 114 113
+set 114 bitmap colx_120_8
+set 114 zoom_x 2.05
+viewport 115 0 40 270 8
+plane 116 115
+set 116 bitmap colx_100_8
+set 116 zoom_x 2.07
+viewport 117 0 48 270 8
+plane 118 117
+set 118 bitmap colx_100_8
+set 118 zoom_x 2.09
+viewport 119 0 56 270 8
+plane 120 119
+set 120 bitmap colx_30_8
+set 120 zoom_x 2.1
+viewport 121 0 64 270 8
+plane 122 121
+set 122 bitmap colx_50_8
+set 122 zoom_x 2.1
+viewport 123 0 72 270 8
+plane 124 123
+set 124 bitmap colx_60_8
+set 124 zoom_x 2.1
+viewport 125 0 80 270 8
+plane 126 125
+set 126 bitmap colx_90_8
+set 126 zoom_x 2.1
+viewport 127 0 88 270 8
+plane 128 127
+set 128 bitmap colx_100_8
+set 128 zoom_x 2.1
+viewport 129 0 96 270 8
+plane 130 129
+set 130 bitmap colx_110_8
+set 130 zoom_x 2.1
+viewport 131 0 104 270 8
+plane 132 131
+set 132 bitmap colx_100_8
+set 132 zoom_x 2.11
+viewport 133 0 112 270 8
+plane 134 133
+set 134 bitmap colx_25_8
+set 134 zoom_x 2.12
+viewport 135 0 120 270 8
+plane 136 135
+set 136 bitmap colx_50_8
+set 136 zoom_x 2.12
+viewport 137 0 128 270 8
+plane 138 137
+set 138 bitmap colx_75_8
+set 138 zoom_x 2.12
+viewport 139 0 136 270 8
+plane 140 139
+set 140 bitmap colx_100_8
+set 140 zoom_x 2.12
+viewport 141 0 144 270 8
+plane 142 141
+set 142 bitmap colx_50_8
+set 142 zoom_x 2.26
+viewport 143 0 152 270 8
+plane 144 143
+set 144 bitmap colx_100_8
+set 144 zoom_x 2.26
+viewport 145 0 160 270 8
+plane 146 145
+set 146 bitmap colx_25_8
+set 146 zoom_x 2.28
+viewport 147 0 168 270 8
+plane 148 147
+set 148 bitmap colx_50_8
+set 148 zoom_x 2.28
+viewport 149 0 176 270 8
+plane 150 149
+set 150 bitmap colx_75_8
+set 150 zoom_x 2.28
+viewport 151 0 184 270 8
+plane 152 151
+set 152 bitmap colx_100_8
+set 152 zoom_x 2.28
+viewport 153 0 192 270 8
+plane 154 153
+set 154 bitmap colx_50_8
+set 154 zoom_x 2.3
+viewport 155 0 200 270 8
+plane 156 155
+set 156 bitmap colx_90_8
+set 156 zoom_x 2.3
+viewport 157 0 208 270 8
+plane 158 157
+set 158 bitmap colx_100_8
+set 158 zoom_x 2.3
+viewport 159 0 216 270 8
+plane 160 159
+set 160 bitmap colx_25_8
+set 160 zoom_x 2.32
+viewport 161 0 224 270 8
+plane 162 161
+set 162 bitmap colx_50_8
+set 162 zoom_x 2.32
+viewport 163 0 232 270 8
+plane 164 163
+set 164 bitmap colx_100_8
+set 164 zoom_x 2.32
+viewport 165 0 240 270 8
+plane 166 165
+set 166 bitmap colx_50_8
+set 166 zoom_x 2.34
+viewport 167 0 248 270 8
+plane 168 167
+set 168 bitmap colx_100_8
+set 168 zoom_x 2.34
+viewport 169 0 256 270 8
+plane 170 169
+set 170 bitmap colx_100_8
+set 170 zoom_x 2.35
+viewport 171 0 264 270 8
+plane 172 171
+set 172 bitmap colx_25_8
+set 172 zoom_x 2.36
+viewport 173 0 272 270 8
+plane 174 173
+set 174 bitmap colx_50_8
+set 174 zoom_x 2.36
+viewport 175 0 280 270 8
+plane 176 175
+set 176 bitmap colx_75_8
+set 176 zoom_x 2.36
+viewport 177 0 288 270 8
+plane 178 177
+set 178 bitmap colx_100_8
+set 178 zoom_x 2.36
+viewport 179 0 296 270 8
+plane 180 179
+set 180 bitmap colx_100_8
+set 180 zoom_x 2.37
+viewport 181 0 304 270 8
+plane 182 181
+set 182 bitmap colx_45_8
+set 182 zoom_x 2.6
+viewport 183 0 312 270 8
+plane 184 183
+set 184 bitmap colx_85_8
+set 184 zoom_x 2.6
+viewport 185 0 320 270 8
+plane 186 185
+set 186 bitmap colx_90_8
+set 186 zoom_x 2.6
+viewport 187 0 328 270 8
+plane 188 187
+set 188 bitmap colx_95_8
+set 188 zoom_x 2.6
+viewport 189 0 336 270 8
+plane 190 189
+set 190 bitmap colx_75_8
+set 190 zoom_x 2.76
+viewport 191 0 344 270 8
+plane 192 191
+set 192 bitmap colx_45_8
+set 192 zoom_x 2.8
+viewport 193 0 352 270 8
+plane 194 193
+set 194 bitmap colx_85_8
+set 194 zoom_x 2.8
+viewport 195 0 360 270 8
+plane 196 195
+set 196 bitmap colx_75_8
+set 196 zoom_x 3.12
+viewport 197 0 368 270 8
+plane 198 197
+set 198 bitmap colx_75_8
+set 198 zoom_x 3.28
+frame a4afd722813ac3a5
+clear
+viewport 199 0 0 8 260
+plane 200 199
+set 200 bitmap rowy_8_100
+set 200 zoom_y 0.29
+viewport 201 8 0 8 260
+plane 202 201
+set 202 bitmap rowy_8_180
+set 202 zoom_y 0.35
+viewport 203 16 0 8 260
+plane 204 203
+set 204 bitmap rowy_8_150
+set 204 zoom_y 0.42
+viewport 205 24 0 8 260
+plane 206 205
+set 206 bitmap rowy_8_100
+set 206 zoom_y 0.53
+viewport 207 32 0 8 260
+plane 208 207
+set 208 bitmap rowy_8_100
+set 208 zoom_y 0.57
+viewport 209 40 0 8 260
+plane 210 209
+set 210 bitmap rowy_8_50
+set 210 zoom_y 0.58
+viewport 211 48 0 8 260
+plane 212 211
+set 212 bitmap rowy_8_100
+set 212 zoom_y 0.58
+viewport 213 56 0 8 260
+plane 214 213
+set 214 bitmap rowy_8_100
+set 214 zoom_y 0.59
+viewport 215 64 0 8 260
+plane 216 215
+set 216 bitmap rowy_8_180
+set 216 zoom_y 0.65
+viewport 217 72 0 8 260
+plane 218 217
+set 218 bitmap rowy_8_90
+set 218 zoom_y 0.7
+viewport 219 80 0 8 260
+plane 220 219
+set 220 bitmap rowy_8_170
+set 220 zoom_y 0.7
+viewport 221 88 0 8 260
+plane 222 221
+set 222 bitmap rowy_8_180
+set 222 zoom_y 0.7
+viewport 223 96 0 8 260
+plane 224 223
+set 224 bitmap rowy_8_150
+set 224 zoom_y 0.78
+viewport 225 104 0 8 260
+plane 226 225
+set 226 bitmap rowy_8_150
+set 226 zoom_y 0.82
+viewport 227 112 0 8 260
+plane 228 227
+set 228 bitmap rowy_8_75
+set 228 zoom_y 0.84
+viewport 229 120 0 8 260
+plane 230 229
+set 230 bitmap rowy_8_150
+set 230 zoom_y 0.84
+viewport 231 128 0 8 260
+plane 232 231
+set 232 bitmap rowy_8_60
+set 232 zoom_y 1.05
+viewport 233 136 0 8 260
+plane 234 233
+set 234 bitmap rowy_8_100
+set 234 zoom_y 1.05
+viewport 235 144 0 8 260
+plane 236 235
+set 236 bitmap rowy_8_120
+set 236 zoom_y 1.05
+viewport 237 152 0 8 260
+plane 238 237
+set 238 bitmap rowy_8_180
+set 238 zoom_y 1.05
+viewport 239 160 0 8 260
+plane 240 239
+set 240 bitmap rowy_8_50
+set 240 zoom_y 1.06
+viewport 241 168 0 8 260
+plane 242 241
+set 242 bitmap rowy_8_100
+set 242 zoom_y 1.06
+viewport 243 176 0 8 260
+plane 244 243
+set 244 bitmap rowy_8_150
+set 244 zoom_y 1.06
+viewport 245 184 0 8 260
+plane 246 245
+set 246 bitmap rowy_8_100
+set 246 zoom_y 1.13
+viewport 247 192 0 8 260
+plane 248 247
+set 248 bitmap rowy_8_50
+set 248 zoom_y 1.14
+viewport 249 200 0 8 260
+plane 250 249
+set 250 bitmap rowy_8_100
+set 250 zoom_y 1.14
+viewport 251 208 0 8 260
+plane 252 251
+set 252 bitmap rowy_8_150
+set 252 zoom_y 1.14
+viewport 253 216 0 8 260
+plane 254 253
+set 254 bitmap rowy_8_100
+set 254 zoom_y 1.15
+viewport 255 224 0 8 260
+plane 256 255
+set 256 bitmap rowy_8_180
+set 256 zoom_y 1.15
+viewport 257 232 0 8 260
+plane 258 257
+set 258 bitmap rowy_8_25
+set 258 zoom_y 1.16
+viewport 259 240 0 8 260
+plane 260 259
+set 260 bitmap rowy_8_50
+set 260 zoom_y 1.16
+viewport 261 248 0 8 260
+plane 262 261
+set 262 bitmap rowy_8_100
+set 262 zoom_y 1.16
+viewport 263 256 0 8 260
+plane 264 263
+set 264 bitmap rowy_8_100
+set 264 zoom_y 1.17
+viewport 265 264 0 8 260
+plane 266 265
+set 266 bitmap rowy_8_50
+set 266 zoom_y 1.18
+frame f3e472c208d8ba95
+clear
+viewport 267 0 0 8 260
+plane 268 267
+set 268 bitmap rowy_8_100
+set 268 zoom_y 1.18
+viewport 269 8 0 8 260
+plane 270 269
+set 270 bitmap rowy_8_150
+set 270 zoom_y 1.18
+viewport 271 16 0 8 260
+plane 272 271
+set 272 bitmap rowy_8_90
+set 272 zoom_y 1.3
+viewport 273 24 0 8 260
+plane 274 273
+set 274 bitmap rowy_8_170
+set 274 zoom_y 1.3
+viewport 275 32 0 8 260
+plane 276 275
+set 276 bitmap rowy_8_180
+set 276 zoom_y 1.3
+viewport 277 40 0 8 260
+plane 278 277
+set 278 bitmap rowy_8_190
+set 278 zoom_y 1.3
+viewport 279 48 0 8 260
+plane 280 279
+set 280 bitmap rowy_8_150
+set 280 zoom_y 1.38
+viewport 281 56 0 8 260
+plane 282 281
+set 282 bitmap rowy_8_45
+set 282 zoom_y 1.4
+viewport 283 64 0 8 260
+plane 284 283
+set 284 bitmap rowy_8_85
+set 284 zoom_y 1.4
+viewport 285 72 0 8 260
+plane 286 285
+set 286 bitmap rowy_8_90
+set 286 zoom_y 1.4
+viewport 287 80 0 8 260
+plane 288 287
+set 288 bitmap rowy_8_165
+set 288 zoom_y 1.4
+viewport 289 88 0 8 260
+plane 290 289
+set 290 bitmap rowy_8_170
+set 290 zoom_y 1.4
+viewport 291 96 0 8 260
+plane 292 291
+set 292 bitmap rowy_8_175
+set 292 zoom_y 1.4
+viewport 293 104 0 8 260
+plane 294 293
+set 294 bitmap rowy_8_75
+set 294 zoom_y 1.56
+viewport 295 112 0 8 260
+plane 296 295
+set 296 bitmap rowy_8_150
+set 296 zoom_y 1.56
+viewport 297 120 0 8 260
+plane 298 297
+set 298 bitmap rowy_8_75
+set 298 zoom_y 1.64
+viewport 299 128 0 8 260
+plane 300 299
+set 300 bitmap rowy_8_150
+set 300 zoom_y 1.64
+viewport 301 136 0 8 260
+plane 302 301
+set 302 bitmap rowy_8_75
+set 302 zoom_y 1.68
+viewport 303 144 0 8 260
+plane 304 303
+set 304 bitmap rowy_8_100
+set 304 zoom_y 2.01
+viewport 305 152 0 8 260
+plane 306 305
+set 306 bitmap rowy_8_100
+set 306 zoom_y 2.03
+viewport 307 160 0 8 260
+plane 308 307
+set 308 bitmap rowy_8_60
+set 308 zoom_y 2.05
+viewport 309 168 0 8 260
+plane 310 309
+set 310 bitmap rowy_8_100
+set 310 zoom_y 2.05
+viewport 311 176 0 8 260
+plane 312 311
+set 312 bitmap rowy_8_120
+set 312 zoom_y 2.05
+viewport 313 184 0 8 260
+plane 314 313
+set 314 bitmap rowy_8_100
+set 314 zoom_y 2.07
+viewport 315 192 0 8 260
+plane 316 315
+set 316 bitmap rowy_8_100
+set 316 zoom_y 2.09
+viewport 317 200 0 8 260
+plane 318 317
+set 318 bitmap rowy_8_30
+set 318 zoom_y 2.1
+viewport 319 208 0 8 260
+plane 320 319
+set 320 bitmap rowy_8_50
+set 320 zoom_y 2.1
+viewport 321 216 0 8 260
+plane 322 321
+set 322 bitmap rowy_8_60
+set 322 zoom_y 2.1
+viewport 323 224 0 8 260
+plane 324 323
+set 324 bitmap rowy_8_90
+set 324 zoom_y 2.1
+viewport 325 232 0 8 260
+plane 326 325
+set 326 bitmap rowy_8_100
+set 326 zoom_y 2.1
+viewport 327 240 0 8 260
+plane 328 327
+set 328 bitmap rowy_8_110
+set 328 zoom_y 2.1
+viewport 329 248 0 8 260
+plane 330 329
+set 330 bitmap rowy_8_100
+set 330 zoom_y 2.11
+viewport 331 256 0 8 260
+plane 332 331
+set 332 bitmap rowy_8_25
+set 332 zoom_y 2.12
+viewport 333 264 0 8 260
+plane 334 333
+set 334 bitmap rowy_8_50
+set 334 zoom_y 2.12
+frame de6004d285f33b85
+clear
+viewport 335 0 0 8 260
+plane 336 335
+set 336 bitmap rowy_8_75
+set 336 zoom_y 2.12
+viewport 337 8 0 8 260
+plane 338 337
+set 338 bitmap rowy_8_100
+set 338 zoom_y 2.12
+viewport 339 16 0 8 260
+plane 340 339
+set 340 bitmap rowy_8_50
+set 340 zoom_y 2.26
+viewport 341 24 0 8 260
+plane 342 341
+set 342 bitmap rowy_8_100
+set 342 zoom_y 2.26
+viewport 343 32 0 8 260
+plane 344 343
+set 344 bitmap rowy_8_25
+set 344 zoom_y 2.28
+viewport 345 40 0 8 260
+plane 346 345
+set 346 bitmap rowy_8_50
+set 346 zoom_y 2.28
+viewport 347 48 0 8 260
+plane 348 347
+set 348 bitmap rowy_8_75
+set 348 zoom_y 2.28
+viewport 349 56 0 8 260
+plane 350 349
+set 350 bitmap rowy_8_100
+set 350 zoom_y 2.28
+viewport 351 64 0 8 260
+plane 352 351
+set 352 bitmap rowy_8_50
+set 352 zoom_y 2.3
+viewport 353 72 0 8 260
+plane 354 353
+set 354 bitmap rowy_8_90
+set 354 zoom_y 2.3
+viewport 355 80 0 8 260
+plane 356 355
+set 356 bitmap rowy_8_100
+set 356 zoom_y 2.3
+viewport 357 88 0 8 260
+plane 358 357
+set 358 bitmap rowy_8_25
+set 358 zoom_y 2.32
+viewport 359 96 0 8 260
+plane 360 359
+set 360 bitmap rowy_8_50
+set 360 zoom_y 2.32
+viewport 361 104 0 8 260
+plane 362 361
+set 362 bitmap rowy_8_100
+set 362 zoom_y 2.32
+viewport 363 112 0 8 260
+plane 364 363
+set 364 bitmap rowy_8_50
+set 364 zoom_y 2.34
+viewport 365 120 0 8 260
+plane 366 365
+set 366 bitmap rowy_8_100
+set 366 zoom_y 2.34
+viewport 367 128 0 8 260
+plane 368 367
+set 368 bitmap rowy_8_100
+set 368 zoom_y 2.35
+viewport 369 136 0 8 260
+plane 370 369
+set 370 bitmap rowy_8_25
+set 370 zoom_y 2.36
+viewport 371 144 0 8 260
+plane 372 371
+set 372 bitmap rowy_8_50
+set 372 zoom_y 2.36
+viewport 373 152 0 8 260
+plane 374 373
+set 374 bitmap rowy_8_75
+set 374 zoom_y 2.36
+viewport 375 160 0 8 260
+plane 376 375
+set 376 bitmap rowy_8_100
+set 376 zoom_y 2.36
+viewport 377 168 0 8 260
+plane 378 377
+set 378 bitmap rowy_8_100
+set 378 zoom_y 2.37
+viewport 379 176 0 8 260
+plane 380 379
+set 380 bitmap rowy_8_45
+set 380 zoom_y 2.6
+viewport 381 184 0 8 260
+plane 382 381
+set 382 bitmap rowy_8_85
+set 382 zoom_y 2.6
+viewport 383 192 0 8 260
+plane 384 383
+set 384 bitmap rowy_8_90
+set 384 zoom_y 2.6
+viewport 385 200 0 8 260
+plane 386 385
+set 386 bitmap rowy_8_95
+set 386 zoom_y 2.6
+viewport 387 208 0 8 260
+plane 388 387
+set 388 bitmap rowy_8_75
+set 388 zoom_y 2.76
+viewport 389 216 0 8 260
+plane 390 389
+set 390 bitmap rowy_8_45
+set 390 zoom_y 2.8
+viewport 391 224 0 8 260
+plane 392 391
+set 392 bitmap rowy_8_85
+set 392 zoom_y 2.8
+viewport 393 232 0 8 260
+plane 394 393
+set 394 bitmap rowy_8_75
+set 394 zoom_y 3.12
+viewport 395 240 0 8 260
+plane 396 395
+set 396 bitmap rowy_8_75
+set 396 zoom_y 3.28
+frame 43f6741ad7f248a5
+clear
+clear

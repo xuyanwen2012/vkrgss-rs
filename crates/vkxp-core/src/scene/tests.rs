@@ -891,3 +891,17 @@ mod moving {
         assert_eq!(stage.frame().pixel(4, 4), GREEN);
     }
 }
+
+#[test]
+fn a_scene_keeps_the_rules_it_was_made_with() {
+    assert_eq!(Scene::new().rules(), Rules::Rgss1);
+    assert_eq!(
+        Scene::with_logical_size(Size::new(544, 416)).rules(),
+        Rules::Rgss1
+    );
+    let mut scene = Scene::with_rules(Rules::Rgss2, Size::new(544, 416));
+    assert_eq!(scene.rules(), Rules::Rgss2);
+    assert_eq!(scene.logical_size(), Size::new(544, 416));
+    scene.clear();
+    assert_eq!(scene.rules(), Rules::Rgss2);
+}

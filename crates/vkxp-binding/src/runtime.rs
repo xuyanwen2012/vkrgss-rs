@@ -21,7 +21,7 @@ use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use vkxp_core::{InputState, Scene};
+use vkxp_core::{InputState, Rules, Scene};
 use vkxp_proto::link::GuestEnd;
 use vkxp_proto::{AudioChannel, AudioCommand, GuestToHost, HostToGuest, Size};
 use vkxp_ruby_sys::ffi::{self, VALUE};
@@ -486,9 +486,18 @@ pub fn frame_size(runtime: Runtime) -> Size {
     }
 }
 
-/// The empty scene a game of `runtime` starts with: its frame size and its frame rate.
+/// The rules of the core a game of `runtime` follows where the runtimes differ.
+pub(crate) fn rules(runtime: Runtime) -> Rules {
+    match runtime {
+        Runtime::Rgss1 => Rules::Rgss1,
+        Runtime::Rgss2 | Runtime::Rgss3 => Rules::Rgss2,
+    }
+}
+
+/// The empty scene a game of `runtime` starts with: its rules, its frame size and its frame
+/// rate.
 pub(crate) fn new_scene(runtime: Runtime) -> Scene {
-    let mut scene = Scene::with_logical_size(frame_size(runtime));
+    let mut scene = Scene::with_rules(rules(runtime), frame_size(runtime));
     scene.set_frame_rate(match runtime {
         Runtime::Rgss1 => RGSS1_FRAME_RATE,
         Runtime::Rgss2 | Runtime::Rgss3 => RGSS2_FRAME_RATE,

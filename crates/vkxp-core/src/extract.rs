@@ -9,7 +9,7 @@ use crate::geometry::{self, Geometry};
 use crate::scene::Arena;
 use crate::scene::Key;
 use crate::tilemap::Strip;
-use crate::{Bitmaps, Rect, Scene, Sprite, Viewport, ViewportId};
+use crate::{Bitmaps, Rect, Rules, Scene, Sprite, Viewport, ViewportId};
 
 /// The pixels both rectangles cover; a rectangle without pixels when they share none.
 pub(crate) fn intersect(a: vkxp_proto::Rect, b: vkxp_proto::Rect) -> vkxp_proto::Rect {
@@ -234,6 +234,8 @@ impl Look {
 /// The frame being assembled.
 pub(crate) struct Assembly<'a> {
     pub(crate) bitmaps: &'a Bitmaps,
+    /// The rules of the scene's runtime.
+    pub(crate) rules: Rules,
     pub(crate) ops: Vec<Op>,
     /// The bitmap of every quad and the sheets of every tilemap layer in `ops`.
     pub(crate) referenced: Vec<BitmapId>,
@@ -434,10 +436,29 @@ impl Assembly<'_> {
     }
 
     /// Applies the viewport's tone and colour to everything drawn so far inside `clip`.
+    ///
+    /// RGSS1: the flash colour stands in for the colour by the rule of a sprite
+    /// ([`Flash::effective_color`](crate::element::Flash::effective_color)).
+    ///
+    /// RGSS2: the tone, then the colour, then the flash colour at its current alpha, each
+    /// laid on by `s + (((c - s) * (a + 1)) >> 8)`; the flash colour is a rectangle effect
+    /// of its own.
+    ///
+    /// Provenance of RGSS2: oracle measurement 2026-10-12, RGSS202E versions 2.0.0.1 and
+    /// 2.0.2.1, `vx-v1-sprite-REPORT.md` section 4 (topics `viewport` and `flash`, without a
+    /// differing pixel; the rule of RGSS1 leaves 107256 wrong on the 6 flash frames).
     fn viewport_effect(&mut self, viewport: &Viewport, clip: vkxp_proto::Rect) {
         let tone = viewport.tone.to_proto();
-        let color = viewport.flash.effective_color(viewport.color);
+        let (color, flash) = match self.rules {
+            Rules::Rgss1 => (viewport.flash.effective_color(viewport.color), None),
+            Rules::Rgss2 => (viewport.color.to_proto(), viewport.flash.color()),
+        };
         if tone != vkxp_proto::Tone::NEUTRAL || color.a != 0 {
+            self.ops
+                .push(Op::RectEffect(RectEffect { clip, tone, color }));
+        }
+        if let Some(color) = flash.filter(|color| color.a != 0) {
+            let tone = vkxp_proto::Tone::NEUTRAL;
             self.ops
                 .push(Op::RectEffect(RectEffect { clip, tone, color }));
         }
@@ -465,6 +486,9 @@ enum Item {
 #[derive(Debug, Clone, Copy)]
 struct Entry {
     z: i64,
+    /// What orders items of equal z before their stamps do: the y of a sprite of RGSS2, and
+    /// 0 for every other item.
+    y: i32,
     stamp: u64,
     item: Item,
 }
@@ -473,20 +497,28 @@ impl Entry {
     fn new(order: Order, item: Item) -> Entry {
         Entry {
             z: i64::from(order.z),
+            y: 0,
             stamp: order.stamp,
             item,
         }
     }
 }
 
-/// Sorts into draw order: ascending z, and among equal z ascending stamp.
+/// Sorts into draw order: ascending z, among equal z ascending y, and among those ascending
+/// stamp.
 ///
 /// The stamp is that of creation, so among equal z the element created later is in front.
+/// The y is 0 for every item of a scene of RGSS1, whose order is (z, creation) alone.
 ///
 /// Provenance: oracle measurement, RGSS103J, z order probe (`ph-scene-zorder-probe.rb`): the
 /// key (z, creation) predicts all 109 observations; keys that follow z assignments do not.
+///
+/// Provenance of RGSS2: oracle measurement 2026-10-12, RGSS202E versions 2.0.0.1 and 2.0.2.1,
+/// `vx-v1-sprite-REPORT.md` section 3 (topic `order`, 36 cases without a differing pixel; the
+/// key of RGSS1 leaves 13472 wrong): the key is (z, y, creation), y being the property of a
+/// sprite, not where it is drawn, and 0 for a plane, a viewport and a window.
 fn sort(entries: &mut [Entry]) {
-    entries.sort_by_key(|entry| (entry.z, entry.stamp));
+    entries.sort_by_key(|entry| (entry.z, entry.y, entry.stamp));
 }
 
 impl Scene {
@@ -603,7 +635,7 @@ impl Scene {
         }
         for (_, plane) in self.planes.iter_mut() {
             let level = level_of(&self.viewports, self.logical_size, plane.viewport);
-            plane.refresh_cache(bitmaps, level.as_ref());
+            plane.refresh_cache(bitmaps, self.rules, level.as_ref());
         }
     }
 }
@@ -626,7 +658,15 @@ impl Scene {
             Some(_) => {}
         };
         for (key, sprite) in self.sprites.iter() {
-            place(sprite.viewport, Entry::new(sprite.order, Item::Sprite(key)));
+            let y = match self.rules() {
+                Rules::Rgss1 => 0,
+                Rules::Rgss2 => sprite.y,
+            };
+            let entry = Entry {
+                y,
+                ..Entry::new(sprite.order, Item::Sprite(key))
+            };
+            place(sprite.viewport, entry);
         }
         for (key, plane) in self.planes.iter() {
             place(plane.viewport, Entry::new(plane.order, Item::Plane(key)));
@@ -635,6 +675,7 @@ impl Scene {
             for (z, strip) in tilemap.strips() {
                 let entry = Entry {
                     z,
+                    y: 0,
                     stamp: tilemap.order.stamp,
                     item: Item::Tiles(key, strip),
                 };
@@ -664,6 +705,7 @@ impl Scene {
         };
         let mut assembly = Assembly {
             bitmaps,
+            rules: self.rules(),
             ops: Vec::new(),
             referenced: Vec::new(),
         };
@@ -676,7 +718,14 @@ impl Scene {
                     let Some(level) = level(Some(ViewportId(key))) else {
                         continue;
                     };
-                    if !viewport.flash.hides() {
+                    if viewport.flash.hides() {
+                        // RGSS2: for as long as a flash without a colour lasts, nothing of
+                        // the viewport is done, its tone and colour included (measured,
+                        // `vx-v1-sprite-REPORT.md` section 4).
+                        if self.rules() == Rules::Rgss2 {
+                            continue;
+                        }
+                    } else {
                         let entries = &mut inside[key.index as usize];
                         sort(entries);
                         for entry in entries.iter() {
@@ -786,6 +835,11 @@ pub(crate) mod testing {
             Stage::with(Scene::with_logical_size(Size::new(width, height)))
         }
 
+        /// A stage whose scene follows `rules`.
+        pub(crate) fn with_rules(rules: crate::Rules, width: u32, height: u32) -> Stage {
+            Stage::with(Scene::with_rules(rules, Size::new(width, height)))
+        }
+
         fn with(scene: Scene) -> Stage {
             Stage {
                 scene,
@@ -886,3 +940,6 @@ mod tests;
 
 #[cfg(test)]
 mod samples;
+
+#[cfg(test)]
+mod scene_cases;

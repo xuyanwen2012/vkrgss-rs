@@ -8,6 +8,17 @@ use crate::{
     Bitmaps, ElementKind, Plane, Rect, SceneError, Sprite, Tilemap, TilemapRgss2, Viewport, Window,
 };
 
+/// Which runtime's measured rules a scene and an input state follow where the runtimes
+/// differ.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum Rules {
+    /// RGSS1, of RPG Maker XP.
+    #[default]
+    Rgss1,
+    /// RGSS2, of RPG Maker VX.
+    Rgss2,
+}
+
 /// Names one occupant of one slot of an arena.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct Key {
@@ -201,6 +212,11 @@ pub struct DisposedElements {
 /// Provenance: oracle measurement, RGSS103J, z order probe (`ph-scene-zorder-probe.rb`: 109
 /// observations of sprites, planes, windows, viewports and a tilemap, none mismatching).
 ///
+/// A scene follows the rules of one runtime, [`Scene::rules`], given when it is made. With
+/// those of RGSS2 the y of a sprite orders elements of equal z before their creation does,
+/// a flashing viewport lays its flash colour over its colour, and the tile of a plane is
+/// sized in double precision; see `extract` and `plane`.
+///
 /// [`Scene::extract`] turns the scene into the frame packet a compositor draws.
 #[derive(Debug, Clone)]
 pub struct Scene {
@@ -223,6 +239,8 @@ pub struct Scene {
     /// The brightness of the whole screen, from 0 to 255.
     pub(crate) brightness: u8,
     pub(crate) logical_size: Size,
+    /// The runtime whose rules the scene follows.
+    pub(crate) rules: Rules,
 }
 
 /// `size` with each side brought into 1 to [`MAX_LOGICAL_DIMENSION`].
@@ -249,8 +267,14 @@ impl Scene {
     }
 
     /// An empty scene of the given size, each side brought into 1 to
-    /// [`MAX_LOGICAL_DIMENSION`].
+    /// [`MAX_LOGICAL_DIMENSION`], with the rules of RGSS1.
     pub fn with_logical_size(size: Size) -> Scene {
+        Scene::with_rules(Rules::Rgss1, size)
+    }
+
+    /// An empty scene that follows `rules`, of the given size, each side brought into 1 to
+    /// [`MAX_LOGICAL_DIMENSION`].
+    pub fn with_rules(rules: Rules, size: Size) -> Scene {
         Scene {
             sprites: Arena::default(),
             viewports: Arena::default(),
@@ -265,7 +289,13 @@ impl Scene {
             frame_rate: FrameRate::DEFAULT,
             brightness: 255,
             logical_size: limited(size),
+            rules,
         }
+    }
+
+    /// The runtime whose rules the scene follows, as it was made.
+    pub fn rules(&self) -> Rules {
+        self.rules
     }
 
     /// The size of the logical screen in pixels.
@@ -280,8 +310,8 @@ impl Scene {
         self.logical_size = limited(size);
     }
 
-    /// Makes the scene what [`Scene::new`] returns, except that the handles handed out so
-    /// far stay used: one of an element from before names nothing, and no new element gets
+    /// Makes the scene what [`Scene::new`] returns, except that it keeps its rules and that
+    /// the handles handed out so far stay used: one of an element from before names nothing, and no new element gets
     /// it. The bitmaps the scene made for its elements stay in their arena, as when a scene
     /// is dropped.
     pub fn clear(&mut self) {
@@ -296,6 +326,7 @@ impl Scene {
             windows: std::mem::take(&mut self.windows),
             planes: std::mem::take(&mut self.planes),
             tilemaps: std::mem::take(&mut self.tilemaps),
+            rules: self.rules,
             ..Scene::new()
         };
     }

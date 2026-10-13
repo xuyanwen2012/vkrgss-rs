@@ -240,6 +240,24 @@ pub(crate) fn stretch_length(length: i32, zoom: f64) -> Option<u32> {
         .then_some(pixels as u32)
 }
 
+/// The number of screen pixels one tile of a plane of RGSS2 takes along an axis `length`
+/// texels long at `zoom`: `floor(length * zoom)` in double precision. `None` as for
+/// [`stretch_length`].
+///
+/// Provenance: oracle measurement 2026-10-12, RGSS202E versions 2.0.0.1 and 2.0.2.1,
+/// `vx-v1-sprite-REPORT.md` section 4 (topics `plane`, `size` and `size2`: 197 pairs on both
+/// axes without a differing pixel, where the rule of 32-bit floats is wrong for all 93 pairs
+/// of `size2`).
+pub(crate) fn stretch_length_f64(length: i32, zoom: f64) -> Option<u32> {
+    if zoom.is_nan() || zoom <= 0.0 {
+        return None;
+    }
+    let pixels = (f64::from(length) * zoom).floor();
+    (1.0..f64::from(F32_U32_END))
+        .contains(&pixels)
+        .then_some(pixels as u32)
+}
+
 /// The first screen pixel of an unrotated sprite along one axis, as the original runtime
 /// finds it: `floor(position - origin * zoom)` in 32-bit floating point. `None` when it is
 /// not a number or beyond the coordinates of a rectangle.

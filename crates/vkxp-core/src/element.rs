@@ -74,7 +74,7 @@ impl Flash {
     }
 
     /// The colour of a running flash with its current alpha.
-    fn color(&self) -> Option<vkxp_proto::Color> {
+    pub(crate) fn color(&self) -> Option<vkxp_proto::Color> {
         if !self.shown {
             return None;
         }

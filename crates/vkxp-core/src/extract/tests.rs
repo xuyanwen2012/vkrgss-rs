@@ -7,7 +7,7 @@ use vkxp_proto::{BitmapDelta, FrameRate, Size};
 use super::testing::*;
 use crate::bitmap::testing::{color, defaults};
 use crate::{
-    Bitmaps, Color, PlaneId, Rect, Scene, SharedTable, SpriteId, Table, TilemapId, Tone,
+    Bitmaps, Color, PlaneId, Rect, Rules, Scene, SharedTable, SpriteId, Table, TilemapId, Tone,
     ViewportId, WindowId,
 };
 
@@ -1593,6 +1593,160 @@ fn a_viewport_flash_without_a_colour_hides_its_elements() {
     assert_eq!(frame.pixel(1, 1), GREEN, "what is behind still shows");
     stage.scene.viewport_mut(viewport).unwrap().update();
     assert_eq!(stage.frame().pixel(1, 1), WHITE);
+}
+
+// The rules of RGSS2.
+
+/// A red sprite with `y` and then a green one with y 0, of equal z, both covering the
+/// corner of the screen whatever their y.
+fn red_with_y_then_green(stage: &mut Stage, y: i32) -> (SpriteId, SpriteId) {
+    let red = stage.solid(4, 4, RED);
+    let green = stage.solid(4, 4, GREEN);
+    let older = sprite(stage, red, 0, y);
+    stage.scene.sprite_mut(older).unwrap().oy = y;
+    (older, sprite(stage, green, 0, 0))
+}
+
+/// Scenario "y breaks the tie, measured on the original".
+#[test]
+fn in_rgss2_the_larger_y_is_in_front_among_equal_z() {
+    for (rules, front) in [(Rules::Rgss2, RED), (Rules::Rgss1, GREEN)] {
+        let mut stage = Stage::with_rules(rules, 8, 8);
+        red_with_y_then_green(&mut stage, 9);
+        assert_eq!(stage.frame().pixel(1, 1), front, "{rules:?}");
+    }
+    // A y below 0 sorts behind 0, and z counts before y.
+    let mut stage = Stage::with_rules(Rules::Rgss2, 8, 8);
+    let (red, green) = red_with_y_then_green(&mut stage, 9);
+    stage.scene.sprite_mut(green).unwrap().y = -3;
+    stage.scene.sprite_mut(green).unwrap().oy = -3;
+    assert_eq!(stage.frame().pixel(1, 1), RED);
+    stage.scene.set_sprite_z(green, 1).unwrap();
+    assert_eq!(stage.frame().pixel(1, 1), GREEN);
+    stage.scene.set_sprite_z(green, 0).unwrap();
+    stage.scene.sprite_mut(red).unwrap().y = -4;
+    stage.scene.sprite_mut(red).unwrap().oy = -4;
+    assert_eq!(stage.frame().pixel(1, 1), GREEN);
+}
+
+/// Scenario "The property, not the place, measured on the original".
+#[test]
+fn in_rgss2_the_y_of_a_sprite_orders_it_wherever_it_is_drawn() {
+    let mut stage = Stage::with_rules(Rules::Rgss2, 8, 8);
+    let (older, _) = red_with_y_then_green(&mut stage, 20);
+    let sprite = stage.scene.sprite(older).unwrap();
+    assert_eq!((sprite.y, sprite.oy), (20, 20));
+    assert_eq!(stage.frame().pixel(1, 1), RED);
+}
+
+/// Scenario "Viewport, measured on the original".
+#[test]
+fn in_rgss2_a_viewport_takes_its_place_with_a_y_of_zero() {
+    let mut stage = Stage::with_rules(Rules::Rgss2, 8, 8);
+    let viewport = stage.scene.create_viewport(Rect::new(0, 0, 8, 8)).unwrap();
+    let red = stage.solid(4, 4, RED);
+    let inside = sprite_in(&mut stage, Some(viewport), red, 0, 50);
+    stage.scene.sprite_mut(inside).unwrap().oy = 50;
+    let green = stage.solid(4, 4, GREEN);
+    let free = sprite(&mut stage, green, 0, 0);
+    assert_eq!(stage.frame().pixel(1, 1), GREEN);
+    // A free sprite with a y is in front of a younger viewport of its z.
+    stage.scene.dispose_sprite(free);
+    let blue = stage.solid(4, 4, BLUE);
+    let older = sprite(&mut stage, blue, 0, 9);
+    stage.scene.sprite_mut(older).unwrap().oy = 9;
+    let younger = stage.scene.create_viewport(Rect::new(0, 0, 8, 8)).unwrap();
+    sprite_in(&mut stage, Some(younger), green, 0, 0);
+    assert_eq!(stage.frame().pixel(1, 1), BLUE);
+    // Inside a viewport the same key orders its elements.
+    let white = stage.solid(4, 4, WHITE);
+    sprite_in(&mut stage, Some(viewport), white, 0, 0);
+    stage.scene.dispose_sprite(older);
+    stage.scene.dispose_viewport(younger, &mut stage.bitmaps);
+    assert_eq!(stage.frame().pixel(1, 1), RED);
+}
+
+/// In RGSS2 a plane has a y of 0, whatever its origin.
+#[test]
+fn in_rgss2_a_plane_is_ordered_with_a_y_of_zero() {
+    let mut stage = Stage::with_rules(Rules::Rgss2, 8, 8);
+    let red = stage.solid(4, 4, RED);
+    let older = sprite(&mut stage, red, 0, 4);
+    stage.scene.sprite_mut(older).unwrap().oy = 4;
+    let green = stage.solid(4, 4, GREEN);
+    let plane = stage.scene.create_plane(None).unwrap();
+    stage.scene.plane_mut(plane).unwrap().bitmap = Some(green);
+    stage.scene.plane_mut(plane).unwrap().oy = 100;
+    assert_eq!(stage.frame().pixel(1, 1), RED);
+    stage.scene.sprite_mut(older).unwrap().y = 0;
+    stage.scene.sprite_mut(older).unwrap().oy = 0;
+    assert_eq!(stage.frame().pixel(1, 1), GREEN);
+}
+
+#[test]
+fn in_rgss2_a_viewport_lays_its_flash_colour_over_its_colour() {
+    let mut stage = Stage::with_rules(Rules::Rgss2, 8, 8);
+    let viewport = tinted_half(&mut stage);
+    let own = [0, 0, 255, 200];
+    stage.scene.viewport_mut(viewport).unwrap().color = Color::new(0.0, 0.0, 255.0, 200.0);
+    stage
+        .scene
+        .viewport_mut(viewport)
+        .unwrap()
+        .flash(Some(Color::new(255.0, 255.0, 255.0, 100.0)), 4);
+    // The flash is weaker than the colour, which hides it in RGSS1.
+    for alpha in [100, 75, 50, 25] {
+        let both = |pixel| {
+            let colored = vkxp_pixel::blend_color(pixel, own);
+            vkxp_pixel::blend_color(colored, [255, 255, 255, alpha])
+        };
+        let frame = stage.frame();
+        assert_eq!(frame.pixel(0, 0), both(RED), "alpha {alpha}");
+        assert_eq!(frame.pixel(1, 3), both(GREEN), "alpha {alpha}");
+        assert_eq!(frame.pixel(2, 0), BLUE, "outside the rectangle");
+        stage.scene.viewport_mut(viewport).unwrap().update();
+    }
+    assert_eq!(stage.frame().pixel(0, 0), vkxp_pixel::blend_color(RED, own));
+}
+
+/// Scenario "Flash without a colour, measured on the original".
+#[test]
+fn in_rgss2_a_viewport_flash_without_a_colour_leaves_the_viewport_undone() {
+    let mut stage = Stage::with_rules(Rules::Rgss2, 8, 8);
+    let viewport = tinted_half(&mut stage);
+    let white = stage.solid(1, 1, WHITE);
+    sprite_in(&mut stage, Some(viewport), white, 1, 1);
+    let tone = Tone::new(-100.0, -100.0, 0.0, 0.0);
+    stage.scene.viewport_mut(viewport).unwrap().tone = tone;
+    stage.scene.viewport_mut(viewport).unwrap().color = Color::new(9.0, 9.0, 9.0, 90.0);
+    stage.scene.viewport_mut(viewport).unwrap().flash(None, 5);
+    for update in 0..5 {
+        let frame = stage.frame();
+        for (x, behind) in [(0, RED), (1, GREEN), (2, BLUE)] {
+            for y in 0..4 {
+                assert_eq!(frame.pixel(x, y), behind, "update {update}");
+            }
+        }
+        stage.scene.viewport_mut(viewport).unwrap().update();
+    }
+    let tinted = |pixel| {
+        let toned = vkxp_pixel::apply_tone(pixel, -100, -100, 0, 0);
+        vkxp_pixel::blend_color(toned, [9, 9, 9, 90])
+    };
+    let frame = stage.frame();
+    assert_eq!(frame.pixel(1, 1), tinted(WHITE));
+    assert_eq!(frame.pixel(0, 0), tinted(RED));
+}
+
+/// In RGSS1 the tone and colour of a viewport stay while a flash without a colour hides
+/// its elements.
+#[test]
+fn in_rgss1_a_viewport_flash_without_a_colour_keeps_tone_and_colour() {
+    let mut stage = Stage::sized(8, 8);
+    let viewport = tinted_half(&mut stage);
+    stage.scene.viewport_mut(viewport).unwrap().tone = Tone::new(-100.0, -100.0, 0.0, 0.0);
+    stage.scene.viewport_mut(viewport).unwrap().flash(None, 5);
+    assert_eq!(stage.frame().pixel(0, 0), [155, 0, 0, 255]);
 }
 
 #[test]

@@ -34,7 +34,11 @@
 //!   (`scene.sprite(id)`, `scene.sprite_mut(id)`); z is set through the scene
 //!   (`scene.set_sprite_z`), because it decides the draw order: ascending z, and among equal z
 //!   the element created more recently in front. Using a disposed
-//!   element fails with [`SceneError::Disposed`], which names the [`ElementKind`].
+//!   element fails with [`SceneError::Disposed`], which names the [`ElementKind`]. A scene
+//!   follows the [`Rules`] of the runtime it was made for: with those of RGSS2 the y of a
+//!   sprite orders elements of equal z before their creation, a viewport lays its flash
+//!   colour over its colour and does nothing while a flash without a colour lasts, and the
+//!   tile of a plane is sized in `f64`.
 //! - Extraction. [`Scene::extract`] is the only place a frame is assembled: it returns the
 //!   protocol `FramePacket` with the ops of every visible element in draw order and the
 //!   deltas for exactly the bitmaps those ops refer to, and counts the frame. A sprite that is
@@ -83,7 +87,7 @@
 //! | `bitmap` | [`Bitmaps`], [`MAX_BITMAP_PIXELS`], the drawing operations |
 //! | `text` | [`TextRasterizer`], [`TextMetrics`], [`Mask`], [`Align`], `draw_text`, `text_size` |
 //! | `delta` | changed rectangles and [`Bitmaps::deltas`] |
-//! | `scene` | [`Scene`], the element arenas and their handles, creation and disposal |
+//! | `scene` | [`Scene`], [`Rules`], the element arenas and their handles, creation and disposal |
 //! | `element` | [`Sprite`], [`Viewport`], [`Window`], [`Plane`], [`Tilemap`], flashes |
 //! | `geometry` | the fixed-point transform of a quad, the rectangle of a stretch, the walk of a turned sprite |
 //! | `extract` | [`Scene::extract`], the draw order, sprites and viewports as ops |
@@ -124,8 +128,8 @@ pub use font::{Font, FontDefaults};
 pub use input::InputState;
 pub use rect::Rect;
 pub use scene::{
-    DisposedElements, MAX_LOGICAL_DIMENSION, PlaneId, Scene, SpriteId, TilemapId, ViewportId,
-    WindowId,
+    DisposedElements, MAX_LOGICAL_DIMENSION, PlaneId, Rules, Scene, SpriteId, TilemapId,
+    ViewportId, WindowId,
 };
 pub use table::{SharedTable, Table};
 pub use text::{Align, Mask, SQUEEZE_STEPS, Squeeze, TextMetrics, TextRasterizer};

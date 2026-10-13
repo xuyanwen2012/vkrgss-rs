@@ -4,7 +4,7 @@ use vkxp_pixel::Rgba;
 use super::*;
 use crate::bitmap::testing::color;
 use crate::extract::testing::*;
-use crate::{Color, PlaneId, Tone};
+use crate::{Color, PlaneId, Rules, Tone};
 
 /// The pixel at (`x`, `y`) of a [`pattern`] bitmap: different from its neighbours.
 fn texel(x: u32, y: u32) -> Rgba {
@@ -147,6 +147,24 @@ fn the_origin_of_a_zoomed_plane_counts_screen_pixels() {
             ((row * step_y) >> 20) as u32,
         )
     }));
+}
+
+/// Scenario "Measured on the original" of "Plane tile size of RGSS2".
+#[test]
+fn the_tile_is_sized_in_double_precision_in_rgss2() {
+    for (rules, rows) in [(Rules::Rgss2, 62), (Rules::Rgss1, 63)] {
+        let mut stage = Stage::with_rules(rules, 4, 200);
+        let bitmap = pattern(&mut stage, 4, 90);
+        let id = plane(&mut stage, bitmap);
+        stage.scene.plane_mut(id).unwrap().zoom_y = 0.7;
+        let step = (90u64 << 20) / rows;
+        assert!(
+            shows(&stage.frame(), |x, y| {
+                texel(x, ((u64::from(y) % rows * step) >> 20) as u32)
+            }),
+            "{rules:?}"
+        );
+    }
 }
 
 #[test]

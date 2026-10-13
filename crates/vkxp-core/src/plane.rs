@@ -2,7 +2,8 @@
 //!
 //! As measured on the original runtime, a plane repeats a tile: its bitmap stretched to
 //! `floor(width * zoom_x)` by `floor(height * zoom_y)` whole pixels by the rule of a stretch
-//! quad. The tiles lie on a grid of whole screen pixels that the origins of the plane and of
+//! quad. RGSS1 finds that size in 32-bit floating point and RGSS2 in double precision: a
+//! bitmap 90 high at a zoom of 0.7 repeats every 63 rows in RGSS1 and every 62 in RGSS2. The tiles lie on a grid of whole screen pixels that the origins of the plane and of
 //! its viewport shift, pixel by pixel whatever the zoom. Every repeat that shows is a stretch
 //! quad over the whole bitmap.
 //!
@@ -15,8 +16,8 @@
 use vkxp_proto::{BitmapId, STRETCH_FRAC_BITS};
 
 use crate::extract::{Assembly, Level, Look, blend_mode};
-use crate::geometry::stretch_length;
-use crate::{BitmapError, Bitmaps, Plane, Rect};
+use crate::geometry::{stretch_length, stretch_length_f64};
+use crate::{BitmapError, Bitmaps, Plane, Rect, Rules};
 
 /// Most quads a plane is drawn with when it can draw from a pre-tiled bitmap.
 const MAX_REPEATS: i64 = 64;
@@ -65,9 +66,12 @@ struct Tiling {
 
 impl Tiling {
     /// The tiling of `pixels` screen pixels in a row by a source `size` texels long at
-    /// `zoom`, or `None` when nothing is drawn.
-    fn new(size: i32, zoom: f64, pixels: u32) -> Option<Tiling> {
-        let tile = stretch_length(size, zoom)?;
+    /// `zoom`, by the `rules` of the scene, or `None` when nothing is drawn.
+    fn new(rules: Rules, size: i32, zoom: f64, pixels: u32) -> Option<Tiling> {
+        let tile = match rules {
+            Rules::Rgss1 => stretch_length(size, zoom)?,
+            Rules::Rgss2 => stretch_length_f64(size, zoom)?,
+        };
         // Whether the stretch step is exact, so that copies of the source in a row stretch
         // as the source itself does.
         let exact =
@@ -98,18 +102,18 @@ impl Tiling {
 impl Plane {
     /// How the plane tiles a `level` with a bitmap of `size`: across and down. `None` when
     /// it draws nothing: a zoom of 0 or less, or a tile of less than one pixel.
-    fn tiling(&self, level: &Level, size: Rect) -> Option<(Tiling, Tiling)> {
+    fn tiling(&self, rules: Rules, level: &Level, size: Rect) -> Option<(Tiling, Tiling)> {
         Some((
-            Tiling::new(size.width, self.zoom_x, level.clip.width)?,
-            Tiling::new(size.height, self.zoom_y, level.clip.height)?,
+            Tiling::new(rules, size.width, self.zoom_x, level.clip.width)?,
+            Tiling::new(rules, size.height, self.zoom_y, level.clip.height)?,
         ))
     }
 
     /// The size of the pre-tiled bitmap a plane showing a bitmap of `size` inside `level`
     /// draws from, or `None` when it draws from the bitmap itself or draws nothing. The
     /// pre-tiled bitmap only saves quads, so one that would be too large is not used.
-    fn pretiled_size(&self, level: &Level, size: Rect) -> Option<(i32, i32)> {
-        let (across, down) = self.tiling(level, size)?;
+    fn pretiled_size(&self, rules: Rules, level: &Level, size: Rect) -> Option<(i32, i32)> {
+        let (across, down) = self.tiling(rules, level, size)?;
         if across.copies == 1 && down.copies == 1 {
             return None;
         }
@@ -132,7 +136,12 @@ impl Plane {
     /// Brings the pre-tiled bitmap up to date, if this frame draws from one. An invisible
     /// plane gives it back; one that is not drawn for another reason, such as having no
     /// `level` because its viewport is hidden, keeps what it has.
-    pub(crate) fn refresh_cache(&mut self, bitmaps: &mut Bitmaps, level: Option<&Level>) {
+    pub(crate) fn refresh_cache(
+        &mut self,
+        bitmaps: &mut Bitmaps,
+        rules: Rules,
+        level: Option<&Level>,
+    ) {
         if !self.visible {
             self.pretiled.dispose(bitmaps);
             return;
@@ -142,7 +151,7 @@ impl Plane {
         };
         let wanted = self.bitmap.and_then(|source| {
             let size = bitmaps.rect(source).ok()?;
-            let (width, height) = self.pretiled_size(level, size)?;
+            let (width, height) = self.pretiled_size(rules, level, size)?;
             Some((source, bitmaps.revision(source).ok()?, width, height, false))
         });
         self.pretiled.refresh(bitmaps, wanted, draw_pretiled);
@@ -171,12 +180,12 @@ impl Assembly<'_> {
         let Ok(size) = self.bitmaps.rect(source) else {
             return;
         };
-        let Some((mut across, mut down)) = plane.tiling(level, size) else {
+        let Some((mut across, mut down)) = plane.tiling(self.rules, level, size) else {
             return;
         };
         // Without a pre-tiled bitmap, also when one could not be made, every repeat is drawn
         // from the source.
-        let pretiled = plane.pretiled_size(level, size);
+        let pretiled = plane.pretiled_size(self.rules, level, size);
         let bitmap = match pretiled.and(plane.pretiled.bitmap) {
             Some(bitmap) => bitmap,
             None => {

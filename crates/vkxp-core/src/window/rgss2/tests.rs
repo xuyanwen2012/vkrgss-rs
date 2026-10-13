@@ -109,6 +109,26 @@ fn a_window_is_one_element_at_its_z() {
     assert_eq!(frame.pixel(65, 35), GREEN);
 }
 
+/// Scenario "Window, measured on the original" of "Draw order of RGSS2".
+#[test]
+fn the_y_of_a_sprite_orders_it_against_a_window_of_its_z() {
+    for (y, over) in [(50, true), (-50, false)] {
+        let mut stage = Stage::with_rules(crate::Rules::Rgss2, 64, 64);
+        let red = stage.solid(20, 20, RED);
+        let id = stage.scene.create_sprite(None).unwrap();
+        let sprite = stage.scene.sprite_mut(id).unwrap();
+        sprite.set_bitmap(Some(red), &stage.bitmaps);
+        // Drawn at (20, 20) whatever its y.
+        (sprite.x, sprite.y, sprite.oy) = (20, y, y - 20);
+        let skin = skin(&mut stage);
+        // The y of the window is no part of the order.
+        let window = window(&mut stage, skin, 0, 10, 64, 54);
+        assert_eq!(stage.scene.window(window).unwrap().z(), 0);
+        // The background of the window is over the sprite, or the sprite as it is.
+        assert_eq!(stage.frame().pixel(30, 30) == RED, over, "y {y}");
+    }
+}
+
 #[test]
 fn a_window_without_a_width_or_a_height_draws_nothing() {
     let mut stage = Stage::sized(64, 64);
