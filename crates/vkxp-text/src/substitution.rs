@@ -1,6 +1,6 @@
 //! The table that replaces family names a system does not have.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Built-in substitutions: the names that share a replacement list, then the list. All
 /// replacements are openly licensed families commonly packaged for Linux.
@@ -101,6 +101,8 @@ pub(crate) fn family_key(name: &str) -> String {
 pub(crate) struct SubstitutionTable {
     /// Family key to replacement family keys, in order of preference.
     entries: HashMap<String, Vec<String>>,
+    /// The replaced names as the table spells them.
+    spellings: HashSet<String>,
 }
 
 impl SubstitutionTable {
@@ -108,7 +110,9 @@ impl SubstitutionTable {
     /// same name.
     pub(crate) fn new(extra: &[(String, Vec<String>)]) -> Self {
         let mut entries: HashMap<String, Vec<String>> = HashMap::new();
+        let mut spellings = HashSet::new();
         let mut add = |name: &str, replacements: &mut dyn Iterator<Item = &str>| {
+            spellings.insert(name.to_owned());
             let list = entries.entry(family_key(name)).or_default();
             for replacement in replacements {
                 let key = family_key(replacement);
@@ -125,12 +129,17 @@ impl SubstitutionTable {
                 add(name, &mut replacements.iter().copied());
             }
         }
-        Self { entries }
+        Self { entries, spellings }
     }
 
     /// The replacement family keys for the family key `key`, in order of preference.
     pub(crate) fn replacements(&self, key: &str) -> &[String] {
         self.entries.get(key).map_or(&[], Vec::as_slice)
+    }
+
+    /// Whether the table has an entry for `name` spelled exactly so.
+    pub(crate) fn spells(&self, name: &str) -> bool {
+        self.spellings.contains(name)
     }
 }
 

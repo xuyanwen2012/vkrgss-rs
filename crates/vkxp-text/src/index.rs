@@ -154,6 +154,19 @@ impl FontIndex {
         self.by_family.contains_key(key)
     }
 
+    /// Whether a face that is not hidden by another source declares the family name `name`
+    /// exactly as given: character for character, with regard to letter case.
+    pub(crate) fn has_family_exactly(&self, name: &str) -> bool {
+        self.by_family.get(&family_key(name)).is_some_and(|faces| {
+            faces.iter().any(|&position| {
+                self.records[position]
+                    .families
+                    .iter()
+                    .any(|family| family == name)
+            })
+        })
+    }
+
     /// The first family name of every face that is not hidden by another source, sorted and
     /// without duplicates.
     pub(crate) fn families(&self) -> Vec<String> {
@@ -271,6 +284,16 @@ mod tests {
     fn picked(index: &FontIndex, bold: bool, italic: bool) -> (u16, bool) {
         let record = index.record(index.pick("family", bold, italic).unwrap());
         (record.weight, record.italic)
+    }
+
+    #[test]
+    fn an_exact_family_name_regards_letter_case() {
+        let index = family(&[(400, false)]);
+        assert!(index.has_family("family"));
+        assert!(index.has_family_exactly("Family"));
+        for name in ["family", "FAMILY", " Family", "Family ", "", " "] {
+            assert!(!index.has_family_exactly(name), "{name:?}");
+        }
     }
 
     #[test]

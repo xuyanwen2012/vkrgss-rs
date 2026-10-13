@@ -3,7 +3,7 @@
 mod common;
 
 use common::{LIBERATION, SYMBOLS, engine, max_coverage, request};
-use vkxp_text::TextRequest;
+use vkxp_text::{MaskRules, TextRequest};
 
 // Requirement: Rasterisation
 
@@ -149,4 +149,67 @@ fn glyph_cache_is_bounded_and_does_not_change_results() {
         unbounded.rasterize(&request, texts[0])
     );
     assert_eq!(bounded.glyph_cache_bytes(), 0);
+}
+
+// Requirement: Mask rules
+
+#[test]
+fn the_plain_rule_is_the_default() {
+    assert_eq!(engine().mask_rules(), MaskRules::Plain);
+    assert_eq!(MaskRules::default(), MaskRules::Plain);
+}
+
+#[test]
+fn sizes_do_not_depend_on_the_mask_rule() {
+    let mut engine = engine();
+    let request = TextRequest {
+        italic: true,
+        ..request(LIBERATION, 24)
+    };
+    let mut results = Vec::new();
+    for rules in [MaskRules::Plain, MaskRules::Rgss3, MaskRules::Rgss3Early] {
+        engine.set_mask_rules(rules);
+        let mask = engine.rasterize(&request, "fW Hj il");
+        results.push((
+            engine.measure(&request, "fW Hj il"),
+            engine.layout(&request, "fW Hj il"),
+            (mask.width, mask.height, mask.left_overhang),
+        ));
+    }
+    assert_eq!(results[0], results[1]);
+    assert_eq!(results[0], results[2]);
+}
+
+#[test]
+fn switching_the_mask_rule_back_gives_the_same_mask() {
+    let mut engine = engine();
+    let request = request(LIBERATION, 24);
+    let first = engine.rasterize(&request, "Hello, World!");
+    engine.set_mask_rules(MaskRules::Rgss3);
+    let between = engine.rasterize(&request, "Hello, World!");
+    assert_eq!(between, engine.rasterize(&request, "Hello, World!"));
+    engine.set_mask_rules(MaskRules::Plain);
+    assert_eq!(engine.rasterize(&request, "Hello, World!"), first);
+    assert_ne!(between, first);
+}
+
+// Requirement: Coverage levels of RGSS3
+
+#[test]
+fn a_mask_of_rgss3_holds_only_scaled_levels() {
+    let scaled: Vec<u8> = (0..=64u32).map(|level| (level * 255 / 64) as u8).collect();
+    for rules in [MaskRules::Rgss3, MaskRules::Rgss3Early] {
+        let mut engine = engine();
+        engine.set_mask_rules(rules);
+        let mask = engine.rasterize(&request(LIBERATION, 24), "Hello, World!");
+        assert!(mask.coverage.contains(&255));
+        assert!(
+            mask.coverage
+                .iter()
+                .any(|&value| value != 0 && value != 255)
+        );
+        for value in &mask.coverage {
+            assert!(scaled.contains(value), "{value} with {rules:?}");
+        }
+    }
 }

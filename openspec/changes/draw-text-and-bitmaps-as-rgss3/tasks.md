@@ -7,8 +7,8 @@
 
 ## 2. Masks and names
 
-- [ ] 2.1 The mask rules of the engine: the 65 levels and their scaling, the two rules for overlapping glyphs, the plain rule as the default. Verify: the scenarios of "Mask rules", "Coverage levels of RGSS3" and "Overlapping glyphs of RGSS3"; the existing tests of `crates/vkxp-text` pass with their expected values unchanged; `cargo test -p vkxp-text --locked` passes.
-- [ ] 2.2 Exact family names and the name of a name list; the three sizes measured on RGSS3. Verify: the scenarios of "Exact family names", "Name of a name list in RGSS3" and "Text size measured on RGSS3"; the same command.
+- [x] 2.1 The mask rules of the engine: the 65 levels and their scaling, the two rules for overlapping glyphs, the plain rule as the default. Verify: the scenarios of "Mask rules", "Coverage levels of RGSS3" and "Overlapping glyphs of RGSS3"; the existing tests of `crates/vkxp-text` pass with their expected values unchanged; `cargo test -p vkxp-text --locked` passes.
+- [x] 2.2 Exact family names and the name of a name list; the three sizes measured on RGSS3. Verify: the scenarios of "Exact family names", "Name of a name list in RGSS3" and "Text size measured on RGSS3"; the same command.
 
 ## 3. Text of RGSS3
 

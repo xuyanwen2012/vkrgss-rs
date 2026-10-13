@@ -68,6 +68,43 @@ pub struct TextMask {
     pub coverage: Vec<u8>,
 }
 
+/// The rule a mask is made by: how the coverage of a glyph becomes a mask value and what a
+/// glyph does to the values earlier glyphs wrote where they overlap. Measured sizes and
+/// advances do not depend on it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum MaskRules {
+    /// The coverage as the rasteriser gives it, and the larger value where glyphs overlap:
+    /// the masks of RGSS1 and RGSS2.
+    #[default]
+    Plain,
+    /// RGSS3 as its DLL 3.0.1.1 makes a mask: the coverage in 65 levels, a level `v` held as
+    /// `trunc(v * 255 / 64)`, and a glyph replacing earlier values wherever its own level is
+    /// above 0.
+    ///
+    /// Provenance: oracle measurement 2026-10-13, RGSS301 3.0.1.1 (235 draws against RGSS2,
+    /// 220 whole draws against a mask made from GDI's answers).
+    Rgss3,
+    /// RGSS3 as its DLL 3.0.0.1 makes a mask: the levels of [`MaskRules::Rgss3`], and a
+    /// glyph replacing every pixel of its own box, also where its level is 0.
+    ///
+    /// Provenance: the same measurement on RGSS300 3.0.0.1.
+    Rgss3Early,
+}
+
+/// The level from 0 to 64 that stands for GDI's answer for a pixel of coverage `coverage`.
+///
+/// PLACEHOLDER: this is how Wine's GDI, under which the rule was measured, is believed to
+/// reduce the 256 levels of its rasteriser; it was not checked against Wine's source. What
+/// is established is only that the original has 65 levels.
+fn coverage_level(coverage: u8) -> u8 {
+    (u32::from(coverage) * 65 / 256) as u8
+}
+
+/// The mask value RGSS3 holds for the level `level` of 0 to 64: `trunc(level * 255 / 64)`.
+fn scaled_level(level: u8) -> u8 {
+    (u32::from(level.min(64)) * 255 / 64) as u8
+}
+
 /// How a string is set at a size: what is needed to place and to squeeze it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TextLayout {
@@ -191,6 +228,7 @@ pub struct TextEngine {
     line_boxes: LineBoxTable,
     /// Whether a replacement keeps its own line box.
     own_metrics: bool,
+    mask_rules: MaskRules,
     /// Family keys of the fallback families, in order.
     fallback_families: Vec<String>,
     /// Contents of the font files in use. `None` for a file that could not be read.
@@ -242,6 +280,7 @@ impl TextEngine {
             substitutions: SubstitutionTable::new(&sources.substitutions),
             line_boxes: LineBoxTable::new(&sources.line_boxes),
             own_metrics: sources.own_metrics,
+            mask_rules: MaskRules::default(),
             fallback_families,
             files: HashMap::new(),
             faces: Vec::new(),
@@ -271,6 +310,49 @@ impl TextEngine {
                 .replacements(&key)
                 .iter()
                 .any(|replacement| self.index.has_family(replacement))
+    }
+
+    /// Whether `name` exists exactly, as `Font.exist?` of RGSS3 asks: whether it equals,
+    /// character for character and with regard to letter case, a family name an available
+    /// font declares, or a name of the substitution table as the table spells it when one of
+    /// its replacements is available.
+    ///
+    /// The second half is this engine's: the original tests against the fonts Windows has,
+    /// and the table is what stands for them here. The vertical variants of GDI, whose
+    /// names begin with `@`, are not known and answer false.
+    pub fn has_family_exactly(&self, name: &str) -> bool {
+        self.index.has_family_exactly(name)
+            || (self.substitutions.spells(name)
+                && self
+                    .substitutions
+                    .replacements(&family_key(name))
+                    .iter()
+                    .any(|replacement| self.index.has_family(replacement)))
+    }
+
+    /// The position of the name a name list of RGSS3 stands for: the first that exists
+    /// exactly ([`TextEngine::has_family_exactly`]), the first of the list when none does,
+    /// and `None` for an empty list.
+    ///
+    /// Provenance: oracle measurement 2026-10-13, RGSS301 3.0.1.1, api probe.
+    pub fn first_existing<S: AsRef<str>>(&self, names: &[S]) -> Option<usize> {
+        if names.is_empty() {
+            return None;
+        }
+        let existing = names
+            .iter()
+            .position(|name| self.has_family_exactly(name.as_ref()));
+        Some(existing.unwrap_or(0))
+    }
+
+    /// The rule masks are made by.
+    pub fn mask_rules(&self) -> MaskRules {
+        self.mask_rules
+    }
+
+    /// Sets the rule masks are made by from now on. Nothing cached depends on it.
+    pub fn set_mask_rules(&mut self, rules: MaskRules) {
+        self.mask_rules = rules;
     }
 
     /// The face `request` selects, before per-character fallback. `None` only when the engine
@@ -337,7 +419,8 @@ impl TextEngine {
     /// character, and every glyph `condense.0 / condense.1` as wide as it naturally is.
     ///
     /// The mask is as high as the text height and holds the advances and the overhangs of
-    /// the first and the last glyph as drawn; other ink beyond it is clipped.
+    /// the first and the last glyph as drawn; other ink beyond it is clipped. The glyphs are
+    /// composed by the engine's [`MaskRules`].
     pub fn rasterize_run(
         &mut self,
         request: &TextRequest,
@@ -386,7 +469,13 @@ impl TextEngine {
         let mut pen = i64::from(left_overhang);
         for (glyph, advance) in &glyphs {
             let top = i64::from(setting.cell.ascent) - i64::from(glyph.top);
-            blit(&mut mask, glyph, pen + i64::from(glyph.left), top);
+            blit(
+                &mut mask,
+                glyph,
+                pen + i64::from(glyph.left),
+                top,
+                self.mask_rules,
+            );
             pen += i64::from(*advance);
         }
         mask
@@ -709,9 +798,13 @@ fn advance_pixels(units: u32, pixels_per_em: u32, units_per_em: u32) -> u32 {
     ((advance + 32) >> 6).min(u64::from(u32::MAX)) as u32
 }
 
-/// Composes `glyph` into `mask` with its top-left corner at (`left`, `top`), keeping the
-/// larger coverage where glyphs overlap and dropping what falls outside the mask.
-fn blit(mask: &mut TextMask, glyph: &Glyph, left: i64, top: i64) {
+/// Composes `glyph` into `mask` with its top-left corner at (`left`, `top`) by `rules`,
+/// dropping what falls outside the mask. With [`MaskRules::Plain`] the larger coverage stays
+/// where glyphs overlap. With the rules of RGSS3 the glyph's values are its scaled levels,
+/// and they replace what the mask held: wherever the level is above 0, or with
+/// [`MaskRules::Rgss3Early`] over the whole image of the glyph, which stands for the black
+/// box of GDI.
+fn blit(mask: &mut TextMask, glyph: &Glyph, left: i64, top: i64, rules: MaskRules) {
     let (mask_width, mask_height) = (i64::from(mask.width), i64::from(mask.height));
     let (glyph_width, glyph_height) = (i64::from(glyph.width), i64::from(glyph.height));
     let x_range = left.max(0)..(left + glyph_width).min(mask_width);
@@ -726,7 +819,16 @@ fn blit(mask: &mut TextMask, glyph: &Glyph, left: i64, top: i64) {
         let source = &glyph.coverage[source..source + columns];
         let target = &mut mask.coverage[target..target + columns];
         for (to, from) in target.iter_mut().zip(source) {
-            *to = (*to).max(*from);
+            match rules {
+                MaskRules::Plain => *to = (*to).max(*from),
+                MaskRules::Rgss3 => {
+                    let level = coverage_level(*from);
+                    if level > 0 {
+                        *to = scaled_level(level);
+                    }
+                }
+                MaskRules::Rgss3Early => *to = scaled_level(coverage_level(*from)),
+            }
         }
     }
 }
@@ -756,10 +858,10 @@ mod tests {
     #[test]
     fn overlapping_glyphs_keep_the_larger_coverage() {
         let mut mask = mask(4, 1);
-        blit(&mut mask, &glyph(3, 1, 200), 0, 0);
-        blit(&mut mask, &glyph(3, 1, 100), 1, 0);
+        blit(&mut mask, &glyph(3, 1, 200), 0, 0, MaskRules::Plain);
+        blit(&mut mask, &glyph(3, 1, 100), 1, 0, MaskRules::Plain);
         assert_eq!(mask.coverage, [200, 200, 200, 100]);
-        blit(&mut mask, &glyph(2, 1, 255), 2, 0);
+        blit(&mut mask, &glyph(2, 1, 255), 2, 0, MaskRules::Plain);
         assert_eq!(mask.coverage, [200, 200, 255, 255]);
     }
 
@@ -774,7 +876,7 @@ mod tests {
         };
         let drawn = |left: i64, top: i64| {
             let mut mask = mask(2, 2);
-            blit(&mut mask, &numbered, left, top);
+            blit(&mut mask, &numbered, left, top, MaskRules::Plain);
             mask.coverage
         };
         assert_eq!(drawn(0, 0), [1, 2, 4, 5]);
@@ -786,8 +888,71 @@ mod tests {
         }
         // A mask without pixels takes nothing.
         let mut empty = mask(0, 2);
-        blit(&mut empty, &numbered, 0, 0);
+        blit(&mut empty, &numbered, 0, 0, MaskRules::Plain);
         assert!(empty.coverage.is_empty());
+    }
+
+    #[test]
+    fn the_levels_of_rgss3_are_scaled_as_measured() {
+        let scaled: Vec<u8> = [0, 1, 32, 49, 56, 63, 64]
+            .into_iter()
+            .map(scaled_level)
+            .collect();
+        assert_eq!(scaled, [0, 3, 127, 195, 223, 251, 255]);
+    }
+
+    #[test]
+    fn a_larger_coverage_never_gives_a_smaller_level() {
+        assert_eq!(coverage_level(0), 0);
+        assert_eq!(coverage_level(255), 64);
+        for coverage in 1..=255u8 {
+            assert!(coverage_level(coverage) >= coverage_level(coverage - 1));
+            assert!(coverage_level(coverage) <= 64);
+        }
+    }
+
+    #[test]
+    fn the_end_points_of_the_coverage_stay_with_rgss3() {
+        let ends = Glyph {
+            width: 2,
+            height: 1,
+            coverage: vec![0, 255],
+            ..Glyph::default()
+        };
+        for rules in [MaskRules::Rgss3, MaskRules::Rgss3Early] {
+            let mut mask = mask(2, 1);
+            blit(&mut mask, &ends, 0, 0, rules);
+            assert_eq!(mask.coverage, [0, 255], "{rules:?}");
+        }
+    }
+
+    /// A glyph of full coverage 4 wide, then one whose box lies over its columns 1 and 2
+    /// with a level between 0 and 64 in the first and 0 in the second.
+    fn overlapped(rules: MaskRules) -> Vec<u8> {
+        let mut mask = mask(4, 1);
+        blit(&mut mask, &glyph(4, 1, 255), 0, 0, rules);
+        let later = Glyph {
+            width: 2,
+            height: 1,
+            coverage: vec![128, 0],
+            ..Glyph::default()
+        };
+        blit(&mut mask, &later, 1, 0, rules);
+        mask.coverage
+    }
+
+    #[test]
+    fn later_ink_replaces_earlier_ink_in_rgss3() {
+        // Coverage 128 is level 32, held as 127.
+        assert_eq!(overlapped(MaskRules::Rgss3), [255, 127, 255, 255]);
+        // The plain rule keeps the larger value.
+        assert_eq!(overlapped(MaskRules::Plain), [255, 255, 255, 255]);
+    }
+
+    #[test]
+    fn the_box_of_a_glyph_erases_in_the_early_rgss3() {
+        // Outside the box of the second glyph the first one stays.
+        assert_eq!(overlapped(MaskRules::Rgss3Early), [255, 127, 0, 255]);
     }
 
     #[test]

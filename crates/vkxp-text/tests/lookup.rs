@@ -442,3 +442,60 @@ fn unknown_name() {
     assert!(!engine.is_available("黑体"));
     assert!(!engine.is_available(""));
 }
+
+// Requirement: Exact family names
+
+#[test]
+fn an_exact_name_regards_letter_case() {
+    let engine = engine();
+    assert!(engine.has_family_exactly("Liberation Sans"));
+    assert!(!engine.has_family_exactly("liberation sans"));
+    assert!(!engine.has_family_exactly("LIBERATION SANS"));
+    // The availability query still ignores the case.
+    assert!(engine.is_available("liberation sans"));
+}
+
+#[test]
+fn what_is_not_a_family_name_does_not_exist_exactly() {
+    let engine = engine();
+    for name in [
+        "Liberation Sans Regular",
+        "LiberationSans-Regular",
+        "",
+        " ",
+        " Liberation Sans",
+        "@Liberation Sans",
+        "NoSuchFont",
+    ] {
+        assert!(!engine.has_family_exactly(name), "{name:?}");
+    }
+}
+
+#[test]
+fn a_substituted_name_exists_as_the_table_spells_it() {
+    let engine = engine();
+    assert!(engine.has_family_exactly("Arial"));
+    assert!(!engine.has_family_exactly("arial"));
+    // A name of the table none of whose replacements is installed.
+    assert!(!engine.has_family_exactly("MS Gothic"));
+}
+
+// Requirement: Name of a name list in RGSS3
+
+#[test]
+fn a_name_list_stands_for_its_first_existing_name() {
+    let engine = engine();
+    assert_eq!(
+        engine.first_existing(&["NoSuchFont", LIBERATION, SYMBOLS]),
+        Some(1)
+    );
+    assert_eq!(
+        engine.first_existing(&["NoSuchFont", "NoSuchFont2"]),
+        Some(0)
+    );
+    assert_eq!(
+        engine.first_existing(&["liberation sans", SYMBOLS]),
+        Some(1)
+    );
+    assert_eq!(engine.first_existing::<&str>(&[]), None);
+}

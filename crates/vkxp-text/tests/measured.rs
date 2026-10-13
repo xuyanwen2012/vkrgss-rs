@@ -9,7 +9,7 @@ mod common;
 use std::path::{Path, PathBuf};
 
 use common::{LIBERATION, engine};
-use vkxp_text::{FontSources, TextEngine, TextRequest};
+use vkxp_text::{FontSources, MaskRules, TextEngine, TextRequest};
 
 const NOTO: &str = "Noto Sans CJK SC";
 
@@ -165,4 +165,34 @@ fn measured_overhangs() {
         samples.len(),
         wrong.join("\n")
     );
+}
+
+// Requirement: Text size measured on RGSS3
+
+/// The sizes `text_size` of RGSS3 gave for "Arial" at size 24, which was Liberation Sans
+/// (Wine's replacement) in its own line box.
+///
+/// Provenance: oracle measurement 2026-10-13, RGSS301 3.0.1.1, the same on RGSS300 3.0.0.1.
+#[test]
+fn measured_sizes_of_rgss3() {
+    for rules in [MaskRules::Plain, MaskRules::Rgss3, MaskRules::Rgss3Early] {
+        let mut engine = engine();
+        engine.set_mask_rules(rules);
+        let request = TextRequest::new([LIBERATION], 24);
+        assert_eq!(engine.measure(&request, "Hello"), (49, 23));
+        assert_eq!(engine.measure(&request, "W"), (20, 23));
+        assert_eq!(engine.measure(&request, "il"), (10, 23));
+    }
+}
+
+#[test]
+fn a_synthesised_bold_adds_a_pixel_to_every_character() {
+    let mut engine = engine();
+    let regular = TextRequest::new([LIBERATION], 24);
+    let bold = TextRequest {
+        bold: true,
+        ..regular.clone()
+    };
+    let (width, height) = engine.measure(&regular, "Hello");
+    assert_eq!(engine.measure(&bold, "Hello"), (width + 5, height));
 }

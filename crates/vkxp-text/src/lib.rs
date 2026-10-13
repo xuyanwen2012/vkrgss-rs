@@ -63,6 +63,13 @@
 //! ([`DEFAULT_FALLBACK_FAMILIES`] unless the caller names others), and failing that any font.
 //! [`TextEngine::is_available`] answers steps 1 and 2 only.
 //!
+//! RGSS3 asks another question of a name, which changes nothing of the lookup:
+//! [`TextEngine::has_family_exactly`] is true for a name that equals a declared family name
+//! character for character, letter case included, or a name of the substitution table as the
+//! table spells it when one of its replacements is installed. From a list of names
+//! [`TextEngine::first_existing`] chooses the first that exists so, and the first of the list
+//! when none does; the chosen name is then looked up as above.
+//!
 //! Within the family, a bold, italic or bold-italic request selects the face of exactly that
 //! weight class and slant when the family has one and the regular face otherwise. A font with
 //! a weight axis is set to weight 400, or 700 for a bold request. A style the selected face
@@ -125,6 +132,19 @@
 //! PLACEHOLDER: most built-in line boxes are from memory of the Windows fonts' metric tables;
 //! the list in `line_box.rs` marks each.
 //!
+//! # Mask rules
+//!
+//! A mask is made by the engine's [`MaskRules`], which [`TextEngine::set_mask_rules`] sets.
+//! With the plain rule, the default, a mask value is the coverage of the rasteriser and the
+//! larger value stays where glyphs overlap. With the two rules of RGSS3 the coverage first
+//! becomes one of 65 levels and the mask holds `trunc(level * 255 / 64)`, as measured on the
+//! original runtime of VX Ace, and a later glyph replaces what an earlier one wrote: where
+//! its own level is above 0 (DLL 3.0.1.1), or over the whole of its image (DLL 3.0.0.1).
+//! Sizes and advances are the same with every rule.
+//!
+//! PLACEHOLDER: the step from the rasteriser's 256 values to the 65 levels stands for GDI's
+//! own 65-level answer; see `coverage_level` in `engine.rs`.
+//!
 //! # Caching
 //!
 //! Resolved requests, character-to-glyph mappings and rendered glyphs are cached. The glyph
@@ -142,8 +162,8 @@ mod sources;
 mod substitution;
 
 pub use engine::{
-    DEFAULT_FALLBACK_FAMILIES, DEFAULT_GLYPH_CACHE_BYTES, ResolvedFace, TextEngine, TextLayout,
-    TextMask, TextRequest,
+    DEFAULT_FALLBACK_FAMILIES, DEFAULT_GLYPH_CACHE_BYTES, MaskRules, ResolvedFace, TextEngine,
+    TextLayout, TextMask, TextRequest,
 };
 pub use line_box::{LineBox, default_line_box};
 pub use sources::{FontSources, SystemFonts};
