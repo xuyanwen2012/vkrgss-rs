@@ -51,3 +51,22 @@ binding.
   `PATCHES.md` follow as for the other patches (the test of the manifest shows how).
 - Use a target directory of its own (`CARGO_TARGET_DIR=$PWD/target/fortify`) so that the
   plain build is not rebuilt back and forth.
+
+## Findings
+
+- Ruby 1.9.2 (2026-10-13): the three files ended at one place, `join_path` of `dir.c`,
+  reached from `Dir.glob`: `strlcat(buf+len, name, len2)` states one byte more than is left
+  of the buffer when a separator was written. No byte was written past the buffer; the size
+  is now true (patch 15, `glob-join-path-size`, our own correction). The place was found
+  with a handler of SIGABRT in a preloaded library that prints the call stack, because the
+  sandbox of the run does not permit `ptrace` and `gdb` could not start the process. With
+  the patch `cargo test -p vkxp-ruby192-sys --locked` passes with
+  `CFLAGS='-O2 -D_FORTIFY_SOURCE=3'`, the stressed selection included, and no other place
+  showed. The build script is unchanged and no test was added: the suites of the release
+  are the test.
+
+## Follow-ups
+
+- The fortified run was made on the development machine with GCC and
+  `-D_FORTIFY_SOURCE=3`. That the merge gate passes on the CI runner is seen only when
+  this branch runs there; nothing is pushed by this flow.

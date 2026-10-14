@@ -44,8 +44,9 @@ the workflow, and its log is where the state of aarch64 can be seen.
 
 ## Checks outside the gate
 
-Four checks are run by hand, because three are slow and need another compiler and the
-fourth needs the network. None is a step of the merge gate.
+Five checks are run by hand, because three are slow and need another compiler, the
+fourth needs the network and the fifth is what the CI runner's compiler does in every run.
+None is a step of the merge gate.
 
 **The upstream Ruby suites under sanitizers.** The interpreter, Oniguruma and Ruby's own test
 executable are compiled again with AddressSanitizer and UndefinedBehaviorSanitizer, and the
@@ -113,6 +114,23 @@ allocation; a test it leaves out is a line `binding-1.9.2 <test>` of the skip li
 lost value is never a reason for one. Without the variable, the tests `stress` and
 `scene_stress` of `vkxp-binding-rgss3` switch `GC.stress` on around every snippet
 themselves, in the gate.
+
+**The fortified build of Ruby 1.9.2.** The compiler of Ubuntu 24.04, which the CI runner
+uses, defines `_FORTIFY_SOURCE` by default, and the C library then ends the process with
+"buffer overflow detected" where a call states a size larger than its buffer. The compiler
+of the development machine does not define it, so a fault of this kind shows on the runner
+only. The build script takes `CFLAGS` of the environment, and the fortified build is tried
+on such a machine with
+
+```sh
+CARGO_TARGET_DIR=$PWD/target/fortify CFLAGS='-O2 -D_FORTIFY_SOURCE=3' \
+    cargo test -p vkxp-ruby192-sys --locked
+```
+
+in a target directory of its own, so that the plain build is not rebuilt back and forth.
+The same flags with `-p vkxp-ruby-sys` try Ruby 1.8.7. The check is never switched off in
+the build script; a place it stops at is corrected in the vendored source by a patch
+recorded in [third_party/ruby-1.9.2/PATCHES.md](../third_party/ruby-1.9.2/PATCHES.md).
 
 **The fuzz targets.** Three parts of the vendored C code read what comes with a game:
 `Marshal.load` reads save files and `.rxdata` files, the parser reads the scripts, and the

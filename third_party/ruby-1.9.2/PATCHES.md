@@ -190,3 +190,21 @@ the interpreter behave as vkxp embeds it. None changes what a script computes.
   again where the timer thread is created, which is when a script creates its first Ruby
   thread; while the main thread is the only Ruby thread the signal is never sent, and the
   process keeps the disposition the host gave it.
+
+## 15. glob-join-path-size
+
+- File: `dir.c`
+- Patch: `patches/glob-join-path-size.patch`
+- Patched SHA-256: `3ab4044ea6f2a46c29b9871dcca6fc902854b65a0c4fe7c81edd0553d86b1312`
+- Reason: a C library built into the program with `_FORTIFY_SOURCE` (the default of the
+  compiler of Ubuntu 24.04) ended the process with "buffer overflow detected" at the first
+  `Dir.glob` that joins a directory and a name; `test_dir.rb`, `test_require.rb` and
+  `test_system.rb` of the release's suite ended so. `join_path` allocates the two lengths,
+  a separator and a terminator, copies the directory and the separator, and appended the
+  name with `strlcat(buf+len, name, len2)`, where `len2` counts the separator that is
+  already written: the size it states is one byte more than is left of the buffer. Of the
+  two kinds this is an idiom the check misreads, not a write past the buffer: `strlcat`
+  wrote the name and its terminator, which fit exactly, and the check compares the stated
+  size with the object. The name and its terminator are now copied with `memcpy` of their
+  true length, which is our own correction and not taken from a later release. The result
+  of `join_path` is unchanged.

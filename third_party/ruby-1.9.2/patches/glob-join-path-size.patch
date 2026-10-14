@@ -1,0 +1,16 @@
+--- a/dir.c
++++ b/dir.c
+@@ -1235,8 +1235,11 @@
+     if (dirsep) {
+ 	buf[len++] = '/';
+     }
+-    buf[len] = '\0';
+-    strlcat(buf+len, name, len2);
++    /* vkxp: the release ended the buffer here and appended the name with
++     * strlcat(buf+len, name, len2). After a separator len2 is one more than is left of
++     * the buffer, which a fortified C library ends the process for. What is left is the
++     * name and its terminator exactly. */
++    memcpy(buf+len, name, strlen(name)+1);
+     return buf;
+ }
+ 
