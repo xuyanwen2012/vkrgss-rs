@@ -14,6 +14,7 @@ members = [
     "crates/vkxp-guest",
     "crates/vkxp-guest-main",
     "crates/vkxp-guest-main-rgss3",
+    "crates/vkxp-guest-rgss3",
     "crates/vkxp-compose-ref",
     "crates/vkxp-vk",
     "crates/vkxp-audio",

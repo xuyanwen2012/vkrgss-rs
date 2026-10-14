@@ -36,7 +36,7 @@ use vkxp_guest::role::{self, GuestRole};
 use vkxp_guest::settings::GuestSettings;
 use vkxp_guest::{Attached, diagnostics, play_in_process, play_on_thread, signals};
 use vkxp_proto::link::GuestEnd;
-use vkxp_ruby_sys::{Interpreter, Options};
+use vkxp_ruby_sys::{Interpreter, Options, RUBY_API, RubyApi};
 use vkxp_vfs::{FileKind, GameFiles, GameIni, Runtime, VfsError, resolve_rtps};
 
 use crate::font::FontBackend;
@@ -167,6 +167,43 @@ fn runtime_of(ini: &GameIni, named: Option<Runtime>) -> Result<Runtime> {
             anyhow!("{error}; name the runtime with --runtime rgss1, rgss2 or rgss3")
         }),
     }
+}
+
+/// Whether the interpreter of this executable runs the games of `runtime`: Ruby 1.8.7 those
+/// of RGSS1 and RGSS2, Ruby 1.9.2 those of RGSS3.
+pub fn interpreter_runs(runtime: Runtime) -> bool {
+    let needed = match runtime {
+        Runtime::Rgss1 | Runtime::Rgss2 => RubyApi::Ruby18,
+        Runtime::Rgss3 => RubyApi::Ruby19,
+    };
+    RUBY_API == needed
+}
+
+/// The name of the interpreter of `api`.
+fn interpreter_name(api: RubyApi) -> &'static str {
+    match api {
+        RubyApi::Ruby18 => "Ruby 1.8.7",
+        RubyApi::Ruby19 => "Ruby 1.9.2",
+    }
+}
+
+/// Ends a run of a game whose runtime the interpreter of this executable does not run, and
+/// does nothing for another.
+fn refuse_other_interpreter(runtime: Runtime) -> Result<()> {
+    if interpreter_runs(runtime) {
+        return Ok(());
+    }
+    let needed = match RUBY_API {
+        RubyApi::Ruby18 => RubyApi::Ruby19,
+        RubyApi::Ruby19 => RubyApi::Ruby18,
+    };
+    bail!(
+        "a game of {} ({}) runs over {}, and this executable has {}",
+        runtime.product(),
+        runtime.name(),
+        interpreter_name(needed),
+        interpreter_name(RUBY_API)
+    )
 }
 
 /// Ends a run of RGSS3, which has no guest yet, and does nothing for another runtime. What
@@ -330,6 +367,7 @@ pub fn guest_on_thread(
     seed: u64,
 ) -> Result<(impl FnOnce(GuestEnd) + Send + 'static, Outcome)> {
     let runtime = inputs.runtime;
+    refuse_other_interpreter(runtime)?;
     let config = guest_config(game_dir, settings, inputs, seed)?;
     let interpreter = start_interpreter(runtime)?;
     let (done, outcome) = mpsc::channel();
@@ -389,6 +427,7 @@ fn run_guest(
 ) -> Result<bool> {
     signals::die_with_parent();
     let inputs = guest_inputs(&game_dir, settings)?;
+    refuse_other_interpreter(inputs.runtime)?;
     refuse_rgss3(&game_dir, &inputs)?;
     let runtime = inputs.runtime;
     let mut config = guest_config(&game_dir, settings, inputs, role.seed)?;
@@ -563,6 +602,27 @@ mod tests {
         ] {
             let inputs = inputs(game.path(), runtime, scripts);
             assert!(refuse_rgss3(game.path(), &inputs).is_ok());
+        }
+    }
+
+    /// Requirement "An executable runs the runtimes of its interpreter".
+    #[test]
+    fn each_interpreter_runs_the_runtimes_it_was_made_for() {
+        for runtime in Runtime::ALL {
+            let runs = interpreter_runs(runtime);
+            assert_eq!(
+                runs,
+                (runtime == Runtime::Rgss3) == (RUBY_API == RubyApi::Ruby19)
+            );
+            match refuse_other_interpreter(runtime) {
+                Ok(()) => assert!(runs),
+                Err(error) => {
+                    let message = error.to_string();
+                    assert!(!runs);
+                    assert!(message.contains(runtime.product()), "{message}");
+                    assert!(message.contains(interpreter_name(RUBY_API)), "{message}");
+                }
+            }
         }
     }
 

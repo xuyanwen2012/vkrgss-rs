@@ -18,7 +18,8 @@
 //! the interpreter crate and the binding package, and every test file of the first of a pair
 //! has its counterpart in the second.
 //!
-//! The `vkxp` binary is on neither side: it is the one crate that may depend on both.
+//! The `vkxp` binary is on neither side: it is the one crate that may depend on both. The
+//! guest executable `vkxp-guest-rgss3` is a guest crate.
 //!
 //! The graph is taken with every feature of every workspace crate enabled, so a forbidden
 //! dependency cannot hide behind an optional dependency or a feature that is off by default.
@@ -47,6 +48,7 @@ pub(crate) const GUEST_CRATES: &[&str] = &[
     "vkxp-guest",
     "vkxp-guest-main",
     "vkxp-guest-main-rgss3",
+    "vkxp-guest-rgss3",
 ];
 
 /// Crates that own the window, the GPU or the audio device.
@@ -616,6 +618,36 @@ mod tests {
         assert_eq!(check(&allowed), vec![]);
     }
 
+    /// Scenario "The guest executable of RGSS3".
+    #[test]
+    fn the_guest_executable_reaching_a_host_crate_is_reported() {
+        for host in HOST_CRATES {
+            let reaching = graph(&[
+                ("vkxp-guest-rgss3", "vkxp-guest-main-rgss3"),
+                ("vkxp-guest-main-rgss3", host),
+            ]);
+            let violations = check(&reaching);
+            assert_eq!(
+                violations,
+                vec![
+                    Violation::GuestReachesHost {
+                        path: path(&["vkxp-guest-main-rgss3", host]),
+                    },
+                    Violation::GuestReachesHost {
+                        path: path(&["vkxp-guest-rgss3", "vkxp-guest-main-rgss3", host]),
+                    },
+                ]
+            );
+            assert_eq!(
+                violations[1].to_string(),
+                format!(
+                    "guest crate `vkxp-guest-rgss3` reaches host crate `{host}`: \
+                     vkxp-guest-rgss3 -> vkxp-guest-main-rgss3 -> {host}"
+                )
+            );
+        }
+    }
+
     #[test]
     fn the_guest_role_reaching_an_interpreter_is_reported() {
         for interpreter in INTERPRETER_CRATES {
@@ -1088,15 +1120,21 @@ mod tests {
         );
     }
 
-    /// Each binding package reaches its interpreter and not the other, development
-    /// dependencies counted.
+    /// Each package that links an interpreter reaches its own and not the other,
+    /// development dependencies counted. Scenario "One interpreter each".
     #[test]
-    fn each_binding_package_reaches_its_own_interpreter_only() {
+    fn each_package_reaches_its_own_interpreter_only() {
         let linked = linked_workspace_graph(&crate::workspace_root())
             .expect("cargo metadata for the workspace");
-        for (index, twin) in BINDING_PACKAGES.into_iter().enumerate() {
-            let (package, interpreter) = (twin.package, twin.interpreter);
-            let other = BINDING_PACKAGES[1 - index].interpreter;
+        let [first, second] = INTERPRETER_SYS_CRATES;
+        for (package, interpreter, other) in [
+            ("vkxp-binding", first, second),
+            ("vkxp-guest-main", first, second),
+            ("vkxp", first, second),
+            ("vkxp-binding-rgss3", second, first),
+            ("vkxp-guest-main-rgss3", second, first),
+            ("vkxp-guest-rgss3", second, first),
+        ] {
             let paths = paths_from(&linked, package);
             assert!(
                 paths.contains_key(interpreter),
@@ -1104,6 +1142,63 @@ mod tests {
             );
             assert!(!paths.contains_key(other), "`{package}` reaches `{other}`");
         }
+    }
+
+    /// Scenario "Nothing of the host is linked": the guest executable reaches none of the
+    /// host crates and none of the crates of the window, the device and the sound.
+    #[test]
+    fn the_guest_executable_links_nothing_of_the_host() {
+        let paths = paths_from(&real_graph(), "vkxp-guest-rgss3");
+        for host in ["vkxp-host", "vkxp-vk", "vkxp-audio", "ash", "winit", "cpal"] {
+            assert!(
+                !paths.contains_key(host),
+                "vkxp-guest-rgss3 reaches {host}: {}",
+                paths[host].join(" -> ")
+            );
+        }
+        assert!(paths.contains_key("vkxp-guest-main-rgss3"));
+    }
+
+    /// Scenario "Direct dependencies": the guest executable declares one package of the
+    /// workspace, its development dependencies left out.
+    #[test]
+    fn the_guest_executable_depends_on_the_glue_alone() {
+        let metadata = metadata_without_resolution();
+        let packages = metadata["packages"].as_array().expect("the packages");
+        let workspace: BTreeSet<&str> = packages
+            .iter()
+            .filter_map(|package| package["name"].as_str())
+            .collect();
+        let executable = packages
+            .iter()
+            .find(|package| package["name"] == "vkxp-guest-rgss3")
+            .expect("the guest executable is in the workspace");
+        let declared: Vec<&str> = executable["dependencies"]
+            .as_array()
+            .expect("its dependencies")
+            .iter()
+            .filter(|dependency| dependency["kind"].as_str() != Some("dev"))
+            .filter_map(|dependency| dependency["name"].as_str())
+            .filter(|name| workspace.contains(name))
+            .collect();
+        assert_eq!(declared, ["vkxp-guest-main-rgss3"]);
+    }
+
+    /// Scenario "One version": the program and the guest executable it starts state one
+    /// version.
+    #[test]
+    fn the_program_and_the_guest_executable_have_one_version() {
+        let metadata = metadata_without_resolution();
+        let version = |name: &str| {
+            metadata["packages"]
+                .as_array()
+                .expect("the packages")
+                .iter()
+                .find(|package| package["name"] == name)
+                .map(|package| package["version"].clone())
+                .unwrap_or_else(|| panic!("`{name}` is in the workspace"))
+        };
+        assert_eq!(version("vkxp"), version("vkxp-guest-rgss3"));
     }
 
     fn metadata_without_resolution() -> Value {

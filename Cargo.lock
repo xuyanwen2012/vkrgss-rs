@@ -2620,6 +2620,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "vkxp-guest-rgss3"
+version = "0.2.0"
+dependencies = [
+ "tempfile",
+ "vkxp-guest",
+ "vkxp-guest-main-rgss3",
+]
+
+[[package]]
 name = "vkxp-host"
 version = "0.2.0"
 dependencies = [

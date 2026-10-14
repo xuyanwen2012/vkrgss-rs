@@ -116,3 +116,24 @@ fn the_option_after_another_argument_is_an_unknown_option() {
     );
     assert!(stderr.contains("usage: vkxp"), "{stderr}");
 }
+
+/// Scenario "The program given a record of VX Ace" of the requirement "An executable runs
+/// the runtimes of its interpreter".
+#[test]
+fn a_game_of_vx_ace_is_refused_before_the_socket_is_tried() {
+    let work = tempfile::tempdir().unwrap();
+    std::fs::write(
+        work.path().join("Game.ini"),
+        "[Game]\r\nLibrary=System\\RGSS301.dll\r\nScripts=Data\\Scripts.rvdata2\r\n",
+    )
+    .unwrap();
+    let builtin = work.path().join("rpg.rb");
+    std::fs::write(&builtin, "module RPG\nend\n").unwrap();
+    let mut record = record(work.path());
+    record.settings.builtin_scripts = Some(builtin);
+    let file = work.path().join("guest.record");
+    record.write(&file, VERSION).unwrap();
+    let stderr = refusal(&vkxp(work.path(), &[GUEST_ROLE, file.to_str().unwrap()]));
+    assert!(stderr.contains("RPG Maker VX Ace"), "{stderr}");
+    assert!(!stderr.contains("guest.sock"), "{stderr}");
+}
