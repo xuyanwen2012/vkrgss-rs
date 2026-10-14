@@ -20,4 +20,4 @@
 
 ## 5. Integration check
 
-- [ ] 5.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0, every name of the kept lists is listed again, and `openspec validate emulate-win32api-and-dl-over-ruby-1-9-2 --strict` passes.
+- [x] 5.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0, every name of the kept lists is listed again, and `openspec validate emulate-win32api-and-dl-over-ruby-1-9-2 --strict` passes.
