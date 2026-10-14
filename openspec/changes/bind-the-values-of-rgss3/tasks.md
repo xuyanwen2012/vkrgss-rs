@@ -7,7 +7,7 @@
 
 ## 2. Rectangle
 
-- [ ] 2.1 The functions of RGSS3 for `initialize` and `set` of `Rect`, both with arity -1 (decisions 3 and 4). Verify: the scenarios of "Rect of RGSS3", "Seen by the element" among them with the scene support of `vkxp-binding`, and "Rect, measured on the original", "Out of range" and the calls on `Rect` of "Numbers of the wrong kind"; the same test command.
+- [x] 2.1 The functions of RGSS3 for `initialize` and `set` of `Rect`, both with arity -1 (decisions 3 and 4). Verify: the scenarios of "Rect of RGSS3", "Seen by the element" among them with the scene support of `vkxp-binding`, and "Rect, measured on the original", "Out of range" and the calls on `Rect` of "Numbers of the wrong kind"; the same test command.
 
 ## 3. Table, comparison, serialized and text forms
 
