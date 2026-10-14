@@ -6,7 +6,7 @@
 
 ## 2. The fix
 
-- [ ] 2.1 Draw the hinted outline whole. Verify: the scenarios of `specs/text-rendering/spec.md`; every test of `crates/vkxp-text` passes with its expected values unedited, `tests/rgss3_metrics.rs` included.
+- [x] 2.1 Draw the hinted outline whole. Verify: the scenarios of `specs/text-rendering/spec.md`; every test of `crates/vkxp-text` passes with its expected values unedited, `tests/rgss3_metrics.rs` included.
 
 ## 3. Integration check
 

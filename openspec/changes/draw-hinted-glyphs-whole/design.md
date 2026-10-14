@@ -50,3 +50,15 @@ which is 0 until the size has been computed by `inspect` (or set by `size`), so 
 gave was the glyph's bottom row and every glyph was drawn its own height too low. `swash`'s
 `Render`, which the plain rule uses, calls `inspect` before it renders, so plain glyphs were
 placed right. The points of the hinted outline were in the right units and axis.
+
+## The fix
+
+`hinted_glyph` asks the mask for its size (`inspect`) before it renders, as `swash`'s `Render`
+does, so the placement's top is the top of the glyph. Nothing of the advances, the boxes or
+the metrics changes, and the plain rule renders through `Render` as before.
+
+As the decision above says, a glyph whose hinted outline has another number of points than
+`swash`'s outline is no longer a panic: it is drawn plain, from the image of the plain rule.
+Both outlines are draws of `skrifa` (`swash` 0.2.10 draws through `skrifa`), so this is not
+expected to happen; drawing such a glyph through a pen of its own was not built, because the
+emboldening of a synthesised bold works on `swash`'s outline.

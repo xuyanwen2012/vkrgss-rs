@@ -761,7 +761,14 @@ impl TextEngine {
             return Arc::new(Glyph::default());
         }
         if key.hinted {
-            let rendered = Arc::new(self.hinted_glyph(key));
+            // A glyph whose hinted points do not match its outline is drawn plain.
+            let rendered = match self.hinted_glyph(key) {
+                Some(rendered) => Arc::new(rendered),
+                None => self.glyph(GlyphKey {
+                    hinted: false,
+                    ..key
+                }),
+            };
             self.glyphs.insert(key, Arc::clone(&rendered));
             return rendered;
         }
@@ -833,14 +840,15 @@ impl TextEngine {
     }
 
     /// The image of a glyph by [`MetricRules::Rgss3`]: `swash`'s outline of the glyph with
-    /// its points moved to those of the hinted outline, emboldened, slanted and condensed as
-    /// by the plain rule, and its box from that outline.
-    fn hinted_glyph(&mut self, key: GlyphKey) -> Glyph {
+    /// all its points moved to those of the hinted outline, emboldened, slanted and condensed
+    /// as by the plain rule, and its box from that outline. `None` where the hinted outline
+    /// has another number of points than `swash`'s.
+    fn hinted_glyph(&mut self, key: GlyphKey) -> Option<Glyph> {
         let (numerator, denominator) = key.condense;
         // A glyph `skrifa` gives no hinted draw for draws nothing.
         let Some(hinted_points) = self.faces[key.face].hinted_points(key.pixels_per_em, key.glyph)
         else {
-            return Glyph::default();
+            return Some(Glyph::default());
         };
         let loaded = &self.faces[key.face];
         let mut scaler = self
@@ -855,10 +863,13 @@ impl TextEngine {
             .filter(|outline| !outline.points().is_empty())
         else {
             // A glyph without an outline, such as a space, draws nothing.
-            return Glyph::default();
+            return Some(Glyph::default());
         };
         // Both are draws of `skrifa` with FreeType's path style, so the points come in the
-        // same order; sequences of different lengths are a fault, which panics here.
+        // same order.
+        if outline.points().len() != hinted_points.len() {
+            return None;
+        }
         outline.points_mut().copy_from_slice(&hinted_points);
         if key.bold {
             let strength = key.pixels_per_em as f32 * SYNTHETIC_BOLD;
@@ -877,22 +888,25 @@ impl TextEngine {
         if key.italic || numerator != denominator {
             outline.transform(&Transform::new(condense, 0.0, slant, 1.0, 0.0, 0.0));
         }
+        // zeno places a mask with a bottom-left origin by its size, which it has computed
+        // only once asked for it; before that the top it gives is the bottom of the glyph.
         let (coverage, placement) = Mask::new(outline.path())
             .format(Format::Alpha)
             .origin(Origin::BottomLeft)
+            .inspect(|_, _, _| {})
             .render();
         let bytes = placement.width as usize * placement.height as usize;
         if coverage.len() != bytes {
-            return Glyph::default();
+            return Some(Glyph::default());
         }
-        Glyph {
+        Some(Glyph {
             left: placement.left,
             top: placement.top,
             width: placement.width,
             height: placement.height,
             extent: Some(extent),
             coverage,
-        }
+        })
     }
 }
 
