@@ -477,6 +477,8 @@ end
         /// What [`run`] does with `options` on the vkxp side alone: the copy with the probe
         /// and the command of vkxp, which it runs with the run-time directory of
         /// [`Generated::plain_run`]. A game of RGSS3 runs its scripts in a guest process.
+        // Only the tests of games of RGSS3 call it, and they exist where Ruby 1.9.2 is built.
+        #[cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
         fn vkxp_side(&self, options: &Options) {
             let runtime = game::runtime(&options.game, options.runtime).unwrap();
             let executable = vkxp::build(&crate::workspace_root(), runtime).unwrap();
