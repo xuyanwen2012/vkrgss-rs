@@ -9,7 +9,7 @@
 
 ## 2. The metric rule of a game
 
-- [ ] 2.1 In `crates/vkxp-guest-main/src/font.rs`: the metric rule of a game by its runtime, set by `FontBackend::for_game`, with its unit tests. Verify: the scenarios of "Metric rule of a game of RGSS3"; `cargo test -p vkxp-guest-main -p vkxp-guest-main-rgss3 --locked` passes; `git diff --stat` against the start of the change names no file of `crates/vkxp-core`, `crates/vkxp-binding`, `crates/vkxp-guest`, `crates/vkxp-proto` or `crates/vkxp-host`.
+- [x] 2.1 In `crates/vkxp-guest-main/src/font.rs`: the metric rule of a game by its runtime, set by `FontBackend::for_game`, with its unit tests. Verify: the scenarios of "Metric rule of a game of RGSS3"; `cargo test -p vkxp-guest-main -p vkxp-guest-main-rgss3 --locked` passes; `git diff --stat` against the start of the change names no file of `crates/vkxp-core`, `crates/vkxp-binding`, `crates/vkxp-guest`, `crates/vkxp-proto` or `crates/vkxp-host`.
 
 ## 3. Documents
 

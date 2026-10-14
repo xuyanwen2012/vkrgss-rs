@@ -1,15 +1,15 @@
 //! The text backend of a running game: the binding's interface over the font engine.
 //!
 //! It lives outside the binding so that the binding does not depend on the font engine.
-//! For a game of RGSS3 it also takes the fonts of the run-time packages and the glyph rule
-//! of the DLL the game ships.
+//! For a game of RGSS3 it also takes the fonts of the run-time packages, the glyph rule of
+//! the DLL the game ships and the metric rule of RGSS3.
 
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 
 use vkxp_binding::TextBackend;
 use vkxp_core::{Font, Mask, TextMetrics, TextRasterizer};
-use vkxp_text::{FontSources, MaskRules, TextEngine, TextRequest};
+use vkxp_text::{FontSources, MaskRules, MetricRules, TextEngine, TextRequest};
 use vkxp_vfs::{LibraryVersion, Runtime};
 
 /// The directories a game of `runtime` takes fonts from before the system's, in order: those
@@ -52,6 +52,17 @@ pub(crate) fn mask_rules(runtime: Runtime, version: Option<LibraryVersion>) -> M
     }
 }
 
+/// The rule text is measured and set by in a game of `runtime`: in RGSS3 that of the glyphs
+/// Wine's FreeType hints, whatever version the DLL has (both versions measured the same
+/// table of `text_size`), and the plain rule in RGSS1 and RGSS2. See `docs/decisions.md`,
+/// "Text and bitmaps of RGSS3".
+pub(crate) fn metric_rules(runtime: Runtime) -> MetricRules {
+    match runtime {
+        Runtime::Rgss3 => MetricRules::Rgss3,
+        Runtime::Rgss1 | Runtime::Rgss2 => MetricRules::Plain,
+    }
+}
+
 /// A [`TextBackend`] that draws with a [`TextEngine`].
 ///
 /// The binding's interface takes `&self` and the engine fills caches through `&mut self`;
@@ -70,8 +81,9 @@ impl FontBackend {
 
     /// The backend of a game of `runtime`: the fonts of the directories of
     /// [`font_directories`], then the fonts installed on the system, with the glyph rule of
-    /// [`mask_rules`] for the version of the game's DLL. With `own_metrics` a font that
-    /// replaces another is sized by its own line box.
+    /// [`mask_rules`] for the version of the game's DLL and the metric rule of
+    /// [`metric_rules`]. With `own_metrics` a font that replaces another is sized by its own
+    /// line box.
     pub(crate) fn for_game(
         runtime: Runtime,
         game_dir: &Path,
@@ -85,10 +97,11 @@ impl FontBackend {
             own_metrics,
             ..FontSources::system()
         });
-        backend
-            .engine
-            .borrow_mut()
-            .set_mask_rules(mask_rules(runtime, version));
+        {
+            let mut engine = backend.engine.borrow_mut();
+            engine.set_mask_rules(mask_rules(runtime, version));
+            engine.set_metric_rules(metric_rules(runtime));
+        }
         backend
     }
 }
@@ -380,6 +393,29 @@ mod tests {
             let backend =
                 FontBackend::for_game(runtime, game.path(), &[], &[], false, version([3, 0, 0, 1]));
             assert_eq!(backend.engine.borrow().mask_rules(), expected);
+        }
+    }
+
+    /// Scenarios "The table" and "The backend of a game" of "Metric rule of a game of RGSS3".
+    #[test]
+    fn the_metric_rule_follows_the_runtime() {
+        assert_eq!(metric_rules(Runtime::Rgss3), MetricRules::Rgss3);
+        assert_eq!(metric_rules(Runtime::Rgss2), MetricRules::Plain);
+        assert_eq!(metric_rules(Runtime::Rgss1), MetricRules::Plain);
+        let version = |numbers| Some(LibraryVersion(numbers));
+        let game = tempfile::tempdir().unwrap();
+        let fonts = [text_tests().join("fonts")];
+        for (runtime, version, expected) in [
+            (Runtime::Rgss3, version([3, 0, 0, 1]), MetricRules::Rgss3),
+            (Runtime::Rgss3, version([3, 0, 1, 1]), MetricRules::Rgss3),
+            (Runtime::Rgss3, None, MetricRules::Rgss3),
+            (Runtime::Rgss2, version([2, 0, 2, 1]), MetricRules::Plain),
+            (Runtime::Rgss1, None, MetricRules::Plain),
+        ] {
+            let backend = FontBackend::for_game(runtime, game.path(), &[], &fonts, false, version);
+            let engine = backend.engine.borrow();
+            assert_eq!(engine.metric_rules(), expected, "{runtime:?} {version:?}");
+            assert_eq!(engine.mask_rules(), mask_rules(runtime, version));
         }
     }
 
