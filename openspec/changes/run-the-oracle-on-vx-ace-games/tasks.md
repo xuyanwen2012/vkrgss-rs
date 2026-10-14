@@ -11,7 +11,7 @@
 
 ## 3. The original's side
 
-- [ ] 3.1 The DLL of a game of RGSS3 at the path of `Library=`, `--dll` optional for RGSS3, the check before Wine (decision 6); the runtime decided before the prerequisites. Verify: the four scenarios of "The DLL of a game of RGSS3"; the scenario "No DLL" of "Missing prerequisites" still passes for a game of RGSS1; `cargo test -p xtask --locked` passes.
+- [x] 3.1 The DLL of a game of RGSS3 at the path of `Library=`, `--dll` optional for RGSS3, the check before Wine (decision 6); the runtime decided before the prerequisites. Verify: the four scenarios of "The DLL of a game of RGSS3"; the scenario "No DLL" of "Missing prerequisites" still passes for a game of RGSS1; `cargo test -p xtask --locked` passes.
 - [ ] 3.2 The size of a captured frame from the request, and the choice of the window by that size as a function tested without a display (decision 5). Verify: the scenario "Size from the request"; the requests of the probes of RGSS1 and RGSS2 give the frame size of their runtime; `cargo test -p xtask --locked` passes.
 - [ ] 3.3 The GStreamer plugin directories and variables of decision 7 on every Wine command. Verify: the four scenarios of "The original side has no GPU device and no network"; `cargo test -p xtask --locked` passes; no test or command of this task starts `wine`, `wineboot`, `wineserver` or `Xvfb`.
 

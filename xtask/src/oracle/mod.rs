@@ -32,7 +32,9 @@ usage: cargo xtask oracle <GAME_DIR> --frames N[,N...] [OPTIONS]
 
   GAME_DIR                the game directory; it is copied, never changed
   --frames N[,N...]       the frames to capture, numbered from 0 as `vkxp --dump` numbers them
-  --dll FILE              the RGSS DLL the game's Game.ini names; needed without --vkxp-only
+  --dll FILE              the RGSS DLL the game's Game.ini names; needed without --vkxp-only,
+                          except for a game of rgss3, which runs with the DLL it has at the
+                          path its Library= names when the option is left out
   --runtime rgss1|rgss2|rgss3
                           the runtime of the game, when the file its Scripts= names is
                           none of .rxdata (rgss1), .rvdata (rgss2) and .rvdata2 (rgss3)
@@ -167,7 +169,7 @@ fn prepare_copy(options: &Options, runtime: Runtime, side: Side, copy: &Path) ->
 fn capture_original(
     options: &Options,
     runtime: Runtime,
-    dll: &Path,
+    dll: Option<&Path>,
     fonts: Option<&fonts::Shared>,
 ) -> Result<Vec<u64>> {
     let Options { out, frames, .. } = options;
@@ -195,14 +197,12 @@ pub(crate) fn run(options: &Options, root: &Path) -> Result<()> {
         "{}: the game directory does not exist",
         game.display()
     );
-    let dll = match (&options.dll, options.vkxp_only) {
-        (_, true) => None,
-        (Some(dll), false) => {
-            original::check_prerequisites(game, dll)?;
-            Some(dll)
-        }
-        (None, false) => bail!("--dll is missing; without the original, use --vkxp-only"),
-    };
+    // The DLL of the original is checked by the runtime of the game.
+    let runtime = game::runtime(game, options.runtime)?;
+    let dll = options.dll.as_deref();
+    if !options.vkxp_only {
+        original::check_prerequisites(game, runtime, dll)?;
+    }
     // A copy below the game would be copied into itself, and would change the game.
     let inside = |inner: &Path, outer: &Path| {
         let outer = outer.canonicalize().unwrap_or_else(|_| outer.to_path_buf());
@@ -217,7 +217,6 @@ pub(crate) fn run(options: &Options, root: &Path) -> Result<()> {
         "the output directory {} is inside the game directory",
         out.display()
     );
-    let runtime = game::runtime(game, options.runtime)?;
     // Before either runtime is started: a file that is no font ends the run here.
     let shared = fonts::share(&options.fonts, out)?;
     let executable = match options.original_only {
@@ -233,7 +232,7 @@ pub(crate) fn run(options: &Options, root: &Path) -> Result<()> {
     fs::create_dir_all(&frames_dir).with_context(|| frames_dir.display().to_string())?;
 
     let mut late = Vec::new();
-    if let Some(dll) = dll {
+    if !options.vkxp_only {
         eprintln!("oracle: running the original");
         late = capture_original(options, runtime, dll, shared.as_ref())?;
     }
@@ -869,6 +868,100 @@ loop { Graphics.update }
         }
     }
 
+    /// The DLL-given and DLL-of-the-game scenarios of `oracle-harness`.
+    #[test]
+    fn the_dll_of_a_game_of_rgss3_is_at_the_path_of_its_library() {
+        let generated = Generated::ace(&[("Main", "")]);
+        let game = generated.game();
+        fs::create_dir_all(game.join("system")).unwrap();
+        fs::write(game.join("system/readme.txt"), b"a file").unwrap();
+        let dll = generated.dir.path().join("Given.dll");
+        fs::write(&dll, b"the given DLL").unwrap();
+        let options = generated.options("10", "");
+        let copy = generated.out().join("given");
+
+        original::check_dll(&game, Runtime::Rgss3, Some(&dll)).unwrap();
+        prepare_copy(&options, Runtime::Rgss3, Side::Original, &copy).unwrap();
+        original::place_dll(&copy, Runtime::Rgss3, Some(&dll)).unwrap();
+
+        let placed = fs::read(copy.join("system/RGSS300.dll")).unwrap();
+        assert_eq!(placed, b"the given DLL");
+        assert!(!copy.join("System").exists());
+        assert!(!copy.join("Given.dll").exists());
+        let dlls: Vec<_> = fs::read_dir(&copy)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .filter(|name| name.to_string_lossy().to_lowercase().ends_with(".dll"))
+            .collect();
+        assert!(dlls.is_empty(), "{dlls:?}");
+
+        // The game's own file, used without --dll.
+        fs::write(game.join("system/RGSS300.dll"), b"the game's DLL").unwrap();
+        let copy = generated.out().join("own");
+        original::check_dll(&game, Runtime::Rgss3, None).unwrap();
+        prepare_copy(&options, Runtime::Rgss3, Side::Original, &copy).unwrap();
+        original::place_dll(&copy, Runtime::Rgss3, None).unwrap();
+        let placed = fs::read(copy.join("system/RGSS300.dll")).unwrap();
+        assert_eq!(placed, b"the game's DLL");
+
+        // A folder that the game lacks is made.
+        let other = Generated::ace(&[("Main", "")]);
+        let copy = other.out().join("made");
+        prepare_copy(
+            &other.options("10", ""),
+            Runtime::Rgss3,
+            Side::Original,
+            &copy,
+        )
+        .unwrap();
+        original::place_dll(&copy, Runtime::Rgss3, Some(&dll)).unwrap();
+        assert_eq!(
+            fs::read(copy.join("System/RGSS300.dll")).unwrap(),
+            b"the given DLL"
+        );
+    }
+
+    /// The no-DLL and path-outside-the-game scenarios of `oracle-harness`, and the other
+    /// paths of `Library=` that are refused.
+    #[test]
+    fn a_game_of_rgss3_without_its_dll_or_with_a_path_outside_it_is_an_error() {
+        let generated = Generated::ace(&[("Main", "")]);
+        let mut options = generated.options("10", "");
+        options.vkxp_only = false;
+        let error = run(&options, &crate::workspace_root()).unwrap_err();
+        let message = format!("{error:#}");
+        assert!(message.contains("`System\\RGSS300.dll`"), "{message}");
+        assert!(message.contains("--dll"), "{message}");
+        assert!(!generated.out().exists(), "nothing was started");
+
+        let ini = |library: &str| {
+            let text = format!("[Game]\r\n{library}Scripts=Data\\Scripts.rvdata2\r\nRTP=\r\n");
+            fs::write(generated.game().join("Game.ini"), text).unwrap();
+        };
+        let dll = generated.dir.path().join("Given.dll");
+        fs::write(&dll, b"the given DLL").unwrap();
+        for (library, named) in [
+            ("..\\RGSS300.dll", "..\\RGSS300.dll"),
+            ("System/../../RGSS300.dll", "System/../../RGSS300.dll"),
+            ("\\RGSS300.dll", "\\RGSS300.dll"),
+            ("C:\\RGSS300.dll", "C:\\RGSS300.dll"),
+            ("", "Library="),
+        ] {
+            let line = match library {
+                "" => String::new(),
+                _ => format!("Library={library}\r\n"),
+            };
+            ini(&line);
+            for given in [None, Some(dll.clone())] {
+                options.dll = given;
+                let error = run(&options, &crate::workspace_root()).unwrap_err();
+                let message = format!("{error:#}");
+                assert!(message.contains(named), "{library}: {message}");
+                assert!(!generated.out().exists(), "nothing was started");
+            }
+        }
+    }
+
     /// What RGSS2 has and the `Graphics` of vkxp, which runs these games as RGSS1, has not,
     /// so that the probe of RGSS2 can be run: the functions show nothing here.
     const RGSS2_STAND_IN: &str = "\
@@ -1081,10 +1174,10 @@ loop { Graphics.update }
         let mut options = parse(&arguments, &root).unwrap();
         options.out = out.clone();
         let dll = options.dll.clone().unwrap();
-        original::check_prerequisites(&options.game, &dll).unwrap();
+        original::check_prerequisites(&options.game, Runtime::Rgss1, Some(&dll)).unwrap();
         fs::create_dir_all(out.join("frames")).unwrap();
 
-        capture_original(&options, Runtime::Rgss1, &dll, None).unwrap();
+        capture_original(&options, Runtime::Rgss1, Some(&dll), None).unwrap();
 
         for frame in [10, 20] {
             let picture = report::Picture::read(&out.join(report::original_file(frame))).unwrap();

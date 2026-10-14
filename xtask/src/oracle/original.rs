@@ -18,6 +18,7 @@ use x11rb::connection::Connection;
 use x11rb::protocol::xproto::{ConnectionExt, ImageFormat, ImageOrder, MapState};
 
 use super::fonts;
+use super::game::Library;
 use super::report::{self, Picture};
 use super::runtime::Runtime;
 
@@ -50,8 +51,9 @@ pub(super) struct Run<'a> {
     /// The runtime of the game, for the size of its window and the registry key of its
     /// run-time packages.
     pub runtime: Runtime,
-    /// The RGSS DLL, which is copied into the game copy.
-    pub dll: &'a Path,
+    /// The RGSS DLL, which is copied into the game copy. A game of RGSS3 may run with the
+    /// DLL it has.
+    pub dll: Option<&'a Path>,
     /// The directory of each run-time package, by its name.
     pub rtps: &'a [(String, PathBuf)],
     /// The fonts that the game font names are replaced by, if any are shared with vkxp.
@@ -65,18 +67,59 @@ pub(super) struct Run<'a> {
 }
 
 /// What must be there before the original side can run, checked before anything is started.
-pub(super) fn check_prerequisites(game: &Path, dll: &Path) -> Result<()> {
-    ensure!(
-        dll.is_file(),
-        "{}: the RGSS DLL does not exist",
-        dll.display()
-    );
+pub(super) fn check_prerequisites(game: &Path, runtime: Runtime, dll: Option<&Path>) -> Result<()> {
+    check_dll(game, runtime, dll)?;
     ensure!(
         game.join("Game.exe").is_file(),
         "{}: the game has no Game.exe to run in the original runtime",
         game.display()
     );
     check_programs(std::env::var_os("PATH").as_deref())
+}
+
+/// Checks that the original of the game in `game` will have its DLL: `dll`, which is needed
+/// for RGSS1 and RGSS2, or for RGSS3 the file the game has at the path of its `Library=`.
+pub(super) fn check_dll(game: &Path, runtime: Runtime, dll: Option<&Path>) -> Result<()> {
+    if let Some(dll) = dll {
+        ensure!(
+            dll.is_file(),
+            "{}: the RGSS DLL does not exist",
+            dll.display()
+        );
+    }
+    if runtime != Runtime::Rgss3 {
+        ensure!(
+            dll.is_some(),
+            "--dll is missing; without the original, use --vkxp-only"
+        );
+        return Ok(());
+    }
+    let library = Library::of(game)?;
+    ensure!(
+        dll.is_some() || library.find(game).is_some(),
+        "{}: the game has no DLL at `{}`, which `Library=` of its Game.ini names; give one \
+         with --dll",
+        game.display(),
+        library.written
+    );
+    Ok(())
+}
+
+/// Puts the DLL into the game copy `game` where the original of `runtime` loads it from: for
+/// RGSS3 at the path of `Library=`, replacing the file the game has there, and nothing when
+/// no DLL is given; for RGSS1 and RGSS2 beside `Game.exe` under its own name.
+pub(super) fn place_dll(game: &Path, runtime: Runtime, dll: Option<&Path>) -> Result<()> {
+    let Some(dll) = dll else {
+        return Ok(());
+    };
+    let target = match runtime {
+        Runtime::Rgss3 => Library::of(game)?.place(game)?,
+        Runtime::Rgss1 | Runtime::Rgss2 => {
+            game.join(dll.file_name().context("the DLL path has no name")?)
+        }
+    };
+    fs::copy(dll, &target).with_context(|| format!("{} to {}", dll.display(), target.display()))?;
+    Ok(())
 }
 
 /// The programs of the original side, which must all be in a directory of `path`, the value
@@ -107,8 +150,7 @@ impl Run<'_> {
         out: &Path,
         log: &Path,
     ) -> Result<Vec<u64>> {
-        let dll_name = self.dll.file_name().context("the DLL path has no name")?;
-        fs::copy(self.dll, game.join(dll_name)).with_context(|| self.dll.display().to_string())?;
+        place_dll(game, self.runtime, self.dll)?;
 
         let display = Xvfb::start()?;
         // From here on the Wine server is shut down however the run ends.
@@ -467,7 +509,7 @@ mod tests {
     fn every_wine_command_runs_in_the_sandbox_without_a_driver_of_va_api() {
         let run = Run {
             runtime: Runtime::Rgss1,
-            dll: Path::new("RGSS104E.dll"),
+            dll: Some(Path::new("RGSS104E.dll")),
             rtps: &[],
             fonts: None,
             prefix: Path::new("prefix"),
