@@ -17,4 +17,4 @@
 
 ## 4. Integration check
 
-- [ ] 4.1 Run the full gate. Verify: every name of the lists kept in 1.1 is there again; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate measure-text-as-gdi-does-in-rgss3 --strict` passes.
+- [x] 4.1 Run the full gate. Verify: every name of the lists kept in 1.1 is there again; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate measure-text-as-gdi-does-in-rgss3 --strict` passes.
