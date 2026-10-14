@@ -143,6 +143,42 @@ fn base_build() -> cc::Build {
 }
 
 /// A path as a string for `cargo:` lines, which cannot carry anything but UTF-8.
+/// Links libcrypt, which `String#crypt` needs: dynamically, or statically when
+/// `VKXP_STATIC_CRYPT` is `1`, as `cargo xtask dist` sets it, because the shared library has
+/// a different name on Ubuntu (`libcrypt.so.1`) and on Fedora (`libcrypt.so.2`). As the
+/// build script of `vkxp-ruby-sys` does.
+fn link_crypt(base: &cc::Build) {
+    println!("cargo:rerun-if-env-changed=VKXP_STATIC_CRYPT");
+    let value = env::var("VKXP_STATIC_CRYPT").unwrap_or_default();
+    match value.as_str() {
+        "" | "0" => println!("cargo:rustc-link-lib=crypt"),
+        "1" => {
+            // rustc looks for a static library only in its own search paths, so it is given
+            // the directory in which the C compiler finds the library.
+            let compiler = base.get_compiler();
+            let output = compiler
+                .to_command()
+                .arg("-print-file-name=libcrypt.a")
+                .output()
+                .unwrap_or_else(|error| panic!("{}: {error}", compiler.path().display()));
+            let printed = String::from_utf8_lossy(&output.stdout);
+            let directory = Path::new(printed.trim())
+                .parent()
+                .filter(|directory| directory.is_dir())
+                .unwrap_or_else(|| {
+                    panic!(
+                        "VKXP_STATIC_CRYPT=1 needs the static library `libcrypt.a`, which the \
+                         C compiler does not find. It is in the package `libcrypt-dev` on \
+                         Debian and Ubuntu and `libxcrypt-static` on Fedora."
+                    )
+                });
+            println!("cargo:rustc-link-search=native={}", utf8(directory));
+            println!("cargo:rustc-link-lib=static=crypt");
+        }
+        other => panic!("VKXP_STATIC_CRYPT is `{other}`; it must be unset, empty, `0` or `1`"),
+    }
+}
+
 fn utf8(path: &Path) -> &str {
     path.to_str()
         .unwrap_or_else(|| panic!("path is not UTF-8: {}", path.display()))
@@ -206,11 +242,11 @@ fn main() {
         .file(ruby_dir.join("ext/zlib/zlib.c"));
     zlib.compile("vkxp-ruby192-zlib");
 
-    // libcrypt is linked dynamically; the static switch of `vkxp-ruby-sys` comes with the
-    // change that puts this interpreter into a release package.
-    for library in ["pthread", "rt", "crypt", "m"] {
+    for library in ["pthread", "rt"] {
         println!("cargo:rustc-link-lib={library}");
     }
+    link_crypt(&base);
+    println!("cargo:rustc-link-lib=m");
 
     // What the tests need to build Ruby's own test executable exactly as the library was
     // built: the compiler, its arguments, and where the inputs and outputs are.

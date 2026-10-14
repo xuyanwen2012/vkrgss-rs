@@ -1,26 +1,37 @@
-//! The release package: the release executable with the documents and licence texts that
-//! accompany it, in one archive under `target/dist/`, and the archive's SHA-256 checksum
+//! The release package: the release executables, `vkxp` and the guest executable of games
+//! of RGSS3 that it starts from beside itself, with the documents and licence texts that
+//! accompany them, in one archive under `target/dist/`, and the archive's SHA-256 checksum
 //! beside it. The archive is written by `tar` and the checksum by `sha256sum`.
 //!
-//! The executable is built with libcrypt linked statically (`VKXP_STATIC_CRYPT=1`, read by
-//! the build script of `vkxp-ruby-sys`), because the shared library has a different name on
-//! Ubuntu and on Fedora. The command looks for the static library before the build and reads
-//! the needed libraries of the executable with `readelf` after it.
+//! Both executables are built in one build with libcrypt linked statically
+//! (`VKXP_STATIC_CRYPT=1`, read by the build scripts of `vkxp-ruby-sys` and
+//! `vkxp-ruby192-sys`), because the shared library has a different name on Ubuntu and on
+//! Fedora. The command looks for the static library before the build and reads the needed
+//! libraries of each executable with `readelf` after it.
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 
 /// The only target vkxp builds for.
 const TARGET: &str = "x86_64-unknown-linux-gnu";
 
 /// The arguments of the build, after the cargo executable.
-const BUILD: [&str; 5] = ["build", "--release", "--locked", "-p", "vkxp"];
+const BUILD: [&str; 7] = [
+    "build",
+    "--release",
+    "--locked",
+    "-p",
+    "vkxp",
+    "-p",
+    "vkxp-guest-rgss3",
+];
 
-/// The variable that makes the build script of `vkxp-ruby-sys` link libcrypt statically.
+/// The variable that makes the build scripts of the interpreter crates link libcrypt
+/// statically.
 const STATIC_CRYPT: (&str, &str) = ("VKXP_STATIC_CRYPT", "1");
 
 /// The static library the build needs.
@@ -29,11 +40,18 @@ const CRYPT_ARCHIVE: &str = "libcrypt.a";
 /// Where the build leaves the executable, below the workspace root.
 const EXECUTABLE: &str = "target/release/vkxp";
 
+/// Where the build leaves the guest executable of games of RGSS3, below the workspace root.
+const GUEST_EXECUTABLE: &str = "target/release/vkxp-guest-rgss3";
+
+/// The executables of the package.
+const EXECUTABLES: [&str; 2] = [EXECUTABLE, GUEST_EXECUTABLE];
+
 /// The files of the package: where each is below the workspace root and where it goes below
-/// the directory of the archive. The licence texts are the ones the bundled source asks to
+/// the directory of the archive. The licence texts are the ones the bundled sources ask to
 /// accompany a binary.
-const FILES: [(&str, &str); 10] = [
+const FILES: [(&str, &str); 14] = [
     (EXECUTABLE, "vkxp"),
+    (GUEST_EXECUTABLE, "vkxp-guest-rgss3"),
     ("README.md", "README.md"),
     ("CHANGELOG.md", "CHANGELOG.md"),
     ("LICENSE", "LICENSE"),
@@ -46,6 +64,12 @@ const FILES: [(&str, &str); 10] = [
     ("third_party/ruby-1.8.7/LGPL", "licenses/ruby-1.8.7/LGPL"),
     ("third_party/ruby-1.8.7/LEGAL", "licenses/ruby-1.8.7/LEGAL"),
     (
+        "third_party/ruby-1.9.2/COPYING",
+        "licenses/ruby-1.9.2/COPYING",
+    ),
+    ("third_party/ruby-1.9.2/GPL", "licenses/ruby-1.9.2/GPL"),
+    ("third_party/ruby-1.9.2/LEGAL", "licenses/ruby-1.9.2/LEGAL"),
+    (
         "third_party/oniguruma-5.9.6/COPYING",
         "licenses/oniguruma-5.9.6/COPYING",
     ),
@@ -57,11 +81,14 @@ fn package_name() -> String {
     format!("vkxp-{}-{TARGET}", env!("CARGO_PKG_VERSION"))
 }
 
-/// Builds the release executable through the cargo executable `cargo` and writes the package
-/// under `target/dist/` of `root`.
+/// Builds the release executables through the cargo executable `cargo` and writes the
+/// package under `target/dist/` of `root`.
 pub(crate) fn run(cargo: &str, root: &Path) -> Result<()> {
     // The build takes minutes; a document that is missing is reported before it.
-    for (source, _) in FILES.iter().filter(|(source, _)| *source != EXECUTABLE) {
+    for (source, _) in FILES
+        .iter()
+        .filter(|(source, _)| !EXECUTABLES.contains(source))
+    {
         require(root, source)?;
     }
     let mut cc = Command::new("cc");
@@ -78,13 +105,15 @@ pub(crate) fn run(cargo: &str, root: &Path) -> Result<()> {
     if !status.success() {
         bail!("dist: `{command_line}` ended with {status}");
     }
-    // The messages of `readelf` are parsed, so they are not translated.
-    let mut readelf = Command::new("readelf");
-    readelf.arg("--dynamic").arg(root.join(EXECUTABLE));
-    let dynamic = tool("readelf", readelf.env("LC_ALL", "C"))?;
-    let needed = needed_libraries(&String::from_utf8_lossy(&dynamic));
-    eprintln!("dist: the executable needs {}", needed.join(", "));
-    refuse_shared_crypt(&needed)?;
+    for executable in EXECUTABLES {
+        // The messages of `readelf` are parsed, so they are not translated.
+        let mut readelf = Command::new("readelf");
+        readelf.arg("--dynamic").arg(root.join(executable));
+        let dynamic = tool("readelf", readelf.env("LC_ALL", "C"))?;
+        let needed = needed_libraries(&String::from_utf8_lossy(&dynamic));
+        eprintln!("dist: `{executable}` needs {}", needed.join(", "));
+        refuse_shared_crypt_in(executable, &needed)?;
+    }
     let archive = package(root, &root.join("target/dist"))?;
     eprintln!("dist: wrote {} and its .sha256", archive.display());
     Ok(())
@@ -135,6 +164,11 @@ fn refuse_shared_crypt(needed: &[String]) -> Result<()> {
     Ok(())
 }
 
+/// [`refuse_shared_crypt`] for the executable `executable`, which the error names.
+fn refuse_shared_crypt_in(executable: &str, needed: &[String]) -> Result<()> {
+    refuse_shared_crypt(needed).map_err(|error| anyhow!("{error} (`{executable}`)"))
+}
+
 /// Copies the files of the package from `root` into a directory below `dist`, packs that
 /// directory and writes the checksum. Returns the path of the archive.
 fn package(root: &Path, dist: &Path) -> Result<PathBuf> {
@@ -150,7 +184,11 @@ fn package(root: &Path, dist: &Path) -> Result<PathBuf> {
         let write = || -> std::io::Result<()> {
             fs::create_dir_all(to.parent().expect("a file below the package directory"))?;
             fs::copy(&from, &to)?;
-            let mode = if source == EXECUTABLE { 0o755 } else { 0o644 };
+            let mode = if EXECUTABLES.contains(&source) {
+                0o755
+            } else {
+                0o644
+            };
             fs::set_permissions(&to, fs::Permissions::from_mode(mode))
         };
         write().with_context(|| format!("dist: could not write {}", to.display()))?;
@@ -254,7 +292,12 @@ mod tests {
             ("-rw-r--r--", "licenses/ruby-1.8.7/GPL"),
             ("-rw-r--r--", "licenses/ruby-1.8.7/LEGAL"),
             ("-rw-r--r--", "licenses/ruby-1.8.7/LGPL"),
+            ("drwxr-xr-x", "licenses/ruby-1.9.2/"),
+            ("-rw-r--r--", "licenses/ruby-1.9.2/COPYING"),
+            ("-rw-r--r--", "licenses/ruby-1.9.2/GPL"),
+            ("-rw-r--r--", "licenses/ruby-1.9.2/LEGAL"),
             ("-rwxr-xr-x", "vkxp"),
+            ("-rwxr-xr-x", "vkxp-guest-rgss3"),
         ]
         .map(|(mode, path)| (mode.to_owned(), format!("{name}/{path}")));
         assert_eq!(entries(&archive), expected);
@@ -309,6 +352,28 @@ Dynamic section at offset 0x1f3a2d0 contains 33 entries:
              statically"
         );
         refuse_shared_crypt(&needed[1..]).unwrap();
+    }
+
+    /// Scenario "Shared libcrypt in the guest executable".
+    #[test]
+    fn a_needed_libcrypt_of_the_guest_executable_is_named_with_it() {
+        let needed = ["libcrypt.so.1".to_owned(), "libc.so.6".to_owned()];
+        let error = refuse_shared_crypt_in(GUEST_EXECUTABLE, &needed)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("libcrypt.so.1"), "{error}");
+        assert!(error.contains("vkxp-guest-rgss3"), "{error}");
+        refuse_shared_crypt_in(GUEST_EXECUTABLE, &needed[1..]).unwrap();
+    }
+
+    /// Scenario "Missing guest executable".
+    #[test]
+    fn a_tree_without_the_guest_executable_fails_naming_it() {
+        let root = source_tree();
+        fs::remove_file(root.path().join(GUEST_EXECUTABLE)).unwrap();
+        let dist = root.path().join("target/dist");
+        let error = package(root.path(), &dist).unwrap_err().to_string();
+        assert_eq!(error, "dist: `target/release/vkxp-guest-rgss3` is missing");
     }
 
     #[test]

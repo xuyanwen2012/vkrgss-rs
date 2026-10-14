@@ -30,7 +30,7 @@
 
 ## 6. The release archive
 
-- [ ] 6.1 `xtask/src/dist.rs` as in decision 16, the build script of `vkxp-ruby192-sys` reading `VKXP_STATIC_CRYPT` as that of `vkxp-ruby-sys` does, the tests of `dist`. Verify: the scenarios "Package" (by the test that packs a source tree), "Missing guest executable" and "Shared libcrypt in the guest executable"; `cargo test -p xtask --locked` passes. Where the static libcrypt is installed, run `cargo xtask dist` once and write under Follow-ups of `design.md` what the archive holds and what the two executables need; where it is not, write that the command was not run.
+- [x] 6.1 `xtask/src/dist.rs` as in decision 16, the build script of `vkxp-ruby192-sys` reading `VKXP_STATIC_CRYPT` as that of `vkxp-ruby-sys` does, the tests of `dist`. Verify: the scenarios "Package" (by the test that packs a source tree), "Missing guest executable" and "Shared libcrypt in the guest executable"; `cargo test -p xtask --locked` passes. Where the static libcrypt is installed, run `cargo xtask dist` once and write under Follow-ups of `design.md` what the archive holds and what the two executables need; where it is not, write that the command was not run.
 
 ## 7. Stress, documents and the local game
 

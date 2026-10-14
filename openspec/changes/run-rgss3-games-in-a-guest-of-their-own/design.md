@@ -528,6 +528,14 @@ Sections are those of the API report unless another report is named.
 - *`prelude.rb`.* The lines that moved to `prelude_shared.rb` were its last ones; they are
   replaced by a comment of two lines, and no line before them moved.
 
+### The release archive (task 6.1)
+
+`cargo xtask dist` was not run: the static library `libcrypt.a` is not installed on the
+machine of this change (`cc -print-file-name=libcrypt.a` prints the bare name). The tests
+of `dist` pack a source tree; the list of entries the package test expects gains
+`vkxp-guest-rgss3` and `licenses/ruby-1.9.2/`, as the scenario "Package" asks, and keeps
+every entry it had.
+
 ### Follow-ups: the changes that follow
 
 In a suggested order. The first four are what the main test game needs for its title
