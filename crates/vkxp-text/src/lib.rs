@@ -156,15 +156,17 @@
 mod engine;
 mod face;
 mod glyph_cache;
+mod hinted;
 mod index;
 mod line_box;
 mod sources;
 mod substitution;
 
 pub use engine::{
-    DEFAULT_FALLBACK_FAMILIES, DEFAULT_GLYPH_CACHE_BYTES, MaskRules, ResolvedFace, TextEngine,
-    TextLayout, TextMask, TextRequest,
+    DEFAULT_FALLBACK_FAMILIES, DEFAULT_GLYPH_CACHE_BYTES, MaskRules, MetricRules, ResolvedFace,
+    TextEngine, TextLayout, TextMask, TextRequest,
 };
+pub use hinted::HintingEngine;
 pub use line_box::{LineBox, default_line_box};
 pub use sources::{FontSources, SystemFonts};
 pub use substitution::default_substitutions;

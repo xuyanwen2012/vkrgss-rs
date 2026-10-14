@@ -41,7 +41,8 @@ impl Glyph {
 }
 
 /// Identifies a rendered glyph: the loaded face, its pixels per em, the glyph, the styles
-/// synthesised for it, and the fraction of its natural width it is condensed to.
+/// synthesised for it, the fraction of its natural width it is condensed to, and whether it
+/// is drawn from its hinted outline (the metric rule of RGSS3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct GlyphKey {
     pub(crate) face: usize,
@@ -50,6 +51,7 @@ pub(crate) struct GlyphKey {
     pub(crate) bold: bool,
     pub(crate) italic: bool,
     pub(crate) condense: (u32, u32),
+    pub(crate) hinted: bool,
 }
 
 struct Entry {
@@ -164,6 +166,7 @@ mod tests {
             bold: false,
             italic: false,
             condense: (1, 1),
+            hinted: false,
         }
     }
 

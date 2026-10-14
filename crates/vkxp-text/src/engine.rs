@@ -7,10 +7,11 @@ use std::sync::Arc;
 
 use swash::GlyphId;
 use swash::scale::{Render, ScaleContext, Source};
-use swash::zeno::{Format, Transform, Vector};
+use swash::zeno::{Format, Mask, Origin, Point, Transform, Vector};
 
 use crate::face::LoadedFace;
 use crate::glyph_cache::{Glyph, GlyphCache, GlyphKey};
+use crate::hinted::{self, HintingEngine};
 use crate::index::FontIndex;
 use crate::line_box::{Cell, LineBox, LineBoxTable, mul_div};
 use crate::sources::FontSources;
@@ -89,6 +90,26 @@ pub enum MaskRules {
     ///
     /// Provenance: the same measurement on RGSS300 3.0.0.1.
     Rgss3Early,
+}
+
+/// The rule text is measured and set by: where advances, overhangs, the average width and
+/// the glyph images come from. It does not depend on the [`MaskRules`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum MetricRules {
+    /// The unhinted outline: advances of the face rounded as FreeType rounds them, the
+    /// overhangs of vkxp's box model, the average width rounded: the metrics of RGSS1 and
+    /// RGSS2.
+    #[default]
+    Plain,
+    /// RGSS3 as its DLL measures text under Wine's GDI: glyphs hinted as FreeType hints them
+    /// for an anti-aliased target, the hinted advance rounded up with Wine's rule for
+    /// full-width glyphs of a fixed-pitch font, the overhangs from the control box of the
+    /// hinted outline, the average width as Wine's `tmAveCharWidth`, and glyph images from
+    /// the hinted outline.
+    ///
+    /// Provenance: the `text_size` table of VL Gothic and VL PGothic, 28392 values measured
+    /// on RGSS301 3.0.1.1 and RGSS300 3.0.0.1 under Wine 11.0 on 2026-10-13, all reproduced.
+    Rgss3,
 }
 
 /// The level from 0 to 64 that stands for GDI's answer for a pixel of coverage `coverage`.
@@ -229,6 +250,7 @@ pub struct TextEngine {
     /// Whether a replacement keeps its own line box.
     own_metrics: bool,
     mask_rules: MaskRules,
+    metric_rules: MetricRules,
     /// Family keys of the fallback families, in order.
     fallback_families: Vec<String>,
     /// Contents of the font files in use. `None` for a file that could not be read.
@@ -281,6 +303,7 @@ impl TextEngine {
             line_boxes: LineBoxTable::new(&sources.line_boxes),
             own_metrics: sources.own_metrics,
             mask_rules: MaskRules::default(),
+            metric_rules: MetricRules::default(),
             fallback_families,
             files: HashMap::new(),
             faces: Vec::new(),
@@ -355,6 +378,24 @@ impl TextEngine {
         self.mask_rules = rules;
     }
 
+    /// The rule text is measured and set by.
+    pub fn metric_rules(&self) -> MetricRules {
+        self.metric_rules
+    }
+
+    /// Sets the rule text is measured and set by from now on. What is cached for one rule
+    /// is kept apart from what is cached for the other.
+    pub fn set_metric_rules(&mut self, rules: MetricRules) {
+        self.metric_rules = rules;
+    }
+
+    /// The engine the face `request` selects is hinted with under [`MetricRules::Rgss3`].
+    /// `None` only when the engine has no usable font at all.
+    pub fn hinting_engine(&mut self, request: &TextRequest) -> Option<HintingEngine> {
+        let selected = self.selected_face(request)?;
+        Some(self.faces[selected.face].hinting_engine())
+    }
+
     /// The face `request` selects, before per-character fallback. `None` only when the engine
     /// has no usable font at all.
     pub fn resolve(&mut self, request: &TextRequest) -> Option<ResolvedFace> {
@@ -387,9 +428,10 @@ impl TextEngine {
         };
         let run = std::mem::take(&mut self.run);
         let pixels_per_em = setting.cell.pixels_per_em;
+        let hinted = self.metric_rules == MetricRules::Rgss3;
         let mut overhang = |placed: Option<&Placed>| match placed {
             Some(placed) => {
-                let glyph = self.glyph(placed.key(pixels_per_em, (1, 1)));
+                let glyph = self.glyph(placed.key(pixels_per_em, (1, 1), hinted));
                 (glyph.left_overhang(), glyph.right_overhang(placed.advance))
             }
             None => (0, 0),
@@ -436,11 +478,12 @@ impl TextEngine {
             _ => (1, 1),
         };
         let run = std::mem::take(&mut self.run);
+        let hinted = self.metric_rules == MetricRules::Rgss3;
         let glyphs: Vec<(Arc<Glyph>, u32)> = run
             .iter()
             .zip(advances)
             .map(|(placed, &advance)| {
-                let key = placed.key(setting.cell.pixels_per_em, condense);
+                let key = placed.key(setting.cell.pixels_per_em, condense, hinted);
                 (self.glyph(key), advance)
             })
             .collect();
@@ -506,7 +549,10 @@ impl TextEngine {
         let pixels_per_em = cell.pixels_per_em;
         let (has_bold, _) = self.face_style(selected);
         let emboldened = u32::from(request.bold && !has_bold);
-        let average_width = mul_div(face.average_width.into(), pixels_per_em, units_per_em);
+        let average_width = match self.metric_rules {
+            MetricRules::Plain => mul_div(face.average_width.into(), pixels_per_em, units_per_em),
+            MetricRules::Rgss3 => face.metrics().average_width(pixels_per_em),
+        };
         let style = style_bits(request.bold, request.italic);
         for ch in text.chars() {
             let found = match self.chars.get(&(selected, style, ch)) {
@@ -520,8 +566,18 @@ impl TextEngine {
             let (glyph_bold, glyph_italic) = self.face_style(found.face);
             // A glyph of a fallback face keeps its own advance, at the same pixels per em.
             let glyph_units = u32::from(self.faces[found.face].units_per_em);
-            let mut advance = advance_pixels(found.advance, pixels_per_em, glyph_units)
-                .saturating_add(u32::from(request.bold && !glyph_bold));
+            let plain = advance_pixels(found.advance, pixels_per_em, glyph_units);
+            let natural = match self.metric_rules {
+                MetricRules::Plain => plain,
+                MetricRules::Rgss3 => {
+                    let face = &mut self.faces[found.face];
+                    face.hinted_advance(pixels_per_em, found.glyph)
+                        .map_or(plain, |hinted| {
+                            face.metrics().advance(hinted, pixels_per_em)
+                        })
+                }
+            };
+            let mut advance = natural.saturating_add(u32::from(request.bold && !glyph_bold));
             // As measured: a character outside the Basic Multilingual Plane is two units to
             // GDI, each of which is a missing glyph.
             if found.missing && u32::from(ch) > 0xFFFF {
@@ -707,6 +763,11 @@ impl TextEngine {
         if key.pixels_per_em == 0 || numerator == 0 || denominator == 0 {
             return Arc::new(Glyph::default());
         }
+        if key.hinted {
+            let rendered = Arc::new(self.hinted_glyph(key));
+            self.glyphs.insert(key, Arc::clone(&rendered));
+            return rendered;
+        }
         let loaded = &self.faces[key.face];
         let mut scaler = self
             .scaler
@@ -773,10 +834,74 @@ impl TextEngine {
         self.glyphs.insert(key, Arc::clone(&rendered));
         rendered
     }
+
+    /// The image of a glyph by [`MetricRules::Rgss3`]: `swash`'s outline of the glyph with
+    /// its points moved to those of the hinted outline, emboldened, slanted and condensed as
+    /// by the plain rule, and its box from that outline.
+    fn hinted_glyph(&mut self, key: GlyphKey) -> Glyph {
+        let (numerator, denominator) = key.condense;
+        let hinted_points = self.faces[key.face].hinted_points(key.pixels_per_em, key.glyph);
+        let loaded = &self.faces[key.face];
+        let mut scaler = self
+            .scaler
+            .builder(loaded.font())
+            .size(key.pixels_per_em as f32)
+            .hint(false)
+            .normalized_coords(loaded.coords())
+            .build();
+        let Some(mut outline) = scaler
+            .scale_outline(key.glyph)
+            .filter(|outline| !outline.points().is_empty())
+        else {
+            // A glyph without an outline, such as a space, draws nothing.
+            return Glyph::default();
+        };
+        if let Some(points) = hinted_points {
+            // Both are draws of `skrifa` with FreeType's path style, so the points come in
+            // the same order.
+            debug_assert_eq!(points.len(), outline.points().len(), "glyph {}", key.glyph);
+            if points.len() == outline.points().len() {
+                outline.points_mut().copy_from_slice(&points);
+            }
+        }
+        if key.bold {
+            let strength = key.pixels_per_em as f32 * SYNTHETIC_BOLD;
+            outline.embolden(strength, strength);
+        }
+        let condense = numerator as f32 / denominator as f32;
+        let bounds = outline.bounds();
+        let scaled = |point: Point| Point::new(point.x * condense, point.y);
+        let extent = hinted::extent(
+            scaled(bounds.min),
+            scaled(bounds.max),
+            !key.bold,
+            key.italic,
+        );
+        let slant = if key.italic { SYNTHETIC_SLANT } else { 0.0 };
+        if key.italic || numerator != denominator {
+            outline.transform(&Transform::new(condense, 0.0, slant, 1.0, 0.0, 0.0));
+        }
+        let (coverage, placement) = Mask::new(outline.path())
+            .format(Format::Alpha)
+            .origin(Origin::BottomLeft)
+            .render();
+        let bytes = placement.width as usize * placement.height as usize;
+        if coverage.len() != bytes {
+            return Glyph::default();
+        }
+        Glyph {
+            left: placement.left,
+            top: placement.top,
+            width: placement.width,
+            height: placement.height,
+            extent: Some(extent),
+            coverage,
+        }
+    }
 }
 
 impl Placed {
-    fn key(&self, pixels_per_em: u32, condense: (u32, u32)) -> GlyphKey {
+    fn key(&self, pixels_per_em: u32, condense: (u32, u32), hinted: bool) -> GlyphKey {
         GlyphKey {
             face: self.face,
             pixels_per_em,
@@ -784,6 +909,7 @@ impl Placed {
             bold: self.bold,
             italic: self.italic,
             condense,
+            hinted,
         }
     }
 }
@@ -836,6 +962,7 @@ fn blit(mask: &mut TextMask, glyph: &Glyph, left: i64, top: i64, rules: MaskRule
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::FontSources;
 
     fn mask(width: u32, height: u32) -> TextMask {
         TextMask {
@@ -953,6 +1080,54 @@ mod tests {
     fn the_box_of_a_glyph_erases_in_the_early_rgss3() {
         // Outside the box of the second glyph the first one stays.
         assert_eq!(overlapped(MaskRules::Rgss3Early), [255, 127, 0, 255]);
+    }
+
+    /// The columns of an image `columns` wide and `height` high that hold ink.
+    fn inked(columns: u32, height: u32, coverage: &[u8]) -> Vec<u32> {
+        (0..columns)
+            .filter(|&x| (0..height).any(|y| coverage[(y * columns + x) as usize] > 0))
+            .collect()
+    }
+
+    // Requirement: Glyph images of RGSS3
+
+    #[test]
+    fn hinted_ink_lies_inside_the_box() {
+        let fonts = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fonts");
+        let mut engine = TextEngine::new(&FontSources::directories_only([fonts]));
+        engine.set_metric_rules(MetricRules::Rgss3);
+        for family in ["Liberation Sans", "Noto Sans Symbols 2"] {
+            for size in [12, 24, 48] {
+                for (bold, italic) in [(false, false), (true, false), (false, true), (true, true)] {
+                    let request = TextRequest {
+                        bold,
+                        italic,
+                        ..TextRequest::new([family], size)
+                    };
+                    for ch in "Hello World".chars() {
+                        let text = ch.to_string();
+                        let context = format!("{ch:?} of {family} at {size}, {bold} {italic}");
+                        let mask = engine.rasterize(&request, &text);
+                        let setting = engine.set(&request, &text).unwrap();
+                        let placed = engine.run[0];
+                        let key = placed.key(setting.cell.pixels_per_em, (1, 1), true);
+                        let glyph = engine.glyph(key);
+                        let Some((left, right)) = glyph.extent else {
+                            assert!(!mask.coverage.iter().any(|&c| c > 0), "{context}");
+                            continue;
+                        };
+                        for x in inked(glyph.width, glyph.height, &glyph.coverage) {
+                            let x = glyph.left + x as i32;
+                            assert!(left <= x && x < right, "{context}: image column {x}");
+                        }
+                        for x in inked(mask.width, mask.height, &mask.coverage) {
+                            let x = x as i32 - mask.left_overhang as i32;
+                            assert!(left <= x && x < right, "{context}: mask column {x}");
+                        }
+                    }
+                }
+            }
+        }
     }
 
     #[test]

@@ -18,6 +18,7 @@ workspace = true
 
 [dependencies]
 fontdb.workspace = true
+skrifa.workspace = true
 swash.workspace = true
 
 [dev-dependencies]

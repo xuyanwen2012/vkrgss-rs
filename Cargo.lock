@@ -2703,6 +2703,7 @@ name = "vkxp-text"
 version = "0.2.0"
 dependencies = [
  "fontdb",
+ "skrifa",
  "swash",
  "tempfile",
 ]
