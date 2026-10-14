@@ -2484,7 +2484,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vkrgss"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "flate2",
@@ -2506,7 +2506,7 @@ dependencies = [
 
 [[package]]
 name = "vkrgss-audio"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "cpal",
  "rustysynth",
@@ -2519,7 +2519,7 @@ dependencies = [
 
 [[package]]
 name = "vkrgss-binding"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "encoding_rs",
  "png",
@@ -2535,7 +2535,7 @@ dependencies = [
 
 [[package]]
 name = "vkrgss-binding-rgss3"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "encoding_rs",
  "png",
@@ -2551,7 +2551,7 @@ dependencies = [
 
 [[package]]
 name = "vkrgss-compose-ref"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "png",
  "tempfile",
@@ -2562,7 +2562,7 @@ dependencies = [
 
 [[package]]
 name = "vkrgss-core"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "libm",
  "proptest",
@@ -2574,7 +2574,7 @@ dependencies = [
 
 [[package]]
 name = "vkrgss-guest"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "landlock",
  "libc",
@@ -2590,7 +2590,7 @@ dependencies = [
 
 [[package]]
 name = "vkrgss-guest-main"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "tempfile",
@@ -2606,7 +2606,7 @@ dependencies = [
 
 [[package]]
 name = "vkrgss-guest-main-rgss3"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "tempfile",
@@ -2622,7 +2622,7 @@ dependencies = [
 
 [[package]]
 name = "vkrgss-guest-rgss3"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "tempfile",
  "vkrgss-guest",
@@ -2631,7 +2631,7 @@ dependencies = [
 
 [[package]]
 name = "vkrgss-host"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "gilrs",
  "png",
@@ -2649,7 +2649,7 @@ dependencies = [
 
 [[package]]
 name = "vkrgss-image"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "jpeg-decoder",
  "jpeg-encoder",
@@ -2660,7 +2660,7 @@ dependencies = [
 
 [[package]]
 name = "vkrgss-pixel"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "proptest",
  "vkrgss-proto",
@@ -2668,7 +2668,7 @@ dependencies = [
 
 [[package]]
 name = "vkrgss-proto"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "postcard",
  "proptest",
@@ -2679,7 +2679,7 @@ dependencies = [
 
 [[package]]
 name = "vkrgss-ruby-sys"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "cc",
  "libc",
@@ -2690,7 +2690,7 @@ dependencies = [
 
 [[package]]
 name = "vkrgss-ruby192-sys"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "cc",
  "libc",
@@ -2700,7 +2700,7 @@ dependencies = [
 
 [[package]]
 name = "vkrgss-text"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "fontdb",
  "skrifa",
@@ -2710,7 +2710,7 @@ dependencies = [
 
 [[package]]
 name = "vkrgss-vfs"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "encoding_rs",
  "proptest",
@@ -2720,7 +2720,7 @@ dependencies = [
 
 [[package]]
 name = "vkrgss-vk"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "ash",
  "ash-window",
@@ -3302,7 +3302,7 @@ checksum = "b9cc00251562a284751c9973bace760d86c0276c471b4be569fe6b068ee97a56"
 
 [[package]]
 name = "xtask"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "flate2",

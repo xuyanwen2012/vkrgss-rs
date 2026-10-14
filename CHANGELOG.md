@@ -4,6 +4,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-14
+
 ### Security
 
 - Ruby 1.9.2 of RPG Maker VX Ace games carries the fix of CVE-2013-4164: a very long digit
