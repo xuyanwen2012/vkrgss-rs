@@ -1,5 +1,6 @@
-//! Scenes of windows of RGSS2 written as text, for the tests that compare frames with the
-//! pictures of the measurement of 2026-10-12 on the original runtime of VX.
+//! Scenes of windows of RGSS2 and RGSS3 written as text, for the tests that compare frames
+//! with the pictures of the measurements on the original runtimes: of 2026-10-12 on VX and of
+//! 2026-10-13 on VX Ace.
 //!
 //! A scene is the calls of a script on windows, sprites and viewports, on a screen of 544 by
 //! 416 pixels, and after some of them a frame with the digest of the picture the model of
@@ -8,16 +9,23 @@
 //!
 //! ```text
 //! scene <name>
+//! runtime rgss3
 //! bitmap b<n> noise <o|t|a|u> <seed> <width> <height>
 //! bitmap b<n> skin <o|t|a|u> <seed> <mask> <width> <height>
 //! bitmap b<n> flat <red> <green> <blue> <alpha> <width> <height>
 //! bitmap b<n> exc|grid <width> <height>
+//! bitmap b<n> frame2|cursor2|ramp <width> <height>
+//! bitmap b<n> back4 <red> <green> <blue> <width> <height>
 //! new <id> window|sprite|viewport <viewport id or -> [<x> <y> <width> <height>]
 //! set <id> <property> <integer | true | false | nil | b<n> | o<id> | rect x y width height>
+//! set <id> tone <red> <green> <blue> <grey>
 //! update <id> <times>
 //! rect <id> <x> <y> <width> <height>
+//! rectx <id> <x>
+//! move <id> <x> <y> <width> <height>
 //! fill b<n> <x> <y> <width> <height> <red> <green> <blue> <alpha>
 //! dispose <id>
+//! bdispose b<n>
 //! brightness <value>
 //! frame <digest> <name>
 //! end
@@ -28,16 +36,25 @@
 //! of which only the 64 by 64 quadrants named by the bits of the mask are kept (1 background,
 //! 2 pattern, 4 frame, 8 cursor and pause sign). `exc` and `grid` are skins of noise whose
 //! frame and cursor have the pairs of alphas for which `Bitmap#blt` is one weight off, and
-//! the alphas of a coarse grid. `rect` changes the cursor rectangle of a
-//! window as the methods of its `Rect` do. A window is created as the binding creates one
-//! in RGSS2: with contents of 1 by 1.
+//! the alphas of a coarse grid. `frame2` and `cursor2` are readable gradients in the frame
+//! quadrant and in the lower right quadrant alone, `ramp` a readable gradient of any size,
+//! and `back4` a skin whose background block alone is opaque, red rising with x over the
+//! other components given. `rect` changes the cursor rectangle of a window as the methods of
+//! its `Rect` do, `rectx` its x alone, and `bdispose` disposes a bitmap. A window is created
+//! as the binding creates one: with contents of 1 by 1.
+//!
+//! `runtime rgss3`, the first statement of a scene of RGSS3, makes every window of the scene
+//! one of RGSS3 and lets the scene follow the rules of RGSS2, which a game of RGSS3 gets.
+//! Such a window may be created with its position and size, and has the properties
+//! `padding`, `padding_bottom`, `arrows_visible` and `tone` and the statement `move`.
 
 use std::collections::HashMap;
 
 use vkxp_proto::{BitmapId, FramePacket, Size};
 
 use crate::{
-    Bitmaps, Color, FontDefaults, Rect, Scene, SpriteId, ViewportId, WindowCall, WindowId,
+    Bitmaps, Color, FontDefaults, Rect, Rules, Scene, SpriteId, Tone, ViewportId, WindowCall,
+    WindowId,
 };
 
 /// The screen of every scene.
@@ -130,6 +147,8 @@ struct Run {
     defaults: FontDefaults,
     named: HashMap<String, BitmapId>,
     elements: HashMap<String, Element>,
+    /// Whether the windows of the scene are of RGSS3.
+    rgss3: bool,
 }
 
 fn number<T: std::str::FromStr>(word: &str) -> T {
@@ -209,6 +228,28 @@ impl Run {
                 };
                 [v as u8, (v >> 8) as u8, (v >> 16) as u8, alpha as u8]
             }),
+            // The readable gradients of the measurement of RGSS3, each from its case file.
+            "frame2" => Box::new(|x, y| match (x, y) {
+                (64.., 0..64) => [(255 - 2 * (x - 64)) as u8, (255 - 2 * y) as u8, 60, 255],
+                _ => [0; 4],
+            }),
+            "cursor2" => Box::new(|x, y| match (x, y) {
+                (64.., 64..) => [
+                    (255 - 2 * (x - 64)) as u8,
+                    (255 - 2 * (y - 64)) as u8,
+                    60,
+                    255,
+                ],
+                _ => [0; 4],
+            }),
+            "ramp" => Box::new(|x, y| [(4 * x) as u8, (4 * y) as u8, 255, 255]),
+            "back4" => {
+                let [red, green, blue]: [u8; 3] = std::array::from_fn(|i| number(words[2 + i]));
+                Box::new(move |x, y| match (x, y) {
+                    (0..64, 0..64) => [(4 * x) as u8, green, blue, 255],
+                    _ => [red, green, blue, 0],
+                })
+            }
             other => panic!("unknown kind of bitmap `{other}`"),
         };
         let mut rgba = Vec::with_capacity(width as usize * height as usize * 4);
@@ -228,7 +269,15 @@ impl Run {
         let viewport = self.viewport(words[2]);
         let element = match words[1] {
             "window" => {
-                let id = self.scene.create_window_rgss2(viewport).unwrap();
+                let id = if self.rgss3 {
+                    self.scene.create_window_rgss3(viewport).unwrap()
+                } else {
+                    self.scene.create_window_rgss2(viewport).unwrap()
+                };
+                if words.len() > 3 {
+                    let [x, y, width, height] = numbers(&words[3..]);
+                    self.call(id, WindowCall::Move(x, y, width, height));
+                }
                 let contents = self.bitmaps.create(1, 1, &self.defaults).unwrap();
                 self.call(id, WindowCall::Contents(Some(contents)));
                 Element::Window(id)
@@ -270,6 +319,15 @@ impl Run {
                     "cursor_rect" => {
                         let [x, y, width, height] = numbers(&words[3..]);
                         WindowCall::CursorRect(Rect::new(x, y, width, height))
+                    }
+                    "padding" => WindowCall::Padding(number(value)),
+                    "padding_bottom" => WindowCall::PaddingBottom(number(value)),
+                    "arrows_visible" => WindowCall::ArrowsVisible(flag),
+                    "tone" => {
+                        let [red, green, blue, grey]: [f64; 4] =
+                            std::array::from_fn(|index| number(words[2 + index]));
+                        let window = self.scene.window_mut(id).unwrap();
+                        return window.set_tone(Tone::new(red, green, blue, grey));
                     }
                     _ => {
                         let viewport = self.viewport(value);
@@ -348,6 +406,27 @@ impl Run {
                 let [x, y, width, height] = numbers(&rest[1..]);
                 self.call(id, WindowCall::CursorRect(Rect::new(x, y, width, height)));
             }
+            "rectx" => {
+                let Element::Window(id) = self.elements[rest[0]] else {
+                    panic!("`{line}` names no window");
+                };
+                let mut rect = self.scene.window(id).unwrap().cursor_rect;
+                rect.x = number(rest[1]);
+                self.call(id, WindowCall::CursorRect(rect));
+            }
+            "move" => {
+                let Element::Window(id) = self.elements[rest[0]] else {
+                    panic!("`{line}` names no window");
+                };
+                let [x, y, width, height] = numbers(&rest[1..]);
+                self.call(id, WindowCall::Move(x, y, width, height));
+            }
+            "bdispose" => self.bitmaps.dispose(self.named[rest[0]]),
+            "runtime" => {
+                assert_eq!(rest, ["rgss3"], "`{line}` names no known runtime");
+                self.rgss3 = true;
+                self.scene = Scene::with_rules(Rules::Rgss2, SIZE);
+            }
             "fill" => {
                 let [x, y, width, height, red, green, blue, alpha] = numbers(&rest[1..]);
                 let color = Color::new(red.into(), green.into(), blue.into(), alpha.into());
@@ -391,6 +470,7 @@ impl<'a> Case<'a> {
             defaults: FontDefaults::new(Vec::new()),
             named: HashMap::new(),
             elements: HashMap::new(),
+            rgss3: false,
         };
         let mut frames = Vec::new();
         for line in &self.statements {

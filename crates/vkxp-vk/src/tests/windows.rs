@@ -1,7 +1,7 @@
-//! Scenes of windows of RGSS2, extracted by the scene of the guest and composed by both
-//! backends: the cases and the random scenes of the window measurement of 2026-10-12 on the
-//! original runtime of VX, whose pictures are committed as digests beside the scenes in
-//! `vkxp-core`.
+//! Scenes of windows of RGSS2 and RGSS3, extracted by the scene of the guest and composed by
+//! both backends: the cases and the random scenes of the window measurements of 2026-10-12 on
+//! the original runtime of VX and of 2026-10-13 on that of VX Ace, whose pictures are
+//! committed as digests beside the scenes in `vkxp-core`.
 
 use vkxp_core::test_support::window_cases::{cases, digest};
 use vkxp_proto::GuestToHost;
@@ -42,4 +42,19 @@ fn the_random_scenes_of_windows_of_rgss2_are_the_expected_pictures() {
 fn the_cases_of_windows_of_rgss2_are_the_expected_pictures() {
     let text = include_str!("../../../vkxp-core/tests/data/window-rgss2-cases.txt");
     compare(text, 27);
+}
+
+/// Scenario "Both backends" of "Whole windows of RGSS3 as measured", the random scenes.
+#[test]
+fn the_random_scenes_of_windows_of_rgss3_are_the_expected_pictures() {
+    let text = include_str!("../../../vkxp-core/tests/data/window-rgss3-random.txt");
+    compare(text, 30);
+}
+
+/// Scenario "Both backends" of "Whole windows of RGSS3 as measured", the cases of the
+/// measurement.
+#[test]
+fn the_cases_of_windows_of_rgss3_are_the_expected_pictures() {
+    let text = include_str!("../../../vkxp-core/tests/data/window-rgss3-cases.txt");
+    compare(text, 28);
 }

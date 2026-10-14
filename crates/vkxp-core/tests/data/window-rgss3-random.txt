@@ -1,0 +1,4940 @@
+# Thirty scenes of the random generator of the window measurement of 2026-10-13 on the
+# original runtime of VX Ace (RGSS300.dll 3.0.0.1 and RGSS301.dll 3.0.1.1, the same pictures):
+# the first thirty of the set of seed 3 (`ace-v1-window-ha-cases.py`, `H_SEED=3`), which was
+# held out when the model of the measurement (`ace-v1-window-model.py`) was fitted and which
+# the model draws without a wrong pixel. The format is that of
+# `vkxp_core::test_support::window_cases`. Every bitmap is made by a formula, and the digest of
+# a frame is that of the picture the model draws. None of the first thirty scenes of the set
+# is left out, and the generator is the one case file of this text.
+#
+# A scene has 5 to 9 windows with any skin, also of unusual sizes, size, opacities, openness,
+# contents, origin, cursor rectangle, z, visibility, paddings, tone and arrows_visible, some
+# created with their position and size, up to 2 viewports, opaque sprites, and random updates,
+# assignments and moves in two rounds, each followed by a frame.
+scene ha-ha3_s00_a
+runtime rgss3
+bitmap b0 noise o 5900 544 416
+bitmap b2 skin t 5001 11 128 128
+bitmap b4 noise o 6000 128 72
+bitmap b8 noise t 7002 174 149
+bitmap b6 noise o 7000 244 129
+bitmap b7 noise a 7001 258 23
+bitmap b1 skin a 5000 13 128 128
+bitmap b5 noise t 6001 33 33
+new 1 sprite -
+set 1 bitmap b0
+set 1 z -1000
+new 2 viewport - 16 164 166 224
+set 2 ox 0
+set 2 oy 0
+set 2 z 101
+new 3 viewport - 286 141 50 85
+set 3 ox -5
+set 3 oy 0
+set 3 z 101
+new 4 window - 200 133 -2 67
+set 4 windowskin nil
+set 4 viewport o2
+set 4 padding 16
+set 4 openness 130
+set 4 back_opacity 192
+set 4 active false
+set 4 tone -255 -255 -255 0
+set 4 cursor_rect rect 0 44 65 24
+set 4 windowskin b2
+set 4 pause false
+set 4 oy -35
+set 4 visible true
+set 4 opacity 254
+set 4 ox 0
+set 4 contents_opacity 192
+new 5 window - 458 -9 -5 38
+set 5 windowskin nil
+set 5 pause true
+set 5 openness 115
+set 5 back_opacity 255
+set 5 opacity 255
+set 5 windowskin b4
+set 5 active true
+set 5 ox 0
+set 5 padding 16
+set 5 visible true
+set 5 contents_opacity 255
+set 5 contents b8
+set 5 z 1
+set 5 arrows_visible true
+set 5 cursor_rect rect 0 11 0 28
+set 5 oy 0
+update 5 78
+new 6 window -
+set 6 windowskin nil
+set 6 visible true
+set 6 windowskin nil
+set 6 cursor_rect rect 0 26 8 59
+set 6 active false
+set 6 y 45
+set 6 back_opacity 255
+set 6 contents b8
+set 6 x 303
+set 6 opacity 130
+set 6 openness 127
+set 6 height 182
+set 6 ox 0
+set 6 contents_opacity 1
+set 6 oy -22
+set 6 width 51
+set 6 pause true
+new 7 window 2
+set 7 windowskin nil
+set 7 height 171
+set 7 width 145
+set 7 contents_opacity 1
+set 7 windowskin b2
+set 7 cursor_rect rect -16 0 32 6
+set 7 x 21
+set 7 padding_bottom 0
+set 7 padding 8
+set 7 openness 255
+set 7 contents b6
+set 7 y 239
+set 7 pause false
+set 7 ox 64
+set 7 back_opacity 255
+set 7 oy 0
+set 7 visible true
+set 7 opacity 192
+set 7 active false
+update 7 1
+new 8 window 3
+set 8 windowskin nil
+set 8 contents b7
+set 8 ox 0
+set 8 contents_opacity 0
+set 8 width 35
+set 8 visible true
+set 8 oy 59
+set 8 cursor_rect rect 35 0 45 56
+set 8 active true
+set 8 opacity 35
+set 8 pause false
+set 8 openness 104
+set 8 arrows_visible true
+set 8 x 427
+set 8 height 93
+set 8 y 149
+set 8 padding 16
+set 8 windowskin nil
+new 9 window -
+set 9 windowskin nil
+set 9 height 22
+set 9 x -32
+set 9 contents_opacity 255
+set 9 ox 0
+set 9 active true
+set 9 visible true
+set 9 windowskin b1
+set 9 pause false
+set 9 oy 53
+set 9 z -1
+set 9 openness 132
+set 9 y 306
+set 9 opacity 255
+set 9 contents b7
+set 9 width 107
+set 9 cursor_rect rect 87 -7 4 76
+new 10 window - -31 341 105 5
+set 10 windowskin nil
+set 10 cursor_rect rect 56 64 5 76
+set 10 z 101
+set 10 back_opacity 255
+set 10 pause false
+set 10 windowskin b2
+set 10 active false
+set 10 contents b7
+set 10 oy 0
+set 10 openness 255
+set 10 contents_opacity 1
+set 10 ox 0
+set 10 visible true
+set 10 padding 16
+set 10 opacity 254
+update 10 73
+new 11 window - 239 111 169 2
+set 11 windowskin nil
+set 11 viewport o2
+set 11 cursor_rect rect 92 18 113 -2
+set 11 windowskin b5
+set 11 ox 0
+set 11 pause false
+set 11 openness 255
+set 11 active true
+set 11 opacity 255
+set 11 visible true
+set 11 contents_opacity 192
+set 11 back_opacity 255
+set 11 oy 0
+set 11 tone -255 -255 -255 0
+set 11 contents b6
+update 11 9
+move 7 350 349 23 31
+set 7 z 1
+set 5 tone 255 255 255 255
+set 11 active true
+set 5 back_opacity 238
+set 4 padding 12
+set 7 ox 0
+rectx 4 56
+set 6 visible false
+set 7 pause true
+frame 4dd8e4ed737ad205 ha3_s00_a
+set 4 tone 255 255 255 255
+set 4 z 101
+set 4 oy 27
+set 6 contents nil
+set 6 ox 0
+set 4 x 130
+set 6 y -51
+update 5 1
+move 6 30 155 -1 152
+set 8 oy 58
+rectx 11 52
+frame 4dd8e4ed737ad205 ha3_s00_b
+end
+scene ha-ha3_s01_a
+runtime rgss3
+bitmap b9 noise o 5901 544 416
+bitmap b11 skin t 5011 15 128 128
+bitmap b16 noise o 7011 180 160
+bitmap b17 noise a 7012 11 246
+bitmap b14 noise o 6011 64 64
+bitmap b10 skin t 5010 15 128 128
+bitmap b18 flat 212 181 75 255 119 98
+bitmap b15 noise t 7010 70 151
+bitmap b19 flat 117 148 16 255 27 117
+bitmap b20 flat 239 130 1 255 33 73
+bitmap b21 flat 162 208 127 255 101 14
+bitmap b22 flat 255 254 62 255 36 69
+bitmap b23 flat 250 209 236 255 14 11
+new 12 sprite -
+set 12 bitmap b9
+set 12 z -1000
+new 13 viewport - 15 18 173 279
+set 13 ox 0
+set 13 oy 27
+set 13 z 50
+new 14 viewport - 100 38 335 121
+set 14 ox 21
+set 14 oy 0
+set 14 z 101
+new 15 window - 87 322 106 15
+set 15 windowskin nil
+set 15 viewport o14
+set 15 openness 255
+set 15 ox 94
+set 15 z 0
+set 15 cursor_rect rect 65 0 0 33
+set 15 visible true
+set 15 windowskin b11
+set 15 pause true
+set 15 padding_bottom 30
+set 15 contents_opacity 254
+set 15 contents b16
+set 15 padding 0
+set 15 opacity 177
+set 15 active true
+set 15 oy 0
+update 15 1
+new 16 window -
+set 16 windowskin nil
+set 16 arrows_visible false
+set 16 padding 12
+set 16 y 201
+set 16 active false
+set 16 contents_opacity 159
+set 16 width 45
+set 16 visible true
+set 16 openness 255
+set 16 pause true
+set 16 contents b17
+set 16 windowskin b11
+set 16 cursor_rect rect 0 -6 32 3
+set 16 opacity 249
+set 16 ox 137
+set 16 x 45
+set 16 height 5
+set 16 oy 0
+new 17 window - -40 -20 131 147
+set 17 windowskin nil
+set 17 viewport o14
+set 17 visible true
+set 17 back_opacity 255
+set 17 padding 10
+set 17 contents b17
+set 17 tone -59 -232 -124 151
+set 17 oy 72
+set 17 opacity 0
+set 17 ox 15
+set 17 contents_opacity 255
+set 17 windowskin b14
+set 17 active true
+set 17 cursor_rect rect 0 0 32 24
+set 17 openness 143
+set 17 pause true
+update 17 1
+new 18 window - 123 149 112 -3
+set 18 windowskin nil
+set 18 viewport o13
+set 18 active true
+set 18 contents b16
+set 18 windowskin b10
+set 18 oy 3
+set 18 cursor_rect rect 0 0 109 7
+set 18 padding 1
+set 18 back_opacity 254
+set 18 ox 0
+set 18 openness 255
+set 18 opacity 1
+set 18 visible true
+set 18 contents_opacity 255
+set 18 pause false
+set 18 tone -149 135 -105 224
+new 19 sprite -
+set 19 bitmap b18
+set 19 x 124
+set 19 y 47
+set 19 z 0
+new 20 window 13
+set 20 windowskin nil
+set 20 cursor_rect rect 49 -10 94 8
+set 20 x 406
+set 20 contents b15
+set 20 opacity 0
+set 20 pause false
+set 20 oy 0
+set 20 openness 255
+set 20 z 0
+set 20 y 211
+set 20 active true
+set 20 visible true
+set 20 ox 0
+set 20 height 5
+set 20 contents_opacity 255
+set 20 width 123
+set 20 windowskin b14
+update 20 34
+new 21 sprite 14
+set 21 bitmap b19
+set 21 x 60
+set 21 y 18
+set 21 z 0
+new 22 sprite -
+set 22 bitmap b20
+set 22 x 19
+set 22 y 202
+set 22 z 100
+new 23 sprite -
+set 23 bitmap b21
+set 23 x 160
+set 23 y 211
+set 23 z 100
+new 24 sprite -
+set 24 bitmap b22
+set 24 x 16
+set 24 y 269
+set 24 z 102
+new 25 sprite 14
+set 25 bitmap b23
+set 25 x 182
+set 25 y 118
+set 25 z -1
+set 16 padding 12
+set 18 opacity 1
+frame e7b22a36f5fd9bf9 ha3_s01_a
+set 17 arrows_visible false
+set 17 pause true
+set 18 padding_bottom 43
+frame e7b22a36f5fd9bf9 ha3_s01_b
+end
+scene ha-ha3_s02_a
+runtime rgss3
+bitmap b24 noise o 5902 544 416
+bitmap b33 flat 213 50 169 255 94 21
+bitmap b30 noise t 7020 247 240
+bitmap b26 skin t 5021 14 128 128
+bitmap b31 noise t 7021 129 156
+bitmap b29 noise t 6021 80 128
+bitmap b32 noise o 7022 11 16
+bitmap b34 flat 5 190 215 255 43 95
+new 26 sprite -
+set 26 bitmap b24
+set 26 z -1000
+new 27 viewport - 168 107 153 300
+set 27 ox 0
+set 27 oy 0
+set 27 z 0
+new 28 viewport - 47 13 348 59
+set 28 ox 21
+set 28 oy 22
+set 28 z 0
+new 29 sprite -
+set 29 bitmap b33
+set 29 x 42
+set 29 y 48
+set 29 z 100
+new 30 window -
+set 30 windowskin nil
+set 30 padding_bottom 12
+set 30 arrows_visible false
+set 30 height 3
+set 30 openness 255
+set 30 x 266
+set 30 width 143
+set 30 cursor_rect rect 98 0 65 7
+set 30 pause true
+set 30 back_opacity 1
+set 30 tone -13 -22 27 0
+set 30 ox 101
+set 30 padding 8
+set 30 visible true
+set 30 y 147
+set 30 contents b30
+set 30 windowskin b26
+set 30 oy 0
+set 30 contents_opacity 1
+set 30 active true
+set 30 opacity 255
+new 31 window - 9 357 2 121
+set 31 windowskin nil
+set 31 viewport o28
+set 31 back_opacity 100
+set 31 openness 97
+set 31 active true
+set 31 contents_opacity 254
+set 31 cursor_rect rect 15 0 9 3
+set 31 windowskin b26
+set 31 oy 0
+set 31 contents b30
+set 31 pause true
+set 31 tone 0 0 0 17
+set 31 visible true
+set 31 opacity 254
+set 31 ox 0
+update 31 1
+new 32 window -
+set 32 windowskin nil
+set 32 cursor_rect rect 0 40 32 -1
+set 32 openness 63
+set 32 pause true
+set 32 oy 0
+set 32 contents b31
+set 32 active true
+set 32 width 1
+set 32 back_opacity 144
+set 32 visible true
+set 32 y 99
+set 32 padding 12
+set 32 windowskin b29
+set 32 ox 0
+set 32 tone 255 255 255 255
+set 32 height 66
+set 32 opacity 126
+set 32 x -60
+set 32 contents_opacity 246
+new 33 window - 205 286 4 137
+set 33 windowskin nil
+set 33 visible true
+set 33 openness 255
+set 33 padding 21
+set 33 oy 0
+set 33 ox 0
+set 33 opacity 255
+set 33 pause true
+set 33 active true
+set 33 contents b32
+set 33 windowskin b29
+set 33 contents_opacity 101
+set 33 cursor_rect rect 50 0 13 24
+set 33 z 101
+update 33 1
+new 34 sprite 28
+set 34 bitmap b34
+set 34 x 106
+set 34 y 381
+set 34 z 0
+frame cb448f03d9d2c476 ha3_s02_a
+set 32 active false
+update 32 1
+set 31 y -39
+set 33 openness 57
+update 33 1
+set 31 visible false
+set 32 padding 12
+set 33 y 70
+set 33 padding 12
+set 32 z 0
+set 30 opacity 137
+set 32 cursor_rect rect 45 0 0 24
+set 33 pause false
+frame 566b4a81ae5f6a76 ha3_s02_b
+end
+scene ha-ha3_s03_a
+runtime rgss3
+bitmap b35 noise o 5903 544 416
+bitmap b44 flat 157 35 135 255 36 45
+bitmap b41 noise a 7030 139 243
+bitmap b40 noise o 6031 40 50
+bitmap b45 flat 7 153 243 255 110 115
+bitmap b43 noise o 7032 127 87
+bitmap b37 skin a 5031 11 128 128
+bitmap b39 noise o 6030 80 128
+bitmap b38 skin t 5032 13 128 128
+bitmap b46 flat 213 12 70 255 17 100
+bitmap b47 flat 2 183 63 255 111 36
+bitmap b48 flat 124 153 111 255 29 57
+new 35 sprite -
+set 35 bitmap b35
+set 35 z -1000
+new 36 viewport - 121 178 321 232
+set 36 ox -27
+set 36 oy 15
+set 36 z 0
+new 37 sprite 36
+set 37 bitmap b44
+set 37 x 135
+set 37 y 186
+set 37 z 102
+new 38 window -
+set 38 windowskin nil
+set 38 oy 108
+set 38 contents_opacity 255
+set 38 active false
+set 38 visible true
+set 38 back_opacity 7
+set 38 y 233
+set 38 ox 134
+set 38 opacity 192
+set 38 padding 12
+set 38 x 310
+set 38 width 53
+set 38 height -1
+set 38 cursor_rect rect 0 21 6 5
+set 38 padding_bottom 16
+set 38 pause true
+set 38 contents b41
+set 38 windowskin b40
+set 38 openness 109
+update 38 76
+new 39 sprite -
+set 39 bitmap b45
+set 39 x 179
+set 39 y 330
+set 39 z 99
+new 40 window 36
+set 40 windowskin nil
+set 40 arrows_visible true
+set 40 pause false
+set 40 visible true
+set 40 contents b43
+set 40 width 21
+set 40 ox 0
+set 40 padding 21
+set 40 contents_opacity 192
+set 40 oy 0
+set 40 windowskin b37
+set 40 active true
+set 40 cursor_rect rect 0 0 5 24
+set 40 padding_bottom 6
+set 40 height 198
+set 40 opacity 192
+set 40 openness 124
+set 40 x 406
+set 40 back_opacity 228
+set 40 y -37
+set 40 tone 147 -117 -141 49
+update 40 1
+new 41 window 36
+set 41 windowskin nil
+set 41 contents_opacity 235
+set 41 x 387
+set 41 active true
+set 41 cursor_rect rect 0 0 8 24
+set 41 tone -187 99 -238 60
+set 41 ox 104
+set 41 visible true
+set 41 width 51
+set 41 pause true
+set 41 y 258
+set 41 openness 36
+set 41 windowskin b39
+set 41 contents b41
+set 41 oy 0
+set 41 opacity 254
+set 41 height 204
+update 41 73
+new 42 window - 179 340 94 -4
+set 42 windowskin nil
+set 42 viewport o36
+set 42 active true
+set 42 cursor_rect rect 0 0 0 24
+set 42 tone 255 255 255 255
+set 42 ox 101
+set 42 oy 11
+set 42 arrows_visible false
+set 42 visible true
+set 42 padding_bottom 44
+set 42 opacity 0
+set 42 windowskin b39
+set 42 openness 255
+set 42 contents nil
+set 42 pause true
+set 42 contents_opacity 121
+new 43 window -
+set 43 windowskin nil
+set 43 contents_opacity 255
+set 43 contents nil
+set 43 y 319
+set 43 openness 255
+set 43 active true
+set 43 padding 8
+set 43 height 26
+set 43 oy 5
+set 43 tone 0 0 0 139
+set 43 visible true
+set 43 cursor_rect rect 0 0 46 24
+set 43 opacity 255
+set 43 x 445
+set 43 z -1
+set 43 pause true
+set 43 windowskin b40
+set 43 width 99
+set 43 ox 13
+new 44 window - 463 297 286 173
+set 44 windowskin nil
+set 44 viewport o36
+set 44 tone 255 255 255 255
+set 44 cursor_rect rect 0 22 110 72
+set 44 openness 79
+set 44 visible false
+set 44 padding 22
+set 44 active false
+set 44 windowskin b38
+set 44 contents_opacity 70
+set 44 pause false
+set 44 contents b43
+set 44 oy 0
+set 44 ox 0
+set 44 opacity 203
+update 44 45
+new 45 sprite -
+set 45 bitmap b46
+set 45 x 42
+set 45 y 191
+set 45 z 101
+new 46 sprite 36
+set 46 bitmap b47
+set 46 x 413
+set 46 y 153
+set 46 z -1
+new 47 sprite 36
+set 47 bitmap b48
+set 47 x 168
+set 47 y 79
+set 47 z 100
+set 38 arrows_visible true
+move 43 233 124 3 263
+set 43 contents_opacity 255
+set 38 padding_bottom 19
+move 42 104 243 104 3
+set 41 pause false
+set 43 y -54
+frame f48a7f1e771abfa5 ha3_s03_a
+update 44 1
+update 42 1
+set 41 ox 0
+update 43 1
+set 40 tone -166 -59 -117 121
+set 40 visible true
+set 40 windowskin nil
+set 44 openness 81
+frame f48a7f1e771abfa5 ha3_s03_b
+end
+scene ha-ha3_s04_a
+runtime rgss3
+bitmap b49 noise o 5904 544 416
+bitmap b51 skin a 5041 15 128 128
+bitmap b57 noise t 7042 224 137
+bitmap b52 skin o 5042 15 128 128
+bitmap b56 noise t 7041 286 66
+bitmap b50 skin a 5040 13 128 128
+bitmap b58 flat 7 74 129 255 68 88
+bitmap b59 flat 49 135 235 255 36 85
+bitmap b53 noise o 6040 100 100
+bitmap b54 noise t 6041 192 128
+bitmap b60 flat 88 46 169 255 38 71
+new 48 sprite -
+set 48 bitmap b49
+set 48 z -1000
+new 49 viewport - 74 160 252 57
+set 49 ox 0
+set 49 oy 0
+set 49 z 101
+new 50 window - 233 206 226 198
+set 50 windowskin nil
+set 50 ox -20
+set 50 pause true
+set 50 contents_opacity 83
+set 50 openness 255
+set 50 visible true
+set 50 active true
+set 50 opacity 255
+set 50 windowskin b51
+set 50 cursor_rect rect 0 0 -2 28
+set 50 back_opacity 134
+set 50 padding 1
+set 50 contents b57
+set 50 padding_bottom 8
+set 50 oy 44
+update 50 37
+new 51 window - 167 277 123 1
+set 51 windowskin nil
+set 51 ox 0
+set 51 windowskin b52
+set 51 opacity 255
+set 51 contents_opacity 255
+set 51 active true
+set 51 openness 245
+set 51 cursor_rect rect 0 0 32 7
+set 51 pause true
+set 51 visible true
+set 51 oy 57
+set 51 contents b56
+set 51 arrows_visible false
+update 51 33
+new 52 window - 366 89 60 254
+set 52 windowskin nil
+set 52 back_opacity 255
+set 52 cursor_rect rect 0 57 0 24
+set 52 pause true
+set 52 windowskin b52
+set 52 active true
+set 52 visible false
+set 52 contents_opacity 1
+set 52 ox 0
+set 52 openness 247
+set 52 opacity 0
+set 52 z 1
+set 52 contents b56
+set 52 tone 0 0 0 133
+set 52 padding 8
+set 52 oy 0
+update 52 1
+new 53 window -
+set 53 windowskin nil
+set 53 ox 0
+set 53 contents_opacity 0
+set 53 pause true
+set 53 windowskin b50
+set 53 opacity 1
+set 53 active true
+set 53 tone 141 -6 20 156
+set 53 padding_bottom 8
+set 53 cursor_rect rect -18 9 32 24
+set 53 oy 60
+set 53 visible true
+set 53 openness 255
+set 53 x 71
+set 53 width 143
+set 53 height 35
+set 53 y 161
+update 53 25
+new 54 sprite -
+set 54 bitmap b58
+set 54 x 292
+set 54 y 305
+set 54 z 100
+new 55 sprite -
+set 55 bitmap b59
+set 55 x 31
+set 55 y 158
+set 55 z 0
+new 56 window - 307 -11 35 137
+set 56 windowskin nil
+set 56 z -1
+set 56 pause false
+set 56 windowskin b53
+set 56 tone -255 -255 -255 0
+set 56 openness 144
+set 56 ox 0
+set 56 visible true
+set 56 cursor_rect rect 0 43 32 24
+set 56 opacity 255
+set 56 oy 0
+set 56 arrows_visible true
+set 56 active true
+set 56 padding_bottom 23
+set 56 contents_opacity 0
+update 56 88
+new 57 window -
+set 57 windowskin nil
+set 57 cursor_rect rect 0 0 61 24
+set 57 y 271
+set 57 opacity 192
+set 57 x 480
+set 57 ox 0
+set 57 padding_bottom 0
+set 57 openness 255
+set 57 contents b56
+set 57 height 147
+set 57 pause true
+set 57 active false
+set 57 padding 0
+set 57 visible true
+set 57 oy 0
+set 57 contents_opacity 0
+set 57 tone 255 255 255 255
+set 57 width 161
+set 57 windowskin b54
+update 57 45
+new 58 window 49
+set 58 windowskin nil
+set 58 ox 0
+set 58 active true
+set 58 pause false
+set 58 windowskin b50
+set 58 tone 255 255 255 255
+set 58 contents b56
+set 58 oy 0
+set 58 back_opacity 254
+set 58 opacity 255
+set 58 x -30
+set 58 openness 255
+set 58 visible true
+set 58 y -31
+set 58 width 0
+set 58 padding 0
+set 58 contents_opacity 254
+set 58 arrows_visible false
+set 58 height 192
+set 58 cursor_rect rect 0 66 2 20
+update 58 84
+new 59 sprite -
+set 59 bitmap b60
+set 59 x 3
+set 59 y 302
+set 59 z 101
+frame 5ab973cec92bb73c ha3_s04_a
+rectx 57 6
+set 58 active false
+set 57 active true
+update 51 2
+set 53 width 117
+set 52 contents_opacity 1
+set 50 cursor_rect rect 0 -12 64 9
+set 57 active false
+set 56 contents b57
+set 56 z 99
+set 50 padding 8
+set 56 cursor_rect rect 83 0 9 24
+frame d7fe6bd44accc927 ha3_s04_b
+end
+scene ha-ha3_s05_a
+runtime rgss3
+bitmap b61 noise o 5905 544 416
+bitmap b62 skin t 5050 15 128 128
+bitmap b67 noise a 7050 228 147
+bitmap b69 noise a 7052 8 219
+bitmap b65 noise t 6050 128 96
+bitmap b64 skin o 5052 15 128 128
+bitmap b70 flat 81 173 246 255 45 95
+bitmap b66 noise t 6051 40 50
+bitmap b68 noise t 7051 115 61
+bitmap b71 flat 199 243 4 255 18 47
+bitmap b72 flat 42 96 235 255 63 16
+new 60 sprite -
+set 60 bitmap b61
+set 60 z -1000
+new 61 window - 128 146 244 0
+set 61 windowskin nil
+set 61 contents_opacity 192
+set 61 visible true
+set 61 pause true
+set 61 tone -255 -255 -255 0
+set 61 cursor_rect rect 61 72 0 -1
+set 61 padding 12
+set 61 active true
+set 61 z 1
+set 61 opacity 255
+set 61 ox 103
+set 61 openness 255
+set 61 oy 0
+set 61 back_opacity 192
+set 61 padding_bottom 11
+set 61 windowskin b62
+set 61 contents b67
+update 61 1
+new 62 window - 65 48 88 132
+set 62 windowskin nil
+set 62 oy 0
+set 62 contents b69
+set 62 visible true
+set 62 active true
+set 62 contents_opacity 255
+set 62 ox 0
+set 62 opacity 255
+set 62 padding 16
+set 62 pause true
+set 62 cursor_rect rect 0 0 38 1
+set 62 openness 73
+set 62 windowskin b65
+new 63 window -
+set 63 windowskin nil
+set 63 ox 0
+set 63 arrows_visible false
+set 63 active true
+set 63 z 1
+set 63 padding_bottom 10
+set 63 opacity 169
+set 63 padding 12
+set 63 contents b67
+set 63 height 27
+set 63 width 81
+set 63 oy 0
+set 63 visible true
+set 63 cursor_rect rect 0 0 32 2
+set 63 contents_opacity 1
+set 63 openness 255
+set 63 y 224
+set 63 pause true
+set 63 x 236
+set 63 windowskin b64
+new 64 sprite -
+set 64 bitmap b70
+set 64 x 76
+set 64 y 190
+set 64 z 100
+new 65 window -
+set 65 windowskin nil
+set 65 ox 115
+set 65 windowskin b66
+set 65 active true
+set 65 y 161
+set 65 pause false
+set 65 padding 15
+set 65 contents b68
+set 65 oy 0
+set 65 width 156
+set 65 openness 255
+set 65 visible true
+set 65 x 167
+set 65 cursor_rect rect 0 8 4 -1
+set 65 height 128
+set 65 contents_opacity 0
+set 65 opacity 1
+new 66 sprite -
+set 66 bitmap b71
+set 66 x 73
+set 66 y 47
+set 66 z 101
+new 67 sprite -
+set 67 bitmap b72
+set 67 x 95
+set 67 y 286
+set 67 z 102
+set 62 padding 0
+set 61 opacity 255
+set 61 padding 51
+frame 5b000f6f3c2eca2d ha3_s05_a
+set 62 padding 9
+rect 62 57 0 0 22
+update 65 5
+set 62 tone -255 -255 -255 0
+move 63 423 27 159 12
+set 63 back_opacity 255
+set 62 opacity 233
+set 62 z 0
+set 62 oy 3
+set 62 height 76
+set 61 tone 0 0 0 243
+set 61 arrows_visible true
+set 65 opacity 82
+set 65 y 145
+move 62 385 -49 120 115
+frame 167cb0b6edc13f20 ha3_s05_b
+end
+scene ha-ha3_s06_a
+runtime rgss3
+bitmap b73 noise o 5906 544 416
+bitmap b81 noise t 7062 267 175
+bitmap b77 noise t 6060 192 128
+bitmap b82 flat 105 100 2 255 89 14
+bitmap b78 noise o 6061 256 256
+bitmap b79 noise o 7060 125 173
+bitmap b76 skin o 5062 13 128 128
+bitmap b80 noise a 7061 140 24
+bitmap b83 flat 255 188 247 255 44 60
+bitmap b84 flat 47 137 70 255 112 66
+bitmap b85 flat 22 150 95 255 120 95
+new 68 sprite -
+set 68 bitmap b73
+set 68 z -1000
+new 69 viewport - 85 10 233 181
+set 69 ox 5
+set 69 oy -12
+set 69 z 101
+new 70 window 69
+set 70 windowskin nil
+set 70 height 82
+set 70 width 150
+set 70 contents b81
+set 70 cursor_rect rect 0 0 -1 50
+set 70 windowskin b77
+set 70 oy 0
+set 70 active true
+set 70 opacity 255
+set 70 z 99
+set 70 y 191
+set 70 pause false
+set 70 openness 255
+set 70 visible true
+set 70 ox 50
+set 70 contents_opacity 1
+set 70 x 25
+update 70 63
+new 71 sprite -
+set 71 bitmap b82
+set 71 x -8
+set 71 y 380
+set 71 z 102
+new 72 window - 208 235 24 -5
+set 72 windowskin nil
+set 72 visible true
+set 72 tone 0 0 0 0
+set 72 cursor_rect rect 0 0 32 24
+set 72 arrows_visible true
+set 72 ox 0
+set 72 windowskin b78
+set 72 z 100
+set 72 contents_opacity 101
+set 72 active true
+set 72 opacity 129
+set 72 pause true
+set 72 oy 0
+set 72 openness 12
+new 73 window - 112 268 164 41
+set 73 windowskin nil
+set 73 pause true
+set 73 back_opacity 236
+set 73 contents b79
+set 73 padding 12
+set 73 opacity 254
+set 73 z 1
+set 73 ox 0
+set 73 arrows_visible false
+set 73 cursor_rect rect 0 0 40 24
+set 73 oy 0
+set 73 active true
+set 73 openness 255
+set 73 windowskin b76
+set 73 contents_opacity 1
+set 73 visible true
+new 74 window - 266 78 42 62
+set 74 windowskin nil
+set 74 arrows_visible true
+set 74 active false
+set 74 cursor_rect rect 0 -12 32 24
+set 74 windowskin b78
+set 74 pause false
+set 74 contents_opacity 255
+set 74 opacity 255
+set 74 contents b80
+set 74 openness 255
+set 74 ox 0
+set 74 oy 0
+set 74 back_opacity 254
+set 74 visible true
+update 74 15
+new 75 window -
+set 75 windowskin nil
+set 75 z 101
+set 75 visible true
+set 75 contents b79
+set 75 cursor_rect rect 0 0 32 62
+set 75 padding 16
+set 75 openness 255
+set 75 pause true
+set 75 active false
+set 75 arrows_visible false
+set 75 oy 0
+set 75 y 116
+set 75 x 138
+set 75 height 116
+set 75 windowskin b76
+set 75 contents_opacity 194
+set 75 opacity 254
+set 75 width -4
+set 75 ox -45
+new 76 sprite -
+set 76 bitmap b83
+set 76 x 492
+set 76 y 378
+set 76 z 99
+new 77 sprite -
+set 77 bitmap b84
+set 77 x 186
+set 77 y 341
+set 77 z -1
+new 78 sprite -
+set 78 bitmap b85
+set 78 x 321
+set 78 y 77
+set 78 z 102
+set 72 z 0
+rect 73 0 0 19 69
+rect 74 0 0 91 -1
+set 73 contents_opacity 0
+update 74 1
+set 72 pause true
+set 70 padding 12
+set 75 tone 0 0 0 0
+frame 91ad9275ff33c0c4 ha3_s06_a
+set 73 ox 0
+update 73 1
+set 73 tone 255 255 255 255
+set 74 z 1
+set 72 pause true
+set 75 y 50
+set 72 openness 255
+frame 9a867f8c7360ce1a ha3_s06_b
+end
+scene ha-ha3_s07_a
+runtime rgss3
+bitmap b86 noise o 5907 544 416
+bitmap b92 noise t 7070 56 196
+bitmap b87 skin t 5070 15 128 128
+bitmap b91 noise t 6071 72 72
+bitmap b88 skin a 5071 11 128 128
+bitmap b94 noise o 7072 129 196
+bitmap b93 noise o 7071 164 38
+bitmap b90 noise o 6070 40 50
+bitmap b95 flat 133 53 65 255 110 52
+bitmap b96 flat 135 181 160 255 76 89
+bitmap b97 flat 129 213 183 255 13 82
+new 79 sprite -
+set 79 bitmap b86
+set 79 z -1000
+new 80 viewport - 146 156 55 268
+set 80 ox -21
+set 80 oy 28
+set 80 z 1
+new 81 viewport - 219 156 197 100
+set 81 ox 0
+set 81 oy 0
+set 81 z 0
+new 82 window - 295 344 228 83
+set 82 windowskin nil
+set 82 viewport o80
+set 82 oy 33
+set 82 cursor_rect rect 48 0 0 39
+set 82 contents_opacity 156
+set 82 visible true
+set 82 contents b92
+set 82 back_opacity 0
+set 82 ox 0
+set 82 openness 161
+set 82 active true
+set 82 windowskin b87
+set 82 padding_bottom 11
+set 82 pause true
+set 82 opacity 255
+update 82 1
+new 83 window - 147 26 38 85
+set 83 windowskin nil
+set 83 viewport o81
+set 83 windowskin nil
+set 83 visible true
+set 83 tone 255 255 255 255
+set 83 back_opacity 255
+set 83 ox 0
+set 83 contents nil
+set 83 active true
+set 83 opacity 194
+set 83 openness 255
+set 83 oy 0
+set 83 cursor_rect rect 0 3 56 24
+set 83 padding 8
+set 83 contents_opacity 1
+set 83 pause false
+update 83 1
+new 84 window - 328 162 3 178
+set 84 windowskin nil
+set 84 viewport o80
+set 84 ox 0
+set 84 visible true
+set 84 active true
+set 84 arrows_visible true
+set 84 pause false
+set 84 contents_opacity 1
+set 84 opacity 1
+set 84 openness 211
+set 84 windowskin b91
+set 84 contents b92
+set 84 oy 0
+set 84 cursor_rect rect 12 3 8 24
+new 85 window -
+set 85 windowskin nil
+set 85 contents_opacity 223
+set 85 oy 0
+set 85 back_opacity 1
+set 85 x 218
+set 85 ox 0
+set 85 windowskin b88
+set 85 cursor_rect rect 66 0 25 24
+set 85 height 91
+set 85 width -1
+set 85 opacity 0
+set 85 y 86
+set 85 active true
+set 85 openness 102
+set 85 padding_bottom 45
+set 85 contents b94
+set 85 visible true
+set 85 pause true
+update 85 46
+new 86 window - 170 340 145 38
+set 86 windowskin nil
+set 86 viewport o81
+set 86 contents b94
+set 86 ox 0
+set 86 pause true
+set 86 cursor_rect rect 0 0 32 24
+set 86 contents_opacity 255
+set 86 active true
+set 86 openness 230
+set 86 oy 0
+set 86 tone -255 -255 -255 0
+set 86 windowskin b91
+set 86 opacity 255
+set 86 visible true
+new 87 window -
+set 87 windowskin nil
+set 87 y 47
+set 87 contents b93
+set 87 height 5
+set 87 opacity 0
+set 87 cursor_rect rect 20 73 0 -1
+set 87 pause false
+set 87 windowskin b90
+set 87 active true
+set 87 visible true
+set 87 ox 135
+set 87 oy 0
+set 87 contents_opacity 0
+set 87 x 117
+set 87 openness 255
+set 87 width 188
+set 87 tone 255 255 255 255
+set 87 z 100
+update 87 1
+new 88 sprite -
+set 88 bitmap b95
+set 88 x 285
+set 88 y 337
+set 88 z 102
+new 89 sprite 81
+set 89 bitmap b96
+set 89 x 270
+set 89 y 80
+set 89 z 100
+new 90 sprite 80
+set 90 bitmap b97
+set 90 x 187
+set 90 y 328
+set 90 z 0
+set 84 z 100
+set 84 active true
+rect 87 21 13 -1 24
+set 87 padding_bottom 18
+set 83 windowskin b90
+set 83 pause false
+frame 77ae945016024d00 ha3_s07_a
+set 86 width 16
+set 82 x 429
+set 87 height 195
+set 86 tone -255 -255 -255 0
+move 87 123 156 191 279
+set 85 visible true
+set 85 padding_bottom 5
+set 86 width 110
+move 83 -49 268 286 55
+set 86 contents_opacity 1
+set 84 padding 12
+set 83 arrows_visible true
+move 82 -13 -36 114 191
+frame feb601059a735952 ha3_s07_b
+end
+scene ha-ha3_s08_a
+runtime rgss3
+bitmap b98 noise o 5908 544 416
+bitmap b102 noise t 6080 100 100
+bitmap b105 noise o 7081 158 190
+bitmap b103 noise t 6081 72 72
+bitmap b101 skin a 5082 15 128 128
+bitmap b107 flat 99 143 130 255 78 28
+bitmap b100 skin t 5081 15 128 128
+bitmap b104 noise t 7080 265 183
+bitmap b108 flat 128 183 165 255 98 109
+new 91 sprite -
+set 91 bitmap b98
+set 91 z -1000
+new 92 viewport - 97 16 358 77
+set 92 ox 0
+set 92 oy -22
+set 92 z 101
+new 93 viewport - 156 59 104 173
+set 93 ox -7
+set 93 oy 0
+set 93 z 0
+new 94 window -
+set 94 windowskin nil
+set 94 contents_opacity 163
+set 94 ox 119
+set 94 oy 0
+set 94 pause true
+set 94 openness 242
+set 94 width 28
+set 94 y 259
+set 94 z 100
+set 94 visible false
+set 94 height -2
+set 94 opacity 0
+set 94 tone -255 -255 -255 0
+set 94 x 185
+set 94 windowskin b102
+set 94 active true
+set 94 cursor_rect rect 98 0 -3 0
+new 95 window - 33 43 159 114
+set 95 windowskin nil
+set 95 viewport o93
+set 95 contents b105
+set 95 oy 0
+set 95 active true
+set 95 windowskin nil
+set 95 cursor_rect rect 50 41 -3 26
+set 95 arrows_visible true
+set 95 back_opacity 192
+set 95 visible true
+set 95 openness 255
+set 95 opacity 255
+set 95 contents_opacity 0
+set 95 pause false
+set 95 ox 128
+set 95 padding_bottom 21
+new 96 window - 281 15 39 3
+set 96 windowskin nil
+set 96 viewport o93
+set 96 windowskin b103
+set 96 openness 177
+set 96 z -1
+set 96 opacity 255
+set 96 back_opacity 255
+set 96 padding 28
+set 96 active true
+set 96 oy 86
+set 96 contents_opacity 255
+set 96 ox -25
+set 96 cursor_rect rect 53 0 9 27
+set 96 visible true
+set 96 pause true
+update 96 23
+new 97 window - 374 -27 181 4
+set 97 windowskin nil
+set 97 viewport o93
+set 97 arrows_visible true
+set 97 tone -7 39 38 68
+set 97 windowskin b101
+set 97 opacity 254
+set 97 padding_bottom 12
+set 97 ox 0
+set 97 visible true
+set 97 z 0
+set 97 openness 255
+set 97 oy 0
+set 97 back_opacity 255
+set 97 active true
+set 97 pause true
+set 97 contents_opacity 1
+set 97 contents b105
+set 97 padding 12
+set 97 cursor_rect rect 0 0 0 9
+update 97 1
+new 98 sprite 93
+set 98 bitmap b107
+set 98 x 70
+set 98 y 349
+set 98 z 100
+new 99 window - 450 262 183 5
+set 99 windowskin nil
+set 99 openness 168
+set 99 tone 0 0 0 0
+set 99 padding 8
+set 99 visible true
+set 99 arrows_visible true
+set 99 windowskin b100
+set 99 pause true
+set 99 cursor_rect rect 0 80 32 52
+set 99 oy 0
+set 99 opacity 0
+set 99 ox 0
+set 99 contents_opacity 131
+set 99 contents b104
+set 99 active true
+update 99 1
+new 100 window - 446 110 -4 54
+set 100 windowskin nil
+set 100 viewport o92
+set 100 pause true
+set 100 windowskin b101
+set 100 cursor_rect rect 35 64 8 1
+set 100 opacity 255
+set 100 contents_opacity 219
+set 100 contents b104
+set 100 back_opacity 192
+set 100 oy 0
+set 100 ox 10
+set 100 z 99
+set 100 visible true
+set 100 active true
+set 100 padding 0
+set 100 openness 255
+new 101 sprite -
+set 101 bitmap b108
+set 101 x 102
+set 101 y 250
+set 101 z -1
+set 94 x 170
+set 96 ox 58
+move 94 158 56 168 0
+set 97 tone -255 -255 -255 0
+set 97 x 111
+set 96 openness 255
+set 95 x 116
+frame 51678c2bee4d3401 ha3_s08_a
+set 94 z 101
+set 96 x 396
+set 96 x 366
+update 97 2
+set 99 openness 255
+move 94 254 131 82 13
+move 95 175 -58 -3 86
+set 100 contents b104
+frame b52b7dae6fe45fd5 ha3_s08_b
+end
+scene ha-ha3_s09_a
+runtime rgss3
+bitmap b109 noise o 5909 544 416
+bitmap b116 noise o 7091 160 91
+bitmap b115 noise t 7090 178 222
+bitmap b111 skin t 5091 11 128 128
+bitmap b112 skin t 5092 15 128 128
+bitmap b114 noise o 6091 64 64
+bitmap b118 flat 121 228 38 255 55 49
+bitmap b119 flat 154 148 12 255 77 51
+new 102 sprite -
+set 102 bitmap b109
+set 102 z -1000
+new 103 viewport - 285 155 150 57
+set 103 ox 2
+set 103 oy 0
+set 103 z 50
+new 104 window -
+set 104 windowskin nil
+set 104 y 15
+set 104 contents_opacity 255
+set 104 pause false
+set 104 ox -40
+set 104 visible true
+set 104 height 22
+set 104 width 101
+set 104 windowskin nil
+set 104 x 466
+set 104 active false
+set 104 opacity 255
+set 104 contents b116
+set 104 padding 8
+set 104 openness 255
+set 104 oy 119
+set 104 arrows_visible false
+set 104 cursor_rect rect 41 -4 32 24
+update 104 60
+new 105 window -
+set 105 windowskin nil
+set 105 width -3
+set 105 y 325
+set 105 cursor_rect rect 0 0 8 8
+set 105 opacity 0
+set 105 height 254
+set 105 x 187
+set 105 contents_opacity 255
+set 105 windowskin nil
+set 105 oy 0
+set 105 pause true
+set 105 ox 0
+set 105 visible true
+set 105 padding_bottom 12
+set 105 openness 255
+set 105 active true
+update 105 1
+new 106 window -
+set 106 windowskin nil
+set 106 oy -8
+set 106 openness 115
+set 106 back_opacity 255
+set 106 x 447
+set 106 height 58
+set 106 cursor_rect rect 49 -20 43 0
+set 106 ox 106
+set 106 opacity 254
+set 106 contents b115
+set 106 visible true
+set 106 y 166
+set 106 windowskin b111
+set 106 active true
+set 106 padding 25
+set 106 pause true
+set 106 contents_opacity 255
+set 106 width 39
+new 107 window 103
+set 107 windowskin nil
+set 107 visible false
+set 107 x 329
+set 107 contents b116
+set 107 opacity 255
+set 107 oy 95
+set 107 padding_bottom 8
+set 107 windowskin b112
+set 107 width 134
+set 107 ox -7
+set 107 y 197
+set 107 active false
+set 107 tone 0 0 0 0
+set 107 cursor_rect rect 36 0 -2 3
+set 107 openness 255
+set 107 pause true
+set 107 height 75
+set 107 contents_opacity 0
+update 107 12
+new 108 window - 259 39 179 97
+set 108 windowskin nil
+set 108 viewport o103
+set 108 contents b116
+set 108 openness 255
+set 108 padding_bottom 16
+set 108 opacity 255
+set 108 visible true
+set 108 ox 0
+set 108 pause false
+set 108 contents_opacity 0
+set 108 oy 0
+set 108 active true
+set 108 cursor_rect rect 86 10 97 24
+set 108 windowskin b114
+set 108 tone 255 255 255 255
+update 108 1
+new 109 window 103
+set 109 windowskin nil
+set 109 ox 0
+set 109 y -14
+set 109 contents b115
+set 109 height 82
+set 109 pause true
+set 109 x 457
+set 109 opacity 71
+set 109 tone 0 0 0 86
+set 109 visible true
+set 109 back_opacity 254
+set 109 padding_bottom 0
+set 109 oy 0
+set 109 z 200
+set 109 width -1
+set 109 openness 237
+set 109 cursor_rect rect 0 75 2 24
+set 109 arrows_visible false
+set 109 padding 12
+set 109 windowskin b114
+set 109 active true
+set 109 contents_opacity 1
+new 110 sprite -
+set 110 bitmap b118
+set 110 x 437
+set 110 y 285
+set 110 z 0
+new 111 sprite -
+set 111 bitmap b119
+set 111 x 478
+set 111 y 116
+set 111 z 100
+set 108 tone 0 0 0 0
+set 105 width 56
+set 106 padding 43
+rectx 107 -20
+rect 108 0 52 32 9
+frame 0825a4656863cb40 ha3_s09_a
+set 106 y 203
+set 106 z 99
+set 106 x 68
+set 108 windowskin b111
+frame 076e2abd5ee77518 ha3_s09_b
+end
+scene ha-ha3_s10_a
+runtime rgss3
+bitmap b120 noise o 5910 544 416
+bitmap b124 noise t 6100 256 256
+bitmap b122 skin t 5101 15 128 128
+bitmap b126 noise t 7100 3 69
+bitmap b128 noise t 7102 179 166
+bitmap b129 flat 138 234 250 255 52 40
+bitmap b130 flat 125 195 242 255 90 76
+bitmap b131 flat 207 75 51 255 108 29
+bitmap b132 flat 146 247 240 255 36 43
+bitmap b133 flat 219 141 215 255 85 17
+bitmap b125 noise o 6101 256 256
+bitmap b127 noise t 7101 142 12
+new 112 sprite -
+set 112 bitmap b120
+set 112 z -1000
+new 113 window - 413 167 -5 84
+set 113 windowskin nil
+set 113 cursor_rect rect 0 49 101 3
+set 113 visible true
+set 113 pause false
+set 113 z 200
+set 113 openness 255
+set 113 opacity 254
+set 113 active true
+set 113 contents_opacity 255
+set 113 oy 0
+set 113 windowskin b124
+set 113 ox 0
+new 114 window - 17 46 26 130
+set 114 windowskin nil
+set 114 contents nil
+set 114 active true
+set 114 windowskin b124
+set 114 oy -14
+set 114 back_opacity 192
+set 114 ox 0
+set 114 cursor_rect rect -3 0 90 45
+set 114 opacity 255
+set 114 padding 12
+set 114 visible true
+set 114 openness 255
+set 114 contents_opacity 255
+set 114 pause false
+update 114 53
+new 115 window -
+set 115 windowskin nil
+set 115 cursor_rect rect -20 0 0 2
+set 115 contents_opacity 255
+set 115 x 138
+set 115 back_opacity 254
+set 115 windowskin b122
+set 115 pause true
+set 115 contents b126
+set 115 width 2
+set 115 tone -255 -255 -255 0
+set 115 height 16
+set 115 y 229
+set 115 visible true
+set 115 active true
+set 115 openness 192
+set 115 opacity 68
+set 115 ox 0
+set 115 oy 12
+new 116 window -
+set 116 windowskin nil
+set 116 width 123
+set 116 cursor_rect rect 0 0 86 2
+set 116 padding 12
+set 116 opacity 255
+set 116 openness 246
+set 116 contents_opacity 254
+set 116 windowskin nil
+set 116 active true
+set 116 padding_bottom 6
+set 116 contents b128
+set 116 pause false
+set 116 x 48
+set 116 ox 0
+set 116 oy 33
+set 116 y 350
+set 116 visible false
+set 116 height 109
+new 117 sprite -
+set 117 bitmap b129
+set 117 x 419
+set 117 y 317
+set 117 z 0
+new 118 sprite -
+set 118 bitmap b130
+set 118 x 327
+set 118 y 288
+set 118 z 99
+new 119 sprite -
+set 119 bitmap b131
+set 119 x 5
+set 119 y 372
+set 119 z 100
+new 120 sprite -
+set 120 bitmap b132
+set 120 x 227
+set 120 y 310
+set 120 z 100
+new 121 sprite -
+set 121 bitmap b133
+set 121 x 252
+set 121 y 147
+set 121 z 101
+set 114 contents nil
+set 116 ox 144
+set 116 z 1
+frame f93bb9a70720a462 ha3_s10_a
+set 116 padding 16
+set 114 x 255
+set 115 windowskin b125
+set 113 height 130
+set 115 contents b126
+set 116 tone -255 -255 -255 0
+set 113 openness 254
+move 114 470 80 -1 -3
+set 115 cursor_rect rect 77 70 7 -3
+set 116 contents b127
+frame 3d63930e39dd1e79 ha3_s10_b
+end
+scene ha-ha3_s11_a
+runtime rgss3
+bitmap b134 noise o 5911 544 416
+bitmap b137 skin t 5112 14 128 128
+bitmap b140 noise t 7110 294 177
+bitmap b139 noise t 6111 100 100
+bitmap b141 noise o 7111 195 68
+bitmap b143 flat 251 192 7 255 27 113
+bitmap b142 noise a 7112 258 10
+bitmap b144 flat 84 43 97 255 20 111
+bitmap b145 flat 68 213 216 255 46 47
+new 122 sprite -
+set 122 bitmap b134
+set 122 z -1000
+new 123 window - 290 21 158 2
+set 123 windowskin nil
+set 123 windowskin b137
+set 123 pause false
+set 123 cursor_rect rect 0 0 -1 24
+set 123 padding_bottom 8
+set 123 contents_opacity 255
+set 123 visible true
+set 123 oy 0
+set 123 contents b140
+set 123 ox 0
+set 123 opacity 204
+set 123 padding 8
+set 123 openness 255
+set 123 active true
+update 123 25
+new 124 window - 35 27 2 141
+set 124 windowskin nil
+set 124 opacity 27
+set 124 oy 0
+set 124 cursor_rect rect 9 33 0 2
+set 124 openness 130
+set 124 active true
+set 124 visible true
+set 124 windowskin b139
+set 124 ox 0
+set 124 pause true
+set 124 contents b141
+set 124 contents_opacity 255
+update 124 36
+new 125 sprite -
+set 125 bitmap b143
+set 125 x 498
+set 125 y 371
+set 125 z 99
+new 126 window - 471 134 131 -4
+set 126 windowskin nil
+set 126 contents b140
+set 126 visible true
+set 126 arrows_visible true
+set 126 cursor_rect rect 0 35 5 39
+set 126 ox 0
+set 126 pause true
+set 126 windowskin nil
+set 126 contents_opacity 0
+set 126 tone 160 88 -60 49
+set 126 active true
+set 126 openness 255
+set 126 oy 0
+set 126 opacity 255
+set 126 z 1
+update 126 1
+new 127 window -
+set 127 windowskin nil
+set 127 windowskin b139
+set 127 width 133
+set 127 visible true
+set 127 contents_opacity 255
+set 127 ox 0
+set 127 active true
+set 127 y 77
+set 127 x 390
+set 127 opacity 78
+set 127 cursor_rect rect 0 0 3 5
+set 127 openness 100
+set 127 contents b142
+set 127 oy 55
+set 127 pause false
+set 127 height 30
+update 127 10
+new 128 sprite -
+set 128 bitmap b144
+set 128 x 122
+set 128 y 121
+set 128 z 0
+new 129 sprite -
+set 129 bitmap b145
+set 129 x 432
+set 129 y 57
+set 129 z 100
+update 126 7
+set 126 x 9
+set 126 x 370
+set 124 pause true
+set 123 padding 12
+set 124 cursor_rect rect 74 0 32 34
+set 126 padding_bottom 18
+frame aa018d0e21ee9bdc ha3_s11_a
+move 126 348 -19 5 3
+set 123 padding_bottom 8
+rect 126 51 39 32 9
+set 127 active true
+set 123 back_opacity 192
+set 127 active false
+update 124 26
+set 126 opacity 255
+rectx 124 21
+set 127 y 264
+set 123 tone 255 255 255 255
+frame 26ce0888a4f83805 ha3_s11_b
+end
+scene ha-ha3_s12_a
+runtime rgss3
+bitmap b146 noise o 5912 544 416
+bitmap b152 noise a 7120 245 209
+bitmap b149 skin o 5122 15 128 128
+bitmap b154 noise a 7122 122 33
+bitmap b148 skin o 5121 11 128 128
+bitmap b155 flat 213 253 69 255 14 120
+bitmap b151 noise o 6121 128 72
+bitmap b156 flat 143 137 72 255 42 64
+bitmap b157 flat 192 172 134 255 98 86
+bitmap b158 flat 166 105 147 255 57 99
+bitmap b159 flat 164 165 176 255 84 101
+new 130 sprite -
+set 130 bitmap b146
+set 130 z -1000
+new 131 window -
+set 131 windowskin nil
+set 131 cursor_rect rect 6 12 21 0
+set 131 y 180
+set 131 z -1
+set 131 contents b152
+set 131 opacity 255
+set 131 ox 0
+set 131 width 4
+set 131 active true
+set 131 contents_opacity 254
+set 131 openness 53
+set 131 padding 12
+set 131 visible false
+set 131 windowskin b149
+set 131 oy 0
+set 131 x 346
+set 131 height 69
+set 131 pause true
+new 132 window - 120 342 5 172
+set 132 windowskin nil
+set 132 openness 255
+set 132 oy 53
+set 132 padding 8
+set 132 ox 10
+set 132 pause true
+set 132 opacity 255
+set 132 contents b154
+set 132 cursor_rect rect 0 58 2 19
+set 132 contents_opacity 124
+set 132 windowskin b148
+set 132 visible true
+set 132 back_opacity 255
+set 132 padding_bottom 0
+set 132 z 0
+set 132 active false
+update 132 1
+new 133 window -
+set 133 windowskin nil
+set 133 active true
+set 133 height 237
+set 133 y 197
+set 133 pause true
+set 133 opacity 205
+set 133 contents nil
+set 133 padding 60
+set 133 cursor_rect rect 14 0 2 50
+set 133 x 166
+set 133 arrows_visible true
+set 133 openness 255
+set 133 contents_opacity 254
+set 133 padding_bottom 4
+set 133 visible true
+set 133 ox 0
+set 133 tone 0 0 0 111
+set 133 oy 0
+set 133 windowskin b148
+set 133 width -5
+update 133 1
+new 134 sprite -
+set 134 bitmap b155
+set 134 x 144
+set 134 y 3
+set 134 z 100
+new 135 window -
+set 135 windowskin nil
+set 135 contents_opacity 192
+set 135 windowskin b151
+set 135 opacity 255
+set 135 y 332
+set 135 visible true
+set 135 z 0
+set 135 pause false
+set 135 ox 0
+set 135 height 129
+set 135 cursor_rect rect 70 0 0 24
+set 135 oy 104
+set 135 openness 255
+set 135 contents b154
+set 135 x 250
+set 135 width 144
+set 135 tone 0 0 0 0
+set 135 active false
+new 136 window - 412 144 117 -3
+set 136 windowskin nil
+set 136 ox 133
+set 136 back_opacity 255
+set 136 visible true
+set 136 contents_opacity 29
+set 136 pause true
+set 136 oy 0
+set 136 active true
+set 136 z 101
+set 136 cursor_rect rect 59 12 65 24
+set 136 opacity 192
+set 136 tone -67 -196 -102 243
+set 136 windowskin b151
+set 136 openness 255
+update 136 1
+new 137 window - 51 248 146 24
+set 137 windowskin nil
+set 137 cursor_rect rect 0 -2 0 48
+set 137 active false
+set 137 contents_opacity 255
+set 137 arrows_visible true
+set 137 openness 1
+set 137 tone -152 -169 -184 205
+set 137 windowskin b149
+set 137 contents b152
+set 137 oy 0
+set 137 visible true
+set 137 pause true
+set 137 ox 0
+set 137 opacity 95
+new 138 sprite -
+set 138 bitmap b156
+set 138 x 164
+set 138 y 306
+set 138 z 100
+new 139 sprite -
+set 139 bitmap b157
+set 139 x 239
+set 139 y 227
+set 139 z -1
+new 140 sprite -
+set 140 bitmap b158
+set 140 x 150
+set 140 y 143
+set 140 z 100
+new 141 sprite -
+set 141 bitmap b159
+set 141 x 145
+set 141 y 399
+set 141 z 99
+set 135 pause true
+set 132 openness 255
+move 131 -52 103 62 248
+set 132 openness 19
+set 137 active false
+set 136 oy 0
+move 133 -7 308 30 142
+set 133 active false
+frame 729b99dbe4722638 ha3_s12_a
+update 132 1
+set 133 active false
+set 135 contents_opacity 194
+set 135 tone 255 255 255 255
+set 131 padding_bottom 12
+move 137 224 239 251 -4
+set 137 padding_bottom 0
+update 135 2
+set 133 padding 29
+set 132 openness 255
+set 135 padding 12
+set 136 y 177
+frame 26220371ae4156e7 ha3_s12_b
+end
+scene ha-ha3_s13_a
+runtime rgss3
+bitmap b160 noise o 5913 544 416
+bitmap b165 noise t 6131 128 96
+bitmap b168 noise t 7132 290 145
+bitmap b161 skin a 5130 13 128 128
+bitmap b167 noise a 7131 94 97
+bitmap b163 skin t 5132 15 128 128
+bitmap b169 flat 111 15 68 255 33 62
+bitmap b162 skin a 5131 15 128 128
+bitmap b164 noise o 6130 256 256
+bitmap b170 flat 224 121 153 255 117 76
+new 142 sprite -
+set 142 bitmap b160
+set 142 z -1000
+new 143 window - 357 352 230 15
+set 143 windowskin nil
+set 143 contents_opacity 0
+set 143 visible true
+set 143 opacity 255
+set 143 pause true
+set 143 padding 23
+set 143 cursor_rect rect 0 -7 3 24
+set 143 oy 45
+set 143 tone -255 -255 -255 0
+set 143 windowskin b165
+set 143 contents b168
+set 143 active true
+set 143 ox 147
+set 143 openness 115
+new 144 window - 441 355 54 64
+set 144 windowskin nil
+set 144 tone -255 -255 -255 0
+set 144 contents_opacity 255
+set 144 ox 0
+set 144 windowskin b161
+set 144 cursor_rect rect 0 76 0 2
+set 144 pause true
+set 144 visible true
+set 144 oy 2
+set 144 active false
+set 144 padding_bottom -4
+set 144 padding 0
+set 144 contents b167
+set 144 opacity 1
+set 144 openness 255
+update 144 1
+new 145 window - 198 118 261 38
+set 145 windowskin nil
+set 145 contents_opacity 255
+set 145 opacity 255
+set 145 ox 0
+set 145 contents b168
+set 145 active true
+set 145 cursor_rect rect 0 0 32 41
+set 145 pause true
+set 145 windowskin b163
+set 145 visible true
+set 145 openness 255
+set 145 oy 0
+set 145 tone -255 -255 -255 0
+set 145 z 200
+update 145 65
+new 146 sprite -
+set 146 bitmap b169
+set 146 x 55
+set 146 y 331
+set 146 z 101
+new 147 window - 255 219 4 61
+set 147 windowskin nil
+set 147 cursor_rect rect 84 80 24 41
+set 147 opacity 255
+set 147 windowskin b163
+set 147 ox 0
+set 147 openness 255
+set 147 contents b167
+set 147 oy 5
+set 147 active true
+set 147 z 99
+set 147 tone 0 0 0 243
+set 147 pause true
+set 147 visible true
+set 147 contents_opacity 192
+set 147 padding 8
+update 147 20
+new 148 window -
+set 148 windowskin nil
+set 148 pause true
+set 148 contents b167
+set 148 width 144
+set 148 y 111
+set 148 back_opacity 255
+set 148 padding_bottom 16
+set 148 visible true
+set 148 tone 255 255 255 255
+set 148 x 408
+set 148 openness 115
+set 148 oy 0
+set 148 cursor_rect rect 0 0 32 25
+set 148 active false
+set 148 ox 0
+set 148 padding 52
+set 148 opacity 30
+set 148 windowskin b162
+set 148 height 209
+set 148 contents_opacity 254
+update 148 1
+new 149 window -
+set 149 windowskin nil
+set 149 pause false
+set 149 windowskin b163
+set 149 openness 255
+set 149 contents b167
+set 149 z 1
+set 149 visible false
+set 149 y 71
+set 149 opacity 0
+set 149 width 73
+set 149 height 14
+set 149 x 160
+set 149 ox 0
+set 149 padding 16
+set 149 cursor_rect rect 0 0 32 7
+set 149 contents_opacity 46
+set 149 active true
+set 149 oy 0
+update 149 1
+new 150 window - 124 334 161 102
+set 150 windowskin nil
+set 150 visible true
+set 150 openness 255
+set 150 pause false
+set 150 opacity 255
+set 150 back_opacity 255
+set 150 windowskin b164
+set 150 active false
+set 150 oy 126
+set 150 ox 107
+set 150 contents_opacity 1
+set 150 cursor_rect rect 0 13 5 24
+set 150 padding 8
+set 150 z 101
+update 150 1
+new 151 window -
+set 151 windowskin nil
+set 151 contents_opacity 240
+set 151 width 145
+set 151 openness 107
+set 151 opacity 255
+set 151 ox 0
+set 151 padding 16
+set 151 visible true
+set 151 windowskin b163
+set 151 height 50
+set 151 oy 0
+set 151 active true
+set 151 cursor_rect rect 0 0 2 2
+set 151 pause false
+set 151 y -18
+set 151 x 396
+set 151 contents b168
+new 152 sprite -
+set 152 bitmap b170
+set 152 x 355
+set 152 y 383
+set 152 z -1
+move 150 339 21 265 171
+set 148 opacity 255
+set 150 contents b168
+set 144 width 1
+set 148 padding 22
+set 149 ox 110
+frame 8921791a639169ea ha3_s13_a
+set 147 back_opacity 57
+rectx 144 -17
+set 143 visible true
+set 144 width 164
+update 147 1
+move 151 289 115 139 33
+set 150 back_opacity 254
+set 150 pause true
+set 148 tone 255 255 255 255
+set 149 padding 0
+set 144 contents b168
+set 151 padding 14
+set 149 arrows_visible false
+set 143 opacity 168
+frame 37a753682c938dc1 ha3_s13_b
+end
+scene ha-ha3_s14_a
+runtime rgss3
+bitmap b171 noise o 5914 544 416
+bitmap b176 noise o 6141 128 67
+bitmap b178 noise o 7141 246 120
+bitmap b177 noise t 7140 211 181
+bitmap b174 skin o 5142 13 128 128
+bitmap b179 noise a 7142 293 110
+bitmap b175 noise o 6140 100 100
+bitmap b173 skin a 5141 15 128 128
+bitmap b180 flat 175 134 4 255 92 76
+bitmap b181 flat 215 253 205 255 89 50
+bitmap b182 flat 1 223 1 255 15 119
+bitmap b183 flat 140 141 162 255 52 80
+new 153 sprite -
+set 153 bitmap b171
+set 153 z -1000
+new 154 viewport - 10 117 289 120
+set 154 ox 0
+set 154 oy 0
+set 154 z -1
+new 155 window -
+set 155 windowskin nil
+set 155 opacity 255
+set 155 height 258
+set 155 openness 255
+set 155 padding_bottom 27
+set 155 pause false
+set 155 width 200
+set 155 windowskin b176
+set 155 y -36
+set 155 x 359
+set 155 cursor_rect rect 20 0 4 64
+set 155 visible true
+set 155 z 101
+set 155 contents b178
+set 155 back_opacity 0
+set 155 oy 2
+set 155 ox 65
+set 155 contents_opacity 255
+set 155 active true
+update 155 1
+new 156 window - 191 79 194 -2
+set 156 windowskin nil
+set 156 contents_opacity 255
+set 156 pause true
+set 156 ox 0
+set 156 padding 12
+set 156 cursor_rect rect 0 0 77 5
+set 156 oy 0
+set 156 visible true
+set 156 opacity 255
+set 156 active true
+set 156 windowskin b176
+set 156 contents b177
+set 156 openness 255
+set 156 back_opacity 0
+update 156 21
+new 157 window -
+set 157 windowskin nil
+set 157 arrows_visible true
+set 157 cursor_rect rect -11 60 32 9
+set 157 contents_opacity 0
+set 157 ox 85
+set 157 active true
+set 157 z 100
+set 157 width 198
+set 157 y 63
+set 157 tone -35 -33 47 0
+set 157 padding 27
+set 157 visible true
+set 157 oy 59
+set 157 windowskin b174
+set 157 height 48
+set 157 x 270
+set 157 contents b178
+set 157 opacity 255
+set 157 openness 255
+set 157 pause false
+update 157 26
+new 158 window - 41 61 170 294
+set 158 windowskin nil
+set 158 viewport o154
+set 158 oy 0
+set 158 padding 12
+set 158 padding_bottom 8
+set 158 openness 255
+set 158 back_opacity 255
+set 158 windowskin b174
+set 158 arrows_visible true
+set 158 visible true
+set 158 active false
+set 158 pause false
+set 158 opacity 255
+set 158 contents_opacity 83
+set 158 z 200
+set 158 contents b179
+set 158 cursor_rect rect 0 30 -3 4
+set 158 ox 0
+new 159 window - 121 300 62 35
+set 159 windowskin nil
+set 159 visible true
+set 159 tone 0 0 0 178
+set 159 cursor_rect rect -16 12 0 5
+set 159 ox 0
+set 159 contents b177
+set 159 arrows_visible true
+set 159 openness 255
+set 159 windowskin b175
+set 159 padding 16
+set 159 oy 0
+set 159 opacity 233
+set 159 contents_opacity 0
+set 159 back_opacity 255
+set 159 pause false
+set 159 active true
+update 159 42
+new 160 window - 35 22 6 48
+set 160 windowskin nil
+set 160 padding_bottom 48
+set 160 active true
+set 160 padding 12
+set 160 visible true
+set 160 openness 255
+set 160 arrows_visible true
+set 160 contents_opacity 243
+set 160 tone 255 255 255 255
+set 160 back_opacity 1
+set 160 ox 0
+set 160 opacity 254
+set 160 pause false
+set 160 oy 0
+set 160 windowskin b175
+set 160 cursor_rect rect 0 0 6 2
+new 161 window -
+set 161 windowskin nil
+set 161 active true
+set 161 height 36
+set 161 contents_opacity 255
+set 161 ox 0
+set 161 pause true
+set 161 visible true
+set 161 opacity 0
+set 161 contents nil
+set 161 padding 14
+set 161 x 43
+set 161 y 307
+set 161 oy 8
+set 161 openness 255
+set 161 cursor_rect rect 0 -3 -3 7
+set 161 width -5
+set 161 windowskin b173
+set 161 z 101
+new 162 window -
+set 162 windowskin nil
+set 162 height 212
+set 162 z -1
+set 162 visible true
+set 162 y 173
+set 162 opacity 1
+set 162 cursor_rect rect 97 0 8 -1
+set 162 windowskin b176
+set 162 width 157
+set 162 pause false
+set 162 contents_opacity 192
+set 162 padding_bottom 12
+set 162 oy -33
+set 162 back_opacity 29
+set 162 active true
+set 162 openness 255
+set 162 x 330
+set 162 padding 12
+set 162 ox 0
+update 162 60
+new 163 window - -56 62 27 296
+set 163 windowskin nil
+set 163 viewport o154
+set 163 visible true
+set 163 cursor_rect rect 33 -10 -3 20
+set 163 windowskin b173
+set 163 z 200
+set 163 opacity 254
+set 163 pause true
+set 163 oy 0
+set 163 ox 0
+set 163 active false
+set 163 contents_opacity 51
+set 163 padding 58
+set 163 contents b177
+set 163 openness 255
+new 164 sprite -
+set 164 bitmap b180
+set 164 x 170
+set 164 y 37
+set 164 z 101
+new 165 sprite -
+set 165 bitmap b181
+set 165 x 3
+set 165 y 118
+set 165 z -1
+new 166 sprite -
+set 166 bitmap b182
+set 166 x 418
+set 166 y 183
+set 166 z 100
+new 167 sprite 154
+set 167 bitmap b183
+set 167 x 6
+set 167 y 188
+set 167 z -1
+set 162 z 99
+set 160 pause false
+frame 4f1fccc6ca98b9a2 ha3_s14_a
+set 162 x 240
+set 160 openness 255
+set 158 active true
+move 161 121 29 171 -2
+set 157 tone -109 107 0 172
+set 157 cursor_rect rect 98 0 110 8
+frame e91cbd8c6f356f84 ha3_s14_b
+end
+scene ha-ha3_s15_a
+runtime rgss3
+bitmap b184 noise o 5915 544 416
+bitmap b192 noise o 7152 288 102
+bitmap b185 skin a 5150 15 128 128
+bitmap b188 noise t 6150 100 100
+bitmap b190 noise t 7150 204 193
+bitmap b186 skin t 5151 14 128 128
+bitmap b189 noise o 6151 33 33
+bitmap b187 skin a 5152 14 128 128
+bitmap b193 flat 167 175 196 255 28 119
+bitmap b194 flat 121 147 95 255 24 29
+bitmap b195 flat 7 175 72 255 51 78
+bitmap b196 flat 53 121 232 255 79 21
+new 168 sprite -
+set 168 bitmap b184
+set 168 z -1000
+new 169 window -
+set 169 windowskin nil
+set 169 back_opacity 255
+set 169 pause true
+set 169 x 279
+set 169 z 1
+set 169 height 141
+set 169 active true
+set 169 contents b192
+set 169 width 2
+set 169 ox 140
+set 169 windowskin b185
+set 169 visible true
+set 169 oy 111
+set 169 y 77
+set 169 contents_opacity 255
+set 169 cursor_rect rect 0 54 61 5
+set 169 opacity 255
+set 169 openness 255
+update 169 1
+new 170 window -
+set 170 windowskin nil
+set 170 z 0
+set 170 openness 181
+set 170 back_opacity 255
+set 170 height 201
+set 170 width -3
+set 170 tone 0 0 0 42
+set 170 padding 8
+set 170 visible true
+set 170 active true
+set 170 cursor_rect rect 80 55 32 45
+set 170 contents_opacity 0
+set 170 y 32
+set 170 pause false
+set 170 contents b192
+set 170 x 121
+set 170 opacity 255
+set 170 ox 75
+set 170 oy 0
+set 170 windowskin b188
+update 170 1
+new 171 window -
+set 171 windowskin nil
+set 171 padding 19
+set 171 contents b190
+set 171 oy 0
+set 171 height 8
+set 171 ox 0
+set 171 visible true
+set 171 active true
+set 171 openness 255
+set 171 padding_bottom 12
+set 171 y 105
+set 171 pause true
+set 171 back_opacity 254
+set 171 contents_opacity 1
+set 171 windowskin b188
+set 171 width 1
+set 171 x 176
+set 171 opacity 255
+set 171 cursor_rect rect 0 0 4 9
+new 172 window - 124 155 182 72
+set 172 windowskin nil
+set 172 oy 0
+set 172 active true
+set 172 pause true
+set 172 opacity 255
+set 172 contents b190
+set 172 cursor_rect rect 73 77 0 6
+set 172 openness 77
+set 172 ox 0
+set 172 tone 0 0 0 167
+set 172 visible true
+set 172 windowskin b186
+set 172 contents_opacity 144
+set 172 back_opacity 63
+new 173 window - 148 147 162 -1
+set 173 windowskin nil
+set 173 cursor_rect rect 4 35 32 24
+set 173 openness 255
+set 173 contents_opacity 254
+set 173 active true
+set 173 pause false
+set 173 padding 57
+set 173 contents b190
+set 173 oy 0
+set 173 visible true
+set 173 windowskin b186
+set 173 back_opacity 1
+set 173 opacity 192
+set 173 ox 0
+new 174 window - 419 221 48 -1
+set 174 windowskin nil
+set 174 padding 36
+set 174 active true
+set 174 ox 0
+set 174 contents b190
+set 174 cursor_rect rect 80 14 0 24
+set 174 back_opacity 255
+set 174 windowskin b186
+set 174 tone 255 255 255 255
+set 174 openness 17
+set 174 pause true
+set 174 arrows_visible false
+set 174 visible true
+set 174 contents_opacity 0
+set 174 opacity 255
+set 174 oy 0
+new 175 window - 197 127 193 141
+set 175 windowskin nil
+set 175 oy 0
+set 175 openness 255
+set 175 opacity 3
+set 175 active false
+set 175 windowskin b189
+set 175 contents b192
+set 175 tone -255 -255 -255 0
+set 175 z 101
+set 175 contents_opacity 179
+set 175 back_opacity 1
+set 175 pause true
+set 175 ox 0
+set 175 visible true
+set 175 cursor_rect rect 0 0 36 0
+set 175 padding 8
+update 175 1
+new 176 window - 208 275 5 95
+set 176 windowskin nil
+set 176 opacity 255
+set 176 cursor_rect rect 80 0 15 6
+set 176 openness 255
+set 176 padding 8
+set 176 contents_opacity 255
+set 176 pause true
+set 176 active true
+set 176 back_opacity 255
+set 176 visible true
+set 176 oy 0
+set 176 windowskin b187
+set 176 contents b192
+set 176 ox 0
+set 176 tone 0 0 0 201
+update 176 1
+new 177 sprite -
+set 177 bitmap b193
+set 177 x 157
+set 177 y 234
+set 177 z 100
+new 178 sprite -
+set 178 bitmap b194
+set 178 x 54
+set 178 y 100
+set 178 z 102
+new 179 sprite -
+set 179 bitmap b195
+set 179 x 406
+set 179 y 193
+set 179 z 100
+new 180 sprite -
+set 180 bitmap b196
+set 180 x 193
+set 180 y 298
+set 180 z 0
+set 171 cursor_rect rect 42 63 31 24
+set 174 arrows_visible false
+set 171 tone 255 255 255 255
+set 169 width 291
+set 172 windowskin b189
+set 171 padding_bottom 28
+set 175 ox 23
+frame faffbabe9501412e ha3_s15_a
+set 173 arrows_visible false
+move 176 -12 1 2 77
+set 172 visible false
+set 175 contents_opacity 255
+rectx 175 49
+set 171 tone 255 255 255 255
+frame e09988dba98719e7 ha3_s15_b
+end
+scene ha-ha3_s16_a
+runtime rgss3
+bitmap b197 noise o 5916 544 416
+bitmap b200 skin t 5162 7 128 128
+bitmap b199 skin a 5161 15 128 128
+bitmap b202 noise o 6161 256 256
+bitmap b204 noise o 7161 97 135
+bitmap b206 flat 204 220 46 255 24 116
+bitmap b207 flat 211 221 14 255 74 113
+bitmap b208 flat 37 66 142 255 17 10
+bitmap b209 flat 184 151 57 255 60 66
+bitmap b198 skin t 5160 11 128 128
+bitmap b205 noise a 7162 182 221
+new 181 sprite -
+set 181 bitmap b197
+set 181 z -1000
+new 182 window - 477 3 123 127
+set 182 windowskin nil
+set 182 visible true
+set 182 ox 0
+set 182 opacity 192
+set 182 oy 105
+set 182 tone -255 -255 -255 0
+set 182 active true
+set 182 cursor_rect rect 92 0 -2 66
+set 182 contents_opacity 254
+set 182 back_opacity 199
+set 182 windowskin b200
+set 182 openness 255
+set 182 pause true
+update 182 1
+new 183 window -
+set 183 windowskin nil
+set 183 active false
+set 183 width 159
+set 183 oy 0
+set 183 z 0
+set 183 arrows_visible true
+set 183 windowskin b199
+set 183 ox 0
+set 183 y 259
+set 183 opacity 0
+set 183 padding_bottom 8
+set 183 x 59
+set 183 tone -255 -255 -255 0
+set 183 openness 255
+set 183 contents_opacity 1
+set 183 visible true
+set 183 cursor_rect rect 0 48 -2 24
+set 183 height 177
+set 183 pause true
+new 184 window -
+set 184 windowskin nil
+set 184 oy 0
+set 184 height 96
+set 184 visible true
+set 184 x 302
+set 184 windowskin b202
+set 184 back_opacity 0
+set 184 pause true
+set 184 arrows_visible true
+set 184 z 99
+set 184 y -9
+set 184 cursor_rect rect 25 0 32 24
+set 184 openness 196
+set 184 active true
+set 184 tone 148 -95 178 9
+set 184 width 101
+set 184 padding 12
+set 184 contents_opacity 2
+set 184 opacity 1
+set 184 ox -25
+new 185 window - 83 105 40 11
+set 185 windowskin nil
+set 185 oy 0
+set 185 tone 0 0 0 0
+set 185 contents_opacity 85
+set 185 visible true
+set 185 contents b204
+set 185 openness 255
+set 185 ox 6
+set 185 cursor_rect rect 0 0 22 58
+set 185 pause false
+set 185 active true
+set 185 windowskin nil
+set 185 back_opacity 254
+set 185 opacity 255
+new 186 sprite -
+set 186 bitmap b206
+set 186 x 329
+set 186 y 383
+set 186 z 0
+new 187 sprite -
+set 187 bitmap b207
+set 187 x 410
+set 187 y 262
+set 187 z -1
+new 188 sprite -
+set 188 bitmap b208
+set 188 x 486
+set 188 y 197
+set 188 z 102
+new 189 sprite -
+set 189 bitmap b209
+set 189 x 467
+set 189 y 204
+set 189 z 101
+set 182 oy 47
+set 185 windowskin b198
+set 183 y 98
+set 185 contents_opacity 254
+set 183 cursor_rect rect 10 0 32 8
+set 182 arrows_visible true
+set 182 arrows_visible true
+set 185 contents b205
+set 182 width 18
+rectx 184 -20
+frame 8abc1260ed37c8ca ha3_s16_a
+set 185 padding 16
+set 183 visible true
+rect 182 73 0 32 56
+set 183 tone -26 -10 -55 0
+set 183 visible true
+rectx 185 99
+set 182 y 177
+update 182 1
+set 182 cursor_rect rect 53 0 35 4
+rectx 183 67
+set 185 arrows_visible false
+frame 6c196bea5d60201e ha3_s16_b
+end
+scene ha-ha3_s17_a
+runtime rgss3
+bitmap b210 noise o 5917 544 416
+bitmap b219 flat 45 11 172 255 66 83
+bitmap b213 skin a 5172 13 128 128
+bitmap b218 noise o 7172 62 177
+bitmap b220 flat 106 6 67 255 112 46
+bitmap b216 noise a 7170 251 103
+bitmap b221 flat 71 145 16 255 112 25
+bitmap b222 flat 161 42 45 255 16 103
+bitmap b212 skin t 5171 15 128 128
+bitmap b217 noise o 7171 22 8
+new 190 sprite -
+set 190 bitmap b210
+set 190 z -1000
+new 191 sprite -
+set 191 bitmap b219
+set 191 x 121
+set 191 y 384
+set 191 z 100
+new 192 window - 11 -43 14 177
+set 192 windowskin nil
+set 192 active false
+set 192 ox 0
+set 192 windowskin b213
+set 192 oy 78
+set 192 openness 255
+set 192 padding_bottom 0
+set 192 tone -40 17 -19 0
+set 192 z 101
+set 192 visible true
+set 192 back_opacity 192
+set 192 cursor_rect rect 26 26 0 2
+set 192 contents b218
+set 192 opacity 1
+set 192 contents_opacity 255
+set 192 pause true
+new 193 sprite -
+set 193 bitmap b220
+set 193 x 143
+set 193 y 47
+set 193 z 100
+new 194 window -
+set 194 windowskin nil
+set 194 ox 0
+set 194 windowskin nil
+set 194 width 36
+set 194 y -47
+set 194 visible true
+set 194 openness 212
+set 194 opacity 255
+set 194 height 119
+set 194 active false
+set 194 pause false
+set 194 z 99
+set 194 contents_opacity 27
+set 194 contents b218
+set 194 oy 89
+set 194 cursor_rect rect 0 -8 0 32
+set 194 x -22
+set 194 padding 12
+update 194 1
+new 195 window - 429 316 189 37
+set 195 windowskin nil
+set 195 openness 255
+set 195 ox 27
+set 195 contents_opacity 254
+set 195 cursor_rect rect 0 0 4 24
+set 195 pause false
+set 195 contents b216
+set 195 windowskin nil
+set 195 tone 0 0 0 0
+set 195 opacity 254
+set 195 active true
+set 195 oy 143
+set 195 visible true
+update 195 5
+new 196 sprite -
+set 196 bitmap b221
+set 196 x 33
+set 196 y 101
+set 196 z -1
+new 197 sprite -
+set 197 bitmap b222
+set 197 x -8
+set 197 y 86
+set 197 z 0
+update 194 2
+set 195 padding 16
+set 195 windowskin b212
+set 194 contents b217
+update 194 1
+set 195 pause false
+set 194 contents b217
+set 194 x 149
+update 195 1
+update 192 2
+frame 72e6a6cb6cbc3ba1 ha3_s17_a
+set 192 active false
+set 194 opacity 254
+rectx 195 65
+set 195 tone -29 9 -34 0
+set 192 pause true
+set 195 windowskin b213
+set 192 z 100
+set 194 opacity 81
+move 192 339 264 4 82
+set 195 back_opacity 72
+set 192 active true
+set 192 x 309
+set 195 contents nil
+rectx 195 33
+frame f41e2b942290850c ha3_s17_b
+end
+scene ha-ha3_s18_a
+runtime rgss3
+bitmap b223 noise o 5918 544 416
+bitmap b224 skin t 5180 15 128 128
+bitmap b229 noise t 7180 87 195
+bitmap b231 noise o 7182 237 107
+bitmap b225 skin t 5181 14 128 128
+bitmap b232 flat 22 114 60 255 79 44
+bitmap b230 noise t 7181 149 115
+bitmap b233 flat 73 230 244 255 119 100
+new 198 sprite -
+set 198 bitmap b223
+set 198 z -1000
+new 199 viewport - 30 109 165 282
+set 199 ox -14
+set 199 oy -14
+set 199 z 101
+new 200 window -
+set 200 windowskin nil
+set 200 contents_opacity 222
+set 200 oy 0
+set 200 windowskin b224
+set 200 y 38
+set 200 x 148
+set 200 openness 255
+set 200 pause false
+set 200 padding 12
+set 200 ox 93
+set 200 opacity 0
+set 200 contents b229
+set 200 active false
+set 200 height 120
+set 200 visible true
+set 200 width 161
+set 200 cursor_rect rect 39 41 0 24
+new 201 window -
+set 201 windowskin nil
+set 201 arrows_visible true
+set 201 y 72
+set 201 cursor_rect rect 0 0 32 24
+set 201 visible true
+set 201 active true
+set 201 contents b231
+set 201 windowskin b224
+set 201 x 178
+set 201 pause false
+set 201 openness 73
+set 201 opacity 192
+set 201 contents_opacity 192
+set 201 ox 0
+set 201 oy 0
+set 201 height 23
+set 201 width 24
+new 202 window - -2 284 4 193
+set 202 windowskin nil
+set 202 viewport o199
+set 202 openness 41
+set 202 padding 12
+set 202 windowskin b225
+set 202 pause true
+set 202 visible true
+set 202 opacity 255
+set 202 contents_opacity 1
+set 202 ox -45
+set 202 contents b231
+set 202 oy 137
+set 202 back_opacity 192
+set 202 cursor_rect rect 0 75 78 -3
+set 202 tone -151 -219 -42 197
+set 202 active true
+new 203 sprite -
+set 203 bitmap b232
+set 203 x 149
+set 203 y 5
+set 203 z 102
+new 204 window -
+set 204 windowskin nil
+set 204 contents_opacity 125
+set 204 opacity 192
+set 204 contents b230
+set 204 oy 0
+set 204 ox 0
+set 204 windowskin b225
+set 204 width 76
+set 204 back_opacity 255
+set 204 visible true
+set 204 pause true
+set 204 cursor_rect rect -9 0 32 24
+set 204 height 89
+set 204 active true
+set 204 x -9
+set 204 y -12
+set 204 openness 255
+update 204 1
+new 205 window - 269 268 91 35
+set 205 windowskin nil
+set 205 viewport o199
+set 205 contents_opacity 192
+set 205 arrows_visible true
+set 205 pause true
+set 205 oy 87
+set 205 windowskin b225
+set 205 contents nil
+set 205 tone 0 0 0 0
+set 205 active false
+set 205 openness 178
+set 205 cursor_rect rect 95 0 0 24
+set 205 visible true
+set 205 ox 0
+set 205 opacity 255
+update 205 1
+new 206 window - 158 249 45 56
+set 206 windowskin nil
+set 206 viewport o199
+set 206 active true
+set 206 ox 0
+set 206 openness 220
+set 206 cursor_rect rect 72 0 21 64
+set 206 contents_opacity 255
+set 206 visible true
+set 206 contents b229
+set 206 opacity 1
+set 206 padding 18
+set 206 windowskin b225
+set 206 pause false
+set 206 oy 0
+set 206 padding_bottom 0
+new 207 window -
+set 207 windowskin nil
+set 207 pause true
+set 207 height 2
+set 207 opacity 255
+set 207 cursor_rect rect 0 65 19 31
+set 207 x 81
+set 207 oy 0
+set 207 y 250
+set 207 openness 255
+set 207 z 200
+set 207 ox 0
+set 207 visible true
+set 207 contents b231
+set 207 width 55
+set 207 padding 12
+set 207 active true
+set 207 windowskin nil
+set 207 contents_opacity 206
+update 207 60
+new 208 sprite -
+set 208 bitmap b233
+set 208 x 94
+set 208 y 356
+set 208 z 0
+set 206 x 250
+set 206 y 68
+set 201 ox 31
+move 205 346 269 11 58
+update 200 1
+rect 200 99 -11 39 24
+set 205 pause true
+set 202 openness 184
+move 206 473 187 224 247
+frame 25d835a2ee24b309 ha3_s18_a
+update 206 29
+set 201 padding 12
+set 200 padding_bottom 0
+set 202 windowskin b225
+set 202 visible false
+set 202 width 136
+move 200 206 -27 183 131
+set 201 active false
+rectx 202 94
+update 204 24
+set 207 openness 75
+set 206 padding_bottom 12
+frame 4ff80c9d1afefd49 ha3_s18_b
+end
+scene ha-ha3_s19_a
+runtime rgss3
+bitmap b234 noise o 5919 544 416
+bitmap b235 skin o 5190 15 128 128
+bitmap b241 noise a 7191 197 217
+bitmap b236 skin o 5191 7 128 128
+bitmap b242 noise t 7192 80 78
+bitmap b243 flat 0 125 116 255 49 95
+bitmap b237 skin t 5192 15 128 128
+bitmap b244 flat 21 62 167 255 77 109
+bitmap b245 flat 114 187 253 255 26 11
+bitmap b246 flat 33 76 149 255 53 38
+bitmap b247 flat 87 25 99 255 66 114
+new 209 sprite -
+set 209 bitmap b234
+set 209 z -1000
+new 210 viewport - 95 129 320 94
+set 210 ox -5
+set 210 oy 14
+set 210 z 50
+new 211 window -
+set 211 windowskin nil
+set 211 height 38
+set 211 ox 102
+set 211 oy 30
+set 211 contents_opacity 255
+set 211 y -45
+set 211 active false
+set 211 cursor_rect rect 0 0 1 0
+set 211 arrows_visible true
+set 211 pause true
+set 211 opacity 158
+set 211 width 147
+set 211 padding_bottom 16
+set 211 windowskin nil
+set 211 openness 255
+set 211 x 97
+set 211 visible true
+set 211 back_opacity 255
+new 212 window - 443 70 173 83
+set 212 windowskin nil
+set 212 contents_opacity 255
+set 212 ox 0
+set 212 openness 71
+set 212 tone 0 0 0 63
+set 212 pause false
+set 212 back_opacity 0
+set 212 contents nil
+set 212 oy 105
+set 212 visible true
+set 212 opacity 112
+set 212 windowskin b235
+set 212 cursor_rect rect 0 -2 -3 7
+set 212 active true
+new 213 window -
+set 213 windowskin nil
+set 213 visible true
+set 213 height 50
+set 213 contents b241
+set 213 windowskin b236
+set 213 opacity 255
+set 213 contents_opacity 192
+set 213 pause false
+set 213 y 343
+set 213 width 80
+set 213 x 412
+set 213 openness 169
+set 213 oy 0
+set 213 back_opacity 78
+set 213 active true
+set 213 cursor_rect rect -8 68 0 24
+set 213 padding 50
+set 213 ox 0
+new 214 window - 6 294 23 32
+set 214 windowskin nil
+set 214 pause false
+set 214 contents b242
+set 214 openness 150
+set 214 visible true
+set 214 windowskin b235
+set 214 contents_opacity 1
+set 214 cursor_rect rect 10 32 8 9
+set 214 ox 0
+set 214 oy 0
+set 214 opacity 255
+set 214 active false
+update 214 1
+new 215 window -
+set 215 windowskin nil
+set 215 arrows_visible true
+set 215 visible true
+set 215 active true
+set 215 contents_opacity 255
+set 215 windowskin nil
+set 215 y 63
+set 215 openness 255
+set 215 ox -48
+set 215 opacity 1
+set 215 pause false
+set 215 oy 0
+set 215 height 158
+set 215 width 27
+set 215 x 397
+set 215 padding 26
+set 215 back_opacity 83
+set 215 cursor_rect rect 50 0 0 -2
+new 216 window 210
+set 216 windowskin nil
+set 216 padding 12
+set 216 contents_opacity 254
+set 216 pause true
+set 216 width -4
+set 216 visible true
+set 216 windowskin b235
+set 216 openness 8
+set 216 oy 0
+set 216 x 385
+set 216 opacity 255
+set 216 ox 75
+set 216 height 104
+set 216 y 157
+set 216 active true
+set 216 cursor_rect rect 0 0 32 57
+set 216 contents b241
+set 216 z 99
+new 217 sprite -
+set 217 bitmap b243
+set 217 x 299
+set 217 y 195
+set 217 z 99
+new 218 window -
+set 218 windowskin nil
+set 218 visible true
+set 218 cursor_rect rect 34 59 6 5
+set 218 contents nil
+set 218 z 101
+set 218 opacity 0
+set 218 x 270
+set 218 contents_opacity 255
+set 218 width 53
+set 218 height 22
+set 218 pause false
+set 218 windowskin b237
+set 218 y 355
+set 218 ox 0
+set 218 oy 0
+set 218 active true
+set 218 openness 0
+update 218 1
+new 219 sprite -
+set 219 bitmap b244
+set 219 x 79
+set 219 y 161
+set 219 z 100
+new 220 sprite 210
+set 220 bitmap b245
+set 220 x 56
+set 220 y 225
+set 220 z 0
+new 221 sprite -
+set 221 bitmap b246
+set 221 x 337
+set 221 y 107
+set 221 z 101
+new 222 sprite -
+set 222 bitmap b247
+set 222 x 387
+set 222 y 228
+set 222 z 100
+set 213 z 101
+set 211 x 383
+set 214 openness 183
+set 211 visible false
+set 214 back_opacity 90
+set 215 windowskin nil
+set 215 pause true
+set 218 x 171
+set 213 tone 255 255 255 255
+set 213 ox 8
+frame 6145eb01124469ef ha3_s19_a
+rect 215 0 43 32 -2
+set 211 ox 144
+set 211 y 84
+set 211 tone -32 -56 49 0
+set 212 tone -255 -255 -255 0
+rect 212 0 37 28 6
+set 212 x 272
+set 213 opacity 192
+move 213 388 194 0 107
+set 213 visible false
+set 215 tone 255 255 255 255
+frame e72a1796f8ffe758 ha3_s19_b
+end
+scene ha-ha3_s20_a
+runtime rgss3
+bitmap b248 noise o 5920 544 416
+bitmap b255 noise t 7201 52 32
+bitmap b252 noise o 6200 100 100
+bitmap b249 skin o 5200 7 128 128
+bitmap b254 noise t 7200 169 83
+bitmap b251 skin t 5202 14 128 128
+bitmap b250 skin t 5201 14 128 128
+new 223 sprite -
+set 223 bitmap b248
+set 223 z -1000
+new 224 viewport - 281 45 355 233
+set 224 ox 7
+set 224 oy 13
+set 224 z -1
+new 225 viewport - 12 110 90 131
+set 225 ox 0
+set 225 oy -24
+set 225 z 100
+new 226 window - 198 227 282 195
+set 226 windowskin nil
+set 226 viewport o225
+set 226 arrows_visible true
+set 226 padding_bottom 13
+set 226 visible true
+set 226 back_opacity 35
+set 226 ox 0
+set 226 active true
+set 226 contents_opacity 191
+set 226 z 1
+set 226 contents b255
+set 226 windowskin b252
+set 226 pause true
+set 226 oy 0
+set 226 openness 255
+set 226 padding 1
+set 226 cursor_rect rect 0 38 8 24
+set 226 opacity 255
+set 226 tone -255 -255 -255 0
+update 226 42
+new 227 window 225
+set 227 windowskin nil
+set 227 x 151
+set 227 contents b255
+set 227 y -21
+set 227 ox 0
+set 227 padding_bottom 16
+set 227 oy 0
+set 227 active true
+set 227 visible true
+set 227 back_opacity 255
+set 227 opacity 255
+set 227 contents_opacity 192
+set 227 height 1
+set 227 pause false
+set 227 windowskin b252
+set 227 openness 213
+set 227 width 111
+set 227 cursor_rect rect 0 0 -1 4
+set 227 z 99
+update 227 1
+new 228 window 224
+set 228 windowskin nil
+set 228 windowskin b249
+set 228 pause true
+set 228 height 84
+set 228 cursor_rect rect 0 0 119 0
+set 228 visible true
+set 228 opacity 192
+set 228 width 34
+set 228 tone -15 40 31 0
+set 228 y -28
+set 228 active true
+set 228 z 101
+set 228 contents_opacity 192
+set 228 padding 20
+set 228 openness 255
+set 228 contents b254
+set 228 ox 0
+set 228 x 71
+set 228 oy 0
+new 229 window -
+set 229 windowskin nil
+set 229 height 105
+set 229 pause true
+set 229 windowskin b251
+set 229 contents_opacity 0
+set 229 width 51
+set 229 y 0
+set 229 opacity 255
+set 229 x 42
+set 229 visible true
+set 229 tone 0 0 0 0
+set 229 cursor_rect rect 0 0 32 24
+set 229 openness 255
+set 229 ox 85
+set 229 padding_bottom 6
+set 229 oy 0
+set 229 active true
+new 230 window - 338 -44 108 5
+set 230 windowskin nil
+set 230 ox 0
+set 230 visible true
+set 230 back_opacity 1
+set 230 pause false
+set 230 padding 16
+set 230 windowskin nil
+set 230 openness 200
+set 230 contents_opacity 0
+set 230 contents b255
+set 230 oy 0
+set 230 tone 255 255 255 255
+set 230 active true
+set 230 opacity 255
+set 230 cursor_rect rect 65 52 4 7
+update 230 1
+new 231 window - 404 306 39 188
+set 231 windowskin nil
+set 231 viewport o225
+set 231 padding 12
+set 231 padding_bottom 0
+set 231 openness 255
+set 231 opacity 254
+set 231 pause false
+set 231 oy 74
+set 231 active true
+set 231 windowskin b252
+set 231 cursor_rect rect 0 0 0 24
+set 231 tone -255 -255 -255 0
+set 231 contents_opacity 254
+set 231 visible true
+set 231 back_opacity 254
+set 231 contents b254
+set 231 ox 0
+new 232 window - -45 102 172 15
+set 232 windowskin nil
+set 232 viewport o225
+set 232 active true
+set 232 oy 0
+set 232 visible true
+set 232 contents_opacity 192
+set 232 tone -255 -255 -255 0
+set 232 pause false
+set 232 openness 84
+set 232 z 100
+set 232 windowskin b252
+set 232 opacity 27
+set 232 cursor_rect rect 60 0 106 0
+set 232 contents nil
+set 232 padding 14
+set 232 ox 14
+set 232 back_opacity 193
+update 232 1
+new 233 window - 22 245 16 137
+set 233 windowskin nil
+set 233 opacity 209
+set 233 ox 0
+set 233 pause false
+set 233 arrows_visible true
+set 233 active true
+set 233 openness 255
+set 233 tone -5 57 -21 0
+set 233 visible true
+set 233 contents_opacity 192
+set 233 windowskin b249
+set 233 padding 12
+set 233 padding_bottom 12
+set 233 back_opacity 255
+set 233 z -1
+set 233 oy 0
+set 233 cursor_rect rect 16 -14 32 5
+update 233 79
+new 234 window - 246 184 51 109
+set 234 windowskin nil
+set 234 viewport o224
+set 234 windowskin b252
+set 234 openness 255
+set 234 tone 255 255 255 255
+set 234 contents nil
+set 234 back_opacity 254
+set 234 oy 67
+set 234 visible true
+set 234 cursor_rect rect 33 0 32 24
+set 234 active true
+set 234 opacity 192
+set 234 ox 0
+set 234 pause false
+set 234 contents_opacity 255
+update 234 33
+set 229 tone 0 0 0 0
+update 230 18
+set 227 contents_opacity 255
+set 233 visible false
+rectx 233 0
+set 230 openness 198
+move 226 253 128 105 163
+move 226 354 296 63 167
+frame 0c485ee33b3b8395 ha3_s20_a
+rectx 226 13
+set 230 padding 8
+set 229 windowskin b250
+set 230 active true
+set 232 padding 27
+set 227 height 1
+set 231 ox 103
+set 232 active true
+move 228 119 192 110 -1
+set 228 arrows_visible false
+set 231 padding 0
+set 228 contents_opacity 213
+rect 234 82 0 103 0
+frame 0b652990b234f9b0 ha3_s20_b
+end
+scene ha-ha3_s21_a
+runtime rgss3
+bitmap b257 noise o 5921 544 416
+bitmap b260 skin a 5212 15 128 128
+bitmap b263 noise a 7210 51 49
+bitmap b261 noise t 6210 72 72
+bitmap b258 skin o 5210 13 128 128
+bitmap b265 noise t 7212 128 19
+bitmap b266 flat 91 216 138 255 58 13
+bitmap b264 noise o 7211 242 225
+bitmap b262 noise t 6211 93 69
+new 235 sprite -
+set 235 bitmap b257
+set 235 z -1000
+new 236 window -
+set 236 windowskin nil
+set 236 windowskin b260
+set 236 visible true
+set 236 padding 0
+set 236 pause true
+set 236 active true
+set 236 tone 0 0 0 0
+set 236 width 99
+set 236 cursor_rect rect 0 48 4 6
+set 236 x 250
+set 236 openness 255
+set 236 contents_opacity 255
+set 236 y 214
+set 236 oy -47
+set 236 ox 0
+set 236 height 170
+set 236 opacity 1
+update 236 63
+new 237 window - 405 202 87 199
+set 237 windowskin nil
+set 237 z 100
+set 237 oy 34
+set 237 ox 0
+set 237 contents_opacity 75
+set 237 pause true
+set 237 openness 255
+set 237 cursor_rect rect 0 -6 32 -2
+set 237 active true
+set 237 padding 0
+set 237 opacity 0
+set 237 visible true
+set 237 contents b263
+set 237 windowskin b261
+set 237 back_opacity 192
+new 238 window -
+set 238 windowskin nil
+set 238 opacity 255
+set 238 ox 74
+set 238 x -40
+set 238 y 256
+set 238 contents_opacity 192
+set 238 width 176
+set 238 back_opacity 23
+set 238 windowskin b258
+set 238 height -2
+set 238 active true
+set 238 cursor_rect rect 0 0 0 54
+set 238 visible true
+set 238 oy 0
+set 238 contents b265
+set 238 openness 150
+set 238 pause true
+update 238 41
+new 239 sprite -
+set 239 bitmap b266
+set 239 x 294
+set 239 y 270
+set 239 z 101
+new 240 window - 251 38 62 37
+set 240 windowskin nil
+set 240 windowskin b258
+set 240 back_opacity 1
+set 240 pause false
+set 240 active true
+set 240 contents_opacity 254
+set 240 padding_bottom 0
+set 240 ox 19
+set 240 cursor_rect rect 0 -5 10 24
+set 240 arrows_visible false
+set 240 oy 0
+set 240 opacity 254
+set 240 openness 255
+set 240 z -1
+set 240 contents b264
+set 240 visible true
+new 241 window - 301 177 268 127
+set 241 windowskin nil
+set 241 visible true
+set 241 ox 0
+set 241 pause false
+set 241 openness 255
+set 241 contents b265
+set 241 windowskin b262
+set 241 contents_opacity 255
+set 241 active true
+set 241 tone 255 255 255 255
+set 241 back_opacity 255
+set 241 opacity 255
+set 241 oy 0
+set 241 cursor_rect rect 27 0 19 -2
+update 241 27
+new 242 window - 225 304 139 180
+set 242 windowskin nil
+set 242 windowskin nil
+set 242 cursor_rect rect 2 -9 32 24
+set 242 visible true
+set 242 openness 255
+set 242 ox 0
+set 242 tone 0 0 0 0
+set 242 padding_bottom 8
+set 242 active false
+set 242 padding 12
+set 242 oy 0
+set 242 contents_opacity 254
+set 242 pause false
+set 242 back_opacity 254
+set 242 opacity 192
+set 238 y 143
+set 237 active true
+set 242 z 100
+set 241 x 224
+set 241 padding 37
+set 242 oy 0
+set 237 visible false
+set 237 padding_bottom 45
+set 236 back_opacity 246
+set 240 active true
+frame 8df469aad39f50fe ha3_s21_a
+set 240 contents_opacity 255
+set 237 padding_bottom 0
+set 241 oy 140
+set 241 cursor_rect rect 72 5 0 24
+set 238 tone 238 -36 147 150
+set 236 pause true
+set 241 windowskin b258
+set 236 openness 255
+rect 242 -13 78 0 45
+move 237 394 -21 103 166
+set 238 windowskin b260
+frame 83e9f87662619dbe ha3_s21_b
+end
+scene ha-ha3_s22_a
+runtime rgss3
+bitmap b267 noise o 5922 544 416
+bitmap b275 noise o 7222 255 175
+bitmap b269 skin t 5221 13 128 128
+bitmap b271 noise t 6220 64 64
+bitmap b274 noise a 7221 275 200
+bitmap b272 noise o 6221 128 67
+bitmap b276 flat 244 251 43 255 39 49
+bitmap b268 skin t 5220 15 128 128
+bitmap b277 flat 228 116 110 255 21 67
+bitmap b278 flat 91 148 217 255 17 118
+new 243 sprite -
+set 243 bitmap b267
+set 243 z -1000
+new 244 viewport - 226 92 176 124
+set 244 ox 16
+set 244 oy -30
+set 244 z -1
+new 245 window -
+set 245 windowskin nil
+set 245 pause true
+set 245 ox 0
+set 245 oy 120
+set 245 height 25
+set 245 contents b275
+set 245 width 156
+set 245 y 63
+set 245 cursor_rect rect 48 0 0 53
+set 245 opacity 91
+set 245 visible true
+set 245 contents_opacity 1
+set 245 active true
+set 245 windowskin b269
+set 245 openness 219
+set 245 x 16
+new 246 window - 463 86 181 139
+set 246 windowskin nil
+set 246 ox 0
+set 246 opacity 255
+set 246 oy 7
+set 246 openness 255
+set 246 pause false
+set 246 windowskin b271
+set 246 cursor_rect rect 0 9 15 24
+set 246 active false
+set 246 contents nil
+set 246 visible true
+set 246 padding 8
+set 246 z 101
+set 246 contents_opacity 254
+update 246 1
+new 247 window -
+set 247 windowskin nil
+set 247 contents_opacity 255
+set 247 ox 0
+set 247 padding 16
+set 247 oy 0
+set 247 windowskin nil
+set 247 z 0
+set 247 x -25
+set 247 cursor_rect rect 0 0 51 8
+set 247 opacity 253
+set 247 y 291
+set 247 pause true
+set 247 active true
+set 247 height -1
+set 247 visible true
+set 247 openness 255
+set 247 width 280
+update 247 1
+new 248 window - 57 320 175 77
+set 248 windowskin nil
+set 248 cursor_rect rect 0 -13 32 -1
+set 248 windowskin nil
+set 248 contents_opacity 48
+set 248 padding 16
+set 248 oy 0
+set 248 visible true
+set 248 tone 0 0 0 233
+set 248 ox 0
+set 248 opacity 192
+set 248 padding_bottom 12
+set 248 openness 88
+set 248 active false
+set 248 contents b274
+set 248 pause false
+set 248 z 0
+new 249 window -
+set 249 windowskin nil
+set 249 arrows_visible false
+set 249 x 430
+set 249 width 178
+set 249 pause true
+set 249 back_opacity 0
+set 249 windowskin b272
+set 249 padding_bottom 2
+set 249 z 200
+set 249 active true
+set 249 contents b274
+set 249 openness 166
+set 249 height 82
+set 249 y 80
+set 249 opacity 1
+set 249 ox 0
+set 249 contents_opacity 254
+set 249 padding 8
+set 249 visible true
+set 249 oy 0
+set 249 cursor_rect rect 0 0 0 32
+update 249 1
+new 250 window -
+set 250 windowskin nil
+set 250 contents b274
+set 250 y 124
+set 250 x 304
+set 250 tone 0 0 0 162
+set 250 opacity 255
+set 250 pause true
+set 250 ox 122
+set 250 cursor_rect rect 8 0 7 24
+set 250 contents_opacity 255
+set 250 height -1
+set 250 windowskin b269
+set 250 active true
+set 250 oy 0
+set 250 visible true
+set 250 openness 255
+set 250 width 223
+update 250 21
+new 251 sprite 244
+set 251 bitmap b276
+set 251 x 447
+set 251 y 33
+set 251 z 100
+new 252 window - 34 295 17 181
+set 252 windowskin nil
+set 252 viewport o244
+set 252 contents nil
+set 252 active true
+set 252 opacity 255
+set 252 openness 255
+set 252 oy 0
+set 252 contents_opacity 1
+set 252 pause false
+set 252 cursor_rect rect 37 0 0 1
+set 252 visible true
+set 252 ox 0
+set 252 windowskin b268
+new 253 sprite -
+set 253 bitmap b277
+set 253 x 68
+set 253 y -9
+set 253 z 100
+new 254 sprite -
+set 254 bitmap b278
+set 254 x 284
+set 254 y 250
+set 254 z 100
+set 248 y 321
+set 249 padding 8
+set 245 width 37
+set 246 width 159
+set 250 back_opacity 254
+set 248 cursor_rect rect 63 0 32 -2
+set 245 arrows_visible true
+move 246 283 -38 57 1
+frame 1b55455a1df2324c ha3_s22_a
+set 247 cursor_rect rect 0 60 0 27
+set 245 contents b274
+move 249 96 199 37 271
+set 248 padding 26
+set 248 tone 0 0 0 227
+set 247 openness 255
+frame 1311c0fe38f6ef92 ha3_s22_b
+end
+scene ha-ha3_s23_a
+runtime rgss3
+bitmap b279 noise o 5923 544 416
+bitmap b285 noise o 7230 218 65
+bitmap b280 skin t 5230 15 128 128
+bitmap b287 noise t 7232 203 78
+bitmap b281 skin a 5231 15 128 128
+bitmap b286 noise t 7231 161 182
+bitmap b284 noise t 6231 33 33
+bitmap b288 flat 27 98 132 255 84 81
+bitmap b282 skin o 5232 15 128 128
+bitmap b289 flat 95 186 236 255 24 97
+bitmap b290 flat 180 182 24 255 48 105
+new 255 sprite -
+set 255 bitmap b279
+set 255 z -1000
+new 256 window - 196 4 36 21
+set 256 windowskin nil
+set 256 pause false
+set 256 openness 255
+set 256 contents b285
+set 256 visible true
+set 256 cursor_rect rect 0 5 4 24
+set 256 ox 0
+set 256 windowskin b280
+set 256 opacity 192
+set 256 contents_opacity 255
+set 256 oy 0
+set 256 active true
+new 257 window -
+set 257 windowskin nil
+set 257 cursor_rect rect 73 44 0 24
+set 257 pause false
+set 257 windowskin nil
+set 257 padding 30
+set 257 contents_opacity 255
+set 257 height 40
+set 257 tone 255 255 255 255
+set 257 y -41
+set 257 visible true
+set 257 openness 255
+set 257 width 29
+set 257 opacity 0
+set 257 active true
+set 257 oy 66
+set 257 x 109
+set 257 ox 0
+new 258 window -
+set 258 windowskin nil
+set 258 ox 107
+set 258 cursor_rect rect 0 -13 7 24
+set 258 width 179
+set 258 oy 0
+set 258 contents b287
+set 258 z 0
+set 258 pause false
+set 258 visible true
+set 258 padding_bottom 3
+set 258 opacity 217
+set 258 height -3
+set 258 y 230
+set 258 x 396
+set 258 windowskin b280
+set 258 openness 101
+set 258 back_opacity 255
+set 258 contents_opacity 192
+set 258 active true
+update 258 12
+new 259 window - 213 257 73 126
+set 259 windowskin nil
+set 259 pause false
+set 259 active true
+set 259 opacity 1
+set 259 cursor_rect rect 0 5 3 80
+set 259 visible true
+set 259 contents_opacity 254
+set 259 oy 0
+set 259 openness 237
+set 259 windowskin b281
+set 259 contents b286
+set 259 padding_bottom 13
+set 259 back_opacity 254
+set 259 ox 26
+update 259 17
+new 260 window -
+set 260 windowskin nil
+set 260 contents_opacity 254
+set 260 padding_bottom 57
+set 260 windowskin b284
+set 260 ox -26
+set 260 height 27
+set 260 padding 8
+set 260 width 13
+set 260 opacity 192
+set 260 visible true
+set 260 y 304
+set 260 oy 0
+set 260 cursor_rect rect 0 29 32 24
+set 260 contents nil
+set 260 openness 255
+set 260 x -40
+set 260 active true
+set 260 pause false
+new 261 sprite -
+set 261 bitmap b288
+set 261 x 107
+set 261 y 282
+set 261 z 102
+new 262 window -
+set 262 windowskin nil
+set 262 y 91
+set 262 height 49
+set 262 width 4
+set 262 ox -39
+set 262 contents_opacity 192
+set 262 padding_bottom 8
+set 262 openness 255
+set 262 pause false
+set 262 opacity 1
+set 262 x 236
+set 262 cursor_rect rect 8 0 0 24
+set 262 active true
+set 262 windowskin b280
+set 262 oy 86
+set 262 visible true
+new 263 window -
+set 263 windowskin nil
+set 263 width 181
+set 263 contents b285
+set 263 back_opacity 0
+set 263 padding 16
+set 263 visible true
+set 263 y 182
+set 263 windowskin b280
+set 263 pause false
+set 263 active true
+set 263 cursor_rect rect 0 7 1 4
+set 263 openness 181
+set 263 oy 0
+set 263 opacity 254
+set 263 contents_opacity 255
+set 263 ox 0
+set 263 height -4
+set 263 x 9
+update 263 13
+new 264 window - 107 250 246 -1
+set 264 windowskin nil
+set 264 pause false
+set 264 padding_bottom 0
+set 264 oy 37
+set 264 contents_opacity 255
+set 264 contents b286
+set 264 windowskin b282
+set 264 tone 0 0 0 154
+set 264 z -1
+set 264 ox 122
+set 264 cursor_rect rect 0 0 32 24
+set 264 visible true
+set 264 openness 211
+set 264 opacity 1
+set 264 active true
+new 265 sprite -
+set 265 bitmap b289
+set 265 x 2
+set 265 y 31
+set 265 z 100
+new 266 sprite -
+set 266 bitmap b290
+set 266 x 474
+set 266 y 221
+set 266 z 99
+set 257 arrows_visible true
+move 257 449 219 176 179
+set 264 contents b285
+move 259 377 334 2 2
+set 259 windowskin nil
+move 264 219 208 186 115
+update 263 1
+move 258 34 298 196 33
+set 264 x 212
+set 260 contents_opacity 255
+frame 5b9ecee174167269 ha3_s23_a
+set 257 tone 0 0 0 214
+set 260 arrows_visible false
+set 263 tone -255 -255 -255 0
+set 264 tone -255 -255 -255 0
+set 258 contents_opacity 255
+update 256 1
+set 264 pause false
+set 259 contents b286
+move 256 136 243 1 245
+set 264 windowskin b280
+frame c06ce437b798e3e1 ha3_s23_b
+end
+scene ha-ha3_s24_a
+runtime rgss3
+bitmap b291 noise o 5924 544 416
+bitmap b297 noise t 7240 219 141
+bitmap b299 noise t 7242 158 60
+bitmap b295 noise t 6240 72 72
+bitmap b294 skin o 5242 15 128 128
+bitmap b293 skin o 5241 15 128 128
+bitmap b296 noise o 6241 256 256
+bitmap b300 flat 116 51 48 255 110 43
+bitmap b301 flat 158 63 89 255 97 34
+bitmap b302 flat 47 2 60 255 117 91
+bitmap b303 flat 100 183 251 255 116 57
+bitmap b304 flat 190 247 228 255 112 112
+bitmap b305 flat 97 94 245 255 39 87
+new 267 sprite -
+set 267 bitmap b291
+set 267 z -1000
+new 268 viewport - 35 185 231 255
+set 268 ox 24
+set 268 oy -29
+set 268 z 1
+new 269 window - -26 114 261 11
+set 269 windowskin nil
+set 269 viewport o268
+set 269 contents b297
+set 269 visible true
+set 269 opacity 193
+set 269 contents_opacity 255
+set 269 oy -1
+set 269 openness 255
+set 269 pause false
+set 269 cursor_rect rect 0 0 9 51
+set 269 padding 54
+set 269 z 1
+set 269 windowskin nil
+set 269 active true
+set 269 tone 0 0 0 199
+set 269 ox 0
+set 269 back_opacity 192
+new 270 window - 466 336 -2 63
+set 270 windowskin nil
+set 270 opacity 227
+set 270 oy 61
+set 270 ox 0
+set 270 active true
+set 270 contents b299
+set 270 cursor_rect rect 0 15 32 24
+set 270 tone 0 0 0 0
+set 270 windowskin b295
+set 270 padding_bottom 12
+set 270 arrows_visible true
+set 270 openness 255
+set 270 contents_opacity 0
+set 270 z -1
+set 270 visible true
+set 270 pause false
+update 270 1
+new 271 window 268
+set 271 windowskin nil
+set 271 x 148
+set 271 height 12
+set 271 y 30
+set 271 windowskin b294
+set 271 oy 0
+set 271 ox 0
+set 271 openness 255
+set 271 contents b297
+set 271 arrows_visible false
+set 271 pause true
+set 271 z 100
+set 271 cursor_rect rect 94 30 25 0
+set 271 opacity 98
+set 271 padding_bottom 3
+set 271 active true
+set 271 width 2
+set 271 visible true
+set 271 contents_opacity 43
+set 271 back_opacity 255
+update 271 69
+new 272 window - -53 342 140 35
+set 272 windowskin nil
+set 272 viewport o268
+set 272 windowskin b293
+set 272 cursor_rect rect 48 0 6 0
+set 272 pause false
+set 272 visible true
+set 272 oy 0
+set 272 padding 0
+set 272 arrows_visible false
+set 272 opacity 255
+set 272 active true
+set 272 ox 0
+set 272 openness 173
+set 272 contents_opacity 254
+update 272 34
+new 273 window 268
+set 273 windowskin nil
+set 273 width 4
+set 273 visible true
+set 273 padding 16
+set 273 opacity 255
+set 273 back_opacity 192
+set 273 cursor_rect rect 46 44 34 3
+set 273 height 76
+set 273 oy 0
+set 273 y 301
+set 273 pause true
+set 273 ox 0
+set 273 active true
+set 273 x 228
+set 273 openness 30
+set 273 windowskin b296
+set 273 contents_opacity 77
+update 273 1
+new 274 window - 94 354 34 2
+set 274 windowskin nil
+set 274 viewport o268
+set 274 pause true
+set 274 back_opacity 255
+set 274 tone 0 0 0 34
+set 274 opacity 112
+set 274 contents b297
+set 274 cursor_rect rect 0 31 32 11
+set 274 padding 24
+set 274 ox 0
+set 274 contents_opacity 254
+set 274 active true
+set 274 openness 247
+set 274 visible true
+set 274 oy 0
+set 274 windowskin b294
+new 275 window 268
+set 275 windowskin nil
+set 275 ox 0
+set 275 y -1
+set 275 openness 150
+set 275 x 283
+set 275 windowskin b294
+set 275 padding_bottom 12
+set 275 oy 0
+set 275 contents_opacity 0
+set 275 back_opacity 0
+set 275 active true
+set 275 contents b297
+set 275 height 20
+set 275 cursor_rect rect 0 21 32 -1
+set 275 width 101
+set 275 visible true
+set 275 pause false
+set 275 opacity 255
+new 276 sprite -
+set 276 bitmap b300
+set 276 x 311
+set 276 y 180
+set 276 z 102
+new 277 sprite -
+set 277 bitmap b301
+set 277 x 310
+set 277 y 127
+set 277 z 100
+new 278 sprite -
+set 278 bitmap b302
+set 278 x 195
+set 278 y 213
+set 278 z 0
+new 279 sprite 268
+set 279 bitmap b303
+set 279 x 355
+set 279 y 33
+set 279 z 100
+new 280 sprite -
+set 280 bitmap b304
+set 280 x 421
+set 280 y 215
+set 280 z 99
+new 281 sprite -
+set 281 bitmap b305
+set 281 x 76
+set 281 y 0
+set 281 z 99
+set 272 padding 16
+set 271 z 99
+set 271 ox 0
+frame 309b425bc7f8d59f ha3_s24_a
+set 269 tone 0 0 0 19
+set 269 contents nil
+set 272 height -4
+set 269 height 113
+set 274 visible false
+set 269 back_opacity 0
+set 272 visible true
+set 273 cursor_rect rect 22 0 5 43
+set 270 ox 0
+rect 275 49 0 -1 37
+rect 272 96 0 9 6
+set 274 back_opacity 0
+frame 309b425bc7f8d59f ha3_s24_b
+end
+scene ha-ha3_s25_a
+runtime rgss3
+bitmap b306 noise o 5925 544 416
+bitmap b309 skin t 5252 15 128 128
+bitmap b313 noise t 7251 211 114
+bitmap b308 skin a 5251 13 128 128
+bitmap b312 noise t 7250 88 192
+bitmap b310 noise o 6250 100 100
+bitmap b311 noise o 6251 64 64
+bitmap b315 flat 45 185 224 255 108 19
+bitmap b316 flat 184 66 226 255 29 88
+bitmap b317 flat 231 156 225 255 35 63
+bitmap b318 flat 93 187 147 255 75 76
+new 282 sprite -
+set 282 bitmap b306
+set 282 z -1000
+new 283 viewport - 165 184 366 90
+set 283 ox 0
+set 283 oy 28
+set 283 z 100
+new 284 viewport - 109 135 165 90
+set 284 ox 0
+set 284 oy 16
+set 284 z -1
+new 285 window - -52 177 121 236
+set 285 windowskin nil
+set 285 viewport o283
+set 285 active true
+set 285 contents_opacity 0
+set 285 opacity 207
+set 285 contents nil
+set 285 openness 223
+set 285 pause true
+set 285 padding_bottom 56
+set 285 oy 0
+set 285 visible true
+set 285 ox 0
+set 285 windowskin b309
+set 285 cursor_rect rect 0 0 12 7
+new 286 window - 342 -49 50 104
+set 286 windowskin nil
+set 286 viewport o284
+set 286 contents_opacity 177
+set 286 opacity 255
+set 286 pause true
+set 286 contents b313
+set 286 active false
+set 286 visible true
+set 286 windowskin b309
+set 286 openness 255
+set 286 padding 12
+set 286 cursor_rect rect 13 73 -2 2
+set 286 z -1
+set 286 ox 0
+set 286 oy 0
+set 286 padding_bottom 0
+new 287 window 283
+set 287 windowskin nil
+set 287 x 369
+set 287 oy 0
+set 287 visible true
+set 287 pause false
+set 287 back_opacity 255
+set 287 active false
+set 287 windowskin b308
+set 287 y 236
+set 287 openness 255
+set 287 contents_opacity 127
+set 287 cursor_rect rect 0 0 114 0
+set 287 ox 106
+set 287 width 161
+set 287 opacity 180
+set 287 height 1
+update 287 17
+new 288 window - 69 46 -3 34
+set 288 windowskin nil
+set 288 viewport o284
+set 288 contents_opacity 255
+set 288 ox 0
+set 288 cursor_rect rect 0 36 0 36
+set 288 windowskin b309
+set 288 pause true
+set 288 active false
+set 288 tone -230 149 23 198
+set 288 visible true
+set 288 contents b312
+set 288 oy 68
+set 288 opacity 255
+set 288 arrows_visible true
+set 288 openness 2
+new 289 window - -47 263 13 31
+set 289 windowskin nil
+set 289 viewport o283
+set 289 visible true
+set 289 back_opacity 255
+set 289 openness 56
+set 289 active true
+set 289 contents_opacity 1
+set 289 padding 16
+set 289 ox 0
+set 289 opacity 192
+set 289 arrows_visible false
+set 289 oy 0
+set 289 pause false
+set 289 cursor_rect rect 55 49 3 76
+set 289 windowskin b308
+set 289 contents b312
+new 290 window - 339 297 2 122
+set 290 windowskin nil
+set 290 contents b312
+set 290 tone 20 47 -43 0
+set 290 padding 12
+set 290 visible true
+set 290 contents_opacity 192
+set 290 cursor_rect rect -9 0 0 21
+set 290 openness 255
+set 290 pause false
+set 290 back_opacity 192
+set 290 padding_bottom 16
+set 290 opacity 254
+set 290 active true
+set 290 windowskin b310
+set 290 oy 23
+set 290 ox 0
+new 291 window 284
+set 291 windowskin nil
+set 291 cursor_rect rect 10 0 0 24
+set 291 x 295
+set 291 padding_bottom 0
+set 291 opacity 78
+set 291 visible true
+set 291 back_opacity 255
+set 291 oy 0
+set 291 openness 186
+set 291 pause true
+set 291 height 45
+set 291 contents b313
+set 291 z 100
+set 291 contents_opacity 255
+set 291 tone 255 255 255 255
+set 291 ox 0
+set 291 windowskin b311
+set 291 width 114
+set 291 y 4
+set 291 active true
+update 291 20
+new 292 sprite -
+set 292 bitmap b315
+set 292 x 80
+set 292 y 272
+set 292 z 100
+new 293 sprite 284
+set 293 bitmap b316
+set 293 x 40
+set 293 y 155
+set 293 z 100
+new 294 sprite -
+set 294 bitmap b317
+set 294 x 433
+set 294 y 84
+set 294 z -1
+new 295 sprite -
+set 295 bitmap b318
+set 295 x 230
+set 295 y 116
+set 295 z 101
+set 291 visible true
+set 288 visible true
+set 286 padding_bottom 18
+set 287 contents b312
+frame e687aa4762bbc0bd ha3_s25_a
+set 288 x 456
+rect 285 0 41 2 24
+set 290 padding 19
+set 285 openness 255
+set 285 ox 0
+set 287 ox 91
+set 287 arrows_visible false
+set 289 contents nil
+frame e687aa4762bbc0bd ha3_s25_b
+end
+scene ha-ha3_s26_a
+runtime rgss3
+bitmap b319 noise o 5926 544 416
+bitmap b325 noise o 7260 279 128
+bitmap b328 flat 161 195 196 255 107 15
+bitmap b327 noise t 7262 86 150
+bitmap b321 skin t 5261 13 128 128
+bitmap b323 noise o 6260 33 33
+bitmap b326 noise o 7261 11 127
+bitmap b320 skin o 5260 11 128 128
+bitmap b329 flat 117 4 119 255 120 118
+bitmap b324 noise t 6261 40 50
+bitmap b330 flat 221 238 62 255 83 40
+bitmap b331 flat 151 217 107 255 86 47
+bitmap b332 flat 91 146 84 255 15 76
+new 296 sprite -
+set 296 bitmap b319
+set 296 z -1000
+new 297 window -
+set 297 windowskin nil
+set 297 opacity 24
+set 297 padding_bottom 12
+set 297 active true
+set 297 padding 0
+set 297 pause false
+set 297 ox 82
+set 297 visible true
+set 297 contents_opacity 254
+set 297 height 140
+set 297 z 99
+set 297 width 182
+set 297 x 409
+set 297 back_opacity 0
+set 297 windowskin nil
+set 297 openness 255
+set 297 cursor_rect rect 29 75 1 7
+set 297 oy 0
+set 297 contents b325
+set 297 y 265
+new 298 sprite -
+set 298 bitmap b328
+set 298 x 426
+set 298 y -19
+set 298 z 102
+new 299 window -
+set 299 windowskin nil
+set 299 oy 58
+set 299 opacity 255
+set 299 cursor_rect rect 0 10 32 24
+set 299 contents_opacity 1
+set 299 height 167
+set 299 active true
+set 299 width 130
+set 299 openness 255
+set 299 back_opacity 255
+set 299 padding_bottom 16
+set 299 padding 12
+set 299 pause false
+set 299 contents b327
+set 299 y 254
+set 299 x 160
+set 299 ox 0
+set 299 windowskin b321
+set 299 visible true
+new 300 window - 16 240 -1 282
+set 300 windowskin nil
+set 300 ox 59
+set 300 windowskin b323
+set 300 openness 255
+set 300 opacity 255
+set 300 visible true
+set 300 z 1
+set 300 oy 0
+set 300 contents b326
+set 300 cursor_rect rect 0 -7 2 -3
+set 300 pause false
+set 300 contents_opacity 192
+set 300 active true
+update 300 1
+new 301 window -
+set 301 windowskin nil
+set 301 height 173
+set 301 visible true
+set 301 ox 0
+set 301 openness 152
+set 301 y 59
+set 301 contents_opacity 140
+set 301 opacity 192
+set 301 pause true
+set 301 width 106
+set 301 active true
+set 301 windowskin b320
+set 301 padding 12
+set 301 oy 0
+set 301 contents b327
+set 301 cursor_rect rect 0 0 32 4
+set 301 back_opacity 0
+set 301 tone -255 -255 -255 0
+set 301 x 226
+update 301 77
+new 302 window -
+set 302 windowskin nil
+set 302 opacity 254
+set 302 x 437
+set 302 contents b327
+set 302 padding 16
+set 302 ox 0
+set 302 contents_opacity 0
+set 302 y 230
+set 302 windowskin b323
+set 302 visible true
+set 302 width 2
+set 302 oy 0
+set 302 pause true
+set 302 openness 66
+set 302 active true
+set 302 cursor_rect rect 0 42 32 24
+set 302 height -5
+update 302 1
+new 303 sprite -
+set 303 bitmap b329
+set 303 x 445
+set 303 y -7
+set 303 z 101
+new 304 window - 0 342 193 110
+set 304 windowskin nil
+set 304 padding 0
+set 304 cursor_rect rect 0 0 0 24
+set 304 ox 0
+set 304 padding_bottom 0
+set 304 opacity 255
+set 304 windowskin b324
+set 304 visible true
+set 304 back_opacity 1
+set 304 contents b325
+set 304 openness 255
+set 304 contents_opacity 189
+set 304 oy 57
+set 304 active true
+set 304 pause false
+new 305 sprite -
+set 305 bitmap b330
+set 305 x 40
+set 305 y -17
+set 305 z 100
+new 306 sprite -
+set 306 bitmap b331
+set 306 x 31
+set 306 y 231
+set 306 z 102
+new 307 sprite -
+set 307 bitmap b332
+set 307 x 381
+set 307 y 325
+set 307 z 99
+set 300 height 166
+set 302 width 266
+update 297 1
+update 301 1
+set 299 active false
+frame 6eafc9d167a9926e ha3_s26_a
+set 297 visible true
+rect 300 9 0 3 24
+set 304 cursor_rect rect 0 0 -1 -3
+set 300 windowskin b324
+move 300 166 -19 0 14
+set 299 padding_bottom 8
+update 301 2
+frame 6eafc9d167a9926e ha3_s26_b
+end
+scene ha-ha3_s27_a
+runtime rgss3
+bitmap b333 noise o 5927 544 416
+bitmap b335 skin a 5271 11 128 128
+bitmap b338 noise t 6271 128 72
+bitmap b339 noise a 7270 114 172
+bitmap b340 noise t 7271 218 36
+bitmap b342 flat 210 214 184 255 22 100
+bitmap b343 flat 42 137 99 255 105 70
+bitmap b336 skin o 5272 15 128 128
+bitmap b344 flat 149 221 58 255 27 56
+bitmap b345 flat 59 59 50 255 22 24
+bitmap b346 flat 92 245 28 255 94 95
+new 308 sprite -
+set 308 bitmap b333
+set 308 z -1000
+new 309 viewport - 94 49 286 156
+set 309 ox -1
+set 309 oy -25
+set 309 z 100
+new 310 window 309
+set 310 windowskin nil
+set 310 contents_opacity 0
+set 310 height 83
+set 310 opacity 254
+set 310 windowskin b335
+set 310 oy 121
+set 310 width 2
+set 310 z 200
+set 310 openness 14
+set 310 pause true
+set 310 y 18
+set 310 cursor_rect rect -3 0 62 24
+set 310 visible true
+set 310 ox 0
+set 310 active true
+set 310 x 259
+new 311 window - 372 254 86 123
+set 311 windowskin nil
+set 311 viewport o309
+set 311 ox 0
+set 311 active true
+set 311 opacity 150
+set 311 oy 0
+set 311 visible false
+set 311 windowskin b338
+set 311 contents_opacity 249
+set 311 contents b339
+set 311 tone -123 -254 -38 134
+set 311 openness 255
+set 311 pause true
+set 311 cursor_rect rect 0 28 49 7
+new 312 window - 416 33 40 0
+set 312 windowskin nil
+set 312 openness 255
+set 312 pause false
+set 312 ox 0
+set 312 padding 26
+set 312 contents b340
+set 312 back_opacity 99
+set 312 opacity 0
+set 312 cursor_rect rect 0 0 32 21
+set 312 active false
+set 312 oy 150
+set 312 windowskin nil
+set 312 visible true
+set 312 contents_opacity 254
+set 312 tone 0 0 0 150
+new 313 sprite -
+set 313 bitmap b342
+set 313 x 2
+set 313 y 102
+set 313 z 100
+new 314 sprite -
+set 314 bitmap b343
+set 314 x 248
+set 314 y 202
+set 314 z 0
+new 315 window -
+set 315 windowskin nil
+set 315 cursor_rect rect 41 0 64 24
+set 315 oy 0
+set 315 x 178
+set 315 opacity 1
+set 315 height 191
+set 315 contents_opacity 1
+set 315 openness 80
+set 315 ox 0
+set 315 windowskin b336
+set 315 visible true
+set 315 contents b339
+set 315 back_opacity 0
+set 315 active true
+set 315 arrows_visible false
+set 315 pause true
+set 315 width 264
+set 315 y 119
+new 316 sprite 309
+set 316 bitmap b344
+set 316 x 229
+set 316 y 21
+set 316 z 0
+new 317 sprite 309
+set 317 bitmap b345
+set 317 x 424
+set 317 y -6
+set 317 z 102
+new 318 sprite -
+set 318 bitmap b346
+set 318 x 179
+set 318 y 91
+set 318 z 100
+set 310 tone 19 -93 -118 125
+set 310 back_opacity 255
+set 311 windowskin b336
+set 312 padding_bottom 4
+set 310 pause false
+set 310 y 318
+update 312 1
+frame 5ccd0d157bf92e85 ha3_s27_a
+set 311 active true
+set 315 back_opacity 255
+rect 315 0 0 7 24
+set 310 opacity 1
+set 312 y 7
+set 310 windowskin b338
+set 312 tone 13 -40 -3 0
+set 311 arrows_visible true
+set 311 z 99
+set 310 contents_opacity 192
+set 310 oy 0
+set 315 z 99
+frame eea54fb375fdb6f5 ha3_s27_b
+end
+scene ha-ha3_s28_a
+runtime rgss3
+bitmap b347 noise o 5928 544 416
+bitmap b355 noise a 7282 54 83
+bitmap b349 skin a 5281 11 128 128
+bitmap b351 noise o 6280 128 67
+bitmap b354 noise t 7281 136 159
+bitmap b352 noise o 6281 128 96
+bitmap b353 noise a 7280 89 130
+bitmap b356 flat 199 40 255 255 30 59
+bitmap b357 flat 218 186 200 255 36 96
+new 319 sprite -
+set 319 bitmap b347
+set 319 z -1000
+new 320 viewport - 151 82 112 210
+set 320 ox 8
+set 320 oy -12
+set 320 z 50
+new 321 window - 452 355 292 222
+set 321 windowskin nil
+set 321 contents b355
+set 321 oy 0
+set 321 opacity 192
+set 321 windowskin b349
+set 321 pause true
+set 321 ox 0
+set 321 active true
+set 321 contents_opacity 255
+set 321 cursor_rect rect 0 0 0 -1
+set 321 openness 255
+set 321 back_opacity 255
+set 321 visible false
+set 321 arrows_visible true
+update 321 86
+new 322 window - 432 178 5 4
+set 322 windowskin nil
+set 322 viewport o320
+set 322 windowskin b351
+set 322 oy 0
+set 322 cursor_rect rect -5 0 4 17
+set 322 opacity 255
+set 322 visible true
+set 322 openness 211
+set 322 active true
+set 322 back_opacity 0
+set 322 padding_bottom 26
+set 322 pause true
+set 322 contents_opacity 255
+set 322 ox 57
+set 322 padding 1
+new 323 window -
+set 323 windowskin nil
+set 323 z 0
+set 323 openness 255
+set 323 y -22
+set 323 cursor_rect rect 0 0 32 24
+set 323 width 82
+set 323 opacity 69
+set 323 pause true
+set 323 contents b354
+set 323 height 2
+set 323 tone 0 0 0 255
+set 323 x -59
+set 323 active true
+set 323 windowskin b352
+set 323 ox 0
+set 323 oy 0
+set 323 contents_opacity 208
+set 323 visible true
+new 324 window 320
+set 324 windowskin nil
+set 324 contents b353
+set 324 padding_bottom 13
+set 324 openness 255
+set 324 height 115
+set 324 y 87
+set 324 ox 54
+set 324 width -5
+set 324 x 393
+set 324 padding 0
+set 324 pause false
+set 324 cursor_rect rect 0 0 0 3
+set 324 active true
+set 324 visible true
+set 324 contents_opacity 255
+set 324 z 200
+set 324 oy 0
+set 324 opacity 215
+set 324 windowskin b352
+new 325 sprite -
+set 325 bitmap b356
+set 325 x 131
+set 325 y 189
+set 325 z 101
+new 326 window -
+set 326 windowskin nil
+set 326 openness 255
+set 326 y 14
+set 326 cursor_rect rect 0 0 42 53
+set 326 height 160
+set 326 oy 0
+set 326 visible true
+set 326 contents_opacity 181
+set 326 width 82
+set 326 active false
+set 326 ox 0
+set 326 padding_bottom 19
+set 326 contents b355
+set 326 opacity 254
+set 326 pause false
+set 326 x 37
+set 326 windowskin b349
+new 327 sprite -
+set 327 bitmap b357
+set 327 x 24
+set 327 y 269
+set 327 z 100
+set 324 visible true
+set 321 visible false
+set 326 width 39
+frame 013b2fa3b9c92877 ha3_s28_a
+move 324 -56 202 130 28
+update 322 1
+set 322 height 19
+move 326 59 27 75 109
+set 324 width 18
+set 324 arrows_visible true
+set 326 ox 0
+frame 5fe814b184ccad07 ha3_s28_b
+end
+scene ha-ha3_s29_a
+runtime rgss3
+bitmap b358 noise o 5929 544 416
+bitmap b359 skin o 5290 11 128 128
+bitmap b360 skin t 5291 15 128 128
+bitmap b363 noise t 6291 192 128
+bitmap b365 noise a 7291 101 112
+bitmap b364 noise t 7290 153 135
+bitmap b366 noise a 7292 109 68
+bitmap b367 flat 245 32 72 255 88 12
+bitmap b368 flat 40 69 254 255 76 46
+bitmap b361 skin a 5292 14 128 128
+bitmap b369 flat 180 217 129 255 105 37
+bitmap b370 flat 1 26 213 255 86 43
+bitmap b371 flat 217 34 214 255 88 96
+new 328 sprite -
+set 328 bitmap b358
+set 328 z -1000
+new 329 window -
+set 329 windowskin nil
+set 329 z 1
+set 329 ox 63
+set 329 height 132
+set 329 oy 0
+set 329 windowskin b359
+set 329 y -48
+set 329 contents_opacity 254
+set 329 width 285
+set 329 visible true
+set 329 openness 255
+set 329 opacity 1
+set 329 padding 20
+set 329 active true
+set 329 x 298
+set 329 pause false
+set 329 cursor_rect rect 40 0 54 21
+update 329 5
+new 330 window -
+set 330 windowskin nil
+set 330 ox 21
+set 330 active true
+set 330 cursor_rect rect 58 73 32 -1
+set 330 openness 255
+set 330 windowskin b360
+set 330 oy 0
+set 330 height 77
+set 330 visible false
+set 330 opacity 1
+set 330 contents_opacity 194
+set 330 x 64
+set 330 y -33
+set 330 width 82
+set 330 pause false
+update 330 1
+new 331 window - 343 42 114 106
+set 331 windowskin nil
+set 331 ox 12
+set 331 windowskin b363
+set 331 pause false
+set 331 cursor_rect rect 0 -11 9 24
+set 331 contents_opacity 254
+set 331 active true
+set 331 contents b365
+set 331 arrows_visible true
+set 331 opacity 192
+set 331 openness 255
+set 331 padding 8
+set 331 visible true
+set 331 oy 0
+new 332 window - -49 48 52 198
+set 332 windowskin nil
+set 332 padding_bottom 15
+set 332 active true
+set 332 pause false
+set 332 back_opacity 255
+set 332 contents b364
+set 332 oy 100
+set 332 windowskin b363
+set 332 ox 0
+set 332 cursor_rect rect 35 0 1 5
+set 332 opacity 0
+set 332 openness 255
+set 332 contents_opacity 255
+set 332 visible true
+update 332 1
+new 333 window -
+set 333 windowskin nil
+set 333 contents b366
+set 333 x 452
+set 333 y 198
+set 333 openness 255
+set 333 cursor_rect rect 14 -12 0 24
+set 333 visible true
+set 333 padding 12
+set 333 windowskin b359
+set 333 opacity 255
+set 333 oy 108
+set 333 ox 0
+set 333 height 20
+set 333 pause false
+set 333 contents_opacity 255
+set 333 active true
+set 333 width 200
+set 333 back_opacity 254
+update 333 1
+new 334 sprite -
+set 334 bitmap b367
+set 334 x 451
+set 334 y 44
+set 334 z 99
+new 335 sprite -
+set 335 bitmap b368
+set 335 x 339
+set 335 y 172
+set 335 z 0
+new 336 window - 440 0 108 79
+set 336 windowskin nil
+set 336 pause true
+set 336 contents b364
+set 336 active false
+set 336 windowskin b360
+set 336 opacity 255
+set 336 z 100
+set 336 contents_opacity 135
+set 336 ox 0
+set 336 oy -14
+set 336 visible true
+set 336 cursor_rect rect 0 0 0 37
+set 336 padding_bottom 0
+set 336 openness 255
+update 336 1
+new 337 window -
+set 337 windowskin nil
+set 337 active false
+set 337 arrows_visible true
+set 337 y 31
+set 337 oy 98
+set 337 contents_opacity 182
+set 337 visible true
+set 337 windowskin b361
+set 337 contents b365
+set 337 opacity 254
+set 337 padding 16
+set 337 x 329
+set 337 openness 255
+set 337 cursor_rect rect 0 44 32 7
+set 337 pause true
+set 337 width 175
+set 337 ox 0
+set 337 height 37
+new 338 sprite -
+set 338 bitmap b369
+set 338 x 463
+set 338 y 204
+set 338 z 102
+new 339 sprite -
+set 339 bitmap b370
+set 339 x 216
+set 339 y -20
+set 339 z 102
+new 340 sprite -
+set 340 bitmap b371
+set 340 x 484
+set 340 y 369
+set 340 z 99
+set 336 openness 255
+set 333 height 26
+frame b293302148bf249d ha3_s29_a
+update 333 2
+set 330 contents_opacity 43
+set 330 ox 23
+set 331 padding_bottom 12
+update 331 14
+frame 666e7165325960da ha3_s29_b
+end

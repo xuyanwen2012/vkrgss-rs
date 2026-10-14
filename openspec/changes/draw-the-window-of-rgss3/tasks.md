@@ -15,8 +15,8 @@
 
 ## 3. Whole scenes
 
-- [ ] 3.1 The format of `test_support::window_cases` for scenes of RGSS3; `window-rgss3-cases.txt` and `window-rgss3-random.txt` with the digests of the model of the measurement; both compared in the CPU reference. Verify: the scenarios "Cases of the measurement", "Random scenes held out" and "Nothing of the original" of "Whole windows of RGSS3 as measured"; the script that drove the model is under `local/` and not committed; `cargo test -p vkxp-core --locked` passes.
-- [ ] 3.2 Both files composed by both backends. Verify: the scenario "Both backends"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-core -p vkxp-compose-ref -p vkxp-vk --locked` passes; `git diff --stat` against the start of the change names no file under `crates/vkxp-proto`, `crates/vkxp-compose-ref/src` or `crates/vkxp-vk/shaders`, and of `crates/vkxp-vk/src` only `tests/windows.rs`.
+- [x] 3.1 The format of `test_support::window_cases` for scenes of RGSS3; `window-rgss3-cases.txt` and `window-rgss3-random.txt` with the digests of the model of the measurement; both compared in the CPU reference. Verify: the scenarios "Cases of the measurement", "Random scenes held out" and "Nothing of the original" of "Whole windows of RGSS3 as measured"; the script that drove the model is under `local/` and not committed; `cargo test -p vkxp-core --locked` passes.
+- [x] 3.2 Both files composed by both backends. Verify: the scenario "Both backends"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-core -p vkxp-compose-ref -p vkxp-vk --locked` passes; `git diff --stat` against the start of the change names no file under `crates/vkxp-proto`, `crates/vkxp-compose-ref/src` or `crates/vkxp-vk/shaders`, and of `crates/vkxp-vk/src` only `tests/windows.rs`.
 
 ## 4. Documentation
 

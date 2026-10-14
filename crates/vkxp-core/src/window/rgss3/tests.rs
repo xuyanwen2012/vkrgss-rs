@@ -1,9 +1,10 @@
-use vkxp_compose_ref::Frame;
+use vkxp_compose_ref::{Compositor, Frame};
 use vkxp_pixel::Rgba;
 
 use super::*;
 use crate::bitmap::testing::{color, defaults};
 use crate::extract::testing::*;
+use crate::test_support::window_cases::{cases, digest};
 use crate::{Tone, WindowId};
 
 const BACK: Rgba = [0, 0, 200, 255];
@@ -893,4 +894,74 @@ fn a_part_cut_by_the_skin_counts_its_cut_width() {
     assert_eq!(frame.pixel(47, 90), [120, 120, 120, 255]);
     assert_eq!(frame.pixel(48, 90), [119, 119, 119, 255]);
     assert_eq!(frame.pixel(49, 90), [200, 200, 200, 255]);
+}
+
+// Requirement "Whole windows of RGSS3 as measured".
+
+const CASES: &str = include_str!("../../../tests/data/window-rgss3-cases.txt");
+const RANDOM: &str = include_str!("../../../tests/data/window-rgss3-random.txt");
+
+/// Asserts that every frame of every scene of `text` is the picture its digest names.
+fn assert_frames(text: &str) {
+    let mut wrong = Vec::new();
+    let mut frames = 0;
+    for case in cases(text) {
+        let mut compositor = Compositor::new();
+        for (index, (packet, expected)) in case.frames().into_iter().enumerate() {
+            let frame = compositor.render(&packet).unwrap();
+            frames += 1;
+            if digest(frame.size, &frame.rgba) != expected {
+                wrong.push(format!("{}, frame {index}", case.name));
+            }
+        }
+    }
+    assert!(frames > 0, "no frame was compared");
+    assert!(wrong.is_empty(), "frames differ:\n{}", wrong.join("\n"));
+}
+
+/// At least one scene of each case file of the measurement.
+#[test]
+fn the_cases_of_the_measurement_are_drawn_as_the_model_draws_them() {
+    let cases = cases(CASES);
+    for file in [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16] {
+        let prefix = format!("a{file}-");
+        let found = cases.iter().any(|case| case.name.starts_with(&prefix));
+        assert!(found, "no scene of the case file a{file}");
+    }
+    assert_frames(CASES);
+}
+
+/// Thirty scenes of the random generator of the measurement, from a held-out set.
+#[test]
+fn the_random_scenes_of_the_measurement_are_drawn_as_the_model_draws_them() {
+    assert_eq!(cases(RANDOM).len(), 30);
+    assert_frames(RANDOM);
+}
+
+/// Scenario "Nothing of the original": bitmaps by formula alone, and a head that names the
+/// model, the date and the case files left out.
+#[test]
+fn the_scenes_hold_nothing_of_the_original() {
+    const FORMULAS: [&str; 9] = [
+        "noise", "skin", "flat", "exc", "grid", "frame2", "cursor2", "ramp", "back4",
+    ];
+    for text in [CASES, RANDOM] {
+        let head: Vec<&str> = text.lines().take_while(|l| l.starts_with('#')).collect();
+        let head = head.join("\n");
+        for word in ["ace-v1-window-model.py", "2026-10-13", "case file"] {
+            assert!(head.contains(word), "the head does not name `{word}`");
+        }
+        for case in cases(text) {
+            assert_eq!(case.statements()[0], "runtime rgss3", "{}", case.name);
+            let bitmaps = case
+                .statements()
+                .iter()
+                .filter(|l| l.starts_with("bitmap "));
+            for line in bitmaps {
+                let kind = line.split(' ').nth(2).unwrap();
+                assert!(FORMULAS.contains(&kind), "{}: `{line}`", case.name);
+            }
+        }
+    }
+    assert!(CASES.contains("no a10") && CASES.contains("`rtp`"));
 }
