@@ -11,7 +11,7 @@
 
 ## 3. Documents
 
-- [ ] 3.1 `docs/compatibility.md`, the section on VX Ace: the class `Tilemap` and the known differences, as the implementation notes of `design.md` say; `CHANGELOG.md`; the documentation of `tilemap.rs` and, where it names what a tilemap keeps, of `lib.rs`. Verify: the text names nothing that the code does not do, and names the write to a slot of a disposed tilemap as a difference in which the original ends and vkxp goes on; `cargo test -p xtask --locked` passes.
+- [x] 3.1 `docs/compatibility.md`, the section on VX Ace: the class `Tilemap` and the known differences, as the implementation notes of `design.md` say; `CHANGELOG.md`; the documentation of `tilemap.rs` and, where it names what a tilemap keeps, of `lib.rs`. Verify: the text names nothing that the code does not do, and names the write to a slot of a disposed tilemap as a difference in which the original ends and vkxp goes on; `cargo test -p xtask --locked` passes.
 
 ## 4. Integration check
 

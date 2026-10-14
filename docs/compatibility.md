@@ -273,6 +273,40 @@ by 480.
 In a game of XP `Tilemap` is as it was: none of `bitmaps`, `passages` and
 `Tilemap::BitmapArray` is defined.
 
+## RPG Maker VX Ace
+
+Games of RPG Maker VX Ace (RGSS3) are not supported yet. What a game of VX Ace has of the
+classes so far is listed here, each measured on the original runtime of VX Ace (DLL versions
+3.0.0.1 and 3.0.1.1) under Wine.
+
+### The tilemap of VX Ace
+
+The class `Tilemap` of a game of VX Ace is the one of VX with `flags` and `flags=` in the
+place of `passages` and `passages=`:
+
+- `bitmaps` is a `Tilemap::BitmapArray` of nine slots, as in VX. `flags` is a table kept by
+  reference, under the rules of `passages`: once a table is set, `map_data = nil` and
+  `flags = nil` raise `TypeError` and the table stays; `flash_data = nil` is always
+  accepted. `passages`, `tileset`, `autotiles`, `priorities` and the class
+  `TilemapAutotiles` are not defined.
+- A map has four layers, the fourth being the shadows, one bit for each quarter of a cell.
+  A tile whose entry of `flags` has the bit 0x10 is drawn on the upper plane from the third
+  layer and on the lower plane from the first two. `visible = false` hides the tilemap.
+- A change made through the `Table` object of `map_data` or `flags` shows in the next frame
+  without `update`.
+
+Known differences:
+
+- A write to a slot of `bitmaps` of a disposed tilemap ends the original with a page fault.
+  vkxp accepts it and keeps the object in the slot, and the tilemap draws nothing.
+- Where the original reads outside its arrays, vkxp draws nothing: the tile numbers 1024 to
+  1535 (from 1245 on the original ends with a page fault), negative tile numbers (the
+  original draws a block of the sheets A1 to A5 for -256 to -1280), and the layers that a
+  map of fewer than four does not have. A map of three layers is drawn as on the original;
+  one of fewer layers draws its layers, where the original draws other things or ends.
+- `Viewport#dispose` disposes the tilemaps of the viewport, as in XP and VX; on the original
+  of VX Ace such a tilemap stays alive and is not drawn.
+
 ## Limits of save states
 
 Save states are described under [Save states](running.md#save-states). Their limits:

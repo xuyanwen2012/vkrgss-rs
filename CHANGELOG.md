@@ -2,6 +2,14 @@
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- RPG Maker VX Ace (RGSS3): the class `Tilemap` with `flags` in the place of `passages`,
+  drawn by the rules of RGSS3. A write to a slot of `bitmaps` of a disposed tilemap is kept
+  where the original runtime ends.
+
 ## [0.2.0] - 2026-10-13
 
 ### Added

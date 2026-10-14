@@ -84,9 +84,10 @@
 //! scene through that handle.
 //!
 //! **Objects an element refers to.** The viewport an element was created in, the bitmap of
-//! a sprite or a plane, the window skin and the contents of a window, the tileset, the
-//! autotile list and the three tables of a tilemap are Ruby objects kept in hidden instance
-//! variables of the element object. The scene gets the `BitmapId`, the `ViewportId` or the
+//! a sprite or a plane, the window skin and the contents of a window, the tileset or the
+//! bitmap array, the autotile list and the three tables of a tilemap (the map data, the
+//! flash data, and the priorities, the passages or the flags as the runtime has them) are
+//! Ruby objects kept in hidden instance variables of the element object. The scene gets the `BitmapId`, the `ViewportId` or the
 //! shared table; the reader returns the variable, so a script reads back the very object it
 //! assigned, and the object lives as long as the element object does. Assigning a bitmap
 //! never copies or disposes it, and a disposed bitmap may be assigned: it draws nothing.
