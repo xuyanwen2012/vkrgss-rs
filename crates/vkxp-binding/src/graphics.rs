@@ -2,6 +2,11 @@
 //!
 //! A frame is extracted from the guest's scene, sent to the host, and its tick awaited in
 //! [`Guest::pump`]. What the host asked for meanwhile is raised once the guest is released.
+//!
+//! A game of RGSS3 has the module of RGSS2 with `__reset__` and `play_movie` and without a
+//! public `_reset`, keeps the frozen picture by the buffer rule, makes its snapshots by the
+//! snapshot rule of RGSS3 and takes the arguments of `transition` as its original runtime
+//! does.
 
 use std::ffi::c_long;
 
@@ -9,7 +14,7 @@ use vkxp_compose_ref::SnapshotRule;
 use vkxp_proto::{BitmapDelta, BitmapId, FreezeRule, GuestToHost, Size, TransitionRule};
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{HostResult, Raise, Raised, Ruby};
-use vkxp_vfs::{FileKind, Runtime};
+use vkxp_vfs::{FileKind, Runtime, VfsError};
 
 use crate::bitmap;
 use crate::error::{self, Error};
@@ -34,6 +39,10 @@ def Graphics._reset
   nil
 end
 ";
+
+/// In RGSS3 `_reset` is private, so that a script does not see it; `__reset__` calls it
+/// through Ruby all the same, which ignores visibility.
+const RESET_PRIVATE: &str = "class << Graphics; private :_reset; end";
 
 /// Extracts one frame, sends it with `front` before its own bitmap deltas, and waits for its
 /// tick. The tick count of the emulated `Win32API` functions advances by the frame.
@@ -121,18 +130,24 @@ fn set_brightness(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     Ok(args[0])
 }
 
+/// `Graphics.freeze`: the host keeps the picture as the frame at its own size, or in RGSS3
+/// in the buffer of 640 by 480 pixels of that runtime.
+///
+/// Provenance of RGSS3: oracle measurement 2026-10-13, `ace-v1-sprite-REPORT.md` section 5.
 fn freeze(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
     Guest::with(|guest| {
         guest.runtime.held = true;
-        guest.send(GuestToHost::Freeze {
-            rule: FreezeRule::Frame,
-        });
+        let rule = match guest.runtime.run.runtime {
+            Runtime::Rgss1 | Runtime::Rgss2 => FreezeRule::Frame,
+            Runtime::Rgss3 => FreezeRule::Buffer,
+        };
+        guest.send(GuestToHost::Freeze { rule });
     });
     Ok(ffi::Qnil)
 }
 
 /// Loads the picture of a transition as `Bitmap.new(path)` loads one.
-fn load_mask(ruby: &Ruby, path: &str) -> Result<BitmapId, Raise> {
+fn read_mask(path: &str) -> Result<BitmapId, Error> {
     Guest::with(|guest| -> Result<BitmapId, Error> {
         let bytes = guest.files.read(FileKind::Image, path)?;
         let image = vkxp_image::decode(&bytes)?;
@@ -143,7 +158,11 @@ fn load_mask(ruby: &Ruby, path: &str) -> Result<BitmapId, Raise> {
             &guest.font_defaults,
         )?)
     })
-    .map_err(|error| error::to_raise(ruby, error))
+}
+
+/// [`read_mask`] with its failure raised.
+fn load_mask(ruby: &Ruby, path: &str) -> Result<BitmapId, Raise> {
+    read_mask(path).map_err(|error| error::to_raise(ruby, error))
 }
 
 /// `transition(duration, filename = nil, vague)`, by the runtime of the run.
@@ -187,6 +206,20 @@ fn transition(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
         Some(path) => Some(load_mask(ruby, &path)?),
         None => None,
     };
+    show_transition(ruby, duration, loaded, vague, rule)
+}
+
+/// Shows a transition of `duration` frames from the frozen picture, masked by the bitmap
+/// `loaded` (disposed here), and ends the freeze. In RGSS2 and RGSS3 the brightness becomes
+/// 255.
+fn show_transition(
+    ruby: &Ruby,
+    duration: u32,
+    loaded: Option<BitmapId>,
+    vague: u16,
+    rule: TransitionRule,
+) -> HostResult {
+    let rgss1 = Guest::with(|guest| guest.runtime.run.runtime) == Runtime::Rgss1;
     // No op refers to the mask, so its deltas are asked from the arena here and travel in
     // front of the first frame's own. Without a frame the mask is never announced.
     let (mask, mut mask_deltas) = Guest::with(|guest| {
@@ -227,6 +260,97 @@ fn transition(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
         }
     });
     interrupted?;
+    Ok(ffi::Qnil)
+}
+
+/// `transition(duration = 10, filename = nil, vague = 40)` of RGSS3. With nothing frozen it
+/// returns `nil` before it counts or reads its arguments. After a freeze the count is that
+/// of RGSS3 (`wrong number of arguments (3 for 4)`), the duration and the vagueness are
+/// Integers, and a name is a `String`; each of these errors keeps the freeze. An empty name
+/// is no mask. A name whose picture is not found raises `Errno::ENOENT` and ends the freeze
+/// without a frame, as `__reset__` ends one. Otherwise it is the transition of RGSS2.
+///
+/// Provenance: oracle measurement 2026-10-13, RGSS301 version 3.0.1.1 and RGSS300 version
+/// 3.0.0.1, `ace-v1-sprite-REPORT.md` section 5 and its exploration log.
+fn transition_rgss3(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
+    if !Guest::with(|guest| guest.runtime.held) {
+        return Ok(ffi::Qnil);
+    }
+    rb::check_count_rgss3(ruby, args, 0, 3)?;
+    let duration = match args.first() {
+        Some(&duration) => rb::int(ruby, duration)?.max(0).unsigned_abs(),
+        None => 10,
+    };
+    let name = match args.get(1) {
+        Some(&name) => name_rgss3(ruby, name)?,
+        None => String::new(),
+    };
+    let vague = match args.get(2) {
+        Some(&vague) => rb::int(ruby, vague)?.clamp(0, i32::from(u16::MAX)) as u16,
+        None => 40,
+    };
+    let loaded = if name.is_empty() {
+        None
+    } else {
+        match read_mask(&name) {
+            Ok(id) => Some(id),
+            Err(error) => {
+                if matches!(error, Error::Files(VfsError::NotFound { .. })) {
+                    Guest::with(|guest| {
+                        guest.runtime.held = false;
+                        guest.send(GuestToHost::Transition {
+                            duration: 0,
+                            mask: None,
+                            vague: 0,
+                            rule: TransitionRule::Rgss2,
+                        });
+                    });
+                }
+                return Err(error::to_raise(ruby, error));
+            }
+        }
+    };
+    show_transition(ruby, duration, loaded, vague, TransitionRule::Rgss2)
+}
+
+/// A name argument of `transition` and `play_movie` of RGSS3: a `String`, or `TypeError`
+/// worded as Ruby 1.9.2 converts it, `can't convert nil into String` for `nil`, `true` and
+/// `false` and `can't convert Fixnum into String` by the class of anything else.
+fn name_rgss3(ruby: &Ruby, value: VALUE) -> Result<String, Raise> {
+    let named = match value {
+        ffi::Qnil => "nil",
+        ffi::Qtrue => "true",
+        ffi::Qfalse => "false",
+        _ => return rb::text(ruby, value),
+    };
+    Err(Raise::new(
+        rb::type_error(ruby),
+        format!("can't convert {named} into String"),
+    ))
+}
+
+/// `Graphics.play_movie(name)` of RGSS3: plays nothing and shows no frame. A name under
+/// which no file of the game directory is found, as given or with `.ogv` appended, raises
+/// `Errno::ENOENT` with the name as given; otherwise it returns `nil`.
+///
+/// PLACEHOLDER: no movie was played on the original runtime, and how it looks a file up was
+/// not measured; `.ogv` is the extension the editor of VX Ace writes, and the run-time
+/// packages are not searched.
+///
+/// Provenance of the errors: oracle measurement 2026-10-13, RGSS301 version 3.0.1.1 and
+/// RGSS300 version 3.0.0.1, `ace-v1-sprite-REPORT.md` section 5.
+fn play_movie(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
+    let name = name_rgss3(ruby, args[0])?;
+    let found = Guest::with(|guest| {
+        let with_extension = format!("{name}.ogv");
+        [name.as_str(), with_extension.as_str()]
+            .iter()
+            .any(|path| guest.files.resolve(FileKind::Data, path).is_ok())
+    });
+    if !found {
+        let missing = VfsError::NotFound { path: name };
+        return Err(error::to_raise(ruby, Error::Files(missing)));
+    }
     Ok(ffi::Qnil)
 }
 
@@ -292,7 +416,8 @@ fn resize_screen(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
 
 /// `Graphics.snap_to_bitmap` of RGSS2: a new bitmap of the size of the frame with the scene
 /// as its objects are now, shown or not, frozen or not, darkened by the brightness, with an
-/// alpha of 255 everywhere. No frame is shown and the frame count stays.
+/// alpha of 255 everywhere. No frame is shown and the frame count stays. In RGSS3 every byte
+/// is 0 at brightness 0 (`ace-v1-sprite-REPORT.md` section 5).
 ///
 /// The scene is drawn here in the guest by the reference compositor, in one of its own that
 /// lives for this call, from a packet that takes nothing from what the host is sent next.
@@ -302,8 +427,12 @@ fn resize_screen(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
 fn snap_to_bitmap(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
     wrap::intern_owner_names(ruby)?;
     let created = Guest::with(|guest| -> Option<Result<BitmapId, Error>> {
+        let rule = match guest.runtime.run.runtime {
+            Runtime::Rgss1 | Runtime::Rgss2 => SnapshotRule::Rgss2,
+            Runtime::Rgss3 => SnapshotRule::Rgss3,
+        };
         let packet = guest.scene.snapshot(&mut guest.bitmaps);
-        let frame = vkxp_compose_ref::snapshot(&packet, SnapshotRule::Rgss2).ok()?;
+        let frame = vkxp_compose_ref::snapshot(&packet, rule).ok()?;
         let (width, height) = (frame.size.width, frame.size.height);
         let bitmaps = &mut guest.bitmaps;
         let id = bitmaps.create_from_rgba(width, height, frame.rgba, &guest.font_defaults);
@@ -336,7 +465,11 @@ pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
     let module = ruby.define_module(c"Graphics")?;
     rb::class_method(ruby, module, c"update", 0, update)?;
     rb::class_method(ruby, module, c"freeze", 0, freeze)?;
-    rb::class_method(ruby, module, c"transition", -1, transition)?;
+    if Guest::with(|guest| guest.runtime.run.runtime) == Runtime::Rgss3 {
+        rb::class_method(ruby, module, c"transition", -1, transition_rgss3)?;
+    } else {
+        rb::class_method(ruby, module, c"transition", -1, transition)?;
+    }
     rb::class_method(ruby, module, c"frame_reset", 0, frame_reset)?;
     rb::class_method(ruby, module, c"frame_rate", 0, frame_rate)?;
     rb::class_method(ruby, module, c"frame_rate=", 1, set_frame_rate)?;
@@ -357,8 +490,12 @@ pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
     }
     if Guest::with(|guest| guest.runtime.run.runtime) == Runtime::Rgss3 {
         rb::class_method(ruby, module, c"__reset__", 0, reset)?;
+        rb::class_method(ruby, module, c"play_movie", 1, play_movie)?;
     }
     ruby.eval(RESET, "Graphics", 1)?;
+    if Guest::with(|guest| guest.runtime.run.runtime) == Runtime::Rgss3 {
+        ruby.eval(RESET_PRIVATE, "Graphics", 1)?;
+    }
     Ok(())
 }
 

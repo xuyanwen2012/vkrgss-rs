@@ -52,6 +52,7 @@ const BOUND: &[&str] = &[
     "Viewport",
     "Tilemap",
     "Tilemap::BitmapArray",
+    "Graphics",
 ];
 
 fn eval(source: &str) -> String {
@@ -117,7 +118,7 @@ fn every_listed_method_of_a_bound_class_has_the_listed_arity() {
         .iter()
         .map(|class| entries.iter().filter(|entry| entry.class == *class).count())
         .collect();
-    assert_eq!(counts, [17, 17, 18, 10, 53, 55, 29, 20, 21, 2]);
+    assert_eq!(counts, [17, 17, 18, 10, 53, 55, 29, 20, 21, 2, 21]);
     let wrong = mismatches(&entries, BOUND);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
     assert_eq!(

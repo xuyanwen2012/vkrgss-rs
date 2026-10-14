@@ -462,8 +462,9 @@ fn a_window_of_rgss2_is_not_the_window_of_rgss3() {
 }
 
 /// Scenario "XP and VX" of "The scene classes of RGSS1 and RGSS2 are unchanged by RGSS3",
-/// for a game of RGSS2, and the scenario "The same sprite in RGSS2" of "The scene of a game
-/// of RGSS3": a turned sprite in a viewport keeps the rule of RGSS2.
+/// for a game of RGSS2, the scenario "The same sprite in RGSS2" of "The scene of a game of
+/// RGSS3" (a turned sprite in a viewport keeps the rule of RGSS2), and the scenario "XP and
+/// VX" of "Method surface of Graphics in RGSS3" of `rgss-modules`.
 #[test]
 fn the_scene_classes_of_rgss2_are_not_those_of_rgss3() {
     assert_eq!(
@@ -483,5 +484,9 @@ fn the_scene_classes_of_rgss2_are_not_those_of_rgss3() {
             "[pixel(105, 58), pixel(115, 62)[0]]"
         ),
         format!("[{BLACK}, 15]")
+    );
+    assert_eq!(
+        eval("[Graphics.respond_to?(:_reset), Graphics.respond_to?(:play_movie)]"),
+        "[true, false]"
     );
 }

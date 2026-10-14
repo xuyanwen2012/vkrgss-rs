@@ -432,7 +432,7 @@ pub fn run_game(game: &Game, run: RunConfig, script: Script, after: &str) -> Pla
     let files = GameFiles::new(game.dir(), []);
     let after = after.to_owned();
     let (outcome, after, bitmaps) = super::run(move |ruby| {
-        ruby.eval_protected("Graphics._reset", "testing", 1)
+        ruby.eval_protected("Graphics.send(:_reset)", "testing", 1)
             .expect("what the previous game left is disposed");
         // SAFETY: `nil` is a special constant.
         unsafe { ruby.set_current_error(vkxp_ruby_sys::ffi::Qnil) };
