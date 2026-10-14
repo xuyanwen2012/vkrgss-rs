@@ -28,6 +28,7 @@ mod extract;
 mod fuzz;
 mod gate;
 mod oracle;
+mod rgss3a;
 mod rgssad;
 mod stress;
 

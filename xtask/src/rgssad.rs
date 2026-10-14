@@ -44,7 +44,7 @@ fn step(key: &mut u32) -> u32 {
 }
 
 /// XORs `data` with the key stream that starts at `key`. The operation is its own inverse.
-fn crypt(data: &[u8], mut key: u32) -> impl Iterator<Item = u8> {
+pub(crate) fn crypt(data: &[u8], mut key: u32) -> impl Iterator<Item = u8> {
     data.chunks(4).flat_map(move |word| {
         let mask = step(&mut key).to_le_bytes();
         word.iter().zip(mask).map(|(byte, mask)| byte ^ mask)

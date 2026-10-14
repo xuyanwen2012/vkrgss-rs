@@ -2,7 +2,7 @@
 
 ## 1. Archive of RGSS3
 
-- [ ] 1.1 `xtask/src/rgss3a.rs`: the reader and writer of RGSSAD version 3 of decision 2, reusing the word cipher and `names_match` of `xtask/src/rgssad.rs` without changing what they do; tests on archives the tests generate. Verify: the four scenarios of "Archives of RGSSAD version 3"; `cargo test -p xtask --locked` passes and no existing test of `rgssad.rs` changed.
+- [x] 1.1 `xtask/src/rgss3a.rs`: the reader and writer of RGSSAD version 3 of decision 2, reusing the word cipher and `names_match` of `xtask/src/rgssad.rs` without changing what they do; tests on archives the tests generate. Verify: the four scenarios of "Archives of RGSSAD version 3"; `cargo test -p xtask --locked` passes and no existing test of `rgssad.rs` changed.
 
 ## 2. Runtime and probe of RGSS3
 
