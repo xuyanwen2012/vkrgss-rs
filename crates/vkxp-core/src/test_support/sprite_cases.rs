@@ -35,6 +35,10 @@
 //!   with `x'` and `y'` the coordinates modulo 64.
 //! - `colx_<width>_<height>` and `rowy_<width>_<height>`: opaque, red the column or the row,
 //!   green 255 less that, blue 128.
+//! - `solid_<width>_<height>_<red>_<green>_<blue>_<alpha>`: one colour.
+//!
+//! `viewport=` moves a sprite or a plane into the viewport of that id, and out of any for
+//! `nil`.
 
 use std::collections::HashMap;
 
@@ -107,6 +111,10 @@ fn bitmap(name: &str) -> (u32, u32, Formula) {
         "rowy" => {
             let pixel = |_: u32, y: u32| [y as u8, 255 - y as u8, 128, 255];
             (number(1), number(2), Box::new(pixel))
+        }
+        "solid" => {
+            let pixel: [u8; 4] = std::array::from_fn(|index| number(3 + index) as u8);
+            (number(1), number(2), Box::new(move |_, _| pixel))
         }
         other => panic!("unknown kind of bitmap `{other}`"),
     }

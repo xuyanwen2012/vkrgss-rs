@@ -1,0 +1,50 @@
+# Planes and sprites moved between viewports in RGSS3: the topic `aplanevp` (6 frames in
+# two scenes). A moved element is drawn by its new viewport, or on the screen, and keeps
+# the rank of its creation among elements of equal z.
+#
+# Measured on the original runtime of VX Ace on 2026-10-13 (RGSS300.dll 3.0.0.1 and
+# RGSS301.dll 3.0.1.1, the same pictures; report `ace-v1-sprite-REPORT.md`). The scenes are
+# those of the probes, made by formulas; the digest of a frame is that of the picture the
+# model of the measurement draws with its rule of RGSS3 (`ace-v1-sprite-model.py`: the model
+# of VX, `vx-v1-sprite-model.py`, with the one option `tv=fix`), which is the frame of the
+# original: the model has no wrong pixel on these topics. The format is that of
+# `vkxp_core::test_support::sprite_cases`, run with the rules of RGSS3.
+scene aplanevp-00
+sprite 1 - bitmap=bg z=-1000
+viewport 2 4 4 60 50
+viewport 3 70 20 80 90 ox=7 oy=3
+plane 4 2 bitmap=pat_24_16_o_0 ox=5 oy=2
+frame 1c52298785a0b454
+set 4 viewport=3
+frame 27405aa428d552d4
+plane 5 - bitmap=pat_24_16_a_3 z=-500 zoom_x=2
+frame 5ac133b5b8ea31fd
+viewport 6 170 10 140 100
+set 5 viewport=6
+frame 10c3c89b27cf8d93
+set 5 viewport=nil
+set 4 viewport=nil opacity=100
+frame b36fec52f7992892
+end
+scene aplanevp-01
+sprite 1 - bitmap=bg z=-1000
+viewport 2 4 4 150 110
+viewport 3 4 4 150 110
+plane 4 3 bitmap=solid_60_60_255_0_0_255
+sprite 5 2 bitmap=solid_60_60_0_255_0_255 x=40 y=0 oy=-20
+set 4 viewport=2
+viewport 6 164 4 150 110
+viewport 7 164 4 150 110
+sprite 8 6 bitmap=solid_60_60_0_255_0_255 x=40 y=0 oy=-20
+plane 9 7 bitmap=solid_60_60_255_0_0_255 viewport=6
+viewport 10 324 4 150 110
+viewport 11 324 4 150 110
+sprite 12 11 bitmap=solid_60_60_255_0_0_255 x=20 y=0
+sprite 13 10 bitmap=solid_60_60_0_255_0_255 x=40 y=0 oy=-20
+set 12 viewport=10
+viewport 14 4 124 150 110
+viewport 15 4 124 150 110
+sprite 16 14 bitmap=solid_60_60_0_255_0_255 x=40 y=0 oy=-20
+sprite 17 15 bitmap=solid_60_60_255_0_0_255 x=20 y=0 viewport=14
+frame 9a61b7df274f310c
+end

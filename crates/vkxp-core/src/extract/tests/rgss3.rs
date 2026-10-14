@@ -419,3 +419,79 @@ fn a_negative_wave_length_takes_the_angle_modulo_360() {
     // 8 rows of 360 / -50 degrees are -57.6, whose floor is 302 modulo 360.
     assert_eq!(wave_offset(10, -50, 0.0, 8, 8, 0), -8);
 }
+
+const TURNED: &str = include_str!("../../../tests/data/sprite-rgss3-turned.txt");
+const MOVED: &str = include_str!("../../../tests/data/sprite-rgss3-moved.txt");
+const RANDOM: &str = include_str!("../../../tests/data/sprite-rgss3-random.txt");
+
+/// The number of `frame` statements of `text`.
+fn frame_statements(text: &str) -> usize {
+    let frames = text.lines().filter(|line| line.starts_with("frame "));
+    frames.count()
+}
+
+/// Scenario "Turned sprites in viewports" of "Whole scenes of sprites of RGSS3 as
+/// measured": the 8 frames of `atvp` and the 4 of `turnedvp`. `vkxp-vk` composes the same
+/// scenes with both backends.
+#[test]
+fn the_turned_sprites_in_viewports_of_rgss3_are_the_measured_pictures() {
+    assert_eq!(frame_statements(TURNED), 12);
+    assert_eq!(wrong_frames(TURNED, Rules::Rgss3, 12), [""; 0]);
+}
+
+/// Scenario "Moved planes and sprites": the 6 frames of `aplanevp`.
+#[test]
+fn the_moved_planes_and_sprites_of_rgss3_are_the_measured_pictures() {
+    assert_eq!(frame_statements(MOVED), 6);
+    assert_eq!(wrong_frames(MOVED, Rules::Rgss3, 2), [""; 0]);
+}
+
+/// Scenario "Random scenes held out": the 20 scenes of `aheldx`, none left out.
+#[test]
+fn the_random_scenes_of_rgss3_are_the_measured_pictures() {
+    assert_eq!(frame_statements(RANDOM), 20);
+    assert_eq!(wrong_frames(RANDOM, Rules::Rgss3, 20), [""; 0]);
+}
+
+/// Scenario "Not the rule of RGSS2".
+#[test]
+fn the_turned_sprites_in_viewports_of_rgss3_are_not_those_of_rgss2() {
+    let wrong = wrong_frames(TURNED, Rules::Rgss2, 12);
+    assert!(
+        wrong.iter().any(|name| name.starts_with("atvp-")),
+        "{wrong:?}"
+    );
+}
+
+/// Scenario "Nothing of the original": the files hold comments, statements of scenes with
+/// numbers, names of bitmaps made by formula and digests, and their heads name the topic,
+/// the model and the DLL versions.
+#[test]
+fn the_files_of_scenes_of_rgss3_hold_scenes_and_digests_only() {
+    for (text, topics) in [
+        (TURNED, &["`atvp`", "`turnedvp`"][..]),
+        (MOVED, &["`aplanevp`"]),
+        (RANDOM, &["`aheldx`"]),
+    ] {
+        let head: Vec<&str> = text
+            .lines()
+            .take_while(|line| line.starts_with('#'))
+            .collect();
+        let head = head.join("\n");
+        for word in ["ace-v1-sprite-model.py", "3.0.0.1", "3.0.1.1"] {
+            assert!(head.contains(word), "the head names `{word}`");
+        }
+        for topic in topics {
+            assert!(head.contains(topic), "the head names {topic}");
+        }
+        let statements = text.lines().filter(|line| !line.starts_with('#'));
+        for line in statements {
+            let word = line.split(' ').next().unwrap();
+            let known = [
+                "scene", "sprite", "plane", "viewport", "set", "flash", "update", "frame", "end",
+            ];
+            assert!(known.contains(&word), "`{line}`");
+            assert!(line.is_ascii() && line.len() < 400, "`{line}`");
+        }
+    }
+}

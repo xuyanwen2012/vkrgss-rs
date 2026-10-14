@@ -1,0 +1,337 @@
+# Turned sprites in viewports of RGSS3: the topics `atvp` (72 random turned sprites in
+# viewports with an origin, 8 frames) and `turnedvp` (48 turned sprites in viewports, the
+# probe of RGSS1 and RGSS2, 4 frames). In RGSS3 the box and the walk of a turned sprite
+# come from one position, the sprite's plus the viewport's rectangle position less its
+# origin.
+#
+# Measured on the original runtime of VX Ace on 2026-10-13 (RGSS300.dll 3.0.0.1 and
+# RGSS301.dll 3.0.1.1, the same pictures; report `ace-v1-sprite-REPORT.md`). The scenes are
+# those of the probes, made by formulas; the digest of a frame is that of the picture the
+# model of the measurement draws with its rule of RGSS3 (`ace-v1-sprite-model.py`: the model
+# of VX, `vx-v1-sprite-model.py`, with the one option `tv=fix`), which is the frame of the
+# original: the model has no wrong pixel on these topics. The format is that of
+# `vkxp_core::test_support::sprite_cases`, run with the rules of RGSS3.
+scene atvp-00
+sprite 1 - bitmap=bg z=-1000
+viewport 2 6 6 87 61 ox=30 oy=5
+sprite 3 2 bitmap=pat_24_16_a_3 x=52 y=75 ox=0 oy=-2 zoom_x=-2 zoom_y=1.5 angle=123.4 mirror=false tone=222,-61,206,128
+sprite 4 2 bitmap=pat_24_16_a_3 x=7 y=23 ox=5 oy=4 zoom_x=-2 zoom_y=1.3 angle=0.5 mirror=true
+viewport 5 182 2 109 51 ox=0 oy=20
+sprite 6 5 bitmap=pat_24_16_o_0 x=23 y=36 ox=-3 oy=4 zoom_x=2 zoom_y=-2 angle=0.5 mirror=true
+sprite 7 5 bitmap=pat_20_90_o_1 src_rect=2,22,13,43 x=40 y=75 ox=0 oy=-2 zoom_x=-1 zoom_y=1.5 angle=-90 mirror=true color=34,201,172,255 bush_depth=8
+viewport 8 334 20 69 109 ox=-25 oy=20
+sprite 9 8 bitmap=pat_24_16_a_3 src_rect=13,5,4,7 x=31 y=13 ox=12 oy=-2 zoom_x=-1 zoom_y=2.5 angle=200 mirror=true blend_type=1 color=112,255,14,158 tone=-58,205,-39,169
+sprite 10 8 bitmap=pat_24_16_o_0 x=53 y=9 ox=0 oy=8 zoom_x=-1 zoom_y=-1 angle=180 mirror=false color=244,135,251,0
+viewport 11 21 126 97 59 ox=0 oy=7
+sprite 12 11 bitmap=pat_20_90_o_1 x=92 y=72 ox=-3 oy=-2 zoom_x=1 zoom_y=0.5 angle=30 mirror=true opacity=124 tone=-77,-197,184,0
+sprite 13 11 bitmap=pat_24_16_a_3 src_rect=8,7,10,8 x=99 y=67 ox=12 oy=0 zoom_x=2 zoom_y=1 angle=360 mirror=false color=27,38,196,255 bush_depth=8
+viewport 14 174 135 94 63 ox=-25 oy=5
+sprite 15 14 bitmap=pat_20_90_o_1 x=98 y=5 ox=0 oy=-2 zoom_x=1 zoom_y=0.5 angle=0.5 mirror=false tone=50,44,-8,56
+sprite 16 14 bitmap=pat_24_16_o_0 x=6 y=54 ox=-3 oy=0 zoom_x=1 zoom_y=2.5 angle=45 mirror=false
+viewport 17 344 137 86 97 ox=30 oy=-6
+sprite 18 17 bitmap=pat_24_16_o_0 x=8 y=2 ox=0 oy=8 zoom_x=1 zoom_y=2.5 angle=-90 mirror=false
+sprite 19 17 bitmap=pat_24_16_o_0 src_rect=3,7,15,6 x=44 y=21 ox=0 oy=0 zoom_x=1.3 zoom_y=1.3 angle=360 mirror=false blend_type=1
+viewport 20 6 255 115 84 ox=1 oy=-15
+sprite 21 20 bitmap=pat_24_16_a_3 x=101 y=66 ox=5 oy=8 zoom_x=-1 zoom_y=-2 angle=0.5 mirror=false blend_type=1 tone=-86,-156,88,255
+sprite 22 20 bitmap=pat_24_16_a_3 src_rect=6,7,10,8 x=6 y=9 ox=-3 oy=0 zoom_x=1 zoom_y=1.3 angle=0.5 mirror=true bush_depth=3
+viewport 23 187 242 83 94 ox=0 oy=0
+sprite 24 23 bitmap=pat_20_90_o_1 x=48 y=38 ox=5 oy=-2 zoom_x=-2 zoom_y=-2 angle=720 mirror=false
+sprite 25 23 bitmap=pat_24_16_o_0 x=41 y=24 ox=0 oy=-2 zoom_x=2 zoom_y=1.3 angle=200 mirror=false blend_type=2
+viewport 26 333 248 124 71 ox=13 oy=1
+sprite 27 26 bitmap=pat_24_16_o_0 x=42 y=45 ox=5 oy=8 zoom_x=1 zoom_y=0.5 angle=30 mirror=false opacity=254 blend_type=2 tone=185,53,-95,165
+sprite 28 26 bitmap=pat_24_16_o_0 x=0 y=14 ox=5 oy=4 zoom_x=2.5 zoom_y=2.5 angle=-30 mirror=false blend_type=1 color=43,196,151,255 tone=-13,-166,196,0
+frame bd03991fb43964c7
+end
+scene atvp-01
+sprite 1 - bitmap=bg z=-1000
+viewport 2 17 0 68 97 ox=-7 oy=-15
+sprite 3 2 bitmap=pat_24_16_a_3 x=47 y=59 ox=12 oy=4 zoom_x=2 zoom_y=0.7 angle=90 mirror=true blend_type=2 tone=172,-120,64,0 bush_depth=8
+sprite 4 2 bitmap=pat_24_16_a_3 x=4 y=12 ox=5 oy=4 zoom_x=1.5 zoom_y=-1 angle=359 mirror=true opacity=251 color=72,11,39,173
+viewport 5 182 18 128 106 ox=13 oy=1
+sprite 6 5 bitmap=pat_24_16_o_0 x=50 y=63 ox=0 oy=0 zoom_x=-2 zoom_y=1 angle=12.5 mirror=false opacity=187 blend_type=2 color=148,80,184,255 bush_depth=20
+sprite 7 5 bitmap=pat_20_90_o_1 x=69 y=37 ox=0 oy=8 zoom_x=0.7 zoom_y=1.3 angle=-30 mirror=true color=162,163,149,0 bush_depth=20
+viewport 8 332 3 70 102 ox=13 oy=-6
+sprite 9 8 bitmap=pat_24_16_o_0 x=49 y=17 ox=0 oy=8 zoom_x=0.5 zoom_y=1 angle=180 mirror=false tone=99,-96,121,0
+sprite 10 8 bitmap=pat_24_16_a_3 x=10 y=69 ox=-3 oy=0 zoom_x=1.5 zoom_y=1.3 angle=359 mirror=false blend_type=2 bush_depth=20
+viewport 11 2 122 97 80 ox=9 oy=20
+sprite 12 11 bitmap=pat_24_16_a_3 x=92 y=78 ox=5 oy=-2 zoom_x=1.3 zoom_y=1 angle=200 mirror=false opacity=155 color=29,243,81,255 bush_depth=3
+sprite 13 11 bitmap=pat_24_16_o_0 x=54 y=32 ox=5 oy=0 zoom_x=1 zoom_y=0.7 angle=90 mirror=false color=168,231,64,86
+viewport 14 189 132 118 103 ox=-7 oy=0
+sprite 15 14 bitmap=pat_20_90_o_1 src_rect=2,34,7,50 x=36 y=8 ox=-3 oy=-2 zoom_x=1.5 zoom_y=-1 angle=270 mirror=true blend_type=1
+sprite 16 14 bitmap=pat_24_16_o_0 x=10 y=79 ox=5 oy=8 zoom_x=2.5 zoom_y=0.7 angle=200 mirror=true bush_depth=8
+viewport 17 335 124 117 80 ox=13 oy=0
+sprite 18 17 bitmap=pat_20_90_o_1 src_rect=7,54,4,25 x=89 y=36 ox=5 oy=0 zoom_x=0.7 zoom_y=1.3 angle=360 mirror=false blend_type=1 tone=-157,-153,-96,166
+sprite 19 17 bitmap=pat_24_16_a_3 src_rect=11,8,8,4 x=12 y=70 ox=12 oy=0 zoom_x=2 zoom_y=1 angle=180 mirror=false color=160,80,6,255
+viewport 20 0 247 135 75 ox=1 oy=5
+sprite 21 20 bitmap=pat_24_16_o_0 src_rect=1,5,7,10 x=106 y=1 ox=0 oy=8 zoom_x=2.5 zoom_y=2 angle=359 mirror=false bush_depth=20
+sprite 22 20 bitmap=pat_20_90_o_1 src_rect=2,24,14,9 x=85 y=35 ox=0 oy=8 zoom_x=0.7 zoom_y=1.5 angle=-30 mirror=true
+viewport 23 174 241 144 55 ox=9 oy=-15
+sprite 24 23 bitmap=pat_20_90_o_1 x=55 y=78 ox=5 oy=8 zoom_x=-2 zoom_y=2.5 angle=-30 mirror=true
+sprite 25 23 bitmap=pat_24_16_o_0 x=27 y=40 ox=-3 oy=4 zoom_x=0.5 zoom_y=1 angle=270 mirror=false blend_type=2
+viewport 26 350 258 61 100 ox=1 oy=5
+sprite 27 26 bitmap=pat_24_16_a_3 src_rect=11,5,11,7 x=74 y=12 ox=-3 oy=8 zoom_x=0.5 zoom_y=2 angle=359 mirror=false blend_type=1 color=5,91,254,0 bush_depth=3
+sprite 28 26 bitmap=pat_24_16_a_3 src_rect=1,4,9,10 x=55 y=4 ox=5 oy=8 zoom_x=1.3 zoom_y=1.5 angle=720 mirror=true tone=105,-119,-253,28 bush_depth=3
+frame b9f8639c70a52b86
+end
+scene atvp-02
+sprite 1 - bitmap=bg z=-1000
+viewport 2 15 20 91 53 ox=-25 oy=-15
+sprite 3 2 bitmap=pat_20_90_o_1 x=11 y=30 ox=0 oy=8 zoom_x=0.7 zoom_y=2 angle=720 mirror=true
+sprite 4 2 bitmap=pat_24_16_o_0 x=38 y=15 ox=-3 oy=0 zoom_x=-2 zoom_y=0.7 angle=12.5 mirror=true bush_depth=3
+viewport 5 166 1 98 66 ox=13 oy=0
+sprite 6 5 bitmap=pat_24_16_o_0 x=0 y=0 ox=-3 oy=0 zoom_x=1.3 zoom_y=1.5 angle=90 mirror=false blend_type=1 bush_depth=8
+sprite 7 5 bitmap=pat_24_16_a_3 src_rect=13,6,5,9 x=57 y=80 ox=0 oy=8 zoom_x=-1 zoom_y=-1 angle=270 mirror=false bush_depth=8
+viewport 8 348 16 80 101 ox=9 oy=-6
+sprite 9 8 bitmap=pat_20_90_o_1 src_rect=0,17,20,54 x=84 y=26 ox=0 oy=-2 zoom_x=0.7 zoom_y=1.5 angle=90 mirror=false color=29,221,138,255
+sprite 10 8 bitmap=pat_24_16_o_0 x=17 y=16 ox=12 oy=-2 zoom_x=2.5 zoom_y=0.7 angle=359 mirror=false opacity=136 tone=228,-194,63,255 bush_depth=20
+viewport 11 26 140 147 75 ox=13 oy=5
+sprite 12 11 bitmap=pat_24_16_a_3 src_rect=16,6,7,4 x=71 y=21 ox=5 oy=4 zoom_x=0.5 zoom_y=-1 angle=30 mirror=false color=45,2,17,0 tone=-61,-203,138,0
+sprite 13 11 bitmap=pat_24_16_a_3 x=21 y=34 ox=-3 oy=4 zoom_x=1.3 zoom_y=-1 angle=-90 mirror=false opacity=97 blend_type=1
+viewport 14 187 140 79 75 ox=30 oy=20
+sprite 15 14 bitmap=pat_24_16_a_3 src_rect=11,0,7,11 x=29 y=40 ox=12 oy=0 zoom_x=1.3 zoom_y=1.3 angle=12.5 mirror=false
+sprite 16 14 bitmap=pat_24_16_a_3 src_rect=8,5,16,6 x=79 y=71 ox=5 oy=8 zoom_x=1 zoom_y=2.5 angle=0.5 mirror=false
+viewport 17 329 134 146 68 ox=-25 oy=5
+sprite 18 17 bitmap=pat_24_16_o_0 x=23 y=62 ox=12 oy=0 zoom_x=1.3 zoom_y=2 angle=90 mirror=false
+sprite 19 17 bitmap=pat_24_16_o_0 src_rect=4,3,6,7 x=96 y=12 ox=0 oy=0 zoom_x=1.5 zoom_y=1 angle=200 mirror=false
+viewport 20 19 257 145 80 ox=-7 oy=7
+sprite 21 20 bitmap=pat_20_90_o_1 x=5 y=4 ox=5 oy=4 zoom_x=-1 zoom_y=1.5 angle=30 mirror=true color=70,200,153,218 tone=79,102,-98,128
+sprite 22 20 bitmap=pat_20_90_o_1 x=21 y=0 ox=-3 oy=-2 zoom_x=-1 zoom_y=-2 angle=-90 mirror=false
+viewport 23 173 257 121 61 ox=1 oy=0
+sprite 24 23 bitmap=pat_24_16_a_3 x=92 y=66 ox=5 oy=8 zoom_x=-2 zoom_y=0.5 angle=0.5 mirror=true blend_type=2
+sprite 25 23 bitmap=pat_20_90_o_1 src_rect=3,73,10,10 x=70 y=22 ox=-3 oy=-2 zoom_x=-2 zoom_y=1.5 angle=30 mirror=false blend_type=1 bush_depth=20
+viewport 26 348 252 137 69 ox=-7 oy=20
+sprite 27 26 bitmap=pat_24_16_o_0 x=97 y=31 ox=-3 oy=8 zoom_x=2 zoom_y=-1 angle=-30 mirror=false blend_type=2
+sprite 28 26 bitmap=pat_24_16_a_3 x=52 y=9 ox=5 oy=4 zoom_x=-2 zoom_y=2.5 angle=12.5 mirror=false opacity=41 tone=153,-146,104,36
+frame 731aebd730f77a48
+end
+scene atvp-03
+sprite 1 - bitmap=bg z=-1000
+viewport 2 10 7 114 66 ox=9 oy=7
+sprite 3 2 bitmap=pat_24_16_a_3 x=69 y=31 ox=5 oy=8 zoom_x=1.5 zoom_y=1 angle=123.4 mirror=false blend_type=1 color=216,22,58,255 tone=213,-142,127,4 bush_depth=3
+sprite 4 2 bitmap=pat_24_16_o_0 src_rect=13,6,10,6 x=14 y=58 ox=-3 oy=8 zoom_x=1.3 zoom_y=0.5 angle=360 mirror=false blend_type=2 color=1,21,137,39 tone=71,-78,-46,111 bush_depth=3
+viewport 5 169 8 73 83 ox=30 oy=7
+sprite 6 5 bitmap=pat_20_90_o_1 x=83 y=73 ox=0 oy=4 zoom_x=1 zoom_y=0.7 angle=0.5 mirror=false opacity=154 blend_type=1 color=173,195,145,0
+sprite 7 5 bitmap=pat_24_16_a_3 x=28 y=54 ox=-3 oy=-2 zoom_x=-2 zoom_y=-1 angle=-30 mirror=true blend_type=2 color=45,207,107,213 tone=-164,-170,-1,102
+viewport 8 332 15 74 89 ox=9 oy=20
+sprite 9 8 bitmap=pat_24_16_o_0 x=72 y=7 ox=0 oy=-2 zoom_x=1 zoom_y=1 angle=200 mirror=false opacity=158
+sprite 10 8 bitmap=pat_24_16_o_0 x=22 y=76 ox=5 oy=4 zoom_x=-2 zoom_y=0.7 angle=200 mirror=true tone=-147,215,1,128
+viewport 11 30 124 137 96 ox=9 oy=-15
+sprite 12 11 bitmap=pat_20_90_o_1 src_rect=4,73,9,12 x=59 y=25 ox=5 oy=4 zoom_x=1.5 zoom_y=2.5 angle=720 mirror=false blend_type=2 color=47,222,158,255 tone=51,195,-124,0
+sprite 13 11 bitmap=pat_24_16_o_0 src_rect=1,1,7,4 x=11 y=56 ox=5 oy=0 zoom_x=1.3 zoom_y=2.5 angle=720 mirror=false blend_type=2 tone=-18,-176,-28,102
+viewport 14 177 131 136 65 ox=1 oy=-6
+sprite 15 14 bitmap=pat_24_16_o_0 src_rect=3,8,8,5 x=107 y=20 ox=12 oy=0 zoom_x=2.5 zoom_y=2.5 angle=180 mirror=false tone=13,-12,3,120 bush_depth=3
+sprite 16 14 bitmap=pat_20_90_o_1 x=67 y=70 ox=12 oy=8 zoom_x=1.3 zoom_y=2 angle=-30 mirror=false opacity=47 blend_type=1 color=38,183,78,238
+viewport 17 337 120 142 73 ox=9 oy=1
+sprite 18 17 bitmap=pat_24_16_o_0 x=2 y=48 ox=-3 oy=8 zoom_x=-1 zoom_y=2 angle=123.4 mirror=false bush_depth=20
+sprite 19 17 bitmap=pat_24_16_o_0 src_rect=7,3,13,10 x=55 y=69 ox=0 oy=8 zoom_x=-2 zoom_y=1.5 angle=123.4 mirror=false blend_type=1 color=240,219,148,227 bush_depth=3
+viewport 20 5 248 136 62 ox=1 oy=5
+sprite 21 20 bitmap=pat_20_90_o_1 x=89 y=72 ox=-3 oy=8 zoom_x=1.3 zoom_y=-1 angle=360 mirror=false tone=-187,-177,-148,128
+sprite 22 20 bitmap=pat_24_16_a_3 x=34 y=21 ox=12 oy=8 zoom_x=0.7 zoom_y=0.5 angle=200 mirror=false opacity=224 blend_type=1
+viewport 23 162 241 70 88 ox=0 oy=-6
+sprite 24 23 bitmap=pat_20_90_o_1 x=20 y=53 ox=12 oy=-2 zoom_x=2.5 zoom_y=1.3 angle=0.5 mirror=false tone=-26,-125,-233,88 bush_depth=8
+sprite 25 23 bitmap=pat_24_16_o_0 x=3 y=43 ox=0 oy=4 zoom_x=1 zoom_y=0.5 angle=200 mirror=false bush_depth=20
+viewport 26 327 255 139 97 ox=0 oy=-15
+sprite 27 26 bitmap=pat_24_16_o_0 x=1 y=71 ox=12 oy=0 zoom_x=2.5 zoom_y=0.5 angle=359 mirror=true opacity=250 blend_type=1 color=209,65,99,255 tone=-252,-34,91,97
+sprite 28 26 bitmap=pat_24_16_o_0 x=61 y=68 ox=5 oy=0 zoom_x=-1 zoom_y=2 angle=720 mirror=true blend_type=2 color=129,203,156,210 tone=-144,-232,85,144 bush_depth=3
+frame afffaffe03a29390
+end
+scene atvp-04
+sprite 1 - bitmap=bg z=-1000
+viewport 2 26 3 122 93 ox=1 oy=7
+sprite 3 2 bitmap=pat_24_16_a_3 src_rect=14,1,4,10 x=24 y=78 ox=0 oy=-2 zoom_x=-1 zoom_y=0.7 angle=720 mirror=false
+sprite 4 2 bitmap=pat_24_16_a_3 x=53 y=34 ox=5 oy=4 zoom_x=-1 zoom_y=1 angle=270 mirror=true blend_type=1 color=213,202,117,0
+viewport 5 184 2 73 62 ox=0 oy=7
+sprite 6 5 bitmap=pat_24_16_o_0 x=100 y=34 ox=12 oy=4 zoom_x=0.7 zoom_y=1 angle=270 mirror=false
+sprite 7 5 bitmap=pat_24_16_a_3 x=63 y=10 ox=12 oy=-2 zoom_x=1.3 zoom_y=0.5 angle=720 mirror=false opacity=192
+viewport 8 321 9 79 106 ox=9 oy=1
+sprite 9 8 bitmap=pat_24_16_o_0 src_rect=15,6,8,5 x=78 y=52 ox=0 oy=-2 zoom_x=1 zoom_y=0.7 angle=-90 mirror=true opacity=208 blend_type=1 tone=131,-107,-173,35
+sprite 10 8 bitmap=pat_20_90_o_1 x=15 y=5 ox=0 oy=0 zoom_x=-1 zoom_y=1.5 angle=270 mirror=false tone=-76,60,136,128 bush_depth=20
+viewport 11 18 140 115 90 ox=30 oy=7
+sprite 12 11 bitmap=pat_20_90_o_1 x=93 y=10 ox=5 oy=8 zoom_x=1 zoom_y=0.5 angle=720 mirror=true blend_type=2 color=254,229,92,0 bush_depth=20
+sprite 13 11 bitmap=pat_20_90_o_1 src_rect=3,52,10,6 x=107 y=37 ox=0 oy=4 zoom_x=1.3 zoom_y=0.5 angle=180 mirror=false blend_type=2 tone=134,-137,-193,0 bush_depth=20
+viewport 14 189 128 120 108 ox=-25 oy=0
+sprite 15 14 bitmap=pat_24_16_o_0 x=38 y=44 ox=0 oy=4 zoom_x=-1 zoom_y=1.5 angle=-90 mirror=false opacity=234 color=14,81,135,255
+sprite 16 14 bitmap=pat_20_90_o_1 x=7 y=7 ox=-3 oy=-2 zoom_x=-2 zoom_y=-1 angle=360 mirror=false color=218,153,185,255
+viewport 17 345 136 111 57 ox=-7 oy=1
+sprite 18 17 bitmap=pat_20_90_o_1 src_rect=6,15,9,35 x=90 y=46 ox=0 oy=0 zoom_x=0.7 zoom_y=1.5 angle=200 mirror=false opacity=237 blend_type=2 bush_depth=8
+sprite 19 17 bitmap=pat_24_16_o_0 x=55 y=45 ox=-3 oy=8 zoom_x=0.5 zoom_y=2.5 angle=-30 mirror=false blend_type=2 bush_depth=3
+viewport 20 19 245 100 89 ox=9 oy=-6
+sprite 21 20 bitmap=pat_24_16_o_0 x=82 y=56 ox=12 oy=0 zoom_x=2 zoom_y=1 angle=200 mirror=false opacity=112 blend_type=1 color=173,62,80,5
+sprite 22 20 bitmap=pat_24_16_o_0 src_rect=11,7,5,7 x=43 y=20 ox=12 oy=8 zoom_x=-1 zoom_y=1 angle=0.5 mirror=true
+viewport 23 173 243 139 73 ox=13 oy=7
+sprite 24 23 bitmap=pat_24_16_o_0 x=21 y=21 ox=-3 oy=4 zoom_x=2 zoom_y=1 angle=12.5 mirror=true
+sprite 25 23 bitmap=pat_24_16_a_3 src_rect=14,3,8,4 x=99 y=30 ox=5 oy=-2 zoom_x=1.5 zoom_y=1.3 angle=0.5 mirror=false
+viewport 26 321 240 105 77 ox=13 oy=0
+sprite 27 26 bitmap=pat_20_90_o_1 x=62 y=62 ox=-3 oy=8 zoom_x=-2 zoom_y=1 angle=0.5 mirror=true bush_depth=8
+sprite 28 26 bitmap=pat_24_16_o_0 x=11 y=14 ox=-3 oy=8 zoom_x=1 zoom_y=2 angle=123.4 mirror=false opacity=245 bush_depth=20
+frame fe1e8d073313b89f
+end
+scene atvp-05
+sprite 1 - bitmap=bg z=-1000
+viewport 2 27 10 61 97 ox=30 oy=-15
+sprite 3 2 bitmap=pat_20_90_o_1 x=97 y=4 ox=0 oy=0 zoom_x=1 zoom_y=-1 angle=45 mirror=true
+sprite 4 2 bitmap=pat_20_90_o_1 src_rect=5,6,4,41 x=4 y=38 ox=0 oy=-2 zoom_x=0.7 zoom_y=1.3 angle=360 mirror=false blend_type=2 color=243,47,160,255 bush_depth=20
+viewport 5 174 8 140 108 ox=9 oy=20
+sprite 6 5 bitmap=pat_20_90_o_1 x=71 y=65 ox=0 oy=8 zoom_x=1 zoom_y=-1 angle=200 mirror=false
+sprite 7 5 bitmap=pat_20_90_o_1 x=41 y=0 ox=-3 oy=0 zoom_x=1.5 zoom_y=-2 angle=359 mirror=false
+viewport 8 346 19 82 59 ox=13 oy=-15
+sprite 9 8 bitmap=pat_20_90_o_1 x=11 y=27 ox=-3 oy=-2 zoom_x=-1 zoom_y=2 angle=-90 mirror=true bush_depth=20
+sprite 10 8 bitmap=pat_24_16_o_0 x=41 y=9 ox=12 oy=-2 zoom_x=-1 zoom_y=1.3 angle=-30 mirror=false tone=104,183,208,128
+viewport 11 11 138 79 107 ox=0 oy=7
+sprite 12 11 bitmap=pat_20_90_o_1 x=8 y=44 ox=12 oy=-2 zoom_x=-1 zoom_y=0.5 angle=200 mirror=false opacity=146 color=153,205,101,255 tone=-99,100,236,0
+sprite 13 11 bitmap=pat_20_90_o_1 x=0 y=33 ox=12 oy=8 zoom_x=2 zoom_y=1.5 angle=359 mirror=false blend_type=1 tone=-218,-78,-164,161
+viewport 14 188 131 71 88 ox=1 oy=-6
+sprite 15 14 bitmap=pat_24_16_a_3 x=36 y=35 ox=0 oy=4 zoom_x=2.5 zoom_y=-1 angle=0.5 mirror=false tone=5,-73,-194,255 bush_depth=20
+sprite 16 14 bitmap=pat_20_90_o_1 x=94 y=10 ox=-3 oy=8 zoom_x=2.5 zoom_y=1 angle=180 mirror=false blend_type=1
+viewport 17 349 122 79 66 ox=1 oy=-15
+sprite 18 17 bitmap=pat_24_16_o_0 x=16 y=38 ox=-3 oy=0 zoom_x=-1 zoom_y=1.3 angle=45 mirror=false blend_type=1 color=229,35,80,255 tone=205,81,239,128
+sprite 19 17 bitmap=pat_24_16_o_0 x=28 y=10 ox=0 oy=0 zoom_x=-2 zoom_y=1.5 angle=270 mirror=false bush_depth=3
+viewport 20 24 251 76 92 ox=-7 oy=5
+sprite 21 20 bitmap=pat_20_90_o_1 x=87 y=22 ox=5 oy=0 zoom_x=0.7 zoom_y=-1 angle=30 mirror=false color=246,223,74,226
+sprite 22 20 bitmap=pat_24_16_a_3 x=16 y=47 ox=12 oy=8 zoom_x=1.3 zoom_y=2.5 angle=180 mirror=false color=227,243,142,255 tone=135,-155,-125,255 bush_depth=20
+viewport 23 175 240 104 81 ox=-7 oy=7
+sprite 24 23 bitmap=pat_24_16_a_3 x=42 y=50 ox=0 oy=-2 zoom_x=1.5 zoom_y=2.5 angle=720 mirror=true color=155,190,236,0
+sprite 25 23 bitmap=pat_20_90_o_1 x=47 y=62 ox=0 oy=0 zoom_x=-2 zoom_y=1 angle=360 mirror=false color=233,106,87,0
+viewport 26 341 247 87 69 ox=0 oy=1
+sprite 27 26 bitmap=pat_20_90_o_1 x=53 y=77 ox=0 oy=8 zoom_x=1 zoom_y=-1 angle=200 mirror=true blend_type=1
+sprite 28 26 bitmap=pat_20_90_o_1 x=46 y=58 ox=-3 oy=-2 zoom_x=2.5 zoom_y=2.5 angle=123.4 mirror=true tone=-141,-137,78,255 bush_depth=20
+frame 978455d1f3c1e4f2
+end
+scene atvp-06
+sprite 1 - bitmap=bg z=-1000
+viewport 2 27 8 141 66 ox=30 oy=0
+sprite 3 2 bitmap=pat_24_16_a_3 x=55 y=46 ox=12 oy=8 zoom_x=1 zoom_y=1 angle=-30 mirror=true tone=-83,-197,195,0
+sprite 4 2 bitmap=pat_24_16_o_0 x=72 y=66 ox=0 oy=0 zoom_x=0.7 zoom_y=1.3 angle=90 mirror=false color=247,180,47,0 bush_depth=8
+viewport 5 185 13 73 104 ox=13 oy=5
+sprite 6 5 bitmap=pat_20_90_o_1 x=34 y=40 ox=-3 oy=-2 zoom_x=0.7 zoom_y=-2 angle=0.5 mirror=false color=88,105,177,204 bush_depth=3
+sprite 7 5 bitmap=pat_24_16_a_3 x=57 y=64 ox=5 oy=-2 zoom_x=-1 zoom_y=1.5 angle=123.4 mirror=false bush_depth=20
+viewport 8 329 9 116 80 ox=-7 oy=5
+sprite 9 8 bitmap=pat_24_16_o_0 src_rect=11,8,13,6 x=29 y=25 ox=12 oy=-2 zoom_x=-2 zoom_y=2 angle=360 mirror=false color=132,126,48,245
+sprite 10 8 bitmap=pat_24_16_a_3 x=8 y=63 ox=12 oy=0 zoom_x=1.5 zoom_y=2.5 angle=180 mirror=true blend_type=1 tone=4,226,-195,255
+viewport 11 3 129 139 68 ox=1 oy=-6
+sprite 12 11 bitmap=pat_20_90_o_1 src_rect=11,64,6,9 x=42 y=80 ox=5 oy=4 zoom_x=1 zoom_y=-2 angle=45 mirror=false blend_type=2
+sprite 13 11 bitmap=pat_20_90_o_1 x=17 y=75 ox=5 oy=0 zoom_x=1 zoom_y=1 angle=720 mirror=false
+viewport 14 189 121 149 76 ox=0 oy=7
+sprite 15 14 bitmap=pat_20_90_o_1 x=93 y=33 ox=5 oy=-2 zoom_x=2 zoom_y=1.3 angle=-30 mirror=true
+sprite 16 14 bitmap=pat_24_16_a_3 src_rect=2,8,11,5 x=25 y=34 ox=12 oy=4 zoom_x=-2 zoom_y=0.5 angle=123.4 mirror=true blend_type=1 color=87,131,105,0 tone=-208,-188,-35,128
+viewport 17 345 138 79 58 ox=-7 oy=7
+sprite 18 17 bitmap=pat_24_16_a_3 src_rect=2,3,20,7 x=16 y=80 ox=5 oy=0 zoom_x=2.5 zoom_y=2 angle=123.4 mirror=true opacity=83 blend_type=2 tone=71,130,246,0
+sprite 19 17 bitmap=pat_20_90_o_1 x=27 y=67 ox=5 oy=0 zoom_x=1 zoom_y=2.5 angle=270 mirror=true opacity=142 blend_type=1 tone=93,141,195,0
+viewport 20 19 255 63 100 ox=1 oy=-15
+sprite 21 20 bitmap=pat_24_16_a_3 x=19 y=10 ox=5 oy=4 zoom_x=1.5 zoom_y=2.5 angle=90 mirror=false bush_depth=20
+sprite 22 20 bitmap=pat_20_90_o_1 src_rect=5,16,15,56 x=82 y=13 ox=5 oy=-2 zoom_x=2 zoom_y=1 angle=45 mirror=false opacity=201 bush_depth=8
+viewport 23 160 260 74 97 ox=13 oy=20
+sprite 24 23 bitmap=pat_20_90_o_1 x=66 y=44 ox=-3 oy=0 zoom_x=2 zoom_y=2 angle=-30 mirror=false
+sprite 25 23 bitmap=pat_20_90_o_1 x=7 y=1 ox=-3 oy=8 zoom_x=1 zoom_y=-1 angle=123.4 mirror=true tone=31,-179,-228,128 bush_depth=20
+viewport 26 344 260 136 101 ox=-7 oy=5
+sprite 27 26 bitmap=pat_24_16_a_3 src_rect=14,5,4,9 x=101 y=35 ox=0 oy=0 zoom_x=2 zoom_y=1.3 angle=90 mirror=false tone=205,115,133,255 bush_depth=3
+sprite 28 26 bitmap=pat_24_16_a_3 x=2 y=0 ox=5 oy=4 zoom_x=0.5 zoom_y=1.5 angle=30 mirror=false color=41,131,31,255 bush_depth=3
+frame 03b1646c59bc338e
+end
+scene atvp-07
+sprite 1 - bitmap=bg z=-1000
+viewport 2 7 15 103 55 ox=0 oy=7
+sprite 3 2 bitmap=pat_24_16_a_3 x=52 y=58 ox=0 oy=0 zoom_x=1 zoom_y=2.5 angle=720 mirror=true blend_type=1
+sprite 4 2 bitmap=pat_20_90_o_1 x=0 y=80 ox=5 oy=0 zoom_x=1 zoom_y=1.5 angle=45 mirror=false color=154,156,202,29
+viewport 5 168 18 147 106 ox=0 oy=20
+sprite 6 5 bitmap=pat_20_90_o_1 x=105 y=42 ox=0 oy=4 zoom_x=2.5 zoom_y=1.5 angle=90 mirror=false bush_depth=8
+sprite 7 5 bitmap=pat_24_16_a_3 x=11 y=64 ox=12 oy=4 zoom_x=1.3 zoom_y=2 angle=720 mirror=false
+viewport 8 328 9 78 107 ox=0 oy=7
+sprite 9 8 bitmap=pat_20_90_o_1 x=72 y=44 ox=-3 oy=0 zoom_x=-2 zoom_y=-2 angle=200 mirror=false bush_depth=8
+sprite 10 8 bitmap=pat_24_16_a_3 src_rect=0,0,20,7 x=78 y=56 ox=12 oy=0 zoom_x=1.5 zoom_y=1 angle=180 mirror=false
+viewport 11 3 132 87 72 ox=-25 oy=-6
+sprite 12 11 bitmap=pat_24_16_o_0 x=95 y=30 ox=-3 oy=-2 zoom_x=-2 zoom_y=2.5 angle=0.5 mirror=false blend_type=1 bush_depth=20
+sprite 13 11 bitmap=pat_20_90_o_1 x=29 y=65 ox=-3 oy=0 zoom_x=1 zoom_y=2 angle=12.5 mirror=false opacity=100
+viewport 14 182 137 109 80 ox=13 oy=0
+sprite 15 14 bitmap=pat_24_16_o_0 x=94 y=71 ox=0 oy=0 zoom_x=0.7 zoom_y=-1 angle=0.5 mirror=false color=159,166,146,0 bush_depth=8
+sprite 16 14 bitmap=pat_24_16_o_0 x=39 y=7 ox=5 oy=8 zoom_x=2.5 zoom_y=1 angle=12.5 mirror=false blend_type=2 tone=-147,-126,206,0 bush_depth=3
+viewport 17 320 136 64 69 ox=30 oy=-15
+sprite 18 17 bitmap=pat_20_90_o_1 x=17 y=32 ox=5 oy=0 zoom_x=-2 zoom_y=-2 angle=359 mirror=false opacity=130 bush_depth=8
+sprite 19 17 bitmap=pat_20_90_o_1 x=104 y=71 ox=12 oy=0 zoom_x=1 zoom_y=1.5 angle=359 mirror=true
+viewport 20 8 257 87 89 ox=-25 oy=7
+sprite 21 20 bitmap=pat_24_16_o_0 x=43 y=40 ox=0 oy=8 zoom_x=0.7 zoom_y=-1 angle=123.4 mirror=true color=133,246,59,0 tone=-58,9,-4,46
+sprite 22 20 bitmap=pat_24_16_a_3 x=92 y=59 ox=-3 oy=4 zoom_x=2.5 zoom_y=2.5 angle=180 mirror=true color=90,73,2,0
+viewport 23 172 245 104 71 ox=-7 oy=5
+sprite 24 23 bitmap=pat_24_16_o_0 x=84 y=74 ox=5 oy=-2 zoom_x=1.3 zoom_y=1 angle=12.5 mirror=true bush_depth=8
+sprite 25 23 bitmap=pat_20_90_o_1 src_rect=9,49,8,5 x=78 y=48 ox=0 oy=8 zoom_x=1 zoom_y=2.5 angle=12.5 mirror=false opacity=204 tone=-11,-164,-228,128
+viewport 26 339 251 148 95 ox=-25 oy=5
+sprite 27 26 bitmap=pat_24_16_a_3 x=101 y=48 ox=12 oy=-2 zoom_x=2.5 zoom_y=1 angle=270 mirror=false
+sprite 28 26 bitmap=pat_24_16_a_3 x=68 y=28 ox=0 oy=8 zoom_x=1 zoom_y=1.5 angle=30 mirror=false color=191,36,200,255
+frame e060ba8fd213b79b
+end
+scene turnedvp-00
+viewport 1 20 15 110 80 ox=0 oy=0
+sprite 2 1 bitmap=pat_24_16_o_0 x=55 y=40 ox=12 oy=8 zoom_x=2 zoom_y=2 angle=30 mirror=false bush_depth=0
+viewport 3 180 15 110 80 ox=13 oy=7
+sprite 4 3 bitmap=pat_24_16_o_0 x=68 y=47 ox=12 oy=8 zoom_x=2 zoom_y=2 angle=30 mirror=false bush_depth=0
+viewport 5 340 15 110 80 ox=-9 oy=-5
+sprite 6 5 bitmap=pat_24_16_o_0 x=46 y=35 ox=12 oy=8 zoom_x=2 zoom_y=2 angle=30 mirror=false bush_depth=0
+viewport 7 33 147 90 70 ox=13 oy=7
+sprite 8 7 bitmap=pat_24_16_o_0 x=68 y=47 ox=12 oy=8 zoom_x=2 zoom_y=2 angle=30 mirror=false bush_depth=0
+viewport 9 180 135 110 80 ox=0 oy=0
+sprite 10 9 bitmap=pat_24_16_o_0 x=55 y=40 ox=12 oy=8 zoom_x=2 zoom_y=2 angle=90 mirror=false bush_depth=0
+viewport 11 340 135 110 80 ox=13 oy=7
+sprite 12 11 bitmap=pat_24_16_o_0 x=68 y=47 ox=12 oy=8 zoom_x=2 zoom_y=2 angle=90 mirror=false bush_depth=0
+viewport 13 20 255 110 80 ox=-9 oy=-5
+sprite 14 13 bitmap=pat_24_16_o_0 x=46 y=35 ox=12 oy=8 zoom_x=2 zoom_y=2 angle=90 mirror=false bush_depth=0
+viewport 15 193 267 90 70 ox=13 oy=7
+sprite 16 15 bitmap=pat_24_16_o_0 x=68 y=47 ox=12 oy=8 zoom_x=2 zoom_y=2 angle=90 mirror=false bush_depth=0
+viewport 17 340 255 110 80 ox=0 oy=0
+sprite 18 17 bitmap=pat_24_16_o_0 x=55 y=40 ox=12 oy=8 zoom_x=2 zoom_y=2 angle=180 mirror=false bush_depth=0
+frame 4d337f2087f7c0f4
+end
+scene turnedvp-01
+viewport 1 20 15 110 80 ox=13 oy=7
+sprite 2 1 bitmap=pat_24_16_o_0 x=68 y=47 ox=12 oy=8 zoom_x=2 zoom_y=2 angle=180 mirror=false bush_depth=0
+viewport 3 180 15 110 80 ox=-9 oy=-5
+sprite 4 3 bitmap=pat_24_16_o_0 x=46 y=35 ox=12 oy=8 zoom_x=2 zoom_y=2 angle=180 mirror=false bush_depth=0
+viewport 5 353 27 90 70 ox=13 oy=7
+sprite 6 5 bitmap=pat_24_16_o_0 x=68 y=47 ox=12 oy=8 zoom_x=2 zoom_y=2 angle=180 mirror=false bush_depth=0
+viewport 7 20 135 110 80 ox=0 oy=0
+sprite 8 7 bitmap=pat_24_16_o_0 x=55 y=40 ox=12 oy=8 zoom_x=1.5 zoom_y=2.5 angle=45 mirror=true bush_depth=0
+viewport 9 180 135 110 80 ox=13 oy=7
+sprite 10 9 bitmap=pat_24_16_o_0 x=68 y=47 ox=12 oy=8 zoom_x=1.5 zoom_y=2.5 angle=45 mirror=true bush_depth=0
+viewport 11 340 135 110 80 ox=-9 oy=-5
+sprite 12 11 bitmap=pat_24_16_o_0 x=46 y=35 ox=12 oy=8 zoom_x=1.5 zoom_y=2.5 angle=45 mirror=true bush_depth=0
+viewport 13 33 267 90 70 ox=13 oy=7
+sprite 14 13 bitmap=pat_24_16_o_0 x=68 y=47 ox=12 oy=8 zoom_x=1.5 zoom_y=2.5 angle=45 mirror=true bush_depth=0
+viewport 15 180 255 110 80 ox=13 oy=7
+sprite 16 15 bitmap=pat_24_16_o_0 x=18 y=47 ox=12 oy=8 zoom_x=2 zoom_y=2 angle=30 mirror=false bush_depth=0
+viewport 17 340 255 110 80 ox=13 oy=7
+sprite 18 17 bitmap=pat_24_16_o_0 x=118 y=47 ox=12 oy=8 zoom_x=2 zoom_y=2 angle=30 mirror=false bush_depth=0
+frame d52c2e73923ebc8c
+end
+scene turnedvp-02
+viewport 1 20 15 110 80 ox=13 oy=7
+sprite 2 1 bitmap=pat_24_16_o_0 x=68 y=10 ox=12 oy=8 zoom_x=2 zoom_y=2 angle=30 mirror=false bush_depth=0
+viewport 3 180 15 110 80 ox=13 oy=7
+sprite 4 3 bitmap=pat_24_16_o_0 x=68 y=84 ox=12 oy=8 zoom_x=2 zoom_y=2 angle=30 mirror=false bush_depth=0
+viewport 5 351 22 97 71 ox=100 oy=-50
+sprite 6 5 bitmap=pat_24_16_o_0 x=105 y=-10 ox=0 oy=0 zoom_x=1 zoom_y=1 angle=30 mirror=false bush_depth=0
+viewport 7 31 142 97 71 ox=100 oy=-50
+sprite 8 7 bitmap=pat_24_16_o_0 x=205 y=-10 ox=0 oy=0 zoom_x=1 zoom_y=1 angle=30 mirror=false bush_depth=0
+viewport 9 191 142 97 71 ox=100 oy=-50
+sprite 10 9 bitmap=pat_24_16_o_0 x=155 y=-47 ox=0 oy=0 zoom_x=1 zoom_y=1 angle=30 mirror=false bush_depth=0
+viewport 11 351 142 97 71 ox=100 oy=-50
+sprite 12 11 bitmap=pat_24_16_o_0 x=155 y=27 ox=0 oy=0 zoom_x=1 zoom_y=1 angle=30 mirror=false bush_depth=0
+viewport 13 20 255 110 80 ox=13 oy=7
+sprite 14 13 bitmap=pat_24_16_o_0 x=18 y=47 ox=12 oy=8 zoom_x=2 zoom_y=2 angle=200 mirror=false bush_depth=0
+viewport 15 180 255 110 80 ox=13 oy=7
+sprite 16 15 bitmap=pat_24_16_o_0 x=118 y=47 ox=12 oy=8 zoom_x=2 zoom_y=2 angle=200 mirror=false bush_depth=0
+viewport 17 340 255 110 80 ox=13 oy=7
+sprite 18 17 bitmap=pat_24_16_o_0 x=68 y=10 ox=12 oy=8 zoom_x=2 zoom_y=2 angle=200 mirror=false bush_depth=0
+frame 6198398f7dc73c4c
+end
+scene turnedvp-03
+viewport 1 20 15 110 80 ox=13 oy=7
+sprite 2 1 bitmap=pat_24_16_o_0 x=68 y=84 ox=12 oy=8 zoom_x=2 zoom_y=2 angle=200 mirror=false bush_depth=0
+viewport 3 191 22 97 71 ox=100 oy=-50
+sprite 4 3 bitmap=pat_24_16_o_0 x=105 y=-10 ox=0 oy=0 zoom_x=1 zoom_y=1 angle=200 mirror=false bush_depth=0
+viewport 5 351 22 97 71 ox=100 oy=-50
+sprite 6 5 bitmap=pat_24_16_o_0 x=205 y=-10 ox=0 oy=0 zoom_x=1 zoom_y=1 angle=200 mirror=false bush_depth=0
+viewport 7 31 142 97 71 ox=100 oy=-50
+sprite 8 7 bitmap=pat_24_16_o_0 x=155 y=-47 ox=0 oy=0 zoom_x=1 zoom_y=1 angle=200 mirror=false bush_depth=0
+viewport 9 191 142 97 71 ox=100 oy=-50
+sprite 10 9 bitmap=pat_24_16_o_0 x=155 y=27 ox=0 oy=0 zoom_x=1 zoom_y=1 angle=200 mirror=false bush_depth=0
+frame 0a242bc3d4cd91a6
+end
