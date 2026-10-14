@@ -1,0 +1,658 @@
+//! The built `vkxp` executable, run headless on games of RGSS3 written here without an
+//! interpreter (`support::ace`): the scenarios of `game-launch` and `rgss-runtime` that need
+//! the program and its guest executable `vkxp-guest-rgss3` together.
+//!
+//! The program finds the guest executable beside its own file, as a player's does; cargo
+//! puts the binaries of the workspace into one directory, and builds the binary of
+//! `vkxp-guest-rgss3` before any test runs when that package is selected too. Each test
+//! checks first that the file is there.
+//!
+//! The file is empty on every target but the one Ruby 1.9.2 is built for.
+#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use tempfile::TempDir;
+use vkxp_binding::testing::host::{Game, RGSS3_STAND_IN};
+use vkxp_vfs::Runtime;
+
+mod support;
+
+use support::ace::{AceGame, script_archive};
+use support::*;
+
+/// The command that builds and tests the program together with its guest executable.
+const BOTH: &str = "cargo test -p vkxp -p vkxp-guest-rgss3";
+
+/// The guest executable beside the program under test. Fails the test, before any child is
+/// started, when it is not there.
+fn guest_executable() -> PathBuf {
+    let guest = Path::new(env!("CARGO_BIN_EXE_vkxp")).with_file_name("vkxp-guest-rgss3");
+    assert!(
+        guest.is_file(),
+        "there is no guest executable {} beside the program, which runs the games of RGSS3 \
+         in it: build and test both with `{BOTH}`",
+        guest.display()
+    );
+    guest
+}
+
+/// Runs `game` headless as [`headless`] does, once the guest executable is known to be there.
+fn ace(game: &impl TestGame, arguments: &[&str]) -> Ran {
+    guest_executable();
+    headless(game, arguments)
+}
+
+/// A copy of the program alone in a directory of its own, with the files of `beside` next
+/// to it.
+fn copy_of_the_program(beside: &[&Path]) -> (TempDir, PathBuf) {
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    let program = dir.path().join("vkxp");
+    fs::copy(env!("CARGO_BIN_EXE_vkxp"), &program).expect("the program is copied");
+    for file in beside {
+        let name = file.file_name().expect("a file name");
+        fs::copy(file, dir.path().join(name)).expect("the file is copied");
+    }
+    (dir, program)
+}
+
+/// Runs `program`, a copy of the program, headless on `game`.
+fn copy_headless(program: &Path, game: &impl TestGame, arguments: &[&str]) -> Ran {
+    let work = tempfile::tempdir().expect("a temporary directory");
+    let arguments = headless_arguments(game, arguments);
+    let arguments: Vec<&str> = arguments.iter().map(String::as_str).collect();
+    let output = command_of(program, work.path(), &arguments)
+        .output()
+        .expect("the program starts");
+    Ran { output, work }
+}
+
+/// A script that writes `value`, a Ruby expression, to `name` in the game directory.
+fn writes(name: &str, value: &str) -> String {
+    format!("File.open('{name}', 'w') {{ |file| file.write(({value}).to_s) }}")
+}
+
+/// A game of RGSS3 whose one script would leave `ran.txt` in the game directory.
+fn ran_game(name: &str) -> AceGame {
+    AceGame::new(name, "Ace", &[("Main", &writes("ran.txt", "'ran'"))])
+}
+
+/// Whether a script of `game` left `ran.txt`.
+fn script_ran(game: &impl TestGame) -> bool {
+    game.dir().join("ran.txt").exists()
+}
+
+/// What a script of `game` wrote to `name`.
+fn written(game: &impl TestGame, name: &str) -> String {
+    fs::read_to_string(game.dir().join(name))
+        .unwrap_or_else(|error| panic!("{name} of {}: {error}", game.dir().display()))
+}
+
+// --- The guest executable ---------------------------------------------------------------------
+
+/// Requirement "Executable of the guest process", scenario "Missing guest executable".
+#[test]
+fn a_copy_of_the_program_alone_names_the_missing_guest_executable() {
+    let game = ran_game("ace-alone");
+    let (dir, program) = copy_of_the_program(&[]);
+    let ran = copy_headless(&program, &game, &[]);
+    ran.assert_failure();
+    let stderr = ran.stderr();
+    assert!(stderr.contains("vkxp-guest-rgss3"), "{stderr}");
+    assert!(
+        stderr.contains(&dir.path().display().to_string()),
+        "{stderr}"
+    );
+    assert!(!script_ran(&game));
+}
+
+/// Requirement "Executable of the guest process", scenario "A guest executable that ends at
+/// once".
+#[test]
+fn a_guest_executable_that_ends_at_once_is_reported_with_its_status() {
+    let game = ran_game("ace-ends-at-once");
+    let stand_in = tempfile::tempdir().unwrap();
+    let script = stand_in.path().join("vkxp-guest-rgss3");
+    fs::write(
+        &script,
+        "#!/bin/sh\necho 'a stand-in of the guest executable' >&2\nexit 3\n",
+    )
+    .unwrap();
+    let (_dir, program) = copy_of_the_program(&[&script]);
+    let ran = copy_headless(&program, &game, &[]);
+    ran.assert_failure();
+    let stderr = ran.stderr();
+    assert!(stderr.contains("guest process"), "{stderr}");
+    assert!(stderr.contains('3'), "{stderr}");
+    assert!(!script_ran(&game));
+}
+
+/// Requirement "Executable of the guest process", scenario "XP and VX need no second file".
+#[test]
+fn a_copy_of_the_program_alone_runs_games_of_xp_and_vx_in_a_process() {
+    let (_dir, program) = copy_of_the_program(&[]);
+    for runtime in [Runtime::Rgss1, Runtime::Rgss2] {
+        let game = Game::of(
+            runtime,
+            &format!("ace-alone-{}", runtime.name()),
+            "Alone",
+            &[("Main", &writes("ran.txt", "'ran'"))],
+        );
+        let ran = copy_headless(&program, &game, &["--guest", "process"]);
+        ran.assert_success();
+        assert!(script_ran(&game), "{}", runtime.name());
+    }
+}
+
+/// Requirement "Release package holds both executables", scenario "The two files are
+/// enough".
+#[test]
+fn the_program_and_the_guest_executable_alone_run_a_game_of_vx_ace() {
+    let game = ran_game("ace-two-files");
+    let (_dir, program) = copy_of_the_program(&[&guest_executable()]);
+    copy_headless(&program, &game, &[]).assert_success();
+    assert!(script_ran(&game));
+}
+
+// --- The form of the guest --------------------------------------------------------------------
+
+/// Requirement "Guest option", scenario "Headless default of VX Ace".
+#[test]
+fn a_headless_run_of_vx_ace_has_its_guest_in_a_process() {
+    let game = AceGame::new("ace-headless-default", "Ace", &[("Main", "nil")]);
+    let ran = ace(&game, &["--verbose"]);
+    ran.assert_success();
+    assert_eq!(
+        attached_processes(&ran.stderr()).len(),
+        1,
+        "{}",
+        ran.stderr()
+    );
+}
+
+/// Requirement "Guest option", scenario "Thread with VX Ace".
+#[test]
+fn a_thread_chosen_for_vx_ace_ends_the_run_naming_the_process() {
+    let game = ran_game("ace-thread");
+    let check = |ran: Ran| {
+        ran.assert_failure();
+        let stderr = ran.stderr();
+        assert!(stderr.contains("RPG Maker VX Ace"), "{stderr}");
+        assert!(stderr.contains("--guest process"), "{stderr}");
+    };
+    check(ace(&game, &["--guest", "thread"]));
+    let work = tempfile::tempdir().unwrap();
+    let arguments = headless_arguments(&game, &[]);
+    let arguments: Vec<&str> = arguments.iter().map(String::as_str).collect();
+    let output = command(work.path(), &arguments)
+        .env("VKXP_GUEST", "thread")
+        .output()
+        .expect("the program starts");
+    check(Ran { output, work });
+    assert!(!script_ran(&game));
+}
+
+// --- A game of VX Ace runs --------------------------------------------------------------------
+
+/// The script of the scenario "Ace game": the version of Ruby, and a red sprite for three
+/// frames.
+fn red_sprite_script() -> String {
+    format!(
+        "{}
+sprite = Sprite.new
+sprite.bitmap = Bitmap.new(32, 32)
+sprite.bitmap.fill_rect(0, 0, 32, 32, Color.new(255, 0, 0))
+sprite.x = 10
+sprite.y = 20
+3.times {{ Graphics.update }}",
+        writes("version.txt", "RUBY_VERSION")
+    )
+}
+
+#[track_caller]
+fn assert_red_sprite_run(game: &AceGame, ran: &Ran) {
+    ran.assert_success();
+    assert_eq!(written(game, "version.txt"), "1.9.2");
+    let frame = ran.frame("frame.png");
+    assert_eq!((frame.width, frame.height), (544, 416));
+    assert_eq!(frame.pixel(10, 20), RED);
+    assert_ne!(frame.pixel(9, 20), RED);
+}
+
+/// Requirement "A game of VX Ace runs", scenario "Ace game".
+#[test]
+fn a_game_of_vx_ace_runs_over_ruby_1_9_2() {
+    let game = AceGame::new("ace-game", "Ace", &[("Main", &red_sprite_script())]);
+    assert_red_sprite_run(&game, &ace(&game, &["--dump", "2=frame.png"]));
+}
+
+/// Requirement "A game of VX Ace runs", scenario "Library under the other name".
+#[test]
+fn a_game_of_vx_ace_with_the_library_under_the_other_name_runs_the_same_way() {
+    let game = AceGame::new("ace-300", "Ace", &[("Main", &red_sprite_script())]);
+    let ini = "[Game]\r\nRTP=\r\nLibrary=System\\RGSS300.dll\r\n\
+               Scripts=Data\\Scripts.rvdata2\r\nTitle=Ace\r\n";
+    fs::write(game.dir().join("Game.ini"), ini).unwrap();
+    assert_red_sprite_run(&game, &ace(&game, &["--dump", "2=frame.png"]));
+}
+
+/// Requirement "A game of VX Ace runs", scenario "Runtime named by the option".
+#[test]
+fn a_game_run_as_one_of_vx_ace_runs_over_ruby_1_9_2() {
+    let game = Game::new(
+        "ace-named",
+        "Named",
+        &[("Main", &writes("version.txt", "RUBY_VERSION"))],
+    );
+    fs::write(game.builtin_scripts(), RGSS3_STAND_IN).unwrap();
+    ace(&game, &["--runtime", "rgss3"]).assert_success();
+    assert_eq!(written(&game, "version.txt"), "1.9.2");
+}
+
+/// Requirement "A game of VX Ace runs", scenario "Run-time package not given", and the run
+/// with the package given.
+#[test]
+fn a_game_of_vx_ace_needs_the_run_time_package_it_names() {
+    let game = ran_game("ace-rtp");
+    let ini = "[Game]\r\nRTP=RPGVXAce\r\nLibrary=System\\RGSS301.dll\r\n\
+               Scripts=Data\\Scripts.rvdata2\r\nTitle=Ace\r\n";
+    fs::write(game.dir().join("Game.ini"), ini).unwrap();
+    let ran = ace(&game, &[]);
+    ran.assert_failure();
+    let stderr = ran.stderr();
+    assert!(stderr.contains("RPGVXAce"), "{stderr}");
+    assert!(stderr.contains("--rtp"), "{stderr}");
+    assert!(!script_ran(&game));
+
+    let rtp = tempfile::tempdir().unwrap();
+    let table = format!("RPGVXAce={}", rtp.path().display());
+    ace(&game, &["--rtp", &table]).assert_success();
+    assert!(script_ran(&game));
+}
+
+/// Requirement "A game of VX Ace runs", scenario "No script archive".
+#[test]
+fn a_game_of_vx_ace_without_a_script_archive_is_an_error_naming_it() {
+    let game = ran_game("ace-no-scripts");
+    fs::remove_dir_all(game.dir().join("Data")).unwrap();
+    let check = |ran: Ran| {
+        ran.assert_failure();
+        assert!(
+            ran.stderr().contains("Data\\Scripts.rvdata2"),
+            "{}",
+            ran.stderr()
+        );
+    };
+    check(ace(&game, &[]));
+    // Nor does an archive that holds something else supply it.
+    let archive = rgss3a(&[("Data\\Actors.rvdata2", b"actors")]);
+    fs::write(game.dir().join("Game.rgss3a"), archive).unwrap();
+    check(ace(&game, &[]));
+}
+
+/// Requirement "A game of VX Ace runs", scenario "Script error".
+#[test]
+fn a_script_error_of_vx_ace_is_reported_in_the_form_of_rgss3() {
+    let game = AceGame::new(
+        "ace-script-error",
+        "Ace",
+        &[("Main", "nil"), ("Scene_Title", "x = 1\nraise 'boom'\n")],
+    );
+    let ran = ace(&game, &[]);
+    ran.assert_failure();
+    let stderr = ran.stderr();
+    assert!(
+        stderr.contains("Script 'Scene_Title' line 2: RuntimeError occurred."),
+        "{stderr}"
+    );
+    assert!(stderr.contains("boom"), "{stderr}");
+}
+
+/// Requirement "A game of VX Ace runs", scenario "Frame limit and input".
+#[test]
+fn the_frame_limit_and_the_input_script_drive_a_game_of_vx_ace() {
+    let source = format!(
+        "{}
+sprite = Sprite.new
+sprite.bitmap = Bitmap.new(32, 32)
+sprite.bitmap.fill_rect(0, 0, 32, 32, Color.new(255, 0, 0))
+loop do
+  Graphics.update
+  Input.update
+  sprite.x += 4 if Input.press?(Input::RIGHT)
+end",
+        writes("pid.txt", "$$")
+    );
+    let game = AceGame::new("ace-frames", "Ace", &[("Main", &source)]);
+    let ran = ace(
+        &game,
+        &[
+            "--frames",
+            "12",
+            "--input",
+            "2:RIGHT, 6:",
+            "--dump",
+            "1=first.png",
+            "--dump",
+            "8=later.png",
+        ],
+    );
+    ran.assert_success();
+    let first = ran.frame("first.png").leftmost(RED).expect("the sprite");
+    let later = ran.frame("later.png").leftmost(RED).expect("the sprite");
+    assert!(later > first, "{first} then {later}");
+    let pid = written(&game, "pid.txt");
+    assert!(
+        !Path::new(&format!("/proc/{pid}")).exists(),
+        "the guest process {pid} is still there"
+    );
+}
+
+/// Requirement "A game of VX Ace runs", scenario "Two runs".
+#[test]
+fn two_runs_of_vx_ace_with_one_seed_write_the_same_picture() {
+    let source = "sprite = Sprite.new
+sprite.bitmap = Bitmap.new(16, 16)
+sprite.bitmap.fill_rect(0, 0, 16, 16, Color.new(255, 0, 0))
+sprite.x = rand(500)
+sprite.y = rand(400)
+3.times { Graphics.update }";
+    let game = AceGame::new("ace-two-runs", "Ace", &[("Main", source)]);
+    let arguments = ["--seed", "42", "--dump", "2=frame.png"];
+    let (one, two) = (ace(&game, &arguments), ace(&game, &arguments));
+    one.assert_success();
+    two.assert_success();
+    assert_eq!(
+        fs::read(one.file("frame.png")).unwrap(),
+        fs::read(two.file("frame.png")).unwrap()
+    );
+}
+
+// --- The built-in scripts file and the archive ------------------------------------------------
+
+/// Requirement "Built-in scripts file", scenarios "Missing file of VX Ace", "Default
+/// location of VX Ace" and "A file of VX Ace that is not Ruby".
+#[test]
+fn the_built_in_scripts_file_of_vx_ace_is_found_at_its_default_location() {
+    guest_executable();
+    let game = ran_game("ace-builtin");
+    let dir = game.dir().to_string_lossy().into_owned();
+    let device = device();
+    let arguments = [dir.as_str(), "--headless", "--device", &device, "--verbose"];
+    let ran = vkxp(&arguments);
+    ran.assert_failure();
+    let stderr = ran.stderr();
+    assert!(stderr.contains("rpg_builtin_rgss3.rb"), "{stderr}");
+    assert!(stderr.contains("docs/running.md"), "{stderr}");
+    assert!(attached_processes(&stderr).is_empty(), "{stderr}");
+
+    let work = tempfile::tempdir().unwrap();
+    let data = work.path().join("vkxp");
+    fs::create_dir_all(&data).unwrap();
+    fs::write(data.join("rpg_builtin_rgss3.rb"), RGSS3_STAND_IN).unwrap();
+    let ran = vkxp_in(work, &arguments[..4]);
+    ran.assert_success();
+    assert!(
+        !ran.stderr().contains("built-in scripts"),
+        "{}",
+        ran.stderr()
+    );
+    assert!(script_ran(&game));
+
+    fs::remove_file(game.dir().join("ran.txt")).unwrap();
+    let work = tempfile::tempdir().unwrap();
+    let data = work.path().join("vkxp");
+    fs::create_dir_all(&data).unwrap();
+    fs::write(data.join("rpg_builtin_rgss3.rb"), "not ) Ruby").unwrap();
+    let ran = vkxp_in(work, &arguments[..4]);
+    ran.assert_failure();
+    assert!(ran.stderr().contains("SyntaxError"), "{}", ran.stderr());
+    assert!(!script_ran(&game));
+}
+
+/// The script of the scenario "Game of VX Ace in an archive": it reads a data file and
+/// shows a red sprite.
+fn archived_game(name: &str) -> AceGame {
+    let source = format!(
+        "{}
+sprite = Sprite.new
+sprite.bitmap = Bitmap.new(32, 32)
+sprite.bitmap.fill_rect(0, 0, 32, 32, Color.new(255, 0, 0))
+sprite.x = 10
+sprite.y = 20
+Graphics.update",
+        writes("value.txt", "load_data('Data/Thing.rvdata2').inspect")
+    );
+    let game = AceGame::new(name, "Ace", &[("Main", &source)]);
+    // `[1, "two"]`, its string without an encoding.
+    fs::write(
+        game.dir().join("Data/Thing.rvdata2"),
+        b"\x04\x08[\x07i\x06\"\x08two",
+    )
+    .unwrap();
+    game
+}
+
+/// Requirement "Encrypted archive of the game", scenario "Game of VX Ace in an archive".
+#[test]
+fn a_game_of_vx_ace_whose_data_is_in_the_archive_runs_like_the_one_with_loose_files() {
+    let game = archived_game("ace-archive");
+    let loose = ace(&game, &["--dump", "0=frame.png"]);
+    loose.assert_success();
+    let value = written(&game, "value.txt");
+    assert_eq!(value, "[1, \"two\"]");
+
+    let data = game.dir().join("Data");
+    let archive = rgss3a(&[
+        (
+            "Data\\Thing.rvdata2",
+            &fs::read(data.join("Thing.rvdata2")).unwrap(),
+        ),
+        ("Data\\Scripts.rvdata2", &fs::read(game.archive()).unwrap()),
+    ]);
+    fs::write(game.dir().join("Game.rgss3a"), archive).unwrap();
+    fs::remove_dir_all(&data).unwrap();
+    fs::remove_file(game.dir().join("value.txt")).unwrap();
+    let archived = ace(&game, &["--dump", "0=frame.png"]);
+    archived.assert_success();
+    assert_eq!(written(&game, "value.txt"), value);
+    assert_eq!(
+        fs::read(archived.file("frame.png")).unwrap(),
+        fs::read(loose.file("frame.png")).unwrap()
+    );
+}
+
+/// Requirement "Encrypted archive of the game", scenario "Damaged archive of VX Ace".
+#[test]
+fn a_damaged_archive_of_vx_ace_is_an_error_naming_it() {
+    let game = ran_game("ace-damaged-archive");
+    let scripts = fs::read(game.archive()).unwrap();
+    let mut archive = rgss3a(&[("Data\\Scripts.rvdata2", &scripts)]);
+    // Inside the name of the one record of the table.
+    archive.truncate(12 + 16 + 7);
+    fs::write(game.dir().join("Game.rgss3a"), archive).unwrap();
+    let check = |ran: Ran| {
+        ran.assert_failure();
+        assert!(ran.stderr().contains("Game.rgss3a"), "{}", ran.stderr());
+    };
+    check(ace(&game, &[]));
+    // An archive of version 1 under that name is damaged too.
+    let archive = rgssad(&[("Data\\Scripts.rvdata2", &scripts)]);
+    fs::write(game.dir().join("Game.rgss3a"), archive).unwrap();
+    check(ace(&game, &[]));
+    assert!(!script_ran(&game));
+}
+
+/// Requirement "Script archive of RGSS3", scenario "Both forms of the strings".
+#[test]
+fn the_strings_of_the_archive_may_carry_their_encoding_or_not() {
+    let source = writes("name.txt", "$RGSS_SCRIPTS[0][1].encoding.name");
+    for (name, game) in [
+        (
+            "labelled",
+            AceGame::new("ace-labelled", "Ace", &[("Main", &source)]),
+        ),
+        (
+            "plain",
+            AceGame::plain("ace-plain", "Ace", &[("Main", &source)]),
+        ),
+    ] {
+        ace(&game, &[]).assert_success();
+        assert_eq!(written(&game, "name.txt"), "UTF-8", "{name}");
+    }
+    // The two forms differ in their bytes.
+    let scripts = [("Main", source.as_str())];
+    assert_ne!(
+        script_archive(&scripts, true),
+        script_archive(&scripts, false)
+    );
+}
+
+// --- The state of VX Ace ----------------------------------------------------------------------
+
+/// Requirement "Experimental runtime says so", scenarios "VX Ace" and "XP".
+#[test]
+fn a_run_of_vx_ace_says_once_that_it_is_experimental() {
+    let game = AceGame::new("ace-experimental", "Ace", &[("Main", "nil")]);
+    let ran = ace(&game, &[]);
+    ran.assert_success();
+    let stderr = ran.stderr();
+    let lines = experimental_lines(&stderr);
+    assert_eq!(lines.len(), 1, "{stderr}");
+    assert!(lines[0].contains("RPG Maker VX Ace"), "{stderr}");
+
+    let xp = Game::new("ace-experimental-xp", "XP", &[("Main", "nil")]);
+    let ran = headless(&xp, &["--guest", "process"]);
+    ran.assert_success();
+    assert!(
+        experimental_lines(&ran.stderr()).is_empty(),
+        "{}",
+        ran.stderr()
+    );
+}
+
+// --- The start-up of RGSS3 --------------------------------------------------------------------
+
+/// Requirement "Message boxes and console output of RGSS3", scenario "Console output".
+#[test]
+fn p_print_and_puts_write_to_the_standard_output() {
+    let source = format!(
+        "$r = p(\"a\", 1); print \"b\", 2; puts \"c\"\n{}",
+        writes("r.txt", "$r.inspect")
+    );
+    let game = AceGame::new("ace-console", "Ace", &[("Main", &source)]);
+    for arguments in [&[][..], &["--log-p"]] {
+        let ran = ace(&game, arguments);
+        ran.assert_success();
+        let stdout = String::from_utf8_lossy(&ran.output.stdout);
+        assert_eq!(stdout, "\"a\"\n1\nb2c\n", "{arguments:?}");
+        assert_eq!(written(&game, "r.txt"), "[\"a\", 1]");
+        assert!(!ran.stderr().contains("\"a\""), "{}", ran.stderr());
+    }
+}
+
+/// Requirement "End of a game of RGSS3", scenario "Exit with a status".
+#[test]
+fn every_exit_of_a_game_of_vx_ace_ends_with_status_0() {
+    for (index, ending) in ["exit", "exit(3)", "exit(false)", "abort"]
+        .into_iter()
+        .enumerate()
+    {
+        let game = AceGame::new(
+            &format!("ace-exit-{index}"),
+            "Ace",
+            &[("Ends", ending), ("Later", &writes("ran.txt", "'ran'"))],
+        );
+        let ran = ace(&game, &[]);
+        assert_eq!(
+            ran.output.status.code(),
+            Some(0),
+            "{ending}: {}",
+            ran.stderr()
+        );
+        assert!(!script_ran(&game), "{ending}");
+    }
+}
+
+/// Requirement "End of a game of RGSS3", scenario "Exit inside the block of the main
+/// function and inside a Fiber".
+#[test]
+fn an_exit_inside_the_main_function_or_a_fiber_ends_with_status_0() {
+    for (name, source) in [
+        ("ace-exit-main", "rgss_main { exit }"),
+        ("ace-exit-fiber", "Fiber.new { exit }.resume"),
+    ] {
+        let game = AceGame::new(name, "Ace", &[("Main", source)]);
+        let ran = ace(&game, &[]);
+        assert_eq!(
+            ran.output.status.code(),
+            Some(0),
+            "{name}: {}",
+            ran.stderr()
+        );
+    }
+}
+
+/// Requirement "End of a game of RGSS3", scenario "A loop driven by a Fiber".
+#[test]
+fn a_loop_driven_by_a_fiber_moves_the_sprite() {
+    let source = "sprite = Sprite.new
+sprite.bitmap = Bitmap.new(32, 32)
+sprite.bitmap.fill_rect(0, 0, 32, 32, Color.new(255, 0, 0))
+mover = Fiber.new do
+  loop do
+    sprite.x += 3
+    Fiber.yield
+  end
+end
+10.times do
+  mover.resume
+  Graphics.update
+end";
+    let game = AceGame::new("ace-fiber-loop", "Ace", &[("Main", source)]);
+    let ran = ace(&game, &["--dump", "2=early.png", "--dump", "9=late.png"]);
+    ran.assert_success();
+    let early = ran.frame("early.png").leftmost(RED).expect("the sprite");
+    let late = ran.frame("late.png").leftmost(RED).expect("the sprite");
+    assert!(late > early, "{early} then {late}");
+}
+
+/// Requirement "Process functions of Ruby 1.9 are off by default", scenarios "Functions of
+/// Ruby 1.9" and "Open with a file name".
+#[test]
+fn the_functions_of_ruby_1_9_that_start_processes_are_off() {
+    let calls = "[spawn('touch a'), Process.spawn('touch b'), open('|touch c'), \
+                 system('touch', 'd'), `touch e`, IO.popen(['touch', 'f'])]";
+    let source = format!(
+        "{}\nopen('note.txt', 'w') {{ |file| file.write('x') }}",
+        writes("results.txt", &format!("{calls}.inspect"))
+    );
+    let game = AceGame::new("ace-process-functions", "Ace", &[("Main", &source)]);
+    let ran = ace(&game, &["--sandbox", "off"]);
+    ran.assert_success();
+    assert_eq!(
+        written(&game, "results.txt"),
+        "[nil, nil, nil, nil, nil, nil]"
+    );
+    for name in ["a", "b", "c", "d", "e", "f"] {
+        assert!(!game.dir().join(name).exists(), "{name}");
+    }
+    let stderr = ran.stderr();
+    let lines = stderr.lines().filter(|line| line.contains("is turned off"));
+    assert_eq!(lines.count(), 6, "{stderr}");
+    assert_eq!(written(&game, "note.txt"), "x");
+}
+
+/// Requirement "Process functions of Ruby 1.9 are off by default", scenario "Enabled by the
+/// caller".
+#[test]
+fn the_functions_that_start_processes_work_when_enabled() {
+    let source = writes(
+        "results.txt",
+        "[system('true'), Process.wait(spawn('true')).is_a?(Integer)].inspect",
+    );
+    let game = AceGame::new("ace-process-enabled", "Ace", &[("Main", &source)]);
+    ace(&game, &["--allow-process-functions"]).assert_success();
+    assert_eq!(written(&game, "results.txt"), "[true, true]");
+}

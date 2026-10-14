@@ -30,6 +30,8 @@ vkxp-proto.workspace = true
 vkxp-vfs.workspace = true
 
 [dev-dependencies]
+# The tests of RGSS3 write the script archives of their games without an interpreter.
+flate2.workspace = true
 # The end-to-end test asks the kernel itself whether a process can confine itself here.
 landlock.workspace = true
 png.workspace = true

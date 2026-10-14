@@ -6,215 +6,22 @@
 //! and runs the executable on it as a child process, without a window, on the CPU device.
 //!
 //! Like the other tests that reach Vulkan, these refuse to run unless the loader has been
-//! restricted to chosen drivers, and they hand the restriction on to the child.
+//! restricted to chosen drivers, and they hand the restriction on to the child
+//! (`support`). No test here runs a game of RGSS3, which needs the guest executable of
+//! `vkxp-guest-rgss3`: those are in `rgss3.rs`.
 
 use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Output, Stdio};
+use std::path::Path;
+use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use tempfile::TempDir;
 use vkxp_binding::testing::host::Game;
 use vkxp_vfs::Runtime;
 
-/// Environment variables that restrict which drivers the Vulkan loader loads. Naming a
-/// device does not do that: the loader loads every installed driver to enumerate the devices.
-const ISOLATION_VARIABLES: [&str; 3] = [
-    "VK_LOADER_DRIVERS_SELECT",
-    "VK_DRIVER_FILES",
-    "VK_ICD_FILENAMES",
-];
+mod support;
 
-/// The loader restriction of this process, for the child. Fails the test, before any child
-/// is started, when there is none.
-fn isolation() -> Vec<(&'static str, String)> {
-    let restriction: Vec<_> = ISOLATION_VARIABLES
-        .iter()
-        .filter_map(|name| Some((*name, std::env::var(name).ok()?)))
-        .filter(|(_, value)| !value.trim().is_empty())
-        .collect();
-    assert!(
-        !restriction.is_empty(),
-        "the Vulkan loader is not restricted to chosen drivers, so running the program would \
-         load the driver of every GPU in the machine. Set VK_LOADER_DRIVERS_SELECT before \
-         running these tests: '*lvp*' for the CPU device (lavapipe), which they use by \
-         default, or the pattern of the driver that VKXP_TEST_DEVICE names."
-    );
-    restriction
-}
-
-/// The device the child composites on: llvmpipe, unless `VKXP_TEST_DEVICE` names another.
-fn device() -> String {
-    match std::env::var("VKXP_TEST_DEVICE") {
-        Ok(value) if !value.is_empty() => value,
-        _ => "llvmpipe".to_owned(),
-    }
-}
-
-/// The test fonts of `vkxp-text`.
-fn font_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../vkxp-text/tests/fonts")
-}
-
-/// How a run of the program went.
-struct Ran {
-    output: Output,
-    /// The directory the program was started in, where relative dump paths end up. It also
-    /// stands in for the user's data directory.
-    work: TempDir,
-}
-
-impl Ran {
-    fn stderr(&self) -> String {
-        String::from_utf8_lossy(&self.output.stderr).into_owned()
-    }
-
-    #[track_caller]
-    fn assert_success(&self) {
-        assert!(
-            self.output.status.success(),
-            "{}: {}",
-            self.output.status,
-            self.stderr()
-        );
-    }
-
-    #[track_caller]
-    fn assert_failure(&self) {
-        assert!(!self.output.status.success(), "the run succeeded");
-        assert!(
-            self.output.status.code().is_some(),
-            "{}",
-            self.output.status
-        );
-    }
-
-    fn file(&self, name: &str) -> PathBuf {
-        self.work.path().join(name)
-    }
-
-    fn frame(&self, name: &str) -> Frame {
-        Frame::read(&self.file(name))
-    }
-}
-
-/// Runs the executable with these arguments in a fresh directory, with the loader restricted
-/// as this process is and no built-in scripts file at the default location.
-fn vkxp(arguments: &[&str]) -> Ran {
-    vkxp_in(
-        tempfile::tempdir().expect("a temporary directory"),
-        arguments,
-    )
-}
-
-/// Runs the executable in `work`, which is also where it looks for the user's data and
-/// configuration.
-fn vkxp_in(work: TempDir, arguments: &[&str]) -> Ran {
-    vkxp_logging(work, arguments, None)
-}
-
-/// Runs the executable as [`vkxp_in`] does, with the environment variable `VKXP_LOG` set to
-/// `log` or, without one, not set.
-fn vkxp_logging(work: TempDir, arguments: &[&str], log: Option<&str>) -> Ran {
-    let mut command = command(work.path(), arguments);
-    if let Some(log) = log {
-        command.env("VKXP_LOG", log);
-    }
-    let output = command.output().expect("the program starts");
-    Ran { output, work }
-}
-
-/// The executable with these arguments, to be started in `work`, with the loader restricted
-/// as this process is and none of `VKXP_LOG`, `VKXP_GUEST` and `VKXP_SANDBOX` set. `work` also stands in for
-/// the user's run-time directory, where the socket of a guest process is made.
-fn command(work: &Path, arguments: &[&str]) -> Command {
-    let restriction = isolation();
-    let mut command = Command::new(env!("CARGO_BIN_EXE_vkxp"));
-    command
-        .args(arguments)
-        .current_dir(work)
-        .env("XDG_DATA_HOME", work)
-        .env("XDG_CONFIG_HOME", work)
-        .env("XDG_RUNTIME_DIR", work)
-        .env_remove("VKXP_LOG")
-        .env_remove("VKXP_GUEST")
-        .env_remove("VKXP_SANDBOX");
-    for (name, value) in restriction {
-        command.env(name, value);
-    }
-    command
-}
-
-/// Runs `game` headless with its stand-in built-in scripts file, followed by `arguments`.
-fn headless(game: &Game, arguments: &[&str]) -> Ran {
-    headless_in(
-        tempfile::tempdir().expect("a temporary directory"),
-        game,
-        arguments,
-    )
-}
-
-/// Runs `game` headless as [`headless`] does, started in `work`.
-fn headless_in(work: TempDir, game: &Game, arguments: &[&str]) -> Ran {
-    headless_logging(work, game, arguments, None)
-}
-
-/// Runs `game` headless as [`headless`] does, with `VKXP_LOG` set to `log`.
-fn headless_logging(work: TempDir, game: &Game, arguments: &[&str], log: Option<&str>) -> Ran {
-    let dir = game.dir().to_string_lossy().into_owned();
-    let builtin = game.builtin_scripts().to_string_lossy().into_owned();
-    let device = device();
-    let mut all = vec![
-        dir.as_str(),
-        "--builtin-scripts",
-        &builtin,
-        "--headless",
-        "--device",
-        &device,
-    ];
-    all.extend_from_slice(arguments);
-    vkxp_logging(work, &all, log)
-}
-
-/// A dumped frame.
-struct Frame {
-    width: u32,
-    height: u32,
-    rgba: Vec<u8>,
-}
-
-impl Frame {
-    fn read(path: &Path) -> Frame {
-        let file =
-            fs::File::open(path).unwrap_or_else(|error| panic!("{}: {error}", path.display()));
-        let mut reader = png::Decoder::new(std::io::BufReader::new(file))
-            .read_info()
-            .expect("a PNG file");
-        let info = reader.info();
-        assert_eq!(info.color_type, png::ColorType::Rgba);
-        assert_eq!(info.bit_depth, png::BitDepth::Eight);
-        let (width, height) = (info.width, info.height);
-        let mut rgba = vec![0; width as usize * height as usize * 4];
-        reader.next_frame(&mut rgba).expect("PNG data");
-        Frame {
-            width,
-            height,
-            rgba,
-        }
-    }
-
-    fn pixel(&self, x: u32, y: u32) -> [u8; 4] {
-        let at = (y as usize * self.width as usize + x as usize) * 4;
-        self.rgba[at..at + 4].try_into().expect("four bytes")
-    }
-
-    /// The leftmost column that has a pixel of this colour.
-    fn leftmost(&self, colour: [u8; 4]) -> Option<u32> {
-        (0..self.width).find(|x| (0..self.height).any(|y| self.pixel(*x, y) == colour))
-    }
-}
-
-const RED: [u8; 4] = [255, 0, 0, 255];
+use support::*;
 
 /// A red sprite of 32 by 32 pixels at 10, 20, as `$sprite`.
 const RED_SPRITE: &str = "\
@@ -1258,33 +1065,6 @@ fn a_preload_script_patches_the_game() {
     assert!(ran.stderr().contains("absent.rb"), "{}", ran.stderr());
 }
 
-/// An RGSSAD version 1 archive of these entries, in the format `vkxp-vfs` documents: after
-/// the header, per entry, the length of the name, the name, the size of the data and the
-/// data, XORed with a key that advances after every length, name byte and size, the data
-/// word by word with a copy of the key.
-fn rgssad(entries: &[(&str, &[u8])]) -> Vec<u8> {
-    fn step(key: &mut u32) -> u32 {
-        let current = *key;
-        *key = key.wrapping_mul(7).wrapping_add(3);
-        current
-    }
-    let mut key: u32 = 0xDEAD_CAFE;
-    let mut archive = b"RGSSAD\0\x01".to_vec();
-    for (name, contents) in entries {
-        let length = u32::try_from(name.len()).unwrap();
-        archive.extend((length ^ step(&mut key)).to_le_bytes());
-        archive.extend(name.bytes().map(|byte| byte ^ step(&mut key) as u8));
-        let size = u32::try_from(contents.len()).unwrap();
-        archive.extend((size ^ step(&mut key)).to_le_bytes());
-        let mut data_key = key;
-        for word in contents.chunks(4) {
-            let mask = step(&mut data_key).to_le_bytes();
-            archive.extend(word.iter().zip(mask).map(|(byte, mask)| byte ^ mask));
-        }
-    }
-    archive
-}
-
 /// Scenario "Game in an archive".
 #[test]
 fn a_game_whose_data_is_in_the_archive_runs_like_the_one_with_loose_files() {
@@ -1418,14 +1198,6 @@ Graphics.update
     }
 }
 
-/// The lines of the error stream that say a runtime is experimental.
-fn experimental_lines(stderr: &str) -> Vec<&str> {
-    stderr
-        .lines()
-        .filter(|line| line.contains("experimental"))
-        .collect()
-}
-
 /// Requirement "Supported runtimes say nothing about their state", scenario "VX", whether
 /// the guest is a thread or a process.
 #[test]
@@ -1494,206 +1266,6 @@ fn an_unknown_runtime_prints_the_usage_message() {
     let stderr = ran.stderr();
     assert!(stderr.contains("`vx`"), "{stderr}");
     assert!(stderr.contains("usage: vkxp"), "{stderr}");
-}
-
-/// Requirement "VX Ace is refused", scenario "Ace game".
-#[test]
-fn a_game_of_vx_ace_ends_before_any_script_runs() {
-    let source = "File.open('ran.txt', 'w') { |file| file.write('ran') }";
-    let game = Game::of(Runtime::Rgss3, "e2e-ace", "Ace", &[("Main", source)]);
-    let ran = headless(&game, &[]);
-    ran.assert_failure();
-    let stderr = ran.stderr();
-    assert!(stderr.contains("RPG Maker VX Ace"), "{stderr}");
-    assert!(stderr.contains("not supported"), "{stderr}");
-    assert!(stderr.contains("planned"), "{stderr}");
-    assert!(!game.dir().join("ran.txt").exists());
-}
-
-/// An RGSSAD version 3 archive of these entries, in the format `vkxp-vfs` documents: after
-/// the header a seed, then a table of records XORed with the key seed * 9 + 3 (the offset
-/// of the data, its size, its key, the length of the name, and the name), a word that
-/// decrypts to 0, and the data, each XORed word by word with a key that starts at the key
-/// of its record. The seed and the keys are those the editor wrote in the measured archives.
-fn rgss3a(entries: &[(&str, &[u8])]) -> Vec<u8> {
-    const SEED: u32 = 0x2A38;
-    const FILE_KEYS: [u32; 3] = [41, 18467, 6334];
-    let key = SEED.wrapping_mul(9).wrapping_add(3);
-    let table: usize = entries.iter().map(|(name, _)| 16 + name.len()).sum();
-    let mut offset = 12 + table + 4;
-    let mut archive = b"RGSSAD\0\x03".to_vec();
-    archive.extend(SEED.to_le_bytes());
-    for ((name, contents), file_key) in entries.iter().zip(FILE_KEYS) {
-        for word in [offset, contents.len(), file_key as usize, name.len()] {
-            archive.extend((u32::try_from(word).unwrap() ^ key).to_le_bytes());
-        }
-        let mask = key.to_le_bytes();
-        archive.extend(name.bytes().enumerate().map(|(i, byte)| byte ^ mask[i % 4]));
-        offset += contents.len();
-    }
-    archive.extend(key.to_le_bytes());
-    for ((_, contents), mut data_key) in entries.iter().zip(FILE_KEYS) {
-        for word in contents.chunks(4) {
-            let mask = data_key.to_le_bytes();
-            data_key = data_key.wrapping_mul(7).wrapping_add(3);
-            archive.extend(word.iter().zip(mask).map(|(byte, mask)| byte ^ mask));
-        }
-    }
-    archive
-}
-
-/// A generated game of RGSS3 whose one script would leave `ran.txt` in the game directory.
-fn ace_game(name: &str) -> Game {
-    let source = "File.open('ran.txt', 'w') { |file| file.write('ran') }";
-    Game::of(Runtime::Rgss3, name, "Ace", &[("Main", source)])
-}
-
-/// Asserts that the run ended with the message that VX Ace is planned and not supported,
-/// and that no script of `game` ran.
-#[track_caller]
-fn assert_refused(ran: &Ran, game: &Game) {
-    ran.assert_failure();
-    let stderr = ran.stderr();
-    assert!(stderr.contains("RPG Maker VX Ace"), "{stderr}");
-    assert!(stderr.contains("not supported"), "{stderr}");
-    assert!(stderr.contains("planned"), "{stderr}");
-    assert!(!game.dir().join("ran.txt").exists());
-}
-
-/// Asserts that the run ended with an error that names each of `named` and is not the
-/// message that VX Ace is planned.
-#[track_caller]
-fn assert_failed_before_the_refusal(ran: &Ran, named: &[&str]) {
-    ran.assert_failure();
-    let stderr = ran.stderr();
-    for name in named {
-        assert!(stderr.contains(name), "{name}: {stderr}");
-    }
-    assert!(!stderr.contains("planned"), "{stderr}");
-}
-
-/// Requirement "VX Ace is refused", scenario "Library under the other name".
-#[test]
-fn a_game_of_vx_ace_with_the_library_under_the_other_name_ends_the_same_way() {
-    let game = ace_game("e2e-ace-300");
-    let ini = "[Game]\r\nRTP=\r\nLibrary=System\\RGSS300.dll\r\n\
-               Scripts=Data\\Scripts.rvdata2\r\nTitle=Ace\r\n";
-    fs::write(game.dir().join("Game.ini"), ini).unwrap();
-    assert_refused(&headless(&game, &[]), &game);
-}
-
-/// Requirement "VX Ace is refused", scenarios "Run-time package not given" and "Run-time
-/// package given".
-#[test]
-fn a_game_of_vx_ace_needs_the_run_time_package_it_names() {
-    let game = ace_game("e2e-ace-rtp");
-    let ini = "[Game]\r\nRTP=RPGVXAce\r\nLibrary=System\\RGSS301.dll\r\n\
-               Scripts=Data\\Scripts.rvdata2\r\nTitle=Ace\r\n";
-    fs::write(game.dir().join("Game.ini"), ini).unwrap();
-    assert_failed_before_the_refusal(&headless(&game, &[]), &["RPGVXAce", "--rtp"]);
-
-    let rtp = tempfile::tempdir().unwrap();
-    let table = format!("RPGVXAce={}", rtp.path().display());
-    assert_refused(&headless(&game, &["--rtp", &table]), &game);
-}
-
-/// Requirement "VX Ace is refused", scenario "No script archive".
-#[test]
-fn a_game_of_vx_ace_without_a_script_archive_is_an_error_naming_it() {
-    let game = ace_game("e2e-ace-no-scripts");
-    fs::remove_dir_all(game.dir().join("Data")).unwrap();
-    assert_failed_before_the_refusal(&headless(&game, &[]), &["Data\\Scripts.rvdata2"]);
-    // Nor does an archive that holds something else supply it.
-    let archive = rgss3a(&[("Data\\Actors.rvdata2", b"actors")]);
-    fs::write(game.dir().join("Game.rgss3a"), archive).unwrap();
-    assert_failed_before_the_refusal(&headless(&game, &[]), &["Data\\Scripts.rvdata2"]);
-}
-
-/// Requirement "VX Ace is refused", scenario "Runtime named by the option".
-#[test]
-fn a_game_run_as_one_of_vx_ace_ends_before_any_script_runs() {
-    let source = "File.open('ran.txt', 'w') { |file| file.write('ran') }";
-    let game = Game::new("e2e-ace-named", "Named", &[("Main", source)]);
-    assert_refused(&headless(&game, &["--runtime", "rgss3"]), &game);
-}
-
-/// Requirement "Built-in scripts file", scenarios "Missing file of VX Ace" and "Default
-/// location of VX Ace".
-#[test]
-fn the_built_in_scripts_file_of_vx_ace_is_found_at_its_default_location() {
-    let game = ace_game("e2e-builtin-ace");
-    let dir = game.dir().to_string_lossy().into_owned();
-    let ran = vkxp(&[&dir, "--headless"]);
-    assert_failed_before_the_refusal(
-        &ran,
-        &[
-            "rpg_builtin_rgss3.rb",
-            "docs/running.md",
-            "The built-in scripts of RPG Maker VX Ace",
-        ],
-    );
-
-    let work = tempfile::tempdir().unwrap();
-    let data = work.path().join("vkxp");
-    fs::create_dir_all(&data).unwrap();
-    // The file is found and not evaluated: this one is not Ruby.
-    fs::write(data.join("rpg_builtin_rgss3.rb"), "not ) Ruby").unwrap();
-    let ran = vkxp_in(work, &[&dir, "--headless"]);
-    assert_refused(&ran, &game);
-    assert!(
-        !ran.stderr().contains("built-in scripts"),
-        "{}",
-        ran.stderr()
-    );
-}
-
-/// Requirement "Encrypted archive of the game", scenario "Game of VX Ace in an archive".
-#[test]
-fn a_game_of_vx_ace_whose_data_is_in_the_archive_ends_like_the_one_with_loose_files() {
-    let game = ace_game("e2e-archive-ace");
-    let loose = headless(&game, &["--verbose"]);
-    assert_refused(&loose, &game);
-    let info = |ran: &Ran, text: &str| {
-        let stderr = ran.stderr();
-        stderr
-            .lines()
-            .any(|line| line.starts_with("vkxp: INFO ") && line.contains(text))
-    };
-    assert!(!info(&loose, "Game.rgss3a"), "{}", loose.stderr());
-
-    let data = game.dir().join("Data");
-    let scripts = fs::read(data.join("Scripts.rvdata2")).unwrap();
-    let archive = rgss3a(&[
-        ("Data\\Actors.rvdata2", b"actors"),
-        ("Data\\Scripts.rvdata2", &scripts),
-    ]);
-    fs::write(game.dir().join("Game.rgss3a"), archive).unwrap();
-    fs::remove_dir_all(&data).unwrap();
-    let archived = headless(&game, &["--verbose"]);
-    assert_refused(&archived, &game);
-    let stderr = archived.stderr();
-    assert!(!stderr.contains("not found"), "{stderr}");
-    // The archive and the script archive read from it are named, with its size.
-    assert!(info(&archived, "Game.rgss3a"), "{stderr}");
-    let read = format!("Data\\Scripts.rvdata2 ({} bytes)", scripts.len());
-    assert!(info(&archived, &read), "{stderr}");
-    assert!(info(&loose, &read), "{}", loose.stderr());
-}
-
-/// Requirement "Encrypted archive of the game", scenario "Damaged archive of VX Ace".
-#[test]
-fn a_damaged_archive_of_vx_ace_is_an_error_naming_it() {
-    let game = ace_game("e2e-damaged-archive-ace");
-    let scripts = fs::read(game.dir().join("Data").join("Scripts.rvdata2")).unwrap();
-    let mut archive = rgss3a(&[("Data\\Scripts.rvdata2", &scripts)]);
-    // Inside the name of the one record of the table.
-    archive.truncate(12 + 16 + 7);
-    fs::write(game.dir().join("Game.rgss3a"), archive).unwrap();
-    assert_failed_before_the_refusal(&headless(&game, &[]), &["Game.rgss3a"]);
-    // An archive of version 1 under that name is damaged too.
-    let archive = rgssad(&[("Data\\Scripts.rvdata2", &scripts)]);
-    fs::write(game.dir().join("Game.rgss3a"), archive).unwrap();
-    assert_failed_before_the_refusal(&headless(&game, &[]), &["Game.rgss3a"]);
 }
 
 #[test]
@@ -1808,28 +1380,6 @@ fn guest_pid(game: &Game) -> Option<u32> {
         .trim()
         .parse()
         .ok()
-}
-
-/// Starts `game` headless with `arguments`, its error stream kept.
-fn start_headless(work: &Path, game: &Game, arguments: &[&str]) -> Child {
-    let dir = game.dir().to_string_lossy().into_owned();
-    let builtin = game.builtin_scripts().to_string_lossy().into_owned();
-    let device = device();
-    let mut all = vec![
-        dir.as_str(),
-        "--builtin-scripts",
-        &builtin,
-        "--headless",
-        "--device",
-        &device,
-    ];
-    all.extend_from_slice(arguments);
-    command(work, &all)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("the program starts")
 }
 
 /// Scenario "Same frames" of the requirement "Guest in a process".
@@ -2116,10 +1666,6 @@ fn states_run(game: &Game, frames: u64, states: &str, dumped: &[u64]) -> Ran {
     ran
 }
 
-fn dumped_bytes(ran: &Ran, index: u64) -> Vec<u8> {
-    fs::read(ran.file(&format!("{index}.png"))).expect("a dumped frame")
-}
-
 /// Scenario "Back to the saved frame".
 #[test]
 fn a_loaded_state_goes_back_to_the_saved_frame() {
@@ -2171,17 +1717,6 @@ fn loading_an_empty_slot_is_reported_and_the_run_goes_on() {
         "{}",
         ran.stderr()
     );
-}
-
-/// The numbers of the guest processes that attached during a run, from its informational
-/// lines.
-fn attached_processes(stderr: &str) -> Vec<u32> {
-    let numbers = stderr.lines().filter_map(|line| {
-        let (_, rest) = line.split_once("guest process ")?;
-        let (number, rest) = rest.split_once(' ')?;
-        rest.starts_with("attached").then(|| number.parse().ok())?
-    });
-    numbers.collect()
 }
 
 /// Scenario "Nothing left behind".
@@ -2284,36 +1819,6 @@ fn a_guest_that_may_start_processes_saves_no_state() {
 
 // The confined guest process: the scenarios of the requirements "Confined guest process" and
 // "Sandbox option".
-
-/// Why a guest process cannot confine itself here, if it cannot: the kernel has no Landlock,
-/// or the environment the tests run in does not let it be used. A thread that is made for
-/// it puts a restriction without consequence on itself.
-fn landlock_missing() -> Option<String> {
-    use landlock::{AccessFs, Ruleset, RulesetAttr, RulesetStatus};
-
-    let probe = || {
-        Ruleset::default()
-            .handle_access(AccessFs::MakeBlock)?
-            .create()?
-            .restrict_self()
-    };
-    match std::thread::spawn(probe).join().expect("the probe ends") {
-        Ok(status) if status.ruleset == RulesetStatus::NotEnforced => {
-            Some(format!("Landlock is not available: {:?}", status.landlock))
-        }
-        Ok(_) => None,
-        Err(error) => Some(format!("Landlock cannot be used: {error}")),
-    }
-}
-
-/// Whether the test that calls this is skipped, with the reason printed.
-fn skipped_without_landlock(test: &str) -> bool {
-    let missing = landlock_missing();
-    if let Some(reason) = &missing {
-        eprintln!("{test}: skipped, a guest process cannot confine itself here. {reason}");
-    }
-    missing.is_some()
-}
 
 /// A game that opens `out.txt` in the directory `outside` for writing and notes in
 /// `result.txt` in the game directory how that went.

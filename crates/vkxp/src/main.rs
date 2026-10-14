@@ -23,9 +23,9 @@
 //!    file of the runtime is found and a SoundFont named with `--soundfont` is checked to
 //!    exist. The recording of `--replay` is read or the file of `--record` created, the
 //!    random seed is settled, and the game's files are opened, with the encrypted archive
-//!    of the runtime (`Game.rgssad`, `Game.rgss2a`) if there is one. A failure is a message
-//!    and status 1, before any window or interpreter exists; a game of RPG Maker VX Ace
-//!    ends there too.
+//!    of the runtime (`Game.rgssad`, `Game.rgss2a`, `Game.rgss3a`) if there is one. A
+//!    failure is a message and status 1, before any window or interpreter exists. A run of
+//!    RPG Maker VX Ace says once that its support is experimental.
 //! 3. The game directory becomes the working directory, because scripts write their saves
 //!    with relative names. Paths given on the command line are made absolute first.
 //! 4. SIGVTALRM is blocked while the main thread is still the only one; the library of the
@@ -48,7 +48,10 @@
 //! (`process`). The program then does the steps above without the interpreter: it checks
 //! what the game needs, writes what a guest needs of the settled run into the guest record
 //! of `vkxp-guest`, starts itself again in the guest role with that record as its only
-//! argument, and gives the host a relay to that process as its guest. The child parses no
+//! argument, and gives the host a relay to that process as its guest. A game of RPG Maker
+//! VX Ace, whose scripts need Ruby 1.9.2, always has its guest in a process: the program
+//! starts the guest executable `vkxp-guest-rgss3` that lies beside it in the guest role
+//! instead of itself, and refuses `--guest thread`. The child parses no
 //! command line and reads no configuration file: it installs the subscriber from the
 //! record, looks the game up and does the steps 3 to 5 with the settings of the record,
 //! opens no window, device or recording, attaches to the socket of its parent, plays the game over it and reports
@@ -87,7 +90,8 @@ use crate::config::Settings;
 use vkxp_guest::diagnostics;
 use vkxp_guest::record::Diagnostics;
 use vkxp_guest::settings::GuestSettings;
-use vkxp_guest_main::{Outcome, game_succeeded, guest_inputs, guest_on_thread, refuse_rgss3};
+use vkxp_guest_main::{Outcome, game_succeeded, guest_inputs, guest_on_thread};
+use vkxp_vfs::Runtime;
 
 use crate::process::{GuestProcess, Handed};
 
@@ -285,14 +289,25 @@ fn absolute_settings(settings: GuestSettings) -> std::io::Result<GuestSettings> 
     })
 }
 
-/// The form of the guest of a run: the one that was chosen, and without a choice a process
-/// in a window, where the state keys need it, and a thread in a headless run.
-fn guest_form(chosen: Option<GuestForm>, headless: bool) -> GuestForm {
-    chosen.unwrap_or(if headless {
-        GuestForm::Thread
-    } else {
-        GuestForm::Process
-    })
+/// The form of the guest of a run of a game of `runtime`: the one that was chosen, and
+/// without a choice a process in a window, where the state keys need it, and in every run of
+/// RGSS3, and a thread in a headless run of RGSS1 or RGSS2. A game of RGSS3, whose
+/// interpreter the program does not link, refuses a thread.
+fn guest_form(chosen: Option<GuestForm>, headless: bool, runtime: Runtime) -> Result<GuestForm> {
+    match (chosen, runtime) {
+        (Some(GuestForm::Thread), Runtime::Rgss3) => bail!(
+            "a game of {} runs with the guest in a process only: give --guest process, or no \
+             choice of the guest with --guest, VKXP_GUEST or the key `guest`",
+            runtime.product()
+        ),
+        (Some(form), _) => Ok(form),
+        (None, Runtime::Rgss3) => Ok(GuestForm::Process),
+        (None, Runtime::Rgss1 | Runtime::Rgss2) => Ok(if headless {
+            GuestForm::Thread
+        } else {
+            GuestForm::Process
+        }),
+    }
 }
 
 /// The guest of a run, as the host is given it and as the program waits for it.
@@ -327,7 +342,18 @@ fn run(
 ) -> Result<bool> {
     let guest_settings = guest_settings(&settings.options);
     let inputs = guest_inputs(&game_dir, &guest_settings)?;
-    refuse_rgss3(&game_dir, &inputs)?;
+    let form = guest_form(
+        settings.options.guest,
+        settings.options.headless,
+        inputs.runtime,
+    )?;
+    if inputs.runtime == Runtime::Rgss3 {
+        tracing::warn!(
+            "support for {} is experimental: its scripts run, with the classes of RPG Maker \
+             VX still, so a game may end with an error before its title screen",
+            inputs.runtime.product()
+        );
+    }
     // The keyboard maps to the buttons as the original runtime of the game does.
     let keys = settings.keys_of(inputs.runtime).clone();
     let Settings { options, pads, .. } = settings;
@@ -342,7 +368,6 @@ fn run(
 
     let frame_size = vkxp_binding::frame_size(inputs.runtime);
 
-    let form = guest_form(options.guest, options.headless);
     // What the guest thread does, and what the program waits for once the host has ended.
     let (guest, waited): (Box<dyn FnOnce(GuestEnd) + Send>, Guest) = match form {
         GuestForm::Thread => {
@@ -453,12 +478,29 @@ mod tests {
     /// default".
     #[test]
     fn without_a_choice_the_guest_is_a_process_in_a_window_and_a_thread_headless() {
-        assert_eq!(guest_form(None, false), GuestForm::Process);
-        assert_eq!(guest_form(None, true), GuestForm::Thread);
-        for headless in [false, true] {
-            for form in [GuestForm::Thread, GuestForm::Process] {
-                assert_eq!(guest_form(Some(form), headless), form);
+        for runtime in [Runtime::Rgss1, Runtime::Rgss2] {
+            let form = |chosen, headless| guest_form(chosen, headless, runtime).unwrap();
+            assert_eq!(form(None, false), GuestForm::Process);
+            assert_eq!(form(None, true), GuestForm::Thread);
+            for headless in [false, true] {
+                for chosen in [GuestForm::Thread, GuestForm::Process] {
+                    assert_eq!(form(Some(chosen), headless), chosen);
+                }
             }
+        }
+    }
+
+    /// Requirement "Guest option": a game of RGSS3 has its guest in a process, and a thread
+    /// that was chosen ends the run.
+    #[test]
+    fn a_game_of_vx_ace_has_its_guest_in_a_process() {
+        for headless in [false, true] {
+            let form = |chosen| guest_form(chosen, headless, Runtime::Rgss3);
+            assert_eq!(form(None).unwrap(), GuestForm::Process);
+            assert_eq!(form(Some(GuestForm::Process)).unwrap(), GuestForm::Process);
+            let message = form(Some(GuestForm::Thread)).unwrap_err().to_string();
+            assert!(message.contains("RPG Maker VX Ace"), "{message}");
+            assert!(message.contains("--guest process"), "{message}");
         }
     }
 

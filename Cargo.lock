@@ -2487,6 +2487,7 @@ name = "vkxp"
 version = "0.2.0"
 dependencies = [
  "anyhow",
+ "flate2",
  "landlock",
  "libc",
  "png",

@@ -15,7 +15,7 @@ usage: vkxp [GAME_DIR] [OPTIONS]
                             default: $XDG_CONFIG_HOME/vkxp/config.toml
   --no-config               read neither that file nor vkxp.toml in the game directory
   --runtime RUNTIME         the runtime of the game: rgss1 (RPG Maker XP), rgss2 (RPG
-                            Maker VX) or rgss3 (RPG Maker VX Ace, not supported yet);
+                            Maker VX) or rgss3 (RPG Maker VX Ace, experimental);
                             default: what Library and Scripts of Game.ini say
   --rtp NAME=DIR            the directory of the run-time package NAME; repeatable
   --builtin-scripts FILE    the built-in scripts file, made by `cargo xtask extract-rpg`;
@@ -56,8 +56,10 @@ usage: vkxp [GAME_DIR] [OPTIONS]
                             in a process of their own, which save states need (F3
                             saves, F4 loads, with Shift they choose the slot);
                             default: process in a window, thread in a headless run;
-                            the environment variable VKXP_GUEST sets it too, and
-                            comes after this option
+                            a game of rgss3 runs in a process only, of the guest
+                            executable vkxp-guest-rgss3 beside the program; the
+                            environment variable VKXP_GUEST sets it too, and comes
+                            after this option
   --sandbox on|off          whether a guest process confines itself before the first
                             script runs: it then writes only below the game
                             directory, executes nothing and opens no TCP connection;
@@ -739,6 +741,25 @@ mod tests {
             "{error}"
         );
         assert!(parse_words(&["--filter"]).is_err());
+    }
+
+    /// Requirement "Supported runtimes say nothing about their state", scenario "Usage".
+    #[test]
+    fn the_usage_text_says_that_rgss3_alone_is_experimental() {
+        let lines: Vec<&str> = USAGE
+            .lines()
+            .skip_while(|line| !line.trim_start().starts_with("--runtime"))
+            .take(3)
+            .map(str::trim)
+            .collect();
+        let runtime = lines.join(" ");
+        assert!(runtime.contains("rgss2 (RPG Maker VX)"), "{runtime}");
+        assert!(
+            runtime.contains("rgss3 (RPG Maker VX Ace, experimental)"),
+            "{runtime}"
+        );
+        assert_eq!(USAGE.matches("experimental").count(), 1);
+        assert!(USAGE.contains("rgss3 runs in a process"));
     }
 
     #[test]
