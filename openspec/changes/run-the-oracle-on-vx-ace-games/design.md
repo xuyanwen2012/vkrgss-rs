@@ -258,3 +258,24 @@ the reset; `Graphics.play_movie`; capture through `snap_to_bitmap`; audio; anyth
 - Comment lines in schedule files.
 - Whether a registry substitute applies to a font the runtime of RGSS3 loads itself.
 - Mask transitions of RGSS3 were recorded, not fitted (as VX).
+
+## Measured
+
+After the merge, on 2026-10-14, on the development machine (Wine 11.0, Xvfb, llvmpipe; the
+games and the run-time package are outside the repository):
+
+- Crysalis (unencrypted, its own DLL 3.0.0.1), `--original-only` with the schedule of
+  `ace-v0-crysalis-input.txt` (comment lines removed) and 11 frames from 60 to 6250, twice:
+  every picture of the second run is byte for byte that of the first.
+- Crysalis compared with vkxp on 28 frames of that schedule (title, introduction, map, menu,
+  walking, battle, map again): 11 equal, 15 different, 2 inside a transition. Every
+  differing pixel lies in a line of text; a second run with `--font` naming the run-time
+  package's `VL-Gothic-Regular.ttf` for both sides gave the same counts, so vkxp's text is
+  measured wider than the original's with the same font (about half a pixel a character), a
+  finding for the text rules, not for this harness.
+- In Search of Immortality (`Game.rgss3a`, DLL 3.0.1.1) and Capella's Promise (`Game.rgss3a`,
+  DLL 3.0.1.1 under the name `RGSS300.dll`), `--original-only`, frames 60, 200, 400 and 600:
+  both start from their archives; the first is captured at 640 by 480 after its
+  `resize_screen`, the second at 544 by 416.
+- In every run each Wine process saw an empty `/dev/dri`, mapped no VA-API driver and no
+  hardware plugin of GStreamer, and `wine.log` holds no line of `libva`.
