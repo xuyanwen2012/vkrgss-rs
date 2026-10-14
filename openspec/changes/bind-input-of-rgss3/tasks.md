@@ -2,8 +2,8 @@
 
 ## 1. Constants and arguments of Input of RGSS3
 
-- [ ] 1.1 Before anything changes, keep `cargo test --locked -- --list` of `vkxp-binding` and of `vkxp-binding-rgss3` under `local/`. Check that `bind-the-scene-classes-of-rgss3` is merged on `main` (`runtime::input_rules`, `Graphics` in `BOUND` of `crates/vkxp-binding-rgss3/tests/arity_rgss3.rs`); stop and report if not. Verify: both lists are kept; `git log` names the change.
-- [ ] 1.2 `input::define` by runtime, the constants of RGSS3 and `button_arg_rgss3` for `press?`, `trigger?` and `repeat?` (decisions 1 to 3); `crates/vkxp-binding-rgss3/tests/input_rgss3.rs` with the scenarios of "Arguments of Input of RGSS3", "Button constants of RGSS3, measured on the original" and "Functions and constants, measured on the original"; `Input` added to `BOUND` (decision 8). Verify: those scenarios and "Bound"; `cargo test -p vkxp-binding -p vkxp-binding-rgss3 --locked` passes with every name of the kept lists.
+- [x] 1.1 Before anything changes, keep `cargo test --locked -- --list` of `vkxp-binding` and of `vkxp-binding-rgss3` under `local/`. Check that `bind-the-scene-classes-of-rgss3` is merged on `main` (`runtime::input_rules`, `Graphics` in `BOUND` of `crates/vkxp-binding-rgss3/tests/arity_rgss3.rs`); stop and report if not. Verify: both lists are kept; `git log` names the change.
+- [x] 1.2 `input::define` by runtime, the constants of RGSS3 and `button_arg_rgss3` for `press?`, `trigger?` and `repeat?` (decisions 1 to 3); `crates/vkxp-binding-rgss3/tests/input_rgss3.rs` with the scenarios of "Arguments of Input of RGSS3", "Button constants of RGSS3, measured on the original" and "Functions and constants, measured on the original"; `Input` added to `BOUND` (decision 8). Verify: those scenarios and "Bound"; `cargo test -p vkxp-binding -p vkxp-binding-rgss3 --locked` passes with every name of the kept lists.
 
 ## 2. When a key is seen
 

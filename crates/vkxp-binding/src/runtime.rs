@@ -469,7 +469,7 @@ pub(crate) fn raise_pending(ruby: &Ruby) -> Result<(), Raise> {
 /// functions. The Ruby part follows in [`prepare`].
 pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
     graphics::define(ruby)?;
-    input::define(ruby)?;
+    input::define(ruby, Guest::with(|guest| guest.runtime.run.runtime))?;
     audio::define(ruby)?;
     win32api::define(ruby)?;
     kernel::define(ruby)
