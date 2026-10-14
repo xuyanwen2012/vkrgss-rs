@@ -88,3 +88,11 @@ the warning and the usage text.
   and `openspec` pass when run by hand. Whether the test is changed (its owner crate is
   outside the scope of this change) or the gate is run again on a quieter machine is the
   owner's decision.
+
+  A later run of the gate on 2026-10-14, at `91a7aa0` with the same command and ccache's
+  directories set below `target/` (a first attempt had failed because ccache could not
+  write its temporary directory), passed all six steps with exit status 0;
+  `a_busy_main_thread_of_a_copy_gives_way_to_a_new_thread` and
+  `quick_files_pass_under_collector_stress` passed in it, and no test was skipped. The
+  failure above did not repeat there, so task 3.1 is done; the test stays dependent on the
+  scheduler of the machine, as recorded above.
