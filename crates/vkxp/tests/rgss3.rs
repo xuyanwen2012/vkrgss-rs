@@ -245,6 +245,54 @@ fn a_game_of_vx_ace_with_the_library_under_the_other_name_runs_the_same_way() {
     assert_red_sprite_run(&game, &ace(&game, &["--dump", "2=frame.png"]));
 }
 
+/// The bytes of a file that stands for the DLL of a game: other bytes, then the version
+/// record of `version` (`VS_FIXEDFILEINFO`, found by its signature), then more bytes.
+fn library_file(version: [u16; 4]) -> Vec<u8> {
+    let mut bytes = b"MZ".to_vec();
+    bytes.extend_from_slice(&[0x11; 500]);
+    for word in [
+        0xFEEF_04BD_u32,
+        0x0001_0000,
+        u32::from(version[0]) << 16 | u32::from(version[1]),
+        u32::from(version[2]) << 16 | u32::from(version[3]),
+    ] {
+        bytes.extend_from_slice(&word.to_le_bytes());
+    }
+    bytes.extend_from_slice(&[0x22; 100]);
+    bytes
+}
+
+/// What `RGSS_VERSION` a game of RGSS3 reports whose `Library=System\RGSS300.dll` is a file
+/// of the version `version`.
+fn reported_version(name: &str, version: [u16; 4]) -> String {
+    let game = AceGame::new(
+        name,
+        "Ace",
+        &[("Main", &writes("version.txt", "RGSS_VERSION"))],
+    );
+    let ini = "[Game]\r\nRTP=\r\nLibrary=System\\RGSS300.dll\r\n\
+               Scripts=Data\\Scripts.rvdata2\r\nTitle=Ace\r\n";
+    fs::write(game.dir().join("Game.ini"), ini).unwrap();
+    fs::create_dir_all(game.dir().join("System")).unwrap();
+    fs::write(game.dir().join("System/RGSS300.dll"), library_file(version)).unwrap();
+    ace(&game, &[]).assert_success();
+    written(&game, "version.txt")
+}
+
+/// Requirement "Version of RGSS3 by the library of the game", scenario "Through both
+/// executables": the DLL 3.0.0.1.
+#[test]
+fn a_game_of_vx_ace_with_the_dll_3_0_0_1_reports_3_0_0() {
+    assert_eq!(reported_version("ace-dll-3001", [3, 0, 0, 1]), "3.0.0");
+}
+
+/// Requirement "Version of RGSS3 by the library of the game", scenario "Through both
+/// executables": the DLL 3.0.1.1 under the name `RGSS300.dll`.
+#[test]
+fn a_game_of_vx_ace_with_the_dll_3_0_1_1_reports_3_0_1() {
+    assert_eq!(reported_version("ace-dll-3011", [3, 0, 1, 1]), "3.0.1");
+}
+
 /// Requirement "A game of VX Ace runs", scenario "Runtime named by the option".
 #[test]
 fn a_game_run_as_one_of_vx_ace_runs_over_ruby_1_9_2() {

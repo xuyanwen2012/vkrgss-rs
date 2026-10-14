@@ -37,6 +37,13 @@ impl LibraryVersion {
             ]))
         })
     }
+
+    /// Whether the first three numbers are 3.0.0, as those of the DLL 3.0.0.1 of RGSS3: the
+    /// one place of the rule by which a game of RGSS3 takes the glyph rule of 3.0.0.1 and
+    /// the `RGSS_VERSION` `"3.0.0"`. Every other version takes those of 3.0.1.1.
+    pub fn is_3_0_0(&self) -> bool {
+        matches!(self.0, [3, 0, 0, _])
+    }
 }
 
 impl fmt::Display for LibraryVersion {
@@ -78,6 +85,17 @@ mod tests {
             Some(LibraryVersion([3, 0, 1, 1]))
         );
         assert_eq!(LibraryVersion([3, 0, 1, 1]).to_string(), "3.0.1.1");
+    }
+
+    #[test]
+    fn the_first_three_numbers_tell_3_0_0() {
+        assert!(LibraryVersion([3, 0, 0, 1]).is_3_0_0());
+        assert!(LibraryVersion([3, 0, 0, 7]).is_3_0_0());
+        assert!(LibraryVersion([3, 0, 0, 0]).is_3_0_0());
+        assert!(!LibraryVersion([3, 0, 1, 1]).is_3_0_0());
+        assert!(!LibraryVersion([3, 1, 0, 1]).is_3_0_0());
+        assert!(!LibraryVersion([2, 0, 2, 1]).is_3_0_0());
+        assert!(!LibraryVersion([0, 3, 0, 0]).is_3_0_0());
     }
 
     #[test]

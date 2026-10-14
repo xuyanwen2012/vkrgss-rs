@@ -12,9 +12,9 @@
 
 ## 3. The library and the fonts of a game of RGSS3
 
-- [ ] 3.1 `LibraryVersion::is_3_0_0` with its unit test; `RunConfig::library_version` and `RGSS_VERSION` by it in the preparation of RGSS3 (design decision 10), `prelude_rgss3.rb` defining the constant no second time; `crates/vkxp-binding-rgss3/tests/version_rgss3.rs`. Verify: the first, second and last scenarios of "Version of RGSS3 by the library of the game"; `cargo test -p vkxp-vfs -p vkxp-binding -p vkxp-binding-rgss3 --locked` passes.
-- [ ] 3.2 In `vkxp-guest-main`: the version read in `guest_config` for a game of RGSS3, the mask rules and the font directories of `FontBackend::for_game` (design decisions 10 and 11), with their unit tests. Verify: the scenarios of "Fonts of a game of RGSS3" and "Glyph rule by the library of a game of RGSS3"; `cargo test -p vkxp-guest-main -p vkxp-guest-main-rgss3 --locked` passes; `git diff --stat` against the start of the change names no file of `crates/vkxp-guest`, `crates/vkxp-proto`, `crates/vkxp-host`, `crates/vkxp-core` or `crates/vkxp-text`.
-- [ ] 3.3 Two tests in `crates/vkxp/tests/rgss3.rs` (design decision 13). Verify: the scenario "Through both executables"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp -p vkxp-guest-rgss3 --locked --test rgss3 --test guest_record` passes.
+- [x] 3.1 `LibraryVersion::is_3_0_0` with its unit test; `RunConfig::library_version` and `RGSS_VERSION` by it in the preparation of RGSS3 (design decision 10), `prelude_rgss3.rb` defining the constant no second time; `crates/vkxp-binding-rgss3/tests/version_rgss3.rs`. Verify: the first, second and last scenarios of "Version of RGSS3 by the library of the game"; `cargo test -p vkxp-vfs -p vkxp-binding -p vkxp-binding-rgss3 --locked` passes.
+- [x] 3.2 In `vkxp-guest-main`: the version read in `guest_config` for a game of RGSS3, the mask rules and the font directories of `FontBackend::for_game` (design decisions 10 and 11), with their unit tests. Verify: the scenarios of "Fonts of a game of RGSS3" and "Glyph rule by the library of a game of RGSS3"; `cargo test -p vkxp-guest-main -p vkxp-guest-main-rgss3 --locked` passes; `git diff --stat` against the start of the change names no file of `crates/vkxp-guest`, `crates/vkxp-proto`, `crates/vkxp-host`, `crates/vkxp-core` or `crates/vkxp-text`.
+- [x] 3.3 Two tests in `crates/vkxp/tests/rgss3.rs` (design decision 13). Verify: the scenario "Through both executables"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp -p vkxp-guest-rgss3 --locked --test rgss3 --test guest_record` passes.
 
 ## 4. Documents
 

@@ -27,7 +27,7 @@ use vkxp_proto::link::GuestEnd;
 use vkxp_proto::{AudioChannel, AudioCommand, GuestToHost, HostToGuest, Size};
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{Raise, Raised, Ruby, RubyError};
-use vkxp_vfs::{GameIni, Runtime};
+use vkxp_vfs::{FileKind, GameIni, LibraryVersion, Runtime};
 
 use crate::guest::{Config, Guest};
 use crate::panel::Panel;
@@ -39,8 +39,8 @@ use crate::{audio, graphics, input, kernel, rb, win32api};
 const PRELUDE: &str = include_str!("prelude.rb");
 
 /// The Ruby part of the preparation of a game of RGSS3, in the place of [`PRELUDE`]:
-/// `RGSS_VERSION`, `RGSSReset`, `save_data`, `load_data`, `msgbox`, `msgbox_p` and the
-/// loader of the script archive.
+/// `RGSSReset`, `save_data`, `load_data`, `msgbox`, `msgbox_p` and the loader of the script
+/// archive. `RGSS_VERSION` is defined before it ([`rgss3_version`]).
 const PRELUDE_RGSS3: &str = include_str!("prelude_rgss3.rb");
 
 /// What the preparation evaluates for every runtime after [`PRELUDE`] or
@@ -120,6 +120,12 @@ pub struct RunConfig {
     /// The way the guest has itself copied when it is asked to save a state. A guest
     /// without one answers such a request with the failure message.
     pub copier: Option<Arc<dyn Copier>>,
+    /// The version of the DLL the game's `Library` names, read by the caller; `None` for no
+    /// DLL and for a file without a version record. In a game of RGSS3 it decides
+    /// `RGSS_VERSION`: `"3.0.0"` for a version whose first three numbers are 3.0.0
+    /// ([`LibraryVersion::is_3_0_0`]) and `"3.0.1"` otherwise, without one included. The
+    /// other runtimes do not read it.
+    pub library_version: Option<LibraryVersion>,
 }
 
 impl Default for RunConfig {
@@ -144,6 +150,7 @@ impl Default for RunConfig {
             log_p: false,
             frame_stats: false,
             copier: None,
+            library_version: None,
         }
     }
 }
@@ -473,19 +480,22 @@ pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
 /// from the guest's [`RunConfig`], and turns the process functions off unless it enables
 /// them.
 pub(crate) fn prepare(ruby: &Ruby) -> Result<(), RubyError> {
-    let (runtime, debug, battle_test, process_functions) = Guest::with(|guest| {
+    let (runtime, debug, battle_test, process_functions, library_version) = Guest::with(|guest| {
         let run = &guest.runtime.run;
         (
             run.runtime,
             run.debug,
             run.battle_test,
             run.process_functions,
+            run.library_version,
         )
     });
     if !rb::RUBY_19 {
         ruby.eval_protected(PRELUDE_RUBY18, PRELUDE_NAME, 1)?;
     }
     if runtime == Runtime::Rgss3 {
+        let version = rgss3_version_source(rgss3_version(library_version));
+        ruby.eval_protected(&version, PRELUDE_NAME, 1)?;
         ruby.eval_protected(PRELUDE_RGSS3, PRELUDE_NAME, 1)?;
     } else {
         ruby.eval_protected(PRELUDE, PRELUDE_NAME, 1)?;
@@ -504,6 +514,31 @@ pub(crate) fn prepare(ruby: &Ruby) -> Result<(), RubyError> {
     let flags = test_mode_globals(runtime, debug, battle_test);
     ruby.eval_protected(&flags, PRELUDE_NAME, 1)?;
     Ok(())
+}
+
+/// `RGSS_VERSION` of a game of RGSS3 whose DLL has `version`: `"3.0.0"` for a version
+/// whose first three numbers are 3.0.0 ([`LibraryVersion::is_3_0_0`]), and `"3.0.1"`, the
+/// version vkxp follows, for every other version, a DLL without a version record and no
+/// DLL. This is the table of the glyph rule of `docs/decisions.md`.
+///
+/// Provenance: oracle measurement 2026-10-13, RGSS301 3.0.1.1 and RGSS300 3.0.0.1: each
+/// states its own version.
+fn rgss3_version(version: Option<LibraryVersion>) -> &'static str {
+    match version {
+        Some(version) if version.is_3_0_0() => "3.0.0",
+        _ => "3.0.1",
+    }
+}
+
+/// The source that defines `RGSS_VERSION` as `version`, in ASCII-8BIT. A process prepares
+/// once; the harness of the tests prepares again for every game it plays on its one
+/// interpreter, so a constant of an earlier preparation is removed first and the constant
+/// is defined once, without the warning of a constant defined again.
+fn rgss3_version_source(version: &str) -> String {
+    format!(
+        "Object.send(:remove_const, :RGSS_VERSION) if defined?(RGSS_VERSION)\n\
+         RGSS_VERSION = \"{version}\".force_encoding(\"ASCII-8BIT\")\n"
+    )
 }
 
 /// The source that sets the globals of test mode. RGSS1 has `$DEBUG` and `$BTEST`. The

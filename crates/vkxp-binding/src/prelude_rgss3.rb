@@ -3,8 +3,8 @@
 # functions whose names start with `vkxp_` are host functions of the binding. `rgss_main`
 # and `rgss_stop` are not defined here: they come with the built-in scripts file.
 
-# The version of RGSS that vkxp follows, as the original runtime 3.0.1 states it.
-RGSS_VERSION = "3.0.1".force_encoding("ASCII-8BIT") unless defined?(RGSS_VERSION)
+# RGSS_VERSION is defined by the binding before this file, by the version of the DLL the
+# game ships: "3.0.0" for 3.0.0.x and "3.0.1" otherwise.
 
 # Raised by Graphics.update when the host asks for a restart of the game (F12), with an
 # empty message. Not a StandardError: a bare rescue does not catch it.

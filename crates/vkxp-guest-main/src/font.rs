@@ -1,13 +1,56 @@
 //! The text backend of a running game: the binding's interface over the font engine.
 //!
 //! It lives outside the binding so that the binding does not depend on the font engine.
+//! For a game of RGSS3 it also takes the fonts of the run-time packages and the glyph rule
+//! of the DLL the game ships.
 
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 
 use vkxp_binding::TextBackend;
 use vkxp_core::{Font, Mask, TextMetrics, TextRasterizer};
-use vkxp_text::{FontSources, TextEngine, TextRequest};
+use vkxp_text::{FontSources, MaskRules, TextEngine, TextRequest};
+use vkxp_vfs::{LibraryVersion, Runtime};
+
+/// The directories a game of `runtime` takes fonts from before the system's, in order: those
+/// of `font_dirs`, the game's `Fonts` directory, and for RGSS3 the `Fonts` directory of each
+/// run-time package in the order of `rtp_dirs`, each of the last two when it exists. The
+/// game comes before the packages, as in the search of the game's files.
+///
+/// Provenance of the fonts of RGSS3: oracle measurement 2026-10-13, `ace-v0-REPORT.md`
+/// "Fonts" and `ace-v1-bitmap-REPORT.md` section 7: the original loads the fonts of
+/// `<RTP>/Fonts` and `<game>/Fonts`. The packages of RGSS1 and RGSS2 are not read for fonts.
+pub(crate) fn font_directories(
+    runtime: Runtime,
+    game_dir: &Path,
+    rtp_dirs: &[PathBuf],
+    font_dirs: &[PathBuf],
+) -> Vec<PathBuf> {
+    let mut directories = font_dirs.to_vec();
+    let packages: &[PathBuf] = if runtime == Runtime::Rgss3 {
+        rtp_dirs
+    } else {
+        &[]
+    };
+    let fonts = std::iter::once(game_dir)
+        .chain(packages.iter().map(PathBuf::as_path))
+        .map(|dir| dir.join("Fonts"))
+        .filter(|fonts| fonts.is_dir());
+    directories.extend(fonts);
+    directories
+}
+
+/// The rule masks of glyphs are made by in a game of `runtime` whose DLL has `version`:
+/// those of RGSS1 and RGSS2, and in RGSS3 those of the DLL 3.0.0.1 for a version whose
+/// first three numbers are 3.0.0 and those of 3.0.1.1 for any other version and for none.
+/// This is the table of `docs/decisions.md`, "Text and bitmaps of RGSS3".
+pub(crate) fn mask_rules(runtime: Runtime, version: Option<LibraryVersion>) -> MaskRules {
+    match (runtime, version) {
+        (Runtime::Rgss3, Some(version)) if version.is_3_0_0() => MaskRules::Rgss3Early,
+        (Runtime::Rgss3, _) => MaskRules::Rgss3,
+        (Runtime::Rgss1 | Runtime::Rgss2, _) => MaskRules::Plain,
+    }
+}
 
 /// A [`TextBackend`] that draws with a [`TextEngine`].
 ///
@@ -25,24 +68,28 @@ impl FontBackend {
         }
     }
 
-    /// The backend of a game: the fonts of `font_dirs` first, then those of the game's
-    /// `Fonts` directory if it has one, then the fonts installed on the system. With
-    /// `own_metrics` a font that replaces another is sized by its own line box.
+    /// The backend of a game of `runtime`: the fonts of the directories of
+    /// [`font_directories`], then the fonts installed on the system, with the glyph rule of
+    /// [`mask_rules`] for the version of the game's DLL. With `own_metrics` a font that
+    /// replaces another is sized by its own line box.
     pub(crate) fn for_game(
+        runtime: Runtime,
         game_dir: &Path,
+        rtp_dirs: &[PathBuf],
         font_dirs: &[PathBuf],
         own_metrics: bool,
+        version: Option<LibraryVersion>,
     ) -> FontBackend {
-        let mut directories = font_dirs.to_vec();
-        let game_fonts = game_dir.join("Fonts");
-        if game_fonts.is_dir() {
-            directories.push(game_fonts);
-        }
-        FontBackend::new(&FontSources {
-            directories,
+        let backend = FontBackend::new(&FontSources {
+            directories: font_directories(runtime, game_dir, rtp_dirs, font_dirs),
             own_metrics,
             ..FontSources::system()
-        })
+        });
+        backend
+            .engine
+            .borrow_mut()
+            .set_mask_rules(mask_rules(runtime, version));
+        backend
     }
 }
 
@@ -249,6 +296,91 @@ mod tests {
         let backend = backend();
         assert!(backend.font_exists("Liberation Sans"));
         assert!(!backend.font_exists("NoSuchFamilyAnywhere"));
+    }
+
+    /// Scenarios "The order of the directories" and "VX" of "Fonts of a game of RGSS3".
+    #[test]
+    fn a_game_of_rgss3_takes_the_fonts_of_its_packages_after_its_own() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = |name: &str| root.path().join(name);
+        let (named, game, first, second) = (dir("named"), dir("game"), dir("rtp1"), dir("rtp2"));
+        for fonts in [named.clone(), game.join("Fonts"), second.join("Fonts")] {
+            std::fs::create_dir_all(fonts).unwrap();
+        }
+        std::fs::create_dir_all(&first).unwrap();
+        let rtp_dirs = [first, second.clone()];
+        let font_dirs = [named.clone()];
+        assert_eq!(
+            font_directories(Runtime::Rgss3, &game, &rtp_dirs, &font_dirs),
+            [named.clone(), game.join("Fonts"), second.join("Fonts")]
+        );
+        for runtime in [Runtime::Rgss1, Runtime::Rgss2] {
+            assert_eq!(
+                font_directories(runtime, &game, &rtp_dirs, &font_dirs),
+                [named.clone(), game.join("Fonts")]
+            );
+        }
+    }
+
+    /// Scenario "A font of the run-time package": the backend over the directories of a game
+    /// of RGSS3, without the system's fonts, which may have the same family.
+    #[test]
+    fn a_font_of_the_run_time_package_exists() {
+        let root = tempfile::tempdir().unwrap();
+        let (game, rtp) = (root.path().join("game"), root.path().join("rtp"));
+        std::fs::create_dir_all(&game).unwrap();
+        std::fs::create_dir_all(rtp.join("Fonts")).unwrap();
+        std::fs::copy(
+            text_tests().join("fonts/LiberationSans-Regular.ttf"),
+            rtp.join("Fonts/LiberationSans-Regular.ttf"),
+        )
+        .unwrap();
+        let directories = font_directories(Runtime::Rgss3, &game, &[rtp], &[]);
+        let backend = FontBackend::new(&FontSources::directories_only(directories));
+        assert!(backend.font_exists_exactly("Liberation Sans"));
+        let without = font_directories(Runtime::Rgss2, &game, &[root.path().join("rtp")], &[]);
+        let backend = FontBackend::new(&FontSources::directories_only(without));
+        assert!(!backend.font_exists_exactly("Liberation Sans"));
+    }
+
+    /// Scenario "The table of the decision" of "Glyph rule by the library of a game of
+    /// RGSS3", and the rule a backend of a game is made with.
+    #[test]
+    fn the_glyph_rule_follows_the_version_of_the_dll() {
+        let version = |numbers| Some(LibraryVersion(numbers));
+        let rules: Vec<MaskRules> = [
+            version([3, 0, 0, 1]),
+            version([3, 0, 0, 7]),
+            version([3, 0, 1, 1]),
+            version([2, 0, 2, 1]),
+            None,
+        ]
+        .into_iter()
+        .map(|version| mask_rules(Runtime::Rgss3, version))
+        .collect();
+        assert_eq!(
+            rules,
+            [
+                MaskRules::Rgss3Early,
+                MaskRules::Rgss3Early,
+                MaskRules::Rgss3,
+                MaskRules::Rgss3,
+                MaskRules::Rgss3,
+            ]
+        );
+        assert_eq!(
+            mask_rules(Runtime::Rgss2, version([3, 0, 0, 1])),
+            MaskRules::Plain
+        );
+        let game = tempfile::tempdir().unwrap();
+        for (runtime, expected) in [
+            (Runtime::Rgss3, MaskRules::Rgss3Early),
+            (Runtime::Rgss2, MaskRules::Plain),
+        ] {
+            let backend =
+                FontBackend::for_game(runtime, game.path(), &[], &[], false, version([3, 0, 0, 1]));
+            assert_eq!(backend.engine.borrow().mask_rules(), expected);
+        }
     }
 
     /// `Font.exist?` of RGSS3 asks exactly, letter case included.

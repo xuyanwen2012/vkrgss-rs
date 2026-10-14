@@ -37,7 +37,7 @@ use vkxp_guest::settings::GuestSettings;
 use vkxp_guest::{Attached, diagnostics, play_in_process, play_on_thread, signals};
 use vkxp_proto::link::GuestEnd;
 use vkxp_ruby_sys::{Interpreter, Options, RUBY_API, RubyApi};
-use vkxp_vfs::{GameFiles, GameIni, Runtime, VfsError, resolve_rtps};
+use vkxp_vfs::{FileKind, GameFiles, GameIni, LibraryVersion, Runtime, VfsError, resolve_rtps};
 
 use crate::font::FontBackend;
 
@@ -145,6 +145,50 @@ fn default_font_names(library: &str) -> Vec<String> {
     vec![name.to_owned()]
 }
 
+/// The version of the DLL that `library`, the `Library` of the game's configuration file,
+/// names, found in the game directory as a data file is (letter case and `\` accepted,
+/// never in the archive), and the line of the log that says which file gave which version,
+/// or why there is none: an empty `Library`, a file that is not found or cannot be read,
+/// and bytes without a version record. The file's name does not count.
+fn library_version(files: &GameFiles, library: &str) -> (Option<LibraryVersion>, String) {
+    if library.trim().is_empty() {
+        return (
+            None,
+            "no library version: Game.ini names no Library".to_owned(),
+        );
+    }
+    let path = match files.resolve(FileKind::Data, library) {
+        Ok(path) => path,
+        Err(_) => {
+            let line = format!("no library version: {library} is not in the game directory");
+            return (None, line);
+        }
+    };
+    let bytes = match std::fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            let line = format!(
+                "no library version: {} cannot be read: {error}",
+                path.display()
+            );
+            return (None, line);
+        }
+    };
+    match LibraryVersion::read(&bytes) {
+        Some(version) => {
+            let line = format!("library version: {version} ({})", path.display());
+            (Some(version), line)
+        }
+        None => {
+            let line = format!(
+                "no library version: {} has no version record",
+                path.display()
+            );
+            (None, line)
+        }
+    }
+}
+
 /// What the guest of a run is set up with, as far as it is looked up before any game file
 /// is opened.
 pub struct GuestInputs {
@@ -250,7 +294,8 @@ pub fn guest_inputs(game_dir: &Path, settings: &GuestSettings) -> Result<GuestIn
     })
 }
 
-/// Opens the game's files, enters the game directory, blocks SIGVTALRM in the calling
+/// Opens the game's files, reads the version of the DLL of a game of RGSS3
+/// ([`library_version`]), enters the game directory, blocks SIGVTALRM in the calling
 /// thread, which has to be the only one still, and builds the binding's configuration.
 fn guest_config(
     game_dir: &Path,
@@ -270,6 +315,22 @@ fn guest_config(
     if let Some(archive) = archive(game_dir, runtime) {
         tracing::info!("encrypted archive: {}", archive.display());
     }
+    // Only RGSS3 has a rule by the version: the glyph rule and `RGSS_VERSION`.
+    let version = if runtime == Runtime::Rgss3 {
+        let (version, line) = library_version(&files, &ini.library);
+        tracing::info!("{line}");
+        version
+    } else {
+        None
+    };
+    let text = FontBackend::for_game(
+        runtime,
+        game_dir,
+        files.rtp_dirs(),
+        &font_dirs,
+        settings.font_own_metrics,
+        version,
+    );
 
     std::env::set_current_dir(game_dir)
         .with_context(|| format!("cannot enter the game directory {}", game_dir.display()))?;
@@ -278,11 +339,7 @@ fn guest_config(
     Ok(Config {
         files,
         font_names: default_font_names(&ini.library),
-        text: Box::new(FontBackend::for_game(
-            game_dir,
-            &font_dirs,
-            settings.font_own_metrics,
-        )),
+        text: Box::new(text),
         run: RunConfig {
             ini,
             runtime,
@@ -293,6 +350,7 @@ fn guest_config(
             frame_stats: settings.frame_stats,
             seed: Some(seed),
             preload,
+            library_version: version,
             ..RunConfig::default()
         },
     })
@@ -522,6 +580,81 @@ mod tests {
             runtime_of(&xp, Some(Runtime::Rgss3)).unwrap(),
             Runtime::Rgss3
         );
+    }
+
+    /// The bytes of a file that holds the version record of `version` after other bytes.
+    fn dll(version: [u16; 4]) -> Vec<u8> {
+        let mut bytes = vec![0x4D, 0x5A];
+        bytes.extend_from_slice(&[7; 300]);
+        for word in [
+            0xFEEF_04BD,
+            0x0001_0000,
+            u32::from(version[0]) << 16 | u32::from(version[1]),
+            u32::from(version[2]) << 16 | u32::from(version[3]),
+        ] {
+            bytes.extend_from_slice(&word.to_le_bytes());
+        }
+        bytes.extend_from_slice(&[9; 40]);
+        bytes
+    }
+
+    /// The version of the DLL of a game directory with the file `file` of `contents`, read
+    /// by the `Library` of its `Game.ini`.
+    fn version_in_game(
+        library: &str,
+        file: Option<(&str, Vec<u8>)>,
+    ) -> (Option<LibraryVersion>, String) {
+        let game = tempfile::tempdir().unwrap();
+        if let Some((name, contents)) = file {
+            let path = game.path().join(name);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, contents).unwrap();
+        }
+        let ini = ini(library, "Data\\Scripts.rvdata2");
+        let files = GameFiles::new(game.path(), []);
+        library_version(&files, &ini.library)
+    }
+
+    /// Scenarios "The file named by the configuration" and "The name of the file does not
+    /// count" of "Glyph rule by the library of a game of RGSS3".
+    #[test]
+    fn the_version_is_read_from_the_file_the_library_names() {
+        let (version, line) = version_in_game(
+            "System\\RGSS300.dll",
+            Some(("system/rgss300.dll", dll([3, 0, 0, 1]))),
+        );
+        assert_eq!(version, Some(LibraryVersion([3, 0, 0, 1])));
+        assert!(
+            line.contains("3.0.0.1") && line.contains("rgss300.dll"),
+            "{line}"
+        );
+        let (version, _) = version_in_game(
+            "System\\RGSS300.dll",
+            Some(("System/RGSS300.dll", dll([3, 0, 1, 1]))),
+        );
+        assert_eq!(version, Some(LibraryVersion([3, 0, 1, 1])));
+        assert_eq!(
+            font::mask_rules(Runtime::Rgss3, version),
+            vkxp_text::MaskRules::Rgss3
+        );
+    }
+
+    /// Scenario "No version": each is one line of the log that names the reason.
+    #[test]
+    fn a_game_without_a_version_says_why() {
+        for (library, file, reason) in [
+            ("", None, "names no Library"),
+            ("System\\RGSS300.dll", None, "is not in the game directory"),
+            (
+                "System\\RGSS300.dll",
+                Some(("System/RGSS300.dll", vec![0; 1000])),
+                "has no version record",
+            ),
+        ] {
+            let (version, line) = version_in_game(library, file);
+            assert_eq!(version, None, "{library}");
+            assert!(line.contains(reason) && !line.contains('\n'), "{line}");
+        }
     }
 
     #[test]
