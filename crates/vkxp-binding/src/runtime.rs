@@ -44,8 +44,12 @@ const PRELUDE: &str = include_str!("prelude.rb");
 const PRELUDE_RGSS3: &str = include_str!("prelude_rgss3.rb");
 
 /// What the preparation evaluates for every runtime after [`PRELUDE`] or
-/// [`PRELUDE_RGSS3`]: `Win32API`, and `require` and `load` limited to the game directory.
+/// [`PRELUDE_RGSS3`]: `require` and `load` limited to the game directory.
 const PRELUDE_SHARED: &str = include_str!("prelude_shared.rb");
+
+/// `Win32API` of RGSS1 and RGSS2, evaluated before [`PRELUDE_SHARED`]. In RGSS3 the class is
+/// one of the binding.
+const PRELUDE_WIN32API: &str = include_str!("prelude_win32api.rb");
 
 /// What is prepared over Ruby 1.8 only, before the prelude: `$KCODE` and the empty load path.
 const PRELUDE_RUBY18: &str = include_str!("prelude_ruby18.rb");
@@ -471,7 +475,7 @@ pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
     graphics::define(ruby)?;
     input::define(ruby, Guest::with(|guest| guest.runtime.run.runtime))?;
     audio::define(ruby)?;
-    win32api::define(ruby)?;
+    win32api::define(ruby, Guest::with(|guest| guest.runtime.run.runtime))?;
     kernel::define(ruby)
 }
 
@@ -499,6 +503,9 @@ pub(crate) fn prepare(ruby: &Ruby) -> Result<(), RubyError> {
         ruby.eval_protected(PRELUDE_RGSS3, PRELUDE_NAME, 1)?;
     } else {
         ruby.eval_protected(PRELUDE, PRELUDE_NAME, 1)?;
+    }
+    if runtime != Runtime::Rgss3 {
+        ruby.eval_protected(PRELUDE_WIN32API, PRELUDE_NAME, 1)?;
     }
     ruby.eval_protected(PRELUDE_SHARED, PRELUDE_NAME, 1)?;
     if runtime == Runtime::Rgss1 {

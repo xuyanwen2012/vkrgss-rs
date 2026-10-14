@@ -56,6 +56,7 @@ const BOUND: &[&str] = &[
     "Font",
     "Bitmap",
     "Input",
+    "Win32API",
 ];
 
 fn eval(source: &str) -> String {
@@ -123,7 +124,7 @@ fn every_listed_method_of_a_bound_class_has_the_listed_arity() {
         .collect();
     assert_eq!(
         counts,
-        [17, 17, 18, 10, 53, 55, 29, 20, 21, 2, 21, 35, 22, 6]
+        [17, 17, 18, 10, 53, 55, 29, 20, 21, 2, 21, 35, 22, 6, 3]
     );
     let wrong = mismatches(&entries, BOUND);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));

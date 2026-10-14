@@ -22,7 +22,7 @@
 //! at its label: [`bytes`] takes the bytes and [`text`] those bytes with invalid UTF-8
 //! replaced.
 
-use std::ffi::{CStr, c_char, c_long};
+use std::ffi::{CStr, c_char, c_long, c_void};
 
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{Arity, HostResult, Raise, Raised, Ruby};
@@ -39,8 +39,19 @@ pub(crate) type AllocFn = unsafe extern "C" fn(VALUE) -> VALUE;
 enum Op {
     /// `NUM2LONG`, into [`Call::long`].
     Long(VALUE),
+    /// `NUM2ULONG`, into [`Call::long`].
+    ULong(VALUE),
     /// `NUM2DBL`, into [`Call::double`].
     Double(VALUE),
+    /// `StringValue`: the value, or what its `to_str` returns.
+    StringValue(VALUE),
+    /// A new object of the class `Data` that holds `data`.
+    DataNew {
+        data: *mut c_void,
+        free: ffi::DataFn,
+    },
+    /// The value of a global variable.
+    GlobalGet(*const c_char),
     /// A new `Float`.
     Float(f64),
     /// A new instance from the class's allocator, without `initialize`.
@@ -92,10 +103,22 @@ unsafe extern "C" fn call_body(data: VALUE) -> VALUE {
                 call.long = ffi::num2long(value);
                 ffi::Qnil
             }
+            Op::ULong(value) => {
+                call.long = ffi::rb_num2ulong(value) as c_long;
+                ffi::Qnil
+            }
             Op::Double(value) => {
                 call.double = ffi::rb_num2dbl(value);
                 ffi::Qnil
             }
+            Op::StringValue(value) => {
+                let mut value = value;
+                ffi::rb_string_value(&mut value)
+            }
+            Op::DataNew { data, free } => {
+                ffi::rb_data_object_alloc(ffi::rb_cData, data, None, Some(free))
+            }
+            Op::GlobalGet(name) => ffi::rb_gv_get(name),
             Op::Float(number) => ffi::rb_float_new(number),
             Op::Alloc(class) => ffi::rb_obj_alloc(class),
             Op::IvarSet {
@@ -333,6 +356,14 @@ pub(crate) fn long(ruby: &Ruby, value: VALUE) -> Result<i64, Raise> {
     Ok(perform(ruby, Op::Long(value))?.1.long)
 }
 
+/// An integer argument as Ruby's own `NUM2ULONG` converts it, in 64 bits: a `Float` is
+/// truncated, a negative number is taken in two's complement, `nil` raises `TypeError` with
+/// `no implicit conversion from nil to integer`, anything without `to_int` `TypeError` with
+/// `can't convert String into Integer`, and a `Bignum` beyond 64 bits `RangeError`.
+pub(crate) fn ulong(ruby: &Ruby, value: VALUE) -> Result<u64, Raise> {
+    Ok(perform(ruby, Op::ULong(value))?.1.long as u64)
+}
+
 /// An integer argument, as Ruby's own `NUM2INT` converts it: see [`long`], with the range of
 /// 32 bits.
 pub(crate) fn int(ruby: &Ruby, value: VALUE) -> Result<i32, Raise> {
@@ -372,6 +403,21 @@ pub(crate) fn bytes(ruby: &Ruby, value: VALUE) -> Result<Vec<u8>, Raise> {
             format!("can't convert {class} into String")
         })
     })
+}
+
+/// A `String` argument as Ruby's own `StringValue` converts it: the string, or what `to_str`
+/// of the value returns. Anything else raises `TypeError` with `can't convert Symbol into
+/// String`.
+pub(crate) fn string_value(ruby: &Ruby, value: VALUE) -> Result<VALUE, Raised> {
+    Ok(perform(ruby, Op::StringValue(value))?.0)
+}
+
+/// Whether the value is frozen.
+pub(crate) fn frozen(value: VALUE) -> bool {
+    // SAFETY: the value is live by the condition of this module, and a value that is no
+    // special constant has its flags in its header.
+    !ffi::special_const_p(value)
+        && unsafe { (*(value as *const ffi::RBasic)).flags } & ffi::FL_FREEZE != 0
 }
 
 /// A `String` argument as text. Bytes that are not valid UTF-8 are replaced, not rejected.
@@ -445,6 +491,33 @@ pub(crate) fn strings_new(ruby: &Ruby, strings: &[String]) -> HostResult {
 /// A new instance of `class` from its allocator, without `initialize`.
 pub(crate) fn allocate(ruby: &Ruby, class: VALUE) -> Result<VALUE, Raised> {
     Ok(perform(ruby, Op::Alloc(class))?.0)
+}
+
+/// A new object of the class `Data` whose data pointer is `data`; `free` is called with it
+/// when the object is collected. The object has no methods a script could use on the data:
+/// it is how a plain Ruby object keeps Rust state, in an instance variable without `@`. If
+/// this raises, `data` is not freed.
+pub(crate) fn data_new(ruby: &Ruby, data: *mut c_void, free: ffi::DataFn) -> HostResult {
+    Ok(perform(ruby, Op::DataNew { data, free })?.0)
+}
+
+/// The data pointer of `value` if it is an object [`data_new`] made with `free`, or `None`.
+pub(crate) fn data_of(value: VALUE, free: ffi::DataFn) -> Option<*mut c_void> {
+    if !is_data(value) {
+        return None;
+    }
+    // SAFETY: a live data object has the layout `RData`; its class is read from its header.
+    unsafe {
+        let data = &*(value as *const ffi::RData);
+        let ours = data.basic.klass == ffi::rb_cData
+            && data.dfree.map(|function| function as usize) == Some(free as usize);
+        ours.then_some(data.data)
+    }
+}
+
+/// The value of the global variable `name`, such as `$stderr`.
+pub(crate) fn global(ruby: &Ruby, name: &CStr) -> HostResult {
+    Ok(perform(ruby, Op::GlobalGet(name.as_ptr()))?.0)
 }
 
 /// Sets the allocator of `class`.

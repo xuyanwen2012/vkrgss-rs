@@ -2,7 +2,7 @@
 
 ## 1. The class of RGSS3
 
-- [ ] 1.1 Before anything changes, keep `cargo test --locked -- --list` of `vkxp-binding` and of `vkxp-binding-rgss3` under `local/`. The class `Win32API` of RGSS3 in `win32api.rs` with its state in a `Data` object, the constructor's arguments, the libraries found and the count (design decisions 1 to 4); `prelude_win32api.rb` for RGSS1 and RGSS2 with `prelude_shared.rb` keeping its line numbers; `Win32API` among the bound classes of `arity_rgss3.rs`; `crates/vkxp-binding-rgss3/tests/win32api_rgss3.rs`. Verify: the scenarios of "Win32API of RGSS3", "Libraries of Win32API in RGSS3" and "Declarations and count of Win32API in RGSS3"; `cargo test -p vkxp-binding -p vkxp-binding-rgss3 --locked` passes with every name of the kept lists.
+- [x] 1.1 Before anything changes, keep `cargo test --locked -- --list` of `vkxp-binding` and of `vkxp-binding-rgss3` under `local/`. The class `Win32API` of RGSS3 in `win32api.rs` with its state in a `Data` object, the constructor's arguments, the libraries found and the count (design decisions 1 to 4); `prelude_win32api.rb` for RGSS1 and RGSS2 with `prelude_shared.rb` keeping its line numbers; `Win32API` among the bound classes of `arity_rgss3.rs`; `crates/vkxp-binding-rgss3/tests/win32api_rgss3.rs`. Verify: the scenarios of "Win32API of RGSS3", "Libraries of Win32API in RGSS3" and "Declarations and count of Win32API in RGSS3"; `cargo test -p vkxp-binding -p vkxp-binding-rgss3 --locked` passes with every name of the kept lists.
 
 ## 2. Conversions, values and the measured calls
 

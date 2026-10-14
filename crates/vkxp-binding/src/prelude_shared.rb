@@ -2,30 +2,30 @@
 # Written for vkxp; the functions whose names start with `vkxp_` are host functions of the
 # binding.
 
-# Calls go to the host's table of emulated functions. A function outside the table returns 0
-# and is named once.
-class Win32API
-  @@vkxp_called = {}
-
-  def initialize(dll, function, import, export)
-    @vkxp_dll = dll.to_s
-    @vkxp_function = function.to_s
-    @vkxp_name = "#{dll} #{function}"
-    vkxp_win32api_names
-  end
-
-  def call(*args)
-    result = vkxp_win32api(@vkxp_dll, @vkxp_function, *args)
-    return result if result
-    unless @@vkxp_called[@vkxp_name]
-      @@vkxp_called[@vkxp_name] = true
-      $stderr.write("vkxp: Win32API #{@vkxp_name} is not emulated and returns 0\n")
-    end
-    0
-  end
-
-  alias Call call
-end
+# `Win32API` was defined on the lines below. It moved to `prelude_win32api.rb`, evaluated
+# before this file for RGSS1 and RGSS2; in RGSS3 it is a class of the binding. The comment
+# lines keep the line numbers of what follows.
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
 
 # Only Ruby files inside the game directory are loaded.
 module Kernel
