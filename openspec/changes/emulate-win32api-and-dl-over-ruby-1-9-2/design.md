@@ -295,3 +295,15 @@ Left out, with the measured source (API report unless named):
   type`: refused (decision 10). `NULL`, `RUBY_FREE`, `Handle::DEFAULT`, `NEXT`,
   `BUILD_RUBY_*` and the callback constants are not defined.
 - The six names `Win32API.new` interns (4.1): `intern-the-names-of-rgss3`.
+- Found while implementing, not built:
+  - A pointer parameter that is no String but has `to_str` is read from the String `to_str`
+    returns, which is not written back; the original passes that String's memory. Not
+    measured.
+  - `call` of a `Win32API` that was allocated without `initialize` raises `RuntimeError`
+    with `uninitialized Win32API`; not measured.
+  - The comment at the end of `prelude.rb` still says that `Win32API` comes with
+    `prelude_shared.rb`; the file was outside the scope of this change.
+  - The frozen String of a pointer parameter is refused with the words of the interpreter's
+    own check before it changes a string (`can't modify frozen string`), written in
+    `win32api.rs`: the interpreter crate does not declare that check, and `rb_check_frozen`,
+    which it declares, says `frozen String`.

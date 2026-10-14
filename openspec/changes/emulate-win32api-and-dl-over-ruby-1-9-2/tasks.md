@@ -16,7 +16,7 @@
 
 ## 4. Documents
 
-- [ ] 4.1 `docs/compatibility.md` (the section "RPG Maker VX Ace"), `CHANGELOG.md` under "Unreleased", the documentation of `win32api.rs` and of `lib.rs` where it describes `Win32API`; the `PLACEHOLDER` of `ShowCursor` names the measurement of RGSS3. Verify: the scenarios of "Win32API and DL of VX Ace in the documents"; the text names nothing that the code does not do; `cargo test -p xtask --locked` passes.
+- [x] 4.1 `docs/compatibility.md` (the section "RPG Maker VX Ace"), `CHANGELOG.md` under "Unreleased", the documentation of `win32api.rs` and of `lib.rs` where it describes `Win32API`; the `PLACEHOLDER` of `ShowCursor` names the measurement of RGSS3. Verify: the scenarios of "Win32API and DL of VX Ace in the documents"; the text names nothing that the code does not do; `cargo test -p xtask --locked` passes.
 
 ## 5. Integration check
 

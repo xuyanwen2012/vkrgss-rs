@@ -233,8 +233,10 @@
 //!   more for every tick until the dismissal has arrived. These frames do not advance
 //!   `Graphics.frame_count`, and a reset or quit request ends the wait and is raised as by
 //!   `Graphics.update`. With `log_p` of the [`RunConfig`], `p` only writes to `$stderr`.
-//! - `Win32API#call` goes to the table of emulated functions, see *Win32API*; a function
-//!   outside the table returns 0 and is named once on `$stderr`.
+//! - In RGSS1 and RGSS2 `Win32API` is a class of the prelude (`src/prelude_win32api.rb`)
+//!   whose `call` goes to the table of emulated functions, see *Win32API*; a function
+//!   outside the table returns 0 and is named once on `$stderr`. In RGSS3 it is a class of
+//!   the binding over the same table, and `DL` is defined (`src/prelude_dl.rb`).
 //! - `require` and `load` evaluate only `.rb` files inside the game directory and raise
 //!   `LoadError` for anything else.
 //! - Unless the `RunConfig` enables them, `system`, backticks, `exec`, `fork`, `syscall` and
@@ -243,13 +245,25 @@
 //!
 //! # Win32API
 //!
-//! `Win32API.new(library, function, import, export)` keeps the two names, and `call` passes
-//! them with its arguments to the host function `vkxp_win32api` (private module `win32api`).
-//! The library name matches without regard to letter case and with or without `.dll`; a
-//! function name also finds its ANSI variant, so `GetPrivateProfileString` is
-//! `GetPrivateProfileStringA`. An integer argument arrives as it is and `nil` as 0. A string
-//! argument is a buffer: what a function writes goes into the very string object the script
-//! passed, never beyond its length.
+//! In RGSS1 and RGSS2 `Win32API.new(library, function, import, export)` keeps the two names,
+//! and `call` passes them with its arguments to the host function `vkxp_win32api` (private
+//! module `win32api`). The library name matches without regard to letter case and with or
+//! without `.dll`; a function name also finds its ANSI variant, so `GetPrivateProfileString`
+//! is `GetPrivateProfileStringA`. An integer argument arrives as it is and `nil` as 0. A
+//! string argument is a buffer: what a function writes goes into the very string object the
+//! script passed, never beyond its length.
+//!
+//! In RGSS3 `Win32API` is the class of the original runtime of RGSS3, defined by the binding:
+//! the constructor takes four arguments and raises `LoadLibrary: <name>` for a library that
+//! is neither a file of the game, the runtime library of `Game.ini` nor a system library of
+//! a fixed list; the import declares the parameters and `call` checks their count; an
+//! integer parameter is converted as Ruby converts to an unsigned long and taken by its low
+//! 32 bits, a pointer parameter is a String that is not frozen, `nil` or an address; the
+//! export decides the value (0 for `v`, an empty String for `p` and `NULL pointer given` for
+//! 0, a signed 32-bit Integer otherwise); a buffer keeps its encoding label. The profile
+//! functions find no file under a name without `/` or `\`. `DL` is a module whose every way
+//! into a library or into memory raises `DL::DLError`. `docs/compatibility.md` has the
+//! details and the differences from the original.
 //!
 //! | Library | Function | What it does |
 //! |---|---|---|

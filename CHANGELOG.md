@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- RPG Maker VX Ace (RGSS3): `Win32API` of RGSS3. The constructor takes four arguments and
+  finds a library that is a file of the game, the runtime library of `Game.ini` or a system
+  library of Windows of a fixed list, and raises `LoadLibrary` for any other; the import
+  declares the parameters, whose count, conversions and errors are those of the original;
+  the export decides the value; a filled buffer keeps its encoding label; the profile
+  functions read nothing under a bare file name. No library is loaded: functions are
+  emulated as for XP and VX or give 0. `DL` exists with its constants and classes and
+  refuses every way into a library or into memory with `DL::DLError`.
 - RPG Maker VX Ace (RGSS3): `Font` and the text and creation of `Bitmap` of RGSS3: the
   defaults of RGSS3, `outline` and `out_color`, the objects a font is given kept as given,
   `Font.exist?` exact, `font=` that copies every attribute, text drawn by the rules of RGSS3,

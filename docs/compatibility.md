@@ -43,7 +43,8 @@ source. What remains under `crates/`:
   wheel. A key injected with `keybd_event` or `mouse_event` is seen one `Input.update`
   later than on Windows when a script injects and updates in the same frame. These rules
   and those of `ShowCursor` and `SetKeyboardState` follow the documentation of Windows and
-  were not measured on the original.
+  were not measured on the original of XP or VX; the start of the count of `ShowCursor` was
+  measured on the original of VX Ace.
 
 The level of a transition mask pixel follows the original's rule, which was measured with PNG
 masks of 24 and 32 bits; masks with a palette, in grey of 8 or 16 bits, and JPEG masks were
@@ -311,7 +312,7 @@ Known differences of the start, each against the measurements of the original:
   `Graphics.__reset__` does not wait for F12 to be released.
 - `load_data` does not freeze strings as the original does in two of 71 samples, and its
   errors for a loose file and its lookup rules are those of RGSS2.
-- `Win32API` and `DL` are not those of RGSS3; `require` and `load` are those of vkxp.
+- `require` and `load` are those of vkxp.
 - A state is not saved while a script thread is alive: a thread of Ruby 1.9.2 is a thread
   of the system, which a copy of the process does not have.
 
@@ -718,6 +719,79 @@ arguments whose first is no `Rect`, `fill_rect` whose first is no `Rect`, and th
 
 In a game of XP or VX `Font` and `Bitmap` are as they were: neither `outline` nor
 `out_color` is defined.
+
+### Win32API and DL of VX Ace
+
+A game of VX Ace has the `Win32API` of the original runtime of VX Ace as measured under Wine
+(version 3.0.1.1), with the functions vkxp emulates for XP and VX behind it:
+
+- `Win32API` has `initialize` with four arguments, `call` and `Call`, and nothing else of
+  its own. The library and the function are Strings (`can't convert Symbol into String`),
+  the import a String, an Array of Strings or `nil`, the export a String or `nil`. The
+  object shows no instance variables, can be duplicated and subclassed, and cannot be dumped
+  (`no marshal_dump is defined for class Data`).
+- Each character `p`, `l`, `i` or `n` of the import, in either case, is a parameter, `v` and
+  every other character none (`"pointer"` declares three); an Array declares the first
+  character of each String. A call with another number of arguments raises `RuntimeError`
+  with `wrong number of parameters: expected 1, got 0`.
+- A library is found when, without regard to letter case and with or without `.dll`, it is
+  a file of the game directory, the runtime library that `Game.ini` names (by its path or
+  its file name), or one of these system libraries of Windows: `kernel32`, `kernelbase`,
+  `user32`, `gdi32`, `advapi32`, `shell32`, `shlwapi`, `ole32`, `oleaut32`, `comctl32`,
+  `comdlg32`, `winmm`, `wininet`, `winhttp`, `urlmon`, `ws2_32`, `wsock32`, `msvcrt`,
+  `ntdll`, `version`, `imm32`, `psapi`, `dwmapi`, `uxtheme`, `msimg32`, `gdiplus`, `dsound`,
+  `ddraw`, `dinput`, `dinput8`, `xinput1_3`, `opengl32`, `d3d9`, `setupapi`, `crypt32`,
+  `iphlpapi`, `secur32`, `netapi32`, `mpr`, `rpcrt4`, `hid`, `powrprof`. Any other name
+  raises `RuntimeError` with `LoadLibrary: <name>` and a line feed at `Win32API.new`, as the
+  original does for a missing DLL, so a script that rescues it takes its fallback. vkxp
+  loads none of these libraries: a function is emulated, or it gives 0 (an empty String for
+  the export `p`) and is named once on `$stderr`, as for XP and VX. The functions of a
+  library a game ships are not run.
+- An integer parameter is converted as Ruby converts to an unsigned long (a `Float`
+  truncated; `nil`, a String and `true` raise `TypeError` with the words of the original)
+  and taken by its low 32 bits. A pointer parameter takes a String that is not frozen
+  (`can't modify frozen string`), `nil` and 0 as the null pointer and another Integer as an
+  address; anything else raises `TypeError` (`can't convert Float into String`).
+- The export `v` gives 0, `p` raises `ArgumentError` with `NULL pointer given` for 0, and
+  every other export, `""` and `nil` included, a signed 32-bit Integer. A buffer an
+  emulated function fills keeps its length and its encoding label.
+- The profile functions read nothing and write nothing for a file name without `/` or `\`,
+  which Windows looks for in its own directory: `GetPrivateProfileStringA` with
+  `"Game.ini"` gives the default, with `"./Game.ini"` the title. The window class is
+  `RGSS Player`, the client rectangle 544 by 416, and the first `ShowCursor(0)` gives -1, as
+  measured.
+- `DL` exists with the numeric constants of the original (`TYPE_*`, `SIZEOF_*`, `ALIGN_*`,
+  `RTLD_*`, `DLSTACK_SIZE`, `MAX_CALLBACK`) and the classes `DLError`, `DLTypeError`,
+  `Handle`, `CFunc` and `CPtr`. Every function of the module and every constructor and class
+  method of the three classes raises `DL::DLError` naming the call: vkxp loads no library
+  and reads no memory of the process. No game of the corpus uses `DL`.
+
+Known differences:
+
+- A function of a found library never raises `GetProcAddress: Name or NameA`, since vkxp
+  does not know the functions of a library it does not load. A system library outside the
+  list raises `LoadLibrary` where the original would load it; the list grows when a game
+  needs it.
+- An integer parameter raises `RangeError` at the 64-bit bounds of the guest, not at 2**32
+  and -2**31 as on the original: a game passes `bitmap.object_id` to a library of its own,
+  and an object id of the 64-bit guest is above 2**32.
+- The export `p` gives an empty String for a value other than 0, where the original copies
+  the memory at that address; no value of an emulated function is an address the guest has.
+- An Integer as the source of `RtlMoveMemory` copies nothing, so the address trick of
+  bitmap scripts (the pixels found through `object_id * 2 + 16`) reads nothing: vkxp has no
+  memory at the original's addresses and does not give scripts the memory of the guest.
+- `GetWindowRect` and `GetSystemMetrics` give the logical size, where the original under
+  Wine gave 550 by 448 and the screen; `GetModuleHandle`, `GetWindowThreadProcessId` and the
+  functions of `msvcrt` are not emulated. `FindWindowA` finds the game window for any
+  class.
+- `DL` refuses what the original does: opening a library, calling an address, `CPtr` and
+  `DL.dlwrap`. `DL::NULL`, `DL::RUBY_FREE`, `Handle::DEFAULT`, `Handle::NEXT`, `BUILD_RUBY_PLATFORM`,
+  `BUILD_RUBY_VERSION` and the callback constants are not defined.
+
+Not measured: declarations of other types than a String, an Array and `nil`, which raise
+`TypeError`; `WritePrivateProfileStringA` with a bare file name.
+
+In a game of XP or VX `Win32API` is as it was, and there is no `DL`.
 
 ## Limits of save states
 

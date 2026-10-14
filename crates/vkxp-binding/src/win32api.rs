@@ -1,9 +1,14 @@
-//! The emulated functions behind `Win32API`.
+//! The emulated functions behind `Win32API`, and the class `Win32API` of RGSS3.
 //!
-//! The prelude's `Win32API#call` passes the library name, the function name and the arguments
-//! to the host function `vkxp_win32api`. That looks the pair up in [`TABLE`] and runs the
-//! entry on the guest state, or returns `nil` for a function outside the table, which the
-//! prelude turns into 0 and one report.
+//! In RGSS1 and RGSS2 the prelude's `Win32API#call` passes the library name, the function
+//! name and the arguments to the host function `vkxp_win32api`. That looks the pair up in
+//! [`TABLE`] and runs the entry on the guest state, or returns `nil` for a function outside
+//! the table, which the prelude turns into 0 and one report.
+//!
+//! In RGSS3 `Win32API` is a class defined here, as the original runtime of RGSS3 has it
+//! (oracle measurement 2026-10-13, RGSS301 3.0.1.1, API report 5.8): it finds the library,
+//! reads the import and the export, counts and converts the parameters with the errors of
+//! the original, and runs the entry of [`TABLE`] or reports the function once.
 //!
 //! An integer argument reaches an entry as an `i64` and `nil` as 0, the null pointer. A Ruby
 //! string reaches it as a copy of its bytes that the entry may overwrite but not resize; a
@@ -636,8 +641,10 @@ fn window_rect(guest: &mut Guest, args: &mut [Arg]) -> i64 {
 
 /// `ShowCursor(show)`: the new display count. The pointer is to be seen while the count is
 /// 0 or more, and the host is told when a call changes that.
-// PLACEHOLDER: the count starts at 0 and follows the documentation of Windows; it was not
-// measured on the original.
+// PLACEHOLDER: the count follows the documentation of Windows and was not measured on the
+// originals of XP and VX. Its start, 0, was measured on the original of VX Ace:
+// `ShowCursor(0)` gives -1 at first (oracle measurement 2026-10-13, RGSS301 3.0.1.1, API
+// report 5.8).
 fn show_cursor(guest: &mut Guest, args: &mut [Arg]) -> i64 {
     let before = guest.win32api.pointer_visible();
     guest.win32api.cursor += if int(args, 0) != 0 { 1 } else { -1 };
