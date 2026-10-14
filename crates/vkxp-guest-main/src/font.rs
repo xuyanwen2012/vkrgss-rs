@@ -391,6 +391,10 @@ mod tests {
         assert!(backend.font_exists("liberation sans"));
         assert!(!backend.font_exists_exactly("liberation sans"));
         assert!(!backend.font_exists_exactly("NoSuchFamilyAnywhere"));
+        // A name of the substitution table, as the table spells it, exists when a font that
+        // replaces it is there: the known difference of `docs/compatibility.md`.
+        assert!(backend.font_exists_exactly("Arial"));
+        assert!(!backend.font_exists_exactly("arial"));
     }
 
     const NOTO: &str = "Noto Sans CJK SC";

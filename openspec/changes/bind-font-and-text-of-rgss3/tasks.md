@@ -22,4 +22,4 @@
 
 ## 5. Integration check
 
-- [ ] 5.1 Run the full gate. Verify: every name of the lists kept in 1.1 is there again; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate bind-font-and-text-of-rgss3 --strict` passes.
+- [x] 5.1 Run the full gate. Verify: every name of the lists kept in 1.1 is there again; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate bind-font-and-text-of-rgss3 --strict` passes.
