@@ -93,3 +93,24 @@ fn every_group_is_tested_here() {
     // One test function per group above: a group added to the list must get one too.
     assert_eq!(cases::GROUPS.len(), 13);
 }
+
+/// Scenarios "XP and VX" of "Color and Tone of RGSS3" and "Rect of RGSS3", for a game of
+/// RGSS1: the forms that RGSS3 adds raise `ArgumentError`, and `Rect#initialize` keeps its
+/// arity of 4.
+#[test]
+fn the_forms_of_rgss3_are_not_taken() {
+    for source in [
+        "Color.new",
+        "Tone.new",
+        "Color.new(1, 2, 3).set(Color.new(1, 2, 3))",
+        "Rect.new",
+        "Rect.new(1, 2, 3, 4).set(Rect.new(1, 2, 3, 4))",
+    ] {
+        let error = testing::eval(source).expect_err(source);
+        assert_eq!(error.class_name, "ArgumentError", "{source}");
+    }
+    assert_eq!(
+        testing::eval("Rect.instance_method(:initialize).arity").as_deref(),
+        Ok("4")
+    );
+}

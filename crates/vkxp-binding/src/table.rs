@@ -3,6 +3,7 @@
 use vkxp_core::{SharedTable, Table};
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{HostResult, Raise, Raised, Ruby};
+use vkxp_vfs::Runtime;
 
 use crate::error::{self, Error};
 use crate::guest::Classes;
@@ -155,8 +156,8 @@ fn load(ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
     wrap::new_object(ruby, TableData { table })
 }
 
-/// Defines `Table`.
-pub(crate) fn define(ruby: &Ruby) -> Result<VALUE, Raised> {
+/// Defines `Table` as a game of `runtime` has it.
+pub(crate) fn define(ruby: &Ruby, _runtime: Runtime) -> Result<VALUE, Raised> {
     let class = wrap::define_class::<TableData>(ruby, c"Table")?;
     rb::method(ruby, class, c"initialize", -1, initialize)?;
     rb::method(ruby, class, c"initialize_copy", 1, initialize_copy)?;

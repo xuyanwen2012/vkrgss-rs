@@ -3,6 +3,7 @@
 use vkxp_core::Rect;
 use vkxp_ruby_sys::ffi::VALUE;
 use vkxp_ruby_sys::{HostResult, Raise, Raised, Ruby};
+use vkxp_vfs::Runtime;
 
 use crate::error::{self, Error};
 use crate::guest::Classes;
@@ -131,8 +132,8 @@ fn load(ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
     rect_new(ruby, rect)
 }
 
-/// Defines `Rect`.
-pub(crate) fn define(ruby: &Ruby) -> Result<VALUE, Raised> {
+/// Defines `Rect` as a game of `runtime` has it.
+pub(crate) fn define(ruby: &Ruby, _runtime: Runtime) -> Result<VALUE, Raised> {
     let class = wrap::define_class::<Owned<Rect>>(ruby, c"Rect")?;
     rb::method(ruby, class, c"initialize", 4, set)?;
     rb::method(ruby, class, c"initialize_copy", 1, initialize_copy)?;

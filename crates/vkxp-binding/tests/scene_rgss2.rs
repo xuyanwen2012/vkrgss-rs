@@ -426,3 +426,21 @@ fn the_wave_and_the_bush_opacity_are_drawn() {
         format!("[[{BLACK}, {RED}, {RED}, {BLACK}], [0, 0, 255, 255], {RED}]")
     );
 }
+
+/// Scenarios "XP and VX" of "Color and Tone of RGSS3" and "Rect of RGSS3", for a game of
+/// RGSS2: the forms that RGSS3 adds raise `ArgumentError`, and `Rect#initialize` keeps its
+/// arity of 4.
+#[test]
+fn the_value_forms_of_rgss3_are_not_taken() {
+    for source in [
+        "Color.new",
+        "Tone.new",
+        "Color.new(1, 2, 3).set(Color.new(1, 2, 3))",
+        "Rect.new",
+        "Rect.new(1, 2, 3, 4).set(Rect.new(1, 2, 3, 4))",
+    ] {
+        let result = eval(source);
+        assert!(result.starts_with("ArgumentError: "), "{source}: {result}");
+    }
+    assert_eq!(eval("Rect.instance_method(:initialize).arity"), "4");
+}

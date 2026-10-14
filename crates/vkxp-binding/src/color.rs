@@ -6,6 +6,7 @@
 use vkxp_core::{Color, DecodeError, Tone};
 use vkxp_ruby_sys::ffi::VALUE;
 use vkxp_ruby_sys::{HostResult, Raise, Raised, Ruby};
+use vkxp_vfs::Runtime;
 
 use crate::error::{self, Error};
 use crate::guest::Classes;
@@ -28,6 +29,12 @@ pub(crate) trait Quad: Property + PartialEq + 'static {
     fn to_bytes(&self) -> [u8; 32];
 
     fn from_bytes(bytes: &[u8]) -> Result<Self, DecodeError>;
+
+    /// The four numbers of a colour in order, as `set(color)` of RGSS3 copies them.
+    fn from_color(color: Color) -> Self;
+
+    /// The four numbers of a tone in order, as `set(tone)` of RGSS3 copies them.
+    fn from_tone(tone: Tone) -> Self;
 }
 
 impl Quad for Color {
@@ -49,6 +56,14 @@ impl Quad for Color {
     fn from_bytes(bytes: &[u8]) -> Result<Color, DecodeError> {
         Color::from_bytes(bytes)
     }
+
+    fn from_color(color: Color) -> Color {
+        color
+    }
+
+    fn from_tone(tone: Tone) -> Color {
+        Color::from(tone)
+    }
 }
 
 impl Quad for Tone {
@@ -69,6 +84,14 @@ impl Quad for Tone {
 
     fn from_bytes(bytes: &[u8]) -> Result<Tone, DecodeError> {
         Tone::from_bytes(bytes)
+    }
+
+    fn from_color(color: Color) -> Tone {
+        Tone::from(color)
+    }
+
+    fn from_tone(tone: Tone) -> Tone {
+        tone
     }
 }
 
@@ -169,6 +192,63 @@ where
     Ok(recv)
 }
 
+/// The components of RGSS3 given as three or four numeric arguments; no argument is
+/// (0, 0, 0, 0).
+fn parts_of_rgss3<Q: Quad>(ruby: &Ruby, args: &[VALUE]) -> Result<[f64; 4], Raise> {
+    if args.is_empty() {
+        return Ok([0.0; 4]);
+    }
+    rb::check_count_rgss3(ruby, args, 3, 4)?;
+    let mut parts = [0.0, 0.0, 0.0, Q::FOURTH];
+    for (part, &arg) in parts.iter_mut().zip(args) {
+        *part = rb::float(ruby, arg)?;
+    }
+    Ok(parts)
+}
+
+/// `initialize` of RGSS3: no argument, or three or four numbers. One argument is never an
+/// object to copy.
+fn initialize_rgss3<Q: Quad>(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult
+where
+    Owned<Q>: Wrapped,
+{
+    let value = Q::from_parts(parts_of_rgss3::<Q>(ruby, args)?);
+    this::<Q>(ruby, recv)?.with(|data| data.set(value));
+    Ok(recv)
+}
+
+/// `set` of RGSS3: the forms of `initialize`, or one `Color` or `Tone` whose four numbers
+/// are copied in order. One argument that is neither raises `TypeError`.
+fn set_rgss3<Q: Quad>(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult
+where
+    Owned<Q>: Wrapped,
+{
+    let value = match *args {
+        [other] => copied::<Q>(ruby, other)?,
+        _ => Q::from_parts(parts_of_rgss3::<Q>(ruby, args)?),
+    };
+    this::<Q>(ruby, recv)?.with(|data| data.set(value));
+    Ok(recv)
+}
+
+/// The value of the one argument of `set` of RGSS3. The original copies the bytes of any
+/// native object; vkxp takes a `Color` or a `Tone` and refuses everything else.
+fn copied<Q: Quad>(ruby: &Ruby, other: VALUE) -> Result<Q, Raise>
+where
+    Owned<Q>: Wrapped,
+{
+    if let Some(color) = wrap::find::<Owned<Color>>(ruby, other) {
+        return Ok(Q::from_color(color.get().value()));
+    }
+    if let Some(tone) = wrap::find::<Owned<Tone>>(ruby, other) {
+        return Ok(Q::from_tone(tone.get().value()));
+    }
+    if !rb::is_data(other) {
+        return Err(rb::data_expected(ruby, other));
+    }
+    Ok(this::<Q>(ruby, other)?.get().value())
+}
+
 fn initialize_copy<Q: Quad>(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult
 where
     Owned<Q>: Wrapped,
@@ -242,13 +322,23 @@ where
 }
 
 /// Defines the methods `Color` and `Tone` share; the caller adds the fourth component.
-fn define_shared<Q: Quad>(ruby: &Ruby, class: VALUE) -> Result<(), Raised>
+fn define_shared<Q: Quad>(ruby: &Ruby, class: VALUE, runtime: Runtime) -> Result<(), Raised>
 where
     Owned<Q>: Wrapped,
 {
-    rb::method(ruby, class, c"initialize", -1, set::<Q>)?;
+    // The order of the definitions is that of the names in the symbol table of RGSS1.
+    let rgss3 = runtime == Runtime::Rgss3;
+    if rgss3 {
+        rb::method(ruby, class, c"initialize", -1, initialize_rgss3::<Q>)?;
+    } else {
+        rb::method(ruby, class, c"initialize", -1, set::<Q>)?;
+    }
     rb::method(ruby, class, c"initialize_copy", 1, initialize_copy::<Q>)?;
-    rb::method(ruby, class, c"set", -1, set_again::<Q>)?;
+    if rgss3 {
+        rb::method(ruby, class, c"set", -1, set_rgss3::<Q>)?;
+    } else {
+        rb::method(ruby, class, c"set", -1, set_again::<Q>)?;
+    }
     rb::method(ruby, class, c"to_s", 0, to_s::<Q>)?;
     rb::method(ruby, class, c"_dump", 1, dump::<Q>)?;
     rb::class_method(ruby, class, c"_load", 1, load::<Q>)?;
@@ -264,19 +354,19 @@ where
     Ok(())
 }
 
-/// Defines `Color`.
-pub(crate) fn define_color(ruby: &Ruby) -> Result<VALUE, Raised> {
+/// Defines `Color` as a game of `runtime` has it.
+pub(crate) fn define_color(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
     let class = wrap::define_class::<Owned<Color>>(ruby, c"Color")?;
-    define_shared::<Color>(ruby, class)?;
+    define_shared::<Color>(ruby, class, runtime)?;
     rb::method(ruby, class, c"alpha", 0, component::<Color, 3>)?;
     rb::method(ruby, class, c"alpha=", 1, set_component::<Color, 3>)?;
     Ok(class)
 }
 
-/// Defines `Tone`.
-pub(crate) fn define_tone(ruby: &Ruby) -> Result<VALUE, Raised> {
+/// Defines `Tone` as a game of `runtime` has it.
+pub(crate) fn define_tone(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
     let class = wrap::define_class::<Owned<Tone>>(ruby, c"Tone")?;
-    define_shared::<Tone>(ruby, class)?;
+    define_shared::<Tone>(ruby, class, runtime)?;
     rb::method(ruby, class, c"gray", 0, component::<Tone, 3>)?;
     rb::method(ruby, class, c"gray=", 1, set_component::<Tone, 3>)?;
     Ok(class)

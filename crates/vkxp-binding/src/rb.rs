@@ -238,6 +238,52 @@ pub(crate) fn check_count(
     ))
 }
 
+/// Checks the argument count of a method of a value class of RGSS3 with the message of the
+/// original runtime of RGSS3, which reverses Ruby's order: `wrong number of arguments
+/// (expected for given)`, an `ArgumentError`. `expected` is `min` when fewer were given and
+/// `max` when more.
+///
+/// Provenance: oracle measurement 2026-10-13, RGSS301 version 3.0.1.1 and RGSS300 version
+/// 3.0.0.1, `ace-v1-api-REPORT.md` section 0 and `ace-v1-bitmap-REPORT.md` section 3.
+pub(crate) fn check_count_rgss3(
+    ruby: &Ruby,
+    args: &[VALUE],
+    min: usize,
+    max: usize,
+) -> Result<(), Raise> {
+    let expected = if args.len() < min {
+        min
+    } else if args.len() > max {
+        max
+    } else {
+        return Ok(());
+    };
+    Err(Raise::new(
+        arg_error(ruby),
+        format!("wrong number of arguments ({expected} for {})", args.len()),
+    ))
+}
+
+/// Whether the value is a data object, the kind of object every class of the binding makes.
+pub(crate) fn is_data(value: VALUE) -> bool {
+    // SAFETY: the value is live by the condition of this module, and a value that is no
+    // special constant has a type in its header.
+    !ffi::special_const_p(value) && unsafe { ffi::builtin_type(value) } == ffi::T_DATA
+}
+
+/// The `TypeError` of Ruby's own type check for a value that is no data object: `wrong
+/// argument type Fixnum (expected Data)`, with `nil`, `true` and `false` named so and every
+/// other value by its class.
+pub(crate) fn data_expected(ruby: &Ruby, value: VALUE) -> Raise {
+    let message = |name: &str| format!("wrong argument type {name} (expected Data)");
+    match value {
+        ffi::Qnil => Raise::new(type_error(ruby), message("nil")),
+        ffi::Qtrue => Raise::new(type_error(ruby), message("true")),
+        ffi::Qfalse => Raise::new(type_error(ruby), message("false")),
+        _ => wrong_type(ruby, value, message),
+    }
+}
+
 /// The `ArgumentError` of a method that takes one of several argument counts, `accepted` in
 /// ascending order: Ruby's usual message with the nearest accepted count at or above the
 /// given one, or the largest.

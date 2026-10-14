@@ -103,10 +103,10 @@ impl Guest {
         );
         let classes = Classes {
             errors: error::define(ruby)?,
-            color: color::define_color(ruby)?,
-            tone: color::define_tone(ruby)?,
-            rect: rect::define(ruby)?,
-            table: table::define(ruby)?,
+            color: color::define_color(ruby, config.run.runtime)?,
+            tone: color::define_tone(ruby, config.run.runtime)?,
+            rect: rect::define(ruby, config.run.runtime)?,
+            table: table::define(ruby, config.run.runtime)?,
             font: font::define(ruby, config.run.runtime)?,
             bitmap: bitmap::define(ruby, config.run.runtime)?,
             scene: element::define(ruby, config.run.runtime)?,

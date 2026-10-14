@@ -2,8 +2,8 @@
 
 ## 1. Colour and tone
 
-- [ ] 1.1 Before anything changes, keep `cargo test --locked -- --list` of `vkxp-binding` and of `vkxp-binding-rgss3` under `local/`. Hand the runtime to `color::define_color`, `color::define_tone`, `rect::define` and `table::define` (decision 1), with nothing registered differently yet. Verify: `cargo test -p vkxp-binding -p vkxp-binding-rgss3 --locked` passes with every name of the kept lists.
-- [ ] 1.2 `rb::check_count_rgss3` (decision 5) and the functions of RGSS3 for `initialize` and `set` of `Color` and `Tone` (decisions 2 and 4); `crates/vkxp-binding-rgss3/tests/values_rgss3.rs` with their scenarios; the test of RGSS1 in `crates/vkxp-binding/tests/ruby.rs` and that of RGSS2 in `tests/scene_rgss2.rs` for the scenarios "XP and VX" (decision 13). Verify: the scenarios of "Color and Tone of RGSS3", and "Color and Tone, measured on the original", the first three calls of "Numbers of the wrong kind" and "A method of fixed arity" of "Argument errors of the value classes in RGSS3"; `cargo test -p vkxp-binding -p vkxp-binding-rgss3 --locked` passes.
+- [x] 1.1 Before anything changes, keep `cargo test --locked -- --list` of `vkxp-binding` and of `vkxp-binding-rgss3` under `local/`. Hand the runtime to `color::define_color`, `color::define_tone`, `rect::define` and `table::define` (decision 1), with nothing registered differently yet. Verify: `cargo test -p vkxp-binding -p vkxp-binding-rgss3 --locked` passes with every name of the kept lists.
+- [x] 1.2 `rb::check_count_rgss3` (decision 5) and the functions of RGSS3 for `initialize` and `set` of `Color` and `Tone` (decisions 2 and 4); `crates/vkxp-binding-rgss3/tests/values_rgss3.rs` with their scenarios; the test of RGSS1 in `crates/vkxp-binding/tests/ruby.rs` and that of RGSS2 in `tests/scene_rgss2.rs` for the scenarios "XP and VX" (decision 13). Verify: the scenarios of "Color and Tone of RGSS3", and "Color and Tone, measured on the original", the first three calls of "Numbers of the wrong kind" and "A method of fixed arity" of "Argument errors of the value classes in RGSS3"; `cargo test -p vkxp-binding -p vkxp-binding-rgss3 --locked` passes.
 
 ## 2. Rectangle
 
