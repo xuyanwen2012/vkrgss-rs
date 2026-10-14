@@ -429,6 +429,28 @@ named.
   implementation notes.
 - An "every n-th allocation" form of the stress switch for Ruby 1.9.2, if the step
   `binding-1.9.2` is too slow.
+- The durations of the gate's steps on the development machine on 2026-10-13, one run each
+  with everything built before, while other flows used the machine:
+
+  | Step | `main` (03b603a) | this change |
+  |---|---|---|
+  | `fmt` | 1.2 s | 2.5 s |
+  | `clippy` | 0.3 s | 22.4 s |
+  | `test` | 505.6 s | 662.4 s |
+  | `test-unvalidated` | 206.2 s | 149.2 s |
+  | `doc` | 0.4 s | 1.3 s |
+  | `openspec` | 0.7 s | 1.0 s |
+  | all | 722 s | 843 s |
+
+  `clippy` of this change checked the crates edited since its last run, that of `main`
+  nothing. `test-unvalidated` runs crates this change does not touch and differs by a
+  minute between the two runs, so the load of the machine is of that order; what the
+  second package adds to `test` is its 28 test binaries, which alone run in about 10 s
+  once built (`cargo test -p vkxp-binding-rgss3`), and their build.
+- The documentation test of `Interpreter` in `vkxp-ruby192-sys` is listed under another
+  line number (`interp.rs`, line 128 before), because the items of the common surface
+  stand above it. The scenario "Names of the tests" does not name that crate; every name
+  of the four packages it names is listed as before.
 - What the flow decided where the artifacts left room, for the reviewer and the owner:
   - *Scenario "Round trip" and `Table`.* `Table` has no `==`, over either interpreter and
     on the original, so `Marshal.load(Marshal.dump(table)) == table` is false by identity.

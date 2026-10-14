@@ -34,4 +34,4 @@
 
 ## 7. Integration check
 
-- [ ] 7.1 Run the full gate and write the durations of its steps under Follow-ups of `design.md`, beside those of `main`. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate build-the-binding-over-ruby-1-9-2 --strict` passes; scenarios "Names of the tests" (against the kept lists) and "The program" (`git diff main -- crates/vkxp crates/vkxp-guest crates/vkxp-host crates/vkxp-proto crates/vkxp-core third_party` is empty).
+- [x] 7.1 Run the full gate and write the durations of its steps under Follow-ups of `design.md`, beside those of `main`. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate build-the-binding-over-ruby-1-9-2 --strict` passes; scenarios "Names of the tests" (against the kept lists) and "The program" (`git diff main -- crates/vkxp crates/vkxp-guest crates/vkxp-host crates/vkxp-proto crates/vkxp-core third_party` is empty).
