@@ -2,9 +2,9 @@
 
 ## 1. Scene of RGSS3
 
-- [ ] 1.1 The value of RGSS3 in the rules of a scene, equal to RGSS2 in every place the rules are read (decision 1 of `design.md`); the scenes of RGSS2 that RGSS3 shares, run with it. Verify: the scenarios of "Scene of RGSS3"; `cargo test -p vkxp-core --locked` passes and `cargo check --workspace --all-targets --locked` succeeds.
-- [ ] 1.2 Turned sprites in viewports by the rule of RGSS3; RGSS1 and RGSS2 keep their shift. Verify: the scenarios of "Turned sprites in viewports of RGSS3" and of "Turned sprites in viewports and with cut source rectangles", each expected number written in its test; `cargo test -p vkxp-core --locked` passes.
-- [ ] 1.3 The viewport of the screen, the change of the screen's size, moved elements with the provenance in place of "not measured", the sprites at which the original faults. Verify: the scenarios of "Viewport of the screen and a change of its size", "Elements moved between viewports" and "Sprites at which the original of RGSS3 faults"; `cargo test -p vkxp-core --locked` passes; `git diff --stat` against the start of the change names no file of `crates/vkxp-binding` and no existing file under `crates/vkxp-core/tests/data/`.
+- [x] 1.1 The value of RGSS3 in the rules of a scene, equal to RGSS2 in every place the rules are read (decision 1 of `design.md`); the scenes of RGSS2 that RGSS3 shares, run with it. Verify: the scenarios of "Scene of RGSS3"; `cargo test -p vkxp-core --locked` passes and `cargo check --workspace --all-targets --locked` succeeds.
+- [x] 1.2 Turned sprites in viewports by the rule of RGSS3; RGSS1 and RGSS2 keep their shift. Verify: the scenarios of "Turned sprites in viewports of RGSS3" and of "Turned sprites in viewports and with cut source rectangles", each expected number written in its test; `cargo test -p vkxp-core --locked` passes.
+- [x] 1.3 The viewport of the screen, the change of the screen's size, moved elements with the provenance in place of "not measured", the sprites at which the original faults. Verify: the scenarios of "Viewport of the screen and a change of its size", "Elements moved between viewports" and "Sprites at which the original of RGSS3 faults"; `cargo test -p vkxp-core --locked` passes; `git diff --stat` against the start of the change names no file of `crates/vkxp-binding` and no existing file under `crates/vkxp-core/tests/data/`.
 
 ## 2. Whole scenes of the measurement
 

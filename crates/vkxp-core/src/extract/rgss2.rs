@@ -467,8 +467,10 @@ fn wave_sine(degrees: u32) -> f32 {
 /// Provenance: oracle measurement 2026-10-12, RGSS202E, topics `wave1` to `wave6` (78400
 /// rows of 196 sprites with amplitudes of 1 to 30 and 250 and 20 lengths, and amplitudes up
 /// to 3000 near 0 degrees, without a differing pixel); the rows of
-/// `tests/data/sprite-rgss2-wave-samples.txt` are those at which the offset changes. Not
-/// measured: a negative length, for which the angle is taken modulo 360 here.
+/// `tests/data/sprite-rgss2-wave-samples.txt` are those at which the offset changes. For a
+/// negative length the angle is taken modulo 360 here: RGSS2 was not measured with one, and
+/// the original runtime of RGSS3 reads outside its sine table there, so that its two
+/// versions show different pictures (`ace-v1-sprite-REPORT.md`, 2026-10-13).
 pub(crate) fn wave_offset(
     amp: i32,
     length: i32,

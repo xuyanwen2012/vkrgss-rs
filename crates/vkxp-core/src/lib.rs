@@ -41,7 +41,11 @@
 //!   follows the [`Rules`] of the runtime it was made for: with those of RGSS2 the y of a
 //!   sprite orders elements of equal z before their creation, a viewport lays its flash
 //!   colour over its colour and does nothing while a flash without a colour lasts, and the
-//!   tile of a plane is sized in `f64`.
+//!   tile of a plane is sized in `f64`. The rules of RGSS3 are those of RGSS2 except for a
+//!   turned sprite in a viewport, which stands at its position plus the viewport's
+//!   rectangle position less the viewport's origin, as it would on the screen.
+//!   [`Scene::create_screen_viewport`] makes the viewport `Viewport.new` of RGSS3 makes
+//!   without arguments.
 //! - Extraction. [`Scene::extract`] is the only place a frame is assembled: it returns the
 //!   protocol `FramePacket` with the ops of every visible element in draw order and the
 //!   deltas for exactly the bitmaps those ops refer to, and counts the frame. A sprite that is
@@ -77,7 +81,7 @@
 //!   the newest one per update, from which it answers pressed, triggered, repeated and the
 //!   four- and eight-way direction queries. The same snapshots always give the same answers.
 //!   The repeat timing is that of its [`Rules`]: after 16 updates and then every 4 in RGSS1,
-//!   after 24 and then every 6 in RGSS2.
+//!   after 24 and then every 6 in RGSS2 and RGSS3.
 //!
 //! Nothing here talks to the host: sending packets, waiting for frame ticks and receiving
 //! snapshots is the binding's part.

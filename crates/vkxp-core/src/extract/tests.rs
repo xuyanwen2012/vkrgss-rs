@@ -2619,3 +2619,5 @@ proptest! {
         }
     }
 }
+
+mod rgss3;

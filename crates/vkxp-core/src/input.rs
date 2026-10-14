@@ -13,7 +13,7 @@ use crate::Rules;
 fn repeat_timing(rules: Rules) -> (u64, u64) {
     match rules {
         Rules::Rgss1 => (16, 4),
-        Rules::Rgss2 => (24, 6),
+        Rules::Rgss2 | Rules::Rgss3 => (24, 6),
     }
 }
 

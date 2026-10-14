@@ -557,3 +557,16 @@ fn the_pretiled_copy_is_disposed_with_the_plane_or_when_it_is_not_needed() {
     assert!(!stage.bitmaps.is_disposed(bitmap));
     assert!(all(&stage.frame(), BLACK));
 }
+
+/// Scenario "Plane tile and sprite width" of "Scene of RGSS3": the plane.
+#[test]
+fn the_tile_is_sized_in_double_precision_in_rgss3() {
+    let mut stage = Stage::with_rules(Rules::Rgss3, 4, 200);
+    let bitmap = pattern(&mut stage, 4, 90);
+    let id = plane(&mut stage, bitmap);
+    stage.scene.plane_mut(id).unwrap().zoom_y = 0.7;
+    let step = (90u64 << 20) / 62;
+    assert!(shows(&stage.frame(), |x, y| {
+        texel(x, ((u64::from(y) % 62 * step) >> 20) as u32)
+    }));
+}

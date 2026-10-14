@@ -194,7 +194,7 @@ impl Sprite {
     ///
     /// Provenance of the rule of RGSS2: oracle measurement 2026-10-12, RGSS202E.
     pub fn set_bitmap(&mut self, bitmap: Option<BitmapId>, bitmaps: &Bitmaps) {
-        if self.rules == Rules::Rgss2 && bitmap == self.bitmap {
+        if self.rules.as_rgss2() && bitmap == self.bitmap {
             return;
         }
         self.bitmap = bitmap;
@@ -239,7 +239,7 @@ impl Sprite {
     /// Provenance of the wave: oracle measurement 2026-10-12, RGSS202E, topic `wave6`.
     pub fn update(&mut self) {
         self.flash.advance();
-        if self.rules == Rules::Rgss2 && self.wave_length != 0 {
+        if self.rules.as_rgss2() && self.wave_length != 0 {
             let step = f64::from(self.wave_speed) / f64::from(self.wave_length);
             self.set_wave_phase(self.wave_phase + step);
         }

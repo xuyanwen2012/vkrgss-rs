@@ -295,7 +295,7 @@ fn check(topic: &str, rules: Rules) -> usize {
             continue;
         };
         let column = match rules {
-            Rules::Rgss2 => 0,
+            Rules::Rgss2 | Rules::Rgss3 => 0,
             Rules::Rgss1 => 1,
         };
         let expected = digests.split(' ').nth(column).unwrap();
@@ -329,4 +329,21 @@ fn viewports_of_rgss2_show_the_measured_frames() {
 fn planes_of_rgss2_show_the_measured_frames() {
     assert_eq!(check("plane", Rules::Rgss2), 10);
     assert_eq!(check("size2", Rules::Rgss2), 5);
+}
+
+/// Scenario "Scenes that RGSS3 shares with RGSS2, measured on the original": the topics of
+/// this file, which the original runtime of VX Ace shows byte for byte as that of VX does
+/// (oracle measurement 2026-10-13, `ace-v1-sprite-vx-compare.txt`; the one frame of
+/// `viewport` that differs there is not among the nine of this file).
+#[test]
+fn the_scenes_of_rgss2_are_the_same_frames_in_rgss3() {
+    for (topic, frames) in [
+        ("order", 5),
+        ("viewport", 9),
+        ("flash", 14),
+        ("plane", 10),
+        ("size2", 5),
+    ] {
+        assert_eq!(check(topic, Rules::Rgss3), frames);
+    }
 }

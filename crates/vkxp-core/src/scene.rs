@@ -17,6 +17,24 @@ pub enum Rules {
     Rgss1,
     /// RGSS2, of RPG Maker VX.
     Rgss2,
+    /// RGSS3, of RPG Maker VX Ace: RGSS2 except for a turned sprite in a viewport and for
+    /// when an input snapshot is seen.
+    Rgss3,
+}
+
+impl Rules {
+    /// Whether the rules are those of RGSS2 where RGSS3 was measured to equal it: every
+    /// place but a turned sprite in a viewport and when an input snapshot is seen.
+    ///
+    /// Provenance of RGSS3: oracle measurement 2026-10-13, versions 3.0.0.1 and
+    /// 3.0.1.1, `ace-v1-sprite-REPORT.md` (24 of the 32 topics of RGSS2 byte-identical in
+    /// every frame, the others differing by turned sprites in viewports only).
+    pub(crate) fn as_rgss2(self) -> bool {
+        match self {
+            Rules::Rgss1 => false,
+            Rules::Rgss2 | Rules::Rgss3 => true,
+        }
+    }
 }
 
 /// Names one occupant of one slot of an arena.
@@ -215,7 +233,9 @@ pub struct DisposedElements {
 /// A scene follows the rules of one runtime, [`Scene::rules`], given when it is made. With
 /// those of RGSS2 the y of a sprite orders elements of equal z before their creation does,
 /// a flashing viewport lays its flash colour over its colour, and the tile of a plane is
-/// sized in double precision; see `extract` and `plane`.
+/// sized in double precision; see `extract` and `plane`. Those of RGSS3 are those of RGSS2,
+/// except that a turned sprite in a viewport stands there as it would on the screen; see
+/// `turned`.
 ///
 /// [`Scene::extract`] turns the scene into the frame packet a compositor draws.
 #[derive(Debug, Clone)]
@@ -305,7 +325,10 @@ impl Scene {
 
     /// Sets the size of the logical screen, each side brought into 1 to
     /// [`MAX_LOGICAL_DIMENSION`]; the caller applies the limits of its runtime. Elements keep
-    /// their coordinates, and the next extracted packet carries the size.
+    /// their coordinates and viewports their rectangles, each clipping to the part of it
+    /// inside the new size; brightness, frame count and frame rate stay, and the next
+    /// extracted packet carries the size (measured on the original runtime of RGSS3 on
+    /// 2026-10-13, `ace-v1-sprite-REPORT.md`).
     pub fn set_logical_size(&mut self, size: Size) {
         self.logical_size = limited(size);
     }
@@ -356,6 +379,19 @@ impl Scene {
             .ok_or(SceneError::Full(ElementKind::Viewport))
     }
 
+    /// Creates a viewport of the screen, as `Viewport.new` without arguments does in RGSS3:
+    /// its rectangle is (0, 0, width, height) of the logical size as it is now, and an
+    /// ordinary rectangle afterwards, which a change of the logical size leaves alone.
+    ///
+    /// Provenance: oracle measurement 2026-10-13, versions 3.0.0.1 and 3.0.1.1,
+    /// `ace-v1-sprite-REPORT.md` (measured at 544 by 416, 640 by 480, 320 by 240, 200 by
+    /// 300 and 1 by 1).
+    pub fn create_screen_viewport(&mut self) -> Result<ViewportId, SceneError> {
+        let size = self.logical_size;
+        // A side is at most `MAX_LOGICAL_DIMENSION`.
+        self.create_viewport(Rect::new(0, 0, size.width as i32, size.height as i32))
+    }
+
     /// Creates a window with the RGSS1 defaults, in `viewport` or directly on the screen.
     /// In a disposed viewport the window is alive and not drawn.
     pub fn create_window(&mut self, viewport: Option<ViewportId>) -> Result<WindowId, SceneError> {
@@ -384,8 +420,8 @@ impl Scene {
     /// Creates a window of RGSS3 with its defaults (z 100, back opacity 192, paddings of 8)
     /// and without contents, in `viewport` or directly on the screen: one element at its z,
     /// drawn by the rules of RGSS3, whose properties are assigned through [`Window::call`].
-    /// The rule set belongs to the window: such a window lives in a scene of
-    /// [`Rules::Rgss2`]. In a disposed viewport the window is alive and not drawn.
+    /// The rule set belongs to the window: such a window lives in a scene of any
+    /// [`Rules`]. In a disposed viewport the window is alive and not drawn.
     pub fn create_window_rgss3(
         &mut self,
         viewport: Option<ViewportId>,
@@ -657,8 +693,11 @@ macro_rules! set_viewport {
             /// equal z. A disposed viewport fails with [`SceneError::Disposed`] and moves
             /// nothing.
             ///
-            /// Not measured: how the original runtime orders a moved element among elements
-            /// of equal z.
+            /// Provenance of the rank: in RGSS2 the order key of `vx-v1-sprite-REPORT.md`
+            /// (oracle measurement 2026-10-12), which `viewport=` does not renew; in RGSS3
+            /// the topic `aplanevp` of `ace-v1-sprite-REPORT.md` (oracle measurement
+            /// 2026-10-13, 6 frames without a wrong pixel). The original runtime of RGSS3
+            /// ends when it is given a disposed viewport.
             pub fn $set_viewport(
                 &mut self,
                 id: $id,

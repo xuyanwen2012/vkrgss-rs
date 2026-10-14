@@ -70,7 +70,7 @@ impl Tiling {
     fn new(rules: Rules, size: i32, zoom: f64, pixels: u32) -> Option<Tiling> {
         let tile = match rules {
             Rules::Rgss1 => stretch_length(size, zoom)?,
-            Rules::Rgss2 => stretch_length_f64(size, zoom)?,
+            Rules::Rgss2 | Rules::Rgss3 => stretch_length_f64(size, zoom)?,
         };
         // Whether the stretch step is exact, so that copies of the source in a row stretch
         // as the source itself does.

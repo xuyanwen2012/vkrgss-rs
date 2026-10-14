@@ -65,7 +65,7 @@ struct TurnedKey {
     /// The bits of zoom x, zoom y and the angle.
     turn: [u64; 3],
     mirror: bool,
-    /// The origin of the viewport, by which the picture is displaced inside the box.
+    /// By how much the picture is displaced inside the box.
     shift: (i64, i64),
     /// Left, top, right and bottom of the box, from where the box is computed for.
     bounds: [i64; 4],
@@ -217,11 +217,17 @@ impl Picture {
 
 /// Where a turned sprite is drawn inside a level.
 struct Placement {
-    /// The sprite at its own position, which the rows are walked from.
+    /// The sprite at the position the rows are walked from.
     geometry: Geometry,
-    /// The box, counted from the corner of the viewport.
+    /// The box, counted from the corner of the viewport, and in RGSS3 from that of the
+    /// screen.
     bounds: TurnedBox,
-    /// The corner of the viewport on the screen.
+    /// The position the box is computed for, counted as the box is.
+    boxed: (i64, i64),
+    /// By how much the picture is displaced inside the box: the origin of the viewport,
+    /// and nothing in RGSS3.
+    shift: (i64, i64),
+    /// On the screen, the place the box is counted from.
     corner: (i64, i64),
     /// The pixels of the box, on the screen, that are drawn and lie inside the level. Never
     /// empty.
@@ -241,14 +247,37 @@ impl Sprite {
     /// Provenance: oracle measurement 2026-10-10, RGSS103J, probes `turnedvp`, `geom2` and
     /// `srcrect` (48 turned sprites in viewports and 32 with source rectangles in and
     /// outside the bitmap, without a differing pixel).
+    ///
+    /// RGSS3 has no such shift: the position of the viewport's rectangle less its origin is
+    /// added to the sprite's position first, and the box and the rows both come from that
+    /// position, as for a sprite without a viewport there.
+    ///
+    /// Provenance of RGSS3: oracle measurement 2026-10-13, versions 3.0.0.1 and 3.0.1.1,
+    /// `ace-v1-sprite-REPORT.md` section 1 (359 frames without a wrong pixel, the held-out
+    /// set `aheldx` among them; the rule of RGSS2 leaves 213035 wrong).
     fn turned_placement(&self, level: &Level, bitmap: Rect) -> Option<Placement> {
         let src = self.src_rect;
         if !inside(src, bitmap) {
             return None;
         }
+        let (x, y) = (i64::from(self.x), i64::from(self.y));
+        // Where the rows are walked from, where the box is computed for, and where the
+        // place the box is counted from lies on the screen.
+        let (walked, boxed, corner) = match self.rules {
+            Rules::Rgss1 | Rules::Rgss2 => (
+                (x, y),
+                (x - level.ox, y - level.oy),
+                (level.dx + level.ox, level.dy + level.oy),
+            ),
+            Rules::Rgss3 => {
+                let at = (x + level.dx, y + level.dy);
+                (at, at, (0, 0))
+            }
+        };
         let geometry = Geometry {
-            x: f64::from(self.x),
-            y: f64::from(self.y),
+            // Sums and differences of an `i32` and `i64`s built from some.
+            x: walked.0 as f64,
+            y: walked.1 as f64,
             ox: f64::from(self.ox),
             oy: f64::from(self.oy),
             zoom_x: self.zoom_x,
@@ -257,9 +286,8 @@ impl Sprite {
             mirror: self.mirror,
         };
         let shifted = Geometry {
-            // Differences of an `i32` and an `i64` built from one.
-            x: (i64::from(self.x) - level.ox) as f64,
-            y: (i64::from(self.y) - level.oy) as f64,
+            x: boxed.0 as f64,
+            y: boxed.1 as f64,
             ..geometry
         };
         let bounds = shifted.turned_box(src.width, src.height)?;
@@ -268,7 +296,6 @@ impl Sprite {
         if cells.unsigned_abs() > MAX_BITMAP_PIXELS {
             return None;
         }
-        let corner = (level.dx + level.ox, level.dy + level.oy);
         let clip = level.clip;
         let left = (bounds.left + corner.0).max(i64::from(clip.x));
         let top = (bounds.top + corner.1).max(i64::from(clip.y));
@@ -278,6 +305,8 @@ impl Sprite {
         (left < right && top < bottom).then(|| Placement {
             geometry,
             bounds,
+            boxed,
+            shift: (walked.0 - boxed.0, walked.1 - boxed.1),
             corner,
             part: vkxp_proto::Rect::new(
                 left as i32,
@@ -342,7 +371,7 @@ impl Sprite {
         let source = self.bitmap?;
         let revision = bitmaps.revision(source).ok()?;
         let bitmap = bitmaps.rect(source).ok()?;
-        if self.angle == 0.0 && self.rules == Rules::Rgss2 {
+        if self.angle == 0.0 && self.rules.as_rgss2() {
             let placed = self.placed_rgss2(level, bitmap)?;
             let key = UprightKey {
                 source,
@@ -374,8 +403,8 @@ impl Sprite {
         }
         let placement = self.turned_placement(level, bitmap)?;
         let (bounds, part) = (placement.bounds, placement.part);
-        // Where the box is computed for, from the corner of the viewport and on the screen.
-        let (x, y) = (i64::from(self.x) - level.ox, i64::from(self.y) - level.oy);
+        // Where the box is computed for, as the box is counted and on the screen.
+        let (x, y) = placement.boxed;
         let (screen_x, screen_y) = (x + placement.corner.0, y + placement.corner.1);
         let key = TurnedKey {
             source,
@@ -384,7 +413,7 @@ impl Sprite {
             origin: (self.ox, self.oy),
             turn: [self.zoom_x, self.zoom_y, self.angle].map(f64::to_bits),
             mirror: self.mirror,
-            shift: (level.ox, level.oy),
+            shift: placement.shift,
             bounds: [
                 bounds.left - x,
                 bounds.top - y,
@@ -410,7 +439,7 @@ impl Sprite {
         let pictured = self.angle != 0.0
             || source.is_some_and(|bitmap| match self.rules {
                 Rules::Rgss1 => self.is_cut(bitmap),
-                Rules::Rgss2 => self.is_pictured_rgss2(bitmap),
+                Rules::Rgss2 | Rules::Rgss3 => self.is_pictured_rgss2(bitmap),
             });
         if !self.visible || !pictured {
             self.turned.dispose(bitmaps);
@@ -537,7 +566,7 @@ impl Assembly<'_> {
                 opacity: look.opacity >> 1,
                 ..look
             }),
-            Rules::Rgss2 => sprite.bush_look_rgss2(look),
+            Rules::Rgss2 | Rules::Rgss3 => sprite.bush_look_rgss2(look),
         };
         self.picture(bitmap, placement.part, split, level.clip, look, faint);
     }

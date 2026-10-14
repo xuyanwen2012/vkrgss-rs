@@ -905,3 +905,52 @@ fn a_scene_keeps_the_rules_it_was_made_with() {
     scene.clear();
     assert_eq!(scene.rules(), Rules::Rgss2);
 }
+
+/// Scenario "Size of the moment, measured on the original of RGSS3".
+#[test]
+fn a_viewport_of_the_screen_takes_the_size_of_the_moment() {
+    let mut scene = Scene::with_rules(Rules::Rgss3, Size::new(544, 416));
+    let first = scene.create_screen_viewport().unwrap();
+    assert_eq!(
+        scene.viewport(first).unwrap().rect,
+        Rect::new(0, 0, 544, 416)
+    );
+    for (width, height) in [(640, 480), (320, 240), (200, 300), (1, 1)] {
+        scene.set_logical_size(Size::new(width, height));
+        let viewport = scene.create_screen_viewport().unwrap();
+        assert_eq!(
+            scene.viewport(viewport).unwrap().rect,
+            Rect::new(0, 0, width as i32, height as i32)
+        );
+    }
+    assert_eq!(
+        scene.viewport(first).unwrap().rect,
+        Rect::new(0, 0, 544, 416)
+    );
+}
+
+/// Scenario "Bookkeeping is kept".
+#[test]
+fn a_change_of_the_size_keeps_the_bookkeeping() {
+    let mut scene = Scene::with_rules(Rules::Rgss3, Size::new(544, 416));
+    scene.set_brightness(100);
+    scene.set_frame_count(7);
+    scene.set_frame_rate(30);
+    let sprite = scene.create_sprite(None).unwrap();
+    scene.sprite_mut(sprite).unwrap().x = 600;
+    scene.set_logical_size(Size::new(640, 480));
+    assert_eq!(scene.brightness(), 100);
+    assert_eq!(scene.frame_count(), 7);
+    assert_eq!(scene.frame_rate().get(), 30);
+    assert_eq!(scene.sprite(sprite).unwrap().x, 600);
+    // No frame was extracted.
+    assert_eq!(scene.frame_index, 0);
+}
+
+#[test]
+fn a_scene_of_rgss3_keeps_its_rules() {
+    let mut scene = Scene::with_rules(Rules::Rgss3, Size::new(544, 416));
+    assert_eq!(scene.rules(), Rules::Rgss3);
+    scene.clear();
+    assert_eq!(scene.rules(), Rules::Rgss3);
+}

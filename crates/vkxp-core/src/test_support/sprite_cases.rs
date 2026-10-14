@@ -1,8 +1,10 @@
-//! Scenes of sprites of RGSS2 written as text, for the tests that compare frames with the
-//! pictures of the measurement of 2026-10-12 on the original runtime of VX.
+//! Scenes of sprites of RGSS2 and RGSS3 written as text, for the tests that compare frames
+//! with the pictures of the measurements of 2026-10-12 on the original runtime of VX and of
+//! 2026-10-13 on that of VX Ace.
 //!
 //! A scene is the calls of a script on sprites, planes and viewports, on a screen of 544 by
-//! 416 pixels with the rules of RGSS2, and after some of them a frame with the digest of
+//! 416 pixels with the rules of RGSS2 ([`frames`]) or those given ([`frames_by`]), and after
+//! some of them a frame with the digest of
 //! the picture the model of the measurement gives there ([`digest`]). Every bitmap is made
 //! by a formula; no picture is read. One statement stands on a line; `#` begins a comment
 //! line.
@@ -269,6 +271,10 @@ impl Run {
         if name == "z" {
             return self.scene.set_plane_z(id, whole(value)).unwrap();
         }
+        if name == "viewport" {
+            let viewport = self.viewport(value);
+            return self.scene.set_plane_viewport(id, viewport).unwrap();
+        }
         let bitmap = (name == "bitmap").then(|| self.bitmap(value));
         let plane = self.scene.plane_mut(id).unwrap();
         match name {
@@ -339,8 +345,17 @@ impl Run {
 ///
 /// When a statement cannot be read.
 pub fn frames(case: &Case<'_>) -> Vec<(FramePacket, u64)> {
+    frames_by(Rules::Rgss2, case)
+}
+
+/// Runs a scene of sprites as [`frames`] does, in a scene that follows `rules`.
+///
+/// # Panics
+///
+/// When a statement cannot be read.
+pub fn frames_by(rules: Rules, case: &Case<'_>) -> Vec<(FramePacket, u64)> {
     let mut run = Run {
-        scene: Scene::with_rules(Rules::Rgss2, SIZE),
+        scene: Scene::with_rules(rules, SIZE),
         bitmaps: Bitmaps::new(),
         defaults: FontDefaults::new(Vec::new()),
         named: HashMap::new(),

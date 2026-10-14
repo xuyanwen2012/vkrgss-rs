@@ -392,7 +392,9 @@ impl Assembly<'_> {
         if sprite.angle == 0.0 {
             match sprite.rules {
                 Rules::Rgss1 => self.upright_sprite(sprite, bitmap, level, look),
-                Rules::Rgss2 => self.upright_sprite_rgss2(sprite, bitmap, level, look),
+                Rules::Rgss2 | Rules::Rgss3 => {
+                    self.upright_sprite_rgss2(sprite, bitmap, level, look)
+                }
             }
         } else {
             self.turned_sprite(sprite, level, look);
@@ -454,7 +456,7 @@ impl Assembly<'_> {
         let tone = viewport.tone.to_proto();
         let (color, flash) = match self.rules {
             Rules::Rgss1 => (viewport.flash.effective_color(viewport.color), None),
-            Rules::Rgss2 => (viewport.color.to_proto(), viewport.flash.color()),
+            Rules::Rgss2 | Rules::Rgss3 => (viewport.color.to_proto(), viewport.flash.color()),
         };
         if tone != vkxp_proto::Tone::NEUTRAL || color.a != 0 {
             self.ops
@@ -663,7 +665,7 @@ impl Scene {
         for (key, sprite) in self.sprites.iter() {
             let y = match self.rules() {
                 Rules::Rgss1 => 0,
-                Rules::Rgss2 => sprite.y,
+                Rules::Rgss2 | Rules::Rgss3 => sprite.y,
             };
             let entry = Entry {
                 y,
@@ -725,7 +727,7 @@ impl Scene {
                         // RGSS2: for as long as a flash without a colour lasts, nothing of
                         // the viewport is done, its tone and colour included (measured,
                         // `vx-v1-sprite-REPORT.md` section 4).
-                        if self.rules() == Rules::Rgss2 {
+                        if self.rules().as_rgss2() {
                             continue;
                         }
                     } else {
