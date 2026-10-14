@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail, ensure};
 use x11rb::connection::Connection;
-use x11rb::protocol::xproto::{ConnectionExt, ImageFormat, ImageOrder, MapState};
+use x11rb::protocol::xproto::{ConnectionExt, ImageFormat, ImageOrder, MapState, Window};
 
 use super::fonts;
 use super::game::Library;
@@ -189,10 +189,10 @@ impl Run<'_> {
                 );
             }
             sleep(SETTLE);
-            let picture = grab(&display.name, self.runtime.frame_size())
-                .with_context(|| format!("frame {frame}"))?;
-            picture.write(&out.join(report::original_file(frame)))?;
             let record = fs::read(&request).with_context(|| request.display().to_string())?;
+            let size = capture_size(self.runtime, &record);
+            let picture = grab(&display.name, size).with_context(|| format!("frame {frame}"))?;
+            picture.write(&out.join(report::original_file(frame)))?;
             if request_says_late(&record) {
                 late.push(frame);
             }
@@ -288,6 +288,43 @@ fn request_says_late(record: &[u8]) -> bool {
     String::from_utf8_lossy(record)
         .split_whitespace()
         .any(|word| word == "late")
+}
+
+/// The size of the window to capture for a request file as the probe wrote it: the word of
+/// the form `<width>x<height>` that the probe of RGSS3 writes, or the frame size of `runtime`
+/// for a request without one.
+fn capture_size(runtime: Runtime, record: &[u8]) -> (u32, u32) {
+    String::from_utf8_lossy(record)
+        .split_whitespace()
+        .find_map(|word| {
+            let (width, height) = word.split_once('x')?;
+            let number = |text: &str| {
+                text.bytes()
+                    .all(|byte| byte.is_ascii_digit())
+                    .then(|| text.parse().ok())
+                    .flatten()
+            };
+            Some((number(width)?, number(height)?))
+        })
+        .unwrap_or_else(|| runtime.frame_size())
+}
+
+/// A top-level window of the display, as the choice of the game window sees it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TopLevel {
+    window: Window,
+    size: (u32, u32),
+    viewable: bool,
+}
+
+/// The game window among `windows`, which are in stacking order with the topmost last: the
+/// topmost viewable one of `size`.
+fn choose_window(windows: &[TopLevel], size: (u32, u32)) -> Option<Window> {
+    windows
+        .iter()
+        .rev()
+        .find(|top| top.viewable && top.size == size)
+        .map(|top| top.window)
 }
 
 /// The part of the registry script of a prefix that names the directory of each run-time
@@ -413,9 +450,9 @@ fn grab(display: &str, (width, height): (u32, u32)) -> Result<Picture> {
         x11rb::connect(Some(display)).with_context(|| format!("the display {display}"))?;
     let setup = connection.setup();
     let root = setup.roots[screen].root;
-    let mut window = None;
+    let mut windows = Vec::new();
     // The children of the root are in stacking order, the topmost last.
-    for &child in connection.query_tree(root)?.reply()?.children.iter().rev() {
+    for &child in &connection.query_tree(root)?.reply()?.children {
         // A window may be gone by the time it is asked about.
         let Ok(geometry) = connection.get_geometry(child)?.reply() else {
             continue;
@@ -423,15 +460,14 @@ fn grab(display: &str, (width, height): (u32, u32)) -> Result<Picture> {
         let Ok(attributes) = connection.get_window_attributes(child)?.reply() else {
             continue;
         };
-        if (u32::from(geometry.width), u32::from(geometry.height)) == (width, height)
-            && attributes.map_state == MapState::VIEWABLE
-        {
-            window = Some(child);
-            break;
-        }
+        windows.push(TopLevel {
+            window: child,
+            size: (u32::from(geometry.width), u32::from(geometry.height)),
+            viewable: attributes.map_state == MapState::VIEWABLE,
+        });
     }
-    let window =
-        window.with_context(|| format!("no window of {width} by {height} on the display"))?;
+    let window = choose_window(&windows, (width, height))
+        .with_context(|| format!("no window of {width} by {height} on the display"))?;
     let image = connection
         .get_image(
             ImageFormat::Z_PIXMAP,
@@ -564,6 +600,39 @@ mod tests {
         assert!(request_says_late(b"10 late"));
         assert!(!request_says_late(b"10"));
         assert!(!request_says_late(b""));
+    }
+
+    /// The size-from-the-request scenario of `oracle-harness`, and the requests of the probes
+    /// of RGSS1 and RGSS2, which name no size.
+    #[test]
+    fn the_size_of_a_capture_is_that_of_the_request_or_that_of_the_runtime() {
+        assert_eq!(capture_size(Runtime::Rgss3, b"5 640x480"), (640, 480));
+        assert_eq!(capture_size(Runtime::Rgss3, b"12 late 544x416"), (544, 416));
+        assert_eq!(capture_size(Runtime::Rgss2, b"5"), (544, 416));
+        assert_eq!(capture_size(Runtime::Rgss2, b"12 late"), (544, 416));
+        assert_eq!(capture_size(Runtime::Rgss1, b"5"), (640, 480));
+        assert_eq!(capture_size(Runtime::Rgss3, b"5"), (544, 416));
+        assert_eq!(capture_size(Runtime::Rgss3, b"5 x480 +1x2"), (544, 416));
+    }
+
+    #[test]
+    fn the_game_window_is_the_topmost_viewable_one_of_the_size() {
+        let top = |window, size, viewable| TopLevel {
+            window,
+            size,
+            viewable,
+        };
+        let windows = [
+            top(1, (640, 480), true),
+            top(2, (544, 416), true),
+            top(3, (640, 480), true),
+            top(4, (640, 480), false),
+            top(5, (1024, 768), true),
+        ];
+        assert_eq!(choose_window(&windows, (640, 480)), Some(3));
+        assert_eq!(choose_window(&windows, (544, 416)), Some(2));
+        assert_eq!(choose_window(&windows, (800, 600)), None);
+        assert_eq!(choose_window(&windows[3..4], (640, 480)), None);
     }
 
     #[test]
