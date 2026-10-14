@@ -73,6 +73,9 @@ pub(super) fn build(root: &Path, runtime: Runtime) -> Result<PathBuf> {
 /// What a run of vkxp needs besides the game.
 pub(super) struct Run<'a> {
     pub executable: &'a Path,
+    /// The runtime the harness decided on, which vkxp is told rather than left to decide
+    /// again from `Game.ini`.
+    pub runtime: Runtime,
     /// The directory of each run-time package, by its name.
     pub rtps: &'a [(String, PathBuf)],
     /// A directory of fonts that vkxp searches before those of the system: the fonts shared
@@ -98,7 +101,11 @@ impl Run<'_> {
     /// The command of the run that `capture` describes.
     pub(super) fn command(&self, game: &Path, frames: &[u64], out: &Path) -> Result<Command> {
         let mut command = Command::new(self.executable);
-        command.arg(game).arg("--headless");
+        command
+            .arg(game)
+            .arg("--headless")
+            .arg("--runtime")
+            .arg(self.runtime.name());
         for (name, dir) in self.rtps {
             command
                 .arg("--rtp")

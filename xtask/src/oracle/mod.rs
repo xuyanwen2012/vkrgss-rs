@@ -246,6 +246,7 @@ pub(crate) fn run(options: &Options, root: &Path) -> Result<()> {
         eprintln!("oracle: running vkxp");
         vkxp::Run {
             executable,
+            runtime,
             rtps: &options.rtps,
             font_dir: shared.as_ref().map(|shared| shared.dir.as_path()),
             builtin_scripts: options.builtin_scripts.as_deref(),
@@ -484,6 +485,7 @@ end
             fs::create_dir_all(options.out.join("frames")).unwrap();
             let mut command = vkxp::Run {
                 executable: &executable,
+                runtime,
                 rtps: &options.rtps,
                 font_dir: None,
                 builtin_scripts: options.builtin_scripts.as_deref(),
@@ -1087,6 +1089,7 @@ loop { Graphics.update }
         let shared = fonts::share(&[font], &out).unwrap().unwrap();
         let command = vkxp::Run {
             executable: Path::new("vkxp"),
+            runtime: Runtime::Rgss1,
             rtps: &[],
             font_dir: Some(&shared.dir),
             builtin_scripts: None,
@@ -1110,6 +1113,7 @@ loop { Graphics.update }
         let own_metrics = |font_dir| {
             let command = vkxp::Run {
                 executable: Path::new("vkxp"),
+                runtime: Runtime::Rgss1,
                 rtps: &[],
                 font_dir,
                 builtin_scripts: None,
@@ -1122,6 +1126,28 @@ loop { Graphics.update }
         };
         assert!(own_metrics(Some(Path::new("out/fonts"))));
         assert!(!own_metrics(None));
+    }
+
+    /// vkxp is told the runtime the harness decided on, whatever `Game.ini` says.
+    #[test]
+    fn the_command_line_of_vkxp_names_the_runtime() {
+        for runtime in [Runtime::Rgss1, Runtime::Rgss2, Runtime::Rgss3] {
+            let command = vkxp::Run {
+                executable: Path::new("vkxp"),
+                runtime,
+                rtps: &[],
+                font_dir: None,
+                builtin_scripts: None,
+            }
+            .command(Path::new("game"), &[3], Path::new("out"))
+            .unwrap();
+            let arguments: Vec<_> = command.get_args().collect();
+            let option = arguments
+                .iter()
+                .position(|argument| *argument == "--runtime")
+                .expect("the runtime is named");
+            assert_eq!(arguments[option + 1], runtime.name());
+        }
     }
 
     /// The not-a-font scenario of `oracle-harness`.
@@ -1243,6 +1269,50 @@ loop { Graphics.update }
                 pictures.push(captured);
             }
             assert!(pictures[0] != pictures[1], "the square did not move");
+        }
+
+        /// A game of RGSS3 whose `Game.ini` does not tell vkxp its runtime: the runtime that
+        /// the harness decided on, from `--runtime` or from the extension of the script
+        /// archive, is the one vkxp runs it as.
+        #[test]
+        fn a_game_whose_runtime_the_harness_decided_runs_as_that_runtime_in_vkxp() {
+            let pictures = |generated: &Generated, options: &Options| {
+                generated.vkxp_side(options);
+                [10, 20].map(|frame| {
+                    let file = generated.out().join(report::vkxp_file(frame));
+                    report::Picture::read(&file).unwrap()
+                })
+            };
+            let scripts = [("Main", MOVING_SQUARE)];
+
+            // An unknown extension and a DLL whose name tells nothing, with the option.
+            let ini = "[Game]\r\nLibrary=System\\custom.dll\r\nScripts=Data\\Code.bin\r\n\
+                       RTP=\r\nTitle=Generated\r\n";
+            let named = Generated::written("Code.bin", ini, RGSS3_STAND_IN, &scripts);
+            let mut options = named.options("10,20", "");
+            options.runtime = Some(Runtime::Rgss3);
+            let by_option = pictures(&named, &options);
+
+            // The extension of RGSS3 and the DLL of XP, without the option.
+            let ini = "[Game]\r\nLibrary=RGSS104E.dll\r\nScripts=Data\\Scripts.rvdata2\r\n\
+                       RTP=\r\nTitle=Generated\r\n";
+            let mixed = Generated::written("Scripts.rvdata2", ini, RGSS3_STAND_IN, &scripts);
+            let by_extension = pictures(&mixed, &mixed.options("10,20", ""));
+
+            let ace = Generated::ace(&scripts);
+            let expected = pictures(&ace, &ace.options("10,20", ""));
+            for picture in by_option.iter().chain(&by_extension) {
+                assert_eq!((picture.width, picture.height), (544, 416));
+            }
+            assert!(
+                by_option == expected,
+                "the game named rgss3 draws other frames"
+            );
+            assert!(
+                by_extension == expected,
+                "the game of .rvdata2 draws other frames"
+            );
+            assert!(expected[0] != expected[1], "the square did not move");
         }
 
         /// The packed-game-of-RGSS3-runs-in-vkxp scenario of `oracle-harness`.

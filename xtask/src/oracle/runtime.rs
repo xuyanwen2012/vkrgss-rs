@@ -24,6 +24,15 @@ impl Runtime {
         }
     }
 
+    /// The value of `--runtime` that names this runtime, to the harness and to vkxp alike.
+    pub(super) fn name(self) -> &'static str {
+        match self {
+            Runtime::Rgss1 => "rgss1",
+            Runtime::Rgss2 => "rgss2",
+            Runtime::Rgss3 => "rgss3",
+        }
+    }
+
     /// The runtime that the extension of the script archive `name` tells, if it tells one.
     pub(super) fn of_scripts(name: &str) -> Option<Runtime> {
         let (_, extension) = name.rsplit_once('.')?;
@@ -87,6 +96,9 @@ mod tests {
         assert_eq!(Runtime::of_scripts("Scripts"), None);
         assert!(Runtime::parse("rgss2").is_ok());
         assert_eq!(Runtime::parse("rgss3").unwrap(), Runtime::Rgss3);
+        for runtime in [Runtime::Rgss1, Runtime::Rgss2, Runtime::Rgss3] {
+            assert_eq!(Runtime::parse(runtime.name()).unwrap(), runtime);
+        }
         assert!(Runtime::parse("vx").is_err());
     }
 }
