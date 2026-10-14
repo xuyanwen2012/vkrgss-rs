@@ -23,7 +23,7 @@
 
 ## 5. Documents
 
-- [ ] 5.1 `docs/compatibility.md`: the subsection on sprites, planes, viewports and `Graphics` of VX Ace, the bullet of the tilemap of VX Ace, the sentence of VX (decision 13); `docs/decisions.md`, section "VX Ace": decisions 4 and 9. Verify: the scenarios of `specs/supported-runtimes/spec.md`; the text names nothing that the code does not do; `git diff --stat` names under `docs/` only these two files; `cargo test -p xtask --locked` passes.
+- [x] 5.1 `docs/compatibility.md`: the subsection on sprites, planes, viewports and `Graphics` of VX Ace, the bullet of the tilemap of VX Ace, the sentence of VX (decision 13); `docs/decisions.md`, section "VX Ace": decisions 4 and 9. Verify: the scenarios of `specs/supported-runtimes/spec.md`; the text names nothing that the code does not do; `git diff --stat` names under `docs/` only these two files; `cargo test -p xtask --locked` passes.
 
 ## 6. Integration check
 

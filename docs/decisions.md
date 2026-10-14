@@ -582,6 +582,27 @@ outside the repository); what of it is not followed is named as a known differen
   `open?`, `Audio.bgm_play` with four arguments, and soon after `Input.repeat?` with a
   Symbol.
 
+Sprites, planes, viewports and `Graphics` of RGSS3, recorded by the change
+`bind-the-scene-classes-of-rgss3` on 2026-10-13 after the measurements of that day (kept
+outside the repository). The scene of a game of RGSS3 is made with `Rules::Rgss3` from this
+change on; its input state keeps the rules of RGSS2 until the binding marks the frames it
+shows. Decided without a measurement:
+
+- Disposing a viewport of RGSS3 leaves its sprites, planes, windows and tilemaps alive, as
+  measured. vkxp draws them nowhere while they are in that viewport, by the rule of the core
+  that hides the elements of a disposed viewport; they are not clipped to its last
+  rectangle and not shown on the screen. Moved to the screen or to another viewport, they
+  are drawn there. What the original draws of them was not measured; nothing measured
+  supports drawing them anywhere. A disposed viewport given to `viewport=` raises
+  `RGSSError` with `disposed viewport`, where the original ends. RGSS1 and RGSS2 keep
+  disposing the elements with the viewport, although the original of RGSS2 keeps them alive
+  as RGSS3 does.
+- `Graphics.play_movie(name)` plays nothing. It looks for a file of the game directory under
+  the name as given and then with `.ogv` appended, the extension the editor of VX Ace
+  writes; the run-time packages and the archive are not searched. Found, it returns `nil`
+  without a frame; not found, it raises `Errno::ENOENT` with the name as given, as measured.
+  How the original looks a movie up and what it shows were not measured.
+
 ### Several runtimes in one program
 
 - One repository, and the name stays for now.

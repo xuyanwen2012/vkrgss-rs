@@ -195,6 +195,10 @@ pixel or value:
 
 Not measured: gamepads and the F1 dialog of VX; a negative vagueness is taken as 0.
 
+Known difference: `Viewport#dispose` disposes the sprites, planes, windows and tilemaps of
+the viewport, as in XP, where the original of VX keeps them alive and their `viewport`
+returns the disposed viewport.
+
 ### Bitmap and Font of VX
 
 Of `Bitmap` and `Font`, a game of VX has what follows, measured on the same two versions of
@@ -286,9 +290,10 @@ evaluated as `{0000}`, `{0001}` and so on and compiled as UTF-8, `RGSSReset` wit
 `msgbox_p`, `p`, `print` and `puts` on the standard output, `load_data` that labels the
 strings of a data file UTF-8, `save_data`, and `RGSS_VERSION` `"3.0.1"`.
 
-Of the classes, `Window`, `Tilemap` and the value classes `Color`, `Tone`, `Rect` and `Table`
-are those of RGSS3, as the sections below say; `Font` and text, `Sprite`, `Viewport`, `Plane`,
-`Input` and `Audio` are those of RPG Maker VX still and do not have what RGSS3 adds.
+Of the classes, `Window`, `Tilemap`, `Sprite`, `Plane`, `Viewport`, the module `Graphics` and
+the value classes `Color`, `Tone`, `Rect` and `Table` are those of RGSS3, as the sections below
+say; `Font` and text, `Input` and `Audio` are those of RPG Maker VX still and do not have what
+RGSS3 adds.
 A game made with the standard scripts of VX Ace therefore loads its scripts and its database
 and ends with an error report at its first call of what only RGSS3 has and vkxp does not
 bind yet, before its title screen. A frame it
@@ -340,8 +345,72 @@ Known differences:
   original draws a block of the sheets A1 to A5 for -256 to -1280), and the layers that a
   map of fewer than four does not have. A map of three layers is drawn as on the original;
   one of fewer layers draws its layers, where the original draws other things or ends.
-- `Viewport#dispose` disposes the tilemaps of the viewport, as in XP and VX; on the original
-  of VX Ace such a tilemap stays alive and is not drawn.
+- A tilemap of a disposed viewport stays alive and usable, as on the original, and vkxp
+  draws it nowhere while it is in that viewport; what the original draws of it was not
+  measured ([Sprites, planes, viewports and Graphics of VX
+  Ace](#sprites-planes-viewports-and-graphics-of-vx-ace)).
+
+### Sprites, planes, viewports and Graphics of VX Ace
+
+A game of VX Ace has the `Sprite`, `Plane`, `Viewport` and `Graphics` of VX with what
+follows, measured on the original runtime of VX Ace:
+
+- The scene is drawn by the rules of VX but for a turned sprite in a viewport, which stands
+  at its own position plus the position of the viewport's rectangle less the viewport's
+  origin, its bounding box and its texels both taken from there, as for a sprite on the
+  screen.
+- `Viewport.new` without arguments covers the screen as it is then, (0, 0, `Graphics.width`,
+  `Graphics.height`), and keeps that rectangle when the screen is resized. One `Rect` is
+  copied, four numbers are truncated. Another count, or one argument that is no `Rect`,
+  raises `ArgumentError` with the message of the original, `wrong number of arguments (4 for
+  1)`, or `(1 for 2)` after a `Rect`.
+- `Viewport#dispose` disposes none of the sprites, planes, windows and tilemaps of the
+  viewport: they stay alive and usable, their `viewport` returns the disposed viewport,
+  `Graphics.update` goes on, and their own `dispose` disposes them.
+- `Plane#viewport` is a reader without an argument and `Plane#viewport=` a writer that moves
+  the plane and keeps its place among the elements of equal z, as `Sprite#viewport=` does.
+- `Sprite.new`, `Plane.new` and `Tilemap.new` take nothing, `nil` or a `Viewport`; another
+  count raises `ArgumentError` (`wrong number of arguments (1 for 2)`) and another object
+  `TypeError` (`can't convert Fixnum into Viewport`). An argument of `Sprite`, `Plane` or
+  `Viewport` that must be a `Color`, `Tone`, `Rect` or `Bitmap` raises `TypeError` worded as
+  the original words it: `can't convert NilClass into Color`.
+- `Graphics` has `play_movie` and `__reset__`, and `_reset` is not public.
+  `Graphics.freeze` keeps the frozen picture in the buffer of 640 by 480 pixels of the
+  original ([decisions.md](decisions.md#vx-ace)). `Graphics.snap_to_bitmap` gives all of
+  (0, 0, 0, 0) at brightness 0.
+- `Graphics.transition` with nothing frozen returns at once without looking at its
+  arguments. After a freeze a fourth argument raises `ArgumentError` (`wrong number of
+  arguments (3 for 4)`), a name that is no `String`, `nil` among them, raises `TypeError`
+  (`can't convert nil into String`), and each of these errors keeps the freeze; an empty
+  name is no mask; a name whose picture is not found raises `Errno::ENOENT` and ends the
+  freeze.
+- The plain values of sprites, planes and viewports, the disposed errors, and the waits,
+  fades, brightness, frame rate, frame count, `width`, `height` and `resize_screen` of
+  `Graphics` with its limits are those of VX, and so is the order of elements. A resize
+  keeps the brightness, the frame count, the frame rate, a freeze and the rectangles of
+  viewports.
+
+Known differences:
+
+- A disposed viewport given to `Sprite#viewport=` or `Plane#viewport=` ends the original
+  with a page fault. vkxp raises `RGSSError` (`disposed viewport`) and moves nothing.
+- The elements of a disposed viewport are drawn nowhere in vkxp until they are moved to the
+  screen or to another viewport; what the original draws of them, and of an element moved
+  out of such a viewport, was not measured ([decisions.md](decisions.md#vx-ace)).
+- `Graphics.play_movie` plays nothing: for a file of the game directory under the name, or
+  under the name with `.ogv` appended, it returns `nil` at once and shows no frame; for no
+  such file it raises `Errno::ENOENT` as the original does. How the original looks a movie
+  up was not measured ([decisions.md](decisions.md#vx-ace)).
+- What depends on the word size ([decisions.md](decisions.md#vx-ace), "Word size"):
+  `Graphics.frame_count` goes on beyond 2^31 - 1 where the original wraps to -2147483648,
+  `Graphics.frame_count = 2**31` is kept where the original raises `RangeError`, and the
+  `RangeError` of an integer of 2^31 or more given to a writer has another message.
+
+Not measured: what `Graphics.visible=` does; what `Plane#visible` reads after `visible =
+false`, which vkxp reads `true` as in VX; the pixels of `transition` with an empty name,
+which vkxp shows as a plain transition.
+
+In a game of XP or VX these classes and `Graphics` are as they were.
 
 ### The value classes of VX Ace
 
