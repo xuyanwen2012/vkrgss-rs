@@ -1203,9 +1203,10 @@ mod tests {
                 let top = ceil(points.iter().map(|point| point.y).fold(f32::MIN, f32::max));
                 let left = floor(points.iter().map(|point| point.x).fold(f32::MAX, f32::min));
                 let right = ceil(points.iter().map(|point| point.x).fold(f32::MIN, f32::max));
-                // A row `y` holds the pixels from `y - 1` up to `y`.
+                // A row `y` holds the pixels from `y - 1` up to `y`, so the last row is
+                // above the bottom of the box.
                 assert!(
-                    first <= top && last - 1 >= bottom,
+                    first <= top && last > bottom,
                     "{context}: rows {first}..={last}, box rows {bottom}..{top}"
                 );
                 for x in inked(hinted.width, hinted.height, &hinted.coverage) {
