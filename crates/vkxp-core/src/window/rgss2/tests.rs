@@ -197,6 +197,54 @@ fn the_random_scenes_of_the_measurement_are_drawn_as_the_original_draws_them() {
     assert_frames(text);
 }
 
+/// Scenario "Two pictures of RGSS2 corrected": the digests of the pictures the original
+/// runtime of VX drew of the two scenes with skins smaller than the background block.
+#[test]
+fn the_two_scenes_of_small_skins_have_the_measured_digests() {
+    for (scene, measured) in [
+        ("g6-skin_sizes_t", 0xedbd_df94_f499_2ce6),
+        ("g8-smallskin_t_0", 0x0263_b571_0a3a_9da6),
+    ] {
+        let cases = cases(CASES);
+        let case = cases.iter().find(|case| case.name == scene).unwrap();
+        let frames = case.frames();
+        assert_eq!(frames.len(), 1);
+        let (packet, expected) = &frames[0];
+        assert_eq!(*expected, measured, "{scene}");
+        let frame = Compositor::new().render(packet).unwrap();
+        assert_eq!(digest(frame.size, &frame.rgba), measured, "{scene}");
+    }
+}
+
+/// Scenario "Background, measured on the originals of VX and VX Ace", for RGSS2: a
+/// background block that leaves the skin is cut and its target shortened.
+#[test]
+fn the_background_of_a_skin_smaller_than_its_block_is_shortened() {
+    for ((skin_width, skin_height), (width, height), filled) in [
+        ((32, 32), (76, 132), Some((2, 37, 2, 64))),
+        ((63, 128), (76, 68), Some((2, 72, 2, 66))),
+        ((40, 128), (24, 24), Some((2, 14, 2, 22))),
+        ((40, 128), (68, 68), Some((2, 42, 2, 66))),
+        ((32, 32), (24, 24), Some((2, 11, 2, 11))),
+        ((1, 1), (76, 76), None),
+    ] {
+        let mut stage = Stage::sized(140, 140);
+        let skin = stage.solid(skin_width, skin_height, RED);
+        window(&mut stage, skin, 0, 0, width, height);
+        let frame = stage.frame();
+        let (left, right, top, bottom) = filled.unwrap_or_default();
+        let pixels = ((right - left) * (bottom - top)) as usize;
+        let name = format!("{skin_width} by {skin_height} in {width} by {height}");
+        assert_eq!(count(&frame, RED), pixels, "{name}");
+        assert_eq!(count(&frame, BLACK), 140 * 140 - pixels, "{name}");
+        for y in top..bottom {
+            for x in left..right {
+                assert_eq!(frame.pixel(x, y), RED, "{name}: ({x}, {y})");
+            }
+        }
+    }
+}
+
 #[test]
 fn the_pattern_gives_the_background_its_colour_and_keeps_the_alpha() {
     let mut stage = Stage::sized(8, 8);

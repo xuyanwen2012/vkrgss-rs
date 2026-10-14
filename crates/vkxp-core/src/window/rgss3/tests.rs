@@ -834,3 +834,63 @@ fn sizes_too_large_for_a_bitmap_are_drawn_without_the_built_parts() {
         assert_eq!(count(&frame, FRAME_PIECES), 0);
     }
 }
+
+// Requirement "Skins smaller than the layout".
+
+#[test]
+fn the_background_of_a_skin_smaller_than_its_block_is_shortened() {
+    for ((skin_width, skin_height), (width, height), filled) in [
+        ((32, 32), (76, 132), Some((2, 37, 2, 64))),
+        ((63, 128), (76, 68), Some((2, 72, 2, 66))),
+        ((40, 128), (24, 24), Some((2, 14, 2, 22))),
+        ((40, 128), (68, 68), Some((2, 42, 2, 66))),
+        ((32, 32), (24, 24), Some((2, 11, 2, 11))),
+        ((1, 1), (76, 76), None),
+    ] {
+        let mut stage = Stage::rgss2(140, 140);
+        let skin = stage.solid(skin_width, skin_height, RED);
+        let id = window(&mut stage, Some(skin), (0, 0, width, height));
+        stage.scene.window_mut(id).unwrap().set_back_opacity(255);
+        let frame = stage.frame();
+        let filled = filled.unwrap_or_default();
+        assert_fills(&frame, RED, filled);
+        let pixels = ((filled.1 - filled.0) * (filled.3 - filled.2)) as usize;
+        assert_eq!(count(&frame, BLACK), 140 * 140 - pixels);
+    }
+}
+
+#[test]
+fn centre_and_edges_of_the_cursor_are_shortened_by_a_skin_that_cuts_them() {
+    let mut stage = Stage::rgss2(120, 120);
+    let whole = piece_skin(&mut stage);
+    let skin = stage.bitmaps.create(80, 128, &defaults()).unwrap();
+    let left = Rect::new(0, 0, 80, 128);
+    stage.bitmaps.blt(skin, 0, 0, whole, left, 255).unwrap();
+    let id = window(&mut stage, Some(skin), (0, 0, 100, 100));
+    call(&mut stage, id, rect(0, 0, 32, 32));
+    assert_fills(&stage.frame(), WHITE, (8, 24, 8, 40));
+    call(&mut stage, id, rect(0, 0, 16, 16));
+    assert_fills(&stage.frame(), WHITE, (8, 15, 8, 24));
+    call(&mut stage, id, rect(0, 0, 40, 40));
+    assert_fills(&stage.frame(), WHITE, (8, 27, 8, 48));
+}
+
+/// An arrow that the skin cuts to an odd width blends its last column by the normal
+/// formula: the cut width counts in the rule of the odd column.
+#[test]
+fn a_part_cut_by_the_skin_counts_its_cut_width() {
+    let mut stage = Stage::rgss2(120, 120);
+    let grey = stage.solid(120, 120, [200, 200, 200, 255]);
+    sprite(&mut stage, grey, 0);
+    // The down arrow at (88, 40, 16, 8), half transparent, of which the skin has 7 columns.
+    let skin = stage.bitmaps.create(95, 128, &defaults()).unwrap();
+    fill(&mut stage, skin, (88, 40, 7, 8), [40, 40, 40, 128]);
+    let id = window(&mut stage, Some(skin), (0, 0, 100, 100));
+    call(&mut stage, id, WindowCall::ContentsOpacity(0));
+    contents(&mut stage, id, 200);
+    let frame = stage.frame();
+    // The window formula, and the normal one in the seventh column.
+    assert_eq!(frame.pixel(47, 90), [120, 120, 120, 255]);
+    assert_eq!(frame.pixel(48, 90), [119, 119, 119, 255]);
+    assert_eq!(frame.pixel(49, 90), [200, 200, 200, 255]);
+}

@@ -16,9 +16,12 @@
 //! Every rule here was measured on the original runtime of VX (`RGSS202E.dll` 2.0.2.1 and
 //! 2.0.0.1, window measurement of 2026-10-12, 490 captures without a wrong pixel); the samples
 //! of `tests/data/window-rgss2-samples.txt` and the cases of
-//! `tests/data/window-rgss2-cases.txt` are a selection of what was measured. Not measured: a
-//! skin narrower or lower than 64 pixels, of which the original draws less of the background
-//! than is drawn here, and a disposed skin or contents bitmap.
+//! `tests/data/window-rgss2-cases.txt` are a selection of what was measured. Of a skin narrower
+//! or lower than 64 pixels the background is drawn as measured (the shortened target of
+//! [`draw_background`], found by the window measurement of RGSS3 of 2026-10-13 and confirmed
+//! on the captures of VX). Not measured on VX: the cursor from a skin that cuts the cursor
+//! block, the odd-column rule for an arrow or pause sign that the skin cuts, and a disposed
+//! skin or contents bitmap.
 //!
 //! The window of RGSS3 (`rgss3`) extends this one: it shares the state, the builders of
 //! background and frame, the openness, the blink and the pause sign.
@@ -156,7 +159,7 @@ impl State {
 /// Runs `draw` with a bitmap that holds the layout of `skin`: the skin itself, or for a skin
 /// smaller than the layout a copy with transparent pixels where the skin has none, so that
 /// every piece is taken as the layout names it.
-pub(super) fn with_layout(
+fn with_layout(
     bitmaps: &mut Bitmaps,
     skin: BitmapId,
     draw: impl FnOnce(&mut Bitmaps, BitmapId) -> Result<(), BitmapError>,
@@ -186,6 +189,11 @@ pub(super) fn with_layout(
 /// window draws the background with the transparent column at its right, which makes its
 /// rows count as the original counts them (see `draw_background` of RGSS1), and the opening
 /// window samples rows of the whole window.
+///
+/// A skin narrower or lower than the block cuts the block and shortens the target, each
+/// axis by itself: a copy draws the columns the skin has, the stretch that picks texels
+/// those [`Bitmaps::stretch_blt`] draws of a cut source, the bilinear one those of
+/// `bilinear_kept`. The pattern is laid over what was drawn.
 pub(super) fn draw_background(
     bitmaps: &mut Bitmaps,
     dst: BitmapId,
@@ -200,12 +208,12 @@ pub(super) fn draw_background(
         width - 2 * BACK_MARGIN,
         height - 2 * BACK_MARGIN,
     );
+    if stretched_part(BACK, to.width, to.height) < BACK {
+        stretch_bilinear(bitmaps, dst, to, skin, (0, 0), BACK, true)?;
+    } else {
+        bitmaps.stretch_blt(dst, to, skin, Rect::new(0, 0, BACK, BACK), 255)?;
+    }
     with_layout(bitmaps, skin, |bitmaps, skin| {
-        if stretched_part(BACK, to.width, to.height) < BACK {
-            stretch_bilinear(bitmaps, dst, to, skin, (0, 0), BACK, false)?;
-        } else {
-            bitmaps.stretch_blt(dst, to, skin, Rect::new(0, 0, BACK, BACK), 255)?;
-        }
         lay_pattern(bitmaps, dst, to, skin)
     })
 }

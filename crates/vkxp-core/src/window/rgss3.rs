@@ -17,6 +17,9 @@
 //!   order.
 //! - A window whose width or height is 0 or less draws no background and no frame, and its
 //!   other parts are cut to the one pixel at its origin.
+//! - A skin smaller than the layout cuts the centre and the edges of the cursor as it cuts
+//!   the background, and a part of the skin that the skin cuts counts its cut width in the
+//!   rule of the odd column.
 //! - A disposed skin or contents bitmap is drawn as none.
 //!
 //! What each call latches, in the order it does so:
@@ -94,7 +97,7 @@ impl State {
 }
 
 /// The cursor: the pieces of RGSS1 from the cursor image of the layout of RGSS2, with a
-/// border of 4.
+/// border of 4. What the skin lacks of a piece is cut as the stretch of that piece cuts it.
 fn draw_cursor(
     bitmaps: &mut Bitmaps,
     dst: BitmapId,
@@ -103,10 +106,8 @@ fn draw_cursor(
     height: i32,
     _stretch: bool,
 ) -> Result<(), BitmapError> {
-    rgss2::with_layout(bitmaps, skin, |bitmaps, skin| {
-        let size = (width, height);
-        cursor_pieces(bitmaps, dst, skin, size, CURSOR, CURSOR_BORDER, false)
-    })
+    let size = (width, height);
+    cursor_pieces(bitmaps, dst, skin, size, CURSOR, CURSOR_BORDER, true)
 }
 
 impl Window {
@@ -425,6 +426,8 @@ impl Assembly<'_> {
             self.quad(bitmap, size, &at, shown, look);
         }
 
+        // A plain quad cuts a part to what the skin has of it, and the rule of the odd
+        // column then counts the cut width, as the original does in RGSS3.
         if let Some(skin) = arrow_skin {
             for arrow in &state.arrows {
                 let at = Geometry::at(x + arrow.x, y + arrow.y);

@@ -2,11 +2,13 @@
 # case files of the window measurement of 2026-10-12 (RGSS202E.dll 2.0.2.1; the file of version
 # 2.0.0.1 gave the same pictures). The format is that of `vkxp_core::test_support::window_cases`.
 #
-# The digest of a frame is that of the picture the model of the measurement draws, which is the
-# picture the original drew, pixel for pixel, in all of these but two. NOT MEASURED: in
-# `g8-smallskin_t_0` every skin, and in `g6-skin_sizes_t` the skin of 1 by 1, is narrower or
-# lower than 64 pixels. Of such a skin the original draws less of the background than the model
-# does; those two follow the model, not the original.
+# The digest of a frame is that of the picture the original drew. In all of these but two it is
+# also that of the picture the model of that measurement draws. In `g8-smallskin_t_0` every
+# skin, and in `g6-skin_sizes_t` the skin of 1 by 1, is narrower or lower than 64 pixels: of such
+# a skin the original draws less of the background than that model does. The rule was found by
+# the window measurement of RGSS3 of 2026-10-13 (a stretched block that leaves the skin is cut
+# and its target shortened), and with it the model draws the pictures of the original of VX for
+# these two as well.
 #
 # By rule of the design of the change `draw-the-window-of-rgss2`:
 #   1, 2    background with its pattern, frame   g1 (sizes, opacities), g17 (overlapping pieces)
@@ -1827,7 +1829,7 @@ set 34 y 310
 set 34 width 130
 set 34 height 70
 set 34 openness 180
-frame 51c81ac0bdc87e36 skin_sizes_t
+frame edbddf94f4992ce6 skin_sizes_t
 end
 scene g6-small_t
 bitmap b25 noise o 5031 544 416
@@ -2835,7 +2837,7 @@ set 129 y 334
 set 129 width 76
 set 129 height 80
 set 129 openness 200
-frame 6e2b1b9df573caf0 smallskin_t_0
+frame 0263b5710a3a9da6 smallskin_t_0
 end
 scene g9-opacities_front
 bitmap b5 noise o 5050 544 416

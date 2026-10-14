@@ -10,8 +10,8 @@
 
 ## 2. Skins smaller than the layout
 
-- [ ] 2.1 The shortened target for the background of windows of RGSS2 and RGSS3; the two digests of `crates/vkxp-core/tests/data/window-rgss2-cases.txt` and the head of that file. Verify: the scenarios "Background, measured on the originals of VX and VX Ace", "Two pictures of RGSS2 corrected" and "Nothing else of RGSS2 changes" of "Skins smaller than the layout"; `git diff` of `crates/vkxp-core/tests/data/` shows two changed `frame` lines and changed comment lines in that file and no other change to a file that existed; `cargo test -p vkxp-core -p vkxp-binding --locked` and `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk --locked windows` pass.
-- [ ] 2.2 In RGSS3 the shortened target for the centre and edges of the cursor, and the cut width of a part of the skin; RGSS2 keeps both as they are. Verify: the scenario "Cursor of RGSS3, measured on the original"; the tests of `crates/vkxp-core/src/window/rgss2/tests.rs` pass with no expected value edited beyond task 2.1; `cargo test -p vkxp-core --locked` passes.
+- [x] 2.1 The shortened target for the background of windows of RGSS2 and RGSS3; the two digests of `crates/vkxp-core/tests/data/window-rgss2-cases.txt` and the head of that file. Verify: the scenarios "Background, measured on the originals of VX and VX Ace", "Two pictures of RGSS2 corrected" and "Nothing else of RGSS2 changes" of "Skins smaller than the layout"; `git diff` of `crates/vkxp-core/tests/data/` shows two changed `frame` lines and changed comment lines in that file and no other change to a file that existed; `cargo test -p vkxp-core -p vkxp-binding --locked` and `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk --locked windows` pass.
+- [x] 2.2 In RGSS3 the shortened target for the centre and edges of the cursor, and the cut width of a part of the skin; RGSS2 keeps both as they are. Verify: the scenario "Cursor of RGSS3, measured on the original"; the tests of `crates/vkxp-core/src/window/rgss2/tests.rs` pass with no expected value edited beyond task 2.1; `cargo test -p vkxp-core --locked` passes.
 
 ## 3. Whole scenes
 
