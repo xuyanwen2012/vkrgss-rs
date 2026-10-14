@@ -820,14 +820,15 @@ fn move_memory(_guest: &mut Guest, args: &mut [Arg]) -> i64 {
 
 /// Runs `shim` on `args` and puts every buffer it changed back into the string at the same
 /// index of `strings`, which must be live: in RGSS1 and RGSS2 by `String#replace`, which
-/// labels the string ASCII-8BIT over Ruby 1.9; in RGSS3 with the encoding label the string
-/// had, as the original runtime of RGSS3 leaves it (API report 3.3). The length stays.
+/// labels the string ASCII-8BIT over Ruby 1.9; in RGSS3 by writing its bytes in place, with
+/// the length and the encoding label the string has, as the original runtime of RGSS3
+/// leaves it (API report 3.3).
 fn run_shim(
     ruby: &Ruby,
     shim: Shim,
     strings: &[Option<VALUE>],
     mut args: Vec<Arg>,
-    keep_label: bool,
+    in_place: bool,
 ) -> Result<i64, Raise> {
     let before = args.clone();
     let result = Guest::with(|guest| shim(guest, &mut args));
@@ -835,15 +836,13 @@ fn run_shim(
         if let (Some(string), Arg::Buffer(bytes)) = (*string, after)
             && after != before
         {
-            let contents = rb::bytes_new(ruby, bytes)?;
-            if keep_label && rb::RUBY_19 {
-                // SAFETY: `string` is live by the condition of this function, and every
-                // value here was just returned and is in a local.
-                let encoding = unsafe { ruby.funcall(string, c"encoding", &[]) }?;
-                // SAFETY: as above.
-                unsafe { ruby.funcall(contents, c"force_encoding", &[encoding]) }?;
+            if in_place {
+                rb::write_bytes(ruby, string, bytes)?;
+                continue;
             }
-            // SAFETY: as above.
+            let contents = rb::bytes_new(ruby, bytes)?;
+            // SAFETY: `string` is live by the condition of this function, and `contents`
+            // was just returned and is in a local.
             unsafe { ruby.funcall(string, c"replace", &[contents]) }?;
         }
     }

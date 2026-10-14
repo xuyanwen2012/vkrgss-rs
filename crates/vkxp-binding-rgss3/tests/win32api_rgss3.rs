@@ -342,6 +342,44 @@ fn a_filled_buffer_keeps_its_length_and_label() {
     );
 }
 
+/// The buffer is written in place through no method a script can redefine: neither a
+/// `replace` nor an `encoding` of its own changes what the buffer holds or its label.
+#[test]
+fn a_buffer_is_written_whatever_methods_a_script_gives_it() {
+    assert_eq!(
+        eval(&format!(
+            "handle = Win32API.new('user32', 'FindWindowA', 'pp', 'l').call('RGSS Player', '{TITLE}')
+             rect = Win32API.new('user32', 'GetClientRect', 'lp', 'i')
+             replaced = \"\\0\" * 16
+             def replaced.replace(value); self; end
+             labelled = (\"\\0\" * 16).force_encoding('UTF-8')
+             def labelled.encoding; Encoding.find('ASCII-8BIT'); end
+             [rect.call(handle, replaced), replaced.unpack('l4'), rect.call(handle, labelled),
+              labelled.unpack('l4'), Encoding.instance_method(:name).bind(
+                String.instance_method(:encoding).bind(labelled).call).call]"
+        )),
+        "[1, [0, 0, 544, 416], 1, [0, 0, 544, 416], \"UTF-8\"]"
+    );
+}
+
+/// A buffer that shares its bytes with another string is given bytes of its own before it is
+/// written, and keeps its length.
+#[test]
+fn a_shared_buffer_is_written_alone() {
+    assert_eq!(
+        eval(&format!(
+            "handle = Win32API.new('user32', 'FindWindowA', 'pp', 'l').call('RGSS Player', '{TITLE}')
+             rect = Win32API.new('user32', 'GetClientRect', 'lp', 'i')
+             original = \"\\0\" * 64
+             copy = original.dup
+             part = original[8, 40]
+             [rect.call(handle, copy), rect.call(handle, part), copy.unpack('l4'), copy.bytesize,
+              part.unpack('l4'), part.bytesize, original.unpack('C*').uniq, original.bytesize]"
+        )),
+        "[1, 1, [0, 0, 544, 416], 64, [0, 0, 544, 416], 40, [0], 64]"
+    );
+}
+
 // --- Measured calls ---------------------------------------------------------------------------
 
 /// Scenario "Title, measured on the original".

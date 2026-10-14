@@ -52,6 +52,12 @@ enum Op {
     },
     /// The value of a global variable.
     GlobalGet(*const c_char),
+    /// Overwrites the bytes of a string in place, at most as many as it has.
+    WriteBytes {
+        string: VALUE,
+        bytes: *const u8,
+        len: usize,
+    },
     /// A new `Float`.
     Float(f64),
     /// A new instance from the class's allocator, without `initialize`.
@@ -119,6 +125,19 @@ unsafe extern "C" fn call_body(data: VALUE) -> VALUE {
                 ffi::rb_data_object_alloc(ffi::rb_cData, data, None, Some(free))
             }
             Op::GlobalGet(name) => ffi::rb_gv_get(name),
+            Op::WriteBytes { string, bytes, len } => {
+                // Resizing to its own length checks that the string may change, gives it a
+                // buffer of its own when it shares one, and keeps its length and its
+                // encoding label.
+                ffi::rb_str_resize(string, ffi::rstring_len(string));
+                let room = usize::try_from(ffi::rstring_len(string)).unwrap_or(0);
+                std::ptr::copy_nonoverlapping(
+                    bytes,
+                    ffi::rstring_ptr(string).cast(),
+                    len.min(room),
+                );
+                ffi::Qnil
+            }
             Op::Float(number) => ffi::rb_float_new(number),
             Op::Alloc(class) => ffi::rb_obj_alloc(class),
             Op::IvarSet {
@@ -513,6 +532,27 @@ pub(crate) fn data_of(value: VALUE, free: ffi::DataFn) -> Option<*mut c_void> {
             && data.dfree.map(|function| function as usize) == Some(free as usize);
         ours.then_some(data.data)
     }
+}
+
+/// Overwrites the first bytes of the String `string` with `bytes`, in place and through no
+/// method a script can redefine: its length and its encoding label stay, bytes beyond its
+/// length are dropped, and a string that shares its buffer with another gets one of its
+/// own first. A frozen string raises `RuntimeError` (`can't modify frozen string`), anything
+/// but a String `TypeError`.
+pub(crate) fn write_bytes(ruby: &Ruby, string: VALUE, bytes: &[u8]) -> Result<(), Raise> {
+    // SAFETY: the value is live by the condition of this module.
+    if unsafe { ffi::rb_type(string) } != ffi::T_STRING {
+        return Err(wrong_type(ruby, string, |class| {
+            format!("can't convert {class} into String")
+        }));
+    }
+    let op = Op::WriteBytes {
+        string,
+        bytes: bytes.as_ptr(),
+        len: bytes.len(),
+    };
+    perform(ruby, op)?;
+    Ok(())
 }
 
 /// The value of the global variable `name`, such as `$stderr`.
