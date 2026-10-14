@@ -912,6 +912,31 @@ fn the_music_returns_to_its_own_volume() {
     assert!((full - 1.0).abs() < 0.001, "{full}");
 }
 
+/// Scenario "No return time" after an effect whose music was still returning: the music is
+/// at its own amplitude at once, whether the second effect ends by itself or by a stop.
+#[test]
+fn no_return_time_ends_a_return_that_was_not_over() {
+    let music = wav_of(RATE, &vec![8192; RATE as usize]);
+    let effect = wav_of(RATE, &vec![0; RATE as usize / 10]);
+    for stopped in [false, true] {
+        let mut mixer = mixer();
+        mixer.apply(play(BGM, &music));
+        mixer.apply(play_from(AudioChannel::Me, &effect, (100, 100), 0, 1000));
+        // The effect, then a quarter of the return.
+        frames(&mut mixer, RATE as usize / 10 + RATE as usize / 4);
+        mixer.apply(play_from(AudioChannel::Me, &effect, (100, 100), 0, 0));
+        let after = if stopped {
+            frames(&mut mixer, 100);
+            mixer.apply(stop(AudioChannel::Me));
+            frames(&mut mixer, 1)
+        } else {
+            let out = frames(&mut mixer, RATE as usize / 10 + 1);
+            out[out.len() - 2..].to_vec()
+        };
+        assert_eq!(after, [0.25, 0.25], "stopped: {stopped}");
+    }
+}
+
 /// Scenario "A stop without an effect".
 #[test]
 fn a_stop_of_the_effect_channel_without_an_effect_changes_nothing() {

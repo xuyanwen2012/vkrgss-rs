@@ -364,14 +364,13 @@ impl Voice {
         }
     }
 
-    /// Lets the volume rise from silence over `frames`, evenly in the volume number.
+    /// Lets the volume rise from silence over `frames`, evenly in the volume number. Over no
+    /// frames the voice is at its volume at once, also when an earlier rise was not over.
     fn rise(&mut self, frames: u32) {
-        if frames > 0 {
-            self.rise = Some(Rise {
-                done: 0,
-                total: frames,
-            });
-        }
+        self.rise = (frames > 0).then_some(Rise {
+            done: 0,
+            total: frames,
+        });
     }
 
     fn fade(&mut self, frames: u32) {
