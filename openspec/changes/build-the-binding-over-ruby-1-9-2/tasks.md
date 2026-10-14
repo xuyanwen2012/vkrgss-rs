@@ -24,8 +24,8 @@
 
 ## 5. What the second package tests itself
 
-- [ ] 5.1 `crates/vkxp-binding-rgss3/tests/strings.rs` and `tests/preparation.rs`. Verify: the six scenarios of "Strings the binding creates are text or bytes" and the scenarios "Ruby 1.9.2" and "No prelude of the release" of "Preparation by interpreter".
-- [ ] 5.2 `crates/vkxp-binding-rgss3/tests/rgss3_script.rs` as in decision 8. Verify: the four scenarios of "A script of RGSS3 flavour runs through the binding"; `cargo test -p vkxp-binding-rgss3 --locked` passes.
+- [x] 5.1 `crates/vkxp-binding-rgss3/tests/strings.rs` and `tests/preparation.rs`. Verify: the six scenarios of "Strings the binding creates are text or bytes" and the scenarios "Ruby 1.9.2" and "No prelude of the release" of "Preparation by interpreter".
+- [x] 5.2 `crates/vkxp-binding-rgss3/tests/rgss3_script.rs` as in decision 8. Verify: the four scenarios of "A script of RGSS3 flavour runs through the binding"; `cargo test -p vkxp-binding-rgss3 --locked` passes.
 
 ## 6. Collector stress and documents
 
