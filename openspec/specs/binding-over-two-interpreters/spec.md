@@ -97,9 +97,8 @@ of what Ruby 1.8.7 does.
 - **THEN** every test that passed before passes under its name with its expected values unedited
 
 ### Requirement: Strings the binding creates are text or bytes
-Every Ruby string the binding creates SHALL be made through one of two functions: one for
-bytes, which over Ruby 1.9.2 gives an ASCII-8BIT string, and one for text, which gives a
-UTF-8 string. Over Ruby 1.8.7 the two SHALL give the same string. Text SHALL be only the source of
+Every Ruby string the binding creates SHALL be made by one of two functions: bytes,
+ASCII-8BIT over Ruby 1.9.2, or text, UTF-8. Over Ruby 1.8.7 the two SHALL be the same. Text SHALL be only the source of
 game scripts and preload files handed to the interpreter and the path of the script archive;
 the built-in scripts file SHALL be handed over as bytes. Everything else SHALL
 be bytes: serialized forms, `to_s`, font names, data for `Marshal`, buffers, file names.
