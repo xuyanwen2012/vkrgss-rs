@@ -1,7 +1,10 @@
 # embedded-ruby-1-9-2 Specification
 
 ## Purpose
-TBD - created by archiving change vendor-ruby-1-9-2. Update Purpose after archive.
+Defines the Ruby 1.9.2 interpreter that vkxp builds for RPG Maker VX Ace (RGSS3): how it is
+built from vendored source beside Ruby 1.8.7 without the two meeting in one program, what is
+true of it at start-up as measured on the original runtime, and how host code enters and
+leaves it.
 
 ## Requirements
 
