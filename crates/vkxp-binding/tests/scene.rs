@@ -199,3 +199,20 @@ fn a_window_of_rgss1_is_not_the_window_of_rgss3() {
         Ok("[false, ArgumentError, [false, false, false, false, false, false, false]]")
     );
 }
+
+/// Scenario "XP and VX" of "The scene classes of RGSS1 and RGSS2 are unchanged by RGSS3",
+/// for a game of RGSS1: no `Plane#viewport=`, no `Viewport.new` without arguments, and a
+/// viewport takes its elements along.
+#[test]
+fn the_scene_classes_of_rgss1_are_not_those_of_rgss3() {
+    scene_support::install();
+    assert_eq!(
+        testing::eval(
+            "p = Plane.new; a = p.respond_to?(:viewport=); p.dispose; \
+             b = begin; Viewport.new; rescue ArgumentError; ArgumentError; end; \
+             v = Viewport.new(0, 0, 8, 8); s = Sprite.new(v); v.dispose; [a, b, s.disposed?]"
+        )
+        .as_deref(),
+        Ok("[false, ArgumentError, true]")
+    );
+}

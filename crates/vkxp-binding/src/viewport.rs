@@ -2,18 +2,24 @@
 //!
 //! A viewport has no `disposed?` and no viewport of its own; otherwise it is an element
 //! like the others (see [`element`]).
+//!
+//! A game of RGSS3 gets another `initialize`, as measured on the original runtime of RGSS3:
+//! without arguments it makes a viewport of the screen as it is then, and a wrong count says
+//! `(expected for given)`. Disposing a viewport of RGSS3 leaves its elements alive (see
+//! [`element`]).
 
 use std::ffi::CStr;
 
-use vkxp_core::ViewportId;
+use vkxp_core::{Rect, Scene, SceneError, ViewportId};
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{HostResult, Raised, Ruby};
+use vkxp_vfs::Runtime;
 
 use crate::color::{color_arg, color_of, color_set, tone_arg, tone_of, tone_set};
 use crate::element::{self, field, object, reader, writer};
 use crate::rb;
 use crate::rect::{rect_arg, rect_of, rect_set};
-use crate::wrap::{self, Owner};
+use crate::wrap::{self, Owned, Owner};
 
 /// The instance variables that hold the viewport's own `Rect`, `Color` and `Tone` objects.
 const RECT: &CStr = c"rect";
@@ -28,10 +34,50 @@ fn initialize(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
         [_, _, _, _] => element::rect_of_ints(ruby, args)?,
         _ => return Err(rb::count_error(ruby, args, &[1, 4])),
     };
-    let id = element::create(ruby, recv, None, |scene| scene.create_viewport(rect))?;
-    let (color, tone) = element::operate(ruby, |guest| {
+    create(ruby, recv, |scene| scene.create_viewport(rect))
+}
+
+/// `initialize` of RGSS3: no argument for the screen as it is now, one `Rect` or four
+/// values. Any other count, or one argument that is no `Rect`, raises `ArgumentError`
+/// worded as the original runtime of RGSS3 words it: `(1 for given)` when the first
+/// argument is a `Rect`, `(4 for given)` otherwise.
+///
+/// Provenance: oracle measurement 2026-10-13, RGSS301 version 3.0.1.1 and RGSS300 version
+/// 3.0.0.1, `ace-v1-sprite-REPORT.md` section 3 and its exploration log, part 2.
+fn initialize_rgss3(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    wrap::intern_owner_names(ruby)?;
+    let first_is_rect = args
+        .first()
+        .is_some_and(|&first| wrap::find::<Owned<Rect>>(ruby, first).is_some());
+    match args {
+        [] => create(ruby, recv, Scene::create_screen_viewport),
+        [rect] if first_is_rect => {
+            let rect = rect_arg(ruby, *rect)?;
+            create(ruby, recv, |scene| scene.create_viewport(rect))
+        }
+        [_, _, _, _] if !first_is_rect => {
+            let rect = element::rect_of_ints(ruby, args)?;
+            create(ruby, recv, |scene| scene.create_viewport(rect))
+        }
+        _ => {
+            let expected = if first_is_rect { 1 } else { 4 };
+            rb::check_count_rgss3(ruby, args, expected, expected)?;
+            unreachable!("a count other than the expected one was given")
+        }
+    }
+}
+
+/// Creates the viewport of the object `recv` with `create` and gives the object its own
+/// `Rect`, `Color` and `Tone`.
+fn create(
+    ruby: &Ruby,
+    recv: VALUE,
+    create: impl FnOnce(&mut Scene) -> Result<ViewportId, SceneError>,
+) -> HostResult {
+    let id = element::create(ruby, recv, None, create)?;
+    let (rect, color, tone) = element::operate(ruby, |guest| {
         let viewport = guest.scene.viewport(id)?;
-        Ok((viewport.color, viewport.tone))
+        Ok((viewport.rect, viewport.color, viewport.tone))
     })?;
     let rect = rect_of(ruby, rect, Owner::ViewportRect(id))?;
     rb::ivar_set(ruby, recv, RECT, rect)?;
@@ -82,10 +128,14 @@ writer!(set_z, ViewportId, |guest, id, z: i32| guest
     .scene
     .set_viewport_z(id, z)?);
 
-/// Defines `Viewport`.
-pub(crate) fn define(ruby: &Ruby) -> Result<VALUE, Raised> {
+/// Defines `Viewport` as `runtime` has it.
+pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
     let class = element::define_class::<ViewportId>(ruby, c"Viewport")?;
-    rb::method(ruby, class, c"initialize", -1, initialize)?;
+    if runtime == Runtime::Rgss3 {
+        rb::method(ruby, class, c"initialize", -1, initialize_rgss3)?;
+    } else {
+        rb::method(ruby, class, c"initialize", -1, initialize)?;
+    }
     rb::method(ruby, class, c"flash", 2, flash)?;
     rb::method(ruby, class, c"update", 0, update)?;
     rb::method(ruby, class, c"rect", 0, rect)?;

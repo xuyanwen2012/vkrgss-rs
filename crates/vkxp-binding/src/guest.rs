@@ -81,7 +81,7 @@ impl Guest {
             files: config.files,
             text: config.text,
             scene: runtime::new_scene(config.run.runtime),
-            input: InputState::with_rules(runtime::rules(config.run.runtime)),
+            input: InputState::with_rules(runtime::input_rules(config.run.runtime)),
             owner_names_pending: config.run.runtime == Runtime::Rgss2,
             runtime: runtime::State::new(config.run),
             win32api: win32api::State::default(),

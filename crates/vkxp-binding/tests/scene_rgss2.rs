@@ -460,3 +460,28 @@ fn a_window_of_rgss2_is_not_the_window_of_rgss3() {
         "[false, ArgumentError, [false, false, false, false, false, false, false]]"
     );
 }
+
+/// Scenario "XP and VX" of "The scene classes of RGSS1 and RGSS2 are unchanged by RGSS3",
+/// for a game of RGSS2, and the scenario "The same sprite in RGSS2" of "The scene of a game
+/// of RGSS3": a turned sprite in a viewport keeps the rule of RGSS2.
+#[test]
+fn the_scene_classes_of_rgss2_are_not_those_of_rgss3() {
+    assert_eq!(
+        eval(
+            "p = Plane.new; a = p.respond_to?(:viewport=); p.dispose; \
+             b = begin; Viewport.new; rescue ArgumentError; ArgumentError; end; \
+             v = Viewport.new(0, 0, 8, 8); s = Sprite.new(v); v.dispose; [a, b, s.disposed?]"
+        ),
+        "[false, ArgumentError, true]"
+    );
+    assert_eq!(
+        eval_with(
+            "made << (b = Bitmap.new(16, 8)) << (v = Viewport.new(100, 50, 60, 40)) \
+             << (s = Sprite.new(v)); \
+             16.times { |c| b.fill_rect(c, 0, 1, 8, Color.new(c, 255 - c, 128)) }; \
+             v.ox = 10; v.oy = 4; s.bitmap = b; s.x = 30; s.y = 20; s.angle = 180",
+            "[pixel(105, 58), pixel(115, 62)[0]]"
+        ),
+        format!("[{BLACK}, 15]")
+    );
+}

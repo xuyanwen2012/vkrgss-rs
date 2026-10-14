@@ -533,8 +533,19 @@ pub fn frame_size(runtime: Runtime) -> Size {
     }
 }
 
-/// The rules of the core a game of `runtime` follows where the runtimes differ.
+/// The rules of the core the scene of a game of `runtime` follows where the runtimes differ.
 pub(crate) fn rules(runtime: Runtime) -> Rules {
+    match runtime {
+        Runtime::Rgss1 => Rules::Rgss1,
+        Runtime::Rgss2 => Rules::Rgss2,
+        Runtime::Rgss3 => Rules::Rgss3,
+    }
+}
+
+/// The rules the input state of a game of `runtime` starts with. A game of RGSS3 keeps those
+/// of RGSS2 until its binding marks the frames it shows, without which an input state of
+/// RGSS3 would never see a snapshot.
+pub(crate) fn input_rules(runtime: Runtime) -> Rules {
     match runtime {
         Runtime::Rgss1 => Rules::Rgss1,
         Runtime::Rgss2 | Runtime::Rgss3 => Rules::Rgss2,

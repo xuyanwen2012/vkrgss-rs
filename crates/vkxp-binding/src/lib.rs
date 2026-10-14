@@ -110,16 +110,16 @@
 //! rectangle.
 //!
 //! **Lifetime.** `dispose` removes the element from the scene and leaves the handle in the
-//! object; a handle whose element is gone names nothing, so every later method fails in
-//! the scene and raises `RGSSError` with `disposed sprite`, `disposed viewport`,
-//! `disposed window`, `disposed plane` or `disposed tilemap`. Only `dispose` itself and
-//! `disposed?`, which `Viewport` does not have, still work. Disposing an element disposes
-//! none of the objects it refers to. An object that was allocated and never initialized
-//! counts as disposed. `clone` and `dup` raise `TypeError` (`can't clone Sprite`). An
-//! element whose Ruby object is collected without having been disposed is disposed through
-//! the free queue below. The collector reaches elements only through Ruby references, so an
-//! element a script can still reach is never freed that way: a viewport is kept by its
-//! elements, a tilemap by its autotile list.
+//! object; a handle whose element is gone names nothing, so every later method fails in the scene
+//! and raises `RGSSError` with `disposed sprite`, `disposed viewport`, `disposed window`,
+//! `disposed plane` or `disposed tilemap`. Only `dispose` itself and `disposed?`, which
+//! `Viewport` does not have, still work. Disposing an element disposes none of the objects it
+//! refers to. Disposing a viewport disposes its elements in RGSS1 and RGSS2 and none of them in
+//! RGSS3 (see `element`). An object that was allocated and never initialized counts as disposed.
+//! `clone` and `dup` raise `TypeError` (`can't clone Sprite`). An element whose Ruby object is
+//! collected without having been disposed is disposed through the free queue below. The collector
+//! reaches elements only through Ruby references, so an element a script can still reach is never
+//! freed that way: a viewport is kept by its elements, a tilemap by its autotile list.
 //!
 //! # The free queue
 //!

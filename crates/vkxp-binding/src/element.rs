@@ -14,15 +14,18 @@
 //! `dispose` removes the element from the scene and leaves the handle in the object, so
 //! that every later use fails in the scene with the class's `disposed` message; only
 //! `Sprite#bitmap` and `Tilemap#autotiles` go on returning their object. Disposing a viewport
-//! disposes the elements created in it in the same way. An element created in a disposed
-//! viewport is alive, keeps that `Viewport` object and is never drawn. When the
-//! collector frees an element object that was not disposed, its handle goes to a queue, as
-//! the bitmap of a collected `Bitmap` does, and the element is disposed the next time the
-//! guest is entered.
+//! in RGSS1 and RGSS2 disposes the elements in it in the same way; in RGSS3 it disposes none
+//! of them, as the original runtime of RGSS3 does: they stay alive and usable and keep the
+//! disposed `Viewport` object. An element in a disposed viewport, created there or left
+//! there, is alive, keeps that `Viewport` object and is never drawn until it is moved out.
+//! When the collector frees an element object that was not disposed, its handle goes to a
+//! queue, as the bitmap of a collected `Bitmap` does, and the element is disposed the next
+//! time the guest is entered; a collected viewport is disposed as `dispose` disposes it.
 //!
-//! The classes are defined as the runtime of the run has them. In RGSS2 an element can be
-//! moved to another viewport: `Sprite`, `Window` and `Tilemap` have `viewport=`, and
-//! `Plane#viewport` takes the viewport and has no reader.
+//! The classes are defined as the runtime of the run has them. In RGSS2 and RGSS3 an element
+//! can be moved to another viewport: `Sprite`, `Window` and `Tilemap` have `viewport=`. In
+//! RGSS2 `Plane#viewport` takes the viewport and has no reader; in RGSS3 `Plane` has the
+//! reader `viewport` and the writer `viewport=` of the other elements.
 
 use std::cell::RefCell;
 
@@ -59,7 +62,7 @@ pub(crate) struct SceneClasses {
 pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<SceneClasses, Raised> {
     Ok(SceneClasses {
         sprite: sprite::define(ruby, runtime)?,
-        viewport: viewport::define(ruby)?,
+        viewport: viewport::define(ruby, runtime)?,
         window: window::define(ruby, runtime)?,
         plane: plane::define(ruby, runtime)?,
         tilemap: tilemap::define(ruby, runtime)?,
@@ -180,8 +183,17 @@ in_viewport!(WindowId, set_window_viewport);
 in_viewport!(PlaneId, set_plane_viewport);
 in_viewport!(TilemapId, set_tilemap_viewport);
 
-/// Disposes a viewport, and with it the elements that are in it.
+/// Disposes a viewport: in RGSS1 and RGSS2 with the elements that are in it, in RGSS3 alone.
+///
+/// Provenance of RGSS3: oracle measurement 2026-10-13, RGSS301 version 3.0.1.1 and RGSS300
+/// version 3.0.0.1, `ace-v1-sprite-REPORT.md`, `ace-v1-window-REPORT.md` and
+/// `ace-v1-tilemap-REPORT.md` section 5: the sprites, planes, windows and tilemaps of a
+/// disposed viewport are not disposed.
 fn dispose_viewport(id: ViewportId, guest: &mut Guest) {
+    if guest.runtime.run.runtime == Runtime::Rgss3 {
+        guest.scene.dispose_viewport_alone(id);
+        return;
+    }
     let _disposed = guest.scene.dispose_viewport(id, &mut guest.bitmaps);
     #[cfg(feature = "testing")]
     for (kind, count) in [
@@ -366,7 +378,8 @@ fn viewport_of<K: Kind>(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult
     Ok(rb::ivar_get(ruby, recv, VIEWPORT)?)
 }
 
-/// `viewport = viewport_or_nil` of RGSS2, and `Plane#viewport(viewport_or_nil)`: moves the
+/// `viewport = viewport_or_nil` of RGSS2 and RGSS3, and `Plane#viewport(viewport_or_nil)` of
+/// RGSS2: moves the
 /// element and keeps the object. Another object raises `TypeError` in the words of the
 /// original runtime.
 ///
@@ -402,7 +415,7 @@ pub(crate) fn define_class<K: Kind>(ruby: &Ruby, name: &std::ffi::CStr) -> Resul
 }
 
 /// Defines `disposed?` and `viewport`, which every element class but `Viewport` has, and in
-/// RGSS2 `viewport=`.
+/// RGSS2 and RGSS3 `viewport=`.
 pub(crate) fn define_in_viewport<K: InViewport>(
     ruby: &Ruby,
     class: VALUE,
@@ -416,19 +429,24 @@ pub(crate) fn define_in_viewport<K: InViewport>(
     Ok(())
 }
 
-/// Defines `disposed?` and the `viewport` of `Plane`: the reader in RGSS1, and in RGSS2 the
+/// Defines `disposed?` and the `viewport` of `Plane`: the reader in RGSS1; in RGSS2 the
 /// method of one argument that sets the viewport, beside which there is no reader and no
-/// `viewport=`.
+/// `viewport=`; in RGSS3 the reader and the writer `viewport=` that the other elements have.
+///
+/// Provenance of RGSS3: oracle measurement 2026-10-13, `ace-v1-sprite-REPORT.md` section 2.
 pub(crate) fn define_plane_viewport(
     ruby: &Ruby,
     class: VALUE,
     runtime: Runtime,
 ) -> Result<(), Raised> {
     rb::method(ruby, class, c"disposed?", 0, disposed::<PlaneId>)?;
-    if runtime == Runtime::Rgss1 {
-        rb::method(ruby, class, c"viewport", 0, viewport_of::<PlaneId>)
-    } else {
-        rb::method(ruby, class, c"viewport", 1, set_viewport::<PlaneId>)
+    match runtime {
+        Runtime::Rgss1 => rb::method(ruby, class, c"viewport", 0, viewport_of::<PlaneId>),
+        Runtime::Rgss2 => rb::method(ruby, class, c"viewport", 1, set_viewport::<PlaneId>),
+        Runtime::Rgss3 => {
+            rb::method(ruby, class, c"viewport", 0, viewport_of::<PlaneId>)?;
+            rb::method(ruby, class, c"viewport=", 1, set_viewport::<PlaneId>)
+        }
     }
 }
 
