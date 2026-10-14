@@ -2,7 +2,7 @@
 
 ## 1. The class of RGSS3
 
-- [ ] 1.1 Before anything changes, keep the lists of tests under `local/` as the implementation notes of `design.md` say. In `crates/vkxp-binding/src/tilemap.rs`: the constructor that calls `Scene::create_tilemap_rgss3`, `flags` and `flags=`, and the third shape of `define` (decisions 1 to 3). New test file `crates/vkxp-binding-rgss3/tests/tilemap_rgss3.rs` (decision 7) with the method surface, the values and the errors. Verify: the ten scenarios of "Tilemap class of RGSS3" and the six of "Tables of a tilemap of RGSS3"; `cargo test -p vkxp-binding -p vkxp-binding-rgss3 --locked` passes with every name of the kept lists, no expected value of an existing test changed, and `git diff main -- crates/vkxp-binding-rgss3/tests/ruby192.allow` is empty.
+- [x] 1.1 Before anything changes, keep the lists of tests under `local/` as the implementation notes of `design.md` say. In `crates/vkxp-binding/src/tilemap.rs`: the constructor that calls `Scene::create_tilemap_rgss3`, `flags` and `flags=`, and the third shape of `define` (decisions 1 to 3). New test file `crates/vkxp-binding-rgss3/tests/tilemap_rgss3.rs` (decision 7) with the method surface, the values and the errors. Verify: the ten scenarios of "Tilemap class of RGSS3" and the six of "Tables of a tilemap of RGSS3"; `cargo test -p vkxp-binding -p vkxp-binding-rgss3 --locked` passes with every name of the kept lists, no expected value of an existing test changed, and `git diff main -- crates/vkxp-binding-rgss3/tests/ruby192.allow` is empty.
 
 ## 2. What it draws, and a disposed tilemap
 

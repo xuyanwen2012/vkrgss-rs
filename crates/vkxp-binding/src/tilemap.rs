@@ -14,7 +14,13 @@
 //! nor `autotiles` nor `priorities`; `TilemapAutotiles` is not defined. The bitmap array is
 //! the same kind of object as the autotile list, with nine slots. Every write and every
 //! update refreshes the tilemap in the scene (`Scene::refresh_tilemap`), which only a
-//! tilemap of RGSS2 notices.
+//! tilemap of RGSS2 or RGSS3 notices.
+//!
+//! In a game of RGSS3 the class is the one measured on the original runtime of VX Ace: that
+//! of RGSS2 with `flags` in the place of `passages`, and a tilemap of the scene drawn by the
+//! rule set of RGSS3 (`Scene::create_tilemap_rgss3`). The flags table goes where the passages
+//! table of RGSS2 goes, under the same rules of reference and of `nil`. A write to a slot of
+//! `bitmaps` of a disposed tilemap is kept, where the original ends with a page fault.
 
 use std::ffi::CStr;
 
@@ -44,6 +50,8 @@ const BITMAPS: &CStr = c"bitmaps";
 /// The instance variable that holds the passages `Table` object of a tilemap of RGSS2, or
 /// `nil`.
 const PASSAGES: &CStr = c"passages";
+/// The instance variable that holds the flags `Table` object of a tilemap of RGSS3, or `nil`.
+const FLAGS: &CStr = c"flags";
 
 /// The instance variable of a `TilemapAutotiles` object that holds its `Tilemap` object.
 const TILEMAP: &CStr = c"tilemap";
@@ -107,6 +115,21 @@ fn initialize_rgss2(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     let id = element::create(ruby, recv, args.first(), |scene| {
         scene.create_tilemap_rgss2(viewport)
     })?;
+    give_bitmaps(ruby, recv, id)
+}
+
+/// `initialize(viewport = nil)` in RGSS3: as in RGSS2, with a tilemap of the scene that is
+/// drawn by the rule set of RGSS3.
+fn initialize_rgss3(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let viewport = element::viewport_arg(ruby, args)?;
+    let id = element::create(ruby, recv, args.first(), |scene| {
+        scene.create_tilemap_rgss3(viewport)
+    })?;
+    give_bitmaps(ruby, recv, id)
+}
+
+/// Gives a new tilemap of RGSS2 or RGSS3 its `Tilemap::BitmapArray` object.
+fn give_bitmaps(ruby: &Ruby, recv: VALUE, id: TilemapId) -> HostResult {
     let bitmaps = wrap::new_object(ruby, Autotiles { tilemap: Some(id) })?;
     rb::ivar_set(ruby, recv, BITMAPS, bitmaps)?;
     // The array keeps its tilemap alive, as the tilemap keeps the array. The variable has a
@@ -141,6 +164,7 @@ fn set_tileset(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
 kept_after_dispose!(autotiles, TilemapId, AUTOTILES);
 kept_after_dispose!(bitmaps, TilemapId, BITMAPS);
 kept!(passages, TilemapId, PASSAGES);
+kept!(flags, TilemapId, FLAGS);
 kept!(map_data, TilemapId, MAP_DATA);
 kept!(flash_data, TilemapId, FLASH_DATA);
 kept!(priorities, TilemapId, PRIORITIES);
@@ -168,9 +192,9 @@ fn set_table(
     Ok(assigned)
 }
 
-/// Raises the `TypeError` of the original runtime of VX when `nil` is assigned to a table
-/// property that holds a table: once set, the map data and the passages cannot be taken
-/// away. The property stays as it is.
+/// Raises the `TypeError` of the original runtimes of VX and VX Ace when `nil` is assigned
+/// to a table property that holds a table: once set, the map data and the passages or flags
+/// cannot be taken away. The property stays as it is.
 fn keep_table(ruby: &Ruby, recv: VALUE, assigned: VALUE, variable: &CStr) -> Result<(), Raise> {
     element::live::<TilemapId>(ruby, recv)?;
     if ffi::nil_p(assigned) && !ffi::nil_p(rb::ivar_get(ruby, recv, variable)?) {
@@ -186,8 +210,19 @@ fn set_map_data_rgss2(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
 }
 
 fn set_passages(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
-    keep_table(ruby, recv, args[0], PASSAGES)?;
-    set_table(ruby, recv, args[0], PASSAGES, |tilemap, table| {
+    set_passages_in(ruby, recv, args[0], PASSAGES)
+}
+
+/// `flags = table_or_nil`: the passages of RGSS2 under the name of RGSS3. The table goes
+/// where the passages table goes, which the rule set of RGSS3 reads as the flags.
+fn set_flags(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    set_passages_in(ruby, recv, args[0], FLAGS)
+}
+
+/// Assigns the passages or flags table kept in `variable`.
+fn set_passages_in(ruby: &Ruby, recv: VALUE, assigned: VALUE, variable: &CStr) -> HostResult {
+    keep_table(ruby, recv, assigned, variable)?;
+    set_table(ruby, recv, assigned, variable, |tilemap, table| {
         if let Some(rgss2) = &mut tilemap.rgss2 {
             rgss2.passages = table;
         }
@@ -300,7 +335,8 @@ fn sheet(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
 
 /// `bitmaps[index] = bitmap_or_nil`: keeps the object, gives the tilemap its bitmap and
 /// refreshes it. An index outside 0 to 8 stores nothing; a disposed tilemap leaves the
-/// array working, as measured on the original runtime of VX.
+/// array working, as measured on the original runtime of VX. The original runtime of VX Ace
+/// ends with a page fault at a write after dispose; vkxp keeps the object there too.
 fn set_sheet(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     let slot = sheet_slot(ruby, recv, args[0])?;
     let bitmap = element::bitmap_ref(ruby, args[1])?;
@@ -322,25 +358,36 @@ fn set_sheet(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
 }
 
 /// Defines `Tilemap` as `runtime` has it: with the tileset, the autotiles and the
-/// priorities in RGSS1; with `viewport=`, `bitmaps` and `passages` in RGSS2.
+/// priorities in RGSS1; with `viewport=`, `bitmaps` and `passages` in RGSS2; with
+/// `viewport=`, `bitmaps` and `flags` in RGSS3.
 pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
     let class = element::define_class::<TilemapId>(ruby, c"Tilemap")?;
     element::define_in_viewport::<TilemapId>(ruby, class, runtime)?;
     rb::method(ruby, class, c"update", 0, update)?;
-    if runtime == Runtime::Rgss1 {
-        rb::method(ruby, class, c"initialize", -1, initialize)?;
-        rb::method(ruby, class, c"tileset", 0, tileset)?;
-        rb::method(ruby, class, c"tileset=", 1, set_tileset)?;
-        rb::method(ruby, class, c"autotiles", 0, autotiles)?;
-        rb::method(ruby, class, c"map_data=", 1, set_map_data)?;
-        rb::method(ruby, class, c"priorities", 0, priorities)?;
-        rb::method(ruby, class, c"priorities=", 1, set_priorities)?;
-    } else {
-        rb::method(ruby, class, c"initialize", -1, initialize_rgss2)?;
-        rb::method(ruby, class, c"bitmaps", 0, bitmaps)?;
-        rb::method(ruby, class, c"map_data=", 1, set_map_data_rgss2)?;
-        rb::method(ruby, class, c"passages", 0, passages)?;
-        rb::method(ruby, class, c"passages=", 1, set_passages)?;
+    match runtime {
+        Runtime::Rgss1 => {
+            rb::method(ruby, class, c"initialize", -1, initialize)?;
+            rb::method(ruby, class, c"tileset", 0, tileset)?;
+            rb::method(ruby, class, c"tileset=", 1, set_tileset)?;
+            rb::method(ruby, class, c"autotiles", 0, autotiles)?;
+            rb::method(ruby, class, c"map_data=", 1, set_map_data)?;
+            rb::method(ruby, class, c"priorities", 0, priorities)?;
+            rb::method(ruby, class, c"priorities=", 1, set_priorities)?;
+        }
+        Runtime::Rgss2 => {
+            rb::method(ruby, class, c"initialize", -1, initialize_rgss2)?;
+            rb::method(ruby, class, c"bitmaps", 0, bitmaps)?;
+            rb::method(ruby, class, c"map_data=", 1, set_map_data_rgss2)?;
+            rb::method(ruby, class, c"passages", 0, passages)?;
+            rb::method(ruby, class, c"passages=", 1, set_passages)?;
+        }
+        Runtime::Rgss3 => {
+            rb::method(ruby, class, c"initialize", -1, initialize_rgss3)?;
+            rb::method(ruby, class, c"bitmaps", 0, bitmaps)?;
+            rb::method(ruby, class, c"map_data=", 1, set_map_data_rgss2)?;
+            rb::method(ruby, class, c"flags", 0, flags)?;
+            rb::method(ruby, class, c"flags=", 1, set_flags)?;
+        }
     }
     rb::method(ruby, class, c"map_data", 0, map_data)?;
     rb::method(ruby, class, c"flash_data", 0, flash_data)?;
@@ -355,7 +402,7 @@ pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
 }
 
 /// Defines the class of the list of sheets a tilemap of `runtime` has: `TilemapAutotiles`
-/// in RGSS1, `Tilemap::BitmapArray` in RGSS2. `Tilemap` must be defined.
+/// in RGSS1, `Tilemap::BitmapArray` in RGSS2 and RGSS3. `Tilemap` must be defined.
 pub(crate) fn define_autotiles(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
     if runtime == Runtime::Rgss1 {
         let class = wrap::define_class::<Autotiles>(ruby, c"TilemapAutotiles")?;

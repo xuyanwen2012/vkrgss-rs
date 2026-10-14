@@ -168,6 +168,17 @@ fn a_tilemap_draws_what_it_was_given() {
         ),
         format!("[{RED}, {BLACK}, {RED}]")
     );
+    // Scenarios "XP and VX" and "VX" of the tilemap of RGSS3: no `flags`, and a tilemap of
+    // RGSS2 is drawn while it is invisible.
+    assert_eq!(
+        eval_with(
+            "made << (t = Tilemap.new) << (b = solid(64, 32, 255, 0, 0)); \
+             m = Table.new(1, 1, 3)",
+            "t.bitmaps[5] = b; t.map_data = m; m[0, 0, 0] = 1; t.visible = false; \
+             [t.respond_to?(:flags), t.respond_to?(:passages), pixel(0, 0)]"
+        ),
+        format!("[false, true, {RED}]")
+    );
 }
 
 /// Scenario "Other viewport, measured on the original" of `core-scene`, through the class.

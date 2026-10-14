@@ -88,6 +88,11 @@ fn the_classes_of_rgss1_lack_what_rgss2_adds() {
         .as_deref(),
         Ok("[false, false, false, false, nil, nil, false, false, true, true, false]")
     );
+    // Scenario "XP and VX" of the tilemap of RGSS3: a tilemap of RGSS1 has no `flags`.
+    assert_eq!(
+        testing::eval("t = Tilemap.new; r = t.respond_to?(:flags); t.dispose; r").as_deref(),
+        Ok("false")
+    );
 }
 
 /// Scenario "XP" of "Sprite properties of RGSS2": a sprite of RGSS1 has none of the five,
