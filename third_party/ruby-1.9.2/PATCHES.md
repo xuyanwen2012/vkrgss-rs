@@ -242,3 +242,17 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
   taken the lock; each of the twenty threads then runs after one time slice. The count
   belongs to the threads of one process: `ruby_vkxp_gvl_atfork` forgets it in a copy,
   called by `rb_thread_atfork` and by vkrgss's `restart_thread_timer`.
+
+## 18. strtod-long-digit-string
+
+- File: `util.c`
+- Patch: `patches/strtod-long-digit-string.patch`
+- Patched SHA-256: `3581f19c5254cb0a269e0fbe26ee969849eaa86ba448bb896c0d408484b3f2f3`
+- Reason: CVE-2013-4164, the fix patch 33 of the tree of Ruby 1.8.7 carries, which this
+  tree lacked. `ruby_strtod` allocated its big numbers through `Balloc`, whose free list has
+  `Kmax + 1` entries; a digit string long enough asked for a larger one, and `Balloc` and
+  `Bfree` indexed the list past its end: a heap overflow that `Marshal.load` of a dumped
+  Float reaches, as `String#to_f` does. Sizes above `Kmax` are now allocated and freed
+  outside the list, and fraction digits after the first `DBL_DIG * 4` are skipped, which no
+  double can tell apart. `tests/backports.rs` of `vkrgss-ruby192-sys` crashed with SIGSEGV
+  before the patch.

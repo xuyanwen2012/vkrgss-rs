@@ -186,6 +186,14 @@ code that Oniguruma got after 5.9.6 and that is not in the vendored tree.
 | 12215ca | `regcomp.c`: `get_tree_tail_literal` | no | — | **does not apply**: 6.x |
 | #251: 1877295; #265: 2553552; #267: e6aef5e | `regparse.c`: `prs_branch`, `prs_alts`, `node_new_str_crude_char` | no | — | **does not apply**: 6.x |
 
+## Ruby 1.9.2-p0
+
+The tree of Ruby 1.9.2-p0 (August 2010), which games of RGSS3 run, came later and has not
+been reviewed against this list yet. One fix is backported: CVE-2013-4164, the fix of
+patch 33 above, as patch 18 of its `PATCHES.md`. Until the review is made, every other row
+of this document is open for that tree, and so are the fixes made upstream between 1.9.2
+and the releases this list starts from.
+
 ## Found by the fuzz targets
 
 The first runs of `cargo xtask fuzz` (`openspec` change

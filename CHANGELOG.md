@@ -4,6 +4,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security
+
+- Ruby 1.9.2 of RPG Maker VX Ace games carries the fix of CVE-2013-4164: a very long digit
+  string, such as a Float dumped in a save file, overflowed the heap when it was converted.
+  The tree of Ruby 1.8.7 has had the fix since 0.1.0.
+
 ### Added
 
 - RPG Maker VX Ace (RGSS3): the endings and loading of the original runtime. `$0` is
