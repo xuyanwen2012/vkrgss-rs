@@ -27,7 +27,7 @@ use vkxp_proto::link::GuestEnd;
 use vkxp_proto::{AudioChannel, AudioCommand, GuestToHost, HostToGuest, Size};
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{Raise, Raised, Ruby, RubyError};
-use vkxp_vfs::{FileKind, GameIni, LibraryVersion, Runtime};
+use vkxp_vfs::{GameIni, LibraryVersion, Runtime};
 
 use crate::guest::{Config, Guest};
 use crate::panel::Panel;
