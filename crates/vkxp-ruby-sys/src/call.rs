@@ -247,6 +247,13 @@ impl Ruby {
         unsafe { ffi::ruby_errinfo = exception };
     }
 
+    /// The `main` object, `self` at the top level.
+    pub fn top_self(&self) -> VALUE {
+        // SAFETY: `&self` proves the thread, on which only the interpreter writes the
+        // variable, once, at start-up.
+        unsafe { ffi::ruby_top_self }
+    }
+
     /// A new Ruby string with these bytes. The error is the `NoMemoryError` of a failed
     /// allocation.
     pub fn str_new(&self, bytes: &[u8]) -> Result<VALUE, Raised> {
@@ -257,6 +264,13 @@ impl Ruby {
         // SAFETY: `&self` proves the thread; `new_string_body` fits the contract of
         // `protect`, and the buffer is valid for `len` bytes and is copied.
         unsafe { protect::protect(&mut new, new_string_body) }
+    }
+
+    /// A new Ruby string with this text. A string of Ruby 1.8 has no encoding: it is the
+    /// string [`str_new`](Self::str_new) makes, and the bytes need not be UTF-8. The error is
+    /// the `NoMemoryError` of a failed allocation.
+    pub fn str_new_text(&self, bytes: &[u8]) -> Result<VALUE, Raised> {
+        self.str_new(bytes)
     }
 
     /// The bytes of a Ruby string, or `None` when the value is not a string.

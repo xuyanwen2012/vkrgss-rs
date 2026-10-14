@@ -6,7 +6,10 @@ mod common;
 use std::sync::OnceLock;
 
 use vkxp_ruby_sys::ffi::{self, VALUE};
-use vkxp_ruby_sys::{Arity, HostResult, Interpreter, Options, Raise, Root, Ruby, RubyError};
+use vkxp_ruby_sys::{
+    Arity, HostResult, Interpreter, Options, RUBY_API, Raise, Root, Ruby, RubyApi, RubyError,
+    SymbolTable,
+};
 
 fn interpreter() -> &'static Interpreter {
     static SHARED: OnceLock<Interpreter> = OnceLock::new();
@@ -678,4 +681,84 @@ fn raise_and_panic_in_a_fixed_arity_body_behave_as_in_the_any_arity_case() {
         )
     );
     assert_eq!(host_eval("VkxpFixedClass.new.pair(1, 2)"), ok("[1, 2]"));
+}
+
+// --- The surface shared with vkxp-ruby192-sys -------------------------------------------------
+
+#[test]
+fn the_interpreter_is_ruby_1_8() {
+    assert_eq!(RUBY_API, RubyApi::Ruby18);
+    assert_eq!(eval("RUBY_VERSION"), ok("\"1.8.7\""));
+}
+
+#[test]
+fn options_for_a_runtime_choose_the_symbol_table() {
+    let default = Options::default();
+    for (generation, symbols) in [
+        (1, SymbolTable::Rgss1),
+        (2, SymbolTable::Rgss2),
+        (3, SymbolTable::Rgss2),
+    ] {
+        let options = Options::for_rgss(generation);
+        assert_eq!(options.symbols, symbols, "generation {generation}");
+        assert_eq!(options.stack_size, default.stack_size);
+        assert_eq!(options.script_name, default.script_name);
+    }
+}
+
+#[test]
+fn top_self_is_the_main_object() {
+    let text = interpreter().run(|ruby| {
+        // SAFETY: the main object lives as long as the interpreter.
+        unsafe { ruby.inspect(ruby.top_self()) }.expect("inspect of main does not raise")
+    });
+    assert_eq!(text, "main");
+}
+
+#[test]
+fn accessors_read_strings_and_arrays() {
+    interpreter().run(|ruby| {
+        // SAFETY: every value is created here, held in a local and read before anything
+        // else runs in the interpreter.
+        unsafe {
+            for len in [3_usize, 100] {
+                let source = format!("'{}'", "x".repeat(len));
+                let string = ruby.eval_protected(&source, "test", 1).expect("a string");
+                assert_eq!(ffi::rstring_len(string), len as i64, "length {len}");
+                let bytes = std::slice::from_raw_parts(ffi::rstring_ptr(string).cast::<u8>(), len);
+                assert!(bytes.iter().all(|&byte| byte == b'x'), "length {len}");
+            }
+            for len in [2_usize, 100] {
+                let source = format!("(0...{len}).map {{|i| i * 3 }}");
+                let array = ruby.eval_protected(&source, "test", 1).expect("an array");
+                assert_eq!(ffi::rarray_len(array), len as i64, "length {len}");
+                let elements = std::slice::from_raw_parts(ffi::rarray_ptr(array), len);
+                for (index, &element) in elements.iter().enumerate() {
+                    assert_eq!(ffi::fix2long(element), index as i64 * 3, "length {len}");
+                }
+            }
+        }
+    });
+}
+
+#[test]
+fn text_and_bytes_are_the_same_string() {
+    let bytes = [0xe3_u8, 0x81, 0x82, 0xff];
+    let (equal, dumps) = interpreter().run(move |ruby| {
+        let binary = ruby.str_new(&bytes).expect("a string of bytes");
+        let text = ruby.str_new_text(&bytes).expect("a string of text");
+        // SAFETY: both strings are live and held in locals, as are the dumps.
+        unsafe {
+            let equal = ruby.funcall(binary, c"==", &[text]).expect("==");
+            let marshal = ruby.eval_protected("Marshal", "test", 1).expect("Marshal");
+            let dumps = [binary, text].map(|string| {
+                let dump = ruby.funcall(marshal, c"dump", &[string]).expect("dump");
+                ruby.str_bytes(dump).expect("a string")
+            });
+            (equal == ffi::Qtrue, dumps)
+        }
+    });
+    assert!(equal);
+    assert_eq!(dumps[0], dumps[1]);
+    assert_eq!(dumps[0], b"\x04\x08\"\x09\xe3\x81\x82\xff");
 }

@@ -7,7 +7,7 @@ mod common;
 use std::sync::OnceLock;
 
 use vkxp_ruby192_sys::ffi::{self, VALUE};
-use vkxp_ruby192_sys::{Interpreter, Options, Root, Ruby, RubyError};
+use vkxp_ruby192_sys::{Interpreter, Options, RUBY_API, Root, Ruby, RubyApi, RubyError};
 
 fn interpreter() -> &'static Interpreter {
     static SHARED: OnceLock<Interpreter> = OnceLock::new();
@@ -216,6 +216,75 @@ fn accessors_read_embedded_and_heap_strings_and_arrays() {
             );
         }
     });
+}
+
+#[test]
+fn text_takes_bytes_and_labels_them_utf_8() {
+    let bytes = [0xe3_u8, 0x81, 0x82];
+    let (binary, text, text_bytes) = interpreter().run(move |ruby| {
+        let binary = ruby.str_new(&bytes).expect("a string of bytes");
+        let text = ruby.str_new_text(&bytes).expect("a string of text");
+        // SAFETY: the string is live and held in a local.
+        let text_bytes = unsafe { ruby.str_bytes(text) };
+        (
+            describe_string(ruby, binary),
+            describe_string(ruby, text),
+            text_bytes,
+        )
+    });
+    assert_eq!(binary, ("ASCII-8BIT".to_owned(), 3));
+    assert_eq!(text, ("UTF-8".to_owned(), 1));
+    assert_eq!(text_bytes.as_deref(), Some(&bytes[..]));
+}
+
+#[test]
+fn text_that_is_not_utf_8_keeps_its_bytes_and_its_label() {
+    let (name, valid, bytes) = interpreter().run(|ruby| {
+        let text = ruby.str_new_text(&[0xff]).expect("a string of text");
+        // SAFETY: the string is live and held in a local.
+        unsafe {
+            let valid = ruby.funcall(text, c"valid_encoding?", &[]).expect("valid");
+            (describe_string(ruby, text).0, valid, ruby.str_bytes(text))
+        }
+    });
+    assert_eq!(name, "UTF-8");
+    assert_eq!(valid, ffi::Qfalse);
+    assert_eq!(bytes.as_deref(), Some(&[0xff_u8][..]));
+}
+
+// --- The surface shared with vkxp-ruby-sys ----------------------------------------------------
+
+#[test]
+fn the_interpreter_is_ruby_1_9() {
+    assert_eq!(RUBY_API, RubyApi::Ruby19);
+    assert_eq!(eval("RUBY_VERSION"), ok("\"1.9.2\""));
+}
+
+#[test]
+fn options_for_a_runtime_are_the_defaults() {
+    let default = Options::default();
+    for generation in [1, 2, 3] {
+        let Options {
+            stack_size,
+            script_name,
+        } = Options::for_rgss(generation);
+        assert_eq!(stack_size, default.stack_size, "generation {generation}");
+        assert_eq!(script_name, default.script_name, "generation {generation}");
+    }
+}
+
+#[test]
+fn the_mark_of_the_game_scripts_does_nothing() {
+    let value = interpreter().run(|ruby| {
+        ruby.eval_protected("1", "test", 1).expect("no exception");
+        ruby.mark_game_scripts();
+        ruby.mark_game_scripts();
+        ffi::fix2long(
+            ruby.eval_protected("6 * 7", "test", 1)
+                .expect("no exception"),
+        )
+    });
+    assert_eq!(value, 42);
 }
 
 // --- Rooting ----------------------------------------------------------------------------------

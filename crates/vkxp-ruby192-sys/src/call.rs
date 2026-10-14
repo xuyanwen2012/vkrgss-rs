@@ -105,7 +105,7 @@ struct NewString {
 }
 
 unsafe extern "C" fn new_string_body(data: VALUE) -> VALUE {
-    // SAFETY: `Ruby::str_new` and `Ruby::str_new_utf8` pass a pointer to a `NewString` whose
+    // SAFETY: `Ruby::str_new` and `Ruby::str_new_text` pass a pointer to a `NewString` whose
     // buffer outlives the call. The allocation raises `NoMemoryError` when it fails, hence
     // the protection.
     unsafe {
@@ -292,16 +292,22 @@ impl Ruby {
         unsafe { protect::protect(&mut new, new_string_body) }
     }
 
-    /// A new Ruby string with this text, labelled UTF-8, as a string literal of a script
-    /// is. The error is the `NoMemoryError` of a failed allocation.
-    pub fn str_new_utf8(&self, text: &str) -> Result<VALUE, Raised> {
+    /// A new Ruby string with these bytes as text, labelled UTF-8 whether they are valid
+    /// UTF-8 or not, as a string literal of a script is. The error is the `NoMemoryError` of
+    /// a failed allocation.
+    pub fn str_new_text(&self, bytes: &[u8]) -> Result<VALUE, Raised> {
         let mut new = NewString {
-            bytes: text.as_ptr().cast(),
-            len: c_long::try_from(text.len()).expect("fewer than 2^63 bytes"),
+            bytes: bytes.as_ptr().cast(),
+            len: c_long::try_from(bytes.len()).expect("fewer than 2^63 bytes"),
             text: true,
         };
         // SAFETY: as for `str_new`.
         unsafe { protect::protect(&mut new, new_string_body) }
+    }
+
+    /// [`str_new_text`](Self::str_new_text) of host text.
+    pub fn str_new_utf8(&self, text: &str) -> Result<VALUE, Raised> {
+        self.str_new_text(text.as_bytes())
     }
 
     /// The bytes of a Ruby string, whatever its encoding, or `None` when the value is not a

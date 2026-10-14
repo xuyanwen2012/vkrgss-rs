@@ -11,6 +11,18 @@ use crate::ffi::{self, VALUE};
 use crate::protect;
 use crate::signals::State;
 
+/// Which Ruby an interpreter crate embeds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RubyApi {
+    /// Ruby 1.8, the interpreter of RGSS1 and RGSS2.
+    Ruby18,
+    /// Ruby 1.9, the interpreter of RGSS3.
+    Ruby19,
+}
+
+/// The Ruby this crate embeds.
+pub const RUBY_API: RubyApi = RubyApi::Ruby19;
+
 /// The smallest stack the interpreter thread is given.
 pub const MIN_STACK_SIZE: usize = 16 << 20;
 
@@ -68,6 +80,15 @@ impl Default for Options {
     }
 }
 
+impl Options {
+    /// The options for a game of the given generation of RGSS: the defaults for every
+    /// number. Ruby 1.9.2 has no table of symbol numbers to choose.
+    pub fn for_rgss(generation: u8) -> Self {
+        let _ = generation;
+        Self::default()
+    }
+}
+
 /// Why the interpreter did not start.
 #[derive(Debug, thiserror::Error)]
 pub enum StartError {
@@ -114,6 +135,10 @@ impl Ruby {
             not_send: PhantomData,
         }
     }
+
+    /// Tells the interpreter that the game's scripts begin here. It does nothing: Ruby 1.9.2
+    /// numbers its symbols as the release does, and a dump does not depend on the numbers.
+    pub fn mark_game_scripts(&self) {}
 }
 
 type Job = Box<dyn FnOnce(&Ruby) + Send>;

@@ -109,6 +109,19 @@
 //! script is not held back in a C stdio buffer when it does not go to a terminal. `$KCODE`,
 //! the RGSS classes and the policy on functions that start processes belong to the binding,
 //! not to this crate.
+//!
+//! # The surface shared with `vkxp-ruby192-sys`
+//!
+//! `vkxp-ruby192-sys` embeds Ruby 1.9.2 and offers the items of this crate under the same
+//! names. What the RGSS classes use is the same in both, name and signature, so that their
+//! one source compiles over either: [`RUBY_API`] says which Ruby it is, [`Options::for_rgss`]
+//! gives the options for a runtime, [`Ruby::top_self`] the main object,
+//! [`ffi::rstring_ptr`], [`ffi::rstring_len`], [`ffi::rarray_ptr`] and [`ffi::rarray_len`]
+//! read strings and arrays, [`Ruby::str_new`] makes a string of bytes and
+//! [`Ruby::str_new_text`] one of text (the same string here, where a string has no
+//! encoding), and [`Ruby::mark_game_scripts`] marks where the game's scripts begin.
+//! [`SymbolTable`], [`Options::symbols`], [`ffi::ruby_top_self`], [`ffi::rstring()`],
+//! [`ffi::rarray()`] and [`restart_thread_timer`] exist only here.
 
 // The `Zlib` extension calls into the zlib that `libz-sys` builds; naming the crate is what
 // makes rustc link it.
@@ -125,8 +138,8 @@ mod signals;
 pub use call::RubyError;
 pub use host::{Arity, HostResult, Raise};
 pub use interp::{
-    GC_STRESS_VARIABLE, Interpreter, MIN_STACK_SIZE, Options, Ruby, STACK_HEADROOM, StartError,
-    SymbolTable,
+    GC_STRESS_VARIABLE, Interpreter, MIN_STACK_SIZE, Options, RUBY_API, Ruby, RubyApi,
+    STACK_HEADROOM, StartError, SymbolTable,
 };
 pub use protect::{Raised, protect};
 pub use root::Root;

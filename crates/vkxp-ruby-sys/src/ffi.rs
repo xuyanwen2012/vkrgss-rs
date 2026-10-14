@@ -367,6 +367,53 @@ pub unsafe fn rarray(value: VALUE) -> *mut RArray {
     value as *mut RArray
 }
 
+/// `RSTRING_LEN`: the length of a string in bytes.
+///
+/// # Safety
+///
+/// `value` must be a live `T_STRING`.
+#[inline]
+pub unsafe fn rstring_len(value: VALUE) -> c_long {
+    // SAFETY: the caller guarantees a live string, whose header is an `RString`.
+    unsafe { (*rstring(value)).len }
+}
+
+/// `RSTRING_PTR`: the bytes of a string, null for some empty strings. The bytes are not
+/// necessarily NUL-terminated text: [`rstring_len`] rules.
+///
+/// # Safety
+///
+/// `value` must be a live `T_STRING`. The pointer is valid until the string is modified or
+/// collected.
+#[inline]
+pub unsafe fn rstring_ptr(value: VALUE) -> *mut c_char {
+    // SAFETY: as for `rstring_len`.
+    unsafe { (*rstring(value)).ptr }
+}
+
+/// `RARRAY_LEN`: the number of elements of an array.
+///
+/// # Safety
+///
+/// `value` must be a live `T_ARRAY`.
+#[inline]
+pub unsafe fn rarray_len(value: VALUE) -> c_long {
+    // SAFETY: the caller guarantees a live array, whose header is an `RArray`.
+    unsafe { (*rarray(value)).len }
+}
+
+/// `RARRAY_PTR`: the elements of an array, null for some empty arrays.
+///
+/// # Safety
+///
+/// `value` must be a live `T_ARRAY`. The pointer is valid until the array is modified or
+/// collected.
+#[inline]
+pub unsafe fn rarray_ptr(value: VALUE) -> *mut VALUE {
+    // SAFETY: as for `rarray_len`.
+    unsafe { (*rarray(value)).ptr }
+}
+
 /// `DATA_PTR(value)`: the host pointer of a wrapped object.
 ///
 /// # Safety

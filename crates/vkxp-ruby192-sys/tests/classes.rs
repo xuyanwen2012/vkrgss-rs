@@ -61,7 +61,13 @@ fn the_public_items_of_vkxp_ruby192_sys_are_offered() {
     let _ = Ruby::describe;
     let _ = Ruby::set_current_error;
     let _ = Ruby::str_new;
+    let _ = Ruby::str_new_text;
+    let _ = Ruby::str_new_utf8;
     let _ = Ruby::str_bytes;
+    let _ = Ruby::top_self;
+    let _ = Ruby::mark_game_scripts;
+    let _: vkxp_ruby192_sys::RubyApi = vkxp_ruby192_sys::RUBY_API;
+    let _: fn(u8) -> Options = Options::for_rgss;
     let _ = Ruby::inspect;
     let _ = Ruby::root;
     let _ = Ruby::check_arity;

@@ -11,6 +11,18 @@ use crate::ffi::{self, VALUE};
 use crate::protect;
 use crate::signals::Dispositions;
 
+/// Which Ruby an interpreter crate embeds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RubyApi {
+    /// Ruby 1.8, the interpreter of RGSS1 and RGSS2.
+    Ruby18,
+    /// Ruby 1.9, the interpreter of RGSS3.
+    Ruby19,
+}
+
+/// The Ruby this crate embeds.
+pub const RUBY_API: RubyApi = RubyApi::Ruby18;
+
 /// The smallest stack the interpreter thread is given.
 pub const MIN_STACK_SIZE: usize = 16 << 20;
 
@@ -82,6 +94,21 @@ impl Default for Options {
             stack_size: MIN_STACK_SIZE,
             script_name: "vkxp".to_owned(),
             symbols: SymbolTable::default(),
+        }
+    }
+}
+
+impl Options {
+    /// The options for a game of the given generation of RGSS: the defaults, with the
+    /// symbol table of RGSS1 for 1 and that of RGSS2 for any other number.
+    pub fn for_rgss(generation: u8) -> Self {
+        Self {
+            symbols: if generation == 1 {
+                SymbolTable::Rgss1
+            } else {
+                SymbolTable::Rgss2
+            },
+            ..Self::default()
         }
     }
 }

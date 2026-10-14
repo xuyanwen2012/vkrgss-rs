@@ -44,7 +44,7 @@
 //!
 //! 1. **A call into Ruby that may raise goes through `rb_protect`.** The jump then ends
 //!    inside C and the host sees a status. `Ruby::eval_protected`, `Ruby::eval`,
-//!    `Ruby::funcall`, `Ruby::inspect`, `Ruby::str_new`, `Ruby::str_new_utf8`, `Ruby::root`
+//!    `Ruby::funcall`, `Ruby::inspect`, `Ruby::str_new`, `Ruby::str_new_text`, `Ruby::root`
 //!    and the `define_*` methods do this and return a `Result`: the error is a `Raised` (the
 //!    exception object, as plain data) or a `RubyError` (class name, message and backtrace,
 //!    copied into host memory). `protect` is what they are built on, and another crate uses
@@ -74,8 +74,9 @@
 //! # Strings
 //!
 //! A string of Ruby 1.9 has an encoding. `Ruby::str_new` makes a string of bytes, labelled
-//! ASCII-8BIT; `Ruby::str_new_utf8` makes text, labelled UTF-8 as the literals of a script
-//! are. `Ruby::str_bytes` returns the bytes of a string whatever its encoding. Source given
+//! ASCII-8BIT; `Ruby::str_new_text` makes text, labelled UTF-8 as the literals of a script
+//! are, whether the bytes are valid UTF-8 or not, and `Ruby::str_new_utf8` is the same for a
+//! `&str`. `Ruby::str_bytes` returns the bytes of a string whatever its encoding. Source given
 //! to `Ruby::eval` is read as UTF-8.
 //!
 //! # Signals
@@ -118,12 +119,15 @@
 //! | `ffi::ruby_top_self`, a variable | absent; `ffi::rb_vm_top_self()` and `Ruby::top_self()` |
 //! | `ffi::ruby_set_stack_size` | absent; `Options::stack_size` is applied through the variable `ffi::ruby_vkxp_stack_size` of a patch |
 //! | `ffi::ruby_vkxp_gc_stress`, `ffi::ruby_vkxp_gc_count` | absent; `GC.stress` and `GC.count` of the release. `VKXP_GC_STRESS` has no "every n-th" form |
-//! | `ffi::ruby_vkxp_select_symbols`, `ffi::ruby_vkxp_mark_game_scripts`, `SymbolTable`, `Options::symbols`, `Ruby::mark_game_scripts` | absent; symbols are numbered as the release numbers them, and a dump does not depend on the numbers |
+//! | `ffi::ruby_vkxp_select_symbols`, `ffi::ruby_vkxp_mark_game_scripts`, `SymbolTable`, `Options::symbols` | absent; symbols are numbered as the release numbers them, and a dump does not depend on the numbers. `Options::for_rgss` gives the defaults for every runtime |
+//! | `Ruby::mark_game_scripts` | exists and does nothing |
+//! | `restart_thread_timer` | absent; the timer thread does not start before a script creates a thread |
+//! | `RUBY_API` is `RubyApi::Ruby18` | `RubyApi::Ruby19` |
 //! | `ffi::RString`, `ffi::RArray`, `ffi::RAux`, `ffi::rstring()`, `ffi::rarray()` | absent; `ffi::rstring_ptr()`, `ffi::rstring_len()`, `ffi::rarray_ptr()` and `ffi::rarray_len()`, which follow `RSTRING_PTR` and its siblings for the embedded and the heap form. The layouts are in `ffi::layout` |
 //! | `ffi::RObject` with `iv_tbl` | the layout of 1.9.2: slots inside the object, or a pointer to them |
 //! | the type tags `ffi::T_*` and the flag bits `ffi::FL_*` | the values of the 1.9.2 headers; `T_COMPLEX`, `T_RATIONAL`, `T_NODE`, `T_ZOMBIE` and `FL_UNTRUSTED` are new |
 //! | `ffi::ruby_finalize` ends the interpreter | still declared; `ffi::ruby_cleanup`, which also terminates the Ruby threads, is what ends it |
-//! | `Ruby::str_new` | the same, and the string is labelled ASCII-8BIT; `Ruby::str_new_utf8` beside it for text |
+//! | `Ruby::str_new`, `Ruby::str_new_text` give the same string | `Ruby::str_new` labels the string ASCII-8BIT and `Ruby::str_new_text` UTF-8, valid or not; `Ruby::str_new_utf8` is the latter for a `&str` |
 //! | `Ruby::eval`, `Ruby::eval_protected` | the same; the source is handed over as a UTF-8 string, a backtrace position outside a method reads ``file:line:in `<main>'``, and the backtrace ends with the frame of the `eval` call itself (``vkxp:in `eval'``, with the script name) |
 //! | `Raised` of a `throw` or `break` | the same shape; the interpreter keeps what the jump carries as its current error until the jump is continued or described |
 //! | `SIGNALS_TAKEN_BY_RUBY`, ten signals | the eleven whose dispositions `Init_signal` of 1.9.2 changes: SIGCHLD is new. SIGVTALRM is no timer signal any more and is taken only once a script has created a thread |
@@ -161,8 +165,8 @@ on_target! {
     pub use call::RubyError;
     pub use host::{Arity, HostResult, Raise};
     pub use interp::{
-        GC_STRESS_VARIABLE, HASH_SEED, Interpreter, MIN_STACK_SIZE, Options, Ruby,
-        STACK_HEADROOM, StartError,
+        GC_STRESS_VARIABLE, HASH_SEED, Interpreter, MIN_STACK_SIZE, Options, RUBY_API, Ruby,
+        RubyApi, STACK_HEADROOM, StartError,
     };
     pub use protect::{Raised, protect};
     pub use root::Root;
