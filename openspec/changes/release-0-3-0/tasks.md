@@ -7,7 +7,7 @@
 ## 2. Documents, banner and version
 
 - [x] 2.1 `docs/decisions.md`: the rows A1 to A3 "Done" with the record of `design.md`, and the sentence that ends the experimental state. Verify: the scenario "Rows".
-- [ ] 2.2 README (first paragraph, table, banner file and alternative text), `AGENTS.md`, `docs/compatibility.md`, `docs/running.md`. Verify: the scenarios "Documents", "Banner" and "Length"; `grep -rn -i 'experimental' README.md AGENTS.md docs/compatibility.md docs/running.md crates/vkxp/src` finds nothing about VX Ace.
+- [x] 2.2 README (first paragraph, table, banner file and alternative text), `AGENTS.md`, `docs/compatibility.md`, `docs/running.md`. Verify: the scenarios "Documents", "Banner" and "Length"; `grep -rn -i 'experimental' README.md AGENTS.md docs/compatibility.md docs/running.md crates/vkxp/src` finds nothing about VX Ace.
 - [ ] 2.3 Version 0.3.0 in `Cargo.toml` and `Cargo.lock`; the section 0.3.0 of `CHANGELOG.md`. Verify: the scenarios "Version and lock file" and "Changelog".
 
 ## 3. Integration check

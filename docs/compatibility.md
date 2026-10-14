@@ -1,11 +1,10 @@
 # Compatibility
 
-vkxp aims at the behaviour of the original runtimes of RPG Maker XP, RGSS 1.04, and of RPG
-Maker VX, RGSS2: both are supported. Games that use the default scripts or common
-community scripts are meant to run unmodified. VX Ace is experimental: its scripts run, and
-its games do not reach their title screen yet ([RPG Maker VX Ace](#rpg-maker-vx-ace)). What
-a game of VX has differently is under [RPG Maker VX](#rpg-maker-vx); everything else below is
-about XP.
+vkxp aims at the behaviour of the original runtimes of RPG Maker XP, RGSS 1.04, of RPG
+Maker VX, RGSS2, and of RPG Maker VX Ace, RGSS3: all three are supported. Games that use the
+default scripts or common community scripts are meant to run unmodified. What a game of VX
+has differently is under [RPG Maker VX](#rpg-maker-vx), what a game of VX Ace has under
+[RPG Maker VX Ace](#rpg-maker-vx-ace); everything else below is about XP.
 
 ## What is exact
 
@@ -281,23 +280,26 @@ In a game of XP `Tilemap` is as it was: none of `bitmaps`, `passages` and
 
 ## RPG Maker VX Ace
 
-Support for RPG Maker VX Ace (RGSS3) is experimental, and a run of it says so once. The
-scripts of a game of VX Ace run over Ruby 1.9.2, the interpreter of the original runtime, in
-the guest executable `vkxp-guest-rgss3`, which `vkxp` starts from beside itself, always in a
-process ([Guest process](running.md#guest-process)). The start of a game is the one measured
-on the original runtime 3.0.1: the built-in scripts file, `$RGSS_SCRIPTS`, each script
-evaluated as `{0000}`, `{0001}` and so on and compiled as UTF-8, `RGSSReset` with
-`Graphics.__reset__` and `Audio.__reset__`, the endings, the error report, `msgbox` and
-`msgbox_p`, `p`, `print` and `puts` on the standard output, `load_data` that labels the
-strings of a data file UTF-8, `save_data`, and `RGSS_VERSION`, which follows the DLL the game
-ships: `"3.0.0"` for a DLL of a version 3.0.0.x, `"3.0.1"` for any other and for none. The
-glyph rule of text follows the DLL by the same table (see *Font and text of VX Ace*).
+Games of RPG Maker VX Ace (RGSS3) are supported. Two games were compared with the original
+runtime, Crysalis and In Search of Immortality; the rows A0 to A3 of the milestone table in
+[decisions.md](decisions.md#milestones) say which frames and which saves, and what the
+comparison does not cover. The scripts of a game of VX Ace run over Ruby 1.9.2, the
+interpreter of the original runtime, in the guest executable `vkxp-guest-rgss3`, which
+`vkxp` starts from beside itself, always in a process ([Guest
+process](running.md#guest-process)). The start of a game is the one measured on the original
+runtime 3.0.1: the built-in scripts file, `$RGSS_SCRIPTS`, each script evaluated as
+`{0000}`, `{0001}` and so on and compiled as UTF-8, `RGSSReset` with `Graphics.__reset__`
+and `Audio.__reset__`, the endings, the error report, `msgbox` and `msgbox_p`, `p`, `print`
+and `puts` on the standard output, `load_data` that labels the strings of a data file UTF-8,
+`save_data`, and `RGSS_VERSION`, which follows the DLL the game ships: `"3.0.0"` for a DLL
+of a version 3.0.0.x, `"3.0.1"` for any other and for none. The glyph rule of text follows
+the DLL by the same table (see *Font and text of VX Ace*).
 
 Of the classes, `Window`, `Tilemap`, `Sprite`, `Plane`, `Viewport`, `Font`, the text and
-creation of `Bitmap`, the modules `Graphics`, `Input` and `Audio` and the value classes `Color`,
-`Tone`, `Rect` and `Table` are those of RGSS3, as the sections below say. A game made with
-the standard scripts of VX Ace shows its title screen and its menu and starts a new game; no
-frame of it was compared with the original.
+creation of `Bitmap`, the modules `Graphics`, `Input` and `Audio` and the value classes
+`Color`, `Tone`, `Rect` and `Table` are those of RGSS3, as the sections below say. A game
+made with the standard scripts of VX Ace shows its title screen and its menu and starts a
+new game.
 
 Known differences of the start, each against the measurements of the original:
 

@@ -1,8 +1,8 @@
-<p align="center"><img src="docs/images/banner.jpg" width="100%" alt="vkxp. Classic RPG Maker, modern Rust + Vulkan: RPG Maker XP and VX run, VX Ace is planned. A Rust + Vulkan runtime for RPG Maker games on Linux."></p>
+<p align="center"><img src="docs/images/banner.jpg" width="100%" alt="vkxp. Classic RPG Maker, modern Rust + Vulkan: RPG Maker XP, VX and VX Ace are supported. A Rust + Vulkan runtime for RPG Maker games on Linux."></p>
 
 <h1 align="center">vkxp</h1>
 
-<p align="center"><b>Classic RPG Maker. Modern Rust + Vulkan.</b><br>The games of RPG Maker XP and VX on Linux, pixel for pixel.</p>
+<p align="center"><b>Classic RPG Maker. Modern Rust + Vulkan.</b><br>The games of RPG Maker XP, VX and VX Ace on Linux, pixel for pixel.</p>
 
 <p align="center">
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-1.99-CE422B?logo=rust&logoColor=white" alt="Rust 1.99"></a>
@@ -15,10 +15,10 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-MIT-blue.svg" alt="Licence: MIT"></a>
 </p>
 
-A Rust + Vulkan runtime for RPG Maker games on Linux. RPG Maker XP (RGSS1) and VX (RGSS2)
-are supported; VX Ace (RGSS3) is experimental. `vkxp <game directory>` runs the game's
-scripts in an embedded Ruby interpreter, 1.8.7 or for VX Ace 1.9.2, against the RGSS classes
-and shows the frames of a Vulkan compositor in a window, or writes them to files headless.
+A Rust + Vulkan runtime for RPG Maker games on Linux. RPG Maker XP (RGSS1), VX (RGSS2) and
+VX Ace (RGSS3) are supported. `vkxp <game directory>` runs the game's scripts in an embedded
+Ruby interpreter, 1.8.7 or for VX Ace 1.9.2, against the RGSS classes and shows the frames
+of a Vulkan compositor in a window, or writes them to files headless.
 
 ## Classic RPG Maker
 
@@ -26,7 +26,7 @@ and shows the frames of a Vulkan compositor in a window, or writes them to files
 |---|---|---|
 | RPG Maker XP (RGSS1) | Supported | Since version 0.1.0 |
 | RPG Maker VX (RGSS2) | Supported | Since version 0.2.0 |
-| RPG Maker VX Ace (RGSS3) | Experimental | Its games run; no frame compared with the original yet |
+| RPG Maker VX Ace (RGSS3) | Supported | Since version 0.3.0 |
 
 <p align="center">
   <img src="docs/images/legendary-warband-title.png" width="49%" alt="The title screen of Legendary Warband running in vkxp">
@@ -50,12 +50,12 @@ The runtime is taken from the game's `Game.ini`. What works:
 
 **Exactness.** Frames are compared with those of the original runtime, which
 `cargo xtask oracle` runs under Wine. On the seven community-made games used as the
-regression corpus, the frames compared are pixel-identical except for text glyphs. Two games
-of RPG Maker VX were compared in the same way, Visions & Voices and The Witch's House: the
-title, the menu, maps, a battle and the screens of saving and loading equal the original
-outside the rectangles of text, and a save of The Witch's House written at the same frame is
-byte for byte that of the original. Many rules were measured on the original runtime; the
-specifications under [`openspec/specs`](openspec/specs) record them.
+regression corpus, the frames compared are pixel-identical except for text glyphs. On two
+games of RPG Maker VX the title, the menu, maps, a battle and the screens of saving and
+loading equal the original outside the rectangles of text; on two of VX Ace every compared
+frame equals it but for three antialiased pixels of one glyph. In one game of each, a save
+written at the same frame is byte for byte that of the original. The specifications under
+[`openspec/specs`](openspec/specs) record the many rules measured on the original runtime.
 
 **Known gaps.** [docs/compatibility.md](docs/compatibility.md) has the full list.
 
@@ -100,9 +100,9 @@ cargo build --release -p vkxp -p vkxp-guest-rgss3
 ```
 
 The built-in scripts. A game expects the `RPG` module of the original runtime. That Ruby
-source is Enterbrain's and is not part of this repository; one command copies it from an RGSS
-DLL of your own into a file that `vkxp` loads. A game of VX needs those of RGSS2 in a file
-of their own; [docs/running.md](docs/running.md) says how.
+source is Enterbrain's and is not part of this repository; one command copies it from an
+RGSS DLL of your own into a file that `vkxp` loads. A game of VX or VX Ace needs those of
+RGSS2 or RGSS3 in a file of their own; [docs/running.md](docs/running.md) says how.
 
 ```sh
 mkdir -p ~/.local/share/vkxp

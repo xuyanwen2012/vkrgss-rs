@@ -13,9 +13,8 @@ then needs `cargo build -p vkxp-guest-rgss3` once (see *Guest process*).
 
 ### The runtime of a game
 
-`vkxp` runs the games of RPG Maker XP, whose runtime is RGSS1, and of RPG Maker VX, whose
-runtime is RGSS2: both are supported. Support for RPG Maker VX Ace (RGSS3) is experimental:
-its scripts run, and its games do not reach their title screen yet.
+`vkxp` runs the games of RPG Maker XP, whose runtime is RGSS1, of RPG Maker VX, whose
+runtime is RGSS2, and of RPG Maker VX Ace, whose runtime is RGSS3: all three are supported.
 
 The runtime of a game is taken from two values of its `Game.ini`, and from nothing else:
 
@@ -57,20 +56,18 @@ what was measured of them and what was not.
 
 A game of VX Ace runs in the guest executable `vkxp-guest-rgss3`, over Ruby 1.9.2, the
 interpreter of the original runtime, and always with the guest in a process (see *Guest
-process*); a run says once, as a warning, that the support is experimental. Before the
-guest starts, the program resolves the run-time package that `RTP` names (a game that names
-`RPGVXAce` needs `--rtp RPGVXAce=DIR`) and looks for the built-in scripts file of RGSS3 (see
-*The built-in scripts of RPG Maker VX Ace*); the guest opens `Game.rgss3a` when the game
-directory holds it and reads the script archive that `Scripts` names. The scripts start as
-the original starts them: the built-in scripts file, then `$RGSS_SCRIPTS`, each script
-evaluated as `{0000}`, `{0001}` and so on, `RGSSReset` for F12, and the error report in the
-form of RGSS3. The guest reads the version of the DLL that `Library` names from the game
-directory, which decides `RGSS_VERSION` and the glyph rule of text, and takes fonts also from
-the `Fonts` directory of each run-time package of the game (`<RTP>/Fonts`), after the game's
-own `Fonts` directory. The classes are those of RGSS3; no frame of a game of VX Ace has been
-compared with the original yet. [compatibility.md](compatibility.md#rpg-maker-vx-ace)
-says what runs and what differs. With `--verbose` the run names the package directory, the
-built-in scripts file and the archive.
+process*). Before the guest starts, the program resolves the run-time package that `RTP`
+names (a game that names `RPGVXAce` needs `--rtp RPGVXAce=DIR`) and looks for the built-in
+scripts file of RGSS3 (see *The built-in scripts of RPG Maker VX Ace*); the guest opens
+`Game.rgss3a` when the game directory holds it and reads the script archive that `Scripts`
+names. The scripts start as the original starts them: the built-in scripts file, then
+`$RGSS_SCRIPTS`, each script evaluated as `{0000}`, `{0001}` and so on, `RGSSReset` for F12,
+and the error report in the form of RGSS3. The guest reads the version of the DLL that
+`Library` names from the game directory, which decides `RGSS_VERSION` and the glyph rule of
+text, and takes fonts also from the `Fonts` directory of each run-time package of the game
+(`<RTP>/Fonts`), after the game's own `Fonts` directory. The classes are those of RGSS3.
+[compatibility.md](compatibility.md#rpg-maker-vx-ace) says what runs and what differs. With
+`--verbose` the run names the package directory, the built-in scripts file and the archive.
 
 ### The built-in scripts
 
