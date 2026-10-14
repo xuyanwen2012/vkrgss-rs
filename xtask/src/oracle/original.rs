@@ -4,7 +4,7 @@
 //! copy; the picture of the game window is then read from the display and the request is
 //! removed.
 
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -46,6 +46,88 @@ const SANDBOX_ARGUMENTS: [&str; 8] = [
 /// A directory that does not exist, where VA-API is sent to look for its drivers.
 const NO_VA_DRIVERS: &str = "/nonexistent/vkxp-oracle-no-va-drivers";
 
+/// The directories where a system keeps the plugins of GStreamer 1.0.
+pub(super) const GSTREAMER_SYSTEM_DIRS: [&str; 4] = [
+    "/usr/lib64/gstreamer-1.0",
+    "/usr/lib/gstreamer-1.0",
+    "/usr/lib/x86_64-linux-gnu/gstreamer-1.0",
+    "/usr/lib/i386-linux-gnu/gstreamer-1.0",
+];
+
+/// The plugins of GStreamer that open a GPU or a video device, the list of the measurements
+/// of VX Ace (`ace-v0-env.sh`, kept outside the repository).
+fn is_hardware_plugin(name: &str) -> bool {
+    matches!(
+        name,
+        "libgstva.so"
+            | "libgstqsv.so"
+            | "libgstmsdk.so"
+            | "libgstvulkan.so"
+            | "libgstkms.so"
+            | "libgstopengl.so"
+            | "libgstqmlgl.so"
+            | "libgstnvcodec.so"
+            | "libgstvideo4linux2.so"
+            | "libgstv4l2codecs.so"
+    ) || (name.starts_with("libgstvaapi") && name.ends_with(".so"))
+}
+
+/// The plugins of GStreamer, which plays Ogg and MP3 for Wine, that the Wine processes of a
+/// run may load: links to those of the system without its hardware plugins, which probe
+/// VA-API and other devices, in directories below the output directory, with a registry of
+/// their own so that the user's registry is not rewritten with this view. A third line
+/// behind the sandbox and the variables of VA-API.
+pub(super) struct GStreamer {
+    /// The value of `GST_PLUGIN_SYSTEM_PATH_1_0`: the directories of the links.
+    system_path: OsString,
+    registry: PathBuf,
+}
+
+impl GStreamer {
+    /// Makes the directories of the links below `out/gstreamer` afresh, one for each of
+    /// `system`, the directories of the system's plugins, that exists; an empty one when
+    /// none does.
+    pub(super) fn prepare(out: &Path, system: &[&Path]) -> Result<GStreamer> {
+        let base = out.join("gstreamer");
+        fs::create_dir_all(&base).with_context(|| base.display().to_string())?;
+        // The links of an earlier run may name plugins that are gone.
+        for entry in fs::read_dir(&base).with_context(|| base.display().to_string())? {
+            let entry = entry.with_context(|| base.display().to_string())?;
+            if entry.file_type()?.is_dir() {
+                let path = entry.path();
+                fs::remove_dir_all(&path).with_context(|| path.display().to_string())?;
+            }
+        }
+        let mut dirs = Vec::new();
+        for dir in system.iter().filter(|dir| dir.is_dir()) {
+            let made = base.join(format!("plugins-{}", dirs.len()));
+            fs::create_dir(&made).with_context(|| made.display().to_string())?;
+            for entry in fs::read_dir(dir).with_context(|| dir.display().to_string())? {
+                let name = entry
+                    .with_context(|| dir.display().to_string())?
+                    .file_name();
+                let Some(text) = name.to_str() else {
+                    continue;
+                };
+                if text.ends_with(".so") && !is_hardware_plugin(text) {
+                    std::os::unix::fs::symlink(dir.join(&name), made.join(&name))
+                        .with_context(|| made.join(&name).display().to_string())?;
+                }
+            }
+            dirs.push(made);
+        }
+        if dirs.is_empty() {
+            let empty = base.join("no-plugins");
+            fs::create_dir(&empty).with_context(|| empty.display().to_string())?;
+            dirs.push(empty);
+        }
+        Ok(GStreamer {
+            system_path: std::env::join_paths(&dirs).context("the GStreamer plugin directories")?,
+            registry: base.join("registry.bin"),
+        })
+    }
+}
+
 /// What a run of the original needs besides the game.
 pub(super) struct Run<'a> {
     /// The runtime of the game, for the size of its window and the registry key of its
@@ -60,6 +142,8 @@ pub(super) struct Run<'a> {
     pub fonts: Option<&'a fonts::Shared>,
     /// The Wine prefix, made on first use.
     pub prefix: &'a Path,
+    /// The plugins of GStreamer that Wine may load.
+    pub gstreamer: &'a GStreamer,
     /// `LC_ALL` of the run, which decides the code page of the game's file names.
     pub locale: &'a str,
     /// How long one capture frame may take to be reached.
@@ -221,6 +305,11 @@ impl Run<'_> {
             // VA-API: it finds no driver even where the sandbox would fail.
             .env("LIBVA_DRIVERS_PATH", NO_VA_DRIVERS)
             .env("LIBVA_DRIVER_NAME", "vkxp-oracle-none")
+            .env("GST_PLUGIN_SYSTEM_PATH_1_0", &self.gstreamer.system_path)
+            .env("GST_REGISTRY_1_0", &self.gstreamer.registry)
+            .env_remove("GST_PLUGIN_PATH")
+            .env_remove("GST_PLUGIN_PATH_1_0")
+            .env_remove("GST_PLUGIN_SYSTEM_PATH")
             // The runtime uses the ANSI file functions, so the locale decides which file
             // names of the game resolve.
             .env("LC_ALL", self.locale);
@@ -543,12 +632,15 @@ mod tests {
     /// The command-that-is-built and VA-API scenarios of `oracle-harness`.
     #[test]
     fn every_wine_command_runs_in_the_sandbox_without_a_driver_of_va_api() {
+        let out = tempfile::tempdir().unwrap();
+        let gstreamer = GStreamer::prepare(out.path(), &[]).unwrap();
         let run = Run {
             runtime: Runtime::Rgss1,
             dll: Some(Path::new("RGSS104E.dll")),
             rtps: &[],
             fonts: None,
             prefix: Path::new("prefix"),
+            gstreamer: &gstreamer,
             locale: "zh_CN.UTF-8",
             timeout: Duration::from_secs(1),
         };
@@ -579,6 +671,75 @@ mod tests {
             assert!(!Path::new(variable("LIBVA_DRIVERS_PATH")).exists());
             assert!(!variable("LIBVA_DRIVER_NAME").is_empty());
         }
+    }
+
+    /// The GStreamer scenario of `oracle-harness`, on a stand-in for the system's directory.
+    #[test]
+    fn wine_gets_the_plugins_of_gstreamer_without_the_hardware_ones() {
+        let dir = tempfile::tempdir().unwrap();
+        let system = dir.path().join("system");
+        fs::create_dir(&system).unwrap();
+        let plugins = [
+            "libgstogg.so",
+            "libgstva.so",
+            "libgstvaapi.so",
+            "libgstvulkan.so",
+            "libgstmsdk.so",
+        ];
+        for name in plugins {
+            fs::write(system.join(name), name).unwrap();
+        }
+        let out = dir.path().join("out");
+        let missing = dir.path().join("missing");
+
+        let gstreamer = GStreamer::prepare(&out, &[&missing, &system]).unwrap();
+        let run = Run {
+            runtime: Runtime::Rgss3,
+            dll: None,
+            rtps: &[],
+            fonts: None,
+            prefix: Path::new("prefix"),
+            gstreamer: &gstreamer,
+            locale: "en_US.UTF-8",
+            timeout: Duration::from_secs(1),
+        };
+        let command = run.wine("wine", ":104");
+
+        let variable = |name: &str| {
+            let (_, value) = command.get_envs().find(|(key, _)| *key == name).unwrap();
+            value.map(Path::new)
+        };
+        let made = variable("GST_PLUGIN_SYSTEM_PATH_1_0").unwrap();
+        assert_eq!(made, out.join("gstreamer/plugins-0"));
+        let linked: Vec<_> = fs::read_dir(made)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(linked, ["libgstogg.so"]);
+        assert_eq!(
+            fs::read(made.join("libgstogg.so")).unwrap(),
+            b"libgstogg.so"
+        );
+        let registry = variable("GST_REGISTRY_1_0").unwrap();
+        assert!(registry.starts_with(&out), "{}", registry.display());
+        for removed in [
+            "GST_PLUGIN_PATH",
+            "GST_PLUGIN_PATH_1_0",
+            "GST_PLUGIN_SYSTEM_PATH",
+        ] {
+            assert_eq!(variable(removed), None, "{removed}");
+        }
+
+        // Made afresh: what an earlier run left there is gone, and without a directory of
+        // the system the variable names an empty one.
+        fs::write(made.join("libgstva.so"), b"left").unwrap();
+        GStreamer::prepare(&out, &[&system]).unwrap();
+        assert!(!out.join("gstreamer/plugins-0/libgstva.so").exists());
+        let none = GStreamer::prepare(&out, &[&missing]).unwrap();
+        let empty = Path::new(&none.system_path);
+        assert!(empty.starts_with(out.join("gstreamer")));
+        assert_eq!(fs::read_dir(empty).unwrap().count(), 0);
+        assert!(!out.join("gstreamer/plugins-0").exists());
     }
 
     /// The bwrap-is-missing scenario of `oracle-harness`.

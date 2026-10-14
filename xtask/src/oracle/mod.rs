@@ -175,12 +175,15 @@ fn capture_original(
     let Options { out, frames, .. } = options;
     let copy = out.join("original").join("game");
     prepare_copy(options, runtime, Side::Original, &copy)?;
+    let system = original::GSTREAMER_SYSTEM_DIRS.map(Path::new);
+    let gstreamer = original::GStreamer::prepare(out, &system)?;
     original::Run {
         runtime,
         dll,
         rtps: &options.rtps,
         fonts,
         prefix: &out.join("prefix"),
+        gstreamer: &gstreamer,
         locale: &options.locale,
         timeout: options.timeout,
     }
