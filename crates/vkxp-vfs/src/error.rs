@@ -35,6 +35,10 @@ pub enum VfsError {
     /// exactly as it was requested.
     #[error("file not found: {path}")]
     NotFound { path: String },
+    /// A data file of RGSS3 names a directory of the game. `path` is the path exactly as it
+    /// was requested.
+    #[error("{path} is a directory")]
+    IsDirectory { path: String },
     /// The encrypted archive of the game is not a complete RGSSAD archive of the version
     /// its runtime reads.
     #[error("damaged archive {}: {reason}", path.display())]

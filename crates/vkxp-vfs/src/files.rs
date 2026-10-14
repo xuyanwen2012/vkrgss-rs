@@ -2,7 +2,7 @@
 //! run-time packages.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use crate::archive::{Archive, Version};
@@ -67,6 +67,52 @@ pub(crate) fn candidates(name: &str, extensions: &[&str]) -> impl Iterator<Item 
     let as_given = std::iter::once(name.to_owned());
     let extended = extensions.iter().map(move |ext| format!("{name}.{ext}"));
     as_given.chain(extended)
+}
+
+/// The components of the name of a data file of RGSS3 under which the archive is asked, or
+/// `None` for a name the archive is not asked for: one that starts with a separator or a
+/// drive, ends with a dot or a space, or has a component that is empty, `.` or `..`.
+fn archive_components_rgss3(name: &str) -> Option<Vec<&str>> {
+    let bytes = name.as_bytes();
+    let drive = bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':';
+    if drive || name.starts_with(['/', '\\']) || name.ends_with(['.', ' ']) {
+        return None;
+    }
+    let components: Vec<&str> = name.split(['/', '\\']).collect();
+    let named = components
+        .iter()
+        .all(|component| !matches!(*component, "" | "." | ".."));
+    named.then_some(components)
+}
+
+/// The name of a loose data file of RGSS3 with the dots and spaces at the end of its last
+/// component dropped, as Windows drops them; a last component of `.` or `..` stays.
+fn trim_last_component(name: &str) -> String {
+    let start = name.rfind(['/', '\\']).map_or(0, |separator| separator + 1);
+    let (directories, last) = name.split_at(start);
+    if matches!(last, "." | "..") {
+        return name.to_owned();
+    }
+    format!("{directories}{}", last.trim_end_matches(['.', ' ']))
+}
+
+/// The names of the normal components of `path`, or `None` when one is not valid Unicode.
+fn component_names(path: &Path) -> Option<Vec<String>> {
+    path.components()
+        .filter_map(|component| match component {
+            Component::Normal(name) => Some(name.to_str().map(str::to_owned)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// What a data file of a game of RGSS3 is found as ([`GameFiles::data_rgss3`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DataFile {
+    /// The decrypted bytes of an entry of the encrypted archive.
+    Entry(Vec<u8>),
+    /// A loose file inside the game directory.
+    Loose(PathBuf),
 }
 
 /// Whether `path`, an entry of a directory inside `root`, is still inside `root` once a symbolic
@@ -166,9 +212,9 @@ impl GameFiles {
         };
         components(script_path)
             .and_then(|components| {
-                roots
-                    .iter()
-                    .find_map(|root| self.find(root, root, &components, kind.extensions()))
+                roots.iter().find_map(|root| {
+                    self.find(root, root, &components, kind.extensions(), Path::is_file)
+                })
             })
             .ok_or_else(|| VfsError::NotFound {
                 path: script_path.to_owned(),
@@ -190,6 +236,78 @@ impl GameFiles {
         std::fs::read(&path).map_err(|source| VfsError::Io { path, source })
     }
 
+    /// Finds the data file a game of RGSS3 names, by the rules measured on the original
+    /// runtime (`ace-v1-api-REPORT.md` sections 2.1 and 2.2):
+    ///
+    /// - The encrypted archive first, unless the name starts with a separator or a drive,
+    ///   ends with a dot or a space, or has a component that is empty, `.` or `..`. Its
+    ///   components, split at `/` and `\`, match an entry without regard to letter case when
+    ///   they are the entry's name, or else its name without the extension of its last
+    ///   component; of several such entries the first of the table is taken. No extension is
+    ///   added, and the current directory does not count.
+    /// - Then a loose file, after the dots and spaces at the end of the last component are
+    ///   dropped: an absolute name as it is, a relative one from `current_dir`, the current
+    ///   directory of the process, which counts as the game directory when it lies outside
+    ///   it. Components match as [`GameFiles::resolve`] matches them for
+    ///   [`FileKind::Data`]; `.` and `..` are resolved by the name, and a name that then lies
+    ///   outside the game directory is not found.
+    ///
+    /// A name that finds a directory of the game is [`VfsError::IsDirectory`]; a name that
+    /// finds nothing is [`VfsError::NotFound`]. Both carry `name` exactly as given.
+    pub fn data_rgss3(&self, name: &str, current_dir: &Path) -> Result<DataFile, VfsError> {
+        if let Some(archive) = &self.archive
+            && let Some(entry) =
+                archive_components_rgss3(name).and_then(|parts| archive.find_data_rgss3(&parts))
+        {
+            return archive.read(entry).map(DataFile::Entry);
+        }
+        let root = self.game_dir();
+        let components = self.loose_components_rgss3(name, current_dir);
+        let components: Vec<&str> = components.iter().flatten().map(String::as_str).collect();
+        if !components.is_empty() {
+            if let Some(path) = self.find(root, root, &components, &[], Path::is_file) {
+                return Ok(DataFile::Loose(path));
+            }
+            if self
+                .find(root, root, &components, &[], Path::is_dir)
+                .is_some()
+            {
+                return Err(VfsError::IsDirectory {
+                    path: name.to_owned(),
+                });
+            }
+        }
+        Err(VfsError::NotFound {
+            path: name.to_owned(),
+        })
+    }
+
+    /// The components below the game directory of the loose file a data file of RGSS3 names
+    /// (see [`GameFiles::data_rgss3`]), or `None` for a name outside the game directory.
+    fn loose_components_rgss3(&self, name: &str, current_dir: &Path) -> Option<Vec<String>> {
+        let game = self.game_dir();
+        let game = component_names(&game.canonicalize().unwrap_or_else(|_| game.to_owned()))?;
+        let name = trim_last_component(name);
+        let mut path = if name.starts_with(['/', '\\']) {
+            Vec::new()
+        } else {
+            match component_names(current_dir) {
+                Some(current) if current.starts_with(&game) => current,
+                _ => game.clone(),
+            }
+        };
+        for component in name.split(['/', '\\']) {
+            match component {
+                "" | "." => {}
+                ".." => {
+                    path.pop();
+                }
+                component => path.push(component.to_owned()),
+            }
+        }
+        path.starts_with(&game).then(|| path.split_off(game.len()))
+    }
+
     /// Drops the cached directory listings, so files added or removed since they were listed
     /// are seen.
     pub fn refresh(&self) {
@@ -199,15 +317,17 @@ impl GameFiles {
             .clear();
     }
 
-    /// Finds `components` below `dir`, a directory inside `root`. When several entries match a
-    /// directory component, each is searched in turn. Entries that are symbolic links to
-    /// somewhere outside `root` are passed over.
+    /// Finds `components` below `dir`, a directory inside `root`, as something `wanted`
+    /// accepts: a file, or a directory. When several entries match a directory component,
+    /// each is searched in turn. Entries that are symbolic links to somewhere outside `root`
+    /// are passed over.
     fn find(
         &self,
         root: &Path,
         dir: &Path,
         components: &[&str],
         extensions: &[&str],
+        wanted: fn(&Path) -> bool,
     ) -> Option<PathBuf> {
         let (name, rest) = components.split_first()?;
         let listing = self.listing(dir);
@@ -217,7 +337,7 @@ impl GameFiles {
                     .matches(&candidate)
                     .into_iter()
                     .map(|real| dir.join(real))
-                    .find(|path| stays_inside(root, path) && path.is_file())
+                    .find(|path| stays_inside(root, path) && wanted(path))
             })
         } else {
             listing
@@ -225,7 +345,7 @@ impl GameFiles {
                 .into_iter()
                 .map(|real| dir.join(real))
                 .filter(|path| stays_inside(root, path))
-                .find_map(|path| self.find(root, &path, rest, extensions))
+                .find_map(|path| self.find(root, &path, rest, extensions, wanted))
         }
     }
 
@@ -892,6 +1012,205 @@ mod tests {
         let files = GameFiles::open(other.path(), [], Runtime::Rgss3).unwrap();
         let bytes = files.read(FileKind::AudioRgss3, "Audio/SE/Hit");
         assert_eq!(bytes.unwrap(), b"archive");
+    }
+
+    /// The game directory of a game of RGSS3 whose archive holds `entries`, opened, and its
+    /// path with links resolved, which is what the current directory of the process names.
+    fn ace_with_archive(entries: &[(&str, &[u8])]) -> (tempfile::TempDir, GameFiles, PathBuf) {
+        let game = tempfile::tempdir().unwrap();
+        let entries: Vec<(&str, u32, &[u8])> = entries
+            .iter()
+            .zip(1u32..)
+            .map(|(&(name, contents), key)| (name, key * 7919, contents))
+            .collect();
+        let archive = crate::archive::tests::Three::seed(0x2A38).build(&entries);
+        std::fs::write(game.path().join("Game.rgss3a"), archive).unwrap();
+        let files = GameFiles::open(game.path(), [], Runtime::Rgss3).unwrap();
+        let dir = game.path().canonicalize().unwrap();
+        (game, files, dir)
+    }
+
+    /// The contents of what `name` finds as a data file of RGSS3 from `current`: `Entry` or
+    /// `Loose` and the bytes, or the error.
+    fn data(
+        files: &GameFiles,
+        name: &str,
+        current: &Path,
+    ) -> Result<(&'static str, Vec<u8>), VfsError> {
+        match files.data_rgss3(name, current)? {
+            DataFile::Entry(bytes) => Ok(("Entry", bytes)),
+            DataFile::Loose(path) => Ok(("Loose", std::fs::read(path).unwrap())),
+        }
+    }
+
+    fn not_found(result: Result<(&'static str, Vec<u8>), VfsError>, name: &str) {
+        match result {
+            Err(VfsError::NotFound { path }) => assert_eq!(path, name),
+            other => panic!("{name}: {other:?}"),
+        }
+    }
+
+    /// Requirement "Data files of RGSS3", scenario "Archive first".
+    #[test]
+    fn a_data_file_of_rgss3_comes_from_the_archive_first() {
+        let (_game, files, dir) = ace_with_archive(&[("Data\\both.rvdata2", b"archive")]);
+        // Written while the game runs, after the archive was opened.
+        put(&dir, "Data/both.rvdata2", b"loose");
+        for name in [
+            "Data/both.rvdata2",
+            "Data\\both.rvdata2",
+            "DATA/BOTH.rvdata2",
+        ] {
+            let found = data(&files, name, &dir).unwrap();
+            assert_eq!(found, ("Entry", b"archive".to_vec()), "{name}");
+        }
+    }
+
+    /// Requirement "Data files of RGSS3", scenario "Without the extension".
+    #[test]
+    fn an_entry_of_rgss3_is_found_by_its_name_without_the_extension() {
+        let (_game, files, dir) = ace_with_archive(&[
+            ("Data\\arconly.rvdata2", b"arconly"),
+            ("Other\\x.bin", b"x"),
+            ("Data\\noext", b"noext"),
+        ]);
+        for (name, bytes) in [
+            ("Data/arconly", &b"arconly"[..]),
+            ("Data\\arconly", b"arconly"),
+            ("data/ARCONLY.RVDATA2", b"arconly"),
+            ("Other/x", b"x"),
+            ("Data/noext", b"noext"),
+        ] {
+            let found = data(&files, name, &dir).unwrap();
+            assert_eq!(found, ("Entry", bytes.to_vec()), "{name}");
+        }
+        for name in [
+            "Data/arconly.rvdata",
+            "Data/arconly.rvdata2.rvdata2",
+            "Data/arconly.zzz",
+            "Data/arconl",
+            "Data/arconly.",
+            "Data/noext.rvdata2",
+        ] {
+            not_found(data(&files, name, &dir), name);
+        }
+    }
+
+    /// Requirement "Data files of RGSS3", scenario "Names the archive is not asked for".
+    #[test]
+    fn names_with_dots_and_separators_skip_the_archive_of_rgss3() {
+        let (_game, files, dir) = ace_with_archive(&[
+            ("Data\\arconly.rvdata2", b"arconly"),
+            ("Data\\both.rvdata2", b"archive"),
+        ]);
+        put(&dir, "Data/both.rvdata2", b"loose");
+        let absolute = |name: &str| format!("{}/{name}", dir.display());
+        for stem in ["arconly", "both"] {
+            let names = [
+                format!("./Data/{stem}.rvdata2"),
+                format!("Data//{stem}.rvdata2"),
+                format!("Data/./{stem}.rvdata2"),
+                format!("Data/Sub/../{stem}.rvdata2"),
+                absolute(&format!("Data/{stem}.rvdata2")),
+            ];
+            for name in &names {
+                let found = data(&files, name, &dir);
+                if stem == "both" {
+                    assert_eq!(found.unwrap(), ("Loose", b"loose".to_vec()), "{name}");
+                } else {
+                    not_found(found, name);
+                }
+            }
+        }
+    }
+
+    /// Requirement "Data files of RGSS3", scenario "No extension for a loose file".
+    #[test]
+    fn a_loose_data_file_of_rgss3_is_found_by_its_whole_name() {
+        let game = tempfile::tempdir().unwrap();
+        put(game.path(), "d/p.bin", b"p");
+        let files = GameFiles::open(game.path(), [], Runtime::Rgss3).unwrap();
+        let dir = game.path().canonicalize().unwrap();
+        not_found(data(&files, "d/p", &dir), "d/p");
+        for name in [
+            "d/p.bin",
+            "d\\p.bin",
+            "./d/p.bin",
+            "D/P.BIN",
+            "d//p.bin",
+            "d/../d/p.bin",
+            "d/p.bin.",
+            "d/p.bin ",
+        ] {
+            let found = data(&files, name, &dir).unwrap();
+            assert_eq!(found, ("Loose", b"p".to_vec()), "{name}");
+        }
+        not_found(data(&files, " d/p.bin", &dir), " d/p.bin");
+    }
+
+    /// Requirement "Data files of RGSS3", scenarios "The current directory" and "The current
+    /// directory does not move the archive".
+    #[test]
+    fn a_loose_data_file_of_rgss3_is_found_from_the_current_directory() {
+        let (_game, files, dir) = ace_with_archive(&[("Data\\arconly.rvdata2", b"arconly")]);
+        put(&dir, "d/p.bin", b"p");
+        put(&dir, "Game.ini", b"ini");
+        let inside = dir.join("d");
+        assert_eq!(
+            data(&files, "p.bin", &inside).unwrap(),
+            ("Loose", b"p".to_vec())
+        );
+        not_found(data(&files, "d/p.bin", &inside), "d/p.bin");
+        assert_eq!(
+            data(&files, "../Game.ini", &inside).unwrap(),
+            ("Loose", b"ini".to_vec())
+        );
+        std::fs::create_dir(dir.join("Data")).unwrap();
+        let data_dir = dir.join("Data");
+        assert_eq!(
+            data(&files, "Data/arconly.rvdata2", &data_dir).unwrap(),
+            ("Entry", b"arconly".to_vec())
+        );
+        not_found(
+            data(&files, "arconly.rvdata2", &data_dir),
+            "arconly.rvdata2",
+        );
+        // A current directory outside the game directory counts as the game directory.
+        let outside = tempfile::tempdir().unwrap();
+        assert_eq!(
+            data(&files, "d/p.bin", outside.path()).unwrap(),
+            ("Loose", b"p".to_vec())
+        );
+    }
+
+    /// Requirement "Data files of RGSS3", scenarios "A directory" and "Outside the game
+    /// directory".
+    #[test]
+    fn a_directory_and_a_file_outside_are_no_data_files_of_rgss3() {
+        let outer = tempfile::tempdir().unwrap();
+        let outer = outer.path().canonicalize().unwrap();
+        let game = outer.join("game");
+        put(&game, "Data/Actors.rvdata2", b"actors");
+        put(&outer, "other.rvdata2", b"other");
+        let files = GameFiles::open(&game, [], Runtime::Rgss3).unwrap();
+        for name in ["Data", "data", "Data/", "Data."] {
+            match files.data_rgss3(name, &game) {
+                Err(VfsError::IsDirectory { path }) => assert_eq!(path, name),
+                other => panic!("{name}: {other:?}"),
+            }
+        }
+        let absolute = outer.join("other.rvdata2").display().to_string();
+        for name in ["../other.rvdata2", "Data/../../other.rvdata2", &absolute] {
+            not_found(data(&files, name, &game), name);
+        }
+    }
+
+    /// Requirement "Data files of RGSS3": the other lookups of data files are unchanged.
+    #[test]
+    fn the_other_lookups_of_data_files_take_no_extension_from_the_archive() {
+        let (_game, files, _dir) = ace_with_archive(&[("Data\\arconly.rvdata2", b"arconly")]);
+        assert!(files.read(FileKind::Data, "Data/arconly").is_err());
+        assert!(files.read(FileKind::Data, "./Data/arconly.rvdata2").is_ok());
     }
 
     #[test]

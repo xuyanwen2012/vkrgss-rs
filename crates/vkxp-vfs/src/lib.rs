@@ -22,7 +22,8 @@
 //!
 //! [`GameFiles::open`] also reads the encrypted archive of the game (`Game.rgssad` or
 //! `Game.rgss2a`, RGSSAD version 1, or `Game.rgss3a`, RGSSAD version 3), whose entries come
-//! before loose files. Nothing here writes files: saves go through Ruby's own file API.
+//! before loose files. [`GameFiles::data_rgss3`] finds a data file of a game of RGSS3 by the
+//! rules of its runtime, which differ from those of the other lookups. Nothing here writes files: saves go through Ruby's own file API.
 //!
 //! # Example
 //!
@@ -73,7 +74,7 @@ mod rtp;
 mod runtime;
 
 pub use error::VfsError;
-pub use files::{FileKind, GameFiles};
+pub use files::{DataFile, FileKind, GameFiles};
 pub use ini::{Encoding, GameIni};
 pub use library_version::LibraryVersion;
 pub use rtp::resolve_rtps;

@@ -166,10 +166,9 @@ impl Table<'_> {
     }
 }
 
-/// Reads the entry table of `file`. Of entries whose names are the same once normalised, the
-/// first is kept. An entry whose name is not valid UTF-8 is left out: no script path can name
-/// it.
-fn read_table(file: &File) -> Result<HashMap<String, Entry>, Fault> {
+/// Reads the entry table of `file` into an [`Index`]. An entry whose name is not valid UTF-8
+/// is left out: no script path can name it.
+fn read_table(file: &File) -> Result<Index, Fault> {
     let mut table = Table {
         reader: BufReader::new(file),
         position: 0,
@@ -185,23 +184,21 @@ fn read_table(file: &File) -> Result<HashMap<String, Entry>, Fault> {
     if header != HEADER {
         return Err(Fault::Damaged("not an RGSSAD version 1 archive"));
     }
-    let mut entries = HashMap::new();
+    let mut entries = Index::default();
     while table.left() > 0 {
         let name = table.name()?;
         let entry = table.data()?;
         let Ok(name) = String::from_utf8(name) else {
             continue;
         };
-        if let Some(components) = components(&name) {
-            entries.entry(index_name(&components)).or_insert(entry);
-        }
+        entries.insert(&name, entry);
     }
     Ok(entries)
 }
 
 /// Reads the entry table of `file` as that of RGSSAD version 3, with the rules of
 /// [`read_table`] for names. The data of an entry is found by its offset alone.
-fn read_table_three(file: &File) -> Result<HashMap<String, Entry>, Fault> {
+fn read_table_three(file: &File) -> Result<Index, Fault> {
     let mut table = Table {
         reader: BufReader::new(file),
         position: 0,
@@ -219,7 +216,7 @@ fn read_table_three(file: &File) -> Result<HashMap<String, Entry>, Fault> {
     }
     let seed = table.word_three()?;
     table.key = seed.wrapping_mul(9).wrapping_add(3);
-    let mut entries = HashMap::new();
+    let mut entries = Index::default();
     loop {
         let offset = table.word_three()?;
         if offset == 0 {
@@ -242,11 +239,38 @@ fn read_table_three(file: &File) -> Result<HashMap<String, Entry>, Fault> {
         let Ok(name) = String::from_utf8(name) else {
             continue;
         };
-        if let Some(components) = components(&name) {
-            entries.entry(index_name(&components)).or_insert(entry);
-        }
+        entries.insert(&name, entry);
     }
     Ok(entries)
+}
+
+/// The entries of an archive by their index names. Of entries whose names are the same once
+/// normalised, the first is kept.
+#[derive(Debug, Default)]
+struct Index {
+    entries: HashMap<String, Entry>,
+    /// The entries by their index names without the extension of their last component (from
+    /// its last `.`), for the data files of RGSS3. Of entries with the same stem, the first
+    /// in the order of the table is kept.
+    stems: HashMap<String, Entry>,
+}
+
+impl Index {
+    /// Adds the entry of the name the table holds, unless the name names nothing.
+    fn insert(&mut self, name: &str, entry: Entry) {
+        let Some(components) = components(name) else {
+            return;
+        };
+        let name = index_name(&components);
+        if let Some((stem, extension)) = name.rsplit_once('.')
+            && !extension.contains('/')
+            && !stem.is_empty()
+            && !stem.ends_with('/')
+        {
+            self.stems.entry(stem.to_owned()).or_insert(entry);
+        }
+        self.entries.entry(name).or_insert(entry);
+    }
 }
 
 /// An open archive: the index of its entries, and the file they are read from on demand.
@@ -255,6 +279,8 @@ pub(crate) struct Archive {
     path: PathBuf,
     file: Mutex<File>,
     entries: HashMap<String, Entry>,
+    /// See [`Index::stems`].
+    stems: HashMap<String, Entry>,
 }
 
 impl Archive {
@@ -268,10 +294,11 @@ impl Archive {
             Ok((entries, file))
         });
         match table {
-            Ok((entries, file)) => Ok(Self {
+            Ok((Index { entries, stems }, file)) => Ok(Self {
                 path,
                 file: Mutex::new(file),
                 entries,
+                stems,
             }),
             Err(Fault::Damaged(reason)) => Err(VfsError::DamagedArchive { path, reason }),
             Err(Fault::Io(source)) => Err(VfsError::Io { path, source }),
@@ -287,6 +314,17 @@ impl Archive {
             components.push(&candidate);
             self.entries.get(&index_name(&components)).copied()
         })
+    }
+
+    /// Finds the entry that `components` name as a data file of RGSS3: the entry of that
+    /// name, or else the first entry whose name without the extension of its last component
+    /// is that name. No extension is added.
+    pub(crate) fn find_data_rgss3(&self, components: &[&str]) -> Option<Entry> {
+        let name = index_name(components);
+        self.entries
+            .get(&name)
+            .or_else(|| self.stems.get(&name))
+            .copied()
     }
 
     /// The decrypted bytes of `entry`.

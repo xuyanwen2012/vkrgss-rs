@@ -13,8 +13,8 @@
 
 ## 3. load_data and save_data
 
-- [ ] 3.1 `GameFiles::data_rgss3` and `VfsError::IsDirectory` in `vkxp-vfs`, with unit tests over an archive and a directory written by the tests (decision 11). Verify: the scenarios of "Data files of RGSS3" of `game-files`; `cargo test -p vkxp-vfs --locked` passes with every name of its kept list.
-- [ ] 3.2 `load_data` of RGSS3 as a host function over `data_rgss3`, with a `File` for a loose file, `vkxp_label_utf8`, the name checks, `Errno::EACCES`, and `save_data` with the name checks (decisions 9 and 10); `vkxp_data_bytes` goes. Verify: the scenarios of "Source and errors of load_data in RGSS3" and of "Names of data files in RGSS3"; every scenario of "Data files of RGSS3" still passes; an end-to-end test in `crates/vkxp/tests/rgss3.rs` finds an archive entry without its extension and a loose file beside the entry of the same name; the test command of task 1.3.
+- [x] 3.1 `GameFiles::data_rgss3` and `VfsError::IsDirectory` in `vkxp-vfs`, with unit tests over an archive and a directory written by the tests (decision 11). Verify: the scenarios of "Data files of RGSS3" of `game-files`; `cargo test -p vkxp-vfs --locked` passes with every name of its kept list.
+- [x] 3.2 `load_data` of RGSS3 as a host function over `data_rgss3`, with a `File` for a loose file, `vkxp_label_utf8`, the name checks, `Errno::EACCES`, and `save_data` with the name checks (decisions 9 and 10); `vkxp_data_bytes` goes. Verify: the scenarios of "Source and errors of load_data in RGSS3" and of "Names of data files in RGSS3"; every scenario of "Data files of RGSS3" still passes; an end-to-end test in `crates/vkxp/tests/rgss3.rs` finds an archive entry without its extension and a loose file beside the entry of the same name; the test command of task 1.3.
 
 ## 4. Loading code
 

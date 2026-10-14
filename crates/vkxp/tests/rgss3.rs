@@ -653,6 +653,45 @@ fn a_game_of_vx_ace_whose_data_is_in_the_archive_runs_like_the_one_with_loose_fi
     );
 }
 
+/// Requirements "Data files of RGSS3" of `game-files` and "Source and errors of load_data
+/// in RGSS3" (`ace-v1-api-REPORT.md` sections 2.1 and 2.2): an entry of the archive is found
+/// without its extension and comes before a loose file of the same name, and is handed to
+/// `Marshal.load` as a `String`, a loose file as a `File`.
+#[test]
+fn load_data_of_vx_ace_asks_the_archive_first_by_the_name_without_its_extension() {
+    let source = format!(
+        "class << Marshal
+  alias vkxp_marshal_load load
+  def load(source, *rest)
+    ($vkxp_sources ||= []) << source.class.name
+    vkxp_marshal_load(source, *rest)
+  end
+end
+{}",
+        writes(
+            "value.txt",
+            "[load_data('Data/Thing'), load_data('Data\\\\Thing.rvdata2'), \
+             load_data('Data/Loose.rvdata2'), $vkxp_sources].inspect"
+        )
+    );
+    let game = AceGame::new("ace-data-lookup", "Ace", &[("Main", &source)]);
+    let data = game.dir().join("Data");
+    // `"archive"`, `"loose"` and `"loose only"`, without an encoding.
+    let archive = rgss3a(&[
+        ("Data\\Scripts.rvdata2", &fs::read(game.archive()).unwrap()),
+        ("Data\\Thing.rvdata2", b"\x04\x08\"\x0carchive"),
+    ]);
+    fs::write(game.dir().join("Game.rgss3a"), archive).unwrap();
+    fs::remove_file(game.archive()).unwrap();
+    fs::write(data.join("Thing.rvdata2"), b"\x04\x08\"\x0aloose").unwrap();
+    fs::write(data.join("Loose.rvdata2"), b"\x04\x08\"\x0floose only").unwrap();
+    ace(&game, &[]).assert_success();
+    assert_eq!(
+        written(&game, "value.txt"),
+        r#"["archive", "archive", "loose only", ["String", "String", "File"]]"#
+    );
+}
+
 /// Requirement "Encrypted archive of the game", scenario "Damaged archive of VX Ace".
 #[test]
 fn a_damaged_archive_of_vx_ace_is_an_error_naming_it() {

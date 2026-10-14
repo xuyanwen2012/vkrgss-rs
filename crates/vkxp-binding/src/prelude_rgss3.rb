@@ -11,24 +11,13 @@
 class RGSSReset < Exception
 end
 
+# The name is checked as `load_data` checks it before anything is written. `load_data` is
+# a host function of the binding.
 def save_data(object, filename)
+  vkxp_check_data_name(filename)
   File.open(filename, "wb") { |file| file.write(Marshal.dump(object)) }
   nil
 end
-
-# `load_data` hands `Marshal.load` a proc that labels every String it is handed whose
-# encoding is ASCII-8BIT as UTF-8. The encoding is asked by name: the constants of the
-# encodings do not exist at start-up.
-vkxp_utf8 = proc do |object|
-  if object.is_a?(String) && object.encoding.name == "ASCII-8BIT"
-    object.force_encoding("UTF-8")
-  end
-  object
-end
-Object.send(:define_method, :load_data) do |name|
-  Marshal.load(vkxp_data_bytes(name), vkxp_utf8)
-end
-Object.send(:private, :load_data)
 
 # The original runtime never runs an `at_exit` block: `at_exit` returns the block and
 # registers nothing. `exit!` and `Process.exit!` end the game at once, without running an
