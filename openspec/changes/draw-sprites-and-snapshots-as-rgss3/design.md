@@ -318,6 +318,10 @@ Where each of the six measured differences goes:
   `crates/vkxp-host/src/demo.rs`; each gets the frame rule. In `crates/vkxp-binding` the
   only edits are the literal in `freeze` and the body of `snap_to_bitmap`; `Runtime::Rgss3`
   stays mapped to `Rules::Rgss2` there until the binding of RGSS3 (see "Follow-ups").
+- `snap_to_bitmap` no longer names `Compositor`, so the `use` line of
+  `crates/vkxp-binding/src/graphics.rs` that imported it imports the rule of the snapshot
+  function instead: one line outside the body of the function, which the build needs
+  (an unused import is an error of the gate).
 - Presenter: a hold in the middle of a cross-fade writes the mix as it is shown at the
   logical size of the newest frame, which the existing off-screen capture gives. After a
   state was loaded the buffer keeps its texels; the freeze has ended, as today.

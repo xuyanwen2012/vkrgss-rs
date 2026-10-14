@@ -495,3 +495,35 @@ fn the_files_of_scenes_of_rgss3_hold_scenes_and_digests_only() {
         }
     }
 }
+
+/// Scenario "The scene as it is and the brightness of the call" of "Pixels of a snapshot".
+#[test]
+fn a_snapshot_shows_the_scene_as_it_is_at_the_brightness_of_the_call() {
+    let mut stage = Stage::with_rules(Rules::Rgss3, 8, 8);
+    let bitmap = stage.solid(4, 4, RED);
+    sprite(&mut stage, bitmap, 2, 2);
+    assert_eq!(stage.frame().pixel(3, 3), RED);
+    let blue = crate::Color::new(0.0, 0.0, 255.0, 255.0);
+    stage
+        .bitmaps
+        .fill_rect(bitmap, Rect::new(0, 0, 4, 4), blue)
+        .unwrap();
+    stage.scene.set_brightness(100);
+    let mut twin = Stage::with_rules(Rules::Rgss3, 8, 8);
+    twin.scene = stage.scene.clone();
+    twin.bitmaps = stage.bitmaps.clone();
+
+    let packet = stage.scene.snapshot(&mut stage.bitmaps);
+    let snapped = vkxp_compose_ref::snapshot(&packet, vkxp_compose_ref::SnapshotRule::Rgss3);
+    let snapped = snapped.unwrap();
+    for (x, y, expected) in [
+        (2, 2, [0, 0, 99, 255]),
+        (5, 5, [0, 0, 99, 255]),
+        (1, 1, BLACK),
+    ] {
+        assert_eq!(snapped.pixel(x, y), expected);
+    }
+    // The next extracted packet is the one it would have been without the snapshot.
+    let next = stage.scene.extract(&mut stage.bitmaps);
+    assert_eq!(next, twin.scene.extract(&mut twin.bitmaps));
+}

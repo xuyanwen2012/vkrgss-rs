@@ -9,7 +9,9 @@ use crate::Rules;
 ///
 /// Provenance of RGSS2: oracle measurement 2026-10-12, RGSS202E versions 2.0.0.1 and 2.0.2.1,
 /// `vx-v1-sprite-REPORT.md` section 7 (12084 updates without a mismatch; the timing of RGSS1
-/// leaves 821 mismatches of `repeat?`).
+/// leaves 821 mismatches of `repeat?`). Provenance of RGSS3: oracle measurement 2026-10-13,
+/// versions 3.0.0.1 and 3.0.1.1, `ace-v1-sprite-REPORT.md` section 6 (12084 updates without
+/// a mismatch on each, the model fed with the held buttons the original reported).
 fn repeat_timing(rules: Rules) -> (u64, u64) {
     match rules {
         Rules::Rgss1 => (16, 4),
@@ -26,10 +28,28 @@ const BUTTON_BITS: usize = 32;
 /// changes only in [`InputState::update`], which takes the most recent snapshot, so every
 /// query between two updates gives the same answer, and the same snapshots at the same
 /// updates always give the same answers.
+///
+/// With the rules of RGSS3 an update takes the most recent snapshot that had arrived when
+/// a frame was last shown ([`InputState::frame_shown`]); one that arrives afterwards waits
+/// for the next shown frame. The original runtime of RGSS3 takes the window messages of
+/// keys only in the calls of `Graphics` that show frames: `Input.update` alone never sees
+/// a new key, and a key change before a `Graphics.update` is seen by the `Input.update`
+/// after it.
+///
+/// Provenance: oracle measurement 2026-10-13, versions 3.0.0.1 and 3.0.1.1,
+/// `ace-v1-sprite-REPORT.md` section 6. Known difference: the original takes exactly one
+/// key message in a frame that has no time to wait and more, up to all that are queued, in
+/// one that waits, and how many is not a rule; here every shown frame makes the whole state
+/// as it arrived visible. Several key changes between two frames are therefore seen
+/// together, and a key pressed and released between two frames is never seen.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct InputState {
-    /// The most recent snapshot received since the last update.
+    /// The most recent snapshot received since the last update, and in RGSS3 since the last
+    /// shown frame.
     received: Option<InputSnapshot>,
+    /// RGSS3: the most recent snapshot that had arrived when a frame was last shown and
+    /// that no update has latched yet.
+    visible: Option<InputSnapshot>,
     /// The snapshot the queries answer from.
     latched: InputSnapshot,
     /// The snapshot the queries answered from before the last update.
@@ -46,7 +66,7 @@ pub struct InputState {
     axis_flag: bool,
     /// The four-way direction as of the last update.
     dir4: u8,
-    /// The runtime whose repeat timing the state follows.
+    /// The runtime whose rules the state follows.
     rules: Rules,
 }
 
@@ -70,16 +90,38 @@ impl InputState {
     }
 
     /// Takes a snapshot from the host. It has no effect until the next update, and only the
-    /// last snapshot received before an update counts.
+    /// last snapshot received before an update counts. With the rules of RGSS3 it has none
+    /// until the update after the next shown frame, and only the last snapshot received
+    /// before a shown frame counts.
     pub fn receive(&mut self, snapshot: InputSnapshot) {
         self.received = Some(snapshot);
     }
 
+    /// Marks a shown frame. With the rules of RGSS3 the snapshots received so far become
+    /// visible to the next update; with the other rules nothing changes. The caller marks
+    /// every frame it shows (`Graphics.update`, and each frame of a wait, a fade and a
+    /// transition) and nothing else.
+    pub fn frame_shown(&mut self) {
+        match self.rules {
+            Rules::Rgss1 | Rules::Rgss2 => {}
+            Rules::Rgss3 => {
+                if let Some(snapshot) = self.received.take() {
+                    self.visible = Some(snapshot);
+                }
+            }
+        }
+    }
+
     /// One `Input.update`: latches the most recent snapshot, or keeps the button state when
-    /// none was received, and advances every button by one step.
+    /// none was received, and advances every button by one step. With the rules of RGSS3
+    /// the snapshot is the most recent one a shown frame made visible.
     pub fn update(&mut self) {
         self.previous = self.latched;
-        if let Some(snapshot) = self.received.take() {
+        let newest = match self.rules {
+            Rules::Rgss1 | Rules::Rgss2 => self.received.take(),
+            Rules::Rgss3 => self.visible.take(),
+        };
+        if let Some(snapshot) = newest {
             self.latched = snapshot;
         }
         for button in Button::ALL {
@@ -165,7 +207,8 @@ impl InputState {
 
     /// Whether `button` is the repeating button and repeats at the last update: on the update
     /// in which it was triggered, on the 15th update after that, and on every 4th after that;
-    /// by the rules of RGSS2 on the 23rd update after it and on every 6th after that.
+    /// by the rules of RGSS2 and RGSS3 on the 23rd update after it and on every 6th after
+    /// that.
     /// Only one button repeats at a time: the one triggered most recently, and of several
     /// triggered in the same update the one with the highest number. A button that lost the
     /// repeat to another does not get it back while it stays held. Measured on the original

@@ -13,8 +13,8 @@
 
 ## 3. Input and snapshots
 
-- [ ] 3.1 The rules of RGSS3 in the input state: the timing of RGSS2, the call that marks a shown frame, `rgss3-input-samples.txt` from the samples of the measurement. Verify: the scenarios of `specs/core-input/spec.md`; `rgss2-input-samples.txt` is unchanged; the script that converted the samples is under `local/` and not committed; `cargo test -p vkxp-core --locked` passes.
-- [ ] 3.2 The pixels of a snapshot by the rule of RGSS2 or RGSS3 in the reference compositor; `snap_to_bitmap` of RGSS2 uses it. Verify: the scenarios of `specs/frame-composition/spec.md`; in `crates/vkxp-binding` only the body of `snap_to_bitmap` in `src/graphics.rs` changed and no file under `crates/vkxp-binding/tests/`; `cargo test -p vkxp-compose-ref -p vkxp-core -p vkxp-binding --locked` passes.
+- [x] 3.1 The rules of RGSS3 in the input state: the timing of RGSS2, the call that marks a shown frame, `rgss3-input-samples.txt` from the samples of the measurement. Verify: the scenarios of `specs/core-input/spec.md`; `rgss2-input-samples.txt` is unchanged; the script that converted the samples is under `local/` and not committed; `cargo test -p vkxp-core --locked` passes.
+- [x] 3.2 The pixels of a snapshot by the rule of RGSS2 or RGSS3 in the reference compositor; `snap_to_bitmap` of RGSS2 uses it. Verify: the scenarios of `specs/frame-composition/spec.md`; in `crates/vkxp-binding` only the body of `snap_to_bitmap` in `src/graphics.rs` changed and no file under `crates/vkxp-binding/tests/`; `cargo test -p vkxp-compose-ref -p vkxp-core -p vkxp-binding --locked` passes.
 
 ## 4. Frozen picture
 

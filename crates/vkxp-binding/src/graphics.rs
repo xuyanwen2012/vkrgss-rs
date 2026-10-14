@@ -5,7 +5,7 @@
 
 use std::ffi::c_long;
 
-use vkxp_compose_ref::Compositor;
+use vkxp_compose_ref::SnapshotRule;
 use vkxp_proto::{BitmapDelta, BitmapId, GuestToHost, Size, TransitionRule};
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{HostResult, Raise, Raised, Ruby};
@@ -301,10 +301,7 @@ fn snap_to_bitmap(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
     wrap::intern_owner_names(ruby)?;
     let created = Guest::with(|guest| -> Option<Result<BitmapId, Error>> {
         let packet = guest.scene.snapshot(&mut guest.bitmaps);
-        let mut frame = Compositor::new().render(&packet).ok()?;
-        for pixel in frame.rgba.as_chunks_mut::<4>().0 {
-            pixel[3] = 255;
-        }
+        let frame = vkxp_compose_ref::snapshot(&packet, SnapshotRule::Rgss2).ok()?;
         let (width, height) = (frame.size.width, frame.size.height);
         let bitmaps = &mut guest.bitmaps;
         let id = bitmaps.create_from_rgba(width, height, frame.rgba, &guest.font_defaults);

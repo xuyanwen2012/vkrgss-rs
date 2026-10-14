@@ -81,7 +81,9 @@
 //!   the newest one per update, from which it answers pressed, triggered, repeated and the
 //!   four- and eight-way direction queries. The same snapshots always give the same answers.
 //!   The repeat timing is that of its [`Rules`]: after 16 updates and then every 4 in RGSS1,
-//!   after 24 and then every 6 in RGSS2 and RGSS3.
+//!   after 24 and then every 6 in RGSS2 and RGSS3. With the rules of RGSS3 an update
+//!   latches the newest snapshot that had arrived when a frame was last shown
+//!   ([`InputState::frame_shown`]).
 //!
 //! Nothing here talks to the host: sending packets, waiting for frame ticks and receiving
 //! snapshots is the binding's part.

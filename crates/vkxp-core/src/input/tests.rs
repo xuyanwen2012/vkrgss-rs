@@ -566,3 +566,171 @@ fn the_sequences_measured_on_the_original_of_vx_give_the_measured_answers() {
     }
     assert_eq!(checked, 12084);
 }
+
+// The rules of RGSS3.
+
+/// The answers of `rules` to the samples of `text`, and the measured ones, for every
+/// listed update: `press?`, `trigger?`, `repeat?`, `dir4` and `dir8`. A frame is shown
+/// before each update.
+fn replayed(text: &str, rules: Rules) -> Vec<([String; 5], [String; 5])> {
+    let mut input = InputState::with_rules(rules);
+    let mut answers = Vec::new();
+    for line in text.lines().filter(|line| !line.starts_with('#')) {
+        if line.starts_with("stream ") {
+            input.receive(InputSnapshot::EMPTY);
+            for _ in 0..8 {
+                input.frame_shown();
+                input.update();
+            }
+            continue;
+        }
+        let words: Vec<&str> = line.split(' ').collect();
+        let times = words.get(6).map_or(1, |times| times[1..].parse().unwrap());
+        for _ in 0..times {
+            if words[0] == "update" {
+                let held = SAMPLED.iter().zip(words[1].chars());
+                let held: Vec<Button> = held
+                    .filter(|(_, digit)| *digit == '1')
+                    .map(|(button, _)| *button)
+                    .collect();
+                input.receive(holding(&held));
+                input.frame_shown();
+                input.update();
+            } else {
+                assert_eq!(words[0], "keep", "{line}");
+            }
+            let found = [
+                digits(|button| input.is_pressed(button)),
+                digits(|button| input.is_triggered(button)),
+                digits(|button| input.is_repeated(button)),
+                input.dir4().to_string(),
+                input.dir8().to_string(),
+            ];
+            let measured = std::array::from_fn(|index| words[1 + index].to_owned());
+            answers.push((found, measured));
+        }
+    }
+    answers
+}
+
+const RGSS3_SAMPLES: &str = include_str!("../../tests/data/rgss3-input-samples.txt");
+
+/// Scenario "Sequences of the measurement" of "Input of RGSS3".
+#[test]
+fn the_sequences_measured_on_the_original_of_vx_ace_give_the_measured_answers() {
+    let answers = replayed(RGSS3_SAMPLES, Rules::Rgss3);
+    assert_eq!(answers.len(), 12084);
+    for (update, (found, measured)) in answers.iter().enumerate() {
+        assert_eq!(found, measured, "update {update}");
+    }
+}
+
+/// Scenario "Not the timing of RGSS1".
+#[test]
+fn the_sequences_of_vx_ace_are_not_repeated_as_in_rgss1() {
+    let answers = replayed(RGSS3_SAMPLES, Rules::Rgss1);
+    assert!(
+        answers
+            .iter()
+            .any(|(found, measured)| found[2] != measured[2])
+    );
+}
+
+/// Scenario "Repeat pattern, measured on the original" of "Input of RGSS3".
+#[test]
+fn the_repeat_timing_of_rgss3_is_that_of_rgss2() {
+    let mut input = InputState::with_rules(Rules::Rgss3);
+    assert_eq!(input.rules(), Rules::Rgss3);
+    input.receive(holding(&[Button::C]));
+    let repeating: Vec<u32> = (1..=36)
+        .filter(|_| {
+            input.frame_shown();
+            input.update();
+            input.is_repeated(Button::C)
+        })
+        .collect();
+    assert_eq!(repeating, [1, 24, 30, 36]);
+}
+
+/// Scenario "First diagonal of a new state, measured on the original" of "Input of RGSS3".
+#[test]
+fn the_first_diagonal_of_a_new_state_of_rgss3_gives_the_horizontal_direction() {
+    let mut input = InputState::with_rules(Rules::Rgss3);
+    input.receive(holding(&[Button::Left, Button::Up]));
+    input.frame_shown();
+    input.update();
+    assert_eq!((input.dir4(), input.dir8()), (4, 7));
+}
+
+/// Scenarios "An update alone sees nothing new" and "Seen after a shown frame".
+#[test]
+fn in_rgss3_a_snapshot_is_seen_by_the_update_after_a_shown_frame() {
+    let mut input = InputState::with_rules(Rules::Rgss3);
+    input.receive(holding(&[Button::C]));
+    for _ in 0..3 {
+        input.update();
+        assert!(!input.is_pressed(Button::C));
+    }
+    input.frame_shown();
+    assert!(
+        !input.is_pressed(Button::C),
+        "only an update changes the state"
+    );
+    input.update();
+    assert!(input.is_pressed(Button::C) && input.is_triggered(Button::C));
+}
+
+/// Scenario "Arrived after the frame".
+#[test]
+fn in_rgss3_a_snapshot_that_arrives_after_a_frame_waits_for_the_next() {
+    let mut input = InputState::with_rules(Rules::Rgss3);
+    input.frame_shown();
+    input.receive(holding(&[Button::C]));
+    input.update();
+    assert!(!input.is_pressed(Button::C));
+    input.frame_shown();
+    input.update();
+    assert!(input.is_pressed(Button::C) && input.is_triggered(Button::C));
+}
+
+/// Scenario "Several snapshots before one frame".
+#[test]
+fn in_rgss3_a_shown_frame_shows_the_last_of_several_snapshots() {
+    let mut input = InputState::with_rules(Rules::Rgss3);
+    input.receive(holding(&[Button::C]));
+    input.receive(InputSnapshot::EMPTY);
+    input.frame_shown();
+    input.update();
+    assert!(!input.is_pressed(Button::C) && !input.is_triggered(Button::C));
+}
+
+/// Scenario "Several frames before one update".
+#[test]
+fn in_rgss3_a_snapshot_stays_visible_over_several_frames() {
+    let mut input = InputState::with_rules(Rules::Rgss3);
+    input.receive(holding(&[Button::C]));
+    for _ in 0..12 {
+        input.frame_shown();
+    }
+    input.update();
+    assert!(input.is_pressed(Button::C) && input.is_triggered(Button::C));
+}
+
+/// Scenario "RGSS1 and RGSS2" of "Snapshots are seen at shown frames in RGSS3".
+#[test]
+fn in_rgss1_and_rgss2_a_shown_frame_changes_nothing() {
+    for rules in [Rules::Rgss1, Rules::Rgss2] {
+        for shown in [false, true] {
+            let mut input = InputState::with_rules(rules);
+            input.receive(holding(&[Button::C]));
+            if shown {
+                input.frame_shown();
+            }
+            input.update();
+            assert!(
+                input.is_pressed(Button::C) && input.is_triggered(Button::C),
+                "{rules:?}, shown {shown}"
+            );
+        }
+    }
+}
