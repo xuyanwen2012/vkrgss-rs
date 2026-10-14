@@ -117,7 +117,7 @@ impl Guest {
         CLASSES.set(Some(classes));
         enter(Guest::new(config));
         runtime::define(ruby)?;
-        font::install_default_color(ruby)
+        font::install_defaults(ruby)
     }
 
     /// Runs `access` on the guest of this thread.
@@ -223,6 +223,10 @@ mod tests {
 
     impl TextBackend for NoFonts {
         fn font_exists(&self, _name: &str) -> bool {
+            false
+        }
+
+        fn font_exists_exactly(&self, _name: &str) -> bool {
             false
         }
     }

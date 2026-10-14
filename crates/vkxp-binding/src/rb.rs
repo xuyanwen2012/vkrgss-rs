@@ -238,6 +238,30 @@ pub(crate) fn check_count(
     ))
 }
 
+/// Checks the argument count of a method with optional arguments with the message that
+/// names the range: `wrong number of arguments (given for min..max)`, an `ArgumentError`,
+/// as the original runtime of RGSS3 words it for `Font.new` and `Bitmap.new`.
+///
+/// Provenance: oracle measurement 2026-10-13, RGSS301 version 3.0.1.1 and RGSS300 version
+/// 3.0.0.1, `ace-v1-bitmap-REPORT.md` sections 2 and 4.
+pub(crate) fn check_count_range(
+    ruby: &Ruby,
+    args: &[VALUE],
+    min: usize,
+    max: usize,
+) -> Result<(), Raise> {
+    if (min..=max).contains(&args.len()) {
+        return Ok(());
+    }
+    Err(Raise::new(
+        arg_error(ruby),
+        format!(
+            "wrong number of arguments ({} for {min}..{max})",
+            args.len()
+        ),
+    ))
+}
+
 /// Checks the argument count of a method of a value class of RGSS3 with the message of the
 /// original runtime of RGSS3, which reverses Ruby's order: `wrong number of arguments
 /// (expected for given)`, an `ArgumentError`. `expected` is `min` when fewer were given and

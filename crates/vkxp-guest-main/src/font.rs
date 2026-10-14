@@ -87,6 +87,10 @@ impl TextBackend for FontBackend {
     fn font_exists(&self, name: &str) -> bool {
         self.engine.borrow().is_available(name)
     }
+
+    fn font_exists_exactly(&self, name: &str) -> bool {
+        self.engine.borrow().has_family_exactly(name)
+    }
 }
 
 #[cfg(test)]
@@ -245,6 +249,16 @@ mod tests {
         let backend = backend();
         assert!(backend.font_exists("Liberation Sans"));
         assert!(!backend.font_exists("NoSuchFamilyAnywhere"));
+    }
+
+    /// `Font.exist?` of RGSS3 asks exactly, letter case included.
+    #[test]
+    fn font_exists_exactly_answers_from_the_engine() {
+        let backend = backend();
+        assert!(backend.font_exists_exactly("Liberation Sans"));
+        assert!(backend.font_exists("liberation sans"));
+        assert!(!backend.font_exists_exactly("liberation sans"));
+        assert!(!backend.font_exists_exactly("NoSuchFamilyAnywhere"));
     }
 
     const NOTO: &str = "Noto Sans CJK SC";

@@ -50,9 +50,11 @@ fn a_font_name_is_bytes() {
         eval("[Font.new.name, Font.default_name].flatten.map { |name| name.encoding.name }.uniq"),
         r#"["ASCII-8BIT"]"#
     );
+    // A name a script gives is kept as given, as measured on the original
+    // (`ace-v1-api-REPORT.md` section 3.3): the String of the script's source is UTF-8.
     assert_eq!(
         eval("Font.new('Test Sans').name.encoding.name"),
-        r#""ASCII-8BIT""#
+        r#""UTF-8""#
     );
 }
 

@@ -366,8 +366,8 @@ fn set_font_rgss2(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     Ok(args[0])
 }
 
-/// A text argument of RGSS2: any object, as its `to_s`.
-fn text_of(ruby: &Ruby, value: VALUE) -> Result<String, Raise> {
+/// A text argument of RGSS2 and RGSS3: any object, as its `to_s`.
+pub(crate) fn text_of(ruby: &Ruby, value: VALUE) -> Result<String, Raise> {
     if rb::string_bytes(ruby, value).is_some() {
         return rb::text(ruby, value);
     }
@@ -466,15 +466,22 @@ fn is_rect(ruby: &Ruby, value: VALUE) -> bool {
     wrap::find::<Owned<Rect>>(ruby, value).is_some()
 }
 
+/// The handle of an argument that must be an instance of the class of `T`, as the original
+/// runtime of RGSS2 checks the colours of `gradient_fill_rect` and that of RGSS3 every
+/// `Color`, `Rect`, `Bitmap` and `Font` argument: anything else raises `TypeError` with
+/// `can't convert <class> into <expected class>`.
+pub(crate) fn converted_arg<T: Wrapped>(ruby: &Ruby, value: VALUE) -> Result<Handle<T>, Raise> {
+    wrap::find::<T>(ruby, value).ok_or_else(|| {
+        rb::wrong_type(ruby, value, |class| {
+            format!("can't convert {class} into {}", T::CLASS_NAME)
+        })
+    })
+}
+
 /// A colour argument of `gradient_fill_rect`. Anything but a `Color` raises `TypeError`
 /// with the message of the original.
 fn gradient_color_arg(ruby: &Ruby, value: VALUE) -> Result<Color, Raise> {
-    if wrap::find::<Owned<Color>>(ruby, value).is_none() {
-        return Err(rb::wrong_type(ruby, value, |class| {
-            format!("can't convert {class} into Color")
-        }));
-    }
-    color_arg(ruby, value)
+    Ok(converted_arg::<Owned<Color>>(ruby, value)?.get().value())
 }
 
 /// `blur` of RGSS2.

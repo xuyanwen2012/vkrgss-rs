@@ -92,6 +92,10 @@ impl TextBackend for CellBackend {
     fn font_exists(&self, name: &str) -> bool {
         self.families.iter().any(|family| family == name)
     }
+
+    fn font_exists_exactly(&self, name: &str) -> bool {
+        self.families.iter().any(|family| family == name)
+    }
 }
 
 struct Harness {

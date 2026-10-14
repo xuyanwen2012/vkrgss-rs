@@ -315,6 +315,23 @@ Three facts:
 - A shared test of RGSS2 that asserts the message of a wrong count of `Bitmap` over Ruby
   1.9.2 keeps passing: the functions of RGSS2 do not change.
 
+## Edits beyond the files named
+
+Made during the implementation because a requirement plainly needed them; each is a few
+lines.
+
+- `crates/vkxp-binding-rgss3/tests/arity_rgss3.rs`: beside the line of `BOUND`, the line
+  that asserts the number of entries of each bound class gets the counts of `Font` (35) and
+  `Bitmap` (22); it is computed from `BOUND` and fails for any other length. The change
+  `bind-the-window-of-rgss3` edited the same line when it added `Window`.
+- `crates/vkxp-binding-rgss3/tests/strings.rs`, `a_font_name_is_bytes`: its second
+  assertion expected `Font.new('Test Sans').name` of RGSS3 to be ASCII-8BIT, which held
+  while the font of RGSS3 was that of RGSS2 and rebuilt its name. The requirement "Font
+  names of RGSS3" keeps the object given, and the original was measured to keep a name as
+  given (API report 3.3): the assertion now expects the encoding of the script's literal,
+  UTF-8, with a comment. Its first assertion, the initial `"VL Gothic"` in ASCII-8BIT, is
+  unchanged.
+
 ## Follow-ups
 
 Left out, with the measured source. Sections are those of the bitmap report unless another
