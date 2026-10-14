@@ -954,3 +954,193 @@ fn a_scene_of_rgss3_keeps_its_rules() {
     scene.clear();
     assert_eq!(scene.rules(), Rules::Rgss3);
 }
+
+/// Requirement "Disposing a viewport without its elements".
+mod alone {
+    use vkxp_pixel::Rgba;
+
+    use super::*;
+    use crate::extract::testing::*;
+    use crate::WindowCall;
+
+    const PLANE: Rgba = [200, 0, 200, 255];
+    const INK: Rgba = [10, 250, 10, 255];
+
+    /// A sprite, a plane, a window of RGSS3 and a tilemap of RGSS3 in a viewport of
+    /// (0, 0, 96, 32), each showing opaque pixels of its own colour in it, and a blue sprite
+    /// without a viewport at (0, 40).
+    struct Elements {
+        stage: Stage,
+        viewport: ViewportId,
+        sprite: SpriteId,
+        plane: PlaneId,
+        window: WindowId,
+        tilemap: TilemapId,
+        free: SpriteId,
+    }
+
+    impl Elements {
+        fn new() -> Elements {
+            let mut stage = Stage::with_rules(Rules::Rgss3, 96, 48);
+            let viewport = stage
+                .scene
+                .create_viewport(Rect::new(0, 0, 96, 32))
+                .unwrap();
+            let inside = Some(viewport);
+
+            // The tilemap shows one green cell at (0, 0).
+            let sheet = stage.solid(512, 512, GREEN);
+            let map = SharedTable::new(Table::new_3d(3, 1, 4).unwrap());
+            map.set(0, 0, 0, 300);
+            let tilemap = stage.scene.create_tilemap_rgss3(inside).unwrap();
+            let element = stage.scene.tilemap_mut(tilemap).unwrap();
+            let rgss2 = element.rgss2.as_mut().unwrap();
+            rgss2.bitmaps = [Some(sheet); 9];
+            rgss2.passages = Some(SharedTable::new(Table::new(8192).unwrap()));
+            element.map_data = Some(map);
+            stage.scene.refresh_tilemap(tilemap).unwrap();
+
+            // The plane fills what nothing else covers, behind everything.
+            let bitmap = stage.solid(8, 8, PLANE);
+            let plane = stage.scene.create_plane(inside).unwrap();
+            stage.scene.plane_mut(plane).unwrap().bitmap = Some(bitmap);
+            stage.scene.set_plane_z(plane, -10).unwrap();
+
+            let red = stage.solid(8, 8, RED);
+            let sprite = stage.scene.create_sprite(inside).unwrap();
+            let element = stage.scene.sprite_mut(sprite).unwrap();
+            element.set_bitmap(Some(red), &stage.bitmaps);
+            element.x = 40;
+
+            let contents = stage.solid(16, 16, INK);
+            let window = stage.scene.create_window_rgss3(inside).unwrap();
+            let element = stage.scene.window_mut(window).unwrap();
+            element.call(&mut stage.bitmaps, WindowCall::Contents(Some(contents)));
+            element.call(&mut stage.bitmaps, WindowCall::Move(56, 0, 32, 32));
+
+            let blue = stage.solid(8, 8, BLUE);
+            let free = stage.scene.create_sprite(None).unwrap();
+            let element = stage.scene.sprite_mut(free).unwrap();
+            element.set_bitmap(Some(blue), &stage.bitmaps);
+            element.y = 40;
+
+            let mut elements = Elements {
+                stage,
+                viewport,
+                sprite,
+                plane,
+                window,
+                tilemap,
+                free,
+            };
+            let frame = elements.stage.frame();
+            let shown =
+                [(5, 5), (42, 2), (66, 10), (90, 30), (2, 42)].map(|(x, y)| frame.pixel(x, y));
+            assert_eq!(shown, [GREEN, RED, INK, PLANE, BLUE]);
+            elements
+        }
+
+        /// Asserts that a frame is extracted and shows the free sprite and nothing else, and
+        /// `also` where it is.
+        fn assert_shown(&mut self, also: Option<(Rect, Rgba)>) {
+            let frame = self.stage.frame();
+            let shown = [(Rect::new(0, 40, 8, 8), BLUE)].into_iter().chain(also);
+            for y in 0..48 {
+                for x in 0..96 {
+                    let inside = |rect: &Rect| {
+                        (rect.x..rect.x + rect.width).contains(&x)
+                            && (rect.y..rect.y + rect.height).contains(&y)
+                    };
+                    let mut shown = shown.clone();
+                    let expected = shown.find(|(rect, _)| inside(rect)).map_or(BLACK, |s| s.1);
+                    assert_eq!(frame.pixel(x as u32, y as u32), expected, "({x}, {y})");
+                }
+            }
+        }
+    }
+
+    /// Scenarios "The elements stay" and "Drawn nowhere".
+    #[test]
+    fn the_elements_of_a_viewport_disposed_alone_stay_and_are_drawn_nowhere() {
+        let mut elements = Elements::new();
+        let Elements {
+            viewport,
+            sprite,
+            plane,
+            window,
+            tilemap,
+            free,
+            ..
+        } = elements;
+        let scene = &mut elements.stage.scene;
+        scene.dispose_viewport_alone(viewport);
+        assert!(scene.is_viewport_disposed(viewport));
+        assert!(!scene.is_sprite_disposed(sprite));
+        assert!(!scene.is_plane_disposed(plane));
+        assert!(!scene.is_window_disposed(window));
+        assert!(!scene.is_tilemap_disposed(tilemap));
+        assert!(!scene.is_sprite_disposed(free));
+        let inside = Some(viewport);
+        assert_eq!(scene.sprite(sprite).unwrap().viewport(), inside);
+        assert_eq!(scene.plane(plane).unwrap().viewport(), inside);
+        assert_eq!(scene.window(window).unwrap().viewport(), inside);
+        assert_eq!(scene.tilemap(tilemap).unwrap().viewport(), inside);
+
+        scene.sprite_mut(sprite).unwrap().x = 41;
+        scene.plane_mut(plane).unwrap().ox = 3;
+        scene.window_mut(window).unwrap().x = 57;
+        scene.tilemap_mut(tilemap).unwrap().ox = 2;
+        scene.tilemap_mut(tilemap).unwrap().update();
+        scene.refresh_tilemap(tilemap).unwrap();
+        scene.notice_viewport_origins();
+        assert_eq!(scene.sprite(sprite).unwrap().x, 41);
+        assert_eq!(scene.plane(plane).unwrap().ox, 3);
+        assert_eq!(scene.window(window).unwrap().x, 57);
+        assert_eq!(scene.tilemap(tilemap).unwrap().ox, 2);
+
+        elements.assert_shown(None);
+    }
+
+    /// Scenario "Moved out".
+    #[test]
+    fn a_sprite_moved_out_of_a_viewport_disposed_alone_is_drawn() {
+        let mut elements = Elements::new();
+        let (viewport, sprite) = (elements.viewport, elements.sprite);
+        let scene = &mut elements.stage.scene;
+        scene.dispose_viewport_alone(viewport);
+        scene.set_sprite_viewport(sprite, None).unwrap();
+        assert_eq!(scene.sprite(sprite).unwrap().viewport(), None);
+        elements.assert_shown(Some((Rect::new(40, 0, 8, 8), RED)));
+
+        let scene = &mut elements.stage.scene;
+        assert_eq!(
+            scene.set_sprite_viewport(sprite, Some(viewport)),
+            Err(SceneError::Disposed(ElementKind::Viewport))
+        );
+        assert_eq!(scene.sprite(sprite).unwrap().viewport(), None);
+    }
+
+    /// Scenario "Twice and a reused slot".
+    #[test]
+    fn a_viewport_disposed_alone_twice_or_reused_takes_no_element() {
+        let mut elements = Elements::new();
+        let viewport = elements.viewport;
+        let scene = &mut elements.stage.scene;
+        scene.dispose_viewport_alone(viewport);
+        scene.dispose_viewport_alone(viewport);
+        let reused = scene.create_viewport(Rect::new(0, 0, 96, 32)).unwrap();
+        assert_eq!(reused.0.index, viewport.0.index, "the slot is reused");
+        scene.dispose_viewport_alone(viewport);
+        assert!(!scene.is_viewport_disposed(reused));
+        let inside = Some(viewport);
+        assert_eq!(scene.sprite(elements.sprite).unwrap().viewport(), inside);
+        assert_eq!(scene.plane(elements.plane).unwrap().viewport(), inside);
+        assert_eq!(scene.window(elements.window).unwrap().viewport(), inside);
+        assert_eq!(scene.tilemap(elements.tilemap).unwrap().viewport(), inside);
+        assert!(!scene.is_sprite_disposed(elements.sprite));
+        assert!(!scene.is_plane_disposed(elements.plane));
+        assert!(!scene.is_window_disposed(elements.window));
+        assert!(!scene.is_tilemap_disposed(elements.tilemap));
+        elements.assert_shown(None);
+    }
+}

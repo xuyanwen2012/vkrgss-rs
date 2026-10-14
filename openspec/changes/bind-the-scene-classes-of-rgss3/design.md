@@ -306,6 +306,11 @@ Four facts:
   counts.
 - A scenario that names a message asks for that message; one that names only a class asks
   for the class.
+- Edit outside the files of the Impact: at the start of this change the test
+  `crates/vkxp-binding-rgss3/tests/reset_rgss3.rs` did not compile, because it compared a
+  message with `GuestToHost::Freeze`, which is a struct variant since protocol version 13.
+  Its line 212 now matches `GuestToHost::Freeze { .. }`; without it neither the test list of
+  task 1.1 nor the gate can be had.
 
 ## Follow-ups
 

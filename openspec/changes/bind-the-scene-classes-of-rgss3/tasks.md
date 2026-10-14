@@ -2,8 +2,8 @@
 
 ## 1. A viewport disposed alone in the core
 
-- [ ] 1.1 Before anything changes, keep `cargo test --locked -- --list` of `vkxp-core`, `vkxp-binding` and `vkxp-binding-rgss3` under `local/`. Check that `bind-the-values-of-rgss3` and `run-rgss3-games-in-a-guest-of-their-own` are merged on `main` (`rb::check_count_rgss3`, `crates/vkxp-binding-rgss3/tests/arity_rgss3.rs` with `BOUND`, `Graphics.__reset__`); stop and report if not. Verify: the three lists are kept; `git log` names both changes.
-- [ ] 1.2 `Scene::dispose_viewport_alone` and the documentation of the arena of elements in `crates/vkxp-core/src/scene.rs` (decision 4), with tests in `crates/vkxp-core/src/scene/tests.rs`. Verify: the scenarios of "Disposing a viewport without its elements" of `specs/core-scene/spec.md`; `cargo test -p vkxp-core --locked` passes with every name of the kept list.
+- [x] 1.1 Before anything changes, keep `cargo test --locked -- --list` of `vkxp-core`, `vkxp-binding` and `vkxp-binding-rgss3` under `local/`. Check that `bind-the-values-of-rgss3` and `run-rgss3-games-in-a-guest-of-their-own` are merged on `main` (`rb::check_count_rgss3`, `crates/vkxp-binding-rgss3/tests/arity_rgss3.rs` with `BOUND`, `Graphics.__reset__`); stop and report if not. Verify: the three lists are kept; `git log` names both changes.
+- [x] 1.2 `Scene::dispose_viewport_alone` and the documentation of the arena of elements in `crates/vkxp-core/src/scene.rs` (decision 4), with tests in `crates/vkxp-core/src/scene/tests.rs`. Verify: the scenarios of "Disposing a viewport without its elements" of `specs/core-scene/spec.md`; `cargo test -p vkxp-core --locked` passes with every name of the kept list.
 
 ## 2. The scene, viewports and their disposal in RGSS3
 

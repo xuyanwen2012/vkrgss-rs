@@ -219,10 +219,11 @@ pub struct DisposedElements {
 /// only disposing it again and asking whether it is disposed still work.
 ///
 /// An element is created with or without a viewport and belongs to it until it is moved to
-/// another (`set_sprite_viewport` and the like, which RGSS2 has): disposing the viewport
-/// disposes it, and an element created in a disposed viewport is alive and never drawn.
-/// Elements are drawn
-/// in ascending order of z; among equal z, the element created more recently is in front, and
+/// another (`set_sprite_viewport` and the like, which RGSS2 has). Disposing the viewport
+/// with [`Scene::dispose_viewport`], as RGSS1 and RGSS2 do in vkxp, disposes it;
+/// [`Scene::dispose_viewport_alone`], as RGSS3 does, leaves it alive in the disposed
+/// viewport. An element in a disposed viewport, created there or left there, is alive and
+/// never drawn until it is moved out. Elements are drawn in ascending order of z; among equal z, the element created more recently is in front, and
 /// assigning a z never changes the order among equals. A viewport takes one place in that
 /// order for all its elements, by its own z and its own creation; its elements are ordered
 /// among themselves in the same way.
@@ -565,6 +566,20 @@ impl Scene {
             disposed.tilemaps += 1;
         }
         disposed
+    }
+
+    /// Disposes a viewport and nothing else, as `Viewport#dispose` of RGSS3 does: every
+    /// element in it stays alive, keeps the handle of the viewport and is drawn nowhere until
+    /// it is moved to the screen or to another viewport. Disposing a disposed viewport does
+    /// nothing, also to a viewport that took its slot since.
+    ///
+    /// Provenance: `ace-v1-sprite-REPORT.md`, `ace-v1-window-REPORT.md` and
+    /// `ace-v1-tilemap-REPORT.md` (oracle measurement 2026-10-13): the sprites, planes,
+    /// windows and tilemaps of a disposed viewport are not disposed and stay usable. What
+    /// they draw was not measured; they are hidden as an element created in a disposed
+    /// viewport is.
+    pub fn dispose_viewport_alone(&mut self, id: ViewportId) {
+        self.viewports.remove(id.0);
     }
 
     /// Disposes a window, and with it the bitmaps the scene drew from its window skin, which
