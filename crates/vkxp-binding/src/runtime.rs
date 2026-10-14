@@ -363,6 +363,8 @@ impl Guest {
                     data,
                     volume: playing.volume,
                     pitch: playing.pitch,
+                    start: 0,
+                    music_return_ms: 0,
                 }));
             }
         }

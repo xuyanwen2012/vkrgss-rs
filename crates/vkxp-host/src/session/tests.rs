@@ -1629,6 +1629,8 @@ fn audio_commands_reach_the_sink_in_the_order_sent() {
         data: vec![1, 2, 3],
         volume: 80,
         pitch: 100,
+        start: 0,
+        music_return_ms: 0,
     };
     let fade = AudioCommand::Fade {
         channel: AudioChannel::Bgm,

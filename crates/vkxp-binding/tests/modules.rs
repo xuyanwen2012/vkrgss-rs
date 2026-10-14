@@ -32,6 +32,8 @@ fn sound(channel: AudioChannel, volume: u8, pitch: u16) -> GuestToHost {
         data: SOUND_BYTES.to_vec(),
         volume,
         pitch,
+        start: 0,
+        music_return_ms: 0,
     })
 }
 

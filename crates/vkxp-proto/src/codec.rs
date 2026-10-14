@@ -23,7 +23,7 @@ use crate::{GuestToHost, HostToGuest, InputSnapshot};
 pub const MAGIC: [u8; 4] = *b"VKXP";
 
 /// Version of the message types and their encoding. Any change to either increments it.
-pub const PROTOCOL_VERSION: u16 = 14;
+pub const PROTOCOL_VERSION: u16 = 15;
 
 /// Length of the stream header in bytes.
 pub const HEADER_LEN: usize = 7;
@@ -245,11 +245,32 @@ mod tests {
         assert_eq!(decode_stream::<GuestToHost>(&bytes), Ok(messages));
     }
 
+    /// Scenario "Round trip" of the start, return time and volume command of audio.
+    #[test]
+    fn start_return_time_and_volume_command_round_trip() {
+        let messages = vec![
+            GuestToHost::Audio(AudioCommand::Play {
+                channel: AudioChannel::Bgm,
+                data: b"sound".to_vec(),
+                volume: 100,
+                pitch: 453,
+                start: 123_456_789_012,
+                music_return_ms: 1000,
+            }),
+            GuestToHost::Audio(AudioCommand::Volume {
+                channel: AudioChannel::Bgm,
+                volume: 80,
+            }),
+        ];
+        let bytes = encode_stream(&messages).unwrap();
+        assert_eq!(decode_stream::<GuestToHost>(&bytes), Ok(messages));
+    }
+
     /// Scenario "Version".
     #[test]
     fn older_streams_are_rejected_naming_both_versions() {
-        assert_eq!(PROTOCOL_VERSION, 14);
-        for found in [1u16, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] {
+        assert_eq!(PROTOCOL_VERSION, 15);
+        for found in [1u16, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] {
             let mut bytes = encode_stream(&sample()).unwrap();
             bytes[4..6].copy_from_slice(&found.to_le_bytes());
 
@@ -258,12 +279,12 @@ mod tests {
                 error,
                 DecodeError::UnsupportedVersion {
                     found,
-                    supported: 14,
+                    supported: 15,
                 }
             );
             assert_eq!(
                 error.to_string(),
-                format!("unsupported protocol version: found {found}, supported 14")
+                format!("unsupported protocol version: found {found}, supported 15")
             );
         }
     }
@@ -583,8 +604,24 @@ mod tests {
                 vague: 40,
                 rule: TransitionRule::Rgss1,
             },
+            GuestToHost::Audio(AudioCommand::Play {
+                channel: AudioChannel::Me,
+                data: vec![1, 2, 3],
+                volume: 80,
+                pitch: 453,
+                start: 11025,
+                music_return_ms: 1000,
+            }),
             GuestToHost::Audio(AudioCommand::Stop {
                 channel: AudioChannel::Bgm,
+            }),
+            GuestToHost::Audio(AudioCommand::Fade {
+                channel: AudioChannel::Bgs,
+                duration_ms: 1000,
+            }),
+            GuestToHost::Audio(AudioCommand::Volume {
+                channel: AudioChannel::Bgm,
+                volume: 80,
             }),
             GuestToHost::Modal {
                 text: "message".to_owned(),

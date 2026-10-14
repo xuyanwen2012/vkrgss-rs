@@ -332,6 +332,8 @@ fn non_frame_messages_are_ignored_as_in_the_reference() {
             data: vec![1, 2, 3],
             volume: 100,
             pitch: 100,
+            start: 0,
+            music_return_ms: 0,
         }),
         GuestToHost::Audio(AudioCommand::Stop {
             channel: AudioChannel::Se,

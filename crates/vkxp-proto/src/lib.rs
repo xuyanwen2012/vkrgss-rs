@@ -11,7 +11,7 @@
 //! numbering of the tiles of a tilemap of RGSS1, which the guest and every backend read
 //! alike, [`tiles_rgss2`] that of RGSS2, and [`tiles_rgss3`] what that of RGSS3 adds to it.
 //!
-//! This is protocol version 14. Over version 1 a [`FramePacket`] carries the guest's
+//! This is protocol version 15. Over version 1 a [`FramePacket`] carries the guest's
 //! [`FrameRate`], a [`Quad`] carries a tone and a colour for its own texels, the messages
 //! [`GuestToHost::FrameReset`] and [`HostToGuest::Reset`] exist, and [`Button`] has F9. Over
 //! version 2 a [`Quad`] states its [`Sampling`]: the affine transform it always had, or a
@@ -32,7 +32,10 @@
 //! numbering of [`tiles_rgss2`]. Over version 12 a [`TilemapPlane`] names its [`PlaneRules`],
 //! those of RGSS2 or of RGSS3. Over version 13 [`GuestToHost::Freeze`] names the
 //! [`FreezeRule`] by which the frozen picture is kept: as the frame at its own size, or in the
-//! buffer of RGSS3. Streams of older versions are rejected.
+//! buffer of RGSS3. Over version 14 [`AudioCommand::Play`] carries the sample frame at which
+//! its sound starts and the time over which the music returns after a music effect, its pitch
+//! runs from 1 to 65535, and [`AudioCommand::Volume`] exists. Streams of older versions are
+//! rejected.
 //!
 //! The binary form encodes enum variants by position, so reordering or removing variants, or
 //! changing fields, requires a new [`codec::PROTOCOL_VERSION`].

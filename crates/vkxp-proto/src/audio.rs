@@ -25,8 +25,13 @@ pub enum AudioCommand {
         data: Vec<u8>,
         /// 0 to 100.
         volume: u8,
-        /// Playback speed in percent, 50 to 150.
+        /// Playback speed in percent, 1 to 65535.
         pitch: u16,
+        /// The sample frame of the file at which the sound begins.
+        start: u64,
+        /// For a music effect: the time in milliseconds over which the music returns to
+        /// its volume when the effect has ended. 0 for none, and for the other channels.
+        music_return_ms: u32,
     },
     /// Stops a channel at once.
     Stop { channel: AudioChannel },
@@ -35,4 +40,6 @@ pub enum AudioCommand {
         channel: AudioChannel,
         duration_ms: u32,
     },
+    /// Sets the volume, 0 to 100, of what a channel plays, without starting it again.
+    Volume { channel: AudioChannel, volume: u8 },
 }

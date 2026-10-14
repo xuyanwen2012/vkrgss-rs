@@ -242,15 +242,23 @@ fn audio_command() -> impl Strategy<Value = AudioCommand> {
             audio_channel(),
             vec(any::<u8>(), 0..64),
             any::<u8>(),
-            any::<u16>()
+            any::<u16>(),
+            any::<u64>(),
+            any::<u32>()
         )
-            .prop_map(|(channel, data, volume, pitch)| AudioCommand::Play {
-                channel,
-                data,
-                volume,
-                pitch,
+            .prop_map(|(channel, data, volume, pitch, start, music_return_ms)| {
+                AudioCommand::Play {
+                    channel,
+                    data,
+                    volume,
+                    pitch,
+                    start,
+                    music_return_ms,
+                }
             }),
         audio_channel().prop_map(|channel| AudioCommand::Stop { channel }),
+        (audio_channel(), any::<u8>())
+            .prop_map(|(channel, volume)| AudioCommand::Volume { channel, volume }),
         (audio_channel(), any::<u32>()).prop_map(|(channel, duration_ms)| AudioCommand::Fade {
             channel,
             duration_ms,

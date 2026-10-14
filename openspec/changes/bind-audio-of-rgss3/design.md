@@ -361,3 +361,13 @@ Sections are those of the API report.
 - `vkxp-core/src/lib.rs` received its one line, `pub mod sound;`. The crate's documentation
   still says that every module but `test_support` is private and has no row for `sound`;
   the next change that edits that file can add the row.
+- The mixer opens a source for the output rate times 100 over the pitch. With the pitch
+  from 1 to 65535 that rate can leave the range the synthesiser of MIDI accepts (16000 to
+  192000 Hz: at an output of 48000 Hz a pitch below 25 or above 300); such a MIDI file
+  is reported once and stays silent. RGSS1 and RGSS2 keep 50 to 150 in the binding, so
+  only a game of RGSS3 can ask for it; what the original does with such a pitch of MIDI
+  was not measured (6.3).
+- The pitch rule of decision 3 compares the pitch of the play command (after the limits of
+  decision 2) with that of what the channel plays, since `runtime::Playing` keeps three
+  fields; two pitch arguments that both become 100 (0 and -1, or 454 at 44100 Hz) count
+  as one pitch.

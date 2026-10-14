@@ -74,6 +74,13 @@ pub trait Source: Send {
             }
         }
     }
+
+    /// Makes a source that has given no frame yet start at the sample frame `frame` of its
+    /// file, as [`start_from`](Source::start_from) does. Only sampled data does: a MIDI
+    /// file and data decoded by the external decoder start at their beginning.
+    fn start_at_file_frame(&mut self, frame: u64) {
+        let _ = frame;
+    }
 }
 
 /// Where a source reports damage it meets while it plays: [`DecodeError::Damaged`], at most
@@ -317,5 +324,11 @@ impl Source for Sampled {
 
     fn position(&self) -> u64 {
         self.given
+    }
+
+    fn start_at_file_frame(&mut self, frame: u64) {
+        // An output frame advances the file by `step` frames.
+        let output = (frame as f64 / self.step).round();
+        self.start_from(output as u64);
     }
 }

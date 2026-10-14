@@ -23,7 +23,7 @@ use crate::midi::SoundFonts;
 use crate::wma;
 
 /// The range of the pitch of a play command, in percent.
-const PITCH: std::ops::RangeInclusive<u16> = 50..=150;
+const PITCH: std::ops::RangeInclusive<u16> = 1..=u16::MAX;
 
 /// How a mixer is set up.
 pub struct MixerOptions {
@@ -54,6 +54,8 @@ pub(crate) enum Prepared {
         volume: u8,
         /// Where the voice writes its position, on the channels that are remembered.
         position: Option<Arc<AtomicU64>>,
+        /// For a music effect: the time over which the music returns when it has ended.
+        music_return_ms: u32,
     },
     Stop {
         channel: AudioChannel,
@@ -61,6 +63,10 @@ pub(crate) enum Prepared {
     Fade {
         channel: AudioChannel,
         duration_ms: u32,
+    },
+    Volume {
+        channel: AudioChannel,
+        volume: u8,
     },
 }
 
@@ -162,6 +168,8 @@ impl Loader {
                 data,
                 volume,
                 pitch,
+                start,
+                music_return_ms,
             } => {
                 // A sound opened for a rate other than the output's, and played at the
                 // output's, is faster or slower by their ratio. That is the pitch.
@@ -177,16 +185,20 @@ impl Loader {
                     &self.report,
                 );
                 let mut source = opened.map_err(|error| (self.report)(&error)).ok();
+                // Whatever the command plays, the channel is armed no longer.
+                let armed = remembered(channel).and_then(|index| self.armed[index].take());
+                if let Some(source) = source.as_mut() {
+                    // A recalled position knows better than the command a resumed guest
+                    // repeats.
+                    match armed {
+                        Some((file, recalled)) if file == data => source.start_from(recalled),
+                        _ if start > 0 => source.start_at_file_frame(start),
+                        _ => {}
+                    }
+                }
                 let mut position = None;
                 if let Some(index) = remembered(channel) {
-                    // Whatever the command plays, the channel is armed no longer.
-                    let armed = self.armed[index].take();
                     self.playing[index] = source.as_mut().map(|source| {
-                        if let Some((file, start)) = armed
-                            && file == data
-                        {
-                            source.start_from(start);
-                        }
                         let shared = Arc::new(AtomicU64::new(source.position()));
                         position = Some(shared.clone());
                         Playing {
@@ -200,6 +212,7 @@ impl Loader {
                     source,
                     volume,
                     position,
+                    music_return_ms,
                 }
             }
             AudioCommand::Stop { channel } => {
@@ -215,6 +228,7 @@ impl Loader {
                 channel,
                 duration_ms,
             },
+            AudioCommand::Volume { channel, volume } => Prepared::Volume { channel, volume },
         }
     }
 }
@@ -229,6 +243,19 @@ fn loops(channel: AudioChannel) -> bool {
 struct Fade {
     remaining: u32,
     total: u32,
+}
+
+/// A rise from silence to the volume of the voice: `done` of `total` frames have passed.
+#[derive(Clone, Copy)]
+struct Rise {
+    done: u32,
+    total: u32,
+}
+
+/// The frames of `duration_ms` milliseconds at `sample_rate`.
+fn frames_of(duration_ms: u32, sample_rate: u32) -> u32 {
+    let frames = u64::from(duration_ms) * u64::from(sample_rate) / 1000;
+    frames.min(u64::from(u32::MAX)) as u32
 }
 
 /// The gain of the volume `v`, 0 to 100: 0.35 dB below full for every unit under 100, as the
@@ -248,6 +275,10 @@ struct Voice {
     volume: f32,
     looping: bool,
     fade: Option<Fade>,
+    /// The return of the music after a music effect.
+    rise: Option<Rise>,
+    /// For a music effect: the frames over which the music returns when it has ended.
+    music_return: u32,
     /// Where the position of the source is written each time the voice was mixed.
     position: Option<Arc<AtomicU64>>,
 }
@@ -264,6 +295,8 @@ impl Voice {
             volume: f32::from(volume.min(100)),
             looping,
             fade: None,
+            rise: None,
+            music_return: 0,
             position,
         }
     }
@@ -295,12 +328,23 @@ impl Voice {
                 break;
             }
             let mut gain = steady;
+            let mut level = 1.0;
             if let Some(fade) = &mut self.fade {
                 if fade.remaining == 0 {
                     return index;
                 }
-                gain = self::gain(self.volume * fade.remaining as f32 / fade.total as f32);
+                level = fade.remaining as f32 / fade.total as f32;
                 fade.remaining -= 1;
+            }
+            if let Some(rise) = &mut self.rise {
+                level *= rise.done as f32 / rise.total as f32;
+                rise.done += 1;
+                if rise.done >= rise.total {
+                    self.rise = None;
+                }
+            }
+            if level < 1.0 {
+                gain = self::gain(self.volume * level);
             }
             frame[0] += sound[0] * gain;
             frame[1] += sound[1] * gain;
@@ -317,6 +361,16 @@ impl Voice {
                 fade.remaining > 0
             }
             None => true,
+        }
+    }
+
+    /// Lets the volume rise from silence over `frames`, evenly in the volume number.
+    fn rise(&mut self, frames: u32) {
+        if frames > 0 {
+            self.rise = Some(Rise {
+                done: 0,
+                total: frames,
+            });
         }
     }
 
@@ -352,9 +406,13 @@ impl Channels {
                 source,
                 volume,
                 position,
+                music_return_ms,
             } => {
-                let voice =
-                    source.map(|source| Voice::new(source, volume, loops(channel), position));
+                let voice = source.map(|source| {
+                    let mut voice = Voice::new(source, volume, loops(channel), position);
+                    voice.music_return = frames_of(music_return_ms, self.sample_rate);
+                    voice
+                });
                 match channel {
                     AudioChannel::Bgm => self.bgm = voice,
                     AudioChannel::Bgs => self.bgs = voice,
@@ -365,23 +423,39 @@ impl Channels {
             Prepared::Stop { channel } => match channel {
                 AudioChannel::Bgm => self.bgm = None,
                 AudioChannel::Bgs => self.bgs = None,
-                AudioChannel::Me => self.me = None,
+                AudioChannel::Me => self.end_effect(),
                 AudioChannel::Se => self.se.clear(),
             },
             Prepared::Fade {
                 channel,
                 duration_ms,
             } => {
-                let frames = u64::from(duration_ms) * u64::from(self.sample_rate) / 1000;
-                let frames = frames.min(u64::from(u32::MAX)) as u32;
-                let voices: &mut dyn Iterator<Item = &mut Voice> = match channel {
-                    AudioChannel::Bgm => &mut self.bgm.iter_mut(),
-                    AudioChannel::Bgs => &mut self.bgs.iter_mut(),
-                    AudioChannel::Me => &mut self.me.iter_mut(),
-                    AudioChannel::Se => &mut self.se.iter_mut(),
-                };
-                voices.for_each(|voice| voice.fade(frames));
+                let frames = frames_of(duration_ms, self.sample_rate);
+                self.voices(channel).for_each(|voice| voice.fade(frames));
             }
+            Prepared::Volume { channel, volume } => {
+                let volume = f32::from(volume.min(100));
+                self.voices(channel).for_each(|voice| voice.volume = volume);
+            }
+        }
+    }
+
+    /// The voices of a channel.
+    fn voices(&mut self, channel: AudioChannel) -> Box<dyn Iterator<Item = &mut Voice> + '_> {
+        match channel {
+            AudioChannel::Bgm => Box::new(self.bgm.iter_mut()),
+            AudioChannel::Bgs => Box::new(self.bgs.iter_mut()),
+            AudioChannel::Me => Box::new(self.me.iter_mut()),
+            AudioChannel::Se => Box::new(self.se.iter_mut()),
+        }
+    }
+
+    /// Ends the music effect, if one plays, and lets the music return over its time.
+    fn end_effect(&mut self) {
+        if let Some(effect) = self.me.take()
+            && let Some(music) = &mut self.bgm
+        {
+            music.rise(effect.music_return);
         }
     }
 
@@ -400,7 +474,7 @@ impl Channels {
         if let Some(voice) = &mut self.me {
             effect = voice.mix(out, &mut scratch);
             if effect < frames {
-                self.me = None;
+                self.end_effect();
             }
         }
         if let Some(voice) = &mut self.bgm {

@@ -38,6 +38,26 @@ fn play_with(channel: AudioChannel, data: &[u8], volume: u8, pitch: u16) -> Audi
         data: data.to_vec(),
         volume,
         pitch,
+        start: 0,
+        music_return_ms: 0,
+    }
+}
+
+/// A play command with the two fields that RGSS3 uses.
+fn play_from(
+    channel: AudioChannel,
+    data: &[u8],
+    (volume, pitch): (u8, u16),
+    start: u64,
+    music_return_ms: u32,
+) -> AudioCommand {
+    AudioCommand::Play {
+        channel,
+        data: data.to_vec(),
+        volume,
+        pitch,
+        start,
+        music_return_ms,
     }
 }
 
@@ -208,6 +228,7 @@ fn sound_effects_overlap() {
     assert!((level(&after, RATE, 1000.0) - AMPLITUDE).abs() < 0.01);
 }
 
+/// Scenario "No return time".
 #[test]
 fn a_music_effect_pauses_the_music_which_then_continues() {
     // A ramp, so that every frame of the music tells where in the track it is.
@@ -298,6 +319,24 @@ fn pitch_150_plays_half_as_fast_again() {
     assert!((sounding_seconds(&out, RATE) - 1.0).abs() < 0.01);
     let heard = side(&out[..RATE as usize * 2], 0);
     assert!((frequency(&heard, RATE) - 660.0).abs() < 2.0);
+}
+
+/// Scenario "Pitch outside 50 to 150".
+#[test]
+fn pitch_outside_50_to_150() {
+    for (pitch, heard_frequency, seconds) in [(200, 880.0, 0.5), (25, 110.0, 4.0)] {
+        let mut mixer = mixer();
+        mixer.apply(play_with(AudioChannel::Se, &tone(440.0, 1.0), 100, pitch));
+        let out = render(&mut mixer, 5.0);
+        let sounding = sounding_seconds(&out, RATE);
+        assert!((sounding - seconds).abs() < 0.01, "{pitch}: {sounding} s");
+        let heard = side(&out[..(RATE as f32 * seconds) as usize * 2], 0);
+        let found = frequency(&heard, RATE);
+        assert!(
+            (found - heard_frequency).abs() < heard_frequency * 0.005,
+            "{pitch}: {found} Hz"
+        );
+    }
 }
 
 #[test]
@@ -691,4 +730,171 @@ fn a_recalled_position_is_where_the_same_midi_file_starts() {
     mixer.apply(play(BGM, &midi));
     assert_eq!(frames(&mut mixer, 4000), from_there);
     assert_eq!(reports.text(), "");
+}
+
+/// The value of frame `frame` of [`ramp`].
+fn ramp_at(frame: u32) -> f32 {
+    (frame / 2) as f32 / 32768.0
+}
+
+/// Scenarios "Start", "Start at half the pitch" and "Start of zero".
+#[test]
+fn a_play_command_starts_at_its_frame() {
+    let ramp = ramp();
+    for (channel, pitch, start) in [(BGM, 100, 1000), (BGS, 50, 1000), (BGM, 100, 0)] {
+        let mut mixer = mixer();
+        mixer.apply(play_from(channel, &ramp, (100, pitch), start, 0));
+        let first = frames(&mut mixer, 1);
+        assert_eq!(first[0], ramp_at(start as u32), "{channel:?} {pitch}");
+    }
+    // A sound effect starts there too.
+    let mut mixer = mixer();
+    mixer.apply(play_from(AudioChannel::Se, &ramp, (100, 100), 3000, 0));
+    assert_eq!(frames(&mut mixer, 1)[0], ramp_at(3000));
+}
+
+/// Scenario "Behind the end".
+#[test]
+fn a_start_behind_the_end_of_a_looping_sound_begins_it() {
+    let short: Vec<i16> = (0..2000).map(|frame| (frame / 2 + 100) as i16).collect();
+    let short = wav_of(RATE, &short);
+    let mut mixer = mixer();
+    mixer.apply(play_from(BGM, &short, (100, 100), 5000, 0));
+    assert_eq!(frames(&mut mixer, 1)[0], 100.0 / 32768.0);
+}
+
+/// Scenario "A recalled position wins".
+#[test]
+fn a_recalled_position_wins_over_the_start() {
+    let ramp = ramp();
+    let mut mixer = mixer();
+    mixer.apply(play(BGM, &ramp));
+    frames(&mut mixer, 1000);
+    mixer.remember(0);
+    mixer.apply(stop(BGM));
+    mixer.recall(0);
+    mixer.apply(play_from(BGM, &ramp, (100, 100), 5, 0));
+    assert_eq!(frames(&mut mixer, 1)[0], ramp_at(1000));
+}
+
+/// Scenario "MIDI" of the start position. Runs only where one of the system SoundFont
+/// locations exists.
+#[test]
+fn midi_starts_at_its_beginning() {
+    let reports = Reports::default();
+    let (Some(mut mixer), Some(mut whole)) = (
+        mixer_with_soundfont(&reports),
+        mixer_with_soundfont(&reports),
+    ) else {
+        return;
+    };
+    let midi = one_note_midi(1);
+    mixer.apply(play_from(BGM, &midi, (100, 100), 100_000, 0));
+    whole.apply(play(BGM, &midi));
+    let tenth = RATE as usize / 10;
+    let first = frames(&mut mixer, tenth);
+    assert!(peak(&first) > 0.01);
+    assert_eq!(first, frames(&mut whole, tenth));
+    assert_eq!(reports.text(), "");
+}
+
+/// Scenario "Lower and go on".
+#[test]
+fn a_volume_command_lowers_without_a_restart() {
+    let ramp = ramp();
+    let mut mixer = mixer();
+    mixer.apply(play(BGM, &ramp));
+    frames(&mut mixer, 1000);
+    mixer.apply(AudioCommand::Volume {
+        channel: BGM,
+        volume: 50,
+    });
+    let heard = frames(&mut mixer, 1)[0] / ramp_at(1000);
+    assert!((heard - 0.133).abs() < 0.001, "{heard}");
+}
+
+/// Scenario "Nothing plays".
+#[test]
+fn a_volume_command_without_a_voice_does_nothing() {
+    let sound = tone(440.0, 0.5);
+    let mut mixer = mixer();
+    mixer.apply(AudioCommand::Volume {
+        channel: BGS,
+        volume: 50,
+    });
+    mixer.apply(play(BGS, &sound));
+    let mut alone = self::mixer();
+    alone.apply(play(BGS, &sound));
+    assert_eq!(render(&mut mixer, 0.2), render(&mut alone, 0.2));
+}
+
+/// The peak of the music around `seconds` of `out`, a hundredth of a second, more than four
+/// periods of a tone of 440 Hz.
+fn around(out: &[f32], seconds: f32) -> f32 {
+    let frame = (RATE as f32 * seconds) as usize;
+    peak(&out[(frame - 220) * 2..(frame + 220) * 2])
+}
+
+/// A tone of 440 Hz as music at `volume` and its peak before an effect of 1000 Hz and half
+/// a second is played with the return time 1000 ms; then, if `stop_after` is given, the
+/// effect is stopped after that many seconds. Returns the peak before the effect, the
+/// mix while the effect sounds, and the two seconds after the end of the effect.
+fn music_after_an_effect(volume: u8, stop_after: Option<f32>) -> (f32, Vec<f32>, Vec<f32>) {
+    let mut mixer = mixer();
+    mixer.apply(play_with(BGM, &tone(440.0, 0.5), volume, 100));
+    let before = peak(&render(&mut mixer, 0.5));
+    mixer.apply(play_from(
+        AudioChannel::Me,
+        &tone(1000.0, 0.5),
+        (100, 100),
+        0,
+        1000,
+    ));
+    let during = match stop_after {
+        Some(seconds) => {
+            let during = render(&mut mixer, seconds);
+            mixer.apply(stop(AudioChannel::Me));
+            during
+        }
+        None => render(&mut mixer, 0.5),
+    };
+    (before, during, render(&mut mixer, 2.0))
+}
+
+/// Scenarios "One second, measured on the original" and "A stopped effect".
+#[test]
+fn the_music_returns_over_one_second() {
+    for stop_after in [None, Some(0.1)] {
+        let (before, during, after) = music_after_an_effect(100, stop_after);
+        assert!(level(&side(&during, 0), RATE, 440.0) < 0.001);
+        let half = around(&after, 0.5) / before;
+        assert!((half - 0.133).abs() < 0.01, "{stop_after:?}: {half}");
+        let full = peak(&after[RATE as usize * 2..]) / before;
+        assert!((full - 1.0).abs() < 0.001, "{stop_after:?}: {full}");
+        assert!(peak(&after[..RATE as usize / 5]) / before < 0.05);
+    }
+}
+
+/// Scenario "A music at a lower volume".
+#[test]
+fn the_music_returns_to_its_own_volume() {
+    let (before, _, after) = music_after_an_effect(50, None);
+    // The gains of the volumes 25 and 50 against that of 50.
+    let half = around(&after, 0.5) / before;
+    assert!((half - 0.0487 / 0.133).abs() < 0.02, "{half}");
+    let full = peak(&after[RATE as usize * 2..]) / before;
+    assert!((full - 1.0).abs() < 0.001, "{full}");
+}
+
+/// Scenario "A stop without an effect".
+#[test]
+fn a_stop_of_the_effect_channel_without_an_effect_changes_nothing() {
+    let music = tone(440.0, 0.5);
+    let mut mixer = mixer();
+    mixer.apply(play(BGM, &music));
+    let mut alone = self::mixer();
+    alone.apply(play(BGM, &music));
+    assert_eq!(render(&mut mixer, 0.2), render(&mut alone, 0.2));
+    mixer.apply(stop(AudioChannel::Me));
+    assert_eq!(render(&mut mixer, 0.5), render(&mut alone, 0.5));
 }

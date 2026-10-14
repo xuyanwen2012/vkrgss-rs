@@ -69,6 +69,8 @@ fn play(ruby: &Ruby, channel: AudioChannel, args: &[VALUE]) -> HostResult {
             data,
             volume,
             pitch,
+            start: 0,
+            music_return_ms: 0,
         }));
         if let Some(remembered) = remembered(guest, channel) {
             *remembered = Some(description);

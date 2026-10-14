@@ -24,6 +24,8 @@ fn play(data: &[u8]) -> AudioCommand {
         data: data.to_vec(),
         volume: 100,
         pitch: 100,
+        start: 0,
+        music_return_ms: 0,
     }
 }
 

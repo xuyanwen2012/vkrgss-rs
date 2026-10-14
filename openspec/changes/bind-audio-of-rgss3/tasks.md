@@ -11,8 +11,8 @@
 
 ## 3. The protocol and the mixer
 
-- [ ] 3.1 `crates/vkxp-proto`: the two fields of the play command, the volume command, the version one higher, the paragraph on versions in `lib.rs`, the tests (decision 8). Every literal of the play command in the workspace gains `start: 0` and `music_return_ms: 0`, and the binding sends these for every runtime for now; no other expected value of a test changes. Verify: the three scenarios of "Start, return time and volume command of audio"; `cargo test -p vkxp-proto --locked` passes and `cargo build --workspace --all-targets --locked` succeeds.
-- [ ] 3.2 `crates/vkxp-audio`: the start position, the volume command, the return of the music, the pitch from 1 up (decision 9). Verify: the scenarios of "Start position of a play command", "Volume command", "Return of the music after a music effect" and "Volume, pitch, stop and fade"; `cargo test -p vkxp-audio -p vkxp-host --locked` passes with every name of the kept lists, and the scenarios of "Remembered positions" pass unedited.
+- [x] 3.1 `crates/vkxp-proto`: the two fields of the play command, the volume command, the version one higher, the paragraph on versions in `lib.rs`, the tests (decision 8). Every literal of the play command in the workspace gains `start: 0` and `music_return_ms: 0`, and the binding sends these for every runtime for now; no other expected value of a test changes. Verify: the three scenarios of "Start, return time and volume command of audio"; `cargo test -p vkxp-proto --locked` passes and `cargo build --workspace --all-targets --locked` succeeds.
+- [x] 3.2 `crates/vkxp-audio`: the start position, the volume command, the return of the music, the pitch from 1 up (decision 9). Verify: the scenarios of "Start position of a play command", "Volume command", "Return of the music after a music effect" and "Volume, pitch, stop and fade"; `cargo test -p vkxp-audio -p vkxp-host --locked` passes with every name of the kept lists, and the scenarios of "Remembered positions" pass unedited.
 
 ## 4. Audio of RGSS3 in the binding
 

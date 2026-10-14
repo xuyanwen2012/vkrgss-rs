@@ -898,6 +898,8 @@ fn a_game_that_plays_music_runs_headless_without_an_audio_report() {
                     data: b"MThd music".to_vec(),
                     volume: 100,
                     pitch: 100,
+                    start: 0,
+                    music_return_ms: 0,
                 });
             }
             tick(1);

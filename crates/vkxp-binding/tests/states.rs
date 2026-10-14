@@ -307,6 +307,8 @@ fn a_resumed_copy_sends_its_title_its_pointer_its_music_and_a_complete_frame() {
             data: music,
             volume: 80,
             pitch: 110,
+            start: 0,
+            music_return_ms: 0,
         })
     );
     let GuestToHost::Frame(first) = &resumed.received[3] else {
