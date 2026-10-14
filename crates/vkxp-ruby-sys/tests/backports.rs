@@ -8,12 +8,19 @@ use std::sync::OnceLock;
 use common::eval_inspect;
 use vkxp_ruby_sys::{Interpreter, Options};
 
+/// Evaluates in the interpreter all tests of this file share. `$KCODE` is set before the
+/// source is parsed, because a regular expression literal is compiled when it is parsed:
+/// a test that ran before may have left another encoding behind (a pattern with the option
+/// `n` that is refused does), and the tests run in any order.
 fn eval(source: &str) -> Result<String, String> {
     static INTERPRETER: OnceLock<Interpreter> = OnceLock::new();
     let source = source.to_owned();
     INTERPRETER
         .get_or_init(|| Interpreter::start(Options::default()).expect("the interpreter starts"))
-        .run(move |_| eval_inspect(&source))
+        .run(move |_| {
+            eval_inspect("$KCODE = 'U'")?;
+            eval_inspect(&source)
+        })
 }
 
 /// CVE-2013-4164: a digit string of this length overflowed the heap in `ruby_strtod`. The

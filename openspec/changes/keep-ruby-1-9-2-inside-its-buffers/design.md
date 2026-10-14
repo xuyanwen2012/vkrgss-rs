@@ -67,9 +67,23 @@ binding.
 - Ruby 1.8.7 (2026-10-13): `cargo test -p vkxp-ruby-sys --locked` with the same flags in
   `target/fortify187` passes, all 27 test targets. Nothing was found and
   nothing is patched there.
+- An edit outside the scope of this change, found by the gate (2026-10-13):
+  `crates/vkxp-ruby-sys/tests/backports.rs`, a test of Ruby 1.8.7 that this change does not
+  otherwise touch. Its tests share one interpreter and run in any order;
+  `matches_at_the_end_of_the_subject_are_as_before` gave `[nil, 0, nil, 1, 0, 1]` for
+  `[nil, 0, 1, 1, 0, 1]` when `patterns_that_were_read_out_of_bounds_are_errors` had run
+  before it, 7 times in 300 runs of the test binary. The helper `eval` now sets
+  `$KCODE = 'U'` in an evaluation of its own before the source is parsed, since a regular
+  expression literal is compiled when it is parsed; 0 failures in 1000 runs afterwards. No
+  assertion and no expected value changed, nothing is skipped or made serial.
 
 ## Follow-ups
 
 - The fortified run was made on the development machine with GCC and
   `-D_FORTIFY_SOURCE=3`. That the merge gate passes on the CI runner is seen only when
   this branch runs there; nothing is pushed by this flow.
+- Why the encoding state of the 1.8.7 interpreter differs after
+  `patterns_that_were_read_out_of_bounds_are_errors` was not looked for. If a pattern with
+  the option `n` that is refused leaves the encoding of the process changed, a script of a
+  game could see it too; whether the original runtime does the same is a question for a
+  change of its own.
