@@ -1,7 +1,7 @@
 # oracle-harness Specification
 
 ## Purpose
-Defines the developer tool that runs one game in the original RGSS runtime and in vkxp under
+Defines the developer tool that runs one game in the original RGSS runtime and in vkrgss under
 the same conditions and reports how their frames differ.
 
 ## Requirements

@@ -1,7 +1,7 @@
 # embedded-ruby Specification
 
 ## Purpose
-Defines the Ruby 1.8.7 interpreter embedded in vkxp: how it is built from vendored source, what
+Defines the Ruby 1.8.7 interpreter embedded in vkrgss: how it is built from vendored source, what
 is true of it at start-up, and how host code enters and leaves it without corrupting either
 side.
 

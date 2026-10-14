@@ -1,7 +1,7 @@
 # text-rendering Specification
 
 ## Purpose
-Defines how vkxp finds a font for the family names a game asks for and turns a string into
+Defines how vkrgss finds a font for the family names a game asks for and turns a string into
 glyph coverage at a pixel size, including what happens when the requested font or a glyph is
 missing.
 

@@ -1,7 +1,7 @@
 # game-launch Specification
 
 ## Purpose
-Defines how a game is started with the `vkxp` program: its command line, the windowed and
+Defines how a game is started with the `vkrgss` program: its command line, the windowed and
 headless modes, how it ends, the fonts it draws text with, and the tool that provides the
 built-in scripts a game needs.
 

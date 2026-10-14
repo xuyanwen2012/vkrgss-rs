@@ -1,7 +1,7 @@
 # game-files Specification
 
 ## Purpose
-Defines how vkxp finds the files of a game: reading the game configuration file, locating the
+Defines how vkrgss finds the files of a game: reading the game configuration file, locating the
 run-time packages it names, and resolving the paths scripts use to real files on a
 case-sensitive file system.
 
