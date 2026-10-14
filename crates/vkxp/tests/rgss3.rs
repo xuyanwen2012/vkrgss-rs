@@ -907,3 +907,43 @@ fn a_confined_guest_of_vx_ace_writes_below_its_game_directory_only() {
         assert_eq!(written(&game, "in.txt"), "x", "{name}");
     }
 }
+
+// --- Win32API ---------------------------------------------------------------------------------
+
+/// The script of a game that makes `Win32API` objects while it loads, as the games of the
+/// corpus do: of `wininet` and of `user32` with Array and spaced declarations, and of a
+/// library that is a file of the game; it calls some of them and writes their values.
+const WIN32API_AT_LOAD: &str = "
+open = Win32API.new('wininet', 'InternetOpenA', ['p', 'l', 'p', 'p', 'l'], 'l')
+key = Win32API.new('user32', 'GetKeyState', ['i'], 'i')
+metrics = Win32API.new('user32', 'GetSystemMetrics', 'i', 'i')
+blur = Win32API.new('tktk_bitmap', 'Blur', 'n i i i i', 'i')
+error = Win32API.new('Kernel32', 'GetLastError', [], 'l')
+Graphics.update
+values = [open.call('vkxp', 0, nil, nil, 0), key.call(0x09), metrics.call(5),
+          blur.call(Bitmap.new(1, 1).object_id, 1, 2, 3, 4), error.call]
+File.open('win32api.txt', 'w') { |file| file.write(values.inspect) }
+";
+
+/// Requirement "Libraries of Win32API in RGSS3" and "Declarations and count of Win32API in
+/// RGSS3": a game that calls `Win32API` while it loads runs to its end through both
+/// executables.
+#[test]
+fn a_game_of_vx_ace_that_calls_win32api_at_load_runs_to_its_end() {
+    let game = AceGame::new("ace-win32api", "Ace", &[("Main", WIN32API_AT_LOAD)]);
+    fs::write(game.dir().join("tktk_bitmap.dll"), b"").unwrap();
+    let ran = ace(&game, &[]);
+    assert_eq!(ran.output.status.code(), Some(0), "{}", ran.stderr());
+    assert_eq!(written(&game, "win32api.txt"), "[0, 0, 0, 0, 0]");
+    let stderr = ran.stderr();
+    for pair in [
+        "wininet InternetOpenA",
+        "tktk_bitmap Blur",
+        "Kernel32 GetLastError",
+    ] {
+        assert!(
+            stderr.contains(&format!("vkxp: Win32API {pair} is not emulated")),
+            "{stderr}"
+        );
+    }
+}

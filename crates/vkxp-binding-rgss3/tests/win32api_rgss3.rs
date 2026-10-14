@@ -21,6 +21,7 @@ use std::sync::Once;
 use vkxp_binding::RunConfig;
 use vkxp_binding::testing;
 use vkxp_binding::testing::host::{self, Script, with_error_stream};
+use vkxp_proto::{HostToGuest, InputSnapshot};
 use vkxp_vfs::{GameIni, Runtime};
 
 /// The title of the game, 16 bytes as in the measurement.
@@ -212,5 +213,230 @@ fn arrays_spaces_and_v_declare_what_they_say() {
          \"vkxp: Win32API wininet InternetOpenUrl is not emulated and returns 0\\n\
          vkxp: Win32API tktk_bitmap Blur is not emulated and returns 0\\n\
          vkxp: Win32API Kernel32 GetLastError is not emulated and returns 0\\n\"]"
+    );
+}
+
+// --- Parameters -------------------------------------------------------------------------------
+
+/// Scenario "Integer parameters, measured on the original".
+#[test]
+fn an_integer_parameter_is_converted_as_an_unsigned_long() {
+    assert_eq!(
+        eval(&format!(
+            "{CLEAR_KEYS}{OUTCOMES}
+             state = Win32API.new('user32', 'GetKeyState', 'i', 'i')
+             outcomes(proc {{ state.call(nil) }}, proc {{ state.call('a') }},
+                      proc {{ state.call(true).class }}, proc {{ state.call(65.9) == state.call(65) }})"
+        )),
+        "[[TypeError, \"no implicit conversion from nil to integer\"], \
+         [TypeError, \"can't convert String into Integer\"], \
+         [TypeError, \"can't convert true into Integer\"], true]"
+    );
+}
+
+/// Scenario "Pointer parameters, measured on the original".
+#[test]
+fn a_pointer_parameter_takes_a_string_that_is_not_frozen() {
+    assert_eq!(
+        eval(&format!(
+            "{OUTCOMES}
+             get = Win32API.new('user32', 'GetKeyboardState', 'p', 'i')
+             outcomes(proc {{ get.call((\"\\0\" * 256).freeze) }}, proc {{ get.call(1.5) }},
+                      proc {{ get.call(:sym) }}, proc {{ get.call([]) }}, proc {{ get.call(nil) }},
+                      proc {{ get.call(0) }}, proc {{ get.call(4096) }})"
+        )),
+        "[[RuntimeError, \"can't modify frozen string\"], \
+         [TypeError, \"can't convert Float into String\"], \
+         [TypeError, \"can't convert Symbol into String\"], \
+         [TypeError, \"can't convert Array into String\"], 0, 0, 0]"
+    );
+}
+
+/// Scenario "Object ids".
+#[test]
+fn an_object_id_is_taken_by_its_low_32_bits() {
+    assert_eq!(
+        eval(&with_error_stream(
+            "bitmap = Bitmap.new(1, 1)
+             value = Win32API.new('tktk_bitmap', 'InvertColor', 'n', 'i').call(bitmap.object_id)
+             bitmap.dispose
+             value"
+        )),
+        "[0, \"vkxp: Win32API tktk_bitmap InvertColor is not emulated and returns 0\\n\"]"
+    );
+}
+
+/// Scenario "Unsigned, measured on the original", and the bounds of the 64-bit guest.
+#[test]
+fn an_integer_parameter_wraps_to_32_bits_up_to_the_bounds_of_the_guest() {
+    assert_eq!(
+        eval(&format!(
+            "{CLEAR_KEYS}{OUTCOMES}
+             state = Win32API.new('user32', 'GetKeyState', 'i', 'i')
+             outcomes(proc {{ state.call(2**32 - 1) }}, proc {{ state.call(2**64) }},
+                      proc {{ state.call(-(2**63) - 1) }}, proc {{ state.call(2**32 + 0x41) }})"
+        )),
+        "[0, [RangeError, \"bignum too big to convert into `unsigned long'\"], \
+         [RangeError, \"bignum out of range of unsigned long\"], 0]"
+    );
+}
+
+// --- Values -----------------------------------------------------------------------------------
+
+/// Scenario "Exports, measured on the original".
+#[test]
+fn the_export_decides_the_value() {
+    assert_eq!(
+        eval(&format!(
+            "{OUTCOMES}
+             outcomes(*['v', 'p', '', nil, 'x', 'V'].map {{ |export|
+               proc {{ Win32API.new('user32', 'GetSystemMetrics', 'i', export).call(5) }}
+             }})"
+        )),
+        "[0, [ArgumentError, \"NULL pointer given\"], 0, 0, 0, 0]"
+    );
+}
+
+/// Scenario "Signed, measured on the original".
+#[test]
+fn a_held_key_gives_a_negative_value() {
+    let held = Script::new().at_start(HostToGuest::Input(InputSnapshot::EMPTY.with_key(0x0D)));
+    assert_eq!(
+        eval_with(
+            "Graphics.update
+             Input.update
+             state = Win32API.new('user32', 'GetKeyState', 'i', 'i').call(0x0D)
+             async = Win32API.new('user32', 'GetAsyncKeyState', 'i', 'L').call(0x0D)
+             [state < 0, state & 0x80, async < 0, async & 0x8000]",
+            held
+        ),
+        "[true, 128, true, 32768]"
+    );
+}
+
+/// Scenario "Not emulated with p".
+#[test]
+fn a_function_outside_the_table_gives_an_empty_string_for_p() {
+    assert_eq!(
+        eval(&with_error_stream(
+            "value = Win32API.new('user32', 'GetWindowTextA', 'lpi', 'p').call(0, nil, 0)
+             [value, value.encoding.name]"
+        )),
+        "[[\"\", \"ASCII-8BIT\"], \
+         \"vkxp: Win32API user32 GetWindowTextA is not emulated and returns 0\\n\"]"
+    );
+}
+
+/// Scenario "A buffer keeps its label, measured on the original".
+#[test]
+fn a_filled_buffer_keeps_its_length_and_label() {
+    assert_eq!(
+        eval(&format!(
+            "handle = Win32API.new('user32', 'FindWindowA', 'pp', 'l').call('RGSS Player', '{TITLE}')
+             rect = (\"\\0\" * 16).force_encoding('UTF-8')
+             same = rect
+             result = Win32API.new('user32', 'GetClientRect', 'lp', 'i').call(handle, rect)
+             [result, rect.equal?(same), rect.encoding.name, rect.bytesize, rect.unpack('l4')]"
+        )),
+        "[1, true, \"UTF-8\", 16, [0, 0, 544, 416]]"
+    );
+}
+
+// --- Measured calls ---------------------------------------------------------------------------
+
+/// Scenario "Title, measured on the original".
+#[test]
+fn the_title_is_read_with_a_path_and_not_with_a_bare_name() {
+    assert_eq!(
+        eval(
+            "get = Win32API.new('kernel32', 'GetPrivateProfileStringA', 'pppplp', 'l')
+             read = proc do |file|
+               buffer = \"\\0\" * 256
+               length = get.call('Game', 'Title', '', buffer, 255, file)
+               [length, buffer[0, length]]
+             end
+             [read.call('./Game.ini'), read.call('Game.ini'), read.call('.\\\\Game.ini')]"
+        ),
+        format!("[[16, \"{TITLE}\"], [0, \"\"], [16, \"{TITLE}\"]]")
+    );
+}
+
+#[test]
+fn a_bare_profile_name_reads_the_default_and_writes_nothing() {
+    let game = testing::game_dir();
+    fs::write(game.join("Bare.ini"), "[Options]\r\nVolume=80\r\n").unwrap();
+    assert_eq!(
+        eval(
+            "get = Win32API.new('kernel32', 'GetPrivateProfileIntA', 'ppip', 'i')
+             set = Win32API.new('kernel32', 'WritePrivateProfileStringA', 'pppp', 'l')
+             [get.call('Options', 'Volume', 7, 'Bare.ini'), get.call('Options', 'Volume', 7, './Bare.ini'),
+              set.call('Options', 'Volume', '65', 'Bare.ini'), set.call('Options', 'Name', 'a', 'New.ini'),
+              set.call('Options', 'Volume', '65', '.\\\\Bare.ini'), get.call('Options', 'Volume', 7, './Bare.ini')]"
+        ),
+        "[7, 80, 0, 0, 1, 65]"
+    );
+    assert!(!game.join("New.ini").exists());
+}
+
+/// Scenario "Window, measured on the original".
+#[test]
+fn the_window_class_finds_the_game_window_of_544_by_416() {
+    assert_eq!(
+        eval(&format!(
+            "handle = Win32API.new('user32', 'FindWindowA', 'pp', 'l').call('RGSS Player', '{TITLE}')
+             rect = \"\\xff\" * 16
+             Win32API.new('user32', 'GetClientRect', 'lp', 'i').call(handle, rect)
+             [handle != 0, rect.unpack('l4')]"
+        )),
+        "[true, [0, 0, 544, 416]]"
+    );
+}
+
+/// Scenario "Cursor, measured on the original": no other test of this binary calls
+/// `ShowCursor`, so this is the first call of the run.
+#[test]
+fn the_first_show_cursor_0_gives_minus_1() {
+    assert_eq!(
+        eval(
+            "show = Win32API.new('user32', 'ShowCursor', 'i', 'i')
+             [show.call(0), show.call(1)]"
+        ),
+        "[-1, 0]"
+    );
+}
+
+/// Scenario "Text, measured on the original".
+#[test]
+fn text_converts_through_utf_16_to_utf_8_and_shift_jis() {
+    assert_eq!(
+        eval(
+            "to_wide = Win32API.new('kernel32', 'MultiByteToWideChar', 'ilpipi', 'i')
+             to_bytes = Win32API.new('kernel32', 'WideCharToMultiByte', 'ilpipipp', 'i')
+             text = [0xE6, 0x97, 0xA5, 0xE6, 0x9C, 0xAC].pack('C*').force_encoding('UTF-8')
+             wide = \"\\0\" * 16
+             units = to_wide.call(65001, 0, text, -1, wide, 8)
+             [65001, 932].map do |code_page|
+               bytes = \"\\0\" * 16
+               size = to_bytes.call(code_page, 0, wide, -1, bytes, 16, nil, nil)
+               bytes.unpack('C*')[0, size]
+             end.unshift(units)"
+        ),
+        "[3, [230, 151, 165, 230, 156, 172, 0], [147, 250, 150, 123, 0]]"
+    );
+}
+
+/// Scenario "The address trick".
+#[test]
+fn an_address_as_the_source_copies_nothing() {
+    assert_eq!(
+        eval(
+            "bitmap = Bitmap.new(2, 2)
+             buffer = \"\\1\\2\\3\\4\"
+             value = Win32API.new('kernel32', 'RtlMoveMemory', 'pll', 'l')
+               .call(buffer, bitmap.object_id * 2 + 16, 4)
+             bitmap.dispose
+             [value, buffer.unpack('C*')]"
+        ),
+        "[0, [1, 2, 3, 4]]"
     );
 }

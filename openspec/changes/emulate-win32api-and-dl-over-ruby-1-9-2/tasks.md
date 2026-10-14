@@ -6,8 +6,8 @@
 
 ## 2. Conversions, values and the measured calls
 
-- [ ] 2.1 The conversions of the parameters, the values by the export and the buffers that keep their label (decisions 5 to 7). Verify: the scenarios of "Parameters of Win32API in RGSS3" and "Values of Win32API in RGSS3"; the test command of task 1.1.
-- [ ] 2.2 The bare profile name of RGSS3 (decision 8), the tests of the measured calls and of the address trick (decision 9), and the game of decision 12 in `crates/vkxp/tests/rgss3.rs`. Verify: the scenarios of "Measured calls of Win32API in RGSS3"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp -p vkxp-guest-rgss3 -p vkxp-binding-rgss3 --locked` passes.
+- [x] 2.1 The conversions of the parameters, the values by the export and the buffers that keep their label (decisions 5 to 7). Verify: the scenarios of "Parameters of Win32API in RGSS3" and "Values of Win32API in RGSS3"; the test command of task 1.1.
+- [x] 2.2 The bare profile name of RGSS3 (decision 8), the tests of the measured calls and of the address trick (decision 9), and the game of decision 12 in `crates/vkxp/tests/rgss3.rs`. Verify: the scenarios of "Measured calls of Win32API in RGSS3"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp -p vkxp-guest-rgss3 -p vkxp-binding-rgss3 --locked` passes.
 
 ## 3. DL and the shared tests
 

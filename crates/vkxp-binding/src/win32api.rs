@@ -346,13 +346,28 @@ fn profile_path(guest: &Guest, name: &[u8]) -> Option<PathBuf> {
     (!taken).then(|| parent.join(new.file_name().unwrap_or_default()))
 }
 
+/// Where the profile functions find the file `name`, as [`profile_path`] finds it. In a game
+/// of RGSS3 a name without `/` or `\` is a file of the Windows directory, which vkxp does not
+/// have, and is not found: `GetPrivateProfileStringA` with the bare name `"Game.ini"` gives
+/// the default.
+///
+/// Provenance: oracle measurement 2026-10-13, RGSS301 3.0.1.1, API report 5.8. The write was
+/// not measured; it follows the rule that files stay in the game directory.
+fn profile_file(guest: &Guest, name: &[u8]) -> Option<PathBuf> {
+    let bare = !name.iter().any(|&byte| byte == b'/' || byte == b'\\');
+    if bare && guest.runtime.run.runtime == Runtime::Rgss3 {
+        return None;
+    }
+    profile_path(guest, name)
+}
+
 /// The value the section, key and file name arguments name: the first two arguments and the
 /// one at `file`. `None` when the file is missing or outside the game directory, or has no
 /// such key.
 fn profile_value(guest: &Guest, args: &[Arg], file: usize) -> Option<Vec<u8>> {
     let section = c_string(args, 0)?;
     let key = c_string(args, 1)?;
-    let contents = std::fs::read(profile_path(guest, c_string(args, file)?)?).ok()?;
+    let contents = std::fs::read(profile_file(guest, c_string(args, file)?)?).ok()?;
     profile_lookup(&contents, section, key).map(<[u8]>::to_vec)
 }
 
@@ -411,7 +426,7 @@ fn write_profile_string(guest: &mut Guest, args: &mut [Arg]) -> i64 {
     ) else {
         return 0;
     };
-    let Some(path) = profile_path(guest, file) else {
+    let Some(path) = profile_file(guest, file) else {
         return 0;
     };
     let contents = std::fs::read(&path).unwrap_or_default();
