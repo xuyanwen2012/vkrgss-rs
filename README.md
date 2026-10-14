@@ -26,7 +26,7 @@ and shows the frames of a Vulkan compositor in a window, or writes them to files
 |---|---|---|
 | RPG Maker XP (RGSS1) | Supported | Since version 0.1.0 |
 | RPG Maker VX (RGSS2) | Supported | Since version 0.2.0 |
-| RPG Maker VX Ace (RGSS3) | Experimental | Its scripts run; its games end before the title |
+| RPG Maker VX Ace (RGSS3) | Experimental | Its games run; no frame compared with the original yet |
 
 <p align="center">
   <img src="docs/images/legendary-warband-title.png" width="49%" alt="The title screen of Legendary Warband running in vkxp">

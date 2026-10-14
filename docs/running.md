@@ -67,8 +67,8 @@ evaluated as `{0000}`, `{0001}` and so on, `RGSSReset` for F12, and the error re
 form of RGSS3. The guest reads the version of the DLL that `Library` names from the game
 directory, which decides `RGSS_VERSION` and the glyph rule of text, and takes fonts also from
 the `Fonts` directory of each run-time package of the game (`<RTP>/Fonts`), after the game's
-own `Fonts` directory. The classes are those of VX still, so a game made with the standard
-scripts ends with an error before its title screen; [compatibility.md](compatibility.md#rpg-maker-vx-ace)
+own `Fonts` directory. The classes are those of RGSS3; no frame of a game of VX Ace has been
+compared with the original yet. [compatibility.md](compatibility.md#rpg-maker-vx-ace)
 says what runs and what differs. With `--verbose` the run names the package directory, the
 built-in scripts file and the archive.
 

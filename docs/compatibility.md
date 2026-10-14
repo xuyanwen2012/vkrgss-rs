@@ -294,11 +294,9 @@ glyph rule of text follows the DLL by the same table (see *Font and text of VX A
 
 Of the classes, `Window`, `Tilemap`, `Sprite`, `Plane`, `Viewport`, `Font`, the text and
 creation of `Bitmap`, the modules `Graphics`, `Input` and `Audio` and the value classes `Color`,
-`Tone`, `Rect` and `Table` are those of RGSS3, as the sections below say.
-A game made with the standard scripts of VX Ace therefore loads its scripts and its database
-and ends with an error report at its first call of what only RGSS3 has and vkxp does not
-bind yet, before its title screen. A frame it
-draws is wrong where RGSS3 draws otherwise, and no frame was compared with the original.
+`Tone`, `Rect` and `Table` are those of RGSS3, as the sections below say. A game made with
+the standard scripts of VX Ace shows its title screen and its menu and starts a new game; no
+frame of it was compared with the original.
 
 Known differences of the start, each against the measurements of the original:
 

@@ -349,8 +349,8 @@ fn run(
     )?;
     if inputs.runtime == Runtime::Rgss3 {
         tracing::warn!(
-            "support for {} is experimental: its scripts run, with the classes of RPG Maker \
-             VX still, so a game may end with an error before its title screen",
+            "support for {} is experimental: its scripts run with the classes of RGSS3, and \
+             no frame of it has been compared with the original runtime yet",
             inputs.runtime.product()
         );
     }
