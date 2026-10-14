@@ -25,4 +25,4 @@
 
 ## 5. Integration check
 
-- [ ] 5.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0, `python3 -I local/rename/specdeltas.py . openspec/changes/rename-to-vkrgss local/rename/added --check` exits 0, and `openspec validate rename-to-vkrgss --strict` passes.
+- [x] 5.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0, `python3 -I local/rename/specdeltas.py . openspec/changes/rename-to-vkrgss local/rename/added --check` exits 0, and `openspec validate rename-to-vkrgss --strict` passes.
