@@ -8,17 +8,22 @@ Defines the Cargo workspace layout, the dependency-direction and purity rules be
 ### Requirement: Crate layout
 The repository SHALL be a single Cargo workspace containing the crates `vkxp-proto`,
 `vkxp-pixel`, `vkxp-core`, `vkxp-image`, `vkxp-text`, `vkxp-vfs`, `vkxp-ruby-sys`,
-`vkxp-binding`, `vkxp-guest`, `vkxp-guest-main`, `vkxp-compose-ref`, `vkxp-vk`,
-`vkxp-audio`, `vkxp-host` and the binary `vkxp`.
+`vkxp-ruby192-sys`, `vkxp-binding`, `vkxp-binding-rgss3`, `vkxp-guest`, `vkxp-guest-main`,
+`vkxp-compose-ref`, `vkxp-vk`, `vkxp-audio`, `vkxp-host` and the binary `vkxp`.
 
 #### Scenario: Workspace builds from a clean checkout
 - **WHEN** `cargo build --workspace` runs on a clean checkout with the pinned toolchain
 - **THEN** every listed crate compiles without warnings
 
+#### Scenario: The crates of the second interpreter on another target
+- **WHEN** the workspace is built for a target other than `x86_64-unknown-linux-gnu`
+- **THEN** `vkxp-ruby192-sys` and `vkxp-binding-rgss3` build and are empty, and every other crate builds as before
+
 ### Requirement: Guest crates do not depend on host crates
 No guest crate (`vkxp-core`, `vkxp-image`, `vkxp-text`, `vkxp-vfs`, `vkxp-ruby-sys`,
-`vkxp-binding`, `vkxp-guest`, `vkxp-guest-main`) SHALL depend, directly or transitively, on
-a host crate (`vkxp-vk`, `vkxp-audio`, `vkxp-host`).
+`vkxp-ruby192-sys`, `vkxp-binding`, `vkxp-binding-rgss3`, `vkxp-guest`, `vkxp-guest-main`)
+SHALL depend, directly or transitively, on a host crate (`vkxp-vk`, `vkxp-audio`,
+`vkxp-host`).
 
 #### Scenario: Forbidden dependency is rejected
 - **WHEN** a guest crate gains a dependency path to a host crate
@@ -30,6 +35,10 @@ a host crate (`vkxp-vk`, `vkxp-audio`, `vkxp-host`).
 
 #### Scenario: The main of a guest
 - **WHEN** `vkxp-guest-main` gains a dependency path to `vkxp-host`, to `vkxp-vk` or to `vkxp-audio`
+- **THEN** the merge gate fails and names the offending path
+
+#### Scenario: The binding over the second interpreter
+- **WHEN** `vkxp-binding-rgss3` gains a dependency path to `vkxp-host`, to `vkxp-vk` or to `vkxp-audio`
 - **THEN** the merge gate fails and names the offending path
 
 ### Requirement: Core stays pure
@@ -82,8 +91,9 @@ each step took.
 ### Requirement: Host crates do not depend on guest crates
 No host crate (`vkxp-vk`, `vkxp-audio`, `vkxp-host`) and not the reference compositor
 `vkxp-compose-ref` SHALL depend, directly or transitively, on a guest crate (`vkxp-core`,
-`vkxp-image`, `vkxp-text`, `vkxp-vfs`, `vkxp-ruby-sys`, `vkxp-binding`, `vkxp-guest`,
-`vkxp-guest-main`). Only the `vkxp` binary may depend on both sides. As for the other
+`vkxp-image`, `vkxp-text`, `vkxp-vfs`, `vkxp-ruby-sys`, `vkxp-ruby192-sys`, `vkxp-binding`,
+`vkxp-binding-rgss3`, `vkxp-guest`, `vkxp-guest-main`). Only the `vkxp` binary may depend
+on both sides. As for the other
 dependency rules, development-only dependencies do not count.
 
 #### Scenario: Forbidden dependency is rejected
@@ -285,11 +295,12 @@ copier and of the signals.
 - **THEN** every test that passed before passes, none is removed apart from a test of something that no longer exists, and no test that exists in `crates/vkxp/tests/end_to_end.rs` is altered
 
 ### Requirement: The guest role links no interpreter
-`vkxp-guest` SHALL NOT depend, directly or transitively, on `vkxp-ruby-sys` or
-`vkxp-binding`. The executable that links it SHALL give it the function that runs the game.
+`vkxp-guest` SHALL NOT depend, directly or transitively, on `vkxp-ruby-sys`,
+`vkxp-ruby192-sys`, `vkxp-binding` or `vkxp-binding-rgss3`. The executable that links it
+SHALL give it the function that runs the game.
 
 #### Scenario: Interpreter dependency is rejected
-- **WHEN** `vkxp-guest` gains a dependency path to `vkxp-ruby-sys` or to `vkxp-binding`
+- **WHEN** `vkxp-guest` gains a dependency path to `vkxp-ruby-sys`, to `vkxp-ruby192-sys`, to `vkxp-binding` or to `vkxp-binding-rgss3`
 - **THEN** the merge gate fails and names the offending path
 
 ### Requirement: Guest main library
