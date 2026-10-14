@@ -15,7 +15,7 @@ usage: vkxp [GAME_DIR] [OPTIONS]
                             default: $XDG_CONFIG_HOME/vkxp/config.toml
   --no-config               read neither that file nor vkxp.toml in the game directory
   --runtime RUNTIME         the runtime of the game: rgss1 (RPG Maker XP), rgss2 (RPG
-                            Maker VX) or rgss3 (RPG Maker VX Ace, experimental);
+                            Maker VX) or rgss3 (RPG Maker VX Ace);
                             default: what Library and Scripts of Game.ini say
   --rtp NAME=DIR            the directory of the run-time package NAME; repeatable
   --builtin-scripts FILE    the built-in scripts file, made by `cargo xtask extract-rpg`;
@@ -745,7 +745,7 @@ mod tests {
 
     /// Requirement "Supported runtimes say nothing about their state", scenario "Usage".
     #[test]
-    fn the_usage_text_says_that_rgss3_alone_is_experimental() {
+    fn the_usage_text_names_the_runtimes_without_their_state() {
         let lines: Vec<&str> = USAGE
             .lines()
             .skip_while(|line| !line.trim_start().starts_with("--runtime"))
@@ -754,11 +754,8 @@ mod tests {
             .collect();
         let runtime = lines.join(" ");
         assert!(runtime.contains("rgss2 (RPG Maker VX)"), "{runtime}");
-        assert!(
-            runtime.contains("rgss3 (RPG Maker VX Ace, experimental)"),
-            "{runtime}"
-        );
-        assert_eq!(USAGE.matches("experimental").count(), 1);
+        assert!(runtime.contains("rgss3 (RPG Maker VX Ace);"), "{runtime}");
+        assert!(!USAGE.contains("experimental"));
         assert!(USAGE.contains("rgss3 runs in a process"));
     }
 

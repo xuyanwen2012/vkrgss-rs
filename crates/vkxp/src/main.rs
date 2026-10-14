@@ -24,8 +24,7 @@
 //!    exist. The recording of `--replay` is read or the file of `--record` created, the
 //!    random seed is settled, and the game's files are opened, with the encrypted archive
 //!    of the runtime (`Game.rgssad`, `Game.rgss2a`, `Game.rgss3a`) if there is one. A
-//!    failure is a message and status 1, before any window or interpreter exists. A run of
-//!    RPG Maker VX Ace says once that its support is experimental.
+//!    failure is a message and status 1, before any window or interpreter exists.
 //! 3. The game directory becomes the working directory, because scripts write their saves
 //!    with relative names. Paths given on the command line are made absolute first.
 //! 4. SIGVTALRM is blocked while the main thread is still the only one; the library of the
@@ -347,13 +346,6 @@ fn run(
         settings.options.headless,
         inputs.runtime,
     )?;
-    if inputs.runtime == Runtime::Rgss3 {
-        tracing::warn!(
-            "support for {} is experimental: its scripts run with the classes of RGSS3, and \
-             no frame of it has been compared with the original runtime yet",
-            inputs.runtime.product()
-        );
-    }
     // The keyboard maps to the buttons as the original runtime of the game does.
     let keys = settings.keys_of(inputs.runtime).clone();
     let Settings { options, pads, .. } = settings;

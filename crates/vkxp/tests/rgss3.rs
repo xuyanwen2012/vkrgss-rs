@@ -567,25 +567,14 @@ fn the_strings_of_the_archive_may_carry_their_encoding_or_not() {
 
 // --- The state of VX Ace ----------------------------------------------------------------------
 
-/// Requirement "Experimental runtime says so", scenarios "VX Ace" and "XP".
+/// Requirement "Supported runtimes say nothing about their state", scenario "VX Ace".
 #[test]
-fn a_run_of_vx_ace_says_once_that_it_is_experimental() {
-    let game = AceGame::new("ace-experimental", "Ace", &[("Main", "nil")]);
+fn a_run_of_vx_ace_does_not_say_that_it_is_experimental() {
+    let game = AceGame::new("ace-supported", "Ace", &[("Main", "nil")]);
     let ran = ace(&game, &[]);
     ran.assert_success();
     let stderr = ran.stderr();
-    let lines = experimental_lines(&stderr);
-    assert_eq!(lines.len(), 1, "{stderr}");
-    assert!(lines[0].contains("RPG Maker VX Ace"), "{stderr}");
-
-    let xp = Game::new("ace-experimental-xp", "XP", &[("Main", "nil")]);
-    let ran = headless(&xp, &["--guest", "process"]);
-    ran.assert_success();
-    assert!(
-        experimental_lines(&ran.stderr()).is_empty(),
-        "{}",
-        ran.stderr()
-    );
+    assert!(experimental_lines(&stderr).is_empty(), "{stderr}");
 }
 
 // --- The start-up of RGSS3 --------------------------------------------------------------------

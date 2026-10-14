@@ -2,7 +2,7 @@
 
 ## 1. Program
 
-- [ ] 1.1 Remove the warning of an experimental runtime for RGSS3 and the word in the usage message; the tests of the scenarios of `specs/game-launch/spec.md`. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp -p vkxp-guest-rgss3 --locked` passes.
+- [x] 1.1 Remove the warning of an experimental runtime for RGSS3 and the word in the usage message; the tests of the scenarios of `specs/game-launch/spec.md`. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp -p vkxp-guest-rgss3 --locked` passes.
 
 ## 2. Documents, banner and version
 
