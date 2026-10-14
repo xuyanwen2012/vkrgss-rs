@@ -269,14 +269,7 @@ fn options_for_a_runtime_are_the_defaults() {
             script_name,
         } = Options::for_rgss(generation);
         assert_eq!(stack_size, default.stack_size, "generation {generation}");
-        // RGSS3 gives its interpreter no script name (change
-        // `match-the-endings-and-loading-of-rgss3`).
-        let expected = if generation == 3 {
-            ""
-        } else {
-            &default.script_name
-        };
-        assert_eq!(script_name, expected, "generation {generation}");
+        assert_eq!(script_name, default.script_name, "generation {generation}");
     }
 }
 

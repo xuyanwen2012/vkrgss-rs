@@ -323,10 +323,6 @@ with `Marshal` on a `File` by `DataManager`, not with `load_data`.
 
 What the implementation had to do beyond the decisions above, with the reason:
 
-- `crates/vkxp-ruby192-sys/tests/calling.rs`, `options_for_a_runtime_are_the_defaults`,
-  asserted that `Options::for_rgss(3)` has the default script name, the rule this change
-  reverses (decision 6). Its assertion for generation 3 now expects the empty name; those
-  for 1 and 2 are unchanged. No other expected value of an existing test was edited.
 - `GameFiles::data_rgss3` takes the current directory of the process as a second argument,
   so that the crate stays free of global state and its tests can name one. A current
   directory outside the game directory counts as the game directory: the harness of the
@@ -353,6 +349,23 @@ What the implementation had to do beyond the decisions above, with the reason:
   modifier does not catch a `LoadError`, so its test rescues `Exception` explicitly.
 
 ## Follow-ups
+
+Open questions, each leaving its task unticked:
+
+- **`Options::for_rgss(3)` against an existing test (task 1.1, and 6.1 with it).** The test
+  `options_for_a_runtime_are_the_defaults` of `crates/vkxp-ruby192-sys/tests/calling.rs`
+  asserts that `Options::for_rgss(generation)` has the default script name `vkxp` for 1, 2
+  and 3. Decision 6 and the requirement "An interpreter without a script name" ask for an
+  empty name for 3, and the scenario "Default options" asks that the existing tests of the
+  crate pass unedited. Both cannot hold: with the empty name that test fails, and the gate
+  with it. The test is left as it was and `for_rgss(3)` gives the empty name; the owner
+  decides whether the expected value of the test may change.
+- **The encoding of a file that `autoload` loads (task 4.1).** The requirement "Loading code
+  in RGSS3" says that a file `require_relative` and `autoload` load is compiled as UTF-8.
+  Ruby's own `autoload`, which decision 12 calls with the located path, loads the file with
+  the interpreter's loader, which compiles it as US-ASCII, the default of Ruby 1.9.2: a
+  `"測"` in such a file is a `SyntaxError`. Loading it through the prelude would need a hook
+  of the constant lookup that this design does not name, so none was built.
 
 Left out, with the measured source (API report unless named):
 
@@ -389,10 +402,6 @@ Left out, with the measured source (API report unless named):
   for those runtimes, with a test over both interpreters.
 - The name of the box's caption (the game title) has no counterpart: vkxp's modal message
   has none.
-- A file that `autoload` loads is compiled by the interpreter's own loader, which reads it
-  as US-ASCII, the default of Ruby 1.9.2, and not as UTF-8 as `require` of the prelude does.
-  Loading it through the prelude would need a hook of the constant lookup that this
-  design does not name.
 - The opening comment of `prelude_shared.rb` still says that it is evaluated after
   `prelude_rgss3.rb`; the file is outside this change.
 - `load_data` after `Dir.chdir` to a directory outside the game directory looks from the
