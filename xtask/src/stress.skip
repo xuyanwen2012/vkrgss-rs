@@ -18,3 +18,12 @@
 suites-1.9.2 ruby/test_integer_comb.rb
 suites-1.9.2 ruby/test_m17n_comb.rb
 suites-1.9.2 ruby/test_yield.rb
+
+# The collector stress of Ruby 1.9.2, step `suites-1.9.2` and the stressed run of the
+# workspace tests: `test_status_and_stop_p` kills a sleeping thread and reads its state at
+# once, `["aborting", false]`. Under `GC.stress = true` a tick of the timer thread can come
+# between the two calls and let the killed thread run, which then reads as stopped; it
+# failed so in two runs of the merge gate on 2026-10-13 while other work loaded the machine,
+# once with the C source of `main`, and passed alone. A moment of scheduling, no lost value;
+# the file runs it without the stress.
+suites-1.9.2 ruby/test_thread.rb#test_status_and_stop_p

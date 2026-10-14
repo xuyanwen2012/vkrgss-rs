@@ -58,7 +58,7 @@ the interpreter behave as vkxp embeds it. None changes what a script computes.
 
 - File: `thread_pthread.c`
 - Patch: `patches/lazy-timer-thread.patch`
-- Patched SHA-256: `bbc3d12cd81578209e7535503cd9e19a15696a925eaa155399444799aa062569`
+- Patched SHA-256: `d145c6e75822737d96b0956b79862232b88857ca86e6d89937bda1ba8f58bdf0`
 - Reason: the release starts a timer thread in `ruby_init`, a thread of the process that
   the host did not create and that wakes every 10 ms. With `ruby_vkxp_lazy_timer_thread` set
   before `ruby_init`, `rb_thread_create_timer_thread` creates no thread while the main thread
@@ -152,7 +152,7 @@ the interpreter behave as vkxp embeds it. None changes what a script computes.
 
 - File: `thread_pthread.c`
 - Patch: `patches/host-stack-limit.patch`
-- Patched SHA-256: `bbc3d12cd81578209e7535503cd9e19a15696a925eaa155399444799aa062569`
+- Patched SHA-256: `d145c6e75822737d96b0956b79862232b88857ca86e6d89937bda1ba8f58bdf0`
 - Reason: applies after patch 4. `ruby_init_stack` takes the size of the machine stack
   from `RLIMIT_STACK`, which describes the main thread of the process. vkxp runs the
   interpreter on a thread it creates: with a limit larger than that thread's stack a deep
@@ -180,7 +180,7 @@ the interpreter behave as vkxp embeds it. None changes what a script computes.
 
 - File: `thread_pthread.c`
 - Patch: `patches/thread-wakeup-signal-with-first-thread.patch`
-- Patched SHA-256: `bbc3d12cd81578209e7535503cd9e19a15696a925eaa155399444799aa062569`
+- Patched SHA-256: `d145c6e75822737d96b0956b79862232b88857ca86e6d89937bda1ba8f58bdf0`
 - Reason: applies after patches 4 and 12, and belongs to patch 4. The interpreter wakes
   a Ruby thread that blocks by sending it SIGVTALRM (`ubf_select`), for which
   `Init_native_thread` installs an empty handler. vkxp puts the signal dispositions of the
@@ -208,3 +208,19 @@ the interpreter behave as vkxp embeds it. None changes what a script computes.
   size with the object. The name and its terminator are now copied with `memcpy` of their
   true length, which is our own correction and not taken from a later release. The result
   of `join_path` is unchanged.
+
+## 16. timer-thread-in-a-copy
+
+- File: `thread_pthread.c`
+- Patch: `patches/timer-thread-in-a-copy.patch`
+- Patched SHA-256: `d145c6e75822737d96b0956b79862232b88857ca86e6d89937bda1ba8f58bdf0`
+- Reason: applies after patches 4, 12 and 14; it is numbered after 15, which touches another file. A copy of the process made by `fork` has no
+  timer thread, and `rb_thread_reset_timer_thread`, which the interpreter calls in its own
+  child and vkxp in a copy that is a state, only forgets the thread. The lock and the
+  condition variable of the timer thread stay as that thread left them in the copied
+  process, which waits on the condition variable or holds the lock at any moment. The timer
+  thread the copy starts for its next script thread then left its loop at once, at a wakeup
+  that was not a timeout, and a busy main thread of the copy never gave way to the new
+  thread: a test of a copy of the process showed it once in a run of the workspace tests
+  under load. `native_reset_timer_thread` makes both afresh. After the timer thread was
+  stopped and joined, its other caller, they are free and nothing changes.

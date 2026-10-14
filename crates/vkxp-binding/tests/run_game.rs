@@ -720,6 +720,8 @@ fn a_picture_a_script_wrote_is_loaded() {
            File.open('Save/1.cdat', 'wb') {{ |file| file.write(bytes) }}
            bitmap = Bitmap.new('Save/1.cdat')
            $vkxp_written << bitmap.width << bitmap.height
+           # The guest is shared with the tests that count its bitmaps.
+           bitmap.dispose
          end",
         host::ruby_literal(&picture.to_string_lossy())
     );

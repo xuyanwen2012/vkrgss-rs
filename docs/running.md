@@ -67,7 +67,7 @@ evaluated as `{0000}`, `{0001}` and so on, `RGSSReset` for F12, and the error re
 form of RGSS3. The classes are those of VX still, so a game made with the standard scripts
 ends with an error before its title screen; [compatibility.md](compatibility.md#rpg-maker-vx-ace)
 says what runs and what differs. With `--verbose` the run names the package directory, the
-built-in scripts file, the archive and the script archive with its size.
+built-in scripts file and the archive.
 
 ### The built-in scripts
 

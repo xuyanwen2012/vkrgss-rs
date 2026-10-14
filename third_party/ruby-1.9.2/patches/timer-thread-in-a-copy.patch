@@ -1,0 +1,16 @@
+--- a/thread_pthread.c
++++ b/thread_pthread.c
+@@ -869,6 +869,13 @@
+ native_reset_timer_thread(void)
+ {
+     timer_thread_id = 0;
++    /* vkxp: in a copy of the process made by fork the lock and the condition variable of
++     * the timer thread are as that thread left them in the copied process, which waits on
++     * the condition variable or holds the lock at any moment. The timer thread of the copy
++     * would leave its loop at a wakeup that is not a timeout, or wait for ever; both are
++     * made afresh for it. After the timer thread was stopped they are free anyway. */
++    native_mutex_initialize(&timer_thread_lock);
++    native_cond_initialize(&timer_thread_cond);
+ }
+ 
+ #ifdef HAVE_SIGALTSTACK

@@ -34,10 +34,11 @@ unsafe extern "C" {
 }
 
 /// Makes script threads work in a copy of the process that `fork` has just made. The timer
-/// thread of the copied process does not exist in the copy; this forgets it, and the
-/// interpreter then starts one when a script next creates a thread (patch
-/// `lazy-timer-thread`). To be called in the copy on the interpreter thread, which is the
-/// one thread a copy has. Nothing changes when no script ever made a thread.
+/// thread of the copied process does not exist in the copy; this forgets it and makes its
+/// lock and condition variable afresh (patch `timer-thread-in-a-copy`), and the interpreter
+/// then starts one when a script next creates a thread (patch `lazy-timer-thread`). To be
+/// called in the copy on the interpreter thread, which is the one thread a copy has.
+/// Nothing changes when no script ever made a thread.
 pub fn restart_thread_timer() {
     // SAFETY: called on the interpreter thread, as the interpreter itself calls it after a
     // `fork`; it clears one variable that only that thread reads.

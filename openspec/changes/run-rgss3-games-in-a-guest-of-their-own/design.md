@@ -505,8 +505,9 @@ Sections are those of the API report unless another report is named.
 - `require` and `load` as on the original, `require_relative`, `autoload`: 0, row
   "kernel"; V0 report 8.
 - Processes: `IO.read` and its family with a command, `Process.daemon`: 5.7.
-- Script threads: stopping the timer thread before a copy (the study, 5b, rule 2); how
-  often a thread runs between frames (V0 report 8).
+- Script threads: how often a thread runs between frames (V0 report 8). Stopping the timer
+  thread before a copy (the study, 5b, rule 2) is not needed since patch 15 (see "Found
+  while implementing").
 - An option, variable or key that names the guest executable, for packagers.
 - A guest on a thread for RGSS3 (the study, option B).
 
@@ -531,6 +532,35 @@ Sections are those of the API report unless another report is named.
   `cfg` on the target; no other target is installed on the machine of this change, so the
   scenario was not built there. `vkxp-guest-main-rgss3` and `vkxp-guest-rgss3` were built
   with the `cfg` passed by hand (task 3.2).
+- *The timer thread of a copy* (a recorded patch, as task 5.1 allows for a fault of a copy
+  of the process). The second run of the gate failed in the scenario "A busy main thread
+  after a copy": in the copy the new thread did not run within thirty seconds. A copy keeps
+  the lock and the condition variable of the timer thread as the timer thread of the copied
+  process left them, waiting on the condition variable; the timer thread of the copy left
+  its loop at a wakeup that was not a timeout, and nothing preempted the main thread. Patch
+  15 of `third_party/ruby-1.9.2/PATCHES.md`, `timer-thread-in-a-copy`, makes both afresh in
+  `rb_thread_reset_timer_thread`, which `restart_thread_timer()` calls. The two tests of a
+  thread after a copy then passed 30 of 30 runs under load. This also covers the timer
+  thread that holds its lock at the moment of the copy, which the study inferred (the
+  follow-up "stopping the timer thread before a copy" below is answered by it). It is the
+  one change under `third_party/`.
+- *A race of two tests of `run_game.rs` of `vkxp-binding`.* The first run of the gate
+  failed in `a_reset_request_starts_the_scripts_over`, which counts the bitmaps of the
+  guest the tests of the file share after its game: `a_picture_a_script_wrote_is_loaded`,
+  run in parallel, left its bitmap alive, and its game ran between the two calls. Under
+  load the test failed in 8 of 40 runs on this branch and in none of 40 on `main`, which
+  leaves the same bitmap (the order of the two tests is a matter of timing). The script of
+  the second test now disposes its bitmap; no expected value changed, and the first test
+  passed 40 of 40 runs under the same load.
+- *`test_thread.rb` under stress.* The first and the third run of the gate failed in the
+  stressed selection of `vkxp-ruby192-sys`, in `test_status_and_stop_p` of Ruby's own suite:
+  it kills a sleeping thread and reads its state at once, and a thread that was `"aborting"`
+  read `true` for `stop?`. That test executable is built from the vendored C alone, which
+  was that of `main` in the first run; the file passed in five runs of the selection alone,
+  while the gate runs shared the machine with the gate of another flow (load average 15 to
+  18). A tick of the timer thread under `GC.stress` between the two calls is a moment of
+  scheduling, no lost value, so the method is a line `suites-1.9.2` of
+  `xtask/src/stress.skip` with that reason; `tests/upstream.rs` runs it without the stress.
 - *The banner of `README.md`.* The picture `docs/images/banner.jpg` says that VX Ace is
   planned, and its alternative text says what the picture says. The picture is the owner's;
   a new one is a follow-up.
@@ -584,6 +614,38 @@ program then makes its socket directory in the temporary directory, as the tests
 
   This is fact 1: `Tone.new` without arguments, the first call that only RGSS3 has.
   Nothing was changed in the classes to get further.
+
+### The gate (task 8.1)
+
+`VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 on this branch, on the source
+of its last commit before this record and one sentence of `docs/running.md` were written
+(after them `openspec validate --all`, the test of the links of the documents and the
+format check passed again); the first three runs failed as "Found while implementing" says. `main`
+(`a5045d6`) was run in a worktree of its own right after, with a build directory that held
+part of a build. Both runs shared the machine with the gate of another flow (load average
+15 to 20), so a difference of a minute is noise:
+
+| Step | `main` (`a5045d6`) | this change |
+|---|---|---|
+| `fmt` | 1.6 s | 0.9 s |
+| `clippy` | 47.0 s | 0.4 s |
+| `test` | 510.3 s | 504.3 s |
+| `test-unvalidated` | 160.8 s | 165.0 s |
+| `doc` | 6.1 s | 1.6 s |
+| `openspec` | 2.2 s | 0.5 s |
+| all | 728 s | 673 s |
+
+`clippy` of `main` compiled what its build directory lacked, that of this change nothing.
+What this change adds to `test` is the binaries of `vkxp-guest-main-rgss3` and
+`vkxp-guest-rgss3`, the six test files of `vkxp-binding-rgss3` of the start of RGSS3 (well
+under a second together), the new tests of the interpreter crates, and `tests/rgss3.rs` of
+the program, about 5 s once built.
+
+Every name of the kept lists of `local/` is listed again, apart from the two tests of
+`refuse_rgss3` and four of the eight tests of the refusal in `end_to_end.rs`, whose
+successors in `rgss3.rs` carry other names (the other four kept theirs). The crates
+`vkxp-core`, `vkxp-proto`, `vkxp-host`, `vkxp-vk`, `vkxp-audio` and `vkxp-guest` have no
+change; `third_party/` holds patch 15 alone.
 
 ### Follow-ups: the changes that follow
 
