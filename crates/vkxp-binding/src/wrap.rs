@@ -157,6 +157,8 @@ pub(crate) enum Owner {
     PlaneColor(PlaneId),
     PlaneTone(PlaneId),
     WindowCursorRect(WindowId),
+    /// The tone of a window of RGSS3.
+    WindowTone(WindowId),
 }
 
 /// A value that can be a property of a scene element.
@@ -195,6 +197,9 @@ impl Property for Tone {
             }
             Owner::PlaneTone(id) => {
                 let _ = scene.plane_mut(id).map(|plane| plane.tone = self);
+            }
+            Owner::WindowTone(id) => {
+                let _ = scene.window_mut(id).map(|window| window.set_tone(self));
             }
             _ => {}
         }

@@ -7,8 +7,8 @@
 
 ## 2. Tone and the calls of the scene
 
-- [ ] 2.1 `Owner::WindowTone`, the window's `Tone` object, `tone` and `tone=` (decision 4). Verify: the scenarios of "Window tone in RGSS3" and all of "Window construction in RGSS3"; the same test command.
-- [ ] 2.2 Tests of the assignments as calls (decision 3); no code is expected beyond what the tasks before made. Verify: the scenarios of "Assignments of a window in RGSS3 are calls of the scene"; the same test command; `git diff --stat` against the start of the change names no file of `crates/vkxp-core`.
+- [x] 2.1 `Owner::WindowTone`, the window's `Tone` object, `tone` and `tone=` (decision 4). Verify: the scenarios of "Window tone in RGSS3" and all of "Window construction in RGSS3"; the same test command.
+- [x] 2.2 Tests of the assignments as calls (decision 3); no code is expected beyond what the tasks before made. Verify: the scenarios of "Assignments of a window in RGSS3 are calls of the scene"; the same test command; `git diff --stat` against the start of the change names no file of `crates/vkxp-core`.
 
 ## 3. Disposal, faults and the method list
 

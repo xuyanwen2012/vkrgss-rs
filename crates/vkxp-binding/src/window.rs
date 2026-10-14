@@ -11,14 +11,15 @@
 
 use std::ffi::CStr;
 
-use vkxp_core::{Scene, SceneError, ViewportId, WindowCall, WindowId};
+use vkxp_core::{Scene, SceneError, Tone, ViewportId, WindowCall, WindowId};
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{HostResult, Raise, Raised, Ruby};
 use vkxp_vfs::Runtime;
 
+use crate::color::{tone_of, tone_set};
 use crate::element::{self, field, kept, object, reader, writer};
 use crate::rect::{rect_arg, rect_of, rect_set};
-use crate::wrap::{self, Owner};
+use crate::wrap::{self, Owned, Owner};
 use crate::{bitmap, rb};
 
 /// The instance variables that hold the window's `Bitmap` objects, or `nil`.
@@ -26,6 +27,8 @@ const WINDOWSKIN: &CStr = c"windowskin";
 const CONTENTS: &CStr = c"contents";
 /// The instance variable that holds the window's own `Rect` object.
 const CURSOR_RECT: &CStr = c"cursor_rect";
+/// The instance variable that holds the own `Tone` object of a window of RGSS3.
+const TONE: &CStr = c"tone";
 
 /// Creates the window of `recv` with `create` and its cursor rectangle.
 fn create(
@@ -84,6 +87,9 @@ fn initialize_rgss3(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
         Ok(())
     })?;
     keep_cursor_rect(ruby, recv, id)?;
+    let tone = element::operate(ruby, |guest| Ok(guest.scene.window(id)?.tone()))?;
+    let tone = tone_of(ruby, tone, Owner::WindowTone(id))?;
+    rb::ivar_set(ruby, recv, TONE, tone)?;
     let contents = bitmap::new_blank(ruby, 1, 1)?;
     set_contents(ruby, recv, &[contents])?;
     Ok(recv)
@@ -161,6 +167,27 @@ object!(
     rect_arg,
     rect_set
 );
+kept!(tone, WindowId, TONE);
+
+/// `tone = tone` of RGSS3: copies the values of a `Tone` into the window's own object.
+/// Anything else raises `TypeError` in the words of the original runtime, `can't convert
+/// NilClass into Tone`.
+///
+/// Provenance: oracle measurement 2026-10-13, RGSS300 version 3.0.0.1 and RGSS301 version
+/// 3.0.1.1, `ace-v1-window-REPORT.md` section "The class".
+fn set_tone(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    element::live::<WindowId>(ruby, recv)?;
+    let tone = wrap::find::<Owned<Tone>>(ruby, args[0]).ok_or_else(|| {
+        rb::wrong_type(ruby, args[0], |class| {
+            format!("can't convert {class} into Tone")
+        })
+    })?;
+    let tone = tone.get().value();
+    let own = rb::ivar_get(ruby, recv, TONE)?;
+    tone_set(ruby, own, tone)?;
+    Ok(args[0])
+}
+
 field!(stretch, set_stretch, WindowId, window, window_mut, stretch: bool);
 reader!(active, WindowId, |guest, id| guest.scene.window(id)?.active);
 called!(set_active, Active: bool);
@@ -260,6 +287,8 @@ pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
             rb::method(ruby, class, c"padding_bottom=", 1, set_padding_bottom)?;
             rb::method(ruby, class, c"arrows_visible", 0, arrows_visible)?;
             rb::method(ruby, class, c"arrows_visible=", 1, set_arrows_visible)?;
+            rb::method(ruby, class, c"tone", 0, tone)?;
+            rb::method(ruby, class, c"tone=", 1, set_tone)?;
         }
     }
     rb::method(ruby, class, c"update", 0, update)?;
