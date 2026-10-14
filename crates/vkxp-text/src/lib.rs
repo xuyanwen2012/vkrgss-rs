@@ -105,10 +105,24 @@
 //! PLACEHOLDER: the decrement in the choice of pixels per em is Wine's; it is confined to
 //! `LineBox::pixels_per_em` in `line_box.rs`.
 //!
-//! Each advance is rounded to a whole pixel at that pixels per em the way FreeType rounds
-//! it. A string's width is the sum of its characters' advances plus the amount by which the
+//! Advances, overhangs, the average width and the glyph images follow the engine's
+//! [`MetricRules`], which [`TextEngine::set_metric_rules`] sets apart from the mask rules.
+//! With the plain rule, the default, each advance is rounded to a whole pixel at that pixels
+//! per em the way FreeType rounds it, the average width is the OS/2 `xAvgCharWidth` scaled
+//! and rounded, and glyphs are not hinted. With the rule of RGSS3 each glyph is hinted at
+//! that pixels per em as Wine's FreeType hints it for an anti-aliased target
+//! ([`TextEngine::hinting_engine`]: the automatic hinter for a TrueType font without `fpgm`
+//! whose `prep` is at most 7 bytes, the font's own engine otherwise), and GDI's answers under
+//! Wine are taken from the hinted glyph: the hinted advance rounded up, a full-width glyph of
+//! a font whose panose says monospaced twice the scaled average width, the overhangs from the
+//! control box of the hinted outline (on whole pixels, or for a synthesised bold that of the
+//! emboldened outline as it is, its corners slanted for a synthesised italic), the average
+//! width `MulFix(xAvgCharWidth, MulDiv(ppem, 65536, upm))`, and the glyph images rasterised
+//! from the hinted outline. Pixels per em and text heights are the same with both rules.
+//!
+//! A string's width is the sum of its characters' advances plus the amount by which the
 //! first glyph reaches left of the pen (its left overhang); an empty string measures 0 by 0.
-//! There is no kerning, shaping or hinting. A mask is as high as the text and holds the
+//! There is no kerning or shaping. A mask is as high as the text and holds the
 //! advances and the overhangs of the first and the last glyph; other ink beyond it is
 //! clipped. [`TextEngine::rasterize_run`] sets a string with advances of the caller and
 //! glyphs condensed horizontally, which is how text is squeezed into a narrow rectangle.

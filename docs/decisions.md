@@ -23,6 +23,11 @@ The change `run-rgss3-games-in-a-guest-of-their-own` added the crates `vkxp-gues
 and `vkxp-guest-rgss3` to the table of crates, and "The guest executable and the start of
 RGSS3" under "VX Ace" on 2026-10-13.
 
+The change `measure-text-as-gdi-does-in-rgss3` replaced, on 2026-10-14, the items on the
+advance, the overhangs and synthesised styles of "What stands for the answers of GDI" under
+"Text and bitmaps of RGSS3", and added the items on the hinting engine, the average width,
+the glyph images and why RGSS1 and RGSS2 keep their advances.
+
 ## Goal and scope
 
 - vkxp is a from-scratch runtime for the games of RPG Maker XP, VX and VX Ace, built to a
@@ -373,20 +378,49 @@ repository). The first decision may be overruled by the owner.
   holds layout, advances, placement and blending to the original, and supplies itself what
   GDI answers there. All of these were Wine's answers in the measurement; none was measured
   on Windows.
-  - The advance of a glyph (`gmCellIncX`): the advance of the face at the whole pixels per
-    em, rounded as FreeType rounds it.
+  - The glyphs GDI measures: each glyph hinted at the whole pixels per em as Wine's
+    FreeType hints it for an anti-aliased target without load flags, run by `skrifa`. The
+    engine is FreeType's choice: the automatic hinter for a TrueType font without `fpgm`
+    whose `prep` is at most 7 bytes (VL Gothic), the font's own engine otherwise (the
+    TrueType interpreter for VL PGothic, the PostScript hinter for CFF). `skrifa`'s own
+    choice takes the interpreter for any `prep` and is not used. Measured: the rule below
+    gives all 28392 values of the `text_size` table of VL Gothic and VL PGothic, sizes 6 to
+    96 in four styles, where the unhinted advances gave 22658.
+  - The advance of a glyph (`gmCellIncX`): the hinted advance rounded up to whole pixels.
+    In a font whose OS/2 panose proportion is monospaced (9), with `a = xAvgCharWidth` and
+    `s = MulDiv(ppem, 65536, upm)`, a glyph whose advance equals `MulFix(2 a, s)` is
+    `2 MulFix(a, s)` wide, as Wine's GDI makes it (`あ` of VL Gothic 18 at size 24, where
+    the hinted advance is 19).
   - The left-bearing correction: the left overhang of the first glyph. The original also
     moves the pen when a later glyph would start left of column 0; vkxp does not. Accepted
     limit.
   - `tmHeight` and `tmAscent`: the rounded ascent plus the rounded descent, and the rounded
     ascent, at that pixels per em. The decrement in the choice of pixels per em stays a
     placeholder of Wine.
-  - The right overhang of the last glyph: the glyph's box against its advance.
+  - The box of a glyph (`gmptGlyphOrigin.x`, `gmBlackBoxX`): the control box of the hinted
+    outline on whole pixels outwards. The left overhang of the first glyph is minus its left
+    edge, the right overhang of the last glyph its right edge beyond its advance, each when
+    positive.
   - Bold without a bold face: every advance one pixel wider. The original adds 1 per UTF-16
     unit and vkxp 1 per character, which is the same inside the Basic Multilingual Plane;
-    outside it, accepted limit.
-  - Italic without an italic face: the regular advances and the overhangs of the slanted
-    box.
+    outside it, accepted limit. The box is that of the hinted outline after vkxp's
+    emboldening, not on whole pixels; the strength of the emboldening stays a placeholder of
+    Wine's.
+  - Italic without an italic face: the regular advances, and the four corners of the box
+    slanted by `x + y / 4`, the left edge rounded down and the right edge rounded up.
+  - The average character width (`tmAveCharWidth`): `MulFix(xAvgCharWidth, MulDiv(ppem,
+    65536, upm))`, at least 1, plus 1 for a synthesised bold (9 for VL Gothic at size 24).
+    In RGSS3 it enters only the squeeze.
+  - The glyph images: rasterised from the same hinted outlines, emboldened, slanted and
+    condensed as before, so that ink lies inside the box and the pen places it as GDI does.
+    The shapes still differ from GDI's.
+  - RGSS1 and RGSS2 keep the unhinted advances of the face in whole pixels and their
+    box model, although the rule is Wine's GDI and so would hold under Wine for them too:
+    for the fonts they were measured with it changes no value (Noto Sans CJK SC is a CFF
+    font, whose hinter changes no advance beyond that rounding; the hinted advances of
+    Liberation Sans equal the rounded ones at every size from 4 to 80 pixels per em). A
+    font that FreeType auto-hints or that is monospaced by its panose may give other widths
+    under Wine in RGSS1 and RGSS2; that needs a measurement of its own.
   - The 65 levels of coverage: the coverage `c` of the rasteriser, 0 to 255, becomes the
     level `c * 65 / 256`, and the mask holds `trunc(level * 255 / 64)`. The second step is
     measured; the first is a placeholder for GDI's own 65-level answer.

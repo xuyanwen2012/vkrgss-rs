@@ -218,6 +218,14 @@ the digits of VL Gothic are 10 pixels in both rules at size 24.
   as `f32` pixels from `skrifa`; multiply by 64 and round to the nearest integer before
   rounding to whole pixels (they are exact multiples of 1/64).
 - The slant of decision 4 in 26.6: `x + MulFix(y, 0x4000)`.
+- As built: the choice of decision 2 is public as `HintingEngine` and
+  `TextEngine::hinting_engine`, which the scenarios of the engine choice test. Per-glyph
+  hinted advances are cached by face, pixels per em and glyph (the style adds only the
+  pixel of a synthesised bold, which is added after the cache). Where `skrifa` cannot make a
+  hinting instance (a program of the font fails), the glyph is drawn unhinted and its
+  advance rounded, as `skrifa` does for an instance whose programs turn hinting off; where a
+  glyph cannot be drawn at all, it keeps the plain advance. A hinted point sequence whose
+  length differs from the unhinted one fails a debug assertion, so the tests show it.
 - The VL Gothic table test after the merge (not a flow task):
   `VKXP_RGSS3_FONTS=/home/doremy/Desktop/rgss/ref/ace/rtp/Fonts cargo test -p vkxp-text
   --locked --test rgss3_metrics`, then `cargo xtask oracle` on Crysalis with `--font` as

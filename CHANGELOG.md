@@ -49,6 +49,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A game of VX Ace no longer ends with the message that VX Ace is planned. `--guest thread`
   with such a game ends the run with a message that names `--guest process`.
 
+### Fixed
+
+- RPG Maker VX Ace (RGSS3): text is measured and placed from glyphs hinted as Wine's
+  FreeType hints them, so that its widths are those of the original runtime.
+
 ## [0.2.0] - 2026-10-13
 
 ### Added

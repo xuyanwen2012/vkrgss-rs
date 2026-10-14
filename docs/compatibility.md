@@ -677,6 +677,9 @@ those of VX.
   neither the outline nor the shadow. The glyph masks are those of the DLL the game ships:
   where glyphs overlap, a glyph of a DLL 3.0.0.x replaces earlier values over its whole box,
   and one of every other DLL only where it has ink.
+- Text is measured and placed from glyphs hinted as Wine's FreeType hints them: the
+  advances, the overhangs and the placement of the glyphs follow the hinted glyphs, and the
+  glyph shapes still differ from those of the original.
 - `Bitmap.new(width, height)` has no limit of 4194304 pixels, and a negative height is
   taken by its size: `Bitmap.new(10, -5)` is 10 by 5.
 - The methods of `Bitmap` that take several argument counts word a wrong count with the

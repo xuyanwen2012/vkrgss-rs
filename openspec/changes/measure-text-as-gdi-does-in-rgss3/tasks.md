@@ -13,7 +13,7 @@
 
 ## 3. Documents
 
-- [ ] 3.1 `docs/decisions.md`, `docs/compatibility.md` and `CHANGELOG.md` (design decision 9); the crate documentation of `vkxp-text` in `src/lib.rs` ("Metrics") and the documentation of `crates/vkxp-guest-main/src/font.rs` where it describes the backend of a game. Verify: the scenarios of `specs/supported-runtimes/spec.md`; the text names nothing that the code does not do; `git diff --stat` against the start of the change names no file under `docs/` but those two; `cargo doc -p vkxp-text --no-deps` has no warning.
+- [x] 3.1 `docs/decisions.md`, `docs/compatibility.md` and `CHANGELOG.md` (design decision 9); the crate documentation of `vkxp-text` in `src/lib.rs` ("Metrics") and the documentation of `crates/vkxp-guest-main/src/font.rs` where it describes the backend of a game. Verify: the scenarios of `specs/supported-runtimes/spec.md`; the text names nothing that the code does not do; `git diff --stat` against the start of the change names no file under `docs/` but those two; `cargo doc -p vkxp-text --no-deps` has no warning.
 
 ## 4. Integration check
 
