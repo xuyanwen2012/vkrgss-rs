@@ -296,6 +296,11 @@ Facts that decide the design:
   in the document's own words. `docs/running.md`, "Audio": the start position, the return
   of the music, and that the position a script reads follows frames. `CHANGELOG.md` under
   "Unreleased" (created if absent).
+- Edit outside the scope: the branch this flow started from did not compile the test
+  `crates/vkxp-binding-rgss3/tests/reset_rgss3.rs`, which compared a message with
+  `GuestToHost::Freeze` after that message gained its rule. The comparison became a
+  `matches!` with `GuestToHost::Freeze { .. }`, one line, so that the kept lists of tests
+  could be taken and the gate can pass.
 
 ## Risks
 

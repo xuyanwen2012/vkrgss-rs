@@ -2,7 +2,7 @@
 
 ## 1. The lookup order of RGSS3
 
-- [ ] 1.1 Before anything changes, keep the lists of tests under `local/` as the implementation notes of `design.md` say. Add the kind for the audio of a game of RGSS3 to `crates/vkxp-vfs/src/files.rs` (decision 10) with its tests; `FileKind::Audio` and every existing test stay as they are. Verify: the seven scenarios of "Extension search"; `cargo test -p vkxp-vfs --locked` passes with every name of the kept list.
+- [x] 1.1 Before anything changes, keep the lists of tests under `local/` as the implementation notes of `design.md` say. Add the kind for the audio of a game of RGSS3 to `crates/vkxp-vfs/src/files.rs` (decision 10) with its tests; `FileKind::Audio` and every existing test stay as they are. Verify: the seven scenarios of "Extension search"; `cargo test -p vkxp-vfs --locked` passes with every name of the kept list.
 
 ## 2. The probe and the position model
 

@@ -18,6 +18,9 @@ pub enum FileKind {
     Image,
     /// Music or a sound: searched in the game directory and the run-time packages.
     Audio,
+    /// Music or a sound of a game of RGSS3: searched as [`FileKind::Audio`], with the
+    /// extensions in the order of RGSS3.
+    AudioRgss3,
     /// A data file such as `Data/Scripts.rxdata`: searched in the game directory only, under
     /// the name as given.
     Data,
@@ -25,12 +28,15 @@ pub enum FileKind {
 
 impl FileKind {
     /// Extensions appended, in this order, when the path as given names no file.
-    // The original runtime's own order has not been measured yet; it only matters when one name
-    // exists with two extensions in the same directory.
+    // The order of RGSS1 and RGSS2 has not been measured yet; it only matters when one name
+    // exists with two extensions in the same directory. That of RGSS3 was measured for 17 sets
+    // of names (oracle measurement 2026-10-13, RGSS301, `ace-v1-api-REPORT.md` section 6.4);
+    // its tail `mid`, `mp3`, `wav`, `wma` is taken as a fixed list (section 8, point 5).
     pub fn extensions(self) -> &'static [&'static str] {
         match self {
             FileKind::Image => &["png", "jpg", "jpeg", "bmp"],
             FileKind::Audio => &["mid", "ogg", "wav", "mp3", "wma"],
+            FileKind::AudioRgss3 => &["ogg", "mid", "mp3", "wav", "wma"],
             FileKind::Data => &[],
         }
     }
@@ -841,5 +847,59 @@ mod tests {
         let files = GameFiles::new(game.path(), [rtp.path().to_owned()]);
         let bytes = files.read(FileKind::Audio, "Audio/SE/001-System01");
         assert_eq!(bytes.unwrap(), contents);
+    }
+
+    #[test]
+    fn order_of_the_audio_of_rgss3() {
+        let game = tempfile::tempdir().unwrap();
+        let name = |path: PathBuf| path.file_name().unwrap().to_str().unwrap().to_owned();
+        let all = ["ogg", "mid", "mp3", "wav", "wma"];
+        for ext in all {
+            put(game.path(), &format!("Theme.{ext}"), b"");
+        }
+        let files = game_only(game.path());
+        let found = name(files.resolve(FileKind::AudioRgss3, "Theme").unwrap());
+        assert_eq!(found, "Theme.ogg");
+        // The other runtimes keep their order.
+        let found = name(files.resolve(FileKind::Audio, "Theme").unwrap());
+        assert_eq!(found, "Theme.mid");
+        // Each pair of the tail.
+        let tail = ["mid", "mp3", "wav", "wma"];
+        for (index, first) in tail.iter().enumerate() {
+            for second in &tail[index + 1..] {
+                let game = tempfile::tempdir().unwrap();
+                put(game.path(), &format!("Pair.{second}"), b"");
+                put(game.path(), &format!("Pair.{first}"), b"");
+                let files = game_only(game.path());
+                let found = name(files.resolve(FileKind::AudioRgss3, "Pair").unwrap());
+                assert_eq!(found, format!("Pair.{first}"));
+            }
+        }
+    }
+
+    #[test]
+    fn audio_of_rgss3_in_a_package_and_in_the_archive() {
+        let game = tempfile::tempdir().unwrap();
+        let rtp = tempfile::tempdir().unwrap();
+        put(rtp.path(), "Audio/BGM/Theme.ogg", b"package");
+        let files = GameFiles::open(game.path(), [rtp.path().to_owned()], Runtime::Rgss3).unwrap();
+        let bytes = files.read(FileKind::AudioRgss3, "Audio/BGM/Theme");
+        assert_eq!(bytes.unwrap(), b"package");
+
+        let other = tempfile::tempdir().unwrap();
+        let archive = three(&[("Audio\\SE\\Hit.ogg", b"archive")]);
+        std::fs::write(other.path().join("Game.rgss3a"), archive).unwrap();
+        let files = GameFiles::open(other.path(), [], Runtime::Rgss3).unwrap();
+        let bytes = files.read(FileKind::AudioRgss3, "Audio/SE/Hit");
+        assert_eq!(bytes.unwrap(), b"archive");
+    }
+
+    #[test]
+    fn other_kinds_with_the_audio_of_rgss3() {
+        let game = tempfile::tempdir().unwrap();
+        put(game.path(), "Fog.png", b"");
+        let files = game_only(game.path());
+        assert!(files.resolve(FileKind::AudioRgss3, "Fog").is_err());
+        assert!(files.read(FileKind::AudioRgss3, "Fog").is_err());
     }
 }
