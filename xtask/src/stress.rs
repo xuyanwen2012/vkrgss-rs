@@ -2,9 +2,10 @@
 //!
 //! With `VKXP_GC_STRESS=<n>` the embedded interpreter collects at every n-th allocation, so
 //! a value that C or Rust code keeps alive only through a pointer into it is lost at once
-//! instead of on some other machine. The last two steps are the same for the second
-//! interpreter, Ruby 1.9.2, whose own `GC.stress` does the collecting: its own suite, and the
-//! tests of the binding over it. See `docs/development.md`.
+//! instead of on some other machine. The last three steps are the same for the second
+//! interpreter, Ruby 1.9.2, whose own `GC.stress` does the collecting: its own suite, the
+//! tests of the binding over it, and the tests of the executable that start the guest
+//! executable of RGSS3. See `docs/development.md`.
 
 use std::path::Path;
 use std::process::Command;
@@ -83,10 +84,14 @@ const SUITES_192: &str = "suites-1.9.2";
 /// The name of the step that runs the tests of the binding over Ruby 1.9.2.
 const BINDING_192: &str = "binding-1.9.2";
 
-/// The five runs. Everything else of the environment is inherited, so the restriction of
+/// The name of the step that runs the tests of the executable with the guest executable of
+/// RGSS3.
+const GUEST_192: &str = "guest-1.9.2";
+
+/// The six runs. Everything else of the environment is inherited, so the restriction of
 /// the Vulkan loader (`VK_LOADER_DRIVERS_SELECT`) that the tests of the executable ask for
 /// reaches them.
-fn steps(skipped: &[Skipped]) -> [Step; 5] {
+fn steps(skipped: &[Skipped]) -> [Step; 6] {
     let tests_of = |step: &str| -> Vec<&str> {
         skipped
             .iter()
@@ -181,6 +186,28 @@ fn steps(skipped: &[Skipped]) -> [Step; 5] {
             ),
             env: vec![(VARIABLE, "1".to_owned())],
         },
+        // The tests of the executable that run games of RGSS3 through the guest executable,
+        // and the tests of the guest records of both executables. The guest processes
+        // inherit the variable.
+        Step {
+            name: GUEST_192,
+            args: cargo_test(
+                &[
+                    "test",
+                    "-p",
+                    "vkxp",
+                    "-p",
+                    "vkxp-guest-rgss3",
+                    "--locked",
+                    "--test",
+                    "rgss3",
+                    "--test",
+                    "guest_record",
+                ],
+                GUEST_192,
+            ),
+            env: vec![(VARIABLE, "1".to_owned())],
+        },
     ]
 }
 
@@ -250,7 +277,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_steps_are_the_five_runs_in_order_four_of_them_under_the_switch() {
+    fn the_steps_are_the_six_runs_in_order_five_of_them_under_the_switch() {
         let steps = steps(&[]);
         let names: Vec<&str> = steps.iter().map(|step| step.name).collect();
         assert_eq!(
@@ -260,7 +287,8 @@ mod tests {
                 "binding",
                 "guest",
                 "suites-1.9.2",
-                "binding-1.9.2"
+                "binding-1.9.2",
+                "guest-1.9.2"
             ]
         );
         for (step, every) in steps.iter().zip([SUITES_EVERY, BINDING_EVERY, GUEST_EVERY]) {
@@ -286,7 +314,7 @@ mod tests {
     /// ordinary build, without the switch of the other interpreter.
     #[test]
     fn the_step_of_ruby_1_9_2_runs_the_slow_files_of_the_stressed_selection() {
-        let [.., suites_192, _] = steps(&[]);
+        let [.., suites_192, _, _] = steps(&[]);
         assert_eq!(
             suites_192.args,
             [
@@ -307,7 +335,7 @@ mod tests {
     /// the collector at every allocation.
     #[test]
     fn the_step_of_the_binding_over_ruby_1_9_2_runs_its_tests_under_the_switch() {
-        let [.., binding_192] = steps(&[]);
+        let [.., binding_192, _] = steps(&[]);
         assert_eq!(binding_192.name, "binding-1.9.2");
         assert_eq!(
             binding_192.args,
@@ -326,12 +354,12 @@ mod tests {
     #[test]
     fn a_test_left_out_of_the_binding_over_ruby_1_9_2_reaches_no_other_step() {
         let skipped = parse_skip_list("# Takes an hour.\nbinding-1.9.2 t::a_slow_test\n").unwrap();
-        let [suites, binding, guest, suites_192, binding_192] = steps(&skipped);
+        let [suites, binding, guest, suites_192, binding_192, guest_192] = steps(&skipped);
         assert_eq!(
             binding_192.args[5..],
             ["--", "--exact", "--skip", "t::a_slow_test"]
         );
-        for other in [suites, binding, guest, suites_192] {
+        for other in [suites, binding, guest, suites_192, guest_192] {
             assert!(
                 !other.args.iter().any(|arg| arg.contains("a_slow_test")),
                 "{}",
@@ -408,6 +436,36 @@ mod tests {
         assert_eq!(guest.args[6..], ["--", "--exact", "--skip", "test_d"]);
     }
 
+    /// The step of the guest executable runs the tests of the executable that start it, and
+    /// those of the guest records, with the collector at every allocation.
+    #[test]
+    fn the_step_of_the_guest_of_rgss3_runs_its_tests_under_the_switch() {
+        let skipped = parse_skip_list("# Slow.\nguest-1.9.2 a_slow_test\n").unwrap();
+        let [.., binding_192, guest_192] = steps(&skipped);
+        assert_eq!(guest_192.name, "guest-1.9.2");
+        assert_eq!(
+            guest_192.args,
+            [
+                "test",
+                "-p",
+                "vkxp",
+                "-p",
+                "vkxp-guest-rgss3",
+                "--locked",
+                "--test",
+                "rgss3",
+                "--test",
+                "guest_record",
+                "--",
+                "--exact",
+                "--skip",
+                "a_slow_test"
+            ]
+        );
+        assert_eq!(guest_192.env, [(VARIABLE, "1".to_owned())]);
+        assert!(!binding_192.args.contains(&"a_slow_test".to_owned()));
+    }
+
     #[test]
     fn a_skip_list_line_without_a_step_is_refused() {
         assert!(parse_skip_list("# Reason.\nruby/test_a.rb\n").is_err());
@@ -417,8 +475,15 @@ mod tests {
     fn the_committed_skip_list_names_known_steps_and_gives_reasons() {
         for entry in parse_skip_list(SKIP_LIST).unwrap() {
             assert!(
-                ["suites", "binding", "guest", SUITES_192, BINDING_192]
-                    .contains(&entry.step.as_str()),
+                [
+                    "suites",
+                    "binding",
+                    "guest",
+                    SUITES_192,
+                    BINDING_192,
+                    GUEST_192
+                ]
+                .contains(&entry.step.as_str()),
                 "{entry:?}"
             );
             assert!(!entry.reason.is_empty(), "{entry:?}");

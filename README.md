@@ -16,9 +16,9 @@
 </p>
 
 A Rust + Vulkan runtime for RPG Maker games on Linux. RPG Maker XP (RGSS1) and VX (RGSS2)
-are supported; VX Ace (RGSS3) is planned and does not run yet. `vkxp <game directory>` runs
-the game's scripts in an embedded Ruby 1.8.7 interpreter against the RGSS classes and shows
-the frames of a Vulkan compositor in a window, or writes them to files in a headless run.
+are supported; VX Ace (RGSS3) is experimental. `vkxp <game directory>` runs the game's
+scripts in an embedded Ruby interpreter, 1.8.7 or for VX Ace 1.9.2, against the RGSS classes
+and shows the frames of a Vulkan compositor in a window, or writes them to files headless.
 
 ## Classic RPG Maker
 
@@ -26,7 +26,7 @@ the frames of a Vulkan compositor in a window, or writes them to files in a head
 |---|---|---|
 | RPG Maker XP (RGSS1) | Supported | Since version 0.1.0 |
 | RPG Maker VX (RGSS2) | Supported | Since version 0.2.0 |
-| RPG Maker VX Ace (RGSS3) | Planned | Does not run yet; in progress |
+| RPG Maker VX Ace (RGSS3) | Experimental | Its scripts run; its games end before the title |
 
 <p align="center">
   <img src="docs/images/legendary-warband-title.png" width="49%" alt="The title screen of Legendary Warband running in vkxp">
@@ -43,7 +43,7 @@ The runtime is taken from the game's `Game.ini`. What works:
 - Audio: Ogg Vorbis, WAV, MP3 and MPEG layer II, with a SoundFont MIDI, and with `ffmpeg`
   installed WMA.
 - Keyboard and gamepads, with key maps that can be changed.
-- Encrypted archives (`Game.rgssad`, `Game.rgss2a`).
+- Encrypted archives (`Game.rgssad`, `Game.rgss2a`, `Game.rgss3a`).
 - Configuration files for the user and for a game, besides the command line.
 - Fast-forward, input recording and replay, and save states that work in any game.
 - A headless mode that writes chosen frames as PNG files and is reproducible byte for byte.
@@ -96,7 +96,7 @@ and libudev, and a Vulkan 1.3 device; see [docs/building.md](docs/building.md). 
 toolchain is pinned in `rust-toolchain.toml`.
 
 ```sh
-cargo build --release -p vkxp
+cargo build --release -p vkxp -p vkxp-guest-rgss3
 ```
 
 The built-in scripts. A game expects the `RPG` module of the original runtime. That Ruby
@@ -138,7 +138,7 @@ Every option, the configuration files and the key maps are in [docs/running.md](
 ```mermaid
 flowchart LR
   subgraph guest["Guest: a thread, or a sandboxed process"]
-    scripts["Game scripts<br>embedded Ruby 1.8.7"] --> binding["vkxp-binding<br>RGSS classes"]
+    scripts["Game scripts<br>embedded Ruby 1.8.7 or 1.9.2"] --> binding["vkxp-binding<br>RGSS classes"]
     binding --> core["vkxp-core<br>bitmaps, scene, frame extraction"]
   end
   subgraph host["Host"]
@@ -161,9 +161,9 @@ picture is kept.
 
 Each frame the guest sends an ordered list of ops of five kinds, and both compositors
 evaluate every kind per pixel. The interpreter is Ruby 1.8.7-p374 with Oniguruma 5.9.6, built
-from vendored and patched source by a build script; no installed Ruby is involved. A second
-one, Ruby 1.9.2 for RGSS3, is built in `vkxp-ruby192-sys`, and `vkxp-binding-rgss3` compiles
-the same RGSS classes over it; no executable links it yet.
+from vendored and patched source by a build script; no installed Ruby is involved. Ruby 1.9.2
+for RGSS3 is linked by `vkxp-guest-rgss3` alone, the guest executable that `vkxp` starts from
+beside itself for a game of VX Ace, over the same RGSS classes (`vkxp-binding-rgss3`).
 [docs/architecture.md](docs/architecture.md) has every crate and the four dependency rules.
 
 ## Documentation

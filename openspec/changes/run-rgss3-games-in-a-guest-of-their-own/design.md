@@ -527,6 +527,13 @@ Sections are those of the API report unless another report is named.
   `bind-the-scene-classes-of-rgss3`.
 - *`prelude.rb`.* The lines that moved to `prelude_shared.rb` were its last ones; they are
   replaced by a comment of two lines, and no line before them moved.
+- *Another target.* `tests/rgss3.rs` of `crates/vkxp` is empty on another target by its
+  `cfg` on the target; no other target is installed on the machine of this change, so the
+  scenario was not built there. `vkxp-guest-main-rgss3` and `vkxp-guest-rgss3` were built
+  with the `cfg` passed by hand (task 3.2).
+- *The banner of `README.md`.* The picture `docs/images/banner.jpg` says that VX Ace is
+  planned, and its alternative text says what the picture says. The picture is the owner's;
+  a new one is a follow-up.
 
 ### The release archive (task 6.1)
 
@@ -535,6 +542,48 @@ machine of this change (`cc -print-file-name=libcrypt.a` prints the bare name). 
 of `dist` pack a source tree; the list of entries the package test expects gains
 `vkxp-guest-rgss3` and `licenses/ruby-1.9.2/`, as the scenario "Package" asks, and keeps
 every entry it had.
+
+### The stress step (task 7.1)
+
+`VK_LOADER_DRIVERS_SELECT='*lvp*' VKXP_GC_STRESS=1 cargo test -p vkxp -p vkxp-guest-rgss3
+--locked --test rgss3 --test guest_record`, the command of the step `guest-1.9.2`, passed
+with nothing left out on 2026-10-13: 17.8 s on the development machine with the build done
+before, of which `tests/rgss3.rs` took 15.2 s (5.2 s without the variable). No value was
+lost, and `xtask/src/stress.skip` gained no entry.
+
+### The check of the local game (task 7.3)
+
+A copy of `../../games/ace-crysalis` under `target/ace-check/game`, both executables of the
+development profile, llvmpipe, run from `target/ace-check`:
+
+```sh
+XDG_RUNTIME_DIR= VK_LOADER_DRIVERS_SELECT='*lvp*' ../debug/vkxp game --headless \
+    --device llvmpipe --rtp RPGVXAce=../../../../ref/ace/rtp \
+    --builtin-scripts ../../../../ref/ace/rpg-rgss3.rb --frames 120 \
+    --dump 100=frame.png --verbose
+```
+
+`XDG_RUNTIME_DIR` is emptied because the shell of this flow may not write
+`/run/user/1000` and a socket below `target/` is longer than a Unix socket path may be; the
+program then makes its socket directory in the temporary directory, as the tests do.
+
+- Exit status 1. The run said once that VX Ace is experimental, the guest process attached,
+  confined with Landlock, and no frame was dumped: the run ended after one frame, that of
+  the report's panel (`frame 100 was to be dumped but the run ended after 1 frame(s)`).
+- The archive has 126 entries. The built-in scripts file and the entries `{0000}` to
+  `{0123}` ran to their end; `{0124}`, `Main`, called `rgss_main`, and the scene manager
+  created the game objects through `DataManager`, where `Game_Screen` raised. The last
+  entry, without a name or source, did not run.
+- The report, as the guest wrote it to the error stream and the host showed it:
+
+  ```
+  Script 'Game_Screen' line 49: ArgumentError occurred.
+
+  wrong number of arguments (0 for 3)
+  ```
+
+  This is fact 1: `Tone.new` without arguments, the first call that only RGSS3 has.
+  Nothing was changed in the classes to get further.
 
 ### Follow-ups: the changes that follow
 

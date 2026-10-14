@@ -76,7 +76,7 @@ so a game can be run under it, very slowly: `VKXP_GC_STRESS=1 vkxp <game directo
 VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask stress
 ```
 
-runs five steps, all but the fourth under the variable, goes on after one that fails and
+runs six steps, all but the fourth under the variable, goes on after one that fails and
 names all that failed:
 
 | Step | What runs | `n` |
@@ -86,9 +86,10 @@ names all that failed:
 | `guest` | the tests of the executable that start a guest, `cargo test -p vkxp --locked --test end_to_end` | 1 |
 | `suites-1.9.2` | the files of `test/ruby` of Ruby 1.9.2 that are slow under `GC.stress = true` (`cargo test -p vkxp-ruby192-sys --locked --test upstream_stress -- --ignored`) | every allocation |
 | `binding-1.9.2` | the tests of the binding over Ruby 1.9.2, `cargo test -p vkxp-binding-rgss3 --locked --no-fail-fast` | every allocation |
+| `guest-1.9.2` | the tests of the executable that run a game of RGSS3 through the guest executable, and the tests of the guest records of both executables, `cargo test -p vkxp -p vkxp-guest-rgss3 --locked --test rgss3 --test guest_record`; the guest processes inherit the variable | every allocation |
 
 The values of `n` are constants in `xtask/src/stress.rs`. The first step needs what the
-sanitized run needs; the last two need no sanitizer and run the ordinary build. The
+sanitized run needs; the last three need no sanitizer and run the ordinary build. The
 command takes about three quarters of an hour on the development machine. A test
 that is left out is named in `xtask/src/stress.skip` with the reason. A lost value is a
 defect also without the variable; it is fixed with a guard (`RB_GC_GUARD` in the vendored
@@ -225,6 +226,33 @@ fault and is fixed, never listed.
 - When later work makes a listed test or case pass, the run fails and names it. Remove its
   line from the list, and for a test also the marker; the entry goes when its last line
   does. A marker without an entry is inert, so the test then has to pass in place.
+
+The main of a guest has one source too, `crates/vkxp-guest-main/src`, which
+`vkxp-guest-main` compiles over Ruby 1.8.7 and `vkxp-guest-main-rgss3` over Ruby 1.9.2, with
+the same rules: no source of its own in the second package, the unit tests in both, and a
+counterpart for every test file, should there be one.
+
+## The tests of the guest executable of RGSS3
+
+A game of RGSS3 runs in the guest executable `vkxp-guest-rgss3`, which the program finds in
+the directory of its own file. The tests of `crates/vkxp` that run such a game are the file
+`tests/rgss3.rs`, and they find it as a player's program does: cargo puts every binary of
+the workspace into one directory, and builds the binary of each selected package that has
+an integration test before any test runs. Two commands are always right:
+
+```sh
+VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp -p vkxp-guest-rgss3 --locked
+VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test --workspace --locked
+```
+
+`cargo test -p vkxp` alone builds the program and uses whatever guest executable an
+earlier build left beside it; without one, every test of `tests/rgss3.rs` fails before it
+starts a child and names the first command. `tests/end_to_end.rs` runs no game of RGSS3 and
+needs no guest executable. The games of RGSS3 are written by test code without an
+interpreter (`tests/support/ace.rs`), with the stand-in of the built-in scripts of the
+binding's test support, which was written for the tests. In the same way
+`cargo run -p vkxp` builds the program alone; `cargo build -p vkxp-guest-rgss3` builds the
+guest executable beside it.
 
 ## Testing with another compiler
 

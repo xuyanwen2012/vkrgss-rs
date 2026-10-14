@@ -27,8 +27,9 @@ file lists. Oniguruma, the regular expression engine with the encodings, is part
 release and is built in under its BSD terms; `parse.c`, `util.c`, `random.c`, `st.c`,
 `vsnprintf.c` and `strftime.c` have the terms that `LEGAL` or the file gives for them. No
 file under the LGPL is involved. The texts are [`COPYING`](third_party/ruby-1.9.2/COPYING),
-[`GPL`](third_party/ruby-1.9.2/GPL) and [`LEGAL`](third_party/ruby-1.9.2/LEGAL). No
-executable of vkxp links this interpreter yet.
+[`GPL`](third_party/ruby-1.9.2/GPL) and [`LEGAL`](third_party/ruby-1.9.2/LEGAL). The guest
+executable `vkxp-guest-rgss3` links this interpreter, and the release package carries the
+three texts under `licenses/ruby-1.9.2/`.
 
 Its [`README.vkxp.md`](third_party/ruby-1.9.2/README.vkxp.md) states the origin, the parts
 with terms of their own and how the subset was chosen,
@@ -45,13 +46,13 @@ licence; the text is [`COPYING`](third_party/oniguruma-5.9.6/COPYING). Its
 
 ## libxcrypt
 
-The executable of the release package, which `cargo xtask dist` builds, links libcrypt
+The two executables of the release package, which `cargo xtask dist` builds, link libcrypt
 statically: the libxcrypt of the distribution the package is built on, Ubuntu 24.04. No
 other build does, and its source is not in this repository. libxcrypt is under the GNU
 Lesser General Public License version 2.1 or later, whose text the package carries as
 `licenses/ruby-1.8.7/LGPL`. Its source is at <https://github.com/besser82/libxcrypt>, and
 that of the version in the package is the source package `libxcrypt` of Ubuntu 24.04. The
-source of everything else that is linked is public, so the executable can be linked again
+source of everything else that is linked is public, so the executables can be linked again
 with another libxcrypt.
 
 ## Fonts used by tests

@@ -22,11 +22,13 @@ defined in `vkxp-proto`.
 | `vkxp-binding-rgss3` | The source of `vkxp-binding` compiled over Ruby 1.9.2: no source of its own, and the tests of `vkxp-binding` a second time | guest |
 | `vkxp-guest` | The guest role: the hidden option, the guest record and the settings in it, the subscriber of the diagnostics, the attachment, the copies that are states, the sandbox and the signal settings of a guest process | guest |
 | `vkxp-guest-main` | The main of a guest: what a guest is set up with, the text backend over the font engine, the guest on a thread, and the function that makes an executable a guest process | guest |
+| `vkxp-guest-main-rgss3` | The source of `vkxp-guest-main` compiled over `vkxp-binding-rgss3` and Ruby 1.9.2: no source of its own | guest |
+| `vkxp-guest-rgss3` | The guest executable of games of RGSS3: the guest role and `vkxp-guest-main-rgss3`, nothing of the host; `vkxp` starts it from beside itself | guest |
 | `vkxp-compose-ref` | CPU reference compositor | host and tests |
 | `vkxp-vk` | Vulkan backend | host |
 | `vkxp-audio` | Mixer, decoding, MIDI synthesis | host |
 | `vkxp-host` | Event loop, input mapping, thread orchestration, configuration | host |
-| `vkxp` | Executable | |
+| `vkxp` | Executable: the program, and the guest of games of RGSS1 and RGSS2 | |
 
 `xtask` holds repository automation and the tool that extracts the built-in scripts; it is not
 part of the runtime.
@@ -38,8 +40,11 @@ strings and arrays, a constructor for bytes and one for text, the mark of the ga
 or is asked at run time in one place, `rb::RUBY_19`; no `cfg` and no cargo feature tells the
 interpreters apart. A string the classes create is bytes (ASCII-8BIT over Ruby 1.9.2, as on
 the original runtime of RGSS3) unless it is script source or the path of the script archive.
-No executable links `vkxp-binding-rgss3` yet: the guest executable of RGSS3 is a later
-change.
+The main of a guest has one source as well, `crates/vkxp-guest-main/src`, compiled a second
+time by `vkxp-guest-main-rgss3` over `vkxp-binding-rgss3`. The guest executable
+`vkxp-guest-rgss3` links it, and nothing else of the workspace: the program starts it for a
+game of RGSS3, always as a guest process, and finds it in the directory of its own file.
+Each executable refuses a game of a runtime its interpreter does not run.
 
 The protocol is at version 14; an encoded stream of another version is rejected. A frame packet
 carries the changes to bitmaps and tables and an ordered list of ops of five kinds: `Clear`,
@@ -112,11 +117,12 @@ violation is reported with the full dependency path that causes it.
 
 1. **Guest crates do not reach host crates.** None of `vkxp-core`, `vkxp-image`, `vkxp-text`,
    `vkxp-vfs`, `vkxp-ruby-sys`, `vkxp-ruby192-sys`, `vkxp-binding`, `vkxp-binding-rgss3`,
-   `vkxp-guest`, `vkxp-guest-main` may depend,
+   `vkxp-guest`, `vkxp-guest-main`, `vkxp-guest-main-rgss3`, `vkxp-guest-rgss3` may depend,
    directly or transitively, on `vkxp-vk`, `vkxp-audio` or `vkxp-host`.
 2. **Host crates do not reach guest crates.** None of `vkxp-vk`, `vkxp-audio`, `vkxp-host`, and
    not the reference compositor `vkxp-compose-ref` either, may depend, directly or transitively,
-   on a guest crate, `vkxp-guest` and `vkxp-guest-main` included. The `vkxp` binary is exempt from both directions: it is the one crate that
+   on a guest crate, `vkxp-guest`, the two packages of the main of a guest and the guest
+   executable included. The `vkxp` binary is exempt from both directions: it is the one crate that
    depends on both sides and joins them.
 3. **`vkxp-core` stays pure.** Everything `vkxp-core` reaches, directly or transitively, must be
    on its allow-list: `vkxp-proto`, `vkxp-pixel` and the pure crates those need. The list is
@@ -134,11 +140,14 @@ count; dev-dependencies are not linked into either side.
 Beside the four, the same check holds the two interpreters apart: no package reaches both
 `vkxp-ruby-sys` and `vkxp-ruby192-sys`, which define the same symbols and cannot be linked
 into one program. Here development dependencies count too, because a test binary links
-them. Tests of `xtask` also hold the two packages of the binding together: they declare the
-same dependencies apart from the interpreter crate, and every test file of `vkxp-binding`
-has a file of the same name in `vkxp-binding-rgss3` that loads it.
+them. Tests of `xtask` also hold the twin packages together, those of the binding and those of
+the main of a guest: they declare the same dependencies apart from the interpreter crate and
+the binding package, and every test file of `vkxp-binding` or `vkxp-guest-main` has a file
+of the same name in the package over Ruby 1.9.2. The program and the guest executable have
+one version, which a test of `xtask` holds as well.
 
 In addition, `vkxp-proto`, `vkxp-pixel`, `vkxp-core` and `vkxp-compose-ref` carry
-`#![forbid(unsafe_code)]`, so `unsafe` in them does not compile, and so does `vkxp-guest-main`.
+`#![forbid(unsafe_code)]`, so `unsafe` in them does not compile, and so does `vkxp-guest-main`;
+`vkxp-guest-rgss3` has no `unsafe`.
 `vkxp-guest` denies `unsafe`
 at its root and allows it in the modules of the copier and of the signals only.

@@ -6,13 +6,16 @@ Building is described in [building.md](building.md).
 ## Running a game
 
 The commands below use `cargo run`, which builds the development profile.
-`cargo build --release -p vkxp` produces the optimised executable, `target/release/vkxp`, which
-takes the same arguments.
+`cargo build --release -p vkxp -p vkxp-guest-rgss3` produces the optimised executables,
+`target/release/vkxp`, which takes the same arguments, and beside it the guest executable
+that runs a game of VX Ace. `cargo run -p vkxp` builds the program alone; a game of VX Ace
+then needs `cargo build -p vkxp-guest-rgss3` once (see *Guest process*).
 
 ### The runtime of a game
 
 `vkxp` runs the games of RPG Maker XP, whose runtime is RGSS1, and of RPG Maker VX, whose
-runtime is RGSS2: both are supported. RPG Maker VX Ace (RGSS3) is planned and not supported.
+runtime is RGSS2: both are supported. Support for RPG Maker VX Ace (RGSS3) is experimental:
+its scripts run, and its games do not reach their title screen yet.
 
 The runtime of a game is taken from two values of its `Game.ini`, and from nothing else:
 
@@ -33,11 +36,12 @@ What follows the runtime:
 | Run-time packages in `Game.ini` | `RTP1`, `RTP2`, `RTP3` | `RTP` | `RTP` |
 | Encrypted archive | `Game.rgssad` | `Game.rgss2a` | `Game.rgss3a` |
 | Default built-in scripts file | `rpg_builtin.rb` | `rpg_builtin_rgss2.rb` | `rpg_builtin_rgss3.rb` |
-| `--debug` sets | `$DEBUG` | `$TEST`; `$DEBUG` stays `false` | comes with the guest |
-| Frame and starting window size | 640 by 480 | 544 by 416 | comes with the guest |
-| Starting frame rate | 40 | 60 | comes with the guest |
-| Symbol numbers (`Symbol#to_i`) | those of RGSS1 | those of RGSS2 | come with the guest |
-| Default keys and repeat of `Input` | those of XP | those of VX (see *The keys of a game of VX*) | come with the guest |
+| `--debug` sets | `$DEBUG` | `$TEST`; `$DEBUG` stays `false` | `$TEST`; `$DEBUG` stays `false` |
+| Frame and starting window size | 640 by 480 | 544 by 416 | 544 by 416 |
+| Starting frame rate | 40 | 60 | 60 |
+| Interpreter | Ruby 1.8.7 | Ruby 1.8.7 | Ruby 1.9.2, in the guest executable `vkxp-guest-rgss3` |
+| Symbol numbers (`Symbol#to_i`) | those of RGSS1 | those of RGSS2 | those of Ruby 1.9.2 |
+| Default keys and repeat of `Input` | those of XP | those of VX (see *The keys of a game of VX*) | those of VX, for now |
 
 A game of VX names the package `RPGVX`, so it is run with `--rtp RPGVX=<RTP directory>`, and
 a game of VX Ace names `RPGVXAce`, so it is run with `--rtp RPGVXAce=<RTP directory>`; a
@@ -51,16 +55,19 @@ a dumped frame alike, its frame rate starts at 60, and its scripts see the symbo
 the classes and functions of RGSS2; [compatibility.md](compatibility.md#rpg-maker-vx) says
 what was measured of them and what was not.
 
-A game of VX Ace does not run yet. The program does for it what it does for any game before
-the scripts start, and then ends with a message that says VX Ace is planned and not
-supported, and with a failure status. In this order it resolves the run-time package that
-`RTP` names, looks for the built-in scripts file of RGSS3 (see *The built-in scripts of RPG
-Maker VX Ace*), opens `Game.rgss3a` when the game directory holds it, and reads the file
-that `Scripts` names, from the archive or from the directory, without looking into it. When
-one of these fails, the run ends with that error instead of the message: a game that names
-`RPGVXAce` needs `--rtp RPGVXAce=DIR`, and the built-in scripts file has to exist, before the
-program says that the game will not run yet. With `--verbose` the run names the package
-directory, the built-in scripts file, the archive and the script archive with its size.
+A game of VX Ace runs in the guest executable `vkxp-guest-rgss3`, over Ruby 1.9.2, the
+interpreter of the original runtime, and always with the guest in a process (see *Guest
+process*); a run says once, as a warning, that the support is experimental. Before the
+guest starts, the program resolves the run-time package that `RTP` names (a game that names
+`RPGVXAce` needs `--rtp RPGVXAce=DIR`) and looks for the built-in scripts file of RGSS3 (see
+*The built-in scripts of RPG Maker VX Ace*); the guest opens `Game.rgss3a` when the game
+directory holds it and reads the script archive that `Scripts` names. The scripts start as
+the original starts them: the built-in scripts file, then `$RGSS_SCRIPTS`, each script
+evaluated as `{0000}`, `{0001}` and so on, `RGSSReset` for F12, and the error report in the
+form of RGSS3. The classes are those of VX still, so a game made with the standard scripts
+ends with an error before its title screen; [compatibility.md](compatibility.md#rpg-maker-vx-ace)
+says what runs and what differs. With `--verbose` the run names the package directory, the
+built-in scripts file, the archive and the script archive with its size.
 
 ### The built-in scripts
 
@@ -108,8 +115,9 @@ The built-in scripts of RGSS3 are three blocks: one that starts with `module RPG
 defines the `RPG` data classes, one that starts with `def rgss_main` and one that starts
 with `def rgss_stop`. `vkxp` looks for them at `$XDG_DATA_HOME/vkxp/rpg_builtin_rgss3.rb`,
 or takes the file named with `--builtin-scripts`. Without the file a run of a VX Ace game
-ends with a message that names it and this section. A game of VX Ace does not run yet (see
-*The runtime of a game*): today the file only has to exist, and nothing of it is evaluated.
+ends with a message that names it and this section. The file is evaluated whole before the
+script archive is read; `rgss_main` and `rgss_stop` are its own, and vkxp defines neither,
+so a file without them ends a game that calls them with a `NoMethodError`.
 
 As for VX, no DLL of VX Ace holds that text as it is, and the file is made in the same two
 steps, from the memory that the RGSS3 DLL (`System\RGSS300.dll` or `System\RGSS301.dll` of
@@ -147,8 +155,8 @@ Paths on the command line are relative to the directory the program was started 
 | `--filter FILTER` | How the frame is scaled into the window: `auto`, `nearest`, `linear` or `sharp`. See *Window*. |
 | `--fullscreen` | Start in borderless fullscreen. |
 | `--debug` | Debug mode: sets `$DEBUG` to `true` for RGSS1; for RGSS2 sets `$TEST` to `true` and leaves `$DEBUG` `false`. |
-| `--allow-process-functions` | Lets `system`, backticks, `exec`, `fork`, `syscall` and `IO.popen` start processes. Without it they do nothing. |
-| `--log-p` | `p` only writes to the error stream: no message panel is shown and the game does not wait. See *Messages*. |
+| `--allow-process-functions` | Lets `system`, backticks, `exec`, `fork`, `syscall` and `IO.popen` start processes, and in a game of VX Ace `spawn`, `Process.spawn`, `Process.exec` and `open` of a command too. Without it they do nothing. |
+| `--log-p` | `p` only writes to the error stream: no message panel is shown and the game does not wait. In a game of VX Ace `p` writes to the standard output anyway. See *Messages*. |
 | `--present-stats` | Write the intervals between the frames shown to the error stream. See *Window*. |
 | `--frame-stats` | Write where the frames spend their time to the error stream. See *Frame times*. |
 | `--verbose` | Also write informational and debug messages to the error stream. See *Diagnostics*. |
@@ -158,7 +166,7 @@ Paths on the command line are relative to the directory the program was started 
 | `--preload FILE` | A Ruby file evaluated after the built-in scripts and before the game's first script, and again after a reset. Repeatable, in the order given. |
 | `--record FILE` | Write the input of every frame and the seed to `FILE`. |
 | `--replay FILE` | Play the input of a recording back instead of the keyboard. Not together with `--record` or `--input`. |
-| `--guest thread\|process` | Where the game's scripts run: on a thread of the program or in a process of their own, which the save states need. Without a choice it is a process in a window and a thread in a headless run. See *Guest process* and *Save states*. |
+| `--guest thread\|process` | Where the game's scripts run: on a thread of the program or in a process of their own, which the save states need. Without a choice it is a process in a window and in every run of VX Ace, and a thread in a headless run of XP or VX. A game of VX Ace runs in a process only. See *Guest process* and *Save states*. |
 | `--sandbox on\|off` | Whether a guest process confines itself before the first script runs: it then writes only below the game directory, executes nothing and opens no TCP connection. On unless it is said otherwise. See *Sandbox*. |
 | `--headless` | Run without a window, on a virtual clock that never waits. |
 | `--frames N` | Headless: stop after N frames if the game has not ended. |
@@ -356,7 +364,9 @@ the message is dismissed with a key that holds C or B (by default Space, Enter, 
 and so on; in a game of VX Z in place of C) or a mouse click. That press does not reach the game. A headless run dismisses
 every message at once. With `--log-p`, `p` writes to the error stream only and the game goes
 on. While the screen is frozen (`Graphics.freeze`) the panel is not visible; the message is
-still on the error stream and still waits for its dismissal.
+still on the error stream and still waits for its dismissal. In a game of VX Ace the panel
+shows `msgbox`, `msgbox_p` and the report, while `p`, `print` and `puts` are Ruby's own and
+write to the standard output, show nothing and wait for nothing, with or without `--log-p`.
 
 ### Window
 
@@ -524,7 +534,8 @@ The game's scripts, with the interpreter, the bitmaps and the game's files, are 
 the window, the GPU, the audio device and the input are the host. The guest is a thread of
 the program or a child process. Without a choice it is a process in a window, where the keys
 of the save states need it, and a thread in a headless run. `--guest thread` and
-`--guest process` choose:
+`--guest process` choose. A game of VX Ace has its guest in a process, headless too, and
+`--guest thread` with such a game ends the run with a message that names `--guest process`:
 
 ```sh
 VK_LOADER_DRIVERS_SELECT='*radeon*' \
@@ -535,7 +546,14 @@ The environment variable `VKXP_GUEST` and the key `guest` of a configuration fil
 form too; the command line comes before the environment and the environment before the
 files. Any value but `thread` and `process` is an error.
 
-The program starts itself again for the guest and hands it a guest record: a file,
+The program starts itself again for the guest of a game of XP or VX, and for a game of VX
+Ace the guest executable `vkxp-guest-rgss3`, which links Ruby 1.9.2 and nothing of the
+host. That file is looked for in the directory of the program's own file, links resolved,
+and nowhere else: the release archive has both side by side, and in the directory of a
+build both are there once both are built, which `cargo build -p vkxp-guest-rgss3` does for
+the second. Without it a run of VX Ace ends before anything starts with a message that names
+the file and the directory. Each executable refuses a game of a runtime its interpreter
+does not run. The program hands the guest a guest record: a file,
 `guest.record`, that holds what the guest needs of the run, which is the game directory, the
 settings a guest reads (the runtime, the run-time packages, the fonts, the preload scripts
 and the like), the seed, the socket and the level of the diagnostics. The guest process is
@@ -580,7 +598,7 @@ scripts included. From then on it
 - neither binds nor connects a TCP socket.
 
 A script that opens a file for writing anywhere else gets `Errno::EACCES`. The states of the
-guest process are confined as it is. The program itself, with the window, the GPU and the
+guest process are confined as it is, and so are the threads a script of VX Ace makes. The program itself, with the window, the GPU and the
 audio device, is not restricted.
 
 `--sandbox off` leaves the guest process as it was, for a game that writes outside its
@@ -628,7 +646,10 @@ were when the state was saved; a fade that was running then is not brought back.
 The keys only show a notice when the guest is a thread, and while input is recorded or
 replayed, since a load would make the recording describe another run. With
 `--allow-process-functions` no state is saved: a game that starts processes has to wait for
-them, and a guest that keeps copies of itself cannot.
+them, and a guest that keeps copies of itself cannot. Nor is a state of a game of VX Ace
+saved while a thread a script made is alive, because a thread of Ruby 1.9.2 is a thread of
+the system and a copy of the process would not have it: the guest says so for the slot,
+and the request counts as one that failed.
 
 A headless run takes its requests from `--states`, for the tests: entries `frame:save N` and
 `frame:load N` separated by commas, made when that frame of the run arrives. The frames of a

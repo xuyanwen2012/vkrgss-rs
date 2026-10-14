@@ -34,9 +34,9 @@
 
 ## 7. Stress, documents and the local game
 
-- [ ] 7.1 `xtask/src/stress.rs`: the step `guest-1.9.2` (decision 17) with the tests that hold the steps and, if needed, its lines in `xtask/src/stress.skip`. Run its command once. A value lost under stress is a fault and is fixed; a test left out for another reason is named in the skip list with it. Verify: `cargo test -p xtask --locked` passes; the command of the step passes with the skips of the list, and its duration is written under Follow-ups of `design.md`.
-- [ ] 7.2 Documents as the implementation notes of `design.md` list them, and `CHANGELOG.md` under "Unreleased". Verify: the scenarios of "State of VX Ace once its games start" and "Recorded decisions on the guest executable and the start of RGSS3"; the tests of `xtask` that check the documents pass.
-- [ ] 7.3 The check of the local game as the implementation notes describe it: a copy under `target/`, llvmpipe, never Wine. Verify: under Follow-ups of `design.md` stand the command, the exit status, how many scripts ran, and the report or the frame the run ended with; nothing of the game or of `../../ref/` is in the commit.
+- [x] 7.1 `xtask/src/stress.rs`: the step `guest-1.9.2` (decision 17) with the tests that hold the steps and, if needed, its lines in `xtask/src/stress.skip`. Run its command once. A value lost under stress is a fault and is fixed; a test left out for another reason is named in the skip list with it. Verify: `cargo test -p xtask --locked` passes; the command of the step passes with the skips of the list, and its duration is written under Follow-ups of `design.md`.
+- [x] 7.2 Documents as the implementation notes of `design.md` list them, and `CHANGELOG.md` under "Unreleased". Verify: the scenarios of "State of VX Ace once its games start" and "Recorded decisions on the guest executable and the start of RGSS3"; the tests of `xtask` that check the documents pass.
+- [x] 7.3 The check of the local game as the implementation notes describe it: a copy under `target/`, llvmpipe, never Wine. Verify: under Follow-ups of `design.md` stand the command, the exit status, how many scripts ran, and the report or the frame the run ended with; nothing of the game or of `../../ref/` is in the commit.
 
 ## 8. Integration check
 

@@ -2,7 +2,8 @@
 
 vkxp aims at the behaviour of the original runtimes of RPG Maker XP, RGSS 1.04, and of RPG
 Maker VX, RGSS2: both are supported. Games that use the default scripts or common
-community scripts are meant to run unmodified. VX Ace is planned and not supported yet. What
+community scripts are meant to run unmodified. VX Ace is experimental: its scripts run, and
+its games do not reach their title screen yet ([RPG Maker VX Ace](#rpg-maker-vx-ace)). What
 a game of VX has differently is under [RPG Maker VX](#rpg-maker-vx); everything else below is
 about XP.
 
@@ -275,8 +276,43 @@ In a game of XP `Tilemap` is as it was: none of `bitmaps`, `passages` and
 
 ## RPG Maker VX Ace
 
-Games of RPG Maker VX Ace (RGSS3) are not supported yet. What a game of VX Ace has of the
-classes so far is listed here, each measured on the original runtime of VX Ace (DLL versions
+Support for RPG Maker VX Ace (RGSS3) is experimental, and a run of it says so once. The
+scripts of a game of VX Ace run over Ruby 1.9.2, the interpreter of the original runtime, in
+the guest executable `vkxp-guest-rgss3`, which `vkxp` starts from beside itself, always in a
+process ([Guest process](running.md#guest-process)). The start of a game is the one measured
+on the original runtime 3.0.1: the built-in scripts file, `$RGSS_SCRIPTS`, each script
+evaluated as `{0000}`, `{0001}` and so on and compiled as UTF-8, `RGSSReset` with
+`Graphics.__reset__` and `Audio.__reset__`, the endings, the error report, `msgbox` and
+`msgbox_p`, `p`, `print` and `puts` on the standard output, `load_data` that labels the
+strings of a data file UTF-8, `save_data`, and `RGSS_VERSION` `"3.0.1"`.
+
+Of the classes, `Tilemap` and the value classes `Color`, `Tone`, `Rect` and `Table` are
+those of RGSS3, as the sections below say; `Window`, `Font` and text, `Sprite`, `Viewport`,
+`Plane`, `Input` and `Audio` are those of RPG Maker VX still and do not have what RGSS3 adds.
+A game made with the standard scripts of VX Ace therefore loads its scripts and its database
+and ends with an error report at its first call of what only RGSS3 has and vkxp does not
+bind yet, before its title screen. A frame it
+draws is wrong where RGSS3 draws otherwise, and no frame was compared with the original.
+
+Known differences of the start, each against the measurements of the original:
+
+- An uncaught exception ends the run with status 1; the original's code follows the line
+  number in most cases. A report of more than 1023 UTF-16 units is shown, where the
+  original shows an empty box.
+- A script archive that cannot be loaded is an error that names it, with a failure status;
+  the original shows `Failed to load script.` and ends with code 0.
+- `at_exit` handlers are not run, as on the original, and `exit!` is not followed.
+- After a reset by the host a script that calls no function of `Graphics` is not
+  interrupted; `Graphics.wait`, `fadeout`, `fadein` and `transition` are not cut short, and
+  `Graphics.__reset__` does not wait for F12 to be released.
+- `load_data` does not freeze strings as the original does in two of 71 samples, and its
+  errors for a loose file and its lookup rules are those of RGSS2.
+- `RGSS_VERSION` is `"3.0.1"` whatever DLL the game ships.
+- `Win32API` and `DL` are not those of RGSS3; `require` and `load` are those of vkxp.
+- A state is not saved while a script thread is alive: a thread of Ruby 1.9.2 is a thread
+  of the system, which a copy of the process does not have.
+
+What follows of the classes was measured on the original runtime of VX Ace (DLL versions
 3.0.0.1 and 3.0.1.1) under Wine.
 
 ### The tilemap of VX Ace
@@ -364,7 +400,6 @@ Known differences:
   `ArgumentError`.
 
 In a game of XP or VX the value classes are as they were: none of these forms is taken.
-
 ## Limits of save states
 
 Save states are described under [Save states](running.md#save-states). Their limits:
@@ -374,5 +409,5 @@ Save states are described under [Save states](running.md#save-states). Their lim
   file a script holds open across frames shares its position with the copies.
 - Each state costs the memory pages the game has changed since it was saved.
 - States need the guest in a process, and no state is saved with
-  `--allow-process-functions`.
+  `--allow-process-functions`, nor in a game of VX Ace while a script thread is alive.
 - The keys only show a notice while input is recorded or replayed.

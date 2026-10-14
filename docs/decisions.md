@@ -19,6 +19,10 @@ The change `draw-text-and-bitmaps-as-rgss3` added "Text and bitmaps of RGSS3" un
 on 2026-10-13: which DLL version vkxp follows, the largest bitmap, and what stands for the
 answers of GDI.
 
+The change `run-rgss3-games-in-a-guest-of-their-own` added the crates `vkxp-guest-main-rgss3`
+and `vkxp-guest-rgss3` to the table of crates, and "The guest executable and the start of
+RGSS3" under "VX Ace" on 2026-10-13.
+
 ## Goal and scope
 
 - vkxp is a from-scratch runtime for the games of RPG Maker XP, VX and VX Ace, built to a
@@ -113,6 +117,8 @@ answers of GDI.
 | `vkxp-binding-rgss3` | The source of `vkxp-binding` compiled over Ruby 1.9.2 | guest |
 | `vkxp-guest` | The guest role: the hidden option, the guest record and the settings in it, the subscriber of the diagnostics, the attachment, the copies that are states, the sandbox and the signal settings of a guest process; links no interpreter | guest |
 | `vkxp-guest-main` | The main of a guest: what a guest is set up with, the text backend over the font engine, the guest on a thread, and the function that makes an executable a guest process | guest |
+| `vkxp-guest-main-rgss3` | The source of `vkxp-guest-main` compiled over `vkxp-binding-rgss3` and Ruby 1.9.2 | guest |
+| `vkxp-guest-rgss3` | The guest executable of games of RGSS3: the guest role and `vkxp-guest-main-rgss3`, nothing of the host | guest |
 | `vkxp-compose-ref` | CPU reference compositor | host and tests |
 | `vkxp-vk` | Vulkan backend: binning, compositing, presentation, pacing | host |
 | `vkxp-audio` | Mixer, decoding, MIDI synthesis | host |
@@ -494,6 +500,87 @@ the classes and modules of RGSS3 that use them come with the binding over Ruby 1
   - A negative wave length: the original reads outside its sine table, and its two versions
     show different pictures. vkxp takes the angle of the wave modulo 360, as its sprite of
     RGSS2 does.
+The guest executable and the start of RGSS3, recorded by the change
+`run-rgss3-games-in-a-guest-of-their-own` on 2026-10-13. The behaviour of the start is that
+measured on the original runtime 3.0.1 under Wine that day (the measurements are kept
+outside the repository); what of it is not followed is named as a known difference.
+
+- Where the guest executable is: `vkxp` starts `vkxp-guest-rgss3` from the directory of its
+  own file, links resolved as the system resolves them. When the file is not there, the run
+  ends before a guest, a window or a device starts, with an error that names the file and
+  the directory. No option, variable or configuration key names another place. Both
+  executables have the version of the workspace, and each refuses a record or a connection
+  of another version. Each executable runs the runtimes of its interpreter only: Ruby 1.8.7
+  those of RGSS1 and RGSS2, Ruby 1.9.2 those of RGSS3.
+- How tests reach it: the tests of the program that run a game of RGSS3 are a file of their
+  own and let the program find the guest executable beside it, where cargo puts every
+  binary of the workspace; `cargo test --workspace` and `cargo test -p vkxp -p
+  vkxp-guest-rgss3` build it first. A test that finds none fails and names that command.
+  There is no artifact dependency, no build script that builds the other package and no
+  variable that names the file.
+- The form of the guest: a game of RGSS3 has its guest in a process, headless too. A choice
+  of `thread` ends the run with a message that names `--guest process`.
+- Experimental: VX Ace is experimental while its games start and the milestones A1 to A3
+  are open. A run of RGSS3 says so once, as a warning of the program; the documents say so,
+  and the rows A1 to A3 stay "Not started". This ends when A3 is reached.
+- Preparation: chosen by the runtime of the run. A game of RGSS3 gets a prelude of its own
+  in the place of that of RGSS1 and RGSS2: `RGSS_VERSION` `"3.0.1"` (the version vkxp
+  follows by the decision on the DLL version; known difference: it does not follow the DLL a
+  game ships), `RGSSReset <
+  Exception`, `save_data`, `load_data`, `msgbox` and `msgbox_p`, and no `Reset`, `Hangup`,
+  `print` or `p`, which are Ruby's own there and write to the standard output. `rgss_main`
+  and `rgss_stop` belong to the built-in scripts file, which is evaluated whole before the
+  script archive is read. `$TEST`, `$BTEST` and `$DEBUG` are set as for RGSS2. The seed is
+  set once, before the built-in scripts. Beside the functions that start processes of
+  RGSS1 and RGSS2, `spawn`, `Process.spawn`, `Process.exec` and `open` of a command are off
+  unless the caller enables them. The binding over Ruby 1.8.7 refuses a game of RGSS3.
+- Script loading: `$RGSS_SCRIPTS` is what `load_data` returns for the script archive, each
+  entry with its inflated source inserted at index 3; the count is read once, and entry `i`
+  is evaluated on the main object under the name `{%04d}` from `$RGSS_SCRIPTS[i][3]` as it
+  is when its turn comes, compiled as UTF-8 from a new string of its bytes. The filesystem
+  encoding of the interpreter is ASCII-8BIT, as on the original, so `__FILE__` is bytes.
+  Known difference: an archive that cannot be loaded is an error that names it with a
+  failure status, where the original shows `Failed to load script.` and ends with code 0.
+- Data files: `load_data` is `Marshal.load` of the bytes of the file with a proc that
+  labels every String of ASCII-8BIT as UTF-8, called through Ruby; `save_data` writes the
+  dump and returns `nil`. Known differences: a frozen string the original gives in two of
+  71 samples, the errors of a loose file, and the lookup rules of the original.
+- Reset: a reset request of the host makes the next `Graphics.update` raise `RGSSReset` with
+  an empty message. `Graphics.__reset__` disposes every bitmap and scene element, sets the
+  brightness to 255 and the frame rate to 60 and ends a freeze; `Audio.__reset__` stops the
+  audio. An `RGSSReset` that leaves a script calls `Graphics.__reset__` through Ruby, stops
+  the audio, clears the input and runs the scripts again from the first, as for the other
+  runtimes. Known differences: a raise that arrives without a call of `Graphics`, the
+  waits and fades cut short, and `__reset__` waiting for the release of F12.
+- Endings and the report: `exit` in any form, `raise SystemExit`, `abort` and the end of
+  the last script end the game with status 0. An uncaught exception ends it with status 1
+  and a report in the measured form: `Unable to find file:` for `Errno::ENOENT`, `Script
+  '<name>' line <n>: <class> occurred.` with the message, or `<class> occurred.` without a
+  line; the position is the first backtrace entry outside `(eval)`, the name is
+  `$RGSS_SCRIPTS[i][1]` as it is then, and a `SyntaxError` takes its position from its
+  message. Known differences: the original's exit code, which follows the line number in
+  most cases, the empty box for a text of more than 1023 UTF-16 units, `at_exit` handlers,
+  which the original never runs and vkxp does not either, and `exit!`.
+- Message boxes and console output: `msgbox` joins `to_s` of its arguments (`nil` as `nil`)
+  with `$,`, adds `$\` and cuts at a NUL byte; `msgbox_p` joins `inspect` with line feeds;
+  both show a modal message, write the text to the error stream and return `nil`. `p`,
+  `print` and `puts` are Ruby's and write to the standard output of the program.
+- States with script threads: a state of a guest of RGSS3 is a copy made by `fork` as any
+  other. While a Ruby thread other than the main one is alive no state is saved: the guest
+  says so for the slot and the save counts as failed. A copy forgets the timer thread of
+  the process it was copied from, and starts one when a script makes a thread. The sandbox
+  is that of the other runtimes; the threads a script makes inherit it.
+- Release archive: `cargo xtask dist` builds both executables in one build with libcrypt
+  linked statically into both, refuses a shared libcrypt in either and packs them side by
+  side with the licence texts of Ruby 1.9.2.
+- The classes of a game of RGSS3 are those of RGSS2 still. The class surface of RGSS3 is
+  bound by the changes that follow, in their own order. A title screen of the standard
+  scripts calls of it, between the end of script loading and its first frames: `Tone.new`
+  and `Color.new` without arguments, `Viewport.new` without arguments,
+  `Window#initialize(x, y, width, height)`, `padding=`, `padding_bottom=`, `tone`,
+  `Tone#set`, `Rect.new` without arguments, `Rect#set` and `Color#set` with one object,
+  `open?`, `Audio.bgm_play` with four arguments, and soon after `Input.repeat?` with a
+  Symbol.
 
 ### Several runtimes in one program
 

@@ -9,6 +9,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - RPG Maker VX Ace (RGSS3): the class `Tilemap` with `flags` in the place of `passages`,
   drawn by the rules of RGSS3. A write to a slot of `bitmaps` of a disposed tilemap is kept
   where the original runtime ends.
+- Experimental support for RPG Maker VX Ace (RGSS3): the scripts of a game of VX Ace run
+  over Ruby 1.9.2 in the guest executable `vkxp-guest-rgss3`, which `vkxp` starts from
+  beside itself, always as a guest process. The start of a game is that of the original
+  runtime: the built-in scripts file with `rgss_main` and `rgss_stop`, `$RGSS_SCRIPTS`,
+  scripts evaluated as `{0000}` and compiled as UTF-8, `RGSSReset` with `Graphics.__reset__`
+  and `Audio.__reset__`, the endings, the error report of RGSS3, `msgbox`, `msgbox_p`,
+  `load_data`, `save_data` and `RGSS_VERSION`. The classes are those of RGSS2 still, so a
+  game made with the standard scripts ends with an error before its title screen; a run
+  says once that the support is experimental.
+- Save states and the sandbox for a guest of VX Ace; a state is not saved while a script
+  thread is alive.
+- The release archive holds `vkxp-guest-rgss3` beside `vkxp` and the licence texts of
+  Ruby 1.9.2.
+- `cargo xtask stress` has the step `guest-1.9.2`.
+
+### Changed
+
+- A game of VX Ace no longer ends with the message that VX Ace is planned. `--guest thread`
+  with such a game ends the run with a message that names `--guest process`.
 
 ## [0.2.0] - 2026-10-13
 
