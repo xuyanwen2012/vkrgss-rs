@@ -17,7 +17,7 @@
 
 ## 4. Documentation
 
-- [ ] 4.1 `docs/development.md`, section "Comparing with the original runtime", as the implementation notes of `design.md` list it. Verify: the usage text of the command and the document name the same options and the same three values of `--runtime`; the section names `Library=`, `Game.rgss3a`, `RGSS3\RTP`, the size from the probe, VL Gothic as a `--font` and the GStreamer plugin directories; it claims no comparison of a real VX Ace game.
+- [x] 4.1 `docs/development.md`, section "Comparing with the original runtime", as the implementation notes of `design.md` list it. Verify: the usage text of the command and the document name the same options and the same three values of `--runtime`; the section names `Library=`, `Game.rgss3a`, `RGSS3\RTP`, the size from the probe, VL Gothic as a `--font` and the GStreamer plugin directories; it claims no comparison of a real VX Ace game.
 
 ## 5. Integration check
 

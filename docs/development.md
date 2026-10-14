@@ -299,9 +299,9 @@ cargo xtask oracle <game directory> --frames 10,20,200 \
 | Option | Meaning |
 |---|---|
 | `--frames N[,N...]` | The frames to capture, numbered from 0 as `vkxp --dump` numbers them. Required. |
-| `--dll FILE` | The RGSS DLL that the game's `Game.ini` names with `Library=`. Required unless `--vkxp-only` is given. |
-| `--runtime rgss1\|rgss2` | The runtime of the game. Only needed when the file that `Scripts=` of `Game.ini` names is neither a `.rxdata` (RGSS1, RPG Maker XP) nor a `.rvdata` (RGSS2, RPG Maker VX). |
-| `--rtp NAME=DIR` | The directory of the run-time package that `Game.ini` names `NAME`, with `RTP1` to `RTP3` in a game of XP and with `RTP` in a game of VX. Repeatable. |
+| `--dll FILE` | The RGSS DLL that the game's `Game.ini` names with `Library=`. Required unless `--vkxp-only` is given, except for a game of VX Ace, which runs with the DLL it has at the path of its `Library=` when the option is left out. |
+| `--runtime rgss1\|rgss2\|rgss3` | The runtime of the game. Only needed when the file that `Scripts=` of `Game.ini` names is none of a `.rxdata` (RGSS1, RPG Maker XP), a `.rvdata` (RGSS2, RPG Maker VX) and a `.rvdata2` (RGSS3, RPG Maker VX Ace). |
+| `--rtp NAME=DIR` | The directory of the run-time package that `Game.ini` names `NAME`, with `RTP1` to `RTP3` in a game of XP and with `RTP` in a game of VX or VX Ace. Repeatable. |
 | `--input SCHEDULE\|@FILE` | The buttons held from given frames on, in the syntax described under [Running the demo](running.md#running-the-demo), or a file that holds such a schedule. |
 | `--font FILE` | A font file that both runtimes draw text with, as described below. Repeatable. |
 | `--builtin-scripts FILE` | The built-in scripts file for vkxp, instead of its default location. |
@@ -309,7 +309,7 @@ cargo xtask oracle <game directory> --frames 10,20,200 \
 | `--vkxp-only` | Run only vkxp. Needs neither Wine nor Xvfb nor the DLL. |
 | `--original-only` | Run only the original. Nothing is compared, and vkxp is not built. Not together with `--vkxp-only`. |
 | `--no-threads` | On both sides, make `Thread.new` run its block at once in the caller and `sleep` return at once inside such a block. For a game whose Ruby threads end the original under Wine. |
-| `--locale LOCALE` | `LC_ALL` of the original, which decides the code page its file names are read in: `zh_CN.UTF-8`, the default, for a Chinese game, `ja_JP.UTF-8` for a Japanese one. |
+| `--locale LOCALE` | `LC_ALL` of the original, which decides the code page its file names are read in: `zh_CN.UTF-8`, the default, for a Chinese game, `ja_JP.UTF-8` for a Japanese one, `en_US.UTF-8` for the English games of VX Ace that were measured. |
 | `--timeout SECONDS` | How long the original may take to reach one frame. Defaults to 120. |
 
 Each side runs a copy of the game, `<out>/original/game` and `<out>/vkxp/game`, with a probe
@@ -330,10 +330,43 @@ updates that were measured to show the same pictures, so that a frame inside the
 and it calls `Graphics.frame_reset` around a hold, because the original does not draw the
 updates that follow a stall. `--original-only` runs the side of the original alone.
 
-A game that ships its data in `Game.rgssad`, or `Game.rgss2a` (both RGSSAD version 1), is compared as it is: the
-probe is added to the script archive inside the encrypted archive of each copy, every other
-entry is written back unchanged, and no loose script archive is added, because the original
-reads its scripts only from the archive when there is one. To make such a game from an
+A game of RPG Maker VX Ace (RGSS3) is run with the rules of VX and these differences:
+
+- Its run-time package is registered under `HKLM\Software\Enterbrain\RGSS3\RTP`, by the
+  name `RTP=` of its `Game.ini` gives (`--rtp RPGVXAce=<directory>`); a game with `RTP=`
+  empty needs none. Its encrypted archive is `Game.rgss3a`.
+- The run-time package holds no DLL: the game ships its own at the path that `Library=` of
+  its `Game.ini` names, for example `Library=System\RGSS300.dll`, relative to the game
+  directory. The command puts the DLL there in the copy of the original's side, each folder
+  of the path matched without regard to case and made when missing, and nowhere else. With
+  `--dll` that file replaces the game's; without it the game's own file is used. A missing
+  `Library=` line, a path with a drive, a leading separator, `.` or `..`, and a missing file
+  without `--dll` end the run before Wine starts.
+- The screen is 544 by 416 at the start, and a game may resize it with
+  `Graphics.resize_screen` at any time. The probe reports the size of the screen with each
+  frame it holds, and the command captures the window of that size. vkxp dumps its pictures
+  at the size it has; pictures of different sizes are reported as not comparable.
+- The probe is a third one, written for Ruby 1.9.2. It counts frames as the probe of VX does,
+  which was measured to be the same in VX Ace, and takes a button as its Symbol (`:DOWN`),
+  as the constants of `Input` are in RGSS3, or as its Integer of RGSS2 (2), as the original
+  does; anything else is not pressed.
+- Its default font, VL Gothic, is an open font that the run-time package has in its `Fonts`
+  folder: `--font <RTP directory>/Fonts/VL-Gothic-Regular.ttf` gives both sides that very
+  file.
+- Ruby threads run in the original of VX Ace, at times that are not repeatable;
+  `--no-threads` is not needed for the game to run, and makes its runs repeatable.
+- vkxp runs such a game in its guest executable `vkxp-guest-rgss3`, which the command builds
+  together with vkxp. Until vkxp has the classes of RGSS3, a real game of VX Ace ends on the
+  vkxp side with an error, which the command reports as the failure of that side;
+  `--original-only` runs the original alone.
+
+A game that ships its data in `Game.rgssad`, or `Game.rgss2a` (both RGSSAD version 1), or
+`Game.rgss3a` (RGSSAD version 3) is compared as it is: the probe is added to the script
+archive inside the encrypted archive of each copy, every other entry is written back
+unchanged, and no loose script archive is added, because the original reads its scripts only
+from the archive when there is one. An archive of version 3 is written back with its seed,
+the key and the place of every entry and the end of its table, so that only the data of the
+script archive differ. To make such a game from an
 unpacked one, `cargo xtask pack-rgssad <game directory>` writes every file below the
 directory's `Data` and `Graphics` folders into `Game.rgssad`, under its path with
 backslashes, and then removes the two folders. It changes the directory it is given, so give
@@ -344,16 +377,21 @@ game that has its `Game.exe`. Every Wine process runs inside a `bwrap` sandbox i
 `/dev/dri` is an empty directory and there is no network: software rendering alone does not
 keep the run from the GPUs of the machine, because a game that plays Ogg or MP3 does it
 through GStreamer, whose hardware plugins probe VA-API. VA-API is also pointed at a driver
-directory that does not exist. A game that needs the network on the original side is not
+directory that does not exist, and GStreamer, for every runtime, at plugin directories of
+its own, `<out>/gstreamer/plugins-<n>`, made afresh on every run with links to the plugins of
+the system's GStreamer directories without the hardware plugins (`va`, `vaapi`, `qsv`,
+`msdk`, `vulkan`, `kms`, `opengl`, `qmlgl`, `nvcodec`, `video4linux2`, `v4l2codecs`), and at a
+registry of its own, `<out>/gstreamer/registry.bin`, so that the user's registry is not
+rewritten. These are lines behind the sandbox, which stays the requirement. A game that needs the network on the original side is not
 compared. The command starts a virtual display of its own, makes a Wine prefix at
 `<out>/prefix` on the first run (which takes a while), registers the run-time packages and
 replacements for common game fonts in it, and runs `Game.exe` with software rendering only.
 At each frame asked for the probe holds the game until the command has read the picture of
 the game window from the display; after the last one the game ends. A frame that falls
 inside a transition is captured when the transition has ended, because the original cannot
-be held in the middle of one. In a game of VX such a frame is a late frame, unless it is the
-last frame of the transition, whose picture is the one the transition ends with: the picture
-of the original is kept, the report lists the frame as "not comparable: inside a transition",
+be held in the middle of one. In a game of VX or VX Ace such a frame is a late frame, unless
+it is the last frame of the transition, whose picture is the one the transition ends with: the
+picture of the original is kept, the report lists the frame as "not comparable: inside a transition",
 and it counts neither as equal nor as different. What Wine and the game print is in `<out>/original/wine.log`,
 which is where to look when the command reports that a frame was not reached. vkxp runs
 headless on the CPU device unless the Vulkan loader is already restricted to other drivers.
@@ -386,16 +424,24 @@ The limits of the original's side:
 
 - A Ruby thread ends the original under Wine, in XP and in VX. `--no-threads` lets such a game
   go on, but changes it: what the thread did over time happens at once. The option applies to
-  both sides, and the report says that it was used.
-- A frame inside a transition cannot be held. In a game of VX it is a late frame, as above; in
-  a game of XP its picture is whatever the window shows when the transition has ended.
-- The game window is looked for by the frame size of the runtime. A game that changes the
-  size of its window (`Graphics.resize_screen`, a resizer of its own) cannot be captured
-  after that.
+  both sides, and the report says that it was used. In VX Ace threads run, at times that are
+  not repeatable.
+- A frame inside a transition cannot be held. In a game of VX or VX Ace it is a late frame,
+  as above; in a game of XP its picture is whatever the window shows when the transition has
+  ended.
+- The game window is the topmost visible window of the size of the frame: for XP and VX the
+  fixed frame size of the runtime, so that a game of theirs that changes the size of its
+  window (`Graphics.resize_screen` of VX, a resizer of its own) cannot be captured after
+  that; for VX Ace the size the probe
+  reports, so that `Graphics.resize_screen` is followed.
+- Real key presses, F12 and the reset are not sent: the probe answers `Input` on both sides.
+  Neither `Graphics.play_movie` nor audio is compared.
 The pictures show the game's and the run-time package's art, so they stay out of the
 repository, like everything else below `target/`.
 
-The tests of the harness run the vkxp side on games they generate. The one test of the
+The tests of the harness run the vkxp side on games they generate; those of VX Ace, which
+need the guest executable of RGSS3, run where the tests of `crates/vkxp/tests/rgss3.rs` do,
+with built-in scripts that are the tests' own stand-in. The one test of the
 original side is ignored by default, because it needs Wine, Xvfb, `bwrap` and files that are not in the
 repository; it captures frames 10 and 20 of a real game below `target/oracle-test`. Its three
 variables hold absolute paths:
