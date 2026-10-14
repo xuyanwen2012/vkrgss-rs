@@ -105,13 +105,16 @@ static inline void blocking_region_end(rb_thread_t *th, struct rb_blocking_regio
     SET_MACHINE_STACK_END(&(th)->machine_stack_end); \
   } while (0)
 
+static void gvl_acquire(rb_vm_t *vm);
+static void gvl_yield(rb_vm_t *vm);
+
 #define GVL_UNLOCK_BEGIN() do { \
   rb_thread_t *_th_stored = GET_THREAD(); \
   RB_GC_SAVE_MACHINE_CONTEXT(_th_stored); \
   native_mutex_unlock(&_th_stored->vm->global_vm_lock)
 
 #define GVL_UNLOCK_END() \
-  native_mutex_lock(&_th_stored->vm->global_vm_lock); \
+  gvl_acquire(_th_stored->vm); \
   rb_thread_set_current(_th_stored); \
 } while(0)
 
@@ -221,6 +224,77 @@ static void timer_thread_function(void *);
 #else
 #error "unsupported thread type"
 #endif
+
+/* vkxp: the GVL is a plain mutex, which is not fair. A thread that gives the GVL up at the
+ * end of its time slice (rb_thread_schedule) took it again at once, before the thread that
+ * waited for it had woken, and a main thread that never blocks kept a new thread from ever
+ * running: 3000 time slices in 30 seconds were measured without one handover. A thread
+ * that takes the GVL counts itself in gvl_waiting while it waits and counts gvl_taken
+ * once it has the lock; gvl_yield, when a thread waits, sleeps until another thread has
+ * taken the GVL before it takes it again. gvl_handover_lock is never held while a thread
+ * waits for the GVL. ruby_vkxp_gvl_atfork forgets the waiters of the copied process. */
+static rb_thread_lock_t gvl_handover_lock;
+static rb_thread_cond_t gvl_handover_cond;
+static int gvl_waiting;
+static int gvl_yielding;
+static unsigned long gvl_taken;
+
+static void
+gvl_acquire(rb_vm_t *vm)
+{
+    native_mutex_lock(&gvl_handover_lock);
+    gvl_waiting++;
+    native_mutex_unlock(&gvl_handover_lock);
+
+    native_mutex_lock(&vm->global_vm_lock);
+
+    native_mutex_lock(&gvl_handover_lock);
+    gvl_waiting--;
+    gvl_taken++;
+    if (gvl_yielding) native_cond_broadcast(&gvl_handover_cond);
+    native_mutex_unlock(&gvl_handover_lock);
+}
+
+static void
+gvl_yield(rb_vm_t *vm)
+{
+    native_mutex_lock(&gvl_handover_lock);
+    if (gvl_waiting > 0) {
+	unsigned long taken = gvl_taken;
+	gvl_yielding++;
+	native_mutex_unlock(&vm->global_vm_lock);
+	while (gvl_taken == taken) {
+	    native_cond_wait(&gvl_handover_cond, &gvl_handover_lock);
+	}
+	gvl_yielding--;
+	native_mutex_unlock(&gvl_handover_lock);
+    }
+    else {
+	native_mutex_unlock(&gvl_handover_lock);
+	native_mutex_unlock(&vm->global_vm_lock);
+	native_thread_yield();
+    }
+    gvl_acquire(vm);
+}
+
+static void
+gvl_handover_initialize(void)
+{
+    native_mutex_initialize(&gvl_handover_lock);
+    native_cond_initialize(&gvl_handover_cond);
+    gvl_waiting = 0;
+    gvl_yielding = 0;
+}
+
+/* vkxp: to be called in a copy of the process made by fork, on its one thread, which
+ * holds the GVL. The threads the copied process counted as waiting for the GVL, or that
+ * held gvl_handover_lock, do not exist in the copy. The interpreter's own fork calls it
+ * through rb_thread_atfork. */
+void
+ruby_vkxp_gvl_atfork(void)
+{
+    gvl_handover_initialize();
+}
 
 #if THREAD_DEBUG
 static int debug_mutex_initialized = 1;
@@ -431,7 +505,7 @@ thread_start_func_2(rb_thread_t *th, VALUE *stack_start, VALUE *register_stack_s
 #endif
     thread_debug("thread start: %p\n", (void *)th);
 
-    native_mutex_lock(&th->vm->global_vm_lock);
+    gvl_acquire(th->vm);
     {
 	thread_debug("thread start (get lock): %p\n", (void *)th);
 	rb_thread_set_current(th);
@@ -1008,11 +1082,7 @@ rb_thread_schedule_rec(int sched_depth)
 	thread_debug("rb_thread_schedule/switch start\n");
 
 	RB_GC_SAVE_MACHINE_CONTEXT(th);
-	native_mutex_unlock(&th->vm->global_vm_lock);
-	{
-	    native_thread_yield();
-	}
-	native_mutex_lock(&th->vm->global_vm_lock);
+	gvl_yield(th->vm);
 
 	rb_thread_set_current(th);
 	thread_debug("rb_thread_schedule/switch done\n");
@@ -1034,7 +1104,7 @@ rb_thread_schedule(void)
 static inline void
 blocking_region_end(rb_thread_t *th, struct rb_blocking_region_buffer *region)
 {
-    native_mutex_lock(&th->vm->global_vm_lock);
+    gvl_acquire(th->vm);
     rb_thread_set_current(th);
     thread_debug("leave blocking region (%p)\n", (void *)th);
     remove_signal_thread_list(th);
@@ -2752,6 +2822,7 @@ rb_thread_atfork_internal(int (*atfork)(st_data_t, st_data_t, st_data_t))
     vm->main_thread = th;
 
     native_mutex_reinitialize_atfork(&th->vm->global_vm_lock);
+    ruby_vkxp_gvl_atfork();
     st_foreach(vm->living_threads, atfork, (st_data_t)th);
     st_clear(vm->living_threads);
     st_insert(vm->living_threads, thval, (st_data_t)th->thread_id);
@@ -4246,6 +4317,7 @@ Init_Thread(void)
 	    /* acquire global vm lock */
 	    rb_thread_lock_t *lp = &GET_THREAD()->vm->global_vm_lock;
 	    native_mutex_initialize(lp);
+	    gvl_handover_initialize();
 	    native_mutex_lock(lp);
 	    native_mutex_initialize(&GET_THREAD()->interrupt_lock);
 	}

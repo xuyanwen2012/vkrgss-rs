@@ -31,18 +31,27 @@ unsafe extern "C" {
     /// Forgets the timer thread without stopping it. The interpreter calls it itself after
     /// its own `fork`.
     fn rb_thread_reset_timer_thread();
+    /// Forgets the threads the copied process counted as waiting for the interpreter's
+    /// lock (patch `gvl-handover`). The interpreter calls it itself after its own `fork`.
+    fn ruby_vkxp_gvl_atfork();
 }
 
 /// Makes script threads work in a copy of the process that `fork` has just made. The timer
 /// thread of the copied process does not exist in the copy; this forgets it and makes its
 /// lock and condition variable afresh (patch `timer-thread-in-a-copy`), and the interpreter
-/// then starts one when a script next creates a thread (patch `lazy-timer-thread`). To be
-/// called in the copy on the interpreter thread, which is the one thread a copy has.
-/// Nothing changes when no script ever made a thread.
+/// then starts one when a script next creates a thread (patch `lazy-timer-thread`). It also
+/// forgets the threads of the copied process that waited for the interpreter's lock, which
+/// a thread of the copy that gives way at the end of its time slice would otherwise wait
+/// for (patch `gvl-handover`). To be called in the copy on the interpreter thread, which is
+/// the one thread a copy has. Nothing changes when no script ever made a thread.
 pub fn restart_thread_timer() {
-    // SAFETY: called on the interpreter thread, as the interpreter itself calls it after a
-    // `fork`; it clears one variable that only that thread reads.
-    unsafe { rb_thread_reset_timer_thread() }
+    // SAFETY: called on the interpreter thread, which holds the interpreter's lock and is
+    // the one thread of the copy, as the interpreter itself calls both after a `fork`; they
+    // clear variables and make a lock and condition variables afresh.
+    unsafe {
+        rb_thread_reset_timer_thread();
+        ruby_vkxp_gvl_atfork();
+    }
 }
 
 /// Whether a copy of the process made by `fork` now would lack threads a script has made:

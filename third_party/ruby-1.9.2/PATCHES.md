@@ -71,7 +71,7 @@ the interpreter behave as vkxp embeds it. None changes what a script computes.
 
 - File: `thread.c`
 - Patch: `patches/lazy-timer-thread-create.patch`
-- Patched SHA-256: `6bc2a2555bbc47137dccbde3f963b1e8843b6772216923390221e9acb62db2ea`
+- Patched SHA-256: `1606cf65a1ddd5e8560da9774299da93c5a4a1d50bb311cdf92823d92af960bf`
 - Reason: the other half of patch 4: `thread_create_core` calls
   `rb_thread_create_timer_thread` before it starts the native thread of a new Ruby thread, so
   that the timer thread exists from the first `Thread.new` on. The call does nothing when
@@ -224,3 +224,21 @@ the interpreter behave as vkxp embeds it. None changes what a script computes.
   thread: a test of a copy of the process showed it once in a run of the workspace tests
   under load. `native_reset_timer_thread` makes both afresh. After the timer thread was
   stopped and joined, its other caller, they are free and nothing changes.
+
+## 17. gvl-handover
+
+- File: `thread.c`
+- Patch: `patches/gvl-handover.patch`
+- Patched SHA-256: `1606cf65a1ddd5e8560da9774299da93c5a4a1d50bb311cdf92823d92af960bf`
+- Reason: applies after patch 5. The global VM lock of the release is a plain mutex, which
+  is not fair: a thread that gave it up at the end of its time slice (`rb_thread_schedule`)
+  took it again before the thread that waited for it had woken, so a main thread that never
+  blocks kept a new thread from running. Of twenty new threads in a row, each awaited by a
+  main thread in a loop without blocking, seven had not run after 30 seconds and the others
+  ran after 0.1 to 28 seconds, in the original process and in a copy made by `fork` alike;
+  the timer thread had set the interrupt of the main thread every 10 ms and the main thread
+  had given way every time. A thread that takes the lock now counts itself as waiting
+  (`gvl_acquire`), and `gvl_yield` sleeps, when a thread waits, until another thread has
+  taken the lock; each of the twenty threads then runs after one time slice. The count
+  belongs to the threads of one process: `ruby_vkxp_gvl_atfork` forgets it in a copy,
+  called by `rb_thread_atfork` and by vkxp's `restart_thread_timer`.
