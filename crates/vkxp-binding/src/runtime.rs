@@ -916,7 +916,9 @@ fn load(ruby: &Ruby) -> Result<(Vec<Preload>, usize), RunError> {
         RunError::Prepare(unsafe { ruby.describe(raised) })
     };
     seed(ruby).map_err(prepare)?;
-    let source = rb::text_new(ruby, &source).map_err(prepare)?;
+    // Bytes: the original of RGSS3 evaluates its built-in scripts from a string of bytes, so
+    // their literals are ASCII-8BIT (a save shows it); over Ruby 1.8.7 bytes and text are one.
+    let source = rb::bytes_new(ruby, &source).map_err(prepare)?;
     if let Err(raised) = evaluate(ruby, source, BUILTIN_NAME) {
         // SAFETY: as above.
         let error = unsafe { ruby.describe(raised) };
