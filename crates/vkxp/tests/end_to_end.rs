@@ -520,7 +520,7 @@ fn the_version_is_printed_without_a_driver_or_a_game() {
         command.env("VK_LOADER_DRIVERS_SELECT", "no-such-driver");
         let output = command.output().expect("the program starts");
         assert_eq!(output.status.code(), Some(0), "{option}");
-        assert_eq!(output.stdout, b"vkxp 0.2.0\n", "{option}");
+        assert_eq!(output.stdout, b"vkxp 0.3.0\n", "{option}");
     }
 }
 

@@ -2,10 +2,36 @@
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.3.0] - 2026-10-14
 
 ### Added
 
+- Support for RPG Maker VX Ace (RGSS3): the scripts of a game of VX Ace run over Ruby 1.9.2
+  in the guest executable `vkxp-guest-rgss3`, which `vkxp` starts from beside itself, always
+  as a guest process. The start of a game is that of the original runtime: the built-in
+  scripts file with `rgss_main` and `rgss_stop`, `$RGSS_SCRIPTS`, scripts evaluated as
+  `{0000}` and compiled as UTF-8, `RGSSReset` with `Graphics.__reset__` and
+  `Audio.__reset__`, the endings, the error report of RGSS3, `msgbox`, `msgbox_p`,
+  `load_data`, `save_data` and `RGSS_VERSION`. Two games of VX Ace equal the original
+  runtime on every compared frame of their title, menus, maps and a battle but for three
+  antialiased pixels of one glyph, and a save written at the same frame is byte for byte
+  that of the original.
+- RPG Maker VX Ace (RGSS3): the class `Tilemap` with `flags` in the place of `passages`,
+  drawn by the rules of RGSS3. A write to a slot of `bitmaps` of a disposed tilemap is kept
+  where the original runtime ends.
+- RPG Maker VX Ace (RGSS3): `Font` and the text and creation of `Bitmap` of RGSS3: the
+  defaults of RGSS3, `outline` and `out_color`, the objects a font is given kept as given,
+  `Font.exist?` exact, `font=` that copies every attribute, text drawn by the rules of RGSS3,
+  no limit of 4194304 pixels on `Bitmap.new`, and the argument errors of the original. The
+  guest reads the version of the DLL the game ships, by which `RGSS_VERSION` is `"3.0.0"` or
+  `"3.0.1"` and the glyph rule is that of 3.0.0.1 or 3.0.1.1, and a game takes fonts from the
+  `Fonts` directories of its run-time packages.
+- RPG Maker VX Ace (RGSS3): the module `Audio` of RGSS3. `bgm_play` and `bgs_play` take
+  `pos`, `bgm_pos`, `bgs_pos` and `setup_midi` exist, and volume and pitch follow the limits
+  of RGSS3. The same music played again goes on and only changes its volume. The position
+  follows the rule measured on the original, computed by the game's side from the frames it
+  has shown and the header of the file, so it is the same in every run with the same input;
+  a music effect holds it. A sound is looked for as `ogg`, `mid`, `mp3`, `wav`, `wma`.
 - RPG Maker VX Ace (RGSS3): `Win32API` of RGSS3. The constructor takes four arguments and
   finds a library that is a file of the game, the runtime library of `Game.ini` or a system
   library of Windows of a fixed list, and raises `LoadLibrary` for any other; the import
@@ -14,36 +40,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   functions read nothing under a bare file name. No library is loaded: functions are
   emulated as for XP and VX or give 0. `DL` exists with its constants and classes and
   refuses every way into a library or into memory with `DL::DLError`.
-- RPG Maker VX Ace (RGSS3): `Font` and the text and creation of `Bitmap` of RGSS3: the
-  defaults of RGSS3, `outline` and `out_color`, the objects a font is given kept as given,
-  `Font.exist?` exact, `font=` that copies every attribute, text drawn by the rules of RGSS3,
-  no limit of 4194304 pixels on `Bitmap.new`, and the argument errors of the original. The
-  guest reads the version of the DLL the game ships, by which `RGSS_VERSION` is `"3.0.0"` or
-  `"3.0.1"` and the glyph rule is that of 3.0.0.1 or 3.0.1.1, and a game takes fonts from the
-  `Fonts` directories of its run-time packages.
-- RPG Maker VX Ace (RGSS3): the class `Tilemap` with `flags` in the place of `passages`,
-  drawn by the rules of RGSS3. A write to a slot of `bitmaps` of a disposed tilemap is kept
-  where the original runtime ends.
-- Experimental support for RPG Maker VX Ace (RGSS3): the scripts of a game of VX Ace run
-  over Ruby 1.9.2 in the guest executable `vkxp-guest-rgss3`, which `vkxp` starts from
-  beside itself, always as a guest process. The start of a game is that of the original
-  runtime: the built-in scripts file with `rgss_main` and `rgss_stop`, `$RGSS_SCRIPTS`,
-  scripts evaluated as `{0000}` and compiled as UTF-8, `RGSSReset` with `Graphics.__reset__`
-  and `Audio.__reset__`, the endings, the error report of RGSS3, `msgbox`, `msgbox_p`,
-  `load_data`, `save_data` and `RGSS_VERSION`. The classes are those of RGSS2 still, so a
-  game made with the standard scripts ends with an error before its title screen; a run
-  says once that the support is experimental.
 - Save states and the sandbox for a guest of VX Ace; a state is not saved while a script
   thread is alive.
 - The release archive holds `vkxp-guest-rgss3` beside `vkxp` and the licence texts of
   Ruby 1.9.2.
 - `cargo xtask stress` has the step `guest-1.9.2`.
-- RPG Maker VX Ace (RGSS3): the module `Audio` of RGSS3. `bgm_play` and `bgs_play` take
-  `pos`, `bgm_pos`, `bgs_pos` and `setup_midi` exist, and volume and pitch follow the limits
-  of RGSS3. The same music played again goes on and only changes its volume. The position
-  follows the rule measured on the original, computed by the game's side from the frames it
-  has shown and the header of the file, so it is the same in every run with the same input;
-  a music effect holds it. A sound is looked for as `ogg`, `mid`, `mp3`, `wav`, `wma`.
 - Audio: a sound can start part of the way into its file, the music returns to its volume
   over one second after a music effect of VX Ace, the volume of a playing sound can change
   without a restart, and the mixer plays every pitch from 1 up.
@@ -53,7 +54,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The protocol is at version 15: the play command carries where its sound starts and the
   time over which the music returns after a music effect, and a volume command exists. An
   input recording or a stream of version 14 is refused.
-
 - A game of VX Ace no longer ends with the message that VX Ace is planned. `--guest thread`
   with such a game ends the run with a message that names `--guest process`.
 

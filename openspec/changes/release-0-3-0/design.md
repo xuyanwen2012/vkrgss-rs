@@ -66,3 +66,7 @@ the warning and the usage text.
 
 - The banner file to use: `../../vkxp/target/release-0-3-0/banner.jpg` (outside the clone,
   made by the owner's agent from the owner's picture); copy it to `docs/images/banner.jpg`.
+- The version is asserted by two tests: `crates/vkxp/src/args.rs` and the test of `--version`
+  in `crates/vkxp/tests/end_to_end.rs`, which names neither the warning nor the usage text.
+  Each expects `vkxp 0.3.0` now; the requirement "Version 0.3.0" plainly needs that one-line
+  edit outside the listed files, as the release of 0.2.0 made it.
