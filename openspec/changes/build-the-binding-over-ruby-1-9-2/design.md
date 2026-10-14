@@ -452,11 +452,6 @@ named.
   stand above it. The scenario "Names of the tests" does not name that crate; every name
   of the four packages it names is listed as before.
 - What the flow decided where the artifacts left room, for the reviewer and the owner:
-  - *Scenario "Round trip" and `Table`.* `Table` has no `==`, over either interpreter and
-    on the original, so `Marshal.load(Marshal.dump(table)) == table` is false by identity.
-    `tests/strings.rs` compares `Color`, `Tone` and `Rect` with `==` as the scenario says
-    and a table through its serialized form and one element. Giving `Table` an `==` would
-    be class behaviour, which this change does not add.
   - *Scenario "Font name".* In a game of RGSS3 `Font.new.name` is already a list of names
     (change `draw-text-and-bitmaps-as-rgss3`); the test asserts ASCII-8BIT for every name
     of the list and for the one name of `Font.new('Test Sans')`.
@@ -484,3 +479,15 @@ named.
   over Ruby 1.8.7 during this flow (`testing::bitmap_count()` was 1, not 0) and passed in
   every later run. The count is of the arena shared by the tests of the binary, which run
   in parallel. Not caused by this change and not examined.
+- **Open question, task 5.1 unticked: the scenario "Round trip" for `Table`.** The scenario
+  (`specs/binding-over-two-interpreters/spec.md`, "Round trip") asks that
+  `Marshal.load(Marshal.dump(value)) == value` be true for a `Color`, a `Tone`, a `Rect`
+  and a `Table`. For a `Table` the expression returns `false`, over Ruby 1.9.2 and over
+  Ruby 1.8.7: `Table` defines no `==`, as on the original runtime, so the comparison is
+  that of `Object`, by identity. It is true for the other three classes. The question for
+  the owner: should the acceptance of a `Table` compare its contents and not the identity
+  of the object, and if so, in which words? `tests/strings.rs` of `vkxp-binding-rgss3`
+  compares a loaded table with the original through `_dump(0)` and one element; that is
+  an additional check and does not meet the scenario as written. The flow did not add
+  `Table#==`, which would be class behaviour and would change Ruby 1.8.7, and did not
+  edit the scenario. Everything else of task 5.1 passes.
