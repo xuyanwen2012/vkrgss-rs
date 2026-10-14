@@ -41,7 +41,7 @@ const CLASSES: &[&str] = &[
 ];
 
 /// The classes whose surface of RGSS3 is bound, which the test checks.
-const BOUND: &[&str] = &["Color", "Tone", "Rect", "Table"];
+const BOUND: &[&str] = &["Color", "Tone", "Rect", "Table", "Window"];
 
 fn eval(source: &str) -> String {
     testing::start_as(Runtime::Rgss3);
@@ -106,7 +106,7 @@ fn every_listed_method_of_a_bound_class_has_the_listed_arity() {
         .iter()
         .map(|class| entries.iter().filter(|entry| entry.class == *class).count())
         .collect();
-    assert_eq!(counts, [17, 17, 18, 10]);
+    assert_eq!(counts, [17, 17, 18, 10, 53]);
     let wrong = mismatches(&entries, BOUND);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
     assert_eq!(

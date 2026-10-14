@@ -64,6 +64,7 @@ const GREEN_CONTENTS: &str = "made << (green = solid(50, 50, 0, 255, 0))";
 const RED: &str = "[255, 0, 0, 255]";
 const GREEN: &str = "[0, 255, 0, 255]";
 const BLACK: &str = "[0, 0, 0, 255]";
+const DISPOSED: &str = "RGSSError: disposed window";
 const NIL_INTEGER: &str = "TypeError: no implicit conversion from nil to integer";
 
 // --- Construction -----------------------------------------------------------------------------
@@ -493,5 +494,149 @@ fn the_viewport_is_assigned_as_in_rgss2() {
              [[a, w.viewport], error { w.viewport = 5 }]"
         ),
         "[[true, nil], \"TypeError: can't convert Fixnum into Viewport\"]"
+    );
+}
+
+// --- Disposal and disposed bitmaps ------------------------------------------------------------
+
+/// Scenario "A disposed window, measured on the original".
+#[test]
+fn a_disposed_window_raises_and_leaves_its_bitmaps() {
+    let calls = [
+        "w.x",
+        "w.width",
+        "w.contents",
+        "w.windowskin",
+        "w.tone",
+        "w.cursor_rect",
+        "w.open?",
+        "w.close?",
+        "w.update",
+        "w.padding",
+        "w.viewport",
+        "w.visible",
+        "w.x = 1",
+        "w.move(1, 2, 3, 4)",
+    ];
+    let errors: Vec<String> = calls
+        .iter()
+        .map(|call| format!("error {{ {call} }}"))
+        .collect();
+    assert_eq!(
+        eval_with(
+            &format!("{}; made << (c = Bitmap.new(10, 10))", window("")),
+            &format!(
+                "w.contents = c; w.dispose; [[c.disposed?, w.disposed?, w.dispose], [{}]]",
+                errors.join(", ")
+            )
+        ),
+        format!(
+            "[[false, true, nil], [{}]]",
+            vec![format!("\"{DISPOSED}\""); calls.len()].join(", ")
+        )
+    );
+}
+
+/// Scenario "A disposed skin, measured on the original".
+#[test]
+fn a_disposed_skin_is_drawn_as_none() {
+    assert_eq!(
+        eval_with(
+            &format!(
+                "{GREY_SKIN}; {}; w.windowskin = skin; w.back_opacity = 255",
+                window("0, 0, 100, 100")
+            ),
+            &format!(
+                "first = pixel(50, 50) != {BLACK}; skin.dispose; second = pixel(50, 50); \
+                 w.update; w.width = 100; w.ox = 0; w.cursor_rect = Rect.new(0, 0, 8, 8); \
+                 w.contents_opacity = 100; same = w.windowskin.equal?(skin); \
+                 [first, second, pixel(50, 50), same]"
+            )
+        ),
+        format!("[true, {BLACK}, {BLACK}, true]")
+    );
+}
+
+/// Scenario "Disposed contents, measured on the original".
+#[test]
+fn disposed_contents_are_drawn_as_none() {
+    assert_eq!(
+        eval_with(
+            &format!(
+                "{GREEN_CONTENTS}; {}; w.contents = green",
+                window("0, 0, 100, 100")
+            ),
+            "first = pixel(10, 10); green.dispose; w.update; w.contents_opacity = 100; \
+             [first, pixel(10, 10)]"
+        ),
+        format!("[{GREEN}, {BLACK}]")
+    );
+}
+
+// --- Calls at which the original faults -------------------------------------------------------
+
+/// Scenario "No skin was ever assigned": the original ends at the first assignment here.
+#[test]
+fn the_cursor_is_placed_in_a_window_that_never_had_a_skin() {
+    assert_eq!(
+        eval_with(
+            &window("0, 0, 96, 96"),
+            "w.padding = 8; w.padding_bottom = 4; w.ox = 0; w.oy = 0; \
+             w.cursor_rect = Rect.new(0, 0, 0, 0); w.cursor_rect.set(0, 0, 0, 0); \
+             w.cursor_rect.x = 0; w.cursor_rect.empty; \
+             [w.padding, w.padding_bottom, w.cursor_rect.to_s, pixel(48, 48)]"
+        ),
+        format!("[8, 4, \"(0, 0, 0, 0)\", {BLACK}]")
+    );
+}
+
+/// Scenario "A small skin and contents".
+#[test]
+fn contents_follow_a_small_skin() {
+    assert_eq!(
+        eval_with(
+            &window(""),
+            "made << (w.windowskin = Bitmap.new(8, 8)) << (w.contents = Bitmap.new(8, 8)); \
+             w.contents.width"
+        ),
+        "8"
+    );
+}
+
+/// Scenario "Sizes": nothing of a window without a skin needs a bitmap of its size.
+#[test]
+fn a_window_and_a_cursor_of_any_size_are_taken() {
+    assert_eq!(
+        eval_with(
+            &window("0, 0, 100000, 100000"),
+            "w.cursor_rect = Rect.new(0, 0, 100000, 100000); \
+             [w.width, w.cursor_rect.width, pixel(0, 0).size]"
+        ),
+        "[100000, 100000, 4]"
+    );
+}
+
+// --- Method surface ---------------------------------------------------------------------------
+
+/// Scenarios "Every listed method exists" and "Nothing beside the list", in part: the
+/// arities named there and no `stretch`. `arity_rgss3.rs` checks the whole list.
+#[test]
+fn the_class_has_the_methods_of_rgss3_and_no_stretch() {
+    assert_eq!(
+        eval(
+            "[:initialize, :move, :open?, :close?, :padding, :padding_bottom, \
+              :arrows_visible, :tone, :viewport].map { |m| Window.instance_method(m).arity } \
+             << [Window.method_defined?(:stretch), Window.method_defined?(:stretch=)]"
+        ),
+        "[-1, 4, 0, 0, 0, 0, 0, 0, 0, [false, false]]"
+    );
+}
+
+/// Scenario "No copies".
+#[test]
+fn a_window_is_not_copied() {
+    assert_eq!(
+        eval_with(&window(""), "[try { w.clone }, try { w.dup }]"),
+        "[TypeError, TypeError]"
     );
 }

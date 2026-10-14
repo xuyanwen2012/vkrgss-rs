@@ -12,8 +12,8 @@
 
 ## 3. Disposal, faults and the method list
 
-- [ ] 3.1 Tests of disposal, of disposed bitmaps and of the calls at which the original faults (decisions 5 and 6). Verify: the scenarios of "Disposal and disposed bitmaps of a window in RGSS3" and "Calls at which the original of RGSS3 faults, through the class"; the same test command.
-- [ ] 3.2 `Window` in the list of bound classes of `crates/vkxp-binding-rgss3/tests/arity_rgss3.rs` (decision 8). Verify: the scenarios of "Method surface of Window in RGSS3" and of "The window of RGSS1 and RGSS2 is unchanged by RGSS3"; `git diff` against the start of the change is empty for `crates/vkxp-binding/tests/data/rgss3_api.txt` and for `crates/vkxp-binding-rgss3/tests/ruby192.allow`, and in `tests/scene.rs` and `tests/scene_rgss2.rs` of `vkxp-binding` it adds lines and removes none; `cargo test -p vkxp-binding -p vkxp-binding-rgss3 -p xtask --locked` passes.
+- [x] 3.1 Tests of disposal, of disposed bitmaps and of the calls at which the original faults (decisions 5 and 6). Verify: the scenarios of "Disposal and disposed bitmaps of a window in RGSS3" and "Calls at which the original of RGSS3 faults, through the class"; the same test command.
+- [x] 3.2 `Window` in the list of bound classes of `crates/vkxp-binding-rgss3/tests/arity_rgss3.rs` (decision 8). Verify: the scenarios of "Method surface of Window in RGSS3" and of "The window of RGSS1 and RGSS2 is unchanged by RGSS3"; `git diff` against the start of the change is empty for `crates/vkxp-binding/tests/data/rgss3_api.txt` and for `crates/vkxp-binding-rgss3/tests/ruby192.allow`, and in `tests/scene.rs` and `tests/scene_rgss2.rs` of `vkxp-binding` it adds lines and removes none; `cargo test -p vkxp-binding -p vkxp-binding-rgss3 -p xtask --locked` passes.
 
 ## 4. Documents
 

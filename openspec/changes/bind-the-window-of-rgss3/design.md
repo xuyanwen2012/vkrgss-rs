@@ -203,6 +203,11 @@ Two facts:
 - The interpreter of a test binary is shared: a test disposes its windows and bitmaps.
 - `Window#initialize` on an object that already has a window disposes the old one, as
   `element::create` does for every class.
+- One line beyond the line of `BOUND` was changed in `arity_rgss3.rs`: the test that counts
+  the entries of the bound classes compares one count per class of `BOUND`, so the count
+  of `Window`, 53, is added to it (`[17, 17, 18, 10]` became `[17, 17, 18, 10, 53]`). The
+  counts of the classes before are unchanged. Without it the scenario "Every listed method
+  exists" cannot pass with `Window` in the list.
 
 ## Follow-ups
 
