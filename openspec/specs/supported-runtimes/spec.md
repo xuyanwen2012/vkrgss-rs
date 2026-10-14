@@ -64,18 +64,6 @@ and their scenes, the mean and the largest value of the stages, and what was not
 - **WHEN** the risks of the extension to VX in `docs/decisions.md` are read
 - **THEN** the risk on frame times is followed by the measurement of 2026-10-13 with the numbers of this change's `design.md`
 
-### Requirement: Version 0.2.0
-The version of the workspace SHALL be 0.2.0, and `CHANGELOG.md` SHALL have a section
-`[0.2.0] - 2026-10-13` above that of 0.1.0 which names support for RPG Maker VX.
-
-#### Scenario: Version and lock file
-- **WHEN** `cargo metadata --locked --no-deps` is run
-- **THEN** it succeeds and gives the package `vkxp` the version 0.2.0
-
-#### Scenario: Documents after V3
-- **WHEN** the first paragraph of `README.md`, the first sentence of `AGENTS.md` and the openings of `docs/compatibility.md` and `docs/running.md` are read
-- **THEN** each says that XP and VX are supported and that VX Ace is planned, and none calls VX experimental
-
 ### Requirement: Order and milestones of VX Ace
 `docs/decisions.md` SHALL give VX Ace the milestones A0 (the original runtime under Wine),
 A1 (title screen and menu), A2 (walking on a map) and A3 (battle, saving and loading), held
@@ -83,7 +71,7 @@ to the standard of V1 to V3, and SHALL say that version 0.3.0 is released when A
 
 #### Scenario: Rows
 - **WHEN** the milestone table is read
-- **THEN** it has the rows A0 to A3, A0 "Done" with the games, their DLLs, the seeds, the schedule and the repeated run, and A1 to A3 "Not started"
+- **THEN** it has the rows A0 to A3, each "Done" with the games, their DLLs, the seeds, the schedules, the compared frames and the repeated run, and A3 also with the saves written at the same frame
 
 #### Scenario: Limits of A0
 - **WHEN** the row A0 is read
@@ -185,29 +173,6 @@ documents say about the state of VX Ace.
 #### Scenario: The section is there already
 - **WHEN** the change starts from a tree whose `docs/compatibility.md` has a section "RPG Maker VX Ace"
 - **THEN** the subsection is added to it, no second section of that name exists, and a sentence of that section that calls the value classes those of RGSS2 is brought up to date
-
-### Requirement: State of VX Ace once its games start
-The README, the agent guide, `docs/compatibility.md`, `docs/running.md` and the usage
-message SHALL say that RPG Maker VX Ace is experimental, and SHALL NOT say that it is
-supported or that a milestone of it is reached. The rows A1 to A3 of the milestone table
-SHALL stay "Not started". This statement SHALL replace what earlier scenarios of this
-capability say of VX Ace as planned.
-
-#### Scenario: Documents
-- **WHEN** the first paragraph and the table of runtimes of `README.md`, the first sentence of `AGENTS.md` and the openings of `docs/compatibility.md` and `docs/running.md` are read
-- **THEN** each says that XP and VX are supported and that VX Ace is experimental, and none says that VX Ace is planned or does not run
-
-#### Scenario: What experimental means here
-- **WHEN** the section on VX Ace of `docs/compatibility.md` is read
-- **THEN** it says that the scripts of a game of VX Ace run in a guest executable of their own with the classes of RGSS3, and that no frame was compared with the original, and it does not say that a game made with the standard scripts ends before its title screen
-
-#### Scenario: Milestones
-- **WHEN** the milestone table of `docs/decisions.md` is read
-- **THEN** the rows A1, A2 and A3 say "Not started" and the row A0 is unchanged
-
-#### Scenario: README stays within its length
-- **WHEN** the lines of `README.md` are counted
-- **THEN** there are at most 200
 
 ### Requirement: Recorded decisions on the guest executable and the start of RGSS3
 `docs/decisions.md` SHALL record, under "VX Ace", the decisions 5 to 16 of this change's
@@ -359,3 +324,33 @@ statements on XP and VX unchanged. What it says about the state of VX Ace SHALL 
 #### Scenario: Nothing else changes
 - **WHEN** the README, the agent guide, the opening of `docs/compatibility.md` and its sections on XP and VX are compared with the start of the change
 - **THEN** they are unchanged
+
+### Requirement: VX Ace is supported
+The README, the agent guide, `docs/compatibility.md`, `docs/running.md` and the usage
+message SHALL say that RPG Maker XP, VX and VX Ace are supported, and none SHALL call VX Ace
+experimental or planned. The README SHALL keep at most 200 lines.
+
+#### Scenario: Documents
+- **WHEN** the first paragraph and the table of runtimes of `README.md`, the first sentence of `AGENTS.md` and the openings of `docs/compatibility.md` and `docs/running.md` are read
+- **THEN** each says that XP, VX and VX Ace are supported, and none calls VX Ace experimental or planned
+
+#### Scenario: Banner
+- **WHEN** the banner of the README and its alternative text are looked at
+- **THEN** the card of VX Ace is labelled as supported and the text does not call it planned
+
+#### Scenario: Length
+- **WHEN** the lines of `README.md` are counted
+- **THEN** there are at most 200
+
+### Requirement: Version 0.3.0
+The version of the workspace SHALL be 0.3.0, and `CHANGELOG.md` SHALL have a section
+`[0.3.0] - 2026-10-14` above that of 0.2.0 which names support for RPG Maker VX Ace and
+holds what the section "Unreleased" held.
+
+#### Scenario: Version and lock file
+- **WHEN** `cargo metadata --locked --no-deps` is run
+- **THEN** it succeeds and gives the packages of the workspace the version 0.3.0
+
+#### Scenario: Changelog
+- **WHEN** `CHANGELOG.md` is read
+- **THEN** it has no section "Unreleased" with entries, and the section of 0.3.0 starts with support for RPG Maker VX Ace

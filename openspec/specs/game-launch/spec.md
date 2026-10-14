@@ -451,16 +451,20 @@ starts with, and a frame dumped by a headless run SHALL have the size of the gam
 - **THEN** the written picture is 640 by 480
 
 ### Requirement: Supported runtimes say nothing about their state
-A run of RGSS1 or of RGSS2 SHALL NOT say that support for its runtime is experimental, and
-the usage message SHALL name `rgss1` and `rgss2` without such a word.
+A run of RGSS1, RGSS2 or RGSS3 SHALL NOT say that support for its runtime is experimental,
+and the usage message SHALL name `rgss1`, `rgss2` and `rgss3` without such a word.
 
 #### Scenario: VX
 - **WHEN** a generated game of RGSS2 whose only script returns at once is run headless
 - **THEN** the diagnostics hold no line with the word "experimental", and the exit status is 0
 
+#### Scenario: VX Ace
+- **WHEN** a generated game of RGSS3 whose only script returns at once is run headless
+- **THEN** the diagnostics hold no line with the word "experimental", and the exit status is 0
+
 #### Scenario: Usage
 - **WHEN** the usage message is read
-- **THEN** the line of `--runtime` says of `rgss2` only that it is RPG Maker VX, and of `rgss3` that it is RPG Maker VX Ace and experimental
+- **THEN** the line of `--runtime` says of `rgss2` only that it is RPG Maker VX, and of `rgss3` only that it is RPG Maker VX Ace
 
 ### Requirement: Version of a guest process
 A guest process SHALL state the version of its executable as the first bytes of each
@@ -604,19 +608,6 @@ SHALL end the run with its own error.
 #### Scenario: Two runs
 - **WHEN** a generated game of RGSS3 that places a sprite by `rand` is run twice headless with the same seed and a dump of the same frame
 - **THEN** the two pictures are byte for byte equal
-
-### Requirement: Experimental runtime says so
-A run of RGSS3 SHALL say once, as a warning of the program's diagnostics, that support for
-RPG Maker VX Ace is experimental, whatever the form of the guest was chosen by. The guest
-process SHALL NOT say it again.
-
-#### Scenario: VX Ace
-- **WHEN** a generated game of RGSS3 whose only script returns at once is run headless without `--verbose`
-- **THEN** the error stream holds exactly one line with the word "experimental", that line names RPG Maker VX Ace, and the exit status is 0
-
-#### Scenario: XP
-- **WHEN** a generated game of RGSS1 is run headless with `--guest process`
-- **THEN** the error stream holds no such line
 
 ### Requirement: An executable runs the runtimes of its interpreter
 An executable SHALL play a game only when its interpreter is that of the game's runtime:
