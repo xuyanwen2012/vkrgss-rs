@@ -130,6 +130,7 @@ mod input;
 mod plane;
 mod rect;
 mod scene;
+pub mod sound;
 mod table;
 pub mod test_support;
 mod text;

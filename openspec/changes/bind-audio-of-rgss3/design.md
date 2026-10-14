@@ -355,3 +355,9 @@ Sections are those of the API report.
 - The message of the `RangeError` for a value of 2**31: the original says ``bignum too
   big to convert into `long'``, a 64-bit guest another text (the decision on the word
   size in `docs/decisions.md`).
+
+### Found while implementing
+
+- `vkxp-core/src/lib.rs` received its one line, `pub mod sound;`. The crate's documentation
+  still says that every module but `test_support` is private and has no row for `sound`;
+  the next change that edits that file can add the row.

@@ -6,8 +6,8 @@
 
 ## 2. The probe and the position model
 
-- [ ] 2.1 `crates/vkxp-core/src/sound.rs` and its line in `lib.rs`: the probe of decision 4, with the writers of WAV files and of Ogg pages as test code. Verify: the eight scenarios of "Probe of the format of a sound"; `cargo test -p vkxp-core --locked` passes.
-- [ ] 2.2 The model of decision 5 in the same module: the streamed sound, the short sound, the clock in frames. Verify: the scenarios of "Position of a streamed sound" and "Position of a short sound", each number as written; `cargo test -p vkxp-core --locked` passes and `cargo clippy -p vkxp-core --all-targets --locked -- -D warnings` passes (the crate forbids `unsafe`).
+- [x] 2.1 `crates/vkxp-core/src/sound.rs` and its line in `lib.rs`: the probe of decision 4, with the writers of WAV files and of Ogg pages as test code. Verify: the eight scenarios of "Probe of the format of a sound"; `cargo test -p vkxp-core --locked` passes.
+- [x] 2.2 The model of decision 5 in the same module: the streamed sound, the short sound, the clock in frames. Verify: the scenarios of "Position of a streamed sound" and "Position of a short sound", each number as written; `cargo test -p vkxp-core --locked` passes and `cargo clippy -p vkxp-core --all-targets --locked -- -D warnings` passes (the crate forbids `unsafe`).
 
 ## 3. The protocol and the mixer
 
