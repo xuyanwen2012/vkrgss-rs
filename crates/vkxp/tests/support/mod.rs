@@ -352,6 +352,25 @@ pub(crate) fn start_headless(work: &Path, game: &impl TestGame, arguments: &[&st
         .expect("the program starts")
 }
 
+/// Runs `game` headless with the guest in a process for `frames` frames, with the states
+/// schedule `states` unless it is empty, and writes every frame of `dumped`.
+pub(crate) fn states_run(game: &impl TestGame, frames: u64, states: &str, dumped: &[u64]) -> Ran {
+    let frames = frames.to_string();
+    let names: Vec<String> = dumped
+        .iter()
+        .map(|index| format!("{index}={index}.png"))
+        .collect();
+    let mut arguments = vec!["--guest", "process", "--frames", &frames];
+    if !states.is_empty() {
+        arguments.extend(["--states", states]);
+    }
+    arguments.extend(names.iter().flat_map(|name| ["--dump", name.as_str()]));
+    let work = tempfile::tempdir().expect("a temporary directory");
+    let ran = headless_logging(work, game, &arguments, Some("info"));
+    ran.assert_success();
+    ran
+}
+
 pub(crate) fn dumped_bytes(ran: &Ran, index: u64) -> Vec<u8> {
     fs::read(ran.file(&format!("{index}.png"))).expect("a dumped frame")
 }

@@ -1647,25 +1647,6 @@ end
     Game::new(name, "States", &[("Sprite", RED_SPRITE), ("Main", main)])
 }
 
-/// Runs `game` headless with the guest in a process for `frames` frames, with the states
-/// schedule `states` unless it is empty, and writes every frame of `dumped`.
-fn states_run(game: &Game, frames: u64, states: &str, dumped: &[u64]) -> Ran {
-    let frames = frames.to_string();
-    let names: Vec<String> = dumped
-        .iter()
-        .map(|index| format!("{index}={index}.png"))
-        .collect();
-    let mut arguments = vec!["--guest", "process", "--frames", &frames];
-    if !states.is_empty() {
-        arguments.extend(["--states", states]);
-    }
-    arguments.extend(names.iter().flat_map(|name| ["--dump", name.as_str()]));
-    let work = tempfile::tempdir().expect("a temporary directory");
-    let ran = headless_logging(work, game, &arguments, Some("info"));
-    ran.assert_success();
-    ran
-}
-
 /// Scenario "Back to the saved frame".
 #[test]
 fn a_loaded_state_goes_back_to_the_saved_frame() {

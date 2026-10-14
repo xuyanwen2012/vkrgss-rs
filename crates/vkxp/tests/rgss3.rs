@@ -656,3 +656,198 @@ fn the_functions_that_start_processes_work_when_enabled() {
     ace(&game, &["--allow-process-functions"]).assert_success();
     assert_eq!(written(&game, "results.txt"), "[true, true]");
 }
+
+// --- States and the sandbox -------------------------------------------------------------------
+
+/// A game of RGSS3 that never ends: a red sprite moved by a counter of frames and placed by
+/// `rand`, with a pixel of its bitmap changed in every frame.
+fn counter_and_rand_game(name: &str) -> AceGame {
+    let source = "sprite = Sprite.new
+sprite.bitmap = Bitmap.new(32, 32)
+sprite.bitmap.fill_rect(0, 0, 32, 32, Color.new(255, 0, 0))
+counter = 0
+loop do
+  counter += 1
+  sprite.x = counter * 3
+  sprite.y = rand(380)
+  sprite.bitmap.set_pixel(rand(32), rand(32), Color.new(0, rand(256), counter % 256))
+  Graphics.update
+end";
+    AceGame::new(name, "States", &[("Main", source)])
+}
+
+/// Runs `game` as [`states_run`] does, with `arguments` added.
+fn states_run_with(
+    game: &AceGame,
+    frames: u64,
+    states: &str,
+    dumped: &[u64],
+    arguments: &[&str],
+) -> Ran {
+    guest_executable();
+    let frames = frames.to_string();
+    let names: Vec<String> = dumped
+        .iter()
+        .map(|index| format!("{index}={index}.png"))
+        .collect();
+    let mut all = vec![
+        "--guest", "process", "--frames", &frames, "--states", states,
+    ];
+    all.extend(names.iter().flat_map(|name| ["--dump", name.as_str()]));
+    all.extend_from_slice(arguments);
+    let work = tempfile::tempdir().expect("a temporary directory");
+    let ran = headless_logging(work, game, &all, Some("info"));
+    ran.assert_success();
+    ran
+}
+
+/// Requirement "States and the sandbox with a game of RGSS3", scenario "A state is loaded".
+#[test]
+fn a_loaded_state_of_vx_ace_goes_back_to_the_saved_frame() {
+    guest_executable();
+    let game = counter_and_rand_game("ace-states-back");
+    let plain_frames: Vec<u64> = (61..=90).collect();
+    let plain = states_run(&game, 91, "", &plain_frames);
+    let loaded_frames: Vec<u64> = (100..=130).collect();
+    let loaded = states_run(&game, 131, "60:save 0, 100:load 0", &loaded_frames);
+    for k in 1..=30 {
+        assert!(
+            dumped_bytes(&loaded, 100 + k) == dumped_bytes(&plain, 60 + k),
+            "frame {} is not frame {} of the run without states",
+            100 + k,
+            60 + k
+        );
+    }
+    assert!(dumped_bytes(&loaded, 100) != dumped_bytes(&loaded, 101));
+    let stderr = loaded.stderr();
+    assert!(stderr.contains("state saved into slot 0"), "{stderr}");
+    assert!(stderr.contains("state loaded from slot 0"), "{stderr}");
+}
+
+/// Requirement "States and the sandbox with a game of RGSS3", scenario "With and without the
+/// sandbox".
+#[test]
+fn a_guest_of_vx_ace_saves_and_loads_states_confined_or_not() {
+    let game = counter_and_rand_game("ace-states-sandbox");
+    let frames: Vec<u64> = (95..=110).collect();
+    let runs: Vec<Ran> = ["on", "off"]
+        .into_iter()
+        .map(|sandbox| {
+            states_run_with(
+                &game,
+                111,
+                "60:save 0, 100:load 0",
+                &frames,
+                &["--sandbox", sandbox],
+            )
+        })
+        .collect();
+    for index in &frames {
+        assert!(
+            dumped_bytes(&runs[0], *index) == dumped_bytes(&runs[1], *index),
+            "frame {index}"
+        );
+    }
+    for ran in &runs {
+        let attached = attached_processes(&ran.stderr());
+        assert!(attached.len() >= 2, "{}", ran.stderr());
+        for pid in attached {
+            assert!(
+                !Path::new(&format!("/proc/{pid}")).exists(),
+                "the process {pid} is still there"
+            );
+        }
+    }
+}
+
+/// The lines of the guest that say that the state of slot 0 is not saved because of a
+/// thread.
+fn thread_lines(stderr: &str) -> Vec<&str> {
+    stderr
+        .lines()
+        .filter(|line| line.contains("slot 0") && line.contains("thread"))
+        .collect()
+}
+
+/// Requirement "States and the sandbox with a game of RGSS3", scenario "A script thread is
+/// alive".
+#[test]
+fn a_state_is_not_saved_while_a_script_thread_is_alive() {
+    let game = AceGame::new(
+        "ace-states-thread",
+        "Ace",
+        &[
+            ("Thread", "$t = Thread.new { sleep }"),
+            ("Main", "loop { Graphics.update }"),
+        ],
+    );
+    let ran = states_run_with(&game, 20, "5:save 0, 10:load 0", &[], &[]);
+    let stderr = ran.stderr();
+    assert_eq!(thread_lines(&stderr).len(), 1, "{stderr}");
+    assert!(stderr.contains("slot 0 holds no state"), "{stderr}");
+}
+
+/// Requirement "States and the sandbox with a game of RGSS3", scenario "A script thread has
+/// ended".
+#[test]
+fn a_state_is_saved_once_the_script_thread_has_ended() {
+    let game = AceGame::new(
+        "ace-states-thread-ended",
+        "Ace",
+        &[
+            ("Thread", "Thread.new { 1 + 1 }.value"),
+            ("Main", "loop { Graphics.update }"),
+        ],
+    );
+    let ran = states_run_with(&game, 20, "5:save 0, 10:load 0", &[], &[]);
+    let stderr = ran.stderr();
+    assert!(thread_lines(&stderr).is_empty(), "{stderr}");
+    assert!(stderr.contains("state saved into slot 0"), "{stderr}");
+    assert!(stderr.contains("state loaded from slot 0"), "{stderr}");
+}
+
+/// A game of RGSS3 that opens `out.txt` in the directory `outside` and `in.txt` in its own
+/// directory for writing, from `context` (`%s` stands for the code), and notes in
+/// `result.txt` how that went.
+fn confined_game(name: &str, outside: &Path, context: &str) -> AceGame {
+    let attempt = format!(
+        "[File.join({:?}, 'out.txt'), 'in.txt'].map do |path|
+  begin
+    File.open(path, 'w') {{ |file| file.write('x') }}
+    'written'
+  rescue SystemCallError => error
+    error.class.name
+  end
+end",
+        outside.display().to_string()
+    );
+    let source = format!(
+        "{}\nGraphics.update",
+        writes("result.txt", &context.replace("%s", &attempt))
+    );
+    AceGame::new(name, "Confined", &[("Main", &source)])
+}
+
+/// Requirement "States and the sandbox with a game of RGSS3", scenarios "Write outside" and
+/// "A script thread is confined too".
+#[test]
+fn a_confined_guest_of_vx_ace_writes_below_its_game_directory_only() {
+    if skipped_without_landlock("a_confined_guest_of_vx_ace_writes_below_its_game_directory_only") {
+        return;
+    }
+    for (name, context) in [
+        ("ace-confined", "(%s).inspect"),
+        ("ace-confined-thread", "Thread.new { %s }.value.inspect"),
+    ] {
+        let outside = tempfile::tempdir().unwrap();
+        let game = confined_game(name, outside.path(), context);
+        ace(&game, &[]).assert_success();
+        assert_eq!(
+            written(&game, "result.txt"),
+            "[\"Errno::EACCES\", \"written\"]",
+            "{name}"
+        );
+        assert!(!outside.path().join("out.txt").exists(), "{name}");
+        assert_eq!(written(&game, "in.txt"), "x", "{name}");
+    }
+}

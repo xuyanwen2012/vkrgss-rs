@@ -26,7 +26,7 @@
 
 ## 5. States and the sandbox
 
-- [ ] 5.1 Tests of a guest of RGSS3 that is saved, loaded and confined, in `rgss3.rs`; the tests of the sandbox skip where the kernel cannot restrict, as those of `end_to_end.rs` do. A fault they show in a copy of the process is fixed in the glue or the interpreter crate, in `third_party/ruby-1.9.2` only as a recorded patch. Verify: the six scenarios of "States and the sandbox with a game of RGSS3"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp -p vkxp-guest-rgss3 --locked --test rgss3` passes three times in a row.
+- [x] 5.1 Tests of a guest of RGSS3 that is saved, loaded and confined, in `rgss3.rs`; the tests of the sandbox skip where the kernel cannot restrict, as those of `end_to_end.rs` do. A fault they show in a copy of the process is fixed in the glue or the interpreter crate, in `third_party/ruby-1.9.2` only as a recorded patch. Verify: the six scenarios of "States and the sandbox with a game of RGSS3"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp -p vkxp-guest-rgss3 --locked --test rgss3` passes three times in a row.
 
 ## 6. The release archive
 
