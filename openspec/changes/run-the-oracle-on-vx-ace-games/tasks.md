@@ -21,4 +21,4 @@
 
 ## 5. Integration check
 
-- [ ] 5.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate run-the-oracle-on-vx-ace-games --strict` passes; `git diff main -- crates docs/decisions.md xtask/src/oracle/probe.rb xtask/src/oracle/probe_rgss2.rb` is empty.
+- [x] 5.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate run-the-oracle-on-vx-ace-games --strict` passes; `git diff main -- crates docs/decisions.md xtask/src/oracle/probe.rb xtask/src/oracle/probe_rgss2.rb` is empty.

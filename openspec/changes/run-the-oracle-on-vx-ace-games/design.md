@@ -224,6 +224,13 @@ the reset; `Graphics.play_movie`; capture through `snap_to_bitmap`; audio; anyth
   plugin directories from a temporary directory that stands in for the system's (the
   function takes the candidate directories as an argument).
 - The ignored test of the original side stays as it is.
+- Made in the flow outside the files the change names: `xtask/src/main.rs` declares the new
+  module (`mod rgss3a;`), one line without which `rgss3a.rs` is not compiled.
+- The tests that run a game of RGSS3 in vkxp give it the test's own directory as
+  `XDG_RUNTIME_DIR`, where vkxp makes the socket of the guest process, as the tests of `vkxp`
+  do; those that go through the harness run its vkxp side (the copy with the probe and the
+  command of `vkxp::Run`) for that reason, rather than the whole of `run`. The harness itself
+  leaves the variable as it is.
 - `docs/development.md`, section "Comparing with the original runtime": a paragraph on VX
   Ace (runtime, key, archive, DLL and `--dll`, screen size, fonts with VL Gothic, locale,
   threads), the GStreamer directories next to the sandbox, the limit on window size
