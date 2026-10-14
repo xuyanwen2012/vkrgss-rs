@@ -70,3 +70,21 @@ the warning and the usage text.
   in `crates/vkxp/tests/end_to_end.rs`, which names neither the warning nor the usage text.
   Each expects `vkxp 0.3.0` now; the requirement "Version 0.3.0" plainly needs that one-line
   edit outside the listed files, as the release of 0.2.0 made it.
+
+## Follow-ups
+
+- The gate does not pass on 2026-10-14, for a reason outside this change, so task 3.1 stays
+  open. Every step passes but `test`, and in `test` every test passes but one:
+  `a_busy_main_thread_of_a_copy_gives_way_to_a_new_thread` of `vkxp-ruby192-sys`
+  (`tests/fork_busy_main_after_copy.rs`), which this change does not touch. It passed in the
+  first of five runs of the gate and failed in the other four, at one assertion or the other
+  (the original or the copy reports `false`: its busy main thread kept the lock of the
+  interpreter for the whole 30 seconds). Run alone it failed six times in six; pinned to one
+  processor (`taskset -c 3`) it passed in 0.02 s. Ruby 1.9.2 hands the lock over by
+  `unlock; sched_yield(); lock`, so whether a waiting thread on another processor ever gets
+  it depends on the scheduler of the machine. In the first run of the gate the step
+  `test` failed instead at `quick_files_pass_under_collector_stress` (`test_thread.rb` ran
+  into its time limit), which passed when run alone. The steps `test-unvalidated`, `doc`
+  and `openspec` pass when run by hand. Whether the test is changed (its owner crate is
+  outside the scope of this change) or the gate is run again on a quieter machine is the
+  owner's decision.
