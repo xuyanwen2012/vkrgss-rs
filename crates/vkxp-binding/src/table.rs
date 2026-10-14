@@ -1,4 +1,8 @@
 //! The Ruby class `Table`.
+//!
+//! A game of RGSS3 gets other functions for `[]` and `[]=`, which word a wrong count of
+//! indices as the original runtime of RGSS3 does, the number of dimensions first. The rest
+//! of the class is that of RGSS2.
 
 use vkxp_core::{SharedTable, Table};
 use vkxp_ruby_sys::ffi::{self, VALUE};

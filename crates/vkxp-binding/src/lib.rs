@@ -10,7 +10,10 @@
 //! Every method the original runtime defines for them exists with the original arity;
 //! `tests/data/rgss1_api.txt` is the list, and `tests/arity.rs` checks it. In a game of RGSS2
 //! the scene classes are those of `tests/data/rgss2_api.txt`, which `tests/arity_rgss2.rs`
-//! checks except for the methods it names as pending.
+//! checks except for the methods it names as pending. `tests/data/rgss3_api.txt` is the whole
+//! list of RGSS3; in a game of RGSS3 `Color`, `Tone`, `Rect` and `Table` take the forms and
+//! the messages of that runtime, and `tests/arity_rgss3.rs` of `vkxp-binding-rgss3` checks
+//! the classes it names as bound.
 //!
 //! ```no_run
 //! use vkxp_binding::{Config, Guest};

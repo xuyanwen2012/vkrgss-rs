@@ -2,6 +2,11 @@
 //!
 //! Both are four floating-point components that clamp when set, and differ in the name, the
 //! range and the default of the fourth. The host functions are written once, over [`Quad`].
+//!
+//! A game of RGSS3 gets other functions for `initialize`, `set` and `_load`, as measured on
+//! the original runtime of RGSS3: `new` and `set` without arguments give (0, 0, 0, 0), `set`
+//! copies one `Color` or `Tone`, a wrong count says the expected count first, and a dump of
+//! another length than 32 bytes loads as (0, 0, 0, 0). RGSS1 and RGSS2 keep theirs.
 
 use vkxp_core::{Color, DecodeError, Tone};
 use vkxp_ruby_sys::ffi::VALUE;

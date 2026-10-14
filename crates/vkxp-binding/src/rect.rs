@@ -1,4 +1,9 @@
 //! The Ruby class `Rect`.
+//!
+//! A game of RGSS3 gets other functions for `initialize`, `set` and `_load`, as measured on
+//! the original runtime of RGSS3: `new` takes no argument or four, `set` four or one `Rect`
+//! to copy, both with the arity -1, a wrong count says `(4 for given)`, and a short dump is
+//! read as if zeros followed it. RGSS1 and RGSS2 keep theirs.
 
 use vkxp_core::Rect;
 use vkxp_ruby_sys::ffi::VALUE;

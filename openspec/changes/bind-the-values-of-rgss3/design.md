@@ -276,8 +276,9 @@ bitmap report is named.
   samples, lines 243 to 247.
 - `Table#[]=` with one index too few: `t[0, 0] = 5` on a table of three dimensions
   returned 5 on the original and, by a later read, wrote the element (0, 0, 0). One sample,
-  no rule; vkxp raises `ArgumentError`. `Table.new` and `resize` with no size or with four:
-  not measured.
+  no rule; vkxp raises `ArgumentError`, with `(4 for 3)` there, the number of dimensions
+  plus one first, as for `[]=` with more arguments than that: not measured. `Table.new` and
+  `resize` with no size or with four: not measured.
 - `Rect._load` of more than 16 bytes, `Tone._load` of another length than 32: not
   measured.
 - The class of what `_load` returns for a subclass; what a loaded object has of the

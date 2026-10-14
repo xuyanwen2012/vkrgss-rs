@@ -22,7 +22,7 @@
 
 ## 5. Documents
 
-- [ ] 5.1 `docs/compatibility.md`: the subsection on the value classes of VX Ace (decision 14); the documentation of `color.rs`, `rect.rs`, `table.rs`, `rb.rs` and of `lib.rs` where it describes these classes. Verify: the scenarios of `specs/supported-runtimes/spec.md`; the text names nothing that the code does not do; `git diff --stat` against the start of the change names no file under `docs/` but `compatibility.md`; `cargo test -p xtask --locked` passes.
+- [x] 5.1 `docs/compatibility.md`: the subsection on the value classes of VX Ace (decision 14); the documentation of `color.rs`, `rect.rs`, `table.rs`, `rb.rs` and of `lib.rs` where it describes these classes. Verify: the scenarios of `specs/supported-runtimes/spec.md`; the text names nothing that the code does not do; `git diff --stat` against the start of the change names no file under `docs/` but `compatibility.md`; `cargo test -p xtask --locked` passes.
 
 ## 6. Integration check
 

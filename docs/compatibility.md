@@ -307,6 +307,64 @@ Known differences:
 - `Viewport#dispose` disposes the tilemaps of the viewport, as in XP and VX; on the original
   of VX Ace such a tilemap stays alive and is not drawn.
 
+### The value classes of VX Ace
+
+Of `Color`, `Tone`, `Rect` and `Table`, a game of VX Ace has what follows beside what a game
+of VX has, measured on the original runtime of VX Ace (`RGSS301.dll` and `RGSS300.dll`,
+versions 3.0.1.1 and 3.0.0.1) under Wine:
+
+- `Color.new` and `Tone.new` without arguments give (0, 0, 0, 0). `set` takes no argument,
+  which sets (0, 0, 0, 0), three or four numbers, or one `Color` or `Tone` whose four numbers
+  it copies in order, a tone's grey amount becoming a colour's alpha and back. One argument
+  of `new` is never an object to copy.
+- `Rect.new` takes no argument, giving (0, 0, 0, 0), or four integers. `Rect#set` takes four
+  integers or one `Rect` whose values it copies. Both have the arity -1.
+- `set` returns the receiver in every form, and a change made by any form reaches the
+  sprite, plane, viewport or window the object belongs to.
+- One argument of `set` that no native class made, a number or `nil` for instance, raises
+  `TypeError` with the message of the original, `wrong argument type Fixnum (expected
+  Data)`, naming `nil`, `true` and `false` as such.
+- A count of arguments these methods, `Table#[]` and `Table#[]=` do not take raises
+  `ArgumentError` with the message of the original, `wrong number of arguments (3 for 1)`:
+  the expected count first. It is 3 below three arguments and 4 above four for `Color` and
+  `Tone`, 4 for `Rect`, and the number of dimensions of the table for `Table#[]` and for a
+  `Table#[]=` with fewer arguments than that. A number of the wrong kind raises the
+  `TypeError` of Ruby 1.9.2, such as `can't convert String into Integer`.
+- `Color._load` of a string that is not 32 bytes long gives (0, 0, 0, 0), and so does
+  `Tone._load`, for which it was not measured. `Rect._load` of a string shorter than 16
+  bytes reads zeros for what is missing.
+- `==`, `===` and `eql?` of `Color`, `Tone` and `Rect` are false for `nil`, a number and an
+  object of another class, and raise nothing, as version 3.0.1.1 has it.
+- The limits of the components, `_dump`, `to_s` and `Table` are those of VX. `inspect`
+  gives the text of `to_s`, the serialized forms and texts are ASCII-8BIT strings, and
+  `hash` does not depend on the values.
+
+Known differences:
+
+- `==`, `===` and `eql?` with an object of another class raise `TypeError` on version
+  3.0.0.1 of the original (`can't convert NilClass into Color`), which one game of the corpus
+  ships; vkxp returns false whatever the game ships
+  ([decisions.md](decisions.md#vx-ace), "Text and bitmaps of RGSS3").
+- `set` with an object of another native class, `rect.set(color)` for instance, copies the
+  bytes of that object on the original; vkxp raises `TypeError`.
+- `Color._load` of 32 bytes keeps a component outside its limits on the original, and `to_s`
+  of a component such as 1e300 ends it; vkxp limits the components when it loads them.
+- `Rect._load` of a short string reads the memory behind the string on the original, where
+  vkxp reads zeros. `Table._load` of a short or malformed string ends the original with a
+  page fault; vkxp raises `ArgumentError` and the game goes on.
+- What depends on the word size, the guest being a 64-bit build
+  ([decisions.md](decisions.md#vx-ace), "Word size"): the original keeps integers from 2^30
+  to 2^31 - 1 in 31 bits (`Rect.new(2**30, 0, 0, 0)` has the x -1073741824), where vkxp keeps
+  them as they are; the message of the `RangeError` of an integer of 2^31 or more is
+  ``bignum too big to convert into `long'`` on the original and
+  ``integer 2147483648 too big to convert to `int'`` in vkxp; and `t[1, 1, 1] = 2**31`
+  raises `RangeError` on the original, where vkxp stores the low 16 bits.
+- `Table#[]=` with one index too few, `t[0, 0] = 5` on a table of three dimensions, wrote
+  the element (0, 0, 0) on the original in the one sample taken; vkxp raises
+  `ArgumentError`.
+
+In a game of XP or VX the value classes are as they were: none of these forms is taken.
+
 ## Limits of save states
 
 Save states are described under [Save states](running.md#save-states). Their limits:
