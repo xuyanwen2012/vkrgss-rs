@@ -716,7 +716,8 @@ A recording is text: the line `vkrgss-input 2 seed=<n>`, then one line per run o
 the same input, `<count>x` followed by the `+`-joined button names, if any, by `keys=` and the
 hexadecimal Windows virtual-key codes of the held keys and mouse buttons, if any, and by
 `pointer=<x>,<y>` while the pointer is over the picture. Recordings of version 1, with the
-buttons only, still replay. The replay
+buttons only, still replay, and so do those of versions 0.1.0 to 0.3.0, whose first line
+starts with `vkxp-input` (see *Coming from vkxp 0.3.0*). The replay
 uses the recorded seed unless `--seed` is given. After the last recorded frame the keyboard
 applies again in a window, and no button is held in a headless run. A file that is not a
 recording ends the program with an error that names it, before the first frame. While input
@@ -783,3 +784,45 @@ VK_LOADER_DRIVERS_SELECT='*lvp*' \
     cargo run -p vkrgss-host --example demo-headless -- --frames 30 \
     --input "0:RIGHT+UP+SHIFT, 6:B, 7:RIGHT+C" --dump 12=target/demo.png
 ```
+
+## Coming from vkxp 0.3.0
+
+Versions 0.1.0 to 0.3.0 of the program were released under the name vkxp. Every name that
+held it now holds vkrgss:
+
+| Up to 0.3.0 | Now |
+|---|---|
+| the executables `vkxp` and `vkxp-guest-rgss3` | `vkrgss` and `vkrgss-guest-rgss3` |
+| the package `vkxp-<version>-x86_64-unknown-linux-gnu.tar.gz` | `vkrgss-<version>-x86_64-unknown-linux-gnu.tar.gz` |
+| the user file `$XDG_CONFIG_HOME/vkxp/config.toml` | `$XDG_CONFIG_HOME/vkrgss/config.toml` |
+| the game's file `vkxp.toml` | `vkrgss.toml` |
+| the built-in scripts files under `$XDG_DATA_HOME/vkxp/` | under `$XDG_DATA_HOME/vkrgss/` |
+| the variables `VKXP_LOG`, `VKXP_GUEST`, `VKXP_SANDBOX`, `VKXP_PRESENT_TIMING` | `VKRGSS_LOG`, `VKRGSS_GUEST`, `VKRGSS_SANDBOX`, `VKRGSS_PRESENT_TIMING` |
+| the line prefix `vkxp: ` of the diagnostics | `vkrgss: ` |
+
+There is no executable or link under the former name: a script that starts `vkxp` has to
+start `vkrgss` instead.
+
+For this version only, the program reads a file at its place of 0.3.0 when the file is not
+at its new place: the user file, the game's file and the default built-in scripts files. It
+then writes a warning that names both paths. When both exist, the new one is read and the
+former one is ignored without a warning. A file named with `--config` or `--builtin-scripts`
+is read as named. Nothing is moved or copied; move the files yourself:
+
+```sh
+mv ~/.config/vkxp ~/.config/vkrgss
+mv ~/.local/share/vkxp ~/.local/share/vkrgss
+mv <game directory>/vkxp.toml <game directory>/vkrgss.toml
+```
+
+The same holds for the four variables in the table, for this version only: one that is not
+set is read under its name of 0.3.0, with a warning that names both, and when both are set
+the new one is used without a warning. No other variable of the former name is read. A
+filter of `VKRGSS_LOG` names modules, whose names follow the crates: a filter such as
+`vkxp_host=trace` matches nothing now and is written `vkrgss_host=trace`. The next release
+reads neither the files nor the variables under the former name.
+
+Recordings of 0.1.0 to 0.3.0, whose first line is `vkxp-input 1 seed=<n>` or
+`vkxp-input 2 seed=<n>`, replay as before, without a warning, in this version and later
+ones. A new recording starts with `vkrgss-input 2 seed=<n>`. The saves of a game hold no
+name of the program; in a game of XP or VX, `$0` is now `"vkrgss"`.

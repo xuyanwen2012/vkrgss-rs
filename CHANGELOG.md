@@ -13,9 +13,29 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the archive first, also by the name without its extension, then a loose file from the
   current directory, which it reads as a `File`, labels frozen strings too, raises
   `Errno::EACCES` for a directory and checks the name as 3.0.1 does, as `save_data` does.
-  vkxp's own rules: `require` and `load` compile a file as UTF-8, `require_relative` and
+  vkrgss's own rules: `require` and `load` compile a file as UTF-8, `require_relative` and
   `autoload` follow the rule of `require`, a long report is shown whole, and every uncaught
   error ends with status 1.
+
+### Changed
+
+- The project is renamed vkrgss; versions 0.1.0 to 0.3.0 were released as vkxp. The
+  executables are `vkrgss` and `vkrgss-guest-rgss3`, with no executable or link named
+  `vkxp`; the package is `vkrgss-<version>-x86_64-unknown-linux-gnu.tar.gz`; the crates are
+  `vkrgss` and `vkrgss-*`; the repository is `https://github.com/xuyanwen2012/vkrgss-rs`.
+  The user file is `$XDG_CONFIG_HOME/vkrgss/config.toml`, the game's file `vkrgss.toml`, the
+  default built-in scripts files are under `$XDG_DATA_HOME/vkrgss/`, and the environment
+  variables are named `VKRGSS_*`. Diagnostics start with `vkrgss: `, `--version` prints
+  `vkrgss <version>`, a new recording starts with `vkrgss-input 2`, and in a game of XP or
+  VX `$0` is `"vkrgss"`. The modules that a filter of `VKRGSS_LOG` names follow the crates:
+  `vkxp_host=trace` is now `vkrgss_host=trace`.
+- For this version only, a file at its place of 0.3.0 (`vkxp/config.toml`, `vkxp.toml`,
+  `vkxp/rpg_builtin*.rb`) is read when the file is not at its new place, and `VKXP_LOG`,
+  `VKXP_GUEST`, `VKXP_SANDBOX` and `VKXP_PRESENT_TIMING` are read when the new variable is
+  not set, each with a warning that names both; the following release reads neither.
+  Recordings whose first line is `vkxp-input 1` or `vkxp-input 2` replay as before, without a
+  warning and without an end. docs/running.md, section "Coming from vkxp 0.3.0", says what to
+  move.
 
 ## [0.3.0] - 2026-10-14
 

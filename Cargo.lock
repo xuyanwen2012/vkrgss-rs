@@ -3307,6 +3307,7 @@ dependencies = [
  "anyhow",
  "flate2",
  "png",
+ "regex-lite",
  "serde_json",
  "tempfile",
  "x11rb 0.14.0",

@@ -1,6 +1,6 @@
 [package]
 name = "vkrgss"
-description = "Rust + Vulkan runtime for RPG Maker XP (RGSS1) games"
+description = "Rust + Vulkan runtime for RPG Maker XP, VX and VX Ace (RGSS1, RGSS2, RGSS3) games"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

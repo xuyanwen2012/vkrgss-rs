@@ -31,10 +31,24 @@ the glyph images and why RGSS1 and RGSS2 keep their advances.
 The change `release-0-3-0` set the rows A1 to A3 of "Milestones" to "Done" with their record
 on 2026-10-14, and ended the experimental state of VX Ace under "VX Ace".
 
+The change `rename-to-vkrgss` renamed the project on 2026-10-14, by a decision of the owner
+taken that day: "xp" named RPG Maker XP alone, "rgss" names the three runtimes. The program,
+the guest executable, the crates and the environment variables are named `vkrgss`,
+`vkrgss-guest-rgss3`, `vkrgss-*` and `VKRGSS_*`, and the repository
+`https://github.com/xuyanwen2012/vkrgss-rs`; versions 0.1.0 to 0.3.0 were released as vkxp.
+The change rewrote the former name in this document and added the item on the name under
+"Goal and scope".
+
 ## Goal and scope
 
 - vkrgss is a from-scratch runtime for the games of RPG Maker XP, VX and VX Ace, built to a
   2026 standard.
+- The project is named vkrgss, for the RGSS of its three runtimes: the program `vkrgss`,
+  the crates `vkrgss` and `vkrgss-*`, the repository `vkrgss-rs` (crates and executables carry
+  no `-rs`, by the convention of Rust). Up to version 0.3.0 it was named vkxp; for one
+  version the program reads the files and the four environment variables a player sets
+  under that name, with a warning, and recordings under that name replay for good. The
+  former name stays only where `xtask/tests/former-name.allow` says why.
 - In scope: RGSS1, RGSS2, RGSS3. Out of scope: RPG Maker MV and MZ (JavaScript on a browser
   engine) and 2000 and 2003 (not Ruby; EasyRPG Player exists).
 - VX and VX Ace are held to the standard of XP: compared frames are pixel-identical to the

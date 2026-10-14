@@ -411,8 +411,11 @@ confirm it.
   recordings stays.
 - The value of `$0` in the originals of RGSS1 and RGSS2 is not measured; `"vkrgss"` is a
   placeholder as `"vkxp"` was.
-- If the banner was not provided, `docs/images/banner.jpg` still shows "vkxp"; replace it and
-  drop the allow-list entry of its alternative text.
+- The banner was not provided: `../../vkxp/target/rename-to-vkrgss/banner.jpg` did not exist
+  when the flow reached task 4.1, so `docs/images/banner.jpg` still shows "vkxp" and the
+  README's alternative text of the banner says "vkxp". Replace the picture, set the
+  alternative text to "vkrgss" and drop `alt="vkxp\. ` from the README entry of
+  `xtask/tests/former-name.allow`.
 - Outside the repository, for the owner's agent: the scripts and notes that call
   `target/release/vkxp`, `--vkxp-only`, read `<n>-vkxp.png` or set `VKXP_*` (the workspace's
   `CLAUDE.md` names `VKXP_TEST_DEVICE=RADV`), the built-in scripts files in

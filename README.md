@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/images/banner.jpg" width="100%" alt="vkrgss. Classic RPG Maker, modern Rust + Vulkan: RPG Maker XP, VX and VX Ace are supported. A Rust + Vulkan runtime for RPG Maker games on Linux."></p>
+<p align="center"><img src="docs/images/banner.jpg" width="100%" alt="vkxp. Classic RPG Maker, modern Rust + Vulkan: RPG Maker XP, VX and VX Ace are supported. A Rust + Vulkan runtime for RPG Maker games on Linux."></p>
 
 <h1 align="center">vkrgss</h1>
 
@@ -11,14 +11,15 @@
   <img src="https://img.shields.io/badge/platform-Linux%20x86__64-333333?logo=linux&logoColor=white" alt="Platform: Linux x86_64">
   <br>
   <a href="https://github.com/xuyanwen2012/vkrgss-rs/actions/workflows/ci.yml"><img src="https://github.com/xuyanwen2012/vkrgss-rs/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/xuyanwen2012/vkrgss-rs/releases/latest"><img src="https://img.shields.io/github/v/release/xuyanwen2012/vkrgss?label=release" alt="Latest release"></a>
+  <a href="https://github.com/xuyanwen2012/vkrgss-rs/releases/latest"><img src="https://img.shields.io/github/v/release/xuyanwen2012/vkrgss-rs?label=release" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-MIT-blue.svg" alt="Licence: MIT"></a>
 </p>
 
 A Rust + Vulkan runtime for RPG Maker games on Linux. RPG Maker XP (RGSS1), VX (RGSS2) and
 VX Ace (RGSS3) are supported. `vkrgss <game directory>` runs the game's scripts in an embedded
 Ruby interpreter, 1.8.7 or for VX Ace 1.9.2, against the RGSS classes and shows the frames
-of a Vulkan compositor in a window, or writes them to files headless.
+of a Vulkan compositor in a window, or writes them to files headless. Versions 0.1.0 to
+0.3.0 were released under the name vkxp ([what changed](docs/running.md#coming-from-vkxp-030)).
 
 ## Classic RPG Maker
 
@@ -150,12 +151,11 @@ flowchart LR
   cpu["vkrgss-compose-ref<br>CPU reference compositor"] -. "byte-identical frames, tested" .- vk
 ```
 
-The game's scripts, with the interpreter, the bitmaps and the game's files, are the guest;
-the window, the GPU, the audio device and the input are the host. The two exchange only plain
-data defined in `vkrgss-proto`, and the guest runs as a thread or as a process of its own. A
-guest process confines itself with Landlock before the first script runs: it writes only
-below the game directory, executes nothing and opens no TCP connection; `--sandbox off`
-turns that off.
+The game's scripts, with the interpreter, the bitmaps and the game's files, are the guest; the
+window, the GPU, the audio device and the input are the host. The two exchange only plain data
+defined in `vkrgss-proto`, and the guest runs as a thread or as a process of its own. A guest
+process confines itself with Landlock before the first script runs: it writes only below the
+game directory, executes nothing and opens no TCP connection; `--sandbox off` turns that off.
 The protocol is at version 15, which added the start and the return time of the music to the
 play command, and the volume command.
 

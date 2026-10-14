@@ -1,0 +1,63 @@
+# Where the former name of the project, vkxp, may stay: the check of `former_name.rs` reports
+# every tracked file outside `openspec/` that names it, in any case, in its path or a line of
+# its text, at a place no entry below allows (design.md of the change `rename-to-vkrgss`,
+# decisions 3 and 8).
+#
+# An entry is a reason, written as comment lines, followed by one or more lines of a rule:
+# `path <glob>`, a tracked path that may hold the name, or `text <glob> <regex>`, what the
+# lines of the files whose paths match the glob may hold; each match of the regex is removed
+# from a line before the line is checked. In a glob `**` stands for any part of a path, `*`
+# and `?` for any part and any one character of one directory or file name. Entries are
+# separated by blank lines, and an entry without a reason fails the test.
+
+# The vendored sources and their patches are kept as they are: each patched file must match
+# the patched SHA-256 that `PATCHES.md` records and each patch must apply to the release, so
+# the identifiers they define and the comments that name the program stay.
+text third_party/** .*
+
+# The vendored sources include the compat header by this name.
+path crates/vkrgss-ruby-sys/compat/vkxp_regex.h
+
+# The identifiers that the vendored sources define or name: the Rust declarations, the build
+# scripts, the compat header and the documents must name what the vendored code defines.
+text ** \b(ruby_vkxp_\w+|VKXP_ADDRESS_SANITIZER|VKXP_FIRST_PROVISIONAL|VKXP_GC_STRESS_DUE|VKXP_LAST_MEASURED_DEFAULT|VKXP_STACK_ADDRESSABLE|vkxp_char_end|vkxp_gc_stress_every|vkxp_gc_stress_left|vkxp_measured_id|vkxp_next_counter|vkxp_regex|vkxp_symbol_table|vkxp_symbol_tables)\b
+
+# Versions 0.1.0 to 0.3.0 were released as vkxp, and the release notes on GitHub quote their
+# sections; the entry of the rename names what changed.
+text CHANGELOG.md .*
+
+# The readers of the files and environment variables of version 0.3.0 and their tests, which
+# name the former places, the four variables a player sets and the former name itself.
+text crates/vkrgss/src/args.rs (\bnamed vkxp\b|`VKXP_`|"VKXP_"|\bVKXP_GUEST\b)
+text crates/vkrgss/src/config.rs (\bnamed vkxp\b|`vkxp/config\.toml`|`vkxp\.toml`|"vkxp\.toml"|"vkxp")
+text crates/vkrgss-guest-main/src/lib.rs (\bnamed vkxp\b|"vkxp")
+text crates/vkrgss-vk/src/device.rs (\bnamed vkxp\b|\bVKXP_PRESENT_TIMING\b)
+text crates/vkrgss/tests/support/mod.rs "VKXP_(LOG|GUEST|SANDBOX)"
+text crates/vkrgss/tests/former_name.rs (\bnamed vkxp\b|`vkxp/<name>`|"vkxp"|"vkxp\.toml"|"vkxp-input"|\bVKXP_(LOG|GUEST|SANDBOX)\b)
+
+# Recordings of versions 0.1.0 to 0.3.0 replay for good: their first line starts with
+# `vkxp-input`.
+text crates/vkrgss-host/src/record.rs (\bnamed vkxp\b|\bvkxp-input\b)
+
+# The four bytes that start a stream of the protocol are a constant that guest and host of
+# one build compare, and stay; a test of the greeting gives the start of such a stream.
+text crates/vkrgss-proto/src/codec.rs b?"VKXP"
+text crates/vkrgss-guest/src/hello.rs \\x00VKXP"
+
+# Names inside the Wine prefix of the oracle, which `cargo xtask oracle` reuses across runs:
+# new names would make a reused prefix be prepared again and hold each shared font twice.
+text xtask/src/oracle/original.rs (vkxp-oracle-prepared|vkxp-oracle\.reg)
+text xtask/src/oracle/fonts.rs (vkxp oracle font|vkxp-oracle-)
+
+# The banner still shows the text "vkxp", so its alternative text says so; the README says
+# once that versions 0.1.0 to 0.3.0 were released under that name.
+text README.md (alt="vkxp\. |\bunder the name vkxp \(|#coming-from-vkxp-030\))
+
+# What users of version 0.3.0 have to know, in docs/running.md, and the record of the rename
+# in docs/decisions.md.
+text docs/running.md (Coming from vkxp 0\.3\.0|\bname vkxp\.|`vkxp`|`vkxp-guest-rgss3`|`vkxp-<version>|\$XDG_(CONFIG|DATA)_HOME/vkxp/|~/\.config/vkxp\b|~/\.local/share/vkxp\b|\bvkxp\.toml\b|\bVKXP_(LOG|GUEST|SANDBOX|PRESENT_TIMING)\b|`vkxp: `|`vkxp_host=trace`|\bvkxp-input\b)
+text docs/decisions.md (\breleased as vkxp\.|\bnamed vkxp;)
+
+# The check itself and this list.
+text xtask/tests/former_name.rs .*
+text xtask/tests/former-name.allow .*

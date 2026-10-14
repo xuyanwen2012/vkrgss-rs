@@ -1,7 +1,8 @@
 schema: spec-driven
 
 context: |
-  vkxp is a Rust + Vulkan (ash) runtime for RPG Maker XP (RGSS1) games on Linux.
+  vkrgss is a Rust + Vulkan (ash) runtime for RPG Maker XP, VX and VX Ace (RGSS1, RGSS2,
+  RGSS3) games on Linux.
   docs/decisions.md records settled decisions; artifacts must not contradict it.
   Write all artifacts in English.
   Guest (Ruby, core, CPU bitmaps) and host (window, Vulkan, audio) exchange plain data only.
