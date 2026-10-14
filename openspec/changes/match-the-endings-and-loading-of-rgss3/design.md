@@ -328,7 +328,8 @@ What the implementation had to do beyond the decisions above, with the reason:
   the binding plays its games in the process of the test, whose current directory is not
   the game's; the test files of `crates/vkxp-binding-rgss3/tests/` that play games of
   RGSS3 enter the game directory before each game (`run_game_in`), as the glue of a guest
-  does.
+  does. `builtin_encoding_rgss3.rs`, which came from `main` with the rebase, enters the
+  game directory before its game in the same way; its expected value is unchanged.
 - `vkxp_label_utf8` reads and sets the encoding with `rb_enc_get_index` and
   `rb_enc_associate_index` of the C API (decision 9). The binding compiles over both
   interpreter crates and Ruby 1.8.7 has no such functions, so the call is compiled under a
@@ -366,7 +367,12 @@ Open questions, each leaving its task unticked:
   and 3. Decision 6 and the requirement "An interpreter without a script name" ask for an
   empty name for 3, and the scenario "Default options" asks that the existing tests of the
   crate pass unedited. Both cannot hold: with the empty name that test fails, and the gate
-  with it. The test is left as it was and `for_rgss(3)` gives the empty name; the owner
+  with it. After the rebase onto 0.3.0 it is the only test of the gate that fails
+  (`local/rebased-gate.log` of the clone, after the fix of `builtin_encoding_rgss3.rs`).
+  Every name of the kept lists is listed again but two that release 0.3.0 removed on `main`
+  with the experimental warning (commit `2ce1159`): `a_run_of_vx_ace_says_once_that_it_is_
+  experimental` of `crates/vkxp/tests/rgss3.rs` and `args::tests::the_usage_text_says_that_
+  rgss3_alone_is_experimental` of `vkxp`. The test is left as it was and `for_rgss(3)` gives the empty name; the owner
   decides whether the expected value of the test may change.
 - **The encoding of a file that `autoload` loads (task 4.1).** The requirement "Loading code
   in RGSS3" says that a file `require_relative` and `autoload` load is compiled as UTF-8.

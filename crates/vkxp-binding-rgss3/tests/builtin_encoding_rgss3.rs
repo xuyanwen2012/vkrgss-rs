@@ -23,6 +23,9 @@ fn a_literal_of_the_built_in_scripts_is_bytes_and_one_of_a_game_is_text() {
         "module RPG\nend\n$builtin_literal = ''\n$builtin_dump = Marshal.dump(['', 'a'])\n",
     )
     .unwrap();
+    // `load_data` of RGSS3 reads from the current directory, which the glue of a guest sets
+    // to the game directory.
+    std::env::set_current_dir(game.dir()).expect("the game directory is entered");
     let played = host::run_game(
         &game,
         game.run_config(),
