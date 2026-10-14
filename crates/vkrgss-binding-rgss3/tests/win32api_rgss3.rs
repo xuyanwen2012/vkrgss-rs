@@ -401,6 +401,8 @@ fn the_title_is_read_with_a_path_and_not_with_a_bare_name() {
 
 #[test]
 fn a_bare_profile_name_reads_the_default_and_writes_nothing() {
+    // The harness first: a game directory asked for before it starts it as a game of RGSS1.
+    start();
     let game = testing::game_dir();
     fs::write(game.join("Bare.ini"), "[Options]\r\nVolume=80\r\n").unwrap();
     assert_eq!(
