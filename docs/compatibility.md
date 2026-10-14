@@ -293,9 +293,8 @@ ships: `"3.0.0"` for a DLL of a version 3.0.0.x, `"3.0.1"` for any other and for
 glyph rule of text follows the DLL by the same table (see *Font and text of VX Ace*).
 
 Of the classes, `Window`, `Tilemap`, `Sprite`, `Plane`, `Viewport`, `Font`, the text and
-creation of `Bitmap`, the modules `Graphics` and `Audio` and the value classes `Color`, `Tone`,
-`Rect` and `Table` are those of RGSS3, as the sections below say; `Input` is that of RPG Maker
-VX still and does not have what RGSS3 adds.
+creation of `Bitmap`, the modules `Graphics`, `Input` and `Audio` and the value classes `Color`,
+`Tone`, `Rect` and `Table` are those of RGSS3, as the sections below say.
 A game made with the standard scripts of VX Ace therefore loads its scripts and its database
 and ends with an error report at its first call of what only RGSS3 has and vkxp does not
 bind yet, before its title screen. A frame it
@@ -412,6 +411,55 @@ false`, which vkxp reads `true` as in VX; the pixels of `transition` with an emp
 which vkxp shows as a plain transition.
 
 In a game of XP or VX these classes and `Graphics` are as they were.
+
+### Input of VX Ace
+
+The module `Input` of a game of VX Ace is the one of VX with what follows, measured on the
+original runtime of VX Ace (versions 3.0.0.1 and 3.0.1.1) under Wine:
+
+- The twenty constants are the Symbols of their names: `Input::DOWN` is `:DOWN`, and so on to
+  `Input::F9`.
+- `press?`, `trigger?` and `repeat?` take exactly one argument; none or two raise
+  `ArgumentError`. The Symbol of a button's name, written as the constant is (`:DOWN`, not
+  `:down`), or the number of the button in VX (2, 4, 6, 8, 11 to 18, 21 to 23, 25 to 29)
+  names that button. Anything else gives `false` and raises nothing: another Symbol, a
+  String, a Float, another Integer, `nil`, `true`, `false`, an Array, any other object. No
+  method of the argument is called, so an object that defines `to_int` or `to_sym` gives
+  `false` too; that case was not measured.
+- An `Input.update` sees the input that had arrived when `Graphics` last showed a frame, which
+  `Graphics.update` and each frame of `wait`, `fadeout`, `fadein` and `transition` do. So
+  `Input.update` alone never sees a new key, and a key pressed before a `Graphics.update` is
+  seen by the `Input.update` after it. A call of `Graphics` that shows no frame
+  (`frame_reset`, `brightness=`, `snap_to_bitmap`, `freeze`, `resize_screen`, a `wait`, fade
+  or transition of no frame) makes no key visible, and in vkxp neither does a frame shown
+  while a message box is open, which was not measured on the original.
+- `trigger?`, `repeat?`, `dir4` and `dir8` are those of VX, without a mismatch in 12084
+  updates: one button repeats at a time, the one triggered last, at the 1st, 24th and 30th
+  update and every 6th after; of buttons triggered together the one with the highest number
+  repeats, so with Shift `SHIFT` repeats and `A` never.
+- The keys are those of VX, F5 to F9 included ([The keys of a game of
+  VX](running.md#the-keys-of-a-game-of-vx)); the original of VX Ace has the table of VX line
+  for line.
+
+Known differences, which follow from vkxp having no queue of key messages: the host sends
+whole input states, and every frame shown makes the state that has arrived visible
+([decisions.md](decisions.md#vx-ace)).
+
+- A frame of the original takes exactly one key message when it has no time to wait and
+  more, up to all, when it waits; how many is not a rule, and vkxp imitates no count. Several
+  key changes between two frames are seen together in vkxp, where frames of the original
+  without time to spare spread them over the following updates.
+- A key pressed and released between two frames is never seen in vkxp; the original saw it
+  for one update when its frame took only the key-down.
+- The original takes a key message now and then during `Kernel#sleep`, so that a key can
+  become visible to `Input.update` after a sleep; vkxp takes none.
+- `GetKeyState`, `GetAsyncKeyState` and `GetKeyboardState` of `Win32API` follow the rules of
+  VX; on the original `GetKeyState` changes when `Input.press?` does.
+
+Not measured: gamepads, the F1 dialog, F12 and Alt+Enter of the original of VX Ace.
+
+In a game of XP or VX `Input` is as it was: its constants are numbers, and an `Input.update`
+sees the newest input that has arrived.
 
 ### The value classes of VX Ace
 

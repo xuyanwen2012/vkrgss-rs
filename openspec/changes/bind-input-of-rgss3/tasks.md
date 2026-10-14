@@ -12,7 +12,7 @@
 
 ## 3. Documents
 
-- [ ] 3.1 `docs/compatibility.md`: the subsection on `Input` of VX Ace (decision 10). Verify: the scenarios of `specs/supported-runtimes/spec.md`; the text names nothing that the code does not do; `git diff --stat` names under `docs/` only `compatibility.md`; `cargo test -p xtask --locked` passes.
+- [x] 3.1 `docs/compatibility.md`: the subsection on `Input` of VX Ace (decision 10). Verify: the scenarios of `specs/supported-runtimes/spec.md`; the text names nothing that the code does not do; `git diff --stat` names under `docs/` only `compatibility.md`; `cargo test -p xtask --locked` passes.
 
 ## 4. Integration check
 
