@@ -12,6 +12,8 @@ use std::fs;
 
 const SHT_DYNSYM: u32 = 11;
 const SHN_UNDEF: u16 = 0;
+/// `STT_SECTION`, the type of a symbol that stands for a section.
+const STT_SECTION: u8 = 3;
 
 fn u16_at(bytes: &[u8], offset: usize) -> u16 {
     u16::from_le_bytes(bytes[offset..offset + 2].try_into().unwrap())
@@ -47,6 +49,11 @@ fn defined_dynamic_symbols(elf: &[u8]) -> Vec<String> {
         let strings = u64_at(elf, header(u32_at(elf, section + 0x28) as usize) + 0x18);
         for symbol in (offset..offset + size).step_by(entry_size) {
             if u16_at(elf, symbol + 6) == SHN_UNDEF {
+                continue;
+            }
+            // A section symbol has no name; the linker of aarch64 puts some into the table,
+            // and `nm -D` does not list them.
+            if elf[symbol + 4] & 0xf == STT_SECTION {
                 continue;
             }
             let name = strings + u32_at(elf, symbol) as usize;
