@@ -1,6 +1,8 @@
+<p align="center"><img src="docs/images/banner.jpg" width="100%" alt="vkxp. Classic RPG Maker, modern Rust + Vulkan: RPG Maker XP and VX run, VX Ace is planned. A Rust + Vulkan runtime for RPG Maker games on Linux."></p>
+
 <h1 align="center">vkxp</h1>
 
-<p align="center"><b>RPG Maker games on Linux, pixel for pixel, in Rust on raw Vulkan.</b></p>
+<p align="center"><b>Classic RPG Maker. Modern Rust + Vulkan.</b><br>The games of RPG Maker XP and VX on Linux, pixel for pixel.</p>
 
 <p align="center">
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-1.99-CE422B?logo=rust&logoColor=white" alt="Rust 1.99"></a>
@@ -18,6 +20,14 @@ are supported; VX Ace (RGSS3) is planned and does not run yet. `vkxp <game direc
 the game's scripts in an embedded Ruby 1.8.7 interpreter against the RGSS classes and shows
 the frames of a Vulkan compositor in a window, or writes them to files in a headless run.
 
+## Classic RPG Maker
+
+| Runtime | State | |
+|---|---|---|
+| RPG Maker XP (RGSS1) | Supported | Since version 0.1.0 |
+| RPG Maker VX (RGSS2) | Supported | Since version 0.2.0 |
+| RPG Maker VX Ace (RGSS3) | Planned | Does not run yet; in progress |
+
 <p align="center">
   <img src="docs/images/legendary-warband-title.png" width="49%" alt="The title screen of Legendary Warband running in vkxp">
   <img src="docs/images/legendary-warband-battle.png" width="49%" alt="The start of a battle of Legendary Warband running in vkxp">
@@ -25,40 +35,6 @@ the frames of a Vulkan compositor in a window, or writes them to files in a head
 
 The pictures are frames of [Legendary Warband](https://github.com/xuyanwen2012/XP-MBBS-7.0),
 an RPG Maker XP game, as vkxp renders them in a headless run.
-
-## Why Rust + Vulkan
-
-- **Raw Vulkan 1.3 through `ash`, no engine in between.** The compositor is one compute
-  shader, [`compose.comp`](crates/vkxp-vk/shaders/compose.comp): one dispatch per frame, one
-  workgroup per 16 by 16 tile, one invocation per pixel, integer arithmetic only and texels
-  fetched, never filtered, so a frame is the same on every device.
-- **Two compositors that must agree.** A CPU reference compositor in pure Rust evaluates the
-  same op list; the tests render every message stream with both and require byte-identical
-  frames.
-- **Current Vulkan, used.** Dynamic rendering, `synchronization2` and descriptor indexing are
-  required. `VK_EXT_present_timing` with `VK_KHR_present_wait2` paces presents at the game's
-  frame rate and `VK_EXT_swapchain_maintenance1` replaces the swapchain, each where the
-  device offers it and with a fallback where it does not.
-- **Validated in CI.** The Vulkan tests run on lavapipe, the software rasteriser of Mesa,
-  with the Khronos validation layer, and a validation error fails the test.
-- **`unsafe` has an address.** `#![forbid(unsafe_code)]` holds in the core, the protocol,
-  the pixel arithmetic, the reference compositor, the decoders, the audio and the host;
-  `unsafe` lives in the Vulkan backend, the Ruby FFI, the binding, the guest role and
-  platform code.
-- **Boundaries that a test keeps.** Guest and host exchange only plain data, and
-  `cargo xtask deps` checks the crate graph against `cargo metadata`.
-- **The C that remains is watched.** The vendored Ruby runs its upstream test suites; outside
-  the merge gate they run again under AddressSanitizer and UndefinedBehaviorSanitizer, with
-  libFuzzer targets (`cargo xtask fuzz`) and a stress run of the garbage collector
-  (`cargo xtask stress`).
-
-## Status
-
-| Runtime | State | |
-|---|---|---|
-| RPG Maker XP (RGSS1) | Supported | Since version 0.1.0 |
-| RPG Maker VX (RGSS2) | Supported | Since version 0.2.0 |
-| RPG Maker VX Ace (RGSS3) | Planned | Does not run yet; in progress |
 
 The runtime is taken from the game's `Game.ini`. What works:
 
@@ -85,8 +61,33 @@ specifications under [`openspec/specs`](openspec/specs) record them.
 
 - Text glyphs are not rasterised as Windows GDI rasterises them, so the pixels of text
   differ; layout and advance widths are kept.
-- RPG Maker VX Ace (RGSS3) does not run yet.
 - Linux x86_64 only.
+
+## Modern Rust + Vulkan
+
+- **Raw Vulkan 1.3 through `ash`, no engine in between.** The compositor is one compute
+  shader, [`compose.comp`](crates/vkxp-vk/shaders/compose.comp): one dispatch per frame, one
+  workgroup per 16 by 16 tile, one invocation per pixel, integer arithmetic only and texels
+  fetched, never filtered, so a frame is the same on every device.
+- **Two compositors that must agree.** A CPU reference compositor in pure Rust evaluates the
+  same op list; the tests render every message stream with both and require byte-identical
+  frames.
+- **Current Vulkan, used.** Dynamic rendering, `synchronization2` and descriptor indexing are
+  required. `VK_EXT_present_timing` with `VK_KHR_present_wait2` paces presents at the game's
+  frame rate and `VK_EXT_swapchain_maintenance1` replaces the swapchain, each where the
+  device offers it and with a fallback where it does not.
+- **Validated in CI.** The Vulkan tests run on lavapipe, the software rasteriser of Mesa,
+  with the Khronos validation layer, and a validation error fails the test.
+- **`unsafe` has an address.** `#![forbid(unsafe_code)]` holds in the core, the protocol,
+  the pixel arithmetic, the reference compositor, the decoders, the audio and the host;
+  `unsafe` lives in the Vulkan backend, the Ruby FFI, the binding, the guest role and
+  platform code.
+- **Boundaries that a test keeps.** Guest and host exchange only plain data, and
+  `cargo xtask deps` checks the crate graph against `cargo metadata`.
+- **The C that remains is watched.** The vendored Ruby runs its upstream test suites; outside
+  the merge gate they run again under AddressSanitizer and UndefinedBehaviorSanitizer, with
+  libFuzzer targets (`cargo xtask fuzz`) and a stress run of the garbage collector
+  (`cargo xtask stress`).
 
 ## Quick start
 
@@ -130,8 +131,7 @@ leave the others alone, set `VK_LOADER_DRIVERS_SELECT` and `--device`, for examp
 | F2 | Frame rate in the title |
 | F3, F4 | Save and load a state; with Shift, choose the slot |
 
-Every option, the configuration files and the key maps are in
-[docs/running.md](docs/running.md).
+Every option, the configuration files and the key maps are in [docs/running.md](docs/running.md).
 
 ## How it works
 
