@@ -7,7 +7,7 @@
 
 ## 2. When a key is seen
 
-- [ ] 2.1 The input state of RGSS3 with `Rules::Rgss3`, `runtime::input_rules` removed (decision 4), and `InputState::frame_shown` in `graphics::frame` (decision 5); the documentation of `input.rs`, `graphics.rs` and of `lib.rs` where it describes `Input`. Verify: the scenarios of "When Input of RGSS3 sees a key" and "Repeat and directions of Input of RGSS3" in `input_rgss3.rs`; the same test command.
+- [x] 2.1 The input state of RGSS3 with `Rules::Rgss3`, `runtime::input_rules` removed (decision 4), and `InputState::frame_shown` in `graphics::frame` (decision 5); the documentation of `input.rs`, `graphics.rs` and of `lib.rs` where it describes `Input`. Verify: the scenarios of "When Input of RGSS3 sees a key" and "Repeat and directions of Input of RGSS3" in `input_rgss3.rs`; the same test command.
 - [ ] 2.2 What did not change. Verify: the scenarios of "Input of RGSS1 and RGSS2 is unchanged by RGSS3", "XP and VX" being one new test in `crates/vkxp-binding/tests/graphics_rgss2.rs`; the tests of `Input` in `crates/vkxp-binding/tests/modules.rs` pass unedited over both interpreters; `git diff` against the start of the change is empty for `crates/vkxp-binding-rgss3/tests/ruby192.allow` (unless the mechanism reported an entry that now passes, which is then removed with its marker) and for `crates/vkxp-core`, and in the existing test files it adds lines and removes none; `git diff` of `arity_rgss3.rs` touches the list `BOUND` alone.
 
 ## 3. Documents

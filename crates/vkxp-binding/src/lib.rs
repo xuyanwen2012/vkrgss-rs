@@ -291,7 +291,9 @@
 //! for the tick of the frame just sent), by `Input.update`
 //! (taking only what has arrived) and by `print`, `p`, in RGSS3 `msgbox` and `msgbox_p`,
 //! and the error report (waiting for the dismissal). Whatever it waits for, it keeps the
-//! latest input snapshot for the next `Input.update` and records a reset or quit request.
+//! latest input snapshot for the next `Input.update` and records a reset or quit request. In
+//! RGSS3 a snapshot waits for the next frame `Graphics` shows as well: `Input.update` sees
+//! what had arrived when a frame was last shown, so it never sees a new key on its own.
 //! The request is raised, as `Reset` (`RGSSReset` in RGSS3) or `SystemExit`, by the
 //! function of `Graphics` that showed the frame, after the pump has
 //! returned and the guest is released, which is the raise rule of the interpreter crate. A

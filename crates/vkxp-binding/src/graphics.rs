@@ -45,7 +45,10 @@ end
 const RESET_PRIVATE: &str = "class << Graphics; private :_reset; end";
 
 /// Extracts one frame, sends it with `front` before its own bitmap deltas, and waits for its
-/// tick. The tick count of the emulated `Win32API` functions advances by the frame.
+/// tick. The tick count of the emulated `Win32API` functions advances by the frame, and the
+/// input state marks it shown, which with the rules of RGSS3 lets the next `Input.update` see
+/// the snapshots received so far. Every frame `Graphics` shows passes here, and nothing else
+/// marks a frame.
 fn frame(mut front: Vec<BitmapDelta>) {
     Guest::with(|guest| {
         let extraction = Span::enter(Part::Extraction);
@@ -57,6 +60,7 @@ fn frame(mut front: Vec<BitmapDelta>) {
         guest.send(GuestToHost::Frame(packet));
         drop(extraction);
         guest.pump(Await::Tick);
+        guest.input.frame_shown();
         let frame_rate = guest.scene.frame_rate().get();
         guest.win32api.frame_shown(frame_rate.into());
         guest.audio.frame_shown(frame_rate.into());
