@@ -119,7 +119,6 @@ fn bit_0_of_the_asynchronous_state_is_set_at_the_update_a_key_goes_down() {
 /// Scenario "Toggle".
 #[test]
 fn the_toggle_of_a_key_flips_at_each_latched_press() {
-    vkxp_binding::pending_over_ruby_1_9_2!();
     let caps = InputSnapshot::EMPTY.with_key(0x14);
     let script = holding(caps)
         .after_frame(1, HostToGuest::Input(InputSnapshot::EMPTY))
@@ -141,7 +140,8 @@ fn the_toggle_of_a_key_flips_at_each_latched_press() {
              Input.update
              buffer = \"\\0\" * 256
              get.call(buffer)
-             [before, first, same, second, state.call(0x14) & 1, buffer[0x14], state.call(0x41)]"),
+             [before, first, same, second, state.call(0x14) & 1, buffer.unpack('C*')[0x14],
+              state.call(0x41)]"),
             script
         ),
         "[0, [1, true], 1, [1, 1], 0, 128, 0]"
@@ -199,7 +199,6 @@ fn mouse_event_sends_a_press_or_release_for_each_button_flag() {
 /// Scenario "SetKeyboardState".
 #[test]
 fn set_keyboard_state_replaces_what_is_reported_until_the_next_update() {
-    vkxp_binding::pending_over_ruby_1_9_2!();
     assert_eq!(
         eval_with(
             &with_error_stream(
@@ -208,9 +207,10 @@ fn set_keyboard_state_replaces_what_is_reported_until_the_next_update() {
                  state = Win32API.new('user32', 'GetKeyState', 'i', 'i')
                  async = Win32API.new('user32', 'GetAsyncKeyState', 'i', 'i')
                  Input.update
-                 buffer = \"\\0\" * 256
-                 buffer[0x41] = 0x80
-                 buffer[0x14] = 0x01
+                 bytes = [0] * 256
+                 bytes[0x41] = 0x80
+                 bytes[0x14] = 0x01
+                 buffer = bytes.pack('C*')
                  result = set.call(buffer)
                  read = \"\\xff\" * 256
                  get.call(read)
@@ -235,7 +235,6 @@ fn set_keyboard_state_replaces_what_is_reported_until_the_next_update() {
 /// Scenario "Keyboard state".
 #[test]
 fn the_keyboard_state_has_0x81_for_a_key_held_for_the_first_time() {
-    vkxp_binding::pending_over_ruby_1_9_2!();
     assert_eq!(
         eval_with(
             &(CLEAR_TOGGLES.to_owned()
@@ -243,10 +242,12 @@ fn the_keyboard_state_has_0x81_for_a_key_held_for_the_first_time() {
              buffer = \"\\xff\" * 256
              Input.update
              result = state.call(buffer)
-             held = (0...256).select { |key| buffer[key] != 0 }
+             bytes = buffer.unpack('C*')
+             held = (0...256).select { |key| bytes[key] != 0 }
              short = \"\\xff\" * 0x42
              state.call(short)
-             [result, buffer.size, buffer[0x41], held, short.size, short[0x41], state.call(0)]"),
+             [result, buffer.size, bytes[0x41], held, short.size, short.unpack('C*')[0x41],
+              state.call(0)]"),
             holding(InputSnapshot::EMPTY.with_key(0x41))
         ),
         "[1, 256, 129, [65], 66, 129, 0]"

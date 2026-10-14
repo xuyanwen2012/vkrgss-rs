@@ -45,12 +45,6 @@ case data written by the original runtime
 test arity_rgss2 no_class_has_a_method_the_list_lacks
 test modules button_constants
 
-# `String#[]` with an index returns the byte as a Fixnum in Ruby 1.8 and a String of one
-# character in Ruby 1.9, and `String#[]=` of Ruby 1.9 takes no Fixnum.
-test win32api set_keyboard_state_replaces_what_is_reported_until_the_next_update
-test win32api the_toggle_of_a_key_flips_at_each_latched_press
-test win32api the_keyboard_state_has_0x81_for_a_key_held_for_the_first_time
-
 # `Marshal.dump` of Ruby 1.9 writes the encoding of a string as an instance variable: the
 # dump of a UTF-8 string that a `_dump` method returned is six bytes longer than in Ruby
 # 1.8, and the test expects the size of Ruby 1.8.

@@ -51,6 +51,9 @@ const PRELUDE_SHARED: &str = include_str!("prelude_shared.rb");
 /// one of the binding.
 const PRELUDE_WIN32API: &str = include_str!("prelude_win32api.rb");
 
+/// `DL` of RGSS3, evaluated after [`PRELUDE_SHARED`].
+const PRELUDE_DL: &str = include_str!("prelude_dl.rb");
+
 /// What is prepared over Ruby 1.8 only, before the prelude: `$KCODE` and the empty load path.
 const PRELUDE_RUBY18: &str = include_str!("prelude_ruby18.rb");
 
@@ -508,6 +511,9 @@ pub(crate) fn prepare(ruby: &Ruby) -> Result<(), RubyError> {
         ruby.eval_protected(PRELUDE_WIN32API, PRELUDE_NAME, 1)?;
     }
     ruby.eval_protected(PRELUDE_SHARED, PRELUDE_NAME, 1)?;
+    if runtime == Runtime::Rgss3 {
+        ruby.eval_protected(PRELUDE_DL, PRELUDE_NAME, 1)?;
+    }
     if runtime == Runtime::Rgss1 {
         ruby.eval_protected(PRELUDE_RGSS1, PRELUDE_NAME, 1)?;
     }

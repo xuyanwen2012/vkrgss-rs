@@ -440,3 +440,47 @@ fn an_address_as_the_source_copies_nothing() {
         "[0, [1, 2, 3, 4]]"
     );
 }
+
+// --- DL ---------------------------------------------------------------------------------------
+
+/// Scenario "Constants, measured on the original".
+#[test]
+fn dl_has_the_constants_of_the_original() {
+    assert_eq!(
+        eval(
+            "[DL::TYPE_VOID, DL::TYPE_INT, DL::TYPE_DOUBLE, DL::SIZEOF_VOIDP, DL::SIZEOF_LONG_LONG,
+              DL::ALIGN_SHORT, DL::RTLD_NOW, DL::DLError.superclass, DL::DLTypeError.superclass]"
+        ),
+        "[0, 4, 8, 4, 8, 2, -1, StandardError, DL::DLError]"
+    );
+}
+
+/// Scenario "Refused".
+#[test]
+fn every_way_into_a_library_or_memory_raises_dl_error() {
+    let calls = [
+        ("DL.dlopen('user32')", "DL.dlopen"),
+        ("DL::Handle.new('user32')", "DL::Handle.new"),
+        ("DL::CFunc.new(0)", "DL::CFunc.new"),
+        ("DL::CPtr.malloc(8)", "DL::CPtr.malloc"),
+        ("DL.malloc(8)", "DL.malloc"),
+        ("DL::Handle['user32']", "DL::Handle[]"),
+        ("DL::Handle.sym('GetKeyState')", "DL::Handle.sym"),
+        ("DL::CPtr['abc']", "DL::CPtr[]"),
+        ("DL::CPtr.new(0)", "DL::CPtr.new"),
+        ("DL::CPtr.to_ptr('abc')", "DL::CPtr.to_ptr"),
+        ("DL.dlwrap(1)", "DL.dlwrap"),
+        ("DL.dlunwrap(2)", "DL.dlunwrap"),
+        ("DL.realloc(0, 8)", "DL.realloc"),
+        ("DL.free(0)", "DL.free"),
+    ];
+    for (call, name) in calls {
+        assert_eq!(
+            eval(call),
+            format!(
+                "DL::DLError: {name}: vkxp loads no library and reads no memory of the process"
+            ),
+            "{call}"
+        );
+    }
+}

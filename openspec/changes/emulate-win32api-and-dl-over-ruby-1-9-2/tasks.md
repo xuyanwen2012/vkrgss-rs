@@ -11,8 +11,8 @@
 
 ## 3. DL and the shared tests
 
-- [ ] 3.1 `prelude_dl.rb` for RGSS3 (decision 10). Verify: the scenarios of "DL of RGSS3"; the test command of task 1.1.
-- [ ] 3.2 The Ruby snippets of the three tests of the keyboard state in `crates/vkxp-binding/tests/win32api.rs` with `unpack` and `pack`, their markers and their entry of `ruby192.allow` removed (decision 11). Verify: the scenarios of "Win32API of XP and VX over Ruby 1.9.2"; `git diff` of `tests/win32api.rs` against the start of the change changes no expected value; the test command of task 1.1.
+- [x] 3.1 `prelude_dl.rb` for RGSS3 (decision 10). Verify: the scenarios of "DL of RGSS3"; the test command of task 1.1.
+- [x] 3.2 The Ruby snippets of the three tests of the keyboard state in `crates/vkxp-binding/tests/win32api.rs` with `unpack` and `pack`, their markers and their entry of `ruby192.allow` removed (decision 11). Verify: the scenarios of "Win32API of XP and VX over Ruby 1.9.2"; `git diff` of `tests/win32api.rs` against the start of the change changes no expected value; the test command of task 1.1.
 
 ## 4. Documents
 
