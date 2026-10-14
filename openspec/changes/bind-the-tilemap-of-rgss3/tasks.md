@@ -15,4 +15,4 @@
 
 ## 4. Integration check
 
-- [ ] 4.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate bind-the-tilemap-of-rgss3 --strict` passes; every name of the kept lists is listed again; `git diff main -- crates/vkxp-core crates/vkxp-proto crates/vkxp-host crates/vkxp-vk crates/vkxp-audio crates/vkxp-vfs third_party` is empty.
+- [x] 4.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate bind-the-tilemap-of-rgss3 --strict` passes; every name of the kept lists is listed again; `git diff main -- crates/vkxp-core crates/vkxp-proto crates/vkxp-host crates/vkxp-vk crates/vkxp-audio crates/vkxp-vfs third_party` is empty.
