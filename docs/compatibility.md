@@ -327,11 +327,10 @@ Known differences of the start, each against the measurements of the original:
   `Graphics.__reset__` does not wait for F12 to be released.
 - `load_data` of a path outside the game directory raises `Errno::ENOENT`, where the
   original reads any file the process may read: the game's files never reach outside the
-  game directory. After `Dir.chdir` to a directory outside the game directory, a relative
-  name is looked for from the game directory.
-- A file that `autoload` loads is compiled by the interpreter's own loader as US-ASCII, the
-  default of Ruby 1.9.2, and `autoload` of a file that `require` would not load raises
-  `LoadError` at the call, where the original raises at the first use of the constant.
+  game directory. This holds for an absolute path and for a relative name from a current
+  directory that leads outside.
+- `autoload` of a file that `require` would not load raises `LoadError` at the call, where
+  the original raises at the first use of the constant.
 - A state is not saved while a script thread is alive: a thread of Ruby 1.9.2 is a thread
   of the system, which a copy of the process does not have.
 
@@ -341,8 +340,8 @@ Measured on the original runtime of VX Ace 3.0.1 under Wine, and followed:
 
 - The interpreter has no script name: `$0` and `$PROGRAM_NAME` are `false`, and the last
   entry of the backtrace of a script is ``ruby:in `eval'``.
-- A `Game.ini` without a title, or with an empty one, gives the window the title
-  `Untitled`.
+- A `Game.ini` without `Title=` gives the window the title `Untitled`. An empty value was
+  not measured; vkxp takes it as missing.
 - Magic comments are those of Ruby 1.9.2: `ascii-8bit` and its spellings compile a script
   as bytes, a comment on the second line after a comment is ignored, a byte above 127 in a
   script of `us-ascii` is a `SyntaxError`, and `euc-jp`, `binary`, an unknown name and
@@ -362,10 +361,20 @@ Measured on the original runtime of VX Ace 3.0.1 under Wine, and followed:
 - `load_data` and `save_data` raise `ArgumentError` for a name with a NUL byte and
   `Encoding::UndefinedConversionError` for a name labelled ASCII-8BIT whose bytes are not
   UTF-8, as 3.0.1 does; vkxp follows 3.0.1 where 3.0.0 differs.
-- `require` and `load` load only `.rb` files inside the game directory, and compile them as
-  UTF-8, as the scripts are. `require_relative` takes the name from the directory of the
-  file that calls it, the game directory for a script, and loads by the rule of
-  `require`; `autoload` locates its file by that rule.
+- `require` and `load` load files of the game directory: `require` returns `true` and then
+  `false` for the same file and adds its full path to `$LOADED_FEATURES`, and a missing
+  file and `require "zlib"` raise `LoadError` (`no such file to load -- <name>`).
+  `require_relative` and `autoload` exist.
+
+vkxp's own rules, where the original was not measured:
+
+- `require`, `load`, `require_relative` and `autoload` load only `.rb` files inside the game
+  directory, the rule of vkxp for every runtime. `require_relative` takes the name from the
+  directory of the file that calls it, the game directory for a script, as Ruby 1.9.2
+  does, and `autoload` locates its file by the rule of `require` at the call.
+- A file that `require` or `load` loads is compiled as UTF-8, as the scripts are. A file
+  that `autoload` loads is compiled by the interpreter's own loader as US-ASCII, the
+  default of Ruby 1.9.2.
 
 What follows of the classes was measured on the original runtime of VX Ace (DLL versions
 3.0.0.1 and 3.0.1.1) under Wine.

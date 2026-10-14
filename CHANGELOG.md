@@ -13,9 +13,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the archive first, also by the name without its extension, then a loose file from the
   current directory, which it reads as a `File`, labels frozen strings too, raises
   `Errno::EACCES` for a directory and checks the name as 3.0.1 does, as `save_data` does.
-  `require` and `load` compile a file as UTF-8, and `require_relative` and `autoload` follow
-  the rule of `require`. A long report is shown whole, and every uncaught error ends with
-  status 1, vkxp's own rules.
+  vkxp's own rules: `require` and `load` compile a file as UTF-8, `require_relative` and
+  `autoload` follow the rule of `require`, a long report is shown whole, and every uncaught
+  error ends with status 1.
 
 ## [0.3.0] - 2026-10-14
 
