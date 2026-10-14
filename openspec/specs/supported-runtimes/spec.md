@@ -199,7 +199,7 @@ capability say of VX Ace as planned.
 
 #### Scenario: What experimental means here
 - **WHEN** the section on VX Ace of `docs/compatibility.md` is read
-- **THEN** it says that the scripts of a game of VX Ace run in a guest executable of their own, that the classes are those of RGSS2 still, that a game made with the standard scripts therefore ends with an error before its title screen, and that no frame was compared with the original
+- **THEN** it says that the scripts of a game of VX Ace run in a guest executable of their own with the classes of RGSS3, and that no frame was compared with the original, and it does not say that a game made with the standard scripts ends before its title screen
 
 #### Scenario: Milestones
 - **WHEN** the milestone table of `docs/decisions.md` is read
