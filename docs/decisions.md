@@ -11,6 +11,10 @@ The change `plan-vx-ace` recorded the decisions of the owner of 2026-10-13 on VX
 after V3: it rewrote "VX Ace" and "Process" under "Several runtimes" and added the rows A0 to
 A3 of "Milestones" and the risks of VX Ace.
 
+The change `build-the-binding-over-ruby-1-9-2` added the crates `vkxp-ruby192-sys` and
+`vkxp-binding-rgss3` to the table of crates and to the crates that may hold `unsafe`, and
+under "VX Ace" what the decision on the binding became in code.
+
 The change `draw-text-and-bitmaps-as-rgss3` added "Text and bitmaps of RGSS3" under "VX Ace"
 on 2026-10-13: which DLL version vkxp follows, the largest bitmap, and what stands for the
 answers of GDI.
@@ -103,8 +107,10 @@ answers of GDI.
 | `vkxp-image` | PNG, JPEG, BMP decoding | guest |
 | `vkxp-text` | Font lookup, substitution table, glyph rasterisation | guest |
 | `vkxp-vfs` | Path resolution, RTP lookup, encrypted archive | guest |
-| `vkxp-ruby-sys` | Build of the embedded Ruby and raw FFI | guest |
-| `vkxp-binding` | RGSS Ruby API on top of core | guest |
+| `vkxp-ruby-sys` | Build of the embedded Ruby 1.8.7 and raw FFI | guest |
+| `vkxp-ruby192-sys` | Build of the embedded Ruby 1.9.2 and raw FFI, under the names of `vkxp-ruby-sys` | guest |
+| `vkxp-binding` | RGSS Ruby API on top of core, over Ruby 1.8.7 | guest |
+| `vkxp-binding-rgss3` | The source of `vkxp-binding` compiled over Ruby 1.9.2 | guest |
 | `vkxp-guest` | The guest role: the hidden option, the guest record and the settings in it, the subscriber of the diagnostics, the attachment, the copies that are states, the sandbox and the signal settings of a guest process; links no interpreter | guest |
 | `vkxp-guest-main` | The main of a guest: what a guest is set up with, the text backend over the font engine, the guest on a thread, and the function that makes an executable a guest process | guest |
 | `vkxp-compose-ref` | CPU reference compositor | host and tests |
@@ -178,8 +184,8 @@ answers of GDI.
   tools), `games/` (local test games), `vkxp/` (this repository), `wt/` (worktrees).
   Nothing under `ref/` or `games/` is ever committed.
 - Everything in the repository is English. Rust edition 2024, toolchain pinned.
-- `unsafe` only in `vkxp-vk`, `vkxp-ruby-sys`, `vkxp-binding`, `vkxp-guest` and platform
-  code.
+- `unsafe` only in `vkxp-vk`, `vkxp-ruby-sys`, `vkxp-ruby192-sys`, `vkxp-binding` (the source
+  that `vkxp-binding-rgss3` compiles too), `vkxp-guest` and platform code.
   `thiserror` in libraries, `anyhow` in the binary and in `vkxp-guest-main`, which is the
   body of the `main` of a guest executable, `tracing` for logs.
 - Merge gate: `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test`,
@@ -261,7 +267,13 @@ Ace finished and published.
   from the start.
 - Binding: one source for the RGSS classes. `vkxp-binding` is compiled a second time, as a
   package of its own over `vkxp-ruby192-sys`; what differs by interpreter is behind the API
-  of the sys crates or a runtime check. There is no second copy of the classes.
+  of the sys crates or a runtime check. There is no second copy of the classes. The package
+  is `vkxp-binding-rgss3` (change `build-the-binding-over-ruby-1-9-2`): it has no source,
+  runs the tests of `vkxp-binding` a second time, and names in an allow-list those that
+  expect RGSS1, RGSS2 or Ruby 1.8. A string the classes create is bytes, ASCII-8BIT over
+  Ruby 1.9.2 as measured on the original, unless it is script source or the path of the
+  script archive. Symbols are not numbered over Ruby 1.9.2: a dump of Ruby 1.9 does not
+  depend on the numbers.
 - Encodings: only what the original has is linked and listed, and an encoding the original
   does not know is unknown in vkxp too. The original lists four (ASCII-8BIT, UTF-8,
   UTF-16LE, US-ASCII), with UTF-8 as the default external and source encoding; which

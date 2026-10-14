@@ -75,8 +75,8 @@ so a game can be run under it, very slowly: `VKXP_GC_STRESS=1 vkxp <game directo
 VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask stress
 ```
 
-runs four steps, the first three under the variable, goes on after one that fails and names
-all that failed:
+runs five steps, all but the fourth under the variable, goes on after one that fails and
+names all that failed:
 
 | Step | What runs | `n` |
 |---|---|---|
@@ -84,9 +84,10 @@ all that failed:
 | `binding` | `cargo test -p vkxp-binding --locked --no-fail-fast` | 1 |
 | `guest` | the tests of the executable that start a guest, `cargo test -p vkxp --locked --test end_to_end` | 1 |
 | `suites-1.9.2` | the files of `test/ruby` of Ruby 1.9.2 that are slow under `GC.stress = true` (`cargo test -p vkxp-ruby192-sys --locked --test upstream_stress -- --ignored`) | every allocation |
+| `binding-1.9.2` | the tests of the binding over Ruby 1.9.2, `cargo test -p vkxp-binding-rgss3 --locked --no-fail-fast` | every allocation |
 
 The values of `n` are constants in `xtask/src/stress.rs`. The first step needs what the
-sanitized run needs; the last one needs no sanitizer and runs the ordinary build. The
+sanitized run needs; the last two need no sanitizer and run the ordinary build. The
 command takes about three quarters of an hour on the development machine. A test
 that is left out is named in `xtask/src/stress.skip` with the reason. A lost value is a
 defect also without the variable; it is fixed with a guard (`RB_GC_GUARD` in the vendored
@@ -106,7 +107,12 @@ host function that is suspended with its Fiber, both under stress. Only the seve
 `suites-1.9.2` above. `test_integer_comb.rb`, `test_m17n_comb.rb` and `test_yield.rb` did
 not finish in 14 minutes under stress when the release was studied and are named in
 `xtask/src/stress.skip`. A value lost in this interpreter is fixed with a guard recorded in
-[third_party/ruby-1.9.2/PATCHES.md](../third_party/ruby-1.9.2/PATCHES.md).
+[third_party/ruby-1.9.2/PATCHES.md](../third_party/ruby-1.9.2/PATCHES.md). The step
+`binding-1.9.2` is where the Rust and C code of the binding meets that collector at every
+allocation; a test it leaves out is a line `binding-1.9.2 <test>` of the skip list, and a
+lost value is never a reason for one. Without the variable, the tests `stress` and
+`scene_stress` of `vkxp-binding-rgss3` switch `GC.stress` on around every snippet
+themselves, in the gate.
 
 **The fuzz targets.** Three parts of the vendored C code read what comes with a game:
 `Marshal.load` reads save files and `.rxdata` files, the parser reads the scripts, and the
@@ -161,6 +167,46 @@ It runs `cargo deny --locked check --warn unmaintained`, which downloads the adv
 database. A vulnerability, a licence that is not on the list or a crate from anywhere but
 crates.io fails it; an unmaintained crate is a warning. Without `cargo-deny` the command
 says how to install it (`cargo install --locked cargo-deny`) and fails.
+
+## The tests of the binding over two interpreters
+
+The RGSS classes have one source, `crates/vkxp-binding/src`, which `vkxp-binding` compiles
+over Ruby 1.8.7 and `vkxp-binding-rgss3` over Ruby 1.9.2. The unit tests are in that source
+and run in both packages. For every test file `crates/vkxp-binding/tests/<name>.rs` the
+second package has a file of the same name that loads it as the module `t`; a test of `xtask`
+fails for a file without that counterpart, and the counterpart is these lines:
+
+```rust
+//! `tests/<name>.rs` of `vkxp-binding`, over Ruby 1.9.2.
+#![cfg(not(vkxp_interpreter_absent))]
+extern crate vkxp_binding_rgss3 as vkxp_binding;
+#[path = "../../vkxp-binding/tests/<name>.rs"]
+mod t;
+```
+
+So the `test` step of the gate builds and runs the tests of the binding twice, and
+`cargo test -p vkxp-binding-rgss3` runs those over Ruby 1.9.2 alone. The source has no `cfg`
+and no feature that tells the interpreters apart; the one `cfg` in it,
+`vkxp_interpreter_absent`, is set by the build script of the second package for a target
+without Ruby 1.9.2 and empties the package there.
+
+A test or a snippet case that cannot pass over Ruby 1.9.2 yet is named in
+`crates/vkxp-binding-rgss3/tests/ruby192.allow`, whose head describes the format. A reason
+is one of three kinds: the test expects behaviour of RGSS1 or RGSS2 that a named section of
+a measurement of the original runtime of RGSS3 states otherwise; its Ruby, or the text it
+expects from Ruby, is that of 1.8 and the construct is named; or it holds the symbol
+numbering of Ruby 1.8.1. A crash, a hang, a value lost under stress or a wrong pixel is a
+fault and is fixed, never listed.
+
+- A listed test has `vkxp_binding::pending_over_ruby_1_9_2!()` as its first statement
+  (`crate::` in a unit test). Over Ruby 1.9.2 the test executable is started again for that
+  one test, and the test counts as passed while it fails there; its output then gives the
+  reason of its entry. Over Ruby 1.8.7 the marker does nothing and the list is not read.
+- A listed case of `tests/cases` or `tests/scene_cases` is evaluated like the others and is
+  reported only when it is as expected.
+- When later work makes a listed test or case pass, the run fails and names it. Remove its
+  line from the list, and for a test also the marker; the entry goes when its last line
+  does. A marker without an entry is inert, so the test then has to pass in place.
 
 ## Testing with another compiler
 

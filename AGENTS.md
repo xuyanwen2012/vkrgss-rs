@@ -12,7 +12,8 @@ changing anything; it records decisions that are settled.
 - Respect the guest/host boundary: only plain data from `vkxp-proto` crosses it. Guest crates
   never depend on `vkxp-vk`, `vkxp-audio` or `vkxp-host`.
 - `vkxp-core` does no file I/O, has no Ruby or Vulkan dependency, and forbids `unsafe`.
-- `unsafe` is allowed only in `vkxp-vk`, `vkxp-ruby-sys`, `vkxp-ruby192-sys`, `vkxp-binding`,
+- `unsafe` is allowed only in `vkxp-vk`, `vkxp-ruby-sys`, `vkxp-ruby192-sys`, `vkxp-binding`
+  (whose source `vkxp-binding-rgss3` compiles a second time, over Ruby 1.9.2),
   `vkxp-guest` and platform code.
 - Never commit any original DLL, RTP asset, or Enterbrain Ruby source. Tests use procedurally
   generated images only.

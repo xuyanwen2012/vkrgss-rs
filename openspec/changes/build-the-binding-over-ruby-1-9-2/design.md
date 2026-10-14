@@ -421,7 +421,44 @@ named.
   `Input`: `../../ref/RGSS301_api.md`.
 - An entry of the allow-list whose test has no marker is not noticed (the test simply
   runs). A check would have to search the sources.
-- The durations of the gate's steps before and after this change, to be written here by
-  the flow.
+- The step `binding-1.9.2`, run once on the development machine on 2026-10-13
+  (`VKXP_GC_STRESS=1 cargo test -p vkxp-binding-rgss3 --locked --no-fail-fast`, no test
+  skipped): 281 tests in 28 binaries passed in 37 s, the build not counted. No value was
+  lost and `xtask/src/stress.skip` has no line for the step. The plain run of the same
+  tests takes about 10 s; `stress` and `scene_stress` are far below the ten minutes of the
+  implementation notes.
 - An "every n-th allocation" form of the stress switch for Ruby 1.9.2, if the step
   `binding-1.9.2` is too slow.
+- What the flow decided where the artifacts left room, for the reviewer and the owner:
+  - *Scenario "Round trip" and `Table`.* `Table` has no `==`, over either interpreter and
+    on the original, so `Marshal.load(Marshal.dump(table)) == table` is false by identity.
+    `tests/strings.rs` compares `Color`, `Tone` and `Rect` with `==` as the scenario says
+    and a table through its serialized form and one element. Giving `Table` an `==` would
+    be class behaviour, which this change does not add.
+  - *Scenario "Font name".* In a game of RGSS3 `Font.new.name` is already a list of names
+    (change `draw-text-and-bitmaps-as-rgss3`); the test asserts ASCII-8BIT for every name
+    of the list and for the one name of `Font.new('Test Sans')`.
+  - *`Fiber#alive?`* is not in the core of Ruby 1.9.2 (it comes with `require 'fiber'`,
+    which the original does not have). The script of decision 8 shows the end of its Fiber
+    by the `FiberError` of a third resume.
+  - *`rb::bytes_new` and `rb::text_new` return `Result<VALUE, Raised>`*, not `HostResult`,
+    because `runtime.rs` makes strings outside a host function; a host function writes
+    `Ok(rb::bytes_new(..)?)`. Beside the 14 places of decision 3 a probe of the unit tests
+    (`foundation_tests.rs`) makes a string, as bytes.
+  - *The two lines of `prelude.rb`* that moved to `prelude_ruby18.rb` left two comment
+    lines behind, so that the line numbers of the prelude in backtraces are the ones they
+    were.
+  - *The process of a listed test* runs from the same executable beside its parent, so
+    the harness gives it a game directory of its own, named after the test; otherwise it
+    removed the directory the parent's tests were using.
+  - *The name of a snippet case* may hold spaces: a `case` line takes the rest of the line.
+  - *`rgss3_script.rs`* has the alias `extern crate vkxp_binding_rgss3 as vkxp_binding`,
+    which `tests/scene_support` of the binding needs, and uses the package through it.
+  - *The helpers of the two tests of `xtask`* (dependencies, counterparts) are in its test
+    module, since nothing but the tests calls them.
+  - *The load path of the original* is cited in the allow-list from V0 report 2 and API
+    report 1.1, where the reports state it; decision 4 names V0 report 8.
+- `a_reset_request_starts_the_scripts_over` of `tests/run_game.rs` failed once in a run
+  over Ruby 1.8.7 during this flow (`testing::bitmap_count()` was 1, not 0) and passed in
+  every later run. The count is of the arena shared by the tests of the binary, which run
+  in parallel. Not caused by this change and not examined.

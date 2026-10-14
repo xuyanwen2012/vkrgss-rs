@@ -16,8 +16,10 @@ defined in `vkxp-proto`.
 | `vkxp-image` | PNG, JPEG, BMP decoding | guest |
 | `vkxp-text` | Font lookup, substitution table, glyph rasterisation | guest |
 | `vkxp-vfs` | Path resolution, RTP lookup, encrypted archive | guest |
-| `vkxp-ruby-sys` | Build of the embedded Ruby and raw FFI | guest |
-| `vkxp-binding` | RGSS Ruby API on top of core | guest |
+| `vkxp-ruby-sys` | Build of the embedded Ruby 1.8.7 and raw FFI | guest |
+| `vkxp-ruby192-sys` | Build of the embedded Ruby 1.9.2, the interpreter of RGSS3, and raw FFI under the names of `vkxp-ruby-sys`; empty on every target but `x86_64-unknown-linux-gnu` | guest |
+| `vkxp-binding` | RGSS Ruby API on top of core, over Ruby 1.8.7 | guest |
+| `vkxp-binding-rgss3` | The source of `vkxp-binding` compiled over Ruby 1.9.2: no source of its own, and the tests of `vkxp-binding` a second time | guest |
 | `vkxp-guest` | The guest role: the hidden option, the guest record and the settings in it, the subscriber of the diagnostics, the attachment, the copies that are states, the sandbox and the signal settings of a guest process | guest |
 | `vkxp-guest-main` | The main of a guest: what a guest is set up with, the text backend over the font engine, the guest on a thread, and the function that makes an executable a guest process | guest |
 | `vkxp-compose-ref` | CPU reference compositor | host and tests |
@@ -28,6 +30,16 @@ defined in `vkxp-proto`.
 
 `xtask` holds repository automation and the tool that extracts the built-in scripts; it is not
 part of the runtime.
+
+The RGSS classes have one source, `crates/vkxp-binding/src`, and two packages. What differs
+between the interpreters is behind the surface that both interpreter crates offer under the
+same names (which Ruby it is, the options for a runtime, the main object, the accessors of
+strings and arrays, a constructor for bytes and one for text, the mark of the game's scripts)
+or is asked at run time in one place, `rb::RUBY_19`; no `cfg` and no cargo feature tells the
+interpreters apart. A string the classes create is bytes (ASCII-8BIT over Ruby 1.9.2, as on
+the original runtime of RGSS3) unless it is script source or the path of the script archive.
+No executable links `vkxp-binding-rgss3` yet: the guest executable of RGSS3 is a later
+change.
 
 The protocol is at version 13; an encoded stream of another version is rejected. A frame packet
 carries the changes to bitmaps and tables and an ordered list of ops of five kinds: `Clear`,
@@ -97,7 +109,8 @@ Four rules keep the guest/host boundary intact. A test in `xtask` checks them ag
 violation is reported with the full dependency path that causes it.
 
 1. **Guest crates do not reach host crates.** None of `vkxp-core`, `vkxp-image`, `vkxp-text`,
-   `vkxp-vfs`, `vkxp-ruby-sys`, `vkxp-binding`, `vkxp-guest`, `vkxp-guest-main` may depend,
+   `vkxp-vfs`, `vkxp-ruby-sys`, `vkxp-ruby192-sys`, `vkxp-binding`, `vkxp-binding-rgss3`,
+   `vkxp-guest`, `vkxp-guest-main` may depend,
    directly or transitively, on `vkxp-vk`, `vkxp-audio` or `vkxp-host`.
 2. **Host crates do not reach guest crates.** None of `vkxp-vk`, `vkxp-audio`, `vkxp-host`, and
    not the reference compositor `vkxp-compose-ref` either, may depend, directly or transitively,
@@ -108,12 +121,20 @@ violation is reported with the full dependency path that causes it.
    `CORE_ALLOW_LIST` in `xtask/src/deps.rs`; adding to it is a reviewed decision, and nothing
    that does file I/O or binds Ruby, Vulkan, windowing or audio belongs there.
 4. **The guest role links no interpreter.** `vkxp-guest` may not depend, directly or
-   transitively, on `vkxp-ruby-sys` or `vkxp-binding`: an executable of another interpreter
-   links it too, and gives it the function that runs the game.
+   transitively, on `vkxp-ruby-sys`, `vkxp-ruby192-sys`, `vkxp-binding` or
+   `vkxp-binding-rgss3`: an executable of another interpreter links it too, and gives it the
+   function that runs the game.
 
 The check runs with every feature of every workspace crate enabled, so an optional dependency
 or an off-by-default feature cannot hide a forbidden path. Only normal and build dependencies
 count; dev-dependencies are not linked into either side.
+
+Beside the four, the same check holds the two interpreters apart: no package reaches both
+`vkxp-ruby-sys` and `vkxp-ruby192-sys`, which define the same symbols and cannot be linked
+into one program. Here development dependencies count too, because a test binary links
+them. Tests of `xtask` also hold the two packages of the binding together: they declare the
+same dependencies apart from the interpreter crate, and every test file of `vkxp-binding`
+has a file of the same name in `vkxp-binding-rgss3` that loads it.
 
 In addition, `vkxp-proto`, `vkxp-pixel`, `vkxp-core` and `vkxp-compose-ref` carry
 `#![forbid(unsafe_code)]`, so `unsafe` in them does not compile, and so does `vkxp-guest-main`.

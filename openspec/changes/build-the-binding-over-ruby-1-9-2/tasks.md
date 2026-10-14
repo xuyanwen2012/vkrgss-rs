@@ -29,8 +29,8 @@
 
 ## 6. Collector stress and documents
 
-- [ ] 6.1 `xtask/src/stress.rs`: the step `binding-1.9.2` and its lines in `xtask/src/stress.skip`, with the tests of `xtask` that hold the steps. Run the command of the step once. A value lost under stress is fixed, with a root in the binding or a recorded patch; a test that is left out for another reason is named in the skip list with it. Verify: scenarios "The step", "A test left out", "Not in the gate"; scenario "The run": `VKXP_GC_STRESS=1 cargo test -p vkxp-binding-rgss3 --locked --no-fail-fast` with the skips of the list passes, and its duration is written under Follow-ups of `design.md`; `cargo test -p xtask --locked` passes.
-- [ ] 6.2 Documents: `AGENTS.md`, `README.md`, `docs/architecture.md`, `docs/decisions.md`, `docs/development.md` as the implementation notes of `design.md` list them. Verify: the tests of `xtask` that check the documents pass; scenario "The crates of the second interpreter on another target" is stated in `docs/building.md` or `docs/development.md` where the targets are described.
+- [x] 6.1 `xtask/src/stress.rs`: the step `binding-1.9.2` and its lines in `xtask/src/stress.skip`, with the tests of `xtask` that hold the steps. Run the command of the step once. A value lost under stress is fixed, with a root in the binding or a recorded patch; a test that is left out for another reason is named in the skip list with it. Verify: scenarios "The step", "A test left out", "Not in the gate"; scenario "The run": `VKXP_GC_STRESS=1 cargo test -p vkxp-binding-rgss3 --locked --no-fail-fast` with the skips of the list passes, and its duration is written under Follow-ups of `design.md`; `cargo test -p xtask --locked` passes.
+- [x] 6.2 Documents: `AGENTS.md`, `README.md`, `docs/architecture.md`, `docs/decisions.md`, `docs/development.md` as the implementation notes of `design.md` list them. Verify: the tests of `xtask` that check the documents pass; scenario "The crates of the second interpreter on another target" is stated in `docs/building.md` or `docs/development.md` where the targets are described.
 
 ## 7. Integration check
 

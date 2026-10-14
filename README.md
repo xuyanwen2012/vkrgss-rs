@@ -162,7 +162,8 @@ draws a plane of a tilemap.
 Each frame the guest sends an ordered list of ops of five kinds, and both compositors
 evaluate every kind per pixel. The interpreter is Ruby 1.8.7-p374 with Oniguruma 5.9.6, built
 from vendored and patched source by a build script; no installed Ruby is involved. A second
-one, Ruby 1.9.2 for RGSS3, is built in `vkxp-ruby192-sys`, and no executable links it yet.
+one, Ruby 1.9.2 for RGSS3, is built in `vkxp-ruby192-sys`, and `vkxp-binding-rgss3` compiles
+the same RGSS classes over it; no executable links it yet.
 [docs/architecture.md](docs/architecture.md) has every crate and the four dependency rules.
 
 ## Documentation

@@ -42,12 +42,16 @@ generated at build time. It is linked with the encodings the original runtime ha
 (UTF-16LE, Shift_JIS with Windows-31J, ISO-8859-1) and no other. Its tests compile a Ruby
 executable too and run the release's `bootstraptest` and a selection of its `test/ruby`,
 once plainly and once with `GC.stress = true`; `crates/vkxp-ruby192-sys/tests/upstream.allow`
-names what is left out, with the reasons. No executable links this interpreter yet, and no
+names what is left out, with the reasons. `vkxp-binding-rgss3` compiles the source of
+`vkxp-binding` over it and runs the tests of the binding a second time
+([development.md](development.md)). No executable links this interpreter yet, and no
 package may link both: they define the same symbols, which a dependency rule checks.
 
 `vkxp-ruby192-sys` is for the target `x86_64-unknown-linux-gnu` alone. For any other target,
 `aarch64-unknown-linux-gnu` included, its build script compiles nothing and prints a warning
-that names the target, and the crate and its tests are empty; the rest of the workspace
+that names the target, and the crate and its tests are empty; so is `vkxp-binding-rgss3`,
+the package that compiles the RGSS classes over it, whose build script sets the `cfg`
+`vkxp_interpreter_absent` for such a target. The rest of the workspace
 builds as before. Unlike `vkxp-ruby-sys` it is not built on aarch64 with the header of
 x86_64: an interpreter with native threads and copied Fiber stacks is not offered on a
 guess.

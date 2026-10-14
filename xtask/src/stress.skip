@@ -5,8 +5,10 @@
 # methods (`ruby/test_x.rb#test_y`) or `sample`; `binding` or `guest` with the full name of
 # a test as `cargo test` prints it; `suites-1.9.2` with a file of `test/ruby` of Ruby 1.9.2
 # (`ruby/test_x.rb`) or one of its test methods, which the stressed tests of
-# `vkxp-ruby192-sys` read from here. Entries are separated by blank lines, and an entry
-# without a reason fails a test.
+# `vkxp-ruby192-sys` read from here; `binding-1.9.2` with the full name of a test of
+# `vkxp-binding-rgss3` as `cargo test` prints it (`t::<name>` for a test of a file of
+# `vkxp-binding`). Entries are separated by blank lines, and an entry without a reason fails
+# a test. A value lost under stress is never a reason: it is a fault and is fixed.
 
 # The collector stress of Ruby 1.9.2 (`GC.stress = true`), step `suites-1.9.2`: these files
 # did not finish in 14 minutes under stress in the feasibility study of 2026-10-13
