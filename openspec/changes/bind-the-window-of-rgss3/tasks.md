@@ -2,8 +2,8 @@
 
 ## 1. The window of RGSS3 as a class
 
-- [ ] 1.1 Before anything changes, keep `cargo test --locked -- --list` of `vkxp-binding` and of `vkxp-binding-rgss3` under `local/`. The third branch of `window::define` and `Window.new` of RGSS3 (decisions 1 and 2), with `openness`, `viewport=` and no `stretch`; `crates/vkxp-binding-rgss3/tests/window_rgss3.rs` with the scene support of `vkxp-binding`; the test of RGSS1 in `crates/vkxp-binding/tests/scene.rs` and that of RGSS2 in `tests/scene_rgss2.rs` for the scenarios "XP and VX" (decision 9). Verify: the scenarios of "Window construction in RGSS3" but the readers `padding`, `padding_bottom`, `arrows_visible`, `tone`, `open?` and `close?`, which come with tasks 1.2 and 2.1; `cargo test -p vkxp-binding -p vkxp-binding-rgss3 --locked` passes with every name of the kept lists.
-- [ ] 1.2 `padding`, `padding_bottom`, `arrows_visible`, `move`, `open?`, `close?` (decisions 1 and 3). Verify: the scenarios of "Window methods added in RGSS3" and, of "Window construction in RGSS3", everything but `tone`; the same test command.
+- [x] 1.1 Before anything changes, keep `cargo test --locked -- --list` of `vkxp-binding` and of `vkxp-binding-rgss3` under `local/`. The third branch of `window::define` and `Window.new` of RGSS3 (decisions 1 and 2), with `openness`, `viewport=` and no `stretch`; `crates/vkxp-binding-rgss3/tests/window_rgss3.rs` with the scene support of `vkxp-binding`; the test of RGSS1 in `crates/vkxp-binding/tests/scene.rs` and that of RGSS2 in `tests/scene_rgss2.rs` for the scenarios "XP and VX" (decision 9). Verify: the scenarios of "Window construction in RGSS3" but the readers `padding`, `padding_bottom`, `arrows_visible`, `tone`, `open?` and `close?`, which come with tasks 1.2 and 2.1; `cargo test -p vkxp-binding -p vkxp-binding-rgss3 --locked` passes with every name of the kept lists.
+- [x] 1.2 `padding`, `padding_bottom`, `arrows_visible`, `move`, `open?`, `close?` (decisions 1 and 3). Verify: the scenarios of "Window methods added in RGSS3" and, of "Window construction in RGSS3", everything but `tone`; the same test command.
 
 ## 2. Tone and the calls of the scene
 

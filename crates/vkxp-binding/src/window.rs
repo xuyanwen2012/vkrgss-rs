@@ -13,7 +13,7 @@ use std::ffi::CStr;
 
 use vkxp_core::{Scene, SceneError, ViewportId, WindowCall, WindowId};
 use vkxp_ruby_sys::ffi::{self, VALUE};
-use vkxp_ruby_sys::{HostResult, Raised, Ruby};
+use vkxp_ruby_sys::{HostResult, Raise, Raised, Ruby};
 use vkxp_vfs::Runtime;
 
 use crate::element::{self, field, kept, object, reader, writer};
@@ -36,10 +36,16 @@ fn create(
 ) -> HostResult {
     let viewport = element::viewport_arg(ruby, args)?;
     let id = element::create(ruby, recv, args.first(), |scene| create(scene, viewport))?;
+    keep_cursor_rect(ruby, recv, id)?;
+    Ok(recv)
+}
+
+/// Makes the cursor rectangle object of the window `id` and keeps it in `recv`.
+fn keep_cursor_rect(ruby: &Ruby, recv: VALUE, id: WindowId) -> Result<(), Raise> {
     let cursor_rect = element::operate(ruby, |guest| Ok(guest.scene.window(id)?.cursor_rect))?;
     let cursor_rect = rect_of(ruby, cursor_rect, Owner::WindowCursorRect(id))?;
     rb::ivar_set(ruby, recv, CURSOR_RECT, cursor_rect)?;
-    Ok(recv)
+    Ok(())
 }
 
 /// `initialize(viewport = nil)`.
@@ -52,6 +58,32 @@ fn initialize(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
 fn initialize_rgss2(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     wrap::intern_owner_names(ruby)?;
     create(ruby, recv, args, Scene::create_window_rgss2)?;
+    let contents = bitmap::new_blank(ruby, 1, 1)?;
+    set_contents(ruby, recv, &[contents])?;
+    Ok(recv)
+}
+
+/// `initialize(x = 0, y = 0, width = 0, height = 0)` of RGSS3: no viewport, the original's
+/// count message, the arguments converted before a window exists. The window is a window
+/// of RGSS3 with the scene's defaults, given the four values as one `move`, and starts with
+/// a contents bitmap of 1 by 1, as in RGSS2.
+///
+/// Provenance: oracle measurement 2026-10-13, RGSS300 version 3.0.0.1 and RGSS301 version
+/// 3.0.1.1, `ace-v1-window-REPORT.md` section "The class".
+fn initialize_rgss3(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    rb::check_count_rgss3(ruby, args, 0, 4)?;
+    let mut place = [0; 4];
+    for (value, &arg) in place.iter_mut().zip(args) {
+        *value = rb::int(ruby, arg)?;
+    }
+    let [x, y, width, height] = place;
+    let id = element::create(ruby, recv, None, |scene| scene.create_window_rgss3(None))?;
+    element::operate(ruby, |guest| {
+        let window = guest.scene.window_mut(id)?;
+        window.call(&mut guest.bitmaps, WindowCall::Move(x, y, width, height));
+        Ok(())
+    })?;
+    keep_cursor_rect(ruby, recv, id)?;
     let contents = bitmap::new_blank(ruby, 1, 1)?;
     set_contents(ruby, recv, &[contents])?;
     Ok(recv)
@@ -76,6 +108,19 @@ fn update(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
         Ok(())
     })?;
     Ok(ffi::Qnil)
+}
+
+/// `move(x, y, width, height)` of RGSS3: the four assignments as one call; the receiver.
+fn move_to(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let id = element::live::<WindowId>(ruby, recv)?;
+    let place = element::rect_of_ints(ruby, args)?;
+    element::operate(ruby, |guest| {
+        let window = guest.scene.window_mut(id)?;
+        let call = WindowCall::Move(place.x, place.y, place.width, place.height);
+        window.call(&mut guest.bitmaps, call);
+        Ok(())
+    })?;
+    Ok(recv)
 }
 
 kept!(windowskin, WindowId, WINDOWSKIN);
@@ -160,20 +205,62 @@ reader!(openness, WindowId, |guest, id| i32::from(
     guest.scene.window(id)?.openness()
 ));
 called!(set_openness, Openness: i32);
+reader!(open, WindowId, |guest, id| guest
+    .scene
+    .window(id)?
+    .openness()
+    == 255);
+reader!(close, WindowId, |guest, id| guest
+    .scene
+    .window(id)?
+    .openness()
+    == 0);
+reader!(padding, WindowId, |guest, id| guest
+    .scene
+    .window(id)?
+    .padding());
+called!(set_padding, Padding: i32);
+reader!(padding_bottom, WindowId, |guest, id| guest
+    .scene
+    .window(id)?
+    .padding_bottom());
+called!(set_padding_bottom, PaddingBottom: i32);
+reader!(arrows_visible, WindowId, |guest, id| guest
+    .scene
+    .window(id)?
+    .arrows_visible());
+called!(set_arrows_visible, ArrowsVisible: bool);
 
 /// Defines `Window` as `runtime` has it: in RGSS2 the window of RGSS2, with `viewport=`,
 /// `openness`, a contents bitmap from the start and no `stretch`.
 pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
     let class = element::define_class::<WindowId>(ruby, c"Window")?;
     element::define_in_viewport::<WindowId>(ruby, class, runtime)?;
-    if runtime == Runtime::Rgss1 {
-        rb::method(ruby, class, c"initialize", -1, initialize)?;
-        rb::method(ruby, class, c"stretch", 0, stretch)?;
-        rb::method(ruby, class, c"stretch=", 1, set_stretch)?;
-    } else {
-        rb::method(ruby, class, c"initialize", -1, initialize_rgss2)?;
-        rb::method(ruby, class, c"openness", 0, openness)?;
-        rb::method(ruby, class, c"openness=", 1, set_openness)?;
+    match runtime {
+        Runtime::Rgss1 => {
+            rb::method(ruby, class, c"initialize", -1, initialize)?;
+            rb::method(ruby, class, c"stretch", 0, stretch)?;
+            rb::method(ruby, class, c"stretch=", 1, set_stretch)?;
+        }
+        Runtime::Rgss2 => {
+            rb::method(ruby, class, c"initialize", -1, initialize_rgss2)?;
+            rb::method(ruby, class, c"openness", 0, openness)?;
+            rb::method(ruby, class, c"openness=", 1, set_openness)?;
+        }
+        Runtime::Rgss3 => {
+            rb::method(ruby, class, c"initialize", -1, initialize_rgss3)?;
+            rb::method(ruby, class, c"openness", 0, openness)?;
+            rb::method(ruby, class, c"openness=", 1, set_openness)?;
+            rb::method(ruby, class, c"move", 4, move_to)?;
+            rb::method(ruby, class, c"open?", 0, open)?;
+            rb::method(ruby, class, c"close?", 0, close)?;
+            rb::method(ruby, class, c"padding", 0, padding)?;
+            rb::method(ruby, class, c"padding=", 1, set_padding)?;
+            rb::method(ruby, class, c"padding_bottom", 0, padding_bottom)?;
+            rb::method(ruby, class, c"padding_bottom=", 1, set_padding_bottom)?;
+            rb::method(ruby, class, c"arrows_visible", 0, arrows_visible)?;
+            rb::method(ruby, class, c"arrows_visible=", 1, set_arrows_visible)?;
+        }
     }
     rb::method(ruby, class, c"update", 0, update)?;
     rb::method(ruby, class, c"windowskin", 0, windowskin)?;

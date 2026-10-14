@@ -444,3 +444,19 @@ fn the_value_forms_of_rgss3_are_not_taken() {
     }
     assert_eq!(eval("Rect.instance_method(:initialize).arity"), "4");
 }
+
+/// Scenarios "XP and VX" of "Window construction in RGSS3" and "Window methods added in
+/// RGSS3", for a game of RGSS2: `Window.new` takes a viewport and not four Integers, and the
+/// window has none of the methods RGSS3 adds.
+#[test]
+fn a_window_of_rgss2_is_not_the_window_of_rgss3() {
+    assert_eq!(
+        eval_with(
+            "made << (v = Viewport.new(0, 0, 10, 10)) << (w = Window.new(v)) << w.contents",
+            "[w.viewport.nil?, (Window.new(1, 2, 3, 4) rescue $!.class), \
+              [:padding, :padding_bottom, :arrows_visible, :move, :open?, :close?, :tone] \
+              .map { |name| w.respond_to?(name) }]"
+        ),
+        "[false, ArgumentError, [false, false, false, false, false, false, false]]"
+    );
+}

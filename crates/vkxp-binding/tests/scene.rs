@@ -181,3 +181,21 @@ fn blend_type_takes_any_value_in_rgss1() {
         assert_eq!(testing::eval(&source).unwrap(), "[3, -1]", "{class}");
     }
 }
+
+/// Scenarios "XP and VX" of "Window construction in RGSS3" and "Window methods added in
+/// RGSS3", for a game of RGSS1: `Window.new` takes a viewport and not four Integers, and the
+/// window has none of the methods RGSS3 adds.
+#[test]
+fn a_window_of_rgss1_is_not_the_window_of_rgss3() {
+    scene_support::install();
+    assert_eq!(
+        testing::eval(
+            "v = Viewport.new(0, 0, 10, 10); w = Window.new(v); \
+             r = [w.viewport.nil?, (Window.new(1, 2, 3, 4) rescue $!.class)]; \
+             r << [:padding, :padding_bottom, :arrows_visible, :move, :open?, :close?, :tone] \
+             .map { |name| w.respond_to?(name) }; w.dispose; v.dispose; r"
+        )
+        .as_deref(),
+        Ok("[false, ArgumentError, [false, false, false, false, false, false, false]]")
+    );
+}
