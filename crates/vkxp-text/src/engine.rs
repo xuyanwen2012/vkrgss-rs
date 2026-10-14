@@ -566,15 +566,12 @@ impl TextEngine {
             let (glyph_bold, glyph_italic) = self.face_style(found.face);
             // A glyph of a fallback face keeps its own advance, at the same pixels per em.
             let glyph_units = u32::from(self.faces[found.face].units_per_em);
-            let plain = advance_pixels(found.advance, pixels_per_em, glyph_units);
             let natural = match self.metric_rules {
-                MetricRules::Plain => plain,
+                MetricRules::Plain => advance_pixels(found.advance, pixels_per_em, glyph_units),
                 MetricRules::Rgss3 => {
                     let face = &mut self.faces[found.face];
-                    face.hinted_advance(pixels_per_em, found.glyph)
-                        .map_or(plain, |hinted| {
-                            face.metrics().advance(hinted, pixels_per_em)
-                        })
+                    let hinted = face.hinted_advance(pixels_per_em, found.glyph);
+                    face.metrics().advance(hinted, pixels_per_em)
                 }
             };
             let mut advance = natural.saturating_add(u32::from(request.bold && !glyph_bold));
@@ -840,7 +837,11 @@ impl TextEngine {
     /// by the plain rule, and its box from that outline.
     fn hinted_glyph(&mut self, key: GlyphKey) -> Glyph {
         let (numerator, denominator) = key.condense;
-        let hinted_points = self.faces[key.face].hinted_points(key.pixels_per_em, key.glyph);
+        // A glyph `skrifa` gives no hinted draw for draws nothing.
+        let Some(hinted_points) = self.faces[key.face].hinted_points(key.pixels_per_em, key.glyph)
+        else {
+            return Glyph::default();
+        };
         let loaded = &self.faces[key.face];
         let mut scaler = self
             .scaler
@@ -856,14 +857,9 @@ impl TextEngine {
             // A glyph without an outline, such as a space, draws nothing.
             return Glyph::default();
         };
-        if let Some(points) = hinted_points {
-            // Both are draws of `skrifa` with FreeType's path style, so the points come in
-            // the same order.
-            debug_assert_eq!(points.len(), outline.points().len(), "glyph {}", key.glyph);
-            if points.len() == outline.points().len() {
-                outline.points_mut().copy_from_slice(&points);
-            }
-        }
+        // Both are draws of `skrifa` with FreeType's path style, so the points come in the
+        // same order; sequences of different lengths are a fault, which panics here.
+        outline.points_mut().copy_from_slice(&hinted_points);
         if key.bold {
             let strength = key.pixels_per_em as f32 * SYNTHETIC_BOLD;
             outline.embolden(strength, strength);

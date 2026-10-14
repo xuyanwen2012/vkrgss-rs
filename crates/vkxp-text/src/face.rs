@@ -126,11 +126,13 @@ impl LoadedFace {
         }
     }
 
-    /// The hinted advance of `glyph` at `pixels_per_em` in 26.6; `None` when the glyph
-    /// cannot be drawn.
-    pub(crate) fn hinted_advance(&mut self, pixels_per_em: u32, glyph: GlyphId) -> Option<i32> {
-        let font = skrifa::FontRef::from_index(&self.data, self.index).ok()?;
-        self.hints.advance(&font, pixels_per_em, glyph)
+    /// The hinted advance of `glyph` at `pixels_per_em` in 26.6; 0 when `skrifa` gives
+    /// none.
+    pub(crate) fn hinted_advance(&mut self, pixels_per_em: u32, glyph: GlyphId) -> i32 {
+        match skrifa::FontRef::from_index(&self.data, self.index) {
+            Ok(font) => self.hints.advance(&font, pixels_per_em, glyph),
+            Err(_) => 0,
+        }
     }
 
     /// The points of the hinted outline of `glyph` at `pixels_per_em`, in the order of the

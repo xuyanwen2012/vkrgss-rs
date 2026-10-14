@@ -56,11 +56,11 @@ pub(crate) struct Hints {
     coords: Vec<NormalizedCoord>,
     /// The glyph styles of the automatic hinter, computed once for the face.
     styles: Option<GlyphStyles>,
-    /// Instances by pixels per em; `None` where the font's programs failed.
+    /// Instances by pixels per em; `None` where `skrifa` made none (the font's programs
+    /// failed).
     instances: HashMap<u32, Option<HintingInstance>>,
-    /// Hinted advances in 26.6 by pixels per em and glyph; `None` for a glyph that cannot be
-    /// drawn.
-    advances: HashMap<(u32, GlyphId), Option<i32>>,
+    /// Hinted advances in 26.6 by pixels per em and glyph.
+    advances: HashMap<(u32, GlyphId), i32>,
 }
 
 impl Hints {
@@ -82,26 +82,28 @@ impl Hints {
         self.engine
     }
 
-    /// The hinted advance of `glyph` at `pixels_per_em` in 26.6, as FreeType gives it.
+    /// The hinted advance of `glyph` at `pixels_per_em` in 26.6, as FreeType gives it. A
+    /// glyph `skrifa` gives no hinted draw or advance for has none, 0.
     pub(crate) fn advance(
         &mut self,
         font: &FontRef<'_>,
         pixels_per_em: u32,
         glyph: GlyphId,
-    ) -> Option<i32> {
+    ) -> i32 {
         if let Some(&advance) = self.advances.get(&(pixels_per_em, glyph)) {
             return advance;
         }
         let advance = self
             .draw(font, pixels_per_em, glyph, &mut Points::default())
             .and_then(|metrics| metrics.advance_width)
-            .map(to_26_6);
+            .map_or(0, to_26_6);
         self.advances.insert((pixels_per_em, glyph), advance);
         advance
     }
 
     /// The points of the hinted outline of `glyph` at `pixels_per_em`, y up, in the order a
-    /// draw gives them: that of the points of `swash`'s outline of the same glyph.
+    /// draw gives them: that of the points of `swash`'s outline of the same glyph. `None`
+    /// where `skrifa` gives no hinted draw.
     pub(crate) fn points(
         &mut self,
         font: &FontRef<'_>,
@@ -136,21 +138,10 @@ impl Hints {
                 };
                 instance(&outlines, pixels_per_em, &self.coords, engine)
             })
-            .as_ref();
-        match instance {
-            Some(instance) => outline
-                .draw(DrawSettings::hinted(instance, false), pen)
-                .ok(),
-            // Without an instance the glyph is drawn unhinted and its advance rounded, as for
-            // an instance whose programs turned hinting off.
-            None => {
-                let size = Size::new(pixels_per_em as f32);
-                let location = LocationRef::new(&self.coords);
-                let mut metrics = outline.draw((size, location), pen).ok()?;
-                metrics.advance_width = metrics.advance_width.map(f32::round);
-                Some(metrics)
-            }
-        }
+            .as_ref()?;
+        outline
+            .draw(DrawSettings::hinted(instance, false), pen)
+            .ok()
     }
 }
 

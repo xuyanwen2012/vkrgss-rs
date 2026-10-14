@@ -221,11 +221,10 @@ the digits of VL Gothic are 10 pixels in both rules at size 24.
 - As built: the choice of decision 2 is public as `HintingEngine` and
   `TextEngine::hinting_engine`, which the scenarios of the engine choice test. Per-glyph
   hinted advances are cached by face, pixels per em and glyph (the style adds only the
-  pixel of a synthesised bold, which is added after the cache). Where `skrifa` cannot make a
-  hinting instance (a program of the font fails), the glyph is drawn unhinted and its
-  advance rounded, as `skrifa` does for an instance whose programs turn hinting off; where a
-  glyph cannot be drawn at all, it keeps the plain advance. A hinted point sequence whose
-  length differs from the unhinted one fails a debug assertion, so the tests show it.
+  pixel of a synthesised bold, which is added after the cache). There is no second path:
+  where `skrifa` gives no hinting instance or no hinted draw of a glyph, the glyph has no
+  advance and no ink, and a hinted point sequence whose length differs from the unhinted
+  one panics (Follow-ups).
 - The VL Gothic table test after the merge (not a flow task):
   `VKXP_RGSS3_FONTS=/home/doremy/Desktop/rgss/ref/ace/rtp/Fonts cargo test -p vkxp-text
   --locked --test rgss3_metrics`, then `cargo xtask oracle` on Crysalis with `--font` as
@@ -263,3 +262,9 @@ the digits of VL Gothic are 10 pixels in both rules at size 24.
   accepted limit; no measured value needs it.
 - The vertical placement of a glyph from its hinted box was not measured against the
   original apart from the frames of the oracle.
+- A glyph FreeType cannot load hinted (a font program that fails, so that `skrifa` makes
+  no hinting instance, or a glyph it cannot draw): FreeType returns an error, and what
+  Wine's `GetGlyphOutlineW` and the DLL then do was not measured. vkxp gives such a glyph
+  no advance and no ink, which is `skrifa` giving no answer; none of the test fonts or the
+  fonts of the table has such a glyph. A measurement with a font whose `prep` fails decides
+  the rule.
