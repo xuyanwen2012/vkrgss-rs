@@ -18,7 +18,7 @@
 
 ## 4. Documents
 
-- [ ] 4.1 `docs/compatibility.md`, `docs/decisions.md`, `docs/running.md` and `CHANGELOG.md` (design decision 14); the documentation of `font.rs`, `bitmap.rs`, `text.rs`, `runtime.rs`, `crates/vkxp-guest-main/src/font.rs` and of `lib.rs` of the binding where it describes these classes. Verify: the scenarios of `specs/supported-runtimes/spec.md`; the text names nothing that the code does not do; `git diff --stat` against the start of the change names no file under `docs/` but those three; `cargo test -p xtask --locked` passes.
+- [x] 4.1 `docs/compatibility.md`, `docs/decisions.md`, `docs/running.md` and `CHANGELOG.md` (design decision 14); the documentation of `font.rs`, `bitmap.rs`, `text.rs`, `runtime.rs`, `crates/vkxp-guest-main/src/font.rs` and of `lib.rs` of the binding where it describes these classes. Verify: the scenarios of `specs/supported-runtimes/spec.md`; the text names nothing that the code does not do; `git diff --stat` against the start of the change names no file under `docs/` but those three; `cargo test -p xtask --locked` passes.
 
 ## 5. Integration check
 

@@ -11,9 +11,9 @@
 //! `tests/data/rgss1_api.txt` is the list, and `tests/arity.rs` checks it. In a game of RGSS2
 //! the scene classes are those of `tests/data/rgss2_api.txt`, which `tests/arity_rgss2.rs`
 //! checks except for the methods it names as pending. `tests/data/rgss3_api.txt` is the whole
-//! list of RGSS3; in a game of RGSS3 `Color`, `Tone`, `Rect` and `Table` take the forms and
-//! the messages of that runtime, and `tests/arity_rgss3.rs` of `vkxp-binding-rgss3` checks
-//! the classes it names as bound.
+//! list of RGSS3; in a game of RGSS3 `Color`, `Tone`, `Rect`, `Table`, `Font` and `Bitmap`
+//! take the forms and the messages of that runtime, and `tests/arity_rgss3.rs` of
+//! `vkxp-binding-rgss3` checks the classes it names as bound.
 //!
 //! ```no_run
 //! use vkxp_binding::{Config, Guest};
@@ -63,7 +63,7 @@
 //! |---|---|---|
 //! | `Color`, `Tone`, `Rect` | the core value, and an optional owner | |
 //! | `Table` | the core table, shared with the tilemaps it is assigned to | |
-//! | `Font` | the core font attributes | its `Color`, in an instance variable |
+//! | `Font` | the core font attributes | its `Color`, in an instance variable; in RGSS3 also its out colour and the objects given for its name and size |
 //! | `Bitmap` | the `BitmapId` of its bitmap in the arena | its `Font`, in an instance variable |
 //! | `Sprite`, `Viewport`, `Window`, `Plane`, `Tilemap` | the handle of its element in the scene | see *Scene elements* |
 //! | `TilemapAutotiles` | the handle of its tilemap | its tilemap and seven bitmaps, in instance variables |
@@ -150,10 +150,12 @@
 //!
 //! # Text
 //!
-//! Glyphs come from the guest's [`TextBackend`]: core's `TextRasterizer` plus the question
-//! `Font.exist?` asks. Strings reach it as UTF-8, with invalid bytes replaced. The backend
-//! over real fonts comes with the change that runs games; tests use the `CellBackend` of
-//! the `testing` module.
+//! Glyphs come from the guest's [`TextBackend`]: core's `TextRasterizer` plus the questions
+//! `Font.exist?` asks, by the engine's lookup in RGSS1 and RGSS2 and exactly in RGSS3,
+//! where the name a font is drawn with is chosen by the same question. Strings reach it as
+//! UTF-8, with invalid bytes replaced. The backend over real fonts comes with the change
+//! that runs games; tests use the `CellBackend` of the `testing` module. A game of RGSS3
+//! draws text by the core's rules of RGSS3, and with a font without a name not at all.
 //!
 //! # Running a game
 //!

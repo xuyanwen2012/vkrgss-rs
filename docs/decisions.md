@@ -350,7 +350,15 @@ repository). The first decision may be overruled by the owner.
     | a file without a version record | that of 3.0.1.1 |
     | no DLL | that of 3.0.1.1 |
 
-    Applying the table is the guest's work and waits for the binding over Ruby 1.9.2.
+    Applying the table is the guest's work (change `bind-font-and-text-of-rgss3`). A guest
+    of RGSS3 reads the version record of the file its `Library` names, found in the game
+    directory as a data file is and never in the archive, before the first script, and
+    sets the glyph rule of its text engine by the table; an empty `Library`, a file that is
+    not there or cannot be read and bytes without a record are "no DLL", with one line of
+    the log that says why. Nothing of it is in the guest record: the guest reads `Game.ini`
+    and the game's files itself, and the sandbox does not restrict reading. `RGSS_VERSION`
+    follows the same table: `"3.0.0"` for a version whose first three numbers are 3.0.0,
+    `"3.0.1"` in every other row.
   - Known difference: `Color#==` of 3.0.0.1 is not followed on any DLL. vkxp returns false,
     as 3.0.1.1 does; raising where a comparison is false is a fault no script can rely on
     without rescuing it.
@@ -389,6 +397,13 @@ repository). The first decision may be overruled by the owner.
     squeezes: the constants 7 and 16, Wine's values. A Windows of another language has
     another System font.
   - The font chosen for a missing name: the substitution table and the fallback families.
+- Fonts of a game of RGSS3 (change `bind-font-and-text-of-rgss3`): the directories of
+  `--font-dir`, the game's `Fonts` directory, then the `Fonts` directory of each run-time
+  package of the game in the order of the packages, each when it exists, then the system's
+  fonts. The original loads the fonts of `<RTP>/Fonts` and `<game>/Fonts`; the game comes
+  before the packages as in the search of the game's files. RGSS1 and RGSS2 keep their
+  list. "VL Gothic" gets no entry of the substitution table: a game of VX Ace names the
+  package or ships its fonts, and without either the fallback families draw.
 
 The window of RGSS3, recorded by the change `draw-the-window-of-rgss3` after the window
 measurement of 2026-10-13 on the DLLs 3.0.1.1 and 3.0.0.1 under Wine (kept outside the
@@ -524,10 +539,9 @@ outside the repository); what of it is not followed is named as a known differen
   are open. A run of RGSS3 says so once, as a warning of the program; the documents say so,
   and the rows A1 to A3 stay "Not started". This ends when A3 is reached.
 - Preparation: chosen by the runtime of the run. A game of RGSS3 gets a prelude of its own
-  in the place of that of RGSS1 and RGSS2: `RGSS_VERSION` `"3.0.1"` (the version vkxp
-  follows by the decision on the DLL version; known difference: it does not follow the DLL a
-  game ships), `RGSSReset <
-  Exception`, `save_data`, `load_data`, `msgbox` and `msgbox_p`, and no `Reset`, `Hangup`,
+  in the place of that of RGSS1 and RGSS2: `RGSS_VERSION` by the version of the DLL the
+  game ships, `"3.0.0"` or `"3.0.1"` by the table of the glyph rule under "Text and bitmaps
+  of RGSS3", `RGSSReset < Exception`, `save_data`, `load_data`, `msgbox` and `msgbox_p`, and no `Reset`, `Hangup`,
   `print` or `p`, which are Ruby's own there and write to the standard output. `rgss_main`
   and `rgss_stop` belong to the built-in scripts file, which is evaluated whole before the
   script archive is read. `$TEST`, `$BTEST` and `$DEBUG` are set as for RGSS2. The seed is

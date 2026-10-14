@@ -64,8 +64,11 @@ guest starts, the program resolves the run-time package that `RTP` names (a game
 directory holds it and reads the script archive that `Scripts` names. The scripts start as
 the original starts them: the built-in scripts file, then `$RGSS_SCRIPTS`, each script
 evaluated as `{0000}`, `{0001}` and so on, `RGSSReset` for F12, and the error report in the
-form of RGSS3. The classes are those of VX still, so a game made with the standard scripts
-ends with an error before its title screen; [compatibility.md](compatibility.md#rpg-maker-vx-ace)
+form of RGSS3. The guest reads the version of the DLL that `Library` names from the game
+directory, which decides `RGSS_VERSION` and the glyph rule of text, and takes fonts also from
+the `Fonts` directory of each run-time package of the game (`<RTP>/Fonts`), after the game's
+own `Fonts` directory. The classes are those of VX still, so a game made with the standard
+scripts ends with an error before its title screen; [compatibility.md](compatibility.md#rpg-maker-vx-ace)
 says what runs and what differs. With `--verbose` the run names the package directory, the
 built-in scripts file and the archive.
 
@@ -149,7 +152,7 @@ Paths on the command line are relative to the directory the program was started 
 | `--rtp NAME=DIR` | The directory of the run-time package that `Game.ini` names `NAME`: `--rtp Standard=DIR` for most games of XP, `--rtp RPGVX=DIR` for a game of VX, `--rtp RPGVXAce=DIR` for a game of VX Ace. Repeatable. A game that names a package without this option does not start. |
 | `--builtin-scripts FILE` | The built-in scripts file of the game's runtime, instead of the default location: `rpg_builtin.rb` for RGSS1, `rpg_builtin_rgss2.rb` for RGSS2 and `rpg_builtin_rgss3.rb` for RGSS3, in `$XDG_DATA_HOME/vkxp`. |
 | `--device INDEX\|NAME` | The Vulkan device: its index or a part of its name, as `vulkaninfo --summary` prints them. In a window the default is the first discrete GPU, then an integrated one; headless it is `llvmpipe`. |
-| `--font-dir DIR` | A directory of fonts. Repeatable; earlier directories come first, then the game's `Fonts` directory, then the fonts installed on the system. |
+| `--font-dir DIR` | A directory of fonts. Repeatable; earlier directories come first, then the game's `Fonts` directory, for a game of VX Ace then the `Fonts` directory of each of its run-time packages (`<RTP>/Fonts`), then the fonts installed on the system. |
 | `--font-own-metrics` | Size every font by its own line box. Without it a font that replaces a Windows font is scaled to the line box of the font it replaces. Meant for comparing text with the original when both draw with the same font file. |
 | `--encoding ENCODING` | The text encoding of `Game.ini`: `utf-8`, `gbk`, `shift-jis` or `big5`. Without it UTF-8 is tried, then those three in that order. |
 | `--filter FILTER` | How the frame is scaled into the window: `auto`, `nearest`, `linear` or `sharp`. See *Window*. |

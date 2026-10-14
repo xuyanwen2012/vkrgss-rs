@@ -288,12 +288,14 @@ on the original runtime 3.0.1: the built-in scripts file, `$RGSS_SCRIPTS`, each 
 evaluated as `{0000}`, `{0001}` and so on and compiled as UTF-8, `RGSSReset` with
 `Graphics.__reset__` and `Audio.__reset__`, the endings, the error report, `msgbox` and
 `msgbox_p`, `p`, `print` and `puts` on the standard output, `load_data` that labels the
-strings of a data file UTF-8, `save_data`, and `RGSS_VERSION` `"3.0.1"`.
+strings of a data file UTF-8, `save_data`, and `RGSS_VERSION`, which follows the DLL the game
+ships: `"3.0.0"` for a DLL of a version 3.0.0.x, `"3.0.1"` for any other and for none. The
+glyph rule of text follows the DLL by the same table (see *Font and text of VX Ace*).
 
-Of the classes, `Window`, `Tilemap`, `Sprite`, `Plane`, `Viewport`, the modules `Graphics`
-and `Audio` and the value classes `Color`, `Tone`, `Rect` and `Table` are those of RGSS3, as
-the sections below say; `Font` and text and `Input` are those of RPG Maker VX still and do not
-have what RGSS3 adds.
+Of the classes, `Window`, `Tilemap`, `Sprite`, `Plane`, `Viewport`, `Font`, the text and
+creation of `Bitmap`, the modules `Graphics` and `Audio` and the value classes `Color`, `Tone`,
+`Rect` and `Table` are those of RGSS3, as the sections below say; `Input` is that of RPG Maker
+VX still and does not have what RGSS3 adds.
 A game made with the standard scripts of VX Ace therefore loads its scripts and its database
 and ends with an error report at its first call of what only RGSS3 has and vkxp does not
 bind yet, before its title screen. A frame it
@@ -312,7 +314,6 @@ Known differences of the start, each against the measurements of the original:
   `Graphics.__reset__` does not wait for F12 to be released.
 - `load_data` does not freeze strings as the original does in two of 71 samples, and its
   errors for a loose file and its lookup rules are those of RGSS2.
-- `RGSS_VERSION` is `"3.0.1"` whatever DLL the game ships.
 - `Win32API` and `DL` are not those of RGSS3; `require` and `load` are those of vkxp.
 - A state is not saved while a script thread is alive: a thread of Ruby 1.9.2 is a thread
   of the system, which a copy of the process does not have.
@@ -594,6 +595,81 @@ Known differences:
   again in every frame are not followed; a faded music is ended by the mixer, while its
   position goes on in the game as on the original.
 - The message of the `RangeError` of a value of 2^31 is that of a 64-bit guest.
+
+### Font and text of VX Ace
+
+Of `Font` and `Bitmap`, a game of VX Ace has what follows, measured on the original runtime
+of VX Ace (versions 3.0.0.1 and 3.0.1.1) under Wine. The pixel operations of `Bitmap` are
+those of VX.
+
+- The font defaults are the name `"VL Gothic"`, a String, size 24, neither bold nor italic,
+  no shadow, an outline, white, and the out colour (0, 0, 0, 128). `Font` has `outline`,
+  `out_color`, `Font.default_outline` and `Font.default_out_color`. A new font and the font
+  of a new bitmap take the defaults of the moment they are made.
+- A font keeps the objects it is given: `name=` any object, `nil` and an Array included,
+  and `size=` the number, a `Float` too. The size is from 6 to 96 after its fraction is
+  dropped (`ArgumentError`, `bad value for size`), and text is measured and drawn with that
+  integer. The `default_` writers keep their objects in the same way, the flags included,
+  and `Font.default_color=` and `Font.default_out_color=` keep the `Color` given, so that a
+  later change of it changes the default; `color=` and `out_color=` copy a `Color` into the
+  font's own object. Another class raises `TypeError` (`can't convert NilClass into Color`).
+  `Font.new` takes at most a name and a size.
+- The font is drawn with the first element of an Array that exists exactly, else its first
+  element, else the object given; by its `to_s`, cut to 31 characters. A font without a name
+  (`""`, `[]`, `nil`) draws nothing. `Font.exist?` is exact and case-sensitive over the family
+  names of the fonts vkxp has; a Symbol is taken by its name and any other object that is no
+  String is false.
+- A game of VX Ace takes fonts from the `Fonts` directory of each of its run-time packages,
+  after its own `Fonts` directory, as the original loads those of the package.
+- `Bitmap#font=` copies every attribute, the shadow, the outline and the out colour
+  included, and `dup` and `clone` of a bitmap give the copy a font of its own with all of
+  them.
+- `Bitmap#draw_text` follows the text rules of RGSS3: the text is placed with the outline's
+  two pixels, squeezed in one step by the metrics of the System font, drawn in the passes of
+  the outline, the shadow and the text, and blended over the whole work rectangle, also
+  where no glyph is, as the original blends it. `Bitmap#text_size` counts
+  neither the outline nor the shadow. The glyph masks are those of the DLL the game ships:
+  where glyphs overlap, a glyph of a DLL 3.0.0.x replaces earlier values over its whole box,
+  and one of every other DLL only where it has ink.
+- `Bitmap.new(width, height)` has no limit of 4194304 pixels, and a negative height is
+  taken by its size: `Bitmap.new(10, -5)` is 10 by 5.
+- The methods of `Bitmap` that take several argument counts word a wrong count with the
+  expected count first, `wrong number of arguments (5 for 3)`, and a call without arguments
+  raises `ArgumentError`, as on the original; an argument that is no `Color`,
+  `Rect`, `Bitmap` or `Font` raises `TypeError` with `can't convert NilClass into Rect` and
+  the like, and `Bitmap.new` and `Font.new` with three arguments say `(3 for 1..2)` and
+  `(3 for 0..2)`.
+
+Known differences:
+
+- The largest bitmap is the one vkxp has for every runtime, 268435456 pixels. The original
+  has no rule but the free address space of its process: it created 8192 by 44954 in one
+  run, which vkxp refuses.
+- Text wider than 640 pixels ends at the work rectangle; the original writes the part right
+  of column 640 into its surface 640 columns to the left and one row up.
+- `text_size` of a font without a name is (0, 0, 0, 0); the original returns uninitialised
+  numbers.
+- The vertical names that begin with `@`, `"@VL Gothic"` among them, do not exist in vkxp;
+  on the original `Font.exist?` is true for them.
+- A name of the substitution table counts as existing when a font that replaces it is
+  there: `Font.exist?("Arial")` is true on a system with Liberation Sans.
+- When "VL Gothic" is missing, the original shows "Unable to find VL Gothic font." at the
+  start; vkxp shows nothing and draws with its fallback families.
+- The original adds the name in the other language of the two fonts of the run-time package
+  ("VL ゴシック" for "VL Gothic"); vkxp knows such a name only if the font file declares it.
+- What Windows' GDI answers in the measurement (the advances and metrics of a font, the
+  width of a squeezed font, the font chosen for a missing name, the glyph shapes) was Wine's
+  answer, and vkxp supplies its own for it, as for XP and VX.
+
+Not measured: `Font.new` with a `Float` size, and whether a new font shares the name and
+size objects of the defaults (in vkxp it does); `Font.exist?` of an object of another
+class than a String, a Symbol, `nil`, an Integer and an Array; `draw_text` with two or three
+arguments whose first is no `Rect`, `fill_rect` whose first is no `Rect`, and the counts of
+`clear_rect` and `gradient_fill_rect` other than none and two.
+
+In a game of XP or VX `Font` and `Bitmap` are as they were: neither `outline` nor
+`out_color` is defined.
+
 ## Limits of save states
 
 Save states are described under [Save states](running.md#save-states). Their limits:

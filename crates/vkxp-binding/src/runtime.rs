@@ -1088,8 +1088,9 @@ pub(crate) fn play(ruby: &Ruby, link: GuestEnd) -> Result<(), RunError> {
 /// 2. Prepares the interpreter with the prelude of this crate: over Ruby 1.8 `$KCODE` and an
 ///    empty load path, `$DEBUG` and `$BTEST`, `Reset` and in RGSS1 `Hangup`, `save_data`, `print` and `p`, `Win32API`,
 ///    the process functions and `require` and `load`. A game of RGSS3 gets
-///    `RGSS_VERSION`, `RGSSReset`, `save_data`, `load_data`, `msgbox` and `msgbox_p` in the
-///    place of `Reset`, `print` and `p`, which are Ruby's own there.
+///    `RGSS_VERSION`, by the [`RunConfig::library_version`], `RGSSReset`, `save_data`,
+///    `load_data`, `msgbox` and `msgbox_p` in the place of `Reset`, `print` and `p`, which
+///    are Ruby's own there.
 /// 3. Reads the preload scripts, seeds the random number generator when the configuration
 ///    has a seed, and evaluates the built-in scripts file under the name `(builtin)`.
 /// 4. Reads the script archive into `$RGSS_SCRIPTS`, each entry with its inflated source

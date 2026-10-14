@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- RPG Maker VX Ace (RGSS3): `Font` and the text and creation of `Bitmap` of RGSS3: the
+  defaults of RGSS3, `outline` and `out_color`, the objects a font is given kept as given,
+  `Font.exist?` exact, `font=` that copies every attribute, text drawn by the rules of RGSS3,
+  no limit of 4194304 pixels on `Bitmap.new`, and the argument errors of the original. The
+  guest reads the version of the DLL the game ships, by which `RGSS_VERSION` is `"3.0.0"` or
+  `"3.0.1"` and the glyph rule is that of 3.0.0.1 or 3.0.1.1, and a game takes fonts from the
+  `Fonts` directories of its run-time packages.
 - RPG Maker VX Ace (RGSS3): the class `Tilemap` with `flags` in the place of `passages`,
   drawn by the rules of RGSS3. A write to a slot of `bitmaps` of a disposed tilemap is kept
   where the original runtime ends.
