@@ -2,7 +2,7 @@
 
 ## 1. Deltas and the lists before the rename
 
-- [ ] 1.1 Copy `../drafts/rename-to-vkrgss-tools/` to `local/rename/` and check the delta specs against the main specs of the clone; regenerate them if the main specs moved on since `19e8786` (design decision 9). Keep the output of `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test --workspace --locked -- --list` under `local/rename/` (design, Implementation notes). Verify: `python3 -I local/rename/specdeltas.py . openspec/changes/rename-to-vkrgss local/rename/added --check` exits 0 and `openspec validate rename-to-vkrgss --strict` passes.
+- [x] 1.1 Copy `../drafts/rename-to-vkrgss-tools/` to `local/rename/` and check the delta specs against the main specs of the clone; regenerate them if the main specs moved on since `19e8786` (design decision 9). Keep the output of `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test --workspace --locked -- --list` under `local/rename/` (design, Implementation notes). Verify: `python3 -I local/rename/specdeltas.py . openspec/changes/rename-to-vkrgss local/rename/added --check` exits 0 and `openspec validate rename-to-vkrgss --strict` passes.
 
 ## 2. Scripted rename
 
