@@ -1,7 +1,10 @@
 # binding-over-two-interpreters Specification
 
 ## Purpose
-TBD - created by archiving change build-the-binding-over-ruby-1-9-2. Update Purpose after archive.
+Defines how the one source of the RGSS classes is built over both embedded interpreters, Ruby
+1.8.7 and Ruby 1.9.2: the second package without a source of its own, the common surface of
+the two interpreter crates it compiles against, which strings are text and which are bytes,
+and how its tests run over each interpreter.
 
 ## Requirements
 
