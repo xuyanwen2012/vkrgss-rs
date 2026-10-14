@@ -99,8 +99,9 @@ of what Ruby 1.8.7 does.
 ### Requirement: Strings the binding creates are text or bytes
 Every Ruby string the binding creates SHALL be made through one of two functions: one for
 bytes, which over Ruby 1.9.2 gives an ASCII-8BIT string, and one for text, which gives a
-UTF-8 string. Over Ruby 1.8.7 the two SHALL give the same string. Text SHALL be only script
-source handed to the interpreter and the path of the script archive. Everything else SHALL
+UTF-8 string. Over Ruby 1.8.7 the two SHALL give the same string. Text SHALL be only the source of
+game scripts and preload files handed to the interpreter and the path of the script archive;
+the built-in scripts file SHALL be handed over as bytes. Everything else SHALL
 be bytes: serialized forms, `to_s`, font names, data for `Marshal`, buffers, file names.
 
 #### Scenario: Serialized values
@@ -121,7 +122,7 @@ be bytes: serialized forms, `to_s`, font names, data for `Marshal`, buffers, fil
 
 #### Scenario: Script source is text
 - **WHEN** over Ruby 1.9.2 a game is run whose built-in scripts file and whose preload script each store the name of the encoding and the size of a literal of one character outside ASCII
-- **THEN** both store `"UTF-8"` and 1
+- **THEN** the built-in scripts store `"ASCII-8BIT"` and 2, and the preload script `"UTF-8"` and 1
 
 #### Scenario: Round trip
 - **WHEN** over Ruby 1.9.2 a script evaluates `Marshal.load(Marshal.dump(value)) == value` for a `Color`, a `Tone` and a `Rect` with values of its own, and for a `Table`, which defines no `==`, compares `_dump(0)` of the loaded table with that of the table dumped
