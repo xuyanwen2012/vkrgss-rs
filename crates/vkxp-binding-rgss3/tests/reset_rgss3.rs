@@ -209,7 +209,7 @@ $vkxp_set_back = [Graphics.brightness, Graphics.frame_rate]";
         .record
         .received
         .iter()
-        .skip_while(|message| **message != GuestToHost::Freeze)
+        .skip_while(|message| !matches!(message, GuestToHost::Freeze { .. }))
         .collect();
     assert!(
         matches!(
