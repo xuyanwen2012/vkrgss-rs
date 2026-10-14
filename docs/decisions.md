@@ -573,6 +573,9 @@ section asks for. V0 is a proof of the original's side alone and was done on 202
 The rows A0 to A3 are the milestones of VX Ace, decided on 2026-10-13 (see "VX Ace"), under
 the same rule; A0 is, like V0, a proof of the original's side alone and was done on
 2026-10-13.
+The owner accepted on 2026-10-13, before A1 to A3 were reached, that their compared frames
+may differ from the original inside the rectangles of text, as the frames of XP and VX do:
+glyph shapes are not compared (see "Goal and scope"); positions, widths and placement are.
 
 | | Outcome | Status | Evidence | Not covered |
 |---|---|---|---|---|
