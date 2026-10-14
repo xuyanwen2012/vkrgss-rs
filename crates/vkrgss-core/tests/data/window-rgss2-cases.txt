@@ -1,0 +1,5421 @@
+# Scenes of windows of RGSS2 with the pictures of the original runtime of VX: a selection of the
+# case files of the window measurement of 2026-10-12 (RGSS202E.dll 2.0.2.1; the file of version
+# 2.0.0.1 gave the same pictures). The format is that of `vkrgss_core::test_support::window_cases`.
+#
+# The digest of a frame is that of the picture the original drew. In all of these but two it is
+# also that of the picture the model of that measurement draws. In `g8-smallskin_t_0` every
+# skin, and in `g6-skin_sizes_t` the skin of 1 by 1, is narrower or lower than 64 pixels: of such
+# a skin the original draws less of the background than that model does. The rule was found by
+# the window measurement of RGSS3 of 2026-10-13 (a stretched block that leaves the skin is cut
+# and its target shortened), and with it the model draws the pictures of the original of VX for
+# these two as well.
+#
+# By rule of the design of the change `draw-the-window-of-rgss2`:
+#   1, 2    background with its pattern, frame   g1 (sizes, opacities), g17 (overlapping pieces)
+#   3       blending, odd columns                g4-vp_clip, g6-edges
+#   4       openness                             g3, g5, g6-huge_open
+#   5, 6    contents, cursor                     g2-contents, g2-cursor, g9-blink
+#   7, 8    pause sign, arrows                   g2-arrows_pause, g9-opacities_front
+#   9       latched state                        g10, g12, g13, g14, g15, g16
+#   10      one element, viewports, sizes        g4-vp_z, g6-small, g6-no_skin, g6-skin_sizes,
+#                                                g6-brightness, g8
+scene g1-size_t_15
+bitmap b6 noise o 5001 544 416
+bitmap b11 skin t 25 15 128 128
+new 244 sprite -
+set 244 bitmap b6
+set 244 z -1000
+new 245 window -
+set 245 windowskin b11
+set 245 x 0
+set 245 y 0
+set 245 width 68
+set 245 height 68
+new 246 window -
+set 246 windowskin b11
+set 246 x 70
+set 246 y 0
+set 246 width 132
+set 246 height 132
+new 247 window -
+set 247 windowskin b11
+set 247 x 204
+set 247 y 0
+set 247 width 100
+set 247 height 80
+new 248 window -
+set 248 windowskin b11
+set 248 x 306
+set 248 y 0
+set 248 width 36
+set 248 height 36
+new 249 window -
+set 249 windowskin b11
+set 249 x 344
+set 249 y 0
+set 249 width 200
+set 249 height 150
+new 250 window -
+set 250 windowskin b11
+set 250 x 0
+set 250 y 160
+set 250 width 37
+set 250 height 53
+new 251 window -
+set 251 windowskin b11
+set 251 x 40
+set 251 y 160
+set 251 width 32
+set 251 height 32
+new 252 window -
+set 252 windowskin b11
+set 252 x 75
+set 252 y 160
+set 252 width 31
+set 252 height 31
+new 253 window -
+set 253 windowskin b11
+set 253 x 110
+set 253 y 160
+set 253 width 16
+set 253 height 16
+new 254 window -
+set 254 windowskin b11
+set 254 x 130
+set 254 y 160
+set 254 width 17
+set 254 height 40
+new 255 window -
+set 255 windowskin b11
+set 255 x 150
+set 255 y 160
+set 255 width 8
+set 255 height 8
+new 256 window -
+set 256 windowskin b11
+set 256 x 160
+set 256 y 160
+set 256 width 1
+set 256 height 1
+new 257 window -
+set 257 windowskin b11
+set 257 x 165
+set 257 y 160
+set 257 width 33
+set 257 height 33
+new 258 window -
+set 258 windowskin b11
+set 258 x 200
+set 258 y 160
+set 258 width 47
+set 258 height 47
+new 259 window -
+set 259 windowskin b11
+set 259 x 250
+set 259 y 160
+set 259 width 48
+set 259 height 48
+new 260 window -
+set 260 windowskin b11
+set 260 x 300
+set 260 y 160
+set 260 width 20
+set 260 height 90
+new 261 window -
+set 261 windowskin b11
+set 261 x 330
+set 261 y 160
+set 261 width 90
+set 261 height 20
+new 262 window -
+set 262 windowskin b11
+set 262 x 430
+set 262 y 160
+set 262 width 24
+set 262 height 24
+new 263 window -
+set 263 windowskin b11
+set 263 x 460
+set 263 y 160
+set 263 width 5
+set 263 height 60
+new 264 window -
+set 264 windowskin b11
+set 264 x 470
+set 264 y 160
+set 264 width 60
+set 264 height 5
+new 265 window -
+set 265 windowskin b11
+set 265 x 0
+set 265 y 260
+set 265 width 300
+set 265 height 150
+new 266 window -
+set 266 windowskin b11
+set 266 x 310
+set 266 y 260
+set 266 width 160
+set 266 height 36
+new 267 window -
+set 267 windowskin b11
+set 267 x 310
+set 267 y 300
+set 267 width 160
+set 267 height 34
+new 268 window -
+set 268 windowskin b11
+set 268 x 310
+set 268 y 340
+set 268 width 64
+set 268 height 64
+new 269 window -
+set 269 windowskin b11
+set 269 x 380
+set 269 y 340
+set 269 width 65
+set 269 height 65
+new 270 window -
+set 270 windowskin b11
+set 270 x 450
+set 270 y 340
+set 270 width 67
+set 270 height 67
+frame 34d992c2b95f9a40 size_t_15
+end
+scene g1-opac_15
+bitmap b12 noise o 5002 544 416
+bitmap b16 skin t 45 15 128 128
+new 346 sprite -
+set 346 bitmap b12
+set 346 z -1000
+new 347 window -
+set 347 windowskin b16
+set 347 x 0
+set 347 y 0
+set 347 width 68
+set 347 height 68
+set 347 opacity 255
+set 347 back_opacity 255
+new 348 window -
+set 348 windowskin b16
+set 348 x 0
+set 348 y 70
+set 348 width 67
+set 348 height 67
+set 348 opacity 255
+set 348 back_opacity 255
+new 349 window -
+set 349 windowskin b16
+set 349 x 0
+set 349 y 140
+set 349 width 61
+set 349 height 40
+set 349 opacity 255
+set 349 back_opacity 255
+new 350 window -
+set 350 windowskin b16
+set 350 x 68
+set 350 y 0
+set 350 width 68
+set 350 height 68
+set 350 opacity 255
+set 350 back_opacity 200
+new 351 window -
+set 351 windowskin b16
+set 351 x 68
+set 351 y 70
+set 351 width 67
+set 351 height 67
+set 351 opacity 200
+set 351 back_opacity 255
+new 352 window -
+set 352 windowskin b16
+set 352 x 68
+set 352 y 140
+set 352 width 61
+set 352 height 40
+set 352 opacity 255
+set 352 back_opacity 200
+new 353 window -
+set 353 windowskin b16
+set 353 x 136
+set 353 y 0
+set 353 width 68
+set 353 height 68
+set 353 opacity 255
+set 353 back_opacity 128
+new 354 window -
+set 354 windowskin b16
+set 354 x 136
+set 354 y 70
+set 354 width 67
+set 354 height 67
+set 354 opacity 128
+set 354 back_opacity 255
+new 355 window -
+set 355 windowskin b16
+set 355 x 136
+set 355 y 140
+set 355 width 61
+set 355 height 40
+set 355 opacity 255
+set 355 back_opacity 128
+new 356 window -
+set 356 windowskin b16
+set 356 x 204
+set 356 y 0
+set 356 width 68
+set 356 height 68
+set 356 opacity 255
+set 356 back_opacity 1
+new 357 window -
+set 357 windowskin b16
+set 357 x 204
+set 357 y 70
+set 357 width 67
+set 357 height 67
+set 357 opacity 1
+set 357 back_opacity 255
+new 358 window -
+set 358 windowskin b16
+set 358 x 204
+set 358 y 140
+set 358 width 61
+set 358 height 40
+set 358 opacity 255
+set 358 back_opacity 1
+new 359 window -
+set 359 windowskin b16
+set 359 x 272
+set 359 y 0
+set 359 width 68
+set 359 height 68
+set 359 opacity 255
+set 359 back_opacity 0
+new 360 window -
+set 360 windowskin b16
+set 360 x 272
+set 360 y 70
+set 360 width 67
+set 360 height 67
+set 360 opacity 0
+set 360 back_opacity 255
+new 361 window -
+set 361 windowskin b16
+set 361 x 272
+set 361 y 140
+set 361 width 61
+set 361 height 40
+set 361 opacity 255
+set 361 back_opacity 0
+new 362 window -
+set 362 windowskin b16
+set 362 x 340
+set 362 y 0
+set 362 width 68
+set 362 height 68
+set 362 opacity 128
+set 362 back_opacity 255
+new 363 window -
+set 363 windowskin b16
+set 363 x 340
+set 363 y 70
+set 363 width 67
+set 363 height 67
+set 363 opacity 255
+set 363 back_opacity 128
+new 364 window -
+set 364 windowskin b16
+set 364 x 340
+set 364 y 140
+set 364 width 61
+set 364 height 40
+set 364 opacity 128
+set 364 back_opacity 255
+new 365 window -
+set 365 windowskin b16
+set 365 x 408
+set 365 y 0
+set 365 width 68
+set 365 height 68
+set 365 opacity 128
+set 365 back_opacity 128
+new 366 window -
+set 366 windowskin b16
+set 366 x 408
+set 366 y 70
+set 366 width 67
+set 366 height 67
+set 366 opacity 128
+set 366 back_opacity 128
+new 367 window -
+set 367 windowskin b16
+set 367 x 408
+set 367 y 140
+set 367 width 61
+set 367 height 40
+set 367 opacity 128
+set 367 back_opacity 128
+new 368 window -
+set 368 windowskin b16
+set 368 x 476
+set 368 y 0
+set 368 width 68
+set 368 height 68
+set 368 opacity 200
+set 368 back_opacity 77
+new 369 window -
+set 369 windowskin b16
+set 369 x 476
+set 369 y 70
+set 369 width 67
+set 369 height 67
+set 369 opacity 77
+set 369 back_opacity 200
+new 370 window -
+set 370 windowskin b16
+set 370 x 476
+set 370 y 140
+set 370 width 61
+set 370 height 40
+set 370 opacity 200
+set 370 back_opacity 77
+frame dfb1f1f58aeaf912 opac_15
+end
+scene g2-contents_t
+bitmap b6 noise o 5003 544 416
+bitmap b8 skin t 50 0 128 128
+bitmap b9 noise t 60 100 60
+bitmap b7 skin t 50 15 128 128
+bitmap b10 noise t 61 300 200
+bitmap b11 noise t 62 20 10
+new 25 sprite -
+set 25 bitmap b6
+set 25 z -1000
+new 26 window -
+set 26 windowskin b8
+set 26 x 0
+set 26 y 0
+set 26 width 107
+set 26 height 99
+set 26 ox 0
+set 26 oy 0
+set 26 contents_opacity 255
+set 26 contents b9
+new 27 window -
+set 27 windowskin b7
+set 27 x 108
+set 27 y 0
+set 27 width 106
+set 27 height 98
+set 27 ox 0
+set 27 oy 0
+set 27 contents_opacity 255
+set 27 contents b9
+new 28 window -
+set 28 windowskin b7
+set 28 x 216
+set 28 y 0
+set 28 width 107
+set 28 height 97
+set 28 ox 0
+set 28 oy 0
+set 28 contents_opacity 255
+set 28 contents b10
+new 29 window -
+set 29 windowskin b7
+set 29 x 324
+set 29 y 0
+set 29 width 106
+set 29 height 99
+set 29 ox 7
+set 29 oy 9
+set 29 contents_opacity 255
+set 29 contents b10
+new 30 window -
+set 30 windowskin b7
+set 30 x 432
+set 30 y 0
+set 30 width 107
+set 30 height 98
+set 30 ox 250
+set 30 oy 180
+set 30 contents_opacity 200
+set 30 contents b10
+new 31 window -
+set 31 windowskin b7
+set 31 x 0
+set 31 y 100
+set 31 width 106
+set 31 height 97
+set 31 ox -5
+set 31 oy -6
+set 31 contents_opacity 128
+set 31 contents b10
+new 32 window -
+set 32 windowskin b7
+set 32 x 108
+set 32 y 100
+set 32 width 107
+set 32 height 99
+set 32 ox 0
+set 32 oy 0
+set 32 contents_opacity 255
+set 32 contents b11
+new 33 window -
+set 33 windowskin b7
+set 33 x 216
+set 33 y 100
+set 33 width 106
+set 33 height 98
+set 33 ox -30
+set 33 oy -20
+set 33 contents_opacity 1
+set 33 contents b11
+new 34 window -
+set 34 windowskin b7
+set 34 x 324
+set 34 y 100
+set 34 width 107
+set 34 height 97
+set 34 ox 15
+set 34 oy 5
+set 34 contents_opacity 254
+set 34 contents b11
+new 35 window -
+set 35 windowskin b7
+set 35 x 432
+set 35 y 100
+set 35 width 106
+set 35 height 99
+set 35 ox 0
+set 35 oy 0
+set 35 contents_opacity 255
+set 35 contents nil
+new 36 window -
+set 36 windowskin b7
+set 36 x 0
+set 36 y 200
+set 36 width 107
+set 36 height 98
+set 36 ox 1000
+set 36 oy 0
+set 36 contents_opacity 255
+set 36 contents b9
+new 37 window -
+set 37 windowskin b7
+set 37 x 108
+set 37 y 200
+set 37 width 106
+set 37 height 97
+set 37 ox 3
+set 37 oy 0
+set 37 contents_opacity 0
+set 37 contents b9
+new 38 window -
+set 38 windowskin b7
+set 38 x 216
+set 38 y 200
+set 38 width 107
+set 38 height 99
+set 38 ox 0
+set 38 oy -70
+set 38 contents_opacity 77
+set 38 contents b9
+new 39 window -
+set 39 windowskin b7
+set 39 x 324
+set 39 y 200
+set 39 width 106
+set 39 height 98
+set 39 ox -68
+set 39 oy 0
+set 39 contents_opacity 255
+set 39 contents b9
+new 40 window -
+set 40 windowskin b7
+set 40 x 432
+set 40 y 200
+set 40 width 107
+set 40 height 97
+set 40 ox 0
+set 40 oy 0
+set 40 contents_opacity 255
+new 41 window -
+set 41 windowskin b7
+set 41 x 0
+set 41 y 300
+set 41 width 40
+set 41 height 40
+set 41 contents b10
+set 41 ox 3
+set 41 oy 4
+new 42 window -
+set 42 windowskin b7
+set 42 x 66
+set 42 y 300
+set 42 width 33
+set 42 height 34
+set 42 contents b10
+set 42 ox 3
+set 42 oy 4
+new 43 window -
+set 43 windowskin b7
+set 43 x 132
+set 43 y 300
+set 43 width 32
+set 43 height 32
+set 43 contents b10
+set 43 ox 3
+set 43 oy 4
+new 44 window -
+set 44 windowskin b7
+set 44 x 198
+set 44 y 300
+set 44 width 31
+set 44 height 50
+set 44 contents b10
+set 44 ox 3
+set 44 oy 4
+new 45 window -
+set 45 windowskin b7
+set 45 x 264
+set 45 y 300
+set 45 width 50
+set 45 height 31
+set 45 contents b10
+set 45 ox 3
+set 45 oy 4
+new 46 window -
+set 46 windowskin b7
+set 46 x 330
+set 46 y 300
+set 46 width 16
+set 46 height 16
+set 46 contents b10
+set 46 ox 3
+set 46 oy 4
+new 47 window -
+set 47 windowskin b7
+set 47 x 396
+set 47 y 300
+set 47 width 64
+set 47 height 35
+set 47 contents b10
+set 47 ox 3
+set 47 oy 4
+new 48 window -
+set 48 windowskin b7
+set 48 x 462
+set 48 y 300
+set 48 width 35
+set 48 height 64
+set 48 contents b10
+set 48 ox 3
+set 48 oy 4
+frame 4db90b7eefae8702 contents_t
+end
+scene g2-cursor_a
+bitmap b14 noise o 5004 544 416
+bitmap b18 skin a 70 8 128 128
+bitmap b19 noise a 61 300 200
+bitmap b17 skin a 70 15 128 128
+new 101 sprite -
+set 101 bitmap b14
+set 101 z -1000
+new 102 window -
+set 102 windowskin b18
+set 102 x 0
+set 102 y 0
+set 102 width 108
+set 102 height 82
+set 102 cursor_rect rect 0 0 32 32
+set 102 contents b19
+set 102 contents_opacity 255
+new 103 window -
+set 103 windowskin b17
+set 103 x 108
+set 103 y 0
+set 103 width 108
+set 103 height 82
+set 103 cursor_rect rect 0 0 64 24
+set 103 ox 5
+set 103 oy 3
+new 104 window -
+set 104 windowskin b18
+set 104 x 216
+set 104 y 0
+set 104 width 108
+set 104 height 82
+set 104 cursor_rect rect 5 7 33 21
+new 105 window -
+set 105 windowskin b17
+set 105 x 324
+set 105 y 0
+set 105 width 108
+set 105 height 82
+set 105 cursor_rect rect 0 0 17 18
+set 105 contents b19
+set 105 contents_opacity 128
+update 105 3
+new 106 window -
+set 106 windowskin b18
+set 106 x 432
+set 106 y 0
+set 106 width 108
+set 106 height 82
+set 106 cursor_rect rect 0 0 16 16
+new 107 window -
+set 107 windowskin b17
+set 107 x 0
+set 107 y 82
+set 107 width 108
+set 107 height 82
+set 107 cursor_rect rect 3 3 4 4
+set 107 ox 5
+set 107 oy 3
+new 108 window -
+set 108 windowskin b18
+set 108 x 108
+set 108 y 82
+set 108 width 108
+set 108 height 82
+set 108 cursor_rect rect 3 3 5 5
+set 108 contents b19
+set 108 contents_opacity 255
+new 109 window -
+set 109 windowskin b17
+set 109 x 216
+set 109 y 82
+set 109 width 108
+set 109 height 82
+set 109 cursor_rect rect 3 3 3 9
+new 110 window -
+set 110 windowskin b18
+set 110 x 324
+set 110 y 82
+set 110 width 108
+set 110 height 82
+set 110 cursor_rect rect 3 3 9 3
+new 111 window -
+set 111 windowskin b17
+set 111 x 432
+set 111 y 82
+set 111 width 108
+set 111 height 82
+set 111 cursor_rect rect 3 3 1 1
+set 111 contents b19
+set 111 contents_opacity 128
+set 111 ox 5
+set 111 oy 3
+new 112 window -
+set 112 windowskin b18
+set 112 x 0
+set 112 y 164
+set 112 width 108
+set 112 height 82
+set 112 cursor_rect rect 3 3 2 2
+update 112 10
+new 113 window -
+set 113 windowskin b17
+set 113 x 108
+set 113 y 164
+set 113 width 108
+set 113 height 82
+set 113 cursor_rect rect -10 -5 40 40
+new 114 window -
+set 114 windowskin b18
+set 114 x 216
+set 114 y 164
+set 114 width 108
+set 114 height 82
+set 114 cursor_rect rect 50 30 100 100
+set 114 contents b19
+set 114 contents_opacity 255
+new 115 window -
+set 115 windowskin b17
+set 115 x 324
+set 115 y 164
+set 115 width 108
+set 115 height 82
+set 115 cursor_rect rect 0 0 200 200
+set 115 ox 5
+set 115 oy 3
+new 116 window -
+set 116 windowskin b18
+set 116 x 432
+set 116 y 164
+set 116 width 108
+set 116 height 82
+set 116 cursor_rect rect 0 0 76 66
+new 117 window -
+set 117 windowskin b17
+set 117 x 0
+set 117 y 246
+set 117 width 108
+set 117 height 82
+set 117 cursor_rect rect 0 0 0 10
+set 117 contents b19
+set 117 contents_opacity 128
+new 118 window -
+set 118 windowskin b18
+set 118 x 108
+set 118 y 246
+set 118 width 108
+set 118 height 82
+set 118 cursor_rect rect 0 0 10 0
+new 119 window -
+set 119 windowskin b17
+set 119 x 216
+set 119 y 246
+set 119 width 108
+set 119 height 82
+set 119 cursor_rect rect 0 0 -5 10
+set 119 ox 5
+set 119 oy 3
+update 119 17
+new 120 window -
+set 120 windowskin b18
+set 120 x 324
+set 120 y 246
+set 120 width 108
+set 120 height 82
+set 120 cursor_rect rect 4 4 60 3
+set 120 contents b19
+set 120 contents_opacity 255
+new 121 window -
+set 121 windowskin b17
+set 121 x 432
+set 121 y 246
+set 121 width 108
+set 121 height 82
+set 121 cursor_rect rect 4 4 2 50
+new 122 window -
+set 122 windowskin b18
+set 122 x 0
+set 122 y 328
+set 122 width 108
+set 122 height 82
+set 122 cursor_rect rect -3 -3 82 72
+new 123 window -
+set 123 windowskin b17
+set 123 x 108
+set 123 y 328
+set 123 width 108
+set 123 height 82
+set 123 cursor_rect rect 1 1 31 15
+set 123 contents b19
+set 123 contents_opacity 128
+set 123 ox 5
+set 123 oy 3
+new 124 window -
+set 124 windowskin b18
+set 124 x 216
+set 124 y 328
+set 124 width 108
+set 124 height 82
+set 124 cursor_rect rect 0 0 15 31
+new 125 window -
+set 125 windowskin b17
+set 125 x 324
+set 125 y 328
+set 125 width 108
+set 125 height 82
+set 125 cursor_rect rect 2 2 6 60
+new 126 window -
+set 126 windowskin b18
+set 126 x 432
+set 126 y 328
+set 126 width 108
+set 126 height 82
+set 126 cursor_rect rect 2 2 60 6
+set 126 contents b19
+set 126 contents_opacity 255
+update 126 24
+frame c1e3fe2f16dc821d cursor_a
+end
+scene g2-arrows_pause
+bitmap b29 noise o 5006 544 416
+bitmap b21 skin t 80 15 128 128
+bitmap b25 flat 0 0 0 0 200 200
+new 168 sprite -
+set 168 bitmap b29
+set 168 z -1000
+new 169 window -
+set 169 windowskin b21
+set 169 x 0
+set 169 y 0
+set 169 width 100
+set 169 height 80
+set 169 contents b25
+set 169 ox 50
+set 169 oy 50
+set 169 pause true
+update 169 3
+new 170 window -
+set 170 windowskin b21
+set 170 x 104
+set 170 y 0
+set 170 width 100
+set 170 height 80
+set 170 contents b25
+set 170 ox 0
+set 170 oy 0
+set 170 pause true
+update 170 8
+new 171 window -
+set 171 windowskin b21
+set 171 x 208
+set 171 y 0
+set 171 width 101
+set 171 height 81
+set 171 contents b25
+set 171 ox 50
+set 171 oy 50
+set 171 pause true
+update 171 13
+new 172 window -
+set 172 windowskin b21
+set 172 x 312
+set 172 y 0
+set 172 width 101
+set 172 height 81
+set 172 contents b25
+set 172 ox 0
+set 172 oy 0
+set 172 pause true
+update 172 18
+new 173 window -
+set 173 windowskin b21
+set 173 x 416
+set 173 y 0
+set 173 width 99
+set 173 height 79
+set 173 contents b25
+set 173 ox 50
+set 173 oy 50
+set 173 pause true
+update 173 23
+new 174 window -
+set 174 windowskin b21
+set 174 x 0
+set 174 y 84
+set 174 width 99
+set 174 height 79
+set 174 contents b25
+set 174 ox 0
+set 174 oy 0
+set 174 pause true
+update 174 28
+new 175 window -
+set 175 windowskin b21
+set 175 x 104
+set 175 y 84
+set 175 width 35
+set 175 height 33
+set 175 contents b25
+set 175 ox 50
+set 175 oy 50
+set 175 pause true
+update 175 33
+new 176 window -
+set 176 windowskin b21
+set 176 x 208
+set 176 y 84
+set 176 width 35
+set 176 height 33
+set 176 contents b25
+set 176 ox 0
+set 176 oy 0
+set 176 pause true
+update 176 38
+new 177 window -
+set 177 windowskin b21
+set 177 x 312
+set 177 y 84
+set 177 width 32
+set 177 height 32
+set 177 contents b25
+set 177 ox 50
+set 177 oy 50
+set 177 pause true
+update 177 43
+new 178 window -
+set 178 windowskin b21
+set 178 x 416
+set 178 y 84
+set 178 width 32
+set 178 height 32
+set 178 contents b25
+set 178 ox 0
+set 178 oy 0
+set 178 pause true
+update 178 48
+new 179 window -
+set 179 windowskin b21
+set 179 x 0
+set 179 y 168
+set 179 width 33
+set 179 height 40
+set 179 contents b25
+set 179 ox 50
+set 179 oy 50
+set 179 pause true
+update 179 53
+new 180 window -
+set 180 windowskin b21
+set 180 x 104
+set 180 y 168
+set 180 width 33
+set 180 height 40
+set 180 contents b25
+set 180 ox 0
+set 180 oy 0
+set 180 pause true
+update 180 58
+new 181 window -
+set 181 windowskin b21
+set 181 x 208
+set 181 y 168
+set 181 width 20
+set 181 height 20
+set 181 contents b25
+set 181 ox 50
+set 181 oy 50
+set 181 pause true
+update 181 63
+new 182 window -
+set 182 windowskin b21
+set 182 x 312
+set 182 y 168
+set 182 width 20
+set 182 height 20
+set 182 contents b25
+set 182 ox 0
+set 182 oy 0
+set 182 pause true
+update 182 68
+new 183 window -
+set 183 windowskin b21
+set 183 x 416
+set 183 y 168
+set 183 width 16
+set 183 height 16
+set 183 contents b25
+set 183 ox 50
+set 183 oy 50
+set 183 pause true
+update 183 73
+new 184 window -
+set 184 windowskin b21
+set 184 x 0
+set 184 y 252
+set 184 width 16
+set 184 height 16
+set 184 contents b25
+set 184 ox 0
+set 184 oy 0
+set 184 pause true
+update 184 78
+new 185 window -
+set 185 windowskin b21
+set 185 x 104
+set 185 y 252
+set 185 width 40
+set 185 height 24
+set 185 contents b25
+set 185 ox 50
+set 185 oy 50
+set 185 pause true
+update 185 83
+new 186 window -
+set 186 windowskin b21
+set 186 x 208
+set 186 y 252
+set 186 width 40
+set 186 height 24
+set 186 contents b25
+set 186 ox 0
+set 186 oy 0
+set 186 pause true
+update 186 88
+new 187 window -
+set 187 windowskin b21
+set 187 x 420
+set 187 y 340
+set 187 width 100
+set 187 height 60
+set 187 pause true
+set 187 opacity 100
+set 187 contents_opacity 50
+set 187 back_opacity 30
+update 187 5
+new 188 window -
+set 188 windowskin b21
+set 188 x 300
+set 188 y 340
+set 188 width 100
+set 188 height 60
+set 188 pause true
+set 188 contents nil
+update 188 9
+frame e884191307ed85d6 arrows_pause
+end
+scene g3-open_101
+bitmap b0 flat 0 0 0 255 544 416
+bitmap b1 skin o 90 15 128 128
+bitmap b2 noise o 91 100 200
+new 24 sprite -
+set 24 bitmap b0
+set 24 z -1000
+new 25 window -
+set 25 windowskin b1
+set 25 x 0
+set 25 y 10
+set 25 width 48
+set 25 height 101
+set 25 openness 0
+set 25 contents b2
+set 25 cursor_rect rect 0 0 10 10
+set 25 pause true
+new 26 window -
+set 26 windowskin b1
+set 26 x 0
+set 26 y 210
+set 26 width 48
+set 26 height 101
+set 26 openness 0
+set 26 contents b2
+set 26 cursor_rect rect 0 0 10 10
+set 26 pause true
+set 26 opacity 0
+new 27 window -
+set 27 windowskin b1
+set 27 x 49
+set 27 y 10
+set 27 width 48
+set 27 height 101
+set 27 openness 1
+set 27 contents b2
+set 27 cursor_rect rect 0 0 10 10
+set 27 pause true
+new 28 window -
+set 28 windowskin b1
+set 28 x 49
+set 28 y 210
+set 28 width 48
+set 28 height 101
+set 28 openness 1
+set 28 contents b2
+set 28 cursor_rect rect 0 0 10 10
+set 28 pause true
+set 28 opacity 0
+new 29 window -
+set 29 windowskin b1
+set 29 x 98
+set 29 y 10
+set 29 width 48
+set 29 height 101
+set 29 openness 2
+set 29 contents b2
+set 29 cursor_rect rect 0 0 10 10
+set 29 pause true
+new 30 window -
+set 30 windowskin b1
+set 30 x 98
+set 30 y 210
+set 30 width 48
+set 30 height 101
+set 30 openness 2
+set 30 contents b2
+set 30 cursor_rect rect 0 0 10 10
+set 30 pause true
+set 30 opacity 0
+new 31 window -
+set 31 windowskin b1
+set 31 x 147
+set 31 y 10
+set 31 width 48
+set 31 height 101
+set 31 openness 3
+set 31 contents b2
+set 31 cursor_rect rect 0 0 10 10
+set 31 pause true
+new 32 window -
+set 32 windowskin b1
+set 32 x 147
+set 32 y 210
+set 32 width 48
+set 32 height 101
+set 32 openness 3
+set 32 contents b2
+set 32 cursor_rect rect 0 0 10 10
+set 32 pause true
+set 32 opacity 0
+new 33 window -
+set 33 windowskin b1
+set 33 x 196
+set 33 y 10
+set 33 width 48
+set 33 height 101
+set 33 openness 64
+set 33 contents b2
+set 33 cursor_rect rect 0 0 10 10
+set 33 pause true
+new 34 window -
+set 34 windowskin b1
+set 34 x 196
+set 34 y 210
+set 34 width 48
+set 34 height 101
+set 34 openness 64
+set 34 contents b2
+set 34 cursor_rect rect 0 0 10 10
+set 34 pause true
+set 34 opacity 0
+new 35 window -
+set 35 windowskin b1
+set 35 x 245
+set 35 y 10
+set 35 width 48
+set 35 height 101
+set 35 openness 127
+set 35 contents b2
+set 35 cursor_rect rect 0 0 10 10
+set 35 pause true
+new 36 window -
+set 36 windowskin b1
+set 36 x 245
+set 36 y 210
+set 36 width 48
+set 36 height 101
+set 36 openness 127
+set 36 contents b2
+set 36 cursor_rect rect 0 0 10 10
+set 36 pause true
+set 36 opacity 0
+new 37 window -
+set 37 windowskin b1
+set 37 x 294
+set 37 y 10
+set 37 width 48
+set 37 height 101
+set 37 openness 128
+set 37 contents b2
+set 37 cursor_rect rect 0 0 10 10
+set 37 pause true
+new 38 window -
+set 38 windowskin b1
+set 38 x 294
+set 38 y 210
+set 38 width 48
+set 38 height 101
+set 38 openness 128
+set 38 contents b2
+set 38 cursor_rect rect 0 0 10 10
+set 38 pause true
+set 38 opacity 0
+new 39 window -
+set 39 windowskin b1
+set 39 x 343
+set 39 y 10
+set 39 width 48
+set 39 height 101
+set 39 openness 129
+set 39 contents b2
+set 39 cursor_rect rect 0 0 10 10
+set 39 pause true
+new 40 window -
+set 40 windowskin b1
+set 40 x 343
+set 40 y 210
+set 40 width 48
+set 40 height 101
+set 40 openness 129
+set 40 contents b2
+set 40 cursor_rect rect 0 0 10 10
+set 40 pause true
+set 40 opacity 0
+new 41 window -
+set 41 windowskin b1
+set 41 x 392
+set 41 y 10
+set 41 width 48
+set 41 height 101
+set 41 openness 200
+set 41 contents b2
+set 41 cursor_rect rect 0 0 10 10
+set 41 pause true
+new 42 window -
+set 42 windowskin b1
+set 42 x 392
+set 42 y 210
+set 42 width 48
+set 42 height 101
+set 42 openness 200
+set 42 contents b2
+set 42 cursor_rect rect 0 0 10 10
+set 42 pause true
+set 42 opacity 0
+new 43 window -
+set 43 windowskin b1
+set 43 x 441
+set 43 y 10
+set 43 width 48
+set 43 height 101
+set 43 openness 253
+set 43 contents b2
+set 43 cursor_rect rect 0 0 10 10
+set 43 pause true
+new 44 window -
+set 44 windowskin b1
+set 44 x 441
+set 44 y 210
+set 44 width 48
+set 44 height 101
+set 44 openness 253
+set 44 contents b2
+set 44 cursor_rect rect 0 0 10 10
+set 44 pause true
+set 44 opacity 0
+new 45 window -
+set 45 windowskin b1
+set 45 x 490
+set 45 y 10
+set 45 width 48
+set 45 height 101
+set 45 openness 254
+set 45 contents b2
+set 45 cursor_rect rect 0 0 10 10
+set 45 pause true
+new 46 window -
+set 46 windowskin b1
+set 46 x 490
+set 46 y 210
+set 46 width 48
+set 46 height 101
+set 46 openness 254
+set 46 contents b2
+set 46 cursor_rect rect 0 0 10 10
+set 46 pause true
+set 46 opacity 0
+frame 405c0115a073ba05 open_101
+end
+scene g4-vp_clip_1
+bitmap b27 noise o 5010 544 416
+bitmap b20 skin t 120 15 128 128
+bitmap b28 noise t 101 190 160
+bitmap b21 skin t 121 15 128 128
+bitmap b29 noise t 102 191 161
+bitmap b30 noise t 103 140 140
+bitmap b31 noise t 103 141 141
+new 111 sprite -
+set 111 bitmap b27
+set 111 z -1000
+new 112 viewport - 50 40 201 151
+set 112 ox 7
+set 112 oy 5
+new 113 window 112
+set 113 windowskin b20
+set 113 x -10
+set 113 y -10
+set 113 width 150
+set 113 height 120
+set 113 contents b28
+set 113 ox 5
+set 113 oy 5
+set 113 cursor_rect rect 4 4 100 30
+set 113 pause true
+update 113 9
+new 114 window 112
+set 114 windowskin b21
+set 114 x 120
+set 114 y 80
+set 114 width 151
+set 114 height 121
+set 114 contents b29
+set 114 ox 5
+set 114 oy 5
+set 114 cursor_rect rect 4 4 101 30
+set 114 pause true
+update 114 9
+new 115 viewport - 300 40 100 100
+new 116 window 115
+set 116 windowskin b20
+set 116 x 0
+set 116 y 0
+set 116 width 100
+set 116 height 100
+set 116 contents b30
+set 116 ox 5
+set 116 oy 5
+set 116 cursor_rect rect 4 4 50 30
+set 116 pause true
+update 116 9
+new 117 viewport - 420 40 99 99
+set 117 ox 7
+new 118 window 117
+set 118 windowskin b20
+set 118 x 0
+set 118 y 0
+set 118 width 100
+set 118 height 100
+set 118 contents b30
+set 118 ox 5
+set 118 oy 5
+set 118 cursor_rect rect 4 4 50 30
+set 118 pause true
+update 118 9
+new 119 viewport - 300 200 51 300
+new 120 window 119
+set 120 windowskin b20
+set 120 x -30
+set 120 y 10
+set 120 width 100
+set 120 height 100
+set 120 contents b30
+set 120 ox 5
+set 120 oy 5
+set 120 cursor_rect rect 4 4 50 30
+set 120 pause true
+set 120 openness 200
+update 120 9
+new 121 viewport - 400 200 144 300
+new 122 window 121
+set 122 windowskin b21
+set 122 x 100
+set 122 y 150
+set 122 width 101
+set 122 height 101
+set 122 contents b31
+set 122 ox 5
+set 122 oy 5
+set 122 cursor_rect rect 4 4 51 30
+set 122 pause true
+update 122 9
+frame 8c37b563d4a2efdd vp_clip_1
+end
+scene g4-vp_z
+bitmap b32 noise o 5011 544 416
+bitmap b20 skin t 120 15 128 128
+bitmap b28 noise t 101 190 160
+bitmap b33 flat 255 0 0 255 50 300
+bitmap b34 flat 0 255 0 255 50 300
+bitmap b35 flat 0 0 255 255 50 300
+bitmap b36 flat 255 255 0 255 300 20
+bitmap b37 flat 0 255 255 255 300 20
+bitmap b38 flat 255 0 255 255 300 20
+bitmap b39 flat 255 128 0 255 20 300
+bitmap b21 skin t 121 15 128 128
+bitmap b40 noise t 102 190 160
+bitmap b41 flat 128 255 0 255 20 300
+bitmap b42 noise t 104 140 140
+bitmap b43 noise t 105 140 140
+bitmap b44 noise t 106 140 140
+new 135 sprite -
+set 135 bitmap b32
+set 135 z -1000
+new 136 viewport - 20 20 200 150
+set 136 z 50
+new 137 window 136
+set 137 windowskin b20
+set 137 x 0
+set 137 y 0
+set 137 width 150
+set 137 height 120
+set 137 contents b28
+set 137 ox 5
+set 137 oy 5
+set 137 cursor_rect rect 4 4 100 30
+set 137 pause true
+set 137 z 500
+update 137 9
+new 138 sprite -
+set 138 bitmap b33
+set 138 x 40
+set 138 y 0
+set 138 z 49
+new 139 sprite -
+set 139 bitmap b34
+set 139 x 100
+set 139 y 0
+set 139 z 50
+new 140 sprite -
+set 140 bitmap b35
+set 140 x 160
+set 140 y 0
+set 140 z 51
+new 141 sprite 136
+set 141 bitmap b36
+set 141 x 0
+set 141 y 60
+set 141 z 52
+new 142 sprite 136
+set 142 bitmap b37
+set 142 x 0
+set 142 y 90
+set 142 z 501
+new 143 sprite 136
+set 143 bitmap b38
+set 143 x 0
+set 143 y 110
+set 143 z 502
+new 144 sprite -
+set 144 bitmap b39
+set 144 x 250
+set 144 y 0
+set 144 z 0
+new 145 viewport - 240 20 200 150
+new 146 window 145
+set 146 windowskin b21
+set 146 x 0
+set 146 y 0
+set 146 width 150
+set 146 height 120
+set 146 contents b40
+set 146 ox 5
+set 146 oy 5
+set 146 cursor_rect rect 4 4 100 30
+set 146 pause true
+update 146 9
+new 147 sprite -
+set 147 bitmap b41
+set 147 x 290
+set 147 y 0
+set 147 z 0
+new 148 window -
+set 148 windowskin b20
+set 148 x 0
+set 148 y 250
+set 148 width 100
+set 148 height 100
+set 148 contents b42
+set 148 ox 5
+set 148 oy 5
+set 148 cursor_rect rect 4 4 50 30
+set 148 pause true
+set 148 visible false
+update 148 9
+new 149 viewport - 120 250 100 100
+set 149 visible false
+new 150 window 149
+set 150 windowskin b20
+set 150 x 0
+set 150 y 0
+set 150 width 100
+set 150 height 100
+set 150 contents b42
+set 150 ox 5
+set 150 oy 5
+set 150 cursor_rect rect 4 4 50 30
+set 150 pause true
+update 150 9
+new 151 viewport - 240 250 80 80
+new 152 window -
+set 152 windowskin b20
+set 152 x 10
+set 152 y 10
+set 152 width 100
+set 152 height 100
+set 152 contents b43
+set 152 ox 5
+set 152 oy 5
+set 152 cursor_rect rect 4 4 50 30
+set 152 pause true
+update 152 9
+set 152 viewport o151
+new 153 window 151
+set 153 windowskin b21
+set 153 x 340
+set 153 y 250
+set 153 width 100
+set 153 height 100
+set 153 contents b44
+set 153 ox 5
+set 153 oy 5
+set 153 cursor_rect rect 4 4 50 30
+set 153 pause true
+update 153 9
+set 153 viewport nil
+frame 90482a25bcd3de5b vp_z
+end
+scene g5-open_blend_15
+bitmap b0 noise o 5020 544 416
+bitmap b4 skin t 155 15 128 128
+new 40 sprite -
+set 40 bitmap b0
+set 40 z -1000
+new 41 window -
+set 41 windowskin b4
+set 41 x 0
+set 41 y 0
+set 41 width 60
+set 41 height 80
+set 41 openness 200
+set 41 opacity 255
+set 41 back_opacity 255
+new 42 window -
+set 42 windowskin b4
+set 42 x 66
+set 42 y 0
+set 42 width 61
+set 42 height 81
+set 42 openness 200
+set 42 opacity 255
+set 42 back_opacity 235
+new 43 window -
+set 43 windowskin b4
+set 43 x 132
+set 43 y 0
+set 43 width 60
+set 43 height 80
+set 43 openness 200
+set 43 opacity 128
+set 43 back_opacity 215
+new 44 window -
+set 44 windowskin b4
+set 44 x 198
+set 44 y 0
+set 44 width 61
+set 44 height 81
+set 44 openness 200
+set 44 opacity 77
+set 44 back_opacity 255
+new 45 window -
+set 45 windowskin b4
+set 45 x 264
+set 45 y 0
+set 45 width 60
+set 45 height 80
+set 45 openness 100
+set 45 opacity 255
+set 45 back_opacity 235
+new 46 window -
+set 46 windowskin b4
+set 46 x 330
+set 46 y 0
+set 46 width 61
+set 46 height 81
+set 46 openness 100
+set 46 opacity 255
+set 46 back_opacity 215
+new 47 window -
+set 47 windowskin b4
+set 47 x 396
+set 47 y 0
+set 47 width 60
+set 47 height 80
+set 47 openness 100
+set 47 opacity 128
+set 47 back_opacity 255
+new 48 window -
+set 48 windowskin b4
+set 48 x 462
+set 48 y 0
+set 48 width 61
+set 48 height 81
+set 48 openness 100
+set 48 opacity 77
+set 48 back_opacity 235
+new 49 window -
+set 49 windowskin b4
+set 49 x 0
+set 49 y 84
+set 49 width 60
+set 49 height 80
+set 49 openness 254
+set 49 opacity 255
+set 49 back_opacity 215
+new 50 window -
+set 50 windowskin b4
+set 50 x 66
+set 50 y 84
+set 50 width 61
+set 50 height 81
+set 50 openness 254
+set 50 opacity 255
+set 50 back_opacity 255
+new 51 window -
+set 51 windowskin b4
+set 51 x 132
+set 51 y 84
+set 51 width 60
+set 51 height 80
+set 51 openness 254
+set 51 opacity 128
+set 51 back_opacity 235
+new 52 window -
+set 52 windowskin b4
+set 52 x 198
+set 52 y 84
+set 52 width 61
+set 52 height 81
+set 52 openness 254
+set 52 opacity 77
+set 52 back_opacity 215
+frame bf9a5c838b334b35 open_blend_15
+end
+scene g6-skin_sizes_t
+bitmap b0 noise o 5030 544 416
+bitmap b17 noise t 150 64 64
+bitmap b2 noise t 100 170 140
+bitmap b18 noise t 151 256 256
+bitmap b4 noise t 101 170 141
+bitmap b19 noise t 152 128 64
+bitmap b6 noise t 102 170 140
+bitmap b20 noise t 153 64 128
+bitmap b8 noise t 103 170 141
+bitmap b21 noise t 154 100 100
+bitmap b10 noise t 104 170 140
+bitmap b22 noise t 155 129 127
+bitmap b12 noise t 105 170 141
+bitmap b23 noise t 156 192 128
+bitmap b14 noise t 106 170 140
+bitmap b24 flat 38 96 179 200 1 1
+bitmap b16 noise t 107 170 141
+new 18 sprite -
+set 18 bitmap b0
+set 18 z -1000
+new 19 window -
+set 19 windowskin b17
+set 19 x 0
+set 19 y 0
+set 19 width 130
+set 19 height 100
+set 19 contents b2
+set 19 ox 5
+set 19 oy 5
+set 19 cursor_rect rect 4 4 80 30
+set 19 pause true
+update 19 9
+new 20 window -
+set 20 windowskin b17
+set 20 x 0
+set 20 y 230
+set 20 width 130
+set 20 height 70
+set 20 openness 180
+new 21 window -
+set 21 windowskin b18
+set 21 x 136
+set 21 y 0
+set 21 width 130
+set 21 height 101
+set 21 contents b4
+set 21 ox 5
+set 21 oy 5
+set 21 cursor_rect rect 4 4 80 30
+set 21 pause true
+update 21 9
+new 22 window -
+set 22 windowskin b18
+set 22 x 136
+set 22 y 230
+set 22 width 130
+set 22 height 70
+set 22 openness 180
+new 23 window -
+set 23 windowskin b19
+set 23 x 272
+set 23 y 0
+set 23 width 130
+set 23 height 100
+set 23 contents b6
+set 23 ox 5
+set 23 oy 5
+set 23 cursor_rect rect 4 4 80 30
+set 23 pause true
+update 23 9
+new 24 window -
+set 24 windowskin b19
+set 24 x 272
+set 24 y 230
+set 24 width 130
+set 24 height 70
+set 24 openness 180
+new 25 window -
+set 25 windowskin b20
+set 25 x 408
+set 25 y 0
+set 25 width 130
+set 25 height 101
+set 25 contents b8
+set 25 ox 5
+set 25 oy 5
+set 25 cursor_rect rect 4 4 80 30
+set 25 pause true
+update 25 9
+new 26 window -
+set 26 windowskin b20
+set 26 x 408
+set 26 y 230
+set 26 width 130
+set 26 height 70
+set 26 openness 180
+new 27 window -
+set 27 windowskin b21
+set 27 x 0
+set 27 y 110
+set 27 width 130
+set 27 height 100
+set 27 contents b10
+set 27 ox 5
+set 27 oy 5
+set 27 cursor_rect rect 4 4 80 30
+set 27 pause true
+update 27 9
+new 28 window -
+set 28 windowskin b21
+set 28 x 0
+set 28 y 310
+set 28 width 130
+set 28 height 70
+set 28 openness 180
+new 29 window -
+set 29 windowskin b22
+set 29 x 136
+set 29 y 110
+set 29 width 130
+set 29 height 101
+set 29 contents b12
+set 29 ox 5
+set 29 oy 5
+set 29 cursor_rect rect 4 4 80 30
+set 29 pause true
+update 29 9
+new 30 window -
+set 30 windowskin b22
+set 30 x 136
+set 30 y 310
+set 30 width 130
+set 30 height 70
+set 30 openness 180
+new 31 window -
+set 31 windowskin b23
+set 31 x 272
+set 31 y 110
+set 31 width 130
+set 31 height 100
+set 31 contents b14
+set 31 ox 5
+set 31 oy 5
+set 31 cursor_rect rect 4 4 80 30
+set 31 pause true
+update 31 9
+new 32 window -
+set 32 windowskin b23
+set 32 x 272
+set 32 y 310
+set 32 width 130
+set 32 height 70
+set 32 openness 180
+new 33 window -
+set 33 windowskin b24
+set 33 x 408
+set 33 y 110
+set 33 width 130
+set 33 height 101
+set 33 contents b16
+set 33 ox 5
+set 33 oy 5
+set 33 cursor_rect rect 4 4 80 30
+set 33 pause true
+update 33 9
+new 34 window -
+set 34 windowskin b24
+set 34 x 408
+set 34 y 310
+set 34 width 130
+set 34 height 70
+set 34 openness 180
+frame edbddf94f4992ce6 skin_sizes_t
+end
+scene g6-small_t
+bitmap b25 noise o 5031 544 416
+bitmap b28 skin t 160 15 128 128
+bitmap b29 noise t 161 100 100
+new 80 sprite -
+set 80 bitmap b25
+set 80 z -1000
+new 81 window -
+set 81 windowskin b28
+set 81 x 20
+set 81 y 20
+set 81 width -10
+set 81 height 50
+set 81 contents b29
+set 81 cursor_rect rect 0 0 20 20
+set 81 pause true
+set 81 ox 0
+set 81 oy 0
+update 81 8
+new 82 window -
+set 82 windowskin b28
+set 82 x 20
+set 82 y 230
+set 82 width -10
+set 82 height 50
+set 82 contents b29
+set 82 pause true
+set 82 openness 225
+new 83 window -
+set 83 windowskin b28
+set 83 x 84
+set 83 y 20
+set 83 width 50
+set 83 height -10
+set 83 contents b29
+set 83 cursor_rect rect 0 0 20 20
+set 83 pause true
+set 83 ox 1
+set 83 oy 1
+update 83 9
+new 84 window -
+set 84 windowskin b28
+set 84 x 84
+set 84 y 230
+set 84 width 50
+set 84 height -10
+set 84 contents b29
+set 84 pause true
+set 84 openness 195
+new 85 window -
+set 85 windowskin b28
+set 85 x 148
+set 85 y 20
+set 85 width 0
+set 85 height 50
+set 85 contents b29
+set 85 cursor_rect rect 0 0 20 20
+set 85 pause true
+set 85 ox 2
+set 85 oy 0
+update 85 10
+new 86 window -
+set 86 windowskin b28
+set 86 x 148
+set 86 y 230
+set 86 width 0
+set 86 height 50
+set 86 contents b29
+set 86 pause true
+set 86 openness 165
+new 87 window -
+set 87 windowskin b28
+set 87 x 212
+set 87 y 20
+set 87 width 50
+set 87 height 0
+set 87 contents b29
+set 87 cursor_rect rect 0 0 20 20
+set 87 pause true
+set 87 ox 0
+set 87 oy 1
+update 87 11
+new 88 window -
+set 88 windowskin b28
+set 88 x 212
+set 88 y 230
+set 88 width 50
+set 88 height 0
+set 88 contents b29
+set 88 pause true
+set 88 openness 135
+new 89 window -
+set 89 windowskin b28
+set 89 x 276
+set 89 y 20
+set 89 width 1
+set 89 height 50
+set 89 contents b29
+set 89 cursor_rect rect 0 0 20 20
+set 89 pause true
+set 89 ox 1
+set 89 oy 0
+update 89 12
+new 90 window -
+set 90 windowskin b28
+set 90 x 276
+set 90 y 230
+set 90 width 1
+set 90 height 50
+set 90 contents b29
+set 90 pause true
+set 90 openness 225
+new 91 window -
+set 91 windowskin b28
+set 91 x 340
+set 91 y 20
+set 91 width 50
+set 91 height 1
+set 91 contents b29
+set 91 cursor_rect rect 0 0 20 20
+set 91 pause true
+set 91 ox 2
+set 91 oy 1
+update 91 13
+new 92 window -
+set 92 windowskin b28
+set 92 x 340
+set 92 y 230
+set 92 width 50
+set 92 height 1
+set 92 contents b29
+set 92 pause true
+set 92 openness 195
+new 93 window -
+set 93 windowskin b28
+set 93 x 404
+set 93 y 20
+set 93 width 2
+set 93 height 2
+set 93 contents b29
+set 93 cursor_rect rect 0 0 20 20
+set 93 pause true
+set 93 ox 0
+set 93 oy 0
+update 93 14
+new 94 window -
+set 94 windowskin b28
+set 94 x 404
+set 94 y 230
+set 94 width 2
+set 94 height 2
+set 94 contents b29
+set 94 pause true
+set 94 openness 165
+new 95 window -
+set 95 windowskin b28
+set 95 x 468
+set 95 y 20
+set 95 width 3
+set 95 height 3
+set 95 contents b29
+set 95 cursor_rect rect 0 0 20 20
+set 95 pause true
+set 95 ox 1
+set 95 oy 1
+update 95 15
+new 96 window -
+set 96 windowskin b28
+set 96 x 468
+set 96 y 230
+set 96 width 3
+set 96 height 3
+set 96 contents b29
+set 96 pause true
+set 96 openness 135
+new 97 window -
+set 97 windowskin b28
+set 97 x 20
+set 97 y 86
+set 97 width 4
+set 97 height 4
+set 97 contents b29
+set 97 cursor_rect rect 0 0 20 20
+set 97 pause true
+set 97 ox 2
+set 97 oy 0
+update 97 16
+new 98 window -
+set 98 windowskin b28
+set 98 x 20
+set 98 y 292
+set 98 width 4
+set 98 height 4
+set 98 contents b29
+set 98 pause true
+set 98 openness 225
+new 99 window -
+set 99 windowskin b28
+set 99 x 84
+set 99 y 86
+set 99 width 5
+set 99 height 5
+set 99 contents b29
+set 99 cursor_rect rect 0 0 20 20
+set 99 pause true
+set 99 ox 0
+set 99 oy 1
+update 99 17
+new 100 window -
+set 100 windowskin b28
+set 100 x 84
+set 100 y 292
+set 100 width 5
+set 100 height 5
+set 100 contents b29
+set 100 pause true
+set 100 openness 195
+new 101 window -
+set 101 windowskin b28
+set 101 x 148
+set 101 y 86
+set 101 width 6
+set 101 height 7
+set 101 contents b29
+set 101 cursor_rect rect 0 0 20 20
+set 101 pause true
+set 101 ox 1
+set 101 oy 0
+update 101 18
+new 102 window -
+set 102 windowskin b28
+set 102 x 148
+set 102 y 292
+set 102 width 6
+set 102 height 7
+set 102 contents b29
+set 102 pause true
+set 102 openness 165
+new 103 window -
+set 103 windowskin b28
+set 103 x 212
+set 103 y 86
+set 103 width 15
+set 103 height 15
+set 103 contents b29
+set 103 cursor_rect rect 0 0 20 20
+set 103 pause true
+set 103 ox 2
+set 103 oy 1
+update 103 19
+new 104 window -
+set 104 windowskin b28
+set 104 x 212
+set 104 y 292
+set 104 width 15
+set 104 height 15
+set 104 contents b29
+set 104 pause true
+set 104 openness 135
+new 105 window -
+set 105 windowskin b28
+set 105 x 276
+set 105 y 86
+set 105 width 17
+set 105 height 17
+set 105 contents b29
+set 105 cursor_rect rect 0 0 20 20
+set 105 pause true
+set 105 ox 0
+set 105 oy 0
+update 105 20
+new 106 window -
+set 106 windowskin b28
+set 106 x 276
+set 106 y 292
+set 106 width 17
+set 106 height 17
+set 106 contents b29
+set 106 pause true
+set 106 openness 225
+new 107 window -
+set 107 windowskin b28
+set 107 x 340
+set 107 y 86
+set 107 width 31
+set 107 height 33
+set 107 contents b29
+set 107 cursor_rect rect 0 0 20 20
+set 107 pause true
+set 107 ox 1
+set 107 oy 1
+update 107 21
+new 108 window -
+set 108 windowskin b28
+set 108 x 340
+set 108 y 292
+set 108 width 31
+set 108 height 33
+set 108 contents b29
+set 108 pause true
+set 108 openness 195
+new 109 window -
+set 109 windowskin b28
+set 109 x 404
+set 109 y 86
+set 109 width 32
+set 109 height 31
+set 109 contents b29
+set 109 cursor_rect rect 0 0 20 20
+set 109 pause true
+set 109 ox 2
+set 109 oy 0
+update 109 22
+new 110 window -
+set 110 windowskin b28
+set 110 x 404
+set 110 y 292
+set 110 width 32
+set 110 height 31
+set 110 contents b29
+set 110 pause true
+set 110 openness 165
+new 111 window -
+set 111 windowskin b28
+set 111 x 468
+set 111 y 86
+set 111 width -1
+set 111 height -1
+set 111 contents b29
+set 111 cursor_rect rect 0 0 20 20
+set 111 pause true
+set 111 ox 0
+set 111 oy 1
+update 111 23
+new 112 window -
+set 112 windowskin b28
+set 112 x 468
+set 112 y 292
+set 112 width -1
+set 112 height -1
+set 112 contents b29
+set 112 pause true
+set 112 openness 135
+new 113 window -
+set 113 windowskin b28
+set 113 x 20
+set 113 y 152
+set 113 width 36
+set 113 height 33
+set 113 contents b29
+set 113 cursor_rect rect 0 0 20 20
+set 113 pause true
+set 113 ox 1
+set 113 oy 0
+update 113 24
+new 114 window -
+set 114 windowskin b28
+set 114 x 20
+set 114 y 354
+set 114 width 36
+set 114 height 33
+set 114 contents b29
+set 114 pause true
+set 114 openness 225
+new 115 window -
+set 115 windowskin b28
+set 115 x 84
+set 115 y 152
+set 115 width 33
+set 115 height 36
+set 115 contents b29
+set 115 cursor_rect rect 0 0 20 20
+set 115 pause true
+set 115 ox 2
+set 115 oy 1
+update 115 25
+new 116 window -
+set 116 windowskin b28
+set 116 x 84
+set 116 y 354
+set 116 width 33
+set 116 height 36
+set 116 contents b29
+set 116 pause true
+set 116 openness 195
+new 117 window -
+set 117 windowskin b28
+set 117 x 148
+set 117 y 152
+set 117 width 34
+set 117 height 34
+set 117 contents b29
+set 117 cursor_rect rect 0 0 20 20
+set 117 pause true
+set 117 ox 0
+set 117 oy 0
+update 117 26
+new 118 window -
+set 118 windowskin b28
+set 118 x 148
+set 118 y 354
+set 118 width 34
+set 118 height 34
+set 118 contents b29
+set 118 pause true
+set 118 openness 165
+new 119 window -
+set 119 windowskin b28
+set 119 x 212
+set 119 y 152
+set 119 width 40
+set 119 height 20
+set 119 contents b29
+set 119 cursor_rect rect 0 0 20 20
+set 119 pause true
+set 119 ox 1
+set 119 oy 1
+update 119 27
+new 120 window -
+set 120 windowskin b28
+set 120 x 212
+set 120 y 354
+set 120 width 40
+set 120 height 20
+set 120 contents b29
+set 120 pause true
+set 120 openness 135
+new 121 window -
+set 121 windowskin b28
+set 121 x 276
+set 121 y 152
+set 121 width 20
+set 121 height 40
+set 121 contents b29
+set 121 cursor_rect rect 0 0 20 20
+set 121 pause true
+set 121 ox 2
+set 121 oy 0
+update 121 28
+new 122 window -
+set 122 windowskin b28
+set 122 x 276
+set 122 y 354
+set 122 width 20
+set 122 height 40
+set 122 contents b29
+set 122 pause true
+set 122 openness 225
+new 123 window -
+set 123 windowskin b28
+set 123 x 340
+set 123 y 152
+set 123 width 48
+set 123 height 52
+set 123 contents b29
+set 123 cursor_rect rect 0 0 20 20
+set 123 pause true
+set 123 ox 0
+set 123 oy 1
+update 123 29
+new 124 window -
+set 124 windowskin b28
+set 124 x 340
+set 124 y 354
+set 124 width 48
+set 124 height 52
+set 124 contents b29
+set 124 pause true
+set 124 openness 195
+frame 08ecc7b03e35fdc2 small_t
+end
+scene g6-no_skin
+bitmap b30 noise o 5032 544 416
+bitmap b31 noise t 162 200 200
+bitmap b32 skin t 163 15 128 128
+new 125 sprite -
+set 125 bitmap b30
+set 125 z -1000
+new 126 window -
+set 126 windowskin nil
+set 126 x 10
+set 126 y 10
+set 126 width 150
+set 126 height 100
+set 126 contents b31
+set 126 cursor_rect rect 0 0 50 30
+set 126 pause true
+set 126 ox 60
+set 126 oy 60
+update 126 9
+new 127 window -
+set 127 windowskin nil
+set 127 x 170
+set 127 y 10
+set 127 width 150
+set 127 height 100
+set 127 contents b31
+set 127 contents_opacity 128
+set 127 openness 254
+new 128 window -
+set 128 windowskin nil
+set 128 x 330
+set 128 y 10
+set 128 width 150
+set 128 height 100
+set 128 contents b31
+set 128 contents_opacity 128
+new 129 window -
+set 129 windowskin b32
+set 129 x 10
+set 129 y 120
+set 129 width 150
+set 129 height 100
+set 129 contents nil
+set 129 cursor_rect rect 0 0 50 30
+set 129 pause true
+set 129 ox 60
+set 129 oy 60
+update 129 9
+frame 363a9399b07529b6 no_skin
+end
+scene g6-edges_t
+bitmap b33 noise o 5033 544 416
+bitmap b42 skin t 164 15 128 128
+bitmap b35 noise t 101 161 141
+bitmap b36 noise t 102 161 141
+bitmap b37 noise t 103 161 141
+bitmap b38 noise t 104 161 141
+bitmap b39 noise t 105 141 120
+new 143 sprite -
+set 143 bitmap b33
+set 143 z -1000
+new 144 window -
+set 144 windowskin b42
+set 144 x -21
+set 144 y -13
+set 144 width 121
+set 144 height 101
+set 144 contents b35
+set 144 ox 5
+set 144 oy 5
+set 144 cursor_rect rect 4 4 71 30
+set 144 pause true
+update 144 9
+new 145 window -
+set 145 windowskin b42
+set 145 x 484
+set 145 y -40
+set 145 width 121
+set 145 height 101
+set 145 contents b36
+set 145 ox 5
+set 145 oy 5
+set 145 cursor_rect rect 4 4 71 30
+set 145 pause true
+update 145 9
+new 146 window -
+set 146 windowskin b42
+set 146 x -60
+set 146 y 350
+set 146 width 121
+set 146 height 101
+set 146 contents b37
+set 146 ox 5
+set 146 oy 5
+set 146 cursor_rect rect 4 4 71 30
+set 146 pause true
+update 146 9
+new 147 window -
+set 147 windowskin b42
+set 147 x 493
+set 147 y 366
+set 147 width 121
+set 147 height 101
+set 147 contents b38
+set 147 ox 5
+set 147 oy 5
+set 147 cursor_rect rect 4 4 71 30
+set 147 pause true
+update 147 9
+new 148 window -
+set 148 windowskin b42
+set 148 x 200
+set 148 y -30
+set 148 width 101
+set 148 height 80
+set 148 contents b39
+set 148 ox 5
+set 148 oy 5
+set 148 cursor_rect rect 4 4 51 30
+set 148 pause true
+set 148 openness 140
+update 148 9
+new 149 window -
+set 149 windowskin b42
+set 149 x 200
+set 149 y 380
+set 149 width 101
+set 149 height 80
+set 149 contents b39
+set 149 ox 5
+set 149 oy 5
+set 149 cursor_rect rect 4 4 51 30
+set 149 pause true
+set 149 openness 140
+update 149 9
+new 150 window -
+set 150 windowskin b42
+set 150 x -50
+set 150 y 150
+set 150 width 101
+set 150 height 80
+set 150 contents b39
+set 150 ox 5
+set 150 oy 5
+set 150 cursor_rect rect 4 4 51 30
+set 150 pause true
+set 150 openness 140
+update 150 9
+new 151 window -
+set 151 windowskin b42
+set 151 x 493
+set 151 y 150
+set 151 width 101
+set 151 height 80
+set 151 contents b39
+set 151 ox 5
+set 151 oy 5
+set 151 cursor_rect rect 4 4 51 30
+set 151 pause true
+set 151 openness 140
+update 151 9
+frame b5bab4e3a46c596c edges_t
+end
+scene g6-huge_open_t
+bitmap b40 noise o 5034 544 416
+bitmap b42 skin t 164 15 128 128
+bitmap b41 noise t 106 640 490
+new 154 sprite -
+set 154 bitmap b40
+set 154 z -1000
+new 155 window -
+set 155 windowskin b42
+set 155 x -20
+set 155 y -10
+set 155 width 600
+set 155 height 450
+set 155 contents b41
+set 155 ox 5
+set 155 oy 5
+set 155 cursor_rect rect 4 4 550 30
+set 155 pause true
+set 155 openness 131
+update 155 9
+frame 001cff018e32d942 huge_open_t
+end
+scene g6-brightness_100
+bitmap b55 noise o 5036 544 416
+bitmap b42 skin t 164 15 128 128
+bitmap b56 noise t 107 240 190
+new 177 sprite -
+set 177 bitmap b55
+set 177 z -1000
+new 178 window -
+set 178 windowskin b42
+set 178 x 20
+set 178 y 20
+set 178 width 200
+set 178 height 150
+set 178 contents b56
+set 178 ox 5
+set 178 oy 5
+set 178 cursor_rect rect 4 4 150 30
+set 178 pause true
+update 178 9
+new 179 window -
+set 179 windowskin b42
+set 179 x 240
+set 179 y 20
+set 179 width 200
+set 179 height 150
+set 179 contents b56
+set 179 ox 5
+set 179 oy 5
+set 179 cursor_rect rect 4 4 150 30
+set 179 pause true
+set 179 openness 100
+update 179 9
+brightness 100
+frame bef4741faa4093de brightness_100
+brightness 255
+end
+scene g8-smallskin_t_0
+bitmap b16 noise o 5040 544 416
+bitmap b17 flat 99 113 49 254 1 1
+bitmap b2 noise t 181 200 200
+bitmap b18 noise t 181 2 2
+bitmap b19 noise t 182 32 32
+bitmap b20 noise t 183 63 63
+bitmap b21 noise t 184 64 63
+bitmap b22 noise t 185 63 64
+bitmap b23 noise t 186 16 128
+new 87 sprite -
+set 87 bitmap b16
+set 87 z -1000
+new 88 window -
+set 88 windowskin b17
+set 88 x 0
+set 88 y 0
+set 88 width 76
+set 88 height 132
+new 89 window -
+set 89 windowskin b17
+set 89 x 0
+set 89 y 134
+set 89 width 68
+set 89 height 68
+new 90 window -
+set 90 windowskin b17
+set 90 x 0
+set 90 y 204
+set 90 width 36
+set 90 height 36
+new 91 window -
+set 91 windowskin b17
+set 91 x 38
+set 91 y 204
+set 91 width 37
+set 91 height 21
+new 92 window -
+set 92 windowskin b17
+set 92 x 0
+set 92 y 242
+set 92 width 76
+set 92 height 90
+set 92 contents b2
+set 92 cursor_rect rect 0 0 40 30
+set 92 pause true
+set 92 ox 5
+set 92 oy 5
+update 92 9
+new 93 window -
+set 93 windowskin b17
+set 93 x 0
+set 93 y 334
+set 93 width 76
+set 93 height 80
+set 93 openness 200
+new 94 window -
+set 94 windowskin b18
+set 94 x 77
+set 94 y 0
+set 94 width 76
+set 94 height 132
+new 95 window -
+set 95 windowskin b18
+set 95 x 77
+set 95 y 134
+set 95 width 68
+set 95 height 68
+new 96 window -
+set 96 windowskin b18
+set 96 x 77
+set 96 y 204
+set 96 width 36
+set 96 height 36
+new 97 window -
+set 97 windowskin b18
+set 97 x 115
+set 97 y 204
+set 97 width 37
+set 97 height 21
+new 98 window -
+set 98 windowskin b18
+set 98 x 77
+set 98 y 242
+set 98 width 76
+set 98 height 90
+set 98 contents b2
+set 98 cursor_rect rect 0 0 40 30
+set 98 pause true
+set 98 ox 5
+set 98 oy 5
+update 98 25
+new 99 window -
+set 99 windowskin b18
+set 99 x 77
+set 99 y 334
+set 99 width 76
+set 99 height 80
+set 99 openness 200
+new 100 window -
+set 100 windowskin b19
+set 100 x 154
+set 100 y 0
+set 100 width 76
+set 100 height 132
+new 101 window -
+set 101 windowskin b19
+set 101 x 154
+set 101 y 134
+set 101 width 68
+set 101 height 68
+new 102 window -
+set 102 windowskin b19
+set 102 x 154
+set 102 y 204
+set 102 width 36
+set 102 height 36
+new 103 window -
+set 103 windowskin b19
+set 103 x 192
+set 103 y 204
+set 103 width 37
+set 103 height 21
+new 104 window -
+set 104 windowskin b19
+set 104 x 154
+set 104 y 242
+set 104 width 76
+set 104 height 90
+set 104 contents b2
+set 104 cursor_rect rect 0 0 40 30
+set 104 pause true
+set 104 ox 5
+set 104 oy 5
+update 104 41
+new 105 window -
+set 105 windowskin b19
+set 105 x 154
+set 105 y 334
+set 105 width 76
+set 105 height 80
+set 105 openness 200
+new 106 window -
+set 106 windowskin b20
+set 106 x 231
+set 106 y 0
+set 106 width 76
+set 106 height 132
+new 107 window -
+set 107 windowskin b20
+set 107 x 231
+set 107 y 134
+set 107 width 68
+set 107 height 68
+new 108 window -
+set 108 windowskin b20
+set 108 x 231
+set 108 y 204
+set 108 width 36
+set 108 height 36
+new 109 window -
+set 109 windowskin b20
+set 109 x 269
+set 109 y 204
+set 109 width 37
+set 109 height 21
+new 110 window -
+set 110 windowskin b20
+set 110 x 231
+set 110 y 242
+set 110 width 76
+set 110 height 90
+set 110 contents b2
+set 110 cursor_rect rect 0 0 40 30
+set 110 pause true
+set 110 ox 5
+set 110 oy 5
+update 110 57
+new 111 window -
+set 111 windowskin b20
+set 111 x 231
+set 111 y 334
+set 111 width 76
+set 111 height 80
+set 111 openness 200
+new 112 window -
+set 112 windowskin b21
+set 112 x 308
+set 112 y 0
+set 112 width 76
+set 112 height 132
+new 113 window -
+set 113 windowskin b21
+set 113 x 308
+set 113 y 134
+set 113 width 68
+set 113 height 68
+new 114 window -
+set 114 windowskin b21
+set 114 x 308
+set 114 y 204
+set 114 width 36
+set 114 height 36
+new 115 window -
+set 115 windowskin b21
+set 115 x 346
+set 115 y 204
+set 115 width 37
+set 115 height 21
+new 116 window -
+set 116 windowskin b21
+set 116 x 308
+set 116 y 242
+set 116 width 76
+set 116 height 90
+set 116 contents b2
+set 116 cursor_rect rect 0 0 40 30
+set 116 pause true
+set 116 ox 5
+set 116 oy 5
+update 116 9
+new 117 window -
+set 117 windowskin b21
+set 117 x 308
+set 117 y 334
+set 117 width 76
+set 117 height 80
+set 117 openness 200
+new 118 window -
+set 118 windowskin b22
+set 118 x 385
+set 118 y 0
+set 118 width 76
+set 118 height 132
+new 119 window -
+set 119 windowskin b22
+set 119 x 385
+set 119 y 134
+set 119 width 68
+set 119 height 68
+new 120 window -
+set 120 windowskin b22
+set 120 x 385
+set 120 y 204
+set 120 width 36
+set 120 height 36
+new 121 window -
+set 121 windowskin b22
+set 121 x 423
+set 121 y 204
+set 121 width 37
+set 121 height 21
+new 122 window -
+set 122 windowskin b22
+set 122 x 385
+set 122 y 242
+set 122 width 76
+set 122 height 90
+set 122 contents b2
+set 122 cursor_rect rect 0 0 40 30
+set 122 pause true
+set 122 ox 5
+set 122 oy 5
+update 122 25
+new 123 window -
+set 123 windowskin b22
+set 123 x 385
+set 123 y 334
+set 123 width 76
+set 123 height 80
+set 123 openness 200
+new 124 window -
+set 124 windowskin b23
+set 124 x 462
+set 124 y 0
+set 124 width 76
+set 124 height 132
+new 125 window -
+set 125 windowskin b23
+set 125 x 462
+set 125 y 134
+set 125 width 68
+set 125 height 68
+new 126 window -
+set 126 windowskin b23
+set 126 x 462
+set 126 y 204
+set 126 width 36
+set 126 height 36
+new 127 window -
+set 127 windowskin b23
+set 127 x 500
+set 127 y 204
+set 127 width 37
+set 127 height 21
+new 128 window -
+set 128 windowskin b23
+set 128 x 462
+set 128 y 242
+set 128 width 76
+set 128 height 90
+set 128 contents b2
+set 128 cursor_rect rect 0 0 40 30
+set 128 pause true
+set 128 ox 5
+set 128 oy 5
+update 128 41
+new 129 window -
+set 129 windowskin b23
+set 129 x 462
+set 129 y 334
+set 129 width 76
+set 129 height 80
+set 129 openness 200
+frame 0263b5710a3a9da6 smallskin_t_0
+end
+scene g9-opacities_front
+bitmap b5 noise o 5050 544 416
+bitmap b0 skin t 120 15 128 128
+bitmap b6 noise t 200 300 300
+new 37 sprite -
+set 37 bitmap b5
+set 37 z -1000
+new 38 window -
+set 38 windowskin b0
+set 38 x 0
+set 38 y 0
+set 38 width 128
+set 38 height 100
+set 38 contents b6
+set 38 ox 20
+set 38 oy 20
+set 38 opacity 255
+set 38 back_opacity 255
+set 38 contents_opacity 255
+set 38 pause true
+set 38 cursor_rect rect 10 10 60 40
+update 38 6
+new 39 window -
+set 39 windowskin b0
+set 39 x 130
+set 39 y 0
+set 39 width 128
+set 39 height 100
+set 39 contents b6
+set 39 ox 20
+set 39 oy 20
+set 39 opacity 100
+set 39 back_opacity 255
+set 39 contents_opacity 255
+set 39 pause true
+set 39 cursor_rect rect 10 10 60 40
+update 39 22
+new 40 window -
+set 40 windowskin b0
+set 40 x 260
+set 40 y 0
+set 40 width 128
+set 40 height 100
+set 40 contents b6
+set 40 ox 20
+set 40 oy 20
+set 40 opacity 255
+set 40 back_opacity 100
+set 40 contents_opacity 255
+set 40 pause true
+set 40 cursor_rect rect 10 10 60 40
+update 40 38
+new 41 window -
+set 41 windowskin b0
+set 41 x 390
+set 41 y 0
+set 41 width 128
+set 41 height 100
+set 41 contents b6
+set 41 ox 20
+set 41 oy 20
+set 41 opacity 255
+set 41 back_opacity 255
+set 41 contents_opacity 50
+set 41 pause true
+set 41 cursor_rect rect 10 10 60 40
+update 41 54
+new 42 window -
+set 42 windowskin b0
+set 42 x 0
+set 42 y 110
+set 42 width 128
+set 42 height 100
+set 42 contents b6
+set 42 ox 20
+set 42 oy 20
+set 42 opacity 0
+set 42 back_opacity 0
+set 42 contents_opacity 0
+set 42 pause true
+set 42 cursor_rect rect 10 10 60 40
+update 42 70
+new 43 window -
+set 43 windowskin b0
+set 43 x 130
+set 43 y 110
+set 43 width 128
+set 43 height 100
+set 43 contents b6
+set 43 ox 20
+set 43 oy 20
+set 43 opacity 0
+set 43 back_opacity 255
+set 43 contents_opacity 255
+set 43 pause true
+set 43 cursor_rect rect 10 10 60 40
+update 43 86
+new 44 window -
+set 44 windowskin b0
+set 44 x 260
+set 44 y 110
+set 44 width 128
+set 44 height 100
+set 44 contents b6
+set 44 ox 20
+set 44 oy 20
+set 44 opacity 255
+set 44 back_opacity 255
+set 44 contents_opacity 0
+set 44 pause true
+set 44 cursor_rect rect 10 10 60 40
+update 44 102
+new 45 window -
+set 45 windowskin b0
+set 45 x 390
+set 45 y 110
+set 45 width 128
+set 45 height 100
+set 45 contents b6
+set 45 ox 20
+set 45 oy 20
+set 45 opacity 1
+set 45 back_opacity 1
+set 45 contents_opacity 1
+set 45 pause true
+set 45 cursor_rect rect 10 10 60 40
+update 45 118
+frame a6f4676eaea71c41 opacities_front
+end
+scene g9-blink_00
+bitmap b7 noise o 5051 544 416
+bitmap b0 skin t 120 15 128 128
+bitmap b6 noise t 200 300 300
+new 46 sprite -
+set 46 bitmap b7
+set 46 z -1000
+new 47 window -
+set 47 windowskin b0
+set 47 x 0
+set 47 y 0
+set 47 width 128
+set 47 height 100
+set 47 contents b6
+set 47 cursor_rect rect 10 10 60 40
+set 47 contents_opacity 255
+new 48 window -
+set 48 windowskin b0
+set 48 x 130
+set 48 y 0
+set 48 width 128
+set 48 height 100
+set 48 contents b6
+set 48 cursor_rect rect 10 10 60 40
+set 48 contents_opacity 195
+new 49 window -
+set 49 windowskin b0
+set 49 x 260
+set 49 y 0
+set 49 width 128
+set 49 height 100
+set 49 contents b6
+set 49 cursor_rect rect 10 10 60 40
+set 49 contents_opacity 135
+new 50 window -
+set 50 windowskin b0
+set 50 x 390
+set 50 y 0
+set 50 width 128
+set 50 height 100
+set 50 contents b6
+set 50 cursor_rect rect 10 10 60 40
+set 50 contents_opacity 75
+new 51 window -
+set 51 windowskin b0
+set 51 x 0
+set 51 y 110
+set 51 width 128
+set 51 height 100
+set 51 cursor_rect rect 0 0 96 68
+set 51 active false
+new 52 window -
+set 52 windowskin b0
+set 52 x 130
+set 52 y 110
+set 52 width 128
+set 52 height 100
+set 52 cursor_rect rect 0 0 96 68
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+frame be4f96fa53bd51ca blink_00
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+frame bd59a1e6f3a87392 blink_01
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+frame 6b383fb38cba8401 blink_02
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+set 47 pause true
+frame 370a1d4f64bebb02 blink_03
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+frame 49b92d5f12a6b92e blink_04
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+set 48 active false
+set 49 pause true
+set 51 active true
+frame 3a301797194ddba2 blink_05
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+frame 46909d868a13bb0e blink_06
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+frame a48c38e4189b2fdf blink_07
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+frame 26c56c48d88a183a blink_08
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+set 48 active true
+set 47 pause false
+set 52 active false
+set 52 active true
+frame 52f874d0d1a5c7ef blink_09
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+frame 1d953b136581ec1c blink_10
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+frame b9be6b0b44724f6c blink_11
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+set 47 pause true
+set 50 visible false
+frame 318e45d42e66ca09 blink_12
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+frame 8040c950d9210bd3 blink_13
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+set 50 visible true
+set 49 openness 200
+frame b430192d67b84254 blink_14
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+frame 8ec4c6f42c532de4 blink_15
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+frame 5877a37cad556edb blink_16
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+set 49 openness 255
+set 49 pause true
+set 51 pause true
+set 51 active false
+frame 0aeb161019099893 blink_17
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+frame 3e47a536521b4520 blink_18
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+frame a3c507735608aba6 blink_19
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+frame 5609e2dd07865cdb blink_20
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+frame 46b52448dcaee10e blink_21
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+frame 69a48b9491a231c7 blink_22
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+frame 9e5e8b70fb92a70e blink_23
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+frame e8a922ed2a403d76 blink_24
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+frame 7a92c25b9c97998f blink_25
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+frame 270cb0278e9e9a0d blink_26
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+frame 2bc9b80d69a93b6c blink_27
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+frame 8d1d4d805c826185 blink_28
+update 47 1
+update 48 2
+update 49 3
+update 50 4
+update 51 3
+update 52 7
+frame 289f8aadf02faa11 blink_29
+end
+scene g10-s0
+bitmap b0 noise o 5060 544 416
+bitmap b1 skin t 210 15 128 128
+bitmap b2 noise o 211 200 200
+new 1 sprite -
+set 1 bitmap b0
+set 1 z -1000
+new 2 window -
+set 2 windowskin b1
+set 2 x 20
+set 2 y 20
+set 2 width 200
+set 2 height 150
+set 2 contents b2
+set 2 cursor_rect rect 10 10 60 40
+set 2 pause true
+update 2 20
+frame ddd4f5b5420de932 s0
+set 2 visible false
+frame 43d4c19b5d4d0d5a s1_hidden
+set 2 visible true
+frame ddd4f5b5420de932 s2_shown
+set 2 visible false
+frame 43d4c19b5d4d0d5a s3_hidden
+update 2 1
+set 2 visible true
+frame 5abfb4b726a811d4 s4_upd_hidden_then_shown
+frame 5abfb4b726a811d4 s4b
+update 2 1
+frame ddd4f5b5420de932 s5_upd
+set 2 visible false
+set 2 visible true
+frame ddd4f5b5420de932 s6_toggle
+set 2 visible false
+update 2 1
+set 2 visible true
+frame 7bf5950a748bab73 s7_hide_upd_show
+frame 7bf5950a748bab73 s7b
+update 2 1
+frame ddd4f5b5420de932 s8_upd
+set 2 openness 200
+frame 167b99f1b0686087 s9_open200
+update 2 1
+set 2 openness 255
+frame ddd4f5b5420de932 s10_upd_open255
+frame ddd4f5b5420de932 s10b
+update 2 1
+frame ddd4f5b5420de932 s11_upd
+set 2 openness 0
+update 2 1
+set 2 openness 255
+frame ddd4f5b5420de932 s12_open0_upd_255
+update 2 1
+frame ddd4f5b5420de932 s13_upd
+set 2 contents_opacity 0
+update 2 1
+set 2 contents_opacity 255
+frame ddd4f5b5420de932 s14_co0_upd_co255
+update 2 1
+frame ddd4f5b5420de932 s15_upd
+set 2 visible false
+update 2 1
+update 2 1
+set 2 visible true
+frame 3a31a5601920d6cb s16_hide_upd_upd_show
+update 2 1
+frame 011e8af1a5c6174c s17_upd
+set 2 visible false
+update 2 1
+set 2 visible true
+set 2 contents b2
+frame de0eafc9f488bc1b s18_hide_upd_show_reassign
+update 2 1
+frame 011e8af1a5c6174c s19_upd
+set 2 visible false
+update 2 1
+set 2 visible true
+set 2 ox 1
+frame 5eadaa00be4c4ab3 s20_hide_upd_show_ox
+update 2 1
+frame 5eadaa00be4c4ab3 s21_upd
+end
+scene g12-trials2_1
+bitmap b0 noise o 5071 544 416
+bitmap b1 skin t 220 15 128 128
+bitmap b3 noise t 222 150 150
+bitmap b2 skin t 221 15 128 128
+bitmap b4 noise t 223 150 150
+new 52 sprite -
+set 52 bitmap b0
+set 52 z -1000
+new 53 viewport - 0 0 108 83
+new 54 window 53
+set 54 windowskin b1
+set 54 x 0
+set 54 y 0
+set 54 width 100
+set 54 height 80
+set 54 contents b3
+set 54 cursor_rect rect 5 5 50 30
+set 54 pause true
+update 54 3
+set 54 visible false
+set 54 pause true
+set 54 visible true
+new 55 viewport - 108 0 108 83
+new 56 window 55
+set 56 windowskin b1
+set 56 x 0
+set 56 y 0
+set 56 width 100
+set 56 height 80
+set 56 contents b3
+set 56 cursor_rect rect 5 5 50 30
+set 56 pause true
+update 56 3
+set 56 visible false
+set 56 pause false
+set 56 visible true
+new 57 viewport - 216 0 108 83
+new 58 window 57
+set 58 windowskin b1
+set 58 x 0
+set 58 y 0
+set 58 width 100
+set 58 height 80
+set 58 contents b3
+set 58 cursor_rect rect 5 5 50 30
+set 58 pause true
+update 58 3
+set 58 visible false
+set 58 cursor_rect rect 5 5 50 30
+set 58 visible true
+new 59 viewport - 324 0 108 83
+new 60 window 59
+set 60 windowskin b1
+set 60 x 0
+set 60 y 0
+set 60 width 100
+set 60 height 80
+set 60 contents b3
+set 60 cursor_rect rect 5 5 50 30
+set 60 pause true
+update 60 3
+set 60 visible false
+set 60 windowskin b2
+set 60 visible true
+new 61 viewport - 432 0 108 83
+new 62 window 61
+set 62 windowskin b1
+set 62 x 0
+set 62 y 0
+set 62 width 100
+set 62 height 80
+set 62 contents b3
+set 62 cursor_rect rect 5 5 50 30
+set 62 pause true
+update 62 3
+set 62 visible false
+set 62 contents b4
+set 62 visible true
+new 63 viewport - 0 83 108 83
+new 64 window 63
+set 64 windowskin b1
+set 64 x 0
+set 64 y 0
+set 64 width 100
+set 64 height 80
+set 64 contents b3
+set 64 cursor_rect rect 5 5 50 30
+set 64 pause true
+update 64 3
+set 64 visible false
+set 64 z 5
+set 64 visible true
+new 65 viewport - 108 83 108 83
+new 66 window 65
+set 66 windowskin b1
+set 66 x 0
+set 66 y 0
+set 66 width 100
+set 66 height 80
+set 66 contents b3
+set 66 cursor_rect rect 5 5 50 30
+set 66 pause true
+update 66 3
+set 66 visible false
+set 66 opacity 200
+set 66 visible true
+new 67 viewport - 216 83 108 83
+new 68 window 67
+set 68 windowskin b1
+set 68 x 0
+set 68 y 0
+set 68 width 100
+set 68 height 80
+set 68 contents b3
+set 68 cursor_rect rect 5 5 50 30
+set 68 pause true
+update 68 3
+set 68 visible false
+set 68 back_opacity 200
+set 68 visible true
+new 69 viewport - 324 83 108 83
+new 70 window 69
+set 70 windowskin b1
+set 70 x 0
+set 70 y 0
+set 70 width 100
+set 70 height 80
+set 70 contents b3
+set 70 cursor_rect rect 5 5 50 30
+set 70 pause true
+update 70 3
+set 70 visible false
+set 70 x 0
+set 70 visible true
+new 71 viewport - 432 83 108 83
+new 72 window 71
+set 72 windowskin b1
+set 72 x 0
+set 72 y 0
+set 72 width 100
+set 72 height 80
+set 72 contents b3
+set 72 cursor_rect rect 5 5 50 30
+set 72 pause true
+update 72 3
+set 72 visible false
+set 72 width 100
+set 72 visible true
+new 73 viewport - 0 166 108 83
+new 74 window 73
+set 74 windowskin b1
+set 74 x 0
+set 74 y 0
+set 74 width 100
+set 74 height 80
+set 74 contents b3
+set 74 cursor_rect rect 5 5 50 30
+set 74 pause true
+update 74 3
+set 74 visible false
+rect 74 6 6 40 20
+set 74 visible true
+new 75 viewport - 108 166 108 83
+new 76 window 75
+set 76 windowskin b1
+set 76 x 0
+set 76 y 0
+set 76 width 100
+set 76 height 80
+set 76 contents b3
+set 76 cursor_rect rect 5 5 50 30
+set 76 pause true
+update 76 3
+set 76 visible false
+set 76 viewport nil
+set 76 visible true
+new 77 viewport - 216 166 108 83
+new 78 window 77
+set 78 windowskin b1
+set 78 x 0
+set 78 y 0
+set 78 width 100
+set 78 height 80
+set 78 contents b3
+set 78 cursor_rect rect 5 5 50 30
+set 78 pause true
+update 78 3
+set 78 visible false
+update 78 1
+set 78 visible true
+update 78 1
+new 79 viewport - 324 166 108 83
+new 80 window 79
+set 80 windowskin b1
+set 80 x 0
+set 80 y 0
+set 80 width 100
+set 80 height 80
+set 80 contents b3
+set 80 cursor_rect rect 5 5 50 30
+set 80 pause true
+update 80 3
+set 80 visible false
+set 80 ox 1
+set 80 visible true
+set 80 z 1
+new 81 viewport - 432 166 108 83
+new 82 window 81
+set 82 windowskin b1
+set 82 x 0
+set 82 y 0
+set 82 width 100
+set 82 height 80
+set 82 contents b3
+set 82 cursor_rect rect 5 5 50 30
+set 82 pause true
+update 82 3
+set 82 visible false
+set 82 ox 1
+set 82 visible true
+set 82 ox 1
+new 83 viewport - 0 249 108 83
+new 84 window 83
+set 84 visible false
+set 84 windowskin b1
+set 84 width 100
+set 84 height 80
+set 84 contents b3
+set 84 cursor_rect rect 5 5 50 30
+set 84 pause true
+set 84 visible true
+new 85 viewport - 108 249 108 83
+new 86 window 85
+set 86 visible false
+set 86 windowskin b1
+set 86 width 100
+set 86 height 80
+set 86 contents b3
+set 86 cursor_rect rect 5 5 50 30
+set 86 pause true
+set 86 visible true
+update 86 1
+new 87 viewport - 216 249 108 83
+new 88 window 87
+set 88 windowskin b1
+set 88 x 0
+set 88 y 0
+set 88 width 100
+set 88 height 80
+set 88 contents b3
+set 88 cursor_rect rect 5 5 50 30
+set 88 pause true
+update 88 3
+set 88 visible false
+set 88 contents b4
+set 88 visible true
+set 88 windowskin b1
+frame ddd462c8e31362b8 trials2_1
+end
+scene g13-skinmod_0
+bitmap b0 noise o 5080 544 416
+bitmap b1 skin t 230 15 128 128
+bitmap b3 noise t 232 200 200
+bitmap b2 skin t 231 15 128 128
+new 1 sprite -
+set 1 bitmap b0
+set 1 z -1000
+new 2 window -
+set 2 windowskin b1
+set 2 x 10
+set 2 y 10
+set 2 width 150
+set 2 height 120
+set 2 contents b3
+set 2 ox 5
+set 2 oy 5
+set 2 cursor_rect rect 4 4 60 30
+set 2 pause true
+set 2 openness 255
+update 2 9
+new 3 window -
+set 3 windowskin b1
+set 3 x 190
+set 3 y 10
+set 3 width 150
+set 3 height 120
+set 3 contents b3
+set 3 ox 5
+set 3 oy 5
+set 3 cursor_rect rect 4 4 60 30
+set 3 pause true
+set 3 openness 200
+update 3 9
+new 4 window -
+set 4 windowskin b1
+set 4 x 10
+set 4 y 150
+set 4 width 40
+set 4 height 40
+set 4 contents b3
+set 4 ox 5
+set 4 oy 5
+set 4 cursor_rect rect 4 4 60 30
+set 4 pause true
+set 4 openness 255
+update 4 9
+new 5 window -
+set 5 windowskin b1
+set 5 x 190
+set 5 y 150
+set 5 width 151
+set 5 height 100
+set 5 contents b3
+set 5 ox 5
+set 5 oy 5
+set 5 cursor_rect rect 4 4 60 30
+set 5 pause true
+set 5 openness 255
+update 5 9
+frame 6209c8cebeb22c2c skinmod_0
+fill b1 10 10 30 30 255 255 0 255
+fill b1 10 80 30 30 255 255 0 255
+fill b1 70 5 50 6 255 255 0 255
+fill b1 66 20 8 20 255 255 0 255
+fill b1 88 16 16 8 255 255 0 255
+fill b1 88 40 16 8 255 255 0 255
+fill b1 70 70 20 20 255 255 0 255
+fill b1 64 64 32 2 255 255 0 255
+fill b1 96 64 32 32 255 255 0 255
+fill b1 100 20 28 30 255 255 0 255
+frame ec7b38c5c61e1842 skinmod_1_filled
+frame ec7b38c5c61e1842 skinmod_2_frames
+update 2 1
+update 3 1
+update 4 1
+update 5 1
+frame cd4ab2b6f3f5c877 skinmod_3_updated
+set 2 windowskin b1
+set 3 windowskin b1
+set 4 windowskin b1
+set 5 windowskin b1
+frame cd4ab2b6f3f5c877 skinmod_4_same_skin
+set 2 width 150
+set 3 width 151
+set 4 opacity 254
+set 5 cursor_rect rect 4 4 61 30
+frame 7bc17dd0b2d47060 skinmod_5_width
+set 2 windowskin b2
+set 2 windowskin b1
+set 3 windowskin b2
+set 3 windowskin b1
+set 4 windowskin b2
+set 4 windowskin b1
+set 5 windowskin b2
+set 5 windowskin b1
+frame 2e2d97be9c779539 skinmod_6_other_and_back
+end
+scene g13-skinmod_7_before_first_draw
+bitmap b4 noise o 5081 544 416
+bitmap b5 skin t 233 15 128 128
+bitmap b3 noise t 232 200 200
+new 6 sprite -
+set 6 bitmap b4
+set 6 z -1000
+new 7 window -
+set 7 windowskin b5
+set 7 x 10
+set 7 y 10
+set 7 width 150
+set 7 height 120
+set 7 contents b3
+set 7 ox 5
+set 7 oy 5
+set 7 cursor_rect rect 4 4 60 30
+set 7 pause true
+set 7 openness 255
+update 7 9
+new 8 window -
+set 8 windowskin b5
+set 8 x 190
+set 8 y 10
+set 8 width 150
+set 8 height 120
+set 8 contents b3
+set 8 ox 5
+set 8 oy 5
+set 8 cursor_rect rect 4 4 60 30
+set 8 pause true
+set 8 openness 200
+update 8 9
+new 9 window -
+set 9 windowskin b5
+set 9 x 10
+set 9 y 150
+set 9 width 40
+set 9 height 40
+set 9 contents b3
+set 9 ox 5
+set 9 oy 5
+set 9 cursor_rect rect 4 4 60 30
+set 9 pause true
+set 9 openness 255
+update 9 9
+new 10 window -
+set 10 windowskin b5
+set 10 x 190
+set 10 y 150
+set 10 width 151
+set 10 height 100
+set 10 contents b3
+set 10 ox 5
+set 10 oy 5
+set 10 cursor_rect rect 4 4 60 30
+set 10 pause true
+set 10 openness 255
+update 10 9
+fill b5 10 10 30 30 255 255 0 255
+fill b5 10 80 30 30 255 255 0 255
+fill b5 70 5 50 6 255 255 0 255
+fill b5 66 20 8 20 255 255 0 255
+fill b5 88 16 16 8 255 255 0 255
+fill b5 88 40 16 8 255 255 0 255
+fill b5 70 70 20 20 255 255 0 255
+fill b5 64 64 32 2 255 255 0 255
+fill b5 96 64 32 32 255 255 0 255
+fill b5 100 20 28 30 255 255 0 255
+frame 08d45892de23c0d3 skinmod_7_before_first_draw
+end
+scene g14-rebuild_1_before
+bitmap b0 noise o 5082 544 416
+bitmap b4 skin t 241 15 128 128
+bitmap b2 noise t 232 200 200
+new 52 sprite -
+set 52 bitmap b0
+set 52 z -1000
+new 53 viewport - 0 0 108 83
+new 54 window 53
+set 54 windowskin b4
+set 54 x 0
+set 54 y 0
+set 54 width 100
+set 54 height 80
+set 54 contents b2
+set 54 ox 5
+set 54 oy 5
+set 54 cursor_rect rect 4 4 60 30
+set 54 pause true
+update 54 9
+new 55 viewport - 108 0 108 83
+new 56 window 55
+set 56 windowskin b4
+set 56 x 0
+set 56 y 0
+set 56 width 100
+set 56 height 80
+set 56 contents b2
+set 56 ox 5
+set 56 oy 5
+set 56 cursor_rect rect 4 4 60 30
+set 56 pause true
+update 56 9
+new 57 viewport - 216 0 108 83
+new 58 window 57
+set 58 windowskin b4
+set 58 x 0
+set 58 y 0
+set 58 width 100
+set 58 height 80
+set 58 contents b2
+set 58 ox 5
+set 58 oy 5
+set 58 cursor_rect rect 4 4 60 30
+set 58 pause true
+update 58 9
+new 59 viewport - 324 0 108 83
+new 60 window 59
+set 60 windowskin b4
+set 60 x 0
+set 60 y 0
+set 60 width 100
+set 60 height 80
+set 60 contents b2
+set 60 ox 5
+set 60 oy 5
+set 60 cursor_rect rect 4 4 60 30
+set 60 pause true
+update 60 9
+new 61 viewport - 432 0 108 83
+new 62 window 61
+set 62 windowskin b4
+set 62 x 0
+set 62 y 0
+set 62 width 100
+set 62 height 80
+set 62 contents b2
+set 62 ox 5
+set 62 oy 5
+set 62 cursor_rect rect 4 4 60 30
+set 62 pause true
+update 62 9
+frame 6d4fb7f3093ce636 rebuild_1_before
+fill b4 10 10 30 30 255 255 0 255
+fill b4 10 80 30 30 255 255 0 255
+fill b4 70 5 50 6 255 255 0 255
+fill b4 66 20 8 20 255 255 0 255
+fill b4 88 16 16 8 255 255 0 255
+fill b4 88 40 16 8 255 255 0 255
+fill b4 70 70 20 20 255 255 0 255
+fill b4 64 64 32 2 255 255 0 255
+fill b4 96 64 32 32 255 255 0 255
+fill b4 100 20 28 30 255 255 0 255
+set 54 cursor_rect rect 0 0 0 0
+set 54 cursor_rect rect 4 4 60 30
+set 56 windowskin nil
+set 56 windowskin b4
+set 58 windowskin b4
+set 60 y 1
+set 62 oy 6
+frame abb1845bff51352d rebuild_1_after
+end
+scene g15-arrowlatch_1
+bitmap b0 noise o 5083 544 416
+bitmap b1 skin t 250 15 128 128
+bitmap b3 noise t 252 150 150
+bitmap b4 noise t 253 20 20
+new 52 sprite -
+set 52 bitmap b0
+set 52 z -1000
+new 53 viewport - 0 0 108 83
+new 54 window 53
+set 54 windowskin b1
+set 54 width 100
+set 54 height 80
+update 54 3
+set 54 contents b3
+update 54 1
+set 54 contents nil
+set 54 z 2
+new 55 viewport - 108 0 108 83
+new 56 window 55
+set 56 windowskin b1
+set 56 width 100
+set 56 height 80
+update 56 3
+set 56 contents b3
+update 56 1
+set 56 contents nil
+set 56 visible false
+set 56 visible true
+new 57 viewport - 216 0 108 83
+new 58 window 57
+set 58 windowskin b1
+set 58 width 100
+set 58 height 80
+update 58 3
+set 58 contents b3
+update 58 1
+set 58 contents nil
+set 58 opacity 200
+new 59 viewport - 324 0 108 83
+new 60 window 59
+set 60 windowskin b1
+set 60 width 100
+set 60 height 80
+update 60 3
+set 60 contents b3
+update 60 1
+set 60 contents nil
+set 60 contents b3
+new 61 viewport - 432 0 108 83
+new 62 window 61
+set 62 windowskin b1
+set 62 width 100
+set 62 height 80
+update 62 3
+set 62 contents b3
+update 62 1
+set 62 contents nil
+set 62 contents b4
+new 63 viewport - 0 83 108 83
+new 64 window 63
+set 64 windowskin b1
+set 64 width 100
+set 64 height 80
+update 64 3
+set 64 contents b3
+update 64 1
+set 64 contents b4
+set 64 ox 0
+new 65 viewport - 108 83 108 83
+new 66 window 65
+set 66 windowskin b1
+set 66 width 100
+set 66 height 80
+update 66 3
+set 66 contents b4
+update 66 1
+set 66 contents b3
+new 67 viewport - 216 83 108 83
+new 68 window 67
+set 68 windowskin b1
+set 68 width 100
+set 68 height 80
+update 68 3
+set 68 contents b4
+update 68 1
+set 68 contents b3
+set 68 x 2
+new 69 viewport - 324 83 108 83
+new 70 window 69
+set 70 windowskin b1
+set 70 width 100
+set 70 height 80
+update 70 3
+set 70 contents b3
+set 70 ox 30
+set 70 contents nil
+set 70 ox 0
+set 70 contents b3
+new 71 viewport - 432 83 108 83
+new 72 window 71
+set 72 windowskin b1
+set 72 width 100
+set 72 height 80
+update 72 3
+set 72 contents b3
+set 72 visible false
+update 72 1
+set 72 contents nil
+set 72 visible true
+new 73 viewport - 0 166 108 83
+new 74 window 73
+set 74 windowskin b1
+set 74 width 100
+set 74 height 80
+update 74 3
+set 74 contents b3
+set 74 contents nil
+set 74 visible false
+update 74 1
+set 74 visible true
+frame 5ebdfcb59f236625 arrowlatch_1
+end
+scene g16-arrowskin_0
+bitmap b0 noise o 5084 544 416
+bitmap b1 skin t 250 15 128 128
+bitmap b3 noise t 252 150 150
+bitmap b2 skin t 251 15 128 128
+new 1 sprite -
+set 1 bitmap b0
+set 1 z -1000
+new 2 viewport - 0 0 108 83
+new 3 window 2
+set 3 windowskin b1
+set 3 width 100
+set 3 height 80
+update 3 3
+set 3 contents b3
+update 3 1
+set 3 contents nil
+set 3 windowskin b2
+set 3 contents b3
+new 4 viewport - 108 0 108 83
+new 5 window 4
+set 5 windowskin b1
+set 5 width 100
+set 5 height 80
+update 5 3
+set 5 contents b3
+update 5 1
+set 5 contents nil
+set 5 windowskin b2
+update 5 1
+new 6 viewport - 216 0 108 83
+new 7 window 6
+set 7 windowskin b1
+set 7 width 100
+set 7 height 80
+update 7 3
+set 7 contents nil
+set 7 windowskin b2
+set 7 contents b3
+new 8 viewport - 324 0 108 83
+new 9 window 8
+set 9 windowskin b1
+set 9 width 100
+set 9 height 80
+update 9 3
+set 9 contents b3
+update 9 1
+set 9 contents nil
+set 9 windowskin nil
+new 10 viewport - 432 0 108 83
+new 11 window 10
+set 11 windowskin b1
+set 11 width 100
+set 11 height 80
+update 11 3
+set 11 contents b3
+update 11 1
+set 11 windowskin nil
+new 12 viewport - 0 83 108 83
+new 13 window 12
+set 13 windowskin b1
+set 13 width 100
+set 13 height 80
+update 13 3
+set 13 contents b3
+update 13 1
+set 13 windowskin nil
+update 13 1
+new 14 viewport - 108 83 108 83
+new 15 window 14
+set 15 windowskin b1
+set 15 width 100
+set 15 height 80
+update 15 3
+set 15 contents b3
+update 15 1
+set 15 contents nil
+set 15 windowskin nil
+set 15 windowskin b2
+new 16 viewport - 216 83 108 83
+new 17 window 16
+set 17 windowskin b1
+set 17 width 100
+set 17 height 80
+update 17 3
+set 17 contents b3
+update 17 1
+set 17 contents nil
+set 17 windowskin nil
+set 17 windowskin b2
+set 17 contents b3
+new 18 viewport - 324 83 108 83
+new 19 window 18
+set 19 windowskin b1
+set 19 width 100
+set 19 height 80
+update 19 3
+set 19 contents b3
+update 19 1
+set 19 windowskin b2
+new 20 viewport - 432 83 108 83
+new 21 window 20
+set 21 windowskin b1
+set 21 width 100
+set 21 height 80
+update 21 3
+set 21 contents b3
+update 21 1
+set 21 contents nil
+set 21 windowskin b2
+set 21 ox 5
+new 22 viewport - 0 166 108 83
+new 23 window 22
+set 23 windowskin b1
+set 23 width 100
+set 23 height 80
+update 23 3
+set 23 contents b3
+update 23 1
+set 23 contents nil
+set 23 windowskin b2
+set 23 width 90
+new 24 viewport - 108 166 108 83
+new 25 window 24
+set 25 windowskin b1
+set 25 width 100
+set 25 height 80
+update 25 3
+set 25 contents b3
+update 25 1
+set 25 windowskin nil
+set 25 contents nil
+set 25 windowskin b2
+new 26 viewport - 216 166 108 83
+new 27 window 26
+set 27 windowskin b1
+set 27 width 100
+set 27 height 80
+update 27 3
+set 27 contents b3
+update 27 1
+set 27 contents nil
+set 27 windowskin b1
+new 28 viewport - 324 166 108 83
+new 29 window 28
+set 29 windowskin b1
+set 29 width 100
+set 29 height 80
+update 29 3
+set 29 contents b3
+set 29 pause true
+update 29 1
+update 29 1
+set 29 contents nil
+set 29 windowskin b2
+new 30 viewport - 432 166 108 83
+new 31 window 30
+set 31 windowskin b1
+set 31 width 100
+set 31 height 80
+update 31 3
+set 31 contents b3
+set 31 cursor_rect rect 0 0 40 30
+update 31 1
+set 31 contents nil
+set 31 windowskin b2
+new 32 viewport - 0 249 108 83
+new 33 window 32
+set 33 windowskin b1
+set 33 width 100
+set 33 height 80
+update 33 3
+set 33 contents b3
+set 33 pause true
+set 33 cursor_rect rect 0 0 40 30
+update 33 1
+update 33 1
+set 33 windowskin nil
+new 34 viewport - 108 249 108 83
+new 35 window 34
+set 35 windowskin b1
+set 35 width 100
+set 35 height 80
+update 35 3
+set 35 contents b3
+update 35 1
+set 35 contents nil
+set 35 windowskin b2
+set 35 opacity 0
+new 36 viewport - 216 249 108 83
+new 37 window 36
+set 37 windowskin b1
+set 37 width 100
+set 37 height 80
+update 37 3
+set 37 contents b3
+update 37 1
+set 37 contents nil
+set 37 windowskin b2
+set 37 contents_opacity 0
+new 38 viewport - 324 249 108 83
+new 39 window 38
+set 39 windowskin b1
+set 39 width 100
+set 39 height 80
+update 39 3
+set 39 contents b3
+update 39 1
+set 39 contents nil
+set 39 windowskin b2
+set 39 openness 254
+new 40 viewport - 432 249 108 83
+new 41 window 40
+set 41 windowskin b1
+set 41 width 100
+set 41 height 80
+update 41 3
+set 41 contents b3
+update 41 1
+set 41 contents nil
+set 41 windowskin b2
+set 41 visible false
+frame 7476fffffde50246 arrowskin_0
+end
+scene g17-blt_pairs_0
+bitmap b0 noise o 5090 544 416
+bitmap b1 exc 128 128
+new 1 sprite -
+set 1 bitmap b0
+set 1 z -1000
+new 2 window -
+set 2 windowskin b1
+set 2 x 0
+set 2 y 0
+set 2 width 20
+set 2 height 40
+set 2 back_opacity 0
+new 3 window -
+set 3 windowskin b1
+set 3 x 0
+set 3 y 62
+set 3 width 50
+set 3 height 36
+set 3 opacity 0
+set 3 cursor_rect rect -14 -14 3 20
+new 4 window -
+set 4 windowskin b1
+set 4 x 54
+set 4 y 0
+set 4 width 20
+set 4 height 40
+set 4 back_opacity 0
+new 5 window -
+set 5 windowskin b1
+set 5 x 54
+set 5 y 62
+set 5 width 50
+set 5 height 36
+set 5 opacity 0
+set 5 cursor_rect rect -13 -14 2 2
+new 6 window -
+set 6 windowskin b1
+set 6 x 108
+set 6 y 0
+set 6 width 20
+set 6 height 40
+set 6 back_opacity 0
+new 7 window -
+set 7 windowskin b1
+set 7 x 108
+set 7 y 62
+set 7 width 50
+set 7 height 36
+set 7 opacity 0
+set 7 cursor_rect rect -12 -14 3 3
+new 8 window -
+set 8 windowskin b1
+set 8 x 162
+set 8 y 0
+set 8 width 20
+set 8 height 40
+set 8 back_opacity 0
+new 9 window -
+set 9 windowskin b1
+set 9 x 162
+set 9 y 62
+set 9 width 50
+set 9 height 36
+set 9 opacity 0
+set 9 cursor_rect rect -11 -14 20 3
+new 10 window -
+set 10 windowskin b1
+set 10 x 216
+set 10 y 0
+set 10 width 24
+set 10 height 24
+set 10 back_opacity 0
+new 11 window -
+set 11 windowskin b1
+set 11 x 216
+set 11 y 62
+set 11 width 50
+set 11 height 36
+set 11 opacity 0
+set 11 cursor_rect rect -10 -14 3 20
+new 12 window -
+set 12 windowskin b1
+set 12 x 270
+set 12 y 0
+set 12 width 24
+set 12 height 24
+set 12 back_opacity 0
+new 13 window -
+set 13 windowskin b1
+set 13 x 270
+set 13 y 62
+set 13 width 50
+set 13 height 36
+set 13 opacity 0
+set 13 cursor_rect rect -9 -14 2 2
+new 14 window -
+set 14 windowskin b1
+set 14 x 324
+set 14 y 0
+set 14 width 24
+set 14 height 24
+set 14 back_opacity 0
+new 15 window -
+set 15 windowskin b1
+set 15 x 324
+set 15 y 62
+set 15 width 50
+set 15 height 36
+set 15 opacity 0
+set 15 cursor_rect rect -8 -14 3 3
+new 16 window -
+set 16 windowskin b1
+set 16 x 378
+set 16 y 0
+set 16 width 24
+set 16 height 24
+set 16 back_opacity 0
+new 17 window -
+set 17 windowskin b1
+set 17 x 378
+set 17 y 62
+set 17 width 50
+set 17 height 36
+set 17 opacity 0
+set 17 cursor_rect rect -7 -14 20 3
+new 18 window -
+set 18 windowskin b1
+set 18 x 432
+set 18 y 0
+set 18 width 17
+set 18 height 33
+set 18 back_opacity 0
+new 19 window -
+set 19 windowskin b1
+set 19 x 432
+set 19 y 62
+set 19 width 50
+set 19 height 36
+set 19 opacity 0
+set 19 cursor_rect rect -6 -14 3 20
+new 20 window -
+set 20 windowskin b1
+set 20 x 486
+set 20 y 0
+set 20 width 17
+set 20 height 33
+set 20 back_opacity 0
+new 21 window -
+set 21 windowskin b1
+set 21 x 486
+set 21 y 62
+set 21 width 50
+set 21 height 36
+set 21 opacity 0
+set 21 cursor_rect rect -5 -14 2 2
+new 22 window -
+set 22 windowskin b1
+set 22 x 0
+set 22 y 100
+set 22 width 17
+set 22 height 33
+set 22 back_opacity 0
+new 23 window -
+set 23 windowskin b1
+set 23 x 0
+set 23 y 162
+set 23 width 50
+set 23 height 36
+set 23 opacity 0
+set 23 cursor_rect rect -14 -14 3 3
+new 24 window -
+set 24 windowskin b1
+set 24 x 54
+set 24 y 100
+set 24 width 17
+set 24 height 33
+set 24 back_opacity 0
+new 25 window -
+set 25 windowskin b1
+set 25 x 54
+set 25 y 162
+set 25 width 50
+set 25 height 36
+set 25 opacity 0
+set 25 cursor_rect rect -13 -14 20 3
+new 26 window -
+set 26 windowskin b1
+set 26 x 108
+set 26 y 100
+set 26 width 31
+set 26 height 31
+set 26 back_opacity 0
+new 27 window -
+set 27 windowskin b1
+set 27 x 108
+set 27 y 162
+set 27 width 50
+set 27 height 36
+set 27 opacity 0
+set 27 cursor_rect rect -12 -14 3 20
+new 28 window -
+set 28 windowskin b1
+set 28 x 162
+set 28 y 100
+set 28 width 31
+set 28 height 31
+set 28 back_opacity 0
+new 29 window -
+set 29 windowskin b1
+set 29 x 162
+set 29 y 162
+set 29 width 50
+set 29 height 36
+set 29 opacity 0
+set 29 cursor_rect rect -11 -14 2 2
+new 30 window -
+set 30 windowskin b1
+set 30 x 216
+set 30 y 100
+set 30 width 31
+set 30 height 31
+set 30 back_opacity 0
+new 31 window -
+set 31 windowskin b1
+set 31 x 216
+set 31 y 162
+set 31 width 50
+set 31 height 36
+set 31 opacity 0
+set 31 cursor_rect rect -10 -14 3 3
+new 32 window -
+set 32 windowskin b1
+set 32 x 270
+set 32 y 100
+set 32 width 31
+set 32 height 31
+set 32 back_opacity 0
+new 33 window -
+set 33 windowskin b1
+set 33 x 270
+set 33 y 162
+set 33 width 50
+set 33 height 36
+set 33 opacity 0
+set 33 cursor_rect rect -9 -14 20 3
+new 34 window -
+set 34 windowskin b1
+set 34 x 324
+set 34 y 100
+set 34 width 18
+set 34 height 18
+set 34 back_opacity 0
+new 35 window -
+set 35 windowskin b1
+set 35 x 324
+set 35 y 162
+set 35 width 50
+set 35 height 36
+set 35 opacity 0
+set 35 cursor_rect rect -8 -14 3 20
+new 36 window -
+set 36 windowskin b1
+set 36 x 378
+set 36 y 100
+set 36 width 18
+set 36 height 18
+set 36 back_opacity 0
+new 37 window -
+set 37 windowskin b1
+set 37 x 378
+set 37 y 162
+set 37 width 50
+set 37 height 36
+set 37 opacity 0
+set 37 cursor_rect rect -7 -14 2 2
+new 38 window -
+set 38 windowskin b1
+set 38 x 432
+set 38 y 100
+set 38 width 18
+set 38 height 18
+set 38 back_opacity 0
+new 39 window -
+set 39 windowskin b1
+set 39 x 432
+set 39 y 162
+set 39 width 50
+set 39 height 36
+set 39 opacity 0
+set 39 cursor_rect rect -6 -14 3 3
+new 40 window -
+set 40 windowskin b1
+set 40 x 486
+set 40 y 100
+set 40 width 18
+set 40 height 18
+set 40 back_opacity 0
+new 41 window -
+set 41 windowskin b1
+set 41 x 486
+set 41 y 162
+set 41 width 50
+set 41 height 36
+set 41 opacity 0
+set 41 cursor_rect rect -5 -14 20 3
+new 42 window -
+set 42 windowskin b1
+set 42 x 0
+set 42 y 200
+set 42 width 16
+set 42 height 40
+set 42 back_opacity 0
+new 43 window -
+set 43 windowskin b1
+set 43 x 0
+set 43 y 262
+set 43 width 50
+set 43 height 36
+set 43 opacity 0
+set 43 cursor_rect rect -14 -14 3 20
+new 44 window -
+set 44 windowskin b1
+set 44 x 54
+set 44 y 200
+set 44 width 16
+set 44 height 40
+set 44 back_opacity 0
+new 45 window -
+set 45 windowskin b1
+set 45 x 54
+set 45 y 262
+set 45 width 50
+set 45 height 36
+set 45 opacity 0
+set 45 cursor_rect rect -13 -14 2 2
+new 46 window -
+set 46 windowskin b1
+set 46 x 108
+set 46 y 200
+set 46 width 16
+set 46 height 40
+set 46 back_opacity 0
+new 47 window -
+set 47 windowskin b1
+set 47 x 108
+set 47 y 262
+set 47 width 50
+set 47 height 36
+set 47 opacity 0
+set 47 cursor_rect rect -12 -14 3 3
+new 48 window -
+set 48 windowskin b1
+set 48 x 162
+set 48 y 200
+set 48 width 16
+set 48 height 40
+set 48 back_opacity 0
+new 49 window -
+set 49 windowskin b1
+set 49 x 162
+set 49 y 262
+set 49 width 50
+set 49 height 36
+set 49 opacity 0
+set 49 cursor_rect rect -11 -14 20 3
+new 50 window -
+set 50 windowskin b1
+set 50 x 216
+set 50 y 200
+set 50 width 30
+set 50 height 20
+set 50 back_opacity 0
+new 51 window -
+set 51 windowskin b1
+set 51 x 216
+set 51 y 262
+set 51 width 50
+set 51 height 36
+set 51 opacity 0
+set 51 cursor_rect rect -10 -14 3 20
+new 52 window -
+set 52 windowskin b1
+set 52 x 270
+set 52 y 200
+set 52 width 30
+set 52 height 20
+set 52 back_opacity 0
+new 53 window -
+set 53 windowskin b1
+set 53 x 270
+set 53 y 262
+set 53 width 50
+set 53 height 36
+set 53 opacity 0
+set 53 cursor_rect rect -9 -14 2 2
+new 54 window -
+set 54 windowskin b1
+set 54 x 324
+set 54 y 200
+set 54 width 30
+set 54 height 20
+set 54 back_opacity 0
+new 55 window -
+set 55 windowskin b1
+set 55 x 324
+set 55 y 262
+set 55 width 50
+set 55 height 36
+set 55 opacity 0
+set 55 cursor_rect rect -8 -14 3 3
+new 56 window -
+set 56 windowskin b1
+set 56 x 378
+set 56 y 200
+set 56 width 30
+set 56 height 20
+set 56 back_opacity 0
+new 57 window -
+set 57 windowskin b1
+set 57 x 378
+set 57 y 262
+set 57 width 50
+set 57 height 36
+set 57 opacity 0
+set 57 cursor_rect rect -7 -14 20 3
+new 58 window -
+set 58 windowskin b1
+set 58 x 432
+set 58 y 200
+set 58 width 25
+set 58 height 60
+set 58 back_opacity 0
+new 59 window -
+set 59 windowskin b1
+set 59 x 432
+set 59 y 262
+set 59 width 50
+set 59 height 36
+set 59 opacity 0
+set 59 cursor_rect rect -6 -14 3 20
+new 60 window -
+set 60 windowskin b1
+set 60 x 486
+set 60 y 200
+set 60 width 25
+set 60 height 60
+set 60 back_opacity 0
+new 61 window -
+set 61 windowskin b1
+set 61 x 486
+set 61 y 262
+set 61 width 50
+set 61 height 36
+set 61 opacity 0
+set 61 cursor_rect rect -5 -14 2 2
+new 62 window -
+set 62 windowskin b1
+set 62 x 0
+set 62 y 300
+set 62 width 25
+set 62 height 60
+set 62 back_opacity 0
+new 63 window -
+set 63 windowskin b1
+set 63 x 0
+set 63 y 362
+set 63 width 50
+set 63 height 36
+set 63 opacity 0
+set 63 cursor_rect rect -14 -14 3 3
+new 64 window -
+set 64 windowskin b1
+set 64 x 54
+set 64 y 300
+set 64 width 25
+set 64 height 60
+set 64 back_opacity 0
+new 65 window -
+set 65 windowskin b1
+set 65 x 54
+set 65 y 362
+set 65 width 50
+set 65 height 36
+set 65 opacity 0
+set 65 cursor_rect rect -13 -14 20 3
+new 66 window -
+set 66 windowskin b1
+set 66 x 108
+set 66 y 300
+set 66 width 22
+set 66 height 16
+set 66 back_opacity 0
+new 67 window -
+set 67 windowskin b1
+set 67 x 108
+set 67 y 362
+set 67 width 50
+set 67 height 36
+set 67 opacity 0
+set 67 cursor_rect rect -12 -14 3 20
+new 68 window -
+set 68 windowskin b1
+set 68 x 162
+set 68 y 300
+set 68 width 22
+set 68 height 16
+set 68 back_opacity 0
+new 69 window -
+set 69 windowskin b1
+set 69 x 162
+set 69 y 362
+set 69 width 50
+set 69 height 36
+set 69 opacity 0
+set 69 cursor_rect rect -11 -14 2 2
+new 70 window -
+set 70 windowskin b1
+set 70 x 216
+set 70 y 300
+set 70 width 22
+set 70 height 16
+set 70 back_opacity 0
+new 71 window -
+set 71 windowskin b1
+set 71 x 216
+set 71 y 362
+set 71 width 50
+set 71 height 36
+set 71 opacity 0
+set 71 cursor_rect rect -10 -14 3 3
+new 72 window -
+set 72 windowskin b1
+set 72 x 270
+set 72 y 300
+set 72 width 22
+set 72 height 16
+set 72 back_opacity 0
+new 73 window -
+set 73 windowskin b1
+set 73 x 270
+set 73 y 362
+set 73 width 50
+set 73 height 36
+set 73 opacity 0
+set 73 cursor_rect rect -9 -14 20 3
+new 74 window -
+set 74 windowskin b1
+set 74 x 324
+set 74 y 300
+set 74 width 28
+set 74 height 29
+set 74 back_opacity 0
+new 75 window -
+set 75 windowskin b1
+set 75 x 324
+set 75 y 362
+set 75 width 50
+set 75 height 36
+set 75 opacity 0
+set 75 cursor_rect rect -8 -14 3 20
+new 76 window -
+set 76 windowskin b1
+set 76 x 378
+set 76 y 300
+set 76 width 28
+set 76 height 29
+set 76 back_opacity 0
+new 77 window -
+set 77 windowskin b1
+set 77 x 378
+set 77 y 362
+set 77 width 50
+set 77 height 36
+set 77 opacity 0
+set 77 cursor_rect rect -7 -14 2 2
+new 78 window -
+set 78 windowskin b1
+set 78 x 432
+set 78 y 300
+set 78 width 28
+set 78 height 29
+set 78 back_opacity 0
+new 79 window -
+set 79 windowskin b1
+set 79 x 432
+set 79 y 362
+set 79 width 50
+set 79 height 36
+set 79 opacity 0
+set 79 cursor_rect rect -6 -14 3 3
+new 80 window -
+set 80 windowskin b1
+set 80 x 486
+set 80 y 300
+set 80 width 28
+set 80 height 29
+set 80 back_opacity 0
+new 81 window -
+set 81 windowskin b1
+set 81 x 486
+set 81 y 362
+set 81 width 50
+set 81 height 36
+set 81 opacity 0
+set 81 cursor_rect rect -5 -14 20 3
+frame 570121a2b8ef8542 blt_pairs_0
+end
+scene g17-blt_pairs_1
+bitmap b0 noise o 5090 544 416
+bitmap b2 grid 128 128
+new 82 sprite -
+set 82 bitmap b0
+set 82 z -1000
+new 83 window -
+set 83 windowskin b2
+set 83 x 0
+set 83 y 0
+set 83 width 20
+set 83 height 40
+set 83 back_opacity 0
+new 84 window -
+set 84 windowskin b2
+set 84 x 0
+set 84 y 62
+set 84 width 50
+set 84 height 36
+set 84 opacity 0
+set 84 cursor_rect rect -14 -14 3 20
+new 85 window -
+set 85 windowskin b2
+set 85 x 54
+set 85 y 0
+set 85 width 20
+set 85 height 40
+set 85 back_opacity 0
+new 86 window -
+set 86 windowskin b2
+set 86 x 54
+set 86 y 62
+set 86 width 50
+set 86 height 36
+set 86 opacity 0
+set 86 cursor_rect rect -13 -14 2 2
+new 87 window -
+set 87 windowskin b2
+set 87 x 108
+set 87 y 0
+set 87 width 20
+set 87 height 40
+set 87 back_opacity 0
+new 88 window -
+set 88 windowskin b2
+set 88 x 108
+set 88 y 62
+set 88 width 50
+set 88 height 36
+set 88 opacity 0
+set 88 cursor_rect rect -12 -14 3 3
+new 89 window -
+set 89 windowskin b2
+set 89 x 162
+set 89 y 0
+set 89 width 20
+set 89 height 40
+set 89 back_opacity 0
+new 90 window -
+set 90 windowskin b2
+set 90 x 162
+set 90 y 62
+set 90 width 50
+set 90 height 36
+set 90 opacity 0
+set 90 cursor_rect rect -11 -14 20 3
+new 91 window -
+set 91 windowskin b2
+set 91 x 216
+set 91 y 0
+set 91 width 24
+set 91 height 24
+set 91 back_opacity 0
+new 92 window -
+set 92 windowskin b2
+set 92 x 216
+set 92 y 62
+set 92 width 50
+set 92 height 36
+set 92 opacity 0
+set 92 cursor_rect rect -10 -14 3 20
+new 93 window -
+set 93 windowskin b2
+set 93 x 270
+set 93 y 0
+set 93 width 24
+set 93 height 24
+set 93 back_opacity 0
+new 94 window -
+set 94 windowskin b2
+set 94 x 270
+set 94 y 62
+set 94 width 50
+set 94 height 36
+set 94 opacity 0
+set 94 cursor_rect rect -9 -14 2 2
+new 95 window -
+set 95 windowskin b2
+set 95 x 324
+set 95 y 0
+set 95 width 24
+set 95 height 24
+set 95 back_opacity 0
+new 96 window -
+set 96 windowskin b2
+set 96 x 324
+set 96 y 62
+set 96 width 50
+set 96 height 36
+set 96 opacity 0
+set 96 cursor_rect rect -8 -14 3 3
+new 97 window -
+set 97 windowskin b2
+set 97 x 378
+set 97 y 0
+set 97 width 24
+set 97 height 24
+set 97 back_opacity 0
+new 98 window -
+set 98 windowskin b2
+set 98 x 378
+set 98 y 62
+set 98 width 50
+set 98 height 36
+set 98 opacity 0
+set 98 cursor_rect rect -7 -14 20 3
+new 99 window -
+set 99 windowskin b2
+set 99 x 432
+set 99 y 0
+set 99 width 17
+set 99 height 33
+set 99 back_opacity 0
+new 100 window -
+set 100 windowskin b2
+set 100 x 432
+set 100 y 62
+set 100 width 50
+set 100 height 36
+set 100 opacity 0
+set 100 cursor_rect rect -6 -14 3 20
+new 101 window -
+set 101 windowskin b2
+set 101 x 486
+set 101 y 0
+set 101 width 17
+set 101 height 33
+set 101 back_opacity 0
+new 102 window -
+set 102 windowskin b2
+set 102 x 486
+set 102 y 62
+set 102 width 50
+set 102 height 36
+set 102 opacity 0
+set 102 cursor_rect rect -5 -14 2 2
+new 103 window -
+set 103 windowskin b2
+set 103 x 0
+set 103 y 100
+set 103 width 17
+set 103 height 33
+set 103 back_opacity 0
+new 104 window -
+set 104 windowskin b2
+set 104 x 0
+set 104 y 162
+set 104 width 50
+set 104 height 36
+set 104 opacity 0
+set 104 cursor_rect rect -14 -14 3 3
+new 105 window -
+set 105 windowskin b2
+set 105 x 54
+set 105 y 100
+set 105 width 17
+set 105 height 33
+set 105 back_opacity 0
+new 106 window -
+set 106 windowskin b2
+set 106 x 54
+set 106 y 162
+set 106 width 50
+set 106 height 36
+set 106 opacity 0
+set 106 cursor_rect rect -13 -14 20 3
+new 107 window -
+set 107 windowskin b2
+set 107 x 108
+set 107 y 100
+set 107 width 31
+set 107 height 31
+set 107 back_opacity 0
+new 108 window -
+set 108 windowskin b2
+set 108 x 108
+set 108 y 162
+set 108 width 50
+set 108 height 36
+set 108 opacity 0
+set 108 cursor_rect rect -12 -14 3 20
+new 109 window -
+set 109 windowskin b2
+set 109 x 162
+set 109 y 100
+set 109 width 31
+set 109 height 31
+set 109 back_opacity 0
+new 110 window -
+set 110 windowskin b2
+set 110 x 162
+set 110 y 162
+set 110 width 50
+set 110 height 36
+set 110 opacity 0
+set 110 cursor_rect rect -11 -14 2 2
+new 111 window -
+set 111 windowskin b2
+set 111 x 216
+set 111 y 100
+set 111 width 31
+set 111 height 31
+set 111 back_opacity 0
+new 112 window -
+set 112 windowskin b2
+set 112 x 216
+set 112 y 162
+set 112 width 50
+set 112 height 36
+set 112 opacity 0
+set 112 cursor_rect rect -10 -14 3 3
+new 113 window -
+set 113 windowskin b2
+set 113 x 270
+set 113 y 100
+set 113 width 31
+set 113 height 31
+set 113 back_opacity 0
+new 114 window -
+set 114 windowskin b2
+set 114 x 270
+set 114 y 162
+set 114 width 50
+set 114 height 36
+set 114 opacity 0
+set 114 cursor_rect rect -9 -14 20 3
+new 115 window -
+set 115 windowskin b2
+set 115 x 324
+set 115 y 100
+set 115 width 18
+set 115 height 18
+set 115 back_opacity 0
+new 116 window -
+set 116 windowskin b2
+set 116 x 324
+set 116 y 162
+set 116 width 50
+set 116 height 36
+set 116 opacity 0
+set 116 cursor_rect rect -8 -14 3 20
+new 117 window -
+set 117 windowskin b2
+set 117 x 378
+set 117 y 100
+set 117 width 18
+set 117 height 18
+set 117 back_opacity 0
+new 118 window -
+set 118 windowskin b2
+set 118 x 378
+set 118 y 162
+set 118 width 50
+set 118 height 36
+set 118 opacity 0
+set 118 cursor_rect rect -7 -14 2 2
+new 119 window -
+set 119 windowskin b2
+set 119 x 432
+set 119 y 100
+set 119 width 18
+set 119 height 18
+set 119 back_opacity 0
+new 120 window -
+set 120 windowskin b2
+set 120 x 432
+set 120 y 162
+set 120 width 50
+set 120 height 36
+set 120 opacity 0
+set 120 cursor_rect rect -6 -14 3 3
+new 121 window -
+set 121 windowskin b2
+set 121 x 486
+set 121 y 100
+set 121 width 18
+set 121 height 18
+set 121 back_opacity 0
+new 122 window -
+set 122 windowskin b2
+set 122 x 486
+set 122 y 162
+set 122 width 50
+set 122 height 36
+set 122 opacity 0
+set 122 cursor_rect rect -5 -14 20 3
+new 123 window -
+set 123 windowskin b2
+set 123 x 0
+set 123 y 200
+set 123 width 16
+set 123 height 40
+set 123 back_opacity 0
+new 124 window -
+set 124 windowskin b2
+set 124 x 0
+set 124 y 262
+set 124 width 50
+set 124 height 36
+set 124 opacity 0
+set 124 cursor_rect rect -14 -14 3 20
+new 125 window -
+set 125 windowskin b2
+set 125 x 54
+set 125 y 200
+set 125 width 16
+set 125 height 40
+set 125 back_opacity 0
+new 126 window -
+set 126 windowskin b2
+set 126 x 54
+set 126 y 262
+set 126 width 50
+set 126 height 36
+set 126 opacity 0
+set 126 cursor_rect rect -13 -14 2 2
+new 127 window -
+set 127 windowskin b2
+set 127 x 108
+set 127 y 200
+set 127 width 16
+set 127 height 40
+set 127 back_opacity 0
+new 128 window -
+set 128 windowskin b2
+set 128 x 108
+set 128 y 262
+set 128 width 50
+set 128 height 36
+set 128 opacity 0
+set 128 cursor_rect rect -12 -14 3 3
+new 129 window -
+set 129 windowskin b2
+set 129 x 162
+set 129 y 200
+set 129 width 16
+set 129 height 40
+set 129 back_opacity 0
+new 130 window -
+set 130 windowskin b2
+set 130 x 162
+set 130 y 262
+set 130 width 50
+set 130 height 36
+set 130 opacity 0
+set 130 cursor_rect rect -11 -14 20 3
+new 131 window -
+set 131 windowskin b2
+set 131 x 216
+set 131 y 200
+set 131 width 30
+set 131 height 20
+set 131 back_opacity 0
+new 132 window -
+set 132 windowskin b2
+set 132 x 216
+set 132 y 262
+set 132 width 50
+set 132 height 36
+set 132 opacity 0
+set 132 cursor_rect rect -10 -14 3 20
+new 133 window -
+set 133 windowskin b2
+set 133 x 270
+set 133 y 200
+set 133 width 30
+set 133 height 20
+set 133 back_opacity 0
+new 134 window -
+set 134 windowskin b2
+set 134 x 270
+set 134 y 262
+set 134 width 50
+set 134 height 36
+set 134 opacity 0
+set 134 cursor_rect rect -9 -14 2 2
+new 135 window -
+set 135 windowskin b2
+set 135 x 324
+set 135 y 200
+set 135 width 30
+set 135 height 20
+set 135 back_opacity 0
+new 136 window -
+set 136 windowskin b2
+set 136 x 324
+set 136 y 262
+set 136 width 50
+set 136 height 36
+set 136 opacity 0
+set 136 cursor_rect rect -8 -14 3 3
+new 137 window -
+set 137 windowskin b2
+set 137 x 378
+set 137 y 200
+set 137 width 30
+set 137 height 20
+set 137 back_opacity 0
+new 138 window -
+set 138 windowskin b2
+set 138 x 378
+set 138 y 262
+set 138 width 50
+set 138 height 36
+set 138 opacity 0
+set 138 cursor_rect rect -7 -14 20 3
+new 139 window -
+set 139 windowskin b2
+set 139 x 432
+set 139 y 200
+set 139 width 25
+set 139 height 60
+set 139 back_opacity 0
+new 140 window -
+set 140 windowskin b2
+set 140 x 432
+set 140 y 262
+set 140 width 50
+set 140 height 36
+set 140 opacity 0
+set 140 cursor_rect rect -6 -14 3 20
+new 141 window -
+set 141 windowskin b2
+set 141 x 486
+set 141 y 200
+set 141 width 25
+set 141 height 60
+set 141 back_opacity 0
+new 142 window -
+set 142 windowskin b2
+set 142 x 486
+set 142 y 262
+set 142 width 50
+set 142 height 36
+set 142 opacity 0
+set 142 cursor_rect rect -5 -14 2 2
+new 143 window -
+set 143 windowskin b2
+set 143 x 0
+set 143 y 300
+set 143 width 25
+set 143 height 60
+set 143 back_opacity 0
+new 144 window -
+set 144 windowskin b2
+set 144 x 0
+set 144 y 362
+set 144 width 50
+set 144 height 36
+set 144 opacity 0
+set 144 cursor_rect rect -14 -14 3 3
+new 145 window -
+set 145 windowskin b2
+set 145 x 54
+set 145 y 300
+set 145 width 25
+set 145 height 60
+set 145 back_opacity 0
+new 146 window -
+set 146 windowskin b2
+set 146 x 54
+set 146 y 362
+set 146 width 50
+set 146 height 36
+set 146 opacity 0
+set 146 cursor_rect rect -13 -14 20 3
+new 147 window -
+set 147 windowskin b2
+set 147 x 108
+set 147 y 300
+set 147 width 22
+set 147 height 16
+set 147 back_opacity 0
+new 148 window -
+set 148 windowskin b2
+set 148 x 108
+set 148 y 362
+set 148 width 50
+set 148 height 36
+set 148 opacity 0
+set 148 cursor_rect rect -12 -14 3 20
+new 149 window -
+set 149 windowskin b2
+set 149 x 162
+set 149 y 300
+set 149 width 22
+set 149 height 16
+set 149 back_opacity 0
+new 150 window -
+set 150 windowskin b2
+set 150 x 162
+set 150 y 362
+set 150 width 50
+set 150 height 36
+set 150 opacity 0
+set 150 cursor_rect rect -11 -14 2 2
+new 151 window -
+set 151 windowskin b2
+set 151 x 216
+set 151 y 300
+set 151 width 22
+set 151 height 16
+set 151 back_opacity 0
+new 152 window -
+set 152 windowskin b2
+set 152 x 216
+set 152 y 362
+set 152 width 50
+set 152 height 36
+set 152 opacity 0
+set 152 cursor_rect rect -10 -14 3 3
+new 153 window -
+set 153 windowskin b2
+set 153 x 270
+set 153 y 300
+set 153 width 22
+set 153 height 16
+set 153 back_opacity 0
+new 154 window -
+set 154 windowskin b2
+set 154 x 270
+set 154 y 362
+set 154 width 50
+set 154 height 36
+set 154 opacity 0
+set 154 cursor_rect rect -9 -14 20 3
+new 155 window -
+set 155 windowskin b2
+set 155 x 324
+set 155 y 300
+set 155 width 28
+set 155 height 29
+set 155 back_opacity 0
+new 156 window -
+set 156 windowskin b2
+set 156 x 324
+set 156 y 362
+set 156 width 50
+set 156 height 36
+set 156 opacity 0
+set 156 cursor_rect rect -8 -14 3 20
+new 157 window -
+set 157 windowskin b2
+set 157 x 378
+set 157 y 300
+set 157 width 28
+set 157 height 29
+set 157 back_opacity 0
+new 158 window -
+set 158 windowskin b2
+set 158 x 378
+set 158 y 362
+set 158 width 50
+set 158 height 36
+set 158 opacity 0
+set 158 cursor_rect rect -7 -14 2 2
+new 159 window -
+set 159 windowskin b2
+set 159 x 432
+set 159 y 300
+set 159 width 28
+set 159 height 29
+set 159 back_opacity 0
+new 160 window -
+set 160 windowskin b2
+set 160 x 432
+set 160 y 362
+set 160 width 50
+set 160 height 36
+set 160 opacity 0
+set 160 cursor_rect rect -6 -14 3 3
+new 161 window -
+set 161 windowskin b2
+set 161 x 486
+set 161 y 300
+set 161 width 28
+set 161 height 29
+set 161 back_opacity 0
+new 162 window -
+set 162 windowskin b2
+set 162 x 486
+set 162 y 362
+set 162 width 50
+set 162 height 36
+set 162 opacity 0
+set 162 cursor_rect rect -5 -14 20 3
+frame 45b92287f3e80aa1 blt_pairs_1
+end

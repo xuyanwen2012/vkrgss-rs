@@ -1,0 +1,43 @@
+[package]
+name = "vkrgss-guest-main-rgss3"
+description = "The main of a guest of vkrgss over Ruby 1.9.2: the source of vkrgss-guest-main"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+build = "build.rs"
+
+# The one source of the main of a guest, compiled here over the second interpreter. The
+# documentation belongs to `vkrgss-guest-main`.
+[lib]
+path = "../vkrgss-guest-main/src/lib.rs"
+doc = false
+doctest = false
+
+[lints]
+workspace = true
+
+# The dependencies of `vkrgss-guest-main`, with the binding and the interpreter crate
+# replaced; a test of `xtask` compares the two lists.
+[dependencies]
+anyhow.workspace = true
+tracing.workspace = true
+# The keys stay `vkrgss-binding` and `vkrgss-ruby-sys`, so that the source goes on saying
+# `vkrgss_binding::` and `vkrgss_ruby_sys::`.
+vkrgss-binding = { package = "vkrgss-binding-rgss3", path = "../vkrgss-binding-rgss3" }
+vkrgss-core.workspace = true
+vkrgss-guest.workspace = true
+vkrgss-proto.workspace = true
+vkrgss-ruby-sys = { package = "vkrgss-ruby192-sys", path = "../vkrgss-ruby192-sys" }
+vkrgss-text.workspace = true
+vkrgss-vfs.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

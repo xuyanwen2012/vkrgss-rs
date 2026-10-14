@@ -1,0 +1,639 @@
+//! The calls into the interpreter that the binding makes, each in a form that cannot jump.
+//!
+//! Ruby raises with `longjmp`, and most functions of the C API can raise, if only
+//! `NoMemoryError`. Following the rule of `vkrgss-ruby-sys`, every such call here runs under
+//! `rb_protect`: the operation is plain data in a [`Call`] on the caller's stack, and one
+//! `extern "C"` function that holds nothing with a destructor performs it. What comes back
+//! is a `Result`, which a host function passes on with `?`.
+//!
+//! The functions of this module are safe to call inside the crate under one condition that
+//! every caller keeps: each `VALUE` passed in is live. In a host function that is the
+//! receiver, an argument, or a value one of these functions returned during the same call
+//! and that has been in a local since, where the collector's stack scan finds it.
+//!
+//! # Text and bytes
+//!
+//! A string of Ruby 1.9 has an encoding, so every string the binding creates is made by
+//! [`bytes_new`] (ASCII-8BIT) or by [`text_new`] (UTF-8); over Ruby 1.8 the two give the
+//! same string. The rule: a string is bytes unless the interpreter is going to read it as
+//! script source, or it is the path of the script archive. Serialized forms, `to_s`, font
+//! names, data for `Marshal`, buffers and file names are bytes, as measured on the original
+//! runtime of RGSS3, whose classes make ASCII-8BIT strings. Reading a string does not look
+//! at its label: [`bytes`] takes the bytes and [`text`] those bytes with invalid UTF-8
+//! replaced.
+
+use std::ffi::{CStr, c_char, c_long, c_void};
+
+use vkrgss_ruby_sys::ffi::{self, VALUE};
+use vkrgss_ruby_sys::{Arity, HostResult, Raise, Raised, Ruby};
+
+/// Whether the interpreter is Ruby 1.9, that of RGSS3, and not Ruby 1.8. This is the one
+/// place where the binding learns its interpreter; what depends on it asks here.
+pub(crate) const RUBY_19: bool =
+    matches!(vkrgss_ruby_sys::RUBY_API, vkrgss_ruby_sys::RubyApi::Ruby19);
+
+/// The allocator of a class, as `rb_define_alloc_func` takes it.
+pub(crate) type AllocFn = unsafe extern "C" fn(VALUE) -> VALUE;
+
+/// One operation of the C API that can raise.
+#[derive(Clone, Copy)]
+enum Op {
+    /// `NUM2LONG`, into [`Call::long`].
+    Long(VALUE),
+    /// `NUM2ULONG`, into [`Call::long`].
+    ULong(VALUE),
+    /// `NUM2DBL`, into [`Call::double`].
+    Double(VALUE),
+    /// `StringValue`: the value, or what its `to_str` returns.
+    StringValue(VALUE),
+    /// A new object of the class `Data` that holds `data`.
+    DataNew {
+        data: *mut c_void,
+        free: ffi::DataFn,
+    },
+    /// The value of a global variable.
+    GlobalGet(*const c_char),
+    /// Overwrites the bytes of a string in place, at most as many as it has.
+    WriteBytes {
+        string: VALUE,
+        bytes: *const u8,
+        len: usize,
+    },
+    /// A new `Float`.
+    Float(f64),
+    /// A new instance from the class's allocator, without `initialize`.
+    Alloc(VALUE),
+    IvarSet {
+        object: VALUE,
+        name: *const c_char,
+        value: VALUE,
+    },
+    IvarGet {
+        object: VALUE,
+        name: *const c_char,
+    },
+    /// `rb_intern`, which raises when the numbers of symbols run out.
+    Intern(*const c_char),
+    /// The class or module at a path such as `Errno::ENOENT`.
+    ClassAt(*const c_char),
+    /// The name of the value's class, into [`Call::name`]. Naming an anonymous class
+    /// allocates and caches the name in the class, which raises when the class is frozen.
+    ClassName(VALUE),
+    AllocFunc {
+        class: VALUE,
+        function: AllocFn,
+    },
+    /// A new array of new strings.
+    Strings {
+        items: *const (*const c_char, c_long),
+        len: usize,
+    },
+}
+
+/// The plain data of one protected operation: the input and the outputs that are not values.
+struct Call {
+    op: Op,
+    long: c_long,
+    double: f64,
+    /// A NUL-terminated name owned by the interpreter, or null.
+    name: *const c_char,
+}
+
+unsafe extern "C" fn call_body(data: VALUE) -> VALUE {
+    // SAFETY: `perform` passes a pointer to a `Call` that outlives this function, whose
+    // values are live by the condition of this module and whose pointers are valid for the
+    // call. Everything here is the C API on plain data: a raise jumps over no destructor.
+    unsafe {
+        let call = &mut *(data as *mut Call);
+        match call.op {
+            Op::Long(value) => {
+                call.long = ffi::num2long(value);
+                ffi::Qnil
+            }
+            Op::ULong(value) => {
+                call.long = ffi::rb_num2ulong(value) as c_long;
+                ffi::Qnil
+            }
+            Op::Double(value) => {
+                call.double = ffi::rb_num2dbl(value);
+                ffi::Qnil
+            }
+            Op::StringValue(value) => {
+                let mut value = value;
+                ffi::rb_string_value(&mut value)
+            }
+            Op::DataNew { data, free } => {
+                ffi::rb_data_object_alloc(ffi::rb_cData, data, None, Some(free))
+            }
+            Op::GlobalGet(name) => ffi::rb_gv_get(name),
+            Op::WriteBytes { string, bytes, len } => {
+                // Resizing to its own length checks that the string may change, gives it a
+                // buffer of its own when it shares one, and keeps its length and its
+                // encoding label.
+                ffi::rb_str_resize(string, ffi::rstring_len(string));
+                let room = usize::try_from(ffi::rstring_len(string)).unwrap_or(0);
+                std::ptr::copy_nonoverlapping(
+                    bytes,
+                    ffi::rstring_ptr(string).cast(),
+                    len.min(room),
+                );
+                ffi::Qnil
+            }
+            Op::Float(number) => ffi::rb_float_new(number),
+            Op::Alloc(class) => ffi::rb_obj_alloc(class),
+            Op::IvarSet {
+                object,
+                name,
+                value,
+            } => ffi::rb_ivar_set(object, ffi::rb_intern(name), value),
+            Op::IvarGet { object, name } => ffi::rb_attr_get(object, ffi::rb_intern(name)),
+            Op::Intern(name) => {
+                ffi::rb_intern(name);
+                ffi::Qnil
+            }
+            Op::ClassAt(path) => ffi::rb_path2class(path),
+            Op::ClassName(value) => {
+                call.name = ffi::rb_obj_classname(value);
+                ffi::Qnil
+            }
+            Op::AllocFunc { class, function } => {
+                ffi::rb_define_alloc_func(class, function);
+                ffi::Qnil
+            }
+            Op::Strings { items, len } => {
+                let array = ffi::rb_ary_new();
+                let mut index = 0;
+                while index < len {
+                    let (bytes, len) = *items.add(index);
+                    ffi::rb_ary_push(array, ffi::rb_str_new(bytes, len));
+                    index += 1;
+                }
+                array
+            }
+        }
+    }
+}
+
+/// Performs `op` under the interpreter's protection and returns its value and outputs.
+fn perform(_ruby: &Ruby, op: Op) -> Result<(VALUE, Call), Raised> {
+    let mut call = Call {
+        op,
+        long: 0,
+        double: 0.0,
+        name: std::ptr::null(),
+    };
+    // SAFETY: `&Ruby` proves the interpreter thread, and `call_body` fits the contract of
+    // `protect`: it treats its argument as a pointer to `call` and holds nothing with a
+    // destructor.
+    let value = unsafe { vkrgss_ruby_sys::protect(&mut call, call_body) }?;
+    Ok((value, call))
+}
+
+// --- Exception classes ------------------------------------------------------------------------
+
+/// `ArgumentError`.
+pub(crate) fn arg_error(_ruby: &Ruby) -> VALUE {
+    // SAFETY: `&Ruby` proves the thread; the class globals are set once the interpreter runs.
+    unsafe { ffi::rb_eArgError }
+}
+
+/// `TypeError`.
+pub(crate) fn type_error(_ruby: &Ruby) -> VALUE {
+    // SAFETY: as in `arg_error`.
+    unsafe { ffi::rb_eTypeError }
+}
+
+/// `RangeError`.
+pub(crate) fn range_error(_ruby: &Ruby) -> VALUE {
+    // SAFETY: as in `arg_error`.
+    unsafe { ffi::rb_eRangeError }
+}
+
+/// `IOError`.
+pub(crate) fn io_error(_ruby: &Ruby) -> VALUE {
+    // SAFETY: as in `arg_error`.
+    unsafe { ffi::rb_eIOError }
+}
+
+/// `StandardError`.
+pub(crate) fn standard_error(_ruby: &Ruby) -> VALUE {
+    // SAFETY: as in `arg_error`.
+    unsafe { ffi::rb_eStandardError }
+}
+
+/// `Object`.
+pub(crate) fn object_class(_ruby: &Ruby) -> VALUE {
+    // SAFETY: as in `arg_error`.
+    unsafe { ffi::rb_cObject }
+}
+
+/// The class or module at `path`, such as `Errno::ENOENT`.
+pub(crate) fn class_at(ruby: &Ruby, path: &CStr) -> Result<VALUE, Raised> {
+    Ok(perform(ruby, Op::ClassAt(path.as_ptr()))?.0)
+}
+
+/// The name of the value's class, for messages.
+pub(crate) fn class_name(ruby: &Ruby, value: VALUE) -> Result<String, Raised> {
+    let name = perform(ruby, Op::ClassName(value))?.1.name;
+    if name.is_null() {
+        return Ok(String::new());
+    }
+    // SAFETY: the interpreter returned a NUL-terminated name that it owns, held by the
+    // class of the live value; it is copied before anything else runs.
+    Ok(unsafe { CStr::from_ptr(name) }
+        .to_string_lossy()
+        .into_owned())
+}
+
+/// The `TypeError` for a value of the wrong class: `describe` makes the message from the
+/// name of the value's class. A failure to name the class is raised in its place.
+pub(crate) fn wrong_type(
+    ruby: &Ruby,
+    value: VALUE,
+    describe: impl FnOnce(&str) -> String,
+) -> Raise {
+    match class_name(ruby, value) {
+        Ok(name) => Raise::new(type_error(ruby), describe(&name)),
+        Err(raised) => raised.into(),
+    }
+}
+
+// --- Arguments --------------------------------------------------------------------------------
+
+/// Checks the argument count of a method with optional arguments, with Ruby's usual message:
+/// `wrong number of arguments (given for expected)`, an `ArgumentError`.
+pub(crate) fn check_count(
+    ruby: &Ruby,
+    args: &[VALUE],
+    min: usize,
+    max: usize,
+) -> Result<(), Raise> {
+    let expected = if args.len() < min {
+        min
+    } else if args.len() > max {
+        max
+    } else {
+        return Ok(());
+    };
+    Err(Raise::new(
+        arg_error(ruby),
+        format!("wrong number of arguments ({} for {expected})", args.len()),
+    ))
+}
+
+/// Checks the argument count of a method with optional arguments with the message that
+/// names the range: `wrong number of arguments (given for min..max)`, an `ArgumentError`,
+/// as the original runtime of RGSS3 words it for `Font.new` and `Bitmap.new`.
+///
+/// Provenance: oracle measurement 2026-10-13, RGSS301 version 3.0.1.1 and RGSS300 version
+/// 3.0.0.1, `ace-v1-bitmap-REPORT.md` sections 2 and 4.
+pub(crate) fn check_count_range(
+    ruby: &Ruby,
+    args: &[VALUE],
+    min: usize,
+    max: usize,
+) -> Result<(), Raise> {
+    if (min..=max).contains(&args.len()) {
+        return Ok(());
+    }
+    Err(Raise::new(
+        arg_error(ruby),
+        format!(
+            "wrong number of arguments ({} for {min}..{max})",
+            args.len()
+        ),
+    ))
+}
+
+/// Checks the argument count of a method of a value class of RGSS3 with the message of the
+/// original runtime of RGSS3, which reverses Ruby's order: `wrong number of arguments
+/// (expected for given)`, an `ArgumentError`. `expected` is `min` when fewer were given and
+/// `max` when more.
+///
+/// Provenance: oracle measurement 2026-10-13, RGSS301 version 3.0.1.1 and RGSS300 version
+/// 3.0.0.1, `ace-v1-api-REPORT.md` section 0 and `ace-v1-bitmap-REPORT.md` section 3.
+pub(crate) fn check_count_rgss3(
+    ruby: &Ruby,
+    args: &[VALUE],
+    min: usize,
+    max: usize,
+) -> Result<(), Raise> {
+    let expected = if args.len() < min {
+        min
+    } else if args.len() > max {
+        max
+    } else {
+        return Ok(());
+    };
+    Err(Raise::new(
+        arg_error(ruby),
+        format!("wrong number of arguments ({expected} for {})", args.len()),
+    ))
+}
+
+/// Whether the value is a data object, the kind of object every class of the binding makes.
+pub(crate) fn is_data(value: VALUE) -> bool {
+    // SAFETY: the value is live by the condition of this module, and a value that is no
+    // special constant has a type in its header.
+    !ffi::special_const_p(value) && unsafe { ffi::builtin_type(value) } == ffi::T_DATA
+}
+
+/// The `TypeError` of Ruby's own type check for a value that is no data object: `wrong
+/// argument type Fixnum (expected Data)`, with `nil`, `true` and `false` named so and every
+/// other value by its class.
+pub(crate) fn data_expected(ruby: &Ruby, value: VALUE) -> Raise {
+    let message = |name: &str| format!("wrong argument type {name} (expected Data)");
+    match value {
+        ffi::Qnil => Raise::new(type_error(ruby), message("nil")),
+        ffi::Qtrue => Raise::new(type_error(ruby), message("true")),
+        ffi::Qfalse => Raise::new(type_error(ruby), message("false")),
+        _ => wrong_type(ruby, value, message),
+    }
+}
+
+/// The `ArgumentError` of a method that takes one of several argument counts, `accepted` in
+/// ascending order: Ruby's usual message with the nearest accepted count at or above the
+/// given one, or the largest.
+pub(crate) fn count_error(ruby: &Ruby, args: &[VALUE], accepted: &[usize]) -> Raise {
+    let expected = accepted
+        .iter()
+        .find(|&&count| count >= args.len())
+        .or(accepted.last())
+        .copied()
+        .unwrap_or(0);
+    Raise::new(
+        arg_error(ruby),
+        format!("wrong number of arguments ({} for {expected})", args.len()),
+    )
+}
+
+/// An integer argument of 64 bits: a `Fixnum`, a `Bignum` in range, or a `Float`, which is
+/// truncated. Anything else raises `TypeError`, a number out of range `RangeError`.
+pub(crate) fn long(ruby: &Ruby, value: VALUE) -> Result<i64, Raise> {
+    if ffi::fixnum_p(value) {
+        return Ok(ffi::fix2long(value));
+    }
+    Ok(perform(ruby, Op::Long(value))?.1.long)
+}
+
+/// An integer argument as Ruby's own `NUM2ULONG` converts it, in 64 bits: a `Float` is
+/// truncated, a negative number is taken in two's complement, `nil` raises `TypeError` with
+/// `no implicit conversion from nil to integer`, anything without `to_int` `TypeError` with
+/// `can't convert String into Integer`, and a `Bignum` beyond 64 bits `RangeError`.
+pub(crate) fn ulong(ruby: &Ruby, value: VALUE) -> Result<u64, Raise> {
+    Ok(perform(ruby, Op::ULong(value))?.1.long as u64)
+}
+
+/// An integer argument, as Ruby's own `NUM2INT` converts it: see [`long`], with the range of
+/// 32 bits.
+pub(crate) fn int(ruby: &Ruby, value: VALUE) -> Result<i32, Raise> {
+    let number = long(ruby, value)?;
+    i32::try_from(number).map_err(|_| {
+        let size = if number < 0 { "small" } else { "big" };
+        Raise::new(
+            range_error(ruby),
+            format!("integer {number} too {size} to convert to `int'"),
+        )
+    })
+}
+
+/// A floating-point argument: any `Numeric`. Anything else raises `TypeError`.
+pub(crate) fn float(ruby: &Ruby, value: VALUE) -> Result<f64, Raise> {
+    if ffi::fixnum_p(value) {
+        return Ok(ffi::fix2long(value) as f64);
+    }
+    Ok(perform(ruby, Op::Double(value))?.1.double)
+}
+
+/// A truth value, as Ruby tests one.
+pub(crate) fn truthy(value: VALUE) -> bool {
+    ffi::rtest(value)
+}
+
+/// The bytes of a `String` argument, or `None` for anything else.
+pub(crate) fn string_bytes(ruby: &Ruby, value: VALUE) -> Option<Vec<u8>> {
+    // SAFETY: the value is live by the condition of this module.
+    unsafe { ruby.str_bytes(value) }
+}
+
+/// The bytes of a `String` argument. Anything else raises `TypeError`.
+pub(crate) fn bytes(ruby: &Ruby, value: VALUE) -> Result<Vec<u8>, Raise> {
+    string_bytes(ruby, value).ok_or_else(|| {
+        wrong_type(ruby, value, |class| {
+            format!("can't convert {class} into String")
+        })
+    })
+}
+
+/// A `String` argument as Ruby's own `StringValue` converts it: the string, or what `to_str`
+/// of the value returns. Anything else raises `TypeError` with `can't convert Symbol into
+/// String`.
+pub(crate) fn string_value(ruby: &Ruby, value: VALUE) -> Result<VALUE, Raised> {
+    Ok(perform(ruby, Op::StringValue(value))?.0)
+}
+
+/// Whether the value is frozen.
+pub(crate) fn frozen(value: VALUE) -> bool {
+    // SAFETY: the value is live by the condition of this module, and a value that is no
+    // special constant has its flags in its header.
+    !ffi::special_const_p(value)
+        && unsafe { (*(value as *const ffi::RBasic)).flags } & ffi::FL_FREEZE != 0
+}
+
+/// A `String` argument as text. Bytes that are not valid UTF-8 are replaced, not rejected.
+/// Anything but a `String` raises `TypeError`.
+pub(crate) fn text(ruby: &Ruby, value: VALUE) -> Result<String, Raise> {
+    Ok(String::from_utf8_lossy(&bytes(ruby, value)?).into_owned())
+}
+
+/// The elements of an `Array`, or `None` for anything else. The copies are for immediate
+/// use: keep them in this frame and do not hold them across a call that can collect unless
+/// the array itself stays in a local.
+pub(crate) fn array_elements(_ruby: &Ruby, value: VALUE) -> Option<Vec<VALUE>> {
+    // SAFETY: the value is live by the condition of this module; the type check makes the
+    // accessors valid, and an array's elements are valid for its length when the pointer
+    // is not null.
+    unsafe {
+        if ffi::rb_type(value) != ffi::T_ARRAY {
+            return None;
+        }
+        let (ptr, len) = (ffi::rarray_ptr(value), ffi::rarray_len(value));
+        if ptr.is_null() || len <= 0 {
+            return Some(Vec::new());
+        }
+        Some(std::slice::from_raw_parts(ptr, len as usize).to_vec())
+    }
+}
+
+// --- Results ----------------------------------------------------------------------------------
+
+/// The `Fixnum` of a 32-bit integer.
+pub(crate) fn fix(integer: i32) -> VALUE {
+    ffi::long2fix(c_long::from(integer))
+}
+
+/// `true` or `false`.
+pub(crate) fn boolean(value: bool) -> VALUE {
+    if value { ffi::Qtrue } else { ffi::Qfalse }
+}
+
+/// A new `Float`.
+pub(crate) fn float_new(ruby: &Ruby, number: f64) -> HostResult {
+    Ok(perform(ruby, Op::Float(number))?.0)
+}
+
+/// A new `String` of bytes: ASCII-8BIT over Ruby 1.9. See the rule of this module.
+pub(crate) fn bytes_new(ruby: &Ruby, bytes: &[u8]) -> Result<VALUE, Raised> {
+    ruby.str_new(bytes)
+}
+
+/// A new `String` of text: UTF-8 over Ruby 1.9, whether the bytes are valid UTF-8 or not.
+/// See the rule of this module.
+pub(crate) fn text_new(ruby: &Ruby, bytes: &[u8]) -> Result<VALUE, Raised> {
+    ruby.str_new_text(bytes)
+}
+
+/// A new `Array` of new `String`s of bytes.
+pub(crate) fn strings_new(ruby: &Ruby, strings: &[String]) -> HostResult {
+    let items: Vec<(*const c_char, c_long)> = strings
+        .iter()
+        .map(|string| (string.as_ptr().cast(), string.len() as c_long))
+        .collect();
+    let op = Op::Strings {
+        items: items.as_ptr(),
+        len: items.len(),
+    };
+    Ok(perform(ruby, op)?.0)
+}
+
+// --- Objects ----------------------------------------------------------------------------------
+
+/// A new instance of `class` from its allocator, without `initialize`.
+pub(crate) fn allocate(ruby: &Ruby, class: VALUE) -> Result<VALUE, Raised> {
+    Ok(perform(ruby, Op::Alloc(class))?.0)
+}
+
+/// A new object of the class `Data` whose data pointer is `data`; `free` is called with it
+/// when the object is collected. The object has no methods a script could use on the data:
+/// it is how a plain Ruby object keeps Rust state, in an instance variable without `@`. If
+/// this raises, `data` is not freed.
+pub(crate) fn data_new(ruby: &Ruby, data: *mut c_void, free: ffi::DataFn) -> HostResult {
+    Ok(perform(ruby, Op::DataNew { data, free })?.0)
+}
+
+/// The data pointer of `value` if it is an object [`data_new`] made with `free`, or `None`.
+pub(crate) fn data_of(value: VALUE, free: ffi::DataFn) -> Option<*mut c_void> {
+    if !is_data(value) {
+        return None;
+    }
+    // SAFETY: a live data object has the layout `RData`; its class is read from its header.
+    unsafe {
+        let data = &*(value as *const ffi::RData);
+        let ours = data.basic.klass == ffi::rb_cData
+            && data.dfree.map(|function| function as usize) == Some(free as usize);
+        ours.then_some(data.data)
+    }
+}
+
+/// Overwrites the first bytes of the String `string` with `bytes`, in place and through no
+/// method a script can redefine: its length and its encoding label stay, bytes beyond its
+/// length are dropped, and a string that shares its buffer with another gets one of its
+/// own first. A frozen string raises `RuntimeError` (`can't modify frozen string`), anything
+/// but a String `TypeError`.
+pub(crate) fn write_bytes(ruby: &Ruby, string: VALUE, bytes: &[u8]) -> Result<(), Raise> {
+    // SAFETY: the value is live by the condition of this module.
+    if unsafe { ffi::rb_type(string) } != ffi::T_STRING {
+        return Err(wrong_type(ruby, string, |class| {
+            format!("can't convert {class} into String")
+        }));
+    }
+    let op = Op::WriteBytes {
+        string,
+        bytes: bytes.as_ptr(),
+        len: bytes.len(),
+    };
+    perform(ruby, op)?;
+    Ok(())
+}
+
+/// The value of the global variable `name`, such as `$stderr`.
+pub(crate) fn global(ruby: &Ruby, name: &CStr) -> HostResult {
+    Ok(perform(ruby, Op::GlobalGet(name.as_ptr()))?.0)
+}
+
+/// Sets the allocator of `class`.
+pub(crate) fn define_alloc(ruby: &Ruby, class: VALUE, function: AllocFn) -> Result<(), Raised> {
+    perform(ruby, Op::AllocFunc { class, function }).map(|_| ())
+}
+
+/// Sets an instance variable. A name without `@` is invisible to scripts, which is how the
+/// binding keeps the Ruby objects that belong to an object reachable from it.
+pub(crate) fn ivar_set(
+    ruby: &Ruby,
+    object: VALUE,
+    name: &CStr,
+    value: VALUE,
+) -> Result<(), Raised> {
+    let op = Op::IvarSet {
+        object,
+        name: name.as_ptr(),
+        value,
+    };
+    perform(ruby, op).map(|_| ())
+}
+
+/// Interns `name`, as the original runtime does with names of its own at the first use of
+/// some functions: a name that is new takes the next number of the symbol sequence.
+pub(crate) fn intern(ruby: &Ruby, name: &CStr) -> Result<(), Raised> {
+    perform(ruby, Op::Intern(name.as_ptr())).map(|_| ())
+}
+
+/// An instance variable, `nil` when it is not set.
+pub(crate) fn ivar_get(ruby: &Ruby, object: VALUE, name: &CStr) -> Result<VALUE, Raised> {
+    let op = Op::IvarGet {
+        object,
+        name: name.as_ptr(),
+    };
+    Ok(perform(ruby, op)?.0)
+}
+
+// --- Definitions ------------------------------------------------------------------------------
+
+/// The arity of a method as the method list of the original runtime writes it: -1 for any
+/// number of arguments, otherwise the fixed count.
+fn arity_of(listed: i8) -> Arity {
+    match u8::try_from(listed) {
+        Ok(count) => Arity::Fixed(count),
+        Err(_) => Arity::Any,
+    }
+}
+
+/// Defines an instance method of `class` with the arity of the method list.
+pub(crate) fn method<F>(
+    ruby: &Ruby,
+    class: VALUE,
+    name: &CStr,
+    arity: i8,
+    function: F,
+) -> Result<(), Raised>
+where
+    F: Fn(&Ruby, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
+{
+    // SAFETY: the class is live by the condition of this module.
+    unsafe { ruby.define_method_with_arity(class, name, arity_of(arity), function) }
+}
+
+/// Defines a class-level method of `class` with the arity of the method list.
+pub(crate) fn class_method<F>(
+    ruby: &Ruby,
+    class: VALUE,
+    name: &CStr,
+    arity: i8,
+    function: F,
+) -> Result<(), Raised>
+where
+    F: Fn(&Ruby, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
+{
+    // SAFETY: the class is live by the condition of this module.
+    unsafe { ruby.define_singleton_method_with_arity(class, name, arity_of(arity), function) }
+}

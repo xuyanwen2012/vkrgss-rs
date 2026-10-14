@@ -1,6 +1,6 @@
-# vkxp agent guide
+# vkrgss agent guide
 
-vkxp is a Rust + Vulkan runtime for RPG Maker games: XP (RGSS1), VX (RGSS2) and VX Ace
+vkrgss is a Rust + Vulkan runtime for RPG Maker games: XP (RGSS1), VX (RGSS2) and VX Ace
 (RGSS3) are supported. Read `docs/decisions.md` before changing anything; it records
 decisions that are settled.
 
@@ -9,12 +9,12 @@ decisions that are settled.
 - Everything in this repository is English: code, comments, commits, OpenSpec artifacts.
 - Work only on the OpenSpec change you were given. Follow its `tasks.md` in order and tick a
   task only when its stated verification passes.
-- Respect the guest/host boundary: only plain data from `vkxp-proto` crosses it. Guest crates
-  never depend on `vkxp-vk`, `vkxp-audio` or `vkxp-host`.
-- `vkxp-core` does no file I/O, has no Ruby or Vulkan dependency, and forbids `unsafe`.
-- `unsafe` is allowed only in `vkxp-vk`, `vkxp-ruby-sys`, `vkxp-ruby192-sys`, `vkxp-binding`
-  (whose source `vkxp-binding-rgss3` compiles a second time, over Ruby 1.9.2),
-  `vkxp-guest` and platform code.
+- Respect the guest/host boundary: only plain data from `vkrgss-proto` crosses it. Guest crates
+  never depend on `vkrgss-vk`, `vkrgss-audio` or `vkrgss-host`.
+- `vkrgss-core` does no file I/O, has no Ruby or Vulkan dependency, and forbids `unsafe`.
+- `unsafe` is allowed only in `vkrgss-vk`, `vkrgss-ruby-sys`, `vkrgss-ruby192-sys`, `vkrgss-binding`
+  (whose source `vkrgss-binding-rgss3` compiles a second time, over Ruby 1.9.2),
+  `vkrgss-guest` and platform code.
 - Never commit any original DLL, RTP asset, or Enterbrain Ruby source. Tests use procedurally
   generated images only.
 - Reference material of the original runtime (its DLLs, the RTP, games) lives outside the

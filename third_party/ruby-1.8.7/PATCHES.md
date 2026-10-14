@@ -2,7 +2,7 @@
 
 Every vendored file is byte-identical to the release unless an entry below says otherwise.
 `MANIFEST.sha256` always keeps the upstream hash; a patched file must instead match the
-`Patched SHA-256` of its entry. The manifest test of `vkxp-ruby-sys` reads this file, so every
+`Patched SHA-256` of its entry. The manifest test of `vkrgss-ruby-sys` reads this file, so every
 entry keeps the four fields `File`, `Patch`, `Patched SHA-256` and `Reason` in this form, and a
 file that several patches touch records the hash after the last of them in every entry.
 
@@ -145,13 +145,13 @@ that the host selects at start-up, and the behaviour of XP stays the default.
 - Patch: `patches/symbol-ids-ruby-181.patch`
 - Patched SHA-256: `a8ce8aad956dfd46d31478ce78424911dd75b868705eff757acd5b0e7b0d331e`
 - Reason: a symbol's number decides the order of instance variables and of hashes with
-  symbol keys, and so the bytes of a save file. 1.8.7 and vkxp's binding intern another set of
+  symbol keys, and so the bytes of a save file. 1.8.7 and vkrgss's binding intern another set of
   names at start-up than the original runtime's Ruby 1.8.1, so every name a game creates had
   another number. `rb_intern` now gives a name of the measured table of the selected runtime
   the number it has there, and calls `rb_bug` when the scope bits it derives from the name
   disagree with the table. The build generates `vkxp_symbol_table.h` with both tables:
-  `crates/vkxp-ruby-sys/data/symbols.startup.txt`, the 2002 symbols the original of XP has
-  before its first game script, and `crates/vkxp-ruby-sys/data/symbols.startup.rgss2.txt`,
+  `crates/vkrgss-ruby-sys/data/symbols.startup.txt`, the 2002 symbols the original of XP has
+  before its first game script, and `crates/vkrgss-ruby-sys/data/symbols.startup.rgss2.txt`,
   the 1996 symbols of the original of VX. `ruby_vkxp_select_symbols` takes the number of a
   table, 0 for RGSS1 and 1 for RGSS2, and sets which one is searched and where the sequence
   starts; it is called before `ruby_init`, and a call after the first `rb_intern` or with
@@ -205,7 +205,7 @@ that the host selects at start-up, and the behaviour of XP stays the default.
 - Patch: `patches/oniguruma-engine-header.patch`
 - Patched SHA-256: `dfd1988bd6289f64ee6a7bdce89bf4d74c716fa5c12d6ef9805622ec3d8811ef`
 - Reason: follows patch 13. `re.h` includes `vkxp_regex.h` in place of `regex.h`. That header
-  is `crates/vkxp-ruby-sys/compat/vkxp_regex.h`: it includes Oniguruma's `oniggnu.h` and
+  is `crates/vkrgss-ruby-sys/compat/vkxp_regex.h`: it includes Oniguruma's `oniggnu.h` and
   provides the `MBCTYPE_*` names, `re_copy_registers`, and `ismbchar` and `mbclen` on the
   encoding that `re_mbcinit` set, so that `string.c` and the other files that use them are
   unchanged.
@@ -243,7 +243,7 @@ that the host selects at start-up, and the behaviour of XP stays the default.
 - Patch: `patches/asan-conservative-scan.patch`
 - Patched SHA-256: `74048030ef7c2198d7299ea1deeb9161e1fb44a06504a5f6f5704067bf34192e`
 - Reason: for the sanitized run of the upstream suites (`tests/sanitized.rs` of
-  `vkxp-ruby-sys`). The collector is conservative: `mark_locations_array` reads every word of
+  `vkrgss-ruby-sys`). The collector is conservative: `mark_locations_array` reads every word of
   the machine stack and of the saved registers, the red zones that AddressSanitizer puts
   around local variables included, and the sanitizer stopped the first collection. The
   function carries the compiler's `no_sanitize_address` attribute. Without the sanitizer the
@@ -294,7 +294,7 @@ that the host selects at start-up, and the behaviour of XP stays the default.
 - File: `marshal.c`
 - Patch: `patches/marshal-gc-guard.patch`
 - Patched SHA-256: `f11ad0ab56d01ede86e4ba14b4c49557db77faed63b6b55ad7bac2e52ef77d9d`
-- Reason: found by the collection stress test of `vkxp-binding` on a build with gcc 13.3,
+- Reason: found by the collection stress test of `vkrgss-binding` on a build with gcc 13.3,
   which read `[980748292, 1650545674, ...]` where a dumped `Table` has its sizes. `w_object`
   hands `RSTRING(v)->ptr` of the string a `_dump` method returned to `w_bytes` and does not
   use `v` again; the collector is conservative, so once the compiler has dropped `v` a
@@ -357,8 +357,8 @@ that the host selects at start-up, and the behaviour of XP stays the default.
   `stress-the-collector-and-try-aarch64`). `GC.stress` collects at every allocation, which
   is too slow for whole suites, and a script has to set it. `ruby_vkxp_gc_stress(n)` makes
   the collector run at every n-th allocation instead, counting `rb_newobj`, `ruby_xmalloc`
-  and `ruby_xrealloc` together; `vkxp-ruby-sys` calls it at start-up when the environment
-  variable `VKXP_GC_STRESS` holds a number of 1 or more. With 0, the initial value, each of
+  and `ruby_xrealloc` together; `vkrgss-ruby-sys` calls it at start-up when the environment
+  variable `VKRGSS_GC_STRESS` holds a number of 1 or more. With 0, the initial value, each of
   the three places tests one variable more and nothing else changes. A collection asked for
   while collections are disabled or one is running does not happen, as before.
   `ruby_vkxp_gc_count` counts the collections that ran, for the tests: this Ruby has no
@@ -377,7 +377,7 @@ that the host selects at start-up, and the behaviour of XP stays the default.
   the buffer to decide whether the name has a junk tail. The test is made only while the
   pointer is inside the name. A dumped symbol reaches it through `Marshal.load`, and an
   identifier of a script through the lexer. Input:
-  `crates/vkxp-ruby-sys/fuzz/fixed/marshal/symbol-incomplete-character.bin`.
+  `crates/vkrgss-ruby-sys/fuzz/fixed/marshal/symbol-incomplete-character.bin`.
 
 ## 29. intern-incomplete-character-generated
 
@@ -403,7 +403,7 @@ that the host selects at start-up, and the behaviour of XP stays the default.
   looked at the type of an operand that is a null pointer when the operand had a syntax
   error of its own (`1 .. A::B += 1`, `if g = __FILE__ = 1`), which ends the process; they
   test the pointer first, as later Rubies do. Inputs:
-  `crates/vkxp-ruby-sys/fuzz/fixed/marshal/global-name-incomplete-character.bin` and
+  `crates/vkrgss-ruby-sys/fuzz/fixed/marshal/global-name-incomplete-character.bin` and
   `fuzz/fixed/parse/{error-line-incomplete-character,range-null-operand,condition-null-value}.rb`.
 
 ## 31. parser-bounds-and-null-operands-generated
@@ -423,7 +423,7 @@ that the host selects at start-up, and the behaviour of XP stays the default.
   `RegexpError`. It copied a multibyte character, and the character after a backslash, with
   the length the lead byte announces, past the end of a source that ends inside the
   character. Both copies stop at the end of the source. Inputs:
-  `crates/vkxp-ruby-sys/fuzz/fixed/regex/error-message-incomplete-character.txt` and
+  `crates/vkrgss-ruby-sys/fuzz/fixed/regex/error-message-incomplete-character.txt` and
   `fuzz/fixed/marshal/regexp-error-incomplete-character.bin`.
 
 ## 33. strtod-long-digit-string
@@ -439,7 +439,7 @@ that the host selects at start-up, and the behaviour of XP stays the default.
   part of the patch Debian carried for `ruby1.8` (the fix of Ruby 1.9.3-p484): sizes above
   `Kmax` are allocated and freed outside the list, and fraction digits after the first
   `DBL_DIG * 4` are skipped, which no double can tell apart. The test of the release is not
-  changed; `tests/backports.rs` of `vkxp-ruby-sys` has one.
+  changed; `tests/backports.rs` of `vkrgss-ruby-sys` has one.
 
 ## 34. unpack-count-overflow
 
@@ -452,7 +452,7 @@ that the host selects at start-up, and the behaviour of XP stays the default.
   `X` and `x`, and moved the read position out of the string. This is the `pack.c` part of
   the patch Debian carried for `ruby1.8`: such a count raises `RangeError` ("pack length
   too big"). The test of the release is not changed; `tests/backports.rs` of
-  `vkxp-ruby-sys` has one.
+  `vkrgss-ruby-sys` has one.
 
 ## 35. name-error-interns-recv
 

@@ -44,7 +44,7 @@ const SANDBOX_ARGUMENTS: [&str; 8] = [
 ];
 
 /// A directory that does not exist, where VA-API is sent to look for its drivers.
-const NO_VA_DRIVERS: &str = "/nonexistent/vkxp-oracle-no-va-drivers";
+const NO_VA_DRIVERS: &str = "/nonexistent/vkrgss-oracle-no-va-drivers";
 
 /// The directories where a system keeps the plugins of GStreamer 1.0.
 pub(super) const GSTREAMER_SYSTEM_DIRS: [&str; 4] = [
@@ -138,7 +138,7 @@ pub(super) struct Run<'a> {
     pub dll: Option<&'a Path>,
     /// The directory of each run-time package, by its name.
     pub rtps: &'a [(String, PathBuf)],
-    /// The fonts that the game font names are replaced by, if any are shared with vkxp.
+    /// The fonts that the game font names are replaced by, if any are shared with vkrgss.
     pub fonts: Option<&'a fonts::Shared>,
     /// The Wine prefix, made on first use.
     pub prefix: &'a Path,
@@ -174,7 +174,7 @@ pub(super) fn check_dll(game: &Path, runtime: Runtime, dll: Option<&Path>) -> Re
     if runtime != Runtime::Rgss3 {
         ensure!(
             dll.is_some(),
-            "--dll is missing; without the original, use --vkxp-only"
+            "--dll is missing; without the original, use --vkrgss-only"
         );
         return Ok(());
     }
@@ -215,7 +215,7 @@ fn check_programs(path: Option<&OsStr>) -> Result<()> {
                 std::env::split_paths(path).any(|dir| dir.join(program).is_file())
             }),
             "`{program}` is not on PATH; the original side needs Wine, Xvfb and bwrap \
-             (--vkxp-only runs without them)"
+             (--vkrgss-only runs without them)"
         );
     }
     Ok(())
@@ -304,7 +304,7 @@ impl Run<'_> {
             // The hardware plugins of GStreamer, which plays Ogg and MP3 for Wine, probe
             // VA-API: it finds no driver even where the sandbox would fail.
             .env("LIBVA_DRIVERS_PATH", NO_VA_DRIVERS)
-            .env("LIBVA_DRIVER_NAME", "vkxp-oracle-none")
+            .env("LIBVA_DRIVER_NAME", "vkrgss-oracle-none")
             .env("GST_PLUGIN_SYSTEM_PATH_1_0", &self.gstreamer.system_path)
             .env("GST_REGISTRY_1_0", &self.gstreamer.registry)
             .env_remove("GST_PLUGIN_PATH")

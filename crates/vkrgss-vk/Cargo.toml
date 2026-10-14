@@ -1,0 +1,33 @@
+[package]
+name = "vkrgss-vk"
+description = "Vulkan backend for vkrgss"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ash.workspace = true
+ash-window.workspace = true
+gpu-allocator.workspace = true
+raw-window-handle.workspace = true
+thiserror.workspace = true
+vkrgss-pixel.workspace = true
+vkrgss-proto.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+vkrgss-compose-ref.workspace = true
+# The scenes of windows of RGSS2 are extracted from the scene of the guest; only the tests
+# reach it.
+vkrgss-core.workspace = true

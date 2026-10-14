@@ -1,6 +1,6 @@
 //! The fonts of a comparison: files given with `--font` that both runtimes draw text with.
 //!
-//! vkxp gets a directory that holds copies of the files. The original gets the same files in
+//! vkrgss gets a directory that holds copies of the files. The original gets the same files in
 //! the font directory of its Wine prefix and a registry script that maps the font names games
 //! ask for to the family of the first file.
 
@@ -43,7 +43,7 @@ const INSTALLED_PREFIX: &str = "vkxp-oracle-";
 pub(super) struct Shared {
     /// The family name of the first file, which the game font names are mapped to.
     pub family: String,
-    /// The directory that holds the copies, for vkxp.
+    /// The directory that holds the copies, for vkrgss.
     pub dir: PathBuf,
     /// The copies, in the order the files were given.
     pub files: Vec<PathBuf>,
@@ -75,7 +75,7 @@ pub(super) fn share(fonts: &[PathBuf], out: &Path) -> Result<Option<Shared>> {
     let family = family.clone();
     let dir = out.join("fonts");
     if dir.exists() {
-        // The fonts of an earlier run would be found by vkxp like those of this one.
+        // The fonts of an earlier run would be found by vkrgss like those of this one.
         fs::remove_dir_all(&dir).with_context(|| dir.display().to_string())?;
     }
     fs::create_dir_all(&dir).with_context(|| dir.display().to_string())?;

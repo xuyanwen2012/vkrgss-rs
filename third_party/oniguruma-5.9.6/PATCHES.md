@@ -2,7 +2,7 @@
 
 Every vendored file is byte-identical to the release unless an entry below says otherwise.
 `MANIFEST.sha256` always keeps the upstream hash; a patched file must instead match the
-`Patched SHA-256` of its entry. The manifest test of `vkxp-ruby-sys` reads this file, so every
+`Patched SHA-256` of its entry. The manifest test of `vkrgss-ruby-sys` reads this file, so every
 entry keeps the four fields `File`, `Patch`, `Patched SHA-256` and `Reason` in this form, and a
 file that several patches touch records the hash after the last of them in every entry.
 
@@ -71,7 +71,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
   CVE-2017-9226). Not from upstream: `PINC` and `PINC_S` get the bound of `PFETCH`. Not
   taken: 8293fd4, which upstream withdrew, and 3b63d12 with ddbf556, whose defect patch 1
   fixed with the error of the original runtime. Inputs:
-  `crates/vkxp-ruby-sys/fuzz/fixed/regex/{pattern,escape}-incomplete-character.txt` and
+  `crates/vkrgss-ruby-sys/fuzz/fixed/regex/{pattern,escape}-incomplete-character.txt` and
   `fuzz/fixed/parse/class-octal-above-255.rb`.
 
 ## 6. compiler-bounds
@@ -89,7 +89,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
   inside a multibyte character when its bytes are no valid text, because the parser splits
   it by looking backwards, and the copy then read past the piece. The lengths stop at the
   end of the piece. Inputs:
-  `crates/vkxp-ruby-sys/fuzz/fixed/regex/repeat-distance-out-of-range.txt`,
+  `crates/vkrgss-ruby-sys/fuzz/fixed/regex/repeat-distance-out-of-range.txt`,
   `fuzz/fixed/marshal/regexp-case-fold-invalid-characters.bin` and
   `fuzz/fixed/parse/regexp-case-fold-invalid-characters.rb`.
 
@@ -111,7 +111,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
   `OP_PUSH_IF_PEEK_NEXT` compared the next byte of the subject before they checked that
   there is one, which read past a subject that ends inside a multibyte character. None of
   these changes a result. Input:
-  `crates/vkxp-ruby-sys/fuzz/fixed/regex/peek-next-past-the-subject.txt`.
+  `crates/vkrgss-ruby-sys/fuzz/fixed/regex/peek-next-past-the-subject.txt`.
 
 ## 8. unicode-case-fold-bounds
 

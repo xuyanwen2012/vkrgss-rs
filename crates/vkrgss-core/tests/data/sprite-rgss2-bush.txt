@@ -1,0 +1,434 @@
+# Bush rows of sprites of RGSS2: the topics `bushbig` (a bush depth near and beyond the
+# height) and `bushop` (`bush_opacity` against the opacity, blend types, zoomed and
+# turned sprites).
+#
+# Measured on the original runtime of VX on 2026-10-12 (RGSS202E.dll 2.0.2.1 and 2.0.0.1, the
+# same pictures). The scenes are those of the probes, made by formulas; the digest of a frame
+# is that of the picture the model of the measurement draws, which is the picture of the
+# original unless said otherwise. The format is that of
+# `vkrgss_core::test_support::sprite_cases`.
+scene bushbig-00
+sprite 1 - bitmap=rowy_8_16 x=0 y=4 zoom_y=2.25 bush_depth=33 bush_opacity=255
+sprite 2 - bitmap=rowy_8_16 x=0 y=210 zoom_y=2.25 bush_depth=33 bush_opacity=255 src_rect=0,3,8,11
+sprite 3 - bitmap=rowy_8_16 x=10 y=4 zoom_y=2.25 bush_depth=36 bush_opacity=255
+sprite 4 - bitmap=rowy_8_16 x=10 y=210 zoom_y=2.25 bush_depth=36 bush_opacity=255 src_rect=0,3,8,11
+sprite 5 - bitmap=rowy_8_16 x=20 y=4 zoom_y=2.25 bush_depth=37 bush_opacity=255
+sprite 6 - bitmap=rowy_8_16 x=20 y=210 zoom_y=2.25 bush_depth=37 bush_opacity=255 src_rect=0,3,8,11
+sprite 7 - bitmap=rowy_8_16 x=30 y=4 zoom_y=2.25 bush_depth=41 bush_opacity=255
+sprite 8 - bitmap=rowy_8_16 x=30 y=210 zoom_y=2.25 bush_depth=41 bush_opacity=255 src_rect=0,3,8,11
+sprite 9 - bitmap=rowy_8_16 x=40 y=4 zoom_y=2.25 bush_depth=49 bush_opacity=255
+sprite 10 - bitmap=rowy_8_16 x=40 y=210 zoom_y=2.25 bush_depth=49 bush_opacity=255 src_rect=0,3,8,11
+sprite 11 - bitmap=rowy_8_16 x=50 y=4 zoom_y=2.25 bush_depth=72 bush_opacity=255
+sprite 12 - bitmap=rowy_8_16 x=50 y=210 zoom_y=2.25 bush_depth=72 bush_opacity=255 src_rect=0,3,8,11
+sprite 13 - bitmap=rowy_8_16 x=60 y=4 zoom_y=2.25 bush_depth=79 bush_opacity=255
+sprite 14 - bitmap=rowy_8_16 x=60 y=210 zoom_y=2.25 bush_depth=79 bush_opacity=255 src_rect=0,3,8,11
+sprite 15 - bitmap=rowy_8_16 x=70 y=4 zoom_y=2.25 bush_depth=200 bush_opacity=255
+sprite 16 - bitmap=rowy_8_16 x=70 y=210 zoom_y=2.25 bush_depth=200 bush_opacity=255 src_rect=0,3,8,11
+sprite 17 - bitmap=rowy_8_16 x=80 y=4 zoom_y=2.25 bush_depth=1000 bush_opacity=255
+sprite 18 - bitmap=rowy_8_16 x=80 y=210 zoom_y=2.25 bush_depth=1000 bush_opacity=255 src_rect=0,3,8,11
+sprite 19 - bitmap=rowy_8_16 x=90 y=4 zoom_y=1.6 bush_depth=22 bush_opacity=255
+sprite 20 - bitmap=rowy_8_16 x=90 y=210 zoom_y=1.6 bush_depth=22 bush_opacity=255 src_rect=0,3,8,11
+sprite 21 - bitmap=rowy_8_16 x=100 y=4 zoom_y=1.6 bush_depth=25 bush_opacity=255
+sprite 22 - bitmap=rowy_8_16 x=100 y=210 zoom_y=1.6 bush_depth=25 bush_opacity=255 src_rect=0,3,8,11
+sprite 23 - bitmap=rowy_8_16 x=110 y=4 zoom_y=1.6 bush_depth=26 bush_opacity=255
+sprite 24 - bitmap=rowy_8_16 x=110 y=210 zoom_y=1.6 bush_depth=26 bush_opacity=255 src_rect=0,3,8,11
+sprite 25 - bitmap=rowy_8_16 x=120 y=4 zoom_y=1.6 bush_depth=30 bush_opacity=255
+sprite 26 - bitmap=rowy_8_16 x=120 y=210 zoom_y=1.6 bush_depth=30 bush_opacity=255 src_rect=0,3,8,11
+sprite 27 - bitmap=rowy_8_16 x=130 y=4 zoom_y=1.6 bush_depth=38 bush_opacity=255
+sprite 28 - bitmap=rowy_8_16 x=130 y=210 zoom_y=1.6 bush_depth=38 bush_opacity=255 src_rect=0,3,8,11
+sprite 29 - bitmap=rowy_8_16 x=140 y=4 zoom_y=1.6 bush_depth=50 bush_opacity=255
+sprite 30 - bitmap=rowy_8_16 x=140 y=210 zoom_y=1.6 bush_depth=50 bush_opacity=255 src_rect=0,3,8,11
+sprite 31 - bitmap=rowy_8_16 x=150 y=4 zoom_y=1.6 bush_depth=57 bush_opacity=255
+sprite 32 - bitmap=rowy_8_16 x=150 y=210 zoom_y=1.6 bush_depth=57 bush_opacity=255 src_rect=0,3,8,11
+sprite 33 - bitmap=rowy_8_16 x=160 y=4 zoom_y=1.6 bush_depth=200 bush_opacity=255
+sprite 34 - bitmap=rowy_8_16 x=160 y=210 zoom_y=1.6 bush_depth=200 bush_opacity=255 src_rect=0,3,8,11
+sprite 35 - bitmap=rowy_8_16 x=170 y=4 zoom_y=1.6 bush_depth=1000 bush_opacity=255
+sprite 36 - bitmap=rowy_8_16 x=170 y=210 zoom_y=1.6 bush_depth=1000 bush_opacity=255 src_rect=0,3,8,11
+sprite 37 - bitmap=rowy_8_16 x=180 y=4 zoom_y=3 bush_depth=45 bush_opacity=255
+sprite 38 - bitmap=rowy_8_16 x=180 y=210 zoom_y=3 bush_depth=45 bush_opacity=255 src_rect=0,3,8,11
+sprite 39 - bitmap=rowy_8_16 x=190 y=4 zoom_y=3 bush_depth=48 bush_opacity=255
+sprite 40 - bitmap=rowy_8_16 x=190 y=210 zoom_y=3 bush_depth=48 bush_opacity=255 src_rect=0,3,8,11
+sprite 41 - bitmap=rowy_8_16 x=200 y=4 zoom_y=3 bush_depth=49 bush_opacity=255
+sprite 42 - bitmap=rowy_8_16 x=200 y=210 zoom_y=3 bush_depth=49 bush_opacity=255 src_rect=0,3,8,11
+sprite 43 - bitmap=rowy_8_16 x=210 y=4 zoom_y=3 bush_depth=53 bush_opacity=255
+sprite 44 - bitmap=rowy_8_16 x=210 y=210 zoom_y=3 bush_depth=53 bush_opacity=255 src_rect=0,3,8,11
+sprite 45 - bitmap=rowy_8_16 x=220 y=4 zoom_y=3 bush_depth=61 bush_opacity=255
+sprite 46 - bitmap=rowy_8_16 x=220 y=210 zoom_y=3 bush_depth=61 bush_opacity=255 src_rect=0,3,8,11
+sprite 47 - bitmap=rowy_8_16 x=230 y=4 zoom_y=3 bush_depth=96 bush_opacity=255
+sprite 48 - bitmap=rowy_8_16 x=230 y=210 zoom_y=3 bush_depth=96 bush_opacity=255 src_rect=0,3,8,11
+sprite 49 - bitmap=rowy_8_16 x=240 y=4 zoom_y=3 bush_depth=103 bush_opacity=255
+sprite 50 - bitmap=rowy_8_16 x=240 y=210 zoom_y=3 bush_depth=103 bush_opacity=255 src_rect=0,3,8,11
+sprite 51 - bitmap=rowy_8_16 x=250 y=4 zoom_y=3 bush_depth=200 bush_opacity=255
+sprite 52 - bitmap=rowy_8_16 x=250 y=210 zoom_y=3 bush_depth=200 bush_opacity=255 src_rect=0,3,8,11
+sprite 53 - bitmap=rowy_8_16 x=260 y=4 zoom_y=3 bush_depth=1000 bush_opacity=255
+sprite 54 - bitmap=rowy_8_16 x=260 y=210 zoom_y=3 bush_depth=1000 bush_opacity=255 src_rect=0,3,8,11
+sprite 55 - bitmap=rowy_8_16 x=270 y=4 zoom_y=0.7 bush_depth=8 bush_opacity=255
+sprite 56 - bitmap=rowy_8_16 x=270 y=210 zoom_y=0.7 bush_depth=8 bush_opacity=255 src_rect=0,3,8,11
+sprite 57 - bitmap=rowy_8_16 x=280 y=4 zoom_y=0.7 bush_depth=11 bush_opacity=255
+sprite 58 - bitmap=rowy_8_16 x=280 y=210 zoom_y=0.7 bush_depth=11 bush_opacity=255 src_rect=0,3,8,11
+sprite 59 - bitmap=rowy_8_16 x=290 y=4 zoom_y=0.7 bush_depth=12 bush_opacity=255
+sprite 60 - bitmap=rowy_8_16 x=290 y=210 zoom_y=0.7 bush_depth=12 bush_opacity=255 src_rect=0,3,8,11
+sprite 61 - bitmap=rowy_8_16 x=300 y=4 zoom_y=0.7 bush_depth=16 bush_opacity=255
+sprite 62 - bitmap=rowy_8_16 x=300 y=210 zoom_y=0.7 bush_depth=16 bush_opacity=255 src_rect=0,3,8,11
+sprite 63 - bitmap=rowy_8_16 x=310 y=4 zoom_y=0.7 bush_depth=24 bush_opacity=255
+sprite 64 - bitmap=rowy_8_16 x=310 y=210 zoom_y=0.7 bush_depth=24 bush_opacity=255 src_rect=0,3,8,11
+sprite 65 - bitmap=rowy_8_16 x=320 y=4 zoom_y=0.7 bush_depth=22 bush_opacity=255
+sprite 66 - bitmap=rowy_8_16 x=320 y=210 zoom_y=0.7 bush_depth=22 bush_opacity=255 src_rect=0,3,8,11
+sprite 67 - bitmap=rowy_8_16 x=330 y=4 zoom_y=0.7 bush_depth=29 bush_opacity=255
+sprite 68 - bitmap=rowy_8_16 x=330 y=210 zoom_y=0.7 bush_depth=29 bush_opacity=255 src_rect=0,3,8,11
+sprite 69 - bitmap=rowy_8_16 x=340 y=4 zoom_y=0.7 bush_depth=200 bush_opacity=255
+sprite 70 - bitmap=rowy_8_16 x=340 y=210 zoom_y=0.7 bush_depth=200 bush_opacity=255 src_rect=0,3,8,11
+sprite 71 - bitmap=rowy_8_16 x=350 y=4 zoom_y=0.7 bush_depth=1000 bush_opacity=255
+sprite 72 - bitmap=rowy_8_16 x=350 y=210 zoom_y=0.7 bush_depth=1000 bush_opacity=255 src_rect=0,3,8,11
+sprite 73 - bitmap=rowy_8_16 x=360 y=4 zoom_y=1 bush_depth=13 bush_opacity=255
+sprite 74 - bitmap=rowy_8_16 x=360 y=210 zoom_y=1 bush_depth=13 bush_opacity=255 src_rect=0,3,8,11
+sprite 75 - bitmap=rowy_8_16 x=370 y=4 zoom_y=1 bush_depth=16 bush_opacity=255
+sprite 76 - bitmap=rowy_8_16 x=370 y=210 zoom_y=1 bush_depth=16 bush_opacity=255 src_rect=0,3,8,11
+sprite 77 - bitmap=rowy_8_16 x=380 y=4 zoom_y=1 bush_depth=17 bush_opacity=255
+sprite 78 - bitmap=rowy_8_16 x=380 y=210 zoom_y=1 bush_depth=17 bush_opacity=255 src_rect=0,3,8,11
+sprite 79 - bitmap=rowy_8_16 x=390 y=4 zoom_y=1 bush_depth=21 bush_opacity=255
+sprite 80 - bitmap=rowy_8_16 x=390 y=210 zoom_y=1 bush_depth=21 bush_opacity=255 src_rect=0,3,8,11
+sprite 81 - bitmap=rowy_8_16 x=400 y=4 zoom_y=1 bush_depth=29 bush_opacity=255
+sprite 82 - bitmap=rowy_8_16 x=400 y=210 zoom_y=1 bush_depth=29 bush_opacity=255 src_rect=0,3,8,11
+sprite 83 - bitmap=rowy_8_16 x=410 y=4 zoom_y=1 bush_depth=32 bush_opacity=255
+sprite 84 - bitmap=rowy_8_16 x=410 y=210 zoom_y=1 bush_depth=32 bush_opacity=255 src_rect=0,3,8,11
+sprite 85 - bitmap=rowy_8_16 x=420 y=4 zoom_y=1 bush_depth=39 bush_opacity=255
+sprite 86 - bitmap=rowy_8_16 x=420 y=210 zoom_y=1 bush_depth=39 bush_opacity=255 src_rect=0,3,8,11
+sprite 87 - bitmap=rowy_8_16 x=430 y=4 zoom_y=1 bush_depth=200 bush_opacity=255
+sprite 88 - bitmap=rowy_8_16 x=430 y=210 zoom_y=1 bush_depth=200 bush_opacity=255 src_rect=0,3,8,11
+sprite 89 - bitmap=rowy_8_16 x=440 y=4 zoom_y=1 bush_depth=1000 bush_opacity=255
+sprite 90 - bitmap=rowy_8_16 x=440 y=210 zoom_y=1 bush_depth=1000 bush_opacity=255 src_rect=0,3,8,11
+sprite 91 - bitmap=rowy_8_16 x=450 y=4 zoom_y=1.3 bush_depth=17 bush_opacity=255
+sprite 92 - bitmap=rowy_8_16 x=450 y=210 zoom_y=1.3 bush_depth=17 bush_opacity=255 src_rect=0,3,8,11
+sprite 93 - bitmap=rowy_8_16 x=460 y=4 zoom_y=1.3 bush_depth=20 bush_opacity=255
+sprite 94 - bitmap=rowy_8_16 x=460 y=210 zoom_y=1.3 bush_depth=20 bush_opacity=255 src_rect=0,3,8,11
+sprite 95 - bitmap=rowy_8_16 x=470 y=4 zoom_y=1.3 bush_depth=21 bush_opacity=255
+sprite 96 - bitmap=rowy_8_16 x=470 y=210 zoom_y=1.3 bush_depth=21 bush_opacity=255 src_rect=0,3,8,11
+sprite 97 - bitmap=rowy_8_16 x=480 y=4 zoom_y=1.3 bush_depth=25 bush_opacity=255
+sprite 98 - bitmap=rowy_8_16 x=480 y=210 zoom_y=1.3 bush_depth=25 bush_opacity=255 src_rect=0,3,8,11
+sprite 99 - bitmap=rowy_8_16 x=490 y=4 zoom_y=1.3 bush_depth=33 bush_opacity=255
+sprite 100 - bitmap=rowy_8_16 x=490 y=210 zoom_y=1.3 bush_depth=33 bush_opacity=255 src_rect=0,3,8,11
+sprite 101 - bitmap=rowy_8_16 x=500 y=4 zoom_y=1.3 bush_depth=40 bush_opacity=255
+sprite 102 - bitmap=rowy_8_16 x=500 y=210 zoom_y=1.3 bush_depth=40 bush_opacity=255 src_rect=0,3,8,11
+sprite 103 - bitmap=rowy_8_16 x=510 y=4 zoom_y=1.3 bush_depth=47 bush_opacity=255
+sprite 104 - bitmap=rowy_8_16 x=510 y=210 zoom_y=1.3 bush_depth=47 bush_opacity=255 src_rect=0,3,8,11
+sprite 105 - bitmap=rowy_8_16 x=520 y=4 zoom_y=1.3 bush_depth=200 bush_opacity=255
+sprite 106 - bitmap=rowy_8_16 x=520 y=210 zoom_y=1.3 bush_depth=200 bush_opacity=255 src_rect=0,3,8,11
+sprite 107 - bitmap=rowy_8_16 x=530 y=4 zoom_y=1.3 bush_depth=1000 bush_opacity=255
+sprite 108 - bitmap=rowy_8_16 x=530 y=210 zoom_y=1.3 bush_depth=1000 bush_opacity=255 src_rect=0,3,8,11
+frame 9034ccece10c6ac4
+end
+scene bushbig-01
+sprite 1 - bitmap=rowy_8_40 x=0 y=4 zoom_y=2.25 bush_depth=87 bush_opacity=255
+sprite 2 - bitmap=rowy_8_40 x=0 y=210 zoom_y=2.25 bush_depth=87 bush_opacity=255 src_rect=0,3,8,35
+sprite 3 - bitmap=rowy_8_40 x=10 y=4 zoom_y=2.25 bush_depth=90 bush_opacity=255
+sprite 4 - bitmap=rowy_8_40 x=10 y=210 zoom_y=2.25 bush_depth=90 bush_opacity=255 src_rect=0,3,8,35
+sprite 5 - bitmap=rowy_8_40 x=20 y=4 zoom_y=2.25 bush_depth=91 bush_opacity=255
+sprite 6 - bitmap=rowy_8_40 x=20 y=210 zoom_y=2.25 bush_depth=91 bush_opacity=255 src_rect=0,3,8,35
+sprite 7 - bitmap=rowy_8_40 x=30 y=4 zoom_y=2.25 bush_depth=95 bush_opacity=255
+sprite 8 - bitmap=rowy_8_40 x=30 y=210 zoom_y=2.25 bush_depth=95 bush_opacity=255 src_rect=0,3,8,35
+sprite 9 - bitmap=rowy_8_40 x=40 y=4 zoom_y=2.25 bush_depth=103 bush_opacity=255
+sprite 10 - bitmap=rowy_8_40 x=40 y=210 zoom_y=2.25 bush_depth=103 bush_opacity=255 src_rect=0,3,8,35
+sprite 11 - bitmap=rowy_8_40 x=50 y=4 zoom_y=2.25 bush_depth=180 bush_opacity=255
+sprite 12 - bitmap=rowy_8_40 x=50 y=210 zoom_y=2.25 bush_depth=180 bush_opacity=255 src_rect=0,3,8,35
+sprite 13 - bitmap=rowy_8_40 x=60 y=4 zoom_y=2.25 bush_depth=187 bush_opacity=255
+sprite 14 - bitmap=rowy_8_40 x=60 y=210 zoom_y=2.25 bush_depth=187 bush_opacity=255 src_rect=0,3,8,35
+sprite 15 - bitmap=rowy_8_40 x=70 y=4 zoom_y=2.25 bush_depth=200 bush_opacity=255
+sprite 16 - bitmap=rowy_8_40 x=70 y=210 zoom_y=2.25 bush_depth=200 bush_opacity=255 src_rect=0,3,8,35
+sprite 17 - bitmap=rowy_8_40 x=80 y=4 zoom_y=2.25 bush_depth=1000 bush_opacity=255
+sprite 18 - bitmap=rowy_8_40 x=80 y=210 zoom_y=2.25 bush_depth=1000 bush_opacity=255 src_rect=0,3,8,35
+sprite 19 - bitmap=rowy_8_40 x=90 y=4 zoom_y=1.6 bush_depth=61 bush_opacity=255
+sprite 20 - bitmap=rowy_8_40 x=90 y=210 zoom_y=1.6 bush_depth=61 bush_opacity=255 src_rect=0,3,8,35
+sprite 21 - bitmap=rowy_8_40 x=100 y=4 zoom_y=1.6 bush_depth=64 bush_opacity=255
+sprite 22 - bitmap=rowy_8_40 x=100 y=210 zoom_y=1.6 bush_depth=64 bush_opacity=255 src_rect=0,3,8,35
+sprite 23 - bitmap=rowy_8_40 x=110 y=4 zoom_y=1.6 bush_depth=65 bush_opacity=255
+sprite 24 - bitmap=rowy_8_40 x=110 y=210 zoom_y=1.6 bush_depth=65 bush_opacity=255 src_rect=0,3,8,35
+sprite 25 - bitmap=rowy_8_40 x=120 y=4 zoom_y=1.6 bush_depth=69 bush_opacity=255
+sprite 26 - bitmap=rowy_8_40 x=120 y=210 zoom_y=1.6 bush_depth=69 bush_opacity=255 src_rect=0,3,8,35
+sprite 27 - bitmap=rowy_8_40 x=130 y=4 zoom_y=1.6 bush_depth=77 bush_opacity=255
+sprite 28 - bitmap=rowy_8_40 x=130 y=210 zoom_y=1.6 bush_depth=77 bush_opacity=255 src_rect=0,3,8,35
+sprite 29 - bitmap=rowy_8_40 x=140 y=4 zoom_y=1.6 bush_depth=128 bush_opacity=255
+sprite 30 - bitmap=rowy_8_40 x=140 y=210 zoom_y=1.6 bush_depth=128 bush_opacity=255 src_rect=0,3,8,35
+sprite 31 - bitmap=rowy_8_40 x=150 y=4 zoom_y=1.6 bush_depth=135 bush_opacity=255
+sprite 32 - bitmap=rowy_8_40 x=150 y=210 zoom_y=1.6 bush_depth=135 bush_opacity=255 src_rect=0,3,8,35
+sprite 33 - bitmap=rowy_8_40 x=160 y=4 zoom_y=1.6 bush_depth=200 bush_opacity=255
+sprite 34 - bitmap=rowy_8_40 x=160 y=210 zoom_y=1.6 bush_depth=200 bush_opacity=255 src_rect=0,3,8,35
+sprite 35 - bitmap=rowy_8_40 x=170 y=4 zoom_y=1.6 bush_depth=1000 bush_opacity=255
+sprite 36 - bitmap=rowy_8_40 x=170 y=210 zoom_y=1.6 bush_depth=1000 bush_opacity=255 src_rect=0,3,8,35
+sprite 37 - bitmap=rowy_8_40 x=180 y=4 zoom_y=3 bush_depth=117 bush_opacity=255
+sprite 38 - bitmap=rowy_8_40 x=180 y=210 zoom_y=3 bush_depth=117 bush_opacity=255 src_rect=0,3,8,35
+sprite 39 - bitmap=rowy_8_40 x=190 y=4 zoom_y=3 bush_depth=120 bush_opacity=255
+sprite 40 - bitmap=rowy_8_40 x=190 y=210 zoom_y=3 bush_depth=120 bush_opacity=255 src_rect=0,3,8,35
+sprite 41 - bitmap=rowy_8_40 x=200 y=4 zoom_y=3 bush_depth=121 bush_opacity=255
+sprite 42 - bitmap=rowy_8_40 x=200 y=210 zoom_y=3 bush_depth=121 bush_opacity=255 src_rect=0,3,8,35
+sprite 43 - bitmap=rowy_8_40 x=210 y=4 zoom_y=3 bush_depth=125 bush_opacity=255
+sprite 44 - bitmap=rowy_8_40 x=210 y=210 zoom_y=3 bush_depth=125 bush_opacity=255 src_rect=0,3,8,35
+sprite 45 - bitmap=rowy_8_40 x=220 y=4 zoom_y=3 bush_depth=133 bush_opacity=255
+sprite 46 - bitmap=rowy_8_40 x=220 y=210 zoom_y=3 bush_depth=133 bush_opacity=255 src_rect=0,3,8,35
+sprite 47 - bitmap=rowy_8_40 x=230 y=4 zoom_y=3 bush_depth=240 bush_opacity=255
+sprite 48 - bitmap=rowy_8_40 x=230 y=210 zoom_y=3 bush_depth=240 bush_opacity=255 src_rect=0,3,8,35
+sprite 49 - bitmap=rowy_8_40 x=240 y=4 zoom_y=3 bush_depth=247 bush_opacity=255
+sprite 50 - bitmap=rowy_8_40 x=240 y=210 zoom_y=3 bush_depth=247 bush_opacity=255 src_rect=0,3,8,35
+sprite 51 - bitmap=rowy_8_40 x=250 y=4 zoom_y=3 bush_depth=200 bush_opacity=255
+sprite 52 - bitmap=rowy_8_40 x=250 y=210 zoom_y=3 bush_depth=200 bush_opacity=255 src_rect=0,3,8,35
+sprite 53 - bitmap=rowy_8_40 x=260 y=4 zoom_y=3 bush_depth=1000 bush_opacity=255
+sprite 54 - bitmap=rowy_8_40 x=260 y=210 zoom_y=3 bush_depth=1000 bush_opacity=255 src_rect=0,3,8,35
+sprite 55 - bitmap=rowy_8_40 x=270 y=4 zoom_y=0.7 bush_depth=25 bush_opacity=255
+sprite 56 - bitmap=rowy_8_40 x=270 y=210 zoom_y=0.7 bush_depth=25 bush_opacity=255 src_rect=0,3,8,35
+sprite 57 - bitmap=rowy_8_40 x=280 y=4 zoom_y=0.7 bush_depth=28 bush_opacity=255
+sprite 58 - bitmap=rowy_8_40 x=280 y=210 zoom_y=0.7 bush_depth=28 bush_opacity=255 src_rect=0,3,8,35
+sprite 59 - bitmap=rowy_8_40 x=290 y=4 zoom_y=0.7 bush_depth=29 bush_opacity=255
+sprite 60 - bitmap=rowy_8_40 x=290 y=210 zoom_y=0.7 bush_depth=29 bush_opacity=255 src_rect=0,3,8,35
+sprite 61 - bitmap=rowy_8_40 x=300 y=4 zoom_y=0.7 bush_depth=33 bush_opacity=255
+sprite 62 - bitmap=rowy_8_40 x=300 y=210 zoom_y=0.7 bush_depth=33 bush_opacity=255 src_rect=0,3,8,35
+sprite 63 - bitmap=rowy_8_40 x=310 y=4 zoom_y=0.7 bush_depth=41 bush_opacity=255
+sprite 64 - bitmap=rowy_8_40 x=310 y=210 zoom_y=0.7 bush_depth=41 bush_opacity=255 src_rect=0,3,8,35
+sprite 65 - bitmap=rowy_8_40 x=320 y=4 zoom_y=0.7 bush_depth=56 bush_opacity=255
+sprite 66 - bitmap=rowy_8_40 x=320 y=210 zoom_y=0.7 bush_depth=56 bush_opacity=255 src_rect=0,3,8,35
+sprite 67 - bitmap=rowy_8_40 x=330 y=4 zoom_y=0.7 bush_depth=63 bush_opacity=255
+sprite 68 - bitmap=rowy_8_40 x=330 y=210 zoom_y=0.7 bush_depth=63 bush_opacity=255 src_rect=0,3,8,35
+sprite 69 - bitmap=rowy_8_40 x=340 y=4 zoom_y=0.7 bush_depth=200 bush_opacity=255
+sprite 70 - bitmap=rowy_8_40 x=340 y=210 zoom_y=0.7 bush_depth=200 bush_opacity=255 src_rect=0,3,8,35
+sprite 71 - bitmap=rowy_8_40 x=350 y=4 zoom_y=0.7 bush_depth=1000 bush_opacity=255
+sprite 72 - bitmap=rowy_8_40 x=350 y=210 zoom_y=0.7 bush_depth=1000 bush_opacity=255 src_rect=0,3,8,35
+sprite 73 - bitmap=rowy_8_40 x=360 y=4 zoom_y=1 bush_depth=37 bush_opacity=255
+sprite 74 - bitmap=rowy_8_40 x=360 y=210 zoom_y=1 bush_depth=37 bush_opacity=255 src_rect=0,3,8,35
+sprite 75 - bitmap=rowy_8_40 x=370 y=4 zoom_y=1 bush_depth=40 bush_opacity=255
+sprite 76 - bitmap=rowy_8_40 x=370 y=210 zoom_y=1 bush_depth=40 bush_opacity=255 src_rect=0,3,8,35
+sprite 77 - bitmap=rowy_8_40 x=380 y=4 zoom_y=1 bush_depth=41 bush_opacity=255
+sprite 78 - bitmap=rowy_8_40 x=380 y=210 zoom_y=1 bush_depth=41 bush_opacity=255 src_rect=0,3,8,35
+sprite 79 - bitmap=rowy_8_40 x=390 y=4 zoom_y=1 bush_depth=45 bush_opacity=255
+sprite 80 - bitmap=rowy_8_40 x=390 y=210 zoom_y=1 bush_depth=45 bush_opacity=255 src_rect=0,3,8,35
+sprite 81 - bitmap=rowy_8_40 x=400 y=4 zoom_y=1 bush_depth=53 bush_opacity=255
+sprite 82 - bitmap=rowy_8_40 x=400 y=210 zoom_y=1 bush_depth=53 bush_opacity=255 src_rect=0,3,8,35
+sprite 83 - bitmap=rowy_8_40 x=410 y=4 zoom_y=1 bush_depth=80 bush_opacity=255
+sprite 84 - bitmap=rowy_8_40 x=410 y=210 zoom_y=1 bush_depth=80 bush_opacity=255 src_rect=0,3,8,35
+sprite 85 - bitmap=rowy_8_40 x=420 y=4 zoom_y=1 bush_depth=87 bush_opacity=255
+sprite 86 - bitmap=rowy_8_40 x=420 y=210 zoom_y=1 bush_depth=87 bush_opacity=255 src_rect=0,3,8,35
+sprite 87 - bitmap=rowy_8_40 x=430 y=4 zoom_y=1 bush_depth=200 bush_opacity=255
+sprite 88 - bitmap=rowy_8_40 x=430 y=210 zoom_y=1 bush_depth=200 bush_opacity=255 src_rect=0,3,8,35
+sprite 89 - bitmap=rowy_8_40 x=440 y=4 zoom_y=1 bush_depth=1000 bush_opacity=255
+sprite 90 - bitmap=rowy_8_40 x=440 y=210 zoom_y=1 bush_depth=1000 bush_opacity=255 src_rect=0,3,8,35
+sprite 91 - bitmap=rowy_8_40 x=450 y=4 zoom_y=1.3 bush_depth=49 bush_opacity=255
+sprite 92 - bitmap=rowy_8_40 x=450 y=210 zoom_y=1.3 bush_depth=49 bush_opacity=255 src_rect=0,3,8,35
+sprite 93 - bitmap=rowy_8_40 x=460 y=4 zoom_y=1.3 bush_depth=52 bush_opacity=255
+sprite 94 - bitmap=rowy_8_40 x=460 y=210 zoom_y=1.3 bush_depth=52 bush_opacity=255 src_rect=0,3,8,35
+sprite 95 - bitmap=rowy_8_40 x=470 y=4 zoom_y=1.3 bush_depth=53 bush_opacity=255
+sprite 96 - bitmap=rowy_8_40 x=470 y=210 zoom_y=1.3 bush_depth=53 bush_opacity=255 src_rect=0,3,8,35
+sprite 97 - bitmap=rowy_8_40 x=480 y=4 zoom_y=1.3 bush_depth=57 bush_opacity=255
+sprite 98 - bitmap=rowy_8_40 x=480 y=210 zoom_y=1.3 bush_depth=57 bush_opacity=255 src_rect=0,3,8,35
+sprite 99 - bitmap=rowy_8_40 x=490 y=4 zoom_y=1.3 bush_depth=65 bush_opacity=255
+sprite 100 - bitmap=rowy_8_40 x=490 y=210 zoom_y=1.3 bush_depth=65 bush_opacity=255 src_rect=0,3,8,35
+sprite 101 - bitmap=rowy_8_40 x=500 y=4 zoom_y=1.3 bush_depth=104 bush_opacity=255
+sprite 102 - bitmap=rowy_8_40 x=500 y=210 zoom_y=1.3 bush_depth=104 bush_opacity=255 src_rect=0,3,8,35
+sprite 103 - bitmap=rowy_8_40 x=510 y=4 zoom_y=1.3 bush_depth=111 bush_opacity=255
+sprite 104 - bitmap=rowy_8_40 x=510 y=210 zoom_y=1.3 bush_depth=111 bush_opacity=255 src_rect=0,3,8,35
+sprite 105 - bitmap=rowy_8_40 x=520 y=4 zoom_y=1.3 bush_depth=200 bush_opacity=255
+sprite 106 - bitmap=rowy_8_40 x=520 y=210 zoom_y=1.3 bush_depth=200 bush_opacity=255 src_rect=0,3,8,35
+sprite 107 - bitmap=rowy_8_40 x=530 y=4 zoom_y=1.3 bush_depth=1000 bush_opacity=255
+sprite 108 - bitmap=rowy_8_40 x=530 y=210 zoom_y=1.3 bush_depth=1000 bush_opacity=255 src_rect=0,3,8,35
+frame 6e2bd0bdcf44cac4
+end
+scene bushop-00
+sprite 1 - bitmap=bg z=-1000
+sprite 2 - bitmap=cb_a x=0 y=0 bush_depth=4 bush_opacity=128 opacity=255
+sprite 3 - bitmap=cb_a x=0 y=8 bush_depth=4 bush_opacity=0 opacity=255
+sprite 4 - bitmap=cb_a x=0 y=16 bush_depth=4 bush_opacity=255 opacity=255
+sprite 5 - bitmap=cb_a x=0 y=24 bush_depth=4 bush_opacity=1 opacity=255
+sprite 6 - bitmap=cb_a x=0 y=32 bush_depth=4 bush_opacity=254 opacity=255
+sprite 7 - bitmap=cb_a x=0 y=40 bush_depth=4 bush_opacity=127 opacity=255
+sprite 8 - bitmap=cb_a x=0 y=48 bush_depth=4 bush_opacity=129 opacity=255
+sprite 9 - bitmap=cb_a x=0 y=56 bush_depth=4 bush_opacity=64 opacity=255
+sprite 10 - bitmap=cb_a x=0 y=64 bush_depth=4 bush_opacity=300 opacity=255
+sprite 11 - bitmap=cb_a x=0 y=72 bush_depth=4 bush_opacity=-5 opacity=255
+sprite 12 - bitmap=cb_a x=0 y=80 bush_depth=4 bush_opacity=256 opacity=255
+sprite 13 - bitmap=cb_a x=0 y=88 bush_depth=4 bush_opacity=77.9 opacity=255
+sprite 14 - bitmap=cb_a x=0 y=96 bush_depth=4 bush_opacity=129 opacity=255
+sprite 15 - bitmap=cb_a x=0 y=104 bush_depth=4 bush_opacity=166 opacity=28
+sprite 16 - bitmap=cb_a x=0 y=112 bush_depth=4 bush_opacity=101 opacity=112
+sprite 17 - bitmap=cb_a x=0 y=120 bush_depth=4 bush_opacity=123 opacity=70
+sprite 18 - bitmap=cb_a x=0 y=128 bush_depth=4 bush_opacity=98 opacity=255
+sprite 19 - bitmap=cb_a x=0 y=136 bush_depth=4 bush_opacity=58 opacity=253
+sprite 20 - bitmap=cb_a x=0 y=144 bush_depth=4 bush_opacity=149 opacity=221
+sprite 21 - bitmap=cb_a x=0 y=152 bush_depth=4 bush_opacity=243 opacity=28
+sprite 22 - bitmap=cb_a x=0 y=160 bush_depth=4 bush_opacity=121 opacity=48
+sprite 23 - bitmap=cb_a x=0 y=168 bush_depth=4 bush_opacity=74 opacity=8
+sprite 24 - bitmap=cb_a x=0 y=176 bush_depth=4 bush_opacity=1 opacity=255
+sprite 25 - bitmap=cb_a x=0 y=184 bush_depth=4 bush_opacity=143 opacity=128
+sprite 26 - bitmap=cb_a x=0 y=192 bush_depth=4 bush_opacity=14 opacity=128
+sprite 27 - bitmap=cb_a x=0 y=200 bush_depth=4 bush_opacity=254 opacity=255
+sprite 28 - bitmap=cb_a x=0 y=208 bush_depth=4 bush_opacity=88 opacity=255
+sprite 29 - bitmap=cb_a x=0 y=216 bush_depth=4 bush_opacity=97 opacity=69
+sprite 30 - bitmap=cb_a x=0 y=224 bush_depth=4 bush_opacity=198 opacity=128
+sprite 31 - bitmap=cb_a x=0 y=232 bush_depth=4 bush_opacity=93 opacity=255
+sprite 32 - bitmap=cb_a x=0 y=240 bush_depth=4 bush_opacity=169 opacity=119
+sprite 33 - bitmap=cb_a x=0 y=248 bush_depth=4 bush_opacity=164 opacity=213
+sprite 34 - bitmap=cb_a x=0 y=256 bush_depth=4 bush_opacity=60 opacity=241
+sprite 35 - bitmap=cb_a x=0 y=264 bush_depth=4 bush_opacity=44 opacity=151
+sprite 36 - bitmap=cb_a x=0 y=272 bush_depth=4 bush_opacity=133 opacity=255
+sprite 37 - bitmap=cb_a x=0 y=280 bush_depth=4 bush_opacity=240 opacity=255
+sprite 38 - bitmap=cb_a x=0 y=288 bush_depth=4 bush_opacity=104 opacity=255
+sprite 39 - bitmap=cb_a x=0 y=296 bush_depth=4 bush_opacity=115 opacity=128
+sprite 40 - bitmap=cb_a x=0 y=304 bush_depth=4 bush_opacity=98 opacity=128
+sprite 41 - bitmap=cb_a x=0 y=312 bush_depth=4 bush_opacity=36 opacity=55
+sprite 42 - bitmap=cb_a x=0 y=320 bush_depth=4 bush_opacity=41 opacity=250
+sprite 43 - bitmap=cb_a x=0 y=328 bush_depth=4 bush_opacity=102 opacity=99
+sprite 44 - bitmap=cb_a x=0 y=336 bush_depth=4 bush_opacity=224 opacity=145
+sprite 45 - bitmap=cb_a x=0 y=344 bush_depth=4 bush_opacity=39 opacity=161
+sprite 46 - bitmap=cb_a x=0 y=352 bush_depth=4 bush_opacity=51 opacity=244
+sprite 47 - bitmap=cb_a x=0 y=360 bush_depth=4 bush_opacity=108 opacity=130
+sprite 48 - bitmap=cb_a x=0 y=368 bush_depth=4 bush_opacity=168 opacity=158
+sprite 49 - bitmap=cb_a x=0 y=376 bush_depth=4 bush_opacity=44 opacity=128
+sprite 50 - bitmap=cb_a x=0 y=384 bush_depth=4 bush_opacity=48 opacity=128
+sprite 51 - bitmap=cb_a x=0 y=392 bush_depth=4 bush_opacity=236 opacity=255
+sprite 52 - bitmap=cb_a x=0 y=400 bush_depth=4 bush_opacity=40 opacity=128
+sprite 53 - bitmap=cb_a x=0 y=408 bush_depth=4 bush_opacity=54 opacity=30
+sprite 54 - bitmap=cb_a x=272 y=0 bush_depth=4 bush_opacity=54 opacity=255 blend_type=0 color=44,153,40,0 tone=-231,-25,128,76
+sprite 55 - bitmap=cb_a x=272 y=8 bush_depth=4 bush_opacity=40 opacity=255 blend_type=1 color=39,220,2,16 tone=144,-191,-236,255
+sprite 56 - bitmap=cb_a x=272 y=16 bush_depth=4 bush_opacity=236 opacity=255 blend_type=2 color=44,35,23,255 tone=122,-9,-151,165
+sprite 57 - bitmap=cb_a x=272 y=24 bush_depth=4 bush_opacity=48 opacity=255 blend_type=0 color=117,97,248,255 tone=-50,101,-206,128
+sprite 58 - bitmap=cb_a x=272 y=32 bush_depth=4 bush_opacity=44 opacity=255 blend_type=1 color=173,219,97,180 tone=-74,152,-140,255
+sprite 59 - bitmap=cb_a x=272 y=40 bush_depth=4 bush_opacity=168 opacity=255 blend_type=2 color=135,228,149,255 tone=101,227,-207,128
+sprite 60 - bitmap=cb_a x=272 y=48 bush_depth=4 bush_opacity=108 opacity=255 blend_type=0 color=148,88,4,214 tone=11,13,60,0
+sprite 61 - bitmap=cb_a x=272 y=56 bush_depth=4 bush_opacity=51 opacity=255 blend_type=1 color=225,182,242,255 tone=-58,-57,189,0
+sprite 62 - bitmap=cb_a x=272 y=64 bush_depth=4 bush_opacity=39 opacity=255 blend_type=2 color=156,145,224,0 tone=-57,-86,209,136
+sprite 63 - bitmap=cb_a x=272 y=72 bush_depth=4 bush_opacity=224 opacity=255 blend_type=0 color=56,179,182,63 tone=102,209,-182,84
+sprite 64 - bitmap=cb_a x=272 y=80 bush_depth=4 bush_opacity=102 opacity=255 blend_type=1 color=150,175,182,255 tone=-167,-87,-37,242
+sprite 65 - bitmap=cb_a x=272 y=88 bush_depth=4 bush_opacity=41 opacity=255 blend_type=2 color=51,221,118,18 tone=-201,57,255,0
+sprite 66 - bitmap=cb_a x=272 y=96 bush_depth=4 bush_opacity=36 opacity=255 blend_type=0 color=15,29,183,249 tone=-48,20,-216,185
+sprite 67 - bitmap=cb_a x=272 y=104 bush_depth=4 bush_opacity=98 opacity=28 blend_type=1 color=118,16,84,91 tone=-76,230,-100,44
+sprite 68 - bitmap=cb_a x=272 y=112 bush_depth=4 bush_opacity=115 opacity=112 blend_type=2 color=96,187,230,0 tone=24,-10,-26,210
+sprite 69 - bitmap=cb_a x=272 y=120 bush_depth=4 bush_opacity=104 opacity=70 blend_type=0 color=236,49,189,62 tone=-136,-110,157,128
+sprite 70 - bitmap=cb_a x=272 y=128 bush_depth=4 bush_opacity=240 opacity=255 blend_type=1 color=244,187,161,0 tone=-242,240,233,127
+sprite 71 - bitmap=cb_a x=272 y=136 bush_depth=4 bush_opacity=133 opacity=253 blend_type=2 color=46,105,218,255 tone=-99,-86,-135,59
+sprite 72 - bitmap=cb_a x=272 y=144 bush_depth=4 bush_opacity=44 opacity=221 blend_type=0 color=254,92,204,255 tone=-160,-240,162,255
+sprite 73 - bitmap=cb_a x=272 y=152 bush_depth=4 bush_opacity=60 opacity=28 blend_type=1 color=8,187,251,0 tone=169,-112,-39,0
+sprite 74 - bitmap=cb_a x=272 y=160 bush_depth=4 bush_opacity=164 opacity=48 blend_type=2 color=69,188,236,255 tone=224,31,213,0
+sprite 75 - bitmap=cb_a x=272 y=168 bush_depth=4 bush_opacity=169 opacity=8 blend_type=0 color=188,131,7,81 tone=-29,-141,-44,255
+sprite 76 - bitmap=cb_a x=272 y=176 bush_depth=4 bush_opacity=93 opacity=255 blend_type=1 color=3,247,95,15 tone=73,-58,-147,0
+sprite 77 - bitmap=cb_a x=272 y=184 bush_depth=4 bush_opacity=198 opacity=128 blend_type=2 color=158,54,173,111 tone=208,-129,23,0
+sprite 78 - bitmap=cb_a x=272 y=192 bush_depth=4 bush_opacity=97 opacity=128 blend_type=0 color=65,13,59,14 tone=-40,-199,-25,255
+sprite 79 - bitmap=cb_a x=272 y=200 bush_depth=4 bush_opacity=88 opacity=255 blend_type=1 color=77,253,44,115 tone=-51,-61,108,255
+sprite 80 - bitmap=cb_a x=272 y=208 bush_depth=4 bush_opacity=254 opacity=255 blend_type=2 color=107,19,105,0 tone=-207,26,-177,255
+sprite 81 - bitmap=cb_a x=272 y=216 bush_depth=4 bush_opacity=14 opacity=69 blend_type=0 color=154,231,70,0 tone=-255,-43,142,128
+sprite 82 - bitmap=cb_a x=272 y=224 bush_depth=4 bush_opacity=143 opacity=128 blend_type=1 color=74,118,232,209 tone=-47,-49,-125,0
+sprite 83 - bitmap=cb_a x=272 y=232 bush_depth=4 bush_opacity=1 opacity=255 blend_type=2 color=118,158,29,49 tone=-207,-30,135,222
+sprite 84 - bitmap=cb_a x=272 y=240 bush_depth=4 bush_opacity=74 opacity=119 blend_type=0 color=162,38,14,145 tone=194,91,-107,128
+sprite 85 - bitmap=cb_a x=272 y=248 bush_depth=4 bush_opacity=121 opacity=213 blend_type=1 color=142,183,43,9 tone=1,-12,-193,0
+sprite 86 - bitmap=cb_a x=272 y=256 bush_depth=4 bush_opacity=243 opacity=241 blend_type=2 color=193,158,121,0 tone=-55,193,229,248
+sprite 87 - bitmap=cb_a x=272 y=264 bush_depth=4 bush_opacity=149 opacity=151 blend_type=0 color=206,191,155,0 tone=17,119,191,195
+sprite 88 - bitmap=cb_a x=272 y=272 bush_depth=4 bush_opacity=58 opacity=255 blend_type=1 color=146,4,127,189 tone=94,237,171,205
+sprite 89 - bitmap=cb_a x=272 y=280 bush_depth=4 bush_opacity=98 opacity=255 blend_type=2 color=11,215,216,0 tone=51,192,175,0
+sprite 90 - bitmap=cb_a x=272 y=288 bush_depth=4 bush_opacity=123 opacity=255 blend_type=0 color=242,150,103,173 tone=-143,-16,25,255
+sprite 91 - bitmap=cb_a x=272 y=296 bush_depth=4 bush_opacity=101 opacity=128 blend_type=1 color=189,180,31,255 tone=-39,-61,159,0
+sprite 92 - bitmap=cb_a x=272 y=304 bush_depth=4 bush_opacity=166 opacity=128 blend_type=2 color=50,216,69,255 tone=230,253,-50,79
+sprite 93 - bitmap=cb_a x=272 y=312 bush_depth=4 bush_opacity=129 opacity=55 blend_type=0 color=8,178,99,0 tone=73,-229,222,241
+sprite 94 - bitmap=cb_a x=272 y=320 bush_depth=4 bush_opacity=77.9 opacity=250 blend_type=1 color=251,241,56,255 tone=-11,-115,-247,50
+sprite 95 - bitmap=cb_a x=272 y=328 bush_depth=4 bush_opacity=256 opacity=99 blend_type=2 color=88,244,61,0 tone=112,-60,216,255
+sprite 96 - bitmap=cb_a x=272 y=336 bush_depth=4 bush_opacity=-5 opacity=145 blend_type=0 color=35,56,245,180 tone=-127,-40,226,128
+sprite 97 - bitmap=cb_a x=272 y=344 bush_depth=4 bush_opacity=300 opacity=161 blend_type=1 color=59,232,225,0 tone=-102,-201,-252,13
+sprite 98 - bitmap=cb_a x=272 y=352 bush_depth=4 bush_opacity=64 opacity=244 blend_type=2 color=210,46,231,121 tone=90,-30,6,0
+sprite 99 - bitmap=cb_a x=272 y=360 bush_depth=4 bush_opacity=129 opacity=130 blend_type=0 color=17,77,87,68 tone=15,90,-146,128
+sprite 100 - bitmap=cb_a x=272 y=368 bush_depth=4 bush_opacity=127 opacity=158 blend_type=1 color=101,89,167,27 tone=-237,-59,-67,0
+sprite 101 - bitmap=cb_a x=272 y=376 bush_depth=4 bush_opacity=254 opacity=128 blend_type=2 color=118,17,191,223 tone=-218,-65,-91,22
+sprite 102 - bitmap=cb_a x=272 y=384 bush_depth=4 bush_opacity=1 opacity=128 blend_type=0 color=0,23,90,0 tone=189,-6,-173,255
+sprite 103 - bitmap=cb_a x=272 y=392 bush_depth=4 bush_opacity=255 opacity=255 blend_type=1 color=53,134,250,131 tone=251,77,31,76
+sprite 104 - bitmap=cb_a x=272 y=400 bush_depth=4 bush_opacity=0 opacity=128 blend_type=2 color=194,50,105,32 tone=-167,197,-14,128
+sprite 105 - bitmap=cb_a x=272 y=408 bush_depth=4 bush_opacity=128 opacity=30 blend_type=0 color=68,224,204,255 tone=-32,-63,59,64
+frame f9a844d9384e12a2
+end
+scene bushop-01
+sprite 1 - bitmap=bg z=-1000
+sprite 2 - bitmap=cb_o x=0 y=0 bush_depth=3 bush_opacity=0 opacity=255
+sprite 3 - bitmap=cb_o x=0 y=8 bush_depth=4 bush_opacity=5 opacity=218
+sprite 4 - bitmap=cb_o x=0 y=16 bush_depth=5 bush_opacity=10 opacity=181
+sprite 5 - bitmap=cb_o x=0 y=24 bush_depth=6 bush_opacity=15 opacity=144
+sprite 6 - bitmap=cb_o x=0 y=32 bush_depth=7 bush_opacity=20 opacity=107
+sprite 7 - bitmap=cb_o x=0 y=40 bush_depth=3 bush_opacity=25 opacity=70
+sprite 8 - bitmap=cb_o x=0 y=48 bush_depth=4 bush_opacity=30 opacity=33
+sprite 9 - bitmap=cb_o x=0 y=56 bush_depth=5 bush_opacity=35 opacity=252
+sprite 10 - bitmap=cb_o x=0 y=64 bush_depth=6 bush_opacity=40 opacity=215
+sprite 11 - bitmap=cb_o x=0 y=72 bush_depth=7 bush_opacity=45 opacity=178
+sprite 12 - bitmap=cb_o x=0 y=80 bush_depth=3 bush_opacity=50 opacity=141
+sprite 13 - bitmap=cb_o x=0 y=88 bush_depth=4 bush_opacity=55 opacity=104
+sprite 14 - bitmap=cb_o x=0 y=96 bush_depth=5 bush_opacity=60 opacity=67
+sprite 15 - bitmap=cb_o x=0 y=104 bush_depth=6 bush_opacity=65 opacity=30
+sprite 16 - bitmap=cb_o x=0 y=112 bush_depth=7 bush_opacity=70 opacity=249
+sprite 17 - bitmap=cb_o x=0 y=120 bush_depth=3 bush_opacity=75 opacity=212
+sprite 18 - bitmap=cb_o x=0 y=128 bush_depth=4 bush_opacity=80 opacity=175
+sprite 19 - bitmap=cb_o x=0 y=136 bush_depth=5 bush_opacity=85 opacity=138
+sprite 20 - bitmap=cb_o x=0 y=144 bush_depth=6 bush_opacity=90 opacity=101
+sprite 21 - bitmap=cb_o x=0 y=152 bush_depth=7 bush_opacity=95 opacity=64
+sprite 22 - bitmap=cb_o x=0 y=160 bush_depth=3 bush_opacity=100 opacity=27
+sprite 23 - bitmap=cb_o x=0 y=168 bush_depth=4 bush_opacity=105 opacity=246
+sprite 24 - bitmap=cb_o x=0 y=176 bush_depth=5 bush_opacity=110 opacity=209
+sprite 25 - bitmap=cb_o x=0 y=184 bush_depth=6 bush_opacity=115 opacity=172
+sprite 26 - bitmap=cb_o x=0 y=192 bush_depth=7 bush_opacity=120 opacity=135
+sprite 27 - bitmap=cb_o x=0 y=200 bush_depth=3 bush_opacity=125 opacity=98
+sprite 28 - bitmap=cb_o x=0 y=208 bush_depth=4 bush_opacity=130 opacity=61
+sprite 29 - bitmap=cb_o x=0 y=216 bush_depth=5 bush_opacity=135 opacity=24
+sprite 30 - bitmap=cb_o x=0 y=224 bush_depth=6 bush_opacity=140 opacity=243
+sprite 31 - bitmap=cb_o x=0 y=232 bush_depth=7 bush_opacity=145 opacity=206
+sprite 32 - bitmap=cb_o x=0 y=240 bush_depth=3 bush_opacity=150 opacity=169
+sprite 33 - bitmap=cb_o x=0 y=248 bush_depth=4 bush_opacity=155 opacity=132
+sprite 34 - bitmap=cb_o x=0 y=256 bush_depth=5 bush_opacity=160 opacity=95
+sprite 35 - bitmap=cb_o x=0 y=264 bush_depth=6 bush_opacity=165 opacity=58
+sprite 36 - bitmap=cb_o x=0 y=272 bush_depth=7 bush_opacity=170 opacity=21
+sprite 37 - bitmap=cb_o x=0 y=280 bush_depth=3 bush_opacity=175 opacity=240
+sprite 38 - bitmap=cb_o x=0 y=288 bush_depth=4 bush_opacity=180 opacity=203
+sprite 39 - bitmap=cb_o x=0 y=296 bush_depth=5 bush_opacity=185 opacity=166
+sprite 40 - bitmap=cb_o x=0 y=304 bush_depth=6 bush_opacity=190 opacity=129
+sprite 41 - bitmap=cb_o x=0 y=312 bush_depth=7 bush_opacity=195 opacity=92
+sprite 42 - bitmap=cb_o x=0 y=320 bush_depth=3 bush_opacity=200 opacity=55
+sprite 43 - bitmap=cb_o x=0 y=328 bush_depth=4 bush_opacity=205 opacity=18
+sprite 44 - bitmap=cb_o x=0 y=336 bush_depth=5 bush_opacity=210 opacity=237
+sprite 45 - bitmap=cb_o x=0 y=344 bush_depth=6 bush_opacity=215 opacity=200
+sprite 46 - bitmap=cb_o x=0 y=352 bush_depth=7 bush_opacity=220 opacity=163
+sprite 47 - bitmap=cb_o x=0 y=360 bush_depth=3 bush_opacity=225 opacity=126
+sprite 48 - bitmap=cb_o x=0 y=368 bush_depth=4 bush_opacity=230 opacity=89
+sprite 49 - bitmap=cb_o x=0 y=376 bush_depth=5 bush_opacity=235 opacity=52
+sprite 50 - bitmap=cb_o x=0 y=384 bush_depth=6 bush_opacity=240 opacity=15
+sprite 51 - bitmap=cb_o x=0 y=392 bush_depth=7 bush_opacity=245 opacity=234
+sprite 52 - bitmap=cb_o x=0 y=400 bush_depth=3 bush_opacity=250 opacity=197
+sprite 53 - bitmap=cb_o x=0 y=408 bush_depth=4 bush_opacity=255 opacity=160
+sprite 54 - bitmap=cb_a x=272 y=0 bush_depth=4 bush_opacity=30 opacity=129
+sprite 55 - bitmap=cb_a x=272 y=8 bush_depth=4 bush_opacity=128 opacity=166
+sprite 56 - bitmap=cb_a x=272 y=16 bush_depth=4 bush_opacity=255 opacity=101
+sprite 57 - bitmap=cb_a x=272 y=24 bush_depth=4 bush_opacity=128 opacity=123
+sprite 58 - bitmap=cb_a x=272 y=32 bush_depth=4 bush_opacity=128 opacity=98
+sprite 59 - bitmap=cb_a x=272 y=40 bush_depth=4 bush_opacity=158 opacity=58
+sprite 60 - bitmap=cb_a x=272 y=48 bush_depth=4 bush_opacity=130 opacity=149
+sprite 61 - bitmap=cb_a x=272 y=56 bush_depth=4 bush_opacity=244 opacity=243
+sprite 62 - bitmap=cb_a x=272 y=64 bush_depth=4 bush_opacity=161 opacity=121
+sprite 63 - bitmap=cb_a x=272 y=72 bush_depth=4 bush_opacity=145 opacity=74
+sprite 64 - bitmap=cb_a x=272 y=80 bush_depth=4 bush_opacity=99 opacity=1
+sprite 65 - bitmap=cb_a x=272 y=88 bush_depth=4 bush_opacity=250 opacity=143
+sprite 66 - bitmap=cb_a x=272 y=96 bush_depth=4 bush_opacity=55 opacity=14
+sprite 67 - bitmap=cb_a x=272 y=104 bush_depth=4 bush_opacity=128 opacity=254
+sprite 68 - bitmap=cb_a x=272 y=112 bush_depth=4 bush_opacity=128 opacity=88
+sprite 69 - bitmap=cb_a x=272 y=120 bush_depth=4 bush_opacity=255 opacity=97
+sprite 70 - bitmap=cb_a x=272 y=128 bush_depth=4 bush_opacity=255 opacity=198
+sprite 71 - bitmap=cb_a x=272 y=136 bush_depth=4 bush_opacity=255 opacity=93
+sprite 72 - bitmap=cb_a x=272 y=144 bush_depth=4 bush_opacity=151 opacity=169
+sprite 73 - bitmap=cb_a x=272 y=152 bush_depth=4 bush_opacity=241 opacity=164
+sprite 74 - bitmap=cb_a x=272 y=160 bush_depth=4 bush_opacity=213 opacity=60
+sprite 75 - bitmap=cb_a x=272 y=168 bush_depth=4 bush_opacity=119 opacity=44
+sprite 76 - bitmap=cb_a x=272 y=176 bush_depth=4 bush_opacity=255 opacity=133
+sprite 77 - bitmap=cb_a x=272 y=184 bush_depth=4 bush_opacity=128 opacity=240
+sprite 78 - bitmap=cb_a x=272 y=192 bush_depth=4 bush_opacity=69 opacity=104
+sprite 79 - bitmap=cb_a x=272 y=200 bush_depth=4 bush_opacity=255 opacity=115
+frame 459b55d478c44f8d
+end
+scene bushop-02
+sprite 1 - bitmap=bg z=-1000
+sprite 2 - bitmap=pat_24_16_a_3 x=80 y=60 ox=12 oy=8 zoom_x=2 zoom_y=2 angle=0 bush_depth=7 bush_opacity=200 opacity=255
+sprite 3 - bitmap=pat_24_16_a_3 x=240 y=60 ox=12 oy=8 zoom_x=1.5 zoom_y=2.5 angle=0 bush_depth=12 bush_opacity=60 opacity=180
+sprite 4 - bitmap=pat_24_16_a_3 x=400 y=60 ox=12 oy=8 zoom_x=2 zoom_y=2 angle=30 bush_depth=8 bush_opacity=200 opacity=255
+sprite 5 - bitmap=pat_24_16_a_3 x=80 y=180 ox=12 oy=8 zoom_x=2 zoom_y=2 angle=90 bush_depth=10 bush_opacity=30 opacity=200
+sprite 6 - bitmap=pat_24_16_a_3 x=240 y=180 ox=12 oy=8 zoom_x=2 zoom_y=3 angle=180 bush_depth=16 bush_opacity=128 opacity=128
+sprite 7 - bitmap=pat_24_16_a_3 x=400 y=180 ox=12 oy=8 zoom_x=1.5 zoom_y=2.5 angle=45 bush_depth=20 bush_opacity=255 opacity=255
+sprite 8 - bitmap=pat_24_16_a_3 x=80 y=300 ox=12 oy=8 zoom_x=3 zoom_y=3 angle=0 bush_depth=100 bush_opacity=90 opacity=255
+sprite 9 - bitmap=pat_24_16_a_3 x=240 y=300 ox=12 oy=8 zoom_x=2 zoom_y=2 angle=200 bush_depth=9 bush_opacity=0 opacity=255
+sprite 10 - bitmap=pat_24_16_a_3 x=400 y=300 ox=12 oy=8 zoom_x=2 zoom_y=0.5 angle=0 bush_depth=3 bush_opacity=250 opacity=100
+frame 53f126794976ee2b
+end

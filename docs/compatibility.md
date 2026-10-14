@@ -1,6 +1,6 @@
 # Compatibility
 
-vkxp aims at the behaviour of the original runtimes of RPG Maker XP, RGSS 1.04, of RPG
+vkrgss aims at the behaviour of the original runtimes of RPG Maker XP, RGSS 1.04, of RPG
 Maker VX, RGSS2, and of RPG Maker VX Ace, RGSS3: all three are supported. Games that use the
 default scripts or common community scripts are meant to run unmodified. What a game of VX
 has differently is under [RPG Maker VX](#rpg-maker-vx), what a game of VX Ace has under
@@ -10,14 +10,14 @@ has differently is under [RPG Maker VX](#rpg-maker-vx), what a game of VX Ace ha
 
 Frames are compared with those of the original runtime, which
 [`cargo xtask oracle`](development.md#comparing-with-the-original-runtime) runs under Wine
-beside vkxp, with the same input and the same seed. On the seven community-made games that
+beside vkrgss, with the same input and the same seed. On the seven community-made games that
 serve as the regression corpus, the frames compared are pixel-identical except for text
 glyphs, whose rasterisation differs from that of Windows GDI.
 
 Many rules were measured on the original runtime rather than taken from a description of it:
 the arithmetic of the bitmap operations and of blending, the layout of text, the timing of
 frames and more. The specifications under [`openspec/specs`](../openspec/specs) record them,
-and `vkxp-pixel` lists for each of its functions whether its formula was measured.
+and `vkrgss-pixel` lists for each of its functions whether its formula was measured.
 
 The CPU reference compositor and the Vulkan backend must produce byte-identical frames; the
 tests render every message stream with both.
@@ -50,7 +50,7 @@ masks of 24 and 32 bits; masks with a palette, in grey of 8 or 16 bits, and JPEG
 not measured.
 
 Besides these, WMA sounds are decoded by the `ffmpeg` program, which has to be installed:
-without it they stay silent. vkxp runs on Linux, and x86_64 is the supported architecture;
+without it they stay silent. vkrgss runs on Linux, and x86_64 is the supported architecture;
 the job `gate-aarch64` of the [CI workflow](../.github/workflows/ci.yml) shows what works on
 aarch64.
 
@@ -130,8 +130,8 @@ Not measured, or not there yet:
 
 - The cursor from a skin that cuts the cursor block (a skin less than 96 pixels wide or
   high) was not measured on VX, nor was an arrow or a pause sign that the skin cuts to an
-  odd width: vkxp draws them from the skin with transparent pixels where it has none.
-- A skin or a contents bitmap that is disposed while the window has it: vkxp goes on
+  odd width: vkrgss draws them from the skin with transparent pixels where it has none.
+- A skin or a contents bitmap that is disposed while the window has it: vkrgss goes on
   drawing the background, frame and cursor it built, and draws no contents, arrows or pause
   sign from a disposed bitmap.
 - Windows larger than 600 pixels and origins beyond 1000 were not measured.
@@ -166,11 +166,11 @@ types, tone, colour, flash, the stretch and the rotation are those of XP. What d
 Not measured, or different from the original:
 
 - A wave on a turned sprite: the original draws shifted bands that no rule was found for;
-  vkxp draws the turned sprite without its wave.
+  vkrgss draws the turned sprite without its wave.
 - A wave on a sprite that is stretched in x and whose source rectangle leaves the bitmap:
   the columns can be one pixel off.
 - A negative `wave_length`. With a `wave_length` of 0 `Sprite#update` of the original does
-  not return; vkxp leaves the phase and draws the sprite without a wave.
+  not return; vkrgss leaves the phase and draws the sprite without a wave.
 
 In a game of XP a sprite is drawn as before and has none of `bush_opacity`, `wave_amp`,
 `wave_length`, `wave_speed` and `wave_phase`.
@@ -266,13 +266,13 @@ and drawn pixel for pixel as the original draws it on every measured frame:
   they last changed; giving the tilemap another viewport does not take the new ones.
 - `flash_data` adds its colour to a cell once with each plane.
 
-Where the original reads outside its arrays, vkxp draws nothing: for the tile numbers 1024
+Where the original reads outside its arrays, vkrgss draws nothing: for the tile numbers 1024
 to 1535, for negative tile numbers, and for the layers a map with fewer than three does not
 have. The original shows garbage or ends with a page fault there.
 
 Not measured: a tilemap under `Viewport#flash`, a freeze or a transition beyond what follows
 from its being an element; how a plane and a sprite of the same z are ordered by the y of
-the sprite, where vkxp orders by creation alone; frame sizes other than 544 by 416 and 640
+the sprite, where vkrgss orders by creation alone; frame sizes other than 544 by 416 and 640
 by 480.
 
 In a game of XP `Tilemap` is as it was: none of `bitmaps`, `passages` and
@@ -284,8 +284,8 @@ Games of RPG Maker VX Ace (RGSS3) are supported. Two games were compared with th
 runtime, Crysalis and In Search of Immortality; the rows A0 to A3 of the milestone table in
 [decisions.md](decisions.md#milestones) say which frames and which saves, and what the
 comparison does not cover. The scripts of a game of VX Ace run over Ruby 1.9.2, the
-interpreter of the original runtime, in the guest executable `vkxp-guest-rgss3`, which
-`vkxp` starts from beside itself, always in a process ([Guest
+interpreter of the original runtime, in the guest executable `vkrgss-guest-rgss3`, which
+`vkrgss` starts from beside itself, always in a process ([Guest
 process](running.md#guest-process)). The start of a game is the one measured on the original
 runtime 3.0.1: the built-in scripts file, `$RGSS_SCRIPTS`, each script evaluated as
 `{0000}`, `{0001}` and so on and compiled as UTF-8, `RGSSReset` with `Graphics.__reset__`
@@ -306,7 +306,7 @@ The endings, `load_data` and the loading of code follow the original as measured
 
 Known differences of the start, each against the measurements of the original:
 
-- An uncaught exception ends the run with status 1, whatever its line: vkxp's status says
+- An uncaught exception ends the run with status 1, whatever its line: vkrgss's status says
   whether the game ended without a failure. The original's code after the box follows the
   line number in most cases, without an established rule, and is 0 or 1 in the others.
 - A report of more than 1023 UTF-16 units is shown and written whole, where the original
@@ -316,7 +316,7 @@ Known differences of the start, each against the measurements of the original:
   and the run ends with status 1, where the original ends with code 0, by the reason of the
   first point. A `Game.ini` without `Scripts=`, or no `Game.ini`, is an error of the program
   before the game starts, and a `Library=` that names a missing DLL is no error, where the
-  original shows an empty box: vkxp loads no DLL.
+  original shows an empty box: vkrgss loads no DLL.
 - `exit!(status)` ends the game at once as on the original, and the program's status is 0
   for a status of 0 or `true` and 1 for any other, where the original's code is the status.
 - A magic comment of `shift_jis` or `Windows-31J` compiles a script in that encoding; on the
@@ -341,7 +341,7 @@ Measured on the original runtime of VX Ace 3.0.1 under Wine, and followed:
 - The interpreter has no script name: `$0` and `$PROGRAM_NAME` are `false`, and the last
   entry of the backtrace of a script is ``ruby:in `eval'``.
 - A `Game.ini` without `Title=` gives the window the title `Untitled`. An empty value was
-  not measured; vkxp takes it as missing.
+  not measured; vkrgss takes it as missing.
 - Magic comments are those of Ruby 1.9.2: `ascii-8bit` and its spellings compile a script
   as bytes, a comment on the second line after a comment is ignored, a byte above 127 in a
   script of `us-ascii` is a `SyntaxError`, and `euc-jp`, `binary`, an unknown name and
@@ -360,16 +360,16 @@ Measured on the original runtime of VX Ace 3.0.1 under Wine, and followed:
   `Errno::EACCES`.
 - `load_data` and `save_data` raise `ArgumentError` for a name with a NUL byte and
   `Encoding::UndefinedConversionError` for a name labelled ASCII-8BIT whose bytes are not
-  UTF-8, as 3.0.1 does; vkxp follows 3.0.1 where 3.0.0 differs.
+  UTF-8, as 3.0.1 does; vkrgss follows 3.0.1 where 3.0.0 differs.
 - `require` and `load` load files of the game directory: `require` returns `true` and then
   `false` for the same file and adds its full path to `$LOADED_FEATURES`, and a missing
   file and `require "zlib"` raise `LoadError` (`no such file to load -- <name>`).
   `require_relative` and `autoload` exist.
 
-vkxp's own rules, where the original was not measured:
+vkrgss's own rules, where the original was not measured:
 
 - `require`, `load`, `require_relative` and `autoload` load only `.rb` files inside the game
-  directory, the rule of vkxp for every runtime. `require_relative` takes the name from the
+  directory, the rule of vkrgss for every runtime. `require_relative` takes the name from the
   directory of the file that calls it, the game directory for a script, as Ruby 1.9.2
   does, and `autoload` locates its file by the rule of `require` at the call.
 - A file that `require` or `load` loads is compiled as UTF-8, as the scripts are. A file
@@ -398,13 +398,13 @@ place of `passages` and `passages=`:
 Known differences:
 
 - A write to a slot of `bitmaps` of a disposed tilemap ends the original with a page fault.
-  vkxp accepts it and keeps the object in the slot, and the tilemap draws nothing.
-- Where the original reads outside its arrays, vkxp draws nothing: the tile numbers 1024 to
+  vkrgss accepts it and keeps the object in the slot, and the tilemap draws nothing.
+- Where the original reads outside its arrays, vkrgss draws nothing: the tile numbers 1024 to
   1535 (from 1245 on the original ends with a page fault), negative tile numbers (the
   original draws a block of the sheets A1 to A5 for -256 to -1280), and the layers that a
   map of fewer than four does not have. A map of three layers is drawn as on the original;
   one of fewer layers draws its layers, where the original draws other things or ends.
-- A tilemap of a disposed viewport stays alive and usable, as on the original, and vkxp
+- A tilemap of a disposed viewport stays alive and usable, as on the original, and vkrgss
   draws it nowhere while it is in that viewport; what the original draws of it was not
   measured ([Sprites, planes, viewports and Graphics of VX
   Ace](#sprites-planes-viewports-and-graphics-of-vx-ace)).
@@ -452,8 +452,8 @@ follows, measured on the original runtime of VX Ace:
 Known differences:
 
 - A disposed viewport given to `Sprite#viewport=` or `Plane#viewport=` ends the original
-  with a page fault. vkxp raises `RGSSError` (`disposed viewport`) and moves nothing.
-- The elements of a disposed viewport are drawn nowhere in vkxp until they are moved to the
+  with a page fault. vkrgss raises `RGSSError` (`disposed viewport`) and moves nothing.
+- The elements of a disposed viewport are drawn nowhere in vkrgss until they are moved to the
   screen or to another viewport; what the original draws of them, and of an element moved
   out of such a viewport, was not measured ([decisions.md](decisions.md#vx-ace)).
 - `Graphics.play_movie` plays nothing: for a file of the game directory under the name, or
@@ -466,8 +466,8 @@ Known differences:
   `RangeError` of an integer of 2^31 or more given to a writer has another message.
 
 Not measured: what `Graphics.visible=` does; what `Plane#visible` reads after `visible =
-false`, which vkxp reads `true` as in VX; the pixels of `transition` with an empty name,
-which vkxp shows as a plain transition.
+false`, which vkrgss reads `true` as in VX; the pixels of `transition` with an empty name,
+which vkrgss shows as a plain transition.
 
 In a game of XP or VX these classes and `Graphics` are as they were.
 
@@ -490,7 +490,7 @@ original runtime of VX Ace (versions 3.0.0.1 and 3.0.1.1) under Wine:
   `Input.update` alone never sees a new key, and a key pressed before a `Graphics.update` is
   seen by the `Input.update` after it. A call of `Graphics` that shows no frame
   (`frame_reset`, `brightness=`, `snap_to_bitmap`, `freeze`, `resize_screen`, a `wait`, fade
-  or transition of no frame) makes no key visible, and in vkxp neither does a frame shown
+  or transition of no frame) makes no key visible, and in vkrgss neither does a frame shown
   while a message box is open, which was not measured on the original.
 - `trigger?`, `repeat?`, `dir4` and `dir8` are those of VX, without a mismatch in 12084
   updates: one button repeats at a time, the one triggered last, at the 1st, 24th and 30th
@@ -500,18 +500,18 @@ original runtime of VX Ace (versions 3.0.0.1 and 3.0.1.1) under Wine:
   VX](running.md#the-keys-of-a-game-of-vx)); the original of VX Ace has the table of VX line
   for line.
 
-Known differences, which follow from vkxp having no queue of key messages: the host sends
+Known differences, which follow from vkrgss having no queue of key messages: the host sends
 whole input states, and every frame shown makes the state that has arrived visible
 ([decisions.md](decisions.md#vx-ace)).
 
 - A frame of the original takes exactly one key message when it has no time to wait and
-  more, up to all, when it waits; how many is not a rule, and vkxp imitates no count. Several
-  key changes between two frames are seen together in vkxp, where frames of the original
+  more, up to all, when it waits; how many is not a rule, and vkrgss imitates no count. Several
+  key changes between two frames are seen together in vkrgss, where frames of the original
   without time to spare spread them over the following updates.
-- A key pressed and released between two frames is never seen in vkxp; the original saw it
+- A key pressed and released between two frames is never seen in vkrgss; the original saw it
   for one update when its frame took only the key-down.
 - The original takes a key message now and then during `Kernel#sleep`, so that a key can
-  become visible to `Input.update` after a sleep; vkxp takes none.
+  become visible to `Input.update` after a sleep; vkrgss takes none.
 - `GetKeyState`, `GetAsyncKeyState` and `GetKeyboardState` of `Win32API` follow the rules of
   VX; on the original `GetKeyState` changes when `Input.press?` does.
 
@@ -556,24 +556,24 @@ Known differences:
 
 - `==`, `===` and `eql?` with an object of another class raise `TypeError` on version
   3.0.0.1 of the original (`can't convert NilClass into Color`), which one game of the corpus
-  ships; vkxp returns false whatever the game ships
+  ships; vkrgss returns false whatever the game ships
   ([decisions.md](decisions.md#vx-ace), "Text and bitmaps of RGSS3").
 - `set` with an object of another native class, `rect.set(color)` for instance, copies the
-  bytes of that object on the original; vkxp raises `TypeError`.
+  bytes of that object on the original; vkrgss raises `TypeError`.
 - `Color._load` of 32 bytes keeps a component outside its limits on the original, and `to_s`
-  of a component such as 1e300 ends it; vkxp limits the components when it loads them.
+  of a component such as 1e300 ends it; vkrgss limits the components when it loads them.
 - `Rect._load` of a short string reads the memory behind the string on the original, where
-  vkxp reads zeros. `Table._load` of a short or malformed string ends the original with a
-  page fault; vkxp raises `ArgumentError` and the game goes on.
+  vkrgss reads zeros. `Table._load` of a short or malformed string ends the original with a
+  page fault; vkrgss raises `ArgumentError` and the game goes on.
 - What depends on the word size, the guest being a 64-bit build
   ([decisions.md](decisions.md#vx-ace), "Word size"): the original keeps integers from 2^30
-  to 2^31 - 1 in 31 bits (`Rect.new(2**30, 0, 0, 0)` has the x -1073741824), where vkxp keeps
+  to 2^31 - 1 in 31 bits (`Rect.new(2**30, 0, 0, 0)` has the x -1073741824), where vkrgss keeps
   them as they are; the message of the `RangeError` of an integer of 2^31 or more is
   ``bignum too big to convert into `long'`` on the original and
-  ``integer 2147483648 too big to convert to `int'`` in vkxp; and `t[1, 1, 1] = 2**31`
-  raises `RangeError` on the original, where vkxp stores the low 16 bits.
+  ``integer 2147483648 too big to convert to `int'`` in vkrgss; and `t[1, 1, 1] = 2**31`
+  raises `RangeError` on the original, where vkrgss stores the low 16 bits.
 - `Table#[]=` with one index too few, `t[0, 0] = 5` on a table of three dimensions, wrote
-  the element (0, 0, 0) on the original in the one sample taken; vkxp raises
+  the element (0, 0, 0) on the original in the one sample taken; vkrgss raises
   `ArgumentError`.
 
 In a game of XP or VX the value classes are as they were: none of these forms is taken.
@@ -613,23 +613,23 @@ the original runtime of VX Ace (versions 3.0.0.1 and 3.0.1.1) under Wine:
 
 Known differences:
 
-- The original ends with a page fault where vkxp goes on and the calls take effect: when the
+- The original ends with a page fault where vkrgss goes on and the calls take effect: when the
   cursor is placed (by `ox=`, `oy=`, `padding=`, `padding_bottom=` or a cursor rectangle of 0
   by 0) in a window on which `windowskin=` was never called; at a window or a cursor
-  rectangle of 100000 by 100000 and a window of 20000 by 20000 with a skin, of which vkxp
+  rectangle of 100000 by 100000 and a window of 20000 by 20000 with a skin, of which vkrgss
   leaves out what cannot be built; and at `contents=` after `windowskin=` with a bitmap of
   8 by 8 on a new window.
-- A window whose viewport is disposed stays alive on the original; vkxp disposes it with
+- A window whose viewport is disposed stays alive on the original; vkrgss disposes it with
   the viewport, as in XP and VX. `viewport=` with a disposed viewport raises `RGSSError`
-  in vkxp, as in VX; it was not measured on VX Ace.
+  in vkrgss, as in VX; it was not measured on VX Ace.
 - Some errors are worded otherwise: `cursor_rect = nil` says `can't convert NilClass into
-  Rect` on the original and `wrong argument type NilClass (expected Rect)` in vkxp, and
+  Rect` on the original and `wrong argument type NilClass (expected Rect)` in vkrgss, and
   `windowskin = 5` and `contents = 5` say `can't convert Fixnum into Bitmap` there and
   `wrong argument type Fixnum (expected Bitmap)` here. The message of the `RangeError` of a
   large integer depends on the word size, as for the value classes.
 
 Not measured: which of the four values `move` assigns before an argument that cannot be
-converted raises (vkxp converts all four first and assigns none), whether the contents
+converted raises (vkrgss converts all four first and assigns none), whether the contents
 bitmap a window was made with is disposed with it, sizes above 600 pixels and origins
 beyond 1000, `flash` of a viewport over a window, `Graphics.__reset__` with windows alive,
 and text in the contents.
@@ -674,12 +674,12 @@ Known differences:
 - The position follows the frames the game has shown, at their frame rate, not real time:
   it stands still during `sleep`, while a message box is shown and while a script computes,
   where the original's goes on, and it does not follow fast-forward. The original lags
-  behind its own rule at a pitch above 100 and when the machine is busy; vkxp does not.
+  behind its own rule at a pitch above 100 and when the machine is busy; vkrgss does not.
   The two copies of the position in a save of a game are therefore those of the original
   at that frame, or apart from them by whole chunks, as two runs of the original are.
 - The position of a short sound is that of the rule, not the play cursor of the original,
   which moves in steps of 10 ms of real time; where between 529200 and 530964 bytes the
-  original begins to stream a sound is not known, and vkxp streams from 529201.
+  original begins to stream a sound is not known, and vkrgss streams from 529201.
 - The position of MIDI, MP3 and WMA is always 0; that of MIDI was not measured. A WAV file
   that is not PCM of 8 or 16 bits reads 0 and starts at its beginning.
 - Tags whose loop start is not before their loop end count as no tags, and a tag whose
@@ -688,15 +688,15 @@ Known differences:
   the first loop what is heard is not where the position says.
 - A music effect that is not WAV or Ogg Vorbis does not hold the position, because its
   length is not known to the game's side. After two music effects in a row the original's
-  music began at 0 again, once; vkxp goes on.
+  music began at 0 again, once; vkrgss goes on.
 - The same file under another name, `Theme` and `Theme.ogg`, is one file to the original,
-  which goes on, and two to vkxp, which starts again.
-- For a file that is not WAV or Ogg Vorbis the pitch is at most 65535, a limit of vkxp: the
+  which goes on, and two to vkrgss, which starts again.
+- For a file that is not WAV or Ogg Vorbis the pitch is at most 65535, a limit of vkrgss: the
   original asks for `pitch / 100` of the playback rate and what follows was not measured. A
   MIDI file at a pitch that the synthesiser cannot render (below 25 or above 300 at an
   output of 48000 Hz) is reported and stays silent.
 - The lookup of the original asks for `name.*` before the name as given, which also finds a
-  file such as `Theme.v1.ogg` for `Theme`; vkxp does not. A name with a NUL byte or in
+  file such as `Theme.v1.ogg` for `Theme`; vkrgss does not. A name with a NUL byte or in
   UTF-16LE is not cut as the original cuts it.
 - One sound effect per file and frame, a fade that follows real time and the volume set
   again in every frame are not followed; a faded music is ended by the mixer, while its
@@ -724,7 +724,7 @@ those of VX.
 - The font is drawn with the first element of an Array that exists exactly, else its first
   element, else the object given; by its `to_s`, cut to 31 characters. A font without a name
   (`""`, `[]`, `nil`) draws nothing. `Font.exist?` is exact and case-sensitive over the family
-  names of the fonts vkxp has; a Symbol is taken by its name and any other object that is no
+  names of the fonts vkrgss has; a Symbol is taken by its name and any other object that is no
   String is false.
 - A game of VX Ace takes fonts from the `Fonts` directory of each of its run-time packages,
   after its own `Fonts` directory, as the original loads those of the package.
@@ -752,27 +752,27 @@ those of VX.
 
 Known differences:
 
-- The largest bitmap is the one vkxp has for every runtime, 268435456 pixels. The original
+- The largest bitmap is the one vkrgss has for every runtime, 268435456 pixels. The original
   has no rule but the free address space of its process: it created 8192 by 44954 in one
-  run, which vkxp refuses.
+  run, which vkrgss refuses.
 - Text wider than 640 pixels ends at the work rectangle; the original writes the part right
   of column 640 into its surface 640 columns to the left and one row up.
 - `text_size` of a font without a name is (0, 0, 0, 0); the original returns uninitialised
   numbers.
-- The vertical names that begin with `@`, `"@VL Gothic"` among them, do not exist in vkxp;
+- The vertical names that begin with `@`, `"@VL Gothic"` among them, do not exist in vkrgss;
   on the original `Font.exist?` is true for them.
 - A name of the substitution table counts as existing when a font that replaces it is
   there: `Font.exist?("Arial")` is true on a system with Liberation Sans.
 - When "VL Gothic" is missing, the original shows "Unable to find VL Gothic font." at the
-  start; vkxp shows nothing and draws with its fallback families.
+  start; vkrgss shows nothing and draws with its fallback families.
 - The original adds the name in the other language of the two fonts of the run-time package
-  ("VL ゴシック" for "VL Gothic"); vkxp knows such a name only if the font file declares it.
+  ("VL ゴシック" for "VL Gothic"); vkrgss knows such a name only if the font file declares it.
 - What Windows' GDI answers in the measurement (the advances and metrics of a font, the
   width of a squeezed font, the font chosen for a missing name, the glyph shapes) was Wine's
-  answer, and vkxp supplies its own for it, as for XP and VX.
+  answer, and vkrgss supplies its own for it, as for XP and VX.
 
 Not measured: `Font.new` with a `Float` size, and whether a new font shares the name and
-size objects of the defaults (in vkxp it does); `Font.exist?` of an object of another
+size objects of the defaults (in vkrgss it does); `Font.exist?` of an object of another
 class than a String, a Symbol, `nil`, an Integer and an Array; `draw_text` with two or three
 arguments whose first is no `Rect`, `fill_rect` whose first is no `Rect`, and the counts of
 `clear_rect` and `gradient_fill_rect` other than none and two.
@@ -783,7 +783,7 @@ In a game of XP or VX `Font` and `Bitmap` are as they were: neither `outline` no
 ### Win32API and DL of VX Ace
 
 A game of VX Ace has the `Win32API` of the original runtime of VX Ace as measured under Wine
-(version 3.0.1.1), with the functions vkxp emulates for XP and VX behind it:
+(version 3.0.1.1), with the functions vkrgss emulates for XP and VX behind it:
 
 - `Win32API` has `initialize` with four arguments, `call` and `Call`, and nothing else of
   its own. The library and the function are Strings (`can't convert Symbol into String`),
@@ -803,7 +803,7 @@ A game of VX Ace has the `Win32API` of the original runtime of VX Ace as measure
   `ddraw`, `dinput`, `dinput8`, `xinput1_3`, `opengl32`, `d3d9`, `setupapi`, `crypt32`,
   `iphlpapi`, `secur32`, `netapi32`, `mpr`, `rpcrt4`, `hid`, `powrprof`. Any other name
   raises `RuntimeError` with `LoadLibrary: <name>` and a line feed at `Win32API.new`, as the
-  original does for a missing DLL, so a script that rescues it takes its fallback. vkxp
+  original does for a missing DLL, so a script that rescues it takes its fallback. vkrgss
   loads none of these libraries: a function is emulated, or it gives 0 (an empty String for
   the export `p`) and is named once on `$stderr`, as for XP and VX. The functions of a
   library a game ships are not run.
@@ -823,12 +823,12 @@ A game of VX Ace has the `Win32API` of the original runtime of VX Ace as measure
 - `DL` exists with the numeric constants of the original (`TYPE_*`, `SIZEOF_*`, `ALIGN_*`,
   `RTLD_*`, `DLSTACK_SIZE`, `MAX_CALLBACK`) and the classes `DLError`, `DLTypeError`,
   `Handle`, `CFunc` and `CPtr`. Every function of the module and every constructor and class
-  method of the three classes raises `DL::DLError` naming the call: vkxp loads no library
+  method of the three classes raises `DL::DLError` naming the call: vkrgss loads no library
   and reads no memory of the process. No game of the corpus uses `DL`.
 
 Known differences:
 
-- A function of a found library never raises `GetProcAddress: Name or NameA`, since vkxp
+- A function of a found library never raises `GetProcAddress: Name or NameA`, since vkrgss
   does not know the functions of a library it does not load. A system library outside the
   list raises `LoadLibrary` where the original would load it; the list grows when a game
   needs it.
@@ -838,7 +838,7 @@ Known differences:
 - The export `p` gives an empty String for a value other than 0, where the original copies
   the memory at that address; no value of an emulated function is an address the guest has.
 - An Integer as the source of `RtlMoveMemory` copies nothing, so the address trick of
-  bitmap scripts (the pixels found through `object_id * 2 + 16`) reads nothing: vkxp has no
+  bitmap scripts (the pixels found through `object_id * 2 + 16`) reads nothing: vkrgss has no
   memory at the original's addresses and does not give scripts the memory of the guest.
 - `GetWindowRect` and `GetSystemMetrics` give the logical size, where the original under
   Wine gave 550 by 448 and the screen; `GetModuleHandle`, `GetWindowThreadProcessId` and the

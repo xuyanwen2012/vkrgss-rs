@@ -12,7 +12,7 @@
 //! (`ace-v0-REPORT.md`, point 2). An archive is read into its seed, its entries in table
 //! order and its end record, and written with the data in table order right after the end
 //! record, which is how the editor lays them out: such an archive is written back byte for
-//! byte. This reader and writer are independent of the ones in `vkxp-vfs`.
+//! byte. This reader and writer are independent of the ones in `vkrgss-vfs`.
 
 use anyhow::{Context, Result, ensure};
 

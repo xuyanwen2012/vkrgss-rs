@@ -1,11 +1,11 @@
-//! The release package: the release executables, `vkxp` and the guest executable of games
+//! The release package: the release executables, `vkrgss` and the guest executable of games
 //! of RGSS3 that it starts from beside itself, with the documents and licence texts that
 //! accompany them, in one archive under `target/dist/`, and the archive's SHA-256 checksum
 //! beside it. The archive is written by `tar` and the checksum by `sha256sum`.
 //!
 //! Both executables are built in one build with libcrypt linked statically
-//! (`VKXP_STATIC_CRYPT=1`, read by the build scripts of `vkxp-ruby-sys` and
-//! `vkxp-ruby192-sys`), because the shared library has a different name on Ubuntu and on
+//! (`VKRGSS_STATIC_CRYPT=1`, read by the build scripts of `vkrgss-ruby-sys` and
+//! `vkrgss-ruby192-sys`), because the shared library has a different name on Ubuntu and on
 //! Fedora. The command looks for the static library before the build and reads the needed
 //! libraries of each executable with `readelf` after it.
 
@@ -16,7 +16,7 @@ use std::process::Command;
 
 use anyhow::{Context, Result, anyhow, bail};
 
-/// The only target vkxp builds for.
+/// The only target vkrgss builds for.
 const TARGET: &str = "x86_64-unknown-linux-gnu";
 
 /// The arguments of the build, after the cargo executable.
@@ -25,23 +25,23 @@ const BUILD: [&str; 7] = [
     "--release",
     "--locked",
     "-p",
-    "vkxp",
+    "vkrgss",
     "-p",
-    "vkxp-guest-rgss3",
+    "vkrgss-guest-rgss3",
 ];
 
 /// The variable that makes the build scripts of the interpreter crates link libcrypt
 /// statically.
-const STATIC_CRYPT: (&str, &str) = ("VKXP_STATIC_CRYPT", "1");
+const STATIC_CRYPT: (&str, &str) = ("VKRGSS_STATIC_CRYPT", "1");
 
 /// The static library the build needs.
 const CRYPT_ARCHIVE: &str = "libcrypt.a";
 
 /// Where the build leaves the executable, below the workspace root.
-const EXECUTABLE: &str = "target/release/vkxp";
+const EXECUTABLE: &str = "target/release/vkrgss";
 
 /// Where the build leaves the guest executable of games of RGSS3, below the workspace root.
-const GUEST_EXECUTABLE: &str = "target/release/vkxp-guest-rgss3";
+const GUEST_EXECUTABLE: &str = "target/release/vkrgss-guest-rgss3";
 
 /// The executables of the package.
 const EXECUTABLES: [&str; 2] = [EXECUTABLE, GUEST_EXECUTABLE];
@@ -50,8 +50,8 @@ const EXECUTABLES: [&str; 2] = [EXECUTABLE, GUEST_EXECUTABLE];
 /// the directory of the archive. The licence texts are the ones the bundled sources ask to
 /// accompany a binary.
 const FILES: [(&str, &str); 14] = [
-    (EXECUTABLE, "vkxp"),
-    (GUEST_EXECUTABLE, "vkxp-guest-rgss3"),
+    (EXECUTABLE, "vkrgss"),
+    (GUEST_EXECUTABLE, "vkrgss-guest-rgss3"),
     ("README.md", "README.md"),
     ("CHANGELOG.md", "CHANGELOG.md"),
     ("LICENSE", "LICENSE"),
@@ -78,7 +78,7 @@ const FILES: [(&str, &str); 14] = [
 /// The name of the archive's directory, which is the archive's name without its extension.
 /// The version is the workspace's, which this crate inherits.
 fn package_name() -> String {
-    format!("vkxp-{}-{TARGET}", env!("CARGO_PKG_VERSION"))
+    format!("vkrgss-{}-{TARGET}", env!("CARGO_PKG_VERSION"))
 }
 
 /// Builds the release executables through the cargo executable `cargo` and writes the
@@ -274,7 +274,7 @@ mod tests {
         let archive = package(root.path(), &dist).unwrap();
 
         let name = format!(
-            "vkxp-{}-x86_64-unknown-linux-gnu",
+            "vkrgss-{}-x86_64-unknown-linux-gnu",
             env!("CARGO_PKG_VERSION")
         );
         assert_eq!(archive, dist.join(format!("{name}.tar.gz")));
@@ -296,8 +296,8 @@ mod tests {
             ("-rw-r--r--", "licenses/ruby-1.9.2/COPYING"),
             ("-rw-r--r--", "licenses/ruby-1.9.2/GPL"),
             ("-rw-r--r--", "licenses/ruby-1.9.2/LEGAL"),
-            ("-rwxr-xr-x", "vkxp"),
-            ("-rwxr-xr-x", "vkxp-guest-rgss3"),
+            ("-rwxr-xr-x", "vkrgss"),
+            ("-rwxr-xr-x", "vkrgss-guest-rgss3"),
         ]
         .map(|(mode, path)| (mode.to_owned(), format!("{name}/{path}")));
         assert_eq!(entries(&archive), expected);
@@ -362,7 +362,7 @@ Dynamic section at offset 0x1f3a2d0 contains 33 entries:
             .unwrap_err()
             .to_string();
         assert!(error.contains("libcrypt.so.1"), "{error}");
-        assert!(error.contains("vkxp-guest-rgss3"), "{error}");
+        assert!(error.contains("vkrgss-guest-rgss3"), "{error}");
         refuse_shared_crypt_in(GUEST_EXECUTABLE, &needed[1..]).unwrap();
     }
 
@@ -373,7 +373,10 @@ Dynamic section at offset 0x1f3a2d0 contains 33 entries:
         fs::remove_file(root.path().join(GUEST_EXECUTABLE)).unwrap();
         let dist = root.path().join("target/dist");
         let error = package(root.path(), &dist).unwrap_err().to_string();
-        assert_eq!(error, "dist: `target/release/vkxp-guest-rgss3` is missing");
+        assert_eq!(
+            error,
+            "dist: `target/release/vkrgss-guest-rgss3` is missing"
+        );
     }
 
     #[test]

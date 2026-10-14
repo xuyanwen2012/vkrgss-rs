@@ -1,0 +1,25 @@
+[package]
+name = "vkrgss-text"
+description = "Font lookup and glyph rasterisation for vkrgss"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fontdb.workspace = true
+skrifa.workspace = true
+swash.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

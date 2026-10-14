@@ -36,12 +36,12 @@ images only.
 
 ## Reporting a game that misbehaves
 
-Open an issue at <https://github.com/xuyanwen2012/vkxp/issues> and state:
+Open an issue at <https://github.com/xuyanwen2012/vkrgss-rs/issues> and state:
 
-- what the game does in vkxp and what it does in the original runtime;
+- what the game does in vkrgss and what it does in the original runtime;
 - the command line, and the output of the same run with `--verbose`;
 - the steps that lead there, or better a recording made with `--record`, which a headless
   run replays (see [docs/running.md](docs/running.md));
-- the version of vkxp, the GPU and its driver.
+- the version of vkrgss, the GPU and its driver.
 
 Do not attach the game, its assets or a DLL of the original runtime.

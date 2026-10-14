@@ -1,0 +1,31 @@
+[package]
+name = "vkrgss-ruby-sys"
+description = "Embedded Ruby build and raw FFI for vkrgss"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+build = "build.rs"
+links = "vkrgss_ruby"
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror.workspace = true
+libc.workspace = true
+libz-sys.workspace = true
+
+[build-dependencies]
+cc.workspace = true
+
+[dev-dependencies]
+libc.workspace = true
+sha2.workspace = true

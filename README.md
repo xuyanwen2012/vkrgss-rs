@@ -1,6 +1,6 @@
-<p align="center"><img src="docs/images/banner.jpg" width="100%" alt="vkxp. Classic RPG Maker, modern Rust + Vulkan: RPG Maker XP, VX and VX Ace are supported. A Rust + Vulkan runtime for RPG Maker games on Linux."></p>
+<p align="center"><img src="docs/images/banner.jpg" width="100%" alt="vkrgss. Classic RPG Maker, modern Rust + Vulkan: RPG Maker XP, VX and VX Ace are supported. A Rust + Vulkan runtime for RPG Maker games on Linux."></p>
 
-<h1 align="center">vkxp</h1>
+<h1 align="center">vkrgss</h1>
 
 <p align="center"><b>Classic RPG Maker. Modern Rust + Vulkan.</b><br>The games of RPG Maker XP, VX and VX Ace on Linux, pixel for pixel.</p>
 
@@ -10,13 +10,13 @@
   <a href="https://www.vulkan.org/"><img src="https://img.shields.io/badge/Vulkan-1.3-AC162C?logo=vulkan&logoColor=white" alt="Vulkan 1.3"></a>
   <img src="https://img.shields.io/badge/platform-Linux%20x86__64-333333?logo=linux&logoColor=white" alt="Platform: Linux x86_64">
   <br>
-  <a href="https://github.com/xuyanwen2012/vkxp/actions/workflows/ci.yml"><img src="https://github.com/xuyanwen2012/vkxp/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/xuyanwen2012/vkxp/releases/latest"><img src="https://img.shields.io/github/v/release/xuyanwen2012/vkxp?label=release" alt="Latest release"></a>
+  <a href="https://github.com/xuyanwen2012/vkrgss-rs/actions/workflows/ci.yml"><img src="https://github.com/xuyanwen2012/vkrgss-rs/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/xuyanwen2012/vkrgss-rs/releases/latest"><img src="https://img.shields.io/github/v/release/xuyanwen2012/vkrgss?label=release" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-MIT-blue.svg" alt="Licence: MIT"></a>
 </p>
 
 A Rust + Vulkan runtime for RPG Maker games on Linux. RPG Maker XP (RGSS1), VX (RGSS2) and
-VX Ace (RGSS3) are supported. `vkxp <game directory>` runs the game's scripts in an embedded
+VX Ace (RGSS3) are supported. `vkrgss <game directory>` runs the game's scripts in an embedded
 Ruby interpreter, 1.8.7 or for VX Ace 1.9.2, against the RGSS classes and shows the frames
 of a Vulkan compositor in a window, or writes them to files headless.
 
@@ -29,12 +29,12 @@ of a Vulkan compositor in a window, or writes them to files headless.
 | RPG Maker VX Ace (RGSS3) | Supported | Since version 0.3.0 |
 
 <p align="center">
-  <img src="docs/images/legendary-warband-title.png" width="49%" alt="The title screen of Legendary Warband running in vkxp">
-  <img src="docs/images/legendary-warband-battle.png" width="49%" alt="The start of a battle of Legendary Warband running in vkxp">
+  <img src="docs/images/legendary-warband-title.png" width="49%" alt="The title screen of Legendary Warband running in vkrgss">
+  <img src="docs/images/legendary-warband-battle.png" width="49%" alt="The start of a battle of Legendary Warband running in vkrgss">
 </p>
 
 The pictures are frames of [Legendary Warband](https://github.com/xuyanwen2012/XP-MBBS-7.0),
-an RPG Maker XP game, as vkxp renders them in a headless run.
+an RPG Maker XP game, as vkrgss renders them in a headless run.
 
 The runtime is taken from the game's `Game.ini`. What works:
 
@@ -66,7 +66,7 @@ written at the same frame is byte for byte that of the original. The specificati
 ## Modern Rust + Vulkan
 
 - **Raw Vulkan 1.3 through `ash`, no engine in between.** The compositor is one compute
-  shader, [`compose.comp`](crates/vkxp-vk/shaders/compose.comp): one dispatch per frame, one
+  shader, [`compose.comp`](crates/vkrgss-vk/shaders/compose.comp): one dispatch per frame, one
   workgroup per 16 by 16 tile, one invocation per pixel, integer arithmetic only and texels
   fetched, never filtered, so a frame is the same on every device.
 - **Two compositors that must agree.** A CPU reference compositor in pure Rust evaluates the
@@ -96,23 +96,23 @@ and libudev, and a Vulkan 1.3 device; see [docs/building.md](docs/building.md). 
 toolchain is pinned in `rust-toolchain.toml`.
 
 ```sh
-cargo build --release -p vkxp -p vkxp-guest-rgss3
+cargo build --release -p vkrgss -p vkrgss-guest-rgss3
 ```
 
 The built-in scripts. A game expects the `RPG` module of the original runtime. That Ruby
 source is Enterbrain's and is not part of this repository; one command copies it from an
-RGSS DLL of your own into a file that `vkxp` loads. A game of VX or VX Ace needs those of
+RGSS DLL of your own into a file that `vkrgss` loads. A game of VX or VX Ace needs those of
 RGSS2 or RGSS3 in a file of their own; [docs/running.md](docs/running.md) says how.
 
 ```sh
-mkdir -p ~/.local/share/vkxp
-cargo xtask extract-rpg <RGSS DLL> ~/.local/share/vkxp/rpg_builtin.rb
+mkdir -p ~/.local/share/vkrgss
+cargo xtask extract-rpg <RGSS DLL> ~/.local/share/vkrgss/rpg_builtin.rb
 ```
 
 Run a game, naming the directory of the run-time package if the game uses one:
 
 ```sh
-target/release/vkxp <game directory> --rtp Standard=<RTP directory>
+target/release/vkrgss <game directory> --rtp Standard=<RTP directory>
 ```
 
 The Vulkan loader loads the driver of every GPU in the machine unless it is restricted; to
@@ -138,21 +138,21 @@ Every option, the configuration files and the key maps are in [docs/running.md](
 ```mermaid
 flowchart LR
   subgraph guest["Guest: a thread, or a sandboxed process"]
-    scripts["Game scripts<br>embedded Ruby 1.8.7 or 1.9.2"] --> binding["vkxp-binding<br>RGSS classes"]
-    binding --> core["vkxp-core<br>bitmaps, scene, frame extraction"]
+    scripts["Game scripts<br>embedded Ruby 1.8.7 or 1.9.2"] --> binding["vkrgss-binding<br>RGSS classes"]
+    binding --> core["vkrgss-core<br>bitmaps, scene, frame extraction"]
   end
   subgraph host["Host"]
-    session["vkxp-host<br>window, input, pacing"] --> vk["vkxp-vk<br>Vulkan compute compositor"]
-    session --> audio["vkxp-audio<br>mixer, decoders, MIDI"]
+    session["vkrgss-host<br>window, input, pacing"] --> vk["vkrgss-vk<br>Vulkan compute compositor"]
+    session --> audio["vkrgss-audio<br>mixer, decoders, MIDI"]
   end
-  core -- "vkxp-proto: frame packets, op lists, audio commands" --> session
+  core -- "vkrgss-proto: frame packets, op lists, audio commands" --> session
   session -- "input snapshots" --> core
-  cpu["vkxp-compose-ref<br>CPU reference compositor"] -. "byte-identical frames, tested" .- vk
+  cpu["vkrgss-compose-ref<br>CPU reference compositor"] -. "byte-identical frames, tested" .- vk
 ```
 
 The game's scripts, with the interpreter, the bitmaps and the game's files, are the guest;
 the window, the GPU, the audio device and the input are the host. The two exchange only plain
-data defined in `vkxp-proto`, and the guest runs as a thread or as a process of its own. A
+data defined in `vkrgss-proto`, and the guest runs as a thread or as a process of its own. A
 guest process confines itself with Landlock before the first script runs: it writes only
 below the game directory, executes nothing and opens no TCP connection; `--sandbox off`
 turns that off.
@@ -162,8 +162,8 @@ play command, and the volume command.
 Each frame the guest sends an ordered list of ops of five kinds, and both compositors
 evaluate every kind per pixel. The interpreter is Ruby 1.8.7-p374 with Oniguruma 5.9.6, built
 from vendored and patched source by a build script; no installed Ruby is involved. Ruby 1.9.2
-for RGSS3 is linked by `vkxp-guest-rgss3` alone, the guest executable that `vkxp` starts from
-beside itself for a game of VX Ace, over the same RGSS classes (`vkxp-binding-rgss3`).
+for RGSS3 is linked by `vkrgss-guest-rgss3` alone, the guest executable that `vkrgss` starts from
+beside itself for a game of VX Ace, over the same RGSS classes (`vkrgss-binding-rgss3`).
 [docs/architecture.md](docs/architecture.md) has every crate and the four dependency rules.
 
 ## Documentation
@@ -193,8 +193,8 @@ beside itself for a game of VX Ace, over the same RGSS classes (`vkxp-binding-rg
 MIT; see [LICENSE](LICENSE). The bundled third-party source keeps its own terms, which
 [THIRD-PARTY.md](THIRD-PARTY.md) lists.
 
-vkxp is an independent project. It is not affiliated with, endorsed by or sponsored by
+vkrgss is an independent project. It is not affiliated with, endorsed by or sponsored by
 Enterbrain, KADOKAWA or Gotcha Gotcha Games. RPG Maker is a trademark of its owner; Rust and
 Vulkan are trademarks of the Rust Foundation and of the Khronos Group, named here only to say
-what vkxp is built with. The repository contains no code, script or asset of the original
+what vkrgss is built with. The repository contains no code, script or asset of the original
 runtime or of the run-time package; to run a game you need the game and the files it requires.

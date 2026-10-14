@@ -8,7 +8,7 @@
 //! data. The data is XORed word by word, little endian, with a copy of the key that is
 //! advanced after every word, while the key itself stays as it was after the size.
 //!
-//! This reader and writer are independent of the ones in `vkxp-vfs`, so that the harness and
+//! This reader and writer are independent of the ones in `vkrgss-vfs`, so that the harness and
 //! the runtime check each other.
 
 use std::fs;

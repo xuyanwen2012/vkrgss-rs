@@ -5,21 +5,21 @@
 //! 1. No guest crate reaches a host crate, directly or transitively.
 //! 2. No host crate, and not the reference compositor, reaches a guest crate, directly or
 //!    transitively.
-//! 3. Everything `vkxp-core` reaches is on its allow-list of pure crates.
-//! 4. The guest role, `vkxp-guest`, reaches no interpreter crate and neither `vkxp-binding`
-//!    nor `vkxp-binding-rgss3`, directly or transitively: it links no interpreter.
-//! 5. No package reaches both `vkxp-ruby-sys` and `vkxp-ruby192-sys`: the two interpreters
+//! 3. Everything `vkrgss-core` reaches is on its allow-list of pure crates.
+//! 4. The guest role, `vkrgss-guest`, reaches no interpreter crate and neither `vkrgss-binding`
+//!    nor `vkrgss-binding-rgss3`, directly or transitively: it links no interpreter.
+//! 5. No package reaches both `vkrgss-ruby-sys` and `vkrgss-ruby192-sys`: the two interpreters
 //!    define the same symbols and cannot be linked into one program. For this rule alone
 //!    development dependencies count as well, because a test binary links them.
 //!
 //! Beside the rules, the twin packages that compile one source over the two interpreters,
-//! `vkxp-binding` and `vkxp-binding-rgss3` for the RGSS classes and `vkxp-guest-main` and
-//! `vkxp-guest-main-rgss3` for the main of a guest, declare the same dependencies apart from
+//! `vkrgss-binding` and `vkrgss-binding-rgss3` for the RGSS classes and `vkrgss-guest-main` and
+//! `vkrgss-guest-main-rgss3` for the main of a guest, declare the same dependencies apart from
 //! the interpreter crate and the binding package, and every test file of the first of a pair
 //! has its counterpart in the second.
 //!
-//! The `vkxp` binary is on neither side: it is the one crate that may depend on both. The
-//! guest executable `vkxp-guest-rgss3` is a guest crate.
+//! The `vkrgss` binary is on neither side: it is the one crate that may depend on both. The
+//! guest executable `vkrgss-guest-rgss3` is a guest crate.
 //!
 //! The graph is taken with every feature of every workspace crate enabled, so a forbidden
 //! dependency cannot hide behind an optional dependency or a feature that is off by default.
@@ -37,47 +37,51 @@ use serde_json::Value;
 
 /// Crates that run on the script thread.
 pub(crate) const GUEST_CRATES: &[&str] = &[
-    "vkxp-core",
-    "vkxp-image",
-    "vkxp-text",
-    "vkxp-vfs",
-    "vkxp-ruby-sys",
-    "vkxp-ruby192-sys",
-    "vkxp-binding",
-    "vkxp-binding-rgss3",
-    "vkxp-guest",
-    "vkxp-guest-main",
-    "vkxp-guest-main-rgss3",
-    "vkxp-guest-rgss3",
+    "vkrgss-core",
+    "vkrgss-image",
+    "vkrgss-text",
+    "vkrgss-vfs",
+    "vkrgss-ruby-sys",
+    "vkrgss-ruby192-sys",
+    "vkrgss-binding",
+    "vkrgss-binding-rgss3",
+    "vkrgss-guest",
+    "vkrgss-guest-main",
+    "vkrgss-guest-main-rgss3",
+    "vkrgss-guest-rgss3",
 ];
 
 /// Crates that own the window, the GPU or the audio device.
-pub(crate) const HOST_CRATES: &[&str] = &["vkxp-vk", "vkxp-audio", "vkxp-host"];
+pub(crate) const HOST_CRATES: &[&str] = &["vkrgss-vk", "vkrgss-audio", "vkrgss-host"];
 
 /// Crates that must not reach a guest crate: the host crates and the reference compositor,
 /// which runs on the host and in tests.
-pub(crate) const HOST_SIDE_CRATES: &[&str] =
-    &["vkxp-vk", "vkxp-audio", "vkxp-host", "vkxp-compose-ref"];
+pub(crate) const HOST_SIDE_CRATES: &[&str] = &[
+    "vkrgss-vk",
+    "vkrgss-audio",
+    "vkrgss-host",
+    "vkrgss-compose-ref",
+];
 
 /// The crate of the guest role, which an executable of any interpreter links.
-pub(crate) const GUEST_ROLE_CRATE: &str = "vkxp-guest";
+pub(crate) const GUEST_ROLE_CRATE: &str = "vkrgss-guest";
 
 /// Crates that link an interpreter, which the guest role must not reach.
 pub(crate) const INTERPRETER_CRATES: &[&str] = &[
-    "vkxp-ruby-sys",
-    "vkxp-ruby192-sys",
-    "vkxp-binding",
-    "vkxp-binding-rgss3",
+    "vkrgss-ruby-sys",
+    "vkrgss-ruby192-sys",
+    "vkrgss-binding",
+    "vkrgss-binding-rgss3",
 ];
 
 /// The crate that must stay free of I/O, Ruby and Vulkan.
-pub(crate) const CORE_CRATE: &str = "vkxp-core";
+pub(crate) const CORE_CRATE: &str = "vkrgss-core";
 
-/// Everything `vkxp-core` may reach: the two shared crates, then pure crates (no I/O, no FFI
+/// Everything `vkrgss-core` may reach: the two shared crates, then pure crates (no I/O, no FFI
 /// to Ruby, Vulkan, windowing or audio) that those need.
 pub(crate) const CORE_ALLOW_LIST: &[&str] = &[
-    "vkxp-proto",
-    "vkxp-pixel",
+    "vkrgss-proto",
+    "vkrgss-pixel",
     // Serialization of protocol types.
     "serde",
     "serde_core",
@@ -112,14 +116,14 @@ pub(crate) enum Violation {
     /// A host crate or the reference compositor reaches a guest crate. The path starts at the
     /// former and ends at the guest crate.
     HostReachesGuest { path: Vec<String> },
-    /// `vkxp-core` reaches a crate outside its allow-list. The path starts at `vkxp-core` and
+    /// `vkrgss-core` reaches a crate outside its allow-list. The path starts at `vkrgss-core` and
     /// ends at the offending dependency.
     CoreDependency { path: Vec<String> },
-    /// `vkxp-guest` reaches a crate that links an interpreter. The path starts at
-    /// `vkxp-guest` and ends at that crate.
+    /// `vkrgss-guest` reaches a crate that links an interpreter. The path starts at
+    /// `vkrgss-guest` and ends at that crate.
     GuestRoleReachesInterpreter { path: Vec<String> },
     /// A package reaches both interpreters. Both paths start at the package; the first ends
-    /// at `vkxp-ruby-sys`, the second at `vkxp-ruby192-sys`.
+    /// at `vkrgss-ruby-sys`, the second at `vkrgss-ruby192-sys`.
     BothInterpreters { paths: [Vec<String>; 2] },
 }
 
@@ -223,7 +227,7 @@ fn outside_allow_list(graph: &Graph, start: &str) -> Vec<Violation> {
 
 /// The two crates that each build an interpreter, in the order of the paths of
 /// [`Violation::BothInterpreters`].
-pub(crate) const INTERPRETER_SYS_CRATES: [&str; 2] = ["vkxp-ruby-sys", "vkxp-ruby192-sys"];
+pub(crate) const INTERPRETER_SYS_CRATES: [&str; 2] = ["vkrgss-ruby-sys", "vkrgss-ruby192-sys"];
 
 /// Checks the rule on the two interpreters over a graph in which development dependencies
 /// count (see [`linked_graph_from_metadata`]), and returns every violation, in a stable
@@ -364,25 +368,25 @@ mod tests {
     #[test]
     fn allowed_graph_has_no_violations() {
         let graph = graph(&[
-            ("vkxp-binding", "vkxp-core"),
-            ("vkxp-core", "vkxp-proto"),
-            ("vkxp-core", "vkxp-pixel"),
-            ("vkxp-proto", "serde"),
-            ("vkxp-host", "vkxp-vk"),
-            ("vkxp-host", "vkxp-compose-ref"),
-            ("vkxp-vk", "vkxp-proto"),
-            ("vkxp-compose-ref", "vkxp-pixel"),
+            ("vkrgss-binding", "vkrgss-core"),
+            ("vkrgss-core", "vkrgss-proto"),
+            ("vkrgss-core", "vkrgss-pixel"),
+            ("vkrgss-proto", "serde"),
+            ("vkrgss-host", "vkrgss-vk"),
+            ("vkrgss-host", "vkrgss-compose-ref"),
+            ("vkrgss-vk", "vkrgss-proto"),
+            ("vkrgss-compose-ref", "vkrgss-pixel"),
         ]);
         assert_eq!(check(&graph), vec![]);
     }
 
     #[test]
     fn direct_guest_to_host_edge_is_reported() {
-        let graph = graph(&[("vkxp-vfs", "vkxp-audio")]);
+        let graph = graph(&[("vkrgss-vfs", "vkrgss-audio")]);
         assert_eq!(
             check(&graph),
             vec![Violation::GuestReachesHost {
-                path: path(&["vkxp-vfs", "vkxp-audio"]),
+                path: path(&["vkrgss-vfs", "vkrgss-audio"]),
             }]
         );
     }
@@ -390,40 +394,40 @@ mod tests {
     #[test]
     fn transitive_guest_to_host_path_is_reported_in_full() {
         let graph = graph(&[
-            ("vkxp-binding", "helper"),
+            ("vkrgss-binding", "helper"),
             ("helper", "glue"),
-            ("glue", "vkxp-vk"),
+            ("glue", "vkrgss-vk"),
         ]);
         let violations = check(&graph);
         assert_eq!(
             violations,
             vec![Violation::GuestReachesHost {
-                path: path(&["vkxp-binding", "helper", "glue", "vkxp-vk"]),
+                path: path(&["vkrgss-binding", "helper", "glue", "vkrgss-vk"]),
             }]
         );
         assert_eq!(
             violations[0].to_string(),
-            "guest crate `vkxp-binding` reaches host crate `vkxp-vk`: \
-             vkxp-binding -> helper -> glue -> vkxp-vk"
+            "guest crate `vkrgss-binding` reaches host crate `vkrgss-vk`: \
+             vkrgss-binding -> helper -> glue -> vkrgss-vk"
         );
     }
 
     #[test]
     fn direct_host_to_guest_edge_is_reported() {
         for host in HOST_SIDE_CRATES {
-            let graph = graph(&[(host, "vkxp-image")]);
+            let graph = graph(&[(host, "vkrgss-image")]);
             let violations = check(&graph);
             assert_eq!(
                 violations,
                 vec![Violation::HostReachesGuest {
-                    path: path(&[host, "vkxp-image"]),
+                    path: path(&[host, "vkrgss-image"]),
                 }]
             );
             assert_eq!(
                 violations[0].to_string(),
                 format!(
-                    "host-side crate `{host}` reaches guest crate `vkxp-image`: \
-                     {host} -> vkxp-image"
+                    "host-side crate `{host}` reaches guest crate `vkrgss-image`: \
+                     {host} -> vkrgss-image"
                 )
             );
         }
@@ -432,36 +436,39 @@ mod tests {
     #[test]
     fn transitive_host_to_guest_path_is_reported_in_full() {
         let graph = graph(&[
-            ("vkxp-compose-ref", "helper"),
+            ("vkrgss-compose-ref", "helper"),
             ("helper", "glue"),
-            ("glue", "vkxp-vfs"),
+            ("glue", "vkrgss-vfs"),
         ]);
         let violations = check(&graph);
         assert_eq!(
             violations,
             vec![Violation::HostReachesGuest {
-                path: path(&["vkxp-compose-ref", "helper", "glue", "vkxp-vfs"]),
+                path: path(&["vkrgss-compose-ref", "helper", "glue", "vkrgss-vfs"]),
             }]
         );
         assert_eq!(
             violations[0].to_string(),
-            "host-side crate `vkxp-compose-ref` reaches guest crate `vkxp-vfs`: \
-             vkxp-compose-ref -> helper -> glue -> vkxp-vfs"
+            "host-side crate `vkrgss-compose-ref` reaches guest crate `vkrgss-vfs`: \
+             vkrgss-compose-ref -> helper -> glue -> vkrgss-vfs"
         );
     }
 
     /// Every guest crate a host crate reaches is reported, each with its own shortest path.
     #[test]
     fn host_reaching_two_guest_crates_reports_both() {
-        let graph = graph(&[("vkxp-host", "vkxp-binding"), ("vkxp-binding", "vkxp-core")]);
+        let graph = graph(&[
+            ("vkrgss-host", "vkrgss-binding"),
+            ("vkrgss-binding", "vkrgss-core"),
+        ]);
         assert_eq!(
             check(&graph),
             vec![
                 Violation::HostReachesGuest {
-                    path: path(&["vkxp-host", "vkxp-binding", "vkxp-core"]),
+                    path: path(&["vkrgss-host", "vkrgss-binding", "vkrgss-core"]),
                 },
                 Violation::HostReachesGuest {
-                    path: path(&["vkxp-host", "vkxp-binding"]),
+                    path: path(&["vkrgss-host", "vkrgss-binding"]),
                 },
             ]
         );
@@ -471,12 +478,12 @@ mod tests {
     #[test]
     fn binary_may_depend_on_both_sides() {
         let graph = graph(&[
-            ("vkxp", "vkxp-binding"),
-            ("vkxp", "vkxp-core"),
-            ("vkxp", "vkxp-host"),
-            ("vkxp", "vkxp-compose-ref"),
-            ("vkxp-binding", "vkxp-core"),
-            ("vkxp-host", "vkxp-vk"),
+            ("vkrgss", "vkrgss-binding"),
+            ("vkrgss", "vkrgss-core"),
+            ("vkrgss", "vkrgss-host"),
+            ("vkrgss", "vkrgss-compose-ref"),
+            ("vkrgss-binding", "vkrgss-core"),
+            ("vkrgss-host", "vkrgss-vk"),
         ]);
         assert_eq!(check(&graph), vec![]);
     }
@@ -485,10 +492,10 @@ mod tests {
     fn metadata_dev_dependency_of_a_host_crate_on_a_guest_crate_is_allowed() {
         let metadata = serde_json::json!({
             "packages": [
-                { "id": "vk 0.1", "name": "vkxp-vk" },
-                { "id": "ref 0.1", "name": "vkxp-compose-ref" },
-                { "id": "core 0.1", "name": "vkxp-core" },
-                { "id": "image 0.1", "name": "vkxp-image" },
+                { "id": "vk 0.1", "name": "vkrgss-vk" },
+                { "id": "ref 0.1", "name": "vkrgss-compose-ref" },
+                { "id": "core 0.1", "name": "vkrgss-core" },
+                { "id": "image 0.1", "name": "vkrgss-image" },
             ],
             "resolve": { "nodes": [
                 { "id": "vk 0.1", "deps": [
@@ -502,52 +509,52 @@ mod tests {
             ] },
         });
         let graph = graph_from_metadata(&metadata).unwrap();
-        assert!(graph["vkxp-vk"].is_empty());
-        assert!(graph["vkxp-compose-ref"].is_empty());
+        assert!(graph["vkrgss-vk"].is_empty());
+        assert!(graph["vkrgss-compose-ref"].is_empty());
         assert_eq!(check(&graph), vec![]);
 
         // The same edge as a normal dependency is the violation.
         let mut linked = graph;
         linked
-            .get_mut("vkxp-vk")
+            .get_mut("vkrgss-vk")
             .unwrap()
-            .insert("vkxp-core".to_owned());
+            .insert("vkrgss-core".to_owned());
         assert_eq!(
             check(&linked),
             vec![Violation::HostReachesGuest {
-                path: path(&["vkxp-vk", "vkxp-core"]),
+                path: path(&["vkrgss-vk", "vkrgss-core"]),
             }]
         );
     }
 
     #[test]
     fn core_dependency_outside_allow_list_is_reported() {
-        let graph = graph(&[("vkxp-core", "vkxp-proto"), ("vkxp-proto", "libc")]);
+        let graph = graph(&[("vkrgss-core", "vkrgss-proto"), ("vkrgss-proto", "libc")]);
         let violations = check(&graph);
         assert_eq!(
             violations,
             vec![Violation::CoreDependency {
-                path: path(&["vkxp-core", "vkxp-proto", "libc"]),
+                path: path(&["vkrgss-core", "vkrgss-proto", "libc"]),
             }]
         );
         assert_eq!(
             violations[0].to_string(),
-            "`vkxp-core` depends on `libc`, which is not on its allow-list: \
-             vkxp-core -> vkxp-proto -> libc"
+            "`vkrgss-core` depends on `libc`, which is not on its allow-list: \
+             vkrgss-core -> vkrgss-proto -> libc"
         );
     }
 
     #[test]
     fn core_reaching_host_breaks_two_rules() {
-        let graph = graph(&[("vkxp-core", "vkxp-vk")]);
+        let graph = graph(&[("vkrgss-core", "vkrgss-vk")]);
         assert_eq!(
             check(&graph),
             vec![
                 Violation::GuestReachesHost {
-                    path: path(&["vkxp-core", "vkxp-vk"]),
+                    path: path(&["vkrgss-core", "vkrgss-vk"]),
                 },
                 Violation::CoreDependency {
-                    path: path(&["vkxp-core", "vkxp-vk"]),
+                    path: path(&["vkrgss-core", "vkrgss-vk"]),
                 },
             ]
         );
@@ -556,25 +563,25 @@ mod tests {
     /// Scenario "The guest role".
     #[test]
     fn the_guest_role_reaching_a_host_crate_is_reported() {
-        let reaching = graph(&[("vkxp-guest", "helper"), ("helper", "vkxp-host")]);
+        let reaching = graph(&[("vkrgss-guest", "helper"), ("helper", "vkrgss-host")]);
         let violations = check(&reaching);
         assert_eq!(
             violations,
             vec![Violation::GuestReachesHost {
-                path: path(&["vkxp-guest", "helper", "vkxp-host"]),
+                path: path(&["vkrgss-guest", "helper", "vkrgss-host"]),
             }]
         );
         assert_eq!(
             violations[0].to_string(),
-            "guest crate `vkxp-guest` reaches host crate `vkxp-host`: \
-             vkxp-guest -> helper -> vkxp-host"
+            "guest crate `vkrgss-guest` reaches host crate `vkrgss-host`: \
+             vkrgss-guest -> helper -> vkrgss-host"
         );
         // And no host crate reaches it.
-        let reached = graph(&[("vkxp-host", "vkxp-guest")]);
+        let reached = graph(&[("vkrgss-host", "vkrgss-guest")]);
         assert_eq!(
             check(&reached),
             vec![Violation::HostReachesGuest {
-                path: path(&["vkxp-host", "vkxp-guest"]),
+                path: path(&["vkrgss-host", "vkrgss-guest"]),
             }]
         );
     }
@@ -584,36 +591,36 @@ mod tests {
     #[test]
     fn the_main_of_a_guest_reaching_a_host_crate_is_reported() {
         for host in HOST_CRATES {
-            let reaching = graph(&[("vkxp-guest-main", "helper"), ("helper", host)]);
+            let reaching = graph(&[("vkrgss-guest-main", "helper"), ("helper", host)]);
             let violations = check(&reaching);
             assert_eq!(
                 violations,
                 vec![Violation::GuestReachesHost {
-                    path: path(&["vkxp-guest-main", "helper", host]),
+                    path: path(&["vkrgss-guest-main", "helper", host]),
                 }]
             );
             assert_eq!(
                 violations[0].to_string(),
                 format!(
-                    "guest crate `vkxp-guest-main` reaches host crate `{host}`: \
-                     vkxp-guest-main -> helper -> {host}"
+                    "guest crate `vkrgss-guest-main` reaches host crate `{host}`: \
+                     vkrgss-guest-main -> helper -> {host}"
                 )
             );
 
-            let reached = graph(&[(host, "vkxp-guest-main")]);
+            let reached = graph(&[(host, "vkrgss-guest-main")]);
             assert_eq!(
                 check(&reached),
                 vec![Violation::HostReachesGuest {
-                    path: path(&[host, "vkxp-guest-main"]),
+                    path: path(&[host, "vkrgss-guest-main"]),
                 }]
             );
         }
         // It is what links the interpreter, and the program links it beside the host.
         let allowed = graph(&[
-            ("vkxp-guest-main", "vkxp-binding"),
-            ("vkxp-guest-main", "vkxp-guest"),
-            ("vkxp", "vkxp-guest-main"),
-            ("vkxp", "vkxp-host"),
+            ("vkrgss-guest-main", "vkrgss-binding"),
+            ("vkrgss-guest-main", "vkrgss-guest"),
+            ("vkrgss", "vkrgss-guest-main"),
+            ("vkrgss", "vkrgss-host"),
         ]);
         assert_eq!(check(&allowed), vec![]);
     }
@@ -623,26 +630,26 @@ mod tests {
     fn the_guest_executable_reaching_a_host_crate_is_reported() {
         for host in HOST_CRATES {
             let reaching = graph(&[
-                ("vkxp-guest-rgss3", "vkxp-guest-main-rgss3"),
-                ("vkxp-guest-main-rgss3", host),
+                ("vkrgss-guest-rgss3", "vkrgss-guest-main-rgss3"),
+                ("vkrgss-guest-main-rgss3", host),
             ]);
             let violations = check(&reaching);
             assert_eq!(
                 violations,
                 vec![
                     Violation::GuestReachesHost {
-                        path: path(&["vkxp-guest-main-rgss3", host]),
+                        path: path(&["vkrgss-guest-main-rgss3", host]),
                     },
                     Violation::GuestReachesHost {
-                        path: path(&["vkxp-guest-rgss3", "vkxp-guest-main-rgss3", host]),
+                        path: path(&["vkrgss-guest-rgss3", "vkrgss-guest-main-rgss3", host]),
                     },
                 ]
             );
             assert_eq!(
                 violations[1].to_string(),
                 format!(
-                    "guest crate `vkxp-guest-rgss3` reaches host crate `{host}`: \
-                     vkxp-guest-rgss3 -> vkxp-guest-main-rgss3 -> {host}"
+                    "guest crate `vkrgss-guest-rgss3` reaches host crate `{host}`: \
+                     vkrgss-guest-rgss3 -> vkrgss-guest-main-rgss3 -> {host}"
                 )
             );
         }
@@ -651,47 +658,47 @@ mod tests {
     #[test]
     fn the_guest_role_reaching_an_interpreter_is_reported() {
         for interpreter in INTERPRETER_CRATES {
-            let direct = graph(&[("vkxp-guest", interpreter)]);
+            let direct = graph(&[("vkrgss-guest", interpreter)]);
             let violations = check(&direct);
             assert_eq!(
                 violations,
                 vec![Violation::GuestRoleReachesInterpreter {
-                    path: path(&["vkxp-guest", interpreter]),
+                    path: path(&["vkrgss-guest", interpreter]),
                 }]
             );
             assert_eq!(
                 violations[0].to_string(),
                 format!(
-                    "`vkxp-guest` reaches `{interpreter}`, which links an interpreter: \
-                     vkxp-guest -> {interpreter}"
+                    "`vkrgss-guest` reaches `{interpreter}`, which links an interpreter: \
+                     vkrgss-guest -> {interpreter}"
                 )
             );
         }
         // The binding reaches the sys crate: both are reported, each with its own path.
         let through = graph(&[
-            ("vkxp-guest", "glue"),
-            ("glue", "vkxp-binding"),
-            ("vkxp-binding", "vkxp-ruby-sys"),
+            ("vkrgss-guest", "glue"),
+            ("glue", "vkrgss-binding"),
+            ("vkrgss-binding", "vkrgss-ruby-sys"),
         ]);
         assert_eq!(
             check(&through),
             vec![
                 Violation::GuestRoleReachesInterpreter {
-                    path: path(&["vkxp-guest", "glue", "vkxp-binding", "vkxp-ruby-sys"]),
+                    path: path(&["vkrgss-guest", "glue", "vkrgss-binding", "vkrgss-ruby-sys"]),
                 },
                 Violation::GuestRoleReachesInterpreter {
-                    path: path(&["vkxp-guest", "glue", "vkxp-binding"]),
+                    path: path(&["vkrgss-guest", "glue", "vkrgss-binding"]),
                 },
             ]
         );
         // The executable links the role and an interpreter side by side.
-        let beside = graph(&[("vkxp", "vkxp-guest"), ("vkxp", "vkxp-binding")]);
+        let beside = graph(&[("vkrgss", "vkrgss-guest"), ("vkrgss", "vkrgss-binding")]);
         assert_eq!(check(&beside), vec![]);
     }
 
     #[test]
     fn dependency_cycles_terminate() {
-        let graph = graph(&[("vkxp-text", "a"), ("a", "b"), ("b", "a")]);
+        let graph = graph(&[("vkrgss-text", "a"), ("a", "b"), ("b", "a")]);
         assert_eq!(check(&graph), vec![]);
     }
 
@@ -699,9 +706,9 @@ mod tests {
     fn metadata_dev_dependencies_are_ignored() {
         let metadata = serde_json::json!({
             "packages": [
-                { "id": "core 0.1", "name": "vkxp-core" },
-                { "id": "host 0.1", "name": "vkxp-host" },
-                { "id": "proto 0.1", "name": "vkxp-proto" },
+                { "id": "core 0.1", "name": "vkrgss-core" },
+                { "id": "host 0.1", "name": "vkrgss-host" },
+                { "id": "proto 0.1", "name": "vkrgss-proto" },
             ],
             "resolve": { "nodes": [
                 { "id": "core 0.1", "deps": [
@@ -714,8 +721,8 @@ mod tests {
         });
         let graph = graph_from_metadata(&metadata).unwrap();
         assert_eq!(
-            graph["vkxp-core"],
-            BTreeSet::from(["vkxp-proto".to_owned()])
+            graph["vkrgss-core"],
+            BTreeSet::from(["vkrgss-proto".to_owned()])
         );
         assert_eq!(check(&graph), vec![]);
     }
@@ -724,8 +731,8 @@ mod tests {
     fn metadata_build_dependency_on_host_is_reported() {
         let metadata = serde_json::json!({
             "packages": [
-                { "id": "sys 0.1", "name": "vkxp-ruby-sys" },
-                { "id": "audio 0.1", "name": "vkxp-audio" },
+                { "id": "sys 0.1", "name": "vkrgss-ruby-sys" },
+                { "id": "audio 0.1", "name": "vkrgss-audio" },
             ],
             "resolve": { "nodes": [
                 { "id": "sys 0.1", "deps": [
@@ -738,7 +745,7 @@ mod tests {
         assert_eq!(
             check(&graph),
             vec![Violation::GuestReachesHost {
-                path: path(&["vkxp-ruby-sys", "vkxp-audio"]),
+                path: path(&["vkrgss-ruby-sys", "vkrgss-audio"]),
             }]
         );
     }
@@ -776,38 +783,38 @@ mod tests {
             directory.path(),
             &[
                 (
-                    "vkxp-image",
-                    "[dependencies]\nvkxp-vk = { path = \"../vkxp-vk\", optional = true }\n",
+                    "vkrgss-image",
+                    "[dependencies]\nvkrgss-vk = { path = \"../vkrgss-vk\", optional = true }\n",
                 ),
                 (
-                    "vkxp-text",
+                    "vkrgss-text",
                     "[dependencies]\nglue = { path = \"../glue\" }\n\n\
                      [features]\nsound = [\"glue/sound\"]\n",
                 ),
                 (
                     "glue",
-                    "[dependencies]\nvkxp-audio = { path = \"../vkxp-audio\", optional = true }\n\n\
-                     [features]\nsound = [\"dep:vkxp-audio\"]\n",
+                    "[dependencies]\nvkrgss-audio = { path = \"../vkrgss-audio\", optional = true }\n\n\
+                     [features]\nsound = [\"dep:vkrgss-audio\"]\n",
                 ),
                 (
-                    "vkxp-core",
-                    "[dependencies]\nvkxp-proto = { path = \"../vkxp-proto\" }\n\
+                    "vkrgss-core",
+                    "[dependencies]\nvkrgss-proto = { path = \"../vkrgss-proto\" }\n\
                      impure-io = { path = \"../impure-io\", optional = true }\n\n\
                      [features]\ndefault = []\nfiles = [\"dep:impure-io\"]\n",
                 ),
                 (
-                    "vkxp-host",
-                    "[dependencies]\nvkxp-vfs = { path = \"../vkxp-vfs\", optional = true }\n",
+                    "vkrgss-host",
+                    "[dependencies]\nvkrgss-vfs = { path = \"../vkrgss-vfs\", optional = true }\n",
                 ),
                 (
-                    "vkxp-compose-ref",
+                    "vkrgss-compose-ref",
                     "[dependencies]\nglue = { path = \"../glue\" }\n\n\
-                     [build-dependencies]\nvkxp-vfs = { path = \"../vkxp-vfs\" }\n",
+                     [build-dependencies]\nvkrgss-vfs = { path = \"../vkrgss-vfs\" }\n",
                 ),
-                ("vkxp-proto", ""),
-                ("vkxp-vk", ""),
-                ("vkxp-audio", ""),
-                ("vkxp-vfs", ""),
+                ("vkrgss-proto", ""),
+                ("vkrgss-vk", ""),
+                ("vkrgss-audio", ""),
+                ("vkrgss-vfs", ""),
                 ("impure-io", ""),
             ],
         );
@@ -817,19 +824,19 @@ mod tests {
             check(&graph),
             vec![
                 Violation::GuestReachesHost {
-                    path: path(&["vkxp-image", "vkxp-vk"]),
+                    path: path(&["vkrgss-image", "vkrgss-vk"]),
                 },
                 Violation::GuestReachesHost {
-                    path: path(&["vkxp-text", "glue", "vkxp-audio"]),
+                    path: path(&["vkrgss-text", "glue", "vkrgss-audio"]),
                 },
                 Violation::HostReachesGuest {
-                    path: path(&["vkxp-host", "vkxp-vfs"]),
+                    path: path(&["vkrgss-host", "vkrgss-vfs"]),
                 },
                 Violation::HostReachesGuest {
-                    path: path(&["vkxp-compose-ref", "vkxp-vfs"]),
+                    path: path(&["vkrgss-compose-ref", "vkrgss-vfs"]),
                 },
                 Violation::CoreDependency {
-                    path: path(&["vkxp-core", "impure-io"]),
+                    path: path(&["vkrgss-core", "impure-io"]),
                 },
             ]
         );
@@ -844,31 +851,31 @@ mod tests {
             directory.path(),
             &[
                 (
-                    "vkxp-core",
-                    "[dependencies]\nvkxp-proto = { path = \"../vkxp-proto\", optional = true }\n",
+                    "vkrgss-core",
+                    "[dependencies]\nvkrgss-proto = { path = \"../vkrgss-proto\", optional = true }\n",
                 ),
                 (
-                    "vkxp-host",
-                    "[dependencies]\nvkxp-vk = { path = \"../vkxp-vk\", optional = true }\n\n\
-                     [dev-dependencies]\nvkxp-core = { path = \"../vkxp-core\" }\n",
+                    "vkrgss-host",
+                    "[dependencies]\nvkrgss-vk = { path = \"../vkrgss-vk\", optional = true }\n\n\
+                     [dev-dependencies]\nvkrgss-core = { path = \"../vkrgss-core\" }\n",
                 ),
                 (
-                    "vkxp",
-                    "[dependencies]\nvkxp-core = { path = \"../vkxp-core\" }\n\
-                     vkxp-host = { path = \"../vkxp-host\" }\n",
+                    "vkrgss",
+                    "[dependencies]\nvkrgss-core = { path = \"../vkrgss-core\" }\n\
+                     vkrgss-host = { path = \"../vkrgss-host\" }\n",
                 ),
-                ("vkxp-proto", ""),
-                ("vkxp-vk", ""),
+                ("vkrgss-proto", ""),
+                ("vkrgss-vk", ""),
             ],
         );
         let graph = workspace_graph(directory.path()).unwrap();
-        assert!(graph["vkxp-core"].contains("vkxp-proto"));
-        assert!(graph["vkxp-host"].contains("vkxp-vk"));
+        assert!(graph["vkrgss-core"].contains("vkrgss-proto"));
+        assert!(graph["vkrgss-host"].contains("vkrgss-vk"));
         assert!(
-            !graph["vkxp-host"].contains("vkxp-core"),
+            !graph["vkrgss-host"].contains("vkrgss-core"),
             "development only"
         );
-        assert!(graph["vkxp"].contains("vkxp-core") && graph["vkxp"].contains("vkxp-host"));
+        assert!(graph["vkrgss"].contains("vkrgss-core") && graph["vkrgss"].contains("vkrgss-host"));
         assert_eq!(check(&graph), vec![]);
     }
 
@@ -879,7 +886,11 @@ mod tests {
     #[test]
     fn real_workspace_contains_every_named_crate() {
         let graph = real_graph();
-        for name in GUEST_CRATES.iter().chain(HOST_SIDE_CRATES).chain(&["vkxp"]) {
+        for name in GUEST_CRATES
+            .iter()
+            .chain(HOST_SIDE_CRATES)
+            .chain(&["vkrgss"])
+        {
             assert!(
                 graph.contains_key(*name),
                 "`{name}` is missing from the workspace"
@@ -917,9 +928,9 @@ mod tests {
         let metadata = serde_json::json!({
             "packages": [
                 { "id": "both 0.1", "name": "both" },
-                { "id": "binding 0.1", "name": "vkxp-binding" },
-                { "id": "sys 0.1", "name": "vkxp-ruby-sys" },
-                { "id": "sys192 0.1", "name": "vkxp-ruby192-sys" },
+                { "id": "binding 0.1", "name": "vkrgss-binding" },
+                { "id": "sys 0.1", "name": "vkrgss-ruby-sys" },
+                { "id": "sys192 0.1", "name": "vkrgss-ruby192-sys" },
             ],
             "resolve": { "nodes": [
                 { "id": "both 0.1", "deps": [
@@ -938,15 +949,15 @@ mod tests {
             violations,
             vec![Violation::BothInterpreters {
                 paths: [
-                    path(&["both", "vkxp-binding", "vkxp-ruby-sys"]),
-                    path(&["both", "vkxp-ruby192-sys"]),
+                    path(&["both", "vkrgss-binding", "vkrgss-ruby-sys"]),
+                    path(&["both", "vkrgss-ruby192-sys"]),
                 ],
             }]
         );
         assert_eq!(
             violations[0].to_string(),
             "`both` reaches both interpreters, which cannot be linked into one program: \
-             both -> vkxp-binding -> vkxp-ruby-sys and both -> vkxp-ruby192-sys"
+             both -> vkrgss-binding -> vkrgss-ruby-sys and both -> vkrgss-ruby192-sys"
         );
         // Without the development dependency the graph of the other rules has no such
         // package, and neither interpreter alone is a violation.
@@ -968,28 +979,28 @@ mod tests {
     /// The two packages that compile the one source of the RGSS classes.
     const BINDING_PACKAGES: [Twin; 2] = [
         Twin {
-            package: "vkxp-binding",
-            interpreter: "vkxp-ruby-sys",
-            binding: "vkxp-binding",
+            package: "vkrgss-binding",
+            interpreter: "vkrgss-ruby-sys",
+            binding: "vkrgss-binding",
         },
         Twin {
-            package: "vkxp-binding-rgss3",
-            interpreter: "vkxp-ruby192-sys",
-            binding: "vkxp-binding-rgss3",
+            package: "vkrgss-binding-rgss3",
+            interpreter: "vkrgss-ruby192-sys",
+            binding: "vkrgss-binding-rgss3",
         },
     ];
 
     /// The two packages that compile the one source of the main of a guest.
     const GUEST_MAIN_PACKAGES: [Twin; 2] = [
         Twin {
-            package: "vkxp-guest-main",
-            interpreter: "vkxp-ruby-sys",
-            binding: "vkxp-binding",
+            package: "vkrgss-guest-main",
+            interpreter: "vkrgss-ruby-sys",
+            binding: "vkrgss-binding",
         },
         Twin {
-            package: "vkxp-guest-main-rgss3",
-            interpreter: "vkxp-ruby192-sys",
-            binding: "vkxp-binding-rgss3",
+            package: "vkrgss-guest-main-rgss3",
+            interpreter: "vkrgss-ruby192-sys",
+            binding: "vkrgss-binding-rgss3",
         },
     ];
 
@@ -1097,26 +1108,26 @@ mod tests {
     #[test]
     fn a_package_that_reaches_both_binding_packages_is_reported_with_both_paths() {
         let graph = graph(&[
-            ("both", "vkxp-binding"),
-            ("both", "vkxp-binding-rgss3"),
-            ("vkxp-binding", "vkxp-ruby-sys"),
-            ("vkxp-binding-rgss3", "vkxp-ruby192-sys"),
+            ("both", "vkrgss-binding"),
+            ("both", "vkrgss-binding-rgss3"),
+            ("vkrgss-binding", "vkrgss-ruby-sys"),
+            ("vkrgss-binding-rgss3", "vkrgss-ruby192-sys"),
         ]);
         let violations = check_interpreters(&graph);
         assert_eq!(
             violations,
             vec![Violation::BothInterpreters {
                 paths: [
-                    path(&["both", "vkxp-binding", "vkxp-ruby-sys"]),
-                    path(&["both", "vkxp-binding-rgss3", "vkxp-ruby192-sys"]),
+                    path(&["both", "vkrgss-binding", "vkrgss-ruby-sys"]),
+                    path(&["both", "vkrgss-binding-rgss3", "vkrgss-ruby192-sys"]),
                 ],
             }]
         );
         assert_eq!(
             violations[0].to_string(),
             "`both` reaches both interpreters, which cannot be linked into one program: \
-             both -> vkxp-binding -> vkxp-ruby-sys and \
-             both -> vkxp-binding-rgss3 -> vkxp-ruby192-sys"
+             both -> vkrgss-binding -> vkrgss-ruby-sys and \
+             both -> vkrgss-binding-rgss3 -> vkrgss-ruby192-sys"
         );
     }
 
@@ -1128,12 +1139,12 @@ mod tests {
             .expect("cargo metadata for the workspace");
         let [first, second] = INTERPRETER_SYS_CRATES;
         for (package, interpreter, other) in [
-            ("vkxp-binding", first, second),
-            ("vkxp-guest-main", first, second),
-            ("vkxp", first, second),
-            ("vkxp-binding-rgss3", second, first),
-            ("vkxp-guest-main-rgss3", second, first),
-            ("vkxp-guest-rgss3", second, first),
+            ("vkrgss-binding", first, second),
+            ("vkrgss-guest-main", first, second),
+            ("vkrgss", first, second),
+            ("vkrgss-binding-rgss3", second, first),
+            ("vkrgss-guest-main-rgss3", second, first),
+            ("vkrgss-guest-rgss3", second, first),
         ] {
             let paths = paths_from(&linked, package);
             assert!(
@@ -1148,15 +1159,22 @@ mod tests {
     /// host crates and none of the crates of the window, the device and the sound.
     #[test]
     fn the_guest_executable_links_nothing_of_the_host() {
-        let paths = paths_from(&real_graph(), "vkxp-guest-rgss3");
-        for host in ["vkxp-host", "vkxp-vk", "vkxp-audio", "ash", "winit", "cpal"] {
+        let paths = paths_from(&real_graph(), "vkrgss-guest-rgss3");
+        for host in [
+            "vkrgss-host",
+            "vkrgss-vk",
+            "vkrgss-audio",
+            "ash",
+            "winit",
+            "cpal",
+        ] {
             assert!(
                 !paths.contains_key(host),
-                "vkxp-guest-rgss3 reaches {host}: {}",
+                "vkrgss-guest-rgss3 reaches {host}: {}",
                 paths[host].join(" -> ")
             );
         }
-        assert!(paths.contains_key("vkxp-guest-main-rgss3"));
+        assert!(paths.contains_key("vkrgss-guest-main-rgss3"));
     }
 
     /// Scenario "Direct dependencies": the guest executable declares one package of the
@@ -1171,7 +1189,7 @@ mod tests {
             .collect();
         let executable = packages
             .iter()
-            .find(|package| package["name"] == "vkxp-guest-rgss3")
+            .find(|package| package["name"] == "vkrgss-guest-rgss3")
             .expect("the guest executable is in the workspace");
         let declared: Vec<&str> = executable["dependencies"]
             .as_array()
@@ -1181,7 +1199,7 @@ mod tests {
             .filter_map(|dependency| dependency["name"].as_str())
             .filter(|name| workspace.contains(name))
             .collect();
-        assert_eq!(declared, ["vkxp-guest-main-rgss3"]);
+        assert_eq!(declared, ["vkrgss-guest-main-rgss3"]);
     }
 
     /// Scenario "One version": the program and the guest executable it starts state one
@@ -1198,7 +1216,7 @@ mod tests {
                 .map(|package| package["version"].clone())
                 .unwrap_or_else(|| panic!("`{name}` is in the workspace"))
         };
-        assert_eq!(version("vkxp"), version("vkxp-guest-rgss3"));
+        assert_eq!(version("vkrgss"), version("vkrgss-guest-rgss3"));
     }
 
     fn metadata_without_resolution() -> Value {
@@ -1231,45 +1249,45 @@ mod tests {
             })
         };
         let metadata = serde_json::json!({ "packages": [
-            { "name": "vkxp-binding", "dependencies": [
-                dependency("vkxp-ruby-sys", Value::Null, &[]),
-                dependency("vkxp-core", Value::Null, &[]),
-                dependency("vkxp-binding", "dev".into(), &["testing"]),
+            { "name": "vkrgss-binding", "dependencies": [
+                dependency("vkrgss-ruby-sys", Value::Null, &[]),
+                dependency("vkrgss-core", Value::Null, &[]),
+                dependency("vkrgss-binding", "dev".into(), &["testing"]),
             ] },
-            { "name": "vkxp-binding-rgss3", "dependencies": [
-                dependency("vkxp-ruby192-sys", Value::Null, &[]),
-                dependency("vkxp-core", Value::Null, &["extra"]),
-                dependency("vkxp-binding-rgss3", "dev".into(), &["testing"]),
+            { "name": "vkrgss-binding-rgss3", "dependencies": [
+                dependency("vkrgss-ruby192-sys", Value::Null, &[]),
+                dependency("vkrgss-core", Value::Null, &["extra"]),
+                dependency("vkrgss-binding-rgss3", "dev".into(), &["testing"]),
                 dependency("libc", Value::Null, &[]),
             ] },
         ] });
         assert_eq!(
             twin_manifest_differences(&metadata, BINDING_PACKAGES).unwrap(),
             [
-                "only `vkxp-binding` declares vkxp-core (normal, features [])",
-                "only `vkxp-binding-rgss3` declares libc (normal, features [])",
-                "only `vkxp-binding-rgss3` declares vkxp-core (normal, features [extra])",
+                "only `vkrgss-binding` declares vkrgss-core (normal, features [])",
+                "only `vkrgss-binding-rgss3` declares libc (normal, features [])",
+                "only `vkrgss-binding-rgss3` declares vkrgss-core (normal, features [extra])",
             ]
         );
 
         // The main of a guest names the binding package of its interpreter.
         let metadata = serde_json::json!({ "packages": [
-            { "name": "vkxp-guest-main", "dependencies": [
-                dependency("vkxp-ruby-sys", Value::Null, &[]),
-                dependency("vkxp-binding", Value::Null, &[]),
+            { "name": "vkrgss-guest-main", "dependencies": [
+                dependency("vkrgss-ruby-sys", Value::Null, &[]),
+                dependency("vkrgss-binding", Value::Null, &[]),
                 dependency("tempfile", "dev".into(), &[]),
             ] },
-            { "name": "vkxp-guest-main-rgss3", "dependencies": [
-                dependency("vkxp-ruby192-sys", Value::Null, &[]),
-                dependency("vkxp-binding-rgss3", Value::Null, &[]),
+            { "name": "vkrgss-guest-main-rgss3", "dependencies": [
+                dependency("vkrgss-ruby192-sys", Value::Null, &[]),
+                dependency("vkrgss-binding-rgss3", Value::Null, &[]),
                 dependency("libc", Value::Null, &[]),
             ] },
         ] });
         assert_eq!(
             twin_manifest_differences(&metadata, GUEST_MAIN_PACKAGES).unwrap(),
             [
-                "only `vkxp-guest-main` declares tempfile (dev, features [])",
-                "only `vkxp-guest-main-rgss3` declares libc (normal, features [])",
+                "only `vkrgss-guest-main` declares tempfile (dev, features [])",
+                "only `vkrgss-guest-main-rgss3` declares libc (normal, features [])",
             ]
         );
     }
@@ -1297,47 +1315,47 @@ mod tests {
     /// An interpreter crate that depends on the other one reaches both.
     #[test]
     fn an_interpreter_that_reaches_the_other_is_reported() {
-        let graph = graph(&[("vkxp-ruby192-sys", "vkxp-ruby-sys")]);
+        let graph = graph(&[("vkrgss-ruby192-sys", "vkrgss-ruby-sys")]);
         assert_eq!(
             check_interpreters(&graph),
             vec![Violation::BothInterpreters {
                 paths: [
-                    path(&["vkxp-ruby192-sys", "vkxp-ruby-sys"]),
-                    path(&["vkxp-ruby192-sys"]),
+                    path(&["vkrgss-ruby192-sys", "vkrgss-ruby-sys"]),
+                    path(&["vkrgss-ruby192-sys"]),
                 ],
             }]
         );
     }
 
-    /// `vkxp-core` is allowed to depend on the shared crates, so whatever they pull in has to
+    /// `vkrgss-core` is allowed to depend on the shared crates, so whatever they pull in has to
     /// be on the allow-list as well.
     #[test]
     fn shared_crates_stay_inside_the_core_allow_list() {
         let graph = real_graph();
-        for shared in ["vkxp-proto", "vkxp-pixel"] {
+        for shared in ["vkrgss-proto", "vkrgss-pixel"] {
             let violations = outside_allow_list(&graph, shared);
             let report: Vec<String> = violations.iter().map(Violation::to_string).collect();
             assert!(violations.is_empty(), "{}", report.join("\n"));
         }
     }
 
-    /// The test doubles of `vkxp-host` are behind its feature `testing`, which only its own
+    /// The test doubles of `vkrgss-host` are behind its feature `testing`, which only its own
     /// development dependency on itself enables: the executable is built without it.
     #[test]
     fn the_executable_is_built_without_the_test_doubles_of_the_host() {
         let output = Command::new(crate::cargo())
-            .args(["tree", "-p", "vkxp", "-e", "features", "--locked"])
+            .args(["tree", "-p", "vkrgss", "-e", "features", "--locked"])
             .current_dir(crate::workspace_root())
             .output()
             .expect("cargo tree for the executable");
         assert!(output.status.success());
         let tree = String::from_utf8_lossy(&output.stdout);
-        assert!(tree.contains("vkxp-host feature \"default\""), "{tree}");
-        assert!(!tree.contains("vkxp-host feature \"testing\""), "{tree}");
+        assert!(tree.contains("vkrgss-host feature \"default\""), "{tree}");
+        assert!(!tree.contains("vkrgss-host feature \"testing\""), "{tree}");
     }
 
     /// The address every crate gives as its repository.
-    const REPOSITORY: &str = "https://github.com/xuyanwen2012/vkxp";
+    const REPOSITORY: &str = "https://github.com/xuyanwen2012/vkrgss-rs";
 
     /// What a reader of a published project expects of every crate, and nothing that could
     /// be sent to a registry.

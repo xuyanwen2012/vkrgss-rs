@@ -1,4 +1,4 @@
-# Running vkxp
+# Running vkrgss
 
 How to run a game, every option and configuration key, and the demo that needs no game.
 Building is described in [building.md](building.md).
@@ -6,14 +6,14 @@ Building is described in [building.md](building.md).
 ## Running a game
 
 The commands below use `cargo run`, which builds the development profile.
-`cargo build --release -p vkxp -p vkxp-guest-rgss3` produces the optimised executables,
-`target/release/vkxp`, which takes the same arguments, and beside it the guest executable
-that runs a game of VX Ace. `cargo run -p vkxp` builds the program alone; a game of VX Ace
-then needs `cargo build -p vkxp-guest-rgss3` once (see *Guest process*).
+`cargo build --release -p vkrgss -p vkrgss-guest-rgss3` produces the optimised executables,
+`target/release/vkrgss`, which takes the same arguments, and beside it the guest executable
+that runs a game of VX Ace. `cargo run -p vkrgss` builds the program alone; a game of VX Ace
+then needs `cargo build -p vkrgss-guest-rgss3` once (see *Guest process*).
 
 ### The runtime of a game
 
-`vkxp` runs the games of RPG Maker XP, whose runtime is RGSS1, of RPG Maker VX, whose
+`vkrgss` runs the games of RPG Maker XP, whose runtime is RGSS1, of RPG Maker VX, whose
 runtime is RGSS2, and of RPG Maker VX Ace, whose runtime is RGSS3: all three are supported.
 
 The runtime of a game is taken from two values of its `Game.ini`, and from nothing else:
@@ -38,7 +38,7 @@ What follows the runtime:
 | `--debug` sets | `$DEBUG` | `$TEST`; `$DEBUG` stays `false` | `$TEST`; `$DEBUG` stays `false` |
 | Frame and starting window size | 640 by 480 | 544 by 416 | 544 by 416 |
 | Starting frame rate | 40 | 60 | 60 |
-| Interpreter | Ruby 1.8.7 | Ruby 1.8.7 | Ruby 1.9.2, in the guest executable `vkxp-guest-rgss3` |
+| Interpreter | Ruby 1.8.7 | Ruby 1.8.7 | Ruby 1.9.2, in the guest executable `vkrgss-guest-rgss3` |
 | Symbol numbers (`Symbol#to_i`) | those of RGSS1 | those of RGSS2 | those of Ruby 1.9.2 |
 | Default keys and repeat of `Input` | those of XP | those of VX (see *The keys of a game of VX*) | those of VX, for now |
 
@@ -54,7 +54,7 @@ a dumped frame alike, its frame rate starts at 60, and its scripts see the symbo
 the classes and functions of RGSS2; [compatibility.md](compatibility.md#rpg-maker-vx) says
 what was measured of them and what was not.
 
-A game of VX Ace runs in the guest executable `vkxp-guest-rgss3`, over Ruby 1.9.2, the
+A game of VX Ace runs in the guest executable `vkrgss-guest-rgss3`, over Ruby 1.9.2, the
 interpreter of the original runtime, and always with the guest in a process (see *Guest
 process*). Before the
 guest starts, the program resolves the run-time package that `RTP` names (a game that names
@@ -78,25 +78,25 @@ built-in scripts file and the archive.
 A game expects the `RPG` module of the original runtime: the data classes, `RPG::Cache`,
 `RPG::Sprite` and `RPG::Weather`. That Ruby source is Enterbrain's and is not part of this
 repository. The original runtime keeps it as plain text inside its DLL, and one command copies
-it from a DLL of your own into a file that `vkxp` loads:
+it from a DLL of your own into a file that `vkrgss` loads:
 
 ```sh
-mkdir -p ~/.local/share/vkxp
-cargo xtask extract-rpg <RGSS DLL> ~/.local/share/vkxp/rpg_builtin.rb
+mkdir -p ~/.local/share/vkrgss
+cargo xtask extract-rpg <RGSS DLL> ~/.local/share/vkrgss/rpg_builtin.rb
 ```
 
 The DLLs of versions 1.00 and 1.02 (`RGSS100J.dll`, `RGSS102E.dll`, `RGSS102J.dll`) hold the
 text as it is. Later ones are compressed by their protector, and the command says so and
-writes nothing; an unpacked copy of such a DLL works. `vkxp` looks for the file at
-`$XDG_DATA_HOME/vkxp/rpg_builtin.rb`, which is `~/.local/share/vkxp/rpg_builtin.rb` unless
+writes nothing; an unpacked copy of such a DLL works. `vkrgss` looks for the file at
+`$XDG_DATA_HOME/vkrgss/rpg_builtin.rb`, which is `~/.local/share/vkrgss/rpg_builtin.rb` unless
 `XDG_DATA_HOME` is set, or takes the file named with `--builtin-scripts`. Without the file it
 ends with a message that names the command above.
 
 ### The built-in scripts of RPG Maker VX
 
 A game of VX needs the built-in scripts of RGSS2, which are one block that starts with
-`module RPG;` and defines the `RPG` data classes. `vkxp` looks for them at
-`$XDG_DATA_HOME/vkxp/rpg_builtin_rgss2.rb`, or takes the file named with `--builtin-scripts`.
+`module RPG;` and defines the `RPG` data classes. `vkrgss` looks for them at
+`$XDG_DATA_HOME/vkrgss/rpg_builtin_rgss2.rb`, or takes the file named with `--builtin-scripts`.
 Without the file a run of a VX game ends with a message that names it and this section.
 
 No DLL of VX holds that text as it is: the files are packed, and the text exists only in the
@@ -108,7 +108,7 @@ memory of the running original. Today the file is made by hand in two steps:
 2. Give that file to the same command as for XP, which looks for the block in any file:
 
    ```sh
-   cargo xtask extract-rpg <memory image> ~/.local/share/vkxp/rpg_builtin_rgss2.rb
+   cargo xtask extract-rpg <memory image> ~/.local/share/vkrgss/rpg_builtin_rgss2.rb
    ```
 
 There is no tool yet that does the first step for you.
@@ -117,10 +117,10 @@ There is no tool yet that does the first step for you.
 
 The built-in scripts of RGSS3 are three blocks: one that starts with `module RPG;` and
 defines the `RPG` data classes, one that starts with `def rgss_main` and one that starts
-with `def rgss_stop`. `vkxp` looks for them at `$XDG_DATA_HOME/vkxp/rpg_builtin_rgss3.rb`,
+with `def rgss_stop`. `vkrgss` looks for them at `$XDG_DATA_HOME/vkrgss/rpg_builtin_rgss3.rb`,
 or takes the file named with `--builtin-scripts`. Without the file a run of a VX Ace game
 ends with a message that names it and this section. The file is evaluated whole before the
-script archive is read; `rgss_main` and `rgss_stop` are its own, and vkxp defines neither,
+script archive is read; `rgss_main` and `rgss_stop` are its own, and vkrgss defines neither,
 so a file without them ends a game that calls them with a `NoMethodError`.
 
 As for VX, no DLL of VX Ace holds that text as it is, and the file is made in the same two
@@ -128,7 +128,7 @@ steps, from the memory that the RGSS3 DLL (`System\RGSS300.dll` or `System\RGSS3
 the game) occupies in the running original:
 
 ```sh
-cargo xtask extract-rpg <memory image> ~/.local/share/vkxp/rpg_builtin_rgss3.rb
+cargo xtask extract-rpg <memory image> ~/.local/share/vkrgss/rpg_builtin_rgss3.rb
 ```
 
 The command says how many blocks it wrote. For an image of RGSS3 that is three; fewer means
@@ -138,7 +138,7 @@ so.
 ### Options
 
 ```text
-vkxp [GAME_DIR] [OPTIONS]
+vkrgss [GAME_DIR] [OPTIONS]
 ```
 
 `GAME_DIR` is the directory that holds `Game.ini`; without it the current directory is used.
@@ -151,7 +151,7 @@ Paths on the command line are relative to the directory the program was started 
 | `--no-config` | Read no configuration file. Not together with `--config`. |
 | `--runtime RUNTIME` | The runtime of the game: `rgss1`, `rgss2` or `rgss3`. Without it `Library` and `Scripts` of `Game.ini` tell it. See *The runtime of a game*. |
 | `--rtp NAME=DIR` | The directory of the run-time package that `Game.ini` names `NAME`: `--rtp Standard=DIR` for most games of XP, `--rtp RPGVX=DIR` for a game of VX, `--rtp RPGVXAce=DIR` for a game of VX Ace. Repeatable. A game that names a package without this option does not start. |
-| `--builtin-scripts FILE` | The built-in scripts file of the game's runtime, instead of the default location: `rpg_builtin.rb` for RGSS1, `rpg_builtin_rgss2.rb` for RGSS2 and `rpg_builtin_rgss3.rb` for RGSS3, in `$XDG_DATA_HOME/vkxp`. |
+| `--builtin-scripts FILE` | The built-in scripts file of the game's runtime, instead of the default location: `rpg_builtin.rb` for RGSS1, `rpg_builtin_rgss2.rb` for RGSS2 and `rpg_builtin_rgss3.rb` for RGSS3, in `$XDG_DATA_HOME/vkrgss`. |
 | `--device INDEX\|NAME` | The Vulkan device: its index or a part of its name, as `vulkaninfo --summary` prints them. In a window the default is the first discrete GPU, then an integrated one; headless it is `llvmpipe`. |
 | `--font-dir DIR` | A directory of fonts. Repeatable; earlier directories come first, then the game's `Fonts` directory, for a game of VX Ace then the `Fonts` directory of each of its run-time packages (`<RTP>/Fonts`), then the fonts installed on the system. |
 | `--font-own-metrics` | Size every font by its own line box. Without it a font that replaces a Windows font is scaled to the line box of the font it replaces. Meant for comparing text with the original when both draw with the same font file. |
@@ -190,7 +190,7 @@ frame is rejected in a headless run, or when a frame that was to be dumped was n
 ### Diagnostics
 
 What the running program has to say about itself goes to the error stream as lines that start
-with `vkxp: `. By default these are warnings and errors: a sound that cannot be decoded, MIDI
+with `vkrgss: `. By default these are warnings and errors: a sound that cannot be decoded, MIDI
 without a SoundFont, no gamepad support, a frame that cannot be drawn. `--verbose` adds
 informational and debug messages, which name the choices the program made: the GPU and how
 frames are paced, the directories of the run-time packages, the built-in scripts file, the
@@ -198,12 +198,12 @@ encrypted archive and the configuration files that were read. Each line then als
 level and the module it comes from:
 
 ```text
-vkxp: INFO vkxp: built-in scripts file: /home/me/.local/share/vkxp/rpg_builtin.rb
+vkrgss: INFO vkrgss: built-in scripts file: /home/me/.local/share/vkrgss/rpg_builtin.rb
 ```
 
-The environment variable `VKXP_LOG` sets the level instead and comes before `--verbose`. It
+The environment variable `VKRGSS_LOG` sets the level instead and comes before `--verbose`. It
 holds a level (`off`, `error`, `warn`, `info`, `debug` or `trace`) or a filter by module,
-such as `VKXP_LOG=warn,vkxp_host=trace`. A value that cannot be parsed ends the program with
+such as `VKRGSS_LOG=warn,vkrgss_host=trace`. A value that cannot be parsed ends the program with
 the usage message and status 2. There is no key for the level in a configuration file.
 
 What the game itself writes (`print`, `p`, the report of a script error), the usage message
@@ -214,8 +214,8 @@ the level. The intervals that `--present-stats` asks for and the frame times tha
 ### Configuration files
 
 What the options above set can be written down in two files, both optional: the user's, at
-`$XDG_CONFIG_HOME/vkxp/config.toml` (`~/.config/vkxp/config.toml` unless `XDG_CONFIG_HOME` is
-set) or wherever `--config` says, and `vkxp.toml` in the game directory. The game's file
+`$XDG_CONFIG_HOME/vkrgss/config.toml` (`~/.config/vkrgss/config.toml` unless `XDG_CONFIG_HOME` is
+set) or wherever `--config` says, and `vkrgss.toml` in the game directory. The game's file
 overrides the user's and the command line overrides both: a value replaces the value, a list
 replaces the whole list, and the tables `[rtp]`, `[keys]` and `[gamepad]` are overridden entry
 by entry. `--no-config` reads neither file. Paths in a file are relative to the directory of
@@ -341,7 +341,7 @@ runs with the keyboard. A headless run reads no gamepad.
 
 ```sh
 VK_LOADER_DRIVERS_SELECT='*radeon*' \
-    cargo run -p vkxp -- <game directory> --rtp Standard=<RTP directory> --device RADV
+    cargo run -p vkrgss -- <game directory> --rtp Standard=<RTP directory> --device RADV
 ```
 
 The loader restriction is part of the command. `--device` only chooses among the devices the
@@ -395,7 +395,7 @@ time as the display allows; with `VK_KHR_present_wait2` as well, a frame is only
 once the one before it has reached the display. Without the extension, and after any error
 from it, which is reported once, frames are shown at the first refresh after they are ready.
 Pacing with `VK_EXT_present_timing` is used whenever the device and surface support it; the
-environment variable `VKXP_PRESENT_TIMING=0` switches it off, and then frames are paced by the
+environment variable `VKRGSS_PRESENT_TIMING=0` switches it off, and then frames are paced by the
 host's timer alone. `--present-stats` writes the intervals between the frames shown to the error stream, every
 600 frames and at exit, as their count, mean, smallest and largest in milliseconds, and says
 whether the times are those the extension reports or those of the host's own clock.
@@ -413,15 +413,15 @@ stream: every 600 frames and at exit in a window, once at the end of a headless 
 is measured without the option, and measuring changes neither a frame nor when it is shown.
 
 ```text
-vkxp: frame times over 600 frame(s):
-vkxp:   guest: 600 frame(s), mean 3.412 ms, smallest 2.870 ms, largest 9.105 ms
-vkxp:   encode: 600 frame(s), mean 0.031 ms, smallest 0.024 ms, largest 0.112 ms
-vkxp:   bin: 600 frame(s), mean 0.018 ms, smallest 0.012 ms, largest 0.094 ms
-vkxp:   upload: 600 frame(s), mean 0.142 ms, smallest 0.021 ms, largest 4.730 ms
-vkxp:   submit: 600 frame(s), mean 0.655 ms, smallest 0.580 ms, largest 1.904 ms
-vkxp:   present: 600 frame(s), mean 0.410 ms, smallest 0.352 ms, largest 1.218 ms
-vkxp:   compose (device): 600 frame(s), mean 0.207 ms, smallest 0.180 ms, largest 0.655 ms
-vkxp:   present (device): 600 frame(s), mean 0.058 ms, smallest 0.049 ms, largest 0.201 ms
+vkrgss: frame times over 600 frame(s):
+vkrgss:   guest: 600 frame(s), mean 3.412 ms, smallest 2.870 ms, largest 9.105 ms
+vkrgss:   encode: 600 frame(s), mean 0.031 ms, smallest 0.024 ms, largest 0.112 ms
+vkrgss:   bin: 600 frame(s), mean 0.018 ms, smallest 0.012 ms, largest 0.094 ms
+vkrgss:   upload: 600 frame(s), mean 0.142 ms, smallest 0.021 ms, largest 4.730 ms
+vkrgss:   submit: 600 frame(s), mean 0.655 ms, smallest 0.580 ms, largest 1.904 ms
+vkrgss:   present: 600 frame(s), mean 0.410 ms, smallest 0.352 ms, largest 1.218 ms
+vkrgss:   compose (device): 600 frame(s), mean 0.207 ms, smallest 0.180 ms, largest 0.655 ms
+vkrgss:   present (device): 600 frame(s), mean 0.058 ms, smallest 0.049 ms, largest 0.201 ms
 ```
 
 The numbers above only show the layout. Each row gives the number of frames the stage was
@@ -447,11 +447,11 @@ The guest measures its own frames as well and writes a second block at the same 
 every 600 frames and when the game's side ends, a little before or after the host's:
 
 ```text
-vkxp: guest frame times over 600 frame(s):
-vkxp:   guest scripts: 600 frame(s), mean 2.104 ms, smallest 1.730 ms, largest 6.412 ms
-vkxp:   guest bitmap operations: 600 frame(s), mean 0.611 ms, smallest 0.000 ms, largest 2.250 ms
-vkxp:   guest text: 600 frame(s), mean 0.402 ms, smallest 0.000 ms, largest 1.981 ms
-vkxp:   guest extraction: 600 frame(s), mean 0.118 ms, smallest 0.094 ms, largest 0.530 ms
+vkrgss: guest frame times over 600 frame(s):
+vkrgss:   guest scripts: 600 frame(s), mean 2.104 ms, smallest 1.730 ms, largest 6.412 ms
+vkrgss:   guest bitmap operations: 600 frame(s), mean 0.611 ms, smallest 0.000 ms, largest 2.250 ms
+vkrgss:   guest text: 600 frame(s), mean 0.402 ms, smallest 0.000 ms, largest 1.981 ms
+vkrgss:   guest extraction: 600 frame(s), mean 0.118 ms, smallest 0.094 ms, largest 0.530 ms
 ```
 
 A frame of the guest lasts from the moment the wait for one frame's tick returns to the start
@@ -478,9 +478,9 @@ build with the `profiling` profile, which is the release build with full debug i
 use a profiler. With `perf`, on a headless run, which does not wait between frames:
 
 ```sh
-cargo build -p vkxp --profile profiling
+cargo build -p vkrgss --profile profiling
 VK_LOADER_DRIVERS_SELECT='*lvp*' perf record --call-graph dwarf -o target/perf.data \
-    target/profiling/vkxp <game directory> --rtp Standard=<RTP directory> \
+    target/profiling/vkrgss <game directory> --rtp Standard=<RTP directory> \
     --headless --frames 600
 perf report -i target/perf.data --sort dso,symbol
 ```
@@ -528,7 +528,7 @@ message box is shown and does not follow fast-forward.
 
 ```sh
 VK_LOADER_DRIVERS_SELECT='*lvp*' \
-    cargo run -p vkxp -- <game directory> --rtp Standard=<RTP directory> \
+    cargo run -p vkrgss -- <game directory> --rtp Standard=<RTP directory> \
     --headless --frames 120 --input "40:C, 42:, 60:DOWN, 62:" --dump 100=target/frame.png
 ```
 
@@ -537,7 +537,7 @@ byte-identical files. A script that loops without calling `Graphics.update` neve
 request to quit that follows the last frame; the program waits five seconds for the game and
 then ends with a message and a non-zero status.
 
-The end-to-end test of the `vkxp` crate runs the built program this way on games it assembles
+The end-to-end test of the `vkrgss` crate runs the built program this way on games it assembles
 itself, with a stand-in for the built-in scripts. Like the other tests that render, it refuses
 to run while the loader is not restricted, and it passes the restriction on to the program.
 
@@ -552,18 +552,18 @@ of the save states need it, and a thread in a headless run. `--guest thread` and
 
 ```sh
 VK_LOADER_DRIVERS_SELECT='*radeon*' \
-    cargo run -p vkxp -- <game directory> --rtp Standard=<RTP directory> --guest process
+    cargo run -p vkrgss -- <game directory> --rtp Standard=<RTP directory> --guest process
 ```
 
-The environment variable `VKXP_GUEST` and the key `guest` of a configuration file name the
+The environment variable `VKRGSS_GUEST` and the key `guest` of a configuration file name the
 form too; the command line comes before the environment and the environment before the
 files. Any value but `thread` and `process` is an error.
 
 The program starts itself again for the guest of a game of XP or VX, and for a game of VX
-Ace the guest executable `vkxp-guest-rgss3`, which links Ruby 1.9.2 and nothing of the
+Ace the guest executable `vkrgss-guest-rgss3`, which links Ruby 1.9.2 and nothing of the
 host. That file is looked for in the directory of the program's own file, links resolved,
 and nowhere else: the release archive has both side by side, and in the directory of a
-build both are there once both are built, which `cargo build -p vkxp-guest-rgss3` does for
+build both are there once both are built, which `cargo build -p vkrgss-guest-rgss3` does for
 the second. Without it a run of VX Ace ends before anything starts with a message that names
 the file and the directory. Each executable refuses a game of a runtime its interpreter
 does not run. The program hands the guest a guest record: a file,
@@ -572,7 +572,7 @@ settings a guest reads (the runtime, the run-time packages, the fonts, the prelo
 and the like), the seed, the socket and the level of the diagnostics. The guest process is
 started with the hidden option `--guest-role` and the path of that file, and with no other
 argument: it reads neither the command line of the program nor a configuration file, and
-not `VKXP_LOG`, `VKXP_GUEST` or `VKXP_SANDBOX` either, whose values the program has settled.
+not `VKRGSS_LOG`, `VKRGSS_GUEST` or `VKRGSS_SANDBOX` either, whose values the program has settled.
 The record starts with a line that states the version of the program, and an executable
 given a record of another version, or a file that is no record, ends with a message that
 names the file and a non-zero status. The option is the program's to give; anywhere but as
@@ -615,8 +615,8 @@ guest process are confined as it is, and so are the threads a script of VX Ace m
 audio device, is not restricted.
 
 `--sandbox off` leaves the guest process as it was, for a game that writes outside its
-directory on purpose; `sandbox = false` in the `vkxp.toml` of that game does it for that game
-alone. The environment variable `VKXP_SANDBOX` takes `on` and `off` too; the command line
+directory on purpose; `sandbox = false` in the `vkrgss.toml` of that game does it for that game
+alone. The environment variable `VKRGSS_SANDBOX` takes `on` and `off` too; the command line
 comes before the environment and the environment before the files. Any value but `on` and
 `off` is an error.
 
@@ -670,7 +670,7 @@ run keep counting through a load, so after `--states "60:save 0, 100:load 0"` fr
 the frame that followed frame 60. Without `--guest process` the option is an error.
 
 ```sh
-VK_LOADER_DRIVERS_SELECT='*lvp*' cargo run -p vkxp -- <game directory> \
+VK_LOADER_DRIVERS_SELECT='*lvp*' cargo run -p vkrgss -- <game directory> \
     --rtp Standard=<RTP directory> --headless --guest process --frames 140 \
     --states "60:save 0, 100:load 0" --dump 101=target/frame.png
 ```
@@ -681,7 +681,7 @@ Limits:
 - Files the game wrote after a state was saved stay as they are, its own saves included; a
   file a script holds open across frames shares its position with the copies.
 - Each state costs the memory pages the game has changed since it was saved.
-- States need `fork`, which the one platform of vkxp, Linux, has.
+- States need `fork`, which the one platform of vkrgss, Linux, has.
 
 ### Seed, preload scripts and input recordings
 
@@ -696,7 +696,7 @@ file's name and line in the report, and a file that does not exist ends it befor
 
 ```sh
 VK_LOADER_DRIVERS_SELECT='*radeon*' \
-    cargo run -p vkxp -- <game directory> --rtp Standard=<RTP directory> --device RADV \
+    cargo run -p vkrgss -- <game directory> --rtp Standard=<RTP directory> --device RADV \
     --preload fixes/fonts.rb --preload fixes/skip_intro.rb
 ```
 
@@ -705,14 +705,14 @@ the game again, in a window or headless:
 
 ```sh
 VK_LOADER_DRIVERS_SELECT='*radeon*' \
-    cargo run -p vkxp -- <game directory> --rtp Standard=<RTP directory> --device RADV \
+    cargo run -p vkrgss -- <game directory> --rtp Standard=<RTP directory> --device RADV \
     --record session.txt
 VK_LOADER_DRIVERS_SELECT='*lvp*' \
-    cargo run -p vkxp -- <game directory> --rtp Standard=<RTP directory> \
+    cargo run -p vkrgss -- <game directory> --rtp Standard=<RTP directory> \
     --headless --replay session.txt --frames 600 --dump 599=target/frame.png
 ```
 
-A recording is text: the line `vkxp-input 2 seed=<n>`, then one line per run of frames with
+A recording is text: the line `vkrgss-input 2 seed=<n>`, then one line per run of frames with
 the same input, `<count>x` followed by the `+`-joined button names, if any, by `keys=` and the
 hexadecimal Windows virtual-key codes of the held keys and mouse buttons, if any, and by
 `pointer=<x>,<y>` while the pointer is over the picture. Recordings of version 1, with the
@@ -726,16 +726,16 @@ are recorded: a reset with F12 is not, and a game that reads the clock can still
 
 ## Running the demo
 
-The host can also be driven without Ruby, by a guest written in Rust, `vkxp_host::demo`. It
+The host can also be driven without Ruby, by a guest written in Rust, `vkrgss_host::demo`. It
 moves a sprite with the arrow keys (faster with Shift), tints the middle of the screen while
 Space, Enter or C is held, and swaps the background with a transition on Escape or X.
-The module is compiled only with the feature `testing` of `vkxp-host`, which the crate's examples
+The module is compiled only with the feature `testing` of `vkrgss-host`, which the crate's examples
 and tests enable by themselves: the commands below need no flag.
 
 In a window:
 
 ```sh
-cargo run -p vkxp-host --example demo -- <device>
+cargo run -p vkrgss-host --example demo -- <device>
 ```
 
 `<device>` is the index of a Vulkan device or a part of its name, as `vulkaninfo --summary`
@@ -748,15 +748,15 @@ where a GPU is to be left alone the loader is restricted to the driver of the ch
 with `VK_LOADER_DRIVERS_SELECT`: RADV for an AMD GPU, for example, or lavapipe for the CPU:
 
 ```sh
-VK_LOADER_DRIVERS_SELECT='*radeon*' cargo run -p vkxp-host --example demo -- RADV
-VK_LOADER_DRIVERS_SELECT='*lvp*' cargo run -p vkxp-host --example demo -- llvmpipe
+VK_LOADER_DRIVERS_SELECT='*radeon*' cargo run -p vkrgss-host --example demo -- RADV
+VK_LOADER_DRIVERS_SELECT='*lvp*' cargo run -p vkrgss-host --example demo -- llvmpipe
 ```
 
 Without a window, on a virtual clock that never waits:
 
 ```sh
 VK_LOADER_DRIVERS_SELECT='*lvp*' \
-    cargo run -p vkxp-host --example demo-headless -- --frames 30 --dump 10=target/frame.png
+    cargo run -p vkrgss-host --example demo-headless -- --frames 30 --dump 10=target/frame.png
 ```
 
 The loader restriction is part of the command, not decoration: `--device` only chooses among
@@ -780,6 +780,6 @@ middle of the transition after B, and the tint of C over the middle of the scree
 
 ```sh
 VK_LOADER_DRIVERS_SELECT='*lvp*' \
-    cargo run -p vkxp-host --example demo-headless -- --frames 30 \
+    cargo run -p vkrgss-host --example demo-headless -- --frames 30 \
     --input "0:RIGHT+UP+SHIFT, 6:B, 7:RIGHT+C" --dump 12=target/demo.png
 ```

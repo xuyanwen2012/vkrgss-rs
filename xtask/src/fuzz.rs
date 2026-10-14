@@ -3,7 +3,7 @@
 //!
 //! A target feeds arbitrary bytes to `Marshal.load`, to the parser or to the regular
 //! expression engine under libFuzzer and the sanitizers. The targets, their seeds and the
-//! test that builds and runs one are in `crates/vkxp-ruby-sys`; this command checks its
+//! test that builds and runs one are in `crates/vkrgss-ruby-sys`; this command checks its
 //! arguments and the compiler and runs that test. See `docs/development.md`.
 
 use std::path::Path;
@@ -11,17 +11,17 @@ use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, bail};
 
-/// The targets, each the name of a C file under `crates/vkxp-ruby-sys/fuzz/`.
+/// The targets, each the name of a C file under `crates/vkrgss-ruby-sys/fuzz/`.
 const TARGETS: [&str; 3] = ["marshal", "parse", "regex"];
 
 /// The seconds a target runs for unless `--seconds` says otherwise.
 const DEFAULT_SECONDS: u64 = 60;
 
-/// The variables through which the test of `vkxp-ruby-sys` gets the target and the time.
-const TARGET_VARIABLE: &str = "VKXP_FUZZ_TARGET";
-const SECONDS_VARIABLE: &str = "VKXP_FUZZ_SECONDS";
+/// The variables through which the test of `vkrgss-ruby-sys` gets the target and the time.
+const TARGET_VARIABLE: &str = "VKRGSS_FUZZ_TARGET";
+const SECONDS_VARIABLE: &str = "VKRGSS_FUZZ_SECONDS";
 
-/// The compiler of the instrumented builds, as in the tests of `vkxp-ruby-sys`.
+/// The compiler of the instrumented builds, as in the tests of `vkrgss-ruby-sys`.
 const COMPILER: &str = "clang";
 
 pub(crate) const USAGE: &str = "usage: cargo xtask fuzz <marshal|parse|regex> [--seconds N]";
@@ -64,7 +64,7 @@ fn cargo_arguments() -> [&'static str; 11] {
     [
         "test",
         "-p",
-        "vkxp-ruby-sys",
+        "vkrgss-ruby-sys",
         "--locked",
         "--test",
         "fuzz",
@@ -195,22 +195,29 @@ mod tests {
         let arguments = cargo_arguments();
         assert_eq!(
             arguments[..6],
-            ["test", "-p", "vkxp-ruby-sys", "--locked", "--test", "fuzz"]
+            [
+                "test",
+                "-p",
+                "vkrgss-ruby-sys",
+                "--locked",
+                "--test",
+                "fuzz"
+            ]
         );
         assert!(arguments.contains(&"--ignored") && arguments.contains(&"--nocapture"));
         let options = parse(&["parse", "--seconds", "5"]).unwrap();
         assert_eq!(
             environment(&options),
             [
-                ("VKXP_FUZZ_TARGET", "parse".to_owned()),
-                ("VKXP_FUZZ_SECONDS", "5".to_owned())
+                ("VKRGSS_FUZZ_TARGET", "parse".to_owned()),
+                ("VKRGSS_FUZZ_SECONDS", "5".to_owned())
             ]
         );
     }
 
     #[test]
     fn every_target_has_its_file_and_its_seeds() {
-        let fuzz = Path::new(env!("CARGO_MANIFEST_DIR")).join("../crates/vkxp-ruby-sys/fuzz");
+        let fuzz = Path::new(env!("CARGO_MANIFEST_DIR")).join("../crates/vkrgss-ruby-sys/fuzz");
         for target in TARGETS {
             assert!(fuzz.join(format!("{target}.c")).is_file(), "{target}");
             assert!(fuzz.join("seeds").join(target).is_dir(), "{target}");

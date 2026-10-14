@@ -1,25 +1,25 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/vkxp-proto",
-    "crates/vkxp-pixel",
-    "crates/vkxp-core",
-    "crates/vkxp-image",
-    "crates/vkxp-text",
-    "crates/vkxp-vfs",
-    "crates/vkxp-ruby-sys",
-    "crates/vkxp-ruby192-sys",
-    "crates/vkxp-binding",
-    "crates/vkxp-binding-rgss3",
-    "crates/vkxp-guest",
-    "crates/vkxp-guest-main",
-    "crates/vkxp-guest-main-rgss3",
-    "crates/vkxp-guest-rgss3",
-    "crates/vkxp-compose-ref",
-    "crates/vkxp-vk",
-    "crates/vkxp-audio",
-    "crates/vkxp-host",
-    "crates/vkxp",
+    "crates/vkrgss-proto",
+    "crates/vkrgss-pixel",
+    "crates/vkrgss-core",
+    "crates/vkrgss-image",
+    "crates/vkrgss-text",
+    "crates/vkrgss-vfs",
+    "crates/vkrgss-ruby-sys",
+    "crates/vkrgss-ruby192-sys",
+    "crates/vkrgss-binding",
+    "crates/vkrgss-binding-rgss3",
+    "crates/vkrgss-guest",
+    "crates/vkrgss-guest-main",
+    "crates/vkrgss-guest-main-rgss3",
+    "crates/vkrgss-guest-rgss3",
+    "crates/vkrgss-compose-ref",
+    "crates/vkrgss-vk",
+    "crates/vkrgss-audio",
+    "crates/vkrgss-host",
+    "crates/vkrgss",
     "xtask",
 ]
 
@@ -29,8 +29,8 @@ edition = "2024"
 rust-version = "1.99"
 license = "MIT"
 authors = ["Yanwen Xu"]
-repository = "https://github.com/xuyanwen2012/vkxp"
-homepage = "https://github.com/xuyanwen2012/vkxp"
+repository = "https://github.com/xuyanwen2012/vkrgss-rs"
+homepage = "https://github.com/xuyanwen2012/vkrgss-rs"
 readme = "README.md"
 keywords = ["rpg-maker", "rgss", "vulkan", "game-engine", "emulation"]
 categories = ["game-engines", "emulators"]
@@ -40,7 +40,7 @@ publish = false
 unsafe_op_in_unsafe_fn = "deny"
 unreachable_pub = "warn"
 # Set by the build scripts of the packages over Ruby 1.9.2 for a target without it.
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(vkxp_interpreter_absent)', 'cfg(vkxp_ruby_19)'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(vkrgss_interpreter_absent)', 'cfg(vkrgss_ruby_19)'] }
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
@@ -66,22 +66,22 @@ inherits = "release"
 debug = true
 
 [workspace.dependencies]
-vkxp-proto = { path = "crates/vkxp-proto" }
-vkxp-pixel = { path = "crates/vkxp-pixel" }
-vkxp-core = { path = "crates/vkxp-core" }
-vkxp-image = { path = "crates/vkxp-image" }
-vkxp-text = { path = "crates/vkxp-text" }
-vkxp-vfs = { path = "crates/vkxp-vfs" }
-vkxp-ruby-sys = { path = "crates/vkxp-ruby-sys" }
-vkxp-binding = { path = "crates/vkxp-binding" }
-vkxp-binding-rgss3 = { path = "crates/vkxp-binding-rgss3" }
-vkxp-guest = { path = "crates/vkxp-guest" }
-vkxp-guest-main = { path = "crates/vkxp-guest-main" }
-vkxp-guest-main-rgss3 = { path = "crates/vkxp-guest-main-rgss3" }
-vkxp-compose-ref = { path = "crates/vkxp-compose-ref" }
-vkxp-vk = { path = "crates/vkxp-vk" }
-vkxp-audio = { path = "crates/vkxp-audio" }
-vkxp-host = { path = "crates/vkxp-host" }
+vkrgss-proto = { path = "crates/vkrgss-proto" }
+vkrgss-pixel = { path = "crates/vkrgss-pixel" }
+vkrgss-core = { path = "crates/vkrgss-core" }
+vkrgss-image = { path = "crates/vkrgss-image" }
+vkrgss-text = { path = "crates/vkrgss-text" }
+vkrgss-vfs = { path = "crates/vkrgss-vfs" }
+vkrgss-ruby-sys = { path = "crates/vkrgss-ruby-sys" }
+vkrgss-binding = { path = "crates/vkrgss-binding" }
+vkrgss-binding-rgss3 = { path = "crates/vkrgss-binding-rgss3" }
+vkrgss-guest = { path = "crates/vkrgss-guest" }
+vkrgss-guest-main = { path = "crates/vkrgss-guest-main" }
+vkrgss-guest-main-rgss3 = { path = "crates/vkrgss-guest-main-rgss3" }
+vkrgss-compose-ref = { path = "crates/vkrgss-compose-ref" }
+vkrgss-vk = { path = "crates/vkrgss-vk" }
+vkrgss-audio = { path = "crates/vkrgss-audio" }
+vkrgss-host = { path = "crates/vkrgss-host" }
 
 anyhow = "1"
 ash = "0.38"

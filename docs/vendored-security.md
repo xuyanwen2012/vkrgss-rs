@@ -1,6 +1,6 @@
 # Security fixes after the vendored releases
 
-vkxp builds two old C trees: Ruby 1.8.7-p374 (June 2013, the last release of its line) and
+vkrgss builds two old C trees: Ruby 1.8.7-p374 (June 2013, the last release of its line) and
 Oniguruma 5.9.6 (December 2014). Fixes made after those releases reached neither tree. This
 document lists the security fixes published since, and says for each what was done about it
 here. It was made on 2026-10-12 by the change `fuzz-the-interpreter-and-review-fixes`; a
@@ -10,7 +10,7 @@ Every row has:
 
 - **Identifier**: the CVE, or the upstream issue or commit where there is none.
 - **Code**: the file and function concerned.
-- **Built**: whether that code is in the vendored tree and compiled into vkxp.
+- **Built**: whether that code is in the vendored tree and compiled into vkrgss.
 - **Reached by**: whether a game reaches it with a *data* file (a save file or an `.rxdata`
   file, through `Marshal.load`, or a string of such a file), only with a *script*, or not
   at all. A script is code that the game's author wrote, a data file can come from anybody.
@@ -38,10 +38,10 @@ this list has; those are fixed by recorded patches too, and the last section nam
   CVE, most of them found by fuzzing; they are listed with the issue number or the hash.
   Leaks, time-outs and changes that only avoid undefined pointer arithmetic are not listed.
 
-## Ruby 1.8.7-p374: code that vkxp builds
+## Ruby 1.8.7-p374: code that vkrgss builds
 
 The built files are the core of the interpreter and `ext/zlib/zlib.c`
-(`crates/vkxp-ruby-sys/build.rs` has the list).
+(`crates/vkrgss-ruby-sys/build.rs` has the list).
 
 | Identifier | Code | Built | Reached by | Outcome |
 |---|---|---|---|---|
@@ -49,23 +49,23 @@ The built files are the core of the interpreter and `ext/zlib/zlib.c`
 | CVE-2018-8778 | `pack.c`: `pack_unpack` (a count above `LONG_MAX` moves `@`, `X` and `x` out of the string) | yes | script: the format of `String#unpack`; data only where a script builds that format from it | **backported**: patch 34 (the `pack.c` part of Debian's patch) |
 | CVE-2018-8780 | `dir.c`: `dir_initialize`, `rb_push_glob`, `dir_globs` (`Dir.open`, `Dir.glob` and others use a path up to its first NUL byte) | yes | script: a path that a script passes | **left**: all of Ruby 1.8 passes a path to the system up to its first NUL byte, `File.open` included (the check came with 1.9), and so does the Ruby 1.8.1 of the original runtime. Scripts pass buffers that a `Win32API` call filled, which end in NUL bytes; refusing them would stop a game that runs on the original. The guest process is confined to the game directory whatever the path is. Not measured on the original |
 | CVE-2019-15845 | `dir.c`: `file_s_fnmatch` (`File.fnmatch` stops at a NUL byte in the pattern) | yes | script | **left**: as CVE-2018-8780; no backport for 1.8 exists |
-| CVE-2018-16396 | `pack.c`: `pack_pack` (`u`, `m`, `M`, `p`), `pack_unpack` (`b`, `B`, `h`, `H`) do not pass the taint flag on | yes | no effect | **left**: taint is only looked at under `$SAFE` of 1 or more, which vkxp does not use as a boundary; no backport for 1.8 exists |
+| CVE-2018-16396 | `pack.c`: `pack_pack` (`u`, `m`, `M`, `p`), `pack_unpack` (`b`, `B`, `h`, `H`) do not pass the taint flag on | yes | no effect | **left**: taint is only looked at under `$SAFE` of 1 or more, which vkrgss does not use as a boundary; no backport for 1.8 exists |
 | CVE-2017-0898 | `sprintf.c`: `rb_str_format`, the formatting of infinity and NaN | file yes, block no | — | **does not apply**: in 1.8.7 that block is inside `#if defined(_WIN32)` |
 | CVE-2014-4975 | `pack.c`: `encodes` (a fixed buffer of 4096 bytes) | yes | — | **does not apply**: 1.8.7 sizes the buffer of `encodes` from the count and has no fixed one |
 | CVE-2014-3916 | `string.c`: `str_buf_cat` (a too small capacity) | yes | — | **does not apply**: the faulty computation is not in 1.8.7 |
 | CVE-2022-28739 | `util.c`: `ruby_strtod`, hexadecimal floats | yes | — | **does not apply**: the `ruby_strtod` of 1.8.7 has no hexadecimal branch |
 | CVE-2026-27820 | `ext/zlib/zlib.c`: `zstream_buffer_ungets` | yes | — | **does not apply**: the function is not in 1.8.7; its one-byte `ungetc` grows the buffer first |
 | CVE-2017-11465 | `parse.y`: `parser_yyerror` of Ruby 2.4 | yes | — | **does not apply** as published. The `yyerror` of 1.8.7 read and wrote out of bounds in its own way, which the fuzz target `parse` found: patches 30 and 31 |
-| CVE-2022-28738, CVE-2024-27282, CVE-2017-6181 | the regular expression engine of later Rubies (Onigmo) | no | — | **does not apply**: `regex.c` of 1.8.7 is not built and Onigmo is not in the tree; the engine vkxp builds is in the next table |
+| CVE-2022-28738, CVE-2024-27282, CVE-2017-6181 | the regular expression engine of later Rubies (Onigmo) | no | — | **does not apply**: `regex.c` of 1.8.7 is not built and Onigmo is not in the tree; the engine vkrgss builds is in the next table |
 
 Before p374, and still open here on purpose: the hash-flooding fix of 1.8.7-p357
 (CVE-2011-4815) made `String#hash` depend on a random seed. Patch 5 of the tree takes that
 out again, because games depend on the order of a `Hash`, which follows the hash values of
 the original runtime. Its entry in `PATCHES.md` says so.
 
-## Ruby 1.8.7-p374: code that vkxp does not build
+## Ruby 1.8.7-p374: code that vkrgss does not build
 
-vkxp builds no extension but `Zlib`, no Windows code, and no game loads a file of `lib/`:
+vkrgss builds no extension but `Zlib`, no Windows code, and no game loads a file of `lib/`:
 the load path is empty, and `require` only takes files inside the game directory. No row
 below is built, and none is reached by a game.
 
@@ -192,7 +192,7 @@ The first runs of `cargo xtask fuzz` (`openspec` change
 `fuzz-the-interpreter-and-review-fixes`, section "Checked" of its `design.md`) found the
 defects of the first rows of the table above again, and these, which no published fix
 names. Each is a recorded patch, and its input is a test
-(`crates/vkxp-ruby-sys/fuzz/fixed/`).
+(`crates/vkrgss-ruby-sys/fuzz/fixed/`).
 
 | Tree | Code | Defect | Patch |
 |---|---|---|---|

@@ -1,7 +1,7 @@
-# Probe of the vkxp oracle harness (`cargo xtask oracle`), added in front of the scripts of
-# a copy of the game. It runs in the original runtime and in vkxp, so it keeps to Ruby 1.8.1.
+# Probe of the vkrgss oracle harness (`cargo xtask oracle`), added in front of the scripts of
+# a copy of the game. It runs in the original runtime and in vkrgss, so it keeps to Ruby 1.8.1.
 #
-# Frames are counted as the host of vkxp numbers them: every `Graphics.update` is one frame
+# Frames are counted as the host of vkrgss numbers them: every `Graphics.update` is one frame
 # and `Graphics.transition(d)` is d frames. `OracleProbe.frame` is the number of the frame
 # the scripts are working on, counted from 0.
 module OracleProbe

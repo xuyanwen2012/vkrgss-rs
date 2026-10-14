@@ -1,0 +1,26 @@
+[package]
+name = "vkrgss-guest-rgss3"
+description = "The guest executable of vkrgss for games of RPG Maker VX Ace, over Ruby 1.9.2"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+build = "build.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+vkrgss-guest-main-rgss3.workspace = true
+
+[dev-dependencies]
+# The tests write guest records as the program does.
+tempfile.workspace = true
+vkrgss-guest.workspace = true

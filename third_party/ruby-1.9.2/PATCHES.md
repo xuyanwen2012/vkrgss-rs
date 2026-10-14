@@ -2,7 +2,7 @@
 
 Every vendored file is byte-identical to the release unless an entry below says otherwise.
 `MANIFEST.sha256` always keeps the upstream hash; a patched file must instead match the
-`Patched SHA-256` of its entry. The manifest test of `vkxp-ruby-sys` reads this file, so every
+`Patched SHA-256` of its entry. The manifest test of `vkrgss-ruby-sys` reads this file, so every
 entry keeps the four fields `File`, `Patch`, `Patched SHA-256` and `Reason` in this form, and a
 file that several patches touch records the hash after the last of them in every entry.
 
@@ -14,7 +14,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 Patches 1 to 9 are the eight patches of the feasibility study of 2026-10-13, which built
 this release with GCC 16 and clang 22 and ran its suites, also under `GC.stress`. Patches 1,
 2, 3, 7, 8 and 9 repair the release for a compiler and a C library of today; the others make
-the interpreter behave as vkxp embeds it. None changes what a script computes.
+the interpreter behave as vkrgss embeds it. None changes what a script computes.
 
 ## 1. computed-goto-pointer
 
@@ -86,7 +86,7 @@ the interpreter behave as vkxp embeds it. None changes what a script computes.
   the other hashes from `/dev/urandom`, the time, the process id and a stack address, so the
   values differ in every process. With `ruby_vkxp_hashseed_fixed` set before `ruby_init`, the
   seed is `ruby_vkxp_hashseed`. The original runtime's values differ in every process too, so
-  no game can depend on them; vkxp fixes the seed so that a run is repeatable. The seed of
+  no game can depend on them; vkrgss fixes the seed so that a run is repeatable. The seed of
   `rand` is not touched.
 
 ## 7. gc-mark-callee-saved-registers
@@ -128,10 +128,10 @@ the interpreter behave as vkxp embeds it. None changes what a script computes.
 - Patch: `patches/static-encodings.patch`
 - Patched SHA-256: `cc6c62548576ce0b8990cbcf41e94f74c9bb9216b90dfb59bbaba35dba2fd71d`
 - Reason: the release loads an encoding that is not registered with
-  `require "enc/<name>.so"`. vkxp links the encodings the original runtime has and loads no
+  `require "enc/<name>.so"`. vkrgss links the encodings the original runtime has and loads no
   file. `load_encoding` normalises the name as before (lower case, every other character than
   a letter or digit an underscore) and asks `ruby_vkxp_static_encoding`, a function of the
-  embedder (`crates/vkxp-ruby192-sys/encodings.c`), for the `Init_` function of that name; it
+  embedder (`crates/vkrgss-ruby192-sys/encodings.c`), for the `Init_` function of that name; it
   calls the function, or the name stays unknown. An encoding is so registered at the first
   look-up of its name, as measured on the original runtime, whose `Encoding.list` has four
   entries at start-up although Shift_JIS, Windows-31J and ISO-8859-1 are usable. `require_enc`
@@ -144,7 +144,7 @@ the interpreter behave as vkxp embeds it. None changes what a script computes.
 - Patched SHA-256: `ffb77ade6ecc607d26bfd020667cce31f29836d2f5418995f3eef71b1259d228`
 - Reason: follows patch 10. `load_transcoder_entry` loaded a transcoder that is only
   declared by the name of its library with `require "enc/trans/<lib>.so"`. The transcoders
-  vkxp links are registered at start-up by their `Init_` functions and `transdb` is not
+  vkrgss links are registered at start-up by their `Init_` functions and `transdb` is not
   linked, so nothing is declared by name; such an entry now gives no transcoder and no file
   is looked for.
 
@@ -154,7 +154,7 @@ the interpreter behave as vkxp embeds it. None changes what a script computes.
 - Patch: `patches/host-stack-limit.patch`
 - Patched SHA-256: `d145c6e75822737d96b0956b79862232b88857ca86e6d89937bda1ba8f58bdf0`
 - Reason: applies after patch 4. `ruby_init_stack` takes the size of the machine stack
-  from `RLIMIT_STACK`, which describes the main thread of the process. vkxp runs the
+  from `RLIMIT_STACK`, which describes the main thread of the process. vkrgss runs the
   interpreter on a thread it creates: with a limit larger than that thread's stack a deep
   recursion would overrun the stack before the interpreter notices, and the depth of a
   recursion would depend on the user's shell. When `ruby_vkxp_stack_size` is set before
@@ -169,7 +169,7 @@ the interpreter behave as vkxp embeds it. None changes what a script computes.
 - Reason: applies after patch 7, and belongs to patch 12. Where the platform has an
   alternate signal stack, `ruby_stack_check` of the release returns 0 without looking: the
   release waits for the segmentation fault of a stack overflow and raises `SystemStackError`
-  from its signal handler. vkxp gives the disposition of SIGSEGV back to the host, so a
+  from its signal handler. vkrgss gives the disposition of SIGSEGV back to the host, so a
   recursion that is deep in the machine stack and shallow in Ruby's own stack (one through a
   host function that calls back into the script) ran off the thread's stack and ended the
   process; a test of the stack limit showed it. When `ruby_vkxp_stack_size` is set, the
@@ -183,7 +183,7 @@ the interpreter behave as vkxp embeds it. None changes what a script computes.
 - Patched SHA-256: `d145c6e75822737d96b0956b79862232b88857ca86e6d89937bda1ba8f58bdf0`
 - Reason: applies after patches 4 and 12, and belongs to patch 4. The interpreter wakes
   a Ruby thread that blocks by sending it SIGVTALRM (`ubf_select`), for which
-  `Init_native_thread` installs an empty handler. vkxp puts the signal dispositions of the
+  `Init_native_thread` installs an empty handler. vkrgss puts the signal dispositions of the
   process back after `ruby_init`, and the default action of SIGVTALRM ends the process: the
   test of the signal dispositions showed the handler, and killing a sleeping thread would
   have ended the program. With `ruby_vkxp_lazy_timer_thread` set, the handler is installed
@@ -216,7 +216,7 @@ the interpreter behave as vkxp embeds it. None changes what a script computes.
 - Patched SHA-256: `d145c6e75822737d96b0956b79862232b88857ca86e6d89937bda1ba8f58bdf0`
 - Reason: applies after patches 4, 12 and 14; it is numbered after 15, which touches another file. A copy of the process made by `fork` has no
   timer thread, and `rb_thread_reset_timer_thread`, which the interpreter calls in its own
-  child and vkxp in a copy that is a state, only forgets the thread. The lock and the
+  child and vkrgss in a copy that is a state, only forgets the thread. The lock and the
   condition variable of the timer thread stay as that thread left them in the copied
   process, which waits on the condition variable or holds the lock at any moment. The timer
   thread the copy starts for its next script thread then left its loop at once, at a wakeup
@@ -241,4 +241,4 @@ the interpreter behave as vkxp embeds it. None changes what a script computes.
   (`gvl_acquire`), and `gvl_yield` sleeps, when a thread waits, until another thread has
   taken the lock; each of the twenty threads then runs after one time slice. The count
   belongs to the threads of one process: `ruby_vkxp_gvl_atfork` forgets it in a copy,
-  called by `rb_thread_atfork` and by vkxp's `restart_thread_timer`.
+  called by `rb_thread_atfork` and by vkrgss's `restart_thread_timer`.

@@ -53,9 +53,9 @@ fn steps() -> [Step; 6] {
             args: &[
                 "test",
                 "-p",
-                "vkxp-vk",
+                "vkrgss-vk",
                 "-p",
-                "vkxp-host",
+                "vkrgss-host",
                 "--locked",
                 "--no-fail-fast",
             ],
@@ -185,7 +185,7 @@ mod tests {
         for step in steps() {
             assert!(!step.args.contains(&"stress"), "{}", step.name);
             for (name, _) in step.env {
-                assert_ne!(*name, "VKXP_GC_STRESS", "{}", step.name);
+                assert_ne!(*name, "VKRGSS_GC_STRESS", "{}", step.name);
             }
         }
     }
@@ -221,9 +221,9 @@ mod tests {
             [
                 "test",
                 "-p",
-                "vkxp-vk",
+                "vkrgss-vk",
                 "-p",
-                "vkxp-host",
+                "vkrgss-host",
                 "--locked",
                 "--no-fail-fast"
             ]

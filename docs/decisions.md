@@ -1,4 +1,4 @@
-# vkxp design decisions
+# vkrgss design decisions
 
 Record of the decisions settled on 2026-10-08 before any code was written. Treat these as
 settled; change one only through an OpenSpec change that says so.
@@ -11,16 +11,16 @@ The change `plan-vx-ace` recorded the decisions of the owner of 2026-10-13 on VX
 after V3: it rewrote "VX Ace" and "Process" under "Several runtimes" and added the rows A0 to
 A3 of "Milestones" and the risks of VX Ace.
 
-The change `build-the-binding-over-ruby-1-9-2` added the crates `vkxp-ruby192-sys` and
-`vkxp-binding-rgss3` to the table of crates and to the crates that may hold `unsafe`, and
+The change `build-the-binding-over-ruby-1-9-2` added the crates `vkrgss-ruby192-sys` and
+`vkrgss-binding-rgss3` to the table of crates and to the crates that may hold `unsafe`, and
 under "VX Ace" what the decision on the binding became in code.
 
 The change `draw-text-and-bitmaps-as-rgss3` added "Text and bitmaps of RGSS3" under "VX Ace"
-on 2026-10-13: which DLL version vkxp follows, the largest bitmap, and what stands for the
+on 2026-10-13: which DLL version vkrgss follows, the largest bitmap, and what stands for the
 answers of GDI.
 
-The change `run-rgss3-games-in-a-guest-of-their-own` added the crates `vkxp-guest-main-rgss3`
-and `vkxp-guest-rgss3` to the table of crates, and "The guest executable and the start of
+The change `run-rgss3-games-in-a-guest-of-their-own` added the crates `vkrgss-guest-main-rgss3`
+and `vkrgss-guest-rgss3` to the table of crates, and "The guest executable and the start of
 RGSS3" under "VX Ace" on 2026-10-13.
 
 The change `measure-text-as-gdi-does-in-rgss3` replaced, on 2026-10-14, the items on the
@@ -33,7 +33,7 @@ on 2026-10-14, and ended the experimental state of VX Ace under "VX Ace".
 
 ## Goal and scope
 
-- vkxp is a from-scratch runtime for the games of RPG Maker XP, VX and VX Ace, built to a
+- vkrgss is a from-scratch runtime for the games of RPG Maker XP, VX and VX Ace, built to a
   2026 standard.
 - In scope: RGSS1, RGSS2, RGSS3. Out of scope: RPG Maker MV and MZ (JavaScript on a browser
   engine) and 2000 and 2003 (not Ruby; EasyRPG Player exists).
@@ -68,7 +68,7 @@ on 2026-10-14, and ended the experimental state of VX Ace under "VX Ace".
   message requests. The guest never holds a GPU, window or audio handle.
 - The guest is a thread of the host's process or a child process, with which the same
   messages cross a Unix stream socket (change `run-the-guest-in-a-process`). It is chosen by
-  `--guest thread` or `--guest process`, the environment variable `VKXP_GUEST` and the
+  `--guest thread` or `--guest process`, the environment variable `VKRGSS_GUEST` and the
   configuration key `guest`. Without a choice it is a process in a window and a thread in a
   headless run (change `save-and-load-states`).
 - Save states are copies of the guest process: the guest forks at a frame boundary and the
@@ -113,32 +113,32 @@ on 2026-10-14, and ended the experimental state of VX Ace under "VX Ace".
 
 | Crate | Responsibility | Side |
 |---|---|---|
-| `vkxp-proto` | Plain data shared by both sides: frame packet, op list, audio commands, input snapshot | shared |
-| `vkxp-pixel` | Bit-exact pixel arithmetic (blend, tone, colour, hue) with its reverse-engineering source | shared |
-| `vkxp-core` | Value types, `Bitmap` pixels and operations, scene objects, frame extraction | guest |
-| `vkxp-image` | PNG, JPEG, BMP decoding | guest |
-| `vkxp-text` | Font lookup, substitution table, glyph rasterisation | guest |
-| `vkxp-vfs` | Path resolution, RTP lookup, encrypted archive | guest |
-| `vkxp-ruby-sys` | Build of the embedded Ruby 1.8.7 and raw FFI | guest |
-| `vkxp-ruby192-sys` | Build of the embedded Ruby 1.9.2 and raw FFI, under the names of `vkxp-ruby-sys` | guest |
-| `vkxp-binding` | RGSS Ruby API on top of core, over Ruby 1.8.7 | guest |
-| `vkxp-binding-rgss3` | The source of `vkxp-binding` compiled over Ruby 1.9.2 | guest |
-| `vkxp-guest` | The guest role: the hidden option, the guest record and the settings in it, the subscriber of the diagnostics, the attachment, the copies that are states, the sandbox and the signal settings of a guest process; links no interpreter | guest |
-| `vkxp-guest-main` | The main of a guest: what a guest is set up with, the text backend over the font engine, the guest on a thread, and the function that makes an executable a guest process | guest |
-| `vkxp-guest-main-rgss3` | The source of `vkxp-guest-main` compiled over `vkxp-binding-rgss3` and Ruby 1.9.2 | guest |
-| `vkxp-guest-rgss3` | The guest executable of games of RGSS3: the guest role and `vkxp-guest-main-rgss3`, nothing of the host | guest |
-| `vkxp-compose-ref` | CPU reference compositor | host and tests |
-| `vkxp-vk` | Vulkan backend: binning, compositing, presentation, pacing | host |
-| `vkxp-audio` | Mixer, decoding, MIDI synthesis | host |
-| `vkxp-host` | Event loop, input mapping, thread orchestration | host |
-| `vkxp` | Executable: command line, configuration files | |
+| `vkrgss-proto` | Plain data shared by both sides: frame packet, op list, audio commands, input snapshot | shared |
+| `vkrgss-pixel` | Bit-exact pixel arithmetic (blend, tone, colour, hue) with its reverse-engineering source | shared |
+| `vkrgss-core` | Value types, `Bitmap` pixels and operations, scene objects, frame extraction | guest |
+| `vkrgss-image` | PNG, JPEG, BMP decoding | guest |
+| `vkrgss-text` | Font lookup, substitution table, glyph rasterisation | guest |
+| `vkrgss-vfs` | Path resolution, RTP lookup, encrypted archive | guest |
+| `vkrgss-ruby-sys` | Build of the embedded Ruby 1.8.7 and raw FFI | guest |
+| `vkrgss-ruby192-sys` | Build of the embedded Ruby 1.9.2 and raw FFI, under the names of `vkrgss-ruby-sys` | guest |
+| `vkrgss-binding` | RGSS Ruby API on top of core, over Ruby 1.8.7 | guest |
+| `vkrgss-binding-rgss3` | The source of `vkrgss-binding` compiled over Ruby 1.9.2 | guest |
+| `vkrgss-guest` | The guest role: the hidden option, the guest record and the settings in it, the subscriber of the diagnostics, the attachment, the copies that are states, the sandbox and the signal settings of a guest process; links no interpreter | guest |
+| `vkrgss-guest-main` | The main of a guest: what a guest is set up with, the text backend over the font engine, the guest on a thread, and the function that makes an executable a guest process | guest |
+| `vkrgss-guest-main-rgss3` | The source of `vkrgss-guest-main` compiled over `vkrgss-binding-rgss3` and Ruby 1.9.2 | guest |
+| `vkrgss-guest-rgss3` | The guest executable of games of RGSS3: the guest role and `vkrgss-guest-main-rgss3`, nothing of the host | guest |
+| `vkrgss-compose-ref` | CPU reference compositor | host and tests |
+| `vkrgss-vk` | Vulkan backend: binning, compositing, presentation, pacing | host |
+| `vkrgss-audio` | Mixer, decoding, MIDI synthesis | host |
+| `vkrgss-host` | Event loop, input mapping, thread orchestration | host |
+| `vkrgss` | Executable: command line, configuration files | |
 
-`vkxp-core` does no file I/O and depends on neither Ruby nor Vulkan.
+`vkrgss-core` does no file I/O and depends on neither Ruby nor Vulkan.
 
 ## Ruby
 
 - Embedded interpreter: vendored Ruby 1.8.7-p374 source under `third_party/ruby-1.8.7/`, with
-  its own licence files, built by `vkxp-ruby-sys`.
+  its own licence files, built by `vkrgss-ruby-sys`.
 - Required flags: `-std=gnu89 -fwrapv -fno-strict-aliasing -fPIC`. Without the first two the
   build succeeds but is wrong (misdetected configuration, broken Bignum overflow), so Ruby's own
   core test suite (625 tests) is part of the merge gate.
@@ -147,7 +147,7 @@ on 2026-10-14, and ended the experimental state of VX Ace under "VX Ace".
 - Exposed surface matches the original: core library only, plus `Zlib` (extension compiled in,
   `Zlib.crc_table` fixed for 64-bit, zlib linked statically) and a `Win32API` shim. Load path
   cleared and `$KCODE='U'` at start.
-- Regex: the original uses Oniguruma, and so does vkxp: Oniguruma 5.9.6 is vendored and built
+- Regex: the original uses Oniguruma, and so does vkrgss: Oniguruma 5.9.6 is vendored and built
   in place of the interpreter's own engine (change `embed-oniguruma`); a probe of 65 patterns
   gives the original's results.
 - The interpreter runs only on the script thread, with a large dedicated stack
@@ -158,7 +158,7 @@ on 2026-10-14, and ended the experimental state of VX Ace under "VX Ace".
   game directory.
 - `Win32API`: the class exists; common calls are emulated from a table; unknown calls log once
   and return 0; preload scripts may override.
-- vkxp-specific extensions live under a `VKXP` module only.
+- vkrgss-specific extensions live under a `VKRGSS` module only.
 - The built-in Enterbrain Ruby source (`RPG::Sprite`, `RPG::Weather`, `RPG::Cache`, the `RPG::`
   data classes) is never committed. A tool extracts it from the user's own DLL into a
   git-ignored file that is loaded at run time.
@@ -176,11 +176,11 @@ on 2026-10-14, and ended the experimental state of VX Ace under "VX Ace".
 - Pacing: logic and display at exactly the game's frame rate (default 40), no interpolation.
 - `print`, `p` and script errors show a blocking in-window modal panel and log to stderr; a
   switch makes `p` log-only. Settings are TOML (global plus per-game override) and CLI flags.
-- Fonts: fontconfig lookup plus a substitution table; fonts in `~/.config/vkxp/fonts/` take
+- Fonts: fontconfig lookup plus a substitution table; fonts in `~/.config/vkrgss/fonts/` take
   priority; no CJK font is bundled.
 - SoundFont: configured path, then `/usr/share/soundfonts`.
 - The original's 10-second hang watchdog is off by default.
-- Command line: `vkxp <game directory>`.
+- Command line: `vkrgss <game directory>`.
 
 ## Feature tiers
 
@@ -195,12 +195,12 @@ on 2026-10-14, and ended the experimental state of VX Ace under "VX Ace".
 ## Process
 
 - Workspace: `~/Desktop/rgss/` holds `ref/` (installer, original DLLs, unpacked DLL, RTP,
-  tools), `games/` (local test games), `vkxp/` (this repository), `wt/` (worktrees).
+  tools), `games/` (local test games), `vkrgss/` (this repository), `wt/` (worktrees).
   Nothing under `ref/` or `games/` is ever committed.
 - Everything in the repository is English. Rust edition 2024, toolchain pinned.
-- `unsafe` only in `vkxp-vk`, `vkxp-ruby-sys`, `vkxp-ruby192-sys`, `vkxp-binding` (the source
-  that `vkxp-binding-rgss3` compiles too), `vkxp-guest` and platform code.
-  `thiserror` in libraries, `anyhow` in the binary and in `vkxp-guest-main`, which is the
+- `unsafe` only in `vkrgss-vk`, `vkrgss-ruby-sys`, `vkrgss-ruby192-sys`, `vkrgss-binding` (the source
+  that `vkrgss-binding-rgss3` compiles too), `vkrgss-guest` and platform code.
+  `thiserror` in libraries, `anyhow` in the binary and in `vkrgss-guest-main`, which is the
   body of the `main` of a guest executable, `tracing` for logs.
 - Merge gate: `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test`,
   `cargo doc` with warnings denied, `openspec validate`.
@@ -225,7 +225,7 @@ Decisions of the owner of 2026-10-12, recorded by the change `extend-scope-to-vx
     count as frames is established. This is a proof of the original's side only, done by
     the owner's coordinating session directly; the oracle tool may be adapted for it (frame
     size, the probe script). No change that implements VX in the guest is drafted before it
-    has passed. Comparing with vkxp begins at V1.
+    has passed. Comparing with vkrgss begins at V1.
   - V1: title screen and menu.
   - V2: walking on a map.
   - V3: battle, saving and loading.
@@ -263,7 +263,7 @@ Ace finished and published.
   what its record names is that of V1 to V3 in "Order and milestones". Version 0.3.0 is
   released when A3 is reached.
 - Guest executable: a game of RGSS3 runs in a guest executable of its own,
-  `vkxp-guest-rgss3`, beside `vkxp`: the binding over Ruby 1.9.2 and the guest role, no
+  `vkrgss-guest-rgss3`, beside `vkrgss`: the binding over Ruby 1.9.2 and the guest role, no
   window, no Vulkan, no audio. This keeps the two interpreters' symbols and global state
   apart (868 global symbols are defined by both). The program knows the runtime before it
   starts a guest and starts that executable instead of itself, found beside its own path;
@@ -275,26 +275,26 @@ Ace finished and published.
   (2010-08-18 revision 29036) [i386-mswin32_90]`), is vendored under
   `third_party/ruby-1.9.2/` as 1.8.7 is: a subset with a manifest, a patch log and a
   checked-in `config.h`, built without `configure` or a bootstrap Ruby by a sys crate of its
-  own, `vkxp-ruby192-sys`, which offers the Rust API of `vkxp-ruby-sys`. It needs
+  own, `vkrgss-ruby192-sys`, which offers the Rust API of `vkrgss-ruby-sys`. It needs
   `-std=gnu89 -fwrapv`. It is our fork, patched to the behaviour measured on the original,
   as was done with Ruby 1.8.7. The stress run of the collector is part of the gate for it
   from the start.
-- Binding: one source for the RGSS classes. `vkxp-binding` is compiled a second time, as a
-  package of its own over `vkxp-ruby192-sys`; what differs by interpreter is behind the API
+- Binding: one source for the RGSS classes. `vkrgss-binding` is compiled a second time, as a
+  package of its own over `vkrgss-ruby192-sys`; what differs by interpreter is behind the API
   of the sys crates or a runtime check. There is no second copy of the classes. The package
-  is `vkxp-binding-rgss3` (change `build-the-binding-over-ruby-1-9-2`): it has no source,
-  runs the tests of `vkxp-binding` a second time, and names in an allow-list those that
+  is `vkrgss-binding-rgss3` (change `build-the-binding-over-ruby-1-9-2`): it has no source,
+  runs the tests of `vkrgss-binding` a second time, and names in an allow-list those that
   expect RGSS1, RGSS2 or Ruby 1.8. A string the classes create is bytes, ASCII-8BIT over
   Ruby 1.9.2 as measured on the original, unless it is script source or the path of the
   script archive. Symbols are not numbered over Ruby 1.9.2: a dump of Ruby 1.9 does not
   depend on the numbers.
 - Encodings: only what the original has is linked and listed, and an encoding the original
-  does not know is unknown in vkxp too. The original lists four (ASCII-8BIT, UTF-8,
+  does not know is unknown in vkrgss too. The original lists four (ASCII-8BIT, UTF-8,
   UTF-16LE, US-ASCII), with UTF-8 as the default external and source encoding; which
   encodings exactly, transcoding included, is measured on the original before the change
   that implements it.
-- Hash seed: `String#hash` gets a fixed seed in vkxp. The original's differs in every
-  process, so there is no value to reproduce, and a run of vkxp stays reproducible.
+- Hash seed: `String#hash` gets a fixed seed in vkrgss. The original's differs in every
+  process, so there is no value to reproduce, and a run of vkrgss stays reproducible.
 - Script threads: Ruby threads of RGSS3 are native threads. They run; a run with a live
   script thread is not claimed to be reproducible, and a save state is refused while one is
   alive. The timer thread of the interpreter is not started before a script makes a thread.
@@ -303,7 +303,7 @@ Ace finished and published.
   of the corpus depends on one.
 - Order of work: vendoring and the sys crate, then the binding, are one chain. Beside it,
   at once: the guest role as a library, runtime detection with the archive `Game.rgss3a`
-  and the built-in scripts, and the parts of the RGSS3 surface that live in `vkxp-core`.
+  and the built-in scripts, and the parts of the RGSS3 surface that live in `vkrgss-core`.
   Behaviour of the RGSS3 classes is measured on the original before it is implemented, as
   for VX.
 - The original side of every comparison runs without GPU device nodes and without network
@@ -313,7 +313,7 @@ Ace finished and published.
   (`Game.rgss3a`, DLL 3.0.1.1). Each ships its DLL in `System/`; the run-time package holds
   none. A game is compared with the DLL it ships, as for VX.
 - Tilemap, where the original reads outside its arrays (measured on 2026-10-13 on the DLL
-  versions 3.0.0.1 and 3.0.1.1, recorded by the change `draw-the-tilemap-of-rgss3`): vkxp
+  versions 3.0.0.1 and 3.0.1.1, recorded by the change `draw-the-tilemap-of-rgss3`): vkrgss
   reads nothing outside its tables.
   - The tile numbers 1024 to 1535 draw nothing. On the original 1024 to 1244 drew nothing
     and a page with 1245 to 1535 ended both DLLs with a page fault.
@@ -322,18 +322,18 @@ Ace finished and published.
     layers draws without shadows; layers beyond the fourth are not read.
 
   Known differences that follow: the five multiples of -256 from -256 to -1280 draw the
-  block at (0, 0) of A5, A4, A3, A2 and A1 on the original and nothing in vkxp; a map of
+  block at (0, 0) of A5, A4, A3, A2 and A1 on the original and nothing in vkrgss; a map of
   fewer than three layers (two layers, one layer, two dimensions, one dimension) draws its
-  layers in vkxp where the original draws other things, differently on the two DLLs, or
-  faults, and where the original faults vkxp goes on. A map of three layers drew on the
-  original as with an empty fourth, as it does in vkxp.
+  layers in vkrgss where the original draws other things, differently on the two DLLs, or
+  faults, and where the original faults vkrgss goes on. A map of three layers drew on the
+  original as with an empty fourth, as it does in vkrgss.
 - The process of this work is in "Process" below.
 
 Text and bitmaps of RGSS3, recorded by the change `draw-text-and-bitmaps-as-rgss3` after the
 measurement of 2026-10-13 on the DLLs 3.0.1.1 and 3.0.0.1 under Wine 11.0 (kept outside the
 repository). The first decision may be overruled by the owner.
 
-- DLL version: vkxp follows 3.0.1.1, and the glyph rule of 3.0.0.1 is selected by the DLL
+- DLL version: vkrgss follows 3.0.1.1, and the glyph rule of 3.0.0.1 is selected by the DLL
   the game ships.
   - The two versions differ in two things only. Where glyphs overlap in a mask, 3.0.1.1
     lets a later glyph replace earlier values where its own value is above 0, and 3.0.0.1
@@ -367,17 +367,17 @@ repository). The first decision may be overruled by the owner.
     and the game's files itself, and the sandbox does not restrict reading. `RGSS_VERSION`
     follows the same table: `"3.0.0"` for a version whose first three numbers are 3.0.0,
     `"3.0.1"` in every other row.
-  - Known difference: `Color#==` of 3.0.0.1 is not followed on any DLL. vkxp returns false,
+  - Known difference: `Color#==` of 3.0.0.1 is not followed on any DLL. vkrgss returns false,
     as 3.0.1.1 does; raising where a comparison is false is a fault no script can rely on
     without rescuing it.
-- Largest bitmap of RGSS3: the limit vkxp has for every bitmap, 268435456 pixels (1 GiB of
+- Largest bitmap of RGSS3: the limit vkrgss has for every bitmap, 268435456 pixels (1 GiB of
   pixels), the limit of the compositors' bitmap stores, and no limit of 4194304 pixels as in
   RGSS2. The original has no rule to reproduce, only the free address space of a 32-bit
   process: 16384 by 16384, exactly this limit, was created, 32768 by 32768 and 20000 by
   20000 were not. Every size the measurement saw created is created, and a bitmap that
   could not be uploaded is refused before memory is taken. Known difference: the original
-  created 8192 by 44954 in one run, which vkxp refuses.
-- What stands for the answers of GDI. vkxp does not reproduce the glyph shapes of GDI; it
+  created 8192 by 44954 in one run, which vkrgss refuses.
+- What stands for the answers of GDI. vkrgss does not reproduce the glyph shapes of GDI; it
   holds layout, advances, placement and blending to the original, and supplies itself what
   GDI answers there. All of these were Wine's answers in the measurement; none was measured
   on Windows.
@@ -395,7 +395,7 @@ repository). The first decision may be overruled by the owner.
     `2 MulFix(a, s)` wide, as Wine's GDI makes it (`あ` of VL Gothic 18 at size 24, where
     the hinted advance is 19).
   - The left-bearing correction: the left overhang of the first glyph. The original also
-    moves the pen when a later glyph would start left of column 0; vkxp does not. Accepted
+    moves the pen when a later glyph would start left of column 0; vkrgss does not. Accepted
     limit.
   - `tmHeight` and `tmAscent`: the rounded ascent plus the rounded descent, and the rounded
     ascent, at that pixels per em. The decrement in the choice of pixels per em stays a
@@ -405,8 +405,8 @@ repository). The first decision may be overruled by the owner.
     edge, the right overhang of the last glyph its right edge beyond its advance, each when
     positive.
   - Bold without a bold face: every advance one pixel wider. The original adds 1 per UTF-16
-    unit and vkxp 1 per character, which is the same inside the Basic Multilingual Plane;
-    outside it, accepted limit. The box is that of the hinted outline after vkxp's
+    unit and vkrgss 1 per character, which is the same inside the Basic Multilingual Plane;
+    outside it, accepted limit. The box is that of the hinted outline after vkrgss's
     emboldening, not on whole pixels; the strength of the emboldening stays a placeholder of
     Wine's.
   - Italic without an italic face: the regular advances, and the four corners of the box
@@ -427,7 +427,7 @@ repository). The first decision may be overruled by the owner.
   - The 65 levels of coverage: the coverage `c` of the rasteriser, 0 to 255, becomes the
     level `c * 65 / 256`, and the mask holds `trunc(level * 255 / 64)`. The second step is
     measured; the first is a placeholder for GDI's own 65-level answer.
-  - The width a font gets for an `lfWidth`: the model vkxp has for a font of a given
+  - The width a font gets for an `lfWidth`: the model vkrgss has for a font of a given
     average width. Accepted limit: today's Wine gives other widths for one measured font,
     and the model needs a measurement of its own for all three runtimes before it changes.
   - The average character width and the height of the System font, by which RGSS3
@@ -444,17 +444,17 @@ repository). The first decision may be overruled by the owner.
 
 The window of RGSS3, recorded by the change `draw-the-window-of-rgss3` after the window
 measurement of 2026-10-13 on the DLLs 3.0.1.1 and 3.0.0.1 under Wine (kept outside the
-repository; 1185 captures, the same on both versions). The window is in `vkxp-core`; its
+repository; 1185 captures, the same on both versions). The window is in `vkrgss-core`; its
 class comes with the binding over Ruby 1.9.2.
 
-- Where the original ends with a page fault, vkxp goes on. Known difference: the original
-  ends, vkxp does not.
+- Where the original ends with a page fault, vkrgss goes on. Known difference: the original
+  ends, vkrgss does not.
   - The calls: `ox=`, `oy=`, `padding=`, `padding_bottom=` and an assignment of
     `cursor_rect` that leaves its size 0 by 0, on a window on which `windowskin=` was never
-    called and whose `cursor_rect` never changed its size. In vkxp they take effect by the
+    called and whose `cursor_rect` never changed its size. In vkrgss they take effect by the
     measured rules: the cursor is placed, and nothing is drawn of it without a skin.
   - The sizes: a window of 20000 by 20000 with a skin, a window of 100000 by 100000, a
-    `cursor_rect` of 100000 by 100000. In vkxp a window or a cursor too large for a bitmap
+    `cursor_rect` of 100000 by 100000. In vkrgss a window or a cursor too large for a bitmap
     has no built background, frame or cursor, and its other parts are drawn.
 - A window whose width or height is 0 or less draws no background and no frame, and its
   cursor, arrows, pause sign and contents are cut to the one pixel at its origin. This rule
@@ -479,7 +479,7 @@ Sprites, planes, viewports, snapshots, the frozen picture and input of RGSS3, re
 the change `draw-sprites-and-snapshots-as-rgss3` after the measurement of 2026-10-13 on the
 DLLs 3.0.0.1 and 3.0.1.1 under Wine (`ace-v1-sprite-REPORT.md` with its model and frames,
 kept outside the repository; the two versions gave the same results). These rules are in
-`vkxp-core`, `vkxp-compose-ref`, `vkxp-proto`, `vkxp-host` and the presenter of `vkxp-vk`;
+`vkrgss-core`, `vkrgss-compose-ref`, `vkrgss-proto`, `vkrgss-host` and the presenter of `vkrgss-vk`;
 the classes and modules of RGSS3 that use them come with the binding over Ruby 1.9.2.
 
 - The rules of a scene and of an input state have a value for RGSS3, `Rules::Rgss3`, beside
@@ -496,9 +496,9 @@ the classes and modules of RGSS3 that use them come with the binding over Ruby 1
   - When an input snapshot is seen, below.
 
   Until the binding over Ruby 1.9.2 makes the scene and the input state of a game of RGSS3
-  with this value, `vkxp-binding` gives such a game the rules of RGSS2.
+  with this value, `vkrgss-binding` gives such a game the rules of RGSS2.
 - When an input snapshot is seen (measured on 2026-10-13). The original takes the window messages of keys only in
-  the calls of `Graphics` that show frames; `Input.update` takes none. vkxp has no queue of
+  the calls of `Graphics` that show frames; `Input.update` takes none. vkrgss has no queue of
   key messages: the host sends whole input states. With the rules of RGSS3 an update
   latches the most recent snapshot that had arrived when a frame was last shown, and a
   snapshot that arrives afterwards waits for the next shown frame. The input state has a
@@ -509,7 +509,7 @@ the classes and modules of RGSS3 that use them come with the binding over Ruby 1
   because the state of a frame arrives ahead of that frame's tick. Known differences:
   - The count of key messages a frame takes. The original takes exactly one in a frame
     that has no time to wait and more, up to all that are queued, in a frame that waits;
-    how many in between is not a rule, so vkxp imitates no count: every shown frame makes
+    how many in between is not a rule, so vkrgss imitates no count: every shown frame makes
     the whole state as it arrived visible. Several key changes between two frames are seen
     together, where a frame of the original without slack spreads them over the following
     frames.
@@ -539,25 +539,25 @@ the classes and modules of RGSS3 that use them come with the binding over Ruby 1
   brightness 0, where it was not measured. One function of the reference compositor makes
   both; `Graphics.snap_to_bitmap` of RGSS2 uses it, and that of RGSS3 comes with the
   binding.
-- Where the original faults or reads outside a table (measured on 2026-10-13), vkxp goes
+- Where the original faults or reads outside a table (measured on 2026-10-13), vkrgss goes
   on. Known differences:
   - A disposed viewport given to a move (`Sprite#viewport=`, `Plane#viewport=`): the
-    original ends. The scene of vkxp refuses the move with a disposed error and moves
+    original ends. The scene of vkrgss refuses the move with a disposed error and moves
     nothing, for every runtime; what the classes of RGSS3 raise from it is decided with the
     binding.
   - The sprite that ends the original: one sprite (bitmap 20 by 90, `src_rect`
     (8, 38, 9, 26), zoom 2.5 by 0.7, angle 180, mirrored, `bush_depth` 20, at (434, 160))
-    ends it inside `Graphics.update`; the condition was not found. vkxp draws it by the
+    ends it inside `Graphics.update`; the condition was not found. vkrgss draws it by the
     rules of a turned sprite. There is no picture of the original to compare with.
   - A negative wave length: the original reads outside its sine table, and its two versions
-    show different pictures. vkxp takes the angle of the wave modulo 360, as its sprite of
+    show different pictures. vkrgss takes the angle of the wave modulo 360, as its sprite of
     RGSS2 does.
 The guest executable and the start of RGSS3, recorded by the change
 `run-rgss3-games-in-a-guest-of-their-own` on 2026-10-13. The behaviour of the start is that
 measured on the original runtime 3.0.1 under Wine that day (the measurements are kept
 outside the repository); what of it is not followed is named as a known difference.
 
-- Where the guest executable is: `vkxp` starts `vkxp-guest-rgss3` from the directory of its
+- Where the guest executable is: `vkrgss` starts `vkrgss-guest-rgss3` from the directory of its
   own file, links resolved as the system resolves them. When the file is not there, the run
   ends before a guest, a window or a device starts, with an error that names the file and
   the directory. No option, variable or configuration key names another place. Both
@@ -566,8 +566,8 @@ outside the repository); what of it is not followed is named as a known differen
   those of RGSS1 and RGSS2, Ruby 1.9.2 those of RGSS3.
 - How tests reach it: the tests of the program that run a game of RGSS3 are a file of their
   own and let the program find the guest executable beside it, where cargo puts every
-  binary of the workspace; `cargo test --workspace` and `cargo test -p vkxp -p
-  vkxp-guest-rgss3` build it first. A test that finds none fails and names that command.
+  binary of the workspace; `cargo test --workspace` and `cargo test -p vkrgss -p
+  vkrgss-guest-rgss3` build it first. A test that finds none fails and names that command.
   There is no artifact dependency, no build script that builds the other package and no
   variable that names the file.
 - The form of the guest: a game of RGSS3 has its guest in a process, headless too. A choice
@@ -615,7 +615,7 @@ outside the repository); what of it is not followed is named as a known differen
   `$RGSS_SCRIPTS[i][1]` as it is then, and a `SyntaxError` takes its position from its
   message. Known differences: the original's exit code, which follows the line number in
   most cases, the empty box for a text of more than 1023 UTF-16 units, `at_exit` handlers,
-  which the original never runs and vkxp does not either, and `exit!`.
+  which the original never runs and vkrgss does not either, and `exit!`.
 - Message boxes and console output: `msgbox` joins `to_s` of its arguments (`nil` as `nil`)
   with `$,`, adds `$\` and cuts at a NUL byte; `msgbox_p` joins `inspect` with line feeds;
   both show a modal message, write the text to the error stream and return `nil`. `p`,
@@ -644,7 +644,7 @@ change on; its input state keeps the rules of RGSS2 until the binding marks the 
 shows. Decided without a measurement:
 
 - Disposing a viewport of RGSS3 leaves its sprites, planes, windows and tilemaps alive, as
-  measured. vkxp draws them nowhere while they are in that viewport, by the rule of the core
+  measured. vkrgss draws them nowhere while they are in that viewport, by the rule of the core
   that hides the elements of a disposed viewport; they are not clipped to its last
   rectangle and not shown on the screen. Moved to the screen or to another viewport, they
   are drawn there. What the original draws of them was not measured; nothing measured
@@ -668,12 +668,12 @@ kept outside the repository, with the script that fits the rule to 982 readings)
   runs of the original with the same input wrote saves whose two copies of `Audio.bgm_pos`
   are one chunk apart. Its rule is exact in its values and steps; when a step happens
   depends on real time.
-- The probe: `vkxp_core::sound::SoundFormat::probe` reads, from the bytes the guest has
+- The probe: `vkrgss_core::sound::SoundFormat::probe` reads, from the bytes the guest has
   read, the sample rate, the channel count, the length in sample frames and the tags
   `LOOPSTART` and `LOOPLENGTH` (upper case only) of a WAV file of 8-bit or 16-bit PCM and of
   an Ogg Vorbis file; for everything else it gives nothing. It is written for this purpose:
   a decoder in the guest for four numbers was rejected, and so was asking the host.
-- The model: `vkxp_core::sound::Position` is the measured rule with time counted in frames
+- The model: `vkrgss_core::sound::Position` is the measured rule with time counted in frames
   shown. A sound of more than 529200 bytes of 16-bit PCM is streamed: its decoder starts at
   `pos`, reads 15 chunks of 187.5 ms at once and one more each time the frames shown, at
   their frame rate and the pitch of the sound, amount to 187.5 ms, and wraps at the loop
@@ -684,7 +684,7 @@ kept outside the repository, with the script that fits the rule to 982 readings)
   `Graphics.frame_count`; setting `Graphics.frame_count` changes nothing of it. A music
   effect whose length is known holds the music for that many frames.
 - What a save holds: the standard scripts store `Audio.bgm_pos` twice. For a streamed Ogg or
-  WAV file vkxp writes a value of the original's own sequence for that file and start, the
+  WAV file vkrgss writes a value of the original's own sequence for that file and start, the
   original's own value at that frame when the original has read the same number of chunks,
   and otherwise one whole chunks away; the comparison of a save for A3 allows the four
   bytes of the two positions to be equal or apart by whole chunks, and its record says
@@ -728,7 +728,7 @@ kept outside the repository, with the script that fits the rule to 982 readings)
   directory outside the repository.
 - At least three games for each runtime, by different authors: the owner's own first, then
   well-known free games, whose list the owner sees before anything is fetched. A game is
-  kept outside the repository and only a copy of it is run: by vkxp in the confined guest
+  kept outside the repository and only a copy of it is run: by vkrgss in the confined guest
   process, by the original under Wine, whose prefix is not that sandbox.
 - What is built beyond the default scripts follows the corpus: it decides which further
   `Win32API` calls are emulated and which patches are written. The limit that games which
@@ -778,17 +778,17 @@ glyph shapes are not compared (see "Goal and scope"); positions, widths and plac
 | M1 | Title screen of the test game, navigable | Done | The test game has no title screen and goes straight to its map; its menu, and the title screens of two other games, are navigable and compared with the original | |
 | M2 | Map: tilemap, viewports, planes, walking | Done | Map frames of the test game, a second large game and three more games are identical to the original pixel for pixel; tilemaps are evaluated by the compositor as decided | |
 | M3 | Audio: Ogg, WAV, MP3, MIDI | Done | Decoding and mixing tests; the owner confirmed sound in a windowed run of a real game | What the original does with more than one MIDI loop marker; WMA without `ffmpeg` installed |
-| M4 | Full play-through: battle, menus, save/load, F12 reset | Done | Battle course, menu and a save written at the same frame (byte for byte) equal the original; reset is covered by tests of vkxp alone | A complete play-through of a long game by a person; F12 cannot be injected into the original for comparison |
+| M4 | Full play-through: battle, menus, save/load, F12 reset | Done | Battle course, menu and a save written at the same frame (byte for byte) equal the original; reset is covered by tests of vkrgss alone | A complete play-through of a long game by a person; F12 cannot be injected into the original for comparison |
 | M5 | Modernisation: filters, present-timing pacing, configuration, gamepad | Done | Scaling filters, fullscreen, layered TOML configuration, gamepads, input recording and replay; `VK_EXT_present_timing` pacing runs on the AMD GPU at 60, 120 and 144 Hz with a mean interval of 25.0 ms | Whether present-timing pacing looks smoother than timer pacing on a physical display has not been judged by a person |
 | M6 | Wider compatibility: encrypted archives, `Win32API` shims, more games | Done | A packed game is identical to the original on every compared frame with both runtimes reading only the archive; common `Win32API` calls and raw key state are emulated; 20 of 23 further XP games start and the three others stop on files missing from the projects | An archive written by the original packing tool; custom DLLs that games ship |
 | V0 | The original runtime of VX under Wine: a schedule of input, the same captures at the same frame numbers in repeated runs, how waits and fades count as frames | Done | 2026-10-12, Visions & Voices (its DLL is version 2.0.0.1 under the name `RGSS202E.dll`), seed 1, a schedule of 11901 frames through title, name input, a battle, walking and the menu: 17 window captures and 9 snapshots byte for byte equal in two runs, and again with seed 20261009. The frame rules of `Graphics.update`, `wait`, `fadeout`, `fadein`, `freeze` and `transition` hold on 331 frames of a probe game with no wrong pixel, on that DLL and on version 2.0.2.1. The Witch's House starts from its archive with the probe inside | A Ruby thread ends the original under Wine, so the game was run with thread blocks executed at once; a frame inside a transition cannot be held, only the one after it; mask transitions were recorded, not fitted; audio; the third game of the corpus is not unpacked |
-| V1 | VX: title screen and menu | Done | 2026-10-12, Visions & Voices with the DLL it ships (2.0.0.1), `cargo xtask oracle` with `--no-threads`, seed of the harness, the input schedule of V0 extended by the keys that open the menu: the title (frames 100 and 261, the second inside its fade-out) and the menu over its blurred snapshot (frames 12100 to 12550) equal the original outside the rectangles of text; frame 261 has no differing pixel | The owner accepted on 2026-10-12 that frames with text differ in the pixels of the glyphs. The harness does not leave the pixels of text out: every frame with text counts as different, and each of the 25 such frames of these runs was judged by its picture of differences. In the menu of The Witch's House the two sides drew with different fonts (the game asks for `ＭＳ Ｐ明朝` first, which the prefix lacks and vkxp replaces), so the layout of its text was not compared; The Witch's House 1.09a from its archive with the DLL it ships (2.0.2.1) was compared on its title only (frames 300, 590: text alone differs); the run of Visions & Voices over 11901 frames was repeated and gave the same 13 pictures on each side byte for byte; the name scene was compared (frames 3500, 3630), the load screen and the other screens of the menu were not |
+| V1 | VX: title screen and menu | Done | 2026-10-12, Visions & Voices with the DLL it ships (2.0.0.1), `cargo xtask oracle` with `--no-threads`, seed of the harness, the input schedule of V0 extended by the keys that open the menu: the title (frames 100 and 261, the second inside its fade-out) and the menu over its blurred snapshot (frames 12100 to 12550) equal the original outside the rectangles of text; frame 261 has no differing pixel | The owner accepted on 2026-10-12 that frames with text differ in the pixels of the glyphs. The harness does not leave the pixels of text out: every frame with text counts as different, and each of the 25 such frames of these runs was judged by its picture of differences. In the menu of The Witch's House the two sides drew with different fonts (the game asks for `ＭＳ Ｐ明朝` first, which the prefix lacks and vkrgss replaces), so the layout of its text was not compared; The Witch's House 1.09a from its archive with the DLL it ships (2.0.2.1) was compared on its title only (frames 300, 590: text alone differs); the run of Visions & Voices over 11901 frames was repeated and gave the same 13 pictures on each side byte for byte; the name scene was compared (frames 3500, 3630), the load screen and the other screens of the menu were not |
 | V2 | VX: walking on a map | Done | The same run: maps with events, weather and messages (frames 1000, 2800, 11300, 11580) equal the original outside the rectangles of text, and five frames of walking without text (11700, 11760, 11900, 11950, 12700) have no differing pixel, after a battle with random numbers. The Witch's House from its archive, a schedule that starts the game and walks: eight frames of its intro and first map (700 to 2150) have no differing pixel, and two frames with its menu (2300, 2400) differ in text alone, where the two sides also chose different fonts | As V1; a map with animated water or a table edge of the game was not looked for among the frames |
-| V3 | VX: battle, saving and loading | Done | The same run: two frames of the side-view battle of the game (6600, 7000) equal the original outside the rectangles of text. The Witch's House, a schedule that walks to its save point and saves to file 1 (frames 2055 to 2700 compared, three without text have no differing pixel): the save `Save/1.rvdata` (76577 bytes) and the thumbnail `Save/1.cdat` the game writes beside it are byte for byte those of the original. The same schedule continued: the save is loaded from the game's menu (frames 2700 to 3300; the load screen with the thumbnail differs in text alone, and the five frames without text, three of them after the load, have no differing pixel) | No save of Visions & Voices (its menu has no save command; it saves at events further into the game than the schedule goes); a game name that vkxp or Ruby 1.8.7 made first keeps a provisional symbol number, which can order a dumped hash another way (not met in this save); in the battle of Visions & Voices the window of a "Missed!" notice is one pixel wider on the original (frame 7000): both sides drew with the game's own font, so the measured width of that text differs by one pixel, which is layout and not glyph pixels; the owner accepted it on 2026-10-12 as a known limit like that of XP, the width of the original being that of GDI under Wine; on the save and load screens of The Witch's House the box around "File 1" follows the width of text drawn with different fonts; as V1 |
+| V3 | VX: battle, saving and loading | Done | The same run: two frames of the side-view battle of the game (6600, 7000) equal the original outside the rectangles of text. The Witch's House, a schedule that walks to its save point and saves to file 1 (frames 2055 to 2700 compared, three without text have no differing pixel): the save `Save/1.rvdata` (76577 bytes) and the thumbnail `Save/1.cdat` the game writes beside it are byte for byte those of the original. The same schedule continued: the save is loaded from the game's menu (frames 2700 to 3300; the load screen with the thumbnail differs in text alone, and the five frames without text, three of them after the load, have no differing pixel) | No save of Visions & Voices (its menu has no save command; it saves at events further into the game than the schedule goes); a game name that vkrgss or Ruby 1.8.7 made first keeps a provisional symbol number, which can order a dumped hash another way (not met in this save); in the battle of Visions & Voices the window of a "Missed!" notice is one pixel wider on the original (frame 7000): both sides drew with the game's own font, so the measured width of that text differs by one pixel, which is layout and not glyph pixels; the owner accepted it on 2026-10-12 as a known limit like that of XP, the width of the original being that of GDI under Wine; on the save and load screens of The Witch's House the box around "File 1" follows the width of text drawn with different fonts; as V1 |
 | A0 | The original runtime of VX Ace under Wine: a schedule of input, the same captures at the same frame numbers in repeated runs, how waits and fades count as frames | Done | 2026-10-13, Crysalis (a sample game of the publisher, unencrypted) with the DLL it ships (version 3.0.0.1, `RGSS300.dll`), a schedule of 6551 frames through the title, the introduction with its messages, the menu, walking with a transfer between maps, a battle and walking again: 31 window captures and 13 snapshots byte for byte equal in two runs with seed 1 (waits and fades run as loops of `Graphics.update`) and in two runs with seed 20261009 (native waits and fades); where a capture and a snapshot were taken of the same frame at a brightness above 0 they are equal, 13 of 13 in each run with seed 1. The frame rules of `Graphics.update`, `wait`, `fadeout`, `fadein`, `freeze` and `transition` are those of RGSS2: 331 frames of a probe game, 85729 sampled pixels, none wrong, on version 3.0.0.1 and on 3.0.1.1; frame rate and sizes are those of RGSS2 too. In Search of Immortality (version 3.0.1.1, `RGSS301.dll`, 640 by 480) and Capella's Promise 1.09 (version 3.0.1.1 under the name `RGSS300.dll`) start from their archives `Game.rgss3a` with the probe inside: 1501 frames each with the confirm key every 50 frames, 15 captures and 4 snapshots each. Of the interpreter: 2170 symbols exist before the first script and the next serial is 2086; `Marshal` is 4.8; there is no prelude; a method calling itself inside a Fiber reaches depth 284 | A frame inside a transition cannot be held, only the one after it; saving, loading and reset were not measured; the two encrypted games ran once each, without a repeated run; in sequences that call `Input.update` several times without a `Graphics.update`, one of two runs saw a key one update later, so the rule of when a key is seen holds for the frame loop only; no game of the corpus has a name input scene; mask transitions were recorded, not fitted; audio and movies; `String#hash` differs in every process, and Ruby threads run at times that are not repeatable against frames |
-| A1 | VX Ace: title screen and menu | Done | 2026-10-14, `cargo xtask oracle` on `main` at `51c8d34`, seed of the harness 20261009; Wine 11.0 in the sandbox of the harness (no GPU device node, no network), Xvfb, llvmpipe on the side of vkxp; the built-in scripts extracted from each game's own DLL. Crysalis (unencrypted) with the DLL it ships (`RGSS300.dll`, version 3.0.0.1, `RTP=RPGVXAce`), its schedule through the title, New Game, the introduction confirmed, the map, the menu opened, the cursor moved and the menu closed, walking into a cave, a battle with one Ratinga fought to its end and back on the map, 28 frames compared: the title and its menu (frames 60, 210, 360) equal the original pixel for pixel, text included; the menu (4950, 5000) differs in 3 pixels in each frame, the antialiased edge of the glyph "Q" of "Quit" (largest difference 5 of 255), which is a glyph shape. In Search of Immortality from its archive `Game.rgss3a` with the DLL it ships (`RGSS301.dll`, version 3.0.1.1, `resize_screen` to 640 by 480), a schedule of C every 16 frames until control returns, then the menu, Save, File 1, Game End, To Title, Continue, File 1, 15 frames compared: its account screen and title (140, 180), the save screen (4700, 4759), the menu after the save (4800), the title with Continue (5400, 5559) and the load screen (5600, 5659) equal the original pixel for pixel, text included. The original's pictures of both games equal those of an earlier run of the same schedule byte for byte | Frames inside a transition cannot be compared (Crysalis 4900 and 5450), as for VX; the third game of the corpus, Capella's Promise, was started and captured on the original's side only; audio is not compared; the change `match-the-endings-and-loading-of-rgss3` (endings, error reports, `require`) is not part of 0.3.0 |
+| A1 | VX Ace: title screen and menu | Done | 2026-10-14, `cargo xtask oracle` on `main` at `51c8d34`, seed of the harness 20261009; Wine 11.0 in the sandbox of the harness (no GPU device node, no network), Xvfb, llvmpipe on the side of vkrgss; the built-in scripts extracted from each game's own DLL. Crysalis (unencrypted) with the DLL it ships (`RGSS300.dll`, version 3.0.0.1, `RTP=RPGVXAce`), its schedule through the title, New Game, the introduction confirmed, the map, the menu opened, the cursor moved and the menu closed, walking into a cave, a battle with one Ratinga fought to its end and back on the map, 28 frames compared: the title and its menu (frames 60, 210, 360) equal the original pixel for pixel, text included; the menu (4950, 5000) differs in 3 pixels in each frame, the antialiased edge of the glyph "Q" of "Quit" (largest difference 5 of 255), which is a glyph shape. In Search of Immortality from its archive `Game.rgss3a` with the DLL it ships (`RGSS301.dll`, version 3.0.1.1, `resize_screen` to 640 by 480), a schedule of C every 16 frames until control returns, then the menu, Save, File 1, Game End, To Title, Continue, File 1, 15 frames compared: its account screen and title (140, 180), the save screen (4700, 4759), the menu after the save (4800), the title with Continue (5400, 5559) and the load screen (5600, 5659) equal the original pixel for pixel, text included. The original's pictures of both games equal those of an earlier run of the same schedule byte for byte | Frames inside a transition cannot be compared (Crysalis 4900 and 5450), as for VX; the third game of the corpus, Capella's Promise, was started and captured on the original's side only; audio is not compared; the change `match-the-endings-and-loading-of-rgss3` (endings, error reports, `require`) is not part of 0.3.0 |
 | A2 | VX Ace: walking on a map | Done | The runs of A1 (Crysalis with `RGSS300.dll` and In Search of Immortality with `RGSS301.dll`, seed 20261009, the same schedules, the original's side repeated): Crysalis on the map after the introduction (4850), walking into the cave (5050 to 5400) and back on the map after the battle (6200, 6250); In Search of Immortality on its map (4200, 4499) and after the save (4950): every one of these frames equals the original pixel for pixel, text included | In Search of Immortality is never walked by its schedule, so it meets no random encounter; as A1 |
-| A3 | VX Ace: battle, saving and loading | Done | The runs of A1 (Crysalis with `RGSS300.dll` and In Search of Immortality with `RGSS301.dll`, seed 20261009, the same schedules, the original's side repeated): the battle of Crysalis and its log (5500 to 6100) equal the original pixel for pixel, text included. In Search of Immortality saves through its own menu at frame 4760: `Save01.rvdata2` (19018 bytes) and the game's own `AutoSave.rvdata2` (21992 bytes, written at its map transfers) are byte for byte those of the original; it returns to the title and loads file 1, and the map after the load (5760, 5999) equals the original pixel for pixel. Both saves of the original equal those of an earlier run byte for byte | F12 and the reset are covered by tests of vkxp alone; a save whose music is an Ogg file holds `Audio.bgm_pos`, which vkxp computes by the measured model and in which the original's own runs can differ by whole chunks (the save compared here plays an MP3, whose position is 0 on both sides); as A1 |
+| A3 | VX Ace: battle, saving and loading | Done | The runs of A1 (Crysalis with `RGSS300.dll` and In Search of Immortality with `RGSS301.dll`, seed 20261009, the same schedules, the original's side repeated): the battle of Crysalis and its log (5500 to 6100) equal the original pixel for pixel, text included. In Search of Immortality saves through its own menu at frame 4760: `Save01.rvdata2` (19018 bytes) and the game's own `AutoSave.rvdata2` (21992 bytes, written at its map transfers) are byte for byte those of the original; it returns to the title and loads file 1, and the map after the load (5760, 5999) equals the original pixel for pixel. Both saves of the original equal those of an earlier run byte for byte | F12 and the reset are covered by tests of vkrgss alone; a save whose music is an Ogg file holds `Audio.bgm_pos`, which vkrgss computes by the measured model and in which the original's own runs can differ by whole chunks (the save compared here plays an MP3, whose position is 0 on both sides); as A1 |
 
 Text: positions, widths and line placement follow rules measured on the original under Wine
 with an open font; glyph shapes are not compared, as the scope in "Goal and scope" says, and
@@ -852,7 +852,7 @@ Risks of the extension to VX and VX Ace, each with what answers it (change
   side, up to 40 ms. Not measured: how long the original takes for the same frames, a slower
   processor, and a run with a window. No performance requirement is made of these numbers.
 - Ruby 1.9.2 differs in encodings, in what it serialises and in how it is embedded. These
-  are checked for feasibility when VX Ace is planned; sharing the rest of vkxp does not
+  are checked for feasibility when VX Ace is planned; sharing the rest of vkrgss does not
   settle them. They were checked on 2026-10-13: the release builds as a static library and
   embeds, with the risks below.
 

@@ -17,7 +17,7 @@ prints how long each step took, after the step and once more for all of them at 
 | `fmt` | `cargo fmt --all --check` |
 | `clippy` | `cargo clippy --workspace --all-targets --locked -- -D warnings` |
 | `test` | `cargo test --workspace --locked --no-fail-fast` |
-| `test-unvalidated` | `cargo test -p vkxp-vk -p vkxp-host --locked --no-fail-fast` with `VK_LOADER_LAYERS_DISABLE='*validation*'` |
+| `test-unvalidated` | `cargo test -p vkrgss-vk -p vkrgss-host --locked --no-fail-fast` with `VK_LOADER_LAYERS_DISABLE='*validation*'` |
 | `doc` | `cargo doc --workspace --no-deps --locked` with `RUSTDOCFLAGS=-D warnings` |
 | `openspec` | `openspec validate --all` |
 
@@ -54,23 +54,23 @@ suites the gate runs for their results are run for invalid memory accesses and u
 behaviour:
 
 ```sh
-cargo test -p vkxp-ruby-sys --test sanitized -- --ignored upstream_suites_pass_under_the_sanitizers
+cargo test -p vkrgss-ruby-sys --test sanitized -- --ignored upstream_suites_pass_under_the_sanitizers
 ```
 
 It needs `clang` with its sanitizer runtimes (`compiler-rt` on Fedora) and takes about a
 minute. It fails on a suite that does not pass and on every sanitizer report that
-`crates/vkxp-ruby-sys/tests/sanitized.allow` does not list; an entry there states why the
+`crates/vkrgss-ruby-sys/tests/sanitized.allow` does not list; an entry there states why the
 report is harmless. The full reports are left in `target/tmp/sanitized/reports/`.
 
 **The tests under collector stress.** The interpreter's collector is conservative: a value
 stays alive only while a copy of it lies on the machine stack, in a register or in a
 reachable object. Code that holds a value only through a pointer into it, the buffer of a
 string or the slots of an array, loses it when a collection comes at the wrong moment, which
-depends on the compiler and on the machine. The environment variable `VKXP_GC_STRESS=<n>`,
-with `n` of 1 or more, makes every interpreter that `vkxp-ruby-sys` starts collect at every
+depends on the compiler and on the machine. The environment variable `VKRGSS_GC_STRESS=<n>`,
+with `n` of 1 or more, makes every interpreter that `vkrgss-ruby-sys` starts collect at every
 n-th allocation of an object or of memory, so that such a fault shows at once; unset, empty
 or 0 changes nothing. The variable is read in every build, also by the release executable,
-so a game can be run under it, very slowly: `VKXP_GC_STRESS=1 vkxp <game directory>`.
+so a game can be run under it, very slowly: `VKRGSS_GC_STRESS=1 vkrgss <game directory>`.
 
 ```sh
 VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask stress
@@ -81,12 +81,12 @@ names all that failed:
 
 | Step | What runs | `n` |
 |---|---|---|
-| `suites` | the upstream Ruby suites in the sanitized build, where the use of the buffer of a collected string is a report of AddressSanitizer, and a test that such a report appears for code that keeps only the buffer pointer of a fresh string (`cargo test -p vkxp-ruby-sys --locked --test sanitized -- --ignored under_collector_stress`) | 32 |
-| `binding` | `cargo test -p vkxp-binding --locked --no-fail-fast` | 1 |
-| `guest` | the tests of the executable that start a guest, `cargo test -p vkxp --locked --test end_to_end` | 1 |
-| `suites-1.9.2` | the files of `test/ruby` of Ruby 1.9.2 that are slow under `GC.stress = true` (`cargo test -p vkxp-ruby192-sys --locked --test upstream_stress -- --ignored`) | every allocation |
-| `binding-1.9.2` | the tests of the binding over Ruby 1.9.2, `cargo test -p vkxp-binding-rgss3 --locked --no-fail-fast` | every allocation |
-| `guest-1.9.2` | the tests of the executable that run a game of RGSS3 through the guest executable, and the tests of the guest records of both executables, `cargo test -p vkxp -p vkxp-guest-rgss3 --locked --test rgss3 --test guest_record`; the guest processes inherit the variable | every allocation |
+| `suites` | the upstream Ruby suites in the sanitized build, where the use of the buffer of a collected string is a report of AddressSanitizer, and a test that such a report appears for code that keeps only the buffer pointer of a fresh string (`cargo test -p vkrgss-ruby-sys --locked --test sanitized -- --ignored under_collector_stress`) | 32 |
+| `binding` | `cargo test -p vkrgss-binding --locked --no-fail-fast` | 1 |
+| `guest` | the tests of the executable that start a guest, `cargo test -p vkrgss --locked --test end_to_end` | 1 |
+| `suites-1.9.2` | the files of `test/ruby` of Ruby 1.9.2 that are slow under `GC.stress = true` (`cargo test -p vkrgss-ruby192-sys --locked --test upstream_stress -- --ignored`) | every allocation |
+| `binding-1.9.2` | the tests of the binding over Ruby 1.9.2, `cargo test -p vkrgss-binding-rgss3 --locked --no-fail-fast` | every allocation |
+| `guest-1.9.2` | the tests of the executable that run a game of RGSS3 through the guest executable, and the tests of the guest records of both executables, `cargo test -p vkrgss -p vkrgss-guest-rgss3 --locked --test rgss3 --test guest_record`; the guest processes inherit the variable | every allocation |
 
 The values of `n` are constants in `xtask/src/stress.rs`. The first step needs what the
 sanitized run needs; the last three need no sanitizer and run the ordinary build. The
@@ -96,12 +96,12 @@ defect also without the variable; it is fixed with a guard (`RB_GC_GUARD` in the
 tree, recorded as a patch, or a root in the binding). The reports of the first step are left
 in `target/tmp/sanitized/stress/reports/`.
 
-The second interpreter, Ruby 1.9.2 of `vkxp-ruby192-sys`, has the stress of the release
-itself, `GC.stress = true`, which collects at every allocation; `VKXP_GC_STRESS` set to a
+The second interpreter, Ruby 1.9.2 of `vkrgss-ruby192-sys`, has the stress of the release
+itself, `GC.stress = true`, which collects at every allocation; `VKRGSS_GC_STRESS` set to a
 number of 1 or more switches it on in an interpreter that the crate starts, and there is no
 "every n-th" form. Its stressed selection of `test/ruby` is not a check outside the gate:
 the files that take under a minute run with the workspace tests
-(`cargo test -p vkxp-ruby192-sys --test upstream_stress`, about three minutes), together
+(`cargo test -p vkrgss-ruby192-sys --test upstream_stress`, about three minutes), together
 with a copy of the process made by `fork` between two frames of a script with Fibers and a
 host function that is suspended with its Fiber, both under stress. Only the seven slow files
 (`test_array.rb`, `test_assignment.rb`, `test_fiber.rb`, `test_literal.rb`,
@@ -113,7 +113,7 @@ not finish in 14 minutes under stress when the release was studied and are named
 `binding-1.9.2` is where the Rust and C code of the binding meets that collector at every
 allocation; a test it leaves out is a line `binding-1.9.2 <test>` of the skip list, and a
 lost value is never a reason for one. Without the variable, the tests `stress` and
-`scene_stress` of `vkxp-binding-rgss3` switch `GC.stress` on around every snippet
+`scene_stress` of `vkrgss-binding-rgss3` switch `GC.stress` on around every snippet
 themselves, in the gate.
 
 **The fortified build of Ruby 1.9.2.** The compiler of Ubuntu 24.04, which the CI runner
@@ -125,11 +125,11 @@ on such a machine with
 
 ```sh
 CARGO_TARGET_DIR=$PWD/target/fortify CFLAGS='-O2 -D_FORTIFY_SOURCE=3' \
-    cargo test -p vkxp-ruby192-sys --locked
+    cargo test -p vkrgss-ruby192-sys --locked
 ```
 
 in a target directory of its own, so that the plain build is not rebuilt back and forth.
-The same flags with `-p vkxp-ruby-sys` try Ruby 1.8.7. The check is never switched off in
+The same flags with `-p vkrgss-ruby-sys` try Ruby 1.8.7. The check is never switched off in
 the build script; a place it stops at is corrected in the vendored source by a patch
 recorded in [third_party/ruby-1.9.2/PATCHES.md](../third_party/ruby-1.9.2/PATCHES.md).
 
@@ -148,7 +148,7 @@ cargo xtask fuzz marshal --seconds 300
 | `parse` | a script, compiled as `eval` compiles a string and not run | 4096 bytes | 10 s |
 | `regex` | a pattern up to the first line break, compiled as `Regexp.new` compiles it, and after it the subject it is matched against | 512 bytes | 3 s |
 
-The targets are one C file each in `crates/vkxp-ruby-sys/fuzz/`, with the seeds they start
+The targets are one C file each in `crates/vkrgss-ruby-sys/fuzz/`, with the seeds they start
 from in `seeds/<target>/`. The command builds the interpreter and the engine as the
 sanitized run does, with libFuzzer's coverage instrumentation, and runs the target for 60
 seconds or for the time given, under `target/tmp/fuzz/<target>/`: the corpus that the run
@@ -170,7 +170,7 @@ more than 256 MiB gets a null pointer, so a length field that asks for more rais
 `NoMemoryError`.
 
 A defect that a target finds is fixed in the vendored tree as a recorded patch, and its
-input, reduced, goes to `crates/vkxp-ruby-sys/fuzz/fixed/<target>/`, where a test of the
+input, reduced, goes to `crates/vkrgss-ruby-sys/fuzz/fixed/<target>/`, where a test of the
 normal test step runs it. [vendored-security.md](vendored-security.md) lists what the first
 runs found, together with the review of the security fixes published for the two vendored
 trees after their releases.
@@ -189,35 +189,35 @@ says how to install it (`cargo install --locked cargo-deny`) and fails.
 
 ## The tests of the binding over two interpreters
 
-The RGSS classes have one source, `crates/vkxp-binding/src`, which `vkxp-binding` compiles
-over Ruby 1.8.7 and `vkxp-binding-rgss3` over Ruby 1.9.2. The unit tests are in that source
-and run in both packages. For every test file `crates/vkxp-binding/tests/<name>.rs` the
+The RGSS classes have one source, `crates/vkrgss-binding/src`, which `vkrgss-binding` compiles
+over Ruby 1.8.7 and `vkrgss-binding-rgss3` over Ruby 1.9.2. The unit tests are in that source
+and run in both packages. For every test file `crates/vkrgss-binding/tests/<name>.rs` the
 second package has a file of the same name that loads it as the module `t`; a test of `xtask`
 fails for a file without that counterpart, and the counterpart is these lines:
 
 ```rust
-//! `tests/<name>.rs` of `vkxp-binding`, over Ruby 1.9.2.
-#![cfg(not(vkxp_interpreter_absent))]
-extern crate vkxp_binding_rgss3 as vkxp_binding;
-#[path = "../../vkxp-binding/tests/<name>.rs"]
+//! `tests/<name>.rs` of `vkrgss-binding`, over Ruby 1.9.2.
+#![cfg(not(vkrgss_interpreter_absent))]
+extern crate vkrgss_binding_rgss3 as vkrgss_binding;
+#[path = "../../vkrgss-binding/tests/<name>.rs"]
 mod t;
 ```
 
 So the `test` step of the gate builds and runs the tests of the binding twice, and
-`cargo test -p vkxp-binding-rgss3` runs those over Ruby 1.9.2 alone. The source has no `cfg`
+`cargo test -p vkrgss-binding-rgss3` runs those over Ruby 1.9.2 alone. The source has no `cfg`
 and no feature that tells the interpreters apart; the one `cfg` in it,
-`vkxp_interpreter_absent`, is set by the build script of the second package for a target
+`vkrgss_interpreter_absent`, is set by the build script of the second package for a target
 without Ruby 1.9.2 and empties the package there.
 
 A test or a snippet case that cannot pass over Ruby 1.9.2 yet is named in
-`crates/vkxp-binding-rgss3/tests/ruby192.allow`, whose head describes the format. A reason
+`crates/vkrgss-binding-rgss3/tests/ruby192.allow`, whose head describes the format. A reason
 is one of three kinds: the test expects behaviour of RGSS1 or RGSS2 that a named section of
 a measurement of the original runtime of RGSS3 states otherwise; its Ruby, or the text it
 expects from Ruby, is that of 1.8 and the construct is named; or it holds the symbol
 numbering of Ruby 1.8.1. A crash, a hang, a value lost under stress or a wrong pixel is a
 fault and is fixed, never listed.
 
-- A listed test has `vkxp_binding::pending_over_ruby_1_9_2!()` as its first statement
+- A listed test has `vkrgss_binding::pending_over_ruby_1_9_2!()` as its first statement
   (`crate::` in a unit test). Over Ruby 1.9.2 the test executable is started again for that
   one test, and the test counts as passed while it fails there; its output then gives the
   reason of its entry. Over Ruby 1.8.7 the marker does nothing and the list is not read.
@@ -227,31 +227,31 @@ fault and is fixed, never listed.
   line from the list, and for a test also the marker; the entry goes when its last line
   does. A marker without an entry is inert, so the test then has to pass in place.
 
-The main of a guest has one source too, `crates/vkxp-guest-main/src`, which
-`vkxp-guest-main` compiles over Ruby 1.8.7 and `vkxp-guest-main-rgss3` over Ruby 1.9.2, with
+The main of a guest has one source too, `crates/vkrgss-guest-main/src`, which
+`vkrgss-guest-main` compiles over Ruby 1.8.7 and `vkrgss-guest-main-rgss3` over Ruby 1.9.2, with
 the same rules: no source of its own in the second package, the unit tests in both, and a
 counterpart for every test file, should there be one.
 
 ## The tests of the guest executable of RGSS3
 
-A game of RGSS3 runs in the guest executable `vkxp-guest-rgss3`, which the program finds in
-the directory of its own file. The tests of `crates/vkxp` that run such a game are the file
+A game of RGSS3 runs in the guest executable `vkrgss-guest-rgss3`, which the program finds in
+the directory of its own file. The tests of `crates/vkrgss` that run such a game are the file
 `tests/rgss3.rs`, and they find it as a player's program does: cargo puts every binary of
 the workspace into one directory, and builds the binary of each selected package that has
 an integration test before any test runs. Two commands are always right:
 
 ```sh
-VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp -p vkxp-guest-rgss3 --locked
+VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss -p vkrgss-guest-rgss3 --locked
 VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test --workspace --locked
 ```
 
-`cargo test -p vkxp` alone builds the program and uses whatever guest executable an
+`cargo test -p vkrgss` alone builds the program and uses whatever guest executable an
 earlier build left beside it; without one, every test of `tests/rgss3.rs` fails before it
 starts a child and names the first command. `tests/end_to_end.rs` runs no game of RGSS3 and
 needs no guest executable. The games of RGSS3 are written by test code without an
 interpreter (`tests/support/ace.rs`), with the stand-in of the built-in scripts of the
 binding's test support, which was written for the tests. In the same way
-`cargo run -p vkxp` builds the program alone; `cargo build -p vkxp-guest-rgss3` builds the
+`cargo run -p vkrgss` builds the program alone; `cargo build -p vkrgss-guest-rgss3` builds the
 guest executable beside it.
 
 ## Testing with another compiler
@@ -264,7 +264,7 @@ build and test the interpreter with a compiler other than the default one.
 With clang, which the build script takes from `CC`, in a target directory of its own:
 
 ```sh
-CC=clang CARGO_TARGET_DIR=target/clang cargo test -p vkxp-binding -p vkxp-ruby-sys --locked
+CC=clang CARGO_TARGET_DIR=target/clang cargo test -p vkrgss-binding -p vkrgss-ruby-sys --locked
 ```
 
 With the gcc of the CI runner, in a container of Ubuntu 24.04 that uses the Rust toolchain
@@ -277,16 +277,16 @@ podman run --rm --security-opt label=disable -v "$PWD":/src \
         build-essential libcrypt-dev ca-certificates >/dev/null &&
       export PATH=/cargo/bin:$PATH CARGO_HOME=/cargo RUSTUP_HOME=/rustup \
         CARGO_TARGET_DIR=/src/target/ubuntu-gcc && cd /src &&
-      cargo test -p vkxp-binding -p vkxp-ruby-sys --locked --offline'
+      cargo test -p vkrgss-binding -p vkrgss-ruby-sys --locked --offline'
 ```
 
-The collection stress test of `vkxp-binding` (`tests/stress.rs`) is the one that finds such
+The collection stress test of `vkrgss-binding` (`tests/stress.rs`) is the one that finds such
 faults; a fix is a `RB_GC_GUARD` recorded as a patch in
 [third_party/ruby-1.8.7/PATCHES.md](../third_party/ruby-1.8.7/PATCHES.md).
 
 ## Comparing with the original runtime
 
-`cargo xtask oracle` runs one game in the original runtime and in vkxp under the same
+`cargo xtask oracle` runs one game in the original runtime and in vkrgss under the same
 conditions and reports how chosen frames differ. The original runtime, the run-time package
 and the game are yours and stay where they are: the command takes their locations, works on
 copies of the game and writes only below its output directory.
@@ -298,24 +298,24 @@ cargo xtask oracle <game directory> --frames 10,20,200 \
 
 | Option | Meaning |
 |---|---|
-| `--frames N[,N...]` | The frames to capture, numbered from 0 as `vkxp --dump` numbers them. Required. |
-| `--dll FILE` | The RGSS DLL that the game's `Game.ini` names with `Library=`. Required unless `--vkxp-only` is given, except for a game of VX Ace, which runs with the DLL it has at the path of its `Library=` when the option is left out. |
+| `--frames N[,N...]` | The frames to capture, numbered from 0 as `vkrgss --dump` numbers them. Required. |
+| `--dll FILE` | The RGSS DLL that the game's `Game.ini` names with `Library=`. Required unless `--vkrgss-only` is given, except for a game of VX Ace, which runs with the DLL it has at the path of its `Library=` when the option is left out. |
 | `--runtime rgss1\|rgss2\|rgss3` | The runtime of the game. Only needed when the file that `Scripts=` of `Game.ini` names is none of a `.rxdata` (RGSS1, RPG Maker XP), a `.rvdata` (RGSS2, RPG Maker VX) and a `.rvdata2` (RGSS3, RPG Maker VX Ace). |
 | `--rtp NAME=DIR` | The directory of the run-time package that `Game.ini` names `NAME`, with `RTP1` to `RTP3` in a game of XP and with `RTP` in a game of VX or VX Ace. Repeatable. |
 | `--input SCHEDULE\|@FILE` | The buttons held from given frames on, in the syntax described under [Running the demo](running.md#running-the-demo), or a file that holds such a schedule. |
 | `--font FILE` | A font file that both runtimes draw text with, as described below. Repeatable. |
-| `--builtin-scripts FILE` | The built-in scripts file for vkxp, instead of its default location. |
+| `--builtin-scripts FILE` | The built-in scripts file for vkrgss, instead of its default location. |
 | `--out DIR` | Where everything is written. Defaults to `target/oracle`. |
-| `--vkxp-only` | Run only vkxp. Needs neither Wine nor Xvfb nor the DLL. |
-| `--original-only` | Run only the original. Nothing is compared, and vkxp is not built. Not together with `--vkxp-only`. |
+| `--vkrgss-only` | Run only vkrgss. Needs neither Wine nor Xvfb nor the DLL. |
+| `--original-only` | Run only the original. Nothing is compared, and vkrgss is not built. Not together with `--vkrgss-only`. |
 | `--no-threads` | On both sides, make `Thread.new` run its block at once in the caller and `sleep` return at once inside such a block. For a game whose Ruby threads end the original under Wine. |
 | `--locale LOCALE` | `LC_ALL` of the original, which decides the code page its file names are read in: `zh_CN.UTF-8`, the default, for a Chinese game, `ja_JP.UTF-8` for a Japanese one, `en_US.UTF-8` for the English games of VX Ace that were measured. |
 | `--timeout SECONDS` | How long the original may take to reach one frame. Defaults to 120. |
 
-Each side runs a copy of the game, `<out>/original/game` and `<out>/vkxp/game`, with a probe
+Each side runs a copy of the game, `<out>/original/game` and `<out>/vkrgss/game`, with a probe
 script added in front of the scripts of its archive. The probe seeds the random numbers with
 a fixed value, answers `Input.press?`, `Input.trigger?`, `Input.repeat?`, `Input.dir4` and
-`Input.dir8` from the schedule instead of the keyboard, and counts frames as the host of vkxp
+`Input.dir8` from the schedule instead of the keyboard, and counts frames as the host of vkrgss
 does: one for every `Graphics.update` and `d` for `Graphics.transition(d)`. The game directory
 given is never written to, and the output directory may not be inside it.
 
@@ -344,7 +344,7 @@ A game of RPG Maker VX Ace (RGSS3) is run with the rules of VX and these differe
   without `--dll` end the run before Wine starts.
 - The screen is 544 by 416 at the start, and a game may resize it with
   `Graphics.resize_screen` at any time. The probe reports the size of the screen with each
-  frame it holds, and the command captures the window of that size. vkxp dumps its pictures
+  frame it holds, and the command captures the window of that size. vkrgss dumps its pictures
   at the size it has; pictures of different sizes are reported as not comparable.
 - The probe is a third one, written for Ruby 1.9.2. It counts frames as the probe of VX does,
   which was measured to be the same in VX Ace, and takes a button as its Symbol (`:DOWN`),
@@ -355,9 +355,9 @@ A game of RPG Maker VX Ace (RGSS3) is run with the rules of VX and these differe
   file.
 - Ruby threads run in the original of VX Ace, at times that are not repeatable;
   `--no-threads` is not needed for the game to run, and makes its runs repeatable.
-- vkxp runs such a game in its guest executable `vkxp-guest-rgss3`, which the command builds
-  together with vkxp. Until vkxp has the classes of RGSS3, a real game of VX Ace ends on the
-  vkxp side with an error, which the command reports as the failure of that side;
+- vkrgss runs such a game in its guest executable `vkrgss-guest-rgss3`, which the command builds
+  together with vkrgss. Until vkrgss has the classes of RGSS3, a real game of VX Ace ends on the
+  vkrgss side with an error, which the command reports as the failure of that side;
   `--original-only` runs the original alone.
 
 A game that ships its data in `Game.rgssad`, or `Game.rgss2a` (both RGSSAD version 1), or
@@ -393,17 +393,17 @@ be held in the middle of one. In a game of VX or VX Ace such a frame is a late f
 it is the last frame of the transition, whose picture is the one the transition ends with: the
 picture of the original is kept, the report lists the frame as "not comparable: inside a transition",
 and it counts neither as equal nor as different. What Wine and the game print is in `<out>/original/wine.log`,
-which is where to look when the command reports that a frame was not reached. vkxp runs
+which is where to look when the command reports that a frame was not reached. vkrgss runs
 headless on the CPU device unless the Vulkan loader is already restricted to other drivers.
 
 Text can only be compared when both runtimes draw it with the same font file. `--font FILE`,
 which may be given several times, names such a file, a TrueType or OpenType font or a
-collection: the files are copied to `<out>/fonts`, which vkxp searches before the fonts of the
+collection: the files are copied to `<out>/fonts`, which vkrgss searches before the fonts of the
 system and sizes by their own line boxes (`--font-own-metrics`), as the original does, and into the font directory of the prefix, where they are registered, and the common
 game font names (`SimHei`, `黑体`, `SimSun`, `MS PGothic` and the like) are replaced in the
 original by the family name read from the first file. A file that cannot be read or is not a
 font ends the run before either runtime starts. Without `--font` the original draws those
-names with whatever `Noto Sans CJK` the machine has and vkxp with its own choice, and the
+names with whatever `Noto Sans CJK` the machine has and vkrgss with its own choice, and the
 command prints a line saying that text is not comparable.
 
 The command prints one line per frame and writes:
@@ -411,13 +411,13 @@ The command prints one line per frame and writes:
 | File | Contents |
 |---|---|
 | `<out>/frames/<n>-original.png` | frame `n` of the original |
-| `<out>/frames/<n>-vkxp.png` | frame `n` of vkxp |
+| `<out>/frames/<n>-vkrgss.png` | frame `n` of vkrgss |
 | `<out>/frames/<n>-diff.png` | the absolute difference of red, green and blue, multiplied by 32 |
 | `<out>/summary.json` | for every frame the three file names, `differing_pixels` and `largest_difference` (of any colour channel), or `not_comparable` with the reason: a late frame, or two pictures of different sizes; `totals` with the numbers of frames that are equal, different and not comparable; `no_threads` when that option was used |
 
 It exits with status 0 when both runs completed, whatever the differences are; a missing
 prerequisite or a run that fails is an error that names what was missing or what happened.
-With `--vkxp-only` or `--original-only` there is nothing to compare, and the summary lists
+With `--vkrgss-only` or `--original-only` there is nothing to compare, and the summary lists
 the pictures of the side that ran.
 
 The limits of the original's side:
@@ -439,15 +439,15 @@ The limits of the original's side:
 The pictures show the game's and the run-time package's art, so they stay out of the
 repository, like everything else below `target/`.
 
-The tests of the harness run the vkxp side on games they generate; those of VX Ace, which
-need the guest executable of RGSS3, run where the tests of `crates/vkxp/tests/rgss3.rs` do,
+The tests of the harness run the vkrgss side on games they generate; those of VX Ace, which
+need the guest executable of RGSS3, run where the tests of `crates/vkrgss/tests/rgss3.rs` do,
 with built-in scripts that are the tests' own stand-in. The one test of the
 original side is ignored by default, because it needs Wine, Xvfb, `bwrap` and files that are not in the
 repository; it captures frames 10 and 20 of a real game below `target/oracle-test`. Its three
 variables hold absolute paths:
 
 ```sh
-VKXP_ORACLE_DLL=<RGSS DLL> VKXP_ORACLE_RTP=<RTP directory> VKXP_ORACLE_GAME=<game directory> \
+VKRGSS_ORACLE_DLL=<RGSS DLL> VKRGSS_ORACLE_RTP=<RTP directory> VKRGSS_ORACLE_GAME=<game directory> \
     cargo test -p xtask -- --ignored the_original_is_captured
 ```
 

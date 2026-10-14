@@ -5,15 +5,15 @@
 # methods (`ruby/test_x.rb#test_y`) or `sample`; `binding` or `guest` with the full name of
 # a test as `cargo test` prints it; `suites-1.9.2` with a file of `test/ruby` of Ruby 1.9.2
 # (`ruby/test_x.rb`) or one of its test methods, which the stressed tests of
-# `vkxp-ruby192-sys` read from here; `binding-1.9.2` with the full name of a test of
-# `vkxp-binding-rgss3` as `cargo test` prints it (`t::<name>` for a test of a file of
-# `vkxp-binding`); `guest-1.9.2` with the full name of a test of `rgss3.rs` of `vkxp` or of
+# `vkrgss-ruby192-sys` read from here; `binding-1.9.2` with the full name of a test of
+# `vkrgss-binding-rgss3` as `cargo test` prints it (`t::<name>` for a test of a file of
+# `vkrgss-binding`); `guest-1.9.2` with the full name of a test of `rgss3.rs` of `vkrgss` or of
 # the `guest_record.rs` files. Entries are separated by blank lines, and an entry without a reason fails
 # a test. A value lost under stress is never a reason: it is a fault and is fixed.
 
 # The collector stress of Ruby 1.9.2 (`GC.stress = true`), step `suites-1.9.2`: these files
 # did not finish in 14 minutes under stress in the feasibility study of 2026-10-13
-# (combinatorial tests) and are unexamined there. No stressed run of `vkxp-ruby192-sys`
+# (combinatorial tests) and are unexamined there. No stressed run of `vkrgss-ruby192-sys`
 # includes them, neither that of the workspace tests nor the step.
 suites-1.9.2 ruby/test_integer_comb.rb
 suites-1.9.2 ruby/test_m17n_comb.rb

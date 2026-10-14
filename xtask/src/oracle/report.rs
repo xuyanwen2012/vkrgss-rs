@@ -80,14 +80,14 @@ pub(super) struct Difference {
 
 /// Compares the colours of two pictures of the same size. Alpha is not compared: a picture
 /// of a screen has none.
-pub(super) fn compare(original: &Picture, vkxp: &Picture) -> Result<Difference> {
+pub(super) fn compare(original: &Picture, vkrgss: &Picture) -> Result<Difference> {
     ensure!(
-        (original.width, original.height) == (vkxp.width, vkxp.height),
-        "the pictures differ in size: {} by {} in the original, {} by {} in vkxp",
+        (original.width, original.height) == (vkrgss.width, vkrgss.height),
+        "the pictures differ in size: {} by {} in the original, {} by {} in vkrgss",
         original.width,
         original.height,
-        vkxp.width,
-        vkxp.height
+        vkrgss.width,
+        vkrgss.height
     );
     let mut difference = Difference {
         differing_pixels: 0,
@@ -103,7 +103,7 @@ pub(super) fn compare(original: &Picture, vkxp: &Picture) -> Result<Difference> 
         .as_chunks::<4>()
         .0
         .iter()
-        .zip(vkxp.rgba.as_chunks::<4>().0.iter())
+        .zip(vkrgss.rgba.as_chunks::<4>().0.iter())
     {
         let channels = [0, 1, 2].map(|channel| a[channel].abs_diff(b[channel]));
         let largest = channels.into_iter().max().unwrap_or(0);
@@ -121,8 +121,8 @@ pub(super) fn original_file(frame: u64) -> String {
     format!("frames/{frame}-original.png")
 }
 
-pub(super) fn vkxp_file(frame: u64) -> String {
-    format!("frames/{frame}-vkxp.png")
+pub(super) fn vkrgss_file(frame: u64) -> String {
+    format!("frames/{frame}-vkrgss.png")
 }
 
 fn diff_file(frame: u64) -> String {
@@ -133,7 +133,7 @@ fn diff_file(frame: u64) -> String {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Sides {
     Both,
-    VkxpOnly,
+    VkrgssOnly,
     OriginalOnly,
 }
 
@@ -168,17 +168,17 @@ pub(super) fn write(out: &Path, frames: &[u64], run: &Run) -> Result<()> {
     for &frame in frames {
         let mut row = json!({ "frame": frame });
         if run.sides != Sides::OriginalOnly {
-            row["vkxp"] = Value::from(vkxp_file(frame));
+            row["vkrgss"] = Value::from(vkrgss_file(frame));
         }
-        if run.sides != Sides::VkxpOnly {
+        if run.sides != Sides::VkrgssOnly {
             row["original"] = Value::from(original_file(frame));
         }
-        let late = run.sides != Sides::VkxpOnly && run.late.contains(&frame);
+        let late = run.sides != Sides::VkrgssOnly && run.late.contains(&frame);
         let mut reason = late.then(|| LATE.to_owned());
         if both && reason.is_none() {
             let original = Picture::read(&out.join(original_file(frame)))?;
-            let vkxp = Picture::read(&out.join(vkxp_file(frame)))?;
-            match compare(&original, &vkxp) {
+            let vkrgss = Picture::read(&out.join(vkrgss_file(frame)))?;
+            match compare(&original, &vkrgss) {
                 Ok(difference) => {
                     difference.picture.write(&out.join(diff_file(frame)))?;
                     println!(
@@ -285,8 +285,8 @@ mod tests {
                 .write(&out.path().join(original_file(frame)))
                 .unwrap();
         }
-        gradient().write(&out.path().join(vkxp_file(10))).unwrap();
-        other.write(&out.path().join(vkxp_file(20))).unwrap();
+        gradient().write(&out.path().join(vkrgss_file(10))).unwrap();
+        other.write(&out.path().join(vkrgss_file(20))).unwrap();
 
         let run = Run {
             sides: Sides::Both,
@@ -303,7 +303,7 @@ mod tests {
                 {
                     "frame": 10,
                     "original": "frames/10-original.png",
-                    "vkxp": "frames/10-vkxp.png",
+                    "vkrgss": "frames/10-vkrgss.png",
                     "diff": "frames/10-diff.png",
                     "differing_pixels": 0,
                     "largest_difference": 0,
@@ -311,7 +311,7 @@ mod tests {
                 {
                     "frame": 20,
                     "original": "frames/20-original.png",
-                    "vkxp": "frames/20-vkxp.png",
+                    "vkrgss": "frames/20-vkrgss.png",
                     "diff": "frames/20-diff.png",
                     "differing_pixels": 1,
                     "largest_difference": 3,
@@ -331,11 +331,11 @@ mod tests {
         other.rgba[0] += 3;
         let mut turned = gradient();
         (turned.width, turned.height) = (4, 8);
-        for (frame, vkxp) in [(5, gradient()), (10, other), (20, turned)] {
+        for (frame, vkrgss) in [(5, gradient()), (10, other), (20, turned)] {
             gradient()
                 .write(&out.path().join(original_file(frame)))
                 .unwrap();
-            vkxp.write(&out.path().join(vkxp_file(frame))).unwrap();
+            vkrgss.write(&out.path().join(vkrgss_file(frame))).unwrap();
         }
 
         let run = Run {
@@ -357,7 +357,7 @@ mod tests {
             json!({
                 "frame": 10,
                 "original": "frames/10-original.png",
-                "vkxp": "frames/10-vkxp.png",
+                "vkrgss": "frames/10-vkrgss.png",
                 "not_comparable": "inside a transition",
             })
         );

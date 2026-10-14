@@ -1,0 +1,47 @@
+[package]
+name = "vkrgss-binding-rgss3"
+description = "RGSS Ruby API for vkrgss over Ruby 1.9.2: the source of vkrgss-binding"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+build = "build.rs"
+
+# The one source of the RGSS classes, compiled here over the second interpreter. The
+# documentation and its examples belong to `vkrgss-binding`.
+[lib]
+path = "../vkrgss-binding/src/lib.rs"
+doc = false
+doctest = false
+
+[lints]
+workspace = true
+
+[features]
+# As in `vkrgss-binding`.
+testing = ["dep:png"]
+
+# The dependencies of `vkrgss-binding`, with the interpreter crate replaced; a test of `xtask`
+# compares the two lists.
+[dependencies]
+encoding_rs.workspace = true
+png = { workspace = true, optional = true }
+thiserror.workspace = true
+vkrgss-compose-ref.workspace = true
+vkrgss-core.workspace = true
+vkrgss-image.workspace = true
+vkrgss-proto.workspace = true
+# The key stays `vkrgss-ruby-sys`, so that the source goes on saying `vkrgss_ruby_sys::`.
+vkrgss-ruby-sys = { package = "vkrgss-ruby192-sys", path = "../vkrgss-ruby192-sys" }
+vkrgss-vfs.workspace = true
+
+[dev-dependencies]
+# The crate's own tests use its harness.
+vkrgss-binding-rgss3 = { workspace = true, features = ["testing"] }

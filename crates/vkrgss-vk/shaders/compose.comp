@@ -1,0 +1,578 @@
+#version 460
+// Both extensions are language features of the GLSL front end. In SPIR-V they become the
+// descriptor indexing capabilities the backend requires and a plain image fetch.
+#extension GL_EXT_nonuniform_qualifier : require
+#extension GL_EXT_samplerless_texture_functions : require
+
+// The compositor: one workgroup per 16x16 tile, one invocation per pixel. Each invocation
+// starts from opaque black and applies, in order, the ops binned to its tile, then darkens
+// the pixel by the brightness of the frame. All arithmetic
+// is on integers and texels are fetched, never filtered, so the result is the same on every
+// device and equal to the CPU reference compositor.
+
+#include "pixel.glsl"
+#include "transform.glsl"
+// The values of `OpRecord.kind` (`OP_*`), `OpRecord.blend` (`BLEND_*`) and
+// `OpRecord.sampling` (`SAMPLING_*`), `NO_BITMAP` and `WHOLE_TILES`. The build generates this
+// file from `src/shared.rs`.
+#include "shared.glsl"
+// `OpRecord` and `TilemapRecord`, which a test shader reads too.
+#include "records.glsl"
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+// For each autotile pattern, its top-left, top-right, bottom-left and bottom-right quarter,
+// numbered from 1 row by row over the 6 by 8 grid of a frame. A copy of `AUTOTILE_QUARTERS`
+// of the reference compositor; a test compares the two.
+const uint AUTOTILE_QUARTERS[192] = uint[192](
+    27, 28, 33, 34,   5, 28, 33, 34,  27,  6, 33, 34,   5,  6, 33, 34,
+    27, 28, 33, 12,   5, 28, 33, 12,  27,  6, 33, 12,   5,  6, 33, 12,
+    27, 28, 11, 34,   5, 28, 11, 34,  27,  6, 11, 34,   5,  6, 11, 34,
+    27, 28, 11, 12,   5, 28, 11, 12,  27,  6, 11, 12,   5,  6, 11, 12,
+    25, 26, 31, 32,  25,  6, 31, 32,  25, 26, 31, 12,  25,  6, 31, 12,
+    15, 16, 21, 22,  15, 16, 21, 12,  15, 16, 11, 22,  15, 16, 11, 12,
+    29, 30, 35, 36,  29, 30, 11, 36,   5, 30, 35, 36,   5, 30, 11, 36,
+    39, 40, 45, 46,   5, 40, 45, 46,  39,  6, 45, 46,   5,  6, 45, 46,
+    25, 30, 31, 36,  15, 16, 45, 46,  13, 14, 19, 20,  13, 14, 19, 12,
+    17, 18, 23, 24,  17, 18, 11, 24,  41, 42, 47, 48,   5, 42, 47, 48,
+    37, 38, 43, 44,  37,  6, 43, 44,  13, 18, 19, 24,  13, 14, 43, 44,
+    37, 42, 43, 48,  17, 18, 47, 48,  13, 18, 43, 48,   1,  2,  7,  8
+);
+
+layout(set = 0, binding = 0) uniform utexture2D bitmaps[];
+layout(set = 0, binding = 1, rgba8ui) uniform writeonly uimage2D frame;
+
+layout(std430, set = 0, binding = 2) readonly buffer Ops {
+    OpRecord ops[];
+};
+
+// Per tile, in row order: `x` is the offset of its list in `tile_ops`, `y` its length.
+layout(std430, set = 0, binding = 3) readonly buffer TileHeaders {
+    uvec2 tiles[];
+};
+
+// Indices into `ops`, tile after tile, each list in op order.
+layout(std430, set = 0, binding = 4) readonly buffer TileOps {
+    uint tile_ops[];
+};
+
+// The records of the frame's tilemap layer ops and tilemap plane ops.
+layout(std430, set = 0, binding = 5) readonly buffer Tilemaps {
+    TilemapRecord tilemaps[];
+};
+
+// Every table, one after the other, each element widened to 32 bits.
+layout(std430, set = 0, binding = 6) readonly buffer Tables {
+    int table_words[];
+};
+
+layout(push_constant) uniform FrameConstants {
+    // Logical size in pixels.
+    uvec2 size;
+    // Width of the tile grid.
+    uint tiles_x;
+    // Brightness of the frame, from 0 to 255.
+    uint brightness;
+} frame_constants;
+
+uvec4 unpack_color(uint color) {
+    return uvec4(color & 0xFFu, (color >> 8) & 0xFFu, (color >> 16) & 0xFFu, color >> 24);
+}
+
+// The texel of a stretch quad under `position`, relative to its source rectangle. `position`
+// is inside the clip, so inside the destination rectangle: both offsets are counted from its
+// corner and are below its size, whatever was clipped away.
+ivec2 stretch_texel(OpRecord op, ivec2 position) {
+    uint i = uint(position.x) - uint(op.transform.xx);
+    uint j = uint(position.y) - uint(op.transform.xy);
+    uint column = stretch_index(i, uint(op.transform.yx), uint(op.transform.yy));
+    uint row = stretch_index(j, uint(op.transform.tx), uint(op.transform.ty));
+    if (op.sampling == SAMPLING_STRETCH_MIRRORED) {
+        column = uint(op.src_width) - 1u - column;
+    }
+    return ivec2(column, row);
+}
+
+// Mirrors `Quad::is_window_tail` in vkrgss-proto: whether `position`, which the quad covers
+// inside its clip, is the last pixel of a row whose visible part has an odd number of pixels.
+// Only a quad placed unscaled on whole pixels has such a pixel.
+bool is_window_tail(OpRecord op, ivec2 position) {
+    Transform t = op.transform;
+    if (op.sampling != SAMPLING_AFFINE || t.xx != 65536 || t.xy != 0 || t.yx != 0
+            || t.yy != 65536 || (t.tx & 0xFFFF) != 0 || (t.ty & 0xFFFF) != 0) {
+        return false;
+    }
+    int left = -(t.tx >> 16);
+    int low = max(left, op.clip_x0);
+    int high = min(left + op.src_width, op.clip_x1);
+    return position.x == high - 1 && ((high - low) & 1) == 1;
+}
+
+// The value of screen pixel `position` after the tilemap layer `layer`, given its value
+// before. Mirrors `Layer::texel` of the reference compositor: the cell under the pixel, its
+// tile number, the priority test, the texel of the tile, a normal blend at full opacity.
+uvec4 apply_tilemap(TilemapRecord layer, uvec4 pixel, ivec2 position) {
+    uvec2 place = uvec2(position) + uvec2(layer.sub_x, layer.sub_y);
+    uvec2 cell = (uvec2(layer.cell_x, layer.cell_y) + place / 32u)
+        % uvec2(layer.map_xsize, layer.map_ysize);
+    int number = table_words[layer.map_offset + cell.y * layer.map_xsize + cell.x];
+    int priority = 0;
+    if (number >= 0 && uint(number) < layer.priorities_count) {
+        priority = table_words[layer.priorities_offset + uint(number)];
+    }
+    if (priority != layer.priority || number < 48) {
+        return pixel;
+    }
+    uvec2 within = place % 32u;
+    uint slot;
+    uvec2 texel;
+    if (number >= 384) {
+        uint index = uint(number) - 384u;
+        slot = layer.tileset;
+        texel = uvec2(index % 8u, index / 8u) * 32u + within;
+    } else {
+        // Numbers 48 to 383 give 0 to 6.
+        uint autotile = uint(number) / 48u - 1u;
+        slot = layer.autotiles[autotile];
+        uint shown = layer.frames[autotile];
+        if ((shown & WHOLE_TILES) != 0u) {
+            texel = uvec2((shown & ~WHOLE_TILES) * 32u + within.x, within.y);
+        } else {
+            uint corner = within.y / 16u * 2u + within.x / 16u;
+            uint quarter = AUTOTILE_QUARTERS[uint(number) % 48u * 4u + corner] - 1u;
+            texel = uvec2(shown * 96u + quarter % 6u * 16u, quarter / 6u * 16u) + within % 16u;
+        }
+    }
+    if (slot == NO_BITMAP) {
+        return pixel;
+    }
+    uvec2 size = uvec2(textureSize(bitmaps[nonuniformEXT(slot)], 0));
+    if (texel.x >= size.x || texel.y >= size.y) {
+        return pixel;
+    }
+    uvec4 source = texelFetch(bitmaps[nonuniformEXT(slot)], ivec2(texel), 0);
+    return blend_normal(pixel, source, 255u);
+}
+
+// A tilemap plane of RGSS2 or of RGSS3. The functions from here to `apply_plane` mirror
+// `vkrgss_proto::tiles_rgss2`, `vkrgss_proto::tiles_rgss3` and `PlaneStep::apply` of the
+// reference compositor, in their order; the three shape tables are copies of those of `tiles_rgss2`, and a test compares
+// them. Each holds, shape after shape and quarter after quarter (top-left, top-right,
+// bottom-left, bottom-right), the x and the y of the quarter's piece inside the block of
+// the autotile.
+const uint FLOOR_SHAPES[384] = uint[384](
+    32, 64, 16, 64, 32, 48, 16, 48, 32,  0, 16, 64, 32, 48, 16, 48,
+    32, 64, 48,  0, 32, 48, 16, 48, 32,  0, 48,  0, 32, 48, 16, 48,
+    32, 64, 16, 64, 32, 48, 48, 16, 32,  0, 16, 64, 32, 48, 48, 16,
+    32, 64, 48,  0, 32, 48, 48, 16, 32,  0, 48,  0, 32, 48, 48, 16,
+    32, 64, 16, 64, 32, 16, 16, 48, 32,  0, 16, 64, 32, 16, 16, 48,
+    32, 64, 48,  0, 32, 16, 16, 48, 32,  0, 48,  0, 32, 16, 16, 48,
+    32, 64, 16, 64, 32, 16, 48, 16, 32,  0, 16, 64, 32, 16, 48, 16,
+    32, 64, 48,  0, 32, 16, 48, 16, 32,  0, 48,  0, 32, 16, 48, 16,
+     0, 64, 16, 64,  0, 48, 16, 48,  0, 64, 48,  0,  0, 48, 16, 48,
+     0, 64, 16, 64,  0, 48, 48, 16,  0, 64, 48,  0,  0, 48, 48, 16,
+    32, 32, 16, 32, 32, 48, 16, 48, 32, 32, 16, 32, 32, 48, 48, 16,
+    32, 32, 16, 32, 32, 16, 16, 48, 32, 32, 16, 32, 32, 16, 48, 16,
+    32, 64, 48, 64, 32, 48, 48, 48, 32, 64, 48, 64, 32, 16, 48, 48,
+    32,  0, 48, 64, 32, 48, 48, 48, 32,  0, 48, 64, 32, 16, 48, 48,
+    32, 64, 16, 64, 32, 80, 16, 80, 32,  0, 16, 64, 32, 80, 16, 80,
+    32, 64, 48,  0, 32, 80, 16, 80, 32,  0, 48,  0, 32, 80, 16, 80,
+     0, 64, 48, 64,  0, 48, 48, 48, 32, 32, 16, 32, 32, 80, 16, 80,
+     0, 32, 16, 32,  0, 48, 16, 48,  0, 32, 16, 32,  0, 48, 48, 16,
+    32, 32, 48, 32, 32, 48, 48, 48, 32, 32, 48, 32, 32, 16, 48, 48,
+    32, 64, 48, 64, 32, 80, 48, 80, 32,  0, 48, 64, 32, 80, 48, 80,
+     0, 64, 16, 64,  0, 80, 16, 80,  0, 64, 48,  0,  0, 80, 16, 80,
+     0, 32, 48, 32,  0, 48, 48, 48,  0, 32, 16, 32,  0, 80, 16, 80,
+     0, 64, 48, 64,  0, 80, 48, 80, 32, 32, 48, 32, 32, 80, 48, 80,
+     0, 32, 48, 32,  0, 80, 48, 80,  0,  0, 16,  0,  0, 16, 16, 16
+);
+
+const uint WALL_SHAPES[128] = uint[128](
+    32, 32, 16, 32, 32, 16, 16, 16,  0, 32, 16, 32,  0, 16, 16, 16,
+    32,  0, 16,  0, 32, 16, 16, 16,  0,  0, 16,  0,  0, 16, 16, 16,
+    32, 32, 48, 32, 32, 16, 48, 16,  0, 32, 48, 32,  0, 16, 48, 16,
+    32,  0, 48,  0, 32, 16, 48, 16,  0,  0, 48,  0,  0, 16, 48, 16,
+    32, 32, 16, 32, 32, 48, 16, 48,  0, 32, 16, 32,  0, 48, 16, 48,
+    32,  0, 16,  0, 32, 48, 16, 48,  0,  0, 16,  0,  0, 48, 16, 48,
+    32, 32, 48, 32, 32, 48, 48, 48,  0, 32, 48, 32,  0, 48, 48, 48,
+    32,  0, 48,  0, 32, 48, 48, 48,  0,  0, 48,  0,  0, 48, 48, 48
+);
+
+const uint FALL_SHAPES[32] = uint[32](
+    32,  0, 16,  0, 32, 16, 16, 16,  0,  0, 16,  0,  0, 16, 16, 16,
+    32,  0, 48,  0, 32, 16, 48, 16,  0,  0, 48,  0,  0, 16, 48, 16
+);
+
+// Which table gives the pieces of a tile; `SHAPES_NONE` is a tile that draws nothing.
+const uint SHAPES_NONE = 0u;
+const uint SHAPES_WHOLE = 1u;
+const uint SHAPES_FLOOR = 2u;
+const uint SHAPES_WALL = 3u;
+const uint SHAPES_FALL = 4u;
+
+// Mirrors `tiles_rgss2::Tile`.
+struct PlaneTile {
+    uint shapes;
+    // Which of the nine sheets, and the corner of the tile's block in it.
+    uint sheet;
+    uvec2 block;
+    uint shape;
+    bool table;
+};
+
+// Mirrors `tiles_rgss2::is_wall`.
+bool plane_is_wall(int number) {
+    return number >= 4352 && number < 8192;
+}
+
+// Mirrors `tiles_rgss2::is_table`.
+bool plane_is_table(int number) {
+    return number >= 2816 && number < 4352 && (number - 2048) / 48 % 8 == 7;
+}
+
+// Mirrors `tiles_rgss3::is_table`: `entry` is the tile's entry of the flags table.
+bool plane_is_table_rgss3(int number, int entry) {
+    return number >= 2816 && number < 4352 && (entry & 128) != 0;
+}
+
+// Mirrors `tiles_rgss2::takes_shadow`.
+bool plane_takes_shadow(int number) {
+    return (number >= 1552 && number < 2048)
+        || (number >= 2816 && number < 4352 && !plane_is_table(number));
+}
+
+// Mirrors `tiles_rgss2::tile`. `shift` is what the animation step moves the block of an
+// animated floor of the first sheet right by, and the block of a waterfall down by.
+PlaneTile plane_tile(int number, uvec2 shift) {
+    PlaneTile tile = PlaneTile(SHAPES_NONE, 0u, uvec2(0u), 0u, false);
+    if (number <= 0) {
+        return tile;
+    }
+    uint n = uint(number);
+    if (number < 2048) {
+        if (number >= 1536) {
+            tile.sheet = 4u;
+        } else if (number < 1024) {
+            tile.sheet = 5u + n / 256u;
+        } else {
+            return tile;
+        }
+        tile.shapes = SHAPES_WHOLE;
+        tile.block = uvec2(n % 8u + n / 128u % 2u * 8u, n % 256u / 8u % 16u) * 32u;
+        return tile;
+    }
+    uint index = n - 2048u;
+    uint kind = index / 48u;
+    uint column = kind % 8u;
+    uint row = kind / 8u;
+    tile.shape = index % 48u;
+    tile.table = plane_is_table(number);
+    if (row < 2u) {
+        bool fall = kind >= 4u && kind % 2u == 1u;
+        tile.block = kind < 4u
+            ? uvec2(kind / 2u * 192u, kind % 2u * 96u)
+            : uvec2(column / 4u * 256u + (fall ? 192u : 0u), (column / 2u % 2u + row * 2u) * 96u);
+        if (fall) {
+            tile.block.y += shift.y;
+        } else if (kind != 2u && kind != 3u) {
+            tile.block.x += shift.x;
+        }
+        tile.sheet = 0u;
+        tile.shapes = fall ? SHAPES_FALL : SHAPES_FLOOR;
+    } else if (row < 6u) {
+        tile.sheet = 1u;
+        tile.block = uvec2(column * 64u, (row - 2u) * 96u);
+        tile.shapes = SHAPES_FLOOR;
+    } else if (row < 10u) {
+        tile.sheet = 2u;
+        tile.block = uvec2(column * 64u, (row - 6u) * 64u);
+        tile.shapes = SHAPES_WALL;
+    } else if (row % 2u == 0u) {
+        tile.sheet = 3u;
+        tile.block = uvec2(column * 64u, (row - 10u) * 80u);
+        tile.shapes = SHAPES_FLOOR;
+    } else {
+        tile.sheet = 3u;
+        tile.block = uvec2(column * 64u, (row - 10u) * 80u + 16u);
+        tile.shapes = SHAPES_WALL;
+    }
+    return tile;
+}
+
+// Mirrors `Tile::piece`: the corner, inside the block, of the piece of a quarter of an
+// autotile.
+uvec2 plane_piece(PlaneTile tile, uint quarter) {
+    uint at = (tile.shape * 4u + quarter) * 2u;
+    if (tile.shapes == SHAPES_FLOOR) {
+        return uvec2(FLOOR_SHAPES[at], FLOOR_SHAPES[at + 1u]);
+    }
+    if (tile.shapes == SHAPES_WALL && tile.shape < 16u) {
+        return uvec2(WALL_SHAPES[at], WALL_SHAPES[at + 1u]);
+    }
+    if (tile.shapes == SHAPES_FALL && tile.shape < 4u) {
+        return uvec2(FALL_SHAPES[at], FALL_SHAPES[at + 1u]);
+    }
+    return uvec2(0u);
+}
+
+// Mirrors `Tile::sinks`.
+bool plane_sinks(PlaneTile tile, uint y) {
+    return tile.table && (y == 16u || y == 80u);
+}
+
+// The filling of an inner corner of a table, by the column of the corner's piece.
+const uint PLANE_FILLING[4] = uint[4](0u, 48u, 32u, 16u);
+
+// Mirrors `PlaneStep::number`: the tile number at a cell of a layer of the map, 0 outside
+// the map and for a layer it does not have.
+int plane_number(TilemapRecord plane, ivec2 cell, uint layer) {
+    uint layers = (uint(plane.priority) >> 1) & 7u;
+    if (cell.x < 0 || uint(cell.x) >= plane.map_xsize
+            || cell.y < 0 || uint(cell.y) >= plane.map_ysize || layer >= layers) {
+        return 0;
+    }
+    return table_words[plane.map_offset
+        + (layer * plane.map_ysize + uint(cell.y)) * plane.map_xsize + uint(cell.x)];
+}
+
+// Whether the plane is drawn by the rule set of RGSS3.
+bool plane_rgss3(TilemapRecord plane) {
+    return (uint(plane.priority) & 16u) != 0u;
+}
+
+// Mirrors `PlaneStep::flags`: the entry of tile `number` in the passages table, the flags
+// table of RGSS3, 0 when there is none.
+int plane_entry(TilemapRecord plane, int number) {
+    if (number >= 0 && uint(number) < plane.priorities_count) {
+        return table_words[plane.priorities_offset + uint(number)];
+    }
+    return 0;
+}
+
+// Mirrors `tiles_rgss3::tile` for a plane of RGSS3 and `tiles_rgss2::tile` otherwise.
+PlaneTile plane_resolved(TilemapRecord plane, int number, uvec2 shift) {
+    PlaneTile tile = plane_tile(number, shift);
+    if (plane_rgss3(plane)) {
+        tile.table = plane_is_table_rgss3(number, plane_entry(plane, number));
+    }
+    return tile;
+}
+
+// Mirrors `PlaneStep::drawn`: tile `number` of layer `layer` when this plane draws it.
+PlaneTile plane_drawn(TilemapRecord plane, int number, uint layer) {
+    uint flags = uint(plane.priority);
+    bool star = (plane_entry(plane, number) & 16) != 0;
+    if (plane_rgss3(plane)) {
+        star = star && layer == 2u;
+    }
+    if (star != ((flags & 1u) != 0u)) {
+        return PlaneTile(SHAPES_NONE, 0u, uvec2(0u), 0u, false);
+    }
+    return plane_resolved(
+        plane, number, uvec2((flags >> 16) & 3u, (flags >> 18) & 3u) * uvec2(64u, 32u));
+}
+
+// Mirrors `PlaneStep::blend`: `pixel` with the texel `texel` of the tile's sheet over it.
+// `clip` holds the first column of the record's clip and the one past its last, and `left`
+// the screen column of the left edge of the cell, of which the pixel is in column `tx`. The
+// test of the last pixel of an odd row is `TilemapPlane::is_tail` of vkrgss-proto.
+uvec4 plane_blend(TilemapRecord plane, PlaneTile tile, uvec2 texel, uvec4 pixel,
+        int column, ivec2 clip, int left, uint tx) {
+    uint slot = tile.sheet == 0u ? plane.tileset
+        : tile.sheet == 8u ? plane.frames[0] : plane.autotiles[tile.sheet - 1u];
+    if (slot == NO_BITMAP) {
+        return pixel;
+    }
+    uvec2 size = uvec2(textureSize(bitmaps[nonuniformEXT(slot)], 0));
+    if (texel.x >= size.x || texel.y >= size.y) {
+        return pixel;
+    }
+    uvec4 source = texelFetch(bitmaps[nonuniformEXT(slot)], ivec2(texel), 0);
+    int span = tile.shapes == SHAPES_WHOLE ? 32 : 16;
+    int row_left = left + int(tx) / span * span;
+    int low = max(row_left, clip.x);
+    int high = min(row_left + span, clip.y);
+    return column == high - 1 && ((high - low) & 1) == 1
+        ? blend_normal(pixel, source, 255u)
+        : blend_window(pixel, source, 255u);
+}
+
+// Mirrors `Tile::edge`: `pixel` with the edge that the tile `table` shows on the cell below
+// over it, for the pixel at `within` of that cell. The other arguments are those of
+// `plane_blend`.
+uvec4 plane_edge(TilemapRecord plane, PlaneTile table, uvec4 pixel, int column, ivec2 clip,
+        int left, uvec2 within) {
+    if (!table.table || plane_piece(table, 2u).y != 80u) {
+        return pixel;
+    }
+    uvec2 piece = plane_piece(table, 2u + within.x / 16u);
+    uvec2 texel = table.block + uvec2(piece.x + within.x % 16u, 88u + within.y);
+    return plane_blend(plane, table, texel, pixel, column, clip, left, within.x);
+}
+
+// The value of screen pixel `position` after the tilemap plane `plane`, given its value
+// before. Mirrors `PlaneStep::apply` of the reference compositor. `clip` is as for
+// `plane_blend`; the record's clip lies inside the plane.
+uvec4 apply_plane(TilemapRecord plane, uvec4 pixel, ivec2 position, ivec2 clip) {
+    uvec2 place = uvec2(position - ivec2(int(plane.sub_x), int(plane.sub_y)));
+    uvec2 cell = place / 32u;
+    uvec2 within = place % 32u;
+    uvec2 quarter = within % 16u;
+    uint flags = uint(plane.priority);
+    bool upper = (flags & 1u) != 0u;
+    bool rgss3 = plane_rgss3(plane);
+    uint first_layer = upper ? 2u : 0u;
+    ivec2 map_cell = ivec2(
+        (uvec2(plane.cell_x, plane.cell_y) + cell) % uvec2(plane.map_xsize, plane.map_ysize));
+    int left = position.x - int(within.x);
+    int top = position.y - int(within.y);
+
+    if (within.y < 8u && cell.y > 0u && position.y / 8 * 8 <= top) {
+        int above = int((plane.cell_y + cell.y - 1u) % plane.map_ysize);
+        for (uint layer = first_layer; layer < 3u; ++layer) {
+            PlaneTile tile = plane_drawn(
+                plane, plane_number(plane, ivec2(map_cell.x, above), layer), layer);
+            if (tile.shapes == SHAPES_NONE || tile.shapes == SHAPES_WHOLE) {
+                continue;
+            }
+            uvec2 piece = plane_piece(tile, 2u + within.x / 16u);
+            if (plane_sinks(tile, piece.y)) {
+                uvec2 texel = tile.block + piece + uvec2(quarter.x, 8u + within.y);
+                pixel = plane_blend(plane, tile, texel, pixel, position.x, clip, left, within.x);
+            }
+        }
+    }
+    for (uint layer = first_layer; layer < 3u; ++layer) {
+        int number = plane_number(plane, map_cell, layer);
+        PlaneTile tile = plane_drawn(plane, number, layer);
+        if (tile.shapes == SHAPES_WHOLE) {
+            pixel = plane_blend(
+                plane, tile, tile.block + within, pixel, position.x, clip, left, within.x);
+        } else if (tile.shapes != SHAPES_NONE) {
+            uvec2 piece = plane_piece(tile, within.y / 16u * 2u + within.x / 16u);
+            if (within.y < 16u || !plane_sinks(tile, piece.y)) {
+                pixel = plane_blend(plane, tile, tile.block + piece + quarter, pixel,
+                    position.x, clip, left, within.x);
+            } else {
+                uint filling = piece.y == 16u ? PLANE_FILLING[piece.x / 16u] : piece.x;
+                uvec2 texel = tile.block + uvec2(filling + quarter.x, 48u + quarter.y);
+                pixel = plane_blend(plane, tile, texel, pixel, position.x, clip, left, within.x);
+                if (quarter.y >= 8u) {
+                    texel = tile.block + piece + uvec2(quarter.x, quarter.y - 8u);
+                    pixel = plane_blend(
+                        plane, tile, texel, pixel, position.x, clip, left, within.x);
+                }
+            }
+        }
+        if (upper) {
+            continue;
+        }
+        if (rgss3) {
+            if (layer != 1u) {
+                continue;
+            }
+            // Mirrors `tiles_rgss3::shadow_covers` and `tiles_rgss2::shadow`.
+            int mask = plane_number(plane, map_cell, 3u);
+            if (((mask >> (within.y / 16u * 2u + within.x / 16u)) & 1) != 0) {
+                pixel.rgb = (pixel.rgb * 127u) >> 8;
+            }
+            if (within.y < 8u && !plane_is_table_rgss3(number, plane_entry(plane, number))
+                    && !plane_is_wall(plane_number(plane, map_cell, 0u))) {
+                PlaneTile table = plane_resolved(
+                    plane, plane_number(plane, map_cell + ivec2(0, -1), 1u), uvec2(0u));
+                pixel = plane_edge(plane, table, pixel, position.x, clip, left, within);
+            }
+            continue;
+        }
+        if (layer != 0u) {
+            continue;
+        }
+        if (within.x < 16u && plane_takes_shadow(number)
+                && plane_is_wall(plane_number(plane, map_cell + ivec2(-1, 0), 0u))
+                && plane_is_wall(plane_number(plane, map_cell + ivec2(-1, -1), 0u))) {
+            // Mirrors `tiles_rgss2::shadow`.
+            pixel.rgb = (pixel.rgb * 127u) >> 8;
+        }
+        if (within.y < 8u && !plane_is_wall(number) && !plane_is_table(number)) {
+            PlaneTile table = plane_tile(plane_number(plane, map_cell + ivec2(0, -1), 0u), uvec2(0u));
+            pixel = plane_edge(plane, table, pixel, position.x, clip, left, within);
+        }
+    }
+
+    // The flash: mirrors `tiles_rgss2::flash_amounts`.
+    uvec2 flash_size = uvec2(plane.frames[2], plane.frames[3]);
+    if (flash_size.x != 0u && flash_size.y != 0u) {
+        uvec2 flash_cell = (uvec2(plane.frames[4], plane.frames[5]) + cell) % flash_size;
+        int entry = table_words[plane.frames[1] + flash_cell.y * flash_size.x + flash_cell.x];
+        if (entry > 0) {
+            uvec3 nibbles = uvec3((entry >> 8) & 15, (entry >> 4) & 15, entry & 15);
+            pixel.rgb = min(pixel.rgb + nibbles * ((flags >> 8) & 0xFFu), uvec3(255u));
+        }
+    }
+    return pixel;
+}
+
+// The value of screen pixel `position` after `op`, given its value before.
+uvec4 apply_op(OpRecord op, uvec4 pixel, ivec2 position) {
+    if (position.x < op.clip_x0 || position.x >= op.clip_x1
+            || position.y < op.clip_y0 || position.y >= op.clip_y1) {
+        return pixel;
+    }
+    switch (op.kind) {
+    case OP_CLEAR:
+        return unpack_color(op.color);
+    case OP_QUAD: {
+        ivec2 texel = op.sampling == SAMPLING_AFFINE
+            ? source_texel(op.transform, position)
+            : stretch_texel(op, position);
+        if (texel.x < 0 || texel.x >= op.src_width || texel.y < 0 || texel.y >= op.src_height) {
+            return pixel;
+        }
+        uvec4 source = texelFetch(
+            bitmaps[nonuniformEXT(op.bitmap)], ivec2(op.src_x, op.src_y) + texel, 0);
+        // Tone, then colour, on the texel alone; both keep its alpha.
+        source = apply_tone(source, op.tone_red, op.tone_green, op.tone_blue, op.tone_gray);
+        source = blend_color(source, unpack_color(op.color));
+        switch (op.blend) {
+        case BLEND_NORMAL:
+            return blend_normal(pixel, source, op.opacity);
+        case BLEND_ADD:
+            return blend_add(pixel, source, op.opacity);
+        case BLEND_WINDOW:
+            return is_window_tail(op, position)
+                ? blend_normal(pixel, source, op.opacity)
+                : blend_window(pixel, source, op.opacity);
+        default:
+            return blend_sub(pixel, source, op.opacity);
+        }
+    }
+    case OP_TILEMAP:
+        return apply_tilemap(tilemaps[op.bitmap], pixel, position);
+    case OP_TILEMAP_PLANE:
+        return apply_plane(
+            tilemaps[op.bitmap], pixel, position, ivec2(op.clip_x0, op.clip_x1));
+    default: {
+        uvec4 toned = apply_tone(pixel, op.tone_red, op.tone_green, op.tone_blue, op.tone_gray);
+        return blend_color(toned, unpack_color(op.color));
+    }
+    }
+}
+
+void main() {
+    uvec2 position = gl_GlobalInvocationID.xy;
+    // The tile grid covers the screen rounded up to whole tiles.
+    if (position.x >= frame_constants.size.x || position.y >= frame_constants.size.y) {
+        return;
+    }
+    uvec2 tile = tiles[gl_WorkGroupID.y * frame_constants.tiles_x + gl_WorkGroupID.x];
+    uvec4 pixel = uvec4(0u, 0u, 0u, 255u);
+    for (uint i = 0u; i < tile.y; ++i) {
+        pixel = apply_op(ops[tile_ops[tile.x + i]], pixel, ivec2(position));
+    }
+    // Mirrors `darken` of the reference compositor: 255 is the identity and is not
+    // multiplied, and the alpha stays.
+    if (frame_constants.brightness != 255u) {
+        pixel.rgb = (pixel.rgb * frame_constants.brightness) >> 8;
+    }
+    imageStore(frame, ivec2(position), pixel);
+}

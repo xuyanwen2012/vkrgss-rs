@@ -7,7 +7,7 @@ use anyhow::{Context, Result, bail, ensure};
 use super::runtime::Runtime;
 
 /// The name of the probe in the script archive.
-pub(super) const NAME: &str = "vkxp oracle probe";
+pub(super) const NAME: &str = "vkrgss oracle probe";
 
 /// The seed both runtimes start their random numbers from.
 const SEED: u32 = 20_261_009;
@@ -24,7 +24,7 @@ const TEMPLATE_RGSS3: &str = include_str!("probe_rgss3.rb");
 /// What `--no-threads` adds to every probe.
 const THREADS: &str = include_str!("probe_threads.rb");
 
-/// The buttons a schedule may name, as `vkxp --input` names them.
+/// The buttons a schedule may name, as `vkrgss --input` names them.
 const BUTTONS: [&str; 20] = [
     "DOWN", "LEFT", "RIGHT", "UP", "A", "B", "C", "X", "Y", "Z", "L", "R", "SHIFT", "CTRL", "ALT",
     "F5", "F6", "F7", "F8", "F9",
@@ -36,8 +36,8 @@ pub(super) enum Side {
     /// The original runtime: the probe holds the game at the capture frames and ends it
     /// after the last one.
     Original,
-    /// vkxp: the frames are dumped by the host, and the frame limit ends the run.
-    Vkxp,
+    /// vkrgss: the frames are dumped by the host, and the frame limit ends the run.
+    Vkrgss,
 }
 
 /// The buttons held from given frames on.
@@ -47,7 +47,7 @@ pub(crate) struct Schedule {
 }
 
 impl Schedule {
-    /// Reads the syntax of `vkxp --input`: `frame:BUTTONS` entries separated by commas or
+    /// Reads the syntax of `vkrgss --input`: `frame:BUTTONS` entries separated by commas or
     /// line breaks, `BUTTONS` being button names joined by `+`, or nothing.
     pub(crate) fn parse(text: &str) -> Result<Schedule> {
         let mut entries = BTreeMap::new();
@@ -91,7 +91,7 @@ pub(super) fn generate(
 ) -> String {
     let side = match side {
         Side::Original => "original",
-        Side::Vkxp => "vkxp",
+        Side::Vkrgss => "vkrgss",
     };
     let schedule: Vec<String> = schedule
         .entries
@@ -137,7 +137,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_schedule_is_read_as_vkxp_reads_an_input_script() {
+    fn a_schedule_is_read_as_vkrgss_reads_an_input_script() {
         let schedule = Schedule::parse("60:RIGHT, 100:\n120: c + Shift").unwrap();
         let entries: Vec<_> = schedule.entries.into_iter().collect();
         assert_eq!(
@@ -167,15 +167,15 @@ mod tests {
         assert!(original.contains("srand(20261009)\n"), "{original}");
         assert!(!original.contains("__"), "{original}");
 
-        let vkxp = generate(
+        let vkrgss = generate(
             Runtime::Rgss1,
-            Side::Vkxp,
+            Side::Vkrgss,
             &Schedule::default(),
             &[3],
             false,
         );
-        assert!(vkxp.contains("SIDE = \"vkxp\"\n"), "{vkxp}");
-        assert!(vkxp.contains("SCHEDULE = []\n"), "{vkxp}");
+        assert!(vkrgss.contains("SIDE = \"vkrgss\"\n"), "{vkrgss}");
+        assert!(vkrgss.contains("SCHEDULE = []\n"), "{vkrgss}");
     }
 
     #[test]
@@ -196,7 +196,7 @@ mod tests {
     #[test]
     fn the_probe_redefines_threads_only_with_the_option() {
         for runtime in [Runtime::Rgss1, Runtime::Rgss2, Runtime::Rgss3] {
-            for side in [Side::Original, Side::Vkxp] {
+            for side in [Side::Original, Side::Vkrgss] {
                 let plain = generate(runtime, side, &Schedule::default(), &[3], false);
                 assert!(!plain.contains("Thread"), "{plain}");
                 let with = generate(runtime, side, &Schedule::default(), &[3], true);
@@ -211,7 +211,7 @@ mod tests {
     fn the_probe_of_rgss3_is_one_ascii_text_for_both_sides() {
         let schedule = Schedule::parse("0:DOWN, 60:RIGHT+C, 100:").unwrap();
         for no_threads in [false, true] {
-            let [original, vkxp] = [Side::Original, Side::Vkxp]
+            let [original, vkrgss] = [Side::Original, Side::Vkrgss]
                 .map(|side| generate(Runtime::Rgss3, side, &schedule, &[2, 5], no_threads));
             assert!(original.contains("SIDE = \"original\"\n"), "{original}");
             assert!(
@@ -221,12 +221,20 @@ mod tests {
             assert!(!original.contains("__"), "{original}");
             let differing: Vec<_> = original
                 .lines()
-                .zip(vkxp.lines())
+                .zip(vkrgss.lines())
                 .filter(|(one, two)| one != two)
                 .collect();
-            assert_eq!(differing, [("  SIDE = \"original\"", "  SIDE = \"vkxp\"")]);
-            assert_eq!(original.lines().count(), vkxp.lines().count());
-            assert!(original.bytes().chain(vkxp.bytes()).all(|byte| byte < 128));
+            assert_eq!(
+                differing,
+                [("  SIDE = \"original\"", "  SIDE = \"vkrgss\"")]
+            );
+            assert_eq!(original.lines().count(), vkrgss.lines().count());
+            assert!(
+                original
+                    .bytes()
+                    .chain(vkrgss.bytes())
+                    .all(|byte| byte < 128)
+            );
         }
         let rgss2 = generate(Runtime::Rgss2, Side::Original, &schedule, &[2], false);
         let rgss3 = generate(Runtime::Rgss3, Side::Original, &schedule, &[2], false);

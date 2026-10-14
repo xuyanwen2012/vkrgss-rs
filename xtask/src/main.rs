@@ -1,4 +1,4 @@
-//! Repository automation for vkxp, run as `cargo xtask <command>`.
+//! Repository automation for vkrgss, run as `cargo xtask <command>`.
 //!
 //! - `gate`: the merge gate (formatting, lints, tests, documentation, OpenSpec validation).
 //! - `deps`: the dependency-direction rules on their own.
@@ -15,7 +15,7 @@
 //! - `extract-rpg <DLL> <OUTPUT>`: copies the built-in scripts out of an RGSS DLL, or out of
 //!   the image of one as it lies in the memory of the running original.
 //! - `oracle <GAME_DIR> --frames N[,N...] [OPTIONS]`: compares frames of a game between the
-//!   original runtime and vkxp.
+//!   original runtime and vkrgss.
 //! - `pack-rgssad <GAME_DIR>`: packs the `Data` and `Graphics` folders of a copy of a game
 //!   into `Game.rgssad`.
 

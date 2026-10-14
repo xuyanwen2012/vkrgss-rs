@@ -1,5 +1,5 @@
-# Probe of the vkxp oracle harness (`cargo xtask oracle`) for games of RGSS2, added in front
-# of the scripts of a copy of the game. It runs in the original runtime and in vkxp, so it
+# Probe of the vkrgss oracle harness (`cargo xtask oracle`) for games of RGSS2, added in front
+# of the scripts of a copy of the game. It runs in the original runtime and in vkrgss, so it
 # keeps to Ruby 1.8.1.
 #
 # Frames are counted as the original advances `Graphics.frame_count`, which the probe does not
@@ -169,7 +169,7 @@ class << Graphics
 
   # `wait`, `fadeout` and `fadein` of the original cannot be held at a frame inside them. On
   # its side they are the loops of updates that were measured to show the same pictures
-  # frame for frame; vkxp runs its own.
+  # frame for frame; vkrgss runs its own.
   def wait(duration)
     if OracleProbe.original?
       duration.times { update }

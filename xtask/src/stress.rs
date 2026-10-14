@@ -1,6 +1,6 @@
 //! The tests under collector stress: one command, run by hand and not by the gate.
 //!
-//! With `VKXP_GC_STRESS=<n>` the embedded interpreter collects at every n-th allocation, so
+//! With `VKRGSS_GC_STRESS=<n>` the embedded interpreter collects at every n-th allocation, so
 //! a value that C or Rust code keeps alive only through a pointer into it is lost at once
 //! instead of on some other machine. The last three steps are the same for the second
 //! interpreter, Ruby 1.9.2, whose own `GC.stress` does the collecting: its own suite, the
@@ -13,11 +13,11 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Result, anyhow, bail};
 
-/// The variable `vkxp-ruby-sys` reads when it starts an interpreter.
-const VARIABLE: &str = "VKXP_GC_STRESS";
+/// The variable `vkrgss-ruby-sys` reads when it starts an interpreter.
+const VARIABLE: &str = "VKRGSS_GC_STRESS";
 
-/// The variable through which the stressed test of `vkxp-ruby-sys` gets its skip list.
-const SKIP_VARIABLE: &str = "VKXP_GC_STRESS_SKIP";
+/// The variable through which the stressed test of `vkrgss-ruby-sys` gets its skip list.
+const SKIP_VARIABLE: &str = "VKRGSS_GC_STRESS_SKIP";
 
 /// The `n` of the upstream suites in the sanitized build: the smallest with which the step
 /// ends within about half an hour on the development machine.
@@ -78,7 +78,7 @@ struct Step {
 }
 
 /// The name of the step that runs the slow files of the stressed selection of
-/// `vkxp-ruby192-sys`. The test reads the skip list itself, for the lines of this step.
+/// `vkrgss-ruby192-sys`. The test reads the skip list itself, for the lines of this step.
 const SUITES_192: &str = "suites-1.9.2";
 
 /// The name of the step that runs the tests of the binding over Ruby 1.9.2.
@@ -119,7 +119,7 @@ fn steps(skipped: &[Skipped]) -> [Step; 6] {
             args: [
                 "test",
                 "-p",
-                "vkxp-ruby-sys",
+                "vkrgss-ruby-sys",
                 "--locked",
                 "--test",
                 "sanitized",
@@ -137,7 +137,7 @@ fn steps(skipped: &[Skipped]) -> [Step; 6] {
         Step {
             name: "binding",
             args: cargo_test(
-                &["test", "-p", "vkxp-binding", "--locked", "--no-fail-fast"],
+                &["test", "-p", "vkrgss-binding", "--locked", "--no-fail-fast"],
                 "binding",
             ),
             env: vec![(VARIABLE, BINDING_EVERY.to_string())],
@@ -145,7 +145,7 @@ fn steps(skipped: &[Skipped]) -> [Step; 6] {
         Step {
             name: "guest",
             args: cargo_test(
-                &["test", "-p", "vkxp", "--locked", "--test", "end_to_end"],
+                &["test", "-p", "vkrgss", "--locked", "--test", "end_to_end"],
                 "guest",
             ),
             env: vec![(VARIABLE, GUEST_EVERY.to_string())],
@@ -158,7 +158,7 @@ fn steps(skipped: &[Skipped]) -> [Step; 6] {
             args: [
                 "test",
                 "-p",
-                "vkxp-ruby192-sys",
+                "vkrgss-ruby192-sys",
                 "--locked",
                 "--test",
                 "upstream_stress",
@@ -178,7 +178,7 @@ fn steps(skipped: &[Skipped]) -> [Step; 6] {
                 &[
                     "test",
                     "-p",
-                    "vkxp-binding-rgss3",
+                    "vkrgss-binding-rgss3",
                     "--locked",
                     "--no-fail-fast",
                 ],
@@ -195,9 +195,9 @@ fn steps(skipped: &[Skipped]) -> [Step; 6] {
                 &[
                     "test",
                     "-p",
-                    "vkxp",
+                    "vkrgss",
                     "-p",
-                    "vkxp-guest-rgss3",
+                    "vkrgss-guest-rgss3",
                     "--locked",
                     "--test",
                     "rgss3",
@@ -302,11 +302,11 @@ mod tests {
         }
         assert_eq!(
             steps[1].args,
-            ["test", "-p", "vkxp-binding", "--locked", "--no-fail-fast"]
+            ["test", "-p", "vkrgss-binding", "--locked", "--no-fail-fast"]
         );
         assert_eq!(
             steps[2].args,
-            ["test", "-p", "vkxp", "--locked", "--test", "end_to_end"]
+            ["test", "-p", "vkrgss", "--locked", "--test", "end_to_end"]
         );
     }
 
@@ -320,7 +320,7 @@ mod tests {
             [
                 "test",
                 "-p",
-                "vkxp-ruby192-sys",
+                "vkrgss-ruby192-sys",
                 "--locked",
                 "--test",
                 "upstream_stress",
@@ -342,7 +342,7 @@ mod tests {
             [
                 "test",
                 "-p",
-                "vkxp-binding-rgss3",
+                "vkrgss-binding-rgss3",
                 "--locked",
                 "--no-fail-fast"
             ]
@@ -400,7 +400,7 @@ mod tests {
             [
                 "test",
                 "-p",
-                "vkxp-ruby-sys",
+                "vkrgss-ruby-sys",
                 "--locked",
                 "--test",
                 "sanitized",
@@ -448,9 +448,9 @@ mod tests {
             [
                 "test",
                 "-p",
-                "vkxp",
+                "vkrgss",
                 "-p",
-                "vkxp-guest-rgss3",
+                "vkrgss-guest-rgss3",
                 "--locked",
                 "--test",
                 "rgss3",

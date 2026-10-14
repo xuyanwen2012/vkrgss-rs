@@ -5,7 +5,7 @@
 //! that each start with `module RPG;`. The DLLs of versions 1.00 and 1.02 store that section
 //! as it is; later ones are compressed by their protector and show the strings only once
 //! unpacked. That source is Enterbrain's and is never committed: this tool writes it to a
-//! file of the user's, which the `vkxp` program loads.
+//! file of the user's, which the `vkrgss` program loads.
 //!
 //! The DLLs of RGSS2 and RGSS3 show the strings only in the image of the DLL as it lies in
 //! the memory of the running original. An image of RGSS3 holds three blocks: the data

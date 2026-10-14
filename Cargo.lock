@@ -2483,7 +2483,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
-name = "vkxp"
+name = "vkrgss"
 version = "0.3.0"
 dependencies = [
  "anyhow",
@@ -2496,16 +2496,16 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
- "vkxp-binding",
- "vkxp-guest",
- "vkxp-guest-main",
- "vkxp-host",
- "vkxp-proto",
- "vkxp-vfs",
+ "vkrgss-binding",
+ "vkrgss-guest",
+ "vkrgss-guest-main",
+ "vkrgss-host",
+ "vkrgss-proto",
+ "vkrgss-vfs",
 ]
 
 [[package]]
-name = "vkxp-audio"
+name = "vkrgss-audio"
 version = "0.3.0"
 dependencies = [
  "cpal",
@@ -2514,66 +2514,66 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "tracing",
- "vkxp-proto",
+ "vkrgss-proto",
 ]
 
 [[package]]
-name = "vkxp-binding"
+name = "vkrgss-binding"
 version = "0.3.0"
 dependencies = [
  "encoding_rs",
  "png",
  "thiserror 2.0.21",
- "vkxp-binding",
- "vkxp-compose-ref",
- "vkxp-core",
- "vkxp-image",
- "vkxp-proto",
- "vkxp-ruby-sys",
- "vkxp-vfs",
+ "vkrgss-binding",
+ "vkrgss-compose-ref",
+ "vkrgss-core",
+ "vkrgss-image",
+ "vkrgss-proto",
+ "vkrgss-ruby-sys",
+ "vkrgss-vfs",
 ]
 
 [[package]]
-name = "vkxp-binding-rgss3"
+name = "vkrgss-binding-rgss3"
 version = "0.3.0"
 dependencies = [
  "encoding_rs",
  "png",
  "thiserror 2.0.21",
- "vkxp-binding-rgss3",
- "vkxp-compose-ref",
- "vkxp-core",
- "vkxp-image",
- "vkxp-proto",
- "vkxp-ruby192-sys",
- "vkxp-vfs",
+ "vkrgss-binding-rgss3",
+ "vkrgss-compose-ref",
+ "vkrgss-core",
+ "vkrgss-image",
+ "vkrgss-proto",
+ "vkrgss-ruby192-sys",
+ "vkrgss-vfs",
 ]
 
 [[package]]
-name = "vkxp-compose-ref"
+name = "vkrgss-compose-ref"
 version = "0.3.0"
 dependencies = [
  "png",
  "tempfile",
  "thiserror 2.0.21",
- "vkxp-pixel",
- "vkxp-proto",
+ "vkrgss-pixel",
+ "vkrgss-proto",
 ]
 
 [[package]]
-name = "vkxp-core"
+name = "vkrgss-core"
 version = "0.3.0"
 dependencies = [
  "libm",
  "proptest",
  "thiserror 2.0.21",
- "vkxp-compose-ref",
- "vkxp-pixel",
- "vkxp-proto",
+ "vkrgss-compose-ref",
+ "vkrgss-pixel",
+ "vkrgss-proto",
 ]
 
 [[package]]
-name = "vkxp-guest"
+name = "vkrgss-guest"
 version = "0.3.0"
 dependencies = [
  "landlock",
@@ -2584,53 +2584,53 @@ dependencies = [
  "thiserror 2.0.21",
  "tracing",
  "tracing-subscriber",
- "vkxp-proto",
- "vkxp-vfs",
+ "vkrgss-proto",
+ "vkrgss-vfs",
 ]
 
 [[package]]
-name = "vkxp-guest-main"
+name = "vkrgss-guest-main"
 version = "0.3.0"
 dependencies = [
  "anyhow",
  "tempfile",
  "tracing",
- "vkxp-binding",
- "vkxp-core",
- "vkxp-guest",
- "vkxp-proto",
- "vkxp-ruby-sys",
- "vkxp-text",
- "vkxp-vfs",
+ "vkrgss-binding",
+ "vkrgss-core",
+ "vkrgss-guest",
+ "vkrgss-proto",
+ "vkrgss-ruby-sys",
+ "vkrgss-text",
+ "vkrgss-vfs",
 ]
 
 [[package]]
-name = "vkxp-guest-main-rgss3"
+name = "vkrgss-guest-main-rgss3"
 version = "0.3.0"
 dependencies = [
  "anyhow",
  "tempfile",
  "tracing",
- "vkxp-binding-rgss3",
- "vkxp-core",
- "vkxp-guest",
- "vkxp-proto",
- "vkxp-ruby192-sys",
- "vkxp-text",
- "vkxp-vfs",
+ "vkrgss-binding-rgss3",
+ "vkrgss-core",
+ "vkrgss-guest",
+ "vkrgss-proto",
+ "vkrgss-ruby192-sys",
+ "vkrgss-text",
+ "vkrgss-vfs",
 ]
 
 [[package]]
-name = "vkxp-guest-rgss3"
+name = "vkrgss-guest-rgss3"
 version = "0.3.0"
 dependencies = [
  "tempfile",
- "vkxp-guest",
- "vkxp-guest-main-rgss3",
+ "vkrgss-guest",
+ "vkrgss-guest-main-rgss3",
 ]
 
 [[package]]
-name = "vkxp-host"
+name = "vkrgss-host"
 version = "0.3.0"
 dependencies = [
  "gilrs",
@@ -2639,16 +2639,16 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "tracing",
- "vkxp-audio",
- "vkxp-compose-ref",
- "vkxp-host",
- "vkxp-proto",
- "vkxp-vk",
+ "vkrgss-audio",
+ "vkrgss-compose-ref",
+ "vkrgss-host",
+ "vkrgss-proto",
+ "vkrgss-vk",
  "winit",
 ]
 
 [[package]]
-name = "vkxp-image"
+name = "vkrgss-image"
 version = "0.3.0"
 dependencies = [
  "jpeg-decoder",
@@ -2659,15 +2659,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "vkxp-pixel"
+name = "vkrgss-pixel"
 version = "0.3.0"
 dependencies = [
  "proptest",
- "vkxp-proto",
+ "vkrgss-proto",
 ]
 
 [[package]]
-name = "vkxp-proto"
+name = "vkrgss-proto"
 version = "0.3.0"
 dependencies = [
  "postcard",
@@ -2678,7 +2678,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "vkxp-ruby-sys"
+name = "vkrgss-ruby-sys"
 version = "0.3.0"
 dependencies = [
  "cc",
@@ -2689,7 +2689,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "vkxp-ruby192-sys"
+name = "vkrgss-ruby192-sys"
 version = "0.3.0"
 dependencies = [
  "cc",
@@ -2699,7 +2699,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "vkxp-text"
+name = "vkrgss-text"
 version = "0.3.0"
 dependencies = [
  "fontdb",
@@ -2709,7 +2709,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "vkxp-vfs"
+name = "vkrgss-vfs"
 version = "0.3.0"
 dependencies = [
  "encoding_rs",
@@ -2719,7 +2719,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "vkxp-vk"
+name = "vkrgss-vk"
 version = "0.3.0"
 dependencies = [
  "ash",
@@ -2728,10 +2728,10 @@ dependencies = [
  "proptest",
  "raw-window-handle",
  "thiserror 2.0.21",
- "vkxp-compose-ref",
- "vkxp-core",
- "vkxp-pixel",
- "vkxp-proto",
+ "vkrgss-compose-ref",
+ "vkrgss-core",
+ "vkrgss-pixel",
+ "vkrgss-proto",
 ]
 
 [[package]]

@@ -25,7 +25,7 @@ SOFTWARE.
 Third-party source code
 
 The licence above does not cover the directories below third_party/. Each has
-its own licence files and a README.vkxp.md that says where it comes from:
+its own licence files and a README.vkrgss.md that says where it comes from:
 
 - third_party/ruby-1.8.7/: Ruby 1.8.7-p374, under the Ruby licence or the GPL
   version 2 (COPYING, GPL), with the exceptions that its LEGAL file lists.
