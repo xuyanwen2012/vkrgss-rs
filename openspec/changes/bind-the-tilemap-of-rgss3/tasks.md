@@ -6,8 +6,8 @@
 
 ## 2. What it draws, and a disposed tilemap
 
-- [ ] 2.1 Tests in `tilemap_rgss3.rs` that read pixels of frames drawn by the reference compositor: hidden, the star tiles, the shadow, the maps of fewer layers, changes through the table objects. A fault they show is fixed in `tilemap.rs`; one in `vkxp-core` is recorded under Follow-ups of `design.md` and its task stays unticked. Verify: the eight scenarios of "A tilemap of RGSS3 is drawn by the rules of RGSS3"; `cargo test -p vkxp-binding -p vkxp-binding-rgss3 --locked` passes.
-- [ ] 2.2 The disposed tilemap and its array (decision 4). Verify: the four scenarios of "Disposed tilemap of RGSS3"; the same test command passes twice in a row, and `cargo test -p vkxp-binding-rgss3 --locked --test tilemap_rgss3` passes with `VKXP_GC_STRESS=1`.
+- [x] 2.1 Tests in `tilemap_rgss3.rs` that read pixels of frames drawn by the reference compositor: hidden, the star tiles, the shadow, the maps of fewer layers, changes through the table objects. A fault they show is fixed in `tilemap.rs`; one in `vkxp-core` is recorded under Follow-ups of `design.md` and its task stays unticked. Verify: the eight scenarios of "A tilemap of RGSS3 is drawn by the rules of RGSS3"; `cargo test -p vkxp-binding -p vkxp-binding-rgss3 --locked` passes.
+- [x] 2.2 The disposed tilemap and its array (decision 4). Verify: the four scenarios of "Disposed tilemap of RGSS3"; the same test command passes twice in a row, and `cargo test -p vkxp-binding-rgss3 --locked --test tilemap_rgss3` passes with `VKXP_GC_STRESS=1`.
 
 ## 3. Documents
 

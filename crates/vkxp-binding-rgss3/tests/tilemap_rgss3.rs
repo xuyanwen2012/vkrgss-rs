@@ -42,6 +42,14 @@ fn eval_with(objects: &str, source: &str) -> String {
 }
 
 const TILEMAP: &str = "made << (t = Tilemap.new) << (b = solid(32, 32, 255, 0, 0))";
+/// A tilemap with a red sheet of 64 by 32 in slot 5, so that tile 1, drawn from (32, 0) of
+/// that sheet, is red, and a map `m` of 1 by 1 by 4 with tile 1 in layer 0.
+const RED_TILE: &str = "made << (t = Tilemap.new) << (b = solid(64, 32, 255, 0, 0)); \
+                        t.bitmaps[5] = b; m = Table.new(1, 1, 4); m[0, 0, 0] = 1; \
+                        t.map_data = m";
+const RED: &str = "[255, 0, 0, 255]";
+const GREEN: &str = "[0, 255, 0, 255]";
+const BLACK: &str = "[0, 0, 0, 255]";
 
 /// Scenario "Methods, measured on the original".
 #[test]
@@ -242,5 +250,113 @@ fn the_flags_table_is_kept_alive_by_its_tilemap() {
              (1..2000).map { |i| Table.new(4)[1] = i }; GC.start; t.flags[1]"
         ),
         "7"
+    );
+}
+
+/// Scenarios "Hidden, measured on the original" and "Star tile of the lowest layer,
+/// measured on the original".
+#[test]
+fn a_hidden_tilemap_draws_nothing_and_a_star_tile_of_layer_0_is_drawn() {
+    assert_eq!(
+        eval_with(
+            RED_TILE,
+            "r = [pixel(0, 0)]; t.visible = false; r << pixel(0, 0); \
+             t.visible = true; r << pixel(0, 0); \
+             f = Table.new(8192); f[1] = 0x10; t.flags = f; r << pixel(0, 0); r"
+        ),
+        format!("[{RED}, {BLACK}, {RED}, {RED}]")
+    );
+}
+
+/// Scenario "Star tile of the third layer, measured on the original": a change through the
+/// table object shows without `update`.
+#[test]
+fn a_star_tile_of_layer_2_is_drawn_above_a_sprite() {
+    assert_eq!(
+        eval_with(
+            "made << (t = Tilemap.new) << (b = solid(64, 32, 255, 0, 0)) \
+             << (g = solid(32, 32, 0, 255, 0)) << (s = Sprite.new); \
+             s.bitmap = g; s.z = 100",
+            "t.bitmaps[5] = b; m = Table.new(1, 1, 4); m[0, 0, 2] = 1; t.map_data = m; \
+             f = Table.new(8192); t.flags = f; r = [pixel(0, 0)]; \
+             f[1] = 0x10; r << pixel(0, 0); r"
+        ),
+        format!("[{GREEN}, {RED}]")
+    );
+}
+
+/// Scenario "Shadow of the fourth layer, measured on the original": the shadow of bit 0
+/// darkens the upper left quarter of the cell alone.
+#[test]
+fn the_fourth_layer_is_the_shadow() {
+    assert_eq!(
+        eval_with(
+            RED_TILE,
+            "m[0, 0, 3] = 1; [pixel(0, 0), pixel(16, 0), pixel(0, 16)]"
+        ),
+        format!("[[126, 0, 0, 255], {RED}, {RED}]")
+    );
+}
+
+/// Scenarios "A map of three layers, measured on the original" and "A map of fewer layers".
+#[test]
+fn a_map_of_fewer_layers_is_drawn() {
+    assert_eq!(
+        eval_with(
+            "made << (t = Tilemap.new) << (b = solid(64, 32, 255, 0, 0))",
+            "t.bitmaps[5] = b; m = Table.new(1, 1, 3); m[0, 0, 0] = 1; t.map_data = m; \
+             r = [pixel(0, 0), pixel(16, 16)]; \
+             m = Table.new(1, 1); m[0, 0] = 1; t.map_data = m; r << pixel(0, 0); \
+             m = Table.new(1); m[0] = 1; t.map_data = m; r << pixel(0, 0); r"
+        ),
+        format!("[{RED}, {RED}, {RED}, {RED}]")
+    );
+}
+
+/// Scenario "No flags, measured on the original".
+#[test]
+fn a_tilemap_without_flags_is_drawn() {
+    assert_eq!(
+        eval_with(
+            RED_TILE,
+            "r = [pixel(0, 0)]; t.flags = Table.new(1); r << pixel(0, 0); r"
+        ),
+        format!("[{RED}, {RED}]")
+    );
+}
+
+/// Scenarios "Disposed, measured on the original", "The array of a disposed tilemap,
+/// measured on the original" and "A write after dispose": the write that ends the original
+/// is kept, and the frame shows nothing of the tilemap.
+#[test]
+fn a_disposed_tilemap_keeps_its_array() {
+    assert_eq!(
+        eval_with(
+            RED_TILE,
+            "t.bitmaps[1] = b; r = [t.disposed?, t.dispose, t.disposed?, t.dispose]; \
+             e = [error { t.ox }, error { t.ox = 1 }, error { t.update }, \
+                  error { t.map_data }, error { t.flags }, error { t.flags = Table.new(1) }, \
+                  error { t.flash_data }, error { t.visible }, error { t.viewport }, \
+                  error { t.viewport = nil }].uniq; \
+             a = [t.bitmaps.class, t.bitmaps[1].equal?(b), t.bitmaps[9]]; \
+             t.bitmaps[2] = b; t.bitmaps[1] = nil; \
+             [r, e, a, [t.bitmaps[2].equal?(b), t.bitmaps[1]], pixel(0, 0)]"
+        ),
+        format!(
+            "[[false, nil, true, nil], [\"RGSSError: disposed tilemap\"], \
+             [Tilemap::BitmapArray, true, nil], [true, nil], {BLACK}]"
+        )
+    );
+}
+
+/// Scenario "Not drawn any more".
+#[test]
+fn a_disposed_tilemap_is_not_drawn() {
+    assert_eq!(
+        eval_with(
+            RED_TILE,
+            "r = [pixel(0, 0)]; t.dispose; r << pixel(0, 0); r"
+        ),
+        format!("[{RED}, {BLACK}]")
     );
 }
