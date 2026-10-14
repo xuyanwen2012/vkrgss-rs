@@ -451,3 +451,17 @@ fn a_game_of_rgss2_has_no_reset_functions() {
     let (value, _) = eval("[Graphics.respond_to?(:__reset__), Audio.respond_to?(:__reset__)]");
     assert_eq!(value, "[false, false]");
 }
+
+/// Scenario "XP and VX" of "Input of RGSS1 and RGSS2 is unchanged by RGSS3": the constants
+/// are numbers and an `Input.update` alone sees a snapshot, frames being marked shown.
+#[test]
+fn input_of_rgss2_is_unchanged_by_rgss3() {
+    use vkxp_proto::{Button, HostToGuest, InputSnapshot};
+    testing::start_as(Runtime::Rgss2);
+    let held = HostToGuest::Input(InputSnapshot::EMPTY.with(Button::C));
+    let (outcome, _) = host::play(
+        "Input.update; [Input::DOWN, Input::F9, Input.press?(Input::C)]",
+        Script::new().at_start(held),
+    );
+    assert_eq!(outcome.unwrap(), "[2, 29, true]");
+}

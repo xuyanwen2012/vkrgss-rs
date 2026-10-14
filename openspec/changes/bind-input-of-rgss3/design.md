@@ -129,7 +129,8 @@ What was measured (sprite report 6, V0 report 4), against the binding today:
    change; `docs/compatibility.md` says so.
 
 8. **Method surface.** `Input` is added to `BOUND` of `arity_rgss3.rs`, nothing else of
-   that file being edited. `input_rgss3.rs` compares `Input.singleton_methods(false)` and
+   that file being edited but the list of counts that the test compares with one count per
+   entry of `BOUND`, which gains the 6 entries of `Input`; the test cannot pass otherwise. `input_rgss3.rs` compares `Input.singleton_methods(false)` and
    `Input.constants` with the method list itself, because that test compares instance
    methods of classes.
 
