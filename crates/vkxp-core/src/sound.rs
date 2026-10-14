@@ -324,7 +324,9 @@ impl Position {
         } else {
             let per_second = u64::from(format.rate) * frame_bytes;
             let chunk = (per_second * 3 / 16).next_multiple_of(frame_bytes);
-            let mut loop_start = format.loop_start.map_or(0, |start| start * frame_bytes);
+            let mut loop_start = format
+                .loop_start
+                .map_or(0, |start| start.saturating_mul(frame_bytes));
             let mut loop_end = match format.loop_length {
                 Some(loop_length) => format
                     .loop_start
@@ -730,6 +732,29 @@ mod tests {
     fn only_the_start_tag() {
         let tag20s = tagged(20, Some(88200), None);
         assert_eq!(readings(&tag20s, 0, 100, 60, &[300]), [826_900]);
+    }
+
+    /// Tags out of every range make no region, as tags whose start is behind their end.
+    #[test]
+    fn tags_that_make_no_region() {
+        let huge = ogg(
+            44100,
+            2,
+            &[
+                "LOOPSTART=18446744073709551615",
+                "LOOPLENGTH=18446744073709551615",
+            ],
+            44100 * 20,
+        );
+        let huge = SoundFormat::probe(&huge).unwrap();
+        assert_eq!(huge.loop_start, Some(u64::MAX));
+        let start = ogg(44100, 2, &["LOOPSTART=18446744073709551615"], 44100 * 20);
+        let start = SoundFormat::probe(&start).unwrap();
+        let behind = tagged(20, Some(882_000), Some(1));
+        let untagged = readings(&tagged(20, None, None), 0, 100, 60, &[0, 300, 1200]);
+        for format in [huge, start, behind] {
+            assert_eq!(readings(&format, 0, 100, 60, &[0, 300, 1200]), untagged);
+        }
     }
 
     #[test]
