@@ -17,7 +17,11 @@ const TEMPLATE: &str = include_str!("probe.rb");
 /// The probe for games of RGSS2: its frame counting and the repeat rule of its input differ.
 const TEMPLATE_RGSS2: &str = include_str!("probe_rgss2.rb");
 
-/// What `--no-threads` adds to either probe.
+/// The probe for games of RGSS3: the probe of RGSS2 for Ruby 1.9.2, with buttons as Symbols
+/// and the size of the screen in the request to hold a frame.
+const TEMPLATE_RGSS3: &str = include_str!("probe_rgss3.rb");
+
+/// What `--no-threads` adds to every probe.
 const THREADS: &str = include_str!("probe_threads.rb");
 
 /// The buttons a schedule may name, as `vkxp --input` names them.
@@ -101,6 +105,7 @@ pub(super) fn generate(
     let template = match runtime {
         Runtime::Rgss1 => TEMPLATE,
         Runtime::Rgss2 => TEMPLATE_RGSS2,
+        Runtime::Rgss3 => TEMPLATE_RGSS3,
     };
     let probe = template
         .replace("__SIDE__", side)
@@ -190,7 +195,7 @@ mod tests {
     /// The without-the-option scenario of `oracle-harness`, and what the option adds.
     #[test]
     fn the_probe_redefines_threads_only_with_the_option() {
-        for runtime in [Runtime::Rgss1, Runtime::Rgss2] {
+        for runtime in [Runtime::Rgss1, Runtime::Rgss2, Runtime::Rgss3] {
             for side in [Side::Original, Side::Vkxp] {
                 let plain = generate(runtime, side, &Schedule::default(), &[3], false);
                 assert!(!plain.contains("Thread"), "{plain}");
@@ -199,6 +204,33 @@ mod tests {
                 assert!(with.contains("class Thread\n"), "{with}");
             }
         }
+    }
+
+    /// The one-text scenario of `oracle-harness`.
+    #[test]
+    fn the_probe_of_rgss3_is_one_ascii_text_for_both_sides() {
+        let schedule = Schedule::parse("0:DOWN, 60:RIGHT+C, 100:").unwrap();
+        for no_threads in [false, true] {
+            let [original, vkxp] = [Side::Original, Side::Vkxp]
+                .map(|side| generate(Runtime::Rgss3, side, &schedule, &[2, 5], no_threads));
+            assert!(original.contains("SIDE = \"original\"\n"), "{original}");
+            assert!(
+                original.contains("SCHEDULE = [[0, [:DOWN]], [60, [:RIGHT, :C]], [100, []]]\n")
+            );
+            assert!(original.contains("CAPTURES = [2, 5]\n"), "{original}");
+            assert!(!original.contains("__"), "{original}");
+            let differing: Vec<_> = original
+                .lines()
+                .zip(vkxp.lines())
+                .filter(|(one, two)| one != two)
+                .collect();
+            assert_eq!(differing, [("  SIDE = \"original\"", "  SIDE = \"vkxp\"")]);
+            assert_eq!(original.lines().count(), vkxp.lines().count());
+            assert!(original.bytes().chain(vkxp.bytes()).all(|byte| byte < 128));
+        }
+        let rgss2 = generate(Runtime::Rgss2, Side::Original, &schedule, &[2], false);
+        let rgss3 = generate(Runtime::Rgss3, Side::Original, &schedule, &[2], false);
+        assert_ne!(rgss2, rgss3);
     }
 
     #[test]

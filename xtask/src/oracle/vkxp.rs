@@ -7,6 +7,7 @@ use anyhow::{Context, Result, bail, ensure};
 use serde_json::Value;
 
 use super::report;
+use super::runtime::Runtime;
 
 /// Environment variables that restrict which drivers the Vulkan loader loads.
 const ISOLATION_VARIABLES: [&str; 3] = [
@@ -22,26 +23,51 @@ pub(super) fn loader_is_restricted() -> bool {
         .any(|name| std::env::var(name).is_ok_and(|value| !value.trim().is_empty()))
 }
 
-/// Builds the `vkxp` executable of this workspace and returns its path.
-pub(super) fn build(root: &Path) -> Result<PathBuf> {
-    let output = Command::new(crate::cargo())
-        .args(["build", "--package", "vkxp", "--message-format=json"])
+/// The guest executable that `vkxp` starts for a game of RGSS3, found beside its own file.
+const GUEST_RGSS3: &str = "vkxp-guest-rgss3";
+
+/// Builds the `vkxp` executable of this workspace and returns its path. For a game of RGSS3
+/// the guest executable of RGSS3 is built in the same call, so that it lies beside `vkxp`.
+pub(super) fn build(root: &Path, runtime: Runtime) -> Result<PathBuf> {
+    let mut packages = vec!["vkxp"];
+    if runtime == Runtime::Rgss3 {
+        packages.push(GUEST_RGSS3);
+    }
+    let mut command = Command::new(crate::cargo());
+    command.arg("build");
+    let mut name = "cargo build".to_owned();
+    for package in &packages {
+        command.args(["--package", package]);
+        name += &format!(" --package {package}");
+    }
+    let output = command
+        .arg("--message-format=json")
         .current_dir(root)
         .stderr(Stdio::inherit())
         .output()
-        .context("could not start `cargo build --package vkxp`")?;
+        .with_context(|| format!("could not start `{name}`"))?;
     ensure!(
         output.status.success(),
-        "`cargo build --package vkxp` ended with {}",
+        "`{name}` ended with {}",
         output.status
     );
-    String::from_utf8_lossy(&output.stdout)
+    let executable = String::from_utf8_lossy(&output.stdout)
         .lines()
         .filter_map(|line| serde_json::from_str::<Value>(line).ok())
         .filter(|message| message["reason"] == "compiler-artifact")
         .filter(|message| message["target"]["name"] == "vkxp")
         .find_map(|message| message["executable"].as_str().map(PathBuf::from))
-        .context("`cargo build --package vkxp` did not name the executable")
+        .with_context(|| format!("`{name}` did not name the executable"))?;
+    if runtime == Runtime::Rgss3 {
+        let guest = executable.with_file_name(GUEST_RGSS3);
+        ensure!(
+            guest.is_file(),
+            "{}: there is no guest executable of RGSS3 beside vkxp after `{name}`; \
+             build it with `cargo build -p {GUEST_RGSS3}`",
+            guest.display()
+        );
+    }
+    Ok(executable)
 }
 
 /// What a run of vkxp needs besides the game.

@@ -33,8 +33,9 @@ usage: cargo xtask oracle <GAME_DIR> --frames N[,N...] [OPTIONS]
   GAME_DIR                the game directory; it is copied, never changed
   --frames N[,N...]       the frames to capture, numbered from 0 as `vkxp --dump` numbers them
   --dll FILE              the RGSS DLL the game's Game.ini names; needed without --vkxp-only
-  --runtime rgss1|rgss2   the runtime of the game, when the file its Scripts= names is
-                          neither a .rxdata (rgss1) nor a .rvdata (rgss2)
+  --runtime rgss1|rgss2|rgss3
+                          the runtime of the game, when the file its Scripts= names is
+                          none of .rxdata (rgss1), .rvdata (rgss2) and .rvdata2 (rgss3)
   --rtp NAME=DIR          the directory of the run-time package NAME; repeatable
   --input SCHEDULE|@FILE  held buttons in the syntax of `vkxp --input`, for example
                           \"60:RIGHT, 100:\", or a file that holds such a schedule
@@ -221,7 +222,7 @@ pub(crate) fn run(options: &Options, root: &Path) -> Result<()> {
     let shared = fonts::share(&options.fonts, out)?;
     let executable = match options.original_only {
         true => None,
-        false => Some(vkxp::build(root)?),
+        false => Some(vkxp::build(root, runtime)?),
     };
 
     let frames_dir = out.join("frames");
@@ -276,6 +277,10 @@ mod tests {
     /// A stand-in for the built-in scripts of the original, which are not in the repository.
     const RPG_STAND_IN: &str = "module RPG\n  module Cache\n  end\nend\n";
 
+    /// A stand-in for the built-in scripts of the original of RGSS3, which are not in the
+    /// repository either: the module `RPG` and an `rgss_main` that yields.
+    const RGSS3_STAND_IN: &str = "module RPG\nend\n\ndef rgss_main\n  yield\nend\n";
+
     /// A red square that moves to the right by four pixels in every frame, for ever.
     const MOVING_SQUARE: &str = "\
 sprite = Sprite.new
@@ -294,6 +299,37 @@ end
     }
 
     impl Generated {
+        /// Runs the game, whose probe is that of the original's side, in vkxp, and answers
+        /// the probe's requests to hold a frame in place of the harness. Returns their text.
+        fn answered_requests(&self) -> Vec<String> {
+            let game = self.game();
+            let deadline = std::time::Instant::now() + Duration::from_secs(120);
+            let mut requests = Vec::new();
+            std::thread::scope(|scope| {
+                let runner = scope.spawn(|| self.plain_run(&[]));
+                while !runner.is_finished() {
+                    assert!(std::time::Instant::now() < deadline, "{requests:?}");
+                    std::thread::sleep(Duration::from_millis(2));
+                    for entry in fs::read_dir(&game).unwrap() {
+                        let path = entry.unwrap().path();
+                        if path
+                            .extension()
+                            .is_none_or(|extension| extension != "request")
+                        {
+                            continue;
+                        }
+                        let record = fs::read_to_string(&path).unwrap();
+                        // An empty file is one that the probe has not written yet.
+                        if !record.is_empty() {
+                            requests.push(record);
+                            fs::remove_file(&path).unwrap();
+                        }
+                    }
+                }
+            });
+            requests
+        }
+
         /// A game of RGSS1 whose archive, written by the harness's writer, holds `scripts`
         /// as pairs of name and source.
         fn new(scripts: &[(&str, &str)]) -> Generated {
@@ -303,21 +339,35 @@ end
         /// A game whose archive is the file `archive` of its `Data` folder. `lines` are
         /// further lines of its `Game.ini`.
         fn named(archive: &str, lines: &str, scripts: &[(&str, &str)]) -> Generated {
-            let dir = tempfile::tempdir().expect("a temporary directory");
-            let generated = Generated { dir };
-            let game = generated.game();
-            fs::create_dir_all(game.join("Data")).unwrap();
             let ini = format!(
                 "[Game]\r\nLibrary=RGSS104E.dll\r\nScripts=Data\\{archive}\r\n\
                  Title=Generated\r\n{lines}"
             );
+            Generated::written(archive, &ini, RPG_STAND_IN, scripts)
+        }
+
+        /// A game of RGSS3 without a run-time package, whose `Library=` names
+        /// `System\RGSS300.dll`, which it does not have.
+        fn ace(scripts: &[(&str, &str)]) -> Generated {
+            let ini = "[Game]\r\nLibrary=System\\RGSS300.dll\r\n\
+                       Scripts=Data\\Scripts.rvdata2\r\nRTP=\r\nTitle=Generated\r\n";
+            Generated::written("Scripts.rvdata2", ini, RGSS3_STAND_IN, scripts)
+        }
+
+        /// A game with this `Game.ini` and these built-in scripts, whose archive is the file
+        /// `archive` of its `Data` folder.
+        fn written(archive: &str, ini: &str, builtin: &str, scripts: &[(&str, &str)]) -> Generated {
+            let dir = tempfile::tempdir().expect("a temporary directory");
+            let generated = Generated { dir };
+            let game = generated.game();
+            fs::create_dir_all(game.join("Data")).unwrap();
             fs::write(game.join("Game.ini"), ini).unwrap();
             let entries: Vec<_> = (1..)
                 .zip(scripts)
                 .map(|(id, (name, source))| archive::Entry::new(id, name, source))
                 .collect();
             fs::write(game.join("Data").join(archive), archive::write(&entries)).unwrap();
-            fs::write(generated.builtin_scripts(), RPG_STAND_IN).unwrap();
+            fs::write(generated.builtin_scripts(), builtin).unwrap();
             generated
         }
 
@@ -375,9 +425,12 @@ end
         }
 
         /// A run of vkxp on the game itself, without the harness: headless, with these
-        /// further arguments, started in the game's parent directory.
+        /// further arguments, started in the game's parent directory. That directory also
+        /// stands in for the user's run-time directory, where vkxp makes the socket of a
+        /// guest process, as in the tests of `vkxp`.
         fn plain_run(&self, arguments: &[&str]) {
-            let executable = vkxp::build(&crate::workspace_root()).unwrap();
+            let runtime = game::runtime(&self.game(), None).unwrap_or(Runtime::Rgss1);
+            let executable = vkxp::build(&crate::workspace_root(), runtime).unwrap();
             let mut command = Command::new(executable);
             command
                 .arg(self.game())
@@ -385,11 +438,36 @@ end
                 .arg("--builtin-scripts")
                 .arg(self.builtin_scripts())
                 .args(arguments)
-                .current_dir(self.dir.path());
+                .current_dir(self.dir.path())
+                .env("XDG_RUNTIME_DIR", self.dir.path());
             if !vkxp::loader_is_restricted() {
                 command.env("VK_LOADER_DRIVERS_SELECT", "*lvp*");
             }
             let status = command.status().expect("vkxp starts");
+            assert!(status.success(), "{status}");
+        }
+
+        /// What [`run`] does with `options` on the vkxp side alone: the copy with the probe
+        /// and the command of vkxp, which it runs with the run-time directory of
+        /// [`Generated::plain_run`]. A game of RGSS3 runs its scripts in a guest process.
+        fn vkxp_side(&self, options: &Options) {
+            let runtime = game::runtime(&options.game, options.runtime).unwrap();
+            let executable = vkxp::build(&crate::workspace_root(), runtime).unwrap();
+            let copy = options.out.join("vkxp").join("game");
+            prepare_copy(options, runtime, Side::Vkxp, &copy).unwrap();
+            fs::create_dir_all(options.out.join("frames")).unwrap();
+            let mut command = vkxp::Run {
+                executable: &executable,
+                rtps: &options.rtps,
+                font_dir: None,
+                builtin_scripts: options.builtin_scripts.as_deref(),
+            }
+            .command(&copy, &options.frames, &options.out)
+            .unwrap();
+            let status = command
+                .env("XDG_RUNTIME_DIR", self.dir.path())
+                .status()
+                .expect("vkxp starts");
             assert!(status.success(), "{status}");
         }
     }
@@ -456,7 +534,7 @@ end
                 "--original-only",
                 "--vkxp-only",
             ][..],
-            &["/games/one", "--frames", "1", "--runtime", "rgss3"],
+            &["/games/one", "--frames", "1", "--runtime", "rgss4"],
             &["--frames", "1"],
             &["/games/one"],
             &["/games/one", "--frames"],
@@ -625,13 +703,13 @@ loop { Graphics.update }
         assert_eq!(frames.next(), Some(131), "every frame was logged");
     }
 
-    /// The VX-game and XP-game scenarios of `oracle-harness`; the registry script itself is
-    /// covered in `original`.
+    /// The VX-game, VX-Ace-game and XP-game scenarios of `oracle-harness`; the registry
+    /// script itself is covered in `original`.
     #[test]
     fn the_runtime_of_the_game_chooses_the_probe_and_the_registry_key() {
-        let first_script = |generated: &Generated, runtime| {
+        let first_script = |generated: &Generated, runtime, rtp: &str| {
             let mut options = generated.options("10", "");
-            options.rtps = vec![("RPGVX".to_owned(), PathBuf::from("/rtp"))];
+            options.rtps = vec![(rtp.to_owned(), PathBuf::from("/rtp"))];
             let copy = generated.out().join("game");
             prepare_copy(&options, runtime, Side::Original, &copy).unwrap();
             let name = game::runtime(&options.game, None).unwrap();
@@ -639,6 +717,7 @@ loop { Graphics.update }
             let file = match runtime {
                 Runtime::Rgss1 => "Data/Scripts.rxdata",
                 Runtime::Rgss2 => "Data/Scripts.rvdata",
+                Runtime::Rgss3 => "Data/Scripts.rvdata2",
             };
             let scripts = archive::read(&fs::read(copy.join(file)).unwrap()).unwrap();
             assert_eq!(scripts.len(), 2);
@@ -650,14 +729,27 @@ loop { Graphics.update }
         };
 
         let vx = Generated::named("Scripts.rvdata", "RTP=RPGVX\r\n", &[("Main", "")]);
-        let (script, options) = first_script(&vx, Runtime::Rgss2);
+        let (script, options) = first_script(&vx, Runtime::Rgss2, "RPGVX");
         assert!(script == probe(Runtime::Rgss2, &options));
         assert!(script != probe(Runtime::Rgss1, &options));
         let registry = original::rtp_registry_script(Runtime::Rgss2, &options.rtps, true);
         assert!(registry.contains("\\Enterbrain\\RGSS2\\RTP]\r\n\"RPGVX\"=\"Z:\\\\rtp\"\r\n"));
 
+        let ace = Generated::named("Scripts.rvdata2", "RTP=RPGVXAce\r\n", &[("Main", "")]);
+        let (script, options) = first_script(&ace, Runtime::Rgss3, "RPGVXAce");
+        assert!(script == probe(Runtime::Rgss3, &options));
+        assert!(script != probe(Runtime::Rgss2, &options));
+        let registry = original::rtp_registry_script(Runtime::Rgss3, &options.rtps, true);
+        assert!(
+            registry.contains(
+                "[HKEY_LOCAL_MACHINE\\Software\\Wow6432Node\\Enterbrain\\RGSS3\\RTP]\r\n\
+                 \"RPGVXAce\"=\"Z:\\\\rtp\"\r\n"
+            ),
+            "{registry}"
+        );
+
         let xp = Generated::new(&[("Main", "")]);
-        let (script, options) = first_script(&xp, Runtime::Rgss1);
+        let (script, options) = first_script(&xp, Runtime::Rgss1, "RPGVX");
         assert!(script == probe(Runtime::Rgss1, &options));
         let registry = original::rtp_registry_script(Runtime::Rgss1, &options.rtps, true);
         assert!(
@@ -799,34 +891,11 @@ loop { Graphics.update }
             (probe::NAME, &probe),
             ("Main", main),
         ]);
-        let game = generated.game();
 
-        let deadline = std::time::Instant::now() + Duration::from_secs(120);
-        let mut requests = Vec::new();
-        std::thread::scope(|scope| {
-            let runner = scope.spawn(|| generated.plain_run(&[]));
-            while !runner.is_finished() {
-                assert!(std::time::Instant::now() < deadline, "{requests:?}");
-                std::thread::sleep(Duration::from_millis(2));
-                for entry in fs::read_dir(&game).unwrap() {
-                    let path = entry.unwrap().path();
-                    if path
-                        .extension()
-                        .is_none_or(|extension| extension != "request")
-                    {
-                        continue;
-                    }
-                    let record = fs::read_to_string(&path).unwrap();
-                    // An empty file is one that the probe has not written yet.
-                    if !record.is_empty() {
-                        requests.push(record);
-                        fs::remove_file(&path).unwrap();
-                    }
-                }
-            }
-        });
-
-        assert_eq!(requests, ["2", "7", "12 late", "18", "20"]);
+        assert_eq!(
+            generated.answered_requests(),
+            ["2", "7", "12 late", "18", "20"]
+        );
     }
 
     /// The block-runs-at-once scenario of `oracle-harness`, and the report of the option.
@@ -983,5 +1052,163 @@ loop { Graphics.update }
         options.game = generated.dir.path().join("nowhere");
         let error = run(&options, &crate::workspace_root()).unwrap_err();
         assert!(format!("{error:#}").contains("nowhere"), "{error:#}");
+    }
+
+    /// Games of RGSS3 run in vkxp. They need the guest executable of RGSS3, which is built
+    /// only where Ruby 1.9.2 is, as for the tests of `crates/vkxp/tests/rgss3.rs`.
+    #[cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+    mod rgss3 {
+        use super::*;
+
+        /// The capture-in-vkxp-of-RGSS3 scenario of `oracle-harness`.
+        #[test]
+        fn the_frames_of_vkxp_of_rgss3_equal_those_of_a_plain_run() {
+            let generated = Generated::ace(&[("Main", MOVING_SQUARE)]);
+
+            generated.vkxp_side(&generated.options("10,20", ""));
+
+            generated.plain_run(&[
+                "--frames",
+                "21",
+                "--dump",
+                "10=10.png",
+                "--dump",
+                "20=20.png",
+            ]);
+            let mut pictures = Vec::new();
+            for frame in [10, 20] {
+                let file = generated.out().join(report::vkxp_file(frame));
+                let captured = report::Picture::read(&file).unwrap();
+                assert_eq!((captured.width, captured.height), (544, 416));
+                let file = generated.dir.path().join(format!("{frame}.png"));
+                let plain = report::Picture::read(&file).unwrap();
+                assert!(
+                    captured == plain,
+                    "frame {frame} differs from the plain run"
+                );
+                pictures.push(captured);
+            }
+            assert!(pictures[0] != pictures[1], "the square did not move");
+        }
+
+        /// The buttons-of-RGSS3 scenario of `oracle-harness`: the probe runs in vkxp.
+        #[test]
+        fn the_probe_of_rgss3_takes_a_button_as_its_symbol_or_its_integer_of_rgss2() {
+            let main = "\
+answers = nil
+loop do
+  Input.update
+  if OracleProbe.frame == 70 && answers.nil?
+    asked = [:RIGHT, 6, :right, 'RIGHT', nil, :LEFT]
+    answers = asked.map { |button| Input.press?(button) ? '1' : '0' }.join
+    File.open('buttons.log', 'w') { |file| file.write(answers) }
+  end
+  Graphics.update
+end
+";
+            let generated = Generated::ace(&[("Main", main)]);
+            let options = generated.options("75", "60:RIGHT, 100:");
+
+            generated.vkxp_side(&options);
+
+            let log = generated.out().join("vkxp/game/buttons.log");
+            assert_eq!(fs::read_to_string(log).unwrap(), "110000");
+        }
+
+        /// The scenarios of `oracle-harness` that are stated on the model of the probe of
+        /// RGSS3: its repeat rule and its frame numbers.
+        #[test]
+        fn the_probe_of_rgss3_repeats_and_counts_frames_as_measured() {
+            let main = "\
+repeats = []
+(1..40).each do |update|
+  Input.update
+  repeats << update if Input.repeat?(:DOWN)
+  Graphics.update
+end
+counts = []
+mark = OracleProbe.frame
+[proc { Graphics.wait(5) }, proc { Graphics.fadeout(3) }, proc { Graphics.transition(20) },
+ proc { Graphics.freeze }, proc { Graphics.transition(20) }].each do |call|
+  call.call
+  counts << OracleProbe.frame - mark
+  mark = OracleProbe.frame
+end
+File.open('model.log', 'w') { |file| file.write(repeats.join(' ') + '|' + counts.join(' ')) }
+";
+            let schedule = Schedule::parse("0:DOWN").unwrap();
+            let probe = probe::generate(Runtime::Rgss3, Side::Vkxp, &schedule, &[], false);
+            let generated = Generated::ace(&[(probe::NAME, &probe), ("Main", main)]);
+
+            generated.plain_run(&[]);
+
+            let log = fs::read_to_string(generated.game().join("model.log")).unwrap();
+            assert_eq!(log, "1 24 30 36|5 3 0 0 20");
+        }
+
+        /// The screen-resized-in-RGSS3 scenario of `oracle-harness`.
+        #[test]
+        fn the_probe_of_rgss3_asks_for_the_size_the_screen_has_at_the_frame() {
+            let main = "\
+3.times { Graphics.update }
+Graphics.resize_screen(640, 480)
+loop { Graphics.update }
+";
+            let schedule = Schedule::default();
+            let probe = probe::generate(Runtime::Rgss3, Side::Original, &schedule, &[2, 5], false);
+            let generated = Generated::ace(&[(probe::NAME, &probe), ("Main", main)]);
+
+            assert_eq!(generated.answered_requests(), ["2 544x416", "5 640x480"]);
+        }
+
+        /// The late-frame-of-RGSS3 scenario of `oracle-harness`.
+        #[test]
+        fn the_probe_of_rgss3_marks_only_a_frame_inside_a_transition_as_late() {
+            // Frame 0, then 1 to 4, 5 to 8, 9 to 18, and updates from 19 on.
+            let main = "\
+Graphics.update
+Graphics.wait(4)
+Graphics.fadeout(4)
+Graphics.freeze
+Graphics.transition(10)
+loop { Graphics.update }
+";
+            let captures = [2, 7, 12, 18, 20];
+            let schedule = Schedule::default();
+            let probe =
+                probe::generate(Runtime::Rgss3, Side::Original, &schedule, &captures, false);
+            let generated = Generated::ace(&[(probe::NAME, &probe), ("Main", main)]);
+
+            assert_eq!(
+                generated.answered_requests(),
+                [
+                    "2 544x416",
+                    "7 544x416",
+                    "12 late 544x416",
+                    "18 544x416",
+                    "20 544x416"
+                ]
+            );
+        }
+
+        /// The block-runs-at-once scenario of `oracle-harness` with the probe of RGSS3.
+        #[test]
+        fn with_the_option_the_block_of_a_thread_of_rgss3_runs_at_once_in_the_caller() {
+            let main = "\
+started = Time.now
+x = 0
+Thread.new { sleep(5); x = 1 }
+File.open('threads.log', 'w') { |file| file.write(\"#{x} #{Time.now - started < 4}\") }
+loop { Graphics.update }
+";
+            let generated = Generated::ace(&[("Main", main)]);
+            let mut options = generated.options("1", "");
+            options.no_threads = true;
+
+            generated.vkxp_side(&options);
+
+            let log = fs::read_to_string(generated.out().join("vkxp/game/threads.log")).unwrap();
+            assert_eq!(log, "1 true");
+        }
     }
 }

@@ -19,7 +19,7 @@ pub(super) fn runtime(game: &Path, chosen: Option<Runtime>) -> Result<Runtime> {
     Runtime::of_scripts(&name).with_context(|| {
         format!(
             "{}: `Scripts={name}` of Game.ini does not tell the runtime of the game; \
-             name it with --runtime rgss1 or --runtime rgss2",
+             name it with --runtime rgss1, rgss2 or rgss3",
             game.display()
         )
     })
