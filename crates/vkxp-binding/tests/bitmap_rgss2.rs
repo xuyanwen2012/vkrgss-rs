@@ -416,3 +416,17 @@ fn text_is_squeezed_to_a_fifth_step() {
         "[100, 90, 80, 70, 60, 50, 50, 50, 49]"
     );
 }
+
+/// Scenario "VX" of "Font and Bitmap of RGSS1 and RGSS2 are unchanged by RGSS3": a game of
+/// RGSS2 has no outline and no out colour, drops the fraction of a size and keeps its
+/// default names.
+#[test]
+fn the_font_of_rgss3_does_not_reach_rgss2() {
+    assert_eq!(
+        eval(
+            "[Font.new.respond_to?(:outline), Font.respond_to?(:default_out_color), \
+             (f = Font.new; f.size = 24.7; f.size), Font.default_name]"
+        ),
+        r#"[false, false, 24, ["Verdana", "Arial", "Courier New"]]"#
+    );
+}

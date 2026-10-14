@@ -114,3 +114,14 @@ fn the_forms_of_rgss3_are_not_taken() {
         Ok("4")
     );
 }
+
+/// Scenario "XP" of "Font and Bitmap of RGSS1 and RGSS2 are unchanged by RGSS3": a game of
+/// RGSS1 has no outline.
+#[test]
+fn the_font_of_rgss3_does_not_reach_rgss1() {
+    assert_eq!(
+        testing::eval("[Font.new.respond_to?(:outline), Font.respond_to?(:default_outline)]")
+            .as_deref(),
+        Ok("[false, false]")
+    );
+}

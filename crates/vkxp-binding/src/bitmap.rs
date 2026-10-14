@@ -8,10 +8,16 @@
 //! In a game of RGSS2 the class has four more methods (`blur`, `radial_blur`, `clear_rect`,
 //! `gradient_fill_rect`) and differs in `Bitmap.new`, `font=`, `draw_text` and `text_size`,
 //! as measured on the original runtime of VX.
+//!
+//! In a game of RGSS3 the class has the methods of RGSS2. `Bitmap.new` has no limit of its
+//! own, `font=` copies every attribute, text is drawn by the rules of RGSS3 of the core and
+//! not at all with a font without a name, and the methods that take several argument
+//! counts or a `Color`, `Rect`, `Bitmap` or `Font` raise the errors of the original runtime
+//! of VX Ace.
 
 use std::ffi::CStr;
 
-use vkxp_core::{Align, BitmapError, Color, CreateFailure, Rect, Squeeze};
+use vkxp_core::{Align, BitmapError, Color, CreateFailure, Rect, Squeeze, TextRules};
 use vkxp_proto::BitmapId;
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{HostResult, Raise, Raised, Ruby};
@@ -19,7 +25,9 @@ use vkxp_vfs::{FileKind, Runtime};
 
 use crate::color::{color_arg, color_new};
 use crate::error::{self, Error};
-use crate::font::{font_arg, font_assign, font_copy, font_new_default};
+use crate::font::{
+    FontData, font_arg, font_assign, font_assign_rgss3, font_copy, font_new_default,
+};
 use crate::guest::{self, Classes, Guest};
 use crate::rb;
 use crate::rect::{rect_arg, rect_new};
@@ -377,14 +385,17 @@ pub(crate) fn text_of(ruby: &Ruby, value: VALUE) -> Result<String, Raise> {
 }
 
 /// Copies the attributes of the bitmap's `Font` object into the arena's bitmap, which is
-/// where drawing and measuring take them from.
-fn apply_font(ruby: &Ruby, recv: VALUE, id: BitmapId) -> Result<(), Raise> {
+/// where drawing and measuring take them from. Returns whether the font has a family name
+/// to draw with, which only a font of RGSS3 can lack.
+fn apply_font(ruby: &Ruby, recv: VALUE, id: BitmapId) -> Result<bool, Raise> {
     let font = rb::ivar_get(ruby, recv, FONT)?;
     if ffi::nil_p(font) {
-        return Ok(());
+        return Ok(true);
     }
     let font = font_arg(ruby, font)?;
-    operate(ruby, |guest| Ok(guest.bitmaps.set_font(id, font)?))
+    let named = !font.names.is_empty();
+    operate(ruby, |guest| Ok(guest.bitmaps.set_font(id, font)?))?;
+    Ok(named)
 }
 
 /// `draw_text` of RGSS1. Text that is not a `String` raises `TypeError`, as in the original.
@@ -560,9 +571,256 @@ fn gradient_fill_rect(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     Ok(ffi::Qnil)
 }
 
-/// Defines `Bitmap` as a game of `runtime` has it.
+// --- RGSS3 -----------------------------------------------------------------------------------
+
+/// The `TypeError` of a path argument of RGSS3 that is no `String`, worded as Ruby 1.9.2
+/// words its own conversion: `can't convert <class> into String`, with `nil`, `true` and
+/// `false` named so.
+fn path_arg_rgss3(ruby: &Ruby, value: VALUE) -> Result<String, Raise> {
+    if rb::string_bytes(ruby, value).is_some() {
+        return rb::text(ruby, value);
+    }
+    let message = |name: &str| format!("can't convert {name} into String");
+    Err(match value {
+        ffi::Qnil => Raise::new(rb::type_error(ruby), message("nil")),
+        ffi::Qtrue => Raise::new(rb::type_error(ruby), message("true")),
+        ffi::Qfalse => Raise::new(rb::type_error(ruby), message("false")),
+        _ => rb::wrong_type(ruby, value, message),
+    })
+}
+
+/// `initialize` of RGSS3: one or two arguments, `(given for 1..2)` otherwise. A size has no
+/// limit of its own: the arena refuses a width of 0 or less, a height of 0 and a bitmap
+/// above its largest, and a negative height is taken by its size, as measured.
+/// `initialize(path)` is that of RGSS2 but for the message of a path that is no `String`.
+///
+/// Provenance: oracle measurement 2026-10-13, RGSS301 3.0.1.1 and RGSS300 3.0.0.1,
+/// `ace-v1-bitmap-REPORT.md` section 2.
+fn initialize_rgss3(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    wrap::intern_owner_names(ruby)?;
+    rb::check_count_range(ruby, args, 1, 2)?;
+    this(ruby, recv)?;
+    let id = if let [path] = args {
+        let path = path_arg_rgss3(ruby, *path)?;
+        operate(ruby, |guest| {
+            let bytes = guest.files.read(FileKind::Image, &path)?;
+            let image = vkxp_image::decode(&bytes)?;
+            Ok(guest.bitmaps.create_from_rgba(
+                image.width,
+                image.height,
+                image.rgba,
+                &guest.font_defaults,
+            )?)
+        })?
+    } else {
+        let width = rb::int(ruby, args[0])?.max(0).unsigned_abs();
+        let height = rb::int(ruby, args[1])?.unsigned_abs();
+        operate(ruby, |guest| {
+            Ok(guest.bitmaps.create(width, height, &guest.font_defaults)?)
+        })?
+    };
+    adopt(ruby, recv, id)?;
+    let font = font_new_default(ruby)?;
+    rb::ivar_set(ruby, recv, FONT, font)?;
+    Ok(recv)
+}
+
+/// `font=` of RGSS3: a `Font` only, whose name and size objects, flags and colour values
+/// are copied into the bitmap's own `Font` object.
+fn set_font_rgss3(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    id_arg(ruby, recv)?;
+    converted_arg::<FontData>(ruby, args[0])?;
+    let own = rb::ivar_get(ruby, recv, FONT)?;
+    if ffi::nil_p(own) {
+        let copy = font_copy(ruby, args[0])?;
+        rb::ivar_set(ruby, recv, FONT, copy)?;
+    } else {
+        font_assign_rgss3(ruby, own, args[0])?;
+    }
+    Ok(args[0])
+}
+
+/// The rectangle and the rest of the arguments of `draw_text`, `clear_rect` and
+/// `gradient_fill_rect` of RGSS3: a `Rect` first takes the short form, of `short` counts,
+/// and anything else the form of four integers, of `long` counts. A wrong count names the
+/// bound of its form nearer the count given, as `check_count_rgss3` does.
+fn rect_form_rgss3<'a>(
+    ruby: &Ruby,
+    args: &'a [VALUE],
+    short: (usize, usize),
+    long: (usize, usize),
+) -> Result<(Rect, &'a [VALUE]), Raise> {
+    if args.first().is_some_and(|&first| is_rect(ruby, first)) {
+        rb::check_count_rgss3(ruby, args, short.0, short.1)?;
+        Ok((rect_arg(ruby, args[0])?, &args[1..]))
+    } else {
+        rb::check_count_rgss3(ruby, args, long.0, long.1)?;
+        Ok((rect_of(ruby, &args[..4])?, &args[4..]))
+    }
+}
+
+/// `draw_text` of RGSS3: drawn by [`TextRules::Rgss3`]; with a font without a name nothing
+/// is drawn once the arguments are checked.
+fn draw_text_rgss3(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let _span = Span::enter(Part::Text);
+    let id = id_arg(ruby, recv)?;
+    let (rect, rest) = rect_form_rgss3(ruby, args, (2, 3), (5, 6))?;
+    let text = text_of(ruby, rest[0])?;
+    let align = match rest.get(1).map(|&align| rb::int(ruby, align)).transpose()? {
+        Some(1) => Align::Center,
+        Some(2) => Align::Right,
+        _ => Align::Left,
+    };
+    if !apply_font(ruby, recv, id)? {
+        return Ok(ffi::Qnil);
+    }
+    operate(ruby, |guest| {
+        Ok(guest
+            .bitmaps
+            .draw_text_as(id, rect, &text, align, TextRules::Rgss3, &*guest.text)?)
+    })?;
+    Ok(ffi::Qnil)
+}
+
+/// `text_size` of RGSS3: the size the core measures, without outline or shadow; (0, 0, 0,
+/// 0) for a font without a name, where the original returns uninitialised numbers.
+fn text_size_rgss3(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let _span = Span::enter(Part::Text);
+    let id = id_arg(ruby, recv)?;
+    let text = text_of(ruby, args[0])?;
+    if !apply_font(ruby, recv, id)? {
+        return rect_new(ruby, Rect::new(0, 0, 0, 0));
+    }
+    let size = operate(ruby, |guest| {
+        Ok(guest.bitmaps.text_size(id, &text, &*guest.text)?)
+    })?;
+    rect_new(ruby, size)
+}
+
+/// A `Rect` argument of RGSS3, with the message of the original for anything else.
+fn rect_arg_rgss3(ruby: &Ruby, value: VALUE) -> Result<Rect, Raise> {
+    Ok(converted_arg::<Owned<Rect>>(ruby, value)?.get().value())
+}
+
+/// A source bitmap of `blt` and `stretch_blt` of RGSS3, `None` when it is disposed, with the
+/// message of the original for anything that is no `Bitmap`.
+fn source_arg_rgss3(ruby: &Ruby, value: VALUE) -> Result<Option<BitmapId>, Raise> {
+    Ok(converted_arg::<BitmapData>(ruby, value)?.get().id)
+}
+
+/// `blt` of RGSS3: four or five arguments, with the messages of the original.
+fn blt_rgss3(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let _span = Span::enter(Part::Bitmap);
+    rb::check_count_rgss3(ruby, args, 4, 5)?;
+    let id = id_arg(ruby, recv)?;
+    let x = rb::int(ruby, args[0])?;
+    let y = rb::int(ruby, args[1])?;
+    let source = source_arg_rgss3(ruby, args[2])?;
+    let source_rect = rect_arg_rgss3(ruby, args[3])?;
+    let opacity = opacity_arg(ruby, args.get(4))?;
+    operate(ruby, |guest| {
+        Ok(guest.bitmaps.blt(id, x, y, source, source_rect, opacity)?)
+    })?;
+    Ok(ffi::Qnil)
+}
+
+/// `stretch_blt` of RGSS3: three or four arguments, with the messages of the original.
+fn stretch_blt_rgss3(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let _span = Span::enter(Part::Bitmap);
+    rb::check_count_rgss3(ruby, args, 3, 4)?;
+    let id = id_arg(ruby, recv)?;
+    let dest_rect = rect_arg_rgss3(ruby, args[0])?;
+    let source = source_arg_rgss3(ruby, args[1])?;
+    let source_rect = rect_arg_rgss3(ruby, args[2])?;
+    let opacity = opacity_arg(ruby, args.get(3))?;
+    operate(ruby, |guest| {
+        Ok(guest
+            .bitmaps
+            .stretch_blt(id, dest_rect, source, source_rect, opacity)?)
+    })?;
+    Ok(ffi::Qnil)
+}
+
+/// `fill_rect` of RGSS3: a `Rect` and a `Color`, or five arguments; every other call is a
+/// wrong count that expects five, as measured.
+fn fill_rect_rgss3(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let _span = Span::enter(Part::Bitmap);
+    let id = id_arg(ruby, recv)?;
+    let (rect, color) = match args {
+        [rect, color]
+            if is_rect(ruby, *rect) && wrap::find::<Owned<Color>>(ruby, *color).is_some() =>
+        {
+            (rect_arg(ruby, *rect)?, color_arg(ruby, *color)?)
+        }
+        [x, y, width, height, color] => (
+            rect_of(ruby, &[*x, *y, *width, *height])?,
+            gradient_color_arg(ruby, *color)?,
+        ),
+        _ => {
+            return Err(Raise::new(
+                rb::arg_error(ruby),
+                format!("wrong number of arguments (5 for {})", args.len()),
+            ));
+        }
+    };
+    operate(ruby, |guest| {
+        Ok(guest.bitmaps.fill_rect(id, rect, color)?)
+    })?;
+    Ok(ffi::Qnil)
+}
+
+/// `set_pixel` of RGSS3, with the message of the original for a colour of another class.
+fn set_pixel_rgss3(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let _span = Span::enter(Part::Bitmap);
+    let id = id_arg(ruby, recv)?;
+    let x = rb::int(ruby, args[0])?;
+    let y = rb::int(ruby, args[1])?;
+    let color = gradient_color_arg(ruby, args[2])?;
+    operate(ruby, |guest| {
+        Ok(guest.bitmaps.set_pixel(id, x, y, color)?)
+    })?;
+    Ok(ffi::Qnil)
+}
+
+/// `clear_rect` of RGSS3: a `Rect`, or four integers.
+fn clear_rect_rgss3(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let _span = Span::enter(Part::Bitmap);
+    let id = id_arg(ruby, recv)?;
+    let (rect, _) = rect_form_rgss3(ruby, args, (1, 1), (4, 4))?;
+    operate(ruby, |guest| Ok(guest.bitmaps.clear_rect(id, rect)?))?;
+    Ok(ffi::Qnil)
+}
+
+/// `gradient_fill_rect` of RGSS3: a `Rect` and two colours, or four integers and two
+/// colours, each with the flag; with seven arguments the gradient is vertical whatever the
+/// seventh is, as in RGSS2.
+fn gradient_fill_rect_rgss3(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let _span = Span::enter(Part::Bitmap);
+    let id = id_arg(ruby, recv)?;
+    let (rect, rest) = rect_form_rgss3(ruby, args, (3, 4), (6, 7))?;
+    let vertical = if args.len() == 7 {
+        true
+    } else {
+        rest.get(2).is_some_and(|&flag| rb::truthy(flag))
+    };
+    let from = gradient_color_arg(ruby, rest[0])?;
+    let to = gradient_color_arg(ruby, rest[1])?;
+    operate(ruby, |guest| {
+        Ok(guest
+            .bitmaps
+            .gradient_fill_rect(id, rect, from, to, vertical)?)
+    })?;
+    Ok(ffi::Qnil)
+}
+
+/// Defines `Bitmap` as a game of `runtime` has it; RGSS3 has a definition of its own
+/// ([`define_rgss3`]).
 pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
     let class = wrap::define_class::<BitmapData>(ruby, c"Bitmap")?;
+    if runtime == Runtime::Rgss3 {
+        define_rgss3(ruby, class)?;
+        return Ok(class);
+    }
     rb::method(ruby, class, c"initialize_copy", 1, initialize_copy)?;
     rb::method(ruby, class, c"dispose", 0, dispose)?;
     rb::method(ruby, class, c"disposed?", 0, disposed)?;
@@ -593,4 +851,37 @@ pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
         rb::method(ruby, class, c"radial_blur", 2, radial_blur)?;
     }
     Ok(class)
+}
+
+/// Defines `Bitmap` of RGSS3: the methods of RGSS2, with functions of their own for
+/// creation, `font=`, text and the methods whose arguments the original checks otherwise.
+fn define_rgss3(ruby: &Ruby, class: VALUE) -> Result<(), Raised> {
+    rb::method(ruby, class, c"initialize", -1, initialize_rgss3)?;
+    rb::method(ruby, class, c"initialize_copy", 1, initialize_copy)?;
+    rb::method(ruby, class, c"dispose", 0, dispose)?;
+    rb::method(ruby, class, c"disposed?", 0, disposed)?;
+    rb::method(ruby, class, c"width", 0, width)?;
+    rb::method(ruby, class, c"height", 0, height)?;
+    rb::method(ruby, class, c"rect", 0, rect)?;
+    rb::method(ruby, class, c"blt", -1, blt_rgss3)?;
+    rb::method(ruby, class, c"stretch_blt", -1, stretch_blt_rgss3)?;
+    rb::method(ruby, class, c"fill_rect", -1, fill_rect_rgss3)?;
+    rb::method(ruby, class, c"clear", 0, clear)?;
+    rb::method(ruby, class, c"get_pixel", 2, get_pixel)?;
+    rb::method(ruby, class, c"set_pixel", 3, set_pixel_rgss3)?;
+    rb::method(ruby, class, c"hue_change", 1, hue_change)?;
+    rb::method(ruby, class, c"font", 0, font)?;
+    rb::method(ruby, class, c"font=", 1, set_font_rgss3)?;
+    rb::method(ruby, class, c"draw_text", -1, draw_text_rgss3)?;
+    rb::method(ruby, class, c"text_size", 1, text_size_rgss3)?;
+    rb::method(ruby, class, c"clear_rect", -1, clear_rect_rgss3)?;
+    rb::method(
+        ruby,
+        class,
+        c"gradient_fill_rect",
+        -1,
+        gradient_fill_rect_rgss3,
+    )?;
+    rb::method(ruby, class, c"blur", 0, blur)?;
+    rb::method(ruby, class, c"radial_blur", 2, radial_blur)
 }
