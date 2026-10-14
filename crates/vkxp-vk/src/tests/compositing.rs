@@ -6,8 +6,8 @@
 
 use vkxp_compose_ref::fixtures::{self, bitmap, sprite};
 use vkxp_proto::{
-    AudioChannel, AudioCommand, BitmapDelta, BitmapId, Color, FramePacket, FrameRate, GuestToHost,
-    Op, Rect, Size, TransitionRule,
+    AudioChannel, AudioCommand, BitmapDelta, BitmapId, Color, FramePacket, FrameRate, FreezeRule,
+    GuestToHost, Op, Rect, Size, TransitionRule,
 };
 
 use super::differential::{Pair, assert_stream_matches};
@@ -312,7 +312,9 @@ fn invalid_logical_size_is_rejected_before_the_deltas_are_applied() {
 #[test]
 fn non_frame_messages_are_ignored_as_in_the_reference() {
     let others = [
-        GuestToHost::Freeze,
+        GuestToHost::Freeze {
+            rule: FreezeRule::Frame,
+        },
         GuestToHost::Transition {
             duration: 20,
             mask: Some(ID),

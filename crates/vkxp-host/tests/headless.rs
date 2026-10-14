@@ -17,8 +17,8 @@ use vkxp_host::{
 };
 use vkxp_proto::link::{Disconnected, GuestEnd};
 use vkxp_proto::{
-    BitmapDelta, BitmapId, BlendMode, Button, Color, GuestToHost, HostToGuest, InputSnapshot, Op,
-    Quad, Rect, Sampling, Size, Tone, TransitionRule,
+    BitmapDelta, BitmapId, BlendMode, Button, Color, FreezeRule, GuestToHost, HostToGuest,
+    InputSnapshot, Op, Quad, Rect, Sampling, Size, Tone, TransitionRule,
 };
 use vkxp_vk::DeviceChoice;
 
@@ -164,7 +164,7 @@ fn dumped_frames_equal_the_reference_compositor() {
             .filter(|message| matches!(message, GuestToHost::Frame(_)))
             .count()
     };
-    let held = frames_before(|message| matches!(message, GuestToHost::Freeze)) - 1;
+    let held = frames_before(|message| matches!(message, GuestToHost::Freeze { .. })) - 1;
     let first = frames_before(|message| matches!(message, GuestToHost::Transition { .. }));
     assert!(
         held < first && first < 12,
@@ -271,7 +271,15 @@ fn transition_of_rgss2(duration: u32) -> GuestToHost {
 /// Scenario "Cross-fade, measured on the original runtime of VX".
 #[test]
 fn transition_of_rgss2_shows_the_steps_one_to_its_duration() {
-    let levels = dumped_levels(vec![GuestToHost::Freeze, transition_of_rgss2(4)], 5);
+    let levels = dumped_levels(
+        vec![
+            GuestToHost::Freeze {
+                rule: FreezeRule::Frame,
+            },
+            transition_of_rgss2(4),
+        ],
+        5,
+    );
     // The black frames are at steps 1 to 4 of 4, with the weights 63, 127 and 191 and then
     // alone; the held frame is not shown again.
     assert_eq!(levels, [255, 192, 128, 64, 0, 0]);
@@ -280,14 +288,30 @@ fn transition_of_rgss2_shows_the_steps_one_to_its_duration() {
 /// Scenario "The same frames under the rule of RGSS1".
 #[test]
 fn the_same_transition_of_rgss1_shows_the_held_frame_first() {
-    let levels = dumped_levels(vec![GuestToHost::Freeze, transition(4)], 5);
+    let levels = dumped_levels(
+        vec![
+            GuestToHost::Freeze {
+                rule: FreezeRule::Frame,
+            },
+            transition(4),
+        ],
+        5,
+    );
     assert_eq!(levels, [255, 255, 192, 128, 64, 0]);
 }
 
 /// Scenario "Duration one".
 #[test]
 fn transition_of_rgss2_of_duration_one_shows_its_frame_alone() {
-    let levels = dumped_levels(vec![GuestToHost::Freeze, transition_of_rgss2(1)], 2);
+    let levels = dumped_levels(
+        vec![
+            GuestToHost::Freeze {
+                rule: FreezeRule::Frame,
+            },
+            transition_of_rgss2(1),
+        ],
+        2,
+    );
     assert_eq!(levels, [255, 0, 0]);
 }
 
@@ -389,7 +413,10 @@ fn masked_transitions_of_rgss2_show_the_measured_values() {
         for (duration, vague) in shown {
             show(ramp_frame(index, 255, (index == 0).then_some(mask)));
             index += 1;
-            link.send(GuestToHost::Freeze).unwrap();
+            link.send(GuestToHost::Freeze {
+                rule: FreezeRule::Frame,
+            })
+            .unwrap();
             link.send(GuestToHost::Transition {
                 duration,
                 mask: Some(mask),
@@ -453,18 +480,40 @@ fn held_frame_keeps_the_brightness_it_was_composed_with() {
         unreachable!("a grey frame is a frame");
     };
     first.brightness = 100;
-    let levels = dumped_levels_after(GuestToHost::Frame(first), vec![GuestToHost::Freeze], 3);
+    let levels = dumped_levels_after(
+        GuestToHost::Frame(first),
+        vec![GuestToHost::Freeze {
+            rule: FreezeRule::Frame,
+        }],
+        3,
+    );
     assert_eq!(levels, [78, 78, 78, 78]);
 }
 
 #[test]
 fn dump_of_a_frame_under_a_freeze_is_the_held_frame() {
-    assert_eq!(dumped_levels(vec![GuestToHost::Freeze], 2), [255, 255, 255]);
+    assert_eq!(
+        dumped_levels(
+            vec![GuestToHost::Freeze {
+                rule: FreezeRule::Frame
+            }],
+            2
+        ),
+        [255, 255, 255]
+    );
 }
 
 #[test]
 fn dump_in_the_middle_of_a_transition_is_the_mix() {
-    let levels = dumped_levels(vec![GuestToHost::Freeze, transition(4)], 6);
+    let levels = dumped_levels(
+        vec![
+            GuestToHost::Freeze {
+                rule: FreezeRule::Frame,
+            },
+            transition(4),
+        ],
+        6,
+    );
     // The black frames of the transition are at steps 0 to 3 of 4, with the weights 0, 63,
     // 127 and 191: white keeps `(255 * (256 - weight)) >> 8`.
     assert_eq!(levels, [255, 255, 192, 128, 64, 0, 0]);
@@ -478,7 +527,15 @@ fn dump_under_a_transition_without_a_freeze_is_the_frame_that_was_on_screen() {
 
 #[test]
 fn dump_after_a_transition_of_duration_zero_is_the_newest_frame() {
-    let levels = dumped_levels(vec![GuestToHost::Freeze, transition(0)], 2);
+    let levels = dumped_levels(
+        vec![
+            GuestToHost::Freeze {
+                rule: FreezeRule::Frame,
+            },
+            transition(0),
+        ],
+        2,
+    );
     assert_eq!(levels, [255, 0, 0]);
 }
 
@@ -1117,4 +1174,61 @@ fn a_load_that_fails_is_reported_and_the_run_goes_on() {
     let report = result.unwrap();
     assert_eq!((report.end, report.frames), (HeadlessEnd::Shutdown, 4));
     assert_eq!(errors.severities("slot 3 holds no state"), [Severity::Info]);
+}
+
+/// Scenario "Dump across a resize, measured on the original of RGSS3": a frame of 544 by
+/// 416 frozen by the buffer rule, and a transition of RGSS2 over four frames of 640 by 480.
+#[test]
+fn a_freeze_of_the_buffer_rule_is_dumped_across_a_resize() {
+    let grey = |frame_index: u64, size: Size, level: u8| {
+        let GuestToHost::Frame(mut packet) = grey_frame(frame_index, level) else {
+            unreachable!("a grey frame is a frame");
+        };
+        packet.logical_size = size;
+        packet.ops = vec![Op::Clear {
+            clip: Rect::from_size(size),
+            color: Color::new(level, level, level, 255),
+        }];
+        GuestToHost::Frame(packet)
+    };
+    let directory = tempfile::tempdir().unwrap();
+    let path = |index: u64| directory.path().join(format!("frame-{index}.png"));
+    let guest = move |link: GuestEnd| {
+        let show = |message| {
+            link.send(message).unwrap();
+            assert_eq!(link.recv(), Ok(HostToGuest::Tick));
+        };
+        show(grey(0, Size::new(544, 416), 200));
+        let rule = FreezeRule::Buffer;
+        link.send(GuestToHost::Freeze { rule }).unwrap();
+        link.send(transition_of_rgss2(4)).unwrap();
+        for index in 1..=4 {
+            show(grey(index, Size::new(640, 480), 100));
+        }
+        link.send(GuestToHost::Shutdown).unwrap();
+    };
+    let errors = ErrorBuffer::new();
+    let (result, ()) = run_with(
+        HeadlessOptions {
+            dumps: (1..=4).map(|index| (index, path(index))).collect(),
+            errors: Box::new(errors.clone()),
+            ..options()
+        },
+        guest,
+    );
+    assert_eq!(result.unwrap().frames, 5);
+    assert_eq!(errors.text(), "");
+    for (index, (inside, outside)) in (1..).zip([(175, 24), (150, 49), (125, 74), (100, 100)]) {
+        let (size, rgba) = read_png(&path(index));
+        assert_eq!(size, Size::new(640, 480), "dump {index}");
+        for (at, pixel) in rgba.as_chunks::<4>().0.iter().enumerate() {
+            let (x, y) = (at % 640, at / 640);
+            let level = if x < 544 && y < 416 { inside } else { outside };
+            assert_eq!(
+                *pixel,
+                [level, level, level, 255],
+                "dump {index} at ({x}, {y})"
+            );
+        }
+    }
 }

@@ -23,7 +23,7 @@ use crate::{GuestToHost, HostToGuest, InputSnapshot};
 pub const MAGIC: [u8; 4] = *b"VKXP";
 
 /// Version of the message types and their encoding. Any change to either increments it.
-pub const PROTOCOL_VERSION: u16 = 13;
+pub const PROTOCOL_VERSION: u16 = 14;
 
 /// Length of the stream header in bytes.
 pub const HEADER_LEN: usize = 7;
@@ -155,7 +155,8 @@ pub fn decode_stream<T: Message>(bytes: &[u8]) -> Result<Vec<T>, DecodeError> {
 mod tests {
     use super::*;
     use crate::{
-        AudioChannel, AudioCommand, BitmapId, Button, FramePacket, FrameRate, Size, TransitionRule,
+        AudioChannel, AudioCommand, BitmapId, Button, FramePacket, FrameRate, FreezeRule, Size,
+        TransitionRule,
     };
 
     fn sample() -> Vec<GuestToHost> {
@@ -233,10 +234,22 @@ mod tests {
         );
     }
 
+    /// Scenario "Rule travels with the message".
+    #[test]
+    fn a_freeze_message_keeps_its_rule() {
+        let messages: Vec<GuestToHost> = [FreezeRule::Frame, FreezeRule::Buffer]
+            .map(|rule| GuestToHost::Freeze { rule })
+            .into();
+        assert_ne!(messages[0], messages[1]);
+        let bytes = encode_stream(&messages).unwrap();
+        assert_eq!(decode_stream::<GuestToHost>(&bytes), Ok(messages));
+    }
+
+    /// Scenario "Version".
     #[test]
     fn older_streams_are_rejected_naming_both_versions() {
-        assert_eq!(PROTOCOL_VERSION, 13);
-        for found in [1u16, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] {
+        assert_eq!(PROTOCOL_VERSION, 14);
+        for found in [1u16, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] {
             let mut bytes = encode_stream(&sample()).unwrap();
             bytes[4..6].copy_from_slice(&found.to_le_bytes());
 
@@ -245,12 +258,12 @@ mod tests {
                 error,
                 DecodeError::UnsupportedVersion {
                     found,
-                    supported: 13,
+                    supported: 14,
                 }
             );
             assert_eq!(
                 error.to_string(),
-                format!("unsupported protocol version: found {found}, supported 13")
+                format!("unsupported protocol version: found {found}, supported 14")
             );
         }
     }
@@ -561,7 +574,9 @@ mod tests {
     fn every_kind_of_message_round_trips() {
         let guest = vec![
             packet_at(3, FrameRate::DEFAULT),
-            GuestToHost::Freeze,
+            GuestToHost::Freeze {
+                rule: FreezeRule::Frame,
+            },
             GuestToHost::Transition {
                 duration: 20,
                 mask: Some(BitmapId::new(4, 1)),
@@ -609,7 +624,7 @@ mod tests {
         for message in &guest {
             match message {
                 GuestToHost::Frame(_)
-                | GuestToHost::Freeze
+                | GuestToHost::Freeze { .. }
                 | GuestToHost::Transition { .. }
                 | GuestToHost::Audio(_)
                 | GuestToHost::Modal { .. }

@@ -320,8 +320,14 @@ Where each of the six measured differences goes:
   stays mapped to `Rules::Rgss2` there until the binding of RGSS3 (see "Follow-ups").
 - `snap_to_bitmap` no longer names `Compositor`, so the `use` line of
   `crates/vkxp-binding/src/graphics.rs` that imported it imports the rule of the snapshot
-  function instead: one line outside the body of the function, which the build needs
-  (an unused import is an error of the gate).
+  function instead, and the `use` line of `vkxp_proto` there names `FreezeRule` for the
+  literal in `freeze`: two lines outside the two places named above, which the build needs
+  (an unused import is an error of the gate). The tests of the binding that hold a literal
+  of the freeze message import `FreezeRule` likewise.
+- The test of `vkxp_proto::codec` that states the protocol version and lists the versions
+  that are refused states 14 and lists 13 too, as after every step of the version.
+- `RecordingDisplay` of `vkxp-host` keeps the rules of its holds in a list of their own
+  (`holds`), so that the events the existing tests compare stay as they are.
 - Presenter: a hold in the middle of a cross-fade writes the mix as it is shown at the
   logical size of the newest frame, which the existing off-screen capture gives. After a
   state was loaded the buffer keeps its texels; the freeze has ended, as today.

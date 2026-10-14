@@ -670,7 +670,7 @@ mod tests {
     use std::process::Stdio;
 
     use vkxp_host::{HostLink, headless_link};
-    use vkxp_proto::InputSnapshot;
+    use vkxp_proto::{FreezeRule, InputSnapshot};
 
     use super::*;
 
@@ -705,9 +705,18 @@ mod tests {
         let mut process = idle();
         let (host, guest, relay) = relaying(dir.path(), &process);
 
-        guest.send(GuestToHost::Freeze).unwrap();
+        guest
+            .send(GuestToHost::Freeze {
+                rule: FreezeRule::Frame,
+            })
+            .unwrap();
         guest.send(GuestToHost::FrameReset).unwrap();
-        assert_eq!(host.recv(), Ok(GuestToHost::Freeze));
+        assert_eq!(
+            host.recv(),
+            Ok(GuestToHost::Freeze {
+                rule: FreezeRule::Frame
+            })
+        );
         assert_eq!(host.recv(), Ok(GuestToHost::FrameReset));
         host.send(HostToGuest::Input(InputSnapshot::EMPTY)).unwrap();
         host.send(HostToGuest::Tick).unwrap();
@@ -842,12 +851,23 @@ mod tests {
         hello::write(&mut written, VERSION).unwrap();
         written.extend(attachment(7));
         // What a guest sends after it has attached is not taken with them.
-        write_message(&mut written, &GuestToHost::Freeze).unwrap();
+        write_message(
+            &mut written,
+            &GuestToHost::Freeze {
+                rule: FreezeRule::Frame,
+            },
+        )
+        .unwrap();
         guest.write_all(&written).unwrap();
         let (attached, parked) = attached(program).unwrap_or_else(|error| panic!("{error:#}"));
         assert_eq!((attached.pid, parked), (7, None));
         let next = read_message::<GuestToHost>(&mut &attached.stream).unwrap();
-        assert_eq!(next, Some(GuestToHost::Freeze));
+        assert_eq!(
+            next,
+            Some(GuestToHost::Freeze {
+                rule: FreezeRule::Frame
+            })
+        );
     }
 
     /// Scenario "XP and VX".
@@ -939,14 +959,32 @@ mod tests {
         host.send(HostToGuest::SaveState { slot: 3 }).unwrap();
         assert_eq!(guest.recv(), Ok(HostToGuest::SaveState { slot: 3 }));
         let old = park(dir.path(), &replaced, 3);
-        guest.send(GuestToHost::Freeze).unwrap();
+        guest
+            .send(GuestToHost::Freeze {
+                rule: FreezeRule::Frame,
+            })
+            .unwrap();
         assert_eq!(host.recv(), Ok(GuestToHost::StateSaved { slot: 3 }));
-        assert_eq!(host.recv(), Ok(GuestToHost::Freeze));
+        assert_eq!(
+            host.recv(),
+            Ok(GuestToHost::Freeze {
+                rule: FreezeRule::Frame
+            })
+        );
         // A second copy takes the slot, and the connection of the first ends.
         let parked = park(dir.path(), &copy, 3);
-        guest.send(GuestToHost::Freeze).unwrap();
+        guest
+            .send(GuestToHost::Freeze {
+                rule: FreezeRule::Frame,
+            })
+            .unwrap();
         assert_eq!(host.recv(), Ok(GuestToHost::StateSaved { slot: 3 }));
-        assert_eq!(host.recv(), Ok(GuestToHost::Freeze));
+        assert_eq!(
+            host.recv(),
+            Ok(GuestToHost::Freeze {
+                rule: FreezeRule::Frame
+            })
+        );
         assert_eq!(read_message::<HostToGuest>(&mut &old).unwrap(), None);
 
         // Loading ends the running guest and resumes the copy, which is the guest now.

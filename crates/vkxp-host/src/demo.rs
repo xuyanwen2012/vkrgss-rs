@@ -14,9 +14,9 @@
 
 use vkxp_proto::link::{Disconnected, GuestEnd};
 use vkxp_proto::{
-    BitmapDelta, BitmapId, BlendMode, Button, Color, FramePacket, FrameRate, GuestToHost,
-    HostToGuest, InputSnapshot, Op, Quad, Rect, RectEffect, Sampling, Size, Tone, Transform,
-    TransitionRule,
+    BitmapDelta, BitmapId, BlendMode, Button, Color, FramePacket, FrameRate, FreezeRule,
+    GuestToHost, HostToGuest, InputSnapshot, Op, Quad, Rect, RectEffect, Sampling, Size, Tone,
+    Transform, TransitionRule,
 };
 
 /// The window title the demo sets.
@@ -144,7 +144,9 @@ pub fn run(link: &GuestEnd, options: DemoOptions) -> Result<(), Disconnected> {
             size.height,
         );
         if input.is_down(Button::B) && !previous.is_down(Button::B) {
-            link.send(GuestToHost::Freeze)?;
+            link.send(GuestToHost::Freeze {
+                rule: FreezeRule::Frame,
+            })?;
             state.swapped = !state.swapped;
             link.send(GuestToHost::Transition {
                 duration: TRANSITION_FRAMES,

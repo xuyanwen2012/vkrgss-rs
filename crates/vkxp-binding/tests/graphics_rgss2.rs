@@ -6,7 +6,7 @@ mod scene_support;
 
 use vkxp_binding::testing;
 use vkxp_binding::testing::host::{self, Record, Script};
-use vkxp_proto::{BitmapDelta, GuestToHost, Rect, Size, TransitionRule};
+use vkxp_proto::{BitmapDelta, FreezeRule, GuestToHost, Rect, Size, TransitionRule};
 use vkxp_vfs::Runtime;
 
 /// The value of a snippet, or its exception as `Class: message`, and what the host saw. The
@@ -139,7 +139,12 @@ fn freeze_and_the_default_transition() {
     let (value, record) = eval("Graphics.freeze; Graphics.transition");
     assert_eq!(value, "nil");
     assert_eq!(record.received.len(), 12);
-    assert_eq!(record.received[0], GuestToHost::Freeze);
+    assert_eq!(
+        record.received[0],
+        GuestToHost::Freeze {
+            rule: FreezeRule::Frame
+        }
+    );
     assert_eq!(
         record.received[1],
         GuestToHost::Transition {
@@ -192,7 +197,9 @@ fn a_transition_after_a_freeze_sets_the_brightness_to_255() {
     assert_eq!(
         record.received[1..],
         [
-            GuestToHost::Freeze,
+            GuestToHost::Freeze {
+                rule: FreezeRule::Frame
+            },
             GuestToHost::Transition {
                 duration: 0,
                 mask: None,

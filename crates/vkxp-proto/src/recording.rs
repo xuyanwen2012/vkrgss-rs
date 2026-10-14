@@ -45,7 +45,7 @@ mod tests {
 
     use super::*;
     use crate::codec::PROTOCOL_VERSION;
-    use crate::{Button, GuestToHost};
+    use crate::{Button, FreezeRule, GuestToHost};
 
     /// A walk right, a confirm press held for three frames, then nothing.
     fn session() -> Vec<InputSnapshot> {
@@ -93,7 +93,10 @@ mod tests {
 
     #[test]
     fn message_stream_is_not_a_recording() {
-        let bytes = codec::encode_stream(&[GuestToHost::Freeze]).unwrap();
+        let bytes = codec::encode_stream(&[GuestToHost::Freeze {
+            rule: FreezeRule::Frame,
+        }])
+        .unwrap();
         assert!(matches!(
             read_recording(bytes.as_slice()),
             Err(RecordingError::Decode(DecodeError::WrongStreamKind { .. }))

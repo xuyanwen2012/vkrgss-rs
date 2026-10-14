@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use thiserror::Error;
 use vkxp_proto::link::{GuestEnd, HostEnd, link};
-use vkxp_proto::{BitmapId, FramePacket, FrameRate, Size};
+use vkxp_proto::{BitmapId, FramePacket, FrameRate, FreezeRule, Size};
 use vkxp_vk::{
     DeviceChoice, Filter, FrameTiming, IntervalSummary, Mix, STATS_INTERVALS, VkCompositor, VkError,
 };
@@ -276,8 +276,8 @@ impl Display for VulkanDisplay {
         Ok(())
     }
 
-    fn hold(&mut self) -> Result<(), VkError> {
-        self.compositor.freeze()
+    fn hold(&mut self, rule: FreezeRule) -> Result<(), VkError> {
+        self.compositor.freeze_by(rule)
     }
 
     fn set_frame_rate(&mut self, rate: FrameRate) {

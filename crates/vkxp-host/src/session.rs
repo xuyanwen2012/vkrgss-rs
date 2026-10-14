@@ -5,8 +5,8 @@ use std::time::{Duration, Instant};
 
 use vkxp_proto::link::HostEnd;
 use vkxp_proto::{
-    AudioChannel, AudioCommand, BitmapId, Button, FramePacket, GuestToHost, HostToGuest,
-    InputSnapshot, Size, TransitionRule,
+    AudioChannel, AudioCommand, BitmapId, Button, FramePacket, FreezeRule, GuestToHost,
+    HostToGuest, InputSnapshot, Size, TransitionRule,
 };
 use vkxp_vk::Mix;
 use winit::event::MouseButton;
@@ -427,7 +427,7 @@ impl<D: Display, C: Clock> Session<D, C> {
         }
         match message {
             GuestToHost::Frame(packet) => self.frame(&packet),
-            GuestToHost::Freeze => self.freeze(),
+            GuestToHost::Freeze { rule } => self.freeze(rule),
             GuestToHost::Transition {
                 duration,
                 mask,
@@ -1093,13 +1093,15 @@ impl<D: Display, C: Clock> Session<D, C> {
         }
     }
 
-    fn freeze(&mut self) {
+    /// Freezes the display by the rule the guest names, as it names the rule of a
+    /// transition.
+    fn freeze(&mut self, rule: FreezeRule) {
         if self.fade == Fade::Frozen {
             // Already showing a held frame; that one stays.
             return;
         }
         // In the middle of a cross-fade this captures the mixed image on screen.
-        if let Err(error) = self.display.hold() {
+        if let Err(error) = self.display.hold(rule) {
             self.report(
                 Severity::Error,
                 format_args!("cannot freeze the display: {error}"),
@@ -1115,7 +1117,7 @@ impl<D: Display, C: Clock> Session<D, C> {
             Fade::Normal if duration == 0 => {}
             // Nothing is frozen: the picture on screen stays for the transition's frames.
             Fade::Normal => {
-                if let Err(error) = self.display.hold() {
+                if let Err(error) = self.display.hold(FreezeRule::Frame) {
                     self.report(
                         Severity::Error,
                         format_args!("cannot freeze the display: {error}"),

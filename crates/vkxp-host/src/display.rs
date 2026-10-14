@@ -1,6 +1,6 @@
 //! What a session asks of whatever shows its frames.
 
-use vkxp_proto::{BitmapId, FramePacket, FrameRate};
+use vkxp_proto::{BitmapId, FramePacket, FrameRate, FreezeRule};
 use vkxp_vk::{FrameTiming, Mix};
 
 /// The surface a session draws on: a window, an off-screen target, or a recording fake.
@@ -24,7 +24,11 @@ pub trait Display {
     /// Captures what the display shows in its current state, the mix of the held and the
     /// newest frame, as the held frame. Outside a transition that is the newest frame; in the
     /// middle of a cross-fade it is the mixed image on screen.
-    fn hold(&mut self) -> Result<(), Self::Error>;
+    ///
+    /// `rule` says how the picture is kept: as a frame of its own size, or, for RGSS3, in
+    /// the top left corner of one buffer of 640 by 480 pixels that keeps its other pixels
+    /// and whose pixel (x, y) is mixed with pixel (x, y) of the newest frame.
+    fn hold(&mut self, rule: FreezeRule) -> Result<(), Self::Error>;
 
     /// Sets the mix. It applies from the next time something is shown.
     fn set_mix(&mut self, mix: Mix);

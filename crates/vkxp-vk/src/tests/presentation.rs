@@ -4,7 +4,7 @@
 use ash::vk;
 use vkxp_compose_ref as reference;
 use vkxp_compose_ref::fixtures::{self, bitmap, sprite};
-use vkxp_proto::{BitmapId, Color, FramePacket, FrameRate, Op, Rect, Size};
+use vkxp_proto::{BitmapId, Color, FramePacket, FrameRate, FreezeRule, Op, Rect, Size};
 
 use super::harness::{TestCompositor, assert_clean, require_isolation, test_device};
 use crate::{
@@ -1690,4 +1690,177 @@ fn device_without_present_timing_presents_as_before_and_measures_by_its_own_cloc
     assert_clean(&log, "while presenting without present timing");
     drop(compositor);
     assert_clean(&log, "while the compositor was dropped");
+}
+
+// The frozen picture in the buffer of RGSS3.
+
+const SMALL: Size = Size::new(544, 416);
+const LARGE: Size = Size::new(640, 480);
+
+/// A frame of one grey level.
+fn level(size: Size, level: u8) -> FramePacket {
+    flat(size, [level, level, level, 255])
+}
+
+/// Asserts that what a window of the size of `size` shows has `inside` where x is below
+/// 544 and y below 416, and `outside` elsewhere.
+fn assert_corner(compositor: &mut VkCompositor, size: Size, inside: u8, outside: u8, what: &str) {
+    let shown = compositor.scale_frame(size).unwrap();
+    assert_eq!(shown.size, size);
+    for (index, found) in shown.rgba.as_chunks::<4>().0.iter().enumerate() {
+        let (x, y) = (index as u32 % size.width, index as u32 / size.width);
+        let expected = if x < 544 && y < 416 { inside } else { outside };
+        assert_eq!(
+            *found,
+            [expected, expected, expected, 255],
+            "{what} at ({x}, {y})"
+        );
+    }
+}
+
+/// Scenarios "Larger screen from a fresh buffer, measured on the original" and "Held
+/// picture alone and newest frame alone".
+#[test]
+fn the_buffer_of_rgss3_keeps_a_frozen_frame_in_its_corner_over_black() {
+    let mut compositor = TestCompositor::new();
+    compositor.render(&level(SMALL, 200)).unwrap();
+    compositor.freeze_by(FreezeRule::Buffer).unwrap();
+    compositor.render(&level(LARGE, 100)).unwrap();
+    compositor.set_mix(fade(127));
+    assert_corner(&mut compositor, LARGE, 150, 49, "mixed");
+    compositor.set_mix(Mix::HELD);
+    assert_corner(&mut compositor, LARGE, 200, 0, "held alone");
+    compositor.set_mix(Mix::Newest);
+    assert_corner(&mut compositor, LARGE, 100, 100, "newest alone");
+}
+
+/// Scenario "The rest of the buffer stays, measured on the original".
+#[test]
+fn a_freeze_into_the_buffer_of_rgss3_leaves_the_rest_of_it() {
+    let mut compositor = TestCompositor::new();
+    compositor.render(&level(LARGE, 60)).unwrap();
+    compositor.freeze_by(FreezeRule::Buffer).unwrap();
+    compositor.render(&level(SMALL, 200)).unwrap();
+    compositor.freeze_by(FreezeRule::Buffer).unwrap();
+    compositor.render(&level(LARGE, 100)).unwrap();
+    compositor.set_mix(fade(127));
+    assert_corner(&mut compositor, LARGE, 150, 79, "mixed");
+}
+
+/// Scenario "Smaller screen, measured on the original".
+#[test]
+fn a_smaller_frame_is_mixed_with_the_corner_of_the_buffer_of_rgss3() {
+    let mut compositor = TestCompositor::new();
+    let mut first = level(LARGE, 60);
+    first.ops.push(Op::Clear {
+        clip: Rect::new(0, 0, 160, 480),
+        color: Color::from_rgba([200, 200, 200, 255]),
+    });
+    compositor.render(&first).unwrap();
+    compositor.freeze_by(FreezeRule::Buffer).unwrap();
+    let small = Size::new(320, 240);
+    compositor.render(&level(small, 100)).unwrap();
+    compositor.set_mix(fade(127));
+    let shown = compositor.scale_frame(small).unwrap();
+    assert_eq!(shown.size, small);
+    assert_all(
+        &shown,
+        Rect::new(0, 0, 160, 240),
+        [150, 150, 150, 255],
+        "left",
+    );
+    assert_all(
+        &shown,
+        Rect::new(160, 0, 160, 240),
+        [79, 79, 79, 255],
+        "right",
+    );
+}
+
+/// Scenario "Shown frames do not enter the buffer, measured on the original".
+#[test]
+fn a_frame_that_is_only_shown_does_not_enter_the_buffer_of_rgss3() {
+    let mut compositor = TestCompositor::new();
+    compositor.render(&level(LARGE, 60)).unwrap();
+    compositor.render(&level(SMALL, 200)).unwrap();
+    compositor.freeze_by(FreezeRule::Buffer).unwrap();
+    compositor.render(&level(LARGE, 100)).unwrap();
+    compositor.set_mix(fade(127));
+    assert_corner(&mut compositor, LARGE, 150, 49, "mixed");
+}
+
+/// Scenario "One size": frames of one size are held and mixed alike by both rules, also by
+/// a freeze in the middle of a cross-fade and under a mask.
+#[test]
+fn frames_of_one_size_are_frozen_alike_by_both_rules() {
+    let shown = |rule: FreezeRule| {
+        let mut compositor = TestCompositor::new();
+        let mut frames = Vec::new();
+        compositor.render(&gradient(SIZE)).unwrap();
+        compositor.freeze_by(rule).unwrap();
+        compositor
+            .render(&halves(SIZE, WHITE, [10, 200, 90, 255]))
+            .unwrap();
+        for mix in [Mix::HELD, fade(1), fade(127), fade(255), Mix::Newest] {
+            compositor.set_mix(mix);
+            frames.push(compositor.scale_frame(SIZE).unwrap());
+            frames.push(compositor.scale_frame(Size::new(40, 36)).unwrap());
+        }
+        // A freeze in the middle of the cross-fade, as a session does it.
+        compositor.set_mix(fade(77));
+        compositor.freeze_by(rule).unwrap();
+        compositor.set_mix(Mix::HELD);
+        compositor.render(&flat(SIZE, [1, 2, 3, 255])).unwrap();
+        frames.push(compositor.scale_frame(SIZE).unwrap());
+        compositor.set_mix(fade(200));
+        frames.push(compositor.scale_frame(SIZE).unwrap());
+        frames
+    };
+    assert_eq!(shown(FreezeRule::Buffer), shown(FreezeRule::Frame));
+}
+
+/// Scenario "A frame larger than the buffer".
+#[test]
+fn a_frame_larger_than_the_buffer_of_rgss3_is_frozen_by_the_frame_rule() {
+    let large = Size::new(800, 600);
+    let shown = |rule: FreezeRule| {
+        let mut compositor = TestCompositor::new();
+        // The buffer holds level 60 in its corner.
+        compositor.render(&level(SMALL, 60)).unwrap();
+        compositor.freeze_by(FreezeRule::Buffer).unwrap();
+        compositor.render(&gradient(large)).unwrap();
+        compositor.set_mix(Mix::Newest);
+        compositor.freeze_by(rule).unwrap();
+        compositor.render(&level(large, 100)).unwrap();
+        compositor.set_mix(fade(127));
+        let mixed = compositor.scale_frame(large).unwrap();
+        // The buffer kept its texels: a freeze of a frame that fits writes its corner only.
+        compositor.render(&level(Size::new(8, 8), 200)).unwrap();
+        compositor.set_mix(Mix::Newest);
+        compositor.freeze_by(FreezeRule::Buffer).unwrap();
+        compositor.render(&level(LARGE, 100)).unwrap();
+        compositor.set_mix(Mix::HELD);
+        (mixed, compositor.scale_frame(LARGE).unwrap())
+    };
+    let (mixed, buffer) = shown(FreezeRule::Buffer);
+    assert_eq!((mixed.clone(), buffer.clone()), shown(FreezeRule::Frame));
+    assert_ne!(
+        pixel(&mixed, 0, 0),
+        pixel(&mixed, 799, 599),
+        "the gradient is held"
+    );
+    assert_eq!(pixel(&buffer, 0, 0), [200, 200, 200, 255]);
+    assert_eq!(pixel(&buffer, 8, 8), [60, 60, 60, 255]);
+    assert_eq!(pixel(&buffer, 543, 415), [60, 60, 60, 255]);
+    assert_eq!(pixel(&buffer, 544, 416), BLACK);
+}
+
+/// Before the first frame a freeze into the buffer of RGSS3 holds black.
+#[test]
+fn a_freeze_into_the_buffer_of_rgss3_before_the_first_frame_holds_black() {
+    let mut compositor = TestCompositor::new();
+    compositor.freeze_by(FreezeRule::Buffer).unwrap();
+    compositor.render(&level(SMALL, 100)).unwrap();
+    compositor.set_mix(Mix::HELD);
+    assert_corner(&mut compositor, SMALL, 0, 0, "held");
 }

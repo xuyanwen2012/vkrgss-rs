@@ -4,8 +4,8 @@
 use vkxp_binding::testing::host::{self, Record, SOUND_BYTES, Script, with_error_stream};
 use vkxp_binding::testing::{self, DOT_PIXELS};
 use vkxp_proto::{
-    AudioChannel, AudioCommand, BitmapDelta, Button, GuestToHost, HostToGuest, InputSnapshot,
-    TransitionRule,
+    AudioChannel, AudioCommand, BitmapDelta, Button, FreezeRule, GuestToHost, HostToGuest,
+    InputSnapshot, TransitionRule,
 };
 
 /// The value of a snippet, or its exception as `Class: message`, and what the host saw.
@@ -124,7 +124,12 @@ fn freeze_and_the_default_transition() {
     let (value, record) = eval("Graphics.freeze; Graphics.transition");
     assert_eq!(value, "nil");
     assert_eq!(record.received.len(), 10);
-    assert_eq!(record.received[0], GuestToHost::Freeze);
+    assert_eq!(
+        record.received[0],
+        GuestToHost::Freeze {
+            rule: FreezeRule::Frame
+        }
+    );
     assert_eq!(
         record.received[1],
         GuestToHost::Transition {

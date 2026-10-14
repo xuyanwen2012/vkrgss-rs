@@ -157,7 +157,7 @@ fn b_pressed_freezes_swaps_the_background_and_starts_a_transition_once() {
         .map(|message| match message {
             GuestToHost::SetTitle { .. } => "title",
             GuestToHost::Frame(_) => "frame",
-            GuestToHost::Freeze => "freeze",
+            GuestToHost::Freeze { .. } => "freeze",
             GuestToHost::Transition { .. } => "transition",
             _ => "other",
         })

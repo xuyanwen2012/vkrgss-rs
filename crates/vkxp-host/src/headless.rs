@@ -16,7 +16,7 @@ use std::sync::mpsc::{Receiver, channel};
 
 use thiserror::Error;
 use vkxp_proto::link::{Disconnected, GuestEnd, HostEnd, link};
-use vkxp_proto::{BitmapId, FramePacket, GuestToHost, HostToGuest, Size};
+use vkxp_proto::{BitmapId, FramePacket, FreezeRule, GuestToHost, HostToGuest, Size};
 use vkxp_vk::{DeviceChoice, Frame, FrameTiming, Mix, VkCompositor, VkError};
 
 use crate::report::ErrorStream;
@@ -204,8 +204,8 @@ impl Display for HeadlessDisplay {
         Ok(())
     }
 
-    fn hold(&mut self) -> Result<(), VkError> {
-        self.compositor.freeze()
+    fn hold(&mut self, rule: FreezeRule) -> Result<(), VkError> {
+        self.compositor.freeze_by(rule)
     }
 
     fn set_mix(&mut self, mix: Mix) {

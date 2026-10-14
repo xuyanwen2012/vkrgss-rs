@@ -6,7 +6,7 @@
 use std::ffi::c_long;
 
 use vkxp_compose_ref::SnapshotRule;
-use vkxp_proto::{BitmapDelta, BitmapId, GuestToHost, Size, TransitionRule};
+use vkxp_proto::{BitmapDelta, BitmapId, FreezeRule, GuestToHost, Size, TransitionRule};
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{HostResult, Raise, Raised, Ruby};
 use vkxp_vfs::{FileKind, Runtime};
@@ -124,7 +124,9 @@ fn set_brightness(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
 fn freeze(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
     Guest::with(|guest| {
         guest.runtime.held = true;
-        guest.send(GuestToHost::Freeze);
+        guest.send(GuestToHost::Freeze {
+            rule: FreezeRule::Frame,
+        });
     });
     Ok(ffi::Qnil)
 }

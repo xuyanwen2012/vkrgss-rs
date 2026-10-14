@@ -7,9 +7,9 @@ use proptest::prelude::*;
 use vkxp_proto::codec::{Message, decode_stream, encode_stream};
 use vkxp_proto::{
     AudioChannel, AudioCommand, BitmapDelta, BitmapId, BlendMode, Color, Fixed, FramePacket,
-    FrameRate, GuestToHost, HostToGuest, InputSnapshot, Op, Plane, PlaneRules, Quad, Rect,
-    RectEffect, Sampling, Size, TableDelta, TableId, TilemapLayer, TilemapPlane, Tone, Transform,
-    TransitionRule,
+    FrameRate, FreezeRule, GuestToHost, HostToGuest, InputSnapshot, Op, Plane, PlaneRules, Quad,
+    Rect, RectEffect, Sampling, Size, TableDelta, TableId, TilemapLayer, TilemapPlane, Tone,
+    Transform, TransitionRule,
 };
 
 fn fixed() -> impl Strategy<Value = Fixed> {
@@ -261,7 +261,8 @@ fn audio_command() -> impl Strategy<Value = AudioCommand> {
 fn guest_to_host() -> impl Strategy<Value = GuestToHost> {
     prop_oneof![
         frame_packet().prop_map(GuestToHost::Frame),
-        Just(GuestToHost::Freeze),
+        prop_oneof![Just(FreezeRule::Frame), Just(FreezeRule::Buffer)]
+            .prop_map(|rule| GuestToHost::Freeze { rule }),
         (
             any::<u32>(),
             option::of(bitmap_id()),

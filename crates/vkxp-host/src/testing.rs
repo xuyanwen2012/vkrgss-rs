@@ -8,7 +8,7 @@ use std::collections::HashSet;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use vkxp_proto::{AudioCommand, BitmapDelta, BitmapId, FramePacket, FrameRate, Op};
+use vkxp_proto::{AudioCommand, BitmapDelta, BitmapId, FramePacket, FrameRate, FreezeRule, Op};
 use vkxp_vk::Mix;
 
 use crate::{AudioSink, Display, ManualClock, Reporter, Severity};
@@ -102,6 +102,8 @@ pub struct RecordingDisplay {
     pub events: Vec<DisplayEvent>,
     /// What it was told about pacing, oldest first. Kept apart from the requests above.
     pub pacing: Vec<PacingEvent>,
+    /// The rule of every [`DisplayEvent::Hold`], oldest first.
+    pub holds: Vec<FreezeRule>,
     newest: Option<u64>,
     held: Shown,
     mix: Mix,
@@ -119,6 +121,7 @@ impl RecordingDisplay {
         RecordingDisplay {
             events: Vec::new(),
             pacing: Vec::new(),
+            holds: Vec::new(),
             newest: None,
             held: Shown::Nothing,
             mix: Mix::Newest,
@@ -224,8 +227,9 @@ impl Display for RecordingDisplay {
         Ok(())
     }
 
-    fn hold(&mut self) -> Result<(), Rejected> {
+    fn hold(&mut self, rule: FreezeRule) -> Result<(), Rejected> {
         self.events.push(DisplayEvent::Hold);
+        self.holds.push(rule);
         self.held = self.compose();
         Ok(())
     }

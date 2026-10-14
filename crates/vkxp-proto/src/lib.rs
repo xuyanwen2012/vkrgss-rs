@@ -11,7 +11,7 @@
 //! numbering of the tiles of a tilemap of RGSS1, which the guest and every backend read
 //! alike, [`tiles_rgss2`] that of RGSS2, and [`tiles_rgss3`] what that of RGSS3 adds to it.
 //!
-//! This is protocol version 13. Over version 1 a [`FramePacket`] carries the guest's
+//! This is protocol version 14. Over version 1 a [`FramePacket`] carries the guest's
 //! [`FrameRate`], a [`Quad`] carries a tone and a colour for its own texels, the messages
 //! [`GuestToHost::FrameReset`] and [`HostToGuest::Reset`] exist, and [`Button`] has F9. Over
 //! version 2 a [`Quad`] states its [`Sampling`]: the affine transform it always had, or a
@@ -30,7 +30,9 @@
 //! [`GuestToHost::Transition`] names the [`TransitionRule`] its frames are stepped by. Over
 //! version 11 the op [`Op::TilemapPlane`] draws a plane of a tilemap of RGSS2, by the tile
 //! numbering of [`tiles_rgss2`]. Over version 12 a [`TilemapPlane`] names its [`PlaneRules`],
-//! those of RGSS2 or of RGSS3. Streams of older versions are rejected.
+//! those of RGSS2 or of RGSS3. Over version 13 [`GuestToHost::Freeze`] names the
+//! [`FreezeRule`] by which the frozen picture is kept: as the frame at its own size, or in the
+//! buffer of RGSS3. Streams of older versions are rejected.
 //!
 //! The binary form encodes enum variants by position, so reordering or removing variants, or
 //! changing fields, requires a new [`codec::PROTOCOL_VERSION`].
@@ -60,5 +62,5 @@ pub use frame::{
     TilemapLayer, TilemapPlane, Transform, stretch_index, stretch_step,
 };
 pub use input::{Button, InputSnapshot};
-pub use message::{GuestToHost, HostToGuest, TransitionRule};
+pub use message::{FreezeRule, GuestToHost, HostToGuest, TransitionRule};
 pub use types::{BitmapId, Color, Rect, Size, TableId, Tone};

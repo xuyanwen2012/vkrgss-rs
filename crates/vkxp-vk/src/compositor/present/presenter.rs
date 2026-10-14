@@ -38,6 +38,14 @@ pub(in crate::compositor) struct Presenter {
     /// the size of the frame it was captured from, which later frames need not share, and
     /// lives until the next capture. Black, at the size of the first frame, until a freeze.
     pub(super) held: Option<GpuImage>,
+    /// The buffer of the frozen picture of RGSS3: 640 by 480 texels, in the
+    /// `SHADER_READ_ONLY_OPTIMAL` layout between submissions, opaque black when it is made,
+    /// which is when a freeze first asks for it. It lives as long as the presenter and is
+    /// only ever written in its top left corner.
+    pub(super) buffer: Option<GpuImage>,
+    /// Whether the buffer is the held picture: since the last freeze into it, until the
+    /// next capture of a held frame.
+    pub(super) buffer_held: bool,
     /// One texel, in the `SHADER_READ_ONLY_OPTIMAL` layout, bound in place of a mask when a
     /// draw has none.
     pub(super) no_mask: Option<GpuImage>,
@@ -75,6 +83,8 @@ impl Presenter {
             fragment: vk::ShaderModule::null(),
             pipelines: Vec::new(),
             held: None,
+            buffer: None,
+            buffer_held: false,
             no_mask: None,
             bound: None,
             swapchain_loader: None,
@@ -275,6 +285,9 @@ impl Presenter {
         if let Some(held) = self.held.take() {
             held.destroy(device, allocator);
         }
+        if let Some(buffer) = self.buffer.take() {
+            buffer.destroy(device, allocator);
+        }
         if let Some(no_mask) = self.no_mask.take() {
             no_mask.destroy(device, allocator);
         }
@@ -422,6 +435,12 @@ impl VkCompositor {
     /// Makes everything a draw reads ready: the presenter, a held frame, and the descriptor
     /// set pointing at both frames and the mask. Returns their sizes, or `None` when no frame has been
     /// rendered and there is nothing to draw.
+    ///
+    /// While the buffer of RGSS3 is the held picture and the newest frame fits into it, the
+    /// buffer is bound as the held frame and counted at the size of the newest frame: the
+    /// draw then mixes buffer texel (x, y) with newest texel (x, y), as it mixes two frames
+    /// of one size. A newest frame that does not fit meets the whole buffer as a held frame
+    /// of another size.
     pub(super) fn prepare_sources(&mut self) -> Result<Option<Sources>, VkError> {
         self.ensure_presenter()?;
         let target = self
@@ -436,13 +455,23 @@ impl VkCompositor {
         self.ensure_no_mask()?;
         let mask = self.mask_in_effect();
         let presenter = self.presenter.as_mut().expect("just ensured");
-        let held = presenter.held.as_ref().expect("just ensured");
-        let (held_view, held_size) = (held.view, Size::new(held.width, held.height));
+        let newest_size = Size::new(size.0, size.1);
+        let (held_view, held_size) = match presenter.buffer.as_ref() {
+            Some(buffer) if presenter.buffer_held => {
+                let whole = Size::new(buffer.width, buffer.height);
+                let fits = size.0 <= buffer.width && size.1 <= buffer.height;
+                (buffer.view, if fits { newest_size } else { whole })
+            }
+            _ => {
+                let held = presenter.held.as_ref().expect("just ensured");
+                (held.view, Size::new(held.width, held.height))
+            }
+        };
         let no_mask = presenter.no_mask.as_ref().expect("just ensured").view;
         let mask_view = mask.map_or(no_mask, |(view, _)| view);
         presenter.bind(&self.gpu.device, newest, held_view, mask_view);
         Ok(Some(Sources {
-            newest: Size::new(size.0, size.1),
+            newest: newest_size,
             held: held_size,
             vagueness: mask.map(|(_, vagueness)| vagueness),
         }))

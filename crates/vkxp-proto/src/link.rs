@@ -278,7 +278,7 @@ mod tests {
     use std::thread;
 
     use super::*;
-    use crate::InputSnapshot;
+    use crate::{FreezeRule, InputSnapshot};
 
     fn title(text: &str) -> GuestToHost {
         GuestToHost::SetTitle {
@@ -349,9 +349,17 @@ mod tests {
         );
         let observed = Arc::clone(&wakes);
         let sender = thread::spawn(move || {
-            guest.send(GuestToHost::Freeze).unwrap();
+            guest
+                .send(GuestToHost::Freeze {
+                    rule: FreezeRule::Frame,
+                })
+                .unwrap();
             let after_first = observed.load(Ordering::SeqCst);
-            guest.send(GuestToHost::Freeze).unwrap();
+            guest
+                .send(GuestToHost::Freeze {
+                    rule: FreezeRule::Frame,
+                })
+                .unwrap();
             (after_first, observed.load(Ordering::SeqCst), guest)
         });
         let (after_first, after_second, _guest) = sender.join().unwrap();
@@ -375,7 +383,12 @@ mod tests {
     fn guest_cannot_send_or_poll_once_the_host_has_gone() {
         let (guest, host, wakes) = counted();
         drop(host);
-        assert_eq!(guest.send(GuestToHost::Freeze), Err(Disconnected));
+        assert_eq!(
+            guest.send(GuestToHost::Freeze {
+                rule: FreezeRule::Frame
+            }),
+            Err(Disconnected)
+        );
         assert_eq!(guest.try_recv(), Err(Disconnected));
         assert_eq!(guest.recv(), Err(Disconnected));
         assert_eq!(wakes.load(Ordering::SeqCst), 0, "nobody is left to wake");
@@ -457,7 +470,12 @@ mod tests {
         drop(other);
         assert_eq!(guest.recv(), Err(Disconnected));
         assert_eq!(guest.try_recv(), Err(Disconnected));
-        assert_eq!(guest.send(GuestToHost::Freeze), Err(Disconnected));
+        assert_eq!(
+            guest.send(GuestToHost::Freeze {
+                rule: FreezeRule::Frame
+            }),
+            Err(Disconnected)
+        );
 
         // What was written before the other side closed is still delivered.
         let (guest, mut other) = over_socket();
@@ -476,7 +494,13 @@ mod tests {
         assert_eq!(guest.recv(), Err(Disconnected));
 
         let (guest, mut other) = over_socket();
-        framing::write_message(&mut other, &GuestToHost::Freeze).unwrap();
+        framing::write_message(
+            &mut other,
+            &GuestToHost::Freeze {
+                rule: FreezeRule::Frame,
+            },
+        )
+        .unwrap();
         assert_eq!(guest.try_recv(), Err(Disconnected));
     }
 
@@ -485,10 +509,19 @@ mod tests {
         let (guest, host, wakes) = counted();
         let (sender, receiver) = guest.split();
         let waiter = thread::spawn(move || receiver.recv());
-        sender.send(GuestToHost::Freeze).unwrap();
+        sender
+            .send(GuestToHost::Freeze {
+                rule: FreezeRule::Frame,
+            })
+            .unwrap();
         host.send(HostToGuest::Tick).unwrap();
         assert_eq!(waiter.join().unwrap(), Ok(HostToGuest::Tick));
-        assert_eq!(host.try_recv(), Ok(Some(GuestToHost::Freeze)));
+        assert_eq!(
+            host.try_recv(),
+            Ok(Some(GuestToHost::Freeze {
+                rule: FreezeRule::Frame
+            }))
+        );
 
         // The host sees the guest as gone once the sender is dropped.
         drop(sender);

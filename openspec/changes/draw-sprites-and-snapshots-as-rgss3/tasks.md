@@ -18,9 +18,9 @@
 
 ## 4. Frozen picture
 
-- [ ] 4.1 The rule of the freeze message and the protocol version; the frame rule in every existing literal of the workspace. Verify: the scenarios "Rule travels with the message" and "Version" of `specs/guest-host-protocol/spec.md`; `cargo test -p vkxp-proto --locked` passes and `cargo check --workspace --all-targets --locked` succeeds; in `crates/vkxp-binding/src` only `graphics.rs` changed.
-- [ ] 4.2 The buffer of RGSS3 in the presenter. Verify: the scenarios of `specs/vulkan-presentation/spec.md`; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk --locked` passes; if `git diff --stat` against the start of the change names a file under `crates/vkxp-vk/shaders`, one run of `VK_LOADER_DRIVERS_SELECT='*radeon*' VKXP_TEST_DEVICE=RADV cargo test -p vkxp-vk --locked` passes too.
-- [ ] 4.3 The session holds by the rule of the message; the headless run across a resize. Verify: the scenarios of `specs/host-session/spec.md`; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-host -p vkxp --locked` passes.
+- [x] 4.1 The rule of the freeze message and the protocol version; the frame rule in every existing literal of the workspace. Verify: the scenarios "Rule travels with the message" and "Version" of `specs/guest-host-protocol/spec.md`; `cargo test -p vkxp-proto --locked` passes and `cargo check --workspace --all-targets --locked` succeeds; in `crates/vkxp-binding/src` only `graphics.rs` changed.
+- [x] 4.2 The buffer of RGSS3 in the presenter. Verify: the scenarios of `specs/vulkan-presentation/spec.md`; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-vk --locked` passes; if `git diff --stat` against the start of the change names a file under `crates/vkxp-vk/shaders`, one run of `VK_LOADER_DRIVERS_SELECT='*radeon*' VKXP_TEST_DEVICE=RADV cargo test -p vkxp-vk --locked` passes too.
+- [x] 4.3 The session holds by the rule of the message; the headless run across a resize. Verify: the scenarios of `specs/host-session/spec.md`; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkxp-host -p vkxp --locked` passes.
 
 ## 5. Documentation
 

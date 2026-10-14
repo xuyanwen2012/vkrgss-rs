@@ -6,8 +6,8 @@ use std::time::Duration;
 use vkxp_proto::link::{GuestEnd, HostEnd, link};
 use vkxp_proto::{
     AudioChannel, AudioCommand, BitmapDelta, BitmapId, BlendMode, Button, Color, FramePacket,
-    FrameRate, GuestToHost, HostToGuest, InputSnapshot, Op, Quad, Rect, Sampling, Size, Tone,
-    TransitionRule,
+    FrameRate, FreezeRule, GuestToHost, HostToGuest, InputSnapshot, Op, Quad, Rect, Sampling, Size,
+    Tone, TransitionRule,
 };
 use winit::keyboard::KeyCode;
 
@@ -754,7 +754,12 @@ fn frozen_display_keeps_its_image_while_frames_are_rendered_and_ticked() {
     let mut rig = Rig::new();
     rig.frame(frame(0));
     assert_eq!(rig.shown(), Shown::Frame(0));
-    assert_eq!(rig.send(GuestToHost::Freeze), []);
+    assert_eq!(
+        rig.send(GuestToHost::Freeze {
+            rule: FreezeRule::Frame
+        }),
+        []
+    );
 
     let mut ticks = 0;
     for index in 1..=3 {
@@ -770,7 +775,9 @@ fn frozen_display_keeps_its_image_while_frames_are_rendered_and_ticked() {
 fn transition_cross_fades_one_step_behind_its_frames_then_shows_frames_normally() {
     let mut rig = Rig::new();
     rig.frame(frame(0));
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     rig.send(transition(4));
     assert_eq!(rig.shown(), Shown::Frame(0));
 
@@ -843,7 +850,9 @@ fn intermediate_steps_have_the_thresholds_measured_on_the_original() {
 fn first_step_of_a_masked_transition_is_the_held_frame_alone() {
     let mut rig = Rig::new();
     rig.frame(frame(0));
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     rig.send(masked_transition(5, 40));
     rig.frame(frame_with_mask(1));
     // The display has the mask bitmap and is not told to use it yet.
@@ -871,7 +880,9 @@ fn last_step_has_the_weight_and_the_threshold_measured_on_the_original() {
     // The eighth frame of a transition of duration 8 is shown with them.
     let mut rig = Rig::new();
     rig.frame(frame(0));
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     rig.send(transition(8));
     for index in 1..=8 {
         rig.frame(frame(index));
@@ -883,7 +894,9 @@ fn last_step_has_the_weight_and_the_threshold_measured_on_the_original() {
 fn transition_of_duration_one_shows_the_held_frame_then_the_newest() {
     let mut rig = Rig::new();
     rig.frame(frame(0));
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     rig.send(transition(1));
     rig.frame(frame(1));
     assert_eq!(rig.shown(), Shown::Frame(0));
@@ -905,7 +918,9 @@ fn transition_of_rgss2(duration: u32) -> GuestToHost {
 fn transition_of_rgss2_is_one_step_ahead_and_ends_with_its_last_frame() {
     let mut rig = Rig::new();
     rig.frame(frame(0));
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     rig.send(transition_of_rgss2(4));
     assert_eq!(rig.shown(), Shown::Frame(0));
 
@@ -919,7 +934,9 @@ fn transition_of_rgss2_is_one_step_ahead_and_ends_with_its_last_frame() {
     rig.frame(frame(4));
     assert_eq!(rig.shown(), Shown::Frame(4), "the newest frame alone");
     // The transition has ended: a freeze holds the frame on screen.
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     rig.frame(frame(5));
     assert_eq!(rig.shown(), Shown::Frame(4));
 }
@@ -929,7 +946,9 @@ fn transition_of_rgss2_is_one_step_ahead_and_ends_with_its_last_frame() {
 fn transition_of_rgss2_of_duration_one_shows_the_newest_frame_alone() {
     let mut rig = Rig::new();
     rig.frame(frame(0));
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     rig.send(transition_of_rgss2(1));
     rig.frame(frame(1));
     assert_eq!(rig.shown(), Shown::Frame(1));
@@ -942,7 +961,9 @@ fn transition_of_rgss2_of_duration_one_shows_the_newest_frame_alone() {
 fn transition_of_rgss2_of_duration_zero_or_without_freeze_is_as_under_rgss1() {
     let mut rig = Rig::new();
     rig.frame(frame(0));
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     rig.send(transition_of_rgss2(0));
     assert_eq!(rig.shown(), Shown::Frame(0));
     rig.frame(frame(1));
@@ -961,7 +982,9 @@ fn transition_of_rgss2_of_duration_zero_or_without_freeze_is_as_under_rgss1() {
 fn frames_between_freeze_and_transition_do_not_advance_the_fade() {
     let mut rig = Rig::new();
     rig.frame(frame(0));
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     rig.frame(frame(1));
     rig.frame(frame(2));
     rig.send(transition(2));
@@ -977,7 +1000,9 @@ fn frames_between_freeze_and_transition_do_not_advance_the_fade() {
 fn transition_of_duration_zero_keeps_the_held_frame_until_the_next_frame() {
     let mut rig = Rig::new();
     rig.frame(frame(0));
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     rig.send(transition(0));
     assert_eq!(rig.shown(), Shown::Frame(0));
     // Whatever makes the window draw again shows the held frame too.
@@ -989,7 +1014,9 @@ fn transition_of_duration_zero_keeps_the_held_frame_until_the_next_frame() {
     assert_eq!(rig.shown(), Shown::Frame(2));
 
     // The freeze has ended: the next one holds the frame then on screen.
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     rig.frame(frame(3));
     assert_eq!(rig.shown(), Shown::Frame(2));
 }
@@ -1095,7 +1122,9 @@ fn masked(newest: u64, threshold: u8, vagueness: u32) -> Shown {
 fn masked_transition_is_the_masked_mix_with_the_mask_and_the_vagueness() {
     let mut rig = Rig::new();
     rig.frame(frame(0));
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     rig.send(masked_transition(4, 40));
     // The mask arrives with the first frame after the transition message.
     rig.frame(frame_with_mask(1));
@@ -1113,7 +1142,9 @@ fn masked_transition_is_the_masked_mix_with_the_mask_and_the_vagueness() {
     assert_eq!(rig.errors.text(), "");
 
     // The mask is dropped with the transition: the next one is a cross-fade.
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     rig.send(transition(2));
     rig.frame(frame(6));
     rig.frame(frame(7));
@@ -1139,7 +1170,9 @@ fn masked_transition_is_the_masked_mix_with_the_mask_and_the_vagueness() {
 fn masked_transition_of_rgss2_is_masked_from_its_first_frame() {
     let mut rig = Rig::new();
     rig.frame(frame(0));
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     rig.send(GuestToHost::Transition {
         duration: 4,
         mask: Some(MASK),
@@ -1164,7 +1197,9 @@ fn first_step_of_a_transition_that_follows_a_masked_one_drops_the_old_mask() {
     for vague in [None, Some(7)] {
         let mut rig = Rig::new();
         rig.frame(frame(0));
-        rig.send(GuestToHost::Freeze);
+        rig.send(GuestToHost::Freeze {
+            rule: FreezeRule::Frame,
+        });
         rig.send(masked_transition(2, 40));
         rig.frame(frame_with_mask(1));
         rig.frame(frame(2));
@@ -1206,7 +1241,9 @@ fn first_step_of_a_transition_that_follows_a_masked_one_drops_the_old_mask() {
 fn mask_destroyed_with_the_frame_that_ends_the_transition_is_not_reported() {
     let mut rig = Rig::new();
     rig.frame(frame(0));
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     rig.send(masked_transition(2, 40));
     rig.frame(frame_with_mask(1));
     rig.frame(frame(2));
@@ -1221,7 +1258,9 @@ fn mask_destroyed_with_the_frame_that_ends_the_transition_is_not_reported() {
 fn vagueness_of_zero_is_passed_on_as_it_is() {
     let mut rig = Rig::new();
     rig.frame(frame(0));
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     rig.send(masked_transition(2, 0));
     rig.frame(frame_with_mask(1));
     rig.frame(frame(2));
@@ -1232,7 +1271,9 @@ fn vagueness_of_zero_is_passed_on_as_it_is() {
 fn transition_with_an_unknown_mask_is_a_cross_fade_and_is_reported_once() {
     let mut rig = Rig::new();
     rig.frame(frame(0));
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     rig.send(masked_transition(4, 40));
     rig.frame(frame(1));
     assert_eq!(rig.shown(), Shown::Frame(0));
@@ -1251,13 +1292,17 @@ fn transition_with_an_unknown_mask_is_a_cross_fade_and_is_reported_once() {
 fn freeze_during_a_masked_transition_holds_the_masked_image_and_drops_the_mask() {
     let mut rig = Rig::new();
     rig.frame(frame(0));
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     rig.send(masked_transition(4, 40));
     rig.frame(frame_with_mask(1));
     rig.frame(frame(2));
     let on_screen = rig.shown();
     assert_eq!(on_screen, masked(2, 63, 40));
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     rig.frame(frame(3));
     assert_eq!(rig.shown(), on_screen);
     rig.send(transition(2));
@@ -1271,9 +1316,13 @@ fn freeze_during_a_masked_transition_holds_the_masked_image_and_drops_the_mask()
 fn a_second_freeze_keeps_the_frame_already_held() {
     let mut rig = Rig::new();
     rig.frame(frame(0));
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     rig.frame(frame(1));
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     rig.frame(frame(2));
     assert_eq!(rig.shown(), Shown::Frame(0));
 }
@@ -1282,7 +1331,9 @@ fn a_second_freeze_keeps_the_frame_already_held() {
 fn fading() -> (Rig, Shown) {
     let mut rig = Rig::new();
     rig.frame(frame(0));
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     rig.send(transition(4));
     rig.frame(frame(1));
     rig.frame(frame(2));
@@ -1294,7 +1345,9 @@ fn fading() -> (Rig, Shown) {
 #[test]
 fn freeze_during_a_transition_holds_the_mixed_image_on_screen() {
     let (mut rig, on_screen) = fading();
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     for index in 3..=5 {
         rig.frame(frame(index));
         assert_eq!(rig.shown(), on_screen, "after frame {index}");
@@ -1336,7 +1389,9 @@ fn frame_rejected_during_a_transition_keeps_the_image_and_its_weight() {
 fn frame_rejected_at_the_end_of_a_transition_does_not_end_it() {
     let mut rig = Rig::new();
     rig.frame(frame(0));
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     rig.send(transition(1));
     rig.frame(frame(1));
     rig.send(invalid_frame(2));
@@ -1351,7 +1406,9 @@ fn frame_rejected_at_the_end_of_a_transition_does_not_end_it() {
 fn frame_rejected_while_frozen_keeps_the_held_frame() {
     let mut rig = Rig::new();
     rig.frame(frame(0));
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     rig.send(invalid_frame(1));
     rig.wait_for_tick();
     rig.session.display_mut().redraw().unwrap();
@@ -1361,7 +1418,9 @@ fn frame_rejected_while_frozen_keeps_the_held_frame() {
 #[test]
 fn freeze_before_any_frame_shows_nothing_until_the_transition() {
     let mut rig = Rig::new();
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     rig.frame(frame(0));
     assert_eq!(rig.shown(), Shown::Nothing);
     rig.send(transition(1));
@@ -1742,7 +1801,11 @@ fn control_messages_behind_a_frame_take_effect_while_its_tick_waits() {
             title: "Loading".to_owned(),
         })
         .unwrap();
-    guest.send(GuestToHost::Freeze).unwrap();
+    guest
+        .send(GuestToHost::Freeze {
+            rule: FreezeRule::Frame,
+        })
+        .unwrap();
     guest.send(modal("first")).unwrap();
     guest.send(modal("second")).unwrap();
     rig.session.pump(&host);
@@ -2490,7 +2553,9 @@ fn a_loaded_state_resets_what_the_session_holds_of_the_guest() {
         ..SessionOptions::default()
     });
     rig.frame(frame(0));
-    rig.send(GuestToHost::Freeze);
+    rig.send(GuestToHost::Freeze {
+        rule: FreezeRule::Frame,
+    });
     rig.send(transition(8));
     rig.frame(frame(1));
     rig.frame(frame(2));
@@ -2799,4 +2864,62 @@ fn losing_focus_leaves_the_fast_forward_of_an_injected_key() {
     rig.session.focus_lost();
     assert!(!rig.session.fast_forward());
     assert_eq!(rig.send(frame(3)), []);
+}
+
+// Freeze by the rule of the message.
+
+/// A frame of `size`.
+fn frame_of(frame_index: u64, size: Size) -> GuestToHost {
+    let mut packet = packet(frame_index, 40);
+    packet.logical_size = size;
+    GuestToHost::Frame(packet)
+}
+
+fn freeze(rule: FreezeRule) -> GuestToHost {
+    GuestToHost::Freeze { rule }
+}
+
+/// Scenario "The rule reaches the display".
+#[test]
+fn the_display_is_asked_to_hold_by_the_rule_of_the_freeze() {
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    rig.send(freeze(FreezeRule::Frame));
+    rig.send(transition(0));
+    rig.frame(frame(1));
+    rig.send(freeze(FreezeRule::Buffer));
+    let display = rig.session.display();
+    assert_eq!(display.holds, [FreezeRule::Frame, FreezeRule::Buffer]);
+}
+
+/// Scenario "Frozen twice".
+#[test]
+fn a_second_freeze_of_the_buffer_rule_while_frozen_holds_nothing() {
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    rig.send(freeze(FreezeRule::Buffer));
+    rig.frame(frame(1));
+    rig.send(freeze(FreezeRule::Buffer));
+    assert_eq!(rig.session.display().holds, [FreezeRule::Buffer]);
+    assert_eq!(rig.shown(), Shown::Frame(0));
+}
+
+/// Scenario "A freeze survives a resize, measured on the original of RGSS3".
+#[test]
+fn a_freeze_of_the_buffer_rule_and_its_transition_survive_a_resize() {
+    let mut rig = Rig::new();
+    rig.frame(frame_of(0, Size::new(544, 416)));
+    rig.send(freeze(FreezeRule::Buffer));
+    rig.send(transition_of_rgss2(6));
+    let mix = |newest, weight| Shown::mix(Shown::Frame(0), newest, weight);
+    // The steps 1 to 5 of 6, and then the newest frame alone.
+    for (index, weight) in [(1, 42), (2, 85), (3, 127), (4, 170), (5, 212)] {
+        rig.frame(frame_of(index, Size::new(640, 480)));
+        assert_eq!(rig.shown(), mix(index, weight), "frame {index}");
+    }
+    rig.frame(frame_of(6, Size::new(640, 480)));
+    assert_eq!(rig.shown(), Shown::Frame(6));
+    assert_eq!(rig.session.display().rendered(), [0, 1, 2, 3, 4, 5, 6]);
+    assert_eq!(rig.session.display().holds, [FreezeRule::Buffer]);
+    assert_eq!(rig.errors.text(), "");
 }

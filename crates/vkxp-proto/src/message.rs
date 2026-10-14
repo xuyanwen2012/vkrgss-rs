@@ -31,6 +31,17 @@ pub enum TransitionRule {
     Rgss2,
 }
 
+/// The rule by which a freeze keeps the frozen picture.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FreezeRule {
+    /// The frame that is shown, at its own size: RGSS1 and RGSS2.
+    Frame,
+    /// RGSS3: one buffer of 640 by 480 pixels, black at the start. A freeze writes the
+    /// screen into its top left corner and leaves the rest, and a transition mixes buffer
+    /// pixel (x, y) with pixel (x, y) of the screen as it is then.
+    Buffer,
+}
+
 /// A message from the guest (script thread) to the host.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GuestToHost {
@@ -38,7 +49,10 @@ pub enum GuestToHost {
     /// [`HostToGuest::Tick`]; see the module documentation.
     Frame(FramePacket),
     /// Keep showing the current frame until the next transition.
-    Freeze,
+    Freeze {
+        /// How the frozen picture is kept.
+        rule: FreezeRule,
+    },
     /// Cross-fade from the frozen frame to the next one.
     Transition {
         /// Length in frames.
