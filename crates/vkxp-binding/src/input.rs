@@ -62,7 +62,7 @@ fn button_arg_rgss3(value: VALUE) -> Option<Button> {
             .zip(names)
             .find_map(|(button, name)| (name == id).then_some(button))
     } else if ffi::fixnum_p(value) {
-        button_of(i64::from(ffi::fix2long(value)))
+        button_of(ffi::fix2long(value))
     } else {
         None
     }
