@@ -26,4 +26,4 @@
 
 ## 6. Integration check
 
-- [ ] 6.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0, every name of the kept lists is listed again, and `openspec validate match-the-endings-and-loading-of-rgss3 --strict` passes.
+- [x] 6.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0, every name of the kept lists is listed again, and `openspec validate match-the-endings-and-loading-of-rgss3 --strict` passes.
