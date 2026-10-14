@@ -764,6 +764,15 @@ unsafe extern "C" {
     pub fn rb_enc_str_new(bytes: *const c_char, len: c_long, encoding: *mut rb_encoding) -> VALUE;
     /// The encoding UTF-8.
     pub fn rb_utf8_encoding() -> *mut rb_encoding;
+    /// The index of the encoding UTF-8.
+    pub fn rb_utf8_encindex() -> c_int;
+    /// The index of the encoding ASCII-8BIT.
+    pub fn rb_ascii8bit_encindex() -> c_int;
+    /// The index of the encoding of a string, a regular expression or a symbol.
+    pub fn rb_enc_get_index(value: VALUE) -> c_int;
+    /// Labels an object with the encoding of `index`, also a frozen one: the release does not
+    /// look at the frozen flag. Raises for a special constant.
+    pub fn rb_enc_associate_index(value: VALUE, index: c_int) -> VALUE;
     /// The `Encoding` object of an encoding.
     pub fn rb_enc_from_encoding(encoding: *mut rb_encoding) -> VALUE;
     /// `Encoding.default_external = encoding`.

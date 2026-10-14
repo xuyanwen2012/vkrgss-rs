@@ -9,6 +9,23 @@ use vkxp_binding_rgss3::testing;
 use vkxp_binding_rgss3::testing::host::{self, Game, Script, ruby_literal};
 use vkxp_vfs::Runtime;
 
+/// Plays `game` as `host::run_game` does, with the current directory of the process in the
+/// game directory, where the glue of a guest puts it: `load_data` of RGSS3 looks for a loose
+/// file from there. One game at a time enters its directory.
+fn run_game_in(
+    game: &Game,
+    run: vkxp_binding_rgss3::RunConfig,
+    script: Script,
+    after: &str,
+) -> host::Played {
+    static PLAYING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _playing = PLAYING
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    std::env::set_current_dir(game.dir()).expect("the game directory is entered");
+    host::run_game(game, run, script, after)
+}
+
 /// Plays a game of RGSS3 whose one script is `source`, with the data files `files` (path
 /// below the game directory and bytes) in place, and returns what `$vkxp_data` holds then.
 /// `GAME` in the script stands for the game directory as a Ruby string.
@@ -24,7 +41,7 @@ fn run(name: &str, files: &[(&str, &[u8])], source: &str) -> String {
         &game,
         &source.replace("GAME", &ruby_literal(&game.dir().to_string_lossy())),
     );
-    let played = host::run_game(&game, game.run_config(), Script::new(), "$vkxp_data");
+    let played = run_game_in(&game, game.run_config(), Script::new(), "$vkxp_data");
     assert!(played.outcome.is_ok(), "{name}: {:?}", played.outcome);
     match played.after {
         Ok(inspect) => inspect,
@@ -193,7 +210,12 @@ end
 fn a_frozen_string_is_labelled_and_stays_frozen() {
     let source = "class VkxpFrozen
        def self._load(data)
-         'ret'.force_encoding('ASCII-8BIT').freeze
+         ret = 'ret'.force_encoding('ASCII-8BIT')
+         # Labelled by the C API, not by a method a script may redefine.
+         def ret.force_encoding(encoding)
+           self
+         end
+         ret.freeze
        end
        def _dump(level)
          ''
@@ -345,8 +367,33 @@ fn names_labelled_utf_8_and_names_of_other_characters_are_files() {
          end"
         .replace("GAME", &ruby_literal(&game.dir().to_string_lossy())),
     );
-    let played = host::run_game(&game, game.run_config(), Script::new(), "$vkxp_data");
+    let played = run_game_in(&game, game.run_config(), Script::new(), "$vkxp_data");
     assert!(played.outcome.is_ok(), "{:?}", played.outcome);
     assert_eq!(played.after.as_deref(), Ok("[nil, 1, [1], [1]]"));
     assert!(game.dir().join("測試.rvdata2").is_file());
+}
+
+/// Requirement "Data files of RGSS3" of `game-files`, scenarios "The current directory" and
+/// "Outside the game directory", through `load_data`: a relative name is taken from the
+/// current directory of the process, which a script changes with `Dir.chdir`.
+#[test]
+fn load_data_looks_from_the_current_directory() {
+    testing::start_as(Runtime::Rgss3);
+    let outside = testing::game_dir().with_file_name("outside_current_directory");
+    std::fs::create_dir_all(&outside).unwrap();
+    let source = format!(
+        "{TRY}
+         inside = Dir.chdir('d') do
+           [load_data('p.bin'), vkxp_try {{ load_data('d/p.bin') }}[0],
+            load_data('../top.bin')]
+         end
+         away = Dir.chdir({}) {{ vkxp_try {{ load_data('top.bin') }}[0] }}
+         $vkxp_data = [inside, away, load_data('top.bin')]",
+        ruby_literal(&outside.to_string_lossy())
+    );
+    let files: &[(&str, &[u8])] = &[("d/p.bin", b"\x04\x08i\x06"), ("top.bin", b"\x04\x08i\x07")];
+    assert_eq!(
+        run("current_directory", files, &source),
+        "[[1, Errno::ENOENT, 2], Errno::ENOENT, 2]"
+    );
 }

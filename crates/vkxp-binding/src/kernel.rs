@@ -132,31 +132,23 @@ fn check_data_name(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
 /// `vkxp_label_utf8(object)`: labels a `String` whose encoding is ASCII-8BIT as UTF-8, a
 /// frozen one too, which stays frozen, and returns the object; anything else is returned
 /// as it is. The proc `load_data` of RGSS3 hands `Marshal.load` calls it for each object.
-fn label_utf8(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
+/// The encoding is read and set with the functions of the C API, as the original does, so
+/// no method a script may redefine is called and the frozen flag is not looked at. Over
+/// Ruby 1.8.7, which has no encodings and runs no game of RGSS3, it returns the object.
+fn label_utf8(_ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     let object = args[0];
     // SAFETY: a value that is no special constant has a type in its header.
     if ffi::special_const_p(object) || unsafe { ffi::builtin_type(object) } != ffi::T_STRING {
         return Ok(object);
     }
-    if encoding_name(ruby, object)? != b"ASCII-8BIT" {
-        return Ok(object);
+    #[cfg(vkxp_ruby_19)]
+    // SAFETY: `&Ruby` proves the thread and `object` is a live string, for which reading
+    // and setting the encoding index raises nothing.
+    unsafe {
+        if ffi::rb_enc_get_index(object) == ffi::rb_ascii8bit_encindex() {
+            ffi::rb_enc_associate_index(object, ffi::rb_utf8_encindex());
+        }
     }
-    let utf8 = rb::bytes_new(ruby, b"UTF-8")?;
-    // The original labels the string with the encoding call of the C API, which does not
-    // look at the frozen flag; `force_encoding` does, so the flag is taken off for the call
-    // and put back.
-    // SAFETY: `object` is a live string, whose header starts with its flags; the flags are
-    // read and written through the pointer, without a reference held across the call.
-    let flags = unsafe { std::ptr::addr_of_mut!((*(object as *mut ffi::RBasic)).flags) };
-    // SAFETY: as above.
-    let frozen = unsafe { flags.read() } & ffi::FL_FREEZE;
-    // SAFETY: as above.
-    unsafe { flags.write(flags.read() & !ffi::FL_FREEZE) };
-    // SAFETY: `object` and `utf8` are live and in locals.
-    let labelled = unsafe { ruby.funcall(object, c"force_encoding", &[utf8]) };
-    // SAFETY: as above.
-    unsafe { flags.write(flags.read() | frozen) };
-    labelled?;
     Ok(object)
 }
 

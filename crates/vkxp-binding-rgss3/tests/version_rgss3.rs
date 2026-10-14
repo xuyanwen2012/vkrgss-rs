@@ -10,6 +10,23 @@ use vkxp_binding_rgss3::testing;
 use vkxp_binding_rgss3::testing::host::{self, Game, Script};
 use vkxp_vfs::{LibraryVersion, Runtime};
 
+/// Plays `game` as `host::run_game` does, with the current directory of the process in the
+/// game directory, where the glue of a guest puts it: `load_data` of RGSS3 looks for a loose
+/// file from there. One game at a time enters its directory.
+fn run_game_in(
+    game: &Game,
+    run: vkxp_binding_rgss3::RunConfig,
+    script: Script,
+    after: &str,
+) -> host::Played {
+    static PLAYING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _playing = PLAYING
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    std::env::set_current_dir(game.dir()).expect("the game directory is entered");
+    host::run_game(game, run, script, after)
+}
+
 /// `[RGSS_VERSION, RGSS_VERSION.encoding.name]` in a game of RGSS3 named `name` whose DLL
 /// has `version`.
 fn version_of(name: &str, version: Option<[u16; 4]>) -> String {
@@ -25,7 +42,7 @@ fn version_of(name: &str, version: Option<[u16; 4]>) -> String {
     );
     let mut run = game.run_config();
     run.library_version = version.map(LibraryVersion);
-    let played = host::run_game(&game, run, Script::new(), "$vkxp_version");
+    let played = run_game_in(&game, run, Script::new(), "$vkxp_version");
     assert!(played.outcome.is_ok(), "{:?}", played.outcome);
     played.after.expect("the version is read")
 }

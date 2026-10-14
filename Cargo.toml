@@ -40,7 +40,7 @@ publish = false
 unsafe_op_in_unsafe_fn = "deny"
 unreachable_pub = "warn"
 # Set by the build scripts of the packages over Ruby 1.9.2 for a target without it.
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(vkxp_interpreter_absent)'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(vkxp_interpreter_absent)', 'cfg(vkxp_ruby_19)'] }
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }

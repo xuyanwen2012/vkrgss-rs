@@ -11,12 +11,29 @@ use vkxp_binding_rgss3::testing::host::{self, Game, Played, Script, with_error_s
 use vkxp_proto::GuestToHost;
 use vkxp_vfs::Runtime;
 
+/// Plays `game` as `host::run_game` does, with the current directory of the process in the
+/// game directory, where the glue of a guest puts it: `load_data` of RGSS3 looks for a loose
+/// file from there. One game at a time enters its directory.
+fn run_game_in(
+    game: &Game,
+    run: vkxp_binding_rgss3::RunConfig,
+    script: Script,
+    after: &str,
+) -> host::Played {
+    static PLAYING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _playing = PLAYING
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    std::env::set_current_dir(game.dir()).expect("the game directory is entered");
+    host::run_game(game, run, script, after)
+}
+
 /// Plays a game of RGSS3 of these scripts that ends with an uncaught exception, and returns
 /// its report and what the host saw.
 fn report(name: &str, scripts: &[(&str, &str)]) -> (String, Played) {
     testing::start_as(Runtime::Rgss3);
     let game = Game::of(Runtime::Rgss3, name, "Ace", scripts);
-    let played = host::run_game(&game, game.run_config(), Script::new(), "nil");
+    let played = run_game_in(&game, game.run_config(), Script::new(), "nil");
     match &played.outcome {
         Err(RunError::Script(report)) => (report.clone(), played),
         other => panic!("{name}: {other:?}"),
@@ -272,7 +289,7 @@ fn with_archive(name: &str, archive: Option<&str>) -> Played {
         }
     }
     testing::eval("$vkxp_loaded_ran = nil").unwrap();
-    host::run_game(&game, game.run_config(), Script::new(), "$vkxp_loaded_ran")
+    run_game_in(&game, game.run_config(), Script::new(), "$vkxp_loaded_ran")
 }
 
 /// Requirement "A script archive of RGSS3 that cannot be loaded", scenario "The cases"

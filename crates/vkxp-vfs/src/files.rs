@@ -247,10 +247,9 @@ impl GameFiles {
     ///   added, and the current directory does not count.
     /// - Then a loose file, after the dots and spaces at the end of the last component are
     ///   dropped: an absolute name as it is, a relative one from `current_dir`, the current
-    ///   directory of the process, which counts as the game directory when it lies outside
-    ///   it. Components match as [`GameFiles::resolve`] matches them for
-    ///   [`FileKind::Data`]; `.` and `..` are resolved by the name, and a name that then lies
-    ///   outside the game directory is not found.
+    ///   directory of the process. `.` and `..` are resolved by the name, and a path that
+    ///   then lies outside the game directory is not found; below it, components match as
+    ///   [`GameFiles::resolve`] matches them for [`FileKind::Data`].
     ///
     /// A name that finds a directory of the game is [`VfsError::IsDirectory`]; a name that
     /// finds nothing is [`VfsError::NotFound`]. Both carry `name` exactly as given.
@@ -291,10 +290,7 @@ impl GameFiles {
         let mut path = if name.starts_with(['/', '\\']) {
             Vec::new()
         } else {
-            match component_names(current_dir) {
-                Some(current) if current.starts_with(&game) => current,
-                _ => game.clone(),
-            }
+            component_names(current_dir)?
         };
         for component in name.split(['/', '\\']) {
             match component {
@@ -1175,10 +1171,16 @@ mod tests {
             data(&files, "arconly.rvdata2", &data_dir),
             "arconly.rvdata2",
         );
-        // A current directory outside the game directory counts as the game directory.
-        let outside = tempfile::tempdir().unwrap();
+        // From a current directory outside the game directory a relative name finds nothing
+        // there, and finds a file of the game only by a path that leads back into it.
+        let outer = dir.parent().unwrap();
+        let outside = tempfile::tempdir_in(outer).unwrap();
+        put(outside.path(), "p.bin", b"outside");
+        not_found(data(&files, "p.bin", outside.path()), "p.bin");
+        not_found(data(&files, "d/p.bin", outside.path()), "d/p.bin");
+        let back = format!("../{}/d/p.bin", dir.file_name().unwrap().to_str().unwrap());
         assert_eq!(
-            data(&files, "d/p.bin", outside.path()).unwrap(),
+            data(&files, &back, outside.path()).unwrap(),
             ("Loose", b"p".to_vec())
         );
     }

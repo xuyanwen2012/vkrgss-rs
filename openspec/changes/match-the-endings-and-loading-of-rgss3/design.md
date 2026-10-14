@@ -324,13 +324,21 @@ with `Marshal` on a `File` by `DataManager`, not with `load_data`.
 What the implementation had to do beyond the decisions above, with the reason:
 
 - `GameFiles::data_rgss3` takes the current directory of the process as a second argument,
-  so that the crate stays free of global state and its tests can name one. A current
-  directory outside the game directory counts as the game directory: the harness of the
-  binding plays its games in the process of the test, whose current directory is not the
-  game's, and the guest sets it to the game directory.
-- `vkxp_label_utf8` labels through `String#force_encoding` with the frozen flag taken off
-  for the call and put back: the binding compiles over both interpreter crates, and no
-  encoding function of the C API is declared by both (decision 9 named the C API).
+  so that the crate stays free of global state and its tests can name one. The harness of
+  the binding plays its games in the process of the test, whose current directory is not
+  the game's; the test files of `crates/vkxp-binding-rgss3/tests/` that play games of
+  RGSS3 enter the game directory before each game (`run_game_in`), as the glue of a guest
+  does.
+- `vkxp_label_utf8` reads and sets the encoding with `rb_enc_get_index` and
+  `rb_enc_associate_index` of the C API (decision 9). The binding compiles over both
+  interpreter crates and Ruby 1.8.7 has no such functions, so the call is compiled under a
+  `cfg` that only the build over Ruby 1.9.2 sets. Edits outside the scope of this change,
+  each a few lines that this needs: `crates/vkxp-ruby192-sys/src/ffi.rs` declares the four
+  functions (`rb_utf8_encindex`, `rb_ascii8bit_encindex`, `rb_enc_get_index`,
+  `rb_enc_associate_index`), `crates/vkxp-binding-rgss3/build.rs` sets the `cfg`
+  `vkxp_ruby_19`, and the workspace `Cargo.toml` names it among the expected `cfg`s.
+- `crates/vkxp-vfs/src/lib.rs`, outside the scope too, exports `DataFile`, the result of
+  `GameFiles::data_rgss3`, and names the function in the documentation of the crate.
 - The name check of `save_data` is the host function `vkxp_check_data_name`, which
   `load_data` of RGSS3 shares.
 - In a game of RGSS3 `prelude_shared.rb` is evaluated before `prelude_rgss3.rb`, whose
@@ -404,5 +412,3 @@ Left out, with the measured source (API report unless named):
   has none.
 - The opening comment of `prelude_shared.rb` still says that it is evaluated after
   `prelude_rgss3.rb`; the file is outside this change.
-- `load_data` after `Dir.chdir` to a directory outside the game directory looks from the
-  game directory (see the implementation record); the original looks outside.

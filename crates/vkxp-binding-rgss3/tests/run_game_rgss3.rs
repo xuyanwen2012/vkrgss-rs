@@ -10,6 +10,23 @@ use vkxp_binding_rgss3::testing::host::{self, Game, Played, RGSS3_STAND_IN, Scri
 use vkxp_proto::GuestToHost;
 use vkxp_vfs::Runtime;
 
+/// Plays `game` as `host::run_game` does, with the current directory of the process in the
+/// game directory, where the glue of a guest puts it: `load_data` of RGSS3 looks for a loose
+/// file from there. One game at a time enters its directory.
+fn run_game_in(
+    game: &Game,
+    run: vkxp_binding_rgss3::RunConfig,
+    script: Script,
+    after: &str,
+) -> host::Played {
+    static PLAYING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _playing = PLAYING
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    std::env::set_current_dir(game.dir()).expect("the game directory is entered");
+    host::run_game(game, run, script, after)
+}
+
 /// A game of RGSS3 named `name` with these scripts.
 fn game(name: &str, scripts: &[(&str, &str)]) -> Game {
     testing::start_as(Runtime::Rgss3);
@@ -18,7 +35,7 @@ fn game(name: &str, scripts: &[(&str, &str)]) -> Game {
 
 /// Plays `game` with its own settings and reads `after`.
 fn play(game: &Game, after: &str) -> Played {
-    host::run_game(game, game.run_config(), Script::new(), after)
+    run_game_in(game, game.run_config(), Script::new(), after)
 }
 
 /// Plays a game of these scripts and returns what `after` reads, after a run that ended
@@ -47,7 +64,7 @@ fn the_globals_are_those_measured_in_a_plain_run_and_in_debug_mode() {
     let debug = game("globals_debug", &[("Main", source)]);
     let mut run = debug.run_config();
     run.debug = true;
-    let played = host::run_game(&debug, run, Script::new(), "$vkxp_globals");
+    let played = run_game_in(&debug, run, Script::new(), "$vkxp_globals");
     assert_eq!(
         played.after.as_deref(),
         Ok(r#"[nil, ["."], true, false, false]"#)
