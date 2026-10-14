@@ -48,6 +48,7 @@ pub(crate) struct Archive {
     pub end: Vec<u8>,
 }
 
+#[cfg(test)]
 impl Archive {
     /// A new archive, whose table ends with four words that decrypt to 0.
     pub(crate) fn new(seed: u32, entries: Vec<Entry>) -> Archive {

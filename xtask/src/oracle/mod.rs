@@ -273,6 +273,7 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
+    use crate::rgss3a;
 
     /// A stand-in for the built-in scripts of the original, which are not in the repository.
     const RPG_STAND_IN: &str = "module RPG\n  module Cache\n  end\nend\n";
@@ -374,6 +375,29 @@ end
         /// Packs the game as `cargo xtask pack-rgssad` does.
         fn pack(&self) {
             crate::rgssad::pack(&self.game()).unwrap();
+        }
+
+        /// Packs the files of the `Data` folder of a game of RGSS3 into `Game.rgss3a`, under
+        /// keys of its own, and removes the folder.
+        fn pack_rgss3a(&self) {
+            let data = self.game().join("Data");
+            let mut names: Vec<_> = fs::read_dir(&data)
+                .unwrap()
+                .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+                .collect();
+            names.sort();
+            let entries = names
+                .iter()
+                .zip([41, 18467, 6334, 26500])
+                .map(|(name, key)| rgss3a::Entry {
+                    name: format!("Data\\{name}").into_bytes(),
+                    key,
+                    data: fs::read(data.join(name)).unwrap(),
+                })
+                .collect();
+            let archive = rgss3a::Archive::new(0x2a38, entries);
+            fs::write(self.game().join(rgss3a::FILE_NAME), rgss3a::write(&archive)).unwrap();
+            fs::remove_dir_all(data).unwrap();
         }
 
         fn game(&self) -> PathBuf {
@@ -811,6 +835,40 @@ loop { Graphics.update }
         }
     }
 
+    /// The archive-of-VX-Ace scenario of `oracle-harness`.
+    #[test]
+    fn the_probe_is_added_inside_the_archive_of_a_packed_game_of_rgss3() {
+        let generated = Generated::ace(&[("Main", "")]);
+        let game = generated.game();
+        fs::write(game.join("Data/Map001.rvdata2"), [4, 8, b'0']).unwrap();
+        fs::write(game.join("Data/Actors.rvdata2"), b"\x04\x08[\x00").unwrap();
+        generated.pack_rgss3a();
+        let before = generated.files();
+        let packed = rgss3a::read(&before[&game.join(rgss3a::FILE_NAME)]).unwrap();
+        let copy = generated.out().join("game");
+
+        let runtime = game::runtime(&game, None).unwrap();
+        game::prepare(&game, &copy, runtime, "$probed = true").unwrap();
+
+        assert_eq!(runtime, Runtime::Rgss3);
+        assert_eq!(generated.files(), before);
+        assert!(!copy.join("Data").exists());
+        let probed = rgss3a::read(&fs::read(copy.join(rgss3a::FILE_NAME)).unwrap()).unwrap();
+        assert_eq!(probed.seed, 0x2a38);
+        assert_eq!(probed.end, packed.end);
+        assert_eq!(probed.entries.len(), 3);
+        for (probed, packed) in probed.entries.iter().zip(&packed.entries) {
+            assert_eq!((&probed.name, probed.key), (&packed.name, packed.key));
+            if probed.name != b"Data\\Scripts.rvdata2" {
+                assert_eq!(probed.data, packed.data);
+                continue;
+            }
+            let scripts = archive::read(&probed.data).unwrap();
+            assert_eq!(scripts[0].name, probe::NAME.as_bytes());
+            assert_eq!(scripts[1..], archive::read(&packed.data).unwrap());
+        }
+    }
+
     /// What RGSS2 has and the `Graphics` of vkxp, which runs these games as RGSS1, has not,
     /// so that the probe of RGSS2 can be run: the functions show nothing here.
     const RGSS2_STAND_IN: &str = "\
@@ -1089,6 +1147,25 @@ loop { Graphics.update }
                 pictures.push(captured);
             }
             assert!(pictures[0] != pictures[1], "the square did not move");
+        }
+
+        /// The packed-game-of-RGSS3-runs-in-vkxp scenario of `oracle-harness`.
+        #[test]
+        fn the_frames_of_a_game_of_rgss3_in_its_archive_equal_those_of_the_game_unpacked() {
+            let pictures = |packed: bool| {
+                let generated = Generated::ace(&[("Main", MOVING_SQUARE)]);
+                if packed {
+                    generated.pack_rgss3a();
+                }
+                generated.vkxp_side(&generated.options("10,20", ""));
+                [10, 20].map(|frame| {
+                    let file = generated.out().join(report::vkxp_file(frame));
+                    report::Picture::read(&file).unwrap()
+                })
+            };
+            let (packed, unpacked) = (pictures(true), pictures(false));
+            assert!(packed == unpacked, "the packed game draws other frames");
+            assert!(packed[0] != packed[1], "the square did not move");
         }
 
         /// The buttons-of-RGSS3 scenario of `oracle-harness`: the probe runs in vkxp.

@@ -7,7 +7,7 @@ use anyhow::{Context, Result, bail};
 
 use super::runtime::Runtime;
 use super::{archive, probe};
-use crate::rgssad;
+use crate::{rgss3a, rgssad};
 
 /// The runtime of the game in `game`: `chosen` if the command line named one, else what the
 /// extension of the script archive tells.
@@ -36,7 +36,11 @@ pub(super) fn prepare(source: &Path, copy: &Path, runtime: Runtime, probe: &str)
     let name = scripts_name(copy)?;
     if let Some(packed) = child(copy, runtime.archive_name()) {
         // The original reads its scripts only from the archive when there is one.
-        return probe_packed(&packed, &name, probe).with_context(|| packed.display().to_string());
+        let probed = match runtime {
+            Runtime::Rgss3 => probe_packed_rgss3(&packed, &name, probe),
+            Runtime::Rgss1 | Runtime::Rgss2 => probe_packed(&packed, &name, probe),
+        };
+        return probed.with_context(|| packed.display().to_string());
     }
     let scripts = scripts_file(copy, &name)?;
     let bytes = fs::read(&scripts).with_context(|| scripts.display().to_string())?;
@@ -56,6 +60,22 @@ fn probe_packed(packed: &Path, name: &str, probe: &str) -> Result<()> {
     scripts.data =
         archive::with_first(&scripts.data, probe::NAME, probe).with_context(|| name.to_owned())?;
     fs::write(packed, rgssad::write(&entries))?;
+    Ok(())
+}
+
+/// Adds `probe` as the first script of the script archive `name` inside the archive of
+/// RGSSAD version 3 `packed`. The seed, the keys, the order of the entries and the end of the
+/// table are kept, so only the data of the script archive change.
+fn probe_packed_rgss3(packed: &Path, name: &str, probe: &str) -> Result<()> {
+    let mut archive = rgss3a::read(&fs::read(packed)?)?;
+    let scripts = archive
+        .entries
+        .iter_mut()
+        .find(|entry| rgssad::names_match(&entry.name, name))
+        .with_context(|| format!("the script archive `{name}` that Game.ini names is not in it"))?;
+    scripts.data =
+        archive::with_first(&scripts.data, probe::NAME, probe).with_context(|| name.to_owned())?;
+    fs::write(packed, rgss3a::write(&archive))?;
     Ok(())
 }
 
