@@ -28,4 +28,4 @@
 
 ## 6. Integration check
 
-- [ ] 6.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate draw-sprites-and-snapshots-as-rgss3 --strict` passes.
+- [x] 6.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate draw-sprites-and-snapshots-as-rgss3 --strict` passes.

@@ -328,6 +328,26 @@ Where each of the six measured differences goes:
   that are refused states 14 and lists 13 too, as after every step of the version.
 - `RecordingDisplay` of `vkxp-host` keeps the rules of its holds in a list of their own
   (`holds`), so that the events the existing tests compare stay as they are.
+- One test outside the scope of the change is corrected, because the gate failed on it
+  in the default schedule of the tests (twice in the review):
+  `matches_at_the_end_of_the_subject_are_as_before` of
+  `crates/vkxp-ruby-sys/tests/backports.rs`. Its regular expression literals were compiled
+  when the source was parsed, before its `$KCODE = 'U'` ran. The tests of that file share
+  one interpreter, and when `Regexp.new('[\\777]', nil, 'n')` of the test beside it had
+  raised just before, the engine was still set to the kcode of that pattern, so the
+  literals were compiled for it and `'aSs' =~ /[\303\237]/i` gave nil instead of 1. The
+  test now compiles its literals in an `eval` of their own after the assignment; every
+  assertion and expected value is as it was, and no code of the interpreter changed.
+- A second test outside the scope is corrected, because the gate failed on it twice
+  (once for the author, once in the review): `a_reset_request_starts_the_scripts_over` of
+  `crates/vkxp-binding/tests/run_game.rs` found one live bitmap where it expects none. The
+  tests of that file share one interpreter. The harness ran the game in one call of the
+  interpreter (`run_game` of `crates/vkxp-binding/src/testing/host.rs`), and the test
+  counted the bitmaps in a second call (`testing::bitmap_count`), so the game of another
+  test could run in between and leave its bitmap. `run_game` now counts the bitmaps in
+  the call that ran the game and gives the number in `Played::bitmaps`, which the test
+  compares with 0 as before. These are the test harness and one test of the binding; no
+  class or module of the binding changed.
 - Presenter: a hold in the middle of a cross-fade writes the mix as it is shown at the
   logical size of the newest frame, which the existing off-screen capture gives. After a
   state was loaded the buffer keeps its texels; the freeze has ended, as today.
@@ -373,6 +393,21 @@ Not the binding:
 
 - A masked transition after a resize, and what the window shows while frozen after a
   resize, are decided in decision 8 without a measurement.
+- Found by the gate of this change, in tests of the interpreters and not caused by it:
+  - Ruby 1.8.7 leaves the encoding of its regular expression engine at the fixed kcode of
+    a pattern whose compilation raises (`rb_reg_initialize` in `re.c` raises between
+    `rb_kcode_set_option` and `rb_kcode_reset_option`), until `$KCODE` is assigned again.
+    Whether the original runtime does the same, and whether a game can meet it, was not
+    examined; the test that depended on it was corrected (see "Implementation notes").
+  - `crates/vkxp-ruby192-sys/tests/hash_seed.rs` fails when the tests run with
+    `RUST_TEST_THREADS=1`: the child then prints its values behind the name of the test
+    on one line, and the parent looks for the marker at the start of a line. The gate
+    does not run the tests that way, so the test is left as it is.
+  - `testing::bitmap_count` of `vkxp-binding` counts in a call of the interpreter of its
+    own, so a test that runs beside others of its binary can see their bitmaps. The one
+    test the gate failed on no longer uses it (see "Implementation notes"); its other
+    callers (`tests/modules.rs`, `tests/ruby.rs`, `tests/stress.rs`) were not examined
+    and did not fail in any gate run of this change.
 - Whether RGSS2 keeps its frozen picture in such a buffer is not measured; a game of RGSS2
   that freezes and then resizes shows the held frame in its own letterbox rectangle.
 - A wave on a turned sprite and a wave with a stretched cut source rectangle have no rule on
