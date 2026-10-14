@@ -492,6 +492,33 @@ fn stop_and_fade() {
     );
 }
 
+/// Scenario "Fields that RGSS3 uses".
+#[test]
+fn play_commands_carry_no_start_and_no_return_time() {
+    let (_, record) = eval(
+        "name = 'Audio/SE/001-System01'
+         Audio.bgm_play(name, 80)
+         Audio.me_play(name)",
+    );
+    assert_eq!(
+        record.received,
+        [
+            sound(AudioChannel::Bgm, 80, 100),
+            sound(AudioChannel::Me, 100, 100)
+        ]
+    );
+}
+
+/// Scenario "XP and VX" of the functions of `Audio` in RGSS3.
+#[test]
+fn the_functions_of_rgss3_are_not_there() {
+    let (value, _) = eval("[:bgm_pos, :bgs_pos, :setup_midi].map { |m| Audio.respond_to?(m) }");
+    assert_eq!(value, "[false, false, false]");
+    let (value, record) = eval("Audio.bgm_play('Audio/SE/001-System01', 100, 100, 0)");
+    assert_eq!(value, "ArgumentError: wrong number of arguments (4 for 3)");
+    assert!(record.received.is_empty());
+}
+
 // --- Data files and message output ------------------------------------------------------------
 
 #[test]

@@ -371,3 +371,8 @@ Sections are those of the API report.
   decision 2) with that of what the channel plays, since `runtime::Playing` keeps three
   fields; two pitch arguments that both become 100 (0 and -1, or 454 at 44100 Hz) count
   as one pitch.
+- `Audio.__reset__` exists on this branch, so task 4.3 added its test
+  (`a_reset_freezes_both_positions` in `crates/vkxp-binding-rgss3/tests/audio_rgss3.rs`).
+- To apply the rule of decision 3 without reading the file again, the model of a looping
+  channel keeps the format the probe gave for its file: the pitch of a repeated call is
+  limited by the rate of that format.

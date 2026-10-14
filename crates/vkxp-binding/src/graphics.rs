@@ -59,6 +59,7 @@ fn frame(mut front: Vec<BitmapDelta>) {
         guest.pump(Await::Tick);
         let frame_rate = guest.scene.frame_rate().get();
         guest.win32api.frame_shown(frame_rate.into());
+        guest.audio.frame_shown(frame_rate.into());
     });
 }
 

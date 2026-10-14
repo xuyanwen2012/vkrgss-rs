@@ -12,7 +12,7 @@ use crate::element::{self, SceneClasses};
 use crate::error::{self, ErrorClasses};
 use crate::runtime::{self, RunConfig};
 use crate::text::TextBackend;
-use crate::{bitmap, color, font, rect, table, win32api};
+use crate::{audio, bitmap, color, font, rect, table, win32api};
 
 /// What a guest is created from.
 pub struct Config {
@@ -44,6 +44,8 @@ pub struct Guest {
     pub(crate) runtime: runtime::State,
     /// What the emulated `Win32API` functions keep between calls.
     pub(crate) win32api: win32api::State,
+    /// The positions of the music and the background sound of RGSS3.
+    pub(crate) audio: audio::State,
     /// Whether `owner` and `observer` are still to be interned: in a game of RGSS2 until the
     /// first of the calls at which the original runtime interns them (see
     /// [`wrap::intern_owner_names`](crate::wrap::intern_owner_names)).
@@ -85,6 +87,7 @@ impl Guest {
             owner_names_pending: config.run.runtime == Runtime::Rgss2,
             runtime: runtime::State::new(config.run),
             win32api: win32api::State::default(),
+            audio: audio::State::default(),
         }
     }
 

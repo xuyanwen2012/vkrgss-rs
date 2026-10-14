@@ -27,7 +27,7 @@ use vkxp_proto::link::GuestEnd;
 use vkxp_proto::{AudioChannel, AudioCommand, GuestToHost, HostToGuest, Size};
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{Raise, Raised, Ruby, RubyError};
-use vkxp_vfs::{FileKind, GameIni, Runtime};
+use vkxp_vfs::{GameIni, Runtime};
 
 use crate::guest::{Config, Guest};
 use crate::panel::Panel;
@@ -227,6 +227,7 @@ impl Guest {
         self.runtime.modal = false;
         self.runtime.music = None;
         self.runtime.background_sound = None;
+        self.audio = audio::State::default();
         self.input = InputState::with_rules(self.input.rules());
     }
 
@@ -357,7 +358,8 @@ impl Guest {
                 continue;
             };
             // A file that has gone since plays nothing, as if the channel had stopped.
-            if let Ok(data) = self.files.read(FileKind::Audio, &playing.name) {
+            let kind = audio::file_kind(self.runtime.run.runtime);
+            if let Ok(data) = self.files.read(kind, &playing.name) {
                 self.send(GuestToHost::Audio(AudioCommand::Play {
                     channel,
                     data,
