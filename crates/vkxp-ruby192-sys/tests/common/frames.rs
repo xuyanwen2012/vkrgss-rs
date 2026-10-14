@@ -71,6 +71,9 @@ static LAST_FORK: AtomicI64 = AtomicI64::new(0);
 static IS_COPY: AtomicBool = AtomicBool::new(false);
 static COPIED_AT: AtomicI64 = AtomicI64::new(0);
 
+/// Whether a copy calls `restart_thread_timer()` before it goes on.
+pub(crate) static RESTART_TIMER: AtomicBool = AtomicBool::new(false);
+
 /// The end of the pipe a copy writes its digest to.
 static DIGESTS: AtomicI32 = AtomicI32::new(-1);
 
@@ -91,6 +94,9 @@ fn frame(_ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
         match process {
             0 => {
                 IS_COPY.store(true, Ordering::SeqCst);
+                if RESTART_TIMER.load(Ordering::SeqCst) {
+                    vkxp_ruby192_sys::restart_thread_timer();
+                }
                 COPIED_AT.store(number, Ordering::SeqCst);
             }
             process if process > 0 => COPIES.lock().unwrap().push((number, process)),

@@ -1,0 +1,43 @@
+[package]
+name = "vkxp-guest-main-rgss3"
+description = "The main of a guest of vkxp over Ruby 1.9.2: the source of vkxp-guest-main"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+build = "build.rs"
+
+# The one source of the main of a guest, compiled here over the second interpreter. The
+# documentation belongs to `vkxp-guest-main`.
+[lib]
+path = "../vkxp-guest-main/src/lib.rs"
+doc = false
+doctest = false
+
+[lints]
+workspace = true
+
+# The dependencies of `vkxp-guest-main`, with the binding and the interpreter crate
+# replaced; a test of `xtask` compares the two lists.
+[dependencies]
+anyhow.workspace = true
+tracing.workspace = true
+# The keys stay `vkxp-binding` and `vkxp-ruby-sys`, so that the source goes on saying
+# `vkxp_binding::` and `vkxp_ruby_sys::`.
+vkxp-binding = { package = "vkxp-binding-rgss3", path = "../vkxp-binding-rgss3" }
+vkxp-core.workspace = true
+vkxp-guest.workspace = true
+vkxp-proto.workspace = true
+vkxp-ruby-sys = { package = "vkxp-ruby192-sys", path = "../vkxp-ruby192-sys" }
+vkxp-text.workspace = true
+vkxp-vfs.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

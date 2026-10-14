@@ -12,9 +12,11 @@
 //!    define the same symbols and cannot be linked into one program. For this rule alone
 //!    development dependencies count as well, because a test binary links them.
 //!
-//! Beside the rules, the two packages that compile the one source of the RGSS classes,
-//! `vkxp-binding` and `vkxp-binding-rgss3`, declare the same dependencies apart from the
-//! interpreter crate, and every test file of the first has its counterpart in the second.
+//! Beside the rules, the twin packages that compile one source over the two interpreters,
+//! `vkxp-binding` and `vkxp-binding-rgss3` for the RGSS classes and `vkxp-guest-main` and
+//! `vkxp-guest-main-rgss3` for the main of a guest, declare the same dependencies apart from
+//! the interpreter crate and the binding package, and every test file of the first of a pair
+//! has its counterpart in the second.
 //!
 //! The `vkxp` binary is on neither side: it is the one crate that may depend on both.
 //!
@@ -44,6 +46,7 @@ pub(crate) const GUEST_CRATES: &[&str] = &[
     "vkxp-binding-rgss3",
     "vkxp-guest",
     "vkxp-guest-main",
+    "vkxp-guest-main-rgss3",
 ];
 
 /// Crates that own the window, the GPU or the audio device.
@@ -921,21 +924,55 @@ mod tests {
         );
     }
 
-    /// The two packages that compile the one source of the RGSS classes, each with the
-    /// interpreter crate it is built over.
-    const BINDING_PACKAGES: [(&str, &str); 2] = [
-        ("vkxp-binding", "vkxp-ruby-sys"),
-        ("vkxp-binding-rgss3", "vkxp-ruby192-sys"),
+    /// One of two packages that compile one source: its name, the interpreter crate it is
+    /// built over and the binding package it is built over.
+    #[derive(Clone, Copy)]
+    struct Twin {
+        package: &'static str,
+        interpreter: &'static str,
+        binding: &'static str,
+    }
+
+    /// The two packages that compile the one source of the RGSS classes.
+    const BINDING_PACKAGES: [Twin; 2] = [
+        Twin {
+            package: "vkxp-binding",
+            interpreter: "vkxp-ruby-sys",
+            binding: "vkxp-binding",
+        },
+        Twin {
+            package: "vkxp-binding-rgss3",
+            interpreter: "vkxp-ruby192-sys",
+            binding: "vkxp-binding-rgss3",
+        },
     ];
 
-    /// The dependencies a binding package declares, each as one line of name, kind, features
-    /// and whether it is optional, with the package's own name and its interpreter crate
-    /// replaced by placeholders.
-    fn declared_dependencies(
-        metadata: &Value,
-        package: &str,
-        interpreter: &str,
-    ) -> Result<BTreeSet<String>> {
+    /// The two packages that compile the one source of the main of a guest.
+    const GUEST_MAIN_PACKAGES: [Twin; 2] = [
+        Twin {
+            package: "vkxp-guest-main",
+            interpreter: "vkxp-ruby-sys",
+            binding: "vkxp-binding",
+        },
+        Twin {
+            package: "vkxp-guest-main-rgss3",
+            interpreter: "vkxp-ruby192-sys",
+            binding: "vkxp-binding-rgss3",
+        },
+    ];
+
+    /// The pairs of twin packages.
+    const TWIN_PACKAGES: [[Twin; 2]; 2] = [BINDING_PACKAGES, GUEST_MAIN_PACKAGES];
+
+    /// The dependencies a package declares, each as one line of name, kind, features and
+    /// whether it is optional, with the package's own name, its interpreter crate and its
+    /// binding package replaced by placeholders.
+    fn declared_dependencies(metadata: &Value, twin: Twin) -> Result<BTreeSet<String>> {
+        let Twin {
+            package,
+            interpreter,
+            binding,
+        } = twin;
         let packages = metadata["packages"]
             .as_array()
             .context("metadata has no `packages` array")?;
@@ -955,6 +992,8 @@ mod tests {
                 "<itself>"
             } else if name == interpreter {
                 "<the interpreter crate>"
+            } else if name == binding {
+                "<the binding package>"
             } else {
                 name
             };
@@ -979,12 +1018,14 @@ mod tests {
         Ok(lines)
     }
 
-    /// What the two binding packages declare differently, apart from the interpreter crate: one
-    /// entry per dependency that one of them has and the other has not, or has otherwise.
-    fn binding_manifest_differences(metadata: &Value) -> Result<Vec<String>> {
-        let [(first, first_sys), (second, second_sys)] = BINDING_PACKAGES;
-        let of_first = declared_dependencies(metadata, first, first_sys)?;
-        let of_second = declared_dependencies(metadata, second, second_sys)?;
+    /// What two twin packages declare differently, apart from the interpreter crate and the
+    /// binding package: one entry per dependency that one of them has and the other has not,
+    /// or has otherwise.
+    fn twin_manifest_differences(metadata: &Value, twins: [Twin; 2]) -> Result<Vec<String>> {
+        let [first, second] = twins;
+        let of_first = declared_dependencies(metadata, first)?;
+        let of_second = declared_dependencies(metadata, second)?;
+        let (first, second) = (first.package, second.package);
         let only = |package: &str, lines: &BTreeSet<String>, other: &BTreeSet<String>| {
             lines
                 .difference(other)
@@ -996,9 +1037,12 @@ mod tests {
         Ok(differences)
     }
 
-    /// The names of the `.rs` files directly in `dir`, sorted.
+    /// The names of the `.rs` files directly in `dir`, sorted; none when there is no `dir`.
     fn test_files(dir: &Path) -> Result<BTreeSet<String>> {
         let mut names = BTreeSet::new();
+        if !dir.exists() {
+            return Ok(names);
+        }
         for entry in std::fs::read_dir(dir).with_context(|| format!("{}", dir.display()))? {
             let name = entry?.file_name().to_string_lossy().into_owned();
             if name.ends_with(".rs") {
@@ -1050,8 +1094,9 @@ mod tests {
     fn each_binding_package_reaches_its_own_interpreter_only() {
         let linked = linked_workspace_graph(&crate::workspace_root())
             .expect("cargo metadata for the workspace");
-        for (index, (package, interpreter)) in BINDING_PACKAGES.into_iter().enumerate() {
-            let other = BINDING_PACKAGES[1 - index].1;
+        for (index, twin) in BINDING_PACKAGES.into_iter().enumerate() {
+            let (package, interpreter) = (twin.package, twin.interpreter);
+            let other = BINDING_PACKAGES[1 - index].interpreter;
             let paths = paths_from(&linked, package);
             assert!(
                 paths.contains_key(interpreter),
@@ -1071,17 +1116,20 @@ mod tests {
         serde_json::from_slice(&output.stdout).expect("metadata JSON")
     }
 
-    /// The two binding packages declare the same dependencies apart from the interpreter
-    /// crate.
+    /// Twin packages declare the same dependencies apart from the interpreter crate and the
+    /// binding package.
     #[test]
-    fn the_binding_packages_declare_the_same_dependencies() {
-        let differences = binding_manifest_differences(&metadata_without_resolution())
-            .expect("both packages are in the workspace");
-        assert!(differences.is_empty(), "{}", differences.join("\n"));
+    fn the_twin_packages_declare_the_same_dependencies() {
+        let metadata = metadata_without_resolution();
+        for twins in TWIN_PACKAGES {
+            let differences = twin_manifest_differences(&metadata, twins)
+                .expect("both packages are in the workspace");
+            assert!(differences.is_empty(), "{}", differences.join("\n"));
+        }
     }
 
     #[test]
-    fn a_dependency_of_one_binding_package_only_is_named() {
+    fn a_dependency_of_one_twin_package_only_is_named() {
         let dependency = |name: &str, kind: Value, features: &[&str]| {
             serde_json::json!({
                 "name": name, "kind": kind, "optional": false, "features": features,
@@ -1101,30 +1149,54 @@ mod tests {
             ] },
         ] });
         assert_eq!(
-            binding_manifest_differences(&metadata).unwrap(),
+            twin_manifest_differences(&metadata, BINDING_PACKAGES).unwrap(),
             [
                 "only `vkxp-binding` declares vkxp-core (normal, features [])",
                 "only `vkxp-binding-rgss3` declares libc (normal, features [])",
                 "only `vkxp-binding-rgss3` declares vkxp-core (normal, features [extra])",
             ]
         );
+
+        // The main of a guest names the binding package of its interpreter.
+        let metadata = serde_json::json!({ "packages": [
+            { "name": "vkxp-guest-main", "dependencies": [
+                dependency("vkxp-ruby-sys", Value::Null, &[]),
+                dependency("vkxp-binding", Value::Null, &[]),
+                dependency("tempfile", "dev".into(), &[]),
+            ] },
+            { "name": "vkxp-guest-main-rgss3", "dependencies": [
+                dependency("vkxp-ruby192-sys", Value::Null, &[]),
+                dependency("vkxp-binding-rgss3", Value::Null, &[]),
+                dependency("libc", Value::Null, &[]),
+            ] },
+        ] });
+        assert_eq!(
+            twin_manifest_differences(&metadata, GUEST_MAIN_PACKAGES).unwrap(),
+            [
+                "only `vkxp-guest-main` declares tempfile (dev, features [])",
+                "only `vkxp-guest-main-rgss3` declares libc (normal, features [])",
+            ]
+        );
     }
 
-    /// Every test file of `vkxp-binding` is built a second time by `vkxp-binding-rgss3`.
+    /// Every test file of the first of twin packages is built a second time by the second.
     #[test]
-    fn every_test_file_of_the_binding_has_its_counterpart() {
+    fn every_test_file_of_a_twin_package_has_its_counterpart() {
         let crates = crate::workspace_root().join("crates");
-        let missing = tests_without_counterpart(
-            &crates.join("vkxp-binding").join("tests"),
-            &crates.join("vkxp-binding-rgss3").join("tests"),
-        )
-        .expect("both directories are read");
-        assert!(
-            missing.is_empty(),
-            "crates/vkxp-binding/tests has files without a counterpart in \
-             crates/vkxp-binding-rgss3/tests: {}",
-            missing.join(", ")
-        );
+        for [first, second] in TWIN_PACKAGES {
+            let missing = tests_without_counterpart(
+                &crates.join(first.package).join("tests"),
+                &crates.join(second.package).join("tests"),
+            )
+            .expect("the directories are read");
+            assert!(
+                missing.is_empty(),
+                "crates/{}/tests has files without a counterpart in crates/{}/tests: {}",
+                first.package,
+                second.package,
+                missing.join(", ")
+            );
+        }
     }
 
     /// An interpreter crate that depends on the other one reaches both.

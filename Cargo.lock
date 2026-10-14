@@ -2604,6 +2604,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "vkxp-guest-main-rgss3"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "tempfile",
+ "tracing",
+ "vkxp-binding-rgss3",
+ "vkxp-core",
+ "vkxp-guest",
+ "vkxp-proto",
+ "vkxp-ruby192-sys",
+ "vkxp-text",
+ "vkxp-vfs",
+]
+
+[[package]]
 name = "vkxp-host"
 version = "0.2.0"
 dependencies = [

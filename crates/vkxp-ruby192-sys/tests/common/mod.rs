@@ -306,3 +306,5 @@ pub(crate) fn thread_count() -> usize {
 pub(crate) mod suites;
 
 pub(crate) mod frames;
+
+pub(crate) mod copy;

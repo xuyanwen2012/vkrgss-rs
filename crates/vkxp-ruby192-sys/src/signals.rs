@@ -25,6 +25,35 @@ pub const SIGNALS_TAKEN_BY_RUBY: [c_int; 11] = [
     libc::SIGCHLD,
 ];
 
+unsafe extern "C" {
+    /// Whether the main thread is the only living Ruby thread.
+    fn rb_thread_alone() -> c_int;
+    /// Forgets the timer thread without stopping it. The interpreter calls it itself after
+    /// its own `fork`.
+    fn rb_thread_reset_timer_thread();
+}
+
+/// Makes script threads work in a copy of the process that `fork` has just made. The timer
+/// thread of the copied process does not exist in the copy; this forgets it, and the
+/// interpreter then starts one when a script next creates a thread (patch
+/// `lazy-timer-thread`). To be called in the copy on the interpreter thread, which is the
+/// one thread a copy has. Nothing changes when no script ever made a thread.
+pub fn restart_thread_timer() {
+    // SAFETY: called on the interpreter thread, as the interpreter itself calls it after a
+    // `fork`; it clears one variable that only that thread reads.
+    unsafe { rb_thread_reset_timer_thread() }
+}
+
+/// Whether a copy of the process made by `fork` now would lack threads a script has made:
+/// true exactly while a Ruby thread other than the main one is alive. A Ruby thread of 1.9
+/// is a thread of the operating system, and a copy has the calling thread only. To be
+/// called on the interpreter thread.
+pub fn threads_lost_in_a_copy() -> bool {
+    // SAFETY: called on the interpreter thread, which holds the interpreter's lock; the
+    // function reads the count of living threads.
+    unsafe { rb_thread_alone() == 0 }
+}
+
 /// `struct sigaction` as the x86_64 Linux kernel defines it for `rt_sigaction`.
 ///
 /// The dispositions go through the system call directly instead of through `sigaction` of

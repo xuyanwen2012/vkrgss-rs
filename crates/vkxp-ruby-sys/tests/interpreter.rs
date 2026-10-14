@@ -150,3 +150,19 @@ fn ruby_threads_and_continuations_work_on_the_interpreter_thread() {
         Ok("[3, 4]".to_owned())
     );
 }
+
+#[test]
+fn a_copy_of_the_process_loses_no_script_thread() {
+    // The threads of Ruby 1.8 are memory of the interpreter: the answer is `false` even
+    // while a script thread is alive.
+    let answers = shared().interpreter.run(|_| {
+        let made = eval_inspect("$sleeper = Thread.new { sleep }; $sleeper.alive?");
+        let lost = vkxp_ruby_sys::threads_lost_in_a_copy();
+        let ended = eval_inspect("$sleeper.kill; $sleeper.join; $sleeper.alive?");
+        (made, lost, ended)
+    });
+    assert_eq!(
+        answers,
+        (Ok("true".to_owned()), false, Ok("false".to_owned()))
+    );
+}

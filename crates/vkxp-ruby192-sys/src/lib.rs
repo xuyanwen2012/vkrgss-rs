@@ -121,7 +121,8 @@
 //! | `ffi::ruby_vkxp_gc_stress`, `ffi::ruby_vkxp_gc_count` | absent; `GC.stress` and `GC.count` of the release. `VKXP_GC_STRESS` has no "every n-th" form |
 //! | `ffi::ruby_vkxp_select_symbols`, `ffi::ruby_vkxp_mark_game_scripts`, `SymbolTable`, `Options::symbols` | absent; symbols are numbered as the release numbers them, and a dump does not depend on the numbers. `Options::for_rgss` gives the defaults for every runtime |
 //! | `Ruby::mark_game_scripts` | exists and does nothing |
-//! | `restart_thread_timer` | absent; the timer thread does not start before a script creates a thread |
+//! | `restart_thread_timer` arms the timer of the green threads in a copy of the process | forgets the timer thread, which a copy made by `fork` does not have; the interpreter starts one when a script next creates a thread. Nothing changes when no script ever made a thread |
+//! | `threads_lost_in_a_copy` is always `false`: the threads are memory of the interpreter | `true` exactly while a Ruby thread other than the main one is alive: a Ruby thread is a thread of the system, and a copy made by `fork` does not have it |
 //! | `RUBY_API` is `RubyApi::Ruby18` | `RubyApi::Ruby19` |
 //! | `ffi::RString`, `ffi::RArray`, `ffi::RAux`, `ffi::rstring()`, `ffi::rarray()` | absent; `ffi::rstring_ptr()`, `ffi::rstring_len()`, `ffi::rarray_ptr()` and `ffi::rarray_len()`, which follow `RSTRING_PTR` and its siblings for the embedded and the heap form. The layouts are in `ffi::layout` |
 //! | `ffi::RObject` with `iv_tbl` | the layout of 1.9.2: slots inside the object, or a pointer to them |
@@ -170,5 +171,5 @@ on_target! {
     };
     pub use protect::{Raised, protect};
     pub use root::Root;
-    pub use signals::SIGNALS_TAKEN_BY_RUBY;
+    pub use signals::{SIGNALS_TAKEN_BY_RUBY, restart_thread_timer, threads_lost_in_a_copy};
 }

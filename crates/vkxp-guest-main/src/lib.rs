@@ -18,6 +18,7 @@
 //! `vkxp-guest`. Its errors are written to the error stream with their causes and matched
 //! by nobody, so it uses `anyhow`.
 
+#![cfg(not(vkxp_interpreter_absent))]
 #![forbid(unsafe_code)]
 
 mod font;
@@ -302,6 +303,14 @@ struct ProcessCopier(ForkCopier);
 
 impl Copier for ProcessCopier {
     fn park(&self, slot: u8) -> Result<Copied, CopyFailed> {
+        // A thread of the interpreter that is a thread of the system is not in a copy.
+        if vkxp_ruby_sys::threads_lost_in_a_copy() {
+            tracing::warn!(
+                "the state of slot {slot} is not saved: a script thread is alive, and a copy \
+                 of the process would not have it"
+            );
+            return Err(CopyFailed);
+        }
         match self.0.park(slot) {
             Ok(Parked::WentOn) => Ok(Copied::WentOn),
             Ok(Parked::Resumed(link)) => Ok(Copied::Resumed(link)),

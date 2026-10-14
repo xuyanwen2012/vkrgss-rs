@@ -54,6 +54,8 @@ fn the_public_items_of_vkxp_ruby192_sys_are_offered() {
     let _: &[libc::c_int] = &SIGNALS_TAKEN_BY_RUBY;
     let _: ffi::VALUE = ffi::Qnil;
     let _ = protect::<()>;
+    let _: fn() = vkxp_ruby192_sys::restart_thread_timer;
+    let _: fn() -> bool = vkxp_ruby192_sys::threads_lost_in_a_copy;
 
     let _ = Ruby::eval;
     let _ = Ruby::eval_protected;

@@ -39,6 +39,14 @@ pub fn restart_thread_timer() {
     unsafe { rb_thread_start_timer() }
 }
 
+/// Whether a copy of the process made by `fork` now would lack threads a script has made.
+/// Never here: the threads of Ruby 1.8 are memory of the interpreter and are copied with
+/// it. To be called on the interpreter thread, as in `vkxp-ruby192-sys`, where the answer
+/// depends on the script.
+pub fn threads_lost_in_a_copy() -> bool {
+    false
+}
+
 /// `struct sigaction` as the x86_64 Linux kernel defines it for `rt_sigaction`.
 ///
 /// The dispositions go through the system call directly instead of through `sigaction` of

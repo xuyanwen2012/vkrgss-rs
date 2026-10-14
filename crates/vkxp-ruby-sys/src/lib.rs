@@ -120,8 +120,10 @@
 //! read strings and arrays, [`Ruby::str_new`] makes a string of bytes and
 //! [`Ruby::str_new_text`] one of text (the same string here, where a string has no
 //! encoding), and [`Ruby::mark_game_scripts`] marks where the game's scripts begin.
-//! [`SymbolTable`], [`Options::symbols`], [`ffi::ruby_top_self`], [`ffi::rstring()`],
-//! [`ffi::rarray()`] and [`restart_thread_timer`] exist only here.
+//! What the main of a guest needs around a copy of the process has one name and one
+//! signature in both as well: [`threads_lost_in_a_copy`], which is always `false` here, and
+//! [`restart_thread_timer`]. [`SymbolTable`], [`Options::symbols`], [`ffi::ruby_top_self`],
+//! [`ffi::rstring()`] and [`ffi::rarray()`] exist only here.
 
 // The `Zlib` extension calls into the zlib that `libz-sys` builds; naming the crate is what
 // makes rustc link it.
@@ -143,4 +145,4 @@ pub use interp::{
 };
 pub use protect::{Raised, protect};
 pub use root::Root;
-pub use signals::{SIGNALS_TAKEN_BY_RUBY, restart_thread_timer};
+pub use signals::{SIGNALS_TAKEN_BY_RUBY, restart_thread_timer, threads_lost_in_a_copy};
