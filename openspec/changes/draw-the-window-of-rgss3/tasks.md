@@ -2,11 +2,11 @@
 
 ## 1. Window of RGSS3 in the scene
 
-- [ ] 1.1 The third rule set: creation, defaults, the paddings, `arrows_visible`, the tone and their readers; the new calls, ignored by windows of RGSS1 and RGSS2; background and frame with the tone and the normal blend, open and opening. Verify: the scenarios of "Window of RGSS3" and "Background of a window of RGSS3"; `cargo test -p vkxp-core --locked` passes and `cargo check --workspace --all-targets --locked` succeeds.
-- [ ] 1.2 The cursor: its pieces, its position, and its placement as state of the calls. Verify: the scenarios of "Cursor of a window of RGSS3" and "Cursor placement of a window of RGSS3"; the same test command.
-- [ ] 1.3 Contents with the paddings and the calls that show them; the built parts and `move`. Verify: the scenarios of "Contents of a window of RGSS3" and "Cached parts and move of a window of RGSS3"; the same test command.
-- [ ] 1.4 Scroll arrows with their conditions and their calls, the pause sign, the order of the parts. Verify: the scenarios of "Scroll arrows of a window of RGSS3" and "Order of the parts of a window of RGSS3"; the same test command.
-- [ ] 1.5 The window without area, disposed skin and contents, the calls at which the original faults. Verify: the scenarios of "Window of RGSS3 without area", "Disposed skin and contents of a window of RGSS3" and "Calls at which the original of RGSS3 faults"; the same test command; `git diff --stat` against the start of the change names no file of `crates/vkxp-binding`.
+- [x] 1.1 The third rule set: creation, defaults, the paddings, `arrows_visible`, the tone and their readers; the new calls, ignored by windows of RGSS1 and RGSS2; background and frame with the tone and the normal blend, open and opening. Verify: the scenarios of "Window of RGSS3" and "Background of a window of RGSS3"; `cargo test -p vkxp-core --locked` passes and `cargo check --workspace --all-targets --locked` succeeds.
+- [x] 1.2 The cursor: its pieces, its position, and its placement as state of the calls. Verify: the scenarios of "Cursor of a window of RGSS3" and "Cursor placement of a window of RGSS3"; the same test command.
+- [x] 1.3 Contents with the paddings and the calls that show them; the built parts and `move`. Verify: the scenarios of "Contents of a window of RGSS3" and "Cached parts and move of a window of RGSS3"; the same test command.
+- [x] 1.4 Scroll arrows with their conditions and their calls, the pause sign, the order of the parts. Verify: the scenarios of "Scroll arrows of a window of RGSS3" and "Order of the parts of a window of RGSS3"; the same test command.
+- [x] 1.5 The window without area, disposed skin and contents, the calls at which the original faults. Verify: the scenarios of "Window of RGSS3 without area", "Disposed skin and contents of a window of RGSS3" and "Calls at which the original of RGSS3 faults"; the same test command; `git diff --stat` against the start of the change names no file of `crates/vkxp-binding`.
 
 ## 2. Skins smaller than the layout
 

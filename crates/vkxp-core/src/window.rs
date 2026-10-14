@@ -167,13 +167,33 @@ fn bilinear_position(i: usize, part: i32, length: i32) -> (i32, i32) {
     ((position >> 32) as i32, ((position >> 24) & 255) as i32)
 }
 
+/// How many of the `length` columns or rows of its target the bilinear stretch of a block
+/// of `side` draws when the skin holds only the first `held` of the block's: those whose
+/// next one still reads a texel with a neighbour inside the skin,
+/// `(i + 1) * (side - 1) / length < held - 1` in exact arithmetic.
+///
+/// Measured on the originals of VX and VX Ace (window measurement of RGSS3, 2026-10-13).
+/// The stretch that picks texels follows the same rule with `side` for `side - 1` and
+/// `held` for `held - 1`, which is how [`Bitmaps::stretch_blt`] cuts.
+fn bilinear_kept(side: i32, held: i64, length: i32) -> i32 {
+    if held >= i64::from(side) {
+        return length;
+    }
+    let part = i64::from(side) - 1;
+    let reach = (held - 1).max(0) * i64::from(length);
+    // Between 0 and `length`.
+    ((reach + part - 1) / part - 1).clamp(0, i64::from(length)) as i32
+}
+
 /// Stretches the `side` by `side` block of `skin` at `corner` over the rectangle `to` of the
 /// cleared bitmap `dst` as the original does with the reduced numerator `side - 1`: each
 /// pixel is interpolated between four texels, along the row first and then between the two
 /// rows, with 8-bit weights and truncation, the alpha like a colour channel. A texel with an
 /// alpha of 0 lends no colour.
 ///
-/// Texels outside the skin count as transparent (not measured).
+/// Texels outside the skin count as transparent. With `cut`, a block that leaves the skin
+/// shortens the target ([`bilinear_kept`]); without it the whole target is drawn (RGSS1,
+/// not measured there).
 fn stretch_bilinear(
     bitmaps: &mut Bitmaps,
     dst: BitmapId,
@@ -181,8 +201,16 @@ fn stretch_bilinear(
     skin: BitmapId,
     corner: (i32, i32),
     side: i32,
+    cut: bool,
 ) -> Result<(), BitmapError> {
-    let Some(area) = bitmaps.get(dst)?.clip(to) else {
+    let mut drawn = to;
+    if cut {
+        let size = bitmaps.rect(skin)?;
+        let held = |length: i32, start: i32| i64::from(length) - i64::from(start);
+        drawn.width = bilinear_kept(side, held(size.width, corner.0), to.width);
+        drawn.height = bilinear_kept(side, held(size.height, corner.1), to.height);
+    }
+    let Some(area) = bitmaps.get(dst)?.clip(drawn) else {
         return Ok(());
     };
     let source = bitmaps.get(skin)?;
@@ -239,7 +267,7 @@ fn draw_background(
     if stretch {
         let to = Rect::new(0, 0, width, height);
         if stretched_part(PATTERN, width, height) < PATTERN {
-            return stretch_bilinear(bitmaps, dst, to, skin, (0, 0), PATTERN);
+            return stretch_bilinear(bitmaps, dst, to, skin, (0, 0), PATTERN, false);
         }
         let from = Rect::new(0, 0, PATTERN, PATTERN);
         return bitmaps.stretch_blt(dst, to, skin, from, 255);
@@ -317,18 +345,28 @@ fn draw_cursor(
     height: i32,
     _stretch: bool,
 ) -> Result<(), BitmapError> {
-    cursor_pieces(bitmaps, dst, skin, (width, height), CURSOR)
+    cursor_pieces(
+        bitmaps,
+        dst,
+        skin,
+        (width, height),
+        CURSOR,
+        CURSOR_BORDER,
+        false,
+    )
 }
 
-/// The cursor of `size` from the cursor image `cursor` of the skin.
+/// The cursor of `size` from the cursor image `cursor` of the skin, whose border of `border`
+/// pixels keeps its size. `cut` is that of [`stretch_bilinear`], for the centre.
 fn cursor_pieces(
     bitmaps: &mut Bitmaps,
     dst: BitmapId,
     skin: BitmapId,
     (width, height): (i32, i32),
     cursor: Rect,
+    border: i32,
+    cut: bool,
 ) -> Result<(), BitmapError> {
-    let border = CURSOR_BORDER;
     let (inner_width, inner_height) = (width - 2 * border, height - 2 * border);
     let image = cursor.width - 2 * border;
     let (near_x, near_y) = (cursor.x, cursor.y);
@@ -337,7 +375,7 @@ fn cursor_pieces(
         let corner = (near_x + border, near_y + border);
         let to = Rect::new(border, border, inner_width, inner_height);
         if stretched_part(image, inner_width, inner_height) < image {
-            stretch_bilinear(bitmaps, dst, to, skin, corner, image)?;
+            stretch_bilinear(bitmaps, dst, to, skin, corner, image, cut)?;
         } else {
             let from = Rect::new(corner.0, corner.1, image, image);
             bitmaps.stretch_blt(dst, to, skin, from, 255)?;
@@ -583,6 +621,7 @@ impl Assembly<'_> {
 }
 
 pub(crate) mod rgss2;
+pub(crate) mod rgss3;
 
 #[cfg(test)]
 mod tests;

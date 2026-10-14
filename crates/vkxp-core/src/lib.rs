@@ -101,7 +101,7 @@
 //! | `geometry` | the fixed-point transform of a quad, the rectangle of a stretch, the walk of a turned sprite |
 //! | `extract` | [`Scene::extract`], the draw order, sprites and viewports as ops; the sprite of RGSS2 |
 //! | `turned` | the bitmap a turned sprite is rendered into |
-//! | `window` | the bitmaps cached from a window skin, windows as ops; the window of RGSS2 with [`WindowCall`] |
+//! | `window` | the bitmaps cached from a window skin, windows as ops; the windows of RGSS2 and RGSS3 with [`WindowCall`] |
 //! | `plane` | planes as tiled quads, the pre-tiled bitmap of a small pattern |
 //! | `tilemap` | tilemaps as ops, the tables sent for them, the overlay of flashing cells; the tile numbering is `vkxp_proto::tiles` |
 //! | `input` | [`InputState`] |

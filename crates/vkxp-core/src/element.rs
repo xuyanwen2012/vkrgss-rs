@@ -328,7 +328,8 @@ pub struct Window {
     counted: (bool, bool),
     /// The bitmaps drawn from the window skin.
     pub(crate) caches: Caches,
-    /// What a window of RGSS2 keeps beside its properties; `None` in a window of RGSS1.
+    /// What a window of RGSS2 or RGSS3 keeps beside its properties; `None` in a window of
+    /// RGSS1.
     pub(crate) rgss2: Option<crate::window::rgss2::State>,
 }
 
@@ -366,6 +367,17 @@ impl Window {
     pub(crate) fn new_rgss2(viewport: Option<ViewportId>, stamp: u64) -> Window {
         Window {
             rgss2: Some(crate::window::rgss2::State::new()),
+            ..Window::new(viewport, stamp)
+        }
+    }
+
+    /// A window of RGSS3, with its defaults: as one of RGSS2, with z 100 and a back opacity
+    /// of 192.
+    pub(crate) fn new_rgss3(viewport: Option<ViewportId>, stamp: u64) -> Window {
+        Window {
+            order: Order { z: 100, stamp },
+            back_opacity: 192,
+            rgss2: Some(crate::window::rgss2::State::new_rgss3()),
             ..Window::new(viewport, stamp)
         }
     }

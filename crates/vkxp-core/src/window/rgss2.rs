@@ -19,11 +19,14 @@
 //! `tests/data/window-rgss2-cases.txt` are a selection of what was measured. Not measured: a
 //! skin narrower or lower than 64 pixels, of which the original draws less of the background
 //! than is drawn here, and a disposed skin or contents bitmap.
+//!
+//! The window of RGSS3 (`rgss3`) extends this one: it shares the state, the builders of
+//! background and frame, the openness, the blink and the pause sign.
 
 use vkxp_proto::BitmapId;
 
 use super::{
-    CORNER, Key, PADDING, clip_to, cursor_pieces, frame_pieces, layer, stretch_bilinear,
+    CORNER, Key, PADDING, clip_to, cursor_pieces, frame_pieces, layer, rgss3, stretch_bilinear,
     stretched_part,
 };
 use crate::extract::{Assembly, Level, Look, intersect};
@@ -39,13 +42,13 @@ const BACK_MARGIN: i32 = 2;
 /// Left and top of the pattern.
 const PATTERN: (usize, usize) = (0, 64);
 /// Left and top of the frame area.
-const FRAME: (i32, i32) = (64, 0);
+pub(super) const FRAME: (i32, i32) = (64, 0);
 /// Where a frame edge starts: where the corner ends.
 const EDGE_START: i32 = 16;
 /// The cursor image.
-const CURSOR: Rect = Rect::new(64, 64, 32, 32);
+pub(super) const CURSOR: Rect = Rect::new(64, 64, 32, 32);
 /// Left and top of the pause sign's four images, each 16 by 16.
-const PAUSE: (i32, i32) = (96, 64);
+pub(super) const PAUSE: (i32, i32) = (96, 64);
 /// Number of updates one image of the pause sign stays.
 const PAUSE_PERIOD: u32 = 16;
 /// Number of updates of one blink of the cursor.
@@ -53,9 +56,9 @@ const BLINK: u8 = 40;
 /// Where the blink stands in a window that was made inactive.
 const BLINK_INACTIVE: u8 = 16;
 
-/// One call of a script on a window that can change what the window latches: `update`, or
-/// the assignment of a property. The properties that latch nothing in either runtime
-/// (`visible`, `z`, `opacity`, `back_opacity`, `viewport`) are not among them.
+/// One call of a script on a window that can change what the window latches: `update`,
+/// `move`, or the assignment of a property. The properties that latch nothing in any runtime
+/// (`visible`, `z`, `opacity`, `back_opacity`, `viewport`, `tone`) are not among them.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum WindowCall {
     Update,
@@ -74,28 +77,60 @@ pub enum WindowCall {
     Windowskin(Option<BitmapId>),
     Contents(Option<BitmapId>),
     CursorRect(Rect),
+    /// Both paddings of a window of RGSS3, not clamped. Other windows ignore it.
+    Padding(i32),
+    /// The lower padding of a window of RGSS3, not clamped. Other windows ignore it.
+    PaddingBottom(i32),
+    /// Whether a window of RGSS3 may show scroll arrows. Other windows ignore it.
+    ArrowsVisible(bool),
+    /// `move(x, y, width, height)` of RGSS3: the four assignments in this order, in every
+    /// window.
+    Move(i32, i32, i32, i32),
 }
 
 /// A scroll arrow as it was decided: where it is drawn, relative to the window, and from
 /// which rectangle of the skin.
 #[derive(Debug, Clone, Copy, PartialEq)]
-struct Arrow {
-    x: i64,
-    y: i64,
-    from: Rect,
+pub(super) struct Arrow {
+    pub(super) x: i64,
+    pub(super) y: i64,
+    pub(super) from: Rect,
 }
 
-/// What a window of RGSS2 keeps beside its properties.
+/// The arrows that are `shown`, in the order down, left, right, up, in a window of `width`
+/// by `height` whose halves less 8 are `centre`.
+pub(super) fn arrows(
+    shown: [bool; 4],
+    (width, height): (i64, i64),
+    centre: (i64, i64),
+) -> Vec<Arrow> {
+    // The arrows sit around the 32 by 32 centre of the frame area.
+    let (left, top) = (FRAME.0 + CORNER, FRAME.1 + CORNER);
+    let places = [
+        (centre.0, height - 12, Rect::new(left + 8, top + 24, 16, 8)),
+        (4, centre.1, Rect::new(left, top + 8, 8, 16)),
+        (width - 12, centre.1, Rect::new(left + 24, top + 8, 8, 16)),
+        (centre.0, 4, Rect::new(left + 8, top, 16, 8)),
+    ];
+    let shown = shown.into_iter().zip(places).filter(|(shown, _)| *shown);
+    shown
+        .map(|(_, (x, y, from))| Arrow { x, y, from })
+        .collect()
+}
+
+/// What a window of RGSS2 or RGSS3 keeps beside its properties.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct State {
-    openness: u8,
+    pub(super) openness: u8,
     /// Whether the contents are drawn when the window is: the value `visible` had at the
     /// last refresh.
-    contents_shown: bool,
-    /// The scroll arrows decided at the last refresh that found contents, in the order they
-    /// are drawn in, and the skin of that moment, from which they are drawn.
-    arrows: Vec<Arrow>,
-    arrow_skin: Option<BitmapId>,
+    pub(super) contents_shown: bool,
+    /// The scroll arrows as they were decided last with contents, in the order they are
+    /// drawn in, and the skin of that moment, from which they are drawn.
+    pub(super) arrows: Vec<Arrow>,
+    pub(super) arrow_skin: Option<BitmapId>,
+    /// What a window of RGSS3 keeps beyond that; `None` in a window of RGSS2.
+    pub(super) rgss3: Option<rgss3::State>,
 }
 
 impl State {
@@ -105,6 +140,15 @@ impl State {
             contents_shown: true,
             arrows: Vec::new(),
             arrow_skin: None,
+            rgss3: None,
+        }
+    }
+
+    /// The state of a new window of RGSS3.
+    pub(crate) fn new_rgss3() -> State {
+        State {
+            rgss3: Some(rgss3::State::new()),
+            ..State::new()
         }
     }
 }
@@ -112,7 +156,7 @@ impl State {
 /// Runs `draw` with a bitmap that holds the layout of `skin`: the skin itself, or for a skin
 /// smaller than the layout a copy with transparent pixels where the skin has none, so that
 /// every piece is taken as the layout names it.
-fn with_layout(
+pub(super) fn with_layout(
     bitmaps: &mut Bitmaps,
     skin: BitmapId,
     draw: impl FnOnce(&mut Bitmaps, BitmapId) -> Result<(), BitmapError>,
@@ -142,7 +186,7 @@ fn with_layout(
 /// window draws the background with the transparent column at its right, which makes its
 /// rows count as the original counts them (see `draw_background` of RGSS1), and the opening
 /// window samples rows of the whole window.
-fn draw_background(
+pub(super) fn draw_background(
     bitmaps: &mut Bitmaps,
     dst: BitmapId,
     skin: BitmapId,
@@ -158,7 +202,7 @@ fn draw_background(
     );
     with_layout(bitmaps, skin, |bitmaps, skin| {
         if stretched_part(BACK, to.width, to.height) < BACK {
-            stretch_bilinear(bitmaps, dst, to, skin, (0, 0), BACK)?;
+            stretch_bilinear(bitmaps, dst, to, skin, (0, 0), BACK, false)?;
         } else {
             bitmaps.stretch_blt(dst, to, skin, Rect::new(0, 0, BACK, BACK), 255)?;
         }
@@ -211,7 +255,7 @@ fn lay_pattern(
 
 /// The frame: the pieces of RGSS1 from the frame area of this layout, the edges running
 /// from the corners.
-fn draw_frame(
+pub(super) fn draw_frame(
     bitmaps: &mut Bitmaps,
     dst: BitmapId,
     skin: BitmapId,
@@ -234,7 +278,7 @@ fn draw_cursor(
     _stretch: bool,
 ) -> Result<(), BitmapError> {
     with_layout(bitmaps, skin, |bitmaps, skin| {
-        cursor_pieces(bitmaps, dst, skin, (width, height), CURSOR)
+        cursor_pieces(bitmaps, dst, skin, (width, height), CURSOR, 2, false)
     })
 }
 
@@ -252,9 +296,16 @@ pub(crate) fn open_rows(height: i32, openness: u8) -> (i32, i32) {
 }
 
 impl Window {
-    /// Whether this is a window of RGSS2.
+    /// Whether this is a window of RGSS2 or of RGSS3, which extends it: one element at its
+    /// z, whose calls latch. [`Window::is_rgss3`] tells the two apart, and a window of
+    /// RGSS1 is neither.
     pub fn is_rgss2(&self) -> bool {
         self.rgss2.is_some()
+    }
+
+    /// Whether this is a window of RGSS3.
+    pub fn is_rgss3(&self) -> bool {
+        self.rgss3().is_some()
     }
 
     /// How far the window is open, from 0 to 255; 255 in a window of RGSS1, which is always
@@ -281,21 +332,32 @@ impl Window {
     /// - `Update` advances the blink of the cursor in an active window and the pause sign
     ///   in a pausing one, whether the window is visible, open or has a skin. Making the
     ///   window inactive puts the blink at its sixteenth step, also when it was inactive.
+    ///
+    /// A window of RGSS3 latches by lists of its own, which the module `rgss3` describes.
+    /// `Padding`, `PaddingBottom` and `ArrowsVisible` are ignored by the other two, and
+    /// `Move` is the four assignments in every window.
     pub fn call(&mut self, bitmaps: &mut Bitmaps, call: WindowCall) {
+        if let WindowCall::Move(x, y, width, height) = call {
+            for assignment in [
+                WindowCall::X(x),
+                WindowCall::Y(y),
+                WindowCall::Width(width),
+                WindowCall::Height(height),
+            ] {
+                self.call(bitmaps, assignment);
+            }
+            return;
+        }
         if self.rgss2.is_none() {
             return self.call_rgss1(call);
+        }
+        if self.is_rgss3() {
+            return self.call_rgss3(bitmaps, call);
         }
         match call {
             WindowCall::Update => {
                 self.latch(bitmaps);
-                if self.active {
-                    self.cursor_step = (self.cursor_step + 1) % BLINK;
-                }
-                if self.pause {
-                    // 2^32 and 64 are the same step of the sign: both multiples of its
-                    // four images, and both beyond its fading in.
-                    self.pause_step = self.pause_step.checked_add(1).unwrap_or(64);
-                }
+                self.advance();
             }
             WindowCall::X(x) => {
                 let changed = self.x != x;
@@ -336,19 +398,11 @@ impl Window {
                 self.latch(bitmaps);
             }
             WindowCall::Active(active) => {
-                let changed = self.active != active;
-                if !active {
-                    self.cursor_step = BLINK_INACTIVE;
-                }
-                self.active = active;
+                let changed = self.store_active(active);
                 self.latch_if(changed, bitmaps);
             }
             WindowCall::Pause(pause) => {
-                let changed = self.pause != pause;
-                if changed && pause {
-                    self.pause_step = 0;
-                }
-                self.pause = pause;
+                let changed = self.store_pause(pause);
                 self.latch_if(changed, bitmaps);
             }
             WindowCall::Windowskin(skin) => {
@@ -373,7 +427,43 @@ impl Window {
                     self.build_cursor(bitmaps);
                 }
             }
+            WindowCall::Padding(_)
+            | WindowCall::PaddingBottom(_)
+            | WindowCall::ArrowsVisible(_)
+            | WindowCall::Move(..) => {}
         }
+    }
+
+    /// What `Update` does beside latching: the blink of the cursor and the pause sign.
+    pub(super) fn advance(&mut self) {
+        if self.active {
+            self.cursor_step = (self.cursor_step + 1) % BLINK;
+        }
+        if self.pause {
+            // 2^32 and 64 are the same step of the sign: both multiples of its four
+            // images, and both beyond its fading in.
+            self.pause_step = self.pause_step.checked_add(1).unwrap_or(64);
+        }
+    }
+
+    /// Assigns `active` and says whether it changed.
+    pub(super) fn store_active(&mut self, active: bool) -> bool {
+        let changed = self.active != active;
+        if !active {
+            self.cursor_step = BLINK_INACTIVE;
+        }
+        self.active = active;
+        changed
+    }
+
+    /// Assigns `pause` and says whether it changed.
+    pub(super) fn store_pause(&mut self, pause: bool) -> bool {
+        let changed = self.pause != pause;
+        if changed && pause {
+            self.pause_step = 0;
+        }
+        self.pause = pause;
+        changed
     }
 
     /// A call on a window of RGSS1, which latches nothing.
@@ -393,6 +483,10 @@ impl Window {
             WindowCall::Windowskin(skin) => self.windowskin = skin,
             WindowCall::Contents(contents) => self.contents = contents,
             WindowCall::CursorRect(rect) => self.cursor_rect = rect,
+            WindowCall::Padding(_)
+            | WindowCall::PaddingBottom(_)
+            | WindowCall::ArrowsVisible(_)
+            | WindowCall::Move(..) => {}
         }
     }
 
@@ -418,43 +512,27 @@ impl Window {
         let (ox, oy) = (i64::from(self.ox), i64::from(self.oy));
         let padding = 2 * i64::from(PADDING);
         // Halves are rounded down, also of a negative size.
-        let centre_x = width.div_euclid(2) - 8;
-        let centre_y = height.div_euclid(2) - 8;
-        // The arrows sit around the 32 by 32 centre of the frame area.
-        let (left, top) = (FRAME.0 + CORNER, FRAME.1 + CORNER);
-        let arrow = |shown: bool, x: i64, y: i64, from: Rect| shown.then_some(Arrow { x, y, from });
-        state.arrows = [
-            arrow(
-                i64::from(contents.height) - oy > height - padding,
-                centre_x,
-                height - 12,
-                Rect::new(left + 8, top + 24, 16, 8),
-            ),
-            arrow(ox > 0, 4, centre_y, Rect::new(left, top + 8, 8, 16)),
-            arrow(
-                i64::from(contents.width) - ox > width - padding,
-                width - 12,
-                centre_y,
-                Rect::new(left + 24, top + 8, 8, 16),
-            ),
-            arrow(oy > 0, centre_x, 4, Rect::new(left + 8, top, 16, 8)),
-        ]
-        .into_iter()
-        .flatten()
-        .collect();
+        let centre = (width.div_euclid(2) - 8, height.div_euclid(2) - 8);
+        let shown = [
+            i64::from(contents.height) - oy > height - padding,
+            ox > 0,
+            i64::from(contents.width) - ox > width - padding,
+            oy > 0,
+        ];
+        state.arrows = arrows(shown, (width, height), centre);
         state.arrow_skin = self.windowskin;
     }
 
     /// What a bitmap of `width` by `height` is built from: nothing without a live skin or
     /// without pixels.
-    fn built_from(&self, bitmaps: &Bitmaps, width: i32, height: i32) -> Option<Key> {
+    pub(super) fn built_from(&self, bitmaps: &Bitmaps, width: i32, height: i32) -> Option<Key> {
         let skin = self.windowskin?;
         let revision = bitmaps.revision(skin).ok()?;
         (width > 0 && height > 0).then_some((skin, revision, width, height, false))
     }
 
     /// Builds background and frame from the skin as it is now.
-    fn build_back(&mut self, bitmaps: &mut Bitmaps) {
+    pub(super) fn build_back(&mut self, bitmaps: &mut Bitmaps) {
         let whole = self.built_from(bitmaps, self.width, self.height);
         let inside =
             whole.filter(|_| self.width > 2 * BACK_MARGIN && self.height > 2 * BACK_MARGIN);
@@ -546,6 +624,9 @@ impl Assembly<'_> {
         let Some(state) = &window.rgss2 else {
             return;
         };
+        if let Some(rules) = &state.rgss3 {
+            return self.window_rgss3(window, state, rules, level);
+        }
         if !window.visible || window.width <= 0 || window.height <= 0 {
             return;
         }
