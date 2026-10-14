@@ -603,6 +603,38 @@ shows. Decided without a measurement:
   without a frame; not found, it raises `Errno::ENOENT` with the name as given, as measured.
   How the original looks a movie up and what it shows were not measured.
 
+Audio of RGSS3, recorded by the change `bind-audio-of-rgss3` after the measurement of
+2026-10-13 on the DLLs 3.0.1.1 and 3.0.0.1 under Wine (`ace-v1-api-REPORT.md` section 6,
+kept outside the repository, with the script that fits the rule to 982 readings).
+
+- The position is the guest's. Nothing flows from the audio of the host to the guest, and
+  nothing may: the audio device runs on its own clock, a headless run has none, and what the
+  guest does depends on its ticks alone. The original's value is not repeatable either: two
+  runs of the original with the same input wrote saves whose two copies of `Audio.bgm_pos`
+  are one chunk apart. Its rule is exact in its values and steps; when a step happens
+  depends on real time.
+- The probe: `vkxp_core::sound::SoundFormat::probe` reads, from the bytes the guest has
+  read, the sample rate, the channel count, the length in sample frames and the tags
+  `LOOPSTART` and `LOOPLENGTH` (upper case only) of a WAV file of 8-bit or 16-bit PCM and of
+  an Ogg Vorbis file; for everything else it gives nothing. It is written for this purpose:
+  a decoder in the guest for four numbers was rejected, and so was asking the host.
+- The model: `vkxp_core::sound::Position` is the measured rule with time counted in frames
+  shown. A sound of more than 529200 bytes of 16-bit PCM is streamed: its decoder starts at
+  `pos`, reads 15 chunks of 187.5 ms at once and one more each time the frames shown, at
+  their frame rate and the pitch of the sound, amount to 187.5 ms, and wraps at the loop
+  end to the loop start; the position is the decoder's less 16 chunks, not below 0. A
+  shorter sound is a cursor from `pos` that wraps at its end. Integers only.
+- Which frames count: those the guest sends and waits a tick for outside a modal message,
+  of `Graphics.update`, `wait`, `fadeout`, `fadein` and `transition`, as for
+  `Graphics.frame_count`; setting `Graphics.frame_count` changes nothing of it. A music
+  effect whose length is known holds the music for that many frames.
+- What a save holds: the standard scripts store `Audio.bgm_pos` twice. For a streamed Ogg or
+  WAV file vkxp writes a value of the original's own sequence for that file and start, the
+  original's own value at that frame when the original has read the same number of chunks,
+  and otherwise one whole chunks away; the comparison of a save for A3 allows the four
+  bytes of the two positions to be equal or apart by whole chunks, and its record says
+  which.
+
 ### Several runtimes in one program
 
 - One repository, and the name stays for now.

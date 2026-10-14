@@ -511,6 +511,15 @@ background sound loop; a MIDI track that marks the start of its loop with contro
 music written for RPG Maker does, continues there, and one without the marker at its
 beginning.
 
+A game of VX Ace can start a sound part of the way into its file: Ogg Vorbis and WAV start
+there, MIDI, MP3 and WMA at their beginning. After a music effect the music of a game of VX
+Ace returns to its volume over one second, as on the original; in the other runtimes it goes
+on at its volume at once. The position that `Audio.bgm_pos` and `Audio.bgs_pos` report is
+computed by the game's side from the frames it has shown, not taken from the audio device:
+it is the same in a window and headless, with and without `--no-audio`, and in every run
+with the same input, and it follows the frames, not the clock, so it stands still while a
+message box is shown and does not follow fast-forward.
+
 ### Headless
 
 ```sh

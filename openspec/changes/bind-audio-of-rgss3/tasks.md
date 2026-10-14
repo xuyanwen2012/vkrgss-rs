@@ -22,7 +22,7 @@
 
 ## 5. Documents
 
-- [ ] 5.1 The documents as the implementation notes of `design.md` list them: `docs/compatibility.md` (the section on VX Ace: `Audio`, the known differences), `docs/decisions.md` ("Audio of RGSS3" under "VX Ace"), `docs/running.md` ("Audio"), the protocol version in `docs/architecture.md` and `README.md` (a line replaced, none added), `CHANGELOG.md`. Verify: the text names nothing that the code does not do and every known difference of decisions 2, 3, 5, 6 and 7 of `design.md`; the tests of `xtask` that check the documents pass (`cargo test -p xtask --locked`).
+- [x] 5.1 The documents as the implementation notes of `design.md` list them: `docs/compatibility.md` (the section on VX Ace: `Audio`, the known differences), `docs/decisions.md` ("Audio of RGSS3" under "VX Ace"), `docs/running.md` ("Audio"), the protocol version in `docs/architecture.md` and `README.md` (a line replaced, none added), `CHANGELOG.md`. Verify: the text names nothing that the code does not do and every known difference of decisions 2, 3, 5, 6 and 7 of `design.md`; the tests of `xtask` that check the documents pass (`cargo test -p xtask --locked`).
 
 ## 6. Integration check
 

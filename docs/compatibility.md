@@ -290,10 +290,10 @@ evaluated as `{0000}`, `{0001}` and so on and compiled as UTF-8, `RGSSReset` wit
 `msgbox_p`, `p`, `print` and `puts` on the standard output, `load_data` that labels the
 strings of a data file UTF-8, `save_data`, and `RGSS_VERSION` `"3.0.1"`.
 
-Of the classes, `Window`, `Tilemap`, `Sprite`, `Plane`, `Viewport`, the module `Graphics` and
-the value classes `Color`, `Tone`, `Rect` and `Table` are those of RGSS3, as the sections below
-say; `Font` and text, `Input` and `Audio` are those of RPG Maker VX still and do not have what
-RGSS3 adds.
+Of the classes, `Window`, `Tilemap`, `Sprite`, `Plane`, `Viewport`, the modules `Graphics`
+and `Audio` and the value classes `Color`, `Tone`, `Rect` and `Table` are those of RGSS3, as
+the sections below say; `Font` and text and `Input` are those of RPG Maker VX still and do not
+have what RGSS3 adds.
 A game made with the standard scripts of VX Ace therefore loads its scripts and its database
 and ends with an error report at its first call of what only RGSS3 has and vkxp does not
 bind yet, before its title screen. A frame it
@@ -529,6 +529,71 @@ and text in the contents.
 In a game of XP or VX the window is as it was: `Window.new` takes a viewport and none of
 these methods is defined.
 
+### The audio of VX Ace
+
+`Audio` of a game of VX Ace is the module of RGSS3, measured on the original runtime of VX
+Ace (versions 3.0.1.1 and 3.0.0.1) under Wine:
+
+- `bgm_play` and `bgs_play` take a file name and up to three of volume, pitch and `pos`;
+  `me_play` and `se_play` a file name and up to two of volume and pitch. `bgm_pos`,
+  `bgs_pos` and `setup_midi` exist, and every function returns `nil` but the two positions.
+  A wrong count raises `ArgumentError` with the expected count first, `wrong number of
+  arguments (1 for 0)`; a Float is truncated, and `pos` may be `nil`, which is 0.
+- Volume and pitch are not limited as in XP and VX: a volume of 100 or more and one below 0
+  is full volume; a pitch below 1 is the normal rate, and so is one that asks for more than
+  200000 Hz of a WAV or Ogg Vorbis file (454 at 44100 Hz).
+- `pos` is a place in bytes of 16-bit PCM, whatever the file holds: a WAV file of 8-bit or
+  16-bit PCM and an Ogg Vorbis file start at the sample frame it names; other files start
+  at their beginning.
+- A `bgm_play` or `bgs_play` with the name and the pitch of what its channel plays goes on
+  where the sound is, whatever `pos` says; only its volume changes. After a stop or a fade
+  the sound starts anew.
+- `bgm_pos` and `bgs_pos` follow the rule measured on the original: the position of its
+  decoder, which reads 15 chunks of 187.5 ms at once and then one chunk per 187.5 ms at
+  pitch 100, less the 16 chunks of its buffer, and which jumps at the end of the file, or
+  at the loop end that `LOOPSTART` and `LOOPLENGTH` in upper case make, to the loop start.
+  A sound of at most 529200 bytes of 16-bit PCM is a cursor that runs through it. The
+  position is 0 before the first play and for a file that is not WAV or Ogg Vorbis, keeps
+  its value after a stop and goes on during a fade.
+- A music effect holds the position of the music, not that of the background sound, for
+  its length, `me_stop` ends the hold and `me_fade` does not; when the effect has ended the
+  music returns to its volume over one second.
+- A sound is looked for with the extensions `ogg`, `mid`, `mp3`, `wav` and `wma`, in this
+  order, after the name as given.
+
+Known differences:
+
+- The position follows the frames the game has shown, at their frame rate, not real time:
+  it stands still during `sleep`, while a message box is shown and while a script computes,
+  where the original's goes on, and it does not follow fast-forward. The original lags
+  behind its own rule at a pitch above 100 and when the machine is busy; vkxp does not.
+  The two copies of the position in a save of a game are therefore those of the original
+  at that frame, or apart from them by whole chunks, as two runs of the original are.
+- The position of a short sound is that of the rule, not the play cursor of the original,
+  which moves in steps of 10 ms of real time; where between 529200 and 530964 bytes the
+  original begins to stream a sound is not known, and vkxp streams from 529201.
+- The position of MIDI, MP3 and WMA is always 0; that of MIDI was not measured. A WAV file
+  that is not PCM of 8 or 16 bits reads 0 and starts at its beginning.
+- Tags whose loop start is not before their loop end count as no tags, and a tag whose
+  value is not decimal digits as no tag; neither was measured.
+- The sound is not looped at `LOOPSTART` and `LOOPLENGTH`: the whole file repeats, so after
+  the first loop what is heard is not where the position says.
+- A music effect that is not WAV or Ogg Vorbis does not hold the position, because its
+  length is not known to the game's side. After two music effects in a row the original's
+  music began at 0 again, once; vkxp goes on.
+- The same file under another name, `Theme` and `Theme.ogg`, is one file to the original,
+  which goes on, and two to vkxp, which starts again.
+- For a file that is not WAV or Ogg Vorbis the pitch is at most 65535, a limit of vkxp: the
+  original asks for `pitch / 100` of the playback rate and what follows was not measured. A
+  MIDI file at a pitch that the synthesiser cannot render (below 25 or above 300 at an
+  output of 48000 Hz) is reported and stays silent.
+- The lookup of the original asks for `name.*` before the name as given, which also finds a
+  file such as `Theme.v1.ogg` for `Theme`; vkxp does not. A name with a NUL byte or in
+  UTF-16LE is not cut as the original cuts it.
+- One sound effect per file and frame, a fade that follows real time and the volume set
+  again in every frame are not followed; a faded music is ended by the mixer, while its
+  position goes on in the game as on the original.
+- The message of the `RangeError` of a value of 2^31 is that of a 64-bit guest.
 ## Limits of save states
 
 Save states are described under [Save states](running.md#save-states). Their limits:

@@ -23,8 +23,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The release archive holds `vkxp-guest-rgss3` beside `vkxp` and the licence texts of
   Ruby 1.9.2.
 - `cargo xtask stress` has the step `guest-1.9.2`.
+- RPG Maker VX Ace (RGSS3): the module `Audio` of RGSS3. `bgm_play` and `bgs_play` take
+  `pos`, `bgm_pos`, `bgs_pos` and `setup_midi` exist, and volume and pitch follow the limits
+  of RGSS3. The same music played again goes on and only changes its volume. The position
+  follows the rule measured on the original, computed by the game's side from the frames it
+  has shown and the header of the file, so it is the same in every run with the same input;
+  a music effect holds it. A sound is looked for as `ogg`, `mid`, `mp3`, `wav`, `wma`.
+- Audio: a sound can start part of the way into its file, the music returns to its volume
+  over one second after a music effect of VX Ace, the volume of a playing sound can change
+  without a restart, and the mixer plays every pitch from 1 up.
 
 ### Changed
+
+- The protocol is at version 15: the play command carries where its sound starts and the
+  time over which the music returns after a music effect, and a volume command exists. An
+  input recording or a stream of version 14 is refused.
 
 - A game of VX Ace no longer ends with the message that VX Ace is planned. `--guest thread`
   with such a game ends the run with a message that names `--guest process`.

@@ -156,8 +156,8 @@ data defined in `vkxp-proto`, and the guest runs as a thread or as a process of 
 guest process confines itself with Landlock before the first script runs: it writes only
 below the game directory, executes nothing and opens no TCP connection; `--sandbox off`
 turns that off.
-The protocol is at version 14, which added to the freeze message the rule by which the frozen
-picture is kept.
+The protocol is at version 15, which added the start and the return time of the music to the
+play command, and the volume command.
 
 Each frame the guest sends an ordered list of ops of five kinds, and both compositors
 evaluate every kind per pixel. The interpreter is Ruby 1.8.7-p374 with Oniguruma 5.9.6, built

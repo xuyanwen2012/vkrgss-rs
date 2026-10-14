@@ -46,7 +46,7 @@ time by `vkxp-guest-main-rgss3` over `vkxp-binding-rgss3`. The guest executable
 game of RGSS3, always as a guest process, and finds it in the directory of its own file.
 Each executable refuses a game of a runtime its interpreter does not run.
 
-The protocol is at version 14; an encoded stream of another version is rejected. A frame packet
+The protocol is at version 15; an encoded stream of another version is rejected. A frame packet
 carries the changes to bitmaps and tables and an ordered list of ops of five kinds: `Clear`,
 `Quad`, `RectEffect`, `TilemapLayer` and `TilemapPlane`. Sprites, planes and the parts of a
 window are quads.
@@ -61,7 +61,11 @@ and the field `rule` of `GuestToHost::Transition`. Version 12 added the op `Tile
 Version 13 added the rule set of the tilemap plane op, `TilemapPlane::rules`: the tilemap of
 RGSS2 or that of RGSS3. Version 14 added the rule of the freeze message,
 `GuestToHost::Freeze::rule`: the frozen picture is kept as the frame at its own size, or in
-the buffer of RGSS3, 640 by 480 pixels whose top left corner a freeze writes.
+the buffer of RGSS3, 640 by 480 pixels whose top left corner a freeze writes. Version 15
+added to `AudioCommand::Play` the sample frame at which its sound starts, `start`, and the
+time over which the music returns after a music effect, `music_return_ms`, let its pitch run
+from 1 to 65535, and added `AudioCommand::Volume`, which sets the volume of what a channel
+plays without starting it again.
 
 `FramePacket::brightness` is a value from 0 to 255 that the scene keeps and writes into every
 packet. Both compositors apply it after the last op: each colour channel `v` of the frame
