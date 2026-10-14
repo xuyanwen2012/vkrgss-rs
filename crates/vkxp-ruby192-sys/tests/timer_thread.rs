@@ -70,6 +70,12 @@ fn no_thread_is_created_before_a_script_creates_one() {
     assert_eq!(value, Ok("[10, 20, 30, 40]".to_owned()));
 
     drop(interpreter);
+    // A thread that was joined has woken its joiner before the kernel has taken its task out
+    // of the list this count reads, so the count may lag for a moment under load.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while common::thread_count() != before && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
     assert_eq!(
         common::thread_count(),
         before,
