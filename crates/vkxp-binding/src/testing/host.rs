@@ -384,6 +384,9 @@ pub struct Played {
     pub record: Record,
     /// `inspect` of the snippet evaluated after the run.
     pub after: Result<String, RubyError>,
+    /// The number of live bitmaps in the guest's arena after the run, counted before
+    /// another test can use the interpreter.
+    pub bitmaps: usize,
 }
 
 /// Plays `game` with the settings `run` against a scripted host, then evaluates the snippet
@@ -400,7 +403,7 @@ pub fn run_game(game: &Game, run: RunConfig, script: Script, after: &str) -> Pla
     let (link, host) = scripted_host(script);
     let files = GameFiles::new(game.dir(), []);
     let after = after.to_owned();
-    let (outcome, after) = super::run(move |ruby| {
+    let (outcome, after, bitmaps) = super::run(move |ruby| {
         ruby.eval_protected("Graphics._reset", "testing", 1)
             .expect("what the previous game left is disposed");
         // SAFETY: `nil` is a special constant.
@@ -413,12 +416,14 @@ pub fn run_game(game: &Game, run: RunConfig, script: Script, after: &str) -> Pla
             guest.runtime.run = run;
         });
         let outcome = runtime::play(ruby, link);
-        (outcome, inspect(ruby, &after))
+        let after = inspect(ruby, &after);
+        (outcome, after, Guest::with(|guest| guest.bitmaps().len()))
     });
     Played {
         outcome,
         record: host.finish(),
         after,
+        bitmaps,
     }
 }
 

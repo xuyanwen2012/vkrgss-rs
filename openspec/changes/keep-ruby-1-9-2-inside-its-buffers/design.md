@@ -76,6 +76,15 @@ binding.
   `$KCODE = 'U'` in an evaluation of its own before the source is parsed, since a regular
   expression literal is compiled when it is parsed; 0 failures in 1000 runs afterwards. No
   assertion and no expected value changed, nothing is skipped or made serial.
+- A second edit outside the scope, found by the gate (2026-10-13): the test helper
+  `crates/vkxp-binding/src/testing/host.rs` and `crates/vkxp-binding/tests/run_game.rs`.
+  `a_reset_request_starts_the_scripts_over` ran its game in one call of the shared
+  interpreter and counted the live bitmaps in a second one, and a test of another thread
+  that made a bitmap between the two gave 1 for 0 (2 failures in 30 runs of the test
+  binary here, 10 in 30 in the review). `run_game` of the helper now counts the bitmaps
+  before the call that ran the game returns and gives the number in `Played::bitmaps`; the
+  test asserts that it is 0 as before. 0 failures in 100 runs afterwards. Nothing is
+  skipped, made serial or tried again.
 
 ## Follow-ups
 

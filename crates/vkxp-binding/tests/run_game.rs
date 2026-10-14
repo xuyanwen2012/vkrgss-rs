@@ -395,7 +395,7 @@ fn a_reset_request_starts_the_scripts_over() {
     );
     assert!(played.outcome.is_ok(), "{:?}", played.outcome);
     assert_eq!(played.after.as_deref(), Ok("[2, true]"));
-    assert_eq!(testing::bitmap_count(), 0);
+    assert_eq!(played.bitmaps, 0);
 
     // Two frames, the reset with its audio stops, then the one frame of the second run.
     let received = &played.record.received;
