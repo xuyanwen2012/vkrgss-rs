@@ -18,7 +18,7 @@
 
 ## 4. Loading code
 
-- [ ] 4.1 `require_relative`, `Module#autoload` and `Kernel#autoload` in `prelude_rgss3.rb`, files of `require` and `load` compiled as UTF-8 in RGSS3, and `crates/vkxp-binding-rgss3/tests/loading_rgss3.rs` (decision 12). Verify: the scenarios of "Loading code in RGSS3"; the tests of "Loading code" pass unedited over both interpreters; `cargo test -p vkxp-binding -p vkxp-binding-rgss3 --locked` passes.
+- [x] 4.1 `require_relative`, `Module#autoload` and `Kernel#autoload` in `prelude_rgss3.rb`, files of `require` and `load` compiled as UTF-8 in RGSS3, and `crates/vkxp-binding-rgss3/tests/loading_rgss3.rs` (decision 12). Verify: the scenarios of "Loading code in RGSS3"; the tests of "Loading code" pass unedited over both interpreters; `cargo test -p vkxp-binding -p vkxp-binding-rgss3 --locked` passes.
 
 ## 5. Documents
 

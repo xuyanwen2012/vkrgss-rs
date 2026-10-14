@@ -1,7 +1,8 @@
 # What vkxp prepares before the scripts of a game of RGSS3 run, in the place of
-# `prelude.rb`. Written for vkxp from the measurements of the original runtime; the
-# functions whose names start with `vkxp_` are host functions of the binding. `rgss_main`
-# and `rgss_stop` are not defined here: they come with the built-in scripts file.
+# `prelude.rb` and after `prelude_shared.rb`. Written for vkxp from the measurements of the
+# original runtime; the functions whose names start with `vkxp_` are host functions of the
+# binding, and so is `load_data`. `rgss_main` and `rgss_stop` are not defined here: they
+# come with the built-in scripts file.
 
 # RGSS_VERSION is defined by the binding before this file, by the version of the DLL the
 # game ships: "3.0.0" for 3.0.0.x and "3.0.1" otherwise.
@@ -42,6 +43,54 @@ module Process
   end
 
   module_function :exit!
+end
+
+# Only Ruby files inside the game directory are loaded, by the rule of `prelude_shared.rb`,
+# which is evaluated before this file in a game of RGSS3 and whose `require` and `load`
+# these replace: a file is compiled as UTF-8, as the scripts are. `require_relative` takes
+# the name relative to the directory of the file it is called from, the game directory
+# for a script, and `autoload` locates the file by the rule of `require` at the call;
+# Ruby's own would call the interpreter's `require` past that rule.
+module Kernel
+  def require(name)
+    path = vkxp_locate(name, true)
+    return false if $".include?(path)
+    $" << path
+    eval(File.open(path, "rb") { |file| file.read }.force_encoding("UTF-8"),
+         TOPLEVEL_BINDING, path)
+    true
+  end
+
+  def load(name, wrap = false)
+    path = vkxp_locate(name, false)
+    eval(File.open(path, "rb") { |file| file.read }.force_encoding("UTF-8"),
+         TOPLEVEL_BINDING, path)
+    true
+  end
+
+  def require_relative(name)
+    file = caller(1)[0].to_s[/\A(.*?):\d+(?::in |\z)/, 1]
+    require(vkxp_relative(file.to_s, name))
+  end
+
+  # Registered in `Object`, the namespace of a call at the top level.
+  def autoload(name, file)
+    Object.autoload(name, file)
+  end
+
+  module_function :require, :load, :require_relative, :autoload
+end
+
+# Ruby's own `autoload` loads the file by its path at the first use of the constant.
+class Module
+  unless private_method_defined?(:vkxp_autoload)
+    alias_method :vkxp_autoload, :autoload
+    private :vkxp_autoload
+  end
+
+  def autoload(name, file)
+    vkxp_autoload(name, vkxp_locate(file, true))
+  end
 end
 
 # A modal message: the text goes to the error stream and to the host, and is shown in the

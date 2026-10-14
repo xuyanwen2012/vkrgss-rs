@@ -327,6 +327,30 @@ What the implementation had to do beyond the decisions above, with the reason:
   asserted that `Options::for_rgss(3)` has the default script name, the rule this change
   reverses (decision 6). Its assertion for generation 3 now expects the empty name; those
   for 1 and 2 are unchanged. No other expected value of an existing test was edited.
+- `GameFiles::data_rgss3` takes the current directory of the process as a second argument,
+  so that the crate stays free of global state and its tests can name one. A current
+  directory outside the game directory counts as the game directory: the harness of the
+  binding plays its games in the process of the test, whose current directory is not the
+  game's, and the guest sets it to the game directory.
+- `vkxp_label_utf8` labels through `String#force_encoding` with the frozen flag taken off
+  for the call and put back: the binding compiles over both interpreter crates, and no
+  encoding function of the C API is declared by both (decision 9 named the C API).
+- The name check of `save_data` is the host function `vkxp_check_data_name`, which
+  `load_data` of RGSS3 shares.
+- In a game of RGSS3 `prelude_shared.rb` is evaluated before `prelude_rgss3.rb`, whose
+  `require` and `load`, those of the shared file with the source labelled UTF-8, take their
+  place (decision 12 said the shared definitions stay and the order is the other way):
+  `prelude_shared.rb` may not be edited by this change, and its `require` reads the file as
+  bytes, which the interpreter compiles as ASCII-8BIT.
+- `require_relative` turns the directory of the calling file into a name below the game
+  directory with the host function `vkxp_relative`: `vkxp_locate`, and `GameFiles::resolve`
+  under it, take names relative to the game directory only.
+- `Kernel#autoload` registers in `Object`, the namespace of a call at the top level: Ruby's
+  own registers in the lexical namespace of its caller, which for a definition in the
+  prelude would be `Kernel`. Inside a class body `Module#autoload` is called and registers
+  in that class.
+- The scenario "require" writes `(require("nosuch") rescue $!.message)`; a `rescue`
+  modifier does not catch a `LoadError`, so its test rescues `Exception` explicitly.
 
 ## Follow-ups
 
@@ -365,3 +389,11 @@ Left out, with the measured source (API report unless named):
   for those runtimes, with a test over both interpreters.
 - The name of the box's caption (the game title) has no counterpart: vkxp's modal message
   has none.
+- A file that `autoload` loads is compiled by the interpreter's own loader, which reads it
+  as US-ASCII, the default of Ruby 1.9.2, and not as UTF-8 as `require` of the prelude does.
+  Loading it through the prelude would need a hook of the constant lookup that this
+  design does not name.
+- The opening comment of `prelude_shared.rb` still says that it is evaluated after
+  `prelude_rgss3.rb`; the file is outside this change.
+- `load_data` after `Dir.chdir` to a directory outside the game directory looks from the
+  game directory (see the implementation record); the original looks outside.

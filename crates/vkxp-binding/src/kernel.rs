@@ -1,6 +1,8 @@
 //! The global functions of a game that are host functions, and the host functions the Ruby
 //! prelude builds on, whose names start with `vkxp_`.
 
+use std::path::Path;
+
 use vkxp_proto::GuestToHost;
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{Arity, HostResult, Raise, Raised, Ruby};
@@ -35,6 +37,24 @@ fn locate(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
         Ok(path) => Ok(rb::bytes_new(ruby, path.as_os_str().as_encoded_bytes())?),
         Err(_) => Err(not_loadable()),
     }
+}
+
+/// `vkxp_relative(file, name)`: for `require_relative` of RGSS3, `name` taken relative to
+/// the directory of `file`, the file the call is made from, as a name below the game
+/// directory for `require`: `name` itself when `file` has no directory, as a script
+/// (`{0001}`) has not, and `LoadError` when that directory is not inside the game directory.
+fn relative(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
+    let file = rb::text(ruby, args[0])?;
+    let name = rb::text(ruby, args[1])?;
+    let Some((directory, _)) = file.rsplit_once(['/', '\\']) else {
+        return Ok(rb::text_new(ruby, name.as_bytes())?);
+    };
+    let game = Guest::with(|guest| guest.files.game_dir().to_owned());
+    let below = Path::new(directory)
+        .strip_prefix(&game)
+        .map_err(|_| Raise::new(load_error(ruby), format!("no such file to load -- {name}")))?;
+    let joined = below.join(&name);
+    Ok(rb::text_new(ruby, joined.as_os_str().as_encoded_bytes())?)
 }
 
 /// `load_data(path)`: the object `Marshal` loads from a data file of the game.
@@ -252,5 +272,6 @@ pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
         Arity::Fixed(1),
         check_data_name,
     )?;
+    ruby.define_global_function_with_arity(c"vkxp_relative", Arity::Fixed(2), relative)?;
     ruby.define_global_function_with_arity(c"vkxp_exit_now", Arity::Fixed(1), exit_now)
 }

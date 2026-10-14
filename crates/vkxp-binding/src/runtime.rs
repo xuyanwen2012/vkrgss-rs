@@ -38,12 +38,14 @@ use crate::{audio, graphics, input, kernel, rb, win32api};
 /// `print`, `p` and the loader of the script archive.
 const PRELUDE: &str = include_str!("prelude.rb");
 
-/// The Ruby part of the preparation of a game of RGSS3, in the place of [`PRELUDE`]:
-/// `RGSSReset`, `save_data`, `load_data`, `msgbox`, `msgbox_p` and the loader of the script
-/// archive. `RGSS_VERSION` is defined before it ([`rgss3_version`]).
+/// The Ruby part of the preparation of a game of RGSS3, in the place of [`PRELUDE`] and
+/// after [`PRELUDE_SHARED`]: `RGSSReset`, `save_data`, `at_exit`, `exit!`, `msgbox`,
+/// `msgbox_p`, `require` and `load` that compile as UTF-8, `require_relative`, `autoload`
+/// and the loader of the script archive. `RGSS_VERSION` is defined before it
+/// ([`rgss3_version`]), and `load_data` is a host function of [`kernel`].
 const PRELUDE_RGSS3: &str = include_str!("prelude_rgss3.rb");
 
-/// What the preparation evaluates for every runtime after [`PRELUDE`] or
+/// What the preparation evaluates for every runtime, after [`PRELUDE`] or before
 /// [`PRELUDE_RGSS3`]: `require` and `load` limited to the game directory.
 const PRELUDE_SHARED: &str = include_str!("prelude_shared.rb");
 
@@ -503,16 +505,14 @@ pub(crate) fn prepare(ruby: &Ruby) -> Result<(), RubyError> {
     if runtime == Runtime::Rgss3 {
         let version = rgss3_version_source(rgss3_version(library_version));
         ruby.eval_protected(&version, PRELUDE_NAME, 1)?;
+        // The prelude of RGSS3 replaces `require` and `load` of the shared one.
+        ruby.eval_protected(PRELUDE_SHARED, PRELUDE_NAME, 1)?;
         ruby.eval_protected(PRELUDE_RGSS3, PRELUDE_NAME, 1)?;
+        ruby.eval_protected(PRELUDE_DL, PRELUDE_NAME, 1)?;
     } else {
         ruby.eval_protected(PRELUDE, PRELUDE_NAME, 1)?;
-    }
-    if runtime != Runtime::Rgss3 {
         ruby.eval_protected(PRELUDE_WIN32API, PRELUDE_NAME, 1)?;
-    }
-    ruby.eval_protected(PRELUDE_SHARED, PRELUDE_NAME, 1)?;
-    if runtime == Runtime::Rgss3 {
-        ruby.eval_protected(PRELUDE_DL, PRELUDE_NAME, 1)?;
+        ruby.eval_protected(PRELUDE_SHARED, PRELUDE_NAME, 1)?;
     }
     if runtime == Runtime::Rgss1 {
         ruby.eval_protected(PRELUDE_RGSS1, PRELUDE_NAME, 1)?;
