@@ -64,6 +64,9 @@ binding.
   `CFLAGS='-O2 -D_FORTIFY_SOURCE=3'`, the stressed selection included, and no other place
   showed. The build script is unchanged and no test was added: the suites of the release
   are the test.
+- Ruby 1.8.7 (2026-10-13): `cargo test -p vkxp-ruby-sys --locked` with the same flags in
+  `target/fortify187` passes, all 27 test targets. Nothing was found and
+  nothing is patched there.
 
 ## Follow-ups
 
