@@ -10,11 +10,26 @@
 //! every caller keeps: each `VALUE` passed in is live. In a host function that is the
 //! receiver, an argument, or a value one of these functions returned during the same call
 //! and that has been in a local since, where the collector's stack scan finds it.
+//!
+//! # Text and bytes
+//!
+//! A string of Ruby 1.9 has an encoding, so every string the binding creates is made by
+//! [`bytes_new`] (ASCII-8BIT) or by [`text_new`] (UTF-8); over Ruby 1.8 the two give the
+//! same string. The rule: a string is bytes unless the interpreter is going to read it as
+//! script source, or it is the path of the script archive. Serialized forms, `to_s`, font
+//! names, data for `Marshal`, buffers and file names are bytes, as measured on the original
+//! runtime of RGSS3, whose classes make ASCII-8BIT strings. Reading a string does not look
+//! at its label: [`bytes`] takes the bytes and [`text`] those bytes with invalid UTF-8
+//! replaced.
 
 use std::ffi::{CStr, c_char, c_long};
 
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{Arity, HostResult, Raise, Raised, Ruby};
+
+/// Whether the interpreter is Ruby 1.9, that of RGSS3, and not Ruby 1.8. This is the one
+/// place where the binding learns its interpreter; what depends on it asks here.
+pub(crate) const RUBY_19: bool = matches!(vkxp_ruby_sys::RUBY_API, vkxp_ruby_sys::RubyApi::Ruby19);
 
 /// The allocator of a class, as `rb_define_alloc_func` takes it.
 pub(crate) type AllocFn = unsafe extern "C" fn(VALUE) -> VALUE;
@@ -300,16 +315,17 @@ pub(crate) fn text(ruby: &Ruby, value: VALUE) -> Result<String, Raise> {
 /// the array itself stays in a local.
 pub(crate) fn array_elements(_ruby: &Ruby, value: VALUE) -> Option<Vec<VALUE>> {
     // SAFETY: the value is live by the condition of this module; the type check makes the
-    // cast valid, and an array's `ptr` is valid for `len` elements when it is not null.
+    // accessors valid, and an array's elements are valid for its length when the pointer
+    // is not null.
     unsafe {
         if ffi::rb_type(value) != ffi::T_ARRAY {
             return None;
         }
-        let array = &*ffi::rarray(value);
-        if array.ptr.is_null() || array.len <= 0 {
+        let (ptr, len) = (ffi::rarray_ptr(value), ffi::rarray_len(value));
+        if ptr.is_null() || len <= 0 {
             return Some(Vec::new());
         }
-        Some(std::slice::from_raw_parts(array.ptr, array.len as usize).to_vec())
+        Some(std::slice::from_raw_parts(ptr, len as usize).to_vec())
     }
 }
 
@@ -330,12 +346,18 @@ pub(crate) fn float_new(ruby: &Ruby, number: f64) -> HostResult {
     Ok(perform(ruby, Op::Float(number))?.0)
 }
 
-/// A new `String` of these bytes.
-pub(crate) fn string_new(ruby: &Ruby, bytes: &[u8]) -> HostResult {
-    Ok(ruby.str_new(bytes)?)
+/// A new `String` of bytes: ASCII-8BIT over Ruby 1.9. See the rule of this module.
+pub(crate) fn bytes_new(ruby: &Ruby, bytes: &[u8]) -> Result<VALUE, Raised> {
+    ruby.str_new(bytes)
 }
 
-/// A new `Array` of new `String`s.
+/// A new `String` of text: UTF-8 over Ruby 1.9, whether the bytes are valid UTF-8 or not.
+/// See the rule of this module.
+pub(crate) fn text_new(ruby: &Ruby, bytes: &[u8]) -> Result<VALUE, Raised> {
+    ruby.str_new_text(bytes)
+}
+
+/// A new `Array` of new `String`s of bytes.
 pub(crate) fn strings_new(ruby: &Ruby, strings: &[String]) -> HostResult {
     let items: Vec<(*const c_char, c_long)> = strings
         .iter()

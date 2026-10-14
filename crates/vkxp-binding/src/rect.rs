@@ -112,12 +112,15 @@ fn equal(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
 
 fn to_s(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
     let [x, y, width, height] = parts(rect_arg(ruby, recv)?);
-    rb::string_new(ruby, format!("({x}, {y}, {width}, {height})").as_bytes())
+    Ok(rb::bytes_new(
+        ruby,
+        format!("({x}, {y}, {width}, {height})").as_bytes(),
+    )?)
 }
 
 /// `_dump(depth)`: the serialized form `Marshal` stores.
 fn dump(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
-    rb::string_new(ruby, &rect_arg(ruby, recv)?.to_bytes())
+    Ok(rb::bytes_new(ruby, &rect_arg(ruby, recv)?.to_bytes())?)
 }
 
 /// `_load(string)`: a new object from the serialized form.

@@ -35,7 +35,7 @@ use vkxp_guest::role::{self, GuestRole};
 use vkxp_guest::settings::GuestSettings;
 use vkxp_guest::{Attached, diagnostics, play_in_process, play_on_thread, signals};
 use vkxp_proto::link::GuestEnd;
-use vkxp_ruby_sys::{Interpreter, SymbolTable};
+use vkxp_ruby_sys::{Interpreter, Options};
 use vkxp_vfs::{FileKind, GameFiles, GameIni, Runtime, VfsError, resolve_rtps};
 
 use crate::font::FontBackend;
@@ -60,22 +60,16 @@ pub fn builtin_scripts_name(runtime: Runtime) -> &'static str {
     }
 }
 
-/// The start-up symbol table of `runtime`, which numbers the symbols as its original does.
-/// A run of RGSS3 ends before an interpreter is started.
-fn symbol_table(runtime: Runtime) -> SymbolTable {
-    match runtime {
-        Runtime::Rgss1 => SymbolTable::Rgss1,
-        Runtime::Rgss2 | Runtime::Rgss3 => SymbolTable::Rgss2,
-    }
-}
-
-/// Starts the interpreter of a game of `runtime`.
+/// Starts the interpreter of a game of `runtime`, with the options of its interpreter crate
+/// for that runtime: over Ruby 1.8.7 the start-up symbol table, which numbers the symbols as
+/// the original does. A run of RGSS3 ends before an interpreter is started.
 fn start_interpreter(runtime: Runtime) -> Result<Interpreter> {
-    let options = vkxp_ruby_sys::Options {
-        symbols: symbol_table(runtime),
-        ..vkxp_ruby_sys::Options::default()
+    let generation = match runtime {
+        Runtime::Rgss1 => 1,
+        Runtime::Rgss2 => 2,
+        Runtime::Rgss3 => 3,
     };
-    Ok(Interpreter::start(options)?)
+    Ok(Interpreter::start(Options::for_rgss(generation))?)
 }
 
 /// The built-in scripts file of `runtime`: the one named on the command line, or the default

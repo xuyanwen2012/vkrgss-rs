@@ -1,8 +1,8 @@
 # The Ruby part of what vkxp prepares before a game's scripts run. Written for vkxp; the
 # functions whose names start with `vkxp_` are host functions of the binding.
 
-$KCODE = "U"
-$:.clear
+# `$KCODE` and the load path are set over Ruby 1.8 only: `prelude_ruby18.rb`, which is
+# evaluated before this file.
 
 # Raised by Graphics.update when the host asks for a restart of the game (F12).
 class Reset < Exception

@@ -7,7 +7,7 @@ use std::fs;
 use vkxp_binding::testing::host::{Script, ruby_literal, scripted_host};
 use vkxp_binding::testing::{CellBackend, FONT_FAMILIES};
 use vkxp_binding::{Config, RunConfig, run_game};
-use vkxp_ruby_sys::{Interpreter, Options, SymbolTable};
+use vkxp_ruby_sys::{Interpreter, Options};
 use vkxp_vfs::{GameFiles, GameIni, Runtime};
 
 /// The probe, as it ran on the original.
@@ -92,10 +92,7 @@ fn a_new_name_has_the_measured_number_after_every_step_of_the_probe() {
         },
     };
     let (link, host) = scripted_host(Script::new());
-    let options = Options {
-        symbols: SymbolTable::Rgss2,
-        ..Options::default()
-    };
+    let options = Options::for_rgss(2);
     let interpreter = Interpreter::start(options).unwrap();
     let outcome = interpreter.run(move |ruby| {
         // The archive is made with the interpreter's own `Marshal` and `Zlib`.

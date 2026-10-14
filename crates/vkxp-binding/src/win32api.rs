@@ -818,7 +818,7 @@ fn call(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
         if let Arg::Buffer(bytes) = after
             && after != before
         {
-            let contents = rb::string_new(ruby, bytes)?;
+            let contents = rb::bytes_new(ruby, bytes)?;
             // SAFETY: `value` is an argument of this call and `contents` was just returned
             // and is in a local.
             unsafe { ruby.funcall(value, c"replace", &[contents]) }?;

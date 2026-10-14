@@ -8,7 +8,7 @@ use vkxp_binding::testing::host::{RPG_STAND_IN, Script, ruby_literal, scripted_h
 use vkxp_binding::testing::{CellBackend, FONT_FAMILIES};
 use vkxp_binding::{Config, RunConfig, run_game};
 use vkxp_proto::Size;
-use vkxp_ruby_sys::{Interpreter, Options, SymbolTable};
+use vkxp_ruby_sys::{Interpreter, Options};
 use vkxp_vfs::{GameFiles, GameIni, Runtime};
 
 /// Scenarios "First new names of a game of VX, measured on the original", "Known names of a
@@ -65,10 +65,7 @@ fn the_first_script_of_a_game_of_vx_sees_the_measured_numbers_and_frame() {
         },
     };
     let (link, host) = scripted_host(Script::new());
-    let options = Options {
-        symbols: SymbolTable::Rgss2,
-        ..Options::default()
-    };
+    let options = Options::for_rgss(2);
     let interpreter = Interpreter::start(options).unwrap();
     let outcome = interpreter.run(move |ruby| {
         // The archive is made with the interpreter's own `Marshal` and `Zlib`.

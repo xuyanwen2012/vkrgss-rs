@@ -26,7 +26,7 @@ use std::sync::OnceLock;
 
 use vkxp_core::test_support::CellRasterizer;
 use vkxp_core::{Font, Mask, TextMetrics, TextRasterizer};
-use vkxp_ruby_sys::{Interpreter, Options, Ruby, RubyError, SymbolTable};
+use vkxp_ruby_sys::{Interpreter, Options, Ruby, RubyError};
 use vkxp_vfs::{GameFiles, Runtime};
 
 use crate::{Config, Guest, TextBackend};
@@ -170,13 +170,11 @@ fn harness() -> &'static Harness {
                 ..crate::RunConfig::default()
             },
         };
-        let options = Options {
-            symbols: match runtime {
-                Runtime::Rgss1 => SymbolTable::Rgss1,
-                Runtime::Rgss2 | Runtime::Rgss3 => SymbolTable::Rgss2,
-            },
-            ..Options::default()
-        };
+        let options = Options::for_rgss(match runtime {
+            Runtime::Rgss1 => 1,
+            Runtime::Rgss2 => 2,
+            Runtime::Rgss3 => 3,
+        });
         let interpreter = Interpreter::start(options).expect("the interpreter starts");
         interpreter
             .run(move |ruby| {

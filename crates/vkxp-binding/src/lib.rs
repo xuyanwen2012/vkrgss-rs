@@ -211,8 +211,12 @@
 //! What a game meets outside the RGSS classes is prepared by a prelude written in Ruby
 //! (`src/prelude.rb`), on top of a few host functions whose names start with `vkxp_`:
 //!
-//! - `$KCODE` is `"UTF8"`, the load path is empty, `$DEBUG` and `$BTEST` follow the
-//!   [`RunConfig`]; in a game of RGSS2 `$TEST` and `$BTEST` do.
+//! - Over Ruby 1.8 only, `$KCODE` is `"UTF8"` and the load path is empty
+//!   (`src/prelude_ruby18.rb`, evaluated first). Over Ruby 1.9 `$KCODE` stays `nil` and the
+//!   load path is the `["."]` of the interpreter crate, as on the original runtime of RGSS3.
+//!   Everything below is the same over both interpreters.
+//! - `$DEBUG` and `$BTEST` follow the [`RunConfig`]; in a game of RGSS2 `$TEST` and `$BTEST`
+//!   do.
 //! - `Reset` and `Hangup` are subclasses of `Exception`, so a bare `rescue` lets them pass.
 //!   `Hangup` is defined in a game of RGSS1 only (`src/prelude_rgss1.rb`).
 //! - `save_data` writes a `Marshal` dump through Ruby's `File`. `load_data` is a host

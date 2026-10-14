@@ -218,7 +218,7 @@ where
 {
     let [first, second, third, fourth] = this::<Q>(ruby, recv)?.get().value().parts();
     let text = format!("({first:.6}, {second:.6}, {third:.6}, {fourth:.6})");
-    rb::string_new(ruby, text.as_bytes())
+    Ok(rb::bytes_new(ruby, text.as_bytes())?)
 }
 
 /// `_dump(depth)`: the serialized form `Marshal` stores.
@@ -227,7 +227,7 @@ where
     Owned<Q>: Wrapped,
 {
     let bytes = this::<Q>(ruby, recv)?.get().value().to_bytes();
-    rb::string_new(ruby, &bytes)
+    Ok(rb::bytes_new(ruby, &bytes)?)
 }
 
 /// `_load(string)`: a new object from the serialized form.

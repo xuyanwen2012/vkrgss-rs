@@ -23,7 +23,7 @@ fn probe_float(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
 }
 
 fn probe_text(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
-    rb::string_new(ruby, rb::text(ruby, args[0])?.as_bytes())
+    Ok(rb::bytes_new(ruby, rb::text(ruby, args[0])?.as_bytes())?)
 }
 
 /// Takes one or two arguments and returns how many it got.

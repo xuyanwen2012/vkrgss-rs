@@ -143,7 +143,7 @@ fn zsize(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
 /// `_dump(depth)`: the serialized form `Marshal` stores.
 fn dump(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
     let bytes = this(ruby, recv)?.with(|data| data.table.read().to_bytes());
-    rb::string_new(ruby, &bytes)
+    Ok(rb::bytes_new(ruby, &bytes)?)
 }
 
 /// `_load(string)`: a new object from the serialized form.

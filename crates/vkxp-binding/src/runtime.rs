@@ -37,6 +37,9 @@ use crate::{audio, graphics, input, kernel, rb, win32api};
 /// `require` and `load` limited to the game directory.
 const PRELUDE: &str = include_str!("prelude.rb");
 
+/// What is prepared over Ruby 1.8 only, before the prelude: `$KCODE` and the empty load path.
+const PRELUDE_RUBY18: &str = include_str!("prelude_ruby18.rb");
+
 /// What the prelude has in RGSS1 only: `Hangup`.
 const PRELUDE_RGSS1: &str = include_str!("prelude_rgss1.rb");
 
@@ -442,6 +445,9 @@ pub(crate) fn prepare(ruby: &Ruby) -> Result<(), RubyError> {
             run.process_functions,
         )
     });
+    if !rb::RUBY_19 {
+        ruby.eval_protected(PRELUDE_RUBY18, PRELUDE_NAME, 1)?;
+    }
     ruby.eval_protected(PRELUDE, PRELUDE_NAME, 1)?;
     if runtime == Runtime::Rgss1 {
         ruby.eval_protected(PRELUDE_RGSS1, PRELUDE_NAME, 1)?;
@@ -559,13 +565,13 @@ enum Ended {
 /// Evaluates a Ruby string at the top level under the file name `name`, as the original
 /// runtime evaluates a script.
 fn evaluate(ruby: &Ruby, source: VALUE, name: &str) -> Result<(), Raised> {
-    let name = ruby.str_new(name.as_bytes())?;
+    let name = rb::bytes_new(ruby, name.as_bytes())?;
     // SAFETY: `&Ruby` proves the thread, on which the main object exists for the life of the
     // interpreter. `source` is live by the caller's word and `name` was just returned; both
     // are in locals.
     unsafe {
         let arguments = [source, ffi::Qnil, name, ffi::long2fix(1)];
-        ruby.funcall(ffi::ruby_top_self, c"eval", &arguments)?;
+        ruby.funcall(ruby.top_self(), c"eval", &arguments)?;
     }
     Ok(())
 }
@@ -681,17 +687,17 @@ fn load(ruby: &Ruby) -> Result<(Vec<Preload>, usize), RunError> {
         RunError::Prepare(unsafe { ruby.describe(raised) })
     };
     seed(ruby).map_err(prepare)?;
-    let source = ruby.str_new(&source).map_err(prepare)?;
+    let source = rb::text_new(ruby, &source).map_err(prepare)?;
     if let Err(raised) = evaluate(ruby, source, BUILTIN_NAME) {
         // SAFETY: as above.
         let error = unsafe { ruby.describe(raised) };
         return Err(RunError::Script(report(ruby, &error)));
     }
 
-    let path = ruby.str_new(archive.as_bytes()).map_err(prepare)?;
+    let path = rb::text_new(ruby, archive.as_bytes()).map_err(prepare)?;
     // SAFETY: the main object lives as long as the interpreter, and `path` was just returned
     // and is in a local.
-    let count = unsafe { ruby.funcall(ffi::ruby_top_self, c"vkxp_load_scripts", &[path]) };
+    let count = unsafe { ruby.funcall(ruby.top_self(), c"vkxp_load_scripts", &[path]) };
     match count {
         Ok(count) if ffi::fixnum_p(count) => {
             Ok((preload, usize::try_from(ffi::fix2long(count)).unwrap_or(0)))
@@ -733,9 +739,9 @@ fn run_scripts(ruby: &Ruby, preload: &[Preload], count: usize) -> Result<(), Run
     let mut index = 0;
     while index < preload.len() + count {
         let evaluated = match preload.get(index) {
-            Some((name, source)) => ruby
-                .str_new(source)
-                .and_then(|source| evaluate(ruby, source, name)),
+            Some((name, source)) => {
+                rb::text_new(ruby, source).and_then(|source| evaluate(ruby, source, name))
+            }
             None => {
                 let index = index - preload.len();
                 ruby.eval(&format!("$RGSS_SCRIPTS[{index}][3]"), PRELUDE_NAME, 1)
@@ -806,8 +812,8 @@ pub(crate) fn play(ruby: &Ruby, link: GuestEnd) -> Result<(), RunError> {
 ///
 /// 1. Installs the guest of `config` ([`Guest::install`]) and sends the host the window
 ///    title of the game's configuration file.
-/// 2. Prepares the interpreter with the prelude of this crate: `$KCODE`, an empty load path,
-///    `$DEBUG` and `$BTEST`, `Reset` and in RGSS1 `Hangup`, `save_data`, `print` and `p`, `Win32API`,
+/// 2. Prepares the interpreter with the prelude of this crate: over Ruby 1.8 `$KCODE` and an
+///    empty load path, `$DEBUG` and `$BTEST`, `Reset` and in RGSS1 `Hangup`, `save_data`, `print` and `p`, `Win32API`,
 ///    the process functions and `require` and `load`.
 /// 3. Reads the preload scripts, seeds the random number generator when the configuration
 ///    has a seed, and evaluates the built-in scripts file under the name `(builtin)`.

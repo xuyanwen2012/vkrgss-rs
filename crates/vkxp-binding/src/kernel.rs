@@ -33,7 +33,7 @@ fn locate(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     // The game's files never resolve a path to something outside the game directory.
     let found = Guest::with(|guest| guest.files.resolve(FileKind::Data, &file));
     match found {
-        Ok(path) => rb::string_new(ruby, path.as_os_str().as_encoded_bytes()),
+        Ok(path) => Ok(rb::bytes_new(ruby, path.as_os_str().as_encoded_bytes())?),
         Err(_) => Err(not_loadable()),
     }
 }
@@ -48,7 +48,7 @@ fn load_data(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
         guest.files.read(FileKind::Data, &path)
     })
     .map_err(|error| error::to_raise(ruby, error.into()))?;
-    let dump = rb::string_new(ruby, &bytes)?;
+    let dump = rb::bytes_new(ruby, &bytes)?;
     let marshal = rb::class_at(ruby, c"Marshal")?;
     // SAFETY: `Marshal` is kept alive by its constant, and `dump` was just returned and is
     // in a local.

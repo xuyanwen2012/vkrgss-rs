@@ -87,7 +87,7 @@ fn names_arg(ruby: &Ruby, value: VALUE) -> Result<(Vec<String>, bool), Raise> {
 /// Family names as a script reads them: an Array of Strings, or the one String.
 fn names_value(ruby: &Ruby, names: &[String], listed: bool) -> HostResult {
     match names {
-        [name] if !listed => rb::string_new(ruby, name.as_bytes()),
+        [name] if !listed => Ok(rb::bytes_new(ruby, name.as_bytes())?),
         _ => rb::strings_new(ruby, names),
     }
 }

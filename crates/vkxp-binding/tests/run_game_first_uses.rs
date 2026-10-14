@@ -8,7 +8,7 @@ use std::fs;
 use vkxp_binding::testing::host::{RPG_STAND_IN, Script, ruby_literal, scripted_host};
 use vkxp_binding::testing::{CellBackend, FONT_FAMILIES};
 use vkxp_binding::{Config, RunConfig, run_game};
-use vkxp_ruby_sys::{Interpreter, Options, SymbolTable};
+use vkxp_ruby_sys::{Interpreter, Options};
 use vkxp_vfs::{GameFiles, GameIni, Runtime};
 
 /// The game's script. It is parsed before it runs, so its identifiers have their numbers by
@@ -75,10 +75,7 @@ fn the_first_uses_move_the_sequence_as_on_the_original() {
         },
     };
     let (link, host) = scripted_host(Script::new());
-    let options = Options {
-        symbols: SymbolTable::Rgss2,
-        ..Options::default()
-    };
+    let options = Options::for_rgss(2);
     let interpreter = Interpreter::start(options).unwrap();
     let outcome = interpreter.run(move |ruby| {
         // The archive is made with the interpreter's own `Marshal` and `Zlib`.
