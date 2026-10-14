@@ -69,7 +69,15 @@ of `vkxp-text` read. They are not part of the executable.
   is the licence file received with it and holds the text of the Apache License 2.0, under
   which earlier Noto releases were published.
 
-The [`README.md`](crates/vkxp-text/tests/fonts/README.md) beside them states their origins.
+[`crates/vkxp-text/tests/fonts-cff`](crates/vkxp-text/tests/fonts-cff) holds a third, with CFF
+outlines:
+
+- `SourceCodePro-Regular.otf`, Source Code Pro 2.042, under the SIL Open Font License 1.1;
+  [`LICENSE.SourceCodePro.md`](crates/vkxp-text/tests/fonts-cff/LICENSE.SourceCodePro.md)
+  holds its copyright notice and the text of the licence.
+
+The [`README.md`](crates/vkxp-text/tests/fonts/README.md) of the first directory states the
+origins of all three.
 
 ## Rust crates
 

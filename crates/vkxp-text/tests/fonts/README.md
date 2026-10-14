@@ -11,6 +11,15 @@ files from this directory so that they do not depend on the fonts installed on t
 Both files are unmodified. In the tests Liberation Sans stands in for the font a game asks for
 and Noto Sans Symbols 2 for a fallback font that has characters the first one lacks.
 
+## A CFF font
+
+`../fonts-cff/SourceCodePro-Regular.otf` is Source Code Pro 2.042 (Regular), unmodified, from
+<https://github.com/adobe-fonts/source-code-pro>. It is a font with CFF outlines, which
+FreeType hints with its PostScript hinter, for the tests of hinted glyph images. It lies in a
+directory of its own so that the tests that load this directory keep seeing the two fonts
+above alone. It declares the SIL Open Font License, Version 1.1; `../fonts-cff/LICENSE.SourceCodePro.md`
+is the licence file distributed with it.
+
 ## Licences
 
 Both fonts declare the SIL Open Font License, Version 1.1, in their `name` table.

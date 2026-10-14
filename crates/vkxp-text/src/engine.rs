@@ -1126,6 +1126,109 @@ mod tests {
         }
     }
 
+    /// The rows of an image `columns` wide and `height` high that hold ink, from the top.
+    fn inked_rows(columns: u32, height: u32, coverage: &[u8]) -> Vec<u32> {
+        (0..height)
+            .filter(|&y| (0..columns).any(|x| coverage[(y * columns + x) as usize] > 0))
+            .collect()
+    }
+
+    /// The first and the last row of ink of `glyph`, as the rows above the baseline (y up)
+    /// whose pixels they are; `None` for a glyph without ink.
+    fn ink_rows(glyph: &Glyph) -> Option<(i32, i32)> {
+        let rows = inked_rows(glyph.width, glyph.height, &glyph.coverage);
+        let row = |index: u32| glyph.top - index as i32;
+        Some((row(*rows.first()?), row(*rows.last()?)))
+    }
+
+    /// A copy of Liberation Sans in `directory` without `fpgm` and `prep`, which FreeType
+    /// hints with its automatic hinter.
+    fn auto_hinted_copy(directory: &std::path::Path) {
+        let fonts = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fonts");
+        let mut font = std::fs::read(fonts.join("LiberationSans-Regular.ttf")).unwrap();
+        let tables = usize::from(u16::from_be_bytes([font[4], font[5]]));
+        for record in (0..tables).map(|position| 12 + 16 * position) {
+            if matches!(&font[record..record + 4], b"fpgm" | b"prep") {
+                font[record + 3] = b'~';
+            }
+        }
+        std::fs::write(directory.join("LiberationSans-Regular.ttf"), font).unwrap();
+    }
+
+    /// Draws `H`, `g`, `j`, `M` and `!` of `family`, the only font in `directory`, at 12, 20
+    /// and 24 pixels per em by both metric rules, and checks that each hinted image is
+    /// whole: its ink inside its hinted box, its first and last row of ink within a pixel of
+    /// the plain image's.
+    fn hinted_glyphs_are_whole(directory: &std::path::Path, family: &str, hinting: HintingEngine) {
+        let mut engine = TextEngine::new(&FontSources {
+            fallback_families: Some(Vec::new()),
+            ..FontSources::directories_only([directory])
+        });
+        let request = TextRequest::new([family], 24);
+        assert_eq!(engine.hinting_engine(&request), Some(hinting), "{family}");
+        for ch in "HgjM!".chars() {
+            engine.set(&request, &ch.to_string()).unwrap();
+            let placed = engine.run[0];
+            for pixels_per_em in [12, 20, 24] {
+                let context = format!("{ch:?} of {family} at {pixels_per_em} pixels per em");
+                let plain = engine.glyph(placed.key(pixels_per_em, (1, 1), false));
+                let hinted = engine.glyph(placed.key(pixels_per_em, (1, 1), true));
+                let (plain_first, plain_last) = ink_rows(&plain).expect(&context);
+                let (first, last) = ink_rows(&hinted).expect(&context);
+                assert!(
+                    first.abs_diff(plain_first) <= 1 && last.abs_diff(plain_last) <= 1,
+                    "{context}: rows {first}..={last}, plain {plain_first}..={plain_last}"
+                );
+                // The hinted box: that of the hinted outline's points on whole pixels.
+                let points = engine.faces[placed.face]
+                    .hinted_points(pixels_per_em, placed.glyph)
+                    .expect(&context);
+                let floor = |value: f32| value.floor() as i32;
+                let ceil = |value: f32| value.ceil() as i32;
+                let bottom = floor(points.iter().map(|point| point.y).fold(f32::MAX, f32::min));
+                let top = ceil(points.iter().map(|point| point.y).fold(f32::MIN, f32::max));
+                let left = floor(points.iter().map(|point| point.x).fold(f32::MAX, f32::min));
+                let right = ceil(points.iter().map(|point| point.x).fold(f32::MIN, f32::max));
+                // A row `y` holds the pixels from `y - 1` up to `y`.
+                assert!(
+                    first <= top && last - 1 >= bottom,
+                    "{context}: rows {first}..={last}, box rows {bottom}..{top}"
+                );
+                for x in inked(hinted.width, hinted.height, &hinted.coverage) {
+                    let x = hinted.left + x as i32;
+                    assert!(
+                        left <= x && x < right,
+                        "{context}: column {x}, box {left}..{right}"
+                    );
+                }
+            }
+        }
+    }
+
+    // Requirement: Hinted glyph images are whole
+
+    #[test]
+    fn auto_hinted_glyphs_are_whole() {
+        let directory = tempfile::tempdir().unwrap();
+        auto_hinted_copy(directory.path());
+        hinted_glyphs_are_whole(
+            directory.path(),
+            "Liberation Sans",
+            HintingEngine::Automatic,
+        );
+    }
+
+    #[test]
+    fn interpreted_and_cff_hinted_glyphs_are_whole() {
+        let tests = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
+        hinted_glyphs_are_whole(&tests.join("fonts"), "Liberation Sans", HintingEngine::Font);
+        hinted_glyphs_are_whole(
+            &tests.join("fonts-cff"),
+            "Source Code Pro",
+            HintingEngine::Font,
+        );
+    }
+
     #[test]
     fn advances_round_twice() {
         // 812 units of 1000 at 8 pixels per em are 6.496 pixels: 6.5 in 26.6, then 7.

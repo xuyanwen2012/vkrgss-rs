@@ -25,3 +25,28 @@ values). Non-goal: glyph shapes equal to the original's.
 - If the points of swash's outline and skrifa's hinted points cannot be matched safely for a
   glyph (count or order differs), that glyph is drawn from skrifa's hinted outline through
   its own pen into the rasteriser, or else plain; never partly.
+
+## Tests and the cause
+
+The tests of the three scenarios are `engine::tests::auto_hinted_glyphs_are_whole` and
+`engine::tests::interpreted_and_cff_hinted_glyphs_are_whole` (unit tests, since the hinted box
+and the glyph images are internal) and `a_hinted_line_of_text_is_whole` in
+`tests/rgss3_metrics.rs`. The auto-hinter path is a copy of Liberation Sans without `fpgm` and
+`prep`, the interpreter path Liberation Sans, the CFF path Source Code Pro 2.042, added
+unmodified under `tests/fonts-cff/` (OFL 1.1) because no committed test font has CFF outlines.
+A font of its own directory keeps the tests that load `tests/fonts` unchanged. Outside the
+scope of the change, `THIRD-PARTY.md` got the few lines that list the new font beside the
+other two fonts of the tests.
+
+Before the fix all three failed, on every engine: `H` of Liberation Sans at 12 pixels per em
+had its ink on rows 0..=-8 against the plain 9..=1, the same for both hinting engines, and `H`
+of Source Code Pro rows 0..=-7 against 8..=1; the line `Mio attacks!` held 4 rows of ink
+against 17 of the plain rule, as the frames of the test game showed.
+
+The images themselves were whole; their placement was wrong. `hinted_glyph` rendered the
+outline with `zeno::Mask::new(..).origin(Origin::BottomLeft).render()`. zeno 0.3.3 computes
+the top of a bottom-left placement as the bottom of the bounds plus the mask's stored height,
+which is 0 until the size has been computed by `inspect` (or set by `size`), so the top it
+gave was the glyph's bottom row and every glyph was drawn its own height too low. `swash`'s
+`Render`, which the plain rule uses, calls `inspect` before it renders, so plain glyphs were
+placed right. The points of the hinted outline were in the right units and axis.

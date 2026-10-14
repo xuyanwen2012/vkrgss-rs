@@ -2,7 +2,7 @@
 
 ## 1. Tests first
 
-- [ ] 1.1 The tests of the three scenarios, failing before the fix where the cause shows on the test fonts (record in design.md which fail). Verify: `cargo test -p vkxp-text --locked` runs them.
+- [x] 1.1 The tests of the three scenarios, failing before the fix where the cause shows on the test fonts (record in design.md which fail). Verify: `cargo test -p vkxp-text --locked` runs them.
 
 ## 2. The fix
 

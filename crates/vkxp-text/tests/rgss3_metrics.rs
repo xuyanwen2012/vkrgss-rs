@@ -15,7 +15,8 @@ use skrifa::outline::pen::NullPen;
 use skrifa::outline::{DrawSettings, Engine, HintingInstance, HintingOptions, SmoothMode, Target};
 use skrifa::{FontRef, MetadataProvider};
 use vkxp_text::{
-    FontSources, HintingEngine, MaskRules, MetricRules, TextEngine, TextLayout, TextRequest,
+    FontSources, HintingEngine, MaskRules, MetricRules, TextEngine, TextLayout, TextMask,
+    TextRequest,
 };
 
 fn rgss3(mut engine: TextEngine) -> TextEngine {
@@ -251,6 +252,47 @@ fn a_hinted_glyph_is_not_the_plain_glyph() {
     engine.set_metric_rules(MetricRules::Rgss3);
     let hinted = engine.rasterize(&request, "H");
     assert_ne!(plain.coverage, hinted.coverage);
+}
+
+// Requirement: Hinted glyph images are whole
+
+/// The number of rows from the first to the last that holds ink of `mask`.
+fn rows_spanned(mask: &TextMask) -> usize {
+    let width = mask.width as usize;
+    let inked: Vec<usize> = (0..mask.height as usize)
+        .filter(|&y| {
+            mask.coverage[y * width..(y + 1) * width]
+                .iter()
+                .any(|&c| c > 0)
+        })
+        .collect();
+    inked.last().map_or(0, |last| last - inked[0] + 1)
+}
+
+#[test]
+fn a_hinted_line_of_text_is_whole() {
+    let directory = tempfile::tempdir().unwrap();
+    copy_with_tables(
+        directory.path(),
+        LIBERATION_FILE,
+        &[Table::Without(b"fpgm"), Table::Without(b"prep")],
+    );
+    let mut engine = engine_on(directory.path());
+    engine.set_mask_rules(MaskRules::Rgss3);
+    let request = TextRequest::new([LIBERATION], 24);
+    assert_eq!(
+        engine.hinting_engine(&request),
+        Some(HintingEngine::Automatic)
+    );
+    let text = "Mio attacks!";
+    let plain = rows_spanned(&engine.rasterize(&request, text));
+    engine.set_metric_rules(MetricRules::Rgss3);
+    let hinted = rows_spanned(&engine.rasterize(&request, text));
+    assert!(plain > 0);
+    assert!(
+        3 * hinted >= 2 * plain,
+        "{hinted} rows of ink, plain {plain}"
+    );
 }
 
 // The samples measured on the original runtime.
