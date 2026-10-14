@@ -86,37 +86,71 @@ fn resize(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     Ok(recv)
 }
 
-/// The x, y and z of as many index arguments as the table has dimensions; the dimensions a
-/// table does not use are 0. Another number of indices raises `ArgumentError`.
-fn indices(
-    ruby: &Ruby,
-    table: Handle<TableData>,
-    args: &[VALUE],
-    extra: usize,
-) -> Result<[i32; 3], Raise> {
-    let dimensions = table.with(|data| data.table.read().dimensions()) as usize;
-    rb::check_count(ruby, args, dimensions + extra, dimensions + extra)?;
+/// The number of dimensions of the table.
+fn dimensions(table: Handle<TableData>) -> usize {
+    table.with(|data| data.table.read().dimensions()) as usize
+}
+
+/// The x, y and z of the first index arguments, as many as the table has dimensions; the
+/// dimensions a table does not use are 0. The caller has checked the count.
+fn indices(ruby: &Ruby, table: Handle<TableData>, args: &[VALUE]) -> Result<[i32; 3], Raise> {
     let mut indices = [0; 3];
-    for (index, &arg) in indices.iter_mut().zip(&args[..dimensions]) {
+    for (index, &arg) in indices.iter_mut().zip(&args[..dimensions(table)]) {
         *index = rb::int(ruby, arg)?;
     }
     Ok(indices)
 }
 
-/// `[x]`, `[x, y]` or `[x, y, z]`: the element, or `nil` outside the table.
+/// `[x]`, `[x, y]` or `[x, y, z]`: the element, or `nil` outside the table. Another number
+/// of indices raises `ArgumentError`.
 fn element(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     let table = this(ruby, recv)?;
-    let [x, y, z] = indices(ruby, table, args, 0)?;
+    let dimensions = dimensions(table);
+    rb::check_count(ruby, args, dimensions, dimensions)?;
+    element_at(ruby, table, args)
+}
+
+/// `[]` of RGSS3: as [`element`], with the count message of the original runtime of RGSS3.
+fn element_rgss3(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let table = this(ruby, recv)?;
+    let dimensions = dimensions(table);
+    rb::check_count_rgss3(ruby, args, dimensions, dimensions)?;
+    element_at(ruby, table, args)
+}
+
+fn element_at(ruby: &Ruby, table: Handle<TableData>, args: &[VALUE]) -> HostResult {
+    let [x, y, z] = indices(ruby, table, args)?;
     Ok(match table.with(|data| data.table.get(x, y, z)) {
         Some(value) => rb::fix(i32::from(value)),
         None => ffi::Qnil,
     })
 }
 
-/// `[x] = value` and so on: stores the value; outside the table nothing changes.
+/// `[x] = value` and so on: stores the value; outside the table nothing changes. Another
+/// number of indices raises `ArgumentError`.
 fn set_element(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     let table = this(ruby, recv)?;
-    let [x, y, z] = indices(ruby, table, args, 1)?;
+    let count = dimensions(table) + 1;
+    rb::check_count(ruby, args, count, count)?;
+    set_element_at(ruby, table, args)
+}
+
+/// `[]=` of RGSS3: as [`set_element`], with the count message of the original runtime of
+/// RGSS3, which expects the number of dimensions when fewer arguments are given.
+fn set_element_rgss3(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let table = this(ruby, recv)?;
+    let dimensions = dimensions(table);
+    let count = if args.len() < dimensions {
+        dimensions
+    } else {
+        dimensions + 1
+    };
+    rb::check_count_rgss3(ruby, args, count, count)?;
+    set_element_at(ruby, table, args)
+}
+
+fn set_element_at(ruby: &Ruby, table: Handle<TableData>, args: &[VALUE]) -> HostResult {
+    let [x, y, z] = indices(ruby, table, args)?;
     let assigned = args[args.len() - 1];
     let value = rb::long(ruby, assigned)?;
     table.with(|data| data.table.set(x, y, z, value));
@@ -157,15 +191,20 @@ fn load(ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
 }
 
 /// Defines `Table` as a game of `runtime` has it.
-pub(crate) fn define(ruby: &Ruby, _runtime: Runtime) -> Result<VALUE, Raised> {
+pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
     let class = wrap::define_class::<TableData>(ruby, c"Table")?;
     rb::method(ruby, class, c"initialize", -1, initialize)?;
     rb::method(ruby, class, c"initialize_copy", 1, initialize_copy)?;
     rb::method(ruby, class, c"resize", -1, resize)?;
     rb::method(ruby, class, c"_dump", 1, dump)?;
     rb::class_method(ruby, class, c"_load", 1, load)?;
-    rb::method(ruby, class, c"[]", -1, element)?;
-    rb::method(ruby, class, c"[]=", -1, set_element)?;
+    if runtime == Runtime::Rgss3 {
+        rb::method(ruby, class, c"[]", -1, element_rgss3)?;
+        rb::method(ruby, class, c"[]=", -1, set_element_rgss3)?;
+    } else {
+        rb::method(ruby, class, c"[]", -1, element)?;
+        rb::method(ruby, class, c"[]=", -1, set_element)?;
+    }
     rb::method(ruby, class, c"xsize", 0, xsize)?;
     rb::method(ruby, class, c"ysize", 0, ysize)?;
     rb::method(ruby, class, c"zsize", 0, zsize)?;

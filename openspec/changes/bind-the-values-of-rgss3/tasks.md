@@ -11,9 +11,9 @@
 
 ## 3. Table, comparison, serialized and text forms
 
-- [ ] 3.1 The count message of `Table#[]` and `Table#[]=` in RGSS3 (decision 5) and the tests of the table. Verify: the scenarios of "Table of RGSS3", and "Table, measured on the original" and the calls on `Table` of "Numbers of the wrong kind"; the same test command.
-- [ ] 3.2 `_load` of `Color`, `Tone` and `Rect` in RGSS3 (decision 8). Verify: the scenarios of "Serialized forms of the value classes in RGSS3"; the same test command.
-- [ ] 3.3 Tests of what needs no code (decisions 7 and 9). Verify: the scenarios of "Comparison of the value classes in RGSS3" and "Text forms of the value classes in RGSS3"; the same test command; `git diff --stat` against the start of the change names, under `crates`, files of `crates/vkxp-binding/src`, `crates/vkxp-binding-rgss3/tests/values_rgss3.rs` and the two shared test files of decision 13 only.
+- [x] 3.1 The count message of `Table#[]` and `Table#[]=` in RGSS3 (decision 5) and the tests of the table. Verify: the scenarios of "Table of RGSS3", and "Table, measured on the original" and the calls on `Table` of "Numbers of the wrong kind"; the same test command.
+- [x] 3.2 `_load` of `Color`, `Tone` and `Rect` in RGSS3 (decision 8). Verify: the scenarios of "Serialized forms of the value classes in RGSS3"; the same test command.
+- [x] 3.3 Tests of what needs no code (decisions 7 and 9). Verify: the scenarios of "Comparison of the value classes in RGSS3" and "Text forms of the value classes in RGSS3"; the same test command; `git diff --stat` against the start of the change names, under `crates`, files of `crates/vkxp-binding/src`, `crates/vkxp-binding-rgss3/tests/values_rgss3.rs` and the two shared test files of decision 13 only.
 
 ## 4. Method list of RGSS3
 

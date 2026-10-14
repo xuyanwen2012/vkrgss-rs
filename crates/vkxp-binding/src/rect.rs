@@ -167,6 +167,20 @@ fn load(ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
     rect_new(ruby, rect)
 }
 
+/// `_load(string)` of RGSS3: as [`load`], and a string shorter than the 16 bytes of a
+/// serialized form is read as if zeros followed it. The original reads the memory behind the
+/// string there.
+fn load_rgss3(ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
+    let mut bytes = rb::bytes(ruby, args[0])?;
+    let len = Rect::new(0, 0, 0, 0).to_bytes().len();
+    if bytes.len() < len {
+        bytes.resize(len, 0);
+    }
+    let rect =
+        Rect::from_bytes(&bytes).map_err(|error| error::to_raise(ruby, Error::Decode(error)))?;
+    rect_new(ruby, rect)
+}
+
 /// Defines `Rect` as a game of `runtime` has it.
 pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
     let class = wrap::define_class::<Owned<Rect>>(ruby, c"Rect")?;
@@ -186,7 +200,11 @@ pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
     rb::method(ruby, class, c"empty", 0, empty)?;
     rb::method(ruby, class, c"to_s", 0, to_s)?;
     rb::method(ruby, class, c"_dump", 1, dump)?;
-    rb::class_method(ruby, class, c"_load", 1, load)?;
+    if rgss3 {
+        rb::class_method(ruby, class, c"_load", 1, load_rgss3)?;
+    } else {
+        rb::class_method(ruby, class, c"_load", 1, load)?;
+    }
     rb::method(ruby, class, c"x", 0, part::<0>)?;
     rb::method(ruby, class, c"x=", 1, set_part::<0>)?;
     rb::method(ruby, class, c"y", 0, part::<1>)?;

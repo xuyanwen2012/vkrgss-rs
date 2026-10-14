@@ -321,6 +321,21 @@ where
     wrap::new_object(ruby, Owned::new(value))
 }
 
+/// `_load(string)` of RGSS3: as [`load`], and a string of another length than the 32 bytes
+/// of a serialized form gives (0, 0, 0, 0), as on the original runtime of RGSS3.
+fn load_rgss3<Q: Quad>(ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult
+where
+    Owned<Q>: Wrapped,
+{
+    let bytes = rb::bytes(ruby, args[0])?;
+    let value = if bytes.len() == Q::BLANK.to_bytes().len() {
+        Q::from_bytes(&bytes).map_err(|error| error::to_raise(ruby, Error::Decode(error)))?
+    } else {
+        Q::from_parts([0.0; 4])
+    };
+    wrap::new_object(ruby, Owned::new(value))
+}
+
 /// Defines the methods `Color` and `Tone` share; the caller adds the fourth component.
 fn define_shared<Q: Quad>(ruby: &Ruby, class: VALUE, runtime: Runtime) -> Result<(), Raised>
 where
@@ -341,7 +356,11 @@ where
     }
     rb::method(ruby, class, c"to_s", 0, to_s::<Q>)?;
     rb::method(ruby, class, c"_dump", 1, dump::<Q>)?;
-    rb::class_method(ruby, class, c"_load", 1, load::<Q>)?;
+    if rgss3 {
+        rb::class_method(ruby, class, c"_load", 1, load_rgss3::<Q>)?;
+    } else {
+        rb::class_method(ruby, class, c"_load", 1, load::<Q>)?;
+    }
     rb::method(ruby, class, c"red", 0, component::<Q, 0>)?;
     rb::method(ruby, class, c"red=", 1, set_component::<Q, 0>)?;
     rb::method(ruby, class, c"green", 0, component::<Q, 1>)?;
