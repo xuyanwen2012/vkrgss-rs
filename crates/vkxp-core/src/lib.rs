@@ -55,7 +55,9 @@
 //!   elements and then applies its tone, colour and flash as a rectangle effect. A window is
 //!   drawn from bitmaps of the scene's own in the bitmap arena (background, frame, cursor),
 //!   redrawn from the window skin only when the skin, the size, the stretch flag or the
-//!   cursor size changes, plus its contents, pause sign and scroll arrows. A plane is one
+//!   cursor size changes, plus its contents, pause sign and scroll arrows. A window of RGSS2
+//!   or RGSS3 ([`Scene::create_window_rgss2`], [`Scene::create_window_rgss3`]) is one element
+//!   whose bitmaps are built at its calls ([`Window::call`]). A plane is one
 //!   stretch quad per repeat of its tile, on a grid of whole pixels, and draws from a
 //!   pre-tiled bitmap of the scene's own when its bitmap is small against the area and the
 //!   zoom lets copies in a row stretch as one. A tilemap is drawn by the compositor, from

@@ -11,6 +11,9 @@
 //! Every rule here was measured on the original runtime (RGSS103J, window probes,
 //! 2026-10-09); the samples of `tests/data/window-samples.txt` are a selection of what was
 //! measured. All parts of a window are drawn in the window blend mode.
+//!
+//! This is the window of RGSS1. The windows of RGSS2 and RGSS3 are in the modules `rgss2`
+//! and `rgss3`; they share the pieces of frame and cursor and the stretch of a block with it.
 
 use vkxp_proto::{BitmapId, BlendMode};
 

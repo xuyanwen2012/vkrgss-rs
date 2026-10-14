@@ -20,7 +20,7 @@
 
 ## 4. Documentation
 
-- [ ] 4.1 `docs/decisions.md` (section "VX Ace"), `docs/compatibility.md` (section "The window of VX"), the documentation of the modules touched. Verify: the scenarios of `specs/supported-runtimes/spec.md`; the text names nothing that the code does not do; `git diff --stat` against the start of the change names no file under `docs/` but `decisions.md` and `compatibility.md`.
+- [x] 4.1 `docs/decisions.md` (section "VX Ace"), `docs/compatibility.md` (section "The window of VX"), the documentation of the modules touched. Verify: the scenarios of `specs/supported-runtimes/spec.md`; the text names nothing that the code does not do; `git diff --stat` against the start of the change names no file under `docs/` but `decisions.md` and `compatibility.md`.
 
 ## 5. Integration check
 

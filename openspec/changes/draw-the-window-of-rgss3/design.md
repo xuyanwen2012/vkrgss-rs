@@ -318,6 +318,22 @@ The scenarios of `core-scene` use these words.
   `docs/decisions.md` (all three append to "VX Ace"). The protocol version is not among
   them.
 
+## As built
+
+- One `State` (`window/rgss2.rs`) serves both rule sets; what RGSS3 keeps beyond it
+  (paddings, `arrows_visible`, tone, the placed cursor) is an optional part of it in
+  `window/rgss3.rs`. No file outside the scope was touched: extraction (`extract.rs`) asks
+  `Window::is_rgss2` whether a window is one element, so that reader stays true for a window
+  of RGSS3 as well, and `Window::is_rgss3` tells the two apart.
+- Rule 15 needed a new cut for the bilinear stretch alone. `Bitmaps::stretch_blt` already
+  cuts a source rectangle that leaves its bitmap by the same count (measured for RGSS1 and
+  RGSS2 bitmaps), and a block transfer draws what the source has; the builders that follow
+  rule 15 therefore stretch from the skin itself and not from its copy padded to the layout.
+- The fixtures hold the first and the last scene of each case file (28 scenes) and the first
+  thirty scenes of the set of seed 3. While this change was built, all 125 scenes of the
+  case files and all 60 of that set were composed by the CPU reference and had the digests
+  of the model; no scene had to be left out and no rule needed an op that does not exist.
+
 ## Follow-ups
 
 None of these leaves a requirement of this change unmet.

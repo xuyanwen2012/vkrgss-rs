@@ -98,13 +98,18 @@ In a game of XP none of `brightness`, `brightness=`, `wait`, `fadeout`, `fadein`
 ### The window of VX
 
 In a game of VX a `Window` is drawn by the rules of RGSS2, measured on the same two files.
-The rules reproduce 490 of the 496 pictures of that measurement without a wrong pixel; the
-six others hold a skin smaller than 64 pixels. The tests compare a selection of them.
+The rules of that measurement reproduced 490 of its 496 pictures without a wrong pixel; the
+six others hold a skin smaller than 64 pixels, and the rule for their background was found by
+the window measurement of VX Ace of 2026-10-13 and is followed. The tests compare a selection
+of them.
 
 - The skin is read as 128 by 128: the background (0, 0, 64, 64) is stretched to the window
   less a margin of 2 and the pattern (0, 64, 64, 64) is tiled over it; the frame is built
   from the corners and edges at (64, 0, 64, 64); cursor, pause sign and scroll arrows come
   from their places in the skin.
+- Of a skin narrower or lower than 64 pixels the background block is cut and its target
+  shortened, as the original does: a skin of 32 by 32 fills 35 columns and 62 rows of a
+  background of 72 by 128, and a skin of 1 by 1 none.
 - A window is one element at its `z`: contents, cursor, arrows and pause sign have no z of
   their own, so a sprite above the window's `z` covers all of it.
 - `Window#openness` and `openness=`, limited to 0 to 255. Below 255 the window shows part of
@@ -122,8 +127,9 @@ six others hold a skin smaller than 64 pixels. The tests compare a selection of 
 
 Not measured, or not there yet:
 
-- A skin narrower or lower than 64 pixels: the original draws less of the background than
-  vkxp does.
+- The cursor from a skin that cuts the cursor block (a skin less than 96 pixels wide or
+  high) was not measured on VX, nor was an arrow or a pause sign that the skin cuts to an
+  odd width: vkxp draws them from the skin with transparent pixels where it has none.
 - A skin or a contents bitmap that is disposed while the window has it: vkxp goes on
   drawing the background, frame and cursor it built, and draws no contents, arrows or pause
   sign from a disposed bitmap.

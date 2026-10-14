@@ -372,6 +372,39 @@ repository). The first decision may be overruled by the owner.
     another System font.
   - The font chosen for a missing name: the substitution table and the fallback families.
 
+The window of RGSS3, recorded by the change `draw-the-window-of-rgss3` after the window
+measurement of 2026-10-13 on the DLLs 3.0.1.1 and 3.0.0.1 under Wine (kept outside the
+repository; 1185 captures, the same on both versions). The window is in `vkxp-core`; its
+class comes with the binding over Ruby 1.9.2.
+
+- Where the original ends with a page fault, vkxp goes on. Known difference: the original
+  ends, vkxp does not.
+  - The calls: `ox=`, `oy=`, `padding=`, `padding_bottom=` and an assignment of
+    `cursor_rect` that leaves its size 0 by 0, on a window on which `windowskin=` was never
+    called and whose `cursor_rect` never changed its size. In vkxp they take effect by the
+    measured rules: the cursor is placed, and nothing is drawn of it without a skin.
+  - The sizes: a window of 20000 by 20000 with a skin, a window of 100000 by 100000, a
+    `cursor_rect` of 100000 by 100000. In vkxp a window or a cursor too large for a bitmap
+    has no built background, frame or cursor, and its other parts are drawn.
+- A window whose width or height is 0 or less draws no background and no frame, and its
+  cursor, arrows, pause sign and contents are cut to the one pixel at its origin. This rule
+  rests on 14 measured pixels, 9 it was fitted to and 5 of the held-out sets, and was not
+  examined with readable bitmaps.
+- Skins smaller than the layout: the measurement found the rule the measurement of RGSS2
+  had left open (a stretched block that leaves the skin is cut and its target shortened).
+  The captures of VX decide it for the background alone, where it removes every wrong
+  pixel, so the background of a window of RGSS2 follows it too.
+- Not measured for the window of RGSS2 on 2026-10-13, and left as it was there, each
+  needing a measurement on the original of VX first:
+  - the cursor from a skin that cuts the cursor block, and the rule of the odd column for
+    an arrow or pause sign that the skin cuts (in RGSS3 both are measured and followed);
+  - the list of calls that decide the scroll arrows: RGSS3 decides them at `width=`,
+    `height=`, `ox=`, `oy=`, `arrows_visible=`, `move` and the assignment of another skin or
+    contents object, and not in `update`; the report infers the same for RGSS2 from
+    captures that do not tell the two apart, and RGSS2 keeps deciding them in every
+    refresh;
+  - a disposed skin or contents bitmap (in RGSS3 both are drawn as none).
+
 ### Several runtimes in one program
 
 - One repository, and the name stays for now.
