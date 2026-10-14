@@ -7,7 +7,13 @@
 //! In a game of RGSS2 the window is the window of RGSS2 of the scene, which is drawn by
 //! other rules and latches part of what it shows at certain calls. The binding does not
 //! imitate that: `update` and every assignment the scene has a call for are passed to
-//! [`vkxp_core::Window::call`], in both runtimes.
+//! [`vkxp_core::Window::call`], in every runtime, also with the value the window has.
+//!
+//! In a game of RGSS3 the window is the window of RGSS3 of the scene. `Window.new` takes
+//! the position and the size instead of a viewport, and the class adds the paddings, the
+//! arrows flag, `move`, `open?`, `close?` and `tone`, whose `Tone` object is the window's
+//! own as the cursor rectangle is: a change of it reaches [`vkxp_core::Window::set_tone`].
+//! What a call latches is decided by the scene.
 
 use std::ffi::CStr;
 
@@ -259,7 +265,8 @@ reader!(arrows_visible, WindowId, |guest, id| guest
 called!(set_arrows_visible, ArrowsVisible: bool);
 
 /// Defines `Window` as `runtime` has it: in RGSS2 the window of RGSS2, with `viewport=`,
-/// `openness`, a contents bitmap from the start and no `stretch`.
+/// `openness`, a contents bitmap from the start and no `stretch`; in RGSS3 the window of
+/// RGSS3, which has what RGSS2 has but its constructor, and the methods RGSS3 adds.
 pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
     let class = element::define_class::<WindowId>(ruby, c"Window")?;
     element::define_in_viewport::<WindowId>(ruby, class, runtime)?;

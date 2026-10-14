@@ -17,7 +17,7 @@
 
 ## 4. Documents
 
-- [ ] 4.1 `docs/compatibility.md`: the subsection on the window of VX Ace (decision 10); the documentation of `window.rs`, `wrap.rs` and of `lib.rs` where it describes the window. Verify: the scenarios of `specs/supported-runtimes/spec.md`; the text names nothing that the code does not do; `cargo test -p xtask --locked` passes.
+- [x] 4.1 `docs/compatibility.md`: the subsection on the window of VX Ace (decision 10); the documentation of `window.rs`, `wrap.rs` and of `lib.rs` where it describes the window. Verify: the scenarios of `specs/supported-runtimes/spec.md`; the text names nothing that the code does not do; `cargo test -p xtask --locked` passes.
 
 ## 5. Integration check
 

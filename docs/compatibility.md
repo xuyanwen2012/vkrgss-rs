@@ -286,9 +286,9 @@ evaluated as `{0000}`, `{0001}` and so on and compiled as UTF-8, `RGSSReset` wit
 `msgbox_p`, `p`, `print` and `puts` on the standard output, `load_data` that labels the
 strings of a data file UTF-8, `save_data`, and `RGSS_VERSION` `"3.0.1"`.
 
-Of the classes, `Tilemap` and the value classes `Color`, `Tone`, `Rect` and `Table` are
-those of RGSS3, as the sections below say; `Window`, `Font` and text, `Sprite`, `Viewport`,
-`Plane`, `Input` and `Audio` are those of RPG Maker VX still and do not have what RGSS3 adds.
+Of the classes, `Window`, `Tilemap` and the value classes `Color`, `Tone`, `Rect` and `Table`
+are those of RGSS3, as the sections below say; `Font` and text, `Sprite`, `Viewport`, `Plane`,
+`Input` and `Audio` are those of RPG Maker VX still and do not have what RGSS3 adds.
 A game made with the standard scripts of VX Ace therefore loads its scripts and its database
 and ends with an error report at its first call of what only RGSS3 has and vkxp does not
 bind yet, before its title screen. A frame it
@@ -400,6 +400,66 @@ Known differences:
   `ArgumentError`.
 
 In a game of XP or VX the value classes are as they were: none of these forms is taken.
+
+### The window of VX Ace
+
+The class `Window` of a game of VX Ace is the one of VX with these differences, measured on
+the original runtime of VX Ace (versions 3.0.0.1 and 3.0.1.1) under Wine:
+
+- `Window.new(x = 0, y = 0, width = 0, height = 0)` takes up to four integers, a `Float`
+  truncated and negative values kept, and no viewport: a `Viewport` among them raises
+  `TypeError` (`can't convert Viewport into Integer`), a fifth argument `ArgumentError`
+  with the message of the original, `wrong number of arguments (4 for 5)`. `viewport=`
+  moves a window into a viewport, as in VX. A new window has z 100, a back opacity of 192,
+  paddings of 8, shows scroll arrows, has a neutral tone and a contents bitmap of 1 by 1 of
+  its own, which is not disposed with the window.
+- The class adds `padding`, whose writer sets `padding_bottom` too, and `padding_bottom`,
+  neither of them limited; `arrows_visible`; `move(x, y, width, height)`, which returns the
+  window; `open?` and `close?`, true at the openness 255 and 0 alone; and `tone`. It has no
+  `stretch`.
+- `tone` is a `Tone` object of the window, the same at every read. `tone=` takes a `Tone`
+  only and copies its values into that object, and anything else raises `TypeError` (`can't
+  convert NilClass into Tone`). A change of the object, through `tone=` or its own methods,
+  tones the background from the next frame on.
+- The window is drawn by the rules measured on the original, which reproduced 1185 captures
+  without a wrong pixel: the cursor lies at the padding plus the distance between the
+  cursor rectangle and the origin, the contents lie at the padding and are cut by both
+  paddings, and the background is toned and drawn at every openness. Where the cursor lies,
+  whether the contents show, which scroll arrows are drawn and what is built from the skin
+  are decided at the calls the original decides them at and kept until the next of them: a
+  cursor rectangle that is assigned or changed through its own methods, also to the values
+  it has, places the cursor, and so do `ox`, `oy` and the paddings; `width`, `height` and
+  `move` do not.
+- A skin or a contents bitmap that is disposed while the window has it raises nothing, the
+  reader goes on returning the object, and the window is drawn as without it: nothing of a
+  disposed skin shows, not even the background and frame built from it before.
+
+Known differences:
+
+- The original ends with a page fault where vkxp goes on and the calls take effect: when the
+  cursor is placed (by `ox=`, `oy=`, `padding=`, `padding_bottom=` or a cursor rectangle of 0
+  by 0) in a window on which `windowskin=` was never called; at a window or a cursor
+  rectangle of 100000 by 100000 and a window of 20000 by 20000 with a skin, of which vkxp
+  leaves out what cannot be built; and at `contents=` after `windowskin=` with a bitmap of
+  8 by 8 on a new window.
+- A window whose viewport is disposed stays alive on the original; vkxp disposes it with
+  the viewport, as in XP and VX. `viewport=` with a disposed viewport raises `RGSSError`
+  in vkxp, as in VX; it was not measured on VX Ace.
+- Some errors are worded otherwise: `cursor_rect = nil` says `can't convert NilClass into
+  Rect` on the original and `wrong argument type NilClass (expected Rect)` in vkxp, and
+  `windowskin = 5` and `contents = 5` say `can't convert Fixnum into Bitmap` there and
+  `wrong argument type Fixnum (expected Bitmap)` here. The message of the `RangeError` of a
+  large integer depends on the word size, as for the value classes.
+
+Not measured: which of the four values `move` assigns before an argument that cannot be
+converted raises (vkxp converts all four first and assigns none), whether the contents
+bitmap a window was made with is disposed with it, sizes above 600 pixels and origins
+beyond 1000, `flash` of a viewport over a window, `Graphics.__reset__` with windows alive,
+and text in the contents.
+
+In a game of XP or VX the window is as it was: `Window.new` takes a viewport and none of
+these methods is defined.
+
 ## Limits of save states
 
 Save states are described under [Save states](running.md#save-states). Their limits:

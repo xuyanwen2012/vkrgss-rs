@@ -97,17 +97,17 @@
 //! A `Table` object and the tilemap it is assigned to hold the same `SharedTable`, so a
 //! write through the object is what the tilemap draws at the next frame.
 //!
-//! **Owned value objects.** `color` and `tone` of a sprite, a viewport and a plane,
-//! `src_rect` of a sprite, `rect` of a viewport and `cursor_rect` of a window are objects of
-//! the element's own, created with it and kept in hidden instance variables too. Each has
-//! an owner: the element's handle and the property. Every change of such an object, by
-//! `set`, by a component writer or by `initialize`, updates the object's own value and then
-//! writes it to the scene. A writer such as `sprite.color = c` copies the value of `c` into
-//! the sprite's own object and leaves `c` unconnected; so does a copy made by `dup`, which
-//! has no owner. Because the object keeps its value itself, it goes on working as a plain
-//! value after its element is disposed: the write to the scene finds nothing and is
-//! dropped. Assigning a bitmap to a sprite sets the sprite's `src_rect` object to the
-//! bitmap's rectangle.
+//! **Owned value objects.** `color` and `tone` of a sprite, a viewport and a plane, `src_rect`
+//! of a sprite, `rect` of a viewport, `cursor_rect` of a window and `tone` of a window of
+//! RGSS3 are objects of the element's own, created with it and kept in hidden instance
+//! variables too. Each has an owner: the element's handle and the property. Every change of
+//! such an object, by `set`, by a component writer or by `initialize`, updates the object's
+//! own value and then writes it to the scene. A writer such as `sprite.color = c` copies the
+//! value of `c` into the sprite's own object and leaves `c` unconnected; so does a copy made
+//! by `dup`, which has no owner. Because the object keeps its value itself, it goes on working
+//! as a plain value after its element is disposed: the write to the scene finds nothing and is
+//! dropped. Assigning a bitmap to a sprite sets the sprite's `src_rect` object to the bitmap's
+//! rectangle.
 //!
 //! **Lifetime.** `dispose` removes the element from the scene and leaves the handle in the
 //! object; a handle whose element is gone names nothing, so every later method fails in

@@ -165,7 +165,7 @@ pub(crate) enum Owner {
 pub(crate) trait Property: Copy {
     /// Makes this the value of the property `owner` names. A disposed element, and a
     /// property of another type, are left alone. `bitmaps` is for the property whose
-    /// assignment draws: the cursor rectangle of a window of RGSS2.
+    /// assignment draws: the cursor rectangle of a window of RGSS2 or RGSS3.
     fn store(self, owner: Owner, scene: &mut Scene, bitmaps: &mut Bitmaps);
 }
 
