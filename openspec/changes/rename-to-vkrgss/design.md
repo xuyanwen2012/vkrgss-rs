@@ -361,6 +361,12 @@ confirm it.
   --workspace`) without `--locked` rewrites the package names; the gate then runs with
   `--locked`.
 - `cargo fmt --all` after the substitution: lines grow by two characters per occurrence.
+- As implemented, two kept strings beyond the list of decision 3, for the reasons given
+  there: the prefix `vkxp-oracle-` of the font files that `xtask/src/oracle/fonts.rs` puts
+  into the font directory of the reused Wine prefix (a new prefix would leave the files of an
+  earlier run there, which GDI would enumerate beside the new ones; the registry values of
+  decision 3 name these files), and the four bytes `VKXP` in a test of
+  `crates/vkrgss-guest/src/hello.rs` that stand for the start of a stream of the protocol.
 - `CARGO_BIN_EXE_vkxp` and `CARGO_BIN_EXE_vkxp-guest-rgss3` in tests become the new names
   through the rule; tests that look for the guest executable beside the program follow
   `RGSS3_GUEST` in `crates/vkrgss/src/process.rs`.
@@ -374,6 +380,11 @@ confirm it.
   A run writes the warning about the built-in scripts once, also with a guest process: the
   side that resolves the default today (the guest) writes it, and nothing else resolves it a
   second time.
+  - As implemented: the program itself resolves the file too, in `guest_inputs`, before it
+    starts a guest process, and the guest process resolved it a second time. The program now
+    hands the file it found to the guest process in the guest record, so the default is
+    resolved, and the warning written, once, by the program; with the guest on a thread the
+    one resolution is that of the program as before.
 - `--help`: the usage text names the new paths and variables only.
 - Tests of the new requirements use the stand-in directories the tests already use
   (`XDG_CONFIG_HOME`, `XDG_DATA_HOME` and `HOME` set to temporary directories); no test reads

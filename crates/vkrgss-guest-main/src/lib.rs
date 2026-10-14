@@ -74,7 +74,7 @@ fn start_interpreter(runtime: Runtime) -> Result<Interpreter> {
 }
 
 /// The built-in scripts file of `runtime`: the one named on the command line, or the default
-/// under the user's data directory. Fails when it does not exist.
+/// under the user's data directory. Fails when it does not exist, naming the default path.
 fn builtin_scripts(named: Option<PathBuf>, runtime: Runtime) -> Result<PathBuf> {
     let path = match named {
         Some(path) => absolute(&path)?,
@@ -89,7 +89,19 @@ fn builtin_scripts(named: Option<PathBuf>, runtime: Runtime) -> Result<PathBuf> 
                      <OUTPUT>` creates it from your own RGSS DLL"
                 ),
             };
-            data.join("vkrgss").join(builtin_scripts_name(runtime))
+            let path = data.join("vkrgss").join(builtin_scripts_name(runtime));
+            // Up to version 0.3.0 the program was named vkxp; for one version a file that
+            // is still at its former place is read from there.
+            let former = data.join("vkxp").join(builtin_scripts_name(runtime));
+            if !path.is_file() && former.is_file() {
+                tracing::warn!(
+                    "read {} under the former name of the program; the file belongs at {}",
+                    former.display(),
+                    path.display()
+                );
+                return Ok(former);
+            }
+            path
         }
     };
     if path.is_file() {
@@ -200,6 +212,13 @@ pub struct GuestInputs {
     builtin_scripts: PathBuf,
     font_dirs: Vec<PathBuf>,
     preload: Vec<PathBuf>,
+}
+
+impl GuestInputs {
+    /// The built-in scripts file that was found.
+    pub fn builtin_scripts(&self) -> &Path {
+        &self.builtin_scripts
+    }
 }
 
 /// The runtime of the game whose configuration file is `ini`: the one the option names, and

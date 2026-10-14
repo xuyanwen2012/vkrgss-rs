@@ -2728,6 +2728,7 @@ dependencies = [
  "proptest",
  "raw-window-handle",
  "thiserror 2.0.21",
+ "tracing",
  "vkrgss-compose-ref",
  "vkrgss-core",
  "vkrgss-pixel",

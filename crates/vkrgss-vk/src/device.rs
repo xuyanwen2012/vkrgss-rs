@@ -603,7 +603,7 @@ impl Gpu {
         let pacing = match surface {
             // On by default; `VKRGSS_PRESENT_TIMING=0` switches it off. Checked live on RADV in a
             // headless mutter at 60, 120 and 144 Hz (see docs/decisions.md, milestone M5).
-            Some(_) if std::env::var_os("VKRGSS_PRESENT_TIMING").is_some_and(|v| v == "0") => {
+            Some(_) if present_timing_variable().is_some_and(|v| v == "0") => {
                 PacingSupport::default()
             }
             Some(_) => pacing_support(&instance.pacing_caps(candidate.physical)?),
@@ -805,6 +805,21 @@ impl Drop for Gpu {
             self.device.destroy_device(None);
         }
     }
+}
+
+/// The value of `VKRGSS_PRESENT_TIMING`, if it is set. Up to version 0.3.0 the program was
+/// named vkxp: for one version, `VKXP_PRESENT_TIMING` is read when the variable is not set,
+/// with a warning that names both.
+fn present_timing_variable() -> Option<std::ffi::OsString> {
+    if let Some(value) = std::env::var_os("VKRGSS_PRESENT_TIMING") {
+        return Some(value);
+    }
+    let value = std::env::var_os("VKXP_PRESENT_TIMING")?;
+    tracing::warn!(
+        "read VKXP_PRESENT_TIMING under the former name of the program; the variable is named \
+         VKRGSS_PRESENT_TIMING now"
+    );
+    Some(value)
 }
 
 #[cfg(test)]

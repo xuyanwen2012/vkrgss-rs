@@ -5,6 +5,10 @@
 //! game directory. Both are optional. The game's file overrides the user's and the command
 //! line overrides both; `--no-config` reads neither. Paths in a file are relative to the
 //! directory of that file.
+//!
+//! Up to version 0.3.0 the program was named vkxp. For one version, a default file that does
+//! not exist is taken from its former place, `vkxp/config.toml` or `vkxp.toml`, with a
+//! warning that names both paths.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf, absolute};
@@ -19,6 +23,13 @@ use crate::args::{self, Input, Options};
 
 /// The name of the configuration file in a game directory.
 pub(crate) const GAME_FILE: &str = "vkrgss.toml";
+
+/// The name of the configuration file in a game directory up to version 0.3.0.
+const FORMER_GAME_FILE: &str = "vkxp.toml";
+
+/// The directory of the program under the user's configuration directory up to version
+/// 0.3.0.
+const FORMER_DIR: &str = "vkxp";
 
 /// What one configuration file holds. Everything is optional.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
@@ -190,15 +201,35 @@ impl File {
     }
 }
 
-/// The user's file at its default location, if that can be told.
-fn default_user_file() -> Option<PathBuf> {
+/// The user's file at its default location and at its former one, if that can be told.
+fn default_user_file() -> Option<(PathBuf, PathBuf)> {
     let variable = |name| std::env::var_os(name).filter(|value| !value.is_empty());
     let config = match (variable("XDG_CONFIG_HOME"), variable("HOME")) {
         (Some(config), _) => PathBuf::from(config),
         (None, Some(home)) => Path::new(&home).join(".config"),
         (None, None) => return None,
     };
-    Some(config.join("vkrgss").join("config.toml"))
+    Some((
+        config.join("vkrgss").join("config.toml"),
+        config.join(FORMER_DIR).join("config.toml"),
+    ))
+}
+
+/// The file at `path` if it exists, and otherwise the one at `former`, the place of version
+/// 0.3.0, if that exists, with a warning that names both.
+fn existing(path: PathBuf, former: PathBuf) -> Option<PathBuf> {
+    if path.is_file() {
+        return Some(path);
+    }
+    if !former.is_file() {
+        return None;
+    }
+    tracing::warn!(
+        "read {} under the former name of the program; the file belongs at {}",
+        former.display(),
+        path.display()
+    );
+    Some(former)
 }
 
 /// Reads the configuration files of a run of the game in `game_dir`: the user's and the
@@ -209,9 +240,9 @@ pub(crate) fn load(options: &Options, game_dir: &Path) -> Result<File> {
     }
     let user = match &options.config {
         Some(path) => Some(path.clone()),
-        None => default_user_file().filter(|path| path.is_file()),
+        None => default_user_file().and_then(|(path, former)| existing(path, former)),
     };
-    let game = Some(game_dir.join(GAME_FILE)).filter(|path| path.is_file());
+    let game = existing(game_dir.join(GAME_FILE), game_dir.join(FORMER_GAME_FILE));
     let mut settled = File::default();
     for path in user.iter().chain(&game) {
         settled = settled.overridden_by(File::read(path)?);

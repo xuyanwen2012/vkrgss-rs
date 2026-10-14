@@ -102,6 +102,72 @@ pub(crate) const GUEST_VARIABLE: &str = "VKRGSS_GUEST";
 /// The environment variable that says whether a guest process confines itself.
 pub(crate) const SANDBOX_VARIABLE: &str = "VKRGSS_SANDBOX";
 
+/// An environment variable of the program as it was read: its value, if it is set and not
+/// empty, and the name it was read under.
+///
+/// Up to version 0.3.0 the program was named vkxp. For one version, a variable a player sets
+/// that is not set is read under its former name, `VKXP_` in the place of `VKRGSS_`, if that
+/// one is set.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Variable {
+    /// The name of the variable.
+    pub name: &'static str,
+    /// The value, if the variable is set and not empty under either name.
+    pub value: Option<String>,
+    /// The former name, if the value was read under it.
+    pub former: Option<String>,
+}
+
+impl Variable {
+    /// Reads the variable `name` of the environment of the program.
+    pub(crate) fn read(name: &'static str) -> Variable {
+        Variable::of(name, |name| std::env::var(name).ok())
+    }
+
+    /// Reads the variable `name` with `lookup`, which gives the value of a variable by its
+    /// name.
+    pub(crate) fn of(name: &'static str, lookup: impl Fn(&str) -> Option<String>) -> Variable {
+        let set = |name: &str| lookup(name).filter(|value| !value.is_empty());
+        if let Some(value) = set(name) {
+            return Variable {
+                name,
+                value: Some(value),
+                former: None,
+            };
+        }
+        let former = name.replacen("VKRGSS_", "VKXP_", 1);
+        match set(&former) {
+            Some(value) => Variable {
+                name,
+                value: Some(value),
+                former: Some(former),
+            },
+            None => Variable {
+                name,
+                value: None,
+                former: None,
+            },
+        }
+    }
+
+    /// The name the value was read under.
+    pub(crate) fn read_as(&self) -> &str {
+        self.former.as_deref().unwrap_or(self.name)
+    }
+
+    /// Writes a warning event if the value was read under the former name. Called once the
+    /// subscriber is installed.
+    pub(crate) fn warn_if_former(&self) {
+        if let Some(former) = &self.former {
+            tracing::warn!(
+                "read {former} under the former name of the program; the variable is named {} \
+                 now",
+                self.name
+            );
+        }
+    }
+}
+
 /// The parsed command line.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct Options {
@@ -236,13 +302,14 @@ pub(crate) fn guest_form(text: &str) -> Result<GuestForm, String> {
 }
 
 /// The form of the guest that the value of [`GUEST_VARIABLE`] asks for; none when the
-/// variable is not set or empty. The error is a message for the user that names the variable.
-pub(crate) fn guest_of_environment(value: Option<&str>) -> Result<Option<GuestForm>, String> {
-    value
-        .filter(|value| !value.is_empty())
+/// variable is not set. The error is a message for the user that names the variable.
+pub(crate) fn guest_of_environment(variable: &Variable) -> Result<Option<GuestForm>, String> {
+    variable
+        .value
+        .as_deref()
         .map(guest_form)
         .transpose()
-        .map_err(|error| format!("{GUEST_VARIABLE}: {error}"))
+        .map_err(|error| format!("{}: {error}", variable.read_as()))
 }
 
 /// Whether a guest process confines itself, by the word for it, in either case. The error
@@ -255,14 +322,15 @@ pub(crate) fn sandbox(text: &str) -> Result<bool, String> {
     }
 }
 
-/// What the value of [`SANDBOX_VARIABLE`] asks for; nothing when the variable is not set or
-/// empty. The error is a message for the user that names the variable.
-pub(crate) fn sandbox_of_environment(value: Option<&str>) -> Result<Option<bool>, String> {
-    value
-        .filter(|value| !value.is_empty())
+/// What the value of [`SANDBOX_VARIABLE`] asks for; nothing when the variable is not set.
+/// The error is a message for the user that names the variable.
+pub(crate) fn sandbox_of_environment(variable: &Variable) -> Result<Option<bool>, String> {
+    variable
+        .value
+        .as_deref()
         .map(sandbox)
         .transpose()
-        .map_err(|error| format!("{SANDBOX_VARIABLE}: {error}"))
+        .map_err(|error| format!("{}: {error}", variable.read_as()))
 }
 
 /// Reads the arguments that follow the program name. The error is a message for the user,
@@ -562,31 +630,63 @@ mod tests {
         assert!(parse_words(&["--sandbox"]).is_err());
     }
 
+    /// The variable `name` read from an environment that holds `set`.
+    fn variable(name: &'static str, set: &[(&str, &str)]) -> Variable {
+        Variable::of(name, |wanted| {
+            set.iter()
+                .find(|(name, _)| *name == wanted)
+                .map(|(_, value)| (*value).to_owned())
+        })
+    }
+
     #[test]
     fn the_environment_says_whether_the_guest_is_confined() {
-        assert_eq!(sandbox_of_environment(None), Ok(None));
-        assert_eq!(sandbox_of_environment(Some("")), Ok(None));
-        assert_eq!(sandbox_of_environment(Some("off")), Ok(Some(false)));
-        assert_eq!(sandbox_of_environment(Some("on")), Ok(Some(true)));
-        let error = sandbox_of_environment(Some("maybe")).unwrap_err();
+        let sandbox = |value| sandbox_of_environment(&variable(SANDBOX_VARIABLE, value));
+        assert_eq!(sandbox(&[]), Ok(None));
+        assert_eq!(sandbox(&[(SANDBOX_VARIABLE, "")]), Ok(None));
+        assert_eq!(sandbox(&[(SANDBOX_VARIABLE, "off")]), Ok(Some(false)));
+        assert_eq!(sandbox(&[(SANDBOX_VARIABLE, "on")]), Ok(Some(true)));
+        let error = sandbox(&[(SANDBOX_VARIABLE, "maybe")]).unwrap_err();
         assert!(error.contains(SANDBOX_VARIABLE), "{error}");
         assert!(error.contains("on, off"), "{error}");
     }
 
     #[test]
     fn the_environment_names_the_form_of_the_guest() {
-        assert_eq!(guest_of_environment(None), Ok(None));
-        assert_eq!(guest_of_environment(Some("")), Ok(None));
+        let guest = |value| guest_of_environment(&variable(GUEST_VARIABLE, value));
+        assert_eq!(guest(&[]), Ok(None));
+        assert_eq!(guest(&[(GUEST_VARIABLE, "")]), Ok(None));
         assert_eq!(
-            guest_of_environment(Some("process")),
+            guest(&[(GUEST_VARIABLE, "process")]),
             Ok(Some(GuestForm::Process))
         );
-        let error = guest_of_environment(Some("fiber")).unwrap_err();
+        let error = guest(&[(GUEST_VARIABLE, "fiber")]).unwrap_err();
         assert!(error.contains(GUEST_VARIABLE), "{error}");
         assert!(
             error.contains("thread") && error.contains("process"),
             "{error}"
         );
+    }
+
+    /// Requirement "Environment variables under the former name": the former name is read
+    /// when the variable is not set, and names the value it gave in an error.
+    #[test]
+    fn a_variable_that_is_not_set_is_read_under_its_former_name() {
+        let former = "VKXP_GUEST";
+        let read = variable(GUEST_VARIABLE, &[(former, "process")]);
+        assert_eq!(read.value.as_deref(), Some("process"));
+        assert_eq!(read.read_as(), former);
+        let read = variable(GUEST_VARIABLE, &[(GUEST_VARIABLE, ""), (former, "process")]);
+        assert_eq!(read.value.as_deref(), Some("process"));
+        let error = guest_of_environment(&variable(GUEST_VARIABLE, &[(former, "fiber")]));
+        let error = error.unwrap_err();
+        assert!(error.starts_with("VKXP_GUEST: "), "{error}");
+
+        let both = [(GUEST_VARIABLE, "thread"), (former, "process")];
+        let read = variable(GUEST_VARIABLE, &both);
+        assert_eq!(read.value.as_deref(), Some("thread"));
+        assert_eq!(read.former, None);
+        assert_eq!(variable(GUEST_VARIABLE, &[(former, "")]).value, None);
     }
 
     #[test]

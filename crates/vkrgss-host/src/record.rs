@@ -20,7 +20,8 @@
 //! are those of the input script (see [`button_name`]).
 //!
 //! Format version 1, whose first line is `vkrgss-input 1 seed=<n>`, has the buttons only; it is
-//! still read.
+//! still read. So are recordings that versions 0.1.0 to 0.3.0 wrote, when the program was
+//! named vkxp, whose first line starts with `vkxp-input` instead.
 //!
 //! A session that has an [`InputSource`] asks it once per frame, in order, for the snapshot
 //! to deliver, and sends that snapshot ahead of the frame's tick. [`Recorder`] passes the
@@ -41,6 +42,10 @@ use crate::script::button_named;
 const MAGIC: &str = "vkrgss-input 2 seed=";
 /// The same of format version 1, which has no raw keys and no pointer.
 const MAGIC_1: &str = "vkrgss-input 1 seed=";
+/// The name of the format up to version 0.3.0, which is read as [`NAME`].
+const FORMER_NAME: &str = "vkxp-input ";
+/// The name of the format, with which [`MAGIC`] and [`MAGIC_1`] start.
+const NAME: &str = "vkrgss-input ";
 
 /// Where a session takes the input snapshot of each frame from.
 pub trait InputSource: Debug + Send {
@@ -118,6 +123,10 @@ impl Recording {
     pub fn parse(text: &str) -> Result<Recording, String> {
         let mut lines = text.lines();
         let first = lines.next().unwrap_or_default();
+        let first = match first.strip_prefix(FORMER_NAME) {
+            Some(rest) => format!("{NAME}{rest}"),
+            None => first.to_owned(),
+        };
         let (seed, raw) = match (first.strip_prefix(MAGIC), first.strip_prefix(MAGIC_1)) {
             (Some(seed), _) => (seed, true),
             (None, Some(seed)) => (seed, false),
@@ -409,6 +418,30 @@ mod tests {
         let mut pushed = Recording::new(7);
         example().into_iter().for_each(|frame| pushed.push(frame));
         assert_eq!(pushed, recording);
+    }
+
+    /// Scenario "Format 1 of version 0.1.0", and the format 2 that versions up to 0.3.0
+    /// wrote.
+    #[test]
+    fn a_recording_under_the_former_name_parses_as_one_under_the_new_name() {
+        let text = "vkxp-input 1 seed=0\n2x\n1x C\n";
+        let recording = Recording::parse(text).unwrap();
+        assert_eq!(
+            Ok(recording.clone()),
+            Recording::parse("vkrgss-input 1 seed=0\n2x\n1x C\n")
+        );
+        assert!(
+            recording
+                .snapshots()
+                .all(|snapshot| snapshot.keys == [0; 4] && snapshot.pointer.is_none())
+        );
+        let former = RAW_EXAMPLE_TEXT.replacen("vkrgss-input", "vkxp-input", 1);
+        assert_eq!(
+            Recording::parse(&former),
+            Recording::parse(RAW_EXAMPLE_TEXT)
+        );
+        // The former name with another version is not a recording.
+        assert!(Recording::parse("vkxp-input 3 seed=1\n").is_err());
     }
 
     #[test]

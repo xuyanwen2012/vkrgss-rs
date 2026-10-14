@@ -143,7 +143,8 @@ pub(crate) fn vkrgss_logging(work: TempDir, arguments: &[&str], log: Option<&str
 }
 
 /// The executable with these arguments, to be started in `work`, with the loader restricted
-/// as this process is and none of `VKRGSS_LOG`, `VKRGSS_GUEST` and `VKRGSS_SANDBOX` set. `work` also stands in for
+/// as this process is and none of `VKRGSS_LOG`, `VKRGSS_GUEST` and `VKRGSS_SANDBOX` set, nor
+/// their former names, which the program reads for one version. `work` also stands in for
 /// the user's run-time directory, where the socket of a guest process is made.
 pub(crate) fn command(work: &Path, arguments: &[&str]) -> Command {
     command_of(Path::new(env!("CARGO_BIN_EXE_vkrgss")), work, arguments)
@@ -161,7 +162,10 @@ pub(crate) fn command_of(program: &Path, work: &Path, arguments: &[&str]) -> Com
         .env("XDG_RUNTIME_DIR", work)
         .env_remove("VKRGSS_LOG")
         .env_remove("VKRGSS_GUEST")
-        .env_remove("VKRGSS_SANDBOX");
+        .env_remove("VKRGSS_SANDBOX")
+        .env_remove("VKXP_LOG")
+        .env_remove("VKXP_GUEST")
+        .env_remove("VKXP_SANDBOX");
     for (name, value) in restriction {
         command.env(name, value);
     }

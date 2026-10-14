@@ -84,7 +84,7 @@ use vkrgss_host::{
 };
 use vkrgss_proto::link::GuestEnd;
 
-use crate::args::{GuestForm, Input, Options};
+use crate::args::{GuestForm, Input, Options, Variable};
 use crate::config::Settings;
 use vkrgss_guest::diagnostics;
 use vkrgss_guest::record::Diagnostics;
@@ -121,23 +121,26 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     // Nothing before this emits an event: a mistake on the command line is written directly.
-    let variable = std::env::var(diagnostics::VARIABLE).ok();
-    match diagnostics::level(variable.as_deref(), options.verbose) {
+    let log = Variable::read(diagnostics::VARIABLE);
+    match diagnostics::level(log.value.as_deref(), options.verbose) {
         Ok(level) => diagnostics::install(level),
-        Err(message) => return usage(message),
+        Err(message) => return usage(message.replacen(log.name, log.read_as(), 1)),
     }
+    log.warn_if_former();
     // A guest process takes its level from the same two values.
     let diagnostics = Diagnostics {
-        variable,
+        variable: log.value,
         verbose: options.verbose,
     };
-    let variable = std::env::var(args::GUEST_VARIABLE).ok();
-    let from_environment = match args::guest_of_environment(variable.as_deref()) {
+    let variable = Variable::read(args::GUEST_VARIABLE);
+    variable.warn_if_former();
+    let from_environment = match args::guest_of_environment(&variable) {
         Ok(form) => form,
         Err(message) => return usage(message),
     };
-    let variable = std::env::var(args::SANDBOX_VARIABLE).ok();
-    let sandbox = match args::sandbox_of_environment(variable.as_deref()) {
+    let variable = Variable::read(args::SANDBOX_VARIABLE);
+    variable.warn_if_former();
+    let sandbox = match args::sandbox_of_environment(&variable) {
         Ok(sandbox) => sandbox,
         Err(message) => return usage(message),
     };
@@ -371,8 +374,13 @@ fn run(
         }
         GuestForm::Process => {
             // The child sets the guest up itself, from the record of what this process has
-            // settled; this process has no interpreter.
-            let settings = absolute_settings(guest_settings)?;
+            // settled; this process has no interpreter. It is handed the built-in scripts
+            // file found here, so that the file is looked up, and a file at its former place
+            // warned about, once.
+            let settings = absolute_settings(GuestSettings {
+                builtin_scripts: Some(inputs.builtin_scripts().to_owned()),
+                ..guest_settings
+            })?;
             let handed = Handed {
                 seed,
                 game_dir: &game_dir,

@@ -13,9 +13,9 @@
 
 ## 3. Compatibility with version 0.3.0
 
-- [ ] 3.1 The files under the former name: the user file, the game's file and the default built-in scripts files (design decision 5), with tests of every scenario of "Files under the former name". Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss -p vkrgss-guest-main -p vkrgss-guest-main-rgss3 -p vkrgss-guest-rgss3 --locked` passes.
-- [ ] 3.2 The four environment variables under the former name (design decision 6), with tests of every scenario of "Environment variables under the former name". Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss -p vkrgss-guest -p vkrgss-vk --locked` passes; `git grep -n -E 'VKXP_[A-Z]' -- crates xtask` shows only those four names and the kept macros.
-- [ ] 3.3 Recordings with the first line `vkxp-input 1` or `vkxp-input 2` (design decision 4), with tests of the scenarios of "Recordings under the former name". Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss-host -p vkrgss --locked` passes.
+- [x] 3.1 The files under the former name: the user file, the game's file and the default built-in scripts files (design decision 5), with tests of every scenario of "Files under the former name". Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss -p vkrgss-guest-main -p vkrgss-guest-main-rgss3 -p vkrgss-guest-rgss3 --locked` passes.
+- [x] 3.2 The four environment variables under the former name (design decision 6), with tests of every scenario of "Environment variables under the former name". Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss -p vkrgss-guest -p vkrgss-vk --locked` passes; `git grep -n -E 'VKXP_[A-Z]' -- crates xtask` shows only those four names and the kept macros.
+- [x] 3.3 Recordings with the first line `vkxp-input 1` or `vkxp-input 2` (design decision 4), with tests of the scenarios of "Recordings under the former name". Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss-host -p vkrgss --locked` passes.
 
 ## 4. Check of the former name, banner and documents
 
