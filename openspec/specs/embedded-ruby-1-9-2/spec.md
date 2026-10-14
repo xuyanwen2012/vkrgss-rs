@@ -9,7 +9,7 @@ leaves it.
 ## Requirements
 
 ### Requirement: Hermetic build
-On the target `x86_64-unknown-linux-gnu`, building `vkxp-ruby192-sys` SHALL compile the
+On the target `x86_64-unknown-linux-gnu`, building `vkrgss-ruby192-sys` SHALL compile the
 vendored Ruby 1.9.2, its linked encodings and its `Zlib` extension from a fixed list of
 files with `-std=gnu89`, `-fwrapv` and `-fno-strict-aliasing`, using only a C compiler and
 a checked-in configuration header: no `configure`, no `make`, no installed Ruby, no
@@ -41,7 +41,7 @@ check the tree against both.
 - **THEN** it accepts the file only if its hash equals the patched hash recorded with that patch
 
 #### Scenario: Unrecorded change
-- **WHEN** a vendored file differs from the manifest and no patch is recorded for it, or a file is present that neither the manifest nor the list of files added by vkxp names
+- **WHEN** a vendored file differs from the manifest and no patch is recorded for it, or a file is present that neither the manifest nor the list of files added by vkrgss names
 - **THEN** the test fails and names the file
 
 ### Requirement: Interpreter identity
@@ -175,8 +175,8 @@ thread as it was when the thread started.
 - **WHEN** the interpreter is started in a process with default dispositions
 - **THEN** every signal from 1 to 31 that can have a disposition still has its default, and on the interpreter thread no signal is blocked that was not blocked before `ruby_init`
 
-### Requirement: The Rust API of vkxp-ruby-sys
-The crate SHALL offer the public modules and items of `vkxp-ruby-sys` under the same names
+### Requirement: The Rust API of vkrgss-ruby-sys
+The crate SHALL offer the public modules and items of `vkrgss-ruby-sys` under the same names
 with the same meaning. An item without a counterpart in Ruby 1.9.2 SHALL be absent and
 listed in the crate documentation with what takes its place; `mark_game_scripts` SHALL
 exist and do nothing. What `ffi` mirrors SHALL be that of the vendored headers, and a test
@@ -184,7 +184,7 @@ SHALL compare the two. `str_new` SHALL make an ASCII-8BIT string and the constru
 text a UTF-8 string.
 
 #### Scenario: Public items
-- **WHEN** a test crate names `ffi`, `Interpreter`, `Options`, `StartError`, `Ruby`, `protect`, `Raised`, `RubyError`, `HostResult`, `Raise`, `Arity`, `Root`, `MIN_STACK_SIZE`, `STACK_HEADROOM`, `GC_STRESS_VARIABLE` and `SIGNALS_TAKEN_BY_RUBY` of `vkxp_ruby192_sys`, and the methods `eval`, `eval_protected`, `funcall`, `describe`, `set_current_error`, `str_new`, `str_new_text`, `str_new_utf8`, `str_bytes`, `inspect`, `root`, `check_arity`, `top_self`, `mark_game_scripts` and the `define_*` methods of `Ruby`, `RUBY_API` and `Options::for_rgss`
+- **WHEN** a test crate names `ffi`, `Interpreter`, `Options`, `StartError`, `Ruby`, `protect`, `Raised`, `RubyError`, `HostResult`, `Raise`, `Arity`, `Root`, `MIN_STACK_SIZE`, `STACK_HEADROOM`, `GC_STRESS_VARIABLE` and `SIGNALS_TAKEN_BY_RUBY` of `vkrgss_ruby192_sys`, and the methods `eval`, `eval_protected`, `funcall`, `describe`, `set_current_error`, `str_new`, `str_new_text`, `str_new_utf8`, `str_bytes`, `inspect`, `root`, `check_arity`, `top_self`, `mark_game_scripts` and the `define_*` methods of `Ruby`, `RUBY_API` and `Options::for_rgss`
 - **THEN** it compiles, and the crate documentation lists `ruby_errinfo`, `ruby_top_self`, `ruby_set_stack_size`, the four `ruby_vkxp_` hooks of 1.8.7, `SymbolTable`, `rstring` and `rarray` as absent, each with what takes its place
 
 #### Scenario: Value
@@ -243,9 +243,9 @@ extension SHALL appear among the dynamic symbols exported by an executable that 
 - **THEN** it contains no defined symbol starting with `rb_`, `ruby_`, `st_`, `Init_`, `onig` or `Onig`
 
 ### Requirement: The two interpreters are never linked together
-No package of the workspace SHALL depend on both `vkxp-ruby-sys` and `vkxp-ruby192-sys`,
+No package of the workspace SHALL depend on both `vkrgss-ruby-sys` and `vkrgss-ruby192-sys`,
 directly or transitively, where normal, build and development dependencies all count.
-`vkxp-ruby192-sys` SHALL be a guest crate under the dependency rules of the workspace. The
+`vkrgss-ruby192-sys` SHALL be a guest crate under the dependency rules of the workspace. The
 check SHALL be part of the dependency rules that the workspace tests run.
 
 #### Scenario: The real workspace
@@ -253,15 +253,15 @@ check SHALL be part of the dependency rules that the workspace tests run.
 - **THEN** no package reaches both crates and the check passes
 
 #### Scenario: A package that reaches both
-- **WHEN** the rule is given a graph in which one package reaches `vkxp-ruby-sys` through a normal dependency and `vkxp-ruby192-sys` through a development dependency
+- **WHEN** the rule is given a graph in which one package reaches `vkrgss-ruby-sys` through a normal dependency and `vkrgss-ruby192-sys` through a development dependency
 - **THEN** it reports a violation that names the package and both paths
 
 ### Requirement: Upstream test suites pass
 The release's `bootstraptest` and a selection of its `test/ruby` SHALL run in the workspace
-tests against an executable linked from the interpreter as built for vkxp, with no further
+tests against an executable linked from the interpreter as built for vkrgss, with no further
 encoding. A committed list SHALL name each file or test left out or allowed to fail, with
 its reason: a cause in the environment or in thread scheduling that the study of
-2026-10-13 explains, or something vkxp does not link. The harness SHALL fail on a file that
+2026-10-13 explains, or something vkrgss does not link. The harness SHALL fail on a file that
 reports no test.
 
 #### Scenario: Bootstrap tests
@@ -285,14 +285,14 @@ reports no test.
 - **THEN** they pass as they do otherwise
 
 ### Requirement: Collector stress
-With `VKXP_GC_STRESS` set to a number of 1 or more, an interpreter started through the crate
+With `VKRGSS_GC_STRESS` set to a number of 1 or more, an interpreter started through the crate
 SHALL collect at every allocation after start-up; unset, empty or 0 SHALL change nothing.
 The selected files of `test/ruby` SHALL also run with `GC.stress = true`: the quick ones in
 the workspace tests, the slow ones as a step of `cargo xtask stress`, which SHALL stay
 outside the gate. A file left out SHALL be named in a committed list with the reason.
 
 #### Scenario: Every allocation
-- **WHEN** an interpreter is started with `VKXP_GC_STRESS=1` and a script allocates 100 objects
+- **WHEN** an interpreter is started with `VKRGSS_GC_STRESS=1` and a script allocates 100 objects
 - **THEN** `GC.count` has grown by at least 100
 
 #### Scenario: Off
@@ -398,15 +398,15 @@ library. Each correction SHALL be a patch recorded in `PATCHES.md` that says whe
 a write past a buffer or rewrites an idiom the check misreads.
 
 #### Scenario: The three files
-- **WHEN** `cargo test -p vkxp-ruby192-sys --locked --test upstream` is run with `CFLAGS='-O2 -D_FORTIFY_SOURCE=3'` in a target directory of its own
+- **WHEN** `cargo test -p vkrgss-ruby192-sys --locked --test upstream` is run with `CFLAGS='-O2 -D_FORTIFY_SOURCE=3'` in a target directory of its own
 - **THEN** it passes, and `test_dir.rb`, `test_require.rb` and `test_system.rb` are not among the files left out or allowed to fail for this reason
 
 #### Scenario: Under collector stress
-- **WHEN** `cargo test -p vkxp-ruby192-sys --locked --test upstream_stress` is run with the same flags
+- **WHEN** `cargo test -p vkrgss-ruby192-sys --locked --test upstream_stress` is run with the same flags
 - **THEN** it passes
 
 #### Scenario: The plain build
-- **WHEN** `cargo test -p vkxp-ruby192-sys --locked` is run without those flags
+- **WHEN** `cargo test -p vkrgss-ruby192-sys --locked` is run without those flags
 - **THEN** it passes as before, and the test of the manifest accepts the corrected files with their patches
 
 #### Scenario: The check stays on
@@ -441,8 +441,8 @@ one. Over Ruby 1.8.7 the first SHALL be false and the second what it is today.
 - **THEN** the answer is `false`, and the tests of the crate that hold `restart_thread_timer` pass unedited
 
 #### Scenario: Documentation
-- **WHEN** the crate documentation of `vkxp-ruby192-sys` is read
-- **THEN** its table of differences from `vkxp-ruby-sys` no longer lists `restart_thread_timer` as absent and says what the two functions do over Ruby 1.9.2
+- **WHEN** the crate documentation of `vkrgss-ruby192-sys` is read
+- **THEN** its table of differences from `vkrgss-ruby-sys` no longer lists `restart_thread_timer` as absent and says what the two functions do over Ruby 1.9.2
 
 ### Requirement: A busy main thread lets a new thread run
 Over Ruby 1.9.2 a thread that gives up the interpreter's lock at the end of its time slice
@@ -463,7 +463,7 @@ The interpreter crate SHALL start an interpreter whose options have an empty scr
 without giving it a script name: `$0` SHALL then be `false` and the frame of a C function
 at the bottom of a backtrace SHALL be named `ruby`. The options for a game of RGSS3 SHALL
 have an empty script name; the default options and those for RGSS1 and RGSS2 SHALL keep
-`vkxp`.
+`vkrgss`.
 
 #### Scenario: Options for RGSS3
 - **WHEN** an interpreter started with `Options::for_rgss(3)` evaluates `[$0, $PROGRAM_NAME]` and the last entry of `caller(0)` inside a string given to `eval` by the crate's evaluation helper
@@ -471,4 +471,4 @@ have an empty script name; the default options and those for RGSS1 and RGSS2 SHA
 
 #### Scenario: Default options
 - **WHEN** an interpreter started with the default options evaluates `$0`
-- **THEN** the result is `"vkxp"`, and the existing tests of the crate pass unedited
+- **THEN** the result is `"vkrgss"`, and the existing tests of the crate pass unedited

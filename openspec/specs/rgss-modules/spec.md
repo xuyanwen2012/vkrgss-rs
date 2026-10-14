@@ -618,7 +618,7 @@ SHALL NOT. An effect whose format is not known SHALL hold nothing.
 - **THEN** `Audio.bgm_pos` is 297684
 
 ### Requirement: Probe of the format of a sound
-`vkxp-core` SHALL read from the bytes of a file, without an interpreter and without decoding
+`vkrgss-core` SHALL read from the bytes of a file, without an interpreter and without decoding
 a sample, the sample rate, the channel count and the length in sample frames of a WAV file
 of 8-bit or 16-bit PCM and of an Ogg Vorbis file, and of the latter the comments `LOOPSTART`
 and `LOOPLENGTH`, whose names count in upper case only. For any other bytes it SHALL give
@@ -657,7 +657,7 @@ nothing, and no input SHALL make it panic.
 - **THEN** it returns for each, with a format or with nothing
 
 ### Requirement: Position of a streamed sound
-The position model of `vkxp-core` SHALL follow the rule measured on RGSS3 for a sound of
+The position model of `vkrgss-core` SHALL follow the rule measured on RGSS3 for a sound of
 more than 529200 bytes of 16-bit PCM: a decoder position that starts at `pos`, advances by
 15 chunks at the start and by one chunk per 187.5 ms at pitch 100, faster or slower by the
 pitch, and wraps from the loop end to the loop start; the position is the decoder's less 16
@@ -813,7 +813,7 @@ frames SHALL change nothing there, and every test of the two binding packages th
 before SHALL pass under its name with its expected values unedited, over both interpreters.
 
 #### Scenario: Names of the tests
-- **WHEN** `cargo test --locked -- --list` of `vkxp-binding` and of `vkxp-binding-rgss3` is compared before and after
+- **WHEN** `cargo test --locked -- --list` of `vkrgss-binding` and of `vkrgss-binding-rgss3` is compared before and after
 - **THEN** every name listed before is listed after
 
 #### Scenario: XP and VX

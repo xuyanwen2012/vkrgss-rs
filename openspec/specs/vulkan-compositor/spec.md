@@ -220,14 +220,14 @@ cover every word of each record.
 - **THEN** every frame equals the reference
 
 ### Requirement: Source layout of the backend
-No file under `crates/vkxp-vk/src` SHALL be longer than 1000 lines unless it holds only
+No file under `crates/vkrgss-vk/src` SHALL be longer than 1000 lines unless it holds only
 tests. The unit tests of the compositor, the presenter and the device SHALL live in files of
 their own. In the non-test files of the compositor and the presenter, `#[cfg(test)]` SHALL
 stand only on module declarations and whole `impl` blocks, and in the files of the test
 probes.
 
 #### Scenario: File lengths
-- **WHEN** the lines of every file under `crates/vkxp-vk/src` are counted
+- **WHEN** the lines of every file under `crates/vkrgss-vk/src` are counted
 - **THEN** each file longer than 1000 lines holds only tests
 
 #### Scenario: Test attributes
@@ -236,7 +236,7 @@ probes.
 
 #### Scenario: Nothing else changes
 - **WHEN** the workspace is built and tested after the move
-- **THEN** every crate that uses `vkxp-vk` compiles unchanged and the tests that passed before pass, none removed
+- **THEN** every crate that uses `vkrgss-vk` compiles unchanged and the tests that passed before pass, none removed
 
 ### Requirement: Tilemap planes of RGSS3 match the reference
 The Vulkan backend SHALL evaluate a tilemap plane op by the rule set it names and SHALL
@@ -257,7 +257,7 @@ byte-identical to the reference's as before.
 - **THEN** every frame equals the reference compositor's byte for byte
 
 #### Scenario: RGSS1 and RGSS2 unchanged
-- **WHEN** the tests of `crates/vkxp-vk/src/tests/tilemap.rs` and `crates/vkxp-vk/src/tests/tilemap_rgss2.rs` that existed before this change run
+- **WHEN** the tests of `crates/vkrgss-vk/src/tests/tilemap.rs` and `crates/vkrgss-vk/src/tests/tilemap_rgss2.rs` that existed before this change run
 - **THEN** they pass, the generated test of RGSS2 with the seed and the cases it had
 
 #### Scenario: Record layout

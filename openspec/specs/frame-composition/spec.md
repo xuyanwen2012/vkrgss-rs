@@ -384,7 +384,7 @@ wrapping, blend, flash and the drawing of a table tile SHALL be those of RGSS2, 
 the edge under a table, shadows and star tiles SHALL follow the requirements of RGSS3 below.
 
 #### Scenario: RGSS2 unchanged
-- **WHEN** the tests of `crates/vkxp-compose-ref/tests/tilemap_rgss2.rs` run with their ops naming the rule set of RGSS2
+- **WHEN** the tests of `crates/vkrgss-compose-ref/tests/tilemap_rgss2.rs` run with their ops naming the rule set of RGSS2
 - **THEN** they pass, and `tests/data/tilemap-rgss2-digests.txt` of that crate is byte for byte what it was before this change
 
 #### Scenario: Common numbering, measured on the original

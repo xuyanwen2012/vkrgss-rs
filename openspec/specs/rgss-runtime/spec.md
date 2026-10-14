@@ -475,7 +475,7 @@ for its tests.
 
 #### Scenario: The stand-in is not the original text
 - **WHEN** the stand-in of the tests is read
-- **THEN** it says in a comment that it was written for the tests of vkxp, and it is the text given in this change's `design.md`
+- **THEN** it says in a comment that it was written for the tests of vkrgss, and it is the text given in this change's `design.md`
 
 ### Requirement: Script archive of RGSS3
 In a game of RGSS3 `$RGSS_SCRIPTS` SHALL be what `load_data` returns for the script archive,
@@ -710,7 +710,7 @@ RGSS3" states.
 - **THEN** `RGSS_VERSION` is `"3.0.0"`, `"3.0.1"` and `"3.0.1"`, and no warning of a constant defined twice is written
 
 #### Scenario: Through both executables
-- **WHEN** a generated game of RGSS3 whose `Library=System\RGSS300.dll` is a file holding a version record is run headless by `vkxp`, once with 3.0.0.1 and once with 3.0.1.1, and reports `RGSS_VERSION`
+- **WHEN** a generated game of RGSS3 whose `Library=System\RGSS300.dll` is a file holding a version record is run headless by `vkrgss`, once with 3.0.0.1 and once with 3.0.1.1, and reports `RGSS_VERSION`
 - **THEN** it reports `"3.0.0"` and `"3.0.1"`
 
 #### Scenario: Before this change
@@ -908,7 +908,7 @@ what they have.
 ### Requirement: Long reports and the status after an error in RGSS3
 In a game of RGSS3 the report of an uncaught exception SHALL be sent and written whole
 whatever its length, and the run SHALL end with status 1 whatever the line of the error.
-These are vkxp's rules where the original shows an empty box above 1023 UTF-16 units and
+These are vkrgss's rules where the original shows an empty box above 1023 UTF-16 units and
 ends with a code that follows the line in most cases.
 
 #### Scenario: A long message
@@ -1071,5 +1071,5 @@ compiled as UTF-8; a file that `autoload` loads is compiled by the interpreter's
 - **THEN** both raise `LoadError` at the call, and the second message is `no such file to load -- nosuch`
 
 #### Scenario: Compiled as UTF-8
-- **WHEN** a required file holds `$vkxp_enc = ["測".encoding.name, "測".size]`
-- **THEN** `$vkxp_enc` is `["UTF-8", 1]`
+- **WHEN** a required file holds `$vkrgss_enc = ["測".encoding.name, "測".size]`
+- **THEN** `$vkrgss_enc` is `["UTF-8", 1]`

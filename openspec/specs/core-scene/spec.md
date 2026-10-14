@@ -952,8 +952,8 @@ a tilemap of RGSS2 names the rule set of RGSS2 in its plane ops, and no expected
 existing test of tilemaps is edited.
 
 #### Scenario: Existing tests
-- **WHEN** the tests of `crates/vkxp-core/src/tilemap/tests.rs` and `crates/vkxp-core/src/tilemap/rgss2/tests.rs` that existed before this change run
-- **THEN** they pass with their expected values as they were, and every line that `crates/vkxp-core/tests/data/tilemap-frames.txt` had is unchanged
+- **WHEN** the tests of `crates/vkrgss-core/src/tilemap/tests.rs` and `crates/vkrgss-core/src/tilemap/rgss2/tests.rs` that existed before this change run
+- **THEN** they pass with their expected values as they were, and every line that `crates/vkrgss-core/tests/data/tilemap-frames.txt` had is unchanged
 
 #### Scenario: Rule set of RGSS2
 - **WHEN** a tilemap created as one of RGSS2 is extracted
@@ -1186,7 +1186,7 @@ cursor, and a part cut by the skin's edge SHALL count its cut width in the odd-c
 - **THEN** in both the red pixels fill (2 .. 37, 2 .. 64), 2170 pixels; (2 .. 72, 2 .. 66), 4480; (2 .. 14, 2 .. 22), 240; (2 .. 42, 2 .. 66), 2560; (2 .. 11, 2 .. 11), 81; and none, and no other pixel is drawn
 
 #### Scenario: Two pictures of RGSS2 corrected, measured on the original of VX
-- **WHEN** the scenes `g6-skin_sizes_t` and `g8-smallskin_t_0` of `crates/vkxp-core/tests/data/window-rgss2-cases.txt` are composed
+- **WHEN** the scenes `g6-skin_sizes_t` and `g8-smallskin_t_0` of `crates/vkrgss-core/tests/data/window-rgss2-cases.txt` are composed
 - **THEN** the digests of their frames are `edbddf94f4992ce6` and `0263b5710a3a9da6`, which are those of the pictures of the original runtime of VX, and the file no longer names them as not measured
 
 #### Scenario: Nothing else of RGSS2 changes
@@ -1273,8 +1273,8 @@ requirement that names a scene of RGSS2, except where a requirement names RGSS3.
 - **THEN** the scene reports the rules of RGSS3 and the sprite is drawn by them
 
 #### Scenario: RGSS1 and RGSS2 unchanged
-- **WHEN** the tests of `vkxp-core` that existed before this change run
-- **THEN** they pass with no expected value and no file under `crates/vkxp-core/tests/data/` edited
+- **WHEN** the tests of `vkrgss-core` that existed before this change run
+- **THEN** they pass with no expected value and no file under `crates/vkrgss-core/tests/data/` edited
 
 ### Requirement: Turned sprites in viewports of RGSS3
 In a scene of RGSS3 a sprite with an angle inside a viewport SHALL be drawn as a sprite
@@ -1392,7 +1392,7 @@ digests of the model's frames.
 - **THEN** at least one frame does not have the digest committed for RGSS3
 
 #### Scenario: Nothing of the original
-- **WHEN** the files this change adds under `crates/vkxp-core/tests/data/` are read
+- **WHEN** the files this change adds under `crates/vkrgss-core/tests/data/` are read
 - **THEN** they hold scenes, numbers and digests only, and the head of each names the topic, the model and the DLL versions of the measurement
 
 ### Requirement: Disposing a viewport without its elements
@@ -1419,5 +1419,5 @@ it is.
 - **THEN** nothing changes, and the four elements are not in the new viewport
 
 #### Scenario: With the elements, as before
-- **WHEN** the tests of `vkxp-core` that dispose a viewport with its elements run
+- **WHEN** the tests of `vkrgss-core` that dispose a viewport with its elements run
 - **THEN** they pass with their expected values unedited

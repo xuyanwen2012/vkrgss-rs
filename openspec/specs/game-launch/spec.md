@@ -8,7 +8,7 @@ built-in scripts a game needs.
 ## Requirements
 
 ### Requirement: Starting a game
-`vkxp <game directory>` SHALL run the game in that directory: with the directory as the working
+`vkrgss <game directory>` SHALL run the game in that directory: with the directory as the working
 directory of the scripts, the host on the main thread and the scripts on the interpreter
 thread, connected by the protocol link. Without a directory argument the current directory
 SHALL be used. A directory without a game configuration file SHALL end the program with an
@@ -110,7 +110,7 @@ SHALL NOT contain such scripts.
 - **THEN** it exits with a non-zero status, the message names that file and `docs/running.md`, and no guest process was started
 
 #### Scenario: Default location of VX Ace
-- **WHEN** the same game is run without the option and the stand-in built-in scripts of the tests are the file `rpg_builtin_rgss3.rb` in the directory `vkxp` of the user's data directory
+- **WHEN** the same game is run without the option and the stand-in built-in scripts of the tests are the file `rpg_builtin_rgss3.rb` in the directory `vkrgss` of the user's data directory
 - **THEN** no message about a built-in scripts file is printed, the scripts of the game run and the exit status is 0
 
 #### Scenario: A file of VX Ace that is not Ruby
@@ -189,7 +189,7 @@ damaged.
 - **THEN** the program exits with a non-zero status, the message names `Game.rgss3a`, and no script has run
 
 ### Requirement: Configuration files
-The program SHALL read settings from a user configuration file and from `vkxp.toml` in the game
+The program SHALL read settings from a user configuration file and from `vkrgss.toml` in the game
 directory when they exist, with the game's file overriding the user's and command-line options
 overriding both. Every setting that has a command-line option SHALL be settable in the files.
 `--config FILE` SHALL name the user file and `--no-config` SHALL make the program read neither.
@@ -238,21 +238,21 @@ which make the game's text use fonts' own line boxes.
 
 ### Requirement: Diagnostics
 Diagnostics of the running program SHALL be events with a level, written to the error stream.
-By default warnings and errors SHALL be shown, each as a line that starts with `vkxp: `. Text
+By default warnings and errors SHALL be shown, each as a line that starts with `vkrgss: `. Text
 the game produces and the program's usage and fatal error message SHALL be shown at every
 level.
 
 #### Scenario: Default level
-- **WHEN** a game runs without `--verbose` and without `VKXP_LOG`
+- **WHEN** a game runs without `--verbose` and without `VKRGSS_LOG`
 - **THEN** the error stream has no informational line
 
 #### Scenario: Script error at every level
-- **WHEN** a game whose script raises runs with `VKXP_LOG=error`
+- **WHEN** a game whose script raises runs with `VKRGSS_LOG=error`
 - **THEN** the error stream still carries the script error report
 
 ### Requirement: Diagnostic level
 The option `--verbose` SHALL also show informational and debug events. The environment
-variable `VKXP_LOG` SHALL set the level or a per-module filter and take precedence over
+variable `VKRGSS_LOG` SHALL set the level or a per-module filter and take precedence over
 `--verbose`; a value that cannot be parsed SHALL end the program with a message and a non-zero
 status.
 
@@ -261,11 +261,11 @@ status.
 - **THEN** the error stream names the built-in scripts file that was loaded
 
 #### Scenario: Level from the environment
-- **WHEN** the game runs with `VKXP_LOG=error` and `--verbose`
+- **WHEN** the game runs with `VKRGSS_LOG=error` and `--verbose`
 - **THEN** the error stream has no informational line
 
 #### Scenario: Malformed filter
-- **WHEN** the program runs with `VKXP_LOG` set to `=`
+- **WHEN** the program runs with `VKRGSS_LOG` set to `=`
 - **THEN** it ends with a message naming the variable and a non-zero status
 
 ### Requirement: Frame statistics option
@@ -277,7 +277,7 @@ host session, in windowed and in headless mode.
 - **THEN** it runs the game and writes the summary to the error stream
 
 ### Requirement: Guest in a process
-`vkxp` SHALL run the guest either as a thread of its own process or in a child process. In a
+`vkrgss` SHALL run the guest either as a thread of its own process or in a child process. In a
 child process the guest SHALL exchange with the host, over a socket that other users of the
 machine cannot reach, the statement of its version at the start of each connection it
 opens, the messages of the protocol, and nothing else. A run SHALL write the same frames in
@@ -293,29 +293,29 @@ both forms, and its exit status SHALL follow the same rules.
 
 #### Scenario: Guest process dies
 - **WHEN** the guest process of a headless run is killed by a signal while the game runs
-- **THEN** `vkxp` ends with a status other than 0 and its error stream names the signal
+- **THEN** `vkrgss` ends with a status other than 0 and its error stream names the signal
 
 #### Scenario: Frame limit
 - **WHEN** a game that never ends is run headless with `--guest process --frames 5`
-- **THEN** `vkxp` exits with status 0 and no guest process is left running
+- **THEN** `vkrgss` exits with status 0 and no guest process is left running
 
 ### Requirement: Guest option
 The form SHALL be chosen by `--guest thread` or `--guest process`, by the environment variable
-`VKXP_GUEST` and by the configuration key `guest`, the command line before the environment and
+`VKRGSS_GUEST` and by the configuration key `guest`, the command line before the environment and
 the environment before the configuration files. Without a choice the guest SHALL be a process
 in a window and in every run of RGSS3, and a thread in a headless run of RGSS1 or RGSS2. A
 choice of `thread` for a game of RGSS3 SHALL end the run with an error naming `--guest process`.
 
 #### Scenario: Unknown value
-- **WHEN** `vkxp` is started with `--guest fiber`
+- **WHEN** `vkrgss` is started with `--guest fiber`
 - **THEN** it exits with an error that names `thread` and `process`
 
 #### Scenario: Environment
-- **WHEN** `vkxp` is started with `VKXP_GUEST=process` and without `--guest`
+- **WHEN** `vkrgss` is started with `VKRGSS_GUEST=process` and without `--guest`
 - **THEN** the guest runs in a child process
 
 #### Scenario: Headless default
-- **WHEN** `vkxp` is started headless without a choice on a game of RGSS1 or of RGSS2
+- **WHEN** `vkrgss` is started headless without a choice on a game of RGSS1 or of RGSS2
 - **THEN** the guest runs as a thread
 
 #### Scenario: Headless default of VX Ace
@@ -323,22 +323,22 @@ choice of `thread` for a game of RGSS3 SHALL end the run with an error naming `-
 - **THEN** the diagnostics say that a guest process attached, and the exit status is 0
 
 #### Scenario: Thread with VX Ace
-- **WHEN** a generated game of RGSS3 is run headless with `--guest thread`, and again with `VKXP_GUEST=thread` and no option
+- **WHEN** a generated game of RGSS3 is run headless with `--guest thread`, and again with `VKRGSS_GUEST=thread` and no option
 - **THEN** each run exits with a non-zero status before a script has run, and its error stream names RPG Maker VX Ace and `--guest process`
 
 ### Requirement: States option and parked copies
 `--states SCHEDULE` SHALL give a headless run its state requests, as `frame:save N` and
 `frame:load N` entries separated by commas, and SHALL be an error with the guest as a thread.
-States SHALL be kept as copies of the guest process, and when `vkxp` ends no process of the
+States SHALL be kept as copies of the guest process, and when `vkrgss` ends no process of the
 run SHALL be left. The exit status SHALL follow the rules of a run without states.
 
 #### Scenario: Thread form
-- **WHEN** `vkxp` is started headless with `--states "5:save 0"` and without `--guest process`
+- **WHEN** `vkrgss` is started headless with `--states "5:save 0"` and without `--guest process`
 - **THEN** it exits with an error that names `--guest process`
 
 #### Scenario: Malformed schedule
 - **WHEN** `--states "5:keep 0"` or a slot above 9 is given
-- **THEN** `vkxp` exits with an error that names the entry
+- **THEN** `vkrgss` exits with an error that names the entry
 
 #### Scenario: Nothing left behind
 - **WHEN** a headless run that saves into three slots, saves again into one of them and loads once ends
@@ -358,28 +358,28 @@ the directory they are in alone.
 - **THEN** the first is gone and the other two are still there
 
 ### Requirement: Version option
-`vkxp --version` and `vkxp -V` SHALL print `vkxp` and the version of the package on one line
+`vkrgss --version` and `vkrgss -V` SHALL print `vkrgss` and the version of the package on one line
 to the standard output and exit with status 0, without opening a device or a game.
 
 #### Scenario: Version
-- **WHEN** `vkxp --version` is run with no Vulkan driver selectable and no game directory
-- **THEN** the standard output is `vkxp 0.1.0` followed by a line break and the exit status is 0
+- **WHEN** `vkrgss --version` is run with no Vulkan driver selectable and no game directory
+- **THEN** the standard output is `vkrgss 0.1.0` followed by a line break and the exit status is 0
 
 #### Scenario: Listed in the usage
-- **WHEN** `vkxp --help` is run
+- **WHEN** `vkrgss --help` is run
 - **THEN** the text lists `--version`
 
 ### Requirement: Help option
-`vkxp --help` and `vkxp -h` SHALL print the usage text to the standard output and exit with
+`vkrgss --help` and `vkrgss -h` SHALL print the usage text to the standard output and exit with
 status 0, without opening a device or a game. An unknown option SHALL keep ending with a
 status other than 0 and the usage on the error stream.
 
 #### Scenario: Help
-- **WHEN** `vkxp --help` is run with no Vulkan driver selectable and no game directory
+- **WHEN** `vkrgss --help` is run with no Vulkan driver selectable and no game directory
 - **THEN** the standard output holds the usage text, which lists `--help` and `--version`, the error stream is empty and the exit status is 0
 
 #### Scenario: Unknown option
-- **WHEN** `vkxp --no-such-option` is run
+- **WHEN** `vkrgss --no-such-option` is run
 - **THEN** the exit status is 2 and the error stream names the option
 
 ### Requirement: Confined guest process
@@ -402,7 +402,7 @@ restricted.
 - **THEN** both runs dump the same frames
 
 ### Requirement: Sandbox option
-`--sandbox on|off`, the environment variable `VKXP_SANDBOX` and the configuration key
+`--sandbox on|off`, the environment variable `VKRGSS_SANDBOX` and the configuration key
 `sandbox` SHALL choose whether a guest process is confined, with the command line before
 the environment and the environment before the files; the default SHALL be on. With
 `--allow-process-functions`, and for a guest on a thread, nothing SHALL be confined, and
@@ -491,7 +491,7 @@ program has just started, the run SHALL end with that error.
 
 ### Requirement: Executable of the guest process
 The program SHALL take the executable it starts as its guest process from the runtime of
-the game: itself for RGSS1 and RGSS2, and for RGSS3 the file `vkxp-guest-rgss3` in the
+the game: itself for RGSS1 and RGSS2, and for RGSS3 the file `vkrgss-guest-rgss3` in the
 directory of its own executable file. When that file is missing, the run SHALL end before a
 guest, a window or a device is started, with an error that names the file and the directory.
 
@@ -501,14 +501,14 @@ guest, a window or a device is started, with an error that names the file and th
 
 #### Scenario: VX Ace
 - **WHEN** it is asked for RGSS3
-- **THEN** the answer is the path `vkxp-guest-rgss3` in the directory that holds the running executable
+- **THEN** the answer is the path `vkrgss-guest-rgss3` in the directory that holds the running executable
 
 #### Scenario: Missing guest executable
 - **WHEN** a copy of the program that lies alone in a directory is run headless on a generated game of RGSS3
-- **THEN** it exits with a non-zero status, its error stream names `vkxp-guest-rgss3` and that directory, and no script has run
+- **THEN** it exits with a non-zero status, its error stream names `vkrgss-guest-rgss3` and that directory, and no script has run
 
 #### Scenario: A guest executable that ends at once
-- **WHEN** a file `vkxp-guest-rgss3` that only exits with status 3 lies beside that copy and the game is run again
+- **WHEN** a file `vkrgss-guest-rgss3` that only exits with status 3 lies beside that copy and the game is run again
 - **THEN** the program exits with a non-zero status and its error stream says how the guest process ended, with the status 3
 
 #### Scenario: XP and VX need no second file
@@ -539,7 +539,7 @@ options of the program's command line or a configuration file.
 - **THEN** each run exits with status 0 and shows what it shows with the guest on a thread: the picture is loaded, and the dumped frame has the patch
 
 #### Scenario: Level of the guest process
-- **WHEN** a game is run headless with `--guest process --allow-process-functions --verbose` and without `VKXP_LOG`
+- **WHEN** a game is run headless with `--guest process --allow-process-functions --verbose` and without `VKRGSS_LOG`
 - **THEN** the error stream has the informational line in which the guest process says that it is not confined
 
 ### Requirement: Refused guest record
@@ -551,27 +551,27 @@ another version the message SHALL name both. Elsewhere on the command line the o
 SHALL be an unknown option.
 
 #### Scenario: No such file
-- **WHEN** `vkxp --guest-role <path>` is run with a path at which no file is
+- **WHEN** `vkrgss --guest-role <path>` is run with a path at which no file is
 - **THEN** it exits with a non-zero status and its error stream names the path
 
 #### Scenario: The value of version 0.2.0
-- **WHEN** `vkxp --guest-role 7=/tmp/guest.sock` is run by hand
+- **WHEN** `vkrgss --guest-role 7=/tmp/guest.sock` is run by hand
 - **THEN** it exits with a non-zero status and its error stream names `7=/tmp/guest.sock` as a record that cannot be read
 
 #### Scenario: Other version
-- **WHEN** `vkxp --guest-role <file>` is run with a record that states the version `0.0.0`
+- **WHEN** `vkrgss --guest-role <file>` is run with a record that states the version `0.0.0`
 - **THEN** it exits with a non-zero status and its error stream contains `0.0.0` and the version of the program
 
 #### Scenario: Not a record
-- **WHEN** `vkxp --guest-role <file>` is run with a file that holds the line of the program's version followed by bytes that are no record
+- **WHEN** `vkrgss --guest-role <file>` is run with a file that holds the line of the program's version followed by bytes that are no record
 - **THEN** it exits with a non-zero status and its error stream names the file
 
 #### Scenario: Among other arguments
-- **WHEN** `vkxp <game directory> --guest-role <file>` is run
+- **WHEN** `vkrgss <game directory> --guest-role <file>` is run
 - **THEN** the exit status is 2 and the error stream names `--guest-role` as an unknown option
 
 ### Requirement: A game of VX Ace runs
-A run whose runtime is RGSS3 SHALL play the game in a guest process of `vkxp-guest-rgss3`,
+A run whose runtime is RGSS3 SHALL play the game in a guest process of `vkrgss-guest-rgss3`,
 over the interpreter of RGSS3, with the frame size, the dumps, the frame limit, the input
 script and the exit status rules of any run. Before the guest starts the program SHALL
 resolve the run-time package and find the built-in scripts file, and a step that fails
@@ -616,20 +616,20 @@ runtime it SHALL end with a non-zero status and a message that names the product
 runtime, before it opens a game file, starts an interpreter or connects.
 
 #### Scenario: The guest executable of RGSS3 given a game of XP
-- **WHEN** `vkxp-guest-rgss3 --guest-role <file>` is run with a record of its own version whose game directory holds a `Game.ini` of RGSS1 and whose socket nobody listens on
+- **WHEN** `vkrgss-guest-rgss3 --guest-role <file>` is run with a record of its own version whose game directory holds a `Game.ini` of RGSS1 and whose socket nobody listens on
 - **THEN** it exits with a non-zero status and its error stream names RPG Maker XP and not the socket
 
 #### Scenario: The program given a record of VX Ace
-- **WHEN** `vkxp --guest-role <file>` is run with such a record of a game of RGSS3
+- **WHEN** `vkrgss --guest-role <file>` is run with such a record of a game of RGSS3
 - **THEN** it exits with a non-zero status and its error stream names RPG Maker VX Ace and not the socket
 
 #### Scenario: Refused records of the guest executable
-- **WHEN** `vkxp-guest-rgss3 --guest-role <file>` is run with a path at which no file is, with a record that states the version `0.0.0`, and with a file that holds the line of its version followed by bytes that are no record
+- **WHEN** `vkrgss-guest-rgss3 --guest-role <file>` is run with a path at which no file is, with a record that states the version `0.0.0`, and with a file that holds the line of its version followed by bytes that are no record
 - **THEN** each run exits with a non-zero status and names the file, and the second names `0.0.0` and the version of the executable
 
 #### Scenario: Not started as a guest
-- **WHEN** `vkxp-guest-rgss3` is run without arguments, and with `--help`
-- **THEN** each run exits with a non-zero status and one line on its error stream that names `vkxp`, and nothing is written to the standard output
+- **WHEN** `vkrgss-guest-rgss3` is run without arguments, and with `--help`
+- **THEN** each run exits with a non-zero status and one line on its error stream that names `vkrgss`, and nothing is written to the standard output
 
 ### Requirement: States and the sandbox with a game of RGSS3
 A guest process of RGSS3 SHALL be saved, loaded and confined as one of the other runtimes
@@ -677,7 +677,7 @@ requirement "Fonts".
 - **THEN** they are the `--font-dir` and the game's `Fonts`, as before
 
 #### Scenario: A font of the run-time package
-- **WHEN** a text backend is made for a game of RGSS3 whose run-time package has a `Fonts` directory holding a copy of a font of the test fonts of `vkxp-text`
+- **WHEN** a text backend is made for a game of RGSS3 whose run-time package has a `Fonts` directory holding a copy of a font of the test fonts of `vkrgss-text`
 - **THEN** that font's family name exists exactly in the backend
 
 ### Requirement: Glyph rule by the library of a game of RGSS3
@@ -714,7 +714,7 @@ sets them, and the guest record SHALL not change.
 - **THEN** it is the rule of RGSS3 for the first three and the plain rule for the last two
 
 #### Scenario: The backend of a game
-- **WHEN** a text backend is made for a game of RGSS3 and for a game of RGSS2 over the test fonts of `vkxp-text`
+- **WHEN** a text backend is made for a game of RGSS3 and for a game of RGSS2 over the test fonts of `vkrgss-text`
 - **THEN** its engine has the metric rule of RGSS3 in the first and the plain rule in the second
 
 ### Requirement: Title of a game of RGSS3
@@ -734,3 +734,62 @@ RGSS1 and RGSS2 SHALL keep their titles.
 #### Scenario: XP and VX
 - **WHEN** the inputs are read for games of RGSS1 and RGSS2 without `Title=`
 - **THEN** their titles are empty, as before
+
+### Requirement: Files under the former name
+When the user configuration file `vkrgss/config.toml` of the configuration directory, the
+game's `vkrgss.toml` or a default built-in scripts file under `vkrgss/` of the data
+directory does not exist and the same file with `vkxp` in the place of `vkrgss` does, the
+program SHALL read that file and write one warning that names both paths. When both exist,
+the new one SHALL be read without such a warning. A file named on the command line SHALL be
+read as named.
+
+#### Scenario: User file of version 0.3.0
+- **WHEN** a generated game of RGSS1 is run headless with no `vkrgss/config.toml` in the configuration directory and a `vkxp/config.toml` there that sets seed 1
+- **THEN** the run uses seed 1, the exit status is 0 and the error stream has exactly one warning, which names both paths
+
+#### Scenario: Both user files
+- **WHEN** the same game is run while `vkxp/config.toml` sets seed 1 and `vkrgss/config.toml` sets seed 2
+- **THEN** the run uses seed 2 and no line of the error stream names the path of `vkxp/config.toml`
+
+#### Scenario: Game file of version 0.3.0
+- **WHEN** a game directory holds `vkxp.toml` that sets seed 2 and no `vkrgss.toml`, and the game is run without a user file
+- **THEN** the run uses seed 2 and the error stream has exactly one warning, which names both files
+
+#### Scenario: Built-in scripts of version 0.3.0
+- **WHEN** a generated game of RGSS1, and one of RGSS3, is run headless without `--builtin-scripts` while its default file exists under `vkxp/` of the data directory and not under `vkrgss/`
+- **THEN** each run loads that file, exits with status 0 and has exactly one warning that names both paths, also with `--guest process`
+
+#### Scenario: No built-in scripts file
+- **WHEN** a generated game of RGSS1 is run without `--builtin-scripts` and the file exists under neither name
+- **THEN** it exits with a non-zero status and the message names the path under `vkrgss/` and `cargo xtask extract-rpg`, and not the path under `vkxp/`
+
+#### Scenario: Named file
+- **WHEN** the program is run with `--config FILE` while only `vkxp/config.toml` exists in the configuration directory
+- **THEN** it reads `FILE` alone and writes no warning about the former name
+
+### Requirement: Environment variables under the former name
+When `VKRGSS_LOG`, `VKRGSS_GUEST`, `VKRGSS_SANDBOX` or `VKRGSS_PRESENT_TIMING` is not set
+and the variable of the same name with `VKXP_` in the place of `VKRGSS_` is, the program
+SHALL use the value of that one and write one warning event that names both variables. When
+both are set, the new one SHALL be used without such a warning. No other variable of the
+former name SHALL be read.
+
+#### Scenario: Level under the former name
+- **WHEN** a generated game of RGSS1 is run headless with `VKXP_LOG=info` and without `VKRGSS_LOG`
+- **THEN** the error stream has informational lines and exactly one warning, which names `VKXP_LOG` and `VKRGSS_LOG`
+
+#### Scenario: Guest under the former name
+- **WHEN** a generated game of RGSS1 is run headless with `VKXP_GUEST=process` and with neither `--guest` nor `VKRGSS_GUEST`
+- **THEN** the guest runs in a child process, the exit status is 0 and one warning names `VKXP_GUEST` and `VKRGSS_GUEST`
+
+#### Scenario: Both names
+- **WHEN** the same game is run with `VKRGSS_GUEST=thread` and `VKXP_GUEST=process`
+- **THEN** the guest runs as a thread and no line of the error stream names `VKXP_GUEST`
+
+#### Scenario: Sandbox under the former name
+- **WHEN** the game of "Write outside" is run with `--guest process`, `VKXP_SANDBOX=off` and without `VKRGSS_SANDBOX`
+- **THEN** the file is written and one warning names `VKXP_SANDBOX` and `VKRGSS_SANDBOX`
+
+#### Scenario: Other variables
+- **WHEN** the allow-list of the former name is read
+- **THEN** the only variables of the former name it allows in the sources of the program are `VKXP_LOG`, `VKXP_GUEST`, `VKXP_SANDBOX` and `VKXP_PRESENT_TIMING`

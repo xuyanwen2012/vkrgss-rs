@@ -22,7 +22,7 @@ method list read from the original runtime.
 
 ### Requirement: Color and Tone
 `Color.new(red, green, blue, alpha = 255)` and `Tone.new(red, green, blue, gray = 0)` SHALL
-create values whose components are Floats, clamped as `vkxp-core` defines, readable and
+create values whose components are Floats, clamped as `vkrgss-core` defines, readable and
 writable by name, settable together with `set`, comparable with `==`, `===` and `eql?`, and
 printable with `to_s` as `(r, g, b, a)` with six decimals. Passing something that is not a
 number SHALL raise `TypeError`, and a wrong number of arguments `ArgumentError`.
@@ -63,7 +63,7 @@ zero by `empty`, comparable with `==`, `===` and `eql?`, and printable with `to_
 
 ### Requirement: Table
 `Table.new(xsize, ysize = 1, zsize = 1)` SHALL create a table of zeros with the behaviour of
-`vkxp-core`'s table. `[]` with as many indices as the table has dimensions SHALL return the
+`vkrgss-core`'s table. `[]` with as many indices as the table has dimensions SHALL return the
 element or `nil` outside the bounds, `[]=` SHALL store a value or do nothing outside the
 bounds, and `resize`, `xsize`, `ysize` and `zsize` SHALL be provided.
 
@@ -81,7 +81,7 @@ bounds, and `resize`, `xsize`, `ysize` and `zsize` SHALL be provided.
 
 ### Requirement: Marshal forms
 `Color`, `Tone`, `Rect` and `Table` SHALL define `_dump` and the class method `_load` with the
-byte layouts of `vkxp-core`, so that `Marshal.dump` writes and `Marshal.load` reads them as the
+byte layouts of `vkrgss-core`, so that `Marshal.dump` writes and `Marshal.load` reads them as the
 original runtime does. Loading malformed data SHALL raise an exception instead of creating a
 value.
 
@@ -385,13 +385,13 @@ package over Ruby 1.9.2 alone, and the scenarios named "XP and VX" SHALL be held
 the shared files.
 
 #### Scenario: Names of the tests
-- **WHEN** `cargo test --locked -- --list` of `vkxp-binding` and of `vkxp-binding-rgss3` is compared before and after
+- **WHEN** `cargo test --locked -- --list` of `vkrgss-binding` and of `vkrgss-binding-rgss3` is compared before and after
 - **THEN** every name listed before is listed after
 
 #### Scenario: Existing tests
-- **WHEN** the difference of `crates/vkxp-binding/tests` and `crates/vkxp-binding-rgss3/tests` against the start of the change is read
-- **THEN** it holds new files and one new test in each of `tests/ruby.rs` and `tests/scene_rgss2.rs` of `vkxp-binding`; no test that existed, no expected value and no line of the allow-list changed
+- **WHEN** the difference of `crates/vkrgss-binding/tests` and `crates/vkrgss-binding-rgss3/tests` against the start of the change is read
+- **THEN** it holds new files and one new test in each of `tests/ruby.rs` and `tests/scene_rgss2.rs` of `vkrgss-binding`; no test that existed, no expected value and no line of the allow-list changed
 
 #### Scenario: Other crates
 - **WHEN** the difference of `crates` against the start of the change is taken
-- **THEN** it names files of `crates/vkxp-binding` and `crates/vkxp-binding-rgss3` only
+- **THEN** it names files of `crates/vkrgss-binding` and `crates/vkrgss-binding-rgss3` only

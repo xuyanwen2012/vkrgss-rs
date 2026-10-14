@@ -168,7 +168,7 @@ Without that support the presenter SHALL present as before.
 - **THEN** the next target is 50 milliseconds after the previous one
 
 #### Scenario: Switched off
-- **WHEN** the environment variable `VKXP_PRESENT_TIMING` is `0`
+- **WHEN** the environment variable `VKRGSS_PRESENT_TIMING` is `0`
 - **THEN** frames are presented as before, whatever the device supports
 
 #### Scenario: No support
@@ -308,5 +308,5 @@ and shown as by the frame rule.
 - **THEN** it is held as by the frame rule, the buffer keeps its texels and no error is reported
 
 #### Scenario: Frame rule unchanged
-- **WHEN** the tests of `crates/vkxp-vk/src/tests/presentation.rs` that existed before this change run with holds of the frame rule
+- **WHEN** the tests of `crates/vkrgss-vk/src/tests/presentation.rs` that existed before this change run with holds of the frame rule
 - **THEN** they pass with no expected value edited

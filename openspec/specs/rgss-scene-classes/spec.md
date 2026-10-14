@@ -658,16 +658,16 @@ package over Ruby 1.9.2 alone, and the scenarios named "XP and VX" SHALL be held
 the shared files.
 
 #### Scenario: Names of the tests
-- **WHEN** `cargo test --locked -- --list` of `vkxp-binding` and of `vkxp-binding-rgss3` is compared before and after
+- **WHEN** `cargo test --locked -- --list` of `vkrgss-binding` and of `vkrgss-binding-rgss3` is compared before and after
 - **THEN** every name listed before is listed after
 
 #### Scenario: Existing tests
-- **WHEN** the difference of `crates/vkxp-binding/tests` and `crates/vkxp-binding-rgss3/tests` against the start of the change is read
-- **THEN** it holds the new file of RGSS3, one new test in each of `tests/scene.rs` and `tests/scene_rgss2.rs` of `vkxp-binding`, and `Window` added to the bound classes of `arity_rgss3.rs`; no test that existed, no expected value and no line of the allow-list changed
+- **WHEN** the difference of `crates/vkrgss-binding/tests` and `crates/vkrgss-binding-rgss3/tests` against the start of the change is read
+- **THEN** it holds the new file of RGSS3, one new test in each of `tests/scene.rs` and `tests/scene_rgss2.rs` of `vkrgss-binding`, and `Window` added to the bound classes of `arity_rgss3.rs`; no test that existed, no expected value and no line of the allow-list changed
 
 #### Scenario: Other crates
 - **WHEN** the difference of `crates` against the start of the change is taken
-- **THEN** it names files of `crates/vkxp-binding` and `crates/vkxp-binding-rgss3` only
+- **THEN** it names files of `crates/vkrgss-binding` and `crates/vkrgss-binding-rgss3` only
 
 ### Requirement: The scene of a game of RGSS3
 The scene of a game of RGSS3 SHALL be made with the rules of RGSS3 of `core-scene`, so that
@@ -792,7 +792,7 @@ test of the two binding packages that passed before SHALL pass under its name wi
 expected values unedited, over both interpreters.
 
 #### Scenario: Names of the tests
-- **WHEN** `cargo test --locked -- --list` of `vkxp-binding`, `vkxp-binding-rgss3` and `vkxp-core` is compared before and after
+- **WHEN** `cargo test --locked -- --list` of `vkrgss-binding`, `vkrgss-binding-rgss3` and `vkrgss-core` is compared before and after
 - **THEN** every name listed before is listed after
 
 #### Scenario: XP and VX

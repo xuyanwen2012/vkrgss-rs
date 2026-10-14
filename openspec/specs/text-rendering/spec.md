@@ -327,7 +327,7 @@ plain metric rule it SHALL stay as "Measurement" gives it.
 - **THEN** its width is the regular width plus 5 and its height is unchanged
 
 #### Scenario: The fonts of the run-time package
-- **WHEN** `VKXP_RGSS3_FONTS` names a directory holding `VL-Gothic-Regular.ttf` and `VL-PGothic-Regular.ttf` and the committed table of `text_size` is evaluated with the rule of RGSS3
+- **WHEN** `VKRGSS_RGSS3_FONTS` names a directory holding `VL-Gothic-Regular.ttf` and `VL-PGothic-Regular.ttf` and the committed table of `text_size` is evaluated with the rule of RGSS3
 - **THEN** all 28392 widths and heights equal the measured values; without the variable the test says it is skipped
 
 ### Requirement: Metric rules
@@ -337,7 +337,7 @@ overhang and mask it gave before this requirement, and the rule of RGSS3. The sa
 with the same rules SHALL return identical results for identical requests.
 
 #### Scenario: Default
-- **WHEN** an engine whose metric rule was never set runs the existing tests of `vkxp-text`
+- **WHEN** an engine whose metric rule was never set runs the existing tests of `vkrgss-text`
 - **THEN** every expected value of those tests holds unedited
 
 #### Scenario: Independent of the mask rules

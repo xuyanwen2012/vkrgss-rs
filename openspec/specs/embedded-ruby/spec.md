@@ -59,7 +59,7 @@ write Marshal format 4.8, and SHALL have the Ruby 1.8 behaviours that old script
 
 ### Requirement: Upstream test suites pass
 Ruby's own core test suite, its `Zlib` test suite and its sample test SHALL pass against the
-interpreter exactly as built for vkxp, and SHALL run as part of the workspace tests.
+interpreter exactly as built for vkrgss, and SHALL run as part of the workspace tests.
 
 #### Scenario: Core suite
 - **WHEN** the workspace tests run
@@ -412,13 +412,13 @@ own, made of its scratch directory and the system's directories, and not with th
 - **THEN** they pass as they do otherwise
 
 ### Requirement: Collector stress switch
-With the environment variable `VKXP_GC_STRESS` set to a number `n` of 1 or more, an
-interpreter started through `vkxp-ruby-sys` SHALL run its collector at every n-th
+With the environment variable `VKRGSS_GC_STRESS` set to a number `n` of 1 or more, an
+interpreter started through `vkrgss-ruby-sys` SHALL run its collector at every n-th
 allocation of an object or of memory, except while collections are disabled. Unset, empty
 or 0 SHALL change nothing. The change to the vendored collector SHALL be a recorded patch.
 
 #### Scenario: Every allocation
-- **WHEN** an interpreter is started with `VKXP_GC_STRESS=1` and a script allocates 100 objects
+- **WHEN** an interpreter is started with `VKRGSS_GC_STRESS=1` and a script allocates 100 objects
 - **THEN** `GC.count`, or a counter the test reads in its place, has grown by at least 100
 
 #### Scenario: Off
