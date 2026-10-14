@@ -6,18 +6,23 @@
 //!
 //! RGSS2 adds `bush_opacity`, `wave_amp`, `wave_length` and `wave_speed`, integers kept as
 //! they are written, and `wave_phase`, a Float kept modulo 360.
+//!
+//! RGSS3 has the sprite of RGSS2; `initialize` and the arguments that must be objects of RGSS
+//! classes word their errors as the original runtime of RGSS3 does (`can't convert NilClass
+//! into Color`). So do those of `Plane` and `Viewport`.
 
 use std::ffi::CStr;
 
-use vkxp_core::SpriteId;
+use vkxp_core::{SpriteId, ViewportId};
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{HostResult, Raised, Ruby};
 use vkxp_vfs::Runtime;
 
-use crate::color::{color_arg, color_of, color_set, tone_arg, tone_of, tone_set};
-use crate::element::{self, field, kept_after_dispose, object, reader, writer};
+use crate::color::{color_of, color_set, tone_of, tone_set};
+use crate::element::{self, color_arg, field, kept_after_dispose, object, reader, rect_arg};
+use crate::element::{tone_arg, writer};
 use crate::rb;
-use crate::rect::{rect_arg, rect_of, rect_set};
+use crate::rect::{rect_of, rect_set};
 use crate::wrap::{self, Owner};
 
 /// The instance variable that holds the sprite's `Bitmap` object, or `nil`.
@@ -31,6 +36,20 @@ const TONE: &CStr = c"tone";
 fn initialize(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     wrap::intern_owner_names(ruby)?;
     let viewport = element::viewport_arg(ruby, args)?;
+    create(ruby, recv, args, viewport)
+}
+
+/// `initialize(viewport = nil)` of RGSS3, which words its errors as the original runtime of
+/// RGSS3 does ([`element::viewport_arg_rgss3`]).
+fn initialize_rgss3(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    wrap::intern_owner_names(ruby)?;
+    let viewport = element::viewport_arg_rgss3(ruby, args)?;
+    create(ruby, recv, args, viewport)
+}
+
+/// Creates the sprite of the object `recv` in `viewport`, the object given as `args`, and
+/// gives the object its own `Rect`, `Color` and `Tone`.
+fn create(ruby: &Ruby, recv: VALUE, args: &[VALUE], viewport: Option<ViewportId>) -> HostResult {
     let id = element::create(ruby, recv, args.first(), |scene| {
         scene.create_sprite(viewport)
     })?;
@@ -72,7 +91,7 @@ kept_after_dispose!(bitmap, SpriteId, BITMAP);
 /// source rectangle, as the scene decides for its runtime.
 fn set_bitmap(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     let id = element::live::<SpriteId>(ruby, recv)?;
-    let bitmap = element::bitmap_ref(ruby, args[0])?;
+    let bitmap = element::bitmap_arg(ruby, args[0])?;
     let src_rect = element::operate(ruby, |guest| {
         let sprite = guest.scene.sprite_mut(id)?;
         sprite.set_bitmap(bitmap, &guest.bitmaps);
@@ -150,7 +169,11 @@ writer!(set_wave_phase, SpriteId, |guest, id, phase: f64| guest
 pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
     let class = element::define_class::<SpriteId>(ruby, c"Sprite")?;
     element::define_in_viewport::<SpriteId>(ruby, class, runtime)?;
-    rb::method(ruby, class, c"initialize", -1, initialize)?;
+    if runtime == Runtime::Rgss3 {
+        rb::method(ruby, class, c"initialize", -1, initialize_rgss3)?;
+    } else {
+        rb::method(ruby, class, c"initialize", -1, initialize)?;
+    }
     rb::method(ruby, class, c"flash", 2, flash)?;
     rb::method(ruby, class, c"update", 0, update)?;
     rb::method(ruby, class, c"bitmap", 0, bitmap)?;

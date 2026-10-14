@@ -119,9 +119,10 @@ fn initialize_rgss2(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
 }
 
 /// `initialize(viewport = nil)` in RGSS3: as in RGSS2, with a tilemap of the scene that is
-/// drawn by the rule set of RGSS3.
+/// drawn by the rule set of RGSS3, and the errors worded as the original runtime of RGSS3
+/// words them ([`element::viewport_arg_rgss3`]).
 fn initialize_rgss3(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
-    let viewport = element::viewport_arg(ruby, args)?;
+    let viewport = element::viewport_arg_rgss3(ruby, args)?;
     let id = element::create(ruby, recv, args.first(), |scene| {
         scene.create_tilemap_rgss3(viewport)
     })?;

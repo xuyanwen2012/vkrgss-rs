@@ -12,8 +12,8 @@
 
 ## 3. Constructors, object arguments and the method surface of the scene classes
 
-- [ ] 3.1 `element::viewport_arg_rgss3` for `Sprite.new`, `Plane.new` and `Tilemap.new` of RGSS3, and the wording `can't convert <class> into <class>` of the object arguments of `Sprite`, `Plane` and `Viewport` in RGSS3 (decision 6). Verify: the scenarios of "Constructors and object arguments of RGSS3", the measured ones and "Plane writers"; the same test command.
-- [ ] 3.2 `Sprite`, `Plane`, `Viewport`, `Tilemap` and `Tilemap::BitmapArray` added to `BOUND` of `arity_rgss3.rs` (decision 11), nothing else of that file or of `tests/data/rgss3_api.txt` edited. Verify: the scenarios of "Method surface of the scene classes in RGSS3" without `Graphics`; the same test command; `git diff` of `arity_rgss3.rs` against the start of the change touches the list `BOUND` alone.
+- [x] 3.1 `element::viewport_arg_rgss3` for `Sprite.new`, `Plane.new` and `Tilemap.new` of RGSS3, and the wording `can't convert <class> into <class>` of the object arguments of `Sprite`, `Plane` and `Viewport` in RGSS3 (decision 6). Verify: the scenarios of "Constructors and object arguments of RGSS3", the measured ones and "Plane writers"; the same test command.
+- [x] 3.2 `Sprite`, `Plane`, `Viewport`, `Tilemap` and `Tilemap::BitmapArray` added to `BOUND` of `arity_rgss3.rs` (decision 11), nothing else of that file or of `tests/data/rgss3_api.txt` edited. Verify: the scenarios of "Method surface of the scene classes in RGSS3" without `Graphics`; the same test command; `git diff` of `arity_rgss3.rs` against the start of the change touches the list `BOUND` alone.
 
 ## 4. Graphics of RGSS3
 

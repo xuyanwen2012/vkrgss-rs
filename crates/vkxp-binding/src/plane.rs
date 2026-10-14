@@ -4,13 +4,13 @@
 
 use std::ffi::CStr;
 
-use vkxp_core::PlaneId;
+use vkxp_core::{PlaneId, ViewportId};
 use vkxp_ruby_sys::ffi::VALUE;
 use vkxp_ruby_sys::{HostResult, Raised, Ruby};
 use vkxp_vfs::Runtime;
 
-use crate::color::{color_arg, color_of, color_set, tone_arg, tone_of, tone_set};
-use crate::element::{self, field, kept, object, reader, writer};
+use crate::color::{color_of, color_set, tone_of, tone_set};
+use crate::element::{self, color_arg, field, kept, object, reader, tone_arg, writer};
 use crate::rb;
 use crate::wrap::{self, Owner};
 
@@ -24,6 +24,20 @@ const TONE: &CStr = c"tone";
 fn initialize(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     wrap::intern_owner_names(ruby)?;
     let viewport = element::viewport_arg(ruby, args)?;
+    create(ruby, recv, args, viewport)
+}
+
+/// `initialize(viewport = nil)` of RGSS3, which words its errors as the original runtime of
+/// RGSS3 does ([`element::viewport_arg_rgss3`]).
+fn initialize_rgss3(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    wrap::intern_owner_names(ruby)?;
+    let viewport = element::viewport_arg_rgss3(ruby, args)?;
+    create(ruby, recv, args, viewport)
+}
+
+/// Creates the plane of the object `recv` in `viewport`, the object given as `args`, and
+/// gives the object its own `Color` and `Tone`.
+fn create(ruby: &Ruby, recv: VALUE, args: &[VALUE], viewport: Option<ViewportId>) -> HostResult {
     let id = element::create(ruby, recv, args.first(), |scene| {
         scene.create_plane(viewport)
     })?;
@@ -43,7 +57,7 @@ kept!(bitmap, PlaneId, BITMAP);
 /// `bitmap = bitmap_or_nil`: keeps the object.
 fn set_bitmap(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     let id = element::live::<PlaneId>(ruby, recv)?;
-    let bitmap = element::bitmap_ref(ruby, args[0])?;
+    let bitmap = element::bitmap_arg(ruby, args[0])?;
     element::operate(ruby, |guest| {
         guest.scene.plane_mut(id)?.bitmap = bitmap;
         Ok(())
@@ -82,11 +96,17 @@ writer!(set_opacity, PlaneId, |guest, id, opacity: i32| guest
     .set_opacity(opacity));
 
 /// Defines `Plane` as `runtime` has it: in RGSS2 `viewport` takes the viewport to move to,
-/// `visible` reads `true` always and `blend_type=` refuses a value other than 0, 1 and 2.
+/// `visible` reads `true` always and `blend_type=` refuses a value other than 0, 1 and 2; in
+/// RGSS3 `viewport` is a reader beside `viewport=`, and the errors of `initialize` are worded
+/// as the original runtime of RGSS3 words them.
 pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<VALUE, Raised> {
     let class = element::define_class::<PlaneId>(ruby, c"Plane")?;
     element::define_plane_viewport(ruby, class, runtime)?;
-    rb::method(ruby, class, c"initialize", -1, initialize)?;
+    if runtime == Runtime::Rgss3 {
+        rb::method(ruby, class, c"initialize", -1, initialize_rgss3)?;
+    } else {
+        rb::method(ruby, class, c"initialize", -1, initialize)?;
+    }
     rb::method(ruby, class, c"bitmap", 0, bitmap)?;
     rb::method(ruby, class, c"bitmap=", 1, set_bitmap)?;
     if runtime == Runtime::Rgss1 {

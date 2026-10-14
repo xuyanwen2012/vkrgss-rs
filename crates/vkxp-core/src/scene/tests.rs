@@ -960,8 +960,8 @@ mod alone {
     use vkxp_pixel::Rgba;
 
     use super::*;
-    use crate::extract::testing::*;
     use crate::WindowCall;
+    use crate::extract::testing::*;
 
     const PLANE: Rgba = [200, 0, 200, 255];
     const INK: Rgba = [10, 250, 10, 255];

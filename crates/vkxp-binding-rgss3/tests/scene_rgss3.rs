@@ -318,3 +318,129 @@ fn a_disposed_viewport_is_refused_by_a_plane_and_a_sprite() {
         "[\"RGSSError: disposed viewport\", \"RGSSError: disposed viewport\", true, true]"
     );
 }
+
+// Requirement "Constructors and object arguments of RGSS3".
+
+/// Scenario "Constructors, measured on the original".
+#[test]
+fn the_constructors_take_nil_or_a_viewport_with_the_measured_messages() {
+    assert_eq!(
+        eval_with(
+            "made << (v = Viewport.new)",
+            "[(s = Sprite.new; r = s.viewport; s.dispose; r), \
+              (s = Sprite.new(nil); r = s.viewport; s.dispose; r), \
+              error { Sprite.new(5) }, error { Sprite.new(v, 1) }, error { Plane.new(5) }, \
+              error { Plane.new(v, 1) }, error { Tilemap.new(v, 1) }]"
+        ),
+        "[nil, nil, \"TypeError: can't convert Fixnum into Viewport\", \
+         \"ArgumentError: wrong number of arguments (1 for 2)\", \
+         \"TypeError: can't convert Fixnum into Viewport\", \
+         \"ArgumentError: wrong number of arguments (1 for 2)\", \
+         \"ArgumentError: wrong number of arguments (1 for 2)\"]"
+    );
+}
+
+/// Scenarios "Object writers, measured on the original" and "Plane writers".
+#[test]
+fn the_object_arguments_are_worded_as_the_original_words_them() {
+    let objects = "made << (s = Sprite.new) << (v = Viewport.new) << (p = Plane.new)";
+    for (source, expected) in [
+        ("s.color = nil", "NilClass into Color"),
+        ("s.color = 5", "Fixnum into Color"),
+        ("s.tone = nil", "NilClass into Tone"),
+        ("s.src_rect = nil", "NilClass into Rect"),
+        ("s.src_rect = 5", "Fixnum into Rect"),
+        ("s.bitmap = 5", "Fixnum into Bitmap"),
+        ("v.rect = nil", "NilClass into Rect"),
+        ("v.rect = 5", "Fixnum into Rect"),
+        ("v.color = nil", "NilClass into Color"),
+        ("v.tone = nil", "NilClass into Tone"),
+        ("s.flash(5, 3)", "Fixnum into Color"),
+        ("v.flash(5, 3)", "Fixnum into Color"),
+        ("p.color = nil", "NilClass into Color"),
+        ("p.tone = 5", "Fixnum into Tone"),
+        ("p.bitmap = 5", "Fixnum into Bitmap"),
+    ] {
+        assert_eq!(
+            eval_with(objects, source),
+            format!("TypeError: can't convert {expected}"),
+            "{source}"
+        );
+    }
+    // What the writers take is still taken.
+    assert_eq!(
+        eval_with(
+            &format!("{objects} << (b = Bitmap.new(4, 4))"),
+            "s.bitmap = b; s.bitmap = nil; p.bitmap = b; s.flash(nil, 3); \
+             v.flash(Color.new(1, 2, 3), 2); s.color = Color.new(1, 2, 3); \
+             [s.bitmap, p.bitmap.equal?(b), s.color.red]"
+        ),
+        "[nil, true, 1.0]"
+    );
+}
+
+/// Scenario "Plain values of a sprite, measured on the original".
+#[test]
+fn the_plain_values_of_a_sprite_are_converted_as_measured() {
+    assert_eq!(
+        eval_with(
+            "made << (s = Sprite.new)",
+            "[[:x, 5.9], [:x, -5.9], [:opacity, 256], [:opacity, -0.5], [:bush_opacity, 300], \
+              [:bush_depth, -3], [:wave_amp, 5.7], [:wave_phase, 725.5], [:wave_phase, -30], \
+              [:zoom_x, -1.5], [:angle, 725.5], [:mirror, 0], [:visible, nil], \
+              [:blend_type, 1.9]].map { |name, value| s.send(\"#{name}=\", value); s.send(name) }"
+        ),
+        "[5, -5, 255, 0, 300, -3, 5, 5.5, 330.0, -1.5, 725.5, true, false, 1]"
+    );
+}
+
+/// Scenario "Errors of plain values, measured on the original".
+#[test]
+fn the_plain_values_of_a_sprite_raise_as_measured() {
+    assert_eq!(
+        eval_with(
+            "made << (s = Sprite.new)",
+            "[error { s.x = nil }, error { s.x = '3' }, error { s.zoom_x = nil }, \
+              error { s.blend_type = 3 }, error { s.blend_type = -1 }, \
+              error { s.flash(Color.new(1, 2, 3), nil) }]"
+        ),
+        "[\"TypeError: no implicit conversion from nil to integer\", \
+         \"TypeError: can't convert String into Integer\", \
+         \"TypeError: no implicit conversion to float from nil\", \
+         \"ArgumentError: bad value for blend_type\", \
+         \"ArgumentError: bad value for blend_type\", \
+         \"TypeError: no implicit conversion from nil to integer\"]"
+    );
+}
+
+/// Scenario "Plane values, measured on the original".
+#[test]
+fn the_values_of_a_plane_are_those_measured() {
+    assert_eq!(
+        eval_with(
+            "made << (p = Plane.new)",
+            "defaults = [p.bitmap, p.viewport, p.z, p.ox, p.oy, p.zoom_x, p.opacity, \
+                         p.blend_type, p.visible]; \
+             read = [[:opacity, 300], [:opacity, 77.9], [:ox, -5.9], [:zoom_x, 0], \
+                     [:blend_type, 1.9]].map { |name, value| \
+                       p.send(\"#{name}=\", value); p.send(name) }; \
+             [defaults, read, error { p.blend_type = 3 }]"
+        ),
+        "[[nil, nil, 0, 0, 0, 1.0, 255, 0, true], [255, 77, -5, 0.0, 1], \
+         \"ArgumentError: bad value for blend_type\"]"
+    );
+}
+
+/// Scenario "Disposed sprite and plane, measured on the original".
+#[test]
+fn a_disposed_sprite_and_plane_raise_as_measured() {
+    assert_eq!(
+        eval_with(
+            "s = Sprite.new; s.dispose; p = Plane.new; p.dispose",
+            "[[error { s.x }, error { s.x = 1 }, error { s.update }, error { s.width }, \
+               error { s.viewport }].uniq, s.bitmap, s.dispose, s.disposed?, \
+              [error { p.ox }, error { p.viewport }].uniq]"
+        ),
+        "[[\"RGSSError: disposed sprite\"], nil, nil, true, [\"RGSSError: disposed plane\"]]"
+    );
+}

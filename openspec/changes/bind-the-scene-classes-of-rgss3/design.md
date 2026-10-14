@@ -311,6 +311,12 @@ Four facts:
   message with `GuestToHost::Freeze`, which is a struct variant since protocol version 13.
   Its line 212 now matches `GuestToHost::Freeze { .. }`; without it neither the test list of
   task 1.1 nor the gate can be had.
+- Edit of `arity_rgss3.rs` beside the list `BOUND`: its test
+  `every_listed_method_of_a_bound_class_has_the_listed_arity` compares the entry counts of
+  the classes of `BOUND` with a literal of one count for each, so the classes this change
+  adds to `BOUND` add their counts to that literal (`Sprite` 55, `Plane` 29, `Viewport` 20,
+  `Tilemap` 21, `Tilemap::BitmapArray` 2, `Graphics` 21). Without it the test of the list
+  cannot pass with them, which "Every listed method exists" asks for.
 
 ## Follow-ups
 

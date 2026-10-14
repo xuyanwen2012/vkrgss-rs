@@ -30,19 +30,19 @@
 use std::cell::RefCell;
 
 use vkxp_core::{Color, ElementKind, PlaneId, Rect, Scene, SceneError, SpriteId, TilemapId};
-use vkxp_core::{ViewportId, WindowId};
+use vkxp_core::{Tone, ViewportId, WindowId};
 use vkxp_proto::BitmapId;
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{HostResult, Raise, Raised, Ruby};
 use vkxp_vfs::Runtime;
 
-use crate::bitmap::bitmap_arg;
-use crate::color::color_arg;
+use crate::bitmap::{self, BitmapData};
+use crate::color;
 use crate::error::{self, Error};
 use crate::guest::{Classes, Guest};
 use crate::rb;
-use crate::wrap::{self, Wrapped};
-use crate::{plane, sprite, tilemap, viewport, window};
+use crate::wrap::{self, Owned, Wrapped};
+use crate::{plane, rect, sprite, tilemap, viewport, window};
 
 /// The instance variable of an element that holds its `Viewport` object, or `nil`.
 pub(crate) const VIEWPORT: &std::ffi::CStr = c"viewport";
@@ -314,6 +314,35 @@ pub(crate) fn viewport_arg(ruby: &Ruby, args: &[VALUE]) -> Result<Option<Viewpor
     }
 }
 
+/// The optional viewport argument of the constructors of `Sprite`, `Plane` and `Tilemap` of
+/// RGSS3: as [`viewport_arg`], with the errors worded as the original runtime of RGSS3 words
+/// them: `wrong number of arguments (1 for 2)` and `can't convert Fixnum into Viewport`.
+///
+/// Provenance: oracle measurement 2026-10-13, RGSS301 version 3.0.1.1 and RGSS300 version
+/// 3.0.0.1, `ace-v1-sprite-REPORT.md` with its exploration log, part 2, and
+/// `ace-v1-tilemap-REPORT.md` section 10.
+pub(crate) fn viewport_arg_rgss3(ruby: &Ruby, args: &[VALUE]) -> Result<Option<ViewportId>, Raise> {
+    rb::check_count_rgss3(ruby, args, 0, 1)?;
+    match args.first() {
+        Some(&viewport) if !ffi::nil_p(viewport) => viewport_object(ruby, viewport).map(Some),
+        _ => Ok(None),
+    }
+}
+
+/// The handle of a `Viewport` argument, which may name a disposed viewport. Another object
+/// raises `TypeError` in the words of the original runtime: `can't convert Fixnum into
+/// Viewport`.
+fn viewport_object(ruby: &Ruby, value: VALUE) -> Result<ViewportId, Raise> {
+    let data = wrap::find::<Element<ViewportId>>(ruby, value).ok_or_else(|| {
+        rb::wrong_type(ruby, value, |class| {
+            format!("can't convert {class} into Viewport")
+        })
+    })?;
+    data.get()
+        .id
+        .ok_or_else(|| disposed_error::<ViewportId>(ruby))
+}
+
 /// Creates the element of the object `recv` with `create` and stores the `Viewport` object
 /// it was created in. An element the object already had is disposed.
 pub(crate) fn create<K: Kind>(
@@ -390,13 +419,7 @@ pub(crate) fn set_viewport<K: InViewport>(ruby: &Ruby, recv: VALUE, args: &[VALU
     let viewport = if ffi::nil_p(args[0]) {
         None
     } else {
-        let data = wrap::find::<Element<ViewportId>>(ruby, args[0]).ok_or_else(|| {
-            rb::wrong_type(ruby, args[0], |class| {
-                format!("can't convert {class} into Viewport")
-            })
-        })?;
-        let viewport = data.get().id;
-        Some(viewport.ok_or_else(|| disposed_error::<ViewportId>(ruby))?)
+        Some(viewport_object(ruby, args[0])?)
     };
     operate(ruby, |guest| id.move_to(&mut guest.scene, viewport))?;
     rb::ivar_set(ruby, recv, VIEWPORT, args[0])?;
@@ -457,10 +480,56 @@ pub(crate) fn bitmap_ref(ruby: &Ruby, value: VALUE) -> Result<Option<BitmapId>, 
     if ffi::nil_p(value) {
         return Ok(None);
     }
-    bitmap_arg(ruby, value)
+    bitmap::bitmap_arg(ruby, value)
 }
 
-/// The arguments of `flash(color, duration)`: `nil` as the colour is the flash without one.
+/// An argument of `Sprite`, `Plane` or `Viewport` that must be an object of the RGSS class
+/// of `T`, taken by `arg`. In a game of RGSS3 any other value, `nil` among them, raises
+/// `TypeError` worded as the original runtime of RGSS3 words it: `can't convert NilClass into
+/// Color`. RGSS1 and RGSS2 keep the words of `arg`.
+///
+/// Provenance: oracle measurement 2026-10-13, RGSS301 version 3.0.1.1 and RGSS300 version
+/// 3.0.0.1, `ace-v1-sprite-REPORT.md` with its exploration log, part 2.
+fn object_arg<T: Wrapped, R>(
+    ruby: &Ruby,
+    value: VALUE,
+    arg: fn(&Ruby, VALUE) -> Result<R, Raise>,
+) -> Result<R, Raise> {
+    let rgss3 = Guest::with(|guest| guest.runtime.run.runtime) == Runtime::Rgss3;
+    if rgss3 && wrap::find::<T>(ruby, value).is_none() {
+        return Err(rb::wrong_type(ruby, value, |class| {
+            format!("can't convert {class} into {}", T::CLASS_NAME)
+        }));
+    }
+    arg(ruby, value)
+}
+
+/// A `Color` argument of `Sprite`, `Plane` or `Viewport`, worded by [`object_arg`].
+pub(crate) fn color_arg(ruby: &Ruby, value: VALUE) -> Result<Color, Raise> {
+    object_arg::<Owned<Color>, _>(ruby, value, color::color_arg)
+}
+
+/// A `Tone` argument of `Sprite`, `Plane` or `Viewport`, worded by [`object_arg`].
+pub(crate) fn tone_arg(ruby: &Ruby, value: VALUE) -> Result<Tone, Raise> {
+    object_arg::<Owned<Tone>, _>(ruby, value, color::tone_arg)
+}
+
+/// A `Rect` argument of `Sprite` or `Viewport`, worded by [`object_arg`].
+pub(crate) fn rect_arg(ruby: &Ruby, value: VALUE) -> Result<Rect, Raise> {
+    object_arg::<Owned<Rect>, _>(ruby, value, rect::rect_arg)
+}
+
+/// The bitmap of a sprite or a plane: as [`bitmap_ref`], with another object worded by
+/// [`object_arg`].
+pub(crate) fn bitmap_arg(ruby: &Ruby, value: VALUE) -> Result<Option<BitmapId>, Raise> {
+    if ffi::nil_p(value) {
+        return Ok(None);
+    }
+    object_arg::<BitmapData, _>(ruby, value, bitmap::bitmap_arg)
+}
+
+/// The arguments of `flash(color, duration)` of a sprite or a viewport: `nil` as the colour
+/// is the flash without one, and another colour is worded by [`object_arg`].
 pub(crate) fn flash_args(ruby: &Ruby, args: &[VALUE]) -> Result<(Option<Color>, i32), Raise> {
     let color = if ffi::nil_p(args[0]) {
         None

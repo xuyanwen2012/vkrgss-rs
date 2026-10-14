@@ -15,10 +15,10 @@ use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{HostResult, Raised, Ruby};
 use vkxp_vfs::Runtime;
 
-use crate::color::{color_arg, color_of, color_set, tone_arg, tone_of, tone_set};
-use crate::element::{self, field, object, reader, writer};
+use crate::color::{color_of, color_set, tone_of, tone_set};
+use crate::element::{self, color_arg, field, object, reader, rect_arg, tone_arg, writer};
 use crate::rb;
-use crate::rect::{rect_arg, rect_of, rect_set};
+use crate::rect::{rect_of, rect_set};
 use crate::wrap::{self, Owned, Owner};
 
 /// The instance variables that hold the viewport's own `Rect`, `Color` and `Tone` objects.
