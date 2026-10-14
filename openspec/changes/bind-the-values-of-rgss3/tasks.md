@@ -17,8 +17,8 @@
 
 ## 4. Method list of RGSS3
 
-- [ ] 4.1 `crates/vkxp-binding/tests/data/rgss3_api.txt`, whole, and `crates/vkxp-binding-rgss3/tests/arity_rgss3.rs` with the list of bound classes (decision 12). Verify: the scenarios of "Method surface of the value classes in RGSS3"; the file holds lines of the form `Class#method arity` or `Class.method arity` and nothing else; `cargo test -p vkxp-binding -p vkxp-binding-rgss3 -p xtask --locked` passes.
-- [ ] 4.2 What did not change. Verify: the scenarios of "The value classes of RGSS1 and RGSS2 are unchanged by RGSS3"; `git diff` against the start of the change is empty for `crates/vkxp-binding-rgss3/tests/ruby192.allow`, and in `tests/ruby.rs` and `tests/scene_rgss2.rs` of `vkxp-binding` it adds lines and removes none.
+- [x] 4.1 `crates/vkxp-binding/tests/data/rgss3_api.txt`, whole, and `crates/vkxp-binding-rgss3/tests/arity_rgss3.rs` with the list of bound classes (decision 12). Verify: the scenarios of "Method surface of the value classes in RGSS3"; the file holds lines of the form `Class#method arity` or `Class.method arity` and nothing else; `cargo test -p vkxp-binding -p vkxp-binding-rgss3 -p xtask --locked` passes.
+- [x] 4.2 What did not change. Verify: the scenarios of "The value classes of RGSS1 and RGSS2 are unchanged by RGSS3"; `git diff` against the start of the change is empty for `crates/vkxp-binding-rgss3/tests/ruby192.allow`, and in `tests/ruby.rs` and `tests/scene_rgss2.rs` of `vkxp-binding` it adds lines and removes none.
 
 ## 5. Documents
 
