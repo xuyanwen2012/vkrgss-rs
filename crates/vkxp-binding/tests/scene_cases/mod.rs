@@ -10,7 +10,7 @@
 
 #![allow(dead_code)]
 
-use crate::cases::{Case, Expect};
+use super::cases::{Case, Expect};
 
 const fn value(name: &'static str, source: &'static str, inspect: &'static str) -> Case {
     Case {

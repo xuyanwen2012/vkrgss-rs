@@ -6,11 +6,15 @@
 //! 2. No host crate, and not the reference compositor, reaches a guest crate, directly or
 //!    transitively.
 //! 3. Everything `vkxp-core` reaches is on its allow-list of pure crates.
-//! 4. The guest role, `vkxp-guest`, reaches no interpreter crate and not `vkxp-binding`,
-//!    directly or transitively: it links no interpreter.
+//! 4. The guest role, `vkxp-guest`, reaches no interpreter crate and neither `vkxp-binding`
+//!    nor `vkxp-binding-rgss3`, directly or transitively: it links no interpreter.
 //! 5. No package reaches both `vkxp-ruby-sys` and `vkxp-ruby192-sys`: the two interpreters
 //!    define the same symbols and cannot be linked into one program. For this rule alone
 //!    development dependencies count as well, because a test binary links them.
+//!
+//! Beside the rules, the two packages that compile the one source of the RGSS classes,
+//! `vkxp-binding` and `vkxp-binding-rgss3`, declare the same dependencies apart from the
+//! interpreter crate, and every test file of the first has its counterpart in the second.
 //!
 //! The `vkxp` binary is on neither side: it is the one crate that may depend on both.
 //!
@@ -37,6 +41,7 @@ pub(crate) const GUEST_CRATES: &[&str] = &[
     "vkxp-ruby-sys",
     "vkxp-ruby192-sys",
     "vkxp-binding",
+    "vkxp-binding-rgss3",
     "vkxp-guest",
     "vkxp-guest-main",
 ];
@@ -53,8 +58,12 @@ pub(crate) const HOST_SIDE_CRATES: &[&str] =
 pub(crate) const GUEST_ROLE_CRATE: &str = "vkxp-guest";
 
 /// Crates that link an interpreter, which the guest role must not reach.
-pub(crate) const INTERPRETER_CRATES: &[&str] =
-    &["vkxp-ruby-sys", "vkxp-ruby192-sys", "vkxp-binding"];
+pub(crate) const INTERPRETER_CRATES: &[&str] = &[
+    "vkxp-ruby-sys",
+    "vkxp-ruby192-sys",
+    "vkxp-binding",
+    "vkxp-binding-rgss3",
+];
 
 /// The crate that must stay free of I/O, Ruby and Vulkan.
 pub(crate) const CORE_CRATE: &str = "vkxp-core";
@@ -909,6 +918,212 @@ mod tests {
         assert_eq!(
             check_interpreters(&graph_from_metadata(&metadata).unwrap()),
             vec![]
+        );
+    }
+
+    /// The two packages that compile the one source of the RGSS classes, each with the
+    /// interpreter crate it is built over.
+    const BINDING_PACKAGES: [(&str, &str); 2] = [
+        ("vkxp-binding", "vkxp-ruby-sys"),
+        ("vkxp-binding-rgss3", "vkxp-ruby192-sys"),
+    ];
+
+    /// The dependencies a binding package declares, each as one line of name, kind, features
+    /// and whether it is optional, with the package's own name and its interpreter crate
+    /// replaced by placeholders.
+    fn declared_dependencies(
+        metadata: &Value,
+        package: &str,
+        interpreter: &str,
+    ) -> Result<BTreeSet<String>> {
+        let packages = metadata["packages"]
+            .as_array()
+            .context("metadata has no `packages` array")?;
+        let found = packages
+            .iter()
+            .find(|candidate| candidate["name"] == package)
+            .with_context(|| format!("`{package}` is missing from the workspace"))?;
+        let dependencies = found["dependencies"]
+            .as_array()
+            .with_context(|| format!("`{package}` has no `dependencies` array"))?;
+        let mut lines = BTreeSet::new();
+        for dependency in dependencies {
+            let name = dependency["name"]
+                .as_str()
+                .context("dependency without `name`")?;
+            let name = if name == package {
+                "<itself>"
+            } else if name == interpreter {
+                "<the interpreter crate>"
+            } else {
+                name
+            };
+            let kind = dependency["kind"].as_str().unwrap_or("normal");
+            let mut features: Vec<&str> = dependency["features"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect();
+            features.sort_unstable();
+            let optional = if dependency["optional"] == true {
+                ", optional"
+            } else {
+                ""
+            };
+            lines.insert(format!(
+                "{name} ({kind}{optional}, features [{}])",
+                features.join(", ")
+            ));
+        }
+        Ok(lines)
+    }
+
+    /// What the two binding packages declare differently, apart from the interpreter crate: one
+    /// entry per dependency that one of them has and the other has not, or has otherwise.
+    fn binding_manifest_differences(metadata: &Value) -> Result<Vec<String>> {
+        let [(first, first_sys), (second, second_sys)] = BINDING_PACKAGES;
+        let of_first = declared_dependencies(metadata, first, first_sys)?;
+        let of_second = declared_dependencies(metadata, second, second_sys)?;
+        let only = |package: &str, lines: &BTreeSet<String>, other: &BTreeSet<String>| {
+            lines
+                .difference(other)
+                .map(|line| format!("only `{package}` declares {line}"))
+                .collect::<Vec<String>>()
+        };
+        let mut differences = only(first, &of_first, &of_second);
+        differences.extend(only(second, &of_second, &of_first));
+        Ok(differences)
+    }
+
+    /// The names of the `.rs` files directly in `dir`, sorted.
+    fn test_files(dir: &Path) -> Result<BTreeSet<String>> {
+        let mut names = BTreeSet::new();
+        for entry in std::fs::read_dir(dir).with_context(|| format!("{}", dir.display()))? {
+            let name = entry?.file_name().to_string_lossy().into_owned();
+            if name.ends_with(".rs") {
+                names.insert(name);
+            }
+        }
+        Ok(names)
+    }
+
+    /// The test files of `tests` that have no file of the same name in `counterparts`.
+    fn tests_without_counterpart(tests: &Path, counterparts: &Path) -> Result<Vec<String>> {
+        let present = test_files(counterparts)?;
+        Ok(test_files(tests)?
+            .into_iter()
+            .filter(|name| !present.contains(name))
+            .collect())
+    }
+
+    /// A package that reaches both binding packages reaches both interpreters through them.
+    #[test]
+    fn a_package_that_reaches_both_binding_packages_is_reported_with_both_paths() {
+        let graph = graph(&[
+            ("both", "vkxp-binding"),
+            ("both", "vkxp-binding-rgss3"),
+            ("vkxp-binding", "vkxp-ruby-sys"),
+            ("vkxp-binding-rgss3", "vkxp-ruby192-sys"),
+        ]);
+        let violations = check_interpreters(&graph);
+        assert_eq!(
+            violations,
+            vec![Violation::BothInterpreters {
+                paths: [
+                    path(&["both", "vkxp-binding", "vkxp-ruby-sys"]),
+                    path(&["both", "vkxp-binding-rgss3", "vkxp-ruby192-sys"]),
+                ],
+            }]
+        );
+        assert_eq!(
+            violations[0].to_string(),
+            "`both` reaches both interpreters, which cannot be linked into one program: \
+             both -> vkxp-binding -> vkxp-ruby-sys and \
+             both -> vkxp-binding-rgss3 -> vkxp-ruby192-sys"
+        );
+    }
+
+    /// Each binding package reaches its interpreter and not the other, development
+    /// dependencies counted.
+    #[test]
+    fn each_binding_package_reaches_its_own_interpreter_only() {
+        let linked = linked_workspace_graph(&crate::workspace_root())
+            .expect("cargo metadata for the workspace");
+        for (index, (package, interpreter)) in BINDING_PACKAGES.into_iter().enumerate() {
+            let other = BINDING_PACKAGES[1 - index].1;
+            let paths = paths_from(&linked, package);
+            assert!(
+                paths.contains_key(interpreter),
+                "`{package}` misses `{interpreter}`"
+            );
+            assert!(!paths.contains_key(other), "`{package}` reaches `{other}`");
+        }
+    }
+
+    fn metadata_without_resolution() -> Value {
+        let output = Command::new(crate::cargo())
+            .args(["metadata", "--format-version", "1", "--no-deps", "--locked"])
+            .current_dir(crate::workspace_root())
+            .output()
+            .expect("cargo metadata for the workspace");
+        assert!(output.status.success());
+        serde_json::from_slice(&output.stdout).expect("metadata JSON")
+    }
+
+    /// The two binding packages declare the same dependencies apart from the interpreter
+    /// crate.
+    #[test]
+    fn the_binding_packages_declare_the_same_dependencies() {
+        let differences = binding_manifest_differences(&metadata_without_resolution())
+            .expect("both packages are in the workspace");
+        assert!(differences.is_empty(), "{}", differences.join("\n"));
+    }
+
+    #[test]
+    fn a_dependency_of_one_binding_package_only_is_named() {
+        let dependency = |name: &str, kind: Value, features: &[&str]| {
+            serde_json::json!({
+                "name": name, "kind": kind, "optional": false, "features": features,
+            })
+        };
+        let metadata = serde_json::json!({ "packages": [
+            { "name": "vkxp-binding", "dependencies": [
+                dependency("vkxp-ruby-sys", Value::Null, &[]),
+                dependency("vkxp-core", Value::Null, &[]),
+                dependency("vkxp-binding", "dev".into(), &["testing"]),
+            ] },
+            { "name": "vkxp-binding-rgss3", "dependencies": [
+                dependency("vkxp-ruby192-sys", Value::Null, &[]),
+                dependency("vkxp-core", Value::Null, &["extra"]),
+                dependency("vkxp-binding-rgss3", "dev".into(), &["testing"]),
+                dependency("libc", Value::Null, &[]),
+            ] },
+        ] });
+        assert_eq!(
+            binding_manifest_differences(&metadata).unwrap(),
+            [
+                "only `vkxp-binding` declares vkxp-core (normal, features [])",
+                "only `vkxp-binding-rgss3` declares libc (normal, features [])",
+                "only `vkxp-binding-rgss3` declares vkxp-core (normal, features [extra])",
+            ]
+        );
+    }
+
+    /// Every test file of `vkxp-binding` is built a second time by `vkxp-binding-rgss3`.
+    #[test]
+    fn every_test_file_of_the_binding_has_its_counterpart() {
+        let crates = crate::workspace_root().join("crates");
+        let missing = tests_without_counterpart(
+            &crates.join("vkxp-binding").join("tests"),
+            &crates.join("vkxp-binding-rgss3").join("tests"),
+        )
+        .expect("both directories are read");
+        assert!(
+            missing.is_empty(),
+            "crates/vkxp-binding/tests has files without a counterpart in \
+             crates/vkxp-binding-rgss3/tests: {}",
+            missing.join(", ")
         );
     }
 

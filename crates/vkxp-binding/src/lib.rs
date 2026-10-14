@@ -323,6 +323,17 @@
 //! counts the elements the element classes made. The tests of the scene classes draw the
 //! scene with the reference compositor instead of sending frames
 //! (`tests/scene_support`).
+//!
+//! # Two interpreters
+//!
+//! This source is compiled twice: here over `vkxp-ruby-sys`, Ruby 1.8.7, and by the package
+//! `vkxp-binding-rgss3`, which has no source of its own, over `vkxp-ruby192-sys`, Ruby
+//! 1.9.2. Nothing here tells the interpreters apart by a `cfg` or a feature: what differs is
+//! behind the common surface of the two interpreter crates or asked at run time of
+//! `rb::RUBY_19`. The tests run over both; see `docs/development.md`.
+
+// Set by the build script of `vkxp-binding-rgss3` for a target that has no Ruby 1.9.2.
+#![cfg(not(vkxp_interpreter_absent))]
 
 mod audio;
 mod bitmap;

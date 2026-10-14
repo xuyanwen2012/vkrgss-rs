@@ -10,6 +10,7 @@ members = [
     "crates/vkxp-ruby-sys",
     "crates/vkxp-ruby192-sys",
     "crates/vkxp-binding",
+    "crates/vkxp-binding-rgss3",
     "crates/vkxp-guest",
     "crates/vkxp-guest-main",
     "crates/vkxp-compose-ref",
@@ -36,6 +37,8 @@ publish = false
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
 unreachable_pub = "warn"
+# Set by the build script of `vkxp-binding-rgss3` for a target without Ruby 1.9.2.
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(vkxp_interpreter_absent)'] }
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
@@ -69,6 +72,7 @@ vkxp-text = { path = "crates/vkxp-text" }
 vkxp-vfs = { path = "crates/vkxp-vfs" }
 vkxp-ruby-sys = { path = "crates/vkxp-ruby-sys" }
 vkxp-binding = { path = "crates/vkxp-binding" }
+vkxp-binding-rgss3 = { path = "crates/vkxp-binding-rgss3" }
 vkxp-guest = { path = "crates/vkxp-guest" }
 vkxp-guest-main = { path = "crates/vkxp-guest-main" }
 vkxp-compose-ref = { path = "crates/vkxp-compose-ref" }

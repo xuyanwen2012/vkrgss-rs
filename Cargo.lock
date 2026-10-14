@@ -2533,6 +2533,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "vkxp-binding-rgss3"
+version = "0.2.0"
+dependencies = [
+ "encoding_rs",
+ "png",
+ "thiserror 2.0.21",
+ "vkxp-binding-rgss3",
+ "vkxp-compose-ref",
+ "vkxp-core",
+ "vkxp-image",
+ "vkxp-proto",
+ "vkxp-ruby192-sys",
+ "vkxp-vfs",
+]
+
+[[package]]
 name = "vkxp-compose-ref"
 version = "0.2.0"
 dependencies = [
