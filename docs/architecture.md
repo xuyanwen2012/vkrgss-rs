@@ -41,7 +41,7 @@ the original runtime of RGSS3) unless it is script source or the path of the scr
 No executable links `vkxp-binding-rgss3` yet: the guest executable of RGSS3 is a later
 change.
 
-The protocol is at version 13; an encoded stream of another version is rejected. A frame packet
+The protocol is at version 14; an encoded stream of another version is rejected. A frame packet
 carries the changes to bitmaps and tables and an ordered list of ops of five kinds: `Clear`,
 `Quad`, `RectEffect`, `TilemapLayer` and `TilemapPlane`. Sprites, planes and the parts of a
 window are quads.
@@ -54,7 +54,9 @@ player, which the session treats as the physical key of that Windows virtual-key
 whether the pointer is to be seen over the picture. Version 11 added `FramePacket::brightness`
 and the field `rule` of `GuestToHost::Transition`. Version 12 added the op `TilemapPlane`.
 Version 13 added the rule set of the tilemap plane op, `TilemapPlane::rules`: the tilemap of
-RGSS2 or that of RGSS3.
+RGSS2 or that of RGSS3. Version 14 added the rule of the freeze message,
+`GuestToHost::Freeze::rule`: the frozen picture is kept as the frame at its own size, or in
+the buffer of RGSS3, 640 by 480 pixels whose top left corner a freeze writes.
 
 `FramePacket::brightness` is a value from 0 to 255 that the scene keeps and writes into every
 packet. Both compositors apply it after the last op: each colour channel `v` of the frame

@@ -10,7 +10,7 @@
 //! - [`BitmapStore`] holds the bitmaps announced by `BitmapDelta`s and detects stale ids.
 //! - [`TableStore`] holds the tables announced by `TableDelta`s.
 //! - [`Compositor`] owns both stores and renders `FramePacket`s into [`Frame`]s.
-//! - [`snapshot`] gives the pixels of `Graphics.snap_to_bitmap` of a packet that stands alone,
+//! - [`snapshot()`] gives the pixels of `Graphics.snap_to_bitmap` of a packet that stands alone,
 //!   by a [`SnapshotRule`].
 //! - [`encode_png`] writes a frame as PNG, for the headless example and for tests.
 //! - [`fixtures`] generates the message streams whose expected frames are committed.

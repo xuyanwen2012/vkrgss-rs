@@ -417,6 +417,84 @@ class comes with the binding over Ruby 1.9.2.
     refresh;
   - a disposed skin or contents bitmap (in RGSS3 both are drawn as none).
 
+Sprites, planes, viewports, snapshots, the frozen picture and input of RGSS3, recorded by
+the change `draw-sprites-and-snapshots-as-rgss3` after the measurement of 2026-10-13 on the
+DLLs 3.0.0.1 and 3.0.1.1 under Wine (`ace-v1-sprite-REPORT.md` with its model and frames,
+kept outside the repository; the two versions gave the same results). These rules are in
+`vkxp-core`, `vkxp-compose-ref`, `vkxp-proto`, `vkxp-host` and the presenter of `vkxp-vk`;
+the classes and modules of RGSS3 that use them come with the binding over Ruby 1.9.2.
+
+- The rules of a scene and of an input state have a value for RGSS3, `Rules::Rgss3`, beside
+  those of RGSS1 and RGSS2. The window and the tilemap of RGSS3 keep rule sets of their own
+  and live in a scene of any rules. RGSS3 equals RGSS2 wherever the measurement of
+  2026-10-13 found no difference (275 of the 327 frames of the probes of VX are byte-identical on RGSS3): pixel
+  arithmetic, zoom, bush rows, wave, flash, the tile of a plane, the tone, colour and flash
+  of a viewport, the order by z, y and creation, the repeat timing of `Input`, brightness,
+  fades and transitions. It changes two things:
+  - A turned sprite in a viewport stands at its own position plus the viewport's rectangle
+    position less the viewport's origin, and its bounding box and its texels both come from
+    that position, as for a sprite on the screen. RGSS1 and RGSS2 keep the shift between
+    the two (359 frames without a wrong pixel; the rule of RGSS2 leaves 213035 wrong).
+  - When an input snapshot is seen, below.
+
+  Until the binding over Ruby 1.9.2 makes the scene and the input state of a game of RGSS3
+  with this value, `vkxp-binding` gives such a game the rules of RGSS2.
+- When an input snapshot is seen (measured on 2026-10-13). The original takes the window messages of keys only in
+  the calls of `Graphics` that show frames; `Input.update` takes none. vkxp has no queue of
+  key messages: the host sends whole input states. With the rules of RGSS3 an update
+  latches the most recent snapshot that had arrived when a frame was last shown, and a
+  snapshot that arrives afterwards waits for the next shown frame. The input state has a
+  call that marks a shown frame, which the binding of RGSS3 is to make once for every frame
+  it shows and from nowhere else. So `Input.update` alone never sees a new key, and a key change before a
+  `Graphics.update` is seen by the `Input.update` after it, as measured (240 of 240). A
+  scheduled or replayed run gives the answers it would give under the rules of RGSS2,
+  because the state of a frame arrives ahead of that frame's tick. Known differences:
+  - The count of key messages a frame takes. The original takes exactly one in a frame
+    that has no time to wait and more, up to all that are queued, in a frame that waits;
+    how many in between is not a rule, so vkxp imitates no count: every shown frame makes
+    the whole state as it arrived visible. Several key changes between two frames are seen
+    together, where a frame of the original without slack spreads them over the following
+    frames.
+  - A key pressed and released between two frames is never seen, where the original saw it
+    for one update when the frame took only the key-down (2 of 5 in one measurement, 0 of
+    16 in clean loops).
+  - The message the original takes now and then during `Kernel#sleep` is not imitated.
+- The frozen picture (measured on 2026-10-13). The original of RGSS3 keeps it in one buffer of 640 by 480 pixels,
+  black at the start of the process: `Graphics.freeze` copies the screen, at its size of
+  that moment, into the top left corner and leaves the rest, and a transition blends buffer
+  pixel (x, y) with the new scene for every pixel of the screen as it is then; nothing is
+  scaled or centred, and frames merely shown do not enter the buffer (13 screenshots
+  without a wrong pixel, plain transitions only). The guest names the rule with the freeze
+  message, as it names the rule of a transition (protocol version 14), because the host
+  does not know runtimes; the presenter keeps the buffer. RGSS1 and RGSS2 keep the held
+  frame at its own size: whether RGSS2 has such a buffer was not measured. Decided without
+  a measurement:
+  - While frozen after a resize the display shows the buffer's pixels for the screen as it
+    is now; the window of the original shows stale contents until the next frame.
+  - A masked transition after a resize tiles the mask over the screen as it is now and
+    takes the old picture from the buffer.
+  - A frame wider than 640 or higher than 480, which the original cannot have, is frozen as
+    a frame of its own size.
+- A snapshot of RGSS3 (`Graphics.snap_to_bitmap`) is the composed scene as the objects are
+  now, darkened by the brightness, with an alpha of 255, and all of (0, 0, 0, 0) at
+  brightness 0 (256 snapshots without a wrong pixel). RGSS2 keeps an alpha of 255 at
+  brightness 0, where it was not measured. One function of the reference compositor makes
+  both; `Graphics.snap_to_bitmap` of RGSS2 uses it, and that of RGSS3 comes with the
+  binding.
+- Where the original faults or reads outside a table (measured on 2026-10-13), vkxp goes
+  on. Known differences:
+  - A disposed viewport given to a move (`Sprite#viewport=`, `Plane#viewport=`): the
+    original ends. The scene of vkxp refuses the move with a disposed error and moves
+    nothing, for every runtime; what the classes of RGSS3 raise from it is decided with the
+    binding.
+  - The sprite that ends the original: one sprite (bitmap 20 by 90, `src_rect`
+    (8, 38, 9, 26), zoom 2.5 by 0.7, angle 180, mirrored, `bush_depth` 20, at (434, 160))
+    ends it inside `Graphics.update`; the condition was not found. vkxp draws it by the
+    rules of a turned sprite. There is no picture of the original to compare with.
+  - A negative wave length: the original reads outside its sine table, and its two versions
+    show different pictures. vkxp takes the angle of the wave modulo 360, as its sprite of
+    RGSS2 does.
+
 ### Several runtimes in one program
 
 - One repository, and the name stays for now.
