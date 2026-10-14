@@ -830,8 +830,8 @@ fn report_rgss3(ruby: &Ruby, error: &RubyError) -> String {
     let (mut name, mut line) = entry_position(entry);
     let mut message = error.message.clone();
     if class == "SyntaxError" {
-        // The frame of the call of `eval` itself, which the original names `ruby:in
-        // `eval'` and the interpreter crate `vkxp:in `eval'`, has no line.
+        // The frame of the call of `eval` itself, `ruby:in `eval'` as on the original,
+        // has no line.
         if name.contains(":in `") || line == 0 {
             let first = error.message.lines().find_map(split_position);
             (name, line) = first.map_or((name, line), |(file, number, _)| (file, number));
@@ -1110,11 +1110,13 @@ pub(crate) fn play(ruby: &Ruby, link: GuestEnd) -> Result<(), RunError> {
 ///    the process functions and `require` and `load`. A game of RGSS3 gets
 ///    `RGSS_VERSION`, by the [`RunConfig::library_version`], `RGSSReset`, `save_data`,
 ///    `load_data`, `msgbox` and `msgbox_p` in the place of `Reset`, `print` and `p`, which
-///    are Ruby's own there.
+///    are Ruby's own there, `at_exit` that runs nothing, `exit!` that ends the process,
+///    `require` and `load` that compile as UTF-8, `require_relative` and `autoload`.
 /// 3. Reads the preload scripts, seeds the random number generator when the configuration
 ///    has a seed, and evaluates the built-in scripts file under the name `(builtin)`.
 /// 4. Reads the script archive into `$RGSS_SCRIPTS`, each entry with its inflated source
-///    as fourth element.
+///    as fourth element. In RGSS3 an archive that cannot be loaded is written to the error
+///    stream and shown as `Failed to load script.` before step 6.
 /// 5. Marks the start of the game's scripts for the interpreter's symbol numbering, once per
 ///    process. Evaluates the preload scripts under their paths, then the scripts in order as
 ///    `Section000`, `Section001` and so on, or `{0000}`, `{0001}` in RGSS3. `Reset` leaving a script stops the audio,

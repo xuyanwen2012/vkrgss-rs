@@ -256,7 +256,7 @@ const UNTITLED_RGSS3: &str = "Untitled";
 
 /// Reads `Game.ini`, settles the runtime of the game, looks the run-time packages it names
 /// up in the table of the settings and finds the built-in scripts file. A game of RGSS3
-/// without a title gets the title [`UNTITLED_RGSS3`], which the window and the guest take;
+/// without a title gets the title `Untitled`, which the window and the guest take;
 /// the file itself is not changed.
 pub fn guest_inputs(game_dir: &Path, settings: &GuestSettings) -> Result<GuestInputs> {
     let mut ini = GameIni::read(game_dir, settings.encoding)?;

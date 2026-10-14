@@ -301,22 +301,71 @@ creation of `Bitmap`, the modules `Graphics`, `Input` and `Audio` and the value 
 made with the standard scripts of VX Ace shows its title screen and its menu and starts a
 new game.
 
+The endings, `load_data` and the loading of code follow the original as measured; see
+*Endings and loading of VX Ace* below.
+
 Known differences of the start, each against the measurements of the original:
 
-- An uncaught exception ends the run with status 1; the original's code follows the line
-  number in most cases. A report of more than 1023 UTF-16 units is shown, where the
-  original shows an empty box.
-- A script archive that cannot be loaded is an error that names it, with a failure status;
-  the original shows `Failed to load script.` and ends with code 0.
-- `at_exit` handlers are not run, as on the original, and `exit!` is not followed.
+- An uncaught exception ends the run with status 1, whatever its line: vkxp's status says
+  whether the game ended without a failure. The original's code after the box follows the
+  line number in most cases, without an established rule, and is 0 or 1 in the others.
+- A report of more than 1023 UTF-16 units is shown and written whole, where the original
+  shows an empty box: that limit of a buffer of the original hides the error from the
+  player, and no script can read the box.
+- A script archive that cannot be loaded shows `Failed to load script.` as on the original,
+  and the run ends with status 1, where the original ends with code 0, by the reason of the
+  first point. A `Game.ini` without `Scripts=`, or no `Game.ini`, is an error of the program
+  before the game starts, and a `Library=` that names a missing DLL is no error, where the
+  original shows an empty box: vkxp loads no DLL.
+- `exit!(status)` ends the game at once as on the original, and the program's status is 0
+  for a status of 0 or `true` and 1 for any other, where the original's code is the status.
+- A magic comment of `shift_jis` or `Windows-31J` compiles a script in that encoding; on the
+  original those are dummy encodings made at the first transcoding, which ends such a
+  script with a report. This waits for the encodings made at first use.
 - After a reset by the host a script that calls no function of `Graphics` is not
   interrupted; `Graphics.wait`, `fadeout`, `fadein` and `transition` are not cut short, and
   `Graphics.__reset__` does not wait for F12 to be released.
-- `load_data` does not freeze strings as the original does in two of 71 samples, and its
-  errors for a loose file and its lookup rules are those of RGSS2.
-- `require` and `load` are those of vkxp.
+- `load_data` of a path outside the game directory raises `Errno::ENOENT`, where the
+  original reads any file the process may read: the game's files never reach outside the
+  game directory. After `Dir.chdir` to a directory outside the game directory, a relative
+  name is looked for from the game directory.
+- A file that `autoload` loads is compiled by the interpreter's own loader as US-ASCII, the
+  default of Ruby 1.9.2, and `autoload` of a file that `require` would not load raises
+  `LoadError` at the call, where the original raises at the first use of the constant.
 - A state is not saved while a script thread is alive: a thread of Ruby 1.9.2 is a thread
   of the system, which a copy of the process does not have.
+
+### Endings and loading of VX Ace
+
+Measured on the original runtime of VX Ace 3.0.1 under Wine, and followed:
+
+- The interpreter has no script name: `$0` and `$PROGRAM_NAME` are `false`, and the last
+  entry of the backtrace of a script is ``ruby:in `eval'``.
+- A `Game.ini` without a title, or with an empty one, gives the window the title
+  `Untitled`.
+- Magic comments are those of Ruby 1.9.2: `ascii-8bit` and its spellings compile a script
+  as bytes, a comment on the second line after a comment is ignored, a byte above 127 in a
+  script of `us-ascii` is a `SyntaxError`, and `euc-jp`, `binary`, an unknown name and
+  `utf-16le` end the game with the report `ArgumentError occurred.`.
+- `at_exit` returns its block and never runs it. `exit!` and `Process.exit!` end the game
+  at once, without running an `ensure` clause.
+- `load_data` takes one argument, converted as a `String` argument is. It looks in the
+  encrypted archive first, by the name as given or by an entry's name without its
+  extension, without regard to letter case; a name that starts with a separator or a
+  drive, ends with a dot or a space, or has a part that is empty, `.` or `..` is not looked
+  for there. Then it looks for a loose file from the current directory, with the dots and
+  spaces at the end of the name dropped and no extension added. An entry is handed to
+  `Marshal.load` as a `String`, a loose file as an open `File`, so the errors of a cut file
+  are `EOFError` and `ArgumentError: marshal data too short` as on the original; every
+  string of ASCII-8BIT is labelled UTF-8, a frozen one too. A directory raises
+  `Errno::EACCES`.
+- `load_data` and `save_data` raise `ArgumentError` for a name with a NUL byte and
+  `Encoding::UndefinedConversionError` for a name labelled ASCII-8BIT whose bytes are not
+  UTF-8, as 3.0.1 does; vkxp follows 3.0.1 where 3.0.0 differs.
+- `require` and `load` load only `.rb` files inside the game directory, and compile them as
+  UTF-8, as the scripts are. `require_relative` takes the name from the directory of the
+  file that calls it, the game directory for a script, and loads by the rule of
+  `require`; `autoload` locates its file by that rule.
 
 What follows of the classes was measured on the original runtime of VX Ace (DLL versions
 3.0.0.1 and 3.0.1.1) under Wine.

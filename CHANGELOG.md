@@ -2,6 +2,21 @@
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- RPG Maker VX Ace (RGSS3): the endings and loading of the original runtime. `$0` is
+  `false` and a script's backtrace ends with ``ruby:in `eval'``; a game without a title is
+  `Untitled`; an archive that cannot be loaded shows `Failed to load script.`; `at_exit`
+  never runs its block; `exit!` and `Process.exit!` end the game at once. `load_data` asks
+  the archive first, also by the name without its extension, then a loose file from the
+  current directory, which it reads as a `File`, labels frozen strings too, raises
+  `Errno::EACCES` for a directory and checks the name as 3.0.1 does, as `save_data` does.
+  `require` and `load` compile a file as UTF-8, and `require_relative` and `autoload` follow
+  the rule of `require`. A long report is shown whole, and every uncaught error ends with
+  status 1, vkxp's own rules.
+
 ## [0.3.0] - 2026-10-14
 
 ### Added

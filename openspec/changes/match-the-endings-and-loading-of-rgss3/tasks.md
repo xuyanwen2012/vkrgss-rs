@@ -22,7 +22,7 @@
 
 ## 5. Documents
 
-- [ ] 5.1 `docs/compatibility.md` (the section "RPG Maker VX Ace": what is now measured, the known differences with their reasons), `docs/running.md` where it describes the endings of VX Ace, `CHANGELOG.md` under "Unreleased", and the documentation of the changed functions. Verify: the scenarios of "Endings and loading of VX Ace in the documents"; the text names nothing that the code does not do; `cargo test -p xtask --locked` passes.
+- [x] 5.1 `docs/compatibility.md` (the section "RPG Maker VX Ace": what is now measured, the known differences with their reasons), `docs/running.md` where it describes the endings of VX Ace, `CHANGELOG.md` under "Unreleased", and the documentation of the changed functions. Verify: the scenarios of "Endings and loading of VX Ace in the documents"; the text names nothing that the code does not do; `cargo test -p xtask --locked` passes.
 
 ## 6. Integration check
 
