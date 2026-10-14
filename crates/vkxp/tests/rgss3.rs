@@ -11,6 +11,7 @@
 #![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
 
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use tempfile::TempDir;
@@ -119,12 +120,19 @@ fn a_guest_executable_that_ends_at_once_is_reported_with_its_status() {
         "#!/bin/sh\necho 'a stand-in of the guest executable' >&2\nexit 3\n",
     )
     .unwrap();
+    // Executable, as the file of a build is; the copy keeps the mode.
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
     let (_dir, program) = copy_of_the_program(&[&script]);
     let ran = copy_headless(&program, &game, &[]);
     ran.assert_failure();
     let stderr = ran.stderr();
+    // The stand-in ran, and the program says how it ended.
+    assert!(
+        stderr.contains("a stand-in of the guest executable"),
+        "{stderr}"
+    );
     assert!(stderr.contains("guest process"), "{stderr}");
-    assert!(stderr.contains('3'), "{stderr}");
+    assert!(stderr.contains("status 3"), "{stderr}");
     assert!(!script_ran(&game));
 }
 
