@@ -53,6 +53,7 @@ fn report(played: &Played) -> &str {
 
 #[test]
 fn the_first_script_sees_the_prepared_globals() {
+    vkxp_binding::pending_over_ruby_1_9_2!();
     let game = Game::new(
         "globals",
         "Globals",
@@ -487,6 +488,7 @@ fn an_alias_guarded_by_the_backtrace_is_made_once() {
 
 #[test]
 fn a_rescue_in_the_run_after_a_reset_leaves_the_reset() {
+    vkxp_binding::pending_over_ruby_1_9_2!();
     let game = Game::new(
         "error_rescue",
         "Reset",

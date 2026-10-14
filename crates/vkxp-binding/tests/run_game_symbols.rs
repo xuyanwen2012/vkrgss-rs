@@ -11,6 +11,7 @@ use vkxp_vfs::{GameFiles, GameIni};
 
 #[test]
 fn the_first_local_variables_of_the_first_script_have_the_measured_numbers() {
+    vkxp_binding::pending_over_ruby_1_9_2!();
     let executable = std::env::current_exe().unwrap();
     let root = executable.with_extension("vkxp-run-game-symbols");
     if root.exists() {

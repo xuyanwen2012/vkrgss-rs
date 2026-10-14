@@ -1,0 +1,75 @@
+# Tests and snippet cases of `vkxp-binding` that cannot pass over Ruby 1.9.2 yet.
+#
+# An entry is a reason, written as comment lines, followed by one or more lines
+# `test <binary> <name>` (the name of the test file, or `lib` for a unit test, and the name
+# of the test as `vkxp-binding` prints it) or `case <name>` (a snippet case of `tests/cases`
+# or `tests/scene_cases`). Entries are separated by blank lines. A listed test carries the
+# marker `pending_over_ruby_1_9_2!()`, is run alone and counts as passed only while it fails;
+# when it passes, the run fails until the entry and the marker are removed.
+#
+# A reason is one of three kinds and names its source: behaviour of RGSS1 or RGSS2 that a
+# section of a measurement report says RGSS3 does differently ("V0 report" is
+# `ace-v0-REPORT.md`, "API report" is `ace-v1-api-REPORT.md` of the measurements of the
+# original runtime, which are kept outside the repository); a construct of Ruby 1.8 that
+# Ruby 1.9 has differently; the symbol numbering of Ruby 1.8.1. A crash, a hang, a value
+# lost under collector stress or a wrong pixel is a fault and is never listed.
+
+# The message of Ruby itself for a wrong count of arguments of a method with a fixed arity:
+# `wrong number of arguments (2 for 1)` in Ruby 1.8, without the space in Ruby 1.9.2
+# (`wrong number of arguments(2 for 1)`). The messages the binding words itself do not
+# differ.
+test lib foundation_tests::a_wrong_count_raises_argument_error
+test scene_rgss2 the_readers_return_the_object_given_and_other_objects_are_refused
+case wrong number of arguments
+
+# `Float#inspect` of Ruby 1.8 prints 15 significant digits (`1.18059162071741e+21`); Ruby
+# 1.9 prints the shortest text that reads back as the same number
+# (`1180591620717411300000.0`).
+test lib foundation_tests::floats_convert_from_any_number
+
+# Changing a frozen object raises `TypeError` in Ruby 1.8 and `RuntimeError` in Ruby 1.9.
+test lib foundation_tests::a_failure_to_name_the_class_of_a_wrong_argument_is_raised_after_destructors_ran
+
+# `String#==` of Ruby 1.9 is false for a UTF-8 literal and an ASCII-8BIT string that hold the
+# same bytes outside ASCII; a string of Ruby 1.8 has no encoding. The probe of the test
+# returns bytes.
+test lib foundation_tests::strings_convert_and_invalid_utf8_is_replaced
+
+# `String#+` of Ruby 1.9 refuses a UTF-8 literal with bytes outside ASCII and an ASCII-8BIT
+# string (`Encoding::CompatibilityError`); the snippet builds a dump that way, which Ruby
+# 1.8 joins as bytes.
+case data written by the original runtime
+
+# `Module#public_instance_methods` and `Module#constants` return Strings in Ruby 1.8 and
+# Symbols in Ruby 1.9; the tests compare them with lists of Strings.
+test arity_rgss2 no_class_has_a_method_the_list_lacks
+test modules button_constants
+
+# `String#[]` with an index returns the byte as a Fixnum in Ruby 1.8 and a String of one
+# character in Ruby 1.9, and `String#[]=` of Ruby 1.9 takes no Fixnum.
+test win32api set_keyboard_state_replaces_what_is_reported_until_the_next_update
+test win32api the_toggle_of_a_key_flips_at_each_latched_press
+test win32api the_keyboard_state_has_0x81_for_a_key_held_for_the_first_time
+
+# `Marshal.dump` of Ruby 1.9 writes the encoding of a string as an instance variable: the
+# dump of a UTF-8 string that a `_dump` method returned is six bytes longer than in Ruby
+# 1.8, and the test expects the size of Ruby 1.8.
+test stress a_dumped_string_survives_a_collection_while_it_is_written
+
+# `$!` after a `rescue` clause has ended: Ruby 1.8 puts back the error that was current
+# before, Ruby 1.9 leaves `nil`. How RGSS3 starts over is another matter (API report 1.3).
+test run_game a_rescue_in_the_run_after_a_reset_leaves_the_reset
+
+# The tests expect the globals of RGSS1 and RGSS2, `$KCODE` of `"UTF8"` and an empty load
+# path. On the original runtime of RGSS3 `$KCODE` is `nil` (API report 0, row "kernel"; V0
+# report 8) and the load path is `["."]` (V0 report 2, API report 1.1).
+test prelude globals_are_those_of_the_original_runtime
+test run_game the_first_script_sees_the_prepared_globals
+
+# The tests hold the symbol numbering of Ruby 1.8.1 and read it with `Symbol#to_i`, which
+# Ruby 1.9 does not have. Ruby 1.9.2 numbers its symbols as the release does, and a dump
+# does not depend on the numbers (API report 4.2).
+test run_game_first_uses the_first_uses_move_the_sequence_as_on_the_original
+test run_game_lazy_names a_new_name_has_the_measured_number_after_every_step_of_the_probe
+test run_game_rgss2 the_first_script_of_a_game_of_vx_sees_the_measured_numbers_and_frame
+test run_game_symbols the_first_local_variables_of_the_first_script_have_the_measured_numbers

@@ -57,6 +57,7 @@ fn steps(text: &str, number: usize) -> Vec<(usize, String, i64)> {
 /// alone, and this game has no pictures, no sounds and few `RPG` classes.
 #[test]
 fn a_new_name_has_the_measured_number_after_every_step_of_the_probe() {
+    vkxp_binding::pending_over_ruby_1_9_2!();
     let executable = std::env::current_exe().unwrap();
     let root = executable.with_extension("vkxp-run-game-lazy-names");
     if root.exists() {

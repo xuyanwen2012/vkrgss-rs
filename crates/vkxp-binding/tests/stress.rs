@@ -72,6 +72,7 @@ end
 
 #[test]
 fn a_dumped_string_survives_a_collection_while_it_is_written() {
+    vkxp_binding::pending_over_ruby_1_9_2!();
     assert_eq!(testing::eval(FRESH_DUMP).as_deref(), Ok("nil"));
 
     // To a string: growing the buffer collects only with stress on.

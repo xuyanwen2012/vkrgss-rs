@@ -119,6 +119,7 @@ fn bit_0_of_the_asynchronous_state_is_set_at_the_update_a_key_goes_down() {
 /// Scenario "Toggle".
 #[test]
 fn the_toggle_of_a_key_flips_at_each_latched_press() {
+    vkxp_binding::pending_over_ruby_1_9_2!();
     let caps = InputSnapshot::EMPTY.with_key(0x14);
     let script = holding(caps)
         .after_frame(1, HostToGuest::Input(InputSnapshot::EMPTY))
@@ -198,6 +199,7 @@ fn mouse_event_sends_a_press_or_release_for_each_button_flag() {
 /// Scenario "SetKeyboardState".
 #[test]
 fn set_keyboard_state_replaces_what_is_reported_until_the_next_update() {
+    vkxp_binding::pending_over_ruby_1_9_2!();
     assert_eq!(
         eval_with(
             &with_error_stream(
@@ -233,6 +235,7 @@ fn set_keyboard_state_replaces_what_is_reported_until_the_next_update() {
 /// Scenario "Keyboard state".
 #[test]
 fn the_keyboard_state_has_0x81_for_a_key_held_for_the_first_time() {
+    vkxp_binding::pending_over_ruby_1_9_2!();
     assert_eq!(
         eval_with(
             &(CLEAR_TOGGLES.to_owned()

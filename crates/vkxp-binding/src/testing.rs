@@ -19,6 +19,11 @@
 //! the families of [`FONT_FAMILIES`]; the default font name is the first of them.
 //!
 //! The game is one of RGSS1 unless the test binary calls [`start_as`] before anything else.
+//!
+//! The same tests run over Ruby 1.8.7 and over Ruby 1.9.2. What cannot pass over the latter
+//! yet is named in the allow-list [`ALLOW_LIST`]: a test through the marker
+//! [`pending_over_ruby_1_9_2!`](crate::pending_over_ruby_1_9_2) and [`pending`], a snippet
+//! case through [`pending_case`]. The private module `pending` describes the list.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -32,6 +37,9 @@ use vkxp_vfs::{GameFiles, Runtime};
 use crate::{Config, Guest, TextBackend};
 
 pub mod host;
+mod pending;
+
+pub use pending::{ALLOW_LIST, pending, pending_case};
 
 /// The font families the harness's text backend has.
 pub const FONT_FAMILIES: &[&str] = &["Test Sans", "Liberation Sans"];
@@ -114,7 +122,8 @@ fn write(path: &Path, contents: &[u8]) {
 
 /// Creates the game and run-time package directories afresh and returns their parent. It is
 /// named after the test executable, so test binaries that run at the same time do not share
-/// it, and lies next to the executable, where `cargo clean` removes it.
+/// it, and lies next to the executable, where `cargo clean` removes it. The process that
+/// runs a test of the allow-list alone adds the name of that test.
 fn generate_files() -> PathBuf {
     let executable = std::env::current_exe().expect("the path of the test executable");
     let name = executable
@@ -122,6 +131,10 @@ fn generate_files() -> PathBuf {
         .expect("an executable with a file name");
     let mut dir_name = name.to_os_string();
     dir_name.push(".vkxp-binding-testing");
+    if let Some(test) = pending::alone() {
+        dir_name.push(".");
+        dir_name.push(test);
+    }
     let root = executable.with_file_name(dir_name);
     if root.exists() {
         fs::remove_dir_all(&root).unwrap_or_else(|error| panic!("{}: {error}", root.display()));

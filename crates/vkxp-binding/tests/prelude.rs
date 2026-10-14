@@ -16,6 +16,7 @@ fn eval(source: &str) -> String {
 
 #[test]
 fn globals_are_those_of_the_original_runtime() {
+    vkxp_binding::pending_over_ruby_1_9_2!();
     assert_eq!(
         eval("[$KCODE, $:, $DEBUG, $BTEST]"),
         r#"["UTF8", [], false, false]"#

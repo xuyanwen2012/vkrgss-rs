@@ -59,8 +59,18 @@ const fn raises_with(
 }
 
 /// Evaluates each case's source after `wrap` has had its way with it and returns what is
-/// wrong, one entry per failed case.
+/// wrong, one entry per failed case. A case on the allow-list of Ruby 1.9.2 is wrong when it
+/// is as expected.
 pub(crate) fn failures(cases: &[Case], wrap: impl Fn(&str) -> String) -> Vec<String> {
+    failures_with(cases, wrap, testing::pending_case)
+}
+
+/// [`failures`] with the allow-list as a function: whether a case of this name is listed.
+pub(crate) fn failures_with(
+    cases: &[Case],
+    wrap: impl Fn(&str) -> String,
+    pending: impl Fn(&str) -> bool,
+) -> Vec<String> {
     cases
         .iter()
         .filter_map(|case| {
@@ -73,6 +83,16 @@ pub(crate) fn failures(cases: &[Case], wrap: impl Fn(&str) -> String) -> Vec<Str
                 }
                 _ => false,
             };
+            if pending(case.name) {
+                return as_expected.then(|| {
+                    format!(
+                        "{}: passes over Ruby 1.9.2, remove `case {}` from {}",
+                        case.name,
+                        case.name,
+                        testing::ALLOW_LIST
+                    )
+                });
+            }
             (!as_expected).then(|| {
                 let got = match outcome {
                     Ok(inspect) => format!("the value {inspect}"),

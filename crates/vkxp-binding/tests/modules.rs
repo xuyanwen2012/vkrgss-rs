@@ -315,6 +315,7 @@ fn reset_disposes_every_bitmap() {
 
 #[test]
 fn button_constants() {
+    vkxp_binding::pending_over_ruby_1_9_2!();
     let (value, _) =
         eval("[Input::DOWN, Input::LEFT, Input::RIGHT, Input::UP, Input::A, Input::C, Input::F9]");
     assert_eq!(value, "[2, 4, 6, 8, 11, 13, 29]");

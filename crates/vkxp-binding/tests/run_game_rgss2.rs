@@ -16,6 +16,7 @@ use vkxp_vfs::{GameFiles, GameIni, Runtime};
 /// "Size of VX, measured on the original".
 #[test]
 fn the_first_script_of_a_game_of_vx_sees_the_measured_numbers_and_frame() {
+    vkxp_binding::pending_over_ruby_1_9_2!();
     let executable = std::env::current_exe().unwrap();
     let root = executable.with_extension("vkxp-run-game-rgss2");
     if root.exists() {

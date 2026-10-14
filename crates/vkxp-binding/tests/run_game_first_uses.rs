@@ -40,6 +40,7 @@ File.open("moved.txt", "wb") { |zz_file| zz_file.write(zz_moved.inspect) }
 /// Scenarios "First uses, measured on the original" and "Tilemap, measured on the original".
 #[test]
 fn the_first_uses_move_the_sequence_as_on_the_original() {
+    vkxp_binding::pending_over_ruby_1_9_2!();
     let executable = std::env::current_exe().unwrap();
     let root = executable.with_extension("vkxp-run-game-first-uses");
     if root.exists() {

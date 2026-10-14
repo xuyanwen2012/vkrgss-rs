@@ -88,6 +88,7 @@ fn a_window_and_a_tilemap_move() {
 /// Scenario "Readers and errors, measured on the original".
 #[test]
 fn the_readers_return_the_object_given_and_other_objects_are_refused() {
+    vkxp_binding::pending_over_ruby_1_9_2!();
     assert_eq!(
         eval_with(
             "made << (s = Sprite.new) << (v = Viewport.new(0, 0, 8, 8))",

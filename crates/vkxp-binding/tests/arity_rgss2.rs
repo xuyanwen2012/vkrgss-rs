@@ -116,6 +116,7 @@ fn no_pending_method_exists() {
 /// is not defined.
 #[test]
 fn no_class_has_a_method_the_list_lacks() {
+    vkxp_binding::pending_over_ruby_1_9_2!();
     assert_eq!(
         eval(&format!("Object.const_defined?(:{CLASS_NOT_IN_RGSS2})")),
         "false"

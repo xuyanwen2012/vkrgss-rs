@@ -176,6 +176,7 @@ fn a_wrong_type_for_an_integer_raises_type_error() {
 
 #[test]
 fn floats_convert_from_any_number() {
+    crate::pending_over_ruby_1_9_2!();
     assert_eq!(eval("BindingProbe.float(12.5)").as_deref(), Ok("12.5"));
     assert_eq!(eval("BindingProbe.float(3)").as_deref(), Ok("3.0"));
     assert_eq!(
@@ -192,6 +193,7 @@ fn a_wrong_type_for_a_float_raises_type_error() {
 
 #[test]
 fn strings_convert_and_invalid_utf8_is_replaced() {
+    crate::pending_over_ruby_1_9_2!();
     assert_eq!(eval("BindingProbe.text('abc')").as_deref(), Ok("\"abc\""));
     assert_eq!(
         eval("BindingProbe.text(\"a\\377b\") == \"a\\357\\277\\275b\"").as_deref(),
@@ -205,6 +207,7 @@ fn strings_convert_and_invalid_utf8_is_replaced() {
 
 #[test]
 fn a_wrong_count_raises_argument_error() {
+    crate::pending_over_ruby_1_9_2!();
     assert_eq!(
         eval("[BindingProbe.count(1), BindingProbe.count(1, 2)]").as_deref(),
         Ok("[1, 2]")
@@ -274,6 +277,7 @@ const UNNAMEABLE: &str = "c = Class.new; Object.instance_method(:freeze).bind(c)
 
 #[test]
 fn a_failure_to_name_the_class_of_a_wrong_argument_is_raised_after_destructors_ran() {
+    crate::pending_over_ruby_1_9_2!();
     let _alone = HELD_PROBES.lock().unwrap_or_else(PoisonError::into_inner);
     let before = HELD_DROPS.load(Ordering::SeqCst);
     for probe in ["held_bytes", "held_color"] {
