@@ -327,8 +327,23 @@ impl Source for Sampled {
     }
 
     fn start_at_file_frame(&mut self, frame: u64) {
-        // An output frame advances the file by `step` frames.
-        let output = (frame as f64 / self.step).round();
-        self.start_from(output as u64);
+        // The cursor is placed on the frame itself: the decoded blocks before it are dropped
+        // whole, and the cursor counts the rest. A frame behind the end leaves it at the end.
+        let mut left = frame;
+        loop {
+            let count = (self.frames.len() / 2) as u64;
+            if left < count || self.stream.is_none() {
+                self.position = left.min(count) as f64;
+                break;
+            }
+            left -= count;
+            self.frames.clear();
+            self.position = 0.0;
+            if let Some(damage) = self.refill() {
+                self.damaged(damage);
+            }
+        }
+        // What the output has given to come this far, for the position a voice reports.
+        self.given = (frame as f64 / self.step).round() as u64;
     }
 }

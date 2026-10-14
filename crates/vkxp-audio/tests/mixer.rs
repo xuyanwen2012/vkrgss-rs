@@ -753,6 +753,32 @@ fn a_play_command_starts_at_its_frame() {
     assert_eq!(frames(&mut mixer, 1)[0], ramp_at(3000));
 }
 
+/// A file of 2000 frames at `rate` in which frame `n` holds `n + 100`.
+fn counted(rate: u32) -> Vec<u8> {
+    let samples: Vec<i16> = (0..2000).map(|frame| frame + 100).collect();
+    wav_of(rate, &samples)
+}
+
+/// The first frame mixed of [`counted`] at `rate`, played as music at `pitch` from `start`,
+/// as the number of its frame.
+fn first_counted(rate: u32, pitch: u16, start: u64) -> f32 {
+    let mut mixer = mixer();
+    mixer.apply(play_from(BGM, &counted(rate), (100, pitch), start, 0));
+    frames(&mut mixer, 1)[0] * 32768.0 - 100.0
+}
+
+/// Scenario "Start" at any pitch: the frame of the file itself, also where an output frame
+/// steps over it, at the last frame, and at a ratio of rates that is no whole number.
+#[test]
+fn a_play_command_starts_at_its_frame_at_any_pitch() {
+    assert_eq!(first_counted(RATE, 200, 1001), 1001.0);
+    assert_eq!(first_counted(RATE, 200, 1999), 1999.0);
+    assert_eq!(first_counted(RATE, 100, 1999), 1999.0);
+    assert_eq!(first_counted(RATE, 453, 1000), 1000.0);
+    assert_eq!(first_counted(48000, 100, 1001), 1001.0);
+    assert_eq!(first_counted(22050, 73, 777), 777.0);
+}
+
 /// Scenario "Behind the end".
 #[test]
 fn a_start_behind_the_end_of_a_looping_sound_begins_it() {
