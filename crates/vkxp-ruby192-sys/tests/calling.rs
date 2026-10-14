@@ -269,7 +269,13 @@ fn options_for_a_runtime_are_the_defaults() {
             script_name,
         } = Options::for_rgss(generation);
         assert_eq!(stack_size, default.stack_size, "generation {generation}");
-        assert_eq!(script_name, default.script_name, "generation {generation}");
+        // RGSS3 runs without a script name, as its original does (`$0` is false there).
+        let expected = if generation == 3 {
+            String::new()
+        } else {
+            default.script_name.clone()
+        };
+        assert_eq!(script_name, expected, "generation {generation}");
     }
 }
 

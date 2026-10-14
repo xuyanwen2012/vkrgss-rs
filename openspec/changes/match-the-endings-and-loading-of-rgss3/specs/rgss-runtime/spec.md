@@ -164,7 +164,8 @@ does.
 ### Requirement: Loading code in RGSS3
 In a game of RGSS3 `require` and `load` SHALL behave as the requirement "Loading code" says,
 and `require_relative` and `autoload` SHALL load only what `require` may: a `.rb` file inside
-the game directory. A file they load SHALL be compiled as UTF-8.
+the game directory. A file that `require`, `load` or `require_relative` loads SHALL be
+compiled as UTF-8; a file that `autoload` loads is compiled by the interpreter's own loader.
 
 #### Scenario: require
 - **WHEN** the game directory holds `Extra.rb` and a script evaluates `[require("./Extra.rb"), require("Extra"), $LOADED_FEATURES.size, (require("nosuch") rescue $!.message), (require("zlib") rescue $!.class)]`

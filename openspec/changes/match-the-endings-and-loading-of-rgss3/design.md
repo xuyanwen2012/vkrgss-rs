@@ -418,3 +418,10 @@ Left out, with the measured source (API report unless named):
   has none.
 - The opening comment of `prelude_shared.rb` still says that it is evaluated after
   `prelude_rgss3.rb`; the file is outside this change.
+
+Decided after the runs (2026-10-14, by the owner's agent under the owner's go-ahead for VX
+Ace): the expected script name of `Options::for_rgss(3)` in `calling.rs` is the empty name,
+a correction from the measurement that `$0` is `false` on the original; and a file that
+`autoload` loads is compiled by the interpreter's own loader, a known difference already in
+`docs/compatibility.md`, since no game of the corpus uses `autoload`. Tasks 1.1 and 4.1 are
+ticked with that.
