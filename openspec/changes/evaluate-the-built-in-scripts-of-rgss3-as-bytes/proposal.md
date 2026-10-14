@@ -24,8 +24,13 @@ None.
 ### Modified Capabilities
 
 - `rgss-runtime`: the source encoding of the built-in scripts of RGSS3.
+- `binding-over-two-interpreters`: the requirement "Strings the binding creates are text or
+  bytes" called the built-in scripts text, a decision of the change
+  `build-the-binding-over-ruby-1-9-2` made before this measurement; it now calls them bytes,
+  and the expected value of its scenario and test changes with it.
 
 ## Impact
 
 `crates/vkxp-binding/src/runtime.rs` (one call), a new test file of
-`crates/vkxp-binding-rgss3`.
+`crates/vkxp-binding-rgss3`, and the expected value of `script_source_is_text` in its
+`tests/strings.rs`.

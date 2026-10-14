@@ -117,6 +117,7 @@ fn script_source_is_text() {
     assert!(played.outcome.is_ok(), "{:?}", played.outcome);
     assert_eq!(
         played.after.as_deref(),
-        Ok(r#"[["UTF-8", 1], ["UTF-8", 1]]"#)
+        // The built-in scripts are bytes, as on the original (a save of a game shows it).
+        Ok(r#"[["ASCII-8BIT", 2], ["UTF-8", 1]]"#)
     );
 }
