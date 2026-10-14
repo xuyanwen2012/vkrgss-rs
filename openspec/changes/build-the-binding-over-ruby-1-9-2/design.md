@@ -491,3 +491,7 @@ named.
   an additional check and does not meet the scenario as written. The flow did not add
   `Table#==`, which would be class behaviour and would change Ruby 1.8.7, and did not
   edit the scenario. Everything else of task 5.1 passes.
+
+Decided at the merge (2026-10-13): the scenario "Round trip" compares a `Table` through
+`_dump(0)`, since `Table` defines no `==` on the original runtime either; the check of
+`tests/strings.rs` is that comparison. Task 5.1 is ticked.

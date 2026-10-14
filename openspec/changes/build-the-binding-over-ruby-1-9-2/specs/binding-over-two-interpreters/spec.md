@@ -116,7 +116,7 @@ be bytes: serialized forms, `to_s`, font names, data for `Marshal`, buffers, fil
 - **THEN** both store `"UTF-8"` and 1
 
 #### Scenario: Round trip
-- **WHEN** over Ruby 1.9.2 a script evaluates `Marshal.load(Marshal.dump(value)) == value` for a `Color`, a `Tone`, a `Rect` and a `Table` with values of its own
+- **WHEN** over Ruby 1.9.2 a script evaluates `Marshal.load(Marshal.dump(value)) == value` for a `Color`, a `Tone` and a `Rect` with values of its own, and for a `Table`, which defines no `==`, compares `_dump(0)` of the loaded table with that of the table dumped
 - **THEN** every result is true
 
 ### Requirement: Preparation by interpreter
