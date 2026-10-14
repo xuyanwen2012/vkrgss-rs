@@ -1,5 +1,5 @@
-# The Ruby part of what vkxp prepares before a game's scripts run. Written for vkxp; the
-# functions whose names start with `vkxp_` are host functions of the binding.
+# What vkxp prepares before the scripts of a game of RGSS1 or RGSS2 run. Written for vkxp;
+# the functions whose names start with `vkxp_` are host functions of the binding.
 
 # `$KCODE` and the load path are set over Ruby 1.8 only: `prelude_ruby18.rb`, which is
 # evaluated before this file.
@@ -35,46 +35,5 @@ def vkxp_load_scripts(path)
   $RGSS_SCRIPTS.size
 end
 
-# Calls go to the host's table of emulated functions. A function outside the table returns 0
-# and is named once.
-class Win32API
-  @@vkxp_called = {}
-
-  def initialize(dll, function, import, export)
-    @vkxp_dll = dll.to_s
-    @vkxp_function = function.to_s
-    @vkxp_name = "#{dll} #{function}"
-    vkxp_win32api_names
-  end
-
-  def call(*args)
-    result = vkxp_win32api(@vkxp_dll, @vkxp_function, *args)
-    return result if result
-    unless @@vkxp_called[@vkxp_name]
-      @@vkxp_called[@vkxp_name] = true
-      $stderr.write("vkxp: Win32API #{@vkxp_name} is not emulated and returns 0\n")
-    end
-    0
-  end
-
-  alias Call call
-end
-
-# Only Ruby files inside the game directory are loaded.
-module Kernel
-  def require(name)
-    path = vkxp_locate(name, true)
-    return false if $".include?(path)
-    $" << path
-    eval(File.open(path, "rb") { |file| file.read }, TOPLEVEL_BINDING, path)
-    true
-  end
-
-  def load(name, wrap = false)
-    path = vkxp_locate(name, false)
-    eval(File.open(path, "rb") { |file| file.read }, TOPLEVEL_BINDING, path)
-    true
-  end
-
-  module_function :require, :load
-end
+# `Win32API`, `require` and `load` are what every runtime gets: `prelude_shared.rb`, which is
+# evaluated after this file.

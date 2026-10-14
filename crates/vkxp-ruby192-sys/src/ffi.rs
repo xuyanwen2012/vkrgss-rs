@@ -768,6 +768,12 @@ unsafe extern "C" {
     pub fn rb_enc_from_encoding(encoding: *mut rb_encoding) -> VALUE;
     /// `Encoding.default_external = encoding`.
     pub fn rb_enc_set_default_external(encoding: VALUE);
+    /// Makes `alias` name the encoding `orig`, also when it names another one, and defines
+    /// the constant of `alias`. Declared by no header of the release: the encoding database
+    /// calls it.
+    pub fn rb_encdb_alias(alias: *const c_char, orig: *const c_char) -> c_int;
+    /// Removes the constant `id` of `module` and returns its value.
+    pub fn rb_const_remove(module: VALUE, id: ID) -> VALUE;
     pub fn rb_str_new2(text: *const c_char) -> VALUE;
     pub fn rb_str_buf_new(capacity: c_long) -> VALUE;
     pub fn rb_str_cat(string: VALUE, bytes: *const c_char, len: c_long) -> VALUE;

@@ -62,6 +62,23 @@ fn default_encodings_are_those_of_the_original() {
     );
 }
 
+/// `ace-v1-api-REPORT.md` section 3.1 and `ace-v0-REPORT.md` section 8 of the measurements of
+/// the original runtime: the filesystem encoding is ASCII-8BIT, and names of files, as
+/// `__FILE__` is, are labelled with it.
+#[test]
+fn the_filesystem_encoding_is_that_of_the_original() {
+    assert_eq!(
+        eval(
+            "[Encoding.aliases, Encoding.find('filesystem'), __FILE__.encoding, \
+             Dir.pwd.encoding, Encoding.const_defined?(:FILESYSTEM)]"
+        ),
+        ok(
+            "[{\"external\"=>\"UTF-8\", \"filesystem\"=>\"ASCII-8BIT\"}, \
+            #<Encoding:ASCII-8BIT>, #<Encoding:ASCII-8BIT>, #<Encoding:ASCII-8BIT>, false]"
+        )
+    );
+}
+
 #[test]
 fn zlib_is_defined_without_being_a_feature() {
     assert_eq!(

@@ -325,6 +325,14 @@ unsafe extern "C" fn setup_body(data: VALUE) -> VALUE {
         setup.step = "setting the default external encoding";
         let utf8 = ffi::rb_utf8_encoding();
         ffi::rb_enc_set_default_external(ffi::rb_enc_from_encoding(utf8));
+        // Setting the default external encoding made `filesystem` name it too. The original
+        // runtime finds no encoding for the code page of Windows there and takes
+        // ASCII-8BIT, which `__FILE__`, `Dir.pwd` and `Dir.entries` are then labelled with.
+        setup.step = "naming the filesystem encoding";
+        ffi::rb_encdb_alias(c"filesystem".as_ptr(), c"ASCII-8BIT".as_ptr());
+        // The alias defined `Encoding::FILESYSTEM` as well, which the original does not have.
+        let encoding = ffi::rb_path2class(c"Encoding".as_ptr());
+        ffi::rb_const_remove(encoding, ffi::rb_intern(c"FILESYSTEM".as_ptr()));
         setup.step = "setting the load path";
         let load_path = ffi::rb_gv_get(c"$:".as_ptr());
         ffi::rb_ary_push(load_path, ffi::rb_enc_str_new(c".".as_ptr(), 1, utf8));

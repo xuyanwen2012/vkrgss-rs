@@ -296,8 +296,32 @@ module RPG
 end
 ";
 
+/// A stand-in for the built-in scripts of the original runtime of RGSS3, written for these
+/// tests: the module `RPG`, `rgss_main` and `rgss_stop`.
+pub const RGSS3_STAND_IN: &str = "\
+# Stand-in for the built-in scripts of RGSS3, written for the tests of vkxp.
+module RPG
+end
+
+def rgss_main
+  begin
+    result = yield
+  rescue RGSSReset
+    Audio.__reset__
+    Graphics.__reset__
+    retry
+  end
+  result
+end
+
+def rgss_stop
+  Graphics.update while true
+end
+";
+
 /// A game directory made for one test, with a `Game.ini`, a script archive and, next to it,
-/// a built-in scripts file holding [`RPG_STAND_IN`].
+/// a built-in scripts file holding [`RPG_STAND_IN`], or [`RGSS3_STAND_IN`] for a game of
+/// RGSS3.
 #[derive(Debug, Clone)]
 pub struct Game {
     dir: PathBuf,
@@ -327,7 +351,11 @@ impl Game {
         let ini =
             format!("[Game]\r\nLibrary={library}\r\nScripts=Data\\{archive}\r\nTitle={title}\r\n");
         super::write(&game.dir.join("Game.ini"), ini.as_bytes());
-        super::write(&game.builtin_scripts(), RPG_STAND_IN.as_bytes());
+        let stand_in = match runtime {
+            Runtime::Rgss1 | Runtime::Rgss2 => RPG_STAND_IN,
+            Runtime::Rgss3 => RGSS3_STAND_IN,
+        };
+        super::write(&game.builtin_scripts(), stand_in.as_bytes());
         let archive = game.dir.join("Data").join(archive);
         super::write(&archive, b"");
         let entries: Vec<String> = scripts

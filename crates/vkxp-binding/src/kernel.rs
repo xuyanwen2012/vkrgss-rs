@@ -38,8 +38,9 @@ fn locate(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     }
 }
 
-/// `load_data(path)`: the object `Marshal` loads from a data file of the game.
-fn load_data(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
+/// `vkxp_data_bytes(path)`: the bytes of a data file of the game. The `load_data` of the
+/// prelude of RGSS3 builds on it.
+fn data_bytes(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     let path = rb::text(ruby, args[0])?;
     let bytes = Guest::with(|guest| {
         // Scripts write data files through Ruby's own file API (`save_data`, saves), which
@@ -48,7 +49,12 @@ fn load_data(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
         guest.files.read(FileKind::Data, &path)
     })
     .map_err(|error| error::to_raise(ruby, error.into()))?;
-    let dump = rb::bytes_new(ruby, &bytes)?;
+    Ok(rb::bytes_new(ruby, &bytes)?)
+}
+
+/// `load_data(path)`: the object `Marshal` loads from a data file of the game.
+fn load_data(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
+    let dump = data_bytes(ruby, recv, args)?;
     let marshal = rb::class_at(ruby, c"Marshal")?;
     // SAFETY: `Marshal` is kept alive by its constant, and `dump` was just returned and is
     // in a local.
@@ -75,6 +81,7 @@ fn modal_p(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
 /// Defines the global functions.
 pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
     ruby.define_global_function_with_arity(c"load_data", Arity::Fixed(1), load_data)?;
+    ruby.define_global_function_with_arity(c"vkxp_data_bytes", Arity::Fixed(1), data_bytes)?;
     ruby.define_global_function_with_arity(c"vkxp_locate", Arity::Fixed(2), locate)?;
     ruby.define_global_function_with_arity(c"vkxp_modal", Arity::Fixed(1), modal)?;
     ruby.define_global_function_with_arity(c"vkxp_modal_p", Arity::Fixed(1), modal_p)

@@ -4,7 +4,7 @@
 use vkxp_proto::{AudioChannel, AudioCommand, GuestToHost};
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{HostResult, Raised, Ruby};
-use vkxp_vfs::FileKind;
+use vkxp_vfs::{FileKind, Runtime};
 
 use crate::error;
 use crate::guest::Guest;
@@ -157,5 +157,16 @@ pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
     rb::class_method(ruby, module, c"me_fade", 1, me_fade)?;
     rb::class_method(ruby, module, c"se_play", -1, se_play)?;
     rb::class_method(ruby, module, c"se_stop", 0, se_stop)?;
+    if Guest::with(|guest| guest.runtime.run.runtime) == Runtime::Rgss3 {
+        rb::class_method(ruby, module, c"__reset__", 0, reset)?;
+    }
     Ok(())
+}
+
+/// `Audio.__reset__` of RGSS3: stops the four channels.
+///
+/// Provenance: oracle measurement 2026-10-13, RGSS301, `ace-v1-api-REPORT.md` section 1.5.
+fn reset(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
+    Guest::with(stop_all);
+    Ok(ffi::Qnil)
 }

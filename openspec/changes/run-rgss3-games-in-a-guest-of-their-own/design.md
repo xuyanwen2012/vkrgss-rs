@@ -510,6 +510,24 @@ Sections are those of the API report unless another report is named.
 - An option, variable or key that names the guest executable, for packagers.
 - A guest on a thread for RGSS3 (the study, option B).
 
+### Found while implementing
+
+- *The filesystem encoding* (outside the edits this design names, a few lines the scenario
+  "Encodings, measured on the original" plainly needs). `__FILE__` takes the filesystem
+  encoding of Ruby 1.9.2, which follows the default external encoding on Linux: UTF-8.
+  The original finds no encoding for the code page of Windows and takes ASCII-8BIT (API
+  report 3.1, `Encoding.aliases`; V0 report 8). `vkxp-ruby192-sys` now points the alias
+  `filesystem` at ASCII-8BIT at start-up, as one more item of the start-up state it
+  documents, and removes the constant `Encoding::FILESYSTEM` that the alias defines. A
+  script that sets `Encoding.default_external` moves the alias again, which the original
+  does not: left as it is.
+- *`Viewport#disposed?`* belongs to the class surface of RGSS3 (the method list); the
+  viewport of RGSS2 has none. The scenario "What is disposed" asks the viewport by a method
+  that raises `RGSSError` with `disposed viewport` instead, and the method comes with
+  `bind-the-scene-classes-of-rgss3`.
+- *`prelude.rb`.* The lines that moved to `prelude_shared.rb` were its last ones; they are
+  replaced by a comment of two lines, and no line before them moved.
+
 ### Follow-ups: the changes that follow
 
 In a suggested order. The first four are what the main test game needs for its title

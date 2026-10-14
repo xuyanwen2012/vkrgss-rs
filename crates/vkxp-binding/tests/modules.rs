@@ -572,3 +572,10 @@ fn the_snippets_give_the_same_results_with_a_collection_at_every_allocation() {
     assert_eq!(record.frames().len(), 2);
     assert_eq!(record.received.len(), 4);
 }
+
+/// Requirement "Reset functions of RGSS3": a game of RGSS1 has neither.
+#[test]
+fn a_game_of_rgss1_has_no_reset_functions() {
+    let (value, _) = eval("[Graphics.respond_to?(:__reset__), Audio.respond_to?(:__reset__)]");
+    assert_eq!(value, "[false, false]");
+}

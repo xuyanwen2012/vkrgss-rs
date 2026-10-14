@@ -355,6 +355,37 @@ pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
         rb::class_method(ruby, module, c"fadein", 1, fadein)?;
         rb::class_method(ruby, module, c"snap_to_bitmap", 0, snap_to_bitmap)?;
     }
+    if Guest::with(|guest| guest.runtime.run.runtime) == Runtime::Rgss3 {
+        rb::class_method(ruby, module, c"__reset__", 0, reset)?;
+    }
     ruby.eval(RESET, "Graphics", 1)?;
     Ok(())
+}
+
+/// The frame rate `Graphics.__reset__` sets.
+const RESET_FRAME_RATE: i64 = 60;
+
+/// `Graphics.__reset__` of RGSS3: disposes every bitmap and scene element as `_reset` does,
+/// sets the brightness to 255 and the frame rate to 60, and ends a freeze, which the host
+/// is told as a transition of no frames. The frame count, the size of the screen, the fonts
+/// and the audio stay.
+///
+/// Provenance: oracle measurement 2026-10-13, RGSS301, `ace-v1-api-REPORT.md` section 1.5.
+fn reset(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
+    // SAFETY: `recv` is `Graphics`, kept alive by its constant.
+    unsafe { ruby.funcall(recv, c"_reset", &[]) }?;
+    Guest::with(|guest| {
+        guest.scene.set_brightness(255);
+        guest.scene.set_frame_rate(RESET_FRAME_RATE);
+        if guest.runtime.held {
+            guest.runtime.held = false;
+            guest.send(GuestToHost::Transition {
+                duration: 0,
+                mask: None,
+                vague: 0,
+                rule: TransitionRule::Rgss2,
+            });
+        }
+    });
+    Ok(ffi::Qnil)
 }

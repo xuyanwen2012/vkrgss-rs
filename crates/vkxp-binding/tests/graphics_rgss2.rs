@@ -444,3 +444,10 @@ fn a_held_button_repeats_after_24_updates_and_then_every_6() {
     );
     assert_eq!(outcome.unwrap(), "[1, 24, 30, 36]");
 }
+
+/// Requirement "Reset functions of RGSS3": a game of RGSS2 has neither.
+#[test]
+fn a_game_of_rgss2_has_no_reset_functions() {
+    let (value, _) = eval("[Graphics.respond_to?(:__reset__), Audio.respond_to?(:__reset__)]");
+    assert_eq!(value, "[false, false]");
+}

@@ -97,7 +97,8 @@
 //!
 //! After `Interpreter::start` the state is the one measured on the original runtime: `$:` is
 //! `["."]`, `$LOADED_FEATURES` is `["enumerator.so"]`, the default external encoding is
-//! UTF-8 and there is no default internal one, `Zlib` is defined without `zlib.so` being a
+//! UTF-8 and there is no default internal one, the filesystem encoding, which `__FILE__`
+//! and `Dir.pwd` are labelled with, is ASCII-8BIT, `Zlib` is defined without `zlib.so` being a
 //! loaded feature, and the release's prelude has not run (`Mutex#synchronize` and
 //! `Thread.exclusive` do not exist). `Encoding.list` holds ASCII-8BIT, UTF-8, US-ASCII and
 //! UTF-16LE; Shift_JIS, Windows-31J and ISO-8859-1 are registered at the first look-up of
@@ -134,7 +135,8 @@
 //! | `SIGNALS_TAKEN_BY_RUBY`, ten signals | the eleven whose dispositions `Init_signal` of 1.9.2 changes: SIGCHLD is new. SIGVTALRM is no timer signal any more and is taken only once a script has created a thread |
 //! | after start the load path is empty, and `zlib.so` is a loaded feature | the start-up state above |
 //!
-//! New and without a counterpart: `HASH_SEED`, `ffi::rb_enc_str_new`,
+//! New and without a counterpart: `HASH_SEED`, `ffi::rb_enc_str_new`, `ffi::rb_encdb_alias`,
+//! `ffi::rb_const_remove`,
 //! `ffi::rb_utf8_encoding`, `ffi::rb_enc_from_encoding`, `ffi::rb_enc_set_default_external`,
 //! the `Init_` functions of the linked encodings and transcoders, and the variables of the
 //! patches (`ffi::ruby_vkxp_lazy_timer_thread`, `ffi::ruby_vkxp_hashseed_fixed`,

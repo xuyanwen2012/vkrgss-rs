@@ -16,6 +16,7 @@
 //! channels play, and the frame of that wait with every bitmap and table whole. Then it
 //! waits for the tick like the guest it was copied from.
 
+use std::ffi::CStr;
 use std::fmt::Debug;
 use std::io;
 use std::path::PathBuf;
@@ -33,9 +34,18 @@ use crate::panel::Panel;
 use crate::stats::{self, Part, Span};
 use crate::{audio, graphics, input, kernel, rb, win32api};
 
-/// The Ruby part of the preparation: globals, `Reset`, `save_data`, `Win32API`, and
-/// `require` and `load` limited to the game directory.
+/// The Ruby part of the preparation of a game of RGSS1 or RGSS2: `Reset`, `save_data`,
+/// `print`, `p` and the loader of the script archive.
 const PRELUDE: &str = include_str!("prelude.rb");
+
+/// The Ruby part of the preparation of a game of RGSS3, in the place of [`PRELUDE`]:
+/// `RGSS_VERSION`, `RGSSReset`, `save_data`, `load_data`, `msgbox`, `msgbox_p` and the
+/// loader of the script archive.
+const PRELUDE_RGSS3: &str = include_str!("prelude_rgss3.rb");
+
+/// What the preparation evaluates for every runtime after [`PRELUDE`] or
+/// [`PRELUDE_RGSS3`]: `Win32API`, and `require` and `load` limited to the game directory.
+const PRELUDE_SHARED: &str = include_str!("prelude_shared.rb");
 
 /// What is prepared over Ruby 1.8 only, before the prelude: `$KCODE` and the empty load path.
 const PRELUDE_RUBY18: &str = include_str!("prelude_ruby18.rb");
@@ -45,6 +55,9 @@ const PRELUDE_RGSS1: &str = include_str!("prelude_rgss1.rb");
 
 /// The Ruby definitions that turn the functions that start processes off.
 const PROCESS_FUNCTIONS_OFF: &str = include_str!("prelude_process_off.rb");
+
+/// What turns off the functions that start processes that Ruby 1.9 has beside them.
+const PROCESS_FUNCTIONS_OFF_RUBY19: &str = include_str!("prelude_process_off_ruby19.rb");
 
 /// The file name the prelude is reported under in backtraces.
 const PRELUDE_NAME: &str = "(prelude)";
@@ -147,7 +160,7 @@ pub(crate) enum Await {
 /// What the host asked for and the next `Graphics.update` raises.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Pending {
-    /// `Reset`: the scripts start over.
+    /// `Reset`, or `RGSSReset` in RGSS3: the scripts start over.
     Reset,
     /// `SystemExit`: the game ends.
     Quit,
@@ -411,14 +424,33 @@ fn system_exit(_ruby: &Ruby) -> VALUE {
     unsafe { ffi::rb_eSystemExit }
 }
 
-/// Raises what the host asked for while the guest pumped: `Reset` for a reset request,
-/// `SystemExit` for a quit request. Called after [`Guest::pump`] has returned and the guest
-/// is released.
+/// The class of the exception that resets a game of `runtime`: `Reset`, or `RGSSReset` in
+/// RGSS3.
+fn reset_class_name(runtime: Runtime) -> &'static CStr {
+    match runtime {
+        Runtime::Rgss1 | Runtime::Rgss2 => c"Reset",
+        Runtime::Rgss3 => c"RGSSReset",
+    }
+}
+
+/// Raises what the host asked for while the guest pumped: `Reset` with the message `reset`
+/// for a reset request, or in RGSS3 `RGSSReset` with an empty message, and `SystemExit` for
+/// a quit request. Called after [`Guest::pump`] has returned and the guest is released.
 pub(crate) fn raise_pending(ruby: &Ruby) -> Result<(), Raise> {
-    match Guest::with(|guest| guest.runtime.pending.take()) {
+    let (pending, runtime) =
+        Guest::with(|guest| (guest.runtime.pending.take(), guest.runtime.run.runtime));
+    match pending {
         None => Ok(()),
         Some(Pending::Quit) => Err(Raise::new(system_exit(ruby), "exit")),
-        Some(Pending::Reset) => Err(Raise::new(rb::class_at(ruby, c"Reset")?, "reset")),
+        Some(Pending::Reset) => {
+            let class = rb::class_at(ruby, reset_class_name(runtime))?;
+            let message = if runtime == Runtime::Rgss3 {
+                ""
+            } else {
+                "reset"
+            };
+            Err(Raise::new(class, message))
+        }
     }
 }
 
@@ -433,8 +465,9 @@ pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
 }
 
 /// Prepares the interpreter as the original runtime does before a game's scripts run:
-/// evaluates the prelude, sets the globals of test mode from the guest's [`RunConfig`], and
-/// turns the process functions off unless it enables them.
+/// evaluates the prelude of the runtime and the shared one, sets the globals of test mode
+/// from the guest's [`RunConfig`], and turns the process functions off unless it enables
+/// them.
 pub(crate) fn prepare(ruby: &Ruby) -> Result<(), RubyError> {
     let (runtime, debug, battle_test, process_functions) = Guest::with(|guest| {
         let run = &guest.runtime.run;
@@ -448,12 +481,20 @@ pub(crate) fn prepare(ruby: &Ruby) -> Result<(), RubyError> {
     if !rb::RUBY_19 {
         ruby.eval_protected(PRELUDE_RUBY18, PRELUDE_NAME, 1)?;
     }
-    ruby.eval_protected(PRELUDE, PRELUDE_NAME, 1)?;
+    if runtime == Runtime::Rgss3 {
+        ruby.eval_protected(PRELUDE_RGSS3, PRELUDE_NAME, 1)?;
+    } else {
+        ruby.eval_protected(PRELUDE, PRELUDE_NAME, 1)?;
+    }
+    ruby.eval_protected(PRELUDE_SHARED, PRELUDE_NAME, 1)?;
     if runtime == Runtime::Rgss1 {
         ruby.eval_protected(PRELUDE_RGSS1, PRELUDE_NAME, 1)?;
     }
     if !process_functions {
         ruby.eval_protected(PROCESS_FUNCTIONS_OFF, PRELUDE_NAME, 1)?;
+        if rb::RUBY_19 {
+            ruby.eval_protected(PROCESS_FUNCTIONS_OFF_RUBY19, PRELUDE_NAME, 1)?;
+        }
     }
     // Last, so that debug mode does not report the exceptions the prelude itself may meet.
     let flags = test_mode_globals(runtime, debug, battle_test);
@@ -550,13 +591,24 @@ pub enum RunError {
     /// also written to the error stream and shown by the host.
     #[error("{0}")]
     Script(String),
+    /// The game is of a runtime that this binding's interpreter does not run: a game of
+    /// RGSS3 over Ruby 1.8.7. Nothing of the game was evaluated.
+    #[error(
+        "a game of {} ({}) runs over Ruby 1.9.2, and this binding is built over Ruby 1.8.7",
+        runtime.product(),
+        runtime.name()
+    )]
+    Interpreter {
+        /// The runtime of the game.
+        runtime: Runtime,
+    },
 }
 
 /// How an evaluation that did not return ended.
 enum Ended {
     /// `SystemExit`: the game is over.
     Exit,
-    /// `Reset`: the scripts start over.
+    /// `Reset`, or `RGSSReset` in RGSS3: the scripts start over.
     Reset,
     /// Anything else, as its report.
     Failed(String),
@@ -587,6 +639,15 @@ fn position(entry: &str) -> Option<(&str, u32)> {
 fn section_index(file: &str) -> Option<usize> {
     let digits = file.strip_prefix("Section")?;
     (digits.len() >= 3 && digits.bytes().all(|byte| byte.is_ascii_digit()))
+        .then(|| digits.parse().ok())?
+}
+
+/// The index of a script in the archive from the file name it is evaluated under in RGSS3:
+/// `{` and the index as four digits and `}`, found anywhere in the name.
+fn script_index_rgss3(file: &str) -> Option<usize> {
+    let (_, rest) = file.split_once('{')?;
+    let (digits, _) = rest.split_once('}')?;
+    (!digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit()))
         .then(|| digits.parse().ok())?
 }
 
@@ -627,6 +688,132 @@ fn report(ruby: &Ruby, error: &RubyError) -> String {
     )
 }
 
+/// The position at which the report of RGSS3 divides a line: the last `:<digits>:` that has
+/// something before it, as `(.+):(\d+):(.*)` of Ruby matches. Returns the file, the line and
+/// what follows.
+fn split_position(line: &str) -> Option<(&str, u32, &str)> {
+    let mut search = line.len();
+    while let Some(end) = line[..search].rfind(':') {
+        let digits_start = line[..end]
+            .bytes()
+            .rposition(|byte| !byte.is_ascii_digit())
+            .map_or(0, |index| index + 1);
+        if digits_start < end && digits_start >= 2 && line.as_bytes()[digits_start - 1] == b':' {
+            let line_number = line[digits_start..end].parse().unwrap_or(u32::MAX);
+            return Some((&line[..digits_start - 1], line_number, &line[end + 1..]));
+        }
+        search = end;
+    }
+    None
+}
+
+/// The file and line of a backtrace entry as the report of RGSS3 reads them: an entry
+/// without a position is the file, and its line is the number it starts with, 0 for most.
+fn entry_position(entry: &str) -> (&str, u32) {
+    match split_position(entry) {
+        Some((file, line, _)) => (file, line),
+        None => {
+            let digits = entry.bytes().take_while(u8::is_ascii_digit).count();
+            (entry, entry[..digits].parse().unwrap_or(0))
+        }
+    }
+}
+
+/// Whether a line starts with the position of a script of RGSS3, `{<digits>}:<digits>:`.
+fn starts_with_script_position(line: &str) -> bool {
+    let Some((index, rest)) = line
+        .strip_prefix('{')
+        .and_then(|rest| rest.split_once("}:"))
+    else {
+        return false;
+    };
+    let digits = |text: &str| !text.is_empty() && text.bytes().all(|byte| byte.is_ascii_digit());
+    digits(index) && rest.split_once(':').is_some_and(|(line, _)| digits(line))
+}
+
+/// The message of a `SyntaxError` as the report of RGSS3 cuts it: the position taken out of
+/// the first line that has one, then the first line and the second unless that starts with
+/// the position of a script, without the words ` syntax error, `, a leading space and a
+/// line of nothing but `^`.
+fn syntax_message(message: &str) -> String {
+    let mut lines: Vec<String> = message.split('\n').map(str::to_owned).collect();
+    if let Some(line) = lines.iter_mut().find(|line| split_position(line).is_some()) {
+        *line = split_position(line).map_or_else(String::new, |(_, _, rest)| rest.to_owned());
+    }
+    let mut text = lines.first().cloned().unwrap_or_default();
+    if let Some(second) = lines
+        .get(1)
+        .filter(|line| !starts_with_script_position(line))
+    {
+        text.push('\n');
+        text.push_str(second);
+    }
+    for prefix in [" syntax error, ", " "] {
+        if let Some(rest) = text.strip_prefix(prefix) {
+            text = rest.to_owned();
+        }
+    }
+    match text.split_once('\n') {
+        Some((first, second)) if second.trim() == "^" => first.to_owned(),
+        _ => text,
+    }
+}
+
+/// The report of an uncaught exception in a game of RGSS3, in the form measured on the
+/// original runtime (`ace-v1-api-REPORT.md` section 1.2): the position is that of the first
+/// backtrace entry that does not start with `(eval)`, or the last entry; a `SyntaxError`
+/// without a line there takes it from its message; a script is named by
+/// `$RGSS_SCRIPTS[i][1]` as it is now. Not followed: the empty box for a text longer than
+/// 1023 UTF-16 units.
+fn report_rgss3(ruby: &Ruby, error: &RubyError) -> String {
+    let class = error.class_name.as_str();
+    let entry = error
+        .backtrace
+        .iter()
+        .position(|entry| !entry.starts_with("(eval)"))
+        .or_else(|| error.backtrace.len().checked_sub(1))
+        .map_or("", |index| error.backtrace[index].as_str());
+    let (mut name, mut line) = entry_position(entry);
+    let mut message = error.message.clone();
+    if class == "SyntaxError" {
+        // The frame of the call of `eval` itself, which the original names `ruby:in
+        // `eval'` and the interpreter crate `vkxp:in `eval'`, has no line.
+        if name.contains(":in `") || line == 0 {
+            let first = error.message.lines().find_map(split_position);
+            (name, line) = first.map_or((name, line), |(file, number, _)| (file, number));
+        }
+        message = syntax_message(&error.message);
+    } else if class == "Errno::ENOENT" {
+        let file = message
+            .strip_prefix("No such file or directory - ")
+            .unwrap_or(&message);
+        return format!("Unable to find file:\n\n{file}");
+    }
+    let name = match script_index_rgss3(name) {
+        Some(index) => script_name(ruby, index).unwrap_or_else(|| name.to_owned()),
+        None => name.to_owned(),
+    };
+    let mut text = if line != 0 {
+        format!("Script '{name}' line {line}: {class} occurred.")
+    } else {
+        format!("{class} occurred.")
+    };
+    if !message.is_empty() {
+        text.push_str("\n\n");
+        text.push_str(&message);
+    }
+    text
+}
+
+/// The report of an uncaught exception in a game of the guest's runtime.
+fn report_of_runtime(ruby: &Ruby, error: &RubyError) -> String {
+    if Guest::with(|guest| guest.runtime.run.runtime) == Runtime::Rgss3 {
+        report_rgss3(ruby, error)
+    } else {
+        report(ruby, error)
+    }
+}
+
 /// What a jump out of an evaluation means for the game.
 fn ended(ruby: &Ruby, raised: Raised) -> Ended {
     let is_a = |class: VALUE| {
@@ -638,12 +825,13 @@ fn ended(ruby: &Ruby, raised: Raised) -> Ended {
     if is_a(system_exit(ruby)) {
         return Ended::Exit;
     }
-    if rb::class_at(ruby, c"Reset").is_ok_and(is_a) {
+    let runtime = Guest::with(|guest| guest.runtime.run.runtime);
+    if rb::class_at(ruby, reset_class_name(runtime)).is_ok_and(is_a) {
         return Ended::Reset;
     }
     // SAFETY: as above, the exception is still alive in `raised`.
     let error = unsafe { ruby.describe(raised) };
-    Ended::Failed(report(ruby, &error))
+    Ended::Failed(report_of_runtime(ruby, &error))
 }
 
 /// A preload script: the name it is evaluated under, which is its path as the caller gave
@@ -691,7 +879,7 @@ fn load(ruby: &Ruby) -> Result<(Vec<Preload>, usize), RunError> {
     if let Err(raised) = evaluate(ruby, source, BUILTIN_NAME) {
         // SAFETY: as above.
         let error = unsafe { ruby.describe(raised) };
-        return Err(RunError::Script(report(ruby, &error)));
+        return Err(RunError::Script(report_of_runtime(ruby, &error)));
     }
 
     let path = rb::text_new(ruby, archive.as_bytes()).map_err(prepare)?;
@@ -718,35 +906,66 @@ fn load(ruby: &Ruby) -> Result<(Vec<Preload>, usize), RunError> {
 /// bitmap is disposed, the input state starts afresh and the random number generator is
 /// seeded again. The interpreter and what the scripts defined stay, as in the original
 /// runtime.
+///
+/// In RGSS3 `Graphics.__reset__` is called through Ruby, which also sets the brightness and
+/// the frame rate back and ends a freeze, and the generator is not seeded again: it was
+/// seeded once, before the built-in scripts.
 fn reset(ruby: &Ruby) -> Result<(), Raised> {
-    Guest::with(audio::stop_all);
+    let runtime = Guest::with(|guest| {
+        audio::stop_all(guest);
+        guest.runtime.run.runtime
+    });
     let graphics = rb::class_at(ruby, c"Graphics")?;
+    let method = match runtime {
+        Runtime::Rgss1 | Runtime::Rgss2 => c"_reset",
+        Runtime::Rgss3 => c"__reset__",
+    };
     // SAFETY: the module is kept alive by its constant.
-    unsafe { ruby.funcall(graphics, c"_reset", &[]) }?;
+    unsafe { ruby.funcall(graphics, method, &[]) }?;
     Guest::with(|guest| {
         guest.input = InputState::with_rules(guest.input.rules());
         guest.runtime.pending = None;
     });
-    seed(ruby)
+    match runtime {
+        Runtime::Rgss1 | Runtime::Rgss2 => seed(ruby),
+        Runtime::Rgss3 => Ok(()),
+    }
 }
 
-/// Evaluates the preload scripts and then the `count` scripts of `$RGSS_SCRIPTS` in order,
-/// each of the latter under the name `Section` and its index, again from the first preload
-/// script after a reset, until the last returns or one exits. The runs after a reset start
-/// with the `Reset` that ended the one before as the current error, as in the original
-/// runtime: `alias old new unless $@` relies on it.
+/// Evaluates the source of the script at `index` of `$RGSS_SCRIPTS` as it is now, under the
+/// name its runtime gives it: `Section` and the index as three digits, or in RGSS3 `{` and
+/// four digits and `}`. In RGSS3 the source, which is stored as bytes, is compiled as UTF-8:
+/// what is evaluated is a new string of text with its bytes, and the stored one is left as
+/// it is.
+fn evaluate_script(ruby: &Ruby, index: usize, runtime: Runtime) -> Result<(), Raised> {
+    let source = ruby.eval(&format!("$RGSS_SCRIPTS[{index}][3]"), PRELUDE_NAME, 1)?;
+    match runtime {
+        Runtime::Rgss1 | Runtime::Rgss2 => evaluate(ruby, source, &format!("Section{index:03}")),
+        Runtime::Rgss3 => {
+            let text = match rb::string_bytes(ruby, source) {
+                Some(bytes) => rb::text_new(ruby, &bytes)?,
+                // `eval` raises what it raises for anything else.
+                None => source,
+            };
+            evaluate(ruby, text, &format!("{{{index:04}}}"))
+        }
+    }
+}
+
+/// Evaluates the preload scripts and then the `count` scripts of `$RGSS_SCRIPTS` in order
+/// ([`evaluate_script`]), again from the first preload script after a reset, until the last
+/// returns or one exits. The runs after a reset start with the `Reset` that ended the one
+/// before as the current error, as in the original runtime: `alias old new unless $@`
+/// relies on it.
 fn run_scripts(ruby: &Ruby, preload: &[Preload], count: usize) -> Result<(), RunError> {
+    let runtime = Guest::with(|guest| guest.runtime.run.runtime);
     let mut index = 0;
     while index < preload.len() + count {
         let evaluated = match preload.get(index) {
             Some((name, source)) => {
                 rb::text_new(ruby, source).and_then(|source| evaluate(ruby, source, name))
             }
-            None => {
-                let index = index - preload.len();
-                ruby.eval(&format!("$RGSS_SCRIPTS[{index}][3]"), PRELUDE_NAME, 1)
-                    .and_then(|source| evaluate(ruby, source, &format!("Section{index:03}")))
-            }
+            None => evaluate_script(ruby, index - preload.len(), runtime),
         };
         index += 1;
         let Err(raised) = evaluated else {
@@ -812,16 +1031,22 @@ pub(crate) fn play(ruby: &Ruby, link: GuestEnd) -> Result<(), RunError> {
 ///
 /// 1. Installs the guest of `config` ([`Guest::install`]) and sends the host the window
 ///    title of the game's configuration file.
+/// 1. Refuses a game of RGSS3 over Ruby 1.8.7 with [`RunError::Interpreter`], before
+///    anything of the game is evaluated. Installs the guest of `config`
+///    ([`Guest::install`]) and sends the host the window title of the game's configuration
+///    file.
 /// 2. Prepares the interpreter with the prelude of this crate: over Ruby 1.8 `$KCODE` and an
 ///    empty load path, `$DEBUG` and `$BTEST`, `Reset` and in RGSS1 `Hangup`, `save_data`, `print` and `p`, `Win32API`,
-///    the process functions and `require` and `load`.
+///    the process functions and `require` and `load`. A game of RGSS3 gets
+///    `RGSS_VERSION`, `RGSSReset`, `save_data`, `load_data`, `msgbox` and `msgbox_p` in the
+///    place of `Reset`, `print` and `p`, which are Ruby's own there.
 /// 3. Reads the preload scripts, seeds the random number generator when the configuration
 ///    has a seed, and evaluates the built-in scripts file under the name `(builtin)`.
 /// 4. Reads the script archive into `$RGSS_SCRIPTS`, each entry with its inflated source
 ///    as fourth element.
 /// 5. Marks the start of the game's scripts for the interpreter's symbol numbering, once per
 ///    process. Evaluates the preload scripts under their paths, then the scripts in order as
-///    `Section000`, `Section001` and so on. `Reset` leaving a script stops the audio,
+///    `Section000`, `Section001` and so on, or `{0000}`, `{0001}` in RGSS3. `Reset` leaving a script stops the audio,
 ///    disposes every scene element and bitmap, clears the input state, seeds the generator
 ///    again and starts over from the first preload script; `SystemExit` ends the game. Any
 ///    other exception ends it with [`RunError::Script`], after its report was written to the
@@ -833,6 +1058,10 @@ pub(crate) fn play(ruby: &Ruby, link: GuestEnd) -> Result<(), RunError> {
 ///
 /// Panics when a guest is already installed on this thread.
 pub fn run_game(ruby: &Ruby, config: Config, link: GuestEnd) -> Result<(), RunError> {
+    let runtime = config.run.runtime;
+    if runtime == Runtime::Rgss3 && !rb::RUBY_19 {
+        return Err(RunError::Interpreter { runtime });
+    }
     Guest::install(ruby, config).map_err(|raised| {
         // SAFETY: `raised` was produced just now on this thread and sat in a local since.
         RunError::Prepare(unsafe { ruby.describe(raised) })
