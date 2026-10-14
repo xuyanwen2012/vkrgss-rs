@@ -179,6 +179,44 @@ fn exceptions_that_are_no_standard_error_are_reported_the_same_way() {
     }
 }
 
+/// Requirement "Magic comments of the scripts of RGSS3", scenario "US-ASCII"
+/// (`ace-v1-api-REPORT.md` section 1.1).
+#[test]
+fn a_byte_above_127_in_a_script_of_us_ascii_is_a_syntax_error() {
+    let (text, _) = report(
+        "magic_us_ascii",
+        &[("magic", "# coding: us-ascii\n$vkxp_text = \"測\"\n")],
+    );
+    assert_eq!(
+        text,
+        "Script 'magic' line 2: SyntaxError occurred.\n\ninvalid multibyte char (US-ASCII)"
+    );
+}
+
+/// Requirement "Magic comments of the scripts of RGSS3", scenarios "Unknown names" and
+/// "UTF-16LE" (`ace-v1-api-REPORT.md` section 1.1): the comment is refused by the call of
+/// `eval`, which has no line.
+#[test]
+fn an_unknown_or_incompatible_encoding_is_an_argument_error_without_a_line() {
+    for (index, (name, message)) in [
+        ("euc-jp", "unknown encoding name: euc-jp"),
+        ("binary", "unknown encoding name: binary"),
+        ("nosuch", "unknown encoding name: nosuch"),
+        ("utf-16le", "UTF-16LE is not ASCII compatible"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let source = format!("# coding: {name}\n$vkxp_ran = true\n");
+        let (text, _) = report(&format!("magic_unknown_{index}"), &[("Main", &source)]);
+        assert_eq!(
+            text,
+            format!("ArgumentError occurred.\n\n{message}"),
+            "{name}"
+        );
+    }
+}
+
 // --- Message boxes ----------------------------------------------------------------------------
 
 /// The texts of the modal messages the host received for a snippet, with its value.

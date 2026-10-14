@@ -120,7 +120,7 @@
 //! | `ffi::ruby_top_self`, a variable | absent; `ffi::rb_vm_top_self()` and `Ruby::top_self()` |
 //! | `ffi::ruby_set_stack_size` | absent; `Options::stack_size` is applied through the variable `ffi::ruby_vkxp_stack_size` of a patch |
 //! | `ffi::ruby_vkxp_gc_stress`, `ffi::ruby_vkxp_gc_count` | absent; `GC.stress` and `GC.count` of the release. `VKXP_GC_STRESS` has no "every n-th" form |
-//! | `ffi::ruby_vkxp_select_symbols`, `ffi::ruby_vkxp_mark_game_scripts`, `SymbolTable`, `Options::symbols` | absent; symbols are numbered as the release numbers them, and a dump does not depend on the numbers. `Options::for_rgss` gives the defaults for every runtime |
+//! | `ffi::ruby_vkxp_select_symbols`, `ffi::ruby_vkxp_mark_game_scripts`, `SymbolTable`, `Options::symbols` | absent; symbols are numbered as the release numbers them, and a dump does not depend on the numbers. `Options::for_rgss` gives the defaults for RGSS1 and RGSS2 and an empty `Options::script_name` for RGSS3 |
 //! | `Ruby::mark_game_scripts` | exists and does nothing |
 //! | `restart_thread_timer` arms the timer of the green threads in a copy of the process | forgets the timer thread, which a copy made by `fork` does not have, and makes its lock and condition variable afresh; the interpreter starts one when a script next creates a thread. It also forgets the threads of the copied process that waited for the interpreter's lock. Nothing changes when no script ever made a thread |
 //! | `threads_lost_in_a_copy` is always `false`: the threads are memory of the interpreter | `true` exactly while a Ruby thread other than the main one is alive: a Ruby thread is a thread of the system, and a copy made by `fork` does not have it |
@@ -130,7 +130,8 @@
 //! | the type tags `ffi::T_*` and the flag bits `ffi::FL_*` | the values of the 1.9.2 headers; `T_COMPLEX`, `T_RATIONAL`, `T_NODE`, `T_ZOMBIE` and `FL_UNTRUSTED` are new |
 //! | `ffi::ruby_finalize` ends the interpreter | still declared; `ffi::ruby_cleanup`, which also terminates the Ruby threads, is what ends it |
 //! | `Ruby::str_new`, `Ruby::str_new_text` give the same string | `Ruby::str_new` labels the string ASCII-8BIT and `Ruby::str_new_text` UTF-8, valid or not; `Ruby::str_new_utf8` is the latter for a `&str` |
-//! | `Ruby::eval`, `Ruby::eval_protected` | the same; the source is handed over as a UTF-8 string, a backtrace position outside a method reads ``file:line:in `<main>'``, and the backtrace ends with the frame of the `eval` call itself (``vkxp:in `eval'``, with the script name) |
+//! | `Ruby::eval`, `Ruby::eval_protected` | the same; the source is handed over as a UTF-8 string, a backtrace position outside a method reads ``file:line:in `<main>'``, and the backtrace ends with the frame of the `eval` call itself (``vkxp:in `eval'``, with the script name, or ``ruby:in `eval'`` without one) |
+//! | `$0` is the script name | the same; an empty `Options::script_name` gives the interpreter no name, and `$0` is `false` |
 //! | `Raised` of a `throw` or `break` | the same shape; the interpreter keeps what the jump carries as its current error until the jump is continued or described |
 //! | `SIGNALS_TAKEN_BY_RUBY`, ten signals | the eleven whose dispositions `Init_signal` of 1.9.2 changes: SIGCHLD is new. SIGVTALRM is no timer signal any more and is taken only once a script has created a thread |
 //! | after start the load path is empty, and `zlib.so` is a loaded feature | the start-up state above |

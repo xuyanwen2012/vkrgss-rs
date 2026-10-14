@@ -250,11 +250,20 @@ fn refuse_other_interpreter(runtime: Runtime) -> Result<()> {
     )
 }
 
+/// The title of a game of RGSS3 whose `Game.ini` has no `Title` or an empty one, measured
+/// on the original runtime (`ace-v1-api-REPORT.md` section 1.1).
+const UNTITLED_RGSS3: &str = "Untitled";
+
 /// Reads `Game.ini`, settles the runtime of the game, looks the run-time packages it names
-/// up in the table of the settings and finds the built-in scripts file.
+/// up in the table of the settings and finds the built-in scripts file. A game of RGSS3
+/// without a title gets the title [`UNTITLED_RGSS3`], which the window and the guest take;
+/// the file itself is not changed.
 pub fn guest_inputs(game_dir: &Path, settings: &GuestSettings) -> Result<GuestInputs> {
-    let ini = GameIni::read(game_dir, settings.encoding)?;
+    let mut ini = GameIni::read(game_dir, settings.encoding)?;
     let runtime = runtime_of(&ini, settings.runtime)?;
+    if runtime == Runtime::Rgss3 && ini.title.is_empty() {
+        ini.title = UNTITLED_RGSS3.to_owned();
+    }
     tracing::info!("runtime: {} ({})", runtime.name(), runtime.product());
     let rtp_table = settings
         .rtps
@@ -654,6 +663,42 @@ mod tests {
             let (version, line) = version_in_game(library, file);
             assert_eq!(version, None, "{library}");
             assert!(line.contains(reason) && !line.contains('\n'), "{line}");
+        }
+    }
+
+    /// The title of the inputs of a game directory whose `Game.ini` is `ini`, and whether
+    /// the file is unchanged afterwards.
+    fn title_of_inputs(ini: &str) -> (String, bool) {
+        let game = tempfile::tempdir().unwrap();
+        let path = game.path().join("Game.ini");
+        std::fs::write(&path, ini).unwrap();
+        let builtin = game.path().join("rpg.rb");
+        std::fs::write(&builtin, "module RPG;end\n").unwrap();
+        let settings = GuestSettings {
+            builtin_scripts: Some(builtin),
+            ..GuestSettings::default()
+        };
+        let inputs = guest_inputs(game.path(), &settings).unwrap();
+        let unchanged = std::fs::read_to_string(&path).unwrap() == ini;
+        (inputs.ini.title, unchanged)
+    }
+
+    /// Requirement "Title of a game of RGSS3".
+    #[test]
+    fn a_game_of_rgss3_without_a_title_is_untitled() {
+        let ace = "[Game]\r\nLibrary=System\\RGSS301.dll\r\nScripts=Data\\Scripts.rvdata2\r\n";
+        assert_eq!(title_of_inputs(ace), ("Untitled".to_owned(), true));
+        let empty = format!("{ace}Title=\r\n");
+        assert_eq!(title_of_inputs(&empty), ("Untitled".to_owned(), true));
+        let named = format!("{ace}Title=Ace\r\n");
+        assert_eq!(title_of_inputs(&named).0, "Ace");
+        // XP and VX keep an empty title.
+        for (library, scripts) in [
+            ("RGSS104E.dll", "Data\\Scripts.rxdata"),
+            ("RGSS202E.dll", "Data\\Scripts.rvdata"),
+        ] {
+            let ini = format!("[Game]\r\nLibrary={library}\r\nScripts={scripts}\r\n");
+            assert_eq!(title_of_inputs(&ini), (String::new(), true));
         }
     }
 

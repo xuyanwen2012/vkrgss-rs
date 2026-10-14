@@ -365,6 +365,27 @@ fn a_script_error_of_vx_ace_is_reported_in_the_form_of_rgss3() {
     assert!(stderr.contains("boom"), "{stderr}");
 }
 
+/// Requirement "Magic comments of the scripts of RGSS3", scenario "Unknown names"
+/// (`ace-v1-api-REPORT.md` section 1.1).
+#[test]
+fn an_unknown_magic_comment_ends_a_game_of_vx_ace_with_status_1() {
+    for name in ["euc-jp", "binary", "nosuch"] {
+        let source = format!("# coding: {name}\n{}", writes("ran.txt", "'ran'"));
+        let game = AceGame::new(&format!("ace-magic-{name}"), "Ace", &[("Main", &source)]);
+        let ran = ace(&game, &[]);
+        assert_eq!(
+            ran.output.status.code(),
+            Some(1),
+            "{name}: {}",
+            ran.stderr()
+        );
+        let stderr = ran.stderr();
+        let report = format!("ArgumentError occurred.\n\nunknown encoding name: {name}");
+        assert!(stderr.contains(&report), "{name}: {stderr}");
+        assert!(!script_ran(&game), "{name}");
+    }
+}
+
 /// Requirement "A game of VX Ace runs", scenario "Frame limit and input".
 #[test]
 fn the_frame_limit_and_the_input_script_drive_a_game_of_vx_ace() {

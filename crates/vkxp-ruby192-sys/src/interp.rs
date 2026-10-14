@@ -67,7 +67,9 @@ pub struct Options {
     /// The stack size of the interpreter thread in bytes. Values below [`MIN_STACK_SIZE`]
     /// are raised to it.
     pub stack_size: usize,
-    /// What Ruby reports as `$0`.
+    /// What Ruby reports as `$0`. When it is empty the interpreter is given no script name:
+    /// `$0` is then `false`, and the frame of a C function at the bottom of a backtrace,
+    /// such as that of an `eval`, is named `ruby`, as on the original runtime of RGSS3.
     pub script_name: String,
 }
 
@@ -81,11 +83,19 @@ impl Default for Options {
 }
 
 impl Options {
-    /// The options for a game of the given generation of RGSS: the defaults for every
-    /// number. Ruby 1.9.2 has no table of symbol numbers to choose.
+    /// The options for a game of the given generation of RGSS: the defaults, with an empty
+    /// script name for RGSS3, whose original runtime gives its interpreter none. Ruby 1.9.2
+    /// has no table of symbol numbers to choose.
     pub fn for_rgss(generation: u8) -> Self {
-        let _ = generation;
-        Self::default()
+        let defaults = Self::default();
+        if generation >= 3 {
+            Self {
+                script_name: String::new(),
+                ..defaults
+            }
+        } else {
+            defaults
+        }
     }
 }
 
@@ -176,9 +186,10 @@ impl Interpreter {
     /// minus [`STACK_HEADROOM`] as the limit of its machine stack; the stack is anchored for
     /// the collector; `ruby_init` runs; UTF-16LE and the transcoders are registered; `Zlib`
     /// is defined without becoming a loaded feature; the default external encoding becomes
-    /// UTF-8; `"."` is pushed to the empty load path; `$0` is set; `$stdout` and `$stderr`
-    /// are made synchronous; the collector stress is switched on if asked for; and the
-    /// recorded dispositions and mask are put back. The release's prelude does not run.
+    /// UTF-8; `"."` is pushed to the empty load path; `$0` is set unless the script name is
+    /// empty; `$stdout` and `$stderr` are made synchronous; the collector stress is switched
+    /// on if asked for; and the recorded dispositions and mask are put back. The release's
+    /// prelude does not run.
     ///
     /// The environment variable [`GC_STRESS_VARIABLE`] is read once, here.
     pub fn start(options: Options) -> Result<Self, StartError> {
@@ -336,8 +347,12 @@ unsafe extern "C" fn setup_body(data: VALUE) -> VALUE {
         setup.step = "setting the load path";
         let load_path = ffi::rb_gv_get(c"$:".as_ptr());
         ffi::rb_ary_push(load_path, ffi::rb_enc_str_new(c".".as_ptr(), 1, utf8));
-        setup.step = "naming the script";
-        ffi::ruby_script(setup.script_name);
+        // Without a name `$0` stays `false`, the zero the VM starts with, and a C frame is
+        // named by `ruby_engine_name`, `ruby`.
+        if *setup.script_name != 0 {
+            setup.step = "naming the script";
+            ffi::ruby_script(setup.script_name);
+        }
         setup.step = "making the standard output and error synchronous";
         let sync = ffi::rb_intern(c"sync=".as_ptr());
         ffi::rb_funcall(ffi::rb_stdout, sync, 1, ffi::Qtrue);

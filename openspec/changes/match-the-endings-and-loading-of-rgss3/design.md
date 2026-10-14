@@ -319,6 +319,15 @@ with `Marshal` on a `File` by `DataManager`, not with `load_data`.
 - Every item is fidelity for other games and for scripts that probe the runtime. The one
   that changes the safety of a run is decision 12 (`require_relative`, `autoload`).
 
+## Implementation record
+
+What the implementation had to do beyond the decisions above, with the reason:
+
+- `crates/vkxp-ruby192-sys/tests/calling.rs`, `options_for_a_runtime_are_the_defaults`,
+  asserted that `Options::for_rgss(3)` has the default script name, the rule this change
+  reverses (decision 6). Its assertion for generation 3 now expects the empty name; those
+  for 1 and 2 are unchanged. No other expected value of an existing test was edited.
+
 ## Follow-ups
 
 Left out, with the measured source (API report unless named):

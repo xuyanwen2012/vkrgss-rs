@@ -111,6 +111,24 @@ fn the_title_comes_before_the_first_frame() {
     assert!(title < frame);
 }
 
+/// Requirement "Program name of a game of RGSS3": the interpreter has no script name, as
+/// the original's (`ace-v1-api-REPORT.md` section 1.1).
+#[test]
+fn the_program_name_is_false_and_the_last_frame_is_that_of_ruby() {
+    assert_eq!(
+        run(
+            "program_name",
+            &[
+                ("First", "$vkxp_names = [$0, $PROGRAM_NAME]"),
+                ("Second", "nil"),
+                ("Third", "a = 1\nb = 2\n$vkxp_caller = caller(0)"),
+            ],
+            "[$vkxp_names, $vkxp_caller.first[0, 9], $vkxp_caller.last]"
+        ),
+        r#"[[false, false], "{0002}:3:", "ruby:in `eval'"]"#
+    );
+}
+
 // --- Built-in scripts -------------------------------------------------------------------------
 
 #[test]
@@ -173,6 +191,53 @@ fn the_source_is_compiled_as_utf_8_and_stored_as_bytes() {
             "$vkxp_encodings"
         ),
         r#"["UTF-8", "UTF-8", 1, "ASCII-8BIT", "ASCII-8BIT"]"#
+    );
+}
+
+/// Requirement "Magic comments of the scripts of RGSS3", scenario "ASCII-8BIT"
+/// (`ace-v1-api-REPORT.md` section 1.1).
+#[test]
+fn a_magic_comment_of_ascii_8bit_compiles_the_script_as_bytes() {
+    for (index, comment) in [
+        "# coding: ascii-8bit",
+        "# encoding: ASCII-8BIT",
+        "# vim: set fileencoding=ascii-8bit :",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let source = format!("{comment}\n$vkxp_magic = [__ENCODING__.name, \"日本\".size]");
+        assert_eq!(
+            run(
+                &format!("magic_binary_{index}"),
+                &[("Main", &source)],
+                "$vkxp_magic"
+            ),
+            r#"["ASCII-8BIT", 6]"#,
+            "{comment}"
+        );
+    }
+}
+
+/// Requirement "Magic comments of the scripts of RGSS3", scenario "UTF-8 and the second
+/// line" (`ace-v1-api-REPORT.md` section 1.1).
+#[test]
+fn utf_8_is_the_encoding_without_a_comment_and_with_one_on_the_second_line() {
+    let read = "($vkxp_utf8 ||= []) << __ENCODING__.name";
+    assert_eq!(
+        run(
+            "magic_utf8",
+            &[
+                ("None", read),
+                ("Utf8", &format!("# coding: utf-8\n{read}")),
+                (
+                    "Second",
+                    &format!("# a comment\n# coding: ascii-8bit\n{read}")
+                ),
+            ],
+            "$vkxp_utf8"
+        ),
+        r#"["UTF-8", "UTF-8", "UTF-8"]"#
     );
 }
 
