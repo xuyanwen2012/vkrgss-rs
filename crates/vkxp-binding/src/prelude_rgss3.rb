@@ -30,6 +30,31 @@ Object.send(:define_method, :load_data) do |name|
 end
 Object.send(:private, :load_data)
 
+# The original runtime never runs an `at_exit` block: `at_exit` returns the block and
+# registers nothing. `exit!` and `Process.exit!` end the game at once, without running an
+# `ensure` clause, through the host function, which sends the outcome and the shutdown
+# message first.
+module Kernel
+  def at_exit(&block)
+    raise ArgumentError, "called without a block" unless block
+    block
+  end
+
+  def exit!(status = false)
+    vkxp_exit_now(status)
+  end
+
+  module_function :at_exit, :exit!
+end
+
+module Process
+  def exit!(status = false)
+    vkxp_exit_now(status)
+  end
+
+  module_function :exit!
+end
+
 # A modal message: the text goes to the error stream and to the host, and is shown in the
 # message panel until the host has dismissed it.
 def vkxp_msgbox(text)

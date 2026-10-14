@@ -1049,6 +1049,11 @@ fn run_scripts(ruby: &Ruby, preload: &[Preload], count: usize) -> Result<(), Run
     Ok(())
 }
 
+/// The modal message of a game of RGSS3 whose script archive cannot be loaded, measured on
+/// the original runtime (`ace-v1-api-REPORT.md` section 1.1). The error that names the
+/// archive is the caller's to write.
+const FAILED_TO_LOAD_SCRIPT: &str = "Failed to load script.";
+
 /// Plays the game of the installed guest's [`RunConfig`] over `link`: everything of
 /// [`run_game`] after the installation of the guest.
 pub(crate) fn play(ruby: &Ruby, link: GuestEnd) -> Result<(), RunError> {
@@ -1066,9 +1071,18 @@ pub(crate) fn play(ruby: &Ruby, link: GuestEnd) -> Result<(), RunError> {
             ruby.mark_game_scripts();
             run_scripts(ruby, &preload, count)
         });
-    if let Err(RunError::Script(report)) = &outcome {
-        eprintln!("{report}");
-        Guest::with(|guest| guest.show_message(report.clone()));
+    let shown = match &outcome {
+        Err(RunError::Script(report)) => Some(report.clone()),
+        Err(RunError::Archive { .. })
+            if Guest::with(|guest| guest.runtime.run.runtime) == Runtime::Rgss3 =>
+        {
+            Some(FAILED_TO_LOAD_SCRIPT.to_owned())
+        }
+        _ => None,
+    };
+    if let Some(text) = shown {
+        eprintln!("{text}");
+        Guest::with(|guest| guest.show_message(text));
     }
     Guest::with(|guest| {
         audio::stop_all(guest);

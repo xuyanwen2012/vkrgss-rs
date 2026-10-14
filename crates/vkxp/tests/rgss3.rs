@@ -386,6 +386,119 @@ fn an_unknown_magic_comment_ends_a_game_of_vx_ace_with_status_1() {
     }
 }
 
+/// Requirement "Long reports and the status after an error in RGSS3", scenarios "A long
+/// message" and "Status whatever the line": vkxp's rules, where the original shows an empty
+/// box above 1023 UTF-16 units and ends with a code that follows the line in most cases.
+#[test]
+fn every_uncaught_error_of_vx_ace_ends_with_status_1_and_its_whole_report() {
+    let long = format!(
+        "Script 's' line 1: RuntimeError occurred.\n\n{}\n",
+        "x".repeat(2000)
+    );
+    for (index, source) in [
+        "a = 1\nb = 2\nraise 'third line'",
+        "raise Errno::ENOENT, 'Data/Gone.rvdata2'",
+        "e = RuntimeError.new('adrift')\ne.set_backtrace([])\nraise e",
+        "raise RuntimeError, 'x' * 2000",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let game = AceGame::new(&format!("ace-status-{index}"), "Ace", &[("s", source)]);
+        let ran = ace(&game, &[]);
+        let stderr = ran.stderr();
+        assert_eq!(ran.output.status.code(), Some(1), "{source}: {stderr}");
+        if index == 3 {
+            assert!(stderr.contains(&long), "{stderr}");
+        }
+    }
+}
+
+/// Requirement "A script archive of RGSS3 that cannot be loaded", scenarios "Through the
+/// program" and "Empty archive" (`ace-v1-api-REPORT.md` section 1.1).
+#[test]
+fn an_archive_of_vx_ace_that_cannot_be_loaded_shows_failed_to_load_script() {
+    let game = ran_game("ace-unloadable");
+    fs::write(game.archive(), b"not a dump").unwrap();
+    let ran = ace(&game, &[]);
+    assert_eq!(ran.output.status.code(), Some(1), "{}", ran.stderr());
+    let stderr = ran.stderr();
+    assert!(
+        stderr.lines().any(|line| line == "Failed to load script."),
+        "{stderr}"
+    );
+    assert!(
+        stderr
+            .lines()
+            .any(|line| line.contains("Data\\Scripts.rvdata2") && line.contains("archive")),
+        "{stderr}"
+    );
+    assert!(!script_ran(&game));
+
+    // An empty Array: nothing runs, and nothing failed.
+    fs::write(game.archive(), b"\x04\x08[\x00").unwrap();
+    let ran = ace(&game, &[]);
+    assert_eq!(ran.output.status.code(), Some(0), "{}", ran.stderr());
+    assert!(
+        !ran.stderr().contains("Failed to load script."),
+        "{}",
+        ran.stderr()
+    );
+}
+
+/// Requirement "at_exit and exit! in RGSS3", scenario "Never run" (`ace-v1-api-REPORT.md`
+/// section 1.6).
+#[test]
+fn an_at_exit_block_of_vx_ace_never_runs() {
+    let register = "at_exit { File.open('at_exit.txt', 'w') { } }";
+    for (index, ending) in ["nil", "exit(3)", "raise 'ended'", "exit!(0)"]
+        .into_iter()
+        .enumerate()
+    {
+        let game = AceGame::new(
+            &format!("ace-at-exit-{index}"),
+            "Ace",
+            &[("Register", register), ("Ends", ending)],
+        );
+        ace(&game, &[]);
+        assert!(!game.dir().join("at_exit.txt").exists(), "{ending}");
+    }
+}
+
+/// Requirement "at_exit and exit! in RGSS3", scenario "exit!" (`ace-v1-api-REPORT.md`
+/// section 1.6): the program's status says success or failure.
+#[test]
+fn exit_bang_ends_a_game_of_vx_ace_at_once() {
+    for (index, (ending, status)) in [
+        (
+            "begin; exit!(0); ensure; File.open('ensure.txt', 'w') { }; end",
+            0,
+        ),
+        ("exit!(4)", 1),
+        ("exit!(true)", 0),
+        ("exit!", 1),
+        ("Process.exit!(0)", 0),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let game = AceGame::new(
+            &format!("ace-exit-bang-{index}"),
+            "Ace",
+            &[("Ends", ending), ("Later", &writes("ran.txt", "'ran'"))],
+        );
+        let ran = ace(&game, &[]);
+        assert_eq!(
+            ran.output.status.code(),
+            Some(status),
+            "{ending}: {}",
+            ran.stderr()
+        );
+        assert!(!game.dir().join("ensure.txt").exists(), "{ending}");
+        assert!(!script_ran(&game), "{ending}");
+    }
+}
+
 /// Requirement "A game of VX Ace runs", scenario "Frame limit and input".
 #[test]
 fn the_frame_limit_and_the_input_script_drive_a_game_of_vx_ace() {

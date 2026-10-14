@@ -8,8 +8,8 @@
 
 ## 2. Endings
 
-- [ ] 2.1 The modal message `Failed to load script.` in `play` of `runtime.rs` for RGSS3, and the tests of a long report and of the status after an error (decisions 1 to 3). Verify: the scenarios of "Long reports and the status after an error in RGSS3" and of "A script archive of RGSS3 that cannot be loaded"; the scenario "Missing archive" of "Script archive of RGSS3" still passes; the test command of task 1.3.
-- [ ] 2.2 `at_exit`, `exit!` and `Process.exit!` of RGSS3: the definitions in `prelude_rgss3.rb` and the host function `vkxp_exit_now` (decisions 4 and 5), tested through both executables. Verify: the scenarios of "at_exit and exit! in RGSS3"; the test command of task 1.3; `git diff` against the start of the change touches no file of `crates/vkxp/src`, `crates/vkxp-host` or `crates/vkxp-proto`.
+- [x] 2.1 The modal message `Failed to load script.` in `play` of `runtime.rs` for RGSS3, and the tests of a long report and of the status after an error (decisions 1 to 3). Verify: the scenarios of "Long reports and the status after an error in RGSS3" and of "A script archive of RGSS3 that cannot be loaded"; the scenario "Missing archive" of "Script archive of RGSS3" still passes; the test command of task 1.3.
+- [x] 2.2 `at_exit`, `exit!` and `Process.exit!` of RGSS3: the definitions in `prelude_rgss3.rb` and the host function `vkxp_exit_now` (decisions 4 and 5), tested through both executables. Verify: the scenarios of "at_exit and exit! in RGSS3"; the test command of task 1.3; `git diff` against the start of the change touches no file of `crates/vkxp/src`, `crates/vkxp-host` or `crates/vkxp-proto`.
 
 ## 3. load_data and save_data
 

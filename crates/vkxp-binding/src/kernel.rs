@@ -1,14 +1,13 @@
 //! The global functions of a game that are host functions, and the host functions the Ruby
 //! prelude builds on, whose names start with `vkxp_`.
 
+use vkxp_proto::GuestToHost;
 use vkxp_ruby_sys::ffi::{self, VALUE};
 use vkxp_ruby_sys::{Arity, HostResult, Raise, Raised, Ruby};
-use vkxp_vfs::FileKind;
+use vkxp_vfs::{FileKind, Runtime};
 
-use crate::error;
 use crate::guest::Guest;
-use crate::rb;
-use crate::runtime;
+use crate::{audio, error, rb, runtime, stats};
 
 /// `LoadError`.
 fn load_error(_ruby: &Ruby) -> VALUE {
@@ -78,11 +77,37 @@ fn modal_p(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     modal(ruby, recv, args)
 }
 
-/// Defines the global functions.
+/// `vkxp_exit_now(status)`: ends a game of RGSS3 at once, for `exit!` and `Process.exit!`
+/// of its prelude: the audio stops, the frame statistics are finished, the outcome (a
+/// success for `true` and 0) and the shutdown message are sent, and the process ends with
+/// the status, `true` 0, `false` 1 and an Integer as it is. No `ensure` clause and nothing
+/// else of the interpreter runs. A game of RGSS3 always has its guest in a process of its
+/// own, so this ends the guest only.
+fn exit_now(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
+    let status = match args[0] {
+        ffi::Qtrue => 0,
+        ffi::Qfalse => 1,
+        value => rb::int(ruby, value)?,
+    };
+    Guest::with(|guest| {
+        audio::stop_all(guest);
+        guest.send(GuestToHost::Outcome { ok: status == 0 });
+        guest.send(GuestToHost::Shutdown);
+        guest.disconnect();
+    });
+    stats::finish();
+    std::process::exit(status)
+}
+
+/// Defines the global functions, and those of RGSS3 in a game of RGSS3.
 pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
     ruby.define_global_function_with_arity(c"load_data", Arity::Fixed(1), load_data)?;
     ruby.define_global_function_with_arity(c"vkxp_data_bytes", Arity::Fixed(1), data_bytes)?;
     ruby.define_global_function_with_arity(c"vkxp_locate", Arity::Fixed(2), locate)?;
     ruby.define_global_function_with_arity(c"vkxp_modal", Arity::Fixed(1), modal)?;
-    ruby.define_global_function_with_arity(c"vkxp_modal_p", Arity::Fixed(1), modal_p)
+    ruby.define_global_function_with_arity(c"vkxp_modal_p", Arity::Fixed(1), modal_p)?;
+    if Guest::with(|guest| guest.runtime.run.runtime) == Runtime::Rgss3 {
+        ruby.define_global_function_with_arity(c"vkxp_exit_now", Arity::Fixed(1), exit_now)?;
+    }
+    Ok(())
 }

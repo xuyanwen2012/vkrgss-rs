@@ -217,6 +217,121 @@ fn an_unknown_or_incompatible_encoding_is_an_argument_error_without_a_line() {
     }
 }
 
+/// Requirement "Long reports and the status after an error in RGSS3", scenario "A long
+/// message": shown whole, where the original shows an empty box above 1023 UTF-16 units.
+#[test]
+fn a_long_report_is_shown_whole() {
+    let (text, played) = report("long_report", &[("s", "raise RuntimeError, 'x' * 2000")]);
+    let expected = format!(
+        "Script 's' line 1: RuntimeError occurred.\n\n{}",
+        "x".repeat(2000)
+    );
+    assert_eq!(text, expected);
+    let shown =
+        played.record.others().into_iter().any(
+            |message| matches!(message, GuestToHost::Modal { text: shown } if *shown == expected),
+        );
+    assert!(shown, "{:?}", played.record.others());
+}
+
+// --- A script archive that cannot be loaded ---------------------------------------------------
+
+/// The texts of the modal messages of a run.
+fn modal_texts(played: &Played) -> Vec<String> {
+    played
+        .record
+        .received
+        .iter()
+        .filter_map(|message| match message {
+            GuestToHost::Modal { text } => Some(text.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Plays a game of RGSS3 whose one script would set `$vkxp_loaded_ran`, with its archive
+/// replaced by `archive` (Ruby source of the bytes), or removed for `None`.
+fn with_archive(name: &str, archive: Option<&str>) -> Played {
+    testing::start_as(Runtime::Rgss3);
+    let game = Game::of(
+        Runtime::Rgss3,
+        name,
+        "Ace",
+        &[("Main", "$vkxp_loaded_ran = true")],
+    );
+    let path = game.dir().join("Data/Scripts.rvdata2");
+    match archive {
+        None => std::fs::remove_file(&path).unwrap(),
+        Some(bytes) => {
+            let write = format!(
+                "File.open({}, 'wb') {{ |file| file.write({bytes}) }}",
+                host::ruby_literal(&path.to_string_lossy())
+            );
+            testing::run(move |ruby| ruby.eval_protected(&write, "testing", 1).map(|_| ()))
+                .expect("the archive is written");
+        }
+    }
+    testing::eval("$vkxp_loaded_ran = nil").unwrap();
+    host::run_game(&game, game.run_config(), Script::new(), "$vkxp_loaded_ran")
+}
+
+/// Requirement "A script archive of RGSS3 that cannot be loaded", scenario "The cases"
+/// (`ace-v1-api-REPORT.md` section 1.1).
+#[test]
+fn an_archive_that_cannot_be_loaded_shows_failed_to_load_script() {
+    for (index, archive) in [
+        None,
+        Some("''"),
+        Some("'not a dump'"),
+        Some("Marshal.dump('a string')"),
+        Some("Marshal.dump([[0, 'Main']])"),
+        Some("Marshal.dump([[0, 'Main', 'not deflated']])"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let played = with_archive(&format!("unloadable_{index}"), archive);
+        assert!(
+            matches!(played.outcome, Err(RunError::Archive { .. })),
+            "{archive:?}: {:?}",
+            played.outcome
+        );
+        assert_eq!(
+            modal_texts(&played),
+            ["Failed to load script."],
+            "{archive:?}"
+        );
+        assert_eq!(played.after.as_deref(), Ok("nil"), "{archive:?}");
+        let others = played.record.others();
+        let modal = others
+            .iter()
+            .position(|message| matches!(message, GuestToHost::Modal { .. }));
+        let outcome = others
+            .iter()
+            .position(|message| **message == GuestToHost::Outcome { ok: false });
+        assert!(
+            modal < outcome && outcome.is_some(),
+            "{archive:?}: {others:?}"
+        );
+        assert_eq!(others.last(), Some(&&GuestToHost::Shutdown), "{archive:?}");
+    }
+}
+
+/// Requirement "A script archive of RGSS3 that cannot be loaded", scenario "Empty archive"
+/// (`ace-v1-api-REPORT.md` section 1.1).
+#[test]
+fn an_empty_archive_runs_nothing_and_ends_without_a_failure() {
+    let played = with_archive("empty_archive", Some("Marshal.dump([])"));
+    assert!(played.outcome.is_ok(), "{:?}", played.outcome);
+    assert!(modal_texts(&played).is_empty());
+    assert!(
+        played
+            .record
+            .others()
+            .contains(&&GuestToHost::Outcome { ok: true })
+    );
+}
+
 // --- Message boxes ----------------------------------------------------------------------------
 
 /// The texts of the modal messages the host received for a snippet, with its value.
