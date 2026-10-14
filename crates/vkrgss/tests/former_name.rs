@@ -12,6 +12,7 @@ use vkrgss_binding::testing::host::Game;
 
 mod support;
 
+#[cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
 use support::ace::AceGame;
 use support::*;
 
