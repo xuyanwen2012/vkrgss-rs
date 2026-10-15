@@ -1,7 +1,7 @@
 # supported-platforms Specification
 
 ## Purpose
-TBD - created by archiving change plan-the-platforms-and-modernization. Update Purpose after archive.
+Defines which platforms vkrgss supports and plans, in what order, and how each is accepted.
 
 ## Requirements
 
