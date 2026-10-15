@@ -62,7 +62,7 @@ The change rewrote the former name in this document and added the item on the na
   are not. Where an operation of VX spreads glyph pixels (a snapshot of the screen, a
   blur), the comparison says how the affected area is left out.
 - Personal project, MIT licence.
-- Linux is the primary platform. Android is deferred. macOS is a distant maybe.
+- Linux is the only platform supported now.
 - Compatibility bar: games using the default scripts or common community scripts run
   unmodified. Games that depend heavily on Windows may need patches.
 - Fidelity: bitmap operations, blending and tone are pixel-exact against the original runtime.
@@ -190,8 +190,13 @@ The change rewrote the former name in this document and added the item on the na
 - Pacing: logic and display at exactly the game's frame rate (default 40), no interpolation.
 - `print`, `p` and script errors show a blocking in-window modal panel and log to stderr; a
   switch makes `p` log-only. Settings are TOML (global plus per-game override) and CLI flags.
-- Fonts: fontconfig lookup plus a substitution table; fonts in `~/.config/vkrgss/fonts/` take
-  priority; no CJK font is bundled.
+- Fonts: `fontdb` scans font directories, with no fontconfig matching, plus a substitution
+  table. The directories of `font_dirs` (configuration or command line) come first, then the
+  game's `Fonts` directory and for RGSS3 the `Fonts` directory of each run-time package, then
+  the system's: the `<dir>` entries of the fontconfig configuration files `fontdb` reads
+  (`FONTCONFIG_FILE`, or `$XDG_CONFIG_HOME/fontconfig/fonts.conf`, `/etc/fonts/local.conf`
+  and `/etc/fonts/fonts.conf`), or, when they name none, `/usr/share/fonts`,
+  `/usr/local/share/fonts`, `~/.fonts` and `~/.local/share/fonts`. No CJK font is bundled.
 - SoundFont: configured path, then `/usr/share/soundfonts`.
 - The original's 10-second hang watchdog is off by default.
 - Command line: `vkrgss <game directory>`.

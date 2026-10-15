@@ -4,6 +4,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Present timing reads the monotonic clock from the system, and any other clock of the
+  swapchain only when the device can calibrate it; a swapchain without such a clock is paced
+  as without present timing. A time of 0 makes the presenter choose the clock again.
+- The validation messenger no longer asks for performance messages, which it never received
+  at error severity only.
+- `docs/decisions.md` says how fonts are found (`fontdb` and its directory scan) and that
+  Linux is the only platform supported now.
+
 ## [0.3.1] - 2026-10-14
 
 ### Security
