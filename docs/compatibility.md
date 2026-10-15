@@ -52,7 +52,8 @@ not measured.
 Besides these, WMA sounds are decoded by the `ffmpeg` program, which has to be installed:
 without it they stay silent. vkrgss runs on Linux, and x86_64 is the supported architecture;
 the job `gate-aarch64` of the [CI workflow](../.github/workflows/ci.yml) shows what works on
-aarch64.
+aarch64. ARM Linux, macOS, Android and Windows are planned, in that
+order, and not supported yet.
 
 ## RPG Maker VX
 

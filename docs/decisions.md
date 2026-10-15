@@ -11,6 +11,12 @@ The change `plan-vx-ace` recorded the decisions of the owner of 2026-10-13 on VX
 after V3: it rewrote "VX Ace" and "Process" under "Several runtimes" and added the rows A0 to
 A3 of "Milestones" and the risks of VX Ace.
 
+The change `plan-the-platforms-and-modernization` recorded the decisions of the owner of
+2026-10-15, taken on the questions of the modernization audit of 2026-10-14: it added
+"Platforms" and "Order of work", the rows P1 to P4 of "Milestones" and their risks, and the
+decisions on floats in saves, Vulkan, display, audio, Linux packages and CI in the sections
+where they belong.
+
 The change `build-the-binding-over-ruby-1-9-2` added the crates `vkrgss-ruby192-sys` and
 `vkrgss-binding-rgss3` to the table of crates and to the crates that may hold `unsafe`, and
 under "VX Ace" what the decision on the binding became in code.
@@ -62,7 +68,11 @@ The change rewrote the former name in this document and added the item on the na
   are not. Where an operation of VX spreads glyph pixels (a snapshot of the screen, a
   blur), the comparison says how the affected area is left out.
 - Personal project, MIT licence.
-- Linux is the only platform supported now.
+- Linux on x86_64 is the platform supported now. Planned after it, in this order: ARM Linux
+  (aarch64), macOS (Apple silicon), Android (aarch64), Windows (x86_64); see "Platforms".
+- Floats in saves are identical byte for byte across machines and platforms: both
+  interpreters take their mathematical functions from a vendored, correctly rounded library
+  (see "Ruby").
 - Compatibility bar: games using the default scripts or common community scripts run
   unmodified. Games that depend heavily on Windows may need patches.
 - Fidelity: bitmap operations, blending and tone are pixel-exact against the original runtime.
@@ -120,6 +130,9 @@ The change rewrote the former name in this document and added the item on the na
 - Optional, with fallback: `VK_EXT_present_timing` / `VK_KHR_present_wait2` for 40 fps pacing,
   `VK_EXT/KHR_swapchain_maintenance1`.
 - Not used: descriptor heap, shader object, host image copy.
+- Vulkan 1.3 stays the floor; requiring 1.4 is rejected. Features of 1.4 (push descriptors,
+  maintenance5 and 6) are used where the device has them, once `ash` has their bindings or
+  a feature is needed; no hand-written bindings for 1.4 before that.
 - `gpu-allocator` for memory. Shaders are GLSL 4.60, compiled with `glslc` at build time and
   checked with `spirv-val`.
 
@@ -177,6 +190,18 @@ The change rewrote the former name in this document and added the item on the na
   data classes) is never committed. A tool extracts it from the user's own DLL into a
   git-ignored file that is loaded at run time.
 
+### Floats in saves
+
+Decided on 2026-10-15. A save holds floats that `Math` and `Float#**` computed, and their
+results depend on the C library of the machine (glibc's version today, the operating system
+later). Saves are to be identical byte for byte across machines and platforms, so both
+interpreters take these functions from CORE-MATH, vendored as C (MIT), correctly rounded. A
+pure Rust correctly rounded library would be preferred, but none covers the functions with
+that guarantee today. Before it is vendored, its coverage of every function Ruby's `Math`
+uses (`lgamma`, `tgamma`, `erf` and `erfc` included) is checked; a gap is decided then. Where
+the oracle shows that a game depends on a result of the original that differs from the
+correctly rounded one, that function alone is matched to the original.
+
 ## Platform and behaviour defaults
 
 - `winit` + `cpal`, `gilrs` for gamepads, `symphonia` for decoding, an in-house mixer, a built-in
@@ -197,7 +222,16 @@ The change rewrote the former name in this document and added the item on the na
   (`FONTCONFIG_FILE`, or `$XDG_CONFIG_HOME/fontconfig/fonts.conf`, `/etc/fonts/local.conf`
   and `/etc/fonts/fonts.conf`), or, when they name none, `/usr/share/fonts`,
   `/usr/local/share/fonts`, `~/.fonts` and `~/.local/share/fonts`. No CJK font is bundled.
-- SoundFont: configured path, then `/usr/share/soundfonts`.
+- SoundFont: configured path, then `/usr/share/soundfonts`. Decided on 2026-10-15: the
+  package carries GeneralUser GS with its licence as the default; a user's SF2 replaces it;
+  DLS (`gm.dls`, the bank of the original's synthesiser) may follow.
+- Display: no HDR output, because the picture would no longer look like the original's.
+  winit already opens a native Wayland window; it gains the content type "game" (variable
+  refresh, lower latency), fractional scaling (`wp_fractional_scale_v1`) and server-side
+  decorations (`xdg-decoration`). X11 stays supported.
+- Linux packages: Flatpak (Flathub) and AUR beside the tarball, which is built against an
+  older glibc. Flatpak only if the guest's Landlock and seccomp work under Flatpak's own
+  seccomp filter; otherwise AUR alone.
 - The original's 10-second hang watchdog is off by default.
 - Command line: `vkrgss <game directory>`.
 
@@ -209,7 +243,7 @@ The change rewrote the former name in this document and added the item on the na
   (planned route: RetroArch slang presets via `librashader`, to be verified), frame
   interpolation, widescreen through a run-time logical resolution.
 - Added after the first version: save states (F3 and F4), see "Guest / host split".
-- Not planned: rewind.
+- Not planned: rewind, HDR output.
 
 ## Process
 
@@ -223,6 +257,11 @@ The change rewrote the former name in this document and added the item on the na
   body of the `main` of a guest executable, `tracing` for logs.
 - Merge gate: `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test`,
   `cargo doc` with warnings denied, `openspec validate`.
+- CI (decided 2026-10-15): the merge gate of CI keeps the fast checks, about ten minutes in
+  parallel jobs, the fast part of the collector stress included. The rest of the stress,
+  the sanitizers and fuzzing run in the nightly workflow, which opens an issue when it
+  fails. `cargo xtask gate` stays one command that runs everything locally. No CI runner on
+  the owner's devices.
 - OpenSpec proposals are drafted interactively and reviewed by the owner. Each change is
   implemented in its own branch and worktree by an actor/reviewer flow that the owner launches.
   At most three non-overlapping module changes run in parallel.
@@ -774,6 +813,76 @@ game no longer says that its support is experimental, and version 0.2.0 is the r
   VX Ace through the release of 0.3.0, pushing for that release included (change
   `plan-vx-ace`).
 
+## Platforms
+
+Decided by the owner on 2026-10-15 (change `plan-the-platforms-and-modernization`). Linux on
+x86_64 is supported. The planned platforms come in this order, each as its own set of
+changes; finishing one does not commit to the next. Their milestones are P1 to P4.
+
+### ARM Linux
+
+- Accepted when, on aarch64, the frames of the seven XP games and of the VX and VX Ace games
+  of the corpus at the compared frame numbers are identical byte for byte to those of
+  x86_64, and a save written at the same frame is identical byte for byte. The original
+  runtime does not run there, so x86_64 is the reference.
+- Both interpreters get a verified `config.h` of aarch64 (Ruby 1.8.7 borrows the one of
+  x86_64 today), and the collector stress runs on aarch64.
+- The job `gate-aarch64` on GitHub's hosted `ubuntu-24.04-arm` with lavapipe becomes
+  required.
+- Hardware: the two Jetson Orin Nano of the owner (`duck-stable`, `duck-naughty`; JetPack 7.2,
+  NVIDIA's Vulkan driver, no display) may be used for tests at any time, never as runners.
+
+### macOS
+
+- Apple silicon through MoltenVK. MoltenVK has no present timing, so pacing falls back to the
+  timer; portability enumeration and the portability subset; the number of bitmap slots is
+  taken from the device's limits.
+- Prerequisite: the guest of RGSS1 and RGSS2 becomes a program of its own instead of the
+  host executing itself again, so that no window framework is linked before `fork`.
+- Tested only on the owner's MacBook Air, by hand, now and then, and only after asking the
+  owner each time. No CI runner for macOS, hosted or self-hosted.
+- The release is signed with a Developer ID, bought when the macOS release is made, and
+  notarized. Not in the Mac App Store for now.
+
+### Android
+
+- Starts with a measurement of feasibility, as V0 did: both interpreters on bionic, a
+  separate guest process under seccomp, Vulkan 1.3 on the test phones. The scope is fixed
+  after it.
+- First version: a game is imported as a zip into the app's private directory, not reached
+  through the storage access framework, because the runtime reads and writes by path; input
+  through on-screen buttons and gamepads; no save states.
+- Vulkan 1.3 is required as on the desktop; no path for 1.1.
+- The guest is a separate process under seccomp. Most Android kernels have no Landlock; the
+  private directory keeps the game's files apart.
+- Distribution: an APK on the GitHub releases, installable through Obtainium, self-signed.
+  Google Play may come later.
+- Test devices: the owner's Pixel 7a (Tensor G2, Mali-G710) and Galaxy S24+ SM-S926B
+  (Exynos 2400, Xclipse 940), on USB at the owner's desktop, free to use at any time; the
+  Android emulator for routine tests.
+
+### Windows
+
+- Save states (F3 and F4) are never supported on Windows: the interpreter's state cannot be
+  serialized, because the C stack holds the script's calls, and emulating `fork` is not
+  supported by the system and breaks with its updates.
+- Whether the guest is a 32-bit process (Ruby 1.8.7 needs `long` as wide as a pointer, which
+  64-bit Windows does not give) is decided when the work on Windows starts. The owner has no
+  Windows machine yet.
+
+### Order of work
+
+1. `fuzz-and-review-ruby-1-9-2`.
+2. The correctly rounded library of "Floats in saves".
+3. The merge gate of CI split into parallel jobs.
+4. The guest of RGSS1 and RGSS2 as a program of its own.
+5. ARM Linux, then macOS, then Android; Windows last.
+
+The Vulkan items of the audit (synchronization validation in the tests,
+`vkQueueSubmit2` with timeline semaphores, batched upload barriers, swapchain maintenance
+in its KHR form, the swapchain's timing properties and variable refresh) and the Wayland
+items go in between; they do not depend on a platform.
+
 ## Milestones
 
 Status as of 2026-10-09. "Evidence" names what was checked; "Not covered" is what the status
@@ -790,6 +899,8 @@ the same rule; A0 is, like V0, a proof of the original's side alone and was done
 The owner accepted on 2026-10-13, before A1 to A3 were reached, that their compared frames
 may differ from the original inside the rectangles of text, as the frames of XP and VX do:
 glyph shapes are not compared (see "Goal and scope"); positions, widths and placement are.
+The rows P1 to P4 are the platforms, decided on 2026-10-15 (see "Platforms"), under the
+same rule.
 
 | | Outcome | Status | Evidence | Not covered |
 |---|---|---|---|---|
@@ -808,6 +919,10 @@ glyph shapes are not compared (see "Goal and scope"); positions, widths and plac
 | A1 | VX Ace: title screen and menu | Done | 2026-10-14, `cargo xtask oracle` on `main` at `51c8d34`, seed of the harness 20261009; Wine 11.0 in the sandbox of the harness (no GPU device node, no network), Xvfb, llvmpipe on the side of vkrgss; the built-in scripts extracted from each game's own DLL. Crysalis (unencrypted) with the DLL it ships (`RGSS300.dll`, version 3.0.0.1, `RTP=RPGVXAce`), its schedule through the title, New Game, the introduction confirmed, the map, the menu opened, the cursor moved and the menu closed, walking into a cave, a battle with one Ratinga fought to its end and back on the map, 28 frames compared: the title and its menu (frames 60, 210, 360) equal the original pixel for pixel, text included; the menu (4950, 5000) differs in 3 pixels in each frame, the antialiased edge of the glyph "Q" of "Quit" (largest difference 5 of 255), which is a glyph shape. In Search of Immortality from its archive `Game.rgss3a` with the DLL it ships (`RGSS301.dll`, version 3.0.1.1, `resize_screen` to 640 by 480), a schedule of C every 16 frames until control returns, then the menu, Save, File 1, Game End, To Title, Continue, File 1, 15 frames compared: its account screen and title (140, 180), the save screen (4700, 4759), the menu after the save (4800), the title with Continue (5400, 5559) and the load screen (5600, 5659) equal the original pixel for pixel, text included. The original's pictures of both games equal those of an earlier run of the same schedule byte for byte | Frames inside a transition cannot be compared (Crysalis 4900 and 5450), as for VX; the third game of the corpus, Capella's Promise, was started and captured on the original's side only; audio is not compared; the change `match-the-endings-and-loading-of-rgss3` (endings, error reports, `require`) is not part of 0.3.0 |
 | A2 | VX Ace: walking on a map | Done | The runs of A1 (Crysalis with `RGSS300.dll` and In Search of Immortality with `RGSS301.dll`, seed 20261009, the same schedules, the original's side repeated): Crysalis on the map after the introduction (4850), walking into the cave (5050 to 5400) and back on the map after the battle (6200, 6250); In Search of Immortality on its map (4200, 4499) and after the save (4950): every one of these frames equals the original pixel for pixel, text included | In Search of Immortality is never walked by its schedule, so it meets no random encounter; as A1 |
 | A3 | VX Ace: battle, saving and loading | Done | The runs of A1 (Crysalis with `RGSS300.dll` and In Search of Immortality with `RGSS301.dll`, seed 20261009, the same schedules, the original's side repeated): the battle of Crysalis and its log (5500 to 6100) equal the original pixel for pixel, text included. In Search of Immortality saves through its own menu at frame 4760: `Save01.rvdata2` (19018 bytes) and the game's own `AutoSave.rvdata2` (21992 bytes, written at its map transfers) are byte for byte those of the original; it returns to the title and loads file 1, and the map after the load (5760, 5999) equals the original pixel for pixel. Both saves of the original equal those of an earlier run byte for byte | F12 and the reset are covered by tests of vkrgss alone; a save whose music is an Ogg file holds `Audio.bgm_pos`, which vkrgss computes by the measured model and in which the original's own runs can differ by whole chunks (the save compared here plays an MP3, whose position is 0 on both sides); as A1 |
+| P1 | ARM Linux (aarch64): frames and saves equal those of x86_64 byte for byte for the same games, frames and input (see "Platforms") | Not started | | |
+| P2 | macOS (Apple silicon, MoltenVK): the games of P1 with the same frames and saves as on x86_64, tested by hand on the owner's MacBook | Not started | | |
+| P3 | Android (aarch64): a measurement of feasibility first; the acceptance is fixed after it | Not started | | |
+| P4 | Windows (x86_64), without save states; the acceptance is fixed when the work starts | Not started | | |
 
 Text: positions, widths and line placement follow rules measured on the original under Wine
 with an open font; glyph shapes are not compared, as the scope in "Goal and scope" says, and
@@ -892,6 +1007,17 @@ Risks of VX Ace, named by the study of 2026-10-13, each with what answers it (ch
   when a game needs it ("Corpus").
 - `pow` of glibc differs from the C runtime of the DLL in the last bit for `10.0**23`. The
   rest of `Math` is not surveyed.
+
+Risks of the platforms (change `plan-the-platforms-and-modernization`):
+
+- CORE-MATH may not cover every function of Ruby's `Math`; its coverage is checked before
+  it is vendored, and a gap is decided then.
+- Flatpak's own seccomp filter may refuse the guest's Landlock or seccomp setup; then Linux
+  gets AUR and the tarball only.
+- Android may not carry both interpreters on bionic, a separate guest under seccomp, or
+  Vulkan 1.3 on the test phones; the measurement of feasibility comes first and alone.
+- MoltenVK may lack something the compositor uses (the number of bitmap slots, 64-bit
+  integer emulation in the shaders); found by the first runs on the MacBook.
 
 Open, to be decided before the change that implements it is drafted: how
 `Graphics.snap_to_bitmap` of VX gets the pixels of the scene as it is, also while the display
