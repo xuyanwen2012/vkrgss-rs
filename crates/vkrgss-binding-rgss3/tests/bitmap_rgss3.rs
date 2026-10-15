@@ -13,14 +13,18 @@
 //! one is disposed before the snippet ends.
 #![cfg(not(vkrgss_interpreter_absent))]
 
-use vkrgss_binding_rgss3::testing;
+use vkrgss_binding_rgss3::testing::{self, Harness};
 use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS3.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss3)
+}
 
 /// `inspect` of the value of `source` in a game of RGSS3, or the class and the message of
 /// the exception that left it. `error { ... }` is the class and message of the exception
 /// the block raises; `b` is a new bitmap of 40 by 40, `r` a `Rect` (0, 0, 4, 4).
 fn eval(source: &str) -> String {
-    testing::start_as(Runtime::Rgss3);
     let source = format!(
         "def error; yield; rescue Exception; \"#{{$!.class}}: #{{$!.message}}\"; end
          b = Bitmap.new(40, 40); r = Rect.new(0, 0, 4, 4)
@@ -30,7 +34,7 @@ fn eval(source: &str) -> String {
            b.dispose
          end"
     );
-    match testing::eval(&source) {
+    match harness().eval(&source) {
         Ok(inspect) => inspect,
         Err(error) => format!("{}: {}", error.class_name, error.message),
     }

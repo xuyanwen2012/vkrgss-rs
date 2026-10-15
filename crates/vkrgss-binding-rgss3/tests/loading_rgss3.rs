@@ -5,15 +5,19 @@
 //! `ace-v1-api-REPORT.md` section 1.6 of the measurements kept outside the repository).
 #![cfg(not(vkrgss_interpreter_absent))]
 
-use vkrgss_binding_rgss3::testing;
 use vkrgss_binding_rgss3::testing::host::{self, Script};
+use vkrgss_binding_rgss3::testing::{self, Harness};
 use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS3.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss3)
+}
 
 /// `inspect` of the value of `source`, evaluated on the guest of a game of RGSS3 with its
 /// prelude and [`RAISED`], or the class and message of what it raised.
 fn eval(source: &str) -> String {
-    testing::start_as(Runtime::Rgss3);
-    match host::play(&format!("{RAISED}{source}"), Script::new()).0 {
+    match host::play(harness(), &format!("{RAISED}{source}"), Script::new()).0 {
         Ok(inspect) => inspect,
         Err(error) => format!("{}: {}", error.class_name, error.message),
     }
@@ -48,8 +52,7 @@ end
 
 /// Writes `contents` to `relative` below the harness's game directory.
 fn put(relative: &str, contents: &str) {
-    testing::start_as(Runtime::Rgss3);
-    let path = testing::game_dir().join(relative);
+    let path = harness().game_dir().join(relative);
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(path, contents).unwrap();
 }

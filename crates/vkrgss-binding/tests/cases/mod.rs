@@ -8,7 +8,7 @@
 
 #![allow(dead_code)]
 
-use vkrgss_binding::testing;
+use vkrgss_binding::testing::{self, Harness};
 
 /// What a snippet evaluates to.
 #[derive(Debug, Clone, Copy)]
@@ -58,15 +58,20 @@ const fn raises_with(
     }
 }
 
-/// Evaluates each case's source after `wrap` has had its way with it and returns what is
+/// Evaluates on `harness` each case's source after `wrap` has had its way with it and returns what is
 /// wrong, one entry per failed case. A case on the allow-list of Ruby 1.9.2 is wrong when it
 /// is as expected.
-pub(crate) fn failures(cases: &[Case], wrap: impl Fn(&str) -> String) -> Vec<String> {
-    failures_with(cases, wrap, testing::pending_case)
+pub(crate) fn failures(
+    harness: &Harness,
+    cases: &[Case],
+    wrap: impl Fn(&str) -> String,
+) -> Vec<String> {
+    failures_with(harness, cases, wrap, testing::pending_case)
 }
 
 /// [`failures`] with the allow-list as a function: whether a case of this name is listed.
 pub(crate) fn failures_with(
+    harness: &Harness,
     cases: &[Case],
     wrap: impl Fn(&str) -> String,
     pending: impl Fn(&str) -> bool,
@@ -74,7 +79,7 @@ pub(crate) fn failures_with(
     cases
         .iter()
         .filter_map(|case| {
-            let outcome = testing::eval(&wrap(case.source));
+            let outcome = harness.eval(&wrap(case.source));
             let as_expected = match (&outcome, case.expect) {
                 (Ok(inspect), Expect::Value(expected)) => inspect == expected,
                 (Err(error), Expect::Raises(class)) => error.class_name == class,

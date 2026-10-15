@@ -12,12 +12,17 @@
 
 use std::sync::Once;
 
-use vkrgss_binding_rgss3::testing;
 use vkrgss_binding_rgss3::testing::host::{self, Record, Script};
+use vkrgss_binding_rgss3::testing::{self, Harness};
 use vkrgss_proto::{AudioChannel, AudioCommand, GuestToHost};
 use vkrgss_vfs::Runtime;
 
 use AudioChannel::{Bgm, Bgs, Me, Se};
+
+/// The harness, started as a game of RGSS3.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss3)
+}
 
 /// The music of the measurements: 20 s at 44100 Hz in stereo, streamed.
 const S44: &str = "Audio/BGM/s44";
@@ -53,10 +58,9 @@ fn wav(rate: u32, channels: u16, frames: u32) -> Vec<u8> {
 
 /// Starts the harness as RGSS3 and writes the sounds, once.
 fn setup() {
-    testing::start_as(Runtime::Rgss3);
     static WRITTEN: Once = Once::new();
     WRITTEN.call_once(|| {
-        let game = testing::game_dir();
+        let game = harness().game_dir();
         let files: [(&str, Vec<u8>); 8] = [
             ("Audio/BGM/s44.wav", wav(44100, 2, 44100 * 20)),
             ("Audio/ME/me2.wav", wav(44100, 2, 44100 * 2)),
@@ -81,7 +85,7 @@ fn setup() {
 /// The value of `source`, or its exception as `Class: message`, and what the host saw.
 fn play(source: &str, script: Script) -> (String, Record) {
     setup();
-    let (outcome, record) = host::play(source, script);
+    let (outcome, record) = host::play(harness(), source, script);
     let outcome = match outcome {
         Ok(inspect) => inspect,
         Err(error) => format!("{}: {}", error.class_name, error.message),
@@ -169,7 +173,7 @@ fn music_and_background_sound_take_four_arguments() {
         commands(&record),
         [sound(Bgm, 80, 100, 0), sound(Bgs, 80, 100, 0)]
     );
-    let file = std::fs::read(testing::game_dir().join("Audio/SE/se44.wav")).unwrap();
+    let file = std::fs::read(harness().game_dir().join("Audio/SE/se44.wav")).unwrap();
     for message in &record.received {
         assert!(
             matches!(message, GuestToHost::Audio(AudioCommand::Play { data, .. }) if *data == file)

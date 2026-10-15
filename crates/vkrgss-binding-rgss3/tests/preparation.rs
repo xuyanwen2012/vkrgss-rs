@@ -2,15 +2,19 @@
 //! nor an emptied load path, and nothing of the prelude of the Ruby release.
 #![cfg(not(vkrgss_interpreter_absent))]
 
-use vkrgss_binding_rgss3::testing;
 use vkrgss_binding_rgss3::testing::host::{self, Script};
+use vkrgss_binding_rgss3::testing::{self, Harness};
 use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS3.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss3)
+}
 
 /// The value of a snippet evaluated after the preparation of a game of RGSS3, or its
 /// exception as `Class: message`.
 fn prepared(source: &str) -> String {
-    testing::start_as(Runtime::Rgss3);
-    match host::play(source, Script::new()).0 {
+    match host::play(harness(), source, Script::new()).0 {
         Ok(inspect) => inspect,
         Err(error) => format!("{}: {}", error.class_name, error.message),
     }

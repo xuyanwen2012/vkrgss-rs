@@ -5,9 +5,14 @@
 #![cfg(not(vkrgss_interpreter_absent))]
 
 use vkrgss_binding_rgss3::RunError;
-use vkrgss_binding_rgss3::testing;
 use vkrgss_binding_rgss3::testing::host::{self, Game, Script};
+use vkrgss_binding_rgss3::testing::{self, Harness};
 use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS3.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss3)
+}
 
 /// Plays `game` as `host::run_game` does, with the current directory of the process in the
 /// game directory, where the glue of a guest puts it: `load_data` of RGSS3 looks for a loose
@@ -23,13 +28,13 @@ fn run_game_in(
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     std::env::set_current_dir(game.dir()).expect("the game directory is entered");
-    host::run_game(game, run, script, after)
+    host::run_game(harness(), game, run, script, after)
 }
 
 #[test]
 fn a_file_without_the_functions_ends_the_game_at_their_call() {
-    testing::start_as(Runtime::Rgss3);
     let game = Game::of(
+        harness(),
         Runtime::Rgss3,
         "without_main",
         "Ace",

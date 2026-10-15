@@ -8,6 +8,13 @@
 mod method_list;
 
 use method_list::{Entry, mismatches, parse};
+use vkrgss_binding::testing::{self, Harness};
+use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS1.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss1)
+}
 
 const METHOD_LIST: &str = include_str!("data/rgss1_api.txt");
 
@@ -38,7 +45,7 @@ fn the_method_list_parses() {
 
 #[test]
 fn every_listed_method_of_the_implemented_classes_has_the_listed_arity() {
-    let wrong = mismatches(&parse(METHOD_LIST), IMPLEMENTED);
+    let wrong = mismatches(harness(), &parse(METHOD_LIST), IMPLEMENTED);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
@@ -48,7 +55,7 @@ fn a_wrong_entry_is_reported() {
     let entries =
         parse("String#length 0\nString#length 3\nString#no_such_method 0\nString.new -1\n");
     assert_eq!(
-        mismatches(&entries, &["String"]),
+        mismatches(harness(), &entries, &["String"]),
         [
             "String#length has arity 0, the list says 3",
             "String#no_such_method is missing: undefined method `no_such_method' for class `String'",
@@ -75,6 +82,6 @@ fn every_listed_method_of_the_scene_classes_has_the_listed_arity() {
             "the list has no class {class}"
         );
     }
-    let wrong = mismatches(&entries, SCENE_CLASSES);
+    let wrong = mismatches(harness(), &entries, SCENE_CLASSES);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }

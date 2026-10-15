@@ -4,10 +4,16 @@
 mod cases;
 
 use cases::Case;
-use vkrgss_binding::testing;
+use vkrgss_binding::testing::{self, Harness};
+use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS1.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss1)
+}
 
 fn check(cases: &[Case]) {
-    let wrong = cases::failures(cases, str::to_owned);
+    let wrong = cases::failures(harness(), cases, str::to_owned);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
@@ -79,12 +85,12 @@ fn bitmap_copying() {
 #[test]
 fn unreachable_bitmaps_are_freed() {
     assert_eq!(
-        testing::eval(cases::UNREACHABLE_BITMAPS).as_deref(),
+        harness().eval(cases::UNREACHABLE_BITMAPS).as_deref(),
         Ok("nil")
     );
     // The other tests of this binary hold a few bitmaps, and the conservative collector may
     // keep a few of the ten thousand alive.
-    let remaining = testing::bitmap_count();
+    let remaining = harness().bitmap_count();
     assert!(remaining < 500, "{remaining} bitmaps are left in the arena");
 }
 
@@ -106,11 +112,13 @@ fn the_forms_of_rgss3_are_not_taken() {
         "Rect.new",
         "Rect.new(1, 2, 3, 4).set(Rect.new(1, 2, 3, 4))",
     ] {
-        let error = testing::eval(source).expect_err(source);
+        let error = harness().eval(source).expect_err(source);
         assert_eq!(error.class_name, "ArgumentError", "{source}");
     }
     assert_eq!(
-        testing::eval("Rect.instance_method(:initialize).arity").as_deref(),
+        harness()
+            .eval("Rect.instance_method(:initialize).arity")
+            .as_deref(),
         Ok("4")
     );
 }
@@ -120,7 +128,8 @@ fn the_forms_of_rgss3_are_not_taken() {
 #[test]
 fn the_font_of_rgss3_does_not_reach_rgss1() {
     assert_eq!(
-        testing::eval("[Font.new.respond_to?(:outline), Font.respond_to?(:default_outline)]")
+        harness()
+            .eval("[Font.new.respond_to?(:outline), Font.respond_to?(:default_outline)]")
             .as_deref(),
         Ok("[false, false]")
     );

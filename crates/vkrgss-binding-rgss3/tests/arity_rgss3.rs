@@ -15,8 +15,13 @@ extern crate vkrgss_binding_rgss3 as vkrgss_binding;
 mod method_list;
 
 use method_list::{mismatches, parse};
-use vkrgss_binding::testing;
+use vkrgss_binding::testing::{self, Harness};
 use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS3.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss3)
+}
 
 const METHOD_LIST: &str = include_str!("../../vkrgss-binding/tests/data/rgss3_api.txt");
 
@@ -60,8 +65,7 @@ const BOUND: &[&str] = &[
 ];
 
 fn eval(source: &str) -> String {
-    testing::start_as(Runtime::Rgss3);
-    match testing::eval(source) {
+    match harness().eval(source) {
         Ok(inspect) => inspect,
         Err(error) => format!("{}: {}", error.class_name, error.message),
     }
@@ -116,7 +120,6 @@ fn the_method_list_parses() {
 /// arities.
 #[test]
 fn every_listed_method_of_a_bound_class_has_the_listed_arity() {
-    testing::start_as(Runtime::Rgss3);
     let entries = parse(METHOD_LIST);
     let counts: Vec<usize> = BOUND
         .iter()
@@ -126,7 +129,7 @@ fn every_listed_method_of_a_bound_class_has_the_listed_arity() {
         counts,
         [17, 17, 18, 10, 53, 55, 29, 20, 21, 2, 21, 35, 22, 6, 3]
     );
-    let wrong = mismatches(&entries, BOUND);
+    let wrong = mismatches(harness(), &entries, BOUND);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
     assert_eq!(
         eval("[Rect.instance_method(:initialize).arity, Rect.instance_method(:set).arity]"),

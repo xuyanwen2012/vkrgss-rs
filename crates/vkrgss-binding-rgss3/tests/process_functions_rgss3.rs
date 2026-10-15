@@ -4,14 +4,18 @@
 //! binding directly.
 #![cfg(not(vkrgss_interpreter_absent))]
 
-use vkrgss_binding_rgss3::testing;
 use vkrgss_binding_rgss3::testing::host::{self, Script, ruby_literal, with_error_stream};
+use vkrgss_binding_rgss3::testing::{self, Harness};
 use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS3.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss3)
+}
 
 /// A fresh directory for the files the commands would make.
 fn scratch(name: &str) -> std::path::PathBuf {
-    testing::start_as(Runtime::Rgss3);
-    let dir = testing::game_dir().with_file_name(name);
+    let dir = harness().game_dir().with_file_name(name);
     if dir.exists() {
         std::fs::remove_dir_all(&dir).unwrap();
     }
@@ -33,7 +37,7 @@ fn the_functions_of_ruby_1_9_start_nothing_and_say_so() {
         e = file("e"),
         f = file("f"),
     );
-    let (value, _) = host::play(&with_error_stream(&source), Script::new());
+    let (value, _) = host::play(harness(), &with_error_stream(&source), Script::new());
     let value = value.expect("the snippet runs");
     assert!(
         value.starts_with("[[nil, nil, nil, nil, nil, nil], \""),
@@ -65,7 +69,7 @@ fn open_with_a_file_name_works() {
         "open({}, 'w') {{ |file| file.write('x') }}",
         ruby_literal(&note.to_string_lossy())
     );
-    let (value, _) = host::play(&source, Script::new());
+    let (value, _) = host::play(harness(), &source, Script::new());
     assert!(value.is_ok(), "{value:?}");
     assert_eq!(std::fs::read_to_string(note).unwrap(), "x");
 }

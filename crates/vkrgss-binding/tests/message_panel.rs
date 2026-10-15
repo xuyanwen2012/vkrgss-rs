@@ -6,8 +6,15 @@ mod scene_support;
 
 use vkrgss_binding::RunConfig;
 use vkrgss_binding::testing::host::{self, Game, Script};
+use vkrgss_binding::testing::{self, Harness};
 use vkrgss_compose_ref::Frame;
 use vkrgss_proto::{GuestToHost, HostToGuest};
+use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS1.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss1)
+}
 
 /// The largest area a panel covers on the screen of 640 by 480.
 fn in_panel_area(x: u32, y: u32) -> bool {
@@ -31,6 +38,7 @@ fn differences(a: &Frame, b: &Frame) -> Vec<(u32, u32)> {
 #[test]
 fn print_shows_a_panel_over_the_scene_until_the_dismissal() {
     let (value, record) = host::play(
+        harness(),
         "sprite = Sprite.new
          sprite.bitmap = Bitmap.new(640, 480)
          sprite.bitmap.fill_rect(0, 0, 640, 480, Color.new(255, 0, 0))
@@ -84,6 +92,7 @@ fn print_shows_a_panel_over_the_scene_until_the_dismissal() {
 #[test]
 fn the_panel_is_in_front_of_a_window_with_the_highest_z() {
     let (value, record) = host::play(
+        harness(),
         "window = Window.new
          window.x = 0
          window.y = 0
@@ -120,6 +129,7 @@ fn the_panel_is_in_front_of_a_window_with_the_highest_z() {
 #[test]
 fn a_reset_request_ends_the_wait_and_is_raised() {
     let (value, record) = host::play(
+        harness(),
         "begin
            print('waiting')
            :dismissed
@@ -136,8 +146,14 @@ fn a_reset_request_ends_the_wait_and_is_raised() {
 
 #[test]
 fn an_uncaught_error_is_shown_in_a_panel_before_the_shutdown() {
-    let game = Game::new("panel_error", "Panel", &[("Main", "raise 'broken'")]);
+    let game = Game::new(
+        harness(),
+        "panel_error",
+        "Panel",
+        &[("Main", "raise 'broken'")],
+    );
     let played = host::run_game(
+        harness(),
         &game,
         game.run_config(),
         Script::new().dismiss_after(2),
@@ -173,6 +189,7 @@ fn an_uncaught_error_is_shown_in_a_panel_before_the_shutdown() {
 #[test]
 fn log_only_p_writes_to_the_error_stream_and_sends_nothing() {
     let game = Game::new(
+        harness(),
         "panel_log_p",
         "Panel",
         &[(
@@ -194,7 +211,7 @@ fn log_only_p_writes_to_the_error_stream_and_sends_nothing() {
         log_p: true,
         ..game.run_config()
     };
-    let played = host::run_game(&game, config, Script::new(), "$vkrgss_log_p");
+    let played = host::run_game(harness(), &game, config, Script::new(), "$vkrgss_log_p");
     assert!(played.outcome.is_ok(), "{:?}", played.outcome);
     assert_eq!(played.after.as_deref(), Ok(r#""1\n""#));
     assert!(played.record.frames().is_empty());

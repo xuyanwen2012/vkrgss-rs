@@ -9,12 +9,19 @@ use std::process::Stdio;
 
 use tempfile::TempDir;
 use vkrgss_binding::testing::host::Game;
+use vkrgss_binding::testing::{self, Harness};
+use vkrgss_vfs::Runtime;
 
 mod support;
 
 #[cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
 use support::ace::AceGame;
 use support::*;
+
+/// The harness, started as a game of RGSS1.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss1)
+}
 
 /// A game that draws a red sprite at a random place and moves it right while RIGHT is held,
 /// for eight frames: its frames tell the seed and the input of a run.
@@ -31,7 +38,7 @@ $sprite.y = rand(400)
   Graphics.update
 end
 ";
-    Game::new(name, "Rand", &[("Main", main)])
+    Game::new(harness(), name, "Rand", &[("Main", main)])
 }
 
 /// The bytes of the frame that a run of a [`rand_game`] dumped as `out.png`.
@@ -177,6 +184,7 @@ fn work_with_former_builtin(builtin: &Path, name: &str) -> (TempDir, PathBuf, Pa
 #[test]
 fn a_built_in_scripts_file_at_its_former_place_is_read_with_a_warning() {
     let game = Game::new(
+        harness(),
         "former-builtin",
         "Builtin",
         &[(
@@ -235,6 +243,7 @@ fn a_built_in_scripts_file_of_rgss3_at_its_former_place_is_read_with_a_warning()
 #[test]
 fn a_missing_built_in_scripts_file_is_named_at_its_new_place() {
     let game = Game::new(
+        harness(),
         "former-builtin-missing",
         "Builtin",
         &[("Main", "Graphics.update")],
@@ -279,7 +288,7 @@ fn the_level_is_read_under_its_former_name_with_a_warning() {
 /// A game that writes the number of the process its scripts run in to `pid.txt`.
 fn pid_game(name: &str) -> Game {
     let main = "File.open('pid.txt', 'w') { |file| file.write($$.to_s) }\nGraphics.update\n";
-    Game::new(name, "Process", &[("Main", main)])
+    Game::new(harness(), name, "Process", &[("Main", main)])
 }
 
 /// Runs a [`pid_game`] headless with the environment variables `variables` set, and returns
@@ -335,7 +344,7 @@ fn the_sandbox_is_read_under_its_former_name_with_a_warning() {
         "File.open('{}/out.txt', 'w') {{ |file| file.write('x') }}\nGraphics.update\n",
         outside.path().display()
     );
-    let game = Game::new("former-sandbox", "Outside", &[("Main", &main)]);
+    let game = Game::new(harness(), "former-sandbox", "Outside", &[("Main", &main)]);
     let work = tempfile::tempdir().expect("a temporary directory");
     let arguments = headless_arguments(&game, &["--guest", "process"]);
     let arguments: Vec<&str> = arguments.iter().map(String::as_str).collect();

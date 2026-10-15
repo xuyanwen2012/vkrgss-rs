@@ -5,10 +5,15 @@
 #![cfg(not(vkrgss_interpreter_absent))]
 
 use vkrgss_binding_rgss3::RunError;
-use vkrgss_binding_rgss3::testing;
 use vkrgss_binding_rgss3::testing::host::{self, Game, Played, RGSS3_STAND_IN, Script};
+use vkrgss_binding_rgss3::testing::{self, Harness};
 use vkrgss_proto::GuestToHost;
 use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS3.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss3)
+}
 
 /// Plays `game` as `host::run_game` does, with the current directory of the process in the
 /// game directory, where the glue of a guest puts it: `load_data` of RGSS3 looks for a loose
@@ -24,13 +29,12 @@ fn run_game_in(
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     std::env::set_current_dir(game.dir()).expect("the game directory is entered");
-    host::run_game(game, run, script, after)
+    host::run_game(harness(), game, run, script, after)
 }
 
 /// A game of RGSS3 named `name` with these scripts.
 fn game(name: &str, scripts: &[(&str, &str)]) -> Game {
-    testing::start_as(Runtime::Rgss3);
-    Game::of(Runtime::Rgss3, name, "Ace", scripts)
+    Game::of(harness(), Runtime::Rgss3, name, "Ace", scripts)
 }
 
 /// Plays `game` with its own settings and reads `after`.
@@ -104,8 +108,8 @@ fn the_version_is_3_0_1_as_bytes() {
 
 #[test]
 fn the_title_comes_before_the_first_frame() {
-    testing::start_as(Runtime::Rgss3);
     let game = Game::of(
+        harness(),
         Runtime::Rgss3,
         "title",
         "Demo",
@@ -269,7 +273,8 @@ fn the_source_is_inserted_at_index_3_and_a_fourth_value_moves_to_index_4() {
            [7, 'Second'.force_encoding('ASCII-8BIT'), Zlib::Deflate.deflate('nil'), :extra]], file) }}",
         host::ruby_literal(&archive.to_string_lossy())
     );
-    testing::run(move |ruby| ruby.eval_protected(&write, "testing", 1).map(|_| ()))
+    harness()
+        .run(move |ruby| ruby.eval_protected(&write, "testing", 1).map(|_| ()))
         .expect("the archive is written");
     let played = play(
         &game,

@@ -6,7 +6,7 @@
 
 ## 2. Tests
 
-- [ ] 2.1 Move every user of the harness to the handle; files that relied on the fallback declare RGSS1. Verify: scenario "Same tests" against the saved lists; `cargo test -p vkrgss-binding -p vkrgss-binding-rgss3 --locked` passes with the default threads and with `-- --test-threads=1`.
+- [x] 2.1 Move every user of the harness to the handle; files that relied on the fallback declare RGSS1. Verify: scenario "Same tests" against the saved lists; `cargo test -p vkrgss-binding -p vkrgss-binding-rgss3 --locked` passes with the default threads and with `-- --test-threads=1`.
 
 ## 3. Documentation
 

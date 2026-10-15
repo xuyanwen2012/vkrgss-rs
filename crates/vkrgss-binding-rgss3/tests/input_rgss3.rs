@@ -15,10 +15,15 @@
 #![cfg(not(vkrgss_interpreter_absent))]
 extern crate vkrgss_binding_rgss3 as vkrgss_binding;
 
-use vkrgss_binding::testing;
 use vkrgss_binding::testing::host::{self, Script};
+use vkrgss_binding::testing::{self, Harness};
 use vkrgss_proto::{Button, HostToGuest, InputSnapshot};
 use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS3.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss3)
+}
 
 /// The twenty buttons of RGSS3 in the order of [`Button::ALL`], with their numbers of RGSS2.
 const BUTTONS: [(&str, i32); 20] = [
@@ -47,8 +52,7 @@ const BUTTONS: [(&str, i32); 20] = [
 /// The value of a snippet played against a host that sends what `script` says, or its
 /// exception as `Class: message`.
 fn play(source: &str, script: Script) -> String {
-    testing::start_as(Runtime::Rgss3);
-    match host::play(source, script).0 {
+    match host::play(harness(), source, script).0 {
         Ok(inspect) => inspect,
         Err(error) => format!("{}: {}", error.class_name, error.message),
     }

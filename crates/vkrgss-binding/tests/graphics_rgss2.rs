@@ -4,18 +4,22 @@
 
 mod scene_support;
 
-use vkrgss_binding::testing;
 use vkrgss_binding::testing::host::{self, Record, Script};
+use vkrgss_binding::testing::{self, Harness};
 use vkrgss_proto::{BitmapDelta, FreezeRule, GuestToHost, Rect, Size, TransitionRule};
 use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS2.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss2)
+}
 
 /// The value of a snippet, or its exception as `Class: message`, and what the host saw. The
 /// brightness is 255 and nothing is frozen when the snippet starts. The scene is shared by the
 /// tests, so a snippet disposes what it made before it ends.
 fn eval(source: &str) -> (String, Record) {
-    testing::start_as(Runtime::Rgss2);
     let source = format!("Graphics.brightness = 255\n{source}");
-    let (outcome, record) = host::play(&source, Script::new());
+    let (outcome, record) = host::play(harness(), &source, Script::new());
     let outcome = match outcome {
         Ok(inspect) => inspect,
         Err(error) => format!("{}: {}", error.class_name, error.message),
@@ -434,9 +438,9 @@ fn resize_screen_takes_two_integers() {
 #[test]
 fn a_held_button_repeats_after_24_updates_and_then_every_6() {
     use vkrgss_proto::{Button, HostToGuest, InputSnapshot};
-    testing::start_as(Runtime::Rgss2);
     let held = HostToGuest::Input(InputSnapshot::EMPTY.with(Button::C));
     let (outcome, _) = host::play(
+        harness(),
         "repeats = (1..36).select { Input.update; Input.repeat?(Input::C) }
          Input.update
          repeats",
@@ -457,9 +461,9 @@ fn a_game_of_rgss2_has_no_reset_functions() {
 #[test]
 fn input_of_rgss2_is_unchanged_by_rgss3() {
     use vkrgss_proto::{Button, HostToGuest, InputSnapshot};
-    testing::start_as(Runtime::Rgss2);
     let held = HostToGuest::Input(InputSnapshot::EMPTY.with(Button::C));
     let (outcome, _) = host::play(
+        harness(),
         "Input.update; [Input::DOWN, Input::F9, Input.press?(Input::C)]",
         Script::new().at_start(held),
     );

@@ -2,15 +2,21 @@
 //! `rgss-runtime`: Ruby snippets evaluated against a scripted host, and what that host saw.
 
 use vkrgss_binding::testing::host::{self, Record, SOUND_BYTES, Script, with_error_stream};
-use vkrgss_binding::testing::{self, DOT_PIXELS};
+use vkrgss_binding::testing::{self, DOT_PIXELS, Harness};
 use vkrgss_proto::{
     AudioChannel, AudioCommand, BitmapDelta, Button, FreezeRule, GuestToHost, HostToGuest,
     InputSnapshot, TransitionRule,
 };
+use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS1.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss1)
+}
 
 /// The value of a snippet, or its exception as `Class: message`, and what the host saw.
 fn play(source: &str, script: Script) -> (String, Record) {
-    let (outcome, record) = host::play(source, script);
+    let (outcome, record) = host::play(harness(), source, script);
     let outcome = match outcome {
         Ok(inspect) => inspect,
         Err(error) => format!("{}: {}", error.class_name, error.message),
@@ -158,7 +164,7 @@ fn a_transition_of_no_frames() {
         }]
     );
     // A picture is not announced when no frame would carry it, and does not stay behind.
-    let before = testing::bitmap_count();
+    let before = harness().bitmap_count();
     let (value, record) = eval("Graphics.transition(0, 'Graphics/Transitions/004-Blind04', 7)");
     assert_eq!(value, "nil");
     assert_eq!(
@@ -170,7 +176,7 @@ fn a_transition_of_no_frames() {
             rule: TransitionRule::Rgss1,
         }]
     );
-    assert_eq!(testing::bitmap_count(), before);
+    assert_eq!(harness().bitmap_count(), before);
 }
 
 /// Scenario "Default vagueness".
@@ -315,7 +321,7 @@ fn reset_disposes_every_bitmap() {
          bitmaps.map { |bitmap| bitmap.disposed? }",
     );
     assert_eq!(value, "[true, true]");
-    assert_eq!(testing::bitmap_count(), 0);
+    assert_eq!(harness().bitmap_count(), 0);
 }
 
 // --- Input ------------------------------------------------------------------------------------
@@ -541,7 +547,7 @@ fn save_data_then_load_data() {
     let source = format!(
         "Dir.chdir({}) {{ save_data({{1 => 2}}, 'Out.rxdata') }}
          load_data('Out.rxdata')",
-        host::ruby_literal(&testing::game_dir().to_string_lossy())
+        host::ruby_literal(&harness().game_dir().to_string_lossy())
     );
     let (value, _) = eval(&source);
     assert_eq!(value, "{1=>2}");

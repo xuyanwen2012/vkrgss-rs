@@ -16,12 +16,18 @@ use std::path::{Path, PathBuf};
 
 use tempfile::TempDir;
 use vkrgss_binding::testing::host::{Game, RGSS3_STAND_IN};
+use vkrgss_binding::testing::{self, Harness};
 use vkrgss_vfs::Runtime;
 
 mod support;
 
 use support::ace::{AceGame, script_archive};
 use support::*;
+
+/// The harness, started as a game of RGSS1.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss1)
+}
 
 /// The command that builds and tests the program together with its guest executable.
 const BOTH: &str = "cargo test -p vkrgss -p vkrgss-guest-rgss3";
@@ -142,6 +148,7 @@ fn a_copy_of_the_program_alone_runs_games_of_xp_and_vx_in_a_process() {
     let (_dir, program) = copy_of_the_program(&[]);
     for runtime in [Runtime::Rgss1, Runtime::Rgss2] {
         let game = Game::of(
+            harness(),
             runtime,
             &format!("ace-alone-{}", runtime.name()),
             "Alone",
@@ -297,6 +304,7 @@ fn a_game_of_vx_ace_with_the_dll_3_0_1_1_reports_3_0_1() {
 #[test]
 fn a_game_run_as_one_of_vx_ace_runs_over_ruby_1_9_2() {
     let game = Game::new(
+        harness(),
         "ace-named",
         "Named",
         &[("Main", &writes("version.txt", "RUBY_VERSION"))],

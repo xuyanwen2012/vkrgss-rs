@@ -5,14 +5,19 @@
 //! interpreter of a test process keeps what an earlier built-in scripts file defined.
 #![cfg(not(vkrgss_interpreter_absent))]
 
-use vkrgss_binding_rgss3::testing;
 use vkrgss_binding_rgss3::testing::host::{self, Game, Script};
+use vkrgss_binding_rgss3::testing::{self, Harness};
 use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS3.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss3)
+}
 
 #[test]
 fn a_literal_of_the_built_in_scripts_is_bytes_and_one_of_a_game_is_text() {
-    testing::start_as(Runtime::Rgss3);
     let game = Game::of(
+        harness(),
         Runtime::Rgss3,
         "builtin_encoding",
         "Ace",
@@ -27,6 +32,7 @@ fn a_literal_of_the_built_in_scripts_is_bytes_and_one_of_a_game_is_text() {
     // to the game directory.
     std::env::set_current_dir(game.dir()).expect("the game directory is entered");
     let played = host::run_game(
+        harness(),
         &game,
         game.run_config(),
         Script::new(),

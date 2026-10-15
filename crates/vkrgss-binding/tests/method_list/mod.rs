@@ -6,7 +6,7 @@
 
 #![allow(dead_code)]
 
-use vkrgss_binding::testing;
+use vkrgss_binding::testing::Harness;
 
 /// One entry of the method list.
 #[derive(Debug, PartialEq, Eq)]
@@ -41,8 +41,13 @@ pub(crate) fn parse(list: &str) -> Vec<Entry<'_>> {
         .collect()
 }
 
-/// What is wrong with the entries of `classes` in the running interpreter, one line each.
-pub(crate) fn mismatches(entries: &[Entry<'_>], classes: &[&str]) -> Vec<String> {
+/// What is wrong with the entries of `classes` in the interpreter of `harness`, one line
+/// each.
+pub(crate) fn mismatches(
+    harness: &Harness,
+    entries: &[Entry<'_>],
+    classes: &[&str],
+) -> Vec<String> {
     entries
         .iter()
         .filter(|entry| classes.contains(&entry.class))
@@ -59,7 +64,7 @@ pub(crate) fn mismatches(entries: &[Entry<'_>], classes: &[&str]) -> Vec<String>
                 if entry.class_level { '.' } else { '#' },
                 entry.method
             );
-            match testing::eval(&source) {
+            match harness.eval(&source) {
                 Ok(arity) if arity == entry.arity.to_string() => None,
                 Ok(arity) => Some(format!(
                     "{name} has arity {arity}, the list says {}",

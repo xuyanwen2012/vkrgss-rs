@@ -4,9 +4,15 @@
 use std::fs;
 use std::sync::Once;
 
-use vkrgss_binding::testing;
 use vkrgss_binding::testing::host::{self, Script, with_error_stream};
+use vkrgss_binding::testing::{self, Harness};
 use vkrgss_proto::{GuestToHost, HostToGuest, InputSnapshot};
+use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS1.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss1)
+}
 
 /// The bytes of `测试` in GBK.
 const TITLE_GBK: [u8; 4] = [0xB2, 0xE2, 0xCA, 0xD4];
@@ -19,7 +25,7 @@ fn write_game_ini() {
             b"[Game]\r\nLibrary=RGSS102E.dll\r\nScripts=Data\\Scripts.rxdata\r\nTitle=".to_vec();
         ini.extend_from_slice(&TITLE_GBK);
         ini.extend_from_slice(b"\r\nCount=42\r\n");
-        fs::write(testing::game_dir().join("Game.ini"), ini).unwrap();
+        fs::write(harness().game_dir().join("Game.ini"), ini).unwrap();
     });
 }
 
@@ -30,7 +36,7 @@ fn eval(source: &str) -> String {
 
 /// The value of a snippet played against a scripted host.
 fn eval_with(source: &str, script: Script) -> String {
-    match host::play(source, script).0 {
+    match host::play(harness(), source, script).0 {
         Ok(inspect) => inspect,
         Err(error) => format!("{}: {}", error.class_name, error.message),
     }
@@ -44,7 +50,7 @@ const CLEAR_TOGGLES: &str =
 /// The value of a snippet played against a scripted host, and the messages the guest sent
 /// that inject a key or say whether the pointer is to be seen.
 fn eval_sending(source: &str, script: Script) -> (String, Vec<GuestToHost>) {
-    let (outcome, record) = host::play(source, script);
+    let (outcome, record) = host::play(harness(), source, script);
     let value = match outcome {
         Ok(inspect) => inspect,
         Err(error) => format!("{}: {}", error.class_name, error.message),
@@ -420,14 +426,14 @@ fn a_written_value_is_read_back() {
         "[[1, 1, 1], [2, [54, 53, 0]], [3, [97, 98, 99, 0]]]"
     );
     assert_eq!(
-        fs::read(testing::game_dir().join("Settings.ini")).unwrap(),
+        fs::read(harness().game_dir().join("Settings.ini")).unwrap(),
         b"[Options]\r\nVolume=65\r\nName=abc\r\n"
     );
 }
 
 #[test]
 fn nothing_is_written_outside_the_game_directory() {
-    let outside = testing::game_dir().with_file_name("other.ini");
+    let outside = harness().game_dir().with_file_name("other.ini");
     fs::write(&outside, "[Game]\r\nTitle=outside\r\n").unwrap();
     assert_eq!(
         eval(&format!(
@@ -442,7 +448,7 @@ fn nothing_is_written_outside_the_game_directory() {
     );
     assert_eq!(fs::read(&outside).unwrap(), b"[Game]\r\nTitle=outside\r\n");
     // A drive is not taken for a directory of the game.
-    assert!(!testing::game_dir().join("C:").exists());
+    assert!(!harness().game_dir().join("C:").exists());
 }
 
 #[test]
@@ -553,7 +559,7 @@ fn the_cursor_keeps_its_display_count() {
 fn a_symbolic_link_does_not_lead_out_of_the_game_directory() {
     use std::os::unix::fs::symlink;
 
-    let game = testing::game_dir();
+    let game = harness().game_dir();
     let outside_file = game.with_file_name("linked.ini");
     let outside_dir = game.with_file_name("linked");
     let original = b"[Game]\r\nTitle=outside\r\n";
@@ -586,7 +592,7 @@ fn a_symbolic_link_does_not_lead_out_of_the_game_directory() {
 
 #[test]
 fn a_file_is_created_in_a_directory_of_the_game() {
-    fs::create_dir_all(testing::game_dir().join("Saves")).unwrap();
+    fs::create_dir_all(harness().game_dir().join("Saves")).unwrap();
     assert_eq!(
         eval(&format!(
             "{READ_STRING}
@@ -598,7 +604,7 @@ fn a_file_is_created_in_a_directory_of_the_game() {
         "[1, 1, 0, [1, [119, 0]]]"
     );
     assert_eq!(
-        fs::read(testing::game_dir().join("Saves/Slot.ini")).unwrap(),
+        fs::read(harness().game_dir().join("Saves/Slot.ini")).unwrap(),
         b"[A]\r\nk=w\r\n"
     );
 }
@@ -621,7 +627,7 @@ fn a_plain_name_finds_the_ansi_function() {
 /// The scenarios "Copy inside the game directory" and "Copy outside" of `rgss-runtime`.
 #[test]
 fn a_file_is_copied_inside_the_game_directory_only() {
-    let game = testing::game_dir();
+    let game = harness().game_dir();
     let outside = game.with_file_name("copied.rxdata");
     let _ = fs::remove_file(&outside);
     fs::create_dir_all(game.join("Save")).unwrap();

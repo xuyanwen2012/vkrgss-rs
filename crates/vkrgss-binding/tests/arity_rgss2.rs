@@ -10,8 +10,13 @@
 mod method_list;
 
 use method_list::{Entry, mismatches, parse};
-use vkrgss_binding::testing;
+use vkrgss_binding::testing::{self, Harness};
 use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS2.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss2)
+}
 
 const METHOD_LIST: &str = include_str!("data/rgss2_api.txt");
 
@@ -36,8 +41,7 @@ const PENDING: &[(&str, &str)] = &[];
 const CLASS_NOT_IN_RGSS2: &str = "TilemapAutotiles";
 
 fn eval(source: &str) -> String {
-    testing::start_as(Runtime::Rgss2);
-    match testing::eval(source) {
+    match harness().eval(source) {
         Ok(inspect) => inspect,
         Err(error) => format!("{}: {}", error.class_name, error.message),
     }
@@ -81,20 +85,18 @@ fn the_method_list_parses() {
 /// Scenario "List of RGSS2": every entry that is not pending exists with its arity.
 #[test]
 fn every_listed_method_that_is_not_pending_has_the_listed_arity() {
-    testing::start_as(Runtime::Rgss2);
     let mut entries = parse(METHOD_LIST);
     entries.retain(|entry| !is_pending(entry));
-    let wrong = mismatches(&entries, CLASSES);
+    let wrong = mismatches(harness(), &entries, CLASSES);
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
 /// Scenario "List of RGSS2": none of the pending entries exists.
 #[test]
 fn no_pending_method_exists() {
-    testing::start_as(Runtime::Rgss2);
     let mut entries = parse(METHOD_LIST);
     entries.retain(is_pending);
-    let missing = mismatches(&entries, CLASSES);
+    let missing = mismatches(harness(), &entries, CLASSES);
     let existing: Vec<String> = entries
         .iter()
         .map(|entry| format!("{}#{}", entry.class, entry.method))

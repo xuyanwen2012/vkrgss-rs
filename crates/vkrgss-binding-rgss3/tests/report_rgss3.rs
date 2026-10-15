@@ -6,10 +6,15 @@
 #![cfg(not(vkrgss_interpreter_absent))]
 
 use vkrgss_binding_rgss3::RunError;
-use vkrgss_binding_rgss3::testing;
 use vkrgss_binding_rgss3::testing::host::{self, Game, Played, Script, with_error_stream};
+use vkrgss_binding_rgss3::testing::{self, Harness};
 use vkrgss_proto::GuestToHost;
 use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS3.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss3)
+}
 
 /// Plays `game` as `host::run_game` does, with the current directory of the process in the
 /// game directory, where the glue of a guest puts it: `load_data` of RGSS3 looks for a loose
@@ -25,14 +30,13 @@ fn run_game_in(
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     std::env::set_current_dir(game.dir()).expect("the game directory is entered");
-    host::run_game(game, run, script, after)
+    host::run_game(harness(), game, run, script, after)
 }
 
 /// Plays a game of RGSS3 of these scripts that ends with an uncaught exception, and returns
 /// its report and what the host saw.
 fn report(name: &str, scripts: &[(&str, &str)]) -> (String, Played) {
-    testing::start_as(Runtime::Rgss3);
-    let game = Game::of(Runtime::Rgss3, name, "Ace", scripts);
+    let game = Game::of(harness(), Runtime::Rgss3, name, "Ace", scripts);
     let played = run_game_in(&game, game.run_config(), Script::new(), "nil");
     match &played.outcome {
         Err(RunError::Script(report)) => (report.clone(), played),
@@ -145,7 +149,9 @@ fn a_syntax_error_names_its_script_and_line_and_ends_the_scripts() {
     assert!(!message.starts_with('{'), "{message}");
     assert!(!message.is_empty(), "{text}");
     assert_eq!(
-        testing::eval("[$vkrgss_before_syntax, $vkrgss_after_syntax]").as_deref(),
+        harness()
+            .eval("[$vkrgss_before_syntax, $vkrgss_after_syntax]")
+            .as_deref(),
         Ok("[true, nil]")
     );
 }
@@ -269,8 +275,8 @@ fn modal_texts(played: &Played) -> Vec<String> {
 /// Plays a game of RGSS3 whose one script would set `$vkrgss_loaded_ran`, with its archive
 /// replaced by `archive` (Ruby source of the bytes), or removed for `None`.
 fn with_archive(name: &str, archive: Option<&str>) -> Played {
-    testing::start_as(Runtime::Rgss3);
     let game = Game::of(
+        harness(),
         Runtime::Rgss3,
         name,
         "Ace",
@@ -284,11 +290,12 @@ fn with_archive(name: &str, archive: Option<&str>) -> Played {
                 "File.open({}, 'wb') {{ |file| file.write({bytes}) }}",
                 host::ruby_literal(&path.to_string_lossy())
             );
-            testing::run(move |ruby| ruby.eval_protected(&write, "testing", 1).map(|_| ()))
+            harness()
+                .run(move |ruby| ruby.eval_protected(&write, "testing", 1).map(|_| ()))
                 .expect("the archive is written");
         }
     }
-    testing::eval("$vkrgss_loaded_ran = nil").unwrap();
+    harness().eval("$vkrgss_loaded_ran = nil").unwrap();
     run_game_in(
         &game,
         game.run_config(),
@@ -358,8 +365,7 @@ fn an_empty_archive_runs_nothing_and_ends_without_a_failure() {
 
 /// The texts of the modal messages the host received for a snippet, with its value.
 fn boxes(source: &str) -> (String, Vec<String>) {
-    testing::start_as(Runtime::Rgss3);
-    let (value, record) = host::play(source, Script::new());
+    let (value, record) = host::play(harness(), source, Script::new());
     let texts = record
         .received
         .iter()

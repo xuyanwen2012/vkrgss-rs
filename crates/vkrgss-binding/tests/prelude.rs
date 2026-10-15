@@ -3,12 +3,18 @@
 
 use std::fs;
 
-use vkrgss_binding::testing;
 use vkrgss_binding::testing::host::{self, Script, with_error_stream};
+use vkrgss_binding::testing::{self, Harness};
+use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS1.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss1)
+}
 
 /// The value of a snippet, or its exception as `Class: message`.
 fn eval(source: &str) -> String {
-    match host::play(source, Script::new()).0 {
+    match host::play(harness(), source, Script::new()).0 {
         Ok(inspect) => inspect,
         Err(error) => format!("{}: {}", error.class_name, error.message),
     }
@@ -39,10 +45,10 @@ fn reset_and_hangup_are_exceptions_outside_standard_error() {
 
 #[test]
 fn system_starts_nothing_and_says_so() {
-    let marker = testing::game_dir().join("should_not_exist");
+    let marker = harness().game_dir().join("should_not_exist");
     let source = format!(
         "Dir.chdir('{}') {{ system('touch should_not_exist') }}",
-        testing::game_dir().display()
+        harness().game_dir().display()
     );
     assert_eq!(
         eval(&with_error_stream(&source)),
@@ -88,10 +94,10 @@ fn a_ruby_file_in_the_game_directory_is_loaded() {
 
 #[test]
 fn nothing_else_is_loaded() {
-    let outside = testing::game_dir().with_file_name("other.rb");
+    let outside = harness().game_dir().with_file_name("other.rb");
     fs::write(&outside, "$vkrgss_outside = true\n").unwrap();
     fs::write(
-        testing::game_dir().join("Plain.txt"),
+        harness().game_dir().join("Plain.txt"),
         "$vkrgss_plain = true\n",
     )
     .unwrap();

@@ -17,11 +17,17 @@ use std::time::{Duration, Instant};
 
 use tempfile::TempDir;
 use vkrgss_binding::testing::host::Game;
+use vkrgss_binding::testing::{self, Harness};
 use vkrgss_vfs::Runtime;
 
 mod support;
 
 use support::*;
+
+/// The harness, started as a game of RGSS1.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss1)
+}
 
 /// A red sprite of 32 by 32 pixels at 10, 20, as `$sprite`.
 const RED_SPRITE: &str = "\
@@ -59,6 +65,7 @@ end
 exit
 ";
     Game::new(
+        harness(),
         name,
         "Demo",
         &[("Sprite", RED_SPRITE), ("Window", window), ("Main", main)],
@@ -83,6 +90,7 @@ fn run_demo(game: &Game) -> Ran {
 #[test]
 fn a_game_that_draws_three_frames_and_returns_exits_with_status_0() {
     let game = Game::new(
+        harness(),
         "e2e-three",
         "Three",
         &[("Main", "3.times { Graphics.update }")],
@@ -103,7 +111,7 @@ fn a_directory_without_game_ini_is_an_error_naming_it() {
 #[test]
 fn a_file_with_a_relative_name_appears_in_the_game_directory() {
     let source = "File.open('note.txt', 'w') { |file| file.write($DEBUG.inspect) }";
-    let game = Game::new("e2e-relative", "Relative", &[("Main", source)]);
+    let game = Game::new(harness(), "e2e-relative", "Relative", &[("Main", source)]);
     let ran = headless(&game, &["--debug"]);
     ran.assert_success();
     let note = fs::read_to_string(game.dir().join("note.txt")).expect("the file was written");
@@ -116,6 +124,7 @@ fn a_file_with_a_relative_name_appears_in_the_game_directory() {
 fn a_script_error_is_reported_and_fails_the_run() {
     let source = "Graphics.update\nraise 'boom'\n";
     let game = Game::new(
+        harness(),
         "e2e-error",
         "Error",
         &[("Setup", "$x = 1"), ("Main", source)],
@@ -143,6 +152,7 @@ fn a_script_error_is_reported_and_fails_the_run() {
 #[test]
 fn the_frame_limit_ends_a_game_that_never_ends_with_status_0() {
     let game = Game::new(
+        harness(),
         "e2e-limit",
         "Limit",
         &[("Main", "loop { Graphics.update }")],
@@ -165,6 +175,7 @@ const FORMS: [&str; 2] = ["thread", "process"];
 #[test]
 fn frame_statistics_of_a_headless_run_are_written_to_the_error_stream() {
     let game = Game::new(
+        harness(),
         "e2e-frame-stats",
         "Stats",
         &[("Main", "loop { Graphics.update }")],
@@ -238,7 +249,7 @@ loop do
   Graphics.update
 end
 ";
-    let game = Game::new("e2e-guest-stats", "Split", &[("Main", source)]);
+    let game = Game::new(harness(), "e2e-guest-stats", "Split", &[("Main", source)]);
     let fonts = font_dir().to_string_lossy().into_owned();
     let run = |extra: &[&str]| {
         let mut all = vec![
@@ -288,7 +299,7 @@ fn rtp_game(name: &str) -> (Game, TempDir) {
 picture = Bitmap.new('Graphics/Pictures/RtpOnly')
 File.open('size.txt', 'w') { |file| file.write(\"#{picture.width}x#{picture.height}\") }
 ";
-    let game = Game::new(name, "Package", &[("Main", source)]);
+    let game = Game::new(harness(), name, "Package", &[("Main", source)]);
     let ini = "[Game]\r\nLibrary=RGSS104E.dll\r\nScripts=Data\\Scripts.rxdata\r\n\
                Title=Package\r\nRTP1=Standard\r\n";
     fs::write(game.dir().join("Game.ini"), ini).unwrap();
@@ -337,7 +348,13 @@ picture = Bitmap.new('Graphics/Pictures/RtpOnly')
 File.open('size.txt', 'w') { |file| file.write(\"#{picture.width}x#{picture.height}\") }
 ";
     drop(xp);
-    let game = Game::of(Runtime::Rgss2, "e2e-rtp-vx", "Package", &[("Main", source)]);
+    let game = Game::of(
+        harness(),
+        Runtime::Rgss2,
+        "e2e-rtp-vx",
+        "Package",
+        &[("Main", source)],
+    );
     let ini = "[Game]\r\nRTP=RPGVX\r\nLibrary=RGSS202E.dll\r\nScripts=Data\\Scripts.rvdata\r\n\
                Title=Package\r\nRTP1=Standard\r\n";
     fs::write(game.dir().join("Game.ini"), ini).unwrap();
@@ -404,6 +421,7 @@ fn the_seed_of_the_game_file_overrides_the_user_file_and_the_command_line_both()
 #[test]
 fn a_user_file_with_an_error_ends_the_program_unless_it_is_ignored() {
     let game = Game::new(
+        harness(),
         "e2e-config-error",
         "Config",
         &[("Main", "3.times { Graphics.update }")],
@@ -551,7 +569,12 @@ fn the_usage_text_is_printed_without_a_driver_or_a_game() {
 
 #[test]
 fn a_malformed_input_script_file_prints_the_usage_message() {
-    let game = Game::new("e2e-bad-input", "Input", &[("Main", "Graphics.update")]);
+    let game = Game::new(
+        harness(),
+        "e2e-bad-input",
+        "Input",
+        &[("Main", "Graphics.update")],
+    );
     let keys = tempfile::tempdir().unwrap();
     let file = keys.path().join("bad.txt");
     fs::write(&file, "2:SIDEWAYS").unwrap();
@@ -565,7 +588,7 @@ fn a_malformed_input_script_file_prints_the_usage_message() {
 #[test]
 fn a_dumped_frame_shows_the_red_sprite_where_it_is() {
     let main = format!("{RED_SPRITE}loop {{ Graphics.update }}\n");
-    let game = Game::new("e2e-dump", "Dump", &[("Main", &main)]);
+    let game = Game::new(harness(), "e2e-dump", "Dump", &[("Main", &main)]);
     let ran = headless(&game, &["--frames", "5", "--dump", "3=out.png"]);
     ran.assert_success();
     let frame = ran.frame("out.png");
@@ -588,7 +611,7 @@ sprite.visible = false
 Graphics.transition(4)
 Graphics.update
 ";
-    let game = Game::new("e2e-transition", "Transition", &[("Main", main)]);
+    let game = Game::new(harness(), "e2e-transition", "Transition", &[("Main", main)]);
     let names: Vec<String> = (0..6).map(|index| format!("{index}={index}.png")).collect();
     let dumps: Vec<&str> = names.iter().flat_map(|name| ["--dump", name]).collect();
     let ran = headless(&game, &dumps);
@@ -630,7 +653,13 @@ Graphics.freeze
 Graphics.transition(4)
 Graphics.update
 ";
-    let game = Game::of(Runtime::Rgss2, "e2e-fade-vx", "Fade", &[("Main", main)]);
+    let game = Game::of(
+        harness(),
+        Runtime::Rgss2,
+        "e2e-fade-vx",
+        "Fade",
+        &[("Main", main)],
+    );
     let names: Vec<String> = (0..10)
         .map(|index| format!("{index}={index}.png"))
         .collect();
@@ -689,7 +718,7 @@ sprite.visible = false
 Graphics.transition(10, 'Graphics/Transitions/halves')
 Graphics.update
 ";
-    let game = Game::new("e2e-mask", "Mask", &[("Main", main)]);
+    let game = Game::new(harness(), "e2e-mask", "Mask", &[("Main", main)]);
     let transitions = game.dir().join("Graphics").join("Transitions");
     fs::create_dir_all(&transitions).unwrap();
     // Black on the left half, white on the right half.
@@ -758,7 +787,7 @@ answers = [Font.exist?('Liberation Sans'), Font.exist?('NoSuchFamilyAnywhere')]
 File.open('fonts.txt', 'w') { |file| file.write(answers.inspect) }
 2.times { Graphics.update }
 ";
-    let game = Game::new("e2e-fonts", "Fonts", &[("Main", source)]);
+    let game = Game::new(harness(), "e2e-fonts", "Fonts", &[("Main", source)]);
     let fonts = font_dir().to_string_lossy().into_owned();
     let ran = headless(&game, &["--font-dir", &fonts, "--dump", "1=text.png"]);
     ran.assert_success();
@@ -805,7 +834,7 @@ File.open('width.txt', 'w') { |file| file.write(text.text_size('HHHHHHHH').width
 ";
     let fonts = font_dir().to_string_lossy().into_owned();
     let run = |name: &str, arguments: &[&str]| {
-        let game = Game::new(name, "Own metrics", &[("Main", source)]);
+        let game = Game::new(harness(), name, "Own metrics", &[("Main", source)]);
         let mut all = vec!["--font-dir", &fonts, "--dump", "1=text.png"];
         all.extend_from_slice(arguments);
         let ran = headless(&game, &all);
@@ -825,7 +854,12 @@ File.open('width.txt', 'w') { |file| file.write(text.text_size('HHHHHHHH').width
 
 #[test]
 fn a_missing_built_in_scripts_file_names_the_tool_that_creates_it() {
-    let game = Game::new("e2e-builtin", "Builtin", &[("Main", "Graphics.update")]);
+    let game = Game::new(
+        harness(),
+        "e2e-builtin",
+        "Builtin",
+        &[("Main", "Graphics.update")],
+    );
     // Without the option; the default location is in the run's own empty directory.
     let ran = vkrgss(&[&game.dir().to_string_lossy(), "--headless"]);
     ran.assert_failure();
@@ -838,6 +872,7 @@ fn a_missing_built_in_scripts_file_names_the_tool_that_creates_it() {
 #[test]
 fn a_missing_built_in_scripts_file_of_vx_names_the_file_and_the_document() {
     let game = Game::of(
+        harness(),
         Runtime::Rgss2,
         "e2e-builtin-vx",
         "Builtin",
@@ -855,6 +890,7 @@ fn a_missing_built_in_scripts_file_of_vx_names_the_file_and_the_document() {
 fn the_built_in_scripts_file_of_vx_is_loaded_from_its_default_location() {
     let source = "File.open('rpg.txt', 'w') { |file| file.write(RPG::Cache.class.to_s) }";
     let game = Game::of(
+        harness(),
         Runtime::Rgss2,
         "e2e-default-vx",
         "Default",
@@ -877,7 +913,12 @@ fn the_built_in_scripts_file_of_vx_is_loaded_from_its_default_location() {
 /// whatever the program does with the option.
 #[test]
 fn a_soundfont_that_does_not_exist_is_an_error_naming_it() {
-    let game = Game::new("e2e-soundfont", "SoundFont", &[("Main", "Graphics.update")]);
+    let game = Game::new(
+        harness(),
+        "e2e-soundfont",
+        "SoundFont",
+        &[("Main", "Graphics.update")],
+    );
     let absent = game.dir().join("absent.sf2");
     let ran = headless(&game, &["--soundfont", &absent.to_string_lossy()]);
     ran.assert_failure();
@@ -888,7 +929,12 @@ fn a_soundfont_that_does_not_exist_is_an_error_naming_it() {
 
 #[test]
 fn audio_options_do_not_disturb_a_headless_run() {
-    let game = Game::new("e2e-no-audio", "NoAudio", &[("Main", "Graphics.update")]);
+    let game = Game::new(
+        harness(),
+        "e2e-no-audio",
+        "NoAudio",
+        &[("Main", "Graphics.update")],
+    );
     let ran = headless(&game, &["--no-audio"]);
     ran.assert_success();
     assert!(!ran.stderr().contains("audio"), "{}", ran.stderr());
@@ -897,7 +943,7 @@ fn audio_options_do_not_disturb_a_headless_run() {
 #[test]
 fn the_built_in_scripts_file_is_loaded_from_the_default_location() {
     let source = "File.open('rpg.txt', 'w') { |file| file.write(RPG::Cache.class.to_s) }";
-    let game = Game::new("e2e-default", "Default", &[("Main", source)]);
+    let game = Game::new(harness(), "e2e-default", "Default", &[("Main", source)]);
     let work = tempfile::tempdir().unwrap();
     let data = work.path().join("vkrgss");
     fs::create_dir_all(&data).unwrap();
@@ -921,7 +967,7 @@ rescue SystemExit
 end
 loop { }
 ";
-    let game = Game::new("e2e-stuck", "Stuck", &[("Main", source)]);
+    let game = Game::new(harness(), "e2e-stuck", "Stuck", &[("Main", source)]);
     let started = Instant::now();
     let ran = headless(&game, &["--frames", "3"]);
     let elapsed = started.elapsed();
@@ -936,7 +982,7 @@ fn rand_game(name: &str) -> Game {
     let main = format!(
         "{RED_SPRITE}$sprite.x = rand(600)\n$sprite.y = rand(440)\n3.times {{ Graphics.update }}\n"
     );
-    Game::new(name, "Rand", &[("Main", &main)])
+    Game::new(harness(), name, "Rand", &[("Main", &main)])
 }
 
 /// Scenario "Headless default".
@@ -1028,6 +1074,7 @@ fn record_and_replay_together_print_the_usage_message() {
 #[test]
 fn a_replay_of_a_file_that_is_no_recording_fails_before_the_first_frame() {
     let game = Game::new(
+        harness(),
         "e2e-not-a-recording",
         "Replay",
         &[(
@@ -1053,7 +1100,7 @@ fn a_replay_of_a_file_that_is_no_recording_fails_before_the_first_frame() {
 #[test]
 fn a_preload_script_patches_the_game() {
     let main = format!("{RED_SPRITE}$sprite.x = PATCHED_X\n3.times {{ Graphics.update }}\n");
-    let game = Game::new("e2e-preload", "Preload", &[("Main", &main)]);
+    let game = Game::new(harness(), "e2e-preload", "Preload", &[("Main", &main)]);
     let work = tempfile::tempdir().unwrap();
     fs::write(work.path().join("patch.rb"), "PATCHED_X = 200\n").unwrap();
     let ran = headless_in(
@@ -1073,7 +1120,7 @@ fn a_preload_script_patches_the_game() {
 #[test]
 fn a_game_whose_data_is_in_the_archive_runs_like_the_one_with_loose_files() {
     let main = format!("{RED_SPRITE}$sprite.x = 300\n3.times {{ Graphics.update }}\n");
-    let game = Game::new("e2e-archive", "Archive", &[("Main", &main)]);
+    let game = Game::new(harness(), "e2e-archive", "Archive", &[("Main", &main)]);
     let loose = headless(&game, &["--dump", "2=out.png"]);
     loose.assert_success();
 
@@ -1099,6 +1146,7 @@ fn a_game_whose_data_is_in_the_archive_runs_like_the_one_with_loose_files() {
 fn a_game_of_vx_whose_data_is_in_the_archive_runs_like_the_one_with_loose_files() {
     let main = format!("{RED_SPRITE}$sprite.x = 300\n3.times {{ Graphics.update }}\n");
     let game = Game::of(
+        harness(),
         Runtime::Rgss2,
         "e2e-archive-vx",
         "Archive",
@@ -1133,6 +1181,7 @@ fn the_scripts_of_a_game_of_vx_see_the_symbol_numbers_of_rgss2() {
           [:zz_first.to_i, :zz_second.to_i], [:initialize.to_i, :to_s.to_i, :update.to_i]
         ].inspect) }";
     let game = Game::of(
+        harness(),
         Runtime::Rgss2,
         "e2e-symbols-vx",
         "Symbols",
@@ -1159,7 +1208,13 @@ fn the_dump_of_the_first_frame_has_the_frame_size_of_the_runtime() {
         (Runtime::Rgss2, "e2e-size-vx", (544, 416)),
         (Runtime::Rgss1, "e2e-size-xp", (640, 480)),
     ] {
-        let game = Game::of(runtime, name, "Size", &[("Main", "Graphics.update")]);
+        let game = Game::of(
+            harness(),
+            runtime,
+            name,
+            "Size",
+            &[("Main", "Graphics.update")],
+        );
         for form in FORMS {
             let ran = headless(&game, &["--guest", form, "--dump", "0=first.png"]);
             ran.assert_success();
@@ -1182,7 +1237,13 @@ Graphics.update
 Graphics.resize_screen(640, 480)
 Graphics.update
 ";
-    let game = Game::of(Runtime::Rgss2, "e2e-resize-vx", "Resize", &[("Main", main)]);
+    let game = Game::of(
+        harness(),
+        Runtime::Rgss2,
+        "e2e-resize-vx",
+        "Resize",
+        &[("Main", main)],
+    );
     for form in FORMS {
         let dumps = ["--dump", "0=before.png", "--dump", "1=after.png"];
         let ran = headless(&game, &[&["--guest", form], &dumps[..]].concat());
@@ -1206,7 +1267,13 @@ Graphics.update
 /// the guest is a thread or a process.
 #[test]
 fn a_run_of_vx_does_not_say_that_it_is_experimental() {
-    let game = Game::of(Runtime::Rgss2, "e2e-vx-notice", "VX", &[("Main", "nil")]);
+    let game = Game::of(
+        harness(),
+        Runtime::Rgss2,
+        "e2e-vx-notice",
+        "VX",
+        &[("Main", "nil")],
+    );
     for form in ["thread", "process"] {
         let ran = headless(&game, &["--guest", form]);
         ran.assert_success();
@@ -1219,7 +1286,7 @@ fn a_run_of_vx_does_not_say_that_it_is_experimental() {
 #[test]
 fn a_run_of_xp_sets_the_globals_of_debug_mode_of_rgss1() {
     let source = "File.open('modes.txt', 'w') { |file| file.write([$TEST, $DEBUG].inspect) }";
-    let game = Game::new("e2e-xp-notice", "XP", &[("Main", source)]);
+    let game = Game::new(harness(), "e2e-xp-notice", "XP", &[("Main", source)]);
     let ran = headless(&game, &["--debug"]);
     ran.assert_success();
     let modes = fs::read_to_string(game.dir().join("modes.txt")).expect("the script ran");
@@ -1230,7 +1297,13 @@ fn a_run_of_xp_sets_the_globals_of_debug_mode_of_rgss1() {
 /// writes the globals of test mode to `modes.txt`.
 fn conflicting_game(name: &str) -> Game {
     let source = "File.open('modes.txt', 'w') { |file| file.write([$TEST, $DEBUG].inspect) }";
-    let game = Game::of(Runtime::Rgss2, name, "Conflict", &[("Main", source)]);
+    let game = Game::of(
+        harness(),
+        Runtime::Rgss2,
+        name,
+        "Conflict",
+        &[("Main", source)],
+    );
     let ini =
         "[Game]\r\nLibrary=RGSS104E.dll\r\nScripts=Data\\Scripts.rvdata\r\nTitle=Conflict\r\n";
     fs::write(game.dir().join("Game.ini"), ini).unwrap();
@@ -1275,6 +1348,7 @@ fn an_unknown_runtime_prints_the_usage_message() {
 #[test]
 fn a_damaged_archive_is_an_error_naming_it() {
     let game = Game::new(
+        harness(),
         "e2e-damaged-archive",
         "Archive",
         &[("Main", "3.times { Graphics.update }")],
@@ -1291,7 +1365,12 @@ fn a_damaged_archive_is_an_error_naming_it() {
 
 /// A game that shows three frames and ends.
 fn quiet_game(name: &str) -> Game {
-    Game::new(name, "Quiet", &[("Main", "3.times { Graphics.update }")])
+    Game::new(
+        harness(),
+        name,
+        "Quiet",
+        &[("Main", "3.times { Graphics.update }")],
+    )
 }
 
 /// Whether the error stream of a run has a line of an informational event. Such a line names
@@ -1340,7 +1419,7 @@ fn a_malformed_filter_ends_the_program_naming_the_variable() {
 #[test]
 fn a_script_error_is_reported_at_every_level() {
     let source = "Graphics.update\nraise 'boom'\n";
-    let game = Game::new("e2e-log-error", "Error", &[("Main", source)]);
+    let game = Game::new(harness(), "e2e-log-error", "Error", &[("Main", source)]);
     let work = tempfile::tempdir().expect("a temporary directory");
     let ran = headless_logging(work, &game, &[], Some("error"));
     ran.assert_failure();
@@ -1374,7 +1453,7 @@ fn pid_game(name: &str, rest: &str) -> Game {
          File.rename('pid.tmp', 'pid.txt')\n\
          {rest}\n"
     );
-    Game::new(name, "Process", &[("Main", &main)])
+    Game::new(harness(), name, "Process", &[("Main", &main)])
 }
 
 /// The process number a [`pid_game`] wrote, once it has.
@@ -1402,6 +1481,7 @@ end
 exit
 ";
     let game = Game::new(
+        harness(),
         "e2e-process-frames",
         "Frames",
         &[("Sprite", RED_SPRITE), ("Main", main)],
@@ -1437,7 +1517,7 @@ exit
 #[test]
 fn a_script_error_of_a_guest_in_a_process_is_reported_as_that_of_a_thread() {
     let source = "Graphics.update\nraise 'boom'\n";
-    let game = Game::new("e2e-process-error", "Error", &[("Main", source)]);
+    let game = Game::new(harness(), "e2e-process-error", "Error", &[("Main", source)]);
     let [thread, process] = FORMS.map(|form| headless(&game, &["--guest", form]));
     thread.assert_failure();
     process.assert_failure();
@@ -1648,7 +1728,12 @@ loop do
   Graphics.update
 end
 ";
-    Game::new(name, "States", &[("Sprite", RED_SPRITE), ("Main", main)])
+    Game::new(
+        harness(),
+        name,
+        "States",
+        &[("Sprite", RED_SPRITE), ("Main", main)],
+    )
 }
 
 /// Scenario "Back to the saved frame".
@@ -1741,7 +1826,7 @@ loop do
   Graphics.update
 end
 ";
-    let game = Game::new("e2e-states-error", "Error", &[("Main", main)]);
+    let game = Game::new(harness(), "e2e-states-error", "Error", &[("Main", main)]);
     let ran = headless(
         &game,
         &["--guest", "process", "--states", "10:save 4, 30:load 4"],
@@ -1819,7 +1904,7 @@ fn outside_game(name: &str, outside: &Path) -> Game {
          Graphics.update\n",
         outside.display()
     );
-    Game::new(name, "Outside", &[("Main", &main)])
+    Game::new(harness(), name, "Outside", &[("Main", &main)])
 }
 
 /// Scenario "Write inside".
@@ -1835,7 +1920,7 @@ File.rename('saves/one.tmp', 'Save1.rxdata')
 File.open('/dev/null', 'w') { |file| file.write('nothing') }
 Graphics.update
 ";
-    let game = Game::new("e2e-sandbox-inside", "Inside", &[("Main", main)]);
+    let game = Game::new(harness(), "e2e-sandbox-inside", "Inside", &[("Main", main)]);
     let work = tempfile::tempdir().expect("a temporary directory");
     let ran = headless_logging(work, &game, &["--guest", "process"], Some("info"));
     ran.assert_success();
@@ -2007,7 +2092,12 @@ fn a_guest_process_is_handed_the_settings_of_the_run() {
     assert_eq!(size, "3x2");
 
     let main = format!("{RED_SPRITE}$sprite.x = PATCHED_X\n3.times {{ Graphics.update }}\n");
-    let game = Game::new("e2e-record-preload", "Preload", &[("Main", &main)]);
+    let game = Game::new(
+        harness(),
+        "e2e-record-preload",
+        "Preload",
+        &[("Main", &main)],
+    );
     let work = tempfile::tempdir().unwrap();
     fs::write(work.path().join("patch.rb"), "PATCHED_X = 200\n").unwrap();
     let arguments = [

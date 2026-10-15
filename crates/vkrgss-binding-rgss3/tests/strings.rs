@@ -4,9 +4,14 @@
 
 use std::fs;
 
-use vkrgss_binding_rgss3::testing;
 use vkrgss_binding_rgss3::testing::host::{self, Game, Script};
+use vkrgss_binding_rgss3::testing::{self, Harness};
 use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS3.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss3)
+}
 
 /// Plays `game` as `host::run_game` does, with the current directory of the process in the
 /// game directory, where the glue of a guest puts it: `load_data` of RGSS3 looks for a loose
@@ -22,14 +27,13 @@ fn run_game_in(
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     std::env::set_current_dir(game.dir()).expect("the game directory is entered");
-    host::run_game(game, run, script, after)
+    host::run_game(harness(), game, run, script, after)
 }
 
 /// `inspect` of the value of `source` in a game of RGSS3, or the class and the message of
 /// the exception that left it.
 fn eval(source: &str) -> String {
-    testing::start_as(Runtime::Rgss3);
-    match testing::eval(source) {
+    match harness().eval(source) {
         Ok(inspect) => inspect,
         Err(error) => format!("{}: {}", error.class_name, error.message),
     }
@@ -112,9 +116,14 @@ fn values_round_trip_through_marshal() {
 
 #[test]
 fn script_source_is_text() {
-    testing::start_as(Runtime::Rgss3);
     let stores = |name: &str| format!("{name} = ['\u{e9}'.encoding.name, '\u{e9}'.size]\n");
-    let game = Game::of(Runtime::Rgss3, "source_text", "Text", &[("Main", "nil")]);
+    let game = Game::of(
+        harness(),
+        Runtime::Rgss3,
+        "source_text",
+        "Text",
+        &[("Main", "nil")],
+    );
     let builtin = fs::read_to_string(game.builtin_scripts()).unwrap();
     fs::write(
         game.builtin_scripts(),

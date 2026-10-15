@@ -17,10 +17,15 @@ mod method_list;
 
 use std::sync::OnceLock;
 
-use vkrgss_binding::testing;
 use vkrgss_binding::testing::host::{self, Record, Script};
+use vkrgss_binding::testing::{self, Harness};
 use vkrgss_proto::{FreezeRule, GuestToHost, Size, TransitionRule};
 use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS3.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss3)
+}
 
 const METHOD_LIST: &str = include_str!("../../vkrgss-binding/tests/data/rgss3_api.txt");
 
@@ -28,9 +33,8 @@ const METHOD_LIST: &str = include_str!("../../vkrgss-binding/tests/data/rgss3_ap
 /// written before the guest first looks into the directory.
 fn start() {
     static MOVIE: OnceLock<()> = OnceLock::new();
-    testing::start_as(Runtime::Rgss3);
     MOVIE.get_or_init(|| {
-        let movies = testing::game_dir().join("Movies");
+        let movies = harness().game_dir().join("Movies");
         std::fs::create_dir_all(&movies).expect("the directory of the movie");
         std::fs::write(movies.join("clip.ogv"), b"not really Ogg Theora").expect("the movie");
     });
@@ -43,7 +47,7 @@ fn start() {
 fn eval(source: &str) -> (String, Record) {
     start();
     let source = format!("Graphics.brightness = 255\n{source}");
-    let (outcome, record) = host::play(&source, Script::new());
+    let (outcome, record) = host::play(harness(), &source, Script::new());
     let outcome = match outcome {
         Ok(inspect) => inspect,
         Err(error) => format!("{}: {}", error.class_name, error.message),

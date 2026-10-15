@@ -7,7 +7,13 @@
 
 mod cases;
 
-use vkrgss_binding::testing;
+use vkrgss_binding::testing::{self, Harness};
+use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS1.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss1)
+}
 
 /// The snippet with stress on while it runs, and off again whatever happens.
 fn stressed(source: &str) -> String {
@@ -17,7 +23,8 @@ fn stressed(source: &str) -> String {
 #[test]
 fn the_interpreter_supports_stress() {
     assert_eq!(
-        testing::eval("GC.stress = true; on = GC.stress; GC.stress = false; [on, GC.stress]")
+        harness()
+            .eval("GC.stress = true; on = GC.stress; GC.stress = false; [on, GC.stress]")
             .as_deref(),
         Ok("[true, false]")
     );
@@ -28,10 +35,10 @@ fn every_snippet_gives_the_same_result_under_stress() {
     let mut wrong = Vec::new();
     for (group, cases) in cases::GROUPS {
         // Without stress first: a snippet that fails here is not a finding of this test.
-        let plain = cases::failures(cases, str::to_owned);
+        let plain = cases::failures(harness(), cases, str::to_owned);
         assert!(plain.is_empty(), "{group}: {}", plain.join("\n"));
         wrong.extend(
-            cases::failures(cases, stressed)
+            cases::failures(harness(), cases, stressed)
                 .into_iter()
                 .map(|failure| format!("{group}: {failure}")),
         );
@@ -42,10 +49,12 @@ fn every_snippet_gives_the_same_result_under_stress() {
 #[test]
 fn unreachable_bitmaps_are_freed_under_stress() {
     assert_eq!(
-        testing::eval(&stressed(cases::UNREACHABLE_BITMAPS)).as_deref(),
+        harness()
+            .eval(&stressed(cases::UNREACHABLE_BITMAPS))
+            .as_deref(),
         Ok("nil")
     );
-    let remaining = testing::bitmap_count();
+    let remaining = harness().bitmap_count();
     assert!(remaining < 500, "{remaining} bitmaps are left in the arena");
 }
 
@@ -73,13 +82,13 @@ end
 #[test]
 fn a_dumped_string_survives_a_collection_while_it_is_written() {
     vkrgss_binding::pending_over_ruby_1_9_2!();
-    assert_eq!(testing::eval(FRESH_DUMP).as_deref(), Ok("nil"));
+    assert_eq!(harness().eval(FRESH_DUMP).as_deref(), Ok("nil"));
 
     // To a string: growing the buffer collects only with stress on.
     let to_string = "d = Marshal.dump(StressFreshDump.new(40)); \
          [d.size, Marshal.load(d) == StressFreshDump::TEXT * 40]";
     assert_eq!(
-        testing::eval(&stressed(to_string)).as_deref(),
+        harness().eval(&stressed(to_string)).as_deref(),
         Ok("[1063, true]")
     );
 
@@ -92,7 +101,7 @@ fn a_dumped_string_survives_a_collection_while_it_is_written() {
            Marshal.dump(['p' * padding, StressFreshDump.new(4)], port); \
            wrong << padding unless Marshal.load(port.data)[1] == StressFreshDump::TEXT * 4; \
          end; wrong";
-    assert_eq!(testing::eval(to_port).as_deref(), Ok("[]"));
+    assert_eq!(harness().eval(to_port).as_deref(), Ok("[]"));
 }
 
 #[test]
@@ -100,7 +109,7 @@ fn a_loaded_symbol_survives_a_collection_while_it_is_interned() {
     // The name is built here and never interned before `Marshal.load` reads it.
     let load = r#"name = "stress_" + "fresh_symbol_" + "name"; Marshal.load("\004\010:" + (name.size + 5).chr + name).to_s"#;
     assert_eq!(
-        testing::eval(&stressed(load)).as_deref(),
+        harness().eval(&stressed(load)).as_deref(),
         Ok("\"stress_fresh_symbol_name\"")
     );
 }

@@ -19,20 +19,24 @@ use std::fs;
 use std::sync::Once;
 
 use vkrgss_binding::RunConfig;
-use vkrgss_binding::testing;
 use vkrgss_binding::testing::host::{self, Script, with_error_stream};
+use vkrgss_binding::testing::{self, Harness};
 use vkrgss_proto::{HostToGuest, InputSnapshot};
 use vkrgss_vfs::{GameIni, Runtime};
+
+/// The harness, started as a game of RGSS3.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss3)
+}
 
 /// The title of the game, 16 bytes as in the measurement.
 const TITLE: &str = "Win32API of Ace!";
 
 /// Starts the harness as a game of RGSS3 with the files of this test, once.
 fn start() {
-    testing::start_as(Runtime::Rgss3);
     static STARTED: Once = Once::new();
     STARTED.call_once(|| {
-        let game = testing::game_dir();
+        let game = harness().game_dir();
         let ini = format!(
             "[Game]\r\nLibrary=System\\RGSS301.dll\r\nScripts=Data\\Scripts.rvdata2\r\n\
              Title={TITLE}\r\n"
@@ -41,11 +45,14 @@ fn start() {
         fs::create_dir_all(game.join("System")).unwrap();
         fs::write(game.join("System/RGSS301.dll"), b"").unwrap();
         fs::write(game.join("tktk_bitmap.dll"), b"").unwrap();
-        host::configure(RunConfig {
-            ini: GameIni::read(game, None).unwrap(),
-            runtime: Runtime::Rgss3,
-            ..RunConfig::default()
-        });
+        host::configure(
+            harness(),
+            RunConfig {
+                ini: GameIni::read(game, None).unwrap(),
+                runtime: Runtime::Rgss3,
+                ..RunConfig::default()
+            },
+        );
     });
 }
 
@@ -53,7 +60,7 @@ fn start() {
 /// `Class: message`.
 fn eval_with(source: &str, script: Script) -> String {
     start();
-    match host::play(source, script).0 {
+    match host::play(harness(), source, script).0 {
         Ok(inspect) => inspect,
         Err(error) => format!("{}: {}", error.class_name, error.message),
     }
@@ -401,9 +408,9 @@ fn the_title_is_read_with_a_path_and_not_with_a_bare_name() {
 
 #[test]
 fn a_bare_profile_name_reads_the_default_and_writes_nothing() {
-    // The harness first: a game directory asked for before it starts it as a game of RGSS1.
+    // The files and the settings of this test binary first.
     start();
-    let game = testing::game_dir();
+    let game = harness().game_dir();
     fs::write(game.join("Bare.ini"), "[Options]\r\nVolume=80\r\n").unwrap();
     assert_eq!(
         eval(

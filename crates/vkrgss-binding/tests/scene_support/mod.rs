@@ -24,7 +24,8 @@
 
 use std::sync::OnceLock;
 
-use vkrgss_binding::{scene_testing, testing};
+use vkrgss_binding::scene_testing;
+use vkrgss_binding::testing::Harness;
 use vkrgss_compose_ref::{Compositor, Frame};
 use vkrgss_core::ElementKind;
 use vkrgss_proto::{BitmapDelta, FramePacket, Op};
@@ -164,11 +165,11 @@ fn scene_count(_ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     Ok(ffi::long2fix(count.try_into().unwrap_or(i64::MAX >> 2)))
 }
 
-/// Defines `pixel`, `solid` and `scene_count` in the harness's interpreter, once.
-pub(crate) fn install() {
+/// Defines `pixel`, `solid` and `scene_count` in the interpreter of `harness`, once.
+pub(crate) fn install(harness: &Harness) {
     static INSTALLED: OnceLock<()> = OnceLock::new();
     INSTALLED.get_or_init(|| {
-        testing::run(|ruby| {
+        harness.run(|ruby| {
             ruby.define_global_function_with_arity(c"__vkrgss_pixel", Arity::Fixed(2), pixel)
                 .expect("a new function");
             ruby.define_global_function_with_arity(
@@ -178,6 +179,8 @@ pub(crate) fn install() {
             )
             .expect("a new function");
         });
-        testing::eval(RUBY_SIDE).expect("the Ruby side of the helpers is defined");
+        harness
+            .eval(RUBY_SIDE)
+            .expect("the Ruby side of the helpers is defined");
     });
 }

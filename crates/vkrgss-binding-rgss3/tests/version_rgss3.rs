@@ -6,9 +6,14 @@
 //! repository).
 #![cfg(not(vkrgss_interpreter_absent))]
 
-use vkrgss_binding_rgss3::testing;
 use vkrgss_binding_rgss3::testing::host::{self, Game, Script};
+use vkrgss_binding_rgss3::testing::{self, Harness};
 use vkrgss_vfs::{LibraryVersion, Runtime};
+
+/// The harness, started as a game of RGSS3.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss3)
+}
 
 /// Plays `game` as `host::run_game` does, with the current directory of the process in the
 /// game directory, where the glue of a guest puts it: `load_data` of RGSS3 looks for a loose
@@ -24,14 +29,14 @@ fn run_game_in(
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     std::env::set_current_dir(game.dir()).expect("the game directory is entered");
-    host::run_game(game, run, script, after)
+    host::run_game(harness(), game, run, script, after)
 }
 
 /// `[RGSS_VERSION, RGSS_VERSION.encoding.name]` in a game of RGSS3 named `name` whose DLL
 /// has `version`.
 fn version_of(name: &str, version: Option<[u16; 4]>) -> String {
-    testing::start_as(Runtime::Rgss3);
     let game = Game::of(
+        harness(),
         Runtime::Rgss3,
         name,
         "Ace",
@@ -65,9 +70,9 @@ fn the_version_is_that_of_the_dll() {
 /// purpose shows that a warning would be among it.
 #[test]
 fn every_other_version_is_3_0_1_and_the_constant_is_defined_once() {
-    testing::start_as(Runtime::Rgss3);
-    testing::eval(
-        "$vkrgss_stderr = $stderr
+    harness()
+        .eval(
+            "$vkrgss_stderr = $stderr
          $vkrgss_written = ''
          capture = Object.new
          def capture.write(text)
@@ -75,20 +80,21 @@ fn every_other_version_is_3_0_1_and_the_constant_is_defined_once() {
            text.to_s.size
          end
          $stderr = capture",
-    )
-    .expect("the error stream is captured");
+        )
+        .expect("the error stream is captured");
     let versions = [
         version_of("version_3007", Some([3, 0, 0, 7])),
         version_of("version_2021", Some([2, 0, 2, 1])),
         version_of("version_none", None),
     ];
-    let written = testing::eval(
-        "VKRGSS_TWICE = 1
+    let written = harness()
+        .eval(
+            "VKRGSS_TWICE = 1
          VKRGSS_TWICE = 2
          $stderr = $vkrgss_stderr
          $vkrgss_written",
-    )
-    .expect("the error stream is put back");
+        )
+        .expect("the error stream is put back");
     assert_eq!(
         versions,
         [

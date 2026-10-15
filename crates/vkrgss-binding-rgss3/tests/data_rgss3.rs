@@ -5,9 +5,14 @@
 
 use std::path::Path;
 
-use vkrgss_binding_rgss3::testing;
 use vkrgss_binding_rgss3::testing::host::{self, Game, Script, ruby_literal};
+use vkrgss_binding_rgss3::testing::{self, Harness};
 use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS3.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss3)
+}
 
 /// Plays `game` as `host::run_game` does, with the current directory of the process in the
 /// game directory, where the glue of a guest puts it: `load_data` of RGSS3 looks for a loose
@@ -23,15 +28,14 @@ fn run_game_in(
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     std::env::set_current_dir(game.dir()).expect("the game directory is entered");
-    host::run_game(game, run, script, after)
+    host::run_game(harness(), game, run, script, after)
 }
 
 /// Plays a game of RGSS3 whose one script is `source`, with the data files `files` (path
 /// below the game directory and bytes) in place, and returns what `$vkrgss_data` holds then.
 /// `GAME` in the script stands for the game directory as a Ruby string.
 fn run(name: &str, files: &[(&str, &[u8])], source: &str) -> String {
-    testing::start_as(Runtime::Rgss3);
-    let game = Game::of(Runtime::Rgss3, name, "Ace", &[("Main", "nil")]);
+    let game = Game::of(harness(), Runtime::Rgss3, name, "Ace", &[("Main", "nil")]);
     for (path, bytes) in files {
         let path = game.dir().join(path);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -57,7 +61,8 @@ fn rewrite(game: &Game, source: &str) {
         ruby_literal(&archive.to_string_lossy()),
         ruby_literal(source)
     );
-    testing::run(move |ruby| ruby.eval_protected(&write, "testing", 1).map(|_| ()))
+    harness()
+        .run(move |ruby| ruby.eval_protected(&write, "testing", 1).map(|_| ()))
         .expect("the archive is written");
 }
 
@@ -354,8 +359,13 @@ fn names_with_a_nul_or_bytes_that_are_not_utf_8_raise() {
 /// "A name of other characters" (`ace-v1-api-REPORT.md` section 0.2, 3.0.1).
 #[test]
 fn names_labelled_utf_8_and_names_of_other_characters_are_files() {
-    testing::start_as(Runtime::Rgss3);
-    let game = Game::of(Runtime::Rgss3, "other_names", "Ace", &[("Main", "nil")]);
+    let game = Game::of(
+        harness(),
+        Runtime::Rgss3,
+        "other_names",
+        "Ace",
+        &[("Main", "nil")],
+    );
     std::fs::create_dir_all(game.dir().join("d")).unwrap();
     rewrite(
         &game,
@@ -378,8 +388,9 @@ fn names_labelled_utf_8_and_names_of_other_characters_are_files() {
 /// current directory of the process, which a script changes with `Dir.chdir`.
 #[test]
 fn load_data_looks_from_the_current_directory() {
-    testing::start_as(Runtime::Rgss3);
-    let outside = testing::game_dir().with_file_name("outside_current_directory");
+    let outside = harness()
+        .game_dir()
+        .with_file_name("outside_current_directory");
     std::fs::create_dir_all(&outside).unwrap();
     let source = format!(
         "{TRY}

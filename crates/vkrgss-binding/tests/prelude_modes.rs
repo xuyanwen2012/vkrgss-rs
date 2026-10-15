@@ -3,16 +3,27 @@
 
 use vkrgss_binding::RunConfig;
 use vkrgss_binding::testing::host::{self, Script};
+use vkrgss_binding::testing::{self, Harness};
+use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS1.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss1)
+}
 
 #[test]
 fn debug_mode_battle_test_and_process_functions_follow_the_caller() {
-    host::configure(RunConfig {
-        debug: true,
-        battle_test: true,
-        process_functions: true,
-        ..RunConfig::default()
-    });
+    host::configure(
+        harness(),
+        RunConfig {
+            debug: true,
+            battle_test: true,
+            process_functions: true,
+            ..RunConfig::default()
+        },
+    );
     let (value, _) = host::play(
+        harness(),
         "[$DEBUG, $BTEST, system('true'), system('false'), `echo out`]",
         Script::new(),
     );

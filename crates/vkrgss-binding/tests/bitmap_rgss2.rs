@@ -6,13 +6,17 @@
 //! the font size high, fully inked except for spaces: at size 20 that is 10 by 20 pixels.
 //! One snippet is one evaluation; a snippet that changes the font defaults puts them back.
 
-use vkrgss_binding::testing;
+use vkrgss_binding::testing::{self, Harness};
 use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS2.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss2)
+}
 
 /// `inspect` of the value of a snippet, or its exception as `Class: message`.
 fn eval(source: &str) -> String {
-    testing::start_as(Runtime::Rgss2);
-    match testing::eval(source) {
+    match harness().eval(source) {
         Ok(inspect) => inspect,
         Err(error) => format!("{}: {}", error.class_name, error.message),
     }
@@ -311,8 +315,7 @@ fn a_copy_of_a_bitmap_has_its_pixels_and_its_shadow() {
 /// Scenario "Undecodable file, measured on the original".
 #[test]
 fn a_file_that_is_no_picture_raises_rgss_error() {
-    testing::start_as(Runtime::Rgss2);
-    let empty = testing::game_dir().join("Graphics/Pictures/Empty.png");
+    let empty = harness().game_dir().join("Graphics/Pictures/Empty.png");
     std::fs::write(&empty, b"").unwrap();
     for name in ["Broken", "Empty"] {
         assert_eq!(

@@ -7,11 +7,18 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use vkrgss_binding::testing::host::{self, Game, Played, Record, Script, ScriptedHost};
+use vkrgss_binding::testing::{self, Harness};
 use vkrgss_binding::{Copied, Copier, CopyFailed, RunConfig};
 use vkrgss_compose_ref::Compositor;
 use vkrgss_proto::{
     AudioChannel, AudioCommand, BitmapDelta, FramePacket, GuestToHost, HostToGuest, TableDelta,
 };
+use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS1.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss1)
+}
 
 /// What a call of the fake copier does.
 #[derive(Debug)]
@@ -75,7 +82,7 @@ fn run(game: &Game, copier: Option<Arc<FakeCopier>>, script: Script) -> Played {
         copier: copier.map(|copier| copier as Arc<dyn Copier>),
         ..game.run_config()
     };
-    let played = host::run_game(game, config, script, "nil");
+    let played = host::run_game(harness(), game, config, script, "nil");
     assert!(played.outcome.is_ok(), "{:?}", played.outcome);
     played
 }
@@ -115,7 +122,7 @@ fn counting(name: &str, frames: u32) -> Game {
            Graphics.update
          end"
     );
-    Game::new(name, "Counting", &[("Main", &main)])
+    Game::new(harness(), name, "Counting", &[("Main", &main)])
 }
 
 /// Scenario "Unchanged run".
@@ -163,7 +170,7 @@ fn a_request_between_a_freeze_and_the_end_of_its_transition_waits_for_the_frame_
                 2.times { Graphics.update }
                 Graphics.transition(4)
                 3.times { Graphics.update }";
-    let game = Game::new("states_frozen", "Frozen", &[("Main", main)]);
+    let game = Game::new(harness(), "states_frozen", "Frozen", &[("Main", main)]);
     // Frames 4 and 5 are sent while the display is frozen, 6 to 9 are the transition's.
     for request_at in [3, 4, 5, 7, 9] {
         let copier = FakeCopier::new([Plan::Resume]);
@@ -184,7 +191,7 @@ fn a_request_during_a_modal_message_waits_for_the_frame_after_it() {
     let main = "Graphics.update
                 print 'wait'
                 2.times { Graphics.update }";
-    let game = Game::new("states_modal", "Modal", &[("Main", main)]);
+    let game = Game::new(harness(), "states_modal", "Modal", &[("Main", main)]);
     let copier = FakeCopier::new([Plan::Resume]);
     // The message is shown for the frames 2 to 4.
     let script = Script::new().dismiss_after(3).after_frame(2, save(0));
@@ -274,7 +281,7 @@ fn a_resumed_copy_sends_its_title_its_pointer_its_music_and_a_complete_frame() {
                   tilemap.update
                   Graphics.update
                 end";
-    let game = Game::new("states_complete", "Complete", &[("Main", main)]);
+    let game = Game::new(harness(), "states_complete", "Complete", &[("Main", main)]);
     let music = b"not really music".to_vec();
     let file = game.dir().join("Audio/BGM/theme.ogg");
     std::fs::create_dir_all(file.parent().unwrap()).unwrap();

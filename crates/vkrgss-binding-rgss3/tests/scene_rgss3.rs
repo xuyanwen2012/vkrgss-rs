@@ -19,9 +19,14 @@ extern crate vkrgss_binding_rgss3 as vkrgss_binding;
 #[path = "../../vkrgss-binding/tests/scene_support/mod.rs"]
 mod scene_support;
 
-use vkrgss_binding::testing;
 use vkrgss_binding::testing::host::{self, Script};
+use vkrgss_binding::testing::{self, Harness};
 use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS3.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss3)
+}
 
 /// Ruby that `eval_with` defines: `try { ... }` is the class of the exception the block
 /// raises, `error { ... }` its class and message.
@@ -30,15 +35,14 @@ const HELPERS: &str = "def try; yield; rescue Exception; $!.class; end; \
 
 /// Starts the harness as a game of RGSS3.
 fn start() {
-    testing::start_as(Runtime::Rgss3);
-    scene_support::install();
+    scene_support::install(harness());
 }
 
 /// `inspect` of the value of `source` in a game of RGSS3, or the class and the message of
 /// the exception that left it.
 fn eval(source: &str) -> String {
     start();
-    match testing::eval(source) {
+    match harness().eval(source) {
         Ok(inspect) => inspect,
         Err(error) => format!("{}: {}", error.class_name, error.message),
     }
@@ -67,6 +71,7 @@ const FOUR: &str = "made << (v = Viewport.new(0, 0, 50, 50)) << (s = Sprite.new(
 fn a_disposed_viewport_keeps_its_elements() {
     start();
     let (value, record) = host::play(
+        harness(),
         &format!(
             "made = []; begin; {FOUR}; v.dispose; Graphics.update; s.x = 3; \
              [s.disposed?, p.disposed?, w.disposed?, t.disposed?, s.x, s.viewport.equal?(v), \

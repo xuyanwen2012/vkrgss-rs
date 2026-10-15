@@ -16,15 +16,19 @@ extern crate vkrgss_binding_rgss3 as vkrgss_binding;
 #[path = "../../vkrgss-binding/tests/scene_support/mod.rs"]
 mod scene_support;
 
-use vkrgss_binding::testing;
+use vkrgss_binding::testing::{self, Harness};
 use vkrgss_vfs::Runtime;
+
+/// The harness, started as a game of RGSS3.
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss3)
+}
 
 /// `inspect` of the value of `source` in a game of RGSS3, or the class and the message of
 /// the exception that left it.
 fn eval(source: &str) -> String {
-    testing::start_as(Runtime::Rgss3);
-    scene_support::install();
-    match testing::eval(source) {
+    scene_support::install(harness());
+    match harness().eval(source) {
         Ok(inspect) => inspect,
         Err(error) => format!("{}: {}", error.class_name, error.message),
     }
