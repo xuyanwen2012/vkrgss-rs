@@ -139,6 +139,8 @@ pub(crate) struct Suites {
     pub(crate) stress: bool,
     /// How many test processes run at a time.
     pub(crate) workers: usize,
+    /// Environment variables added for every test process.
+    pub(crate) env: Vec<(&'static str, String)>,
 }
 
 impl Suites {
@@ -146,6 +148,16 @@ impl Suites {
     pub(crate) fn build(name: &str, timeout: Duration, stress: bool) -> Self {
         let scratch = scratch_dir(name);
         let ruby = build_ruby_executable(&scratch);
+        Self::with_executable(scratch, ruby, timeout, stress)
+    }
+
+    /// The suites of an executable that was built in `scratch`.
+    pub(crate) fn with_executable(
+        scratch: PathBuf,
+        ruby: PathBuf,
+        timeout: Duration,
+        stress: bool,
+    ) -> Self {
         let workers = thread::available_parallelism().map_or(4, |count| count.get().min(10));
         Self {
             scratch,
@@ -153,6 +165,7 @@ impl Suites {
             timeout,
             stress,
             workers,
+            env: Vec::new(),
         }
     }
 
@@ -219,6 +232,7 @@ impl Suites {
             )
             .env_remove("RUBYOPT")
             .env_remove("TZ")
+            .envs(self.env.iter().map(|(name, value)| (name, value)))
             .stdin(Stdio::null())
             .stdout(log.try_clone().expect("second handle to the log"))
             .stderr(log)

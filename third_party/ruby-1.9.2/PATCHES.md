@@ -29,7 +29,7 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
 
 - File: `cont.c`
 - Patch: `patches/cont-stack-copy-with-current-gcc.patch`
-- Patched SHA-256: `649d6dcce4a988eeb15f692602b03f3d7702af0ef22165622c9cfc94b81f508e`
+- Patched SHA-256: `652deac0ea357f58e9b7d5b5a6f015abd910a44c4460bacebcaf868cc780e1ff`
 - Reason: three faults of the stack copying of Fibers and continuations at `-O1` and
   above. (1) `cont_restore_0` moves the stack pointer below the saved stack with `alloca`
   before the saved stack is copied back; the result of `alloca` was unused, the compiler
@@ -93,7 +93,7 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
 
 - File: `gc.c`
 - Patch: `patches/gc-mark-callee-saved-registers.patch`
-- Patched SHA-256: `d257c2c90cde8caa186b96c84c07661bbdd9dcefc6794420ef02528125f100e4`
+- Patched SHA-256: `54a8cfc474552a897af418375481191d8425ca13ba7497452f96d513cf07bef1`
 - Reason: `mark_current_machine_context` relies on `setjmp` to put the registers where
   the stack scan finds them, and glibc scrambles `rbp` (and `rsp` and the program counter) in
   a jump buffer. A value held only in `rbp` was not marked. `__builtin_unwind_init()` puts
@@ -165,7 +165,7 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
 
 - File: `gc.c`
 - Patch: `patches/host-stack-limit-check.patch`
-- Patched SHA-256: `d257c2c90cde8caa186b96c84c07661bbdd9dcefc6794420ef02528125f100e4`
+- Patched SHA-256: `54a8cfc474552a897af418375481191d8425ca13ba7497452f96d513cf07bef1`
 - Reason: applies after patch 7, and belongs to patch 12. Where the platform has an
   alternate signal stack, `ruby_stack_check` of the release returns 0 without looking: the
   release waits for the segmentation fault of a stack overflow and raises `SystemStackError`
@@ -247,7 +247,7 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
 
 - File: `util.c`
 - Patch: `patches/strtod-long-digit-string.patch`
-- Patched SHA-256: `3581f19c5254cb0a269e0fbe26ee969849eaa86ba448bb896c0d408484b3f2f3`
+- Patched SHA-256: `5907ec59e6834567f6152955daeb5374dba1172893bd63370a77823e502739f0`
 - Reason: CVE-2013-4164, the fix patch 33 of the tree of Ruby 1.8.7 carries, which this
   tree lacked. `ruby_strtod` allocated its big numbers through `Balloc`, whose free list has
   `Kmax + 1` entries; a digit string long enough asked for a larger one, and `Balloc` and
@@ -256,3 +256,45 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
   outside the list, and fraction digits after the first `DBL_DIG * 4` are skipped, which no
   double can tell apart. `tests/backports.rs` of `vkrgss-ruby192-sys` crashed with SIGSEGV
   before the patch.
+
+## 19. asan-conservative-scan
+
+- File: `gc.c`
+- Patch: `patches/asan-conservative-scan.patch`
+- Patched SHA-256: `54a8cfc474552a897af418375481191d8425ca13ba7497452f96d513cf07bef1`
+- Reason: applies after patches 7 and 13. For the sanitized run of the release's suites
+  (`tests/sanitized.rs` of `vkrgss-ruby192-sys`), as patch 18 of the tree of Ruby 1.8.7. The
+  collector is conservative: `mark_locations_array` reads every word of the machine stack
+  and of the saved registers, the red zones that AddressSanitizer puts around local
+  variables included, and the sanitizer stopped the first collection. The function carries
+  the compiler's `no_sanitize_address` attribute. Without the sanitizer the attribute
+  changes nothing.
+
+## 20. asan-stack-copy
+
+- File: `cont.c`
+- Patch: `patches/asan-stack-copy.patch`
+- Patched SHA-256: `652deac0ea357f58e9b7d5b5a6f015abd910a44c4460bacebcaf868cc780e1ff`
+- Reason: applies after patch 2. For the same run, as patch 19 of the tree of Ruby 1.8.7. A
+  Fiber switch and a continuation copy the machine stack to the heap in
+  `cont_save_machine_stack` and back in `cont_restore_1`, red zones included, and the
+  sanitizer's `memcpy` stopped `test_fiber.rb` and the other files that switch Fibers with
+  a stack-buffer-underflow. Under AddressSanitizer the copied range is declared addressable
+  before each copy (`__asan_unpoison_memory_region`); the frames that are live at a switch
+  lose their red zones, so the run can miss a stack overflow in them and cannot report a
+  false one. In any other build the macro is empty.
+
+## 21. dtoa-terminator-room
+
+- File: `util.c`
+- Patch: `patches/dtoa-terminator-room.patch`
+- Patched SHA-256: `5907ec59e6834567f6152955daeb5374dba1172893bd63370a77823e502739f0`
+- Reason: applies after patch 18. Found by the sanitized run, in `test_sprintf.rb`: a heap
+  overflow of one byte. `nrv_alloc` copies a short string with its terminator into a
+  buffer of `n` bytes, and its three callers in `BSD__hdtoa`, the conversion of `%a` and
+  `%A`, pass the length without the terminator (`"Infinity"`, `"NaN"` and `"0"`), so the
+  terminator was written past the buffer: `"%a" % 0.0` reaches it. The allocator's rounding
+  hid it. The buffer now has room for the terminator, as the same function of the tree of
+  Ruby 1.8.7 has; this is our own correction. `ruby_dtoa`, which the other conversions use,
+  counts the terminator itself (`rv_strdup`) and gets one byte more than before. The text
+  that is returned is unchanged.

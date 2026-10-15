@@ -278,6 +278,33 @@ fn main() {
         args.iter().all(|arg| !arg.contains(char::is_whitespace)),
         "a compiler argument contains white space and cannot be passed on: {args:?}"
     );
+    // And what the opt-in sanitized run and the fuzz targets need to compile the same files
+    // themselves, with a compiler that has the sanitizer runtimes.
+    let core_sources: Vec<&str> = CORE_SOURCES
+        .iter()
+        .chain(TRANSCODER_SOURCES)
+        .copied()
+        .collect();
+    println!(
+        "cargo:rustc-env=VKRGSS_RUBY192_CORE_SOURCES={}",
+        core_sources.join(" ")
+    );
+    println!(
+        "cargo:rustc-env=VKRGSS_RUBY192_ENCODING_SOURCES={}",
+        ENCODING_SOURCES.join(" ")
+    );
+    println!(
+        "cargo:rustc-env=VKRGSS_RUBY192_CLANG_CFLAGS={}",
+        CLANG_FLAGS.join(" ")
+    );
+    println!(
+        "cargo:rustc-env=VKRGSS_RUBY192_FORTIFY_CFLAGS={}",
+        FORTIFY_FLAGS.join(" ")
+    );
+    println!(
+        "cargo:rustc-env=VKRGSS_RUBY192_ZLIB_INCLUDE_DIR={}",
+        utf8(&zlib_include)
+    );
     println!(
         "cargo:rustc-env=VKRGSS_RUBY192_CC={}",
         utf8(compiler.path())

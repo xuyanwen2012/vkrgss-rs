@@ -1,0 +1,26 @@
+# Sanitizer reports that the sanitized run of Ruby 1.9.2 accepts.
+#
+# An entry is a reason, written as comment lines, followed by one or more patterns. A report
+# is accepted when one pattern occurs in its line as the run prints it: the location
+# relative to `third_party/`, then the sanitizer's message. A `*` in a pattern stands for any
+# text. Entries are separated by blank lines, and an entry without a reason fails a test.
+
+# The regular expression engine reads the operands of its compiled pattern (lengths,
+# addresses, group numbers, bit sets, code points) from a byte stream at whatever offset
+# they have. It does so on purpose where the processor allows unaligned access
+# (`PLATFORM_UNALIGNED_WORD_ACCESS` in `regint.h`, defined for x86 and x86-64); on other
+# processors it copies the bytes.
+ruby-1.9.2/regexec.c:*: runtime error: load of misaligned address
+ruby-1.9.2/regcomp.c:*: runtime error: load of misaligned address
+
+# `memcpy` is given a null pointer together with a length of zero: an object without
+# instance variables has no table of them, a call without arguments no argument array. The
+# C standard calls that undefined, and no byte is read or written. Each line is one such
+# call.
+ruby-1.9.2/object.c:213:13: runtime error: null pointer passed as argument 2
+ruby-1.9.2/vm_eval.c:570:5: runtime error: null pointer passed as argument 2
+
+# `vm_expandarray` takes the address of the last of `space_size` slots, which for an
+# expansion into no slot is the slot before the first. The pointer is computed and never
+# used: the loop that writes through it runs zero times then.
+ruby-1.9.2/vm_insnhelper.c:1619:17: runtime error: addition of unsigned offset to

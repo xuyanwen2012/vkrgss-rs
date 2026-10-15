@@ -2,7 +2,7 @@
 
 ## 1. Sanitized run
 
-- [ ] 1.1 `tests/sanitized.rs` and `tests/sanitized.allow` of `vkrgss-ruby192-sys`; fix or allow-list what it reports, as `design.md` says. Verify: scenario "A clean run"; `cargo test -p vkrgss-ruby192-sys --locked` passes, the vendored-source checks included.
+- [x] 1.1 `tests/sanitized.rs` and `tests/sanitized.allow` of `vkrgss-ruby192-sys`; fix or allow-list what it reports, as `design.md` says. Verify: scenario "A clean run"; `cargo test -p vkrgss-ruby192-sys --locked` passes, the vendored-source checks included.
 
 ## 2. Targets and command
 

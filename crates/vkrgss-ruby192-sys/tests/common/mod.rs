@@ -93,7 +93,7 @@ pub(crate) fn link_arguments() -> Vec<PathBuf> {
 
 /// The extensions that only Ruby's test executable links, with the defines of their own
 /// `extconf.rb` on this target.
-const TEST_EXTENSIONS: &[(&str, &[&str])] = &[
+pub(crate) const TEST_EXTENSIONS: &[(&str, &[&str])] = &[
     ("stringio", &[]),
     ("fcntl", &[]),
     (
@@ -119,6 +119,12 @@ const TEST_EXTENSIONS: &[(&str, &[&str])] = &[
 /// on), which the release declares in `Init_encdb` and the suites use throughout. The
 /// library declares no name of the release, so these constants are undefined in it.
 fn write_init_ext(scratch: &Path) -> PathBuf {
+    write_init_ext_with(scratch, "", "")
+}
+
+/// As [`write_init_ext`], with more C definitions in front of `Init_ext` and more statements
+/// at its end.
+pub(crate) fn write_init_ext_with(scratch: &Path, definitions: &str, more: &str) -> PathBuf {
     let mut declarations = String::new();
     let mut statements = String::new();
     for (name, _) in TEST_EXTENSIONS {
@@ -139,6 +145,7 @@ fn write_init_ext(scratch: &Path) -> PathBuf {
              void rb_encdb_declare(const char *name);\n\
              {declarations}\
              __attribute__((visibility(\"default\"))) int vkrgss_export_probe = 1;\n\
+             {definitions}\
              void Init_ext(void)\n\
              {{\n\
              \x20   rb_encdb_declare(\"ASCII-8BIT\");\n\
@@ -150,6 +157,7 @@ fn write_init_ext(scratch: &Path) -> PathBuf {
              \x20   Init_utf_16_32();\n\
              \x20   ruby_init_ext(\"zlib.so\", Init_zlib);\n\
              {statements}\
+             {more}\
              }}\n"
         ),
     )
@@ -311,3 +319,5 @@ pub(crate) mod suites;
 pub(crate) mod frames;
 
 pub(crate) mod copy;
+
+pub(crate) mod instrumented;

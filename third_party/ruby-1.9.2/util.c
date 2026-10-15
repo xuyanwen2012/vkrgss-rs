@@ -3130,7 +3130,8 @@ nrv_alloc(const char *s, char **rve, size_t n)
 {
     char *rv, *t;
 
-    t = rv = rv_alloc(n);
+    /* vkrgss: the copy ends with a terminator, which three of the callers do not count */
+    t = rv = rv_alloc(n + 1);
     while ((*t = *s++) != 0) t++;
     if (rve)
         *rve = t;

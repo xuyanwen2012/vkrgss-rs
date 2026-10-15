@@ -1315,6 +1315,11 @@ is_pointer_to_heap(rb_objspace_t *objspace, void *ptr)
     return FALSE;
 }
 
+/* vkrgss: the conservative scan reads every word of the machine stack and of the saved
+   registers, whatever lies there; AddressSanitizer must not check these reads */
+#if defined(__GNUC__)
+__attribute__((no_sanitize_address))
+#endif
 static void
 mark_locations_array(rb_objspace_t *objspace, register VALUE *x, register long n)
 {

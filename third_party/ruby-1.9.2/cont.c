@@ -16,6 +16,24 @@
 
 #define CAPTURE_JUST_VALID_VM_STACK 1
 
+/* vkrgss: a Fiber switch and a continuation copy the machine stack out and later back in,
+   whatever lies there, red zones of AddressSanitizer included. Under that sanitizer the
+   range is declared addressable before each copy; in any other build this is nothing. */
+#if defined(__SANITIZE_ADDRESS__)
+# define VKRGSS_ADDRESS_SANITIZER 1
+#elif defined(__has_feature)
+# if __has_feature(address_sanitizer)
+#  define VKRGSS_ADDRESS_SANITIZER 1
+# endif
+#endif
+#ifdef VKRGSS_ADDRESS_SANITIZER
+void __asan_unpoison_memory_region(void const volatile *addr, size_t size);
+# define VKRGSS_STACK_ADDRESSABLE(pos, len) \
+    __asan_unpoison_memory_region((pos), sizeof(VALUE) * (len))
+#else
+# define VKRGSS_STACK_ADDRESSABLE(pos, len)
+#endif
+
 enum context_type {
     CONTINUATION_CONTEXT = 0,
     FIBER_CONTEXT = 1,
@@ -252,6 +270,7 @@ cont_save_machine_stack(rb_thread_t *th, rb_context_t *cont)
     }
 
     FLUSH_REGISTER_WINDOWS;
+    VKRGSS_STACK_ADDRESSABLE(cont->machine_stack_src, size);
     MEMCPY(cont->machine_stack, cont->machine_stack_src, VALUE, size);
 
 #ifdef __ia64
@@ -409,6 +428,7 @@ cont_restore_1(rb_context_t *cont)
 #endif
     if (cont->machine_stack_src) {
 	FLUSH_REGISTER_WINDOWS;
+	VKRGSS_STACK_ADDRESSABLE(cont->machine_stack_src, cont->machine_stack_size);
 	MEMCPY(cont->machine_stack_src, cont->machine_stack,
 	       VALUE, cont->machine_stack_size);
     }
