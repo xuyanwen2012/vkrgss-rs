@@ -116,6 +116,12 @@ impl Pacer {
         !self.failed
     }
 
+    /// Whether the presents of the swapchain with `calls` carry target times: the extension
+    /// is still used and the swapchain has a time domain that can be read.
+    pub(super) fn paces(&self, calls: Option<&dyn TimingCalls>) -> bool {
+        self.wants_timing() && calls.is_some_and(|calls| calls.time_domain().is_some())
+    }
+
     pub(super) fn summary(&self) -> Option<IntervalSummary> {
         self.stats.summary()
     }
@@ -1138,6 +1144,7 @@ mod tests {
         );
         swapchain.queue_size = 4;
         assert_eq!(swapchain.domain, None);
+        assert!(!pacer.paces(Some(&swapchain)));
         for _ in 0..3 {
             assert_eq!(
                 present(&mut pacer, &mut swapchain),
@@ -1169,6 +1176,8 @@ mod tests {
             "Scenario \"Swapchain domain the device can calibrate\""
         );
         assert_eq!(swapchain.calls, ["calibrated"]);
+        assert!(pacer.paces(Some(&swapchain)));
+        assert!(!pacer.paces(None));
     }
 
     #[test]
@@ -1209,10 +1218,12 @@ mod tests {
         assert_eq!(pacer.take_report(), None);
 
         // Chosen again, the swapchain may have no clock left that can be read.
+        assert!(pacer.paces(Some(&swapchain)));
         swapchain.now = 0;
         swapchain.calibrateable.clear();
         assert_eq!(present(&mut pacer, &mut swapchain), None);
         assert!(pacer.wants_timing());
+        assert!(!pacer.paces(Some(&swapchain)));
     }
 
     #[test]

@@ -38,7 +38,9 @@ enables `VK_KHR_calibrated_timestamps` but nobody calls
   this change, which the requirement plainly needs.
 - A swapchain without a domain that can be read keeps its `SwapchainTiming` (the domains may
   change later), and the pacer plans none of its presents: they go out as without the
-  extension, and nothing is reported as a failure.
+  extension, and nothing is reported as a failure. `paces_with_present_timing` asks the
+  pacer, which counts a swapchain as paced only while it has a time domain, so the host
+  labels its statistics and pacing mode by the presenter's clock then.
 
 ## Out of scope
 

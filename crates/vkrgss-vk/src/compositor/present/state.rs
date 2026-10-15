@@ -6,6 +6,7 @@ use vkrgss_proto::{BitmapId, Size};
 
 use super::scaling::{Filter, MAX_VAGUENESS, Mask, Mix};
 use crate::compositor::VkCompositor;
+use crate::compositor::pacer::TimingCalls;
 use crate::pacing::IntervalSummary;
 
 impl VkCompositor {
@@ -99,7 +100,10 @@ impl VkCompositor {
     /// Whether the current swapchain's presents carry target times.
     pub fn paces_with_present_timing(&self) -> bool {
         let chain = self.presenter.as_ref().and_then(|p| p.swapchain.as_ref());
-        self.pacer.wants_timing() && chain.is_some_and(|chain| chain.timing.is_some())
+        let calls = chain
+            .and_then(|chain| chain.timing.as_ref())
+            .map(|timing| timing as &dyn TimingCalls);
+        self.pacer.paces(calls)
     }
 
     /// Why presents stopped carrying target times, once: a call of the extension failed.
