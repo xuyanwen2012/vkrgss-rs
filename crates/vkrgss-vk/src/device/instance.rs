@@ -399,6 +399,22 @@ impl Instance {
 }
 
 impl Instance {
+    /// The time domains the device can calibrate, on a device that lists
+    /// `VK_KHR_calibrated_timestamps`.
+    pub(super) fn calibrateable_domains(
+        &self,
+        physical: vk::PhysicalDevice,
+    ) -> Result<Vec<vk::TimeDomainKHR>, VkError> {
+        let calibrated = ash::khr::calibrated_timestamps::Instance::new(&self._entry, &self.raw);
+        // SAFETY: the physical device was enumerated from this live instance and lists the
+        // extension, whose physical-device commands can therefore be called.
+        unsafe { calibrated.get_physical_device_calibrateable_time_domains(physical) }.map_err(
+            VkError::vulkan("vkGetPhysicalDeviceCalibrateableTimeDomainsKHR"),
+        )
+    }
+}
+
+impl Instance {
     /// Whether the device can be opened with `VK_EXT_swapchain_maintenance1`: the instance
     /// has the surface extension it needs, and the device lists it and reports its feature.
     pub(super) fn swapchain_maintenance(

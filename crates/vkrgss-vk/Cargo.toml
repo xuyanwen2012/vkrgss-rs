@@ -20,6 +20,7 @@ workspace = true
 ash.workspace = true
 ash-window.workspace = true
 gpu-allocator.workspace = true
+libc.workspace = true
 raw-window-handle.workspace = true
 thiserror.workspace = true
 tracing.workspace = true

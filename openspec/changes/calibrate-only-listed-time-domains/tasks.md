@@ -2,7 +2,7 @@
 
 ## 1. Time domains
 
-- [ ] 1.1 Query the calibrateable domains, read the monotonic clock directly, choose only listed swapchain domains, treat 0 as a clock change; tests of the pacer's stand-in for the four scenarios. Verify: the scenarios of "Calibrated times only from listed domains"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss-vk --locked` passes.
+- [x] 1.1 Query the calibrateable domains, read the monotonic clock directly, choose only listed swapchain domains, treat 0 as a clock change; tests of the pacer's stand-in for the four scenarios. Verify: the scenarios of "Calibrated times only from listed domains"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss-vk --locked` passes.
 
 ## 2. Small corrections
 

@@ -41,8 +41,15 @@ pub(super) trait TimingCalls {
     /// nanoseconds. Running out of time is not an error.
     fn wait(&mut self, present_id: u64, timeout: u64) -> Result<(), Failure>;
     fn feedback(&mut self) -> Result<Feedback, Failure>;
-    /// The time of the swapchain's clock, in nanoseconds.
-    fn now(&mut self) -> Result<u64, Failure>;
+    /// The time domain the swapchain's times are read in, or `None` when none of those it
+    /// offers can be read.
+    fn time_domain(&self) -> Option<vk::TimeDomainKHR>;
+    /// The time of the swapchain's clock, in nanoseconds, from
+    /// `vkGetCalibratedTimestampsKHR`. Called only for a domain other than the monotonic
+    /// clock.
+    fn calibrated_now(&mut self) -> Result<u64, Failure>;
+    /// Reads the swapchain's time domains again and chooses one of them.
+    fn choose_domain(&mut self) -> Result<(), Failure>;
 }
 
 /// What one present carries.
@@ -155,7 +162,8 @@ impl Pacer {
     }
 
     /// What the next present carries, or `None` when it goes out without the extension:
-    /// there are no `calls` for the swapchain, or one has failed, now or earlier.
+    /// there are no `calls` for the swapchain, its clock cannot be read, or a call has
+    /// failed, now or earlier.
     ///
     /// `frame` says whether the present shows a new frame. Only then does the schedule move
     /// on; anything else is shown at the target of the frame it repeats.
@@ -166,7 +174,7 @@ impl Pacer {
     ) -> Option<Plan> {
         let calls = calls.filter(|_| !self.failed)?;
         match self.try_plan(calls, frame) {
-            Ok(plan) => Some(plan),
+            Ok(plan) => plan,
             Err(failure) => {
                 self.fail(failure);
                 None
@@ -174,7 +182,11 @@ impl Pacer {
         }
     }
 
-    fn try_plan(&mut self, calls: &mut dyn TimingCalls, frame: bool) -> Result<Plan, Failure> {
+    fn try_plan(
+        &mut self,
+        calls: &mut dyn TimingCalls,
+        frame: bool,
+    ) -> Result<Option<Plan>, Failure> {
         let can_wait = calls.can_wait();
         if can_wait && let Some(id) = self.awaited {
             // Two periods: long enough for a frame that is on its way, short enough that a
@@ -194,7 +206,21 @@ impl Pacer {
                 self.stats.interrupt();
             }
         }
-        let now = calls.now()?;
+        let Some(mut now) = read_clock(calls)? else {
+            return Ok(None);
+        };
+        if now == 0 {
+            // The swapchain's clock is another one, as when its domains change.
+            calls.choose_domain()?;
+            self.schedule.restart();
+            if self.from_feedback {
+                self.stats.interrupt();
+            }
+            let Some(again) = read_clock(calls)? else {
+                return Ok(None);
+            };
+            now = again;
+        }
         let target = match frame {
             true => self.schedule.next(now, self.rate),
             false => self.schedule.current().unwrap_or(now),
@@ -203,13 +229,13 @@ impl Pacer {
             self.newest_id += 1;
             self.newest_id
         });
-        Ok(Plan {
+        Ok(Some(Plan {
             target: target.max(1),
             present_id,
             // A frame beyond what the results queue holds goes unmeasured.
             query: frame && self.outstanding < queue_size,
             feedback: queue_size > 0,
-        })
+        }))
     }
 
     /// A present went out, with `plan` or without the extension.
@@ -303,8 +329,19 @@ fn visible_stage(stage_queries: u32) -> u32 {
 }
 
 /// The time domain to use of those a swapchain offers, each with its id: the system's
-/// monotonic clock if it is among them, else a clock of the swapchain, else the first.
-fn choose_time_domain(offered: &[(vk::TimeDomainKHR, u64)]) -> Option<(vk::TimeDomainKHR, u64)> {
+/// monotonic clock if it is among them, else a clock of the swapchain, else the first. Any
+/// other domain than the monotonic clock is used only when it is one of the `calibrateable`
+/// domains of the device; `None` when no domain is left.
+fn choose_time_domain(
+    offered: &[(vk::TimeDomainKHR, u64)],
+    calibrateable: &[vk::TimeDomainKHR],
+) -> Option<(vk::TimeDomainKHR, u64)> {
+    let usable: Vec<_> = offered
+        .iter()
+        .filter(|(domain, _)| {
+            *domain == vk::TimeDomainKHR::CLOCK_MONOTONIC || calibrateable.contains(domain)
+        })
+        .collect();
     let preferred = [
         vk::TimeDomainKHR::CLOCK_MONOTONIC,
         ffi::TIME_DOMAIN_SWAPCHAIN_LOCAL,
@@ -312,9 +349,33 @@ fn choose_time_domain(offered: &[(vk::TimeDomainKHR, u64)]) -> Option<(vk::TimeD
     ];
     preferred
         .iter()
-        .find_map(|wanted| offered.iter().find(|(domain, _)| domain == wanted))
-        .or(offered.first())
+        .find_map(|wanted| usable.iter().find(|(domain, _)| domain == wanted))
+        .or(usable.first())
         .copied()
+        .copied()
+}
+
+/// The time of the swapchain's clock in nanoseconds, or `None` when it has no domain that
+/// can be read. The monotonic clock is read from the system.
+fn read_clock(calls: &mut dyn TimingCalls) -> Result<Option<u64>, Failure> {
+    match calls.time_domain() {
+        None => Ok(None),
+        Some(vk::TimeDomainKHR::CLOCK_MONOTONIC) => Ok(Some(monotonic_now())),
+        Some(_) => calls.calibrated_now().map(Some),
+    }
+}
+
+/// The time of `CLOCK_MONOTONIC` in nanoseconds, which is what
+/// `VK_TIME_DOMAIN_CLOCK_MONOTONIC_KHR` is defined as.
+fn monotonic_now() -> u64 {
+    let mut time = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    // SAFETY: the pointer is to a live `timespec`, and the clock exists on every Linux.
+    unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut time) };
+    // Neither field of the monotonic clock is negative.
+    (time.tv_sec as u64) * 1_000_000_000 + time.tv_nsec as u64
 }
 
 /// How many slots the results queue of a swapchain gets. Feedback is read before every
@@ -334,15 +395,19 @@ pub(super) struct SwapchainTiming {
     /// The stage whose time is asked for, or 0 when the surface reports none.
     stage: u32,
     wait: bool,
-    domain: vk::TimeDomainKHR,
-    domain_id: u64,
+    /// The time domains the device can calibrate.
+    calibrateable: Vec<vk::TimeDomainKHR>,
+    /// The time domain in use with its id, or `None` when the swapchain offers none that can
+    /// be read.
+    clock: Option<(vk::TimeDomainKHR, u64)>,
     /// The swapchain's counter of its time domains when the domain was chosen.
     domains_counter: u64,
 }
 
 impl SwapchainTiming {
     /// Prepares a swapchain that was created with the flags of `pacing` on a device that was
-    /// opened with the extensions: allocates its results queue and chooses its clock.
+    /// opened with the extensions: allocates its results queue and chooses its clock from the
+    /// domains it offers and the device's `calibrateable` ones.
     ///
     /// # Safety
     ///
@@ -355,6 +420,7 @@ impl SwapchainTiming {
         device: vk::Device,
         swapchain: vk::SwapchainKHR,
         pacing: SurfacePacing,
+        calibrateable: Vec<vk::TimeDomainKHR>,
     ) -> Result<SwapchainTiming, Failure> {
         let mut timing = SwapchainTiming {
             commands,
@@ -363,8 +429,8 @@ impl SwapchainTiming {
             swapchain,
             stage: visible_stage(pacing.stage_queries),
             wait: pacing.wait && commands.wait_for_present2.is_some(),
-            domain: vk::TimeDomainKHR::DEVICE,
-            domain_id: 0,
+            calibrateable,
+            clock: None,
             domains_counter: 0,
         };
         if timing.stage != 0 {
@@ -380,45 +446,6 @@ impl SwapchainTiming {
         Ok(timing)
     }
 
-    /// Reads the swapchain's time domains and takes one of them.
-    fn choose_domain(&mut self) -> Result<(), Failure> {
-        const CALL: &str = "vkGetSwapchainTimeDomainPropertiesEXT";
-        let query = |properties: &mut ffi::SwapchainTimeDomainProperties, counter: &mut u64| {
-            // SAFETY: the swapchain is live (see `new`), and the arrays the properties point
-            // to, if any, hold as many elements as its count says.
-            let result = unsafe {
-                (self.commands.get_swapchain_time_domain_properties)(
-                    self.device,
-                    self.swapchain,
-                    properties,
-                    counter,
-                )
-            };
-            match result {
-                vk::Result::SUCCESS | vk::Result::INCOMPLETE => Ok(()),
-                result => Err((CALL, result)),
-            }
-        };
-        let mut counter = 0;
-        let mut properties = ffi::SwapchainTimeDomainProperties::default();
-        query(&mut properties, &mut counter)?;
-        let count = properties.time_domain_count as usize;
-        let mut domains = vec![vk::TimeDomainKHR::DEVICE; count];
-        let mut ids = vec![0_u64; count];
-        if count > 0 {
-            properties.p_time_domains = domains.as_mut_ptr();
-            properties.p_time_domain_ids = ids.as_mut_ptr();
-            query(&mut properties, &mut counter)?;
-        }
-        let written = (properties.time_domain_count as usize).min(count);
-        let offered: Vec<_> = domains.into_iter().zip(ids).take(written).collect();
-        // A swapchain has at least one; none is a failure of the extension like any other.
-        let (domain, id) =
-            choose_time_domain(&offered).ok_or((CALL, vk::Result::ERROR_FEATURE_NOT_PRESENT))?;
-        (self.domain, self.domain_id, self.domains_counter) = (domain, id, counter);
-        Ok(())
-    }
-
     /// The stage a target time and a reading of the clock refer to where the clock is one of
     /// a present stage.
     fn target_stage(&self) -> u32 {
@@ -428,11 +455,16 @@ impl SwapchainTiming {
         }
     }
 
+    /// The id of the time domain in use. Only a swapchain with one gets a plan.
+    fn domain_id(&self) -> u64 {
+        self.clock.map_or(0, |(_, id)| id)
+    }
+
     /// The timing information the present of `plan` carries.
     pub(super) fn present_info(&self, plan: &Plan) -> ffi::PresentTimingInfo {
         ffi::PresentTimingInfo {
             target_time: plan.target,
-            time_domain_id: self.domain_id,
+            time_domain_id: self.domain_id(),
             present_stage_queries: if plan.query { self.stage } else { 0 },
             target_time_domain_present_stage: self.target_stage(),
             ..Default::default()
@@ -511,7 +543,8 @@ impl TimingCalls for SwapchainTiming {
             // use cannot be compared with the others.
             if timing.present_stage_count > 0
                 && stage.time != 0
-                && timing.time_domain_id == self.domain_id
+                && self.clock.is_some()
+                && timing.time_domain_id == self.domain_id()
             {
                 feedback.visible.push(stage.time);
             }
@@ -523,31 +556,76 @@ impl TimingCalls for SwapchainTiming {
         Ok(feedback)
     }
 
-    fn now(&mut self) -> Result<u64, Failure> {
+    fn time_domain(&self) -> Option<vk::TimeDomainKHR> {
+        self.clock.map(|(domain, _)| domain)
+    }
+
+    fn calibrated_now(&mut self) -> Result<u64, Failure> {
+        let (domain, domain_id) = self
+            .clock
+            .ok_or(("vkGetCalibratedTimestampsKHR", vk::Result::ERROR_UNKNOWN))?;
         let local = [
             ffi::TIME_DOMAIN_SWAPCHAIN_LOCAL,
             ffi::TIME_DOMAIN_PRESENT_STAGE_LOCAL,
         ]
-        .contains(&self.domain);
+        .contains(&domain);
         let swapchain_info = ffi::SwapchainCalibratedTimestampInfo {
             swapchain: self.swapchain,
-            present_stage: match self.domain {
+            present_stage: match domain {
                 ffi::TIME_DOMAIN_PRESENT_STAGE_LOCAL => self.target_stage(),
                 _ => 0,
             },
-            time_domain_id: self.domain_id,
+            time_domain_id: domain_id,
             ..Default::default()
         };
-        let mut info = vk::CalibratedTimestampInfoKHR::default().time_domain(self.domain);
+        let mut info = vk::CalibratedTimestampInfoKHR::default().time_domain(domain);
         if local {
             info.p_next = (&raw const swapchain_info).cast();
         }
         // SAFETY: the device was created with the calibrated-timestamps extension; the
-        // domain is one the live swapchain offers, and a domain of the swapchain comes with
-        // the structure that names the swapchain, which has the layout of the header.
+        // domain is one the live swapchain offers and the device lists as calibrateable, and
+        // a domain of the swapchain comes with the structure that names the swapchain, which
+        // has the layout of the header.
         let (timestamps, _) = unsafe { self.calibrated.get_calibrated_timestamps(&[info]) }
             .map_err(|result| ("vkGetCalibratedTimestampsKHR", result))?;
         Ok(timestamps[0])
+    }
+
+    fn choose_domain(&mut self) -> Result<(), Failure> {
+        const CALL: &str = "vkGetSwapchainTimeDomainPropertiesEXT";
+        let query = |properties: &mut ffi::SwapchainTimeDomainProperties, counter: &mut u64| {
+            // SAFETY: the swapchain is live (see `new`), and the arrays the properties point
+            // to, if any, hold as many elements as its count says.
+            let result = unsafe {
+                (self.commands.get_swapchain_time_domain_properties)(
+                    self.device,
+                    self.swapchain,
+                    properties,
+                    counter,
+                )
+            };
+            match result {
+                vk::Result::SUCCESS | vk::Result::INCOMPLETE => Ok(()),
+                result => Err((CALL, result)),
+            }
+        };
+        let mut counter = 0;
+        let mut properties = ffi::SwapchainTimeDomainProperties::default();
+        query(&mut properties, &mut counter)?;
+        let count = properties.time_domain_count as usize;
+        let mut domains = vec![vk::TimeDomainKHR::DEVICE; count];
+        let mut ids = vec![0_u64; count];
+        if count > 0 {
+            properties.p_time_domains = domains.as_mut_ptr();
+            properties.p_time_domain_ids = ids.as_mut_ptr();
+            query(&mut properties, &mut counter)?;
+        }
+        let written = (properties.time_domain_count as usize).min(count);
+        let offered: Vec<_> = domains.into_iter().zip(ids).take(written).collect();
+        // Without a domain the swapchain presents as one without the extension.
+        self.clock = choose_time_domain(&offered, &self.calibrateable);
+        self.domains_counter = counter;
+        Ok(())
     }
 }
 
@@ -558,9 +636,11 @@ mod tests {
     const MS: u64 = 1_000_000;
 
     /// A swapchain that reports every present as visible at its target, one call late, and
-    /// fails a chosen call from a chosen moment on.
-    #[derive(Default)]
+    /// fails a chosen call from a chosen moment on. Its clock is read with the calibrated
+    /// call unless it is the monotonic clock; by default it offers its own clock, which the
+    /// device lists.
     struct StandIn {
+        /// The time of its own clock.
         now: u64,
         wait: bool,
         queue_size: u32,
@@ -573,9 +653,46 @@ mod tests {
         pending: Vec<u64>,
         /// Whether the next feedback says that the clock is another one from then on.
         clock_changes: bool,
+        /// The domains it offers, with their ids.
+        offered: Vec<(vk::TimeDomainKHR, u64)>,
+        /// The domains the device can calibrate.
+        calibrateable: Vec<vk::TimeDomainKHR>,
+        domain: Option<vk::TimeDomainKHR>,
+        /// The time its clock reads once the domain has been chosen again.
+        rechosen_now: u64,
+    }
+
+    impl Default for StandIn {
+        fn default() -> StandIn {
+            StandIn::offering(
+                vec![(ffi::TIME_DOMAIN_SWAPCHAIN_LOCAL, 1)],
+                vec![ffi::TIME_DOMAIN_SWAPCHAIN_LOCAL],
+            )
+        }
     }
 
     impl StandIn {
+        /// A stand-in whose domain is chosen as a swapchain's is when it is created.
+        fn offering(
+            offered: Vec<(vk::TimeDomainKHR, u64)>,
+            calibrateable: Vec<vk::TimeDomainKHR>,
+        ) -> StandIn {
+            StandIn {
+                now: 0,
+                wait: false,
+                queue_size: 0,
+                failing: None,
+                calls: Vec::new(),
+                waited_for: Vec::new(),
+                pending: Vec::new(),
+                clock_changes: false,
+                domain: choose_time_domain(&offered, &calibrateable).map(|(domain, _)| domain),
+                offered,
+                calibrateable,
+                rechosen_now: 0,
+            }
+        }
+
         fn call(&mut self, name: &'static str) -> Result<(), Failure> {
             self.calls.push(name);
             match self.failing {
@@ -610,9 +727,21 @@ mod tests {
             })
         }
 
-        fn now(&mut self) -> Result<u64, Failure> {
-            self.call("now")?;
+        fn time_domain(&self) -> Option<vk::TimeDomainKHR> {
+            self.domain
+        }
+
+        fn calibrated_now(&mut self) -> Result<u64, Failure> {
+            self.call("calibrated")?;
             Ok(self.now)
+        }
+
+        fn choose_domain(&mut self) -> Result<(), Failure> {
+            self.call("choose")?;
+            self.domain =
+                choose_time_domain(&self.offered, &self.calibrateable).map(|(domain, _)| domain);
+            self.now = self.rechosen_now;
+            Ok(())
         }
     }
 
@@ -703,7 +832,7 @@ mod tests {
         assert_eq!(swapchain.waited_for, [1, 2, 3].map(|id| (id, 50 * MS)));
         assert_eq!(
             &swapchain.calls[..5],
-            ["feedback", "now", "wait", "feedback", "now"]
+            ["feedback", "calibrated", "wait", "feedback", "calibrated"]
         );
         // Three reports have been read: two intervals of one period.
         let summary = pacer.summary().unwrap();
@@ -776,7 +905,7 @@ mod tests {
     /// alone from then on, with the statistics taken from the presenter's own clock.
     #[test]
     fn failing_call_is_reported_once_and_presents_go_on_without_target_times() {
-        for failing in ["wait", "feedback", "now"] {
+        for failing in ["wait", "feedback", "calibrated"] {
             let mut pacer = Pacer::new();
             let mut swapchain = StandIn {
                 wait: true,
@@ -949,22 +1078,141 @@ mod tests {
     }
 
     #[test]
-    fn time_domain_is_the_monotonic_clock_then_a_clock_of_the_swapchain() {
+    fn time_domain_is_the_monotonic_clock_then_a_listed_clock_of_the_swapchain() {
         let stage = (ffi::TIME_DOMAIN_PRESENT_STAGE_LOCAL, 11);
         let swapchain = (ffi::TIME_DOMAIN_SWAPCHAIN_LOCAL, 12);
         let monotonic = (vk::TimeDomainKHR::CLOCK_MONOTONIC, 13);
         let device = (vk::TimeDomainKHR::DEVICE, 14);
+        let all = [stage.0, swapchain.0, device.0];
         assert_eq!(
-            choose_time_domain(&[stage, swapchain, monotonic]),
-            Some(monotonic)
+            choose_time_domain(&[stage, swapchain, monotonic], &[]),
+            Some(monotonic),
+            "the monotonic clock needs no listing"
         );
         assert_eq!(
-            choose_time_domain(&[device, stage, swapchain]),
+            choose_time_domain(&[device, stage, swapchain], &all),
             Some(swapchain)
         );
-        assert_eq!(choose_time_domain(&[device, stage]), Some(stage));
-        assert_eq!(choose_time_domain(&[device]), Some(device));
-        assert_eq!(choose_time_domain(&[]), None);
+        assert_eq!(choose_time_domain(&[device, stage], &all), Some(stage));
+        assert_eq!(choose_time_domain(&[device], &all), Some(device));
+        assert_eq!(choose_time_domain(&[], &all), None);
+        // Only listed domains other than the monotonic clock.
+        assert_eq!(
+            choose_time_domain(&[device, stage, swapchain], &[stage.0]),
+            Some(stage)
+        );
+        assert_eq!(
+            choose_time_domain(&[device, stage, swapchain], &[device.0]),
+            Some(device)
+        );
+        assert_eq!(choose_time_domain(&[swapchain], &[]), None);
+    }
+
+    #[test]
+    fn monotonic_clock_is_read_from_the_system() {
+        let mut pacer = Pacer::new();
+        let mut swapchain = StandIn::offering(
+            vec![
+                (ffi::TIME_DOMAIN_SWAPCHAIN_LOCAL, 1),
+                (vk::TimeDomainKHR::CLOCK_MONOTONIC, 2),
+            ],
+            vec![ffi::TIME_DOMAIN_SWAPCHAIN_LOCAL],
+        );
+        assert_eq!(swapchain.domain, Some(vk::TimeDomainKHR::CLOCK_MONOTONIC));
+        let before = monotonic_now();
+        let plan = present(&mut pacer, &mut swapchain).unwrap();
+        let after = monotonic_now();
+        assert!(
+            (before..=after).contains(&plan.target),
+            "Scenario \"Monotonic clock\""
+        );
+        assert!(!swapchain.calls.contains(&"calibrated"));
+    }
+
+    #[test]
+    fn swapchain_clock_the_device_cannot_calibrate_is_not_used() {
+        let mut pacer = Pacer::new();
+        let mut swapchain = StandIn::offering(
+            vec![(ffi::TIME_DOMAIN_SWAPCHAIN_LOCAL, 1)],
+            vec![vk::TimeDomainKHR::DEVICE],
+        );
+        swapchain.queue_size = 4;
+        assert_eq!(swapchain.domain, None);
+        for _ in 0..3 {
+            assert_eq!(
+                present(&mut pacer, &mut swapchain),
+                None,
+                "Scenario \"Swapchain domain the device cannot calibrate\""
+            );
+        }
+        assert!(!swapchain.calls.contains(&"calibrated"));
+        // Not a failure: a later swapchain may have a clock that can be read.
+        assert!(pacer.wants_timing());
+        assert_eq!(pacer.take_report(), None);
+        // Measured by the presenter's clock, as without the extension.
+        assert_eq!(pacer.summary().unwrap().count, 2);
+    }
+
+    #[test]
+    fn swapchain_clock_the_device_lists_is_read_calibrated() {
+        let mut pacer = Pacer::new();
+        let mut swapchain = StandIn::offering(
+            vec![(ffi::TIME_DOMAIN_SWAPCHAIN_LOCAL, 1)],
+            vec![vk::TimeDomainKHR::DEVICE, ffi::TIME_DOMAIN_SWAPCHAIN_LOCAL],
+        );
+        swapchain.now = 1000 * MS;
+        assert_eq!(swapchain.domain, Some(ffi::TIME_DOMAIN_SWAPCHAIN_LOCAL));
+        let plan = present(&mut pacer, &mut swapchain).unwrap();
+        assert_eq!(
+            plan.target,
+            1000 * MS,
+            "Scenario \"Swapchain domain the device can calibrate\""
+        );
+        assert_eq!(swapchain.calls, ["calibrated"]);
+    }
+
+    #[test]
+    fn time_of_zero_chooses_the_domain_again_and_restarts_the_schedule() {
+        let mut pacer = Pacer::new();
+        let mut swapchain = StandIn {
+            now: 1000 * MS,
+            queue_size: 4,
+            ..StandIn::default()
+        };
+        // Visible at 1000 and 1025 ms of the first clock.
+        present(&mut pacer, &mut swapchain);
+        swapchain.now += 25 * MS;
+        present(&mut pacer, &mut swapchain);
+
+        swapchain.now = 0;
+        swapchain.rechosen_now = 7 * MS;
+        let mut targets = Vec::new();
+        for _ in 0..3 {
+            targets.push(present(&mut pacer, &mut swapchain).unwrap().target);
+            swapchain.now += 25 * MS;
+        }
+        assert_eq!(
+            targets,
+            [7, 32, 57].map(|ms| ms * MS),
+            "Scenario \"A time of zero\""
+        );
+        assert_eq!(
+            swapchain.calls[4..8],
+            ["feedback", "calibrated", "choose", "calibrated"]
+        );
+        // Read so far: 1000 and 1025 ms, then 7 and 32 ms; no interval spans the two clocks.
+        let summary = pacer.summary().unwrap();
+        assert_eq!(
+            (summary.count, summary.smallest, summary.largest),
+            (2, 25 * MS, 25 * MS)
+        );
+        assert_eq!(pacer.take_report(), None);
+
+        // Chosen again, the swapchain may have no clock left that can be read.
+        swapchain.now = 0;
+        swapchain.calibrateable.clear();
+        assert_eq!(present(&mut pacer, &mut swapchain), None);
+        assert!(pacer.wants_timing());
     }
 
     #[test]

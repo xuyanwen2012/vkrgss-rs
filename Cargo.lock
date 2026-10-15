@@ -2725,6 +2725,7 @@ dependencies = [
  "ash",
  "ash-window",
  "gpu-allocator",
+ "libc",
  "proptest",
  "raw-window-handle",
  "thiserror 2.0.21",

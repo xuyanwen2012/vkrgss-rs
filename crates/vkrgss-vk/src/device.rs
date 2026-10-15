@@ -457,6 +457,9 @@ pub(crate) struct Gpu {
     pub surface: Option<Surface>,
     /// The pacing extensions the device was created with. None without a surface.
     pub pacing: PacingSupport,
+    /// The time domains `vkGetPhysicalDeviceCalibrateableTimeDomainsKHR` lists, when the
+    /// device was created with present timing; empty otherwise.
+    pub calibrateable_domains: Vec<vk::TimeDomainKHR>,
     /// Whether the device was created with `VK_EXT_swapchain_maintenance1`. Never without a
     /// surface.
     pub swapchain_maintenance: bool,
@@ -609,6 +612,10 @@ impl Gpu {
             Some(_) => pacing_support(&instance.pacing_caps(candidate.physical)?),
             None => PacingSupport::default(),
         };
+        let calibrateable_domains = match pacing.timing {
+            true => instance.calibrateable_domains(candidate.physical)?,
+            false => Vec::new(),
+        };
         let swapchain_maintenance = match surface {
             Some(_) => instance.swapchain_maintenance(candidate.physical)?,
             None => false,
@@ -719,6 +726,7 @@ impl Gpu {
             driver_version: candidate.driver_version,
             surface,
             pacing,
+            calibrateable_domains,
             swapchain_maintenance,
             swapchain_mutable_format,
             timestamps,

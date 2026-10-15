@@ -29,6 +29,17 @@ enables `VK_KHR_calibrated_timestamps` but nobody calls
   performance warnings would need `WARNING` severity and a decision whether they fail tests;
   that belongs to the audit's item on best-practice validation, not here.
 
+## Implementation notes
+
+- The list is queried when the device is opened with present timing and kept in
+  `Gpu::calibrateable_domains`; each paced swapchain gets a copy for its choices.
+- The monotonic clock is read through `libc`, a workspace dependency that `vkrgss-vk` did
+  not list before. Adding it changes one line of `Cargo.lock`, a file outside the scope of
+  this change, which the requirement plainly needs.
+- A swapchain without a domain that can be read keeps its `SwapchainTiming` (the domains may
+  change later), and the pacer plans none of its presents: they go out as without the
+  extension, and nothing is reported as a failure.
+
 ## Out of scope
 
 Reading swapchain timing properties, VRR reporting, best-practice validation, other audit

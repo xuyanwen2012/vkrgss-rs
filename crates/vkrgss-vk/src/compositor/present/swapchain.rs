@@ -375,7 +375,14 @@ impl VkCompositor {
             // `pacing`, and the value is kept in the `Swapchain` that owns the handle; the
             // commands were loaded for this device.
             let timing = unsafe {
-                SwapchainTiming::new(commands, calibrated, device.handle(), handle, pacing)
+                SwapchainTiming::new(
+                    commands,
+                    calibrated,
+                    device.handle(),
+                    handle,
+                    pacing,
+                    self.gpu.calibrateable_domains.clone(),
+                )
             };
             // The swapchain presents without the extension like any other.
             timing.map_err(|failure| self.pacer.fail(failure)).ok()
