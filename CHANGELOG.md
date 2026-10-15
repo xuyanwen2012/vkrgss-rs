@@ -4,8 +4,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security
+
+- Both embedded interpreters are built with `_FORTIFY_SOURCE=3`, `-fstack-protector-strong`,
+  `-fstack-clash-protection` and, on x86_64, `-fcf-protection=full`, asked for by their
+  build scripts with gcc and clang alike instead of left to the defaults of Ubuntu's gcc.
+
+### Added
+
+- The workflow `nightly.yml` runs the dependency audit, the collector stress, the sanitized
+  suites of Ruby 1.8.7 and five minutes of each fuzz target once a day and by hand.
+
 ### Changed
 
+- The workflows name actions by commit hash, install the OpenSpec CLI at version 1.14.2, and
+  build with `CC=gcc-13`, the compiler of the release, named explicitly. A push to `main`
+  no longer cancels the run of the push before it.
 - The test harness of the binding has no default runtime: `testing::start_as` returns the
   handle through which alone a test reaches the interpreter, so every test declares its
   runtime and the order of the tests no longer decides it. Each test process generates its

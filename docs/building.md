@@ -47,6 +47,22 @@ names what is left out, with the reasons. `vkrgss-binding-rgss3` compiles the so
 ([development.md](development.md)). No executable links this interpreter yet, and no
 package may link both: they define the same symbols, which a dependency rule checks.
 
+Both build scripts give the compiler the hardening flags themselves, whatever it turns on
+by default, for gcc and clang alike: `-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3`,
+`-fstack-protector-strong` and `-fstack-clash-protection`, and on x86_64
+`-fcf-protection=full`. A compiler that rejects one fails the build. `CFLAGS` of the
+environment come after them, so a build of one's own can still override one. With `_FORTIFY_SOURCE` the C library
+ends the process with "buffer overflow detected" where a call states a size larger than its
+buffer; a place it stops at is corrected in the vendored source by a recorded patch, never
+by switching the check off. The instrumented builds of the tests, the sanitized run and the
+fuzz targets ([development.md](development.md#checks-outside-the-gate)), leave
+`_FORTIFY_SOURCE` out, because it conflicts with the interceptors of AddressSanitizer.
+
+The release package and the CI runs are built with gcc 13, the default compiler of Ubuntu
+24.04: the workflows set `CC=gcc-13`, so that a new default of the runner image does not
+change the compiler of the release unnoticed. The interpreter's collector scans the machine
+stack, so the compiler shapes what it sees; changing that compiler is a change of its own.
+
 `vkrgss-ruby192-sys` is for the target `x86_64-unknown-linux-gnu` alone. For any other target,
 `aarch64-unknown-linux-gnu` included, its build script compiles nothing and prints a warning
 that names the target, and the crate and its tests are empty; so is `vkrgss-binding-rgss3`,

@@ -42,11 +42,24 @@ job `gate` on x86_64 it has the job `gate-aarch64`, the same steps on an aarch64
 (`ubuntu-24.04-arm`). aarch64 is not supported: that job is allowed to fail, does not fail
 the workflow, and its log is where the state of aarch64 can be seen.
 
+A newer push to a pull request cancels the run of the one before; a run for a push to `main`
+is never cancelled. The workflow `.github/workflows/nightly.yml` runs the four
+[checks outside the gate](#checks-outside-the-gate) once a day and when started by hand,
+each as a job of its own: `audit`, `stress`, `sanitized` and `fuzz`, the last once for
+every target with `--seconds 300`. No pull request waits for it, so its failure does not
+block merging; its runs on the Actions page of the repository are where it is read.
+
+The workflows name every action by its commit hash, with the tag the hash was resolved
+from as a comment, install the OpenSpec CLI and `cargo-deny` at fixed versions, and set
+`CC=gcc-13` in every job, the compiler the release is built with
+([building.md](building.md#prerequisites)). A test of `xtask` (`xtask/tests/workflows.rs`)
+fails on a workflow that does not. A new version is taken by changing the hash and the
+comment together.
+
 ## Checks outside the gate
 
-Five checks are run by hand, because three are slow and need another compiler, the
-fourth needs the network and the fifth is what the CI runner's compiler does in every run.
-None is a step of the merge gate.
+Four checks are run by hand and by the workflow `nightly.yml`, because three are slow and
+need another compiler and the fourth needs the network. None is a step of the merge gate.
 
 **The upstream Ruby suites under sanitizers.** The interpreter, Oniguruma and Ruby's own test
 executable are compiled again with AddressSanitizer and UndefinedBehaviorSanitizer, and the
@@ -115,23 +128,6 @@ allocation; a test it leaves out is a line `binding-1.9.2 <test>` of the skip li
 lost value is never a reason for one. Without the variable, the tests `stress` and
 `scene_stress` of `vkrgss-binding-rgss3` switch `GC.stress` on around every snippet
 themselves, in the gate.
-
-**The fortified build of Ruby 1.9.2.** The compiler of Ubuntu 24.04, which the CI runner
-uses, defines `_FORTIFY_SOURCE` by default, and the C library then ends the process with
-"buffer overflow detected" where a call states a size larger than its buffer. The compiler
-of the development machine does not define it, so a fault of this kind shows on the runner
-only. The build script takes `CFLAGS` of the environment, and the fortified build is tried
-on such a machine with
-
-```sh
-CARGO_TARGET_DIR=$PWD/target/fortify CFLAGS='-O2 -D_FORTIFY_SOURCE=3' \
-    cargo test -p vkrgss-ruby192-sys --locked
-```
-
-in a target directory of its own, so that the plain build is not rebuilt back and forth.
-The same flags with `-p vkrgss-ruby-sys` try Ruby 1.8.7. The check is never switched off in
-the build script; a place it stops at is corrected in the vendored source by a patch
-recorded in [third_party/ruby-1.9.2/PATCHES.md](../third_party/ruby-1.9.2/PATCHES.md).
 
 **The fuzz targets.** Three parts of the vendored C code read what comes with a game:
 `Marshal.load` reads save files and `.rxdata` files, the parser reads the scripts, and the

@@ -10,7 +10,7 @@
 
 ## 3. Documentation
 
-- [ ] 3.1 `docs/building.md` names the hardening flags and the compiler of the release; `docs/development.md` names the scheduled workflow; `CHANGELOG.md` under Unreleased. Verify: the tests of `xtask` that check the documents and their links pass.
+- [x] 3.1 `docs/building.md` names the hardening flags and the compiler of the release; `docs/development.md` names the scheduled workflow; `CHANGELOG.md` under Unreleased. Verify: the tests of `xtask` that check the documents and their links pass.
 
 ## 4. Integration check
 
