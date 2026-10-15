@@ -4,6 +4,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The test harness of the binding has no default runtime: `testing::start_as` returns the
+  handle through which alone a test reaches the interpreter, so every test declares its
+  runtime and the order of the tests no longer decides it. Each test process generates its
+  files in a directory of its own.
+
 ### Fixed
 
 - Present timing reads the monotonic clock from the system, and any other clock of the

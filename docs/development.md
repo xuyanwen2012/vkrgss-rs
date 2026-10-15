@@ -209,6 +209,24 @@ and no feature that tells the interpreters apart; the one `cfg` in it,
 `vkrgss_interpreter_absent`, is set by the build script of the second package for a target
 without Ruby 1.9.2 and empties the package there.
 
+The tests reach the interpreter through the harness `vkrgss_binding::testing`. A test process
+has one interpreter, of one runtime: `testing::start_as(runtime)` starts it the first time it
+is called and returns the `Harness`, whose methods (`eval`, `run`, `game_dir`,
+`bitmap_count`) and which the functions of `testing::host` that reach the interpreter take
+as their first argument are the only way to it. So every test declares its runtime, and the
+order in which the tests run decides nothing; asking for a second runtime in the same
+process panics with a message that names both. A test file usually starts with
+
+```rust
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss1)
+}
+```
+
+The harness generates its game directory next to the test executable, in a directory named
+after the executable and the process id, so that processes of one executable do not share
+it; `cargo clean` removes these directories.
+
 A test or a snippet case that cannot pass over Ruby 1.9.2 yet is named in
 `crates/vkrgss-binding-rgss3/tests/ruby192.allow`, whose head describes the format. A reason
 is one of three kinds: the test expects behaviour of RGSS1 or RGSS2 that a named section of

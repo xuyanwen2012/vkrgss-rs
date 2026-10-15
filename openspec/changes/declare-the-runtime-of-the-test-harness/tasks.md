@@ -10,7 +10,7 @@
 
 ## 3. Documentation
 
-- [ ] 3.1 `docs/development.md` (if it describes the harness) and `CHANGELOG.md` under Unreleased. Verify: the tests of `xtask` that check the documents and their links pass.
+- [x] 3.1 `docs/development.md` (if it describes the harness) and `CHANGELOG.md` under Unreleased. Verify: the tests of `xtask` that check the documents and their links pass.
 
 ## 4. Integration check
 
