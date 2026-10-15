@@ -523,7 +523,8 @@ fn the_version_is_printed_without_a_driver_or_a_game() {
         command.env("VK_LOADER_DRIVERS_SELECT", "no-such-driver");
         let output = command.output().expect("the program starts");
         assert_eq!(output.status.code(), Some(0), "{option}");
-        assert_eq!(output.stdout, b"vkrgss 0.3.0\n", "{option}");
+        let expected = format!("vkrgss {}\n", env!("CARGO_PKG_VERSION"));
+        assert_eq!(output.stdout, expected.as_bytes(), "{option}");
     }
 }
 

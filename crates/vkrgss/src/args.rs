@@ -694,7 +694,7 @@ mod tests {
         assert!(!parse_words(&[]).unwrap().version);
         assert!(parse_words(&["--version"]).unwrap().version);
         assert!(parse_words(&["-V"]).unwrap().version);
-        assert_eq!(VERSION, "vkrgss 0.3.0");
+        assert_eq!(VERSION, concat!("vkrgss ", env!("CARGO_PKG_VERSION")));
         assert!(USAGE.contains("--version, -V"));
     }
 
