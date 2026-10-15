@@ -276,6 +276,16 @@ mod tests {
     fn evaluation_returns_inspect_of_the_value() {
         assert_eq!(harness().eval("1 + 1").as_deref(), Ok("2"));
         assert_eq!(harness().eval("'a' + 'b'").as_deref(), Ok("\"ab\""));
+        // Another runtime is refused, by a message that names both, and the interpreter of
+        // the first goes on.
+        let panic = std::panic::catch_unwind(|| start_as(Runtime::Rgss2))
+            .expect_err("the second runtime is refused");
+        let message = panic.downcast_ref::<String>().expect("a formatted message");
+        assert!(
+            message.contains("rgss1") && message.contains("rgss2"),
+            "{message}"
+        );
+        assert_eq!(harness().eval("1 + 1").as_deref(), Ok("2"));
     }
 
     #[test]
@@ -302,29 +312,25 @@ mod tests {
                 .join("Graphics/Pictures/RtpOnly.png")
                 .is_file()
         );
-    }
-
-    #[test]
-    fn a_second_runtime_panics_and_names_both() {
-        harness();
-        let panic = std::panic::catch_unwind(|| start_as(Runtime::Rgss2))
-            .expect_err("the second runtime is refused");
-        let message = panic.downcast_ref::<String>().expect("a formatted message");
-        assert!(
-            message.contains("rgss1") && message.contains("rgss2"),
-            "{message}"
-        );
-    }
-
-    #[test]
-    fn processes_of_one_executable_have_directories_of_their_own() {
-        let executable = OsStr::new("ruby-1a2b");
-        let first = generated_dir_name(executable, 100, None);
-        let second = generated_dir_name(executable, 101, None);
-        assert_ne!(first, second);
-        assert_eq!(first, "ruby-1a2b.vkrgss-binding-testing.100");
+        // The directory is of this process: another process of the same executable has
+        // one of its own.
+        let name = game_dir
+            .parent()
+            .and_then(Path::file_name)
+            .expect("the directory of the generated files");
+        let executable = std::env::current_exe().unwrap();
+        let executable = executable.file_name().unwrap();
+        let alone = pending::alone();
         assert_eq!(
-            generated_dir_name(executable, 100, Some("t.a_test")),
+            name,
+            generated_dir_name(executable, std::process::id(), alone.as_deref())
+        );
+        assert_ne!(
+            generated_dir_name(executable, 100, None),
+            generated_dir_name(executable, 101, None)
+        );
+        assert_eq!(
+            generated_dir_name(OsStr::new("ruby-1a2b"), 100, Some("t.a_test")),
             "ruby-1a2b.vkrgss-binding-testing.100.t.a_test"
         );
     }

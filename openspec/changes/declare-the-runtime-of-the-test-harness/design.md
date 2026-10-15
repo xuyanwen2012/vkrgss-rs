@@ -21,10 +21,6 @@ the names).
   each test, to keep the diff mechanical. The runtime stays visible in the file.
 - **Test names unchanged.** No test is renamed, added or removed by the move, so the lists of
   both packages and the allow-lists stay valid.
-  The lists taken before task 1.1 and after task 2.1 differ only by the two unit tests of the
-  harness that task 1.1 asks for, `testing::tests::a_second_runtime_panics_and_names_both`
-  and `testing::tests::processes_of_one_executable_have_directories_of_their_own`, which
-  appear in the unit tests of both packages; every test that existed keeps its name.
 - **Runtimes of the moved files.** A file that called `start_as` keeps its runtime; every
   other file, the unit tests of the library (over both interpreters) and the tests of
   `vkrgss` that make games with `Game`, relied on the fallback and declare RGSS1. The shared
