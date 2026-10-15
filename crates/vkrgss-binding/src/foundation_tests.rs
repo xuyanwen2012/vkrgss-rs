@@ -8,11 +8,16 @@ use std::sync::{Mutex, OnceLock, PoisonError};
 use vkrgss_core::{BitmapError, Color, CreateFailure, Table};
 use vkrgss_ruby_sys::ffi::VALUE;
 use vkrgss_ruby_sys::{HostResult, Ruby, RubyError};
-use vkrgss_vfs::{FileKind, GameFiles, VfsError};
+use vkrgss_vfs::{FileKind, GameFiles, Runtime, VfsError};
 
 use crate::error::{self, Error};
+use crate::rb;
+use crate::testing::{self, Harness};
 use crate::wrap::{self, Owned};
-use crate::{rb, testing};
+
+fn harness() -> &'static Harness {
+    testing::start_as(Runtime::Rgss1)
+}
 
 fn probe_int(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     Ok(rb::fix(rb::int(ruby, args[0])?))
@@ -35,7 +40,7 @@ fn probe_count(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
 /// Fails with the error the string names.
 fn probe_fail(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     let which = rb::text(ruby, args[0])?;
-    let files = GameFiles::new(testing::game_dir(), []);
+    let files = GameFiles::new(harness().game_dir(), []);
     let error: Error = match which.as_str() {
         "disposed" => BitmapError::Disposed.into(),
         "create" => BitmapError::CreateFailed(CreateFailure::ZeroSide {
@@ -49,7 +54,7 @@ fn probe_fail(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
             .unwrap_err()
             .into(),
         "unreadable" => VfsError::Io {
-            path: testing::game_dir().to_owned(),
+            path: harness().game_dir().to_owned(),
             source: std::io::ErrorKind::PermissionDenied.into(),
         }
         .into(),
@@ -106,9 +111,9 @@ fn define(ruby: &Ruby) {
 /// not change the outcome.
 fn eval(source: &str) -> Result<String, RubyError> {
     static DEFINED: OnceLock<()> = OnceLock::new();
-    DEFINED.get_or_init(|| testing::run(define));
-    let plain = testing::eval(source);
-    let stressed = testing::eval(&format!(
+    DEFINED.get_or_init(|| harness().run(define));
+    let plain = harness().eval(source);
+    let stressed = harness().eval(&format!(
         "GC.stress = true\nbegin\n{source}\nensure\nGC.stress = false\nend"
     ));
     let outcome = |result: &Result<String, RubyError>| match result {

@@ -2,7 +2,7 @@
 
 ## 1. Harness
 
-- [ ] 1.1 `start_as` returns the handle; the functions that reach the interpreter become its methods; the fallback is removed; the directory name gains the process id; the panic names both runtimes. Save the lists of tests of both packages (`cargo test -p vkrgss-binding -p vkrgss-binding-rgss3 --locked -- --list`) before starting, under `local/`. Verify: scenarios "No default runtime", "Two runtimes in one process", "Two processes of one test executable" (a unit test of the name function is enough for the last).
+- [x] 1.1 `start_as` returns the handle; the functions that reach the interpreter become its methods; the fallback is removed; the directory name gains the process id; the panic names both runtimes. Save the lists of tests of both packages (`cargo test -p vkrgss-binding -p vkrgss-binding-rgss3 --locked -- --list`) before starting, under `local/`. Verify: scenarios "No default runtime", "Two runtimes in one process", "Two processes of one test executable" (a unit test of the name function is enough for the last).
 
 ## 2. Tests
 

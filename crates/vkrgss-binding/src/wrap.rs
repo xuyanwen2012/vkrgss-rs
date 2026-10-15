@@ -284,13 +284,17 @@ impl<T: Property> Owned<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing;
+    use crate::testing::{self, Harness};
+
+    fn harness() -> &'static Harness {
+        testing::start_as(vkrgss_vfs::Runtime::Rgss1)
+    }
 
     #[test]
     fn an_owned_value_follows_its_element_and_outlives_it() {
         let red = Color::new(255.0, 0.0, 0.0, 255.0);
         let blue = Color::new(0.0, 0.0, 255.0, 255.0);
-        let (in_scene, after_disposal) = testing::run(move |_ruby| {
+        let (in_scene, after_disposal) = harness().run(move |_ruby| {
             let sprite = Guest::with(|guest| guest.scene.create_sprite(None)).unwrap();
             let mut color = Owned::of(Color::TRANSPARENT, Owner::SpriteColor(sprite));
             color.set(red);
@@ -306,7 +310,7 @@ mod tests {
 
     #[test]
     fn a_property_of_another_type_is_left_alone() {
-        let rect = testing::run(|_ruby| {
+        let rect = harness().run(|_ruby| {
             Guest::with(|guest| {
                 let sprite = guest.scene.create_sprite(None).unwrap();
                 let color = Owner::SpriteColor(sprite);

@@ -1,7 +1,7 @@
 //! Test access to the guest's scene, next to the harness of [`testing`](crate::testing).
 //!
 //! The functions here run on the interpreter thread, inside the closure given to
-//! [`testing::run`](crate::testing::run).
+//! [`Harness::run`](crate::testing::Harness::run).
 
 use std::cell::Cell;
 

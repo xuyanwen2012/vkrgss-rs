@@ -1223,7 +1223,11 @@ fn define_rgss3(ruby: &Ruby) -> Result<(), Raised> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing;
+    use crate::testing::{self, Harness};
+
+    fn harness() -> &'static Harness {
+        testing::start_as(Runtime::Rgss1)
+    }
 
     #[test]
     fn a_profile_is_read_as_the_configuration_file_is() {
@@ -1289,7 +1293,8 @@ mod tests {
     /// The scenario "XP and VX" of "DL of RGSS3".
     #[test]
     fn a_game_of_rgss1_has_no_dl() {
-        let (value, _) = testing::host::play("defined?(DL)", testing::host::Script::new());
+        let (value, _) =
+            testing::host::play(harness(), "defined?(DL)", testing::host::Script::new());
         assert_eq!(value.map_err(|error| error.message).as_deref(), Ok("nil"));
     }
 

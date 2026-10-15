@@ -5,7 +5,8 @@
 //! [`Script`] says after how many frames, records what it receives, and sends what its
 //! [`Script`] tells it to. [`play`] evaluates a Ruby snippet on the
 //! harness's guest against such a host, and [`run_game`] plays a [`Game`], a game directory
-//! made for one test, on it.
+//! made for one test, on it. Like the functions of [`Harness`], those that reach the
+//! interpreter take the harness that [`start_as`](super::start_as) returned.
 //!
 //! The first use of [`play`] adds these files to the generated game directory and evaluates
 //! the prelude of the binding, with the default [`RunConfig`] unless [`configure`] came
@@ -29,6 +30,7 @@ use vkrgss_proto::{FramePacket, GuestToHost, HostToGuest};
 use vkrgss_ruby_sys::{Ruby, RubyError};
 use vkrgss_vfs::{GameFiles, GameIni, Runtime};
 
+use super::Harness;
 use crate::{Guest, RunConfig, RunError, runtime};
 
 /// What a scripted host sends besides its answers.
@@ -184,16 +186,16 @@ static CONFIGURED: Mutex<Option<RunConfig>> = Mutex::new(None);
 /// Makes the one preparation of this process use `run` in place of the default settings. A
 /// test binary calls this before anything else of this module, because what the prelude
 /// defines cannot be taken back: the process functions stay off once they were turned off.
-pub fn configure(run: RunConfig) {
+pub fn configure(harness: &Harness, run: RunConfig) {
     *CONFIGURED.lock().unwrap_or_else(PoisonError::into_inner) = Some(run);
-    prepare();
+    prepare(harness);
 }
 
 /// Adds the files of this module to the game directory and evaluates the prelude, once.
-fn prepare() {
+fn prepare(harness: &Harness) {
     static PREPARED: Once = Once::new();
     PREPARED.call_once(|| {
-        let game = super::game_dir();
+        let game = harness.game_dir();
         super::write(&game.join("Extra.rb"), EXTRA_RB.as_bytes());
         super::write(
             &game.join("Graphics/Transitions/004-Blind04.png"),
@@ -214,7 +216,7 @@ fn prepare() {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .take();
-        super::run(move |ruby| {
+        harness.run(move |ruby| {
             Guest::with(|guest| {
                 guest.files.refresh();
                 if let Some(run) = run {
@@ -267,12 +269,16 @@ fn inspect(ruby: &Ruby, source: &str) -> Result<String, RubyError> {
 }
 
 /// Evaluates Ruby source on the harness's guest, connected to a new scripted host, with the
-/// prelude in place. Returns what [`eval`](super::eval) returns and what the host saw.
-pub fn play(source: &str, script: Script) -> (Result<String, RubyError>, Record) {
-    prepare();
+/// prelude in place. Returns what [`Harness::eval`] returns and what the host saw.
+pub fn play(
+    harness: &Harness,
+    source: &str,
+    script: Script,
+) -> (Result<String, RubyError>, Record) {
+    prepare(harness);
     let (link, host) = scripted_host(script);
     let source = source.to_owned();
-    let outcome = super::run(move |ruby| {
+    let outcome = harness.run(move |ruby| {
         Guest::with(|guest| guest.connect(link));
         let outcome = inspect(ruby, &source);
         Guest::with(Guest::disconnect);
@@ -331,19 +337,25 @@ impl Game {
     /// Creates the game `name` afresh below the harness's directory. Its window title is
     /// `title` and its archive, `Data/Scripts.rxdata`, holds `scripts` as pairs of name and
     /// source, assembled with `Marshal` and `Zlib` of the interpreter.
-    pub fn new(name: &str, title: &str, scripts: &[(&str, &str)]) -> Game {
-        Game::of(Runtime::Rgss1, name, title, scripts)
+    pub fn new(harness: &Harness, name: &str, title: &str, scripts: &[(&str, &str)]) -> Game {
+        Game::of(harness, Runtime::Rgss1, name, title, scripts)
     }
 
     /// Creates a game as [`Game::new`] does, as the editor of `runtime` lays it out: the
     /// library and the name of the archive in `Game.ini` are those of that runtime.
-    pub fn of(runtime: Runtime, name: &str, title: &str, scripts: &[(&str, &str)]) -> Game {
+    pub fn of(
+        harness: &Harness,
+        runtime: Runtime,
+        name: &str,
+        title: &str,
+        scripts: &[(&str, &str)],
+    ) -> Game {
         let (library, archive) = match runtime {
             Runtime::Rgss1 => ("RGSS104E.dll", "Scripts.rxdata"),
             Runtime::Rgss2 => ("RGSS202E.dll", "Scripts.rvdata"),
             Runtime::Rgss3 => ("System\\RGSS301.dll", "Scripts.rvdata2"),
         };
-        let dir = super::game_dir().with_file_name("games").join(name);
+        let dir = harness.game_dir().with_file_name("games").join(name);
         if dir.exists() {
             fs::remove_dir_all(&dir).unwrap_or_else(|error| panic!("{}: {error}", dir.display()));
         }
@@ -374,7 +386,8 @@ impl Game {
             ruby_literal(&archive.to_string_lossy()),
             entries.join(", ")
         );
-        super::run(move |ruby| ruby.eval_protected(&assemble, "testing", 1).map(|_| ()))
+        harness
+            .run(move |ruby| ruby.eval_protected(&assemble, "testing", 1).map(|_| ()))
             .expect("the script archive is written");
         game
     }
@@ -425,13 +438,19 @@ pub struct Played {
 /// and the guest gets the files of `game` (without run-time packages), an empty scene and
 /// `run`, and the current error is cleared. Classes, constants and global variables of
 /// earlier games stay, and so do the functions of `Graphics` and the frame, which are those
-/// of RGSS1 whatever the runtime of `run` is: what a game of another runtime starts with is
-/// tested through `run_game` of the crate, in a process of its own.
-pub fn run_game(game: &Game, run: RunConfig, script: Script, after: &str) -> Played {
+/// of the runtime of `harness` whatever the runtime of `run` is: what a game of another
+/// runtime starts with is tested through `run_game` of the crate, in a process of its own.
+pub fn run_game(
+    harness: &Harness,
+    game: &Game,
+    run: RunConfig,
+    script: Script,
+    after: &str,
+) -> Played {
     let (link, host) = scripted_host(script);
     let files = GameFiles::new(game.dir(), []);
     let after = after.to_owned();
-    let (outcome, after, bitmaps) = super::run(move |ruby| {
+    let (outcome, after, bitmaps) = harness.run(move |ruby| {
         ruby.eval_protected("Graphics.send(:_reset)", "testing", 1)
             .expect("what the previous game left is disposed");
         // SAFETY: `nil` is a special constant.
@@ -460,10 +479,14 @@ mod tests {
     use super::*;
     use crate::runtime::Await;
 
+    fn harness() -> &'static Harness {
+        super::super::start_as(Runtime::Rgss1)
+    }
+
     #[test]
     fn three_frames_through_the_pump_are_three_frames_and_three_ticks() {
         let (link, host) = scripted_host(Script::new());
-        super::super::run(move |_ruby| {
+        harness().run(move |_ruby| {
             Guest::with(|guest| {
                 guest.connect(link);
                 for _ in 0..3 {
@@ -491,8 +514,14 @@ mod tests {
                      Graphics.update
                      $vkrgss_disposed = sprites.select { |sprite| sprite.disposed? }.size";
         for (name, main) in [("host_earlier", earlier), ("host_later", later)] {
-            let game = Game::new(name, "Collected", &[("Main", main)]);
-            let played = run_game(&game, game.run_config(), Script::new(), "$vkrgss_disposed");
+            let game = Game::new(harness(), name, "Collected", &[("Main", main)]);
+            let played = run_game(
+                harness(),
+                &game,
+                game.run_config(),
+                Script::new(),
+                "$vkrgss_disposed",
+            );
             assert!(played.outcome.is_ok(), "{:?}", played.outcome);
             if name == "host_later" {
                 assert_eq!(played.after.as_deref(), Ok("0"));
@@ -503,7 +532,7 @@ mod tests {
     #[test]
     fn a_guest_whose_host_has_gone_stops_waiting_and_quits() {
         let (link, host) = scripted_host(Script::new());
-        let quit = super::super::run(move |ruby| {
+        let quit = harness().run(move |ruby| {
             Guest::with(|guest| {
                 guest.connect(link);
                 guest.disconnect();
