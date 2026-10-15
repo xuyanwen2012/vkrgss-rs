@@ -68,12 +68,11 @@ impl ValidationLog {
     pub(crate) fn messenger_info(&self) -> vk::DebugUtilsMessengerCreateInfoEXT<'static> {
         // General messages are left out: they carry loader and driver chatter, such as an
         // installed driver for absent hardware failing to load, not misuse of the API.
+        // Performance messages are left out too: they come as warnings, which this messenger
+        // does not ask for, and whether one should fail a test is not decided yet.
         vk::DebugUtilsMessengerCreateInfoEXT::default()
             .message_severity(vk::DebugUtilsMessageSeverityFlagsEXT::ERROR)
-            .message_type(
-                vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION
-                    | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE,
-            )
+            .message_type(vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION)
             .pfn_user_callback(Some(record))
             .user_data(Arc::as_ptr(&self.inner) as *mut c_void)
     }

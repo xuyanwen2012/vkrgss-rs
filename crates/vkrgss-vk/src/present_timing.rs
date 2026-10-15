@@ -56,11 +56,10 @@ pub(crate) const TIME_DOMAIN_SWAPCHAIN_LOCAL: vk::TimeDomainKHR =
 
 /// `VkPresentStageFlagBitsEXT`, in the order a present goes through them.
 pub(crate) const PRESENT_STAGES: [u32; 4] = [
-    // VK_PRESENT_STAGE_QUEUE_OPERATIONS_END_BIT_EXT
-    0x1, // VK_PRESENT_STAGE_REQUEST_DEQUEUED_BIT_EXT
-    0x2, // VK_PRESENT_STAGE_IMAGE_FIRST_PIXEL_OUT_BIT_EXT
-    0x4, // VK_PRESENT_STAGE_IMAGE_FIRST_PIXEL_VISIBLE_BIT_EXT
-    0x8,
+    0x1, // VK_PRESENT_STAGE_QUEUE_OPERATIONS_END_BIT_EXT
+    0x2, // VK_PRESENT_STAGE_REQUEST_DEQUEUED_BIT_EXT
+    0x4, // VK_PRESENT_STAGE_IMAGE_FIRST_PIXEL_OUT_BIT_EXT
+    0x8, // VK_PRESENT_STAGE_IMAGE_FIRST_PIXEL_VISIBLE_BIT_EXT
 ];
 
 /// Declares a structure that starts with `sType` and `pNext`, with its `Default`: the
