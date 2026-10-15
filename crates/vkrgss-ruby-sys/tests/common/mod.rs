@@ -156,16 +156,18 @@ pub(crate) struct Job {
     object: PathBuf,
 }
 
-/// The instrumented compiler with the flags of the build script, the instrumentation flags
-/// `flags` and the include paths given.
+/// The instrumented compiler with the flags of the build script but those of
+/// `_FORTIFY_SOURCE`, which conflicts with the interceptors of AddressSanitizer, the
+/// instrumentation flags `flags` and the include paths given.
 pub(crate) fn instrumented_compiler(scratch: &Path, includes: &[&Path], flags: &[&str]) -> Command {
+    let fortify: Vec<&str> = env!("VKRGSS_RUBY_FORTIFY_CFLAGS").split(' ').collect();
     let mut command = Command::new(INSTRUMENTED_COMPILER);
     command
         .args(
             env!("VKRGSS_RUBY_CFLAGS")
                 .split(' ')
                 .chain(env!("VKRGSS_RUBY_CLANG_CFLAGS").split(' '))
-                .filter(|arg| !arg.is_empty()),
+                .filter(|arg| !arg.is_empty() && !fortify.contains(arg)),
         )
         .args(flags)
         .env("TMPDIR", scratch);

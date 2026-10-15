@@ -120,6 +120,19 @@ const CLANG_FLAGS: &[&str] = &[
     "-Wno-error=incompatible-function-pointer-types",
 ];
 
+/// The hardening flags, asked for whatever the compiler defines by default, for gcc and clang
+/// alike: a compiler that rejects one fails the build. `_FORTIFY_SOURCE` is undefined first,
+/// because a compiler that defines it by default warns about a second definition.
+const FORTIFY_FLAGS: &[&str] = &["-U_FORTIFY_SOURCE", "-D_FORTIFY_SOURCE=3"];
+
+/// The stack hardening of every architecture: canaries in frames with arrays or addresses of
+/// locals, and probes of every page a large frame or `alloca` reaches.
+const HARDENING_FLAGS: &[&str] = &["-fstack-protector-strong", "-fstack-clash-protection"];
+
+/// The hardening of x86_64 alone: the instructions of CET, which also mark the indirect
+/// branch targets.
+const X86_64_HARDENING_FLAGS: &[&str] = &["-fcf-protection=full"];
+
 /// The configuration shared by every C file, without include paths.
 fn base_build() -> cc::Build {
     let mut build = cc::Build::new();
@@ -131,8 +144,13 @@ fn base_build() -> cc::Build {
         .force_frame_pointer(true)
         .define("RUBY_EXPORT", None)
         .define("_GNU_SOURCE", "1");
-    for flag in FLAGS {
+    for flag in FLAGS.iter().chain(FORTIFY_FLAGS).chain(HARDENING_FLAGS) {
         build.flag(flag);
+    }
+    if env::var("CARGO_CFG_TARGET_ARCH").expect("cargo sets CARGO_CFG_TARGET_ARCH") == "x86_64" {
+        for flag in X86_64_HARDENING_FLAGS {
+            build.flag(flag);
+        }
     }
     if build.get_compiler().is_like_clang() {
         for flag in CLANG_FLAGS {

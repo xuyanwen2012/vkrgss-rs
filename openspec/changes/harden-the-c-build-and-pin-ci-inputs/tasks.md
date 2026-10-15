@@ -2,7 +2,7 @@
 
 ## 1. Hardening flags
 
-- [ ] 1.1 The flags in `base_build()` of both build scripts, left out of sanitizer and fuzz builds as `design.md` says; record a patch in `PATCHES.md` for any source correction the check needs. Verify: scenarios "Flags of the build" (a test that reads the constants or the build script) and "The suites pass with them": `cargo test -p vkrgss-ruby-sys -p vkrgss-ruby192-sys --locked` passes, and `cargo xtask stress` and `cargo test -p vkrgss-ruby-sys --test sanitized -- --ignored upstream_suites_pass_under_the_sanitizers` pass if clang with its sanitizer runtimes is installed (say so in design.md if it is not).
+- [x] 1.1 The flags in `base_build()` of both build scripts, left out of sanitizer and fuzz builds as `design.md` says; record a patch in `PATCHES.md` for any source correction the check needs. Verify: scenarios "Flags of the build" (a test that reads the constants or the build script) and "The suites pass with them": `cargo test -p vkrgss-ruby-sys -p vkrgss-ruby192-sys --locked` passes, and `cargo xtask stress` and `cargo test -p vkrgss-ruby-sys --test sanitized -- --ignored upstream_suites_pass_under_the_sanitizers` pass if clang with its sanitizer runtimes is installed (say so in design.md if it is not).
 
 ## 2. Workflows
 

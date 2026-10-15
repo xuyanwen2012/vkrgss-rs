@@ -44,6 +44,21 @@ for 1.9.2.
   an unconditional `cancel-in-progress: true`. If `xtask` already has such a test module,
   extend it.
 
+## Notes of the implementation
+
+- **Flags.** `FORTIFY_FLAGS`, `HARDENING_FLAGS` and `X86_64_HARDENING_FLAGS` in both build
+  scripts; `base_build()` adds the last only when `CARGO_CFG_TARGET_ARCH` is `x86_64`. The
+  tests `tests/hardening.rs` of both crates read the arguments the build script gave the
+  compiler (`VKRGSS_RUBY_CFLAGS`, `VKRGSS_RUBY192_CFLAGS`).
+- **Sanitizer and fuzz builds.** Only `vkrgss-ruby-sys` has them, and they took the flags of
+  the build script through `instrumented_compiler()` in `tests/common/mod.rs`. Its build
+  script now also exports `VKRGSS_RUBY_FORTIFY_CFLAGS`, and `instrumented_compiler()` drops
+  those arguments; the other hardening flags stay.
+- **Check on this machine** (Fedora 44, gcc 16.2.1, clang 22.1.8 with `compiler-rt`):
+  `cargo test -p vkrgss-ruby-sys -p vkrgss-ruby192-sys --locked`, the sanitized suites and
+  all six steps of `cargo xtask stress` pass with the flags. No source correction was
+  needed, so neither `PATCHES.md` changed.
+
 ## Out of scope
 
 Splitting the gate job, sccache, cargo-nextest, Dependabot, zizmor, release attestations,
