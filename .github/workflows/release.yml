@@ -13,21 +13,25 @@ permissions:
 jobs:
   package:
     runs-on: ubuntu-24.04
+    # The compiler of the vendored C code, named so that a new default of the runner image
+    # does not change it unnoticed.
+    env:
+      CC: gcc-13
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       # The packages docs/building.md names.
       - name: Install the prerequisites
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
-            build-essential libcrypt-dev glslc spirv-tools libasound2-dev libudev-dev \
+            build-essential gcc-13 libcrypt-dev glslc spirv-tools libasound2-dev libudev-dev \
             mesa-vulkan-drivers vulkan-validationlayers
       # Installs the toolchain that rust-toolchain.toml pins.
       - name: Install the Rust toolchain
         run: rustup show
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - name: Read the version of the workspace
         id: version
         run: |
@@ -46,7 +50,7 @@ jobs:
           fi
       - name: Build the package
         run: cargo xtask dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: vkrgss-${{ steps.version.outputs.version }}-x86_64-unknown-linux-gnu
           path: |

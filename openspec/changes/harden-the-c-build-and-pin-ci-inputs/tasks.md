@@ -6,7 +6,7 @@
 
 ## 2. Workflows
 
-- [ ] 2.1 Pins, `CC`, the conditional `cancel-in-progress` in `ci.yml` and `release.yml`; `nightly.yml`; the test of `xtask` that reads the workflow files. Verify: scenarios "Pinned inputs", "Pushes to main are not cancelled", "Scheduled checks", "Gate in the workflow", "Release only for a tag", and the aarch64 job is unchanged apart from pins and `CC`; `cargo test -p xtask --locked` passes.
+- [x] 2.1 Pins, `CC`, the conditional `cancel-in-progress` in `ci.yml` and `release.yml`; `nightly.yml`; the test of `xtask` that reads the workflow files. Verify: scenarios "Pinned inputs", "Pushes to main are not cancelled", "Scheduled checks", "Gate in the workflow", "Release only for a tag", and the aarch64 job is unchanged apart from pins and `CC`; `cargo test -p xtask --locked` passes.
 
 ## 3. Documentation
 

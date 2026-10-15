@@ -58,6 +58,14 @@ for 1.9.2.
   `cargo test -p vkrgss-ruby-sys -p vkrgss-ruby192-sys --locked`, the sanitized suites and
   all six steps of `cargo xtask stress` pass with the flags. No source correction was
   needed, so neither `PATCHES.md` changed.
+- **Workflows.** Every job of the three workflows sets `CC: gcc-13` at the job level, the
+  jobs that install packages install `gcc-13`, and the aarch64 job changed only so. The
+  nightly `fuzz` job is a matrix over the three targets with `fail-fast: false`, each run
+  for 300 seconds. `cargo-deny` is installed as `cargo-deny@0.18.2`: design.md names no
+  version and the flow had no network, so it is a release known to exist, not the newest
+  one. `xtask/tests/workflows.rs` checks the pins, the OpenSpec version, the conditional
+  cancelling, `CC` in every job, the gate, the tag condition of the release and the jobs of
+  the nightly workflow.
 
 ## Out of scope
 
@@ -66,4 +74,9 @@ pinning clang, a sanitized run of Ruby 1.9.2 (change `fuzz-and-review-ruby-1-9-2
 
 ## Follow-ups
 
-None yet.
+- The nightly workflow could not be run from the flow. Its first run shows whether
+  `libclang-rt-dev` brings the sanitizer runtimes and libFuzzer on `ubuntu-24.04` (the name
+  `cargo xtask fuzz` gives) and whether `cargo-deny` 0.18.2 reads the current advisory
+  database; a newer version is a change of the pin.
+- The `fuzz` job keeps no input of a finding beyond the log; uploading
+  `target/tmp/fuzz/<target>/artifacts/` on failure is not named here and was not built.

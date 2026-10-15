@@ -1,0 +1,103 @@
+name: Nightly
+
+# The checks outside the merge gate that docs/development.md describes, once a day and when
+# started by hand. No pull request waits for this workflow, so its failure does not block
+# merging. Each check is a job of its own, so that one that fails does not hide the others.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # The dependency audit against the advisory database, which it downloads.
+  audit:
+    runs-on: ubuntu-24.04
+    # The compiler of the vendored C code, named so that a new default of the runner image
+    # does not change it unnoticed.
+    env:
+      CC: gcc-13
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      # Installs the toolchain that rust-toolchain.toml pins.
+      - name: Install the Rust toolchain
+        run: rustup show
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - name: Install cargo-deny
+        run: cargo install --locked cargo-deny@0.18.2
+      - name: Dependency audit
+        run: cargo xtask audit
+
+  # The tests under collector stress. The first step needs clang with its sanitizer
+  # runtimes, the others the prerequisites of the gate and lavapipe.
+  stress:
+    runs-on: ubuntu-24.04
+    # The compiler of the vendored C code, named so that a new default of the runner image
+    # does not change it unnoticed.
+    env:
+      CC: gcc-13
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      # The packages docs/building.md names, and clang with its sanitizer runtimes.
+      - name: Install the prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential gcc-13 libcrypt-dev glslc spirv-tools libasound2-dev libudev-dev \
+            mesa-vulkan-drivers vulkan-validationlayers clang libclang-rt-dev
+      # Installs the toolchain that rust-toolchain.toml pins.
+      - name: Install the Rust toolchain
+        run: rustup show
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - name: Collector stress
+        run: VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask stress
+
+  # The upstream Ruby suites of Ruby 1.8.7 under AddressSanitizer and
+  # UndefinedBehaviorSanitizer.
+  sanitized:
+    runs-on: ubuntu-24.04
+    # The compiler of the vendored C code, named so that a new default of the runner image
+    # does not change it unnoticed.
+    env:
+      CC: gcc-13
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Install the prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential gcc-13 libcrypt-dev clang libclang-rt-dev
+      # Installs the toolchain that rust-toolchain.toml pins.
+      - name: Install the Rust toolchain
+        run: rustup show
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - name: Sanitized suites
+        run: cargo test -p vkrgss-ruby-sys --locked --test sanitized -- --ignored upstream_suites_pass_under_the_sanitizers
+
+  # A short run of each fuzz target; the corpus is not kept between runs.
+  fuzz:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [marshal, parse, regex]
+    # The compiler of the vendored C code, named so that a new default of the runner image
+    # does not change it unnoticed.
+    env:
+      CC: gcc-13
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      # clang with its sanitizer runtimes and libFuzzer.
+      - name: Install the prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential gcc-13 libcrypt-dev clang libclang-rt-dev
+      # Installs the toolchain that rust-toolchain.toml pins.
+      - name: Install the Rust toolchain
+        run: rustup show
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - name: Fuzz target
+        run: cargo xtask fuzz ${{ matrix.target }} --seconds 300
