@@ -2,7 +2,7 @@
 
 ## 1. Listing cache
 
-- [ ] 1.1 The racy rule in `dir.rs` and the timing-independent test. Verify: scenario "Change within one tick" fails before the fix and passes after; `cargo test -p vkrgss-vfs --locked` passes.
+- [x] 1.1 The racy rule in `dir.rs` and the timing-independent test. Verify: scenario "Change within one tick" fails before the fix and passes after; `cargo test -p vkrgss-vfs --locked` passes.
 
 ## 2. Documentation
 

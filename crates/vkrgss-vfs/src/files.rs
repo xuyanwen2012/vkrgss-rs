@@ -134,9 +134,9 @@ fn stays_inside(root: &Path, path: &Path) -> bool {
 ///
 /// Directory listings are cached, and a cached listing is used only while its directory still
 /// has the modification time it was read at, so a file or directory that a script makes,
-/// removes or renames is seen by the next lookup. Two changes within the resolution of the
-/// file system's time stamps could hide the second; the writers the binding knows of call
-/// [`GameFiles::refresh`], which makes them safe from that.
+/// removes or renames is seen by the next lookup. A listing read within two seconds of that
+/// time is read again at each lookup, so a change within the same tick of the file system's
+/// clock is seen too. The writers the binding knows of also call [`GameFiles::refresh`].
 #[derive(Debug)]
 pub struct GameFiles {
     /// Search roots in order: the game directory first.
@@ -552,6 +552,24 @@ mod tests {
         assert_eq!(found.unwrap(), a);
         let_time_stamps_advance();
         let b = put(game.path(), "Graphics/Pictures/b.png", b"");
+        let found = files.resolve(FileKind::Image, "Graphics/Pictures/b");
+        assert_eq!(found.unwrap(), b);
+    }
+
+    /// Scenario "Change within one tick". The directory's time is set by hand, so the test
+    /// does not depend on how coarse the clock of the file system is.
+    #[test]
+    fn a_change_within_one_tick_is_found() {
+        let game = tempfile::tempdir().unwrap();
+        let a = put(game.path(), "Graphics/Pictures/a.png", b"");
+        let pictures = std::fs::File::open(game.path().join("Graphics/Pictures")).unwrap();
+        let listed_at = std::time::SystemTime::now();
+        pictures.set_modified(listed_at).unwrap();
+        let files = game_only(game.path());
+        let found = files.resolve(FileKind::Image, "Graphics/Pictures/a");
+        assert_eq!(found.unwrap(), a);
+        let b = put(game.path(), "Graphics/Pictures/b.png", b"");
+        pictures.set_modified(listed_at).unwrap();
         let found = files.resolve(FileKind::Image, "Graphics/Pictures/b");
         assert_eq!(found.unwrap(), b);
     }
