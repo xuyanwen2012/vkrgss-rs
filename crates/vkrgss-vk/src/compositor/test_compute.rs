@@ -1,12 +1,14 @@
 //! Test only: runs a compute shader that maps one storage buffer to another, so that GLSL
-//! helpers can be checked on the device without going through a frame.
+//! helpers can be checked on the device without going through a frame; and records a
+//! synchronization hazard on purpose, so that the tests can see it reported.
 
 use ash::vk;
 use gpu_allocator::MemoryLocation;
 
 use super::VkCompositor;
 use crate::resources::{
-    GpuBuffer, create_shader_module, make_host_readable, read_words, write_words,
+    COLOR_LAYERS, COLOR_RANGE, GpuBuffer, GpuImage, ImageUse, create_shader_module,
+    make_host_readable, read_words, transition, write_words,
 };
 
 impl VkCompositor {
@@ -166,5 +168,72 @@ impl VkCompositor {
         input_buffer.destroy(device, &mut self.allocator);
         output_buffer.destroy(device, &mut self.allocator);
         output
+    }
+}
+
+impl VkCompositor {
+    /// Clears a new image and copies it to a buffer in the same submission with no barrier
+    /// between the clear, which writes the image, and the copy, which reads it: a
+    /// read-after-write hazard that synchronization validation reports.
+    ///
+    /// Panics on any Vulkan error, as test code may.
+    pub(crate) fn record_unguarded_read(&mut self) {
+        let device = &self.gpu.device;
+        let size = (4, 4);
+        let image = GpuImage::new(
+            device,
+            &mut self.allocator,
+            "test hazard image",
+            size,
+            // Sampled only for the view every image gets.
+            vk::ImageUsageFlags::TRANSFER_DST
+                | vk::ImageUsageFlags::TRANSFER_SRC
+                | vk::ImageUsageFlags::SAMPLED,
+            vk::ImageCreateFlags::empty(),
+        )
+        .unwrap();
+        let buffer = GpuBuffer::new(
+            device,
+            &mut self.allocator,
+            "test hazard buffer",
+            u64::from(size.0 * size.1 * 4),
+            vk::BufferUsageFlags::TRANSFER_DST,
+            MemoryLocation::GpuToCpu,
+        )
+        .unwrap();
+        let region = vk::BufferImageCopy::default()
+            .image_subresource(COLOR_LAYERS)
+            .image_extent(vk::Extent3D {
+                width: size.0,
+                height: size.1,
+                depth: 1,
+            });
+        // SAFETY: the command buffer is recording; the image and the buffer are live, of the
+        // sizes the commands use, and are destroyed only after the submission was waited
+        // for. The missing barrier is the point of the test; in `GENERAL` both commands are
+        // valid apart from it.
+        unsafe {
+            self.begin_commands().unwrap();
+            let commands = self.commands;
+            let general = ImageUse::TRANSFER_WRITE.in_layout(vk::ImageLayout::GENERAL);
+            transition(device, commands, image.image, ImageUse::UNDEFINED, general);
+            device.cmd_clear_color_image(
+                commands,
+                image.image,
+                vk::ImageLayout::GENERAL,
+                &vk::ClearColorValue { uint32: [0; 4] },
+                &[COLOR_RANGE],
+            );
+            device.cmd_copy_image_to_buffer(
+                commands,
+                image.image,
+                vk::ImageLayout::GENERAL,
+                buffer.buffer,
+                &[region],
+            );
+            self.submit_and_wait().unwrap();
+        }
+        image.destroy(device, &mut self.allocator);
+        buffer.destroy(device, &mut self.allocator);
     }
 }

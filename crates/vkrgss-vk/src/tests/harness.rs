@@ -335,6 +335,68 @@ fn deliberate_validation_error_is_recorded() {
     }
 }
 
+/// Whether the installed validation layer offers `VK_EXT_layer_settings`; false without the
+/// layer.
+fn layer_offers_settings() -> bool {
+    require_isolation();
+    // SAFETY: loading the system's Vulkan library runs its initialisers and has no other
+    // precondition; the call after it takes no handle and names a layer only when it is
+    // installed.
+    let extensions = unsafe {
+        let Ok(entry) = ash::Entry::load() else {
+            return false;
+        };
+        if layer_version().is_none() {
+            return false;
+        }
+        entry.enumerate_instance_extension_properties(Some(crate::validation::LAYER_NAME))
+    };
+    extensions.is_ok_and(|extensions| {
+        extensions.iter().any(|extension| {
+            extension.extension_name_as_c_str().ok() == Some(crate::validation::LAYER_SETTINGS_NAME)
+        })
+    })
+}
+
+#[test]
+fn synchronization_validation_is_on_where_the_layer_offers_settings() {
+    let log = ValidationLog::new();
+    let gpu = Gpu::new(&test_device(), Some(&log)).unwrap();
+    drop(gpu);
+    assert_clean(&log, "while creating and dropping the device");
+    let offered = log.is_active() && layer_offers_settings();
+    assert_eq!(log.validates_sync(), offered);
+    if !offered {
+        eprintln!("the validation layer does not offer VK_EXT_layer_settings");
+    }
+}
+
+/// Synchronization validation has to notice a missing barrier, or a clean run would prove
+/// nothing about the barriers.
+#[test]
+fn deliberate_hazard_is_reported() {
+    let log = ValidationLog::new();
+    let mut compositor = VkCompositor::with_validation(test_device(), &log).unwrap();
+    compositor.record_unguarded_read();
+    drop(compositor);
+
+    if log.validates_sync() {
+        let errors = log.errors();
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert!(
+            errors[0].contains("SYNC-HAZARD-READ-AFTER-WRITE"),
+            "the validation layer reported no hazard: {errors:?}"
+        );
+        let caught = std::panic::catch_unwind(|| assert_clean(&log, "in a deliberate hazard"));
+        assert!(
+            caught.is_err(),
+            "the harness must fail on a reported hazard"
+        );
+    } else {
+        eprintln!("synchronization validation is not on; nothing to report");
+    }
+}
+
 /// Without a log the layer is not requested, whether or not it is installed.
 #[test]
 fn compositor_without_a_log_runs_unvalidated() {

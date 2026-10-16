@@ -73,6 +73,33 @@ impl Instance {
             None => false,
         };
         let log = log.filter(|_| validate).cloned();
+        // Synchronization validation is off in the layer by default; its settings turn it on
+        // where the layer takes them.
+        let layer_settings = match validate {
+            true => {
+                // SAFETY: the entry points are loaded, the call takes no handle, and the layer
+                // is installed.
+                let offered = unsafe {
+                    entry.enumerate_instance_extension_properties(Some(validation::LAYER_NAME))
+                }
+                .map_err(VkError::vulkan("vkEnumerateInstanceExtensionProperties"))?;
+                let listed = offered.iter().any(|extension| {
+                    extension.extension_name_as_c_str().ok()
+                        == Some(validation::LAYER_SETTINGS_NAME)
+                });
+                if !listed {
+                    static NOTED: std::sync::Once = std::sync::Once::new();
+                    NOTED.call_once(|| {
+                        tracing::info!(
+                            "the validation layer does not offer VK_EXT_layer_settings; it \
+                             runs without synchronization validation"
+                        );
+                    });
+                }
+                listed
+            }
+            false => false,
+        };
 
         // SAFETY: the entry points are loaded and the call takes no handle.
         let offered = unsafe { entry.enumerate_instance_extension_properties(None) }
@@ -128,6 +155,11 @@ impl Instance {
         if debug_utils {
             extensions.push(ash::ext::debug_utils::NAME.as_ptr());
         }
+        let settings = validation::layer_settings();
+        let mut settings_info = vk::LayerSettingsCreateInfoEXT::default().settings(&settings);
+        if layer_settings {
+            extensions.push(validation::LAYER_SETTINGS_NAME.as_ptr());
+        }
         let mut info = vk::InstanceCreateInfo::default()
             .application_info(&application)
             .enabled_extension_names(&extensions);
@@ -135,7 +167,11 @@ impl Instance {
             // Chaining the messenger also covers instance creation and destruction.
             info = info.enabled_layer_names(&layers).push_next(messenger_info);
         }
-        // SAFETY: `info` and everything it points to are valid for the call, and the log the
+        if layer_settings {
+            info = info.push_next(&mut settings_info);
+        }
+        // SAFETY: `info` and everything it points to are valid for the call, the layer
+        // settings are only chained when the layer offers their extension, and the log the
         // chained messenger reports into is kept alive by the returned `Instance`.
         let raw = unsafe { entry.create_instance(&info, None) }
             .map_err(VkError::vulkan("vkCreateInstance"))?;
@@ -158,6 +194,9 @@ impl Instance {
                     .map_err(VkError::vulkan("vkCreateDebugUtilsMessengerEXT"))?;
             instance.messenger = Some((loader, messenger));
             log.set_active();
+            if layer_settings {
+                log.set_sync_validation();
+            }
         }
         Ok(instance)
     }

@@ -2,7 +2,7 @@
 
 ## 1. Synchronization validation
 
-- [ ] 1.1 `VK_EXT_layer_settings` with `validate_sync` in the test instance; a test that records a hazard on purpose and sees it reported; fix and record every hazard the tests now report. Verify: scenarios of "Clean under validation"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss-vk --locked` passes.
+- [x] 1.1 `VK_EXT_layer_settings` with `validate_sync` in the test instance; a test that records a hazard on purpose and sees it reported; fix and record every hazard the tests now report. Verify: scenarios of "Clean under validation"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss-vk --locked` passes.
 
 ## 2. Submissions
 

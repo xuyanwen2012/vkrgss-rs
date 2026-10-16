@@ -38,6 +38,13 @@
 - **Proof that pixels do not change.** The existing differential tests against
   `vkrgss-compose-ref` and the frame tests pass unchanged; no expected value is edited.
 
+## Hazards found
+
+None. With `validate_sync` on (validation layer 1.4.341, lavapipe), every test of
+`vkrgss-vk` passes without a report; `deliberate_hazard_is_reported` shows that a missing
+barrier is reported and fails the test. That layer leaves the id of a message, such as
+`SYNC-HAZARD-READ-AFTER-WRITE`, out of its text, so the log puts the id in front of the text.
+
 ## Out of scope
 
 `VK_KHR_swapchain_maintenance1` (needs bindings `ash` 0.38 lacks), timing properties and
