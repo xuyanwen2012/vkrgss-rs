@@ -29,10 +29,12 @@ the build directory only.
 The interpreter is built from `third_party/ruby-1.8.7/` by the build script of `vkrgss-ruby-sys`
 with a fixed file list and fixed flags. No installed Ruby, `configure`, `make` or system zlib is
 involved, and the only supported target is `x86_64-unknown-linux-gnu`. The build script also
-accepts `aarch64-unknown-linux-gnu`, which is not supported: it is built with the
-configuration header of x86_64, so that the CI job `gate-aarch64` can show what works there
-(see [development.md](development.md#merge-gate)). Any other target stops the build with a
-message naming it. `CC` selects the compiler. Because a wrong flag gives an interpreter
+accepts `aarch64-unknown-linux-gnu`, with configuration headers of its own: those that the
+release's `configure` wrote on aarch64, which differ from those of x86_64 only in the
+platform strings, as `tests/config_headers.rs` checks. It is built and tested by the CI job
+`gate-aarch64` (see [development.md](development.md#merge-gate)) and is not supported
+before the milestone P1 is accepted. Any other target stops the build with a message
+naming it. `CC` selects the compiler. Because a wrong flag gives an interpreter
 that builds and then computes wrong results, the tests of `vkrgss-ruby-sys` compile a Ruby
 executable from the same objects and run Ruby's own test suites against it, which is why the
 tests need the C compiler too.
@@ -78,14 +80,16 @@ The release package and the CI runs are built with gcc 13, the default compiler 
 change the compiler of the release unnoticed. The interpreter's collector scans the machine
 stack, so the compiler shapes what it sees; changing that compiler is a change of its own.
 
-`vkrgss-ruby192-sys` is for the target `x86_64-unknown-linux-gnu` alone. For any other target,
-`aarch64-unknown-linux-gnu` included, its build script compiles nothing and prints a warning
-that names the target, and the crate and its tests are empty; so is `vkrgss-binding-rgss3`,
-the package that compiles the RGSS classes over it, whose build script sets the `cfg`
-`vkrgss_interpreter_absent` for such a target. The rest of the workspace
-builds as before. Unlike `vkrgss-ruby-sys` it is not built on aarch64 with the header of
-x86_64: an interpreter with native threads and copied Fiber stacks is not offered on a
-guess.
+`vkrgss-ruby192-sys` is for the targets `x86_64-unknown-linux-gnu` and
+`aarch64-unknown-linux-gnu`, which `crates/vkrgss-ruby192-sys/targets.rs` lists. The header
+of aarch64 is the one that the release's `configure` wrote there, kept with the same two
+changes as that of x86_64, from which it differs only in `RUBY_PLATFORM`. For any other
+target its build script compiles nothing and prints a warning that names the target, and
+sets the `cfg` `vkrgss_interpreter_absent`, under which the crate and its tests are empty;
+so are `vkrgss-binding-rgss3`, the package that compiles the RGSS classes over it, and
+`vkrgss-guest-main-rgss3`, whose build scripts read the same list and set the same `cfg`,
+and the executable `vkrgss-guest-rgss3` only says that it is not built for the target. The
+rest of the workspace builds as before.
 
 The tests of `vkrgss-vk` render every message stream with both the CPU reference compositor and
 the Vulkan backend and require byte-identical frames. By default they run on the CPU device

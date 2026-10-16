@@ -10,7 +10,7 @@
 
 ## 3. Documents
 
-- [ ] 3.1 `docs/compatibility.md`, `docs/building.md`, `CHANGELOG.md`. Verify: the tests of `xtask` that check the documents and their links pass.
+- [x] 3.1 `docs/compatibility.md`, `docs/building.md`, `CHANGELOG.md`. Verify: the tests of `xtask` that check the documents and their links pass.
 
 ## 4. Integration check
 

@@ -45,6 +45,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Ruby 1.8.7 is built on aarch64 with configuration headers of its own instead of those of
+  x86_64, and names the platform `aarch64-linux` there. Ruby 1.9.2, and with it the games
+  of RPG Maker VX Ace, is built on aarch64 too. The headers are those that the releases'
+  `configure` wrote on aarch64; aarch64 is not supported before the milestone P1 is
+  accepted.
 - The tests of `vkrgss-vk` run the validation layer with its synchronization validation on,
   through `VK_EXT_layer_settings` where the layer offers it, so a missing or wrong barrier
   fails a test; a test records a hazard on purpose to show that it does. A recorded
