@@ -36,11 +36,43 @@ layer is loaded.
 
 The toolchain is pinned in `rust-toolchain.toml`. The `openspec` CLI must be on `PATH`.
 
+### Parts of the gate
+
+`cargo xtask gate --job <name>` runs one part of the gate, with the same report of
+durations. Together the parts run exactly the steps of `cargo xtask gate`: every check,
+package and test target is in one part, which a test of `xtask` checks, so that nothing
+falls between them. An unknown name fails and lists the parts.
+
+| Part | Steps |
+|---|---|
+| `lint` | `fmt`, `clippy`, `doc`, `openspec` |
+| `ruby` | `test` of `vkrgss-ruby-sys` and `vkrgss-ruby192-sys` except `upstream_stress` |
+| `ruby-stress` | `test` of `vkrgss-ruby192-sys --test upstream_stress`, the quick files of `test/ruby` under collector stress ([checks outside the gate](#checks-outside-the-gate)) |
+| `vulkan` | `test` of `vkrgss-vk` |
+| `vulkan-unvalidated` | `test-unvalidated` |
+| `rest` | `test` of every other package |
+
+A new package is in `rest` without a change. A new test target of `vkrgss-ruby192-sys` is
+named in the part `ruby` in `xtask/src/gate.rs`, because cargo cannot leave out one test
+target; the test fails until it is.
+
+### Continuous integration
+
 The workflow `.github/workflows/ci.yml` runs the gate on GitHub for every push to `main` and
-every pull request; [releasing.md](releasing.md) describes the release package. Beside the
-job `gate` on x86_64 it has the job `gate-aarch64`, the same steps on an aarch64 runner
-(`ubuntu-24.04-arm`). aarch64 is not supported: that job is allowed to fail, does not fail
-the workflow, and its log is where the state of aarch64 can be seen.
+every pull request; [releasing.md](releasing.md) describes the release package. It runs each
+part of the gate as a job of its own, named after the part, so that they run in parallel and
+the checks of a pull request take about ten minutes instead of half an hour. The jobs are
+the same apart from the part. Each caches the objects of the compilers with sccache: cargo
+starts rustc through `RUSTC_WRAPPER=sccache`, and the `cc` crate puts that wrapper in front
+of `gcc-13` too, so that the two interpreters are compiled again only when their sources
+change. `Swatinem/rust-cache` keeps the registry and the dependencies in the build directory;
+a checkout gives every file a new modification time, by which cargo decides to rebuild the
+packages of the workspace.
+
+Beside the parts on x86_64 it has the job `gate-aarch64`, the same steps on an aarch64 runner
+(`ubuntu-24.04-arm`), which runs the whole gate in one job. aarch64 is not supported: that
+job is allowed to fail, does not fail the workflow, and its log is where the state of aarch64
+can be seen.
 
 A newer push to a pull request cancels the run of the one before; a run for a push to `main`
 is never cancelled. The workflow `.github/workflows/nightly.yml` runs the four
@@ -48,11 +80,13 @@ is never cancelled. The workflow `.github/workflows/nightly.yml` runs the four
 each as a job of its own: `audit`, `stress`, `sanitized` and `sanitized192` (the sanitized
 suites of the two interpreters) and `fuzz`, the last once for every target with
 `--seconds 300`. No pull request waits for it, so its failure does not
-block merging; its runs on the Actions page of the repository are where it is read.
+block merging. When one of its jobs fails, its last job, `issue`, opens the issue "Nightly
+checks failed" with the link to the run, or comments on that issue while it is open; it is
+the only job of the workflows that may write issues.
 
 The workflows name every action by its commit hash, with the tag the hash was resolved
-from as a comment, install the OpenSpec CLI and `cargo-deny` at fixed versions, and set
-`CC=gcc-13` in every job, the compiler the release is built with
+from as a comment, install the OpenSpec CLI, `cargo-deny` and sccache at fixed versions,
+and set `CC=gcc-13` in every job that builds, the compiler the release is built with
 ([building.md](building.md#prerequisites)). A test of `xtask` (`xtask/tests/workflows.rs`)
 fails on a workflow that does not. A new version is taken by changing the hash and the
 comment together.
@@ -130,8 +164,8 @@ The second interpreter, Ruby 1.9.2 of `vkrgss-ruby192-sys`, has the stress of th
 itself, `GC.stress = true`, which collects at every allocation; `VKRGSS_GC_STRESS` set to a
 number of 1 or more switches it on in an interpreter that the crate starts, and there is no
 "every n-th" form. Its stressed selection of `test/ruby` is not a check outside the gate:
-the files that take under a minute run with the workspace tests
-(`cargo test -p vkrgss-ruby192-sys --test upstream_stress`, about three minutes), together
+the files that take under a minute run with the workspace tests, in the part `ruby-stress`
+of the gate (`cargo test -p vkrgss-ruby192-sys --test upstream_stress`, about three minutes), together
 with a copy of the process made by `fork` between two frames of a script with Fibers and a
 host function that is suspended with its Fiber, both under stress. Only the seven slow files
 (`test_array.rb`, `test_assignment.rb`, `test_fiber.rb`, `test_literal.rb`,

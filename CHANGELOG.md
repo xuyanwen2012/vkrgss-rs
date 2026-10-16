@@ -37,8 +37,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Ruby 1.9.2 has a sanitized run of its suites
   (`cargo test -p vkrgss-ruby192-sys --test sanitized -- --ignored`) and the fuzz targets
   `marshal192`, `parse192` and `regex192` of `cargo xtask fuzz`; `nightly.yml` runs both.
+- `cargo xtask gate --job <name>` runs one part of the merge gate: `lint`, `ruby`,
+  `ruby-stress`, `vulkan`, `vulkan-unvalidated` or `rest`. Together the parts run exactly
+  what `cargo xtask gate` runs, which is unchanged.
+- When a job of `nightly.yml` fails, the workflow opens the issue "Nightly checks failed",
+  or comments on it while it is open.
 
 ### Changed
+
+- The workflow `ci.yml` runs each part of the gate as a job of its own, in parallel, and
+  caches the objects of Rust and C with sccache, so that the interpreters are compiled
+  again only when their sources change. The job `gate-aarch64` still runs the whole gate.
 
 - The workflows name actions by commit hash, install the OpenSpec CLI at version 1.14.2, and
   build with `CC=gcc-13`, the compiler of the release, named explicitly. A push to `main`
