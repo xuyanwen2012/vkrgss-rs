@@ -14,6 +14,7 @@
 #include "rubysig.h"
 
 #include <math.h>
+#include "vkrgss_math.h" /* vkrgss: correctly rounded functions of CORE-MATH */
 #include <float.h>
 #include <ctype.h>
 #ifdef HAVE_IEEEFP_H

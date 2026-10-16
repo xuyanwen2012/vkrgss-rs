@@ -52,3 +52,13 @@ fn the_instrumented_builds_leave_out_fortify_and_keep_the_rest() {
     );
     assert!(arguments.contains(&"-fstack-protector-strong"));
 }
+
+/// Neither the interpreter nor CORE-MATH is compiled with contraction of floating-point
+/// operations, which a compiler does on one architecture and not on another.
+#[test]
+fn the_interpreter_and_core_math_have_no_contraction() {
+    let core_math: Vec<&str> = env!("VKRGSS_RUBY_CORE_MATH_CFLAGS").split(' ').collect();
+    for arguments in [build_arguments(), core_math] {
+        assert!(arguments.contains(&"-ffp-contract=off"), "{arguments:?}");
+    }
+}

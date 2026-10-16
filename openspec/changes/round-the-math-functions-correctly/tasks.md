@@ -6,7 +6,7 @@
 
 ## 2. Ruby 1.8.7
 
-- [ ] 2.1 Build CORE-MATH and the shim in `vkrgss-ruby-sys`; `-ffp-contract=off` in its flags; the recorded patch that routes the calls; the tests of the vectors and of special arguments. Verify: the scenarios of `specs/embedded-ruby/spec.md`; `cargo test -p vkrgss-ruby-sys --locked` passes, the upstream suites included.
+- [x] 2.1 Build CORE-MATH and the shim in `vkrgss-ruby-sys`; `-ffp-contract=off` in its flags; the recorded patch that routes the calls; the tests of the vectors and of special arguments. Verify: the scenarios of `specs/embedded-ruby/spec.md`; `cargo test -p vkrgss-ruby-sys --locked` passes, the upstream suites included.
 
 ## 3. Ruby 1.9.2
 

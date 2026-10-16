@@ -25,3 +25,4 @@ src/binary64/sinh/sinh.c
 src/binary64/tan/tan.c
 src/binary64/tanh/tanh.c
 src/binary64/tgamma/tgamma.c
+vkrgss/vkrgss_math.c

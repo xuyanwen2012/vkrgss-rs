@@ -13,6 +13,7 @@
 #include "ruby.h"
 #include <math.h>
 #include <errno.h>
+#include "vkrgss_math.h" /* vkrgss: correctly rounded functions of CORE-MATH */
 
 VALUE rb_mMath;
 

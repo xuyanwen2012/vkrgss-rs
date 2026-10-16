@@ -15,8 +15,16 @@ and a save that holds it, is the same on every machine and platform.
 format of `sha256sum`. A test in `vkrgss-ruby-sys` (`tests/manifest.rs`) checks the tree
 against it: no file may be added, removed or changed without a record. A local change would be
 recorded in a `PATCHES.md` with its diff under `patches/`, as for the other vendored trees;
-there is none. The files that vkrgss adds (`MANIFEST.sha256`, `README.vkrgss.md` and `FILES`)
-are not part of CORE-MATH.
+there is none. The files that vkrgss adds (`MANIFEST.sha256`, `README.vkrgss.md`, `FILES` and
+the directory `vkrgss/`) are not part of CORE-MATH.
+
+## The functions the interpreters call
+
+`vkrgss/vkrgss_math.h` and `vkrgss/vkrgss_math.c` are vkrgss's own, under its MIT licence.
+The C file defines `vkrgss_<name>` for each function: for a finite, non-zero argument it
+returns the result of CORE-MATH, and otherwise that of the C library, which also sets `errno`
+where a result of CORE-MATH is not a normal number. The header maps the names: a recorded
+patch of each interpreter includes it in `math.c`, `numeric.c` and `bignum.c`.
 
 ## Licence
 
@@ -36,5 +44,5 @@ the MIT licence in `LICENSE`; the copyright notice of each file is in the file.
 
 Everything else (the other functions and formats, each function's test programs, `.wc`
 files of hard cases, MPFR references, Sollya and Sage scripts, Makefiles, documentation) is
-left out. `FILES` lists the C files that the build scripts compile; both read it, so they
-cannot drift apart.
+left out. `FILES` lists the C files that the build scripts compile, `vkrgss/vkrgss_math.c`
+included; both read it, so they cannot drift apart.

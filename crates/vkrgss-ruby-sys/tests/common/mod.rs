@@ -138,6 +138,7 @@ pub(crate) fn build_ruby_executable(scratch: &Path) -> PathBuf {
         .arg(ruby_libs.join("libvkrgss-ruby-zlib.a"))
         .arg(ruby_libs.join("libvkrgss-ruby-static.a"))
         .arg(ruby_libs.join("libvkrgss-ruby-onig.a"))
+        .arg(ruby_libs.join("libvkrgss-ruby-core-math.a"))
         .arg(zlib_libs.join("libz.a"))
         .args(["-lcrypt", "-lm"])
         .arg("-o")
@@ -231,11 +232,13 @@ pub(crate) struct InstrumentedLibraries {
 }
 
 impl InstrumentedLibraries {
-    /// What follows the objects of an executable on the linker's command line.
+    /// What follows the objects of an executable on the linker's command line. CORE-MATH
+    /// is linked as the build script built it, without instrumentation.
     pub(crate) fn link_arguments(&self) -> Vec<PathBuf> {
         vec![
             self.ruby.clone(),
             self.onig.clone(),
+            Path::new(env!("VKRGSS_RUBY_LIB_DIR")).join("libvkrgss-ruby-core-math.a"),
             Path::new(env!("VKRGSS_RUBY_ZLIB_LIB_DIR")).join("libz.a"),
             PathBuf::from("-lcrypt"),
             PathBuf::from("-lm"),
@@ -268,6 +271,7 @@ pub(crate) fn build_instrumented_libraries(
         Path::new(env!("VKRGSS_RUBY_GENERATED_DIR")),
         Path::new(env!("VKRGSS_RUBY_COMPAT_DIR")),
         onig,
+        Path::new(env!("VKRGSS_RUBY_CORE_MATH_INCLUDE_DIR")),
     ];
     let zlib_includes = [
         config,

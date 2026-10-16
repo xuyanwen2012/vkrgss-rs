@@ -9,6 +9,11 @@
 //! under today's default C dialect; without the second the build succeeds and the overflow
 //! checks that promote to `Bignum` are optimised away (`2**64` evaluates to 0). Ruby's own test
 //! suites, run by `tests/upstream.rs`, are what detects a wrong build.
+//!
+//! The mathematical functions of `Math` and the power of floats come from the vendored
+//! CORE-MATH, which is correctly rounded: the files `third_party/core-math/FILES` lists,
+//! built into a library of their own, and a recorded patch that makes the interpreter call
+//! them. Neither is compiled with contraction of floating-point operations.
 
 use std::env;
 use std::fmt::Write as _;
@@ -89,13 +94,25 @@ const ONIGURUMA_SOURCES: &[&str] = &[
     "enc/utf8",
 ];
 
-/// The pinned flags. `-fvisibility=hidden` is the one deliberate difference from the release's
-/// build: it keeps names such as `re_set_syntax`, which glibc also defines, out of the dynamic
-/// symbol table of the final executable.
+/// The pinned flags. `-fvisibility=hidden` keeps names such as `re_set_syntax`, which glibc
+/// also defines, out of the dynamic symbol table of the final executable.
+/// `-ffp-contract=off` keeps the compiler from fusing a multiplication and an addition, which
+/// it would do on one architecture and not on another, so that a float is computed the same
+/// everywhere. These two are the deliberate differences from the release's build.
 const FLAGS: &[&str] = &[
     "-std=gnu89",
     "-fwrapv",
     "-fno-strict-aliasing",
+    "-fvisibility=hidden",
+    "-ffp-contract=off",
+];
+
+/// The flags of CORE-MATH, which is C11, besides the hardening flags: no contraction, no
+/// fast-math, which would break its error-free transformations, and hidden names.
+const CORE_MATH_FLAGS: &[&str] = &[
+    "-std=gnu11",
+    "-ffp-contract=off",
+    "-fno-fast-math",
     "-fvisibility=hidden",
 ];
 
@@ -121,18 +138,16 @@ const HARDENING_FLAGS: &[&str] = &["-fstack-protector-strong", "-fstack-clash-pr
 /// branch targets.
 const X86_64_HARDENING_FLAGS: &[&str] = &["-fcf-protection=full"];
 
-/// The configuration shared by every C file of the interpreter, without include paths.
-fn base_build() -> cc::Build {
+/// The configuration shared by every C file, `flags` first, then the hardening flags.
+fn hardened_build(flags: &[&str]) -> cc::Build {
     let mut build = cc::Build::new();
     build
         .opt_level(2)
         .pic(true)
         .warnings(false)
         .extra_warnings(false)
-        .force_frame_pointer(true)
-        .define("RUBY_EXPORT", None)
-        .define("_GNU_SOURCE", "1");
-    for flag in FLAGS.iter().chain(FORTIFY_FLAGS).chain(HARDENING_FLAGS) {
+        .force_frame_pointer(true);
+    for flag in flags.iter().chain(FORTIFY_FLAGS).chain(HARDENING_FLAGS) {
         build.flag(flag);
     }
     if env::var("CARGO_CFG_TARGET_ARCH").expect("cargo sets CARGO_CFG_TARGET_ARCH") == "x86_64" {
@@ -140,12 +155,32 @@ fn base_build() -> cc::Build {
             build.flag(flag);
         }
     }
+    build
+}
+
+/// The configuration shared by every C file of the interpreter, without include paths.
+fn base_build() -> cc::Build {
+    let mut build = hardened_build(FLAGS);
+    build.define("RUBY_EXPORT", None).define("_GNU_SOURCE", "1");
     if build.get_compiler().is_like_clang() {
         for flag in CLANG_FLAGS {
             build.flag(flag);
         }
     }
     build
+}
+
+/// The C files of `third_party/core-math/FILES`, which both interpreters build: one path per
+/// line, relative to that directory; empty lines and lines that start with `#` are skipped.
+fn core_math_files(core_math_dir: &Path) -> Vec<PathBuf> {
+    let list = core_math_dir.join("FILES");
+    let text =
+        fs::read_to_string(&list).unwrap_or_else(|error| panic!("{}: {error}", list.display()));
+    text.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .map(|line| core_math_dir.join(line))
+        .collect()
 }
 
 /// A path as a string for `cargo:` lines, which cannot carry anything but UTF-8.
@@ -299,6 +334,11 @@ fn main() {
         .join("../../third_party/oniguruma-5.9.6")
         .canonicalize()
         .expect("third_party/oniguruma-5.9.6 exists");
+    let core_math_dir = manifest_dir
+        .join("../../third_party/core-math")
+        .canonicalize()
+        .expect("third_party/core-math exists");
+    let core_math_include = core_math_dir.join("vkrgss");
     let zlib_include = PathBuf::from(
         env::var_os("DEP_Z_INCLUDE").expect("libz-sys exports the include path of its zlib"),
     );
@@ -311,6 +351,7 @@ fn main() {
     println!("cargo:rerun-if-changed=data");
     println!("cargo:rerun-if-changed={}", utf8(&ruby_dir));
     println!("cargo:rerun-if-changed={}", utf8(&onig_dir));
+    println!("cargo:rerun-if-changed={}", utf8(&core_math_dir));
 
     let base = base_build();
 
@@ -320,14 +361,16 @@ fn main() {
 
     // The interpreter. The include order matters: `config.h` first, then the vendored tree.
     // `compat` holds `vkxp_regex.h`, which the patched `re.h` includes and which in turn
-    // includes Oniguruma's `oniggnu.h`.
+    // includes Oniguruma's `oniggnu.h`; `vkrgss_math.h`, which the patched `math.c`,
+    // `numeric.c` and `bignum.c` include, is in the directory of CORE-MATH.
     let compat_dir = manifest_dir.join("compat");
     let mut core = base.clone();
     core.include(&config_dir)
         .include(&ruby_dir)
         .include(&generated_dir)
         .include(&compat_dir)
-        .include(&onig_dir);
+        .include(&onig_dir)
+        .include(&core_math_include);
     for name in CORE_SOURCES {
         core.file(ruby_dir.join(format!("{name}.c")));
     }
@@ -351,6 +394,11 @@ fn main() {
         onig.file(onig_dir.join(format!("{name}.c")));
     }
     onig.compile("vkrgss-ruby-onig");
+
+    // The correctly rounded functions, which the interpreter refers to.
+    let mut core_math = hardened_build(CORE_MATH_FLAGS);
+    core_math.files(core_math_files(&core_math_dir));
+    core_math.compile("vkrgss-ruby-core-math");
 
     link_crypt(&base);
     println!("cargo:rustc-link-lib=m");
@@ -395,6 +443,20 @@ fn main() {
     );
     println!("cargo:rustc-env=VKRGSS_RUBY_CC={}", utf8(compiler.path()));
     println!("cargo:rustc-env=VKRGSS_RUBY_CFLAGS={}", args.join(" "));
+    let core_math_compiler = core_math.get_compiler();
+    let core_math_args: Vec<&str> = core_math_compiler
+        .args()
+        .iter()
+        .map(|arg| arg.to_str().expect("compiler arguments are UTF-8"))
+        .collect();
+    println!(
+        "cargo:rustc-env=VKRGSS_RUBY_CORE_MATH_CFLAGS={}",
+        core_math_args.join(" ")
+    );
+    println!(
+        "cargo:rustc-env=VKRGSS_RUBY_CORE_MATH_INCLUDE_DIR={}",
+        utf8(&core_math_include)
+    );
     println!(
         "cargo:rustc-env=VKRGSS_RUBY_CONFIG_DIR={}",
         utf8(&config_dir)

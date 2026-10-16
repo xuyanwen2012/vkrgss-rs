@@ -247,8 +247,8 @@ fn manifest_and_patch_log_describe_the_vendored_ruby_1_9_2() {
 }
 
 /// CORE-MATH, which both interpreters build. vkrgss adds `FILES`, the list of what is
-/// compiled.
+/// compiled, and in `vkrgss/` the functions through which the interpreters call it.
 #[test]
 fn manifest_describes_the_vendored_core_math() {
-    check_tree_with_own("core-math", &["FILES"]);
+    check_tree_with_own("core-math", &["FILES", "vkrgss/"]);
 }

@@ -103,7 +103,7 @@ that the host selects at start-up, and the behaviour of XP stays the default.
 
 - File: `numeric.c`
 - Patch: `patches/float-hash-ruby-181.patch`
-- Patched SHA-256: `5ca01d96bdef7dc5cee9ae7ebc61aa54e59aca9790b820414805394bdfdc8f4d`
+- Patched SHA-256: `c4be0ecc13734407967f2aca8a3dab52918226aa22727275c89942aad66f7169`
 - Reason: 1.8.7's `flo_hash` mixes the bytes of the double with XOR. As in 1.8.1, it is the
   sum of the eight bytes, each taken as a signed 8-bit value and multiplied by 971, made
   non-negative, in explicit types.
@@ -482,3 +482,33 @@ that the host selects at start-up, and the behaviour of XP stays the default.
   that the original does not give (measured on the original runtime of VX on 2026-10-12,
   `RGSS202E.dll` 2.0.2.1, change `intern-the-lazy-names-of-rgss2`). The hidden variable has
   the name of 1.8.1 again; no script can see it.
+
+## 37. correctly-rounded-math
+
+- File: `math.c`
+- Patch: `patches/correctly-rounded-math.patch`
+- Patched SHA-256: `7e8b210f9c3e199d9fd750aaac9e89c17395e825d4e007b84d73239b3d44d944`
+- Reason: a save holds floats that `Math` computed, and the C library's results differ
+  between versions of glibc and between operating systems (change
+  `round-the-math-functions-correctly`, "Floats in saves" in `docs/decisions.md`). `math.c`
+  includes `vkrgss_math.h` of `third_party/core-math/vkrgss`, whose macros make every call of
+  `atan2 cos sin tan acos asin atan cosh sinh tanh acosh asinh atanh exp log log10 hypot erf
+  erfc` call the correctly rounded function of the vendored CORE-MATH; for a special
+  argument, and for `errno`, which `domain_check` reads, the C library's function is still
+  called. No other line changes. `sqrt`, `frexp` and `ldexp` are exact and stay with the C
+  library. Patches 38 and 39 do the same for `numeric.c` and `bignum.c`.
+
+## 38. correctly-rounded-pow-numeric
+
+- File: `numeric.c`
+- Patch: `patches/correctly-rounded-pow-numeric.patch`
+- Patched SHA-256: `c4be0ecc13734407967f2aca8a3dab52918226aa22727275c89942aad66f7169`
+- Reason: as patch 37, for `pow` in `Float#**` and in `Fixnum#**` with a float or a negative
+  exponent. Applies after patch 7, whose entry records the hash after this one.
+
+## 39. correctly-rounded-pow-bignum
+
+- File: `bignum.c`
+- Patch: `patches/correctly-rounded-pow-bignum.patch`
+- Patched SHA-256: `68fc4b208e7913306e2b4646a6d07c55f4dc210626c9b54fa8fe78c43a4967e5`
+- Reason: as patch 37, for `pow` in `Bignum#**` where the result is a float.

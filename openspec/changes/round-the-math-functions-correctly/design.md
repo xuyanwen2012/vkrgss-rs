@@ -9,7 +9,12 @@
   `sqrt`, `fmod`, `frexp`, `ldexp`, `modf`, `floor`, `ceil` and `round` are exact in IEEE
   arithmetic and stay with the C library. `log`, `log2` and `log10` are also called in
   `util.c` and `sprintf.c`; whether a result there can reach a value a script sees decides
-  whether those calls go through the shim too (check and say so here).
+  whether those calls go through the shim too (check and say so here). Checked on
+  2026-10-16: in both interpreters these names appear in `util.c` and `sprintf.c` only in
+  comments (`BIT_DIGITS` and the notes of David M. Gay's `dtoa`); neither file calls a
+  function of the list, so neither is patched. No other compiled file of either interpreter
+  calls one but `math.c`, `numeric.c` and `bignum.c`; `complex.c` and `rational.c` of 1.9.2
+  go through `rb_math_*` of `math.c`.
 - Error behaviour: Ruby 1.8.7's `math.c` checks `errno` after a call (`domain_check`:
   `EDOM` raises `Errno::EDOM`, `ERANGE` raises `Errno::ERANGE` except for underflow);
   Ruby 1.9.2 checks the domain before the call and raises `Math::DomainError`. CORE-MATH
@@ -39,12 +44,29 @@
   interpreters are never linked together, so the symbols `cr_*` do not clash.
 - **Flags.** `-O2 -ffp-contract=off -fno-fast-math` and the hardening flags of the
   interpreters, with `-fvisibility=hidden`. `-ffp-contract=off` is added to `FLAGS` of both
-  interpreter build scripts too.
+  interpreter build scripts too. CORE-MATH is C11 (declarations in `for`), so its files are
+  compiled with `-std=gnu11` where the interpreters have `-std=gnu89`. Both scripts compile
+  every file of `FILES`; the shim refers to all functions, so Ruby 1.8.7 links the four it
+  does not call too. The instrumented builds of the tests (sanitizers, fuzzing) link the
+  library of CORE-MATH as the build script built it, without instrumentation.
 - **Shim.** One header and one C file (in `third_party/core-math/vkrgss/` or beside the
   interpreter patches; choose and say where) define `vkrgss_<name>` for each function: for a
   regular argument (finite, non-zero, inside the function's domain, result not overflowing)
   call `cr_<name>`; otherwise call the C library's function, so special values, `errno` and
-  the error behaviour stay what they are. A recorded patch per interpreter makes `math.c`,
+  the error behaviour stay what they are. Chosen: `third_party/core-math/vkrgss/`
+  (`vkrgss_math.h`, `vkrgss_math.c`), shared by both interpreters, listed in `FILES` and
+  left out of the manifest as vkrgss's own; the manifest test takes the directory and
+  `FILES` as files that vkrgss adds to this tree. The argument test is "finite and
+  non-zero"; whether the argument was inside the domain and the result did not overflow is
+  read from the result of `cr_<name>`: when it is not a normal number, the C library's
+  function is called as well. Its value is returned when CORE-MATH's is not finite (a domain
+  error, a pole, an overflow); a zero or subnormal result, an underflow, stays CORE-MATH's
+  correctly rounded one, and the call only sets `errno` as before (glibc sets `ERANGE` for
+  `atanh` of a subnormal argument, which `Math.atanh` of 1.8.7 raises). CORE-MATH, compiled
+  without `CORE_MATH_SUPPORT_ERRNO`, does not touch `errno`. The macros of the header are
+  function-like, so a variable such as `exp` in `math_frexp` keeps its name, and the
+  `#ifndef log2` of 1.9.2's `math.c` skips its fallback. The shim provides `lgamma_r` but
+  not `lgamma`, which neither interpreter calls. A recorded patch per interpreter makes `math.c`,
   `numeric.c` and `bignum.c` (and `util.c`, `sprintf.c` if the check above says so) call the
   shim, by including its header, which maps the names; no other line of those files changes.
 - **lgamma's sign.** `cr_lgamma` sets the global `signgam`. Ruby 1.9.2 uses `lgamma_r`; the
