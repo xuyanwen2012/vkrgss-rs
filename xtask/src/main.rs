@@ -7,9 +7,10 @@
 //! - `stress`: runs the upstream Ruby suites in the sanitized build, the tests of the binding
 //!   and the tests of the executable that start a guest, each under collector stress. Not a
 //!   step of the gate.
-//! - `fuzz <target> [--seconds N]`: builds one of the fuzz targets of the embedded interpreter
-//!   (`marshal`, `parse`, `regex`) with libFuzzer and the sanitizers and runs it. Not a step
-//!   of the gate.
+//! - `fuzz <target> [--seconds N]`: builds one of the fuzz targets of the embedded
+//!   interpreters (`marshal`, `parse`, `regex` of Ruby 1.8.7, `marshal192`, `parse192`,
+//!   `regex192` of Ruby 1.9.2) with libFuzzer and the sanitizers and runs it. Not a step of
+//!   the gate.
 //! - `dist`: builds the release executable and packs it with the licence texts into an archive
 //!   with a checksum under `target/dist/`.
 //! - `extract-rpg <DLL> <OUTPUT>`: copies the built-in scripts out of an RGSS DLL, or out of

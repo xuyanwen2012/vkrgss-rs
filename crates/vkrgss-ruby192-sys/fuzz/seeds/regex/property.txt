@@ -1,0 +1,2 @@
+\p{Hiragana}+\p{Katakana}\p{^Han}
+あいウx

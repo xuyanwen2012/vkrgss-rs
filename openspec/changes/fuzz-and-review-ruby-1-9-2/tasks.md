@@ -6,7 +6,7 @@
 
 ## 2. Targets and command
 
-- [ ] 2.1 The three harnesses, their seeds, and the targets `marshal192`, `parse192`, `regex192` in `cargo xtask fuzz`. Verify: scenarios "A short run" (for each target) and "Unknown target"; `cargo test -p xtask --locked` passes.
+- [x] 2.1 The three harnesses, their seeds, and the targets `marshal192`, `parse192`, `regex192` in `cargo xtask fuzz`. Verify: scenarios "A short run" (for each target) and "Unknown target"; `cargo test -p xtask --locked` passes.
 
 ## 3. First run
 

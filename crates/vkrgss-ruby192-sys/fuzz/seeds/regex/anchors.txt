@@ -1,0 +1,2 @@
+\Afoo$|^bar\z|\bbaz\B
+bar

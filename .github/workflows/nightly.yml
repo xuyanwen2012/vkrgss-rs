@@ -76,13 +76,35 @@ jobs:
       - name: Sanitized suites
         run: cargo test -p vkrgss-ruby-sys --locked --test sanitized -- --ignored upstream_suites_pass_under_the_sanitizers
 
+  # The upstream Ruby suites of Ruby 1.9.2 under AddressSanitizer and
+  # UndefinedBehaviorSanitizer.
+  sanitized192:
+    runs-on: ubuntu-24.04
+    # The compiler of the vendored C code, named so that a new default of the runner image
+    # does not change it unnoticed.
+    env:
+      CC: gcc-13
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Install the prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            build-essential gcc-13 libcrypt-dev clang libclang-rt-dev
+      # Installs the toolchain that rust-toolchain.toml pins.
+      - name: Install the Rust toolchain
+        run: rustup show
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - name: Sanitized suites of Ruby 1.9.2
+        run: cargo test -p vkrgss-ruby192-sys --locked --test sanitized -- --ignored upstream_suites_pass_under_the_sanitizers
+
   # A short run of each fuzz target; the corpus is not kept between runs.
   fuzz:
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        target: [marshal, parse, regex]
+        target: [marshal, parse, regex, marshal192, parse192, regex192]
     # The compiler of the vendored C code, named so that a new default of the runner image
     # does not change it unnoticed.
     env:

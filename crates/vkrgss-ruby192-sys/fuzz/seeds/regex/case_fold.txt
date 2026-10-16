@@ -1,0 +1,2 @@
+(?i)テスト|straße
+STRASSE テスト

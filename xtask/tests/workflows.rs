@@ -203,9 +203,15 @@ fn the_nightly_workflow_runs_the_checks_outside_the_gate() {
         "cargo test -p vkrgss-ruby-sys --locked --test sanitized -- \
          --ignored upstream_suites_pass_under_the_sanitizers",
     );
+    runs(
+        "sanitized192",
+        "cargo test -p vkrgss-ruby192-sys --locked --test sanitized -- \
+         --ignored upstream_suites_pass_under_the_sanitizers",
+    );
     runs("fuzz", "cargo xtask fuzz ${{ matrix.target }} --seconds");
     assert!(
-        job(&workflow, "fuzz").contains(&"        target: [marshal, parse, regex]"),
+        job(&workflow, "fuzz")
+            .contains(&"        target: [marshal, parse, regex, marshal192, parse192, regex192]"),
         "the job `fuzz` does not run each target"
     );
     let audit = job(&workflow, "audit");

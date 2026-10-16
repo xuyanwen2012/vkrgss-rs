@@ -1,0 +1,2 @@
+[[:alpha:]][[:digit:]][[:space:]][[:^punct:]]
+a1 b

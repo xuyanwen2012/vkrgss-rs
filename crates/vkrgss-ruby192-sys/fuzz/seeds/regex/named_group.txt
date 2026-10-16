@@ -1,0 +1,2 @@
+(?<word>\w+) \k<word>
+hello hello
