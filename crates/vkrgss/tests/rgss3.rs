@@ -1,6 +1,7 @@
 //! The built `vkrgss` executable, run headless on games of RGSS3 written here without an
 //! interpreter (`support::ace`): the scenarios of `game-launch` and `rgss-runtime` that need
-//! the program and its guest executable `vkrgss-guest-rgss3` together.
+//! the program and its guest executable `vkrgss-guest-rgss3` together, and those of a copy of
+//! the program alone in a directory or beside its guest executables.
 //!
 //! The program finds the guest executable beside its own file, as a player's does; cargo
 //! puts the binaries of the workspace into one directory, and builds the binary of
@@ -142,19 +143,41 @@ fn a_guest_executable_that_ends_at_once_is_reported_with_its_status() {
     assert!(!script_ran(&game));
 }
 
+/// A game of `runtime` whose one script would leave `ran.txt` in the game directory.
+fn ran_game_of(runtime: Runtime, name: &str) -> Game {
+    Game::of(
+        harness(),
+        runtime,
+        name,
+        "Alone",
+        &[("Main", &writes("ran.txt", "'ran'"))],
+    )
+}
+
+/// Requirement "Executable of the guest process", scenario "XP and VX need their guest
+/// executable".
+#[test]
+fn a_copy_of_the_program_alone_names_the_missing_guest_executable_of_xp_and_vx() {
+    let game = ran_game_of(Runtime::Rgss1, "xp-alone-process");
+    let (dir, program) = copy_of_the_program(&[]);
+    let ran = copy_headless(&program, &game, &["--guest", "process"]);
+    ran.assert_failure();
+    let stderr = ran.stderr();
+    assert!(stderr.contains("vkrgss-guest-rgss12"), "{stderr}");
+    assert!(
+        stderr.contains(&dir.path().display().to_string()),
+        "{stderr}"
+    );
+    assert!(!script_ran(&game));
+}
+
 /// Requirement "Executable of the guest process", scenario "XP and VX need no second file".
 #[test]
-fn a_copy_of_the_program_alone_runs_games_of_xp_and_vx_in_a_process() {
+fn a_copy_of_the_program_alone_runs_games_of_xp_and_vx_on_a_thread() {
     let (_dir, program) = copy_of_the_program(&[]);
     for runtime in [Runtime::Rgss1, Runtime::Rgss2] {
-        let game = Game::of(
-            harness(),
-            runtime,
-            &format!("ace-alone-{}", runtime.name()),
-            "Alone",
-            &[("Main", &writes("ran.txt", "'ran'"))],
-        );
-        let ran = copy_headless(&program, &game, &["--guest", "process"]);
+        let game = ran_game_of(runtime, &format!("ace-alone-{}", runtime.name()));
+        let ran = copy_headless(&program, &game, &["--guest", "thread"]);
         ran.assert_success();
         assert!(script_ran(&game), "{}", runtime.name());
     }

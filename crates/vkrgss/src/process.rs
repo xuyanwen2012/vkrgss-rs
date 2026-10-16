@@ -3,8 +3,9 @@
 //! The program makes a directory only the user can enter and listens on a Unix stream
 //! socket in it. Beside the socket it writes the guest record of `vkrgss-guest`: the game
 //! directory, the settings a guest reads, the seed, the socket and the inputs of the
-//! diagnostic level. Then it starts itself again with the hidden option [`GUEST_ROLE`] and
-//! the path of the record, and with no other argument. The child reads the record and
+//! diagnostic level. Then it starts the guest executable of the game's runtime, which lies
+//! beside the program, with the hidden option [`GUEST_ROLE`] and the path of the record, and
+//! with no other argument; it never starts itself. The child reads the record and
 //! neither the command line of the program nor a configuration file, sets the game up as
 //! the guest thread of the other form does, connects, and plays the game with the socket as
 //! its link. The record is removed with the directory, when the run ends.
@@ -189,12 +190,16 @@ fn attached(stream: UnixStream) -> Result<(Attached, Option<u8>)> {
     }
 }
 
+/// The file name of the guest executable of games of RGSS1 and RGSS2, which lies beside the
+/// program.
+pub(crate) const RGSS12_GUEST: &str = "vkrgss-guest-rgss12";
+
 /// The file name of the guest executable of games of RGSS3, which lies beside the program.
 pub(crate) const RGSS3_GUEST: &str = "vkrgss-guest-rgss3";
 
-/// The executable the program starts as the guest process of a game of `runtime`: the
-/// program itself for RGSS1 and RGSS2, and for RGSS3 the guest executable in the directory
-/// of the program's own file, links resolved as the system resolves them.
+/// The executable the program starts as the guest process of a game of `runtime`: the guest
+/// executable of its interpreter in the directory of the program's own file, links resolved
+/// as the system resolves them.
 fn guest_executable(runtime: Runtime) -> Result<PathBuf> {
     let program = std::env::current_exe().context("cannot tell where the program is")?;
     guest_executable_of(&program, runtime)
@@ -203,25 +208,23 @@ fn guest_executable(runtime: Runtime) -> Result<PathBuf> {
 /// [`guest_executable`] for the program `program`. A guest executable that is not there is
 /// an error that names it and the directory.
 fn guest_executable_of(program: &Path, runtime: Runtime) -> Result<PathBuf> {
-    match runtime {
-        Runtime::Rgss1 | Runtime::Rgss2 => Ok(program.to_owned()),
-        Runtime::Rgss3 => {
-            let dir = program.parent().unwrap_or(Path::new("/"));
-            let guest = dir.join(RGSS3_GUEST);
-            if !guest.is_file() {
-                bail!(
-                    "a game of {} runs in the guest executable {RGSS3_GUEST}, and there is no \
-                     file {} in {}, the directory of the program: it is built with the \
-                     program (`cargo build -p {RGSS3_GUEST}`) and lies beside it in the \
-                     release archive",
-                    runtime.product(),
-                    guest.display(),
-                    dir.display()
-                );
-            }
-            Ok(guest)
-        }
+    let name = match runtime {
+        Runtime::Rgss1 | Runtime::Rgss2 => RGSS12_GUEST,
+        Runtime::Rgss3 => RGSS3_GUEST,
+    };
+    let dir = program.parent().unwrap_or(Path::new("/"));
+    let guest = dir.join(name);
+    if !guest.is_file() {
+        bail!(
+            "the guest process of a game of {} is the guest executable {name}, and there is \
+             no file {} in {}, the directory of the program: it is built with the program \
+             (`cargo build -p {name}`) and lies beside it in the release archive",
+            runtime.product(),
+            guest.display(),
+            dir.display()
+        );
     }
+    Ok(guest)
 }
 
 /// What the program hands a guest process beside the socket: the rest of the guest record.
@@ -896,39 +899,52 @@ mod tests {
         );
     }
 
-    /// Scenario "XP and VX".
+    /// Scenarios "XP and VX" and "VX Ace", and the error of a guest executable that is not
+    /// there.
     #[test]
-    fn the_guest_executable_of_xp_and_vx_is_the_program_itself() {
-        let program = std::env::current_exe().unwrap();
-        for runtime in [Runtime::Rgss1, Runtime::Rgss2] {
-            assert_eq!(guest_executable(runtime).unwrap(), program);
+    fn the_guest_executable_lies_beside_the_program() {
+        let dir = tempfile::tempdir().unwrap();
+        let program = dir.path().join("vkrgss");
+        let runtimes = [
+            (Runtime::Rgss1, RGSS12_GUEST, "RPG Maker XP"),
+            (Runtime::Rgss2, RGSS12_GUEST, "RPG Maker VX"),
+            (Runtime::Rgss3, RGSS3_GUEST, "RPG Maker VX Ace"),
+        ];
+        for (runtime, name, product) in runtimes {
+            let message = guest_executable_of(&program, runtime)
+                .unwrap_err()
+                .to_string();
+            assert!(message.contains(name), "{message}");
+            assert!(
+                message.contains(&dir.path().display().to_string()),
+                "{message}"
+            );
+            assert!(message.contains(product), "{message}");
+        }
+
+        for name in [RGSS12_GUEST, RGSS3_GUEST] {
+            std::fs::write(dir.path().join(name), "").unwrap();
+        }
+        for (runtime, name, _) in runtimes {
+            assert_eq!(
+                guest_executable_of(&program, runtime).unwrap(),
+                dir.path().join(name)
+            );
         }
     }
 
-    /// Scenario "VX Ace", and the error of a guest executable that is not there.
+    /// The program does not start itself as a guest: the running executable, a test binary
+    /// here, is asked for the guest executable beside it.
     #[test]
-    fn the_guest_executable_of_vx_ace_lies_beside_the_program() {
-        let dir = tempfile::tempdir().unwrap();
-        let program = dir.path().join("vkrgss");
-        let message = guest_executable_of(&program, Runtime::Rgss3)
-            .unwrap_err()
-            .to_string();
-        assert!(message.contains(RGSS3_GUEST), "{message}");
-        assert!(
-            message.contains(&dir.path().display().to_string()),
-            "{message}"
-        );
-        assert!(message.contains("RPG Maker VX Ace"), "{message}");
-
-        std::fs::write(dir.path().join(RGSS3_GUEST), "").unwrap();
-        assert_eq!(
-            guest_executable_of(&program, Runtime::Rgss3).unwrap(),
-            dir.path().join(RGSS3_GUEST)
-        );
-        assert_eq!(
-            guest_executable_of(&program, Runtime::Rgss1).unwrap(),
-            program
-        );
+    fn the_guest_executable_of_xp_and_vx_is_not_the_program_itself() {
+        let program = std::env::current_exe().unwrap();
+        for runtime in [Runtime::Rgss1, Runtime::Rgss2] {
+            let expected = program.with_file_name(RGSS12_GUEST);
+            match guest_executable(runtime) {
+                Ok(guest) => assert_eq!(guest, expected),
+                Err(error) => assert!(error.to_string().contains(RGSS12_GUEST), "{error}"),
+            }
+        }
     }
 
     /// Scenario "Arguments of the guest process".

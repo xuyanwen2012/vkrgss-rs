@@ -56,10 +56,11 @@ usage: vkrgss [GAME_DIR] [OPTIONS]
                             in a process of their own, which save states need (F3
                             saves, F4 loads, with Shift they choose the slot);
                             default: process in a window, thread in a headless run;
-                            a game of rgss3 runs in a process only, of the guest
-                            executable vkrgss-guest-rgss3 beside the program; the
-                            environment variable VKRGSS_GUEST sets it too, and comes
-                            after this option
+                            a game of rgss3 runs in a process only; the process is
+                            one of the guest executable beside the program,
+                            vkrgss-guest-rgss12 for rgss1 and rgss2 and
+                            vkrgss-guest-rgss3 for rgss3; the environment variable
+                            VKRGSS_GUEST sets it too, and comes after this option
   --sandbox on|off          whether a guest process confines itself before the first
                             script runs: it then writes only below the game
                             directory, executes nothing and opens no TCP connection;

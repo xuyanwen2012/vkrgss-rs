@@ -9,7 +9,8 @@
 //!
 //! Before anything else, an executable whose first argument is the hidden option of the
 //! guest role is a guest process (`guest_process` of `vkrgss-guest-main`): it reads the guest record that
-//! the option names and nothing else of its command line, and none of the steps below.
+//! the option names and nothing else of its command line, and none of the steps below. The
+//! program never starts itself so: its guest processes are the guest executables beside it.
 //! Otherwise:
 //!
 //! 1. The arguments are parsed (`args`); a mistake there ends with the usage message and
@@ -46,11 +47,13 @@
 //! says otherwise) the game's scripts run in a child process instead of on a thread
 //! (`process`). The program then does the steps above without the interpreter: it checks
 //! what the game needs, writes what a guest needs of the settled run into the guest record
-//! of `vkrgss-guest`, starts itself again in the guest role with that record as its only
-//! argument, and gives the host a relay to that process as its guest. A game of RPG Maker
-//! VX Ace, whose scripts need Ruby 1.9.2, always has its guest in a process: the program
-//! starts the guest executable `vkrgss-guest-rgss3` that lies beside it in the guest role
-//! instead of itself, and refuses `--guest thread`. The child parses no
+//! of `vkrgss-guest`, starts the guest executable of the game's runtime that lies beside it
+//! in the guest role, with that record as its only argument, and gives the host a relay to
+//! that process as its guest. The guest executable is `vkrgss-guest-rgss12` for RPG Maker XP
+//! and VX and `vkrgss-guest-rgss3` for RPG Maker VX Ace; neither links anything of the host,
+//! so the process that states copy with `fork` holds no window framework. A game of VX Ace,
+//! whose scripts need Ruby 1.9.2, always has its guest in a process: the program refuses
+//! `--guest thread` for it. The child parses no
 //! command line and reads no configuration file: it installs the subscriber from the
 //! record, looks the game up and does the steps 3 to 5 with the settings of the record,
 //! opens no window, device or recording, attaches to the socket of its parent, plays the game over it and reports

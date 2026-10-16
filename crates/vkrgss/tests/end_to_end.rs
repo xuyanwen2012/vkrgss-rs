@@ -8,7 +8,10 @@
 //! Like the other tests that reach Vulkan, these refuse to run unless the loader has been
 //! restricted to chosen drivers, and they hand the restriction on to the child
 //! (`support`). No test here runs a game of RGSS3, which needs the guest executable of
-//! `vkrgss-guest-rgss3`: those are in `rgss3.rs`.
+//! `vkrgss-guest-rgss3`: those are in `rgss3.rs`. The tests with the guest in a process need
+//! the guest executable `vkrgss-guest-rgss12` beside the program, where cargo puts every
+//! binary of the workspace: `cargo test --workspace` and `cargo test -p vkrgss -p
+//! vkrgss-guest-rgss12` build it first.
 
 use std::fs;
 use std::path::Path;

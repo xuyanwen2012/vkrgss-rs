@@ -142,10 +142,23 @@ fn steps(skipped: &[Skipped]) -> [Step; 6] {
             ),
             env: vec![(VARIABLE, BINDING_EVERY.to_string())],
         },
+        // The tests of the executable that start the guest executable of RGSS1 and RGSS2,
+        // which the test of its guest records makes cargo build first.
         Step {
             name: "guest",
             args: cargo_test(
-                &["test", "-p", "vkrgss", "--locked", "--test", "end_to_end"],
+                &[
+                    "test",
+                    "-p",
+                    "vkrgss",
+                    "-p",
+                    "vkrgss-guest-rgss12",
+                    "--locked",
+                    "--test",
+                    "end_to_end",
+                    "--test",
+                    "guest_record",
+                ],
                 "guest",
             ),
             env: vec![(VARIABLE, GUEST_EVERY.to_string())],
@@ -306,7 +319,18 @@ mod tests {
         );
         assert_eq!(
             steps[2].args,
-            ["test", "-p", "vkrgss", "--locked", "--test", "end_to_end"]
+            [
+                "test",
+                "-p",
+                "vkrgss",
+                "-p",
+                "vkrgss-guest-rgss12",
+                "--locked",
+                "--test",
+                "end_to_end",
+                "--test",
+                "guest_record"
+            ]
         );
     }
 
@@ -433,7 +457,7 @@ mod tests {
             binding.args[5..],
             ["--", "--exact", "--skip", "module::test_c"]
         );
-        assert_eq!(guest.args[6..], ["--", "--exact", "--skip", "test_d"]);
+        assert_eq!(guest.args[10..], ["--", "--exact", "--skip", "test_d"]);
     }
 
     /// The step of the guest executable runs the tests of the executable that start it, and

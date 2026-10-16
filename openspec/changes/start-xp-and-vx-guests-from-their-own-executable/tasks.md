@@ -6,7 +6,7 @@
 
 ## 2. The program starts it
 
-- [ ] 2.1 `guest_executable_of` and what the change of it needs in `vkrgss`; tests. Verify: the scenarios of "Executable of the guest process"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss --locked` passes, the tests of save states and of the sandbox included.
+- [x] 2.1 `guest_executable_of` and what the change of it needs in `vkrgss`; tests. Verify: the scenarios of "Executable of the guest process"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss --locked` passes, the tests of save states and of the sandbox included.
 
 ## 3. Package and documents
 
