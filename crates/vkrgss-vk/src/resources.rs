@@ -392,7 +392,7 @@ pub(crate) unsafe fn transition(
 
 /// Records a barrier that makes what the device wrote to `buffer` visible to the host.
 ///
-/// Waiting for the fence of a submission says that its commands have completed, not that
+/// Waiting for a submission says that its commands have completed, not that
 /// their writes can be seen through a mapping. That takes a dependency from the writing stage
 /// to the host, and host-coherent memory does not stand in for it: coherence only removes the
 /// need to invalidate the mapped range.

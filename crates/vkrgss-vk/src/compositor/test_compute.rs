@@ -25,7 +25,8 @@ impl VkCompositor {
         count: u32,
         local_size: u32,
     ) -> Vec<u32> {
-        let device = &self.gpu.device;
+        // A clone, so that the submission below can borrow the compositor.
+        let device = &self.gpu.device.clone();
         let buffer = |allocator: &mut _, name, words: usize, location| {
             GpuBuffer::new(
                 device,
@@ -147,7 +148,7 @@ impl VkCompositor {
                 &count.to_ne_bytes(),
             );
             device.cmd_dispatch(commands, count.div_ceil(local_size), 1, 1);
-            // The output is read through its mapping once the fence has signalled.
+            // The output is read through its mapping once the submission is done.
             make_host_readable(
                 device,
                 commands,
@@ -178,7 +179,8 @@ impl VkCompositor {
     ///
     /// Panics on any Vulkan error, as test code may.
     pub(crate) fn record_unguarded_read(&mut self) {
-        let device = &self.gpu.device;
+        // A clone, so that the submission below can borrow the compositor.
+        let device = &self.gpu.device.clone();
         let size = (4, 4);
         let image = GpuImage::new(
             device,

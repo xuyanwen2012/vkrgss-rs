@@ -160,7 +160,11 @@ pub struct VkCompositor {
     allocator: ManuallyDrop<Allocator>,
     pool: vk::CommandPool,
     commands: vk::CommandBuffer,
-    fence: vk::Fence,
+    /// The timeline semaphore every submission signals, each with the next value, and that
+    /// the waits for submissions wait on.
+    timeline: vk::Semaphore,
+    /// The value the last submission signals on `timeline`, 0 before the first.
+    submissions: u64,
     // Last, so that the device and the instance outlive everything above. `drop` destroys the
     // objects created from the device before this field is dropped.
     gpu: Gpu,

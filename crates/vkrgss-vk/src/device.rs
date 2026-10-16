@@ -644,8 +644,10 @@ impl Gpu {
             present_wait2: vk::TRUE,
             ..Default::default()
         };
-        // Exactly the features the requirement check looked for, and nothing else.
+        // Exactly the features the requirement check looked for, and the timeline semaphores
+        // of the submissions, which every device of Vulkan 1.2 or later supports.
         let mut features12 = vk::PhysicalDeviceVulkan12Features::default()
+            .timeline_semaphore(true)
             .runtime_descriptor_array(true)
             .shader_sampled_image_array_non_uniform_indexing(true)
             .descriptor_binding_partially_bound(true)

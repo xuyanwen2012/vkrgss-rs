@@ -113,7 +113,8 @@ impl VkCompositor {
             allocator: ManuallyDrop::new(allocator),
             pool: vk::CommandPool::null(),
             commands: vk::CommandBuffer::null(),
-            fence: vk::Fence::null(),
+            timeline: vk::Semaphore::null(),
+            submissions: 0,
             gpu,
         };
         compositor.init()?;
@@ -135,9 +136,14 @@ impl VkCompositor {
         // SAFETY: the pool was just created from this device.
         self.commands = unsafe { device.allocate_command_buffers(&allocate) }
             .map_err(VkError::vulkan("vkAllocateCommandBuffers"))?[0];
-        // SAFETY: the device is live.
-        self.fence = unsafe { device.create_fence(&vk::FenceCreateInfo::default(), None) }
-            .map_err(VkError::vulkan("vkCreateFence"))?;
+        let mut timeline_info = vk::SemaphoreTypeCreateInfo::default()
+            .semaphore_type(vk::SemaphoreType::TIMELINE)
+            .initial_value(0);
+        let semaphore_info = vk::SemaphoreCreateInfo::default().push_next(&mut timeline_info);
+        // SAFETY: the device is live and was created with the timeline semaphore feature.
+        self.timeline = unsafe { device.create_semaphore(&semaphore_info, None) }
+            .map_err(VkError::vulkan("vkCreateSemaphore"))?;
+        self.gpu.name_object(self.timeline, "submissions");
         if self.gpu.timestamps.is_some() {
             let query_info = vk::QueryPoolCreateInfo::default()
                 .query_type(vk::QueryType::TIMESTAMP)
@@ -282,7 +288,7 @@ impl Drop for VkCompositor {
             device.destroy_pipeline(self.pipeline, None);
             device.destroy_pipeline_layout(self.pipeline_layout, None);
             device.destroy_descriptor_set_layout(self.set_layout, None);
-            device.destroy_fence(self.fence, None);
+            device.destroy_semaphore(self.timeline, None);
             device.destroy_query_pool(self.query_pool, None);
             // Frees the command buffer with it.
             device.destroy_command_pool(self.pool, None);

@@ -262,34 +262,19 @@ impl VkCompositor {
     /// Ends recording and submits the command buffer so that it starts drawing once the
     /// swapchain image is available (`wait`) and signals `signal` when it is done, then
     /// blocks until the device has finished it.
-    fn submit_drawn(&self, wait: vk::Semaphore, signal: vk::Semaphore) -> Result<(), VkError> {
-        let device = &self.gpu.device;
-        let (buffers, waits, signals) = ([self.commands], [wait], [signal]);
-        let stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
-        let submit = vk::SubmitInfo::default()
-            .wait_semaphores(&waits)
-            .wait_dst_stage_mask(&stages)
-            .command_buffers(&buffers)
-            .signal_semaphores(&signals);
-        // SAFETY: the command buffer is recording and everything it references stays alive
-        // until the wait below returns. `wait` was signalled by the acquire of the image the
-        // commands draw into, and `signal` is unsignalled: the presentation engine consumed
-        // its previous signal before it handed the image out again. The queue and the fence
-        // belong to this device, the fence is unsignalled, and the queue is only used from
-        // here.
-        unsafe {
-            device
-                .end_command_buffer(self.commands)
-                .map_err(VkError::vulkan("vkEndCommandBuffer"))?;
-            device
-                .queue_submit(self.gpu.queue, &[submit], self.fence)
-                .map_err(VkError::vulkan("vkQueueSubmit"))?;
-            device
-                .wait_for_fences(&[self.fence], true, u64::MAX)
-                .map_err(VkError::vulkan("vkWaitForFences"))?;
-            device
-                .reset_fences(&[self.fence])
-                .map_err(VkError::vulkan("vkResetFences"))
-        }
+    fn submit_drawn(&mut self, wait: vk::Semaphore, signal: vk::Semaphore) -> Result<(), VkError> {
+        // The pass first touches the image when its layout changes at the colour attachment
+        // output stage (`ImageUse::ACQUIRED`), so that is where the acquire is waited for.
+        let waits = [vk::SemaphoreSubmitInfo::default()
+            .semaphore(wait)
+            .stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)];
+        let signals = [vk::SemaphoreSubmitInfo::default()
+            .semaphore(signal)
+            .stage_mask(vk::PipelineStageFlags2::ALL_COMMANDS)];
+        // SAFETY: both are binary semaphores of the live swapchain. `wait` was signalled by
+        // the acquire of the image the commands draw into, and `signal` is unsignalled: the
+        // presentation engine consumed its previous signal before it handed the image out
+        // again.
+        unsafe { self.submit_with(&waits, &signals) }
     }
 }

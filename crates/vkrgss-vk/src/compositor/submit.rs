@@ -266,27 +266,62 @@ impl VkCompositor {
     }
 
     /// Ends recording, submits the command buffer and blocks until the device has finished it.
-    pub(super) fn submit_and_wait(&self) -> Result<(), VkError> {
+    pub(super) fn submit_and_wait(&mut self) -> Result<(), VkError> {
+        // SAFETY: there are no other semaphores.
+        unsafe { self.submit_with(&[], &[]) }
+    }
+
+    /// Ends recording and submits the command buffer, which waits for the semaphores of
+    /// `waits` and, once done, signals those of `signals` as well as the next value of the
+    /// timeline; then blocks until the timeline has that value, so until the device has
+    /// finished the commands.
+    ///
+    /// # Safety
+    ///
+    /// The semaphores of `waits` and `signals` must be live binary semaphores of this device;
+    /// each of `waits` must have a signal operation pending or done that no other wait
+    /// consumes, and each of `signals` must be unsignalled with no signal operation pending.
+    pub(super) unsafe fn submit_with(
+        &mut self,
+        waits: &[vk::SemaphoreSubmitInfo<'_>],
+        signals: &[vk::SemaphoreSubmitInfo<'_>],
+    ) -> Result<(), VkError> {
         let device = &self.gpu.device;
-        let buffers = [self.commands];
-        let submit = vk::SubmitInfo::default().command_buffers(&buffers);
+        let value = self.submissions + 1;
+        let mut all_signals = Vec::with_capacity(signals.len() + 1);
+        all_signals.extend_from_slice(signals);
+        all_signals.push(
+            vk::SemaphoreSubmitInfo::default()
+                .semaphore(self.timeline)
+                .value(value)
+                .stage_mask(vk::PipelineStageFlags2::ALL_COMMANDS),
+        );
+        let buffers = [vk::CommandBufferSubmitInfo::default().command_buffer(self.commands)];
+        let submit = vk::SubmitInfo2::default()
+            .wait_semaphore_infos(waits)
+            .command_buffer_infos(&buffers)
+            .signal_semaphore_infos(&all_signals);
         // SAFETY: the command buffer is recording and everything it references stays alive
-        // until the wait below returns; the queue and fence belong to this device, the fence
-        // is unsignalled, and the queue is only used from here.
+        // until the wait below returns; the queue and the timeline belong to this device, the
+        // device was created with synchronization2 and timeline semaphores, `value` is greater
+        // than every value signalled on the timeline before, and the queue is only used from
+        // here. The caller vouches for the semaphores of `waits` and `signals`.
         unsafe {
             device
                 .end_command_buffer(self.commands)
                 .map_err(VkError::vulkan("vkEndCommandBuffer"))?;
             device
-                .queue_submit(self.gpu.queue, &[submit], self.fence)
-                .map_err(VkError::vulkan("vkQueueSubmit"))?;
-            device
-                .wait_for_fences(&[self.fence], true, u64::MAX)
-                .map_err(VkError::vulkan("vkWaitForFences"))?;
-            device
-                .reset_fences(&[self.fence])
-                .map_err(VkError::vulkan("vkResetFences"))
+                .queue_submit2(self.gpu.queue, &[submit], vk::Fence::null())
+                .map_err(VkError::vulkan("vkQueueSubmit2"))?;
         }
+        self.submissions = value;
+        let (semaphores, values) = ([self.timeline], [value]);
+        let wait = vk::SemaphoreWaitInfo::default()
+            .semaphores(&semaphores)
+            .values(&values);
+        // SAFETY: the timeline belongs to this device and the value was submitted above.
+        unsafe { device.wait_semaphores(&wait, u64::MAX) }
+            .map_err(VkError::vulkan("vkWaitSemaphores"))
     }
 
     /// Copies the pixels of an image to host memory: RGBA8 in row order.
@@ -319,7 +354,7 @@ impl VkCompositor {
     }
 
     fn copy_image_to_buffer(
-        &self,
+        &mut self,
         image: vk::Image,
         (width, height): (u32, u32),
         resting: ImageUse,
@@ -346,7 +381,7 @@ impl VkCompositor {
                 transition(device, commands, image, resting, copying);
             }
             device.cmd_copy_image_to_buffer(commands, image, copying.layout, buffer, &[region]);
-            // The caller reads the buffer through its mapping once the fence has signalled.
+            // The caller reads the buffer through its mapping once the submission is done.
             make_host_readable(
                 device,
                 commands,

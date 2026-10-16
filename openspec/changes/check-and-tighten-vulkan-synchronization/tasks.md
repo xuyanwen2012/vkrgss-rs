@@ -6,7 +6,7 @@
 
 ## 2. Submissions
 
-- [ ] 2.1 `vkQueueSubmit2` and a timeline semaphore for composition, uploads, read-back and presentation submits. Verify: scenario "No fence reset for submissions"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss-vk --locked` passes, and with `VK_LOADER_DRIVERS_SELECT='*radeon*' VKRGSS_TEST_DEVICE=RADV` too.
+- [x] 2.1 `vkQueueSubmit2` and a timeline semaphore for composition, uploads, read-back and presentation submits. Verify: scenario "No fence reset for submissions"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss-vk --locked` passes, and with `VK_LOADER_DRIVERS_SELECT='*radeon*' VKRGSS_TEST_DEVICE=RADV` too.
 
 ## 3. Uploads
 

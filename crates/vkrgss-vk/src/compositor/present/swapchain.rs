@@ -277,7 +277,7 @@ impl VkCompositor {
             && !old.settle_presents(device)
         {
             // The presentation engine may still hold the semaphore of the last present. The
-            // fence of a submission does not cover that. The fences of the presents do, where
+            // wait for a submission does not cover that. The fences of the presents do, where
             // swapchain maintenance gives them; without them, and when they are not
             // signalled in time, idling the device does.
             // SAFETY: the device is live.
