@@ -199,10 +199,12 @@ struct FrameData {
 enum Step<'a> {
     /// Fill a new image with transparent black.
     Clear { image: vk::Image },
-    /// Replace the pixels inside `rect` with `rgba`, staged at `offset`.
+    /// Replace the pixels inside `rect` with `rgba`, staged at `offset`. `whole` says that
+    /// `rect` covers the whole image.
     Upload {
         image: vk::Image,
         rect: Rect,
+        whole: bool,
         offset: u64,
         rgba: &'a [u8],
     },

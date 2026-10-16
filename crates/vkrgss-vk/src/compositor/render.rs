@@ -1,7 +1,7 @@
 //! Rendering a packet: its deltas, the data of its frame, and reading the frame back.
 
 use ash::vk;
-use vkrgss_proto::{BitmapDelta, FramePacket, GuestToHost, Size, TableDelta};
+use vkrgss_proto::{BitmapDelta, FramePacket, GuestToHost, Rect, Size, TableDelta};
 
 use super::{Frame, FrameData, Pending, Step, VkCompositor};
 use crate::binning::bin;
@@ -211,10 +211,11 @@ impl VkCompositor {
                     let BitmapDelta::Update { rgba, .. } = delta else {
                         unreachable!("only an update delta yields an update");
                     };
-                    let image = self.images[&slot].image;
+                    let image = &self.images[&slot];
                     pending.steps.push(Step::Upload {
-                        image,
+                        image: image.image,
                         rect,
+                        whole: rect == Rect::new(0, 0, image.width, image.height),
                         offset: pending.staging_len,
                         rgba,
                     });

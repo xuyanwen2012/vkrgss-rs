@@ -35,6 +35,16 @@
 - **Batched barriers.** A function that records the transitions of several images in one
   `DependencyInfo`; uploads use it before and after their copies. An upload that replaces
   the whole image transitions it from `UNDEFINED`.
+  As implemented (`resources.rs::transition_all`, `compositor/submit.rs::record_steps`): a
+  step that writes every pixel of its image (the clear of a new image, or a whole upload
+  with a staging buffer) makes the earlier steps of the packet on that image moot, so they
+  are not recorded. The guest sends a create with a whole upload, or one update, per bitmap
+  and packet, so in practice each image is written once. The protocol allows more, such as
+  overlapping partial updates, which `partial_updates_match_the_reference_store` sends: a
+  second write to an image is ordered after the first by a transfer-to-transfer memory
+  barrier between them, the narrowest that is correct. Without it synchronization
+  validation reports `SYNC-HAZARD-WRITE-AFTER-WRITE` in that test and in
+  `reused_slot_holds_only_the_new_bitmap`.
 - **Proof that pixels do not change.** The existing differential tests against
   `vkrgss-compose-ref` and the frame tests pass unchanged; no expected value is edited.
 

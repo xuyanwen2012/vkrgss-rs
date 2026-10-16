@@ -374,17 +374,40 @@ pub(crate) unsafe fn transition(
     from: ImageUse,
     to: ImageUse,
 ) {
-    let barriers = [vk::ImageMemoryBarrier2::default()
-        .src_stage_mask(from.stage)
-        .src_access_mask(from.access)
-        .dst_stage_mask(to.stage)
-        .dst_access_mask(to.access)
-        .old_layout(from.layout)
-        .new_layout(to.layout)
-        .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-        .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-        .image(image)
-        .subresource_range(COLOR_RANGE)];
+    // SAFETY: guaranteed by the caller.
+    unsafe { transition_all(device, commands, &[(image, from, to)]) };
+}
+
+/// Records the barriers between two uses of each of several images, as
+/// [`transition`] does for one, in a single dependency. Nothing is recorded for none.
+///
+/// # Safety
+///
+/// As for [`transition`], for each image with its two uses; no image may appear twice.
+pub(crate) unsafe fn transition_all(
+    device: &ash::Device,
+    commands: vk::CommandBuffer,
+    transitions: &[(vk::Image, ImageUse, ImageUse)],
+) {
+    if transitions.is_empty() {
+        return;
+    }
+    let barriers: Vec<vk::ImageMemoryBarrier2<'_>> = transitions
+        .iter()
+        .map(|&(image, from, to)| {
+            vk::ImageMemoryBarrier2::default()
+                .src_stage_mask(from.stage)
+                .src_access_mask(from.access)
+                .dst_stage_mask(to.stage)
+                .dst_access_mask(to.access)
+                .old_layout(from.layout)
+                .new_layout(to.layout)
+                .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                .image(image)
+                .subresource_range(COLOR_RANGE)
+        })
+        .collect();
     let info = vk::DependencyInfo::default().image_memory_barriers(&barriers);
     // SAFETY: guaranteed by the caller.
     unsafe { device.cmd_pipeline_barrier2(commands, &info) };

@@ -3,10 +3,13 @@
 use ash::vk;
 use gpu_allocator::MemoryLocation;
 
+use std::collections::{HashMap, HashSet};
+
 use super::{FrameBuffer, FrameData, PUSH_CONSTANT_BYTES, Pending, Step, VkCompositor, query};
 use crate::VkError;
 use crate::resources::{
-    COLOR_LAYERS, COLOR_RANGE, GpuBuffer, ImageUse, make_host_readable, transition, write_words,
+    COLOR_LAYERS, COLOR_RANGE, GpuBuffer, ImageUse, make_host_readable, transition, transition_all,
+    write_words,
 };
 
 impl VkCompositor {
@@ -59,85 +62,18 @@ impl VkCompositor {
         let (bitmap_use, frame_use) = (self.bitmap_use(), self.frame_use());
         let (device, commands) = (&self.gpu.device, self.commands);
         if !pending.steps.is_empty() {
-            // SAFETY: the command buffer is recording.
-            unsafe { self.gpu.begin_label(commands, c"upload") };
-        }
-        for step in &pending.steps {
             // SAFETY: the command buffer is recording. Every image named by a step is alive
             // until `execute` has waited for this submission: live ones are in `self.images`
-            // and destroyed ones in `pending.retired`. A new image starts in `UNDEFINED`; any
-            // other is in `SHADER_READ_ONLY_OPTIMAL`, where the previous step or submission
-            // left it for its readers. Upload rectangles were checked against the image size and their bytes
-            // lie inside the staging buffer, which is only null when one large enough could not
-            // be had, in which case no copy is recorded.
+            // and destroyed ones in `pending.retired`. A new image is in `UNDEFINED` and its
+            // first step is its clear; any other is in `SHADER_READ_ONLY_OPTIMAL`, where the
+            // previous submission left it for its readers. Upload rectangles were checked
+            // against the image size and their bytes lie inside the staging buffer, which is
+            // only null when one large enough could not be had.
             unsafe {
-                match step {
-                    Step::Clear { image } => {
-                        transition(
-                            device,
-                            commands,
-                            *image,
-                            ImageUse::UNDEFINED,
-                            ImageUse::TRANSFER_WRITE,
-                        );
-                        device.cmd_clear_color_image(
-                            commands,
-                            *image,
-                            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                            &vk::ClearColorValue { uint32: [0; 4] },
-                            &[COLOR_RANGE],
-                        );
-                    }
-                    Step::Upload {
-                        image,
-                        rect,
-                        offset,
-                        ..
-                    } => {
-                        transition(
-                            device,
-                            commands,
-                            *image,
-                            bitmap_use,
-                            ImageUse::TRANSFER_WRITE,
-                        );
-                        let region = vk::BufferImageCopy::default()
-                            .buffer_offset(*offset)
-                            .image_subresource(COLOR_LAYERS)
-                            .image_offset(vk::Offset3D {
-                                x: rect.x,
-                                y: rect.y,
-                                z: 0,
-                            })
-                            .image_extent(vk::Extent3D {
-                                width: rect.width,
-                                height: rect.height,
-                                depth: 1,
-                            });
-                        if staging_buffer != vk::Buffer::null() {
-                            device.cmd_copy_buffer_to_image(
-                                commands,
-                                staging_buffer,
-                                *image,
-                                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                                &[region],
-                            );
-                        }
-                    }
-                }
-                let (Step::Clear { image } | Step::Upload { image, .. }) = step;
-                transition(
-                    device,
-                    commands,
-                    *image,
-                    ImageUse::TRANSFER_WRITE,
-                    bitmap_use,
-                );
+                self.gpu.begin_label(commands, c"upload");
+                record_steps(device, commands, &pending.steps, staging_buffer, bitmap_use);
+                self.gpu.end_label(commands);
             }
-        }
-        if !pending.steps.is_empty() {
-            // SAFETY: the command buffer is recording and the label above is open in it.
-            unsafe { self.gpu.end_label(commands) };
         }
 
         if let Some((frame, new_target)) = draw {
@@ -394,5 +330,135 @@ impl VkCompositor {
             }
         }
         self.submit_and_wait()
+    }
+}
+
+/// Records the bitmap steps of a packet: one dependency that hands every image they write to
+/// the transfer stage, the clears and copies in delta order, and one dependency that hands
+/// the images back to their readers in `bitmap_use`.
+///
+/// A step that writes every pixel of its image, a clear or a whole upload with a staging
+/// buffer to copy from, makes the steps before it on that image moot; those are left out, and
+/// an image whose first remaining step is such a step starts from `UNDEFINED`, its old
+/// contents discarded. Two remaining writes to one image, which the guest does not send but
+/// the protocol allows, are ordered by a barrier between the transfers.
+///
+/// # Safety
+///
+/// `commands` must be a command buffer of `device` in the recording state. Every image named
+/// by a step must be live until the submission has been waited for, and be new (in
+/// `UNDEFINED`, with a clear as its first step) or in `SHADER_READ_ONLY_OPTIMAL` as
+/// `bitmap_use` says, with transfer-destination usage. Upload rectangles lie inside their
+/// images and their bytes inside `staging`, which is null when no buffer large enough could
+/// be had, in which case no copy is recorded.
+unsafe fn record_steps(
+    device: &ash::Device,
+    commands: vk::CommandBuffer,
+    steps: &[Step<'_>],
+    staging: vk::Buffer,
+    bitmap_use: ImageUse,
+) {
+    let image = |step: &Step<'_>| match step {
+        Step::Clear { image } | Step::Upload { image, .. } => *image,
+    };
+    let replaces = |step: &Step<'_>| match step {
+        Step::Clear { .. } => true,
+        Step::Upload { whole, .. } => *whole && staging != vk::Buffer::null(),
+    };
+    // The last step that writes every pixel of each image; the steps on that image before it
+    // are left out.
+    let mut last_whole = HashMap::new();
+    for (index, step) in steps.iter().enumerate() {
+        if replaces(step) {
+            last_whole.insert(image(step), index);
+        }
+    }
+    let kept: Vec<&Step<'_>> = steps
+        .iter()
+        .enumerate()
+        .filter(|(index, step)| {
+            last_whole
+                .get(&image(step))
+                .is_none_or(|last| index >= last)
+        })
+        .map(|(_, step)| step)
+        .collect();
+
+    let mut before = Vec::new();
+    let mut seen = HashSet::new();
+    for step in &kept {
+        if seen.insert(image(step)) {
+            let from = match replaces(step) {
+                true => ImageUse::UNDEFINED,
+                false => bitmap_use,
+            };
+            before.push((image(step), from, ImageUse::TRANSFER_WRITE));
+        }
+    }
+    let after: Vec<_> = before
+        .iter()
+        .map(|&(image, _, to)| (image, to, bitmap_use))
+        .collect();
+
+    // SAFETY: guaranteed by the caller; each image appears once in `before` and `after`, and
+    // is in the layout of the use it is taken from, as the steps are recorded in order.
+    unsafe {
+        transition_all(device, commands, &before);
+        let mut written = HashSet::new();
+        for step in kept {
+            if matches!(step, Step::Upload { .. }) && staging == vk::Buffer::null() {
+                continue;
+            }
+            if !written.insert(image(step)) {
+                // A second write to an image since the last barrier: the first has to be done
+                // before it starts.
+                let barriers = [vk::MemoryBarrier2::default()
+                    .src_stage_mask(vk::PipelineStageFlags2::ALL_TRANSFER)
+                    .src_access_mask(vk::AccessFlags2::TRANSFER_WRITE)
+                    .dst_stage_mask(vk::PipelineStageFlags2::ALL_TRANSFER)
+                    .dst_access_mask(vk::AccessFlags2::TRANSFER_WRITE)];
+                let info = vk::DependencyInfo::default().memory_barriers(&barriers);
+                device.cmd_pipeline_barrier2(commands, &info);
+                written.clear();
+                written.insert(image(step));
+            }
+            match step {
+                Step::Clear { image } => device.cmd_clear_color_image(
+                    commands,
+                    *image,
+                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                    &vk::ClearColorValue { uint32: [0; 4] },
+                    &[COLOR_RANGE],
+                ),
+                Step::Upload {
+                    image,
+                    rect,
+                    offset,
+                    ..
+                } => {
+                    let region = vk::BufferImageCopy::default()
+                        .buffer_offset(*offset)
+                        .image_subresource(COLOR_LAYERS)
+                        .image_offset(vk::Offset3D {
+                            x: rect.x,
+                            y: rect.y,
+                            z: 0,
+                        })
+                        .image_extent(vk::Extent3D {
+                            width: rect.width,
+                            height: rect.height,
+                            depth: 1,
+                        });
+                    device.cmd_copy_buffer_to_image(
+                        commands,
+                        staging,
+                        *image,
+                        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                        &[region],
+                    );
+                }
+            }
+        }
+        transition_all(device, commands, &after);
     }
 }

@@ -10,7 +10,7 @@
 
 ## 3. Uploads
 
-- [ ] 3.1 Batched barriers for uploads, `UNDEFINED` for whole replacements. Verify: scenario "Same frames"; the same two test runs pass.
+- [x] 3.1 Batched barriers for uploads, `UNDEFINED` for whole replacements. Verify: scenario "Same frames"; the same two test runs pass.
 
 ## 4. Documentation
 
