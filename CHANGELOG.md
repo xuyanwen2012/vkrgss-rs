@@ -89,6 +89,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   at error severity only.
 - `docs/decisions.md` says how fonts are found (`fontdb` and its directory scan) and that
   Linux is the only platform supported now.
+- A file written into a directory that was looked into within the same tick of the file
+  system's clock is found: on kernels before 6.13, whose directory times advance in steps of
+  a few milliseconds, a script that wrote a file and read it back at once could be told it
+  did not exist. A directory changed in the last two seconds is listed again at each lookup.
 
 ## [0.3.1] - 2026-10-14
 

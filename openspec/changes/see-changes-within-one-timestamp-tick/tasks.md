@@ -6,7 +6,7 @@
 
 ## 2. Documentation
 
-- [ ] 2.1 `CHANGELOG.md` under Unreleased, Fixed. Verify: the tests of `xtask` that check the documents pass.
+- [x] 2.1 `CHANGELOG.md` under Unreleased, Fixed. Verify: the tests of `xtask` that check the documents pass.
 
 ## 3. Integration check
 
