@@ -3,6 +3,7 @@ name: Nightly
 # The checks outside the merge gate that docs/development.md describes, once a day and when
 # started by hand. No pull request waits for this workflow, so its failure does not block
 # merging. Each check is a job of its own, so that one that fails does not hide the others.
+# The last job opens an issue when one of them failed.
 on:
   schedule:
     - cron: "17 3 * * *"
@@ -123,3 +124,28 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - name: Fuzz target
         run: cargo xtask fuzz ${{ matrix.target }} --seconds 300
+
+  # When a job above failed: opens the issue "Nightly checks failed" with the link to the
+  # run, or comments on it while it is open. The only job that may write issues.
+  issue:
+    needs: [audit, stress, sanitized, sanitized192, fuzz]
+    if: failure()
+    runs-on: ubuntu-24.04
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Open or comment on the issue
+        run: |
+          title="Nightly checks failed"
+          open=$(gh issue list --state open --search "in:title \"$title\"" --json number,title \
+            --jq "map(select(.title == \"$title\")) | .[0].number // empty")
+          body="The nightly run $RUN_URL failed."
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi

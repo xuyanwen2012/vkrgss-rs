@@ -6,7 +6,7 @@
 
 ## 2. Workflows
 
-- [ ] 2.1 The jobs of `ci.yml` with sccache, the issue job of `nightly.yml`, and their tests. Verify: scenarios "One job per part" and "Nightly failure"; the scenarios of "Workflows", "Pinned inputs of the workflows" and "aarch64 job" still hold; `cargo test -p xtask --locked` passes.
+- [x] 2.1 The jobs of `ci.yml` with sccache, the issue job of `nightly.yml`, and their tests. Verify: scenarios "One job per part" and "Nightly failure"; the scenarios of "Workflows", "Pinned inputs of the workflows" and "aarch64 job" still hold; `cargo test -p xtask --locked` passes.
 
 ## 3. Documentation
 

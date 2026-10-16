@@ -1,8 +1,10 @@
-//! The workflows: the gate on x86_64 and, allowed to fail, on aarch64; the release only for a
-//! tag; the checks outside the gate once a day; and in all of them inputs that do not move.
+//! The workflows: the parts of the gate on x86_64 and, allowed to fail, the whole gate on
+//! aarch64; the release only for a tag; the checks outside the gate once a day, with an issue
+//! when they fail; and in all of them inputs that do not move.
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use regex_lite::Regex;
 
@@ -71,22 +73,107 @@ fn code_lines(workflow: &str) -> impl Iterator<Item = &str> {
         .filter(|line| !line.trim_start().starts_with('#'))
 }
 
+/// The names of the parts of the gate, from the message of `cargo xtask gate --job` for a
+/// part that does not exist.
+fn parts() -> Vec<String> {
+    let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
+        .args(["gate", "--job", "nothing"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let message = String::from_utf8(output.stderr).unwrap();
+    let names = message
+        .trim_end()
+        .split_once("the parts are: ")
+        .unwrap_or_else(|| panic!("{message}"))
+        .1;
+    names.split(", ").map(str::to_owned).collect()
+}
+
+const GATE: &str = "VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate";
+
 #[test]
-fn the_aarch64_job_has_the_steps_of_the_gate_and_may_fail() {
+fn each_part_of_the_gate_is_a_job() {
     let workflow = read_workflow("ci.yml");
-    let gate = job(&workflow, "gate");
+    let parts = parts();
+    assert!(parts.len() > 1, "{parts:?}");
+    let mut jobs = job_names(&workflow);
+    jobs.retain(|name| *name != "gate-aarch64");
+    assert_eq!(jobs, parts, "the jobs of ci.yml besides gate-aarch64");
+
+    let first = job(&workflow, &parts[0]);
+    for part in &parts {
+        let lines = job(&workflow, part);
+        assert!(lines.contains(&"    runs-on: ubuntu-24.04"), "{part}");
+        assert!(
+            !lines.iter().any(|line| line.contains("continue-on-error")),
+            "{part}"
+        );
+        let command = format!("        run: {GATE} --job {part}");
+        assert_eq!(steps(&lines).last(), Some(&command.as_str()), "{part}");
+        // The same job for every part, apart from the part it runs.
+        let renamed: Vec<String> = lines
+            .iter()
+            .map(|line| line.replace(&format!("--job {part}"), &format!("--job {}", parts[0])))
+            .collect();
+        assert_eq!(renamed, first, "{part}");
+    }
+}
+
+#[test]
+fn the_parts_cache_the_objects_of_c_and_rust() {
+    let workflow = read_workflow("ci.yml");
+    for name in job_names(&workflow) {
+        let lines = job(&workflow, name);
+        for variable in [
+            "      RUSTC_WRAPPER: sccache",
+            "      SCCACHE_GHA_ENABLED: \"true\"",
+        ] {
+            assert!(lines.contains(&variable), "{name}: `{variable}`");
+        }
+        let position = |action: &str| {
+            lines
+                .iter()
+                .position(|line| line.contains(action))
+                .unwrap_or_else(|| panic!("{name} does not use {action}"))
+        };
+        let sccache = position("uses: mozilla-actions/sccache-action@");
+        assert!(sccache < position("uses: Swatinem/rust-cache@"), "{name}");
+        assert!(sccache < position("cargo xtask gate"), "{name}");
+    }
+}
+
+#[test]
+fn sccache_is_installed_at_a_fixed_version() {
+    let versioned = Regex::new(r"^version: v\d+\.\d+\.\d+$").unwrap();
+    let mut installs = 0;
+    for (name, workflow) in workflows() {
+        let lines: Vec<&str> = code_lines(&workflow).collect();
+        for (index, line) in lines.iter().enumerate() {
+            if line.contains("uses: mozilla-actions/sccache-action@") {
+                installs += 1;
+                assert_eq!(lines[index + 1].trim(), "with:", "{name}");
+                assert!(versioned.is_match(lines[index + 2].trim()), "{name}");
+            }
+        }
+    }
+    assert!(installs > 0, "no workflow installs sccache");
+}
+
+#[test]
+fn the_aarch64_job_has_the_steps_of_the_parts_and_may_fail() {
+    let workflow = read_workflow("ci.yml");
+    let part = job(&workflow, &parts()[0]);
     let aarch64 = job(&workflow, "gate-aarch64");
 
-    assert!(gate.contains(&"    runs-on: ubuntu-24.04"));
-    assert!(!gate.iter().any(|line| line.contains("continue-on-error")));
     assert!(aarch64.contains(&"    runs-on: ubuntu-24.04-arm"));
     assert!(aarch64.contains(&"    continue-on-error: true"));
-    assert!(
-        steps(&gate)
-            .iter()
-            .any(|line| line.contains("VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate"))
-    );
-    assert_eq!(steps(&aarch64), steps(&gate));
+    let (steps_part, steps_aarch64) = (steps(&part), steps(&aarch64));
+    let gate = format!("        run: {GATE}");
+    assert_eq!(steps_aarch64.last(), Some(&gate.as_str()));
+    let last = steps_part.len() - 1;
+    assert_eq!(steps_aarch64[..last], steps_part[..last]);
+    assert_eq!(steps_aarch64.len(), steps_part.len());
 }
 
 #[test]
@@ -142,11 +229,17 @@ fn a_run_is_cancelled_only_for_a_pull_request() {
 }
 
 #[test]
-fn every_job_names_the_c_compiler() {
+fn every_job_that_builds_names_the_c_compiler() {
     for (name, workflow) in workflows() {
         let names = job_names(&workflow);
         assert!(!names.is_empty(), "{name} has no jobs");
         for job_name in names {
+            let builds = steps(&job(&workflow, job_name))
+                .iter()
+                .any(|line| line.contains("cargo ") || line.contains("apt-get install"));
+            if !builds {
+                continue;
+            }
             let lines = job(&workflow, job_name);
             let env = lines
                 .iter()
@@ -221,4 +314,37 @@ fn the_nightly_workflow_runs_the_checks_outside_the_gate() {
             .any(|line| line.contains("cargo install --locked cargo-deny@")),
         "cargo-deny is not installed at a fixed version"
     );
+}
+
+#[test]
+fn a_failure_of_the_nightly_checks_opens_an_issue() {
+    let workflow = read_workflow("nightly.yml");
+    let issue = job(&workflow, "issue");
+    let others: Vec<&str> = job_names(&workflow)
+        .into_iter()
+        .filter(|name| *name != "issue")
+        .collect();
+    assert_eq!(issue[0], format!("    needs: [{}]", others.join(", ")));
+    assert!(issue.contains(&"    if: failure()"));
+    let permissions = issue
+        .iter()
+        .position(|line| *line == "    permissions:")
+        .expect("the job `issue` names its permissions");
+    assert_eq!(issue[permissions + 1], "      issues: write");
+    let text = issue.join("\n");
+    for command in [
+        "title=\"Nightly checks failed\"",
+        "gh issue list --state open",
+        "gh issue comment",
+        "gh issue create --title \"$title\"",
+        "/actions/runs/${{ github.run_id }}",
+    ] {
+        assert!(text.contains(command), "`{command}`");
+    }
+
+    // No other job, and not the workflow, may write.
+    let writes: Vec<&str> = code_lines(&workflow)
+        .filter(|line| line.contains(": write"))
+        .collect();
+    assert_eq!(writes, ["      issues: write"]);
 }
