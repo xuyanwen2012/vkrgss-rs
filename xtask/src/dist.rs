@@ -56,7 +56,7 @@ const EXECUTABLES: [&str; 3] = [EXECUTABLE, RGSS12_GUEST_EXECUTABLE, GUEST_EXECU
 /// The files of the package: where each is below the workspace root and where it goes below
 /// the directory of the archive. The licence texts are the ones the bundled sources ask to
 /// accompany a binary.
-const FILES: [(&str, &str); 15] = [
+const FILES: [(&str, &str); 16] = [
     (EXECUTABLE, "vkrgss"),
     (RGSS12_GUEST_EXECUTABLE, "vkrgss-guest-rgss12"),
     (GUEST_EXECUTABLE, "vkrgss-guest-rgss3"),

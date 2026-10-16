@@ -211,6 +211,8 @@ const RUBY192_TESTS: &[&str] = &[
     "--test",
     "layout",
     "--test",
+    "math",
+    "--test",
     "original",
     "--test",
     "protect",
