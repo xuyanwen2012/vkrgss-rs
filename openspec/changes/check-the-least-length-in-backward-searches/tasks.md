@@ -10,7 +10,7 @@
 
 ## 3. Documentation
 
-- [ ] 3.1 The rows named in `design.md` of `docs/vendored-security.md`, and `CHANGELOG.md` under Unreleased, Security. Verify: the tests of `xtask` that check the documents and their links pass.
+- [x] 3.1 The rows named in `design.md` of `docs/vendored-security.md`, and `CHANGELOG.md` under Unreleased, Security. Verify: the tests of `xtask` that check the documents and their links pass.
 
 ## 4. Integration check
 

@@ -25,6 +25,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   character cut off by the end of a pattern was read past the pattern; groups that refer to
   each other, as `()(\4)()(\2)`, recursed without end when compiled; and `"%a" % 0.0` wrote
   one byte past its buffer.
+- The regular expression engines of both interpreters check the least length of a match
+  in backward searches (`String#rindex`), as upstream 33e5b47c does for CVE-2024-27282:
+  nested repeats whose least length is too large to count formed a position past the
+  subject.
 
 ### Added
 
