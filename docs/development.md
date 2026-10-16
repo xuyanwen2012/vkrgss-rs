@@ -45,8 +45,9 @@ the workflow, and its log is where the state of aarch64 can be seen.
 A newer push to a pull request cancels the run of the one before; a run for a push to `main`
 is never cancelled. The workflow `.github/workflows/nightly.yml` runs the four
 [checks outside the gate](#checks-outside-the-gate) once a day and when started by hand,
-each as a job of its own: `audit`, `stress`, `sanitized` and `fuzz`, the last once for
-every target with `--seconds 300`. No pull request waits for it, so its failure does not
+each as a job of its own: `audit`, `stress`, `sanitized` and `sanitized192` (the sanitized
+suites of the two interpreters) and `fuzz`, the last once for every target with
+`--seconds 300`. No pull request waits for it, so its failure does not
 block merging; its runs on the Actions page of the repository are where it is read.
 
 The workflows name every action by its commit hash, with the tag the hash was resolved
@@ -74,6 +75,20 @@ It needs `clang` with its sanitizer runtimes (`compiler-rt` on Fedora) and takes
 minute. It fails on a suite that does not pass and on every sanitizer report that
 `crates/vkrgss-ruby-sys/tests/sanitized.allow` does not list; an entry there states why the
 report is harmless. The full reports are left in `target/tmp/sanitized/reports/`.
+
+The second interpreter, Ruby 1.9.2 of `vkrgss-ruby192-sys`, has a sanitized run of its own:
+its interpreter, encodings and `Zlib` and the test executable are compiled again in the same
+way, and `bootstraptest` and `test/ruby` run with what `tests/upstream.allow` leaves out:
+
+```sh
+cargo test -p vkrgss-ruby192-sys --test sanitized -- --ignored
+```
+
+It takes about two minutes and fails on a suite that does not pass and on every report that
+`crates/vkrgss-ruby192-sys/tests/sanitized.allow` does not list. Its reports are left in the
+same directory, which each of the two runs empties first. The options of the sanitizers are
+compiled into the test executable too, because the suites start interpreters with an emptied
+environment; `tests/sanitized.rs` says why each is set.
 
 **The tests under collector stress.** The interpreter's collector is conservative: a value
 stays alive only while a copy of it lies on the machine stack, in a register or in a
@@ -129,13 +144,17 @@ lost value is never a reason for one. Without the variable, the tests `stress` a
 `scene_stress` of `vkrgss-binding-rgss3` switch `GC.stress` on around every snippet
 themselves, in the gate.
 
-**The fuzz targets.** Three parts of the vendored C code read what comes with a game:
-`Marshal.load` reads save files and `.rxdata` files, the parser reads the scripts, and the
-regular expression engine compiles the patterns in both. A fuzz target feeds one of them
-arbitrary bytes, under libFuzzer, AddressSanitizer and UndefinedBehaviorSanitizer:
+**The fuzz targets.** Three parts of each vendored interpreter read what comes with a game:
+`Marshal.load` reads save files and the data files (`.rxdata`, `.rvdata`, `.rvdata2`), the
+parser reads the scripts, and the regular expression engine compiles the patterns in both.
+A fuzz target feeds one of them arbitrary bytes, under libFuzzer, AddressSanitizer and
+UndefinedBehaviorSanitizer. The targets `marshal`, `parse` and `regex` are those of Ruby
+1.8.7 and Oniguruma 5.9.6, the targets `marshal192`, `parse192` and `regex192` those of Ruby
+1.9.2 with its own engine:
 
 ```sh
 cargo xtask fuzz marshal --seconds 300
+cargo xtask fuzz marshal192 --seconds 300
 ```
 
 | Target | What an input is | Largest input | Time limit of one input |
@@ -143,14 +162,19 @@ cargo xtask fuzz marshal --seconds 300
 | `marshal` | the argument of `Marshal.load` | 4096 bytes | 10 s |
 | `parse` | a script, compiled as `eval` compiles a string and not run | 4096 bytes | 10 s |
 | `regex` | a pattern up to the first line break, compiled as `Regexp.new` compiles it, and after it the subject it is matched against | 512 bytes | 3 s |
+| `marshal192` | as `marshal` | 4096 bytes | 10 s |
+| `parse192` | a script of source encoding UTF-8, as vkrgss compiles the scripts of RGSS3 through `eval`, compiled into an instruction sequence and not run | 4096 bytes | 10 s |
+| `regex192` | as `regex`, the pattern and the subject in UTF-8 | 512 bytes | 3 s |
 
 The targets are one C file each in `crates/vkrgss-ruby-sys/fuzz/`, with the seeds they start
-from in `seeds/<target>/`. The command builds the interpreter and the engine as the
-sanitized run does, with libFuzzer's coverage instrumentation, and runs the target for 60
-seconds or for the time given, under `target/tmp/fuzz/<target>/`: the corpus that the run
-grows stays in `corpus/` there, for the next run. It needs `clang` with its sanitizer
-runtimes and libFuzzer (`compiler-rt` on Fedora) and says so when they are missing. A name
-that is not a target is an error that names the three.
+from in `seeds/<target>/`, and those of Ruby 1.9.2 the C file of the name without `192` in
+`crates/vkrgss-ruby192-sys/fuzz/`, with its seeds in `seeds/<file>/`. The command builds the
+interpreter and the engine as the sanitized run of that interpreter does, with libFuzzer's
+coverage instrumentation, and runs the target for 60 seconds or for the time given, under
+`target/tmp/fuzz/<target>/`: the corpus that the run grows stays in `corpus/` there, for the
+next run. It needs `clang` with its sanitizer runtimes and libFuzzer (`compiler-rt` on
+Fedora) and says so when they are missing. A name that is not a target is an error that
+names the six.
 
 A Ruby exception is not a finding. A sanitizer report or a crash is: it ends the command
 with a failure, the report is on the error stream and the input in `artifacts/`. Two
@@ -158,18 +182,20 @@ things are not findings, and the run goes on in a new process after them: an inp
 runs into its time limit, which a pattern that backtracks does by its nature, and a process
 that runs into libFuzzer's memory limit of 2 GiB, which happens because the interpreter
 never frees a symbol and the parser does not free the tables of the scopes that a syntax
-error leaves open. The inputs are small because nesting recurses: in the sanitized build,
-with a stack of 8 MiB, `Marshal.load` exhausts the stack at about 21,800 nested arrays (an
+error leaves open. The inputs are small because nesting recurses: in the sanitized build of
+Ruby 1.8.7, with a stack of 8 MiB, `Marshal.load` exhausts the stack at about 21,800 nested arrays (an
 input of 43 KiB) and the engine at about 3,190 nested groups (6.4 KiB), which the limits
-keep an input far from; the parser refuses deep nesting itself. A single allocation of
+keep an input far from; the parser refuses deep nesting itself. The targets of Ruby 1.9.2
+have the same limits. A single allocation of
 more than 256 MiB gets a null pointer, so a length field that asks for more raises
 `NoMemoryError`.
 
 A defect that a target finds is fixed in the vendored tree as a recorded patch, and its
-input, reduced, goes to `crates/vkrgss-ruby-sys/fuzz/fixed/<target>/`, where a test of the
-normal test step runs it. [vendored-security.md](vendored-security.md) lists what the first
-runs found, together with the review of the security fixes published for the two vendored
-trees after their releases.
+input, reduced, goes to `fuzz/fixed/<target>/` of `crates/vkrgss-ruby-sys`, or to
+`fuzz/fixed/<file>/` of `crates/vkrgss-ruby192-sys`, where a test of the normal test step
+runs it. [vendored-security.md](vendored-security.md) lists what the first runs found,
+together with the review of the security fixes published for the three vendored trees after
+their releases.
 
 **The dependency audit.** `cargo deny` checks every crate of `Cargo.lock` against the
 security advisory database, the licence allow-list and the allowed sources in `deny.toml`:

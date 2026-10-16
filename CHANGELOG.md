@@ -9,11 +9,30 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Both embedded interpreters are built with `_FORTIFY_SOURCE=3`, `-fstack-protector-strong`,
   `-fstack-clash-protection` and, on x86_64, `-fcf-protection=full`, asked for by their
   build scripts with gcc and clang alike instead of left to the defaults of Ubuntu's gcc.
+- Ruby 1.9.2 of RPG Maker VX Ace games carries the fixes of CVE-2014-4975 (`pack('m')`),
+  CVE-2018-8778 (`unpack` counts), CVE-2017-0898 (`sprintf` of infinity and NaN with the
+  largest width), CVE-2014-3916 (`String` capacity) and CVE-2026-27820
+  (`Zlib::GzipReader#ungetc`). Its regular expression engine carries the fixes of
+  CVE-2017-9224, CVE-2017-9226, CVE-2017-9227, CVE-2017-9229 and CVE-2019-19246, of the
+  reads past the end of a pattern that upstream Oniguruma fixed, and of nested repeats such
+  as `(?:(?:(?:a{0,100000}){0,100000}){0,100000})bc`, which ended the process when compiled.
+  `docs/vendored-security.md` reviews the security fixes published after that release and
+  says what was done about each.
+- The fuzz targets and the sanitized run of Ruby 1.9.2 found defects that vkrgss now fixes:
+  a dumped Time with a month above 12, which a save file can hold, read past a table; a
+  regexp literal with text after an interpolation, as `/#$y #{"s"}#{"t"}/`, ended the
+  process; `class ::c` could end the process at the next collection; a backslash before a
+  character cut off by the end of a pattern was read past the pattern; groups that refer to
+  each other, as `()(\4)()(\2)`, recursed without end when compiled; and `"%a" % 0.0` wrote
+  one byte past its buffer.
 
 ### Added
 
 - The workflow `nightly.yml` runs the dependency audit, the collector stress, the sanitized
   suites of Ruby 1.8.7 and five minutes of each fuzz target once a day and by hand.
+- Ruby 1.9.2 has a sanitized run of its suites
+  (`cargo test -p vkrgss-ruby192-sys --test sanitized -- --ignored`) and the fuzz targets
+  `marshal192`, `parse192` and `regex192` of `cargo xtask fuzz`; `nightly.yml` runs both.
 
 ### Changed
 

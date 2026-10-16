@@ -18,7 +18,7 @@
 
 ## 5. Documentation
 
-- [ ] 5.1 `docs/development.md` names the new targets and the sanitized run; `CHANGELOG.md` lists the fixes under Security. Verify: the tests of `xtask` that check the documents and their links pass.
+- [x] 5.1 `docs/development.md` names the new targets and the sanitized run; `CHANGELOG.md` lists the fixes under Security. Verify: the tests of `xtask` that check the documents and their links pass.
 
 ## 6. Integration check
 
