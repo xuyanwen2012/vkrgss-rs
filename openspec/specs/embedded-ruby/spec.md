@@ -22,6 +22,10 @@ message that names the target.
 - **WHEN** the crate is built for a target that has no configuration header
 - **THEN** the build stops with an error naming that target and the supported one
 
+#### Scenario: Header of aarch64
+- **WHEN** the configuration headers of `aarch64-unknown-linux-gnu` are compared with those of `x86_64-unknown-linux-gnu`
+- **THEN** they differ only in the platform strings and their leading comment
+
 ### Requirement: Vendored source matches upstream
 Every vendored file SHALL be byte-identical to the file of the same path in the release
 `ruby-1.8.7-p374.tar.gz` whose SHA-256 is
