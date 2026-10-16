@@ -21,6 +21,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::sync::OnceLock;
 use std::time::Duration;
 
@@ -57,14 +58,29 @@ const ASAN_OPTIONS: &str = "detect_stack_use_after_return=0:detect_leaks=0:\
 /// The line of a report names its place without it.
 const UBSAN_OPTIONS: &str = "print_stacktrace=0:halt_on_error=0";
 
-/// C definitions for the `Init_ext` of the sanitized executable: the options above as the
-/// defaults of the sanitizers, for the interpreters that the suites start with an emptied
-/// environment. Without them leak detection would run at their exit, and its helper process
-/// is a child that a test of `Process.wait` sees.
-fn init_ext_definitions() -> String {
+/// The option that makes each process write its reports to a file of its own in `reports`,
+/// named `report.<process id>`.
+fn log_path_option(reports: &Path) -> String {
+    format!("log_path={}", reports.join("report").display())
+}
+
+/// C definitions for the `Init_ext` of the sanitized executable: the options above, with the
+/// report files in `reports`, as the defaults of the sanitizers, for the interpreters that
+/// the suites start with an emptied environment. Without them leak detection would run at
+/// their exit, and its helper process is a child that a test of `Process.wait` sees; and
+/// their reports would go to the error stream, which no test checks against the allow-list.
+fn init_ext_definitions(reports: &Path) -> String {
+    let log_path = log_path_option(reports);
+    assert!(
+        !log_path.contains(['"', '\\', ':']),
+        "the report directory {} cannot be written into a C string of options",
+        reports.display()
+    );
     format!(
-        "const char *__asan_default_options(void) {{ return \"{ASAN_OPTIONS}\"; }}\n\
-         const char *__ubsan_default_options(void) {{ return \"{UBSAN_OPTIONS}\"; }}\n"
+        "const char *__asan_default_options(void) \
+         {{ return \"{ASAN_OPTIONS}:{log_path}\"; }}\n\
+         const char *__ubsan_default_options(void) \
+         {{ return \"{UBSAN_OPTIONS}:{log_path}\"; }}\n"
     )
 }
 
@@ -136,17 +152,22 @@ fn report_lines(output: &str) -> Vec<String> {
         .collect()
 }
 
+/// Adds the report lines of one file the sanitizers wrote to `reports`, with how often each
+/// was reported.
+fn collect_report_file(path: &Path, reports: &mut BTreeMap<String, usize>) {
+    let bytes = fs::read(path).unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+    for line in report_lines(&String::from_utf8_lossy(&bytes)) {
+        *reports.entry(line).or_default() += 1;
+    }
+}
+
 /// The report lines of every file the sanitizers wrote into `dir`, with how often each was
 /// reported.
 fn collect_reports(dir: &Path) -> BTreeMap<String, usize> {
     let mut reports = BTreeMap::new();
     let entries = fs::read_dir(dir).unwrap_or_else(|error| panic!("{}: {error}", dir.display()));
     for entry in entries {
-        let path = entry.expect("directory entry").path();
-        let bytes = fs::read(&path).unwrap_or_else(|error| panic!("{}: {error}", path.display()));
-        for line in report_lines(&String::from_utf8_lossy(&bytes)) {
-            *reports.entry(line).or_default() += 1;
-        }
+        collect_report_file(&entry.expect("directory entry").path(), &mut reports);
     }
     reports
 }
@@ -221,25 +242,50 @@ fn built() -> &'static (PathBuf, PathBuf) {
     static BUILT: OnceLock<(PathBuf, PathBuf)> = OnceLock::new();
     BUILT.get_or_init(|| {
         let scratch = common::scratch_dir("sanitized192");
+        let reports = reports_dir(&scratch);
+        fs::create_dir_all(&reports).expect("report directory");
         let ruby = instrumented::build_instrumented_executable(
             &scratch,
             SANITIZER_FLAGS,
             &[],
-            &init_ext_definitions(),
+            &init_ext_definitions(&reports),
             "",
         );
         (scratch, ruby)
     })
 }
 
-/// The suites of the sanitized executable, and the directory in which each of their
-/// processes writes its reports to a file of its own: the suites compare what child
-/// interpreters print, which the reports must stay out of.
+/// The directory in which every process of the sanitized executable writes its reports, to
+/// a file of its own: the suites compare what child interpreters print, which the reports
+/// must stay out of. The executable has it compiled in, so that it holds for a process
+/// with an emptied environment too.
+fn reports_dir(scratch: &Path) -> PathBuf {
+    scratch.join("reports")
+}
+
+/// Report lines with how often each was reported.
+type Reports = Vec<(String, usize)>;
+
+/// The reports that no pattern of `allowed` accepts, and those that one does.
+fn refused_and_accepted(
+    reports: BTreeMap<String, usize>,
+    allowed: &[Allowed],
+) -> (Reports, Reports) {
+    reports.into_iter().partition(|(line, _)| {
+        !allowed
+            .iter()
+            .flat_map(|entry| &entry.patterns)
+            .any(|pattern| matches(line, pattern))
+    })
+}
+
+/// The suites of the sanitized executable, and the directory of their reports. The options
+/// are given in the environment as well, so that options which the caller's environment
+/// holds do not replace them.
 fn sanitized_suites() -> (Suites, PathBuf) {
     let (scratch, ruby) = built();
-    let reports = scratch.join("reports");
-    fs::create_dir_all(&reports).expect("report directory");
-    let log_path = format!("log_path={}", reports.join("report").display());
+    let reports = reports_dir(scratch);
+    let log_path = log_path_option(&reports);
     let mut suites = Suites::with_executable(scratch.clone(), ruby.clone(), PROCESS_TIMEOUT, false);
     suites.env = vec![
         ("ASAN_OPTIONS", format!("{ASAN_OPTIONS}:{log_path}")),
@@ -279,16 +325,8 @@ fn upstream_suites_pass_under_the_sanitizers() {
         }
     }));
 
-    let allowed = parse_allow_list(ALLOW_LIST);
-    let (accepted, refused): (Vec<_>, Vec<_>) =
-        collect_reports(&reports)
-            .into_iter()
-            .partition(|(line, _)| {
-                allowed
-                    .iter()
-                    .flat_map(|entry| &entry.patterns)
-                    .any(|pattern| matches(line, pattern))
-            });
+    let (refused, accepted) =
+        refused_and_accepted(collect_reports(&reports), &parse_allow_list(ALLOW_LIST));
     eprintln!(
         "{} distinct report(s) accepted by the allow-list",
         accepted.len()
@@ -307,4 +345,49 @@ fn upstream_suites_pass_under_the_sanitizers() {
     if let Err(payload) = outcome {
         std::panic::resume_unwind(payload);
     }
+}
+
+/// A child that the suites start with an emptied environment still writes its reports into
+/// the directory that the run reads, and a report there that no entry of the allow-list
+/// names is refused. The child matches a pattern, which the engine does with the misaligned
+/// loads that `sanitized.allow` accepts; its report file is told by its process id from
+/// those of a run of the suites in the same process.
+#[test]
+#[ignore = "opt-in: builds the interpreter with sanitizers"]
+fn a_report_of_a_child_with_an_emptied_environment_is_collected_and_checked() {
+    let (scratch, ruby) = built();
+    let dir = scratch.join("emptied-environment");
+    fs::create_dir_all(&dir).expect("directory of the child");
+    let child = Command::new(ruby)
+        .args(["-e", "p(/(a|b)+/.match('abba'))"])
+        .env_clear()
+        .current_dir(&dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the sanitized executable starts");
+    let pid = child.id();
+    let output = child.wait_with_output().expect("the child ends");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{}\n{stderr}", output.status);
+    assert!(
+        !stderr.contains(": runtime error: "),
+        "a report went to the error stream:\n{stderr}"
+    );
+
+    let file = reports_dir(scratch).join(format!("report.{pid}"));
+    let mut reports = BTreeMap::new();
+    collect_report_file(&file, &mut reports);
+    assert!(
+        reports
+            .keys()
+            .any(|line| line.contains("ruby-1.9.2/regexec.c:")
+                && line.contains(": runtime error: load of misaligned address")),
+        "{reports:?}"
+    );
+    let (refused, accepted) = refused_and_accepted(reports.clone(), &[]);
+    assert_eq!((refused.len(), accepted.len()), (reports.len(), 0));
+    let (refused, _) = refused_and_accepted(reports, &parse_allow_list(ALLOW_LIST));
+    assert!(refused.is_empty(), "{refused:?}");
 }

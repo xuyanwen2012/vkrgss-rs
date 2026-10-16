@@ -86,9 +86,11 @@ cargo test -p vkrgss-ruby192-sys --test sanitized -- --ignored
 
 It takes about two minutes and fails on a suite that does not pass and on every report that
 `crates/vkrgss-ruby192-sys/tests/sanitized.allow` does not list. Its reports are left in
-`target/tmp/sanitized192/reports/`. The options of the sanitizers are
-compiled into the test executable too, because the suites start interpreters with an emptied
-environment; `tests/sanitized.rs` says why each is set.
+`target/tmp/sanitized192/reports/`. The options of the sanitizers, that directory included,
+are compiled into the test executable too, because the suites start interpreters with an
+emptied environment, whose reports would otherwise go to their error stream unchecked;
+`tests/sanitized.rs` says why each is set, and an ignored test of it shows that such a
+report is collected and checked.
 
 **The tests under collector stress.** The interpreter's collector is conservative: a value
 stays alive only while a copy of it lies on the machine stack, in a register or in a

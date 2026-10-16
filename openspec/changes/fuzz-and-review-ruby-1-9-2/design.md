@@ -99,9 +99,13 @@ exclusions the collector and the copying Fibers need (patches 19 and 20):
   that buffer of `malloc` and ended the process after every `Thread.new`.
 - `handle_segv=0` and `disable_coredump=0`: `test_segv_test` and `test_execopts_rlimit` test
   the interpreter's own handler and the limit of core files.
-- The options are also compiled into the executable (`__asan_default_options`): the suites
-  start interpreters with an emptied environment, in which leak detection ran at exit, and
-  its helper process was a second child that `test_wait_and_sigchild` saw.
+- The options are also compiled into the executable (`__asan_default_options`), with the
+  directory of the reports: the suites start interpreters with an emptied environment, in
+  which leak detection ran at exit, its helper process was a second child that
+  `test_wait_and_sigchild` saw, and a report went to the error stream, past the allow-list.
+  The ignored test `a_report_of_a_child_with_an_emptied_environment_is_collected_and_checked`
+  starts such a child, finds its report in the directory and checks that a report no entry
+  names is refused; without the directory compiled in it fails.
 - No stack trace from UndefinedBehaviorSanitizer: printing one starts `llvm-symbolizer` as
   a child, and `Process.wait` in `test_process.rb` waited for it forever.
 
