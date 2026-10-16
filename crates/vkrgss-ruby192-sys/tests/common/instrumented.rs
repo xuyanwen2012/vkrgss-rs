@@ -93,13 +93,15 @@ pub(crate) struct InstrumentedLibraries {
 
 impl InstrumentedLibraries {
     /// What follows the objects of an executable on the linker's command line, as in
-    /// `super::link_arguments`.
+    /// `super::link_arguments`. CORE-MATH is linked as the build script built it, without
+    /// instrumentation.
     pub(crate) fn link_arguments(&self) -> Vec<PathBuf> {
         let zlib_libs = Path::new(env!("VKRGSS_RUBY192_ZLIB_LIB_DIR"));
         let mut arguments = vec![PathBuf::from("-Wl,--start-group")];
         arguments.extend(self.archives.iter().cloned());
         arguments.extend([
             PathBuf::from("-Wl,--end-group"),
+            Path::new(env!("VKRGSS_RUBY192_LIB_DIR")).join("libvkrgss-ruby192-core-math.a"),
             zlib_libs.join("libz.a"),
             PathBuf::from("-lpthread"),
             PathBuf::from("-lrt"),

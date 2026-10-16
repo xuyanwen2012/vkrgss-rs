@@ -10,10 +10,16 @@
 //! are optimised away. Ruby's own test suites, run by `tests/upstream.rs`, are what detects a
 //! wrong build.
 //!
+//! The mathematical functions of `Math` and the power of floats come from the vendored
+//! CORE-MATH, which is correctly rounded: the files `third_party/core-math/FILES` lists,
+//! built into a library of their own, and a recorded patch that makes the interpreter call
+//! them. Neither is compiled with contraction of floating-point operations.
+//!
 //! The crate is for one target. For any other the script compiles nothing and says so, and
 //! the crate is empty.
 
 use std::env;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 /// The one target the interpreter is built for, and the name of its directory under `config/`.
@@ -103,13 +109,26 @@ const TRANSCODER_SOURCES: &[&str] = &[
     "enc/trans/utf_16_32",
 ];
 
-/// The pinned flags. `-fvisibility=hidden` is the one deliberate difference from the release's
-/// build: it keeps the interpreter's names out of the dynamic symbol table of the final
-/// executable.
+/// The pinned flags. `-fvisibility=hidden` keeps the interpreter's names out of the dynamic
+/// symbol table of the final executable. `-ffp-contract=off` keeps the compiler from fusing a
+/// multiplication and an addition, which it would do on one architecture and not on another,
+/// so that a float is computed the same everywhere. These two are the deliberate differences
+/// from the release's build.
 const FLAGS: &[&str] = &[
     "-std=gnu89",
     "-fwrapv",
     "-fno-strict-aliasing",
+    "-fvisibility=hidden",
+    "-ffp-contract=off",
+];
+
+/// The flags of CORE-MATH, which is C11, besides the hardening flags: no contraction, no
+/// fast-math, which would break its error-free transformations, and hidden names. As the
+/// build script of `vkrgss-ruby-sys` has them.
+const CORE_MATH_FLAGS: &[&str] = &[
+    "-std=gnu11",
+    "-ffp-contract=off",
+    "-fno-fast-math",
     "-fvisibility=hidden",
 ];
 
@@ -133,18 +152,16 @@ const HARDENING_FLAGS: &[&str] = &["-fstack-protector-strong", "-fstack-clash-pr
 /// branch targets.
 const X86_64_HARDENING_FLAGS: &[&str] = &["-fcf-protection=full"];
 
-/// The configuration shared by every C file, without include paths.
-fn base_build() -> cc::Build {
+/// The configuration shared by every C file, `flags` first, then the hardening flags.
+fn hardened_build(flags: &[&str]) -> cc::Build {
     let mut build = cc::Build::new();
     build
         .opt_level(2)
         .pic(true)
         .warnings(false)
         .extra_warnings(false)
-        .force_frame_pointer(true)
-        .define("RUBY_EXPORT", None)
-        .define("_GNU_SOURCE", "1");
-    for flag in FLAGS.iter().chain(FORTIFY_FLAGS).chain(HARDENING_FLAGS) {
+        .force_frame_pointer(true);
+    for flag in flags.iter().chain(FORTIFY_FLAGS).chain(HARDENING_FLAGS) {
         build.flag(flag);
     }
     if env::var("CARGO_CFG_TARGET_ARCH").expect("cargo sets CARGO_CFG_TARGET_ARCH") == "x86_64" {
@@ -152,6 +169,13 @@ fn base_build() -> cc::Build {
             build.flag(flag);
         }
     }
+    build
+}
+
+/// The configuration shared by every C file of the interpreter, without include paths.
+fn base_build() -> cc::Build {
+    let mut build = hardened_build(FLAGS);
+    build.define("RUBY_EXPORT", None).define("_GNU_SOURCE", "1");
     if build.get_compiler().is_like_clang() {
         for flag in CLANG_FLAGS {
             build.flag(flag);
@@ -160,7 +184,20 @@ fn base_build() -> cc::Build {
     build
 }
 
-/// A path as a string for `cargo:` lines, which cannot carry anything but UTF-8.
+/// The C files of `third_party/core-math/FILES`, which both interpreters build, as the build
+/// script of `vkrgss-ruby-sys` reads them: one path per line, relative to that directory;
+/// empty lines and lines that start with `#` are skipped.
+fn core_math_files(core_math_dir: &Path) -> Vec<PathBuf> {
+    let list = core_math_dir.join("FILES");
+    let text =
+        fs::read_to_string(&list).unwrap_or_else(|error| panic!("{}: {error}", list.display()));
+    text.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .map(|line| core_math_dir.join(line))
+        .collect()
+}
+
 /// Links libcrypt, which `String#crypt` needs: dynamically, or statically when
 /// `VKRGSS_STATIC_CRYPT` is `1`, as `cargo xtask dist` sets it, because the shared library has
 /// a different name on Ubuntu (`libcrypt.so.1`) and on Fedora (`libcrypt.so.2`). As the
@@ -197,6 +234,7 @@ fn link_crypt(base: &cc::Build) {
     }
 }
 
+/// A path as a string for `cargo:` lines, which cannot carry anything but UTF-8.
 fn utf8(path: &Path) -> &str {
     path.to_str()
         .unwrap_or_else(|| panic!("path is not UTF-8: {}", path.display()))
@@ -220,6 +258,10 @@ fn main() {
         .join("../../third_party/ruby-1.9.2")
         .canonicalize()
         .expect("third_party/ruby-1.9.2 exists");
+    let core_math_dir = manifest_dir
+        .join("../../third_party/core-math")
+        .canonicalize()
+        .expect("third_party/core-math exists");
     let zlib_include = PathBuf::from(
         env::var_os("DEP_Z_INCLUDE").expect("libz-sys exports the include path of its zlib"),
     );
@@ -229,12 +271,16 @@ fn main() {
     println!("cargo:rerun-if-changed=config");
     println!("cargo:rerun-if-changed=encodings.c");
     println!("cargo:rerun-if-changed={}", utf8(&ruby_dir));
+    println!("cargo:rerun-if-changed={}", utf8(&core_math_dir));
 
     // The include order matters: `ruby/config.h` first, then the vendored tree.
+    // `vkrgss_math.h`, which the patched `math.c`, `numeric.c` and `bignum.c` include, is in
+    // the directory of CORE-MATH.
     let mut base = base_build();
     base.include(&config_dir)
         .include(ruby_dir.join("include"))
-        .include(&ruby_dir);
+        .include(&ruby_dir)
+        .include(core_math_dir.join("vkrgss"));
 
     // The interpreter with its regular expression engine, the four encodings of the core and
     // the transcoders, and the table of the encodings that are registered at first use.
@@ -259,6 +305,11 @@ fn main() {
         .define("OS_CODE", "OS_UNIX")
         .file(ruby_dir.join("ext/zlib/zlib.c"));
     zlib.compile("vkrgss-ruby192-zlib");
+
+    // The correctly rounded functions, which the interpreter refers to.
+    let mut core_math = hardened_build(CORE_MATH_FLAGS);
+    core_math.files(core_math_files(&core_math_dir));
+    core_math.compile("vkrgss-ruby192-core-math");
 
     for library in ["pthread", "rt"] {
         println!("cargo:rustc-link-lib={library}");
@@ -310,6 +361,16 @@ fn main() {
         utf8(compiler.path())
     );
     println!("cargo:rustc-env=VKRGSS_RUBY192_CFLAGS={}", args.join(" "));
+    let core_math_compiler = core_math.get_compiler();
+    let core_math_args: Vec<&str> = core_math_compiler
+        .args()
+        .iter()
+        .map(|arg| arg.to_str().expect("compiler arguments are UTF-8"))
+        .collect();
+    println!(
+        "cargo:rustc-env=VKRGSS_RUBY192_CORE_MATH_CFLAGS={}",
+        core_math_args.join(" ")
+    );
     println!(
         "cargo:rustc-env=VKRGSS_RUBY192_SOURCE_DIR={}",
         utf8(&ruby_dir)

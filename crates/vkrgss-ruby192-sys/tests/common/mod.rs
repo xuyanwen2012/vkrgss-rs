@@ -83,6 +83,7 @@ pub(crate) fn link_arguments() -> Vec<PathBuf> {
         ruby_libs.join("libvkrgss-ruby192-static.a"),
         ruby_libs.join("libvkrgss-ruby192-enc.a"),
         PathBuf::from("-Wl,--end-group"),
+        ruby_libs.join("libvkrgss-ruby192-core-math.a"),
         zlib_libs.join("libz.a"),
         PathBuf::from("-lpthread"),
         PathBuf::from("-lrt"),

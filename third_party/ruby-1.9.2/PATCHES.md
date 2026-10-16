@@ -515,3 +515,35 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
   first; a least distance that does not fit `OnigDistance` is the infinite one, for which
   no threshold is set, and the addition then wrapped around the address space, which the
   sanitized build reported. No result changes; `tests/backports.rs` shows it.
+
+## 38. correctly-rounded-math
+
+- File: `math.c`
+- Patch: `patches/correctly-rounded-math.patch`
+- Patched SHA-256: `b9716016a8e7f326fc35c119b0c7a8ee8b674540b7a8717b986a78c635f52c71`
+- Reason: a save holds floats that `Math` computed, and the C library's results differ
+  between versions of glibc and between operating systems (change
+  `round-the-math-functions-correctly`, "Floats in saves" in `docs/decisions.md`). `math.c`
+  includes `vkrgss_math.h` of `third_party/core-math/vkrgss`, whose macros make every call
+  of `atan2 cos sin tan acos asin atan cosh sinh tanh acosh asinh atanh exp log log2 log10
+  cbrt hypot erf erfc tgamma lgamma_r` call the correctly rounded function of the vendored
+  CORE-MATH; for a special argument the C library's function is still called, and the
+  checks of the domain before the calls are unchanged. `lgamma_r` takes the sign from
+  `signgam`, which CORE-MATH's `lgamma` sets, while the call holds the interpreter's lock.
+  The header defines `log2`, so the fallback under `#ifndef log2` stays out as before. No
+  other line changes. `sqrt`, `frexp`, `ldexp` and `modf` are exact and stay with the C
+  library. Patches 39 and 40 do the same for `numeric.c` and `bignum.c`.
+
+## 39. correctly-rounded-pow-numeric
+
+- File: `numeric.c`
+- Patch: `patches/correctly-rounded-pow-numeric.patch`
+- Patched SHA-256: `4848fb4ee9334a37fceef7c6f55cb1eaf8bc4b943d380d8efd7d1b89956c6947`
+- Reason: as patch 38, for `pow` in `Float#**` and in `Fixnum#**` with a float exponent.
+
+## 40. correctly-rounded-pow-bignum
+
+- File: `bignum.c`
+- Patch: `patches/correctly-rounded-pow-bignum.patch`
+- Patched SHA-256: `f4d67dddbbd7e82058322e271947e29903be353344302ab1e81c9c408c918efe`
+- Reason: as patch 38, for `pow` in `Bignum#**` where the result is a float.

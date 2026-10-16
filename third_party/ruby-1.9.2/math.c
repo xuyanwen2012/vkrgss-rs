@@ -12,6 +12,7 @@
 #include "ruby/ruby.h"
 #include <math.h>
 #include <errno.h>
+#include "vkrgss_math.h" /* vkrgss: correctly rounded functions of CORE-MATH */
 
 #define numberof(array) (int)(sizeof(array) / sizeof((array)[0]))
 

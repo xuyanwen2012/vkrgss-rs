@@ -10,7 +10,7 @@
 
 ## 3. Ruby 1.9.2
 
-- [ ] 3.1 The same in `vkrgss-ruby192-sys`, with `lgamma_r`. Verify: the scenarios of `specs/embedded-ruby-1-9-2/spec.md`; `cargo test -p vkrgss-ruby192-sys --locked` passes, the upstream suites included.
+- [x] 3.1 The same in `vkrgss-ruby192-sys`, with `lgamma_r`. Verify: the scenarios of `specs/embedded-ruby-1-9-2/spec.md`; `cargo test -p vkrgss-ruby192-sys --locked` passes, the upstream suites included.
 
 ## 4. Documentation
 

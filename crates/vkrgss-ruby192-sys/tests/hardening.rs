@@ -26,3 +26,16 @@ fn the_build_has_the_hardening_flags_and_cet_only_on_x86_64() {
         "{arguments:?}"
     );
 }
+
+/// Neither the interpreter nor CORE-MATH is compiled with contraction of floating-point
+/// operations, which a compiler does on one architecture and not on another.
+#[test]
+fn the_interpreter_and_core_math_have_no_contraction() {
+    for flags in [
+        env!("VKRGSS_RUBY192_CFLAGS"),
+        env!("VKRGSS_RUBY192_CORE_MATH_CFLAGS"),
+    ] {
+        let arguments: Vec<&str> = flags.split(' ').collect();
+        assert!(arguments.contains(&"-ffp-contract=off"), "{arguments:?}");
+    }
+}
