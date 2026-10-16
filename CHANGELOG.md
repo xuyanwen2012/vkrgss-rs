@@ -32,6 +32,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- aarch64 Linux is supported (milestone P1): on the owner's Jetson Orin Nano the compared
+  frames and saves of the XP, VX and VX Ace games equal those of x86_64 byte for byte, and the
+  CI job `gate-aarch64` must pass.
+
 - The workflow `nightly.yml` runs the dependency audit, the collector stress, the sanitized
   suites of Ruby 1.8.7 and five minutes of each fuzz target once a day and by hand.
 - Ruby 1.9.2 has a sanitized run of its suites

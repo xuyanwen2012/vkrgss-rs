@@ -161,13 +161,17 @@ fn sccache_is_installed_at_a_fixed_version() {
 }
 
 #[test]
-fn the_aarch64_job_has_the_steps_of_the_parts_and_may_fail() {
+fn the_aarch64_job_has_the_steps_of_the_parts_and_must_pass() {
     let workflow = read_workflow("ci.yml");
     let part = job(&workflow, &parts()[0]);
     let aarch64 = job(&workflow, "gate-aarch64");
 
     assert!(aarch64.contains(&"    runs-on: ubuntu-24.04-arm"));
-    assert!(aarch64.contains(&"    continue-on-error: true"));
+    assert!(
+        !aarch64
+            .iter()
+            .any(|line| line.contains("continue-on-error"))
+    );
     let (steps_part, steps_aarch64) = (steps(&part), steps(&aarch64));
     let gate = format!("        run: {GATE}");
     assert_eq!(steps_aarch64.last(), Some(&gate.as_str()));

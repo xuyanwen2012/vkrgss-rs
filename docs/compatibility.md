@@ -50,12 +50,11 @@ masks of 24 and 32 bits; masks with a palette, in grey of 8 or 16 bits, and JPEG
 not measured.
 
 Besides these, WMA sounds are decoded by the `ffmpeg` program, which has to be installed:
-without it they stay silent. vkrgss runs on Linux, and x86_64 is the supported architecture.
-On aarch64 both interpreters are built, and the job `gate-aarch64` of the
-[CI workflow](../.github/workflows/ci.yml) builds and tests them there and shows what works;
-aarch64 is supported once the milestone P1 of [decisions.md](decisions.md#milestones) is
-accepted. ARM Linux, macOS, Android and Windows are planned, in that order, and not
-supported yet.
+without it they stay silent. vkrgss runs on Linux, on x86_64 and on aarch64 (milestone P1 of
+[decisions.md](decisions.md#milestones)): on aarch64 the compared frames and saves of the
+games equal those of x86_64 byte for byte, and the job `gate-aarch64` of the
+[CI workflow](../.github/workflows/ci.yml) runs the whole gate there. macOS, Android and
+Windows are planned, in that order, and not supported yet.
 
 ## RPG Maker VX
 

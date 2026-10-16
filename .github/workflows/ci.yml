@@ -205,8 +205,8 @@ jobs:
       - name: Merge gate
         run: VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate --job rest
 
-  # aarch64 is not supported. This job shows what works there, and its failure does not
-  # fail the workflow. Its steps are those of the parts, and it runs the whole gate.
+  # aarch64 Linux is supported (milestone P1). This job runs the whole gate there, with the
+  # steps of the parts, and its failure fails the workflow.
   gate-aarch64:
     runs-on: ubuntu-24.04-arm
     # The compiler of the vendored C code, named so that a new default of the runner image
@@ -215,7 +215,6 @@ jobs:
       CC: gcc-13
       RUSTC_WRAPPER: sccache
       SCCACHE_GHA_ENABLED: "true"
-    continue-on-error: true
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       # The packages docs/building.md names.

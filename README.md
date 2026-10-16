@@ -8,7 +8,7 @@
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-1.99-CE422B?logo=rust&logoColor=white" alt="Rust 1.99"></a>
   <a href="https://doc.rust-lang.org/edition-guide/rust-2024/"><img src="https://img.shields.io/badge/edition-2024-CE422B?logo=rust&logoColor=white" alt="Rust edition 2024"></a>
   <a href="https://www.vulkan.org/"><img src="https://img.shields.io/badge/Vulkan-1.3_compute-AC162C?logo=vulkan&logoColor=white" alt="Vulkan 1.3 compute"></a>
-  <img src="https://img.shields.io/badge/platform-Linux%20x86__64-333333?logo=linux&logoColor=white" alt="Platform: Linux x86_64">
+  <img src="https://img.shields.io/badge/platform-Linux%20x86__64%20%7C%20aarch64-333333?logo=linux&logoColor=white" alt="Platform: Linux x86_64 and aarch64">
   <br>
   <img src="https://img.shields.io/badge/sandbox-Landlock-2E7D32" alt="Sandbox: Landlock">
   <img src="https://img.shields.io/badge/fuzzed-libFuzzer%20%2B%20ASan%20%2B%20UBSan-6A1B9A" alt="Fuzzed with libFuzzer, AddressSanitizer and UndefinedBehaviorSanitizer">
@@ -114,7 +114,7 @@ game, as vkrgss renders them headless.
 The runtime is read from `Game.ini`. Integer or filtered scaling, borderless fullscreen,
 encrypted archives, Ogg, WAV, MP3 and SoundFont MIDI, gamepads and remappable keys,
 fast-forward, recording and replay. Known gaps: text glyphs are not rasterised as GDI does,
-so their pixels differ while layout and widths are exact, and only Linux x86_64 is built;
+so their pixels differ while layout and widths are exact, and only Linux (x86_64 and aarch64) is built;
 [docs/compatibility.md](docs/compatibility.md) has the full list.
 
 ## Quick start
