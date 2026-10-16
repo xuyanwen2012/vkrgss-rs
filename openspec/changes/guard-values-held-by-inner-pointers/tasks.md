@@ -10,7 +10,7 @@
 
 ## 3. Documentation
 
-- [ ] 3.1 `CHANGELOG.md` under Unreleased, Fixed; `docs/vendored-security.md` if it lists collector fixes. Verify: the tests of `xtask` that check the documents pass.
+- [x] 3.1 `CHANGELOG.md` under Unreleased, Fixed; `docs/vendored-security.md` if it lists collector fixes. Verify: the tests of `xtask` that check the documents pass.
 
 ## 4. Integration check
 

@@ -129,6 +129,14 @@ The flow has no aarch64 machine, so aarch64 is verified after the merge: the tes
 `tests/inner_pointers.rs` and the stressed suites run there in the CI job `gate-aarch64`
 and on the owner's Jetson. On x86_64 the tests pass with and without the patches.
 
+`docs/vendored-security.md` reviews the security fixes published after the release and lists
+the defects that the fuzz targets and the sanitized run found; it does not list the guards
+against the collector (patches 8 and 9 are not in it), so this change leaves it unchanged.
+
+One edit outside the scope of the change: `xtask/src/gate.rs` names every test target of
+`vkrgss-ruby192-sys` in its list `RUBY192_TESTS`, and its test fails for a target in no
+part of the gate, so the new target `inner_pointers` is added there (two lines).
+
 ## Out of scope
 
 Compiling with flags that change register allocation; Ruby 1.8.7.

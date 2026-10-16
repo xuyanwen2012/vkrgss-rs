@@ -87,6 +87,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Ruby 1.9.2 of RPG Maker VX Ace games keeps values that only a pointer into them holds
+  while it allocates, which the stressed suite on aarch64 showed it did not: the sum of a
+  Bignum of two digits and a small integer could read the digits of a collected object, so
+  that `(2**63 - 1) + 1` gave 1, every `Time` after 1970 was "out of system range" for
+  `File.utime` and local times at changes of daylight saving time came out wrong; and
+  `Marshal.dump` of a `Time` with a fraction raised "can't dump anonymous ID 0". An audit of
+  `bignum.c`, `marshal.c`, `time.c`, `string.c`, `pack.c` and `sprintf.c` added the same
+  guard to Bignum division, multiplication and bitwise operations, `String#sub!`,
+  `#each_codepoint`, `#tr`, `#delete`, `#squeeze`, `#count` and signed Bignum conversions of
+  `format`.
 - Present timing reads the monotonic clock from the system, and any other clock of the
   swapchain only when the device can calibrate it; a swapchain without such a clock is paced
   as without present timing. A time of 0 makes the presenter choose the clock again.

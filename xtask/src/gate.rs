@@ -209,6 +209,8 @@ const RUBY192_TESTS: &[&str] = &[
     "--test",
     "hash_seed",
     "--test",
+    "inner_pointers",
+    "--test",
     "interpreter",
     "--test",
     "layout",
