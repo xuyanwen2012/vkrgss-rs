@@ -6,7 +6,7 @@
 
 ## 2. Audit
 
-- [ ] 2.1 The audit of `design.md`, its list under "Audit", and the guards it adds as recorded patches. Verify: `cargo test -p vkrgss-ruby192-sys --locked` and `cargo test -p vkrgss-ruby192-sys --locked --test upstream_stress` pass; the sanitized run passes if available.
+- [x] 2.1 The audit of `design.md`, its list under "Audit", and the guards it adds as recorded patches. Verify: `cargo test -p vkrgss-ruby192-sys --locked` and `cargo test -p vkrgss-ruby192-sys --locked --test upstream_stress` pass; the sanitized run passes if available.
 
 ## 3. Documentation
 

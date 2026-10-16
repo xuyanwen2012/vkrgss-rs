@@ -868,7 +868,9 @@ rb_str_format(int argc, const VALUE *argv, VALUE fmt)
 		}
 		else {
 		    if (sign) {
-			tmp = rb_big2str(val, base);
+			/* vkrgss: `s` points into tmp across CHECK and PUSH, which
+			 * resize the result; the volatile tmp1 holds it, as below. */
+			tmp1 = tmp = rb_big2str(val, base);
 			s = RSTRING_PTR(tmp);
 			if (s[0] == '-') {
 			    s++;

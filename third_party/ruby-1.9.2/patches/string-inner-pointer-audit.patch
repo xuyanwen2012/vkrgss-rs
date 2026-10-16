@@ -1,0 +1,53 @@
+--- a/string.c
++++ b/string.c
+@@ -3536,6 +3536,9 @@
+ 	    memmove(p + beg0 + rlen, p + beg0 + plen, len - beg0 - plen);
+ 	}
+ 	memcpy(p + beg0, rp, rlen);
++	/* vkrgss: `rp` points into repl, which may be a new string, across
++	 * RESIZE_CAPA; StringValue may be inlined, so nothing else holds it. */
++	RB_GC_GUARD(repl);
+ 	len += rlen - plen;
+ 	STR_SET_LEN(str, len);
+ 	RSTRING_PTR(str)[len] = '\0';
+@@ -4826,6 +4829,10 @@
+ 	    }
+ 	}
+     }
++    /* vkrgss: `trsrc` and `trrepl` point into src and repl, which may be
++     * results of to_str, across rb_hash_new and rb_hash_aset. */
++    RB_GC_GUARD(src);
++    RB_GC_GUARD(repl);
+ 
+     if (cr == ENC_CODERANGE_VALID)
+ 	cr = ENC_CODERANGE_7BIT;
+@@ -5073,6 +5080,9 @@
+     for (i=0; i<256; i++) {
+ 	stable[i] = stable[i] && buf[i];
+     }
++    /* vkrgss: `tr` points into str, which may be a result of to_str that the
++     * caller does not use again, across rb_hash_new and rb_hash_aset. */
++    RB_GC_GUARD(str);
+ }
+ 
+ 
+@@ -5957,6 +5967,8 @@
+ 	rb_yield(UINT2NUM(c));
+ 	ptr += n;
+     }
++    /* vkrgss: the copy is read only through `ptr` across rb_yield. */
++    RB_GC_GUARD(str);
+     return orig;
+ }
+ 
+@@ -7393,7 +7405,9 @@
+       default:
+ 	tmp = rb_check_string_type(name);
+ 	if (NIL_P(tmp)) {
+-	    tmp = rb_inspect(name);
++	    /* vkrgss: rb_raise allocates before it reads RSTRING_PTR(tmp), and
++	     * a guard after a call that does not return would be dropped. */
++	    RB_GC_GUARD(tmp) = rb_inspect(name);
+ 	    rb_raise(rb_eTypeError, "%s is not a symbol",
+ 		     RSTRING_PTR(tmp));
+ 	}

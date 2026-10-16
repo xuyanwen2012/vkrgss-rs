@@ -420,7 +420,7 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
 
 - File: `sprintf.c`
 - Patch: `patches/sprintf-non-finite-width.patch`
-- Patched SHA-256: `00b9f7fad3b188fda89794da6c0b081b493b78ebee9219e26e72a1822e8ba880`
+- Patched SHA-256: `9a2e1424431af3d098056d263e177b707c048270ed5633bdc0801ca7c443020c`
 - Reason: backport for the review of later security fixes (change
   `fuzz-and-review-ruby-1-9-2`, `docs/vendored-security.md`). CVE-2017-0898, fixed
   differently: `rb_str_format` formats infinity and NaN into `need + 1` bytes, and with the
@@ -434,7 +434,7 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
 
 - File: `string.c`
 - Patch: `patches/str-buf-cat-capacity.patch`
-- Patched SHA-256: `84a5fee884a020dd30bd6e34c096c297ec0e402f160186e0c79bdaecf7fde61e`
+- Patched SHA-256: `c5a038e8e2de7785c3743a4b5a3de180222da50a2ad5faad46d054f2f162e48a`
 - Reason: backport for the review of later security fixes (change
   `fuzz-and-review-ruby-1-9-2`, `docs/vendored-security.md`). CVE-2014-3916. When a string
   grows near `LONG_MAX / 2` bytes, `str_buf_cat` took the number of pages of the new length
@@ -545,14 +545,14 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
 
 - File: `bignum.c`
 - Patch: `patches/correctly-rounded-pow-bignum.patch`
-- Patched SHA-256: `d7425aecdb853557fd7078ea726ad2843ae4b837c645b4d63287da54906126a3`
+- Patched SHA-256: `827cacc9a5e4a346d8fd2d3b958db2399e0509fbfd0c1856f33fe47115a982f0`
 - Reason: as patch 38, for `pow` in `Bignum#**` where the result is a float.
 
 ## 41. bignum-int-gc-guard
 
 - File: `bignum.c`
 - Patch: `patches/bignum-int-gc-guard.patch`
-- Patched SHA-256: `d7425aecdb853557fd7078ea726ad2843ae4b837c645b4d63287da54906126a3`
+- Patched SHA-256: `827cacc9a5e4a346d8fd2d3b958db2399e0509fbfd0c1856f33fe47115a982f0`
 - Reason: applies after patch 40; a wrong sum under `GC.stress` on aarch64 (change
   `guard-values-held-by-inner-pointers`; `test_utime` of
   `test/ruby/test_file_exhaustive.rb`, two tests of `test/ruby/test_time_tz.rb`, GCC 13 at
@@ -578,3 +578,47 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
   generic instance variables freed, and `w_ivar` walked the freed table. `RB_GC_GUARD(v)`
   keeps the string until `w_ivar` has returned, as patch 23 of the tree of Ruby 1.8.7 does.
   Patch 41 is the other guard of the change.
+
+## 43. bignum-inner-pointer-audit
+
+- File: `bignum.c`
+- Patch: `patches/bignum-inner-pointer-audit.patch`
+- Patched SHA-256: `827cacc9a5e4a346d8fd2d3b958db2399e0509fbfd0c1856f33fe47115a982f0`
+- Reason: applies after patch 41; the audit of the change
+  `guard-values-held-by-inner-pointers` (its `design.md` lists every place it looked at).
+  Where a function reads the digits of a Bignum through a pointer after a call that
+  allocates, and does not use the Bignum itself afterwards, the Bignum may be collected as in
+  patch 41. `RB_GC_GUARD` keeps it in `bigmul1_balance` (`y`, which `rb_big_pow`
+  passes as a temporary), `bigdivrem` (`x` and `y`, which `big_fdiv` passes as
+  temporaries and does not use again), and `bigand_int`, `bigor_int` and `bigxor_int`
+  (`x`, a clone that the caller may drop in a tail call). No failure was seen; no result
+  changes. Patches 44 and 45 are the other guards of the audit.
+
+## 44. string-inner-pointer-audit
+
+- File: `string.c`
+- Patch: `patches/string-inner-pointer-audit.patch`
+- Patched SHA-256: `c5a038e8e2de7785c3743a4b5a3de180222da50a2ad5faad46d054f2f162e48a`
+- Reason: applies after patch 32; the audit of the change
+  `guard-values-held-by-inner-pointers`, as patch 43 for strings. `RB_GC_GUARD` keeps
+  a string that is read through `RSTRING_PTR` after a call that allocates: the
+  replacement in `rb_str_sub_bang` across `RESIZE_CAPA`; the frozen copy of
+  `rb_str_each_codepoint` across `rb_yield`; the result of `rb_inspect` in
+  `rb_to_id`, whose bytes `rb_raise` reads after it has allocated (the guard is on the
+  assignment, since a guard after a call that does not return would be dropped); and the
+  results of `to_str` that `tr_trans` and `tr_setup_table` read across
+  `rb_hash_new` and `rb_hash_aset`. `StringValue` takes the address of its variable,
+  but within `string.c` the compiler may inline it, so that does not hold the string. No
+  failure was seen; no result changes.
+
+## 45. sprintf-signed-bignum-gc-guard
+
+- File: `sprintf.c`
+- Patch: `patches/sprintf-signed-bignum-gc-guard.patch`
+- Patched SHA-256: `9a2e1424431af3d098056d263e177b707c048270ed5633bdc0801ca7c443020c`
+- Reason: applies after patch 31; the audit of the change
+  `guard-values-held-by-inner-pointers`, as patch 43 for `format`. A signed integer
+  conversion of a Bignum (`%d`, `%+x`) reads the digits of `rb_big2str` through
+  `s` after `CHECK` and `PUSH` have resized the result, which can collect; the
+  string is now also stored in the volatile `tmp1`, as the unsigned branch next to it
+  already does. No failure was seen; no result changes.

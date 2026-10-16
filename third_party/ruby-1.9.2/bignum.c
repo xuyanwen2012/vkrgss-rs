@@ -2049,6 +2049,9 @@ bigmul1_balance(VALUE x, VALUE y)
 	yn -= r;
 	n += r;
     }
+    /* vkrgss: `yds`, a pointer into the digits of y, is read after bigmul0
+     * allocates, and y is not used itself; rb_big_pow passes a temporary. */
+    RB_GC_GUARD(y);
 
     return z;
 }
@@ -2477,6 +2480,11 @@ bigdivrem(VALUE x, VALUE y, volatile VALUE *divp, volatile VALUE *modp)
 	RBIGNUM_SET_LEN(zz, ny);
 	RBIGNUM_SET_SIGN(zz, RBIGNUM_SIGN(x));
     }
+    /* vkrgss: `xds` and `yds` point into the digits of x and y (or of the
+     * clone yy) and are read after bignew allocates; without modp, x is not
+     * used itself, and big_fdiv passes temporaries. */
+    RB_GC_GUARD(x);
+    RB_GC_GUARD(y);
     return z;
 }
 
@@ -2893,6 +2901,9 @@ bigand_int(VALUE x, long y)
 	zds[i] = sign?0:xds[i];
 	i++;
     }
+    /* vkrgss: `xds`, a pointer into the digits of x, is read after bignew
+     * allocates; x may be a clone that the caller drops in a tail call. */
+    RB_GC_GUARD(x);
     if (!RBIGNUM_SIGN(z)) get2comp(z);
     return bignorm(z);
 }
@@ -2984,6 +2995,9 @@ bigor_int(VALUE x, long y)
 	zds[i] = sign?xds[i]:(BDIGIT)(BIGRAD-1);
 	i++;
     }
+    /* vkrgss: `xds`, a pointer into the digits of x, is read after bignew
+     * allocates; x may be a clone that the caller drops in a tail call. */
+    RB_GC_GUARD(x);
     if (!RBIGNUM_SIGN(z)) get2comp(z);
     return bignorm(z);
 }
@@ -3076,6 +3090,9 @@ bigxor_int(VALUE x, long y)
 	zds[i] = sign?xds[i]:~xds[i];
 	i++;
     }
+    /* vkrgss: `xds`, a pointer into the digits of x, is read after bignew
+     * allocates; x may be a clone that the caller drops in a tail call. */
+    RB_GC_GUARD(x);
     if (!RBIGNUM_SIGN(z)) get2comp(z);
     return bignorm(z);
 }
