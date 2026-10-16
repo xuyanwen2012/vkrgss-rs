@@ -14,6 +14,7 @@ members = [
     "crates/vkrgss-guest",
     "crates/vkrgss-guest-main",
     "crates/vkrgss-guest-main-rgss3",
+    "crates/vkrgss-guest-rgss12",
     "crates/vkrgss-guest-rgss3",
     "crates/vkrgss-compose-ref",
     "crates/vkrgss-vk",

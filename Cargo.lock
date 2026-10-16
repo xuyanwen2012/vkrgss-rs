@@ -2621,6 +2621,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "vkrgss-guest-rgss12"
+version = "0.3.1"
+dependencies = [
+ "tempfile",
+ "vkrgss-guest",
+ "vkrgss-guest-main",
+]
+
+[[package]]
 name = "vkrgss-guest-rgss3"
 version = "0.3.1"
 dependencies = [

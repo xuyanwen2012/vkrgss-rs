@@ -19,7 +19,7 @@
 //! has its counterpart in the second.
 //!
 //! The `vkrgss` binary is on neither side: it is the one crate that may depend on both. The
-//! guest executable `vkrgss-guest-rgss3` is a guest crate.
+//! guest executables `vkrgss-guest-rgss12` and `vkrgss-guest-rgss3` are guest crates.
 //!
 //! The graph is taken with every feature of every workspace crate enabled, so a forbidden
 //! dependency cannot hide behind an optional dependency or a feature that is off by default.
@@ -48,6 +48,7 @@ pub(crate) const GUEST_CRATES: &[&str] = &[
     "vkrgss-guest",
     "vkrgss-guest-main",
     "vkrgss-guest-main-rgss3",
+    "vkrgss-guest-rgss12",
     "vkrgss-guest-rgss3",
 ];
 
@@ -349,6 +350,13 @@ pub(crate) fn run(root: &Path) -> Result<()> {
 mod tests {
     use super::*;
 
+    /// The guest executables, each with the main of a guest it is built over: the one package
+    /// of the workspace it declares.
+    const GUEST_EXECUTABLES: [(&str, &str); 2] = [
+        ("vkrgss-guest-rgss12", "vkrgss-guest-main"),
+        ("vkrgss-guest-rgss3", "vkrgss-guest-main-rgss3"),
+    ];
+
     fn graph(edges: &[(&str, &str)]) -> Graph {
         let mut graph = Graph::new();
         for (from, to) in edges {
@@ -625,33 +633,33 @@ mod tests {
         assert_eq!(check(&allowed), vec![]);
     }
 
-    /// Scenario "The guest executable of RGSS3".
+    /// Scenario "The guest executable of RGSS3", and the same for the guest executable of
+    /// RGSS1 and RGSS2.
     #[test]
     fn the_guest_executable_reaching_a_host_crate_is_reported() {
-        for host in HOST_CRATES {
-            let reaching = graph(&[
-                ("vkrgss-guest-rgss3", "vkrgss-guest-main-rgss3"),
-                ("vkrgss-guest-main-rgss3", host),
-            ]);
-            let violations = check(&reaching);
-            assert_eq!(
-                violations,
-                vec![
-                    Violation::GuestReachesHost {
-                        path: path(&["vkrgss-guest-main-rgss3", host]),
-                    },
-                    Violation::GuestReachesHost {
-                        path: path(&["vkrgss-guest-rgss3", "vkrgss-guest-main-rgss3", host]),
-                    },
-                ]
-            );
-            assert_eq!(
-                violations[1].to_string(),
-                format!(
-                    "guest crate `vkrgss-guest-rgss3` reaches host crate `{host}`: \
-                     vkrgss-guest-rgss3 -> vkrgss-guest-main-rgss3 -> {host}"
-                )
-            );
+        for (executable, main) in GUEST_EXECUTABLES {
+            for host in HOST_CRATES {
+                let reaching = graph(&[(executable, main), (main, host)]);
+                let violations = check(&reaching);
+                assert_eq!(
+                    violations,
+                    vec![
+                        Violation::GuestReachesHost {
+                            path: path(&[main, host]),
+                        },
+                        Violation::GuestReachesHost {
+                            path: path(&[executable, main, host]),
+                        },
+                    ]
+                );
+                assert_eq!(
+                    violations[1].to_string(),
+                    format!(
+                        "guest crate `{executable}` reaches host crate `{host}`: \
+                         {executable} -> {main} -> {host}"
+                    )
+                );
+            }
         }
     }
 
@@ -1141,6 +1149,7 @@ mod tests {
         for (package, interpreter, other) in [
             ("vkrgss-binding", first, second),
             ("vkrgss-guest-main", first, second),
+            ("vkrgss-guest-rgss12", first, second),
             ("vkrgss", first, second),
             ("vkrgss-binding-rgss3", second, first),
             ("vkrgss-guest-main-rgss3", second, first),
@@ -1155,57 +1164,62 @@ mod tests {
         }
     }
 
-    /// Scenario "Nothing of the host is linked": the guest executable reaches none of the
-    /// host crates and none of the crates of the window, the device and the sound.
+    /// Scenario "Nothing of the host is linked": no guest executable reaches a host crate
+    /// or a crate of the window, the device and the sound.
     #[test]
-    fn the_guest_executable_links_nothing_of_the_host() {
-        let paths = paths_from(&real_graph(), "vkrgss-guest-rgss3");
-        for host in [
-            "vkrgss-host",
-            "vkrgss-vk",
-            "vkrgss-audio",
-            "ash",
-            "winit",
-            "cpal",
-        ] {
-            assert!(
-                !paths.contains_key(host),
-                "vkrgss-guest-rgss3 reaches {host}: {}",
-                paths[host].join(" -> ")
-            );
+    fn the_guest_executables_link_nothing_of_the_host() {
+        let graph = real_graph();
+        for (executable, main) in GUEST_EXECUTABLES {
+            let paths = paths_from(&graph, executable);
+            for host in [
+                "vkrgss-host",
+                "vkrgss-vk",
+                "vkrgss-audio",
+                "ash",
+                "winit",
+                "cpal",
+            ] {
+                assert!(
+                    !paths.contains_key(host),
+                    "{executable} reaches {host}: {}",
+                    paths[host].join(" -> ")
+                );
+            }
+            assert!(paths.contains_key(main), "{executable} misses {main}");
         }
-        assert!(paths.contains_key("vkrgss-guest-main-rgss3"));
     }
 
-    /// Scenario "Direct dependencies": the guest executable declares one package of the
-    /// workspace, its development dependencies left out.
+    /// Scenario "Direct dependencies": each guest executable declares one package of the
+    /// workspace, the main of a guest, its development dependencies left out.
     #[test]
-    fn the_guest_executable_depends_on_the_glue_alone() {
+    fn the_guest_executables_depend_on_the_glue_alone() {
         let metadata = metadata_without_resolution();
         let packages = metadata["packages"].as_array().expect("the packages");
         let workspace: BTreeSet<&str> = packages
             .iter()
             .filter_map(|package| package["name"].as_str())
             .collect();
-        let executable = packages
-            .iter()
-            .find(|package| package["name"] == "vkrgss-guest-rgss3")
-            .expect("the guest executable is in the workspace");
-        let declared: Vec<&str> = executable["dependencies"]
-            .as_array()
-            .expect("its dependencies")
-            .iter()
-            .filter(|dependency| dependency["kind"].as_str() != Some("dev"))
-            .filter_map(|dependency| dependency["name"].as_str())
-            .filter(|name| workspace.contains(name))
-            .collect();
-        assert_eq!(declared, ["vkrgss-guest-main-rgss3"]);
+        for (name, main) in GUEST_EXECUTABLES {
+            let executable = packages
+                .iter()
+                .find(|package| package["name"] == name)
+                .unwrap_or_else(|| panic!("`{name}` is in the workspace"));
+            let declared: Vec<&str> = executable["dependencies"]
+                .as_array()
+                .expect("its dependencies")
+                .iter()
+                .filter(|dependency| dependency["kind"].as_str() != Some("dev"))
+                .filter_map(|dependency| dependency["name"].as_str())
+                .filter(|name| workspace.contains(name))
+                .collect();
+            assert_eq!(declared, [main], "{name}");
+        }
     }
 
-    /// Scenario "One version": the program and the guest executable it starts state one
+    /// Scenario "One version": the program and the guest executables it starts state one
     /// version.
     #[test]
-    fn the_program_and_the_guest_executable_have_one_version() {
+    fn the_program_and_the_guest_executables_have_one_version() {
         let metadata = metadata_without_resolution();
         let version = |name: &str| {
             metadata["packages"]
@@ -1216,7 +1230,9 @@ mod tests {
                 .map(|package| package["version"].clone())
                 .unwrap_or_else(|| panic!("`{name}` is in the workspace"))
         };
-        assert_eq!(version("vkrgss"), version("vkrgss-guest-rgss3"));
+        for (executable, _) in GUEST_EXECUTABLES {
+            assert_eq!(version("vkrgss"), version(executable), "{executable}");
+        }
     }
 
     fn metadata_without_resolution() -> Value {

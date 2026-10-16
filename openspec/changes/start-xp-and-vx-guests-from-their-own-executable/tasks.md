@@ -2,7 +2,7 @@
 
 ## 1. Guest executable
 
-- [ ] 1.1 The package `vkrgss-guest-rgss12` and the checks of `xtask` that `vkrgss-guest-rgss3` has. Verify: scenarios of "Guest executable of RGSS1 and RGSS2"; `cargo test -p xtask --locked` passes.
+- [x] 1.1 The package `vkrgss-guest-rgss12` and the checks of `xtask` that `vkrgss-guest-rgss3` has. Verify: scenarios of "Guest executable of RGSS1 and RGSS2"; `cargo test -p xtask --locked` passes.
 
 ## 2. The program starts it
 

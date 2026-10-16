@@ -1,0 +1,25 @@
+[package]
+name = "vkrgss-guest-rgss12"
+description = "The guest executable of vkrgss for games of RPG Maker XP and VX, over Ruby 1.8.7"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+vkrgss-guest-main.workspace = true
+
+[dev-dependencies]
+# The tests write guest records as the program does.
+tempfile.workspace = true
+vkrgss-guest.workspace = true
