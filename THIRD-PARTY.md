@@ -58,6 +58,64 @@ states the origin and how the subset was chosen, and
 commit. The directory `vkrgss/` in it, through which the interpreters call the functions,
 is vkrgss's own, under the licence of this repository.
 
+`LICENSE` holds the terms but no copyright notice; each vendored file holds its own, and its
+permission notice is the text of `LICENSE` (in `log/dint.h` and `log10/dint.h` with
+"EXPRESS" misspelt "exp_dRESS" upstream). These are the copyright notices of the vendored
+files, each distinct notice once, as the files have them; the release package carries them
+in this file:
+
+```text
+Copyright (c) 2024-2025 Alexei Sibidanov.
+
+Copyright (c) 2023 Alexei Sibidanov.
+
+Copyright (c) 2022-2026 Alexei Sibidanov <sibid@uvic.ca>.
+
+Copyright (c) 2023-2025 Alexei Sibidanov <sibid@uvic.ca>.
+
+Copyright (c) 2023-2026 Alexei Sibidanov <sibid@uvic.ca>.
+
+Copyright (c) 2024-2025 Paul Zimmermann and Alexei Sibidanov
+
+Copyright (c) 2023-2024 Paul Zimmermann and Alexei Sibidanov
+
+Copyright (c) 2021-2022 Alexei Sibidanov.
+
+Copyright (c) 2022-2025 Paul Zimmermann and Tom Hubrecht
+
+Copyright (c) 2023-2025 Alexei Sibidanov <sibid@uvic.ca>
+
+Copyright (c) 2023-2025 Paul Zimmermann
+
+Copyright (c) 2022-2026 Alexei Sibidanov, Paul Zimmermann, Tom Hubrecht and
+Claude-Pierre Jeannerod.
+
+Copyright (c) 2025 Alexei Sibidanov <sibid@uvic.ca>
+
+Copyright (c) 2022 CERN.
+Author: Tom Hubrecht
+
+Copyright (c) 2022 INRIA and CERN.
+Authors: Paul Zimmermann and Tom Hubrecht.
+
+Copyright (c) 2022-2025 INRIA and CERN.
+Authors: Paul Zimmermann and Tom Hubrecht.
+
+Copyright (c) 2022, 2023 CERN and Inria
+Authors: Tom Hubrecht and Paul Zimmermann
+
+Copyright (c) 2022-2025 CERN and Inria
+Authors: Tom Hubrecht and Paul Zimmermann
+
+Copyright (c) 2022-2026 Paul Zimmermann and Tom Hubrecht and Alexei Sibidanov
+
+Copyright (c) 2023-2026 Alexei Sibidanov and Paul Zimmermann.
+
+Copyright (c) 2023-2026 Alexei Sibidanov, Cyprien Peignier, Paul Zimmermann
+
+Copyright (c) 2024 Alexei Sibidanov <sibid@uvic.ca>.
+```
+
 ## libxcrypt
 
 The three executables of the release package, which `cargo xtask dist` builds, link libcrypt

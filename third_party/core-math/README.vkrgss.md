@@ -29,7 +29,9 @@ patch of each interpreter includes it in `math.c`, `numeric.c` and `bignum.c`.
 ## Licence
 
 The MIT licence of the vkrgss repository does not cover this directory. CORE-MATH is under
-the MIT licence in `LICENSE`; the copyright notice of each file is in the file.
+the MIT licence in `LICENSE`; the copyright notice of each file is in the file, and
+`THIRD-PARTY.md` at the root of the repository, which the release package carries, lists
+them all.
 
 ## How the subset was chosen
 
