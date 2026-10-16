@@ -2,7 +2,7 @@
 
 ## 1. Headers
 
-- [ ] 1.1 The aarch64 headers of both crates and the tests that compare them with x86_64. Verify: scenarios "Header of aarch64"; `cargo test -p vkrgss-ruby-sys -p vkrgss-ruby192-sys --locked` passes.
+- [x] 1.1 The aarch64 headers of both crates and the tests that compare them with x86_64. Verify: scenarios "Header of aarch64"; `cargo test -p vkrgss-ruby-sys -p vkrgss-ruby192-sys --locked` passes.
 
 ## 2. Targets
 
