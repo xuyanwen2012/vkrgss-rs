@@ -49,7 +49,7 @@ or when its variable's address was passed to a function of another file (`String
 link-time optimisation, so the variable keeps its stack slot. Within `string.c` that last
 reason does not hold, since `rb_string_value` may be inlined there.
 
-Guarded (patches 43 to 45):
+Guarded (patches 43 to 46):
 
 - `bignum.c` `bigmul1_balance`: `yds` points into `y` and is read in the loop after
   `bigmul0` allocates; `rb_big_pow` passes its running product, which nothing else holds.
@@ -71,6 +71,11 @@ Guarded (patches 43 to 45):
 - `sprintf.c` `rb_str_format`, signed conversions of a Bignum: `s` points into the result
   of `rb_big2str` across `CHECK` and `PUSH`, which resize the result; the string is stored
   in the `volatile` `tmp1`, as the unsigned branch next to it already does.
+- `pack.c` `pack_pack`, the branch `w` (BER-compressed integer): the bytes are built in the
+  local string `buf`, whose address is never taken, and `RSTRING_PTR(buf)` is passed to
+  `rb_str_buf_cat`, which resizes the result, and can collect, before it copies them; `buf`
+  is not used afterwards. Patch 46, added after a review found that the first pass of the
+  audit had judged this branch safe.
 
 Judged safe:
 
@@ -101,9 +106,12 @@ Judged safe:
   wide values of `struct vtm` live on the stack; `time_strftime` holds its copy of the
   format through `StringValue`; `month_arg` and `utc_offset_arg` use the string again or
   do not allocate in between.
-- `pack.c`: `pack_pack` uses `fmt` at the end (`OBJ_INFECT`) and holds each `from`
-  through `StringValue`; `pack_unpack` reads the receiver and holds `fmt` through
-  `StringValue`; `infected_str_new` copies before anything else allocates.
+- `pack.c`, other than the branch `w`: `pack_pack` uses `fmt` at the end (`OBJ_INFECT`);
+  the strings that the branches `a A Z b B h H u m M` read through `ptr` or pass to
+  `qpencode` are held in `from`, whose address `StringValue` passes to `string.c`, also
+  where `M` assigns it the result of `rb_obj_as_string`; `P` and `p` store `from` in
+  `associates`; `pack_unpack` reads the receiver and holds `fmt` through `StringValue`;
+  `infected_str_new` copies before anything else allocates.
 - `sprintf.c`: `%s` and `%p` read `RSTRING_PTR(str)` again after `CHECK`; `%c` uses `tmp`
   again and allocates nothing after the last read; the unsigned Bignum branch holds `tmp1`;
   `fmt` is held through `StringValue`; `rb_enc_vsprintf` and `rb_str_vcatf` use their

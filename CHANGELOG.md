@@ -95,8 +95,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `Marshal.dump` of a `Time` with a fraction raised "can't dump anonymous ID 0". An audit of
   `bignum.c`, `marshal.c`, `time.c`, `string.c`, `pack.c` and `sprintf.c` added the same
   guard to Bignum division, multiplication and bitwise operations, `String#sub!`,
-  `#each_codepoint`, `#tr`, `#delete`, `#squeeze`, `#count` and signed Bignum conversions of
-  `format`.
+  `#each_codepoint`, `#tr`, `#delete`, `#squeeze`, `#count`, signed Bignum conversions of
+  `format` and the BER-compressed integers of `Array#pack('w')`.
 - Present timing reads the monotonic clock from the system, and any other clock of the
   swapchain only when the device can calibrate it; a swapchain without such a clock is paced
   as without present timing. A time of 0 makes the presenter choose the clock again.

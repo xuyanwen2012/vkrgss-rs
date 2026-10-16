@@ -394,7 +394,7 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
 
 - File: `pack.c`
 - Patch: `patches/pack-encodes-line-feed.patch`
-- Patched SHA-256: `07c21239a133fc2652acef30e38c25470ae586d9270a00c2790fb9e7083c5c03`
+- Patched SHA-256: `d3a5bba42951dc5676a0fcbf9aa1b1cb699e5760af5d0df746ac61dcf8663747`
 - Reason: backport for the review of later security fixes (change
   `fuzz-and-review-ruby-1-9-2`, `docs/vendored-security.md`). CVE-2014-4975. `encodes`, the
   conversion of `m` and `u`, fills a buffer of 4096 bytes in groups of four and empties it
@@ -408,7 +408,7 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
 
 - File: `pack.c`
 - Patch: `patches/unpack-count-overflow.patch`
-- Patched SHA-256: `07c21239a133fc2652acef30e38c25470ae586d9270a00c2790fb9e7083c5c03`
+- Patched SHA-256: `d3a5bba42951dc5676a0fcbf9aa1b1cb699e5760af5d0df746ac61dcf8663747`
 - Reason: applies after patch 29; backport for the review of later security fixes (change
   `fuzz-and-review-ruby-1-9-2`, `docs/vendored-security.md`). CVE-2018-8778, as patch 34 of
   the tree of 1.8.7. A count of `String#unpack` above `LONG_MAX` became negative, which the
@@ -592,7 +592,7 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
   passes as a temporary), `bigdivrem` (`x` and `y`, which `big_fdiv` passes as
   temporaries and does not use again), and `bigand_int`, `bigor_int` and `bigxor_int`
   (`x`, a clone that the caller may drop in a tail call). No failure was seen; no result
-  changes. Patches 44 and 45 are the other guards of the audit.
+  changes. Patches 44 to 46 are the other guards of the audit.
 
 ## 44. string-inner-pointer-audit
 
@@ -622,3 +622,16 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
   `s` after `CHECK` and `PUSH` have resized the result, which can collect; the
   string is now also stored in the volatile `tmp1`, as the unsigned branch next to it
   already does. No failure was seen; no result changes.
+
+## 46. pack-ber-buffer-gc-guard
+
+- File: `pack.c`
+- Patch: `patches/pack-ber-buffer-gc-guard.patch`
+- Patched SHA-256: `d3a5bba42951dc5676a0fcbf9aa1b1cb699e5760af5d0df746ac61dcf8663747`
+- Reason: applies after patch 30; the audit of the change
+  `guard-values-held-by-inner-pointers`, as patch 43 for `Array#pack`. The branch `w`
+  (BER-compressed integer) builds its bytes in the local string `buf` and passes
+  `RSTRING_PTR(buf)` to `rb_str_buf_cat`, which resizes the result, and can collect,
+  before it copies them; `buf` is not used afterwards and nothing else holds it.
+  `RB_GC_GUARD(buf)` keeps it until the copy is done. No failure was seen; no result
+  changes.

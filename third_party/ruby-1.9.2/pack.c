@@ -1023,6 +1023,9 @@ pack_pack(VALUE ary, VALUE fmt)
 			*bufe-- = c;
 		    }
 		    rb_str_buf_cat(res, RSTRING_PTR(buf), RSTRING_LEN(buf));
+		    /* vkrgss: rb_str_buf_cat resizes res, which can collect, before
+		     * it copies the bytes of buf, which nothing else holds. */
+		    RB_GC_GUARD(buf);
 		}
 		else {
 		    c = 0;
