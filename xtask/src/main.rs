@@ -1,6 +1,7 @@
 //! Repository automation for vkrgss, run as `cargo xtask <command>`.
 //!
-//! - `gate`: the merge gate (formatting, lints, tests, documentation, OpenSpec validation).
+//! - `gate [--job <NAME>]`: the merge gate (formatting, lints, tests, documentation, OpenSpec
+//!   validation), or one named part of it, as a job of the CI workflow runs it.
 //! - `deps`: the dependency-direction rules on their own.
 //! - `audit`: checks the dependencies against security advisories and the licence allow-list
 //!   with `cargo deny`. Not a step of the gate.
@@ -36,7 +37,7 @@ mod stress;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-const USAGE: &str = "usage: cargo xtask <gate|deps|audit|stress|fuzz <TARGET> [--seconds N]|dist|\
+const USAGE: &str = "usage: cargo xtask <gate [--job <NAME>]|deps|audit|stress|fuzz <TARGET> [--seconds N]|dist|\
                      extract-rpg <DLL> <OUTPUT>|oracle <GAME_DIR> [OPTIONS]|pack-rgssad <GAME_DIR>>";
 
 fn main() -> ExitCode {
@@ -44,6 +45,7 @@ fn main() -> ExitCode {
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
     let result = match args[..] {
         ["gate"] => gate::run(&workspace_root()),
+        ["gate", "--job", name] => gate::run_part(name, &workspace_root()),
         ["deps"] => deps::run(&workspace_root()),
         ["audit"] => audit::run(&cargo(), &workspace_root()),
         ["stress"] => stress::run(&workspace_root()),

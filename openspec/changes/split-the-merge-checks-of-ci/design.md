@@ -46,6 +46,48 @@
   `cargo xtask gate --job <part>`, the pins rule still holds for the new action, the issue
   job exists with the narrow permission.
 
+## Measured parts
+
+Measured on 2026-10-16 on the owner's machine (12 threads, llvmpipe) with the build warm.
+`cargo test --workspace --locked --no-fail-fast` took 138 s to build and 334 s to run; the
+slowest binaries were the unit tests of `vkrgss-vk` (102.6 s, 336 s on CI),
+`upstream_stress` of `vkrgss-ruby192-sys` (94.8 s, 412 s on CI), `end_to_end` of `vkrgss`
+(36.1 s), the unit tests of `xtask` (20.7 s) and `upstream` of `vkrgss-ruby192-sys`
+(13.4 s). CI is about four times slower than this machine for the tests.
+
+`VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate --job <name>`, each part after the other:
+
+| Part | Local, warm | Expected on CI |
+|---|---|---|
+| `lint` | 36 s (`clippy` 32.1 s) | about 3 min with the build |
+| `ruby` | 46 s | about 3 min of tests and the two interpreters |
+| `ruby-stress` | 91 s | about 7 min of tests (412 s) and Ruby 1.9.2 |
+| `vulkan` | 151 s | about 6 min of tests (336 s) |
+| `vulkan-unvalidated` | 133 s | about 6 min of tests (355 s) |
+| `rest` | 73 s | about 5 min of tests and the build of the workspace |
+
+A cold build of `rest` with 4 jobs (`CARGO_BUILD_JOBS=4`, empty target directory, the
+registry crates included, which `Swatinem/rust-cache` keeps on CI) took 284 s, so the
+longest part stays near ten minutes even when sccache misses.
+
+The starting point was changed in one place: the validated Vulkan tests and
+`test-unvalidated` took 336 s and 355 s on CI, together over eleven minutes before the
+build, so `test-unvalidated` is the part `vulkan-unvalidated` of its own. The validated
+tests of `vkrgss-host` are in `rest`, as the starting point has them.
+
+Cargo cannot leave one test target out of a package, so the part `ruby` names the library,
+the documentation tests and every other test target of `vkrgss-ruby192-sys` (three cargo
+commands). A test target added to that package fails the test of the union until it is
+named there; `docs/development.md` says so.
+
+The scenario "Job is present and may fail" of the requirement "aarch64 job" speaks of "the
+steps of the gate job"; with the gate in parts, `gate-aarch64` has the steps of the part
+jobs, which differ only in the part, and runs the whole gate as its last step, which the
+test of the workflows checks. It got sccache like the parts, which needed no other change.
+The test that every job sets `CC` now asks it of the jobs that build (run cargo or install
+packages), as the requirement "Pinned inputs of the workflows" says: the issue job of the
+nightly workflow builds nothing.
+
 ## Out of scope
 
 cargo-nextest, required status checks in the repository's settings (the owner sets them),
@@ -53,4 +95,9 @@ making `gate-aarch64` required (P1).
 
 ## Follow-ups
 
-None yet.
+- The test targets of `vkrgss-ruby192-sys` but `upstream_stress` are listed by hand in
+  `xtask/src/gate.rs`. Reading them from `cargo metadata` when the part runs would take a
+  new one into `ruby` without a change, at the cost of a lookup the design does not name;
+  the owner may decide whether it is wanted.
+- The expected CI times above are estimates from local runs; the first runs of the new
+  workflow show the real ones.

@@ -2,7 +2,7 @@
 
 ## 1. Parts of the gate
 
-- [ ] 1.1 Measure the test binaries, define the parts, `--job`, and the test of the union. Verify: scenarios "Union of the parts" and "Unknown part"; each part runs and passes locally with `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate --job <name>`; record the measured times of each part in `design.md`.
+- [x] 1.1 Measure the test binaries, define the parts, `--job`, and the test of the union. Verify: scenarios "Union of the parts" and "Unknown part"; each part runs and passes locally with `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate --job <name>`; record the measured times of each part in `design.md`.
 
 ## 2. Workflows
 
