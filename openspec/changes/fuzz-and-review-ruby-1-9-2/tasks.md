@@ -10,7 +10,7 @@
 
 ## 3. First run
 
-- [ ] 3.1 Run each target for 20 minutes, fix or list what is found, add the inputs of fixed findings under `fuzz/fixed/` with a test that replays them, fill "Follow-ups". Verify: a second run of 5 minutes per target ends without a finding that is not listed; `cargo test -p vkrgss-ruby192-sys -p vkrgss-binding-rgss3 --locked` passes.
+- [x] 3.1 Run each target for 20 minutes, fix or list what is found, add the inputs of fixed findings under `fuzz/fixed/` with a test that replays them, fill "Follow-ups". Verify: a second run of 5 minutes per target ends without a finding that is not listed; `cargo test -p vkrgss-ruby192-sys -p vkrgss-binding-rgss3 --locked` passes.
 
 ## 4. Review
 

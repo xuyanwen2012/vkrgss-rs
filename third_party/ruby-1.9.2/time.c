@@ -4591,6 +4591,10 @@ time_mload(VALUE time, VALUE str)
 
 	vtm.year = INT2FIX(((int)(p >> 14) & 0xffff) + 1900);
 	vtm.mon  = ((int)(p >> 10) & 0xf) + 1;
+	/* vkrgss: four bits hold months up to 16; the tables of the months have 12 */
+	if (vtm.mon > 12) {
+	    rb_raise(rb_eTypeError, "marshaled time format differ");
+	}
 	vtm.mday = (int)(p >>  5) & 0x1f;
 	vtm.hour = (int) p        & 0x1f;
 	vtm.min  = (int)(s >> 26) & 0x3f;

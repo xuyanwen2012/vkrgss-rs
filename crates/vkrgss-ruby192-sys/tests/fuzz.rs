@@ -311,6 +311,66 @@ fn every_target_has_its_file_and_well_formed_seeds() {
     }
 }
 
+/// The inputs with which a target failed before the defect was fixed, reduced, under
+/// `fuzz/fixed/<file>/`; `PATCHES.md` of the vendored tree names the patch of each. Here
+/// they run without the sanitizers, so the test shows that the interpreter survives them
+/// and still computes: two of the defects read through a null pointer and one recursed
+/// without end, which end the process in any build, and the others are reported by
+/// `cargo xtask fuzz` again if one comes back. One input needs the collector to run while
+/// it is compiled, which the test below makes sure of.
+#[test]
+fn the_inputs_of_fixed_findings_no_longer_fail() {
+    let mut ran = 0;
+    for target in &TARGETS {
+        for (input, result) in run_inputs(target.file, &fuzz_dir().join("fixed").join(target.file))
+        {
+            assert!(
+                result.as_deref() == Ok(":done") || result.is_err(),
+                "{input}: {result:?}"
+            );
+            assert_eq!(
+                eval("1 + 1".to_owned()),
+                Ok("2".to_owned()),
+                "after {input}"
+            );
+            ran += 1;
+        }
+    }
+    assert!(ran >= 5, "only {ran} inputs of fixed findings were found");
+
+    // What three of the inputs are now.
+    let result = |file: &str, name: &str| -> Result<String, String> {
+        let path = fuzz_dir().join("fixed").join(file).join(name);
+        let path = path.to_str().expect("UTF-8 path");
+        eval(format!("$vkrgss_input = {path:?}; {}", ruby_of(file)))
+    };
+    let time = result("marshal", "time-month-above-12.bin").expect_err("an error");
+    assert!(time.contains("marshaled time format differ"), "{time}");
+    let condition = result("parse", "condition-null-value.rb").expect_err("a syntax error");
+    assert!(condition.starts_with("SyntaxError: "), "{condition}");
+    // The node of `::c` after its syntax error is marked without its name, which the
+    // collector followed as a pointer; under stress it collects while the node is alive.
+    assert_eq!(
+        eval(
+            "GC.stress = true
+             begin
+               eval('class ::c; end')
+             rescue SyntaxError => error
+               error.class
+             ensure
+               GC.stress = false
+             end"
+            .to_owned()
+        ),
+        Ok("SyntaxError".to_owned())
+    );
+    // The pieces after an interpolation are joined into the source of the pattern.
+    assert_eq!(
+        eval("$y = 'a'; /#$y #{'s'}#{'t'}/.source".to_owned()),
+        Ok("\"a st\"".to_owned())
+    );
+}
+
 #[test]
 fn the_fuzzer_reads_the_seeds_and_writes_only_below_the_target_directory() {
     let target = &TARGETS[0];

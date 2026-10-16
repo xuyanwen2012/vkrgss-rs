@@ -1,0 +1,56 @@
+--- a/regcomp.c
++++ b/regcomp.c
+@@ -2063,17 +2063,24 @@
+       Node** nodes = SCANENV_MEM_NODES(env);
+       BRefNode* br = NBREF(node);
+       if (br->state & NST_RECURSION) break;
++      /* vkrgss: groups that refer to each other, as in ()(\4)()(\2), led back here
++	 without end (upstream 7fe8c3f rewrote this); 0 is a lower bound of any length */
++      if (br->state & NST_MARK1) break;
+ 
+       backs = BACKREFS_P(br);
+       if (backs[0] > env->num_mem)  return ONIGERR_INVALID_BACKREF;
++      br->state |= NST_MARK1;
+       r = get_min_match_length(nodes[backs[0]], min, env);
+-      if (r != 0) break;
+-      for (i = 1; i < br->back_num; i++) {
+-	if (backs[i] > env->num_mem)  return ONIGERR_INVALID_BACKREF;
++      for (i = 1; r == 0 && i < br->back_num; i++) {
++	if (backs[i] > env->num_mem) {
++	  r = ONIGERR_INVALID_BACKREF;
++	  break;
++	}
+ 	r = get_min_match_length(nodes[backs[i]], &tmin, env);
+ 	if (r != 0) break;
+ 	if (*min > tmin) *min = tmin;
+       }
++      br->state &= ~NST_MARK1;
+     }
+     break;
+ 
+@@ -2216,17 +2223,23 @@
+       int* backs;
+       Node** nodes = SCANENV_MEM_NODES(env);
+       BRefNode* br = NBREF(node);
+-      if (br->state & NST_RECURSION) {
++      /* vkrgss: as in get_min_match_length; no length is above the infinite one */
++      if (br->state & (NST_RECURSION | NST_MARK1)) {
+ 	*max = ONIG_INFINITE_DISTANCE;
+ 	break;
+       }
+       backs = BACKREFS_P(br);
++      br->state |= NST_MARK1;
+       for (i = 0; i < br->back_num; i++) {
+-	if (backs[i] > env->num_mem)  return ONIGERR_INVALID_BACKREF;
++	if (backs[i] > env->num_mem) {
++	  r = ONIGERR_INVALID_BACKREF;
++	  break;
++	}
+ 	r = get_max_match_length(nodes[backs[i]], &tmax, env);
+ 	if (r != 0) break;
+ 	if (*max < tmax) *max = tmax;
+       }
++      br->state &= ~NST_MARK1;
+     }
+     break;
+ 

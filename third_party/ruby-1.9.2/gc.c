@@ -1619,7 +1619,6 @@ gc_mark_children(rb_objspace_t *objspace, VALUE ptr, int lev)
 	  case NODE_IASGN:
 	  case NODE_IASGN2:
 	  case NODE_CVASGN:
-	  case NODE_COLON3:
 	  case NODE_OPT_N:
 	  case NODE_EVSTR:
 	  case NODE_UNDEF:
@@ -1668,6 +1667,11 @@ gc_mark_children(rb_objspace_t *objspace, VALUE ptr, int lev)
 	  case NODE_FALSE:
 	  case NODE_ERRINFO:
 	  case NODE_BLOCK_ARG:
+	    break;
+	  /* vkrgss: the second field is the name, which was followed as a node. The name of
+	     a constant looks like a Fixnum and was skipped; the name of a local variable,
+	     which `class ::c` leaves there after its syntax error, does not. */
+	  case NODE_COLON3:
 	    break;
 	  case NODE_ALLOCA:
 	    mark_locations_array(objspace,

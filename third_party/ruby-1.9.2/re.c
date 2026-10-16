@@ -2183,6 +2183,16 @@ unescape_nonascii(const char *p, const char *end, rb_encoding *enc,
                 errcpy(err, "too short escape sequence");
                 return -1;
             }
+            /* vkrgss: a character of several bytes after the backslash, whole or cut
+               off, is the error that the next round gave for its second byte. When the
+               end cut it off after its first byte there was no next round, and the
+               engine read past the pattern. */
+            chlen = rb_enc_precise_mbclen(p, end, enc);
+            if (MBCLEN_NEEDMORE_P(chlen) ||
+                (MBCLEN_CHARFOUND_P(chlen) && MBCLEN_CHARFOUND_LEN(chlen) > 1)) {
+                errcpy(err, "invalid multibyte character");
+                return -1;
+            }
             switch (c = *p++) {
               case '1': case '2': case '3':
               case '4': case '5': case '6': case '7': /* \O, \OO, \OOO or backref */

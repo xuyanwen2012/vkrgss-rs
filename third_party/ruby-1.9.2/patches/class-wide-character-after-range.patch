@@ -1,0 +1,51 @@
+--- a/regparse.c
++++ b/regparse.c
+@@ -4183,8 +4183,13 @@
+ 
+   switch (*state) {
+   case CCS_VALUE:
+-    if (*type == CCV_SB)
++    if (*type == CCV_SB) {
++      /* vkrgss: as upstream b4bf968 (CVE-2017-9226): no bit beyond the bit set */
++      if (*vs > 0xff)
++	return ONIGERR_INVALID_CODE_POINT_VALUE;
++
+       BITSET_SET_BIT_CHKDUP(cc->bs, (int )(*vs));
++    }
+     else if (*type == CCV_CODE_POINT) {
+       r = add_code_range(&(cc->mbuf), env, *vs, *vs);
+       if (r < 0) return r;
+@@ -4319,6 +4324,7 @@
+     fetched = 0;
+     switch (r) {
+     case TK_CHAR:
++    any_char_in: /* vkrgss: as upstream 1ca27ef, for the two `goto`s below */
+       if ((tok->u.code >= SINGLE_BYTE_SIZE) ||
+ 	  (len = ONIGENC_CODE_TO_MBCLEN(env->enc, tok->u.c)) > 1) {
+ 	in_type = CCV_CODE_POINT;
+@@ -4328,7 +4334,6 @@
+ 	goto err;
+       }
+       else {
+-      sb_char:
+ 	in_type = CCV_SB;
+       }
+       v = (OnigCodePoint )tok->u.c;
+@@ -4474,7 +4479,7 @@
+       }
+       else if (state == CCS_RANGE) {
+ 	CC_ESC_WARN(env, (UChar* )"-");
+-	goto sb_char;  /* [!--x] is allowed */
++	goto any_char_in;  /* [!--x] is allowed */
+       }
+       else { /* CCS_COMPLETE */
+ 	r = fetch_token_in_cc(tok, &p, end, env);
+@@ -4488,7 +4493,7 @@
+ 
+ 	if (IS_SYNTAX_BV(env->syntax, ONIG_SYN_ALLOW_DOUBLE_RANGE_OP_IN_CC)) {
+ 	  CC_ESC_WARN(env, (UChar* )"-");
+-	  goto sb_char;   /* [0-9-a] is allowed as [0-9\-a] */
++	  goto any_char_in;   /* [0-9-a] is allowed as [0-9\-a] */
+ 	}
+ 	r = ONIGERR_UNMATCHED_RANGE_SPECIFIER_IN_CHAR_CLASS;
+ 	goto err;

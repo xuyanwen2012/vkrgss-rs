@@ -93,7 +93,7 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
 
 - File: `gc.c`
 - Patch: `patches/gc-mark-callee-saved-registers.patch`
-- Patched SHA-256: `54a8cfc474552a897af418375481191d8425ca13ba7497452f96d513cf07bef1`
+- Patched SHA-256: `8c2629cfc340733c01dc1cdda5e4f19e143f262a7fe28b057cfd21e94db24de7`
 - Reason: `mark_current_machine_context` relies on `setjmp` to put the registers where
   the stack scan finds them, and glibc scrambles `rbp` (and `rsp` and the program counter) in
   a jump buffer. A value held only in `rbp` was not marked. `__builtin_unwind_init()` puts
@@ -165,7 +165,7 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
 
 - File: `gc.c`
 - Patch: `patches/host-stack-limit-check.patch`
-- Patched SHA-256: `54a8cfc474552a897af418375481191d8425ca13ba7497452f96d513cf07bef1`
+- Patched SHA-256: `8c2629cfc340733c01dc1cdda5e4f19e143f262a7fe28b057cfd21e94db24de7`
 - Reason: applies after patch 7, and belongs to patch 12. Where the platform has an
   alternate signal stack, `ruby_stack_check` of the release returns 0 without looking: the
   release waits for the segmentation fault of a stack overflow and raises `SystemStackError`
@@ -261,7 +261,7 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
 
 - File: `gc.c`
 - Patch: `patches/asan-conservative-scan.patch`
-- Patched SHA-256: `54a8cfc474552a897af418375481191d8425ca13ba7497452f96d513cf07bef1`
+- Patched SHA-256: `8c2629cfc340733c01dc1cdda5e4f19e143f262a7fe28b057cfd21e94db24de7`
 - Reason: applies after patches 7 and 13. For the sanitized run of the release's suites
   (`tests/sanitized.rs` of `vkrgss-ruby192-sys`), as patch 18 of the tree of Ruby 1.8.7. The
   collector is conservative: `mark_locations_array` reads every word of the machine stack
@@ -298,3 +298,94 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
   Ruby 1.8.7 has; this is our own correction. `ruby_dtoa`, which the other conversions use,
   counts the terminator itself (`rv_strdup`) and gets one byte more than before. The text
   that is returned is unchanged.
+
+## 22. time-load-month-range
+
+- File: `time.c`
+- Patch: `patches/time-load-month-range.patch`
+- Patched SHA-256: `ec140cc52fd93263b8c48fbc9878efd90325cebbf3df5f90e5ec1fe1f160c61a`
+- Reason: found by the fuzz target `marshal192` (change `fuzz-and-review-ruby-1-9-2`).
+  `time_mload`, which `Marshal.load` calls for a dumped Time, takes the month from four bits,
+  1 to 16, and `calc_tm_yday` indexed the tables of the twelve months with it: a read past
+  their end. A month above 12 is now the error of a dump of another format, "marshaled time
+  format differ" (`TypeError`), which the function raises for a wrong length. `Time#_dump`
+  never writes such a month; what the original runtime makes of one (it reads past the same
+  tables) was not measured. Input: `crates/vkrgss-ruby192-sys/fuzz/fixed/marshal/time-month-above-12.bin`.
+
+## 23. parser-fuzz-findings
+
+- File: `parse.y`
+- Patch: `patches/parser-fuzz-findings.patch`
+- Patched SHA-256: `f98aabe446ec7d2ff7149917448b8180416d536a0b6e94b6433666480425a57f`
+- Reason: found by the fuzz target `parse192` (change `fuzz-and-review-ruby-1-9-2`). Two
+  defects of the parser. The rule of a regexp literal joins the pieces of text after an
+  interpolation; after the first piece the one it joins to is an element of the list, whose
+  string is that of its head, and the rule took the element itself for the string, so that
+  `/#$y #{"s"}#{"t"}/`, a valid script, read a null pointer. It takes the string of the
+  head, as later releases do. And `assign_in_cond` looked at the type of the value of an
+  assignment that is a null pointer after a syntax error in it (`!w=%w[`); it tests the
+  pointer first, as patch 30 of the tree of 1.8.7 does. Inputs:
+  `crates/vkrgss-ruby192-sys/fuzz/fixed/parse/{regexp-pieces-after-interpolation,condition-null-value}.rb`.
+
+## 24. parser-fuzz-findings-generated
+
+- File: `parse.c`
+- Patch: `patches/parser-fuzz-findings-generated.patch`
+- Patched SHA-256: `cc107ff47aa6257db062af7726c6391bea509f18d0926f2deabc4cf274735fa5`
+- Reason: follows patch 23. The same lines of the pre-generated parser, changed by hand.
+
+## 25. regexp-escape-incomplete-character
+
+- File: `re.c`
+- Patch: `patches/regexp-escape-incomplete-character.patch`
+- Patched SHA-256: `68c224b0ec35949008496b71a924380014a533ffced099707ef4ad2654a27d9e`
+- Reason: found by the fuzz target `regex192` (change `fuzz-and-review-ruby-1-9-2`).
+  `unescape_nonascii` checks that a pattern is valid text before the engine sees it, but
+  after a backslash it copied one byte without looking at the character: for a character
+  of several bytes the next round found the rest invalid and gave "invalid multibyte
+  character", unless the end cut the character off after its first byte, and then the
+  engine read past the pattern. A character of several bytes after a backslash, whole or
+  cut off by the end, now gives that error at once; a single byte that is no character
+  is copied as before. Input: `crates/vkrgss-ruby192-sys/fuzz/fixed/regex/escape-incomplete-character.txt`.
+
+## 26. class-wide-character-after-range
+
+- File: `regparse.c`
+- Patch: `patches/class-wide-character-after-range.patch`
+- Patched SHA-256: `3ea16c6e83423c6b51b563b40ad9b1d26d2ee4c2300ab9698ef0ee52d7f21d70`
+- Reason: found by the fuzz target `regex192` (change `fuzz-and-review-ruby-1-9-2`); the
+  engine's rows of `docs/vendored-security.md` name the upstream fixes. In a class, a
+  character after a range and a hyphen (`[0-9-ゟ]`) or after two hyphens was taken for one
+  byte whatever its code, and `next_state_val` set the bit of the code in the bit set of 256
+  bits: a write past it. The two places go to the code that tells a byte from a code point,
+  as upstream 1ca27ef (#21), and `next_state_val` refuses a byte value above 255 with
+  "invalid code point value", as upstream b4bf968 (CVE-2017-9226). Input:
+  `crates/vkrgss-ruby192-sys/fuzz/fixed/regex/class-wide-character-after-range.txt`.
+
+## 27. match-length-cycle
+
+- File: `regcomp.c`
+- Patch: `patches/match-length-cycle.patch`
+- Patched SHA-256: `0d8e293517495c1529af680e116b42431f0af342fe61199c3bd6765c66481b01`
+- Reason: found by the fuzz target `regex192` (change `fuzz-and-review-ruby-1-9-2`).
+  `get_min_match_length` and `get_max_match_length` follow a back-reference into its group,
+  and groups that refer to each other, as in `()(\4)()(\2)`, led back without end: the stack
+  was exhausted when the pattern was compiled. A back-reference that is being measured
+  already is now taken as 0 for the shortest and as no limit for the longest length, which
+  are bounds of any length, so the optimisation that uses them stays correct. This is our own
+  correction; upstream rewrote both functions (7fe8c3f). Input:
+  `crates/vkrgss-ruby192-sys/fuzz/fixed/regex/groups-referring-to-each-other.txt`.
+
+## 28. colon3-name-not-marked
+
+- File: `gc.c`
+- Patch: `patches/colon3-name-not-marked.patch`
+- Patched SHA-256: `8c2629cfc340733c01dc1cdda5e4f19e143f262a7fe28b057cfd21e94db24de7`
+- Reason: applies after patches 7, 13 and 19; found by the fuzz target `parse192` (change
+  `fuzz-and-review-ruby-1-9-2`). The collector marked the second field of a `NODE_COLON3`,
+  the node of `::Name`, as a node, but it holds the name. The name of a constant has its
+  lowest bit set and was skipped as a Fixnum; `class ::c`, a syntax error, leaves the name
+  of a local variable there, and a collection while the node was alive read through it and
+  ended the process. The node is marked without that field. Input:
+  `crates/vkrgss-ruby192-sys/fuzz/fixed/parse/class-name-not-constant.rb`, which needs a
+  collection at the right moment; `tests/fuzz.rs` compiles it under `GC.stress`.

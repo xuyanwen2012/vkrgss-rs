@@ -9452,7 +9452,10 @@ yyreduce:
 				if (nd_type(list->nd_head) == NODE_STR) {
 				    VALUE tail = list->nd_head->nd_lit;
 				    if (reg_fragment_check(tail, options) && prev && !NIL_P(prev->nd_lit)) {
-					if (!literal_concat0(parser, prev->nd_lit, tail)) {
+					/* vkrgss: after the first piece `prev` is an element of the list,
+					   whose string is that of its head, as in later releases */
+					VALUE lit = prev == node ? prev->nd_lit : prev->nd_head->nd_lit;
+					if (!literal_concat0(parser, lit, tail)) {
 					    node = 0;
 					    break;
 					}
@@ -14692,6 +14695,8 @@ assign_in_cond(struct parser_params *parser, NODE *node)
 	return 0;
     }
 
+    /* vkrgss: the value is null after a syntax error in it, as in the tree of 1.8.7 */
+    if (!node->nd_value) return 1;
     switch (nd_type(node->nd_value)) {
       case NODE_LIT:
       case NODE_STR:
