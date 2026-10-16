@@ -114,6 +114,12 @@ fn collect_files(root: &Path, dir: &Path, out: &mut Vec<String>) {
 
 /// Checks one tree below `third_party` against its records.
 fn check_tree(tree: &str) {
+    check_tree_with_own(tree, &[]);
+}
+
+/// As [`check_tree`], for a tree to which vkrgss adds more than [`OWN_FILES`]: `own` names
+/// further files, and directories with a trailing `/`, that the manifest does not list.
+fn check_tree_with_own(tree: &str, own: &[&str]) {
     let root = vendored_root(tree);
     let manifest = parse_manifest(
         &fs::read_to_string(root.join("MANIFEST.sha256")).expect("MANIFEST.sha256 is readable"),
@@ -173,7 +179,11 @@ fn check_tree(tree: &str) {
     collect_files(&root, &root, &mut files);
     files.sort();
     for file in &files {
-        if OWN_FILES.contains(&file.as_str()) {
+        if OWN_FILES.contains(&file.as_str())
+            || own
+                .iter()
+                .any(|path| file == path || (path.ends_with('/') && file.starts_with(path)))
+        {
             continue;
         }
         if file.starts_with(&format!("{PATCH_DIR}/")) {
@@ -234,4 +244,11 @@ fn manifest_describes_the_vendored_engine() {
 #[test]
 fn manifest_and_patch_log_describe_the_vendored_ruby_1_9_2() {
     check_tree("ruby-1.9.2");
+}
+
+/// CORE-MATH, which both interpreters build. vkrgss adds `FILES`, the list of what is
+/// compiled.
+#[test]
+fn manifest_describes_the_vendored_core_math() {
+    check_tree_with_own("core-math", &["FILES"]);
 }

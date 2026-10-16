@@ -1,0 +1,27 @@
+# The C files that the build scripts of vkrgss-ruby-sys and vkrgss-ruby192-sys compile into
+# the library of correctly rounded functions of their interpreter, one path per line,
+# relative to this directory. Lines that start with # and empty lines are ignored.
+src/binary64/acos/acos.c
+src/binary64/acosh/acosh.c
+src/binary64/asin/asin.c
+src/binary64/asinh/asinh.c
+src/binary64/atan/atan.c
+src/binary64/atan2/atan2.c
+src/binary64/atanh/atanh.c
+src/binary64/cbrt/cbrt.c
+src/binary64/cos/cos.c
+src/binary64/cosh/cosh.c
+src/binary64/erf/erf.c
+src/binary64/erfc/erfc.c
+src/binary64/exp/exp.c
+src/binary64/hypot/hypot.c
+src/binary64/lgamma/lgamma.c
+src/binary64/log/log.c
+src/binary64/log10/log10.c
+src/binary64/log2/log2.c
+src/binary64/pow/pow.c
+src/binary64/sin/sin.c
+src/binary64/sinh/sinh.c
+src/binary64/tan/tan.c
+src/binary64/tanh/tanh.c
+src/binary64/tgamma/tgamma.c

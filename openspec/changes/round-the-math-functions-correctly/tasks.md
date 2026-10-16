@@ -2,7 +2,7 @@
 
 ## 1. Vendored CORE-MATH
 
-- [ ] 1.1 `third_party/core-math/` with the selection of `design.md`, `LICENSE`, `README.vkrgss.md`, `FILES`, `MANIFEST.sha256` and its test. Verify: the scenarios of "Vendored source matches upstream" as the other trees have them pass for this tree.
+- [x] 1.1 `third_party/core-math/` with the selection of `design.md`, `LICENSE`, `README.vkrgss.md`, `FILES`, `MANIFEST.sha256` and its test. Verify: the scenarios of "Vendored source matches upstream" as the other trees have them pass for this tree.
 
 ## 2. Ruby 1.8.7
 
