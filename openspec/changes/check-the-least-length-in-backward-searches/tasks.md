@@ -2,7 +2,7 @@
 
 ## 1. Ruby 1.9.2
 
-- [ ] 1.1 The patch of `backward_search_range` in `third_party/ruby-1.9.2`, its entry in `PATCHES.md`, and the test. Verify: the scenarios of `specs/embedded-ruby-1-9-2/spec.md`; `cargo test -p vkrgss-ruby192-sys --locked` passes; the sanitized run of `vkrgss-ruby192-sys` passes if clang with its sanitizer runtimes is installed.
+- [x] 1.1 The patch of `backward_search_range` in `third_party/ruby-1.9.2`, its entry in `PATCHES.md`, and the test. Verify: the scenarios of `specs/embedded-ruby-1-9-2/spec.md`; `cargo test -p vkrgss-ruby192-sys --locked` passes; the sanitized run of `vkrgss-ruby192-sys` passes if clang with its sanitizer runtimes is installed.
 
 ## 2. Ruby 1.8.7 and Oniguruma 5.9.6
 

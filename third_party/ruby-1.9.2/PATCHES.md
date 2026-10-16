@@ -473,7 +473,7 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
 
 - File: `regexec.c`
 - Patch: `patches/engine-matcher-bounds.patch`
-- Patched SHA-256: `04cf4300576ff62976cc47609550ebba59de666eebd0300da3045611419661b6`
+- Patched SHA-256: `037f751d2a10a3eb50e5a72654957517911ba59e375a3e50766087f2c8c05822`
 - Reason: backport for the review of later security fixes (change
   `fuzz-and-review-ruby-1-9-2`, `docs/vendored-security.md`). Backports of upstream
   Oniguruma to the matcher, as patch 7 of the tree of Oniguruma 5.9.6 has them: `OP_EXACT1`
@@ -499,3 +499,19 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
   table far before the start, and nested repeats such as
   `(?:(?:(?:a{0,100000}){0,100000}){0,100000})bc` ended the process when they were compiled,
   which `tests/backports.rs` shows.
+
+## 37. engine-backward-search-dmin
+
+- File: `regexec.c`
+- Patch: `patches/engine-backward-search-dmin.patch`
+- Patched SHA-256: `037f751d2a10a3eb50e5a72654957517911ba59e375a3e50766087f2c8c05822`
+- Reason: applies after patch 35; backport of the backward half of upstream 33e5b47c ("Fix
+  handling of reg->dmin in Regex matching", which distributions name for CVE-2024-27282;
+  change `check-the-least-length-in-backward-searches`, the row of CVE-2024-27282 in
+  `docs/vendored-security.md`). `backward_search_range` returns "not found" when
+  `reg->dmin` exceeds the length of the subject, before it adds `reg->dmin` to the start of
+  the range. The forward half is the check of CVE-2017-9227 in patch 35. A plain pattern
+  longer than the subject never got there, because the threshold length turns it away
+  first; a least distance that does not fit `OnigDistance` is the infinite one, for which
+  no threshold is set, and the addition then wrapped around the address space, which the
+  sanitized build reported. No result changes; `tests/backports.rs` shows it.
