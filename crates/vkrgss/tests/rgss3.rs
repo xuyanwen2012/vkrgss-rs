@@ -8,8 +8,12 @@
 //! `vkrgss-guest-rgss3` before any test runs when that package is selected too. Each test
 //! checks first that the file is there.
 //!
-//! The file is empty on every target but the one Ruby 1.9.2 is built for.
-#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+//! The file is empty on every target but those Ruby 1.9.2 is built for.
+#![cfg(all(
+    any(target_arch = "x86_64", target_arch = "aarch64"),
+    target_os = "linux",
+    target_env = "gnu"
+))]
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
