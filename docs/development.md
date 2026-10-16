@@ -85,8 +85,8 @@ cargo test -p vkrgss-ruby192-sys --test sanitized -- --ignored
 ```
 
 It takes about two minutes and fails on a suite that does not pass and on every report that
-`crates/vkrgss-ruby192-sys/tests/sanitized.allow` does not list. Its reports are left in the
-same directory, which each of the two runs empties first. The options of the sanitizers are
+`crates/vkrgss-ruby192-sys/tests/sanitized.allow` does not list. Its reports are left in
+`target/tmp/sanitized192/reports/`. The options of the sanitizers are
 compiled into the test executable too, because the suites start interpreters with an emptied
 environment; `tests/sanitized.rs` says why each is set.
 

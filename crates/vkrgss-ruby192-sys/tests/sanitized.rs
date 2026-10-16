@@ -220,7 +220,7 @@ SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior /home/x/third_party/ruby
 fn built() -> &'static (PathBuf, PathBuf) {
     static BUILT: OnceLock<(PathBuf, PathBuf)> = OnceLock::new();
     BUILT.get_or_init(|| {
-        let scratch = common::scratch_dir("sanitized");
+        let scratch = common::scratch_dir("sanitized192");
         let ruby = instrumented::build_instrumented_executable(
             &scratch,
             SANITIZER_FLAGS,
