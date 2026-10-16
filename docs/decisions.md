@@ -45,6 +45,12 @@ the guest executable, the crates and the environment variables are named `vkrgss
 The change rewrote the former name in this document and added the item on the name under
 "Goal and scope".
 
+The change `start-xp-and-vx-guests-from-their-own-executable` did item 4 of "Order of work"
+on 2026-10-16 and added the crate `vkrgss-guest-rgss12` to the table of crates: the guest
+process of a game of RGSS1 or RGSS2 is that executable, which `vkrgss` starts from beside
+itself as it starts `vkrgss-guest-rgss3`, and the program no longer starts itself as a
+guest. The release archive holds the three executables.
+
 ## Goal and scope
 
 - vkrgss is a from-scratch runtime for the games of RPG Maker XP, VX and VX Ace, built to a
@@ -153,6 +159,7 @@ The change rewrote the former name in this document and added the item on the na
 | `vkrgss-guest` | The guest role: the hidden option, the guest record and the settings in it, the subscriber of the diagnostics, the attachment, the copies that are states, the sandbox and the signal settings of a guest process; links no interpreter | guest |
 | `vkrgss-guest-main` | The main of a guest: what a guest is set up with, the text backend over the font engine, the guest on a thread, and the function that makes an executable a guest process | guest |
 | `vkrgss-guest-main-rgss3` | The source of `vkrgss-guest-main` compiled over `vkrgss-binding-rgss3` and Ruby 1.9.2 | guest |
+| `vkrgss-guest-rgss12` | The guest executable of games of RGSS1 and RGSS2: the guest role and `vkrgss-guest-main`, nothing of the host | guest |
 | `vkrgss-guest-rgss3` | The guest executable of games of RGSS3: the guest role and `vkrgss-guest-main-rgss3`, nothing of the host | guest |
 | `vkrgss-compose-ref` | CPU reference compositor | host and tests |
 | `vkrgss-vk` | Vulkan backend: binning, compositing, presentation, pacing | host |

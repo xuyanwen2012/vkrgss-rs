@@ -147,7 +147,7 @@ names all that failed:
 |---|---|---|
 | `suites` | the upstream Ruby suites in the sanitized build, where the use of the buffer of a collected string is a report of AddressSanitizer, and a test that such a report appears for code that keeps only the buffer pointer of a fresh string (`cargo test -p vkrgss-ruby-sys --locked --test sanitized -- --ignored under_collector_stress`) | 32 |
 | `binding` | `cargo test -p vkrgss-binding --locked --no-fail-fast` | 1 |
-| `guest` | the tests of the executable that start a guest, `cargo test -p vkrgss --locked --test end_to_end` | 1 |
+| `guest` | the tests of the executable that start a guest, and the tests of the guest records of the program and of the guest executable of RGSS1 and RGSS2, which make cargo build that executable first, `cargo test -p vkrgss -p vkrgss-guest-rgss12 --locked --test end_to_end --test guest_record`; the guest processes inherit the variable | 1 |
 | `suites-1.9.2` | the files of `test/ruby` of Ruby 1.9.2 that are slow under `GC.stress = true` (`cargo test -p vkrgss-ruby192-sys --locked --test upstream_stress -- --ignored`) | every allocation |
 | `binding-1.9.2` | the tests of the binding over Ruby 1.9.2, `cargo test -p vkrgss-binding-rgss3 --locked --no-fail-fast` | every allocation |
 | `guest-1.9.2` | the tests of the executable that run a game of RGSS3 through the guest executable, and the tests of the guest records of both executables, `cargo test -p vkrgss -p vkrgss-guest-rgss3 --locked --test rgss3 --test guest_record`; the guest processes inherit the variable | every allocation |
@@ -308,27 +308,30 @@ The main of a guest has one source too, `crates/vkrgss-guest-main/src`, which
 the same rules: no source of its own in the second package, the unit tests in both, and a
 counterpart for every test file, should there be one.
 
-## The tests of the guest executable of RGSS3
+## The tests of the guest executables
 
-A game of RGSS3 runs in the guest executable `vkrgss-guest-rgss3`, which the program finds in
-the directory of its own file. The tests of `crates/vkrgss` that run such a game are the file
-`tests/rgss3.rs`, and they find it as a player's program does: cargo puts every binary of
-the workspace into one directory, and builds the binary of each selected package that has
-an integration test before any test runs. Two commands are always right:
+A guest process is a guest executable that the program finds in the directory of its own
+file: `vkrgss-guest-rgss12` for a game of RGSS1 or RGSS2, `vkrgss-guest-rgss3` for a game of
+RGSS3. The tests of `crates/vkrgss` find them as a player's program does: cargo puts every
+binary of the workspace into one directory, and builds the binary of each selected package
+that has an integration test before any test runs. Two commands are always right:
 
 ```sh
-VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss -p vkrgss-guest-rgss3 --locked
+VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss -p vkrgss-guest-rgss12 -p vkrgss-guest-rgss3 --locked
 VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test --workspace --locked
 ```
 
-`cargo test -p vkrgss` alone builds the program and uses whatever guest executable an
-earlier build left beside it; without one, every test of `tests/rgss3.rs` fails before it
-starts a child and names the first command. `tests/end_to_end.rs` runs no game of RGSS3 and
-needs no guest executable. The games of RGSS3 are written by test code without an
-interpreter (`tests/support/ace.rs`), with the stand-in of the built-in scripts of the
-binding's test support, which was written for the tests. In the same way
-`cargo run -p vkrgss` builds the program alone; `cargo build -p vkrgss-guest-rgss3` builds the
-guest executable beside it.
+The tests that run a game of RGSS3 are the file `tests/rgss3.rs`. `cargo test -p vkrgss`
+alone builds the program and uses whatever guest executables an earlier build left beside
+it; without the one of RGSS3, every test of `tests/rgss3.rs` fails before it starts a child
+and names `cargo test -p vkrgss -p vkrgss-guest-rgss3`, and without the one of RGSS1 and
+RGSS2 a test of `tests/end_to_end.rs` with the guest in a process fails with the program's
+message, which names `vkrgss-guest-rgss12` and the command that builds it.
+`tests/end_to_end.rs` runs no game of RGSS3. The games of RGSS3 are written by test code
+without an interpreter (`tests/support/ace.rs`), with the stand-in of the built-in scripts
+of the binding's test support, which was written for the tests. In the same way `cargo run
+-p vkrgss` builds the program alone; `cargo build -p vkrgss-guest-rgss12 -p
+vkrgss-guest-rgss3` builds the guest executables beside it.
 
 ## Testing with another compiler
 

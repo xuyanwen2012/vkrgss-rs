@@ -46,7 +46,7 @@ licence; the text is [`COPYING`](third_party/oniguruma-5.9.6/COPYING). Its
 
 ## libxcrypt
 
-The two executables of the release package, which `cargo xtask dist` builds, link libcrypt
+The three executables of the release package, which `cargo xtask dist` builds, link libcrypt
 statically: the libxcrypt of the distribution the package is built on, Ubuntu 24.04. No
 other build does, and its source is not in this repository. libxcrypt is under the GNU
 Lesser General Public License version 2.1 or later, whose text the package carries as

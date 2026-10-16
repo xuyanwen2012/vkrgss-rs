@@ -1,7 +1,10 @@
 # Building
 
 vkrgss builds with Cargo; the toolchain is pinned in `rust-toolchain.toml`.
-`cargo build --release -p vkrgss` produces the optimised executable, `target/release/vkrgss`.
+`cargo build --release -p vkrgss -p vkrgss-guest-rgss12 -p vkrgss-guest-rgss3` produces the
+optimised executables: the program, `target/release/vkrgss`, and beside it the guest
+executables it starts, `vkrgss-guest-rgss12` for games of XP and VX and `vkrgss-guest-rgss3`
+for games of VX Ace ([running.md](running.md#guest-process)).
 
 ## Prerequisites
 
@@ -44,8 +47,8 @@ executable too and run the release's `bootstraptest` and a selection of its `tes
 once plainly and once with `GC.stress = true`; `crates/vkrgss-ruby192-sys/tests/upstream.allow`
 names what is left out, with the reasons. `vkrgss-binding-rgss3` compiles the source of
 `vkrgss-binding` over it and runs the tests of the binding a second time
-([development.md](development.md)). No executable links this interpreter yet, and no
-package may link both: they define the same symbols, which a dependency rule checks.
+([development.md](development.md)). Of the executables only `vkrgss-guest-rgss3` links this
+interpreter, and no package may link both: they define the same symbols, which a dependency rule checks.
 
 Both build scripts give the compiler the hardening flags themselves, whatever it turns on
 by default, for gcc and clang alike: `-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3`,

@@ -6,10 +6,12 @@ Building is described in [building.md](building.md).
 ## Running a game
 
 The commands below use `cargo run`, which builds the development profile.
-`cargo build --release -p vkrgss -p vkrgss-guest-rgss3` produces the optimised executables,
-`target/release/vkrgss`, which takes the same arguments, and beside it the guest executable
-that runs a game of VX Ace. `cargo run -p vkrgss` builds the program alone; a game of VX Ace
-then needs `cargo build -p vkrgss-guest-rgss3` once (see *Guest process*).
+`cargo build --release -p vkrgss -p vkrgss-guest-rgss12 -p vkrgss-guest-rgss3` produces the
+optimised executables, `target/release/vkrgss`, which takes the same arguments, and beside it
+the guest executables, which run the scripts of a game of XP or VX and of a game of VX Ace in
+a process. `cargo run -p vkrgss` builds the program alone; a game whose guest is a process,
+every game in a window and every game of VX Ace, then needs `cargo build -p
+vkrgss-guest-rgss12 -p vkrgss-guest-rgss3` once (see *Guest process*).
 
 ### The runtime of a game
 
@@ -39,6 +41,7 @@ What follows the runtime:
 | Frame and starting window size | 640 by 480 | 544 by 416 | 544 by 416 |
 | Starting frame rate | 40 | 60 | 60 |
 | Interpreter | Ruby 1.8.7 | Ruby 1.8.7 | Ruby 1.9.2, in the guest executable `vkrgss-guest-rgss3` |
+| Guest executable of a guest process | `vkrgss-guest-rgss12` | `vkrgss-guest-rgss12` | `vkrgss-guest-rgss3` |
 | Symbol numbers (`Symbol#to_i`) | those of RGSS1 | those of RGSS2 | those of Ruby 1.9.2 |
 | Default keys and repeat of `Input` | those of XP | those of VX (see *The keys of a game of VX*) | those of VX, for now |
 
@@ -559,14 +562,18 @@ The environment variable `VKRGSS_GUEST` and the key `guest` of a configuration f
 form too; the command line comes before the environment and the environment before the
 files. Any value but `thread` and `process` is an error.
 
-The program starts itself again for the guest of a game of XP or VX, and for a game of VX
-Ace the guest executable `vkrgss-guest-rgss3`, which links Ruby 1.9.2 and nothing of the
-host. That file is looked for in the directory of the program's own file, links resolved,
-and nowhere else: the release archive has both side by side, and in the directory of a
-build both are there once both are built, which `cargo build -p vkrgss-guest-rgss3` does for
-the second. Without it a run of VX Ace ends before anything starts with a message that names
-the file and the directory. Each executable refuses a game of a runtime its interpreter
-does not run. The program hands the guest a guest record: a file,
+The guest process is a guest executable that lies beside the program:
+`vkrgss-guest-rgss12` for a game of XP or VX, which links Ruby 1.8.7, and
+`vkrgss-guest-rgss3` for a game of VX Ace, which links Ruby 1.9.2. Neither links anything of
+the host, no window framework, no Vulkan and no audio; the program never starts itself as a
+guest. The file is looked for in the directory of the program's own file, links resolved,
+and nowhere else: the release archive has the three executables side by side, and in the
+directory of a build they are there once they are built, which `cargo build -p
+vkrgss-guest-rgss12 -p vkrgss-guest-rgss3` does for the guest executables. Without the one
+the game needs, a run with the guest in a process ends before anything starts with a
+message that names the file and the directory; a game of XP or VX with `--guest thread`
+needs neither. Each executable refuses a game of a runtime its interpreter does not run.
+The program hands the guest a guest record: a file,
 `guest.record`, that holds what the guest needs of the run, which is the game directory, the
 settings a guest reads (the runtime, the run-time packages, the fonts, the preload scripts
 and the like), the seed, the socket and the level of the diagnostics. The guest process is

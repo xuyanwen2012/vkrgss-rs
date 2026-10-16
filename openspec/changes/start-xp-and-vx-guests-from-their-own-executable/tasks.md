@@ -10,7 +10,7 @@
 
 ## 3. Package and documents
 
-- [ ] 3.1 `cargo xtask dist` with three executables; `docs/` where they name the executables; `CHANGELOG.md`. Verify: the scenarios of "Release package holds the executables" (run `cargo xtask dist` once and the three-file check); the tests of `xtask` that check the documents and their links pass.
+- [x] 3.1 `cargo xtask dist` with three executables; `docs/` where they name the executables; `CHANGELOG.md`. Verify: the scenarios of "Release package holds the executables" (run `cargo xtask dist` once and the three-file check); the tests of `xtask` that check the documents and their links pass.
 
 ## 4. Integration check
 

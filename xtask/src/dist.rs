@@ -1,9 +1,10 @@
-//! The release package: the release executables, `vkrgss` and the guest executable of games
-//! of RGSS3 that it starts from beside itself, with the documents and licence texts that
-//! accompany them, in one archive under `target/dist/`, and the archive's SHA-256 checksum
-//! beside it. The archive is written by `tar` and the checksum by `sha256sum`.
+//! The release package: the release executables, `vkrgss` and the guest executables of games
+//! of RGSS1 and RGSS2 and of games of RGSS3 that it starts from beside itself, with the
+//! documents and licence texts that accompany them, in one archive under `target/dist/`, and
+//! the archive's SHA-256 checksum beside it. The archive is written by `tar` and the checksum
+//! by `sha256sum`.
 //!
-//! Both executables are built in one build with libcrypt linked statically
+//! The three executables are built in one build with libcrypt linked statically
 //! (`VKRGSS_STATIC_CRYPT=1`, read by the build scripts of `vkrgss-ruby-sys` and
 //! `vkrgss-ruby192-sys`), because the shared library has a different name on Ubuntu and on
 //! Fedora. The command looks for the static library before the build and reads the needed
@@ -20,12 +21,14 @@ use anyhow::{Context, Result, anyhow, bail};
 const TARGET: &str = "x86_64-unknown-linux-gnu";
 
 /// The arguments of the build, after the cargo executable.
-const BUILD: [&str; 7] = [
+const BUILD: [&str; 9] = [
     "build",
     "--release",
     "--locked",
     "-p",
     "vkrgss",
+    "-p",
+    "vkrgss-guest-rgss12",
     "-p",
     "vkrgss-guest-rgss3",
 ];
@@ -40,17 +43,22 @@ const CRYPT_ARCHIVE: &str = "libcrypt.a";
 /// Where the build leaves the executable, below the workspace root.
 const EXECUTABLE: &str = "target/release/vkrgss";
 
+/// Where the build leaves the guest executable of games of RGSS1 and RGSS2, below the
+/// workspace root.
+const RGSS12_GUEST_EXECUTABLE: &str = "target/release/vkrgss-guest-rgss12";
+
 /// Where the build leaves the guest executable of games of RGSS3, below the workspace root.
 const GUEST_EXECUTABLE: &str = "target/release/vkrgss-guest-rgss3";
 
 /// The executables of the package.
-const EXECUTABLES: [&str; 2] = [EXECUTABLE, GUEST_EXECUTABLE];
+const EXECUTABLES: [&str; 3] = [EXECUTABLE, RGSS12_GUEST_EXECUTABLE, GUEST_EXECUTABLE];
 
 /// The files of the package: where each is below the workspace root and where it goes below
 /// the directory of the archive. The licence texts are the ones the bundled sources ask to
 /// accompany a binary.
-const FILES: [(&str, &str); 14] = [
+const FILES: [(&str, &str); 15] = [
     (EXECUTABLE, "vkrgss"),
+    (RGSS12_GUEST_EXECUTABLE, "vkrgss-guest-rgss12"),
     (GUEST_EXECUTABLE, "vkrgss-guest-rgss3"),
     ("README.md", "README.md"),
     ("CHANGELOG.md", "CHANGELOG.md"),
@@ -241,6 +249,9 @@ fn tool(name: &str, command: &mut Command) -> Result<Vec<u8>> {
 mod tests {
     use super::*;
 
+    /// The guest executables of the package.
+    const GUEST_EXECUTABLES: [&str; 2] = [RGSS12_GUEST_EXECUTABLE, GUEST_EXECUTABLE];
+
     /// A directory with every file of the package, each holding its own path.
     fn source_tree() -> tempfile::TempDir {
         let root = tempfile::tempdir().unwrap();
@@ -297,6 +308,7 @@ mod tests {
             ("-rw-r--r--", "licenses/ruby-1.9.2/GPL"),
             ("-rw-r--r--", "licenses/ruby-1.9.2/LEGAL"),
             ("-rwxr-xr-x", "vkrgss"),
+            ("-rwxr-xr-x", "vkrgss-guest-rgss12"),
             ("-rwxr-xr-x", "vkrgss-guest-rgss3"),
         ]
         .map(|(mode, path)| (mode.to_owned(), format!("{name}/{path}")));
@@ -354,29 +366,33 @@ Dynamic section at offset 0x1f3a2d0 contains 33 entries:
         refuse_shared_crypt(&needed[1..]).unwrap();
     }
 
-    /// Scenario "Shared libcrypt in the guest executable".
+    /// Scenario "Shared libcrypt in the guest executable", for each guest executable.
     #[test]
-    fn a_needed_libcrypt_of_the_guest_executable_is_named_with_it() {
+    fn a_needed_libcrypt_of_a_guest_executable_is_named_with_it() {
         let needed = ["libcrypt.so.1".to_owned(), "libc.so.6".to_owned()];
-        let error = refuse_shared_crypt_in(GUEST_EXECUTABLE, &needed)
-            .unwrap_err()
-            .to_string();
-        assert!(error.contains("libcrypt.so.1"), "{error}");
-        assert!(error.contains("vkrgss-guest-rgss3"), "{error}");
-        refuse_shared_crypt_in(GUEST_EXECUTABLE, &needed[1..]).unwrap();
+        for (executable, name) in GUEST_EXECUTABLES.iter().zip(["rgss12", "rgss3"]) {
+            let error = refuse_shared_crypt_in(executable, &needed)
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("libcrypt.so.1"), "{error}");
+            assert!(error.contains(&format!("vkrgss-guest-{name}`")), "{error}");
+            refuse_shared_crypt_in(executable, &needed[1..]).unwrap();
+        }
     }
 
-    /// Scenario "Missing guest executable".
+    /// Scenario "Missing guest executable", for each guest executable.
     #[test]
-    fn a_tree_without_the_guest_executable_fails_naming_it() {
-        let root = source_tree();
-        fs::remove_file(root.path().join(GUEST_EXECUTABLE)).unwrap();
-        let dist = root.path().join("target/dist");
-        let error = package(root.path(), &dist).unwrap_err().to_string();
-        assert_eq!(
-            error,
-            "dist: `target/release/vkrgss-guest-rgss3` is missing"
-        );
+    fn a_tree_without_a_guest_executable_fails_naming_it() {
+        for (executable, name) in GUEST_EXECUTABLES.iter().zip(["rgss12", "rgss3"]) {
+            let root = source_tree();
+            fs::remove_file(root.path().join(executable)).unwrap();
+            let dist = root.path().join("target/dist");
+            let error = package(root.path(), &dist).unwrap_err().to_string();
+            assert_eq!(
+                error,
+                format!("dist: `target/release/vkrgss-guest-{name}` is missing")
+            );
+        }
     }
 
     #[test]

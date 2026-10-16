@@ -23,12 +23,13 @@ defined in `vkrgss-proto`.
 | `vkrgss-guest` | The guest role: the hidden option, the guest record and the settings in it, the subscriber of the diagnostics, the attachment, the copies that are states, the sandbox and the signal settings of a guest process | guest |
 | `vkrgss-guest-main` | The main of a guest: what a guest is set up with, the text backend over the font engine, the guest on a thread, and the function that makes an executable a guest process | guest |
 | `vkrgss-guest-main-rgss3` | The source of `vkrgss-guest-main` compiled over `vkrgss-binding-rgss3` and Ruby 1.9.2: no source of its own | guest |
+| `vkrgss-guest-rgss12` | The guest executable of games of RGSS1 and RGSS2: the guest role and `vkrgss-guest-main`, nothing of the host; `vkrgss` starts it from beside itself | guest |
 | `vkrgss-guest-rgss3` | The guest executable of games of RGSS3: the guest role and `vkrgss-guest-main-rgss3`, nothing of the host; `vkrgss` starts it from beside itself | guest |
 | `vkrgss-compose-ref` | CPU reference compositor | host and tests |
 | `vkrgss-vk` | Vulkan backend | host |
 | `vkrgss-audio` | Mixer, decoding, MIDI synthesis | host |
 | `vkrgss-host` | Event loop, input mapping, thread orchestration, configuration | host |
-| `vkrgss` | Executable: the program, and the guest of games of RGSS1 and RGSS2 | |
+| `vkrgss` | Executable: the program, and the guest of games of RGSS1 and RGSS2 on a thread | |
 
 `xtask` holds repository automation and the tool that extracts the built-in scripts; it is not
 part of the runtime.
@@ -43,8 +44,11 @@ the original runtime of RGSS3) unless it is script source or the path of the scr
 The main of a guest has one source as well, `crates/vkrgss-guest-main/src`, compiled a second
 time by `vkrgss-guest-main-rgss3` over `vkrgss-binding-rgss3`. The guest executable
 `vkrgss-guest-rgss3` links it, and nothing else of the workspace: the program starts it for a
-game of RGSS3, always as a guest process, and finds it in the directory of its own file.
-Each executable refuses a game of a runtime its interpreter does not run.
+game of RGSS3, always as a guest process, and finds it in the directory of its own file. The
+guest executable `vkrgss-guest-rgss12` links `vkrgss-guest-main` in the same way, and the
+program starts it for the guest process of a game of RGSS1 or RGSS2; the program never
+starts itself as a guest, so the process that a state copies with `fork` links nothing of
+the host. Each executable refuses a game of a runtime its interpreter does not run.
 
 The protocol is at version 15; an encoded stream of another version is rejected. A frame packet
 carries the changes to bitmaps and tables and an ordered list of ops of five kinds: `Clear`,
@@ -121,12 +125,13 @@ violation is reported with the full dependency path that causes it.
 
 1. **Guest crates do not reach host crates.** None of `vkrgss-core`, `vkrgss-image`, `vkrgss-text`,
    `vkrgss-vfs`, `vkrgss-ruby-sys`, `vkrgss-ruby192-sys`, `vkrgss-binding`, `vkrgss-binding-rgss3`,
-   `vkrgss-guest`, `vkrgss-guest-main`, `vkrgss-guest-main-rgss3`, `vkrgss-guest-rgss3` may depend,
+   `vkrgss-guest`, `vkrgss-guest-main`, `vkrgss-guest-main-rgss3`, `vkrgss-guest-rgss12`,
+   `vkrgss-guest-rgss3` may depend,
    directly or transitively, on `vkrgss-vk`, `vkrgss-audio` or `vkrgss-host`.
 2. **Host crates do not reach guest crates.** None of `vkrgss-vk`, `vkrgss-audio`, `vkrgss-host`, and
    not the reference compositor `vkrgss-compose-ref` either, may depend, directly or transitively,
    on a guest crate, `vkrgss-guest`, the two packages of the main of a guest and the guest
-   executable included. The `vkrgss` binary is exempt from both directions: it is the one crate that
+   executables included. The `vkrgss` binary is exempt from both directions: it is the one crate that
    depends on both sides and joins them.
 3. **`vkrgss-core` stays pure.** Everything `vkrgss-core` reaches, directly or transitively, must be
    on its allow-list: `vkrgss-proto`, `vkrgss-pixel` and the pure crates those need. The list is
@@ -147,11 +152,11 @@ into one program. Here development dependencies count too, because a test binary
 them. Tests of `xtask` also hold the twin packages together, those of the binding and those of
 the main of a guest: they declare the same dependencies apart from the interpreter crate and
 the binding package, and every test file of `vkrgss-binding` or `vkrgss-guest-main` has a file
-of the same name in the package over Ruby 1.9.2. The program and the guest executable have
+of the same name in the package over Ruby 1.9.2. The program and the guest executables have
 one version, which a test of `xtask` holds as well.
 
 In addition, `vkrgss-proto`, `vkrgss-pixel`, `vkrgss-core` and `vkrgss-compose-ref` carry
 `#![forbid(unsafe_code)]`, so `unsafe` in them does not compile, and so does `vkrgss-guest-main`;
-`vkrgss-guest-rgss3` has no `unsafe`.
+`vkrgss-guest-rgss12` and `vkrgss-guest-rgss3` have no `unsafe`.
 `vkrgss-guest` denies `unsafe`
 at its root and allows it in the modules of the copier and of the signals only.

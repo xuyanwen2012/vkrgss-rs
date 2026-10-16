@@ -32,7 +32,7 @@ runs `cargo xtask dist` on Ubuntu 24.04 and creates the GitHub release with two 
 
 | File | Contents |
 |---|---|
-| `vkrgss-<version>-x86_64-unknown-linux-gnu.tar.gz` | one directory of the same name with the executable `vkrgss` and beside it the guest executable `vkrgss-guest-rgss3`, which runs the games of RPG Maker VX Ace, `README.md`, `CHANGELOG.md`, `LICENSE`, `THIRD-PARTY.md` and, under `licenses/`, the licence texts of the bundled Ruby 1.8.7, Ruby 1.9.2 and Oniguruma |
+| `vkrgss-<version>-x86_64-unknown-linux-gnu.tar.gz` | one directory of the same name with the executable `vkrgss` and beside it the guest executables `vkrgss-guest-rgss12`, which runs the games of RPG Maker XP and VX in a guest process, and `vkrgss-guest-rgss3`, which runs the games of RPG Maker VX Ace, `README.md`, `CHANGELOG.md`, `LICENSE`, `THIRD-PARTY.md` and, under `licenses/`, the licence texts of the bundled Ruby 1.8.7, Ruby 1.9.2 and Oniguruma |
 | `vkrgss-<version>-x86_64-unknown-linux-gnu.tar.gz.sha256` | the SHA-256 checksum of the archive, in the format of `sha256sum` |
 
 Started by hand (`workflow_dispatch`), the workflow only builds the two files and keeps
@@ -41,9 +41,9 @@ before a tag.
 
 The executables are linked against the C library of Ubuntu 24.04, so they need glibc 2.39
 or newer. At run time `vkrgss` also needs the Vulkan loader with a Vulkan 1.3 driver, ALSA
-(`libasound.so.2`) and libudev (`libudev.so.1`); the guest executable needs none of them,
-and has to stay in the directory of `vkrgss`, where the program looks for it. The notes of the
-release say so. libcrypt is linked statically into both, because its shared library has a
+(`libasound.so.2`) and libudev (`libudev.so.1`); the guest executables need none of them,
+and have to stay in the directory of `vkrgss`, where the program looks for them. The notes of
+the release say so. libcrypt is linked statically into the three, because its shared library has a
 different name on Ubuntu (`libcrypt.so.1`) and on Fedora (`libcrypt.so.2`).
 
 ## Building the package locally
@@ -53,7 +53,8 @@ cargo xtask dist
 ```
 
 builds the release executables in one build with
-`cargo build --release --locked -p vkrgss -p vkrgss-guest-rgss3` and writes the same two files
+`cargo build --release --locked -p vkrgss -p vkrgss-guest-rgss12 -p vkrgss-guest-rgss3` and
+writes the same two files
 under `target/dist/`. It needs `tar`, `gzip`, `sha256sum` and `readelf`, and
 fails with the name of a file of the package that is missing. It sets `VKRGSS_STATIC_CRYPT=1`
 for the build, so it also needs the static library `libcrypt.a` (`libcrypt-dev` on Debian

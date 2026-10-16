@@ -122,7 +122,7 @@ and libudev, and a Vulkan 1.3 device; see [docs/building.md](docs/building.md). 
 toolchain is pinned in `rust-toolchain.toml`.
 
 ```sh
-cargo build --release -p vkrgss -p vkrgss-guest-rgss3
+cargo build --release -p vkrgss -p vkrgss-guest-rgss12 -p vkrgss-guest-rgss3
 ```
 
 A game expects the `RPG` module of the original runtime. That Ruby source is Enterbrain's
@@ -163,8 +163,9 @@ flowchart LR
 Each frame the guest sends an ordered list of ops of five kinds, and both compositors
 evaluate every kind per pixel. The protocol is at version 15, which added the start and the
 return time of the music to the play command, and the volume command. Ruby 1.8.7-p374 with
-Oniguruma 5.9.6 serves XP and VX; Ruby 1.9.2 is linked by `vkrgss-guest-rgss3` alone, the
-guest executable for VX Ace. A headless run of XP or VX may keep the guest on a thread.
+Oniguruma 5.9.6 serves XP and VX, in the guest executable `vkrgss-guest-rgss12`; Ruby 1.9.2
+is linked by `vkrgss-guest-rgss3` alone, the guest executable for VX Ace. A headless run of
+XP or VX may keep the guest on a thread of `vkrgss`.
 [docs/architecture.md](docs/architecture.md) has every crate and the dependency rules,
 which `cargo xtask deps` enforces.
 

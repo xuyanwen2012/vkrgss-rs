@@ -54,6 +54,15 @@ over Ruby 1.8.7.
   `--test guest_record`, as the step `guest-1.9.2` does: with `--test end_to_end` alone
   cargo does not build the binary of a package that has no such test target, and the
   tests with the guest in a process of that step need it.
+- **Documents outside `docs/`.** `README.md` (its build command and the paragraph on the
+  interpreters) and `THIRD-PARTY.md` (the number of executables that link libcrypt
+  statically) name the executables too; a player who built with the old command of the
+  README would have no guest for a game of XP or VX in a window. Both are edited, a few
+  lines each.
+- **The check of `cargo xtask dist`** ran on this machine with the static libcrypt of the
+  distribution's package `libxcrypt-static`, unpacked below `target/` and named to the
+  compiler with `LIBRARY_PATH`, because the package is not installed here; the command
+  itself is unchanged in that respect.
 
 ## Out of scope
 

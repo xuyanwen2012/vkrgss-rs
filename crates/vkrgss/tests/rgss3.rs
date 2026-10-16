@@ -183,13 +183,35 @@ fn a_copy_of_the_program_alone_runs_games_of_xp_and_vx_on_a_thread() {
     }
 }
 
-/// Requirement "Release package holds both executables", scenario "The two files are
+/// Requirement "Release package holds the executables", scenario "The two files are
 /// enough".
 #[test]
 fn the_program_and_the_guest_executable_alone_run_a_game_of_vx_ace() {
     let game = ran_game("ace-two-files");
     let (_dir, program) = copy_of_the_program(&[&guest_executable()]);
     copy_headless(&program, &game, &[]).assert_success();
+    assert!(script_ran(&game));
+}
+
+/// Requirement "Release package holds the executables", scenario "The three files are
+/// enough".
+#[test]
+fn the_program_and_the_two_guest_executables_alone_run_games_of_every_runtime() {
+    let rgss12 = Path::new(env!("CARGO_BIN_EXE_vkrgss")).with_file_name("vkrgss-guest-rgss12");
+    assert!(
+        rgss12.is_file(),
+        "there is no guest executable {} beside the program: build and test them with \
+         `cargo test -p vkrgss -p vkrgss-guest-rgss12 -p vkrgss-guest-rgss3`",
+        rgss12.display()
+    );
+    let (_dir, program) = copy_of_the_program(&[&rgss12, &guest_executable()]);
+    for runtime in [Runtime::Rgss1, Runtime::Rgss2] {
+        let game = ran_game_of(runtime, &format!("three-files-{}", runtime.name()));
+        copy_headless(&program, &game, &["--guest", "process"]).assert_success();
+        assert!(script_ran(&game), "{}", runtime.name());
+    }
+    let game = ran_game("ace-three-files");
+    copy_headless(&program, &game, &["--guest", "process"]).assert_success();
     assert!(script_ran(&game));
 }
 

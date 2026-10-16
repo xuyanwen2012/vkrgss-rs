@@ -45,6 +45,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- The guest process of a game of RPG Maker XP or VX is the new executable
+  `vkrgss-guest-rgss12`, which `vkrgss` starts from beside itself as it starts
+  `vkrgss-guest-rgss3` for VX Ace; `vkrgss` no longer starts itself as a guest. The new
+  executable links Ruby 1.8.7 and nothing of the host, so the process that a save state
+  copies holds no window framework. A run with the guest in a process, the default in a
+  window, ends with a message that names the file and the directory when it is missing;
+  `--guest thread` needs it not. The release archive holds the three executables, each with
+  libcrypt linked statically, and `cargo build --release -p vkrgss -p vkrgss-guest-rgss12 -p
+  vkrgss-guest-rgss3` builds them.
 - The workflow `ci.yml` runs each part of the gate as a job of its own, in parallel, and
   caches the objects of Rust and C with sccache, so that the interpreters are compiled
   again only when their sources change. The job `gate-aarch64` still runs the whole gate.
