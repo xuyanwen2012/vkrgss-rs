@@ -1,0 +1,22 @@
+--- a/bignum.c
++++ b/bignum.c
+@@ -1760,6 +1760,8 @@
+     if (num < 0) {
+ 	z = bigsub(x, rb_int2big(y0));
+     }
++    /* vkrgss: as in bigadd_int, x is otherwise held only through `xds`. */
++    RB_GC_GUARD(x);
+     return bignorm(z);
+ }
+ 
+@@ -1812,6 +1814,10 @@
+     while (i < zn) {
+ 	zds[i++] = 0;
+     }
++    /* vkrgss: only `xds`, a pointer into the digits of x, is read after bignew
++     * allocates; an embedded x was collected and z took its slot (found under
++     * GC.stress on aarch64, test_utime of test/ruby/test_file_exhaustive.rb). */
++    RB_GC_GUARD(x);
+     return bignorm(z);
+ }
+ 

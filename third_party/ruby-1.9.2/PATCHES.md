@@ -545,5 +545,36 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
 
 - File: `bignum.c`
 - Patch: `patches/correctly-rounded-pow-bignum.patch`
-- Patched SHA-256: `f4d67dddbbd7e82058322e271947e29903be353344302ab1e81c9c408c918efe`
+- Patched SHA-256: `d7425aecdb853557fd7078ea726ad2843ae4b837c645b4d63287da54906126a3`
 - Reason: as patch 38, for `pow` in `Bignum#**` where the result is a float.
+
+## 41. bignum-int-gc-guard
+
+- File: `bignum.c`
+- Patch: `patches/bignum-int-gc-guard.patch`
+- Patched SHA-256: `d7425aecdb853557fd7078ea726ad2843ae4b837c645b4d63287da54906126a3`
+- Reason: applies after patch 40; a wrong sum under `GC.stress` on aarch64 (change
+  `guard-values-held-by-inner-pointers`; `test_utime` of
+  `test/ruby/test_file_exhaustive.rb`, two tests of `test/ruby/test_time_tz.rb`, GCC 13 at
+  `-O2`). `bigadd_int` and `bigsub_int` take `xds = BDIGITS(x)`, call `bignew`, and read
+  `xds` afterwards. A Bignum of two digits keeps its digits in the object, so `xds` points
+  into `x`; the compiler kept only that pointer across the call, `x` was collected and the
+  new Bignum took its slot, and the sum read its zeros: `(2**63 - 1) + 1` gave 1, which made
+  every time after 1970 "out of system range". `RB_GC_GUARD(x)` keeps `x` to the end of
+  both functions. The study's guard in the branch for `SIZEOF_BDIGITS == SIZEOF_LONG` is
+  left out: that branch is not compiled where `BDIGIT` is `unsigned int`, as on every
+  target of vkrgss. Patch 42 is the other guard of the change.
+
+## 42. marshal-userdef-gc-guard
+
+- File: `marshal.c`
+- Patch: `patches/marshal-userdef-gc-guard.patch`
+- Patched SHA-256: `20c85c913e1f94be2ebad4b7616ebce9ccdc2ea3cd3ea7856efe1e188204dda6`
+- Reason: "can't dump anonymous ID 0" under `GC.stress` on aarch64 (change
+  `guard-values-held-by-inner-pointers`; `test_marshal_nsec` and `test_marshal_ivar` of
+  `test/ruby/test_time.rb`, two tests of `test/ruby/test_marshal.rb`, GCC 13 at `-O2`). In
+  the branch of `_dump` of `w_object`, after `has_ivars(v, ivtbl2)` the string `v` is used
+  only through `RSTRING_PTR(v)` and `ivtbl2`; `w_class` allocated, `v` was collected and its
+  generic instance variables freed, and `w_ivar` walked the freed table. `RB_GC_GUARD(v)`
+  keeps the string until `w_ivar` has returned, as patch 23 of the tree of Ruby 1.8.7 does.
+  Patch 41 is the other guard of the change.

@@ -675,6 +675,11 @@ w_object(VALUE obj, struct dump_arg *arg, int limit)
             else if (hasiv) {
 		w_ivar(obj, ivtbl, &c_arg);
 	    }
+	    /* vkrgss: after has_ivars only RSTRING_PTR(v) and ivtbl2 refer to the
+	     * result of _dump; w_class allocated, v was collected and with it its
+	     * generic instance variables (found under GC.stress on aarch64,
+	     * test_marshal_nsec of test/ruby/test_time.rb). */
+	    RB_GC_GUARD(v);
             st_add_direct(arg->data, obj, arg->data->num_entries);
 	    return;
 	}

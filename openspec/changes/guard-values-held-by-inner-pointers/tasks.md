@@ -2,7 +2,7 @@
 
 ## 1. The two patches
 
-- [ ] 1.1 Patches of `bignum.c` and `marshal.c` from the study, the manifest and `PATCHES.md`, and the tests of the scenarios. Verify: the scenarios of `specs/embedded-ruby-1-9-2/spec.md`; `cargo test -p vkrgss-ruby192-sys --locked` passes.
+- [x] 1.1 Patches of `bignum.c` and `marshal.c` from the study, the manifest and `PATCHES.md`, and the tests of the scenarios. Verify: the scenarios of `specs/embedded-ruby-1-9-2/spec.md`; `cargo test -p vkrgss-ruby192-sys --locked` passes.
 
 ## 2. Audit
 
