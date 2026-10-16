@@ -14,4 +14,4 @@
 
 ## 4. Integration check
 
-- [ ] 4.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate guard-values-held-by-inner-pointers --strict` passes; `design.md` says that aarch64 is verified after the merge.
+- [x] 4.1 Run the full gate. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate guard-values-held-by-inner-pointers --strict` passes; `design.md` says that aarch64 is verified after the merge.
