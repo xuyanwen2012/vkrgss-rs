@@ -9,12 +9,11 @@ leaves it.
 ## Requirements
 
 ### Requirement: Hermetic build
-On the targets `x86_64-unknown-linux-gnu` and `aarch64-unknown-linux-gnu`, building `vkrgss-ruby192-sys` SHALL compile the
-vendored Ruby 1.9.2, its linked encodings and its `Zlib` extension from a fixed list of
-files with `-std=gnu89`, `-fwrapv` and `-fno-strict-aliasing`, using only a C compiler and
-a checked-in configuration header: no `configure`, no `make`, no installed Ruby, no
-generated source, no zlib of the system. On any other target the crate SHALL build empty
-and its build script SHALL warn, naming the target.
+On `x86_64-unknown-linux-gnu` and `aarch64-unknown-linux-gnu`, building
+`vkrgss-ruby192-sys` SHALL compile the vendored Ruby 1.9.2, its encodings and `Zlib` from a
+fixed list of files with fixed flags and a checked-in configuration header, using only a C
+compiler: no `configure`, `make`, installed Ruby, generated source or system zlib. On any
+other target the crate SHALL build empty and its build script SHALL warn, naming the target.
 
 #### Scenario: No Ruby on the machine
 - **WHEN** the workspace is built on an x86_64 Linux machine with a C compiler and no Ruby installation
