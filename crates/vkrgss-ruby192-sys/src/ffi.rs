@@ -1,9 +1,10 @@
 //! Hand-written declarations of the Ruby 1.9.2 C API.
 //!
 //! Everything here mirrors `ruby/ruby.h`, `ruby/intern.h` and `ruby/encoding.h` of the
-//! vendored tree for the one supported target, x86_64 Linux, where `VALUE`, `ID`, `long` and
-//! pointers all have 64 bits. The layouts and the constants are checked against the C headers
-//! by `tests/layout.rs`, and so is the signature of every function declared here.
+//! vendored tree for the targets it is built for, x86_64 and aarch64 Linux, where `VALUE`,
+//! `ID`, `long` and pointers all have 64 bits. The layouts and the constants are checked
+//! against the C headers by `tests/layout.rs`, and so is the signature of every function
+//! declared here.
 //!
 //! The names are those `vkrgss-ruby-sys` declares for Ruby 1.8.7, so that code written against
 //! one compiles against the other; the crate documentation lists what differs.

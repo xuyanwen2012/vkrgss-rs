@@ -2,7 +2,7 @@
 //! thread; its timer thread starts with the first thread a script creates.
 //!
 //! One test per file: the threads of the whole process are counted.
-#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+#![cfg(not(vkrgss_interpreter_absent))]
 
 mod common;
 

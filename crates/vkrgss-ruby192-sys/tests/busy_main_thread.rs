@@ -6,7 +6,7 @@
 //! each run here while the main thread waits for them without blocking.
 //!
 //! One test per file: the timer thread of the interpreter belongs to the process.
-#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+#![cfg(not(vkrgss_interpreter_absent))]
 
 mod common;
 

@@ -28,6 +28,13 @@ fn inspect_eval(ruby: &Ruby, source: &str, file: &str, line: u32) -> Result<Stri
     Ok(text.expect("inspect of a test value does not raise"))
 }
 
+/// `RUBY_PLATFORM` of the build, which names the architecture of the target.
+const PLATFORM: &str = if cfg!(target_arch = "aarch64") {
+    "aarch64-linux"
+} else {
+    "x86_64-linux"
+};
+
 fn ok(text: &str) -> Result<String, RubyError> {
     Ok(text.to_owned())
 }
@@ -127,7 +134,7 @@ fn method_call_by_name_is_protected() {
 fn version_is_1_8_7_patch_level_374() {
     assert_eq!(
         eval("[RUBY_VERSION, RUBY_PATCHLEVEL, RUBY_PLATFORM, RUBY_RELEASE_DATE]"),
-        ok("[\"1.8.7\", 374, \"x86_64-linux\", \"2013-06-27\"]")
+        ok(&format!("[\"1.8.7\", 374, \"{PLATFORM}\", \"2013-06-27\"]"))
     );
 }
 

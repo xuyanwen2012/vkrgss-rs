@@ -3,7 +3,7 @@
 //! unbounded recursion still raises `SystemStackError` instead of overrunning the stack.
 //!
 //! One test per file: the test changes a resource limit of the whole process.
-#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+#![cfg(not(vkrgss_interpreter_absent))]
 
 mod common;
 

@@ -2,7 +2,7 @@
 //! flags and masks.
 //!
 //! One test per file: the comparison needs a process in which nothing else starts Ruby.
-#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+#![cfg(not(vkrgss_interpreter_absent))]
 
 mod common;
 

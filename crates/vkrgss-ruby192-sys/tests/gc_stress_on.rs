@@ -1,7 +1,7 @@
 //! With `VKRGSS_GC_STRESS=1` the collector runs at every allocation.
 //!
 //! One test per file: the variable is read when the one interpreter of the process starts.
-#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+#![cfg(not(vkrgss_interpreter_absent))]
 
 mod common;
 

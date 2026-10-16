@@ -1,6 +1,6 @@
 //! The encodings the original runtime was measured to have: four listed at start-up, three
 //! more usable by name, and every other name unknown, without a file ever being looked for.
-#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+#![cfg(not(vkrgss_interpreter_absent))]
 
 mod common;
 

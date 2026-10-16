@@ -4,7 +4,7 @@
 //! Every expected value here is the one the specification gives, measured on the original
 //! runtime of RPG Maker VX Ace (`RGSS301.dll`), except the platform, which is that of this
 //! build. No patch makes them so: the interpreter is the release the original embeds.
-#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+#![cfg(not(vkrgss_interpreter_absent))]
 
 mod common;
 
@@ -22,6 +22,13 @@ fn eval(source: &str) -> Result<String, String> {
     let source = source.to_owned();
     interpreter().run(move |ruby| eval_inspect(ruby, &source))
 }
+
+/// `RUBY_PLATFORM` of the build, which names the architecture of the target.
+const PLATFORM: &str = if cfg!(target_arch = "aarch64") {
+    "aarch64-linux"
+} else {
+    "x86_64-linux"
+};
 
 fn ok(text: &str) -> Result<String, String> {
     Ok(text.to_owned())
@@ -55,7 +62,9 @@ fn version_constants_are_those_of_the_original() {
 fn description_and_platform_name_this_build() {
     assert_eq!(
         eval("[RUBY_DESCRIPTION, RUBY_PLATFORM]"),
-        ok("[\"ruby 1.9.2p0 (2010-08-18 revision 29036) [x86_64-linux]\", \"x86_64-linux\"]")
+        ok(&format!(
+            "[\"ruby 1.9.2p0 (2010-08-18 revision 29036) [{PLATFORM}]\", \"{PLATFORM}\"]"
+        ))
     );
 }
 

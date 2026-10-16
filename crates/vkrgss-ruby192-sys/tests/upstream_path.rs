@@ -5,7 +5,7 @@
 //! text. The harness gives the suites a search path of its own.
 //!
 //! One test per file: the test changes the environment of the whole process.
-#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+#![cfg(not(vkrgss_interpreter_absent))]
 
 mod common;
 

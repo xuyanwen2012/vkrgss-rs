@@ -1,7 +1,7 @@
 //! Start-up state, the work queue, the single-interpreter guard and bounded recursion, on an
 //! interpreter with the default options. The start-up values are those measured on the
 //! original runtime.
-#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+#![cfg(not(vkrgss_interpreter_absent))]
 
 mod common;
 

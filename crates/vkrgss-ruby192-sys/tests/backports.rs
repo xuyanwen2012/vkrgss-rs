@@ -1,6 +1,6 @@
 //! The security fixes backported to the vendored tree (`docs/vendored-security.md`): what a
 //! few lines can show of each defect, and that the results beside it are unchanged.
-#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+#![cfg(not(vkrgss_interpreter_absent))]
 
 mod common;
 

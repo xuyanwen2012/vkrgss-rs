@@ -13,7 +13,7 @@
 //!
 //! What neither run includes is named in `xtask/src/stress.skip` under that step, with its
 //! reason, beside what `upstream.allow` leaves out of every run.
-#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+#![cfg(not(vkrgss_interpreter_absent))]
 
 mod common;
 

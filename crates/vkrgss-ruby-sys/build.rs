@@ -20,16 +20,17 @@ use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// The targets the build accepts, each with the target whose checked-in `config.h` it uses.
+/// The targets the build accepts, each with its checked-in `config.h` under `config/` in the
+/// directory of its name.
 ///
-/// Only x86_64 is supported. aarch64 is accepted so that the CI job `gate-aarch64` shows
-/// what works there: it has no header of its own and is built with that of x86_64, which
-/// describes the same C library and the same sizes but was not verified on aarch64, and
-/// which names the platform `x86_64-linux`.
-const TARGETS: &[(&str, &str)] = &[
-    ("x86_64-unknown-linux-gnu", "x86_64-unknown-linux-gnu"),
-    ("aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu"),
-];
+/// Only x86_64 is supported. The headers of aarch64 are those that the release's `configure`
+/// wrote on aarch64, which differ from those of x86_64 only in the platform strings; the
+/// target is built and tested by the CI job `gate-aarch64`, and supported once P1 of
+/// `docs/decisions.md` is accepted.
+const TARGETS: &[&str] = &["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"];
+
+/// The target of `TARGETS` that is supported.
+const SUPPORTED: &str = "x86_64-unknown-linux-gnu";
 
 /// The C files of `libruby-static.a` in the release's own build, without their extension and
 /// without `regex`, the interpreter's own regular expression engine: Oniguruma replaces it.
@@ -306,26 +307,23 @@ fn link_crypt(base: &cc::Build) {
 
 fn main() {
     let target = env::var("TARGET").expect("cargo sets TARGET");
-    let Some(&(_, config_target)) = TARGETS.iter().find(|(name, _)| *name == target) else {
-        let (supported, borrowing): (Vec<_>, Vec<_>) =
-            TARGETS.iter().partition(|(name, config)| name == config);
-        let names = |targets: Vec<&(&'static str, &str)>| -> String {
-            let names: Vec<&str> = targets.iter().map(|&&(name, _)| name).collect();
-            names.join(", ")
-        };
+    if !TARGETS.contains(&target.as_str()) {
+        let built: Vec<&str> = TARGETS
+            .iter()
+            .copied()
+            .filter(|&name| name != SUPPORTED)
+            .collect();
         panic!(
             "vkrgss-ruby-sys cannot be built for target `{target}`: it has no checked-in Ruby \
-             configuration header. Supported: {}. Built with the header of a supported \
-             target, unsupported: {}. A new target needs its own verified \
-             `config/<target>/config.h`.",
-            names(supported),
-            names(borrowing)
+             configuration header. Supported: {SUPPORTED}. Built, not yet supported: {}. A \
+             new target needs its own verified `config/<target>/config.h`.",
+            built.join(", ")
         );
-    };
+    }
 
     let manifest_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("cargo sets it"));
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("cargo sets OUT_DIR"));
-    let config_dir = manifest_dir.join("config").join(config_target);
+    let config_dir = manifest_dir.join("config").join(&target);
     let ruby_dir = manifest_dir
         .join("../../third_party/ruby-1.8.7")
         .canonicalize()

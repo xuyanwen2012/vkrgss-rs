@@ -3,7 +3,7 @@
 //! `ruby` (`ace-v1-api-REPORT.md` section 1.1 and `ace-v0-REPORT.md` section 8 of the
 //! measurements of the original runtime). The default options keep `vkrgss`, which
 //! `interpreter.rs` holds.
-#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+#![cfg(not(vkrgss_interpreter_absent))]
 
 mod common;
 

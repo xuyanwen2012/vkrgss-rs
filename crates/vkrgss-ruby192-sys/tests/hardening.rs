@@ -1,6 +1,6 @@
 //! The build script asks for the hardening flags itself, whatever the compiler's defaults
 //! are.
-#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+#![cfg(not(vkrgss_interpreter_absent))]
 
 #[test]
 fn the_build_has_the_hardening_flags_and_cet_only_on_x86_64() {

@@ -6,7 +6,7 @@
 
 ## 2. Targets
 
-- [ ] 2.1 aarch64 in the target lists of both interpreter crates and the three dependent build scripts. Verify: scenario "Another target" (a test of the list, or of the function that decides, with `riscv64gc-unknown-linux-gnu`); the gate passes on x86_64; `design.md` says that aarch64 itself is verified after the merge.
+- [x] 2.1 aarch64 in the target lists of both interpreter crates and the three dependent build scripts. Verify: scenario "Another target" (a test of the list, or of the function that decides, with `riscv64gc-unknown-linux-gnu`); the gate passes on x86_64; `design.md` says that aarch64 itself is verified after the merge.
 
 ## 3. Documents
 

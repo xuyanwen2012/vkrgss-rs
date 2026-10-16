@@ -2,7 +2,7 @@
 //! keys in insertion order.
 //!
 //! The test starts itself a second time as a child process and compares the values.
-#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+#![cfg(not(vkrgss_interpreter_absent))]
 
 mod common;
 

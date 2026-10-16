@@ -18,8 +18,9 @@ links = "vkrgss_ruby192"
 [lints]
 workspace = true
 
-# The crate is empty on every other target, and a build for one needs no C compiler for zlib.
-[target.'cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))'.dependencies]
+# The targets of `targets.rs`. The crate is empty on every other target, and a build for one
+# needs no C compiler for zlib.
+[target.'cfg(all(any(target_arch = "x86_64", target_arch = "aarch64"), target_os = "linux", target_env = "gnu"))'.dependencies]
 thiserror.workspace = true
 libc.workspace = true
 libz-sys.workspace = true
@@ -27,5 +28,5 @@ libz-sys.workspace = true
 [build-dependencies]
 cc.workspace = true
 
-[target.'cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))'.dev-dependencies]
+[target.'cfg(all(any(target_arch = "x86_64", target_arch = "aarch64"), target_os = "linux", target_env = "gnu"))'.dev-dependencies]
 libc.workspace = true

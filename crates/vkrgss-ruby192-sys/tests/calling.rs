@@ -1,6 +1,6 @@
 //! Calling in: protected evaluation, what an exception was, strings as bytes and as text,
 //! the accessors of strings and arrays, rooting and `Zlib`, through the crate's own helpers.
-#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+#![cfg(not(vkrgss_interpreter_absent))]
 
 mod common;
 

@@ -1,6 +1,6 @@
 //! Classes, modules and methods backed by host functions: what Ruby passes in, and how a
 //! value, a raise and a panic leave a host function.
-#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+#![cfg(not(vkrgss_interpreter_absent))]
 
 mod common;
 

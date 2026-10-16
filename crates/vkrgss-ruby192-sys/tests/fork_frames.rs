@@ -7,7 +7,7 @@
 //! the random numbers.
 //!
 //! One test per file: the process forks, and has one interpreter.
-#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+#![cfg(not(vkrgss_interpreter_absent))]
 
 mod common;
 

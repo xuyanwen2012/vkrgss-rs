@@ -1,6 +1,6 @@
 //! The functions of `Math` and the power of floats are correctly rounded: they come from the
 //! vendored CORE-MATH (`third_party/core-math`). Special arguments and errors are as before.
-#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+#![cfg(not(vkrgss_interpreter_absent))]
 
 mod common;
 

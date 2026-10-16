@@ -15,15 +15,17 @@
 //! built into a library of their own, and a recorded patch that makes the interpreter call
 //! them. Neither is compiled with contraction of floating-point operations.
 //!
-//! The crate is for one target. For any other the script compiles nothing and says so, and
-//! the crate is empty.
+//! The crate is for the targets of `targets.rs`. For any other the script compiles nothing
+//! and says so, and sets the `cfg` `vkrgss_interpreter_absent`, under which the crate is
+//! empty.
+
+mod targets;
 
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// The one target the interpreter is built for, and the name of its directory under `config/`.
-const TARGET: &str = "x86_64-unknown-linux-gnu";
+use targets::{TARGETS, is_built_for};
 
 /// The C files of `libruby-static.a` in the release's own build, without their extension,
 /// with these differences: `miniprelude` stands for `prelude`, which the release generates
@@ -242,18 +244,21 @@ fn utf8(path: &Path) -> &str {
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=targets.rs");
     let target = env::var("TARGET").expect("cargo sets TARGET");
-    if target != TARGET {
+    if !is_built_for(&target) {
         println!(
             "cargo:warning=vkrgss-ruby192-sys is empty for target `{target}`: the embedded Ruby \
-             1.9.2 is built for `{TARGET}` only"
+             1.9.2 is built for {} only",
+            TARGETS.join(", ")
         );
+        println!("cargo:rustc-cfg=vkrgss_interpreter_absent");
         return;
     }
 
     let manifest_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("cargo sets it"));
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("cargo sets OUT_DIR"));
-    let config_dir = manifest_dir.join("config").join(TARGET);
+    let config_dir = manifest_dir.join("config").join(&target);
     let ruby_dir = manifest_dir
         .join("../../third_party/ruby-1.9.2")
         .canonicalize()

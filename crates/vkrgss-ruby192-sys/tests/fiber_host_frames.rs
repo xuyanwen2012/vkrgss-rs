@@ -7,7 +7,7 @@
 //! If the conservative collector missed a value held by a frame of the host, on the
 //! thread's stack or on the saved stack of a suspended Fiber, the result is wrong or the
 //! process crashes.
-#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+#![cfg(not(vkrgss_interpreter_absent))]
 
 mod common;
 

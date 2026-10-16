@@ -1,6 +1,6 @@
 //! Saving and restoring the signal state that `ruby_init` replaces.
 //!
-//! This is platform code for x86_64 Linux, the one target the crate builds for.
+//! This is platform code for x86_64 and aarch64 Linux, the targets the crate builds for.
 
 use std::mem::MaybeUninit;
 use std::ptr;
@@ -64,7 +64,8 @@ pub fn threads_lost_in_a_copy() -> bool {
     unsafe { rb_thread_alone() == 0 }
 }
 
-/// `struct sigaction` as the x86_64 Linux kernel defines it for `rt_sigaction`.
+/// `struct sigaction` as the Linux kernel defines it for `rt_sigaction`, alike on x86_64 and
+/// aarch64.
 ///
 /// The dispositions go through the system call directly instead of through `sigaction` of
 /// glibc, because glibc adds its own restorer and the `SA_RESTORER` flag to everything it

@@ -1,7 +1,7 @@
 //! Without `VKRGSS_GC_STRESS`, and with it empty or 0, the collector runs when it has to.
 //!
 //! One test per file: the variable is read when the one interpreter of the process starts.
-#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+#![cfg(not(vkrgss_interpreter_absent))]
 
 mod common;
 

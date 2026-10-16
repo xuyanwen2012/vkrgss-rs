@@ -12,10 +12,10 @@
 //! - `Ruby`: the operations that follow the rules below, available only on that thread:
 //!   protected evaluation and calls, definitions backed by host functions, and rooting.
 //!
-//! The crate is for the target `x86_64-unknown-linux-gnu`. For any other target the build
-//! script compiles nothing and the crate has no item. The two interpreters define the same
-//! symbols: no program links this crate and `vkrgss-ruby-sys` together, which a dependency
-//! rule of the workspace checks.
+//! The crate is for the targets `x86_64-unknown-linux-gnu` and `aarch64-unknown-linux-gnu`.
+//! For any other target the build script compiles nothing and the crate has no item. The two
+//! interpreters define the same symbols: no program links this crate and `vkrgss-ruby-sys`
+//! together, which a dependency rule of the workspace checks.
 //!
 //! # One thread
 //!
@@ -146,11 +146,12 @@
 //! patches (`ffi::ruby_vkxp_lazy_timer_thread`, `ffi::ruby_vkxp_hashseed_fixed`,
 //! `ffi::ruby_vkxp_hashseed`, `ffi::ruby_vkxp_stack_size`).
 
-/// Declares the items for the one target the interpreter is built for.
+/// Declares the items for the targets the interpreter is built for, those for which the build
+/// script does not set the `cfg` `vkrgss_interpreter_absent`.
 macro_rules! on_target {
     ($($item:item)*) => {
         $(
-            #[cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+            #[cfg(not(vkrgss_interpreter_absent))]
             $item
         )*
     };

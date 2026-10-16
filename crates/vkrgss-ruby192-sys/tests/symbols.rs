@@ -6,7 +6,7 @@
 //! instead of to its own. The build compiles with hidden visibility; this test links an
 //! executable with `-rdynamic`, which exports everything that is not hidden, and reads its
 //! dynamic symbol table.
-#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+#![cfg(not(vkrgss_interpreter_absent))]
 
 mod common;
 

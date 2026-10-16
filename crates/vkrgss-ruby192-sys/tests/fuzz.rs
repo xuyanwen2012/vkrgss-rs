@@ -8,7 +8,7 @@
 //! `cargo xtask fuzz <target> [--seconds N]` with the targets `marshal192`, `parse192` and
 //! `regex192`, which sets the variables it reads; it is not part of the merge gate. The other
 //! tests run in the normal test step.
-#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+#![cfg(not(vkrgss_interpreter_absent))]
 
 mod common;
 

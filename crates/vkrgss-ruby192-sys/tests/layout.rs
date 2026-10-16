@@ -5,7 +5,7 @@
 //! prints `sizeof`, `offsetof` and the constants; the same list is computed on the Rust side.
 //! A second C file declares every function and variable of `ffi` with the types `ffi` gives
 //! it: the compiler refuses a declaration that conflicts with the one of the headers.
-#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+#![cfg(not(vkrgss_interpreter_absent))]
 
 mod common;
 

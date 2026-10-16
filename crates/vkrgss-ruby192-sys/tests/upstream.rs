@@ -4,7 +4,7 @@
 //! and then fails its overflow checks. Only these suites show it. A real `ruby` executable is
 //! linked from the archives of the build script, because the suites start child interpreters
 //! and expect a normal process. `upstream.allow` names what is left out, each with its reason.
-#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+#![cfg(not(vkrgss_interpreter_absent))]
 
 mod common;
 
@@ -15,8 +15,11 @@ use std::time::Duration;
 
 use common::suites::{self, Suites};
 
-/// What `ruby -v` must print.
+/// What `ruby -v` must print, which names the platform of the target.
+#[cfg(target_arch = "x86_64")]
 const VERSION_LINE: &str = "ruby 1.9.2p0 (2010-08-18 revision 29036) [x86_64-linux]";
+#[cfg(target_arch = "aarch64")]
+const VERSION_LINE: &str = "ruby 1.9.2p0 (2010-08-18 revision 29036) [aarch64-linux]";
 
 /// How long one test process may run. The slowest file takes a few seconds.
 const PROCESS_TIMEOUT: Duration = Duration::from_secs(300);

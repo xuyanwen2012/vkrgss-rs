@@ -8,11 +8,11 @@ module RbConfig
   CONFIG["TEENY"] = "2"
   CONFIG["PATCHLEVEL"] = "0"
   CONFIG["ruby_version"] = "1.9.1"
-  CONFIG["arch"] = "x86_64-linux"
+  CONFIG["arch"] = RUBY_PLATFORM
   CONFIG["host_os"] = "linux-gnu"
   CONFIG["target_os"] = "linux"
-  CONFIG["host_cpu"] = "x86_64"
-  CONFIG["target_cpu"] = "x86_64"
+  CONFIG["host_cpu"] = RUBY_PLATFORM[/\A[^-]+/]
+  CONFIG["target_cpu"] = RUBY_PLATFORM[/\A[^-]+/]
   CONFIG["EXEEXT"] = ""
   CONFIG["DLEXT"] = "so"
   CONFIG["ruby_install_name"] = "ruby"

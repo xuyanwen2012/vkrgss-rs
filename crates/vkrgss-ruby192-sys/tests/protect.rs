@@ -1,5 +1,5 @@
 //! The exported protected call, used the way another crate uses it.
-#![cfg(all(target_arch = "x86_64", target_os = "linux", target_env = "gnu"))]
+#![cfg(not(vkrgss_interpreter_absent))]
 
 use std::cell::Cell;
 use std::ffi::c_long;

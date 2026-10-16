@@ -31,7 +31,8 @@ fn not_a_guest() -> ExitCode {
 fn main() -> ExitCode {
     eprintln!(
         "vkrgss-guest-rgss3: this executable is not built for this target: Ruby 1.9.2, which \
-         games of RPG Maker VX Ace need, is built for x86_64-unknown-linux-gnu only"
+         games of RPG Maker VX Ace need, is built for x86_64-unknown-linux-gnu and \
+         aarch64-unknown-linux-gnu only"
     );
     ExitCode::FAILURE
 }
