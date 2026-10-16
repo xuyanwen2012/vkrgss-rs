@@ -40,7 +40,7 @@ tests need the C compiler too.
 A second interpreter is built beside it: Ruby 1.9.2-p0, the release that the original runtime
 of RPG Maker VX Ace embeds, from `third_party/ruby-1.9.2/` by the build script of
 `vkrgss-ruby192-sys`, in the same way: a fixed file list, the flags `-std=gnu89 -fwrapv
--fno-strict-aliasing`, a checked-in `ruby/config.h`, the zlib of `libz-sys`, and nothing
+-fno-strict-aliasing -ffp-contract=off`, a checked-in `ruby/config.h`, the zlib of `libz-sys`, and nothing
 generated at build time. It is linked with the encodings the original runtime has
 (UTF-16LE, Shift_JIS with Windows-31J, ISO-8859-1) and no other. Its tests compile a Ruby
 executable too and run the release's `bootstraptest` and a selection of its `test/ruby`,
@@ -49,6 +49,18 @@ names what is left out, with the reasons. `vkrgss-binding-rgss3` compiles the so
 `vkrgss-binding` over it and runs the tests of the binding a second time
 ([development.md](development.md)). Of the executables only `vkrgss-guest-rgss3` links this
 interpreter, and no package may link both: they define the same symbols, which a dependency rule checks.
+
+Both interpreters take the functions of `Math` and the power of floats from CORE-MATH,
+which is correctly rounded, so that a float that a script computes, and a save that holds
+it, is the same with every C library. Each build script compiles the files that
+`third_party/core-math/FILES` lists, the functions of `third_party/core-math/src/binary64`
+and the functions in `third_party/core-math/vkrgss/` through which the interpreter calls
+them, into a library of its own (`-std=gnu11 -ffp-contract=off -fno-fast-math`); a recorded
+patch of each interpreter makes `math.c`, `numeric.c` and `bignum.c` call them. The
+interpreters and CORE-MATH are compiled with `-ffp-contract=off`, so that no compiler fuses
+a multiplication and an addition on one architecture and not on another. The tests `math.rs`
+of both crates check the results against committed test vectors
+(`crates/vkrgss-ruby-sys/tests/data/core-math/`).
 
 Both build scripts give the compiler the hardening flags themselves, whatever it turns on
 by default, for gcc and clang alike: `-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3`,

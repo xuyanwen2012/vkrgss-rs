@@ -81,6 +81,10 @@ const FILES: [(&str, &str); 15] = [
         "third_party/oniguruma-5.9.6/COPYING",
         "licenses/oniguruma-5.9.6/COPYING",
     ),
+    (
+        "third_party/core-math/LICENSE",
+        "licenses/core-math/LICENSE",
+    ),
 ];
 
 /// The name of the archive's directory, which is the archive's name without its extension.
@@ -296,6 +300,8 @@ mod tests {
             ("-rw-r--r--", "README.md"),
             ("-rw-r--r--", "THIRD-PARTY.md"),
             ("drwxr-xr-x", "licenses/"),
+            ("drwxr-xr-x", "licenses/core-math/"),
+            ("-rw-r--r--", "licenses/core-math/LICENSE"),
             ("drwxr-xr-x", "licenses/oniguruma-5.9.6/"),
             ("-rw-r--r--", "licenses/oniguruma-5.9.6/COPYING"),
             ("drwxr-xr-x", "licenses/ruby-1.8.7/"),

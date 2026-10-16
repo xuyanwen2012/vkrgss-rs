@@ -4,6 +4,7 @@ vkrgss builds three old C trees: Ruby 1.8.7-p374 (June 2013, the last release of
 Oniguruma 5.9.6 (December 2014), and Ruby 1.9.2-p0 (August 2010) with its own regular
 expression engine. Fixes made after those releases reached none of the trees. This document
 lists the security fixes published since, and says for each what was done about it here.
+A fourth tree, CORE-MATH, is current; its section says what that means for it.
 The sections on Ruby 1.8.7 and Oniguruma 5.9.6 were made on 2026-10-12 by the change
 `fuzz-the-interpreter-and-review-fixes`, the section on Ruby 1.9.2 on 2026-10-15 by the
 change `fuzz-and-review-ruby-1-9-2`; a fix published later is not in them.
@@ -408,3 +409,17 @@ of `third_party/ruby-1.9.2/PATCHES.md`, and the input of each that a target foun
 | `parse.y`: `assign_in_cond` | the value of an assignment in a condition is a null pointer after a syntax error in it (`!w=%w[`) | `parse192` | 23, 24 |
 | `re.c`: `unescape_nonascii` | a backslash before a character cut off by the end of the pattern passed the check of the pattern, and the engine read past it | `regex192` | 25 |
 | `gc.c`: the marking of `NODE_COLON3` | the name in the node of `::Name` was followed as a pointer; the name of a local variable, which `class ::c` leaves there after its syntax error, ended the process at the next collection | `parse192` | 28 |
+
+## CORE-MATH
+
+`third_party/core-math` is CORE-MATH at commit `dae5dd8c0d5bd2691b45de28c9edbe12f067c3d3`
+(2026-10-15), vendored on 2026-10-16 by the change `round-the-math-functions-correctly`:
+the binary64 functions of `Math` and of the power of floats, which both interpreters call.
+It is current, so no fix was published after it; a later commit of upstream that fixes a
+defect is taken in by a recorded patch or by vendoring a newer commit. The code takes two
+floats at most and returns one: it allocates nothing, reads no string and holds no pointer
+that a caller gives it, except the sign that `lgamma_r` writes, which the interpreter
+passes as the address of a local variable. Its tables are indexed by values computed from
+the bits of the argument. A game reaches it with a script and with the floats of a data
+file that a script passes to `Math`. The fuzz targets do not cover it; the test vectors and
+the suites of both interpreters run it, under the sanitizers too, without instrumenting it.

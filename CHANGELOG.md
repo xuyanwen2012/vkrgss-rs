@@ -57,7 +57,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The workflow `ci.yml` runs each part of the gate as a job of its own, in parallel, and
   caches the objects of Rust and C with sccache, so that the interpreters are compiled
   again only when their sources change. The job `gate-aarch64` still runs the whole gate.
-
+- `Math` and the power of floats (`**`) of both interpreters are correctly rounded: they
+  come from CORE-MATH, vendored in `third_party/core-math`, instead of the C library, so a
+  float that a script computes, and a save that holds it, is the same on every machine,
+  version of glibc and operating system. A result differs from the one before only in the
+  last bit, where the C library was not correctly rounded; special arguments and errors are
+  as before. Both interpreters are compiled with `-ffp-contract=off`, so that no compiler
+  fuses a multiplication and an addition on one architecture and not on another.
 - The workflows name actions by commit hash, install the OpenSpec CLI at version 1.14.2, and
   build with `CC=gcc-13`, the compiler of the release, named explicitly. A push to `main`
   no longer cancels the run of the push before it.

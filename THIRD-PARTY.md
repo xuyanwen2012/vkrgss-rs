@@ -44,6 +44,20 @@ licence; the text is [`COPYING`](third_party/oniguruma-5.9.6/COPYING). Its
 [`README.vkrgss.md`](third_party/oniguruma-5.9.6/README.vkrgss.md) states the origin, and
 `MANIFEST.sha256` the upstream hash of every file.
 
+## CORE-MATH
+
+[`third_party/core-math`](third_party/core-math) holds the part of CORE-MATH, the library of
+correctly rounded mathematical functions of INRIA, at commit
+`dae5dd8c0d5bd2691b45de28c9edbe12f067c3d3` of `https://gitlab.inria.fr/core-math/core-math.git`,
+that both embedded interpreters build: the binary64 functions of `Math` and of the power of
+floats. It is under the MIT licence; the text is
+[`LICENSE`](third_party/core-math/LICENSE), and the release package carries it as
+`licenses/core-math/LICENSE`. Its [`README.vkrgss.md`](third_party/core-math/README.vkrgss.md)
+states the origin and how the subset was chosen, and
+[`MANIFEST.sha256`](third_party/core-math/MANIFEST.sha256) the hash of every file at that
+commit. The directory `vkrgss/` in it, through which the interpreters call the functions,
+is vkrgss's own, under the licence of this repository.
+
 ## libxcrypt
 
 The three executables of the release package, which `cargo xtask dist` builds, link libcrypt

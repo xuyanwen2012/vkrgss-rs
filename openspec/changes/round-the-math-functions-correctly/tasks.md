@@ -14,7 +14,7 @@
 
 ## 4. Documentation
 
-- [ ] 4.1 `docs/building.md` and `docs/vendored-security.md` name the new tree; the licence notices list CORE-MATH's MIT licence wherever third-party licences are listed (the release package included); `CHANGELOG.md` under Unreleased. Verify: the tests of `xtask` that check the documents, their links and the package contents pass.
+- [x] 4.1 `docs/building.md` and `docs/vendored-security.md` name the new tree; the licence notices list CORE-MATH's MIT licence wherever third-party licences are listed (the release package included); `CHANGELOG.md` under Unreleased. Verify: the tests of `xtask` that check the documents, their links and the package contents pass.
 
 ## 5. Integration check
 

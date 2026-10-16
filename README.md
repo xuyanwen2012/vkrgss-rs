@@ -70,10 +70,12 @@ crafted save file meets a locked process, not your desktop.
 ### Interpreters from 2010 and 2013, rebuilt for 2026
 
 No installed Ruby is involved. Ruby 1.8.7, Ruby 1.9.2 and Oniguruma are vendored,
-hash-checked and built by `build.rs` with today's GCC and clang, carrying 62 recorded
+hash-checked and built by `build.rs` with today's GCC and clang, carrying 88 recorded
 patches: faults that modern optimisers expose (a computed `goto` on an integer, a fiber
 stack copy that the compiler broke), backported CVE fixes, and symbol isolation so that the
-two interpreters never meet in one binary. libFuzzer targets for `Marshal.load`, the parser
+two interpreters never meet in one binary. `Math` and the power of floats come from the
+vendored CORE-MATH, which is correctly rounded, so a float that a save holds is the same on
+every machine and C library. libFuzzer targets for `Marshal.load`, the parser
 and the regex engine run under AddressSanitizer and UndefinedBehaviorSanitizer, and the
 upstream suites run under a garbage-collector stress run. Every later security fix of Ruby
 1.8 and Oniguruma is reviewed in [docs/vendored-security.md](docs/vendored-security.md); the
