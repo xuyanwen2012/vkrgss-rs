@@ -238,6 +238,17 @@ row whose upstream fix could not be compared says so. Every fix of the rows that
 backported was written against this tree and shown with a test where a few lines can show
 the defect; the defects of the rows that are left were read in this tree.
 
+The section was checked against those sources afterwards, on 2026-10-15, with the network:
+the security index and news of ruby-lang.org, the release notes of p136 to p330, NVD, the
+fix commits of ruby/ruby, Oniguruma and Onigmo, and the patch series of Debian's
+`ruby1.9.1` for squeeze-lts (1.9.2.0-2+deb6u7) and wheezy (1.9.3.194-8.1+deb7u8). Every fix
+of the core's C code that Debian shipped maps to a row; the backports of patches 18, 26,
+27, 29 and 33 to 36 were compared with the upstream fixes and are equivalent (patch 31 is a
+point fix where upstream rewrote the branch, as its row says). The check corrected the row
+of CVE-2024-27282 and added the rows of CVE-2019-16161, CVE-2019-16162, CVE-2010-2489 and
+CVE-2009-4124. Not compared in that check: the upstream diffs of patches 30 (CVE-2018-8778)
+and 32 (CVE-2014-3916), and the recorded checksums of `PATCHES.md`.
+
 ### Code that vkrgss builds
 
 The built files are the core of the interpreter with its own regular expression engine (a
@@ -263,7 +274,7 @@ runtime has, and `ext/zlib/zlib.c` (`crates/vkrgss-ruby192-sys/build.rs` has the
 | CVE-2018-16396 | `pack.c`: `pack_pack`, `pack_unpack` do not pass the taint flag on | yes | no effect | **left**: as CVE-2012-4464 |
 | CVE-2017-11465 | `parse.y`: `parser_yyerror` of Ruby 2.4 | yes | — | **does not apply**, as far as could be established without comparing the published fix: the lexer of 1.9.2 refuses an incomplete multibyte character before it steps over it, so the position of an error stays inside its line, which the copy of `parser_yyerror` is bounded by (the defect that patches 30 and 31 of the tree of 1.8.7 fix in its `yyerror`); the target `parse192` found no defect there |
 | CVE-2022-28738 | `re.c` of Ruby 3.0 and 3.1, double free in the compilation of a pattern | no | — | **does not apply**: the code came with 3.0 |
-| CVE-2024-27282 | the matcher of Onigmo in Ruby 3.0 to 3.3 (an address read with a pattern search) | the predecessor of that code | data and script | **left**: the upstream commit could not be compared offline, so whether the engine of 1.9.2 has the defect was not established. The fuzz target `regex192` runs the same searches and found none of that kind (change `fuzz-and-review-ruby-1-9-2`, "Follow-ups") |
+| CVE-2024-27282 | the matcher of Onigmo in Ruby 3.0 to 3.3 (an address read with a pattern search) | the predecessor of that code | data and script | **backported** in its main part: the fix of ruby/ruby (989a2355, "Fix Use-After-Free issue for Regexp") moves `GET_STACK_INDEX` before `STACK_PUSH_MEM_END` in `OP_MEMORY_END_PUSH_REC`, which is #139 (a8ed18b) of the engine table, patch 35. Distributions also name 33e5b47c, which checks `reg->dmin` against the length of the subject in both `forward_search_range` and `backward_search_range`: the forward check is CVE-2017-9227 (patch 35); the backward one is not in this tree and is **left**, whether a search reaches it with `dmin` past the subject not established |
 | CVE-2017-6181 | `regparse.c`: `parse_char_class`, recursion without a limit on nested classes | yes | data and script | **left**: a deeply nested pattern exhausts the stack and ends the process without touching other memory, as #40 and CVE-2019-16163 below |
 
 The two candidates the change named as "the `Marshal` and `String#to_f` fixes of 1.9.3"
@@ -281,6 +292,7 @@ suites only. No row below is built into vkrgss, and none is reached by a game.
 | Identifier | Code | Outcome |
 |---|---|---|
 | CVE-2010-0541, CVE-2017-10784, CVE-2017-17742, CVE-2018-8777, CVE-2019-16201, CVE-2019-16254, CVE-2020-25613 | `lib/webrick` | **does not apply**: not vendored |
+| CVE-2010-2489, CVE-2009-4124 | `io.c`: `ARGF.inplace_mode` on Windows; `string.c` of 1.9.1 | **does not apply**: fixed before 1.9.2-p0, and the first is Windows code |
 | CVE-2011-1004 | `lib/fileutils.rb`, `remove_entry_secure` | **does not apply**: vendored for the test runs only, never loaded by a game |
 | CVE-2011-0188 | `ext/bigdecimal` | **does not apply**: not vendored |
 | CVE-2011-2705 | `lib/securerandom.rb` | **does not apply**: not vendored |
@@ -374,6 +386,8 @@ too, after checking that the code is the same or absent.
 | #206: c74dc87, 38b02f9, ed4a253, 47d1654, 2b7b941; f29e9ff, 9d9da5a | `regexec.c`, `regparse.c`, `regcomp.c` | part | — | **does not apply**: as 5.9.6 (the commits were not compared one by one) |
 | 4d3863b | `regparse.c`: the Python syntax | no | — | **does not apply** |
 | #251: 1877295; #265: 2553552; #267: e6aef5e | `regparse.c` of 6.x | no | — | **does not apply** |
+| CVE-2019-16161 (Onigmo 9827d5a) | `regparse.c`: `fetch_token`, a null pointer passed to `onig_error_code_to_str` | yes | no, as far as established: the trigger is `(?R` and `(?0` of the Perl syntax, which Ruby does not select | **does not apply** |
+| CVE-2019-16162 (Onigmo d4cf99d) | `regenc.c`: `onigenc_single_byte_code_to_mbclen` gives 1 for a code above 255, which `parse_char_class` then reads past | yes | data and script | **left** as code, not reached: patch 26 (CVE-2017-9226) makes a code point above 255 in a class of a single-byte pattern the error "invalid code point value", checked on an interpreter built from this tree, where the release without it ends the process |
 | Oniguruma 5.9.6, patches 6 and 8 | `regcomp.c`, `enc/unicode.c`: the lengths of a piece of literal text that ends inside a character | yes | no: no piece of a validated pattern ends inside a character | **does not apply** |
 | Oniguruma 5.9.6, patch 7 | `regexec.c`: `OP_PUSH_OR_JUMP_EXACT1`, `OP_PUSH_IF_PEEK_NEXT` read the subject before they check its end | yes | data and script | **backported**: patch 35 |
 | Oniguruma 5.9.6, patch 5 | `regparse.c`: `PINC` | yes | no, as #17 | **does not apply** |
