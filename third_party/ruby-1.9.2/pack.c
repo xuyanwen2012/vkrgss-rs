@@ -1062,7 +1062,10 @@ static const char b64_table[] =
 static void
 encodes(VALUE str, const char *s, long len, int type, int tail_lf)
 {
-    char buff[4096];
+    /* vkrgss: CVE-2014-4975. The loop below leaves room for the last group of 4 bytes in
+       the 4096 that it fills, and the line feed after that group needs one more. */
+    enum {buff_size = 4096};
+    char buff[buff_size + 1];
     long i = 0;
     const char *trans = type == 'u' ? uu_table : b64_table;
     int padding;
@@ -1075,7 +1078,7 @@ encodes(VALUE str, const char *s, long len, int type, int tail_lf)
 	padding = '=';
     }
     while (len >= 3) {
-        while (len >= 3 && sizeof(buff)-i >= 4) {
+        while (len >= 3 && buff_size-i >= 4) {
             buff[i++] = trans[077 & (*s >> 2)];
             buff[i++] = trans[077 & (((*s << 4) & 060) | ((s[1] >> 4) & 017))];
             buff[i++] = trans[077 & (((s[1] << 2) & 074) | ((s[2] >> 6) & 03))];
@@ -1083,7 +1086,7 @@ encodes(VALUE str, const char *s, long len, int type, int tail_lf)
             s += 3;
             len -= 3;
         }
-        if (sizeof(buff)-i < 4) {
+        if (buff_size-i < 4) {
             rb_str_buf_cat(str, buff, i);
             i = 0;
         }
@@ -1366,7 +1369,8 @@ pack_unpack(VALUE str, VALUE fmt)
 	else if (ISDIGIT(*p)) {
 	    errno = 0;
 	    len = STRTOUL(p, (char**)&p, 10);
-	    if (errno) {
+	    /* vkrgss: CVE-2018-8778. A count above LONG_MAX is negative here. */
+	    if (len < 0 || errno) {
 		rb_raise(rb_eRangeError, "pack length too big");
 	    }
 	}

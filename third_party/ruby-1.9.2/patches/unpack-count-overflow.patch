@@ -1,0 +1,12 @@
+--- a/pack.c
++++ b/pack.c
+@@ -1369,7 +1369,8 @@
+ 	else if (ISDIGIT(*p)) {
+ 	    errno = 0;
+ 	    len = STRTOUL(p, (char**)&p, 10);
+-	    if (errno) {
++	    /* vkrgss: CVE-2018-8778. A count above LONG_MAX is negative here. */
++	    if (len < 0 || errno) {
+ 		rb_raise(rb_eRangeError, "pack length too big");
+ 	    }
+ 	}

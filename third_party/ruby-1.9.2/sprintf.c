@@ -1019,6 +1019,10 @@ rb_str_format(int argc, const VALUE *argv, VALUE fmt)
 			need++;
 		    if ((flags & FWIDTH) && need < width)
 			need = width;
+		    /* vkrgss: CVE-2017-0898. With the largest width `need + 1` wraps: the buffer
+		       does not grow, and the text is written as far as the width past its end. */
+		    if (need == INT_MAX)
+			rb_raise(rb_eArgError, "width too big");
 
 		    CHECK(need + 1);
 		    snprintf(&buf[blen], need + 1, "%*s", need, "");

@@ -1,0 +1,13 @@
+--- a/ext/zlib/zlib.c
++++ b/ext/zlib/zlib.c
+@@ -616,7 +616,9 @@
+ static void
+ zstream_buffer_ungets(struct zstream *z, const Bytef *b, int len)
+ {
+-    if (NIL_P(z->buf) || RSTRING_LEN(z->buf) - z->buf_filled == 0) {
++    /* vkrgss: CVE-2026-27820. The buffer grew only when it was full, and the bytes put
++       back were written past its end when less than their length was free. */
++    if (NIL_P(z->buf) || RSTRING_LEN(z->buf) - z->buf_filled < len) {
+ 	zstream_expand_buffer_into(z, len);
+     }
+ 

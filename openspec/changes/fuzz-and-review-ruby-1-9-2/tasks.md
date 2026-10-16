@@ -14,7 +14,7 @@
 
 ## 4. Review
 
-- [ ] 4.1 The section on Ruby 1.9.2 of `docs/vendored-security.md` and the backports, each with a test in `tests/backports.rs` where a few lines can show the defect. Verify: the scenarios of "Later security fixes of Ruby 1.9.2 are reviewed"; `cargo test -p vkrgss-ruby192-sys -p vkrgss-binding-rgss3 --locked` passes; the sanitized run passes.
+- [x] 4.1 The section on Ruby 1.9.2 of `docs/vendored-security.md` and the backports, each with a test in `tests/backports.rs` where a few lines can show the defect. Verify: the scenarios of "Later security fixes of Ruby 1.9.2 are reviewed"; `cargo test -p vkrgss-ruby192-sys -p vkrgss-binding-rgss3 --locked` passes; the sanitized run passes.
 
 ## 5. Documentation
 

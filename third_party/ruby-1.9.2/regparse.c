@@ -2605,6 +2605,9 @@ fetch_name_with_level(OnigCodePoint start_code, UChar** src, UChar* end,
       int level;
       int flag = (c == '-' ? -1 : 1);
 
+      /* vkrgss: as upstream 562bf48, no read at the end; reading the
+         terminator led to err as well */
+      if (PEND) goto err;
       PFETCH(c);
       if (! ONIGENC_IS_CODE_DIGIT(enc, c)) goto err;
       PUNFETCH;
@@ -2613,9 +2616,12 @@ fetch_name_with_level(OnigCodePoint start_code, UChar** src, UChar* end,
       *rlevel = (level * flag);
       exist_level = 1;
 
-      PFETCH(c);
-      if (c == end_code)
-	goto end;
+      /* vkrgss: as upstream 162cf91 */
+      if (!PEND) {
+	PFETCH(c);
+	if (c == end_code)
+	  goto end;
+      }
     }
 
   err:
@@ -3061,7 +3067,8 @@ fetch_token_in_cc(OnigToken* tok, UChar** src, UChar* end, ScanEnv* env)
 	tok->type = TK_CHAR_PROPERTY;
 	tok->u.prop.not = (c == 'P' ? 1 : 0);
 
-	if (IS_SYNTAX_OP2(syn, ONIG_SYN_OP2_ESC_P_BRACE_CIRCUMFLEX_NOT)) {
+	/* vkrgss: as upstream 5186c7c, no read at the end */
+	if (!PEND && IS_SYNTAX_OP2(syn, ONIG_SYN_OP2_ESC_P_BRACE_CIRCUMFLEX_NOT)) {
 	  PFETCH(c2);
 	  if (c2 == '^') {
 	    tok->u.prop.not = (tok->u.prop.not == 0 ? 1 : 0);
@@ -3522,6 +3529,12 @@ fetch_token(OnigToken* tok, UChar** src, UChar* end, ScanEnv* env)
 #ifdef USE_NAMED_GROUP
     case 'k':
       if (IS_SYNTAX_OP2(syn, ONIG_SYN_OP2_ESC_K_NAMED_BACKREF)) {
+	/* vkrgss: as upstream dc0a23e, no read at the end; the warning is
+	   the one that reading the terminator gave */
+	if (PEND) {
+	  onig_syntax_warn(env, "invalid back reference");
+	  break;
+	}
 	PFETCH(c);
 	if (c == '<' || c == '\'') {
 	  UChar* name_end;
@@ -3597,6 +3610,11 @@ fetch_token(OnigToken* tok, UChar** src, UChar* end, ScanEnv* env)
 #ifdef USE_SUBEXP_CALL
     case 'g':
       if (IS_SYNTAX_OP2(syn, ONIG_SYN_OP2_ESC_G_SUBEXP_CALL)) {
+	/* vkrgss: as upstream dc0a23e, as for \k */
+	if (PEND) {
+	  onig_syntax_warn(env, "invalid subexp call");
+	  break;
+	}
 	PFETCH(c);
 	if (c == '<' || c == '\'') {
 	  int gnum;
@@ -3633,7 +3651,8 @@ fetch_token(OnigToken* tok, UChar** src, UChar* end, ScanEnv* env)
 	tok->type = TK_CHAR_PROPERTY;
 	tok->u.prop.not = (c == 'P' ? 1 : 0);
 
-	if (IS_SYNTAX_OP2(syn, ONIG_SYN_OP2_ESC_P_BRACE_CIRCUMFLEX_NOT)) {
+	/* vkrgss: as upstream dc0a23e, no read at the end */
+	if (!PEND && IS_SYNTAX_OP2(syn, ONIG_SYN_OP2_ESC_P_BRACE_CIRCUMFLEX_NOT)) {
 	  PFETCH(c);
 	  if (c == '^') {
 	    tok->u.prop.not = (tok->u.prop.not == 0 ? 1 : 0);
@@ -4664,6 +4683,9 @@ parse_enclose(Node** np, OnigToken* tok, int term, UChar** src, UChar* end,
 #endif
 
     case '<':   /* look behind (?<=...), (?<!...) */
+      /* vkrgss: as upstream 68c3955, no read at the end; the error is the
+	 one that reading the terminator led to (fetch_name of an empty name) */
+      if (PEND) return ONIGERR_EMPTY_GROUP_NAME;
       PFETCH(c);
       if (c == '=')
 	*np = onig_node_new_anchor(ANCHOR_LOOK_BEHIND);

@@ -151,9 +151,53 @@ moment; it was reduced with the collector stressed, and the test compiles it und
 `GC.stress`. Every input gave its report in a build from before its fix: the build of the
 target that found it, in which it was reduced, or the sanitized interpreter.
 
+### The review
+
+The network was not reachable, so none of the sources this design names was consulted. The
+section on Ruby 1.9.2 of `docs/vendored-security.md` was made from the trees (1.9.2 itself,
+1.8.7 with its patches, and the rows of the earlier review, which were made with those
+sources) and from the reviewer's knowledge of the advisories, as "Sources" there says. It
+has 19 rows for built code of Ruby, of which 6 are backported (patch 18 and patches 29 to
+33), 7 left and 6 do not apply; 25 rows for code that is not built; and 56 rows for the
+engine, of which 17 are backported, two of them differently or in part (patches 26, 27 and
+34 to 36), 3 left (one of them in part) and 36 do not apply. The engine was audited against every row of Oniguruma 5.9.6 in
+the tree. Each backport that a few lines can show has a test in `tests/backports.rs`, and
+those of CVE-2014-4975, CVE-2017-0898, CVE-2026-27820 and 9574bc1 gave a report or ended the
+process in the sanitized interpreter built before their patches. The sanitized run passes
+with every patch of this change.
+
 ## Follow-ups
 
 Findings and open points that this change lists and does not fix:
+
+- **The sources of the review were not consulted** (no network): the security index of
+  ruby-lang.org, the change logs of p136 to p330, Debian's patches of `ruby1.9.1`, and the
+  repositories of Oniguruma and Onigmo. Where a row needed an upstream commit that is not in
+  the tree, it says that it was not compared: the fix of CVE-2026-27820, CVE-2024-27282
+  (left: whether the engine has that defect was not established), CVE-2017-11465, and the
+  Oniguruma commits f37dfad, e440706 and #206. A rerun of the review with the sources would
+  check these rows and look for advisories the reviewer does not know of.
+- **CVE-2017-9228 is left.** In a class, a range that starts after a class, `[\d-z]`, reads a
+  variable that was not set, and `[a\d-z]` the character before the class, which the original
+  runtime of RGSS3 accepts as `a` to `z` and the digits. The fix of Oniguruma 5.9.6 (an error)
+  would refuse such a pattern. What the original gives for `[\d-z]` was not measured; the
+  oracle could, and the variable could then be given that value.
+- **The finite branch of `sprintf`** has the overflow of CVE-2017-0898 too: with a width or
+  precision near the largest `int`, `need += 20` wraps, the buffer does not grow, and
+  `snprintf` is given a size of nearly 2^64. glibc refuses to write more than `INT_MAX`
+  bytes and returns an empty result (`"%2147483647f" % 1.0` is `""`), so nothing is written;
+  later releases raise "width too big" or "prec too big". Left, because nothing is written
+  with the C library vkrgss uses; it is the defect the review of 1.8.7 listed too.
+- **Hash flooding (CVE-2011-4815, CVE-2012-5371) is left**, as `docs/vendored-security.md`
+  says: the seed is fixed on purpose.
+- **An octal escape that overflows** passes the check of `re.c`: `\4` followed by 21 zeros
+  wraps to a value below 0200 and is passed on, and the engine reads `\400`. This is the
+  behaviour of the original; after patch 26 it touches no memory.
+- **Reads of the terminator**: `string_cmp_ic` reads the byte at the end of the subject in
+  one case of a case-insensitive back-reference, and the backward search (`String#rindex`
+  with a pattern) reads the byte after the subject, as for Oniguruma 5.9.6. For a Ruby
+  string that byte is its terminator, inside the allocation; no upstream commit fixes the
+  first, and the fix of the second moves where a backward search starts.
 
 - **Stack exhaustion by nesting** is not a finding, as for Ruby 1.8.7: deeply nested groups
   or classes in a pattern (upstream #40, CVE-2019-16163, CVE-2017-6181) and deeply nested

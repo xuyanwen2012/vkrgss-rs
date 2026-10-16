@@ -48,7 +48,7 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
 
 - File: `ext/zlib/zlib.c`
 - Patch: `patches/zlib-crc-table-64bit.patch`
-- Patched SHA-256: `2d2bd40f3d33267620c19734b29f54837696597fd4c378a17dd1dc08ed53e6c3`
+- Patched SHA-256: `6271416d725e49d9f5127b52f55771019b6730f916698cea38073d369e80acea`
 - Reason: `Zlib.crc_table` read zlib's table of 32-bit values through
   `const unsigned long *`. Where `long` has 64 bits that returns wrong values and reads past
   the end of the table, and clang refuses the assignment. The pointer type becomes zlib's own
@@ -352,7 +352,7 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
 
 - File: `regparse.c`
 - Patch: `patches/class-wide-character-after-range.patch`
-- Patched SHA-256: `3ea16c6e83423c6b51b563b40ad9b1d26d2ee4c2300ab9698ef0ee52d7f21d70`
+- Patched SHA-256: `1684ac5ad07fea42e0d9ac21ac2e90c6f01204d977b8027eb0f50222c90e4734`
 - Reason: found by the fuzz target `regex192` (change `fuzz-and-review-ruby-1-9-2`); the
   engine's rows of `docs/vendored-security.md` name the upstream fixes. In a class, a
   character after a range and a hyphen (`[0-9-ゟ]`) or after two hyphens was taken for one
@@ -366,7 +366,7 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
 
 - File: `regcomp.c`
 - Patch: `patches/match-length-cycle.patch`
-- Patched SHA-256: `0d8e293517495c1529af680e116b42431f0af342fe61199c3bd6765c66481b01`
+- Patched SHA-256: `f9972fb4e00b250417e84ac5dfc304e5cfebb7041467ae0d3d3773f5a66e56e8`
 - Reason: found by the fuzz target `regex192` (change `fuzz-and-review-ruby-1-9-2`).
   `get_min_match_length` and `get_max_match_length` follow a back-reference into its group,
   and groups that refer to each other, as in `()(\4)()(\2)`, led back without end: the stack
@@ -389,3 +389,113 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
   ended the process. The node is marked without that field. Input:
   `crates/vkrgss-ruby192-sys/fuzz/fixed/parse/class-name-not-constant.rb`, which needs a
   collection at the right moment; `tests/fuzz.rs` compiles it under `GC.stress`.
+
+## 29. pack-encodes-line-feed
+
+- File: `pack.c`
+- Patch: `patches/pack-encodes-line-feed.patch`
+- Patched SHA-256: `07c21239a133fc2652acef30e38c25470ae586d9270a00c2790fb9e7083c5c03`
+- Reason: backport for the review of later security fixes (change
+  `fuzz-and-review-ruby-1-9-2`, `docs/vendored-security.md`). CVE-2014-4975. `encodes`, the
+  conversion of `m` and `u`, fills a buffer of 4096 bytes in groups of four and empties it
+  when less than a group is free, so a last group can fill it; the line feed after that
+  group was written one byte past it, on the stack (`['a' * 3071].pack('m3072')`). The
+  buffer has one byte more than the loop fills, as in upstream's fix. Its test in
+  `tests/backports.rs` of `vkrgss-ruby192-sys` gave a report of AddressSanitizer in the
+  sanitized interpreter built before the patch.
+
+## 30. unpack-count-overflow
+
+- File: `pack.c`
+- Patch: `patches/unpack-count-overflow.patch`
+- Patched SHA-256: `07c21239a133fc2652acef30e38c25470ae586d9270a00c2790fb9e7083c5c03`
+- Reason: applies after patch 29; backport for the review of later security fixes (change
+  `fuzz-and-review-ruby-1-9-2`, `docs/vendored-security.md`). CVE-2018-8778, as patch 34 of
+  the tree of 1.8.7. A count of `String#unpack` above `LONG_MAX` became negative, which the
+  checks of `@`, `X` and `x` let through, and the position moved before or past the string.
+  Such a count is now the `RangeError` "pack length too big" that a count beyond `ULONG_MAX`
+  gave already.
+
+## 31. sprintf-non-finite-width
+
+- File: `sprintf.c`
+- Patch: `patches/sprintf-non-finite-width.patch`
+- Patched SHA-256: `00b9f7fad3b188fda89794da6c0b081b493b78ebee9219e26e72a1822e8ba880`
+- Reason: backport for the review of later security fixes (change
+  `fuzz-and-review-ruby-1-9-2`, `docs/vendored-security.md`). CVE-2017-0898, fixed
+  differently: `rb_str_format` formats infinity and NaN into `need + 1` bytes, and with the
+  largest width that size wrapped to a negative number: the buffer did not grow, and the
+  text was written as far as the width past it (`format('%2147483647f', 1.0 / 0)` ended the
+  process). That width is now the `ArgumentError` "width too big", the message of a width
+  too big in the format itself. Upstream rewrote the block. Every smaller width formats as
+  before.
+
+## 32. str-buf-cat-capacity
+
+- File: `string.c`
+- Patch: `patches/str-buf-cat-capacity.patch`
+- Patched SHA-256: `84a5fee884a020dd30bd6e34c096c297ec0e402f160186e0c79bdaecf7fde61e`
+- Reason: backport for the review of later security fixes (change
+  `fuzz-and-review-ruby-1-9-2`, `docs/vendored-security.md`). CVE-2014-3916. When a string
+  grows near `LONG_MAX / 2` bytes, `str_buf_cat` took the number of pages of the new length
+  as the capacity instead of the length rounded up to a page, as upstream's fix corrects. On
+  x86_64 the branch needs a string of 2^62 bytes, so no test shows it.
+
+## 33. zlib-ungets-room
+
+- File: `ext/zlib/zlib.c`
+- Patch: `patches/zlib-ungets-room.patch`
+- Patched SHA-256: `6271416d725e49d9f5127b52f55771019b6730f916698cea38073d369e80acea`
+- Reason: applies after patch 3; backport for the review of later security fixes (change
+  `fuzz-and-review-ruby-1-9-2`, `docs/vendored-security.md`). CVE-2026-27820.
+  `zstream_buffer_ungets`, which `Zlib::GzipReader#ungetc` calls with a string, grew the
+  buffer only when it was full and then wrote the bytes put back in front of the rest: past
+  its end when less than their length was free. It grows the buffer when less than the
+  length is free. Upstream's fix was not compared. Its test in `tests/backports.rs` gave a
+  report of AddressSanitizer in the sanitized interpreter built before the patch.
+
+## 34. engine-parser-end-reads
+
+- File: `regparse.c`
+- Patch: `patches/engine-parser-end-reads.patch`
+- Patched SHA-256: `1684ac5ad07fea42e0d9ac21ac2e90c6f01204d977b8027eb0f50222c90e4734`
+- Reason: applies after patch 26; backport for the review of later security fixes (change
+  `fuzz-and-review-ruby-1-9-2`, `docs/vendored-security.md`). Backports of upstream
+  Oniguruma: the parser tests for the end of the pattern before it reads after `\k`, `\g`,
+  `\p{` (dc0a23e, #20), `(?<` (68c3955), `[\p{` (5186c7c), and `\k<a+`, `\k<a+1`, `\k<-`
+  (562bf48, 162cf91). It read the terminator of the pattern there, and two to four bytes for
+  a pattern in UTF-16LE. Each place keeps the warning, the token or the error that reading
+  the terminator led to, where upstream changed them: `\k` and `\g` at the end warn and stay
+  literal, `(?<` at the end is "group name is empty" and `\k<a+` at the end "invalid group
+  name".
+
+## 35. engine-matcher-bounds
+
+- File: `regexec.c`
+- Patch: `patches/engine-matcher-bounds.patch`
+- Patched SHA-256: `04cf4300576ff62976cc47609550ebba59de666eebd0300da3045611419661b6`
+- Reason: backport for the review of later security fixes (change
+  `fuzz-and-review-ruby-1-9-2`, `docs/vendored-security.md`). Backports of upstream
+  Oniguruma to the matcher, as patch 7 of the tree of Oniguruma 5.9.6 has them: `OP_EXACT1`
+  checks the end of the subject before it reads (690313a, CVE-2017-9224);
+  `forward_search_range` fails when `reg->dmin` leads past the end and does not step before
+  the start by `reg->dmax` (9690d3a, CVE-2017-9227; b690371, CVE-2017-9229); the
+  back-reference opcodes do not look for the previous character past the end after an empty
+  match (34c8cdd, 1cb2c31); `OP_CCLASS_MB` checks the end before it reads (6d248fe);
+  `OP_MEMORY_END_PUSH_REC` takes the stack index before the push that can move the stack
+  (a8ed18b); `str_lower_case_match` stops at the end of the pattern's text (d3e4029,
+  CVE-2019-19246); and, as the tree of Oniguruma 5.9.6 does without an upstream commit,
+  `OP_PUSH_OR_JUMP_EXACT1` and `OP_PUSH_IF_PEEK_NEXT` check the end before they compare.
+  None of these changes a result.
+
+## 36. engine-distance-value
+
+- File: `regcomp.c`
+- Patch: `patches/engine-distance-value.patch`
+- Patched SHA-256: `f9972fb4e00b250417e84ac5dfc304e5cfebb7041467ae0d3d3773f5a66e56e8`
+- Reason: applies after patch 27; backport for the review of later security fixes (change
+  `fuzz-and-review-ruby-1-9-2`, `docs/vendored-security.md`). Backport of upstream Oniguruma
+  9574bc1: `distance_value` keeps the distance unsigned; as a negative number it indexed its
+  table far before the start, and nested repeats such as
+  `(?:(?:(?:a{0,100000}){0,100000}){0,100000})bc` ended the process when they were compiled,
+  which `tests/backports.rs` shows.
