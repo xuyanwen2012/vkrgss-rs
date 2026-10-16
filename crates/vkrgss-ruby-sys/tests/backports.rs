@@ -109,3 +109,33 @@ fn patterns_that_were_read_out_of_bounds_are_errors() {
         Ok("[1, 0, 0]".to_owned())
     );
 }
+
+/// Oniguruma 33e5b47c of ruby/ruby (CVE-2024-27282): `backward_search_range` added the least
+/// distance to the literal or class it looks for, `reg->dmin`, to the start of the range
+/// before it compared that distance with the subject. A plain pattern longer than the
+/// subject, such as `/abc/`, is turned away before by the threshold length, but the least
+/// distance of nested repeats of 100000 does not fit the 32 bits of `OnigDistance` and is
+/// the infinite distance, for which no threshold is set: the search reached the addition
+/// with the literal (exact), the literal of three bytes (exact with Boyer-Moore, which a
+/// backward search over so short a range takes as exact), the class (map) and the literal
+/// before an anchor, and formed a position about 4 GiB past the subject. Nothing read
+/// through it, and a sanitized build reported nothing there before the patch.
+#[test]
+fn backward_searches_longer_than_the_subject_find_nothing() {
+    assert_eq!(
+        eval(
+            "r = '(?:(?:(?:.{100000}){100000}){100000}){100000}'
+             ['ab'.rindex(/abc/), 'ab'.rindex(Regexp.new('ab' + r)),
+              'ab'.rindex(Regexp.new(r + 'b')), 'ab'.rindex(Regexp.new(r + 'bcd')),
+              'ab'.rindex(Regexp.new(r + '[bc]')), 'ab'.rindex(Regexp.new(r + 'b$'))]"
+        ),
+        Ok("[nil, nil, nil, nil, nil, nil]".to_owned())
+    );
+    // Backward searches that fit the subject find what they found before.
+    assert_eq!(
+        eval(
+            "['abcab'.rindex(/ab/), 'abcab'.rindex(/b.{2}b/), 'abcab'.rindex(/[bc]/), 'ab'.rindex(/b$/)]"
+        ),
+        Ok("[3, 1, 4, 1]".to_owned())
+    );
+}

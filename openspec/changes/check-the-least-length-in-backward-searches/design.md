@@ -44,6 +44,26 @@ patch is written: "not found" is whatever value the callers treat as no match (i
 - `docs/vendored-security.md`: the row of CVE-2024-27282 in the section of 1.9.2 says the
   backward check is backported, and the rows of CVE-2017-9227 (both sections) mention it.
 
+## What the implementation found
+
+- A plain pattern longer than the subject, such as `"ab".rindex(/abc/)`, never reaches
+  `backward_search_range` in either tree: `onig_search` turns it away first, because the
+  threshold length (`reg->dmin` plus the length of the literal, or plus one for a class) is
+  above `end - range`. The check is reached when the least distance does not fit
+  `OnigDistance` and is the infinite distance, for which no threshold is set. The tests
+  take four nested repeats of 100000 for that, followed by a literal (exact), a literal of
+  three bytes (exact with Boyer-Moore, which the backward search over so short a range
+  runs as exact), a class (map) and a literal before `$`.
+- Ruby 1.9.2: before the patch, its sanitized build reported each of these four searches
+  at `range += reg->dmin` ("addition of unsigned offset ... overflowed"), since the infinite
+  distance is the largest `size_t`; the test's comment records it. After the patch the
+  sanitized run passes and the searches report nothing.
+- Oniguruma 5.9.6: no sanitized build reports anything for these searches before the patch.
+  The unpatched engine, built alone with clang's AddressSanitizer and
+  UndefinedBehaviorSanitizer and run on the same searches, reached the addition with the
+  infinite distance of 32 bits, formed a position about 4 GiB past the subject without
+  wrapping, read nothing through it, and was not reported.
+
 ## Out of scope
 
 Other parts of 33e5b47c, if any, beyond the two checks; any other row of the review.

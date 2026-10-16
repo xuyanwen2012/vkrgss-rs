@@ -1,0 +1,14 @@
+--- a/regexec.c
++++ b/regexec.c
+@@ -3267,6 +3267,11 @@
+ {
+   int r;
+   UChar *p;
++  size_t input_len = end - str;
++
++  if (reg->dmin > input_len) { /* vkrgss: as upstream 33e5b47c */
++    return 0; /* fail */
++  }
+ 
+   range += reg->dmin;
+   p = s;

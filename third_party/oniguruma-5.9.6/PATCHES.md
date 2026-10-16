@@ -97,7 +97,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `regexec.c`
 - Patch: `patches/matcher-bounds.patch`
-- Patched SHA-256: `aca6a29018138e842ba18f20db8fa7134819569437820276512fc0a83d645cb8`
+- Patched SHA-256: `d9d258320b6b57991a88c57cb913b8c72f48b53d2bba0a365739a36952dfec3f`
 - Reason: backports and one fix of the matcher (change `fuzz-the-interpreter-and-review-fixes`; `docs/vendored-security.md` has a
   row for each backport). From upstream: `OP_EXACT1` checks the end of the subject before
   it reads (690313a, #57, CVE-2017-9224); `forward_search_range` fails when `reg->dmin`
@@ -123,3 +123,20 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
   length of a character from its lead byte and copied or skipped that many bytes, past the
   end of a text that ends inside the character (see patch 6). The lengths stop at the end
   they are given. Inputs: as for patch 6.
+
+## 9. backward-search-dmin
+
+- File: `regexec.c`
+- Patch: `patches/backward-search-dmin.patch`
+- Patched SHA-256: `d9d258320b6b57991a88c57cb913b8c72f48b53d2bba0a365739a36952dfec3f`
+- Reason: applies after patch 7; backport of the backward half of upstream 33e5b47c of
+  ruby/ruby ("Fix handling of reg->dmin in Regex matching", which distributions name for
+  CVE-2024-27282; change `check-the-least-length-in-backward-searches`,
+  `docs/vendored-security.md`). `backward_search_range` returns "not found" when
+  `reg->dmin` exceeds the length of the subject, before it adds `reg->dmin` to the start of
+  the range. The forward half is the check of CVE-2017-9227 in patch 7. A plain pattern
+  longer than the subject never got there, because the threshold length turns it away
+  first; a least distance above what `OnigDistance` (32 bits here) holds is the infinite
+  one, for which no threshold is set, and the search then formed a position about 4 GiB
+  past the subject. No result changes; `crates/vkrgss-ruby-sys/tests/backports.rs` shows
+  it.

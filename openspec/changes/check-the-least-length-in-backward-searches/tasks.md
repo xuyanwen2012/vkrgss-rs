@@ -6,7 +6,7 @@
 
 ## 2. Ruby 1.8.7 and Oniguruma 5.9.6
 
-- [ ] 2.1 The same in `third_party/oniguruma-5.9.6`. Verify: the scenarios of `specs/embedded-ruby/spec.md`; `cargo test -p vkrgss-ruby-sys --locked` passes; the sanitized run of `vkrgss-ruby-sys` passes if available.
+- [x] 2.1 The same in `third_party/oniguruma-5.9.6`. Verify: the scenarios of `specs/embedded-ruby/spec.md`; `cargo test -p vkrgss-ruby-sys --locked` passes; the sanitized run of `vkrgss-ruby-sys` passes if available.
 
 ## 3. Documentation
 
