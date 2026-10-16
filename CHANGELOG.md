@@ -45,6 +45,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- The tests of `vkrgss-vk` run the validation layer with its synchronization validation on,
+  through `VK_EXT_layer_settings` where the layer offers it, so a missing or wrong barrier
+  fails a test; a test records a hazard on purpose to show that it does. A recorded
+  validation message starts with its id. The tests report no hazard.
+- The Vulkan backend submits with `vkQueueSubmit2` and waits for its submissions on a
+  timeline semaphore instead of a fence that is reset after each wait. Bitmap uploads record
+  the barriers of all their images in one dependency before the copies and one after, and an
+  image that an upload replaces whole starts from `UNDEFINED`. No composed pixel changes.
 - The guest process of a game of RPG Maker XP or VX is the new executable
   `vkrgss-guest-rgss12`, which `vkrgss` starts from beside itself as it starts
   `vkrgss-guest-rgss3` for VX Ace; `vkrgss` no longer starts itself as a guest. The new

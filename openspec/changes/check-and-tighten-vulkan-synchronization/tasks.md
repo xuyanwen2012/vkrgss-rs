@@ -14,7 +14,7 @@
 
 ## 4. Documentation
 
-- [ ] 4.1 `docs/development.md` if it describes validation; `CHANGELOG.md`. Verify: the tests of `xtask` that check the documents and their links pass.
+- [x] 4.1 `docs/development.md` if it describes validation; `CHANGELOG.md`. Verify: the tests of `xtask` that check the documents and their links pass.
 
 ## 5. Integration check
 

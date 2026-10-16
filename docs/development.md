@@ -34,6 +34,13 @@ handle in a unique number, so a fault that needs a driver to hand out the handle
 destroyed object again, such as a descriptor that is not rewritten, cannot show while the
 layer is loaded.
 
+In the `test` step the validation layer checks synchronization too: where it offers
+`VK_EXT_layer_settings`, a backend created with a validation log, as every test of
+`vkrgss-vk` creates one, turns on its setting `validate_sync`. A missing or wrong barrier is
+then reported as a hazard, `SYNC-HAZARD-*` in front of the message, and fails the test like
+any other validation error. A layer without that extension validates without it, which the
+log says once.
+
 The toolchain is pinned in `rust-toolchain.toml`. The `openspec` CLI must be on `PATH`.
 
 ### Parts of the gate
