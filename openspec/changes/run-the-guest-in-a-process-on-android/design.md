@@ -78,6 +78,43 @@
   machine's. The log of each run says `guest process <pid> attached`, that the guest
   filters its system calls with seccomp and that the kernel has no Landlock; after each
   run no process of the app is left.
+- **The requirement it replaces.** The requirement "A game runs on Android" of
+  `supported-platforms` said the guest runs on a thread and that a game of RGSS3 is
+  refused. The change's delta modifies it: games of RGSS1, RGSS2 and RGSS3 run with the
+  guest in a process, the frames on a phone are compared with a headless run of this
+  machine (which form of the guest that run has does not change a frame), and the scenario
+  "Game of RGSS3" now says that such a game runs. OpenSpec refuses to drop a scenario in a
+  modified requirement, so the scenario keeps its name.
+- **Acceptance of task 2.1**, 2026-10-17, both phones, with `cargo xtask android-run` and
+  `adb` from scripts under `local/` (not committed):
+  - *A game of VX Ace on a phone.* Crysalis with the RTP of `ref/ace/rtp` and
+    `ref/ace/rpg-rgss3.rb` in the game directory, seed 0, the input of
+    `ace-crysalis-input.txt` through `vkrgss.toml`, frames 60, 210 and 360, against
+    `vkrgss <copy> --headless` on this machine (llvmpipe; a game of RGSS3 has its guest in
+    a process there too): all three frames of each phone are identical byte for byte. The
+    log names the runtime `rgss3`, the guest attaches, and the seccomp filter is on.
+  - *Save and load a state.* The game `counter_and_rand_game` of the end-to-end tests
+    (RGSS1; the sprite's `x` taken modulo 608 so that it stays on screen), seed 0, every
+    frame from 1 to 600 dumped, no input script (the session offers no states while input
+    is scripted). `adb shell input keyevent KEYCODE_F3` three seconds after frame 1 and
+    `KEYCODE_F4` four seconds later reach the session as F3 and F4. The first frame after
+    the load equals the first after the save (Pixel 7a: frame 283 is frame 123, saved at
+    122; Galaxy S24+: frame 293 is frame 129, saved at 128), every frame before the load
+    equals the frame of the same number of a headless run without states on this machine,
+    and every frame from the load on equals the frame of that run that follows the saved
+    one, as on the desktop (`a_loaded_state_goes_back_to_the_saved_frame`). The same keys
+    on the title screen of Crysalis save and load a state of a guest of RGSS3 on both
+    phones; the resumed copy leaves a new copy of itself, as on the desktop.
+  - *A copy that is gone.* After F3 the parked copy was killed by its PID (`run-as
+    <package> kill -9`); F4 then says "slot 0 holds no state" and the game goes on, and a
+    second F3 parks a new copy.
+  - *The app ends.* With the game, the guest process and a parked copy running (`ps`
+    shows the three, the copy a child of the guest), `am force-stop` leaves no process of
+    the app's user on either phone. After every other run of this change no process of
+    the app was left either.
+  - *Pause and resume*, in passing: the first run on the Pixel 7a started with the screen
+    locked, the window went and came back when it was unlocked, and the game went on with
+    the guest in a process to frames identical to this machine's.
 
 ## Out of scope
 
@@ -86,4 +123,10 @@ policy.
 
 ## Follow-ups
 
-None yet.
+- `docs/decisions.md`, section "Android", still says that the first version has no save
+  states; this change's scope does not include that file, which changes only through a
+  change that says so.
+- States are asked for with F3 and F4 of a keyboard (or `adb shell input keyevent`); the
+  on-screen buttons come later, as the proposal says. A states schedule in `vkrgss.toml`,
+  as `--states` gives a headless run, would make the test of states on a phone exact to
+  the frame; it is not built, because the windowed host has no schedule.

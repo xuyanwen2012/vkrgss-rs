@@ -6,7 +6,7 @@
 
 ## 2. VX Ace and states
 
-- [ ] 2.1 Games of RGSS3, save states, the end of the app. Verify: scenarios "A game of VX Ace on a phone", "Save and load a state" and "The app ends" on both phones.
+- [x] 2.1 Games of RGSS3, save states, the end of the app. Verify: scenarios "A game of VX Ace on a phone", "Save and load a state" and "The app ends" on both phones.
 
 ## 3. Documents
 
