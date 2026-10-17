@@ -95,7 +95,7 @@ use vkrgss_guest::settings::GuestSettings;
 use vkrgss_guest_main::{Outcome, game_succeeded, guest_inputs, guest_on_thread};
 use vkrgss_vfs::Runtime;
 
-use crate::process::{GuestProcess, Handed};
+use crate::process::{GuestProcess, Handed, socket_base};
 
 /// How long the program waits for the game's scripts to end after the host has.
 const GUEST_WAIT: Duration = Duration::from_secs(5);
@@ -390,7 +390,7 @@ fn run(
                 settings: &settings,
                 diagnostics,
             };
-            let process = GuestProcess::start(inputs.runtime, handed)?;
+            let process = GuestProcess::start(inputs.runtime, &socket_base(), handed)?;
             let (done, outcome) = mpsc::channel();
             let guest = move |link: GuestEnd| {
                 let _ = done.send(process.relay(link));

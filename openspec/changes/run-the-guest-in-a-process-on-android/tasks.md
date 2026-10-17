@@ -2,7 +2,7 @@
 
 ## 1. Guest programs in the APK
 
-- [ ] 1.1 The two guest programs under `lib/arm64-v8a/`, `extractNativeLibs`, and starting a guest from `nativeLibraryDir`. Verify: a game of RGSS1 runs on both phones with the guest in a process (frames identical to the desktop).
+- [x] 1.1 The two guest programs under `lib/arm64-v8a/`, `extractNativeLibs`, and starting a guest from `nativeLibraryDir`. Verify: a game of RGSS1 runs on both phones with the guest in a process (frames identical to the desktop).
 
 ## 2. VX Ace and states
 

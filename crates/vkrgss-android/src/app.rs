@@ -2,22 +2,25 @@
 
 use std::ffi::c_void;
 use std::path::Path;
-use std::sync::mpsc::RecvTimeoutError;
+use std::sync::mpsc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::EnvFilter;
 use vkrgss_guest::diagnostics::{self, Level};
+use vkrgss_guest::record::Diagnostics;
 use vkrgss_guest::settings::GuestSettings;
-use vkrgss_guest_main::{builtin_scripts_name, game_succeeded, guest_inputs, guest_on_thread};
+use vkrgss_guest_main::{builtin_scripts_name, guest_inputs};
 use vkrgss_host::{AudioOptions, InputSource, KeyMap, WindowedOptions, run_windowed_on_android};
+use vkrgss_proto::link::GuestEnd;
 use vkrgss_vfs::{GameIni, Runtime};
 use winit::platform::android::activity::{AndroidApp, MainEvent, PollEvent};
 
 use crate::input::ScriptedInput;
 use crate::log;
 use crate::options::Options;
+use crate::process::{GuestProcess, Handed};
 
 /// The directory of the game in the files directory.
 const GAME_DIR: &str = "game";
@@ -28,8 +31,8 @@ const LOG_FILE: &str = "vkrgss.log";
 /// The fonts of the system.
 const SYSTEM_FONTS: &str = "/system/fonts";
 
-/// How long the app waits for the game's scripts to end after the host has.
-const GUEST_WAIT: Duration = Duration::from_secs(5);
+/// The level of the diagnostics of the guest process, the app's own.
+const GUEST_LEVEL: &str = "info";
 
 /// How long the app waits for the activity to be destroyed once it has finished it.
 const FINISH_WAIT: Duration = Duration::from_secs(5);
@@ -50,13 +53,22 @@ fn android_main(app: AndroidApp) {
         detailed: false,
     });
     tracing::info!("vkrgss {} starts on Android", env!("CARGO_PKG_VERSION"));
-    let succeeded = match files {
-        Some(files) => run(app.clone(), &files).unwrap_or_else(|error| {
-            tracing::error!("{error:#}");
-            false
-        }),
-        None => {
+    let private = app.internal_data_path();
+    let succeeded = match (files, private) {
+        (Some(files), Some(private)) => {
+            run(app.clone(), &files, &private).unwrap_or_else(|error| {
+                tracing::error!("{error:#}");
+                false
+            })
+        }
+        (None, _) => {
             tracing::error!("the app has no external files directory, where the game would be");
+            false
+        }
+        (_, None) => {
+            tracing::error!(
+                "the app has no files directory, where the socket of the guest would be"
+            );
             false
         }
     };
@@ -65,8 +77,8 @@ fn android_main(app: AndroidApp) {
     if let Some(forwarding) = forwarding {
         forwarding.finish();
     }
-    // The interpreter cannot be started twice in one process, so the process ends with
-    // the activity.
+    // The process ends with the activity, so that the next start of the activity starts
+    // afresh.
     std::process::exit(if succeeded { 0 } else { 1 });
 }
 
@@ -85,17 +97,13 @@ fn finish(app: &AndroidApp) {
     }
 }
 
-/// Runs the game of the files directory `files`. `Ok(false)` is a run that failed and has
-/// said why.
-fn run(app: AndroidApp, files: &Path) -> Result<bool> {
+/// Runs the game of the files directory `files`, with the socket of the guest process in the
+/// app's private directory `private`. `Ok(false)` is a run that failed and has said why.
+fn run(app: AndroidApp, files: &Path, private: &Path) -> Result<bool> {
     let game_dir = files.join(GAME_DIR);
     tracing::info!("the game is read from {}", game_dir.display());
     let options = Options::read(&game_dir)?;
     let runtime = Runtime::detect(&GameIni::read(&game_dir, None)?)?;
-    if let Some(refusal) = crate::refusal(runtime) {
-        tracing::error!("{refusal}");
-        return Ok(false);
-    }
     let mut font_dirs = options.font_dirs;
     font_dirs.push(SYSTEM_FONTS.into());
     let settings = GuestSettings {
@@ -110,6 +118,8 @@ fn run(app: AndroidApp, files: &Path) -> Result<bool> {
         log_p: options.log_p,
         ..GuestSettings::default()
     };
+    // What the guest process checks again; a game that lacks something fails here, before
+    // the guest process and the window exist.
     let inputs = guest_inputs(&game_dir, &settings)?;
     let title = inputs.ini.title.clone();
     let seed = options.seed.unwrap_or_else(|| {
@@ -118,8 +128,22 @@ fn run(app: AndroidApp, files: &Path) -> Result<bool> {
             // The low 64 bits of the nanoseconds; a clock before 1970 gives 0.
             .map_or(0, |since| since.as_nanos() as u64)
     });
-    tracing::info!("the guest is a thread and is not confined");
-    let (guest, outcome) = guest_on_thread(&game_dir, &settings, inputs, seed)?;
+    let handed = Handed {
+        seed,
+        game_dir: &game_dir,
+        settings: &settings,
+        diagnostics: Diagnostics {
+            variable: Some(GUEST_LEVEL.to_owned()),
+            verbose: false,
+        },
+    };
+    std::fs::create_dir_all(private)
+        .with_context(|| format!("cannot create the directory {}", private.display()))?;
+    let process = GuestProcess::start(runtime, private, handed)?;
+    let (done, outcome) = mpsc::channel();
+    let guest = move |link: GuestEnd| {
+        let _ = done.send(process.relay(link));
+    };
 
     let host_options = WindowedOptions {
         title,
@@ -135,25 +159,17 @@ fn run(app: AndroidApp, files: &Path) -> Result<bool> {
         input: options
             .input
             .map(|script| Box::new(ScriptedInput::new(script)) as Box<dyn InputSource>),
+        states: true,
         frames: options.frames,
         dumps: options.dumps,
         ..WindowedOptions::new(Default::default())
     };
+    // The windowed runner returns once the guest thread, the relay, has ended.
     let end = run_windowed_on_android(app, host_options, guest)?;
-    let game_ok = match outcome.recv_timeout(GUEST_WAIT) {
-        Ok(result) => game_succeeded(result),
-        Err(RecvTimeoutError::Timeout) => {
-            tracing::error!(
-                "the game's scripts did not end within {} seconds of being asked to quit",
-                GUEST_WAIT.as_secs()
-            );
-            false
-        }
-        Err(RecvTimeoutError::Disconnected) => {
-            tracing::error!("the guest thread panicked");
-            false
-        }
-    };
+    let game_ok = outcome.recv().unwrap_or_else(|_| {
+        tracing::error!("the guest thread panicked");
+        false
+    });
     if !end.is_success() {
         tracing::error!("the session ended without the game shutting down ({end:?})");
     }

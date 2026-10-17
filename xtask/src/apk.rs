@@ -4,10 +4,14 @@
 //! `cargo xtask apk` builds `vkrgss-android` for `aarch64-linux-android` at API level 34
 //! with the NDK that `ANDROID_NDK_HOME` names and assembles `target/apk/vkrgss-debug.apk`
 //! with the tools of the SDK that `ANDROID_HOME` names, without Gradle: aapt2 links the
-//! manifest against `platforms/android-34/android.jar`, the library goes into
-//! `lib/arm64-v8a/` uncompressed (`zip`) and without its debug information, zipalign aligns
-//! it to pages of 16 KiB and apksigner signs the APK with a debug key that is made with
-//! keytool in `target/apk/` on first use.
+//! manifest against `platforms/android-34/android.jar`, the library and the two guest
+//! executables (`vkrgss-guest-rgss12`, `vkrgss-guest-rgss3`) go into `lib/arm64-v8a/`
+//! without their debug information (`zip`), the executables under the names of libraries
+//! that the guest is started by on Android ([`GUEST_PROGRAMS`]); zipalign aligns the APK
+//! and apksigner signs it with a debug key that is made with keytool in `target/apk/` on
+//! first use. The manifest sets `extractNativeLibs`, so that the installer extracts all
+//! three, the executables with the execute bit, into the app's native library directory,
+//! the one place an app may execute files from.
 //!
 //! `cargo xtask android-run <SERIAL> <GAME_DIR>` builds the APK, installs it on the phone,
 //! replaces the game of the app's files directory with the directory `GAME_DIR`, starts the
@@ -32,6 +36,14 @@ pub(crate) const PACKAGE: &str = "io.github.xuyanwen2012.vkrgss";
 /// The name of the native library, which the manifest gives the activity.
 const LIBRARY: &str = "vkrgss_android";
 
+/// The guest executables the APK carries: each package and the name of its file in
+/// `lib/arm64-v8a/`, which the installer extracts only for a name `lib*.so`. They are the
+/// names `process.rs` of `vkrgss` looks for on Android.
+const GUEST_PROGRAMS: [(&str, &str); 2] = [
+    ("vkrgss-guest-rgss12", "libvkrgss_guest_rgss12.so"),
+    ("vkrgss-guest-rgss3", "libvkrgss_guest_rgss3.so"),
+];
+
 /// The API level the app targets.
 const TARGET_SDK: u32 = 37;
 
@@ -44,9 +56,10 @@ const RUN_TIMEOUT: Duration = Duration::from_secs(900);
 pub(crate) const USAGE: &str =
     "usage: cargo xtask apk | cargo xtask android-run <SERIAL> <GAME_DIR>";
 
-/// The manifest: `NativeActivity` with the library, no Java code, landscape on either side,
-/// fullscreen, not restarted by a change of the configuration (the interpreter cannot be
-/// started twice in one process), and Vulkan 1.3.
+/// The manifest: `NativeActivity` with the library, no Java code, the native libraries
+/// extracted at installation (the guest executables are run from there), landscape on
+/// either side, fullscreen, not restarted by a change of the configuration (the game would
+/// start again), and Vulkan 1.3.
 fn manifest(version: &str) -> String {
     format!(
         r#"<?xml version="1.0" encoding="utf-8"?>
@@ -55,7 +68,8 @@ fn manifest(version: &str) -> String {
     android:versionCode="{code}"
     android:versionName="{version}">
     <uses-feature android:name="android.hardware.vulkan.version" android:version="0x403000" android:required="true" />
-    <application android:label="vkrgss" android:hasCode="false" android:appCategory="game">
+    <application android:label="vkrgss" android:hasCode="false" android:appCategory="game"
+        android:extractNativeLibs="true">
         <activity android:name="android.app.NativeActivity"
             android:exported="true"
             android:launchMode="singleTask"
@@ -120,23 +134,29 @@ pub(crate) fn build(cargo: &str, root: &Path) -> Result<PathBuf> {
         bail!("the SDK has no {}", platform.display());
     }
 
-    eprintln!("apk: building {LIBRARY} for {TARGET}");
+    eprintln!("apk: building {LIBRARY} and the guest executables for {TARGET}");
+    let mut packages = vec!["-p", "vkrgss-android"];
+    for (package, _) in GUEST_PROGRAMS {
+        packages.extend(["-p", package]);
+    }
     run_host(
         Command::new(cargo)
-            .args([
-                "build",
-                "-p",
-                "vkrgss-android",
-                "--locked",
-                "--target",
-                TARGET,
-            ])
+            .arg("build")
+            .args(packages)
+            .args(["--locked", "--target", TARGET])
             .env("CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER", &clang)
             .env("CC_aarch64_linux_android", &clang)
             .env("AR_aarch64_linux_android", &ar)
             .current_dir(root),
     )?;
-    let library = root.join(format!("target/{TARGET}/debug/lib{LIBRARY}.so"));
+    let built = root.join(format!("target/{TARGET}/debug"));
+    let mut files = vec![(
+        built.join(format!("lib{LIBRARY}.so")),
+        format!("lib{LIBRARY}.so"),
+    )];
+    for (package, name) in GUEST_PROGRAMS {
+        files.push((built.join(package), name.to_owned()));
+    }
 
     let out = root.join("target/apk");
     let work = out.join("build");
@@ -145,13 +165,15 @@ pub(crate) fn build(cargo: &str, root: &Path) -> Result<PathBuf> {
     }
     let lib_dir = work.join("lib/arm64-v8a");
     fs::create_dir_all(&lib_dir).with_context(|| lib_dir.display().to_string())?;
-    run_host(
-        Command::new(&strip)
-            .arg("--strip-debug")
-            .arg("-o")
-            .arg(lib_dir.join(format!("lib{LIBRARY}.so")))
-            .arg(&library),
-    )?;
+    for (file, name) in &files {
+        run_host(
+            Command::new(&strip)
+                .arg("--strip-debug")
+                .arg("-o")
+                .arg(lib_dir.join(name))
+                .arg(file),
+        )?;
+    }
     let version = env!("CARGO_PKG_VERSION");
     fs::write(work.join("AndroidManifest.xml"), manifest(version)).context("apk: the manifest")?;
 
@@ -169,12 +191,16 @@ pub(crate) fn build(cargo: &str, root: &Path) -> Result<PathBuf> {
             .args(["--target-sdk-version", &TARGET_SDK.to_string()])
             .arg("--debug-mode"),
     )?;
-    // Stored, so that the library is loaded from the APK in place.
+    // Compressed: the installer extracts them.
     run_host(
         Command::new("zip")
-            .args(["-0", "-X", "-q"])
+            .args(["-X", "-q"])
             .arg(&unaligned)
-            .arg(format!("lib/arm64-v8a/lib{LIBRARY}.so"))
+            .args(
+                files
+                    .iter()
+                    .map(|(_, name)| format!("lib/arm64-v8a/{name}")),
+            )
             .current_dir(&work),
     )?;
     let aligned = work.join("aligned.apk");
@@ -276,27 +302,8 @@ fn dumped_files(game: &Path) -> Result<Vec<String>> {
         .collect())
 }
 
-/// Runs the game `game` on the phone `device`; see the module documentation.
-pub(crate) fn run(cargo: &str, root: &Path, device: &str, game: &Path) -> Result<()> {
-    if !game.join("Game.ini").is_file() {
-        bail!("android-run: {} has no Game.ini", game.display());
-    }
-    let dumps = dumped_files(game)?;
-    let apk = build(cargo, root)?;
-    eprintln!("android-run: installing on {device}");
-    run_host(adb(Some(device)).arg("install").arg("-r").arg(&apk))?;
-    output(device, &["shell", "am", "force-stop", PACKAGE])?;
-    let remote_game = format!("{FILES_DIR}/game");
-    output(
-        device,
-        &[
-            "shell",
-            &format!("rm -rf {remote_game} {FILES_DIR}/vkrgss.log && mkdir -p {FILES_DIR}"),
-        ],
-    )?;
-    eprintln!("android-run: pushing {} to {remote_game}", game.display());
-    run_host(adb(Some(device)).arg("push").arg(game).arg(&remote_game))?;
-    output(device, &["logcat", "-c"])?;
+/// Starts the activity on the phone `device` and waits until the app has ended.
+fn start_and_wait(device: &str) -> Result<()> {
     output(
         device,
         &[
@@ -320,6 +327,45 @@ pub(crate) fn run(cargo: &str, root: &Path, device: &str, game: &Path) -> Result
         }
         thread::sleep(Duration::from_secs(1));
     }
+    Ok(())
+}
+
+/// Runs the game `game` on the phone `device`; see the module documentation.
+pub(crate) fn run(cargo: &str, root: &Path, device: &str, game: &Path) -> Result<()> {
+    if !game.join("Game.ini").is_file() {
+        bail!("android-run: {} has no Game.ini", game.display());
+    }
+    let dumps = dumped_files(game)?;
+    let apk = build(cargo, root)?;
+    eprintln!("android-run: installing on {device}");
+    run_host(adb(Some(device)).arg("install").arg("-r").arg(&apk))?;
+    output(device, &["shell", "am", "force-stop", PACKAGE])?;
+    // A directory that adb makes there is not the app's, which then cannot read it: a
+    // freshly installed app makes its own when it first starts, and ends without a game.
+    if !output(
+        device,
+        &[
+            "shell",
+            &format!("test -d {FILES_DIR} && echo yes || echo no"),
+        ],
+    )?
+    .contains("yes")
+    {
+        eprintln!("android-run: starting the app once, to make its files directory");
+        start_and_wait(device)?;
+    }
+    let remote_game = format!("{FILES_DIR}/game");
+    output(
+        device,
+        &[
+            "shell",
+            &format!("rm -rf {remote_game} {FILES_DIR}/vkrgss.log"),
+        ],
+    )?;
+    eprintln!("android-run: pushing {} to {remote_game}", game.display());
+    run_host(adb(Some(device)).arg("push").arg(game).arg(&remote_game))?;
+    output(device, &["logcat", "-c"])?;
+    start_and_wait(device)?;
 
     let out = root.join("target/android-run").join(device);
     if out.exists() {
@@ -380,7 +426,15 @@ mod tests {
         assert!(manifest.contains(r#"android:value="vkrgss_android""#));
         assert!(manifest.contains(r#"android:hasCode="false""#));
         assert!(manifest.contains(r#"android:versionCode="301""#));
+        assert!(manifest.contains(r#"android:extractNativeLibs="true""#));
         assert!(FILES_DIR.contains(PACKAGE));
+    }
+
+    #[test]
+    fn the_guest_executables_have_names_the_installer_extracts() {
+        for (_, name) in GUEST_PROGRAMS {
+            assert!(name.starts_with("lib") && name.ends_with(".so"), "{name}");
+        }
     }
 
     #[test]

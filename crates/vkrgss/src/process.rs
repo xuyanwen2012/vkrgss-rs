@@ -11,7 +11,10 @@
 //! its link. The record is removed with the directory, when the run ends.
 //!
 //! This is platform code for Linux: it waits on several connections at once and ends
-//! processes by their number.
+//! processes by their number. The Android app (`vkrgss-android`) compiles this file as a
+//! module of its own: there the guest executables lie in the app's native library directory
+//! under the names of libraries, and the socket directory is made in the app's private
+//! directory (see [`guest_executable`]).
 //!
 //! The runners of the host know nothing of this. The guest they are given is
 //! [`GuestProcess::relay`], which holds the guest end of their in-process link and hands
@@ -192,17 +195,72 @@ fn attached(stream: UnixStream) -> Result<(Attached, Option<u8>)> {
 
 /// The file name of the guest executable of games of RGSS1 and RGSS2, which lies beside the
 /// program.
+#[cfg(not(target_os = "android"))]
 pub(crate) const RGSS12_GUEST: &str = "vkrgss-guest-rgss12";
 
 /// The file name of the guest executable of games of RGSS3, which lies beside the program.
+#[cfg(not(target_os = "android"))]
 pub(crate) const RGSS3_GUEST: &str = "vkrgss-guest-rgss3";
+
+/// On Android, the name under which the APK installs the guest executable of games of RGSS1
+/// and RGSS2 beside the app's library: the installer extracts only files named `lib*.so`.
+/// The file is the executable all the same.
+#[cfg(target_os = "android")]
+pub(crate) const RGSS12_GUEST: &str = "libvkrgss_guest_rgss12.so";
+
+/// On Android, the name under which the APK installs the guest executable of games of RGSS3.
+#[cfg(target_os = "android")]
+pub(crate) const RGSS3_GUEST: &str = "libvkrgss_guest_rgss3.so";
+
+/// What a missing guest executable `name` lies beside, and how it gets there.
+#[cfg(not(target_os = "android"))]
+fn missing_guest(name: &str) -> String {
+    format!(
+        "the directory of the program: it is built with the program (`cargo build -p {name}`) \
+         and lies beside it in the release archive"
+    )
+}
+
+/// What a missing guest executable lies beside on Android, and how it gets there.
+#[cfg(target_os = "android")]
+fn missing_guest(_: &str) -> String {
+    "the app's native library directory: the APK of `cargo xtask apk` installs it there".to_owned()
+}
 
 /// The executable the program starts as the guest process of a game of `runtime`: the guest
 /// executable of its interpreter in the directory of the program's own file, links resolved
-/// as the system resolves them.
+/// as the system resolves them. On Android the program's own file is the app's library,
+/// which lies in the app's native library directory (`nativeLibraryDir`), where the APK
+/// installs the guest executables too.
 fn guest_executable(runtime: Runtime) -> Result<PathBuf> {
-    let program = std::env::current_exe().context("cannot tell where the program is")?;
-    guest_executable_of(&program, runtime)
+    guest_executable_of(&own_file()?, runtime)
+}
+
+/// The file of the program.
+#[cfg(not(target_os = "android"))]
+fn own_file() -> Result<PathBuf> {
+    std::env::current_exe().context("cannot tell where the program is")
+}
+
+/// The file of the app's library, as the dynamic linker loaded it: the executable of the
+/// process is the system's.
+#[cfg(target_os = "android")]
+fn own_file() -> Result<PathBuf> {
+    use std::ffi::{CStr, OsStr};
+    use std::os::unix::ffi::OsStrExt;
+
+    let address = own_file as fn() -> Result<PathBuf> as *const libc::c_void;
+    // SAFETY: `Dl_info` is plain data, for which all zeros is a valid value.
+    let mut info: libc::Dl_info = unsafe { std::mem::zeroed() };
+    // SAFETY: `info` is valid for writes, and the address is that of code of this library.
+    let found = unsafe { libc::dladdr(address, &mut info) };
+    if found == 0 || info.dli_fname.is_null() {
+        bail!("cannot tell where the app's library is");
+    }
+    // SAFETY: the dynamic linker's name of a loaded library is a NUL-terminated string that
+    // lives as long as the library, which holds this code.
+    let name = unsafe { CStr::from_ptr(info.dli_fname) };
+    Ok(PathBuf::from(OsStr::from_bytes(name.to_bytes())))
 }
 
 /// [`guest_executable`] for the program `program`. A guest executable that is not there is
@@ -217,14 +275,22 @@ fn guest_executable_of(program: &Path, runtime: Runtime) -> Result<PathBuf> {
     if !guest.is_file() {
         bail!(
             "the guest process of a game of {} is the guest executable {name}, and there is \
-             no file {} in {}, the directory of the program: it is built with the program \
-             (`cargo build -p {name}`) and lies beside it in the release archive",
+             no file {} in {}, {}",
             runtime.product(),
             guest.display(),
-            dir.display()
+            dir.display(),
+            missing_guest(name)
         );
     }
     Ok(guest)
+}
+
+/// The directory in which the program makes the directory of its socket: the user's runtime
+/// directory, `XDG_RUNTIME_DIR`, or else the temporary directory.
+#[cfg(not(target_os = "android"))]
+pub(crate) fn socket_base() -> PathBuf {
+    let variable = std::env::var_os("XDG_RUNTIME_DIR").filter(|value| !value.is_empty());
+    variable.map_or_else(std::env::temp_dir, PathBuf::from)
 }
 
 /// What the program hands a guest process beside the socket: the rest of the guest record.
@@ -275,13 +341,13 @@ pub(crate) struct GuestProcess {
 impl GuestProcess {
     /// Starts the guest process of a run, for a game of `runtime`, hands it `handed` and the
     /// socket in the guest record, and waits for it to connect; one that states another
-    /// version than the program's fails the start. To be called on the main thread: the
-    /// child is ended by the kernel when the thread that started it ends.
-    pub(crate) fn start(runtime: Runtime, handed: Handed<'_>) -> Result<GuestProcess> {
+    /// version than the program's fails the start. The socket's directory is made in `base`
+    /// ([`socket_base`] on Linux, the app's private directory on Android). To be called on
+    /// the main thread, or on Android on the thread of `android_main`: the child is ended by
+    /// the kernel when the thread that started it ends.
+    pub(crate) fn start(runtime: Runtime, base: &Path, handed: Handed<'_>) -> Result<GuestProcess> {
         let program = guest_executable(runtime)?;
-        let variable = std::env::var_os("XDG_RUNTIME_DIR").filter(|value| !value.is_empty());
-        let base = variable.map_or_else(std::env::temp_dir, PathBuf::from);
-        sweep(&base);
+        sweep(base);
         let stamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |since| since.subsec_nanos());

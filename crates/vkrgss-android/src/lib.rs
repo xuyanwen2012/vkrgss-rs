@@ -4,7 +4,8 @@
 //!
 //! Side: platform.
 //!
-//! `android_main` (`app`) runs a game as `vkrgss --guest thread` does in a window:
+//! `android_main` (`app`) runs a game as `vkrgss` does in a window, with the guest in a
+//! process of its own:
 //!
 //! 1. The standard output and the error stream are made to lead to logcat (tag `vkrgss`) and
 //!    to the file `vkrgss.log` of the app's external files directory (`log`), and the
@@ -15,18 +16,30 @@
 //!    by default the file of the game's runtime in the files directory
 //!    (`files/rpg_builtin.rb` for RPG Maker XP), and the system's fonts in `/system/fonts` are
 //!    searched after the font directories of the file.
-//! 3. A game of RGSS3 is refused ([`refusal`]): its scripts need Ruby 1.9.2, which runs in a
-//!    process of its own, and the guest on Android is a thread of the app for now.
-//! 4. The interpreter thread runs the game's scripts and the host runs on the thread of
-//!    `android_main` with the window of the activity (`run_windowed_on_android` of
-//!    `vkrgss-host`), with sound through cpal's AAudio backend unless the file says
-//!    `audio = false`. When the activity is paused the surface goes and the game waits;
-//!    when it resumes the game goes on. An input script of the file holds the buttons, frame
-//!    by frame ([`input`]), as a headless run's does.
-//! 5. When the game has ended the process exits, so that the next start of the activity
-//!    starts a new interpreter.
+//! 3. The guest process is started as `vkrgss` starts it (`process`, the file
+//!    `process.rs` of `vkrgss` compiled into this crate): the guest executable of the game's
+//!    runtime, which the APK installs in the app's native library directory beside this
+//!    library as `libvkrgss_guest_rgss12.so` or `libvkrgss_guest_rgss3.so`, is started with
+//!    its guest record, and its socket lies in the app's private files directory. An app
+//!    cannot execute files of its data directories, but it can execute what the installer
+//!    put in that directory. The guest confines itself with the seccomp filter; the kernels
+//!    of the phones have no Landlock. Its lines reach logcat and the log file through the
+//!    error stream it inherits.
+//! 4. The host runs on the thread of `android_main` with the window of the activity
+//!    (`run_windowed_on_android` of `vkrgss-host`), with sound through cpal's AAudio backend
+//!    unless the file says `audio = false`, and the relay to the guest process on the guest
+//!    thread. F3 and F4 of a keyboard save and load states, which are copies of the guest
+//!    process, as on the desktop. When the activity is paused the surface goes and the game
+//!    waits; when it resumes the game goes on. An input script of the file holds the
+//!    buttons, frame by frame ([`input`]), as a headless run's does.
+//! 5. When the game has ended, the relay ends the guest processes and the app's process
+//!    exits, so that the next start of the activity starts afresh. When the app's process
+//!    is ended from outside, the guest process ends with it (its parent-death signal) and
+//!    the parked copies end when their connections do.
 //!
-//! Save states are off: they need the guest in a process.
+//! The app does not start the interpreter itself: it links the crates of the guest for what
+//! it checks of a game before the guest process starts, and the linker leaves the
+//! interpreter out.
 
 pub mod input;
 pub mod options;
@@ -35,37 +48,10 @@ pub mod options;
 mod app;
 #[cfg(target_os = "android")]
 mod log;
+#[cfg(target_os = "android")]
+#[path = "../../vkrgss/src/process.rs"]
+mod process;
 
-use vkrgss_vfs::Runtime;
-
-/// What the app says of a game of `runtime` that it does not run, or `None` for a runtime it
-/// runs.
-pub fn refusal(runtime: Runtime) -> Option<String> {
-    match runtime {
-        Runtime::Rgss1 | Runtime::Rgss2 => None,
-        Runtime::Rgss3 => Some(format!(
-            "a game of {} ({}) is not supported on Android yet: its scripts need Ruby 1.9.2 \
-             in a guest process; games of RPG Maker XP and RPG Maker VX run",
-            runtime.product(),
-            runtime.name()
-        )),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Scenario "Game of RGSS3": the message.
-    #[test]
-    fn a_game_of_rgss3_is_refused_with_a_message_naming_its_runtime() {
-        assert_eq!(refusal(Runtime::Rgss1), None);
-        assert_eq!(refusal(Runtime::Rgss2), None);
-        let message = refusal(Runtime::Rgss3).unwrap();
-        assert!(message.contains("RPG Maker VX Ace"), "{message}");
-        assert!(
-            message.contains("not supported on Android yet"),
-            "{message}"
-        );
-    }
-}
+/// How long the app waits for the game's scripts to end after the host has.
+#[cfg(target_os = "android")]
+const GUEST_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
