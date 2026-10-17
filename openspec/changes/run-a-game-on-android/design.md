@@ -42,6 +42,40 @@
   they must be identical, because composition is the same; record the result in
   `design.md`.
 
+## Implementation
+
+- **Rotation: `IDENTITY`, the compositor rotates.** A swapchain is created with the
+  transform `IDENTITY` wherever the surface lists it, else with the surface's current one
+  (the desktop surfaces report `IDENTITY` as current, so nothing changes there). Both phones
+  report the surface of the landscape window as 2400 by 1080 (Pixel 7a) and 2340 by 1080
+  (Galaxy S24+) with the current transform `ROTATE_90`, and list `IDENTITY`. Chosen because
+  the presenter's letterbox, filters and mask are computed in window pixels, and rotating
+  them in `present.frag` would touch every one of them for a picture of 640 by 480 that the
+  compositor turns at little cost. Android calls every present of such a swapchain
+  `VK_SUBOPTIMAL_KHR`; the swapchain remembers the transform it was created under, and a
+  suboptimal present replaces it only when the surface's transform or extent has changed
+  (a turn to the other landscape side does that). Measured: one swapchain per surface on
+  both phones, where without this it was replaced at every frame.
+- **Surface loss.** `VkCompositor::release_surface` destroys the swapchain and the surface
+  and keeps the device, the bitmaps and the frames; `present` shows nothing until
+  `attach_window` gives it the surface of the window that came back, which the device's
+  queue must be able to present to. The windowed runner of `vkrgss-host` does this on
+  winit's `Suspended` and `Resumed`, which desktop window systems never send, and sends no
+  tick while the window is away, so the game waits. A frame limit and frame dumps were
+  added to the windowed runner (`frames`, `dumps` of `WindowedOptions`, unset on the
+  desktop), because a phone has no headless surface.
+- **Pause and resume (task 2.1).** The demo game of the end-to-end tests, looping for 2400
+  frames, on both phones: `KEYCODE_HOME`, then `am start` again; on the Pixel also the
+  screen going off and on. The log shows the surface going and coming back with one new
+  swapchain each time, a screenshot after the resume shows the game upright and moving,
+  the game runs to its end and the app ends normally. No Khronos validation layer for
+  Android is on this machine (no network), so validation on the phones was not run; the
+  same release and attach path runs under the validation layer on lavapipe with a headless
+  surface (`a_released_surface_shows_nothing_until_a_new_one_is_attached`), without an
+  error.
+- **Commits.** The first commit holds the code of the surface and the session as well,
+  because the app links it; the later ones hold what their tasks changed after it.
+
 ## Out of scope
 
 The guest in a process on Android, RGSS3 on Android, the zip import, on-screen buttons,

@@ -43,6 +43,10 @@ pub(super) struct Swapchain {
     pub(super) drawn: Vec<vk::Semaphore>,
     /// Whether the swapchain no longer matches the surface and has to be replaced.
     pub(super) stale: bool,
+    /// The surface's transform when the swapchain was created with another one, and the
+    /// window system turns its images: Android calls every present of such a swapchain
+    /// suboptimal, so that alone does not make it stale.
+    pub(super) turned: Option<vk::SurfaceTransformFlagsKHR>,
     /// The pacing extensions on this swapchain, when it was created for them.
     pub(super) timing: Option<SwapchainTiming>,
     /// With swapchain maintenance: the fences that the presents carry, one per present,
@@ -207,6 +211,28 @@ impl VkCompositor {
         chain.acquired = acquired;
         chain.drawn[index as usize] = drawn;
         true
+    }
+
+    /// Whether the swapchain, which a present called suboptimal, was created for a surface
+    /// the window system turns and still fits it: the surface has the transform and the
+    /// extent it had then. A call that fails counts as a change.
+    pub(super) fn still_fits_turned_surface(&self) -> bool {
+        let Some(chain) = self.presenter.as_ref().and_then(|p| p.swapchain.as_ref()) else {
+            return false;
+        };
+        let (Some(turned), Some(surface)) = (chain.turned, self.gpu.surface.as_ref()) else {
+            return false;
+        };
+        // SAFETY: the physical device and the surface belong to the live instance.
+        let capabilities = unsafe {
+            surface
+                .loader
+                .get_physical_device_surface_capabilities(self.gpu.physical, surface.handle)
+        };
+        capabilities.is_ok_and(|capabilities| {
+            capabilities.current_transform == turned
+                && swapchain_extent(&capabilities, chain.requested) == chain.extent
+        })
     }
 
     pub(super) fn mark_swapchain_stale(&mut self) {
@@ -409,6 +435,8 @@ impl VkCompositor {
             acquired: vk::Semaphore::null(),
             drawn: Vec::new(),
             stale: false,
+            turned: (pre_transform(&capabilities) != capabilities.current_transform)
+                .then_some(capabilities.current_transform),
             timing,
             present_fences: maintenance.then(Vec::new),
         };

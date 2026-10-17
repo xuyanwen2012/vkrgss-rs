@@ -6,7 +6,7 @@
 
 ## 2. Presentation and lifecycle
 
-- [ ] 2.1 Android surface, swapchain, suspend and resume, rotation. Verify: scenario "Pause and resume" on both phones (`adb shell input keyevent KEYCODE_HOME`, then `am start` again).
+- [x] 2.1 Android surface, swapchain, suspend and resume, rotation. Verify: scenario "Pause and resume" on both phones (`adb shell input keyevent KEYCODE_HOME`, then `am start` again).
 
 ## 3. Game, options, audio
 

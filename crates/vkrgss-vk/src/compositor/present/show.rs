@@ -82,7 +82,9 @@ impl VkCompositor {
             let index = match acquired {
                 Ok((index, suboptimal)) => {
                     self.starved = false;
-                    chain.stale |= suboptimal;
+                    // A swapchain the window system turns is suboptimal at every acquire;
+                    // the present below tells whether the surface has changed.
+                    chain.stale |= suboptimal && chain.turned.is_none();
                     index
                 }
                 // No image in time, or none at once. The frame is rendered and stays the one
@@ -240,7 +242,7 @@ impl VkCompositor {
             match unsafe { loader.queue_present(self.gpu.queue, &info) } {
                 Ok(suboptimal) => {
                     self.pacer.presented(plan.as_ref(), frame);
-                    if suboptimal {
+                    if suboptimal && !self.still_fits_turned_surface() {
                         self.mark_swapchain_stale();
                     }
                     return Ok(true);
