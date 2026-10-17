@@ -7,14 +7,29 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// A directory that the build named on the host, `built`, or where the tests run on another
+/// machine, as `cargo xtask android-test` runs them on a phone, the value of the environment
+/// variable `name` when it is set: the name of the variable that gave `built`.
+pub(crate) fn host_dir(name: &str, built: &str) -> PathBuf {
+    std::env::var_os(name).map_or_else(|| PathBuf::from(built), PathBuf::from)
+}
+
+/// The directory of this crate.
+pub(crate) fn manifest_dir() -> PathBuf {
+    host_dir("CARGO_MANIFEST_DIR", env!("CARGO_MANIFEST_DIR"))
+}
+
 /// The vendored Ruby tree.
 pub(crate) fn source_dir() -> PathBuf {
-    PathBuf::from(env!("VKRGSS_RUBY192_SOURCE_DIR"))
+    host_dir(
+        "VKRGSS_RUBY192_SOURCE_DIR",
+        env!("VKRGSS_RUBY192_SOURCE_DIR"),
+    )
 }
 
 /// A fresh, empty directory for one test, below cargo's directory for test files.
 pub(crate) fn scratch_dir(name: &str) -> PathBuf {
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
+    let dir = host_dir("CARGO_TARGET_TMPDIR", env!("CARGO_TARGET_TMPDIR")).join(name);
     if dir.exists() {
         fs::remove_dir_all(&dir).unwrap_or_else(|error| panic!("{}: {error}", dir.display()));
     }
@@ -173,7 +188,14 @@ pub(crate) fn write_init_ext_with(scratch: &Path, definitions: &str, more: &str)
 /// visibility, as a real `ruby` does, which is also what makes the executable a probe for
 /// leaked symbols: `vkrgss_export_probe` is the one symbol given default visibility on purpose,
 /// to show that.
+///
+/// Where the tests run without the C compiler, `VKRGSS_RUBY192_EXECUTABLE` names the
+/// executable that was linked so on the host (`cargo xtask android-test`), and it is taken
+/// instead.
 pub(crate) fn build_ruby_executable(scratch: &Path) -> PathBuf {
+    if let Some(executable) = std::env::var_os("VKRGSS_RUBY192_EXECUTABLE") {
+        return PathBuf::from(executable);
+    }
     let source = source_dir();
     let init_ext = write_init_ext(scratch);
 

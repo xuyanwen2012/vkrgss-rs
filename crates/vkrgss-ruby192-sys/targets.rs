@@ -5,7 +5,11 @@
 
 /// The targets Ruby 1.9.2 is built for, each with its configuration header under `config/`
 /// in the directory of its name. For any other the crate is empty.
-pub(crate) const TARGETS: &[&str] = &["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"];
+pub(crate) const TARGETS: &[&str] = &[
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "aarch64-linux-android",
+];
 
 /// Whether Ruby 1.9.2 is built for `target`.
 pub(crate) fn is_built_for(target: &str) -> bool {

@@ -434,7 +434,7 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
 
 - File: `string.c`
 - Patch: `patches/str-buf-cat-capacity.patch`
-- Patched SHA-256: `c5a038e8e2de7785c3743a4b5a3de180222da50a2ad5faad46d054f2f162e48a`
+- Patched SHA-256: `071f237ea254a51c38dd44ac05bf3cf657ea6d8307d28ea2782c69a6f3c070f8`
 - Reason: backport for the review of later security fixes (change
   `fuzz-and-review-ruby-1-9-2`, `docs/vendored-security.md`). CVE-2014-3916. When a string
   grows near `LONG_MAX / 2` bytes, `str_buf_cat` took the number of pages of the new length
@@ -598,7 +598,7 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
 
 - File: `string.c`
 - Patch: `patches/string-inner-pointer-audit.patch`
-- Patched SHA-256: `c5a038e8e2de7785c3743a4b5a3de180222da50a2ad5faad46d054f2f162e48a`
+- Patched SHA-256: `071f237ea254a51c38dd44ac05bf3cf657ea6d8307d28ea2782c69a6f3c070f8`
 - Reason: applies after patch 32; the audit of the change
   `guard-values-held-by-inner-pointers`, as patch 43 for strings. `RB_GC_GUARD` keeps
   a string that is read through `RSTRING_PTR` after a call that allocates: the
@@ -657,3 +657,13 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
 - Patch: `patches/null-operands-generated.patch`
 - Patched SHA-256: `57cd6e133392ae4f77a05d634e29d6abba2675c99d37cc57a1716ca54ede240b`
 - Reason: follows patch 47. The same lines of the pre-generated parser, changed by hand.
+
+## 49. android-no-crypt
+
+- File: `string.c`
+- Patch: `patches/android-no-crypt.patch`
+- Patched SHA-256: `071f237ea254a51c38dd44ac05bf3cf657ea6d8307d28ea2782c69a6f3c070f8`
+- Reason: applies after patches 32 and 44, whose entries record the hash after this one.
+  bionic has no `crypt(3)` and no libcrypt (change `build-the-interpreters-for-android`).
+  Under `__ANDROID__`, `String#crypt` raises `NotImplementedError` with a message that
+  names Android, after the check of the salt; elsewhere nothing changes.

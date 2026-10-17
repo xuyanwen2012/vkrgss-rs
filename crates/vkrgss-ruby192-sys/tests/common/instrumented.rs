@@ -154,7 +154,7 @@ pub(crate) fn build_instrumented_libraries(
     core_jobs.push(job(
         scratch,
         &core_dir,
-        &Path::new(env!("CARGO_MANIFEST_DIR")).join("encodings.c"),
+        &super::manifest_dir().join("encodings.c"),
         &refs(&core_flags),
     ));
     let encoding_jobs: Vec<Job> = env!("VKRGSS_RUBY192_ENCODING_SOURCES")

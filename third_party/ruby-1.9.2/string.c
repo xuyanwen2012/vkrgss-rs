@@ -6526,6 +6526,10 @@ rb_str_crypt(VALUE str, VALUE salt)
     if (RSTRING_LEN(salt) < 2)
 	rb_raise(rb_eArgError, "salt too short (need >=2 bytes)");
 
+#ifdef __ANDROID__
+    /* vkrgss: bionic has no crypt(3) */
+    rb_raise(rb_eNotImpError, "crypt() is not available on Android");
+#endif
     s = RSTRING_PTR(str);
     if (!s) s = "";
     saltp = RSTRING_PTR(salt);

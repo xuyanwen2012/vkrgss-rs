@@ -27,6 +27,10 @@ use std::path::{Path, PathBuf};
 
 use targets::{TARGETS, is_built_for};
 
+/// The lowest Android API level the interpreter is built for, as for Ruby 1.8.7, whose
+/// `io.c` needs `__freadahead`; `backtrace`, which this one calls, is public from 33.
+const MIN_ANDROID_API: u32 = 34;
+
 /// The C files of `libruby-static.a` in the release's own build, without their extension,
 /// with these differences: `miniprelude` stands for `prelude`, which the release generates
 /// with an interpreter (`ruby.c` refers to `Init_prelude`; this crate never calls it), and
@@ -242,6 +246,36 @@ fn utf8(path: &Path) -> &str {
         .unwrap_or_else(|| panic!("path is not UTF-8: {}", path.display()))
 }
 
+/// The Android API level that the C compiler targets, from `__ANDROID_API__`, as the build
+/// script of `vkrgss-ruby-sys` reads it.
+fn android_api_level(base: &cc::Build, out_dir: &Path) -> u32 {
+    let probe = out_dir.join("android_api_level.c");
+    fs::write(
+        &probe,
+        "#include <android/api-level.h>\nvkrgss_android_api_level __ANDROID_API__\n",
+    )
+    .expect("OUT_DIR is writable");
+    let expanded = base.clone().file(&probe).expand();
+    String::from_utf8_lossy(&expanded)
+        .lines()
+        .find_map(|line| line.strip_prefix("vkrgss_android_api_level "))
+        .and_then(|level| level.trim().parse().ok())
+        .expect("the C compiler defines __ANDROID_API__ as a number")
+}
+
+/// Panics unless the C compiler targets [`MIN_ANDROID_API`] or a later level.
+fn check_android_api_level(base: &cc::Build, out_dir: &Path) {
+    let level = android_api_level(base, out_dir);
+    assert!(
+        level >= MIN_ANDROID_API,
+        "vkrgss-ruby192-sys needs Android API level {MIN_ANDROID_API} or later, and the C \
+         compiler {} targets API level {level}. Take the compiler of the NDK for API level \
+         {MIN_ANDROID_API}, such as `aarch64-linux-android{MIN_ANDROID_API}-clang` \
+         (docs/building.md).",
+        base.get_compiler().path().display()
+    );
+}
+
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=targets.rs");
@@ -267,11 +301,22 @@ fn main() {
         .join("../../third_party/core-math")
         .canonicalize()
         .expect("third_party/core-math exists");
-    let zlib_include = PathBuf::from(
-        env::var_os("DEP_Z_INCLUDE").expect("libz-sys exports the include path of its zlib"),
-    );
-    let zlib_root =
-        PathBuf::from(env::var_os("DEP_Z_ROOT").expect("libz-sys exports the root of its zlib"));
+    // On Android `libz-sys` links the system's `libz.so` and exports no paths: the C compiler
+    // of the NDK finds `zlib.h` in its sysroot.
+    let android = target.ends_with("-android");
+    let (zlib_include, zlib_root) = if android {
+        (None, None)
+    } else {
+        (
+            Some(PathBuf::from(
+                env::var_os("DEP_Z_INCLUDE")
+                    .expect("libz-sys exports the include path of its zlib"),
+            )),
+            Some(PathBuf::from(
+                env::var_os("DEP_Z_ROOT").expect("libz-sys exports the root of its zlib"),
+            )),
+        )
+    };
 
     println!("cargo:rerun-if-changed=config");
     println!("cargo:rerun-if-changed=encodings.c");
@@ -282,6 +327,9 @@ fn main() {
     // `vkrgss_math.h`, which the patched `math.c`, `numeric.c` and `bignum.c` include, is in
     // the directory of CORE-MATH.
     let mut base = base_build();
+    if android {
+        check_android_api_level(&base, &out_dir);
+    }
     base.include(&config_dir)
         .include(ruby_dir.join("include"))
         .include(&ruby_dir)
@@ -303,10 +351,13 @@ fn main() {
     }
     encodings.compile("vkrgss-ruby192-enc");
 
-    // The `Zlib` extension, against the zlib that `libz-sys` built from source.
+    // The `Zlib` extension, against the zlib that `libz-sys` built from source, or on Android
+    // that of the system.
     let mut zlib = base.clone();
-    zlib.include(&zlib_include)
-        .define("HAVE_ZLIB_H", None)
+    if let Some(zlib_include) = &zlib_include {
+        zlib.include(zlib_include);
+    }
+    zlib.define("HAVE_ZLIB_H", None)
         .define("OS_CODE", "OS_UNIX")
         .file(ruby_dir.join("ext/zlib/zlib.c"));
     zlib.compile("vkrgss-ruby192-zlib");
@@ -316,10 +367,14 @@ fn main() {
     core_math.files(core_math_files(&core_math_dir));
     core_math.compile("vkrgss-ruby192-core-math");
 
-    for library in ["pthread", "rt"] {
-        println!("cargo:rustc-link-lib={library}");
+    // bionic has the functions of libpthread and librt in its libc and has no libcrypt; the
+    // patched `string.c` does not call `crypt` on Android.
+    if !android {
+        for library in ["pthread", "rt"] {
+            println!("cargo:rustc-link-lib={library}");
+        }
+        link_crypt(&base);
     }
-    link_crypt(&base);
     println!("cargo:rustc-link-lib=m");
 
     // What the tests need to build Ruby's own test executable exactly as the library was
@@ -357,9 +412,10 @@ fn main() {
         "cargo:rustc-env=VKRGSS_RUBY192_FORTIFY_CFLAGS={}",
         FORTIFY_FLAGS.join(" ")
     );
+    // Empty on Android, where the tests that read them are not run.
     println!(
         "cargo:rustc-env=VKRGSS_RUBY192_ZLIB_INCLUDE_DIR={}",
-        utf8(&zlib_include)
+        zlib_include.as_deref().map_or("", utf8)
     );
     println!(
         "cargo:rustc-env=VKRGSS_RUBY192_CC={}",
@@ -383,6 +439,6 @@ fn main() {
     println!("cargo:rustc-env=VKRGSS_RUBY192_LIB_DIR={}", utf8(&out_dir));
     println!(
         "cargo:rustc-env=VKRGSS_RUBY192_ZLIB_LIB_DIR={}",
-        utf8(&zlib_root.join("lib"))
+        zlib_root.map_or(String::new(), |root| utf8(&root.join("lib")).to_owned())
     );
 }

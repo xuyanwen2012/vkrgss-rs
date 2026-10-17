@@ -6,7 +6,7 @@
 
 ## 2. Ruby 1.9.2
 
-- [ ] 2.1 The same for `vkrgss-ruby192-sys`, the target lists, the guest programs link. Verify: `cargo build -p vkrgss-guest-rgss12 -p vkrgss-guest-rgss3 --target aarch64-linux-android` succeeds; the tests of the crate pass on Linux.
+- [x] 2.1 The same for `vkrgss-ruby192-sys`, the target lists, the guest programs link. Verify: `cargo build -p vkrgss-guest-rgss12 -p vkrgss-guest-rgss3 --target aarch64-linux-android` succeeds; the tests of the crate pass on Linux.
 
 ## 3. Device runs
 

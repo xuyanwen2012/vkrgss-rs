@@ -23,8 +23,10 @@ fn eval(source: &str) -> Result<String, String> {
     interpreter().run(move |ruby| eval_inspect(ruby, &source))
 }
 
-/// `RUBY_PLATFORM` of the build, which names the architecture of the target.
-const PLATFORM: &str = if cfg!(target_arch = "aarch64") {
+/// `RUBY_PLATFORM` of the build, which names the architecture and the system of the target.
+const PLATFORM: &str = if cfg!(target_os = "android") {
+    "aarch64-linux-android"
+} else if cfg!(target_arch = "aarch64") {
     "aarch64-linux"
 } else {
     "x86_64-linux"

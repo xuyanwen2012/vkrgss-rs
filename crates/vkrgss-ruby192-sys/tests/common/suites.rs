@@ -15,7 +15,7 @@ use super::{build_ruby_executable, scratch_dir, source_dir};
 /// The test libraries of this crate: `rbconfig.rb`, which the release generates and the
 /// suites read, and the two files loaded in front of a suite.
 pub(crate) fn testlib_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/testlib")
+    super::manifest_dir().join("tests/testlib")
 }
 
 /// One entry of `tests/upstream.allow`: a file or a test method that is left out, with the
