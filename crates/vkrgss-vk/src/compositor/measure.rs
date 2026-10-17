@@ -90,13 +90,14 @@ impl VkCompositor {
         let timestamps = self.gpu.timestamps.filter(|_| self.times_device())?;
         let mut ticks = [0u64; 2];
         // SAFETY: the pool is live and has the two queries, which the submission just waited
-        // for wrote; the results are 64-bit values, as the flag says.
+        // for wrote; the results are 64-bit values, as the flag says. `WAIT` costs nothing
+        // once the submission is done, and MoltenVK answers `NOT_READY` without it even then.
         unsafe {
             self.gpu.device.get_query_pool_results(
                 self.query_pool,
                 first,
                 &mut ticks,
-                vk::QueryResultFlags::TYPE_64,
+                vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT,
             )
         }
         .ok()?;

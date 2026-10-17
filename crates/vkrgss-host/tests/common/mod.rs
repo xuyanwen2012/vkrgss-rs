@@ -45,14 +45,15 @@ pub(crate) fn require_isolation() {
     }
 }
 
-/// The device the tests composite on: llvmpipe, unless `VKRGSS_TEST_DEVICE` names another one by
-/// index or by part of its name, as for the tests of `vkrgss-vk`. Like those, the tests refuse
-/// to start while the loader is not restricted to chosen drivers.
+/// The device the tests composite on: that of a headless run (llvmpipe on Linux), unless
+/// `VKRGSS_TEST_DEVICE` names another one by index or by part of its name, as for the tests of
+/// `vkrgss-vk`. Like those, the tests refuse to start while the loader is not restricted to
+/// chosen drivers.
 pub(crate) fn test_device() -> DeviceChoice {
     require_isolation();
     match std::env::var("VKRGSS_TEST_DEVICE") {
         Ok(value) if !value.is_empty() => vkrgss_host::device_from_text(&value),
-        _ => DeviceChoice::Name(vkrgss_host::DEFAULT_DEVICE.to_owned()),
+        _ => vkrgss_host::default_device(),
     }
 }
 

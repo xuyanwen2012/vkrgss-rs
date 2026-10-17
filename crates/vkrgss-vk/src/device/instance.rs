@@ -160,9 +160,22 @@ impl Instance {
         if layer_settings {
             extensions.push(validation::LAYER_SETTINGS_NAME.as_ptr());
         }
+        // MoltenVK is a portability driver, which the loader enumerates only for an instance
+        // created with `VK_KHR_portability_enumeration` and its flag.
+        let portability = cfg!(target_os = "macos")
+            && offered.iter().any(|extension| {
+                extension.extension_name_as_c_str().ok()
+                    == Some(ash::khr::portability_enumeration::NAME)
+            });
+        if portability {
+            extensions.push(ash::khr::portability_enumeration::NAME.as_ptr());
+        }
         let mut info = vk::InstanceCreateInfo::default()
             .application_info(&application)
             .enabled_extension_names(&extensions);
+        if portability {
+            info = info.flags(vk::InstanceCreateFlags::ENUMERATE_PORTABILITY_KHR);
+        }
         if let Some(messenger_info) = messenger_info.as_mut() {
             // Chaining the messenger also covers instance creation and destruction.
             info = info.enabled_layer_names(&layers).push_next(messenger_info);
@@ -495,6 +508,17 @@ impl Instance {
         Ok(extensions.iter().any(|extension| {
             extension.extension_name_as_c_str().ok()
                 == Some(ash::khr::swapchain_mutable_format::NAME)
+        }))
+    }
+
+    /// Whether the device lists `VK_KHR_portability_subset`, which a device that lists it must
+    /// be created with: MoltenVK does.
+    pub(super) fn portability_subset(&self, physical: vk::PhysicalDevice) -> Result<bool, VkError> {
+        // SAFETY: the physical device was enumerated from this live instance.
+        let extensions = unsafe { self.raw.enumerate_device_extension_properties(physical) }
+            .map_err(VkError::vulkan("vkEnumerateDeviceExtensionProperties"))?;
+        Ok(extensions.iter().any(|extension| {
+            extension.extension_name_as_c_str().ok() == Some(ash::khr::portability_subset::NAME)
         }))
     }
 }

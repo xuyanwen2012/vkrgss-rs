@@ -11,7 +11,8 @@
 //! - `--dump N=PATH`: write frame N (counted from 0) as a PNG file. May be given several times.
 //! - `--input SCRIPT`: the buttons held from given frames on, for example
 //!   `"5:RIGHT, 12:RIGHT+SHIFT, 20:"`.
-//! - `--device DEVICE`: index of a Vulkan device or a part of its name. Defaults to llvmpipe.
+//! - `--device DEVICE`: index of a Vulkan device or a part of its name. Defaults to llvmpipe
+//!   (on macOS to the Apple GPU).
 
 use std::path::PathBuf;
 use std::process::ExitCode;

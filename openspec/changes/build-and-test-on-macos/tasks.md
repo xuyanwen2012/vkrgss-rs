@@ -2,7 +2,7 @@
 
 ## 1. Vulkan and host
 
-- [ ] 1.1 Portability, timestamp `WAIT`, headless default device per OS. Verify: scenario "Vulkan backend on the Apple GPU" on the Mac; the tests of `vkrgss-vk` and `vkrgss-host` pass on Linux.
+- [x] 1.1 Portability, timestamp `WAIT`, headless default device per OS. Verify: scenario "Vulkan backend on the Apple GPU" on the Mac; the tests of `vkrgss-vk` and `vkrgss-host` pass on Linux.
 
 ## 2. Guest
 

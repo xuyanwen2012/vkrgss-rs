@@ -25,9 +25,17 @@ use crate::{
     SessionOptions, StateRequest, StateSchedule,
 };
 
-/// The device a headless run uses unless told otherwise: the CPU rasteriser, so that a run
-/// neither depends on nor disturbs the GPUs of the machine.
-pub const DEFAULT_DEVICE: &str = "llvmpipe";
+/// The device a headless run uses unless told otherwise. On Linux the CPU rasteriser, so that a
+/// run neither depends on nor disturbs the GPUs of the machine; macOS has none, and there it is
+/// the first device whose name contains `Apple`, the GPU of the Mac.
+pub fn default_device() -> DeviceChoice {
+    let name = if cfg!(target_os = "macos") {
+        "Apple"
+    } else {
+        "llvmpipe"
+    };
+    DeviceChoice::Name(name.to_owned())
+}
 
 /// The host's end of a link, for a host that has nothing to do but wait for the guest.
 pub struct HostLink {
@@ -92,7 +100,7 @@ pub struct HeadlessOptions {
 impl Default for HeadlessOptions {
     fn default() -> HeadlessOptions {
         HeadlessOptions {
-            device: DeviceChoice::Name(DEFAULT_DEVICE.to_owned()),
+            device: default_device(),
             frames: None,
             script: InputScript::new(),
             input: None,

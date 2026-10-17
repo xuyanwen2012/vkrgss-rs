@@ -9,6 +9,10 @@
 //! where it and the instance offer it, and `VK_KHR_swapchain_mutable_format` where it lists
 //! it.
 //!
+//! On macOS the instance gets `VK_KHR_portability_enumeration` when the loader offers it, so
+//! that MoltenVK is enumerated, and a device that lists `VK_KHR_portability_subset` is created
+//! with it.
+//!
 //! Every instance gets `VK_EXT_debug_utils` when the installation lists it, so that the
 //! objects of the backend have names and its command buffers have labels in a capture; see
 //! [`Gpu::name_object`].
@@ -625,6 +629,8 @@ impl Gpu {
             Some(_) => instance.swapchain_mutable_format(candidate.physical)?,
             None => false,
         };
+        let portability_subset =
+            cfg!(target_os = "macos") && instance.portability_subset(candidate.physical)?;
         let mut extensions: Vec<*const c_char> = Vec::new();
         if surface.is_some() {
             extensions.push(ash::khr::swapchain::NAME.as_ptr());
@@ -678,6 +684,9 @@ impl Gpu {
         if swapchain_mutable_format {
             extensions.push(ash::khr::swapchain_mutable_format::NAME.as_ptr());
         }
+        if portability_subset {
+            extensions.push(ash::khr::portability_subset::NAME.as_ptr());
+        }
         let mut info = vk::DeviceCreateInfo::default()
             .queue_create_infos(&queues)
             .enabled_extension_names(&extensions)
@@ -691,7 +700,7 @@ impl Gpu {
         // that lists it, as are the pacing extensions, whose feature structures behind
         // `features12` are live and have the layout of the header, and the swapchain
         // maintenance extension, whose instance extension the instance has, and the mutable
-        // format extension, and `info` is valid for the call.
+        // format and portability subset extensions, and `info` is valid for the call.
         let created = unsafe { instance.raw.create_device(candidate.physical, &info, None) };
         let device = match created {
             Ok(device) => device,

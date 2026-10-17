@@ -53,8 +53,8 @@ pub use clock::{Clock, ManualClock, SystemClock};
 pub use display::Display;
 pub use gamepad::{DEAD_ZONE, GamepadMap, Gamepads, PadButton, PadState};
 pub use headless::{
-    DEFAULT_DEVICE, HeadlessDisplay, HeadlessEnd, HeadlessError, HeadlessOptions, HeadlessReport,
-    HostLink, headless_link, run_headless,
+    HeadlessDisplay, HeadlessEnd, HeadlessError, HeadlessOptions, HeadlessReport, HostLink,
+    default_device, headless_link, run_headless,
 };
 pub use keys::{KeyDefaults, KeyMap, MapError};
 pub use overlay::{Overlay, OverlayAction};
