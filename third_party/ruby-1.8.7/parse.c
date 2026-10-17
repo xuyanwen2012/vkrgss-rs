@@ -10017,13 +10017,14 @@ yylex()
 
 	  decode_num:
 	    pushback(c);
-	    tokfix();
 	    if (nondigit) {
 		char tmp[30];
 	      trailing_uc:
 		sprintf(tmp, "trailing `%c' in number", nondigit);
 		yyerror(tmp);
 	    }
+	    /* vkrgss: after the jumps to trailing_uc too, as Ruby 1.9 does */
+	    tokfix();
 	    if (is_float) {
 		double d = strtod(tok(), 0);
 		if (errno == ERANGE) {
@@ -10403,7 +10404,7 @@ yylex()
       case '_':
 	if (was_bol() && whole_match_p("__END__", 7, 0)) {
 	    ruby__end__seen = 1;
-	    lex_lastline = 0;
+	    /* vkrgss: the line stays marked while lex_p points into it, as in Ruby 1.9 */
 	    return -1;
 	}
 	newtok();

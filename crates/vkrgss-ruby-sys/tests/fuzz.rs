@@ -478,7 +478,7 @@ fn the_inputs_of_fixed_findings_no_longer_fail() {
     }
     assert!(ran >= 10, "only {ran} inputs of fixed findings were found");
 
-    // What the two inputs with a null operand are now: syntax errors that name the cause.
+    // What four of the inputs are now: syntax errors that name the cause.
     let error = |name: &str| -> String {
         let path = fuzz_dir().join("fixed/parse").join(name);
         let path = path.to_str().expect("UTF-8 path");
@@ -491,6 +491,24 @@ fn the_inputs_of_fixed_findings_no_longer_fail() {
         condition.contains("Can't assign to __FILE__"),
         "{condition}"
     );
+    // The token of the number is read after the error, and ends inside its buffer.
+    let number = error("number-trailing-underscore.rb");
+    assert!(number.contains("trailing `_' in number"), "{number}");
+    // The error after `__END__` quotes the line of `__END__`, which the parser no longer
+    // lets the collector free; under stress it collects while the error is reported.
+    let end = eval(
+        "GC.stress = true
+         begin
+           eval(\"module A\\n__END__\\n\")
+         rescue SyntaxError => error
+           error.message
+         ensure
+           GC.stress = false
+         end"
+        .to_owned(),
+    )
+    .expect("the message");
+    assert!(end.ends_with("expecting kEND\\n__END__\\n ^\""), "{end}");
 }
 
 #[test]

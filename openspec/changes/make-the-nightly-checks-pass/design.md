@@ -47,3 +47,30 @@ Raising libFuzzer's memory limit; fork mode; other targets.
   that is known here renames a key it uses, so it is kept as it is. `cargo-deny` is not
   installed on the machine of this change and there is no network, so the first nightly
   run is what checks it.
+- **The finding of `parse` at `eval.c:496` is not reproduced.** About two hours of `parse`
+  (runs of 570, 690 and 3600 s, and 1500 s of a scratch build described below) did not
+  report `eval.c:496` again. The runs found and this change fixes three other defects of the
+  parsers (patches 40 to 43 of Ruby 1.8.7, 47 and 48 of Ruby 1.9.2, the last the nightly
+  finding of `parse192`). One run of `parse` ended with a report of the same kind as the
+  nightly one: UndefinedBehaviorSanitizer at `gc.c:456` (`rb_newobj`), "member access within
+  misaligned address" of type `RVALUE`, where the head of the collector's free list pointed
+  one byte into the name of the source file (`"fuzz"`, which `rb_source_filename` keeps one
+  byte after the start of its buffer). So the free list was corrupted: a free slot had its
+  second word written as a node's `nd_file`. One slot put on the free list twice by
+  `rb_gc_force_recycle`, or put there while a node still pointed to it, would explain this
+  and the nightly report alike, since a class whose slot is handed out a second time is no
+  class any more. The input of that run (962 bytes of `while`, `begin`, `rescue`, `else`,
+  `ensure` with syntax errors and bytes that are no valid UTF-8) is kept in
+  `local/fuzz-findings/parse-freelist-c8720e17` of this clone. It does not fail on its own:
+  not in a new process, not after the 50,248 inputs of the corpus in one process, not
+  repeated 30 times with a collection forced every 1 to 150 allocations, and not with
+  `GC.stress` (which rebuilds the free list at every allocation and so hides such a slot).
+  A scratch build that aborts when `rb_gc_force_recycle` gets a slot that is already free
+  (a temporary change of `gc.c`, not kept) did not trip in its 1500 s or on that input. The
+  calls of `rb_gc_force_recycle` in `parse.y` (lines of `block_var`, the interpolation
+  `#{}`, `dispose_string`, `heredoc_restore`, the end of a string term, `literal_concat`,
+  `fixup_nodes`, `rb_parser_free` and the end of `yycompile`) were read without finding a
+  path that recycles a live or a free slot. Left open: a guard in `search_method` would
+  only hide a corrupted heap, so none is added; the next step is a run with that detector
+  for longer, or one that also checks at each `rb_newobj` that the slot it hands out is
+  free.

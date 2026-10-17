@@ -143,7 +143,7 @@ that the host selects at start-up, and the behaviour of XP stays the default.
 
 - File: `parse.y`
 - Patch: `patches/symbol-ids-ruby-181.patch`
-- Patched SHA-256: `a8ce8aad956dfd46d31478ce78424911dd75b868705eff757acd5b0e7b0d331e`
+- Patched SHA-256: `c9842866ab7473da8ff8fd4a6cf61f164d38d1222d260142bb8cd4357f9faa5a`
 - Reason: a symbol's number decides the order of instance variables and of hashes with
   symbol keys, and so the bytes of a save file. 1.8.7 and vkrgss's binding intern another set of
   names at start-up than the original runtime's Ruby 1.8.1, so every name a game creates had
@@ -170,7 +170,7 @@ that the host selects at start-up, and the behaviour of XP stays the default.
 
 - File: `parse.c`
 - Patch: `patches/symbol-ids-ruby-181-generated.patch`
-- Patched SHA-256: `ffa1bec927af6d455ee8bb5e9f87013afeb5d379731ea918aad439dd5bc2da01`
+- Patched SHA-256: `d602e8923844bd7bdcc39dd88b0055ebfa3ea75bac5fcc15c8d03e33ac1493d5`
 - Reason: follows patch 11. `parse.c` is the release's pre-generated parser and the file the
   build compiles; the changed code is in the part of `parse.y` that the generator copies
   verbatim, so the same three hunks are applied to it by hand, at an offset of 5947 lines.
@@ -214,7 +214,7 @@ that the host selects at start-up, and the behaviour of XP stays the default.
 
 - File: `parse.y`
 - Patch: `patches/oniguruma-engine-parser.patch`
-- Patched SHA-256: `a8ce8aad956dfd46d31478ce78424911dd75b868705eff757acd5b0e7b0d331e`
+- Patched SHA-256: `c9842866ab7473da8ff8fd4a6cf61f164d38d1222d260142bb8cd4357f9faa5a`
 - Reason: follows patch 14 and applies after patch 11. The parser includes `regex.h` itself,
   for `ismbchar` and `mbclen`; it includes `vkxp_regex.h` instead.
 
@@ -222,7 +222,7 @@ that the host selects at start-up, and the behaviour of XP stays the default.
 
 - File: `parse.c`
 - Patch: `patches/oniguruma-engine-parser-generated.patch`
-- Patched SHA-256: `ffa1bec927af6d455ee8bb5e9f87013afeb5d379731ea918aad439dd5bc2da01`
+- Patched SHA-256: `d602e8923844bd7bdcc39dd88b0055ebfa3ea75bac5fcc15c8d03e33ac1493d5`
 - Reason: follows patch 15 and applies after patch 12. The same line of the pre-generated
   parser, changed by hand.
 
@@ -276,7 +276,7 @@ that the host selects at start-up, and the behaviour of XP stays the default.
 
 - File: `parse.y`
 - Patch: `patches/intern-empty-name.patch`
-- Patched SHA-256: `a8ce8aad956dfd46d31478ce78424911dd75b868705eff757acd5b0e7b0d331e`
+- Patched SHA-256: `c9842866ab7473da8ff8fd4a6cf61f164d38d1222d260142bb8cd4357f9faa5a`
 - Reason: found by the sanitized run. `rb_intern` of a name that consists of `=` alone
   interns the name without its last character, the empty string, and for that one tested
   `name[-1]`, the byte before the buffer; had that byte been `=`, a copy of length -1 would
@@ -286,7 +286,7 @@ that the host selects at start-up, and the behaviour of XP stays the default.
 
 - File: `parse.c`
 - Patch: `patches/intern-empty-name-generated.patch`
-- Patched SHA-256: `ffa1bec927af6d455ee8bb5e9f87013afeb5d379731ea918aad439dd5bc2da01`
+- Patched SHA-256: `d602e8923844bd7bdcc39dd88b0055ebfa3ea75bac5fcc15c8d03e33ac1493d5`
 - Reason: follows patch 21. The same line of the pre-generated parser, changed by hand.
 
 ## 23. marshal-gc-guard
@@ -368,7 +368,7 @@ that the host selects at start-up, and the behaviour of XP stays the default.
 
 - File: `parse.y`
 - Patch: `patches/intern-incomplete-character.patch`
-- Patched SHA-256: `a8ce8aad956dfd46d31478ce78424911dd75b868705eff757acd5b0e7b0d331e`
+- Patched SHA-256: `c9842866ab7473da8ff8fd4a6cf61f164d38d1222d260142bb8cd4357f9faa5a`
 - Reason: found by the fuzz targets `marshal` and `parse` (change
   `fuzz-the-interpreter-and-review-fixes`). `rb_intern` walks a name character by
   character with the length the lead byte announces. A name that ends in an incomplete
@@ -383,14 +383,14 @@ that the host selects at start-up, and the behaviour of XP stays the default.
 
 - File: `parse.c`
 - Patch: `patches/intern-incomplete-character-generated.patch`
-- Patched SHA-256: `ffa1bec927af6d455ee8bb5e9f87013afeb5d379731ea918aad439dd5bc2da01`
+- Patched SHA-256: `d602e8923844bd7bdcc39dd88b0055ebfa3ea75bac5fcc15c8d03e33ac1493d5`
 - Reason: follows patch 28. The same line of the pre-generated parser, changed by hand.
 
 ## 30. parser-bounds-and-null-operands
 
 - File: `parse.y`
 - Patch: `patches/parser-bounds-and-null-operands.patch`
-- Patched SHA-256: `a8ce8aad956dfd46d31478ce78424911dd75b868705eff757acd5b0e7b0d331e`
+- Patched SHA-256: `c9842866ab7473da8ff8fd4a6cf61f164d38d1222d260142bb8cd4357f9faa5a`
 - Reason: applies after patch 28; found by the fuzz targets `parse` and `marshal` (change `fuzz-the-interpreter-and-review-fixes`).
   Four defects of the parser on input that is no valid script:
   `is_special_global_name` and `rb_symname_p` stepped over a name by the length its lead
@@ -410,7 +410,7 @@ that the host selects at start-up, and the behaviour of XP stays the default.
 
 - File: `parse.c`
 - Patch: `patches/parser-bounds-and-null-operands-generated.patch`
-- Patched SHA-256: `ffa1bec927af6d455ee8bb5e9f87013afeb5d379731ea918aad439dd5bc2da01`
+- Patched SHA-256: `d602e8923844bd7bdcc39dd88b0055ebfa3ea75bac5fcc15c8d03e33ac1493d5`
 - Reason: follows patch 30. The same lines of the pre-generated parser, changed by hand.
 
 ## 32. regexp-source-incomplete-character
@@ -512,3 +512,44 @@ that the host selects at start-up, and the behaviour of XP stays the default.
 - Patch: `patches/correctly-rounded-pow-bignum.patch`
 - Patched SHA-256: `68fc4b208e7913306e2b4646a6d07c55f4dc210626c9b54fa8fe78c43a4967e5`
 - Reason: as patch 37, for `pow` in `Bignum#**` where the result is a float.
+
+## 40. number-token-terminated
+
+- File: `parse.y`
+- Patch: `patches/number-token-terminated.patch`
+- Patched SHA-256: `c9842866ab7473da8ff8fd4a6cf61f164d38d1222d260142bb8cd4357f9faa5a`
+- Reason: applies after patch 30; found by the fuzz target `parse` (change
+  `make-the-nightly-checks-pass`). A number with a trailing `_` before a `.`, as `1_.`,
+  jumps from the loop over its digits to the label `trailing_uc`, past the `tokfix()` that
+  ends the token with a null byte, so `rb_cstr_to_inum` read the token past the end of its
+  buffer after the syntax error. `tokfix()` now follows the block of that label, where Ruby
+  1.9 has it. Input: `crates/vkrgss-ruby-sys/fuzz/fixed/parse/number-trailing-underscore.rb`.
+
+## 41. number-token-terminated-generated
+
+- File: `parse.c`
+- Patch: `patches/number-token-terminated-generated.patch`
+- Patched SHA-256: `d602e8923844bd7bdcc39dd88b0055ebfa3ea75bac5fcc15c8d03e33ac1493d5`
+- Reason: follows patch 40. The same lines of the pre-generated parser, changed by hand.
+
+## 42. end-line-kept
+
+- File: `parse.y`
+- Patch: `patches/end-line-kept.patch`
+- Patched SHA-256: `c9842866ab7473da8ff8fd4a6cf61f164d38d1222d260142bb8cd4357f9faa5a`
+- Reason: applies after patch 40; found by the fuzz target `parse` (change
+  `make-the-nightly-checks-pass`), with the collector run at every allocation. At
+  `__END__` the lexer cleared `lex_lastline`, the string of the current line, which only
+  that variable keeps from the collector, while `lex_pbeg` and `lex_p` still point into
+  it. At a syntax error at the end of the script, as an open `module` before `__END__`,
+  `yyerror` first makes the exception of the error, which allocates and can collect the
+  line, and then copies the line from the freed buffer. The line stays in
+  `lex_lastline`, as in Ruby 1.9. Input:
+  `crates/vkrgss-ruby-sys/fuzz/fixed/parse/end-after-open-module.rb`.
+
+## 43. end-line-kept-generated
+
+- File: `parse.c`
+- Patch: `patches/end-line-kept-generated.patch`
+- Patched SHA-256: `d602e8923844bd7bdcc39dd88b0055ebfa3ea75bac5fcc15c8d03e33ac1493d5`
+- Reason: follows patch 42. The same line of the pre-generated parser, changed by hand.

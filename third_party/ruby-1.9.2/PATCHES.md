@@ -316,7 +316,7 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
 
 - File: `parse.y`
 - Patch: `patches/parser-fuzz-findings.patch`
-- Patched SHA-256: `f98aabe446ec7d2ff7149917448b8180416d536a0b6e94b6433666480425a57f`
+- Patched SHA-256: `dcd851d90cdde49d9a27c64ea688bfa76be187aa299b034337df17539f03753d`
 - Reason: found by the fuzz target `parse192` (change `fuzz-and-review-ruby-1-9-2`). Two
   defects of the parser. The rule of a regexp literal joins the pieces of text after an
   interpolation; after the first piece the one it joins to is an element of the list, whose
@@ -331,7 +331,7 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
 
 - File: `parse.c`
 - Patch: `patches/parser-fuzz-findings-generated.patch`
-- Patched SHA-256: `cc107ff47aa6257db062af7726c6391bea509f18d0926f2deabc4cf274735fa5`
+- Patched SHA-256: `57cd6e133392ae4f77a05d634e29d6abba2675c99d37cc57a1716ca54ede240b`
 - Reason: follows patch 23. The same lines of the pre-generated parser, changed by hand.
 
 ## 25. regexp-escape-incomplete-character
@@ -635,3 +635,25 @@ the interpreter behave as vkrgss embeds it. None changes what a script computes.
   before it copies them; `buf` is not used afterwards and nothing else holds it.
   `RB_GC_GUARD(buf)` keeps it until the copy is done. No failure was seen; no result
   changes.
+
+## 47. null-operands
+
+- File: `parse.y`
+- Patch: `patches/null-operands.patch`
+- Patched SHA-256: `dcd851d90cdde49d9a27c64ea688bfa76be187aa299b034337df17539f03753d`
+- Reason: applies after patch 23; found by the fuzz target `parse192`, the first in the
+  nightly run (change `make-the-nightly-checks-pass`). After a syntax error some rules give
+  a null node as an expression: the statement that assigns to a constant with an operator
+  and a command, as `A::B += p 1`, which parentheses pass on, and a word list whose
+  content is no valid UTF-8, as `%W,` and the byte `0xce`. The rules of `..` and `...`
+  looked at the type of such an operand, as in `(A::B += p 1)..1`, and so did the rule of
+  `=~` after `match_op`, as in `%W,\xce=~/`; both read the null pointer. They test the
+  pointer first, as `match_op` does and as patch 30 of the tree of 1.8.7 does for the
+  ranges. Inputs: `crates/vkrgss-ruby192-sys/fuzz/fixed/parse/{range-null-operand,match-null-operand}.rb`.
+
+## 48. null-operands-generated
+
+- File: `parse.c`
+- Patch: `patches/null-operands-generated.patch`
+- Patched SHA-256: `57cd6e133392ae4f77a05d634e29d6abba2675c99d37cc57a1716ca54ede240b`
+- Reason: follows patch 47. The same lines of the pre-generated parser, changed by hand.

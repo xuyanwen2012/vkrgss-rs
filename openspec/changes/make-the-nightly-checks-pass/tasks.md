@@ -10,7 +10,7 @@
 
 ## 3. Findings of the parsers
 
-- [ ] 3.1 Run `parse192` and `parse` as `design.md` says; fix, record and replay what is found, or list it. Verify: a second run of 600 s of each ends without a finding that is not listed; `cargo test -p vkrgss-ruby-sys -p vkrgss-ruby192-sys --locked` passes; the sanitized runs pass.
+- [x] 3.1 Run `parse192` and `parse` as `design.md` says; fix, record and replay what is found, or list it. Verify: a second run of 600 s of each ends without a finding that is not listed; `cargo test -p vkrgss-ruby-sys -p vkrgss-ruby192-sys --locked` passes; the sanitized runs pass.
 
 ## 4. Documentation
 

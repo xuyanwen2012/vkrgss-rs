@@ -495,7 +495,7 @@ fn every_target_has_its_file_and_well_formed_seeds() {
 /// The inputs with which a target failed before the defect was fixed, reduced, under
 /// `fuzz/fixed/<file>/`; `PATCHES.md` of the vendored tree names the patch of each. Here
 /// they run without the sanitizers, so the test shows that the interpreter survives them
-/// and still computes: two of the defects read through a null pointer and one recursed
+/// and still computes: four of the defects read through a null pointer and one recursed
 /// without end, which end the process in any build, and the others are reported by
 /// `cargo xtask fuzz` again if one comes back. One input needs the collector to run while
 /// it is compiled, which the test below makes sure of.
@@ -519,7 +519,7 @@ fn the_inputs_of_fixed_findings_no_longer_fail() {
     }
     assert!(ran >= 5, "only {ran} inputs of fixed findings were found");
 
-    // What three of the inputs are now.
+    // What five of the inputs are now.
     let result = |file: &str, name: &str| -> Result<String, String> {
         let path = fuzz_dir().join("fixed").join(file).join(name);
         let path = path.to_str().expect("UTF-8 path");
@@ -529,6 +529,10 @@ fn the_inputs_of_fixed_findings_no_longer_fail() {
     assert!(time.contains("marshaled time format differ"), "{time}");
     let condition = result("parse", "condition-null-value.rb").expect_err("a syntax error");
     assert!(condition.starts_with("SyntaxError: "), "{condition}");
+    let range = result("parse", "range-null-operand.rb").expect_err("a syntax error");
+    assert!(range.contains("constant re-assignment"), "{range}");
+    let matched = result("parse", "match-null-operand.rb").expect_err("a syntax error");
+    assert!(matched.starts_with("SyntaxError: "), "{matched}");
     // The node of `::c` after its syntax error is marked without its name, which the
     // collector followed as a pointer; under stress it collects while the node is alive.
     assert_eq!(

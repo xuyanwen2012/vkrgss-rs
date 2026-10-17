@@ -1,0 +1,18 @@
+--- a/parse.c
++++ b/parse.c
+@@ -10017,13 +10017,14 @@
+ 
+ 	  decode_num:
+ 	    pushback(c);
+-	    tokfix();
+ 	    if (nondigit) {
+ 		char tmp[30];
+ 	      trailing_uc:
+ 		sprintf(tmp, "trailing `%c' in number", nondigit);
+ 		yyerror(tmp);
+ 	    }
++	    /* vkrgss: after the jumps to trailing_uc too, as Ruby 1.9 does */
++	    tokfix();
+ 	    if (is_float) {
+ 		double d = strtod(tok(), 0);
+ 		if (errno == ERANGE) {
