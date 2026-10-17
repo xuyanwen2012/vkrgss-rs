@@ -51,6 +51,16 @@ aarch64 Linux.
   is still read, and no read blocks on a closed connection. A few lines, needed for the
   guest-process tests of `vkrgss` to pass on the Mac.
 
+## Verification on the Mac
+
+The change ran on the owner's MacBook (Apple M4, macOS 27, MoltenVK), with no Linux machine
+at hand. Task 5.1 was checked there in place of the Linux gate: `cargo fmt --all --check`,
+`cargo clippy --workspace --all-targets --locked -- -D warnings` and
+`cargo test --workspace --locked` with the environment above (3448 tests passed, none
+failed), and `openspec validate build-and-test-on-macos --strict`. The Linux gate
+(`VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate`) is run by the owner's session at the
+merge.
+
 ## Out of scope
 
 `.app` packaging, loading libvulkan and MoltenVK from the bundle, signing, a windowed run,
@@ -72,3 +82,8 @@ audio output, the real corpus, `sandbox_init`.
 - **The crash report of Ruby 1.9.2 on macOS.** `test_rubyoptions.rb#test_segv_test` is kept
   to Linux: the C backtrace has the format of `backtrace_symbols` of macOS, which the
   pattern of the test does not match. Only the text of a crash report differs.
+- **`test_thread.rb#test_local_barrier` of Ruby 1.9.2.** It failed once in a run of the whole
+  workspace on the Mac, its child printing `7: cont` after `exit.`, which the test's own
+  threads may do; it passed in every other run, and 220 runs of its script alone, 180 of
+  them twelve at a time, all ended with `exit.`. Left in the suite; whether it should be
+  listed if it recurs is open.

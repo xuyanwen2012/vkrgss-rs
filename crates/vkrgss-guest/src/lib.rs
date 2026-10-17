@@ -34,7 +34,8 @@
 //!    record.
 //! 1. [`signals::die_with_parent`].
 //! 2. The executable opens the game's files, enters the game directory, calls
-//!    [`signals::block_virtual_timer`] while the main thread is the only one, and starts its
+//!    [`signals::block_virtual_timer`] while the main thread is the only one (on macOS
+//!    beside the thread of [`parent_watch`], which blocks every signal), and starts its
 //!    interpreter.
 //! 3. [`Attached::connect`], with the package version of the executable.
 //! 4. Unless the game may start processes: [`Attached::copier`], which the executable gives
