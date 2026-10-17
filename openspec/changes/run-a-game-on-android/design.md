@@ -112,4 +112,15 @@ gamepads beyond what winit delivers, release signing, Obtainium metadata.
 
 ## Follow-ups
 
-None yet.
+- Sound while the activity is in the background: the session waits, but the AAudio stream
+  is neither paused nor closed, so music that was playing goes on. Pausing the output on
+  `Suspended` needs a call on the audio sink that it does not have.
+- The Khronos validation layer for Android (arm64) is not on this machine; a run on the
+  phones with it, once it can be fetched, would check the pause and resume path there too.
+- On the Pixel 7a, which has `VK_EXT_present_timing`, the log says frames are paced by the
+  host's timer: the surface or the swapchain of the window did not offer present timing
+  as the pacer asks for it. Not looked into.
+- No game of RGSS2 was run on a phone; its path is the one of RGSS1 apart from the key map
+  and the frame size.
+- The refusal of a game of RGSS3 is a line of the log; a message on screen comes with the
+  import of games and the on-screen buttons.
