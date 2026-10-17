@@ -13,11 +13,13 @@ fn the_interpreter_is_built_for_x86_64_aarch64_and_android_and_nothing_else() {
         [
             "x86_64-unknown-linux-gnu",
             "aarch64-unknown-linux-gnu",
+            "aarch64-apple-darwin",
             "aarch64-linux-android"
         ]
     );
     assert!(is_built_for("x86_64-unknown-linux-gnu"));
     assert!(is_built_for("aarch64-unknown-linux-gnu"));
+    assert!(is_built_for("aarch64-apple-darwin"));
     assert!(is_built_for("aarch64-linux-android"));
     assert!(!is_built_for("riscv64gc-unknown-linux-gnu"));
     assert!(!is_built_for("x86_64-linux-android"));

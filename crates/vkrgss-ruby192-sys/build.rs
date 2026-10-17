@@ -362,14 +362,22 @@ fn main() {
         .file(ruby_dir.join("ext/zlib/zlib.c"));
     zlib.compile("vkrgss-ruby192-zlib");
 
-    // The correctly rounded functions, which the interpreter refers to.
+    // The correctly rounded functions, which the interpreter refers to. macOS declares
+    // `lgamma_r`, which the shim calls, only under `_REENTRANT`.
+    let macos = env::var("CARGO_CFG_TARGET_OS").expect("cargo sets CARGO_CFG_TARGET_OS") == "macos";
     let mut core_math = hardened_build(CORE_MATH_FLAGS);
+    if macos {
+        core_math.define("_REENTRANT", None);
+    }
     core_math.files(core_math_files(&core_math_dir));
     core_math.compile("vkrgss-ruby192-core-math");
 
-    // bionic has the functions of libpthread and librt in its libc and has no libcrypt; the
-    // patched `string.c` does not call `crypt` on Android.
-    if !android {
+    // The C library of macOS has what librt and libcrypt hold on Linux. bionic has the
+    // functions of libpthread and librt in its libc and has no libcrypt; the patched
+    // `string.c` does not call `crypt` on Android.
+    if macos {
+        println!("cargo:rustc-link-lib=pthread");
+    } else if !android {
         for library in ["pthread", "rt"] {
             println!("cargo:rustc-link-lib={library}");
         }

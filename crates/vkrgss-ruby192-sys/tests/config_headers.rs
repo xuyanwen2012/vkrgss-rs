@@ -2,6 +2,10 @@
 //! Below their leading comments the two differ only in `RUBY_PLATFORM`, so that they cannot
 //! drift apart. That of Android is that of aarch64 without the definitions of what bionic
 //! lacks and with the platform string of Android.
+//!
+//! The header for aarch64-apple-darwin is the one `configure` wrote on the Mac, which differs
+//! from those of Linux in more than the platform: its platform string and the hand edits it
+//! shares with them are checked.
 
 use std::fs;
 use std::path::PathBuf;
@@ -9,6 +13,7 @@ use std::path::PathBuf;
 const X86_64: &str = "x86_64-unknown-linux-gnu";
 const AARCH64: &str = "aarch64-unknown-linux-gnu";
 const ANDROID: &str = "aarch64-linux-android";
+const DARWIN: &str = "aarch64-apple-darwin";
 
 /// The directory of this crate, or where the tests run on a phone (`cargo xtask
 /// android-test`), the value of `CARGO_MANIFEST_DIR` when it is set.
@@ -101,4 +106,18 @@ fn the_header_of_android_lacks_only_what_bionic_lacks() {
         .collect();
     let actual: Vec<&str> = android.lines().collect();
     assert_eq!(actual, expected, "the header of Android");
+}
+
+#[test]
+fn the_header_of_darwin_names_aarch64_darwin_and_has_the_hand_edits() {
+    let header = read(DARWIN);
+    let (comment, definitions) = split_comments(&header);
+    assert!(
+        comment.contains("aarch64-darwin"),
+        "the leading comment does not name aarch64-darwin"
+    );
+    let lines: Vec<&str> = definitions.lines().collect();
+    assert!(lines.contains(&"#define RUBY_PLATFORM \"aarch64-darwin\""));
+    assert!(lines.contains(&"#define RUBY_EXEC_PREFIX \"/nonexistent-vkrgss-ruby192\""));
+    assert!(!definitions.contains("STACK_END_ADDRESS"));
 }

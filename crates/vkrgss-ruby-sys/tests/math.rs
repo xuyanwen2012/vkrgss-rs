@@ -141,3 +141,82 @@ fn special_arguments_behave_as_before() {
         assert_eq!(eval(source), Ok(format!("{expected:?}")), "{expression}");
     }
 }
+
+// SAFETY: the functions of the shim take and return plain numbers and change nothing but
+// `errno`; `vkrgss_lgamma_r` writes the sign through its pointer too, and stays unsafe.
+unsafe extern "C" {
+    safe fn vkrgss_atanh(x: f64) -> f64;
+    safe fn vkrgss_cosh(x: f64) -> f64;
+    safe fn vkrgss_exp(x: f64) -> f64;
+    safe fn vkrgss_log(x: f64) -> f64;
+    safe fn vkrgss_log10(x: f64) -> f64;
+    safe fn vkrgss_pow(x: f64, y: f64) -> f64;
+    safe fn vkrgss_sinh(x: f64) -> f64;
+    safe fn vkrgss_tgamma(x: f64) -> f64;
+    fn vkrgss_lgamma_r(x: f64, sign: *mut libc::c_int) -> f64;
+}
+
+fn lgamma(x: f64) -> f64 {
+    let mut sign = 0;
+    // SAFETY: `sign` is valid for writes.
+    unsafe { vkrgss_lgamma_r(x, &mut sign) }
+}
+
+/// The `errno` of the calling thread.
+fn errno() -> *mut libc::c_int {
+    // SAFETY: the function returns the address of the calling thread's `errno`.
+    #[cfg(target_os = "linux")]
+    let location = unsafe { libc::__errno_location() };
+    // SAFETY: as above.
+    #[cfg(target_os = "macos")]
+    let location = unsafe { libc::__error() };
+    location
+}
+
+/// The result of `call` and the `errno` it left, cleared before.
+fn with_errno(call: fn() -> f64) -> (f64, libc::c_int) {
+    // SAFETY: `errno` is the calling thread's own.
+    unsafe { *errno() = 0 };
+    let result = call();
+    // SAFETY: as above.
+    (result, unsafe { *errno() })
+}
+
+/// A call of the shim, by what it computes.
+type Call = (&'static str, fn() -> f64);
+
+/// A pole or an overflow, an infinite result from finite arguments, is a range error: the
+/// functions the interpreters call set `errno` to `ERANGE` for it on every platform, as glibc
+/// does and the libm of macOS does not. A finite result leaves `errno` alone.
+#[test]
+fn poles_and_overflows_set_errno_to_erange() {
+    let ranges: [Call; 12] = [
+        ("log(0)", || vkrgss_log(0.0)),
+        ("log(-0)", || vkrgss_log(-0.0)),
+        ("log10(0)", || vkrgss_log10(0.0)),
+        ("atanh(1)", || vkrgss_atanh(1.0)),
+        ("atanh(-1)", || vkrgss_atanh(-1.0)),
+        ("exp(1000)", || vkrgss_exp(1000.0)),
+        ("pow(10, 400)", || vkrgss_pow(10.0, 400.0)),
+        ("pow(0, -1)", || vkrgss_pow(0.0, -1.0)),
+        ("cosh(1000)", || vkrgss_cosh(1000.0)),
+        ("sinh(-1000)", || vkrgss_sinh(-1000.0)),
+        ("tgamma(200)", || vkrgss_tgamma(200.0)),
+        ("lgamma(0)", || lgamma(0.0)),
+    ];
+    for (call, function) in ranges {
+        let (result, error) = with_errno(function);
+        assert!(result.is_infinite(), "{call} = {result}");
+        assert_eq!(error, libc::ERANGE, "errno after {call}");
+    }
+    let finite: [Call; 3] = [
+        ("log(1)", || vkrgss_log(1.0)),
+        ("exp(1)", || vkrgss_exp(1.0)),
+        ("pow(2, 10)", || vkrgss_pow(2.0, 10.0)),
+    ];
+    for (call, function) in finite {
+        let (result, error) = with_errno(function);
+        assert!(result.is_finite(), "{call} = {result}");
+        assert_eq!(error, 0, "errno after {call}");
+    }
+}

@@ -2,6 +2,10 @@
 //! aarch64. Below their leading comments the two differ only in the definitions that name the
 //! platform, so that they cannot drift apart. Those of Android are those of aarch64 without
 //! the definitions of what bionic lacks and with the platform strings of Android.
+//!
+//! The header of Ruby for aarch64-apple-darwin is the one `configure` wrote on the Mac, which
+//! differs from those of Linux in more than the platform: its platform strings are checked.
+//! Its header of Oniguruma is that of aarch64 Linux.
 
 mod common;
 
@@ -10,6 +14,7 @@ use std::fs;
 const X86_64: &str = "x86_64-unknown-linux-gnu";
 const AARCH64: &str = "aarch64-unknown-linux-gnu";
 const ANDROID: &str = "aarch64-linux-android";
+const DARWIN: &str = "aarch64-apple-darwin";
 
 /// The definitions that name the platform in the header of the interpreter.
 const PLATFORM: &[&str] = &[
@@ -144,4 +149,39 @@ fn the_oniguruma_header_of_android_differs_only_in_its_comment() {
 #[test]
 fn the_oniguruma_header_of_aarch64_differs_only_in_its_comment() {
     assert_only_the_platform_differs("oniguruma/config.h", &[]);
+}
+
+#[test]
+fn the_ruby_header_of_darwin_names_aarch64_darwin() {
+    let header = read(DARWIN, "config.h");
+    let (comment, _) = split_comments(&header);
+    assert!(
+        comment.contains("aarch64-darwin"),
+        "the leading comment does not name aarch64-darwin"
+    );
+    let platform: Vec<&str> = header
+        .lines()
+        .filter(|line| line.contains("ARCHLIB ") || line.contains("RUBY_PLATFORM "))
+        .collect();
+    assert_eq!(
+        platform,
+        [
+            "#define RUBY_PLATFORM \"aarch64-darwin\"",
+            "#define RUBY_ARCHLIB \"/usr/local/lib/ruby/1.8/aarch64-darwin\"",
+            "#define RUBY_SITE_ARCHLIB \"/usr/local/lib/ruby/site_ruby/1.8/aarch64-darwin\"",
+            "#define RUBY_VENDOR_ARCHLIB \"/usr/local/lib/ruby/vendor_ruby/1.8/aarch64-darwin\"",
+        ]
+    );
+}
+
+#[test]
+fn the_oniguruma_header_of_darwin_is_that_of_aarch64_linux() {
+    let linux = read(AARCH64, "oniguruma/config.h");
+    let darwin = read(DARWIN, "oniguruma/config.h");
+    let (comment, darwin) = split_comments(&darwin);
+    assert!(
+        comment.contains("aarch64-apple-darwin"),
+        "the leading comment does not name aarch64-apple-darwin"
+    );
+    assert_eq!(split_comments(&linux).1, darwin);
 }

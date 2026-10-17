@@ -5,6 +5,9 @@
 //! shared library loaded into the process would bind to them instead of to its own. The
 //! build compiles with hidden visibility; this test links an executable with `-rdynamic`,
 //! which exports everything that is not hidden, and reads its dynamic symbol table.
+//!
+//! Kept to Linux: the test reads an ELF file, and macOS links Mach-O.
+#![cfg(target_os = "linux")]
 
 mod common;
 

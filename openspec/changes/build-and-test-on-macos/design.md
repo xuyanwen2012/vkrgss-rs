@@ -58,4 +58,11 @@ audio output, the real corpus, `sandbox_init`.
 
 ## Follow-ups
 
-None yet.
+- **`IO#pos` after `IO#readpartial` in Ruby 1.8.7 on macOS.** BSD stdio answers `ftello`
+  from the offset it last knew and does not see the read that `readpartial` makes on the
+  descriptor, so `pos` is 0 instead of 2 in `test_io.rb#test_readpartial_pos`, which is kept
+  to Linux in `tests/upstream.rs` of `vkrgss-ruby-sys`. Whether a game can meet it, and
+  whether a recorded patch of `io.c` should make the position right, is open.
+- **The crash report of Ruby 1.9.2 on macOS.** `test_rubyoptions.rb#test_segv_test` is kept
+  to Linux: the C backtrace has the format of `backtrace_symbols` of macOS, which the
+  pattern of the test does not match. Only the text of a crash report differs.

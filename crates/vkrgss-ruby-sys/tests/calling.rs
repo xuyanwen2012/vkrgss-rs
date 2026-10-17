@@ -31,6 +31,8 @@ fn inspect_eval(ruby: &Ruby, source: &str, file: &str, line: u32) -> Result<Stri
 /// `RUBY_PLATFORM` of the build, which names the architecture and the system of the target.
 const PLATFORM: &str = if cfg!(target_os = "android") {
     "aarch64-linux-android"
+} else if cfg!(target_os = "macos") {
+    "aarch64-darwin"
 } else if cfg!(target_arch = "aarch64") {
     "aarch64-linux"
 } else {

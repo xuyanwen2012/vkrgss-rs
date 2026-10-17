@@ -158,7 +158,12 @@ pub(crate) fn build_ruby_executable(scratch: &Path) -> PathBuf {
         .arg(ruby_libs.join("libvkrgss-ruby-onig.a"))
         .arg(ruby_libs.join("libvkrgss-ruby-core-math.a"))
         .arg(zlib_libs.join("libz.a"))
-        .args(["-lcrypt", "-lm"])
+        // `crypt` is in the C library of macOS, which has no libcrypt.
+        .args(if cfg!(target_os = "macos") {
+            &["-lm"][..]
+        } else {
+            &["-lcrypt", "-lm"]
+        })
         .arg("-o")
         .arg(&executable));
     executable

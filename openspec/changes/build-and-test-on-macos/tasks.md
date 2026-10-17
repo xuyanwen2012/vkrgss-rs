@@ -10,7 +10,7 @@
 
 ## 3. Interpreters
 
-- [ ] 3.1 Darwin headers and build changes for both crates, the errno of `Math` in the shim, tests. Verify: scenarios "Interpreters" and "Errors of Math on macOS" on the Mac; the crates' tests pass on Linux.
+- [x] 3.1 Darwin headers and build changes for both crates, the errno of `Math` in the shim, tests. Verify: scenarios "Interpreters" and "Errors of Math on macOS" on the Mac; the crates' tests pass on Linux.
 
 ## 4. Linux-dependent tests and documents
 

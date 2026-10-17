@@ -2,7 +2,10 @@
 //! thread; its timer thread starts with the first thread a script creates.
 //!
 //! One test per file: the threads of the whole process are counted.
+//!
+//! Kept to Linux: the threads are counted in `/proc/self/task`, which macOS does not have.
 #![cfg(not(vkrgss_interpreter_absent))]
+#![cfg(target_os = "linux")]
 
 mod common;
 

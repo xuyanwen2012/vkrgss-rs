@@ -26,12 +26,15 @@ use std::path::{Path, PathBuf};
 /// Only x86_64 is supported. The headers of aarch64 are those that the release's `configure`
 /// wrote on aarch64, which differ from those of x86_64 only in the platform strings; the
 /// target is built and tested by the CI job `gate-aarch64`, and supported once P1 of
-/// `docs/decisions.md` is accepted. The headers of Android are those of aarch64 without what
-/// bionic lacks; the target is built from API level [`MIN_ANDROID_API`] on and tested on
-/// phones (`cargo xtask android-test`), and supported once P3 is accepted.
+/// `docs/decisions.md` is accepted. The headers of aarch64-apple-darwin are those that
+/// `configure` wrote on an Apple M4, reviewed; that target is built and tested by hand on the
+/// owner's Mac, and supported once P2 is accepted. The headers of Android are those of aarch64
+/// without what bionic lacks; the target is built from API level [`MIN_ANDROID_API`] on and
+/// tested on phones (`cargo xtask android-test`), and supported once P3 is accepted.
 const TARGETS: &[&str] = &[
     "x86_64-unknown-linux-gnu",
     "aarch64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
     "aarch64-linux-android",
 ];
 
@@ -448,13 +451,19 @@ fn main() {
     }
     onig.compile("vkrgss-ruby-onig");
 
-    // The correctly rounded functions, which the interpreter refers to.
+    // The correctly rounded functions, which the interpreter refers to. macOS declares
+    // `lgamma_r`, which the shim calls, only under `_REENTRANT`.
+    let macos = env::var("CARGO_CFG_TARGET_OS").expect("cargo sets CARGO_CFG_TARGET_OS") == "macos";
     let mut core_math = hardened_build(CORE_MATH_FLAGS);
+    if macos {
+        core_math.define("_REENTRANT", None);
+    }
     core_math.files(core_math_files(&core_math_dir));
     core_math.compile("vkrgss-ruby-core-math");
 
     // bionic has no libcrypt; the patched `string.c` does not call `crypt` on Android.
-    if !android {
+    // `crypt` is in the C library of macOS, which has no libcrypt.
+    if !android && !macos {
         link_crypt(&base);
     }
     println!("cargo:rustc-link-lib=m");

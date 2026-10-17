@@ -1,6 +1,7 @@
 //! Saving and restoring the signal state that `ruby_init` replaces.
 //!
-//! This is platform code for x86_64 and aarch64 Linux, the targets the crate builds for.
+//! This is platform code for x86_64 and aarch64 Linux and for aarch64 macOS, the targets the
+//! crate builds for.
 
 use std::mem::MaybeUninit;
 use std::ptr;
@@ -71,6 +72,7 @@ pub fn threads_lost_in_a_copy() -> bool {
 /// glibc, because glibc adds its own restorer and the `SA_RESTORER` flag to everything it
 /// installs. A default disposition that was never touched has neither, so putting it back
 /// through glibc would not leave it exactly as it was.
+#[cfg(target_os = "linux")]
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct KernelAction {
@@ -81,8 +83,10 @@ struct KernelAction {
 }
 
 /// The size of the kernel's signal set, which `rt_sigaction` wants as its last argument.
+#[cfg(target_os = "linux")]
 const KERNEL_SIGSET_SIZE: usize = size_of::<u64>();
 
+#[cfg(target_os = "linux")]
 fn get(signal: c_int) -> KernelAction {
     let mut action = MaybeUninit::<KernelAction>::zeroed();
     // SAFETY: a null new action only queries; `action` is valid for the kernel's structure to
@@ -101,6 +105,7 @@ fn get(signal: c_int) -> KernelAction {
     unsafe { action.assume_init() }
 }
 
+#[cfg(target_os = "linux")]
 fn set(signal: c_int, action: &KernelAction) {
     // SAFETY: `action` is a disposition this process had before, read by `get` with its
     // restorer; installing it gives the process nothing it did not already have.
@@ -114,6 +119,31 @@ fn set(signal: c_int, action: &KernelAction) {
         )
     };
     assert_eq!(status, 0, "rt_sigaction cannot set signal {signal}");
+}
+
+/// `struct sigaction` of the C library of macOS, which has no `rt_sigaction`. Its `sigaction`
+/// adds no restorer and no flag to what it installs, so a disposition read and set again
+/// through it stays exactly as it was.
+#[cfg(target_os = "macos")]
+type KernelAction = libc::sigaction;
+
+#[cfg(target_os = "macos")]
+fn get(signal: c_int) -> KernelAction {
+    let mut action = MaybeUninit::<KernelAction>::zeroed();
+    // SAFETY: a null new action only queries; `action` is valid for the structure to be
+    // written, and every signal passed here is a valid, catchable signal number.
+    let status = unsafe { libc::sigaction(signal, ptr::null(), action.as_mut_ptr()) };
+    assert_eq!(status, 0, "sigaction cannot query signal {signal}");
+    // SAFETY: the successful call above initialised it.
+    unsafe { action.assume_init() }
+}
+
+#[cfg(target_os = "macos")]
+fn set(signal: c_int, action: &KernelAction) {
+    // SAFETY: `action` is a disposition this process had before, read by `get`; installing it
+    // gives the process nothing it did not already have.
+    let status = unsafe { libc::sigaction(signal, ptr::from_ref(action), ptr::null_mut()) };
+    assert_eq!(status, 0, "sigaction cannot set signal {signal}");
 }
 
 /// The signal mask of the calling thread.

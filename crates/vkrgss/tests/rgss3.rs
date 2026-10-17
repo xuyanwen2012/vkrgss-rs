@@ -9,10 +9,13 @@
 //! checks first that the file is there.
 //!
 //! The file is empty on every target but those Ruby 1.9.2 is built for.
-#![cfg(all(
-    any(target_arch = "x86_64", target_arch = "aarch64"),
-    target_os = "linux",
-    target_env = "gnu"
+#![cfg(any(
+    all(
+        any(target_arch = "x86_64", target_arch = "aarch64"),
+        target_os = "linux",
+        target_env = "gnu"
+    ),
+    all(target_arch = "aarch64", target_os = "macos")
 ))]
 
 use std::fs;
@@ -591,7 +594,7 @@ end",
     assert!(later > first, "{first} then {later}");
     let pid = written(&game, "pid.txt");
     assert!(
-        !Path::new(&format!("/proc/{pid}")).exists(),
+        !process_exists(&pid),
         "the guest process {pid} is still there"
     );
 }
@@ -1027,10 +1030,7 @@ fn a_guest_of_vx_ace_saves_and_loads_states_confined_or_not() {
         let attached = attached_processes(&ran.stderr());
         assert!(attached.len() >= 2, "{}", ran.stderr());
         for pid in attached {
-            assert!(
-                !Path::new(&format!("/proc/{pid}")).exists(),
-                "the process {pid} is still there"
-            );
+            assert!(!process_exists(pid), "the process {pid} is still there");
         }
     }
 }

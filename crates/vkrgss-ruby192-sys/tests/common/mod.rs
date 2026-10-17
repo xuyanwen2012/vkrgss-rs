@@ -88,23 +88,35 @@ pub(crate) fn compile_object(scratch: &Path, source: &Path) -> PathBuf {
 
 /// What follows the objects of an executable on the linker's command line: the archives of
 /// the build script, the zlib of `libz-sys` and the libraries of the system. The archives
-/// refer to each other, hence the group.
+/// refer to each other, hence the group. The linker of macOS has no groups and needs none,
+/// since it searches every archive for what any of them lacks, and the C library of macOS has
+/// what librt and libcrypt hold on Linux.
 pub(crate) fn link_arguments() -> Vec<PathBuf> {
     let ruby_libs = Path::new(env!("VKRGSS_RUBY192_LIB_DIR"));
     let zlib_libs = Path::new(env!("VKRGSS_RUBY192_ZLIB_LIB_DIR"));
-    vec![
-        PathBuf::from("-Wl,--start-group"),
+    let archives = [
         ruby_libs.join("libvkrgss-ruby192-zlib.a"),
         ruby_libs.join("libvkrgss-ruby192-static.a"),
         ruby_libs.join("libvkrgss-ruby192-enc.a"),
-        PathBuf::from("-Wl,--end-group"),
+    ];
+    let mut arguments = Vec::new();
+    if cfg!(target_os = "macos") {
+        arguments.extend(archives);
+    } else {
+        arguments.push(PathBuf::from("-Wl,--start-group"));
+        arguments.extend(archives);
+        arguments.push(PathBuf::from("-Wl,--end-group"));
+    }
+    arguments.extend([
         ruby_libs.join("libvkrgss-ruby192-core-math.a"),
         zlib_libs.join("libz.a"),
         PathBuf::from("-lpthread"),
-        PathBuf::from("-lrt"),
-        PathBuf::from("-lcrypt"),
-        PathBuf::from("-lm"),
-    ]
+    ]);
+    if !cfg!(target_os = "macos") {
+        arguments.extend([PathBuf::from("-lrt"), PathBuf::from("-lcrypt")]);
+    }
+    arguments.push(PathBuf::from("-lm"));
+    arguments
 }
 
 /// The extensions that only Ruby's test executable links, with the defines of their own
