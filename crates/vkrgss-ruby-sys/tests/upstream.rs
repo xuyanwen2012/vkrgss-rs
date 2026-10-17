@@ -17,8 +17,10 @@ use common::Suites;
 /// What `ruby -v` must print, which names the platform of the target.
 #[cfg(target_arch = "x86_64")]
 const VERSION_LINE: &str = "ruby 1.8.7 (2013-06-27 patchlevel 374) [x86_64-linux]";
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(target_arch = "aarch64", not(target_os = "android")))]
 const VERSION_LINE: &str = "ruby 1.8.7 (2013-06-27 patchlevel 374) [aarch64-linux]";
+#[cfg(target_os = "android")]
+const VERSION_LINE: &str = "ruby 1.8.7 (2013-06-27 patchlevel 374) [aarch64-linux-android]";
 
 /// How long one test process may run. The slowest file takes a few seconds.
 const PROCESS_TIMEOUT: Duration = Duration::from_secs(120);

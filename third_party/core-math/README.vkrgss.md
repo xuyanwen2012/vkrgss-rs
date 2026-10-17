@@ -23,8 +23,11 @@ the directory `vkrgss/`) are not part of CORE-MATH.
 `vkrgss/vkrgss_math.h` and `vkrgss/vkrgss_math.c` are vkrgss's own, under its MIT licence.
 The C file defines `vkrgss_<name>` for each function: for a finite, non-zero argument it
 returns the result of CORE-MATH, and otherwise that of the C library, which also sets `errno`
-where a result of CORE-MATH is not a normal number. The header maps the names: a recorded
-patch of each interpreter includes it in `math.c`, `numeric.c` and `bignum.c`.
+where a result of CORE-MATH is not a normal number. On Android, whose libm never sets
+`errno`, the C file sets it as glibc does for the errors that `Math` of Ruby 1.8.7 reads: `EDOM`
+for a NaN from arguments that are not NaN, `ERANGE` for an infinity from finite arguments. The
+header maps the names: a recorded patch of each interpreter includes it in `math.c`,
+`numeric.c` and `bignum.c`.
 
 ## Licence
 

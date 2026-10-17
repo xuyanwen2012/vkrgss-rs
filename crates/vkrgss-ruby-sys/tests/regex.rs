@@ -70,7 +70,8 @@ end
 
 #[test]
 fn results_equal_those_measured_on_the_original() {
-    let data = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/regex.original.txt");
+    let data = common::manifest_dir().join("tests/data/regex.original.txt");
+    let data = data.to_str().expect("UTF-8 path");
     let differences = eval(format!("VKRGSS_MEASURED = {data:?}\n{PROBE}"));
     assert_eq!(differences, Ok("[66, []]".to_owned()));
 }

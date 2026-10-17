@@ -6,6 +6,14 @@ mod common;
 
 use vkrgss_ruby_sys::{Interpreter, Options};
 
+#[cfg(not(target_os = "android"))]
+use libc::ITIMER_VIRTUAL;
+
+/// The virtual interval timer of the kernel, which the `libc` crate does not define for
+/// Android.
+#[cfg(target_os = "android")]
+const ITIMER_VIRTUAL: libc::c_int = 1;
+
 #[test]
 fn dispositions_of_the_process_survive_start_and_shutdown() {
     let before = common::dispositions();
@@ -24,7 +32,7 @@ fn dispositions_of_the_process_survive_start_and_shutdown() {
     // SAFETY: plain queries of the timer and of one disposition into valid buffers.
     unsafe {
         let mut timer: libc::itimerval = std::mem::zeroed();
-        assert_eq!(libc::getitimer(libc::ITIMER_VIRTUAL, &mut timer), 0);
+        assert_eq!(libc::getitimer(ITIMER_VIRTUAL, &mut timer), 0);
         assert_eq!(
             (timer.it_interval.tv_sec, timer.it_interval.tv_usec),
             (0, 0),

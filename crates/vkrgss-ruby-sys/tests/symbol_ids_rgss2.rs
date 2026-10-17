@@ -9,7 +9,6 @@
 mod common;
 
 use std::ffi::CString;
-use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
 use common::eval_inspect;
@@ -30,9 +29,7 @@ fn interpreter() -> &'static Mutex<Interpreter> {
 
 /// A measured table as (name, number) pairs.
 fn table(file: &str) -> Vec<(String, u64)> {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("data")
-        .join(file);
+    let path = common::manifest_dir().join("data").join(file);
     std::fs::read_to_string(path)
         .expect("the table is readable")
         .lines()

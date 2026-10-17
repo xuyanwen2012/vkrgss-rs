@@ -1,15 +1,26 @@
 //! The configuration headers of aarch64 are those of x86_64 with the platform strings of
 //! aarch64. Below their leading comments the two differ only in the definitions that name the
-//! platform, so that they cannot drift apart.
+//! platform, so that they cannot drift apart. Those of Android are those of aarch64 without
+//! the definitions of what bionic lacks and with the platform strings of Android.
+
+mod common;
 
 use std::fs;
-use std::path::Path;
 
 const X86_64: &str = "x86_64-unknown-linux-gnu";
 const AARCH64: &str = "aarch64-unknown-linux-gnu";
+const ANDROID: &str = "aarch64-linux-android";
+
+/// The definitions that name the platform in the header of the interpreter.
+const PLATFORM: &[&str] = &[
+    "RUBY_PLATFORM",
+    "RUBY_ARCHLIB",
+    "RUBY_SITE_ARCHLIB",
+    "RUBY_VENDOR_ARCHLIB",
+];
 
 fn read(target: &str, header: &str) -> String {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+    let path = common::manifest_dir()
         .join("config")
         .join(target)
         .join(header);
@@ -62,17 +73,72 @@ fn assert_only_the_platform_differs(header: &str, platform: &[&str]) {
     assert_eq!(differing, platform, "{header}: the platform strings");
 }
 
+/// The name of a definition line.
+fn defined_name(line: &str) -> Option<&str> {
+    line.strip_prefix("#define ")
+        .map(|definition| definition.split([' ', '(']).next().unwrap_or(definition))
+}
+
+/// Asserts that, below the leading comments, the header of Android is that of aarch64
+/// without the definitions `removed` names, each of which the header of aarch64 has, and with
+/// `aarch64-linux` replaced by `aarch64-linux-android` in the definitions `platform` names,
+/// and that its leading comment names Android.
+fn assert_only_bionic_differs(header: &str, removed: &[&str], platform: &[&str]) {
+    let aarch64 = read(AARCH64, header);
+    let android = read(ANDROID, header);
+    let (_, aarch64) = split_comments(&aarch64);
+    let (comment, android) = split_comments(&android);
+    assert!(
+        comment.contains("aarch64-linux-android"),
+        "{header}: the leading comment does not name aarch64-linux-android"
+    );
+    for name in removed {
+        assert!(
+            aarch64.lines().any(|line| defined_name(line) == Some(name)),
+            "{header}: the header of aarch64 does not define {name}"
+        );
+    }
+    let expected: Vec<String> = aarch64
+        .lines()
+        .filter(|line| !defined_name(line).is_some_and(|name| removed.contains(&name)))
+        .map(|line| match defined_name(line) {
+            Some(name) if platform.contains(&name) => {
+                line.replace("aarch64-linux", "aarch64-linux-android")
+            }
+            _ => line.to_owned(),
+        })
+        .collect();
+    let actual: Vec<&str> = android.lines().collect();
+    assert_eq!(actual, expected, "{header}: the header of Android");
+}
+
 #[test]
 fn the_ruby_header_of_aarch64_differs_only_in_the_platform_strings() {
-    assert_only_the_platform_differs(
+    assert_only_the_platform_differs("config.h", PLATFORM);
+}
+
+/// bionic has no `crypt(3)` and no libcrypt, no `eaccess`, `lchmod` or `group_member`, and an
+/// opaque `FILE`.
+#[test]
+fn the_ruby_header_of_android_lacks_only_what_bionic_lacks() {
+    assert_only_bionic_differs(
         "config.h",
         &[
-            "RUBY_PLATFORM",
-            "RUBY_ARCHLIB",
-            "RUBY_SITE_ARCHLIB",
-            "RUBY_VENDOR_ARCHLIB",
+            "HAVE_LIBCRYPT",
+            "HAVE_CRYPT",
+            "HAVE_EACCESS",
+            "HAVE_LCHMOD",
+            "HAVE_GROUP_MEMBER",
+            "FILE_READPTR",
+            "FILE_READEND",
         ],
+        PLATFORM,
     );
+}
+
+#[test]
+fn the_oniguruma_header_of_android_differs_only_in_its_comment() {
+    assert_only_bionic_differs("oniguruma/config.h", &[], &[]);
 }
 
 #[test]

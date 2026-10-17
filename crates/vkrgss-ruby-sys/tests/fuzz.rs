@@ -141,7 +141,7 @@ const FUZZ_FLAGS: &[&str] = &[
 const FUZZ_ONIG_FLAGS: &[&str] = &["-fno-sanitize=alignment"];
 
 fn fuzz_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("fuzz")
+    common::manifest_dir().join("fuzz")
 }
 
 fn fresh_dir(dir: &Path) {
@@ -343,7 +343,7 @@ fn the_chosen_target_runs_without_a_finding() {
     };
 
     // The corpus and the inputs put aside stay from run to run; the build does not.
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
+    let dir = common::host_dir("CARGO_TARGET_TMPDIR", env!("CARGO_TARGET_TMPDIR"))
         .join("fuzz")
         .join(target.name);
     for kept in ["corpus", "artifacts"] {
@@ -662,7 +662,8 @@ fn another_stack_overflow_is_a_finding() {
 
 #[test]
 fn the_input_of_an_exhausted_stack_is_renamed_beside_the_others() {
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("fuzz-set-aside-regex");
+    let dir = common::host_dir("CARGO_TARGET_TMPDIR", env!("CARGO_TARGET_TMPDIR"))
+        .join("fuzz-set-aside-regex");
     fresh_dir(&dir);
     let input = dir.join("crash-0f1e");
     fs::write(&input, b"((((").expect("an input");

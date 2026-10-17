@@ -2,7 +2,7 @@
 
 ## 1. Ruby 1.8.7
 
-- [ ] 1.1 Header, build script, io.c patch, crypt, ITIMER_VIRTUAL, zlib, errno of `Math`. Verify: `cargo build -p vkrgss-ruby-sys --target aarch64-linux-android` with the environment of `env34.sh` succeeds; the tests of the crate pass on Linux.
+- [x] 1.1 Header, build script, io.c patch, crypt, ITIMER_VIRTUAL, zlib, errno of `Math`. Verify: `cargo build -p vkrgss-ruby-sys --target aarch64-linux-android` with the environment of `env34.sh` succeeds; the tests of the crate pass on Linux.
 
 ## 2. Ruby 1.9.2
 

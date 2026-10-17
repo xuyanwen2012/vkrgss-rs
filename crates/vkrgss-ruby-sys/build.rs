@@ -26,11 +26,21 @@ use std::path::{Path, PathBuf};
 /// Only x86_64 is supported. The headers of aarch64 are those that the release's `configure`
 /// wrote on aarch64, which differ from those of x86_64 only in the platform strings; the
 /// target is built and tested by the CI job `gate-aarch64`, and supported once P1 of
-/// `docs/decisions.md` is accepted.
-const TARGETS: &[&str] = &["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"];
+/// `docs/decisions.md` is accepted. The headers of Android are those of aarch64 without what
+/// bionic lacks; the target is built from API level [`MIN_ANDROID_API`] on and tested on
+/// phones (`cargo xtask android-test`), and supported once P3 is accepted.
+const TARGETS: &[&str] = &[
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "aarch64-linux-android",
+];
 
 /// The target of `TARGETS` that is supported.
 const SUPPORTED: &str = "x86_64-unknown-linux-gnu";
+
+/// The lowest Android API level the interpreter is built for: `__freadahead`, with which the
+/// patched `io.c` reads the buffer of a stream, is public from it.
+const MIN_ANDROID_API: u32 = 34;
 
 /// The C files of `libruby-static.a` in the release's own build, without their extension and
 /// without `regex`, the interpreter's own regular expression engine: Oniguruma replaces it.
@@ -305,6 +315,35 @@ fn link_crypt(base: &cc::Build) {
     }
 }
 
+/// The Android API level that the C compiler targets, from `__ANDROID_API__`.
+fn android_api_level(base: &cc::Build, out_dir: &Path) -> u32 {
+    let probe = out_dir.join("android_api_level.c");
+    fs::write(
+        &probe,
+        "#include <android/api-level.h>\nvkrgss_android_api_level __ANDROID_API__\n",
+    )
+    .expect("OUT_DIR is writable");
+    let expanded = base.clone().file(&probe).expand();
+    String::from_utf8_lossy(&expanded)
+        .lines()
+        .find_map(|line| line.strip_prefix("vkrgss_android_api_level "))
+        .and_then(|level| level.trim().parse().ok())
+        .expect("the C compiler defines __ANDROID_API__ as a number")
+}
+
+/// Panics unless the C compiler targets [`MIN_ANDROID_API`] or a later level.
+fn check_android_api_level(base: &cc::Build, out_dir: &Path) {
+    let level = android_api_level(base, out_dir);
+    assert!(
+        level >= MIN_ANDROID_API,
+        "vkrgss-ruby-sys needs Android API level {MIN_ANDROID_API} or later, and the C compiler \
+         {} targets API level {level}. Take the compiler of the NDK for API level \
+         {MIN_ANDROID_API}, such as `aarch64-linux-android{MIN_ANDROID_API}-clang` \
+         (docs/building.md).",
+        base.get_compiler().path().display()
+    );
+}
+
 fn main() {
     let target = env::var("TARGET").expect("cargo sets TARGET");
     if !TARGETS.contains(&target.as_str()) {
@@ -337,11 +376,22 @@ fn main() {
         .canonicalize()
         .expect("third_party/core-math exists");
     let core_math_include = core_math_dir.join("vkrgss");
-    let zlib_include = PathBuf::from(
-        env::var_os("DEP_Z_INCLUDE").expect("libz-sys exports the include path of its zlib"),
-    );
-    let zlib_root =
-        PathBuf::from(env::var_os("DEP_Z_ROOT").expect("libz-sys exports the root of its zlib"));
+    // On Android `libz-sys` links the system's `libz.so` and exports no paths: the C compiler
+    // of the NDK finds `zlib.h` in its sysroot.
+    let android = target.ends_with("-android");
+    let (zlib_include, zlib_root) = if android {
+        (None, None)
+    } else {
+        (
+            Some(PathBuf::from(
+                env::var_os("DEP_Z_INCLUDE")
+                    .expect("libz-sys exports the include path of its zlib"),
+            )),
+            Some(PathBuf::from(
+                env::var_os("DEP_Z_ROOT").expect("libz-sys exports the root of its zlib"),
+            )),
+        )
+    };
 
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=compat");
@@ -352,6 +402,9 @@ fn main() {
     println!("cargo:rerun-if-changed={}", utf8(&core_math_dir));
 
     let base = base_build();
+    if android {
+        check_android_api_level(&base, &out_dir);
+    }
 
     let generated_dir = out_dir.join("generated");
     fs::create_dir_all(&generated_dir).expect("OUT_DIR is writable");
@@ -374,12 +427,14 @@ fn main() {
     }
     core.compile("vkrgss-ruby-static");
 
-    // The `Zlib` extension, against the zlib that `libz-sys` built from source.
+    // The `Zlib` extension, against the zlib that `libz-sys` built from source, or on Android
+    // that of the system.
     let mut zlib = base.clone();
-    zlib.include(&config_dir)
-        .include(&ruby_dir)
-        .include(&zlib_include)
-        .define("HAVE_ZLIB_H", None)
+    zlib.include(&config_dir).include(&ruby_dir);
+    if let Some(zlib_include) = &zlib_include {
+        zlib.include(zlib_include);
+    }
+    zlib.define("HAVE_ZLIB_H", None)
         .define("OS_CODE", "OS_UNIX")
         .file(ruby_dir.join("ext/zlib/zlib.c"));
     zlib.compile("vkrgss-ruby-zlib");
@@ -398,7 +453,10 @@ fn main() {
     core_math.files(core_math_files(&core_math_dir));
     core_math.compile("vkrgss-ruby-core-math");
 
-    link_crypt(&base);
+    // bionic has no libcrypt; the patched `string.c` does not call `crypt` on Android.
+    if !android {
+        link_crypt(&base);
+    }
     println!("cargo:rustc-link-lib=m");
 
     // What the tests need to build Ruby's own test executable exactly as the library was
@@ -435,9 +493,10 @@ fn main() {
         "cargo:rustc-env=VKRGSS_RUBY_GENERATED_DIR={}",
         utf8(&generated_dir)
     );
+    // Empty on Android, where the tests that read them are not run.
     println!(
         "cargo:rustc-env=VKRGSS_RUBY_ZLIB_INCLUDE_DIR={}",
-        utf8(&zlib_include)
+        zlib_include.as_deref().map_or("", utf8)
     );
     println!("cargo:rustc-env=VKRGSS_RUBY_CC={}", utf8(compiler.path()));
     println!("cargo:rustc-env=VKRGSS_RUBY_CFLAGS={}", args.join(" "));
@@ -468,6 +527,6 @@ fn main() {
     println!("cargo:rustc-env=VKRGSS_RUBY_LIB_DIR={}", utf8(&out_dir));
     println!(
         "cargo:rustc-env=VKRGSS_RUBY_ZLIB_LIB_DIR={}",
-        utf8(&zlib_root.join("lib"))
+        zlib_root.map_or(String::new(), |root| utf8(&root.join("lib")).to_owned())
     );
 }

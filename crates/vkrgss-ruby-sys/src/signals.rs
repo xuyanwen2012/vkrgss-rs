@@ -1,11 +1,20 @@
 //! Saving and restoring the signal dispositions that `ruby_init` replaces.
 //!
-//! This is platform code for x86_64 and aarch64 Linux, the targets the crate builds for.
+//! This is platform code for x86_64 and aarch64 Linux and for aarch64 Android, the targets
+//! the crate builds for.
 
 use std::mem::MaybeUninit;
 use std::ptr;
 
 use libc::c_int;
+
+#[cfg(not(target_os = "android"))]
+use libc::ITIMER_VIRTUAL;
+
+/// The virtual interval timer of the kernel, which the `libc` crate does not define for
+/// Android.
+#[cfg(target_os = "android")]
+const ITIMER_VIRTUAL: c_int = 1;
 
 /// The signals whose handlers `ruby_init` installs, replacing the handler, flags and mask of
 /// whatever the process had: hang-up, interrupt, quit, the two user-defined signals, alarm,
@@ -133,7 +142,7 @@ impl Dispositions {
         // allowed.
         unsafe {
             let disarm: libc::itimerval = std::mem::zeroed();
-            libc::setitimer(libc::ITIMER_VIRTUAL, &disarm, ptr::null_mut());
+            libc::setitimer(ITIMER_VIRTUAL, &disarm, ptr::null_mut());
         }
         if !same(&get(libc::SIGVTALRM), &self.virtual_timer) {
             // A tick may still be pending. Ignoring the signal first discards it, so that it

@@ -80,7 +80,7 @@ that the host selects at start-up, and the behaviour of XP stays the default.
 
 - File: `string.c`
 - Patch: `patches/string-hash-ruby-181.patch`
-- Patched SHA-256: `ac3311aebe253de3df594e123a04372437bd46f110945bc711ef821a00bccfeb`
+- Patched SHA-256: `48c30437af23121dfe80801288a351dda8f034d2fb55c53bf3f4cb1a3d3a3d2b`
 - Reason: the iteration order of a hash with string keys follows from `String#hash`, and
   scripts depend on that order. 1.8.7 mixes differently and starts from a seed drawn at
   start-up, so the order differed from the original and from run to run. `rb_str_hash` is the
@@ -553,3 +553,25 @@ that the host selects at start-up, and the behaviour of XP stays the default.
 - Patch: `patches/end-line-kept-generated.patch`
 - Patched SHA-256: `d602e8923844bd7bdcc39dd88b0055ebfa3ea75bac5fcc15c8d03e33ac1493d5`
 - Reason: follows patch 42. The same line of the pre-generated parser, changed by hand.
+
+## 44. android-freadahead
+
+- File: `io.c`
+- Patch: `patches/android-freadahead.patch`
+- Patched SHA-256: `e3c55b1eace30e03090b071828e841d59c475d1c8638fd3eb2f532bcfce7266b`
+- Reason: on Android (change `build-the-interpreters-for-android`) bionic's `FILE` is
+  opaque, so none of the branches that read the buffer of a stream applied, and the fallback
+  `!feof(fp)` made `IO#eof?` answer wrongly and `IO#readpartial` block on an empty buffer.
+  Under `__ANDROID__` the buffer is read with `__freadahead(3)` of `<stdio_ext.h>`, which
+  bionic has from API level 34; below that the file does not compile and the error names
+  the level. No other platform is affected.
+
+## 45. android-no-crypt
+
+- File: `string.c`
+- Patch: `patches/android-no-crypt.patch`
+- Patched SHA-256: `48c30437af23121dfe80801288a351dda8f034d2fb55c53bf3f4cb1a3d3a3d2b`
+- Reason: applies after patch 5, whose entry records the hash after this one. bionic has no
+  `crypt(3)` and no libcrypt (change `build-the-interpreters-for-android`). Under
+  `__ANDROID__`, `String#crypt` raises `NotImplementedError` with a message that names
+  Android, after the check of the salt; elsewhere nothing changes.

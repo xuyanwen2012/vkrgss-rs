@@ -5,6 +5,8 @@
 //! of that entry. Files may be neither added nor removed without a record. A tree without a
 //! `PATCHES.md` has no patches.
 
+mod common;
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -18,9 +20,7 @@ const OWN_FILES: &[&str] = &["MANIFEST.sha256", "PATCHES.md", "README.vkrgss.md"
 const PATCH_DIR: &str = "patches";
 
 fn vendored_root(tree: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../third_party")
-        .join(tree)
+    common::manifest_dir().join("../../third_party").join(tree)
 }
 
 fn sha256_hex(path: &Path) -> String {

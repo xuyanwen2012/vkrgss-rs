@@ -8,7 +8,6 @@
 mod common;
 
 use std::ffi::CString;
-use std::path::Path;
 use std::process::Command;
 use std::sync::{Mutex, OnceLock};
 
@@ -26,7 +25,7 @@ fn interpreter() -> &'static Mutex<Interpreter> {
 
 /// The measured table as (name, number) pairs.
 fn table() -> Vec<(String, u64)> {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("data/symbols.startup.txt");
+    let path = common::manifest_dir().join("data/symbols.startup.txt");
     std::fs::read_to_string(path)
         .expect("the table is readable")
         .lines()

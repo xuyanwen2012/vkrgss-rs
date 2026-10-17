@@ -273,6 +273,10 @@ fn c_side(output: &str) -> Vec<(String, i64)> {
 }
 
 #[test]
+#[cfg_attr(
+    target_os = "android",
+    ignore = "compiles a C program, and a phone has no C compiler"
+)]
 fn layout_and_constants_match_the_c_headers() {
     let scratch = common::scratch_dir("layout");
     let source = scratch.join("layout.c");

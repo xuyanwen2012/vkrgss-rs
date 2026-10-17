@@ -10,6 +10,11 @@
  * subnormal result stays the correctly rounded one. Special arguments (zeros, infinities,
  * NaN) go to the C library alone. CORE-MATH does not set errno as it is compiled here.
  *
+ * The libm of Android's bionic never sets errno. There every function sets it as glibc does
+ * for the errors that Math of Ruby 1.8.7 reads: EDOM for a NaN from arguments that are not
+ * NaN (a domain error), ERANGE for an infinity from finite arguments (a pole or an
+ * overflow). Elsewhere errno stays the C library's.
+ *
  * Part of vkrgss, under its MIT licence; not part of CORE-MATH.
  */
 
@@ -19,6 +24,28 @@
 #include <math.h>
 
 #include "vkrgss_math.h"
+
+#ifdef __ANDROID__
+#include <errno.h>
+
+/* Sets errno for the result of a function whose arguments hold a NaN when nan is non-zero
+   and are all finite when finite is non-zero, and returns the result. */
+static double vkrgss_errno(double result, int nan, int finite)
+{
+    if (isnan(result) && !nan)
+        errno = EDOM;
+    else if (isinf(result) && finite)
+        errno = ERANGE;
+    return result;
+}
+
+#define VKRGSS_RETURN1(result, x) return vkrgss_errno(result, isnan(x), isfinite(x))
+#define VKRGSS_RETURN2(result, x, y)                                                         \
+    return vkrgss_errno(result, isnan(x) || isnan(y), isfinite(x) && isfinite(y))
+#else
+#define VKRGSS_RETURN1(result, x) return result
+#define VKRGSS_RETURN2(result, x, y) return result
+#endif
 
 double cr_sin(double);
 double cr_cos(double);
@@ -50,12 +77,12 @@ double cr_lgamma(double);
     {                                                                                      \
         double result, library;                                                            \
         if (!isfinite(x) || x == 0.0)                                                      \
-            return name(x);                                                                \
+            VKRGSS_RETURN1(name(x), x);                                                    \
         result = cr_##name(x);                                                             \
         if (isnormal(result))                                                              \
             return result;                                                                 \
         library = name(x);                                                                 \
-        return isfinite(result) ? result : library;                                        \
+        VKRGSS_RETURN1(isfinite(result) ? result : library, x);                            \
     }
 
 #define VKRGSS_BINARY(name)                                                                  \
@@ -63,12 +90,12 @@ double cr_lgamma(double);
     {                                                                                      \
         double result, library;                                                            \
         if (!isfinite(x) || x == 0.0 || !isfinite(y) || y == 0.0)                          \
-            return name(x, y);                                                             \
+            VKRGSS_RETURN2(name(x, y), x, y);                                              \
         result = cr_##name(x, y);                                                          \
         if (isnormal(result))                                                              \
             return result;                                                                 \
         library = name(x, y);                                                              \
-        return isfinite(result) ? result : library;                                        \
+        VKRGSS_RETURN2(isfinite(result) ? result : library, x, y);                         \
     }
 
 VKRGSS_UNARY(sin)
@@ -102,7 +129,7 @@ double vkrgss_lgamma_r(double x, int *sign)
     double result, library;
     int result_sign;
     if (!isfinite(x) || x == 0.0)
-        return lgamma_r(x, sign);
+        VKRGSS_RETURN1(lgamma_r(x, sign), x);
     result = cr_lgamma(x);
     result_sign = signgam;
     if (isnormal(result)) {
@@ -111,7 +138,7 @@ double vkrgss_lgamma_r(double x, int *sign)
     }
     library = lgamma_r(x, sign);
     if (!isfinite(result))
-        return library;
+        VKRGSS_RETURN1(library, x);
     *sign = result_sign;
     return result;
 }

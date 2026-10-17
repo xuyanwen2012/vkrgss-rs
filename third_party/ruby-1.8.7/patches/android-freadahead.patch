@@ -1,0 +1,17 @@
+--- a/io.c
++++ b/io.c
+@@ -178,6 +178,14 @@
+ #elif defined(FILE_READEND)
+ #  define READ_DATA_PENDING(fp) ((fp)->FILE_READPTR < (fp)->FILE_READEND)
+ #  define READ_DATA_PENDING_COUNT(fp) ((fp)->FILE_READEND - (fp)->FILE_READPTR)
++#elif defined(__ANDROID__)
++/* vkrgss: bionic's FILE is opaque; __freadahead(3) is public from API level 34. */
++#  if __ANDROID_API__ < 34
++#    error "Ruby 1.8.7 of vkrgss needs Android API level 34 or later (__freadahead)"
++#  endif
++#  include <stdio_ext.h>
++#  define READ_DATA_PENDING(fp) (__freadahead(fp) > 0)
++#  define READ_DATA_PENDING_COUNT(fp) (__freadahead(fp))
+ #elif defined(__BEOS__)
+ #  define READ_DATA_PENDING(fp) (fp->_state._eof == 0)
+ #elif defined(__VMS)
