@@ -149,8 +149,9 @@ with the platform `aarch64-linux-android`; the tests `config_headers.rs` allow n
 difference. On Android `libz-sys` links the system's `libz.so` and exports no include path:
 the compiler of the NDK takes `zlib.h` from its sysroot. Neither libcrypt, libpthread nor
 librt is linked; bionic has no `crypt`, so `String#crypt` raises `NotImplementedError`
-there. bionic's libm never sets `errno`, so the functions of `third_party/core-math/vkrgss/`
-set it there as glibc does for the errors that `Math` of Ruby 1.8.7 reads.
+there. bionic's libm never sets `errno`, and glibc before 2.43 does not report every
+underflow, so the functions of `third_party/core-math/vkrgss/` set it themselves, on every
+platform, as glibc 2.43 does, for `Math` of Ruby 1.8.7, which reads it.
 
 The tests of the two interpreter crates run on a phone over adb:
 

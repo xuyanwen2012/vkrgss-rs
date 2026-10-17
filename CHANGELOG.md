@@ -57,8 +57,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   build with a message naming 34. `cargo xtask android-test <crate>` runs the tests of an
   interpreter crate on a phone over adb; they pass on the Pixel 7a and the Galaxy S24+. Not
   supported before the milestone P3 is accepted. There Ruby 1.8.7 reads the end of a file
-  and of a pipe through `__freadahead`, `String#crypt` raises `NotImplementedError`, and
-  `Math` raises the errors it raises on Linux.
+  and of a pipe through `__freadahead`, and `String#crypt` raises `NotImplementedError`.
 
 ### Changed
 
@@ -110,6 +109,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- `Math` of Ruby 1.8.7 raises the same errors on every platform and C library, those of
+  glibc 2.43: the functions of CORE-MATH set `errno` themselves, so that, for one,
+  `Math.atanh` of a subnormal float raises `Errno::ERANGE` on Android and with glibc 2.42 or
+  older as well. Where CORE-MATH overflows its correctly rounded infinity is returned, not
+  the value of the C library, so `Math.hypot` at the edge of overflow is the same
+  everywhere.
 - Ruby 1.9.2 of RPG Maker VX Ace games keeps values that only a pointer into them holds
   while it allocates, which the stressed suite on aarch64 showed it did not: the sum of a
   Bignum of two digits and a small integer could read the digits of a collected object, so

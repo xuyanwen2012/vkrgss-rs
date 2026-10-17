@@ -111,7 +111,10 @@ fn the_functions_give_the_bits_of_the_test_vectors() {
 }
 
 /// The values, and the errors with their classes, that these arguments gave before the
-/// functions came from CORE-MATH.
+/// functions came from CORE-MATH, with glibc 2.43, on every platform. `MIN` is the smallest
+/// subnormal float: `atanh` reports its subnormal result as an underflow, as glibc 2.43 does
+/// and glibc 2.42 does not, and `asin` gives it without an error. The `hypot` of the largest
+/// float and about 1.55 * 2**997 overflows, where the `hypot` of bionic gives the largest float.
 #[test]
 fn special_arguments_behave_as_before() {
     for (expression, expected) in [
@@ -122,8 +125,19 @@ fn special_arguments_behave_as_before() {
         ("Math.log(0)", "Errno::ERANGE"),
         ("Math.exp(1000)", "Infinity"),
         ("0.0 ** -1", "Infinity"),
+        ("Math.atanh(MIN)", "Errno::ERANGE"),
+        ("Math.atanh(-MIN)", "Errno::ERANGE"),
+        ("Math.asin(MIN) == MIN", "true"),
+        ("Math.asin(-MIN) == -MIN", "true"),
+        (
+            "Math.hypot(Float::MAX, [0x7e48c295c639b07c].pack('Q').unpack('D')[0])",
+            "Infinity",
+        ),
     ] {
-        let source = format!("begin; ({expression}).to_s; rescue => e; e.class.to_s; end");
+        let source = format!(
+            "MIN = [1].pack('Q').unpack('D')[0] unless defined?(MIN); \
+             begin; ({expression}).to_s; rescue => e; e.class.to_s; end"
+        );
         assert_eq!(eval(source), Ok(format!("{expected:?}")), "{expression}");
     }
 }

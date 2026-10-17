@@ -49,9 +49,23 @@ the guest from an app.
 - **crypt.** The `string.c` patch of each interpreter (1.8.7 patch 45, 1.9.2 patch 49): no
   `crypt` symbol is needed, so no compat file. The headers drop `HAVE_CRYPT` and
   `HAVE_LIBCRYPT` with the others bionic lacks.
-- **errno.** `third_party/core-math/vkrgss/vkrgss_math.c` sets `EDOM` for a NaN from non-NaN
-  arguments and `ERANGE` for an infinity from finite ones, under `__ANDROID__` only; its
-  `README.vkrgss.md` says so (a few lines of documentation beside the shim).
+- **errno.** `third_party/core-math/vkrgss/vkrgss_math.c` sets `errno` itself as glibc 2.43
+  does: `EDOM` for a NaN from non-NaN arguments, `ERANGE` for an infinity from finite ones
+  and for an underflow of a regular argument, which `atan2`, `exp` and `pow` report for a
+  zero result and `asinh`, `atanh`, `erfc` and `tgamma` for a zero or subnormal one. It does
+  so on every platform, not under `__ANDROID__` only: glibc 2.42 does not report the
+  subnormal results of those four (measured with the glibc 2.42 of the Flatpak runtime
+  `org.freedesktop.Platform` 25.08), so the regression of `Math.atanh` of the smallest
+  subnormal in `tests/math.rs` would otherwise fail with the glibc 2.39 of Ubuntu 24.04, and
+  Linux itself would not raise the same errors everywhere. Where glibc sets `errno` it sets
+  the same value, so nothing changes with glibc 2.43. Measured on 2026-10-17 over 9.6
+  million calls of all 24 functions on random and special arguments: the `errno` of the shim
+  equals that of glibc 2.43 call for call with glibc 2.43, with glibc 2.42 and on both
+  phones. The same comparison showed that the shim returned the C library's value wherever
+  CORE-MATH overflows, and `hypot` of bionic gives the largest double where the result is
+  infinite (`hypot(DBL_MAX, 0x1.8c295c639b07cp+997)`); the shim now returns the correctly
+  rounded infinity and takes the library's value for NaN only, after which the results are
+  the same bits on the host and both phones. `README.vkrgss.md` beside the shim says this.
 - **Paths.** `tests/common/mod.rs` of each crate has `host_dir(name, built)`: the runtime
   variable of the same name wins over the `env!` value. `config_headers.rs` and `targets.rs`
   of Ruby 1.9.2 read `CARGO_MANIFEST_DIR` the same way inline, because they build on targets
@@ -81,5 +95,8 @@ the guest from an app.
   extensions, not the whole text.
 - If the host side of `cargo xtask android-test` is killed, the processes on the phone and
   `/data/local/tmp/vkrgss-test` stay until the next run removes the directory.
+- A special argument still goes to the C library alone; there `hypot` of an infinity and a
+  signalling NaN is NaN with glibc and infinity with bionic. A script makes a signalling NaN
+  only by unpacking chosen bits.
 - On Android a crash of the interpreter ends in debuggerd's handler, not in Ruby 1.9.2's
   `[BUG]` report; whether the guest wants Ruby's handler there is open.
