@@ -14,7 +14,8 @@
 //! - [`Attached`]: the attachment to the program's socket.
 //! - [`hello`]: the statement of the version that every connection of a guest starts with.
 //! - [`copier`]: the copies of the process that are its states.
-//! - [`sandbox`]: the restriction a guest process puts on itself.
+//! - [`sandbox`]: the restriction a guest process puts on itself, and [`seccomp`]: the
+//!   system calls it denies itself.
 //! - [`signals`]: the signal settings of a guest.
 //!
 //! The crate links no interpreter and no binding: the executable that links it gives it the
@@ -55,6 +56,9 @@ pub mod hello;
 pub mod record;
 pub mod role;
 pub mod sandbox;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[allow(unsafe_code)]
+pub mod seccomp;
 pub mod settings;
 #[allow(unsafe_code)]
 pub mod signals;
@@ -149,13 +153,15 @@ impl Attached {
 
 /// Plays the game of a guest process. To be called on the interpreter thread: lets
 /// SIGVTALRM reach it, confines the thread to writing below the directory `confine`, if
-/// there is one, runs `game`, which says whether the game ended without a failure, and ends
+/// there is one, and then filters the system calls of the process, runs `game`, which says whether the game ended without a failure, and ends
 /// the process there if it is a copy that was resumed, which has no other thread to go
 /// back to.
 pub fn play_in_process(confine: Option<&Path>, game: impl FnOnce() -> bool) -> bool {
     signals::unblock_virtual_timer();
     if let Some(game_dir) = confine {
         sandbox::confine(game_dir);
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        seccomp::filter();
     }
     let ok = game();
     copier::exit_if_copy(ok);

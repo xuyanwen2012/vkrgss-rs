@@ -2026,6 +2026,11 @@ fn a_confined_guest_saves_and_loads_states_as_one_that_is_not() {
             sandbox == "on",
             "{stderr}"
         );
+        assert_eq!(
+            stderr.contains("the guest process filters its system calls with seccomp"),
+            sandbox == "on",
+            "{stderr}"
+        );
         ran
     };
     let (confined, free) = (run("on"), run("off"));
@@ -2038,6 +2043,36 @@ fn a_confined_guest_saves_and_loads_states_as_one_that_is_not() {
     // The load did go back: the frame after it is the one after the save.
     assert!(dumped_bytes(&confined, 81) == dumped_bytes(&confined, 41));
     assert!(dumped_bytes(&confined, 80) != dumped_bytes(&confined, 81));
+}
+
+/// Scenario "Denied system calls", for a script. `system` starts nothing in a confined guest
+/// (requirement "Process functions are off by default"), so the script reaches `execve`
+/// through `Process.exec` of Ruby 1.8.7, which is not turned off; the filter answers before
+/// Landlock would.
+#[test]
+fn a_confined_guest_cannot_start_a_program() {
+    let main = "\
+started = system('true')
+result = begin
+  Process.exec('true')
+  'executed'
+rescue SystemCallError => error
+  error.class.name
+end
+File.open('result.txt', 'w') { |file| file.write(\"#{started.inspect} #{result}\") }
+Graphics.update
+";
+    let game = Game::new(harness(), "e2e-sandbox-exec", "Exec", &[("Main", main)]);
+    let work = tempfile::tempdir().expect("a temporary directory");
+    let ran = headless_logging(work, &game, &["--guest", "process"], Some("info"));
+    ran.assert_success();
+    let result = fs::read_to_string(game.dir().join("result.txt")).expect("the game ran");
+    assert_eq!(result, "nil Errno::EPERM");
+    let stderr = ran.stderr();
+    assert!(
+        stderr.contains("the guest process filters its system calls with seccomp"),
+        "{stderr}"
+    );
 }
 
 /// Scenario "Unknown value" of the requirement "Sandbox option".
