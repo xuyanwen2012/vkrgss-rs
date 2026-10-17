@@ -126,6 +126,10 @@ policy.
 - `docs/decisions.md`, section "Android", still says that the first version has no save
   states; this change's scope does not include that file, which changes only through a
   change that says so.
+- `docs/building.md`, section "The app", still says that only the library goes into
+  `lib/arm64-v8a/`, uncompressed; it is outside this change's scope. `docs/running.md`
+  (Android) and the documentation of `xtask/src/apk.rs` say what the APK holds now: the
+  library and the two guest executables, compressed and extracted at installation.
 - States are asked for with F3 and F4 of a keyboard (or `adb shell input keyevent`); the
   on-screen buttons come later, as the proposal says. A states schedule in `vkrgss.toml`,
   as `--states` gives a headless run, would make the test of states on a phone exact to

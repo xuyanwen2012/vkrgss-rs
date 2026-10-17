@@ -744,10 +744,25 @@ are recorded: a reset with F12 is not, and a game that reads the clock can still
 
 ## Android
 
-The app of `vkrgss-android` runs a game of RPG Maker XP or VX on Android 14 or later, with
-the guest on a thread of the app, as `--guest thread` does; there are no save states. A
-game of RPG Maker VX Ace is refused with a message, because its scripts need Ruby 1.9.2 in
-a guest process. Its APK is built with `cargo xtask apk` ([building.md](building.md#the-app)).
+The app of `vkrgss-android` runs a game of RPG Maker XP, VX or VX Ace on Android 14 or
+later with the guest in a process of its own, as `vkrgss` does in a window. Its APK is built
+with `cargo xtask apk` ([building.md](building.md#the-app)), which puts the two guest
+executables into it beside the app's library, as `lib/arm64-v8a/libvkrgss_guest_rgss12.so`
+and `lib/arm64-v8a/libvkrgss_guest_rgss3.so`: they are executables under the names of
+libraries, because the installer extracts only such files into the app's native library
+directory, and an app may execute files only from there. The manifest asks for that
+extraction (`extractNativeLibs`). The app starts the guest executable of the game's runtime
+from that directory with its guest record, and the socket lies in the app's private files
+directory. The guest confines itself with the seccomp filter; the kernels of the phones
+have no Landlock, so the log says that the guest is not confined by it.
+
+F3 saves a state and F4 loads it, with Shift they choose one of ten slots, as on the
+desktop, on a keyboard or with `adb shell input keyevent KEYCODE_F3` and `KEYCODE_F4`;
+there is no on-screen button for them yet, and no states while an input script holds the
+buttons. A state is a copy of the guest process; when a parked copy has been ended (the
+system may end processes when memory is short), loading it says that the slot holds no
+state and the game goes on. When the app ends, or is ended (`am force-stop`), the guest
+process and the parked copies end with it.
 
 In this version the game is the directory `game` of the app's external files directory,
 `/sdcard/Android/data/io.github.xuyanwen2012.vkrgss/files/game/`, which `adb push` fills;
@@ -767,15 +782,16 @@ before those of the system, `/system/fonts`. Sound goes through AAudio.
 The app writes its log to logcat under the tag `vkrgss` and to `files/vkrgss.log`, at the
 level info; the reports of scripts arrive there too. When the activity goes to the
 background the picture goes and the game waits; it goes on when the activity comes back.
-When the game has ended the app ends.
+When the game has ended the app ends. The guest's lines arrive with the app's.
 
 ```sh
 cargo xtask android-run <SERIAL> <GAME_DIR>
 ```
 
 builds the APK, installs it on the phone with that serial (`adb devices` lists them),
-replaces the app's game with `GAME_DIR`, starts the activity and waits until the app has
-ended, at most 15 minutes. It then pulls the log, the lines of logcat and the frames that
+starts the app once if it has no files directory yet (a directory that `adb` made would
+not be the app's, which could not read it), replaces the app's game with `GAME_DIR`, starts
+the activity and waits until the app has ended, at most 15 minutes. It then pulls the log, the lines of logcat and the frames that
 the `dump` entries of the game's `vkrgss.toml` name into `target/android-run/<SERIAL>/`,
 and fails when one of them was not written. It uninstalls nothing. The phone must be
 unlocked: a screen that goes off sends the activity to the background, and the game waits
