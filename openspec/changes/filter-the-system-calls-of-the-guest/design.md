@@ -74,6 +74,17 @@
   Ruby 1.8.7, which the stubs do not cover: it raises `Errno::EPERM` (the filter answers
   before Landlock, whose answer would be `EACCES`). See the first follow-up.
 
+- **Android.** `cargo xtask android-test` does not cover `vkrgss-guest`: it is built for the
+  two interpreter crates (it links Ruby's test executable from the variables of their build
+  scripts and pushes their vendored trees), and teaching it a third kind of crate is
+  machinery this change does not need. The filter test was instead cross-built with
+  `cargo test -p vkrgss-guest --target aarch64-linux-android --test seccomp --no-run` (the
+  NDK settings of `docs/building.md`), pushed with adb to `/data/local/tmp` and run there
+  with `TMPDIR` inside that directory, on 2026-10-17: it passes on the Pixel 7a (kernel
+  6.1.162-android14) and the Galaxy S24 SM-S926B (kernel 6.1.157-android14). SELinux does
+  not let the shell make a socket file in `/data/local/tmp` (`EACCES`), so on Android the
+  test's Unix socket takes an abstract name instead of a path.
+
 ## Out of scope
 
 An allow-list filter; macOS confinement; changing what Landlock allows.

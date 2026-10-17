@@ -8,7 +8,7 @@
 use std::fs;
 use std::io;
 use std::net::{TcpListener, UdpSocket};
-use std::os::unix::net::{UnixDatagram, UnixListener, UnixStream};
+use std::os::unix::net::{SocketAddr, UnixDatagram, UnixListener, UnixStream};
 use std::process::Command;
 
 use vkrgss_guest::seccomp;
@@ -128,10 +128,19 @@ fn filtered_child() {
         assert_eq!(socket(family), (-1, libc::EPERM), "family {family}");
     }
 
-    // A Unix socket, by its path and as a pair.
-    let path = dir.path().join("guest.sock");
-    let listener = UnixListener::bind(&path).expect("AF_UNIX is allowed");
-    let _client = UnixStream::connect(&path).expect("a connection by the path");
+    // A Unix socket, by its address and as a pair. On Android SELinux does not let the
+    // shell make a socket file in /data/local/tmp, where the test runs (`EACCES`, not the
+    // filter's `EPERM`), so there the socket takes an abstract name.
+    #[cfg(not(target_os = "android"))]
+    let address = SocketAddr::from_pathname(dir.path().join("guest.sock")).unwrap();
+    #[cfg(target_os = "android")]
+    let address = {
+        use std::os::android::net::SocketAddrExt;
+        let name = format!("vkrgss-seccomp-{}", std::process::id());
+        SocketAddr::from_abstract_name(name).unwrap()
+    };
+    let listener = UnixListener::bind_addr(&address).expect("AF_UNIX is allowed");
+    let _client = UnixStream::connect_addr(&address).expect("a connection by the address");
     drop(listener.accept().expect("the connection is accepted"));
     UnixDatagram::unbound().expect("an unbound datagram socket");
     UnixStream::pair().expect("socketpair is allowed");

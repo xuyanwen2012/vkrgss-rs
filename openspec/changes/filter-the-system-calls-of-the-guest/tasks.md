@@ -6,7 +6,7 @@
 
 ## 2. Android
 
-- [ ] 2.1 The guest crate's filter test on a phone through `cargo xtask android-test` if it covers the crate, or a note in `design.md`. Verify: the test passes on both phones, or the note says why it was not run.
+- [x] 2.1 The guest crate's filter test on a phone through `cargo xtask android-test` if it covers the crate, or a note in `design.md`. Verify: the test passes on both phones, or the note says why it was not run.
 
 ## 3. Documents
 
