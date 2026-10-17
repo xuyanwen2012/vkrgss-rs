@@ -4,8 +4,10 @@
 //! the constants of `libc` (no crate stands between: the program is a dozen lines and the
 //! one crate that would write it, `seccompiler`, brings a model of rules this filter does
 //! not need). The filter answers `EPERM` to a fixed list of system calls no game needs
-//! ([`DENIED`]), to `socket` of every family but `AF_UNIX`, to the x32 system calls on
-//! x86_64 and to every system call of another architecture; it allows the rest. It binds
+//! ([`DENIED`]), to `socket` of every family but `AF_UNIX`, to `clone` with a flag of
+//! [`NAMESPACES`], to the x32 system calls on x86_64 and to every system call of another
+//! architecture; it answers `ENOSYS` to `clone3`, whose flags live in memory the filter
+//! cannot read, so that the C library falls back to `clone`; it allows the rest. It binds
 //! every thread of the process (`SECCOMP_FILTER_FLAG_TSYNC`) and what they start later,
 //! the copies of the guest process included, and it cannot be lifted.
 
@@ -33,8 +35,9 @@ const SYS_KEXEC_FILE_LOAD: c_long = libc::SYS_kexec_file_load;
 
 /// The system calls that are denied whatever their arguments: starting programs, reading
 /// and writing other processes, loading code into the kernel, the kernel's key store,
-/// mounts, namespaces, and the calls that only an administrator makes.
-pub const DENIED: [c_long; 25] = [
+/// mounts, namespaces, `io_uring` (which opens sockets of its own), and the calls that only
+/// an administrator makes.
+pub const DENIED: [c_long; 28] = [
     libc::SYS_execve,
     libc::SYS_execveat,
     libc::SYS_ptrace,
@@ -60,7 +63,19 @@ pub const DENIED: [c_long; 25] = [
     libc::SYS_reboot,
     libc::SYS_swapon,
     libc::SYS_swapoff,
+    libc::SYS_io_uring_setup,
+    libc::SYS_io_uring_enter,
+    libc::SYS_io_uring_register,
 ];
+
+/// The flags of `clone` that make a new namespace, which `clone` is denied with.
+pub const NAMESPACES: u32 = (libc::CLONE_NEWNS
+    | libc::CLONE_NEWUSER
+    | libc::CLONE_NEWPID
+    | libc::CLONE_NEWNET
+    | libc::CLONE_NEWIPC
+    | libc::CLONE_NEWUTS
+    | libc::CLONE_NEWCGROUP) as u32;
 
 // The instruction classes and fields of classic BPF, from `linux/bpf_common.h`, which
 // `libc` gives for Linux but not for Android.
@@ -70,6 +85,7 @@ const BPF_RET: u16 = 0x06;
 const BPF_W: u16 = 0x00;
 const BPF_ABS: u16 = 0x20;
 const BPF_JEQ: u16 = 0x10;
+const BPF_JSET: u16 = 0x40;
 #[cfg(target_arch = "x86_64")]
 const BPF_JGE: u16 = 0x30;
 const BPF_K: u16 = 0x00;
@@ -78,11 +94,12 @@ const BPF_K: u16 = 0x00;
 const NR_OFFSET: u32 = 0;
 const ARCH_OFFSET: u32 = 4;
 /// The lower half of the first argument, on a little-endian machine; `socket` reads its
-/// family as an `int`.
+/// family as an `int`, and the namespace flags of `clone` are in that half.
 const FIRST_ARGUMENT_OFFSET: u32 = 16;
 
 const RET_DENY: u32 = libc::SECCOMP_RET_ERRNO | libc::EPERM as u32;
 const RET_ALLOW: u32 = libc::SECCOMP_RET_ALLOW;
+const RET_NO_SYSTEM_CALL: u32 = libc::SECCOMP_RET_ERRNO | libc::ENOSYS as u32;
 
 fn statement(code: u16, k: u32) -> sock_filter {
     sock_filter {
@@ -117,6 +134,13 @@ fn program() -> Vec<sock_filter> {
         ]);
     }
     program.extend([
+        jump(BPF_JMP | BPF_JEQ | BPF_K, libc::SYS_clone3 as u32, 0, 1),
+        statement(BPF_RET | BPF_K, RET_NO_SYSTEM_CALL),
+        jump(BPF_JMP | BPF_JEQ | BPF_K, libc::SYS_clone as u32, 0, 4),
+        statement(BPF_LD | BPF_W | BPF_ABS, FIRST_ARGUMENT_OFFSET),
+        jump(BPF_JMP | BPF_JSET | BPF_K, NAMESPACES, 0, 1),
+        statement(BPF_RET | BPF_K, RET_DENY),
+        statement(BPF_RET | BPF_K, RET_ALLOW),
         jump(BPF_JMP | BPF_JEQ | BPF_K, libc::SYS_socket as u32, 0, 3),
         statement(BPF_LD | BPF_W | BPF_ABS, FIRST_ARGUMENT_OFFSET),
         jump(BPF_JMP | BPF_JEQ | BPF_K, libc::AF_UNIX as u32, 1, 0),

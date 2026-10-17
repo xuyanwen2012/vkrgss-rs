@@ -153,7 +153,8 @@ impl Attached {
 
 /// Plays the game of a guest process. To be called on the interpreter thread: lets
 /// SIGVTALRM reach it, confines the thread to writing below the directory `confine`, if
-/// there is one, and then filters the system calls of the process, runs `game`, which says whether the game ended without a failure, and ends
+/// there is one, and then filters the system calls of the process, runs `game`, which says
+/// whether the game ended without a failure, and ends
 /// the process there if it is a copy that was resumed, which has no other thread to go
 /// back to.
 pub fn play_in_process(confine: Option<&Path>, game: impl FnOnce() -> bool) -> bool {

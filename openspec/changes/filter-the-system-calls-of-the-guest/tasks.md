@@ -2,7 +2,7 @@
 
 ## 1. Filter
 
-- [ ] 1.1 `seccomp.rs`, the call after Landlock, the options that leave it out, tests. Verify: scenario "Denied system calls" and the other scenarios of "Confined guest process"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss-guest -p vkrgss --locked` passes.
+- [x] 1.1 `seccomp.rs`, the call after Landlock, the options that leave it out, tests. Verify: scenario "Denied system calls" and the other scenarios of "Confined guest process"; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss-guest -p vkrgss --locked` passes.
 
 ## 2. Android
 

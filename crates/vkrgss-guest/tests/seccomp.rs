@@ -37,6 +37,15 @@ fn assert_denied(error: io::Error, what: &str) {
     assert_eq!(error.raw_os_error(), Some(libc::EPERM), "{what}: {error}");
 }
 
+/// `clone` with `flags` and `CLONE_THREAD` but not `CLONE_SIGHAND`, which the kernel refuses
+/// with `EINVAL` before it makes anything, and its error number.
+fn refused_clone(flags: libc::c_int) -> (libc::c_long, i32) {
+    let flags = libc::c_long::from(flags | libc::CLONE_THREAD);
+    // SAFETY: the flags are invalid, so no process or thread is made.
+    let result = unsafe { libc::syscall(libc::SYS_clone, flags, 0, 0, 0, 0) };
+    (result, errno())
+}
+
 fn socket(family: libc::c_int) -> (libc::c_int, i32) {
     // SAFETY: plain integers.
     let fd = unsafe { libc::socket(family, libc::SOCK_STREAM, 0) };
@@ -79,6 +88,28 @@ fn filtered_child() {
     for number in seccomp::DENIED {
         assert_eq!(raw_call(number), (-1, libc::EPERM), "system call {number}");
     }
+    // `clone3`, which the C library replaces with `clone`, and `clone` with a namespace.
+    assert_eq!(raw_call(libc::SYS_clone3), (-1, libc::ENOSYS), "clone3");
+    for flag in [
+        libc::CLONE_NEWNS,
+        libc::CLONE_NEWUSER,
+        libc::CLONE_NEWPID,
+        libc::CLONE_NEWNET,
+        libc::CLONE_NEWIPC,
+        libc::CLONE_NEWUTS,
+        libc::CLONE_NEWCGROUP,
+    ] {
+        assert_eq!(
+            refused_clone(flag),
+            (-1, libc::EPERM),
+            "clone flag {flag:#x}"
+        );
+    }
+    assert_eq!(
+        refused_clone(0),
+        (-1, libc::EINVAL),
+        "clone reaches the kernel"
+    );
     #[cfg(target_arch = "x86_64")]
     assert_eq!(
         raw_call(libc::SYS_getpid | 0x4000_0000),
