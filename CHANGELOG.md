@@ -52,6 +52,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - When a job of `nightly.yml` fails, the workflow opens the issue "Nightly checks failed",
   or comments on it while it is open.
 - A failed fuzz job of `nightly.yml` uploads the inputs its target put aside, for 30 days.
+- Both interpreters and the guest executables build for Android (`aarch64-linux-android`) at
+  API level 34 or later, the minimum the owner decided on 2026-10-17; a lower level stops the
+  build with a message naming 34. `cargo xtask android-test <crate>` runs the tests of an
+  interpreter crate on a phone over adb; they pass on the Pixel 7a and the Galaxy S24+. Not
+  supported before the milestone P3 is accepted. There Ruby 1.8.7 reads the end of a file
+  and of a pipe through `__freadahead`, `String#crypt` raises `NotImplementedError`, and
+  `Math` raises the errors it raises on Linux.
 
 ### Changed
 

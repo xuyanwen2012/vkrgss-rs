@@ -33,8 +33,8 @@ accepts `aarch64-unknown-linux-gnu`, with configuration headers of its own: thos
 release's `configure` wrote on aarch64, which differ from those of x86_64 only in the
 platform strings, as `tests/config_headers.rs` checks. It is built and tested by the CI job
 `gate-aarch64` (see [development.md](development.md#merge-gate)) and is not supported
-before the milestone P1 is accepted. Any other target stops the build with a message
-naming it. `CC` selects the compiler. Because a wrong flag gives an interpreter
+before the milestone P1 is accepted. It also accepts `aarch64-linux-android`
+([Android](#android)). Any other target stops the build with a message naming it. `CC` selects the compiler. Because a wrong flag gives an interpreter
 that builds and then computes wrong results, the tests of `vkrgss-ruby-sys` compile a Ruby
 executable from the same objects and run Ruby's own test suites against it, which is why the
 tests need the C compiler too.
@@ -80,10 +80,11 @@ The release package and the CI runs are built with gcc 13, the default compiler 
 change the compiler of the release unnoticed. The interpreter's collector scans the machine
 stack, so the compiler shapes what it sees; changing that compiler is a change of its own.
 
-`vkrgss-ruby192-sys` is for the targets `x86_64-unknown-linux-gnu` and
-`aarch64-unknown-linux-gnu`, which `crates/vkrgss-ruby192-sys/targets.rs` lists. The header
-of aarch64 is the one that the release's `configure` wrote there, kept with the same two
-changes as that of x86_64, from which it differs only in `RUBY_PLATFORM`. For any other
+`vkrgss-ruby192-sys` is for the targets `x86_64-unknown-linux-gnu`,
+`aarch64-unknown-linux-gnu` and `aarch64-linux-android` ([Android](#android)), which
+`crates/vkrgss-ruby192-sys/targets.rs` lists. The header of aarch64 is the one that the
+release's `configure` wrote there, kept with the same two changes as that of x86_64, from
+which it differs only in `RUBY_PLATFORM`. For any other
 target its build script compiles nothing and prints a warning that names the target, and
 sets the `cfg` `vkrgss_interpreter_absent`, under which the crate and its tests are empty;
 so are `vkrgss-binding-rgss3`, the package that compiles the RGSS classes over it, and
@@ -121,3 +122,55 @@ Presentation is tested the same way and never opens a window: scaling and mixing
 an off-screen target and read back, and the swapchain runs on a surface without a window system
 (`VK_EXT_headless_surface`). The headless tests of `vkrgss-host` follow `VKRGSS_TEST_DEVICE` too
 and default to llvmpipe.
+
+## Android
+
+Both interpreters, and with them the guest executables `vkrgss-guest-rgss12` and
+`vkrgss-guest-rgss3`, build for `aarch64-linux-android` at Android API level 34 (Android 14)
+or later, with the NDK (r30 is the one tested). Nothing presents a frame on Android yet,
+and the target is not supported before the milestone P3 is accepted. The Rust target and the
+compiler of the NDK for API level 34 are given to cargo:
+
+```sh
+rustup target add aarch64-linux-android
+TC=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
+export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$TC/aarch64-linux-android34-clang
+export CC_aarch64_linux_android=$TC/aarch64-linux-android34-clang
+export AR_aarch64_linux_android=$TC/llvm-ar
+cargo build -p vkrgss-guest-rgss12 -p vkrgss-guest-rgss3 --target aarch64-linux-android
+```
+
+The build scripts read `__ANDROID_API__` of that compiler and stop with a message naming API
+level 34 below it: bionic has `__freadahead`, through which the patched `io.c` of Ruby 1.8.7
+reads the buffer of a stream, from that level on, and `backtrace`, which Ruby 1.9.2 calls,
+from 33. The configuration headers of Android are those of aarch64 Linux without what bionic
+lacks (`crypt`, `eaccess`, `lchmod`, `group_member`, the internals of glibc's `FILE`) and
+with the platform `aarch64-linux-android`; the tests `config_headers.rs` allow no other
+difference. On Android `libz-sys` links the system's `libz.so` and exports no include path:
+the compiler of the NDK takes `zlib.h` from its sysroot. Neither libcrypt, libpthread nor
+librt is linked; bionic has no `crypt`, so `String#crypt` raises `NotImplementedError`
+there. bionic's libm never sets `errno`, so the functions of `third_party/core-math/vkrgss/`
+set it there as glibc does for the errors that `Math` of Ruby 1.8.7 reads.
+
+The tests of the two interpreter crates run on a phone over adb:
+
+```sh
+ANDROID_NDK_HOME=/path/to/android-ndk-r30 cargo xtask android-test vkrgss-ruby-sys --device <SERIAL>
+ANDROID_NDK_HOME=/path/to/android-ndk-r30 cargo xtask android-test vkrgss-ruby192-sys --device <SERIAL>
+```
+
+Without `--device` adb takes `ANDROID_SERIAL` or the only phone it sees. The command builds
+the test binaries for the target, links Ruby's own test executable on the host from the
+archives of the build script as the tests do elsewhere, pushes both with the directory of
+the crate and the vendored trees its tests read into `/data/local/tmp/vkrgss-test/`, runs
+every binary there with `--test-threads=1` under `umask 022`, and removes that directory
+again. The output of each binary is kept in `target/android-test/<SERIAL>/<CRATE>/logs/`. On
+the phone the tests take the directories that cargo and the build script named on the host
+(`CARGO_MANIFEST_DIR`, `CARGO_TARGET_TMPDIR`, `VKRGSS_RUBY_SOURCE_DIR`,
+`VKRGSS_RUBY192_SOURCE_DIR`) from environment variables of the same names, and the
+executable from `VKRGSS_RUBY_EXECUTABLE` or `VKRGSS_RUBY192_EXECUTABLE`. The tests that
+compile C at run time are ignored on Android with that reason, and the instrumented ones are
+opt-in everywhere. In `/data/local/tmp` SELinux refuses hard links to the shell, so the
+suites leave out `test_file_exhaustive.rb` on Android, Ruby 1.8.7 by the list `LEFT_OUT` of
+its `tests/upstream.rs` and Ruby 1.9.2 by `tests/upstream.android.allow`, which also names
+`String#crypt` and the report of Ruby 1.9.2 on SIGSEGV, each with its reason.

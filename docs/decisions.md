@@ -857,6 +857,13 @@ changes; finishing one does not commit to the next. Their milestones are P1 to P
 - Starts with a measurement of feasibility, as V0 did: both interpreters on bionic, a
   separate guest process under seccomp, Vulkan 1.3 on the test phones. The scope is fixed
   after it.
+- The minimum is Android 14, API level 34, decided by the owner on 2026-10-17 after the
+  measurement of 2026-10-16/17 on both test phones: below it bionic has no public
+  `__freadahead`, without which `IO#eof?` of Ruby 1.8.7 answers wrongly and
+  `IO#readpartial` blocks, because bionic's `FILE` is opaque. Both interpreters build for
+  `aarch64-linux-android` at that level and pass their tests on both phones (change
+  `build-the-interpreters-for-android`, [building.md](building.md#android)). bionic has no
+  `crypt`, so `String#crypt` raises `NotImplementedError` there.
 - First version: a game is imported as a zip into the app's private directory, not reached
   through the storage access framework, because the runtime reads and writes by path; input
   through on-screen buttons and gamepads; no save states.

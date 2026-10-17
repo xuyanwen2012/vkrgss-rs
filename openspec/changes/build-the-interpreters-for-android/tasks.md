@@ -14,7 +14,7 @@
 
 ## 4. Documents
 
-- [ ] 4.1 `docs/building.md` (Android), `docs/decisions.md` (API 34, decided 2026-10-17), `CHANGELOG.md`. Verify: the tests of `xtask` that check the documents pass.
+- [x] 4.1 `docs/building.md` (Android), `docs/decisions.md` (API 34, decided 2026-10-17), `CHANGELOG.md`. Verify: the tests of `xtask` that check the documents pass.
 
 ## 5. Integration check
 
