@@ -25,26 +25,92 @@ struct Target {
     name: &'static str,
     max_len: u32,
     timeout: u32,
+    /// The functions in which a stack overflow is set aside; see [`ended`].
+    recursive: &'static [&'static [&'static str]],
 }
 
-/// The targets. An input is limited in size because nesting recurses in `Marshal.load` and
-/// in the regular expression engine, and a deep enough input exhausts the machine stack,
-/// which this run does not count as a finding; see `docs/development.md` for the depths.
+/// The functions of Oniguruma 5.9.6 (`regparse.c`, `regcomp.c`) that recurse, directly
+/// or through each other, once for each level of nesting of a pattern or each step of a
+/// reference from one group to another.
+const ENGINE_RECURSIVE: &[&str] = &[
+    "parse_subexp",
+    "parse_branch",
+    "parse_exp",
+    "parse_enclose",
+    "parse_char_class",
+    "fetch_escaped_value",
+    "is_invalid_quantifier_target",
+    "noname_disable_map",
+    "renumber_by_map",
+    "numbered_ref_check",
+    "setup_tree",
+    "setup_comb_exp_check",
+    "setup_subexp_call",
+    "subexp_recursive_check",
+    "subexp_recursive_check_trav",
+    "subexp_inf_recursive_check",
+    "subexp_inf_recursive_check_trav",
+    "quantifiers_memory_node_info",
+    "get_min_match_length",
+    "get_max_match_length",
+    "get_char_length_tree1",
+    "get_head_value_node",
+    "check_type_tree",
+    "optimize_node_left",
+    "compile_length_tree",
+    "compile_length_anchor_node",
+    "compile_length_enclose_node",
+    "compile_length_option_node",
+    "compile_length_quantifier_node",
+    "compile_tree",
+    "compile_tree_n_times",
+    "compile_tree_empty_check",
+    "compile_anchor_node",
+    "compile_enclose_node",
+    "compile_option_node",
+    "compile_quantifier_node",
+    "compile_range_repeat_node",
+    "onig_node_free",
+];
+
+/// The functions of the parser (`parse.y`) that recurse on the nesting of the nodes or of an
+/// escape. Bison keeps its own stack, which is limited, on the heap.
+const PARSER_RECURSIVE: &[&str] = &[
+    "value_expr0",
+    "cond0",
+    "range_op",
+    "assign_in_cond",
+    "arg_prepend",
+    "read_escape",
+    "tokadd_escape",
+];
+
+/// The functions of `marshal.c` that recurse once for each level of nesting of the data.
+const MARSHAL_RECURSIVE: &[&str] = &["r_object0", "r_object", "r_ivar"];
+
+/// The targets. An input is limited in size because nesting recurses in `Marshal.load`, in
+/// the parser and in the regular expression engine, and a deep enough input exhausts the
+/// machine stack. This run sets that aside when the stack ends in a function listed for the
+/// target; the parser lists those of the engine too, because it compiles a pattern literal
+/// while it parses. See `docs/development.md` for the depths.
 const TARGETS: [Target; 3] = [
     Target {
         name: "marshal",
         max_len: 4096,
         timeout: 10,
+        recursive: &[MARSHAL_RECURSIVE],
     },
     Target {
         name: "parse",
         max_len: 4096,
         timeout: 10,
+        recursive: &[PARSER_RECURSIVE, ENGINE_RECURSIVE],
     },
     Target {
         name: "regex",
         max_len: 512,
         timeout: 3,
+        recursive: &[ENGINE_RECURSIVE],
     },
 ];
 
@@ -136,21 +202,78 @@ fn fuzzer_arguments(target: &Target, dir: &Path, seconds: u64) -> Vec<String> {
 enum Ended {
     /// The time was used up.
     Clean,
-    /// An input ran into the time limit, which backtracking does by its nature, or the
-    /// process into the memory limit, which the symbol table does because it only grows.
-    /// Neither is a finding: the input is put aside and the run goes on in a new process.
+    /// An input ran into the time limit, which backtracking does by its nature, the
+    /// process into the memory limit, which the symbol table does because it only grows,
+    /// or an input exhausted the stack by nesting. None is a finding: the input is put
+    /// aside and the run goes on in a new process.
     Limit(&'static str),
     /// A sanitizer report or a crash.
     Finding,
 }
 
-fn ended(status: Option<i32>) -> Ended {
+/// The frames of a report of a stack overflow that are looked at for a function of the
+/// target's list: the function that ran into the end of the stack may be one that the
+/// recursive function calls, such as an allocation, a helper or a callback of libFuzzer's
+/// instrumentation.
+const STACK_FRAMES: usize = 8;
+
+/// How a process ended, from its status and the sanitizer's report on its error stream. A
+/// stack overflow is a limit, named "stack", when one of the first frames of its report is
+/// in one of the `recursive` functions; anywhere else it is a finding.
+fn ended(status: Option<i32>, report: &str, recursive: &[&[&str]]) -> Ended {
     match status {
         Some(0) => Ended::Clean,
         Some(TIMEOUT_STATUS) => Ended::Limit("time"),
         Some(OUT_OF_MEMORY_STATUS) => Ended::Limit("memory"),
+        _ if exhausted_by_nesting(report, recursive) => Ended::Limit("stack"),
         _ => Ended::Finding,
     }
+}
+
+/// Whether `report` is AddressSanitizer's report of a stack overflow with one of the
+/// `recursive` functions among the first frames of its stack trace.
+fn exhausted_by_nesting(report: &str, recursive: &[&[&str]]) -> bool {
+    let mut lines = report
+        .lines()
+        .skip_while(|line| !line.contains("ERROR: AddressSanitizer: stack-overflow"));
+    if lines.next().is_none() {
+        return false;
+    }
+    lines
+        .map(str::trim_start)
+        .skip_while(|line| !line.starts_with('#'))
+        .map_while(frame_function)
+        .take(STACK_FRAMES)
+        .any(|function| recursive.iter().any(|list| list.contains(&function)))
+}
+
+/// The function of a frame of a sanitizer's stack trace, as `parse_exp` of
+/// `#3 0x55d0c1 in parse_exp /src/regparse.c:4512:9`.
+fn frame_function(line: &str) -> Option<&str> {
+    let (_, function) = line.strip_prefix('#')?.split_once(" in ")?;
+    function.split_whitespace().next()
+}
+
+/// The file to which libFuzzer says it wrote the input that ended a process.
+fn written_input(line: &str) -> Option<PathBuf> {
+    let (_, path) = line.split_once("Test unit written to ")?;
+    Some(PathBuf::from(path.trim()))
+}
+
+/// Renames the input of a process that exhausted the stack from libFuzzer's `crash-` to
+/// `stack-`, as libFuzzer names those of the other limits `timeout-` and `oom-`, so that
+/// it is not taken for the input of a finding.
+fn set_aside_as_stack(input: &Path) {
+    let Some(hash) = input
+        .file_name()
+        .and_then(|name| name.to_str())
+        .and_then(|name| name.strip_prefix("crash-"))
+    else {
+        return;
+    };
+    let renamed = input.with_file_name(format!("stack-{hash}"));
+    fs::rename(input, &renamed)
+        .unwrap_or_else(|error| panic!("{} -> {}: {error}", input.display(), renamed.display()));
 }
 
 /// The number of inputs a process says it ran, from the statistics it prints at its end.
@@ -161,9 +284,20 @@ fn executed_units(line: &str) -> Option<u64> {
         .ok()
 }
 
+/// What one process of a target left.
+struct Process {
+    status: Option<i32>,
+    /// The number of inputs it ran.
+    executed: u64,
+    /// The sanitizer's report on its error stream, from its first line on; empty without one.
+    report: String,
+    /// The file to which libFuzzer wrote the input that ended it.
+    input: Option<PathBuf>,
+}
+
 /// Runs one process of the target for at most `seconds`, passes its output through and
-/// returns its status and the number of inputs it ran.
-fn run_once(executable: &Path, target: &Target, dir: &Path, seconds: u64) -> (Option<i32>, u64) {
+/// returns what it left.
+fn run_once(executable: &Path, target: &Target, dir: &Path, seconds: u64) -> Process {
     let mut child = Command::new(executable)
         .args(fuzzer_arguments(target, dir, seconds))
         .current_dir(dir)
@@ -171,14 +305,24 @@ fn run_once(executable: &Path, target: &Target, dir: &Path, seconds: u64) -> (Op
         .stderr(Stdio::piped())
         .spawn()
         .unwrap_or_else(|error| panic!("could not start {}: {error}", executable.display()));
-    let mut executed = 0;
+    let (mut executed, mut report, mut input) = (0, String::new(), None);
     let output = BufReader::new(child.stderr.take().expect("the piped error stream"));
     for line in output.split(b'\n') {
         let line = String::from_utf8_lossy(&line.expect("output of the target")).into_owned();
         eprintln!("{line}");
         executed += executed_units(&line).unwrap_or(0);
+        input = written_input(&line).or(input);
+        if !report.is_empty() || line.contains("==ERROR: ") {
+            report.push_str(&line);
+            report.push('\n');
+        }
     }
-    (child.wait().expect("the target ends").code(), executed)
+    Process {
+        status: child.wait().expect("the target ends").code(),
+        executed,
+        report,
+        input,
+    }
 }
 
 #[test]
@@ -210,30 +354,37 @@ fn the_chosen_target_runs_without_a_finding() {
     let executable = build_target(&dir.join("build"), target);
 
     let started = Instant::now();
-    let (mut executed, mut time_limits, mut memory_limits) = (0, 0, 0);
+    let (mut executed, mut time_limits, mut memory_limits, mut stack_limits) = (0, 0, 0, 0);
     loop {
         let left = seconds.saturating_sub(started.elapsed().as_secs());
         if left == 0 {
             break;
         }
-        let (status, units) = run_once(&executable, target, &dir, left);
-        executed += units;
-        match ended(status) {
+        let process = run_once(&executable, target, &dir, left);
+        executed += process.executed;
+        match ended(process.status, &process.report, target.recursive) {
             Ended::Clean => break,
             Ended::Limit("time") => time_limits += 1,
-            Ended::Limit(_) => memory_limits += 1,
+            Ended::Limit("memory") => memory_limits += 1,
+            Ended::Limit(_) => {
+                stack_limits += 1;
+                if let Some(input) = &process.input {
+                    set_aside_as_stack(input);
+                }
+            }
             Ended::Finding => panic!(
-                "the target `{}` ended with {status:?} after {executed} inputs: the report \
-                 is above and the input is in {}",
+                "the target `{}` ended with {:?} after {executed} inputs: the report is \
+                 above and the input is in {}",
                 target.name,
+                process.status,
                 dir.join("artifacts").display()
             ),
         }
     }
     eprintln!(
         "fuzz: `{}` ran {executed} inputs in {} s without a finding; {time_limits} input(s) \
-         ran into the time limit of {} s and {memory_limits} process(es) into the memory \
-         limit, which are put aside in {}",
+         ran into the time limit of {} s, {stack_limits} exhausted the stack by nesting and \
+         {memory_limits} process(es) ran into the memory limit, which are put aside in {}",
         target.name,
         started.elapsed().as_secs(),
         target.timeout,
@@ -361,18 +512,146 @@ fn the_fuzzer_reads_the_seeds_and_writes_only_below_the_target_directory() {
     }
 }
 
+/// The target of the name.
+fn target(name: &str) -> &'static Target {
+    TARGETS
+        .iter()
+        .find(|target| target.name == name)
+        .expect("a target")
+}
+
+/// A report of AddressSanitizer of a stack overflow with the functions of `frames`, the
+/// first frame first, as a process of a target writes it.
+fn stack_overflow(frames: &[&str]) -> String {
+    let mut report = "AddressSanitizer:DEADLYSIGNAL\n\
+        ==4242==ERROR: AddressSanitizer: stack-overflow on address 0x7ffc8e3f9ff8 \
+        (pc 0x55d0c1a2b3c4 bp 0x7ffc8e3fa010 sp 0x7ffc8e3fa000 T0)\n"
+        .to_owned();
+    for (index, function) in frames.iter().enumerate() {
+        report.push_str(&format!(
+            "    #{index} 0x55d0c1a2{index:04x} in {function} /src/third_party/oniguruma-5.9.6/regcomp.c:2030:3\n"
+        ));
+    }
+    report.push_str("SUMMARY: AddressSanitizer: stack-overflow in the first frame\n");
+    report
+}
+
 #[test]
-fn only_the_two_limits_are_not_findings() {
-    assert_eq!(ended(Some(0)), Ended::Clean);
-    assert_eq!(ended(Some(70)), Ended::Limit("time"));
-    assert_eq!(ended(Some(71)), Ended::Limit("memory"));
+fn only_the_limits_are_not_findings() {
+    let recursive = target("regex").recursive;
+    assert_eq!(ended(Some(0), "", recursive), Ended::Clean);
+    assert_eq!(ended(Some(70), "", recursive), Ended::Limit("time"));
+    assert_eq!(ended(Some(71), "", recursive), Ended::Limit("memory"));
     // The sanitizers end with 1, libFuzzer's own errors with 77, a signal with no status.
     for status in [Some(1), Some(77), None] {
-        assert_eq!(ended(status), Ended::Finding);
+        assert_eq!(ended(status, "", recursive), Ended::Finding);
     }
     assert_eq!(
         executed_units("stat::number_of_executed_units: 306"),
         Some(306)
     );
     assert_eq!(executed_units("stat::peak_rss_mb:              45"), None);
+    assert_eq!(
+        written_input("artifact_prefix='/t/a/'; Test unit written to /t/a/crash-0f1e"),
+        Some(PathBuf::from("/t/a/crash-0f1e"))
+    );
+}
+
+#[test]
+fn a_stack_exhausted_by_nesting_is_a_limit() {
+    let deep = stack_overflow(&[
+        "get_min_match_length",
+        "get_min_match_length",
+        "get_min_match_length",
+        "setup_tree",
+    ]);
+    assert_eq!(
+        ended(Some(1), &deep, target("regex").recursive),
+        Ended::Limit("stack")
+    );
+    // The end of the stack reached in a function that a recursive one calls.
+    let called = stack_overflow(&[
+        "__sanitizer_cov_trace_cmp4",
+        "onig_node_new_enclose",
+        "parse_enclose",
+        "parse_exp",
+        "parse_branch",
+        "parse_subexp",
+    ]);
+    assert_eq!(
+        ended(Some(1), &called, target("regex").recursive),
+        Ended::Limit("stack")
+    );
+    // A pattern literal is compiled by the parser.
+    assert_eq!(
+        ended(Some(1), &deep, target("parse").recursive),
+        Ended::Limit("stack")
+    );
+    let marshal = stack_overflow(&["rb_ary_push", "r_object0", "r_object", "r_object0"]);
+    assert_eq!(
+        ended(Some(1), &marshal, target("marshal").recursive),
+        Ended::Limit("stack")
+    );
+}
+
+#[test]
+fn another_stack_overflow_is_a_finding() {
+    // No listed function among the first frames.
+    let elsewhere = stack_overflow(&[
+        "rb_str_format",
+        "rb_f_sprintf",
+        "compile",
+        "vkrgss_fuzz_protected",
+    ]);
+    for target in &TARGETS {
+        assert_eq!(
+            ended(Some(1), &elsewhere, target.recursive),
+            Ended::Finding,
+            "{}",
+            target.name
+        );
+    }
+    // A function of another target's list.
+    let deep = stack_overflow(&["get_min_match_length", "setup_tree"]);
+    assert_eq!(
+        ended(Some(1), &deep, target("marshal").recursive),
+        Ended::Finding
+    );
+    // A listed function only below the first frames.
+    let mut frames = vec!["alloca_in_a_loop"; STACK_FRAMES];
+    frames.push("get_min_match_length");
+    assert_eq!(
+        ended(Some(1), &stack_overflow(&frames), target("regex").recursive),
+        Ended::Finding
+    );
+    // Another report with a listed function in its frames.
+    let overflow = stack_overflow(&["get_min_match_length"]).replace(
+        "stack-overflow on address",
+        "heap-buffer-overflow on address",
+    );
+    assert_eq!(
+        ended(Some(1), &overflow, target("regex").recursive),
+        Ended::Finding
+    );
+    // A trace without names, when the symbolizer is missing.
+    let unnamed = "==7==ERROR: AddressSanitizer: stack-overflow on address 0x7ffc8e3f9ff8\n    \
+                   #0 0x55d0c1a2b3c4  (/src/third_party/ruby-1.8.7/fuzz-regex+0x1b3c4)\n";
+    assert_eq!(
+        ended(Some(1), unnamed, target("regex").recursive),
+        Ended::Finding
+    );
+}
+
+#[test]
+fn the_input_of_an_exhausted_stack_is_renamed_beside_the_others() {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("fuzz-set-aside-regex");
+    fresh_dir(&dir);
+    let input = dir.join("crash-0f1e");
+    fs::write(&input, b"((((").expect("an input");
+    set_aside_as_stack(&input);
+    assert!(!input.exists());
+    assert_eq!(
+        fs::read(dir.join("stack-0f1e")).expect("the input"),
+        b"(((("
+    );
 }

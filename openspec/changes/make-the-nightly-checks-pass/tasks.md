@@ -6,7 +6,7 @@
 
 ## 2. Stack overflow in fuzz runs
 
-- [ ] 2.1 The classification of `design.md` in both crates' fuzz tests, with unit tests of the classification on sample reports. Verify: scenarios of "Stack exhaustion by nesting is set aside in a fuzz run"; `cargo test -p vkrgss-ruby-sys -p vkrgss-ruby192-sys --locked` passes; `cargo xtask fuzz regex --seconds 600` ends without a finding.
+- [x] 2.1 The classification of `design.md` in both crates' fuzz tests, with unit tests of the classification on sample reports. Verify: scenarios of "Stack exhaustion by nesting is set aside in a fuzz run"; `cargo test -p vkrgss-ruby-sys -p vkrgss-ruby192-sys --locked` passes; `cargo xtask fuzz regex --seconds 600` ends without a finding.
 
 ## 3. Findings of the parsers
 
