@@ -57,7 +57,11 @@ The change ran on the owner's MacBook (Apple M4, macOS 27, MoltenVK), with no Li
 at hand. Task 5.1 was checked there in place of the Linux gate: `cargo fmt --all --check`,
 `cargo clippy --workspace --all-targets --locked -- -D warnings` and
 `cargo test --workspace --locked` with the environment above (3448 tests passed, none
-failed), and `openspec validate build-and-test-on-macos --strict`. The Linux gate
+failed), and `openspec validate build-and-test-on-macos --strict`. The clippy and test runs
+were repeated at `a874d44` through `~/vkrgss-flows/tmp/evidence/check.sh`, which writes the
+command, the commit, the state of the tree, the environment, the times and the exit status
+beside the output into `clippy.log` and `test.log` of that directory: both exited 0, the
+tests with 3448 passed, 0 failed and 11 ignored. The Linux gate
 (`VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate`) is run by the owner's session at the
 merge.
 
@@ -84,6 +88,8 @@ audio output, the real corpus, `sandbox_init`.
   pattern of the test does not match. Only the text of a crash report differs.
 - **`test_thread.rb#test_local_barrier` of Ruby 1.9.2.** It failed once in a run of the whole
   workspace on the Mac, its child printing `7: cont` after `exit.`, which the test's own
-  threads may do; it passed in every other run, and 220 runs of its script alone, 180 of
-  them twelve at a time, all ended with `exit.`. Left in the suite; whether it should be
-  listed if it recurs is open.
+  threads may do; it passed in every other run. At `a874d44`, 220 runs of its script alone
+  with the test executable of `vkrgss-ruby192-sys` (40 one after another, then 180 in twelve
+  parallel workers of 15) all exited with status 0 and ended with `exit.`; the last line of
+  each run is kept in `~/vkrgss-flows/tmp/evidence/lb-*.log` on the Mac, outside the
+  repository. Left in the suite; whether it should be listed if it recurs is open.
