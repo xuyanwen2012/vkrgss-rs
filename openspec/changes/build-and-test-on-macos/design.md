@@ -88,8 +88,14 @@ audio output, the real corpus, `sandbox_init`.
   pattern of the test does not match. Only the text of a crash report differs.
 - **`test_thread.rb#test_local_barrier` of Ruby 1.9.2.** It failed once in a run of the whole
   workspace on the Mac, its child printing `7: cont` after `exit.`, which the test's own
-  threads may do; it passed in every other run. At `a874d44`, 220 runs of its script alone
-  with the test executable of `vkrgss-ruby192-sys` (40 one after another, then 180 in twelve
-  parallel workers of 15) all exited with status 0 and ended with `exit.`; the last line of
-  each run is kept in `~/vkrgss-flows/tmp/evidence/lb-*.log` on the Mac, outside the
-  repository. Left in the suite; whether it should be listed if it recurs is open.
+  threads may do; it passed in every other run. Its script `lbtest.rb` was then run alone
+  220 times at `2813b7a` (the same production source as `a874d44`) with the test executable
+  of `vkrgss-ruby192-sys` that the run of the tests at `a874d44` had built: 40 runs one after
+  another, then 180 in twelve workers of 15 started together, with at most twelve runs at the
+  same moment. All 220 exited with status 0 and printed `exit.` last. On the Mac, outside the
+  repository, `~/vkrgss-flows/tmp/evidence/lbtest2/` keeps the whole output of each run, a
+  row per run with its times, exit status and last line, the provenance (commit,
+  environment, SHA-256 of the executable, of `lbtest.rb` and of the recorder) and the
+  summary computed from the rows. An earlier recording of 220 runs, kept beside it, recorded
+  only last lines, all `exit.`; its status fields are not Ruby's. Left in the suite; whether
+  it should be listed if it recurs is open.
