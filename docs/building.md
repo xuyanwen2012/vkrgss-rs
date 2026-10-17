@@ -127,9 +127,9 @@ and default to llvmpipe.
 
 Both interpreters, and with them the guest executables `vkrgss-guest-rgss12` and
 `vkrgss-guest-rgss3`, build for `aarch64-linux-android` at Android API level 34 (Android 14)
-or later, with the NDK (r30 is the one tested). Nothing presents a frame on Android yet,
-and the target is not supported before the milestone P3 is accepted. The Rust target and the
-compiler of the NDK for API level 34 are given to cargo:
+or later, with the NDK (r30 is the one tested), and so does the app `vkrgss-android`
+(below). The target is not supported before the milestone P3 is accepted. The Rust target
+and the compiler of the NDK for API level 34 are given to cargo:
 
 ```sh
 rustup target add aarch64-linux-android
@@ -175,3 +175,26 @@ opt-in everywhere. In `/data/local/tmp` SELinux refuses hard links to the shell,
 suites leave out `test_file_exhaustive.rb` on Android, Ruby 1.8.7 by the list `LEFT_OUT` of
 its `tests/upstream.rs` and Ruby 1.9.2 by `tests/upstream.android.allow`, which also names
 `String#crypt` and the report of Ruby 1.9.2 on SIGSEGV, each with its reason.
+
+### The app
+
+The package `vkrgss-android` is the native library of an APK whose activity is Android's
+`NativeActivity`, through winit's Android backend; the APK has no Java code. It is built
+and packed without Gradle:
+
+```sh
+ANDROID_NDK_HOME=/path/to/android-ndk-r30 ANDROID_HOME=/path/to/Android/Sdk cargo xtask apk
+```
+
+The command builds the library for `aarch64-linux-android` with the compiler of the NDK at
+API level 34, as above, in the development profile, and assembles
+`target/apk/vkrgss-debug.apk` with the newest build tools of the SDK: `aapt2` links the
+manifest (package `io.github.xuyanwen2012.vkrgss`, minimum API level 34, target 37,
+landscape on either side, fullscreen, Vulkan 1.3 required) against
+`platforms/android-34/android.jar`, the library goes into `lib/arm64-v8a/` without its
+debug information and uncompressed (`zip` of the system), `zipalign` aligns it to pages
+of 16 KiB, and `apksigner` signs the APK with a debug key that `keytool` of the JDK makes
+in `target/apk/debug.keystore` on first use. The SDK needs the build tools (35 or later,
+for 16 KiB pages) and the platform `android-34`. On the desktop the package builds as a
+library whose Android parts are left out, so the gate builds and tests its other parts.
+How to run a game with it is in [running.md](running.md#android).

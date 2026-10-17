@@ -44,6 +44,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- An Android app, `vkrgss-android`: an APK with `NativeActivity` and no Java code, built by
+  `cargo xtask apk` without Gradle, that runs a game of RPG Maker XP or VX on Android 14 or
+  later with the guest on a thread and presents through the Vulkan surface of its window,
+  with sound through AAudio. The game is the directory `game` of the app's external files
+  directory, and its `vkrgss.toml` can give a seed, an input script, a frame limit and
+  frames to dump; `cargo xtask android-run <SERIAL> <GAME_DIR>` runs a game on a phone
+  and pulls the log and the frames. On the Pixel 7a and the Galaxy S24+ the frames are
+  identical byte for byte to those of a headless run on the desktop. A game of RPG Maker VX
+  Ace is refused for now. The window may go and come back, as when the activity is paused
+  and resumed: the surface is released and made anew and the game waits in between.
+
 - aarch64 Linux is supported (milestone P1): on the owner's Jetson Orin Nano the compared
   frames and saves of the XP, VX and VX Ace games equal those of x86_64 byte for byte, and the
   CI job `gate-aarch64` must pass.

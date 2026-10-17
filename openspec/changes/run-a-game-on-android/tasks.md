@@ -14,7 +14,7 @@
 
 ## 4. Documents
 
-- [ ] 4.1 `docs/building.md`, `docs/running.md` (Android), `CHANGELOG.md`. Verify: the tests of `xtask` that check the documents pass.
+- [x] 4.1 `docs/building.md`, `docs/running.md` (Android), `CHANGELOG.md`. Verify: the tests of `xtask` that check the documents pass.
 
 ## 5. Integration check
 

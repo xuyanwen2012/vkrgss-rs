@@ -742,6 +742,45 @@ is recorded or replayed the game is given each frame's buttons together with tha
 tick, so a key pressed and released between two frames is not seen. Only input and the seed
 are recorded: a reset with F12 is not, and a game that reads the clock can still diverge.
 
+## Android
+
+The app of `vkrgss-android` runs a game of RPG Maker XP or VX on Android 14 or later, with
+the guest on a thread of the app, as `--guest thread` does; there are no save states. A
+game of RPG Maker VX Ace is refused with a message, because its scripts need Ruby 1.9.2 in
+a guest process. Its APK is built with `cargo xtask apk` ([building.md](building.md#the-app)).
+
+In this version the game is the directory `game` of the app's external files directory,
+`/sdcard/Android/data/io.github.xuyanwen2012.vkrgss/files/game/`, which `adb push` fills;
+there is no import of a game and no on-screen button, so a game is played with a keyboard or
+the keys winit receives. The file `vkrgss.toml` of that directory gives the options of the
+run with the keys and the formats of the configuration file of a game (*Configuration
+files*), and with paths relative to that directory. It is the only configuration file and
+takes only these keys: `rtp`, `builtin_scripts`, `font_dirs`, `audio`, `soundfont`, `seed`,
+`debug`, `log_p`, `frames`, `input` and `dump`; another key is an error that names it. With
+`input` the buttons follow the script frame by frame, whatever the keys do, and with `dump`
+the frames named are written as PNG files of the logical size, numbered and drawn as in a
+headless run, so they can be compared with those of `vkrgss --guest thread --headless`.
+Without `builtin_scripts` the built-in scripts file of the game's runtime is read from the
+files directory (`files/rpg_builtin.rb` for XP). The fonts of `font_dirs` are searched
+before those of the system, `/system/fonts`. Sound goes through AAudio.
+
+The app writes its log to logcat under the tag `vkrgss` and to `files/vkrgss.log`, at the
+level info; the reports of scripts arrive there too. When the activity goes to the
+background the picture goes and the game waits; it goes on when the activity comes back.
+When the game has ended the app ends.
+
+```sh
+cargo xtask android-run <SERIAL> <GAME_DIR>
+```
+
+builds the APK, installs it on the phone with that serial (`adb devices` lists them),
+replaces the app's game with `GAME_DIR`, starts the activity and waits until the app has
+ended, at most 15 minutes. It then pulls the log, the lines of logcat and the frames that
+the `dump` entries of the game's `vkrgss.toml` name into `target/android-run/<SERIAL>/`,
+and fails when one of them was not written. It uninstalls nothing. The phone must be
+unlocked: a screen that goes off sends the activity to the background, and the game waits
+until it is back.
+
 ## Running the demo
 
 The host can also be driven without Ruby, by a guest written in Rust, `vkrgss_host::demo`. It
