@@ -89,13 +89,16 @@ audio output, the real corpus, `sandbox_init`.
 - **`test_thread.rb#test_local_barrier` of Ruby 1.9.2.** It failed once in a run of the whole
   workspace on the Mac, its child printing `7: cont` after `exit.`, which the test's own
   threads may do; it passed in every other run. Its script `lbtest.rb` was then run alone
-  220 times at `2813b7a` (the same production source as `a874d44`) with the test executable
-  of `vkrgss-ruby192-sys` that the run of the tests at `a874d44` had built: 40 runs one after
-  another, then 180 in twelve workers of 15 started together, with at most twelve runs at the
-  same moment. All 220 exited with status 0 and printed `exit.` last. On the Mac, outside the
-  repository, `~/vkrgss-flows/tmp/evidence/lbtest2/` keeps the whole output of each run, a
-  row per run with its times, exit status and last line, the provenance (commit,
-  environment, SHA-256 of the executable, of `lbtest.rb` and of the recorder) and the
-  summary computed from the rows. An earlier recording of 220 runs, kept beside it, recorded
-  only last lines, all `exit.`; its status fields are not Ruby's. Left in the suite; whether
-  it should be listed if it recurs is open.
+  220 times at `9adeb67` (the same production source as `a874d44`) with the test executable
+  of `vkrgss-ruby192-sys` that the run of the workspace tests at `9adeb67` had built, copied
+  beside the records because that test builds the file anew on every run: 40 runs one after
+  another, then 180 in twelve workers of 15 started together, with at most twelve runs at
+  the same moment. All 220 exited with status 0 and printed `exit.` last. On the Mac,
+  outside the repository, `~/vkrgss-flows/tmp/evidence/lbtest3/` keeps that executable, the
+  whole output of each run, a row per run with its times, exit status and last line, the
+  provenance (commit, environment, SHA-256 of the executable, of `lbtest.rb` and of the
+  recorder) and the summary computed from the rows. Two earlier recordings are kept beside
+  it: `lbtest2/`, recorded the same way at `2813b7a` with the same outcome, whose executable
+  was replaced before it could be kept; and the first, which kept only last lines, all
+  `exit.`, and whose status fields are not Ruby's. Left in the suite; whether it should be
+  listed if it recurs is open.
