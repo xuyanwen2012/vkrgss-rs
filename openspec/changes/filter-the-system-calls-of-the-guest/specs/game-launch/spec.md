@@ -21,5 +21,5 @@ restricted.
 - **THEN** both runs dump the same frames
 
 #### Scenario: Denied system calls
-- **WHEN** a script of a game run with `--guest process` calls `system("true")`, and code in the guest opens an `AF_INET` socket
-- **THEN** each fails with `EPERM`, while an `AF_UNIX` socket, file I/O, threads and `fork` work
+- **WHEN** a script of a game run with `--guest process` calls `system("true")` and `Process.exec("true")`, and code in the guest opens an `AF_INET` socket
+- **THEN** `system` starts nothing, `Process.exec` raises `Errno::EPERM`, and the socket fails with `EPERM`, while an `AF_UNIX` socket, file I/O, threads and `fork` work

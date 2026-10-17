@@ -74,11 +74,14 @@ An allow-list filter; macOS confinement; changing what Landlock allows.
 
 ## Follow-ups
 
-- **Open question: the wording of the scenario "Denied system calls".** It says that a
-  script's `system("true")` fails with `EPERM`, which cannot happen (see "The script's
-  `system("true")`" above). Suggested wording: a script's `system("true")` starts nothing
-  and `Process.exec("true")` raises `Errno::EPERM`. Until the owner decides, task 1.1 stays
-  unticked.
+- **Decided by the owner's session on 2026-10-17:** the scenario now says that
+  `system("true")` starts nothing and `Process.exec("true")` raises `Errno::EPERM`, as
+  suggested.
+- **Decided the same day:** the list also denies `io_uring_setup`, `io_uring_enter` and
+  `io_uring_register` (`EPERM`); `clone3` returns `ENOSYS` so the C library falls back to
+  `clone`; and `clone` with any of the namespace flags (`CLONE_NEWNS`, `CLONE_NEWUSER`,
+  `CLONE_NEWPID`, `CLONE_NEWNET`, `CLONE_NEWIPC`, `CLONE_NEWUTS`, `CLONE_NEWCGROUP`)
+  returns `EPERM`. The tests check that `fork` and threads still work.
 - `io_uring` can create sockets (`IORING_OP_SOCKET`) without the system call `socket`, and
   `clone`/`clone3` with namespace flags do what `unshare` does. A script cannot reach either
   (`syscall` is turned off and no FFI is linked); denying `io_uring_setup` and the namespace

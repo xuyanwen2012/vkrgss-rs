@@ -20,7 +20,8 @@ loading kernel code).
   `process_vm_readv`/`writev`, `socket` of every family but `AF_UNIX`, `bpf`,
   `perf_event_open`, `mount`/`umount2`/`pivot_root`/`chroot`, `init_module`/
   `finit_module`/`delete_module`, `kexec_load`/`kexec_file_load`, `keyctl`/`add_key`/
-  `request_key`, `userfaultfd`, `unshare`/`setns`, `reboot`, `swapon`/`swapoff`.
+  `request_key`, `userfaultfd`, `unshare`/`setns`, `reboot`, `swapon`/`swapoff`, the `io_uring` calls, and
+  `clone` with namespace flags; `clone3` returns `ENOSYS`.
 - `--sandbox off` and `--allow-process-functions` leave the filter out, as they leave
   Landlock out today.
 - The copies of the guest (save states) inherit the filter; nothing they do is denied.
