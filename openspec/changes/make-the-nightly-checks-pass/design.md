@@ -41,4 +41,9 @@ Raising libFuzzer's memory limit; fork mode; other targets.
 
 ## Follow-ups
 
-None yet.
+- **`deny.toml` under `cargo-deny` 0.20.2.** The file already has the form that 0.18 asks for
+  (`[advisories]` without the removed `vulnerability`, `notice` and `unsound` keys,
+  `unmaintained` with a scope, `[licenses]` with `allow` only), and no change of 0.19 or 0.20
+  that is known here renames a key it uses, so it is kept as it is. `cargo-deny` is not
+  installed on the machine of this change and there is no network, so the first nightly
+  run is what checks it.

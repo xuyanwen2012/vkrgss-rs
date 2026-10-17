@@ -315,9 +315,42 @@ fn the_nightly_workflow_runs_the_checks_outside_the_gate() {
     assert!(
         audit
             .iter()
-            .any(|line| line.contains("cargo install --locked cargo-deny@")),
-        "cargo-deny is not installed at a fixed version"
+            .any(|line| line.contains("cargo install --locked cargo-deny@0.20.2")),
+        "cargo-deny is not installed at 0.20.2, which reads the current advisory database"
     );
+}
+
+#[test]
+fn a_failed_fuzz_job_uploads_the_inputs_put_aside() {
+    let workflow = read_workflow("nightly.yml");
+    let fuzz = steps(&job(&workflow, "fuzz"));
+    let upload = fuzz
+        .iter()
+        .position(|line| line.contains("uses: actions/upload-artifact@"))
+        .expect("the job `fuzz` uploads an artifact");
+    // The lines of the step: from its `- ` to the next.
+    let start = fuzz[..=upload]
+        .iter()
+        .rposition(|line| line.trim_start().starts_with("- "))
+        .unwrap();
+    let step: Vec<&str> = fuzz[start..]
+        .iter()
+        .enumerate()
+        .take_while(|(index, line)| *index == 0 || !line.trim_start().starts_with("- "))
+        .map(|(_, line)| line.trim())
+        .collect();
+    assert!(step.contains(&"if: failure()"), "{step:?}");
+    assert!(
+        step.contains(&"path: target/tmp/fuzz/${{ matrix.target }}/artifacts/"),
+        "{step:?}"
+    );
+    assert!(step.contains(&"retention-days: 30"), "{step:?}");
+    // The step comes after the run of the target.
+    let run = fuzz
+        .iter()
+        .position(|line| line.contains("cargo xtask fuzz"))
+        .unwrap();
+    assert!(run < start, "{fuzz:?}");
 }
 
 #[test]

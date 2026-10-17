@@ -27,7 +27,7 @@ jobs:
         run: rustup show
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - name: Install cargo-deny
-        run: cargo install --locked cargo-deny@0.18.2
+        run: cargo install --locked cargo-deny@0.20.2
       - name: Dependency audit
         run: cargo xtask audit
 
@@ -99,7 +99,8 @@ jobs:
       - name: Sanitized suites of Ruby 1.9.2
         run: cargo test -p vkrgss-ruby192-sys --locked --test sanitized -- --ignored upstream_suites_pass_under_the_sanitizers
 
-  # A short run of each fuzz target; the corpus is not kept between runs.
+  # A short run of each fuzz target; the corpus is not kept between runs, the inputs put
+  # aside are uploaded when the job fails.
   fuzz:
     runs-on: ubuntu-24.04
     strategy:
@@ -124,6 +125,14 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - name: Fuzz target
         run: cargo xtask fuzz ${{ matrix.target }} --seconds 300
+      # The inputs the target put aside: the one of a finding, and those of the limits.
+      - name: Keep the inputs of the target
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: fuzz-${{ matrix.target }}-artifacts
+          path: target/tmp/fuzz/${{ matrix.target }}/artifacts/
+          retention-days: 30
 
   # When a job above failed: opens the issue "Nightly checks failed" with the link to the
   # run, or comments on it while it is open. The only job that may write issues.

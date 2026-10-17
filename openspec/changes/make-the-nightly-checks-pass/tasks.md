@@ -2,7 +2,7 @@
 
 ## 1. Workflow
 
-- [ ] 1.1 `cargo-deny` 0.20.2, `deny.toml` as far as known, the upload of artifacts, and the tests of `xtask` for the workflow. Verify: scenarios of "The nightly fuzz job keeps its findings"; `cargo test -p xtask --locked` passes.
+- [x] 1.1 `cargo-deny` 0.20.2, `deny.toml` as far as known, the upload of artifacts, and the tests of `xtask` for the workflow. Verify: scenarios of "The nightly fuzz job keeps its findings"; `cargo test -p xtask --locked` passes.
 
 ## 2. Stack overflow in fuzz runs
 
