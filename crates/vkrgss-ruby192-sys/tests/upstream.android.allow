@@ -1,0 +1,16 @@
+# What the release's own suites leave out on Android alone, in the format of
+# `upstream.allow`, to which `tests/common/suites.rs` adds it there. The tests run on a phone
+# in `/data/local/tmp` (`cargo xtask android-test`).
+
+# Every test of the file makes a hard link in its setup, which SELinux refuses to the shell
+# in `/data/local/tmp`.
+ruby/test_file_exhaustive.rb
+
+# bionic has no `crypt(3)`: `String#crypt` raises `NotImplementedError` (PATCHES.md, patch 49).
+ruby/test_string.rb#test_crypt
+
+# Expects the `[BUG]` report of a child that sends itself SIGSEGV. The dynamic linker of
+# Android installs the crash handler of debuggerd in every process, and Ruby installs its own
+# handler only where it finds the default one (`install_sighandler` of `signal.c`), so the
+# child ends by the signal without the report.
+ruby/test_rubyoptions.rb#test_segv_test

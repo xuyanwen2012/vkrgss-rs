@@ -30,6 +30,9 @@ pub(crate) struct Allowed {
 /// The committed list of what the suites leave out.
 pub(crate) const ALLOW_LIST: &str = include_str!("../upstream.allow");
 
+/// The committed list of what the suites leave out on Android as well.
+pub(crate) const ANDROID_ALLOW_LIST: &str = include_str!("../upstream.android.allow");
+
 /// Parses a list in the format of `xtask/src/stress.skip` without its step: entries separated
 /// by blank lines, each made of `#` lines that give the reason and of lines that each name a
 /// file or a test method. A block of comment lines alone is not an entry.
@@ -56,10 +59,16 @@ pub(crate) fn parse_allow_list(text: &str) -> Vec<Allowed> {
     allowed
 }
 
-/// The names of the committed list, for the functions that take what to leave out.
+/// The names of the committed lists that apply to the target, for the functions that take
+/// what to leave out.
 pub(crate) fn allowed_tests() -> Vec<String> {
-    parse_allow_list(ALLOW_LIST)
+    let mut lists = vec![ALLOW_LIST];
+    if cfg!(target_os = "android") {
+        lists.push(ANDROID_ALLOW_LIST);
+    }
+    lists
         .into_iter()
+        .flat_map(parse_allow_list)
         .map(|entry| entry.test)
         .collect()
 }

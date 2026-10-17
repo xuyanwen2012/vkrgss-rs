@@ -22,6 +22,14 @@ const VERSION_LINE: &str = "ruby 1.8.7 (2013-06-27 patchlevel 374) [aarch64-linu
 #[cfg(target_os = "android")]
 const VERSION_LINE: &str = "ruby 1.8.7 (2013-06-27 patchlevel 374) [aarch64-linux-android]";
 
+/// The files of `test/ruby` left out on Android, each with its number of tests. Every test
+/// of `test_file_exhaustive.rb` makes a hard link in its setup, which SELinux refuses in
+/// `/data/local/tmp`, where the tests run on a phone (`cargo xtask android-test`).
+#[cfg(target_os = "android")]
+const LEFT_OUT: &[(&str, u64)] = &[("ruby/test_file_exhaustive.rb", 68)];
+#[cfg(not(target_os = "android"))]
+const LEFT_OUT: &[(&str, u64)] = &[];
+
 /// How long one test process may run. The slowest file takes a few seconds.
 const PROCESS_TIMEOUT: Duration = Duration::from_secs(120);
 
@@ -47,11 +55,13 @@ fn upstream_executable_reports_its_version() {
 
 #[test]
 fn upstream_core_suite_passes() {
-    let totals = built().run_unit_suite("ruby");
+    let skip: Vec<String> = LEFT_OUT.iter().map(|&(file, _)| file.to_owned()).collect();
+    let left_out: u64 = LEFT_OUT.iter().map(|&(_, tests)| tests).sum();
+    let totals = built().run_unit_suite_without("ruby", &skip);
     eprintln!("test/ruby: {totals:?}");
     assert_eq!(
         (totals.tests, totals.failures, totals.errors),
-        (common::CORE_TESTS, 0, 0),
+        (common::CORE_TESTS - left_out, 0, 0),
         "test/ruby reported {totals:?}"
     );
 }

@@ -73,10 +73,16 @@ fn upstream_core_suite_passes() {
     eprintln!("test/ruby: {} files, {totals:?}", files.len());
 }
 
-/// Every entry of the list says why, and names a file that exists.
+/// Every entry of the lists says why, and names a file that exists.
 #[test]
 fn every_allowed_entry_has_a_reason() {
-    let allowed = suites::parse_allow_list(suites::ALLOW_LIST);
+    for list in [suites::ALLOW_LIST, suites::ANDROID_ALLOW_LIST] {
+        check_allow_list(list);
+    }
+}
+
+fn check_allow_list(list: &str) {
+    let allowed = suites::parse_allow_list(list);
     assert!(!allowed.is_empty(), "the list is empty");
     for entry in &allowed {
         assert!(!entry.reason.is_empty(), "{} has no reason", entry.test);

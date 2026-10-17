@@ -219,6 +219,8 @@ const RUBY192_TESTS: &[&str] = &[
     "--test",
     "original",
     "--test",
+    "platform",
+    "--test",
     "protect",
     "--test",
     "sanitized",

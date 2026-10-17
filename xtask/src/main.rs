@@ -12,6 +12,9 @@
 //!   interpreters (`marshal`, `parse`, `regex` of Ruby 1.8.7, `marshal192`, `parse192`,
 //!   `regex192` of Ruby 1.9.2) with libFuzzer and the sanitizers and runs it. Not a step of
 //!   the gate.
+//! - `android-test <CRATE> [--device <SERIAL>]`: cross-builds the tests of an interpreter
+//!   crate (`vkrgss-ruby-sys`, `vkrgss-ruby192-sys`) for Android and runs them on a phone over
+//!   adb. Not a step of the gate.
 //! - `dist`: builds the release executable and packs it with the licence texts into an archive
 //!   with a checksum under `target/dist/`.
 //! - `extract-rpg <DLL> <OUTPUT>`: copies the built-in scripts out of an RGSS DLL, or out of
@@ -23,6 +26,7 @@
 
 #![forbid(unsafe_code)]
 
+mod android;
 mod audit;
 mod deps;
 mod dist;
@@ -37,7 +41,8 @@ mod stress;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-const USAGE: &str = "usage: cargo xtask <gate [--job <NAME>]|deps|audit|stress|fuzz <TARGET> [--seconds N]|dist|\
+const USAGE: &str = "usage: cargo xtask <gate [--job <NAME>]|deps|audit|stress|fuzz <TARGET> [--seconds N]|\
+                     android-test <CRATE> [--device <SERIAL>]|dist|\
                      extract-rpg <DLL> <OUTPUT>|oracle <GAME_DIR> [OPTIONS]|pack-rgssad <GAME_DIR>>";
 
 fn main() -> ExitCode {
@@ -56,6 +61,13 @@ fn main() -> ExitCode {
             Ok(options) => fuzz::run(&options, &workspace_root()),
             Err(error) => {
                 eprintln!("{error:#}\n{}", fuzz::USAGE);
+                return ExitCode::from(2);
+            }
+        },
+        ["android-test", ref arguments @ ..] => match android::parse(arguments) {
+            Ok(options) => android::run(&options, &workspace_root()),
+            Err(error) => {
+                eprintln!("{error:#}\n{}", android::USAGE);
                 return ExitCode::from(2);
             }
         },

@@ -10,7 +10,7 @@
 
 ## 3. Device runs
 
-- [ ] 3.1 The adb runner and the test changes for paths. Verify: the scenarios of `specs/supported-platforms/spec.md` on both phones (or recorded in `design.md` for the merge if adb is not reachable).
+- [x] 3.1 The adb runner and the test changes for paths. Verify: the scenarios of `specs/supported-platforms/spec.md` on both phones (or recorded in `design.md` for the merge if adb is not reachable).
 
 ## 4. Documents
 
