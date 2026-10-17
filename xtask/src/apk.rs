@@ -14,6 +14,7 @@
 //! the one place an app may execute files from.
 //!
 //! `cargo xtask android-run <SERIAL> <GAME_DIR>` builds the APK, installs it on the phone,
+//! starts the app once if it has no files directory yet, so that the app makes it,
 //! replaces the game of the app's files directory with the directory `GAME_DIR`, starts the
 //! activity and waits until the app has ended. Then it pulls the app's log and the frames
 //! that the `dump` entries of the game's `vkrgss.toml` name into

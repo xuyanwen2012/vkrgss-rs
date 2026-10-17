@@ -115,6 +115,10 @@
   - *Pause and resume*, in passing: the first run on the Pixel 7a started with the screen
     locked, the window went and came back when it was unlocked, and the game went on with
     the guest in a process to frames identical to this machine's.
+- **Gate (task 4.1)**, 2026-10-17: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate`
+  passed every step, and `openspec validate run-the-guest-in-a-process-on-android
+  --strict` passes. The commit of this task also adds to the documentation of
+  `xtask/src/apk.rs` that `android-run` starts a freshly installed app once.
 
 ## Out of scope
 
