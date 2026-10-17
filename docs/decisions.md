@@ -108,7 +108,14 @@ guest. The release archive holds the three executables.
   saves and F4 loads, with Shift they choose one of ten slots. States end with the run; the
   music goes on where it was (change `loop-midi-decode-wma-and-resume-music`). The guest process confines itself with Landlock
   before the first script runs: it writes only below the game directory, executes nothing
-  and opens no TCP connection (change `confine-the-guest-process`).
+  and opens no TCP connection (change `confine-the-guest-process`). Then it installs a
+  seccomp-BPF filter, a deny-list that answers `EPERM` to the system calls no game needs:
+  starting programs, tracing other processes, sockets of every family but `AF_UNIX`, mounts,
+  namespaces, kernel modules and keys, `bpf`, `io_uring` (change
+  `filter-the-system-calls-of-the-guest`). The confinement per platform: on Linux Landlock
+  and the filter; on Android the filter and the app's private directory, because the
+  kernels there have no Landlock (both test phones answer `ENOSYS`); on macOS none yet.
+  `--sandbox off` and `--allow-process-functions` leave out both.
 - The guest is deterministic: time comes from frame ticks and a host-provided clock, input is
   sampled once per `Input.update`, the random seed can be injected. Input record and replay is a
   first-version test facility.
@@ -868,8 +875,9 @@ changes; finishing one does not commit to the next. Their milestones are P1 to P
   through the storage access framework, because the runtime reads and writes by path; input
   through on-screen buttons and gamepads; no save states.
 - Vulkan 1.3 is required as on the desktop; no path for 1.1.
-- The guest is a separate process under seccomp. Most Android kernels have no Landlock; the
-  private directory keeps the game's files apart.
+- The guest is a separate process under seccomp (change
+  `filter-the-system-calls-of-the-guest`, whose filter test passes on both phones). Most
+  Android kernels have no Landlock; the private directory keeps the game's files apart.
 - Distribution: an APK on the GitHub releases, installable through Obtainium, self-signed.
   Google Play may come later.
 - Test devices: the owner's Pixel 7a (Tensor G2, Mali-G710) and Galaxy S24+ SM-S926B

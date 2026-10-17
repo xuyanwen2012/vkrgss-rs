@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Security
 
+- A confined guest process also filters its system calls with seccomp, on Linux and
+  Android, after its Landlock rules: starting programs, tracing other processes, sockets of
+  every family but `AF_UNIX`, mounts, namespaces, kernel modules and keys, `bpf`,
+  `perf_event_open` and `io_uring` get `EPERM`. On Android, whose kernels have no Landlock,
+  the filter is the confinement besides the app's private directory. `--sandbox off` and
+  `--allow-process-functions` leave it out, as they leave out Landlock.
+
 - Both embedded interpreters are built with `_FORTIFY_SOURCE=3`, `-fstack-protector-strong`,
   `-fstack-clash-protection` and, on x86_64, `-fcf-protection=full`, asked for by their
   build scripts with gcc and clang alike instead of left to the defaults of Ubuntu's gcc.

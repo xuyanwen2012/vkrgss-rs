@@ -174,7 +174,7 @@ Paths on the command line are relative to the directory the program was started 
 | `--record FILE` | Write the input of every frame and the seed to `FILE`. |
 | `--replay FILE` | Play the input of a recording back instead of the keyboard. Not together with `--record` or `--input`. |
 | `--guest thread\|process` | Where the game's scripts run: on a thread of the program or in a process of their own, which the save states need. Without a choice it is a process in a window and in every run of VX Ace, and a thread in a headless run of XP or VX. A game of VX Ace runs in a process only. See *Guest process* and *Save states*. |
-| `--sandbox on\|off` | Whether a guest process confines itself before the first script runs: it then writes only below the game directory, executes nothing and opens no TCP connection. On unless it is said otherwise. See *Sandbox*. |
+| `--sandbox on\|off` | Whether a guest process confines itself before the first script runs: it then writes only below the game directory, executes nothing and opens no socket but a Unix one. On unless it is said otherwise. See *Sandbox*. |
 | `--headless` | Run without a window, on a virtual clock that never waits. |
 | `--frames N` | Headless: stop after N frames if the game has not ended. |
 | `--input SCRIPT\|@FILE` | Headless: the buttons held from given frames on, in the syntax described under *Running the demo*, or a file that holds such a script. |
@@ -617,7 +617,15 @@ scripts included. From then on it
 - executes no file;
 - neither binds nor connects a TCP socket.
 
-A script that opens a file for writing anywhere else gets `Errno::EACCES`. The states of the
+After Landlock it installs a seccomp filter, which answers `EPERM` to the system calls a
+game never needs: starting a program (`execve`), tracing or reading other processes,
+sockets of every family but Unix sockets, mounts and new namespaces, loading kernel
+modules, the kernel's key store, `bpf`, `perf_event_open`, `io_uring` and the calls only an
+administrator makes. The filter binds every thread of the guest process and its states.
+
+A script that opens a file for writing anywhere else gets `Errno::EACCES`; one that starts a
+program through what the stubs of the process functions leave on, as `Process.exec` of
+XP and VX, gets `Errno::EPERM`. The states of the
 guest process are confined as it is, and so are the threads a script of VX Ace makes. The program itself, with the window, the GPU and the
 audio device, is not restricted.
 
@@ -639,7 +647,9 @@ The restriction is as strong as the kernel allows. On a kernel without Landlock 
 Linux 5.13, or with it switched off) the run warns once that the guest process is not
 confined and goes on. An older kernel that has Landlock but not all of its rules, those for
 truncating files (before 6.2) or for TCP (before 6.7), is named among the informational
-messages with what it does not restrict.
+messages with what it does not restrict. A kernel without seccomp filters gets a warning
+once too, and the guest goes on unfiltered; a filter that is installed is named among the
+informational messages.
 
 ### Save states
 
