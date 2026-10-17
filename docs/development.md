@@ -86,7 +86,9 @@ is never cancelled. The workflow `.github/workflows/nightly.yml` runs the four
 [checks outside the gate](#checks-outside-the-gate) once a day and when started by hand,
 each as a job of its own: `audit`, `stress`, `sanitized` and `sanitized192` (the sanitized
 suites of the two interpreters) and `fuzz`, the last once for every target with
-`--seconds 300`. No pull request waits for it, so its failure does not
+`--seconds 300`. When a fuzz job fails, it uploads the inputs its target put aside,
+`target/tmp/fuzz/<target>/artifacts/`, as an artifact of the run that is kept for 30 days.
+No pull request waits for it, so its failure does not
 block merging. When one of its jobs fails, its last job, `issue`, opens the issue "Nightly
 checks failed" with the link to the run, or comments on that issue while it is open; it is
 the only job of the workflows that may write issues.
@@ -220,15 +222,27 @@ Fedora) and says so when they are missing. A name that is not a target is an err
 names the six.
 
 A Ruby exception is not a finding. A sanitizer report or a crash is: it ends the command
-with a failure, the report is on the error stream and the input in `artifacts/`. Two
-things are not findings, and the run goes on in a new process after them: an input that
-runs into its time limit, which a pattern that backtracks does by its nature, and a process
-that runs into libFuzzer's memory limit of 2 GiB, which happens because the interpreter
-never frees a symbol and the parser does not free the tables of the scopes that a syntax
-error leaves open. The inputs are small because nesting recurses: in the sanitized build of
+with a failure, the report is on the error stream and the input in `artifacts/`. Three
+things are not findings, and the run goes on in a new process after them, with the input
+put aside in `artifacts/`: an input that runs into its time limit, which a pattern that
+backtracks does by its nature; a process that runs into libFuzzer's memory limit of 2 GiB,
+which happens because the interpreter never frees a symbol and the parser does not free the
+tables of the scopes that a syntax error leaves open; and an input that exhausts the
+machine stack by nesting. The last is AddressSanitizer's report of a stack overflow with,
+among the first eight frames of its trace, a function that `tests/fuzz.rs` lists for the
+target as recursing on nesting: `r_object0` and its callers for `Marshal.load`, the
+recursive functions of the parser (and of the compiler of Ruby 1.9.2) for a script, and
+those of the engine's parser and compiler (`parse_exp`, `parse_subexp`, `setup_tree`,
+`get_min_match_length` and others) for a pattern and for a script, whose pattern literals
+the parser compiles. Its input is renamed from libFuzzer's `crash-` to `stack-`. A stack
+overflow anywhere else is a finding. The line that ends a run counts each of the three.
+The inputs are small because nesting recurses: in the sanitized build of
 Ruby 1.8.7, with a stack of 8 MiB, `Marshal.load` exhausts the stack at about 21,800 nested arrays (an
 input of 43 KiB) and the engine at about 3,190 nested groups (6.4 KiB), which the limits
-keep an input far from; the parser refuses deep nesting itself. The targets of Ruby 1.9.2
+keep an input far from; the parser refuses deep nesting itself. Groups that refer to each
+other, as `(\2)(\1)`, make Oniguruma 5.9.6 recurse without end in `get_min_match_length`
+(upstream 7fe8c3f, left; see [vendored-security.md](vendored-security.md)), so the target
+`regex` meets such an exhaustion in inputs of any length. The targets of Ruby 1.9.2
 have the same limits. A single allocation of
 more than 256 MiB gets a null pointer, so a length field that asks for more raises
 `NoMemoryError`.

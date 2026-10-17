@@ -29,6 +29,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   in backward searches (`String#rindex`), as upstream 33e5b47c does for CVE-2024-27282:
   nested repeats whose least length is too large to count formed a position past the
   subject.
+- The fuzz targets of the parsers found more defects that vkrgss now fixes, each after a
+  syntax error in a script: in Ruby 1.8.7 a number such as `1_.` was read past the end of
+  the lexer's buffer, and a script with `__END__` after an open `module` could copy its
+  last line from freed memory; in Ruby 1.9.2 `(A::B += p 1)..1`, and `=~` after a word list
+  that is no valid UTF-8, ended the process.
 
 ### Added
 
@@ -46,9 +51,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   what `cargo xtask gate` runs, which is unchanged.
 - When a job of `nightly.yml` fails, the workflow opens the issue "Nightly checks failed",
   or comments on it while it is open.
+- A failed fuzz job of `nightly.yml` uploads the inputs its target put aside, for 30 days.
 
 ### Changed
 
+- `nightly.yml` installs `cargo-deny` 0.20.2, which reads the current advisory database;
+  0.18.2 could no longer parse it.
+- `cargo xtask fuzz` sets aside an input that exhausts the machine stack by nesting, as it
+  does an input that runs into the time limit: a stack overflow that AddressSanitizer
+  reports in a function that recurses on the nesting of the target's input is counted, and
+  its input kept as `stack-<hash>`; any other stack overflow is still a finding.
 - Ruby 1.8.7 is built on aarch64 with configuration headers of its own instead of those of
   x86_64, and names the platform `aarch64-linux` there. Ruby 1.9.2, and with it the games
   of RPG Maker VX Ace, is built on aarch64 too. The headers are those that the releases'

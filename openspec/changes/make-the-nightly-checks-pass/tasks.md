@@ -14,7 +14,7 @@
 
 ## 4. Documentation
 
-- [ ] 4.1 `docs/development.md`, `docs/vendored-security.md`, `CHANGELOG.md`. Verify: the tests of `xtask` that check the documents pass.
+- [x] 4.1 `docs/development.md`, `docs/vendored-security.md`, `CHANGELOG.md`. Verify: the tests of `xtask` that check the documents pass.
 
 ## 5. Integration check
 

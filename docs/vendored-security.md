@@ -198,8 +198,8 @@ code that Oniguruma got after 5.9.6 and that is not in the vendored tree.
 The first runs of the targets of Ruby 1.8.7, `marshal`, `parse` and `regex` (`openspec` change
 `fuzz-the-interpreter-and-review-fixes`, section "Checked" of its `design.md`) found the
 defects of the first rows of the table above again, and these, which no published fix
-names. Each is a recorded patch, and its input is a test
-(`crates/vkrgss-ruby-sys/fuzz/fixed/`).
+names; the runs of the change `make-the-nightly-checks-pass` found the last two. Each is a
+recorded patch, and its input is a test (`crates/vkrgss-ruby-sys/fuzz/fixed/`).
 
 | Tree | Code | Defect | Patch |
 |---|---|---|---|
@@ -211,6 +211,8 @@ names. Each is a recorded patch, and its input is a test
 | Oniguruma | `regparse.c`: `PINC`, `PINC_S` | as `PFETCH` in #17 | 5 |
 | Oniguruma | `regcomp.c`: `compile_string_node`, `expand_case_fold_string`; `enc/unicode.c`: `onigenc_unicode_mbc_case_fold`, `onigenc_unicode_get_case_fold_codes_by_str` | a piece of literal text that ends inside a multibyte character is read past its end | 6, 8 |
 | Oniguruma | `regexec.c`: `match_at`, `OP_PUSH_OR_JUMP_EXACT1`, `OP_PUSH_IF_PEEK_NEXT` | the subject is read before its end is checked | 7 |
+| Ruby | `parse.y`: the lexer of numbers | a number with `_` before `.`, as `1_.`, leaves its token without a terminator, and the token is read past the end of its buffer after the syntax error | 40, 41 |
+| Ruby | `parse.y`: the lexer at `__END__` | the line of `__END__` is no longer kept from the collector while the lexer points into it, and a syntax error at the end of the script copies it from freed memory if the error collects | 42, 43 |
 
 What is known and not fixed: Oniguruma takes a pattern and a subject to be valid in their
 encoding. Upstream never changed that; it tells the caller to check. The patches above make
@@ -218,6 +220,13 @@ the reads that the fuzz targets reached stay inside the buffers, for UTF-8. A se
 bytes that is no character of the encoding can still be read a few bytes past a string
 elsewhere, in Shift_JIS and EUC-JP in particular, which the fuzz targets do not select.
 The original runtime has the same engine with the same assumption.
+
+Also not fixed: the nightly run of the target `parse` reported once that a method was
+looked up on a class that was no class (`eval.c:496`, `search_method`), and a later run
+that the collector's free list was corrupted (`gc.c:456`). Neither input fails on its own,
+and the defect is not found yet; the change `make-the-nightly-checks-pass` lists what is
+known under "Follow-ups" of its `design.md`. Both reports came from scripts with syntax
+errors.
 
 ## Ruby 1.9.2-p0
 
@@ -409,6 +418,7 @@ of `third_party/ruby-1.9.2/PATCHES.md`, and the input of each that a target foun
 | `parse.y`: `assign_in_cond` | the value of an assignment in a condition is a null pointer after a syntax error in it (`!w=%w[`) | `parse192` | 23, 24 |
 | `re.c`: `unescape_nonascii` | a backslash before a character cut off by the end of the pattern passed the check of the pattern, and the engine read past it | `regex192` | 25 |
 | `gc.c`: the marking of `NODE_COLON3` | the name in the node of `::Name` was followed as a pointer; the name of a local variable, which `class ::c` leaves there after its syntax error, ended the process at the next collection | `parse192` | 28 |
+| `parse.y`: the rules of `..`, `...` and `=~` | an operand is a null pointer after a syntax error in it: a statement in parentheses that assigns to a constant with an operator and a command, as `(A::B += p 1)..1`, or a word list that is no valid UTF-8, as `%W,` and the byte `0xce` before `=~` | `parse192`, the first in the nightly run (change `make-the-nightly-checks-pass`) | 47, 48 |
 
 ## CORE-MATH
 
