@@ -873,7 +873,8 @@ changes; finishing one does not commit to the next. Their milestones are P1 to P
   `crypt`, so `String#crypt` raises `NotImplementedError` there.
 - First version: a game is imported as a zip into the app's private directory, not reached
   through the storage access framework, because the runtime reads and writes by path; input
-  through on-screen buttons and gamepads; no save states.
+  through on-screen buttons and gamepads. Save states came with the guest in a process
+  (change `run-the-guest-in-a-process-on-android`, 2026-10-17).
 - Vulkan 1.3 is required as on the desktop; no path for 1.1.
 - The guest is a separate process under seccomp (change
   `filter-the-system-calls-of-the-guest`, whose filter test passes on both phones). Most
@@ -892,6 +893,8 @@ changes; finishing one does not commit to the next. Their milestones are P1 to P
 - Whether the guest is a 32-bit process (Ruby 1.8.7 needs `long` as wide as a pointer, which
   64-bit Windows does not give) is decided when the work on Windows starts. The owner has no
   Windows machine yet.
+- Decided by the owner on 2026-10-17: Windows is not considered for now; P4 stays "Not
+  started" and no work toward it is planned.
 
 ### Order of work
 

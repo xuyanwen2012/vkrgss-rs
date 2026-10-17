@@ -191,8 +191,10 @@ API level 34, as above, in the development profile, and assembles
 `target/apk/vkrgss-debug.apk` with the newest build tools of the SDK: `aapt2` links the
 manifest (package `io.github.xuyanwen2012.vkrgss`, minimum API level 34, target 37,
 landscape on either side, fullscreen, Vulkan 1.3 required) against
-`platforms/android-34/android.jar`, the library goes into `lib/arm64-v8a/` without its
-debug information and uncompressed (`zip` of the system), `zipalign` aligns it to pages
+`platforms/android-34/android.jar`, the library and the two guest executables
+(`libvkrgss_guest_rgss12.so`, `libvkrgss_guest_rgss3.so`) go into `lib/arm64-v8a/` without
+their debug information, compressed and extracted at installation (see
+[running.md](running.md)), `zipalign` aligns it to pages
 of 16 KiB, and `apksigner` signs the APK with a debug key that `keytool` of the JDK makes
 in `target/apk/debug.keystore` on first use. The SDK needs the build tools (35 or later,
 for 16 KiB pages) and the platform `android-34`. On the desktop the package builds as a
