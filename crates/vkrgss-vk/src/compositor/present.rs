@@ -15,6 +15,7 @@
 
 mod format;
 mod held;
+mod lifecycle;
 mod presenter;
 mod probe;
 mod readback;

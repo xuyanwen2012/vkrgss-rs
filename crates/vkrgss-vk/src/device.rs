@@ -23,6 +23,7 @@ use crate::present_timing as timing;
 use crate::validation::ValidationLog;
 use crate::{DeviceError, VkError};
 
+mod attach;
 mod instance;
 
 use instance::{Candidate, Instance};

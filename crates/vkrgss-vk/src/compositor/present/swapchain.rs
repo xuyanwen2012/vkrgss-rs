@@ -4,7 +4,7 @@
 use ash::vk;
 use vkrgss_proto::Size;
 
-use super::format::{PresentFormat, choose_format, swapchain_extent};
+use super::format::{PresentFormat, choose_format, pre_transform, swapchain_extent};
 use crate::VkError;
 use crate::compositor::VkCompositor;
 use crate::compositor::pacer::{SwapchainTiming, surface_pacing};
@@ -346,7 +346,7 @@ impl VkCompositor {
             .image_array_layers(1)
             .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
             .image_sharing_mode(vk::SharingMode::EXCLUSIVE)
-            .pre_transform(capabilities.current_transform)
+            .pre_transform(pre_transform(&capabilities))
             .composite_alpha(composite_alpha)
             // Every surface supports it, and it paces presentation to the display.
             .present_mode(vk::PresentModeKHR::FIFO)
@@ -370,6 +370,13 @@ impl VkCompositor {
             old.destroy(device, loader);
         }
         let handle = created.map_err(VkError::vulkan("vkCreateSwapchainKHR"))?;
+        tracing::info!(
+            "swapchain of {} by {} pixels, transform {:?} of the surface's {:?}",
+            extent.width,
+            extent.height,
+            pre_transform(&capabilities),
+            capabilities.current_transform
+        );
         let timing = pacing.and_then(|(pacing, (commands, calibrated))| {
             // SAFETY: the swapchain was just created from this device with the flags of
             // `pacing`, and the value is kept in the `Swapchain` that owns the handle; the

@@ -2505,6 +2505,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "vkrgss-android"
+version = "0.3.1"
+dependencies = [
+ "anyhow",
+ "libc",
+ "serde",
+ "tempfile",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+ "vkrgss-binding",
+ "vkrgss-guest",
+ "vkrgss-guest-main",
+ "vkrgss-host",
+ "vkrgss-proto",
+ "vkrgss-vfs",
+ "winit",
+]
+
+[[package]]
 name = "vkrgss-audio"
 version = "0.3.1"
 dependencies = [
@@ -3320,6 +3340,7 @@ dependencies = [
  "regex-lite",
  "serde_json",
  "tempfile",
+ "toml",
  "x11rb 0.14.0",
 ]
 

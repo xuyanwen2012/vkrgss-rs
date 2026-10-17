@@ -2,7 +2,7 @@
 
 ## 1. Package and APK
 
-- [ ] 1.1 `vkrgss-android`, `cargo xtask apk`, the manifest and the debug key. Verify: the APK installs on both phones and its activity starts (logcat shows the app's first log line).
+- [x] 1.1 `vkrgss-android`, `cargo xtask apk`, the manifest and the debug key. Verify: the APK installs on both phones and its activity starts (logcat shows the app's first log line).
 
 ## 2. Presentation and lifecycle
 

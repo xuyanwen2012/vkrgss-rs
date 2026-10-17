@@ -20,10 +20,10 @@ use anyhow::{Context, Result, bail};
 use serde_json::Value;
 
 /// The target the binaries are built for.
-const TARGET: &str = "aarch64-linux-android";
+pub(crate) const TARGET: &str = "aarch64-linux-android";
 
 /// The API level of the compiler, the lowest the interpreters are built for.
-const API_LEVEL: u32 = 34;
+pub(crate) const API_LEVEL: u32 = 34;
 
 /// The directory on the phone, the only one the command writes; removed after a run.
 const DEVICE_DIR: &str = "/data/local/tmp/vkrgss-test";
@@ -130,18 +130,16 @@ fn device_command(krate: &Crate, binary: &str) -> String {
 }
 
 /// The compiler of the NDK for [`API_LEVEL`] and its archiver.
-fn ndk_tools() -> Result<(PathBuf, PathBuf)> {
+pub(crate) fn ndk_tools() -> Result<(PathBuf, PathBuf)> {
     let ndk = std::env::var_os("ANDROID_NDK_HOME")
         .or_else(|| std::env::var_os("ANDROID_NDK_ROOT"))
-        .context(
-            "android-test: neither ANDROID_NDK_HOME nor ANDROID_NDK_ROOT names the Android NDK",
-        )?;
+        .context("neither ANDROID_NDK_HOME nor ANDROID_NDK_ROOT names the Android NDK")?;
     let bin = Path::new(&ndk).join("toolchains/llvm/prebuilt/linux-x86_64/bin");
     let clang = bin.join(format!("{TARGET}{API_LEVEL}-clang"));
     let ar = bin.join("llvm-ar");
     for tool in [&clang, &ar] {
         if !tool.is_file() {
-            bail!("android-test: the NDK has no {}", tool.display());
+            bail!("the NDK has no {}", tool.display());
         }
     }
     Ok((clang, ar))
@@ -232,13 +230,13 @@ fn build(
 }
 
 /// Runs a command of the host and fails with its output if it fails.
-fn run_host(command: &mut Command) -> Result<()> {
+pub(crate) fn run_host(command: &mut Command) -> Result<()> {
     let output = command
         .output()
-        .with_context(|| format!("android-test: could not start {command:?}"))?;
+        .with_context(|| format!("could not start {command:?}"))?;
     if !output.status.success() {
         bail!(
-            "android-test: {command:?} ended with {}\n{}{}",
+            "{command:?} ended with {}\n{}{}",
             output.status,
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
@@ -410,7 +408,7 @@ fn link_executable(
 }
 
 /// adb for the chosen phone.
-fn adb(device: Option<&str>) -> Command {
+pub(crate) fn adb(device: Option<&str>) -> Command {
     let mut command = Command::new("adb");
     if let Some(serial) = device {
         command.args(["-s", serial]);

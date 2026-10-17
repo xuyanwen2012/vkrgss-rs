@@ -15,6 +15,10 @@
 //! - `android-test <CRATE> [--device <SERIAL>]`: cross-builds the tests of an interpreter
 //!   crate (`vkrgss-ruby-sys`, `vkrgss-ruby192-sys`) for Android and runs them on a phone over
 //!   adb. Not a step of the gate.
+//! - `apk`: builds the debug APK of the Android app under `target/apk/`. Not a step of the
+//!   gate.
+//! - `android-run <SERIAL> <GAME_DIR>`: installs the APK on a phone, runs a game on it and
+//!   pulls the app's log and dumped frames. Not a step of the gate.
 //! - `dist`: builds the release executable and packs it with the licence texts into an archive
 //!   with a checksum under `target/dist/`.
 //! - `extract-rpg <DLL> <OUTPUT>`: copies the built-in scripts out of an RGSS DLL, or out of
@@ -27,6 +31,7 @@
 #![forbid(unsafe_code)]
 
 mod android;
+mod apk;
 mod audit;
 mod deps;
 mod dist;
@@ -42,7 +47,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 const USAGE: &str = "usage: cargo xtask <gate [--job <NAME>]|deps|audit|stress|fuzz <TARGET> [--seconds N]|\
-                     android-test <CRATE> [--device <SERIAL>]|dist|\
+                     android-test <CRATE> [--device <SERIAL>]|apk|android-run <SERIAL> <GAME_DIR>|dist|\
                      extract-rpg <DLL> <OUTPUT>|oracle <GAME_DIR> [OPTIONS]|pack-rgssad <GAME_DIR>>";
 
 fn main() -> ExitCode {
@@ -71,6 +76,14 @@ fn main() -> ExitCode {
                 return ExitCode::from(2);
             }
         },
+        ["apk"] => apk::build(&cargo(), &workspace_root()).map(|_| ()),
+        ["android-run", device, game] => {
+            apk::run(&cargo(), &workspace_root(), device, Path::new(game))
+        }
+        ["apk" | "android-run", ..] => {
+            eprintln!("{}", apk::USAGE);
+            return ExitCode::from(2);
+        }
         ["oracle", ref arguments @ ..] => {
             let root = workspace_root();
             match oracle::parse(arguments, &root) {

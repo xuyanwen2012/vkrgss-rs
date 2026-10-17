@@ -28,11 +28,16 @@ impl VkCompositor {
     /// [`set_frame_rate`](VkCompositor::set_frame_rate).
     ///
     /// Fails with [`VkError::NoSurface`] on a compositor that was created without a surface.
+    /// While its surface is released ([`release_surface`](VkCompositor::release_surface))
+    /// nothing is presented, as for a window without pixels.
     pub fn present(&mut self) -> Result<bool, VkError> {
         if self.gpu.surface.is_none() {
             return Err(VkError::NoSurface);
         }
-        if self.surface_size.width == 0 || self.surface_size.height == 0 {
+        if self.gpu.surface_released()
+            || self.surface_size.width == 0
+            || self.surface_size.height == 0
+        {
             return Ok(false);
         }
         let source = self.prepare_sources()?;

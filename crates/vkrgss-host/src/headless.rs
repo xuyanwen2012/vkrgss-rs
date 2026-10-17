@@ -381,7 +381,7 @@ fn dump(display: &mut HeadlessDisplay, frame: u64, path: &Path) -> Result<(), He
 
 /// Writes `frame` as an 8-bit RGBA PNG. The encoder settings are fixed, so the same frame
 /// always gives the same bytes.
-fn write_png(path: &Path, frame: &Frame) -> Result<(), String> {
+pub(crate) fn write_png(path: &Path, frame: &Frame) -> Result<(), String> {
     let file = File::create(path).map_err(|error| error.to_string())?;
     let mut encoder = png::Encoder::new(BufWriter::new(file), frame.size.width, frame.size.height);
     encoder.set_color(png::ColorType::Rgba);

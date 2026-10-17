@@ -107,3 +107,17 @@ pub(super) fn swapchain_extent(
             .clamp(min.height, max.height.max(min.height)),
     }
 }
+
+/// The transform a swapchain of a surface with `capabilities` is created with: none where
+/// the surface takes that, so that the window system turns the picture to the display, as
+/// Android's compositor does when the display is held other than upright; otherwise the
+/// surface's current transform.
+pub(super) fn pre_transform(
+    capabilities: &vk::SurfaceCapabilitiesKHR,
+) -> vk::SurfaceTransformFlagsKHR {
+    let identity = vk::SurfaceTransformFlagsKHR::IDENTITY;
+    match capabilities.supported_transforms.contains(identity) {
+        true => identity,
+        false => capabilities.current_transform,
+    }
+}

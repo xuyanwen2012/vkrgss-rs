@@ -33,6 +33,10 @@ vkrgss-vk.workspace = true
 # `serde` reads the names of key codes in a configuration.
 winit = { workspace = true, features = ["serde"] }
 
+[target.'cfg(target_os = "android")'.dependencies]
+# The window of a `NativeActivity` (`run_windowed_on_android`).
+winit = { workspace = true, features = ["android-native-activity"] }
+
 [dev-dependencies]
 tempfile.workspace = true
 vkrgss-compose-ref.workspace = true

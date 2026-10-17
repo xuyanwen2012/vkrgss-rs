@@ -18,8 +18,8 @@
 //! the interpreter crate and the binding package, and every test file of the first of a pair
 //! has its counterpart in the second.
 //!
-//! The `vkrgss` binary is on neither side: it is the one crate that may depend on both. The
-//! guest executables `vkrgss-guest-rgss12` and `vkrgss-guest-rgss3` are guest crates.
+//! The `vkrgss` binary and the Android app `vkrgss-android` are on neither side: they are the
+//! crates that may depend on both. The guest executables `vkrgss-guest-rgss12` and `vkrgss-guest-rgss3` are guest crates.
 //!
 //! The graph is taken with every feature of every workspace crate enabled, so a forbidden
 //! dependency cannot hide behind an optional dependency or a feature that is off by default.

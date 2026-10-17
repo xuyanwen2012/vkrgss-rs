@@ -421,3 +421,27 @@ fn swapchain_extent_follows_the_surface_or_the_window() {
         extent(0, 0)
     );
 }
+
+#[test]
+fn swapchains_are_created_upright_where_the_surface_allows_it() {
+    let rotated = vk::SurfaceCapabilitiesKHR {
+        current_transform: vk::SurfaceTransformFlagsKHR::ROTATE_90,
+        supported_transforms: vk::SurfaceTransformFlagsKHR::IDENTITY
+            | vk::SurfaceTransformFlagsKHR::ROTATE_90
+            | vk::SurfaceTransformFlagsKHR::ROTATE_270,
+        ..Default::default()
+    };
+    assert_eq!(
+        pre_transform(&rotated),
+        vk::SurfaceTransformFlagsKHR::IDENTITY
+    );
+    let fixed = vk::SurfaceCapabilitiesKHR {
+        current_transform: vk::SurfaceTransformFlagsKHR::ROTATE_180,
+        supported_transforms: vk::SurfaceTransformFlagsKHR::ROTATE_180,
+        ..Default::default()
+    };
+    assert_eq!(
+        pre_transform(&fixed),
+        vk::SurfaceTransformFlagsKHR::ROTATE_180
+    );
+}

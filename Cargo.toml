@@ -21,6 +21,7 @@ members = [
     "crates/vkrgss-audio",
     "crates/vkrgss-host",
     "crates/vkrgss",
+    "crates/vkrgss-android",
     "xtask",
 ]
 

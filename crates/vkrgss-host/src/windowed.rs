@@ -4,8 +4,18 @@
 //! link's wake hook, through an event-loop proxy, whenever the guest has sent something.
 //! [`Driver`] is the part between the window events and the session; it has no window in it,
 //! so the tests drive it with synthetic events.
+//!
+//! A window system can take the window away while the game runs and give it back later, as
+//! Android does when the activity is paused and resumed (winit's `Suspended` and `Resumed`).
+//! Then the surface and the swapchain are released and the session waits: no tick is sent
+//! and nothing is shown until the window is back, when the surface is made anew and the
+//! session goes on. Desktop window systems never take the window away.
+//!
+//! A run can be limited to a number of frames and write chosen frames as PNG files, as a
+//! headless run does, for the tests on a phone, which has no headless surface.
 
 use std::io::Write;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -19,10 +29,11 @@ use vkrgss_vk::{
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, MouseButton, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopBuilder};
 use winit::keyboard::PhysicalKey;
 use winit::window::{Fullscreen, Window, WindowId};
 
+use crate::headless::write_png;
 use crate::report::ErrorStream;
 use crate::{
     AudioOptions, AudioSink, Clock, Display, GamepadMap, Gamepads, InputSource, KeyAction, KeyMap,
@@ -64,6 +75,13 @@ pub struct WindowedOptions {
     pub errors: Box<dyn Reporter>,
     /// Where the audio side reports sounds that cannot be played, taken likewise.
     pub audio_errors: Box<dyn Write + Send>,
+    /// The number of frames after which the guest is asked to quit. The window stays until
+    /// it has, as when the window is closed.
+    pub frames: Option<u64>,
+    /// Frames to write as PNG files, by frame number, numbered as a headless run numbers
+    /// them and holding what the window shows of that frame at the logical size, as a
+    /// headless run writes it.
+    pub dumps: Vec<(u64, PathBuf)>,
 }
 
 impl WindowedOptions {
@@ -84,6 +102,8 @@ impl WindowedOptions {
             states: false,
             errors: Box::new(ErrorStream),
             audio_errors: Box::new(std::io::stderr()),
+            frames: None,
+            dumps: Vec::new(),
         }
     }
 }
@@ -97,6 +117,8 @@ pub enum WindowedError {
     Window(String),
     #[error("cannot start the compositor for the window: {0}")]
     Compositor(#[source] VkError),
+    #[error("cannot present to the window that came back: {0}")]
+    Resume(#[source] VkError),
     #[error("cannot start the guest thread: {0}")]
     GuestThread(#[source] std::io::Error),
     #[error("the guest thread panicked")]
@@ -222,6 +244,10 @@ struct VulkanDisplay {
     present_stats: bool,
     /// Frames shown since the last report.
     frames: usize,
+    /// The frames to write, by frame number; each is removed once it has been written.
+    dumps: Vec<(u64, PathBuf)>,
+    /// The frame messages the display was given, which is the number of the next one.
+    rendered: u64,
 }
 
 /// The line that reports the intervals between the frames shown: their summary, if there
@@ -261,13 +287,52 @@ impl VulkanDisplay {
         self.compositor
             .resize_surface(Size::new(size.width, size.height));
     }
+
+    /// Writes the frame of `packet`, the frame numbered `frame`, to the files that are to
+    /// hold it: what the window shows of it at the logical size, as [`HeadlessDisplay`]
+    /// reads it. A failure is reported and the run goes on.
+    ///
+    /// [`HeadlessDisplay`]: crate::HeadlessDisplay
+    fn dump(&mut self, frame: u64, packet: &FramePacket) {
+        let paths: Vec<PathBuf> = self
+            .dumps
+            .extract_if(.., |(number, _)| *number == frame)
+            .map(|(_, path)| path)
+            .collect();
+        if paths.is_empty() {
+            return;
+        }
+        let shown = match self.compositor.mix() {
+            Mix::Newest => self.compositor.read_frame(),
+            _ => self.compositor.scale_frame(packet.logical_size).map(Some),
+        };
+        let image = match shown {
+            Ok(image) => image.expect("a frame was just rendered"),
+            Err(error) => {
+                tracing::error!("cannot read back frame {frame}: {error}");
+                return;
+            }
+        };
+        for path in paths {
+            match write_png(&path, &image) {
+                Ok(()) => tracing::info!("frame {frame} written to {}", path.display()),
+                Err(message) => tracing::error!(
+                    "cannot write frame {frame} to {}: {message}",
+                    path.display()
+                ),
+            }
+        }
+    }
 }
 
 impl Display for VulkanDisplay {
     type Error = VkError;
 
     fn render(&mut self, packet: &FramePacket) -> Result<(), VkError> {
+        let frame = self.rendered;
+        self.rendered += 1;
         self.compositor.render(packet)?;
+        self.dump(frame, packet);
         self.present()?;
         self.frames += 1;
         if self.present_stats && self.frames >= STATS_INTERVALS {
@@ -326,6 +391,13 @@ impl Drop for VulkanDisplay {
         if self.present_stats {
             self.report_present_stats();
         }
+        for (frame, path) in &self.dumps {
+            tracing::warn!(
+                "frame {frame} was to be written to {} but the run ended after {} frame(s)",
+                path.display(),
+                self.rendered
+            );
+        }
     }
 }
 
@@ -345,6 +417,10 @@ struct Running {
     window: Arc<Window>,
     /// The gamepads, unless the machine has no support for them.
     pads: Option<Gamepads>,
+    /// Whether the window system has taken the window away, and the session waits.
+    suspended: bool,
+    /// Whether the guest was asked to quit because the frame limit was reached.
+    limit_reached: bool,
 }
 
 struct App {
@@ -387,6 +463,8 @@ impl App {
             window: Arc::clone(&window),
             present_stats: self.options.present_stats,
             frames: 0,
+            dumps: std::mem::take(&mut self.options.dumps),
+            rendered: 0,
         };
         display.resized(window.inner_size());
         // Some window systems only show a window once it has content.
@@ -425,7 +503,49 @@ impl App {
             clock,
             window,
             pads: Gamepads::open(self.options.pads.clone()),
+            suspended: false,
+            limit_reached: false,
         })
+    }
+
+    /// The window system took the window away: the surface goes and the session waits.
+    fn suspend(&mut self) {
+        let Some(running) = &mut self.running else {
+            return;
+        };
+        let display = running.driver.session_mut().display_mut();
+        if let Err(error) = display.compositor.release_surface() {
+            tracing::error!("cannot release the surface of the window: {error}");
+        }
+        running.suspended = true;
+        tracing::info!("the window has gone; the game waits");
+    }
+
+    /// The window system gave the window back: a surface is made for it and the session
+    /// goes on, with its pacing started afresh.
+    fn resume(&mut self, event_loop: &ActiveEventLoop) {
+        let Some(running) = &mut self.running else {
+            return;
+        };
+        if !running.suspended {
+            return;
+        }
+        let display = running.driver.session_mut().display_mut();
+        if let Err(error) = display
+            .compositor
+            .attach_window(Arc::clone(&running.window))
+        {
+            self.outcome = Some(Err(WindowedError::Resume(error)));
+            event_loop.exit();
+            return;
+        }
+        display.resized(running.window.inner_size());
+        display.restart_pacing();
+        if let Err(error) = display.redraw() {
+            tracing::error!("cannot draw the window: {error}");
+        }
+        running.suspended = false;
+        tracing::info!("the window is back; the game goes on");
     }
 
     /// Runs the session and tells the event loop when to come back.
@@ -433,13 +553,27 @@ impl App {
         let Some(running) = &mut self.running else {
             return;
         };
+        if running.suspended {
+            // Nothing is due until the window is back; the guest waits for its tick.
+            event_loop.set_control_flow(ControlFlow::Wait);
+            return;
+        }
         // The pads have no events of their own in this loop: they are read whenever it wakes,
         // which is at least once per frame.
         if let Some(pads) = &mut running.pads {
             let held = pads.poll();
             running.driver.session_mut().pad_buttons(held);
         }
-        let next = running.driver.wake();
+        let mut next = running.driver.wake();
+        if let Some(limit) = self.options.frames
+            && !running.limit_reached
+            && running.driver.session().frames() >= limit
+        {
+            running.limit_reached = true;
+            tracing::info!("{limit} frame(s) shown; asking the game to quit");
+            running.driver.session_mut().request_quit();
+            next = running.driver.wake();
+        }
         for action in running.driver.take_actions() {
             act(&running.window, action);
         }
@@ -470,7 +604,12 @@ fn act(window: &Window, action: KeyAction) {
 
 impl ApplicationHandler<GuestSpoke> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.running.is_some() || self.link.is_none() {
+        if self.running.is_some() {
+            self.resume(event_loop);
+            self.advance(event_loop);
+            return;
+        }
+        if self.link.is_none() {
             return;
         }
         match self.start(event_loop) {
@@ -480,6 +619,10 @@ impl ApplicationHandler<GuestSpoke> for App {
                 event_loop.exit();
             }
         }
+    }
+
+    fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
+        self.suspend();
     }
 
     fn user_event(&mut self, event_loop: &ActiveEventLoop, _event: GuestSpoke) {
@@ -546,7 +689,36 @@ pub fn run_windowed<G>(options: WindowedOptions, guest: G) -> Result<SessionEnd,
 where
     G: FnOnce(GuestEnd) + Send + 'static,
 {
-    let event_loop = EventLoop::<GuestSpoke>::with_user_event()
+    run_on(EventLoop::with_user_event(), options, guest)
+}
+
+/// Runs `guest` as [`run_windowed`] does, in the window of the Android activity `app`. Must
+/// be called on the thread of `android_main`.
+#[cfg(target_os = "android")]
+pub fn run_windowed_on_android<G>(
+    app: winit::platform::android::activity::AndroidApp,
+    options: WindowedOptions,
+    guest: G,
+) -> Result<SessionEnd, WindowedError>
+where
+    G: FnOnce(GuestEnd) + Send + 'static,
+{
+    use winit::platform::android::EventLoopBuilderExtAndroid;
+    let mut builder = EventLoop::with_user_event();
+    builder.with_android_app(app);
+    run_on(builder, options, guest)
+}
+
+/// Runs `guest` and a session for it on the event loop `builder` makes.
+fn run_on<G>(
+    mut builder: EventLoopBuilder<GuestSpoke>,
+    options: WindowedOptions,
+    guest: G,
+) -> Result<SessionEnd, WindowedError>
+where
+    G: FnOnce(GuestEnd) + Send + 'static,
+{
+    let event_loop = builder
         .build()
         .map_err(|error| WindowedError::EventLoop(error.to_string()))?;
     let proxy = event_loop.create_proxy();

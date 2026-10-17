@@ -139,6 +139,7 @@ fn compositor_without_a_surface_renders_as_before_and_cannot_present() {
     assert_eq!(compositor.present(), Err(VkError::NoSurface));
     compositor.resize_surface(Size::new(64, 48));
     assert_eq!(compositor.present(), Err(VkError::NoSurface));
+    assert_eq!(compositor.release_surface(), Err(VkError::NoSurface));
     // Asking changed nothing about the frame.
     assert_eq!(opaque(compositor.read_frame().unwrap().unwrap()), frame);
 }
@@ -1362,6 +1363,47 @@ fn frames_are_presented_resized_presented_again_and_torn_down_cleanly() {
 #[test]
 fn frames_are_presented_and_resized_without_swapchain_maintenance() {
     present_resize_and_tear_down(true);
+}
+
+/// Scenario "Pause and resume" of `supported-platforms`, on a headless surface: while the
+/// surface is released frames are rendered and nothing is presented, and a new surface
+/// shows them again, without a validation error.
+#[test]
+fn a_released_surface_shows_nothing_until_a_new_one_is_attached() {
+    let log = ValidationLog::new();
+    let mut compositor = surface_compositor(&log);
+    compositor.resize_surface(Size::new(64, 48));
+    compositor.render(&flat(SIZE, WHITE)).unwrap();
+    assert_eq!(compositor.present(), Ok(true));
+
+    compositor.release_surface().unwrap();
+    assert_eq!(compositor.swapchain_extent(), None);
+    // A second release finds nothing to release.
+    compositor.release_surface().unwrap();
+    compositor.render(&gradient(SIZE)).unwrap();
+    assert_eq!(compositor.present(), Ok(false));
+    let frame = opaque(compositor.read_frame().unwrap().expect("a frame"));
+    assert_eq!(
+        frame,
+        rendered(&gradient(SIZE)).1,
+        "frames are rendered as before"
+    );
+    assert_clean(&log, "while the surface was released");
+
+    compositor.attach_headless_surface().unwrap();
+    assert_eq!(compositor.present(), Ok(true));
+    assert_eq!(compositor.swapchain_extent(), Some((64, 48)));
+    for color in [BLACK, WHITE] {
+        compositor.render(&flat(SIZE, color)).unwrap();
+        assert_eq!(compositor.present(), Ok(true));
+    }
+    // Attaching without a release first releases the surface there is.
+    compositor.attach_headless_surface().unwrap();
+    assert_eq!(compositor.present(), Ok(true));
+    assert_clean(&log, "after new surfaces were attached");
+
+    drop(compositor);
+    assert_clean(&log, "while the compositor was dropped");
 }
 
 fn present_resize_and_tear_down(ignore_maintenance: bool) {
