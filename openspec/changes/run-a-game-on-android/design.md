@@ -73,6 +73,35 @@
   same release and attach path runs under the validation layer on lavapipe with a headless
   surface (`a_released_surface_shows_nothing_until_a_new_one_is_attached`), without an
   error.
+- **Options on the phone.** `vkrgss.toml` of the game is read with the key names, the
+  formats and the relative paths of the Linux file, as its only layer; it takes `rtp`,
+  `builtin_scripts`, `font_dirs`, `audio`, `soundfont`, `seed`, `debug`, `log_p`, `frames`,
+  `input` and `dump`, and any other key is an error that names it. The input script holds
+  the buttons frame by frame as in a headless run (an `InputSource` of the app). Without
+  `builtin_scripts` the file of the runtime in the files directory is read; the system's
+  fonts (`/system/fonts`) are searched after `font_dirs`. The log goes to logcat (tag
+  `vkrgss`) and to `files/vkrgss.log` through a pipe that replaces the standard output and
+  the error stream, so script errors arrive too. When the game has ended the activity is
+  finished, its destruction awaited, and the process exits: the interpreter cannot start
+  twice in one process.
+- **Game of RGSS3.** The app reads `Game.ini` before anything else of the game; for RGSS3
+  it writes "a game of RPG Maker VX Ace (rgss3) is not supported on Android yet: ..." to
+  logcat and the log file and ends, with the activity finished. "Says" is that log line
+  in this version, since the app has no other text on screen before a game runs.
+- **Acceptance (task 3.1), 2026-10-17, at commit 12339844 plus the files of this task.**
+  The games were assembled under `local/games/` (not committed): `demo`, the game `demo`
+  of `crates/vkrgss/tests/end_to_end.rs` (its three scripts, the stand-in built-in
+  scripts, Liberation Sans from `vkrgss-text/tests/fonts`, input `2:RIGHT, 6:`, frames 1
+  and 8, no audio), and `群战示范工程` with the RTP of `ref/app`, Noto Sans CJK SC and
+  `ref/rpg_builtin.rb` in the game directory, seed 0, input `60:RIGHT, 100:, 310:B, 312:`
+  of `ref/tools/oracle/regress.sh` through `vkrgss.toml`, frames 4, 16, 40 and 90, a
+  limit of 91 frames, with audio. `cargo xtask android-run <SERIAL> <GAME>` on the Pixel
+  7a (Mali-G710) and the Galaxy S24+ (Xclipse 940) against `vkrgss <copy> --guest thread
+  --headless` on this machine (llvmpipe) with the same file: all six frames of each phone
+  are identical byte for byte to those of this machine. AAudio opened a stream of 48 kHz
+  for `群战示范工程` without an error. A game whose `Game.ini` names `RGSS301.dll` and
+  `Scripts.rvdata2` is refused on both phones with the message above, and the process
+  ends without being started again. No game of RGSS2 was run on a phone.
 - **Commits.** The first commit holds the code of the surface and the session as well,
   because the app links it; the later ones hold what their tasks changed after it.
 

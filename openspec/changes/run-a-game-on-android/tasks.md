@@ -10,7 +10,7 @@
 
 ## 3. Game, options, audio
 
-- [ ] 3.1 The game from the files directory, `vkrgss.toml`, the guest on a thread, audio, the refusal of RGSS3, `cargo xtask android-run`. Verify: scenarios "Frames on a phone" and "Game of RGSS3".
+- [x] 3.1 The game from the files directory, `vkrgss.toml`, the guest on a thread, audio, the refusal of RGSS3, `cargo xtask android-run`. Verify: scenarios "Frames on a phone" and "Game of RGSS3".
 
 ## 4. Documents
 
