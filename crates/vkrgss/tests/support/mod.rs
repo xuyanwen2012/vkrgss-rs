@@ -390,9 +390,25 @@ pub(crate) fn attached_processes(stderr: &str) -> Vec<u32> {
     numbers.collect()
 }
 
+/// Whether the process `pid` is still there, as a zombie too: as `/proc` lists it on Linux,
+/// and as `ps` does on macOS, which has no `/proc`.
+pub(crate) fn process_exists(pid: impl std::fmt::Display) -> bool {
+    if cfg!(target_os = "linux") {
+        Path::new(&format!("/proc/{pid}")).exists()
+    } else {
+        Command::new("ps")
+            .args(["-p", &pid.to_string()])
+            .stdout(Stdio::null())
+            .status()
+            .expect("ps runs")
+            .success()
+    }
+}
+
 /// Why a guest process cannot confine itself here, if it cannot: the kernel has no Landlock,
 /// or the environment the tests run in does not let it be used. A thread that is made for
 /// it puts a restriction without consequence on itself.
+#[cfg(target_os = "linux")]
 pub(crate) fn landlock_missing() -> Option<String> {
     use landlock::{AccessFs, Ruleset, RulesetAttr, RulesetStatus};
 
@@ -409,6 +425,13 @@ pub(crate) fn landlock_missing() -> Option<String> {
         Ok(_) => None,
         Err(error) => Some(format!("Landlock cannot be used: {error}")),
     }
+}
+
+/// Why a guest process cannot confine itself here: only Linux has Landlock, and on macOS the
+/// guest is not confined.
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn landlock_missing() -> Option<String> {
+    Some("only Linux has Landlock".to_owned())
 }
 
 /// Whether the test that calls this is skipped, with the reason printed.

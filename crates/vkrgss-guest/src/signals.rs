@@ -1,7 +1,7 @@
 //! The signal settings of a guest: the mask of the threads beside the interpreter's, and what
 //! a guest process asks of the kernel.
 //!
-//! This is platform code for Linux, the one platform the interpreter builds for.
+//! This is platform code for Linux and macOS, the platforms the interpreter builds for.
 //!
 //! Ruby switches its threads from a SIGVTALRM handler, driven by a process-wide timer, and
 //! the kernel may deliver that signal to any thread that does not block it. So the main
@@ -34,13 +34,10 @@ pub fn unblock_virtual_timer() {
     change_virtual_timer(libc::SIG_UNBLOCK);
 }
 
-/// Asks the kernel to end this process when the thread of the parent process that started it
-/// ends; for the guest process, whose game may be caught in a loop.
+/// Has this process ended when the parent process that started it ends; for the guest
+/// process, whose game may be caught in a loop. See [`crate::parent_watch`].
 pub fn die_with_parent() {
-    // SAFETY: `PR_SET_PDEATHSIG` takes a signal number as its one argument and changes only
-    // a setting of the calling process.
-    let status = unsafe { libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) };
-    assert_eq!(status, 0, "prctl cannot set the parent-death signal");
+    crate::parent_watch::die_with_parent();
 }
 
 /// Makes the kernel take the children of this process away when they end, so that none of

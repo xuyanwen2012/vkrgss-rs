@@ -1,6 +1,6 @@
 //! States as copies of the guest process: the guest's side of it.
 //!
-//! This is platform code for Linux. A guest process that is asked to save a state calls
+//! This is platform code for Linux and macOS. A guest process that is asked to save a state calls
 //! `fork` on its interpreter thread, in a wait for a tick ([`ForkCopier::park`], which the
 //! executable calls from the copier it gives its binding). The process that asked goes on. The copy connects to
 //! the socket of the program by itself, states its version as every guest does, says with
@@ -126,8 +126,7 @@ impl ForkCopier {
     /// so that the descriptor the binding's link still holds is not one of another guest.
     fn attach(&self, slot: u8) -> Option<UnixStream> {
         COPY.store(true, Ordering::SeqCst);
-        // SAFETY: `PR_SET_PDEATHSIG` with 0 clears a setting of the calling process.
-        unsafe { libc::prctl(libc::PR_SET_PDEATHSIG, 0) };
+        crate::parent_watch::release_copy();
         // On the interpreter thread, as the interpreter itself restarts its timer after a
         // `fork`: timers are not inherited.
         (self.restart_timer)();

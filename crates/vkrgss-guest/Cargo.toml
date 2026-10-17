@@ -17,7 +17,6 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-landlock.workspace = true
 libc.workspace = true
 postcard.workspace = true
 serde.workspace = true
@@ -26,6 +25,10 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 vkrgss-proto.workspace = true
 vkrgss-vfs.workspace = true
+
+# Landlock confines a guest process on Linux; elsewhere nothing does.
+[target.'cfg(target_os = "linux")'.dependencies]
+landlock.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

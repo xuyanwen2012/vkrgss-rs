@@ -42,6 +42,15 @@ aarch64 Linux.
 - **No CI for macOS** (decision of 2026-10-15). `docs/building.md` gets a section "macOS"
   with the commands above.
 
+## Edits outside the impact list
+
+- `crates/vkrgss/src/process.rs`: macOS refuses to set the read timeout of a Unix socket
+  (`EINVAL`) whose other end is closed already, which a guest process with a very short game
+  had done before the program accepted it; the run then failed with "Invalid argument". On
+  macOS that error of `set_read_timeout` is now ignored in `attached`: what the guest sent
+  is still read, and no read blocks on a closed connection. A few lines, needed for the
+  guest-process tests of `vkrgss` to pass on the Mac.
+
 ## Out of scope
 
 `.app` packaging, loading libvulkan and MoltenVK from the bundle, signing, a windowed run,

@@ -53,8 +53,11 @@
 pub mod copier;
 pub mod diagnostics;
 pub mod hello;
+#[allow(unsafe_code)]
+pub mod parent_watch;
 pub mod record;
 pub mod role;
+#[cfg(target_os = "linux")]
 pub mod sandbox;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[allow(unsafe_code)]
@@ -62,6 +65,18 @@ pub mod seccomp;
 pub mod settings;
 #[allow(unsafe_code)]
 pub mod signals;
+
+/// The restriction a guest process puts on itself before the first script runs: none on
+/// macOS, which has no Landlock (see "Platforms" in `docs/decisions.md`).
+#[cfg(target_os = "macos")]
+pub mod sandbox {
+    use std::path::Path;
+
+    /// Says once that the guest process runs unconfined.
+    pub fn confine(_game_dir: &Path) {
+        tracing::info!("the guest process is not confined: macOS has no Landlock");
+    }
+}
 
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};

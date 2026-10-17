@@ -183,13 +183,27 @@ fn readable(descriptor: BorrowedFd<'_>) -> bool {
 /// connected: what it is. One of another version than the program's is refused.
 fn attached(stream: UnixStream) -> Result<(Attached, Option<u8>)> {
     stream.set_nonblocking(false)?;
-    stream.set_read_timeout(Some(ATTACH_WAIT))?;
+    set_read_timeout(&stream, Some(ATTACH_WAIT))?;
     hello::read(&mut &stream, VERSION)?;
     let first = read_message::<GuestToHost>(&mut &stream)?;
-    stream.set_read_timeout(None)?;
+    set_read_timeout(&stream, None)?;
     match first {
         Some(GuestToHost::Attach { pid, parked }) => Ok((Attached { stream, pid }, parked)),
         other => bail!("a process connected and did not attach: its first message is {other:?}"),
+    }
+}
+
+/// Sets the read timeout of a connection. macOS refuses that (`EINVAL`) once the other end is
+/// closed, as a guest whose game is short may have closed it before it is accepted; what it
+/// sent can still be read then, and no read blocks.
+fn set_read_timeout(stream: &UnixStream, timeout: Option<Duration>) -> std::io::Result<()> {
+    match stream.set_read_timeout(timeout) {
+        Err(error)
+            if cfg!(target_os = "macos") && error.kind() == std::io::ErrorKind::InvalidInput =>
+        {
+            Ok(())
+        }
+        result => result,
     }
 }
 

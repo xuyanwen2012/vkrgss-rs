@@ -812,7 +812,8 @@ File.open('fonts.txt', 'w') { |file| file.write(answers.inspect) }
 }
 
 /// The columns of `frame` that have a pixel that is not black: the first and one past the
-/// last.
+/// last. For the test below, which is kept to Linux.
+#[cfg(target_os = "linux")]
 fn ink_columns(frame: &Frame) -> (u32, u32) {
     let inked = |x: &u32| (0..frame.height).any(|y| frame.pixel(*x, y) != [0, 0, 0, 255]);
     let first = (0..frame.width).find(inked).expect("ink");
@@ -821,7 +822,10 @@ fn ink_columns(frame: &Frame) -> (u32, u32) {
 }
 
 /// `Tahoma` is replaced by a font whose own line box is not the one Tahoma's replacements
-/// are scaled to: `DejaVu Sans` where the machine has it, else the test font.
+/// are scaled to: `DejaVu Sans` where the machine has it, else the test font. Kept to Linux:
+/// macOS has Tahoma itself, and Arial, Verdana, Times New Roman and Courier New, the other
+/// Latin families with a built-in line box, so none of them is replaced there.
+#[cfg(target_os = "linux")]
 #[test]
 fn own_font_metrics_change_the_size_of_text_in_a_replaced_font() {
     let source = "\
@@ -1564,7 +1568,7 @@ fn the_frame_limit_ends_a_guest_process_too() {
     ran.assert_success();
     let pid = guest_pid(&game).expect("the game ran");
     assert!(
-        !Path::new(&format!("/proc/{pid}")).exists(),
+        !process_exists(pid),
         "the guest process {pid} is still there"
     );
 }
@@ -1583,7 +1587,7 @@ loop { }";
     ran.assert_failure();
     assert!(ran.stderr().contains("did not end"), "{}", ran.stderr());
     let pid = guest_pid(&game).expect("the game ran");
-    assert!(!Path::new(&format!("/proc/{pid}")).exists());
+    assert!(!process_exists(pid));
 }
 
 /// Scenario "Unknown value" of the requirement "Guest option".
@@ -1803,7 +1807,7 @@ fn no_process_of_a_run_with_states_is_left_when_it_ends() {
     assert_eq!(attached.len(), 6, "{}", ran.stderr());
     for pid in attached {
         assert!(
-            !Path::new(&format!("/proc/{pid}")).exists(),
+            !process_exists(pid),
             "the guest process {pid} is still there"
         );
     }

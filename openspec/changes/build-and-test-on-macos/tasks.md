@@ -6,7 +6,7 @@
 
 ## 2. Guest
 
-- [ ] 2.1 Landlock Linux-only, parent watch with kqueue on macOS, no confinement on macOS. Verify: the tests of `vkrgss-guest` and the guest-process tests of `vkrgss` pass on the Mac and on Linux.
+- [x] 2.1 Landlock Linux-only, parent watch with kqueue on macOS, no confinement on macOS. Verify: the tests of `vkrgss-guest` and the guest-process tests of `vkrgss` pass on the Mac and on Linux.
 
 ## 3. Interpreters
 
