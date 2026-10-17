@@ -63,6 +63,12 @@ audio output, the real corpus, `sandbox_init`.
   descriptor, so `pos` is 0 instead of 2 in `test_io.rb#test_readpartial_pos`, which is kept
   to Linux in `tests/upstream.rs` of `vkrgss-ruby-sys`. Whether a game can meet it, and
   whether a recorded patch of `io.c` should make the position right, is open.
+- **File names that are not UTF-8 on macOS.** The file system of macOS refuses a name that
+  is not valid UTF-8, so a game of VX Ace that writes a file under a name in Shift_JIS (bytes
+  labelled UTF-8 that are not) fails where it works on Linux and on the original. The test
+  `names_labelled_utf_8_and_names_of_other_characters_are_files` of `vkrgss-binding-rgss3` is
+  kept to Linux. Whether such names should be mapped to valid ones on macOS, and how they
+  would be found again, is open.
 - **The crash report of Ruby 1.9.2 on macOS.** `test_rubyoptions.rb#test_segv_test` is kept
   to Linux: the C backtrace has the format of `backtrace_symbols` of macOS, which the
   pattern of the test does not match. Only the text of a crash report differs.

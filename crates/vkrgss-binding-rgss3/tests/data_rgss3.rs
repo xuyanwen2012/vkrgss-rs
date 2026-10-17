@@ -356,7 +356,10 @@ fn names_with_a_nul_or_bytes_that_are_not_utf_8_raise() {
 }
 
 /// Requirement "Names of data files in RGSS3", scenarios "Invalid bytes labelled UTF-8" and
-/// "A name of other characters" (`ace-v1-api-REPORT.md` section 0.2, 3.0.1).
+/// "A name of other characters" (`ace-v1-api-REPORT.md` section 0.2, 3.0.1). Kept to Linux:
+/// the file system of macOS refuses a file name that is not UTF-8 (see "Follow-ups" in the
+/// design of the change `build-and-test-on-macos`).
+#[cfg(target_os = "linux")]
 #[test]
 fn names_labelled_utf_8_and_names_of_other_characters_are_files() {
     let game = Game::of(

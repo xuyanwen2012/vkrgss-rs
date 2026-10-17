@@ -384,6 +384,15 @@ mod tests {
         GameFiles::new(game, [])
     }
 
+    /// Whether the file system of `dir` folds case, as that of macOS does by default: a name
+    /// that differs from that of a file only in case names that file.
+    fn folds_case(dir: &Path) -> bool {
+        let probe = put(dir, "case-probe", b"");
+        let folds = dir.join("CASE-PROBE").exists();
+        std::fs::remove_file(probe).unwrap();
+        folds
+    }
+
     #[test]
     fn backslashes_and_case() {
         let game = tempfile::tempdir().unwrap();
@@ -398,9 +407,18 @@ mod tests {
     #[test]
     fn exact_case_wins() {
         let game = tempfile::tempdir().unwrap();
+        let folds = folds_case(game.path());
         let lower = put(game.path(), "a.png", b"");
         let upper = put(game.path(), "A.png", b"");
         let files = game_only(game.path());
+        if folds {
+            // The second name wrote the first file, which keeps its name and is found by
+            // either.
+            for name in ["A.png", "a.png", "A"] {
+                assert_eq!(files.resolve(FileKind::Image, name).unwrap(), lower);
+            }
+            return;
+        }
         assert_eq!(files.resolve(FileKind::Image, "A.png").unwrap(), upper);
         assert_eq!(files.resolve(FileKind::Image, "a.png").unwrap(), lower);
         assert_eq!(files.resolve(FileKind::Image, "A").unwrap(), upper);
@@ -409,9 +427,22 @@ mod tests {
     #[test]
     fn directories_that_differ_in_case_are_all_searched() {
         let game = tempfile::tempdir().unwrap();
+        let folds = folds_case(game.path());
         let first = put(game.path(), "Graphics/one.png", b"");
         let second = put(game.path(), "graphics/two.png", b"");
         let files = game_only(game.path());
+        if folds {
+            // There is one directory, under the name it was made with.
+            assert_eq!(
+                files.resolve(FileKind::Image, "GRAPHICS/one").unwrap(),
+                first
+            );
+            assert_eq!(
+                files.resolve(FileKind::Image, "GRAPHICS/two").unwrap(),
+                game.path().join("Graphics/two.png")
+            );
+            return;
+        }
         assert_eq!(
             files.resolve(FileKind::Image, "GRAPHICS/one").unwrap(),
             first

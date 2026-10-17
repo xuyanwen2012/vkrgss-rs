@@ -34,7 +34,9 @@ release's `configure` wrote on aarch64, which differ from those of x86_64 only i
 platform strings, as `tests/config_headers.rs` checks. It is built and tested by the CI job
 `gate-aarch64` (see [development.md](development.md#merge-gate)) and is not supported
 before the milestone P1 is accepted. It also accepts `aarch64-linux-android`
-([Android](#android)). Any other target stops the build with a message naming it. `CC` selects the compiler. Because a wrong flag gives an interpreter
+([Android](#android)) and `aarch64-apple-darwin`, with headers that `configure` wrote on a
+Mac, reviewed (see [macOS](#macos)). Any other target stops the build with a message naming
+it. `CC` selects the compiler. Because a wrong flag gives an interpreter
 that builds and then computes wrong results, the tests of `vkrgss-ruby-sys` compile a Ruby
 executable from the same objects and run Ruby's own test suites against it, which is why the
 tests need the C compiler too.
@@ -81,10 +83,11 @@ change the compiler of the release unnoticed. The interpreter's collector scans 
 stack, so the compiler shapes what it sees; changing that compiler is a change of its own.
 
 `vkrgss-ruby192-sys` is for the targets `x86_64-unknown-linux-gnu`,
-`aarch64-unknown-linux-gnu` and `aarch64-linux-android` ([Android](#android)), which
-`crates/vkrgss-ruby192-sys/targets.rs` lists. The header of aarch64 is the one that the
-release's `configure` wrote there, kept with the same two changes as that of x86_64, from
-which it differs only in `RUBY_PLATFORM`. For any other
+`aarch64-unknown-linux-gnu`, `aarch64-linux-android` ([Android](#android)) and
+`aarch64-apple-darwin`, which `crates/vkrgss-ruby192-sys/targets.rs` lists. The header of
+aarch64 is the one that the release's `configure` wrote there, kept with the same two
+changes as that of x86_64, from which it differs only in `RUBY_PLATFORM`; that of macOS is
+the one `configure` wrote on a Mac, with the same two changes. For any other
 target its build script compiles nothing and prints a warning that names the target, and
 sets the `cfg` `vkrgss_interpreter_absent`, under which the crate and its tests are empty;
 so are `vkrgss-binding-rgss3`, the package that compiles the RGSS classes over it, and
@@ -203,3 +206,39 @@ in `target/apk/debug.keystore` on first use. The SDK needs the build tools (35 o
 for 16 KiB pages) and the platform `android-34`. On the desktop the package builds as a
 library whose Android parts are left out, so the gate builds and tests its other parts.
 How to run a game with it is in [running.md](running.md#android).
+
+## macOS
+
+The workspace builds for `aarch64-apple-darwin`, a Mac with Apple silicon, and its tests pass
+there on MoltenVK; macOS is not supported yet (milestone P2 of
+[decisions.md](decisions.md#macos)), and no CI job runs on it. The Mac needs Apple's command
+line tools, for clang, and from Homebrew the Vulkan loader, MoltenVK, `glslc` and
+`spirv-val` (`vulkan-loader`, `molten-vk`, `shaderc`, `spirv-tools`); neither libcrypt, ALSA
+nor libudev, whose parts the system has. Ash does not find Homebrew's `libvulkan.dylib` by
+itself, the loader is restricted to MoltenVK as lavapipe is on Linux, and the tests are told
+the name of the Apple GPU:
+
+```sh
+export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib
+export VK_LOADER_DRIVERS_SELECT='*MoltenVK*' VKRGSS_TEST_DEVICE='Apple M4'
+cargo test --workspace --locked
+```
+
+`DYLD_FALLBACK_LIBRARY_PATH` does not pass through a program of the system such as
+`/usr/bin/nohup` or `/usr/bin/env`, which macOS protects: cargo is to be started from the
+shell. The validation layer is not installed there, so the tests run without it. A headless
+run composites on the first device whose name contains `Apple` unless `--device` says
+otherwise, since the Mac has no CPU rasteriser.
+
+On the Mac the instance asks for `VK_KHR_portability_enumeration`, without which the loader
+does not enumerate MoltenVK, and a device that lists `VK_KHR_portability_subset` is created
+with it. A guest process is not confined (there is no Landlock) and ends with its parent
+through a kqueue. `cargo xtask dist` makes the package of Linux only and says so on macOS.
+
+The tests kept to Linux each say why: those that read ELF files, `/proc` or inotify, the
+RGSS3 test that writes a file name that is not UTF-8, which the file system of macOS
+refuses, the archive tests of `cargo xtask dist`, which use GNU tar, the test of the
+metrics of a replaced font (macOS has Tahoma), and one test of each interpreter's own
+suites whose output differs on macOS. The tests that make files whose names differ only in
+case see that the file system of the Mac folds case, and check what such a file system
+does.

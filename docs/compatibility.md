@@ -53,8 +53,12 @@ Besides these, WMA sounds are decoded by the `ffmpeg` program, which has to be i
 without it they stay silent. vkrgss runs on Linux, on x86_64 and on aarch64 (milestone P1 of
 [decisions.md](decisions.md#milestones)): on aarch64 the compared frames and saves of the
 games equal those of x86_64 byte for byte, and the job `gate-aarch64` of the
-[CI workflow](../.github/workflows/ci.yml) runs the whole gate there. macOS, Android and
-Windows are planned, in that order, and not supported yet.
+[CI workflow](../.github/workflows/ci.yml) runs the whole gate there. On macOS with Apple
+silicon the workspace builds and its tests pass on MoltenVK, and a game runs headless on the
+Apple GPU; macOS is not supported yet (milestone P2): there is no package, and a window and
+audio output were not tried. There `RUBY_PLATFORM` is `aarch64-darwin`, a guest process is
+not confined, and a game of VX Ace cannot make a file whose name is not UTF-8, which the file
+system of macOS refuses. Android and Windows are planned after it, in that order.
 
 ## RPG Maker VX
 

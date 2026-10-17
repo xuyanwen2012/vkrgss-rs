@@ -14,7 +14,7 @@
 
 ## 4. Linux-dependent tests and documents
 
-- [ ] 4.1 The tests as `design.md` says; `docs/building.md` (macOS section), `docs/compatibility.md`, `docs/decisions.md` (the confinement decision), `CHANGELOG.md`. Verify: `cargo test --workspace` on the Mac with the environment of `design.md` passes; the tests of `xtask` that check the documents pass.
+- [x] 4.1 The tests as `design.md` says; `docs/building.md` (macOS section), `docs/compatibility.md`, `docs/decisions.md` (the confinement decision), `CHANGELOG.md`. Verify: `cargo test --workspace` on the Mac with the environment of `design.md` passes; the tests of `xtask` that check the documents pass.
 
 ## 5. Integration check
 

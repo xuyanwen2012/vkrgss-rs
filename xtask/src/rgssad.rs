@@ -269,7 +269,12 @@ mod tests {
         assert!(format!("{error:#}").contains("already packed"), "{error:#}");
         let archive = fs::read(dir.path().join("game.RGSSAD")).unwrap();
         assert_eq!(archive, b"an archive");
-        assert!(!dir.path().join(FILE_NAME).exists());
+        if crate::folds_case(dir.path()) {
+            // The name of the archive there names `game.RGSSAD` too.
+            assert!(!crate::has_entry(dir.path(), FILE_NAME));
+        } else {
+            assert!(!dir.path().join(FILE_NAME).exists());
+        }
         for (name, data) in &files {
             let path = dir.path().join(name.replace('\\', "/"));
             assert_eq!(fs::read(path).unwrap(), *data, "{name}");

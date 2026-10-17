@@ -84,6 +84,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - aarch64 Linux is supported (milestone P1): on the owner's Jetson Orin Nano the compared
   frames and saves of the XP, VX and VX Ace games equal those of x86_64 byte for byte, and the
   CI job `gate-aarch64` must pass.
+- The workspace builds on macOS with Apple silicon (`aarch64-apple-darwin`) and its tests
+  pass there on MoltenVK, those kept to Linux apart; macOS is not supported yet (milestone
+  P2). Vulkan enumerates portability drivers there and creates a device with
+  `VK_KHR_portability_subset` where it lists it; both interpreters have configuration
+  headers measured on the Mac and name the platform `aarch64-darwin`, and `Math` of Ruby
+  1.8.7 raises `Errno::ERANGE` for a pole or an overflow there as on Linux; a guest process is
+  not confined there and ends with its parent through a kqueue; a headless run composites
+  on the Apple GPU by default. `docs/building.md` says how to build and test on the Mac.
 
 - The workflow `nightly.yml` runs the dependency audit, the collector stress, the sanitized
   suites of Ruby 1.8.7 and five minutes of each fuzz target once a day and by hand.
@@ -159,6 +167,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   older as well. Where CORE-MATH overflows its correctly rounded infinity is returned, not
   the value of the C library, so `Math.hypot` at the edge of overflow is the same
   everywhere.
+- Timestamp queries of the frame time statistics are read with `VK_QUERY_RESULT_WAIT_BIT`,
+  as MoltenVK needs even after the submission has been waited for.
 - Ruby 1.9.2 of RPG Maker VX Ace games keeps values that only a pointer into them holds
   while it allocates, which the stressed suite on aarch64 showed it did not: the sum of a
   Bignum of two digits and a small integer could read the digits of a collected object, so

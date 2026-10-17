@@ -51,6 +51,9 @@ process of a game of RGSS1 or RGSS2 is that executable, which `vkrgss` starts fr
 itself as it starts `vkrgss-guest-rgss3`, and the program no longer starts itself as a
 guest. The release archive holds the three executables.
 
+The change `build-and-test-on-macos` added to "macOS" under "Platforms", on 2026-10-17, that
+a guest process on macOS is not confined, and how the workspace is built and tested there.
+
 ## Goal and scope
 
 - vkrgss is a from-scratch runtime for the games of RPG Maker XP, VX and VX Ace, built to a
@@ -856,6 +859,16 @@ changes; finishing one does not commit to the next. Their milestones are P1 to P
   host executing itself again, so that no window framework is linked before `fork`.
 - Tested only on the owner's MacBook Air, by hand, now and then, and only after asking the
   owner each time. No CI runner for macOS, hosted or self-hosted.
+- A guest process on macOS is not confined: Landlock is Linux's, and nothing takes its place
+  for now (change `build-and-test-on-macos`); a later change may add `sandbox_init`. The
+  guest ends with its parent through a kqueue that waits for the parent's exit, as on Linux
+  through the parent-death signal.
+- The workspace builds for `aarch64-apple-darwin` and its tests pass there on MoltenVK
+  (change `build-and-test-on-macos`), those kept to Linux apart, each with its reason. Both
+  interpreters use configuration headers that `configure` wrote on the Mac, reviewed, and
+  name the platform `aarch64-darwin`. A headless run composites on the Apple GPU by default,
+  the Mac having no CPU rasteriser. P2 is not accepted with this: packaging, a window, audio
+  output and the games of the corpus are not covered yet.
 - The release is signed with a Developer ID, bought when the macOS release is made, and
   notarized. Not in the Mac App Store for now.
 

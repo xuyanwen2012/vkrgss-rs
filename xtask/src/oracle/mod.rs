@@ -893,7 +893,12 @@ loop { Graphics.update }
 
         let placed = fs::read(copy.join("system/RGSS300.dll")).unwrap();
         assert_eq!(placed, b"the given DLL");
-        assert!(!copy.join("System").exists());
+        if crate::folds_case(&copy) {
+            // `System` names `system` there: the copy has the directory of the game alone.
+            assert!(crate::has_entry(&copy, "system") && !crate::has_entry(&copy, "System"));
+        } else {
+            assert!(!copy.join("System").exists());
+        }
         assert!(!copy.join("Given.dll").exists());
         let dlls: Vec<_> = fs::read_dir(&copy)
             .unwrap()

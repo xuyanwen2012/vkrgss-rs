@@ -116,6 +116,26 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
+/// Whether the file system of `dir` folds case, as that of macOS does by default: a name that
+/// differs from that of a file only in case names that file.
+#[cfg(test)]
+fn folds_case(dir: &Path) -> bool {
+    let probe = dir.join("case-probe");
+    std::fs::write(&probe, b"").expect("the probe is written");
+    let folds = dir.join("CASE-PROBE").exists();
+    std::fs::remove_file(probe).expect("the probe is removed");
+    folds
+}
+
+/// Whether `dir` lists an entry of exactly the name `name`: on a file system that folds case,
+/// a path that differs from that of an entry only in case exists too.
+#[cfg(test)]
+fn has_entry(dir: &Path, name: &str) -> bool {
+    std::fs::read_dir(dir)
+        .expect("the directory is listed")
+        .any(|entry| entry.expect("an entry").file_name() == name)
+}
+
 /// The cargo executable that is running us, so nested calls use the same toolchain.
 fn cargo() -> String {
     std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned())

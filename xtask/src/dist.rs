@@ -96,6 +96,12 @@ fn package_name() -> String {
 /// Builds the release executables through the cargo executable `cargo` and writes the
 /// package under `target/dist/` of `root`.
 pub(crate) fn run(cargo: &str, root: &Path) -> Result<()> {
+    if !cfg!(target_os = "linux") {
+        bail!(
+            "dist: the release package is made on Linux only; there is no package for macOS yet \
+             (see \"Platforms\" in docs/decisions.md)"
+        );
+    }
     // The build takes minutes; a document that is missing is reported before it.
     for (source, _) in FILES
         .iter()
@@ -268,6 +274,7 @@ mod tests {
     }
 
     /// The entries of the archive as `tar` lists them: mode and name.
+    #[cfg(target_os = "linux")]
     fn entries(archive: &Path) -> Vec<(String, String)> {
         let mut tar = Command::new("tar");
         let listing = tool("tar", tar.arg("-tvzf").arg(archive)).unwrap();
@@ -282,6 +289,8 @@ mod tests {
             .collect()
     }
 
+    // Kept to Linux, as the command is: the archive is written with options of GNU tar.
+    #[cfg(target_os = "linux")]
     #[test]
     fn the_archive_holds_one_directory_with_the_files_of_the_list() {
         let root = source_tree();
@@ -321,6 +330,8 @@ mod tests {
         assert_eq!(entries(&archive), expected);
     }
 
+    // Kept to Linux, as the command is: the archive is written with options of GNU tar.
+    #[cfg(target_os = "linux")]
     #[test]
     fn the_checksum_file_is_accepted_by_sha256sum_and_a_second_run_gives_the_same_archive() {
         let root = source_tree();
@@ -413,6 +424,8 @@ Dynamic section at offset 0x1f3a2d0 contains 33 entries:
         require_static_crypt("/usr/lib/x86_64-linux-gnu/libcrypt.a\n").unwrap();
     }
 
+    // On Linux only: elsewhere the command stops before, as the next test checks.
+    #[cfg(target_os = "linux")]
     #[test]
     fn a_missing_document_is_reported_before_the_build() {
         let root = source_tree();
@@ -420,5 +433,14 @@ Dynamic section at offset 0x1f3a2d0 contains 33 entries:
         // A cargo that would fail differently if it were started.
         let error = run("/nonexistent/cargo", root.path()).unwrap_err();
         assert_eq!(error.to_string(), "dist: `LICENSE` is missing");
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn the_command_says_that_the_package_is_made_on_linux_only() {
+        let root = source_tree();
+        // A cargo that would fail differently if it were started.
+        let error = run("/nonexistent/cargo", root.path()).unwrap_err();
+        assert!(error.to_string().contains("made on Linux only"), "{error}");
     }
 }
