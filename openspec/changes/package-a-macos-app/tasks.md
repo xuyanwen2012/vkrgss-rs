@@ -2,7 +2,7 @@
 
 ## 1. Loading the loader
 
-- [ ] 1.1 Bundle-relative loading and the ICD variable on macOS, with today's fallback. Verify: the tests of `vkrgss-vk` pass on the Mac with the environment of `docs/building.md`; a unit test of the path logic.
+- [x] 1.1 Bundle-relative loading and the ICD variable on macOS, with today's fallback. Verify: the tests of `vkrgss-vk` pass on the Mac with the environment of `docs/building.md`; a unit test of the path logic.
 
 ## 2. The app
 

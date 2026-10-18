@@ -34,6 +34,7 @@ mod compositor;
 mod device;
 mod error;
 mod frame_timing;
+mod loader;
 mod pacing;
 mod present_timing;
 mod records;

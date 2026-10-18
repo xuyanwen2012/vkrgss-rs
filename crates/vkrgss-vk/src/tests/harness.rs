@@ -123,13 +123,9 @@ fn layer_version() -> Option<u32> {
     static VERSION: OnceLock<Option<u32>> = OnceLock::new();
     *VERSION.get_or_init(|| {
         require_isolation();
-        // SAFETY: loading the system's Vulkan library runs its initialisers and has no
-        // other precondition; the call after it takes no handle.
-        let layers = unsafe {
-            ash::Entry::load()
-                .ok()?
-                .enumerate_instance_layer_properties()
-        };
+        let entry = crate::loader::load().ok()?;
+        // SAFETY: the entry points are loaded and the call takes no handle.
+        let layers = unsafe { entry.enumerate_instance_layer_properties() };
         layers
             .ok()?
             .iter()
@@ -339,16 +335,15 @@ fn deliberate_validation_error_is_recorded() {
 /// layer.
 fn layer_offers_settings() -> bool {
     require_isolation();
-    // SAFETY: loading the system's Vulkan library runs its initialisers and has no other
-    // precondition; the call after it takes no handle and names a layer only when it is
-    // installed.
+    let Ok(entry) = crate::loader::load() else {
+        return false;
+    };
+    if layer_version().is_none() {
+        return false;
+    }
+    // SAFETY: the entry points are loaded, and the call takes no handle and names a layer
+    // only when it is installed.
     let extensions = unsafe {
-        let Ok(entry) = ash::Entry::load() else {
-            return false;
-        };
-        if layer_version().is_none() {
-            return false;
-        }
         entry.enumerate_instance_extension_properties(Some(crate::validation::LAYER_NAME))
     };
     extensions.is_ok_and(|extensions| {

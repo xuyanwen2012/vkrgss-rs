@@ -56,10 +56,8 @@ impl Instance {
         log: Option<&ValidationLog>,
         surface_extensions: &[&'static CStr],
     ) -> Result<Instance, VkError> {
-        // SAFETY: loading the system's Vulkan library runs its initialisers; that is the
-        // documented way to obtain the entry points and has no other precondition.
-        let entry = unsafe { ash::Entry::load() }
-            .map_err(|error| DeviceError::Loader(error.to_string()))?;
+        let entry =
+            crate::loader::load().map_err(|error| DeviceError::Loader(error.to_string()))?;
 
         let validate = match log {
             Some(_) => {
