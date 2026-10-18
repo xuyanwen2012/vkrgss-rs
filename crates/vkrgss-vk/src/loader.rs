@@ -9,16 +9,15 @@
 //! fallback, for development.
 
 /// Loads the Vulkan loader.
+#[cfg(not(target_os = "macos"))]
 pub(crate) fn load() -> Result<ash::Entry, ash::LoadingError> {
-    #[cfg(target_os = "macos")]
-    return macos::load();
-    #[cfg(not(target_os = "macos"))]
     // SAFETY: loading the system's Vulkan library runs its initialisers; that is the
     // documented way to obtain the entry points and has no other precondition.
-    unsafe {
-        ash::Entry::load()
-    }
+    unsafe { ash::Entry::load() }
 }
+
+#[cfg(target_os = "macos")]
+pub(crate) use macos::load;
 
 #[cfg(target_os = "macos")]
 mod macos {
@@ -38,7 +37,9 @@ mod macos {
     /// The variables that name the loader's drivers. The first is the one set here.
     const DRIVER_VARIABLES: [&str; 2] = ["VK_DRIVER_FILES", "VK_ICD_FILENAMES"];
 
-    pub(super) fn load() -> Result<ash::Entry, ash::LoadingError> {
+    /// Loads the Vulkan loader: the bundle's, or outside a bundle the one found by its name
+    /// or Homebrew's.
+    pub(crate) fn load() -> Result<ash::Entry, ash::LoadingError> {
         let bundle = std::env::current_exe()
             .and_then(std::fs::canonicalize)
             .ok()

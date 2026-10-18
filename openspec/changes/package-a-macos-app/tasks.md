@@ -18,4 +18,4 @@
 
 ## 5. Checks
 
-- [ ] 5.1 On the Mac: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --locked` with the environment of `docs/building.md`. The Linux gate is run at the merge by the owner's session.
+- [x] 5.1 On the Mac: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --locked` with the environment of `docs/building.md`. The Linux gate is run at the merge by the owner's session.

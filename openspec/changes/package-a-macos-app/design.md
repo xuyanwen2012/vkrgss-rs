@@ -54,6 +54,11 @@ game folder onto the icon.
   with a sprite, a window and text, wrote frame 30 identical byte for byte to that of the
   development build, with the guest on a thread and in a process. The windowed run is the
   owner's to check.
+- **Checks on the Mac (2026-10-17).** `cargo fmt --all --check`, `cargo clippy --workspace
+  --all-targets --locked -- -D warnings` and `cargo test --workspace --locked` pass with the
+  environment of `docs/building.md`. Outside task 5.1, `cargo doc --workspace` with warnings
+  denied stops on the Mac at an unresolved link to `seccomp` in `vkrgss-guest`, which this
+  change does not touch; the crates it changes document without warnings there.
 
 ## Follow-ups
 
