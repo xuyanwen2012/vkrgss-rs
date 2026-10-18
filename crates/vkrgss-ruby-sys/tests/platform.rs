@@ -67,6 +67,8 @@ fn crypt_is_that_of_the_c_library() {
 fn the_platform_names_the_target() {
     let expected = if cfg!(target_os = "android") {
         "aarch64-linux-android"
+    } else if cfg!(target_os = "macos") {
+        "aarch64-darwin"
     } else if cfg!(target_arch = "aarch64") {
         "aarch64-linux"
     } else {

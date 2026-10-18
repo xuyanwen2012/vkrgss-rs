@@ -2052,7 +2052,9 @@ fn a_confined_guest_saves_and_loads_states_as_one_that_is_not() {
 /// Scenario "Denied system calls", for a script. `system` starts nothing in a confined guest
 /// (requirement "Process functions are off by default"), so the script reaches `execve`
 /// through `Process.exec` of Ruby 1.8.7, which is not turned off; the filter answers before
-/// Landlock would.
+/// Landlock would. Kept to Linux: a guest process on macOS has neither seccomp nor Landlock
+/// and is not confined (see "Platforms" in `docs/decisions.md`).
+#[cfg(target_os = "linux")]
 #[test]
 fn a_confined_guest_cannot_start_a_program() {
     let main = "\
