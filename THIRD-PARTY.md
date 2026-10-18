@@ -127,6 +127,17 @@ that of the version in the package is the source package `libxcrypt` of Ubuntu 2
 source of everything else that is linked is public, so the executables can be linked again
 with another libxcrypt.
 
+## MoltenVK and the Vulkan loader
+
+The macOS app that `cargo xtask app` assembles carries two libraries copied from Homebrew,
+whose source is not in this repository: MoltenVK (`libMoltenVK.dylib`,
+<https://github.com/KhronosGroup/MoltenVK>) and the Vulkan loader of Khronos
+(`libvulkan.1.dylib`, <https://github.com/KhronosGroup/Vulkan-Loader>), both under the Apache
+License 2.0. The app carries their licence texts as
+`Contents/Resources/licenses/MoltenVK/LICENSE` and
+`Contents/Resources/licenses/Vulkan-Loader/LICENSE.txt`. Their versions are those that
+Homebrew's `molten-vk` and `vulkan-loader` had installed when the app was built.
+
 ## Fonts used by tests
 
 [`crates/vkrgss-text/tests/fonts`](crates/vkrgss-text/tests/fonts) holds two fonts that the tests

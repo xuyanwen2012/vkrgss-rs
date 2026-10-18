@@ -92,6 +92,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   1.8.7 raises `Errno::ERANGE` for a pole or an overflow there as on Linux; a guest process is
   not confined there and ends with its parent through a kqueue; a headless run composites
   on the Apple GPU by default. `docs/building.md` says how to build and test on the Mac.
+- On macOS, `cargo xtask app` assembles `vkrgss.app` and a zip of it: the release
+  executables with Homebrew's Vulkan loader and MoltenVK, so that the app runs without
+  Homebrew and without `DYLD_*` variables, signed ad hoc. A program in an app bundle loads
+  the bundle's loader and takes the bundle's MoltenVK unless `VK_DRIVER_FILES` or
+  `VK_ICD_FILENAMES` is set; elsewhere it falls back to Homebrew's loader. The app started
+  without a game directory asks for one with the system's folder chooser, offering the one
+  chosen last, and a cancel ends it with status 0.
 
 - The workflow `nightly.yml` runs the dependency audit, the collector stress, the sanitized
   suites of Ruby 1.8.7 and five minutes of each fuzz target once a day and by hand.

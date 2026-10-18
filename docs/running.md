@@ -742,6 +742,41 @@ is recorded or replayed the game is given each frame's buttons together with tha
 tick, so a key pressed and released between two frames is not seen. Only input and the seed
 are recorded: a reset with F12 is not, and a game that reads the clock can still diverge.
 
+## macOS
+
+The app `vkrgss.app`, which `cargo xtask app` builds
+([building.md](building.md#the-app-bundle)), runs on a Mac with Apple silicon without
+Homebrew: it carries the Vulkan loader and MoltenVK. macOS is not supported yet (milestone
+P2 of [decisions.md](decisions.md#macos)).
+
+Opened with a double-click, the app asks for the folder of a game with the system's folder
+chooser and runs it in a window, with the guest in a process, as `vkrgss <GAME_DIR>` does.
+Cancelling the chooser ends the app. The folder chosen is kept in
+`~/Library/Application Support/vkrgss/last-game-dir` and offered first the next time. The
+configuration files and the built-in scripts files are where *Configuration files* and *The
+built-in scripts* say, below `~/.config` and `~/.local/share`, since an app that the Finder
+starts has no `XDG_*` variables. Such an app has no terminal either, and its messages are
+lost; started from a terminal it writes them there.
+
+With a game directory the app asks nothing, and takes the options of *Options*:
+
+```sh
+open target/app/vkrgss.app --args /path/to/game --fullscreen
+target/app/vkrgss.app/Contents/MacOS/vkrgss /path/to/game --headless --frames 60 --dump 30=frame.png
+```
+
+The program started from outside an app bundle without a game directory runs the working
+directory, as on Linux.
+
+The app is signed ad hoc, not with a Developer ID, and is not notarized. A copy built on the
+Mac opens with a double-click there, since it carries no quarantine attribute. A copy that
+was downloaded, such as one unpacked from the zip of the app, does, and macOS refuses to open
+it until the attribute is removed:
+
+```sh
+xattr -dr com.apple.quarantine vkrgss.app
+```
+
 ## Android
 
 The app of `vkrgss-android` runs a game of RPG Maker XP, VX or VX Ace on Android 14 or

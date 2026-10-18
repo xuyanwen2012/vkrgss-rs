@@ -226,14 +226,17 @@ cargo test --workspace --locked
 
 `DYLD_FALLBACK_LIBRARY_PATH` does not pass through a program of the system such as
 `/usr/bin/nohup` or `/usr/bin/env`, which macOS protects: cargo is to be started from the
-shell. The validation layer is not installed there, so the tests run without it. A headless
-run composites on the first device whose name contains `Apple` unless `--device` says
-otherwise, since the Mac has no CPU rasteriser.
+shell. When ash does not find the loader, the program and the tests take Homebrew's,
+`/opt/homebrew/lib/libvulkan.1.dylib`, by its path. The validation layer is not installed
+there, so the tests run without it. A headless run composites on the first device whose
+name contains `Apple` unless `--device` says otherwise, since the Mac has no CPU
+rasteriser.
 
 On the Mac the instance asks for `VK_KHR_portability_enumeration`, without which the loader
 does not enumerate MoltenVK, and a device that lists `VK_KHR_portability_subset` is created
 with it. A guest process is not confined (there is no Landlock) and ends with its parent
-through a kqueue. `cargo xtask dist` makes the package of Linux only and says so on macOS.
+through a kqueue. `cargo xtask dist` makes the package of Linux only and says so on macOS;
+the Mac has the app instead (below).
 
 The tests kept to Linux each say why: those that read ELF files, `/proc` or inotify, the
 RGSS3 test that writes a file name that is not UTF-8, which the file system of macOS
@@ -242,3 +245,36 @@ metrics of a replaced font (macOS has Tahoma), and one test of each interpreter'
 suites whose output differs on macOS. The tests that make files whose names differ only in
 case see that the file system of the Mac folds case, and check what such a file system
 does.
+
+### The app bundle
+
+On the Mac, `cargo xtask app` builds the three executables for release, as `cargo xtask
+dist` does on Linux, and assembles `target/app/vkrgss.app`, which runs on a Mac without
+Homebrew's loader or MoltenVK and without `DYLD_*` variables, and beside it a zip of the app
+written by `ditto`, `target/app/vkrgss-<VERSION>-aarch64-apple-darwin.zip`:
+
+- `Contents/MacOS/`: `vkrgss` and the two guest executables, which it starts from beside
+  itself.
+- `Contents/Frameworks/`: Homebrew's Vulkan loader, `libvulkan.1.dylib`, and
+  `libMoltenVK.dylib`, copied from `/opt/homebrew/lib` with the install names
+  `@rpath/libvulkan.1.dylib` and `@rpath/libMoltenVK.dylib`. The executables link only
+  libraries of the system, so they get no rpath.
+- `Contents/Resources/vulkan/icd.d/MoltenVK_icd.json`: Homebrew's manifest of MoltenVK with
+  the `library_path` `../../../Frameworks/libMoltenVK.dylib`, relative to the manifest.
+- `Contents/Resources/`: the documents and licence texts of the package of Linux, and under
+  `licenses/` those of MoltenVK and the loader (see [THIRD-PARTY.md](../THIRD-PARTY.md)).
+- `Contents/Info.plist`: the identifier `io.github.xuyanwen2012.vkrgss`, the version of the
+  workspace and macOS 14 as the minimum; no icon.
+
+The bundle is signed ad hoc (`codesign --force --sign - --deep`), which the changed install
+names need on Apple silicon; a Developer ID and notarization come with the release
+([decisions.md](decisions.md#macos)). The command fails when `otool -L` of an executable or
+library of the bundle names a path under `/opt/homebrew`. Homebrew's `vulkan-loader` and
+`molten-vk` are needed to build the app, not to run it; the loader is built for the macOS
+that Homebrew built it on, so the app runs on that macOS and later, whatever `Info.plist`
+says, until the release brings a loader built for macOS 14.
+
+A program that lies in an app bundle, `<NAME>.app/Contents/MacOS/`, loads the loader of the
+bundle by its path and, unless `VK_DRIVER_FILES` or `VK_ICD_FILENAMES` is set, sets
+`VK_DRIVER_FILES` to the bundle's manifest of MoltenVK, so that the loader takes that driver
+and no other. How to run the app is in [running.md](running.md#macos).

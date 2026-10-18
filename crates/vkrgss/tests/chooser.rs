@@ -51,15 +51,15 @@ impl App {
         self.dir.path().join("calls")
     }
 
-    /// Starts the app without arguments, as a double-click does.
+    /// Starts the app without arguments and with no environment but `PATH` and `HOME`, as a
+    /// double-click does.
     fn start(&self) -> Output {
         let path = format!("{}:/usr/bin:/bin", self.bin().display());
         Command::new(self.dir.path().join("vkrgss.app/Contents/MacOS/vkrgss"))
             .current_dir("/")
+            .env_clear()
             .env("PATH", path)
             .env("HOME", self.home())
-            .env_remove("VKRGSS_LOG")
-            .env_remove("VKXP_LOG")
             .output()
             .expect("the program starts")
     }

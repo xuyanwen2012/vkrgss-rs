@@ -14,7 +14,7 @@
 
 ## 4. Documents
 
-- [ ] 4.1 `docs/building.md`, `docs/running.md` (macOS), `THIRD-PARTY.md`, `CHANGELOG.md`. Verify: the tests of `xtask` that check the documents pass on the Mac.
+- [x] 4.1 `docs/building.md`, `docs/running.md` (macOS), `THIRD-PARTY.md`, `CHANGELOG.md`. Verify: the tests of `xtask` that check the documents pass on the Mac.
 
 ## 5. Checks
 
