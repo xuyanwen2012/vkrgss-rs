@@ -2,8 +2,11 @@ package io.github.xuyanwen2012.vkrgss;
 
 import android.app.NativeActivity;
 import android.content.Intent;
+import android.graphics.Insets;
 import android.net.Uri;
 import android.os.Bundle;
+import android.view.View;
+import android.view.WindowInsets;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -13,8 +16,8 @@ import java.io.OutputStream;
 /**
  * The activity of the library, whose screen the native code draws. It adds to NativeActivity
  * what the native code cannot do alone: the system's file picker, whose result arrives in
- * onActivityResult, the copy of what the picker chose, and the start of a game in
- * {@link Game}, an activity in a process of its own.
+ * onActivityResult, the copy of what the picker chose, the start of a game in
+ * {@link Game}, an activity in a process of its own, and the window's insets.
  */
 public class VkrgssActivity extends NativeActivity {
     static {
@@ -35,10 +38,33 @@ public class VkrgssActivity extends NativeActivity {
     /** Hands the native code a zip to import, which holds a game or, with rtp, the RTP. */
     private static native void nativeImport(String uri, boolean rtp);
 
+    /** What the system's bars and the display's cutout cover: left, top, right, bottom. */
+    private volatile int[] insets = new int[4];
+
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        getWindow().getDecorView().setOnApplyWindowInsetsListener(
+                new View.OnApplyWindowInsetsListener() {
+                    @Override
+                    public WindowInsets onApplyWindowInsets(View view, WindowInsets given) {
+                        Insets covered = given.getInsets(WindowInsets.Type.systemBars()
+                                | WindowInsets.Type.displayCutout());
+                        insets = new int[] {
+                            covered.left, covered.top, covered.right, covered.bottom
+                        };
+                        return view.onApplyWindowInsets(given);
+                    }
+                });
         importFrom(getIntent());
+    }
+
+    /**
+     * The pixels at the window's edges that the system's bars and the display's cutout cover:
+     * left, top, right, bottom; called by the native code from its thread.
+     */
+    public int[] insets() {
+        return insets;
     }
 
     @Override

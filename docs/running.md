@@ -764,13 +764,15 @@ this screen itself, as it draws the game. A tap on a game selects it, and a tap 
 selected game starts it; the first game of the list is selected when the screen opens, so
 one tap starts the last one played. "Delete" asks for a second tap and then deletes the
 selected game with its directory, its saves too. A finger dragged up or down scrolls a long
-list. The back key leaves the app.
+list. The back key leaves the app. The screen keeps clear of the navigation bar and of the
+display's cutout.
 
 "Import" opens the system's file picker for a zip of a game. The zip is copied into the
 app's cache directory and unpacked into a directory of its own in the app's private files
 directory (`files/games/<number>/`), where the game reads and writes, saves included. A zip
 whose top level is one directory with `Game.ini` inside, as a zip of a game's folder is, is
-unpacked one level down. Its entries may be stored or deflated, with Zip64 sizes or not;
+unpacked one level down; a directory `__MACOSX` beside it, which the archiver of macOS
+adds, is left out. Its entries may be stored or deflated, with Zip64 sizes or not;
 encrypted entries and other methods are refused, and every entry's checksum is checked.
 Names are read as UTF-8 when the entry says so or when all of them are UTF-8, and otherwise
 in the first of GBK, Shift-JIS and Big5 that reads all of them, as the runtime reads
@@ -805,10 +807,30 @@ adb shell am start -n io.github.xuyanwen2012.vkrgss/.VkrgssActivity \
 The library writes its log to `files/library.log` and logcat; it says where each row of the
 list lies, so that a test can tap it with `adb shell input tap`.
 
-### Keys
+### Buttons and gamepads
 
-There are no on-screen buttons yet, and the key events of a gamepad hold no button: a game is
-played with a keyboard or the keys winit receives, mapped as on the desktop.
+Over a game the app draws buttons at the sides of the picture, translucent, beside the
+letterbox where the screen is wider than the game, and clear of the navigation bar and the
+display's cutout: on the left a direction pad, L and a
+menu button; on the right C, B and A under Y, X and Z, as a gamepad's buttons lie, and F3,
+F4 and R. Each finger holds what is under it, so several buttons can be held at once, and a
+finger that slides onto another button lets go of the first; on the pad a finger holds the
+direction it points to from the pad's centre, two at once on a diagonal. The buttons of
+`Input` are held as a gamepad's are. F3 saves a state and F4 loads it, as the keys do on the
+desktop. The menu button asks the game to quit, as closing the window does, when the finger
+lifts on it. A tap also answers a message panel. The buttons are drawn over the picture
+shown and never into a frame written with `dump`, which stays that of the desktop. A game
+writes where the pad's centre lies to its log, so that a test can hold an arm of the pad
+with `adb shell input swipe`.
+
+A gamepad's buttons arrive as Android's key events `KEYCODE_BUTTON_*` and hold the buttons
+of `Input` they hold on the desktop (*Gamepads*): A, the bottom button, holds C, B holds B,
+X holds A, Y holds X, the shoulders hold L and R, Start holds C and Select holds B; its
+directional pad arrives as the arrow keys, which hold the directions through the key map.
+A gamepad's key, its directional pad included, hides the on-screen buttons until the
+screen is touched again; the arrow keys of a keyboard cannot be told from a gamepad's and
+hide them too (`adb shell input gamepad keyevent KEYCODE_BUTTON_A` or `KEYCODE_DPAD_DOWN`
+shows it without a gamepad).
 
 F3 and F4 of a keyboard, or `adb shell input keyevent KEYCODE_F3` and `KEYCODE_F4`, save and
 load states too, with Shift they choose one of ten slots, as on the desktop; there are no
@@ -826,8 +848,8 @@ the options of the run with the keys and the formats of the configuration file o
 (*Configuration files*), and with paths relative to that directory. It is the only
 configuration file and takes only these keys: `rtp`, `builtin_scripts`, `font_dirs`,
 `audio`, `soundfont`, `seed`, `debug`, `log_p`, `frames`, `input` and `dump`; another key is
-an error that names it. With `input` the buttons follow the script frame by frame, whatever
-the keys do, and with `dump` the frames named are written as
+an error that names it. With `input` the buttons follow the script frame by frame, with
+whatever the on-screen buttons hold on top, and with `dump` the frames named are written as
 PNG files of the logical size, numbered and drawn as in a headless run, so they can be
 compared with those of `vkrgss --guest thread --headless`. Without `builtin_scripts` the
 built-in scripts file of the game's runtime is read from the external files directory. The

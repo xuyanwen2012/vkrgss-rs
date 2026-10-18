@@ -47,6 +47,27 @@ impl Area {
     }
 }
 
+/// What covers the edges of a window, in pixels: the system's bars and the display's cutout.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Insets {
+    pub left: f32,
+    pub top: f32,
+    pub right: f32,
+    pub bottom: f32,
+}
+
+impl Insets {
+    /// The area of a window of `window` pixels that nothing covers.
+    pub fn inside(&self, window: Size) -> Area {
+        Area::new(
+            self.left,
+            self.top,
+            (window.width as f32 - self.left - self.right).max(0.0),
+            (window.height as f32 - self.top - self.bottom).max(0.0),
+        )
+    }
+}
+
 /// A picture being drawn: premultiplied RGBA8 pixels, transparent where nothing is drawn.
 pub struct Canvas {
     size: Size,

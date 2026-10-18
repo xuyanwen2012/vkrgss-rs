@@ -18,6 +18,8 @@
 //! - When the top level of the zip is one directory and that directory holds what the zip is
 //!   expected to hold at its top ([`Kind`]), the zip is unpacked one level down, so that a
 //!   zip of a game's folder gives the game directory itself.
+//! - A directory `__MACOSX` at the top, which the archiver of macOS adds with the metadata of
+//!   the files, is left out and does not count for the rule above.
 //! - Symbolic links are not created: such an entry is left out.
 
 use std::fs::{self, File};
@@ -280,9 +282,18 @@ fn parts(name: &str) -> Result<Vec<&str>> {
     Ok(parts)
 }
 
+/// The directory at the top of a zip made by macOS, beside the files themselves.
+const MACOS_METADATA: &str = "__MACOSX";
+
+/// Whether an entry of these parts lies in the directory of macOS's metadata.
+fn metadata(parts: &[&str]) -> bool {
+    parts.first() == Some(&MACOS_METADATA)
+}
+
 /// How many leading parts every path loses: one when the top level is a single directory that
-/// holds what `kind` has at its top, and nothing else.
+/// holds what `kind` has at its top, and nothing else but the directory of macOS's metadata.
 fn stripped(paths: &[(Vec<&str>, bool)], kind: Kind) -> usize {
+    let paths: Vec<_> = paths.iter().filter(|(parts, _)| !metadata(parts)).collect();
     let mut tops = paths.iter().filter_map(|(parts, _)| parts.first());
     let Some(first) = tops.next() else {
         return 0;
@@ -324,7 +335,7 @@ pub fn unpack(zip: &Path, target: &Path, kind: Kind) -> Result<()> {
     }
     fs::create_dir(target).with_context(|| format!("cannot create {}", target.display()))?;
     for ((entry, name), (parts, directory)) in entries.iter().zip(&names).zip(&paths) {
-        if entry.is_symlink() || parts.len() <= strip {
+        if entry.is_symlink() || parts.len() <= strip || metadata(parts) {
             continue;
         }
         let path: PathBuf = parts[strip..].iter().collect();
@@ -544,6 +555,30 @@ pub(crate) mod tests {
             let target = unpacked(&dir, items, Kind::Game).unwrap();
             assert!(!target.join("Game.ini").exists(), "{index}");
         }
+    }
+
+    /// A zip made by macOS: the directory `__MACOSX` beside the game's is left out.
+    #[test]
+    fn the_metadata_of_macos_is_left_out_and_does_not_count_as_a_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = unpacked(
+            dir.path(),
+            &[
+                file("Demo/Game.ini", b"[Game]"),
+                file("Demo/Data/x", b"x"),
+                file("__MACOSX/Demo/._Game.ini", b"apple"),
+                file("__MACOSX/._Demo", b"apple"),
+            ],
+            Kind::Game,
+        )
+        .unwrap();
+        assert_eq!(
+            listing(&target),
+            [
+                ("Data/x".to_owned(), b"x".to_vec()),
+                ("Game.ini".to_owned(), b"[Game]".to_vec()),
+            ]
+        );
     }
 
     #[test]

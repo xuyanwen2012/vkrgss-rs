@@ -4,7 +4,8 @@
 //! A tap on a game selects it, a tap on the selected game starts it; the last one played is
 //! listed first and selected when the screen opens. "Delete" asks for a second tap before it
 //! deletes the selected game. A finger dragged up or down the list scrolls it. A line at the
-//! bottom says what the app is doing or what went wrong.
+//! bottom says what the app is doing or what went wrong. The screen keeps clear of what the
+//! system's bars and the display's cutout cover ([`Insets`]).
 
 use std::path::PathBuf;
 
@@ -12,7 +13,7 @@ use vkrgss_proto::Size;
 use vkrgss_vk::OverlayImage;
 use winit::event::TouchPhase;
 
-use crate::canvas::{Area, Canvas, Color, Text};
+use crate::canvas::{Area, Canvas, Color, Insets, Text};
 use crate::library::Game;
 use crate::unpack::Kind;
 
@@ -43,6 +44,8 @@ const FAINT: Color = [150, 156, 168, 255];
 
 /// Where things are in a window of one size.
 struct Layout {
+    /// The part of the window that nothing covers, which holds everything but the background.
+    inside: Area,
     unit: f32,
     buttons: [(Action, &'static str, Area); 3],
     /// The list, between the buttons and the status line.
@@ -51,26 +54,33 @@ struct Layout {
 }
 
 impl Layout {
-    fn new(window: Size) -> Layout {
-        let unit = window.height as f32 / 10.0;
-        let width = window.width as f32;
+    fn new(window: Size, insets: Insets) -> Layout {
+        let inside = insets.inside(window);
+        let unit = inside.height / 10.0;
+        let (left, top, width) = (inside.x, inside.y, inside.width);
         let button = |index: f32| {
             let w = 2.6 * unit;
             Area::new(
-                width - (3.0 - index) * (w + 0.2 * unit),
-                0.2 * unit,
+                left + width - (3.0 - index) * (w + 0.2 * unit),
+                top + 0.2 * unit,
                 w,
                 0.9 * unit,
             )
         };
         Layout {
+            inside,
             unit,
             buttons: [
                 (Action::Import, "Import", button(0.0)),
                 (Action::ImportRtp, "Import RTP", button(1.0)),
                 (Action::Delete, "Delete", button(2.0)),
             ],
-            list: Area::new(0.3 * unit, 1.3 * unit, width - 0.6 * unit, 7.6 * unit),
+            list: Area::new(
+                left + 0.3 * unit,
+                top + 1.3 * unit,
+                width - 0.6 * unit,
+                7.6 * unit,
+            ),
             row_height: 0.95 * unit,
         }
     }
@@ -112,6 +122,7 @@ pub struct Screen {
     busy: bool,
     status: String,
     finger: Option<Finger>,
+    insets: Insets,
     /// The window size of the picture last given, or `None` when something has changed since.
     shown: Option<Size>,
     fonts: Vec<PathBuf>,
@@ -129,6 +140,7 @@ impl Screen {
             busy: false,
             status: String::new(),
             finger: None,
+            insets: Insets::default(),
             shown: None,
             fonts,
             text: None,
@@ -155,6 +167,14 @@ impl Screen {
         self.shown = None;
     }
 
+    /// Sets what covers the edges of the window.
+    pub fn set_insets(&mut self, insets: Insets) {
+        if insets != self.insets {
+            self.insets = insets;
+            self.shown = None;
+        }
+    }
+
     /// Sets whether an import runs.
     pub fn set_busy(&mut self, busy: bool) {
         self.busy = busy;
@@ -174,7 +194,7 @@ impl Screen {
         phase: TouchPhase,
         (x, y): (f32, f32),
     ) -> Option<Request> {
-        let layout = Layout::new(window);
+        let layout = Layout::new(window, self.insets);
         match phase {
             TouchPhase::Started => {
                 self.finger = Some(Finger {
@@ -263,7 +283,13 @@ impl Screen {
     /// Draws the screen for a window of `window` pixels.
     pub fn picture(&mut self, window: Size) -> OverlayImage {
         self.shown = Some(window);
-        let layout = Layout::new(window);
+        let layout = Layout::new(window, self.insets);
+        let Area {
+            x: left,
+            y: top,
+            width,
+            ..
+        } = layout.inside;
         let fonts = self.fonts.clone();
         let text = self.text.get_or_insert_with(|| Text::new(fonts));
         let mut canvas = Canvas::new(window);
@@ -278,7 +304,7 @@ impl Screen {
             &mut canvas,
             "vkrgss",
             (0.6 * unit) as u32,
-            (0.5 * unit, 0.65 * unit),
+            (left + 0.5 * unit, top + 0.65 * unit),
             true,
             4.0 * unit,
             INK,
@@ -335,7 +361,7 @@ impl Screen {
                 &mut canvas,
                 &shown,
                 (0.4 * unit) as u32,
-                (window.width as f32 - 0.3 * unit - 3.0 * unit, 9.4 * unit),
+                (left + width - 0.3 * unit - 3.0 * unit, top + 9.4 * unit),
                 true,
                 3.0 * unit,
                 FAINT,
@@ -345,9 +371,9 @@ impl Screen {
             &mut canvas,
             &self.status,
             (0.42 * unit) as u32,
-            (0.4 * unit, 9.4 * unit),
+            (left + 0.4 * unit, top + 9.4 * unit),
             true,
-            window.width as f32 - 4.0 * unit,
+            width - 4.0 * unit,
             FAINT,
         );
         canvas.into_image()
@@ -355,8 +381,8 @@ impl Screen {
 
     /// Where row `index` of the list lies in a window of `window` pixels while the list is
     /// scrolled to its top: its centre, for the log, so that a test can tap it.
-    pub fn row_centre(window: Size, index: usize) -> Option<(f32, f32)> {
-        let layout = Layout::new(window);
+    pub fn row_centre(&self, window: Size, index: usize) -> Option<(f32, f32)> {
+        let layout = Layout::new(window, self.insets);
         (index < layout.rows()).then(|| layout.row(index).centre())
     }
 }
@@ -381,7 +407,7 @@ mod tests {
     }
 
     fn button(action: Action) -> (f32, f32) {
-        let layout = Layout::new(WINDOW);
+        let layout = Layout::new(WINDOW, Insets::default());
         let (_, _, area) = layout
             .buttons
             .iter()
@@ -396,8 +422,8 @@ mod tests {
         let games = vec![game(2, "群战示范工程"), game(1, "Other")];
         let mut screen = Screen::new(games.clone(), Vec::new());
         assert_eq!(screen.games(), games);
-        let first = Screen::row_centre(WINDOW, 0).unwrap();
-        let second = Screen::row_centre(WINDOW, 1).unwrap();
+        let first = screen.row_centre(WINDOW, 0).unwrap();
+        let second = screen.row_centre(WINDOW, 1).unwrap();
         assert_eq!(
             tap(&mut screen, first),
             Some(Request::Play(games[0].clone()))
@@ -408,7 +434,7 @@ mod tests {
             Some(Request::Play(games[1].clone()))
         );
         // Below the last game nothing happens.
-        let empty = Screen::row_centre(WINDOW, 4).unwrap();
+        let empty = screen.row_centre(WINDOW, 4).unwrap();
         assert_eq!(tap(&mut screen, empty), None);
     }
 
@@ -436,7 +462,7 @@ mod tests {
 
         screen.set_busy(true);
         assert_eq!(tap(&mut screen, button(Action::Import)), None);
-        let first = Screen::row_centre(WINDOW, 0).unwrap();
+        let first = screen.row_centre(WINDOW, 0).unwrap();
         assert_eq!(
             tap(&mut screen, first),
             None,
@@ -448,8 +474,8 @@ mod tests {
     fn a_drag_scrolls_the_list_and_is_no_tap() {
         let games: Vec<Game> = (0..20).map(|id| game(id, &format!("Game {id}"))).collect();
         let mut screen = Screen::new(games.clone(), Vec::new());
-        let layout = Layout::new(WINDOW);
-        let (x, y) = Screen::row_centre(WINDOW, 3).unwrap();
+        let layout = Layout::new(WINDOW, Insets::default());
+        let (x, y) = screen.row_centre(WINDOW, 3).unwrap();
         screen.touch(WINDOW, 5, TouchPhase::Started, (x, y));
         screen.touch(
             WINDOW,
@@ -476,12 +502,44 @@ mod tests {
         );
         assert_eq!(screen.first, 2);
         // A tap on the first row shown now selects the third game.
-        let first = Screen::row_centre(WINDOW, 0).unwrap();
+        let first = screen.row_centre(WINDOW, 0).unwrap();
         assert_eq!(tap(&mut screen, first), None);
         assert_eq!(
             tap(&mut screen, first),
             Some(Request::Play(games[2].clone()))
         );
+    }
+
+    /// A navigation bar at the right edge, as on a phone with three buttons in landscape.
+    #[test]
+    fn the_screen_keeps_clear_of_the_insets() {
+        let mut screen = Screen::new(vec![game(1, "A")], Vec::new());
+        screen.picture(WINDOW);
+        let insets = Insets {
+            right: 130.0,
+            ..Insets::default()
+        };
+        screen.set_insets(insets);
+        assert!(screen.changed(WINDOW));
+        let layout = Layout::new(WINDOW, insets);
+        let clear = WINDOW.width as f32 - insets.right;
+        for (_, _, area) in layout.buttons {
+            assert!(area.x + area.width <= clear, "{area:?}");
+        }
+        assert!(layout.list.x + layout.list.width <= clear);
+        let delete = layout.buttons[2].2.centre();
+        assert_eq!(tap(&mut screen, delete), None);
+        assert_eq!(
+            tap(&mut screen, delete),
+            Some(Request::Delete(game(1, "A")))
+        );
+        let picture = screen.picture(WINDOW);
+        let at = |x: u32, y: u32| {
+            let start = ((y * WINDOW.width + x) * 4) as usize;
+            picture.pixels[start..start + 4].to_vec()
+        };
+        // Under the bar only the background.
+        assert!((0..WINDOW.height).all(|y| at(WINDOW.width - 1, y) == BACKGROUND));
     }
 
     #[test]

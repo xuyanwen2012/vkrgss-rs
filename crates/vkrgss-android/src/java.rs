@@ -2,7 +2,7 @@
 //! `io.github.xuyanwen2012.vkrgss.VkrgssActivity` (`java/` of the crate), through JNI.
 //!
 //! The native code calls the activity's methods `gameDir`, `openPicker`, `copyToCache`,
-//! `startGame` and `finish`, from any thread; the activity calls the native method
+//! `startGame`, `insets` and `finish`, from any thread; the activity calls the native method
 //! `nativeImport` with a zip to import, which goes to the library's queue
 //! ([`crate::library_app::request_import`]).
 
@@ -10,10 +10,12 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow};
 use jni::errors::Error;
-use jni::objects::{JClass, JObject, JString, JValue};
+use jni::objects::{JClass, JIntArray, JObject, JString, JValue};
 use jni::refs::Global;
 use jni::{EnvUnowned, JavaVM, jni_sig, jni_str};
 use winit::platform::android::activity::AndroidApp;
+
+use crate::canvas::Insets;
 
 /// The activity's Java object, for calls from any thread.
 #[derive(Clone)]
@@ -118,6 +120,32 @@ impl Activity {
                     &[JValue::Object(&dir)],
                 )?;
                 Ok(())
+            })
+            .map_err(message)
+    }
+
+    /// What the system's bars and the display's cutout cover at the window's edges, in pixels.
+    pub(crate) fn insets(&self) -> Result<Insets> {
+        self.vm
+            .attach_current_thread(|env| -> Result<_, Error> {
+                let array = env
+                    .call_method(
+                        self.object.as_ref(),
+                        jni_str!("insets"),
+                        jni_sig!(() -> jint[]),
+                        &[],
+                    )?
+                    .l()?;
+                let array = env.cast_local::<JIntArray>(array)?;
+                let mut edges = [0; 4];
+                array.get_region(env, 0, &mut edges)?;
+                let [left, top, right, bottom] = edges.map(|edge| edge.max(0) as f32);
+                Ok(Insets {
+                    left,
+                    top,
+                    right,
+                    bottom,
+                })
             })
             .map_err(message)
     }

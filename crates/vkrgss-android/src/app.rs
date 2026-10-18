@@ -1,6 +1,6 @@
 //! `android_main`: the steps of the crate's documentation.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -16,6 +16,7 @@ use vkrgss_proto::link::GuestEnd;
 use vkrgss_vfs::{GameIni, Runtime};
 use winit::platform::android::activity::{AndroidApp, MainEvent, PollEvent};
 
+use crate::buttons::TouchButtons;
 use crate::input::ScriptedInput;
 use crate::java::Activity;
 use crate::library::Library;
@@ -84,13 +85,13 @@ fn android_main(app: AndroidApp) {
                     false
                 })
         }
-        (Ok((_, Some(game))), Some(private)) => match files {
+        (Ok((activity, Some(game))), Some(private)) => match files {
             Some(files) => {
                 let game = match game.as_os_str().is_empty() {
                     true => files.join(GAME_DIR),
                     false => game.clone(),
                 };
-                run(app.clone(), &game, &files, &private).unwrap_or_else(|error| {
+                run(app.clone(), activity, &game, &files, &private).unwrap_or_else(|error| {
                     tracing::error!("{error:#}");
                     false
                 })
@@ -134,7 +135,13 @@ fn finish(app: &AndroidApp, activity: &Activity) {
 /// Runs the game of `game_dir`, with the built-in scripts by default in the external files
 /// directory `files` and the socket of the guest process in the app's private directory
 /// `private`, where the library is. `Ok(false)` is a run that failed and has said why.
-fn run(app: AndroidApp, game_dir: &Path, files: &Path, private: &Path) -> Result<bool> {
+fn run(
+    app: AndroidApp,
+    activity: &Activity,
+    game_dir: &Path,
+    files: &Path,
+    private: &Path,
+) -> Result<bool> {
     let game_dir = game_dir.to_owned();
     tracing::info!("the game is read from {}", game_dir.display());
     let options = Options::read(&game_dir)?;
@@ -184,6 +191,10 @@ fn run(app: AndroidApp, game_dir: &Path, files: &Path, private: &Path) -> Result
         let _ = done.send(process.relay(link));
     };
 
+    let insets = activity.clone();
+    let buttons = TouchButtons::new(frame, vec![PathBuf::from(SYSTEM_FONTS)], move || {
+        insets.insets().unwrap_or_default()
+    });
     let host_options = WindowedOptions {
         title,
         logical_size: frame,
@@ -201,6 +212,7 @@ fn run(app: AndroidApp, game_dir: &Path, files: &Path, private: &Path) -> Result
         states: true,
         frames: options.frames,
         dumps: options.dumps,
+        overlay: Some(Box::new(buttons)),
         ..WindowedOptions::new(Default::default())
     };
     // The windowed runner returns once the guest thread, the relay, has ended.

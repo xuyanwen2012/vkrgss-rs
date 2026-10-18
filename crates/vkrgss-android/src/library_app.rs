@@ -120,8 +120,18 @@ impl LibraryApp {
         size.map_or(Size::new(0, 0), |size| Size::new(size.width, size.height))
     }
 
+    /// Gives the screen what covers the window's edges, which can change sides without a
+    /// change of the window's size.
+    fn read_insets(&mut self) {
+        match self.activity.insets() {
+            Ok(insets) => self.screen.set_insets(insets),
+            Err(error) => tracing::error!("cannot read the window's insets: {error:#}"),
+        }
+    }
+
     /// Shows the screen, drawn afresh when it has changed.
     fn draw(&mut self) {
+        self.read_insets();
         let size = self.size();
         let Some(compositor) = self.compositor.as_mut().filter(|_| !self.suspended) else {
             return;
@@ -144,9 +154,12 @@ impl LibraryApp {
     /// Shows the games of the library afresh, and says where their rows are for the tests.
     fn reload(&mut self) {
         let games = self.library.games();
+        self.read_insets();
         let size = self.size();
         for (index, game) in games.iter().enumerate() {
-            let place = Screen::row_centre(size, index)
+            let place = self
+                .screen
+                .row_centre(size, index)
                 .map(|(x, y)| format!(", row {index} at ({x:.0}, {y:.0})"))
                 .unwrap_or_default();
             tracing::info!("library: game {} is {}{place}", game.id, game.title);

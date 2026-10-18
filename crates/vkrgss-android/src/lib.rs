@@ -16,7 +16,8 @@
 //! - `VkrgssActivity$Game`, a game, whose directory the intent names, or the directory `game`
 //!   of the app's external files directory when it names none (the game of tests, filled by
 //!   `adb push`). It runs the game as `vkrgss` does in a window, with the guest in a process of
-//!   its own, and ends with the game; the library comes back.
+//!   its own and on-screen buttons over it ([`buttons`]), and ends with the game; the library
+//!   comes back.
 //!
 //! A game runs in these steps:
 //!
@@ -41,7 +42,8 @@
 //! 4. The host runs on the thread of `android_main` with the window of the activity
 //!    (`run_windowed_on_android` of `vkrgss-host`), with sound through cpal's AAudio backend
 //!    unless the file says `audio = false`, and the relay to the guest process on the guest
-//!    thread. F3 and F4 of a keyboard save and load states, which are copies of the guest
+//!    thread. The on-screen buttons and the keys of gamepads hold the buttons of `Input`; F3
+//!    and F4, on the screen or a keyboard, save and load states, which are copies of the guest
 //!    process, as on the desktop. When the activity is paused the surface goes and the game
 //!    waits; when it resumes the game goes on. An input script of the file holds the buttons,
 //!    frame by frame ([`input`]), as a headless run's does.
@@ -54,6 +56,7 @@
 //! it checks of a game before the guest process starts, and the linker leaves the
 //! interpreter out.
 
+pub mod buttons;
 pub mod canvas;
 pub mod input;
 pub mod library;
