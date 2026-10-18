@@ -1,0 +1,35 @@
+# The list of games of `cargo xtask xarch`, copied to `local/xarch.toml` of the workspace and
+# filled in there; that file is not committed. Paths are relative to the directory of the
+# file, or absolute. See docs/development.md, "Comparing the platforms".
+
+# The font files that the games with `font = true` draw text with, as `--font` of the oracle.
+fonts = ["fonts/NotoSansCJKsc-Regular.otf"]
+
+# The built-in scripts file of each runtime, given to every run of a game of that runtime.
+[builtin_scripts]
+rgss1 = "builtin/rpg_builtin.rb"
+rgss2 = "builtin/rpg_builtin_rgss2.rb"
+rgss3 = "builtin/rpg_builtin_rgss3.rb"
+
+# The directory of each run-time package, by the name a game's Game.ini gives it.
+[rtp]
+Standard = "rtp/xp"
+RPGVX = "rtp/vx"
+RPGVXAce = "rtp/ace"
+
+# One table per game.
+[[game]]
+name = "an-xp-game"                    # the directory of its output
+dir = "games/an-xp-game"
+frames = [100, 350, 599]               # as --frames of the oracle
+input = "200:C, 202:, 400:DOWN, 440:"  # as --input of the oracle; "@FILE" reads a file
+rtp = ["Standard"]                     # names of [rtp]
+font = true                            # draws text with `fonts`
+
+[[game]]
+name = "a-vx-game"
+dir = "games/a-vx-game"
+frames = [100, 1000]
+input = "@schedules/a-vx-game.txt"
+rtp = ["RPGVX"]
+no_threads = true                      # as --no-threads of the oracle

@@ -17,6 +17,7 @@
 //! - [`sandbox`]: the restriction a guest process puts on itself, and [`seccomp`]: the
 //!   system calls it denies itself.
 //! - [`signals`]: the signal settings of a guest.
+//! - `heap`, on Android: the untagged pointers of the heap of a guest process.
 //!
 //! The crate links no interpreter and no binding: the executable that links it gives it the
 //! function that runs the game, [`play_in_process`] or, for a guest that is a thread of the
@@ -32,7 +33,7 @@
 //!    of the record. The executable reads nothing else of its command line, and no
 //!    configuration file: the game directory, the settings and the role are those of the
 //!    record.
-//! 1. [`signals::die_with_parent`].
+//! 1. [`signals::die_with_parent`], and on Android `heap::untag_pointers`.
 //! 2. The executable opens the game's files, enters the game directory, calls
 //!    [`signals::block_virtual_timer`] while the main thread is the only one (on macOS
 //!    beside the thread of [`parent_watch`], which blocks every signal), and starts its
@@ -53,6 +54,9 @@
 #[allow(unsafe_code)]
 pub mod copier;
 pub mod diagnostics;
+#[cfg(target_os = "android")]
+#[allow(unsafe_code)]
+pub mod heap;
 pub mod hello;
 #[allow(unsafe_code)]
 pub mod parent_watch;

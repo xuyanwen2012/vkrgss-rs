@@ -44,6 +44,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `cargo xtask xarch run|android|compare` runs the comparison games of a local list in
+  vkrgss alone, on Linux, on macOS or on an Android phone over adb, and compares the frames
+  and the saves of two runs; see "Comparing the platforms" in `docs/development.md`.
 - An Android app, `vkrgss-android`: an APK with `NativeActivity` and no Java code, built by
   `cargo xtask apk` without Gradle, that runs a game of RPG Maker XP or VX on Android 14 or
   later and presents through the Vulkan surface of its window,
@@ -120,6 +123,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- The Android app keeps the screen on while a game runs.
 - `nightly.yml` installs `cargo-deny` 0.20.2, which reads the current advisory database;
   0.18.2 could no longer parse it.
 - `cargo xtask fuzz` sets aside an input that exhausts the machine stack by nesting, as it
@@ -168,6 +172,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- The guest process on Android turns off the tags that bionic puts into the top byte of heap
+  pointers, so that the object ids of Ruby are positive there as on the other platforms: a
+  script of Visions & Voices that compares the `id` of an enemy with 8 raised an error in
+  battle on the phones.
 - The `vkrgss.toml` of a game on Android takes `font_own_metrics`, as the command line's
   `--font-own-metrics`, which it refused before.
 - `Font.exist?("Arial")` is true on Android: the substitution lists of the sans, serif and

@@ -894,6 +894,7 @@ through AAudio.
 A game writes its log to logcat under the tag `vkrgss` and to `files/vkrgss.log`, at the
 level info; the reports of scripts arrive there too. When the activity goes to the
 background the picture goes and the game waits; it goes on when the activity comes back.
+While a game runs, the app keeps the screen on.
 The guest's lines arrive with the app's.
 
 ```sh
@@ -906,8 +907,8 @@ not be the app's, which could not read it), replaces the app's game with `GAME_D
 the activity and waits until the app has ended, at most 15 minutes. It then pulls the log, the lines of logcat and the frames that
 the `dump` entries of the game's `vkrgss.toml` name into `target/android-run/<SERIAL>/`,
 and fails when one of them was not written. It uninstalls nothing. The phone must be
-unlocked: a screen that goes off sends the activity to the background, and the game waits
-until it is back.
+unlocked when the run starts: a screen that is turned off sends the activity to the
+background, and the game waits until it is back.
 
 ## Running the demo
 

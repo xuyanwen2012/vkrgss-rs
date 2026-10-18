@@ -30,6 +30,9 @@
 //!   original runtime and vkrgss.
 //! - `pack-rgssad <GAME_DIR>`: packs the `Data` and `Graphics` folders of a copy of a game
 //!   into `Game.rgssad`.
+//! - `xarch run|android|compare ...`: runs the comparison games in vkrgss alone on this
+//!   machine or on an Android phone, and compares the frames and saves of two such runs.
+//!   Not a step of the gate.
 
 #![forbid(unsafe_code)]
 
@@ -46,13 +49,15 @@ mod oracle;
 mod rgss3a;
 mod rgssad;
 mod stress;
+mod xarch;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 const USAGE: &str = "usage: cargo xtask <gate [--job <NAME>]|deps|audit|stress|fuzz <TARGET> [--seconds N]|\
                      android-test <CRATE> [--device <SERIAL>]|apk|android-run <SERIAL> <GAME_DIR>|dist|app|\
-                     extract-rpg <DLL> <OUTPUT>|oracle <GAME_DIR> [OPTIONS]|pack-rgssad <GAME_DIR>>";
+                     extract-rpg <DLL> <OUTPUT>|oracle <GAME_DIR> [OPTIONS]|pack-rgssad <GAME_DIR>|\
+                     xarch run|android|compare ...>";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -99,6 +104,13 @@ fn main() -> ExitCode {
                 }
             }
         }
+        ["xarch", ref arguments @ ..] => match xarch::parse(arguments) {
+            Ok(command) => xarch::run(&command, &cargo(), &workspace_root()),
+            Err(error) => {
+                eprintln!("{error:#}\n{}", xarch::USAGE);
+                return ExitCode::from(2);
+            }
+        },
         _ => {
             eprintln!("{USAGE}");
             return ExitCode::from(2);

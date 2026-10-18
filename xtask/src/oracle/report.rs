@@ -12,7 +12,7 @@ const AMPLIFICATION: u8 = 32;
 
 /// A picture as RGBA bytes.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct Picture {
+pub(crate) struct Picture {
     pub width: u32,
     pub height: u32,
     pub rgba: Vec<u8>,
@@ -20,7 +20,7 @@ pub(super) struct Picture {
 
 impl Picture {
     /// Reads a PNG file of 8-bit RGB or RGBA.
-    pub(super) fn read(path: &Path) -> Result<Picture> {
+    pub(crate) fn read(path: &Path) -> Result<Picture> {
         let name = || path.display().to_string();
         let file = fs::File::open(path).with_context(name)?;
         let mut reader = png::Decoder::new(BufReader::new(file))
@@ -55,7 +55,7 @@ impl Picture {
         })
     }
 
-    pub(super) fn write(&self, path: &Path) -> Result<()> {
+    pub(crate) fn write(&self, path: &Path) -> Result<()> {
         let name = || path.display().to_string();
         let file = fs::File::create(path).with_context(name)?;
         let mut encoder = png::Encoder::new(BufWriter::new(file), self.width, self.height);
@@ -69,7 +69,7 @@ impl Picture {
 
 /// How two pictures of one frame differ.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct Difference {
+pub(crate) struct Difference {
     /// The number of pixels that differ in red, green or blue.
     pub differing_pixels: u64,
     /// The largest difference of any of these channels.
@@ -80,7 +80,7 @@ pub(super) struct Difference {
 
 /// Compares the colours of two pictures of the same size. Alpha is not compared: a picture
 /// of a screen has none.
-pub(super) fn compare(original: &Picture, vkrgss: &Picture) -> Result<Difference> {
+pub(crate) fn compare(original: &Picture, vkrgss: &Picture) -> Result<Difference> {
     ensure!(
         (original.width, original.height) == (vkrgss.width, vkrgss.height),
         "the pictures differ in size: {} by {} in the original, {} by {} in vkrgss",
@@ -121,7 +121,7 @@ pub(super) fn original_file(frame: u64) -> String {
     format!("frames/{frame}-original.png")
 }
 
-pub(super) fn vkrgss_file(frame: u64) -> String {
+pub(crate) fn vkrgss_file(frame: u64) -> String {
     format!("frames/{frame}-vkrgss.png")
 }
 

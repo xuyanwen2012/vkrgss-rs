@@ -3343,6 +3343,7 @@ dependencies = [
  "flate2",
  "png",
  "regex-lite",
+ "serde",
  "serde_json",
  "tempfile",
  "toml",

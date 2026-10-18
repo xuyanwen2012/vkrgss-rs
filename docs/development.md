@@ -417,7 +417,11 @@ script added in front of the scripts of its archive. The probe seeds the random 
 a fixed value, answers `Input.press?`, `Input.trigger?`, `Input.repeat?`, `Input.dir4` and
 `Input.dir8` from the schedule instead of the keyboard, and counts frames as the host of vkrgss
 does: one for every `Graphics.update` and `d` for `Graphics.transition(d)`. The game directory
-given is never written to, and the output directory may not be inside it.
+given is never written to, and the output directory may not be inside it. Every file of a
+copy has the modification time of its source, on Linux and on macOS alike, and the files the
+harness writes there itself (the script archive with the probe, the DLL it places) have
+2000-01-01 00:00:00 UTC, so that a game that loads its newest save loads the same one on
+every platform and on both sides.
 
 A game of RPG Maker VX is run in the same way, with what its runtime has differently: the
 window and the pictures are 544 by 416, the run-time package is registered for RGSS2 (for
@@ -550,6 +554,45 @@ variables hold absolute paths:
 VKRGSS_ORACLE_DLL=<RGSS DLL> VKRGSS_ORACLE_RTP=<RTP directory> VKRGSS_ORACLE_GAME=<game directory> \
     cargo test -p xtask -- --ignored the_original_is_captured
 ```
+
+## Comparing the platforms
+
+`cargo xtask xarch` runs the comparison games in vkrgss alone, on this machine, on the Mac or
+on an Android phone, and compares two such runs: with the same game, frames, input, run-time
+packages, fonts and built-in scripts, every frame and every save is to be identical on x86_64
+Linux, macOS and the phones.
+
+```sh
+cargo xtask xarch run <out>                       # this machine, or the Mac
+cargo xtask xarch android <serial> <out>          # a phone on USB, as `adb devices` lists it
+cargo xtask xarch compare <out of this machine> <out of another>
+```
+
+The games are listed in `local/xarch.toml` of the workspace, which is not committed, or in the
+file that `--list FILE` names; names of games after the output directory run only those.
+[`xtask/xarch.example.toml`](../xtask/xarch.example.toml) shows the keys; paths in the file are
+relative to its directory. Each game names its directory, the frames to capture, the schedule
+of `--input`, the run-time packages of `[rtp]` it uses, and whether it draws text with the
+fonts of `fonts`; `[builtin_scripts]` names the built-in scripts file of each runtime, which
+both kinds of run are given, so that they run the same scripts.
+
+`run` runs each game as `cargo xtask oracle --vkrgss-only` does, into `<out>/<game>/`.
+`android` builds the APK and installs it as `android-run` does, pushes the run-time packages,
+the fonts and the built-in scripts into `files/xarch/` of the app (again only what changed),
+and runs each game on the phone: the copy that the oracle makes for vkrgss, probe included,
+with a `vkrgss.toml` that asks for the same frames and options, `font_own_metrics` with the
+fonts. The copy as the run left it, with the saves, comes back to `<out>/<game>/vkrgss/game`
+and the frames to `<out>/<game>/frames/`, where the oracle puts them, with the app's log and
+logcat beside them. The phone must be unlocked; the command wakes its screen before each game,
+and the app keeps it on while a game runs. `compare` decodes every frame of vkrgss of the first
+directory and compares its pixels with the same frame of the second, compares every save file
+the game wrote byte for byte, prints each difference and a line per game, and fails when
+anything differs or is missing.
+
+Text is drawn with the families each system has where a game asks for one the fonts of the list
+do not cover: Liberation and DejaVu on Linux, the fonts of macOS on the Mac, `Roboto`,
+`Noto Serif` and `Droid Sans Mono` on Android. The comparison games draw their text with the
+fonts of the list, or show none of the other families in the frames compared.
 
 ## The OpenSpec workflow
 

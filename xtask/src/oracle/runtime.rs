@@ -25,7 +25,7 @@ impl Runtime {
     }
 
     /// The value of `--runtime` that names this runtime, to the harness and to vkrgss alike.
-    pub(super) fn name(self) -> &'static str {
+    pub(crate) fn name(self) -> &'static str {
         match self {
             Runtime::Rgss1 => "rgss1",
             Runtime::Rgss2 => "rgss2",

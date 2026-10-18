@@ -14,7 +14,7 @@ use vkrgss_guest_main::{builtin_scripts_name, guest_inputs};
 use vkrgss_host::{AudioOptions, InputSource, KeyMap, WindowedOptions, run_windowed_on_android};
 use vkrgss_proto::link::GuestEnd;
 use vkrgss_vfs::{GameIni, Runtime};
-use winit::platform::android::activity::{AndroidApp, MainEvent, PollEvent};
+use winit::platform::android::activity::{AndroidApp, MainEvent, PollEvent, WindowManagerFlags};
 
 use crate::buttons::TouchButtons;
 use crate::input::ScriptedInput;
@@ -216,6 +216,12 @@ fn run(
         overlay: Some(Box::new(buttons)),
         ..WindowedOptions::new(Default::default())
     };
+    // A game is watched more than it is touched, and a screen that goes off sends the
+    // activity to the background, where the game waits; the flag goes with the activity.
+    app.set_window_flags(
+        WindowManagerFlags::KEEP_SCREEN_ON,
+        WindowManagerFlags::empty(),
+    );
     // The windowed runner returns once the guest thread, the relay, has ended.
     let end = run_windowed_on_android(app, host_options, guest)?;
     let game_ok = outcome.recv().unwrap_or_else(|_| {

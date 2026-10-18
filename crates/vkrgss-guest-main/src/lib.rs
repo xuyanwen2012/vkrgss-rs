@@ -485,6 +485,8 @@ fn run_guest(
     version: &str,
 ) -> Result<bool> {
     signals::die_with_parent();
+    #[cfg(target_os = "android")]
+    vkrgss_guest::heap::untag_pointers();
     let inputs = guest_inputs(&game_dir, settings)?;
     refuse_other_interpreter(inputs.runtime)?;
     let runtime = inputs.runtime;

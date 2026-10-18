@@ -70,7 +70,7 @@ const GUEST_PROGRAMS: [(&str, &str); 2] = [
 const TARGET_SDK: u32 = 37;
 
 /// The app's files directory on a phone, where the game and the log are.
-const FILES_DIR: &str = "/sdcard/Android/data/io.github.xuyanwen2012.vkrgss/files";
+pub(crate) const FILES_DIR: &str = "/sdcard/Android/data/io.github.xuyanwen2012.vkrgss/files";
 
 /// How long a run may last on the phone.
 const RUN_TIMEOUT: Duration = Duration::from_secs(900);
@@ -355,7 +355,7 @@ fn debug_key(out: &Path) -> Result<PathBuf> {
 }
 
 /// Runs a command on the phone and gives its standard output.
-fn output(device: &str, args: &[&str]) -> Result<String> {
+pub(crate) fn output(device: &str, args: &[&str]) -> Result<String> {
     let output = adb(Some(device))
         .args(args)
         .output()
@@ -406,18 +406,20 @@ fn game_component() -> String {
 }
 
 /// Starts the activity of games without a game on the phone `device`, which runs the game of
-/// the files directory, and waits until its process has ended.
-fn start_and_wait(device: &str) -> Result<()> {
+/// the files directory, and waits until its process has ended, at most `timeout`; after
+/// that the app is stopped and the run fails.
+pub(crate) fn start_and_wait(device: &str, timeout: Duration) -> Result<()> {
     output(device, &["shell", "am", "start", "-n", &game_component()])?;
     eprintln!("android-run: started; waiting for the app to end");
     let started = Instant::now();
     // The process may take a moment to appear.
     thread::sleep(Duration::from_secs(2));
     while running(device)? {
-        if started.elapsed() > RUN_TIMEOUT {
+        if started.elapsed() > timeout {
+            output(device, &["shell", "am", "force-stop", PACKAGE])?;
             bail!(
-                "android-run: the app still runs after {} seconds",
-                RUN_TIMEOUT.as_secs()
+                "android-run: the app still ran after {} seconds and was stopped",
+                timeout.as_secs()
             );
         }
         thread::sleep(Duration::from_secs(1));
@@ -425,12 +427,9 @@ fn start_and_wait(device: &str) -> Result<()> {
     Ok(())
 }
 
-/// Runs the game `game` on the phone `device`; see the module documentation.
-pub(crate) fn run(cargo: &str, root: &Path, device: &str, game: &Path) -> Result<()> {
-    if !game.join("Game.ini").is_file() {
-        bail!("android-run: {} has no Game.ini", game.display());
-    }
-    let dumps = dumped_files(game)?;
+/// Builds the APK and installs it on the phone `device`, stops the app, and starts it once
+/// if it has no files directory yet, so that the app makes it.
+pub(crate) fn install(cargo: &str, root: &Path, device: &str) -> Result<()> {
     let apk = build(cargo, root)?;
     eprintln!("android-run: installing on {device}");
     run_host(adb(Some(device)).arg("install").arg("-r").arg(&apk))?;
@@ -447,8 +446,18 @@ pub(crate) fn run(cargo: &str, root: &Path, device: &str, game: &Path) -> Result
     .contains("yes")
     {
         eprintln!("android-run: starting the app once, to make its files directory");
-        start_and_wait(device)?;
+        start_and_wait(device, RUN_TIMEOUT)?;
     }
+    Ok(())
+}
+
+/// Runs the game `game` on the phone `device`; see the module documentation.
+pub(crate) fn run(cargo: &str, root: &Path, device: &str, game: &Path) -> Result<()> {
+    if !game.join("Game.ini").is_file() {
+        bail!("android-run: {} has no Game.ini", game.display());
+    }
+    let dumps = dumped_files(game)?;
+    install(cargo, root, device)?;
     let remote_game = format!("{FILES_DIR}/game");
     output(
         device,
@@ -460,7 +469,7 @@ pub(crate) fn run(cargo: &str, root: &Path, device: &str, game: &Path) -> Result
     eprintln!("android-run: pushing {} to {remote_game}", game.display());
     run_host(adb(Some(device)).arg("push").arg(game).arg(&remote_game))?;
     output(device, &["logcat", "-c"])?;
-    start_and_wait(device)?;
+    start_and_wait(device, RUN_TIMEOUT)?;
 
     let out = root.join("target/android-run").join(device);
     if out.exists() {

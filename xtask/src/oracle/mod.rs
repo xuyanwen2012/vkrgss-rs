@@ -12,7 +12,7 @@ mod fonts;
 mod game;
 mod original;
 mod probe;
-mod report;
+pub(crate) mod report;
 mod runtime;
 mod vkrgss;
 
@@ -162,6 +162,18 @@ fn prepare_copy(options: &Options, runtime: Runtime, side: Side, copy: &Path) ->
         options.no_threads,
     );
     game::prepare(&options.game, copy, runtime, &source)
+}
+
+/// Makes the copy of the game at `copy` that vkrgss runs, with the probe of its side, as
+/// [`run`] makes it.
+pub(crate) fn prepare_vkrgss_copy(options: &Options, copy: &Path) -> Result<()> {
+    let runtime = game::runtime(&options.game, options.runtime)?;
+    prepare_copy(options, runtime, Side::Vkrgss, copy)
+}
+
+/// The runtime of the game in `game`, as the extension of its script archive tells.
+pub(crate) fn runtime_of(game: &Path) -> Result<Runtime> {
+    game::runtime(game, None)
 }
 
 /// Runs a copy of the game with the probe in the original runtime and writes its frames.

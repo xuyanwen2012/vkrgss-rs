@@ -14,7 +14,7 @@
 
 ## 4. xarch command
 
-- [ ] 4.1 `cargo xtask xarch run|android|compare`, the local game list, docs. Verify: scenario "All platforms" for this machine and both phones; the Mac run is done at the merge by the owner's session (say so).
+- [x] 4.1 `cargo xtask xarch run|android|compare`, the local game list, docs. Verify: scenario "All platforms" for this machine and both phones; the Mac run is done at the merge by the owner's session (say so).
 
 ## 5. Integration check
 

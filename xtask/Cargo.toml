@@ -20,6 +20,7 @@ workspace = true
 anyhow.workspace = true
 flate2.workspace = true
 png.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 toml.workspace = true
 x11rb.workspace = true

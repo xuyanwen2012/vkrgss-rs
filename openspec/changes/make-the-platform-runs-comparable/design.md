@@ -78,6 +78,38 @@
   strip in frame 599 (31 pixels at x 231-261, y 479); with the APK of this branch frames 570
   to 599 of `mh` are identical to those of x86 on both phones.
 
+### xarch command (task 4.1)
+
+- `cargo xtask xarch run|android|compare` (`xtask/src/xarch.rs`) ports `wt/xarch.sh`,
+  `wt/xarch-compare.py` and `tools/arun.sh`. `run` calls the oracle in the process with the
+  arguments the script gave it; `android` makes the oracle's copy with the probe of the
+  vkrgss side itself (`tools/prep.py` rebuilt it from the x86 output), writes the
+  `vkrgss.toml` that `tools/toml.sh` wrote, now with `font_own_metrics`, and runs it as
+  `arun.sh` did, with the steps of `android-run` that `apk.rs` now shares; `compare`
+  compares as `xarch-compare.py` and prints the counts of `tools/cmp.py`. The list is
+  `local/xarch.toml`; `xtask/xarch.example.toml` shows its keys with placeholders. Both kinds
+  of run are given the built-in scripts of the list, so that XP and VX games read the same
+  file on the desktop and on the phone.
+- Run on 2026-10-18 with the ten games of `wt/xarch.sh`: `xarch run` on this machine
+  (llvmpipe) and `xarch android` on the Pixel 7a and the Galaxy S24+; `xarch compare` of
+  this machine with each phone gives "all identical": every frame (84) and every save (17)
+  of the ten games.
+- Two more causes showed on the phones once the strip was gone, both fixed:
+  - Visions & Voices raised `NoMethodError` in a battle from frame 6775 on. Its
+    `Game_Battler` asks `attacker.id <= 8` of an enemy, which has no `id` and answers with
+    `Object#id`, the address of the object; bionic tags heap pointers in their top byte
+    (`0xb4…` in the inspected object), so the id was negative on Android and positive
+    elsewhere. The guest process now calls `mallopt(M_BIONIC_SET_HEAP_TAGGING_LEVEL,
+    M_HEAP_TAGGING_LEVEL_NONE)` before its interpreter starts (`vkrgss-guest/src/heap.rs`,
+    called from `run_guest` of `vkrgss-guest-main`). These two crates are outside the scope
+    the run was given; the edit is the few lines the requirement "All platforms" needs.
+  - A run of the ten games takes longer than the screen timeout of the phones (30 minutes);
+    when the screen went off the game waited in the background until the timeout of the
+    run. The game activity now sets `KEEP_SCREEN_ON` while a game runs, instead of a change
+    to the settings of the phones.
+- The Mac is not reachable from this machine: the run of `xarch run` there and its
+  comparison with this machine are done at the merge by the owner's session.
+
 ## Out of scope
 
 iOS, release builds, changing what the original runtime does.
