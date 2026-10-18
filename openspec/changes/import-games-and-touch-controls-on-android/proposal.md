@@ -42,4 +42,5 @@ None.
 `crates/vkrgss-android` (library, import, touch overlay, JNI), a small Java source under it,
 `xtask` (`apk`: Java compiled into `classes.dex`; `android-run` keeps working with the files
 directory as a game source for tests), `crates/vkrgss-vk` only if the overlay needs a
-drawing path the presenter lacks, `docs/running.md`, `CHANGELOG.md`.
+drawing path the presenter lacks, `crates/vkrgss-host` (a small hook of the windowed runner
+for touch, gamepad keys and the overlay), `docs/running.md`, `CHANGELOG.md`.

@@ -36,20 +36,14 @@ Release signing, Obtainium metadata, a settings screen, remapping buttons, cloud
 
 ## Follow-ups
 
-- **Open question: the on-screen buttons and the gamepads need a larger edit of
-  `vkrgss-host` than this run may make.** Touch events and the gamepad keys of winit's
-  Android backend (`KEYCODE_BUTTON_*`, which winit gives as unidentified keys and the
-  session ignores) arrive only in `window_event` of the windowed runner, a change of the
-  buttons' visibility needs the compositor that only the runner holds (`set_overlay` and a
-  redraw), and F3, F4 and the menu button need the session's key and close paths. The
-  smallest hook that does this (a trait or callback in `WindowedOptions`, its dispatch, the
-  application of what it asks, the refresh of its picture) is some 20 to 30 lines of
-  `crates/vkrgss-host/src/windowed.rs`; the first implementation took about 130. That is
-  more than the few lines outside the scope the run allows, so the buttons, the gamepad
-  mapping and the hook were withdrawn and task 3.1 is open until the owner allows the edit.
-  When it is made again: a gamepad's directional pad arrives as the arrow keys
-  (`KEYCODE_DPAD_*` become `ArrowDown` and the like), which hold the directions through the
-  key map and must hide the buttons as well, which the first implementation missed.
+- **Decided by the owner's session on 2026-10-17:** the hook in
+  `crates/vkrgss-host/src/windowed.rs` (a trait or callback in `WindowedOptions`, its
+  dispatch, applying what it asks, refreshing the overlay) is in scope; keep it small, keep
+  the desktop behaviour unchanged, and test it on the desktop too. Bring back the buttons
+  and the gamepad mapping, with the fix that the arrow keys of a gamepad's directional pad
+  hide the buttons as well. Also in scope now: a `__MACOSX` directory at the top of a zip is
+  ignored by the rule of one directory; the library screen keeps clear of the window's
+  insets (navigation bar).
 
 - A game activity that the system destroys while the game runs (an `am start` of the
   library, whose `singleTask` clears the activities above it, or memory pressure) leaves
