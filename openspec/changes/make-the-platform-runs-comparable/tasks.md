@@ -10,7 +10,7 @@
 
 ## 3. The strip
 
-- [ ] 3.1 Find and fix the white strip of `mh` frame 599 on Android. Verify: the frame is identical to x86 on both phones; the cause and the fix recorded in `design.md`.
+- [x] 3.1 Find and fix the white strip of `mh` frame 599 on Android. Verify: the frame is identical to x86 on both phones; the cause and the fix recorded in `design.md`.
 
 ## 4. xarch command
 

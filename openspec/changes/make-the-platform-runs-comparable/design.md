@@ -62,6 +62,22 @@
 - A generated game of RGSS2 and one of RGSS3 that write `Font.exist?("Arial")` into a file
   wrote `true` on both phones, with the APK of this branch.
 
+### The strip (task 3.1)
+
+- Cause: a font, not the GPU, the readback or the overlay. The dump of a window is read from
+  an off-screen target that the overlay is never drawn into. In `mh` frame 599 the end
+  credits begin to scroll in from the bottom: the script draws them into a bitmap with
+  `font.name = ["Courier New", "黑体"]`, bold, size 24, and copies one row of it after the
+  other into the last rows of the screen with `stretch_blt`, widened, which gives the soft
+  ends of the strip. On x86 `Courier New` is replaced by Liberation Mono and on macOS it is
+  installed, and the top row of the first line of credits is empty there. On Android the
+  list of `Courier New` named no installed family, so the request fell to `黑体`, that is
+  Noto Sans CJK SC, whose glyphs reach the top row of the line; that row is the strip.
+- Fix: the monospace list ends with `Droid Sans Mono` (task 2.1). With the APK of
+  `vkxp/target/apk/` of 2026-10-18 11:08, built before it, the Galaxy S24+ still draws the
+  strip in frame 599 (31 pixels at x 231-261, y 479); with the APK of this branch frames 570
+  to 599 of `mh` are identical to those of x86 on both phones.
+
 ## Out of scope
 
 iOS, release builds, changing what the original runtime does.
