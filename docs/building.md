@@ -178,16 +178,19 @@ its `tests/upstream.rs` and Ruby 1.9.2 by `tests/upstream.android.allow`, which 
 
 ### The app
 
-The package `vkrgss-android` is the native library of an APK whose activity is Android's
-`NativeActivity`, through winit's Android backend; the APK has no Java code. It is built
-and packed without Gradle:
+The package `vkrgss-android` is the native library of an APK whose two activities, the
+library and a game, are subclasses of Android's `NativeActivity`, through winit's Android
+backend; one small Java class (`crates/vkrgss-android/java/`) adds the file picker and the
+start of a game. It is built and packed without Gradle:
 
 ```sh
 ANDROID_NDK_HOME=/path/to/android-ndk-r30 ANDROID_HOME=/path/to/Android/Sdk cargo xtask apk
 ```
 
 The command builds the library for `aarch64-linux-android` with the compiler of the NDK at
-API level 34, as above, in the development profile, and assembles
+API level 34, as above, in the development profile, compiles the Java class with the
+compiler of the JDK (`java -m jdk.compiler/com.sun.tools.javac.Main`, at the class version
+of Java 8 against `android.jar`) and turns it into `classes.dex` with `d8`, and assembles
 `target/apk/vkrgss-debug.apk` with the newest build tools of the SDK: `aapt2` links the
 manifest (package `io.github.xuyanwen2012.vkrgss`, minimum API level 34, target 37,
 landscape on either side, fullscreen, Vulkan 1.3 required) against

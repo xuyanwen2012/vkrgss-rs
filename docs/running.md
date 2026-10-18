@@ -756,33 +756,103 @@ from that directory with its guest record, and the socket lies in the app's priv
 directory. The guest confines itself with the seccomp filter; the kernels of the phones
 have no Landlock, so the log says that the guest is not confined by it.
 
-F3 saves a state and F4 loads it, with Shift they choose one of ten slots, as on the
-desktop, on a keyboard or with `adb shell input keyevent KEYCODE_F3` and `KEYCODE_F4`;
-there is no on-screen button for them yet, and no states while an input script holds the
-buttons. A state is a copy of the guest process; when a parked copy has been ended (the
-system may end processes when memory is short), loading it says that the slot holds no
-state and the game goes on. When the app ends, or is ended (`am force-stop`), the guest
-process and the parked copies end with it.
+### Importing games
 
-In this version the game is the directory `game` of the app's external files directory,
-`/sdcard/Android/data/io.github.xuyanwen2012.vkrgss/files/game/`, which `adb push` fills;
-there is no import of a game and no on-screen button, so a game is played with a keyboard or
-the keys winit receives. The file `vkrgss.toml` of that directory gives the options of the
-run with the keys and the formats of the configuration file of a game (*Configuration
-files*), and with paths relative to that directory. It is the only configuration file and
-takes only these keys: `rtp`, `builtin_scripts`, `font_dirs`, `audio`, `soundfont`, `seed`,
-`debug`, `log_p`, `frames`, `input` and `dump`; another key is an error that names it. With
-`input` the buttons follow the script frame by frame, whatever the keys do, and with `dump`
-the frames named are written as PNG files of the logical size, numbered and drawn as in a
-headless run, so they can be compared with those of `vkrgss --guest thread --headless`.
-Without `builtin_scripts` the built-in scripts file of the game's runtime is read from the
-files directory (`files/rpg_builtin.rb` for XP). The fonts of `font_dirs` are searched
-before those of the system, `/system/fonts`. Sound goes through AAudio.
+The app opens on its library: the imported games by the `Title` of their `Game.ini`, the
+last one played first, and the buttons "Import", "Import RTP" and "Delete". The app draws
+this screen itself, as it draws the game. A tap on a game selects it, and a tap on the
+selected game starts it; the first game of the list is selected when the screen opens, so
+one tap starts the last one played. "Delete" asks for a second tap and then deletes the
+selected game with its directory, its saves too. A finger dragged up or down scrolls a long
+list. The back key leaves the app.
 
-The app writes its log to logcat under the tag `vkrgss` and to `files/vkrgss.log`, at the
+"Import" opens the system's file picker for a zip of a game. The zip is copied into the
+app's cache directory and unpacked into a directory of its own in the app's private files
+directory (`files/games/<number>/`), where the game reads and writes, saves included. A zip
+whose top level is one directory with `Game.ini` inside, as a zip of a game's folder is, is
+unpacked one level down. Its entries may be stored or deflated, with Zip64 sizes or not;
+encrypted entries and other methods are refused, and every entry's checksum is checked.
+Names are read as UTF-8 when the entry says so or when all of them are UTF-8, and otherwise
+in the first of GBK, Shift-JIS and Big5 that reads all of them, as the runtime reads
+`Game.ini`; Windows writes them in the code page of its language. A zip with a name that
+would leave the directory (`../escape.txt`, `/etc/x`, `C:\x`) is refused before anything is
+written, and symbolic links are not created. The line at the bottom of the screen says what
+was imported or why not.
+
+"Import RTP" takes a zip that holds the folders of a run-time package (`Graphics`,
+`Audio`), at its top or in its one directory. The package is named as games name it, by the
+folders of `Graphics` that only one runtime's package has: `Autotiles` gives `Standard`
+(XP), `Battlebacks1` gives `RPGVXAce` (VX Ace), and else `System` gives `RPGVX` (VX). It is
+unpacked into `files/rtp/<name>/` and replaces an earlier import of the same package. Every
+game finds the imported packages by these names; the `rtp` table of a game's `vkrgss.toml`
+comes on top.
+
+A game started from the library runs in an activity and a process of its own
+(`VkrgssActivity$Game`, process `:game`); when it ends, the activity and its process end and
+the library comes back. The built-in scripts file of the game's runtime is still read from
+the app's external files directory (`files/rpg_builtin.rb` for XP), which `adb push` fills
+(*The built-in scripts*).
+
+For tests the zip can be named by the intent instead of the picker, as a URI in the extra
+`import`, with `rtp` for a run-time package; a file in the app's external files directory
+can be read so:
+
+```sh
+adb shell am start -n io.github.xuyanwen2012.vkrgss/.VkrgssActivity \
+    --eu import file:///sdcard/Android/data/io.github.xuyanwen2012.vkrgss/files/game.zip
+```
+
+The library writes its log to `files/library.log` and logcat; it says where each row of the
+list lies, so that a test can tap it with `adb shell input tap`.
+
+### Buttons and gamepads
+
+Over a game the app draws buttons at the sides of the picture, translucent, beside the
+letterbox where the screen is wider than the game: on the left a direction pad, L and a
+menu button; on the right C, B and A under Y, X and Z, as a gamepad's buttons lie, and F3,
+F4 and R. Each finger holds what is under it, so several buttons can be held at once, and a
+finger that slides onto another button lets go of the first; on the pad a finger holds the
+direction it points to from the pad's centre, two at once on a diagonal. The buttons of
+`Input` are held as a gamepad's are. F3 saves a state and F4 loads it, as the keys do on the
+desktop. The menu button asks the game to quit, as closing the window does, when the finger
+lifts on it. A tap also answers a message panel. The buttons are drawn over the picture
+shown and never into a frame written with `dump`, which stays that of the desktop.
+
+A gamepad's buttons arrive as Android's key events `KEYCODE_BUTTON_*` and hold the buttons
+of `Input` they hold on the desktop (*Gamepads*): A, the bottom button, holds C, B holds B,
+X holds A, Y holds X, the shoulders hold L and R, Start holds C and Select holds B; its
+directional pad arrives as the arrow keys.
+A gamepad's key hides the on-screen buttons until the screen is touched again
+(`adb shell input gamepad keyevent KEYCODE_BUTTON_A` shows it without a gamepad).
+
+F3 and F4 of a keyboard, or `adb shell input keyevent KEYCODE_F3` and `KEYCODE_F4`, save and
+load states too, with Shift they choose one of ten slots, as on the desktop; there are no
+states while an input script holds the buttons. A state is a copy of the guest process;
+when a parked copy has been ended (the system may end processes when memory is short),
+loading it says that the slot holds no state and the game goes on. When the game ends, or
+the app is ended (`am force-stop`), the guest process and the parked copies end with it.
+
+### A game for tests
+
+A game activity started without a game runs the directory `game` of the app's external
+files directory, `/sdcard/Android/data/io.github.xuyanwen2012.vkrgss/files/game/`, which
+`adb push` fills. The file `vkrgss.toml` of a game's directory, imported or pushed, gives
+the options of the run with the keys and the formats of the configuration file of a game
+(*Configuration files*), and with paths relative to that directory. It is the only
+configuration file and takes only these keys: `rtp`, `builtin_scripts`, `font_dirs`,
+`audio`, `soundfont`, `seed`, `debug`, `log_p`, `frames`, `input` and `dump`; another key is
+an error that names it. With `input` the buttons follow the script frame by frame, with
+whatever the on-screen buttons hold on top, and with `dump` the frames named are written as
+PNG files of the logical size, numbered and drawn as in a headless run, so they can be
+compared with those of `vkrgss --guest thread --headless`. Without `builtin_scripts` the
+built-in scripts file of the game's runtime is read from the external files directory. The
+fonts of `font_dirs` are searched before those of the system, `/system/fonts`. Sound goes
+through AAudio.
+
+A game writes its log to logcat under the tag `vkrgss` and to `files/vkrgss.log`, at the
 level info; the reports of scripts arrive there too. When the activity goes to the
 background the picture goes and the game waits; it goes on when the activity comes back.
-When the game has ended the app ends. The guest's lines arrive with the app's.
+The guest's lines arrive with the app's.
 
 ```sh
 cargo xtask android-run <SERIAL> <GAME_DIR>
