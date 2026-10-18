@@ -1,7 +1,8 @@
 //! The copy of the game that a run works on, with the probe in its script archive.
 
-use std::fs;
+use std::fs::{self, File, FileTimes};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 
 use anyhow::{Context, Result, bail, ensure};
 
@@ -25,9 +26,17 @@ pub(super) fn runtime(game: &Path, chosen: Option<Runtime>) -> Result<Runtime> {
     })
 }
 
+/// The modification and access time of the files that the oracle writes into a copy itself:
+/// 2000-01-01 00:00:00 UTC, so that a game that compares the times of its files sees the same
+/// order on every platform and in every run.
+pub(super) fn fixed_time() -> SystemTime {
+    SystemTime::UNIX_EPOCH + Duration::from_secs(946_684_800)
+}
+
 /// Copies the game directory `source` to `copy`, replacing what is there, and adds `probe`
 /// as the first script of the copy's archive. `runtime` gives the name of the encrypted
-/// archive that the game may have.
+/// archive that the game may have. Every copied file has the times of its source, and the
+/// archive with the probe [`fixed_time`].
 pub(super) fn prepare(source: &Path, copy: &Path, runtime: Runtime, probe: &str) -> Result<()> {
     if copy.exists() {
         fs::remove_dir_all(copy).with_context(|| copy.display().to_string())?;
@@ -40,13 +49,15 @@ pub(super) fn prepare(source: &Path, copy: &Path, runtime: Runtime, probe: &str)
             Runtime::Rgss3 => probe_packed_rgss3(&packed, &name, probe),
             Runtime::Rgss1 | Runtime::Rgss2 => probe_packed(&packed, &name, probe),
         };
-        return probed.with_context(|| packed.display().to_string());
+        probed.with_context(|| packed.display().to_string())?;
+        return set_fixed_time(&packed);
     }
     let scripts = scripts_file(copy, &name)?;
     let bytes = fs::read(&scripts).with_context(|| scripts.display().to_string())?;
     let probed = archive::with_first(&bytes, probe::NAME, probe)
         .with_context(|| scripts.display().to_string())?;
-    fs::write(&scripts, probed).with_context(|| scripts.display().to_string())
+    fs::write(&scripts, probed).with_context(|| scripts.display().to_string())?;
+    set_fixed_time(&scripts)
 }
 
 /// Adds `probe` as the first script of the script archive `name` inside the encrypted
@@ -92,9 +103,33 @@ fn copy_dir(from: &Path, to: &Path) -> Result<()> {
             copy_dir(&source, &target)?;
         } else {
             fs::copy(&source, &target).with_context(|| source.display().to_string())?;
+            // `fs::copy` keeps the modification time on macOS and renews it on Linux.
+            let metadata = fs::metadata(&source).with_context(|| source.display().to_string())?;
+            let times = FileTimes::new()
+                .set_modified(metadata.modified()?)
+                .set_accessed(metadata.accessed()?);
+            set_times(&target, times)?;
         }
     }
     Ok(())
+}
+
+/// Gives the file `path`, which the oracle wrote, [`fixed_time`].
+pub(super) fn set_fixed_time(path: &Path) -> Result<()> {
+    set_times(
+        path,
+        FileTimes::new()
+            .set_modified(fixed_time())
+            .set_accessed(fixed_time()),
+    )
+}
+
+fn set_times(path: &Path, times: FileTimes) -> Result<()> {
+    // The owner of a file may set its times through a descriptor opened for reading, so a
+    // copy of a read-only file gets them too.
+    File::open(path)
+        .and_then(|file| file.set_times(times))
+        .with_context(|| format!("{}: setting the file times", path.display()))
 }
 
 /// The path of the script archive that `Game.ini` in `game` names with `Scripts=`.

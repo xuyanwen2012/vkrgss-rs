@@ -18,7 +18,7 @@ use x11rb::connection::Connection;
 use x11rb::protocol::xproto::{ConnectionExt, ImageFormat, ImageOrder, MapState, Window};
 
 use super::fonts;
-use super::game::Library;
+use super::game::{self, Library};
 use super::report::{self, Picture};
 use super::runtime::Runtime;
 
@@ -203,7 +203,7 @@ pub(super) fn place_dll(game: &Path, runtime: Runtime, dll: Option<&Path>) -> Re
         }
     };
     fs::copy(dll, &target).with_context(|| format!("{} to {}", dll.display(), target.display()))?;
-    Ok(())
+    game::set_fixed_time(&target)
 }
 
 /// The programs of the original side, which must all be in a directory of `path`, the value

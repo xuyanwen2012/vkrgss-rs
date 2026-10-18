@@ -33,10 +33,33 @@
   `xtask` (Rust), with the game list in a TOML file under `local/` (example committed with
   placeholders, no game names of the owner beyond what the docs already name).
 
+## Results
+
+### File times (task 1.1)
+
+- `game::prepare` gives every copied file the modification and access times of its source
+  (`File::set_times` through a descriptor opened for reading, which the owner of a file may
+  use), and the files the oracle writes into the copy itself, the archive with the probe and
+  the DLL it places, 2000-01-01 00:00:00 UTC. The unit test
+  `the_copy_keeps_the_times_of_the_files_of_the_game` checks two saves with different times
+  and the probed archive.
+- The vkrgss side of the seven games of `ref/tools/oracle/regress.sh`, run from this branch
+  with the same options (`--vkrgss-only`), gives frames identical, pixel for pixel, to those
+  of `vkxp/target/regress/` of 2026-10-18 for all seven, tower included. Tower does not
+  change there because `regress.sh` runs `tower_exe`, a copy made with `cp -r` whose files
+  all have the same time; the copy of the oracle now keeps those equal times, so tower's
+  summary stays as it was (frames 100, 350, 599: 3208, 1196 and 1999 differing pixels). The
+  tower of `xarch`, which is the game directory itself with its original times, is the one
+  whose loaded save changes.
+
 ## Out of scope
 
 iOS, release builds, changing what the original runtime does.
 
 ## Follow-ups
 
-None yet.
+- The original side of `regress.sh` could not run in the flow that implemented this change:
+  its environment denies `mount` to the processes it starts, so `bwrap` stops with "Failed to
+  make / slave: Operation not permitted" before Wine starts. The comparisons with the
+  original runtime on x86 are to be run by the owner's session (`ref/tools/oracle/regress.sh`
+  on this branch); task 1.1 stays unticked until they pass.

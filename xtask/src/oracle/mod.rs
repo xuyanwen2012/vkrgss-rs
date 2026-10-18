@@ -666,6 +666,45 @@ end
         }
     }
 
+    /// The times-of-the-copy scenario of `oracle-harness`.
+    #[test]
+    fn the_copy_keeps_the_times_of_the_files_of_the_game() {
+        use std::fs::{File, FileTimes};
+        use std::time::SystemTime;
+
+        let generated = Generated::new(&[("Main", MOVING_SQUARE)]);
+        let game = generated.game();
+        fs::create_dir_all(game.join("Saves")).unwrap();
+        let at = |seconds: u64| SystemTime::UNIX_EPOCH + Duration::from_secs(seconds);
+        let saves = [
+            ("Save1.rxdata", at(1_313_280_000)),
+            ("Saves/Save4.rxdata", at(1_284_854_400)),
+        ];
+        for (name, time) in saves {
+            let path = game.join(name);
+            fs::write(&path, name).unwrap();
+            let times = FileTimes::new().set_modified(time).set_accessed(time);
+            File::open(&path).unwrap().set_times(times).unwrap();
+        }
+        let copy = generated.out().join("game");
+
+        game::prepare(&game, &copy, Runtime::Rgss1, "$probed = true").unwrap();
+
+        let modified = |path: PathBuf| fs::metadata(path).unwrap().modified().unwrap();
+        for (name, time) in saves {
+            assert_eq!(modified(copy.join(name)), time, "{name}");
+        }
+        assert_eq!(
+            modified(copy.join("Game.ini")),
+            modified(game.join("Game.ini"))
+        );
+        // The archive with the probe is written by the oracle.
+        assert_eq!(
+            modified(copy.join("Data/Scripts.rxdata")),
+            game::fixed_time()
+        );
+    }
+
     /// The packed-game-runs-in-vkrgss scenario of `oracle-harness`.
     #[test]
     fn the_frames_of_a_packed_game_equal_those_of_the_game_unpacked() {
