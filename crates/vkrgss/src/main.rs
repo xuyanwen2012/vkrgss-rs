@@ -17,6 +17,9 @@
 //!    status 2. The subscriber that writes diagnostics to the error stream is installed
 //!    (the diagnostics of `vkrgss-guest`), at the level `--verbose` and the environment variable `VKRGSS_LOG` ask for; a
 //!    value of the variable that cannot be parsed ends the program the same way.
+//!    On macOS the program of an app bundle started without a game directory asks for one
+//!    with the system's folder chooser (`chooser`), and ends with status 0 when it is
+//!    cancelled.
 //! 2. The configuration files are read and the command line is put over them (`config`);
 //!    settings that do not go together end with the usage message and status 2. `Game.ini`
 //!    is read, the runtime of the game is taken from `--runtime` or from that file, the
@@ -70,6 +73,8 @@
 //! confined, and neither is the program itself.
 
 mod args;
+#[cfg(target_os = "macos")]
+mod chooser;
 mod config;
 mod log;
 mod process;
@@ -151,6 +156,23 @@ fn main() -> ExitCode {
         guest: options.guest.or(from_environment),
         sandbox: options.sandbox.or(sandbox),
         ..options
+    };
+    // The app started without a game directory, as a double-click starts it, asks for one; a
+    // cancel ends it quietly.
+    #[cfg(target_os = "macos")]
+    let options = match options.game_dir {
+        None if chooser::in_app_bundle() => match chooser::ask() {
+            Ok(Some(dir)) => Options {
+                game_dir: Some(dir),
+                ..options
+            },
+            Ok(None) => return ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("vkrgss: {error:#}");
+                return ExitCode::FAILURE;
+            }
+        },
+        _ => options,
     };
     let (game_dir, mut settings) = match settings(options) {
         Ok(settled) => settled,

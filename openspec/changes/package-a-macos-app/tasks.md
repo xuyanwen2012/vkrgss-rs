@@ -10,7 +10,7 @@
 
 ## 3. Asking for a game
 
-- [ ] 3.1 The folder chooser and the remembered directory. Verify: scenario "No game directory" (simulate the cancel by an `osascript` that returns the cancel error, e.g. through a test seam).
+- [x] 3.1 The folder chooser and the remembered directory. Verify: scenario "No game directory" (simulate the cancel by an `osascript` that returns the cancel error, e.g. through a test seam).
 
 ## 4. Documents
 
