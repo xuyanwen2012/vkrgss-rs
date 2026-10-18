@@ -2,7 +2,7 @@
 
 ## 1. Java activity and APK
 
-- [ ] 1.1 `VkrgssActivity`, the picker call, JNI, `cargo xtask apk` with `classes.dex`. Verify: the APK installs and starts on both phones; the picker opens from the library screen.
+- [x] 1.1 `VkrgssActivity`, the picker call, JNI, `cargo xtask apk` with `classes.dex`. Verify: the APK installs and starts on both phones; the picker opens from the library screen.
 
 ## 2. Import and library
 

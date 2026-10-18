@@ -23,6 +23,8 @@ crate-type = ["cdylib", "lib"]
 
 [dependencies]
 anyhow.workspace = true
+encoding_rs.workspace = true
+flate2.workspace = true
 serde.workspace = true
 toml.workspace = true
 tracing.workspace = true
@@ -32,11 +34,14 @@ vkrgss-guest.workspace = true
 vkrgss-guest-main.workspace = true
 vkrgss-host.workspace = true
 vkrgss-proto.workspace = true
+vkrgss-text.workspace = true
 vkrgss-vfs.workspace = true
+vkrgss-vk.workspace = true
+winit = { workspace = true, features = ["android-native-activity"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
+jni.workspace = true
 libc.workspace = true
-winit = { workspace = true, features = ["android-native-activity"] }
 
 [dev-dependencies]
 tempfile.workspace = true

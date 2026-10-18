@@ -5,6 +5,7 @@ use ash::vk;
 use gpu_allocator::vulkan::Allocator;
 use vkrgss_proto::Size;
 
+use super::overlay::Overlay;
 use super::scaling::{PUSH_CONSTANT_BYTES, Sources};
 use super::swapchain::{FormatPipeline, Swapchain};
 use crate::VkError;
@@ -60,6 +61,8 @@ pub(in crate::compositor) struct Presenter {
     /// created for them.
     pub(super) timing_commands: Option<(ffi::Commands, ash::khr::calibrated_timestamps::Device)>,
     pub(super) swapchain: Option<Swapchain>,
+    /// What draws the caller's picture over the frame, made with the first picture.
+    pub(super) overlay: Option<Overlay>,
 }
 
 /// One draw of the frame: what to bind and the constants to push.
@@ -91,6 +94,7 @@ impl Presenter {
             maintenance_loader: None,
             timing_commands: None,
             swapchain: None,
+            overlay: None,
         };
         match presenter.init(device) {
             Ok(()) => Ok(presenter),
@@ -291,6 +295,9 @@ impl Presenter {
         if let Some(no_mask) = self.no_mask.take() {
             no_mask.destroy(device, allocator);
         }
+        if let Some(overlay) = self.overlay.take() {
+            overlay.destroy(device, allocator);
+        }
         // SAFETY: the caller guarantees that nothing is in use; each handle was created from
         // this device or is null, and none is used again.
         unsafe {
@@ -320,7 +327,8 @@ pub(super) struct PassTarget {
 }
 
 /// Records one pass over the whole target: a clear to black, then the frame when there is one
-/// to draw, between the barriers that make the target the colour attachment and hand it on.
+/// to draw, then the overlay when there is one, between the barriers that make the target the
+/// colour attachment and hand it on.
 ///
 /// # Safety
 ///
@@ -329,12 +337,13 @@ pub(super) struct PassTarget {
 /// `extent` pixels large and in the layout of `before`. For a draw, the pipeline must have
 /// been made for the format of the view, and the images behind the descriptor set must be
 /// live and in the layouts the set names, left there for the fragment stage to read, when the
-/// commands execute.
+/// commands execute. The same holds for the overlay's draw.
 pub(super) unsafe fn record_pass(
     device: &ash::Device,
     commands: vk::CommandBuffer,
     target: &PassTarget,
     draw: Option<&DrawCall>,
+    overlay: Option<&DrawCall>,
 ) {
     let extent = target.extent;
     let area = vk::Rect2D {
@@ -365,15 +374,15 @@ pub(super) unsafe fn record_pass(
             ImageUse::COLOR_ATTACHMENT_WRITE,
         );
         device.cmd_begin_rendering(commands, &rendering);
-        if let Some(draw) = draw {
-            let viewport = vk::Viewport {
-                x: 0.0,
-                y: 0.0,
-                width: extent.width as f32,
-                height: extent.height as f32,
-                min_depth: 0.0,
-                max_depth: 1.0,
-            };
+        let viewport = vk::Viewport {
+            x: 0.0,
+            y: 0.0,
+            width: extent.width as f32,
+            height: extent.height as f32,
+            min_depth: 0.0,
+            max_depth: 1.0,
+        };
+        for draw in draw.into_iter().chain(overlay) {
             device.cmd_set_viewport(commands, 0, &[viewport]);
             device.cmd_set_scissor(commands, 0, &[area]);
             device.cmd_bind_pipeline(commands, vk::PipelineBindPoint::GRAPHICS, draw.pipeline);

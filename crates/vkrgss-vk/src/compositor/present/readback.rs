@@ -108,6 +108,7 @@ impl VkCompositor {
                     compositor.commands,
                     &target,
                     draw.as_ref(),
+                    None,
                 );
                 compositor.gpu.end_label(compositor.commands);
             }

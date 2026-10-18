@@ -16,6 +16,7 @@
 mod format;
 mod held;
 mod lifecycle;
+mod overlay;
 mod presenter;
 mod probe;
 mod readback;
@@ -26,6 +27,7 @@ mod swapchain;
 #[cfg(test)]
 mod tests;
 
+pub use overlay::OverlayImage;
 pub(super) use presenter::Presenter;
 pub(super) use probe::Probe;
 pub(super) use scaling::Mask;

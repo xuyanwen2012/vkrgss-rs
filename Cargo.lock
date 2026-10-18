@@ -2509,6 +2509,9 @@ name = "vkrgss-android"
 version = "0.3.1"
 dependencies = [
  "anyhow",
+ "encoding_rs",
+ "flate2",
+ "jni",
  "libc",
  "serde",
  "tempfile",
@@ -2520,7 +2523,9 @@ dependencies = [
  "vkrgss-guest-main",
  "vkrgss-host",
  "vkrgss-proto",
+ "vkrgss-text",
  "vkrgss-vfs",
+ "vkrgss-vk",
  "winit",
 ]
 

@@ -5,6 +5,7 @@ mod compositing;
 mod differential;
 mod fixtures;
 pub(crate) mod harness;
+mod overlay;
 mod presentation;
 mod properties;
 mod shaders;

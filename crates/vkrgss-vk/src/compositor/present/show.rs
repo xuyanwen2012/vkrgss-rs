@@ -57,6 +57,17 @@ impl VkCompositor {
                 .clone()
                 .expect("made with the swapchain");
             let chain = presenter.swapchain.as_mut().expect("just ensured");
+            // Before the acquire, so that a pipeline that cannot be made leaves no image
+            // acquired.
+            let overlay = match presenter.overlay.as_mut() {
+                Some(overlay) => overlay.draw(
+                    &self.gpu,
+                    chain.format.view,
+                    Size::new(chain.extent.width, chain.extent.height),
+                    chain.format.srgb_target,
+                )?,
+                None => None,
+            };
             // A surface that gave no image in time is not waited for again until it gives
             // one, so a hidden window costs one wait and not one per frame.
             let timeout = match self.starved {
@@ -168,6 +179,7 @@ impl VkCompositor {
                         compositor.commands,
                         &pass_target,
                         draw.as_ref(),
+                        overlay.as_ref(),
                     );
                     compositor.record_span_end(query::PRESENT);
                     compositor.gpu.end_label(compositor.commands);

@@ -18,7 +18,9 @@
 //! - Presentation (`compositor/present.rs`, `shaders/present.frag`) scales the frame into the
 //!   window with letterboxing, mixing it with a held frame for freeze and transition. The same
 //!   draw can go to an off-screen target with [`VkCompositor::scale_frame`]. This step uses
-//!   floating point and is never read back into the compositor.
+//!   floating point and is never read back into the compositor. A picture of the caller's,
+//!   [`OverlayImage`], can be drawn over the frame in the window
+//!   ([`VkCompositor::set_overlay`], `shaders/overlay.frag`); frames read back never hold it.
 //! - `frame_timing` is what [`VkCompositor::set_frame_timing`] makes the compositor measure
 //!   of each frame: the processor time of its stages and, where the queue has timestamps,
 //!   the device time of the compose dispatch and of the presentation pass.
@@ -45,7 +47,7 @@ mod validation;
 #[cfg(test)]
 mod tests;
 
-pub use compositor::{Filter, Frame, Mix, VkCompositor, letterbox};
+pub use compositor::{Filter, Frame, Mix, OverlayImage, VkCompositor, letterbox};
 pub use device::{DeviceChoice, DeviceInfo, DeviceKind, available_devices};
 pub use error::{BitmapError, DeviceError, Limit, SlotState, TableError, VkError};
 pub use frame_timing::FrameTiming;

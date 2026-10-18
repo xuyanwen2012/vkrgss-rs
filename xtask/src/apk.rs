@@ -3,23 +3,31 @@
 //!
 //! `cargo xtask apk` builds `vkrgss-android` for `aarch64-linux-android` at API level 34
 //! with the NDK that `ANDROID_NDK_HOME` names and assembles `target/apk/vkrgss-debug.apk`
-//! with the tools of the SDK that `ANDROID_HOME` names, without Gradle: aapt2 links the
-//! manifest against `platforms/android-34/android.jar`, the library and the two guest
-//! executables (`vkrgss-guest-rgss12`, `vkrgss-guest-rgss3`) go into `lib/arm64-v8a/`
-//! without their debug information (`zip`), the executables under the names of libraries
-//! that the guest is started by on Android ([`GUEST_PROGRAMS`]); zipalign aligns the APK
-//! and apksigner signs it with a debug key that is made with keytool in `target/apk/` on
-//! first use. The manifest sets `extractNativeLibs`, so that the installer extracts all
-//! three, the executables with the execute bit, into the app's native library directory,
-//! the one place an app may execute files from.
+//! with the tools of the SDK that `ANDROID_HOME` names, without Gradle: the Java class of the
+//! activities ([`JAVA_SOURCE`]) is compiled by the compiler of the JDK (`java -m
+//! jdk.compiler/...`, which a runtime with the module `jdk.compiler` has, against
+//! `platforms/android-34/android.jar` at the class version of Java 8, which `--release` cannot
+//! give against that library) and turned into `classes.dex` by `d8` of the build tools;
+//! aapt2 links the manifest against `android.jar`, `classes.dex` goes to the top of the APK
+//! and the library and the two guest executables (`vkrgss-guest-rgss12`,
+//! `vkrgss-guest-rgss3`) go into `lib/arm64-v8a/` without their debug information (`zip`),
+//! the executables under the names of libraries that the guest is started by on Android
+//! ([`GUEST_PROGRAMS`]); zipalign aligns the APK and apksigner signs it with a debug key
+//! that is made with keytool in `target/apk/` on first use. The manifest sets
+//! `extractNativeLibs`, so that the installer extracts all three, the executables with the
+//! execute bit, into the app's native library directory, the one place an app may execute
+//! files from. It names two activities of the class: the library, which the launcher
+//! starts, and the activity of games ([`GAME_ACTIVITY`]), in a process of its own
+//! ([`GAME_PROCESS`]).
 //!
 //! `cargo xtask android-run <SERIAL> <GAME_DIR>` builds the APK, installs it on the phone,
-//! starts the app once if it has no files directory yet, so that the app makes it,
-//! replaces the game of the app's files directory with the directory `GAME_DIR`, starts the
-//! activity and waits until the app has ended. Then it pulls the app's log and the frames
-//! that the `dump` entries of the game's `vkrgss.toml` name into
-//! `target/android-run/<SERIAL>/`, with the lines of logcat under the tag `vkrgss`. It
-//! uninstalls nothing; the next run installs over it. See `docs/running.md`.
+//! starts the activity of games once if the app has no files directory yet, so that the app
+//! makes it, replaces the game of the app's files directory with the directory `GAME_DIR`,
+//! starts the activity of games without a game, which then runs that one, and waits until
+//! its process has ended. Then it pulls the app's log and the frames that the `dump`
+//! entries of the game's `vkrgss.toml` name into `target/android-run/<SERIAL>/`, with the
+//! lines of logcat under the tag `vkrgss`. It uninstalls nothing; the next run installs over
+//! it. See `docs/running.md`.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -34,8 +42,21 @@ use crate::android::{API_LEVEL, TARGET, adb, ndk_tools, run_host};
 /// The package of the app.
 pub(crate) const PACKAGE: &str = "io.github.xuyanwen2012.vkrgss";
 
-/// The name of the native library, which the manifest gives the activity.
+/// The name of the native library, which the manifest gives the activities.
 const LIBRARY: &str = "vkrgss_android";
+
+/// The Java class of the activities, below the repository.
+const JAVA_SOURCE: &str =
+    "crates/vkrgss-android/java/io/github/xuyanwen2012/vkrgss/VkrgssActivity.java";
+
+/// The activity of the library, relative to the package.
+const LIBRARY_ACTIVITY: &str = ".VkrgssActivity";
+
+/// The activity of games, relative to the package: a class nested in that of the library.
+const GAME_ACTIVITY: &str = ".VkrgssActivity$Game";
+
+/// The process of the activity of games, relative to the package's.
+const GAME_PROCESS: &str = ":game";
 
 /// The guest executables the APK carries: each package and the name of its file in
 /// `lib/arm64-v8a/`, which the installer extracts only for a name `lib*.so`. They are the
@@ -57,11 +78,43 @@ const RUN_TIMEOUT: Duration = Duration::from_secs(900);
 pub(crate) const USAGE: &str =
     "usage: cargo xtask apk | cargo xtask android-run <SERIAL> <GAME_DIR>";
 
-/// The manifest: `NativeActivity` with the library, no Java code, the native libraries
-/// extracted at installation (the guest executables are run from there), landscape on
-/// either side, fullscreen, not restarted by a change of the configuration (the game would
-/// start again), and Vulkan 1.3.
+/// The manifest: two subclasses of `NativeActivity` with the library, the library's
+/// activity started by the launcher and that of games in a process of its own, the native
+/// libraries extracted at installation (the guest executables are run from there),
+/// landscape on either side, fullscreen, not restarted by a change of the configuration (the
+/// game would start again), and Vulkan 1.3. The activity of games is exported, so that
+/// `android-run` can start it.
 fn manifest(version: &str) -> String {
+    let activity = |name: &str, more: &str, filter: &str| {
+        format!(
+            r#"        <activity android:name="{name}"{more}
+            android:exported="true"
+            android:screenOrientation="sensorLandscape"
+            android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density">
+            <meta-data android:name="android.app.lib_name" android:value="{LIBRARY}" />{filter}
+        </activity>
+"#
+        )
+    };
+    let library = activity(
+        LIBRARY_ACTIVITY,
+        r#"
+            android:launchMode="singleTask""#,
+        r#"
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>"#,
+    );
+    let game = activity(
+        GAME_ACTIVITY,
+        &format!(
+            r#"
+            android:process="{GAME_PROCESS}""#
+        ),
+        "",
+    );
     format!(
         r#"<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
@@ -69,21 +122,9 @@ fn manifest(version: &str) -> String {
     android:versionCode="{code}"
     android:versionName="{version}">
     <uses-feature android:name="android.hardware.vulkan.version" android:version="0x403000" android:required="true" />
-    <application android:label="vkrgss" android:hasCode="false" android:appCategory="game"
+    <application android:label="vkrgss" android:hasCode="true" android:appCategory="game"
         android:extractNativeLibs="true">
-        <activity android:name="android.app.NativeActivity"
-            android:exported="true"
-            android:launchMode="singleTask"
-            android:screenOrientation="sensorLandscape"
-            android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density">
-            <meta-data android:name="android.app.lib_name" android:value="{LIBRARY}" />
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-    </application>
+{library}{game}    </application>
 </manifest>
 "#,
         code = version_code(version)
@@ -177,6 +218,7 @@ pub(crate) fn build(cargo: &str, root: &Path) -> Result<PathBuf> {
     }
     let version = env!("CARGO_PKG_VERSION");
     fs::write(work.join("AndroidManifest.xml"), manifest(version)).context("apk: the manifest")?;
+    compile_java(root, &tools, &platform, &work)?;
 
     let unaligned = work.join("unaligned.apk");
     run_host(
@@ -197,6 +239,7 @@ pub(crate) fn build(cargo: &str, root: &Path) -> Result<PathBuf> {
         Command::new("zip")
             .args(["-X", "-q"])
             .arg(&unaligned)
+            .arg("classes.dex")
             .args(
                 files
                     .iter()
@@ -225,6 +268,60 @@ pub(crate) fn build(cargo: &str, root: &Path) -> Result<PathBuf> {
     )?;
     eprintln!("apk: {}", apk.display());
     Ok(apk)
+}
+
+/// Compiles the Java class of the activities into `work/classes.dex`.
+fn compile_java(root: &Path, tools: &Path, platform: &Path, work: &Path) -> Result<()> {
+    eprintln!("apk: compiling {JAVA_SOURCE}");
+    let classes = work.join("classes");
+    let dex = work.join("dex");
+    for dir in [&classes, &dex] {
+        fs::create_dir_all(dir).with_context(|| dir.display().to_string())?;
+    }
+    run_host(
+        Command::new("java")
+            .args(["-m", "jdk.compiler/com.sun.tools.javac.Main"])
+            .args([
+                "-source",
+                "8",
+                "-target",
+                "8",
+                "-Xlint:-options",
+                "-encoding",
+                "UTF-8",
+            ])
+            .arg("-bootclasspath")
+            .arg(platform)
+            .arg("-d")
+            .arg(&classes)
+            .arg(root.join(JAVA_SOURCE)),
+    )?;
+    let mut compiled = Vec::new();
+    let mut pending = vec![classes];
+    while let Some(dir) = pending.pop() {
+        for entry in fs::read_dir(&dir).with_context(|| dir.display().to_string())? {
+            let path = entry?.path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if path
+                .extension()
+                .is_some_and(|extension| extension == "class")
+            {
+                compiled.push(path);
+            }
+        }
+    }
+    compiled.sort();
+    run_host(
+        Command::new(tools.join("d8"))
+            .args(["--min-api", &API_LEVEL.to_string(), "--release"])
+            .arg("--lib")
+            .arg(platform)
+            .arg("--output")
+            .arg(&dex)
+            .args(&compiled),
+    )?;
+    fs::rename(dex.join("classes.dex"), work.join("classes.dex")).context("apk: classes.dex")
 }
 
 /// The debug keystore in `out`, made on first use.
@@ -274,11 +371,11 @@ fn output(device: &str, args: &[&str]) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
-/// Whether the app's process is alive on the phone.
+/// Whether the process of the activity of games is alive on the phone.
 fn running(device: &str) -> Result<bool> {
     // `pidof` answers with status 1 and no output when there is no such process.
     let output = adb(Some(device))
-        .args(["shell", "pidof", PACKAGE])
+        .args(["shell", "pidof", &format!("{PACKAGE}{GAME_PROCESS}")])
         .output()
         .context("android-run: adb could not be started")?;
     Ok(!String::from_utf8_lossy(&output.stdout).trim().is_empty())
@@ -303,18 +400,15 @@ fn dumped_files(game: &Path) -> Result<Vec<String>> {
         .collect())
 }
 
-/// Starts the activity on the phone `device` and waits until the app has ended.
+/// The name of the activity of games for `am start`, whose shell would read the `$`.
+fn game_component() -> String {
+    format!("{PACKAGE}/{}", GAME_ACTIVITY.replace('$', "\\$"))
+}
+
+/// Starts the activity of games without a game on the phone `device`, which runs the game of
+/// the files directory, and waits until its process has ended.
 fn start_and_wait(device: &str) -> Result<()> {
-    output(
-        device,
-        &[
-            "shell",
-            "am",
-            "start",
-            "-n",
-            &format!("{PACKAGE}/android.app.NativeActivity"),
-        ],
-    )?;
+    output(device, &["shell", "am", "start", "-n", &game_component()])?;
     eprintln!("android-run: started; waiting for the app to end");
     let started = Instant::now();
     // The process may take a moment to appear.
@@ -421,14 +515,53 @@ mod tests {
     }
 
     #[test]
-    fn the_manifest_names_the_native_activity_and_its_library() {
+    fn the_manifest_names_both_activities_of_the_java_class_and_their_library() {
         let manifest = manifest("0.3.1");
-        assert!(manifest.contains(r#"android:name="android.app.NativeActivity""#));
-        assert!(manifest.contains(r#"android:value="vkrgss_android""#));
-        assert!(manifest.contains(r#"android:hasCode="false""#));
+        assert!(manifest.contains(r#"android:name=".VkrgssActivity""#));
+        assert!(manifest.contains(r#"android:name=".VkrgssActivity$Game""#));
+        assert!(manifest.contains(r#"android:process=":game""#));
+        assert_eq!(
+            manifest
+                .matches(r#"android:value="vkrgss_android""#)
+                .count(),
+            2
+        );
+        assert_eq!(
+            manifest.matches("android.intent.category.LAUNCHER").count(),
+            1
+        );
+        assert!(manifest.contains(r#"android:hasCode="true""#));
         assert!(manifest.contains(r#"android:versionCode="301""#));
         assert!(manifest.contains(r#"android:extractNativeLibs="true""#));
         assert!(FILES_DIR.contains(PACKAGE));
+        assert_eq!(
+            game_component(),
+            "io.github.xuyanwen2012.vkrgss/.VkrgssActivity\\$Game"
+        );
+    }
+
+    /// The Java class is the one the manifest names, with the native method and the methods
+    /// the native code calls.
+    #[test]
+    fn the_java_class_has_the_activities_and_the_methods_of_the_native_code() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let source = fs::read_to_string(root.join(JAVA_SOURCE)).unwrap();
+        assert!(source.contains("package io.github.xuyanwen2012.vkrgss;"));
+        assert!(source.contains("public class VkrgssActivity extends NativeActivity"));
+        assert!(source.contains("public static final class Game extends VkrgssActivity"));
+        assert!(source.contains(&format!("System.loadLibrary(\"{LIBRARY}\")")));
+        let native = fs::read_to_string(root.join("crates/vkrgss-android/src/java.rs")).unwrap();
+        assert!(native.contains("Java_io_github_xuyanwen2012_vkrgss_VkrgssActivity_nativeImport"));
+        assert!(
+            source.contains("private static native void nativeImport(String uri, boolean rtp)")
+        );
+        for method in ["gameDir", "openPicker", "copyToCache", "startGame"] {
+            assert!(source.contains(&format!(" {method}(")), "{method}");
+            assert!(
+                native.contains(&format!("jni_str!(\"{method}\")")),
+                "{method}"
+            );
+        }
     }
 
     #[test]

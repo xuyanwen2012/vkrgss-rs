@@ -96,7 +96,7 @@ mod submit;
 mod test_compute;
 
 use present::Presenter;
-pub use present::{Filter, Mix, letterbox};
+pub use present::{Filter, Mix, OverlayImage, letterbox};
 
 /// The Vulkan compositor.
 ///
