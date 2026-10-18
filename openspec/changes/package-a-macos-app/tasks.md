@@ -6,7 +6,7 @@
 
 ## 2. The app
 
-- [ ] 2.1 `cargo xtask app`: executables, Frameworks, ICD, install names, Info.plist, licences, ad-hoc signature, zip. Verify: scenarios "No Homebrew needed" and "Headless frame from the bundle".
+- [x] 2.1 `cargo xtask app`: executables, Frameworks, ICD, install names, Info.plist, licences, ad-hoc signature, zip. Verify: scenarios "No Homebrew needed" and "Headless frame from the bundle".
 
 ## 3. Asking for a game
 

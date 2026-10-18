@@ -42,6 +42,23 @@
 Developer ID signing, notarization, a DMG, Sparkle updates, a menu bar, drag and drop of a
 game folder onto the icon.
 
+## Notes from the implementation
+
+- **Icon.** None: the README banner is a wide JPEG with text, and an icon cut from it would
+  be a design of its own, not the simple case the proposal allows.
+- **Rpath.** The three executables link only libraries of the system (`otool -L`), so they
+  get no rpath; `vkrgss-vk` loads the loader of the bundle by its path.
+- **Acceptance on the Mac (2026-10-17).** `cargo xtask app` built the app; `otool -L` of the
+  three executables and two libraries names nothing under `/opt/homebrew`; the bundle's
+  `vkrgss`, run headless from `env -i` with `PATH=/usr/bin:/bin` on a generated game of RGSS1
+  with a sprite, a window and text, wrote frame 30 identical byte for byte to that of the
+  development build, with the guest on a thread and in a process. The windowed run is the
+  owner's to check.
+
 ## Follow-ups
 
-None yet.
+- **Minimum macOS.** `Info.plist` declares macOS 14, and the executables are built for 11.0,
+  but the loader copied from Homebrew on the owner's Mac is built for macOS 27 (`minos 27.0`
+  in `otool -l`; MoltenVK's is 12.0). The app therefore runs only on the macOS that
+  Homebrew's bottle was built for. The release needs a loader built for macOS 14, or the
+  declared minimum raised.

@@ -21,7 +21,7 @@ use anyhow::{Context, Result, anyhow, bail};
 const TARGET: &str = "x86_64-unknown-linux-gnu";
 
 /// The arguments of the build, after the cargo executable.
-const BUILD: [&str; 9] = [
+pub(crate) const BUILD: [&str; 9] = [
     "build",
     "--release",
     "--locked",
@@ -51,12 +51,12 @@ const RGSS12_GUEST_EXECUTABLE: &str = "target/release/vkrgss-guest-rgss12";
 const GUEST_EXECUTABLE: &str = "target/release/vkrgss-guest-rgss3";
 
 /// The executables of the package.
-const EXECUTABLES: [&str; 3] = [EXECUTABLE, RGSS12_GUEST_EXECUTABLE, GUEST_EXECUTABLE];
+pub(crate) const EXECUTABLES: [&str; 3] = [EXECUTABLE, RGSS12_GUEST_EXECUTABLE, GUEST_EXECUTABLE];
 
 /// The files of the package: where each is below the workspace root and where it goes below
 /// the directory of the archive. The licence texts are the ones the bundled sources ask to
 /// accompany a binary.
-const FILES: [(&str, &str); 16] = [
+pub(crate) const FILES: [(&str, &str); 16] = [
     (EXECUTABLE, "vkrgss"),
     (RGSS12_GUEST_EXECUTABLE, "vkrgss-guest-rgss12"),
     (GUEST_EXECUTABLE, "vkrgss-guest-rgss3"),

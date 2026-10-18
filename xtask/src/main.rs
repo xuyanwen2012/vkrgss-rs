@@ -21,6 +21,9 @@
 //!   pulls the app's log and dumped frames. Not a step of the gate.
 //! - `dist`: builds the release executable and packs it with the licence texts into an archive
 //!   with a checksum under `target/dist/`.
+//! - `app`: on macOS, builds the release executables and assembles the app `vkrgss.app`, with
+//!   the Vulkan loader and MoltenVK, and a zip of it under `target/app/`. Not a step of the
+//!   gate.
 //! - `extract-rpg <DLL> <OUTPUT>`: copies the built-in scripts out of an RGSS DLL, or out of
 //!   the image of one as it lies in the memory of the running original.
 //! - `oracle <GAME_DIR> --frames N[,N...] [OPTIONS]`: compares frames of a game between the
@@ -32,6 +35,7 @@
 
 mod android;
 mod apk;
+mod app;
 mod audit;
 mod deps;
 mod dist;
@@ -47,7 +51,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 const USAGE: &str = "usage: cargo xtask <gate [--job <NAME>]|deps|audit|stress|fuzz <TARGET> [--seconds N]|\
-                     android-test <CRATE> [--device <SERIAL>]|apk|android-run <SERIAL> <GAME_DIR>|dist|\
+                     android-test <CRATE> [--device <SERIAL>]|apk|android-run <SERIAL> <GAME_DIR>|dist|app|\
                      extract-rpg <DLL> <OUTPUT>|oracle <GAME_DIR> [OPTIONS]|pack-rgssad <GAME_DIR>>";
 
 fn main() -> ExitCode {
@@ -60,6 +64,7 @@ fn main() -> ExitCode {
         ["audit"] => audit::run(&cargo(), &workspace_root()),
         ["stress"] => stress::run(&workspace_root()),
         ["dist"] => dist::run(&cargo(), &workspace_root()),
+        ["app"] => app::run(&cargo(), &workspace_root()),
         ["extract-rpg", dll, output] => extract::run(Path::new(dll), Path::new(output)),
         ["pack-rgssad", game] => rgssad::pack(Path::new(game)),
         ["fuzz", ref arguments @ ..] => match fuzz::parse(arguments) {
