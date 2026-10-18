@@ -3,9 +3,10 @@
 //!
 //! One test per file: the threads of the whole process are counted.
 //!
-//! Kept to Linux: the threads are counted in `/proc/self/task`, which macOS does not have.
+//! Kept to Linux and Android: the threads are counted in `/proc/self/task`, which macOS does
+//! not have.
 #![cfg(not(vkrgss_interpreter_absent))]
-#![cfg(target_os = "linux")]
+#![cfg(any(target_os = "linux", target_os = "android"))]
 
 mod common;
 

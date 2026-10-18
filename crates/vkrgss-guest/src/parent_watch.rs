@@ -1,13 +1,14 @@
 //! How a guest process ends with the process that started it, whose game may be caught in a
 //! loop, and how a copy of it stops doing so.
 //!
-//! This is platform code. On Linux the kernel does it: the parent-death signal of `prctl`,
-//! SIGKILL, which ends the process when the thread of the parent that started it ends. macOS
-//! has no such signal; there a thread of the guest waits in a kqueue for the parent process to
-//! exit (`EVFILT_PROC` with `NOTE_EXIT`) and then sends SIGKILL to its own process.
+//! This is platform code. On Linux and Android the kernel does it: the parent-death signal of
+//! `prctl`, SIGKILL, which ends the process when the thread of the parent that started it
+//! ends. macOS has no such signal; there a thread of the guest waits in a kqueue for the
+//! parent process to exit (`EVFILT_PROC` with `NOTE_EXIT`) and then sends SIGKILL to its own
+//! process.
 
 /// Asks for this process to be ended with SIGKILL when its parent ends.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn die_with_parent() {
     // SAFETY: `PR_SET_PDEATHSIG` takes a signal number as its one argument and changes only
     // a setting of the calling process.
@@ -16,7 +17,7 @@ pub fn die_with_parent() {
 }
 
 /// What a copy of the guest process does first: it stops being ended with its parent.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub(crate) fn release_copy() {
     // SAFETY: `PR_SET_PDEATHSIG` with 0 clears a setting of the calling process.
     unsafe { libc::prctl(libc::PR_SET_PDEATHSIG, 0) };

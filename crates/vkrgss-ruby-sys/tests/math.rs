@@ -168,6 +168,9 @@ fn errno() -> *mut libc::c_int {
     #[cfg(target_os = "linux")]
     let location = unsafe { libc::__errno_location() };
     // SAFETY: as above.
+    #[cfg(target_os = "android")]
+    let location = unsafe { libc::__errno() };
+    // SAFETY: as above.
     #[cfg(target_os = "macos")]
     let location = unsafe { libc::__error() };
     location

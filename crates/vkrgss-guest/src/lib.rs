@@ -57,7 +57,7 @@ pub mod hello;
 pub mod parent_watch;
 pub mod record;
 pub mod role;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub mod sandbox;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[allow(unsafe_code)]

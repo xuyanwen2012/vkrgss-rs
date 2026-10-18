@@ -1,7 +1,8 @@
 //! The signal settings of a guest: the mask of the threads beside the interpreter's, and what
 //! a guest process asks of the kernel.
 //!
-//! This is platform code for Linux and macOS, the platforms the interpreter builds for.
+//! This is platform code for Linux, Android and macOS, the platforms the interpreter builds
+//! for.
 //!
 //! Ruby switches its threads from a SIGVTALRM handler, driven by a process-wide timer, and
 //! the kernel may deliver that signal to any thread that does not block it. So the main

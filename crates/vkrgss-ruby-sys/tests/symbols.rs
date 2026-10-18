@@ -6,8 +6,8 @@
 //! build compiles with hidden visibility; this test links an executable with `-rdynamic`,
 //! which exports everything that is not hidden, and reads its dynamic symbol table.
 //!
-//! Kept to Linux: the test reads an ELF file, and macOS links Mach-O.
-#![cfg(target_os = "linux")]
+//! Kept to Linux and Android: the test reads an ELF file, and macOS links Mach-O.
+#![cfg(any(target_os = "linux", target_os = "android"))]
 
 mod common;
 

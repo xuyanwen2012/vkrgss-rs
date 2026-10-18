@@ -4,10 +4,10 @@
 
 mod common;
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::ffi::CString;
 use std::fs;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::ffi::OsStrExt;
 use std::path::PathBuf;
 use std::sync::OnceLock;
@@ -20,8 +20,8 @@ use vkrgss_ruby192_sys::{Interpreter, Options};
 struct Shared {
     interpreter: Interpreter,
     first_evaluation: Result<String, String>,
-    // Watched only on Linux; see `Watch`.
-    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    // Watched only on Linux and Android; see `Watch`.
+    #[cfg_attr(not(any(target_os = "linux", target_os = "android")), allow(dead_code))]
     decoy: PathBuf,
 }
 
@@ -124,14 +124,14 @@ fn encodings_that_are_not_linked_are_unknown() {
     assert_eq!(eval("1 + 1"), ok("2"));
 }
 
-/// Watches a file for being opened or read. Kept to Linux, with the test that uses it: it
-/// watches through inotify.
-#[cfg(target_os = "linux")]
+/// Watches a file for being opened or read. Kept to Linux and Android, with the test that uses
+/// it: it watches through inotify.
+#[cfg(any(target_os = "linux", target_os = "android"))]
 struct Watch {
     descriptor: libc::c_int,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 impl Watch {
     fn new(path: &std::path::Path) -> Self {
         let path = CString::new(path.as_os_str().as_bytes()).expect("a path without NUL");
@@ -155,7 +155,7 @@ impl Watch {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 impl Drop for Watch {
     fn drop(&mut self) {
         // SAFETY: the descriptor is ours and open.
@@ -163,7 +163,7 @@ impl Drop for Watch {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn no_file_is_looked_for() {
     let shared = shared();

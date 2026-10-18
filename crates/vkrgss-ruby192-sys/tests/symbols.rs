@@ -7,9 +7,9 @@
 //! executable with `-rdynamic`, which exports everything that is not hidden, and reads its
 //! dynamic symbol table.
 //!
-//! Kept to Linux: the test reads an ELF file, and macOS links Mach-O.
+//! Kept to Linux and Android: the test reads an ELF file, and macOS links Mach-O.
 #![cfg(not(vkrgss_interpreter_absent))]
-#![cfg(target_os = "linux")]
+#![cfg(any(target_os = "linux", target_os = "android"))]
 
 mod common;
 

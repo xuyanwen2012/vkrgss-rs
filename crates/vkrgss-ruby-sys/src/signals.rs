@@ -63,7 +63,7 @@ pub fn threads_lost_in_a_copy() -> bool {
 /// glibc, because glibc adds its own restorer and the `SA_RESTORER` flag to everything it
 /// installs. A default disposition that was never touched has neither, so putting it back
 /// through glibc would not leave it exactly as it was.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct KernelAction {
@@ -74,10 +74,10 @@ struct KernelAction {
 }
 
 /// The size of the kernel's signal set, which `rt_sigaction` wants as its last argument.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const KERNEL_SIGSET_SIZE: usize = size_of::<u64>();
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn get(signal: c_int) -> KernelAction {
     let mut action = MaybeUninit::<KernelAction>::zeroed();
     // SAFETY: a null new action only queries; `action` is valid for the kernel's structure to
@@ -96,7 +96,7 @@ fn get(signal: c_int) -> KernelAction {
     unsafe { action.assume_init() }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn set(signal: c_int, action: &KernelAction) {
     // SAFETY: `action` is a disposition this process had before, read by `get` with its
     // restorer, or the plain "ignore" of `ignore`; installing it gives the process nothing it
@@ -113,13 +113,13 @@ fn set(signal: c_int, action: &KernelAction) {
     assert_eq!(status, 0, "rt_sigaction cannot set signal {signal}");
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn same(left: &KernelAction, right: &KernelAction) -> bool {
     left.handler == right.handler && left.flags == right.flags
 }
 
 /// The plain "ignore", without flags or mask.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn ignore() -> KernelAction {
     KernelAction {
         handler: libc::SIG_IGN,

@@ -26,8 +26,8 @@ tracing-subscriber.workspace = true
 vkrgss-proto.workspace = true
 vkrgss-vfs.workspace = true
 
-# Landlock confines a guest process on Linux; elsewhere nothing does.
-[target.'cfg(target_os = "linux")'.dependencies]
+# Landlock confines a guest process on Linux and Android; elsewhere nothing does.
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 landlock.workspace = true
 
 [dev-dependencies]

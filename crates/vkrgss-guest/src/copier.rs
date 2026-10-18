@@ -1,6 +1,6 @@
 //! States as copies of the guest process: the guest's side of it.
 //!
-//! This is platform code for Linux and macOS. A guest process that is asked to save a state calls
+//! This is platform code for Linux, Android and macOS. A guest process that is asked to save a state calls
 //! `fork` on its interpreter thread, in a wait for a tick ([`ForkCopier::park`], which the
 //! executable calls from the copier it gives its binding). The process that asked goes on. The copy connects to
 //! the socket of the program by itself, states its version as every guest does, says with

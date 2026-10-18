@@ -1,7 +1,7 @@
 //! Saving and restoring the signal state that `ruby_init` replaces.
 //!
-//! This is platform code for x86_64 and aarch64 Linux and for aarch64 macOS, the targets the
-//! crate builds for.
+//! This is platform code for x86_64 and aarch64 Linux, for aarch64 Android and for aarch64
+//! macOS, the targets the crate builds for.
 
 use std::mem::MaybeUninit;
 use std::ptr;
@@ -72,7 +72,7 @@ pub fn threads_lost_in_a_copy() -> bool {
 /// glibc, because glibc adds its own restorer and the `SA_RESTORER` flag to everything it
 /// installs. A default disposition that was never touched has neither, so putting it back
 /// through glibc would not leave it exactly as it was.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct KernelAction {
@@ -83,10 +83,10 @@ struct KernelAction {
 }
 
 /// The size of the kernel's signal set, which `rt_sigaction` wants as its last argument.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const KERNEL_SIGSET_SIZE: usize = size_of::<u64>();
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn get(signal: c_int) -> KernelAction {
     let mut action = MaybeUninit::<KernelAction>::zeroed();
     // SAFETY: a null new action only queries; `action` is valid for the kernel's structure to
@@ -105,7 +105,7 @@ fn get(signal: c_int) -> KernelAction {
     unsafe { action.assume_init() }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn set(signal: c_int, action: &KernelAction) {
     // SAFETY: `action` is a disposition this process had before, read by `get` with its
     // restorer; installing it gives the process nothing it did not already have.
