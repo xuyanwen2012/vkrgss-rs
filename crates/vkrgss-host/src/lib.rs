@@ -33,7 +33,6 @@ mod display;
 mod gamepad;
 mod headless;
 mod keys;
-mod overlay;
 mod raw;
 mod record;
 mod report;
@@ -57,14 +56,13 @@ pub use headless::{
     HostLink, headless_link, run_headless,
 };
 pub use keys::{KeyDefaults, KeyMap, MapError};
-pub use overlay::{Overlay, OverlayAction};
 pub use raw::{frame_pointer, mouse_key, virtual_key};
 pub use record::{InputSource, Recorder, Recording, RecordingError, Replayer};
 pub use report::{Reporter, Severity};
 pub use script::{InputScript, ScriptError, button_name};
 pub use session::{KeyAction, Session, SessionEnd, SessionOptions};
 pub use states::{ScheduleError, StateRequest, StateSchedule};
-pub use vkrgss_vk::{Filter, FrameTiming, OverlayImage};
+pub use vkrgss_vk::{Filter, FrameTiming};
 #[cfg(target_os = "android")]
 pub use windowed::run_windowed_on_android;
 pub use windowed::{Driver, WindowedError, WindowedOptions, initial_window_size, run_windowed};

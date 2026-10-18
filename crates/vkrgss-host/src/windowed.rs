@@ -13,10 +13,6 @@
 //!
 //! A run can be limited to a number of frames and write chosen frames as PNG files, as a
 //! headless run does, for the tests on a phone, which has no headless surface.
-//!
-//! An [`Overlay`] of the options gets the touches and the keys of the window, holds buttons
-//! and keys for them, and has its picture drawn over every frame shown, as the on-screen
-//! buttons of a phone are.
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -26,19 +22,18 @@ use std::time::Duration;
 
 use thiserror::Error;
 use vkrgss_proto::link::{GuestEnd, HostEnd, link};
-use vkrgss_proto::{BitmapId, FramePacket, FrameRate, FreezeRule, InputSnapshot, Size};
+use vkrgss_proto::{BitmapId, FramePacket, FrameRate, FreezeRule, Size};
 use vkrgss_vk::{
     DeviceChoice, Filter, FrameTiming, IntervalSummary, Mix, STATS_INTERVALS, VkCompositor, VkError,
 };
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
-use winit::event::{ElementState, MouseButton, TouchPhase, WindowEvent};
+use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopBuilder};
 use winit::keyboard::PhysicalKey;
 use winit::window::{Fullscreen, Window, WindowId};
 
 use crate::headless::write_png;
-use crate::overlay::{Overlay, OverlayAction};
 use crate::report::ErrorStream;
 use crate::{
     AudioOptions, AudioSink, Clock, Display, GamepadMap, Gamepads, InputSource, KeyAction, KeyMap,
@@ -87,8 +82,6 @@ pub struct WindowedOptions {
     /// them and holding what the window shows of that frame at the logical size, as a
     /// headless run writes it.
     pub dumps: Vec<(u64, PathBuf)>,
-    /// What is drawn over the game and driven by touches, such as on-screen buttons.
-    pub overlay: Option<Box<dyn Overlay>>,
 }
 
 impl WindowedOptions {
@@ -111,7 +104,6 @@ impl WindowedOptions {
             audio_errors: Box::new(std::io::stderr()),
             frames: None,
             dumps: Vec::new(),
-            overlay: None,
         }
     }
 }
@@ -429,52 +421,6 @@ struct Running {
     suspended: bool,
     /// Whether the guest was asked to quit because the frame limit was reached.
     limit_reached: bool,
-    overlay: Option<Box<dyn Overlay>>,
-    /// The buttons the overlay holds, which are held with those of the pads.
-    overlay_held: InputSnapshot,
-}
-
-impl Running {
-    /// Does what the overlay asks.
-    fn overlay_actions(&mut self, actions: Vec<OverlayAction>) {
-        for action in actions {
-            match action {
-                OverlayAction::Hold(held) => self.overlay_held = held,
-                OverlayAction::Key(code, pressed) => {
-                    let state = match pressed {
-                        true => ElementState::Pressed,
-                        false => ElementState::Released,
-                    };
-                    let action = self.driver.key(PhysicalKey::Code(code), state);
-                    act(&self.window, action);
-                }
-                OverlayAction::Quit => self.driver.close_requested(),
-            }
-        }
-        self.refresh_overlay();
-    }
-
-    /// Gives the compositor the overlay's picture when it has changed, and shows it.
-    fn refresh_overlay(&mut self) {
-        let Some(overlay) = &mut self.overlay else {
-            return;
-        };
-        let size = self.window.inner_size();
-        let size = Size::new(size.width, size.height);
-        if !overlay.changed(size) {
-            return;
-        }
-        let picture = overlay.picture(size);
-        let display = self.driver.session_mut().display_mut();
-        if let Err(error) = display.compositor.set_overlay(picture.as_ref()) {
-            tracing::error!("cannot draw the buttons over the game: {error}");
-        }
-        if !self.suspended
-            && let Err(error) = display.redraw()
-        {
-            tracing::error!("cannot redraw the window: {error}");
-        }
-    }
 }
 
 struct App {
@@ -552,18 +498,14 @@ impl App {
             ..SessionOptions::default()
         };
         let link = self.link.take().expect("the session starts once");
-        let mut running = Running {
+        Ok(Running {
             driver: Driver::new(Session::new(display, clock, options), link),
             clock,
             window,
             pads: Gamepads::open(self.options.pads.clone()),
             suspended: false,
             limit_reached: false,
-            overlay: self.options.overlay.take(),
-            overlay_held: InputSnapshot::EMPTY,
-        };
-        running.refresh_overlay();
-        Ok(running)
+        })
     }
 
     /// The window system took the window away: the surface goes and the session waits.
@@ -603,7 +545,6 @@ impl App {
             tracing::error!("cannot draw the window: {error}");
         }
         running.suspended = false;
-        running.refresh_overlay();
         tracing::info!("the window is back; the game goes on");
     }
 
@@ -618,13 +559,11 @@ impl App {
             return;
         }
         // The pads have no events of their own in this loop: they are read whenever it wakes,
-        // which is at least once per frame. The overlay's buttons are held with theirs.
-        let mut held = running
-            .pads
-            .as_mut()
-            .map_or(InputSnapshot::EMPTY, Gamepads::poll);
-        held.buttons |= running.overlay_held.buttons;
-        running.driver.session_mut().pad_buttons(held);
+        // which is at least once per frame.
+        if let Some(pads) = &mut running.pads {
+            let held = pads.poll();
+            running.driver.session_mut().pad_buttons(held);
+        }
         let mut next = running.driver.wake();
         if let Some(limit) = self.options.frames
             && !running.limit_reached
@@ -697,23 +636,8 @@ impl ApplicationHandler<GuestSpoke> for App {
         match event {
             WindowEvent::CloseRequested => running.driver.close_requested(),
             WindowEvent::KeyboardInput { event, .. } => {
-                if let Some(overlay) = &mut running.overlay {
-                    let actions = overlay.key(event.physical_key, event.state.is_pressed());
-                    running.overlay_actions(actions);
-                }
                 let action = running.driver.key(event.physical_key, event.state);
                 act(&running.window, action);
-            }
-            WindowEvent::Touch(touch) => {
-                // A touch answers a modal message, as a mouse press does.
-                if touch.phase == TouchPhase::Started {
-                    running.driver.click();
-                }
-                if let Some(overlay) = &mut running.overlay {
-                    let size = running.window.inner_size();
-                    let actions = overlay.touch(Size::new(size.width, size.height), &touch);
-                    running.overlay_actions(actions);
-                }
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 running.driver.mouse_button(button, state);
@@ -738,7 +662,6 @@ impl ApplicationHandler<GuestSpoke> for App {
                 if let Err(error) = display.redraw() {
                     tracing::error!("cannot redraw the window: {error}");
                 }
-                running.refresh_overlay();
             }
             WindowEvent::RedrawRequested => {
                 if let Err(error) = running.driver.session_mut().display_mut().redraw() {

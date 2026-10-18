@@ -805,25 +805,10 @@ adb shell am start -n io.github.xuyanwen2012.vkrgss/.VkrgssActivity \
 The library writes its log to `files/library.log` and logcat; it says where each row of the
 list lies, so that a test can tap it with `adb shell input tap`.
 
-### Buttons and gamepads
+### Keys
 
-Over a game the app draws buttons at the sides of the picture, translucent, beside the
-letterbox where the screen is wider than the game: on the left a direction pad, L and a
-menu button; on the right C, B and A under Y, X and Z, as a gamepad's buttons lie, and F3,
-F4 and R. Each finger holds what is under it, so several buttons can be held at once, and a
-finger that slides onto another button lets go of the first; on the pad a finger holds the
-direction it points to from the pad's centre, two at once on a diagonal. The buttons of
-`Input` are held as a gamepad's are. F3 saves a state and F4 loads it, as the keys do on the
-desktop. The menu button asks the game to quit, as closing the window does, when the finger
-lifts on it. A tap also answers a message panel. The buttons are drawn over the picture
-shown and never into a frame written with `dump`, which stays that of the desktop.
-
-A gamepad's buttons arrive as Android's key events `KEYCODE_BUTTON_*` and hold the buttons
-of `Input` they hold on the desktop (*Gamepads*): A, the bottom button, holds C, B holds B,
-X holds A, Y holds X, the shoulders hold L and R, Start holds C and Select holds B; its
-directional pad arrives as the arrow keys.
-A gamepad's key hides the on-screen buttons until the screen is touched again
-(`adb shell input gamepad keyevent KEYCODE_BUTTON_A` shows it without a gamepad).
+There are no on-screen buttons yet, and the key events of a gamepad hold no button: a game is
+played with a keyboard or the keys winit receives, mapped as on the desktop.
 
 F3 and F4 of a keyboard, or `adb shell input keyevent KEYCODE_F3` and `KEYCODE_F4`, save and
 load states too, with Shift they choose one of ten slots, as on the desktop; there are no
@@ -841,8 +826,8 @@ the options of the run with the keys and the formats of the configuration file o
 (*Configuration files*), and with paths relative to that directory. It is the only
 configuration file and takes only these keys: `rtp`, `builtin_scripts`, `font_dirs`,
 `audio`, `soundfont`, `seed`, `debug`, `log_p`, `frames`, `input` and `dump`; another key is
-an error that names it. With `input` the buttons follow the script frame by frame, with
-whatever the on-screen buttons hold on top, and with `dump` the frames named are written as
+an error that names it. With `input` the buttons follow the script frame by frame, whatever
+the keys do, and with `dump` the frames named are written as
 PNG files of the logical size, numbered and drawn as in a headless run, so they can be
 compared with those of `vkrgss --guest thread --headless`. Without `builtin_scripts` the
 built-in scripts file of the game's runtime is read from the external files directory. The

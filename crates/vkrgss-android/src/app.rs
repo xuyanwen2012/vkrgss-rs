@@ -1,6 +1,6 @@
 //! `android_main`: the steps of the crate's documentation.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::mpsc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -16,7 +16,6 @@ use vkrgss_proto::link::GuestEnd;
 use vkrgss_vfs::{GameIni, Runtime};
 use winit::platform::android::activity::{AndroidApp, MainEvent, PollEvent};
 
-use crate::buttons::TouchButtons;
 use crate::input::ScriptedInput;
 use crate::java::Activity;
 use crate::library::Library;
@@ -202,10 +201,6 @@ fn run(app: AndroidApp, game_dir: &Path, files: &Path, private: &Path) -> Result
         states: true,
         frames: options.frames,
         dumps: options.dumps,
-        overlay: Some(Box::new(TouchButtons::new(
-            frame,
-            vec![PathBuf::from(SYSTEM_FONTS)],
-        ))),
         ..WindowedOptions::new(Default::default())
     };
     // The windowed runner returns once the guest thread, the relay, has ended.

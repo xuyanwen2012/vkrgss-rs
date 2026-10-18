@@ -61,21 +61,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   gives the frames of the desktop on both phones), F3 and F4 save and load states, and when
   the app ends or is ended the guest and its parked copies end too. The app no longer
   starts an interpreter in its own process.
-- On Android a player imports games and plays them by touch or with a gamepad. The app
-  opens on a library that it draws itself: the imported games by title, the last one played
+- On Android a player imports games without adb. The app opens on a library that it draws
+  itself: the imported games by title, the last one played
   first, and "Import", "Import RTP" and "Delete". "Import" opens the system's file picker
   for a zip, which is unpacked into a directory of its own in the app's private storage,
   one level down when its top level is one directory with `Game.ini`; names are UTF-8 or,
   failing that, GBK, Shift-JIS or Big5 as for `Game.ini`, and a zip with a path that would
   leave the directory is refused before anything is written. A run-time package is imported
   the same way and named `Standard`, `RPGVX` or `RPGVXAce` by its folders. A game runs in an
-  activity and a process of its own, with translucent buttons beside the picture: a
-  direction pad, C, B, A, X, Y, Z, L, R, F3, F4 and a menu button that quits the game, with
-  several fingers at once. The buttons are never in a dumped frame: holding the on-screen
-  down button gives the frame of the desktop run with the same down key on both phones.
-  The keys of a gamepad hold the buttons a gamepad holds on the desktop and hide the
-  on-screen buttons until the screen is touched again. The APK now has one small Java class,
-  compiled by `cargo xtask apk` with the JDK and `d8`, still without Gradle.
+  activity and a process of its own and is still played with a keyboard; the presenter can
+  draw a picture of the app's over the frame, never into a dumped frame. The APK now has one
+  small Java class, compiled by `cargo xtask apk` with the JDK and `d8`, still without
+  Gradle.
 
 - aarch64 Linux is supported (milestone P1): on the owner's Jetson Orin Nano the compared
   frames and saves of the XP, VX and VX Ace games equal those of x86_64 byte for byte, and the
