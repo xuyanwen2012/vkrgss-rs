@@ -16,7 +16,7 @@
 //! - `VkrgssActivity$Game`, a game, whose directory the intent names, or the directory `game`
 //!   of the app's external files directory when it names none (the game of tests, filled by
 //!   `adb push`). It runs the game as `vkrgss` does in a window, with the guest in a process of
-//!   its own and on-screen buttons over it, and ends with the game; the library
+//!   its own and on-screen buttons over it ([`buttons`]), and ends with the game; the library
 //!   comes back.
 //!
 //! A game runs in these steps:
@@ -56,6 +56,7 @@
 //! it checks of a game before the guest process starts, and the linker leaves the
 //! interpreter out.
 
+pub mod buttons;
 pub mod canvas;
 pub mod input;
 pub mod library;

@@ -10,7 +10,7 @@
 
 ## 3. Touch and gamepad
 
-- [ ] 3.1 The overlay, multi-touch mapping, gamepad hiding. Verify: scenarios "Buttons move the player" and "Gamepad hides the buttons" on both phones.
+- [x] 3.1 The overlay, multi-touch mapping, gamepad hiding. Verify: scenarios "Buttons move the player" and "Gamepad hides the buttons" on both phones.
 
 ## 4. Documents
 
