@@ -168,6 +168,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- The `vkrgss.toml` of a game on Android takes `font_own_metrics`, as the command line's
+  `--font-own-metrics`, which it refused before.
+- `Font.exist?("Arial")` is true on Android: the substitution lists of the sans, serif and
+  monospace families of Windows end with `Roboto`, `Noto Serif` and `Droid Sans Mono`,
+  which Android ships, after the families of Linux.
+- `cargo xtask oracle` gives each file of its copy of a game the times of its source on
+  every platform, and the files it writes there a fixed time; before, the copy kept them on
+  macOS and renewed them on Linux, so a game that loads its newest save loaded another one.
+
 - `Math` of Ruby 1.8.7 raises the same errors on every platform and C library, those of
   glibc 2.43: the functions of CORE-MATH set `errno` themselves, so that, for one,
   `Math.atanh` of a subnormal float raises `Errno::ERANGE` on Android and with glibc 2.42 or

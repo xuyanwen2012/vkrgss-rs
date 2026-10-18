@@ -24,6 +24,7 @@ struct File {
     rtp: BTreeMap<String, PathBuf>,
     builtin_scripts: Option<PathBuf>,
     font_dirs: Option<Vec<PathBuf>>,
+    font_own_metrics: Option<bool>,
     audio: Option<bool>,
     soundfont: Option<PathBuf>,
     seed: Option<u64>,
@@ -43,6 +44,9 @@ pub struct Options {
     pub builtin_scripts: Option<PathBuf>,
     /// Font directories, searched before those of the system.
     pub font_dirs: Vec<PathBuf>,
+    /// Whether a font that replaces another keeps its own line box, as
+    /// `--font-own-metrics` says on the command line.
+    pub font_own_metrics: bool,
     /// Whether the run plays no sound.
     pub no_audio: bool,
     pub soundfont: Option<PathBuf>,
@@ -98,6 +102,7 @@ impl Options {
                 .iter()
                 .map(|path| dir.join(path))
                 .collect(),
+            font_own_metrics: file.font_own_metrics == Some(true),
             no_audio: file.audio == Some(false),
             soundfont: file.soundfont.map(|path| dir.join(path)),
             seed: file.seed,
@@ -156,6 +161,7 @@ mod tests {
         let text = r#"
             builtin_scripts = "../rpg_builtin.rb"
             font_dirs = ["fonts"]
+            font_own_metrics = true
             audio = false
             seed = 7
             frames = 91
@@ -171,6 +177,7 @@ mod tests {
                 rtps: [("Standard".to_owned(), dir.join("rtp"))].into(),
                 builtin_scripts: Some(dir.join("../rpg_builtin.rb")),
                 font_dirs: vec![dir.join("fonts")],
+                font_own_metrics: true,
                 no_audio: true,
                 seed: Some(7),
                 frames: Some(91),

@@ -882,8 +882,8 @@ files directory, `/sdcard/Android/data/io.github.xuyanwen2012.vkrgss/files/game/
 the options of the run with the keys and the formats of the configuration file of a game
 (*Configuration files*), and with paths relative to that directory. It is the only
 configuration file and takes only these keys: `rtp`, `builtin_scripts`, `font_dirs`,
-`audio`, `soundfont`, `seed`, `debug`, `log_p`, `frames`, `input` and `dump`; another key is
-an error that names it. With `input` the buttons follow the script frame by frame, with
+`font_own_metrics`, `audio`, `soundfont`, `seed`, `debug`, `log_p`, `frames`, `input` and
+`dump`; another key is an error that names it. With `input` the buttons follow the script frame by frame, with
 whatever the on-screen buttons hold on top, and with `dump` the frames named are written as
 PNG files of the logical size, numbered and drawn as in a headless run, so they can be
 compared with those of `vkrgss --guest thread --headless`. Without `builtin_scripts` the

@@ -6,7 +6,7 @@
 
 ## 2. Android options and fonts
 
-- [ ] 2.1 `font_own_metrics`; the Android families in the substitution lists. Verify: scenario "Arial on Android" on both phones; the text tests pass on Linux.
+- [x] 2.1 `font_own_metrics`; the Android families in the substitution lists. Verify: scenario "Arial on Android" on both phones; the text tests pass on Linux.
 
 ## 3. The strip
 

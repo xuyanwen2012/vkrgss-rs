@@ -52,6 +52,16 @@
   tower of `xarch`, which is the game directory itself with its original times, is the one
   whose loaded save changes.
 
+### Android options and fonts (task 2.1)
+
+- `/system/fonts` of both phones (Pixel 7a on Android 17, Galaxy S24+ on Android 16) holds
+  `Roboto` (`Roboto-Regular.ttf`, a variable font whose file differs between the two),
+  `Noto Serif` and `Droid Sans Mono` (the same files on both), none of the Linux families of
+  the lists. They end the lists of the sans, serif and monospace families, so Linux and
+  macOS resolve as before.
+- A generated game of RGSS2 and one of RGSS3 that write `Font.exist?("Arial")` into a file
+  wrote `true` on both phones, with the APK of this branch.
+
 ## Out of scope
 
 iOS, release builds, changing what the original runtime does.

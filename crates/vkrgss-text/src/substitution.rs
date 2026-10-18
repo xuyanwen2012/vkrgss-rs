@@ -3,23 +3,29 @@
 use std::collections::{HashMap, HashSet};
 
 /// Built-in substitutions: the names that share a replacement list, then the list. All
-/// replacements are openly licensed families commonly packaged for Linux.
+/// replacements are openly licensed families commonly packaged for Linux; the lists of the
+/// sans, serif and monospace families end with one that Android ships in `/system/fonts`.
 const BUILT_IN: &[(&[&str], &[&str])] = &[
     (
         &["Arial", "Helvetica"],
-        &["Liberation Sans", "Arimo", "DejaVu Sans"],
+        &["Liberation Sans", "Arimo", "DejaVu Sans", "Roboto"],
     ),
     (
         &["Tahoma", "Verdana", "Segoe UI", "Trebuchet MS"],
-        &["DejaVu Sans", "Liberation Sans", "Noto Sans"],
+        &["DejaVu Sans", "Liberation Sans", "Noto Sans", "Roboto"],
     ),
     (
         &["Times New Roman", "Times", "Georgia"],
-        &["Liberation Serif", "Tinos", "DejaVu Serif"],
+        &["Liberation Serif", "Tinos", "DejaVu Serif", "Noto Serif"],
     ),
     (
         &["Courier New", "Courier", "Consolas", "Lucida Console"],
-        &["Liberation Mono", "Cousine", "DejaVu Sans Mono"],
+        &[
+            "Liberation Mono",
+            "Cousine",
+            "DejaVu Sans Mono",
+            "Droid Sans Mono",
+        ],
     ),
     (
         &["MS Gothic", "ＭＳ ゴシック", "MS UI Gothic"],

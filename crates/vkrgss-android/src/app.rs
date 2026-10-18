@@ -159,6 +159,7 @@ fn run(
                 .unwrap_or_else(|| files.join(builtin_scripts_name(runtime))),
         ),
         font_dirs,
+        font_own_metrics: options.font_own_metrics,
         debug: options.debug,
         log_p: options.log_p,
         ..GuestSettings::default()
