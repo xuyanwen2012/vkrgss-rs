@@ -6,7 +6,7 @@
 
 ## 2. Import and library
 
-- [ ] 2.1 Unpacking, the rules, the library screen, the RTP import. Verify: scenarios "Import a zip" and "A path that leaves the directory" (unit tests and on both phones through an intent extra).
+- [x] 2.1 Unpacking, the rules, the library screen, the RTP import. Verify: scenarios "Import a zip" and "A path that leaves the directory" (unit tests and on both phones through an intent extra).
 
 ## 3. Touch and gamepad
 

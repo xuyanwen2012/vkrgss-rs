@@ -376,3 +376,298 @@ fn extract(file: &mut File, entry: &Entry, path: &Path) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use flate2::Compression;
+    use flate2::write::DeflateEncoder;
+
+    use super::*;
+
+    /// One entry of a zip that [`zip`] writes: its stored name, its flags and its contents,
+    /// or `None` for a directory.
+    pub(crate) struct Item<'a> {
+        pub(crate) name: &'a [u8],
+        pub(crate) flags: u16,
+        pub(crate) contents: Option<&'a [u8]>,
+    }
+
+    pub(crate) fn file<'a>(name: &'a str, contents: &'a [u8]) -> Item<'a> {
+        Item {
+            name: name.as_bytes(),
+            flags: FLAG_UTF8,
+            contents: Some(contents),
+        }
+    }
+
+    /// The bytes of a zip of `items`, files deflated or, every other one, stored.
+    pub(crate) fn zip(items: &[Item<'_>]) -> Vec<u8> {
+        let mut out = Vec::new();
+        let mut directory = Vec::new();
+        for (index, item) in items.iter().enumerate() {
+            let contents = item.contents.unwrap_or_default();
+            let method: u16 = if index % 2 == 0 && item.contents.is_some() {
+                8
+            } else {
+                0
+            };
+            let packed = match method {
+                8 => {
+                    let mut encoder = DeflateEncoder::new(Vec::new(), Compression::default());
+                    encoder.write_all(contents).unwrap();
+                    encoder.finish().unwrap()
+                }
+                _ => contents.to_vec(),
+            };
+            let mut crc = flate2::Crc::new();
+            crc.update(contents);
+            let offset = out.len() as u32;
+            let fields = |out: &mut Vec<u8>| {
+                out.extend_from_slice(&item.flags.to_le_bytes());
+                out.extend_from_slice(&method.to_le_bytes());
+                out.extend_from_slice(&[0; 4]);
+                out.extend_from_slice(&crc.sum().to_le_bytes());
+                out.extend_from_slice(&(packed.len() as u32).to_le_bytes());
+                out.extend_from_slice(&(contents.len() as u32).to_le_bytes());
+                out.extend_from_slice(&(item.name.len() as u16).to_le_bytes());
+                out.extend_from_slice(&0u16.to_le_bytes());
+            };
+            out.extend_from_slice(&LOCAL_HEADER.to_le_bytes());
+            out.extend_from_slice(&20u16.to_le_bytes());
+            fields(&mut out);
+            out.extend_from_slice(item.name);
+            out.extend_from_slice(&packed);
+
+            directory.extend_from_slice(&CENTRAL_HEADER.to_le_bytes());
+            directory.extend_from_slice(&20u16.to_le_bytes());
+            directory.extend_from_slice(&20u16.to_le_bytes());
+            fields(&mut directory);
+            // No comment, disk 0, no internal attributes.
+            directory.extend_from_slice(&[0; 6]);
+            let external: u32 = if item.contents.is_none() { 0x10 } else { 0 };
+            directory.extend_from_slice(&external.to_le_bytes());
+            directory.extend_from_slice(&offset.to_le_bytes());
+            directory.extend_from_slice(item.name);
+        }
+        let directory_offset = out.len() as u32;
+        out.extend_from_slice(&directory);
+        out.extend_from_slice(&END.to_le_bytes());
+        out.extend_from_slice(&[0; 4]);
+        out.extend_from_slice(&(items.len() as u16).to_le_bytes());
+        out.extend_from_slice(&(items.len() as u16).to_le_bytes());
+        out.extend_from_slice(&(directory.len() as u32).to_le_bytes());
+        out.extend_from_slice(&directory_offset.to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes());
+        out
+    }
+
+    /// Writes a zip of `items` into `dir` and unpacks it into `dir/out`.
+    fn unpacked(dir: &Path, items: &[Item<'_>], kind: Kind) -> Result<PathBuf> {
+        let path = dir.join("in.zip");
+        fs::write(&path, zip(items)).unwrap();
+        let target = dir.join("out");
+        unpack(&path, &target, kind).map(|()| target)
+    }
+
+    /// Every file below `dir`, as relative paths with forward slashes, and its contents.
+    fn listing(dir: &Path) -> Vec<(String, Vec<u8>)> {
+        let mut files = Vec::new();
+        let mut pending = vec![dir.to_owned()];
+        while let Some(next) = pending.pop() {
+            for entry in fs::read_dir(next).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    pending.push(path);
+                } else {
+                    let name = path.strip_prefix(dir).unwrap().to_string_lossy();
+                    files.push((name.replace('\\', "/"), fs::read(&path).unwrap()));
+                }
+            }
+        }
+        files.sort();
+        files
+    }
+
+    /// Scenario "Import a zip", for the unpacking: the one directory at the top is left out.
+    #[test]
+    fn a_game_in_one_directory_is_unpacked_one_level_down() {
+        let dir = tempfile::tempdir().unwrap();
+        let ini = b"[Game]\r\nTitle=Demo\r\n".as_slice();
+        let target = unpacked(
+            dir.path(),
+            &[
+                Item {
+                    name: b"Demo/",
+                    flags: 0,
+                    contents: None,
+                },
+                file("Demo/Game.ini", ini),
+                file("Demo/Data\\Map001.rxdata", b"map"),
+                file("Demo/Graphics/Pictures/a.png", &[7; 3000]),
+            ],
+            Kind::Game,
+        )
+        .unwrap();
+        assert_eq!(
+            listing(&target),
+            [
+                ("Data/Map001.rxdata".to_owned(), b"map".to_vec()),
+                ("Game.ini".to_owned(), ini.to_vec()),
+                ("Graphics/Pictures/a.png".to_owned(), vec![7; 3000]),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_zip_with_the_game_at_its_top_or_more_at_the_top_keeps_its_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = unpacked(
+            dir.path(),
+            &[file("Game.ini", b"[Game]"), file("Data/x", b"x")],
+            Kind::Game,
+        )
+        .unwrap();
+        assert_eq!(listing(&target).len(), 2);
+        assert!(target.join("Game.ini").is_file());
+
+        // Two directories at the top, or one without `Game.ini`: nothing is left out.
+        for (index, items) in [
+            vec![file("A/Game.ini", b""), file("B/x", b"")],
+            vec![file("A/x", b""), file("A/Data/Game.ini", b"")],
+            vec![file("A/Game.ini", b""), file("readme.txt", b"")],
+        ]
+        .iter()
+        .enumerate()
+        {
+            let dir = dir.path().join(index.to_string());
+            fs::create_dir(&dir).unwrap();
+            let target = unpacked(&dir, items, Kind::Game).unwrap();
+            assert!(!target.join("Game.ini").exists(), "{index}");
+        }
+    }
+
+    #[test]
+    fn an_rtp_in_one_directory_is_unpacked_one_level_down() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = unpacked(
+            dir.path(),
+            &[
+                file("Standard/Graphics/Titles/t.png", b"t"),
+                file("Standard/Audio/BGM/b.mid", b"b"),
+            ],
+            Kind::Rtp,
+        )
+        .unwrap();
+        assert!(target.join("Graphics/Titles/t.png").is_file());
+        assert!(target.join("Audio/BGM/b.mid").is_file());
+        // A zip of the RTP's folders themselves.
+        let dir = dir.path().join("top");
+        fs::create_dir(&dir).unwrap();
+        let target = unpacked(&dir, &[file("Graphics/Titles/t.png", b"t")], Kind::Rtp).unwrap();
+        assert!(target.join("Graphics/Titles/t.png").is_file());
+    }
+
+    /// Scenario "A path that leaves the directory".
+    #[test]
+    fn a_path_that_leaves_the_directory_refuses_the_zip_and_writes_nothing() {
+        for name in [
+            "../escape.txt",
+            "Game/../../escape.txt",
+            "..\\escape.txt",
+            "/escape.txt",
+            "\\escape.txt",
+            "C:/escape.txt",
+            "c:escape.txt",
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let error = unpacked(
+                dir.path(),
+                &[file("Game.ini", b"[Game]"), file(name, b"out")],
+                Kind::Game,
+            )
+            .unwrap_err();
+            assert!(
+                error.to_string().contains("leaves its directory"),
+                "{name}: {error}"
+            );
+            assert!(!dir.path().join("out").exists(), "{name}");
+            assert!(!dir.path().join("escape.txt").exists(), "{name}");
+            assert!(!dir.path().parent().unwrap().join("escape.txt").exists());
+        }
+        // A part that merely starts with dots stays inside.
+        let dir = tempfile::tempdir().unwrap();
+        let target = unpacked(dir.path(), &[file("..x/.y", b"in")], Kind::Game).unwrap();
+        assert!(target.join("..x/.y").is_file());
+    }
+
+    #[test]
+    fn names_are_utf8_or_else_the_first_legacy_encoding_that_reads_them_all() {
+        let (gbk, _, _) = encoding_rs::GBK.encode("群战示范工程/Game.ini");
+        let (sjis, _, _) = encoding_rs::SHIFT_JIS.encode("ゲーム/Data/ｶ.rxdata");
+        let cases: [(&[u8], u16, &str); 4] = [
+            ("日本語.txt".as_bytes(), 0, "日本語.txt"),
+            ("日本語.txt".as_bytes(), FLAG_UTF8, "日本語.txt"),
+            (&gbk, 0, "群战示范工程/Game.ini"),
+            (&sjis, 0, "ゲーム/Data/ｶ.rxdata"),
+        ];
+        for (raw, flags, expected) in cases {
+            let entry = Entry {
+                raw_name: raw.to_vec(),
+                flags,
+                method: 0,
+                crc: 0,
+                compressed: 0,
+                size: 0,
+                offset: 0,
+                made_by: 0,
+                external: 0,
+            };
+            assert_eq!(decode_names(&[entry]).unwrap(), [expected]);
+        }
+        // A half-width katakana before a full stop is not valid GBK, so GBK does not read
+        // the name; a name flagged as UTF-8 keeps its own encoding.
+        let dir = tempfile::tempdir().unwrap();
+        let target = unpacked(
+            dir.path(),
+            &[
+                Item {
+                    name: &sjis,
+                    flags: 0,
+                    contents: Some(b"kana"),
+                },
+                file("ゲーム/Game.ini", b"[Game]"),
+            ],
+            Kind::Game,
+        )
+        .unwrap();
+        assert_eq!(fs::read(target.join("Data/ｶ.rxdata")).unwrap(), b"kana");
+        assert!(target.join("Game.ini").is_file());
+    }
+
+    #[test]
+    fn damaged_encrypted_and_unknown_entries_are_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("in.zip");
+        fs::write(&path, b"not a zip at all").unwrap();
+        let error = unpack(&path, &dir.path().join("a"), Kind::Game).unwrap_err();
+        assert!(error.to_string().contains("not a zip"), "{error}");
+
+        // A changed byte of the contents fails the checksum.
+        let mut bytes = zip(&[file("x", b"stored contents"), file("y", b"plain")]);
+        let at = bytes.windows(5).position(|w| w == b"plain").unwrap();
+        bytes[at] = b'P';
+        fs::write(&path, &bytes).unwrap();
+        let error = unpack(&path, &dir.path().join("b"), Kind::Game).unwrap_err();
+        assert!(format!("{error:#}").contains("damaged"), "{error:#}");
+
+        let encrypted = zip(&[Item {
+            name: b"x",
+            flags: FLAG_ENCRYPTED,
+            contents: Some(b"x"),
+        }]);
+        fs::write(&path, encrypted).unwrap();
+        let error = unpack(&path, &dir.path().join("c"), Kind::Game).unwrap_err();
+        assert!(error.to_string().contains("encrypted"), "{error}");
+        assert!(!dir.path().join("c").exists());
+    }
+}

@@ -225,3 +225,131 @@ impl Library {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::unpack::tests::{file, zip};
+
+    fn write_zip(dir: &Path, name: &str, items: &[crate::unpack::tests::Item<'_>]) -> PathBuf {
+        let path = dir.join(name);
+        fs::write(&path, zip(items)).unwrap();
+        path
+    }
+
+    /// Scenario "Import a zip": the game is listed under the title of its `Game.ini` and its
+    /// directory is the game directory.
+    #[test]
+    fn an_imported_game_is_listed_under_its_title() {
+        let root = tempfile::tempdir().unwrap();
+        let library = Library::new(root.path());
+        assert!(library.games().is_empty());
+        let (title, _, _) = encoding_rs::GBK
+            .encode("[Game]\r\nScripts=Data\\Scripts.rxdata\r\nTitle=群战示范工程\r\n");
+        let zip = write_zip(
+            root.path(),
+            "a.zip",
+            &[
+                file("群战示范工程/Game.ini", &title),
+                file("群战示范工程/Data/Scripts.rxdata", b"s"),
+            ],
+        );
+        let imported = library.import(&zip, Kind::Game).unwrap();
+        let game = Game {
+            id: 1,
+            dir: root.path().join("games/1"),
+            title: "群战示范工程".to_owned(),
+        };
+        assert_eq!(imported, Imported::Game(game.clone()));
+        assert_eq!(library.games(), std::slice::from_ref(&game));
+        assert!(game.dir.join("Data/Scripts.rxdata").is_file());
+        assert!(!root.path().join("games/.import").exists());
+
+        // The next one gets the next number and comes first until one is played.
+        let zip = write_zip(
+            root.path(),
+            "b.zip",
+            &[file(
+                "Game.ini",
+                b"[Game]\r\nScripts=Data\\Scripts.rxdata\r\n",
+            )],
+        );
+        library.import(&zip, Kind::Game).unwrap();
+        let titles = |library: &Library| -> Vec<String> {
+            library.games().into_iter().map(|game| game.title).collect()
+        };
+        assert_eq!(titles(&library), ["Game 2", "群战示范工程"]);
+        library.play(1).unwrap();
+        assert_eq!(titles(&library), ["群战示范工程", "Game 2"]);
+        library.play(2).unwrap();
+        assert_eq!(titles(&library), ["Game 2", "群战示范工程"]);
+        library.delete(2).unwrap();
+        assert_eq!(titles(&library), ["群战示范工程"]);
+        assert!(!root.path().join("games/2").exists());
+    }
+
+    /// Scenario "A path that leaves the directory", for the library.
+    #[test]
+    fn a_refused_zip_leaves_nothing_behind() {
+        let root = tempfile::tempdir().unwrap();
+        let library = Library::new(root.path());
+        let zip = write_zip(
+            root.path(),
+            "bad.zip",
+            &[file("Game.ini", b"[Game]"), file("../escape.txt", b"x")],
+        );
+        let error = library.import(&zip, Kind::Game).unwrap_err();
+        assert!(error.to_string().contains("leaves"), "{error}");
+        assert!(library.games().is_empty());
+        assert_eq!(
+            fs::read_dir(root.path().join("games")).unwrap().count(),
+            0,
+            "nothing is left in the games directory"
+        );
+        assert!(!root.path().join("escape.txt").exists());
+
+        let zip = write_zip(root.path(), "none.zip", &[file("readme.txt", b"x")]);
+        let error = library.import(&zip, Kind::Game).unwrap_err();
+        assert!(error.to_string().contains("no Game.ini"), "{error}");
+        assert_eq!(fs::read_dir(root.path().join("games")).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn a_run_time_package_is_named_by_its_folders_and_replaced_by_a_later_import() {
+        let root = tempfile::tempdir().unwrap();
+        let library = Library::new(root.path());
+        for (folder, name) in [
+            ("Autotiles", "Standard"),
+            ("System", "RPGVX"),
+            ("Battlebacks1", "RPGVXAce"),
+        ] {
+            let path = format!("RTP/Graphics/{folder}/x.png");
+            let zip = write_zip(root.path(), "rtp.zip", &[file(&path, b"1")]);
+            assert_eq!(
+                library.import(&zip, Kind::Rtp).unwrap(),
+                Imported::Rtp(name.to_owned())
+            );
+        }
+        let rtps = library.rtps();
+        assert_eq!(
+            rtps.keys().collect::<Vec<_>>(),
+            ["RPGVX", "RPGVXAce", "Standard"]
+        );
+        assert!(rtps["Standard"].join("Graphics/Autotiles/x.png").is_file());
+
+        let zip = write_zip(
+            root.path(),
+            "rtp.zip",
+            &[file("Graphics/Autotiles/y.png", b"2")],
+        );
+        library.import(&zip, Kind::Rtp).unwrap();
+        let standard = &library.rtps()["Standard"];
+        assert!(standard.join("Graphics/Autotiles/y.png").is_file());
+        assert!(!standard.join("Graphics/Autotiles/x.png").exists());
+
+        let zip = write_zip(root.path(), "rtp.zip", &[file("Audio/BGM/a.mid", b"3")]);
+        let error = library.import(&zip, Kind::Rtp).unwrap_err();
+        assert!(error.to_string().contains("no run-time package"), "{error}");
+        assert_eq!(library.rtps().len(), 3);
+    }
+}
