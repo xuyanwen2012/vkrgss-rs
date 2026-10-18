@@ -2,7 +2,7 @@
 
 ## 1. Oracle file times
 
-- [ ] 1.1 Times of the copy and of the probe's files; test. Verify: scenario "Times of the copy" (unit test on Linux); `ref/tools/oracle/regress.sh` comparisons on x86 still pass, tower's new summary recorded.
+- [x] 1.1 Times of the copy and of the probe's files; test. Verify: scenario "Times of the copy" (unit test on Linux); `ref/tools/oracle/regress.sh` comparisons on x86 still pass, tower's new summary recorded.
 
 ## 2. Android options and fonts
 

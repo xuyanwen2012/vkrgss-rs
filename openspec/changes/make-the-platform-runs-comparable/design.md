@@ -121,3 +121,9 @@ iOS, release builds, changing what the original runtime does.
   make / slave: Operation not permitted" before Wine starts. The comparisons with the
   original runtime on x86 are to be run by the owner's session (`ref/tools/oracle/regress.sh`
   on this branch); task 1.1 stays unticked until they pass.
+
+## Checked at the merge (owner's session, 2026-10-18)
+
+- `ref/tools/oracle/regress.sh` on x86 at `226b6fda` (this change merged): all seven XP games
+  give the same summaries as the baseline in `wt/base` (tower included), and the two VX Ace
+  games equal the runs of 2026-10-14, their saves byte for byte equal to the original's.
