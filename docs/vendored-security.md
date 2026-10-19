@@ -198,7 +198,8 @@ code that Oniguruma got after 5.9.6 and that is not in the vendored tree.
 The first runs of the targets of Ruby 1.8.7, `marshal`, `parse` and `regex` (`openspec` change
 `fuzz-the-interpreter-and-review-fixes`, section "Checked" of its `design.md`) found the
 defects of the first rows of the table above again, and these, which no published fix
-names; the runs of the change `make-the-nightly-checks-pass` found the last two. Each is a
+names; the runs of the change `make-the-nightly-checks-pass` found the two after them, and
+the nightly run 39110302699 the last (change `fix-the-nightly-fuzz-findings`). Each is a
 recorded patch, and its input is a test (`crates/vkrgss-ruby-sys/fuzz/fixed/`).
 
 | Tree | Code | Defect | Patch |
@@ -213,6 +214,7 @@ recorded patch, and its input is a test (`crates/vkrgss-ruby-sys/fuzz/fixed/`).
 | Oniguruma | `regexec.c`: `match_at`, `OP_PUSH_OR_JUMP_EXACT1`, `OP_PUSH_IF_PEEK_NEXT` | the subject is read before its end is checked | 7 |
 | Ruby | `parse.y`: the lexer of numbers | a number with `_` before `.`, as `1_.`, leaves its token without a terminator, and the token is read past the end of its buffer after the syntax error | 40, 41 |
 | Ruby | `parse.y`: the lexer at `__END__` | the line of `__END__` is no longer kept from the collector while the lexer points into it, and a syntax error at the end of the script copies it from freed memory if the error collects | 42, 43 |
+| Ruby | `parse.y`: `local_push`, `yycompile` | after a syntax error in the arguments of a `def` in a block, the end of the script restores block variables that the collector may have freed and handed out again, and `yycompile` puts their slots on the free list: a slot is on it twice, or a live object is (`gc.c:456`, the head of the free list inside another object) | 46, 47 |
 
 What is known and not fixed: Oniguruma takes a pattern and a subject to be valid in their
 encoding. Upstream never changed that; it tells the caller to check. The patches above make
@@ -221,12 +223,14 @@ bytes that is no character of the encoding can still be read a few bytes past a 
 elsewhere, in Shift_JIS and EUC-JP in particular, which the fuzz targets do not select.
 The original runtime has the same engine with the same assumption.
 
-Also not fixed: the nightly run of the target `parse` reported once that a method was
-looked up on a class that was no class (`eval.c:496`, `search_method`), and a later run
-that the collector's free list was corrupted (`gc.c:456`). Neither input fails on its own,
-and the defect is not found yet; the change `make-the-nightly-checks-pass` lists what is
-known under "Follow-ups" of its `design.md`. Both reports came from scripts with syntax
-errors.
+The nightly runs of the target `parse` reported twice that the collector's free list was
+corrupted (`gc.c:456`), and once that a method was looked up on a class that was no class
+(`eval.c:496`, `search_method`), all from scripts with syntax errors. The row of patches 46
+and 47 is the cause found for the first: its input reports the same at `gc.c:456` after a
+few compilations in one process. The saved inputs of those reports pass on their own, with
+or without the fix, as the state left by the inputs before them was not saved; a slot
+handed out twice also explains a class that is no class, but that is not shown. The change
+`fix-the-nightly-fuzz-findings` says what was tried under "Follow-ups" of its `design.md`.
 
 ## Ruby 1.9.2-p0
 

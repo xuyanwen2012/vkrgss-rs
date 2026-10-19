@@ -41,6 +41,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the lexer's buffer, and a script with `__END__` after an open `module` could copy its
   last line from freed memory; in Ruby 1.9.2 `(A::B += p 1)..1`, and `=~` after a word list
   that is no valid UTF-8, ended the process.
+- The nightly fuzz run of the parser of Ruby 1.8.7 found that a `def` with a syntax error in
+  its arguments, inside a block, as `[1].each { def m(&b,) 1 }`, could make the compiler put
+  objects on the collector's free list twice or while they were still in use, so that a
+  later allocation ended the process or handed out an object that was still in use.
+  vkrgss now fixes it.
 
 ### Added
 
