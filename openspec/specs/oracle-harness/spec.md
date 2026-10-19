@@ -337,3 +337,11 @@ answers `Input` from its model of the schedule on both sides.
 #### Scenario: One text
 - **WHEN** the probe of RGSS3 is generated for both sides with the same schedule and frames
 - **THEN** the two texts differ only in the line that names the side, and every byte of both is below 128
+
+### Requirement: The copy of a game keeps its file times
+The oracle SHALL give every file of its copy of a game the modification time of its source, and
+the files it writes itself a fixed time, on every platform.
+
+#### Scenario: Times of the copy
+- **WHEN** a game whose two save files have different modification times is copied by the oracle on Linux and on macOS
+- **THEN** each copied file has the modification time of its source on both
