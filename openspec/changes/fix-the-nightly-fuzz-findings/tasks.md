@@ -2,7 +2,7 @@
 
 ## 1. Marshal target
 
-- [ ] 1.1 The engine's recursive functions in the stack list of `marshal` in both crates; a test of the classification. Verify: scenario "Deep pattern through Marshal"; `cargo test -p vkrgss-ruby-sys -p vkrgss-ruby192-sys --locked` passes.
+- [x] 1.1 The engine's recursive functions in the stack list of `marshal` in both crates; a test of the classification. Verify: scenario "Deep pattern through Marshal"; `cargo test -p vkrgss-ruby-sys -p vkrgss-ruby192-sys --locked` passes.
 
 ## 2. Free list of Ruby 1.8.7
 

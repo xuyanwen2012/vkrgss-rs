@@ -127,14 +127,14 @@ const MARSHAL_RECURSIVE: &[&str] = &[
 /// the parser and in the regular expression engine, and a deep enough input exhausts the
 /// machine stack. This run sets that aside when the stack ends in a function listed for the
 /// target; the parser lists those of the engine too, because it compiles a pattern literal
-/// while it parses. See `docs/development.md`.
+/// while it parses, and so does `Marshal.load`, because it compiles the pattern of a Regexp. See `docs/development.md`.
 const TARGETS: [Target; 3] = [
     Target {
         name: "marshal192",
         file: "marshal",
         max_len: 4096,
         timeout: 10,
-        recursive: &[MARSHAL_RECURSIVE],
+        recursive: &[MARSHAL_RECURSIVE, ENGINE_RECURSIVE],
     },
     Target {
         name: "parse192",
@@ -655,6 +655,11 @@ fn a_stack_exhausted_by_nesting_is_a_limit() {
         ended(Some(1), &marshal, target("marshal192").recursive),
         Ended::Limit("stack")
     );
+    // `Marshal.load` compiles the pattern of a Regexp, as nightly run 39227119222 found.
+    assert_eq!(
+        ended(Some(1), &deep, target("marshal192").recursive),
+        Ended::Limit("stack")
+    );
 }
 
 #[test]
@@ -675,9 +680,9 @@ fn another_stack_overflow_is_a_finding() {
         );
     }
     // A function of another target's list.
-    let deep = stack_overflow(&["get_min_match_length", "setup_tree"]);
+    let parser = stack_overflow(&["value_expr_gen", "value_expr_gen"]);
     assert_eq!(
-        ended(Some(1), &deep, target("marshal192").recursive),
+        ended(Some(1), &parser, target("marshal192").recursive),
         Ended::Finding
     );
     // A listed function only below the first frames.
