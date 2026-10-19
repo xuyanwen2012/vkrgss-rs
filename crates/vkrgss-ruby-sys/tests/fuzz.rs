@@ -509,6 +509,21 @@ fn the_inputs_of_fixed_findings_no_longer_fail() {
     )
     .expect("the message");
     assert!(end.ends_with("expecting kEND\\n__END__\\n ^\""), "{end}");
+    // A `def` with an error in its arguments, in a block, left its table of locals behind,
+    // and the end of the script restored the block variables that table saved, which the
+    // collector may have freed and handed out again; the compiler then put those slots on
+    // the free list. It took a few compilations of the input for a collection to fall
+    // between the block and the end, as it did for the fuzz target.
+    let block = fuzz_dir().join("fixed/parse/def-arguments-error-in-block.rb");
+    let block = block.to_str().expect("UTF-8 path");
+    for _ in 0..20 {
+        let result = eval(format!("VKRGSS_INPUT = {block:?}; {}", ruby_of("parse")));
+        assert!(result.is_err(), "{result:?}");
+    }
+    assert_eq!(
+        eval("(1..2000).map { |i| i.to_s }.join.size".to_owned()),
+        Ok("6893".to_owned())
+    );
 }
 
 #[test]

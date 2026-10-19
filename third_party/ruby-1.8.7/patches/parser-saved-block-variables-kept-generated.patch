@@ -1,0 +1,50 @@
+--- a/parse.c
++++ b/parse.c
+@@ -182,6 +182,9 @@
+ static int command_start = Qtrue;
+ 
+ static NODE *deferred_nodes;
++/* vkrgss: the chains of block variables that the tables of local_push(0) restore,
++   kept from the collector while a script is compiled */
++static NODE *saved_dyna_vars;
+ 
+ static NODE *cond();
+ static NODE *logop();
+@@ -8643,6 +8646,7 @@
+     ruby_current_node = 0;
+     ruby_sourcefile = rb_source_filename(f);
+     deferred_nodes = 0;
++    saved_dyna_vars = 0;
+     n = yyparse();
+     ruby_debug_lines = 0;
+     compile_for_eval = 0;
+@@ -8655,6 +8659,7 @@
+     in_def = 0;
+     cur_mid = 0;
+     deferred_nodes = 0;
++    saved_dyna_vars = 0;
+ 
+     vp = ruby_dyna_vars;
+     ruby_dyna_vars = vars;
+@@ -11686,6 +11691,13 @@
+ 	/* preserve reference for GC, but link should be cut. */
+ 	rb_dvar_push(0, (VALUE)ruby_dyna_vars);
+ 	ruby_dyna_vars->next = 0;
++	/* vkrgss: and keep the chain until the end of the compilation. Error
++	   recovery can discard a rule after its local_push(0), as a `def` with an
++	   error in its arguments; its table stays, and the local_pop of an
++	   enclosing rule restores the chain of this table, which the varmap above
++	   no longer keeps once the parser has left a block around it. yycompile
++	   then recycled a slot that the collector had freed and handed out again. */
++	saved_dyna_vars = NEW_NODE(NODE_ARRAY, local->dyna_vars, 0, saved_dyna_vars);
+     }
+ }
+ 
+@@ -11907,6 +11919,7 @@
+     rb_gc_mark(lex_input);
+     rb_gc_mark((VALUE)lex_strterm);
+     rb_gc_mark((VALUE)deferred_nodes);
++    rb_gc_mark((VALUE)saved_dyna_vars);
+ }
+ 
+ void

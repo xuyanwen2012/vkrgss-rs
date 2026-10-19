@@ -6,7 +6,7 @@
 
 ## 2. Free list of Ruby 1.8.7
 
-- [ ] 2.1 Reproduce, find the cause, fix it as a recorded patch, replay test under `fuzz/fixed/`, check Ruby 1.9.2. Verify: scenario "The saved input"; `cargo xtask fuzz parse --seconds 1800` and `cargo xtask fuzz marshal --seconds 1800` end without an unlisted finding; the sanitized run of `vkrgss-ruby-sys` passes.
+- [x] 2.1 Reproduce, find the cause, fix it as a recorded patch, replay test under `fuzz/fixed/`, check Ruby 1.9.2. Verify: scenario "The saved input"; `cargo xtask fuzz parse --seconds 1800` and `cargo xtask fuzz marshal --seconds 1800` end without an unlisted finding; the sanitized run of `vkrgss-ruby-sys` passes.
 
 ## 3. Documents
 
