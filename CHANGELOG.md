@@ -49,6 +49,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `cargo xtask apk --release` builds the Android app in the release profile and signs it
+  with the key of the keystore that `VKRGSS_ANDROID_KEYSTORE`,
+  `VKRGSS_ANDROID_KEYSTORE_PASSWORD`, `VKRGSS_ANDROID_KEY_ALIAS` and
+  `VKRGSS_ANDROID_KEY_PASSWORD` name, into `target/apk/vkrgss-<version>-android-arm64.apk`
+  with its SHA-256 checksum; without them it refuses and names them. The release workflow
+  attaches that APK and its checksum to the release of a version tag when the repository
+  has the signing secrets, and leaves it out with a notice when it has not. Obtainium
+  installs the app and its updates from the releases; see `docs/running.md`.
+- The library of the Android app has "Import built-in scripts": a built-in scripts file
+  chosen with the picker is stored in the app's private storage under the name of its
+  runtime, told by the classes it defines or, when they do not tell it, chosen with the
+  buttons "XP", "VX" and "VX Ace". A game reads it when the external files directory has
+  no such file, so a player needs no adb.
+- `cargo xtask android-run --validation` and `cargo xtask xarch android --validation` put
+  the Khronos validation layer that `VKRGSS_ANDROID_VALIDATION_LAYER` names into the debug
+  APK and run the games under it; the app writes what the layer reports to logcat, and the
+  run fails when it reported an error. The comparison games run without a validation error
+  on the Pixel 7a and the Galaxy S24+.
 - `cargo xtask xarch run|android|compare` runs the comparison games of a local list in
   vkrgss alone, on Linux, on macOS or on an Android phone over adb, and compares the frames
   and the saves of two runs; see "Comparing the platforms" in `docs/development.md`.
@@ -129,6 +147,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - The Android app keeps the screen on while a game runs.
+- The Android app pauses its sound while it is in the background, and the music goes on
+  where it stopped when the app comes back.
+- The version code of the Android app is `MAJOR * 1000000 + MINOR * 1000 + PATCH`, above
+  the codes of the former formula.
+- A swapchain whose present timing offers no time domain that can be read says so in the
+  log. On the Pixel 7a the driver offers only a clock of a present stage and does not list
+  it among the domains it calibrates, so frames are paced by the timer there.
 - `nightly.yml` installs `cargo-deny` 0.20.2, which reads the current advisory database;
   0.18.2 could no longer parse it.
 - `cargo xtask fuzz` sets aside an input that exhausts the machine stack by nesting, as it

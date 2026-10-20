@@ -48,7 +48,10 @@
 //!    thread. The on-screen buttons and the keys of gamepads hold the buttons of `Input`; F3
 //!    and F4, on the screen or a keyboard, save and load states, which are copies of the guest
 //!    process, as on the desktop. When the activity is paused the surface goes and the game
-//!    waits, and the sound pauses; when it resumes the game and the sound go on. An input script of the file holds the buttons,
+//!    waits, and the sound pauses; when it resumes the game and the sound go on. With the
+//!    extra `validation` of the intent the compositor runs under the Vulkan validation
+//!    layer, which the APK of `cargo xtask android-run --validation` carries, and what it
+//!    reported is written to the log when the game has ended. An input script of the file holds the buttons,
 //!    frame by frame ([`input`]), as a headless run's does.
 //! 5. When the game has ended, the relay ends the guest processes, the activity is finished
 //!    and its process exits, so that the next start of the activity starts afresh. When the

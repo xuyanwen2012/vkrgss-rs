@@ -791,10 +791,25 @@ from that directory with its guest record, and the socket lies in the app's priv
 directory. The guest confines itself with the seccomp filter; the kernels of the phones
 have no Landlock, so the log says that the guest is not confined by it.
 
+### Installing with Obtainium
+
+The release APK is attached to the GitHub releases of the repository as
+`vkrgss-<version>-android-arm64.apk`, with its SHA-256 checksum, signed with the project's
+own key ([building.md](building.md#the-release-apk)). [Obtainium](https://github.com/ImranR98/Obtainium)
+installs it and its updates from there: in Obtainium, "Add app", the URL
+`https://github.com/xuyanwen2012/vkrgss-rs` as the source, and "Add"; it finds the APK
+among the assets of the latest release and offers each later release as an update. Without
+Obtainium, download the APK from the release on the phone and open it; Android asks once for
+the permission to install apps from that browser or file manager. The APK needs Android 14 or
+later on arm64 and Vulkan 1.3. An APK signed with another key, such as a debug APK of `cargo
+xtask apk`, cannot be installed over it, and the other way round, without uninstalling the
+app first, which deletes its games and saves.
+
 ### Importing games
 
 The app opens on its library: the imported games by the `Title` of their `Game.ini`, the
-last one played first, and the buttons "Import", "Import RTP" and "Delete". The app draws
+last one played first, and the buttons "Import", "Import RTP", "Import built-in scripts" and
+"Delete". The app draws
 this screen itself, as it draws the game. A tap on a game selects it, and a tap on the
 selected game starts it; the first game of the list is selected when the screen opens, so
 one tap starts the last one played. "Delete" asks for a second tap and then deletes the
@@ -826,9 +841,20 @@ comes on top.
 
 A game started from the library runs in an activity and a process of its own
 (`VkrgssActivity$Game`, process `:game`); when it ends, the activity and its process end and
-the library comes back. The built-in scripts file of the game's runtime is still read from
-the app's external files directory (`files/rpg_builtin.rb` for XP), which `adb push` fills
-(*The built-in scripts*).
+the library comes back.
+
+"Import built-in scripts" opens the picker for any file: the built-in scripts file of a
+runtime, which you extract from a DLL of your own as *The built-in scripts* says (`cargo
+xtask extract-rpg` on a computer, then copy the file to the phone). It may be at most 1 MiB.
+The app tells the runtime by the classes the file defines: `RPG::Weather` only in that of
+XP, `RPG::BaseItem` in those of VX and VX Ace, and `RPG::BaseItem::Feature` only in that of
+VX Ace. When they do not tell it, the screen asks with the buttons "XP", "VX" and "VX Ace",
+and a tap elsewhere imports nothing. The file is stored as it is in the app's private
+storage, `files/builtin/` with the name of its runtime (`rpg_builtin.rb`,
+`rpg_builtin_rgss2.rb` or `rpg_builtin_rgss3.rb`), and replaces an earlier import for that
+runtime; the line at the bottom says which runtime it was imported for. A game reads the file
+of its runtime from the app's external files directory (`files/rpg_builtin.rb` for XP),
+which `adb push` fills for tests, and else the imported one.
 
 For tests the zip can be named by the intent instead of the picker, as a URI in the extra
 `import`, with `rtp` for a run-time package; a file in the app's external files directory
@@ -887,13 +913,16 @@ configuration file and takes only these keys: `rtp`, `builtin_scripts`, `font_di
 whatever the on-screen buttons hold on top, and with `dump` the frames named are written as
 PNG files of the logical size, numbered and drawn as in a headless run, so they can be
 compared with those of `vkrgss --guest thread --headless`. Without `builtin_scripts` the
-built-in scripts file of the game's runtime is read from the external files directory. The
+built-in scripts file of the game's runtime is read from the external files directory, or
+else is the imported one (*Importing games*). The
 fonts of `font_dirs` are searched before those of the system, `/system/fonts`. Sound goes
 through AAudio.
 
 A game writes its log to logcat under the tag `vkrgss` and to `files/vkrgss.log`, at the
 level info; the reports of scripts arrive there too. When the activity goes to the
-background the picture goes and the game waits; it goes on when the activity comes back.
+background the picture goes, the game waits and the sound pauses (the AAudio stream is
+paused, and the log says `audio: the output is paused`); the game and the music go on where
+they stopped when the activity comes back.
 While a game runs, the app keeps the screen on.
 The guest's lines arrive with the app's.
 
@@ -909,6 +938,26 @@ the `dump` entries of the game's `vkrgss.toml` name into `target/android-run/<SE
 and fails when one of them was not written. It uninstalls nothing. The phone must be
 unlocked when the run starts: a screen that is turned off sends the activity to the
 background, and the game waits until it is back.
+
+### Validation on a phone
+
+```sh
+VKRGSS_ANDROID_VALIDATION_LAYER=/path/to/libVkLayer_khronos_validation.so \
+    cargo xtask android-run --validation <SERIAL> <GAME_DIR>
+VKRGSS_ANDROID_VALIDATION_LAYER=/path/to/libVkLayer_khronos_validation.so \
+    cargo xtask xarch android --validation <SERIAL> <OUT>
+```
+
+install the validation APK ([building.md](building.md#the-validation-apk)) and start the
+activity of games with the extra `validation` of the intent (`am start ... --ez validation
+true`). With it the app asks for `VK_LAYER_KHRONOS_validation`, with synchronization
+validation, and when the game has ended it writes what the layer reported to logcat and the
+log, each error on a line `validation error: ...`, and then `validation: the layer reported
+no error` or the number of errors. Without the layer in the APK it says that the layer was not
+loaded. The command fails unless the app said that the layer reported no error; `xarch
+android --validation` runs the comparison games so (see "Comparing the platforms" in
+[development.md](development.md)), and a game fails as one whose frames are missing does. The
+library itself never runs under the layer.
 
 ## Running the demo
 

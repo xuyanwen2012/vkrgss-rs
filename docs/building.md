@@ -207,6 +207,75 @@ for 16 KiB pages) and the platform `android-34`. On the desktop the package buil
 library whose Android parts are left out, so the gate builds and tests its other parts.
 How to run a game with it is in [running.md](running.md#android).
 
+Both APKs carry the workspace's version as `versionName` and the version code
+`MAJOR * 1000000 + MINOR * 1000 + PATCH` (3001 for 0.3.1), so that each release installs over
+the one before.
+
+The debug key differs from machine to machine, and Android refuses to install an APK over one
+signed with another key: the app would have to be uninstalled, and its data with it. Copy
+`target/apk/debug.keystore` from the machine that built the installed app to keep updating it.
+
+### The release APK
+
+```sh
+export VKRGSS_ANDROID_KEYSTORE=/path/to/release.keystore
+export VKRGSS_ANDROID_KEYSTORE_PASSWORD=... VKRGSS_ANDROID_KEY_ALIAS=vkrgss
+export VKRGSS_ANDROID_KEY_PASSWORD=...
+cargo xtask apk --release
+```
+
+builds the same APK in the release profile, without `debuggable`, and signs it with the key
+of that keystore, with signatures of the schemes v2 and v3, into
+`target/apk/vkrgss-<version>-android-arm64.apk`, with its SHA-256 checksum beside it as
+`sha256sum` writes one (`sha256sum -c` checks it). The passwords reach `apksigner` as
+`env:` references, so that they never appear in a command line. Without the four variables
+the command refuses before it builds and names them. Every release must be signed with the
+same key: Android installs an update only over an APK of the same signer, and Obtainium
+does the same.
+
+The owner makes the keystore once, keeps it and its passwords safe outside the repository
+(a lost key means that the installed apps cannot be updated, only replaced), and never
+commits it:
+
+```sh
+keytool -genkeypair -keystore release.keystore -storetype PKCS12 -alias vkrgss \
+    -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=vkrgss"
+```
+
+A PKCS12 keystore has one password for the store and its key: `keytool` ignores a
+different `-keypass`, so `VKRGSS_ANDROID_KEY_PASSWORD` is the store's password too.
+
+The release workflow (`.github/workflows/release.yml`) builds the release APK for a version
+tag when the repository has these secrets, and attaches it with its checksum to the GitHub
+release; without `VKRGSS_ANDROID_KEYSTORE_BASE64` it leaves the APK out with a notice:
+
+| Secret | Value |
+|---|---|
+| `VKRGSS_ANDROID_KEYSTORE_BASE64` | the keystore file in base64, `base64 -w0 release.keystore` |
+| `VKRGSS_ANDROID_KEYSTORE_PASSWORD` | its password |
+| `VKRGSS_ANDROID_KEY_ALIAS` | the alias of the key, `vkrgss` above |
+| `VKRGSS_ANDROID_KEY_PASSWORD` | the password of the key |
+
+They are set under Settings, Secrets and variables, Actions of the repository, or with
+`gh secret set VKRGSS_ANDROID_KEYSTORE_BASE64 < <(base64 -w0 release.keystore)` and
+`gh secret set NAME` for the others. The workflow writes the keystore to a temporary file
+of the runner and removes it after the build; it installs the NDK r30
+(`ndk;30.0.16248370`), the build tools 36.0.0 and the platform `android-34` with
+`sdkmanager`, and the Rust target `aarch64-linux-android`.
+
+### The validation APK
+
+```sh
+VKRGSS_ANDROID_VALIDATION_LAYER=/path/to/android-binaries-1.4.363.0/arm64-v8a/libVkLayer_khronos_validation.so \
+    cargo xtask android-run --validation <SERIAL> <GAME_DIR>
+```
+
+builds `target/apk/vkrgss-validation.apk`: the debug APK with the Khronos validation layer for
+Android that the variable names (the `android-binaries-<version>.zip` of a release of
+`KhronosGroup/Vulkan-ValidationLayers`, Apache-2.0, never committed) in `lib/arm64-v8a/`,
+where the loader of Android finds the layers of a debuggable app. How a game runs under it is
+in [running.md](running.md#validation-on-a-phone).
+
 ## macOS
 
 The workspace builds for `aarch64-apple-darwin`, a Mac with Apple silicon, and its tests pass
