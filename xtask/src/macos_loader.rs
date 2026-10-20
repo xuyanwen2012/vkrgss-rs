@@ -48,6 +48,9 @@ const LOADER: Source = Source {
     commit: "fa218055ff4948b159f31d43f800c808a13d51df",
 };
 
+/// The licence text of the loader, below its source.
+pub(crate) const LICENCE: &str = "LICENSE.txt";
+
 /// The directory of the loader's build and its result below `root`.
 fn dir(root: &Path) -> PathBuf {
     root.join("target/macos-loader")
@@ -56,6 +59,11 @@ fn dir(root: &Path) -> PathBuf {
 /// The loader built below `root`.
 pub(crate) fn library(root: &Path) -> PathBuf {
     dir(root).join("libvulkan.1.dylib")
+}
+
+/// The source of the loader below `root`, whose licence text the app carries.
+pub(crate) fn loader_source(root: &Path) -> PathBuf {
+    dir(root).join("src").join(LOADER.name)
 }
 
 /// `cargo xtask macos-loader`: builds the loader below `root`.

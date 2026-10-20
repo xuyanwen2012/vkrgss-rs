@@ -1,23 +1,27 @@
 //! The macOS app: `cargo xtask app` builds the release executables of the package of `dist`,
 //! `vkrgss` and the guest executables it starts from beside itself, and assembles
-//! `target/app/vkrgss.app` from them, with the Vulkan loader and MoltenVK of Homebrew, so that
-//! the app runs on a Mac without either installed and without `DYLD_*` variables. Run by
-//! hand, on macOS only, not by the gate.
+//! `target/app/vkrgss.app` from them, with the Vulkan loader that `cargo xtask macos-loader`
+//! builds ([`macos_loader`]) and MoltenVK of Homebrew, so that the app runs on a Mac without
+//! either installed and without `DYLD_*` variables. Run by hand, on macOS only, not by the
+//! gate.
 //!
 //! - `Contents/MacOS/`: the three executables.
-//! - `Contents/Frameworks/`: Homebrew's `libvulkan.1.dylib` and `libMoltenVK.dylib`, each
-//!   with the install name `@rpath/<name>` (`install_name_tool -id`). `vkrgss-vk` loads the
-//!   loader of the bundle by its path; the executables link neither.
+//! - `Contents/Frameworks/`: the loader built for macOS 14, `libvulkan.1.dylib`, and
+//!   Homebrew's `libMoltenVK.dylib`, each with the install name `@rpath/<name>`
+//!   (`install_name_tool -id`). `vkrgss-vk` loads the loader of the bundle by its path; the
+//!   executables link neither.
 //! - `Contents/Resources/vulkan/icd.d/MoltenVK_icd.json`: Homebrew's manifest of MoltenVK with
 //!   a `library_path` relative to the manifest ([`ICD_LIBRARY_PATH`]). `vkrgss-vk` points the
 //!   loader at it.
 //! - `Contents/Resources/`: the documents and licence texts of the package of `dist`, and the
-//!   licence texts of MoltenVK and the loader.
+//!   licence texts of MoltenVK and of the loader, the latter from its source.
 //! - `Contents/Info.plist` ([`info_plist`]); no icon.
 //!
 //! The app is signed ad hoc (`codesign --sign - --deep`), which the changed install names
 //! need on Apple silicon, and `otool -L` of every executable and library of the bundle must
-//! name nothing under `/opt/homebrew`. A zip of the app, written by `ditto`, lies beside it.
+//! name nothing under `/opt/homebrew`. Every Mach-O file of the bundle must need no newer
+//! macOS than [`MINIMUM_MACOS`], which `Info.plist` declares ([`check_minimum`]). A zip of
+//! the app, written by `ditto`, lies beside it.
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
@@ -28,6 +32,8 @@ use anyhow::{Context, Result, bail};
 
 use crate::apk::PACKAGE;
 use crate::dist::{BUILD, EXECUTABLES, FILES};
+use crate::macho::{self, Version};
+use crate::macos_loader;
 
 /// The target the app is built for.
 const TARGET: &str = "aarch64-apple-darwin";
@@ -35,12 +41,11 @@ const TARGET: &str = "aarch64-apple-darwin";
 /// Where Homebrew installs on Apple silicon.
 const HOMEBREW: &str = "/opt/homebrew";
 
-/// The libraries of the bundle: where each is below Homebrew's prefix, and its name in
-/// `Contents/Frameworks/`.
-const LIBRARIES: [(&str, &str); 2] = [
-    ("lib/libvulkan.1.dylib", "libvulkan.1.dylib"),
-    ("lib/libMoltenVK.dylib", "libMoltenVK.dylib"),
-];
+/// The name of the loader in `Contents/Frameworks/`.
+const LOADER: &str = "libvulkan.1.dylib";
+
+/// MoltenVK: where it is below Homebrew's prefix, and its name in `Contents/Frameworks/`.
+const MOLTENVK: (&str, &str) = ("lib/libMoltenVK.dylib", "libMoltenVK.dylib");
 
 /// Homebrew's manifest of MoltenVK, below Homebrew's prefix.
 const HOMEBREW_ICD: &str = "etc/vulkan/icd.d/MoltenVK_icd.json";
@@ -51,21 +56,19 @@ const ICD: &str = "Contents/Resources/vulkan/icd.d/MoltenVK_icd.json";
 /// The library of the manifest, relative to the manifest's directory.
 const ICD_LIBRARY_PATH: &str = "../../../Frameworks/libMoltenVK.dylib";
 
-/// The licence texts of the libraries: where each is below Homebrew's prefix, and where it
-/// goes below `Contents/Resources/`.
-const LIBRARY_LICENCES: [(&str, &str); 2] = [
-    ("opt/molten-vk/LICENSE", "licenses/MoltenVK/LICENSE"),
-    (
-        "opt/vulkan-loader/LICENSE.txt",
-        "licenses/Vulkan-Loader/LICENSE.txt",
-    ),
-];
+/// The licence text of MoltenVK: where it is below Homebrew's prefix, and where it goes below
+/// `Contents/Resources/`.
+const MOLTENVK_LICENCE: (&str, &str) = ("opt/molten-vk/LICENSE", "licenses/MoltenVK/LICENSE");
+
+/// Where the licence text of the loader goes below `Contents/Resources/`.
+const LOADER_LICENCE: &str = "licenses/Vulkan-Loader/LICENSE.txt";
 
 /// The oldest macOS the app declares.
 pub(crate) const MINIMUM_MACOS: &str = "14.0";
 
-/// Builds the release executables through the cargo executable `cargo` and writes the app
-/// and its zip under `target/app/` of `root`.
+/// Builds the loader ([`macos_loader::build`]) and the release executables, the latter
+/// through the cargo executable `cargo`, and writes the app and its zip under `target/app/`
+/// of `root`.
 pub(crate) fn run(cargo: &str, root: &Path) -> Result<()> {
     if !cfg!(target_os = "macos") {
         bail!("app: the macOS app is made on macOS only");
@@ -76,11 +79,9 @@ pub(crate) fn run(cargo: &str, root: &Path) -> Result<()> {
         require(&root.join(source), "")?;
     }
     for source in homebrew_files() {
-        require(
-            &homebrew.join(source),
-            " (from Homebrew: vulkan-loader, molten-vk)",
-        )?;
+        require(&homebrew.join(source), " (from Homebrew: molten-vk)")?;
     }
+    let loader = macos_loader::build(root)?;
     let command_line = format!("cargo {}", BUILD.join(" "));
     eprintln!("app: running `{command_line}`");
     let status = Command::new(cargo)
@@ -92,7 +93,7 @@ pub(crate) fn run(cargo: &str, root: &Path) -> Result<()> {
         bail!("app: `{command_line}` ended with {status}");
     }
     let out = root.join("target/app");
-    let app = assemble(root, homebrew, &out)?;
+    let app = assemble(root, homebrew, &loader, &out)?;
     let zip = out.join(format!("vkrgss-{}-{TARGET}.zip", env!("CARGO_PKG_VERSION")));
     if zip.exists() {
         fs::remove_file(&zip)
@@ -116,12 +117,8 @@ fn documents() -> impl Iterator<Item = &'static (&'static str, &'static str)> {
 }
 
 /// The files the bundle takes from Homebrew, below its prefix.
-fn homebrew_files() -> impl Iterator<Item = &'static str> {
-    LIBRARIES
-        .iter()
-        .map(|(source, _)| *source)
-        .chain([HOMEBREW_ICD])
-        .chain(LIBRARY_LICENCES.iter().map(|(source, _)| *source))
+fn homebrew_files() -> [&'static str; 3] {
+    [MOLTENVK.0, HOMEBREW_ICD, MOLTENVK_LICENCE.0]
 }
 
 /// The file `path`, or an error that names it, followed by `hint`, when it does not exist.
@@ -132,9 +129,10 @@ fn require(path: &Path, hint: &str) -> Result<()> {
     Ok(())
 }
 
-/// Assembles `vkrgss.app` in `out` from the built executables below `root` and the files of
-/// Homebrew below `homebrew`, signs it and checks the libraries it names. Returns its path.
-fn assemble(root: &Path, homebrew: &Path, out: &Path) -> Result<PathBuf> {
+/// Assembles `vkrgss.app` in `out` from the built executables below `root`, the built loader
+/// `loader` and the files of Homebrew below `homebrew`, signs it and checks the libraries it
+/// names and the macOS each file needs. Returns its path.
+fn assemble(root: &Path, homebrew: &Path, loader: &Path, out: &Path) -> Result<PathBuf> {
     let app = out.join("vkrgss.app");
     if app.exists() {
         fs::remove_dir_all(&app)
@@ -149,9 +147,12 @@ fn assemble(root: &Path, homebrew: &Path, out: &Path) -> Result<PathBuf> {
         copy(&from, &to, 0o755)?;
         binaries.push(to);
     }
-    for (source, name) in LIBRARIES {
+    for (source, name) in [
+        (loader.to_path_buf(), LOADER),
+        (homebrew.join(MOLTENVK.0), MOLTENVK.1),
+    ] {
         let to = contents.join("Frameworks").join(name);
-        copy(&homebrew.join(source), &to, 0o755)?;
+        copy(&source, &to, 0o755)?;
         let mut install_name_tool = Command::new("install_name_tool");
         tool(
             "install_name_tool",
@@ -173,9 +174,16 @@ fn assemble(root: &Path, homebrew: &Path, out: &Path) -> Result<PathBuf> {
     for (source, destination) in documents() {
         copy(&root.join(source), &resources.join(destination), 0o644)?;
     }
-    for (source, destination) in LIBRARY_LICENCES {
-        copy(&homebrew.join(source), &resources.join(destination), 0o644)?;
-    }
+    copy(
+        &homebrew.join(MOLTENVK_LICENCE.0),
+        &resources.join(MOLTENVK_LICENCE.1),
+        0o644,
+    )?;
+    copy(
+        &macos_loader::loader_source(root).join(macos_loader::LICENCE),
+        &resources.join(LOADER_LICENCE),
+        0o644,
+    )?;
 
     let mut codesign = Command::new("codesign");
     tool(
@@ -196,7 +204,58 @@ fn assemble(root: &Path, homebrew: &Path, out: &Path) -> Result<PathBuf> {
             );
         }
     }
+    check_minimum(&app, MINIMUM_MACOS)?;
     Ok(app)
+}
+
+/// Fails unless every Mach-O file below `dir` needs macOS `minimum` or older, naming each
+/// that needs a newer one, or names none, with what it needs.
+fn check_minimum(dir: &Path, minimum: &str) -> Result<()> {
+    let minimum = Version::parse(minimum)?;
+    let mut files = Vec::new();
+    mach_o_files(dir, &mut files)?;
+    let mut offending = Vec::new();
+    for (path, bytes) in &files {
+        let needs = macho::minimum_macos(bytes)
+            .with_context(|| format!("app: could not read {}", path.display()))?;
+        match needs {
+            Some(needs) if needs <= minimum => {}
+            Some(needs) => offending.push(format!("`{}` needs macOS {needs}", path.display())),
+            None => offending.push(format!("`{}` names no minimum macOS", path.display())),
+        }
+    }
+    if !offending.is_empty() {
+        bail!(
+            "app: the bundle declares macOS {minimum} in Info.plist, but {}",
+            offending.join(", ")
+        );
+    }
+    Ok(())
+}
+
+/// Pushes every Mach-O file below `dir`, with its bytes, onto `files`; links are not
+/// followed.
+fn mach_o_files(dir: &Path, files: &mut Vec<(PathBuf, Vec<u8>)>) -> Result<()> {
+    let entries =
+        fs::read_dir(dir).with_context(|| format!("app: could not list {}", dir.display()))?;
+    for entry in entries {
+        let path = entry
+            .with_context(|| format!("app: could not list {}", dir.display()))?
+            .path();
+        let kind = fs::symlink_metadata(&path)
+            .with_context(|| format!("app: could not read {}", path.display()))?
+            .file_type();
+        if kind.is_dir() {
+            mach_o_files(&path, files)?;
+        } else if kind.is_file() {
+            let bytes = fs::read(&path)
+                .with_context(|| format!("app: could not read {}", path.display()))?;
+            if macho::is_mach_o(&bytes) {
+                files.push((path, bytes));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Copies `from` to `to`, making its directory, and gives the copy the mode `mode`.
@@ -330,12 +389,7 @@ mod tests {
                 part => resolved.push(part),
             }
         }
-        assert_eq!(resolved, Path::new("Contents/Frameworks/libMoltenVK.dylib"));
-        assert!(
-            LIBRARIES
-                .iter()
-                .any(|(_, name)| *name == "libMoltenVK.dylib")
-        );
+        assert_eq!(resolved, Path::new("Contents/Frameworks").join(MOLTENVK.1));
         assert!(bundle_icd("{}").is_err());
     }
 
@@ -382,6 +436,42 @@ libvulkan.1.dylib:
         fs::write(&path, info_plist(env!("CARGO_PKG_VERSION"))).unwrap();
         let mut plutil = Command::new("plutil");
         tool("plutil", plutil.arg("-lint").arg(&path)).unwrap();
+    }
+
+    #[test]
+    fn every_mach_o_file_of_the_bundle_needs_at_most_the_declared_macos() {
+        use crate::macho::tests::dylib_for;
+        let app = tempfile::tempdir().unwrap();
+        let contents = app.path().join("Contents");
+        for (path, bytes) in [
+            ("MacOS/vkrgss", dylib_for("11.0")),
+            ("Frameworks/libMoltenVK.dylib", dylib_for("12.0")),
+            ("Frameworks/libvulkan.1.dylib", dylib_for("14.0")),
+            ("Resources/README.md", b"# vkrgss\n".to_vec()),
+        ] {
+            write_bytes(&contents.join(path), &bytes);
+        }
+        check_minimum(app.path(), MINIMUM_MACOS).unwrap();
+
+        // A library built for macOS 27, as Homebrew's loader is on the owner's Mac.
+        let newer = contents.join("Frameworks/libnewer.dylib");
+        write_bytes(&newer, &dylib_for("27.0"));
+        let error = check_minimum(app.path(), MINIMUM_MACOS)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains(&format!("`{}` needs macOS 27.0", newer.display())),
+            "{error}"
+        );
+        assert!(error.contains("declares macOS 14.0"), "{error}");
+        // The files that need macOS 14 or older are not named.
+        assert_eq!(error.matches("needs macOS").count(), 1, "{error}");
+    }
+
+    /// Writes `bytes` to `path`, making its directory.
+    fn write_bytes(path: &Path, bytes: &[u8]) {
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, bytes).unwrap();
     }
 
     #[test]

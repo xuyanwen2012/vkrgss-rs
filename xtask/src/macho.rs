@@ -53,6 +53,13 @@ impl fmt::Display for Version {
     }
 }
 
+/// Whether `bytes` begin as a thin or a fat Mach-O file.
+pub(crate) fn is_mach_o(bytes: &[u8]) -> bool {
+    let thin = le32(bytes, 0).is_ok_and(|magic| magic == MH_MAGIC || magic == MH_MAGIC_64);
+    let fat = be32(bytes, 0).is_ok_and(|magic| magic == FAT_MAGIC || magic == FAT_MAGIC_64);
+    thin || fat
+}
+
 /// The minimum macOS of the Mach-O file `bytes`, or `None` when it names none; an error when
 /// it is no Mach-O file or is cut short.
 pub(crate) fn minimum_macos(bytes: &[u8]) -> Result<Option<Version>> {
@@ -223,6 +230,7 @@ pub(crate) mod tests {
     #[test]
     fn the_minimum_is_that_of_the_build_version_of_macos() {
         let file = dylib_for("27.0");
+        assert!(is_mach_o(&file));
         assert_eq!(minimum_macos(&file).unwrap().unwrap().to_string(), "27.0");
         // Another platform's build version (2 is iOS) is no minimum of macOS.
         assert_eq!(
@@ -244,6 +252,7 @@ pub(crate) mod tests {
     fn a_fat_file_needs_the_highest_minimum_of_its_slices() {
         for wide in [false, true] {
             let file = fat_file(wide, &[dylib_for("11.0"), dylib_for("14.2")]);
+            assert!(is_mach_o(&file));
             assert_eq!(minimum_macos(&file).unwrap().unwrap().to_string(), "14.2");
         }
         let mut cut = fat_file(false, &[dylib_for("11.0")]);
@@ -252,7 +261,10 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn a_cut_file_is_an_error() {
+    fn other_files_and_cut_ones_are_told_apart() {
+        for other in [&b"#!/bin/sh\n"[..], b"", b"\xcf\xfa"] {
+            assert!(!is_mach_o(other));
+        }
         let file = dylib_for("14.0");
         for length in [20, 40, file.len() - 1] {
             assert!(minimum_macos(&file[..length]).is_err(), "{length}");
@@ -266,6 +278,7 @@ pub(crate) mod tests {
     #[test]
     fn this_test_executable_names_the_minimum_it_was_built_for() {
         let bytes = std::fs::read(std::env::current_exe().unwrap()).unwrap();
+        assert!(is_mach_o(&bytes));
         let minimum = minimum_macos(&bytes).unwrap().unwrap();
         assert!(minimum <= Version::parse("14.0").unwrap(), "{minimum}");
     }

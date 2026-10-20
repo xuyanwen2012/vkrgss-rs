@@ -6,7 +6,7 @@
 
 ## 2. App
 
-- [ ] 2.1 `cargo xtask app` uses it and checks every Mach-O file. Verify: scenarios "Minimum of every file" and "A file built for a newer macOS" (a unit test with a crafted header or Homebrew's loader); the headless frame of the bundle equals the development build's.
+- [x] 2.1 `cargo xtask app` uses it and checks every Mach-O file. Verify: scenarios "Minimum of every file" and "A file built for a newer macOS" (a unit test with a crafted header or Homebrew's loader); the headless frame of the bundle equals the development build's.
 
 ## 3. Documents
 
