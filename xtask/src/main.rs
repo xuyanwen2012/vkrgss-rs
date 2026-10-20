@@ -25,6 +25,8 @@
 //! - `app`: on macOS, builds the release executables and assembles the app `vkrgss.app`, with
 //!   the Vulkan loader and MoltenVK, and a zip of it under `target/app/`. Not a step of the
 //!   gate.
+//! - `macos-loader`: on macOS, builds the Vulkan loader of the app from its source for the
+//!   oldest macOS the app declares, under `target/macos-loader/`. Not a step of the gate.
 //! - `extract-rpg <DLL> <OUTPUT>`: copies the built-in scripts out of an RGSS DLL, or out of
 //!   the image of one as it lies in the memory of the running original.
 //! - `oracle <GAME_DIR> --frames N[,N...] [OPTIONS]`: compares frames of a game between the
@@ -47,6 +49,8 @@ mod dist;
 mod extract;
 mod fuzz;
 mod gate;
+mod macho;
+mod macos_loader;
 mod oracle;
 mod rgss3a;
 mod rgssad;
@@ -57,7 +61,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 const USAGE: &str = "usage: cargo xtask <gate [--job <NAME>]|deps|audit|stress|fuzz <TARGET> [--seconds N]|\
-                     android-test <CRATE> [--device <SERIAL>]|apk [--release]|android-run [--validation] <SERIAL> <GAME_DIR>|dist|app|\
+                     android-test <CRATE> [--device <SERIAL>]|apk [--release]|android-run [--validation] <SERIAL> <GAME_DIR>|dist|app|macos-loader|\
                      extract-rpg <DLL> <OUTPUT>|oracle <GAME_DIR> [OPTIONS]|pack-rgssad <GAME_DIR>|\
                      xarch run|android|compare ...>";
 
@@ -72,6 +76,7 @@ fn main() -> ExitCode {
         ["stress"] => stress::run(&workspace_root()),
         ["dist"] => dist::run(&cargo(), &workspace_root()),
         ["app"] => app::run(&cargo(), &workspace_root()),
+        ["macos-loader"] => macos_loader::run(&workspace_root()),
         ["extract-rpg", dll, output] => extract::run(Path::new(dll), Path::new(output)),
         ["pack-rgssad", game] => rgssad::pack(Path::new(game)),
         ["fuzz", ref arguments @ ..] => match fuzz::parse(arguments) {

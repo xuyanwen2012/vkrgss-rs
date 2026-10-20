@@ -62,7 +62,7 @@ const LIBRARY_LICENCES: [(&str, &str); 2] = [
 ];
 
 /// The oldest macOS the app declares.
-const MINIMUM_MACOS: &str = "14.0";
+pub(crate) const MINIMUM_MACOS: &str = "14.0";
 
 /// Builds the release executables through the cargo executable `cargo` and writes the app
 /// and its zip under `target/app/` of `root`.

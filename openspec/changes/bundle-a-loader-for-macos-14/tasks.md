@@ -2,7 +2,7 @@
 
 ## 1. Loader
 
-- [ ] 1.1 `cargo xtask macos-loader` with the pinned tag and commits. Verify: it builds `libvulkan.1.dylib` whose `otool -l` shows `minos 14.0`.
+- [x] 1.1 `cargo xtask macos-loader` with the pinned tag and commits. Verify: it builds `libvulkan.1.dylib` whose `otool -l` shows `minos 14.0`.
 
 ## 2. App
 
