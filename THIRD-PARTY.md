@@ -129,14 +129,18 @@ with another libxcrypt.
 
 ## MoltenVK and the Vulkan loader
 
-The macOS app that `cargo xtask app` assembles carries two libraries copied from Homebrew,
-whose source is not in this repository: MoltenVK (`libMoltenVK.dylib`,
-<https://github.com/KhronosGroup/MoltenVK>) and the Vulkan loader of Khronos
-(`libvulkan.1.dylib`, <https://github.com/KhronosGroup/Vulkan-Loader>), both under the Apache
-License 2.0. The app carries their licence texts as
-`Contents/Resources/licenses/MoltenVK/LICENSE` and
-`Contents/Resources/licenses/Vulkan-Loader/LICENSE.txt`. Their versions are those that
-Homebrew's `molten-vk` and `vulkan-loader` had installed when the app was built.
+The macOS app that `cargo xtask app` assembles carries two libraries whose source is not in
+this repository, both under the Apache License 2.0: MoltenVK (`libMoltenVK.dylib`,
+<https://github.com/KhronosGroup/MoltenVK>), copied from Homebrew, and the Vulkan loader of
+Khronos (`libvulkan.1.dylib`, <https://github.com/KhronosGroup/Vulkan-Loader>), which
+`cargo xtask macos-loader` builds unmodified from its source at the tag
+`vulkan-sdk-1.4.363.0`, against the Vulkan headers of the same tag
+(<https://github.com/KhronosGroup/Vulkan-Headers>, Apache License 2.0 or MIT), which are
+compiled into it. The app carries their licence texts as
+`Contents/Resources/licenses/MoltenVK/LICENSE`, from Homebrew's `molten-vk`, and
+`Contents/Resources/licenses/Vulkan-Loader/LICENSE.txt`, from the loader's source. The
+version of MoltenVK is the one that Homebrew's `molten-vk` had installed when the app was
+built.
 
 ## Fonts used by tests
 

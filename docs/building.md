@@ -324,24 +324,52 @@ written by `ditto`, `target/app/vkrgss-<VERSION>-aarch64-apple-darwin.zip`:
 
 - `Contents/MacOS/`: `vkrgss` and the two guest executables, which it starts from beside
   itself.
-- `Contents/Frameworks/`: Homebrew's Vulkan loader, `libvulkan.1.dylib`, and
-  `libMoltenVK.dylib`, copied from `/opt/homebrew/lib` with the install names
+- `Contents/Frameworks/`: the Vulkan loader built for macOS 14 (below), `libvulkan.1.dylib`,
+  and Homebrew's `libMoltenVK.dylib`, copied from `/opt/homebrew/lib`, with the install names
   `@rpath/libvulkan.1.dylib` and `@rpath/libMoltenVK.dylib`. The executables link only
   libraries of the system, so they get no rpath.
 - `Contents/Resources/vulkan/icd.d/MoltenVK_icd.json`: Homebrew's manifest of MoltenVK with
   the `library_path` `../../../Frameworks/libMoltenVK.dylib`, relative to the manifest.
 - `Contents/Resources/`: the documents and licence texts of the package of Linux, and under
-  `licenses/` those of MoltenVK and the loader (see [THIRD-PARTY.md](../THIRD-PARTY.md)).
+  `licenses/` those of MoltenVK and the loader, the latter from the loader's source (see
+  [THIRD-PARTY.md](../THIRD-PARTY.md)).
 - `Contents/Info.plist`: the identifier `io.github.xuyanwen2012.vkrgss`, the version of the
   workspace and macOS 14 as the minimum; no icon.
 
 The bundle is signed ad hoc (`codesign --force --sign - --deep`), which the changed install
 names need on Apple silicon; a Developer ID and notarization come with the release
 ([decisions.md](decisions.md#macos)). The command fails when `otool -L` of an executable or
-library of the bundle names a path under `/opt/homebrew`. Homebrew's `vulkan-loader` and
-`molten-vk` are needed to build the app, not to run it; the loader is built for the macOS
-that Homebrew built it on, so the app runs on that macOS and later, whatever `Info.plist`
-says, until the release brings a loader built for macOS 14.
+library of the bundle names a path under `/opt/homebrew`, and when a Mach-O file of the
+bundle needs a newer macOS than 14.0, the minimum of `Info.plist`: it reads the minimum of
+each from its load commands (`LC_BUILD_VERSION`, or `LC_VERSION_MIN_MACOSX` of older files;
+that of a fat file is the highest of its slices) and names every file that needs more, with
+the version it needs. The executables are built for macOS 11.0, Homebrew's MoltenVK for
+12.0. Homebrew's `molten-vk` is needed to build the app, not to run it.
+
+Homebrew's Vulkan loader cannot go into the app: it is built for the macOS that Homebrew
+built it on (`otool -l /opt/homebrew/lib/libvulkan.1.dylib` gives `minos 27.0` on the
+owner's Mac). `cargo xtask macos-loader` builds the loader of the app instead, and `cargo
+xtask app` runs it first, which builds the loader when it is missing and otherwise finds
+nothing to do:
+
+- It clones `https://github.com/KhronosGroup/Vulkan-Loader` and
+  `https://github.com/KhronosGroup/Vulkan-Headers` at the tag `vulkan-sdk-1.4.363.0`, the
+  version of Homebrew's `vulkan-loader`, with `git clone --depth 1` into
+  `target/macos-loader/src/`, and fails unless each clone is at the commit that `xtask`
+  pins for it. A clone that is there is not fetched again. A later version is a change of
+  the tag and the commits in `xtask/src/macos_loader.rs`; `target/macos-loader/` is then
+  removed, so that the sources are cloned again.
+- It installs the headers with their own cmake into `target/macos-loader/headers/` and
+  builds the loader against them with `cmake -G "Unix Makefiles"`,
+  `-DCMAKE_BUILD_TYPE=Release`, `-DCMAKE_OSX_DEPLOYMENT_TARGET=14.0`,
+  `-DCMAKE_OSX_ARCHITECTURES=arm64` and `-DBUILD_TESTS=OFF`, then copies the library, whose
+  install name is `@rpath/libvulkan.1.dylib`, to `target/macos-loader/libvulkan.1.dylib`,
+  and fails if it needs a newer macOS than 14.0.
+
+Building the loader needs git, network access to GitHub the first time, cmake (Homebrew's
+`cmake`) and Apple's command line tools, not ninja. The app has run only on the macOS of the
+owner's Mac; that it runs on macOS 14 rests on the deployment target of the loader and the
+check of the bundle, not on a run on macOS 14.
 
 A program that lies in an app bundle, `<NAME>.app/Contents/MacOS/`, loads the loader of the
 bundle by its path and, unless `VK_DRIVER_FILES` or `VK_ICD_FILENAMES` is set, sets

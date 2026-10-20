@@ -119,8 +119,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   not confined there and ends with its parent through a kqueue; a headless run composites
   on the Apple GPU by default. `docs/building.md` says how to build and test on the Mac.
 - On macOS, `cargo xtask app` assembles `vkrgss.app` and a zip of it: the release
-  executables with Homebrew's Vulkan loader and MoltenVK, so that the app runs without
-  Homebrew and without `DYLD_*` variables, signed ad hoc. A program in an app bundle loads
+  executables with a Vulkan loader and Homebrew's MoltenVK, so that the app runs without
+  Homebrew and without `DYLD_*` variables, signed ad hoc. The loader is built for macOS 14,
+  the minimum the app declares, from the source of Khronos at the tag
+  `vulkan-sdk-1.4.363.0`, cloned at pinned commits, by `cargo xtask macos-loader`, since
+  Homebrew's needs the macOS that Homebrew built it on; and the command fails when a file
+  of the bundle needs a newer macOS than 14, naming it and the version it needs. A program in an app bundle loads
   the bundle's loader and takes the bundle's MoltenVK unless `VK_DRIVER_FILES` or
   `VK_ICD_FILENAMES` is set; elsewhere it falls back to Homebrew's loader. The app started
   without a game directory asks for one with the system's folder chooser, offering the one

@@ -10,7 +10,7 @@
 
 ## 3. Documents
 
-- [ ] 3.1 `docs/building.md`, `THIRD-PARTY.md`, `CHANGELOG.md`. Verify: the tests of `xtask` that check the documents pass on the Mac.
+- [x] 3.1 `docs/building.md`, `THIRD-PARTY.md`, `CHANGELOG.md`. Verify: the tests of `xtask` that check the documents pass on the Mac.
 
 ## 4. Checks
 
