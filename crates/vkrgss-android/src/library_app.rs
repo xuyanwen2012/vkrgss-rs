@@ -2,10 +2,13 @@
 //! the compositor as the picture over an empty frame, with the imports running on a thread
 //! of their own.
 //!
-//! A zip to import comes from the activity's Java side (the picker's choice, or the extra
+//! A file to import comes from the activity's Java side (the picker's choice, or the extra
 //! `import` of the intent), through [`request_import`], into a queue that the event loop
-//! empties one import at a time: the zip is copied into the cache directory through the
-//! activity, unpacked into the library, and the copy removed.
+//! empties one import at a time: the file is copied into the cache directory through the
+//! activity, a zip is unpacked into the library, a built-in scripts file is stored there
+//! under the name of its runtime, and the copy removed. When the classes of built-in scripts
+//! do not tell their runtime, the screen asks for it, and the next import waits for the
+//! answer.
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -13,6 +16,7 @@ use std::thread;
 
 use anyhow::{Context, Result};
 use vkrgss_proto::Size;
+use vkrgss_vfs::Runtime;
 use vkrgss_vk::{DeviceChoice, VkCompositor};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -22,13 +26,13 @@ use winit::platform::android::EventLoopBuilderExtAndroid;
 use winit::platform::android::activity::AndroidApp;
 use winit::window::{Window, WindowId};
 
-use crate::java::Activity;
-use crate::library::{Imported, Library};
+use crate::java::{Activity, Pick};
+use crate::library::{BUILTIN_LIMIT, Imported, Library, builtin_runtime};
 use crate::screen::{Request, Screen};
 use crate::unpack::Kind;
 
-/// The zips waiting to be imported, as URIs.
-static PENDING: Mutex<Vec<(String, Kind)>> = Mutex::new(Vec::new());
+/// The files waiting to be imported, as URIs, with what they hold.
+static PENDING: Mutex<Vec<(String, Pick)>> = Mutex::new(Vec::new());
 
 /// What wakes the library's event loop while it runs.
 static WAKER: Mutex<Option<EventLoopProxy<Event>>> = Mutex::new(None);
@@ -43,13 +47,15 @@ enum Event {
     Pending,
     /// An import has ended with what it imported or why it failed.
     Imported(Result<Imported, String>),
+    /// Built-in scripts whose classes do not tell their runtime, which the player is asked
+    /// for.
+    Unclear(Vec<u8>),
 }
 
-/// Puts the zip `uri` into the queue of imports: the RTP with `rtp`, else a game.
-pub(crate) fn request_import(uri: String, rtp: bool) {
-    let kind = if rtp { Kind::Rtp } else { Kind::Game };
-    tracing::info!("library: asked to import {uri} as {kind:?}");
-    PENDING.lock().expect("not poisoned").push((uri, kind));
+/// Puts the file `uri` into the queue of imports, as what `pick` says it holds.
+pub(crate) fn request_import(uri: String, pick: Pick) {
+    tracing::info!("library: asked to import {uri} as {pick:?}");
+    PENDING.lock().expect("not poisoned").push((uri, pick));
     if let Some(waker) = WAKER.lock().expect("not poisoned").as_ref() {
         let _ = waker.send_event(Event::Pending);
     }
@@ -86,6 +92,7 @@ pub(crate) fn run(
         window: None,
         suspended: true,
         importing: false,
+        unclear: None,
         failed: None,
     };
     let ran = event_loop.run_app(&mut state);
@@ -108,8 +115,10 @@ struct LibraryApp {
     window: Option<Arc<Window>>,
     /// Whether the window system has taken the window away.
     suspended: bool,
-    /// Whether an import runs.
+    /// Whether an import runs, or waits for the runtime of its built-in scripts.
     importing: bool,
+    /// The built-in scripts whose runtime the screen asks for.
+    unclear: Option<Vec<u8>>,
     /// Why the screen could not be shown.
     failed: Option<anyhow::Error>,
 }
@@ -165,6 +174,22 @@ impl LibraryApp {
             tracing::info!("library: game {} is {}{place}", game.id, game.title);
         }
         self.screen.set_games(games);
+        self.log_buttons();
+    }
+
+    /// Says where the buttons shown are, so that a test can tap them.
+    fn log_buttons(&self) {
+        let size = self.size();
+        if size.width == 0 || size.height == 0 {
+            return;
+        }
+        let buttons: Vec<String> = self
+            .screen
+            .button_centres(size)
+            .iter()
+            .map(|(label, (x, y))| format!("{label} at ({x:.0}, {y:.0})"))
+            .collect();
+        tracing::info!("library: buttons {}", buttons.join(", "));
     }
 
     /// Starts the next import of the queue, unless one runs.
@@ -176,7 +201,7 @@ impl LibraryApp {
             let mut pending = PENDING.lock().expect("not poisoned");
             (!pending.is_empty()).then(|| pending.remove(0))
         };
-        let Some((uri, kind)) = next else {
+        let Some((uri, pick)) = next else {
             return;
         };
         self.importing = true;
@@ -191,9 +216,12 @@ impl LibraryApp {
         let spawned = thread::Builder::new()
             .name("vkrgss-import".to_owned())
             .spawn(move || {
-                let outcome =
-                    import(&activity, &library, &uri, kind).map_err(|error| format!("{error:#}"));
-                let _ = proxy.send_event(Event::Imported(outcome));
+                let event = match import(&activity, &library, &uri, pick) {
+                    Ok(Ok(imported)) => Event::Imported(Ok(imported)),
+                    Ok(Err(text)) => Event::Unclear(text),
+                    Err(error) => Event::Imported(Err(format!("{error:#}"))),
+                };
+                let _ = proxy.send_event(event);
             });
         if let Err(error) = spawned {
             self.imported(Err(format!("cannot start the import: {error}")));
@@ -214,6 +242,18 @@ impl LibraryApp {
                 tracing::info!("library: imported the RTP {name}");
                 self.screen.set_status(format!("Imported the RTP {name}."));
             }
+            Ok(Imported::BuiltinScripts(runtime)) => {
+                let file = self.library.builtin_scripts(runtime);
+                tracing::info!(
+                    "library: imported the built-in scripts of {} as {}",
+                    runtime.name(),
+                    file.display()
+                );
+                self.screen.set_status(format!(
+                    "Imported the built-in scripts of {}.",
+                    runtime_title(runtime)
+                ));
+            }
             Err(error) => {
                 tracing::error!("library: the import failed: {error}");
                 self.screen
@@ -223,9 +263,44 @@ impl LibraryApp {
         self.next_import();
     }
 
+    /// Built-in scripts whose runtime the player is asked for.
+    fn unclear(&mut self, text: Vec<u8>) {
+        tracing::info!("library: the built-in scripts do not tell their runtime; asking");
+        self.unclear = Some(text);
+        self.screen.set_busy(false);
+        self.screen.ask_runtime();
+        self.log_buttons();
+    }
+
     fn request(&mut self, request: Request) {
         let outcome = match request {
-            Request::Import(kind) => self.activity.open_picker(kind == Kind::Rtp),
+            Request::Import(Kind::Game) => self.activity.open_picker(Pick::Game),
+            Request::Import(Kind::Rtp) => self.activity.open_picker(Pick::Rtp),
+            Request::ImportBuiltinScripts => self.activity.open_picker(Pick::BuiltinScripts),
+            Request::BuiltinScriptsOf(runtime) => {
+                // Only asked with scripts that wait.
+                let Some(text) = self.unclear.take() else {
+                    return;
+                };
+                match runtime {
+                    Some(runtime) => {
+                        tracing::info!("library: the player says {}", runtime.name());
+                        let stored = self
+                            .library
+                            .import_builtin_scripts(runtime, &text)
+                            .map_err(|error| format!("{error:#}"));
+                        self.imported(stored);
+                    }
+                    None => {
+                        tracing::info!("library: the built-in scripts are not imported");
+                        self.importing = false;
+                        self.screen
+                            .set_status("The built-in scripts were not imported.");
+                        self.next_import();
+                    }
+                }
+                Ok(())
+            }
             Request::Play(game) => {
                 tracing::info!("library: starting game {}, {}", game.id, game.title);
                 let _ = self.library.play(game.id);
@@ -249,12 +324,56 @@ impl LibraryApp {
     }
 }
 
-/// Imports the zip `uri` into `library`.
-fn import(activity: &Activity, library: &Library, uri: &str, kind: Kind) -> Result<Imported> {
-    let zip = activity.copy_to_cache(uri).context("cannot read the zip")?;
-    let imported = library.import(&zip, kind);
-    let _ = std::fs::remove_file(&zip);
-    imported
+/// The name of a runtime as the player knows it.
+fn runtime_title(runtime: Runtime) -> &'static str {
+    match runtime {
+        Runtime::Rgss1 => "XP",
+        Runtime::Rgss2 => "VX",
+        Runtime::Rgss3 => "VX Ace",
+    }
+}
+
+/// Reads the copy of a file in the cache directory, at most [`BUILTIN_LIMIT`] bytes, and
+/// removes it.
+fn read_cached(file: PathBuf) -> Result<Vec<u8>> {
+    let size = std::fs::metadata(&file)
+        .with_context(|| format!("cannot read {}", file.display()))?
+        .len();
+    let text = match size > BUILTIN_LIMIT {
+        true => Err(anyhow::anyhow!(
+            "the file has {size} bytes; a built-in scripts file has at most {BUILTIN_LIMIT}"
+        )),
+        false => std::fs::read(&file).with_context(|| format!("cannot read {}", file.display())),
+    };
+    let _ = std::fs::remove_file(&file);
+    text
+}
+
+/// Imports the file `uri` into `library` as what `pick` says it holds. `Ok(Err(text))`:
+/// built-in scripts whose classes do not tell their runtime, which are not imported yet.
+fn import(
+    activity: &Activity,
+    library: &Library,
+    uri: &str,
+    pick: Pick,
+) -> Result<Result<Imported, Vec<u8>>> {
+    let copy = activity
+        .copy_to_cache(uri)
+        .context("cannot read the file")?;
+    let kind = match pick {
+        Pick::Game => Kind::Game,
+        Pick::Rtp => Kind::Rtp,
+        Pick::BuiltinScripts => {
+            let text = read_cached(copy)?;
+            return match builtin_runtime(&text) {
+                Some(runtime) => library.import_builtin_scripts(runtime, &text).map(Ok),
+                None => Ok(Err(text)),
+            };
+        }
+    };
+    let imported = library.import(&copy, kind);
+    let _ = std::fs::remove_file(&copy);
+    imported.map(Ok)
 }
 
 impl ApplicationHandler<Event> for LibraryApp {
@@ -304,6 +423,7 @@ impl ApplicationHandler<Event> for LibraryApp {
         match event {
             Event::Pending => self.next_import(),
             Event::Imported(outcome) => self.imported(outcome),
+            Event::Unclear(text) => self.unclear(text),
         }
         self.draw();
     }

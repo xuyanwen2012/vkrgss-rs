@@ -6,7 +6,7 @@
 
 ## 2. Built-in scripts and audio
 
-- [ ] 2.1 Import of built-in scripts, pause of audio. Verify: scenarios "Built-in scripts imported" and "Sound in the background" on both phones (the latter by the audio stream's state in logcat).
+- [x] 2.1 Import of built-in scripts, pause of audio. Verify: scenarios "Built-in scripts imported" and "Sound in the background" on both phones (the latter by the audio stream's state in logcat).
 
 ## 3. Present timing and validation
 

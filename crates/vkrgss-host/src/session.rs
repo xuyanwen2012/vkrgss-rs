@@ -361,6 +361,11 @@ impl<D: Display, C: Clock> Session<D, C> {
         &mut self.display
     }
 
+    /// Pauses the sound, with `paused`, while the window is away, or lets it play again.
+    pub fn set_audio_paused(&mut self, paused: bool) {
+        self.audio.set_paused(paused);
+    }
+
     /// How the session ended, or `None` while it runs.
     pub fn end(&self) -> Option<SessionEnd> {
         self.end

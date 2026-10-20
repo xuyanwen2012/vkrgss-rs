@@ -25,18 +25,22 @@ public class VkrgssActivity extends NativeActivity {
         System.loadLibrary("vkrgss_android");
     }
 
-    /** An extra of the intent: a zip to import, as a URI, in place of the picker's choice. */
+    /** An extra of the intent: a file to import, as a URI, in place of the picker's choice. */
     static final String EXTRA_IMPORT = "import";
-    /** An extra of the intent, with EXTRA_IMPORT: whether the zip holds the RTP. */
+    /** An extra of the intent, with EXTRA_IMPORT: whether the file is a zip of the RTP. */
     static final String EXTRA_RTP = "rtp";
+    /** An extra of the intent, with EXTRA_IMPORT: whether the file holds built-in scripts. */
+    static final String EXTRA_BUILTIN = "builtin";
     /** The extra of the intent of Game: the directory of the game. */
     static final String EXTRA_GAME = "game";
 
+    /** What the picker is opened for, as the native code numbers it (Pick of java.rs). */
     private static final int PICK_GAME = 1;
     private static final int PICK_RTP = 2;
+    private static final int PICK_BUILTIN = 3;
 
-    /** Hands the native code a zip to import, which holds a game or, with rtp, the RTP. */
-    private static native void nativeImport(String uri, boolean rtp);
+    /** Hands the native code a file to import, which holds what the PICK_* what says. */
+    private static native void nativeImport(String uri, int what);
 
     /** What the system's bars and the display's cutout cover: left, top, right, bottom. */
     private volatile int[] insets = new int[4];
@@ -77,21 +81,30 @@ public class VkrgssActivity extends NativeActivity {
     private void importFrom(Intent intent) {
         Uri uri = intent.getParcelableExtra(EXTRA_IMPORT, Uri.class);
         if (uri != null) {
-            nativeImport(uri.toString(), intent.getBooleanExtra(EXTRA_RTP, false));
+            int what = intent.getBooleanExtra(EXTRA_BUILTIN, false) ? PICK_BUILTIN
+                    : intent.getBooleanExtra(EXTRA_RTP, false) ? PICK_RTP : PICK_GAME;
+            nativeImport(uri.toString(), what);
         }
     }
 
-    /** Opens the system's picker for a zip; called by the native code from its thread. */
-    public void openPicker(final boolean rtp) {
+    /**
+     * Opens the system's picker for a zip or, for PICK_BUILTIN, any file, since a Ruby file
+     * has no MIME type that every provider gives; called by the native code from its thread.
+     */
+    public void openPicker(final int what) {
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
                 Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                 intent.addCategory(Intent.CATEGORY_OPENABLE);
-                intent.setType("application/zip");
-                intent.putExtra(Intent.EXTRA_MIME_TYPES,
-                        new String[] {"application/zip", "application/x-zip-compressed"});
-                startActivityForResult(intent, rtp ? PICK_RTP : PICK_GAME);
+                if (what == PICK_BUILTIN) {
+                    intent.setType("*/*");
+                } else {
+                    intent.setType("application/zip");
+                    intent.putExtra(Intent.EXTRA_MIME_TYPES,
+                            new String[] {"application/zip", "application/x-zip-compressed"});
+                }
+                startActivityForResult(intent, what);
             }
         });
     }
@@ -99,18 +112,18 @@ public class VkrgssActivity extends NativeActivity {
     @Override
     protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
-        if ((request == PICK_GAME || request == PICK_RTP) && result == RESULT_OK
-                && data != null && data.getData() != null) {
-            nativeImport(data.getData().toString(), request == PICK_RTP);
+        if ((request == PICK_GAME || request == PICK_RTP || request == PICK_BUILTIN)
+                && result == RESULT_OK && data != null && data.getData() != null) {
+            nativeImport(data.getData().toString(), request);
         }
     }
 
     /**
-     * Copies what uri names into the file import.zip of the cache directory and returns the
+     * Copies what uri names into the file import of the cache directory and returns the
      * file's path; called by the native code from a thread of its own.
      */
     public String copyToCache(String uri) throws IOException {
-        File file = new File(getCacheDir(), "import.zip");
+        File file = new File(getCacheDir(), "import");
         try (InputStream in = getContentResolver().openInputStream(Uri.parse(uri));
                 OutputStream out = new FileOutputStream(file)) {
             if (in == null) {

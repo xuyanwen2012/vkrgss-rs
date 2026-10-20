@@ -6,6 +6,7 @@
 
 use std::any::Any;
 use std::io::Write;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
@@ -55,7 +56,9 @@ pub struct Output {
     /// The way to the worker thread; `None` without a device.
     commands: Option<Sender<Request>>,
     /// The open device. Dropping it ends the sound.
-    _device: Option<Box<dyn Any>>,
+    device: Option<Box<dyn Any>>,
+    /// Whether the callback gives silence without mixing.
+    paused: Arc<AtomicBool>,
 }
 
 impl Output {
@@ -78,6 +81,8 @@ impl Output {
         let ffmpeg = options.ffmpeg;
         let (commands, received) = mpsc::channel::<Request>();
         let worker_errors = errors.clone();
+        let paused = Arc::new(AtomicBool::new(false));
+        let callback_paused = Arc::clone(&paused);
         let start: Start = Box::new(move |sample_rate| {
             let mut errors = worker_errors.clone();
             let options = MixerOptions {
@@ -111,6 +116,10 @@ impl Output {
                 );
             }
             Box::new(move |out: &mut [f32]| {
+                if callback_paused.load(Ordering::Relaxed) {
+                    out.fill(0.0);
+                    return;
+                }
                 while let Ok(command) = ready.try_recv() {
                     channels.apply(command);
                 }
@@ -120,7 +129,8 @@ impl Output {
         match open_device(start) {
             Ok(device) => Output {
                 commands: Some(commands),
-                _device: Some(device),
+                device: Some(device),
+                paused,
             },
             Err(reason) => {
                 // Nothing useful can be done when the error stream itself fails.
@@ -131,7 +141,8 @@ impl Output {
                 );
                 Output {
                     commands: None,
-                    _device: None,
+                    device: None,
+                    paused,
                 }
             }
         }
@@ -151,6 +162,31 @@ impl Output {
     /// Like [`Mixer::recall`], without waiting for it.
     pub fn recall(&self, slot: u8) {
         self.request(Request::Recall(slot));
+    }
+
+    /// Pauses the output, with `paused`, or lets it play again. Commands are still taken
+    /// meanwhile and apply when it plays.
+    pub fn set_paused(&self, paused: bool) {
+        if self.paused.swap(paused, Ordering::Relaxed) == paused {
+            return;
+        }
+        let Some(device) = &self.device else {
+            return;
+        };
+        // A device of `cpal` stops asking for frames; another one gets silence.
+        if let Some(stream) = device.downcast_ref::<cpal::Stream>() {
+            let changed = match paused {
+                true => stream.pause(),
+                false => stream.play(),
+            };
+            if let Err(error) = changed {
+                tracing::error!("audio: the output stream cannot be paused or played: {error}");
+            }
+        }
+        match paused {
+            true => tracing::info!("audio: the output is paused"),
+            false => tracing::info!("audio: the output plays again"),
+        }
     }
 
     fn request(&self, request: Request) {

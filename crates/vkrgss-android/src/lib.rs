@@ -11,8 +11,10 @@
 //! - `VkrgssActivity`, the library ([`library`], `library_app`): the screen of the imported
 //!   games ([`screen`]), drawn by the app itself as a picture over an empty frame
 //!   ([`canvas`]). "Import" and "Import RTP" open the picker for a zip, which is copied into
-//!   the cache directory and unpacked into the app's private files directory ([`unpack`]); a
-//!   tap on the selected game starts it in the activity of games; the back key leaves.
+//!   the cache directory and unpacked into the app's private files directory ([`unpack`]);
+//!   "Import built-in scripts" opens it for a built-in scripts file, which is stored there
+//!   under the name of its runtime; a tap on the selected game starts it in the activity of
+//!   games; the back key leaves.
 //! - `VkrgssActivity$Game`, a game, whose directory the intent names, or the directory `game`
 //!   of the app's external files directory when it names none (the game of tests, filled by
 //!   `adb push`). It runs the game as `vkrgss` does in a window, with the guest in a process of
@@ -28,8 +30,9 @@
 //! 2. The game directory's `vkrgss.toml` gives the options of the run ([`options`]). The
 //!    run-time packages are those imported into the library, and those the file names. The
 //!    built-in scripts file is by default the file of the game's runtime in the external files
-//!    directory (`files/rpg_builtin.rb` for RPG Maker XP), and the system's fonts in
-//!    `/system/fonts` are searched after the font directories of the file.
+//!    directory (`files/rpg_builtin.rb` for RPG Maker XP), which tests fill, or else the one
+//!    imported into the library, and the system's fonts in `/system/fonts` are searched after
+//!    the font directories of the file.
 //! 3. The guest process is started as `vkrgss` starts it (`process`, the file
 //!    `process.rs` of `vkrgss` compiled into this crate): the guest executable of the game's
 //!    runtime, which the APK installs in the app's native library directory beside this
@@ -45,7 +48,7 @@
 //!    thread. The on-screen buttons and the keys of gamepads hold the buttons of `Input`; F3
 //!    and F4, on the screen or a keyboard, save and load states, which are copies of the guest
 //!    process, as on the desktop. When the activity is paused the surface goes and the game
-//!    waits; when it resumes the game goes on. An input script of the file holds the buttons,
+//!    waits, and the sound pauses; when it resumes the game and the sound go on. An input script of the file holds the buttons,
 //!    frame by frame ([`input`]), as a headless run's does.
 //! 5. When the game has ended, the relay ends the guest processes, the activity is finished
 //!    and its process exits, so that the next start of the activity starts afresh. When the

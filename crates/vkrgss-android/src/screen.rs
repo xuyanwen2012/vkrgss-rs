@@ -1,15 +1,20 @@
-//! The library screen: the imported games by title, and the buttons "Import", "Import RTP" and
-//! "Delete", drawn by the app itself as the on-screen buttons are ([`crate::canvas`]).
+//! The library screen: the imported games by title, and the buttons "Import", "Import RTP",
+//! "Import built-in scripts" and "Delete", drawn by the app itself as the on-screen buttons
+//! are ([`crate::canvas`]).
 //!
 //! A tap on a game selects it, a tap on the selected game starts it; the last one played is
 //! listed first and selected when the screen opens. "Delete" asks for a second tap before it
 //! deletes the selected game. A finger dragged up or down the list scrolls it. A line at the
-//! bottom says what the app is doing or what went wrong. The screen keeps clear of what the
-//! system's bars and the display's cutout cover ([`Insets`]).
+//! bottom says what the app is doing or what went wrong. When the runtime of imported
+//! built-in scripts cannot be told, the screen asks for it with the buttons "XP", "VX" and
+//! "VX Ace" in place of the others ([`Screen::ask_runtime`]); a tap elsewhere imports
+//! nothing. The screen keeps clear of what the system's bars and the display's cutout cover
+//! ([`Insets`]).
 
 use std::path::PathBuf;
 
 use vkrgss_proto::Size;
+use vkrgss_vfs::Runtime;
 use vkrgss_vk::OverlayImage;
 use winit::event::TouchPhase;
 
@@ -22,6 +27,11 @@ use crate::unpack::Kind;
 pub enum Request {
     /// Open the picker for a zip of this kind.
     Import(Kind),
+    /// Open the picker for a built-in scripts file.
+    ImportBuiltinScripts,
+    /// The answer to [`Screen::ask_runtime`]: the runtime of the built-in scripts, or `None`
+    /// when they are not to be imported.
+    BuiltinScriptsOf(Option<Runtime>),
     Play(Game),
     Delete(Game),
 }
@@ -31,8 +41,26 @@ pub enum Request {
 enum Action {
     Import,
     ImportRtp,
+    ImportBuiltinScripts,
     Delete,
+    /// An answer to the question of the runtime.
+    Runtime(Runtime),
 }
+
+/// The buttons of the screen, with their labels and widths in units.
+const BUTTONS: [(Action, &str, f32); 4] = [
+    (Action::Import, "Import", 2.2),
+    (Action::ImportRtp, "Import RTP", 2.8),
+    (Action::ImportBuiltinScripts, "Import built-in scripts", 5.2),
+    (Action::Delete, "Delete", 2.2),
+];
+
+/// The buttons of the question of the runtime.
+const RUNTIMES: [(Action, &str, f32); 3] = [
+    (Action::Runtime(Runtime::Rgss1), "XP", 2.2),
+    (Action::Runtime(Runtime::Rgss2), "VX", 2.2),
+    (Action::Runtime(Runtime::Rgss3), "VX Ace", 2.8),
+];
 
 const BACKGROUND: Color = [24, 26, 32, 255];
 const BUTTON: Color = [70, 76, 92, 255];
@@ -47,34 +75,36 @@ struct Layout {
     /// The part of the window that nothing covers, which holds everything but the background.
     inside: Area,
     unit: f32,
-    buttons: [(Action, &'static str, Area); 3],
+    buttons: Vec<(Action, &'static str, Area)>,
     /// The list, between the buttons and the status line.
     list: Area,
     row_height: f32,
 }
 
 impl Layout {
-    fn new(window: Size, insets: Insets) -> Layout {
+    /// The layout with the buttons of the library, or with those of the question of the
+    /// runtime when `asking`.
+    fn new(window: Size, insets: Insets, asking: bool) -> Layout {
         let inside = insets.inside(window);
         let unit = inside.height / 10.0;
         let (left, top, width) = (inside.x, inside.y, inside.width);
-        let button = |index: f32| {
-            let w = 2.6 * unit;
-            Area::new(
-                left + width - (3.0 - index) * (w + 0.2 * unit),
-                top + 0.2 * unit,
-                w,
-                0.9 * unit,
-            )
-        };
+        // From the right edge leftwards.
+        let shown: &[(Action, &'static str, f32)] = if asking { &RUNTIMES } else { &BUTTONS };
+        let mut right = left + width;
+        let mut buttons: Vec<(Action, &'static str, Area)> = shown
+            .iter()
+            .rev()
+            .map(|(action, label, w)| {
+                right -= (w + 0.2) * unit;
+                let area = Area::new(right, top + 0.2 * unit, w * unit, 0.9 * unit);
+                (*action, *label, area)
+            })
+            .collect();
+        buttons.reverse();
         Layout {
             inside,
             unit,
-            buttons: [
-                (Action::Import, "Import", button(0.0)),
-                (Action::ImportRtp, "Import RTP", button(1.0)),
-                (Action::Delete, "Delete", button(2.0)),
-            ],
+            buttons,
             list: Area::new(
                 left + 0.3 * unit,
                 top + 1.3 * unit,
@@ -120,6 +150,8 @@ pub struct Screen {
     confirming: bool,
     /// Whether an import runs; the buttons wait meanwhile.
     busy: bool,
+    /// Whether the screen asks for the runtime of built-in scripts.
+    asking: bool,
     status: String,
     finger: Option<Finger>,
     insets: Insets,
@@ -138,6 +170,7 @@ impl Screen {
             first: 0,
             confirming: false,
             busy: false,
+            asking: false,
             status: String::new(),
             finger: None,
             insets: Insets::default(),
@@ -181,6 +214,16 @@ impl Screen {
         self.shown = None;
     }
 
+    /// Asks for the runtime of built-in scripts whose classes do not tell it; the answer is
+    /// the next tap's [`Request::BuiltinScriptsOf`].
+    pub fn ask_runtime(&mut self) {
+        self.asking = true;
+        self.status =
+            "Which runtime are these built-in scripts of? Tap elsewhere to import nothing."
+                .to_owned();
+        self.shown = None;
+    }
+
     /// The games shown.
     pub fn games(&self) -> &[Game] {
         &self.games
@@ -194,7 +237,7 @@ impl Screen {
         phase: TouchPhase,
         (x, y): (f32, f32),
     ) -> Option<Request> {
-        let layout = Layout::new(window, self.insets);
+        let layout = Layout::new(window, self.insets, self.asking);
         match phase {
             TouchPhase::Started => {
                 self.finger = Some(Finger {
@@ -245,6 +288,12 @@ impl Screen {
             .iter()
             .find(|(_, _, area)| area.contains(x, y))
             .map(|(action, _, _)| *action);
+        if std::mem::take(&mut self.asking) {
+            return Some(Request::BuiltinScriptsOf(match button {
+                Some(Action::Runtime(runtime)) => Some(runtime),
+                _ => None,
+            }));
+        }
         if let Some(action) = button {
             if self.busy {
                 return None;
@@ -252,6 +301,9 @@ impl Screen {
             return match action {
                 Action::Import => Some(Request::Import(Kind::Game)),
                 Action::ImportRtp => Some(Request::Import(Kind::Rtp)),
+                Action::ImportBuiltinScripts => Some(Request::ImportBuiltinScripts),
+                // Only shown while asking.
+                Action::Runtime(_) => None,
                 Action::Delete => {
                     let game = self.games.get(self.selected?)?.clone();
                     if confirming {
@@ -283,7 +335,7 @@ impl Screen {
     /// Draws the screen for a window of `window` pixels.
     pub fn picture(&mut self, window: Size) -> OverlayImage {
         self.shown = Some(window);
-        let layout = Layout::new(window, self.insets);
+        let layout = Layout::new(window, self.insets, self.asking);
         let Area {
             x: left,
             y: top,
@@ -309,8 +361,9 @@ impl Screen {
             4.0 * unit,
             INK,
         );
-        for (action, label, area) in layout.buttons {
-            let enabled = !self.busy && (action != Action::Delete || self.selected.is_some());
+        for (action, label, area) in layout.buttons.iter().copied() {
+            let enabled = self.asking
+                || (!self.busy && (action != Action::Delete || self.selected.is_some()));
             let label = match (action, self.confirming) {
                 (Action::Delete, true) => "Delete?",
                 _ => label,
@@ -382,8 +435,19 @@ impl Screen {
     /// Where row `index` of the list lies in a window of `window` pixels while the list is
     /// scrolled to its top: its centre, for the log, so that a test can tap it.
     pub fn row_centre(&self, window: Size, index: usize) -> Option<(f32, f32)> {
-        let layout = Layout::new(window, self.insets);
+        let layout = Layout::new(window, self.insets, self.asking);
         (index < layout.rows()).then(|| layout.row(index).centre())
+    }
+
+    /// The buttons shown in a window of `window` pixels by their labels, with their centres,
+    /// for the log, so that a test can tap them.
+    pub fn button_centres(&self, window: Size) -> Vec<(&'static str, (f32, f32))> {
+        let layout = Layout::new(window, self.insets, self.asking);
+        layout
+            .buttons
+            .iter()
+            .map(|(_, label, area)| (*label, area.centre()))
+            .collect()
     }
 }
 
@@ -407,7 +471,8 @@ mod tests {
     }
 
     fn button(action: Action) -> (f32, f32) {
-        let layout = Layout::new(WINDOW, Insets::default());
+        let asking = matches!(action, Action::Runtime(_));
+        let layout = Layout::new(WINDOW, Insets::default(), asking);
         let (_, _, area) = layout
             .buttons
             .iter()
@@ -450,6 +515,10 @@ mod tests {
             tap(&mut screen, button(Action::ImportRtp)),
             Some(Request::Import(Kind::Rtp))
         );
+        assert_eq!(
+            tap(&mut screen, button(Action::ImportBuiltinScripts)),
+            Some(Request::ImportBuiltinScripts)
+        );
         assert_eq!(tap(&mut screen, button(Action::Delete)), None);
         assert_eq!(
             tap(&mut screen, button(Action::Delete)),
@@ -474,7 +543,7 @@ mod tests {
     fn a_drag_scrolls_the_list_and_is_no_tap() {
         let games: Vec<Game> = (0..20).map(|id| game(id, &format!("Game {id}"))).collect();
         let mut screen = Screen::new(games.clone(), Vec::new());
-        let layout = Layout::new(WINDOW, Insets::default());
+        let layout = Layout::new(WINDOW, Insets::default(), false);
         let (x, y) = screen.row_centre(WINDOW, 3).unwrap();
         screen.touch(WINDOW, 5, TouchPhase::Started, (x, y));
         screen.touch(
@@ -521,13 +590,13 @@ mod tests {
         };
         screen.set_insets(insets);
         assert!(screen.changed(WINDOW));
-        let layout = Layout::new(WINDOW, insets);
+        let layout = Layout::new(WINDOW, insets, false);
         let clear = WINDOW.width as f32 - insets.right;
-        for (_, _, area) in layout.buttons {
+        for (_, _, area) in &layout.buttons {
             assert!(area.x + area.width <= clear, "{area:?}");
         }
         assert!(layout.list.x + layout.list.width <= clear);
-        let delete = layout.buttons[2].2.centre();
+        let delete = layout.buttons[3].2.centre();
         assert_eq!(tap(&mut screen, delete), None);
         assert_eq!(
             tap(&mut screen, delete),
@@ -540,6 +609,58 @@ mod tests {
         };
         // Under the bar only the background.
         assert!((0..WINDOW.height).all(|y| at(WINDOW.width - 1, y) == BACKGROUND));
+    }
+
+    /// The question of the runtime: one of three buttons answers it, a tap elsewhere
+    /// imports nothing, and the screen is the library's again after either.
+    #[test]
+    fn the_runtime_of_built_in_scripts_is_asked_with_three_buttons() {
+        let games = vec![game(1, "A")];
+        let mut screen = Screen::new(games.clone(), Vec::new());
+        // The buttons do not overlap and lie right of the title.
+        for asking in [false, true] {
+            let layout = Layout::new(WINDOW, Insets::default(), asking);
+            assert!(layout.buttons[0].2.x > layout.unit * 4.5, "{asking}");
+            for pair in layout.buttons.windows(2) {
+                assert!(pair[0].2.x + pair[0].2.width < pair[1].2.x, "{asking}");
+            }
+        }
+        for (runtime, label) in [
+            (Runtime::Rgss1, "XP"),
+            (Runtime::Rgss2, "VX"),
+            (Runtime::Rgss3, "VX Ace"),
+        ] {
+            screen.ask_runtime();
+            assert!(screen.changed(WINDOW));
+            screen.picture(WINDOW);
+            let layout = Layout::new(WINDOW, Insets::default(), true);
+            assert!(
+                layout.buttons.iter().any(
+                    |(action, shown, _)| *action == Action::Runtime(runtime) && *shown == label
+                )
+            );
+            assert_eq!(
+                tap(&mut screen, button(Action::Runtime(runtime))),
+                Some(Request::BuiltinScriptsOf(Some(runtime)))
+            );
+        }
+        screen.ask_runtime();
+        let labels: Vec<&str> = screen
+            .button_centres(WINDOW)
+            .iter()
+            .map(|(label, _)| *label)
+            .collect();
+        assert_eq!(labels, ["XP", "VX", "VX Ace"]);
+        let first = screen.row_centre(WINDOW, 0).unwrap();
+        assert_eq!(
+            tap(&mut screen, first),
+            Some(Request::BuiltinScriptsOf(None))
+        );
+        // Asked no more: the row starts its game again.
+        assert_eq!(
+            tap(&mut screen, first),
+            Some(Request::Play(games[0].clone()))
+        );
     }
 
     #[test]

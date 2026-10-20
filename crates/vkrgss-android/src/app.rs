@@ -133,8 +133,8 @@ fn finish(app: &AndroidApp, activity: &Activity) {
 }
 
 /// Runs the game of `game_dir`, with the built-in scripts by default in the external files
-/// directory `files` and the socket of the guest process in the app's private directory
-/// `private`, where the library is. `Ok(false)` is a run that failed and has said why.
+/// directory `files` or imported into the library, and the socket of the guest process in
+/// the app's private directory `private`, where the library is. `Ok(false)` is a run that failed and has said why.
 fn run(
     app: AndroidApp,
     activity: &Activity,
@@ -149,15 +149,25 @@ fn run(
     let mut font_dirs = options.font_dirs;
     font_dirs.push(SYSTEM_FONTS.into());
     // The imported run-time packages, and those the file names, which win.
-    let mut rtps = Library::new(private).rtps();
+    let library = Library::new(private);
+    let mut rtps = library.rtps();
     rtps.extend(options.rtps);
+    // The file the options name, else that of the external files directory, which tests
+    // fill, else the one imported into the library.
+    let builtin_scripts = options.builtin_scripts.unwrap_or_else(|| {
+        let pushed = files.join(builtin_scripts_name(runtime));
+        match pushed.is_file() {
+            true => pushed,
+            false => library.builtin_scripts(runtime),
+        }
+    });
+    tracing::info!(
+        "the built-in scripts are read from {}",
+        builtin_scripts.display()
+    );
     let settings = GuestSettings {
         rtps,
-        builtin_scripts: Some(
-            options
-                .builtin_scripts
-                .unwrap_or_else(|| files.join(builtin_scripts_name(runtime))),
-        ),
+        builtin_scripts: Some(builtin_scripts),
         font_dirs,
         font_own_metrics: options.font_own_metrics,
         debug: options.debug,

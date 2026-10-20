@@ -19,6 +19,10 @@ pub trait AudioSink {
     /// command of each starts where the slot remembers it, if it plays the remembered file.
     /// It must not wait either.
     fn recall(&mut self, slot: u8);
+
+    /// Stops the sound, with `paused`, so that nothing is heard and nothing advances, or
+    /// lets it go on where it stopped. A sink without sound ignores it.
+    fn set_paused(&mut self, _paused: bool) {}
 }
 
 /// A sink that plays nothing and reports nothing, for headless runs.
@@ -44,6 +48,10 @@ impl AudioSink for Output {
 
     fn recall(&mut self, slot: u8) {
         Output::recall(self, slot);
+    }
+
+    fn set_paused(&mut self, paused: bool) {
+        Output::set_paused(self, paused);
     }
 }
 

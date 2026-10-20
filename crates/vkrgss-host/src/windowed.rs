@@ -590,13 +590,15 @@ impl App {
         Ok(running)
     }
 
-    /// The window system took the window away: the surface goes and the session waits.
+    /// The window system took the window away: the surface goes, the sound pauses and the
+    /// session waits.
     fn suspend(&mut self) {
         let Some(running) = &mut self.running else {
             return;
         };
-        let display = running.driver.session_mut().display_mut();
-        if let Err(error) = display.compositor.release_surface() {
+        let session = running.driver.session_mut();
+        session.set_audio_paused(true);
+        if let Err(error) = session.display_mut().compositor.release_surface() {
             tracing::error!("cannot release the surface of the window: {error}");
         }
         running.suspended = true;
@@ -604,7 +606,7 @@ impl App {
     }
 
     /// The window system gave the window back: a surface is made for it and the session
-    /// goes on, with its pacing started afresh.
+    /// goes on, with its pacing started afresh and its sound where it paused.
     fn resume(&mut self, event_loop: &ActiveEventLoop) {
         let Some(running) = &mut self.running else {
             return;
@@ -627,6 +629,7 @@ impl App {
             tracing::error!("cannot draw the window: {error}");
         }
         running.suspended = false;
+        running.driver.session_mut().set_audio_paused(false);
         running.refresh_overlay();
         tracing::info!("the window is back; the game goes on");
     }

@@ -24,7 +24,12 @@
   stored as is.
 - **Audio.** On `Suspended`, pause the cpal stream (or stop pulling and output silence if
   pausing is not available), on `Resumed` play; the mixer's position does not advance while
-  paused, so music continues where it stopped.
+  paused, so music continues where it stopped. The events arrive in the windowed runner of
+  `vkrgss-host`, outside the scope of this change: `AudioSink` gained `set_paused` (a default
+  that does nothing, and `Output`'s), `Session` `set_audio_paused`, and the runner's
+  `suspend` and `resume` call it, a few lines that the requirement plainly needs.
+  `Output::set_paused` of `vkrgss-audio` pauses the `cpal` stream (AAudio's
+  `requestPause`) and makes its callback give silence without mixing.
 - **Present timing.** Read the pacer's log on the Pixel; check whether the swapchain is created
   with the present-timing flags on Android (the window path may differ from the desktop's) and
   whether `vkGetSwapchainTimeDomainPropertiesEXT` returns usable domains. Fix only a defect of

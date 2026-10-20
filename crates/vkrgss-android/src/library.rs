@@ -6,6 +6,10 @@
 //!   `Standard` for XP, `RPGVX` for VX and `RPGVXAce` for VX Ace, told by the folders it
 //!   holds ([`rtp_name`]). A later import of the same package replaces it.
 //! - `played`: the numbers of the games, the last one played first.
+//! - `builtin/<name>`: the built-in scripts file of a runtime, under the name the runtime
+//!   reads it by (`rpg_builtin.rb`, `rpg_builtin_rgss2.rb`, `rpg_builtin_rgss3.rb`), as the
+//!   player imported it; the runtime is told by the classes the file defines
+//!   ([`builtin_runtime`]) or chosen by the player. A later import replaces it.
 //!
 //! An import unpacks into a directory of its own beside the others ([`crate::unpack`]) and
 //! gives it its place only once everything is written; one that fails leaves nothing behind.
@@ -15,13 +19,18 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use vkrgss_vfs::{GameIni, VfsError};
+use vkrgss_guest_main::builtin_scripts_name;
+use vkrgss_vfs::{GameIni, Runtime, VfsError};
 
 use crate::unpack::{Kind, unpack};
 
 const GAMES: &str = "games";
 const RTPS: &str = "rtp";
 const PLAYED: &str = "played";
+const BUILTIN: &str = "builtin";
+
+/// The largest built-in scripts file taken; those of the runtimes are about 30 KB.
+pub const BUILTIN_LIMIT: u64 = 1 << 20;
 
 /// Where an import is unpacked before it gets its place.
 const IMPORTING: &str = ".import";
@@ -42,6 +51,46 @@ pub enum Imported {
     Game(Game),
     /// A run-time package, by its name.
     Rtp(String),
+    /// The built-in scripts of a runtime.
+    BuiltinScripts(Runtime),
+}
+
+/// The runtime whose built-in scripts `text` holds, told by the classes it defines, in
+/// either way of writing them (`class RPG::BaseItem::Feature` or `module RPG; class
+/// BaseItem; class Feature`): `Feature` (of `RPG::BaseItem`) only in RGSS3, `BaseItem` in
+/// RGSS2 and RGSS3, `Weather` only in RGSS1. `None` when the classes tell none, or tell
+/// more than one.
+pub fn builtin_runtime(text: &[u8]) -> Option<Runtime> {
+    let mut names = Vec::new();
+    let mut rest = text;
+    while let Some(at) = find(rest, b"class ") {
+        let after = &rest[at + b"class ".len()..];
+        let length = after
+            .iter()
+            .take_while(|byte| byte.is_ascii_alphanumeric() || **byte == b'_' || **byte == b':')
+            .count();
+        let path = &after[..length];
+        // The keyword alone, not the end of a longer word.
+        let word_start = at == 0 || !(rest[at - 1].is_ascii_alphanumeric() || rest[at - 1] == b'_');
+        if word_start && let Some(last) = path.split(|byte| *byte == b':').next_back() {
+            names.push(last);
+        }
+        rest = &after[length..];
+    }
+    let has = |name: &[u8]| names.contains(&name);
+    match (has(b"Weather"), has(b"BaseItem"), has(b"Feature")) {
+        (true, false, false) => Some(Runtime::Rgss1),
+        (false, true, false) => Some(Runtime::Rgss2),
+        (false, true, true) => Some(Runtime::Rgss3),
+        _ => None,
+    }
+}
+
+/// Where `needle` first starts in `haystack`.
+fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
 }
 
 /// The library in a directory.
@@ -164,6 +213,30 @@ impl Library {
         let mut played = self.played();
         played.retain(|known| *known != id);
         self.write_played(&played)
+    }
+
+    /// The built-in scripts file of `runtime` as an import puts it there; it may not exist.
+    pub fn builtin_scripts(&self, runtime: Runtime) -> PathBuf {
+        self.root.join(BUILTIN).join(builtin_scripts_name(runtime))
+    }
+
+    /// Stores `text` as the built-in scripts of `runtime`, in place of what was there. The
+    /// file gets its place only once it is written whole.
+    pub fn import_builtin_scripts(&self, runtime: Runtime, text: &[u8]) -> Result<Imported> {
+        if text.len() as u64 > BUILTIN_LIMIT {
+            bail!(
+                "the file has {} bytes; a built-in scripts file has at most {BUILTIN_LIMIT}",
+                text.len()
+            );
+        }
+        let dir = self.root.join(BUILTIN);
+        fs::create_dir_all(&dir).with_context(|| format!("cannot create {}", dir.display()))?;
+        let file = self.builtin_scripts(runtime);
+        let written = dir.join(IMPORTING);
+        fs::write(&written, text).with_context(|| format!("cannot write {}", written.display()))?;
+        fs::rename(&written, &file)
+            .with_context(|| format!("cannot move the file to {}", file.display()))?;
+        Ok(Imported::BuiltinScripts(runtime))
     }
 
     /// Imports the zip `zip`, which holds a game or a run-time package as `kind` says.
@@ -312,6 +385,68 @@ mod tests {
         let error = library.import(&zip, Kind::Game).unwrap_err();
         assert!(error.to_string().contains("no Game.ini"), "{error}");
         assert_eq!(fs::read_dir(root.path().join("games")).unwrap().count(), 0);
+    }
+
+    /// Built-in scripts in the two ways the extracted files write their classes.
+    #[test]
+    fn the_runtime_of_built_in_scripts_is_told_by_their_classes() {
+        let rgss1 = b"module RPG;class Map;def initialize;end;end;class Weather;end;\
+                      class Sprite < ::Sprite;end;end";
+        let rgss2 = b"module RPG;class BaseItem;end;class UsableItem < BaseItem;end;end";
+        let rgss3 = b"module RPG;end;class RPG::BaseItem; end;\
+                      class RPG::BaseItem::Feature; end;class RPG::Map; end";
+        assert_eq!(builtin_runtime(rgss1), Some(Runtime::Rgss1));
+        assert_eq!(builtin_runtime(rgss2), Some(Runtime::Rgss2));
+        assert_eq!(builtin_runtime(rgss3), Some(Runtime::Rgss3));
+        // Nothing to tell by, or two runtimes at once.
+        assert_eq!(builtin_runtime(b"puts 1"), None);
+        assert_eq!(builtin_runtime(b"module RPG;class Map;end;end"), None);
+        assert_eq!(
+            builtin_runtime(b"class Weather;end;class BaseItem;end"),
+            None
+        );
+        // A word that ends in `class` is not the keyword.
+        assert_eq!(builtin_runtime(b"subclass Weather"), None);
+    }
+
+    /// Scenario "Built-in scripts imported", for the library: the file is stored under the
+    /// name of its runtime and replaced by a later import.
+    #[test]
+    fn built_in_scripts_are_stored_under_the_name_of_their_runtime() {
+        let root = tempfile::tempdir().unwrap();
+        let library = Library::new(root.path());
+        let file = library.builtin_scripts(Runtime::Rgss1);
+        assert_eq!(file, root.path().join("builtin/rpg_builtin.rb"));
+        assert!(!file.exists());
+        assert_eq!(
+            library
+                .import_builtin_scripts(Runtime::Rgss1, b"one")
+                .unwrap(),
+            Imported::BuiltinScripts(Runtime::Rgss1)
+        );
+        library
+            .import_builtin_scripts(Runtime::Rgss1, b"two")
+            .unwrap();
+        assert_eq!(fs::read(&file).unwrap(), b"two");
+        library
+            .import_builtin_scripts(Runtime::Rgss3, b"three")
+            .unwrap();
+        assert_eq!(
+            fs::read(root.path().join("builtin/rpg_builtin_rgss3.rb")).unwrap(),
+            b"three"
+        );
+        assert_eq!(
+            fs::read_dir(root.path().join("builtin")).unwrap().count(),
+            2,
+            "nothing else is left there"
+        );
+
+        let large = vec![b'#'; BUILTIN_LIMIT as usize + 1];
+        let error = library
+            .import_builtin_scripts(Runtime::Rgss2, &large)
+            .unwrap_err();
+        assert!(error.to_string().contains("at most"), "{error}");
+        assert!(!library.builtin_scripts(Runtime::Rgss2).exists());
     }
 
     #[test]

@@ -3,7 +3,7 @@
 //!
 //! The native code calls the activity's methods `gameDir`, `openPicker`, `copyToCache`,
 //! `startGame`, `insets` and `finish`, from any thread; the activity calls the native method
-//! `nativeImport` with a zip to import, which goes to the library's queue
+//! `nativeImport` with a file to import, which goes to the library's queue
 //! ([`crate::library_app::request_import`]).
 
 use std::path::{Path, PathBuf};
@@ -16,6 +16,26 @@ use jni::{EnvUnowned, JavaVM, jni_sig, jni_str};
 use winit::platform::android::activity::AndroidApp;
 
 use crate::canvas::Insets;
+
+/// What the picker is opened for: the numbers of the Java class's `PICK_*`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Pick {
+    /// The zip of a game.
+    Game = 1,
+    /// The zip of a run-time package.
+    Rtp = 2,
+    /// A built-in scripts file.
+    BuiltinScripts = 3,
+}
+
+impl Pick {
+    /// The kind of the number `what` of the Java class, or `None` for another number.
+    fn from_java(what: i32) -> Option<Pick> {
+        [Pick::Game, Pick::Rtp, Pick::BuiltinScripts]
+            .into_iter()
+            .find(|pick| *pick as i32 == what)
+    }
+}
 
 /// The activity's Java object, for calls from any thread.
 #[derive(Clone)]
@@ -74,15 +94,15 @@ impl Activity {
             .map_err(message)
     }
 
-    /// Opens the system's picker for a zip of a game or, with `rtp`, of the RTP.
-    pub(crate) fn open_picker(&self, rtp: bool) -> Result<()> {
+    /// Opens the system's picker for a file of the kind `pick`.
+    pub(crate) fn open_picker(&self, pick: Pick) -> Result<()> {
         self.vm
             .attach_current_thread(|env| -> Result<_, Error> {
                 env.call_method(
                     self.object.as_ref(),
                     jni_str!("openPicker"),
-                    jni_sig!((rtp: jboolean) -> void),
-                    &[JValue::Bool(rtp)],
+                    jni_sig!((what: jint) -> void),
+                    &[JValue::Int(pick as i32)],
                 )?;
                 Ok(())
             })
@@ -166,18 +186,19 @@ impl Activity {
     }
 }
 
-/// `VkrgssActivity.nativeImport(String uri, boolean rtp)`.
+/// `VkrgssActivity.nativeImport(String uri, int what)`.
 #[unsafe(no_mangle)]
 extern "system" fn Java_io_github_xuyanwen2012_vkrgss_VkrgssActivity_nativeImport<'caller>(
     mut env: EnvUnowned<'caller>,
     _class: JClass<'caller>,
     uri: JString<'caller>,
-    rtp: jni::sys::jboolean,
+    what: jni::sys::jint,
 ) {
     let uri = env
         .with_env(|env| -> Result<_, Error> { uri.try_to_string(env) })
         .resolve::<jni::errors::ThrowRuntimeExAndDefault>();
-    if !uri.is_empty() {
-        crate::library_app::request_import(uri, rtp);
+    match Pick::from_java(what) {
+        Some(pick) if !uri.is_empty() => crate::library_app::request_import(uri, pick),
+        _ => tracing::error!("library: asked to import {uri:?} as the unknown kind {what}"),
     }
 }

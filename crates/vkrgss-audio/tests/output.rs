@@ -106,3 +106,39 @@ fn commands_reach_the_mixer_behind_the_device_callback() {
 
     drop(output);
 }
+
+/// A paused output gives silence and does not mix: what plays goes on where it stopped.
+#[test]
+fn a_paused_output_is_silent_and_goes_on_where_it_stopped() {
+    const RATE: u32 = 44100;
+    let reports = Reports::default();
+    let device: Arc<Mutex<Option<Render>>> = Arc::default();
+    let slot = device.clone();
+    let output = Output::open_with(options(&reports), move |start| {
+        *slot.lock().unwrap() = Some(start(RATE));
+        Ok(Box::new(()))
+    });
+    let mut render = device.lock().unwrap().take().unwrap();
+    // A sound effect of a fifth of a second, which does not loop.
+    output.command(AudioCommand::Play {
+        channel: AudioChannel::Se,
+        data: tone_wav(RATE, 440.0, 0.2),
+        volume: 100,
+        pitch: 100,
+        start: 0,
+        music_return_ms: 0,
+    });
+    render_until(&mut render, "the tone", |block| peak(block) > 0.0);
+
+    output.set_paused(true);
+    let mut block = [1.0; 2 * 2205];
+    for _ in 0..20 {
+        render(&mut block);
+        assert_eq!(peak(&block), 0.0, "silence while paused");
+    }
+    // A second of calls while paused has not used up the tone.
+    output.set_paused(false);
+    render(&mut block);
+    assert!(peak(&block) > 0.0, "the tone goes on where it stopped");
+    assert_eq!(reports.text(), "");
+}

@@ -791,9 +791,16 @@ mod tests {
         assert!(source.contains(&format!("System.loadLibrary(\"{LIBRARY}\")")));
         let native = fs::read_to_string(root.join("crates/vkrgss-android/src/java.rs")).unwrap();
         assert!(native.contains("Java_io_github_xuyanwen2012_vkrgss_VkrgssActivity_nativeImport"));
-        assert!(
-            source.contains("private static native void nativeImport(String uri, boolean rtp)")
-        );
+        assert!(source.contains("private static native void nativeImport(String uri, int what)"));
+        // The kinds of the picker, numbered alike on both sides.
+        for (java, rust) in [
+            ("PICK_GAME = 1;", "Game = 1,"),
+            ("PICK_RTP = 2;", "Rtp = 2,"),
+            ("PICK_BUILTIN = 3;", "BuiltinScripts = 3,"),
+        ] {
+            assert!(source.contains(java), "{java}");
+            assert!(native.contains(rust), "{rust}");
+        }
         for method in ["gameDir", "openPicker", "copyToCache", "startGame"] {
             assert!(source.contains(&format!(" {method}(")), "{method}");
             assert!(
