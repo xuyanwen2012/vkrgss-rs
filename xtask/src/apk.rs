@@ -20,6 +20,14 @@
 //! starts, and the activity of games ([`GAME_ACTIVITY`]), in a process of its own
 //! ([`GAME_PROCESS`]).
 //!
+//! `cargo xtask apk --release` builds the same APK in the release profile, without the flag
+//! `debuggable`, signs it with the key of the keystore that the environment names
+//! ([`KEY_VARIABLES`]; the passwords reach apksigner as `env:` references, never in a
+//! command line) with signatures of the schemes v2 and v3, and writes it as
+//! `target/apk/vkrgss-<VERSION>-android-arm64.apk` with its SHA-256 checksum beside it, as
+//! `sha256sum` writes one. Without the variables it refuses and names them. Both APKs carry
+//! the workspace's version as `versionName` and the [`version_code`] made from it.
+//!
 //! `cargo xtask android-run <SERIAL> <GAME_DIR>` builds the APK, installs it on the phone,
 //! starts the activity of games once if the app has no files directory yet, so that the app
 //! makes it, replaces the game of the app's files directory with the directory `GAME_DIR`,
@@ -76,7 +84,108 @@ pub(crate) const FILES_DIR: &str = "/sdcard/Android/data/io.github.xuyanwen2012.
 const RUN_TIMEOUT: Duration = Duration::from_secs(900);
 
 pub(crate) const USAGE: &str =
-    "usage: cargo xtask apk | cargo xtask android-run <SERIAL> <GAME_DIR>";
+    "usage: cargo xtask apk [--release] | cargo xtask android-run <SERIAL> <GAME_DIR>";
+
+/// The variables that name the key of the release: the keystore file, its password, the
+/// alias of the key in it and the key's password.
+pub(crate) const KEY_VARIABLES: [&str; 4] = [
+    "VKRGSS_ANDROID_KEYSTORE",
+    "VKRGSS_ANDROID_KEYSTORE_PASSWORD",
+    "VKRGSS_ANDROID_KEY_ALIAS",
+    "VKRGSS_ANDROID_KEY_PASSWORD",
+];
+
+/// What kind of APK is built.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Flavor {
+    /// The development profile, debuggable, signed with the debug key of this machine.
+    Debug,
+    /// The release profile, signed with the key the environment names.
+    Release,
+}
+
+/// The key an APK is signed with.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Key {
+    /// The debug keystore of this machine, whose passwords are known.
+    Debug(PathBuf),
+    /// The keystore of the release and the alias of its key; the passwords stay in the
+    /// environment.
+    Release { keystore: PathBuf, alias: String },
+}
+
+/// The key of the release, from the variables that `lookup` gives: an error that names them
+/// all, and those missing, when one is unset or empty.
+fn release_key(lookup: impl Fn(&str) -> Option<String>) -> Result<Key> {
+    let missing: Vec<&str> = KEY_VARIABLES
+        .iter()
+        .copied()
+        .filter(|name| lookup(name).is_none_or(|value| value.is_empty()))
+        .collect();
+    if !missing.is_empty() {
+        bail!(
+            "apk --release: the release is signed with the key that {} name; {} {} not set",
+            KEY_VARIABLES.join(", "),
+            missing.join(", "),
+            if missing.len() == 1 { "is" } else { "are" }
+        );
+    }
+    let keystore = PathBuf::from(lookup(KEY_VARIABLES[0]).unwrap_or_default());
+    if !keystore.is_file() {
+        bail!(
+            "apk --release: {} names {}, which is no file",
+            KEY_VARIABLES[0],
+            keystore.display()
+        );
+    }
+    Ok(Key::Release {
+        keystore,
+        alias: lookup(KEY_VARIABLES[2]).unwrap_or_default(),
+    })
+}
+
+/// The command of apksigner that signs `aligned` into `apk` with `key`, with signatures of
+/// the schemes v2 and v3 (v1 is left out by apksigner for API level 24 and above).
+fn sign_command(apksigner: &Path, key: &Key, aligned: &Path, apk: &Path) -> Command {
+    let mut command = Command::new(apksigner);
+    command.arg("sign");
+    match key {
+        Key::Debug(keystore) => {
+            command.arg("--ks").arg(keystore).args([
+                "--ks-pass",
+                "pass:android",
+                "--key-pass",
+                "pass:android",
+            ]);
+        }
+        Key::Release { keystore, alias } => {
+            command
+                .arg("--ks")
+                .arg(keystore)
+                .args(["--ks-key-alias", alias])
+                .args(["--ks-pass", &format!("env:{}", KEY_VARIABLES[1])])
+                .args(["--key-pass", &format!("env:{}", KEY_VARIABLES[3])]);
+        }
+    }
+    command
+        .args([
+            "--v2-signing-enabled",
+            "true",
+            "--v3-signing-enabled",
+            "true",
+        ])
+        // No file `.idsig` beside it, which only an incremental installation reads.
+        .args(["--v4-signing-enabled", "false"])
+        .arg("--out")
+        .arg(apk)
+        .arg(aligned);
+    command
+}
+
+/// The file name of the release APK of `version`, the asset of the GitHub release.
+pub(crate) fn release_name(version: &str) -> String {
+    format!("vkrgss-{version}-android-arm64.apk")
+}
 
 /// The manifest: two subclasses of `NativeActivity` with the library, the library's
 /// activity started by the launcher and that of games in a process of its own, the native
@@ -131,14 +240,15 @@ fn manifest(version: &str) -> String {
     )
 }
 
-/// The version code of a version `MAJOR.MINOR.PATCH`: `MAJOR * 10000 + MINOR * 100 + PATCH`.
+/// The version code of a version `MAJOR.MINOR.PATCH`:
+/// `MAJOR * 1_000_000 + MINOR * 1_000 + PATCH`. A suffix such as `-rc.1` is left out.
 fn version_code(version: &str) -> u32 {
-    version
-        .split('.')
+    let core = version.split(['-', '+']).next().unwrap_or_default();
+    core.split('.')
         .map(|part| part.parse::<u32>().unwrap_or(0))
         .chain(std::iter::repeat(0))
         .take(3)
-        .fold(0, |code, part| code * 100 + part)
+        .fold(0, |code, part| code * 1_000 + part)
 }
 
 /// The SDK's directory.
@@ -165,8 +275,13 @@ fn build_tools(sdk: &Path) -> Result<PathBuf> {
     newest.with_context(|| format!("no build tools with aapt2 in {}", dir.display()))
 }
 
-/// Builds the debug APK and returns its path.
-pub(crate) fn build(cargo: &str, root: &Path) -> Result<PathBuf> {
+/// Builds the APK of `flavor` and returns its path.
+pub(crate) fn build(cargo: &str, root: &Path, flavor: Flavor) -> Result<PathBuf> {
+    // Before the build, which takes long.
+    let release_key = match flavor {
+        Flavor::Release => Some(release_key(|name| std::env::var(name).ok())?),
+        Flavor::Debug => None,
+    };
     let (clang, ar) = ndk_tools()?;
     let strip = ar.with_file_name("llvm-strip");
     let sdk = sdk()?;
@@ -176,7 +291,11 @@ pub(crate) fn build(cargo: &str, root: &Path) -> Result<PathBuf> {
         bail!("the SDK has no {}", platform.display());
     }
 
-    eprintln!("apk: building {LIBRARY} and the guest executables for {TARGET}");
+    let profile = match flavor {
+        Flavor::Release => "release",
+        Flavor::Debug => "debug",
+    };
+    eprintln!("apk: building {LIBRARY} and the guest executables for {TARGET}, {profile}");
     let mut packages = vec!["-p", "vkrgss-android"];
     for (package, _) in GUEST_PROGRAMS {
         packages.extend(["-p", package]);
@@ -186,12 +305,13 @@ pub(crate) fn build(cargo: &str, root: &Path) -> Result<PathBuf> {
             .arg("build")
             .args(packages)
             .args(["--locked", "--target", TARGET])
+            .args((flavor == Flavor::Release).then_some("--release"))
             .env("CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER", &clang)
             .env("CC_aarch64_linux_android", &clang)
             .env("AR_aarch64_linux_android", &ar)
             .current_dir(root),
     )?;
-    let built = root.join(format!("target/{TARGET}/debug"));
+    let built = root.join(format!("target/{TARGET}/{profile}"));
     let mut files = vec![(
         built.join(format!("lib{LIBRARY}.so")),
         format!("lib{LIBRARY}.so"),
@@ -232,7 +352,7 @@ pub(crate) fn build(cargo: &str, root: &Path) -> Result<PathBuf> {
             .arg(&platform)
             .args(["--min-sdk-version", &API_LEVEL.to_string()])
             .args(["--target-sdk-version", &TARGET_SDK.to_string()])
-            .arg("--debug-mode"),
+            .args((flavor == Flavor::Debug).then_some("--debug-mode")),
     )?;
     // Compressed: the installer extracts them.
     run_host(
@@ -254,19 +374,32 @@ pub(crate) fn build(cargo: &str, root: &Path) -> Result<PathBuf> {
             .arg(&unaligned)
             .arg(&aligned),
     )?;
-    let keystore = debug_key(&out)?;
-    let apk = out.join("vkrgss-debug.apk");
-    run_host(
-        Command::new(tools.join("apksigner"))
-            .arg("sign")
-            .arg("--ks")
-            .arg(&keystore)
-            .args(["--ks-pass", "pass:android", "--key-pass", "pass:android"])
-            .arg("--out")
-            .arg(&apk)
-            .arg(&aligned),
-    )?;
-    eprintln!("apk: {}", apk.display());
+    let (key, name) = match release_key {
+        Some(key) => (key, release_name(version)),
+        None => (Key::Debug(debug_key(&out)?), "vkrgss-debug.apk".to_owned()),
+    };
+    let apk = out.join(&name);
+    run_host(&mut sign_command(
+        &tools.join("apksigner"),
+        &key,
+        &aligned,
+        &apk,
+    ))?;
+    if flavor == Flavor::Release {
+        let checksum = Command::new("sha256sum")
+            .arg(&name)
+            .current_dir(&out)
+            .output()
+            .context("apk: sha256sum could not be started")?;
+        if !checksum.status.success() {
+            bail!("apk: sha256sum ended with {}", checksum.status);
+        }
+        let file = out.join(format!("{name}.sha256"));
+        fs::write(&file, checksum.stdout).with_context(|| file.display().to_string())?;
+        eprintln!("apk: {} and its .sha256", apk.display());
+    } else {
+        eprintln!("apk: {}", apk.display());
+    }
     Ok(apk)
 }
 
@@ -430,7 +563,7 @@ pub(crate) fn start_and_wait(device: &str, timeout: Duration) -> Result<()> {
 /// Builds the APK and installs it on the phone `device`, stops the app, and starts it once
 /// if it has no files directory yet, so that the app makes it.
 pub(crate) fn install(cargo: &str, root: &Path, device: &str) -> Result<()> {
-    let apk = build(cargo, root)?;
+    let apk = build(cargo, root, Flavor::Debug)?;
     eprintln!("android-run: installing on {device}");
     run_host(adb(Some(device)).arg("install").arg("-r").arg(&apk))?;
     output(device, &["shell", "am", "force-stop", PACKAGE])?;
@@ -517,10 +650,106 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_version_code_has_two_digits_for_the_minor_version_and_the_patch() {
-        assert_eq!(version_code("0.3.1"), 301);
-        assert_eq!(version_code("1.12.5"), 11205);
-        assert_eq!(version_code("2"), 20000);
+    fn the_version_code_has_three_digits_for_the_minor_version_and_the_patch() {
+        assert_eq!(version_code("0.3.1"), 3_001);
+        assert_eq!(version_code("1.12.5"), 1_012_005);
+        assert_eq!(version_code("2"), 2_000_000);
+        assert_eq!(version_code("0.4.0-rc.1"), 4_000);
+        // Above every code of the former formula, `MAJOR * 10000 + MINOR * 100 + PATCH`,
+        // that a version up to 0.3.1 had, so that an update installs over it.
+        assert!(version_code("0.3.1") > 301);
+    }
+
+    /// Scenario "No keystore": the command fails before it builds and names the variables.
+    #[test]
+    fn the_release_without_the_variables_names_them() {
+        let message = format!("{:#}", release_key(|_| None).unwrap_err());
+        for name in KEY_VARIABLES {
+            assert!(message.contains(name), "{message}");
+        }
+        // One missing, the others given.
+        let dir = tempfile::tempdir().unwrap();
+        let keystore = dir.path().join("release.keystore");
+        fs::write(&keystore, b"x").unwrap();
+        let given = |missing: &'static str| {
+            let keystore = keystore.display().to_string();
+            move |name: &str| match name {
+                _ if name == missing => Some(String::new()),
+                "VKRGSS_ANDROID_KEYSTORE" => Some(keystore.clone()),
+                _ => Some("secret".to_owned()),
+            }
+        };
+        let message = format!(
+            "{:#}",
+            release_key(given("VKRGSS_ANDROID_KEY_PASSWORD")).unwrap_err()
+        );
+        assert!(
+            message.ends_with("VKRGSS_ANDROID_KEY_PASSWORD is not set"),
+            "{message}"
+        );
+        assert_eq!(
+            release_key(given("NONE")).unwrap(),
+            Key::Release {
+                keystore: keystore.clone(),
+                alias: "secret".to_owned()
+            }
+        );
+        // A keystore that is not there.
+        let message = format!(
+            "{:#}",
+            release_key(|name| Some(match name {
+                "VKRGSS_ANDROID_KEYSTORE" => "/nonexistent/release.keystore".to_owned(),
+                _ => "secret".to_owned(),
+            }))
+            .unwrap_err()
+        );
+        assert!(
+            message.contains("/nonexistent/release.keystore"),
+            "{message}"
+        );
+    }
+
+    /// The passwords of the release reach apksigner as references to the environment.
+    #[test]
+    fn the_release_is_signed_without_a_password_in_the_command_line() {
+        let key = Key::Release {
+            keystore: PathBuf::from("/keys/release.keystore"),
+            alias: "vkrgss".to_owned(),
+        };
+        let command = sign_command(
+            Path::new("apksigner"),
+            &key,
+            Path::new("aligned.apk"),
+            Path::new("out.apk"),
+        );
+        let args: Vec<String> = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            args,
+            [
+                "sign",
+                "--ks",
+                "/keys/release.keystore",
+                "--ks-key-alias",
+                "vkrgss",
+                "--ks-pass",
+                "env:VKRGSS_ANDROID_KEYSTORE_PASSWORD",
+                "--key-pass",
+                "env:VKRGSS_ANDROID_KEY_PASSWORD",
+                "--v2-signing-enabled",
+                "true",
+                "--v3-signing-enabled",
+                "true",
+                "--v4-signing-enabled",
+                "false",
+                "--out",
+                "out.apk",
+                "aligned.apk",
+            ]
+        );
+        assert_eq!(release_name("0.4.0"), "vkrgss-0.4.0-android-arm64.apk");
     }
 
     #[test]
@@ -540,7 +769,8 @@ mod tests {
             1
         );
         assert!(manifest.contains(r#"android:hasCode="true""#));
-        assert!(manifest.contains(r#"android:versionCode="301""#));
+        assert!(manifest.contains(r#"android:versionCode="3001""#));
+        assert!(manifest.contains(r#"android:versionName="0.3.1""#));
         assert!(manifest.contains(r#"android:extractNativeLibs="true""#));
         assert!(FILES_DIR.contains(PACKAGE));
         assert_eq!(

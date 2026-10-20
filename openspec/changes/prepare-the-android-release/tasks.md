@@ -2,7 +2,7 @@
 
 ## 1. Release APK
 
-- [ ] 1.1 `apk --release`, the version code, the release workflow step, its test. Verify: scenarios "Signed with the given key" and "No keystore"; `cargo test -p xtask --locked` passes.
+- [x] 1.1 `apk --release`, the version code, the release workflow step, its test. Verify: scenarios "Signed with the given key" and "No keystore"; `cargo test -p xtask --locked` passes.
 
 ## 2. Built-in scripts and audio
 

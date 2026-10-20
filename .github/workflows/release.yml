@@ -1,7 +1,9 @@
 name: Release
 
 # A tag v<version> builds the package and publishes the GitHub release. Started by hand,
-# the workflow only builds the package and keeps it as an artifact.
+# the workflow only builds the package and keeps it as an artifact. When the repository has
+# the signing secrets of Android (docs/building.md), the release APK is built and attached
+# too; without them it is left out with a notice.
 on:
   push:
     tags: ["v*"]
@@ -57,6 +59,36 @@ jobs:
             target/dist/*.tar.gz
             target/dist/*.tar.gz.sha256
           if-no-files-found: error
+      # The release APK, signed with the key of the secrets: the keystore is a base64
+      # secret written to a temporary file, the passwords stay in the environment.
+      - name: Build the Android APK
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          KEYSTORE_BASE64: ${{ secrets.VKRGSS_ANDROID_KEYSTORE_BASE64 }}
+          VKRGSS_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.VKRGSS_ANDROID_KEYSTORE_PASSWORD }}
+          VKRGSS_ANDROID_KEY_ALIAS: ${{ secrets.VKRGSS_ANDROID_KEY_ALIAS }}
+          VKRGSS_ANDROID_KEY_PASSWORD: ${{ secrets.VKRGSS_ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::notice::the repository has no signing secrets of Android; the release has no APK"
+            exit 0
+          fi
+          # The NDK that docs/building.md names, the build tools and the platform of the APK.
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
+            "ndk;30.0.16248370" "build-tools;36.0.0" "platforms;android-34" > /dev/null
+          rustup target add aarch64-linux-android
+          export VKRGSS_ANDROID_KEYSTORE="$RUNNER_TEMP/release.keystore"
+          trap 'rm -f "$VKRGSS_ANDROID_KEYSTORE"' EXIT
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$VKRGSS_ANDROID_KEYSTORE"
+          ANDROID_NDK_HOME="$ANDROID_HOME/ndk/30.0.16248370" cargo xtask apk --release
+          test -f "target/apk/vkrgss-$VERSION-android-arm64.apk"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: vkrgss-${{ steps.version.outputs.version }}-android-arm64
+          path: |
+            target/apk/*-android-arm64.apk
+            target/apk/*-android-arm64.apk.sha256
+          if-no-files-found: ignore
       # Only a pushed tag publishes: a run started by hand on a tag only builds.
       - name: Create the release
         if: github.event_name == 'push' && github.ref_type == 'tag'
@@ -82,6 +114,15 @@ jobs:
           (`libasound.so.2`) and libudev (`libudev.so.1`).
           Check the download with `sha256sum -c vkrgss-*.tar.gz.sha256`.
           NOTES
+          assets=(target/dist/*.tar.gz target/dist/*.tar.gz.sha256)
+          apk="target/apk/vkrgss-$VERSION-android-arm64.apk"
+          if [ -f "$apk" ]; then
+            assets+=("$apk" "$apk.sha256")
+            cat >> target/dist/notes.md <<'NOTES'
+
+          The APK is for Android 14 or later on arm64 with Vulkan 1.3, self-signed; Obtainium
+          installs it and its updates from this repository's releases (docs/running.md).
+          NOTES
+          fi
           gh release create "$GITHUB_REF_NAME" --verify-tag --title "vkrgss $VERSION" \
-            --notes-file target/dist/notes.md \
-            target/dist/*.tar.gz target/dist/*.tar.gz.sha256
+            --notes-file target/dist/notes.md "${assets[@]}"

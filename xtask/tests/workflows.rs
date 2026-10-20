@@ -195,6 +195,73 @@ fn the_release_is_created_only_for_a_tag() {
     );
 }
 
+/// The step of a job named `name`: its lines from its `- name:` to the next step.
+fn step<'a>(job: &[&'a str], name: &str) -> Vec<&'a str> {
+    let start = job
+        .iter()
+        .position(|line| line.trim() == format!("- name: {name}"))
+        .unwrap_or_else(|| panic!("no step `{name}`"));
+    job[start..]
+        .iter()
+        .enumerate()
+        .take_while(|(index, line)| *index == 0 || !line.trim_start().starts_with("- "))
+        .map(|(_, line)| *line)
+        .collect()
+}
+
+/// The release APK is built from the secrets when they exist, skipped with a notice when
+/// they do not, and attached to the release with its checksum.
+#[test]
+fn the_release_attaches_the_apk_when_the_signing_secrets_exist() {
+    let workflow = read_workflow("release.yml");
+    let package = job(&workflow, "package");
+    let apk = step(&package, "Build the Android APK");
+    for variable in [
+        "VKRGSS_ANDROID_KEYSTORE_PASSWORD",
+        "VKRGSS_ANDROID_KEY_ALIAS",
+        "VKRGSS_ANDROID_KEY_PASSWORD",
+    ] {
+        let line = format!("          {variable}: ${{{{ secrets.{variable} }}}}");
+        assert!(apk.contains(&line.as_str()), "{variable}");
+    }
+    let text = apk.join("\n");
+    assert!(
+        text.contains("KEYSTORE_BASE64: ${{ secrets.VKRGSS_ANDROID_KEYSTORE_BASE64 }}"),
+        "{text}"
+    );
+    let skip = text
+        .find(r#"if [ -z "$KEYSTORE_BASE64" ]; then"#)
+        .expect("a check for the secret");
+    let notice = text
+        .find("::notice::")
+        .expect("a notice when it is missing");
+    let build = text
+        .find("cargo xtask apk --release")
+        .expect("the release build");
+    assert!(skip < notice && notice < build, "{text}");
+    assert!(text[notice..build].contains("exit 0"), "{text}");
+    // The passwords never appear in the script itself.
+    assert!(!text.contains("--ks-pass"), "{text}");
+
+    let create = step(&package, "Create the release").join("\n");
+    assert!(
+        create.contains(r#"apk="target/apk/vkrgss-$VERSION-android-arm64.apk""#),
+        "{create}"
+    );
+    assert!(
+        create.contains(r#"assets+=("$apk" "$apk.sha256")"#),
+        "{create}"
+    );
+    assert!(create.contains(r#""${assets[@]}""#), "{create}");
+    let position = |name: &str| {
+        package
+            .iter()
+            .position(|line| line.trim() == format!("- name: {name}"))
+            .unwrap()
+    };
+    assert!(position("Build the Android APK") < position("Create the release"));
+}
+
 #[test]
 fn every_action_is_named_by_a_commit_hash() {
     let pinned = Regex::new(r"^-? ?uses: [\w.-]+/[\w./-]+@[0-9a-f]{40} # v\S+$").unwrap();
