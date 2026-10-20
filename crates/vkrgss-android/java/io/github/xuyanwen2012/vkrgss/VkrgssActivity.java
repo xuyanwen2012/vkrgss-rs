@@ -33,6 +33,11 @@ public class VkrgssActivity extends NativeActivity {
     static final String EXTRA_BUILTIN = "builtin";
     /** The extra of the intent of Game: the directory of the game. */
     static final String EXTRA_GAME = "game";
+    /**
+     * An extra of the intent of Game: whether the game runs under the validation layer of
+     * Vulkan, which an APK of cargo xtask android-run --validation carries.
+     */
+    static final String EXTRA_VALIDATION = "validation";
 
     /** What the picker is opened for, as the native code numbers it (Pick of java.rs). */
     private static final int PICK_GAME = 1;
@@ -151,12 +156,22 @@ public class VkrgssActivity extends NativeActivity {
         return null;
     }
 
+    /** Whether the game runs under the validation layer: never for the library. */
+    public boolean validation() {
+        return false;
+    }
+
     /** The activity of a game, in a process of its own, which ends with the game. */
     public static final class Game extends VkrgssActivity {
         @Override
         public String gameDir() {
             String dir = getIntent().getStringExtra(EXTRA_GAME);
             return dir == null ? "" : dir;
+        }
+
+        @Override
+        public boolean validation() {
+            return getIntent().getBooleanExtra(EXTRA_VALIDATION, false);
         }
     }
 }

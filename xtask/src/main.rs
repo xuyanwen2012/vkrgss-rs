@@ -17,8 +17,9 @@
 //!   adb. Not a step of the gate.
 //! - `apk [--release]`: builds the debug APK of the Android app under `target/apk/`, or the
 //!   release APK signed with the key the environment names. Not a step of the gate.
-//! - `android-run <SERIAL> <GAME_DIR>`: installs the APK on a phone, runs a game on it and
-//!   pulls the app's log and dumped frames. Not a step of the gate.
+//! - `android-run [--validation] <SERIAL> <GAME_DIR>`: installs the APK on a phone, runs a
+//!   game on it, under the Vulkan validation layer with `--validation`, and pulls the app's
+//!   log and dumped frames. Not a step of the gate.
 //! - `dist`: builds the release executable and packs it with the licence texts into an archive
 //!   with a checksum under `target/dist/`.
 //! - `app`: on macOS, builds the release executables and assembles the app `vkrgss.app`, with
@@ -31,7 +32,8 @@
 //! - `pack-rgssad <GAME_DIR>`: packs the `Data` and `Graphics` folders of a copy of a game
 //!   into `Game.rgssad`.
 //! - `xarch run|android|compare ...`: runs the comparison games in vkrgss alone on this
-//!   machine or on an Android phone, and compares the frames and saves of two such runs.
+//!   machine or on an Android phone, there also under the Vulkan validation layer, and
+//!   compares the frames and saves of two such runs.
 //!   Not a step of the gate.
 
 #![forbid(unsafe_code)]
@@ -55,7 +57,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 const USAGE: &str = "usage: cargo xtask <gate [--job <NAME>]|deps|audit|stress|fuzz <TARGET> [--seconds N]|\
-                     android-test <CRATE> [--device <SERIAL>]|apk [--release]|android-run <SERIAL> <GAME_DIR>|dist|app|\
+                     android-test <CRATE> [--device <SERIAL>]|apk [--release]|android-run [--validation] <SERIAL> <GAME_DIR>|dist|app|\
                      extract-rpg <DLL> <OUTPUT>|oracle <GAME_DIR> [OPTIONS]|pack-rgssad <GAME_DIR>|\
                      xarch run|android|compare ...>";
 
@@ -91,7 +93,10 @@ fn main() -> ExitCode {
             apk::build(&cargo(), &workspace_root(), apk::Flavor::Release).map(|_| ())
         }
         ["android-run", device, game] => {
-            apk::run(&cargo(), &workspace_root(), device, Path::new(game))
+            apk::run(&cargo(), &workspace_root(), device, Path::new(game), false)
+        }
+        ["android-run", "--validation", device, game] => {
+            apk::run(&cargo(), &workspace_root(), device, Path::new(game), true)
         }
         ["apk" | "android-run", ..] => {
             eprintln!("{}", apk::USAGE);

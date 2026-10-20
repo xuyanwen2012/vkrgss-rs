@@ -83,8 +83,19 @@ pub(crate) const FILES_DIR: &str = "/sdcard/Android/data/io.github.xuyanwen2012.
 /// How long a run may last on the phone.
 const RUN_TIMEOUT: Duration = Duration::from_secs(900);
 
-pub(crate) const USAGE: &str =
-    "usage: cargo xtask apk [--release] | cargo xtask android-run <SERIAL> <GAME_DIR>";
+pub(crate) const USAGE: &str = "usage: cargo xtask apk [--release] | \
+                                 cargo xtask android-run [--validation] <SERIAL> <GAME_DIR>";
+
+/// The variable that names the Khronos validation layer for Android (arm64) that the APK of
+/// [`Flavor::Validation`] carries.
+pub(crate) const LAYER_VARIABLE: &str = "VKRGSS_ANDROID_VALIDATION_LAYER";
+
+/// The file name of the validation layer in `lib/arm64-v8a/`, where the loader of Android
+/// finds the layers of a debuggable app.
+const LAYER_FILE: &str = "libVkLayer_khronos_validation.so";
+
+/// The extra of the intent of the activity of games that runs the game under the layer.
+const VALIDATION_EXTRA: &str = "validation";
 
 /// The variables that name the key of the release: the keystore file, its password, the
 /// alias of the key in it and the key's password.
@@ -102,6 +113,8 @@ pub(crate) enum Flavor {
     Debug,
     /// The release profile, signed with the key the environment names.
     Release,
+    /// [`Flavor::Debug`] with the validation layer that [`LAYER_VARIABLE`] names.
+    Validation,
 }
 
 /// The key an APK is signed with.
@@ -280,7 +293,11 @@ pub(crate) fn build(cargo: &str, root: &Path, flavor: Flavor) -> Result<PathBuf>
     // Before the build, which takes long.
     let release_key = match flavor {
         Flavor::Release => Some(release_key(|name| std::env::var(name).ok())?),
-        Flavor::Debug => None,
+        Flavor::Debug | Flavor::Validation => None,
+    };
+    let layer = match flavor {
+        Flavor::Validation => Some(validation_layer(std::env::var_os(LAYER_VARIABLE))?),
+        Flavor::Debug | Flavor::Release => None,
     };
     let (clang, ar) = ndk_tools()?;
     let strip = ar.with_file_name("llvm-strip");
@@ -293,7 +310,7 @@ pub(crate) fn build(cargo: &str, root: &Path, flavor: Flavor) -> Result<PathBuf>
 
     let profile = match flavor {
         Flavor::Release => "release",
-        Flavor::Debug => "debug",
+        Flavor::Debug | Flavor::Validation => "debug",
     };
     eprintln!("apk: building {LIBRARY} and the guest executables for {TARGET}, {profile}");
     let mut packages = vec!["-p", "vkrgss-android"];
@@ -336,6 +353,11 @@ pub(crate) fn build(cargo: &str, root: &Path, flavor: Flavor) -> Result<PathBuf>
                 .arg(file),
         )?;
     }
+    // As it is: the layer of a release of the SDK.
+    if let Some(layer) = &layer {
+        fs::copy(layer, lib_dir.join(LAYER_FILE)).with_context(|| layer.display().to_string())?;
+        files.push((layer.clone(), LAYER_FILE.to_owned()));
+    }
     let version = env!("CARGO_PKG_VERSION");
     fs::write(work.join("AndroidManifest.xml"), manifest(version)).context("apk: the manifest")?;
     compile_java(root, &tools, &platform, &work)?;
@@ -352,7 +374,7 @@ pub(crate) fn build(cargo: &str, root: &Path, flavor: Flavor) -> Result<PathBuf>
             .arg(&platform)
             .args(["--min-sdk-version", &API_LEVEL.to_string()])
             .args(["--target-sdk-version", &TARGET_SDK.to_string()])
-            .args((flavor == Flavor::Debug).then_some("--debug-mode")),
+            .args((flavor != Flavor::Release).then_some("--debug-mode")),
     )?;
     // Compressed: the installer extracts them.
     run_host(
@@ -376,7 +398,14 @@ pub(crate) fn build(cargo: &str, root: &Path, flavor: Flavor) -> Result<PathBuf>
     )?;
     let (key, name) = match release_key {
         Some(key) => (key, release_name(version)),
-        None => (Key::Debug(debug_key(&out)?), "vkrgss-debug.apk".to_owned()),
+        None => (
+            Key::Debug(debug_key(&out)?),
+            match flavor {
+                Flavor::Validation => "vkrgss-validation.apk",
+                _ => "vkrgss-debug.apk",
+            }
+            .to_owned(),
+        ),
     };
     let apk = out.join(&name);
     run_host(&mut sign_command(
@@ -455,6 +484,38 @@ fn compile_java(root: &Path, tools: &Path, platform: &Path, work: &Path) -> Resu
             .args(&compiled),
     )?;
     fs::rename(dex.join("classes.dex"), work.join("classes.dex")).context("apk: classes.dex")
+}
+
+/// The validation layer that the variable [`LAYER_VARIABLE`] gives as `value`, which must
+/// name the file.
+fn validation_layer(value: Option<std::ffi::OsString>) -> Result<PathBuf> {
+    let Some(path) = value.filter(|value| !value.is_empty()).map(PathBuf::from) else {
+        bail!(
+            "--validation: {LAYER_VARIABLE} names no file; it names {LAYER_FILE} of the \
+             Android binaries (arm64-v8a) of a release of the Vulkan validation layers"
+        );
+    };
+    if !path.is_file() {
+        bail!(
+            "--validation: {LAYER_VARIABLE} names {}, which is no file",
+            path.display()
+        );
+    }
+    Ok(path)
+}
+
+/// What a run under the validation layer wrote to the lines of logcat `logcat`: an error
+/// unless the app said that the layer reported no error, and then one that names how many
+/// errors were reported.
+pub(crate) fn validation_outcome(logcat: &str) -> Result<()> {
+    let errors = logcat.matches("validation error:").count();
+    if errors > 0 {
+        bail!("the validation layer reported {errors} errors");
+    }
+    if !logcat.contains("validation: the layer reported no error") {
+        bail!("the app did not say that the validation layer reported no error");
+    }
+    Ok(())
 }
 
 /// The debug keystore in `out`, made on first use.
@@ -539,10 +600,15 @@ fn game_component() -> String {
 }
 
 /// Starts the activity of games without a game on the phone `device`, which runs the game of
-/// the files directory, and waits until its process has ended, at most `timeout`; after
-/// that the app is stopped and the run fails.
-pub(crate) fn start_and_wait(device: &str, timeout: Duration) -> Result<()> {
-    output(device, &["shell", "am", "start", "-n", &game_component()])?;
+/// the files directory, under the validation layer with `validation`, and waits until its
+/// process has ended, at most `timeout`; after that the app is stopped and the run fails.
+pub(crate) fn start_and_wait(device: &str, timeout: Duration, validation: bool) -> Result<()> {
+    let component = game_component();
+    let mut start = vec!["shell", "am", "start", "-n", &component];
+    if validation {
+        start.extend(["--ez", VALIDATION_EXTRA, "true"]);
+    }
+    output(device, &start)?;
     eprintln!("android-run: started; waiting for the app to end");
     let started = Instant::now();
     // The process may take a moment to appear.
@@ -560,10 +626,10 @@ pub(crate) fn start_and_wait(device: &str, timeout: Duration) -> Result<()> {
     Ok(())
 }
 
-/// Builds the APK and installs it on the phone `device`, stops the app, and starts it once
-/// if it has no files directory yet, so that the app makes it.
-pub(crate) fn install(cargo: &str, root: &Path, device: &str) -> Result<()> {
-    let apk = build(cargo, root, Flavor::Debug)?;
+/// Builds the APK of `flavor` and installs it on the phone `device`, stops the app, and
+/// starts it once if it has no files directory yet, so that the app makes it.
+pub(crate) fn install(cargo: &str, root: &Path, device: &str, flavor: Flavor) -> Result<()> {
+    let apk = build(cargo, root, flavor)?;
     eprintln!("android-run: installing on {device}");
     run_host(adb(Some(device)).arg("install").arg("-r").arg(&apk))?;
     output(device, &["shell", "am", "force-stop", PACKAGE])?;
@@ -579,18 +645,29 @@ pub(crate) fn install(cargo: &str, root: &Path, device: &str) -> Result<()> {
     .contains("yes")
     {
         eprintln!("android-run: starting the app once, to make its files directory");
-        start_and_wait(device, RUN_TIMEOUT)?;
+        start_and_wait(device, RUN_TIMEOUT, false)?;
     }
     Ok(())
 }
 
-/// Runs the game `game` on the phone `device`; see the module documentation.
-pub(crate) fn run(cargo: &str, root: &Path, device: &str, game: &Path) -> Result<()> {
+/// Runs the game `game` on the phone `device`, under the validation layer with
+/// `validation`; see the module documentation.
+pub(crate) fn run(
+    cargo: &str,
+    root: &Path,
+    device: &str,
+    game: &Path,
+    validation: bool,
+) -> Result<()> {
     if !game.join("Game.ini").is_file() {
         bail!("android-run: {} has no Game.ini", game.display());
     }
     let dumps = dumped_files(game)?;
-    install(cargo, root, device)?;
+    let flavor = match validation {
+        true => Flavor::Validation,
+        false => Flavor::Debug,
+    };
+    install(cargo, root, device, flavor)?;
     let remote_game = format!("{FILES_DIR}/game");
     output(
         device,
@@ -602,7 +679,7 @@ pub(crate) fn run(cargo: &str, root: &Path, device: &str, game: &Path) -> Result
     eprintln!("android-run: pushing {} to {remote_game}", game.display());
     run_host(adb(Some(device)).arg("push").arg(game).arg(&remote_game))?;
     output(device, &["logcat", "-c"])?;
-    start_and_wait(device, RUN_TIMEOUT)?;
+    start_and_wait(device, RUN_TIMEOUT, validation)?;
 
     let out = root.join("target/android-run").join(device);
     if out.exists() {
@@ -641,6 +718,10 @@ pub(crate) fn run(cargo: &str, root: &Path, device: &str, game: &Path) -> Result
     );
     if !missing.is_empty() {
         bail!("android-run: the app wrote no {}", missing.join(", "));
+    }
+    if validation {
+        validation_outcome(&logcat).context("android-run")?;
+        eprintln!("android-run: the validation layer reported no error");
     }
     Ok(())
 }
@@ -801,13 +882,45 @@ mod tests {
             assert!(source.contains(java), "{java}");
             assert!(native.contains(rust), "{rust}");
         }
-        for method in ["gameDir", "openPicker", "copyToCache", "startGame"] {
+        for method in [
+            "gameDir",
+            "validation",
+            "openPicker",
+            "copyToCache",
+            "startGame",
+        ] {
             assert!(source.contains(&format!(" {method}(")), "{method}");
             assert!(
                 native.contains(&format!("jni_str!(\"{method}\")")),
                 "{method}"
             );
         }
+    }
+
+    /// Scenario "Validation on the phones", for the lines of logcat a run leaves.
+    #[test]
+    fn a_run_under_the_validation_layer_fails_on_an_error_or_without_its_report() {
+        let clean = "I vkrgss  : vkrgss: the app ends\n\
+                     I vkrgss  : vkrgss: validation: the layer reported no error\n";
+        validation_outcome(clean).unwrap();
+        let failed = "E vkrgss  : vkrgss: validation error: [ VUID-x ] y\n\
+                      E vkrgss  : vkrgss: validation error: [ VUID-z ] w\n\
+                      E vkrgss  : vkrgss: validation: the layer reported 2 errors\n";
+        let message = format!("{:#}", validation_outcome(failed).unwrap_err());
+        assert!(message.contains("2 errors"), "{message}");
+        let silent = "E vkrgss  : vkrgss: validation: the layer \
+                      VK_LAYER_KHRONOS_validation was not loaded\n";
+        assert!(validation_outcome(silent).is_err());
+        assert!(validation_outcome("").is_err());
+
+        let message = format!("{:#}", validation_layer(None).unwrap_err());
+        assert!(message.contains(LAYER_VARIABLE), "{message}");
+        let message = format!(
+            "{:#}",
+            validation_layer(Some("/nonexistent/layer.so".into())).unwrap_err()
+        );
+        assert!(message.contains("/nonexistent/layer.so"), "{message}");
+        assert!(LAYER_FILE.starts_with("lib") && LAYER_FILE.ends_with(".so"));
     }
 
     #[test]

@@ -10,7 +10,10 @@
 //!   oracle makes for vkrgss, probe included, with a `vkrgss.toml` that asks for the options
 //!   the oracle gives vkrgss. The copy as the run left it is pulled back to
 //!   `<OUT>/<game>/vkrgss/game` and the frames to `<OUT>/<game>/frames/`, where the oracle
-//!   puts them, with the app's log and the lines of logcat beside them.
+//!   puts them, with the app's log and the lines of logcat beside them. With
+//!   `--validation` the APK carries the Vulkan validation layer and every game runs under
+//!   it, as with `android-run --validation`, and a game fails when the layer reported an
+//!   error.
 //! - `xarch compare <A> <B>` compares, for each game of `A`, the pixels of every frame and
 //!   the bytes of every save file that the game wrote with those of `B`, and fails when one
 //!   differs or is missing.
@@ -35,7 +38,7 @@ use crate::oracle::report::{self, Picture};
 
 pub(crate) const USAGE: &str = "\
 usage: cargo xtask xarch run <OUT> [GAME...] [--list FILE]
-       cargo xtask xarch android <SERIAL> <OUT> [GAME...] [--list FILE]
+       cargo xtask xarch android <SERIAL> <OUT> [GAME...] [--list FILE] [--validation]
        cargo xtask xarch compare <A> <B>";
 
 /// The directory of the app's files directory that holds what the games share.
@@ -57,6 +60,7 @@ pub(crate) enum Command {
         out: PathBuf,
         games: Vec<String>,
         list: Option<PathBuf>,
+        validation: bool,
     },
     Compare {
         a: PathBuf,
@@ -67,6 +71,7 @@ pub(crate) enum Command {
 /// Parses the arguments after `xarch`.
 pub(crate) fn parse(arguments: &[&str]) -> Result<Command> {
     let mut list = None;
+    let mut validation = false;
     let mut rest = Vec::new();
     let mut arguments = arguments.iter().copied();
     while let Some(argument) = arguments.next() {
@@ -75,6 +80,7 @@ pub(crate) fn parse(arguments: &[&str]) -> Result<Command> {
                 let file = arguments.next().context("--list needs a file")?;
                 list = Some(absolute(file).with_context(|| file.to_owned())?);
             }
+            "--validation" => validation = true,
             _ if argument.starts_with("--") => bail!("unknown option {argument}"),
             _ => rest.push(argument),
         }
@@ -82,6 +88,7 @@ pub(crate) fn parse(arguments: &[&str]) -> Result<Command> {
     let path = |text: &str| absolute(text).with_context(|| text.to_owned());
     let names = |names: &[&str]| names.iter().map(|name| (*name).to_owned()).collect();
     Ok(match rest[..] {
+        ["run" | "compare", ..] if validation => bail!("only android takes --validation"),
         ["run", out, ref games @ ..] => Command::Run {
             out: path(out)?,
             games: names(games),
@@ -92,6 +99,7 @@ pub(crate) fn parse(arguments: &[&str]) -> Result<Command> {
             out: path(out)?,
             games: names(games),
             list,
+            validation,
         },
         ["compare", a, b] => {
             ensure!(list.is_none(), "compare takes no --list");
@@ -117,9 +125,14 @@ pub(crate) fn run(command: &Command, cargo: &str, root: &Path) -> Result<()> {
             out,
             games,
             list,
+            validation,
         } => {
             let list = List::read(list.clone().unwrap_or_else(default_list).as_path())?;
-            run_on_phone(&list, &list.chosen(games)?, serial, out, cargo, root)
+            let phone = Phone {
+                serial,
+                validation: *validation,
+            };
+            run_on_phone(&list, &list.chosen(games)?, &phone, out, cargo, root)
         }
         Command::Compare { a, b } => compare(a, b),
     }
@@ -294,20 +307,28 @@ fn run_here(list: &List, games: &[Game], out: &Path, root: &Path) -> Result<()> 
     })
 }
 
+/// The phone of `xarch android`, and whether its games run under the validation layer.
+struct Phone<'a> {
+    serial: &'a str,
+    validation: bool,
+}
+
 /// `xarch android`.
 fn run_on_phone(
     list: &List,
     games: &[Game],
-    serial: &str,
+    phone: &Phone<'_>,
     out: &Path,
     cargo: &str,
     root: &Path,
 ) -> Result<()> {
-    apk::install(cargo, root, serial)?;
-    push_shared(list, games, serial)?;
-    each_game(games, |game| {
-        run_one_on_phone(list, game, serial, out, root)
-    })
+    let flavor = match phone.validation {
+        true => apk::Flavor::Validation,
+        false => apk::Flavor::Debug,
+    };
+    apk::install(cargo, root, phone.serial, flavor)?;
+    push_shared(list, games, phone.serial)?;
+    each_game(games, |game| run_one_on_phone(list, game, phone, out, root))
 }
 
 /// The path of a file of [`PHONE_DIR`] as a game directory of the files directory sees it.
@@ -407,7 +428,14 @@ fn phone_options(list: &List, game: &Game) -> Result<String> {
 }
 
 /// Runs one game on the phone; see the module documentation.
-fn run_one_on_phone(list: &List, game: &Game, serial: &str, out: &Path, root: &Path) -> Result<()> {
+fn run_one_on_phone(
+    list: &List,
+    game: &Game,
+    phone: &Phone<'_>,
+    out: &Path,
+    root: &Path,
+) -> Result<()> {
+    let serial = phone.serial;
     let out = out.join(&game.name);
     if out.exists() {
         fs::remove_dir_all(&out).with_context(|| out.display().to_string())?;
@@ -430,10 +458,10 @@ fn run_one_on_phone(list: &List, game: &Game, serial: &str, out: &Path, root: &P
     shell("wm dismiss-keyguard")?;
     shell(&format!("am force-stop {PACKAGE}"))?;
     apk::output(serial, &["logcat", "-c"])?;
-    let ran = apk::start_and_wait(serial, PHONE_TIMEOUT);
+    let ran = apk::start_and_wait(serial, PHONE_TIMEOUT, phone.validation);
 
     let logcat = apk::output(serial, &["logcat", "-d", "-s", "vkrgss"])?;
-    fs::write(out.join("logcat.txt"), logcat).context("logcat.txt")?;
+    fs::write(out.join("logcat.txt"), &logcat).context("logcat.txt")?;
     run_host(
         adb(Some(serial))
             .arg("pull")
@@ -459,6 +487,10 @@ fn run_one_on_phone(list: &List, game: &Game, serial: &str, out: &Path, root: &P
         missing.join(", "),
         out.join("vkrgss.log").display()
     );
+    if phone.validation {
+        apk::validation_outcome(&logcat)
+            .with_context(|| format!("see {}", out.join("logcat.txt").display()))?;
+    }
     Ok(())
 }
 
@@ -617,8 +649,19 @@ mod tests {
                 out: absolute("out").unwrap(),
                 games: Vec::new(),
                 list: None,
+                validation: false,
             }
         );
+        let command = parse(&["android", "--validation", "SERIAL", "out", "mh"]).unwrap();
+        assert!(matches!(
+            command,
+            Command::Android {
+                validation: true,
+                ..
+            }
+        ));
+        assert!(parse(&["run", "out", "--validation"]).is_err());
+        assert!(parse(&["compare", "a", "b", "--validation"]).is_err());
         assert!(parse(&["compare", "a"]).is_err());
         assert!(parse(&["run", "out", "--fast"]).is_err());
     }

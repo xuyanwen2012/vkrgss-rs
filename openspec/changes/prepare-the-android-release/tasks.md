@@ -10,7 +10,7 @@
 
 ## 3. Present timing and validation
 
-- [ ] 3.1 The Pixel's present timing; `android-run --validation`. Verify: scenario "Validation on the phones"; the cause of the timer pacing on the Pixel fixed or recorded.
+- [x] 3.1 The Pixel's present timing; `android-run --validation`. Verify: scenario "Validation on the phones"; the cause of the timer pacing on the Pixel fixed or recorded.
 
 ## 4. Documents
 

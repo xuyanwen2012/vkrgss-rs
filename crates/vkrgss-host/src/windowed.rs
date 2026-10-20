@@ -28,7 +28,8 @@ use thiserror::Error;
 use vkrgss_proto::link::{GuestEnd, HostEnd, link};
 use vkrgss_proto::{BitmapId, FramePacket, FrameRate, FreezeRule, InputSnapshot, Size};
 use vkrgss_vk::{
-    DeviceChoice, Filter, FrameTiming, IntervalSummary, Mix, STATS_INTERVALS, VkCompositor, VkError,
+    DeviceChoice, Filter, FrameTiming, IntervalSummary, Mix, STATS_INTERVALS, ValidationLog,
+    VkCompositor, VkError,
 };
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
@@ -89,6 +90,9 @@ pub struct WindowedOptions {
     pub dumps: Vec<(u64, PathBuf)>,
     /// What is drawn over the game and driven by touches, such as on-screen buttons.
     pub overlay: Option<Box<dyn Overlay>>,
+    /// The record that the validation layer reports into, which the compositor then asks
+    /// for where it is installed; `None` for a run without it.
+    pub validation: Option<ValidationLog>,
 }
 
 impl WindowedOptions {
@@ -112,6 +116,7 @@ impl WindowedOptions {
             frames: None,
             dumps: Vec::new(),
             overlay: None,
+            validation: None,
         }
     }
 }
@@ -532,9 +537,12 @@ impl App {
             .map(Arc::new)
             .map_err(|error| WindowedError::Window(error.to_string()))?;
 
-        let mut compositor =
-            VkCompositor::for_window(self.options.device.clone(), Arc::clone(&window), None)
-                .map_err(WindowedError::Compositor)?;
+        let mut compositor = VkCompositor::for_window(
+            self.options.device.clone(),
+            Arc::clone(&window),
+            self.options.validation.as_ref(),
+        )
+        .map_err(WindowedError::Compositor)?;
         compositor.set_filter(self.options.filter);
         compositor.set_frame_timing(self.options.frame_stats);
         let mut display = VulkanDisplay {

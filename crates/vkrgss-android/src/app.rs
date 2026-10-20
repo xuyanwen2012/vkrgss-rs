@@ -14,6 +14,7 @@ use vkrgss_guest_main::{builtin_scripts_name, guest_inputs};
 use vkrgss_host::{AudioOptions, InputSource, KeyMap, WindowedOptions, run_windowed_on_android};
 use vkrgss_proto::link::GuestEnd;
 use vkrgss_vfs::{GameIni, Runtime};
+use vkrgss_vk::ValidationLog;
 use winit::platform::android::activity::{AndroidApp, MainEvent, PollEvent, WindowManagerFlags};
 
 use crate::buttons::TouchButtons;
@@ -202,6 +203,9 @@ fn run(
         let _ = done.send(process.relay(link));
     };
 
+    // Under the validation layer when the intent asks for it, with what it reports written
+    // to the log once the window has gone.
+    let validation = activity.validation()?.then(ValidationLog::new);
     let insets = activity.clone();
     let buttons = TouchButtons::new(frame, vec![PathBuf::from(SYSTEM_FONTS)], move || {
         insets.insets().unwrap_or_default()
@@ -224,6 +228,7 @@ fn run(
         frames: options.frames,
         dumps: options.dumps,
         overlay: Some(Box::new(buttons)),
+        validation: validation.clone(),
         ..WindowedOptions::new(Default::default())
     };
     // A game is watched more than it is touched, and a screen that goes off sends the
@@ -241,5 +246,28 @@ fn run(
     if !end.is_success() {
         tracing::error!("the session ended without the game shutting down ({end:?})");
     }
-    Ok(end.is_success() && game_ok)
+    let valid = validation.as_ref().is_none_or(report_validation);
+    Ok(end.is_success() && game_ok && valid)
+}
+
+/// Writes what the validation layer reported to the log, each error on a line that starts
+/// with `validation error:`, and whether it found none. False when it reported one, or
+/// when the layer was not loaded.
+fn report_validation(log: &ValidationLog) -> bool {
+    if !log.is_active() {
+        tracing::error!(
+            "validation: the layer VK_LAYER_KHRONOS_validation was not loaded; the APK of \
+             `cargo xtask android-run --validation` carries it"
+        );
+        return false;
+    }
+    let errors = log.errors();
+    for error in &errors {
+        tracing::error!("validation error: {error}");
+    }
+    match errors.len() {
+        0 => tracing::info!("validation: the layer reported no error"),
+        count => tracing::error!("validation: the layer reported {count} errors"),
+    }
+    errors.is_empty()
 }

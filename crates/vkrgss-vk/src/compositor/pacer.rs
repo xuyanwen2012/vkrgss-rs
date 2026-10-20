@@ -630,6 +630,17 @@ impl TimingCalls for SwapchainTiming {
         let offered: Vec<_> = domains.into_iter().zip(ids).take(written).collect();
         // Without a domain the swapchain presents as one without the extension.
         self.clock = choose_time_domain(&offered, &self.calibrateable);
+        if self.clock.is_none() {
+            // As on the Pixel 7a, whose driver offers only a clock of a present stage and
+            // does not list it among the domains it calibrates, so that it cannot be read.
+            let offered: Vec<_> = offered.iter().map(|(domain, _)| *domain).collect();
+            tracing::info!(
+                "present timing: the swapchain offers no time domain that can be read \
+                 (it offers {offered:?}, the device calibrates {:?}); frames are paced by \
+                 the timer",
+                self.calibrateable
+            );
+        }
         self.domains_counter = counter;
         Ok(())
     }

@@ -1,8 +1,8 @@
 //! The calls between the native code and the Java class of the activity,
 //! `io.github.xuyanwen2012.vkrgss.VkrgssActivity` (`java/` of the crate), through JNI.
 //!
-//! The native code calls the activity's methods `gameDir`, `openPicker`, `copyToCache`,
-//! `startGame`, `insets` and `finish`, from any thread; the activity calls the native method
+//! The native code calls the activity's methods `gameDir`, `validation`, `openPicker`,
+//! `copyToCache`, `startGame`, `insets` and `finish`, from any thread; the activity calls the native method
 //! `nativeImport` with a file to import, which goes to the library's queue
 //! ([`crate::library_app::request_import`]).
 
@@ -90,6 +90,21 @@ impl Activity {
                 }
                 let dir = env.cast_local::<JString>(dir)?;
                 Ok(Some(PathBuf::from(dir.try_to_string(env)?)))
+            })
+            .map_err(message)
+    }
+
+    /// Whether the game runs under the validation layer, as the intent asks.
+    pub(crate) fn validation(&self) -> Result<bool> {
+        self.vm
+            .attach_current_thread(|env| -> Result<_, Error> {
+                env.call_method(
+                    self.object.as_ref(),
+                    jni_str!("validation"),
+                    jni_sig!(() -> jboolean),
+                    &[],
+                )?
+                .z()
             })
             .map_err(message)
     }

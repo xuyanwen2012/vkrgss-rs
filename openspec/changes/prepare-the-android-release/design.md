@@ -34,10 +34,37 @@
   with the present-timing flags on Android (the window path may differ from the desktop's) and
   whether `vkGetSwapchainTimeDomainPropertiesEXT` returns usable domains. Fix only a defect of
   ours; a driver limitation is recorded.
+  Found on 2026-10-20 on the Pixel 7a (Mali-G710, driver r54p3, Android 17
+  CP3A.260905.009): the device has every extension and feature of the pacer and the surface
+  supports present timing at an absolute time with all four stages, but the swapchain offers
+  one time domain, `VK_TIME_DOMAIN_PRESENT_STAGE_LOCAL_EXT`, and
+  `vkGetPhysicalDeviceCalibrateableTimeDomainsKHR` lists only `DEVICE`, `CLOCK_MONOTONIC`
+  and `CLOCK_MONOTONIC_RAW`. A target time on that clock needs a reading of it, and
+  VUID-VkCalibratedTimestampInfoKHR-timeDomain-02354 allows `vkGetCalibratedTimestampsKHR`
+  only for a domain the device lists, so the pacer correctly finds no domain it can read and
+  presents by the timer. It is the driver's limitation, not a defect of ours; the pacer now
+  says so in the log once per swapchain. The Galaxy S24+ (Xclipse 940) lists none of the
+  pacing extensions.
 - **Validation run.** `android-run --validation` adds the layer to `lib/arm64-v8a/`, sets
   `android:debuggable` (already debug) and enables it through the app's own instance layers
   (the app asks for `VK_LAYER_KHRONOS_validation` when a debug option is set), and routes the
-  messenger to logcat; the run fails if a validation error is logged.
+  messenger to logcat; the run fails if a validation error is logged. The layer's file is
+  named by `VKRGSS_ANDROID_VALIDATION_LAYER`. The debug option is the extra `validation`
+  of the intent of the activity of games, which `android-run --validation` gives `am
+  start`; the app passes a `ValidationLog` to the compositor and, once the window has gone,
+  writes each error it holds to the log (`validation error: ...`) and whether there was
+  none. The windowed runner of `vkrgss-host` (outside the scope) gained
+  `WindowedOptions::validation`, which it hands to `VkCompositor::for_window`: three lines
+  that the requirement plainly needs, since the runner makes the game's compositor. The
+  scenario runs "the comparison games", which `xarch android` runs; it takes `--validation`
+  too and passes it to the same install and start as `android-run`.
+
+  Run on 2026-10-20 with the layer of vulkan-sdk-1.4.363.0: `cargo xtask xarch android
+  --validation` with the ten games of `local/xarch.toml` (qunzhan, mbbs, mh, zhanshen,
+  tower, xinbing, arcis, vv, crysalis, isoi) exited 0 on the Pixel 7a and on the Galaxy
+  S24+; every game's logcat says `validation: the layer reported no error`, and the loader
+  logs `Loaded layer VK_LAYER_KHRONOS_validation` from the app's native library directory.
+  `android-run --validation` with a copy of qunzhan passed on the Pixel 7a too.
 
 ## Out of scope
 
@@ -45,4 +72,9 @@ Google Play, F-Droid, a release keystore made by the flow, iOS.
 
 ## Follow-ups
 
-None yet.
+- Present timing on the Mali driver of the Pixel 7a: a target time could be given relative
+  to the previous present (`presentAtRelativeTime`) instead of on a clock that has to be
+  read, or ARM could list the stage's domain as calibrateable; neither is built here.
+- The library screen does not run under the validation layer; only games do.
+- No release with an APK exists yet, so Obtainium was not tried against a real release; the
+  release workflow's Android step runs for the first time with the owner's secrets.
