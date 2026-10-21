@@ -17,6 +17,8 @@
 //! - [`sandbox`]: the restriction a guest process puts on itself, and [`seccomp`]: the
 //!   system calls it denies itself.
 //! - [`signals`]: the signal settings of a guest.
+//! - [`script`]: the hidden option that makes an executable run a script for a program,
+//!   which [`run_confined`] runs as a guest process runs its game, without the program.
 //! - `heap`, on Android: the untagged pointers of the heap of a guest process.
 //!
 //! The crate links no interpreter and no binding: the executable that links it gives it the
@@ -64,6 +66,7 @@ pub mod record;
 pub mod role;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub mod sandbox;
+pub mod script;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[allow(unsafe_code)]
 pub mod seccomp;
@@ -178,15 +181,23 @@ impl Attached {
 /// the process there if it is a copy that was resumed, which has no other thread to go
 /// back to.
 pub fn play_in_process(confine: Option<&Path>, game: impl FnOnce() -> bool) -> bool {
+    let ok = run_confined(confine, game);
+    copier::exit_if_copy(ok);
+    ok
+}
+
+/// Runs `work` as a guest process runs its game, for [`play_in_process`] and for a script.
+/// To be called on the interpreter thread: lets SIGVTALRM reach it, confines the thread to
+/// writing below the directory `confine`, if there is one, and then filters the system
+/// calls of the process.
+pub fn run_confined<R>(confine: Option<&Path>, work: impl FnOnce() -> R) -> R {
     signals::unblock_virtual_timer();
-    if let Some(game_dir) = confine {
-        sandbox::confine(game_dir);
+    if let Some(dir) = confine {
+        sandbox::confine(dir);
         #[cfg(any(target_os = "linux", target_os = "android"))]
         seccomp::filter();
     }
-    let ok = game();
-    copier::exit_if_copy(ok);
-    ok
+    work()
 }
 
 /// Plays the game of a guest that is a thread of the program. To be called on the

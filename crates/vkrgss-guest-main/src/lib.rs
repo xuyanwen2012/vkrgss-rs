@@ -7,7 +7,8 @@
 //! what a guest is set up with ([`guest_inputs`], which the program also calls as a check
 //! before anything starts), the text backend over the font engine (`font`), the guest on a
 //! thread ([`guest_on_thread`]) and the guest process ([`guest_process`]), which call the
-//! library in the order its documentation gives.
+//! library in the order its documentation gives, and a script without a game
+//! ([`run_script`], and [`script_process`] for an executable a program hands its script).
 //!
 //! It is the body of the `main` of a guest executable, kept in a library so that every such
 //! executable has it: the first statement of `main` is a call of [`guest_process`]. The
@@ -29,12 +30,13 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
 
 use anyhow::{Context, Result, anyhow, bail};
-use vkrgss_binding::{Config, Copied, Copier, CopyFailed, RunConfig, RunError, run_game};
+use vkrgss_binding::{Config, Copied, Copier, CopyFailed, RunConfig, RunError, Script, run_game};
 use vkrgss_guest::copier::{ForkCopier, Parked};
 use vkrgss_guest::record::{Diagnostics, GuestRecord};
 use vkrgss_guest::role::{self, GuestRole};
+use vkrgss_guest::script::ScriptRole;
 use vkrgss_guest::settings::GuestSettings;
-use vkrgss_guest::{Attached, diagnostics, play_in_process, play_on_thread, signals};
+use vkrgss_guest::{Attached, diagnostics, play_in_process, play_on_thread, run_confined, signals};
 use vkrgss_proto::link::GuestEnd;
 use vkrgss_ruby_sys::{Interpreter, Options, RUBY_API, RubyApi};
 use vkrgss_vfs::{FileKind, GameFiles, GameIni, LibraryVersion, Runtime, VfsError, resolve_rtps};
@@ -62,15 +64,20 @@ pub fn builtin_scripts_name(runtime: Runtime) -> &'static str {
 }
 
 /// Starts the interpreter of a game of `runtime`, with the options of its interpreter crate
-/// for that runtime: over Ruby 1.8.7 the start-up symbol table, which numbers the symbols as
-/// the original does.
+/// for that runtime ([`interpreter_options`]).
 fn start_interpreter(runtime: Runtime) -> Result<Interpreter> {
+    Ok(Interpreter::start(interpreter_options(runtime))?)
+}
+
+/// The options of the interpreter crate for a game of `runtime`: over Ruby 1.8.7 the
+/// start-up symbol table, which numbers the symbols as the original does.
+fn interpreter_options(runtime: Runtime) -> Options {
     let generation = match runtime {
         Runtime::Rgss1 => 1,
         Runtime::Rgss2 => 2,
         Runtime::Rgss3 => 3,
     };
-    Ok(Interpreter::start(Options::for_rgss(generation))?)
+    Options::for_rgss(generation)
 }
 
 /// The built-in scripts file of `runtime`: the one named on the command line, or the default
@@ -235,11 +242,15 @@ fn runtime_of(ini: &GameIni, named: Option<Runtime>) -> Result<Runtime> {
 /// Whether the interpreter of this executable runs the games of `runtime`: Ruby 1.8.7 those
 /// of RGSS1 and RGSS2, Ruby 1.9.2 those of RGSS3.
 pub fn interpreter_runs(runtime: Runtime) -> bool {
-    let needed = match runtime {
+    RUBY_API == interpreter_of(runtime)
+}
+
+/// The interpreter of the games of `runtime`.
+fn interpreter_of(runtime: Runtime) -> RubyApi {
+    match runtime {
         Runtime::Rgss1 | Runtime::Rgss2 => RubyApi::Ruby18,
         Runtime::Rgss3 => RubyApi::Ruby19,
-    };
-    RUBY_API == needed
+    }
 }
 
 /// The name of the interpreter of `api`.
@@ -515,6 +526,70 @@ fn run_guest(
     });
     drop(interpreter);
     Ok(ok)
+}
+
+/// Runs the script of `role` with the interpreter of its runtime, which has to be that of
+/// this executable, without a game: no window, device or link, and none of the RGSS
+/// classes (`run_script` of the binding). The interpreter is started as for a game of the
+/// runtime, with the file as `$0`, on the thread of its own that a game has, and SIGVTALRM
+/// is blocked in the calling thread first, which has to be the only one still. The status is
+/// that of the script, which `run_script` of the binding says.
+pub fn run_script(role: &ScriptRole) -> Result<ExitCode> {
+    if !interpreter_runs(role.runtime) {
+        bail!(
+            "a script of {} runs over {}, and this executable has {}",
+            role.runtime.name(),
+            interpreter_name(interpreter_of(role.runtime)),
+            interpreter_name(RUBY_API)
+        );
+    }
+    let file = absolute(&role.file)?;
+    signals::block_virtual_timer();
+    let options = Options {
+        script_name: file.to_string_lossy().into_owned(),
+        ..interpreter_options(role.runtime)
+    };
+    let interpreter = Interpreter::start(options)?;
+    let script = Script {
+        file,
+        arguments: role.arguments.clone(),
+        process_functions: role.process_functions,
+    };
+    let ran = interpreter
+        .run(move |ruby| run_confined(None, || vkrgss_binding::run_script(ruby, &script)));
+    // The interpreter is finalised here, which runs the blocks of `at_exit`.
+    drop(interpreter);
+    // The status as the system keeps it: its low eight bits.
+    Ok(ExitCode::from(ran? as u8))
+}
+
+/// Makes the executable that calls it run the script of a program, when the first of its
+/// arguments is the hidden option of script mode ([`ScriptRole`]); `None` otherwise, and
+/// the executable goes on as what it is. It installs the subscriber of the diagnostics at
+/// the level of the environment variable and of the role, and runs the script
+/// ([`run_script`]). A role that cannot be read and a script that cannot be started are a
+/// line on the error stream and status 1.
+pub fn script_process() -> Option<ExitCode> {
+    let role = ScriptRole::read(std::env::args_os().skip(1))?;
+    let fatal = |message: &dyn std::fmt::Display| {
+        eprintln!("vkrgss: {message}");
+        Some(ExitCode::FAILURE)
+    };
+    let role = match role {
+        Ok(role) => role,
+        Err(error) => return fatal(&error),
+    };
+    // Nothing before this emits an event.
+    let variable = std::env::var(diagnostics::VARIABLE).ok();
+    let variable = variable.filter(|value| !value.is_empty());
+    match diagnostics::level(variable.as_deref(), role.verbose) {
+        Ok(level) => diagnostics::install(level),
+        Err(message) => return fatal(&message),
+    }
+    match run_script(&role) {
+        Ok(status) => Some(status),
+        Err(error) => fatal(&format_args!("{error:#}")),
+    }
 }
 
 /// Whether the game ended without a failure. A failure that is not on the error stream yet

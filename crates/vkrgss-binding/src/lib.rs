@@ -243,6 +243,14 @@
 //!   `IO.popen` start nothing, return `nil` and say so on `$stderr`
 //!   (`src/prelude_process_off.rb`).
 //!
+//! # Script mode
+//!
+//! [`run_script`] runs a Ruby file without a game: none of the RGSS classes is defined and
+//! no guest is installed. The file gets what a game of the interpreter gets of the prelude
+//! for loading files, with the directory of the file in the place of the game directory,
+//! and the functions that start processes are turned off as in a game unless the
+//! [`Script`] enables them; see the private module `script`.
+//!
 //! # Win32API
 //!
 //! In RGSS1 and RGSS2 `Win32API.new(library, function, import, export)` keeps the two names,
@@ -373,6 +381,7 @@ mod plane;
 mod rb;
 mod rect;
 mod runtime;
+mod script;
 mod sprite;
 mod stats;
 mod table;
@@ -395,4 +404,5 @@ pub mod scene_testing;
 pub use error::Error;
 pub use guest::{Config, Guest};
 pub use runtime::{Copied, Copier, CopyFailed, RunConfig, RunError, frame_size, run_game};
+pub use script::{Script, ScriptError, run_script};
 pub use text::TextBackend;

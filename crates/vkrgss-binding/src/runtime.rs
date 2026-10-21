@@ -40,10 +40,19 @@ const PRELUDE: &str = include_str!("prelude.rb");
 
 /// The Ruby part of the preparation of a game of RGSS3, in the place of [`PRELUDE`] and
 /// after [`PRELUDE_SHARED`]: `RGSSReset`, `save_data`, `at_exit`, `exit!`, `msgbox`,
-/// `msgbox_p`, `require` and `load` that compile as UTF-8, `require_relative`, `autoload`
-/// and the loader of the script archive. `RGSS_VERSION` is defined before it
-/// ([`rgss3_version`]), and `load_data` is a host function of [`kernel`].
+/// `msgbox_p` and the loader of the script archive, and [`PRELUDE_LOAD_RGSS3`] after it.
+/// `RGSS_VERSION` is defined before it ([`rgss3_version`]), and `load_data` is a host
+/// function of [`kernel`].
 const PRELUDE_RGSS3: &str = include_str!("prelude_rgss3.rb");
+
+/// The rules of loading of RGSS3, after [`PRELUDE_RGSS3`], in whose lines from
+/// [`PRELUDE_LOAD_RGSS3_LINE`] on they stood: `require` and `load` that compile as UTF-8,
+/// `require_relative` and `autoload`. A script over Ruby 1.9 gets them too.
+const PRELUDE_LOAD_RGSS3: &str = include_str!("prelude_load_rgss3.rb");
+
+/// The line [`PRELUDE_LOAD_RGSS3`] is evaluated from, so that its backtraces have the
+/// positions they had in [`PRELUDE_RGSS3`].
+const PRELUDE_LOAD_RGSS3_LINE: u32 = 48;
 
 /// What the preparation evaluates for every runtime, after [`PRELUDE`] or before
 /// [`PRELUDE_RGSS3`]: `require` and `load` limited to the game directory.
@@ -508,6 +517,7 @@ pub(crate) fn prepare(ruby: &Ruby) -> Result<(), RubyError> {
         // The prelude of RGSS3 replaces `require` and `load` of the shared one.
         ruby.eval_protected(PRELUDE_SHARED, PRELUDE_NAME, 1)?;
         ruby.eval_protected(PRELUDE_RGSS3, PRELUDE_NAME, 1)?;
+        ruby.eval_protected(PRELUDE_LOAD_RGSS3, PRELUDE_NAME, PRELUDE_LOAD_RGSS3_LINE)?;
         ruby.eval_protected(PRELUDE_DL, PRELUDE_NAME, 1)?;
     } else {
         ruby.eval_protected(PRELUDE, PRELUDE_NAME, 1)?;
@@ -518,14 +528,36 @@ pub(crate) fn prepare(ruby: &Ruby) -> Result<(), RubyError> {
         ruby.eval_protected(PRELUDE_RGSS1, PRELUDE_NAME, 1)?;
     }
     if !process_functions {
-        ruby.eval_protected(PROCESS_FUNCTIONS_OFF, PRELUDE_NAME, 1)?;
-        if rb::RUBY_19 {
-            ruby.eval_protected(PROCESS_FUNCTIONS_OFF_RUBY19, PRELUDE_NAME, 1)?;
-        }
+        turn_process_functions_off(ruby)?;
     }
     // Last, so that debug mode does not report the exceptions the prelude itself may meet.
     let flags = test_mode_globals(runtime, debug, battle_test);
     ruby.eval_protected(&flags, PRELUDE_NAME, 1)?;
+    Ok(())
+}
+
+/// Turns the functions that start processes off, those of Ruby 1.9 included.
+pub(crate) fn turn_process_functions_off(ruby: &Ruby) -> Result<(), RubyError> {
+    ruby.eval_protected(PROCESS_FUNCTIONS_OFF, PRELUDE_NAME, 1)?;
+    if rb::RUBY_19 {
+        ruby.eval_protected(PROCESS_FUNCTIONS_OFF_RUBY19, PRELUDE_NAME, 1)?;
+    }
+    Ok(())
+}
+
+/// Prepares the interpreter of a script ([`crate::script`]) with the rules of loading of a
+/// game of its interpreter: over Ruby 1.8 `$KCODE` and an empty load path and the
+/// `require` and `load` of [`PRELUDE_SHARED`], over Ruby 1.9 those of RGSS3,
+/// `require_relative` and `autoload` after it. The host functions they build on are the
+/// caller's to define.
+pub(crate) fn prepare_loading(ruby: &Ruby) -> Result<(), RubyError> {
+    if !rb::RUBY_19 {
+        ruby.eval_protected(PRELUDE_RUBY18, PRELUDE_NAME, 1)?;
+    }
+    ruby.eval_protected(PRELUDE_SHARED, PRELUDE_NAME, 1)?;
+    if rb::RUBY_19 {
+        ruby.eval_protected(PRELUDE_LOAD_RGSS3, PRELUDE_NAME, PRELUDE_LOAD_RGSS3_LINE)?;
+    }
     Ok(())
 }
 
@@ -670,7 +702,7 @@ enum Ended {
 
 /// Evaluates a Ruby string at the top level under the file name `name`, as the original
 /// runtime evaluates a script.
-fn evaluate(ruby: &Ruby, source: VALUE, name: &str) -> Result<(), Raised> {
+pub(crate) fn evaluate(ruby: &Ruby, source: VALUE, name: &str) -> Result<(), Raised> {
     let name = rb::bytes_new(ruby, name.as_bytes())?;
     // SAFETY: `&Ruby` proves the thread, on which the main object exists for the life of the
     // interpreter. `source` is live by the caller's word and `name` was just returned; both

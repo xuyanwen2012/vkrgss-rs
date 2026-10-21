@@ -45,53 +45,53 @@ module Process
   module_function :exit!
 end
 
-# Only Ruby files inside the game directory are loaded, by the rule of `prelude_shared.rb`,
-# which is evaluated before this file in a game of RGSS3 and whose `require` and `load`
-# these replace: a file is compiled as UTF-8, as the scripts are. `require_relative` takes
-# the name relative to the directory of the file it is called from, the game directory
-# for a script, and `autoload` locates the file by the rule of `require` at the call;
-# Ruby's own would call the interpreter's `require` past that rule.
-module Kernel
-  def require(name)
-    path = vkrgss_locate(name, true)
-    return false if $".include?(path)
-    $" << path
-    eval(File.open(path, "rb") { |file| file.read }.force_encoding("UTF-8"),
-         TOPLEVEL_BINDING, path)
-    true
-  end
-
-  def load(name, wrap = false)
-    path = vkrgss_locate(name, false)
-    eval(File.open(path, "rb") { |file| file.read }.force_encoding("UTF-8"),
-         TOPLEVEL_BINDING, path)
-    true
-  end
-
-  def require_relative(name)
-    file = caller(1)[0].to_s[/\A(.*?):\d+(?::in |\z)/, 1]
-    require(vkrgss_relative(file.to_s, name))
-  end
-
-  # Registered in `Object`, the namespace of a call at the top level.
-  def autoload(name, file)
-    Object.autoload(name, file)
-  end
-
-  module_function :require, :load, :require_relative, :autoload
-end
-
-# Ruby's own `autoload` loads the file by its path at the first use of the constant.
-class Module
-  unless private_method_defined?(:vkrgss_autoload)
-    alias_method :vkrgss_autoload, :autoload
-    private :vkrgss_autoload
-  end
-
-  def autoload(name, file)
-    vkrgss_autoload(name, vkrgss_locate(file, true))
-  end
-end
+# The rules of loading stood on the lines below. They moved to `prelude_load_rgss3.rb`,
+# evaluated after this file from line 48, which a script of script mode gets too. The
+# comment lines keep the line numbers of what follows.
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
 
 # A modal message: the text goes to the error stream and to the host, and is shown in the
 # message panel until the host has dismissed it.

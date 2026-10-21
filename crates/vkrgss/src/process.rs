@@ -246,7 +246,7 @@ fn missing_guest(_: &str) -> String {
 /// as the system resolves them. On Android the program's own file is the app's library,
 /// which lies in the app's native library directory (`nativeLibraryDir`), where the APK
 /// installs the guest executables too.
-fn guest_executable(runtime: Runtime) -> Result<PathBuf> {
+pub(crate) fn guest_executable(runtime: Runtime) -> Result<PathBuf> {
     guest_executable_of(&own_file()?, runtime)
 }
 

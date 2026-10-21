@@ -67,6 +67,10 @@
 //! the relay of `process` in the program). F3 and F4 ask for it in a window, `--states` in a headless
 //! run. With `--allow-process-functions` there are no states.
 //!
+//! With `--script FILE` the program runs that Ruby file instead of a game (`script`), after
+//! step 1 and the environment variables of the sandbox: no configuration file, game,
+//! window, device or audio, and the status is that of the script.
+//!
 //! A guest process confines itself before the first script runs (the sandbox of `vkrgss-guest`),
 //! unless
 //! `--sandbox off` or `--allow-process-functions` is given. A guest on a thread is not
@@ -78,6 +82,7 @@ mod chooser;
 mod config;
 mod log;
 mod process;
+mod script;
 
 use std::path::{Path, PathBuf, absolute};
 use std::process::ExitCode;
@@ -152,11 +157,14 @@ fn main() -> ExitCode {
         Ok(sandbox) => sandbox,
         Err(message) => return usage(message),
     };
-    let options = Options {
+    let mut options = Options {
         guest: options.guest.or(from_environment),
         sandbox: options.sandbox.or(sandbox),
         ..options
     };
+    if let Some(file) = options.script.take() {
+        return script::run(file, &options, diagnostics.variable.as_deref());
+    }
     // The app started without a game directory, as a double-click starts it, asks for one; a
     // cancel ends it quietly.
     #[cfg(target_os = "macos")]

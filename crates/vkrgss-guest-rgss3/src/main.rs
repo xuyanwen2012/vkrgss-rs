@@ -7,13 +7,16 @@
 //! beside it, as the guest process of such a game. It is the guest role and the main of a
 //! guest over the second interpreter (`vkrgss-guest-main-rgss3`) and nothing of the host. It
 //! reads no option: started without the hidden option of the guest role, it says what it is
-//! and ends.
+//! and ends. `vkrgss --script` replaces itself with this executable for a script of RGSS3,
+//! with the hidden option of script mode (`script_process`), which it runs instead.
 
 use std::process::ExitCode;
 
 #[cfg(not(vkrgss_interpreter_absent))]
 fn main() -> ExitCode {
-    vkrgss_guest_main_rgss3::guest_process(env!("CARGO_PKG_VERSION")).unwrap_or_else(not_a_guest)
+    vkrgss_guest_main_rgss3::script_process()
+        .or_else(|| vkrgss_guest_main_rgss3::guest_process(env!("CARGO_PKG_VERSION")))
+        .unwrap_or_else(not_a_guest)
 }
 
 /// What an executable started by anything but `vkrgss` says, with status 2.

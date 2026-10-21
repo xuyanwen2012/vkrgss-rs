@@ -9,6 +9,8 @@ use vkrgss_vfs::{Encoding, Runtime};
 /// What `--help` prints, and what is printed with every command-line error.
 pub(crate) const USAGE: &str = "\
 usage: vkrgss [GAME_DIR] [OPTIONS]
+       vkrgss [--runtime RUNTIME] [--sandbox on|off] [--allow-process-functions]
+              [--verbose] --script FILE [ARG...]
 
   GAME_DIR                  the game directory; the current directory if absent
   --config FILE             the user's configuration file;
@@ -66,6 +68,11 @@ usage: vkrgss [GAME_DIR] [OPTIONS]
                             directory, executes nothing and opens no TCP connection;
                             default: on; the environment variable VKRGSS_SANDBOX sets
                             it too, and comes after this option
+  --script FILE [ARG...]    run the Ruby file FILE with the interpreter of the runtime,
+                            without a game, a window or a device; the arguments after
+                            FILE are ARGV of the script; default runtime: rgss3; only
+                            --runtime, --sandbox, --allow-process-functions and
+                            --verbose go before it
   --headless                run without a window, on a virtual clock
   --frames N                headless: stop after N frames
   --input SCRIPT|@FILE      headless: held buttons, for example \"2:RIGHT, 6:\"
@@ -169,6 +176,15 @@ impl Variable {
     }
 }
 
+/// A Ruby file that runs without a game, and its arguments.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ScriptFile {
+    /// The file as it was given.
+    pub file: PathBuf,
+    /// The arguments after it, which are `ARGV` of the script.
+    pub arguments: Vec<String>,
+}
+
 /// The parsed command line.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct Options {
@@ -227,6 +243,8 @@ pub(crate) struct Options {
     pub dumps: Vec<(u64, PathBuf)>,
     /// The states to save and to load at given frames of a headless run.
     pub states: StateSchedule,
+    /// The script that runs instead of a game, if `--script` was given.
+    pub script: Option<ScriptFile>,
     /// Whether only the version is printed.
     pub version: bool,
     /// Whether only the usage text is printed.
@@ -418,6 +436,12 @@ pub(crate) fn parse(arguments: &[String]) -> Result<Options, String> {
                 options.states =
                     StateSchedule::parse(value()?).map_err(|error| format!("--states: {error}"))?;
             }
+            "--script" => {
+                let file = PathBuf::from(value()?);
+                // Every argument after the file is the script's.
+                let arguments = arguments.by_ref().cloned().collect();
+                options.script = Some(ScriptFile { file, arguments });
+            }
             "--version" | "-V" => options.version = true,
             "--help" | "-h" => options.help = true,
             option if option.starts_with('-') => return Err(format!("unknown option `{option}`")),
@@ -430,7 +454,52 @@ pub(crate) fn parse(arguments: &[String]) -> Result<Options, String> {
     if options.no_config && options.config.is_some() {
         return Err("--config cannot be used together with --no-config".to_owned());
     }
+    let of_games = options_of_games(&options);
+    if options.script.is_some() && !of_games.is_empty() {
+        return Err(format!(
+            "--script runs a Ruby file without a game and does not go together with {}",
+            of_games.join(", ")
+        ));
+    }
     Ok(options)
+}
+
+/// The options among `options` that concern only games: all but `--runtime`, `--sandbox`,
+/// `--allow-process-functions`, `--verbose`, `--script`, `--help` and `--version`.
+fn options_of_games(options: &Options) -> Vec<&'static str> {
+    let given = [
+        (options.game_dir.is_some(), "a game directory"),
+        (options.config.is_some(), "--config"),
+        (options.no_config, "--no-config"),
+        (!options.rtps.is_empty(), "--rtp"),
+        (options.builtin_scripts.is_some(), "--builtin-scripts"),
+        (options.device.is_some(), "--device"),
+        (!options.font_dirs.is_empty(), "--font-dir"),
+        (options.font_own_metrics, "--font-own-metrics"),
+        (options.encoding.is_some(), "--encoding"),
+        (options.debug, "--debug"),
+        (options.log_p, "--log-p"),
+        (options.filter.is_some(), "--filter"),
+        (options.fullscreen, "--fullscreen"),
+        (options.present_stats, "--present-stats"),
+        (options.frame_stats, "--frame-stats"),
+        (options.no_audio, "--no-audio"),
+        (options.soundfont.is_some(), "--soundfont"),
+        (options.seed.is_some(), "--seed"),
+        (!options.preload.is_empty(), "--preload"),
+        (options.record.is_some(), "--record"),
+        (options.replay.is_some(), "--replay"),
+        (options.guest.is_some(), "--guest"),
+        (options.headless, "--headless"),
+        (options.frames.is_some(), "--frames"),
+        (options.input.is_some(), "--input"),
+        (!options.dumps.is_empty(), "--dump"),
+        (!options.states.is_empty(), "--states"),
+    ];
+    given
+        .into_iter()
+        .filter_map(|(given, option)| given.then_some(option))
+        .collect()
 }
 
 /// Whether the settings of a run go together, whichever of them came from the command line
@@ -970,6 +1039,71 @@ mod tests {
         ] {
             let error = parse_words(words).unwrap_err();
             assert!(error.contains("--headless"), "{error}");
+        }
+    }
+
+    /// Requirement "Run a Ruby file without a game": the options of the interpreter go
+    /// before `--script`, and everything after the file is the script's.
+    #[test]
+    fn a_script_takes_every_argument_after_its_file() {
+        let options = parse_words(&[
+            "--runtime",
+            "rgss1",
+            "--sandbox",
+            "off",
+            "--allow-process-functions",
+            "--verbose",
+            "--script",
+            "s.rb",
+            "a",
+            "--headless",
+            "--script",
+        ])
+        .unwrap();
+        assert_eq!(
+            options,
+            Options {
+                runtime: Some(Runtime::Rgss1),
+                sandbox: Some(false),
+                process_functions: true,
+                verbose: true,
+                script: Some(ScriptFile {
+                    file: "s.rb".into(),
+                    arguments: ["a", "--headless", "--script"].map(String::from).into(),
+                }),
+                ..Options::default()
+            }
+        );
+        let options = parse_words(&["--script", "s.rb"]).unwrap();
+        assert_eq!(options.script.unwrap().arguments, Vec::<String>::new());
+        assert!(
+            parse_words(&["--script"])
+                .unwrap_err()
+                .contains("--script needs a value")
+        );
+        assert!(USAGE.contains("--script FILE [ARG...]"));
+    }
+
+    /// The options of games before `--script` are an error that names each of them.
+    #[test]
+    fn a_script_refuses_the_options_of_games() {
+        let error =
+            parse_words(&["game", "--headless", "--frames", "3", "--script", "s.rb"]).unwrap_err();
+        assert!(
+            error.ends_with("a game directory, --headless, --frames"),
+            "{error}"
+        );
+        for words in [
+            &["--rtp", "Standard=rtp"][..],
+            &["--preload", "p.rb"],
+            &["--guest", "process"],
+            &["--debug"],
+            &["--seed", "1"],
+        ] {
+            let mut words = words.to_vec();
+            words.extend(["--script", "s.rb"]);
+            let error = parse_words(&words).unwrap_err();
+            assert!(error.contains(words[0]), "{error}");
         }
     }
 }

@@ -1,12 +1,12 @@
 //! The global functions of a game that are host functions, and the host functions the Ruby
 //! prelude builds on, whose names start with `vkrgss_`.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use vkrgss_proto::GuestToHost;
 use vkrgss_ruby_sys::ffi::{self, VALUE};
 use vkrgss_ruby_sys::{Arity, HostResult, Raise, Raised, Ruby};
-use vkrgss_vfs::{DataFile, FileKind, Runtime};
+use vkrgss_vfs::{DataFile, FileKind, Runtime, VfsError};
 
 use crate::guest::Guest;
 use crate::{audio, error, rb, runtime, stats};
@@ -22,6 +22,19 @@ fn load_error(_ruby: &Ruby) -> VALUE {
 /// (which does not). Anything that is not a `.rb` file inside the game directory raises
 /// `LoadError`.
 fn locate(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
+    // The game's files never resolve a path to something outside the game directory.
+    locate_with(ruby, args, |file| {
+        Guest::with(|guest| guest.files.resolve(FileKind::Data, file))
+    })
+}
+
+/// `vkrgss_locate` over `resolve`, which finds a file name below the directory that files
+/// are loaded from, and does not call into Ruby.
+pub(crate) fn locate_with(
+    ruby: &Ruby,
+    args: &[VALUE],
+    resolve: impl FnOnce(&str) -> Result<PathBuf, VfsError>,
+) -> HostResult {
     let name = rb::text(ruby, args[0])?;
     let not_loadable = || Raise::new(load_error(ruby), format!("no such file to load -- {name}"));
     let mut file = name.clone();
@@ -31,9 +44,7 @@ fn locate(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
         }
         file.push_str(".rb");
     }
-    // The game's files never resolve a path to something outside the game directory.
-    let found = Guest::with(|guest| guest.files.resolve(FileKind::Data, &file));
-    match found {
+    match resolve(&file) {
         Ok(path) => Ok(rb::bytes_new(ruby, path.as_os_str().as_encoded_bytes())?),
         Err(_) => Err(not_loadable()),
     }
@@ -44,12 +55,24 @@ fn locate(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
 /// directory for `require`: `name` itself when `file` has no directory, as a script
 /// (`{0001}`) has not, and `LoadError` when that directory is not inside the game directory.
 fn relative(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
+    relative_with(ruby, args, || {
+        Guest::with(|guest| guest.files.game_dir().to_owned())
+    })
+}
+
+/// `vkrgss_relative` below the directory that `root` gives, the directory that files are
+/// loaded from. `root` does not call into Ruby.
+pub(crate) fn relative_with(
+    ruby: &Ruby,
+    args: &[VALUE],
+    root: impl FnOnce() -> PathBuf,
+) -> HostResult {
     let file = rb::text(ruby, args[0])?;
     let name = rb::text(ruby, args[1])?;
     let Some((directory, _)) = file.rsplit_once(['/', '\\']) else {
         return Ok(rb::text_new(ruby, name.as_bytes())?);
     };
-    let game = Guest::with(|guest| guest.files.game_dir().to_owned());
+    let game = root();
     let below = Path::new(directory)
         .strip_prefix(&game)
         .map_err(|_| Raise::new(load_error(ruby), format!("no such file to load -- {name}")))?;

@@ -2,7 +2,7 @@
 
 ## 1. Script mode
 
-- [ ] 1.1 `--script FILE [ARG...]` with `--runtime`, the streams, `ARGV`, the exit status and the rules of `require`. Verify: the scenarios of `script-mode` as integration tests that run the built program, for `rgss1` (Ruby 1.8.7) and `rgss3` (Ruby 1.9.2).
+- [x] 1.1 `--script FILE [ARG...]` with `--runtime`, the streams, `ARGV`, the exit status and the rules of `require`. Verify: the scenarios of `script-mode` as integration tests that run the built program, for `rgss1` (Ruby 1.8.7) and `rgss3` (Ruby 1.9.2).
 
 ## 2. Confinement
 
