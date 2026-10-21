@@ -75,7 +75,7 @@ jobs:
           fi
           # The NDK that docs/building.md names, the build tools and the platform of the APK.
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
-            "ndk;30.0.16248370" "build-tools;36.0.0" "platforms;android-34" > /dev/null
+            "ndk;30.0.16248370" "build-tools;37.0.0" "platforms;android-34" > /dev/null
           rustup target add aarch64-linux-android
           export VKRGSS_ANDROID_KEYSTORE="$RUNNER_TEMP/release.keystore"
           trap 'rm -f "$VKRGSS_ANDROID_KEYSTORE"' EXIT

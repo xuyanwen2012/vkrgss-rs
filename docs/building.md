@@ -260,7 +260,7 @@ They are set under Settings, Secrets and variables, Actions of the repository, o
 `gh secret set VKRGSS_ANDROID_KEYSTORE_BASE64 < <(base64 -w0 release.keystore)` and
 `gh secret set NAME` for the others. The workflow writes the keystore to a temporary file
 of the runner and removes it after the build; it installs the NDK r30
-(`ndk;30.0.16248370`), the build tools 36.0.0 and the platform `android-34` with
+(`ndk;30.0.16248370`), the build tools 37.0.0 and the platform `android-34` with
 `sdkmanager`, and the Rust target `aarch64-linux-android`.
 
 ### The validation APK
