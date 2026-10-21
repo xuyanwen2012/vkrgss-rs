@@ -2,13 +2,14 @@
 //! Ruby 1.8.7 (`--runtime rgss1`) and over Ruby 1.9.2 (`rgss3`, the default), whose
 //! interpreter is that of the guest executable `vkrgss-guest-rgss3` beside the program.
 //!
-//! A script opens no window and no device, so these tests need no Vulkan driver. Ruby 1.9.2
-//! is built for some targets only; elsewhere the runs over it are left out.
+//! A script opens no window and no device; the program is started as in the other tests of
+//! it, with the loader restriction handed on all the same. Ruby 1.9.2 is built for some
+//! targets only; elsewhere the runs over it are left out.
 
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output, Stdio};
+use std::process::{Output, Stdio};
 
 use tempfile::TempDir;
 
@@ -87,7 +88,7 @@ impl Scripts {
 
     /// Runs `vkrgss` with `interpreter`, `options` and `--script` with the file `name` and
     /// `arguments`, from the directory of the scripts' parent, with `input` as the standard
-    /// input and none of the program's variables set.
+    /// input and none of the program's variables set ([`support::command`]).
     fn run(
         &self,
         interpreter: Interpreter,
@@ -96,20 +97,10 @@ impl Scripts {
         arguments: &[&str],
         input: &str,
     ) -> Ran {
-        let file = Path::new("scripts").join(name);
-        let mut child = Command::new(env!("CARGO_BIN_EXE_vkrgss"))
-            .args(interpreter.options)
-            .args(options)
-            .arg("--script")
-            .arg(&file)
-            .args(arguments)
-            .current_dir(self.dir.path())
-            .env_remove("VKRGSS_LOG")
-            .env_remove("VKRGSS_GUEST")
-            .env_remove("VKRGSS_SANDBOX")
-            .env_remove("VKXP_LOG")
-            .env_remove("VKXP_GUEST")
-            .env_remove("VKXP_SANDBOX")
+        let file = format!("scripts/{name}");
+        let script = ["--script", file.as_str()];
+        let words = [interpreter.options, options, &script, arguments].concat();
+        let mut child = support::command(self.dir.path(), &words)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -456,8 +447,7 @@ fn options_of_games_are_refused_with_a_script() {
     assert!(ran.stderr().contains("--frames"), "{}", ran.stderr());
     assert_eq!(ran.stdout(), "");
 
-    let output = Command::new(env!("CARGO_BIN_EXE_vkrgss"))
-        .arg("--script")
+    let output = support::command(scripts.dir.path(), &["--script"])
         .output()
         .expect("the program starts");
     assert_eq!(output.status.code(), Some(2));

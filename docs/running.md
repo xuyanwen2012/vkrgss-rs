@@ -1,6 +1,7 @@
 # Running vkrgss
 
-How to run a game, every option and configuration key, and the demo that needs no game.
+How to run a game, every option and configuration key, a Ruby script without a game, and the
+demo that needs no game.
 Building is described in [building.md](building.md).
 
 ## Running a game
@@ -142,8 +143,11 @@ so.
 
 ```text
 vkrgss [GAME_DIR] [OPTIONS]
+vkrgss [--runtime RUNTIME] [--sandbox on|off] [--allow-process-functions]
+       [--verbose] --script FILE [ARG...]
 ```
 
+The second form runs a Ruby file instead of a game; see *Running a Ruby script*.
 `GAME_DIR` is the directory that holds `Game.ini`; without it the current directory is used.
 The game directory becomes the working directory of the scripts, so saves are written there.
 Paths on the command line are relative to the directory the program was started in.
@@ -175,6 +179,7 @@ Paths on the command line are relative to the directory the program was started 
 | `--replay FILE` | Play the input of a recording back instead of the keyboard. Not together with `--record` or `--input`. |
 | `--guest thread\|process` | Where the game's scripts run: on a thread of the program or in a process of their own, which the save states need. Without a choice it is a process in a window and in every run of VX Ace, and a thread in a headless run of XP or VX. A game of VX Ace runs in a process only. See *Guest process* and *Save states*. |
 | `--sandbox on\|off` | Whether a guest process confines itself before the first script runs: it then writes only below the game directory, executes nothing and opens no socket but a Unix one. On unless it is said otherwise. See *Sandbox*. |
+| `--script FILE [ARG...]` | Run the Ruby file `FILE` with the interpreter of the runtime that `--runtime` names, `rgss3` without it, and no game: every argument after `FILE` is the script's. Only `--runtime`, `--sandbox`, `--allow-process-functions` and `--verbose` go before it. See *Running a Ruby script*. |
 | `--headless` | Run without a window, on a virtual clock that never waits. |
 | `--frames N` | Headless: stop after N frames if the game has not ended. |
 | `--input SCRIPT\|@FILE` | Headless: the buttons held from given frames on, in the syntax described under *Running the demo*, or a file that holds such a script. |
@@ -741,6 +746,47 @@ recording ends the program with an error that names it, before the first frame. 
 is recorded or replayed the game is given each frame's buttons together with that frame's
 tick, so a key pressed and released between two frames is not seen. Only input and the seed
 are recorded: a reset with F12 is not, and a game that reads the clock can still diverge.
+
+## Running a Ruby script
+
+`--script FILE` runs one Ruby file with the interpreter of a runtime, to see what that
+interpreter does with a program of its own, such as an exercise of algorithms. No game
+directory, configuration file, window, Vulkan device or audio device is involved:
+
+```sh
+cargo run -p vkrgss -- --script sort.rb 5 3 1
+cargo run -p vkrgss -- --runtime rgss1 --script sort.rb 5 3 1
+```
+
+- **Interpreter.** `--runtime rgss1` and `rgss2` run the file with Ruby 1.8.7, `rgss3`, the
+  default, with Ruby 1.9.2. A script of `rgss3` runs in the guest executable
+  `vkrgss-guest-rgss3`, which the program replaces itself with, so that has to lie beside the
+  program, as for a game of VX Ace.
+- **Arguments.** Every argument after `FILE` is in `ARGV`, also one that looks like an option
+  of the program, so `--script` comes last. An option that only concerns games beside it
+  (a game directory, `--headless`, `--rtp`, `--preload` and so on) ends the program with the
+  usage message, naming the options, and status 2.
+- **Streams.** The script reads the standard input (`gets`, `STDIN.read`) and writes the
+  standard output and error streams of the process: `puts`, `print` and `p` write to the
+  standard output as `ruby` does. The script runs in the directory the program was started
+  in, and its path is `$0` and `__FILE__`.
+- **Status.** 0 when the file has run to its end, the status given to `exit` or `exit!`, and
+  1 after an exception that nothing rescued, whose message, class and backtrace go to the
+  error stream as `ruby` writes them. A file that cannot be read is a message and status 1.
+  Ctrl-C ends the script at once, without an `Interrupt` exception.
+- **Loading files.** `require` and `load`, and with Ruby 1.9.2 `require_relative` and
+  `autoload`, follow the rules of a game with the directory of the script in the place of
+  the game directory: only `.rb` files below it are loaded, found without regard to letter
+  case. There is no standard library: `require 'set'` raises `LoadError`, as in a game.
+- **No RGSS.** None of the modules and classes of RGSS is defined: `Bitmap`, `Graphics`,
+  `Input`, `Audio`, `RPG`, `Win32API` and the others raise `NameError`.
+- **Confinement.** The script is confined as a guest process is (see *Sandbox*), with its
+  own directory in the place of the game directory: on Linux it writes only below that
+  directory and starts no program, and `system` and the other functions that start
+  processes do nothing. `--sandbox off`, or the environment variable `VKRGSS_SANDBOX`,
+  leaves the confinement out; `--allow-process-functions` lets those functions start
+  programs and leaves it out too. On macOS a script is not confined, as a guest process is
+  not.
 
 ## macOS
 

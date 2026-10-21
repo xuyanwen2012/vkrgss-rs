@@ -10,7 +10,7 @@
 
 ## 3. Documents
 
-- [ ] 3.1 `docs/running.md` (a section on script mode, the option table, `--help`), `CHANGELOG.md`. Verify: the tests that check the documents and the usage text pass.
+- [x] 3.1 `docs/running.md` (a section on script mode, the option table, `--help`), `CHANGELOG.md`. Verify: the tests that check the documents and the usage text pass.
 
 ## 4. Checks
 
