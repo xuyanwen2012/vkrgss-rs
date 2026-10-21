@@ -75,6 +75,16 @@ fn upstream_core_suite_passes() {
     eprintln!("test/ruby: {} files, {totals:?}", files.len());
 }
 
+/// `test_wait_and_sigchild` of `test_process.rb`, which `upstream.allow` leaves out of the
+/// run of its file, in a test process of its own.
+#[test]
+fn wait_and_sigchild_passes_in_a_process_of_its_own() {
+    let totals = built()
+        .run_unit_method("ruby/test_process.rb", "test_wait_and_sigchild")
+        .unwrap_or_else(|problem| panic!("{problem}"));
+    assert_eq!(totals.tests, 1);
+}
+
 /// Every entry of the lists says why, and names a file that exists.
 #[test]
 fn every_allowed_entry_has_a_reason() {

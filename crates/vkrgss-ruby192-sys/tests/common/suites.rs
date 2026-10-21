@@ -289,23 +289,42 @@ impl Suites {
     /// leaving out the test methods that `skip` names as `ruby/test_x.rb#test_y`. A file
     /// that reports no test has not passed.
     pub(crate) fn run_unit_file(&self, file: &str, skip: &[String]) -> Result<Totals, String> {
-        let source = source_dir();
-        let testlib = testlib_dir();
         let methods: Vec<&str> = skip
             .iter()
             .filter_map(|entry| entry.strip_prefix(file)?.strip_prefix('#'))
             .collect();
         let name = file.trim_end_matches(".rb").replace('/', "-");
+        // Every method but those named. Without one the pattern matches every name.
+        let pattern = format!("/\\A(?!(?:{})\\z)/", methods.join("|"));
+        self.run_unit(&name, file, &pattern)
+    }
+
+    /// Runs one test method of a file of `test/ruby`, given as `ruby/test_x.rb` and
+    /// `test_y`, in a test process of its own, so that no child of an earlier test of the
+    /// file can still be reported to it.
+    pub(crate) fn run_unit_method(&self, file: &str, method: &str) -> Result<Totals, String> {
+        let name = format!(
+            "{}-{method}",
+            file.trim_end_matches(".rb").replace('/', "-")
+        );
+        self.run_unit(&name, file, &format!("/\\A{method}\\z/"))
+    }
+
+    /// Runs the methods of one file of `test/ruby` whose names match `pattern` through
+    /// `test/runner.rb`, in the working directory `name`. A run that reports no test has not
+    /// passed.
+    fn run_unit(&self, name: &str, file: &str, pattern: &str) -> Result<Totals, String> {
+        let source = source_dir();
+        let testlib = testlib_dir();
         let mut args = vec![format!("-r{}", testlib.join("test_prelude.rb").display())];
         if self.stress {
             args.push(format!("-r{}", testlib.join("gc_stress.rb").display()));
         }
         args.push(source.join("test/runner.rb").display().to_string());
-        // Every method but those named. Without one the pattern matches every name.
-        args.push(format!("--name=/\\A(?!(?:{})\\z)/", methods.join("|")));
+        args.push(format!("--name={pattern}"));
         args.push(file.to_owned());
         let args: Vec<&str> = args.iter().map(String::as_str).collect();
-        let finished = self.run_ruby(&name, &args);
+        let finished = self.run_ruby(name, &args);
         match parse_totals(&finished.output) {
             Some(totals)
                 if finished.success

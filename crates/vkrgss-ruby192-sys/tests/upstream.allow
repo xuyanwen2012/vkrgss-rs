@@ -81,6 +81,14 @@ ruby/test_require.rb#test_define_module
 # Expects `(65536 ** 65536).to_s` to take longer than a second.
 ruby/test_bignum.rb#test_interrupt
 
+# Runs in a test process of its own instead (`wait_and_sigchild_passes_in_a_process_of_its_own`
+# in `upstream.rs`). The test counts the SIGCHLD it gets while its trap is set and expects one.
+# A process that is traced (the agent tools run every process under `ptrace`) is reported
+# even a signal whose action is to be ignored: the SIGCHLD of the child of the test before
+# (`test_wait2`) waits in a signal-delivery stop until the tracer resumes it, and is then
+# delivered to the trap that `test_wait_and_sigchild` set meanwhile, which counts two.
+ruby/test_process.rb#test_wait_and_sigchild
+
 # A thread in a busy loop starves the main thread for more than a second on the kernel of
 # today (the interpreter hands the lock over with `sched_yield`), and the test times out.
 ruby/test_thread.rb#test_list
