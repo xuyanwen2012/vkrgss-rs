@@ -124,11 +124,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the minimum the app declares, from the source of Khronos at the tag
   `vulkan-sdk-1.4.363.0`, cloned at pinned commits, by `cargo xtask macos-loader`, since
   Homebrew's needs the macOS that Homebrew built it on; and the command fails when a file
-  of the bundle needs a newer macOS than 14, naming it and the version it needs. A program in an app bundle loads
-  the bundle's loader and takes the bundle's MoltenVK unless `VK_DRIVER_FILES` or
-  `VK_ICD_FILENAMES` is set; elsewhere it falls back to Homebrew's loader. The app started
-  without a game directory asks for one with the system's folder chooser, offering the one
-  chosen last, and a cancel ends it with status 0.
+  of the bundle needs a newer macOS than 14, naming it and the version it needs. A program
+  in an app bundle loads the bundle's loader and takes the bundle's MoltenVK unless
+  `VK_DRIVER_FILES` or `VK_ICD_FILENAMES` is set; elsewhere it falls back to Homebrew's
+  loader. The app started without a game directory asks for one with the system's folder
+  chooser, offering the one chosen last, and a cancel ends it with status 0.
 
 - The workflow `nightly.yml` runs the dependency audit, the collector stress, the sanitized
   suites of Ruby 1.8.7 and five minutes of each fuzz target once a day and by hand.

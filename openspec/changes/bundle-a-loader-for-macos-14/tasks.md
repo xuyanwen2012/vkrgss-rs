@@ -14,4 +14,4 @@
 
 ## 4. Checks
 
-- [ ] 4.1 On the Mac: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test -p xtask --locked`. The Linux gate is run at the merge by the owner's session.
+- [x] 4.1 On the Mac: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test -p xtask --locked`. The Linux gate is run at the merge by the owner's session.
