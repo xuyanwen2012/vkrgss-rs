@@ -27,7 +27,9 @@ pub(crate) fn source_dir() -> PathBuf {
     )
 }
 
-/// A fresh, empty directory for one test, below cargo's directory for test files.
+/// A fresh, empty directory for one test, below cargo's directory for test files. The tests
+/// of Ruby 1.8.7 use the same directory and may run at the same time, so a name that they
+/// use too ends in `192` here.
 pub(crate) fn scratch_dir(name: &str) -> PathBuf {
     let dir = host_dir("CARGO_TARGET_TMPDIR", env!("CARGO_TARGET_TMPDIR")).join(name);
     if dir.exists() {

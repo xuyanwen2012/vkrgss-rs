@@ -347,7 +347,7 @@ fn c_side(output: &str) -> Vec<(String, i64)> {
     ignore = "compiles a C program, and a phone has no C compiler"
 )]
 fn layout_and_constants_match_the_c_headers() {
-    let scratch = common::scratch_dir("layout");
+    let scratch = common::scratch_dir("layout192");
     let source = scratch.join("layout.c");
     fs::write(&source, C_PROGRAM).expect("layout.c is writable");
     let executable = scratch.join("layout");

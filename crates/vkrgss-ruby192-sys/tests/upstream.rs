@@ -30,7 +30,7 @@ const PROCESS_TIMEOUT: Duration = Duration::from_secs(300);
 
 fn built() -> &'static Suites {
     static BUILT: OnceLock<Suites> = OnceLock::new();
-    BUILT.get_or_init(|| Suites::build("upstream", PROCESS_TIMEOUT, false))
+    BUILT.get_or_init(|| Suites::build("upstream192", PROCESS_TIMEOUT, false))
 }
 
 #[test]

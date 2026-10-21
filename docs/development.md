@@ -9,8 +9,9 @@ loader restriction described under [Prerequisites](building.md#prerequisites) is
 VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate
 ```
 
-It runs these steps in order, stops at the first failure and names the step that failed. It
-prints how long each step took, after the step and once more for all of them at the end:
+It runs these steps in order, the two test steps together, stops at the first failure and
+names the step that failed. It prints how long each step took, after the step and once more
+for all of them at the end:
 
 | Step | Command |
 |---|---|
@@ -27,6 +28,19 @@ date.
 
 The `test` and `test-unvalidated` steps pass `--no-fail-fast`: every test binary runs although
 an earlier one failed, so the output of one run names all that fail. The step still fails.
+
+The two test steps run at the same time, and so do the binaries within them, as many at a time
+as the machine has hardware threads. The gate builds the binaries of each step with its command
+and `--no-run`, then runs each binary as `cargo test` does: one process per binary, in the
+directory of its package, with `CARGO`, `CARGO_MANIFEST_DIR` and `CARGO_MANIFEST_PATH` set.
+The documentation tests of a step are one more process, `cargo test --doc` with the step's
+arguments, which leaves out the packages whose manifest turns them off (`doctest = false`), as
+`cargo test` does. The output of each binary is printed in one piece when it ends and kept in
+`target/gate/<step>/`, and the failure of the step names every binary that failed. The
+duration of each test step counts from the start of both until its last binary ended. The
+gate clears `PROPTEST_CASES`, so that the property tests run the cases they name. Tests that
+run at the same time must not share a file: the scratch directories below `target/tmp/` of
+the tests of Ruby 1.9.2 end in `192` where those of Ruby 1.8.7 have the same name.
 
 `test-unvalidated` runs the Vulkan tests again as players run, without the validation layer:
 the loader does not load a disabled layer although it is installed. The layer wraps every
@@ -46,7 +60,7 @@ The toolchain is pinned in `rust-toolchain.toml`. The `openspec` CLI must be on 
 ### Parts of the gate
 
 `cargo xtask gate --job <name>` runs one part of the gate, with the same report of
-durations. Together the parts run exactly the steps of `cargo xtask gate`: every check,
+durations; the test steps of a part run at the same time, as in the gate. Together the parts run exactly the steps of `cargo xtask gate`: every check,
 package and test target is in one part, which a test of `xtask` checks, so that nothing
 falls between them. An unknown name fails and lists the parts.
 

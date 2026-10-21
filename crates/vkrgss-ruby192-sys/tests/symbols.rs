@@ -75,7 +75,7 @@ fn defined_dynamic_symbols(elf: &[u8]) -> Vec<String> {
 
 #[test]
 fn interpreter_symbols_are_not_exported_by_a_linked_executable() {
-    let scratch = common::scratch_dir("symbols");
+    let scratch = common::scratch_dir("symbols192");
     let executable = common::build_ruby_executable(&scratch);
     let symbols = defined_dynamic_symbols(&fs::read(&executable).expect("the executable"));
 

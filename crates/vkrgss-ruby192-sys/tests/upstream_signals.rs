@@ -20,7 +20,7 @@ const PROCESS_TIMEOUT: Duration = Duration::from_secs(300);
 
 #[test]
 fn upstream_suite_passes_with_sigint_and_sigquit_ignored() {
-    let suites = Suites::build("upstream_signals", PROCESS_TIMEOUT, false);
+    let suites = Suites::build("upstream_signals192", PROCESS_TIMEOUT, false);
     let skip = suites::allowed_tests();
 
     // SAFETY: `SIG_IGN` installs no handler, and this process has one test, so nothing else

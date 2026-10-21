@@ -9,11 +9,11 @@ use anyhow::{Context, Result, anyhow};
 /// One check of the gate: a name used in reports, the command behind it and the environment
 /// variables it sets for that command.
 #[derive(Clone, Copy)]
-struct Step {
-    name: &'static str,
-    program: &'static str,
-    args: &'static [&'static str],
-    env: &'static [(&'static str, &'static str)],
+pub(crate) struct Step {
+    pub(crate) name: &'static str,
+    pub(crate) program: &'static str,
+    pub(crate) args: &'static [&'static str],
+    pub(crate) env: &'static [(&'static str, &'static str)],
 }
 
 fn steps() -> [Step; 6] {
@@ -276,23 +276,44 @@ fn part(name: &str) -> Result<Part> {
     }
 }
 
-/// Runs the steps in order and stops at the first one that fails, naming it. Each step's
-/// duration is printed when it ends, and all of them once more at the end, pass or fail.
+/// Runs the steps in order and stops at the first one that fails, naming it. Test steps next
+/// to each other run at the same time ([`crate::testrun`]), and all of them, so that the
+/// failures of each are named. Each step's duration is printed when it ends, and all of them
+/// once more at the end, pass or fail.
 fn run_steps(steps: &[Step], root: &Path) -> Result<()> {
     let mut durations = Vec::new();
     let mut outcome = Ok(());
-    for step in steps {
-        let started = Instant::now();
-        let result = run_step(step, root);
-        let elapsed = started.elapsed();
-        durations.push((step.name, elapsed));
-        eprintln!(
-            "gate: step `{}` took {}",
-            step.name,
-            format_duration(elapsed)
-        );
-        if result.is_err() {
-            outcome = result;
+    let mut rest = steps;
+    while let Some(first) = rest.first() {
+        let together = match runs_tests(first) {
+            true => rest.iter().take_while(|step| runs_tests(step)).count(),
+            false => 1,
+        };
+        let (now, later) = rest.split_at(together);
+        rest = later;
+        let results = match runs_tests(first) {
+            true => crate::testrun::run(now, root),
+            false => {
+                let started = Instant::now();
+                let result = run_step(first, root);
+                let elapsed = started.elapsed();
+                eprintln!(
+                    "gate: step `{}` took {}",
+                    first.name,
+                    format_duration(elapsed)
+                );
+                vec![(first.name, elapsed, result)]
+            }
+        };
+        let mut failures = Vec::new();
+        for (name, elapsed, result) in results {
+            durations.push((name, elapsed));
+            if let Err(error) = result {
+                failures.push(format!("{error:#}"));
+            }
+        }
+        if !failures.is_empty() {
+            outcome = Err(anyhow!(failures.join("\n")));
             break;
         }
     }
@@ -301,6 +322,11 @@ fn run_steps(steps: &[Step], root: &Path) -> Result<()> {
         eprintln!("gate: all steps passed");
     }
     outcome
+}
+
+/// Whether the step runs tests with `cargo test`.
+fn runs_tests(step: &Step) -> bool {
+    step.program == "cargo" && step.args.first() == Some(&"test")
 }
 
 fn run_step(step: &Step, root: &Path) -> Result<()> {
@@ -340,7 +366,7 @@ fn report(durations: &[(&str, Duration)]) -> String {
         .collect()
 }
 
-fn format_duration(duration: Duration) -> String {
+pub(crate) fn format_duration(duration: Duration) -> String {
     format!("{:.1} s", duration.as_secs_f64())
 }
 

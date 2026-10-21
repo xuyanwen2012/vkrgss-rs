@@ -55,6 +55,7 @@ mod oracle;
 mod rgss3a;
 mod rgssad;
 mod stress;
+mod testrun;
 mod xarch;
 
 use std::path::{Path, PathBuf};

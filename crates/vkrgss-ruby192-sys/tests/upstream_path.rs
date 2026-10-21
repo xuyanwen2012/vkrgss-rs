@@ -20,7 +20,7 @@ const PROCESS_TIMEOUT: Duration = Duration::from_secs(300);
 
 #[test]
 fn upstream_suite_passes_with_a_world_writable_directory_in_the_path() {
-    let suites = Suites::build("upstream_path", PROCESS_TIMEOUT, false);
+    let suites = Suites::build("upstream_path192", PROCESS_TIMEOUT, false);
     let skip = suites::allowed_tests();
 
     let writable = suites.scratch.join("writable");
