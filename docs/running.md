@@ -772,8 +772,13 @@ cargo run -p vkrgss -- --runtime rgss1 --script sort.rb 5 3 1
   in, and its path is `$0` and `__FILE__`.
 - **Status.** 0 when the file has run to its end, the status given to `exit` or `exit!`, and
   1 after an exception that nothing rescued, whose message, class and backtrace go to the
-  error stream as `ruby` writes them. A file that cannot be read is a message and status 1.
-  Ctrl-C ends the script at once, without an `Interrupt` exception.
+  error stream as `ruby` writes them. The blocks of `at_exit` run after the file, the last
+  first, with the exception that ended it as `$!`, and take part in the status as in
+  `ruby`: an `exit` in one gives its status, and an exception in one, which is reported
+  too, makes a status of 0 a 1. An uncaught `SignalException`, such as `Interrupt`, ends
+  the process by its signal. A file that cannot be read is a message and status 1. Ctrl-C
+  ends the script at once by its signal, without an `Interrupt` exception, so neither
+  `ensure` clauses nor the blocks of `at_exit` run.
 - **Loading files.** `require` and `load`, and with Ruby 1.9.2 `require_relative` and
   `autoload`, follow the rules of a game with the directory of the script in the place of
   the game directory: only `.rb` files below it are loaded, found without regard to letter

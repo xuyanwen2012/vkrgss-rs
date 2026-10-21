@@ -569,7 +569,7 @@ pub fn run_script(role: &ScriptRole) -> Result<ExitCode> {
             vkrgss_binding::run_script(ruby, &script)
         })
     });
-    // The interpreter is finalised here, which runs the blocks of `at_exit`.
+    // The blocks of `at_exit` have run in the script; the interpreter is finalised here.
     drop(interpreter);
     // The status as the system keeps it: its low eight bits.
     Ok(ExitCode::from(ran? as u8))

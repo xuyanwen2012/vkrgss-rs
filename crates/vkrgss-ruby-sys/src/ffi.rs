@@ -541,6 +541,13 @@ unsafe extern "C" {
     pub fn ruby_script(name: *const c_char);
     /// Runs `at_exit` blocks and finalisers. The interpreter cannot be used afterwards.
     pub fn ruby_finalize();
+    /// Runs the `at_exit` blocks registered so far, the last first. One that raises is
+    /// reported on the error stream and leaves its exception in [`ruby_errinfo`]; the next
+    /// runs all the same.
+    pub fn rb_exec_end_proc();
+    /// Gives `signal` its default action and sends it to the process, as `ruby` ends after
+    /// an uncaught `SignalException`.
+    pub fn ruby_default_signal(signal: c_int);
     /// The initialisation function of the compiled-in `Zlib` extension.
     pub fn Init_zlib();
 

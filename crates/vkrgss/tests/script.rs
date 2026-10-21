@@ -8,6 +8,7 @@
 
 use std::fs;
 use std::io::Write;
+use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
 use std::process::{Output, Stdio};
 
@@ -258,6 +259,75 @@ fn the_status_is_that_of_exit() {
     }
 }
 
+/// Scenario "Exit status" and "Uncaught exception" with the blocks of `at_exit`, which run
+/// after the file, the last first, with the exception that ended it as `$!`, and decide
+/// the status as in `ruby`: an `exit` in one gives its status, an exception in one makes
+/// it 1 unless the file had given another.
+#[test]
+fn the_blocks_of_at_exit_take_part_in_the_status() {
+    for ran in each("at_exit { exit 7 }\nputs 'body'\n", &[], &[], "") {
+        ran.assert_status(7);
+        assert_eq!(ran.stdout(), "body\n", "{}", ran.stderr());
+    }
+    for ran in each("at_exit { raise 'late boom' }\n", &[], &[], "") {
+        ran.assert_status(1);
+        assert!(
+            ran.stderr().contains("late boom (RuntimeError)"),
+            "{}",
+            ran.stderr()
+        );
+    }
+    for ran in each("at_exit { p $! }\nexit 3\n", &[], &[], "") {
+        ran.assert_status(3);
+        assert_eq!(ran.stdout(), "#<SystemExit: exit>\n", "{}", ran.stderr());
+    }
+    let text = "at_exit { puts 'first' }\nat_exit { puts 'last'; exit 4 }\nexit 3\n";
+    for ran in each(text, &[], &[], "") {
+        ran.assert_status(4);
+        assert_eq!(ran.stdout(), "last\nfirst\n", "{}", ran.stderr());
+    }
+    for ran in each("at_exit { raise 'late' }\nexit 2\n", &[], &[], "") {
+        ran.assert_status(2);
+    }
+    for ran in each("at_exit { exit }\nraise 'main'\n", &[], &[], "") {
+        ran.assert_status(0);
+        assert!(
+            ran.stderr().contains("main (RuntimeError)"),
+            "{}",
+            ran.stderr()
+        );
+    }
+}
+
+/// An uncaught `SignalException` ends the script by its signal, as `ruby` ends: with the
+/// report of an `Interrupt`, without one of a `SignalException` itself, and from a block of
+/// `at_exit` too.
+#[test]
+fn an_uncaught_signal_exception_ends_the_script_by_its_signal() {
+    for (text, signal, report) in [
+        ("raise Interrupt\n", 2, true),
+        ("at_exit { raise Interrupt }\nputs 'body'\n", 2, true),
+        ("raise SignalException, 'TERM'\n", 15, false),
+    ] {
+        for ran in each(text, &[], &[], "") {
+            assert_eq!(
+                ran.output.status.signal(),
+                Some(signal),
+                "Ruby {}, {text:?}: {}: {}",
+                ran.version,
+                ran.output.status,
+                ran.stderr()
+            );
+            assert_eq!(
+                ran.stderr().contains("Interrupt"),
+                report,
+                "{}",
+                ran.stderr()
+            );
+        }
+    }
+}
+
 /// Scenario "Uncaught exception".
 #[test]
 fn an_uncaught_exception_is_reported_with_status_1() {
@@ -293,6 +363,24 @@ fn a_script_requires_a_file_beside_it() {
             "{}",
             ran.stderr()
         );
+    }
+}
+
+/// A Ruby thread requires by the same rule, which over Ruby 1.9.2 is a thread of the system
+/// of its own.
+#[test]
+fn a_thread_of_a_script_requires_a_file_beside_it() {
+    let scripts = Scripts::new(&[
+        (
+            "s.rb",
+            "Thread.new { require 'helper' }.join\nputs HELPER\n",
+        ),
+        ("helper.rb", "HELPER = 'helped'\n"),
+    ]);
+    for interpreter in interpreters() {
+        let ran = scripts.run(interpreter, &[], "s.rb", &[], "");
+        ran.assert_status(0);
+        assert_eq!(ran.stdout(), "helped\n", "{}", ran.stderr());
     }
 }
 

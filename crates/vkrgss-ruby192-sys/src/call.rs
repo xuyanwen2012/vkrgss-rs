@@ -118,6 +118,15 @@ unsafe extern "C" fn new_string_body(data: VALUE) -> VALUE {
     }
 }
 
+unsafe extern "C" fn end_procs_body(_data: VALUE) -> VALUE {
+    // SAFETY: `Ruby::run_end_procs` calls this on the interpreter thread. Each block runs
+    // under a tag of the interpreter, so nothing raises out of the call.
+    unsafe {
+        ffi::rb_exec_end_proc();
+        ffi::rb_errinfo()
+    }
+}
+
 unsafe extern "C" fn set_errinfo_body(data: VALUE) -> VALUE {
     // SAFETY: `Ruby::set_current_error` passes a pointer to the value. `rb_set_errinfo`
     // raises `TypeError` for a value that is neither `nil` nor an exception, hence the
@@ -257,6 +266,18 @@ impl Ruby {
                 backtrace,
             }
         }
+    }
+
+    /// Runs the blocks of `at_exit` registered so far, the last first, as the interpreter
+    /// runs them when it ends, and returns the current error, `$!`, after them: what it was
+    /// before, or the exception of the last block that raised. The interpreter reports a
+    /// block that raises on the error stream, as `ruby` does, and runs the next. The blocks
+    /// are not run again when the interpreter ends. The value is the caller's to keep in a
+    /// local.
+    pub fn run_end_procs(&self) -> VALUE {
+        // SAFETY: `&self` proves the thread, and `end_procs_body` fits the contract of
+        // `protect`; it reads the current error before `protect` puts back the one it found.
+        unsafe { protect::protect(&mut (), end_procs_body) }.unwrap_or(ffi::Qnil)
     }
 
     /// Makes `exception` the current error, `$!`, whose backtrace is `$@`. `nil` clears it.

@@ -55,6 +55,19 @@ A standard library, a read-eval-print loop, `-e CODE`, the RGSS classes in scrip
   `prelude_load_rgss3.rb`, which a game evaluates right after it, from the line they stood
   on, so that the positions of its backtraces stay as they were; `xarch check` shows the
   games unchanged.
+- **The end of a script.** `run_script` of the binding ends a script as `ruby_cleanup` of
+  both interpreters does: it runs the blocks of `at_exit` itself, with the exception that
+  ended the file as `$!`, and takes the status from the current error after them and from
+  that exception, the first `SystemExit` giving its status, the first `SignalException`
+  its signal (`ruby_default_signal`), and another exception a 1 in the place of a 0. The
+  interpreter crates `vkrgss-ruby-sys` and `vkrgss-ruby192-sys`, outside the scope of the
+  change, gain for it the declarations of `rb_exec_end_proc` and `ruby_default_signal` and
+  `Ruby::run_end_procs`, a few lines each, which the requirement on the exit status needs:
+  the blocks would otherwise run only when the interpreter is finalised, whose status the
+  crates do not report. Games do not call them.
+- **Files of a Ruby thread.** The directory a script loads files from is a value of the
+  process, not of the interpreter thread: over Ruby 1.9 a Ruby thread is a thread of the
+  system, and its `require` follows the same rule.
 - **Working directory.** A script runs in the directory it was started from, as with
   `ruby`; only `require` and its kin take the script's directory as their root.
 
@@ -63,7 +76,8 @@ A standard library, a read-eval-print loop, `-e CODE`, the RGSS classes in scrip
 - **Interrupt.** Ctrl-C ends a script by the default action of SIGINT, as the interpreter
   crates put the signal dispositions of the process back after `ruby_init`: the shell sees
   the same signal as after `ruby`, but no `Interrupt` is raised, so neither `ensure` clauses
-  nor `at_exit` blocks run and no report is written. Raising `Interrupt` needs Ruby's own
+  nor `at_exit` blocks run and no report is written. An `Interrupt` that a script raises
+  itself ends it as in `ruby`. Raising `Interrupt` needs Ruby's own
   handler of SIGINT kept, and the signal delivered to the interpreter thread, which is a
   change of `vkrgss-ruby-sys` and `vkrgss-ruby192-sys`.
 - **Positions in a report.** The positions of the script itself are its absolute path, which

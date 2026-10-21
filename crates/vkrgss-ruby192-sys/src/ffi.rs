@@ -647,6 +647,13 @@ unsafe extern "C" {
     /// Runs `at_exit` blocks and finalisers. Ruby threads other than the calling one keep
     /// running; [`ruby_cleanup`] is what ends an interpreter.
     pub fn ruby_finalize();
+    /// Runs the `at_exit` blocks registered so far, the last first. One that raises is
+    /// reported on the error stream and leaves its exception as [`rb_errinfo`]; the next
+    /// runs all the same.
+    pub fn rb_exec_end_proc();
+    /// Gives `signal` its default action and sends it to the process, as `ruby` ends after
+    /// an uncaught `SignalException`.
+    pub fn ruby_default_signal(signal: c_int);
     /// Ends the interpreter: runs `at_exit` blocks, terminates the other Ruby threads, runs
     /// finalisers and stops the timer thread. Returns the exit status for `status`. The
     /// interpreter cannot be used afterwards.
