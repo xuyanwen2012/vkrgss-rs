@@ -21,11 +21,11 @@ jobs:
     env:
       CC: gcc-13
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Installs the toolchain that rust-toolchain.toml pins.
       - name: Install the Rust toolchain
         run: rustup show
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Install cargo-deny
         run: cargo install --locked cargo-deny@0.20.2
       - name: Dependency audit
@@ -40,7 +40,7 @@ jobs:
     env:
       CC: gcc-13
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The packages docs/building.md names, and clang with its sanitizer runtimes.
       - name: Install the prerequisites
         run: |
@@ -51,7 +51,7 @@ jobs:
       # Installs the toolchain that rust-toolchain.toml pins.
       - name: Install the Rust toolchain
         run: rustup show
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Collector stress
         run: VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask stress
 
@@ -64,7 +64,7 @@ jobs:
     env:
       CC: gcc-13
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install the prerequisites
         run: |
           sudo apt-get update
@@ -73,7 +73,7 @@ jobs:
       # Installs the toolchain that rust-toolchain.toml pins.
       - name: Install the Rust toolchain
         run: rustup show
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Sanitized suites
         run: cargo test -p vkrgss-ruby-sys --locked --test sanitized -- --ignored upstream_suites_pass_under_the_sanitizers
 
@@ -86,7 +86,7 @@ jobs:
     env:
       CC: gcc-13
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install the prerequisites
         run: |
           sudo apt-get update
@@ -95,7 +95,7 @@ jobs:
       # Installs the toolchain that rust-toolchain.toml pins.
       - name: Install the Rust toolchain
         run: rustup show
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Sanitized suites of Ruby 1.9.2
         run: cargo test -p vkrgss-ruby192-sys --locked --test sanitized -- --ignored upstream_suites_pass_under_the_sanitizers
 
@@ -112,7 +112,7 @@ jobs:
     env:
       CC: gcc-13
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # clang with its sanitizer runtimes and libFuzzer.
       - name: Install the prerequisites
         run: |
@@ -122,13 +122,13 @@ jobs:
       # Installs the toolchain that rust-toolchain.toml pins.
       - name: Install the Rust toolchain
         run: rustup show
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Fuzz target
         run: cargo xtask fuzz ${{ matrix.target }} --seconds 300
       # The inputs the target put aside: the one of a finding, and those of the limits.
       - name: Keep the inputs of the target
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fuzz-${{ matrix.target }}-artifacts
           path: target/tmp/fuzz/${{ matrix.target }}/artifacts/

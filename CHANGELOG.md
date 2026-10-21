@@ -203,6 +203,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   handle through which alone a test reaches the interpreter, so every test declares its
   runtime and the order of the tests no longer decides it. Each test process generates its
   files in a directory of its own.
+- The toolchain and dependencies are bumped: Rust 1.99.1 (from 1.99.0); the compatible
+  updates of the lock file, among them cc 1.9.0, serde_json 1.0.154, proptest 1.12.0, sha2
+  0.11.1, libc 0.2.191, libz-sys 1.1.30 and rustysynth 1.3.8; skrifa 0.48 (from 0.44), the
+  parser of the hinted glyph metrics, whose text and frames are unchanged; swash 0.2.10,
+  the newest, still uses skrifa 0.44 for its outlines, so both versions are in the build.
+  The release workflow installs the Android build tools 37.0.0 (from 36.0.0). The
+  workflows use `actions/checkout` v7.0.1 (from v5), `actions/upload-artifact` v7.0.2
+  (from v4) and `Swatinem/rust-cache` v2.9.3 (from v2.9.2).
 
 ### Fixed
 
