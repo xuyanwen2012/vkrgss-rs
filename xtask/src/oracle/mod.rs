@@ -317,32 +317,40 @@ end
     impl Generated {
         /// Runs the game, whose probe is that of the original's side, in vkrgss, and answers
         /// the probe's requests to hold a frame in place of the harness. Returns their text.
+        /// The time limit counts from the start of vkrgss, after its build; a run that
+        /// exceeds it is killed and waited for before the test fails.
         fn answered_requests(&self) -> Vec<String> {
             let game = self.game();
+            let mut child = self.plain_command(&[]).spawn().expect("vkrgss starts");
             let deadline = std::time::Instant::now() + Duration::from_secs(120);
             let mut requests = Vec::new();
-            std::thread::scope(|scope| {
-                let runner = scope.spawn(|| self.plain_run(&[]));
-                while !runner.is_finished() {
-                    assert!(std::time::Instant::now() < deadline, "{requests:?}");
-                    std::thread::sleep(Duration::from_millis(2));
-                    for entry in fs::read_dir(&game).unwrap() {
-                        let path = entry.unwrap().path();
-                        if path
-                            .extension()
-                            .is_none_or(|extension| extension != "request")
-                        {
-                            continue;
-                        }
-                        let record = fs::read_to_string(&path).unwrap();
-                        // An empty file is one that the probe has not written yet.
-                        if !record.is_empty() {
-                            requests.push(record);
-                            fs::remove_file(&path).unwrap();
-                        }
+            let status = loop {
+                if let Some(status) = child.try_wait().expect("vkrgss is waited for") {
+                    break status;
+                }
+                if std::time::Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    panic!("vkrgss ran past the time limit; requests: {requests:?}");
+                }
+                std::thread::sleep(Duration::from_millis(2));
+                for entry in fs::read_dir(&game).unwrap() {
+                    let path = entry.unwrap().path();
+                    if path
+                        .extension()
+                        .is_none_or(|extension| extension != "request")
+                    {
+                        continue;
+                    }
+                    let record = fs::read_to_string(&path).unwrap();
+                    // An empty file is one that the probe has not written yet.
+                    if !record.is_empty() {
+                        requests.push(record);
+                        fs::remove_file(&path).unwrap();
                     }
                 }
-            });
+            };
+            assert!(status.success(), "{status}");
             requests
         }
 
@@ -468,6 +476,15 @@ end
         /// stands in for the user's run-time directory, where vkrgss makes the socket of a
         /// guest process, as in the tests of `vkrgss`.
         fn plain_run(&self, arguments: &[&str]) {
+            let status = self
+                .plain_command(arguments)
+                .status()
+                .expect("vkrgss starts");
+            assert!(status.success(), "{status}");
+        }
+
+        /// The command of [`Generated::plain_run`], with vkrgss built.
+        fn plain_command(&self, arguments: &[&str]) -> Command {
             let runtime = game::runtime(&self.game(), None).unwrap_or(Runtime::Rgss1);
             let executable = vkrgss::build(&crate::workspace_root(), runtime).unwrap();
             let mut command = Command::new(executable);
@@ -482,8 +499,7 @@ end
             if !vkrgss::loader_is_restricted() {
                 command.env("VK_LOADER_DRIVERS_SELECT", "*lvp*");
             }
-            let status = command.status().expect("vkrgss starts");
-            assert!(status.success(), "{status}");
+            command
         }
 
         /// What [`run`] does with `options` on the vkrgss side alone: the copy with the probe

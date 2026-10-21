@@ -120,12 +120,17 @@ fn dump_demo(directory: &Path) -> HeadlessReport {
         host,
     )
     .unwrap();
-    assert_eq!(
-        demo.join().unwrap(),
-        Ok(()),
-        "the demo shut down on the quit request"
-    );
+    join_after_frame_limit(demo);
     report
+}
+
+/// Waits for the demo of a run that ended at its frame limit. The run does not wait for the
+/// guest's answer to the quit request, so the demo either shut down or found the host gone
+/// while it sent its next frame or its shutdown; it must not have panicked.
+fn join_after_frame_limit(demo: thread::JoinHandle<Result<(), Disconnected>>) {
+    match demo.join().expect("the demo did not panic") {
+        Ok(()) | Err(Disconnected) => {}
+    }
 }
 
 #[test]
@@ -987,7 +992,7 @@ fn frame_statistics_do_not_change_a_dumped_frame() {
     let dumped = |frame_stats: bool| {
         let path = directory.path().join(format!("stats-{frame_stats}.png"));
         let (host, demo) = spawn_demo(SMALL_DEMO);
-        run_headless(
+        let report = run_headless(
             HeadlessOptions {
                 frames: Some(14),
                 script: InputScript::parse("2:RIGHT, 6:").unwrap(),
@@ -999,7 +1004,8 @@ fn frame_statistics_do_not_change_a_dumped_frame() {
             host,
         )
         .unwrap();
-        assert_eq!(demo.join().unwrap(), Ok(()));
+        assert_eq!((report.frames, report.end), (14, HeadlessEnd::FrameLimit));
+        join_after_frame_limit(demo);
         fs::read(path).unwrap()
     };
     assert_eq!(dumped(true), dumped(false));
