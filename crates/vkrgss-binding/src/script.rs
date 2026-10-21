@@ -83,8 +83,8 @@ fn relative(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
 /// Runs `script` in an interpreter that has run nothing yet, on the interpreter thread, and
 /// returns the status the process ends with, as `ruby` ends: 0 when the file has been
 /// evaluated to its end, the status of `exit` (`SystemExit`), and 1 after an exception that
-/// nothing rescued, whose report ([`report`]) has been written to the error stream. `exit!`
-/// ends the process itself. Called once per process.
+/// nothing rescued, whose report has been written to the error stream as `ruby` writes it.
+/// `exit!` ends the process itself. Called once per process.
 pub fn run_script(ruby: &Ruby, script: &Script) -> Result<i32, ScriptError> {
     let source = std::fs::read(&script.file).map_err(|source| ScriptError::Read {
         path: script.file.clone(),
