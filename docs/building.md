@@ -126,6 +126,38 @@ an off-screen target and read back, and the swapchain runs on a surface without 
 (`VK_EXT_headless_surface`). The headless tests of `vkrgss-host` follow `VKRGSS_TEST_DEVICE` too
 and default to llvmpipe.
 
+## Checking a change
+
+The [merge gate](development.md#merge-gate), `cargo xtask gate`, is the check a change must
+pass before it is done, and what CI runs. It takes about four and a half minutes on a desktop
+of six cores. While a change is being made, a quicker command checks what it can break:
+
+```sh
+VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate --quick
+VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate --quick --base <REV>
+```
+
+It runs the steps `fmt` and `clippy` of the gate, and the step `test` for the packages of the
+workspace that the change touches and the packages that depend on them. The change is what
+`git diff` shows against the merge base of `HEAD` and `origin/main`, or of `HEAD` and `REV`,
+committed or not, with the files that git neither tracks nor ignores. A file touches the
+package in whose directory it lies, and every package with a test binary that rustc compiled
+from it (the files `<binary>.d` beside the binaries list them), as `vkrgss-binding-rgss3` is
+compiled from the source of `vkrgss-binding`. A package depends on another for its build, its
+library or its tests, and the tests of `vkrgss` and `xtask` depend on the executables they
+run (`vkrgss`, the guest executables). A file outside the packages touches `xtask`, whose tests
+read the repository, when it is a document (`docs/`, `openspec/`, `.github/`, a `.md` at the
+top), and every package otherwise, `Cargo.lock` and `third_party/` among them. The
+documentation tests of every package run; they take a few seconds.
+
+The property tests run 32 cases instead of their own counts: those of `proptest` take
+`PROPTEST_CASES`, which the quick run sets and the gate clears. The run leaves out, and says
+so at the start and at the end, the steps `test-unvalidated`, `doc` and `openspec`, and the
+test target `upstream_stress` of `vkrgss-ruby192-sys`, the collector stress of Ruby 1.9.2,
+which has no smaller count. Once the workspace is built, a change of the program `vkrgss`,
+whose dependents are the tests of `xtask`, is checked in about half a minute on a desktop of
+six cores, and one of `vkrgss-android`, on which nothing depends, in a few seconds.
+
 ## Android
 
 Both interpreters, and with them the guest executables `vkrgss-guest-rgss12` and

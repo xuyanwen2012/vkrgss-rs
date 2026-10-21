@@ -20,8 +20,18 @@ use vkrgss_proto::{
 use super::differential::compare_stream;
 use super::harness::Rng;
 
-/// Cases per property. Fixed, so the gate does the same work everywhere.
+/// Cases per property. Fixed, so the gate, which clears `PROPTEST_CASES`, does the same work
+/// everywhere.
 const CASES: u32 = 192;
+
+/// The cases each property runs: `PROPTEST_CASES` when it is set, as `cargo xtask gate
+/// --quick` sets it lower, and otherwise [`CASES`].
+fn cases() -> u32 {
+    std::env::var("PROPTEST_CASES")
+        .ok()
+        .and_then(|text| text.parse().ok())
+        .unwrap_or(CASES)
+}
 
 /// Slots the plans create bitmaps in. Few, so that slots are reused within a sequence.
 const SLOTS: u32 = 5;
@@ -656,7 +666,7 @@ fn build(plans: &[PacketPlan], faults: bool) -> Vec<GuestToHost> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(CASES))]
+    #![proptest_config(ProptestConfig::with_cases(cases()))]
 
     /// Valid packet sequences: every frame is byte-identical.
     #[test]

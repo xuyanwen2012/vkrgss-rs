@@ -18,9 +18,10 @@ use anyhow::{Context, Result, anyhow, ensure};
 use serde_json::Value;
 
 use crate::gate::{Step, format_duration};
+use crate::quick::Selection;
 
-/// The variable that sets the cases of the property tests; the gate clears it, so that it
-/// does the same work everywhere.
+/// The variable that sets the cases of the property tests. The gate clears it, so that it does
+/// the same work everywhere, unless a step sets it, as `cargo xtask gate --quick` does.
 pub(crate) const PROPTEST_CASES: &str = "PROPTEST_CASES";
 
 /// A test binary that `cargo test --no-run` built.
@@ -28,6 +29,8 @@ pub(crate) const PROPTEST_CASES: &str = "PROPTEST_CASES";
 pub(crate) struct Binary {
     /// The manifest of its package.
     pub(crate) manifest_path: PathBuf,
+    /// The name of the target.
+    pub(crate) name: String,
     /// The root source file of the target.
     pub(crate) source: PathBuf,
     pub(crate) executable: PathBuf,
@@ -63,8 +66,13 @@ struct Queue {
 }
 
 /// Runs the test steps `steps` at the same time and returns, for each, how long it took from
-/// the start until its last job ended and whether it passed.
-pub(crate) fn run(steps: &[Step], root: &Path) -> Vec<(&'static str, Duration, Result<()>)> {
+/// the start until its last job ended and whether it passed. `selection` chooses the binaries
+/// of `cargo xtask gate --quick`.
+pub(crate) fn run(
+    steps: &[Step],
+    root: &Path,
+    selection: Option<&Selection>,
+) -> Vec<(&'static str, Duration, Result<()>)> {
     let started = Instant::now();
     let logs = root.join("target").join("gate");
     for step in steps {
@@ -96,7 +104,7 @@ pub(crate) fn run(steps: &[Step], root: &Path) -> Vec<(&'static str, Duration, R
             let jobs = match without_doctests
                 .as_ref()
                 .map_err(|error| anyhow!("{error:#}"))
-                .and_then(|without| jobs_of(step, index, without, root))
+                .and_then(|without| jobs_of(step, index, without, root, selection))
             {
                 Ok(jobs) => jobs,
                 Err(error) => {
@@ -158,13 +166,15 @@ fn end_if_done(progress: &mut Progress, name: &str, started: Instant) {
 }
 
 /// Builds the test binaries of `step` and returns the jobs that run them and its
-/// documentation tests, leaving out the packages `without_doctests`. A step that selects only
-/// the documentation tests is one job.
+/// documentation tests, leaving out the packages `without_doctests`; only the binaries that
+/// `selection` chooses, if there is one. A step that selects only the documentation tests is
+/// one job.
 fn jobs_of(
     step: &Step,
     index: usize,
     without_doctests: &[String],
     root: &Path,
+    selection: Option<&Selection>,
 ) -> Result<Vec<Job>> {
     let command_line = format!("cargo {}", step.args.join(" "));
     eprintln!("gate: running step `{}` ({command_line})", step.name);
@@ -186,7 +196,10 @@ fn jobs_of(
     if step.args.contains(&"--doc") {
         return Ok(vec![cargo_job(&command_line, args)]);
     }
-    let binaries = build(step, root).context("the build of the test binaries")?;
+    let mut binaries = build(step, root).context("the build of the test binaries")?;
+    if let Some(selection) = selection {
+        binaries = selection.choose(binaries, root);
+    }
     let mut jobs = Vec::new();
     let selects_targets = step
         .args
@@ -316,6 +329,7 @@ fn binaries(messages: &str) -> Vec<Binary> {
             let text = |value: &Value| value.as_str().map(str::to_owned);
             Some(Binary {
                 manifest_path: text(&message["manifest_path"])?.into(),
+                name: text(&message["target"]["name"])?,
                 source: text(&message["target"]["src_path"])?.into(),
                 executable: text(&message["executable"])?.into(),
             })
@@ -390,6 +404,7 @@ mod tests {
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].executable, Path::new("/w/target/debug/deps/a-1"));
         assert_eq!(found[0].source, Path::new("/w/crates/a/src/lib.rs"));
+        assert_eq!(found[0].name, "a");
     }
 
     #[test]

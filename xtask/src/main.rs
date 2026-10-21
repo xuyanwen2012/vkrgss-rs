@@ -2,6 +2,10 @@
 //!
 //! - `gate [--job <NAME>]`: the merge gate (formatting, lints, tests, documentation, OpenSpec
 //!   validation), or one named part of it, as a job of the CI workflow runs it.
+//! - `gate --quick [--base <REV>]`: the format check, the lints and the tests of the packages
+//!   that the change since the merge base with `origin/main`, or with `REV`, touches, and of
+//!   those that depend on them, with fewer cases of the property tests. For the work on a
+//!   change; the full gate stays the check before it is done.
 //! - `deps`: the dependency-direction rules on their own.
 //! - `audit`: checks the dependencies against security advisories and the licence allow-list
 //!   with `cargo deny`. Not a step of the gate.
@@ -52,6 +56,7 @@ mod gate;
 mod macho;
 mod macos_loader;
 mod oracle;
+mod quick;
 mod rgss3a;
 mod rgssad;
 mod stress;
@@ -61,7 +66,7 @@ mod xarch;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-const USAGE: &str = "usage: cargo xtask <gate [--job <NAME>]|deps|audit|stress|fuzz <TARGET> [--seconds N]|\
+const USAGE: &str = "usage: cargo xtask <gate [--job <NAME>|--quick [--base <REV>]]|deps|audit|stress|fuzz <TARGET> [--seconds N]|\
                      android-test <CRATE> [--device <SERIAL>]|apk [--release]|android-run [--validation] <SERIAL> <GAME_DIR>|dist|app|macos-loader|\
                      extract-rpg <DLL> <OUTPUT>|oracle <GAME_DIR> [OPTIONS]|pack-rgssad <GAME_DIR>|\
                      xarch run|android|compare ...>";
@@ -72,6 +77,8 @@ fn main() -> ExitCode {
     let result = match args[..] {
         ["gate"] => gate::run(&workspace_root()),
         ["gate", "--job", name] => gate::run_part(name, &workspace_root()),
+        ["gate", "--quick"] => gate::run_quick(&workspace_root(), quick::DEFAULT_BASE),
+        ["gate", "--quick", "--base", base] => gate::run_quick(&workspace_root(), base),
         ["deps"] => deps::run(&workspace_root()),
         ["audit"] => audit::run(&cargo(), &workspace_root()),
         ["stress"] => stress::run(&workspace_root()),

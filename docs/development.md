@@ -57,6 +57,9 @@ log says once.
 
 The toolchain is pinned in `rust-toolchain.toml`. The `openspec` CLI must be on `PATH`.
 
+`cargo xtask gate --quick` is a shorter check for the work on a change; it is not the gate
+([building.md](building.md#checking-a-change)).
+
 ### Parts of the gate
 
 `cargo xtask gate --job <name>` runs one part of the gate, with the same report of

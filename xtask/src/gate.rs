@@ -6,6 +6,8 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, anyhow};
 
+use crate::quick::{LEFT_OUT_STEPS, QUICK_TEST_ENV, Selection};
+
 /// One check of the gate: a name used in reports, the command behind it and the environment
 /// variables it sets for that command.
 #[derive(Clone, Copy)]
@@ -252,14 +254,41 @@ const RUBY192_TESTS: &[&str] = &[
 
 /// The whole gate.
 pub(crate) fn run(root: &Path) -> Result<()> {
-    run_steps(&steps(), root)
+    run_steps(&steps(), root, None)
+}
+
+/// The quick checks of a change since the merge base with `base` ([`crate::quick`]): the
+/// steps `fmt` and `clippy`, and the step `test` for the packages that the change touches and
+/// those that depend on them, with fewer cases of the property tests.
+pub(crate) fn run_quick(root: &Path, base: &str) -> Result<()> {
+    let selection = Selection::new(root, base)?;
+    let left_out = format!(
+        "gate --quick: left out: the steps {LEFT_OUT_STEPS}; the full gate, \
+         `cargo xtask gate`, runs them before a change is done"
+    );
+    eprintln!("{left_out}");
+    let result = run_steps(&quick_steps(), root, Some(&selection));
+    eprintln!("{left_out}");
+    result
+}
+
+/// The steps of `cargo xtask gate --quick`, whose test step runs only the binaries that the
+/// selection of [`run_quick`] chooses.
+fn quick_steps() -> [Step; 3] {
+    let gate = steps();
+    let step = |name: &str| *gate.iter().find(|step| step.name == name).unwrap();
+    let test = Step {
+        env: QUICK_TEST_ENV,
+        ..step("test")
+    };
+    [step("fmt"), step("clippy"), test]
 }
 
 /// One part of the gate. An unknown name fails and lists the names of the parts.
 pub(crate) fn run_part(name: &str, root: &Path) -> Result<()> {
     let part = part(name)?;
     eprintln!("gate: part `{}`", part.name);
-    run_steps(&part.steps, root)
+    run_steps(&part.steps, root, None)
 }
 
 fn part(name: &str) -> Result<Part> {
@@ -279,8 +308,9 @@ fn part(name: &str) -> Result<Part> {
 /// Runs the steps in order and stops at the first one that fails, naming it. Test steps next
 /// to each other run at the same time ([`crate::testrun`]), and all of them, so that the
 /// failures of each are named. Each step's duration is printed when it ends, and all of them
-/// once more at the end, pass or fail.
-fn run_steps(steps: &[Step], root: &Path) -> Result<()> {
+/// once more at the end, pass or fail. `selection` chooses the test binaries of `cargo xtask
+/// gate --quick`.
+fn run_steps(steps: &[Step], root: &Path, selection: Option<&Selection>) -> Result<()> {
     let mut durations = Vec::new();
     let mut outcome = Ok(());
     let mut rest = steps;
@@ -292,7 +322,7 @@ fn run_steps(steps: &[Step], root: &Path) -> Result<()> {
         let (now, later) = rest.split_at(together);
         rest = later;
         let results = match runs_tests(first) {
-            true => crate::testrun::run(now, root),
+            true => crate::testrun::run(now, root, selection),
             false => {
                 let started = Instant::now();
                 let result = run_step(first, root);
@@ -535,6 +565,19 @@ mod tests {
                 "openspec"
             ]
         );
+    }
+
+    #[test]
+    fn the_quick_run_has_the_lints_of_the_gate_and_its_tests_with_fewer_cases() {
+        let gate = steps();
+        let quick = quick_steps();
+        for (quick, name) in quick.iter().zip(["fmt", "clippy", "test"]) {
+            let full = gate.iter().find(|step| step.name == name).unwrap();
+            assert_eq!((quick.name, quick.program), (full.name, full.program));
+            assert_eq!(quick.args, full.args, "{name}");
+        }
+        assert!(quick[..2].iter().all(|step| step.env.is_empty()));
+        assert_eq!(quick[2].env, [("PROPTEST_CASES", "32")]);
     }
 
     #[test]

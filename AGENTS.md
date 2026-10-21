@@ -23,6 +23,11 @@ decisions that are settled.
   check, clippy with warnings denied, workspace tests, the Vulkan tests again without the
   validation layer, documentation with warnings denied, `openspec validate --all`). The test
   steps run every test binary and report all that fail.
+- While iterating, run `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate --quick`: format,
+  clippy and the tests of the packages the change touches and of those that depend on them,
+  with fewer property-test cases; it names what it leaves out. It does not replace the full
+  gate, which runs before declaring done
+  ([docs/building.md](docs/building.md#checking-a-change)).
 - The Vulkan tests refuse to run unless the loader is restricted to chosen drivers with
   `VK_LOADER_DRIVERS_SELECT`, because the loader loads every installed driver; see
   [docs/building.md](docs/building.md).
