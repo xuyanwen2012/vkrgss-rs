@@ -37,10 +37,10 @@
 //!   original runtime and vkrgss.
 //! - `pack-rgssad <GAME_DIR>`: packs the `Data` and `Graphics` folders of a copy of a game
 //!   into `Game.rgssad`.
-//! - `xarch run|android|compare ...`: runs the comparison games in vkrgss alone on this
-//!   machine or on an Android phone, there also under the Vulkan validation layer, and
-//!   compares the frames and saves of two such runs.
-//!   Not a step of the gate.
+//! - `xarch run|android|compare|baseline|check ...`: runs the comparison games in vkrgss
+//!   alone on this machine or on an Android phone, there also under the Vulkan validation
+//!   layer, and compares the frames and saves of two such runs; records a run as the baseline
+//!   and checks the current tree against it. Not a step of the gate.
 
 #![forbid(unsafe_code)]
 
@@ -69,7 +69,7 @@ use std::process::ExitCode;
 const USAGE: &str = "usage: cargo xtask <gate [--job <NAME>|--quick [--base <REV>]]|deps|audit|stress|fuzz <TARGET> [--seconds N]|\
                      android-test <CRATE> [--device <SERIAL>]|apk [--release]|android-run [--validation] <SERIAL> <GAME_DIR>|dist|app|macos-loader|\
                      extract-rpg <DLL> <OUTPUT>|oracle <GAME_DIR> [OPTIONS]|pack-rgssad <GAME_DIR>|\
-                     xarch run|android|compare ...>";
+                     xarch run|android|compare|baseline|check ...>";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();

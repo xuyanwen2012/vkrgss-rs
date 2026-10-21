@@ -17,6 +17,13 @@
 //! - `xarch compare <A> <B>` compares, for each game of `A`, the pixels of every frame and
 //!   the bytes of every save file that the game wrote with those of `B`, and fails when one
 //!   differs or is missing.
+//! - `xarch baseline [GAME...]` runs the games as `xarch run` does into
+//!   `target/xarch/base-<COMMIT>`, the short hash of `HEAD`, with `-dirty` when tracked files
+//!   differ from it, and records that directory as the baseline in `target/xarch/baseline`.
+//!   With `--at REV` it runs the vkrgss of the revision `REV` instead, from a worktree of it in
+//!   [`TREE`], which keeps its own build directory from run to run.
+//! - `xarch check [GAME...]` runs the games of the current tree into `target/xarch/check` and
+//!   compares the baseline with it as `xarch compare` does, for the games run.
 //!
 //! `[GAME...]` chooses games of the list by name; without one every game runs. The list is
 //! a TOML file, `local/xarch.toml` of the workspace unless `--list FILE` names another; the
@@ -39,7 +46,18 @@ use crate::oracle::report::{self, Picture};
 pub(crate) const USAGE: &str = "\
 usage: cargo xtask xarch run <OUT> [GAME...] [--list FILE]
        cargo xtask xarch android <SERIAL> <OUT> [GAME...] [--list FILE] [--validation]
-       cargo xtask xarch compare <A> <B>";
+       cargo xtask xarch compare <A> <B>
+       cargo xtask xarch baseline [GAME...] [--list FILE] [--at REV]
+       cargo xtask xarch check [GAME...] [--list FILE]";
+
+/// The directory below `target/` of the runs of `xarch baseline` and `xarch check`.
+const XARCH_DIR: &str = "xarch";
+
+/// The file of [`XARCH_DIR`] that names the directory of the baseline.
+const BASELINE_FILE: &str = "baseline";
+
+/// The worktree of [`XARCH_DIR`] in which `xarch baseline --at` builds another revision.
+const TREE: &str = "tree";
 
 /// The directory of the app's files directory that holds what the games share.
 const PHONE_DIR: &str = "xarch";
@@ -66,12 +84,22 @@ pub(crate) enum Command {
         a: PathBuf,
         b: PathBuf,
     },
+    Baseline {
+        games: Vec<String>,
+        list: Option<PathBuf>,
+        at: Option<String>,
+    },
+    Check {
+        games: Vec<String>,
+        list: Option<PathBuf>,
+    },
 }
 
 /// Parses the arguments after `xarch`.
 pub(crate) fn parse(arguments: &[&str]) -> Result<Command> {
     let mut list = None;
     let mut validation = false;
+    let mut at = None;
     let mut rest = Vec::new();
     let mut arguments = arguments.iter().copied();
     while let Some(argument) = arguments.next() {
@@ -81,6 +109,14 @@ pub(crate) fn parse(arguments: &[&str]) -> Result<Command> {
                 list = Some(absolute(file).with_context(|| file.to_owned())?);
             }
             "--validation" => validation = true,
+            "--at" => {
+                at = Some(
+                    arguments
+                        .next()
+                        .context("--at needs a revision")?
+                        .to_owned(),
+                )
+            }
             _ if argument.starts_with("--") => bail!("unknown option {argument}"),
             _ => rest.push(argument),
         }
@@ -88,7 +124,21 @@ pub(crate) fn parse(arguments: &[&str]) -> Result<Command> {
     let path = |text: &str| absolute(text).with_context(|| text.to_owned());
     let names = |names: &[&str]| names.iter().map(|name| (*name).to_owned()).collect();
     Ok(match rest[..] {
-        ["run" | "compare", ..] if validation => bail!("only android takes --validation"),
+        [command, ..] if validation && command != "android" => {
+            bail!("only android takes --validation")
+        }
+        [command, ..] if at.is_some() && command != "baseline" => {
+            bail!("only baseline takes --at")
+        }
+        ["baseline", ref games @ ..] => Command::Baseline {
+            games: names(games),
+            list,
+            at,
+        },
+        ["check", ref games @ ..] => Command::Check {
+            games: names(games),
+            list,
+        },
         ["run", out, ref games @ ..] => Command::Run {
             out: path(out)?,
             games: names(games),
@@ -134,8 +184,100 @@ pub(crate) fn run(command: &Command, cargo: &str, root: &Path) -> Result<()> {
             };
             run_on_phone(&list, &list.chosen(games)?, &phone, out, cargo, root)
         }
-        Command::Compare { a, b } => compare(a, b),
+        Command::Compare { a, b } => compare(a, b, &[]),
+        Command::Baseline { games, list, at } => {
+            let list = List::read(list.clone().unwrap_or_else(default_list).as_path())?;
+            baseline(&list, &list.chosen(games)?, at.as_deref(), root)
+        }
+        Command::Check { games, list } => {
+            let list = List::read(list.clone().unwrap_or_else(default_list).as_path())?;
+            check(&list, &list.chosen(games)?, root)
+        }
     }
+}
+
+/// `xarch baseline`.
+fn baseline(list: &List, games: &[Game], at: Option<&str>, root: &Path) -> Result<()> {
+    let dir = root.join("target").join(XARCH_DIR);
+    let (tree, name) = match at {
+        None => {
+            let commit = git(root, &["rev-parse", "--short", "HEAD"])?;
+            let dirty = !git(root, &["status", "--porcelain", "--untracked-files=no"])?.is_empty();
+            let suffix = if dirty { "-dirty" } else { "" };
+            (root.to_owned(), format!("base-{commit}{suffix}"))
+        }
+        Some(revision) => {
+            let commit = git(
+                root,
+                &["rev-parse", "--short", &format!("{revision}^{{commit}}")],
+            )?;
+            (
+                worktree_at(&dir.join(TREE), &commit, root)?,
+                format!("base-{commit}"),
+            )
+        }
+    };
+    let out = dir.join(&name);
+    if out.exists() {
+        fs::remove_dir_all(&out).with_context(|| out.display().to_string())?;
+    }
+    run_here(list, games, &out, &tree)?;
+    fs::write(dir.join(BASELINE_FILE), format!("{name}\n")).context("the baseline file")?;
+    eprintln!("xarch: the baseline is now {}", out.display());
+    Ok(())
+}
+
+/// `xarch check`.
+fn check(list: &List, games: &[Game], root: &Path) -> Result<()> {
+    let dir = root.join("target").join(XARCH_DIR);
+    let file = dir.join(BASELINE_FILE);
+    let name = fs::read_to_string(&file).with_context(|| {
+        format!(
+            "{}: no baseline; make one with `cargo xtask xarch baseline`",
+            file.display()
+        )
+    })?;
+    let base = dir.join(name.trim());
+    let out = dir.join("check");
+    if out.exists() {
+        fs::remove_dir_all(&out).with_context(|| out.display().to_string())?;
+    }
+    run_here(list, games, &out, root)?;
+    println!("xarch: comparing {} with {}", base.display(), out.display());
+    let names: Vec<String> = games.iter().map(|game| game.name.clone()).collect();
+    compare(&base, &out, &names)
+}
+
+/// A worktree of the commit `commit` of `root` at `tree`, made or moved there.
+fn worktree_at(tree: &Path, commit: &str, root: &Path) -> Result<PathBuf> {
+    let text = tree.display().to_string();
+    if tree.join(".git").exists() {
+        git(tree, &["checkout", "--detach", "--force", commit])?;
+    } else {
+        git(root, &["worktree", "prune"])?;
+        git(
+            root,
+            &["worktree", "add", "--detach", "--force", &text, commit],
+        )?;
+    }
+    Ok(tree.to_owned())
+}
+
+/// The standard output of git with `args` in `dir`, trimmed.
+fn git(dir: &Path, args: &[&str]) -> Result<String> {
+    let output = std::process::Command::new("git")
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .context("could not start git")?;
+    ensure!(
+        output.status.success(),
+        "`git {}` ended with {}: {}",
+        args.join(" "),
+        output.status,
+        String::from_utf8_lossy(&output.stderr).trim()
+    );
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
 
 /// The list of games and what they share.
@@ -594,20 +736,44 @@ fn compare_game(a: &Path, b: &Path, game: &str) -> Result<Tally> {
             println!("{game}: save {} {how}", relative.display());
         }
     }
+    // What `b` has and `a` has not.
+    let frames = b.join("frames");
+    if frames.is_dir() {
+        for frame in captured_frames(&frames)? {
+            if !a.join(report::vkrgss_file(frame)).is_file() {
+                println!("{game}: frame {frame} is missing in A");
+                tally.frames_different += 1;
+            }
+        }
+    }
+    let copy = b.join("vkrgss").join("game");
+    for save in files_below(&copy)?.into_iter().filter(|path| is_save(path)) {
+        let relative = save.strip_prefix(&b).expect("below the game's output");
+        if !a.join(relative).is_file() {
+            println!("{game}: save {} is missing in A", relative.display());
+            tally.saves_different += 1;
+        }
+    }
     Ok(tally)
 }
 
-/// `xarch compare`.
-fn compare(a: &Path, b: &Path) -> Result<()> {
+/// `xarch compare`, of the games named in `only`, or of all games of `a`. A game of `only`
+/// that `a` lacks is a difference.
+fn compare(a: &Path, b: &Path, only: &[String]) -> Result<()> {
     let mut games: Vec<String> = fs::read_dir(a)
         .with_context(|| a.display().to_string())?
         .filter_map(|entry| entry.ok())
         .filter(|entry| entry.path().join("frames").is_dir())
         .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .filter(|game| only.is_empty() || only.contains(game))
         .collect();
     games.sort();
     ensure!(!games.is_empty(), "{}: no game output in it", a.display());
     let mut differences = 0;
+    for game in only.iter().filter(|game| !games.contains(game)) {
+        println!("{game}: missing in A");
+        differences += 1;
+    }
     for game in &games {
         if !b.join(game).is_dir() {
             println!("{game}: missing in B");
@@ -664,6 +830,25 @@ mod tests {
         assert!(parse(&["compare", "a", "b", "--validation"]).is_err());
         assert!(parse(&["compare", "a"]).is_err());
         assert!(parse(&["run", "out", "--fast"]).is_err());
+        let command = parse(&["baseline", "mh", "--at", "origin/main"]).unwrap();
+        assert_eq!(
+            command,
+            Command::Baseline {
+                games: vec!["mh".to_owned()],
+                list: None,
+                at: Some("origin/main".to_owned()),
+            }
+        );
+        let command = parse(&["check", "--list", "games.toml"]).unwrap();
+        assert_eq!(
+            command,
+            Command::Check {
+                games: Vec::new(),
+                list: Some(absolute("games.toml").unwrap()),
+            }
+        );
+        assert!(parse(&["check", "--at", "HEAD"]).is_err());
+        assert!(parse(&["baseline", "--validation"]).is_err());
     }
 
     /// A list with one game of RGSS1, in a directory of its own.
@@ -800,7 +985,7 @@ mod tests {
                 ..Tally::default()
             }
         );
-        compare(&path("a"), &path("b")).unwrap();
+        compare(&path("a"), &path("b"), &[]).unwrap();
         let different = compare_game(&path("a"), &path("c"), "game").unwrap();
         assert_eq!(
             different,
@@ -810,6 +995,12 @@ mod tests {
                 ..Tally::default()
             }
         );
-        assert!(compare(&path("a"), &path("c")).is_err());
+        assert!(compare(&path("a"), &path("c"), &[]).is_err());
+        // A save that only the second wrote, and a game that only the second ran.
+        fs::write(path("b").join("game/vkrgss/game/Save2.rxdata"), "two").unwrap();
+        let extra = compare_game(&path("a"), &path("b"), "game").unwrap();
+        assert_eq!((extra.saves_same, extra.saves_different), (1, 1));
+        compare(&path("a"), &path("a"), &["game".to_owned()]).unwrap();
+        assert!(compare(&path("a"), &path("a"), &["other".to_owned()]).is_err());
     }
 }

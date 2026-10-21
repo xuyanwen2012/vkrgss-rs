@@ -585,6 +585,10 @@ cargo xtask xarch android <serial> <out>          # a phone on USB, as `adb devi
 cargo xtask xarch compare <out of this machine> <out of another>
 ```
 
+The same games are the regression check of a change not meant to change output, with
+`xarch baseline` and `xarch check` against a recorded run of vkrgss
+([building.md](building.md#output-of-the-comparison-games)).
+
 The games are listed in `local/xarch.toml` of the workspace, which is not committed, or in the
 file that `--list FILE` names; names of games after the output directory run only those.
 [`xtask/xarch.example.toml`](../xtask/xarch.example.toml) shows the keys; paths in the file are

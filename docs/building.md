@@ -158,6 +158,37 @@ which has no smaller count. Once the workspace is built, a change of the program
 whose dependents are the tests of `xtask`, is checked in about half a minute on a desktop of
 six cores, and one of `vkrgss-android`, on which nothing depends, in a few seconds.
 
+### Output of the comparison games
+
+The tests do not show every way a change can alter what a game draws or saves. The
+comparison games of `cargo xtask xarch` ([development.md](development.md#comparing-the-platforms))
+do, against a baseline of vkrgss's own output:
+
+```sh
+VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask xarch baseline [--at REV]   # once, before the change
+VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask xarch check                 # after it
+```
+
+`baseline` runs the games as `xarch run` does into `target/xarch/base-<COMMIT>`, the short
+hash of `HEAD` (with `-dirty` when tracked files differ from it), and records that directory
+as the baseline in `target/xarch/baseline`. With `--at REV` it runs the vkrgss of the
+revision `REV` instead, such as `origin/main`, built in a worktree of it,
+`target/xarch/tree`, which keeps its own build directory for the next time (`git worktree
+remove target/xarch/tree` removes it). `check` runs the
+games of the current tree into `target/xarch/check` and compares every frame pixel for pixel
+and every save byte for byte with the baseline, both ways; it prints a line per game and
+each difference, fails when there is one, and prints `all identical` otherwise. Both take
+`--list FILE` and names of games as `xarch run` does. Each of them takes about four minutes
+for the ten games on a desktop of six cores, and the first `--at` a minute more to build.
+
+The check is enough for a change that is not meant to change output: a refactoring, a faster
+path, a change of the build, of the tests or of the tools. When it fails, the change did
+alter output, and that is a finding to explain. A change that is meant to change frames,
+text or saves still needs the comparison with the original runtime (`cargo xtask oracle`,
+[development.md](development.md#comparing-with-the-original-runtime)) for the games it
+concerns, since only the original says which output is right; the check then names the
+games and frames that moved, and the baseline is made again once the change is accepted.
+
 ## Android
 
 Both interpreters, and with them the guest executables `vkrgss-guest-rgss12` and
