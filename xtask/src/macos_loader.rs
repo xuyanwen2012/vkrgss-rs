@@ -7,7 +7,7 @@
 //! `target/macos-loader/src/`, and each clone must be at its pinned commit ([`SOURCES`]); a
 //! later version is a change of these constants. The headers are installed with their own
 //! cmake, the loader is built against them with the deployment target
-//! [`MINIMUM_MACOS`](crate::app::MINIMUM_MACOS) for arm64, and the library is copied to
+//! [`MINIMUM_MACOS`] for arm64, and the library is copied to
 //! `target/macos-loader/libvulkan.1.dylib` ([`library`]), whose install name the build makes
 //! `@rpath/libvulkan.1.dylib`. A second run reuses the clones and the build directories.
 
