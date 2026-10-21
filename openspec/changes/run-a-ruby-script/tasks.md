@@ -6,7 +6,7 @@
 
 ## 2. Confinement
 
-- [ ] 2.1 The confinement of a guest, rooted at the script's directory; `--sandbox off`, `--allow-process-functions`. Verify: scenarios "Writes outside the script's directory" and "No program is started" on Linux.
+- [x] 2.1 The confinement of a guest, rooted at the script's directory; `--sandbox off`, `--allow-process-functions`. Verify: scenarios "Writes outside the script's directory" and "No program is started" on Linux.
 
 ## 3. Documents
 

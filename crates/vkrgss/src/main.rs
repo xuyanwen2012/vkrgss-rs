@@ -74,7 +74,8 @@
 //! A guest process confines itself before the first script runs (the sandbox of `vkrgss-guest`),
 //! unless
 //! `--sandbox off` or `--allow-process-functions` is given. A guest on a thread is not
-//! confined, and neither is the program itself.
+//! confined, and neither is the program itself, but in script mode: there the interpreter
+//! thread confines itself as a guest process does, below the directory of the script.
 
 mod args;
 #[cfg(target_os = "macos")]

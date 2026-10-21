@@ -10,6 +10,11 @@
 //! `exec`, by the guest executable `vkrgss-guest-rgss3` beside it, with the hidden option of
 //! script mode of `vkrgss-guest`: the process, its standard streams and its status stay
 //! those of the program.
+//!
+//! Either way the interpreter thread confines itself before the script runs, as a guest
+//! process does (the sandbox and the filter of `vkrgss-guest`), with the directory of the
+//! script in the place of the game directory, unless `--sandbox off` or
+//! `--allow-process-functions` is given.
 
 use std::os::unix::process::CommandExt;
 use std::path::absolute;

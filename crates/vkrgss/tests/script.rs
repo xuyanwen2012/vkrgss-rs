@@ -7,10 +7,14 @@
 
 use std::fs;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
 use tempfile::TempDir;
+
+mod support;
+
+use support::skipped_without_landlock;
 
 /// Whether this target has Ruby 1.9.2, and with it the guest executable of RGSS3.
 const RUBY_192: bool = cfg!(any(
@@ -69,6 +73,16 @@ impl Scripts {
         }
         fs::create_dir_all(dir.path().join("outside")).unwrap();
         Scripts { dir }
+    }
+
+    /// The directory of the scripts.
+    fn scripts(&self) -> PathBuf {
+        self.dir.path().join("scripts")
+    }
+
+    /// The directory beside it.
+    fn outside(&self) -> PathBuf {
+        self.dir.path().join("outside")
     }
 
     /// Runs `vkrgss` with `interpreter`, `options` and `--script` with the file `name` and
@@ -333,6 +347,94 @@ end
             "{}",
             ran.stderr()
         );
+    }
+}
+
+/// The script that writes a file beside itself and one in the directory beside its own,
+/// and says how each went.
+const WRITES: &str = "\
+['written.txt', '../outside/written.txt'].each do |name|
+  begin
+    File.open(File.join(File.dirname($0), name), 'w') { |file| file.write('x') }
+    puts \"#{name}: written\"
+  rescue SystemCallError => error
+    puts \"#{name}: #{error.class}\"
+  end
+end
+";
+
+/// Scenario "Writes outside the script's directory".
+#[test]
+fn a_script_writes_only_below_its_directory() {
+    if skipped_without_landlock("a_script_writes_only_below_its_directory") {
+        return;
+    }
+    let scripts = Scripts::new(&[("s.rb", WRITES)]);
+    for interpreter in interpreters() {
+        let ran = scripts.run(interpreter, &[], "s.rb", &[], "");
+        ran.assert_status(0);
+        assert_eq!(
+            ran.stdout(),
+            "written.txt: written\n../outside/written.txt: Errno::EACCES\n",
+            "Ruby {}: {}",
+            ran.version,
+            ran.stderr()
+        );
+        assert!(scripts.scripts().join("written.txt").is_file());
+        assert!(!scripts.outside().join("written.txt").exists());
+    }
+}
+
+/// `--sandbox off` and `--allow-process-functions` leave a script unconfined.
+#[test]
+fn a_script_that_is_not_confined_writes_outside_its_directory() {
+    for options in [&["--sandbox", "off"][..], &["--allow-process-functions"]] {
+        let scripts = Scripts::new(&[("s.rb", WRITES)]);
+        for interpreter in interpreters() {
+            let ran = scripts.run(interpreter, options, "s.rb", &[], "");
+            ran.assert_status(0);
+            assert_eq!(
+                ran.stdout(),
+                "written.txt: written\n../outside/written.txt: written\n",
+                "Ruby {}, {options:?}: {}",
+                ran.version,
+                ran.stderr()
+            );
+            fs::remove_file(scripts.outside().join("written.txt")).unwrap();
+        }
+    }
+}
+
+/// Scenario "No program is started", and a program that is with
+/// `--allow-process-functions`.
+#[test]
+fn a_script_starts_no_program_unless_allowed() {
+    let text = "p system('sh', '-c', 'echo ran > started.txt')\n";
+    for (options, started) in [(&[][..], false), (&["--allow-process-functions"], true)] {
+        let scripts = Scripts::new(&[("s.rb", text)]);
+        for interpreter in interpreters() {
+            let ran = scripts.run(interpreter, options, "s.rb", &[], "");
+            ran.assert_status(0);
+            let marker = scripts.dir.path().join("started.txt");
+            assert_eq!(
+                marker.is_file(),
+                started,
+                "Ruby {}: {}",
+                ran.version,
+                ran.stderr()
+            );
+            if started {
+                assert_eq!(ran.stdout(), "true\n");
+                fs::remove_file(marker).unwrap();
+            } else {
+                assert_eq!(ran.stdout(), "nil\n");
+                assert!(
+                    ran.stderr().contains("system is turned off"),
+                    "{}",
+                    ran.stderr()
+                );
+            }
+        }
     }
 }
 

@@ -532,8 +532,10 @@ fn run_guest(
 /// this executable, without a game: no window, device or link, and none of the RGSS
 /// classes (`run_script` of the binding). The interpreter is started as for a game of the
 /// runtime, with the file as `$0`, on the thread of its own that a game has, and SIGVTALRM
-/// is blocked in the calling thread first, which has to be the only one still. The status is
-/// that of the script, which `run_script` of the binding says.
+/// is blocked in the calling thread first, which has to be the only one still. Unless the
+/// role says otherwise, that thread confines itself as a guest process does, with the
+/// directory of the file in the place of the game directory, before the script runs. The
+/// status is that of the script, which `run_script` of the binding says.
 pub fn run_script(role: &ScriptRole) -> Result<ExitCode> {
     if !interpreter_runs(role.runtime) {
         bail!(
@@ -544,19 +546,29 @@ pub fn run_script(role: &ScriptRole) -> Result<ExitCode> {
         );
     }
     let file = absolute(&role.file)?;
+    let dir = file.parent().unwrap_or(Path::new("/")).to_owned();
     signals::block_virtual_timer();
     let options = Options {
         script_name: file.to_string_lossy().into_owned(),
         ..interpreter_options(role.runtime)
     };
     let interpreter = Interpreter::start(options)?;
+    let confined = confined(role.sandbox, role.process_functions);
+    if role.process_functions {
+        // A program the script starts would inherit the restriction. Said whatever the
+        // setting of the sandbox is.
+        tracing::info!("the script is not confined: --allow-process-functions is given");
+    }
     let script = Script {
         file,
         arguments: role.arguments.clone(),
         process_functions: role.process_functions,
     };
-    let ran = interpreter
-        .run(move |ruby| run_confined(None, || vkrgss_binding::run_script(ruby, &script)));
+    let ran = interpreter.run(move |ruby| {
+        run_confined(confined.then_some(dir.as_path()), || {
+            vkrgss_binding::run_script(ruby, &script)
+        })
+    });
     // The interpreter is finalised here, which runs the blocks of `at_exit`.
     drop(interpreter);
     // The status as the system keeps it: its low eight bits.
