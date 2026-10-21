@@ -1,7 +1,7 @@
 # script-mode Specification
 
 ## Purpose
-TBD - created by archiving change run-a-ruby-script. Update Purpose after archive.
+Running a single Ruby file with the interpreter of an RGSS runtime (Ruby 1.8.7 or 1.9.2), without a game: its arguments, streams, exit status, the files it may load and its confinement.
 
 ## Requirements
 
