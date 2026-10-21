@@ -337,7 +337,7 @@ written by `ditto`, `target/app/vkrgss-<VERSION>-aarch64-apple-darwin.zip`:
   workspace and macOS 14 as the minimum; no icon.
 
 The bundle is signed ad hoc (`codesign --force --sign - --deep`), which the changed install
-names need on Apple silicon; a Developer ID and notarization come with the release
+names need on Apple silicon; no Developer ID and no notarization, the release included
 ([decisions.md](decisions.md#macos)). The command fails when `otool -L` of an executable or
 library of the bundle names a path under `/opt/homebrew`, and when a Mach-O file of the
 bundle needs a newer macOS than 14.0, the minimum of `Info.plist`: it reads the minimum of

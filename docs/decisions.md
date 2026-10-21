@@ -869,8 +869,9 @@ changes; finishing one does not commit to the next. Their milestones are P1 to P
   name the platform `aarch64-darwin`. A headless run composites on the Apple GPU by default,
   the Mac having no CPU rasteriser. P2 is not accepted with this: packaging, a window, audio
   output and the games of the corpus are not covered yet.
-- The release is signed with a Developer ID, bought when the macOS release is made, and
-  notarized. Not in the Mac App Store for now.
+- No Developer ID is bought (the owner, 2026-10-21): a macOS release is the app signed ad hoc
+  and not notarized, and the user removes the quarantine attribute of a downloaded copy
+  (see running.md). Not in the Mac App Store.
 
 ### Android
 
