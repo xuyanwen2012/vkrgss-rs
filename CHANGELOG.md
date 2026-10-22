@@ -54,7 +54,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `rgss1` and `rgss2`. The arguments after the file are `ARGV`, the script has the standard
   streams of the terminal, and the status is that of `exit`, 0 at the end of the file and 1
   after an uncaught exception, which is reported on the error stream as `ruby` reports it;
-  the blocks of `at_exit` take part in it as in `ruby`.
+  the blocks of `at_exit` take part in it as in `ruby`. Ctrl-C raises `Interrupt` in the
+  script, as in `ruby`; uncaught, `ensure` and `at_exit` run, it is reported, and the
+  process ends by SIGINT.
   `require` and its kin follow the rules of a game with the script's directory as the root,
   the RGSS classes are not defined, and on Linux the script is confined as a guest process
   is, below its own directory, unless `--sandbox off` or `--allow-process-functions` is

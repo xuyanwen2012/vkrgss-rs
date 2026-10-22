@@ -6,7 +6,7 @@
 
 ## 2. Documents
 
-- [ ] 2.1 `docs/running.md` (script mode), `CHANGELOG.md`; the follow-up "Interrupt" of the archived `run-a-ruby-script` stays as it is (archived). Verify: the tests that check the documents pass.
+- [x] 2.1 `docs/running.md` (script mode), `CHANGELOG.md`; the follow-up "Interrupt" of the archived `run-a-ruby-script` stays as it is (archived). Verify: the tests that check the documents pass.
 
 ## 3. Checks
 

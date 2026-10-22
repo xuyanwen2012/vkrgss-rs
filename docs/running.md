@@ -776,9 +776,13 @@ cargo run -p vkrgss -- --runtime rgss1 --script sort.rb 5 3 1
   first, with the exception that ended it as `$!`, and take part in the status as in
   `ruby`: an `exit` in one gives its status, and an exception in one, which is reported
   too, makes a status of 0 a 1. An uncaught `SignalException`, such as `Interrupt`, ends
-  the process by its signal. A file that cannot be read is a message and status 1. Ctrl-C
-  ends the script at once by its signal, without an `Interrupt` exception, so neither
-  `ensure` clauses nor the blocks of `at_exit` run.
+  the process by its signal. A file that cannot be read is a message and status 1.
+- **Ctrl-C.** SIGINT raises `Interrupt` in the script, as in `ruby`: the script can rescue
+  it and go on. When nothing rescues it, `ensure` clauses and the blocks of `at_exit` run,
+  the report goes to the error stream, and the process ends by SIGINT, so a shell sees
+  status 130. Over Ruby 1.8.7, a script that rescues an `Interrupt` raised while it reads
+  the standard input (`gets`) does not end after its last line; SIGTERM ends it. Games are
+  not affected: they handle SIGINT as before.
 - **Loading files.** `require` and `load`, and with Ruby 1.9.2 `require_relative` and
   `autoload`, follow the rules of a game with the directory of the script in the place of
   the game directory: only `.rb` files below it are loaded, found without regard to letter
