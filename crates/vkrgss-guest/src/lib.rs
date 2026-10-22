@@ -56,6 +56,8 @@
 #[allow(unsafe_code)]
 pub mod copier;
 pub mod diagnostics;
+#[allow(unsafe_code)]
+pub mod exit;
 #[cfg(target_os = "android")]
 #[allow(unsafe_code)]
 pub mod heap;

@@ -439,31 +439,28 @@ fn an_uncaught_signal_exception_ends_the_script_by_its_signal() {
     }
 }
 
-/// Runs the script `text` as `s.rb` with every interpreter, or with every one but Ruby
-/// 1.8.7, and interrupts it once it is ready ([`Scripts::interrupt`]).
-fn each_interrupted(text: &str, ruby_187: bool) -> Vec<Ran> {
+/// Runs the script `text` as `s.rb` with every interpreter, and interrupts it once it is
+/// ready ([`Scripts::interrupt`]).
+fn each_interrupted(text: &str) -> Vec<Ran> {
     let scripts = Scripts::new(&[("s.rb", text)]);
     interpreters()
         .into_iter()
-        .filter(|interpreter| ruby_187 || interpreter.version != "1.8.7")
         .map(|interpreter| scripts.interrupt(interpreter, "s.rb"))
         .collect()
 }
 
 /// Scenario "Rescued" of "Interrupt of a script": SIGINT raises `Interrupt` in the script,
-/// which rescues it and goes on. In a sleep with both interpreters, and in a read of the
-/// standard input with Ruby 1.9.2, whose timer thread wakes the reading thread with
-/// SIGVTALRM. Ruby 1.8.7 leaves the lock of the standard input held when it raises in a
-/// read, and the process does not end (the follow-up "A read interrupted over Ruby 1.8.7"
-/// of the change `interrupt-a-script`).
+/// which rescues it and goes on, in a sleep and in a read of the standard input, with both
+/// interpreters. Ruby 1.8.7 leaves the lock of the standard input held when it raises in a
+/// read, which the end of the process does not wait for (`vkrgss_guest::exit`).
 #[test]
 fn a_script_rescues_the_interrupt_of_sigint() {
-    for (wait, ruby_187) in [("sleep 20", true), ("STDIN.gets", false)] {
+    for wait in ["sleep 20", "STDIN.gets"] {
         let text = format!(
             "begin\n  puts 'ready'\n  {wait}\n  puts 'not interrupted'\nrescue Interrupt\n  \
              puts 'caught'\nend\nputs 'went on'\n"
         );
-        for ran in each_interrupted(&text, ruby_187) {
+        for ran in each_interrupted(&text) {
             ran.assert_status(0);
             assert_eq!(
                 ran.stdout(),
@@ -482,7 +479,7 @@ fn a_script_rescues_the_interrupt_of_sigint() {
 fn an_interrupt_that_is_not_rescued_ends_the_script_by_sigint() {
     let text = "at_exit { puts 'exit' }\nbegin\n  puts 'ready'\n  sleep 20\nensure\n  \
                 puts 'ensure'\nend\nputs 'not interrupted'\n";
-    for ran in each_interrupted(text, true) {
+    for ran in each_interrupted(text) {
         assert_eq!(
             ran.output.status.signal(),
             Some(libc::SIGINT),

@@ -32,6 +32,7 @@ use std::sync::mpsc::{self, Receiver};
 use anyhow::{Context, Result, anyhow, bail};
 use vkrgss_binding::{Config, Copied, Copier, CopyFailed, RunConfig, RunError, Script, run_game};
 use vkrgss_guest::copier::{ForkCopier, Parked};
+use vkrgss_guest::exit;
 use vkrgss_guest::record::{Diagnostics, GuestRecord};
 use vkrgss_guest::role::{self, GuestRole};
 use vkrgss_guest::script::ScriptRole;
@@ -578,8 +579,9 @@ pub fn run_script(role: &ScriptRole) -> Result<ExitCode> {
     });
     // The blocks of `at_exit` have run in the script; the interpreter is finalised here.
     drop(interpreter);
-    // The status as the system keeps it: its low eight bits.
-    Ok(ExitCode::from(ran? as u8))
+    // The status as the system keeps it: its low eight bits. Not returned to `main`, whose
+    // `exit` could wait for a lock that Ruby 1.8.7 left held ([`exit::end_script`]).
+    exit::end_script(ran? as u8)
 }
 
 /// Makes the executable that calls it run the script of a program, when the first of its

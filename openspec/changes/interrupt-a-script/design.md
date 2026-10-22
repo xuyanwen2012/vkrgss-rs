@@ -47,13 +47,9 @@ SIGTERM and other signals; signals in games.
 
 - **A read interrupted over Ruby 1.8.7.** Ruby 1.8.7 raises `Interrupt` from its signal
   handler, with `longjmp`, also while it reads the standard input with `getc` and holds the
-  lock of the C library's `stdin`. `ruby` ends on the thread that holds the lock, which
-  takes it again. In script mode the interpreter thread holds it and ends; the main thread
-  then waits for the lock for ever in `exit`, which flushes every stream. So a script of
-  `rgss1` or `rgss2` that rescues an `Interrupt` raised in `gets` runs to its end and the
-  process does not end (SIGINT is blocked on the main thread; SIGTERM ends it). An
-  `Interrupt` that is not rescued ends the process by SIGINT, which flushes nothing, and is
-  not affected. A fix would end the process of a script without flushing the streams of the
-  C library (`_exit` after the interpreter is finalised, which has flushed what Ruby wrote),
-  or on the interpreter thread; neither is named above, so neither is built. The test of the
-  scenario "Rescued" interrupts a read only over Ruby 1.9.2.
+  lock of the C library's `stdin`; the interpreter thread then ends holding it, and `exit` on
+  the main thread, which flushes every stream, would wait for it for ever. Resolved at the
+  merge by the owner's session: the process of a script ends with `_exit` after the
+  interpreter is finalised, flushing the standard output and error streams first
+  (`vkrgss_guest::exit::end_script`); the scenario "Rescued" interrupts a read over both
+  interpreters.
