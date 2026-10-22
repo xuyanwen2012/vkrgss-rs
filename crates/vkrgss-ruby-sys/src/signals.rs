@@ -172,26 +172,39 @@ fn ignore() -> KernelAction {
 pub(crate) struct Dispositions {
     taken: [KernelAction; SIGNALS_TAKEN_BY_RUBY.len()],
     virtual_timer: KernelAction,
+    /// Whether Ruby keeps its handler of SIGINT while it runs.
+    interrupt: bool,
 }
 
 impl Dispositions {
-    /// Records the dispositions of [`SIGNALS_TAKEN_BY_RUBY`] and of SIGVTALRM.
-    pub(crate) fn capture() -> Self {
+    /// Records the dispositions of [`SIGNALS_TAKEN_BY_RUBY`] and of SIGVTALRM. With
+    /// `interrupt` Ruby keeps its handler of SIGINT until it is finalised.
+    pub(crate) fn capture(interrupt: bool) -> Self {
         Self {
             taken: SIGNALS_TAKEN_BY_RUBY.map(get),
             virtual_timer: get(libc::SIGVTALRM),
+            interrupt,
         }
     }
 
-    /// Puts the dispositions of [`SIGNALS_TAKEN_BY_RUBY`] back. SIGVTALRM is left to Ruby.
+    /// Puts the dispositions of [`SIGNALS_TAKEN_BY_RUBY`] back, except that of SIGINT when
+    /// Ruby keeps it. SIGVTALRM is left to Ruby.
     pub(crate) fn restore(&self) {
+        self.restore_except(self.interrupt);
+    }
+
+    /// Puts the dispositions of [`SIGNALS_TAKEN_BY_RUBY`] back, except that of SIGINT with
+    /// `keep_interrupt`.
+    fn restore_except(&self, keep_interrupt: bool) {
         for (signal, action) in SIGNALS_TAKEN_BY_RUBY.iter().zip(&self.taken) {
-            set(*signal, action);
+            if !(keep_interrupt && *signal == libc::SIGINT) {
+                set(*signal, action);
+            }
         }
     }
 
     /// For shutdown: stops the virtual timer that Ruby's threads arm, gives SIGVTALRM its
-    /// recorded disposition back, then restores the rest.
+    /// recorded disposition back, then restores the rest, SIGINT included.
     pub(crate) fn restore_after_finalize(&self) {
         // SAFETY: an all-zero `itimerval` is valid and means "disarm"; a null old value is
         // allowed.
@@ -205,6 +218,7 @@ impl Dispositions {
             set(libc::SIGVTALRM, &ignore());
             set(libc::SIGVTALRM, &self.virtual_timer);
         }
-        self.restore();
+        // Ruby keeps nothing once it is finalised.
+        self.restore_except(false);
     }
 }

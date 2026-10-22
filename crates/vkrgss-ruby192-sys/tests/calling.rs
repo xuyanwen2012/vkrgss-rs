@@ -270,8 +270,11 @@ fn options_for_a_runtime_are_the_defaults() {
         let Options {
             stack_size,
             script_name,
+            interrupt,
         } = Options::for_rgss(generation);
         assert_eq!(stack_size, default.stack_size, "generation {generation}");
+        // A game gives SIGINT back to the host.
+        assert!(!interrupt, "generation {generation}");
         // RGSS3 runs without a script name, as its original does (`$0` is false there).
         let expected = if generation == 3 {
             String::new()

@@ -86,6 +86,10 @@ pub struct Options {
     /// The table of symbol numbers. It is applied before Ruby is initialised and cannot
     /// change afterwards.
     pub symbols: SymbolTable,
+    /// Whether Ruby keeps its handler of SIGINT after start-up, so that the signal raises
+    /// `Interrupt` in the main Ruby thread as in `ruby`; for a script. Otherwise every
+    /// disposition Ruby took is put back, as a game needs.
+    pub interrupt: bool,
 }
 
 impl Default for Options {
@@ -94,6 +98,7 @@ impl Default for Options {
             stack_size: MIN_STACK_SIZE,
             script_name: "vkrgss".to_owned(),
             symbols: SymbolTable::default(),
+            interrupt: false,
         }
     }
 }
@@ -195,7 +200,8 @@ impl Interpreter {
     /// anchored for the collector, the table of symbol numbers is selected, `ruby_init` runs, the stack limit is set to the stack size
     /// minus [`STACK_HEADROOM`], `Zlib` is registered as if `zlib` had been required, `$0` is
     /// set, `$stdout` and `$stderr` are made synchronous, and the recorded dispositions are
-    /// put back. The load path stays empty.
+    /// put back, that of SIGINT only without [`Options::interrupt`]. The load path stays
+    /// empty.
     ///
     /// The environment variable [`GC_STRESS_VARIABLE`] is read once, here, and takes effect
     /// right after `ruby_init`.
@@ -205,6 +211,7 @@ impl Interpreter {
         let gc_stress = gc_stress_from_environment()?;
         let stack_size = options.stack_size.max(MIN_STACK_SIZE);
         let symbols = options.symbols;
+        let interrupt = options.interrupt;
         if STARTED.swap(true, Ordering::SeqCst) {
             return Err(StartError::AlreadyStarted);
         }
@@ -214,7 +221,17 @@ impl Interpreter {
         let thread = thread::Builder::new()
             .name("ruby".to_owned())
             .stack_size(stack_size)
-            .spawn(move || thread_main(stack_size, gc_stress, symbols, &script_name, queue, ready));
+            .spawn(move || {
+                thread_main(
+                    stack_size,
+                    gc_stress,
+                    symbols,
+                    interrupt,
+                    &script_name,
+                    queue,
+                    ready,
+                )
+            });
         let thread = match thread {
             Ok(thread) => thread,
             Err(error) => {
@@ -299,11 +316,12 @@ fn thread_main(
     stack_size: usize,
     gc_stress: c_ulong,
     symbols: SymbolTable,
+    interrupt: bool,
     script_name: &CString,
     queue: Receiver<Job>,
     ready: SyncSender<Result<(), StartError>>,
 ) {
-    let saved = Dispositions::capture();
+    let saved = Dispositions::capture(interrupt);
     let mut anchor: VALUE = 0;
     // SAFETY: `anchor` lives until this function returns, which is after `serve` has
     // finalised the interpreter, and no interpreter exists yet in this process (`STARTED`).
@@ -370,7 +388,8 @@ fn serve(
         ffi::ruby_vkxp_gc_stress(gc_stress);
         protect::protect(&mut setup, setup_body)
     };
-    // Ruby took the signals during `ruby_init`; the process gets them back.
+    // Ruby took the signals during `ruby_init`; the process gets them back, SIGINT unless
+    // Ruby is to keep it.
     saved.restore();
 
     match started {

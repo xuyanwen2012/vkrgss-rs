@@ -1,6 +1,6 @@
 //! The interpreter thread: start-up, the queue of work, shutdown.
 
-use std::ffi::{CString, c_ulong};
+use std::ffi::{CString, c_int, c_ulong};
 use std::marker::PhantomData;
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -71,6 +71,13 @@ pub struct Options {
     /// `$0` is then `false`, and the frame of a C function at the bottom of a backtrace,
     /// such as that of an `eval`, is named `ruby`, as on the original runtime of RGSS3.
     pub script_name: String,
+    /// Whether Ruby keeps its handler of SIGINT after start-up, so that the signal raises
+    /// `Interrupt` in the main Ruby thread as in `ruby`; for a script. The interpreter then
+    /// starts its timer thread in `ruby_init`, as the release does, because that thread is
+    /// what hands a signal to the main thread, and keeps its handler of SIGVTALRM, with
+    /// which the timer thread wakes a thread that blocks. Otherwise every disposition Ruby
+    /// took is put back, as a game needs.
+    pub interrupt: bool,
 }
 
 impl Default for Options {
@@ -78,6 +85,7 @@ impl Default for Options {
         Self {
             stack_size: MIN_STACK_SIZE,
             script_name: "vkrgss".to_owned(),
+            interrupt: false,
         }
     }
 }
@@ -182,14 +190,15 @@ impl Interpreter {
     /// On that thread, in this order: the dispositions of
     /// [`SIGNALS_TAKEN_BY_RUBY`](crate::SIGNALS_TAKEN_BY_RUBY) and the thread's signal mask
     /// are recorded; the interpreter is told not to start its timer thread before a script
-    /// creates a thread, to seed its hashes with [`HASH_SEED`] and to take the stack size
-    /// minus [`STACK_HEADROOM`] as the limit of its machine stack; the stack is anchored for
-    /// the collector; `ruby_init` runs; UTF-16LE and the transcoders are registered; `Zlib`
-    /// is defined without becoming a loaded feature; the default external encoding becomes
-    /// UTF-8; `"."` is pushed to the empty load path; `$0` is set unless the script name is
-    /// empty; `$stdout` and `$stderr` are made synchronous; the collector stress is switched
-    /// on if asked for; and the recorded dispositions and mask are put back. The release's
-    /// prelude does not run.
+    /// creates a thread (unless [`Options::interrupt`] is set), to seed its hashes with
+    /// [`HASH_SEED`] and to take the stack size minus [`STACK_HEADROOM`] as the limit of its
+    /// machine stack; the stack is anchored for the collector; `ruby_init` runs; UTF-16LE
+    /// and the transcoders are registered; `Zlib` is defined without becoming a loaded
+    /// feature; the default external encoding becomes UTF-8; `"."` is pushed to the empty
+    /// load path; `$0` is set unless the script name is empty; `$stdout` and `$stderr` are
+    /// made synchronous; the collector stress is switched on if asked for; and the recorded
+    /// dispositions and mask are put back, those of SIGINT and SIGVTALRM only without
+    /// [`Options::interrupt`]. The release's prelude does not run.
     ///
     /// The environment variable [`GC_STRESS_VARIABLE`] is read once, here.
     pub fn start(options: Options) -> Result<Self, StartError> {
@@ -197,6 +206,7 @@ impl Interpreter {
             CString::new(options.script_name).map_err(|_| StartError::InvalidScriptName)?;
         let gc_stress = gc_stress_from_environment()?;
         let stack_size = options.stack_size.max(MIN_STACK_SIZE);
+        let interrupt = options.interrupt;
         if STARTED.swap(true, Ordering::SeqCst) {
             return Err(StartError::AlreadyStarted);
         }
@@ -206,7 +216,9 @@ impl Interpreter {
         let thread = thread::Builder::new()
             .name("ruby".to_owned())
             .stack_size(stack_size)
-            .spawn(move || thread_main(stack_size, gc_stress, &script_name, queue, ready));
+            .spawn(move || {
+                thread_main(stack_size, gc_stress, interrupt, &script_name, queue, ready)
+            });
         let thread = match thread {
             Ok(thread) => thread,
             Err(error) => {
@@ -290,18 +302,19 @@ impl Drop for Interpreter {
 fn thread_main(
     stack_size: usize,
     gc_stress: bool,
+    interrupt: bool,
     script_name: &CString,
     queue: Receiver<Job>,
     ready: SyncSender<Result<(), StartError>>,
 ) {
-    let saved = State::capture();
+    let saved = State::capture(interrupt);
     let mut anchor: VALUE = 0;
     // SAFETY: no interpreter exists yet in this process (`STARTED`), so nothing reads the
     // three settings while they are written, and they are written before `ruby_init`, which
     // is when the interpreter reads them. `anchor` lives until this function returns, which
     // is after `serve` has ended the interpreter.
     unsafe {
-        ffi::ruby_vkxp_lazy_timer_thread = 1;
+        ffi::ruby_vkxp_lazy_timer_thread = c_int::from(!interrupt);
         ffi::ruby_vkxp_hashseed_fixed = 1;
         ffi::ruby_vkxp_hashseed = HASH_SEED;
         ffi::ruby_vkxp_stack_size = stack_size - STACK_HEADROOM;
@@ -387,7 +400,7 @@ fn serve(
         protect::protect(&mut setup, setup_body)
     };
     // Ruby took the signals during `ruby_init` and blocked them on this thread; the process
-    // gets them back.
+    // gets them back, SIGINT and SIGVTALRM unless Ruby is to keep SIGINT.
     saved.restore();
 
     match started {
@@ -407,5 +420,5 @@ fn serve(
     // SAFETY: still on the interpreter thread; nothing uses Ruby after this. `ruby_cleanup`
     // catches what the `at_exit` blocks and finalisers raise, and returns.
     let _ = unsafe { ffi::ruby_cleanup(0) };
-    saved.restore();
+    saved.restore_after_cleanup();
 }

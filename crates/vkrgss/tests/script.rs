@@ -7,10 +7,13 @@
 //! targets only; elsewhere the runs over it are left out.
 
 use std::fs;
-use std::io::Write;
-use std::os::unix::process::ExitStatusExt;
+use std::io::{BufRead, BufReader, Read, Write};
+use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::{Path, PathBuf};
 use std::process::{Output, Stdio};
+use std::sync::mpsc;
+use std::thread;
+use std::time::{Duration, Instant};
 
 use tempfile::TempDir;
 
@@ -116,6 +119,114 @@ impl Scripts {
         let output = child.wait_with_output().expect("the program ends");
         Ran {
             output,
+            version: interpreter.version,
+        }
+    }
+}
+
+/// How long a script that is interrupted may take to say that it is ready, and then to end
+/// after the signal.
+const INTERRUPT_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// How long the script is given after it said that it is ready, to begin to wait.
+const SETTLE: Duration = Duration::from_millis(200);
+
+impl Scripts {
+    /// Runs `vkrgss` with `interpreter` and `--script` with the file `name`, as [`Self::run`]
+    /// does, with SIGINT at its default disposition whatever this process has, and the
+    /// standard input left open. Once the script has written the line `ready`, and after
+    /// [`SETTLE`], sends SIGINT to the process. Fails the test when the script is not ready
+    /// or has not ended within [`INTERRUPT_TIMEOUT`] each, after ending it with SIGKILL.
+    ///
+    /// Ruby 1.8.7, as `ruby` 1.8.7, takes a signal that comes just before a call that blocks
+    /// only when the call returns. So that the test does not depend on [`SETTLE`] being
+    /// enough, a script waits for less than [`INTERRUPT_TIMEOUT`].
+    fn interrupt(&self, interpreter: Interpreter, name: &str) -> Ran {
+        let file = format!("scripts/{name}");
+        let words = [interpreter.options, &["--script", file.as_str()]].concat();
+        let mut command = support::command(self.dir.path(), &words);
+        command
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        // SAFETY: the closure runs in the child between `fork` and `exec` and only calls
+        // `signal`, which is async-signal-safe. A tool that starts this test without a
+        // terminal may have SIGINT ignored, which the child would inherit and Ruby keep.
+        unsafe {
+            command.pre_exec(|| {
+                libc::signal(libc::SIGINT, libc::SIG_DFL);
+                Ok(())
+            });
+        }
+        let mut child = command.spawn().expect("the program starts");
+        let stdin = child.stdin.take();
+        let (lines, received) = mpsc::channel();
+        let stdout = BufReader::new(child.stdout.take().unwrap());
+        let reader = thread::spawn(move || {
+            for line in stdout.lines() {
+                let Ok(line) = line else { break };
+                let _ = lines.send(line);
+            }
+        });
+        let mut stderr = child.stderr.take().unwrap();
+        let errors = thread::spawn(move || {
+            let mut text = Vec::new();
+            let _ = stderr.read_to_end(&mut text);
+            text
+        });
+        let mut stdout = String::new();
+        let ready = loop {
+            match received.recv_timeout(INTERRUPT_TIMEOUT) {
+                Ok(line) => {
+                    stdout.push_str(&line);
+                    stdout.push('\n');
+                    if line == "ready" {
+                        break true;
+                    }
+                }
+                Err(_) => break false,
+            }
+        };
+        if !ready {
+            let _ = child.kill();
+            let status = child.wait().unwrap();
+            let stderr = String::from_utf8_lossy(&errors.join().unwrap()).into_owned();
+            panic!(
+                "Ruby {}: the script did not get ready: {status}\nstdout: {stdout}\nstderr: \
+                 {stderr}",
+                interpreter.version
+            );
+        }
+        thread::sleep(SETTLE);
+        let pid = libc::pid_t::try_from(child.id()).unwrap();
+        // SAFETY: `kill` takes no pointer; the child has not been waited for, so the number
+        // is still its own.
+        let sent = unsafe { libc::kill(pid, libc::SIGINT) };
+        assert_eq!(sent, 0, "SIGINT is sent");
+        let sent = Instant::now();
+        let status = loop {
+            if let Some(status) = child.try_wait().unwrap() {
+                break status;
+            }
+            if sent.elapsed() > INTERRUPT_TIMEOUT {
+                let _ = child.kill();
+                let status = child.wait().unwrap();
+                panic!(
+                    "Ruby {}: the script did not end after SIGINT: {status}\nstdout: {stdout}",
+                    interpreter.version
+                );
+            }
+            thread::sleep(Duration::from_millis(20));
+        };
+        drop(stdin);
+        reader.join().unwrap();
+        stdout.extend(received.try_iter().map(|line| line + "\n"));
+        Ran {
+            output: Output {
+                status,
+                stdout: stdout.into_bytes(),
+                stderr: errors.join().unwrap(),
+            },
             version: interpreter.version,
         }
     }
@@ -325,6 +436,74 @@ fn an_uncaught_signal_exception_ends_the_script_by_its_signal() {
                 ran.stderr()
             );
         }
+    }
+}
+
+/// Runs the script `text` as `s.rb` with every interpreter, or with every one but Ruby
+/// 1.8.7, and interrupts it once it is ready ([`Scripts::interrupt`]).
+fn each_interrupted(text: &str, ruby_187: bool) -> Vec<Ran> {
+    let scripts = Scripts::new(&[("s.rb", text)]);
+    interpreters()
+        .into_iter()
+        .filter(|interpreter| ruby_187 || interpreter.version != "1.8.7")
+        .map(|interpreter| scripts.interrupt(interpreter, "s.rb"))
+        .collect()
+}
+
+/// Scenario "Rescued" of "Interrupt of a script": SIGINT raises `Interrupt` in the script,
+/// which rescues it and goes on. In a sleep with both interpreters, and in a read of the
+/// standard input with Ruby 1.9.2, whose timer thread wakes the reading thread with
+/// SIGVTALRM. Ruby 1.8.7 leaves the lock of the standard input held when it raises in a
+/// read, and the process does not end (the follow-up "A read interrupted over Ruby 1.8.7"
+/// of the change `interrupt-a-script`).
+#[test]
+fn a_script_rescues_the_interrupt_of_sigint() {
+    for (wait, ruby_187) in [("sleep 20", true), ("STDIN.gets", false)] {
+        let text = format!(
+            "begin\n  puts 'ready'\n  {wait}\n  puts 'not interrupted'\nrescue Interrupt\n  \
+             puts 'caught'\nend\nputs 'went on'\n"
+        );
+        for ran in each_interrupted(&text, ruby_187) {
+            ran.assert_status(0);
+            assert_eq!(
+                ran.stdout(),
+                "ready\ncaught\nwent on\n",
+                "Ruby {}, {wait}: {}",
+                ran.version,
+                ran.stderr()
+            );
+        }
+    }
+}
+
+/// Scenario "Not rescued" of "Interrupt of a script": the `ensure` clause and the block of
+/// `at_exit` run, the `Interrupt` is reported, and the process ends by SIGINT.
+#[test]
+fn an_interrupt_that_is_not_rescued_ends_the_script_by_sigint() {
+    let text = "at_exit { puts 'exit' }\nbegin\n  puts 'ready'\n  sleep 20\nensure\n  \
+                puts 'ensure'\nend\nputs 'not interrupted'\n";
+    for ran in each_interrupted(text, true) {
+        assert_eq!(
+            ran.output.status.signal(),
+            Some(libc::SIGINT),
+            "Ruby {}: {}: {}",
+            ran.version,
+            ran.output.status,
+            ran.stderr()
+        );
+        assert_eq!(
+            ran.stdout(),
+            "ready\nensure\nexit\n",
+            "Ruby {}: {}",
+            ran.version,
+            ran.stderr()
+        );
+        assert!(
+            ran.stderr().contains("Interrupt"),
+            "Ruby {}: {}",
+            ran.version,
+            ran.stderr()
+        );
     }
 }
 

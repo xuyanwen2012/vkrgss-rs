@@ -2,7 +2,7 @@
 
 ## 1. Interrupt
 
-- [ ] 1.1 Keep Ruby's handler of SIGINT in script mode and deliver it to the interpreter, for Ruby 1.8.7 and 1.9.2. Verify: the scenarios of the requirement "Interrupt of a script" as integration tests for `rgss1` and `rgss3`; the signal tests of the interpreter crates pass unchanged.
+- [x] 1.1 Keep Ruby's handler of SIGINT in script mode and deliver it to the interpreter, for Ruby 1.8.7 and 1.9.2. Verify: the scenarios of the requirement "Interrupt of a script" as integration tests for `rgss1` and `rgss3`; the signal tests of the interpreter crates pass unchanged.
 
 ## 2. Documents
 

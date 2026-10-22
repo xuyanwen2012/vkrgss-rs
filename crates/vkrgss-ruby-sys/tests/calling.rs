@@ -717,6 +717,8 @@ fn options_for_a_runtime_choose_the_symbol_table() {
         assert_eq!(options.symbols, symbols, "generation {generation}");
         assert_eq!(options.stack_size, default.stack_size);
         assert_eq!(options.script_name, default.script_name);
+        // A game gives SIGINT back to the host.
+        assert!(!options.interrupt, "generation {generation}");
     }
 }
 

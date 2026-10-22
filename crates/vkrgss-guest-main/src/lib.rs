@@ -532,10 +532,14 @@ fn run_guest(
 /// this executable, without a game: no window, device or link, and none of the RGSS
 /// classes (`run_script` of the binding). The interpreter is started as for a game of the
 /// runtime, with the file as `$0`, on the thread of its own that a game has, and SIGVTALRM
-/// is blocked in the calling thread first, which has to be the only one still. Unless the
-/// role says otherwise, that thread confines itself as a guest process does, with the
-/// directory of the file in the place of the game directory, before the script runs. The
-/// status is that of the script, which `run_script` of the binding says.
+/// is blocked in the calling thread first, which has to be the only one still. Unlike a
+/// game, the interpreter keeps its handler of SIGINT, as `ruby` has it, and the calling
+/// thread blocks SIGINT once the interpreter has started, so that the signal raises
+/// `Interrupt` in the script. Unless the role says otherwise, the interpreter thread
+/// confines itself as a guest process does, with the directory of the file in the place of
+/// the game directory, before the script runs. The status is that of the script, which
+/// `run_script` of the binding says; an `Interrupt` that the script does not rescue ends
+/// the process by SIGINT.
 pub fn run_script(role: &ScriptRole) -> Result<ExitCode> {
     if !interpreter_runs(role.runtime) {
         bail!(
@@ -550,9 +554,12 @@ pub fn run_script(role: &ScriptRole) -> Result<ExitCode> {
     signals::block_virtual_timer();
     let options = Options {
         script_name: file.to_string_lossy().into_owned(),
+        interrupt: true,
         ..interpreter_options(role.runtime)
     };
     let interpreter = Interpreter::start(options)?;
+    // The interpreter takes SIGINT; this thread only waits for it.
+    signals::block_interrupt();
     let confined = confined(role.sandbox, role.process_functions);
     if role.process_functions {
         // A program the script starts would inherit the restriction. Said whatever the

@@ -164,16 +164,20 @@ pub(crate) struct State {
     /// thread that blocks by sending it this signal.
     wakeup: KernelAction,
     mask: libc::sigset_t,
+    /// Whether Ruby keeps its handlers of SIGINT and SIGVTALRM while it runs.
+    interrupt: bool,
 }
 
 impl State {
     /// Records the dispositions of [`SIGNALS_TAKEN_BY_RUBY`] and of SIGVTALRM, and the
-    /// signal mask of the calling thread, which must be the interpreter thread.
-    pub(crate) fn capture() -> Self {
+    /// signal mask of the calling thread, which must be the interpreter thread. With
+    /// `interrupt` Ruby keeps its handlers of SIGINT and SIGVTALRM until it has ended.
+    pub(crate) fn capture(interrupt: bool) -> Self {
         Self {
             taken: SIGNALS_TAKEN_BY_RUBY.map(get),
             wakeup: get(libc::SIGVTALRM),
             mask: thread_mask(),
+            interrupt,
         }
     }
 
@@ -184,11 +188,30 @@ impl State {
     /// SIGVTALRM goes back to the host as well. The interpreter installs its handler again
     /// when a script creates the first Ruby thread (patch
     /// `thread-wakeup-signal-with-first-thread`), and never sends the signal before.
+    ///
+    /// When Ruby keeps SIGINT, its handlers of SIGINT and SIGVTALRM stay: its timer thread
+    /// runs from `ruby_init` on and may send SIGVTALRM at any time.
     pub(crate) fn restore(&self) {
+        self.restore_except(self.interrupt);
+    }
+
+    /// For the end of the interpreter, after which its timer thread has stopped: puts every
+    /// disposition and the mask back.
+    pub(crate) fn restore_after_cleanup(&self) {
+        self.restore_except(false);
+    }
+
+    /// Puts the dispositions and the mask back, except those of SIGINT and SIGVTALRM with
+    /// `keep_interrupt`.
+    fn restore_except(&self, keep_interrupt: bool) {
         for (signal, action) in SIGNALS_TAKEN_BY_RUBY.iter().zip(&self.taken) {
-            set(*signal, action);
+            if !(keep_interrupt && *signal == libc::SIGINT) {
+                set(*signal, action);
+            }
         }
-        set(libc::SIGVTALRM, &self.wakeup);
+        if !keep_interrupt {
+            set(libc::SIGVTALRM, &self.wakeup);
+        }
         // SAFETY: `mask` is a set this thread had before; a null old set is allowed.
         let status =
             unsafe { libc::pthread_sigmask(libc::SIG_SETMASK, &self.mask, ptr::null_mut()) };
