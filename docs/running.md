@@ -801,8 +801,8 @@ cargo run -p vkrgss -- --runtime rgss1 --script sort.rb 5 3 1
 
 The app `vkrgss.app`, which `cargo xtask app` builds
 ([building.md](building.md#the-app-bundle)), runs on a Mac with Apple silicon without
-Homebrew: it carries the Vulkan loader and MoltenVK. macOS is not supported yet (milestone
-P2 of [decisions.md](decisions.md#macos)).
+Homebrew: it carries the Vulkan loader and MoltenVK, and needs macOS 14 (milestone P2 of
+[decisions.md](decisions.md#macos)).
 
 Opened with a double-click, the app asks for the folder of a game with the system's folder
 chooser and runs it in a window, with the guest in a process, as `vkrgss <GAME_DIR>` does.

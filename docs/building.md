@@ -342,8 +342,8 @@ in [running.md](running.md#validation-on-a-phone).
 ## macOS
 
 The workspace builds for `aarch64-apple-darwin`, a Mac with Apple silicon, and its tests pass
-there on MoltenVK; macOS is not supported yet (milestone P2 of
-[decisions.md](decisions.md#macos)), and no CI job runs on it. The Mac needs Apple's command
+there on MoltenVK (milestone P2 of [decisions.md](decisions.md#macos)); no CI job runs on
+it. The Mac needs Apple's command
 line tools, for clang, and from Homebrew the Vulkan loader, MoltenVK, `glslc` and
 `spirv-val` (`vulkan-loader`, `molten-vk`, `shaderc`, `spirv-tools`); neither libcrypt, ALSA
 nor libudev, whose parts the system has. Ash does not find Homebrew's `libvulkan.dylib` by
