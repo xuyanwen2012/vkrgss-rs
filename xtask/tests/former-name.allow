@@ -49,9 +49,8 @@ text crates/vkrgss-guest/src/hello.rs \\x00VKXP"
 text xtask/src/oracle/original.rs (vkxp-oracle-prepared|vkxp-oracle\.reg)
 text xtask/src/oracle/fonts.rs (vkxp oracle font|vkxp-oracle-)
 
-# The banner still shows the text "vkxp", so its alternative text says so; the README says
-# once that versions 0.1.0 to 0.3.0 were released under that name.
-text README.md (alt="vkxp\. |\bunder the name vkxp \(|#coming-from-vkxp-030\))
+# The README says once that versions 0.1.0 to 0.3.0 were released under that name.
+text README.md (\bunder the name vkxp \(|#coming-from-vkxp-030\))
 
 # What users of version 0.3.0 have to know, in docs/running.md, and the record of the rename
 # in docs/decisions.md.
