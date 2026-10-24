@@ -27,4 +27,4 @@
 
 ## 4. Checks
 
-- [ ] 4.1 `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0; `openspec validate package-linux-aarch64 --strict` passes.
+- [x] 4.1 `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0; `openspec validate package-linux-aarch64 --strict` passes.
