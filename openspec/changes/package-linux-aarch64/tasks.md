@@ -13,7 +13,11 @@
 
 ## 2. Release workflow
 
-- [ ] 2.1 Build both packages and publish them with the APK. Verify: scenario "Both packages in a release" by reading the workflow; `actionlint` if installed, else a YAML parse.
+- [x] 2.1 Build both packages and publish them with the APK. Verify: scenario "Both packages in a release" by reading the workflow; `actionlint` if installed, else a YAML parse.
+  - 2026-10-23: `actionlint` is not installed here; the workflow parses with PyYAML (jobs
+    `package`, `apk`, `release`). The test `the_release_carries_the_packages_of_both_linux_targets`
+    of `xtask/tests/workflows.rs` reads the scenario from the file, and the other tests of the
+    release were moved to the new jobs.
 
 ## 3. Documents
 

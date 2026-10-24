@@ -1,6 +1,7 @@
 //! The workflows: the parts of the gate on x86_64 and, allowed to fail, the whole gate on
-//! aarch64; the release only for a tag; the checks outside the gate once a day, with an issue
-//! when they fail; and in all of them inputs that do not move.
+//! aarch64; the release only for a tag, with the packages of both Linux targets; the checks
+//! outside the gate once a day, with an issue when they fail; and in all of them inputs that
+//! do not move.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -180,19 +181,94 @@ fn the_aarch64_job_has_the_steps_of_the_parts_and_must_pass() {
     assert_eq!(steps_aarch64.len(), steps_part.len());
 }
 
+/// The release is created by its own job, after the jobs that build and only for a pushed
+/// tag; the package checks the tag before it is built, and only the release job may write.
 #[test]
 fn the_release_is_created_only_for_a_tag() {
     let workflow = read_workflow("release.yml");
-    let package = job(&workflow, "package");
-    let create = package
-        .iter()
-        .position(|line| line.trim() == "- name: Create the release")
-        .expect("a step that creates the release");
-    let condition = package[create + 1].trim();
-    assert!(
-        condition.starts_with("if: ") && condition.contains("github.ref_type == 'tag'"),
-        "{condition}"
+    let release = job(&workflow, "release");
+    assert_eq!(release[0], "    needs: [package, apk]");
+    assert_eq!(
+        release[1],
+        "    if: github.event_name == 'push' && github.ref_type == 'tag'"
     );
+    step(&release, "Create the release");
+
+    let package = job(&workflow, "package");
+    let position = |name: &str| {
+        package
+            .iter()
+            .position(|line| line.trim() == format!("- name: {name}"))
+            .unwrap_or_else(|| panic!("no step `{name}`"))
+    };
+    assert!(position("Check that the tag is the version") < position("Build the package"));
+
+    let writes: Vec<&str> = code_lines(&workflow)
+        .filter(|line| line.contains(": write"))
+        .collect();
+    assert_eq!(writes, ["      contents: write"]);
+    let permissions = release
+        .iter()
+        .position(|line| *line == "    permissions:")
+        .expect("the job `release` names its permissions");
+    assert_eq!(release[permissions + 1], "      contents: write");
+}
+
+/// Scenario "Both packages in a release".
+#[test]
+fn the_release_carries_the_packages_of_both_linux_targets() {
+    let workflow = read_workflow("release.yml");
+    let package = job(&workflow, "package");
+    let targets = [
+        ("ubuntu-24.04", "x86_64-unknown-linux-gnu"),
+        ("ubuntu-24.04-arm", "aarch64-unknown-linux-gnu"),
+    ];
+    for (runner, target) in targets {
+        let entry = package
+            .iter()
+            .position(|line| line.trim() == format!("- runner: {runner}"))
+            .unwrap_or_else(|| panic!("no runner `{runner}`"));
+        assert_eq!(package[entry + 1].trim(), format!("target: {target}"));
+    }
+    assert!(package.contains(&"    runs-on: ${{ matrix.runner }}"));
+    assert!(
+        step(&package, "Build the package").contains(&"        run: cargo xtask dist"),
+        "{package:?}"
+    );
+    let text = package.join("\n");
+    for path in [
+        "target/dist/vkrgss-${{ steps.version.outputs.version }}-${{ matrix.target }}.tar.gz",
+        "target/dist/vkrgss-${{ steps.version.outputs.version }}-${{ matrix.target }}.tar.gz.sha256",
+    ] {
+        assert!(
+            text.contains(path),
+            "the package job does not upload `{path}`"
+        );
+    }
+
+    let release = job(&workflow, "release").join("\n");
+    assert!(
+        release.contains("uses: actions/download-artifact@")
+            && release.contains("pattern: vkrgss-*")
+            && release.contains("path: target/assets")
+            && release.contains("merge-multiple: true"),
+        "{release}"
+    );
+    let create = step(&job(&workflow, "release"), "Create the release").join("\n");
+    let targets = targets.map(|(_, target)| target).join(" ");
+    assert!(
+        create.contains(&format!("for target in {targets}; do")),
+        "{create}"
+    );
+    assert!(
+        create.contains(r#"archive="target/assets/vkrgss-$VERSION-$target.tar.gz""#),
+        "{create}"
+    );
+    assert!(
+        create.contains(r#"assets+=("$archive" "$archive.sha256")"#),
+        "{create}"
+    );
+    assert!(create.contains(r#""${assets[@]}""#), "{create}");
 }
 
 /// The step of a job named `name`: its lines from its `- name:` to the next step.
@@ -214,8 +290,9 @@ fn step<'a>(job: &[&'a str], name: &str) -> Vec<&'a str> {
 #[test]
 fn the_release_attaches_the_apk_when_the_signing_secrets_exist() {
     let workflow = read_workflow("release.yml");
-    let package = job(&workflow, "package");
-    let apk = step(&package, "Build the Android APK");
+    let apk_job = job(&workflow, "apk");
+    assert!(apk_job.contains(&"    runs-on: ubuntu-24.04"));
+    let apk = step(&apk_job, "Build the Android APK");
     for variable in [
         "VKRGSS_ANDROID_KEYSTORE_PASSWORD",
         "VKRGSS_ANDROID_KEY_ALIAS",
@@ -243,9 +320,9 @@ fn the_release_attaches_the_apk_when_the_signing_secrets_exist() {
     // The passwords never appear in the script itself.
     assert!(!text.contains("--ks-pass"), "{text}");
 
-    let create = step(&package, "Create the release").join("\n");
+    let create = step(&job(&workflow, "release"), "Create the release").join("\n");
     assert!(
-        create.contains(r#"apk="target/apk/vkrgss-$VERSION-android-arm64.apk""#),
+        create.contains(r#"apk="target/assets/vkrgss-$VERSION-android-arm64.apk""#),
         "{create}"
     );
     assert!(
@@ -253,13 +330,8 @@ fn the_release_attaches_the_apk_when_the_signing_secrets_exist() {
         "{create}"
     );
     assert!(create.contains(r#""${assets[@]}""#), "{create}");
-    let position = |name: &str| {
-        package
-            .iter()
-            .position(|line| line.trim() == format!("- name: {name}"))
-            .unwrap()
-    };
-    assert!(position("Build the Android APK") < position("Create the release"));
+    // The release waits for the APK.
+    assert!(job(&workflow, "release")[0].contains("apk"));
 }
 
 #[test]
