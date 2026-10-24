@@ -4,6 +4,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-23
+
+The first release for more than Linux x86_64: a package for Linux aarch64 and a signed APK
+for Android 14 or later (installable and updatable through Obtainium) come with it, and the
+macOS app (Apple silicon, macOS 14 or later) is built from source. Frames and saves are
+identical across x86_64, aarch64, an Apple M4 and two phones. Also new: `vkrgss --script`
+runs a Ruby file without a game, guests filter their system calls with seccomp, and the math
+of Ruby is correctly rounded (CORE-MATH) so that saves agree on every platform.
+
 ### Security
 
 - A confined guest process also filters its system calls with seccomp, on Linux and

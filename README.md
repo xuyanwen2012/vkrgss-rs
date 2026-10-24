@@ -32,12 +32,12 @@ and saves. Versions 0.1.0 to 0.3.0 were released under the name vkxp (see
 
 | Platform | State | How to get it |
 |---|---|---|
-| Linux x86_64 | Supported | The package of the [latest release](https://github.com/xuyanwen2012/vkrgss-rs/releases/latest), v0.3.1, or from source |
-| Linux aarch64 | Supported (milestone P1) | From source; the next release has a package for it |
-| macOS 14 or later, Apple silicon | Milestone P2 done; not in a release yet | Build `vkrgss.app` on the Mac |
-| Android 14 or later, arm64 | Milestone P3 in progress; not released | Build the APK; the next release attaches a signed one |
+| Linux x86_64 | Supported | The package of the [latest release](https://github.com/xuyanwen2012/vkrgss-rs/releases/latest), or from source |
+| Linux aarch64 | Supported (milestone P1) | The package of the [latest release](https://github.com/xuyanwen2012/vkrgss-rs/releases/latest), or from source |
+| macOS 14 or later, Apple silicon | Supported (milestone P2); no package in the release | Build `vkrgss.app` on the Mac |
+| Android 14 or later, arm64 | Milestone P3 in progress | The signed APK of the [latest release](https://github.com/xuyanwen2012/vkrgss-rs/releases/latest), through Obtainium, or build it |
 
-This page describes `main`; what came after v0.3.1 is "Unreleased" in [CHANGELOG.md](CHANGELOG.md).
+This page describes `main`; what came after the latest release is "Unreleased" in [CHANGELOG.md](CHANGELOG.md).
 The milestones and their evidence are in [docs/decisions.md](docs/decisions.md#milestones).
 
 ## What is new here
@@ -130,8 +130,8 @@ cargo xtask extract-rpg <RGSS DLL> ~/.local/share/vkrgss/rpg_builtin.rb
 ```
 
 **Linux, from a release** (glibc 2.39 or newer, a Vulkan 1.3 driver, ALSA, libudev), where
-`<target>` is `x86_64-unknown-linux-gnu`, or `aarch64-unknown-linux-gnu` on 64-bit ARM from
-the release after v0.3.1:
+`<target>` is `x86_64-unknown-linux-gnu`, or `aarch64-unknown-linux-gnu` on 64-bit ARM (from
+0.4.0 on):
 
 ```sh
 sha256sum -c vkrgss-<version>-<target>.tar.gz.sha256
@@ -157,7 +157,7 @@ It is signed ad hoc and not notarized; a downloaded copy opens only after
 `xattr -dr com.apple.quarantine vkrgss.app` ([docs/running.md](docs/running.md#macos)).
 
 **Android**: `cargo xtask apk` builds a debug APK with the NDK and the SDK
-([docs/building.md](docs/building.md#the-app)). From the next release on, the release carries
+([docs/building.md](docs/building.md#the-app)). From 0.4.0 on, the release carries
 a signed APK that [Obtainium](https://github.com/ImranR98/Obtainium) installs and updates
 ([docs/running.md](docs/running.md#installing-with-obtainium)). In the app, "Import" takes the
 zip of a game; "Import RTP" and "Import built-in scripts" take the other files.
