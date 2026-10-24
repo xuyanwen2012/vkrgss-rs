@@ -33,7 +33,7 @@ and saves. Versions 0.1.0 to 0.3.0 were released under the name vkxp (see
 | Platform | State | How to get it |
 |---|---|---|
 | Linux x86_64 | Supported | The package of the [latest release](https://github.com/xuyanwen2012/vkrgss-rs/releases/latest), v0.3.1, or from source |
-| Linux aarch64 | Supported (milestone P1) | From source; no release has a package for it |
+| Linux aarch64 | Supported (milestone P1) | From source; the next release has a package for it |
 | macOS 14 or later, Apple silicon | Milestone P2 done; not in a release yet | Build `vkrgss.app` on the Mac |
 | Android 14 or later, arm64 | Milestone P3 in progress; not released | Build the APK; the next release attaches a signed one |
 
@@ -129,11 +129,14 @@ mkdir -p ~/.local/share/vkrgss
 cargo xtask extract-rpg <RGSS DLL> ~/.local/share/vkrgss/rpg_builtin.rb
 ```
 
-**Linux, from a release** (x86_64; glibc 2.39 or newer, a Vulkan 1.3 driver, ALSA, libudev):
+**Linux, from a release** (glibc 2.39 or newer, a Vulkan 1.3 driver, ALSA, libudev), where
+`<target>` is `x86_64-unknown-linux-gnu`, or `aarch64-unknown-linux-gnu` on 64-bit ARM from
+the release after v0.3.1:
 
 ```sh
-tar -xzf vkrgss-<version>-x86_64-unknown-linux-gnu.tar.gz
-vkrgss-<version>-x86_64-unknown-linux-gnu/vkrgss <game directory> --rtp Standard=<RTP directory>
+sha256sum -c vkrgss-<version>-<target>.tar.gz.sha256
+tar -xzf vkrgss-<version>-<target>.tar.gz
+vkrgss-<version>-<target>/vkrgss <game directory> --rtp Standard=<RTP directory>
 ```
 
 **Linux, from source** (x86_64 or aarch64): a C compiler, `glslc`, `spirv-val`, the

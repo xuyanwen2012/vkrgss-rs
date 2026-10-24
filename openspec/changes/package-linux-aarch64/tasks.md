@@ -21,7 +21,9 @@
 
 ## 3. Documents
 
-- [ ] 3.1 `docs/building.md`, `README.md`, `CHANGELOG.md`. Verify: the document tests of `xtask` pass; every link in README.md resolves.
+- [x] 3.1 `docs/building.md`, `README.md`, `CHANGELOG.md`. Verify: the document tests of `xtask` pass; every link in README.md resolves.
+  - 2026-10-23: `doc_links` and `former_name` of `xtask` pass; `docs/releasing.md` is
+    updated too (see design.md).
 
 ## 4. Checks
 

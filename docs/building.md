@@ -28,12 +28,11 @@ the build directory only.
 
 The interpreter is built from `third_party/ruby-1.8.7/` by the build script of `vkrgss-ruby-sys`
 with a fixed file list and fixed flags. No installed Ruby, `configure`, `make` or system zlib is
-involved, and the only supported target is `x86_64-unknown-linux-gnu`. The build script also
-accepts `aarch64-unknown-linux-gnu`, with configuration headers of its own: those that the
-release's `configure` wrote on aarch64, which differ from those of x86_64 only in the
-platform strings, as `tests/config_headers.rs` checks. It is built and tested by the CI job
-`gate-aarch64` (see [development.md](development.md#merge-gate)) and is not supported
-before the milestone P1 is accepted. It also accepts `aarch64-linux-android`
+involved. The supported targets of Linux are `x86_64-unknown-linux-gnu` and
+`aarch64-unknown-linux-gnu`; for aarch64 the build script has configuration headers of its
+own: those that the release's `configure` wrote on aarch64, which differ from those of x86_64
+only in the platform strings, as `tests/config_headers.rs` checks. It is built and tested by
+the CI job `gate-aarch64` (see [development.md](development.md#merge-gate)). It also accepts `aarch64-linux-android`
 ([Android](#android)) and `aarch64-apple-darwin`, with headers that `configure` wrote on a
 Mac, reviewed (see [macOS](#macos)). Any other target stops the build with a message naming
 it. `CC` selects the compiler. Because a wrong flag gives an interpreter
@@ -81,6 +80,9 @@ The release package and the CI runs are built with gcc 13, the default compiler 
 24.04: the workflows set `CC=gcc-13`, so that a new default of the runner image does not
 change the compiler of the release unnoticed. The interpreter's collector scans the machine
 stack, so the compiler shapes what it sees; changing that compiler is a change of its own.
+`cargo xtask dist` packages for the machine it runs on, `x86_64-unknown-linux-gnu` or
+`aarch64-unknown-linux-gnu`, and does not cross-compile: the release workflow builds each
+package on an Ubuntu 24.04 runner of its architecture ([releasing.md](releasing.md)).
 
 `vkrgss-ruby192-sys` is for the targets `x86_64-unknown-linux-gnu`,
 `aarch64-unknown-linux-gnu`, `aarch64-linux-android` ([Android](#android)) and

@@ -49,6 +49,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- A release package for Linux on aarch64, `vkrgss-<version>-aarch64-unknown-linux-gnu.tar.gz`,
+  beside the one for x86_64: `cargo xtask dist` packages for the target of the machine it
+  runs on, `x86_64-unknown-linux-gnu` or `aarch64-unknown-linux-gnu`, and fails on any
+  other, and the release workflow builds it on `ubuntu-24.04-arm` and attaches both archives
+  with their checksums. Like the x86_64 package it is built on Ubuntu 24.04 and needs glibc
+  2.39 or newer.
 - `vkrgss --script FILE [ARG...]` runs a Ruby file with the interpreter of a runtime and no
   game, window or device: Ruby 1.9.2 for `--runtime rgss3`, the default, and Ruby 1.8.7 for
   `rgss1` and `rgss2`. The arguments after the file are `ARGV`, the script has the standard

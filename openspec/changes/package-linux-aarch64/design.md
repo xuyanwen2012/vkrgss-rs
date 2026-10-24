@@ -18,6 +18,10 @@
   needs them downloads the artifacts and creates the release with every asset, only for a pushed
   tag, as now. The tag check runs before anything is published. Pinned action SHAs as now.
 - **Notes.** One requirements paragraph per target (both Ubuntu 24.04, glibc 2.39).
+- **Outside the listed documents.** `docs/releasing.md` describes the assets of a release and
+  the command; it named only the x86_64 archive and said "two files", which would be wrong
+  after this change. It is edited in a few lines (the targets, `<target>` in the file names,
+  the refusal on another machine), as the requirement plainly needs.
 - The workflow cannot be run here; it is checked by reading, by `actionlint` if available, and
   by the YAML parser test of `xtask` if one exists. The owner's session runs it by hand
   (`workflow_dispatch`) after the merge.
