@@ -2,7 +2,8 @@
 //! of RGSS1 and RGSS2 and of games of RGSS3 that it starts from beside itself, with the
 //! documents and licence texts that accompany them, in one archive under `target/dist/`, and
 //! the archive's SHA-256 checksum beside it. The archive is written by `tar` and the checksum
-//! by `sha256sum`.
+//! by `sha256sum`. The package is for the target of the machine the command runs on, Linux on
+//! x86_64 or on aarch64; it is not cross-compiled.
 //!
 //! The three executables are built in one build with libcrypt linked statically
 //! (`VKRGSS_STATIC_CRYPT=1`, read by the build scripts of `vkrgss-ruby-sys` and
@@ -17,8 +18,8 @@ use std::process::Command;
 
 use anyhow::{Context, Result, anyhow, bail};
 
-/// The only target vkrgss builds for.
-const TARGET: &str = "x86_64-unknown-linux-gnu";
+/// The architectures, as [`std::env::consts::ARCH`] names them, that have a package for Linux.
+const ARCHES: [&str; 2] = ["x86_64", "aarch64"];
 
 /// The arguments of the build, after the cargo executable.
 pub(crate) const BUILD: [&str; 9] = [
@@ -87,10 +88,22 @@ pub(crate) const FILES: [(&str, &str); 16] = [
     ),
 ];
 
-/// The name of the archive's directory, which is the archive's name without its extension.
-/// The version is the workspace's, which this crate inherits.
-fn package_name() -> String {
-    format!("vkrgss-{}-{TARGET}", env!("CARGO_PKG_VERSION"))
+/// The target of the package for Linux on the architecture `arch`, or an error that names
+/// an architecture without a package.
+fn target(arch: &str) -> Result<String> {
+    if !ARCHES.contains(&arch) {
+        bail!(
+            "dist: there is no release package for Linux on {arch}; it is made on {}",
+            ARCHES.join(" and ")
+        );
+    }
+    Ok(format!("{arch}-unknown-linux-gnu"))
+}
+
+/// The name of the archive's directory for the target `target`, which is the archive's name
+/// without its extension. The version is the workspace's, which this crate inherits.
+fn package_name(target: &str) -> String {
+    format!("vkrgss-{}-{target}", env!("CARGO_PKG_VERSION"))
 }
 
 /// Builds the release executables through the cargo executable `cargo` and writes the
@@ -102,6 +115,7 @@ pub(crate) fn run(cargo: &str, root: &Path) -> Result<()> {
              (see \"Platforms\" in docs/decisions.md)"
         );
     }
+    let target = target(std::env::consts::ARCH)?;
     // The build takes minutes; a document that is missing is reported before it.
     for (source, _) in FILES
         .iter()
@@ -132,7 +146,7 @@ pub(crate) fn run(cargo: &str, root: &Path) -> Result<()> {
         eprintln!("dist: `{executable}` needs {}", needed.join(", "));
         refuse_shared_crypt_in(executable, &needed)?;
     }
-    let archive = package(root, &root.join("target/dist"))?;
+    let archive = package(root, &root.join("target/dist"), &target)?;
     eprintln!("dist: wrote {} and its .sha256", archive.display());
     Ok(())
 }
@@ -187,10 +201,11 @@ fn refuse_shared_crypt_in(executable: &str, needed: &[String]) -> Result<()> {
     refuse_shared_crypt(needed).map_err(|error| anyhow!("{error} (`{executable}`)"))
 }
 
-/// Copies the files of the package from `root` into a directory below `dist`, packs that
-/// directory and writes the checksum. Returns the path of the archive.
-fn package(root: &Path, dist: &Path) -> Result<PathBuf> {
-    let name = package_name();
+/// Copies the files of the package for the target `target` from `root` into a directory
+/// below `dist`, packs that directory and writes the checksum. Returns the path of the
+/// archive.
+fn package(root: &Path, dist: &Path, target: &str) -> Result<PathBuf> {
+    let name = package_name(target);
     let staged = dist.join(&name);
     if staged.exists() {
         fs::remove_dir_all(&staged)
@@ -293,16 +308,25 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn the_archive_holds_one_directory_with_the_files_of_the_list() {
-        let root = source_tree();
-        let dist = root.path().join("target/dist");
-        let archive = package(root.path(), &dist).unwrap();
+        // Scenarios "Package" and "Package on aarch64".
+        for arch in ARCHES {
+            let root = source_tree();
+            let dist = root.path().join("target/dist");
+            let archive = package(root.path(), &dist, &target(arch).unwrap()).unwrap();
 
-        let name = format!(
-            "vkrgss-{}-x86_64-unknown-linux-gnu",
-            env!("CARGO_PKG_VERSION")
-        );
-        assert_eq!(archive, dist.join(format!("{name}.tar.gz")));
-        let expected = [
+            let name = format!(
+                "vkrgss-{}-{arch}-unknown-linux-gnu",
+                env!("CARGO_PKG_VERSION")
+            );
+            assert_eq!(archive, dist.join(format!("{name}.tar.gz")));
+            assert_eq!(entries(&archive), expected_entries(&name), "{arch}");
+        }
+    }
+
+    /// The entries of the archive whose directory is `name`, as [`entries`] lists them.
+    #[cfg(target_os = "linux")]
+    fn expected_entries(name: &str) -> Vec<(String, String)> {
+        [
             ("drwxr-xr-x", ""),
             ("-rw-r--r--", "CHANGELOG.md"),
             ("-rw-r--r--", "LICENSE"),
@@ -326,8 +350,20 @@ mod tests {
             ("-rwxr-xr-x", "vkrgss-guest-rgss12"),
             ("-rwxr-xr-x", "vkrgss-guest-rgss3"),
         ]
-        .map(|(mode, path)| (mode.to_owned(), format!("{name}/{path}")));
-        assert_eq!(entries(&archive), expected);
+        .map(|(mode, path)| (mode.to_owned(), format!("{name}/{path}")))
+        .to_vec()
+    }
+
+    #[test]
+    fn the_target_is_that_of_the_architecture_and_others_are_refused() {
+        assert_eq!(target("x86_64").unwrap(), "x86_64-unknown-linux-gnu");
+        assert_eq!(target("aarch64").unwrap(), "aarch64-unknown-linux-gnu");
+        let error = target("riscv64").unwrap_err().to_string();
+        assert_eq!(
+            error,
+            "dist: there is no release package for Linux on riscv64; it is made on x86_64 and \
+             aarch64"
+        );
     }
 
     // Kept to Linux, as the command is: the archive is written with options of GNU tar.
@@ -336,18 +372,19 @@ mod tests {
     fn the_checksum_file_is_accepted_by_sha256sum_and_a_second_run_gives_the_same_archive() {
         let root = source_tree();
         let dist = root.path().join("target/dist");
-        let archive = package(root.path(), &dist).unwrap();
+        let target = target(std::env::consts::ARCH).unwrap();
+        let archive = package(root.path(), &dist, &target).unwrap();
         let first = fs::read(&archive).unwrap();
 
         let mut check = Command::new("sha256sum");
-        let checksum_file = format!("{}.tar.gz.sha256", package_name());
+        let checksum_file = format!("{}.tar.gz.sha256", package_name(&target));
         tool(
             "sha256sum",
             check.args(["-c", &checksum_file]).current_dir(&dist),
         )
         .unwrap();
 
-        package(root.path(), &dist).unwrap();
+        package(root.path(), &dist, &target).unwrap();
         assert_eq!(fs::read(&archive).unwrap(), first);
     }
 
@@ -357,7 +394,9 @@ mod tests {
             let root = source_tree();
             fs::remove_file(root.path().join(missing)).unwrap();
             let dist = root.path().join("target/dist");
-            let error = package(root.path(), &dist).unwrap_err().to_string();
+            let error = package(root.path(), &dist, "x86_64-unknown-linux-gnu")
+                .unwrap_err()
+                .to_string();
             assert_eq!(error, format!("dist: `{missing}` is missing"));
         }
     }
@@ -404,7 +443,9 @@ Dynamic section at offset 0x1f3a2d0 contains 33 entries:
             let root = source_tree();
             fs::remove_file(root.path().join(executable)).unwrap();
             let dist = root.path().join("target/dist");
-            let error = package(root.path(), &dist).unwrap_err().to_string();
+            let error = package(root.path(), &dist, "x86_64-unknown-linux-gnu")
+                .unwrap_err()
+                .to_string();
             assert_eq!(
                 error,
                 format!("dist: `target/release/vkrgss-guest-{name}` is missing")
