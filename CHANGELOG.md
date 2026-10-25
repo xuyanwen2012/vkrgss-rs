@@ -4,6 +4,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-25
+
 ### Changed
 
 - The Android app is named "RGSS Player" on the home screen and in the app drawer, and has
