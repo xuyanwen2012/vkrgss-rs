@@ -206,3 +206,12 @@ Every executable and library in `vkrgss.app` SHALL be built for the minimum macO
 #### Scenario: A file built for a newer macOS
 - **WHEN** the check is given a library whose minimum is 27.0
 - **THEN** it fails and names the file and its minimum
+
+### Requirement: Name and icon of the Android app
+The Android app SHALL be labelled `RGSS Player` and SHALL carry the project's launcher icon as
+an adaptive icon with a monochrome layer and as legacy and round icons per density; its
+package name SHALL stay `io.github.xuyanwen2012.vkrgss`.
+
+#### Scenario: Name and icon
+- **WHEN** `aapt2 dump badging` reads an APK that `cargo xtask apk` built
+- **THEN** the application label is `RGSS Player`, the package is `io.github.xuyanwen2012.vkrgss`, and the application icon is a resource of the APK
