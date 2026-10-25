@@ -8,7 +8,9 @@
 //! jdk.compiler/...`, which a runtime with the module `jdk.compiler` has, against
 //! `platforms/android-34/android.jar` at the class version of Java 8, which `--release` cannot
 //! give against that library) and turned into `classes.dex` by `d8` of the build tools;
-//! aapt2 links the manifest against `android.jar`, `classes.dex` goes to the top of the APK
+//! aapt2 compiles the resources of [`RESOURCES`] (the launcher icon, adaptive with a
+//! monochrome layer for Android 8 and later, legacy and round per density) and links them
+//! and the manifest against `android.jar`, `classes.dex` goes to the top of the APK
 //! and the library and the two guest executables (`vkrgss-guest-rgss12`,
 //! `vkrgss-guest-rgss3`) go into `lib/arm64-v8a/` without their debug information (`zip`),
 //! the executables under the names of libraries that the guest is started by on Android
@@ -56,6 +58,12 @@ const LIBRARY: &str = "vkrgss_android";
 /// The Java class of the activities, below the repository.
 const JAVA_SOURCE: &str =
     "crates/vkrgss-android/java/io/github/xuyanwen2012/vkrgss/VkrgssActivity.java";
+
+/// The resources of the app, below the repository: the launcher icon.
+const RESOURCES: &str = "crates/vkrgss-android/res";
+
+/// The app's label, which the launcher shows.
+const LABEL: &str = "RGSS Player";
 
 /// The activity of the library, relative to the package.
 const LIBRARY_ACTIVITY: &str = ".VkrgssActivity";
@@ -204,8 +212,9 @@ pub(crate) fn release_name(version: &str) -> String {
 /// activity started by the launcher and that of games in a process of its own, the native
 /// libraries extracted at installation (the guest executables are run from there),
 /// landscape on either side, fullscreen, not restarted by a change of the configuration (the
-/// game would start again), and Vulkan 1.3. The activity of games is exported, so that
-/// `android-run` can start it.
+/// game would start again), and Vulkan 1.3. The application has the [`LABEL`], which the
+/// activities inherit, and the launcher icon of [`RESOURCES`]. The activity of games is
+/// exported, so that `android-run` can start it.
 fn manifest(version: &str) -> String {
     let activity = |name: &str, more: &str, filter: &str| {
         format!(
@@ -244,8 +253,9 @@ fn manifest(version: &str) -> String {
     android:versionCode="{code}"
     android:versionName="{version}">
     <uses-feature android:name="android.hardware.vulkan.version" android:version="0x403000" android:required="true" />
-    <application android:label="vkrgss" android:hasCode="true" android:appCategory="game"
-        android:extractNativeLibs="true">
+    <application android:label="{LABEL}" android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round" android:hasCode="true"
+        android:appCategory="game" android:extractNativeLibs="true">
 {library}{game}    </application>
 </manifest>
 "#,
@@ -361,6 +371,15 @@ pub(crate) fn build(cargo: &str, root: &Path, flavor: Flavor) -> Result<PathBuf>
     let version = env!("CARGO_PKG_VERSION");
     fs::write(work.join("AndroidManifest.xml"), manifest(version)).context("apk: the manifest")?;
     compile_java(root, &tools, &platform, &work)?;
+    let resources = work.join("res.zip");
+    run_host(
+        Command::new(tools.join("aapt2"))
+            .arg("compile")
+            .arg("--dir")
+            .arg(root.join(RESOURCES))
+            .arg("-o")
+            .arg(&resources),
+    )?;
 
     let unaligned = work.join("unaligned.apk");
     run_host(
@@ -374,7 +393,8 @@ pub(crate) fn build(cargo: &str, root: &Path, flavor: Flavor) -> Result<PathBuf>
             .arg(&platform)
             .args(["--min-sdk-version", &API_LEVEL.to_string()])
             .args(["--target-sdk-version", &TARGET_SDK.to_string()])
-            .args((flavor != Flavor::Release).then_some("--debug-mode")),
+            .args((flavor != Flavor::Release).then_some("--debug-mode"))
+            .arg(&resources),
     )?;
     // Compressed: the installer extracts them.
     run_host(
@@ -853,11 +873,47 @@ mod tests {
         assert!(manifest.contains(r#"android:versionCode="3001""#));
         assert!(manifest.contains(r#"android:versionName="0.3.1""#));
         assert!(manifest.contains(r#"android:extractNativeLibs="true""#));
+        assert!(manifest.contains(&format!("package=\"{PACKAGE}\"")));
+        assert_eq!(PACKAGE, "io.github.xuyanwen2012.vkrgss");
         assert!(FILES_DIR.contains(PACKAGE));
         assert_eq!(
             game_component(),
             "io.github.xuyanwen2012.vkrgss/.VkrgssActivity\\$Game"
         );
+    }
+
+    /// Scenario "Name and icon", for the manifest and the resources it names; `aapt2 dump
+    /// badging` of a built APK is checked by hand (`docs/building.md`).
+    #[test]
+    fn the_app_is_labelled_rgss_player_and_has_the_launcher_icon() {
+        let manifest = manifest("0.4.0");
+        assert!(manifest.contains(r#"<application android:label="RGSS Player""#));
+        assert_eq!(manifest.matches("android:label=").count(), 1);
+        assert!(manifest.contains(r#"android:icon="@mipmap/ic_launcher""#));
+        assert!(manifest.contains(r#"android:roundIcon="@mipmap/ic_launcher_round""#));
+        let res = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join(RESOURCES);
+        for icon in ["ic_launcher", "ic_launcher_round"] {
+            let adaptive =
+                fs::read_to_string(res.join(format!("mipmap-anydpi-v26/{icon}.xml"))).unwrap();
+            for layer in ["background", "foreground", "monochrome"] {
+                assert!(
+                    adaptive.contains(&format!(
+                        "<{layer} android:drawable=\"@drawable/ic_launcher_{layer}\""
+                    )),
+                    "{icon}: {layer}"
+                );
+                assert!(
+                    res.join(format!("drawable-nodpi/ic_launcher_{layer}.png"))
+                        .is_file()
+                );
+            }
+            for density in ["mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi"] {
+                let png = res.join(format!("mipmap-{density}/{icon}.png"));
+                assert!(png.is_file(), "{}", png.display());
+            }
+        }
     }
 
     /// The Java class is the one the manifest names, with the native method and the methods

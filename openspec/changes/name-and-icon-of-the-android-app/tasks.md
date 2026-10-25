@@ -2,7 +2,7 @@
 
 ## 1. Resources and manifest
 
-- [ ] 1.1 The resources, `aapt2 compile` and link, the label and icons in the manifest. Verify: scenario "Name and icon" by unit test of the manifest and by `aapt2 dump badging` of a built APK (label `RGSS Player`, icon resources present); the existing apk tests pass.
+- [x] 1.1 The resources, `aapt2 compile` and link, the label and icons in the manifest. Verify: scenario "Name and icon" by unit test of the manifest and by `aapt2 dump badging` of a built APK (label `RGSS Player`, icon resources present); the existing apk tests pass.
 
 ## 2. On a phone
 
