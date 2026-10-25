@@ -6,7 +6,7 @@
 
 ## 2. On a phone
 
-- [ ] 2.1 Install the debug APK on a phone as design.md says and screenshot the launcher. Verify: the screenshot shows the ruby icon and "RGSS Player"; the app still starts its library screen.
+- [x] 2.1 Install the debug APK on a phone as design.md says and screenshot the launcher. Verify: the screenshot shows the ruby icon and "RGSS Player"; the app still starts its library screen.
 
 ## 3. Documents
 

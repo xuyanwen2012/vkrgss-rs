@@ -33,3 +33,10 @@
 A Play Store listing graphic, a splash screen, renaming the package or the desktop programs.
 
 ## Follow-ups
+
+- The heading of the library screen is drawn by the native code (`"vkrgss"` in
+  `crates/vkrgss-android/src/screen.rs`) and still reads `vkrgss`; the launcher, the app
+  drawer and the recents list show `RGSS Player` (checked on the Pixel 7a on 2026-10-25, over
+  the debug build 0.3.1 that was installed there, signed with the same debug key). Whether
+  the heading should read `RGSS Player` too is the owner's choice; the requirement names the
+  app's label only.
