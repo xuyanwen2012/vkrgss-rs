@@ -2,7 +2,7 @@
 
 <h1 align="center">vkrgss</h1>
 
-<p align="center"><b>Classic RPG Maker. Modern Rust + Vulkan.</b><br>The games of RPG Maker XP, VX and VX Ace, pixel for pixel and byte for byte, on Linux, macOS and Android.</p>
+<p align="center"><b>Classic RPGs. Modern runtime.</b><br>The games of RPG Maker XP, VX and VX Ace, pixel for pixel and byte for byte, on Linux, macOS and Android.</p>
 
 <p align="center">
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-1.99-CE422B?logo=rust&logoColor=white" alt="Rust 1.99"></a>
