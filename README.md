@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/images/banner.jpg" width="100%" alt="Banner: Classic RPG Maker. Modern Rust + Vulkan. The covers of RPG Maker XP, VX and VX Ace beside the logos of Rust and Vulkan."></p>
+<p align="center"><img src="docs/images/banner.jpg" width="100%" alt="Banner: vkrgss. Classic RPGs. Modern runtime. Linux, macOS and Android. A pixel-art hero looks out over a castle at sunset; below, the covers of RPG Maker XP, VX and VX Ace and the logos of Rust and Vulkan."></p>
 
 <h1 align="center">vkrgss</h1>
 
