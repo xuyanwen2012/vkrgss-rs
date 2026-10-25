@@ -4,6 +4,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The Android app is named "RGSS Player" on the home screen and in the app drawer, and has
+  a launcher icon, a pixel-art ruby on dark plum: an adaptive icon with a monochrome layer
+  for themed icons, and legacy and round icons per density. The artwork is the owner's, made
+  for this project. The package name stays `io.github.xuyanwen2012.vkrgss`, so installs and
+  Obtainium updates go on as before.
+
 ## [0.4.0] - 2026-10-23
 
 The first release for more than Linux x86_64: a package for Linux aarch64 and a signed APK

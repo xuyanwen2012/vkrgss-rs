@@ -10,7 +10,7 @@
 
 ## 3. Documents
 
-- [ ] 3.1 `docs/building.md`, `docs/running.md`, `README.md` where the app is named, `CHANGELOG.md`. Verify: the document tests of `xtask` pass.
+- [x] 3.1 `docs/building.md`, `docs/running.md`, `README.md` where the app is named, `CHANGELOG.md`. Verify: the document tests of `xtask` pass.
 
 ## 4. Checks
 

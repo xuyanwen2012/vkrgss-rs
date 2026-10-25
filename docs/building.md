@@ -259,8 +259,12 @@ The command builds the library for `aarch64-linux-android` with the compiler of 
 API level 34, as above, in the development profile, compiles the Java class with the
 compiler of the JDK (`java -m jdk.compiler/com.sun.tools.javac.Main`, at the class version
 of Java 8 against `android.jar`) and turns it into `classes.dex` with `d8`, and assembles
-`target/apk/vkrgss-debug.apk` with the newest build tools of the SDK: `aapt2` links the
-manifest (package `io.github.xuyanwen2012.vkrgss`, minimum API level 34, target 37,
+`target/apk/vkrgss-debug.apk` with the newest build tools of the SDK: `aapt2 compile`
+compiles the resources of `crates/vkrgss-android/res/`, the launcher icon (an adaptive icon
+whose foreground, background and monochrome layers are PNGs in `drawable-nodpi/`, for Android
+8 and later, and the legacy and round PNGs per density in `mipmap-*/`), and `aapt2 link`
+links them and the manifest (package `io.github.xuyanwen2012.vkrgss`, label `RGSS Player`,
+icons `@mipmap/ic_launcher` and `@mipmap/ic_launcher_round`, minimum API level 34, target 37,
 landscape on either side, fullscreen, Vulkan 1.3 required) against
 `platforms/android-34/android.jar`, the library and the two guest executables
 (`libvkrgss_guest_rgss12.so`, `libvkrgss_guest_rgss3.so`) go into `lib/arm64-v8a/` without
@@ -268,8 +272,10 @@ their debug information, compressed and extracted at installation (see
 [running.md](running.md)), `zipalign` aligns it to pages
 of 16 KiB, and `apksigner` signs the APK with a debug key that `keytool` of the JDK makes
 in `target/apk/debug.keystore` on first use. The SDK needs the build tools (35 or later,
-for 16 KiB pages) and the platform `android-34`. On the desktop the package builds as a
-library whose Android parts are left out, so the gate builds and tests its other parts.
+for 16 KiB pages) and the platform `android-34`. `aapt2 dump badging
+target/apk/vkrgss-debug.apk` shows the label, the package and the icon of a built APK. On
+the desktop the package builds as a library whose Android parts are left out, so the gate
+builds and tests its other parts.
 How to run a game with it is in [running.md](running.md#android).
 
 Both APKs carry the workspace's version as `versionName` and the version code

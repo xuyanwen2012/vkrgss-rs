@@ -834,7 +834,8 @@ xattr -dr com.apple.quarantine vkrgss.app
 
 ## Android
 
-The app of `vkrgss-android` runs a game of RPG Maker XP, VX or VX Ace on Android 14 or
+The app of `vkrgss-android`, named "RGSS Player" on the phone (its package stays
+`io.github.xuyanwen2012.vkrgss`), runs a game of RPG Maker XP, VX or VX Ace on Android 14 or
 later with the guest in a process of its own, as `vkrgss` does in a window. Its APK is built
 with `cargo xtask apk` ([building.md](building.md#the-app)), which puts the two guest
 executables into it beside the app's library, as `lib/arm64-v8a/libvkrgss_guest_rgss12.so`

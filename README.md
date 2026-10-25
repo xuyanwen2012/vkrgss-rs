@@ -159,7 +159,8 @@ It is signed ad hoc and not notarized; a downloaded copy opens only after
 **Android**: `cargo xtask apk` builds a debug APK with the NDK and the SDK
 ([docs/building.md](docs/building.md#the-app)). From 0.4.0 on, the release carries
 a signed APK that [Obtainium](https://github.com/ImranR98/Obtainium) installs and updates
-([docs/running.md](docs/running.md#installing-with-obtainium)). In the app, "Import" takes the
+([docs/running.md](docs/running.md#installing-with-obtainium)). The app is named "RGSS
+Player" on the phone. In the app, "Import" takes the
 zip of a game; "Import RTP" and "Import built-in scripts" take the other files.
 
 **A Ruby script, no game** (from source): `vkrgss --script sort.rb 5 3 1` runs a file with
