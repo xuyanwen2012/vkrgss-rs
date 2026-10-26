@@ -15,7 +15,7 @@
 
 ## 4. Documents
 
-- [ ] 4.1 `docs/running.md` (section "Sandbox": signals, what Landlock below ABI 6 and Android leave, the identity check), `docs/decisions.md` (the sandbox paragraph), `README.md` ("Browser-grade isolation" says no more than holds), `CHANGELOG.md`; the macOS Follow-up stays in `design.md`. Verify: the tests of `xtask` that check the documents pass; no document says that a guest cannot signal while one can.
+- [x] 4.1 `docs/running.md` (section "Sandbox": signals, what Landlock below ABI 6 and Android leave, the identity check), `docs/decisions.md` (the sandbox paragraph), `README.md` ("Browser-grade isolation" says no more than holds), `CHANGELOG.md`; the macOS Follow-up stays in `design.md`. Verify: the tests of `xtask` that check the documents pass; no document says that a guest cannot signal while one can.
 
 ## 5. Checks
 

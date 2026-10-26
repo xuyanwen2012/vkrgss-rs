@@ -620,13 +620,33 @@ scripts included. From then on it
 - writes, creates, removes and renames only below the game directory, where the saves go,
   and may write the device `/dev/null`;
 - executes no file;
-- neither binds nor connects a TCP socket.
+- neither binds nor connects a TCP socket;
+- sends no signal to a process outside its confinement (Linux 6.12 or later, Landlock's
+  signal scope).
 
 After Landlock it installs a seccomp filter, which answers `EPERM` to the system calls a
 game never needs: starting a program (`execve`), tracing or reading other processes,
 sockets of every family but Unix sockets, mounts and new namespaces, loading kernel
-modules, the kernel's key store, `bpf`, `perf_event_open`, `io_uring` and the calls only an
-administrator makes. The filter binds every thread of the guest process and its states.
+modules, the kernel's key store, `bpf`, `perf_event_open`, `io_uring`, the calls only an
+administrator makes, and the calls that send a signal to another process: `kill`, `tkill`,
+`rt_sigqueueinfo`, `rt_tgsigqueueinfo` and `pidfd_send_signal`, so that a script's
+`Process.kill` reaches no other process (`Errno::EPERM`). `tgkill` stays allowed,
+since the C library's `raise`, `abort` and `pthread_kill` use it: the guest signals its own
+threads, and ends itself by a signal, through it. The filter binds every thread of the
+guest process and its states.
+
+Where the kernel has no signal scope (before Linux 6.12, and on Android, whose kernels have
+no Landlock), the filter is all that stands between the guest and the signals to other
+processes of the user: a guest that already runs native code of its own could still reach
+one with `tgkill`. A script cannot, because no Ruby function calls `tgkill`.
+
+The program, which is not confined, trusts no guest's word about which process it is. It
+takes the number and the user of every process that connects to the socket from the kernel
+(`SO_PEERCRED`, on macOS `LOCAL_PEERPID`), refuses with a warning one of another user and
+one that attaches under another number than that, requires the first one to be the guest
+process it started, and ends processes only by the numbers the kernel gave. The answers
+about states (saved, loaded, failed) are made by the program too; the same messages sent by
+a running guest are dropped with a warning.
 
 A script that opens a file for writing anywhere else gets `Errno::EACCES`; one that starts a
 program through what the stubs of the process functions (`--allow-process-functions`) leave
@@ -653,8 +673,8 @@ Nothing is confined, and the run says so once among its informational messages
 The restriction is as strong as the kernel allows. On a kernel without Landlock (before
 Linux 5.13, or with it switched off) the run warns once that the guest process is not
 confined and goes on. An older kernel that has Landlock but not all of its rules, those for
-truncating files (before 6.2) or for TCP (before 6.7), is named among the informational
-messages with what it does not restrict. A kernel without seccomp filters gets a warning
+truncating files (before 6.2), for TCP (before 6.7) or for signals (before 6.12), is named
+among the informational messages with what it does not restrict. A kernel without seccomp filters gets a warning
 once too, and the guest goes on unfiltered; a filter that is installed is named among the
 informational messages.
 

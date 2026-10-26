@@ -16,6 +16,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `autoload` in a game of XP or VX, and in a script over Ruby 1.8.7, locates its file by
   the rule of `require` at the call: a file outside the game directory raises `LoadError`
   there, as in a game of VX Ace, where before the interpreter loaded it.
+- The program takes the number and user of every guest process that connects from the
+  kernel (`SO_PEERCRED`, on macOS `LOCAL_PEERPID`) and refuses one of another user or one
+  that attaches under another number; the first has to be the guest process it started.
+  Before, a guest could name any process, its own group with 0, and have it ended.
+- A confined guest process can no longer signal another process: the seccomp filter answers
+  `EPERM` to `kill`, `tkill`, `rt_sigqueueinfo`, `rt_tgsigqueueinfo` and
+  `pidfd_send_signal`, and where the kernel has Landlock ABI 6 (Linux 6.12) the rules also
+  scope signals. A script's `Process.kill(9, Process.ppid)` no longer ends the window.
+- The answers about states (saved, loaded, a failed load) come from the program alone; a running
+  guest that sends them is ignored with a warning, instead of making the window forget its
+  resources and stop its audio.
 - The regular expression engine of Ruby 1.8.7 no longer reads past the subject when a
   class, `\w` or `\W` matches a character cut off by the end of the subject and a word
   boundary (`\b`, `\B`) follows, as the nightly fuzz run 40296906749 found; such a match
@@ -24,6 +35,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Loading a slot again at once, right after it was loaded, waits for the resumed game to
+  leave its new copy and loads it, instead of saying that the slot holds no state.
 - `require` records a file once it has loaded, as Ruby's own does: a file that raised while
   it loaded can be required again, where before it was taken as loaded. `load(name, true)`
   evaluates the file in an anonymous module, where before it ignored `wrap`.

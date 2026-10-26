@@ -115,10 +115,17 @@ a guest process on macOS is not confined, and how the workspace is built and tes
   seccomp-BPF filter, a deny-list that answers `EPERM` to the system calls no game needs:
   starting programs, tracing other processes, sockets of every family but `AF_UNIX`, mounts,
   namespaces, kernel modules and keys, `bpf`, `io_uring` (change
-  `filter-the-system-calls-of-the-guest`). The confinement per platform: on Linux Landlock
-  and the filter; on Android the filter and the app's private directory, because the
-  kernels there have no Landlock (both test phones answer `ENOSYS`); on macOS none yet.
-  `--sandbox off` and `--allow-process-functions` leave out both.
+  `filter-the-system-calls-of-the-guest`), and the calls that signal another process,
+  `kill`, `tkill`, `rt_sigqueueinfo`, `rt_tgsigqueueinfo` and `pidfd_send_signal`; `tgkill`
+  stays for `raise` and `pthread_kill`. Where the kernel has Landlock ABI 6 the rules also
+  scope signals, so that no other process is reached by `tgkill` either; below it, and on
+  Android, only code of the guest's own could (change `verify-guests-and-deny-signals`).
+  The confinement per platform: on Linux Landlock and the filter; on Android the filter and
+  the app's private directory, because the kernels there have no Landlock (both test phones
+  answer `ENOSYS`); on macOS none yet. `--sandbox off` and `--allow-process-functions` leave
+  out both. The program takes the number and user of every process that attaches from the
+  kernel, refuses one whose `Attach` states another number, requires the first to be its
+  child, and signals only numbers taken so; it alone makes the answers about states.
 - The guest is deterministic: time comes from frame ticks and a host-provided clock, input is
   sampled once per `Input.update`, the random seed can be injected. Input record and replay is a
   first-version test facility.

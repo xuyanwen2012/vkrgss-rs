@@ -87,8 +87,11 @@ The scripts are untrusted code reading untrusted files, so they run in a guest p
 from the GPU, window, audio and input of the host; the two share no memory and exchange only
 plain data defined in `vkrgss-proto`. On Linux the guest confines itself before the first
 script with **Landlock** and a **seccomp** filter: it writes only below the game directory,
-starts no program and opens no socket but a Unix one. Android, without Landlock, has the
-filter and the app's private directory; on macOS the guest is not confined yet.
+starts no program, opens no socket but a Unix one, and cannot send a signal to another
+process through `kill` and its kin (Landlock's signal scope, from Linux 6.12, also covers
+`tgkill`). The program takes the identity of each guest process from the kernel, not from
+the guest. Android, without Landlock, has the filter and the app's private directory; on
+macOS the guest is not confined yet.
 
 ### Interpreters from 2010 and 2013, rebuilt for 2026
 
