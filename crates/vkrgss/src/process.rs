@@ -630,7 +630,6 @@ fn relay(
         slots: Default::default(),
         refilling: None,
         kept_load: None,
-        saving: Vec::new(),
         outcome: None,
         let_go: Vec::new(),
         dropped: Vec::new(),
@@ -690,9 +689,6 @@ struct Relay<'a> {
     refilling: Option<u8>,
     /// A request to load the slot in `refilling`, kept until its new copy attaches.
     kept_load: Option<u8>,
-    /// The slots the running guest was asked to save into and for which no copy has
-    /// attached.
-    saving: Vec<u8>,
     /// How the game went, as the guest that ended it reported.
     outcome: Option<bool>,
     /// The processes that were ended or told to exit while the relay ran.
@@ -786,7 +782,6 @@ impl Relay<'_> {
                 self.load(slot);
             }
         } else {
-            self.saving.retain(|saving| *saving != slot);
             self.tell_host(GuestToHost::StateSaved { slot });
         }
     }
@@ -804,14 +799,6 @@ impl Relay<'_> {
         }
         match message {
             Ok(Some(GuestToHost::Outcome { ok })) => self.outcome = Some(ok),
-            // The guest could not copy itself for a request to save: the relay answers that
-            // request.
-            Ok(Some(GuestToHost::StateFailed { slot, load: false }))
-                if self.saving.contains(&slot) =>
-            {
-                self.saving.retain(|saving| *saving != slot);
-                self.tell_host(GuestToHost::StateFailed { slot, load: false });
-            }
             Ok(Some(message)) => match only_made_here(&message) {
                 Some(kind) => self.drop_message(kind),
                 None => self.tell_host(message),
@@ -845,11 +832,6 @@ impl Relay<'_> {
         match message {
             HostToGuest::LoadState { slot } => self.load(slot),
             message => {
-                if let HostToGuest::SaveState { slot } = message
-                    && !self.saving.contains(&slot)
-                {
-                    self.saving.push(slot);
-                }
                 // A guest that is gone is found out by the end of its connection.
                 if let Some(running) = &self.running {
                     let _ = write_message(&mut &running.stream, &message);
@@ -1589,7 +1571,14 @@ mod tests {
         for message in made_here {
             guest.send(message).unwrap();
         }
-        // A save that nobody asked for cannot be said to have failed either.
+        guest.send(GuestToHost::FrameReset).unwrap();
+        assert_eq!(host.recv(), Ok(GuestToHost::FrameReset));
+        host.send(HostToGuest::Tick).unwrap();
+        assert_eq!(guest.recv(), Ok(HostToGuest::Tick));
+
+        // A failed save is dropped too, after a request to save as well as without one.
+        host.send(HostToGuest::SaveState { slot: 1 }).unwrap();
+        assert_eq!(guest.recv(), Ok(HostToGuest::SaveState { slot: 1 }));
         guest
             .send(GuestToHost::StateFailed {
                 slot: 1,
@@ -1597,30 +1586,6 @@ mod tests {
             })
             .unwrap();
         guest.send(GuestToHost::FrameReset).unwrap();
-        assert_eq!(host.recv(), Ok(GuestToHost::FrameReset));
-        host.send(HostToGuest::Tick).unwrap();
-        assert_eq!(guest.recv(), Ok(HostToGuest::Tick));
-
-        // A guest that cannot copy itself says so for a request to save, which the relay
-        // answers once.
-        host.send(HostToGuest::SaveState { slot: 1 }).unwrap();
-        assert_eq!(guest.recv(), Ok(HostToGuest::SaveState { slot: 1 }));
-        for _ in 0..2 {
-            guest
-                .send(GuestToHost::StateFailed {
-                    slot: 1,
-                    load: false,
-                })
-                .unwrap();
-        }
-        guest.send(GuestToHost::FrameReset).unwrap();
-        assert_eq!(
-            host.recv(),
-            Ok(GuestToHost::StateFailed {
-                slot: 1,
-                load: false
-            })
-        );
         assert_eq!(host.recv(), Ok(GuestToHost::FrameReset));
 
         drop(guest);

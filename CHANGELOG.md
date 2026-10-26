@@ -20,10 +20,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   kernel (`SO_PEERCRED`, on macOS `LOCAL_PEERPID`) and refuses one of another user or one
   that attaches under another number; the first has to be the guest process it started.
   Before, a guest could name any process, its own group with 0, and have it ended.
-- A confined guest process can no longer signal another process: the seccomp filter answers
-  `EPERM` to `kill`, `tkill`, `rt_sigqueueinfo`, `rt_tgsigqueueinfo` and
-  `pidfd_send_signal`, and where the kernel has Landlock ABI 6 (Linux 6.12) the rules also
-  scope signals. A script's `Process.kill(9, Process.ppid)` no longer ends the window.
+- The seccomp filter of a confined guest process, on Linux and Android, answers `EPERM` to
+  `kill`, `tkill`, `rt_sigqueueinfo`, `rt_tgsigqueueinfo` and `pidfd_send_signal`, so a
+  script's `Process.kill(9, Process.ppid)` no longer ends the window. `tgkill` stays allowed
+  for `raise` and `pthread_kill`; only where the kernel has Landlock ABI 6 (Linux 6.12) do
+  the Landlock rules also keep it from reaching other processes. Below ABI 6 and on Android,
+  native code that a guest already runs could still signal another process with `tgkill`.
 - The answers about states (saved, loaded, a failed load) come from the program alone; a running
   guest that sends them is ignored with a warning, instead of making the window forget its
   resources and stop its audio.

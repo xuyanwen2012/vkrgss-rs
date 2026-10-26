@@ -61,12 +61,6 @@
   `StateLoaded`, `StateFailed` and `Attach` from the running guest, with one warning per kind
   and run; the relay alone makes these answers. The session is not changed: in process form
   only the relay talks to it, and in thread form there are no states.
-  One answer was the guest's to give until now: a guest that cannot copy itself (with
-  `--allow-process-functions`, or when `fork` fails) sends `StateFailed { load: false }` for
-  a request to save, and the scenario "a save is answered with the failure" depends on it.
-  The relay keeps the slots of the requests to save it has handed on and not seen a copy
-  for; a failed save for one of them is the guest's report that it could not copy, and the
-  relay answers that request itself, once. Any other failed answer is dropped like the rest.
 - **A load during a refill.** When `LoadState` names the slot in `refilling`, the relay keeps
   the request and acts on it when the new copy of that slot attaches; if the resumed guest
   ends, or sends a message before a copy of it attached, the kept request is answered
@@ -101,6 +95,21 @@ The relay's blocking reads and writes, the accept loop and budgets (change
   ended.
 
 ## Follow-ups
+
+- **Open question: the failed save of a guest that cannot be copied.** The relay drops every
+  `StateFailed` of the running guest, as this change requires ("State answers are made by
+  the program"). That conflicts with the existing requirement "Saving a state" of
+  `rgss-runtime` ("A guest that cannot be copied SHALL answer that the request failed",
+  scenario "No copier"): a guest process with `--allow-process-functions` has no copier, or
+  its `fork` fails, and its answer `StateFailed { load: false }` is the only way the host
+  learns of the failure. In process form that answer is now dropped, so the save request
+  goes unanswered and the end-to-end test `a_guest_that_may_start_processes_saves_no_state`
+  (`crates/vkrgss/tests/end_to_end.rs`), which expects "no state could be saved into slot 0",
+  fails. Resolving it needs a decision of the owner, for instance: the relay answers a
+  failed save itself from a record of the requests it handed on (a mechanism this design
+  does not name), the program refuses `SaveState` itself when it started the guest with
+  `--allow-process-functions` (which leaves a failed `fork` unanswered), or the requirement
+  is changed. Tasks 3.1 and 5.1 stay unticked until then.
 
 - The macOS branch of the credentials is checked at the Mac at the merge, together with the
   parent watch of macOS, which now raises SIGKILL, and the relay's tests, whose stand-ins
