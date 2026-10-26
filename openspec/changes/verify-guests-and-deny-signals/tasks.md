@@ -2,7 +2,7 @@
 
 ## 1. Identity of attaching processes
 
-- [ ] 1.1 Peer credentials in `attached()` (Linux and Android `SO_PEERCRED`, macOS `LOCAL_PEERPID` and `getpeereid`), the refusals of `design.md`, the first connection compared with `child.id()`, `kill()` guarded and its SAFETY comment rewritten; adapt the relay's tests so that no test kills the test process. Verify: unit tests of `process.rs` for the scenarios "Stated number differs" (a number of another process, and 0) and "First connection from another process"; `cargo test -p vkrgss --locked --lib` passes; `cargo clippy -p vkrgss-android --target aarch64-linux-android` (or the gate part that checks Android) passes.
+- [x] 1.1 Peer credentials in `attached()` (Linux and Android `SO_PEERCRED`, macOS `LOCAL_PEERPID` and `getpeereid`), the refusals of `design.md`, the first connection compared with `child.id()`, `kill()` guarded and its SAFETY comment rewritten; adapt the relay's tests so that no test kills the test process. Verify: unit tests of `process.rs` for the scenarios "Stated number differs" (a number of another process, and 0) and "First connection from another process"; `cargo test -p vkrgss --locked --lib` passes; `cargo clippy -p vkrgss-android --target aarch64-linux-android` (or the gate part that checks Android) passes.
 
 ## 2. Signals of a confined guest
 

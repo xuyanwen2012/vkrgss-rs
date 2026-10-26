@@ -33,6 +33,13 @@
 //!
 //! When the relay ends it ends every process whose connection it holds, and waits until
 //! those and the ones it let go of before are gone.
+//!
+//! # Identity
+//!
+//! The number of a process that attaches is the one the kernel gives for the other side of
+//! its connection (`SO_PEERCRED`, on macOS `LOCAL_PEERPID`), and its `Attach` has to state
+//! that number. A process of another user is refused, and so is a first process that is not
+//! the child the program started. Only numbers taken this way are signalled.
 
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
 use std::os::unix::fs::{DirBuilderExt, MetadataExt};
@@ -77,6 +84,8 @@ const SLOTS: usize = 10;
 /// A guest process that has attached, and its connection.
 struct Attached {
     stream: UnixStream,
+    /// The number of the process, as the kernel gave it for the other side of the
+    /// connection ([`peer`]).
     pid: u32,
 }
 
@@ -105,11 +114,17 @@ impl Attached {
     }
 }
 
-/// Sends SIGKILL to the process `pid`.
+/// Sends SIGKILL to the process `pid`: the number the kernel gave for the other side of a
+/// connection ([`peer`]), never one that a process stated. A number that is not positive,
+/// which would name a group of processes, is refused.
 fn kill(pid: u32) {
-    if let Ok(pid) = libc::pid_t::try_from(pid) {
-        // SAFETY: `kill` takes no pointer. The caller names a process of this run.
-        unsafe { libc::kill(pid, libc::SIGKILL) };
+    match libc::pid_t::try_from(pid) {
+        // SAFETY: `kill` takes no pointer. The number is that of a single process, which the
+        // kernel named as the other side of a connection of this run (see `attached`).
+        Ok(pid) if pid > 0 => unsafe {
+            libc::kill(pid, libc::SIGKILL);
+        },
+        _ => tracing::warn!("no signal is sent to the process number {pid}"),
     }
 }
 
@@ -179,16 +194,103 @@ fn readable(descriptor: BorrowedFd<'_>) -> bool {
     wait_readable([Some(descriptor)], Some(Duration::ZERO))[0]
 }
 
+/// The process at the other side of a connection, as the kernel tells it.
+struct Peer {
+    pid: libc::pid_t,
+    user: libc::uid_t,
+}
+
+/// The process that connected at the other side of `stream` and its user: `SO_PEERCRED`.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn peer(stream: &UnixStream) -> std::io::Result<Peer> {
+    let mut credentials = libc::ucred {
+        pid: 0,
+        uid: 0,
+        gid: 0,
+    };
+    let mut length = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
+    // SAFETY: `credentials` and `length` are valid for writes, and `length` holds the size
+    // of `credentials`; the descriptor is open while `stream` is.
+    let status = unsafe {
+        libc::getsockopt(
+            stream.as_raw_fd(),
+            libc::SOL_SOCKET,
+            libc::SO_PEERCRED,
+            (&raw mut credentials).cast(),
+            &mut length,
+        )
+    };
+    if status != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(Peer {
+        pid: credentials.pid,
+        user: credentials.uid,
+    })
+}
+
+/// The process that connected at the other side of `stream` and its user: `LOCAL_PEERPID`
+/// and `getpeereid`.
+#[cfg(target_os = "macos")]
+fn peer(stream: &UnixStream) -> std::io::Result<Peer> {
+    let mut pid: libc::pid_t = 0;
+    let mut length = std::mem::size_of::<libc::pid_t>() as libc::socklen_t;
+    // SAFETY: `pid` and `length` are valid for writes, and `length` holds the size of `pid`;
+    // the descriptor is open while `stream` is.
+    let status = unsafe {
+        libc::getsockopt(
+            stream.as_raw_fd(),
+            libc::SOL_LOCAL,
+            libc::LOCAL_PEERPID,
+            (&raw mut pid).cast(),
+            &mut length,
+        )
+    };
+    if status != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    let (mut user, mut group) = (0, 0);
+    // SAFETY: both are valid for writes; the descriptor is open while `stream` is.
+    if unsafe { libc::getpeereid(stream.as_raw_fd(), &mut user, &mut group) } != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(Peer { pid, user })
+}
+
 /// Takes the statement of the version and the first message of a process that has
-/// connected: what it is. One of another version than the program's is refused.
+/// connected: what it is. The process is the one the kernel names as the other side of the
+/// connection; one of another user, one the kernel gives no positive number for, one that
+/// attaches under another number than that and one of another version than the program's
+/// are refused.
 fn attached(stream: UnixStream) -> Result<(Attached, Option<u8>)> {
+    let peer = peer(&stream).context("cannot tell which process connected")?;
+    // SAFETY: `geteuid` takes nothing and cannot fail.
+    let user = unsafe { libc::geteuid() };
+    if peer.user != user {
+        bail!(
+            "a process of the user {} connected, not of the user {user} of the program",
+            peer.user
+        );
+    }
+    let Some(pid) = u32::try_from(peer.pid).ok().filter(|pid| *pid > 0) else {
+        bail!(
+            "a process connected whose number the kernel gives as {}",
+            peer.pid
+        );
+    };
     stream.set_nonblocking(false)?;
     set_read_timeout(&stream, Some(ATTACH_WAIT))?;
     hello::read(&mut &stream, VERSION)?;
     let first = read_message::<GuestToHost>(&mut &stream)?;
     set_read_timeout(&stream, None)?;
     match first {
-        Some(GuestToHost::Attach { pid, parked }) => Ok((Attached { stream, pid }, parked)),
+        Some(GuestToHost::Attach {
+            pid: stated,
+            parked,
+        }) if stated == pid => Ok((Attached { stream, pid }, parked)),
+        Some(GuestToHost::Attach { pid: stated, .. }) => {
+            bail!("the process {pid} connected and attached as the process {stated}")
+        }
         other => bail!("a process connected and did not attach: its first message is {other:?}"),
     }
 }
@@ -390,20 +492,35 @@ impl GuestProcess {
             listener,
             first: None,
         };
+        // An error drops the process, which ends the child.
+        process.wait_for_first()?;
+        Ok(process)
+    }
 
+    /// Waits for the child to connect and attach. A first process that attaches and is not
+    /// the child is an error.
+    fn wait_for_first(&mut self) -> Result<()> {
         let deadline = Instant::now() + GUEST_CONNECT;
         loop {
-            match process.listener.accept() {
+            match self.listener.accept() {
                 Ok((stream, _)) => {
                     let (first, _) = attached(stream)?;
+                    if first.pid != self.child.id() {
+                        bail!(
+                            "the first process that attached, {}, is not the guest process {} \
+                             the program started",
+                            first.pid,
+                            self.child.id()
+                        );
+                    }
                     tracing::info!("guest process {} attached", first.pid);
-                    process.first = Some(first);
-                    return Ok(process);
+                    self.first = Some(first);
+                    return Ok(());
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
                 Err(error) => return Err(error).context("cannot accept the guest process"),
             }
-            if let Some(status) = process.child.try_wait()? {
+            if let Some(status) = self.child.try_wait()? {
                 // It has said why on the error stream, unless a signal ended it.
                 bail!("the guest process {}", ended(status));
             }
@@ -899,16 +1016,134 @@ mod tests {
         assert!(marker.is_file());
     }
 
-    /// A copy that attaches as the state of `slot` under the number of `process`.
-    fn park(dir: &std::path::Path, process: &Child, slot: u8) -> UnixStream {
-        let mut stream = UnixStream::connect(dir.join("guest.sock")).unwrap();
+    /// A process that stands in for a guest process which connects by itself: a child of
+    /// the test process that connects to the socket in a directory and then waits to be
+    /// ended. The test writes and reads at the connection in its place, through the same
+    /// open socket, and the kernel names the child as the other side of it. Ended, if it
+    /// has not been waited for, when it is dropped.
+    struct StandIn {
+        pid: libc::pid_t,
+        /// The status it ended with, once waited for.
+        status: Option<libc::c_int>,
+    }
+
+    impl StandIn {
+        /// Forks a stand-in that connects to the socket in `dir`, and returns it with the
+        /// connection.
+        fn connect(dir: &std::path::Path) -> (StandIn, UnixStream) {
+            use std::os::fd::FromRawFd;
+            use std::os::unix::ffi::OsStrExt;
+
+            // SAFETY: plain integers; the descriptor is checked below.
+            let socket = unsafe { libc::socket(libc::AF_UNIX, libc::SOCK_STREAM, 0) };
+            assert!(socket >= 0, "socket: {}", std::io::Error::last_os_error());
+            // SAFETY: the descriptor was just made and is owned by the stream from here on.
+            let stream = unsafe { UnixStream::from_raw_fd(socket) };
+            // SAFETY: `sockaddr_un` is plain data, for which all zeros is a valid value.
+            let mut address: libc::sockaddr_un = unsafe { std::mem::zeroed() };
+            address.sun_family = libc::AF_UNIX as libc::sa_family_t;
+            let path = dir.join("guest.sock");
+            let path = path.as_os_str().as_bytes();
+            assert!(path.len() < address.sun_path.len(), "{path:?}");
+            for (to, from) in address.sun_path.iter_mut().zip(path) {
+                *to = *from as libc::c_char;
+            }
+            let length = std::mem::size_of::<libc::sockaddr_un>() as libc::socklen_t;
+            #[cfg(target_os = "macos")]
+            {
+                address.sun_len = length as u8;
+            }
+            // SAFETY: plain integer.
+            let open_max = unsafe { libc::sysconf(libc::_SC_OPEN_MAX) }.clamp(3, 1 << 16);
+            let mut pipe = [0; 2];
+            // SAFETY: `pipe` is valid for two descriptors.
+            assert_eq!(unsafe { libc::pipe(pipe.as_mut_ptr()) }, 0, "pipe");
+
+            // SAFETY: the child calls only async-signal-safe functions, with what was made
+            // above, and never returns.
+            let pid = unsafe { libc::fork() };
+            assert!(pid >= 0, "fork: {}", std::io::Error::last_os_error());
+            if pid == 0 {
+                // SAFETY: `address` and `connected` are valid for reads of their sizes. The
+                // child holds nothing of the test open afterwards, the descriptors that
+                // other tests have open included, and waits to be ended.
+                unsafe {
+                    let connected =
+                        u8::from(libc::connect(socket, (&raw const address).cast(), length) == 0);
+                    libc::write(pipe[1], (&raw const connected).cast(), 1);
+                    for descriptor in 0..open_max as libc::c_int {
+                        libc::close(descriptor);
+                    }
+                    loop {
+                        libc::pause();
+                    }
+                }
+            }
+            let mut connected = 0_u8;
+            // SAFETY: the descriptors of the pipe are open, and `connected` is valid for one
+            // byte.
+            let read = unsafe {
+                libc::close(pipe[1]);
+                let read = libc::read(pipe[0], (&raw mut connected).cast(), 1);
+                libc::close(pipe[0]);
+                read
+            };
+            let stand_in = StandIn { pid, status: None };
+            assert!(read == 1 && connected == 1, "the stand-in did not connect");
+            (stand_in, stream)
+        }
+
+        fn id(&self) -> u32 {
+            self.pid as u32
+        }
+
+        /// Whether it has not ended.
+        fn running(&mut self) -> bool {
+            if self.status.is_some() {
+                return false;
+            }
+            let mut status = 0;
+            // SAFETY: looks at a child of this process; `status` is valid for writes.
+            let waited = unsafe { libc::waitpid(self.pid, &mut status, libc::WNOHANG) };
+            if waited == self.pid {
+                self.status = Some(status);
+            }
+            waited == 0
+        }
+
+        /// Waits for it to end, and says whether SIGKILL ended it.
+        fn killed(&mut self) -> bool {
+            let status = *self.status.get_or_insert_with(|| {
+                let mut status = 0;
+                // SAFETY: waits for a child of this process; `status` is valid for writes.
+                let waited = unsafe { libc::waitpid(self.pid, &mut status, 0) };
+                assert_eq!(waited, self.pid, "waitpid");
+                status
+            });
+            libc::WIFSIGNALED(status) && libc::WTERMSIG(status) == libc::SIGKILL
+        }
+    }
+
+    impl Drop for StandIn {
+        fn drop(&mut self) {
+            if self.status.is_none() {
+                // SAFETY: the child has not been waited for, so its number is still its own.
+                unsafe { libc::kill(self.pid, libc::SIGKILL) };
+                self.killed();
+            }
+        }
+    }
+
+    /// A stand-in that attaches as the state of `slot`, with the connection.
+    fn park(dir: &std::path::Path, slot: u8) -> (StandIn, UnixStream) {
+        let (process, mut stream) = StandIn::connect(dir);
         hello::write(&mut stream, VERSION).unwrap();
         let attach = GuestToHost::Attach {
             pid: process.id(),
             parked: Some(slot),
         };
         write_message(&mut stream, &attach).unwrap();
-        stream
+        (process, stream)
     }
 
     /// The attachment of a process `pid` that is not parked, framed.
@@ -958,7 +1193,7 @@ mod tests {
         let (mut guest, program) = UnixStream::pair().unwrap();
         let mut written = Vec::new();
         hello::write(&mut written, VERSION).unwrap();
-        written.extend(attachment(7));
+        written.extend(attachment(std::process::id()));
         // What a guest sends after it has attached is not taken with them.
         write_message(
             &mut written,
@@ -969,7 +1204,7 @@ mod tests {
         .unwrap();
         guest.write_all(&written).unwrap();
         let (attached, parked) = attached(program).unwrap_or_else(|error| panic!("{error:#}"));
-        assert_eq!((attached.pid, parked), (7, None));
+        assert_eq!((attached.pid, parked), (std::process::id(), None));
         let next = read_message::<GuestToHost>(&mut &attached.stream).unwrap();
         assert_eq!(
             next,
@@ -977,6 +1212,99 @@ mod tests {
                 rule: FreezeRule::Frame
             })
         );
+    }
+
+    /// Scenario "Stated number differs", for the attachment itself: the process at the
+    /// other side of a pair of sockets is the test process, which states the number of
+    /// another process, and 0.
+    #[test]
+    fn a_process_that_attaches_under_another_number_is_refused() {
+        let mut other = idle();
+        for stated in [other.id(), 0] {
+            let mut written = Vec::new();
+            hello::write(&mut written, VERSION).unwrap();
+            written.extend(attachment(stated));
+            let error = refused(&written);
+            let expected = format!(
+                "the process {} connected and attached as the process {stated}",
+                std::process::id()
+            );
+            assert!(error.contains(&expected), "{error}");
+        }
+        assert_eq!(other.try_wait().unwrap(), None);
+        other.kill().unwrap();
+        other.wait().unwrap();
+    }
+
+    /// Scenario "Stated number differs", at the relay: a process that attaches as a state
+    /// under the number of another process, or 0, is refused, signals nobody and fills no
+    /// slot.
+    #[test]
+    fn the_relay_refuses_a_copy_that_states_another_number() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut first = idle();
+        let mut other = idle();
+        let (host, guest, relay) = relaying(dir.path(), &first);
+        for stated in [other.id(), 0] {
+            let mut stream = UnixStream::connect(dir.path().join("guest.sock")).unwrap();
+            hello::write(&mut stream, VERSION).unwrap();
+            let attach = GuestToHost::Attach {
+                pid: stated,
+                parked: Some(0),
+            };
+            write_message(&mut stream, &attach).unwrap();
+            // The relay closes the connection it refused.
+            assert_eq!(read_message::<HostToGuest>(&mut &stream).unwrap(), None);
+        }
+        host.send(HostToGuest::LoadState { slot: 0 }).unwrap();
+        assert_eq!(
+            host.recv(),
+            Ok(GuestToHost::StateFailed {
+                slot: 0,
+                load: true
+            })
+        );
+        assert_eq!(other.try_wait().unwrap(), None);
+        assert_eq!(first.try_wait().unwrap(), None);
+        drop(guest);
+        drop(host);
+        let relayed = relay.join().unwrap();
+        assert!(!relayed.gone.contains(&other.id()), "{:?}", relayed.gone);
+        for process in [&mut first, &mut other] {
+            process.kill().unwrap();
+            process.wait().unwrap();
+        }
+    }
+
+    /// Scenario "First connection from another process": the test process attaches first,
+    /// in place of the child, which is ended with the guest process.
+    #[test]
+    fn a_first_process_that_is_not_the_child_fails_the_start() {
+        use std::io::Write;
+
+        let dir = tempfile::tempdir().unwrap();
+        let listener = UnixListener::bind(dir.path().join("guest.sock")).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let child = idle();
+        let pid = child.id();
+        let mut process = GuestProcess {
+            child,
+            dir: dir.path().join("sockets"),
+            listener,
+            first: None,
+        };
+        let mut stream = UnixStream::connect(dir.path().join("guest.sock")).unwrap();
+        hello::write(&mut stream, VERSION).unwrap();
+        stream.write_all(&attachment(std::process::id())).unwrap();
+
+        let error = format!("{:#}", process.wait_for_first().unwrap_err());
+        let expected = format!(
+            "the first process that attached, {}, is not the guest process {pid}",
+            std::process::id()
+        );
+        assert!(error.contains(&expected), "{error}");
+        drop(process);
+        assert!(!exists(pid));
     }
 
     /// Scenarios "XP and VX" and "VX Ace", and the error of a guest executable that is not
@@ -1091,7 +1419,7 @@ mod tests {
     #[test]
     fn the_relay_keeps_states_by_slot_and_loads_them() {
         let dir = tempfile::tempdir().unwrap();
-        let (mut first, mut replaced, mut copy, mut again) = (idle(), idle(), idle(), idle());
+        let mut first = idle();
         let (host, guest, relay) = relaying(dir.path(), &first);
 
         // An empty slot.
@@ -1106,7 +1434,7 @@ mod tests {
         // A request to save goes to the guest, whose copy attaches.
         host.send(HostToGuest::SaveState { slot: 3 }).unwrap();
         assert_eq!(guest.recv(), Ok(HostToGuest::SaveState { slot: 3 }));
-        let old = park(dir.path(), &replaced, 3);
+        let (mut replaced, old) = park(dir.path(), 3);
         guest
             .send(GuestToHost::Freeze {
                 rule: FreezeRule::Frame,
@@ -1120,7 +1448,7 @@ mod tests {
             })
         );
         // A second copy takes the slot, and the connection of the first ends.
-        let parked = park(dir.path(), &copy, 3);
+        let (copy, parked) = park(dir.path(), 3);
         guest
             .send(GuestToHost::Freeze {
                 rule: FreezeRule::Frame,
@@ -1143,7 +1471,7 @@ mod tests {
         let resumed = GuestEnd::over_stream(parked);
         assert_eq!(resumed.recv(), Ok(HostToGuest::Resume));
         // The copy it leaves of itself fills the slot again without a word to the host.
-        let _refilled = park(dir.path(), &again, 3);
+        let (mut again, _refilled) = park(dir.path(), 3);
         resumed.send(GuestToHost::FrameReset).unwrap();
         assert_eq!(host.recv(), Ok(GuestToHost::FrameReset));
         host.send(HostToGuest::Tick).unwrap();
@@ -1160,14 +1488,12 @@ mod tests {
         assert_eq!(relayed.outcome, Some(false));
         assert_eq!(relayed.last, copy.id());
         // The parked copy is ended; the replaced one was only told to exit.
-        assert_eq!(again.wait().unwrap().signal(), Some(libc::SIGKILL));
+        assert!(again.killed());
         for pid in [first.id(), replaced.id(), again.id()] {
             assert!(relayed.gone.contains(&pid), "{pid} in {:?}", relayed.gone);
         }
-        for process in [&mut replaced, &mut copy] {
-            let _ = process.kill();
-            process.wait().unwrap();
-        }
+        // A stand-in does not exit by itself: the replaced one was not ended.
+        assert!(replaced.running());
     }
 
     #[test]
