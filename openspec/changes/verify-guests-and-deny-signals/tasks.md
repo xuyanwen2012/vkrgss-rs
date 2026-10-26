@@ -6,7 +6,7 @@
 
 ## 2. Signals of a confined guest
 
-- [ ] 2.1 Move the guest's own signals to allowed forms: `parent_watch.rs`, and the end of a script by the signal of an uncaught `SignalException` for both interpreters (default action, then `raise`). Verify: the tests of the requirement "Interrupt of a script" (`script-mode`) pass for `rgss1` and `rgss3`; the tests of `parent_watch` pass.
+- [x] 2.1 Move the guest's own signals to allowed forms: `parent_watch.rs`, and the end of a script by the signal of an uncaught `SignalException` for both interpreters (default action, then `raise`). Verify: the tests of the requirement "Interrupt of a script" (`script-mode`) pass for `rgss1` and `rgss3`; the tests of `parent_watch` pass.
 - [ ] 2.2 Add `kill`, `tkill`, `rt_sigqueueinfo`, `rt_tgsigqueueinfo` and `pidfd_send_signal` to the denied calls; Landlock's signal scope where the ABI has it, with the report of what an older ABI leaves out. Verify: `vkrgss-guest/tests/seccomp.rs` checks every new number and the scenarios "Signal to another process" and "Own threads" in forked children (skipping with a printed reason where seccomp or Landlock cannot be used); the unit test of `missing()` covers ABI 5 and 6; scenario "Script ends by its signal" passes with the confinement on.
 
 ## 3. State answers and loads during a refill

@@ -32,6 +32,7 @@ testing = ["dep:png"]
 # compares the two lists.
 [dependencies]
 encoding_rs.workspace = true
+libc.workspace = true
 png = { workspace = true, optional = true }
 thiserror.workspace = true
 vkrgss-compose-ref.workspace = true

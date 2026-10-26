@@ -2612,6 +2612,7 @@ name = "vkrgss-binding"
 version = "0.4.1"
 dependencies = [
  "encoding_rs",
+ "libc",
  "png",
  "thiserror 2.0.21",
  "vkrgss-binding",
@@ -2628,6 +2629,7 @@ name = "vkrgss-binding-rgss3"
 version = "0.4.1"
 dependencies = [
  "encoding_rs",
+ "libc",
  "png",
  "thiserror 2.0.21",
  "vkrgss-binding-rgss3",

@@ -4,8 +4,8 @@
 //! This is platform code. On Linux and Android the kernel does it: the parent-death signal of
 //! `prctl`, SIGKILL, which ends the process when the thread of the parent that started it
 //! ends. macOS has no such signal; there a thread of the guest waits in a kqueue for the
-//! parent process to exit (`EVFILT_PROC` with `NOTE_EXIT`) and then sends SIGKILL to its own
-//! process.
+//! parent process to exit (`EVFILT_PROC` with `NOTE_EXIT`) and then raises SIGKILL, which
+//! ends the whole process.
 
 /// Asks for this process to be ended with SIGKILL when its parent ends.
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -99,8 +99,9 @@ pub(crate) fn release_copy() {}
 
 #[cfg(target_os = "macos")]
 fn kill_self() -> ! {
-    // SAFETY: sending SIGKILL to the calling process ends it; nothing is touched.
-    unsafe { libc::kill(libc::getpid(), libc::SIGKILL) };
+    // SAFETY: SIGKILL raised in the calling thread ends the process; nothing is touched.
+    // `raise`, not `kill`: the guest sends no signal with `kill`.
+    unsafe { libc::raise(libc::SIGKILL) };
     // The signal ends the process, if not already before `kill` returned.
     loop {
         std::thread::park();

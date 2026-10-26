@@ -146,8 +146,14 @@ pub fn run_script(ruby: &Ruby, script: &Script) -> Result<i32, ScriptError> {
     match end {
         End::Status(status) => Ok(status),
         End::Signal(signal) => {
-            // SAFETY: the function changes the disposition of the signal and sends it.
-            unsafe { ffi::ruby_default_signal(signal) };
+            // As `ruby_default_signal` of Ruby 1.9.2, for both interpreters: Ruby 1.8.7's
+            // sends the signal with `kill`, which the filter of a confined guest denies.
+            // SAFETY: the default action is a valid disposition for every signal, and
+            // `raise` sends the signal to the calling thread; neither takes a pointer.
+            unsafe {
+                libc::signal(signal, libc::SIG_DFL);
+                libc::raise(signal);
+            }
             // A signal that does not end the process, as `ruby` goes on after it.
             Ok(status.max(1))
         }

@@ -23,6 +23,7 @@ testing = ["dep:png"]
 
 [dependencies]
 encoding_rs.workspace = true
+libc.workspace = true
 png = { workspace = true, optional = true }
 thiserror.workspace = true
 # The reference compositor draws the scene for `Graphics.snap_to_bitmap`, and in the tests of
