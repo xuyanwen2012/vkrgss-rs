@@ -38,12 +38,17 @@ domain. Signals a guest sends its own threads SHALL still arrive.
 - **THEN** the process ends by SIGINT, as before the change
 
 ### Requirement: State answers are made by the program
-Of the messages a running guest process sends, the program SHALL hand on no answer about
-states and no attachment; it SHALL make the answers saved, loaded and failed itself.
+Of the messages a running guest process sends, the program SHALL hand on no attachment
+and no answer about states except a failed save; it SHALL make the answers saved, loaded
+and failed load itself. A guest that cannot be copied still answers its own failed save.
 
 #### Scenario: Guest sends a loaded answer
 - **WHEN** the running guest process sends a loaded answer for slot 0 without a load request
 - **THEN** the host receives no loaded answer, and the next frame of the guest receives its tick
+
+#### Scenario: Guest that cannot be copied
+- **WHEN** a guest process started with process functions allowed is asked to save a state
+- **THEN** the host receives its failed save answer and says that no state could be saved
 
 ### Requirement: Load while a slot is refilled
 A load of the slot whose copy was just resumed SHALL wait until the resumed guest has left

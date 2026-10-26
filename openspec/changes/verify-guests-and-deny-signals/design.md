@@ -58,8 +58,11 @@
   process with `tgkill`; scripts cannot, because no Ruby function reaches `tgkill`. The
   documents say so.
 - **State answers come from the relay.** `Relay::guest_message` drops `StateSaved`,
-  `StateLoaded`, `StateFailed` and `Attach` from the running guest, with one warning per kind
-  and run; the relay alone makes these answers. The session is not changed: in process form
+  `StateLoaded`, `StateFailed { load: true }` and `Attach` from the running guest, with one
+  warning per kind and run; the relay alone makes these answers. `StateFailed { load: false }`
+  is handed on: a guest without a copier (`--allow-process-functions`, or a failed `fork`)
+  can only report its failed save this way (requirement "Saving a state" of `rgss-runtime`),
+  and the session only shows a notice for it, so a forged one changes no state. The session is not changed: in process form
   only the relay talks to it, and in thread form there are no states.
 - **A load during a refill.** When `LoadState` names the slot in `refilling`, the relay keeps
   the request and acts on it when the new copy of that slot attaches; if the resumed guest
@@ -96,20 +99,8 @@ The relay's blocking reads and writes, the accept loop and budgets (change
 
 ## Follow-ups
 
-- **Open question: the failed save of a guest that cannot be copied.** The relay drops every
-  `StateFailed` of the running guest, as this change requires ("State answers are made by
-  the program"). That conflicts with the existing requirement "Saving a state" of
-  `rgss-runtime` ("A guest that cannot be copied SHALL answer that the request failed",
-  scenario "No copier"): a guest process with `--allow-process-functions` has no copier, or
-  its `fork` fails, and its answer `StateFailed { load: false }` is the only way the host
-  learns of the failure. In process form that answer is now dropped, so the save request
-  goes unanswered and the end-to-end test `a_guest_that_may_start_processes_saves_no_state`
-  (`crates/vkrgss/tests/end_to_end.rs`), which expects "no state could be saved into slot 0",
-  fails. Resolving it needs a decision of the owner, for instance: the relay answers a
-  failed save itself from a record of the requests it handed on (a mechanism this design
-  does not name), the program refuses `SaveState` itself when it started the guest with
-  `--allow-process-functions` (which leaves a failed `fork` unanswered), or the requirement
-  is changed. Tasks 3.1 and 5.1 stay unticked until then.
+- Resolved (decided in review, 2026-10-26): the failed save of a guest that cannot be copied
+  is handed on, see "State answers come from the relay".
 
 - The macOS branch of the credentials is checked at the Mac at the merge, together with the
   parent watch of macOS, which now raises SIGKILL, and the relay's tests, whose stand-ins
