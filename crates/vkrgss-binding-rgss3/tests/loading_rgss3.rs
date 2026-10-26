@@ -1,8 +1,9 @@
 //! What a game of RGSS3 loads and registers beside its scripts: the scenarios of "Loading
-//! code in RGSS3" and those of "at_exit and exit! in RGSS3" of `rgss-runtime` that need no
-//! process of their own (`exit!` ends the process, and is tested through the program), as
-//! measured on the original runtime of RGSS3 (`ace-v0-REPORT.md` section 8 and
-//! `ace-v1-api-REPORT.md` section 1.6 of the measurements kept outside the repository).
+//! code in RGSS3", those of "Loading code" that the `require` and `load` of RGSS3 meet, and
+//! those of "at_exit and exit! in RGSS3" of `rgss-runtime` that need no process of their own
+//! (`exit!` ends the process, and is tested through the program), as measured on the
+//! original runtime of RGSS3 (`ace-v0-REPORT.md` section 8 and `ace-v1-api-REPORT.md`
+//! section 1.6 of the measurements kept outside the repository).
 #![cfg(not(vkrgss_interpreter_absent))]
 
 use vkrgss_binding_rgss3::testing::host::{self, Script};
@@ -145,5 +146,52 @@ fn a_required_or_loaded_file_is_compiled_as_utf_8() {
     assert_eq!(
         eval("require 'Utf8'; load 'Loaded.rb'; [$vkrgss_enc, $vkrgss_loaded]"),
         r#"[["UTF-8", 1], ["UTF-8", 1]]"#
+    );
+}
+
+/// Requirement "Loading code", scenario "A file that raised is required again", with the
+/// `require` of RGSS3.
+#[test]
+fn a_file_that_raised_is_required_again() {
+    put(
+        "Flaky.rb",
+        "$vkrgss_flaky = ($vkrgss_flaky || 0) + 1\n\
+         raise 'the first time' if $vkrgss_flaky == 1\n\
+         VKRGSS_FLAKY = $vkrgss_flaky\n",
+    );
+    assert_eq!(
+        eval(
+            "first = (require 'Flaky' rescue nil)
+             [first, require('Flaky'), VKRGSS_FLAKY, require('Flaky')]"
+        ),
+        "[nil, true, 2, false]"
+    );
+}
+
+/// Requirement "Loading code", scenario "A file that requires itself", with the `require` of
+/// RGSS3.
+#[test]
+fn a_file_that_requires_itself_is_evaluated_once() {
+    put(
+        "Self.rb",
+        "$vkrgss_self = ($vkrgss_self || 0) + 1\n$vkrgss_inner = require 'Self'\n",
+    );
+    assert_eq!(
+        eval("[require('Self'), $vkrgss_self, $vkrgss_inner]"),
+        "[true, 1, false]"
+    );
+}
+
+/// Requirement "Loading code", scenario "Wrapped load", with the `load` of RGSS3, which
+/// compiles the file as UTF-8 in the anonymous module too.
+#[test]
+fn a_wrapped_load_keeps_its_constants() {
+    put("Part.rb", "PART = \"測\"\n$vkrgss_part = Module.nesting\n");
+    assert_eq!(
+        eval(
+            "[load('Part.rb', true), defined?(PART), $vkrgss_part.size,
+              $vkrgss_part[0].const_get(:PART).encoding.name]"
+        ),
+        r#"[true, nil, 1, "UTF-8"]"#
     );
 }

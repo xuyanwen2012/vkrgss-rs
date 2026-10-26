@@ -6,7 +6,7 @@
 
 ## 2. Loading code
 
-- [ ] 2.1 `autoload` over Ruby 1.8.7 through the rule of `require`; `require` that records after the load, in `prelude_shared.rb` and `prelude_load_rgss3.rb`; `load` with `wrap`. Verify: the scenarios of the requirement "Loading code" over Ruby 1.8.7 and Ruby 1.9.2; the scenarios of "Loading code in RGSS3" and "Loading files from a script" (`script-mode`) pass unedited; the tests of symbol numbers (`run_game_symbols`, `run_game_first_uses`, `run_game_lazy_names`, `symbol_ids*`) pass unedited.
+- [x] 2.1 `autoload` over Ruby 1.8.7 through the rule of `require`; `require` that records after the load, in `prelude_shared.rb` and `prelude_load_rgss3.rb`; `load` with `wrap`. Verify: the scenarios of the requirement "Loading code" over Ruby 1.8.7 and Ruby 1.9.2; the scenarios of "Loading code in RGSS3" and "Loading files from a script" (`script-mode`) pass unedited; the tests of symbol numbers (`run_game_symbols`, `run_game_first_uses`, `run_game_lazy_names`, `symbol_ids*`) pass unedited.
 
 ## 3. Documents
 

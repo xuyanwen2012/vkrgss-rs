@@ -7,17 +7,17 @@
 module Kernel
   def require(name)
     path = vkrgss_locate(name, true)
-    return false if $".include?(path)
-    $" << path
-    eval(File.open(path, "rb") { |file| file.read }.force_encoding("UTF-8"),
-         TOPLEVEL_BINDING, path)
-    true
+    vkrgss_require(path) do
+      eval(File.open(path, "rb") { |file| file.read }.force_encoding("UTF-8"),
+           TOPLEVEL_BINDING, path)
+    end
   end
 
+  # `vkrgss_require` and `vkrgss_load` are those of `prelude_shared.rb`.
   def load(name, wrap = false)
     path = vkrgss_locate(name, false)
-    eval(File.open(path, "rb") { |file| file.read }.force_encoding("UTF-8"),
-         TOPLEVEL_BINDING, path)
+    vkrgss_load(File.open(path, "rb") { |file| file.read }.force_encoding("UTF-8"),
+                path, wrap)
     true
   end
 

@@ -84,6 +84,17 @@ because reading is not restricted.
   unlike `Process.fork`, which is a singleton method only, so the stub is a module function
   too and the copy a script gets with `include Process` signals nothing either. Its line on
   the error stream says "nothing was signalled" in place of "nothing was started".
+- **`require` and `load`** (task 2.1). `prelude_shared.rb` defines `vkrgss_require`, which
+  keeps `$vkrgss_loading`, and `vkrgss_load`, after the definitions whose lines it keeps;
+  the `require` and `load` of `prelude_load_rgss3.rb` call them with their UTF-8 source, so
+  every definition of both files stands on the line it stood on. A file that requires
+  itself gets `false` from the inner `require`, as from the interpreters' own.
+- **Difference of the wrapped load.** `rb_load` with `wrap` evaluates the file with `self`
+  a copy of `main` extended with the anonymous module, so the file can call a method it
+  defined with `def` at its top level. `Module.new.module_eval` evaluates it with `self` the
+  module, of which such a method is an instance method: a call of it from the file's own top
+  level raises `NoMethodError`, and `self` is the module, not `main`. Constants and classes
+  stay in the module in both.
 
 ## Follow-ups
 

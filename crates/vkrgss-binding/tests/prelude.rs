@@ -190,6 +190,78 @@ fn nothing_else_is_loaded() {
     assert_eq!(eval("[$vkrgss_outside, $vkrgss_plain]"), "[nil, nil]");
 }
 
+/// Writes `contents` to `name` in the game directory.
+fn put(name: &str, contents: &str) {
+    fs::write(harness().game_dir().join(name), contents).unwrap();
+}
+
+/// Requirement "Loading code", scenario "autoload over Ruby 1.8": `autoload` follows the rule
+/// of `require` at the call, and the file loads at the first use of the constant.
+#[test]
+fn autoload_loads_only_what_require_may() {
+    put(
+        "Lazy.rb",
+        "$vkrgss_lazy = ($vkrgss_lazy || 0) + 1\nclass Lazy\nend\n",
+    );
+    assert_eq!(
+        eval(
+            "far = begin
+               autoload(:Far, '/etc/passwd')
+             rescue LoadError => error
+               error.class
+             end
+             autoload(:Lazy, 'Lazy')
+             before = $vkrgss_lazy.to_i
+             [far, Object.autoload?(:Far), before, Lazy.class, $vkrgss_lazy]"
+        ),
+        "[LoadError, nil, 0, Class, 1]"
+    );
+}
+
+/// Requirement "Loading code", scenario "A file that raised is required again".
+#[test]
+fn a_file_that_raised_is_required_again() {
+    put(
+        "Flaky.rb",
+        "$vkrgss_flaky = ($vkrgss_flaky || 0) + 1\n\
+         raise 'the first time' if $vkrgss_flaky == 1\n\
+         VKRGSS_FLAKY = $vkrgss_flaky\n",
+    );
+    assert_eq!(
+        eval(
+            "first = (require 'Flaky' rescue nil)
+             [first, require('Flaky'), VKRGSS_FLAKY, require('Flaky')]"
+        ),
+        "[nil, true, 2, false]"
+    );
+}
+
+/// Requirement "Loading code", scenario "A file that requires itself".
+#[test]
+fn a_file_that_requires_itself_is_evaluated_once() {
+    put(
+        "Self.rb",
+        "$vkrgss_self = ($vkrgss_self || 0) + 1\n$vkrgss_inner = require 'Self'\n",
+    );
+    assert_eq!(
+        eval("[require('Self'), $vkrgss_self, $vkrgss_inner]"),
+        "[true, 1, false]"
+    );
+}
+
+/// Requirement "Loading code", scenario "Wrapped load".
+#[test]
+fn a_wrapped_load_keeps_its_constants() {
+    put("Part.rb", "PART = :part\n$vkrgss_part = Module.nesting\n");
+    assert_eq!(
+        eval(
+            "[load('Part.rb', true), defined?(PART), $vkrgss_part.size,
+              $vkrgss_part[0].const_get(:PART)]"
+        ),
+        "[true, nil, 1, :part]"
+    );
+}
+
 #[test]
 fn win32api_returns_zero_and_names_a_function_once() {
     assert_eq!(
