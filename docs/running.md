@@ -166,7 +166,7 @@ Paths on the command line are relative to the directory the program was started 
 | `--filter FILTER` | How the frame is scaled into the window: `auto`, `nearest`, `linear` or `sharp`. See *Window*. |
 | `--fullscreen` | Start in borderless fullscreen. |
 | `--debug` | Debug mode: sets `$DEBUG` to `true` for RGSS1; for RGSS2 sets `$TEST` to `true` and leaves `$DEBUG` `false`. |
-| `--allow-process-functions` | Lets `system`, backticks, `exec`, `fork`, `syscall` and `IO.popen` start processes, and in a game of VX Ace `spawn`, `Process.spawn`, `Process.exec` and `open` of a command too. Without it they do nothing. |
+| `--allow-process-functions` | Lets `system`, backticks, `exec`, `fork`, `syscall`, `IO.popen` and `Process.fork` start processes, `Process.kill` signal them, and `open`, `IO.read`, `IO.foreach` and `IO.readlines` (and `File.read` and the like) run a command, a name that starts with `\|`; in a game of VX Ace `spawn`, `Process.spawn`, `Process.exec` and `IO.binread` of a command too. Without it they start and signal nothing, return `nil` and say so on the error stream; with any other name `open` and `IO` read and write files as before. |
 | `--log-p` | `p` only writes to the error stream: no message panel is shown and the game does not wait. In a game of VX Ace `p` writes to the standard output anyway. See *Messages*. |
 | `--present-stats` | Write the intervals between the frames shown to the error stream. See *Window*. |
 | `--frame-stats` | Write where the frames spend their time to the error stream. See *Frame times*. |
@@ -629,8 +629,10 @@ modules, the kernel's key store, `bpf`, `perf_event_open`, `io_uring` and the ca
 administrator makes. The filter binds every thread of the guest process and its states.
 
 A script that opens a file for writing anywhere else gets `Errno::EACCES`; one that starts a
-program through what the stubs of the process functions leave on, as `Process.exec` of
-XP and VX, gets `Errno::EPERM`. The states of the
+program through what the stubs of the process functions (`--allow-process-functions`) leave
+on, as `Process.exec` of XP and VX, gets `Errno::EPERM`. The stubs themselves start and
+signal nothing whether the guest is confined or not; what they leave on starts a program
+where the guest is not confined. The states of the
 guest process are confined as it is, and so are the threads a script of VX Ace makes. The program itself, with the window, the GPU and the
 audio device, is not restricted.
 
@@ -783,17 +785,17 @@ cargo run -p vkrgss -- --runtime rgss1 --script sort.rb 5 3 1
   status 130. Over Ruby 1.8.7, a script that rescues an `Interrupt` raised while it reads
   the standard input (`gets`) does not end after its last line; SIGTERM ends it. Games are
   not affected: they handle SIGINT as before.
-- **Loading files.** `require` and `load`, and with Ruby 1.9.2 `require_relative` and
-  `autoload`, follow the rules of a game with the directory of the script in the place of
-  the game directory: only `.rb` files below it are loaded, found without regard to letter
-  case. There is no standard library: `require 'set'` raises `LoadError`, as in a game.
+- **Loading files.** `require`, `load` and `autoload`, and with Ruby 1.9.2
+  `require_relative`, follow the rules of a game with the directory of the script in the
+  place of the game directory: only `.rb` files below it are loaded, found without regard
+  to letter case. There is no standard library: `require 'set'` raises `LoadError`, as in a game.
 - **No RGSS.** None of the modules and classes of RGSS is defined: `Bitmap`, `Graphics`,
   `Input`, `Audio`, `RPG`, `Win32API` and the others raise `NameError`.
 - **Confinement.** The script is confined as a guest process is (see *Sandbox*), with its
   own directory in the place of the game directory: on Linux it writes only below that
-  directory and starts no program, and `system` and the other functions that start
-  processes do nothing. `--sandbox off`, or the environment variable `VKRGSS_SANDBOX`,
-  leaves the confinement out; `--allow-process-functions` lets those functions start
+  directory and starts no program, and `system` and the other functions that start or
+  signal processes do nothing. `--sandbox off`, or the environment variable
+  `VKRGSS_SANDBOX`, leaves the confinement out; `--allow-process-functions` lets those functions start
   programs and leaves it out too. On macOS a script is not confined, as a guest process is
   not.
 

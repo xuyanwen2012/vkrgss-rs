@@ -198,9 +198,12 @@ a guest process on macOS is not confined, and how the workspace is built and tes
 - The interpreter runs only on the script thread, with a large dedicated stack
   (`RUBY_INIT_STACK` at thread entry, `ruby_set_stack_size()` after init). Host signal handlers
   are restored after `ruby_init`. FFI declarations are hand-written.
-- `system`, backticks, `exec`, `fork`, `syscall`, `IO.popen` and similar are stubs by default
-  (log only), with a configuration switch. `require` and `load` only load `.rb` files inside the
-  game directory.
+- `system`, backticks, `exec`, `fork`, `syscall`, `IO.popen`, `Process.kill`, and `open`,
+  `IO.read`, `IO.foreach`, `IO.readlines` and `IO.binread` with the name of a command (one
+  that starts with `|`), and similar are stubs by default (log only), with a configuration
+  switch. `require` and `load` only load `.rb` files inside the game directory, and
+  `autoload` only what `require` may. `require` records a file once it has loaded, as Ruby's
+  own does, and `load` with `wrap` evaluates the file in an anonymous module.
 - `Win32API`: the class exists; common calls are emulated from a table; unknown calls log once
   and return 0; preload scripts may override.
 - vkrgss-specific extensions live under a `VKRGSS` module only.

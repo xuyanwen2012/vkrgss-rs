@@ -10,7 +10,7 @@
 
 ## 3. Documents
 
-- [ ] 3.1 `docs/running.md` (the row of `--allow-process-functions` names every function that is off; the sandbox section's sentence on what the stubs leave on), `docs/decisions.md` (the Ruby section), `CHANGELOG.md`. Verify: the tests of `xtask` that check the documents pass.
+- [x] 3.1 `docs/running.md` (the row of `--allow-process-functions` names every function that is off; the sandbox section's sentence on what the stubs leave on), `docs/decisions.md` (the Ruby section), `CHANGELOG.md`. Verify: the tests of `xtask` that check the documents pass.
 
 ## 4. Checks
 

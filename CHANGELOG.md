@@ -6,11 +6,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Security
 
+- With the process functions off, the default, `open`, `IO.read`, `IO.foreach`,
+  `IO.readlines` and `File.read` and the like with a name that starts with `|`, and over
+  Ruby 1.9.2 `IO.binread`, start no command, and `Process.kill` signals nothing: each
+  returns `nil` and says so on the error stream. Before, Ruby 1.8.7 ran the command of
+  `open` and both interpreters that of the class methods of `IO` where the guest is not
+  confined (macOS, `--sandbox off`, a guest on a thread). `--allow-process-functions` lets
+  them run as before.
+- `autoload` in a game of XP or VX, and in a script over Ruby 1.8.7, locates its file by
+  the rule of `require` at the call: a file outside the game directory raises `LoadError`
+  there, as in a game of VX Ace, where before the interpreter loaded it.
 - The regular expression engine of Ruby 1.8.7 no longer reads past the subject when a
   class, `\w` or `\W` matches a character cut off by the end of the subject and a word
   boundary (`\b`, `\B`) follows, as the nightly fuzz run 40296906749 found; such a match
   ends at the end of the subject instead of past it. Ruby 1.9.2 refuses such a subject
   before its engine runs.
+
+### Fixed
+
+- `require` records a file once it has loaded, as Ruby's own does: a file that raised while
+  it loaded can be required again, where before it was taken as loaded. `load(name, true)`
+  evaluates the file in an anonymous module, where before it ignored `wrap`.
 
 ## [0.4.1] - 2026-10-25
 
