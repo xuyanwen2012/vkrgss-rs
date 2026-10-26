@@ -9,7 +9,7 @@
 
 ## 2. Documents
 
-- [ ] 2.1 `docs/vendored-security.md`, `CHANGELOG.md`. Verify: the tests of `xtask` that check the documents pass.
+- [x] 2.1 `docs/vendored-security.md`, `CHANGELOG.md`. Verify: the tests of `xtask` that check the documents pass.
 
 ## 3. Integration check
 

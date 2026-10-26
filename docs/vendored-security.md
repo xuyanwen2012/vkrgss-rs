@@ -198,8 +198,9 @@ code that Oniguruma got after 5.9.6 and that is not in the vendored tree.
 The first runs of the targets of Ruby 1.8.7, `marshal`, `parse` and `regex` (`openspec` change
 `fuzz-the-interpreter-and-review-fixes`, section "Checked" of its `design.md`) found the
 defects of the first rows of the table above again, and these, which no published fix
-names; the runs of the change `make-the-nightly-checks-pass` found the two after them, and
-the nightly run 39110302699 the last (change `fix-the-nightly-fuzz-findings`). Each is a
+names; the runs of the change `make-the-nightly-checks-pass` found the two after them, the
+nightly run 39110302699 the one after those (change `fix-the-nightly-fuzz-findings`), and the
+nightly run 40296906749 the last (change `fix-the-word-check-past-the-subject`). Each is a
 recorded patch, and its input is a test (`crates/vkrgss-ruby-sys/fuzz/fixed/`).
 
 | Tree | Code | Defect | Patch |
@@ -215,6 +216,7 @@ recorded patch, and its input is a test (`crates/vkrgss-ruby-sys/fuzz/fixed/`).
 | Ruby | `parse.y`: the lexer of numbers | a number with `_` before `.`, as `1_.`, leaves its token without a terminator, and the token is read past the end of its buffer after the syntax error | 40, 41 |
 | Ruby | `parse.y`: the lexer at `__END__` | the line of `__END__` is no longer kept from the collector while the lexer points into it, and a syntax error at the end of the script copies it from freed memory if the error collects | 42, 43 |
 | Ruby | `parse.y`: `local_push`, `yycompile` | after a syntax error in the arguments of a `def` in a block, the end of the script restores block variables that the collector may have freed and handed out again, and `yycompile` puts their slots on the free list: a slot is on it twice, or a live object is (`gc.c:456`, the head of the free list inside another object) | 46, 47 |
+| Oniguruma | `regexec.c`: `match_at`, `OP_CCLASS`, `OP_CCLASS_NOT`, `OP_WORD`, `OP_NOT_WORD` | a character cut off by the end of the subject is stepped over to a position past the end, where the word check of a following `\b` or `\B` reads, and where a match can end | 10 |
 
 What is known and not fixed: Oniguruma takes a pattern and a subject to be valid in their
 encoding. Upstream never changed that; it tells the caller to check. The patches above make
@@ -405,6 +407,7 @@ too, after checking that the code is the same or absent.
 | Oniguruma 5.9.6, patches 6 and 8 | `regcomp.c`, `enc/unicode.c`: the lengths of a piece of literal text that ends inside a character | yes | no: no piece of a validated pattern ends inside a character | **does not apply** |
 | Oniguruma 5.9.6, patch 7 | `regexec.c`: `OP_PUSH_OR_JUMP_EXACT1`, `OP_PUSH_IF_PEEK_NEXT` read the subject before they check its end | yes | data and script | **backported**: patch 35 |
 | Oniguruma 5.9.6, patch 5 | `regparse.c`: `PINC` | yes | no, as #17 | **does not apply** |
+| Oniguruma 5.9.6, patch 10 | `regexec.c`: `OP_CCLASS`, `OP_CCLASS_NOT`, `OP_WORD`, `OP_NOT_WORD` step past a character cut off by the end of the subject | yes | no: `re.c` refuses a subject that is no valid text; the input of 5.9.6 ends in `ArgumentError` before the engine runs | **does not apply**: the code is the same, but the length of a character is never cut off by the end of a valid subject (change `fix-the-word-check-past-the-subject`) |
 
 ### Found by the sanitized run and the fuzz targets
 

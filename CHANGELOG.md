@@ -4,6 +4,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security
+
+- The regular expression engine of Ruby 1.8.7 no longer reads past the subject when a
+  class, `\w` or `\W` matches a character cut off by the end of the subject and a word
+  boundary (`\b`, `\B`) follows, as the nightly fuzz run 40296906749 found; such a match
+  ends at the end of the subject instead of past it. Ruby 1.9.2 refuses such a subject
+  before its engine runs.
+
 ## [0.4.1] - 2026-10-25
 
 ### Changed
