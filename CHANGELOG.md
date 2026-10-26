@@ -26,9 +26,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   for `raise` and `pthread_kill`; only where the kernel has Landlock ABI 6 (Linux 6.12) do
   the Landlock rules also keep it from reaching other processes. Below ABI 6 and on Android,
   native code that a guest already runs could still signal another process with `tgkill`.
-- The answers about states (saved, loaded, a failed load) come from the program alone; a running
-  guest that sends them is ignored with a warning, instead of making the window forget its
-  resources and stop its audio.
+- The answers saved, loaded and failed load come from the program alone; a running guest
+  that sends them is ignored with a warning, instead of making the window forget its
+  resources and stop its audio. A guest that cannot be copied still reports its failed save.
+
 - The regular expression engine of Ruby 1.8.7 no longer reads past the subject when a
   class, `\w` or `\W` matches a character cut off by the end of the subject and a word
   boundary (`\b`, `\B`) follows, as the nightly fuzz run 40296906749 found; such a match

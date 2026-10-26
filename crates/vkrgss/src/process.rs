@@ -896,12 +896,13 @@ impl Relay<'_> {
 }
 
 /// What `message` is, if it is one that only the relay makes and the running guest has no
-/// business sending: an answer about states, or an attachment.
+/// business sending: an answer about states, or an attachment. A failed save is the guest's
+/// own: a guest that cannot copy itself has no other way to report it.
 fn only_made_here(message: &GuestToHost) -> Option<&'static str> {
     match message {
         GuestToHost::StateSaved { .. } => Some("a saved answer"),
         GuestToHost::StateLoaded { .. } => Some("a loaded answer"),
-        GuestToHost::StateFailed { .. } => Some("a failed answer"),
+        GuestToHost::StateFailed { load: true, .. } => Some("a failed load"),
         GuestToHost::Attach { .. } => Some("an attachment"),
         _ => None,
     }
@@ -1576,17 +1577,15 @@ mod tests {
         host.send(HostToGuest::Tick).unwrap();
         assert_eq!(guest.recv(), Ok(HostToGuest::Tick));
 
-        // A failed save is dropped too, after a request to save as well as without one.
+        // A guest that cannot copy itself reports its failed save, which is handed on.
         host.send(HostToGuest::SaveState { slot: 1 }).unwrap();
         assert_eq!(guest.recv(), Ok(HostToGuest::SaveState { slot: 1 }));
-        guest
-            .send(GuestToHost::StateFailed {
-                slot: 1,
-                load: false,
-            })
-            .unwrap();
-        guest.send(GuestToHost::FrameReset).unwrap();
-        assert_eq!(host.recv(), Ok(GuestToHost::FrameReset));
+        let failed = GuestToHost::StateFailed {
+            slot: 1,
+            load: false,
+        };
+        guest.send(failed.clone()).unwrap();
+        assert_eq!(host.recv(), Ok(failed));
 
         drop(guest);
         assert!(host.recv().is_err());

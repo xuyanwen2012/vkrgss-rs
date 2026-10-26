@@ -645,8 +645,9 @@ takes the number and the user of every process that connects to the socket from 
 (`SO_PEERCRED`, on macOS `LOCAL_PEERPID`), refuses with a warning one of another user and
 one that attaches under another number than that, requires the first one to be the guest
 process it started, and ends processes only by the numbers the kernel gave. The answers
-about states (saved, loaded, failed) are made by the program too; the same messages sent by
-a running guest are dropped with a warning.
+saved, loaded and failed load are made by the program too; the same messages sent by a
+running guest are dropped with a warning. A failed save is handed on: a guest that cannot be
+copied has no other way to report it, and it only makes the window say so.
 
 A script that opens a file for writing anywhere else gets `Errno::EACCES`; one that starts a
 program through what the stubs of the process functions (`--allow-process-functions`) leave
