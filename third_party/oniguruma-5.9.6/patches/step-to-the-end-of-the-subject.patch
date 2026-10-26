@@ -1,0 +1,34 @@
+--- a/regexec.c
++++ b/regexec.c
+@@ -1640,6 +1640,7 @@
+       if (BITSET_AT(((BitSetRef )p), *s) == 0) goto fail;
+       p += SIZE_BITSET;
+       s += enclen(encode, s);   /* OP_CCLASS can match mb-code. \D, \S */
++      if (s > end) s = (UChar* )end;
+       MOP_OUT;
+       break;
+ 
+@@ -1696,6 +1697,7 @@
+       if (BITSET_AT(((BitSetRef )p), *s) != 0) goto fail;
+       p += SIZE_BITSET;
+       s += enclen(encode, s);
++      if (s > end) s = (UChar* )end;
+       MOP_OUT;
+       break;
+ 
+@@ -1905,6 +1907,7 @@
+ 	goto fail;
+ 
+       s += enclen(encode, s);
++      if (s > end) s = (UChar* )end;
+       MOP_OUT;
+       break;
+ 
+@@ -1914,6 +1917,7 @@
+ 	goto fail;
+ 
+       s += enclen(encode, s);
++      if (s > end) s = (UChar* )end;
+       MOP_OUT;
+       break;
+ 

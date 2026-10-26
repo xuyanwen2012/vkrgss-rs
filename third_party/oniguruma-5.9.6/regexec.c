@@ -1640,6 +1640,7 @@ match_at(regex_t* reg, const UChar* str, const UChar* end,
       if (BITSET_AT(((BitSetRef )p), *s) == 0) goto fail;
       p += SIZE_BITSET;
       s += enclen(encode, s);   /* OP_CCLASS can match mb-code. \D, \S */
+      if (s > end) s = (UChar* )end;
       MOP_OUT;
       break;
 
@@ -1696,6 +1697,7 @@ match_at(regex_t* reg, const UChar* str, const UChar* end,
       if (BITSET_AT(((BitSetRef )p), *s) != 0) goto fail;
       p += SIZE_BITSET;
       s += enclen(encode, s);
+      if (s > end) s = (UChar* )end;
       MOP_OUT;
       break;
 
@@ -1905,6 +1907,7 @@ match_at(regex_t* reg, const UChar* str, const UChar* end,
 	goto fail;
 
       s += enclen(encode, s);
+      if (s > end) s = (UChar* )end;
       MOP_OUT;
       break;
 
@@ -1914,6 +1917,7 @@ match_at(regex_t* reg, const UChar* str, const UChar* end,
 	goto fail;
 
       s += enclen(encode, s);
+      if (s > end) s = (UChar* )end;
       MOP_OUT;
       break;
 

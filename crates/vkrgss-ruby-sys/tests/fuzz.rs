@@ -524,6 +524,17 @@ fn the_inputs_of_fixed_findings_no_longer_fail() {
         eval("(1..2000).map { |i| i.to_s }.join.size".to_owned()),
         Ok("6893".to_owned())
     );
+    // A class or a word character that matches a character cut off by the end of the
+    // subject steps to the end and not past it, where the word check of
+    // `word-bound-past-the-subject.txt` read; the match ends with the subject.
+    assert_eq!(
+        eval(
+            "$KCODE = 'U'; [\"x\\xf7\" =~ Regexp.new('[^x]'), $~.end(0), \
+             \"\\xf0\\x9f\" =~ Regexp.new('\\w+'), $~.end(0)]"
+                .to_owned()
+        ),
+        Ok("[1, 2, 0, 2]".to_owned())
+    );
 }
 
 #[test]

@@ -97,7 +97,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `regexec.c`
 - Patch: `patches/matcher-bounds.patch`
-- Patched SHA-256: `d9d258320b6b57991a88c57cb913b8c72f48b53d2bba0a365739a36952dfec3f`
+- Patched SHA-256: `b3027300ce13c91f0b8964b8fffe00f507612df67d0f1ab4a42d12f30ed8c5d1`
 - Reason: backports and one fix of the matcher (change `fuzz-the-interpreter-and-review-fixes`; `docs/vendored-security.md` has a
   row for each backport). From upstream: `OP_EXACT1` checks the end of the subject before
   it reads (690313a, #57, CVE-2017-9224); `forward_search_range` fails when `reg->dmin`
@@ -128,7 +128,7 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
 
 - File: `regexec.c`
 - Patch: `patches/backward-search-dmin.patch`
-- Patched SHA-256: `d9d258320b6b57991a88c57cb913b8c72f48b53d2bba0a365739a36952dfec3f`
+- Patched SHA-256: `b3027300ce13c91f0b8964b8fffe00f507612df67d0f1ab4a42d12f30ed8c5d1`
 - Reason: applies after patch 7; backport of the backward half of upstream 33e5b47c of
   ruby/ruby ("Fix handling of reg->dmin in Regex matching", which distributions name for
   CVE-2024-27282; change `check-the-least-length-in-backward-searches`,
@@ -140,3 +140,22 @@ directory with `a/` and `b/` prefixes) under `patches/`, and add an entry.
   one, for which no threshold is set, and the search then formed a position about 4 GiB
   past the subject. No result changes; `crates/vkrgss-ruby-sys/tests/backports.rs` shows
   it.
+
+## 10. step-to-the-end-of-the-subject
+
+- File: `regexec.c`
+- Patch: `patches/step-to-the-end-of-the-subject.patch`
+- Patched SHA-256: `b3027300ce13c91f0b8964b8fffe00f507612df67d0f1ab4a42d12f30ed8c5d1`
+- Reason: applies after patch 9; found by the fuzz target `regex` in nightly run
+  40296906749 (change `fix-the-word-check-past-the-subject`, `docs/vendored-security.md`).
+  `OP_CCLASS`, `OP_CCLASS_NOT`, `OP_WORD` and `OP_NOT_WORD` stepped over the character
+  they matched by the length its lead byte announces; a subject that ends inside a
+  multibyte character left the position past the end, where `ON_STR_END` no longer holds,
+  and the word check of the next `\b` or `\B` read the byte there through `mbc_to_code`.
+  A match could also end past the subject. The four opcodes now stop at the end, as
+  `OP_CCLASS_MB_NOT` of 5.9.6 does with such a character; the opcodes that compare the
+  character with code points (`OP_CCLASS_MB`, `OP_ANYCHAR` and the others) already fail
+  when it does not fit. No upstream fix is known. A match of such a character ends at the
+  end of the subject instead of past it; text without such a character matches as before.
+  Input:
+  `crates/vkrgss-ruby-sys/fuzz/fixed/regex/word-bound-past-the-subject.txt`.
