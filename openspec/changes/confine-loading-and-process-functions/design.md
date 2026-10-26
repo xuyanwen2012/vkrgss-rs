@@ -95,6 +95,14 @@ because reading is not restricted.
   module, of which such a method is an instance method: a call of it from the file's own top
   level raises `NoMethodError`, and `self` is the module, not `main`. Constants and classes
   stay in the module in both.
+- **The checks** (task 4.1), on 2026-10-26. The gate and `xarch` ran with `TMPDIR` and
+  `XDG_RUNTIME_DIR` in a directory of `/var/tmp` on the disk: the quota of the user on the
+  `tmpfs` of `/tmp` was full with the files of another flow, so tests that write there
+  failed with `Disk quota exceeded`, a `TMPDIR` below `target/` makes the socket path of
+  the guest longer than `SUN_LEN`, and the sandbox of the flow refuses `/run/user`. With
+  them the full gate passed. `xarch check` against `xarch baseline --at 31208cef`, the
+  commit before this change, printed `all identical` for the ten games, and no game wrote a
+  line of the new stubs.
 
 ## Follow-ups
 
