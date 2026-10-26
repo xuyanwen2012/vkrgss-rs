@@ -474,7 +474,8 @@ fn a_script_rescues_the_interrupt_of_sigint() {
 }
 
 /// Scenario "Not rescued" of "Interrupt of a script": the `ensure` clause and the block of
-/// `at_exit` run, the `Interrupt` is reported, and the process ends by SIGINT.
+/// `at_exit` run, the `Interrupt` is reported, and the process ends by SIGINT. Scenario
+/// "Script ends by its signal" too: the script runs confined, whose filter denies `kill`.
 #[test]
 fn an_interrupt_that_is_not_rescued_ends_the_script_by_sigint() {
     let text = "at_exit { puts 'exit' }\nbegin\n  puts 'ready'\n  sleep 20\nensure\n  \

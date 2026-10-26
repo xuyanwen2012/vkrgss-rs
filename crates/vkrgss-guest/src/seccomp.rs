@@ -4,7 +4,7 @@
 //! the constants of `libc` (no crate stands between: the program is a dozen lines and the
 //! one crate that would write it, `seccompiler`, brings a model of rules this filter does
 //! not need). The filter answers `EPERM` to a fixed list of system calls no game needs
-//! ([`DENIED`]), to `socket` of every family but `AF_UNIX`, to `clone` with a flag of
+//! ([`DENIED`]), the calls that signal another process among them, to `socket` of every family but `AF_UNIX`, to `clone` with a flag of
 //! [`NAMESPACES`], to the x32 system calls on x86_64 and to every system call of another
 //! architecture; it answers `ENOSYS` to `clone3`, whose flags live in memory the filter
 //! cannot read, so that the C library falls back to `clone`; it allows the rest. It binds
@@ -34,15 +34,24 @@ const SYS_KEXEC_FILE_LOAD: c_long = 294;
 const SYS_KEXEC_FILE_LOAD: c_long = libc::SYS_kexec_file_load;
 
 /// The system calls that are denied whatever their arguments: starting programs, reading
-/// and writing other processes, loading code into the kernel, the kernel's key store,
-/// mounts, namespaces, `io_uring` (which opens sockets of its own), and the calls that only
-/// an administrator makes.
-pub const DENIED: [c_long; 28] = [
+/// and writing other processes, sending signals to other processes, loading code into the
+/// kernel, the kernel's key store, mounts, namespaces, `io_uring` (which opens sockets of its
+/// own), and the calls that only an administrator makes.
+///
+/// Of the calls that send a signal, `tgkill` is allowed: the C library's `raise`, `abort` and
+/// `pthread_kill` use it, and the filter cannot compare its target with the calling process,
+/// whose number differs in every copy. The guest signals itself only through those.
+pub const DENIED: [c_long; 33] = [
     libc::SYS_execve,
     libc::SYS_execveat,
     libc::SYS_ptrace,
     libc::SYS_process_vm_readv,
     libc::SYS_process_vm_writev,
+    libc::SYS_kill,
+    libc::SYS_tkill,
+    libc::SYS_rt_sigqueueinfo,
+    libc::SYS_rt_tgsigqueueinfo,
+    libc::SYS_pidfd_send_signal,
     libc::SYS_bpf,
     libc::SYS_perf_event_open,
     libc::SYS_mount,

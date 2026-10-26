@@ -3,16 +3,18 @@
 //! This is platform code for Linux: the rules are those of Landlock, made with the
 //! `landlock` crate in its best-effort mode. The guest then reads every file as before,
 //! writes, creates, removes and renames only below the game directory, writes the device
-//! `/dev/null`, executes nothing and, where the kernel has those rules, neither binds nor
-//! connects a TCP socket. The rules bind the calling thread and what it starts later, the
-//! copies of the guest process included; connecting to a Unix socket by its path, which
-//! those copies do, is not among them.
+//! `/dev/null`, executes nothing, where the kernel has those rules neither binds nor connects
+//! a TCP socket, and where it has the signal scope (ABI 6) signals no process outside the
+//! confinement. The rules bind the calling thread and what it starts later, the copies of the
+//! guest process included; connecting to a Unix socket by its path, which those copies do,
+//! is not among them.
 
 use std::path::Path;
 
 use landlock::{
     ABI, AccessFs, AccessNet, LandlockStatus, PathBeneath, PathFd, PathFdError, RestrictionStatus,
-    Ruleset, RulesetAttr, RulesetCreatedAttr, RulesetError, RulesetStatus, path_beneath_rules,
+    Ruleset, RulesetAttr, RulesetCreatedAttr, RulesetError, RulesetStatus, Scope,
+    path_beneath_rules,
 };
 
 /// The device every process may write.
@@ -57,6 +59,7 @@ fn restrict(game_dir: &Path) -> Result<RestrictionStatus, RestrictError> {
     let status = Ruleset::default()
         .handle_access(writing | AccessFs::Execute)?
         .handle_access(AccessNet::BindTcp | AccessNet::ConnectTcp)?
+        .scope(Scope::Signal)?
         .create()?
         .add_rule(PathBeneath::new(PathFd::new(game_dir)?, writing))?
         .add_rules(path_beneath_rules(
@@ -67,13 +70,13 @@ fn restrict(game_dir: &Path) -> Result<RestrictionStatus, RestrictError> {
     Ok(status)
 }
 
-/// What an ABI older than the fourth leaves unrestricted; nothing from the fourth on.
+/// What an ABI older than the sixth leaves unrestricted; nothing from the sixth on.
 fn missing(abi: ABI) -> &'static str {
     match abi {
         ABI::Unsupported => "everything",
-        ABI::V1 => "truncating files and TCP connections",
-        ABI::V2 => "truncating files and TCP connections",
-        ABI::V3 => "TCP connections",
+        ABI::V1 | ABI::V2 => "truncating files, TCP connections and signals to other processes",
+        ABI::V3 => "TCP connections and signals to other processes",
+        ABI::V4 | ABI::V5 => "signals to other processes",
         _ => "",
     }
 }
@@ -112,8 +115,14 @@ mod tests {
     fn the_rights_an_older_kernel_lacks_are_named() {
         assert!(missing(ABI::V1).contains("TCP") && missing(ABI::V1).contains("truncating"));
         assert!(missing(ABI::V2).contains("truncating"));
-        assert_eq!(missing(ABI::V3), "TCP connections");
-        assert_eq!(missing(ABI::V4), "");
+        assert!(missing(ABI::V2).contains("signals"));
+        assert_eq!(
+            missing(ABI::V3),
+            "TCP connections and signals to other processes"
+        );
+        assert_eq!(missing(ABI::V4), "signals to other processes");
+        assert_eq!(missing(ABI::V5), "signals to other processes");
+        assert_eq!(missing(ABI::V6), "");
         assert_eq!(missing(ABI::V9), "");
     }
 }
