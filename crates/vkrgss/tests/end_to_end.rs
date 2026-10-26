@@ -2003,7 +2003,9 @@ fn a_guest_that_is_not_confined_writes_beside_the_game_directory() {
     }
 }
 
-/// Scenario "States" of the requirement "Confined guest process".
+/// Scenario "States" of the requirement "Confined guest process", and scenario "Copies still
+/// attach": the copies, whose numbers the program takes from the kernel, attach, and no
+/// process of the run is left.
 #[test]
 fn a_confined_guest_saves_and_loads_states_as_one_that_is_not() {
     if skipped_without_landlock("a_confined_guest_saves_and_loads_states_as_one_that_is_not") {
@@ -2035,6 +2037,15 @@ fn a_confined_guest_saves_and_loads_states_as_one_that_is_not() {
             sandbox == "on",
             "{stderr}"
         );
+        // The child, the copy for the save, and the copy the resumed one left of itself.
+        let attached = attached_processes(&stderr);
+        assert_eq!(attached.len(), 3, "{stderr}");
+        for pid in attached {
+            assert!(
+                !process_exists(pid),
+                "the guest process {pid} is still there"
+            );
+        }
         ran
     };
     let (confined, free) = (run("on"), run("off"));

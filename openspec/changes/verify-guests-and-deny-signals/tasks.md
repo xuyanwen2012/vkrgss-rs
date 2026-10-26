@@ -11,7 +11,7 @@
 
 ## 3. State answers and loads during a refill
 
-- [ ] 3.1 The relay drops state answers and attachments from the running guest, and keeps a load of the refilling slot until its copy attaches. Verify: relay tests for "Guest sends a loaded answer" and "Load again at once"; the existing relay tests and `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss --locked` pass, including scenario "Copies still attach".
+- [x] 3.1 The relay drops state answers and attachments from the running guest, and keeps a load of the refilling slot until its copy attaches. Verify: relay tests for "Guest sends a loaded answer" and "Load again at once"; the existing relay tests and `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss --locked` pass, including scenario "Copies still attach".
 
 ## 4. Documents
 

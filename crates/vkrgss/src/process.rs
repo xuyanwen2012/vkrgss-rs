@@ -629,8 +629,11 @@ fn relay(
         running: first,
         slots: Default::default(),
         refilling: None,
+        kept_load: None,
+        saving: Vec::new(),
         outcome: None,
         let_go: Vec::new(),
+        dropped: Vec::new(),
     };
     // The host's messages come through a channel, which cannot be waited for together with
     // the connections: a thread puts them on a socket that can.
@@ -685,10 +688,18 @@ struct Relay<'a> {
     slots: [Option<Attached>; SLOTS],
     /// The slot whose copy was resumed and is expected to leave a new copy of itself.
     refilling: Option<u8>,
+    /// A request to load the slot in `refilling`, kept until its new copy attaches.
+    kept_load: Option<u8>,
+    /// The slots the running guest was asked to save into and for which no copy has
+    /// attached.
+    saving: Vec<u8>,
     /// How the game went, as the guest that ended it reported.
     outcome: Option<bool>,
     /// The processes that were ended or told to exit while the relay ran.
     let_go: Vec<u32>,
+    /// The kinds of message the running guest sent that only the relay makes, which were
+    /// dropped and warned of.
+    dropped: Vec<&'static str>,
 }
 
 impl Relay<'_> {
@@ -717,8 +728,13 @@ impl Relay<'_> {
             if from_guest {
                 // Before the message, so that a copy is known before what its maker sent
                 // after making it.
+                let read = self.running.as_ref().map(|running| running.pid);
                 self.accept_copies();
-                self.guest_message();
+                // Unless a copy that attached was loaded in place of the guest that could
+                // be read: a load that waited for it.
+                if self.running.as_ref().map(|running| running.pid) == read {
+                    self.guest_message();
+                }
             } else {
                 self.accept_copies();
             }
@@ -766,7 +782,11 @@ impl Relay<'_> {
         }
         if self.refilling == Some(slot) {
             self.refilling = None;
+            if self.kept_load.take() == Some(slot) {
+                self.load(slot);
+            }
         } else {
+            self.saving.retain(|saving| *saving != slot);
             self.tell_host(GuestToHost::StateSaved { slot });
         }
     }
@@ -778,9 +798,24 @@ impl Relay<'_> {
         };
         // A resumed copy that has not left a copy of itself by now has left none.
         self.refilling = None;
-        match read_message::<GuestToHost>(&mut &running.stream) {
+        let message = read_message::<GuestToHost>(&mut &running.stream);
+        if let Some(slot) = self.kept_load.take() {
+            self.tell_host(GuestToHost::StateFailed { slot, load: true });
+        }
+        match message {
             Ok(Some(GuestToHost::Outcome { ok })) => self.outcome = Some(ok),
-            Ok(Some(message)) => self.tell_host(message),
+            // The guest could not copy itself for a request to save: the relay answers that
+            // request.
+            Ok(Some(GuestToHost::StateFailed { slot, load: false }))
+                if self.saving.contains(&slot) =>
+            {
+                self.saving.retain(|saving| *saving != slot);
+                self.tell_host(GuestToHost::StateFailed { slot, load: false });
+            }
+            Ok(Some(message)) => match only_made_here(&message) {
+                Some(kind) => self.drop_message(kind),
+                None => self.tell_host(message),
+            },
             ended => {
                 if let Err(error) = ended
                     && self.to_host.is_some()
@@ -794,11 +829,27 @@ impl Relay<'_> {
         }
     }
 
+    /// Drops a message of the running guest that only the relay makes, and warns of the
+    /// first one of its `kind`.
+    fn drop_message(&mut self, kind: &'static str) {
+        if !self.dropped.contains(&kind) {
+            tracing::warn!(
+                "the guest process sent {kind}, which only the program makes; it is dropped"
+            );
+            self.dropped.push(kind);
+        }
+    }
+
     /// Takes one message of the host.
     fn host_message(&mut self, message: HostToGuest) {
         match message {
             HostToGuest::LoadState { slot } => self.load(slot),
             message => {
+                if let HostToGuest::SaveState { slot } = message
+                    && !self.saving.contains(&slot)
+                {
+                    self.saving.push(slot);
+                }
                 // A guest that is gone is found out by the end of its connection.
                 if let Some(running) = &self.running {
                     let _ = write_message(&mut &running.stream, &message);
@@ -807,8 +858,15 @@ impl Relay<'_> {
         }
     }
 
-    /// Loads the state of `slot`: ends the running guest and resumes the parked copy.
+    /// Loads the state of `slot`: ends the running guest and resumes the parked copy. A load
+    /// of the slot whose copy was just resumed waits until that copy has left its new copy of
+    /// itself; a second request replaces a waiting one.
     fn load(&mut self, slot: u8) {
+        self.kept_load = None;
+        if self.refilling == Some(slot) {
+            self.kept_load = Some(slot);
+            return;
+        }
         let parked = self.slots.get_mut(usize::from(slot)).and_then(Option::take);
         // A copy that is gone has closed its connection, which a parked one never writes to.
         let Some(parked) = parked.filter(|parked| !readable(parked.stream.as_fd())) else {
@@ -852,6 +910,18 @@ impl Relay<'_> {
             self.let_go.push(process.pid);
         }
         (self.outcome, self.let_go)
+    }
+}
+
+/// What `message` is, if it is one that only the relay makes and the running guest has no
+/// business sending: an answer about states, or an attachment.
+fn only_made_here(message: &GuestToHost) -> Option<&'static str> {
+    match message {
+        GuestToHost::StateSaved { .. } => Some("a saved answer"),
+        GuestToHost::StateLoaded { .. } => Some("a loaded answer"),
+        GuestToHost::StateFailed { .. } => Some("a failed answer"),
+        GuestToHost::Attach { .. } => Some("an attachment"),
+        _ => None,
     }
 }
 
@@ -1494,6 +1564,152 @@ mod tests {
         }
         // A stand-in does not exit by itself: the replaced one was not ended.
         assert!(replaced.running());
+    }
+
+    /// Scenario "Guest sends a loaded answer", and the other messages that only the relay
+    /// makes.
+    #[test]
+    fn the_relay_drops_answers_about_states_that_the_guest_sends() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut process = idle();
+        let (host, guest, relay) = relaying(dir.path(), &process);
+        let made_here = [
+            GuestToHost::StateLoaded { slot: 0 },
+            GuestToHost::StateSaved { slot: 0 },
+            GuestToHost::StateFailed {
+                slot: 0,
+                load: true,
+            },
+            GuestToHost::Attach {
+                pid: process.id(),
+                parked: Some(0),
+            },
+            GuestToHost::StateLoaded { slot: 0 },
+        ];
+        for message in made_here {
+            guest.send(message).unwrap();
+        }
+        // A save that nobody asked for cannot be said to have failed either.
+        guest
+            .send(GuestToHost::StateFailed {
+                slot: 1,
+                load: false,
+            })
+            .unwrap();
+        guest.send(GuestToHost::FrameReset).unwrap();
+        assert_eq!(host.recv(), Ok(GuestToHost::FrameReset));
+        host.send(HostToGuest::Tick).unwrap();
+        assert_eq!(guest.recv(), Ok(HostToGuest::Tick));
+
+        // A guest that cannot copy itself says so for a request to save, which the relay
+        // answers once.
+        host.send(HostToGuest::SaveState { slot: 1 }).unwrap();
+        assert_eq!(guest.recv(), Ok(HostToGuest::SaveState { slot: 1 }));
+        for _ in 0..2 {
+            guest
+                .send(GuestToHost::StateFailed {
+                    slot: 1,
+                    load: false,
+                })
+                .unwrap();
+        }
+        guest.send(GuestToHost::FrameReset).unwrap();
+        assert_eq!(
+            host.recv(),
+            Ok(GuestToHost::StateFailed {
+                slot: 1,
+                load: false
+            })
+        );
+        assert_eq!(host.recv(), Ok(GuestToHost::FrameReset));
+
+        drop(guest);
+        assert!(host.recv().is_err());
+        drop(host);
+        relay.join().unwrap();
+        assert_eq!(process.try_wait().unwrap(), None);
+        process.kill().unwrap();
+        process.wait().unwrap();
+    }
+
+    /// Saves the state of slot 0 from the guest at `guest`, the process `first`, and loads
+    /// it, which ends `first`. Returns the copy that was resumed and its link.
+    fn resumed_from_slot_0(
+        dir: &std::path::Path,
+        host: &HostLink,
+        guest: &GuestEnd,
+        first: &mut Child,
+    ) -> (StandIn, GuestEnd) {
+        let (copy, parked) = park(dir, 0);
+        // Its maker goes on after the copy has attached.
+        guest.send(GuestToHost::FrameReset).unwrap();
+        assert_eq!(host.recv(), Ok(GuestToHost::StateSaved { slot: 0 }));
+        assert_eq!(host.recv(), Ok(GuestToHost::FrameReset));
+        host.send(HostToGuest::LoadState { slot: 0 }).unwrap();
+        assert_eq!(host.recv(), Ok(GuestToHost::StateLoaded { slot: 0 }));
+        assert_eq!(first.wait().unwrap().signal(), Some(libc::SIGKILL));
+        let resumed = GuestEnd::over_stream(parked);
+        assert_eq!(resumed.recv(), Ok(HostToGuest::Resume));
+        (copy, resumed)
+    }
+
+    /// Scenario "Load again at once".
+    #[test]
+    fn a_load_of_the_slot_being_refilled_waits_for_its_new_copy() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut first = idle();
+        let (host, guest, relay) = relaying(dir.path(), &first);
+        let (mut copy, resumed) = resumed_from_slot_0(dir.path(), &host, &guest, &mut first);
+
+        // Asked again before the resumed guest has left its new copy: the tick after the
+        // request reaches the guest, so the request has been taken, and is not answered.
+        host.send(HostToGuest::LoadState { slot: 0 }).unwrap();
+        host.send(HostToGuest::Tick).unwrap();
+        assert_eq!(resumed.recv(), Ok(HostToGuest::Tick));
+        let (mut again, refilled) = park(dir.path(), 0);
+        assert_eq!(host.recv(), Ok(GuestToHost::StateLoaded { slot: 0 }));
+        assert!(copy.killed());
+        let loaded = GuestEnd::over_stream(refilled);
+        assert_eq!(loaded.recv(), Ok(HostToGuest::Resume));
+        loaded.send(GuestToHost::FrameReset).unwrap();
+        assert_eq!(host.recv(), Ok(GuestToHost::FrameReset));
+
+        drop(host);
+        assert!(loaded.recv().is_err());
+        drop(loaded);
+        let relayed = relay.join().unwrap();
+        assert_eq!(relayed.last, again.id());
+        assert!(again.running());
+    }
+
+    /// A load of the slot being refilled fails, as one of an empty slot, when the resumed
+    /// guest goes on without leaving a new copy.
+    #[test]
+    fn a_waiting_load_fails_when_the_resumed_guest_goes_on_without_a_copy() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut first = idle();
+        let (host, guest, relay) = relaying(dir.path(), &first);
+        let (mut copy, resumed) = resumed_from_slot_0(dir.path(), &host, &guest, &mut first);
+
+        host.send(HostToGuest::LoadState { slot: 0 }).unwrap();
+        host.send(HostToGuest::Tick).unwrap();
+        assert_eq!(resumed.recv(), Ok(HostToGuest::Tick));
+        resumed.send(GuestToHost::FrameReset).unwrap();
+        assert_eq!(
+            host.recv(),
+            Ok(GuestToHost::StateFailed {
+                slot: 0,
+                load: true
+            })
+        );
+        assert_eq!(host.recv(), Ok(GuestToHost::FrameReset));
+
+        drop(host);
+        assert!(resumed.recv().is_err());
+        drop(resumed);
+        let relayed = relay.join().unwrap();
+        assert_eq!(relayed.last, copy.id());
+        assert!(copy.running());
     }
 
     #[test]

@@ -61,6 +61,12 @@
   `StateLoaded`, `StateFailed` and `Attach` from the running guest, with one warning per kind
   and run; the relay alone makes these answers. The session is not changed: in process form
   only the relay talks to it, and in thread form there are no states.
+  One answer was the guest's to give until now: a guest that cannot copy itself (with
+  `--allow-process-functions`, or when `fork` fails) sends `StateFailed { load: false }` for
+  a request to save, and the scenario "a save is answered with the failure" depends on it.
+  The relay keeps the slots of the requests to save it has handed on and not seen a copy
+  for; a failed save for one of them is the guest's report that it could not copy, and the
+  relay answers that request itself, once. Any other failed answer is dropped like the rest.
 - **A load during a refill.** When `LoadState` names the slot in `refilling`, the relay keeps
   the request and acts on it when the new copy of that slot attaches; if the resumed guest
   ends, or sends a message before a copy of it attached, the kept request is answered
