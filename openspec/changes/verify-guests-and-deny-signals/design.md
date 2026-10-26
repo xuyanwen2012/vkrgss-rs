@@ -82,6 +82,26 @@ The relay's blocking reads and writes, the accept loop and budgets (change
 `end-the-session-without-the-guest`); the stubs of the process functions in Ruby (change
 `confine-loading-and-process-functions`); a sandbox for macOS.
 
+## Implementation notes
+
+- The binding calls `signal` and `raise` through `libc`, which `vkrgss-binding` did not
+  depend on: `libc` is added to its `Cargo.toml` and, because the dependency lists of the two
+  are compared by a test of `xtask`, to that of `vkrgss-binding-rgss3`, which compiles the
+  same source. Two lines outside the named files, which the default-signal path needs.
+- Checked on the running kernel (Linux 7.2, Landlock ABI 6 or later) by
+  `vkrgss-guest/tests/seccomp.rs`: with the Landlock rules on a thread other than the main
+  thread and the filter on every thread, `raise`, `pthread_kill` to a thread the confined
+  thread started and `pthread_kill` to the unconfined main thread all arrive, and `tgkill`
+  to another process gets `EPERM`. The signal scope is kept. Kernels with ABI 6 but without
+  the fix of Landlock's erratum 2 refuse a confined thread's signal to a thread of another
+  domain of the same process; no thread of the guest signals the main thread, so nothing
+  is known to depend on it there.
+- The relay's tests stand in for a copy with a forked child of the test that connects
+  itself; the test reads and writes through the same socket, and only those children are
+  ended.
+
 ## Follow-ups
 
-- The macOS branch of the credentials is checked at the Mac at the merge.
+- The macOS branch of the credentials is checked at the Mac at the merge, together with the
+  parent watch of macOS, which now raises SIGKILL, and the relay's tests, whose stand-ins
+  set `sun_len` on macOS; none of them can be built here.
