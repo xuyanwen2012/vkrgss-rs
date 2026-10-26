@@ -24,11 +24,12 @@ fn debug_mode_battle_test_and_process_functions_follow_the_caller() {
     );
     let (value, _) = host::play(
         harness(),
-        "[$DEBUG, $BTEST, system('true'), system('false'), `echo out`]",
+        "[$DEBUG, $BTEST, system('true'), system('false'), `echo out`, open('|echo x').read,
+          IO.read('|echo y')]",
         Script::new(),
     );
     assert_eq!(
         value.as_deref(),
-        Ok(r#"[true, true, true, false, "out\n"]"#)
+        Ok(r#"[true, true, true, false, "out\n", "x\n", "y\n"]"#)
     );
 }

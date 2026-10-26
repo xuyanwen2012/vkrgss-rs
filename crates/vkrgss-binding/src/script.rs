@@ -33,8 +33,9 @@ pub struct Script {
     pub file: PathBuf,
     /// The arguments, which are `ARGV`.
     pub arguments: Vec<OsString>,
-    /// Whether `system`, backticks, `exec`, `fork`, `syscall`, `IO.popen` and over Ruby 1.9
-    /// `spawn` and the like start processes. They do nothing when this is `false`.
+    /// Whether `system`, backticks, `exec`, `fork`, `syscall`, `IO.popen`, `Process.kill`,
+    /// `open` with the name of a command and the like, and over Ruby 1.9 `spawn`, start or
+    /// signal processes. They do nothing when this is `false`.
     pub process_functions: bool,
 }
 

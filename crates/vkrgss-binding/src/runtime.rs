@@ -71,7 +71,7 @@ const PRELUDE_RUBY18: &str = include_str!("prelude_ruby18.rb");
 /// What the prelude has in RGSS1 only: `Hangup`.
 const PRELUDE_RGSS1: &str = include_str!("prelude_rgss1.rb");
 
-/// The Ruby definitions that turn the functions that start processes off.
+/// The Ruby definitions that turn the functions that start or signal processes off.
 const PROCESS_FUNCTIONS_OFF: &str = include_str!("prelude_process_off.rb");
 
 /// What turns off the functions that start processes that Ruby 1.9 has beside them.
@@ -117,8 +117,9 @@ pub struct RunConfig {
     pub debug: bool,
     /// Battle-test mode: `$BTEST` is `true`, and in the runtimes after RGSS1 `$TEST` too.
     pub battle_test: bool,
-    /// Whether `system`, backticks, `exec`, `fork`, `syscall` and `IO.popen` start processes.
-    /// They do nothing when this is `false`.
+    /// Whether `system`, backticks, `exec`, `fork`, `syscall`, `IO.popen`, `Process.kill`,
+    /// and `open` and the class methods of `IO` that read a file with the name of a command,
+    /// start or signal processes. They do nothing when this is `false`.
     pub process_functions: bool,
     /// The seed of the random number generator, set before the built-in scripts run and
     /// again on every reset. Without one the generator is left as the interpreter seeds it.
@@ -536,7 +537,7 @@ pub(crate) fn prepare(ruby: &Ruby) -> Result<(), RubyError> {
     Ok(())
 }
 
-/// Turns the functions that start processes off, those of Ruby 1.9 included.
+/// Turns the functions that start or signal processes off, those of Ruby 1.9 included.
 pub(crate) fn turn_process_functions_off(ruby: &Ruby) -> Result<(), RubyError> {
     ruby.eval_protected(PROCESS_FUNCTIONS_OFF, PRELUDE_NAME, 1)?;
     if rb::RUBY_19 {

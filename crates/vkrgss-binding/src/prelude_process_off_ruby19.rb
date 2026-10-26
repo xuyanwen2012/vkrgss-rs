@@ -1,26 +1,22 @@
 # The functions of Ruby 1.9 that start processes, turned off beside those of
 # `prelude_process_off.rb`, which is evaluated before this file: each starts nothing,
-# returns nil and says so on the error stream. `open` with a file name works as before.
-# Written for vkrgss.
+# returns nil and says so on the error stream. Written for vkrgss.
+
+# The rule of `vkrgss_file_name` of `prelude_process_off.rb` over Ruby 1.9: `open` gives an
+# object with `to_open` to that method, and a name is converted with `to_path` before
+# `to_str`.
+def vkrgss_file_name(name, open)
+  return name if open && name.respond_to?(:to_open)
+  name = name.to_path if name.respond_to?(:to_path)
+  name.respond_to?(:to_str) ? name.to_str : name
+end
 
 module Kernel
   def spawn(*args)
     vkrgss_process_function_off("spawn")
   end
 
-  # Kept once: the prelude is evaluated again in some tests of the binding.
-  alias vkrgss_open open unless private_method_defined?(:vkrgss_open)
-
-  def open(*args, &block)
-    name = args[0]
-    if name.respond_to?(:to_str) && name.to_str.start_with?("|")
-      return vkrgss_process_function_off("open")
-    end
-    vkrgss_open(*args, &block)
-  end
-
-  private :vkrgss_open
-  module_function :spawn, :open
+  module_function :spawn
 end
 
 def Process.spawn(*args)

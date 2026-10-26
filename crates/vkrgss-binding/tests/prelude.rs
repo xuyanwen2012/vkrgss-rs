@@ -3,7 +3,7 @@
 
 use std::fs;
 
-use vkrgss_binding::testing::host::{self, Script, with_error_stream};
+use vkrgss_binding::testing::host::{self, Script, ruby_literal, with_error_stream};
 use vkrgss_binding::testing::{self, Harness};
 use vkrgss_vfs::Runtime;
 
@@ -74,6 +74,78 @@ fn every_process_function_returns_nil() {
          vkrgss: IO.popen is turned off, nothing was started\\n\
          vkrgss: system is turned off, nothing was started\\n\
          vkrgss: Process.fork is turned off, nothing was started\\n\"]"
+    );
+}
+
+/// A fresh directory beside the game directory, for the files a command would make.
+fn scratch(name: &str) -> std::path::PathBuf {
+    let dir = harness().game_dir().with_file_name(name);
+    if dir.exists() {
+        fs::remove_dir_all(&dir).unwrap();
+    }
+    fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+/// Requirement "Process functions are off by default", scenario "Commands through open and
+/// IO": the binding has no sandbox, as with `--sandbox off`.
+#[test]
+fn open_and_io_start_no_command() {
+    let dir = scratch("pipe_commands");
+    let file = |name: &str| ruby_literal(&dir.join(name).to_string_lossy());
+    let source = format!(
+        "[open('|touch ' + {a}), IO.read('|touch ' + {b}), IO.readlines('|touch ' + {c}),
+          IO.foreach('|touch ' + {d}) {{}}, File.read('|touch ' + {e}),
+          Kernel.open('|touch ' + {f})]",
+        a = file("a"),
+        b = file("b"),
+        c = file("c"),
+        d = file("d"),
+        e = file("e"),
+        f = file("f"),
+    );
+    // One line of the error stream for each call.
+    assert_eq!(
+        eval(&with_error_stream(&source)),
+        "[[nil, nil, nil, nil, nil, nil], \
+         \"vkrgss: open is turned off, nothing was started\\n\
+         vkrgss: IO.read is turned off, nothing was started\\n\
+         vkrgss: IO.readlines is turned off, nothing was started\\n\
+         vkrgss: IO.foreach is turned off, nothing was started\\n\
+         vkrgss: IO.read is turned off, nothing was started\\n\
+         vkrgss: open is turned off, nothing was started\\n\"]"
+    );
+    for name in ["a", "b", "c", "d", "e", "f"] {
+        assert!(!dir.join(name).exists(), "{name} exists");
+    }
+}
+
+/// Requirement "Process functions are off by default", scenario "Files through open and IO".
+#[test]
+fn open_and_io_read_and_write_files() {
+    let dir = scratch("pipe_files");
+    let note = ruby_literal(&dir.join("note.txt").to_string_lossy());
+    assert_eq!(
+        eval(&format!(
+            "open({note}, 'w') {{ |file| file.write(\"one\\ntwo\\n\") }}
+             lines = []
+             IO.foreach({note}) {{ |line| lines << line }}
+             [IO.read({note}), IO.readlines({note}), File.read({note}), lines]"
+        )),
+        r#"["one\ntwo\n", ["one\n", "two\n"], "one\ntwo\n", ["one\n", "two\n"]]"#
+    );
+}
+
+/// Requirement "Process functions are off by default", scenario "Process.kill".
+#[test]
+fn process_kill_signals_nothing() {
+    assert_eq!(
+        eval(&with_error_stream(
+            "[Process.kill(0, Process.ppid), Object.new.extend(Process).send(:kill, 0, Process.ppid)]"
+        )),
+        "[[nil, nil], \
+         \"vkrgss: Process.kill is turned off, nothing was signalled\\n\
+         vkrgss: Process.kill is turned off, nothing was signalled\\n\"]"
     );
 }
 

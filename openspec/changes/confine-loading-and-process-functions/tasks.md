@@ -2,7 +2,7 @@
 
 ## 1. Process functions
 
-- [ ] 1.1 Move the stub of `Kernel#open` to `prelude_process_off.rb`; stub `IO.read`, `IO.foreach`, `IO.readlines`, `IO.binread` (where it exists) with the pipe form, and `Process.kill`; check `io.c` of both interpreters for other callers of the pipe form and cover or list them in `design.md`. Verify: the scenarios of the requirement "Process functions are off by default" as tests over Ruby 1.8.7 (`vkrgss-binding/tests`) and Ruby 1.9.2 (`vkrgss-binding-rgss3/tests/process_functions_rgss3.rs`); with process functions enabled, `open("|echo x").read` returns `"x\n"`; the existing scenarios of "Process functions of Ruby 1.9 are off by default" pass unedited.
+- [x] 1.1 Move the stub of `Kernel#open` to `prelude_process_off.rb`; stub `IO.read`, `IO.foreach`, `IO.readlines`, `IO.binread` (where it exists) with the pipe form, and `Process.kill`; check `io.c` of both interpreters for other callers of the pipe form and cover or list them in `design.md`. Verify: the scenarios of the requirement "Process functions are off by default" as tests over Ruby 1.8.7 (`vkrgss-binding/tests`) and Ruby 1.9.2 (`vkrgss-binding-rgss3/tests/process_functions_rgss3.rs`); with process functions enabled, `open("|echo x").read` returns `"x\n"`; the existing scenarios of "Process functions of Ruby 1.9 are off by default" pass unedited.
 
 ## 2. Loading code
 

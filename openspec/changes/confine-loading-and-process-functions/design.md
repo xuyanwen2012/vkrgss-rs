@@ -60,6 +60,45 @@ The kernel side of signals (change `verify-guests-and-deny-signals`); `Game.ini`
 of symbolic links in `vkrgss-vfs`, which only lets a script read a file it could read anyway,
 because reading is not restricted.
 
+## Notes of the implementation
+
+- **Callers of the pipe form** (task 1.1). Ruby 1.8.7 `io.c`: `pipe_open` is called by
+  `rb_io_s_popen` (`IO.popen`), `rb_f_backquote` (backticks) and `rb_io_open`, and
+  `rb_f_open` calls `rb_io_s_popen` itself for a name that starts with `|`; `rb_io_open` is
+  called only by `rb_io_s_foreach`, `rb_io_s_readlines` and `rb_io_s_read`. Ruby 1.9.2 `io.c`:
+  `check_pipe_command` is called only by `rb_f_open` and `rb_io_open`; `rb_io_open` only by
+  `open_key_args` (`IO.foreach`, `IO.readlines`, `IO.read`) and `rb_io_s_binread`. The
+  `open_args:` key of 1.9.2 opens through `rb_io_open_with_args`, which is `File.new` and
+  takes no command; `IO.copy_stream` opens a name with `File.new`, `ARGF` with `rb_fopen`
+  (1.8.7) or `rb_sysopen` (1.9.2), `IO#reopen` with `rb_sysopen` or `freopen`. No other
+  caller starts a program, so the stubs of the design cover every one.
+- **The name is converted once.** The stubs convert the first argument themselves and pass
+  the converted String on, so that the name checked is the name the original opens: an
+  object whose `to_str` answers a file name at the check and a command at the open would
+  otherwise pass. Ruby 1.8.7 takes the name with `to_str`; Ruby 1.9.2 takes it with `to_path`
+  before `to_str`, and its `open` gives an object that responds to `to_open` to that method
+  (`rb_f_open`, `rb_get_path_check`). `vkrgss_file_name` in `prelude_process_off.rb` has the
+  rule of 1.8.7 and `prelude_process_off_ruby19.rb` replaces it with that of 1.9.2, so
+  `File.read(object)` with `to_path` answering `"|cmd"` is refused over 1.9.2 too.
+- **`Process.kill`** is a module function in both interpreters (`rb_define_module_function`),
+  unlike `Process.fork`, which is a singleton method only, so the stub is a module function
+  too and the copy a script gets with `include Process` signals nothing either. Its line on
+  the error stream says "nothing was signalled" in place of "nothing was started".
+
 ## Follow-ups
 
-None yet.
+- **`Process.exec` over Ruby 1.8.7 is on.** Ruby 1.8.7 has `Process.exec` too (`process.c`,
+  a singleton method of `Process`), and only the prelude of Ruby 1.9 stubs it. The
+  requirement names `exec`, which the stub of `Kernel#exec` covers, and the test
+  `a_confined_guest_cannot_start_a_program` of `crates/vkrgss/tests/end_to_end.rs` uses
+  `Process.exec` of Ruby 1.8.7 on purpose to reach `execve` and see the seccomp filter
+  refuse it. Stubbing it over 1.8.7 needs another way for that test to reach `execve`
+  (outside the scope of this change); where the guest is not confined it starts a program.
+- **The originals stay reachable.** The stubs keep the originals under private aliases
+  (`vkrgss_open`, `vkrgss_read`, `vkrgss_foreach`, `vkrgss_readlines`, `vkrgss_binread`), as
+  the design asks, and a script reaches a private method with `send`:
+  `send(:vkrgss_open, "|cmd")` starts a program where the guest is not confined. Keeping
+  them out of reach would hold each original as an `UnboundMethod` in the closure of a
+  `define_method` in place of an alias (both interpreters take `|*args, &block|` there,
+  probed over Ruby 1.8.7 on 2026-10-26); the design keeps the alias, so this is left for a
+  decision.
