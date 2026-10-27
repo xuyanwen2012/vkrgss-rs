@@ -221,13 +221,21 @@ and the names of a tilemap of XP after the note on `Tilemap` of XP, with `owner`
 `Graphics.update` from a thread returns where the original hangs; `CHANGELOG.md` says both.
 The tests that check the documents (`xtask`'s `doc_links`, `former_name`) pass.
 
-### Checks of 2026-10-27 (task 5.1, left open with tasks 1.1, 1.2, 3.1 and 4.1)
+### Checks of 2026-10-27 (task 5.1)
 
 At `e172139b`: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exited 0, all steps
 passed; `cargo xtask xarch check` against a baseline of `8f028ad5` (the proposal), with the
 ten comparison games of the workspace's `xarch.toml`, printed `all identical` (84 frames, 17
 saves); `openspec validate call-rgss-from-script-threads --strict` passed. Task 3.1 has
 changed nothing yet, so these are to be repeated once it has.
+
+Repeated at `c83a3f77`, after tasks 3.1 and 4.1: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo
+xtask gate` exited 0, all steps passed; `cargo xtask xarch check` against the same baseline
+and games printed `all identical` (84 frames, 17 saves), so the names of a tilemap of XP
+moved no number that those saves hold; `openspec validate call-rgss-from-script-threads
+--strict` passed. The sandbox of the flow could not write `/run/user/1000`, so the check ran
+with `XDG_RUNTIME_DIR` set to the build's `TMPDIR`, where the guest socket goes; without it
+the two games of VX Ace stopped at "cannot create the directory".
 
 ## Follow-ups
 

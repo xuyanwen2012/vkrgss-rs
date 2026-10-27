@@ -20,4 +20,4 @@
 
 ## 5. Checks
 
-- [ ] 5.1 `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask xarch check` prints `all identical` (or, if task 3.1 changed what XP saves hold, the difference is the one the measurement predicts and is explained in design.md); `openspec validate call-rgss-from-script-threads --strict` passes.
+- [x] 5.1 `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask xarch check` prints `all identical` (or, if task 3.1 changed what XP saves hold, the difference is the one the measurement predicts and is explained in design.md); `openspec validate call-rgss-from-script-threads --strict` passes.
