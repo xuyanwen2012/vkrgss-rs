@@ -24,4 +24,4 @@
 
 ## 6. Checks
 
-- [ ] 6.1 `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate keep-the-audio-worker-sound --strict` passes.
+- [x] 6.1 `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0 and `openspec validate keep-the-audio-worker-sound --strict` passes.
