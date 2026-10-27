@@ -110,6 +110,8 @@ fn decode_with_library(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
     };
 
     let samples = decoder.decode().map_err(error)?;
+    // The decoder keeps the coefficients of a progressive file; they are not needed any more.
+    drop(decoder);
     if samples.len() != len / 4 * channels {
         return Err(ImageError::malformed(
             ImageFormat::Jpeg,

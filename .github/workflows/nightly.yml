@@ -106,9 +106,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [marshal, parse, regex, marshal192, parse192, regex192]
+        target: [marshal, parse, regex, marshal192, parse192, regex192, jpeg, bmp, rgssad]
     # The compiler of the vendored C code, named so that a new default of the runner image
-    # does not change it unnoticed.
+    # does not change it unnoticed. The targets of the file readers build libFuzzer with the
+    # C++ compiler of build-essential.
     env:
       CC: gcc-13
     steps:

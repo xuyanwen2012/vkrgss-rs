@@ -73,6 +73,8 @@ mod library_version;
 mod rtp;
 mod runtime;
 
+#[doc(hidden)]
+pub use archive::read_both_versions;
 pub use error::VfsError;
 pub use files::{DataFile, FileKind, GameFiles};
 pub use ini::{Encoding, GameIni};

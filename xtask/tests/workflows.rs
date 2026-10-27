@@ -447,7 +447,7 @@ fn the_nightly_workflow_runs_the_checks_outside_the_gate() {
     runs("fuzz", "cargo xtask fuzz ${{ matrix.target }} --seconds");
     assert!(
         job(&workflow, "fuzz")
-            .contains(&"        target: [marshal, parse, regex, marshal192, parse192, regex192]"),
+            .contains(&"        target: [marshal, parse, regex, marshal192, parse192, regex192, jpeg, bmp, rgssad]"),
         "the job `fuzz` does not run each target"
     );
     let audit = job(&workflow, "audit");

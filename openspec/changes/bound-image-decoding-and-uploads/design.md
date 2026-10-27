@@ -86,6 +86,18 @@
   beyond the stated bounds (a counting global allocator in the target) and returns a full
   image or an error. They are robustness tests of the decoders. `nightly.yml`'s `fuzz` matrix
   gains the three names; the artifact upload stays as it is.
+  Outcome: `libfuzzer-sys` 0.4 builds on 1.99.1 and runs coverage-guided with the flags of
+  `cargo fuzz` without a sanitizer, when the build names its target so that the build scripts
+  are not instrumented; so the targets are its binaries. They live in `fuzz/`, a package and
+  workspace of its own with its own lock file, because they have no `main` of Rust and need
+  an instrumented build apart from the workspace; it depends on `vkrgss-image` and
+  `vkrgss-vfs` by path. `vkrgss-vfs` gains the hidden entry point `read_both_versions`, for
+  which the table readers take any `Read + Seek`. The counting allocator is the file of the
+  memory tests of `vkrgss-image`, included by path. The bounds checked: a decoded BMP within
+  4 times its output plus 1 MiB; any decode within 4 times the output of the largest image
+  plus 1 MiB; an archive within 64 bytes for each byte of the input plus 1 MiB, which the
+  module documentation of the archive reader states. Seeds: the committed JPEG files, and
+  small computed BMP files and archives in `fuzz/seeds/`, since none were committed.
 
 ## Risks
 
@@ -95,4 +107,12 @@
 
 ## Follow-ups
 
-None yet.
+- The bound of memory is kept by the decoder that follows the original. A file it leaves to
+  `jpeg-decoder` (a layout it does not handle, or a block grid beyond the bound) is decoded
+  with that library's memory, whose sample planes, and for a progressive file whose
+  coefficients, cover the same block grid: a very thin image of thousands of pixels can take
+  more than 4 times its output there. Bounding that would put a check in front of the
+  library, which this design does not name. The fuzz target `jpeg` holds such files to the
+  bound of the largest image.
+- `fuzz/Cargo.lock` is not part of `cargo xtask audit`, which reads the lock file of the
+  workspace.

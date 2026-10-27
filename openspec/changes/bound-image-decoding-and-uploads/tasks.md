@@ -17,7 +17,7 @@
 
 ## 4. Fuzz targets of the file readers
 
-- [ ] 4.1 Targets `jpeg`, `bmp`, `rgssad` in `xtask fuzz` with seeds from the committed fixtures, `nightly.yml` matrix, `xtask/tests/workflows.rs`, the usage text and `docs/development.md`. Verify: `cargo xtask fuzz jpeg --seconds 30`, same for `bmp` and `rgssad`, end with status 0; the workflow tests pass; the unknown-target message names all nine.
+- [x] 4.1 Targets `jpeg`, `bmp`, `rgssad` in `xtask fuzz` with seeds from the committed fixtures, `nightly.yml` matrix, `xtask/tests/workflows.rs`, the usage text and `docs/development.md`. Verify: `cargo xtask fuzz jpeg --seconds 30`, same for `bmp` and `rgssad`, end with status 0; the workflow tests pass; the unknown-target message names all nine.
 
 ## 5. Documents and checks
 

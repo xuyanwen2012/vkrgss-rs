@@ -236,7 +236,7 @@ coverage instrumentation, and runs the target for 60 seconds or for the time giv
 `target/tmp/fuzz/<target>/`: the corpus that the run grows stays in `corpus/` there, for the
 next run. It needs `clang` with its sanitizer runtimes and libFuzzer (`compiler-rt` on
 Fedora) and says so when they are missing. A name that is not a target is an error that
-names the six.
+names the nine, these six and the three of the file readers below.
 
 A Ruby exception is not a finding. A sanitizer report or a crash is: it ends the command
 with a failure, the report is on the error stream and the input in `artifacts/`. Three
@@ -270,6 +270,35 @@ input, reduced, goes to `fuzz/fixed/<target>/` of `crates/vkrgss-ruby-sys`, or t
 runs it. [vendored-security.md](vendored-security.md) lists what the first runs found,
 together with the review of the security fixes published for the three vendored trees after
 their releases.
+
+**The fuzz targets of the file readers.** Three more targets feed arbitrary bytes to the
+readers of what a game ships beside its scripts: `jpeg` to the JPEG decoder (the decoder that
+follows the original, and `jpeg-decoder` where that one gives up), `bmp` to the BMP decoder,
+and `rgssad` to the reader of encrypted archives, which reads every input as an archive of
+version 1 and of version 3 and decrypts the data of every entry:
+
+```sh
+cargo xtask fuzz jpeg --seconds 300
+```
+
+They are the binaries of the package `fuzz/`, a workspace of its own, which the command
+builds with libFuzzer's coverage instrumentation through `libfuzzer-sys` on the pinned
+toolchain, without a sanitizer, into `target/fuzz/`, and runs as the targets above, under
+`target/tmp/fuzz/<target>/`. An input is at most 64 KiB. A target fails on a panic, on a
+decode that returns part of an image, and on more memory held at once than the stated bounds,
+which a counting allocator (`crates/vkrgss-image/tests/counting/mod.rs`, shared with the
+memory tests of `vkrgss-image`) measures:
+
+| Target | Seeds | Memory held at once |
+|---|---|---|
+| `jpeg` | the JPEG files of `crates/vkrgss-image/testdata/jpeg/` | 4 times the RGBA output of the largest image, plus 1 MiB |
+| `bmp` | `fuzz/seeds/bmp/` | 4 times the output of the decoded image, plus 1 MiB; on an error, as `jpeg` |
+| `rgssad` | `fuzz/seeds/rgssad/` | 64 bytes for each byte of the input, plus 1 MiB |
+
+The decoder that follows the original keeps a JPEG within 4 times its own output plus 1 MiB,
+which the tests of `vkrgss-image` check; the files it leaves to `jpeg-decoder` are held to the
+bound of the largest image alone. libFuzzer's memory limit is set to 8 GiB, above what the
+largest image needs. Building needs a C++ compiler for libFuzzer.
 
 **The dependency audit.** `cargo deny` checks every crate of `Cargo.lock` against the
 security advisory database, the licence allow-list and the allowed sources in `deny.toml`:

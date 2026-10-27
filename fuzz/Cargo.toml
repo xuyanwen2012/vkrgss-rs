@@ -1,0 +1,36 @@
+# The fuzz targets of the file readers, which `cargo xtask fuzz <jpeg|bmp|rgssad>` builds with
+# libFuzzer's coverage instrumentation and runs; see `docs/development.md`. A workspace of its
+# own, so that its instrumented build, its binaries without a `main` of Rust and
+# `libfuzzer-sys` stay out of the workspace of the program.
+[package]
+name = "vkrgss-fuzz"
+description = "Fuzz targets of the file readers of vkrgss"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+libfuzzer-sys = "0.4"
+vkrgss-image = { path = "../crates/vkrgss-image" }
+vkrgss-vfs = { path = "../crates/vkrgss-vfs" }
+
+[[bin]]
+name = "jpeg"
+path = "src/bin/jpeg.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "bmp"
+path = "src/bin/bmp.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "rgssad"
+path = "src/bin/rgssad.rs"
+test = false
+doc = false
+
+[workspace]

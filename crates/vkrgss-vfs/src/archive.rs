@@ -14,10 +14,16 @@
 //! whose offset is 0; nothing behind that word is read as table. The data of an entry lies
 //! at its offset and is XORed word by word as in version 1, starting at the key of its
 //! record.
+//!
+//! Archives are untrusted. Every length of a name and every size of data is checked against
+//! what is left of the file before anything is allocated for it, so what reading an archive
+//! holds grows with the length of the file and not with what the file declares: at most 64
+//! bytes for each byte of the file, plus 1 MiB, which the fuzz target `rgssad` checks
+//! through [`read_both_versions`].
 
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{self, BufReader, Read, Seek, SeekFrom};
+use std::io::{self, BufReader, Cursor, Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::sync::{Mutex, PoisonError};
 
@@ -78,14 +84,14 @@ impl From<io::Error> for Fault {
 }
 
 /// The entry table while it is read: a position in a file of known length, and the key.
-struct Table<'a> {
-    reader: BufReader<&'a File>,
+struct Table<R> {
+    reader: BufReader<R>,
     position: u64,
     length: u64,
     key: u32,
 }
 
-impl Table<'_> {
+impl<R: Read + Seek> Table<R> {
     fn left(&self) -> u64 {
         self.length - self.position
     }
@@ -166,13 +172,13 @@ impl Table<'_> {
     }
 }
 
-/// Reads the entry table of `file` into an [`Index`]. An entry whose name is not valid UTF-8
-/// is left out: no script path can name it.
-fn read_table(file: &File) -> Result<Index, Fault> {
+/// Reads the entry table of `file`, `length` bytes long, into an [`Index`]. An entry whose
+/// name is not valid UTF-8 is left out: no script path can name it.
+fn read_table(file: impl Read + Seek, length: u64) -> Result<Index, Fault> {
     let mut table = Table {
         reader: BufReader::new(file),
         position: 0,
-        length: file.metadata()?.len(),
+        length,
         key: INITIAL_KEY,
     };
     let mut header = [0; HEADER.len()];
@@ -198,11 +204,11 @@ fn read_table(file: &File) -> Result<Index, Fault> {
 
 /// Reads the entry table of `file` as that of RGSSAD version 3, with the rules of
 /// [`read_table`] for names. The data of an entry is found by its offset alone.
-fn read_table_three(file: &File) -> Result<Index, Fault> {
+fn read_table_three(file: impl Read + Seek, length: u64) -> Result<Index, Fault> {
     let mut table = Table {
         reader: BufReader::new(file),
         position: 0,
-        length: file.metadata()?.len(),
+        length,
         key: 0,
     };
     let mut header = [0; HEADER_THREE.len()];
@@ -287,9 +293,10 @@ impl Archive {
     /// Opens the archive at `path` and reads its entry table as that of `version`.
     pub(crate) fn open(path: PathBuf, version: Version) -> Result<Self, VfsError> {
         let table = File::open(&path).map_err(Fault::Io).and_then(|file| {
+            let length = file.metadata()?.len();
             let entries = match version {
-                Version::One => read_table(&file)?,
-                Version::Three => read_table_three(&file)?,
+                Version::One => read_table(&file, length)?,
+                Version::Three => read_table_three(&file, length)?,
             };
             Ok((entries, file))
         });
@@ -340,6 +347,36 @@ impl Archive {
         crypt(&mut data, entry.key);
         Ok(data)
     }
+}
+
+/// Reads `bytes` as an archive of version 1 and as one of version 3, as [`Archive::open`] reads
+/// a file, and decrypts the data of every entry of each: the entry point of the fuzz target
+/// `rgssad`. Returns how many entries were read; a damaged table reads none.
+///
+/// # Panics
+///
+/// If an entry of a table that was read lies outside `bytes`, which the reader rules out.
+#[doc(hidden)]
+pub fn read_both_versions(bytes: &[u8]) -> usize {
+    let length = bytes.len() as u64;
+    let tables = [
+        read_table(Cursor::new(bytes), length),
+        read_table_three(Cursor::new(bytes), length),
+    ];
+    let mut read = 0;
+    for index in tables.into_iter().flatten() {
+        for entry in index.entries.values().chain(index.stems.values()) {
+            let start = usize::try_from(entry.offset).expect("an offset inside the bytes");
+            let mut data = bytes
+                .get(start..)
+                .and_then(|rest| rest.get(..entry.size as usize))
+                .expect("the table keeps every entry inside the file")
+                .to_vec();
+            crypt(&mut data, entry.key);
+            read += 1;
+        }
+    }
+    read
 }
 
 #[cfg(test)]
@@ -525,6 +562,25 @@ pub(crate) mod tests {
         assert_eq!(find("Graphics/Titles/Bare", &["png"]).unwrap(), b"bare");
         assert!(find("Graphics/Titles/Title", &[]).is_none());
         assert!(find("Graphics/Titles", &["png"]).is_none());
+    }
+
+    #[test]
+    fn bytes_are_read_as_both_versions() {
+        let one = build(&[
+            ("Data\\Map001.rxdata", b"map"),
+            ("Graphics\\a.png", b"png!"),
+        ]);
+        // Each entry in the index of names and in that of stems.
+        assert_eq!(read_both_versions(&one), 4);
+        let three = Three::seed(7).build(&[("Data\\Scripts.rvdata2", 5, b"scripts")]);
+        assert_eq!(read_both_versions(&three), 2);
+        for end in 0..one.len() {
+            read_both_versions(&one[..end]);
+        }
+        for end in 0..three.len() {
+            read_both_versions(&three[..end]);
+        }
+        assert_eq!(read_both_versions(b""), 0);
     }
 
     #[test]
