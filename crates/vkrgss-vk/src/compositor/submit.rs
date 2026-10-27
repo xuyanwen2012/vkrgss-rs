@@ -5,7 +5,10 @@ use gpu_allocator::MemoryLocation;
 
 use std::collections::{HashMap, HashSet};
 
-use super::{FrameBuffer, FrameData, PUSH_CONSTANT_BYTES, Pending, Step, VkCompositor, query};
+use super::{
+    FrameBuffer, FrameData, PUSH_CONSTANT_BYTES, Pending, SUBMISSION_TIMEOUT, Step, VkCompositor,
+    query,
+};
 use crate::VkError;
 use crate::resources::{
     COLOR_LAYERS, COLOR_RANGE, GpuBuffer, ImageUse, make_host_readable, transition, transition_all,
@@ -201,7 +204,8 @@ impl VkCompositor {
         }
     }
 
-    /// Ends recording, submits the command buffer and blocks until the device has finished it.
+    /// Ends recording, submits the command buffer and blocks until the device has finished it,
+    /// or for [`SUBMISSION_TIMEOUT`] at most, after which the device counts as lost.
     pub(super) fn submit_and_wait(&mut self) -> Result<(), VkError> {
         // SAFETY: there are no other semaphores.
         unsafe { self.submit_with(&[], &[]) }
@@ -210,7 +214,8 @@ impl VkCompositor {
     /// Ends recording and submits the command buffer, which waits for the semaphores of
     /// `waits` and, once done, signals those of `signals` as well as the next value of the
     /// timeline; then blocks until the timeline has that value, so until the device has
-    /// finished the commands.
+    /// finished the commands. A wait that runs out after [`SUBMISSION_TIMEOUT`], like a
+    /// lost device, is [`VkError::DeviceLost`] and marks the compositor lost.
     ///
     /// # Safety
     ///
@@ -255,9 +260,26 @@ impl VkCompositor {
         let wait = vk::SemaphoreWaitInfo::default()
             .semaphores(&semaphores)
             .values(&values);
+        let timeout = u64::try_from(SUBMISSION_TIMEOUT.as_nanos()).unwrap_or(u64::MAX);
         // SAFETY: the timeline belongs to this device and the value was submitted above.
-        unsafe { device.wait_semaphores(&wait, u64::MAX) }
-            .map_err(VkError::vulkan("vkWaitSemaphores"))
+        let waited = unsafe { device.wait_semaphores(&wait, timeout) };
+        let result = match self.probe.wait_result(waited) {
+            Ok(()) => return Ok(()),
+            Err(vk::Result::TIMEOUT) => {
+                tracing::error!(
+                    "a submission has not completed after {} seconds; the device is taken as lost",
+                    SUBMISSION_TIMEOUT.as_secs()
+                );
+                vk::Result::ERROR_DEVICE_LOST
+            }
+            Err(result) => result,
+        };
+        let error = VkError::from_result("vkWaitSemaphores", result);
+        if error.is_device_lost() {
+            // The submission may still be running: nothing it uses may be touched again.
+            self.lost = Some("vkWaitSemaphores");
+        }
+        Err(error)
     }
 
     /// Copies the pixels of an image to host memory: RGBA8 in row order.
@@ -280,6 +302,10 @@ impl VkCompositor {
             MemoryLocation::GpuToCpu,
         )?;
         let result = self.copy_image_to_buffer(image, (width, height), resting, buffer.buffer);
+        if result.is_err() && self.lost.is_some() {
+            // The copy may still be running; see `execute`.
+            return result.map(|()| Vec::new());
+        }
         if result.is_err() {
             // SAFETY: the device is live; see `execute`.
             let _ = unsafe { self.gpu.device.device_wait_idle() };

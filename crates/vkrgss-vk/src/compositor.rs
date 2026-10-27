@@ -74,6 +74,12 @@ mod query {
     pub(super) const COUNT: u32 = 4;
 }
 
+/// How long a wait for a submission lasts before the device counts as lost. The heaviest frame
+/// within the work budget ([`FRAME_WORK_BUDGET`](crate::binning::FRAME_WORK_BUDGET)) took
+/// 2.6 seconds on llvmpipe on a desktop of six cores (2026-10-26), a frame of the comparison
+/// games a few milliseconds.
+const SUBMISSION_TIMEOUT: Duration = Duration::from_secs(20);
+
 /// Bytes of the push constants: logical width, logical height, tile grid width, brightness.
 const PUSH_CONSTANT_BYTES: u32 = 16;
 
@@ -101,7 +107,13 @@ pub use present::{Filter, Mix, OverlayImage, letterbox};
 /// The Vulkan compositor.
 ///
 /// Rendering is synchronous: every call submits its work and waits for it, so no Vulkan object
-/// is ever in use by the device when a method returns.
+/// is ever in use by the device when a method returns. A wait is bounded: a submission that has
+/// not completed within 20 seconds counts as a lost device, as does any call that
+/// reports `VK_ERROR_DEVICE_LOST`. The method returns [`VkError::DeviceLost`] then, and every
+/// later method that would use the device returns it again without using the device. Dropping
+/// a compositor whose device is lost leaks the device and what was made from it.
+///
+/// [`VkError::DeviceLost`]: crate::VkError::DeviceLost
 pub struct VkCompositor {
     /// Which slot holds which bitmap. The images below follow it change by change.
     table: BitmapTable,
@@ -165,9 +177,13 @@ pub struct VkCompositor {
     timeline: vk::Semaphore,
     /// The value the last submission signals on `timeline`, 0 before the first.
     submissions: u64,
+    /// The call that found the device lost, once one has. From then on nothing of the device
+    /// is used, destroyed or waited for: a submission whose wait ran out may still be running.
+    lost: Option<&'static str>,
     // Last, so that the device and the instance outlive everything above. `drop` destroys the
-    // objects created from the device before this field is dropped.
-    gpu: Gpu,
+    // objects created from the device and then this, or leaks all of it when the device is
+    // lost.
+    gpu: ManuallyDrop<Gpu>,
 }
 
 /// The GPU work that the deltas of one packet have queued. It is carried out even when a later

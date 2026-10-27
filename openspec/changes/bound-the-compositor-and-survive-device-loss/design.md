@@ -79,6 +79,28 @@
 Re-creating the device after a loss; asynchronous submission; bounding the presentation
 engine's own waits beyond the existing bounded acquire.
 
+## As built
+
+- **Work budget.** The largest tile-list entry count of the ten games of `cargo xtask xarch`,
+  measured on 2026-10-26 through a temporary log in `prepare_frame` over a run of
+  `xarch baseline` on llvmpipe, is 39252 (a frame of 640 by 480 with 41 ops). The budget
+  `FRAME_WORK_BUDGET` in `binning.rs` is 2^22 = 4194304 entries, 107 times that, and keeps
+  the index list at 16 MiB. A frame over it fails with `Limit::FrameWork`; `bin` is given the
+  smaller of the budget and the entries the storage buffer range holds.
+- **Bounded waits.** Every wait for a submission goes through `submit_with`, which waits on
+  the timeline for `SUBMISSION_TIMEOUT`, 20 seconds. The heaviest frames at the budget,
+  measured on llvmpipe on this machine with a temporary test, took 0.43 s (full-screen
+  clears), 1.2 to 1.5 s (full-screen quads with tone, colour and additive blending, at 640 by
+  480 and at 4096 by 4096) and up to 2.6 s (tilemap layers of the reference scenes), so the
+  timeout is about eight times the slowest. A wait that runs out is `DeviceLost` with the call
+  `vkWaitSemaphores`. The compositor records the loss at once (`lost`), and every failure
+  path that would destroy what a submission used (`execute`, `read_image`,
+  `discard_image`, `discard_buffer`, `submit_or_idle`, the undrawn swapchain image) leaves it
+  alone instead and does not idle the device. A test injects the result of the wait through
+  the probe after the real wait has returned, so no device is lost.
+- **Drop.** A lost compositor leaks everything, the device and the instance with it: the
+  device is now a `ManuallyDrop<Gpu>` that `drop` drops last only when the device is not lost.
+
 ## Follow-ups
 
 None yet.

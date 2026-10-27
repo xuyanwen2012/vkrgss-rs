@@ -76,10 +76,7 @@ impl GpuBuffer {
             Ok(()) => Ok(buffer),
             Err(result) => {
                 buffer.destroy(device, allocator);
-                Err(VkError::Vulkan {
-                    call: "vkBindBufferMemory",
-                    result,
-                })
+                Err(VkError::from_result("vkBindBufferMemory", result))
             }
         }
     }
@@ -195,10 +192,7 @@ impl GpuImage {
         };
         if let Err(result) = bound {
             image.destroy(device, allocator);
-            return Err(VkError::Vulkan {
-                call: "vkBindImageMemory",
-                result,
-            });
+            return Err(VkError::from_result("vkBindImageMemory", result));
         }
         let view_info = vk::ImageViewCreateInfo::default()
             .image(image.image)
@@ -213,10 +207,7 @@ impl GpuImage {
             }
             Err(result) => {
                 image.destroy(device, allocator);
-                Err(VkError::Vulkan {
-                    call: "vkCreateImageView",
-                    result,
-                })
+                Err(VkError::from_result("vkCreateImageView", result))
             }
         }
     }

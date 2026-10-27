@@ -181,10 +181,8 @@ impl Overlay {
             gpu.device
                 .create_graphics_pipelines(vk::PipelineCache::null(), &pipeline_info, None)
         };
-        let pipeline = pipelines.map_err(|(_, result)| VkError::Vulkan {
-            call: "vkCreateGraphicsPipelines",
-            result,
-        })?[0];
+        let pipeline = pipelines
+            .map_err(|(_, result)| VkError::from_result("vkCreateGraphicsPipelines", result))?[0];
         gpu.name_object(pipeline, &format!("overlay pipeline {format:?}"));
         self.pipelines.push(FormatPipeline { format, pipeline });
         Ok(pipeline)
@@ -323,7 +321,7 @@ impl VkCompositor {
             }
             Err(error) => {
                 // The device is idle after a failed submission.
-                image.destroy(&self.gpu.device, &mut self.allocator);
+                self.discard_image(image);
                 Err(error)
             }
         }
@@ -385,7 +383,7 @@ impl VkCompositor {
             compositor.submit_and_wait()
         });
         // Waited for, or the device was idled after a failure.
-        staging.destroy(&self.gpu.device, &mut self.allocator);
+        self.discard_buffer(staging);
         copied
     }
 }

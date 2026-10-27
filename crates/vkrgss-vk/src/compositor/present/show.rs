@@ -110,10 +110,7 @@ impl VkCompositor {
                     continue;
                 }
                 Err(result) => {
-                    return Err(VkError::Vulkan {
-                        call: "vkAcquireNextImageKHR",
-                        result,
-                    });
+                    return Err(VkError::from_result("vkAcquireNextImageKHR", result));
                 }
             };
             // Only now that there is an image to show the frame in: a present that shows
@@ -195,8 +192,9 @@ impl VkCompositor {
             if let Err(error) = drawn {
                 // The image is acquired and the two semaphores are in an unknown state. With
                 // swapchain maintenance the image is given back and the semaphores are
-                // replaced; otherwise a new swapchain brings new ones.
-                if !self.release_undrawn(index) {
+                // replaced; otherwise a new swapchain brings new ones. On a lost device
+                // nothing is touched.
+                if self.lost.is_some() || !self.release_undrawn(index) {
                     self.mark_swapchain_stale();
                 }
                 return Err(error);
@@ -268,10 +266,7 @@ impl VkCompositor {
                 Err(result) if self.pacer.present_failed(plan.as_ref(), result) => attempts += 1,
                 Err(result) => {
                     self.mark_swapchain_stale();
-                    return Err(VkError::Vulkan {
-                        call: "vkQueuePresentKHR",
-                        result,
-                    });
+                    return Err(VkError::from_result("vkQueuePresentKHR", result));
                 }
             }
         }

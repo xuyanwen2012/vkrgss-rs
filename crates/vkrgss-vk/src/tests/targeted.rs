@@ -2,6 +2,8 @@
 
 use std::process::Command;
 
+use ash::vk;
+
 use vkrgss_compose_ref as reference;
 use vkrgss_compose_ref::fixtures::{self, bitmap, sprite};
 use vkrgss_proto::{
@@ -11,6 +13,8 @@ use vkrgss_proto::{
 
 use super::differential::{Pair, assert_stream_matches, frame_difference};
 use super::harness::{TestCompositor, require_isolation, test_device};
+use crate::binning::FRAME_WORK_BUDGET;
+use crate::records::MAX_LOGICAL_DIMENSION;
 use crate::{
     BitmapError, DeviceChoice, DeviceError, Limit, SlotState, VkCompositor, VkError,
     available_devices,
@@ -557,6 +561,77 @@ fn bitmap_slot_beyond_the_table_is_a_limit_error_and_recoverable() {
         },
         &later,
     );
+}
+
+/// Scenario "Many full-screen ops at the largest size" of "The work of a frame is bounded".
+#[test]
+fn frame_over_the_work_budget_is_a_limit_error() {
+    let largest = Size::new(MAX_LOGICAL_DIMENSION, MAX_LOGICAL_DIMENSION);
+    let tiles = u64::from(MAX_LOGICAL_DIMENSION.div_ceil(16)).pow(2);
+    let count = FRAME_WORK_BUDGET / tiles + 1;
+    let over: Vec<Op> = (0..count)
+        .map(|n| clear(Rect::from_size(largest), [n as u8, 0, 0, 255]))
+        .collect();
+    let size = Size::new(40, 30);
+    let small = |red| {
+        packet(
+            size,
+            vec![],
+            vec![clear(Rect::from_size(size), [red, 2, 3, 255])],
+        )
+    };
+    let mut reference = reference::Compositor::new();
+    let mut compositor = TestCompositor::new();
+    compositor.render(&small(1)).unwrap();
+    let created = compositor.frame_buffers_created();
+
+    assert_eq!(
+        compositor.render(&packet(largest, vec![], over)),
+        Err(VkError::Limit {
+            limit: Limit::FrameWork,
+            requested: count * tiles,
+            maximum: FRAME_WORK_BUDGET,
+        })
+    );
+    assert_eq!(
+        compositor.frame_buffers_created(),
+        created,
+        "no buffer grew"
+    );
+
+    let wanted = reference.render(&small(200)).unwrap();
+    compositor.render(&small(200)).unwrap();
+    let rendered = compositor.read_frame().unwrap().unwrap();
+    assert_eq!(frame_difference(&wanted, &rendered), None);
+}
+
+// Requirement: A lost device is told apart
+
+/// A frame of `size` that clears the screen to a colour of `red`.
+fn plain_frame(size: Size, red: u8) -> FramePacket {
+    packet(
+        size,
+        vec![],
+        vec![clear(Rect::from_size(size), [red, 2, 3, 255])],
+    )
+}
+
+/// Scenario "Wait that runs out". The device is not lost: the wait does wait, and only its
+/// result is replaced.
+#[test]
+fn wait_that_runs_out_is_a_lost_device() {
+    let size = Size::new(40, 30);
+    let mut compositor = TestCompositor::new();
+    compositor.render(&plain_frame(size, 1)).unwrap();
+    compositor.inject_wait_result(vk::Result::TIMEOUT);
+    let error = compositor.render(&plain_frame(size, 2)).unwrap_err();
+    assert_eq!(
+        error,
+        VkError::DeviceLost {
+            call: "vkWaitSemaphores"
+        }
+    );
+    assert!(error.is_device_lost());
 }
 
 // Requirement: Device selection, on the real devices of this machine

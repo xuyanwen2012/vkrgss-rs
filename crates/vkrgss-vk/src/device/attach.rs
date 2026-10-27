@@ -93,10 +93,10 @@ impl Gpu {
                 device: self.info.name.clone(),
                 reason: "its queue cannot present to the new surface of the window".to_owned(),
             })),
-            Err(result) => Some(VkError::Vulkan {
-                call: "vkGetPhysicalDeviceSurfaceSupportKHR",
+            Err(result) => Some(VkError::from_result(
+                "vkGetPhysicalDeviceSurfaceSupportKHR",
                 result,
-            }),
+            )),
         };
         if let Some(error) = refusal {
             // SAFETY: the surface was just created from this instance and nothing uses it.

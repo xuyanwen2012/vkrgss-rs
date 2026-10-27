@@ -2,8 +2,8 @@
 
 ## 1. Work budget and bounded waits
 
-- [ ] 1.1 Measure the largest tile-list entry count of the regression games and set `Limit::FrameWork`; record both numbers in design.md under "As built". Verify: `frame_over_the_work_budget_is_a_limit_error` and the existing limit tests pass.
-- [ ] 1.2 Bound every wait for a submission; a wait that runs out is a lost device. Verify: `wait_that_runs_out_is_a_lost_device`.
+- [x] 1.1 Measure the largest tile-list entry count of the regression games and set `Limit::FrameWork`; record both numbers in design.md under "As built". Verify: `frame_over_the_work_budget_is_a_limit_error` and the existing limit tests pass.
+- [x] 1.2 Bound every wait for a submission; a wait that runs out is a lost device. Verify: `wait_that_runs_out_is_a_lost_device`.
 
 ## 2. Lost device
 

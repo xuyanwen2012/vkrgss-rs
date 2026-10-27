@@ -93,6 +93,23 @@ impl VkCompositor {
         Ok(buffer)
     }
 
+    /// Destroys an image after a submission that used it failed, which was waited for or the
+    /// device idled after; or leaks it when the device is lost, as the submission may still be
+    /// running.
+    pub(super) fn discard_image(&mut self, image: GpuImage) {
+        if self.lost.is_none() {
+            image.destroy(&self.gpu.device, &mut self.allocator);
+        }
+    }
+
+    /// Destroys a buffer after a submission that used it failed, as
+    /// [`discard_image`](VkCompositor::discard_image) does an image.
+    pub(super) fn discard_buffer(&mut self, buffer: GpuBuffer) {
+        if self.lost.is_none() {
+            buffer.destroy(&self.gpu.device, &mut self.allocator);
+        }
+    }
+
     /// Points a storage buffer binding at the whole of `buffer`.
     fn write_buffer_descriptor(&self, binding: u32, buffer: vk::Buffer) {
         let info = [vk::DescriptorBufferInfo::default()

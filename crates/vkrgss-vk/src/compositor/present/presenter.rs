@@ -212,10 +212,8 @@ impl Presenter {
         let pipelines = unsafe {
             device.create_graphics_pipelines(vk::PipelineCache::null(), &pipeline_info, None)
         };
-        let pipeline = pipelines.map_err(|(_, result)| VkError::Vulkan {
-            call: "vkCreateGraphicsPipelines",
-            result,
-        })?[0];
+        let pipeline = pipelines
+            .map_err(|(_, result)| VkError::from_result("vkCreateGraphicsPipelines", result))?[0];
         gpu.name_object(pipeline, &format!("present pipeline {format:?}"));
         self.pipelines.push(FormatPipeline { format, pipeline });
         Ok(pipeline)
@@ -416,13 +414,15 @@ pub(super) unsafe fn record_pass(
 
 impl VkCompositor {
     /// Runs `work`, which records and submits commands, and idles the device if it fails, so
-    /// that whatever was submitted is finished before the caller releases anything.
+    /// that whatever was submitted is finished before the caller releases anything; except
+    /// when the device is lost, when the caller releases nothing.
     pub(super) fn submit_or_idle(
         &mut self,
         work: impl FnOnce(&mut VkCompositor) -> Result<(), VkError>,
     ) -> Result<(), VkError> {
         let result = work(self);
-        if result.is_err() {
+        // A submission whose wait ran out may never end.
+        if result.is_err() && self.lost.is_none() {
             // SAFETY: the device is live. If this fails too the device is lost.
             let _ = unsafe { self.gpu.device.device_wait_idle() };
         }

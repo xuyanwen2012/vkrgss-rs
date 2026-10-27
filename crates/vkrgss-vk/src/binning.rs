@@ -9,6 +9,13 @@ use vkrgss_proto::Size;
 use crate::device::TILE_SIZE;
 use crate::records::ClipRect;
 
+/// The most tile-list entries a frame may have: the work budget of a frame, which is refused
+/// as a whole above it ([`Limit::FrameWork`](crate::Limit::FrameWork)). Each entry is one op
+/// evaluated over the pixels of one tile. The ten comparison games of `cargo xtask xarch`
+/// need at most 39252 (measured on 2026-10-26); this is about a hundred times that, and keeps
+/// the index list at 16 MiB.
+pub(crate) const FRAME_WORK_BUDGET: u64 = 1 << 22;
+
 /// The tile lists of one frame, in the form the shader reads.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TileLists {

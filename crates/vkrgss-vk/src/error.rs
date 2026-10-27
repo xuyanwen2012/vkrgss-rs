@@ -91,6 +91,9 @@ pub enum Limit {
     FrameDataBytes,
     /// Bytes of all tables together, which share one buffer.
     TableBytes,
+    /// Tile-list entries of one frame: the sum over its ops of the tiles each covers, a budget
+    /// of this backend that bounds the work of a frame.
+    FrameWork,
 }
 
 impl std::fmt::Display for Limit {
@@ -101,6 +104,7 @@ impl std::fmt::Display for Limit {
             Limit::FrameDimension => "frame width or height",
             Limit::FrameDataBytes => "per-frame data size in bytes",
             Limit::TableBytes => "size of all tables in bytes",
+            Limit::FrameWork => "number of tile-list entries of a frame",
         })
     }
 }
@@ -139,6 +143,12 @@ pub enum VkError {
     },
     #[error(transparent)]
     Device(#[from] DeviceError),
+    /// The device is lost: a Vulkan call reported `VK_ERROR_DEVICE_LOST`, or the wait for a
+    /// submission ran out (`call` is then `vkWaitSemaphores`). The compositor returns this
+    /// error for every later call that would use the device; see
+    /// [`is_device_lost`](VkError::is_device_lost).
+    #[error("the Vulkan device was lost (found by `{call}`)")]
+    DeviceLost { call: &'static str },
     #[error("Vulkan call `{call}` failed: {result}")]
     Vulkan {
         call: &'static str,
@@ -155,9 +165,24 @@ pub enum VkError {
 }
 
 impl VkError {
+    /// Whether the device is lost, after which the compositor that returned this error uses
+    /// it no more. Re-creating the device is left to the owner.
+    pub fn is_device_lost(&self) -> bool {
+        matches!(self, VkError::DeviceLost { .. })
+    }
+
+    /// The error of a Vulkan call that returned `result`: [`VkError::DeviceLost`] for
+    /// `VK_ERROR_DEVICE_LOST`, else [`VkError::Vulkan`].
+    pub(crate) fn from_result(call: &'static str, result: vk::Result) -> VkError {
+        match result {
+            vk::Result::ERROR_DEVICE_LOST => VkError::DeviceLost { call },
+            result => VkError::Vulkan { call, result },
+        }
+    }
+
     /// Adapter for `map_err` on the result of a Vulkan call.
     pub(crate) fn vulkan(call: &'static str) -> impl FnOnce(vk::Result) -> VkError {
-        move |result| VkError::Vulkan { call, result }
+        move |result| VkError::from_result(call, result)
     }
 }
 

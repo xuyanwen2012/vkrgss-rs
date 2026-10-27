@@ -115,7 +115,8 @@ impl VkCompositor {
             commands: vk::CommandBuffer::null(),
             timeline: vk::Semaphore::null(),
             submissions: 0,
-            gpu,
+            lost: None,
+            gpu: ManuallyDrop::new(gpu),
         };
         compositor.init()?;
         Ok(compositor)
@@ -221,10 +222,8 @@ impl VkCompositor {
             device.destroy_shader_module(module, None);
             pipelines
         };
-        self.pipeline = pipelines.map_err(|(_, result)| VkError::Vulkan {
-            call: "vkCreateComputePipelines",
-            result,
-        })?[0];
+        self.pipeline = pipelines
+            .map_err(|(_, result)| VkError::from_result("vkCreateComputePipelines", result))?[0];
         self.gpu.name_object(self.pipeline, "compose pipeline");
 
         let pool_sizes = [
@@ -262,10 +261,19 @@ impl VkCompositor {
 
 impl Drop for VkCompositor {
     fn drop(&mut self) {
+        if let Some(call) = self.lost {
+            // A submission may still be running, and idling the device could wait for ever.
+            // Everything is leaked; the process is about to end.
+            tracing::warn!(
+                "the Vulkan device was lost (found by `{call}`); its objects are leaked"
+            );
+            return;
+        }
         let device = &self.gpu.device;
         // SAFETY: every submission was waited for, so nothing below is in use; each handle was
         // created from this device or is null, and none is used again. The allocator is dropped
-        // exactly once, here, after its allocations were freed and while the device is alive.
+        // exactly once, here, after its allocations were freed and while the device is alive;
+        // the device is dropped exactly once, last.
         unsafe {
             let _ = device.device_wait_idle();
             if let Some(presenter) = self.presenter.take() {
@@ -293,6 +301,7 @@ impl Drop for VkCompositor {
             // Frees the command buffer with it.
             device.destroy_command_pool(self.pool, None);
             ManuallyDrop::drop(&mut self.allocator);
+            ManuallyDrop::drop(&mut self.gpu);
         }
     }
 }

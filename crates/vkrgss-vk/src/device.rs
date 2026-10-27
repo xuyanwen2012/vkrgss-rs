@@ -707,10 +707,7 @@ impl Gpu {
             Err(result) => {
                 // Explicitly before the instance, which goes when this function returns.
                 drop(surface);
-                return Err(VkError::Vulkan {
-                    call: "vkCreateDevice",
-                    result,
-                });
+                return Err(VkError::from_result("vkCreateDevice", result));
             }
         };
         // SAFETY: the device was created with one queue in this family.

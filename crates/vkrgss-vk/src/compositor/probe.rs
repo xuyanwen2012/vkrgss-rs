@@ -3,6 +3,9 @@
 //! [`Probe`] exists in every build. Outside the tests it has no field and its methods do
 //! nothing, so the compositor calls them without an attribute.
 
+use ash::prelude::VkResult;
+#[cfg(test)]
+use ash::vk;
 #[cfg(test)]
 use vkrgss_proto::BitmapDelta;
 
@@ -20,6 +23,9 @@ pub(super) struct Probe {
     /// The number of frame buffers created so far, first ones and larger ones alike.
     #[cfg(test)]
     frame_buffers_created: u32,
+    /// Failure injection: what the next wait for a submission returns once it has waited.
+    #[cfg(test)]
+    wait_result: Option<vk::Result>,
 }
 
 #[cfg(test)]
@@ -44,6 +50,15 @@ impl Probe {
     pub(super) fn frame_buffer_created(&mut self) {
         self.frame_buffers_created += 1;
     }
+
+    /// What a wait for a submission that returned `waited` returns: the injected result, once,
+    /// or `waited`.
+    pub(super) fn wait_result(&mut self, waited: VkResult<()>) -> VkResult<()> {
+        match self.wait_result.take() {
+            Some(result) => Err(result),
+            None => waited,
+        }
+    }
 }
 
 #[cfg(not(test))]
@@ -55,6 +70,11 @@ impl Probe {
 
     #[inline(always)]
     pub(super) fn frame_buffer_created(&mut self) {}
+
+    #[inline(always)]
+    pub(super) fn wait_result(&mut self, waited: VkResult<()>) -> VkResult<()> {
+        waited
+    }
 }
 
 #[cfg(test)]
@@ -84,6 +104,18 @@ impl VkCompositor {
     /// The number of frame buffers created so far.
     pub(crate) fn frame_buffers_created(&self) -> u32 {
         self.probe.frame_buffers_created
+    }
+
+    /// Makes the next wait for a submission return `result` once it has waited: the device
+    /// stays as it is, and only the compositor sees the result, as `TIMEOUT` for a wait that
+    /// ran out or `ERROR_DEVICE_LOST`.
+    pub(crate) fn inject_wait_result(&mut self, result: vk::Result) {
+        self.probe.wait_result = Some(result);
+    }
+
+    /// The number of submissions so far.
+    pub(crate) fn submissions(&self) -> u64 {
+        self.submissions
     }
 
     /// Applies bitmap deltas in order and carries out their GPU work, without drawing.

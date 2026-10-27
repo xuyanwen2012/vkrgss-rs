@@ -118,7 +118,7 @@ impl VkCompositor {
                 Ok(image)
             }
             Err(error) => {
-                buffer.destroy(&self.gpu.device, &mut self.allocator);
+                self.discard_image(buffer);
                 Err(error)
             }
         }
@@ -276,7 +276,7 @@ impl VkCompositor {
                 Ok(())
             }
             Err(error) => {
-                fresh.destroy(&self.gpu.device, &mut self.allocator);
+                self.discard_image(fresh);
                 Err(error)
             }
         }
@@ -319,7 +319,7 @@ impl VkCompositor {
                 Ok(())
             }
             Err(error) => {
-                no_mask.destroy(&self.gpu.device, &mut self.allocator);
+                self.discard_image(no_mask);
                 Err(error)
             }
         }
@@ -344,7 +344,7 @@ impl VkCompositor {
                 Ok(())
             }
             Err(error) => {
-                held.destroy(&self.gpu.device, &mut self.allocator);
+                self.discard_image(held);
                 Err(error)
             }
         }

@@ -117,7 +117,7 @@ impl VkCompositor {
         let result = drawn.and_then(|()| then(self, image.image));
         // Every submission that used the image was waited for, or the device was idled after
         // a failure.
-        image.destroy(&self.gpu.device, &mut self.allocator);
+        self.discard_image(image);
         result
     }
 }

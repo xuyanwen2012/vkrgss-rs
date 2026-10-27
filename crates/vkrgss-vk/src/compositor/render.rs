@@ -4,7 +4,7 @@ use ash::vk;
 use vkrgss_proto::{BitmapDelta, FramePacket, GuestToHost, Rect, Size, TableDelta};
 
 use super::{Frame, FrameData, Pending, Step, VkCompositor};
-use crate::binning::bin;
+use crate::binning::{FRAME_WORK_BUDGET, bin};
 use crate::bitmaps::Change;
 use crate::records::{ClipRect, RECORD_WORDS, TILEMAP_WORDS, check_logical_size, encode_frame};
 use crate::resources::GpuImage;
@@ -154,7 +154,16 @@ impl VkCompositor {
         }
         let started = self.stage_start();
         let clips: Vec<ClipRect> = records.ops.iter().map(|record| record.clip).collect();
-        let tiles = bin(size, &clips, max_bytes / 4).map_err(|entries| data_limit(entries * 4))?;
+        // The budget comes first: a frame over it is refused before its lists are made.
+        let max_entries = (max_bytes / 4).min(FRAME_WORK_BUDGET);
+        let tiles = bin(size, &clips, max_entries).map_err(|entries| match entries {
+            entries if entries > FRAME_WORK_BUDGET => VkError::Limit {
+                limit: Limit::FrameWork,
+                requested: entries,
+                maximum: FRAME_WORK_BUDGET,
+            },
+            entries => data_limit(entries * 4),
+        })?;
         let bin = started.map(|started| started.elapsed());
         Ok(FrameData {
             size,
@@ -242,6 +251,11 @@ impl VkCompositor {
     ) -> Result<(), VkError> {
         self.write_bitmap_descriptors(&pending.touched);
         let result = self.submit(&pending, frame);
+        if self.lost.is_some() {
+            // The submission may still be running: the retired images are leaked, and the
+            // device is not idled, which might never end.
+            return result;
+        }
         if result.is_err() {
             // SAFETY: the device is live. Whatever was submitted has to finish before the
             // objects below are destroyed and the frame buffers are written again; if this
