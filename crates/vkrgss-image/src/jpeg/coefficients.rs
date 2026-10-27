@@ -2,10 +2,65 @@
 //! blocks, in the order of operations of IJG libjpeg 6b (`jdmarker.c`, `jdhuff.c`,
 //! `jdphuff.c`).
 //!
-//! Every function returns `None` where this decoder gives up: a layout it does not handle, or
+//! [`read`] returns a [`GiveUp`] where this decoder gives up: a layout it does not handle, or
 //! data that does not decode the plain way. It checks nothing beyond what decoding needs.
+//!
+//! Nothing that grows with the image is allocated from the frame header: the coefficients of a
+//! component are allocated when the first scan that codes it has been read, and only for a
+//! frame whose block grid fits [`MEMORY_MULTIPLE`].
+
+use std::fmt;
 
 use crate::ImageFormat;
+
+/// The decode of a JPEG holds at most this many times its RGBA output at once, plus
+/// [`MEMORY_ALLOWANCE`].
+pub(crate) const MEMORY_MULTIPLE: usize = 4;
+
+/// What a decode may hold beyond [`MEMORY_MULTIPLE`] times its output: tables, and the block
+/// grid of a small image, which covers whole MCUs.
+pub(crate) const MEMORY_ALLOWANCE: usize = 1 << 20;
+
+/// Why the decoder that follows the original gave up on a file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum GiveUp {
+    /// The frame is lossless, hierarchical or arithmetic-coded, or of a precision other than
+    /// 8 bits.
+    Coding,
+    /// The frame has a number of components or a chroma subsampling not handled here.
+    Layout,
+    /// Three components that libjpeg would not take for Y, Cb and Cr.
+    Colour,
+    /// The frame declares no pixels or more than a bitmap may have.
+    Size,
+    /// The coefficients and samples of the block grid with the output would pass
+    /// [`MEMORY_MULTIPLE`] times the output.
+    Memory,
+    /// A marker, a segment or a table is truncated, missing, repeated or out of place.
+    Structure,
+    /// The entropy-coded data does not decode the plain way.
+    Data,
+    /// A component of the frame is coded by no scan.
+    Uncoded,
+    /// The file has a frame header but no scan. Every decoder fails on it.
+    NoScan,
+}
+
+impl fmt::Display for GiveUp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            GiveUp::Coding => "the frame is not baseline or progressive Huffman coding of 8 bits",
+            GiveUp::Layout => "the components or their sampling are not handled",
+            GiveUp::Colour => "three components that are not Y, Cb and Cr",
+            GiveUp::Size => "the frame declares no pixels or too many",
+            GiveUp::Memory => "the block grid would pass the bound of memory",
+            GiveUp::Structure => "a marker, segment or table is truncated, missing or out of place",
+            GiveUp::Data => "the entropy-coded data does not decode",
+            GiveUp::Uncoded => "a component is coded by no scan",
+            GiveUp::NoScan => "the file has no scan",
+        })
+    }
+}
 
 /// The position in a block, in row order, of each coefficient in the order of the file.
 const ZIGZAG: [u8; 64] = [
@@ -25,7 +80,7 @@ pub(super) struct Component {
     /// The quantisation table, in row order.
     pub(super) quant: [u16; 64],
     /// 64 coefficients per block, in row order, not dequantised. They are 16 bits wide as in
-    /// libjpeg.
+    /// libjpeg. Empty until a scan codes the component.
     pub(super) coefficients: Vec<i16>,
 }
 
@@ -396,7 +451,7 @@ fn decode_scan(
     components: &mut [Pending],
     (mcus_wide, mcus_high): (usize, usize),
     restart_interval: usize,
-) -> Option<()> {
+) -> Result<(), GiveUp> {
     let interleaved = scan.components.len() > 1;
     let (wide, high) = if interleaved {
         (mcus_wide, mcus_high)
@@ -410,8 +465,8 @@ fn decode_scan(
     for mcu in 0..wide * high {
         if restart_interval != 0 && mcu != 0 && mcu % restart_interval == 0 {
             stream.end_bits();
-            if stream.marker()? != 0xD0 + (restarts & 7) {
-                return None;
+            if stream.marker() != Some(0xD0 + (restarts & 7)) {
+                return Err(GiveUp::Data);
             }
             restarts = restarts.wrapping_add(1);
             run = Run::default();
@@ -428,32 +483,50 @@ fn decode_scan(
                 for x in column * h..(column + 1) * h {
                     let start = (y * component.blocks_wide + x) * 64;
                     let coefficients = &mut component.coefficients[start..start + 64];
-                    block(stream, scan, (slot, dc, ac), &mut run, coefficients)?;
+                    block(stream, scan, (slot, dc, ac), &mut run, coefficients)
+                        .ok_or(GiveUp::Data)?;
                 }
             }
         }
     }
     stream.end_bits();
-    Some(())
+    Ok(())
 }
 
-fn read_frame(segment: &[u8], coding: Coding) -> Option<Header> {
-    let (&[precision, h1, h0, w1, w0, count], rest) = segment.split_first_chunk()?;
+/// The bytes a decode holds at once at most for a frame of these components: the coefficients
+/// and the samples of every block grid, and the RGBA output.
+fn held(components: &[Pending], (width, height): (usize, usize)) -> usize {
+    let grids: usize = components
+        .iter()
+        .map(|pending| pending.component.blocks_wide * pending.component.blocks_high * 64)
+        .sum();
+    // Two bytes a coefficient, one a sample.
+    grids * 3 + width * height * 4
+}
+
+fn read_frame(segment: &[u8], coding: Coding) -> Result<Header, GiveUp> {
+    let (&[precision, h1, h0, w1, w0, count], rest) =
+        segment.split_first_chunk().ok_or(GiveUp::Structure)?;
     let (width, height) = (
         u32::from(u16::from_be_bytes([w1, w0])),
         u32::from(u16::from_be_bytes([h1, h0])),
     );
-    if precision != 8 || !matches!(count, 1 | 3) {
-        return None;
+    if precision != 8 {
+        return Err(GiveUp::Coding);
     }
-    // The pixel limit also bounds what the coefficients need.
-    crate::rgba_len(ImageFormat::Jpeg, width, height).ok()?;
+    if !matches!(count, 1 | 3) {
+        return Err(GiveUp::Layout);
+    }
+    crate::rgba_len(ImageFormat::Jpeg, width, height).map_err(|_| GiveUp::Size)?;
     let mut factors = Vec::new();
-    for entry in rest.get(..usize::from(count) * 3)?.as_chunks::<3>().0 {
+    let entries = rest
+        .get(..usize::from(count) * 3)
+        .ok_or(GiveUp::Structure)?;
+    for entry in entries.as_chunks::<3>().0 {
         let &[id, sampling, table] = entry;
         let (h, v) = (usize::from(sampling >> 4), usize::from(sampling & 15));
         if !(1..=4).contains(&h) || !(1..=4).contains(&v) {
-            return None;
+            return Err(GiveUp::Layout);
         }
         factors.push((id, h, v, usize::from(table)));
     }
@@ -464,7 +537,7 @@ fn read_frame(segment: &[u8], coding: Coding) -> Option<Header> {
         && (!matches!((h, v), (1, 1) | (2, 1) | (2, 2))
             || chroma.iter().any(|&(_, h, v, _)| (h, v) != (1, 1)))
     {
-        return None;
+        return Err(GiveUp::Layout);
     }
     let (h_max, v_max) = (factors[0].1, factors[0].2);
     let (width_samples, height_samples) = (width as usize, height as usize);
@@ -472,7 +545,7 @@ fn read_frame(segment: &[u8], coding: Coding) -> Option<Header> {
         width_samples.div_ceil(8 * h_max),
         height_samples.div_ceil(8 * v_max),
     );
-    let components = factors
+    let components: Vec<Pending> = factors
         .into_iter()
         .map(|(id, h, v, table)| {
             let (blocks_wide, blocks_high) = (mcus.0 * h, mcus.1 * v);
@@ -488,12 +561,18 @@ fn read_frame(segment: &[u8], coding: Coding) -> Option<Header> {
                     blocks_wide,
                     blocks_high,
                     quant: [0; 64],
-                    coefficients: vec![0; blocks_wide * blocks_high * 64],
+                    coefficients: Vec::new(),
                 },
             }
         })
         .collect();
-    Some(Header {
+    let output = width_samples * height_samples * 4;
+    if held(&components, (width_samples, height_samples))
+        > MEMORY_MULTIPLE * output + MEMORY_ALLOWANCE
+    {
+        return Err(GiveUp::Memory);
+    }
+    Ok(Header {
         coding,
         width,
         height,
@@ -545,16 +624,21 @@ fn read_scan<'a>(
     components: &[Pending],
     dc: &'a [Option<Huffman>; 4],
     ac: &'a [Option<Huffman>; 4],
-) -> Option<Scan<'a>> {
-    let (&count, rest) = segment.split_first()?;
-    let (entries, rest) = rest.split_at_checked(usize::from(count) * 2)?;
-    let &[first, last, bits] = rest.first_chunk()?;
+) -> Result<Scan<'a>, GiveUp> {
+    let (&count, rest) = segment.split_first().ok_or(GiveUp::Structure)?;
+    let (entries, rest) = rest
+        .split_at_checked(usize::from(count) * 2)
+        .ok_or(GiveUp::Structure)?;
+    let &[first, last, bits] = rest.first_chunk().ok_or(GiveUp::Structure)?;
     if !(1..=components.len()).contains(&usize::from(count)) {
-        return None;
+        return Err(GiveUp::Structure);
     }
     let mut selected = Vec::new();
     for &[id, tables] in entries.as_chunks::<2>().0 {
-        let index = components.iter().position(|pending| pending.id == id)?;
+        let index = components
+            .iter()
+            .position(|pending| pending.id == id)
+            .ok_or(GiveUp::Structure)?;
         let dc = dc.get(usize::from(tables >> 4)).and_then(Option::as_ref);
         let ac = ac.get(usize::from(tables & 15)).and_then(Option::as_ref);
         selected.push((index, dc, ac));
@@ -566,12 +650,12 @@ fn read_scan<'a>(
             // Coefficient 0 comes in scans of its own; the others one component at a time.
             if last > 63 || (first == 0) != (last == 0) || first > last || first != 0 && count != 1
             {
-                return None;
+                return Err(GiveUp::Structure);
             }
             Some((first, last, u32::from(bits >> 4), u32::from(bits & 15)))
         }
     };
-    Some(Scan {
+    Ok(Scan {
         components: selected,
         progression,
     })
@@ -589,7 +673,7 @@ fn is_ycbcr(jfif: bool, adobe_transform: Option<u8>, components: &[Pending]) -> 
 }
 
 /// Reads a whole file. `bytes` starts with the start-of-image marker.
-pub(super) fn read(bytes: &[u8]) -> Option<Frame> {
+pub(super) fn read(bytes: &[u8]) -> Result<Frame, GiveUp> {
     let mut stream = Stream {
         bytes,
         pos: 2,
@@ -608,14 +692,14 @@ pub(super) fn read(bytes: &[u8]) -> Option<Frame> {
         match marker {
             0xD9 => break,
             0x01 | 0xD0..=0xD7 => continue,
-            0xD8 => return None,
+            0xD8 => return Err(GiveUp::Structure),
             _ => {}
         }
-        let segment = stream.segment()?;
+        let segment = stream.segment().ok_or(GiveUp::Structure)?;
         match marker {
             0xC0..=0xC2 => {
                 if frame.is_some() {
-                    return None;
+                    return Err(GiveUp::Structure);
                 }
                 let coding = if marker == 0xC2 {
                     Coding::Progressive
@@ -625,10 +709,13 @@ pub(super) fn read(bytes: &[u8]) -> Option<Frame> {
                 frame = Some(read_frame(segment, coding)?);
             }
             // Lossless, hierarchical and arithmetic-coded frames.
-            0xC3 | 0xC5..=0xC7 | 0xC9..=0xCB | 0xCD..=0xCF | 0xCC => return None,
-            0xC4 => read_huffman_tables(segment, &mut dc, &mut ac)?,
-            0xDB => read_quant_tables(segment, &mut quant)?,
-            0xDD => restart_interval = usize::from(u16::from_be_bytes(*segment.first_chunk()?)),
+            0xC3 | 0xC5..=0xC7 | 0xC9..=0xCB | 0xCD..=0xCF | 0xCC => return Err(GiveUp::Coding),
+            0xC4 => read_huffman_tables(segment, &mut dc, &mut ac).ok_or(GiveUp::Structure)?,
+            0xDB => read_quant_tables(segment, &mut quant).ok_or(GiveUp::Structure)?,
+            0xDD => {
+                let interval = segment.first_chunk().ok_or(GiveUp::Structure)?;
+                restart_interval = usize::from(u16::from_be_bytes(*interval));
+            }
             0xE0 => jfif |= segment.starts_with(b"JFIF\0"),
             0xEE if segment.starts_with(b"Adobe") => adobe_transform = segment.get(11).copied(),
             0xDA => {
@@ -637,16 +724,23 @@ pub(super) fn read(bytes: &[u8]) -> Option<Frame> {
                     mcus,
                     components,
                     ..
-                } = frame.as_mut()?;
+                } = frame.as_mut().ok_or(GiveUp::Structure)?;
                 if components.len() == 3 && !is_ycbcr(jfif, adobe_transform, components) {
-                    return None;
+                    return Err(GiveUp::Colour);
                 }
                 let scan = read_scan(segment, *coding, components, &dc, &ac)?;
                 for &(index, ..) in &scan.components {
                     let pending = &mut components[index];
                     if !pending.latched {
-                        pending.component.quant = (*quant.get(pending.table)?)?;
+                        pending.component.quant = quant
+                            .get(pending.table)
+                            .copied()
+                            .flatten()
+                            .ok_or(GiveUp::Structure)?;
                         pending.latched = true;
+                        let component = &mut pending.component;
+                        component.coefficients =
+                            vec![0; component.blocks_wide * component.blocks_high * 64];
                     }
                 }
                 decode_scan(&mut stream, &scan, components, *mcus, restart_interval)?;
@@ -655,11 +749,14 @@ pub(super) fn read(bytes: &[u8]) -> Option<Frame> {
         }
     }
 
-    let frame = frame?;
-    if !frame.components.iter().all(|pending| pending.latched) {
-        return None;
+    let frame = frame.ok_or(GiveUp::Structure)?;
+    if !frame.components.iter().any(|pending| pending.latched) {
+        return Err(GiveUp::NoScan);
     }
-    Some(Frame {
+    if !frame.components.iter().all(|pending| pending.latched) {
+        return Err(GiveUp::Uncoded);
+    }
+    Ok(Frame {
         width: frame.width,
         height: frame.height,
         components: frame
@@ -668,4 +765,199 @@ pub(super) fn read(bytes: &[u8]) -> Option<Frame> {
             .map(|pending| pending.component)
             .collect(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Committed files of every coding this decoder handles.
+    const FILES: [&[u8]; 4] = [
+        include_bytes!("../../testdata/jpeg/colour-420-narrow.jpg"),
+        include_bytes!("../../testdata/jpeg/colour-420-restart.jpg"),
+        include_bytes!("../../testdata/jpeg/grey-q90-progressive.jpg"),
+        include_bytes!("../../testdata/jpeg/colour-444.jpg"),
+    ];
+
+    /// A frame header of `count` components with the given sampling factors.
+    fn frame_segment(width: u16, height: u16, sampling: &[u8]) -> Vec<u8> {
+        let mut segment = vec![8];
+        segment.extend(height.to_be_bytes());
+        segment.extend(width.to_be_bytes());
+        segment.push(sampling.len() as u8);
+        for (id, &factors) in (1..).zip(sampling) {
+            segment.extend([id, factors, 0]);
+        }
+        segment
+    }
+
+    /// Checks what a successful read promises: every component coded, its coefficients
+    /// allocated for its whole block grid.
+    fn assert_complete(frame: &Frame) {
+        for component in &frame.components {
+            assert_eq!(
+                component.coefficients.len(),
+                component.blocks_wide * component.blocks_high * 64
+            );
+        }
+    }
+
+    #[test]
+    fn the_committed_files_are_read() {
+        for file in FILES {
+            assert_complete(&read(file).unwrap());
+        }
+    }
+
+    #[test]
+    fn any_prefix_and_any_changed_byte() {
+        for file in FILES {
+            for end in 2..=file.len() {
+                if let Ok(frame) = read(&file[..end]) {
+                    assert_complete(&frame);
+                }
+            }
+            for at in 2..file.len() {
+                for value in [0x00, 0x01, 0x7f, 0x80, 0xfe, 0xff, file[at] ^ 0x5a] {
+                    let mut changed = file.to_vec();
+                    changed[at] = value;
+                    if let Ok(frame) = read(&changed) {
+                        assert_complete(&frame);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_frame_header_allocates_no_coefficients() {
+        let segment = frame_segment(16384, 16384, &[0x11, 0x11, 0x11]);
+        let header = read_frame(&segment, Coding::Baseline).ok().unwrap();
+        assert_eq!(header.mcus, (2048, 2048));
+        for pending in &header.components {
+            assert_eq!(
+                (pending.component.blocks_wide, pending.component.blocks_high),
+                (2048, 2048)
+            );
+            assert!(pending.component.coefficients.is_empty());
+        }
+    }
+
+    #[test]
+    fn a_block_grid_beyond_the_bound_is_left_to_the_library() {
+        // One pixel wide and chroma halved in both directions: the grid is 16 samples wide.
+        let tall = frame_segment(1, 32768, &[0x22, 0x11, 0x11]);
+        assert_eq!(
+            read_frame(&tall, Coding::Baseline).err(),
+            Some(GiveUp::Memory)
+        );
+        // A small image of the same layout is within the allowance.
+        let small = frame_segment(1, 16, &[0x22, 0x11, 0x11]);
+        assert!(read_frame(&small, Coding::Baseline).is_ok());
+        // Chroma at full resolution and a size of whole blocks is within the multiple.
+        let square = frame_segment(4096, 4096, &[0x11, 0x11, 0x11]);
+        let header = read_frame(&square, Coding::Progressive).ok().unwrap();
+        let output = 4096 * 4096 * 4;
+        assert!(held(&header.components, (4096, 4096)) <= MEMORY_MULTIPLE * output);
+    }
+
+    #[test]
+    fn frame_headers_this_decoder_does_not_handle() {
+        let reasons = [
+            (frame_segment(8, 8, &[0x11, 0x11]), GiveUp::Layout),
+            (
+                frame_segment(8, 8, &[0x11, 0x11, 0x11, 0x11]),
+                GiveUp::Layout,
+            ),
+            (frame_segment(8, 8, &[0x41, 0x11, 0x11]), GiveUp::Layout),
+            (frame_segment(8, 8, &[0x12, 0x11, 0x11]), GiveUp::Layout),
+            (frame_segment(8, 8, &[0x22, 0x12, 0x11]), GiveUp::Layout),
+            (frame_segment(8, 8, &[0x05]), GiveUp::Layout),
+            (frame_segment(0, 8, &[0x11]), GiveUp::Size),
+            (frame_segment(65535, 65535, &[0x11]), GiveUp::Size),
+            (
+                frame_segment(8, 8, &[0x11])[..8].to_vec(),
+                GiveUp::Structure,
+            ),
+        ];
+        for (segment, reason) in reasons {
+            assert_eq!(
+                read_frame(&segment, Coding::Baseline).err(),
+                Some(reason),
+                "{segment:?}"
+            );
+        }
+        let mut twelve_bits = frame_segment(8, 8, &[0x11]);
+        twelve_bits[0] = 12;
+        assert_eq!(
+            read_frame(&twelve_bits, Coding::Baseline).err(),
+            Some(GiveUp::Coding)
+        );
+    }
+
+    #[test]
+    fn whole_files_this_decoder_does_not_handle() {
+        let file = FILES[3];
+        let scan = file.windows(2).position(|m| m == [0xFF, 0xDA]).unwrap();
+        let mut no_scan = file[..scan].to_vec();
+        no_scan.extend([0xFF, 0xD9]);
+        assert_eq!(read(&no_scan).err(), Some(GiveUp::NoScan));
+        assert_eq!(read(&file[..scan]).err(), Some(GiveUp::NoScan));
+        assert_eq!(
+            read(&[0xFF, 0xD8, 0xFF, 0xD9]).err(),
+            Some(GiveUp::Structure)
+        );
+        // An arithmetic-coded frame.
+        let mut arithmetic = file.to_vec();
+        let frame = arithmetic
+            .windows(2)
+            .position(|m| m == [0xFF, 0xC0])
+            .unwrap();
+        arithmetic[frame + 1] = 0xC9;
+        assert_eq!(read(&arithmetic).err(), Some(GiveUp::Coding));
+    }
+
+    #[test]
+    fn extend_gives_negative_values_their_sign() {
+        assert_eq!(extend(0, 0), 0);
+        assert_eq!(extend(0, 1), -1);
+        assert_eq!(extend(1, 1), 1);
+        assert_eq!(extend(0, 3), -7);
+        assert_eq!(extend(3, 3), -4);
+        assert_eq!(extend(4, 3), 4);
+        assert_eq!(extend(0x7FFF, 15), 0x7FFF);
+    }
+
+    #[test]
+    fn huffman_codes_of_every_length() {
+        // One code of each length from 1 to 16: 0, 10, 110, and so on.
+        let counts = [1; 16];
+        let values: Vec<u8> = (0..16).collect();
+        let table = Huffman::new(&counts, &values);
+        for length in 1..=16u32 {
+            // The code of `length` bits is `length - 1` ones and a zero, padded with ones.
+            let code = ((1u32 << (length - 1)) - 1) << (17 - length);
+            let bits = code as u16 | ((1 << (16 - length)) - 1);
+            // A zero is stuffed after each 0xFF, so no marker is read.
+            let mut data = Vec::new();
+            for byte in bits.to_be_bytes() {
+                data.push(byte);
+                if byte == 0xFF {
+                    data.push(0);
+                }
+            }
+            let mut stream = Stream {
+                bytes: &data,
+                pos: 0,
+                acc: 0,
+                count: 0,
+                padding: 0,
+            };
+            assert_eq!(
+                table.decode(&mut stream),
+                Some(length as u8 - 1),
+                "{length}"
+            );
+        }
+    }
 }

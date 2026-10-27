@@ -4,7 +4,13 @@
 //! full resolution or halved horizontally or in both directions, are decoded here with the
 //! arithmetic of the original runtime, which is IJG libjpeg 6b with its floating-point inverse
 //! DCT. Every other file, and every file on which that decoder gives up, goes through
-//! `jpeg-decoder`.
+//! `jpeg-decoder`; the reason it gave up is logged at debug level first. A file with a frame
+//! header and no scan is an error of both decoders and is not decoded a second time.
+//!
+//! The decoder of the original holds at most [`coefficients::MEMORY_MULTIPLE`] times the RGBA
+//! output at once, plus [`coefficients::MEMORY_ALLOWANCE`]: the coefficients of a component exist from the first scan
+//! that codes it until its samples are made, and a frame whose block grid would need more is
+//! left to the library.
 
 mod coefficients;
 mod idct;
@@ -13,6 +19,7 @@ mod samples;
 use jpeg_decoder::{Decoder, PixelFormat};
 
 use crate::{DecodedImage, ImageError, ImageFormat, pixels_mut, rgba_len};
+use coefficients::GiveUp;
 
 fn error(error: jpeg_decoder::Error) -> ImageError {
     match error {
@@ -23,14 +30,15 @@ fn error(error: jpeg_decoder::Error) -> ImageError {
     }
 }
 
-/// Decodes with the arithmetic of the original runtime, or gives up with `None`.
-fn decode_like_the_original(bytes: &[u8]) -> Option<DecodedImage> {
+/// Decodes with the arithmetic of the original runtime, or says why it gives up.
+fn decode_like_the_original(bytes: &[u8]) -> Result<DecodedImage, GiveUp> {
     let frame = coefficients::read(bytes)?;
     let (width, height) = (frame.width as usize, frame.height as usize);
     let (h_max, v_max) = (frame.components[0].h, frame.components[0].v);
+    // Each component's coefficients are dropped once its samples are made.
     let planes: Vec<samples::Plane> = frame
         .components
-        .iter()
+        .into_iter()
         .map(|component| {
             let multipliers = idct::multipliers(&component.quant);
             let stride = component.blocks_wide * 8;
@@ -60,7 +68,7 @@ fn decode_like_the_original(bytes: &[u8]) -> Option<DecodedImage> {
         Ok(planes) => samples::colour(&planes, (h_max == 2, v_max == 2), pixels_mut(&mut rgba)),
         Err(planes) => samples::grey(&planes[0], pixels_mut(&mut rgba)),
     }
-    Some(DecodedImage {
+    Ok(DecodedImage {
         width: frame.width,
         height: frame.height,
         rgba,
@@ -69,8 +77,17 @@ fn decode_like_the_original(bytes: &[u8]) -> Option<DecodedImage> {
 
 pub(crate) fn decode(bytes: &[u8]) -> Result<DecodedImage, ImageError> {
     match decode_like_the_original(bytes) {
-        Some(image) => Ok(image),
-        None => decode_with_library(bytes),
+        Ok(image) => Ok(image),
+        Err(GiveUp::NoScan) => Err(ImageError::malformed(
+            ImageFormat::Jpeg,
+            GiveUp::NoScan.to_string(),
+        )),
+        Err(reason) => {
+            tracing::debug!(
+                "JPEG decoded by jpeg-decoder: the decoder of the original gave up: {reason}"
+            );
+            decode_with_library(bytes)
+        }
     }
 }
 
@@ -334,9 +351,81 @@ mod tests {
             let bytes = testutil::jpeg(21, 13, ColorType::Rgb, &source, |encoder| {
                 encoder.set_sampling_factor(sampling);
             });
-            assert!(decode_like_the_original(&bytes).is_none(), "{sampling:?}");
+            assert_eq!(
+                decode_like_the_original(&bytes),
+                Err(GiveUp::Layout),
+                "{sampling:?}"
+            );
             assert_eq!(crate::decode(&bytes), decode_with_library(&bytes));
         }
+    }
+
+    /// The lines a subscriber at debug level wrote while `work` ran.
+    fn logged(work: impl FnOnce()) -> String {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone, Default)]
+        struct Lines(Arc<Mutex<Vec<u8>>>);
+
+        impl std::io::Write for Lines {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(bytes);
+                Ok(bytes.len())
+            }
+
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let lines = Lines::default();
+        let writer = lines.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::DEBUG)
+            .with_writer(move || writer.clone())
+            .finish();
+        tracing::subscriber::with_default(subscriber, work);
+        let bytes = lines.0.lock().unwrap().clone();
+        String::from_utf8(bytes).unwrap()
+    }
+
+    #[test]
+    fn the_reason_of_a_fallback_is_logged() {
+        let source = gradient(21, 13, 3);
+        let bytes = testutil::jpeg(21, 13, ColorType::Rgb, &source, |encoder| {
+            encoder.set_sampling_factor(SamplingFactor::F_4_1);
+        });
+        let text = logged(|| {
+            decode_ok(&bytes, 21, 13);
+        });
+        assert!(text.contains("DEBUG"), "{text}");
+        assert!(text.contains(&GiveUp::Layout.to_string()), "{text}");
+        // A file the decoder of the original decodes logs nothing.
+        let bytes = testutil::jpeg(21, 13, ColorType::Rgb, &source, |encoder| {
+            encoder.set_sampling_factor(SamplingFactor::F_2_2);
+        });
+        assert_eq!(logged(|| drop(decode_ok(&bytes, 21, 13))), "");
+    }
+
+    #[test]
+    fn a_frame_without_a_scan_is_an_error_of_its_own() {
+        let source = gradient(16, 16, 3);
+        let mut bytes = testutil::jpeg(16, 16, ColorType::Rgb, &source, |_| {});
+        let scan = bytes
+            .windows(2)
+            .position(|marker| marker == [0xFF, 0xDA])
+            .unwrap();
+        bytes.truncate(scan);
+        bytes.extend([0xFF, 0xD9]);
+        assert_eq!(decode_like_the_original(&bytes), Err(GiveUp::NoScan));
+        let text = logged(|| {
+            assert!(matches!(
+                crate::decode(&bytes),
+                Err(ImageError::Malformed { .. })
+            ));
+        });
+        assert_eq!(text, "");
+        assert!(decode_with_library(&bytes).is_err());
     }
 
     #[test]

@@ -2,7 +2,7 @@
 
 ## 1. JPEG memory and reasons
 
-- [ ] 1.1 Allocate a component's coefficients at the first scan that codes it; refuse in the custom path a file whose transient memory would pass the stated multiple of its output; replace the `None` of `coefficients::read` and `decode_like_the_original` by a `GiveUp` reason and log it at debug level on fallback. Verify: the scenarios of "Memory of a JPEG decode" as unit tests of `vkrgss-image` with a counting allocator; `jpeg/{coefficients,idct,samples}.rs` gain unit tests of their own (prefix and flipped-byte loops as in `vkrgss-core/src/sound.rs`); the measured JPEG tests pass unchanged.
+- [x] 1.1 Allocate a component's coefficients at the first scan that codes it; refuse in the custom path a file whose transient memory would pass the stated multiple of its output; replace the `None` of `coefficients::read` and `decode_like_the_original` by a `GiveUp` reason and log it at debug level on fallback. Verify: the scenarios of "Memory of a JPEG decode" as unit tests of `vkrgss-image` with a counting allocator; `jpeg/{coefficients,idct,samples}.rs` gain unit tests of their own (prefix and flipped-byte loops as in `vkrgss-core/src/sound.rs`); the measured JPEG tests pass unchanged.
 
 ## 2. One limit, extraction, plane quads
 

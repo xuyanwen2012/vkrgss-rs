@@ -123,3 +123,82 @@ pub(super) fn inverse(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn transform(coefficients: &[i16; 64], quant: &[u16; 64]) -> [u8; 64] {
+        let mut out = [0; 64];
+        inverse(coefficients, &multipliers(quant), &mut out, 8);
+        out
+    }
+
+    #[test]
+    fn a_store_rounds_to_single_precision() {
+        assert_eq!(store(0.1), f64::from(0.1f32));
+        assert_eq!(store(1.0), 1.0);
+        assert_ne!(store(1.0 + f64::EPSILON), 1.0 + f64::EPSILON);
+    }
+
+    #[test]
+    fn multipliers_fold_the_scale_factors_into_the_table() {
+        let ones = multipliers(&[1; 64]);
+        assert_eq!(ones[0], 1.0);
+        assert_eq!(ones[1], store(AAN[1]));
+        assert_eq!(ones[9], store(AAN[1] * AAN[1]));
+        assert_eq!(multipliers(&[2; 64])[0], 2.0);
+    }
+
+    #[test]
+    fn the_range_limit_table_wraps_at_1024() {
+        // The sum is eight times the sample before the level shift of 128.
+        assert_eq!(sample(0.0), 128);
+        assert_eq!(sample(-1024.0), 0);
+        assert_eq!(sample(1016.0), 255);
+        assert_eq!(sample(-4.0), 128);
+        assert_eq!(sample(-5.0), 127);
+        assert_eq!(sample(-12.0), 127);
+        // Out of range on either side clamps, and further out wraps as libjpeg's table does.
+        assert_eq!(sample(2000.0), 255);
+        assert_eq!(sample(-2000.0), 0);
+        assert_eq!(sample(4096.0), 0);
+        assert_eq!(sample(8192.0 + 8.0), 129);
+        assert_eq!(sample(f64::MAX), sample(f64::from(i32::MAX)));
+    }
+
+    #[test]
+    fn a_block_of_only_its_mean_is_flat() {
+        let mut block = [0; 64];
+        assert_eq!(transform(&block, &[1; 64]), [128; 64]);
+        block[0] = 80;
+        assert_eq!(transform(&block, &[1; 64]), [138; 64]);
+        block[0] = -80;
+        assert_eq!(transform(&block, &[1; 64]), [118; 64]);
+    }
+
+    #[test]
+    fn rows_are_written_at_the_stride() {
+        let mut block = [0; 64];
+        block[0] = 80;
+        let mut out = [7; 8 * 20];
+        inverse(&block, &multipliers(&[1; 64]), &mut out, 20);
+        for (index, &value) in out.iter().enumerate() {
+            let inside = index % 20 < 8 && index / 20 < 8;
+            assert_eq!(value, if inside { 138 } else { 7 }, "{index}");
+        }
+    }
+
+    #[test]
+    fn any_coefficient_at_any_extreme() {
+        for position in 0..64 {
+            for value in [i16::MIN, -1, 1, i16::MAX] {
+                for quant in [1, 255, u16::MAX] {
+                    let mut block = [0; 64];
+                    block[position] = value;
+                    let _ = transform(&block, &[quant; 64]);
+                }
+            }
+        }
+    }
+}

@@ -110,3 +110,97 @@ pub(super) fn colour(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn filled(width: usize, height: usize, samples: impl Fn(usize, usize) -> u8) -> Plane {
+        let stride = width.div_ceil(8) * 8;
+        let mut data = vec![0; stride * height.div_ceil(8) * 8];
+        for y in 0..height {
+            for x in 0..width {
+                data[y * stride + x] = samples(x, y);
+            }
+        }
+        Plane {
+            samples: data,
+            stride,
+            width,
+            height,
+        }
+    }
+
+    #[test]
+    fn grey_chroma_leaves_the_luma() {
+        for y in 0..=255 {
+            assert_eq!(rgb(y, 128, 128), [y; 3]);
+        }
+        assert_eq!(rgb(255, 255, 255), [255, 121, 255]);
+        assert_eq!(rgb(0, 0, 0), [0, 135, 0]);
+        assert_eq!(rgb(128, 0, 255), [255, 81, 0]);
+    }
+
+    #[test]
+    fn a_greyscale_pixel_is_its_sample_three_times() {
+        let plane = filled(3, 2, |x, y| (x * 10 + y) as u8);
+        let mut pixels = [[0; 4]; 6];
+        grey(&plane, &mut pixels);
+        assert_eq!(pixels[4], [11, 11, 11, 255]);
+    }
+
+    #[test]
+    fn horizontal_upsampling_keeps_the_edges() {
+        let plane = filled(4, 1, |x, _| [0, 40, 80, 120][x]);
+        let mut out = [0; 8];
+        plane.upsampled_row(0, false, &mut out);
+        assert_eq!(out, [0, 10, 30, 50, 70, 90, 110, 120]);
+        // A flat row stays flat.
+        let flat = filled(5, 1, |_, _| 77);
+        let mut out = [0; 10];
+        flat.upsampled_row(0, false, &mut out);
+        assert_eq!(out, [77; 10]);
+    }
+
+    #[test]
+    fn vertical_upsampling_mixes_the_nearer_row_three_to_one() {
+        let plane = filled(3, 2, |_, y| [0, 160][y]);
+        let mut out = [0; 6];
+        // Image row 1 lies between plane rows 0 and 1, nearer to 0.
+        plane.upsampled_row(1, true, &mut out);
+        assert_eq!(out, [40; 6]);
+        plane.upsampled_row(2, true, &mut out);
+        assert_eq!(out, [120; 6]);
+        // The first and the last rows have no farther row and repeat their own.
+        plane.upsampled_row(0, true, &mut out);
+        assert_eq!(out, [0; 6]);
+        plane.upsampled_row(3, true, &mut out);
+        assert_eq!(out, [160; 6]);
+    }
+
+    #[test]
+    fn narrow_planes_are_replicated() {
+        let plane = filled(2, 1, |x, _| [10, 90][x]);
+        let mut out = [0; 4];
+        plane.upsampled_row(0, false, &mut out);
+        assert_eq!(out, [10, 10, 90, 90]);
+    }
+
+    #[test]
+    fn every_small_size_and_subsampling() {
+        for width in 1..=19usize {
+            for height in 1..=9usize {
+                for (horizontal, vertical) in [(false, false), (true, false), (true, true)] {
+                    let chroma_width = if horizontal { width.div_ceil(2) } else { width };
+                    let chroma_height = if vertical { height.div_ceil(2) } else { height };
+                    let luma = filled(width, height, |x, y| (x * 13 + y * 7) as u8);
+                    let cb = filled(chroma_width, chroma_height, |x, _| (x * 31) as u8);
+                    let cr = filled(chroma_width, chroma_height, |_, y| (y * 29) as u8);
+                    let mut pixels = vec![[0; 4]; width * height];
+                    colour(&[luma, cb, cr], (horizontal, vertical), &mut pixels);
+                    assert!(pixels.iter().all(|pixel| pixel[3] == 255));
+                }
+            }
+        }
+    }
+}

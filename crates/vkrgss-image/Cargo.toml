@@ -20,7 +20,9 @@ workspace = true
 jpeg-decoder.workspace = true
 png.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 jpeg-encoder.workspace = true
 proptest.workspace = true
+tracing-subscriber.workspace = true
