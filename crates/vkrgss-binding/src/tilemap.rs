@@ -53,19 +53,14 @@ const PASSAGES: &CStr = c"passages";
 /// The instance variable that holds the flags `Table` object of a tilemap of RGSS3, or `nil`.
 const FLAGS: &CStr = c"flags";
 
-/// The instance variable of a `TilemapAutotiles` object that holds its `Tilemap` object.
-const TILEMAP: &CStr = c"tilemap";
 /// The instance variables of a `TilemapAutotiles` object that hold its `Bitmap` objects,
-/// or `nil`.
-const AUTOTILE: [&CStr; 7] = [
-    c"autotile0",
-    c"autotile1",
-    c"autotile2",
-    c"autotile3",
-    c"autotile4",
-    c"autotile5",
-    c"autotile6",
-];
+/// or `nil`. The names are the original's, and as there each is interned at the first read
+/// or write of its slot, where it takes the next number of the symbol sequence.
+///
+/// Provenance: oracle measurement 2026-10-27, RGSS103J, change
+/// `call-rgss-from-script-threads` (design, "Runs on the originals"); the name is formatted
+/// from `at%d` in `RGSS104E.dll` too.
+const AUTOTILE: [&CStr; 7] = [c"at0", c"at1", c"at2", c"at3", c"at4", c"at5", c"at6"];
 
 /// The instance variables of a `Tilemap::BitmapArray` object that hold its `Bitmap` objects,
 /// or `nil`. The names are the original's, and as there each is interned at the first read
@@ -104,8 +99,9 @@ fn initialize(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     })?;
     let autotiles = wrap::new_object(ruby, Autotiles { tilemap: Some(id) })?;
     rb::ivar_set(ruby, recv, AUTOTILES, autotiles)?;
-    // The list keeps its tilemap alive, as the tilemap keeps the list.
-    rb::ivar_set(ruby, autotiles, TILEMAP, recv)?;
+    // The list keeps its tilemap alive, as the tilemap keeps the list. The variable has a
+    // name of the start-up symbol table, because `Tilemap.new` of the original interns none.
+    rb::ivar_set(ruby, autotiles, AUTOTILES, recv)?;
     Ok(recv)
 }
 

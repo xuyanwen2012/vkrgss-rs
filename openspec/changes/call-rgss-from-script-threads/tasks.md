@@ -12,7 +12,7 @@
 
 ## 3. Tilemap names of RGSS1
 
-- [ ] 3.1 Intern for a tilemap of RGSS1 what the original interns, at its moments. Verify: `tilemap_names_of_rgss1_as_measured` and the existing symbol tests of RGSS1 pass.
+- [x] 3.1 Intern for a tilemap of RGSS1 what the original interns, at its moments. Verify: `tilemap_names_of_rgss1_as_measured` and the existing symbol tests of RGSS1 pass.
 
 ## 4. Documents
 

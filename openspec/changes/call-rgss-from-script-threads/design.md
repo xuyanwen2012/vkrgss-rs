@@ -188,6 +188,30 @@ decision "Tilemap names of RGSS1".
   section "Guest state" of `lib.rs`, and the safety comments of `wrap.rs` (`alloc`) and
   `rb.rs` (`perform`), say the same of the binding. No behaviour of the sys crates changed.
 
+### Tilemap names of RGSS1 (task 3.1)
+
+- The variables of a `TilemapAutotiles` object that hold its bitmaps are named `at0` to
+  `at6`, the original's names (`RGSS104E.dll` formats them from `at%d` in `[]` and `[]=`),
+  interned at the first read or write of their slot as there. The variable that holds the
+  tilemap is `autotiles`, a name of the start-up symbol table, because `Tilemap.new` of the
+  original interns none; the same rule as `bitmaps` of RGSS2.
+- `tilemap_names_of_rgss1_as_measured` is in a test binary of its own,
+  `crates/vkrgss-binding/tests/run_game_tilemap_names.rs` (with its file over Ruby 1.9.2 in
+  `vkrgss-binding-rgss3`, listed in `ruby192.allow` with the other tests of Ruby 1.8's
+  numbering), because the interpreter starts once per process and the numbers need a fresh
+  one; the two files the design names each hold the one test of their process. Its probe is
+  the steps of the scenario of `local/probes/tilemap-names-probe.rb`, with the same
+  identifiers. The oracle runs its own probe as the first script, which interns names this
+  test's game does not have (2070 there, 2039 here for the first step), so the test compares
+  how far each number is from the first step's marker: `+1` after `Tilemap.new`, `at0` at `+2`
+  and `+3` after `t.autotiles[0]`, `+4` after `t.autotiles[0] = nil`, as on the original.
+  Before the change it gave `+2` with `tilemap` and `+4` with `autotile0` at `+3`.
+- Step 4 of the probe (`t.autotiles[1] = Bitmap.new(8, 8)`) is outside the scenario. There the
+  original also interns `owner` and `observer`; `[]=` of the autotiles does not refer to them
+  in `RGSS104E.dll`, so they come with `Bitmap.new`, the first of the probe, as on the original
+  of VX (`wrap::intern_owner_names`), which vkrgss does only in RGSS2. That is not a name of a
+  tilemap; see "Follow-ups".
+
 ### Checks of 2026-10-27 (task 5.1, left open with tasks 1.1, 1.2, 3.1 and 4.1)
 
 At `e172139b`: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exited 0, all steps
@@ -201,3 +225,8 @@ changed nothing yet, so these are to be repeated once it has.
 - **Measurements need the owner's shell.** `bwrap` cannot make its namespaces inside the
   sandbox of a flow; runs of `cargo xtask oracle` on the originals are done from the owner's
   session (see "Runs on the originals").
+- **`owner` and `observer` in RGSS1.** The original XP runtime interns `owner` and `observer`
+  at the first `Bitmap.new` of the tilemap probe (step 4, "Runs on the originals"); vkrgss
+  interns them only in a game of RGSS2, at the calls measured on VX. Which calls of RGSS1
+  intern them was not measured, and doing so would move the numbers of every later name of
+  an XP game, so it belongs to a change of its own with a probe like that of RGSS2.
