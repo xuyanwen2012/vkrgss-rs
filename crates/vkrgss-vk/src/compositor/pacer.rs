@@ -10,6 +10,7 @@ use std::time::Instant;
 
 use ash::vk;
 
+use crate::VkError;
 use crate::device::Gpu;
 use crate::pacing::{IntervalSummary, PresentSchedule, PresentStats};
 use crate::present_timing as ffi;
@@ -85,6 +86,8 @@ pub(super) struct Pacer {
     from_feedback: bool,
     /// The origin of the presenter's own clock.
     origin: Instant,
+    /// The call of the extension that found the device lost, if one has.
+    lost: Option<&'static str>,
 }
 
 impl Pacer {
@@ -100,6 +103,7 @@ impl Pacer {
             outstanding: 0,
             from_feedback: false,
             origin: Instant::now(),
+            lost: None,
         }
     }
 
@@ -155,8 +159,21 @@ impl Pacer {
         full
     }
 
-    /// A call of the extension failed: it is not used from here on.
+    /// Fails with [`VkError::DeviceLost`] when a call of the extension found the device lost,
+    /// which the caller passes on instead of presenting without the extension.
+    pub(super) fn check_device(&self) -> Result<(), VkError> {
+        match self.lost {
+            Some(call) => Err(VkError::DeviceLost { call }),
+            None => Ok(()),
+        }
+    }
+
+    /// A call of the extension failed: it is not used from here on. A lost device is kept
+    /// for [`check_device`](Pacer::check_device).
     pub(super) fn fail(&mut self, (call, result): Failure) {
+        if result == vk::Result::ERROR_DEVICE_LOST {
+            self.lost.get_or_insert(call);
+        }
         if !self.failed {
             self.failed = true;
             self.report = Some(format!(
@@ -663,6 +680,8 @@ mod tests {
         queue_size: u32,
         /// The call that fails, if any.
         failing: Option<&'static str>,
+        /// What the call that fails returns.
+        failing_result: vk::Result,
         /// The names of the calls made, in order.
         calls: Vec<&'static str>,
         waited_for: Vec<(u64, u64)>,
@@ -699,6 +718,7 @@ mod tests {
                 wait: false,
                 queue_size: 0,
                 failing: None,
+                failing_result: vk::Result::ERROR_UNKNOWN,
                 calls: Vec::new(),
                 waited_for: Vec::new(),
                 pending: Vec::new(),
@@ -713,7 +733,7 @@ mod tests {
         fn call(&mut self, name: &'static str) -> Result<(), Failure> {
             self.calls.push(name);
             match self.failing {
-                Some(failing) if failing == name => Err((name, vk::Result::ERROR_UNKNOWN)),
+                Some(failing) if failing == name => Err((name, self.failing_result)),
                 _ => Ok(()),
             }
         }
@@ -823,6 +843,52 @@ mod tests {
         assert_clean(&log, "while presenting with a stand-in clock");
         drop(compositor);
         assert_clean(&log, "while the compositor was dropped");
+    }
+
+    /// A call of the extension that finds the device lost ends the present as a lost device,
+    /// before the draw, instead of presenting without the extension; nothing is submitted
+    /// after it.
+    #[test]
+    fn lost_device_in_a_pacing_call_fails_the_present() {
+        use crate::VkError;
+        use crate::tests::harness::{assert_clean, test_device};
+        use crate::{ValidationLog, VkCompositor};
+        use vkrgss_proto::{FramePacket, FrameRate, Size};
+
+        let log = ValidationLog::new();
+        let mut compositor =
+            VkCompositor::with_headless_surface(test_device(), Some(&log)).unwrap();
+        compositor.present_probe.timing_stand_in = Some(Box::new(StandIn {
+            now: 1000 * MS,
+            ..StandIn::default()
+        }));
+        compositor.resize_surface(Size::new(64, 48));
+        let packet = FramePacket {
+            frame_index: 0,
+            logical_size: Size::new(20, 18),
+            frame_rate: FrameRate::DEFAULT,
+            brightness: 255,
+            tables: vec![],
+            bitmaps: vec![],
+            ops: vec![],
+        };
+        compositor.render(&packet).unwrap();
+        assert_eq!(compositor.present(), Ok(true));
+        compositor.present_probe.timing_stand_in = Some(Box::new(StandIn {
+            now: 1000 * MS,
+            failing: Some("calibrated"),
+            failing_result: vk::Result::ERROR_DEVICE_LOST,
+            ..StandIn::default()
+        }));
+        compositor.render(&packet).unwrap();
+        let submissions = compositor.submissions();
+        let lost = Err(VkError::DeviceLost { call: "calibrated" });
+        assert_eq!(compositor.present().map(|_| ()), lost);
+        assert_eq!(compositor.submissions(), submissions, "nothing was drawn");
+        assert_eq!(compositor.present().map(|_| ()), lost);
+        assert_eq!(compositor.render(&packet), lost);
+        assert_eq!(compositor.submissions(), submissions);
+        assert_clean(&log, "around the lost device");
     }
 
     #[test]

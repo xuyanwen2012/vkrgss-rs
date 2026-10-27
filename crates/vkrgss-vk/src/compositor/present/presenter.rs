@@ -280,8 +280,9 @@ impl Presenter {
         allocator: &mut Allocator,
     ) {
         if let (Some(swapchain), Some(loader)) = (self.swapchain.take(), &self.swapchain_loader) {
-            // The device is idle either way; this only gives the fences the time to signal.
-            swapchain.settle_presents(device);
+            // The device is idle either way, after an idle that did not find it lost; this
+            // only gives the fences the time to signal.
+            let _ = swapchain.settle_presents(device);
             swapchain.destroy(device, loader);
         }
         if let Some(held) = self.held.take() {
@@ -421,10 +422,9 @@ impl VkCompositor {
         work: impl FnOnce(&mut VkCompositor) -> Result<(), VkError>,
     ) -> Result<(), VkError> {
         let result = work(self);
-        // A submission whose wait ran out may never end.
-        if result.is_err() && self.lost.is_none() {
-            // SAFETY: the device is live. If this fails too the device is lost.
-            let _ = unsafe { self.gpu.device.device_wait_idle() };
+        if result.is_err() {
+            // A submission whose wait ran out may never end, so a lost device is not idled.
+            self.idle_after_failure();
         }
         result
     }

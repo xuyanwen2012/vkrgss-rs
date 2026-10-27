@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use ash::vk;
 
 use super::VkCompositor;
-use crate::FrameTiming;
+use crate::{FrameTiming, VkError};
 
 impl VkCompositor {
     /// Turns the measuring of frames on or off. It starts off, and then no clock is read and
@@ -85,22 +85,33 @@ impl VkCompositor {
 
     /// The device duration whose queries begin at `first`, once the submission that wrote
     /// them has been waited for. `None` when device durations are not measured or the
-    /// queries cannot be read.
-    pub(super) fn read_span(&self, first: u32) -> Option<Duration> {
-        let timestamps = self.gpu.timestamps.filter(|_| self.times_device())?;
+    /// queries cannot be read, an error when reading them finds the device lost.
+    pub(super) fn read_span(&mut self, first: u32) -> Result<Option<Duration>, VkError> {
+        let Some(timestamps) = self.gpu.timestamps.filter(|_| self.times_device()) else {
+            return Ok(None);
+        };
         let mut ticks = [0u64; 2];
         // SAFETY: the pool is live and has the two queries, which the submission just waited
         // for wrote; the results are 64-bit values, as the flag says. `WAIT` costs nothing
         // once the submission is done, and MoltenVK answers `NOT_READY` without it even then.
-        unsafe {
+        let read = unsafe {
             self.gpu.device.get_query_pool_results(
                 self.query_pool,
                 first,
                 &mut ticks,
                 vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT,
             )
+        };
+        match read.map_err(VkError::vulkan("vkGetQueryPoolResults")) {
+            Ok(()) => Ok(Some(Duration::from_nanos(
+                timestamps.nanos(ticks[0], ticks[1]),
+            ))),
+            Err(error) if error.is_device_lost() => {
+                self.note_loss(&error);
+                Err(error)
+            }
+            // A measurement that cannot be had is left out.
+            Err(_) => Ok(None),
         }
-        .ok()?;
-        Some(Duration::from_nanos(timestamps.nanos(ticks[0], ticks[1])))
     }
 }

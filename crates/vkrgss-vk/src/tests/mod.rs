@@ -2,6 +2,7 @@
 
 mod bitmaps;
 mod compositing;
+mod device_loss;
 mod differential;
 mod fixtures;
 pub(crate) mod harness;

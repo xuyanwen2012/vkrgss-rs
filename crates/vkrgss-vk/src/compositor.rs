@@ -232,7 +232,8 @@ enum Step<'a> {
 impl VkCompositor {
     /// Runs `work`, a method that uses the device, unless the device is lost: then it fails
     /// with [`VkError::DeviceLost`] at once and nothing of the device is used. A lost device
-    /// that `work` finds is recorded, so that every later call is refused.
+    /// that `work` returns is recorded, so that every later call is refused, and one that it
+    /// recorded on the way makes it fail with that error whatever it returned.
     ///
     /// [`VkError::DeviceLost`]: crate::VkError::DeviceLost
     fn unless_lost<T>(
@@ -243,9 +244,37 @@ impl VkCompositor {
             return Err(crate::VkError::DeviceLost { call });
         }
         let result = work(self);
-        if let Err(crate::VkError::DeviceLost { call }) = &result {
+        if let Err(error) = &result {
+            self.note_loss(error);
+        }
+        match self.lost {
+            Some(call) if !matches!(result, Err(crate::VkError::DeviceLost { .. })) => {
+                Err(crate::VkError::DeviceLost { call })
+            }
+            _ => result,
+        }
+    }
+
+    /// Records the lost device that `error` reports, if it does, at once: from then on
+    /// nothing of the device is used, destroyed or waited for.
+    fn note_loss(&mut self, error: &crate::VkError) {
+        if let crate::VkError::DeviceLost { call } = error {
             self.lost.get_or_insert(call);
         }
-        result
+    }
+
+    /// Idles the device after a submission failed, so that whatever was submitted has
+    /// finished before what it used is released. Returns whether it may be released: not
+    /// when the device is lost, found so before or by this idle.
+    fn idle_after_failure(&mut self) -> bool {
+        if self.lost.is_none() {
+            // SAFETY: the device is live.
+            let idled = unsafe { self.gpu.device.device_wait_idle() };
+            // Another failure of the idle leaves nothing pending either.
+            if let Err(result) = idled {
+                self.note_loss(&crate::VkError::from_result("vkDeviceWaitIdle", result));
+            }
+        }
+        self.lost.is_none()
     }
 }

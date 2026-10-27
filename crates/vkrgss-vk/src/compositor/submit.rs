@@ -158,7 +158,7 @@ impl VkCompositor {
         self.submit_and_wait()?;
         if draw.is_some() {
             self.has_frame = true;
-            let compose_device = self.read_span(query::COMPOSE);
+            let compose_device = self.read_span(query::COMPOSE)?;
             if let (Some(timing), Some(started), Some(recorded)) =
                 (&mut self.frame_timing, started, recorded)
             {
@@ -248,13 +248,20 @@ impl VkCompositor {
         // device was created with synchronization2 and timeline semaphores, `value` is greater
         // than every value signalled on the timeline before, and the queue is only used from
         // here. The caller vouches for the semaphores of `waits` and `signals`.
-        unsafe {
+        let submitted = unsafe {
             device
                 .end_command_buffer(self.commands)
-                .map_err(VkError::vulkan("vkEndCommandBuffer"))?;
-            device
-                .queue_submit2(self.gpu.queue, &[submit], vk::Fence::null())
-                .map_err(VkError::vulkan("vkQueueSubmit2"))?;
+                .map_err(VkError::vulkan("vkEndCommandBuffer"))
+                .and_then(|()| {
+                    device
+                        .queue_submit2(self.gpu.queue, &[submit], vk::Fence::null())
+                        .map_err(VkError::vulkan("vkQueueSubmit2"))
+                })
+        };
+        if let Err(error) = submitted {
+            // A lost device is recorded before the caller cleans up.
+            self.note_loss(&error);
+            return Err(error);
         }
         self.submissions = value;
         let (semaphores, values) = ([self.timeline], [value]);
@@ -276,10 +283,8 @@ impl VkCompositor {
             Err(result) => result,
         };
         let error = VkError::from_result("vkWaitSemaphores", result);
-        if error.is_device_lost() {
-            // The submission may still be running: nothing it uses may be touched again.
-            self.lost = Some("vkWaitSemaphores");
-        }
+        // The submission may still be running: nothing it uses may be touched again.
+        self.note_loss(&error);
         Err(error)
     }
 
@@ -303,13 +308,9 @@ impl VkCompositor {
             MemoryLocation::GpuToCpu,
         )?;
         let result = self.copy_image_to_buffer(image, (width, height), resting, buffer.buffer);
-        if result.is_err() && self.lost.is_some() {
+        if result.is_err() && !self.idle_after_failure() {
             // The copy may still be running; see `execute`.
             return result.map(|()| Vec::new());
-        }
-        if result.is_err() {
-            // SAFETY: the device is live; see `execute`.
-            let _ = unsafe { self.gpu.device.device_wait_idle() };
         }
         let pixels = result.map(|()| buffer.bytes()[..size as usize].to_vec());
         buffer.destroy(&self.gpu.device, &mut self.allocator);

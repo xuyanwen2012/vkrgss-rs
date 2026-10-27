@@ -269,16 +269,11 @@ impl VkCompositor {
     ) -> Result<(), VkError> {
         self.write_bitmap_descriptors(&pending.touched);
         let result = self.submit(&pending, frame);
-        if self.lost.is_some() {
-            // The submission may still be running: the retired images are leaked, and the
-            // device is not idled, which might never end.
+        // Whatever was submitted has to finish before the objects below are destroyed and the
+        // frame buffers are written again. On a lost device it may still be running: the
+        // retired images are leaked, and the device is not idled, which might never end.
+        if result.is_err() && !self.idle_after_failure() {
             return result;
-        }
-        if result.is_err() {
-            // SAFETY: the device is live. Whatever was submitted has to finish before the
-            // objects below are destroyed and the frame buffers are written again; if this
-            // fails too the device is lost.
-            let _ = unsafe { self.gpu.device.device_wait_idle() };
         }
         for image in pending.retired {
             image.destroy(&self.gpu.device, &mut self.allocator);

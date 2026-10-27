@@ -284,7 +284,10 @@ impl Drop for VkCompositor {
         // exactly once, here, after its allocations were freed and while the device is alive;
         // the device is dropped exactly once, last.
         unsafe {
-            let _ = device.device_wait_idle();
+            if device.device_wait_idle() == Err(vk::Result::ERROR_DEVICE_LOST) {
+                tracing::warn!("the Vulkan device was lost; its objects are leaked");
+                return;
+            }
             if let Some(presenter) = self.presenter.take() {
                 presenter.destroy(device, &mut self.allocator);
             }

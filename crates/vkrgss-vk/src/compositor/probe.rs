@@ -144,6 +144,26 @@ impl VkCompositor {
             .map(|(_, bytes)| *bytes)
     }
 
+    /// Replaces commands of the device, as `replace` sets them in its tables of Vulkan 1.0
+    /// and 1.3, for the calls the compositor makes through the device from now on: what a
+    /// driver that answers them otherwise would do. The allocator and the extension loaders
+    /// keep the real commands.
+    pub(crate) fn replace_device_commands(
+        &mut self,
+        replace: impl FnOnce(&mut ash::DeviceFnV1_0, &mut ash::DeviceFnV1_3),
+    ) {
+        let device = &self.gpu.device;
+        let (mut v1_0, mut v1_3) = (device.fp_v1_0().clone(), device.fp_v1_3().clone());
+        replace(&mut v1_0, &mut v1_3);
+        self.gpu.device = ash::Device::from_parts_1_3(
+            device.handle(),
+            v1_0,
+            device.fp_v1_1().clone(),
+            device.fp_v1_2().clone(),
+            v1_3,
+        );
+    }
+
     /// The number of submissions so far.
     pub(crate) fn submissions(&self) -> u64 {
         self.submissions

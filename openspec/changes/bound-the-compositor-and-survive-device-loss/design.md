@@ -106,9 +106,30 @@ engine's own waits beyond the existing bounded acquire.
   run their work through `unless_lost`, which refuses at once when the device is lost and
   records a loss the work found. The methods that only set state (`set_mix`,
   `resize_surface` and the like) stay as they were.
+- **Loss found on the way.** A loss is recorded (`note_loss`) where the call that reports it
+  is made, before anything is cleaned up: the submission (`vkEndCommandBuffer`,
+  `vkQueueSubmit2`) and its wait in `submit_with`; reading the timestamps (`read_span`,
+  which before turned every failure into no measurement and now fails the call on a lost
+  device and leaves out only other failures); the wait for the fences of the presents
+  (`settle_presents`, now a `Result`); `vkReleaseSwapchainImagesEXT` for an undrawn image;
+  and the calls of the pacing extensions, which the pacer otherwise answers by presenting
+  without the extension: `Pacer::fail` keeps a lost device, and `check_device` after the plan
+  of a present and before and after the swapchain is made ends the call with it. The idle
+  that cleans up after a failed submission (`idle_after_failure`, used by `execute`,
+  `read_image` and `submit_or_idle`) is skipped on a lost device and records a loss it finds
+  itself; either way nothing the submission used is released. `unless_lost` makes a call
+  that recorded a loss on the way fail with `DeviceLost` whatever it returned, and `drop`
+  leaks everything also when its own idle finds the device lost. The tests of
+  `tests/device_loss.rs` replace commands of the device through the probe
+  (`replace_device_commands`) with ones that report the loss and note every call, and check
+  that the call fails and that no replaced command and no submission follows; the pacing
+  case uses the stand-in of the pacer tests.
 - **Releasing the surface.** `release_surface` keeps the result of idling, destroys the
   swapchain, releases the surface and then returns the error. The presentation probe can
-  replace the result of that idle, after it has idled, for the test.
+  replace the result of that idle, after it has idled, for the test. When the idle, or the
+  wait for the fences before it, finds the device lost, nothing more of the device is used:
+  the swapchain is leaked, the surface stays, and the error is the lost device, which the
+  requirement on a lost device asks; the scenario "Idle fails" is that of any other failure.
 - **Session.** The session cannot see `VkError`: it is generic over `Display`, whose error is
   only `Display`. So `Display` got a provided method `is_device_lost(&Self::Error) -> bool`,
   `false` by default, which `HeadlessDisplay` and `VulkanDisplay` answer with

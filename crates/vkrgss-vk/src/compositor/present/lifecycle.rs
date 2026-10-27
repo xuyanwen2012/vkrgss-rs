@@ -17,7 +17,8 @@ impl VkCompositor {
     ///
     /// Fails with [`VkError::NoSurface`] on a compositor that was created without a surface.
     /// When idling the device before the swapchain is destroyed fails, the swapchain and the
-    /// surface are let go all the same and that error is returned.
+    /// surface are let go all the same and that error is returned; unless the device is lost,
+    /// when nothing of it is used again and both are leaked.
     ///
     /// [`attach_window`]: VkCompositor::attach_window
     /// [`present`]: VkCompositor::present
@@ -38,11 +39,20 @@ impl VkCompositor {
             && let Some(chain) = presenter.swapchain.take()
         {
             // Where the presents carry fences, these say when the presentation engine has let
-            // go of them; idling the device covers the rest, as for a replaced swapchain.
-            let _ = chain.settle_presents(device);
+            // go of them; idling the device covers the rest, as for a replaced swapchain. A
+            // lost device ends the release: the swapchain is leaked and the surface stays.
+            chain.settle_presents(device)?;
             // SAFETY: the device is live.
             let idle = unsafe { device.device_wait_idle() };
-            idled = self.present_probe.idle_result(idle);
+            idled = self
+                .present_probe
+                .idle_result(idle)
+                .map_err(VkError::vulkan("vkDeviceWaitIdle"));
+            if let Err(error) = &idled
+                && error.is_device_lost()
+            {
+                return idled;
+            }
             let loader = presenter
                 .swapchain_loader
                 .as_ref()
@@ -54,7 +64,7 @@ impl VkCompositor {
         }
         self.starved = false;
         self.gpu.release_surface();
-        idled.map_err(VkError::vulkan("vkDeviceWaitIdle"))
+        idled
     }
 
     /// Gives the compositor the surface of `window` after [`release_surface`]: the window the

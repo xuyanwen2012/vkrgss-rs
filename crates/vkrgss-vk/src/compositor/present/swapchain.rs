@@ -67,10 +67,10 @@ impl Swapchain {
     /// Waits, for a bounded time, until the presentation engine has let go of what the
     /// presents of this swapchain used. Returns whether it has, which only the fences of
     /// swapchain maintenance tell: `false` without them and when one is not signalled in
-    /// time.
-    pub(super) fn settle_presents(&self, device: &ash::Device) -> bool {
+    /// time. Fails when the wait finds the device lost.
+    pub(super) fn settle_presents(&self, device: &ash::Device) -> Result<bool, VkError> {
         let Some(fences) = &self.present_fences else {
-            return false;
+            return Ok(false);
         };
         let outstanding: Vec<vk::Fence> = fences
             .iter()
@@ -81,11 +81,13 @@ impl Swapchain {
             // SAFETY: the fences are live and belong to this device.
             let waited =
                 unsafe { device.wait_for_fences(&outstanding, true, PRESENT_FENCE_TIMEOUT) };
-            if waited.is_err() {
-                return false;
+            match waited.map_err(VkError::vulkan("vkWaitForFences")) {
+                Ok(()) => {}
+                Err(error) if error.is_device_lost() => return Err(error),
+                Err(_) => return Ok(false),
             }
         }
-        true
+        Ok(true)
     }
 
     /// Destroys the swapchain and everything made for it. Every submission must have been
@@ -200,7 +202,12 @@ impl VkCompositor {
         // after the failure. For the same reason the old semaphores, which belong to this
         // device and are not used again, can be destroyed.
         unsafe {
-            if loader.release_swapchain_images(&info).is_err() {
+            if let Err(result) = loader.release_swapchain_images(&info) {
+                if result == vk::Result::ERROR_DEVICE_LOST {
+                    // Nothing of the device is used again; the semaphores are leaked.
+                    self.lost.get_or_insert("vkReleaseSwapchainImagesEXT");
+                    return false;
+                }
                 device.destroy_semaphore(acquired, None);
                 device.destroy_semaphore(drawn, None);
                 return false;
@@ -299,9 +306,11 @@ impl VkCompositor {
         let loader = presenter
             .swapchain_loader
             .get_or_insert_with(|| ash::khr::swapchain::Device::new(self.gpu.instance(), device));
-        if let Some(old) = &presenter.swapchain
-            && !old.settle_presents(device)
-        {
+        let settled = match &presenter.swapchain {
+            Some(old) => Some(old.settle_presents(device)?),
+            None => None,
+        };
+        if settled == Some(false) {
             // The presentation engine may still hold the semaphore of the last present. The
             // wait for a submission does not cover that. The fences of the presents do, where
             // swapchain maintenance gives them; without them, and when they are not
@@ -349,6 +358,9 @@ impl VkCompositor {
                     Err(failure) => self.pacer.fail(failure),
                 }
             }
+            // A lost device ends the replacement before the swapchain is made; the old one,
+            // taken out above, is leaked.
+            self.pacer.check_device()?;
         }
         let mut flags = pacing
             .as_ref()
@@ -420,6 +432,8 @@ impl VkCompositor {
             // The swapchain presents without the extension like any other.
             timing.map_err(|failure| self.pacer.fail(failure)).ok()
         });
+        // On a lost device the new swapchain is leaked.
+        self.pacer.check_device()?;
 
         if maintenance {
             self.gpu.note_present_fences();

@@ -141,6 +141,9 @@ impl VkCompositor {
                 .map(|timing| timing as &mut dyn TimingCalls);
             let calls = self.present_probe.timing_calls(calls);
             let plan = self.pacer.plan(calls, frame);
+            // A pacing call that found the device lost ends the present before anything else
+            // of the device is used.
+            self.pacer.check_device()?;
             // The target of a stand-in is on no clock of the swapchain and is not sent.
             let timing_info = plan
                 .as_ref()
@@ -202,7 +205,8 @@ impl VkCompositor {
                 compositor.submit_drawn(wait, signal)
             });
             if let (Some(started), Ok(())) = (started, &drawn) {
-                let present_device = self.read_span(query::PRESENT);
+                // A lost device ends the present here, with the image drawn and not shown.
+                let present_device = self.read_span(query::PRESENT)?;
                 let timing = self.frame_timing.get_or_insert_default();
                 timing.present = Some(started.elapsed());
                 timing.present_device = present_device;
