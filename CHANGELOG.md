@@ -44,8 +44,36 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   socket and says nothing no longer stops the program's messages to the game, and an error
   of accepting connections is reported once instead of making the relay spin. An error of
   the framing says why on the error stream.
+- A JPEG no longer makes the decoder allocate for its declared size before a scan: a file
+  of 200 bytes that declared 16384 by 16384 pixels and had no scan allocated 1.5 GiB and was
+  then decoded a second time by `jpeg-decoder`; it is now an error that allocates less than
+  a megabyte. The decoder that follows the original holds at most 4 times its output plus
+  1 MiB at once (a 4:4:4 picture of 1024 by 1024 about 7 MiB, 13.6 MiB before), and logs
+  at debug level why it leaves a file to `jpeg-decoder`.
+
+### Added
+
+- `cargo xtask fuzz jpeg`, `bmp` and `rgssad`: coverage-guided fuzz targets of the JPEG and
+  BMP decoders and of the reader of encrypted archives of both versions, which fail on a
+  panic, on part of an image and on more memory than the stated bounds. The nightly fuzz job
+  runs them beside the six of the interpreters.
+
+### Changed
+
+- Protocol version 16: the bitmap changes of a frame may travel ahead of it in messages of
+  their own, `GuestToHost::Bitmaps`, which the host applies with the next frame before its
+  own changes and answers with no tick. Recordings of version 15 are not read.
+- The largest bitmap is defined once, `vkrgss_proto::MAX_BITMAP_PIXELS`, for the core and
+  both compositors; a test ties the limit of the image decoders to it.
+- `Scene::extract` returns an error of the bitmap arena instead of a packet without bitmap
+  changes, and the binding ends the game with `RunError::Extraction`.
 
 ### Fixed
+
+- A bitmap of 16384 by 16384 pixels, which the core accepts as the original runtime does,
+  reaches the host from a guest process: its pixels go ahead of the frame in messages under
+  the bound of the framing. Before, the first frame that drew it ended the session, because
+  one message of 1 GiB of pixels passed the bound.
 
 - In a game of VX Ace the RGSS classes work from a script thread as from the main script,
   and bitmaps and scene elements collected while a thread runs are freed. Before, every

@@ -21,5 +21,5 @@
 
 ## 5. Documents and checks
 
-- [ ] 5.1 `docs/architecture.md` (protocol), `docs/development.md` (fuzz), `vkrgss-image/src/lib.rs` crate doc (memory bound and fallback), `vkrgss-core/src/bitmap.rs` doc of the limit, `CHANGELOG.md`. Verify: the document tests pass.
-- [ ] 5.2 `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0, `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask xarch check` prints `all identical`, `openspec validate bound-image-decoding-and-uploads --strict` passes.
+- [x] 5.1 `docs/architecture.md` (protocol), `docs/development.md` (fuzz), `vkrgss-image/src/lib.rs` crate doc (memory bound and fallback), `vkrgss-core/src/bitmap.rs` doc of the limit, `CHANGELOG.md`. Verify: the document tests pass.
+- [x] 5.2 `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0, `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask xarch check` prints `all identical`, `openspec validate bound-image-decoding-and-uploads --strict` passes.

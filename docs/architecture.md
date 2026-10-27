@@ -61,12 +61,12 @@ once the host has gone, a guest is ended five seconds after it was asked to quit
 request or by the host's going. A new connection attaches as its statement of the version and
 its `Attach` arrive, five seconds at most; the running guest's messages wait for it, so that a
 copy is known before what its maker sent after making it. Between two ticks the relay hands
-the host at most 256 MiB of messages from a guest process that are not frame packets, and ends
-a guest that sends more. The session of the host gives up on a guest that has not shut down
+the host at most 256 MiB of messages from a guest process that are not frame packets, and apart
+from them 2 GiB of bitmap changes ahead of a frame, and ends a guest that sends more. The session of the host gives up on a guest that has not shut down
 five seconds after it first asked it to quit, whether a thread or a process, and the windowed
 runner then returns without waiting for a guest thread.
 
-The protocol is at version 15; an encoded stream of another version is rejected. A frame packet
+The protocol is at version 16; an encoded stream of another version is rejected. A frame packet
 carries the changes to bitmaps and tables and an ordered list of ops of five kinds: `Clear`,
 `Quad`, `RectEffect`, `TilemapLayer` and `TilemapPlane`. Sprites, planes and the parts of a
 window are quads.
@@ -85,7 +85,18 @@ the buffer of RGSS3, 640 by 480 pixels whose top left corner a freeze writes. Ve
 added to `AudioCommand::Play` the sample frame at which its sound starts, `start`, and the
 time over which the music returns after a music effect, `music_return_ms`, let its pitch run
 from 1 to 65535, and added `AudioCommand::Volume`, which sets the volume of what a channel
-plays without starting it again.
+plays without starting it again. Version 16 added `GuestToHost::Bitmaps`, bitmap changes of
+the next frame sent ahead of it.
+
+One framed message is at most 1 GiB (`MAX_MESSAGE_LEN`), and the largest bitmap,
+`vkrgss_proto::MAX_BITMAP_PIXELS` (16384 by 16384, the one definition that the core and both
+compositors use), is 1 GiB of pixels alone. When the pixels of a frame's bitmap changes pass a
+quarter of the bound (`framing::BITMAPS_AHEAD_LEN`), the guest sends all of them ahead of the
+frame in `Bitmaps` messages of at most that many bytes, an update of a large bitmap cut into
+bands of whole rows. The host keeps them in order and applies them with the next frame, before
+that frame's own changes; they get no tick, and the frame gets its one tick as before. A
+loaded state drops what was kept for the guest that is gone. Every bitmap the core accepts so
+reaches the host, in a process as on a thread.
 
 `FramePacket::brightness` is a value from 0 to 255 that the scene keeps and writes into every
 packet. Both compositors apply it after the last op: each colour channel `v` of the frame

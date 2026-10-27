@@ -21,6 +21,15 @@
 //! panic or return part of an image, and an image above [`MAX_PIXELS`] is refused from its
 //! header, before its pixels are allocated.
 //!
+//! **Memory.** A decode by the JPEG decoder that follows the original, and a BMP decode, hold
+//! at most 4 times the RGBA output at once, plus 1 MiB for tables and for the block grid of a
+//! small JPEG, which covers whole MCUs. The JPEG decoder allocates a component's coefficients
+//! when the first scan that codes it has been read, and nothing that grows with the image
+//! from the frame header alone, so a file with a frame header and no scan is an error that
+//! costs nothing for its size. A file that it does not handle, or whose block grid would pass
+//! the bound, goes to `jpeg-decoder`; why it gave up is logged at debug level through
+//! `tracing` first.
+//!
 //! This crate does no file I/O: `vkrgss-vfs` finds and reads the file.
 //!
 //! # Example

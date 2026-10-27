@@ -7,8 +7,11 @@ use crate::{BitmapError, Color, CreateFailure, Font, FontDefaults, Rect};
 
 mod rgss2;
 
-/// Largest bitmap that can be created, in pixels: [`vkrgss_proto::MAX_BITMAP_PIXELS`], which
-/// the compositors' bitmap stores accept too, so every bitmap created here can be uploaded.
+/// Largest bitmap that can be created, in pixels: [`vkrgss_proto::MAX_BITMAP_PIXELS`], 16384 by
+/// 16384 as the original created, which the compositors' bitmap stores accept too, so every
+/// bitmap created here can be uploaded. Its pixels are 1 GiB, the bound of one message of the
+/// framing, so a guest sends the changes of a frame that large ahead of it in parts
+/// ([`split_deltas`](crate::split_deltas)).
 pub use vkrgss_proto::MAX_BITMAP_PIXELS;
 
 /// A rectangle of pixels inside a bitmap: `left..right` by `top..bottom`, never empty.
