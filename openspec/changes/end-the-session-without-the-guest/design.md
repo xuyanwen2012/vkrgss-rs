@@ -98,6 +98,25 @@
   for `aarch64-linux-android`; `cargo +1.99.0 clippy -p vkrgss-android --target
   aarch64-linux-android -- -D warnings`, with the NDK's clang as linker and C compiler, passes.
 
+- **What the bound of 256 MiB counts.** The host holds a message as an entry of the
+  in-process link and the heap blocks of its texts, not as its bytes on the wire: a title of
+  one character is 14 bytes encoded and about 140 in the host. The relay therefore charges
+  each message other than a frame packet its encoded length plus `HELD_PER_MESSAGE`, the size
+  of a `GuestToHost` and 64 bytes for up to two heap blocks, so that what the host holds stays
+  below the bound for short messages as for long ones. The test floods with titles of one
+  character and of 1 MiB and measures the peak resident memory of the test process.
+- **Giving up is said whatever the guest reported.** The relay's flag that it gave up means
+  that the guest was still there when its time was up, whatever outcome it had reported. The
+  relay says so on the error stream unless the guest had reported a game that went well; then
+  a headless run stays a success, as before, and when a window gave up on the guest the
+  program says it.
+- **Program shortcuts follow the physical key.** A key is down as a whole while the physical
+  key or the injected one is; the actions of the original runtime's keys follow the key as a
+  whole, the program's own shortcuts (F3, F4, Tab, F11) the physical key alone, so an
+  injected Tab neither keeps fast-forward on after the physical Tab is released nor keeps a
+  physical press from engaging it.
+- **A stream that ends inside a message** says so, through the same mapping of framing errors,
+  for the receive that waits and for the one that does not.
 - **The headless clock and loads.** Moving the clock to ticks alone is not enough for the
   scenario "Save and load": the frame at which a state is loaded never gets its tick, and a
   run with a load would report one period less per load. The headless loop therefore also
@@ -115,8 +134,9 @@
   test doubles of `windowed.rs` and of the join that `run_windowed` leaves out after giving
   up. A windowed run cannot be driven in the tests (they have no window system), so the
   process form is covered by the relay's tests of a guest that stops and by the end-to-end
-  test of a headless guest process in `loop {}`, which now also asserts the 10 s; the owner
-  checks the windowed process form by hand.
+  test of a headless guest process in `loop {}`, which now also asserts the 10 s, counted from
+  a mark the script makes as it enters its loop, right after the tick that the quit request
+  follows; the owner checks the windowed process form by hand.
 
 - **Checks.** The gate passed with `TMPDIR=/var/tmp/vkrgss-end-the-session-without-the-guest`.
   `xarch check` ran against a baseline of the base revision (`xarch baseline --at e3a60d2f`)
