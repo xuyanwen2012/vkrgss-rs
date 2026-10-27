@@ -44,7 +44,11 @@
 //!
 //! A script can loop without ever calling `Graphics.update` and then never sees a quit
 //! request. After a headless run has ended, the program waits [`GUEST_WAIT`] for the game
-//! and then exits with a message and a non-zero status.
+//! and then exits with a message and a non-zero status. In a window the session gives up on
+//! the guest [`QUIT_WAIT`](vkrgss_host::QUIT_WAIT) after it first asked it to quit (the
+//! window was closed, or the frame limit reached); the window closes, and the program exits
+//! with the same message and status 1 without waiting for a guest thread, which may never
+//! return. A guest process is ended by the relay, which the program waits for.
 //!
 //! With the guest in a process (`--guest process`, and in a window unless `--guest thread`
 //! says otherwise) the game's scripts run in a child process instead of on a thread
@@ -94,7 +98,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use anyhow::{Context, Result, anyhow, bail};
 use vkrgss_host::{
     AudioOptions, HeadlessOptions, InputScript, InputSource, Recorder, Recording, Replayer,
-    WindowedOptions, device_from_text, headless_link, run_headless, run_windowed,
+    SessionEnd, WindowedOptions, device_from_text, headless_link, run_headless, run_windowed,
 };
 use vkrgss_proto::link::GuestEnd;
 
@@ -355,6 +359,25 @@ enum Guest {
 }
 
 impl Guest {
+    /// The session gave up on the guest: says so and fails. A guest thread is left where it
+    /// is and the process ends here; a guest process is ended by the relay, which says so
+    /// unless the guest had reported a game that went well.
+    fn given_up(self) -> bool {
+        match self {
+            Guest::Thread(_) => {
+                eprintln!("vkrgss: {}", giving_up());
+                // The interpreter thread is still inside the script and cannot be joined.
+                std::process::exit(1);
+            }
+            Guest::Process(outcome) => {
+                if outcome.recv().unwrap_or(false) {
+                    eprintln!("vkrgss: {}", giving_up());
+                }
+                false
+            }
+        }
+    }
+
     /// Waits for the game's scripts to end, once the host has, and says whether the game
     /// ended without a failure.
     fn ended(self) -> Result<bool> {
@@ -476,8 +499,12 @@ fn run(
             audio_errors: log::EventLines::audio(),
             ..WindowedOptions::new(device.unwrap_or_default())
         };
-        // The windowed runner returns once the guest thread has ended.
+        // The windowed runner returns once the guest thread has ended, or at once when the
+        // session gave up on the guest.
         let end = run_windowed(host_options, guest)?;
+        if end == SessionEnd::GaveUp {
+            return Ok(waited.given_up());
+        }
         let game_ok = waited.ended()?;
         if !end.is_success() {
             eprintln!("vkrgss: the session ended without the game shutting down ({end:?})");
@@ -492,16 +519,20 @@ fn game_ended(outcome: &Outcome) -> Result<bool> {
     match outcome.recv_timeout(GUEST_WAIT) {
         Ok(result) => Ok(game_succeeded(result)),
         Err(RecvTimeoutError::Timeout) => {
-            eprintln!(
-                "vkrgss: the game's scripts did not end within {} seconds of being asked to \
-                 quit; giving up",
-                GUEST_WAIT.as_secs()
-            );
+            eprintln!("vkrgss: {}", giving_up());
             // The interpreter thread is still inside the script and cannot be joined.
             std::process::exit(1);
         }
         Err(RecvTimeoutError::Disconnected) => bail!("the guest thread panicked"),
     }
+}
+
+/// What the program says of a game whose scripts did not end when asked to quit.
+fn giving_up() -> String {
+    format!(
+        "the game's scripts did not end within {} seconds of being asked to quit; giving up",
+        GUEST_WAIT.as_secs()
+    )
 }
 
 #[cfg(test)]

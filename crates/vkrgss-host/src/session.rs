@@ -38,6 +38,9 @@ const NOTICE_TIME: Duration = Duration::from_secs(2);
 /// How often the frame rate in the title is refreshed.
 const FPS_INTERVAL: Duration = Duration::from_secs(1);
 
+/// How long the guest has to shut down after it was first asked to quit.
+pub const QUIT_WAIT: Duration = Duration::from_secs(5);
+
 /// How a session ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionEnd {
@@ -48,6 +51,9 @@ pub enum SessionEnd {
     /// A frame was rejected in a session that does not continue after that. The frame still
     /// got its tick.
     Failed,
+    /// The guest had not shut down [`QUIT_WAIT`] after it was first asked to quit, and was
+    /// given up on.
+    GaveUp,
 }
 
 impl SessionEnd {
@@ -59,7 +65,7 @@ impl SessionEnd {
 
 /// Something a key press asks of the window, which the session itself has no access to. The
 /// press of a physical key returns it from [`Session::key`]; that of a key the guest injected
-/// is kept for [`Session::take_actions`].
+/// is kept for [`Session::take_actions`], and is only ever Alt+Enter's.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyAction {
     None,
@@ -207,14 +213,25 @@ struct FpsCounter {
 /// it when its state was loaded, behind the stop of the channels: the music and the
 /// background sound that the guest then plays again go on where they were.
 ///
+/// # Quitting
+///
+/// A request to close the window, and [`request_quit`](Session::request_quit), send the guest
+/// a quit request; the session runs on until the guest shuts down or goes. One that has not
+/// [`QUIT_WAIT`] after the first request, on the session's clock, is given up on: the
+/// session ends with [`SessionEnd::GaveUp`]. [`next_wake`](Session::next_wake) names that
+/// time, so a host that sleeps between events wakes for it.
+///
 /// # Injected keys
 ///
 /// A key the guest presses for the player ([`GuestToHost::InjectKey`]) is down until the
 /// guest releases it, a state is loaded or the guest is asked to reset. While it is down the
 /// physical key that has its code counts as down: it holds the buttons the key map gives
 /// that key and its code in the raw keys of the snapshots, on top of what
-/// [`set_buttons`](Session::set_buttons) was given, and its press does what a press of that
-/// key does. What that asks of the window is kept for
+/// [`set_buttons`](Session::set_buttons) was given. Its press does what that key does in the
+/// original runtime: F12 resets, Alt+Enter switches full screen, F2 shows the frame rate, and
+/// a key of C or B answers a modal message. It does none of the program's own shortcuts: no
+/// state is saved or loaded and no slot chosen (F3, F4), Tab does not fast-forward and F11
+/// does not switch full screen. What a press asks of the window is kept for
 /// [`take_actions`](Session::take_actions). The code of Shift, Control or Alt of either side
 /// and a code that two keys share stand for the left key; a code no key has, such as that
 /// of a mouse button, is only held in the raw keys. A session that replays a recording
@@ -297,6 +314,8 @@ pub struct Session<D: Display, C: Clock> {
     loading: Option<u8>,
     /// The notice about states that the title shows, and until when.
     notice: Option<(String, Duration)>,
+    /// When the guest was first asked to quit.
+    quit_asked: Option<Duration>,
 }
 
 impl<D: Display, C: Clock> Session<D, C> {
@@ -350,6 +369,7 @@ impl<D: Display, C: Clock> Session<D, C> {
             slot: 0,
             loading: None,
             notice: None,
+            quit_asked: None,
         }
     }
 
@@ -383,17 +403,32 @@ impl<D: Display, C: Clock> Session<D, C> {
     }
 
     /// When [`poll`](Session::poll) next has something to do, on the session's clock: the
-    /// earlier of the time the pending tick is due and the end of the notice in the title.
-    /// `None` when only a guest message or user input can move the session on. While a
-    /// request to load a state waits for its answer the pending tick is not due, but the
-    /// end of a notice still is.
+    /// earliest of the time the pending tick is due, the end of the notice in the title and
+    /// the time the guest is given up on if it was asked to quit. `None` when only a guest
+    /// message or user input can move the session on. While a request to load a state waits
+    /// for its answer the pending tick is not due, but the others still are.
     pub fn next_wake(&self) -> Option<Duration> {
         if self.end.is_some() {
             return None;
         }
-        let tick = self.pending_tick.filter(|_| self.loading.is_none());
         let notice = self.notice.as_ref().map(|(_, until)| *until);
-        tick.into_iter().chain(notice).min()
+        let given_up = self.quit_asked.map(|asked| asked + QUIT_WAIT);
+        self.next_tick()
+            .into_iter()
+            .chain(notice)
+            .chain(given_up)
+            .min()
+    }
+
+    /// When the pending tick is due, if one is and no request to load a state waits for its
+    /// answer.
+    pub(crate) fn next_tick(&self) -> Option<Duration> {
+        self.tick_due().filter(|_| self.loading.is_none())
+    }
+
+    /// When the pending tick is due, whether or not it waits for the answer to a load.
+    pub(crate) fn tick_due(&self) -> Option<Duration> {
+        self.pending_tick.filter(|_| self.end.is_none())
     }
 
     /// Whether fast-forward is engaged.
@@ -502,12 +537,20 @@ impl<D: Display, C: Clock> Session<D, C> {
         self.end.get_or_insert(SessionEnd::Disconnected);
     }
 
-    /// Sends the pending tick when it is due.
+    /// Sends the pending tick when it is due, and gives the guest up when it has not shut
+    /// down in time after it was asked to quit.
     pub fn poll(&mut self) {
         if self.end.is_some() {
             return;
         }
         let now = self.clock.now();
+        if self
+            .quit_asked
+            .is_some_and(|asked| now >= asked + QUIT_WAIT)
+        {
+            self.end = Some(SessionEnd::GaveUp);
+            return;
+        }
         if self.notice.as_ref().is_some_and(|(_, until)| *until <= now) {
             self.notice = None;
             // The frame rate comes back at its next refresh.
@@ -669,7 +712,7 @@ impl<D: Display, C: Clock> Session<D, C> {
                 return KeyAction::None;
             }
             if !injected {
-                action = self.key_pressed(key);
+                action = self.key_pressed(key, false);
             }
         } else {
             self.held_keys.remove(&key);
@@ -700,8 +743,10 @@ impl<D: Display, C: Clock> Session<D, C> {
             .any(|key| self.held_keys.contains(key) || self.injected_holds(*key))
     }
 
-    /// `key`, which was up, is down: what the session does at the press of a key.
-    fn key_pressed(&mut self, key: KeyCode) -> KeyAction {
+    /// `key`, which was up, is down: what the session does at the press of a key. The press
+    /// of a key the guest `injected` does none of the program's own shortcuts; see "Injected
+    /// keys".
+    fn key_pressed(&mut self, key: KeyCode, injected: bool) -> KeyAction {
         let alt = self.any_down([KeyCode::AltLeft, KeyCode::AltRight]);
         let shift = self.any_down([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
         let mut action = KeyAction::None;
@@ -712,7 +757,7 @@ impl<D: Display, C: Clock> Session<D, C> {
                 self.clear_injected();
             }
             // Whatever the key map says of these keys, this press holds no button.
-            FULLSCREEN_KEY => {
+            FULLSCREEN_KEY if !injected => {
                 self.swallowed_keys.insert(key);
                 action = KeyAction::ToggleFullscreen;
             }
@@ -728,7 +773,7 @@ impl<D: Display, C: Clock> Session<D, C> {
                 self.dismiss_modal();
             }
             FPS_KEY => self.toggle_fps(),
-            SAVE_STATE_KEY | LOAD_STATE_KEY => {
+            SAVE_STATE_KEY | LOAD_STATE_KEY if !injected => {
                 self.swallowed_keys.insert(key);
                 match (key == SAVE_STATE_KEY, shift) {
                     (true, false) => self.save_state(self.slot),
@@ -737,7 +782,7 @@ impl<D: Display, C: Clock> Session<D, C> {
                     (false, true) => self.choose_slot(STATE_SLOTS - 1),
                 }
             }
-            FAST_FORWARD_KEY => {
+            FAST_FORWARD_KEY if !injected => {
                 self.fast_forward_key = true;
                 self.pacing_restart = true;
                 self.hurry();
@@ -750,7 +795,7 @@ impl<D: Display, C: Clock> Session<D, C> {
     /// `key`, which was down, is up.
     fn key_released(&mut self, key: KeyCode) {
         self.swallowed_keys.remove(&key);
-        if key == FAST_FORWARD_KEY {
+        if key == FAST_FORWARD_KEY && self.fast_forward_key {
             self.fast_forward_key = false;
             self.pacing_restart = true;
         }
@@ -776,7 +821,7 @@ impl<D: Display, C: Clock> Session<D, C> {
         if let Some(key) = key {
             let is_down = self.held_keys.contains(&key) || self.injected_holds(key);
             if is_down && !was_down {
-                match self.key_pressed(key) {
+                match self.key_pressed(key, true) {
                     KeyAction::None => {}
                     action => self.actions.push(action),
                 }
@@ -861,7 +906,8 @@ impl<D: Display, C: Clock> Session<D, C> {
             .filter_map(|code| physical_key(*code))
             .collect();
         self.swallowed_keys.retain(|key| injected.contains(key));
-        if self.fast_forward_key && !injected.contains(&FAST_FORWARD_KEY) {
+        // Only the physical key fast-forwards.
+        if self.fast_forward_key {
             self.fast_forward_key = false;
             self.pacing_restart = true;
         }
@@ -914,15 +960,18 @@ impl<D: Display, C: Clock> Session<D, C> {
         }
     }
 
-    /// The user asked to close the window. The session runs on until the guest shuts down.
+    /// The user asked to close the window. The session runs on until the guest shuts down,
+    /// or is given up on; see "Quitting".
     pub fn close_requested(&mut self) {
         self.request_quit();
     }
 
-    /// Asks the guest to shut down.
+    /// Asks the guest to shut down; see "Quitting".
     pub fn request_quit(&mut self) {
         if self.end.is_none() {
             self.outbox.push_back(HostToGuest::Quit);
+            let now = self.clock.now();
+            self.quit_asked.get_or_insert(now);
         }
     }
 

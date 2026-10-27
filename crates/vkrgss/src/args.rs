@@ -95,10 +95,9 @@ pub(crate) enum Input {
 }
 
 /// Where the guest runs.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum GuestForm {
     /// On a thread of the program.
-    #[default]
     Thread,
     /// In a child process.
     Process,
@@ -632,7 +631,6 @@ mod tests {
     #[test]
     fn the_form_of_the_guest_is_thread_or_process() {
         assert_eq!(parse_words(&[]).unwrap().guest, None);
-        assert_eq!(GuestForm::default(), GuestForm::Thread);
         let options = parse_words(&["--guest", "process", "games/demo"]).unwrap();
         assert_eq!(options.guest, Some(GuestForm::Process));
         assert_eq!(options.game_dir, Some("games/demo".into()));

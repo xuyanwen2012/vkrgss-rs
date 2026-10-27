@@ -1573,7 +1573,9 @@ fn the_frame_limit_ends_a_guest_process_too() {
     );
 }
 
-/// A guest process whose game never asks for the quit request is ended.
+/// A guest process whose game never asks for the quit request is ended, within the bound
+/// of the scenario "Script in an endless loop": a windowed run cannot be driven here, and the
+/// relay gives up on the guest in the same way in both.
 #[test]
 fn a_guest_process_that_does_not_answer_the_quit_request_is_ended() {
     let source = "\
@@ -1583,7 +1585,9 @@ rescue SystemExit
 end
 loop { }";
     let game = pid_game("e2e-process-stuck", source);
+    let started = std::time::Instant::now();
     let ran = headless(&game, &["--guest", "process", "--frames", "3"]);
+    assert!(started.elapsed() < std::time::Duration::from_secs(10));
     ran.assert_failure();
     assert!(ran.stderr().contains("did not end"), "{}", ran.stderr());
     let pid = guest_pid(&game).expect("the game ran");

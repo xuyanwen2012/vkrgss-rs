@@ -82,7 +82,7 @@ pub struct WindowedOptions {
     /// Where the audio side reports sounds that cannot be played, taken likewise.
     pub audio_errors: Box<dyn Write + Send>,
     /// The number of frames after which the guest is asked to quit. The window stays until
-    /// it has, as when the window is closed.
+    /// it has, or has been given up on, as when the window is closed.
     pub frames: Option<u64>,
     /// Frames to write as PNG files, by frame number, numbered as a headless run numbers
     /// them and holding what the window shows of that frame at the logical size, as a
@@ -793,9 +793,12 @@ impl ApplicationHandler<GuestSpoke> for App {
 /// down or goes away. Must be called on the main thread, as `winit` requires.
 ///
 /// Closing the window sends the guest a quit request; the window stays until the guest has
-/// answered with its shutdown message. F12 asks the guest to reset, Alt+Enter and F11 switch
-/// to borderless fullscreen and back, F2 shows the frame rate in the title, and Tab held runs
-/// the guest as fast as it goes.
+/// answered with its shutdown message, or for [`QUIT_WAIT`](crate::QUIT_WAIT) at most. A guest
+/// that has not answered by then is given up on: the run returns [`SessionEnd::GaveUp`] at
+/// once and leaves the guest thread behind, which may never return; the caller ends the
+/// process. Otherwise the run waits for the guest thread. F12 asks the guest to reset,
+/// Alt+Enter and F11 switch to borderless fullscreen and back, F2 shows the frame rate in the
+/// title, and Tab held runs the guest as fast as it goes.
 pub fn run_windowed<G>(options: WindowedOptions, guest: G) -> Result<SessionEnd, WindowedError>
 where
     G: FnOnce(GuestEnd) + Send + 'static,
@@ -849,16 +852,28 @@ where
         outcome: None,
     };
     let ran = event_loop.run_app(&mut app);
-    let outcome = app.outcome.take();
+    let outcome = app.outcome.take().unwrap_or(Ok(SessionEnd::Disconnected));
     // Dropping the session and the link tells a guest that is still running that the host
     // has gone, so the join below does not wait for a guest that waits for the host.
     drop(app);
-    let joined = guest_thread.join();
+    let joined = join_unless_given_up(&outcome, guest_thread);
 
     ran.map_err(|error| WindowedError::EventLoop(error.to_string()))?;
-    let end = outcome.unwrap_or(Ok(SessionEnd::Disconnected))?;
+    let end = outcome?;
     joined.map_err(|_| WindowedError::GuestPanicked)?;
     Ok(end)
+}
+
+/// Waits for the guest thread, unless the session gave up on the guest: then the thread is
+/// left behind, since a script in an endless loop never returns.
+fn join_unless_given_up(
+    outcome: &Result<SessionEnd, WindowedError>,
+    guest_thread: thread::JoinHandle<()>,
+) -> thread::Result<()> {
+    match outcome {
+        Ok(SessionEnd::GaveUp) => Ok(()),
+        _ => guest_thread.join(),
+    }
 }
 
 #[cfg(test)]
@@ -1241,6 +1256,53 @@ mod tests {
         guest.send(GuestToHost::Shutdown).unwrap();
         driver.wake();
         assert_eq!(driver.end(), Some(SessionEnd::Shutdown));
+    }
+
+    /// Scenario "Script in an endless loop", with a guest thread that loops without reading
+    /// its link: the session gives up on it after five seconds of its clock, and the run does
+    /// not wait for the thread.
+    #[test]
+    fn a_guest_thread_in_an_endless_loop_is_given_up_on_and_left_behind() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::time::Instant;
+
+        let (guest, host) = link(|| {});
+        let clock = ManualClock::new();
+        let session = Session::new(
+            RecordingDisplay::new(),
+            clock.clone(),
+            SessionOptions::default(),
+        );
+        let mut driver = Driver::new(session, host);
+        guest.send(frame(0)).unwrap();
+        driver.wake();
+        let stop = Arc::new(AtomicBool::new(false));
+        let looping = {
+            let stop = Arc::clone(&stop);
+            thread::spawn(move || {
+                // Holds its end of the link and never reads it.
+                let _guest = guest;
+                while !stop.load(Ordering::SeqCst) {
+                    thread::sleep(Duration::from_millis(10));
+                }
+            })
+        };
+
+        driver.close_requested();
+        assert_eq!(driver.wake(), Some(crate::QUIT_WAIT));
+        clock.advance(crate::QUIT_WAIT - Duration::from_millis(1));
+        driver.wake();
+        assert_eq!(driver.end(), None);
+        clock.advance(Duration::from_millis(1));
+        assert_eq!(driver.wake(), None);
+        assert_eq!(driver.end(), Some(SessionEnd::GaveUp));
+        assert!(!driver.end().unwrap().is_success());
+
+        let started = Instant::now();
+        let outcome = Ok(driver.end().unwrap());
+        join_unless_given_up(&outcome, looping).unwrap();
+        assert!(started.elapsed() < Duration::from_secs(1));
+        stop.store(true, Ordering::SeqCst);
     }
 
     #[test]

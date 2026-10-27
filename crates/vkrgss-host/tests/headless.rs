@@ -1184,6 +1184,61 @@ fn a_load_that_fails_is_reported_and_the_run_goes_on() {
     assert_eq!(errors.severities("slot 3 holds no state"), [Severity::Info]);
 }
 
+/// A guest, and what keeps its states, that answers every request about states as a relay
+/// does when it succeeds: a loaded state goes on with the next frame. It sends frames until
+/// it is asked to quit or the host has gone.
+fn saving_guest(link: GuestEnd) {
+    for index in 0.. {
+        if link.send(small_frame(index)).is_err() {
+            return;
+        }
+        loop {
+            match link.recv() {
+                Ok(HostToGuest::Tick) => break,
+                Ok(HostToGuest::SaveState { slot }) => {
+                    let _ = link.send(GuestToHost::StateSaved { slot });
+                }
+                // The copy that goes on from the state sends the next frame.
+                Ok(HostToGuest::LoadState { slot }) => {
+                    let _ = link.send(GuestToHost::StateLoaded { slot });
+                    break;
+                }
+                Ok(HostToGuest::Quit) | Err(_) => return,
+                Ok(_) => {}
+            }
+        }
+    }
+}
+
+/// Scenario "Save and load" of the clock of a headless run: the notices about states do not
+/// move it, and neither does a load.
+#[test]
+fn saving_and_loading_states_does_not_change_the_time_of_a_run() {
+    let run = |states: &str| {
+        let errors = ErrorBuffer::new();
+        let (result, ()) = run_with(
+            HeadlessOptions {
+                frames: Some(12),
+                states: StateSchedule::parse(states).unwrap(),
+                errors: Box::new(errors.clone()),
+                ..options()
+            },
+            saving_guest,
+        );
+        let report = result.unwrap_or_else(|error| panic!("{error}: {}", errors.text()));
+        (report, errors)
+    };
+    let (plain, _) = run("");
+    let (with_states, errors) = run("1:save 0, 3:save 1, 5:load 0, 8:load 1");
+    assert_eq!(
+        errors.severities("state loaded from slot 1"),
+        [Severity::Info]
+    );
+    assert_eq!((plain.frames, with_states.frames), (12, 12));
+    assert_eq!(plain.elapsed, Duration::from_millis(11 * 25));
+    assert_eq!(with_states.elapsed, plain.elapsed);
+}
+
 /// Scenario "Dump across a resize, measured on the original of RGSS3": a frame of 544 by
 /// 416 frozen by the buffer rule, and a transition of RGSS2 over four frames of 640 by 480.
 #[test]

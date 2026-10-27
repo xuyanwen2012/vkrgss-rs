@@ -678,6 +678,48 @@ fn closing_the_window_asks_the_guest_to_quit_and_the_session_runs_on() {
     assert_eq!(rig.session.end(), Some(SessionEnd::Shutdown));
 }
 
+/// Scenarios "Closing the window" and "Guest does not shut down".
+#[test]
+fn a_guest_that_does_not_shut_down_within_five_seconds_of_the_quit_request_is_given_up_on() {
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    rig.clock.advance(ms(1000));
+    rig.session.close_requested();
+    assert_eq!(rig.taken(), [HostToGuest::Quit]);
+    // The time it is given up on is when the session is to be woken.
+    assert_eq!(rig.session.next_wake(), Some(ms(6000)));
+    // A second request does not move that time.
+    rig.clock.advance(ms(2000));
+    rig.session.request_quit();
+    assert_eq!(rig.taken(), [HostToGuest::Quit]);
+    assert_eq!(rig.session.next_wake(), Some(ms(6000)));
+
+    rig.clock.advance_to(ms(5999));
+    rig.session.poll();
+    assert_eq!(rig.session.end(), None);
+    rig.clock.advance_to(ms(6000));
+    rig.session.poll();
+    assert_eq!(rig.session.end(), Some(SessionEnd::GaveUp));
+    assert!(!SessionEnd::GaveUp.is_success());
+    assert_eq!(rig.session.next_wake(), None);
+    assert_eq!(rig.taken(), []);
+}
+
+#[test]
+fn a_guest_that_shuts_down_in_time_ends_the_session_with_success() {
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    rig.session.close_requested();
+    rig.taken();
+    rig.clock.advance(ms(4999));
+    rig.session.poll();
+    rig.send(GuestToHost::Shutdown);
+    assert_eq!(rig.session.end(), Some(SessionEnd::Shutdown));
+    rig.clock.advance(ms(10));
+    rig.session.poll();
+    assert_eq!(rig.session.end(), Some(SessionEnd::Shutdown));
+}
+
 #[test]
 fn guest_shutdown_ends_the_session_with_success() {
     let mut rig = Rig::new();
@@ -2842,30 +2884,84 @@ fn the_display_is_told_whether_the_pointer_is_to_be_seen() {
     );
 }
 
+/// Scenario "Program shortcuts": the keys of the program's own shortcuts, injected, are
+/// held as keys and do nothing else.
 #[test]
-fn losing_focus_leaves_the_fast_forward_of_an_injected_key() {
+fn injected_keys_cause_none_of_the_programs_shortcuts() {
+    let mut rig = states_rig();
+    rig.frame(frame(0));
+    let mut sent = Vec::new();
+    // F3, F4, Tab, F11, and Shift with F3 and F4, which choose a slot.
+    for key in [0x72, 0x73, 0x09, 0x7A, 0x10, 0x72, 0x73] {
+        sent.extend(rig.send_whole(inject(key, true)));
+        if key != 0x10 {
+            sent.extend(rig.send_whole(inject(key, false)));
+        }
+    }
+    for key in [0x72, 0x73, 0x09, 0x7A] {
+        sent.extend(rig.send_whole(inject(key, true)));
+    }
+    assert!(
+        sent.iter()
+            .all(|message| matches!(message, HostToGuest::Input(_))),
+        "{sent:?}"
+    );
+    let Some(HostToGuest::Input(last)) = sent.last() else {
+        panic!("{sent:?}")
+    };
+    let keys = [0x10, 0xA0, 0x72, 0x73, 0x09, 0x7A]
+        .iter()
+        .fold(InputSnapshot::EMPTY, |snapshot, key| {
+            snapshot.with_key(*key)
+        });
+    assert_eq!(last.keys, keys.keys);
+    assert!(!rig.session.fast_forward());
+    assert_eq!(rig.session.take_actions(), []);
+    assert_eq!(rig.session.state_slot(), 0);
+    assert_eq!(rig.title(), "", "no notice");
+    // The next frame is paced as without fast-forward.
+    assert_eq!(rig.send(frame(1)), []);
+    assert_eq!(rig.wait_for_tick(), ms(25));
+}
+
+/// Scenario "Reset by an injected key".
+#[test]
+fn an_injected_f12_asks_the_guest_to_reset_once() {
+    let mut rig = Rig::new();
+    rig.frame(frame(0));
+    assert_eq!(rig.send_whole(inject(0x7B, true)), [HostToGuest::Reset]);
+    assert_eq!(rig.send_whole(inject(0x7B, false)), []);
+    assert_eq!(rig.session.take_actions(), []);
+}
+
+/// The frame rate key of the original runtime, injected, shows the frame rate.
+#[test]
+fn an_injected_f2_shows_the_frame_rate() {
+    let mut rig = Rig::new();
+    rig.send(GuestToHost::SetTitle {
+        title: "Game".to_owned(),
+    });
+    rig.frame(frame(0));
+    rig.send_whole(inject(0x71, true));
+    for index in 1..=40 {
+        rig.frame(frame(index));
+    }
+    assert_eq!(rig.title(), "Game - 40.0 FPS");
+}
+
+#[test]
+fn only_the_physical_tab_fast_forwards_and_losing_focus_releases_it() {
     let mut rig = Rig::new();
     rig.send_whole(inject(0x09, true));
+    assert!(!rig.session.fast_forward());
+    rig.send_whole(inject(0x09, false));
+    rig.session.key(KeyCode::Tab, true);
     assert!(rig.session.fast_forward());
-    rig.session.focus_lost();
-    assert!(rig.session.fast_forward(), "the injected key is still down");
     rig.frame(frame(0));
     assert_eq!(rig.send(frame(1)), [HostToGuest::Tick]);
-    // The physical key beside it is released by the loss of focus, the injected one not.
-    rig.session.key(KeyCode::Tab, true);
     rig.session.focus_lost();
-    assert!(rig.session.fast_forward());
-    rig.send_whole(inject(0x09, false));
     assert!(!rig.session.fast_forward());
     assert_eq!(rig.send(frame(2)), []);
-    rig.wait_for_tick();
-
-    // The physical key alone is released by the loss of focus, as before.
-    rig.session.key(KeyCode::Tab, true);
-    assert!(rig.session.fast_forward());
-    rig.session.focus_lost();
-    assert!(!rig.session.fast_forward());
-    assert_eq!(rig.send(frame(3)), []);
 }
 
 // Freeze by the rule of the message.

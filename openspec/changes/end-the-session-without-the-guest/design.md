@@ -93,6 +93,26 @@
   for `aarch64-linux-android`; `cargo +1.99.0 clippy -p vkrgss-android --target
   aarch64-linux-android -- -D warnings`, with the NDK's clang as linker and C compiler, passes.
 
+- **The headless clock and loads.** Moving the clock to ticks alone is not enough for the
+  scenario "Save and load": the frame at which a state is loaded never gets its tick, and a
+  run with a load would report one period less per load. The headless loop therefore also
+  moves the clock to the time of a tick that waits for the answer to a load, without sending
+  it; the guest that goes on from the state is then paced as the one that went would have
+  been.
+- **Injected keys** keep the actions of the original runtime: F12, Alt+Enter, F2, and a key
+  of C or B that answers a modal message, as it answers the message box of the original.
+- **`GuestForm`** has no `Default` any more; nothing but a test used it.
+- **`--guest-role` in `main.rs` stays.** No caller starts the program with it, but the
+  requirement "Refused guest record" of `game-launch`, which this change does not modify,
+  names `vkrgss --guest-role <path>` in its scenarios, and `crates/vkrgss/tests/guest_record.rs`
+  tests them.
+- **"Script in an endless loop".** The thread form is a test of the windowed driver with the
+  test doubles of `windowed.rs` and of the join that `run_windowed` leaves out after giving
+  up. A windowed run cannot be driven in the tests (they have no window system), so the
+  process form is covered by the relay's tests of a guest that stops and by the end-to-end
+  test of a headless guest process in `loop {}`, which now also asserts the 10 s; the owner
+  checks the windowed process form by hand.
+
 ## Out of scope
 
 Peer credentials and the state answers of the relay (change `verify-guests-and-deny-signals`);

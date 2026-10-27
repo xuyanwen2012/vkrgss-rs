@@ -1,7 +1,10 @@
 //! The headless runner: a session without a window or display.
 //!
 //! It runs on a virtual clock that never waits: when a tick is due in the future the clock is
-//! simply moved there. Input comes from an [`InputScript`], and chosen frames are written as
+//! simply moved there. The clock moves only to ticks, so the time a run reports depends on
+//! its frames alone: a notice about states ends when the clock has passed its end on the way
+//! to a tick, and the clock moves to the tick of a frame at which a state is loaded although
+//! that tick is never sent. Input comes from an [`InputScript`], and chosen frames are written as
 //! PNG files at the logical size, showing what a window of that size would: the held frame
 //! while the display is frozen and the mix during a transition. Nothing in a run depends on
 //! real time, so two runs of the same guest with the same script write identical files.
@@ -344,11 +347,17 @@ pub fn run_headless(
         }
         // Also after the answer that a state could not be loaded, which the tick of a frame
         // waited for.
-        while let Some(due) = session.next_wake() {
-            // The virtual clock never waits: it is moved to the tick, by way of the end of a
-            // notice that is over before it.
+        while let Some(due) = session.next_tick() {
+            // The virtual clock never waits: it is moved to the tick, and a notice that is
+            // over by then ends with it.
             clock.advance_to(due);
             session.poll();
+        }
+        // A tick that waits for the answer to a load is not sent, but the frame had its period
+        // all the same: the guest that goes on from the state is paced from then, as the
+        // guest that went would have been.
+        if let Some(due) = session.tick_due() {
+            clock.advance_to(due);
         }
         // Everything the session produced goes out before the run looks at how it stands, so
         // a rejected frame has its tick before the run fails and the guest is cut off.
@@ -361,7 +370,9 @@ pub fn run_headless(
             Some(SessionEnd::Failed) => {
                 return Err(HeadlessError::FrameRejected { frame: handled });
             }
-            Some(SessionEnd::Disconnected) => {
+            // A run does not wait for the guest once it has asked it to quit, so it never
+            // gives up on it.
+            Some(SessionEnd::Disconnected | SessionEnd::GaveUp) => {
                 return Err(HeadlessError::GuestDisconnected { frames });
             }
             None if gone => return Err(HeadlessError::GuestDisconnected { frames }),
