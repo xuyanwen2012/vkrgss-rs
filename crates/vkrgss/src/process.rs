@@ -97,6 +97,13 @@ const SLOTS: usize = 10;
 /// between two ticks.
 const UNPACED_BOUND: u64 = 256 << 20;
 
+/// What the host holds of a message beside its encoded bytes, as the bound counts it: the
+/// entry of the message in the in-process link, and an allowance for the heap blocks of the
+/// texts in it (two at most, such as the name of a sound and its type, whose bytes the encoded
+/// length counts already). A title of one character is 14 bytes on the wire and about 140 in
+/// the host.
+const HELD_PER_MESSAGE: u64 = std::mem::size_of::<GuestToHost>() as u64 + 64;
+
 /// How long the relay leaves the socket alone after an error of `accept`.
 const ACCEPT_PAUSE: Duration = Duration::from_millis(100);
 
@@ -751,11 +758,12 @@ impl GuestProcess {
     /// Returns once the host has gone and the running guest process has ended, and says
     /// whether the game ended without a failure. A guest process that is still there once
     /// the host has gone and [`GUEST_WAIT`] has passed since the guest was asked to quit, by
-    /// a quit request it was handed or by the host's going, is ended, which is a failure if
-    /// it has not reported how its game went. A guest process that has closed its connection ends by
-    /// itself and is waited for, for as long again at most: it may still be writing to the
-    /// error stream, its frame time statistics for one. Every process of the run is gone
-    /// when this returns.
+    /// a quit request it was handed or by the host's going, is ended and given up on, which
+    /// is a failure unless it had reported a game that went well; the error stream says so
+    /// when it is one, whatever the guest reported before. A guest process that has closed its
+    /// connection ends by itself and is waited for, for as long again at most: it may still be
+    /// writing to the error stream, its frame time statistics for one. Every process of the
+    /// run is gone when this returns.
     pub(crate) fn relay(mut self, link: GuestEnd) -> bool {
         let first = self.first.take();
         let relayed = relay(link, &self.listener, first, self.child.id());
@@ -783,7 +791,7 @@ impl GuestProcess {
             thread::sleep(POLL);
         }
 
-        if stuck {
+        if gave_up_failing(stuck, outcome) {
             eprintln!(
                 "vkrgss: the game's scripts did not end within {} seconds of being asked to \
                  quit; giving up",
@@ -809,11 +817,20 @@ impl GuestProcess {
     }
 }
 
+/// Whether a relay that ended with `stuck` and `outcome` gave up on a guest whose game is a
+/// failure: it was still there when its time was up, and had not reported a game that went
+/// well. A failed outcome it reported before does not keep the program from saying that it
+/// was given up on.
+fn gave_up_failing(stuck: bool, outcome: Option<bool>) -> bool {
+    stuck && outcome != Some(true)
+}
+
 /// How a relay ended.
 struct Relayed {
     /// How the game went, as the guest that ended it reported.
     outcome: Option<bool>,
-    /// Whether the guest was given up on: the host had gone and the guest had not reported.
+    /// Whether the guest was given up on: the host had gone, and the guest was still there
+    /// when its time was up, whatever it had reported.
     stuck: bool,
     /// Whether the running guest closed its connection, or ended, by itself.
     left: bool,
@@ -920,7 +937,7 @@ struct Relay<'a> {
     /// Whether an error of `accept` has been reported.
     accept_failed: bool,
     /// The bytes of the messages other than frame packets that the running guest handed the
-    /// host since it was last handed a tick.
+    /// host since it was last handed a tick, each with [`HELD_PER_MESSAGE`].
     unpaced: u64,
     /// Since when the guest has been asked to quit: when a quit request was handed to it or
     /// the host went, whichever was first.
@@ -934,7 +951,7 @@ struct Relay<'a> {
 impl Relay<'_> {
     /// Hands messages on until the host has gone and the running guest has ended, or the
     /// host has gone and [`GUEST_WAIT`] has passed since the guest was asked to quit. Returns
-    /// whether the guest was given up on: it had not reported how its game went by then.
+    /// whether the guest was given up on: it was still there then.
     ///
     /// No read or write waits: every turn of the loop waits for one of the connections,
     /// the host's side or the socket to be ready, or for the next deadline.
@@ -954,7 +971,7 @@ impl Relay<'_> {
                     return Ok(false);
                 }
                 if self.quit.is_some_and(|quit| now >= quit + GUEST_WAIT) {
-                    return Ok(self.outcome.is_none());
+                    return Ok(true);
                 }
             }
 
@@ -1165,7 +1182,7 @@ impl Relay<'_> {
             message => match only_made_here(&message) {
                 Some(kind) => self.drop_message(kind),
                 None if matches!(message, GuestToHost::Frame(_)) => self.tell_host(message),
-                None if self.unpaced + size > UNPACED_BOUND => {
+                None if self.unpaced + size + HELD_PER_MESSAGE > UNPACED_BOUND => {
                     let pid = self
                         .running
                         .as_ref()
@@ -1178,7 +1195,7 @@ impl Relay<'_> {
                     self.end_running();
                 }
                 None => {
-                    self.unpaced += size;
+                    self.unpaced += size + HELD_PER_MESSAGE;
                     self.tell_host(message);
                 }
             },
@@ -1533,6 +1550,34 @@ mod tests {
         assert!(stand_in.killed());
     }
 
+    /// A guest that reported a failed game and then does not end when asked to quit is
+    /// given up on all the same, and the program says so.
+    #[test]
+    fn a_guest_that_reported_a_failure_and_does_not_end_is_given_up_on() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut process = idle();
+        let (host, guest, relay) = relaying(dir.path(), &process);
+        guest.send(GuestToHost::Outcome { ok: false }).unwrap();
+        host.send(HostToGuest::Quit).unwrap();
+        assert_eq!(guest.recv(), Ok(HostToGuest::Quit));
+        let started = Instant::now();
+        drop(host);
+        // The guest goes on and never closes its connection.
+        let relayed = relay.join().unwrap();
+        assert!(started.elapsed() < Duration::from_secs(10));
+        assert!(relayed.stuck);
+        assert_eq!(relayed.outcome, Some(false));
+        assert!(gave_up_failing(relayed.stuck, relayed.outcome));
+        assert_eq!(process.wait().unwrap().signal(), Some(libc::SIGKILL));
+        drop(guest);
+
+        // Said of every guest given up on but one that reported a game that went well, which
+        // the program says itself when its window gave up on the guest.
+        assert!(gave_up_failing(true, None));
+        assert!(!gave_up_failing(true, Some(true)));
+        assert!(!gave_up_failing(false, Some(false)));
+    }
+
     /// Scenario "Not reading".
     #[test]
     fn a_guest_that_does_not_read_is_ended_once_the_host_has_gone() {
@@ -1604,16 +1649,21 @@ mod tests {
         (field("VmRSS:"), field("VmHWM:"))
     }
 
-    /// Scenario "Flood of titles": the host reads nothing until the guest has been ended, so
-    /// whatever was handed on is still held then.
-    #[test]
-    fn a_guest_that_floods_the_host_with_titles_is_ended_at_the_bound() {
+    /// Floods a relay with titles of `length` characters, reading nothing at the host until
+    /// the guest has been ended, so that whatever was handed on is still held then. Returns
+    /// the titles sent, the number and the characters of those the host was handed, how much
+    /// the memory of this process grew at most meanwhile on Linux, and what the relay logged.
+    fn flood(length: usize) -> (u64, u64, u64, u64, String) {
         let dir = tempfile::tempdir().unwrap();
         let mut process = idle();
         #[cfg(target_os = "linux")]
-        let (before, _) = resident();
+        let before = {
+            // Starts the most anew at what is resident now.
+            std::fs::write("/proc/self/clear_refs", "5").unwrap();
+            resident().0
+        };
         let (host, guest, relay, logged) = relaying_logged(dir.path(), &process);
-        let title = "t".repeat(1 << 20);
+        let title = "t".repeat(length);
         let flooding = thread::spawn(move || {
             let mut sent = 0_u64;
             while guest
@@ -1629,28 +1679,49 @@ mod tests {
         let sent = flooding.join().unwrap();
         assert_eq!(process.wait().unwrap().signal(), Some(libc::SIGKILL));
         #[cfg(target_os = "linux")]
-        {
-            let (_, most) = resident();
-            let grown = most.saturating_sub(before);
-            assert!(grown < UNPACED_BOUND + (64 << 20), "{} MiB", grown >> 20);
-        }
-        let mut handed = 0_u64;
+        let grown = resident().1.saturating_sub(before);
+        #[cfg(not(target_os = "linux"))]
+        let grown = 0;
+        let (mut count, mut characters) = (0_u64, 0_u64);
         while let Ok(message) = host.recv() {
             let GuestToHost::SetTitle { title } = message else {
                 panic!("{message:?}");
             };
-            handed += title.len() as u64;
+            count += 1;
+            characters += title.len() as u64;
         }
-        assert!(handed <= UNPACED_BOUND, "{handed}");
-        assert!(handed > UNPACED_BOUND - (2 << 20), "{handed}");
-        assert!(sent >= 256, "{sent}");
         drop(host);
         relay.join().unwrap();
-        let text = logged.text();
-        assert!(
-            text.contains("more than 256 MiB of messages other than frames"),
-            "{text}"
-        );
+        (sent, count, characters, grown, logged.text())
+    }
+
+    /// Scenario "Flood of titles", with titles of 1 MiB and of one character, whose entries
+    /// in the link take ten times their bytes on the wire. In one test: the memory of the
+    /// process is measured.
+    #[test]
+    fn a_guest_that_floods_the_host_with_titles_is_ended_at_the_bound() {
+        let most = UNPACED_BOUND + (64 << 20);
+        for length in [1, 1 << 20] {
+            let (sent, count, characters, grown, text) = flood(length);
+            assert!(grown < most, "titles of {length}: {} MiB", grown >> 20);
+            assert!(characters <= UNPACED_BOUND, "{characters}");
+            let mut encoded = Vec::new();
+            let title = GuestToHost::SetTitle {
+                title: "t".repeat(length),
+            };
+            write_message(&mut encoded, &title).unwrap();
+            let held = count * (HELD_PER_MESSAGE + encoded.len() as u64);
+            assert!(held <= UNPACED_BOUND, "titles of {length}: {count}");
+            assert!(
+                held > UNPACED_BOUND - (2 << 20),
+                "titles of {length}: {count}"
+            );
+            assert!(sent >= count, "{sent} {count}");
+            assert!(
+                text.contains("more than 256 MiB of messages other than frames"),
+                "{text}"
+            );
+        }
     }
 
     #[test]
