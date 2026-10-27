@@ -58,6 +58,9 @@ The change `bound-the-compositor-and-survive-device-loss` added to "Compositor" 
 on 2026-10-26, the work budget of a frame, the bounded waits, what a lost device does, the
 previous frame on a failed resize, and the descriptor limits a device has to meet.
 
+The change `call-rgss-from-script-threads` added to "Script threads" under "VX Ace", on
+2026-10-27, that the RGSS classes work from a script thread as from the main script.
+
 ## Goal and scope
 
 - vkrgss is a from-scratch runtime for the games of RPG Maker XP, VX and VX Ace, built to a
@@ -410,6 +413,11 @@ Ace finished and published.
 - Script threads: Ruby threads of RGSS3 are native threads. They run; a run with a live
   script thread is not claimed to be reproducible, and a save state is refused while one is
   alive. The timer thread of the interpreter is not started before a script makes a thread.
+  The RGSS classes work from a script thread as from the main script: the state of the
+  binding is one of the process, which a thread reaches only while it holds the interpreter
+  lock, and the binding never releases that lock, so no other Ruby thread runs during a call
+  (`Graphics.update` from a thread waits for its tick as from the main script). Objects
+  collected on any thread are freed at the next call of the binding.
 - Word size: the guest stays a 64-bit build against a 32-bit original. Differences a script
   can see (`2**30` is a Fixnum, `1.size`) are recorded as known differences unless a game
   of the corpus depends on one.

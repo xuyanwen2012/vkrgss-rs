@@ -47,6 +47,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- In a game of VX Ace the RGSS classes work from a script thread as from the main script,
+  and bitmaps and scene elements collected while a thread runs are freed. Before, every
+  call from a thread, `Thread.new { Bitmap.new(1, 1) }` among them, raised
+  `panic in a host function`, `Input.press?` answered `false` there, and what a collection
+  on a thread freed stayed in the arena and in the scene.
 - A frame whose ops cover more than 2^22 tiles in total, which a packet of the largest
   logical size with a few full-screen ops reaches, is refused as a limit before anything is
   allocated for it, and the previous frame stays. Before, such a packet made the program

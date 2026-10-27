@@ -306,6 +306,13 @@ creation of `Bitmap`, the modules `Graphics`, `Input` and `Audio` and the value 
 made with the standard scripts of VX Ace shows its title screen and its menu and starts a
 new game.
 
+The classes work from a script thread (`Thread.new`) as from the main script, as on the
+original, where a thread that called `Graphics.frame_count`, `Audio.se_stop` and
+`Bitmap.new` ran to its end. While a call of the binding runs, from a thread or from the main
+script, no other Ruby thread runs, and `Graphics.update` from a thread waits for its frame as
+from the main script; whether the original lets other threads run during its waits was not
+measured.
+
 The endings, `load_data` and the loading of code follow the original as measured; see
 *Endings and loading of VX Ace* below.
 
