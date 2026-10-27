@@ -200,7 +200,7 @@ fn run(
     let process = GuestProcess::start(runtime, private, handed)?;
     let (done, outcome) = mpsc::channel();
     let guest = move |link: GuestEnd| {
-        let _ = done.send(process.relay(link));
+        let _ = done.send(process.relay(link).ok);
     };
 
     // Under the validation layer when the intent asks for it, with what it reports written

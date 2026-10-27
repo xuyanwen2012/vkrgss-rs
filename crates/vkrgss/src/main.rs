@@ -110,7 +110,7 @@ use vkrgss_guest::settings::GuestSettings;
 use vkrgss_guest_main::{Outcome, game_succeeded, guest_inputs, guest_on_thread};
 use vkrgss_vfs::Runtime;
 
-use crate::process::{GuestProcess, Handed, socket_base};
+use crate::process::{GuestProcess, Handed, RelayEnded, socket_base};
 
 /// How long the program waits for the game's scripts to end after the host has.
 const GUEST_WAIT: Duration = Duration::from_secs(5);
@@ -355,13 +355,15 @@ enum Guest {
     /// The interpreter thread of this process, and what the guest thread reports.
     Thread(Outcome),
     /// A child process and its copies, and what the relay to them reports.
-    Process(Receiver<bool>),
+    Process(Receiver<RelayEnded>),
 }
 
 impl Guest {
     /// The session gave up on the guest: says so and fails. A guest thread is left where it
-    /// is and the process ends here; a guest process is ended by the relay, which says so
-    /// unless the guest had reported a game that went well.
+    /// is and the process ends here; a guest process is ended by the relay, and what it ends
+    /// with does not matter: the guest may have reported a failure and closed its connection
+    /// while the window went away, after the session gave up on it. The line is said once,
+    /// here unless the relay said it.
     fn given_up(self) -> bool {
         match self {
             Guest::Thread(_) => {
@@ -369,8 +371,8 @@ impl Guest {
                 // The interpreter thread is still inside the script and cannot be joined.
                 std::process::exit(1);
             }
-            Guest::Process(outcome) => {
-                if outcome.recv().unwrap_or(false) {
+            Guest::Process(ended) => {
+                if !said_giving_up(ended.recv().ok()) {
                     eprintln!("vkrgss: {}", giving_up());
                 }
                 false
@@ -383,8 +385,9 @@ impl Guest {
     fn ended(self) -> Result<bool> {
         match self {
             Guest::Thread(outcome) => game_ended(&outcome),
-            Guest::Process(outcome) => outcome
+            Guest::Process(ended) => ended
                 .recv()
+                .map(|ended| ended.ok)
                 .map_err(|_| anyhow!("the guest thread panicked")),
         }
     }
@@ -527,6 +530,12 @@ fn game_ended(outcome: &Outcome) -> Result<bool> {
     }
 }
 
+/// Whether the relay to a guest process, which ended with `ended` or whose thread panicked,
+/// said that it gave up on the guest.
+fn said_giving_up(ended: Option<RelayEnded>) -> bool {
+    ended.is_some_and(|ended| ended.said_giving_up)
+}
+
 /// What the program says of a game whose scripts did not end when asked to quit.
 fn giving_up() -> String {
     format!(
@@ -538,6 +547,27 @@ fn giving_up() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Scenario "Script in an endless loop", as the program says it: after the session gave
+    /// up on a guest process, the line is said here unless the relay said it, whatever the
+    /// game ended with, a failure reported before a late disconnect included.
+    #[test]
+    fn giving_up_on_a_guest_process_is_said_once() {
+        let ended = |ok, said_giving_up| Some(RelayEnded { ok, said_giving_up });
+        for ok in [false, true] {
+            assert!(!said_giving_up(ended(ok, false)), "said here");
+        }
+        assert!(said_giving_up(ended(false, true)), "said by the relay");
+        assert!(!said_giving_up(None), "the relay's thread panicked");
+        let (done, outcome) = mpsc::channel();
+        done.send(RelayEnded {
+            ok: false,
+            said_giving_up: false,
+        })
+        .unwrap();
+        assert!(!Guest::Process(outcome).given_up());
+        assert!(giving_up().contains("did not end within 5 seconds"));
+    }
 
     /// Requirement "Guest option": the default by kind of run, and scenario "Headless
     /// default".

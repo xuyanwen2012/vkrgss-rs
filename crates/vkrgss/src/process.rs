@@ -761,7 +761,8 @@ impl GuestProcess {
     /// guest ends, the host sees the guest as gone.
     ///
     /// Returns once the host has gone and the running guest process has ended, and says
-    /// whether the game ended without a failure. A guest process that is still there once
+    /// whether the game ended without a failure and whether it said that the guest was given
+    /// up on. A guest process that is still there once
     /// the host has gone and [`GUEST_WAIT`] has passed since the guest was asked to quit, by
     /// a quit request it was handed or by the host's going, is ended and given up on, which
     /// is a failure unless it had reported a game that went well; the error stream says so
@@ -769,7 +770,7 @@ impl GuestProcess {
     /// connection ends by itself and is waited for, for as long again at most: it may still be
     /// writing to the error stream, its frame time statistics for one. Every process of the
     /// run is gone when this returns.
-    pub(crate) fn relay(mut self, link: GuestEnd) -> bool {
+    pub(crate) fn relay(mut self, link: GuestEnd) -> RelayEnded {
         let first = self.first.take();
         let relayed = relay(link, &self.listener, first, self.child.id());
         let Relayed {
@@ -802,9 +803,12 @@ impl GuestProcess {
                  quit; giving up",
                 GUEST_WAIT.as_secs()
             );
-            return false;
+            return RelayEnded {
+                ok: false,
+                said_giving_up: true,
+            };
         }
-        match (outcome, status) {
+        let ok = match (outcome, status) {
             (Some(ok), _) => ok,
             // The child was the guest to the end and went without a word. One that exits
             // with a status has reported its failure itself.
@@ -818,8 +822,21 @@ impl GuestProcess {
                 eprintln!("vkrgss: the guest process ended without saying how the game went");
                 false
             }
+        };
+        RelayEnded {
+            ok,
+            said_giving_up: false,
         }
     }
+}
+
+/// How the relay to a guest process ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RelayEnded {
+    /// Whether the game ended without a failure.
+    pub(crate) ok: bool,
+    /// Whether the relay said on the error stream that it gave up on the guest.
+    pub(crate) said_giving_up: bool,
 }
 
 /// Whether a relay that ended with `stuck` and `outcome` gave up on a guest whose game is a
@@ -1695,6 +1712,47 @@ mod tests {
         );
     }
 
+    /// A guest that a window gave up on and that reports a failed game and closes its
+    /// connection while the window goes away, before the host has gone: the relay ends with
+    /// the failure and has not said that it gave up, which the program then says itself
+    /// (`main.rs`).
+    #[test]
+    fn a_guest_that_leaves_after_the_window_gave_up_is_not_said_given_up_by_the_relay() {
+        let dir = tempfile::tempdir().unwrap();
+        let listener = UnixListener::bind(dir.path().join("guest.sock")).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let child = Command::new("true")
+            .stdin(Stdio::null())
+            .spawn()
+            .expect("true starts");
+        let (near, far) = UnixStream::pair().unwrap();
+        let pid = child.id();
+        let process = GuestProcess {
+            child,
+            dir: dir.path().join("sockets"),
+            listener,
+            first: Some(Attached::new(near, pid, MessageReader::new()).unwrap()),
+        };
+        let (guest_end, host) = headless_link();
+        let relay = thread::spawn(move || process.relay(guest_end));
+        let guest = GuestEnd::over_stream(far);
+        host.send(HostToGuest::Quit).unwrap();
+        assert_eq!(guest.recv(), Ok(HostToGuest::Quit));
+        // The session gives up after five seconds; the window is still going away.
+        thread::sleep(GUEST_WAIT + Duration::from_millis(10));
+        guest.send(GuestToHost::Outcome { ok: false }).unwrap();
+        drop(guest);
+        thread::sleep(Duration::from_millis(50));
+        drop(host);
+        assert_eq!(
+            relay.join().unwrap(),
+            RelayEnded {
+                ok: false,
+                said_giving_up: false
+            }
+        );
+    }
+
     /// A guest that reported a failed game and then does not end when asked to quit is
     /// given up on all the same, and the program says so.
     #[test]
@@ -1957,7 +2015,13 @@ mod tests {
         guest.send(GuestToHost::Outcome { ok: true }).unwrap();
         drop(guest);
 
-        assert!(process.relay(guest_end));
+        assert_eq!(
+            process.relay(guest_end),
+            RelayEnded {
+                ok: true,
+                said_giving_up: false
+            }
+        );
         assert!(marker.is_file());
     }
 

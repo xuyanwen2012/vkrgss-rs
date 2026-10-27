@@ -120,8 +120,13 @@
 - **Giving up is said whatever the guest reported.** The relay's flag that it gave up means
   that the guest was still there when its time was up, whatever outcome it had reported. The
   relay says so on the error stream unless the guest had reported a game that went well; then
-  a headless run stays a success, as before, and when a window gave up on the guest the
-  program says it.
+  a headless run stays a success, as before. When a window gave up on the guest, the program
+  says it whenever the relay did not, whatever the game ended with: the guest may report a
+  failure and close its connection while the window goes away, after the session gave up and
+  before the host has gone, and the relay then sees no guest to give up on.
+  `GuestProcess::relay` returns whether the game went well and whether it said that it gave
+  up (`RelayEnded`), so the line is said once; `crates/vkrgss-android/src/app.rs`, outside the
+  files of this change that `vkrgss-android` compiles, takes `.ok` of it, one word.
 - **Program shortcuts follow the physical key.** A key is down as a whole while the physical
   key or the injected one is; the actions of the original runtime's keys follow the key as a
   whole, the program's own shortcuts (F3, F4, Tab, F11) the physical key alone, so an
