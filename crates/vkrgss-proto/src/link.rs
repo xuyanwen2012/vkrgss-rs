@@ -206,7 +206,7 @@ impl std::fmt::Debug for GuestReceiver {
 
 /// Reads what the socket has into `reader`, waiting for something with `wait`. `Ok(false)` is
 /// a socket that has nothing now, or a wait that was interrupted; one that the other side
-/// closed is the disconnection. Without `wait` the system is asked not to wait for this one
+/// closed is the disconnection, after the reason if it closed inside a message. Without `wait` the system is asked not to wait for this one
 /// call (`MSG_DONTWAIT`): the socket stays in blocking mode, which a send on another thread
 /// relies on.
 fn read_more(
@@ -221,7 +221,10 @@ fn read_more(
         recv_now(stream, &mut chunk)
     };
     match read {
-        Ok(0) => Err(Disconnected),
+        Ok(0) => {
+            reader.end().map_err(disconnected)?;
+            Err(Disconnected)
+        }
         Ok(count) => {
             reader.push(&chunk[..count]);
             Ok(true)
@@ -267,7 +270,10 @@ fn recv_now(stream: &UnixStream, buffer: &mut [u8]) -> std::io::Result<usize> {
 /// reaches `vkrgss-core` has to be a pure crate.
 fn disconnected(error: FramingError) -> Disconnected {
     if !matches!(error, FramingError::Io(_)) {
-        eprintln!("vkrgss: the connection between guest and host ends: {error}");
+        let line = format!("vkrgss: the connection between guest and host ends: {error}");
+        #[cfg(test)]
+        tests::REPORTED.with(|reported| reported.borrow_mut().push(line.clone()));
+        eprintln!("{line}");
     }
     Disconnected
 }
@@ -311,6 +317,48 @@ mod tests {
 
     use super::*;
     use crate::{FreezeRule, InputSnapshot};
+
+    thread_local! {
+        /// The reasons this thread wrote to the error stream.
+        pub(super) static REPORTED: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    }
+
+    /// The reasons this thread wrote to the error stream since the last call.
+    fn reported() -> Vec<String> {
+        REPORTED.with(|reported| std::mem::take(&mut *reported.borrow_mut()))
+    }
+
+    /// A stream that ends inside a message is the disconnection, after its reason, for the
+    /// receive that waits and for the one that does not.
+    #[test]
+    fn a_stream_that_ends_inside_a_message_reports_why() {
+        for wait in [true, false] {
+            let (guest, mut other) = over_socket();
+            other.write_all(&100_u32.to_le_bytes()).unwrap();
+            other.write_all(&[1, 2, 3]).unwrap();
+            drop(other);
+            reported();
+            let received = if wait {
+                guest.recv().map(Some)
+            } else {
+                guest.try_recv()
+            };
+            assert_eq!(received, Err(Disconnected));
+            assert_eq!(
+                reported(),
+                [
+                    "vkrgss: the connection between guest and host ends: the stream ended inside \
+                  a message"
+                ],
+                "wait: {wait}"
+            );
+        }
+        // One that ends between two messages is no failure.
+        let (guest, other) = over_socket();
+        drop(other);
+        assert_eq!(guest.try_recv(), Err(Disconnected));
+        assert_eq!(reported(), Vec::<String>::new());
+    }
 
     fn title(text: &str) -> GuestToHost {
         GuestToHost::SetTitle {
