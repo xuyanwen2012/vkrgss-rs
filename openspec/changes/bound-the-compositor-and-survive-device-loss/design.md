@@ -53,7 +53,7 @@
   existing resource probe (`probe.rs`) to fail the allocation of the frame target.
 - **Staging buffer.** The staging buffer (the one whose `limit` is `u64::MAX`) is replaced by
   one of the size needed when it is more than four times larger than every upload of the last
-  sixty frames and larger than 64 MiB; the numbers are constants beside the code.
+  sixty frames and 64 MiB or larger; the numbers are constants beside the code.
 - **Unshown frame.** Every path of `present` that returns without showing puts `frame` back
   into `unshown_frame`.
 - **Descriptor limits.** The check counts every descriptor of the composition set against
@@ -146,11 +146,13 @@ engine's own waits beyond the existing bounded acquire.
   (`fail_next_target`), which is what the test uses; the existing resource probe counts only
   frame buffers.
 - **Staging buffer.** `frame_buffer` replaces the staging buffer by one of exactly the size
-  the packet needs when it is larger than 64 MiB and more than four times larger than every
+  the packet needs when it is 64 MiB or larger and more than four times larger than every
   upload of the last 60 packets (`STAGING_KEPT_BYTES`, `STAGING_SHRINK_FACTOR`,
   `STAGING_FRAMES` in `buffers.rs`). Each submission counts the bytes of its uploads, 0 for
   none, in a queue of 60. The check is made where the staging buffer is asked for, so only
-  a packet with an upload gives the buffer back.
+  a packet with an upload gives the buffer back. The scenario is tested with a bitmap of
+  exactly 64 MiB and with one of more, each the only upload of its first frame, then a
+  hundred uploads of one pixel of it.
 - **Unshown frame.** The attempts of `present` moved into `show`; `present` puts the frame
   back into `unshown_frame` whenever `show` returns anything but `Ok(true)`. The presentation
   probe can make acquires report an out-of-date swapchain (`report_out_of_date`).

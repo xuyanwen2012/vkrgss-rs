@@ -57,7 +57,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A frame target that cannot be allocated at a new logical size leaves the previous frame,
   as rendering promises; before, it was gone.
 - The staging buffer of bitmap uploads is given back once 60 frames have needed less than a
-  quarter of it, where it is larger than 64 MiB; one large upload no longer keeps its
+  quarter of it, where it is 64 MiB or larger; one large upload no longer keeps its
   host-visible memory for the rest of the run.
 - A present that shows nothing because the swapchain was out of date twice keeps the frame
   to be shown, so that pacing counts it when it is shown.

@@ -962,28 +962,23 @@ fn larger_frame_and_the_small_one_after_it_match_the_reference() {
 
 // Requirement: The upload buffer does not stay at its largest
 
-/// Scenario "One large upload": a bitmap of more than 64 MiB, then a hundred frames that
-/// each upload a small one.
-#[test]
-fn staging_buffer_shrinks_after_one_large_upload() {
+/// Scenario "One large upload": a first frame that uploads one bitmap of `width` by `height`
+/// pixels, 64 MiB or more, and nothing else, then a hundred frames that each upload one pixel
+/// of it. Every frame equals the reference, and the staging buffer ends smaller than the large
+/// upload.
+fn assert_staging_buffer_shrinks(width: u32, height: u32) {
     let size = Size::new(40, 30);
-    let (large, small) = (BitmapId::new(0, 0), BitmapId::new(1, 0));
-    let (width, height) = (4096, 4160);
+    let id = BitmapId::new(0, 0);
     let large_bytes = u64::from(width) * u64::from(height) * 4;
-    assert!(large_bytes > 64 << 20);
-    let mut deltas: Vec<BitmapDelta> =
-        bitmap(large, width, height, fixtures::gradient(width, height)).into();
-    deltas.extend(bitmap(small, 8, 8, fixtures::gradient(8, 8)));
-    let ops = vec![
-        Op::Quad(sprite(large, width, height, -2000, -3000)),
-        Op::Quad(sprite(small, 8, 8, 5, 5)),
-    ];
+    assert!(large_bytes >= 64 << 20);
+    let ops = vec![Op::Quad(sprite(id, width, height, -5, -7))];
     let mut reference = reference::Compositor::new();
     let mut compositor = TestCompositor::new();
+    let deltas = bitmap(id, width, height, fixtures::gradient(width, height)).into();
     let first = packet(size, deltas, ops.clone());
     let wanted = reference.render(&first).unwrap();
     compositor.render(&first).unwrap();
-    assert!(compositor.staging_buffer_bytes().unwrap() >= large_bytes);
+    assert_eq!(compositor.staging_buffer_bytes(), Some(large_bytes));
     let rendered = compositor.read_frame().unwrap().unwrap();
     assert_eq!(
         frame_difference(&wanted, &rendered),
@@ -992,13 +987,12 @@ fn staging_buffer_shrinks_after_one_large_upload() {
     );
 
     for round in 0..100u32 {
-        let rgba = (0..8 * 8 * 4)
-            .map(|byte| (byte + round * 3) as u8)
-            .collect();
+        // A pixel that the frame shows.
+        let rect = Rect::new((5 + round % 40) as i32, (7 + round % 30) as i32, 1, 1);
         let upload = BitmapDelta::Update {
-            id: small,
-            rect: Rect::new(0, 0, 8, 8),
-            rgba,
+            id,
+            rect,
+            rgba: vec![round as u8, 255 - round as u8, 7, 255],
         };
         let frame = packet(size, vec![upload], ops.clone());
         let wanted = reference.render(&frame).unwrap();
@@ -1011,6 +1005,18 @@ fn staging_buffer_shrinks_after_one_large_upload() {
         kept < large_bytes,
         "a staging buffer of {kept} bytes is left"
     );
+}
+
+/// Scenario "One large upload", with a bitmap of more than 64 MiB.
+#[test]
+fn staging_buffer_shrinks_after_one_large_upload() {
+    assert_staging_buffer_shrinks(4096, 4160);
+}
+
+/// Scenario "One large upload", with a bitmap of exactly 64 MiB.
+#[test]
+fn staging_buffer_shrinks_after_an_upload_of_exactly_64_mib() {
+    assert_staging_buffer_shrinks(4096, 4096);
 }
 
 // Requirement: Stretch sampling of quads

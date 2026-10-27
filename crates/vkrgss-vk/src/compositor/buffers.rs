@@ -12,8 +12,8 @@ use crate::VkError;
 use crate::records::{RECORD_WORDS, TILEMAP_WORDS};
 use crate::resources::{GpuBuffer, GpuImage, write_words};
 
-/// The staging buffer is replaced by one of the size needed once it is larger than this, and
-/// larger by more than `STAGING_SHRINK_FACTOR` than every upload of the last `STAGING_FRAMES`
+/// The staging buffer is replaced by one of the size needed once it is this large or larger,
+/// and larger by more than `STAGING_SHRINK_FACTOR` than every upload of the last `STAGING_FRAMES`
 /// packets: one large upload does not keep its host-visible memory for the rest of the run,
 /// and a buffer of ordinary size is never made anew.
 const STAGING_KEPT_BYTES: u64 = 64 << 20;
@@ -66,7 +66,7 @@ impl VkCompositor {
     /// Whether a staging buffer of `bytes` is to be given back: see `STAGING_KEPT_BYTES`.
     fn staging_oversized(&self, bytes: u64) -> bool {
         let largest = self.staging_needs.iter().copied().max().unwrap_or(0);
-        bytes > STAGING_KEPT_BYTES
+        bytes >= STAGING_KEPT_BYTES
             && self.staging_needs.len() == STAGING_FRAMES
             && largest.saturating_mul(STAGING_SHRINK_FACTOR) < bytes
     }
