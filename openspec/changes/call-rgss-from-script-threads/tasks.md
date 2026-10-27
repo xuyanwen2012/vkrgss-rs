@@ -2,8 +2,8 @@
 
 ## 1. Measurements on the originals
 
-- [ ] 1.1 Run the script-thread probe on the original VX Ace runtime through `cargo xtask oracle`; record the table in design.md under "As built". Verify: the probe's output file of the original run is listed there with every call's result.
-- [ ] 1.2 Run the tilemap-name probe on the original XP runtime through `cargo xtask oracle`; record the numbers and names in design.md. Verify: the output of the original run is listed there.
+- [x] 1.1 Run the script-thread probe on the original VX Ace runtime through `cargo xtask oracle`; record the table in design.md under "As built". Verify: the probe's output file of the original run is listed there with every call's result.
+- [x] 1.2 Run the tilemap-name probe on the original XP runtime through `cargo xtask oracle`; record the numbers and names in design.md. Verify: the output of the original run is listed there.
 
 ## 2. Guest state of the process
 

@@ -66,7 +66,7 @@ reproducible; save states while a script thread is alive (still refused).
 
 ## As built
 
-### Measurements (tasks 1.1 and 1.2): not run on the originals
+### Measurements (tasks 1.1 and 1.2): run on the originals on 2026-10-27
 
 On 2026-10-27 neither original runtime could be run. `cargo xtask oracle` runs Wine only
 inside `bwrap`, and the flow that implemented this change ran under a seccomp filter with
@@ -105,34 +105,60 @@ schedule on both sides, which presses nothing here):
 
 | # | Call in a thread | Original (this probe) | vkrgss before | vkrgss after |
 |---|---|---|---|---|
-| 0 | the scenario: `Bitmap.new(8, 8)`, `fill_rect`, `Sprite.new`, `bitmap=`, `[b.width, Graphics.brightness]` | not run | `Exception: panic in a host function: a guest is installed on the interpreter thread` | `[8, 255]` |
-| 1 | `Bitmap.new(8, 8)`, `fill_rect`, `get_pixel` | not run | the same panic | `[8, 8, 255.0, 0.0, 255.0, 0.0]` |
-| 2 | `Sprite.new` with that bitmap, `x = 3` | not run | the same panic | `[8, 3, false]` |
-| 3 | `Graphics.brightness` | not run | the same panic | `255` |
-| 4 | `Graphics.update` once (frames counted) | not run | the same panic | `1` |
-| 5 | `Input.update`, `Input.press?(:C)` | not run | `false` (the probe's `Input`) | `false` |
-| 6 | `Audio.se_stop` | not run | the same panic | `nil` |
-| 7 | `GC.start` after a dropped bitmap | not run | the same panic | `:done` |
-| 8 | `Viewport`, `Plane`, `Window`, `Tilemap`, `Font`, `Table`, `Rect`, `Tone` | not run | the same panic | `[3, 2.0, true, 5, 32, false, false, false]` |
-| 9 | a hundred sprites with bitmaps dropped, `GC.start` | not run | the same panic | `:done` |
-| 10 | the main script afterwards: `Bitmap`, `Sprite`, `dispose` | not run | `:done` | `:done` |
+| 0 | the scenario: `Bitmap.new(8, 8)`, `fill_rect`, `Sprite.new`, `bitmap=`, `[b.width, Graphics.brightness]` | `[8, 255]` | `Exception: panic in a host function: a guest is installed on the interpreter thread` | `[8, 255]` |
+| 1 | `Bitmap.new(8, 8)`, `fill_rect`, `get_pixel` | `[8, 8, 255.0, 0.0, 255.0, 0.0]` | the same panic | `[8, 8, 255.0, 0.0, 255.0, 0.0]` |
+| 2 | `Sprite.new` with that bitmap, `x = 3` | `[8, 3, false]` | the same panic | `[8, 3, false]` |
+| 3 | `Graphics.brightness` | `255` | the same panic | `255` |
+| 4 | `Graphics.update` once (frames counted) | does not return: no frame is reached in 60 s (run last, see below) | the same panic | `1` |
+| 5 | `Input.update`, `Input.press?(:C)` | `false` | `false` (the probe's `Input`) | `false` |
+| 6 | `Audio.se_stop` | `nil` | the same panic | `nil` |
+| 7 | `GC.start` after a dropped bitmap | `:done` | the same panic | `:done` |
+| 8 | `Viewport`, `Plane`, `Window`, `Tilemap`, `Font`, `Table`, `Rect`, `Tone` | `[3, 2.0, true, 5, 32, false, false, false]` | the same panic | `[3, 2.0, true, 5, 32, false, false, false]` |
+| 9 | a hundred sprites with bitmaps dropped, `GC.start` | `:done` | the same panic | `:done` |
+| 10 | the main script afterwards: `Bitmap`, `Sprite`, `dispose` | `:done` | `:done` | `:done` |
 
 Tilemap names of RGSS1 on vkrgss before this change (serial of the marker, `>> 3`, and the
 new names):
 
 | # | Step | Original | vkrgss |
 |---|---|---|---|
-| 0 | nothing | not run | 2070 |
-| 1 | `Tilemap.new` | not run | 2072, `tilemap` (16569) |
-| 2 | `t.autotiles[0]` | not run | 2074, `autotile0` (16585) |
-| 3 | `t.autotiles[0] = nil` | not run | 2075 |
-| 4 | `t.autotiles[1] = Bitmap.new(8, 8)` | not run | 2077, `autotile1` (16609) |
-| 5 | a second `Tilemap.new` and its `autotiles[0]` | not run | 2078 |
-| 6 | `Marshal.dump` of a tilemap | not run | 2079, `TypeError` |
-| 7 | `t.dispose` | not run | 2080 |
+| 0 | nothing | 2070 | 2070 |
+| 1 | `Tilemap.new` | 2071 | 2072, `tilemap` (16569) |
+| 2 | `t.autotiles[0]` | 2073, `at0` (16577) | 2074, `autotile0` (16585) |
+| 3 | `t.autotiles[0] = nil` | 2074 | 2075 |
+| 4 | `t.autotiles[1] = Bitmap.new(8, 8)` | 2078, `owner` (16601), `observer` (16609), `at1` (16617) | 2077, `autotile1` (16609) |
+| 5 | a second `Tilemap.new` and its `autotiles[0]` | 2079 | 2078 |
+| 6 | `Marshal.dump` of a tilemap | 2080, `TypeError` | 2079, `TypeError` |
+| 7 | `t.dispose` | 2081 | 2080 |
 
 So vkrgss interns `tilemap` at `Tilemap.new` and `autotileN` at the first read or write of
 slot N; each takes a number of the sequence. Whether the original does the same is task 1.2.
+
+### Runs on the originals (2026-10-27, from the owner's session)
+
+The flow's sandbox could not run `bwrap`; the owner's session ran the probes through
+`cargo xtask oracle --original-only` with the run-time package of VX Ace
+(`--rtp RPGVXAce=../../ref/ace/rtp` and its two VL Gothic fonts; without them the original
+stops at "Unable to find VL Gothic font") and, for XP, `--rtp Standard=../../ref/app`. Outputs,
+outside the repository:
+
+- `../../vkxp/target/call-rgss-threads/ace-301/original/game/threads.txt`: the probe as written
+  stopped after step 3; `Graphics.update` called in a thread never returned.
+- `../../vkxp/target/call-rgss-threads/ace-301-v2/original/game/threads.txt`: the same probe
+  with the step `Graphics.update once` moved after the main script's step
+  (`local/probes/threads-probe-v2.rb`, game `local/probes/game-ace-v2`). Every other call works
+  in a thread and gives what vkrgss gives after this change; the `Graphics.update` step again
+  never returned and the original reached no frame in 60 s.
+- `../../vkxp/target/call-rgss-threads/xp-103/original/game/tilemap-names.txt`
+  (`RGSS103J.dll`): the column "Original" of the second table.
+
+So the original of RGSS3 runs every class from a script thread except `Graphics.update`,
+which hangs there. vkrgss keeps returning after one frame: copying a hang serves no game, and
+the requirement asks that a thread's calls work (recorded in `docs/compatibility.md` by task
+4.1). The original of RGSS1 interns no name of its own at `Tilemap.new` (one number), `at0`
+at the first read of slot 0, and `owner`, `observer` and `at1` when a bitmap is set in slot 1;
+vkrgss interns `tilemap`, `autotile0` and `autotile1` instead, so task 3.1 follows the
+decision "Tilemap names of RGSS1".
 
 ### Guest state of the process (tasks 2.1 and 2.2)
 
@@ -172,23 +198,6 @@ changed nothing yet, so these are to be repeated once it has.
 
 ## Follow-ups
 
-- **The measurements on the originals (tasks 1.1 and 1.2, and 3.1 that depends on 1.2).**
-  They need a run of `cargo xtask oracle` where `bwrap` can make its namespaces, which the
-  sandbox of the flow of 2026-10-27 did not allow. With the probes above, in the owner's
-  shell:
-
-  ```sh
-  cargo xtask oracle local/probes/game-ace --frames 30 --original-only \
-      --locale en_US.UTF-8 --out ../../vkxp/target/call-rgss-threads/ace-301
-  cargo xtask oracle local/probes/game-xp --frames 30 --original-only \
-      --dll ../../ref/sys/RGSS103J.dll --rtp Standard=../../ref/app \
-      --out ../../vkxp/target/call-rgss-threads/xp-103
-  ```
-
-  The first writes `original/game/threads.txt` (with 3.0.0.1, replace the DLL of the game by
-  `games/ace-crysalis/System/RGSS300.dll`), the second `original/game/tilemap-names.txt`. If
-  a call of the first raises on the original, the binding raises the same class there and
-  the expected value of `rgss_classes_work_from_a_script_thread` changes; if the second
-  differs from the vkrgss column above, task 3.1 does what the decision "Tilemap names of
-  RGSS1" says and pins the numbers in `tilemap_names_of_rgss1_as_measured`. Task 4.1 then
-  adds the measured table and the names of a tilemap of RGSS1 to `docs/compatibility.md`.
+- **Measurements need the owner's shell.** `bwrap` cannot make its namespaces inside the
+  sandbox of a flow; runs of `cargo xtask oracle` on the originals are done from the owner's
+  session (see "Runs on the originals").
