@@ -67,7 +67,7 @@ use vkrgss_guest::hello;
 use vkrgss_guest::record::{Diagnostics, GuestRecord};
 use vkrgss_guest::role::{GUEST_ROLE, GuestRole};
 use vkrgss_guest::settings::GuestSettings;
-use vkrgss_proto::framing::{MAX_MESSAGE_LEN, MessageReader, write_message};
+use vkrgss_proto::framing::{LENGTH_LEN, MAX_MESSAGE_LEN, MessageReader, write_message};
 use vkrgss_proto::link::{GuestEnd, GuestSender};
 use vkrgss_proto::{GuestToHost, HostToGuest};
 use vkrgss_vfs::Runtime;
@@ -103,6 +103,13 @@ const UNPACED_BOUND: u64 = 256 << 20;
 /// length counts already). A title of one character is 14 bytes on the wire and about 140 in
 /// the host.
 const HELD_PER_MESSAGE: u64 = std::mem::size_of::<GuestToHost>() as u64 + 64;
+
+/// Whether a message of `size` bytes other than a frame packet may be handed to the host when
+/// it holds `unpaced` of the bound: what the host holds with it stays within the bound, and so
+/// does what the program holds while it is decoded, its bytes and their decoded copy at once.
+fn fits(unpaced: u64, size: u64) -> bool {
+    unpaced + 2 * size + HELD_PER_MESSAGE <= UNPACED_BOUND
+}
 
 /// How long the relay leaves the socket alone after an error of `accept`.
 const ACCEPT_PAUSE: Duration = Duration::from_millis(100);
@@ -145,23 +152,21 @@ impl Attached {
         })
     }
 
-    /// Reads what the connection has, `budget` bytes at most.
-    fn read_in(&mut self, budget: usize) -> std::io::Result<()> {
-        let mut chunk = vec![0; CHUNK];
-        let mut read = 0;
-        while read < budget && !self.closed {
-            match (&self.stream).read(&mut chunk) {
-                Ok(0) => self.closed = true,
+    /// Reads what the connection has into its reader, as much as `chunk` holds at most.
+    /// `None` is a connection that has nothing now; `Some(0)` is its end.
+    fn read_some(&mut self, chunk: &mut [u8]) -> std::io::Result<Option<usize>> {
+        loop {
+            match (&self.stream).read(chunk) {
                 Ok(count) => {
+                    self.closed |= count == 0;
                     self.reader.push(&chunk[..count]);
-                    read += count;
+                    return Ok(Some(count));
                 }
-                Err(error) if error.kind() == ErrorKind::WouldBlock => break,
+                Err(error) if error.kind() == ErrorKind::WouldBlock => return Ok(None),
                 Err(error) if error.kind() == ErrorKind::Interrupted => {}
                 Err(error) => return Err(error),
             }
         }
-        Ok(())
     }
 
     /// Puts `message` behind what is to be written to the process, and writes what the
@@ -1029,16 +1034,44 @@ impl Relay<'_> {
         }
     }
 
-    /// Reads what the running guest sent, as far as the budget of a turn goes.
+    /// Reads what the running guest sent, as far as the budget of a turn goes and no further
+    /// than the end of a message: a whole message is handed on before more is read. A message
+    /// other than a frame packet is judged by the length it states before the rest of it is
+    /// read ([`fits`]), so the relay never holds one that the bound would refuse.
     fn read_guest(&mut self) {
-        let Some(running) = &mut self.running else {
-            return;
-        };
-        if let Err(error) = running.read_in(TURN_BUDGET) {
-            if self.to_host.is_some() {
-                tracing::warn!("the connection to the guest process failed: {error}");
+        let mut chunk = vec![0; CHUNK];
+        let mut read = 0;
+        while read < TURN_BUDGET {
+            let Some(running) = &mut self.running else {
+                return;
+            };
+            if running.closed {
+                return;
             }
-            running.closed = true;
+            let reader = &running.reader;
+            if let Some(len) = reader.first_len()
+                && reader.first_is_frame() == Some(false)
+                && len <= MAX_MESSAGE_LEN as usize
+                && !fits(self.unpaced, (LENGTH_LEN + len) as u64)
+            {
+                return self.flooded();
+            }
+            let at_most = match reader.missing() {
+                Some(0) => return,
+                Some(missing) => missing.min(CHUNK),
+                None => CHUNK,
+            };
+            match running.read_some(&mut chunk[..at_most]) {
+                Ok(Some(count)) => read += count.max(1),
+                Ok(None) => return,
+                Err(error) => {
+                    if self.to_host.is_some() {
+                        tracing::warn!("the connection to the guest process failed: {error}");
+                    }
+                    running.closed = true;
+                    return;
+                }
+            }
         }
     }
 
@@ -1182,24 +1215,27 @@ impl Relay<'_> {
             message => match only_made_here(&message) {
                 Some(kind) => self.drop_message(kind),
                 None if matches!(message, GuestToHost::Frame(_)) => self.tell_host(message),
-                None if self.unpaced + size + HELD_PER_MESSAGE > UNPACED_BOUND => {
-                    let pid = self
-                        .running
-                        .as_ref()
-                        .map_or(self.last, |running| running.pid);
-                    tracing::error!(
-                        "the guest process {pid} sent more than {} MiB of messages other than \
-                         frames between two ticks; it is ended",
-                        UNPACED_BOUND >> 20
-                    );
-                    self.end_running();
-                }
+                None if !fits(self.unpaced, size) => self.flooded(),
                 None => {
                     self.unpaced += size + HELD_PER_MESSAGE;
                     self.tell_host(message);
                 }
             },
         }
+    }
+
+    /// Ends the running guest for sending more than the bound allows.
+    fn flooded(&mut self) {
+        let pid = self
+            .running
+            .as_ref()
+            .map_or(self.last, |running| running.pid);
+        tracing::error!(
+            "the guest process {pid} sent more than {} MiB of messages other than frames \
+             between two ticks; it is ended",
+            UNPACED_BOUND >> 20
+        );
+        self.end_running();
     }
 
     /// Ends the running guest, and the host sees it gone.
@@ -1550,6 +1586,115 @@ mod tests {
         assert!(stand_in.killed());
     }
 
+    /// Forks a sender that writes the bytes `head` followed by `count` bytes `t`, over and
+    /// over, to `stream` until the other side closes it: a guest process that floods, whose
+    /// memory is its own and holds no message whole.
+    fn flood_from_another_process(stream: UnixStream, head: &[u8], count: usize) -> StandIn {
+        static TEES: [u8; 1 << 16] = [b't'; 1 << 16];
+
+        /// Writes all of `bytes`, or ends the process once the stream is closed.
+        fn write_all(socket: libc::c_int, mut bytes: &[u8]) {
+            while !bytes.is_empty() {
+                // SAFETY: `bytes` is valid for reads of its length.
+                let written = unsafe { libc::write(socket, bytes.as_ptr().cast(), bytes.len()) };
+                if written <= 0 {
+                    // SAFETY: ends this process at once.
+                    unsafe { libc::_exit(0) };
+                }
+                bytes = &bytes[written as usize..];
+            }
+        }
+
+        let socket = stream.as_raw_fd();
+        // SAFETY: plain integer.
+        let open_max = unsafe { libc::sysconf(libc::_SC_OPEN_MAX) }.clamp(3, 1 << 16);
+        // SAFETY: the child calls only `close`, `write` and `_exit`, with what was made above.
+        let pid = unsafe { libc::fork() };
+        assert!(pid >= 0, "fork: {}", std::io::Error::last_os_error());
+        if pid == 0 {
+            // It holds nothing of the test open but its socket, the relay's side of the
+            // connection included, which so ends when the relay closes it.
+            for descriptor in (0..open_max as libc::c_int).filter(|fd| *fd != socket) {
+                // SAFETY: closes a descriptor of this process, which uses none but `socket`.
+                unsafe { libc::close(descriptor) };
+            }
+            loop {
+                write_all(socket, head);
+                let mut left = count;
+                while left > 0 {
+                    let part = left.min(TEES.len());
+                    write_all(socket, &TEES[..part]);
+                    left -= part;
+                }
+            }
+        }
+        drop(stream);
+        StandIn { pid, status: None }
+    }
+
+    /// Scenario "Flood of titles" with titles of 80 MiB from a guest in a process of its own:
+    /// the relay judges a title by the length it states, before it holds the title and its
+    /// decoded copy at once, and the memory of this process stays below the bound plus 64 MiB.
+    #[cfg(target_os = "linux")]
+    fn large_titles_from_another_process() {
+        let length = 80 << 20;
+        let mut template = Vec::new();
+        let one = GuestToHost::SetTitle {
+            title: "t".to_owned(),
+        };
+        write_message(&mut template, &one).unwrap();
+        // The header and the variant of a title, then the length of its text.
+        let mut text = Vec::new();
+        let mut left = length;
+        while left >= 0x80 {
+            text.push((left & 0x7f) as u8 | 0x80);
+            left >>= 7;
+        }
+        text.push(left as u8);
+        let kind = &template[LENGTH_LEN..LENGTH_LEN + vkrgss_proto::codec::HEADER_LEN + 1];
+        let stated = (kind.len() + text.len() + length) as u32;
+        let head = [&stated.to_le_bytes()[..], kind, &text].concat();
+
+        let dir = tempfile::tempdir().unwrap();
+        let mut process = idle();
+        std::fs::write("/proc/self/clear_refs", "5").unwrap();
+        let before = resident().0;
+        let listener = UnixListener::bind(dir.path().join("guest.sock")).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let (near, far) = UnixStream::pair().unwrap();
+        let pid = process.id();
+        let first = Attached::new(near, pid, MessageReader::new()).unwrap();
+        let (guest_end, host) = headless_link();
+        let logged = Logged::default();
+        let keeping = logged.clone();
+        let relay =
+            thread::spawn(move || keeping.keep(|| relay(guest_end, &listener, Some(first), pid)));
+        let mut sender = flood_from_another_process(far, &head, length);
+        assert!(
+            !sender.killed(),
+            "the sender ends when the relay closes its connection"
+        );
+        assert_eq!(process.wait().unwrap().signal(), Some(libc::SIGKILL));
+        let grown = resident().1.saturating_sub(before);
+        let mut handed = 0;
+        while let Ok(message) = host.recv() {
+            let GuestToHost::SetTitle { title } = message else {
+                panic!("{message:?}");
+            };
+            assert_eq!(title.len(), length);
+            handed += 1;
+        }
+        drop(host);
+        relay.join().unwrap();
+        assert!(grown < UNPACED_BOUND + (64 << 20), "{} MiB", grown >> 20);
+        assert_eq!(handed, 2);
+        let text = logged.text();
+        assert!(
+            text.contains("more than 256 MiB of messages other than frames"),
+            "{text}"
+        );
+    }
+
     /// A guest that reported a failed game and then does not end when asked to quit is
     /// given up on all the same, and the program says so.
     #[test]
@@ -1696,8 +1841,8 @@ mod tests {
     }
 
     /// Scenario "Flood of titles", with titles of 1 MiB and of one character, whose entries
-    /// in the link take ten times their bytes on the wire. In one test: the memory of the
-    /// process is measured.
+    /// in the link take ten times their bytes on the wire, and of 80 MiB from another process.
+    /// In one test: the memory of the process is measured.
     #[test]
     fn a_guest_that_floods_the_host_with_titles_is_ended_at_the_bound() {
         let most = UNPACED_BOUND + (64 << 20);
@@ -1710,18 +1855,19 @@ mod tests {
                 title: "t".repeat(length),
             };
             write_message(&mut encoded, &title).unwrap();
-            let held = count * (HELD_PER_MESSAGE + encoded.len() as u64);
+            let size = encoded.len() as u64;
+            let held = count * (HELD_PER_MESSAGE + size);
             assert!(held <= UNPACED_BOUND, "titles of {length}: {count}");
-            assert!(
-                held > UNPACED_BOUND - (2 << 20),
-                "titles of {length}: {count}"
-            );
+            // Ended at the first title that did not fit, with its copy while decoded.
+            assert!(!fits(held, size), "titles of {length}: {count}");
             assert!(sent >= count, "{sent} {count}");
             assert!(
                 text.contains("more than 256 MiB of messages other than frames"),
                 "{text}"
             );
         }
+        #[cfg(target_os = "linux")]
+        large_titles_from_another_process();
     }
 
     #[test]
@@ -2004,7 +2150,7 @@ mod tests {
         guest.write_all(&written).unwrap();
         let (mut attached, parked) = attached(program).unwrap_or_else(|error| panic!("{error:#}"));
         assert_eq!((attached.pid, parked), (std::process::id(), None));
-        attached.read_in(CHUNK).unwrap();
+        attached.read_some(&mut [0; CHUNK]).unwrap();
         let next = attached.reader.take::<GuestToHost>().unwrap();
         assert_eq!(
             next,

@@ -105,6 +105,18 @@
   of a `GuestToHost` and 64 bytes for up to two heap blocks, so that what the host holds stays
   below the bound for short messages as for long ones. The test floods with titles of one
   character and of 1 MiB and measures the peak resident memory of the test process.
+- **The bound and decoding.** While a message is decoded the relay holds its bytes and the
+  decoded copy at once, so a message other than a frame packet fits only when what the host
+  holds plus twice its length and `HELD_PER_MESSAGE` stays within the bound. The relay judges
+  it by the length it states and its first byte, the number of its variant (a frame packet is
+  the variant 0), before it reads the rest, and reads the running guest no further than the
+  end of a message, so it never holds a message that the bound refuses. The incremental
+  reader makes room for a message whose length it knows at once, instead of doubling its
+  buffer as the bytes arrive, and gives a buffer of more than 1 MiB back once its message is
+  taken. A guest that sends one title of more than about 128 MiB is so ended at that title,
+  although the host would hold less than 256 MiB with it: the program could not decode it
+  within the bound plus 64 MiB. The test floods from a process of its own with titles of
+  80 MiB, of which the host is handed two.
 - **Giving up is said whatever the guest reported.** The relay's flag that it gave up means
   that the guest was still there when its time was up, whatever outcome it had reported. The
   relay says so on the error stream unless the guest had reported a game that went well; then
@@ -114,7 +126,9 @@
   key or the injected one is; the actions of the original runtime's keys follow the key as a
   whole, the program's own shortcuts (F3, F4, Tab, F11) the physical key alone, so an
   injected Tab neither keeps fast-forward on after the physical Tab is released nor keeps a
-  physical press from engaging it.
+  physical press from engaging it. A shortcut's press holds no button; once that physical
+  press is over, by its release or the loss of focus, an injected key beside it holds the
+  buttons of its key map again.
 - **A stream that ends inside a message** says so, through the same mapping of framing errors,
   for the receive that waits and for the one that does not.
 - **The headless clock and loads.** Moving the clock to ticks alone is not enough for the
