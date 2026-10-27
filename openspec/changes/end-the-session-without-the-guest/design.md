@@ -118,6 +118,12 @@
   test of a headless guest process in `loop {}`, which now also asserts the 10 s; the owner
   checks the windowed process form by hand.
 
+- **Checks.** The gate passed with `TMPDIR=/var/tmp/vkrgss-end-the-session-without-the-guest`.
+  `xarch check` ran against a baseline of the base revision (`xarch baseline --at e3a60d2f`)
+  with `XDG_RUNTIME_DIR` set to that directory too, since the sandbox of the run cannot write
+  `/run/user/1000`, where the games of VX Ace make the directory of their socket; all ten games
+  were identical.
+
 ## Out of scope
 
 Peer credentials and the state answers of the relay (change `verify-guests-and-deny-signals`);
