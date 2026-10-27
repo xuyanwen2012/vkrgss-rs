@@ -2,19 +2,28 @@
 //!
 //! Commands go through a channel to a worker thread, which opens the sources (probing the
 //! file, loading the SoundFont, decoding the first block) and passes the prepared commands on
-//! to the callback. The callback applies them and mixes; it never waits for anything.
+//! to the callback. The callback applies them and mixes; it never waits for anything. It
+//! takes no lock, writes no report and frees no decoded source: the voices that end and the
+//! damage that a source meets while it plays go back to the worker over a channel on which
+//! the callback only sends, and the worker drops and reports them.
 
 use std::any::Any;
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Sender};
+use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
+use std::time::Duration;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use vkrgss_proto::AudioCommand;
 
-use crate::mixer::{Mixer, MixerOptions};
+use crate::decode::{DecodeError, Report};
+use crate::mixer::{Mixer, MixerOptions, Returned};
+
+/// How long the worker waits for a request before it drops and reports what the callback
+/// handed back.
+const RETURNED_EVERY: Duration = Duration::from_millis(100);
 
 /// How an output is set up; the same as a mixer.
 pub type OutputOptions = MixerOptions;
@@ -92,18 +101,36 @@ impl Output {
             };
             let (mut loader, mut channels) = Mixer::new(sample_rate, options).into_parts();
             let (prepared, ready) = mpsc::channel();
+            // The worker never blocks on this channel, only drains it, so a send of the
+            // callback finds no receiver to wake and takes no lock.
+            let (back, returned) = mpsc::channel::<Returned>();
+            let damage = back.clone();
+            let report: Report = Arc::new(move |error: &DecodeError| {
+                let _ = damage.send(Returned::Damage(error.clone()));
+            });
+            loader.report_damage_to(report);
+            channels.return_voices_to(back);
             let worker = thread::Builder::new()
                 .name("vkrgss-audio".to_owned())
                 .spawn(move || {
-                    for request in received {
+                    loop {
+                        let request = received.recv_timeout(RETURNED_EVERY);
+                        for returned in returned.try_iter() {
+                            match returned {
+                                Returned::Voice(voice) => drop(voice),
+                                Returned::Damage(error) => loader.report(&error),
+                            }
+                        }
                         match request {
-                            Request::Command(command) => {
+                            Ok(Request::Command(command)) => {
                                 if prepared.send(loader.prepare(command)).is_err() {
                                     break;
                                 }
                             }
-                            Request::Remember(slot) => loader.remember(slot),
-                            Request::Recall(slot) => loader.recall(slot),
+                            Ok(Request::Remember(slot)) => loader.remember(slot),
+                            Ok(Request::Recall(slot)) => loader.recall(slot),
+                            Err(RecvTimeoutError::Timeout) => {}
+                            Err(RecvTimeoutError::Disconnected) => break,
                         }
                     }
                 });

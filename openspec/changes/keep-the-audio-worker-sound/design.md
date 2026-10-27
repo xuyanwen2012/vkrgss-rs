@@ -33,6 +33,10 @@
   The worker therefore also wakes for these messages; it may drain them each time it
   receives a request and on a short timeout. The callback still allocates its scratch buffer
   once when the device asks for a larger buffer than before; that stays.
+  As built, the damage takes the same channel as the voices, not the request channel: the
+  worker blocks on the request channel, and a send to a channel with a blocked receiver
+  wakes it under a lock of the standard library. The worker only drains the channel of the
+  callback, each time it receives a request and every 100 ms, so a send there wakes nobody.
 - **Remember right after play.** The loader tells "the voice ended" from "the voice has not
   started" with a state the two share (for example an atomic that the voice sets when it is
   dropped or ends), instead of the reference count. A voice that has not started yet is

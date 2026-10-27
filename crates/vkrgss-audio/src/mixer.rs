@@ -6,6 +6,11 @@
 //! [`Output`](crate::Output) runs the loader on a worker thread and the channels in the
 //! callback of the device.
 //!
+//! The channels drop no voice themselves when they are given a way back to the loader's
+//! thread: a voice that ends or is replaced goes back there, and so does damage a source
+//! meets while it plays, so that the callback of the device frees no decoded source and
+//! writes no report.
+//!
 //! The loader is also what remembers where the music and the background sound are, for the
 //! save states: it opened their sources, and each voice tells it its position through a
 //! number the two share.
@@ -14,6 +19,7 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use vkrgss_proto::{AudioChannel, AudioCommand};
@@ -68,6 +74,27 @@ pub(crate) enum Prepared {
         channel: AudioChannel,
         volume: u8,
     },
+}
+
+/// What the channels hand back to the loader's thread, where it is dropped or reported.
+pub(crate) enum Returned {
+    /// A voice that ended or was replaced.
+    Voice(Voice),
+    /// Damage that a source met while it played.
+    Damage(DecodeError),
+}
+
+/// Where the channels put the voices that end: dropped at once, or handed back.
+struct Retired(Option<Sender<Returned>>);
+
+impl Retired {
+    fn end(&self, voice: Voice) {
+        if let Some(back) = &self.0 {
+            // Without the loader's thread, which ends only with the output, the voice is
+            // dropped here.
+            let _ = back.send(Returned::Voice(voice));
+        }
+    }
 }
 
 /// What has been reported, and where.
@@ -127,13 +154,16 @@ fn remembered(channel: AudioChannel) -> Option<usize> {
     }
 }
 
-/// Opens the sources of play commands and reports the failures, each kind once: its own and,
-/// through the same [`Report`], the damage a source meets later while it plays.
+/// Opens the sources of play commands and reports the failures, each kind once: its own and
+/// the damage a source meets later while it plays.
 pub(crate) struct Loader {
     sample_rate: u32,
     soundfonts: SoundFonts,
     ffmpeg: PathBuf,
     report: Report,
+    /// What the sources it opens report damage to: `report` itself, or a way to the thread
+    /// of the loader.
+    sources_report: Report,
     /// What the music and the background sound play.
     playing: [Option<Playing>; 2],
     /// What each slot remembers of the two.
@@ -143,6 +173,17 @@ pub(crate) struct Loader {
 }
 
 impl Loader {
+    /// Has the sources opened from now on report damage to `report` instead of reporting it
+    /// themselves; what reaches `report` is to be handed to [`report`](Loader::report).
+    pub(crate) fn report_damage_to(&mut self, report: Report) {
+        self.sources_report = report;
+    }
+
+    /// Reports `error` unless one of its kind has been reported.
+    pub(crate) fn report(&self, error: &DecodeError) {
+        (self.report)(error);
+    }
+
     /// Stores under `slot` what the music and the background sound play and where they are.
     pub(crate) fn remember(&mut self, slot: u8) {
         let playing = self.playing.each_ref().map(|playing| {
@@ -182,7 +223,7 @@ impl Loader {
                     loops(channel),
                     &mut self.soundfonts,
                     &self.ffmpeg,
-                    &self.report,
+                    &self.sources_report,
                 );
                 let mut source = opened.map_err(|error| (self.report)(&error)).ok();
                 // Whatever the command plays, the channel is armed no longer.
@@ -270,7 +311,7 @@ fn gain(v: f32) -> f32 {
 }
 
 /// One sound on a channel.
-struct Voice {
+pub(crate) struct Voice {
     source: Box<dyn Source>,
     /// The volume, 0 to 100, which a fade lowers in proportion.
     volume: f32,
@@ -400,9 +441,32 @@ pub(crate) struct Channels {
     se: Vec<Voice>,
     /// Where a voice is read before it is added to the output.
     scratch: Vec<f32>,
+    retired: Retired,
 }
 
 impl Channels {
+    /// Hands the voices that end from now on to `back` instead of dropping them, see
+    /// [`Returned`].
+    pub(crate) fn return_voices_to(&mut self, back: Sender<Returned>) {
+        self.retired = Retired(Some(back));
+    }
+
+    /// Ends the voices of a channel, as a stop command does.
+    fn end(&mut self, channel: AudioChannel) {
+        let voice = match channel {
+            AudioChannel::Bgm => self.bgm.take(),
+            AudioChannel::Bgs => self.bgs.take(),
+            AudioChannel::Me => return self.end_effect(),
+            AudioChannel::Se => {
+                for voice in self.se.drain(..) {
+                    self.retired.end(voice);
+                }
+                return;
+            }
+        };
+        voice.into_iter().for_each(|voice| self.retired.end(voice));
+    }
+
     pub(crate) fn apply(&mut self, command: Prepared) {
         match command {
             Prepared::Play {
@@ -417,19 +481,20 @@ impl Channels {
                     voice.music_return = frames_of(music_return_ms, self.sample_rate);
                     voice
                 });
-                match channel {
-                    AudioChannel::Bgm => self.bgm = voice,
-                    AudioChannel::Bgs => self.bgs = voice,
-                    AudioChannel::Me => self.me = voice,
-                    AudioChannel::Se => self.se.extend(voice),
-                }
+                let replaced = match channel {
+                    AudioChannel::Bgm => std::mem::replace(&mut self.bgm, voice),
+                    AudioChannel::Bgs => std::mem::replace(&mut self.bgs, voice),
+                    AudioChannel::Me => std::mem::replace(&mut self.me, voice),
+                    AudioChannel::Se => {
+                        self.se.extend(voice);
+                        None
+                    }
+                };
+                replaced
+                    .into_iter()
+                    .for_each(|voice| self.retired.end(voice));
             }
-            Prepared::Stop { channel } => match channel {
-                AudioChannel::Bgm => self.bgm = None,
-                AudioChannel::Bgs => self.bgs = None,
-                AudioChannel::Me => self.end_effect(),
-                AudioChannel::Se => self.se.clear(),
-            },
+            Prepared::Stop { channel } => self.end(channel),
             Prepared::Fade {
                 channel,
                 duration_ms,
@@ -460,11 +525,13 @@ impl Channels {
 
     /// Ends the music effect, if one plays, and lets the music return over its time.
     fn end_effect(&mut self) {
-        if let Some(effect) = self.me.take()
-            && let Some(music) = &mut self.bgm
-        {
+        let Some(effect) = self.me.take() else {
+            return;
+        };
+        if let Some(music) = &mut self.bgm {
             music.rise(effect.music_return);
         }
+        self.retired.end(effect);
     }
 
     /// Fills `out`, interleaved stereo, with the next frames of the mix.
@@ -489,16 +556,20 @@ impl Channels {
             let played = voice.pause(effect)
                 && voice.mix(&mut out[effect * 2..], &mut scratch) == frames - effect;
             if !played {
-                self.bgm = None;
+                self.end(AudioChannel::Bgm);
             }
         }
         if let Some(voice) = &mut self.bgs
             && voice.mix(out, &mut scratch) < frames
         {
-            self.bgs = None;
+            self.end(AudioChannel::Bgs);
         }
-        self.se
-            .retain_mut(|voice| voice.mix(out, &mut scratch) == frames);
+        let ended = self
+            .se
+            .extract_if(.., |voice| voice.mix(out, &mut scratch) < frames);
+        for voice in ended {
+            self.retired.end(voice);
+        }
 
         for sample in out.iter_mut() {
             // `clamp` keeps a NaN, and the device must not get one.
@@ -545,6 +616,7 @@ impl Mixer {
                 sample_rate,
                 soundfonts: options.soundfonts,
                 ffmpeg: options.ffmpeg,
+                sources_report: report.clone(),
                 report,
                 playing: [None, None],
                 slots: HashMap::new(),
@@ -557,6 +629,7 @@ impl Mixer {
                 me: None,
                 se: Vec::new(),
                 scratch: Vec::new(),
+                retired: Retired(None),
             },
         }
     }

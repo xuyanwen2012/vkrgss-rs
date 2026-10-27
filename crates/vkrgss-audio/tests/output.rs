@@ -3,10 +3,11 @@
 
 mod common;
 
-use std::sync::{Arc, Mutex};
+use std::io::Write;
+use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
-use common::{AMPLITUDE, Reports, level, peak, side, tone_wav};
+use common::{AMPLITUDE, Reports, damaged_mp3, level, peak, side, tone_wav};
 use vkrgss_audio::{Output, OutputOptions, Render, SoundFonts};
 use vkrgss_proto::{AudioChannel, AudioCommand};
 
@@ -141,4 +142,69 @@ fn a_paused_output_is_silent_and_goes_on_where_it_stopped() {
     render(&mut block);
     assert!(peak(&block) > 0.0, "the tone goes on where it stopped");
     assert_eq!(reports.text(), "");
+}
+
+/// An error stream that cannot be written while the test holds its gate.
+#[derive(Clone)]
+struct Gated {
+    gate: Arc<Mutex<()>>,
+    reports: Reports,
+}
+
+impl Write for Gated {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        let _open = self.gate.lock().unwrap();
+        self.reports.write(bytes)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Scenario "Error stream held".
+#[test]
+fn callback_reports_damage_without_the_error_lock() {
+    const RATE: u32 = 44100;
+    let reports = Reports::default();
+    let gate = Arc::new(Mutex::new(()));
+    let held = gate.lock().unwrap();
+    let options = OutputOptions {
+        errors: Box::new(Gated {
+            gate: gate.clone(),
+            reports: reports.clone(),
+        }),
+        ..options(&reports)
+    };
+    let device: Arc<Mutex<Option<Render>>> = Arc::default();
+    let slot = device.clone();
+    let output = Output::open_with(options, move |start| {
+        *slot.lock().unwrap() = Some(start(RATE));
+        Ok(Box::new(()))
+    });
+    let mut render = device.lock().unwrap().take().unwrap();
+
+    // The first block decodes; half a second in, the data does not, while the music loops.
+    output.command(play(&damaged_mp3(20)));
+    let (done, finished) = mpsc::channel();
+    std::thread::spawn(move || {
+        render_until(&mut render, "the music", |block| peak(block) > 0.1);
+        let mut block = [0.0; 2 * 2205];
+        for _ in 0..60 {
+            render(&mut block);
+        }
+        done.send(()).unwrap();
+    });
+    finished
+        .recv_timeout(Duration::from_secs(60))
+        .expect("the callback returns for every buffer while the error stream blocks");
+    assert_eq!(reports.text(), "");
+
+    drop(held);
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while !reports.text().contains("damaged") {
+        assert!(Instant::now() < deadline, "the damage is never reported");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(reports.lines(), 1, "{}", reports.text());
 }

@@ -6,7 +6,7 @@
 
 ## 2. The callback does not wait
 
-- [ ] 2.1 Reports from sources reach the worker instead of the error lock; replaced and ended voices are dropped on the worker. Verify: `callback_reports_damage_without_the_error_lock` and the tests of `crates/vkrgss-audio/tests/output.rs` pass; the module comment of `output.rs` is true.
+- [x] 2.1 Reports from sources reach the worker instead of the error lock; replaced and ended voices are dropped on the worker. Verify: `callback_reports_damage_without_the_error_lock` and the tests of `crates/vkrgss-audio/tests/output.rs` pass; the module comment of `output.rs` is true.
 
 ## 3. Save states
 
