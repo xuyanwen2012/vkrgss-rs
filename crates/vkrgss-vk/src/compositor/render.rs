@@ -25,13 +25,19 @@ impl VkCompositor {
     /// the frame target, darkened by the packet's brightness.
     ///
     /// Either a complete frame is rendered or an error is returned and the frame target keeps
-    /// the previous frame. Bitmap state after an error is that of the reference compositor:
+    /// the previous frame, also when the logical size changed and the target of the new size
+    /// cannot be had. Bitmap state after an error is that of the reference compositor:
     /// the deltas before an invalid delta stay applied and the ones after it do not, and an
     /// invalid op leaves every delta applied.
     ///
     /// A [`VkError::Limit`] is returned for a packet that is valid but beyond the device or
-    /// this backend. A limit met by a delta behaves like an invalid delta; a limit met by the
-    /// frame as a whole leaves every delta applied.
+    /// this backend, among them a frame whose ops cover more tiles in total than the work
+    /// budget ([`Limit::FrameWork`]), which is refused before anything is allocated for it. A
+    /// limit met by a delta behaves like an invalid delta; a limit met by the frame as a whole
+    /// leaves every delta applied.
+    ///
+    /// [`VkError::DeviceLost`] is returned when the device is lost, or the frame did not
+    /// complete in time, and for every frame after that.
     pub fn render(&mut self, packet: &FramePacket) -> Result<(), VkError> {
         self.unless_lost(|compositor| compositor.render_packet(packet))
     }

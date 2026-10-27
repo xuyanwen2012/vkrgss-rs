@@ -54,6 +54,10 @@ guest. The release archive holds the three executables.
 The change `build-and-test-on-macos` added to "macOS" under "Platforms", on 2026-10-17, that
 a guest process on macOS is not confined, and how the workspace is built and tested there.
 
+The change `bound-the-compositor-and-survive-device-loss` added to "Compositor" and "Vulkan",
+on 2026-10-26, the work budget of a frame, the bounded waits, what a lost device does, the
+previous frame on a failed resize, and the descriptor limits a device has to meet.
+
 ## Goal and scope
 
 - vkrgss is a from-scratch runtime for the games of RPG Maker XP, VX and VX Ace, built to a
@@ -156,10 +160,23 @@ a guest process on macOS is not confined, and how the workspace is built and tes
 - Arithmetic starts with textbook formulas and is tightened op by op as reverse-engineering
   specs of the original's inner loops land.
 - Blending is done on non-linear values (UNORM formats, not SRGB formats), as the original does.
+- The work of a frame is bounded: a frame whose ops cover more than 2^22 tiles in total (the
+  sum over its ops of the tiles each reaches, about a hundred times what the comparison games
+  need) is refused as a limit before anything is allocated for it, and the previous frame
+  stays on screen. A frame that fails for any reason, a frame target that cannot be had at a
+  new size included, leaves the previous frame.
 
 ### Vulkan
 
-- Through `ash`. Vulkan 1.3 core plus descriptor indexing is the only hard requirement.
+- Through `ash`. Vulkan 1.3 core plus descriptor indexing is the only hard requirement. The
+  composition set needs 65536 update-after-bind sampled images and 65542 update-after-bind
+  resources per stage (the sampled images, the frame target and five storage buffers); every
+  device in use has at least a million.
+- Every submission is waited for before the call that made it returns, for 20 seconds at
+  most. A wait that runs out, like `VK_ERROR_DEVICE_LOST` from any call, is a lost device:
+  the compositor uses the device no more and refuses every later call, and the session
+  reports the loss once and ends with a failure, in a window and headless. The device is not
+  created anew.
 - Optional, with fallback: `VK_EXT_present_timing` / `VK_KHR_present_wait2` for 40 fps pacing,
   `VK_EXT/KHR_swapchain_maintenance1`.
 - Not used: descriptor heap, shader object, host image copy.

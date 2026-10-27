@@ -47,6 +47,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- A frame whose ops cover more than 2^22 tiles in total, which a packet of the largest
+  logical size with a few full-screen ops reaches, is refused as a limit before anything is
+  allocated for it, and the previous frame stays. Before, such a packet made the program
+  allocate up to about 4 GiB and compose for minutes.
+- A lost Vulkan device, or a submission that has not completed after 20 seconds, ends the
+  session with one error and a failure status, in a window and headless. Before, every
+  later frame was reported as rejected, for ever, over a black window.
+- A frame target that cannot be allocated at a new logical size leaves the previous frame,
+  as rendering promises; before, it was gone.
+- The staging buffer of bitmap uploads is given back once 60 frames have needed less than a
+  quarter of it, where it is larger than 64 MiB; one large upload no longer keeps its
+  host-visible memory for the rest of the run.
+- A present that shows nothing because the swapchain was out of date twice keeps the frame
+  to be shown, so that pacing counts it when it is shown.
+- Releasing the surface, as Android does with a paused window, lets the surface go also
+  when idling the device fails.
+- The device check counts every descriptor of the composition set against
+  `maxPerStageUpdateAfterBindResources`, where it counted the bitmap slots alone, and names
+  that limit for a device that falls short.
 - A fade of no time, `Audio.bgm_fade(0)` for one, stops its channel at once, and a fade that
   follows it no longer makes the mixer give the audio device samples that are not a number.
 - The callback of the audio device no longer waits for the error stream when a sound that

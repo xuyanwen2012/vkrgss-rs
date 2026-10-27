@@ -19,7 +19,7 @@
 
 ## 4. Documents
 
-- [ ] 4.1 `docs/decisions.md` or `docs/architecture.md` where they describe waits, device requirements or the previous frame; the doc comments of `render` and `Compositor`; `CHANGELOG.md`. Verify: the tests that check the documents pass.
+- [x] 4.1 `docs/decisions.md` or `docs/architecture.md` where they describe waits, device requirements or the previous frame; the doc comments of `render` and `Compositor`; `CHANGELOG.md`. Verify: the tests that check the documents pass.
 
 ## 5. Checks
 
