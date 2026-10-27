@@ -44,6 +44,10 @@ impl VkCompositor {
     /// [`freeze`](VkCompositor::freeze) instead, and the buffer keeps its texels. Before
     /// the first frame nothing is written.
     pub fn freeze_into_buffer(&mut self) -> Result<(), VkError> {
+        self.unless_lost(|compositor| compositor.freeze_into_buffer_now())
+    }
+
+    fn freeze_into_buffer_now(&mut self) -> Result<(), VkError> {
         self.ensure_presenter()?;
         let target = self
             .target
@@ -153,6 +157,10 @@ impl VkCompositor {
     ///
     /// [`Filter::Auto`]: crate::Filter::Auto
     pub fn freeze(&mut self) -> Result<(), VkError> {
+        self.unless_lost(|compositor| compositor.freeze_now())
+    }
+
+    fn freeze_now(&mut self) -> Result<(), VkError> {
         self.ensure_presenter()?;
         let target = self
             .target

@@ -3,6 +3,7 @@
 //! [`Probe`] exists in every build. Outside the tests it has no field and its methods do
 //! nothing, so the compositor calls them without an attribute.
 
+use ash::prelude::VkResult;
 use ash::vk;
 
 #[cfg(test)]
@@ -33,6 +34,10 @@ pub(in crate::compositor) struct Probe {
     /// The number of times the device was idled to replace a swapchain.
     #[cfg(test)]
     swapchain_idles: u32,
+    /// Failure injection: what idling the device to release the surface returns next, once
+    /// it has idled.
+    #[cfg(test)]
+    idle_result: Option<vk::Result>,
     /// Stands in for the pacing extensions of the swapchain when the presents are planned.
     #[cfg(test)]
     pub(in crate::compositor) timing_stand_in: Option<Box<dyn TimingCalls>>,
@@ -102,6 +107,15 @@ impl Probe {
     pub(super) fn swapchain_idled(&mut self) {
         self.swapchain_idles += 1;
     }
+
+    /// What idling the device to release the surface returns, given that it returned `idled`:
+    /// the injected result, once, or `idled`.
+    pub(super) fn idle_result(&mut self, idled: VkResult<()>) -> VkResult<()> {
+        match self.idle_result.take() {
+            Some(result) => Err(result),
+            None => idled,
+        }
+    }
 }
 
 #[cfg(not(test))]
@@ -147,6 +161,11 @@ impl Probe {
 
     #[inline(always)]
     pub(super) fn swapchain_idled(&mut self) {}
+
+    #[inline(always)]
+    pub(super) fn idle_result(&mut self, idled: VkResult<()>) -> VkResult<()> {
+        idled
+    }
 }
 
 /// The sRGB formats among `formats` that [`choose_format`] knows, or all of `formats` when
@@ -217,6 +236,17 @@ impl VkCompositor {
     /// The number of times the device was idled to replace a swapchain so far.
     pub(crate) fn swapchain_idles(&self) -> u32 {
         self.present_probe.swapchain_idles
+    }
+
+    /// Whether the surface was released and no new one attached.
+    pub(crate) fn surface_is_released(&self) -> bool {
+        self.gpu.surface_released()
+    }
+
+    /// Makes the next idling of the device to release the surface return `result` once it
+    /// has idled.
+    pub(crate) fn fail_next_release_idle(&mut self, result: vk::Result) {
+        self.present_probe.idle_result = Some(result);
     }
 
     /// Makes the draw of the next present fail before anything is submitted, with an image

@@ -225,3 +225,24 @@ enum Step<'a> {
         rgba: &'a [u8],
     },
 }
+
+impl VkCompositor {
+    /// Runs `work`, a method that uses the device, unless the device is lost: then it fails
+    /// with [`VkError::DeviceLost`] at once and nothing of the device is used. A lost device
+    /// that `work` finds is recorded, so that every later call is refused.
+    ///
+    /// [`VkError::DeviceLost`]: crate::VkError::DeviceLost
+    fn unless_lost<T>(
+        &mut self,
+        work: impl FnOnce(&mut VkCompositor) -> Result<T, crate::VkError>,
+    ) -> Result<T, crate::VkError> {
+        if let Some(call) = self.lost {
+            return Err(crate::VkError::DeviceLost { call });
+        }
+        let result = work(self);
+        if let Err(crate::VkError::DeviceLost { call }) = &result {
+            self.lost.get_or_insert(call);
+        }
+        result
+    }
+}

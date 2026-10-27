@@ -98,9 +98,37 @@ engine's own waits beyond the existing bounded acquire.
   `discard_image`, `discard_buffer`, `submit_or_idle`, the undrawn swapchain image) leaves it
   alone instead and does not idle the device. A test injects the result of the wait through
   the probe after the real wait has returned, so no device is lost.
+- **Lost device.** `VkError::from_result` turns `VK_ERROR_DEVICE_LOST` of any call into
+  `DeviceLost`; `VkError::vulkan` and every place that built `VkError::Vulkan` from a result
+  go through it. The public methods that use the device (`render` and through it `handle`,
+  `forget_resources`, `read_frame`, `freeze` and `freeze_into_buffer` and through them
+  `freeze_by`, `scale_frame`, `set_overlay`, `release_surface`, `attach_window`, `present`)
+  run their work through `unless_lost`, which refuses at once when the device is lost and
+  records a loss the work found. The methods that only set state (`set_mix`,
+  `resize_surface` and the like) stay as they were.
+- **Releasing the surface.** `release_surface` keeps the result of idling, destroys the
+  swapchain, releases the surface and then returns the error. The presentation probe can
+  replace the result of that idle, after it has idled, for the test.
+- **Session.** The session cannot see `VkError`: it is generic over `Display`, whose error is
+  only `Display`. So `Display` got a provided method `is_device_lost(&Self::Error) -> bool`,
+  `false` by default, which `HeadlessDisplay` and `VulkanDisplay` answer with
+  `VkError::is_device_lost` and the `RecordingDisplay` of the tests with a loss it is told to
+  fake from a frame on (`lose_device_at`). These are a few lines each in `display.rs`,
+  `headless.rs`, `windowed.rs` and `testing.rs` of `vkrgss-host`, outside the files the
+  scope named, which the requirement plainly needs. In `Session::frame` an error that is a
+  lost device is reported once as "the display's device was lost at frame N" and makes the
+  session failing whatever `fail_on_rejected_frame` says, so it ends as `SessionEnd::Failed`
+  with the tick of that frame; no later frame is rendered.
 - **Drop.** A lost compositor leaks everything, the device and the instance with it: the
   device is now a `ManuallyDrop<Gpu>` that `drop` drops last only when the device is not lost.
 
 ## Follow-ups
 
-None yet.
+- A headless run that ends on a lost device returns `HeadlessError::FrameRejected`, whose
+  text, printed by the program after the session's own report, says "frame N was rejected by
+  the compositor". The session reports the loss itself once; whether the runner should have
+  an error of its own for a lost device is left open, as it would touch `headless.rs` and the
+  program beyond the lines this change needs.
+- A lost device found by a freeze (`Display::hold`) is reported as "cannot freeze the
+  display" and the session ends at the next frame, which reports the loss; only the result
+  of a frame is matched, as the design says.

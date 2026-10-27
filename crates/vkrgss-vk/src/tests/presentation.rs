@@ -1406,6 +1406,33 @@ fn a_released_surface_shows_nothing_until_a_new_one_is_attached() {
     assert_clean(&log, "while the compositor was dropped");
 }
 
+/// Scenario "Idle fails" of "The surface is released when idling fails".
+#[test]
+fn a_surface_is_released_also_when_idling_fails() {
+    let log = ValidationLog::new();
+    let mut compositor = surface_compositor(&log);
+    compositor.resize_surface(Size::new(64, 48));
+    compositor.render(&flat(SIZE, WHITE)).unwrap();
+    assert_eq!(compositor.present(), Ok(true));
+
+    compositor.fail_next_release_idle(vk::Result::ERROR_OUT_OF_HOST_MEMORY);
+    assert_eq!(
+        compositor.release_surface(),
+        Err(VkError::Vulkan {
+            call: "vkDeviceWaitIdle",
+            result: vk::Result::ERROR_OUT_OF_HOST_MEMORY,
+        })
+    );
+    assert!(compositor.surface_is_released());
+    assert_eq!(compositor.swapchain_extent(), None);
+    assert_eq!(compositor.present(), Ok(false));
+    compositor.attach_headless_surface().unwrap();
+    assert_eq!(compositor.present(), Ok(true));
+
+    drop(compositor);
+    assert_clean(&log, "while the compositor was dropped");
+}
+
 fn present_resize_and_tear_down(ignore_maintenance: bool) {
     let log = ValidationLog::new();
     let mut compositor = surface_compositor(&log);

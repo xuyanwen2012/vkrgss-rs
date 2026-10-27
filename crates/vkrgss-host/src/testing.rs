@@ -85,11 +85,17 @@ impl Shown {
 pub struct Rejected {
     /// Position of the op that draws a bitmap that does not exist.
     pub op: usize,
+    /// Whether the packet was rejected because the device is lost, which
+    /// [`RecordingDisplay::lose_device_at`] arranges; `op` is 0 then.
+    pub device_lost: bool,
 }
 
 impl std::fmt::Display for Rejected {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "op {} draws an unknown bitmap", self.op)
+        match self.device_lost {
+            true => f.write_str("the device is lost"),
+            false => write!(f, "op {} draws an unknown bitmap", self.op),
+        }
     }
 }
 
@@ -114,6 +120,8 @@ pub struct RecordingDisplay {
     title: String,
     /// A clock to move forward by a fixed time whenever a packet is rendered.
     render_time: Option<(ManualClock, Duration)>,
+    /// The frame index from which every packet is rejected as on a lost device.
+    lost_from: Option<u64>,
 }
 
 impl RecordingDisplay {
@@ -130,7 +138,13 @@ impl RecordingDisplay {
             shown: Shown::Nothing,
             title: String::new(),
             render_time: None,
+            lost_from: None,
         }
+    }
+
+    /// Makes the packet of `frame_index` and every packet after it fail as on a lost device.
+    pub fn lose_device_at(&mut self, frame_index: u64) {
+        self.lost_from = Some(frame_index);
     }
 
     /// A display on which rendering a packet, accepted or not, takes `time` on `clock`.
@@ -198,10 +212,21 @@ impl Default for RecordingDisplay {
 impl Display for RecordingDisplay {
     type Error = Rejected;
 
+    fn is_device_lost(error: &Rejected) -> bool {
+        error.device_lost
+    }
+
     fn render(&mut self, packet: &FramePacket) -> Result<(), Rejected> {
         let frame_index = packet.frame_index;
         if let Some((clock, time)) = &self.render_time {
             clock.advance(*time);
+        }
+        if self.lost_from.is_some_and(|from| frame_index >= from) {
+            self.events.push(DisplayEvent::Rejected { frame_index });
+            return Err(Rejected {
+                op: 0,
+                device_lost: true,
+            });
         }
         // Like the compositors, which apply the bitmap changes of a packet they then reject.
         for delta in &packet.bitmaps {
@@ -219,7 +244,10 @@ impl Display for RecordingDisplay {
             |op: &Op| matches!(op, Op::Quad(quad) if !self.bitmaps.contains(&quad.bitmap));
         if let Some(op) = packet.ops.iter().position(unknown) {
             self.events.push(DisplayEvent::Rejected { frame_index });
-            return Err(Rejected { op });
+            return Err(Rejected {
+                op,
+                device_lost: false,
+            });
         }
         self.events.push(DisplayEvent::Render { frame_index });
         self.newest = Some(frame_index);

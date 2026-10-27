@@ -17,6 +17,12 @@ pub trait Display {
     /// Why a packet was rejected or could not be shown.
     type Error: std::fmt::Display;
 
+    /// Whether `error` says that the device the display draws with is lost, so that it
+    /// shows nothing more. A display without a device never says so.
+    fn is_device_lost(_error: &Self::Error) -> bool {
+        false
+    }
+
     /// Composites the packet as the newest frame and shows the result in the current mix.
     /// On an error the newest frame and the image on screen stay what they were.
     fn render(&mut self, packet: &FramePacket) -> Result<(), Self::Error>;

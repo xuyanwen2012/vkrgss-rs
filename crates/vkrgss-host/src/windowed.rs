@@ -379,6 +379,10 @@ impl VulkanDisplay {
 impl Display for VulkanDisplay {
     type Error = VkError;
 
+    fn is_device_lost(error: &VkError) -> bool {
+        error.is_device_lost()
+    }
+
     fn render(&mut self, packet: &FramePacket) -> Result<(), VkError> {
         let frame = self.rendered;
         self.rendered += 1;

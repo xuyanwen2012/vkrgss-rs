@@ -21,6 +21,10 @@ impl VkCompositor {
     /// The target is an `R8G8B8A8_UNORM` image, so the bytes are what a `UNORM` swapchain
     /// image would hold. Works with and without a surface.
     pub fn scale_frame(&mut self, size: Size) -> Result<Frame, VkError> {
+        self.unless_lost(|compositor| compositor.scale_frame_now(size))
+    }
+
+    fn scale_frame_now(&mut self, size: Size) -> Result<Frame, VkError> {
         if size.width == 0 || size.height == 0 {
             return Ok(Frame {
                 size,

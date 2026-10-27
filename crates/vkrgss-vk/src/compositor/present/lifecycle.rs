@@ -16,10 +16,16 @@ impl VkCompositor {
     /// released already.
     ///
     /// Fails with [`VkError::NoSurface`] on a compositor that was created without a surface.
+    /// When idling the device before the swapchain is destroyed fails, the swapchain and the
+    /// surface are let go all the same and that error is returned.
     ///
     /// [`attach_window`]: VkCompositor::attach_window
     /// [`present`]: VkCompositor::present
     pub fn release_surface(&mut self) -> Result<(), VkError> {
+        self.unless_lost(|compositor| compositor.release_surface_now())
+    }
+
+    fn release_surface_now(&mut self) -> Result<(), VkError> {
         if self.gpu.surface.is_none() {
             return Err(VkError::NoSurface);
         }
@@ -27,6 +33,7 @@ impl VkCompositor {
             return Ok(());
         }
         let device = &self.gpu.device;
+        let mut idled = Ok(());
         if let Some(presenter) = &mut self.presenter
             && let Some(chain) = presenter.swapchain.take()
         {
@@ -35,17 +42,19 @@ impl VkCompositor {
             let _ = chain.settle_presents(device);
             // SAFETY: the device is live.
             let idle = unsafe { device.device_wait_idle() };
+            idled = self.present_probe.idle_result(idle);
             let loader = presenter
                 .swapchain_loader
                 .as_ref()
                 .expect("made with the swapchain");
+            // Also when idling failed: the surface goes whatever happens, and a swapchain
+            // must not outlive it.
             chain.destroy(device, loader);
             self.pacer.swapchain_replaced();
-            idle.map_err(VkError::vulkan("vkDeviceWaitIdle"))?;
         }
         self.starved = false;
         self.gpu.release_surface();
-        Ok(())
+        idled.map_err(VkError::vulkan("vkDeviceWaitIdle"))
     }
 
     /// Gives the compositor the surface of `window` after [`release_surface`]: the window the
@@ -73,6 +82,10 @@ impl VkCompositor {
     }
 
     fn attach(&mut self, source: SurfaceSource) -> Result<(), VkError> {
+        self.unless_lost(|compositor| compositor.attach_now(source))
+    }
+
+    fn attach_now(&mut self, source: SurfaceSource) -> Result<(), VkError> {
         if !self.gpu.surface_released() {
             self.release_surface()?;
         }

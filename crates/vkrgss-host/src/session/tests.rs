@@ -1785,6 +1785,43 @@ fn rejected_frame_in_a_failing_session_is_ticked_at_once_when_it_is_late() {
     assert_eq!(rig.session.end(), Some(SessionEnd::Failed));
 }
 
+// A lost device.
+
+/// Scenarios "Windowed" and "Headless" of "A lost device ends the session": a session set up
+/// like a windowed one, which goes on after a rejected frame, and one set up like a headless
+/// run, which does not.
+#[test]
+fn lost_device_ends_the_session_with_a_failure() {
+    for (what, mut rig) in [("windowed", Rig::windowed()), ("headless", Rig::with(true))] {
+        rig.session.display_mut().lose_device_at(1);
+        rig.frame(frame(0));
+        assert_eq!(rig.send(frame(1)), [], "{what}");
+        assert!(rig.session.is_failing(), "{what}");
+        // The frame is answered with its tick, and the session ends with it.
+        assert_eq!(rig.wait_for_tick(), ms(25), "{what}");
+        let end = rig.session.end().expect("the session has ended");
+        assert_eq!(end, SessionEnd::Failed, "{what}");
+        assert!(!end.is_success());
+        // Nothing more is rendered, so nothing more is refused.
+        rig.session.handle_message(frame(2));
+        rig.clock.advance(ms(100));
+        rig.session.poll();
+        assert_eq!(rig.session.display().rendered(), [0], "{what}");
+
+        let errors = rig.errors.text();
+        assert!(
+            errors.contains("device was lost at frame 1"),
+            "{what}: {errors}"
+        );
+        assert!(!errors.contains("rejected"), "{what}: {errors}");
+        assert_eq!(
+            rig.errors.severities(""),
+            [Severity::Error],
+            "{what}: {errors}"
+        );
+    }
+}
+
 // Messages behind a frame whose tick is pending, through a link.
 
 /// A linked rig at 10 frames per second with frame 0 ticked and frame 1 waiting for its tick,

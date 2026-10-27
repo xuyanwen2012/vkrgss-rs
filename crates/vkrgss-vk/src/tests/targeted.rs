@@ -634,6 +634,38 @@ fn wait_that_runs_out_is_a_lost_device() {
     assert!(error.is_device_lost());
 }
 
+/// Scenario "Lost during a frame": the frame after the one that found the device lost, and
+/// every other call that would use the device, is refused without a submission or an
+/// allocation.
+#[test]
+fn lost_device_refuses_later_calls() {
+    let size = Size::new(40, 30);
+    let mut compositor = TestCompositor::new();
+    compositor.render(&plain_frame(size, 1)).unwrap();
+    compositor.inject_wait_result(vk::Result::ERROR_DEVICE_LOST);
+    let lost = Err(VkError::DeviceLost {
+        call: "vkWaitSemaphores",
+    });
+    assert_eq!(compositor.render(&plain_frame(size, 2)), lost);
+    let used = (compositor.submissions(), compositor.frame_buffers_created());
+
+    // A larger frame would need larger buffers and a new target.
+    assert_eq!(
+        compositor.render(&plain_frame(Size::new(400, 300), 3)),
+        lost
+    );
+    assert_eq!(compositor.render(&plain_frame(size, 4)), lost);
+    assert_eq!(compositor.read_frame().map(|_| ()), lost);
+    assert_eq!(compositor.forget_resources(), lost);
+    assert_eq!(compositor.freeze(), lost);
+    assert_eq!(compositor.scale_frame(size).map(|_| ()), lost);
+    assert_eq!(
+        (compositor.submissions(), compositor.frame_buffers_created()),
+        used,
+        "the device was not used"
+    );
+}
+
 // Requirement: Device selection, on the real devices of this machine
 
 #[test]

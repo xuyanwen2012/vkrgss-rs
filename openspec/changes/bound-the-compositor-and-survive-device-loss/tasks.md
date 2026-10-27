@@ -7,8 +7,8 @@
 
 ## 2. Lost device
 
-- [ ] 2.1 `VkError::DeviceLost` and `is_device_lost()`; a lost compositor refuses later calls without touching the device; `release_surface` lets the surface go when idling fails. Verify: `lost_device_refuses_later_calls` and the presentation lifecycle tests pass.
-- [ ] 2.2 The session ends with a failure on a lost device, windowed and headless. Verify: `lost_device_ends_the_session_with_a_failure` and the session tests of `vkrgss-host` pass.
+- [x] 2.1 `VkError::DeviceLost` and `is_device_lost()`; a lost compositor refuses later calls without touching the device; `release_surface` lets the surface go when idling fails. Verify: `lost_device_refuses_later_calls` and the presentation lifecycle tests pass.
+- [x] 2.2 The session ends with a failure on a lost device, windowed and headless. Verify: `lost_device_ends_the_session_with_a_failure` and the session tests of `vkrgss-host` pass.
 
 ## 3. Resources and presentation
 

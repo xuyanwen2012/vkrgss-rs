@@ -251,6 +251,10 @@ impl VkCompositor {
     ///
     /// When the picture has no pixels or does not hold four bytes for each of them.
     pub fn set_overlay(&mut self, picture: Option<&OverlayImage>) -> Result<(), VkError> {
+        self.unless_lost(|compositor| compositor.set_overlay_now(picture))
+    }
+
+    fn set_overlay_now(&mut self, picture: Option<&OverlayImage>) -> Result<(), VkError> {
         let Some(picture) = picture else {
             if let Some(overlay) = self.presenter.as_mut().and_then(|p| p.overlay.as_mut())
                 && let Some(image) = overlay.image.take()

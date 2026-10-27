@@ -33,6 +33,10 @@ impl VkCompositor {
     /// this backend. A limit met by a delta behaves like an invalid delta; a limit met by the
     /// frame as a whole leaves every delta applied.
     pub fn render(&mut self, packet: &FramePacket) -> Result<(), VkError> {
+        self.unless_lost(|compositor| compositor.render_packet(packet))
+    }
+
+    fn render_packet(&mut self, packet: &FramePacket) -> Result<(), VkError> {
         // What an earlier frame left is not this frame's, also when this one is refused.
         self.frame_timing = None;
         check_logical_size(packet.logical_size)?;
@@ -70,6 +74,10 @@ impl VkCompositor {
     /// frame target and what the presenter holds stay. For a guest that starts sending anew:
     /// the next packet may create any bitmap and set any table.
     pub fn forget_resources(&mut self) -> Result<(), VkError> {
+        self.unless_lost(|compositor| compositor.forget_all())
+    }
+
+    fn forget_all(&mut self) -> Result<(), VkError> {
         let bitmaps: Vec<BitmapDelta> = self
             .table
             .ids()
@@ -95,6 +103,10 @@ impl VkCompositor {
     /// The most recently rendered frame, copied from the device, or `None` before the first
     /// successful [`render`](VkCompositor::render).
     pub fn read_frame(&mut self) -> Result<Option<Frame>, VkError> {
+        self.unless_lost(|compositor| compositor.read_target())
+    }
+
+    fn read_target(&mut self) -> Result<Option<Frame>, VkError> {
         let Some(target) = self.target.as_ref().filter(|_| self.has_frame) else {
             return Ok(None);
         };

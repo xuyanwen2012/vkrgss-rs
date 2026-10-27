@@ -48,8 +48,8 @@ pub enum SessionEnd {
     Shutdown,
     /// The guest's end of the link went away without a shutdown message.
     Disconnected,
-    /// A frame was rejected in a session that does not continue after that. The frame still
-    /// got its tick.
+    /// A frame was rejected in a session that does not continue after that, or the device of
+    /// the display was lost, in any session. The frame still got its tick.
     Failed,
     /// The guest had not shut down [`QUIT_WAIT`] after it was first asked to quit, and was
     /// given up on.
@@ -308,8 +308,9 @@ pub struct Session<D: Display, C: Clock> {
     /// Whether sending to the guest has failed. What the guest sent before it went is still
     /// read, so a shutdown message that is already in the link is not lost.
     guest_gone: bool,
-    /// Whether a frame was rejected in a session that does not continue after that. The
-    /// session ends as failed when the tick of that frame goes out.
+    /// Whether a frame was rejected in a session that does not continue after that, or found
+    /// the device of the display lost. The session ends as failed when the tick of that frame
+    /// goes out.
     failing: bool,
     end: Option<SessionEnd>,
     /// The frame time statistics, when the session collects them.
@@ -399,8 +400,9 @@ impl<D: Display, C: Clock> Session<D, C> {
         self.end
     }
 
-    /// Whether a frame has been rejected in a session that does not continue after that, and
-    /// the session is only waiting to send that frame's tick before it ends.
+    /// Whether a frame has been rejected in a session that does not continue after that, or
+    /// found the device of the display lost, and the session is only waiting to send that
+    /// frame's tick before it ends.
     pub fn is_failing(&self) -> bool {
         self.failing
     }
@@ -1115,12 +1117,25 @@ impl<D: Display, C: Clock> Session<D, C> {
                     self.display.set_mix(self.mix);
                     self.show_mask(mask_before);
                 }
-                self.report(
-                    Severity::Error,
-                    format_args!("frame {} was rejected: {error}", packet.frame_index),
-                );
-                // The frame is answered with its tick all the same; see `send_tick`.
-                self.failing |= self.fail_on_rejected_frame;
+                if D::is_device_lost(&error) {
+                    // Nothing more can be shown, in a window or not: the session ends with
+                    // the tick of this frame, and no later frame is rendered to be refused.
+                    self.report(
+                        Severity::Error,
+                        format_args!(
+                            "the display's device was lost at frame {}: {error}",
+                            packet.frame_index
+                        ),
+                    );
+                    self.failing = true;
+                } else {
+                    self.report(
+                        Severity::Error,
+                        format_args!("frame {} was rejected: {error}", packet.frame_index),
+                    );
+                    // The frame is answered with its tick all the same; see `send_tick`.
+                    self.failing |= self.fail_on_rejected_frame;
+                }
             }
         }
 

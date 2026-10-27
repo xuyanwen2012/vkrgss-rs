@@ -31,6 +31,10 @@ impl VkCompositor {
     /// While its surface is released ([`release_surface`](VkCompositor::release_surface))
     /// nothing is presented, as for a window without pixels.
     pub fn present(&mut self) -> Result<bool, VkError> {
+        self.unless_lost(|compositor| compositor.present_now())
+    }
+
+    fn present_now(&mut self) -> Result<bool, VkError> {
         if self.gpu.surface.is_none() {
             return Err(VkError::NoSurface);
         }
