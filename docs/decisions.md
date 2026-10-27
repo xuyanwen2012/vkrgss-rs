@@ -172,7 +172,7 @@ previous frame on a failed resize, and the descriptor limits a device has to mee
   composition set needs 65536 update-after-bind sampled images and 65542 update-after-bind
   resources per stage (the sampled images, the frame target and five storage buffers); every
   device in use has at least a million.
-- Every submission is waited for before the call that made it returns, for 20 seconds at
+- Every submission is waited for before the call that made it returns, for 60 seconds at
   most. A wait that runs out, like `VK_ERROR_DEVICE_LOST` from any call, is a lost device:
   the compositor uses the device no more and refuses every later call, and the session
   reports the loss once and ends with a failure, in a window and headless. The device is not

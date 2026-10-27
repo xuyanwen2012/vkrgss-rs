@@ -51,7 +51,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   logical size with a few full-screen ops reaches, is refused as a limit before anything is
   allocated for it, and the previous frame stays. Before, such a packet made the program
   allocate up to about 4 GiB and compose for minutes.
-- A lost Vulkan device, or a submission that has not completed after 20 seconds, ends the
+- A lost Vulkan device, or a submission that has not completed after 60 seconds, ends the
   session with one error and a failure status, in a window and headless. Before, every
   later frame was reported as rejected, for ever, over a black window.
 - A frame target that cannot be allocated at a new logical size leaves the previous frame,

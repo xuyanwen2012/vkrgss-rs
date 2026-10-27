@@ -77,8 +77,10 @@ mod query {
 /// How long a wait for a submission lasts before the device counts as lost. The heaviest frame
 /// within the work budget ([`FRAME_WORK_BUDGET`](crate::binning::FRAME_WORK_BUDGET)) took
 /// 2.6 seconds on llvmpipe on a desktop of six cores (2026-10-26), a frame of the comparison
-/// games a few milliseconds.
-const SUBMISSION_TIMEOUT: Duration = Duration::from_secs(20);
+/// games a few milliseconds. A wait counts the time the process could not run too: under the
+/// parallel tests of the gate, with memory and swap used up, the first frame of a game took
+/// more than 20 seconds on llvmpipe (2026-10-26), so the bound is well above that.
+const SUBMISSION_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Bytes of the push constants: logical width, logical height, tile grid width, brightness.
 const PUSH_CONSTANT_BYTES: u32 = 16;
@@ -108,7 +110,7 @@ pub use present::{Filter, Mix, OverlayImage, letterbox};
 ///
 /// Rendering is synchronous: every call submits its work and waits for it, so no Vulkan object
 /// is ever in use by the device when a method returns. A wait is bounded: a submission that has
-/// not completed within 20 seconds counts as a lost device, as does any call that
+/// not completed within 60 seconds counts as a lost device, as does any call that
 /// reports `VK_ERROR_DEVICE_LOST`. The method returns [`VkError::DeviceLost`] then, and every
 /// later method that would use the device returns it again without using the device. Dropping
 /// a compositor whose device is lost leaks the device and what was made from it.

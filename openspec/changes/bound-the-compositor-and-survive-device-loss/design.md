@@ -88,12 +88,21 @@ engine's own waits beyond the existing bounded acquire.
   the index list at 16 MiB. A frame over it fails with `Limit::FrameWork`; `bin` is given the
   smaller of the budget and the entries the storage buffer range holds.
 - **Bounded waits.** Every wait for a submission goes through `submit_with`, which waits on
-  the timeline for `SUBMISSION_TIMEOUT`, 20 seconds. The heaviest frames at the budget,
+  the timeline for `SUBMISSION_TIMEOUT`, 60 seconds. The heaviest frames at the budget,
   measured on llvmpipe on this machine with a temporary test, took 0.43 s (full-screen
   clears), 1.2 to 1.5 s (full-screen quads with tone, colour and additive blending, at 640 by
-  480 and at 4096 by 4096) and up to 2.6 s (tilemap layers of the reference scenes), so the
-  timeout is about eight times the slowest. A wait that runs out is `DeviceLost` with the call
-  `vkWaitSemaphores`. The compositor records the loss at once (`lost`), and every failure
+  480 and at 4096 by 4096) and up to 2.6 s (tilemap layers of the reference scenes). The
+  timeout was 20 seconds first. A full gate of a review then failed two tests of
+  `crates/vkrgss/tests/rgss3.rs` whose first frame, one `Graphics.update`, was taken as a
+  lost device after 20 seconds, while both pass alone. The first submission of a new
+  compositor takes about 8 ms alone; but the gate runs the Vulkan tests twice in parallel
+  with the rest of the workspace, the test binary of `vkrgss-vk` alone peaks at about 10 GB
+  (8.9 GB without the tests of this change, whose lost compositors keep about 70 MB each
+  until the binary ends), and with the other work on the machine memory and swap were used
+  up (30 GB of each, seen while the tests ran in parallel), which stalls every thread of a
+  process. A wall-clock bound cannot tell that from a device that makes no progress; 60
+  seconds is three times what was seen and still bounds every wait. A wait that runs out is
+  `DeviceLost` with the call `vkWaitSemaphores`. The compositor records the loss at once (`lost`), and every failure
   path that would destroy what a submission used (`execute`, `read_image`,
   `discard_image`, `discard_buffer`, `submit_or_idle`, the undrawn swapchain image) leaves it
   alone instead and does not idle the device. A test injects the result of the wait through
