@@ -111,6 +111,14 @@ pub fn read_message<T: Message>(reader: &mut impl Read) -> Result<Option<T>, Fra
 /// before giving more; it then keeps no more than the bytes of one message within the bound
 /// plus what it was given at once. A length above the bound is an error as soon as its four
 /// bytes are there.
+///
+/// Once the length of the first message is there, the reader makes room for all of it at
+/// once, so that its buffer does not grow past the message by doubling as the bytes arrive;
+/// whoever reads for it can read no more than [`missing`](MessageReader::missing) says, and
+/// the buffer never holds more than the message. A buffer of more than 1 MiB is given back
+/// once its message has been taken. Before a message is read whole, what it is can be told
+/// from its length and its first bytes ([`first_len`](MessageReader::first_len),
+/// [`first_is_frame`](MessageReader::first_is_frame)).
 #[derive(Debug, Default)]
 pub struct MessageReader {
     /// Bytes that no message was taken of yet.
@@ -126,7 +134,44 @@ impl MessageReader {
 
     /// Adds bytes that arrived.
     pub fn push(&mut self, bytes: &[u8]) {
+        let wanted = self.buffered.len() + bytes.len();
+        // Room for the whole of a message whose length is known.
+        let whole = self
+            .first_len()
+            .filter(|len| *len <= MAX_MESSAGE_LEN as usize)
+            .map_or(0, |len| LENGTH_LEN + len);
+        let room = wanted.max(whole);
+        if room > self.buffered.capacity() {
+            self.buffered.reserve_exact(room - self.buffered.len());
+        }
         self.buffered.extend_from_slice(bytes);
+    }
+
+    /// The length the first message states, once its four bytes are there, whether or not it
+    /// is within the bound.
+    pub fn first_len(&self) -> Option<usize> {
+        let (length, _) = self.buffered.split_first_chunk::<LENGTH_LEN>()?;
+        Some(u32::from_le_bytes(*length) as usize)
+    }
+
+    /// The bytes that are missing of the first message once its length is there: 0 when it is
+    /// whole, or when its length is above the bound, which [`take`](MessageReader::take)
+    /// reports. `None` while the length itself is not there.
+    pub fn missing(&self) -> Option<usize> {
+        let len = self.first_len()?;
+        if len > MAX_MESSAGE_LEN as usize {
+            return Some(0);
+        }
+        Some((LENGTH_LEN + len).saturating_sub(self.buffered.len()))
+    }
+
+    /// Whether the first message, of a stream of [`GuestToHost`](crate::GuestToHost)
+    /// messages, is a frame packet, once the byte that tells is there: a message starts with
+    /// the number of its variant, and a frame packet is the variant 0.
+    pub fn first_is_frame(&self) -> Option<bool> {
+        self.buffered
+            .get(LENGTH_LEN + codec::HEADER_LEN)
+            .map(|variant| *variant == 0)
     }
 
     /// Takes the first message if all of it is there. A length above the bound and bytes
@@ -142,6 +187,9 @@ impl MessageReader {
         let message = decode_message(bytes)?;
         self.buffered.drain(..LENGTH_LEN + len);
         self.taken += (LENGTH_LEN + len) as u64;
+        if self.buffered.capacity() > (1 << 20).max(2 * self.buffered.len()) {
+            self.buffered.shrink_to(self.buffered.len());
+        }
         Ok(Some(message))
     }
 
@@ -175,6 +223,19 @@ mod tests {
         BitmapDelta, BitmapId, FramePacket, FrameRate, GuestToHost, HostToGuest, InputSnapshot,
         Rect, Size,
     };
+
+    /// A frame packet without bitmaps.
+    fn frame_packet() -> GuestToHost {
+        GuestToHost::Frame(FramePacket {
+            frame_index: 0,
+            logical_size: Size::new(640, 480),
+            frame_rate: FrameRate::DEFAULT,
+            brightness: 255,
+            bitmaps: Vec::new(),
+            tables: Vec::new(),
+            ops: Vec::new(),
+        })
+    }
 
     /// A frame packet that carries every pixel of a bitmap of 640 by 480.
     fn frame() -> GuestToHost {
@@ -293,6 +354,44 @@ mod tests {
         // A stream that ends inside a message.
         reader.push(&bytes[..3]);
         assert!(matches!(reader.end(), Err(FramingError::Truncated)));
+    }
+
+    /// A reader tells what its first message is before all of it is there, makes room for it
+    /// at once, and gives a large buffer back once the message is taken.
+    #[test]
+    fn the_incremental_reader_tells_the_first_message_and_holds_no_more_than_it() {
+        let title = GuestToHost::SetTitle {
+            title: "t".repeat(3 << 20),
+        };
+        let mut bytes = Vec::new();
+        write_message(&mut bytes, &title).unwrap();
+        let mut frame = Vec::new();
+        write_message(&mut frame, &frame_packet()).unwrap();
+
+        let mut reader = MessageReader::new();
+        assert_eq!((reader.first_len(), reader.missing()), (None, None));
+        reader.push(&bytes[..LENGTH_LEN + HEADER_LEN]);
+        assert_eq!(reader.first_len(), Some(bytes.len() - LENGTH_LEN));
+        assert_eq!(reader.first_is_frame(), None);
+        reader.push(&bytes[LENGTH_LEN + HEADER_LEN..1000]);
+        assert_eq!(reader.first_is_frame(), Some(false));
+        assert_eq!(reader.missing(), Some(bytes.len() - 1000));
+        assert_eq!(reader.buffered.capacity(), bytes.len());
+        for part in bytes[1000..].chunks(1 << 16) {
+            reader.push(part);
+        }
+        assert_eq!(reader.buffered.capacity(), bytes.len(), "no doubling");
+        assert_eq!(reader.missing(), Some(0));
+        assert_eq!(reader.take::<GuestToHost>().unwrap(), Some(title));
+        assert!(reader.buffered.capacity() <= 1 << 20);
+
+        reader.push(&frame[..LENGTH_LEN + HEADER_LEN + 1]);
+        assert_eq!(reader.first_is_frame(), Some(true));
+        // A length above the bound is left to `take`.
+        let mut reader = MessageReader::new();
+        reader.push(&(MAX_MESSAGE_LEN + 1).to_le_bytes());
+        assert_eq!(reader.missing(), Some(0));
+        assert!(reader.take::<GuestToHost>().is_err());
     }
 
     /// Scenario "Oversized length", for the incremental reader: the error comes with the
