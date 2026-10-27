@@ -20,6 +20,8 @@ mod output;
 mod wma;
 
 pub use decode::{DecodeError, Source};
+#[doc(hidden)]
+pub use midi::frames_synthesised_on_this_thread;
 pub use midi::{SYSTEM_SOUNDFONTS, SoundFonts};
 pub use mixer::{Mixer, MixerOptions};
 pub use output::{Output, OutputOptions, Render, Start};

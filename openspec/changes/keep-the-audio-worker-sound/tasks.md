@@ -10,8 +10,8 @@
 
 ## 3. Save states
 
-- [ ] 3.1 Remember tells a voice that has not started from one that ended. Verify: `remember_right_after_play_keeps_the_file` and the remembered-position tests pass.
-- [ ] 3.2 Recall of a position in looping MIDI is reduced into the first pass through the loop. Verify: `recall_of_looping_midi_after_long_play_is_bounded` and the MIDI loop marker tests pass.
+- [x] 3.1 Remember tells a voice that has not started from one that ended. Verify: `remember_right_after_play_keeps_the_file` and the remembered-position tests pass.
+- [x] 3.2 Recall of a position in looping MIDI is reduced into the first pass through the loop. Verify: `recall_of_looping_midi_after_long_play_is_bounded` and the MIDI loop marker tests pass.
 
 ## 4. MIDI pitch and worker failures
 

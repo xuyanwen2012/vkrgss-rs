@@ -64,7 +64,7 @@ pub(crate) fn one_note_midi(seconds: u32) -> Vec<u8> {
     let mut track = vec![0x00, 0xc0, 0x00, 0x00, 0x90, 69, 100];
     variable_length(960 * seconds, &mut track);
     track.extend_from_slice(&[0x80, 69, 0, 0x00, 0xff, 0x2f, 0x00]);
-    midi_of(&track)
+    midi_of(&track, 480)
 }
 
 /// The notes of [`two_note_midi`] and their frequencies: neither is an overtone of the other.
@@ -83,17 +83,36 @@ pub(crate) fn two_note_midi(marker: bool) -> Vec<u8> {
     track.extend_from_slice(&[0x00, 0x90, SECOND_NOTE.0, 100]);
     variable_length(960, &mut track);
     track.extend_from_slice(&[0x80, SECOND_NOTE.0, 0, 0x00, 0xff, 0x2f, 0x00]);
-    midi_of(&track)
+    midi_of(&track, 480)
 }
 
-/// A Standard MIDI file with the one track `track`, 480 ticks to the quarter note.
-fn midi_of(track: &[u8]) -> Vec<u8> {
+/// The note that follows [`SECOND_NOTE`] in [`looped_midi`]: no overtone of either.
+pub(crate) const THIRD_NOTE: (u8, f32) = (77, 698.46);
+
+/// A Standard MIDI file of one second on a flute, 1024 ticks to the second, so that its
+/// times are exact in binary: [`FIRST_NOTE`] for half a second, the loop marker, and
+/// [`SECOND_NOTE`] and [`THIRD_NOTE`] for a quarter of a second each.
+pub(crate) fn looped_midi() -> Vec<u8> {
+    let mut track = vec![0x00, 0xc0, 73, 0x00, 0x90, FIRST_NOTE.0, 100];
+    variable_length(512, &mut track);
+    track.extend_from_slice(&[0x80, FIRST_NOTE.0, 0, 0x00, 0xb0, 111, 0]);
+    for note in [SECOND_NOTE.0, THIRD_NOTE.0] {
+        track.extend_from_slice(&[0x00, 0x90, note, 100]);
+        variable_length(256, &mut track);
+        track.extend_from_slice(&[0x80, note, 0]);
+    }
+    track.extend_from_slice(&[0x00, 0xff, 0x2f, 0x00]);
+    midi_of(&track, 512)
+}
+
+/// A Standard MIDI file with the one track `track`, `ticks` to the quarter note.
+fn midi_of(track: &[u8], ticks: u16) -> Vec<u8> {
     let mut midi = Vec::new();
     midi.extend_from_slice(b"MThd");
     midi.extend_from_slice(&6u32.to_be_bytes());
     midi.extend_from_slice(&0u16.to_be_bytes());
     midi.extend_from_slice(&1u16.to_be_bytes());
-    midi.extend_from_slice(&480u16.to_be_bytes());
+    midi.extend_from_slice(&ticks.to_be_bytes());
     midi.extend_from_slice(b"MTrk");
     midi.extend_from_slice(&(track.len() as u32).to_be_bytes());
     midi.extend_from_slice(track);

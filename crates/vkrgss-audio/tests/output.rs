@@ -7,7 +7,7 @@ use std::io::Write;
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
-use common::{AMPLITUDE, Reports, damaged_mp3, level, peak, side, tone_wav};
+use common::{AMPLITUDE, Reports, damaged_mp3, level, peak, side, tone_wav, wav_of};
 use vkrgss_audio::{Output, OutputOptions, Render, SoundFonts};
 use vkrgss_proto::{AudioChannel, AudioCommand};
 
@@ -207,4 +207,49 @@ fn callback_reports_damage_without_the_error_lock() {
         std::thread::sleep(Duration::from_millis(10));
     }
     assert_eq!(reports.lines(), 1, "{}", reports.text());
+}
+
+/// Scenario "Before the first buffer". The callback runs only once every request is sent, so
+/// the worker handles the remember request before the first buffer; the music it remembers
+/// is played at volume 0, so that every frame heard is of the second play command.
+#[test]
+fn remember_right_after_play_keeps_the_file() {
+    const RATE: u32 = 44100;
+    // Frame `n` holds `n / 2 + 100`: no frame is silent.
+    let ramp_at = |frame: u32| (frame / 2 + 100) as f32 / 32768.0;
+    let samples: Vec<i16> = (0..RATE).map(|frame| (frame / 2 + 100) as i16).collect();
+    let ramp = wav_of(RATE, &samples);
+    let play_from = |volume: u8, start: u64| AudioCommand::Play {
+        channel: AudioChannel::Bgm,
+        data: ramp.clone(),
+        volume,
+        pitch: 100,
+        start,
+        music_return_ms: 0,
+    };
+
+    let reports = Reports::default();
+    let device: Arc<Mutex<Option<Render>>> = Arc::default();
+    let slot = device.clone();
+    let output = Output::open_with(options(&reports), move |start| {
+        *slot.lock().unwrap() = Some(start(RATE));
+        Ok(Box::new(()))
+    });
+    let mut render = device.lock().unwrap().take().unwrap();
+    output.command(play_from(0, 1000));
+    output.remember(0);
+    output.command(AudioCommand::Stop {
+        channel: AudioChannel::Bgm,
+    });
+    output.recall(0);
+    output.command(play_from(100, 0));
+
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let mut frame = [0.0; 2];
+    while frame[0] == 0.0 {
+        assert!(Instant::now() < deadline, "never heard");
+        render(&mut frame);
+    }
+    assert_eq!(frame[0], ramp_at(1000));
+    assert_eq!(reports.text(), "");
 }

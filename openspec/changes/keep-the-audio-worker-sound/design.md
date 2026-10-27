@@ -41,6 +41,11 @@
   started" with a state the two share (for example an atomic that the voice sets when it is
   dropped or ends), instead of the reference count. A voice that has not started yet is
   remembered at the position the loader opened it at.
+  As built, the shared `Place` holds the position and a flag that the channels set when they
+  end a voice. The test of the scenario passes on the reference count too: the prepared
+  command waiting in the channel to the callback held the second reference. The count
+  stopped being usable with the change above, since a voice that ended is now alive until
+  the worker drops it.
 - **MIDI at any pitch.** The synthesiser runs at the requested rate clamped into
   16 000..=192 000 Hz, and the MIDI source resamples its output to the requested rate by
   linear interpolation, as sampled data is resampled. What the original does at such
@@ -54,6 +59,17 @@
   uninterrupted playback; that is accepted and recorded. The source's reported position after
   the reduction keeps counting from the reduced value; remembered positions are only used by
   the same source kind, so this is consistent.
+  As built, the position is reduced into the first pass through the loop, which follows the
+  first pass through the track: `end + (position - end) % period`, where `end` is the frame
+  at which the sequencer of `rustysynth` first jumps back and `period` the frames of each
+  later pass. Both are counted in blocks of the synthesiser, from the times the library
+  computes for the file's events (`midi.rs` reads the events and merges the tracks as the
+  library does, since it does not expose the times) and the clock it advances by a block at
+  a time. So the frames rendered are at most one pass through the track and one through its
+  loop, as the requirement allows, the jumps fall in the same blocks as in a playback, and
+  the release tails at the loop point are those of the end of the track, as in any later
+  pass. Only the reverberation of the passes before differs. A track longer than four
+  hours, or one whose times are not finite, is rendered up to the position as before.
 - **Worker panics.** Each `prepare`, `remember` and `recall` runs under `catch_unwind`. A
   panic in `prepare` turns the command into its silent form (a play command with no
   source); the panic is reported once through the reports as an undecodable sound.

@@ -12,13 +12,13 @@
 //! writes no report.
 //!
 //! The loader is also what remembers where the music and the background sound are, for the
-//! save states: it opened their sources, and each voice tells it its position through a
-//! number the two share.
+//! save states: it opened their sources, and each voice tells it its position, and that it
+//! has ended, through a [`Place`] the two share.
 
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -59,7 +59,7 @@ pub(crate) enum Prepared {
         source: Option<Box<dyn Source>>,
         volume: u8,
         /// Where the voice writes its position, on the channels that are remembered.
-        position: Option<Arc<AtomicU64>>,
+        position: Option<Arc<Place>>,
         /// For a music effect: the time over which the music returns when it has ended.
         music_return_ms: u32,
     },
@@ -76,6 +76,16 @@ pub(crate) enum Prepared {
     },
 }
 
+/// Where a voice of the music or the background sound is, shared by the voice and the
+/// loader.
+pub(crate) struct Place {
+    /// The position of the source, as of the last time the voice was mixed; until then where
+    /// the loader opened it at.
+    position: AtomicU64,
+    /// Whether the voice has ended: a voice that has not started yet has not.
+    ended: AtomicBool,
+}
+
 /// What the channels hand back to the loader's thread, where it is dropped or reported.
 pub(crate) enum Returned {
     /// A voice that ended or was replaced.
@@ -89,6 +99,9 @@ struct Retired(Option<Sender<Returned>>);
 
 impl Retired {
     fn end(&self, voice: Voice) {
+        if let Some(place) = &voice.position {
+            place.ended.store(true, Ordering::Relaxed);
+        }
         if let Some(back) = &self.0 {
             // Without the loader's thread, which ends only with the output, the voice is
             // dropped here.
@@ -137,9 +150,8 @@ struct Playing {
     /// The file of the play command, which is what tells one file from another: the command
     /// carries no name.
     data: Arc<[u8]>,
-    /// The position of the voice, which the voice writes. The voice holds the other
-    /// reference to it, so a count of one says that the voice is gone.
-    position: Arc<AtomicU64>,
+    /// Where the voice is, which the voice writes.
+    place: Arc<Place>,
 }
 
 /// A file and a position in it, or nothing for a channel that was silent.
@@ -188,9 +200,11 @@ impl Loader {
     pub(crate) fn remember(&mut self, slot: u8) {
         let playing = self.playing.each_ref().map(|playing| {
             let playing = playing.as_ref()?;
-            // A voice that a fade ended, or that failed to start, left its number behind.
-            (Arc::strong_count(&playing.position) > 1).then(|| {
-                let position = playing.position.load(Ordering::Relaxed);
+            // A voice that a fade ended is silence; one that the device has not mixed yet is
+            // where it was opened.
+            let place = &playing.place;
+            (!place.ended.load(Ordering::Relaxed)).then(|| {
+                let position = place.position.load(Ordering::Relaxed);
                 (playing.data.clone(), position)
             })
         });
@@ -240,12 +254,12 @@ impl Loader {
                 let mut position = None;
                 if let Some(index) = remembered(channel) {
                     self.playing[index] = source.as_mut().map(|source| {
-                        let shared = Arc::new(AtomicU64::new(source.position()));
-                        position = Some(shared.clone());
-                        Playing {
-                            data,
-                            position: shared,
-                        }
+                        let place = Arc::new(Place {
+                            position: AtomicU64::new(source.position()),
+                            ended: AtomicBool::new(false),
+                        });
+                        position = Some(place.clone());
+                        Playing { data, place }
                     });
                 }
                 Prepared::Play {
@@ -322,7 +336,7 @@ pub(crate) struct Voice {
     /// For a music effect: the frames over which the music returns when it has ended.
     music_return: u32,
     /// Where the position of the source is written each time the voice was mixed.
-    position: Option<Arc<AtomicU64>>,
+    position: Option<Arc<Place>>,
 }
 
 impl Voice {
@@ -330,7 +344,7 @@ impl Voice {
         source: Box<dyn Source>,
         volume: u8,
         looping: bool,
-        position: Option<Arc<AtomicU64>>,
+        position: Option<Arc<Place>>,
     ) -> Voice {
         Voice {
             source,
@@ -360,8 +374,10 @@ impl Voice {
             self.source.rewind();
             rewound = true;
         }
-        if let Some(position) = &self.position {
-            position.store(self.source.position(), Ordering::Relaxed);
+        if let Some(place) = &self.position {
+            place
+                .position
+                .store(self.source.position(), Ordering::Relaxed);
         }
         let steady = gain(self.volume);
         let pairs = out.as_chunks_mut::<2>().0.iter_mut();
