@@ -10,7 +10,7 @@
 
 ## 3. The session
 
-- [x] 3.1 Quit deadline (`SessionEnd::GaveUp`, scheduled by `next_wake`), `run_windowed` without the join after giving up, the program's failure report; injected keys without the program's shortcuts; the headless clock moved only to ticks; `GuestForm`'s default; the `--guest-role` branch of `main.rs` if unused. Verify: session tests of "Guest does not shut down", "Program shortcuts", "Reset by an injected key" and the existing scenarios of both modified requirements; scenario "Script in an endless loop" as a test of the windowed driver with the test doubles `windowed.rs` already uses for the thread form, and through `vkrgss` with a guest process where a windowed run can be driven in tests (otherwise the process form is covered by the relay tests and the owner checks it by hand; say which in `design.md`); "Save and load" of the headless clock; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss-host --locked` passes.
+- [ ] 3.1 Quit deadline (`SessionEnd::GaveUp`, scheduled by `next_wake`), `run_windowed` without the join after giving up, the program's failure report; injected keys without the program's shortcuts; the headless clock moved only to ticks; `GuestForm`'s default; the `--guest-role` branch of `main.rs` if unused. Verify: session tests of "Guest does not shut down", "Program shortcuts", "Reset by an injected key" and the existing scenarios of both modified requirements; scenario "Script in an endless loop" as a test of the windowed driver with the test doubles `windowed.rs` already uses for the thread form, and through `vkrgss` with a guest process where a windowed run can be driven in tests (otherwise the process form is covered by the relay tests and the owner checks it by hand; say which in `design.md`); "Save and load" of the headless clock; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss-host --locked` passes.
 
 ## 4. Documents
 
@@ -18,4 +18,4 @@
 
 ## 5. Checks
 
-- [x] 5.1 `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0, `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask xarch check` prints `all identical`, `openspec validate end-the-session-without-the-guest --strict` passes.
+- [ ] 5.1 `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0, `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask xarch check` prints `all identical`, `openspec validate end-the-session-without-the-guest --strict` passes.
