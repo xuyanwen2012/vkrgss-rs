@@ -872,6 +872,3 @@ Save states are described under [Save states](running.md#save-states). Their lim
 - States need the guest in a process, and no state is saved with
   `--allow-process-functions`, nor in a game of VX Ace while a script thread is alive.
 - The keys only show a notice while input is recorded or replayed.
-- MIDI music that had gone round its loop goes on at the same place in the loop, after the
-  synthesiser has rendered at most the track and the loop once more. What still sounded of
-  the passes before, their reverberation, is that of the first pass through the loop.

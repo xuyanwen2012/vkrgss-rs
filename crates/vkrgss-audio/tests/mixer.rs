@@ -4,17 +4,13 @@ mod common;
 
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use common::{
-    AMPLITUDE, FIRST_NOTE, MP2, MP3, OGG, Reports, SECOND_NOTE, THIRD_NOTE, damaged_mp3, frequency,
-    level, looped_midi, one_note_midi, peak, side, sounding_seconds, tone_wav, two_note_midi,
-    wav_of,
+    AMPLITUDE, FIRST_NOTE, MP2, MP3, OGG, Reports, SECOND_NOTE, damaged_mp3, frequency, level,
+    one_note_midi, peak, side, sounding_seconds, tone_wav, two_note_midi, wav_of,
 };
-use vkrgss_audio::decode::{self, DecodeError, Report, Source};
-use vkrgss_audio::{
-    Mixer, MixerOptions, SYSTEM_SOUNDFONTS, SoundFonts, frames_synthesised_on_this_thread,
-};
+use vkrgss_audio::{Mixer, MixerOptions, SYSTEM_SOUNDFONTS, SoundFonts};
 use vkrgss_proto::{AudioChannel, AudioCommand};
 
 const RATE: u32 = 44100;
@@ -800,113 +796,6 @@ fn a_recalled_position_is_where_the_same_midi_file_starts() {
     mixer.apply(play(BGM, &midi));
     assert_eq!(frames(&mut mixer, 4000), from_there);
     assert_eq!(reports.text(), "");
-}
-
-/// The next `frames` frames of `source`, interleaved.
-fn next_frames(source: &mut dyn Source, frames: u64) -> Vec<f32> {
-    let mut out = vec![0.0; frames as usize * 2];
-    assert_eq!(source.read(&mut out), frames as usize);
-    out
-}
-
-/// Which note of [`looped_midi`] sounds in `out`, at `rate`, in the thirty-second of a
-/// second around `seconds`: 0 is the first note.
-fn note_at(out: &[f32], rate: u32, seconds: f32) -> usize {
-    let (around, width) = ((seconds * rate as f32) as usize, rate as usize / 32);
-    let window = side(&out[(around - width / 2) * 2..(around + width / 2) * 2], 0);
-    let levels = [FIRST_NOTE.1, SECOND_NOTE.1, THIRD_NOTE.1].map(|note| level(&window, rate, note));
-    let loudest = (0..3)
-        .max_by(|a, b| levels[*a].total_cmp(&levels[*b]))
-        .unwrap();
-    let mut others = (0..3).filter(|note| *note != loudest);
-    assert!(
-        others.all(|note| levels[loudest] > 4.0 * levels[note]),
-        "at {seconds} s: {levels:?}"
-    );
-    loudest
-}
-
-/// Scenario "After many loops", on the source, which is what renders up to a recalled
-/// position. At 32768 Hz the blocks of the synthesiser and the times of [`looped_midi`] are
-/// exact in binary, so its loop is exactly half a second of frames. Runs only where one of
-/// the system SoundFont locations exists.
-#[test]
-fn recall_of_looping_midi_after_long_play_is_bounded() {
-    const RATE: u32 = 32768;
-    if mixer_with_soundfont(&Reports::default()).is_none() {
-        return;
-    }
-    let open = || {
-        let report: Report = Arc::new(|error: &DecodeError| panic!("reported: {error}"));
-        let mut soundfonts = SoundFonts::configured(None);
-        let data = looped_midi().into();
-        decode::open(
-            data,
-            RATE,
-            true,
-            &mut soundfonts,
-            Path::new("ffmpeg"),
-            &report,
-        )
-        .unwrap()
-    };
-    let (track, lap) = (u64::from(RATE), u64::from(RATE) / 2);
-
-    let mut recalled = open();
-    let before = frames_synthesised_on_this_thread();
-    recalled.start_from(track + 1000 * lap + lap / 4);
-    let rendered = frames_synthesised_on_this_thread() - before;
-    assert!(rendered < 2 * track, "{rendered} frames rendered");
-    let recalled = next_frames(&mut *recalled, 2 * lap);
-
-    // The same offset in the loop, played through three passes of the loop.
-    let mut played = open();
-    next_frames(&mut *played, track + 3 * lap + lap / 4);
-    let played = next_frames(&mut *played, 2 * lap);
-
-    // The second note sounds for an eighth of a second more, then the third for a quarter,
-    // and so on; each is looked at late in it, when the one before has died away.
-    for (seconds, note) in [(0.0625, 1), (0.3125, 2), (0.5625, 1), (0.8125, 2)] {
-        assert_eq!(note_at(&recalled, RATE, seconds), note, "at {seconds} s");
-        assert_eq!(note_at(&played, RATE, seconds), note, "at {seconds} s");
-    }
-    // Where the loop is is exact: a block of the synthesiser off, the tones would be out of
-    // phase. What differs is the reverberation of the passes before.
-    let differs = recalled
-        .iter()
-        .zip(&played)
-        .fold(0.0f32, |most, (a, b)| most.max((a - b).abs()));
-    assert!(differs < peak(&played) / 10.0, "{differs}");
-
-    // At a rate and a resolution whose times are not exact in binary, the blocks the loop
-    // takes are still those of a playback.
-    let (data, seconds) = (two_note_midi(true), [9.3, 0.5]);
-    let open = || {
-        let report: Report = Arc::new(|error: &DecodeError| panic!("reported: {error}"));
-        let mut soundfonts = SoundFonts::configured(None);
-        decode::open(
-            data.as_slice().into(),
-            RATE + 11_337,
-            true,
-            &mut soundfonts,
-            Path::new("ffmpeg"),
-            &report,
-        )
-        .unwrap()
-    };
-    let [at, length] = seconds.map(|seconds| (seconds * f64::from(RATE + 11_337)) as u64);
-    let mut recalled = open();
-    recalled.start_from(at);
-    let recalled = next_frames(&mut *recalled, length);
-    let mut played = open();
-    next_frames(&mut *played, at);
-    let played = next_frames(&mut *played, length);
-    let differs = recalled
-        .iter()
-        .zip(&played)
-        .fold(0.0f32, |most, (a, b)| most.max((a - b).abs()));
-    assert!(peak(&played) > 0.01);
-    assert!(differs < peak(&played) / 10.0, "{differs}");
 }
 
 /// The value of frame `frame` of [`ramp`].

@@ -54,9 +54,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   thread reports and frees them.
 - MIDI music plays at every pitch: below 25 and above 300 at an output of 48000 Hz it was
   reported as not in a supported format and stayed silent.
-- Loading a state saved after looping MIDI music had played for a long time no longer
-  synthesises all that time again before the next sound plays; the music goes on at the same
-  place in its loop.
 - A panic of the audio thread while it opens a sound is reported once and leaves that sound
   silent, where before it ended the thread and every later sound was dropped without a
   word.

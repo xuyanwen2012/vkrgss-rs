@@ -52,8 +52,7 @@
   pitches is not measured (its MIDI goes through DirectMusic); the pitch then changes speed
   and pitch together, as it does for sampled data. Recorded in `docs/compatibility.md`.
   As built, the position of a MIDI source counts frames of the synthesiser, at the rate it
-  runs at, so that the loop above is counted in its blocks; at the pitches the synthesiser
-  can render that is the requested rate, as before.
+  runs at; at the pitches the synthesiser can render that is the requested rate, as before.
 - **Recall of looping MIDI.** For a looping MIDI source, `start_from(position)` first reduces
   the position: positions past the end of the first pass map to the same offset within the
   loop (`intro + (position - intro) % loop_length`, in frames at the source's rate, from the
@@ -62,17 +61,6 @@
   uninterrupted playback; that is accepted and recorded. The source's reported position after
   the reduction keeps counting from the reduced value; remembered positions are only used by
   the same source kind, so this is consistent.
-  As built, the position is reduced into the first pass through the loop, which follows the
-  first pass through the track: `end + (position - end) % period`, where `end` is the frame
-  at which the sequencer of `rustysynth` first jumps back and `period` the frames of each
-  later pass. Both are counted in blocks of the synthesiser, from the times the library
-  computes for the file's events (`midi.rs` reads the events and merges the tracks as the
-  library does, since it does not expose the times) and the clock it advances by a block at
-  a time. So the frames rendered are at most one pass through the track and one through its
-  loop, as the requirement allows, the jumps fall in the same blocks as in a playback, and
-  the release tails at the loop point are those of the end of the track, as in any later
-  pass. Only the reverberation of the passes before differs. A track longer than four
-  hours, or one whose times are not finite, is rendered up to the position as before.
 - **Worker panics.** Each `prepare`, `remember` and `recall` runs under `catch_unwind`. A
   panic in `prepare` turns the command into its silent form (a play command with no
   source); the panic is reported once through the reports as an undecodable sound.
@@ -97,4 +85,17 @@ the binding sends.
 
 ## Follow-ups
 
-None yet.
+- **Recall of looping MIDI is not bounded (task 3.2 open).** The reduction above needs the
+  time of the loop marker and the length of the track as the sequencer counts them.
+  `rustysynth` 1.3.8 keeps the event times of a `MidiFile` and the index of the loop start
+  crate-private (`MidiFile::times` and `messages` are `pub(crate)`, the sequencer exposes no
+  loop point), and `get_length` alone does not give the loop start. Getting them means one
+  of: reading the MIDI file a second time beside `rustysynth` and merging its tracks as the
+  library does (a second implementation, which this design does not name and the rules do
+  not allow; one was built and withdrawn), a patched or forked `rustysynth`, an upstream
+  change that exposes the times, or finding the loop by rendering, which costs more than
+  the bound of the requirement. The owner decides which. Until then a recalled position in
+  looping MIDI is rendered up to as before, and the requirement "Recall of looping MIDI is
+  bounded" is not met; its test, `recall_of_looping_midi_after_long_play_is_bounded`, is
+  not written, and `docs/compatibility.md` and `CHANGELOG.md` say nothing about the recall
+  of looping MIDI, whose behaviour this change leaves as it was.
