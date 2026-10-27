@@ -73,6 +73,14 @@ pub enum KeyAction {
     ToggleFullscreen,
 }
 
+/// What went down or up at a press or a release of a key: the physical key, and the key as a
+/// whole, which is down while the physical key or the injected one is.
+#[derive(Debug, Clone, Copy)]
+struct Press {
+    physical: bool,
+    whole: bool,
+}
+
 /// How a session is set up.
 pub struct SessionOptions {
     /// The physical keys that hold each button.
@@ -704,22 +712,23 @@ impl<D: Display, C: Clock> Session<D, C> {
         if self.end.is_some() {
             return KeyAction::None;
         }
-        let mut action = KeyAction::None;
-        // A key the guest holds down by injection is down already, and stays down.
+        // A key the guest holds down by injection is down already, and stays down: its press
+        // and release are those of the program's own shortcuts alone.
         let injected = self.injected_holds(key);
-        if pressed {
+        let press = Press {
+            physical: true,
+            whole: !injected,
+        };
+        let action = if pressed {
             if !self.held_keys.insert(key) {
                 return KeyAction::None;
             }
-            if !injected {
-                action = self.key_pressed(key, false);
-            }
+            self.key_pressed(key, press)
         } else {
             self.held_keys.remove(&key);
-            if !injected {
-                self.key_released(key);
-            }
-        }
+            self.key_released(key, press);
+            KeyAction::None
+        };
         self.update_buttons();
         action
     }
@@ -743,37 +752,38 @@ impl<D: Display, C: Clock> Session<D, C> {
             .any(|key| self.held_keys.contains(key) || self.injected_holds(*key))
     }
 
-    /// `key`, which was up, is down: what the session does at the press of a key. The press
-    /// of a key the guest `injected` does none of the program's own shortcuts; see "Injected
-    /// keys".
-    fn key_pressed(&mut self, key: KeyCode, injected: bool) -> KeyAction {
+    /// `key` went down: what the session does at the press of a key. The program's own
+    /// shortcuts follow the physical key alone, and the actions of the original runtime's
+    /// keys the key as a whole, physical or injected; see "Injected keys".
+    fn key_pressed(&mut self, key: KeyCode, press: Press) -> KeyAction {
+        let Press { physical, whole } = press;
         let alt = self.any_down([KeyCode::AltLeft, KeyCode::AltRight]);
         let shift = self.any_down([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
         let mut action = KeyAction::None;
         match key {
-            RESET_KEY => {
+            RESET_KEY if whole => {
                 self.outbox.push_back(HostToGuest::Reset);
                 // The game that starts again holds no key down.
                 self.clear_injected();
             }
             // Whatever the key map says of these keys, this press holds no button.
-            FULLSCREEN_KEY if !injected => {
+            FULLSCREEN_KEY if physical => {
                 self.swallowed_keys.insert(key);
                 action = KeyAction::ToggleFullscreen;
             }
-            KeyCode::Enter | KeyCode::NumpadEnter if alt => {
+            KeyCode::Enter | KeyCode::NumpadEnter if alt && whole => {
                 self.swallowed_keys.insert(key);
                 action = KeyAction::ToggleFullscreen;
             }
             // The press that dismisses a modal message holds no button either, and is
             // not the shortcut the key otherwise is: the key map may put C or B on the
             // keys below.
-            _ if self.pending_modal && self.dismisses(key) => {
+            _ if whole && self.pending_modal && self.dismisses(key) => {
                 self.swallowed_keys.insert(key);
                 self.dismiss_modal();
             }
-            FPS_KEY => self.toggle_fps(),
-            SAVE_STATE_KEY | LOAD_STATE_KEY if !injected => {
+            FPS_KEY if whole => self.toggle_fps(),
+            SAVE_STATE_KEY | LOAD_STATE_KEY if physical => {
                 self.swallowed_keys.insert(key);
                 match (key == SAVE_STATE_KEY, shift) {
                     (true, false) => self.save_state(self.slot),
@@ -782,7 +792,7 @@ impl<D: Display, C: Clock> Session<D, C> {
                     (false, true) => self.choose_slot(STATE_SLOTS - 1),
                 }
             }
-            FAST_FORWARD_KEY if !injected => {
+            FAST_FORWARD_KEY if physical => {
                 self.fast_forward_key = true;
                 self.pacing_restart = true;
                 self.hurry();
@@ -792,10 +802,12 @@ impl<D: Display, C: Clock> Session<D, C> {
         action
     }
 
-    /// `key`, which was down, is up.
-    fn key_released(&mut self, key: KeyCode) {
-        self.swallowed_keys.remove(&key);
-        if key == FAST_FORWARD_KEY && self.fast_forward_key {
+    /// `key` went up, as `press` says: the physical key, the key as a whole, or both.
+    fn key_released(&mut self, key: KeyCode, press: Press) {
+        if press.whole {
+            self.swallowed_keys.remove(&key);
+        }
+        if press.physical && key == FAST_FORWARD_KEY && self.fast_forward_key {
             self.fast_forward_key = false;
             self.pacing_restart = true;
         }
@@ -821,12 +833,20 @@ impl<D: Display, C: Clock> Session<D, C> {
         if let Some(key) = key {
             let is_down = self.held_keys.contains(&key) || self.injected_holds(key);
             if is_down && !was_down {
-                match self.key_pressed(key, true) {
+                let press = Press {
+                    physical: false,
+                    whole: true,
+                };
+                match self.key_pressed(key, press) {
                     KeyAction::None => {}
                     action => self.actions.push(action),
                 }
             } else if was_down && !is_down {
-                self.key_released(key);
+                let press = Press {
+                    physical: false,
+                    whole: true,
+                };
+                self.key_released(key, press);
             }
         }
         self.refresh_live();
@@ -838,7 +858,11 @@ impl<D: Display, C: Clock> Session<D, C> {
             if let Some(key) = physical_key(code)
                 && !self.held_keys.contains(&key)
             {
-                self.key_released(key);
+                let press = Press {
+                    physical: false,
+                    whole: true,
+                };
+                self.key_released(key, press);
             }
         }
         self.refresh_live();

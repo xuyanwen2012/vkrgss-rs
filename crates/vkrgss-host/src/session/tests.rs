@@ -2949,6 +2949,55 @@ fn an_injected_f2_shows_the_frame_rate() {
     assert_eq!(rig.title(), "Game - 40.0 FPS");
 }
 
+/// The physical Tab fast-forwards while it is down, whatever the guest injects beside it,
+/// and the key stays held in the raw keys while either is down: Tab down, injected Tab down,
+/// Tab up.
+#[test]
+fn the_physical_tab_ends_fast_forward_although_the_injected_one_is_down() {
+    let mut rig = Rig::new();
+    rig.session.key(KeyCode::Tab, true);
+    assert!(rig.session.fast_forward());
+    rig.send_whole(inject(0x09, true));
+    rig.session.key(KeyCode::Tab, false);
+    assert!(!rig.session.fast_forward());
+    let HostToGuest::Input(snapshot) = rig.send_whole(inject(0x41, true))[0] else {
+        panic!("a snapshot")
+    };
+    assert!(snapshot.is_key_down(0x09), "the injected Tab is still down");
+    rig.send_whole(inject(0x09, false));
+    assert!(!rig.session.fast_forward());
+}
+
+/// The other order: injected Tab down, Tab down, Tab up, injected Tab up.
+#[test]
+fn the_physical_tab_fast_forwards_although_the_injected_one_is_down() {
+    let mut rig = Rig::new();
+    rig.send_whole(inject(0x09, true));
+    assert!(!rig.session.fast_forward());
+    rig.session.key(KeyCode::Tab, true);
+    assert!(rig.session.fast_forward());
+    rig.frame(frame(0));
+    assert_eq!(rig.send(frame(1)), [HostToGuest::Tick]);
+    rig.session.key(KeyCode::Tab, false);
+    assert!(!rig.session.fast_forward());
+    let HostToGuest::Input(snapshot) = rig.send_whole(inject(0x41, true))[0] else {
+        panic!("a snapshot")
+    };
+    assert!(snapshot.is_key_down(0x09), "the injected Tab is still down");
+    rig.send_whole(inject(0x09, false));
+    assert!(!rig.session.fast_forward());
+    // The same for the keys of the states and full screen: the physical press is the
+    // shortcut, the injected one beside it nothing.
+    let mut rig = states_rig();
+    rig.send_whole(inject(0x72, true));
+    assert_eq!(rig.tap(KeyCode::F3), [HostToGuest::SaveState { slot: 0 }]);
+    rig.send_whole(inject(0x7A, true));
+    assert_eq!(
+        rig.session.key(KeyCode::F11, true),
+        KeyAction::ToggleFullscreen
+    );
+}
+
 #[test]
 fn only_the_physical_tab_fast_forwards_and_losing_focus_releases_it() {
     let mut rig = Rig::new();

@@ -1574,8 +1574,10 @@ fn the_frame_limit_ends_a_guest_process_too() {
 }
 
 /// A guest process whose game never asks for the quit request is ended, within the bound
-/// of the scenario "Script in an endless loop": a windowed run cannot be driven here, and the
-/// relay gives up on the guest in the same way in both.
+/// of the scenario "Script in an endless loop", counted from the quit request: a windowed run
+/// cannot be driven here, and the relay gives up on the guest in the same way in both. The
+/// script marks when it enters its loop, which is right after the tick of its last frame,
+/// which the quit request follows.
 #[test]
 fn a_guest_process_that_does_not_answer_the_quit_request_is_ended() {
     let source = "\
@@ -1583,11 +1585,28 @@ begin
   3.times { Graphics.update }
 rescue SystemExit
 end
+File.open('looping.txt', 'w') { }
 loop { }";
     let game = pid_game("e2e-process-stuck", source);
-    let started = std::time::Instant::now();
-    let ran = headless(&game, &["--guest", "process", "--frames", "3"]);
-    assert!(started.elapsed() < std::time::Duration::from_secs(10));
+    let work = tempfile::tempdir().unwrap();
+    let arguments = headless_arguments(&game, &["--guest", "process", "--frames", "3"]);
+    let arguments: Vec<&str> = arguments.iter().map(String::as_str).collect();
+    let mut child = command(work.path(), &arguments)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the program starts");
+    let marker = game.dir().join("looping.txt");
+    let waited = Instant::now() + Duration::from_secs(120);
+    while !marker.exists() && Instant::now() < waited && child.try_wait().unwrap().is_none() {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let looping = Instant::now();
+    let output = child.wait_with_output().expect("the program ends");
+    let ended = looping.elapsed();
+    let ran = Ran { output, work };
+    assert!(marker.exists(), "{}", ran.stderr());
+    assert!(ended < Duration::from_secs(10), "{ended:?}");
     ran.assert_failure();
     assert!(ran.stderr().contains("did not end"), "{}", ran.stderr());
     let pid = guest_pid(&game).expect("the game ran");
