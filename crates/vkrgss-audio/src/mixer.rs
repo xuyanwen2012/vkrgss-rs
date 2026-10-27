@@ -259,9 +259,10 @@ fn frames_of(duration_ms: u32, sample_rate: u32) -> u32 {
 }
 
 /// The gain of the volume `v`, 0 to 100: 0.35 dB below full for every unit under 100, as the
-/// original asks of its audio back end (read from the code of RGSS104E), and silence at 0.
+/// original asks of its audio back end (read from the code of RGSS104E), and silence at 0 and
+/// for a volume that is not a number or not finite.
 fn gain(v: f32) -> f32 {
-    if v <= 0.0 {
+    if !v.is_finite() || v <= 0.0 {
         0.0
     } else {
         10f32.powf(-0.0175 * (100.0 - v))
@@ -373,11 +374,15 @@ impl Voice {
         });
     }
 
+    /// Lowers the volume to silence over `frames`, which are more than 0: a fade of no time
+    /// is a stop of the channel, see [`Channels::apply`].
     fn fade(&mut self, frames: u32) {
-        // A second fade does not make a fading voice louder again.
-        let level = self
-            .fade
-            .map_or(1.0, |fade| fade.remaining as f32 / fade.total as f32);
+        // A second fade does not make a fading voice louder again. A fade of no frames has
+        // nothing left of its level.
+        let level = self.fade.map_or(1.0, |fade| match fade.total {
+            0 => 0.0,
+            total => fade.remaining as f32 / total as f32,
+        });
         self.volume *= level;
         self.fade = Some(Fade {
             remaining: frames,
@@ -429,8 +434,12 @@ impl Channels {
                 channel,
                 duration_ms,
             } => {
-                let frames = frames_of(duration_ms, self.sample_rate);
-                self.voices(channel).for_each(|voice| voice.fade(frames));
+                // A fade of no time ends its channel at once, as a stop does, so no later
+                // fade meets a fade of no frames.
+                match frames_of(duration_ms, self.sample_rate) {
+                    0 => self.apply(Prepared::Stop { channel }),
+                    frames => self.voices(channel).for_each(|voice| voice.fade(frames)),
+                }
             }
             Prepared::Volume { channel, volume } => {
                 let volume = f32::from(volume.min(100));
@@ -492,7 +501,11 @@ impl Channels {
             .retain_mut(|voice| voice.mix(out, &mut scratch) == frames);
 
         for sample in out.iter_mut() {
-            *sample = sample.clamp(-1.0, 1.0);
+            // `clamp` keeps a NaN, and the device must not get one.
+            *sample = match sample.is_nan() {
+                true => 0.0,
+                false => sample.clamp(-1.0, 1.0),
+            };
         }
         self.scratch = scratch;
     }

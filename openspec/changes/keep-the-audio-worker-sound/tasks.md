@@ -2,7 +2,7 @@
 
 ## 1. Fades and NaN
 
-- [ ] 1.1 A fade of no time ends the voice at once; the level of a fade with total 0 is 0; `gain` gives 0 for a volume that is not finite; `render` maps NaN to 0. Verify: `fade_of_zero_then_another_fade_is_silent_not_nan` and the existing fade tests of `crates/vkrgss-audio/tests/mixer.rs` pass.
+- [x] 1.1 A fade of no time ends the voice at once; the level of a fade with total 0 is 0; `gain` gives 0 for a volume that is not finite; `render` maps NaN to 0. Verify: `fade_of_zero_then_another_fade_is_silent_not_nan` and the existing fade tests of `crates/vkrgss-audio/tests/mixer.rs` pass.
 
 ## 2. The callback does not wait
 

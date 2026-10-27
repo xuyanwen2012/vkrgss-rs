@@ -387,6 +387,46 @@ fn a_fade_lowers_the_volume_evenly_and_then_stops() {
     assert!((peak(&render(&mut mixer, 0.5)) - before).abs() < 0.01);
 }
 
+/// Scenario "Fade of zero, then another fade": both reach the mixer before it renders.
+#[test]
+fn fade_of_zero_then_another_fade_is_silent_not_nan() {
+    let mut mixer = mixer();
+    mixer.apply(play(AudioChannel::Bgm, &tone(440.0, 0.5)));
+    assert!(peak(&render(&mut mixer, 0.1)) > 0.1);
+    for duration_ms in [0, 500] {
+        mixer.apply(AudioCommand::Fade {
+            channel: AudioChannel::Bgm,
+            duration_ms,
+        });
+    }
+    let out = render(&mut mixer, 0.6);
+    assert!(out.iter().all(|sample| !sample.is_nan()));
+    assert_eq!(peak(&out), 0.0);
+}
+
+/// Scenario "Two fades".
+#[test]
+fn a_second_fade_does_not_raise_the_volume() {
+    let mut mixer = mixer();
+    mixer.apply(play(AudioChannel::Bgm, &tone(440.0, 0.5)));
+    render(&mut mixer, 0.5);
+    let fade = AudioCommand::Fade {
+        channel: AudioChannel::Bgm,
+        duration_ms: 1000,
+    };
+    mixer.apply(fade.clone());
+    let mut out = render(&mut mixer, 0.5);
+    mixer.apply(fade);
+    out.extend(render(&mut mixer, 1.0));
+    assert!(out.iter().all(|sample| !sample.is_nan()));
+    // The peak of each hundredth of a second, more than four periods of the tone.
+    let peaks: Vec<f32> = out.chunks(2 * RATE as usize / 100).map(peak).collect();
+    for (index, pair) in peaks.windows(2).enumerate() {
+        assert!(pair[1] <= pair[0] + 1e-3, "rises at {index}: {pair:?}");
+    }
+    assert!(peaks[49] > 0.01, "still heard before the second fade");
+}
+
 #[test]
 fn unsupported_data_is_reported_once_and_leaves_the_channel_silent() {
     let reports = Reports::default();
