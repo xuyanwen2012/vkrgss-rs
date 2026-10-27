@@ -39,15 +39,6 @@ its start position, also when the device has not mixed a frame of it yet.
 - **WHEN** a file whose frames are a known ramp is played as music from file frame 1000 through the output, slot 0 is remembered before the callback runs, the music is stopped, slot 0 is recalled and the same file is played from its start
 - **THEN** the first frame mixed is frame 1000 of the ramp
 
-### Requirement: Recall of looping MIDI is bounded
-Starting a looping MIDI track at a recalled position SHALL render at most the frames of one
-pass through the track and its loop, however long it had played, and SHALL continue at the same
-offset within the loop.
-
-#### Scenario: After many loops
-- **WHEN** a generated looping MIDI file of one second with a loop marker is recalled at the position of a thousand passes plus a quarter of the loop
-- **THEN** the source renders less than two seconds of frames to get there, and the notes after the marker sound next as they would at that offset
-
 ### Requirement: A failure in the audio thread is not fatal
 A panic while a command is prepared on the audio thread SHALL be reported once and SHALL leave
 that command's channel silent; later commands SHALL play.

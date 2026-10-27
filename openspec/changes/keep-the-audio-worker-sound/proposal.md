@@ -17,7 +17,8 @@ found six defects in `vkrgss-audio`:
   (pitch outside about 25 to 300 at 48 kHz) fails to open and is reported as "not in a
   supported format", which also uses up the one report of really undecodable data.
 - Loading a state saved after an hour of looping MIDI music synthesises the whole hour on the
-  worker before any later command is handled.
+  worker before any later command is handled. This change leaves that open: see the
+  follow-up in design.md.
 - A panic while the worker prepares a command (in a decoder, on malformed game data) ends the
   worker, and every later command is dropped without a word.
 
@@ -30,8 +31,6 @@ found six defects in `vkrgss-audio`:
 - A save state taken right after a play command remembers the file and its start position.
 - MIDI plays at every pitch of the range: the synthesiser runs at the nearest rate it allows
   and its output is resampled to the requested rate.
-- Recalling a position in looping MIDI music costs at most the length of the track: the
-  position is reduced into the first pass through the loop before it is rendered up to.
 - A panic in the worker is caught per command: it is reported once, that command's channel is
   silent, and later commands play.
 
@@ -44,8 +43,7 @@ None.
 ### Modified Capabilities
 
 - `audio-playback`: requirements on a fade of no time, MIDI pitch, a callback that does not
-  wait, a state taken right after a play command, recall of looping MIDI, and a failure in the
-  worker.
+  wait, a state taken right after a play command, and a failure in the worker.
 
 ## Impact
 
