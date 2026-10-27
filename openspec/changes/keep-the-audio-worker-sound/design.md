@@ -51,6 +51,9 @@
   linear interpolation, as sampled data is resampled. What the original does at such
   pitches is not measured (its MIDI goes through DirectMusic); the pitch then changes speed
   and pitch together, as it does for sampled data. Recorded in `docs/compatibility.md`.
+  As built, the position of a MIDI source counts frames of the synthesiser, at the rate it
+  runs at, so that the loop above is counted in its blocks; at the pitches the synthesiser
+  can render that is the requested rate, as before.
 - **Recall of looping MIDI.** For a looping MIDI source, `start_from(position)` first reduces
   the position: positions past the end of the first pass map to the same offset within the
   loop (`intro + (position - intro) % loop_length`, in frames at the source's rate, from the
@@ -73,6 +76,10 @@
 - **Worker panics.** Each `prepare`, `remember` and `recall` runs under `catch_unwind`. A
   panic in `prepare` turns the command into its silent form (a play command with no
   source); the panic is reported once through the reports as an undecodable sound.
+  As built, the test-only source reaches the loader through a hidden field of
+  `MixerOptions`, `open`, the function that opens the data of a play command
+  (`decode::open` by default), which the test replaces with one that gives a source that
+  panics while it is started at a frame.
 - **Tests.** Mixer tests in `crates/vkrgss-audio/tests/mixer.rs` and `output.rs`, each named
   after the scenario: `fade_of_zero_then_another_fade_is_silent_not_nan`,
   `midi_at_pitch_400_and_10_plays`, `remember_right_after_play_keeps_the_file` (through `Output` with a device

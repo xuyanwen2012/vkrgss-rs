@@ -15,8 +15,8 @@
 
 ## 4. MIDI pitch and worker failures
 
-- [ ] 4.1 MIDI at a pitch outside the synthesiser's rates plays, resampled. Verify: `midi_at_pitch_400_and_10_plays`.
-- [ ] 4.2 A panic in the worker is caught per request, reported once, and later commands play. Verify: `panic_in_prepare_leaves_later_commands_playing`.
+- [x] 4.1 MIDI at a pitch outside the synthesiser's rates plays, resampled. Verify: `midi_at_pitch_400_and_10_plays`.
+- [x] 4.2 A panic in the worker is caught per request, reported once, and later commands play. Verify: `panic_in_prepare_leaves_later_commands_playing`.
 
 ## 5. Documents
 

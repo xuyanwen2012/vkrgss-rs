@@ -17,6 +17,7 @@
 
 use std::collections::HashMap;
 use std::io::Write;
+use std::panic::{self, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::Sender;
@@ -24,7 +25,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use vkrgss_proto::{AudioChannel, AudioCommand};
 
-use crate::decode::{self, DecodeError, Report, Source};
+use crate::decode::{self, DecodeError, Open, Report, Source};
 use crate::midi::SoundFonts;
 use crate::wma;
 
@@ -39,6 +40,9 @@ pub struct MixerOptions {
     pub errors: Box<dyn Write + Send>,
     /// The program that decodes WMA: `ffmpeg`, looked up on the search path, or a path.
     pub ffmpeg: PathBuf,
+    /// What opens the data of a play command: [`decode::open`], which the tests replace.
+    #[doc(hidden)]
+    pub open: Open,
 }
 
 impl Default for MixerOptions {
@@ -47,6 +51,7 @@ impl Default for MixerOptions {
             soundfonts: SoundFonts::configured(None),
             errors: Box::new(std::io::stderr()),
             ffmpeg: PathBuf::from("ffmpeg"),
+            open: decode::open,
         }
     }
 }
@@ -172,6 +177,7 @@ pub(crate) struct Loader {
     sample_rate: u32,
     soundfonts: SoundFonts,
     ffmpeg: PathBuf,
+    open: Open,
     report: Report,
     /// What the sources it opens report damage to: `report` itself, or a way to the thread
     /// of the loader.
@@ -196,8 +202,65 @@ impl Loader {
         (self.report)(error);
     }
 
+    /// Runs `work`, and reports a panic in it as data that cannot be decoded, once among
+    /// those. Returns `None` after a panic.
+    fn guarded<T>(&mut self, work: impl FnOnce(&mut Loader) -> T) -> Option<T> {
+        let payload = match panic::catch_unwind(AssertUnwindSafe(|| work(self))) {
+            Ok(value) => return Some(value),
+            Err(payload) => payload,
+        };
+        let message = match (
+            payload.downcast_ref::<&str>(),
+            payload.downcast_ref::<String>(),
+        ) {
+            (Some(message), _) => message,
+            (None, Some(message)) => message.as_str(),
+            (None, None) => "without a message",
+        };
+        let reason = format!("the audio thread panicked: {message}");
+        self.report(&DecodeError::Unsupported(reason));
+        None
+    }
+
     /// Stores under `slot` what the music and the background sound play and where they are.
     pub(crate) fn remember(&mut self, slot: u8) {
+        self.guarded(|loader| loader.store(slot));
+    }
+
+    /// Arms the music and the background sound with what `slot` holds.
+    pub(crate) fn recall(&mut self, slot: u8) {
+        self.guarded(|loader| loader.arm(slot));
+    }
+
+    /// Turns a command into a prepared one, which opens the source of a play command. A
+    /// panic while a play command is prepared leaves its channel silent, as data that cannot
+    /// be played does.
+    pub(crate) fn prepare(&mut self, command: AudioCommand) -> Prepared {
+        let AudioCommand::Play {
+            channel,
+            volume,
+            music_return_ms,
+            ..
+        } = command
+        else {
+            return self.prepared(command);
+        };
+        self.guarded(|loader| loader.prepared(command))
+            .unwrap_or_else(|| {
+                if let Some(index) = remembered(channel) {
+                    self.playing[index] = None;
+                }
+                Prepared::Play {
+                    channel,
+                    source: None,
+                    volume,
+                    position: None,
+                    music_return_ms,
+                }
+            })
+    }
+
+    fn store(&mut self, slot: u8) {
         let playing = self.playing.each_ref().map(|playing| {
             let playing = playing.as_ref()?;
             // A voice that a fade ended is silence; one that the device has not mixed yet is
@@ -211,12 +274,11 @@ impl Loader {
         self.slots.insert(slot, playing);
     }
 
-    /// Arms the music and the background sound with what `slot` holds.
-    pub(crate) fn recall(&mut self, slot: u8) {
+    fn arm(&mut self, slot: u8) {
         self.armed = self.slots.get(&slot).cloned().unwrap_or_default();
     }
 
-    pub(crate) fn prepare(&mut self, command: AudioCommand) -> Prepared {
+    fn prepared(&mut self, command: AudioCommand) -> Prepared {
         match command {
             AudioCommand::Play {
                 channel,
@@ -231,7 +293,7 @@ impl Loader {
                 let pitch = u64::from(pitch.clamp(*PITCH.start(), *PITCH.end()));
                 let rate = (u64::from(self.sample_rate) * 100 + pitch / 2) / pitch;
                 let data: Arc<[u8]> = data.into();
-                let opened = decode::open(
+                let opened = (self.open)(
                     data.clone(),
                     rate as u32,
                     loops(channel),
@@ -632,6 +694,7 @@ impl Mixer {
                 sample_rate,
                 soundfonts: options.soundfonts,
                 ffmpeg: options.ffmpeg,
+                open: options.open,
                 sources_report: report.clone(),
                 report,
                 playing: [None, None],

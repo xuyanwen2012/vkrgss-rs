@@ -143,6 +143,31 @@ fn a_midi_note_is_heard_while_it_sounds() {
     assert_eq!(reports.text(), "");
 }
 
+/// Scenario "High and low pitch": at 48000 Hz the synthesiser cannot run at the rate of
+/// either pitch. Runs only where one of the system SoundFont locations exists.
+#[test]
+fn midi_at_pitch_400_and_10_plays() {
+    let reports = Reports::default();
+    if mixer_with_soundfont(&reports).is_none() {
+        return;
+    }
+    let options = MixerOptions {
+        soundfonts: SoundFonts::configured(None),
+        errors: Box::new(reports.clone()),
+        ..MixerOptions::default()
+    };
+    let mut mixer = Mixer::new(48000, options);
+    let mut heard = Vec::new();
+    for pitch in [400, 10] {
+        mixer.apply(play_with(AudioChannel::Bgm, &one_note_midi(1), 100, pitch));
+        let mut out = vec![0.0; 2 * 48000 / 4];
+        mixer.render(&mut out);
+        heard.push(peak(&out));
+    }
+    assert!(heard.iter().all(|peak| *peak > 0.01), "{heard:?}");
+    assert_eq!(reports.text(), "");
+}
+
 /// Which of the two notes of [`two_note_midi`] sounds in each second of four, the file
 /// played as music: `false` is the first note.
 fn notes_heard(marker: bool) -> Option<[bool; 4]> {
@@ -545,6 +570,7 @@ fn mixer_with_ffmpeg(program: PathBuf, reports: &Reports) -> Mixer {
         soundfonts: SoundFonts::new(Vec::new()),
         errors: Box::new(reports.clone()),
         ffmpeg: program,
+        ..MixerOptions::default()
     };
     Mixer::new(RATE, options)
 }

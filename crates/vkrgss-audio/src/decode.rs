@@ -55,7 +55,8 @@ pub trait Source: Send {
 
     /// The position of the next frame [`read`](Source::read) gives: in frames at the rate
     /// of the source, from the start of the data for sampled data, and for a MIDI file as
-    /// the number of frames rendered since its start, loops included.
+    /// the number of frames its synthesiser rendered since its start, loops included, at the
+    /// rate the synthesiser runs at.
     fn position(&self) -> u64;
 
     /// Makes a source that has given no frame yet start at `position` instead of at the
@@ -86,6 +87,18 @@ pub trait Source: Send {
 /// Where a source reports damage it meets while it plays: [`DecodeError::Damaged`], at most
 /// once for each source. It is called where the source is read, so it must not wait.
 pub type Report = Arc<dyn Fn(&DecodeError) + Send + Sync>;
+
+/// A function that opens the data of a play command as [`open`] does: [`open`] itself, or a
+/// stand-in of the tests.
+#[doc(hidden)]
+pub type Open = fn(
+    Arc<[u8]>,
+    u32,
+    bool,
+    &mut SoundFonts,
+    &Path,
+    &Report,
+) -> Result<Box<dyn Source>, DecodeError>;
 
 /// Opens `data` as a source of frames at `sample_rate`. `looping` says that the sound is one
 /// that starts again when it ends: a MIDI file then continues at its loop marker by itself

@@ -88,6 +88,7 @@ impl Output {
         let mut errors = Errors(Arc::new(Mutex::new(options.errors)));
         let soundfonts = options.soundfonts;
         let ffmpeg = options.ffmpeg;
+        let open = options.open;
         let (commands, received) = mpsc::channel::<Request>();
         let worker_errors = errors.clone();
         let paused = Arc::new(AtomicBool::new(false));
@@ -98,6 +99,7 @@ impl Output {
                 soundfonts,
                 errors: Box::new(worker_errors),
                 ffmpeg,
+                open,
             };
             let (mut loader, mut channels) = Mixer::new(sample_rate, options).into_parts();
             let (prepared, ready) = mpsc::channel();

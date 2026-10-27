@@ -4,10 +4,12 @@
 mod common;
 
 use std::io::Write;
+use std::path::Path;
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
 use common::{AMPLITUDE, Reports, damaged_mp3, level, peak, side, tone_wav, wav_of};
+use vkrgss_audio::decode::{self, DecodeError, Report, Source};
 use vkrgss_audio::{Output, OutputOptions, Render, SoundFonts};
 use vkrgss_proto::{AudioChannel, AudioCommand};
 
@@ -209,9 +211,9 @@ fn callback_reports_damage_without_the_error_lock() {
     assert_eq!(reports.lines(), 1, "{}", reports.text());
 }
 
-/// Scenario "Before the first buffer". The callback runs only once every request is sent, so
-/// the worker handles the remember request before the first buffer; the music it remembers
-/// is played at volume 0, so that every frame heard is of the second play command.
+/// Scenario "Before the first buffer". The callback runs only once the worker has handled
+/// every request: the last of them, data that is no audio, is reported by the worker, and
+/// the worker handles them in order.
 #[test]
 fn remember_right_after_play_keeps_the_file() {
     const RATE: u32 = 44100;
@@ -219,10 +221,10 @@ fn remember_right_after_play_keeps_the_file() {
     let ramp_at = |frame: u32| (frame / 2 + 100) as f32 / 32768.0;
     let samples: Vec<i16> = (0..RATE).map(|frame| (frame / 2 + 100) as i16).collect();
     let ramp = wav_of(RATE, &samples);
-    let play_from = |volume: u8, start: u64| AudioCommand::Play {
+    let play_from = |start: u64| AudioCommand::Play {
         channel: AudioChannel::Bgm,
         data: ramp.clone(),
-        volume,
+        volume: 100,
         pitch: 100,
         start,
         music_return_ms: 0,
@@ -236,20 +238,96 @@ fn remember_right_after_play_keeps_the_file() {
         Ok(Box::new(()))
     });
     let mut render = device.lock().unwrap().take().unwrap();
-    output.command(play_from(0, 1000));
+    output.command(play_from(1000));
     output.remember(0);
     output.command(AudioCommand::Stop {
         channel: AudioChannel::Bgm,
     });
     output.recall(0);
-    output.command(play_from(100, 0));
-
+    output.command(play_from(0));
+    output.command(AudioCommand::Play {
+        channel: AudioChannel::Se,
+        data: b"no audio file".to_vec(),
+        volume: 100,
+        pitch: 100,
+        start: 0,
+        music_return_ms: 0,
+    });
     let deadline = Instant::now() + Duration::from_secs(30);
-    let mut frame = [0.0; 2];
-    while frame[0] == 0.0 {
-        assert!(Instant::now() < deadline, "never heard");
-        render(&mut frame);
+    while reports.lines() == 0 {
+        assert!(Instant::now() < deadline, "the requests are never handled");
+        std::thread::sleep(Duration::from_millis(1));
     }
+
+    let mut frame = [0.0; 2];
+    render(&mut frame);
     assert_eq!(frame[0], ramp_at(1000));
-    assert_eq!(reports.text(), "");
+    assert_eq!(reports.lines(), 1, "{}", reports.text());
+}
+
+/// A source that panics when it is asked to start at a frame, which the worker does while it
+/// prepares a play command with a start.
+struct Panicking;
+
+impl Source for Panicking {
+    fn read(&mut self, _out: &mut [f32]) -> usize {
+        0
+    }
+
+    fn rewind(&mut self) {}
+
+    fn position(&self) -> u64 {
+        0
+    }
+
+    fn start_at_file_frame(&mut self, _frame: u64) {
+        panic!("a source of the test panics");
+    }
+}
+
+/// Opens data that says `panics` as [`Panicking`], and other data as the mixer does.
+fn open_panicking(
+    data: Arc<[u8]>,
+    sample_rate: u32,
+    looping: bool,
+    soundfonts: &mut SoundFonts,
+    ffmpeg: &Path,
+    report: &Report,
+) -> Result<Box<dyn Source>, DecodeError> {
+    match &*data {
+        b"panics" => Ok(Box::new(Panicking)),
+        _ => decode::open(data, sample_rate, looping, soundfonts, ffmpeg, report),
+    }
+}
+
+/// Scenario "Panicking source".
+#[test]
+fn panic_in_prepare_leaves_later_commands_playing() {
+    const RATE: u32 = 44100;
+    let reports = Reports::default();
+    let device: Arc<Mutex<Option<Render>>> = Arc::default();
+    let slot = device.clone();
+    let options = OutputOptions {
+        open: open_panicking,
+        ..options(&reports)
+    };
+    let output = Output::open_with(options, move |start| {
+        *slot.lock().unwrap() = Some(start(RATE));
+        Ok(Box::new(()))
+    });
+    let mut render = device.lock().unwrap().take().unwrap();
+    output.command(AudioCommand::Play {
+        channel: AudioChannel::Bgm,
+        data: b"panics".to_vec(),
+        volume: 100,
+        pitch: 100,
+        start: 1,
+        music_return_ms: 0,
+    });
+    output.command(play(&tone_wav(RATE, 440.0, 0.5)));
+    render_until(&mut render, "the tone", |block| {
+        (level(block, RATE, 440.0) - AMPLITUDE).abs() < 0.01
+    });
+    assert_eq!(reports.lines(), 1, "{}", reports.text());
+    assert!(reports.text().contains("panicked"), "{}", reports.text());
 }
