@@ -326,7 +326,9 @@ impl VkCompositor {
                 Ok(())
             }
             Err(error) => {
-                // The device is idle after a failed submission.
+                // The device is idle after a failed submission; on a lost device, which the
+                // staging buffer may have found too, the image is leaked.
+                self.note_loss(&error);
                 self.discard_image(image);
                 Err(error)
             }

@@ -19,6 +19,7 @@
 
 use std::any::Any;
 use std::ffi::{CStr, CString, c_char};
+use std::mem::ManuallyDrop;
 
 use ash::vk;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
@@ -456,7 +457,8 @@ impl Drop for Surface {
 
 /// An open logical device with its one queue. Dropping it destroys the device, then the
 /// surface if there is one, and then the instance; whoever creates objects from the device
-/// destroys them first.
+/// destroys them first. A device that idling finds lost is leaked with the surface and the
+/// instance.
 pub(crate) struct Gpu {
     pub device: ash::Device,
     pub physical: vk::PhysicalDevice,
@@ -491,9 +493,9 @@ pub(crate) struct Gpu {
     /// The commands of `VK_EXT_debug_utils` on this device, when the instance has the
     /// extension.
     debug: Option<ash::ext::debug_utils::Device>,
-    // After `device` in declaration order only for clarity; `drop` destroys the device before
-    // the fields are dropped, which then happens in this order: the surface, then the instance.
-    instance: Instance,
+    // After `device` in declaration order only for clarity; `drop` destroys the device, then
+    // drops the surface and then this, or leaks all three when the device is lost.
+    instance: ManuallyDrop<Instance>,
 }
 
 impl Gpu {
@@ -754,7 +756,7 @@ impl Gpu {
             swapchain_mutable_format,
             timestamps,
             debug,
-            instance,
+            instance: ManuallyDrop::new(instance),
         })
     }
 
@@ -829,11 +831,19 @@ impl Gpu {
 impl Drop for Gpu {
     fn drop(&mut self) {
         // SAFETY: the owner has destroyed every object it created from the device, nothing is
-        // submitted after this point, and the handle is not used again.
+        // submitted after this point, and the handle is not used again. The surface goes
+        // before the instance it belongs to, which is dropped exactly once, last.
         unsafe {
-            // A failure here means the device is lost; destroying it is still the right step.
-            let _ = self.device.device_wait_idle();
+            if self.device.device_wait_idle() == Err(vk::Result::ERROR_DEVICE_LOST) {
+                // Nothing of a lost device is used again: the device is leaked, and with it
+                // the surface and the instance, which may not be destroyed before it.
+                tracing::warn!("the Vulkan device was lost; it is leaked");
+                std::mem::forget(self.surface.take());
+                return;
+            }
             self.device.destroy_device(None);
+            drop(self.surface.take());
+            ManuallyDrop::drop(&mut self.instance);
         }
     }
 }

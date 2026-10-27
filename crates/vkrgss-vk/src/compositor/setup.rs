@@ -67,7 +67,7 @@ impl VkCompositor {
     }
 
     /// Builds the compositor on an open device.
-    fn finish(gpu: Gpu) -> Result<VkCompositor, VkError> {
+    pub(super) fn finish(gpu: Gpu) -> Result<VkCompositor, VkError> {
         let allocator = Allocator::new(&AllocatorCreateDesc {
             instance: gpu.instance().clone(),
             device: gpu.device.clone(),
@@ -119,7 +119,11 @@ impl VkCompositor {
             lost: None,
             gpu: ManuallyDrop::new(gpu),
         };
-        compositor.init()?;
+        if let Err(error) = compositor.init() {
+            // On a lost device `drop` leaks what was made, and the device.
+            compositor.note_loss(&error);
+            return Err(error);
+        }
         Ok(compositor)
     }
 
@@ -224,15 +228,20 @@ impl VkCompositor {
             .stage(stage)
             .layout(self.pipeline_layout)];
         // SAFETY: the module holds a compute shader with entry point `main` whose interface
-        // matches the pipeline layout; the module is not needed once the pipeline exists.
+        // matches the pipeline layout.
         let pipelines = unsafe {
-            let pipelines =
-                device.create_compute_pipelines(vk::PipelineCache::null(), &pipeline_info, None);
-            device.destroy_shader_module(module, None);
-            pipelines
-        };
-        self.pipeline = pipelines
-            .map_err(|(_, result)| VkError::from_result("vkCreateComputePipelines", result))?[0];
+            device.create_compute_pipelines(vk::PipelineCache::null(), &pipeline_info, None)
+        }
+        .map_err(|(_, result)| VkError::from_result("vkCreateComputePipelines", result));
+        // Nothing of a lost device is used again: the module is leaked.
+        if let Err(error) = &pipelines
+            && error.is_device_lost()
+        {
+            return Err(error.clone());
+        }
+        // SAFETY: the module is not needed once the pipeline exists, or could not be made.
+        unsafe { device.destroy_shader_module(module, None) };
+        self.pipeline = pipelines?[0];
         self.gpu.name_object(self.pipeline, "compose pipeline");
 
         let pool_sizes = [
@@ -288,8 +297,11 @@ impl Drop for VkCompositor {
                 tracing::warn!("the Vulkan device was lost; its objects are leaked");
                 return;
             }
-            if let Some(presenter) = self.presenter.take() {
-                presenter.destroy(device, &mut self.allocator);
+            if let Some(presenter) = self.presenter.take()
+                && presenter.destroy(device, &mut self.allocator).is_err()
+            {
+                tracing::warn!("the Vulkan device was lost; its objects are leaked");
+                return;
             }
             for (_, image) in self.images.drain() {
                 image.destroy(device, &mut self.allocator);

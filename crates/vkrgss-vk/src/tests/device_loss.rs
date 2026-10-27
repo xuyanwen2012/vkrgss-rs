@@ -8,6 +8,8 @@ use ash::vk;
 use vkrgss_compose_ref::fixtures::{self, bitmap};
 use vkrgss_proto::{BitmapDelta, BitmapId, Color, FramePacket, FrameRate, Op, Rect, Size};
 
+use crate::Mix;
+
 use super::harness::{TestCompositor, assert_clean, test_device};
 use crate::{OverlayImage, ValidationLog, VkCompositor, VkError};
 
@@ -17,6 +19,12 @@ thread_local! {
     static CALLS: RefCell<Vec<&'static str>> = const { RefCell::new(Vec::new()) };
     /// The real `vkCreateSemaphore`, for a replacement that creates the first semaphore.
     static CREATE_SEMAPHORE: Cell<Option<vk::PFN_vkCreateSemaphore>> = const { Cell::new(None) };
+    /// The real `vkBindImageMemory`, for a replacement that binds the first image.
+    static BIND_IMAGE: Cell<Option<vk::PFN_vkBindImageMemory>> = const { Cell::new(None) };
+    /// The idles a replacement has answered.
+    static IDLES: Cell<u32> = const { Cell::new(0) };
+    /// The real `vkDestroyDevice`, which a replacement calls after noting the call.
+    static DESTROY_DEVICE: Cell<Option<vk::PFN_vkDestroyDevice>> = const { Cell::new(None) };
 }
 
 fn note(call: &'static str) {
@@ -187,6 +195,64 @@ unsafe extern "system" fn destroy_set_layout(
     _: *const vk::AllocationCallbacks<'_>,
 ) {
     note("vkDestroyDescriptorSetLayout");
+}
+
+/// Binds the first image with the real command and finds the device lost at the next.
+unsafe extern "system" fn second_image_bind_lost(
+    device: vk::Device,
+    image: vk::Image,
+    memory: vk::DeviceMemory,
+    offset: vk::DeviceSize,
+) -> vk::Result {
+    note("vkBindImageMemory");
+    match BIND_IMAGE.with(Cell::take) {
+        // SAFETY: the arguments are those the compositor passed to the real command.
+        Some(bind) => unsafe { bind(device, image, memory, offset) },
+        None => vk::Result::ERROR_DEVICE_LOST,
+    }
+}
+
+/// Answers the first idle as done and finds the device lost at the next.
+unsafe extern "system" fn second_idle_lost(_: vk::Device) -> vk::Result {
+    note("vkDeviceWaitIdle");
+    let idles = IDLES.with(|idles| idles.replace(idles.get() + 1));
+    match idles {
+        0 => vk::Result::SUCCESS,
+        _ => vk::Result::ERROR_DEVICE_LOST,
+    }
+}
+
+/// Notes the call and destroys the device with the real command.
+unsafe extern "system" fn destroy_device(
+    device: vk::Device,
+    allocator: *const vk::AllocationCallbacks<'_>,
+) {
+    note("vkDestroyDevice");
+    if let Some(destroy) = DESTROY_DEVICE.with(Cell::take) {
+        // SAFETY: the arguments are those the compositor passed to the real command.
+        unsafe { destroy(device, allocator) };
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+unsafe extern "system" fn lost_compute_pipelines(
+    _: vk::Device,
+    _: vk::PipelineCache,
+    _: u32,
+    _: *const vk::ComputePipelineCreateInfo<'_>,
+    _: *const vk::AllocationCallbacks<'_>,
+    _: *mut vk::Pipeline,
+) -> vk::Result {
+    note("vkCreateComputePipelines");
+    vk::Result::ERROR_DEVICE_LOST
+}
+
+unsafe extern "system" fn destroy_shader_module(
+    _: vk::Device,
+    _: vk::ShaderModule,
+    _: *const vk::AllocationCallbacks<'_>,
+) {
+    note("vkDestroyShaderModule");
 }
 
 const SIZE: Size = Size::new(20, 18);
@@ -506,4 +572,139 @@ fn lost_device_while_the_presenter_or_the_overlay_is_made_destroys_nothing() {
     assert_eq!(compositor.set_overlay(Some(&picture)), lost);
     assert_refused(&mut compositor, &lost);
     assert_clean(&log, "around the lost device");
+}
+
+/// Allocating the buffer that `scale_frame` reads the off-screen target back into, in the
+/// step that runs once the target is drawn, finds the device lost: the target is not
+/// destroyed, and nothing of the device is used after it.
+#[test]
+fn lost_readback_buffer_leaves_the_off_screen_target_alone() {
+    let mut compositor = compositor_with_a_bitmap();
+    compositor.scale_frame(SIZE).unwrap();
+    compositor.replace_device_commands(|v1_0, _| {
+        v1_0.bind_buffer_memory = lost_bind_buffer;
+        v1_0.destroy_image_view = destroy_image_view;
+        v1_0.destroy_image = destroy_image;
+    });
+    let lost = Err(VkError::DeviceLost {
+        call: "vkBindBufferMemory",
+    });
+    assert_eq!(compositor.scale_frame(SIZE).map(|_| ()), lost);
+    assert_eq!(take_calls(), ["vkBindBufferMemory"]);
+    assert_refused(&mut compositor, &lost);
+}
+
+/// A freeze in the middle of a mix draws what is shown into an off-screen target and then
+/// makes a held frame of a new size from it, whose memory finds the device lost: neither
+/// image is destroyed, and nothing of the device is used after it.
+#[test]
+fn lost_held_frame_of_a_freeze_leaves_the_off_screen_target_alone() {
+    let mut compositor = compositor_with_a_bitmap();
+    compositor.freeze().unwrap();
+    // The state is shown at 40 by 30 from now on, so the freeze below captures that size.
+    compositor.scale_frame(Size::new(40, 30)).unwrap();
+    compositor.set_mix(Mix::Step {
+        weight: 128,
+        threshold: 128,
+    });
+    compositor.replace_device_commands(|v1_0, _| {
+        BIND_IMAGE.with(|bind| bind.set(Some(v1_0.bind_image_memory)));
+        v1_0.bind_image_memory = second_image_bind_lost;
+        v1_0.destroy_image_view = destroy_image_view;
+        v1_0.destroy_image = destroy_image;
+    });
+    let lost = Err(VkError::DeviceLost {
+        call: "vkBindImageMemory",
+    });
+    assert_eq!(compositor.freeze(), lost);
+    // The off-screen target, then the held frame.
+    assert_eq!(take_calls(), ["vkBindImageMemory", "vkBindImageMemory"]);
+    assert_refused(&mut compositor, &lost);
+}
+
+/// Allocating the staging buffer of an overlay picture finds the device lost: the image of
+/// the overlay is not destroyed, and nothing of the device is used after it.
+#[test]
+fn lost_staging_buffer_of_an_overlay_leaves_its_image_alone() {
+    let mut compositor = compositor_with_a_bitmap();
+    compositor.scale_frame(SIZE).unwrap();
+    compositor.replace_device_commands(|v1_0, _| {
+        v1_0.bind_buffer_memory = lost_bind_buffer;
+        v1_0.destroy_image_view = destroy_image_view;
+        v1_0.destroy_image = destroy_image;
+    });
+    let lost = Err(VkError::DeviceLost {
+        call: "vkBindBufferMemory",
+    });
+    let picture = OverlayImage {
+        size: Size::new(4, 4),
+        pixels: vec![255; 4 * 4 * 4],
+    };
+    assert_eq!(compositor.set_overlay(Some(&picture)), lost);
+    assert_eq!(take_calls(), ["vkBindBufferMemory"]);
+    assert_eq!(compositor.set_overlay(Some(&picture)), lost);
+    assert_refused(&mut compositor, &lost);
+}
+
+/// Making the compute pipeline finds the device lost while the compositor is set up: the
+/// shader module, and everything made before it, is not destroyed, and the device is not
+/// idled.
+#[test]
+fn lost_device_while_the_compositor_is_set_up_destroys_nothing() {
+    let made = VkCompositor::with_device_commands(|v1_0, _| {
+        v1_0.create_compute_pipelines = lost_compute_pipelines;
+        v1_0.destroy_shader_module = destroy_shader_module;
+        v1_0.device_wait_idle = idle;
+    });
+    assert_eq!(
+        made.err(),
+        Some(VkError::DeviceLost {
+            call: "vkCreateComputePipelines"
+        })
+    );
+    assert_eq!(take_calls(), ["vkCreateComputePipelines"]);
+}
+
+/// The wait for the fences of the presents, when a compositor that presented is dropped,
+/// finds the device lost: nothing more is destroyed.
+#[test]
+fn lost_device_in_the_wait_for_present_fences_stops_the_drop() {
+    let log = ValidationLog::new();
+    let mut compositor = VkCompositor::with_headless_surface(test_device(), Some(&log)).unwrap();
+    compositor.resize_surface(Size::new(64, 48));
+    compositor.render(&packet(vec![], 1)).unwrap();
+    assert_eq!(compositor.present(), Ok(true));
+    if !compositor.uses_swapchain_maintenance() {
+        eprintln!("{}: presents carry no fences", compositor.device());
+        return;
+    }
+    compositor.replace_device_commands(|v1_0, _| {
+        v1_0.wait_for_fences = lost_fences;
+        v1_0.destroy_image_view = destroy_image_view;
+        v1_0.destroy_image = destroy_image;
+        v1_0.destroy_semaphore = destroy_semaphore;
+        v1_0.destroy_descriptor_set_layout = destroy_set_layout;
+    });
+    take_calls();
+    drop(compositor);
+    assert_eq!(take_calls(), ["vkWaitForFences"]);
+    assert_clean(&log, "around the lost device");
+}
+
+/// The idle of the device itself, once the compositor has destroyed what it made, finds the
+/// device lost: the device is not destroyed.
+#[test]
+fn lost_device_in_the_last_idle_leaves_the_device_alone() {
+    let mut compositor = VkCompositor::new(test_device()).unwrap();
+    compositor.render(&packet(vec![], 1)).unwrap();
+    IDLES.with(|idles| idles.set(0));
+    compositor.replace_device_commands(|v1_0, _| {
+        DESTROY_DEVICE.with(|destroy| destroy.set(Some(v1_0.destroy_device)));
+        v1_0.device_wait_idle = second_idle_lost;
+        v1_0.destroy_device = destroy_device;
+    });
+    take_calls();
+    drop(compositor);
+    // That of the compositor, then that of the device.
+    assert_eq!(take_calls(), ["vkDeviceWaitIdle", "vkDeviceWaitIdle"]);
 }

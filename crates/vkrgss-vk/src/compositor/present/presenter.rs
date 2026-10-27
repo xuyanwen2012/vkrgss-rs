@@ -101,7 +101,8 @@ impl Presenter {
             // Nothing of a lost device is used again: what was made is leaked.
             Err(error) if error.is_device_lost() => Err(error),
             Err(error) => {
-                presenter.destroy(device, allocator);
+                // There is no swapchain yet, so nothing is waited for.
+                let _ = presenter.destroy(device, allocator);
                 Err(error)
             }
         }
@@ -275,16 +276,18 @@ impl Presenter {
         self.bound = None;
     }
 
-    /// Destroys everything. The device must be idle.
+    /// Destroys everything. The device must be idle. Fails, and destroys nothing, when the
+    /// wait for the fences of the presents finds the device lost: then nothing of the device
+    /// may be used again.
     pub(in crate::compositor) fn destroy(
         mut self,
         device: &ash::Device,
         allocator: &mut Allocator,
-    ) {
+    ) -> Result<(), VkError> {
         if let (Some(swapchain), Some(loader)) = (self.swapchain.take(), &self.swapchain_loader) {
             // The device is idle either way, after an idle that did not find it lost; this
             // only gives the fences the time to signal.
-            let _ = swapchain.settle_presents(device);
+            swapchain.settle_presents(device)?;
             swapchain.destroy(device, loader);
         }
         if let Some(held) = self.held.take() {
@@ -312,6 +315,7 @@ impl Presenter {
             device.destroy_pipeline_layout(self.pipeline_layout, None);
             device.destroy_descriptor_set_layout(self.set_layout, None);
         }
+        Ok(())
     }
 }
 

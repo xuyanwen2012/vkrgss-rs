@@ -144,6 +144,26 @@ impl VkCompositor {
             .map(|(_, bytes)| *bytes)
     }
 
+    /// Builds a compositor on the test device whose commands `replace` sets as
+    /// [`replace_device_commands`](VkCompositor::replace_device_commands) does, before any
+    /// object is made from the device.
+    pub(crate) fn with_device_commands(
+        replace: impl FnOnce(&mut ash::DeviceFnV1_0, &mut ash::DeviceFnV1_3),
+    ) -> Result<VkCompositor, VkError> {
+        let mut gpu = crate::device::Gpu::new(&crate::tests::harness::test_device(), None)?;
+        let device = &gpu.device;
+        let (mut v1_0, mut v1_3) = (device.fp_v1_0().clone(), device.fp_v1_3().clone());
+        replace(&mut v1_0, &mut v1_3);
+        gpu.device = ash::Device::from_parts_1_3(
+            device.handle(),
+            v1_0,
+            device.fp_v1_1().clone(),
+            device.fp_v1_2().clone(),
+            v1_3,
+        );
+        VkCompositor::finish(gpu)
+    }
+
     /// Replaces commands of the device, as `replace` sets them in its tables of Vulkan 1.0
     /// and 1.3, for the calls the compositor makes through the device from now on: what a
     /// driver that answers them otherwise would do. The allocator and the extension loaders

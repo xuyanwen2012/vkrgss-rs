@@ -146,6 +146,20 @@ engine's own waits beyond the existing bounded acquire.
   writes a descriptor; `execute`, `read_image` and `submit_or_idle` record the loss of the
   work they ran before they idle. Each case has a test in `tests/device_loss.rs` that fails
   without the fix.
+- **Loss before an outer cleanup, and in drop.** A third review found three more:
+  `with_offscreen` records a loss that the draw or its step `then` returns (the read-back
+  buffer of `scale_frame`, the new held frame of a freeze) before it releases the off-screen
+  target, and `set_overlay` one that the staging buffer of the upload returns before it
+  releases the image. `finish` records a loss of `init` before the half-made compositor is
+  dropped, so that `drop` leaks it with the device, and `init` does not destroy the shader
+  module when making the compute pipeline finds the device lost. `Presenter::destroy` returns
+  the loss that the wait for the fences of the presents finds, and `drop` then stops; `Gpu`
+  no longer destroys a device that its own idle finds lost, and then leaks the surface and
+  the instance with it (the instance became a `ManuallyDrop`). Tests: the read-back buffer,
+  the held frame of a freeze and the overlay's staging buffer, through
+  `replace_device_commands`; the compute pipeline, through a compositor made on replaced
+  commands (`with_device_commands`, for which `finish` became `pub(super)`); and the two
+  drops.
 - **Releasing the surface.** `release_surface` keeps the result of idling, destroys the
   swapchain, releases the surface and then returns the error. The presentation probe can
   replace the result of that idle, after it has idled, for the test. When the idle, or the
