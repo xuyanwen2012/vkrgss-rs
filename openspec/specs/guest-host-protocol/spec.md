@@ -224,7 +224,8 @@ that ends between two messages SHALL be reported as the end of the stream.
 The guest end of the link SHALL have a transport over a connected Unix stream socket with the
 operations of the in-process one: send, a receive that waits, and a receive that does not.
 A connection closed by the other side SHALL be reported as the disconnection of the link.
-The transport SHALL use no thread of its own.
+The transport SHALL use no thread of its own, and the receive that does not wait SHALL not
+change the mode of the socket.
 
 #### Scenario: Messages in order
 - **WHEN** the other side of the socket writes an input snapshot and a tick with the framing
@@ -237,6 +238,10 @@ The transport SHALL use no thread of its own.
 #### Scenario: Other side gone
 - **WHEN** the other side of the socket is closed
 - **THEN** a receive and a send of the guest end report the disconnection
+
+#### Scenario: Send while polling
+- **WHEN** one thread sends frame packets larger than the socket's buffer through the split sender while another thread asks without waiting again and again, and the other side reads slowly
+- **THEN** every packet arrives whole and in order, and no send reports the disconnection
 
 ### Requirement: State messages
 The protocol SHALL carry, from the host, a request to save a state into a slot, a request to
@@ -352,3 +357,16 @@ above the version before this change.
 #### Scenario: Version
 - **WHEN** a stream of the protocol version before this change is read
 - **THEN** it is refused with the error for an unsupported version, which states both versions
+
+### Requirement: Incremental reading of the framing
+The framing SHALL have a reader that takes bytes as they arrive and gives each message once
+its last byte is there, with the errors and the bound of reading from a stream. It SHALL
+keep no more bytes than the bound of one message plus what was given to it at once.
+
+#### Scenario: One byte at a time
+- **WHEN** two written messages are given to the reader one byte at a time
+- **THEN** it gives the first message after its last byte, and then the second, and nothing before
+
+#### Scenario: Oversized length
+- **WHEN** the reader is given a length above the bound
+- **THEN** it reports the error without waiting for the bytes that would follow
