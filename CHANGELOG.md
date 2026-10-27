@@ -36,8 +36,28 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   ends at the end of the subject instead of past it. Ruby 1.9.2 refuses such a subject
   before its engine runs.
 
+- The program no longer waits on a guest process: it reads and writes it without
+  blocking, so a guest that stops in the middle of a message or stops reading is ended five
+  seconds after it was asked to quit instead of holding the program. A guest process may
+  send at most 256 MiB of messages that are not frames between two ticks; one that sends
+  more is ended with a message that names the bound. A process that connects to the guest
+  socket and says nothing no longer stops the program's messages to the game, and an error
+  of accepting connections is reported once instead of making the relay spin. An error of
+  the framing says why on the error stream.
+
 ### Fixed
 
+- Closing the window of a game whose scripts do not end, a script in `loop { }` for one,
+  closes it five seconds later and ends the program with a failure that says the scripts
+  did not end, instead of leaving the window open for ever. The same holds after the frame
+  limit of a windowed run.
+- A key a script injects with `keybd_event` no longer causes the program's own shortcuts: it
+  saves and loads no state, does not fast-forward and F11 does not switch to full screen.
+  F12, Alt+Enter and F2 act as in the original runtime.
+- The time a headless run reports no longer grows with the notices about states, and a
+  loaded state no longer shortens it by a frame.
+- Polling the guest end of the link over a socket no longer switches the socket to
+  non-blocking mode, which a send on another thread could see fail.
 - Loading a slot again at once, right after it was loaded, waits for the resumed game to
   leave its new copy and loads it, instead of saying that the slot holds no state.
 - `require` records a file once it has loaded, as Ruby's own does: a file that raised while

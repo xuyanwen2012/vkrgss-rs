@@ -128,6 +128,13 @@ a guest process on macOS is not confined, and how the workspace is built and tes
   child, and signals only numbers taken so; it alone makes the answers saved, loaded and
   failed load, and hands on only a failed save of the guest, which a guest that cannot be
   copied has no other way to report.
+- Ending does not depend on the guest (change `end-the-session-without-the-guest`). The
+  session gives up on a guest that has not shut down five seconds after it was first asked
+  to quit, and a window then closes without waiting for a guest thread. The program reads
+  and writes a guest process without blocking and ends it five seconds after it was asked
+  to quit once the host has gone; between two ticks a guest process may hand the host at
+  most 256 MiB of messages that are not frames. A key the guest injects causes the actions
+  of the original runtime's keys and none of the program's own shortcuts.
 - The guest is deterministic: time comes from frame ticks and a host-provided clock, input is
   sampled once per `Input.update`, the random seed can be injected. Input record and replay is a
   first-version test facility.

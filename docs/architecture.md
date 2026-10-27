@@ -50,6 +50,22 @@ program starts it for the guest process of a game of RGSS1 or RGSS2; the program
 starts itself as a guest, so the process that a state copies with `fork` links nothing of
 the host. Each executable refuses a game of a runtime its interpreter does not run.
 
+The host knows nothing of a guest process. It is given, as its guest, the relay of `vkrgss`
+(`crates/vkrgss/src/process.rs`, which `vkrgss-android` compiles too): it holds the guest end
+of the in-process link and hands each message on, between the link and the connection of the
+running guest process, and keeps the copies that are states. The relay never waits on a
+guest. It reads every connection without blocking, through the incremental reader of the
+framing (`vkrgss_proto::framing::MessageReader`), and keeps what it is to write to a guest in a
+buffer that it writes as the connection takes it, so its deadline is looked at on every turn:
+once the host has gone, a guest is ended five seconds after it was asked to quit, by a quit
+request or by the host's going. A new connection attaches as its statement of the version and
+its `Attach` arrive, five seconds at most; the running guest's messages wait for it, so that a
+copy is known before what its maker sent after making it. Between two ticks the relay hands
+the host at most 256 MiB of messages from a guest process that are not frame packets, and ends
+a guest that sends more. The session of the host gives up on a guest that has not shut down
+five seconds after it first asked it to quit, whether a thread or a process, and the windowed
+runner then returns without waiting for a guest thread.
+
 The protocol is at version 15; an encoded stream of another version is rejected. A frame packet
 carries the changes to bitmaps and tables and an ordered list of ops of five kinds: `Clear`,
 `Quad`, `RectEffect`, `TilemapLayer` and `TilemapPlane`. Sprites, planes and the parts of a

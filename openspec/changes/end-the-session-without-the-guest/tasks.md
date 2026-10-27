@@ -14,7 +14,7 @@
 
 ## 4. Documents
 
-- [ ] 4.1 `docs/running.md` (closing a game whose scripts do not end, the host keys and injected keys), `docs/architecture.md` (the relay), `CHANGELOG.md`. Verify: the tests of `xtask` that check the documents pass.
+- [x] 4.1 `docs/running.md` (closing a game whose scripts do not end, the host keys and injected keys), `docs/architecture.md` (the relay), `CHANGELOG.md`. Verify: the tests of `xtask` that check the documents pass.
 
 ## 5. Checks
 

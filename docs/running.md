@@ -193,7 +193,8 @@ program with the usage message and status 2.
 The exit status is 0 when the game ends normally: its scripts return or call `exit`, the
 window is closed, or the frame limit of a headless run is reached. It is non-zero when a
 script error ends the game (its report is on the error stream), when the host fails, when a
-frame is rejected in a headless run, or when a frame that was to be dumped was never reached.
+frame is rejected in a headless run, when a frame that was to be dumped was never reached,
+or when the game's scripts do not end within five seconds of being asked to quit.
 
 ### Diagnostics
 
@@ -360,8 +361,21 @@ restricts it to RADV, the driver of AMD GPUs; the same on the CPU, with lavapipe
 
 The host keys are those of the demo: F12 (reset), Alt+Enter or F11 (borderless fullscreen),
 F2 (frame rate in the title) and Tab held (fast-forward), and the keys of the save states: F3
-saves, F4 loads, and with Shift they choose the slot (see *Save states*). Closing the window
-asks the game to quit.
+saves, F4 loads, and with Shift they choose the slot (see *Save states*). F12, Alt+Enter and
+F2 are keys of the original runtime too; the others are the program's own.
+
+Closing the window asks the game to quit, and so does the end of `--frames`. A game whose
+scripts have not ended five seconds later is given up on: a script in `loop { }` that calls
+no function of RGSS never sees the request, for one. The window then closes, a guest process
+is ended, and the program exits with the message that the game's scripts did not end within
+five seconds of being asked to quit, and status 1; a guest thread is left inside its script
+as the program exits.
+
+A key that a script presses with `keybd_event` (see `docs/compatibility.md`) is held as the
+key of the keyboard is and does what that key does in the original runtime: F12 resets,
+Alt+Enter switches to full screen and back, F2 shows the frame rate, and a key of C or B
+answers a message panel. It does none of the program's own: it saves and loads no state and
+chooses no slot, Tab does not fast-forward, and F11 does not switch to full screen.
 
 After a reset the scripts are evaluated again with the `Reset` exception as `$!` and its
 backtrace as `$@`, as in the original runtime, so that the common guard
@@ -607,6 +621,16 @@ stream, the same exit status. What differs:
 - The guest process is ended by the kernel should the program itself be killed.
 - With `--frame-stats` the guest's own rows are written by the guest process.
 - A bitmap that changes is copied through the socket instead of handed over.
+- The program reads and writes the guest process without ever waiting on it. A guest
+  process that stops in the middle of a message, or stops reading what the program sends,
+  holds neither the window nor the end of the run: once the run is ending it is ended five
+  seconds after it was asked to quit.
+- Between two frames a guest process may send at most 256 MiB of messages that are not
+  frames, such as titles and sounds; one that sends more is ended, and the error stream
+  says so and names the bound.
+- A process that connects to the socket of the guest and does not say what it is within
+  five seconds is dropped with a warning. The game's messages wait for it meanwhile, since
+  a copy that is a state has to be known before what its maker sent after making it.
 
 The save states and the sandbox, below, build on this form.
 
@@ -1055,7 +1079,8 @@ cargo run -p vkrgss-host --example demo -- <device>
 `<device>` is the index of a Vulkan device or a part of its name, as `vulkaninfo --summary`
 prints them. It has no default, so that the GPU that drives the window is always a choice. The
 host keys are F12 (reset), Alt+Enter or F11 (borderless fullscreen), F2 (frame rate in the
-title) and Tab held (fast-forward). Closing the window asks the guest to quit.
+title) and Tab held (fast-forward). Closing the window asks the guest to quit, and closes it
+five seconds later if the guest has not ended by then.
 
 The Vulkan loader loads every installed driver to enumerate the devices, so on a machine
 where a GPU is to be left alone the loader is restricted to the driver of the chosen device
