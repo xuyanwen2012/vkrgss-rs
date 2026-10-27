@@ -59,7 +59,7 @@ fn frame(ruby: &Ruby, mut front: Vec<BitmapDelta>) {
             front.append(&mut packet.bitmaps);
             packet.bitmaps = front;
         }
-        guest.send(GuestToHost::Frame(packet));
+        guest.send_frame(packet);
         drop(extraction);
         guest.pump(Await::Tick);
         guest.input.frame_shown();

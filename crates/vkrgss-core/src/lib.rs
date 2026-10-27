@@ -103,7 +103,7 @@
 //! | `font` | [`Font`], [`FontDefaults`] |
 //! | `bitmap` | [`Bitmaps`], [`MAX_BITMAP_PIXELS`], the drawing operations |
 //! | `text` | [`TextRasterizer`], [`TextMetrics`], [`Mask`], [`Align`], [`TextRules`], `draw_text`, `draw_text_as`, `text_size` |
-//! | `delta` | changed rectangles and [`Bitmaps::deltas`] |
+//! | `delta` | changed rectangles and [`Bitmaps::deltas`], [`split_deltas`] |
 //! | `scene` | [`Scene`], [`Rules`], the element arenas and their handles, creation and disposal |
 //! | `element` | [`Sprite`], [`Viewport`], [`Window`], [`Plane`], [`Tilemap`], flashes |
 //! | `geometry` | the fixed-point transform of a quad, the rectangle of a stretch, the walk of a turned sprite |
@@ -140,6 +140,7 @@ mod window;
 
 pub use bitmap::{Bitmaps, MAX_BITMAP_PIXELS};
 pub use color::{Color, Tone};
+pub use delta::split_deltas;
 pub use element::{Plane, Sprite, Tilemap, TilemapRgss2, Viewport, Window};
 pub use error::{BitmapError, CreateFailure, DecodeError, ElementKind, SceneError, TableError};
 pub use font::{Font, FontDefaults};

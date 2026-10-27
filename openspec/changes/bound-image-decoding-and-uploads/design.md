@@ -41,6 +41,18 @@
   deltas; it sends no tick for them. A `Frame` without preceding `Bitmaps` behaves as now. The
   tick handshake and the order of deltas are unchanged in meaning. Recordings store the new
   message like any other. Bump `PROTOCOL_VERSION`.
+  Outcome: protocol version 16; `GuestToHost::Bitmaps` is the last variant. The threshold is
+  `vkrgss_proto::framing::BITMAPS_AHEAD_LEN`, a quarter of `MAX_MESSAGE_LEN`, counted over
+  the pixels of a frame's bitmap changes; above it the binding sends all of them ahead, cut
+  by `vkrgss_core::split_deltas` into messages of at most that many bytes (an update into
+  bands of whole rows, or pieces of a row where one row is wider), in thread and process
+  mode alike. The session appends them to a list it puts in front of the next frame's
+  deltas and drops on a loaded state; both compositors' `handle` apply them at once, which
+  is the same for their state. The budget of `end-the-session-without-the-guest` (256 MiB
+  of messages other than frames between two ticks) does not fit the largest bitmap, so the
+  relay counts bitmap changes ahead of a frame apart, against a bound of their own of
+  2 GiB between two ticks: twice the largest bitmap, as much as the original, a 32-bit
+  process, could address. `MessageReader::first_is_bitmaps` tells them before they are read.
 - **One limit.** `vkrgss_proto::MAX_BITMAP_PIXELS` (proto is the one crate core,
   compose-ref and vk all depend on). `vkrgss-image` depends on no crate of the workspace; it
   keeps its own `MAX_PIXELS` and a test in `vkrgss-core` (dev-dependency on `vkrgss-image`, a

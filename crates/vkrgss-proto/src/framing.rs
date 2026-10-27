@@ -27,6 +27,16 @@ use crate::codec::{self, DecodeError, EncodeError, Message};
 /// sends a few dozen times that.
 pub const MAX_MESSAGE_LEN: u32 = 1 << 30;
 
+/// The bytes of pixels of a frame's bitmap changes above which a guest sends them ahead of the
+/// frame in [`GuestToHost::Bitmaps`](crate::GuestToHost::Bitmaps) messages, each with at most
+/// this many: a quarter of [`MAX_MESSAGE_LEN`], which leaves the rest of the bound to the
+/// encoding and to the ops and tables of the frame.
+pub const BITMAPS_AHEAD_LEN: usize = MAX_MESSAGE_LEN as usize / 4;
+
+/// The number of the variant of [`GuestToHost::Bitmaps`](crate::GuestToHost::Bitmaps), the
+/// first byte of its encoding.
+const BITMAPS_VARIANT: u8 = 15;
+
 /// Number of bytes of the length in front of a message.
 pub const LENGTH_LEN: usize = 4;
 
@@ -118,7 +128,8 @@ pub fn read_message<T: Message>(reader: &mut impl Read) -> Result<Option<T>, Fra
 /// the buffer never holds more than the message. A buffer of more than 1 MiB is given back
 /// once its message has been taken. Before a message is read whole, what it is can be told
 /// from its length and its first bytes ([`first_len`](MessageReader::first_len),
-/// [`first_is_frame`](MessageReader::first_is_frame)).
+/// [`first_is_frame`](MessageReader::first_is_frame),
+/// [`first_is_bitmaps`](MessageReader::first_is_bitmaps)).
 #[derive(Debug, Default)]
 pub struct MessageReader {
     /// Bytes that no message was taken of yet.
@@ -172,6 +183,16 @@ impl MessageReader {
         self.buffered
             .get(LENGTH_LEN + codec::HEADER_LEN)
             .map(|variant| *variant == 0)
+    }
+
+    /// Whether the first message, of a stream of [`GuestToHost`](crate::GuestToHost)
+    /// messages, carries bitmap changes ahead of a frame
+    /// ([`GuestToHost::Bitmaps`](crate::GuestToHost::Bitmaps)), once the byte that tells is
+    /// there.
+    pub fn first_is_bitmaps(&self) -> Option<bool> {
+        self.buffered
+            .get(LENGTH_LEN + codec::HEADER_LEN)
+            .map(|variant| *variant == BITMAPS_VARIANT)
     }
 
     /// Takes the first message if all of it is there. A length above the bound and bytes
@@ -392,6 +413,42 @@ mod tests {
         reader.push(&(MAX_MESSAGE_LEN + 1).to_le_bytes());
         assert_eq!(reader.missing(), Some(0));
         assert!(reader.take::<GuestToHost>().is_err());
+    }
+
+    #[test]
+    fn bitmap_changes_ahead_of_a_frame_are_told_and_read_back_as_written() {
+        let id = BitmapId::new(2, 5);
+        let rgba: Vec<u8> = (0..1 << 20).map(|index| (index % 253) as u8).collect();
+        let ahead = GuestToHost::Bitmaps(vec![
+            BitmapDelta::Create {
+                id,
+                width: 512,
+                height: 512,
+            },
+            BitmapDelta::Update {
+                id,
+                rect: Rect::new(0, 0, 512, 512),
+                rgba,
+            },
+        ]);
+        let mut bytes = Vec::new();
+        write_message(&mut bytes, &ahead).unwrap();
+        // The encoding adds a few bytes to the pixels.
+        assert!(bytes.len() <= LENGTH_LEN + HEADER_LEN + (1 << 20) + 64);
+
+        let mut reader = MessageReader::new();
+        reader.push(&bytes[..LENGTH_LEN + HEADER_LEN]);
+        assert_eq!(reader.first_is_bitmaps(), None);
+        reader.push(&bytes[LENGTH_LEN + HEADER_LEN..]);
+        assert_eq!(reader.first_is_bitmaps(), Some(true));
+        assert_eq!(reader.first_is_frame(), Some(false));
+        assert_eq!(reader.take::<GuestToHost>().unwrap(), Some(ahead));
+
+        let mut frame = Vec::new();
+        write_message(&mut frame, &frame_packet()).unwrap();
+        reader.push(&frame);
+        assert_eq!(reader.first_is_bitmaps(), Some(false));
+        assert_eq!(BITMAPS_AHEAD_LEN, 1 << 28);
     }
 
     /// Scenario "Oversized length", for the incremental reader: the error comes with the

@@ -23,7 +23,7 @@ use crate::{GuestToHost, HostToGuest, InputSnapshot};
 pub const MAGIC: [u8; 4] = *b"VKXP";
 
 /// Version of the message types and their encoding. Any change to either increments it.
-pub const PROTOCOL_VERSION: u16 = 15;
+pub const PROTOCOL_VERSION: u16 = 16;
 
 /// Length of the stream header in bytes.
 pub const HEADER_LEN: usize = 7;
@@ -271,8 +271,8 @@ mod tests {
     /// Scenario "Version".
     #[test]
     fn older_streams_are_rejected_naming_both_versions() {
-        assert_eq!(PROTOCOL_VERSION, 15);
-        for found in [1u16, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] {
+        assert_eq!(PROTOCOL_VERSION, 16);
+        for found in [1u16, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] {
             let mut bytes = encode_stream(&sample()).unwrap();
             bytes[4..6].copy_from_slice(&found.to_le_bytes());
 
@@ -281,12 +281,12 @@ mod tests {
                 error,
                 DecodeError::UnsupportedVersion {
                     found,
-                    supported: 15,
+                    supported: 16,
                 }
             );
             assert_eq!(
                 error.to_string(),
-                format!("unsupported protocol version: found {found}, supported 15")
+                format!("unsupported protocol version: found {found}, supported 16")
             );
         }
     }
@@ -595,6 +595,8 @@ mod tests {
 
     #[test]
     fn every_kind_of_message_round_trips() {
+        use crate::{BitmapDelta, Rect};
+
         let guest = vec![
             packet_at(3, FrameRate::DEFAULT),
             GuestToHost::Freeze {
@@ -658,6 +660,19 @@ mod tests {
             },
             GuestToHost::PointerVisible { visible: false },
             GuestToHost::PointerVisible { visible: true },
+            GuestToHost::Bitmaps(Vec::new()),
+            GuestToHost::Bitmaps(vec![
+                BitmapDelta::Create {
+                    id: BitmapId::new(4, 1),
+                    width: 2,
+                    height: 1,
+                },
+                BitmapDelta::Update {
+                    id: BitmapId::new(4, 1),
+                    rect: Rect::new(0, 0, 2, 1),
+                    rgba: vec![1, 2, 3, 4, 5, 6, 7, 8],
+                },
+            ]),
         ];
         // Fails to compile when a kind is added without extending the list above.
         for message in &guest {
@@ -676,12 +691,13 @@ mod tests {
                 | GuestToHost::StateLoaded { .. }
                 | GuestToHost::StateFailed { .. }
                 | GuestToHost::InjectKey { .. }
-                | GuestToHost::PointerVisible { .. } => {}
+                | GuestToHost::PointerVisible { .. }
+                | GuestToHost::Bitmaps(_) => {}
             }
         }
         let kinds: std::collections::HashSet<_> =
             guest.iter().map(std::mem::discriminant).collect();
-        assert_eq!(kinds.len(), 15);
+        assert_eq!(kinds.len(), 16);
         let bytes = encode_stream(&guest).unwrap();
         assert_eq!(decode_stream::<GuestToHost>(&bytes), Ok(guest));
 

@@ -80,11 +80,21 @@ impl Compositor {
     }
 
     /// Handles one message. A `Frame` message yields its frame; every other message yields
-    /// `None`. Freeze, transition, audio, modal and title messages are outside what this
-    /// compositor models and have no effect on later frames.
+    /// `None`. The bitmap changes of a `Bitmaps` message are applied in order, which is the
+    /// same as applying them with the next frame before its own; an invalid one is an error
+    /// and those before it stay applied. Freeze, transition, audio, modal and title messages
+    /// are outside what this compositor models and have no effect on later frames.
     pub fn handle(&mut self, message: &GuestToHost) -> Result<Option<Frame>, ComposeError> {
         match message {
             GuestToHost::Frame(packet) => self.render(packet).map(Some),
+            GuestToHost::Bitmaps(deltas) => {
+                for (index, delta) in deltas.iter().enumerate() {
+                    self.bitmaps
+                        .apply(delta)
+                        .map_err(|source| ComposeError::InvalidDelta { index, source })?;
+                }
+                Ok(None)
+            }
             _ => Ok(None),
         }
     }

@@ -588,6 +588,49 @@ fn a_malformed_input_script_file_prints_the_usage_message() {
     assert!(stderr.contains("usage: vkrgss"), "{stderr}");
 }
 
+/// Scenario "Largest bitmap" of the guest-host protocol: a bitmap of 16384 by 16384 pixels,
+/// 1 GiB, which no single message may carry, reaches the host from a guest in a process of its
+/// own. Its far corner is red, shown at (10, 20) in the first frame; the second frame shows its
+/// first pixel, and the run goes on to its frame limit.
+#[test]
+fn the_largest_bitmap_reaches_the_host_from_a_guest_process() {
+    let main = "\
+bitmap = Bitmap.new(16384, 16384)
+bitmap.fill_rect(0, 0, 16384, 16384, Color.new(0, 255, 0))
+bitmap.fill_rect(16383, 16383, 1, 1, Color.new(255, 0, 0))
+sprite = Sprite.new
+sprite.bitmap = bitmap
+sprite.x = 10 - 16383
+sprite.y = 20 - 16383
+Graphics.update
+sprite.x = 0
+sprite.y = 0
+loop { Graphics.update }
+";
+    let game = Game::new(harness(), "e2e-largest", "Largest", &[("Main", main)]);
+    let ran = headless(
+        &game,
+        &[
+            "--guest",
+            "process",
+            "--frames",
+            "3",
+            "--dump",
+            "0=first.png",
+            "--dump",
+            "2=last.png",
+        ],
+    );
+    ran.assert_success();
+    let first = ran.frame("first.png");
+    assert_eq!(first.pixel(10, 20), RED);
+    assert_eq!(first.pixel(9, 20), [0, 255, 0, 255]);
+    assert_eq!(first.pixel(11, 21), [0, 0, 0, 255]);
+    let last = ran.frame("last.png");
+    assert_eq!(last.pixel(0, 0), [0, 255, 0, 255]);
+    assert_eq!(last.pixel(639, 479), [0, 255, 0, 255]);
+}
+
 #[test]
 fn a_dumped_frame_shows_the_red_sprite_where_it_is() {
     let main = format!("{RED_SPRITE}loop {{ Graphics.update }}\n");

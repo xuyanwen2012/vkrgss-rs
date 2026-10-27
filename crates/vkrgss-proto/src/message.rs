@@ -7,6 +7,12 @@
 //! has received that `Tick`. A `Tick` carries no data, so what the guest does never depends on
 //! wall-clock time, only on the number of ticks it has seen.
 //!
+//! The bitmap changes of a frame may travel ahead of it in [`GuestToHost::Bitmaps`] messages,
+//! which the host keeps in order and applies with the next `Frame`, before that frame's own
+//! changes. They are part of that frame and get no `Tick` of their own. A guest sends them
+//! when the pixels of a frame's changes pass [`BITMAPS_AHEAD_LEN`](crate::framing::BITMAPS_AHEAD_LEN),
+//! so that every message stays under the bound of the framing.
+//!
 //! # States
 //!
 //! A guest in a process of its own can be saved: it leaves a copy of its process behind, which
@@ -18,7 +24,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{AudioCommand, BitmapId, FramePacket, InputSnapshot};
+use crate::{AudioCommand, BitmapDelta, BitmapId, FramePacket, InputSnapshot};
 
 /// The rule by which the frames of a transition are stepped.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -111,6 +117,10 @@ pub enum GuestToHost {
     },
     /// Whether the pointer is to be seen over the picture.
     PointerVisible { visible: bool },
+    /// Bitmap changes of the next [`GuestToHost::Frame`], sent ahead of it. The host applies
+    /// them, in the order sent, with that frame and before the frame's own changes, and
+    /// answers them with no tick; see the module documentation.
+    Bitmaps(Vec<BitmapDelta>),
 }
 
 /// A message from the host to the guest.

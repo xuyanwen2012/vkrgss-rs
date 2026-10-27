@@ -5,8 +5,8 @@ use std::time::{Duration, Instant};
 
 use vkrgss_proto::link::HostEnd;
 use vkrgss_proto::{
-    AudioChannel, AudioCommand, BitmapId, Button, FramePacket, FreezeRule, GuestToHost,
-    HostToGuest, InputSnapshot, Size, TransitionRule,
+    AudioChannel, AudioCommand, BitmapDelta, BitmapId, Button, FramePacket, FreezeRule,
+    GuestToHost, HostToGuest, InputSnapshot, Size, TransitionRule,
 };
 use vkrgss_vk::Mix;
 use winit::event::MouseButton;
@@ -263,6 +263,9 @@ pub struct Session<D: Display, C: Clock> {
     /// A frame message that [`pump`](Session::pump) took from the link while the tick of the
     /// frame before it was still pending.
     waiting_frame: Option<GuestToHost>,
+    /// The bitmap changes the guest sent ahead of its next frame, in the order sent; they are
+    /// applied with that frame, before its own.
+    ahead: Vec<BitmapDelta>,
     /// Whether a frame reset is waiting for the frame it applies to.
     frame_reset: bool,
     /// Whether the display is to start its pacing anew with the next frame.
@@ -342,6 +345,7 @@ impl<D: Display, C: Clock> Session<D, C> {
             pending_tick: None,
             previous_tick: None,
             waiting_frame: None,
+            ahead: Vec::new(),
             frame_reset: false,
             pacing_restart: false,
             fast_forward_key: false,
@@ -476,7 +480,16 @@ impl<D: Display, C: Clock> Session<D, C> {
             return;
         }
         match message {
-            GuestToHost::Frame(packet) => self.frame(&packet),
+            GuestToHost::Frame(mut packet) => {
+                if !self.ahead.is_empty() {
+                    let mut bitmaps = std::mem::take(&mut self.ahead);
+                    bitmaps.append(&mut packet.bitmaps);
+                    packet.bitmaps = bitmaps;
+                }
+                self.frame(&packet);
+            }
+            // Part of the next frame, which gets the tick.
+            GuestToHost::Bitmaps(mut deltas) => self.ahead.append(&mut deltas),
             GuestToHost::Freeze { rule } => self.freeze(rule),
             GuestToHost::Transition {
                 duration,
@@ -659,6 +672,7 @@ impl<D: Display, C: Clock> Session<D, C> {
         // The frame that waited for its tick was one of the guest that is gone.
         self.pending_tick = None;
         self.waiting_frame = None;
+        self.ahead.clear();
         self.frame_reset = true;
         self.clear_injected();
         self.outbox.push_back(HostToGuest::Input(self.buttons));

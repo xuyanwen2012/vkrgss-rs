@@ -13,7 +13,7 @@
 
 ## 3. Bitmap changes ahead of a frame
 
-- [ ] 3.1 `GuestToHost::Bitmaps`, codec, recording, protocol version bump; the binding sends changes ahead and splits large updates into row bands under the threshold; the session holds them until the next frame and applies them first; the relay passes them; both compositors accept them through the existing delta path. Verify: the three scenarios of "Bitmap changes ahead of a frame" (the first as a process-mode test of the program at lvp, `VK_LOADER_DRIVERS_SELECT='*lvp*'`), the framing round-trip tests, the session tests of the tick handshake.
+- [x] 3.1 `GuestToHost::Bitmaps`, codec, recording, protocol version bump; the binding sends changes ahead and splits large updates into row bands under the threshold; the session holds them until the next frame and applies them first; the relay passes them; both compositors accept them through the existing delta path. Verify: the three scenarios of "Bitmap changes ahead of a frame" (the first as a process-mode test of the program at lvp, `VK_LOADER_DRIVERS_SELECT='*lvp*'`), the framing round-trip tests, the session tests of the tick handshake.
 
 ## 4. Fuzz targets of the file readers
 

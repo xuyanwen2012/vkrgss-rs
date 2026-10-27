@@ -469,6 +469,94 @@ fn messages_behind_a_frame_wait_for_its_tick() {
     assert_eq!(guest.try_recv(), Ok(Some(HostToGuest::Tick)));
 }
 
+/// A frame that draws the bitmap 900, of which [`invalid_frame`] knows nothing.
+fn frame_of_bitmap_900(frame_index: u64) -> GuestToHost {
+    invalid_frame(frame_index)
+}
+
+/// The changes that create the bitmap 900, in two messages ahead of a frame.
+fn bitmap_900_ahead() -> [GuestToHost; 2] {
+    let id = BitmapId::new(900, 0);
+    [
+        GuestToHost::Bitmaps(vec![BitmapDelta::Create {
+            id,
+            width: 1,
+            height: 1,
+        }]),
+        GuestToHost::Bitmaps(vec![BitmapDelta::Update {
+            id,
+            rect: Rect::new(0, 0, 1, 1),
+            rgba: vec![1, 2, 3, 255],
+        }]),
+    ]
+}
+
+/// Scenario "No tick for changes".
+#[test]
+fn bitmap_changes_ahead_of_a_frame_get_no_tick_of_their_own() {
+    let (mut rig, guest, host) = linked();
+    for message in bitmap_900_ahead() {
+        guest.send(message).unwrap();
+    }
+    for _ in 0..10 {
+        rig.clock.advance(ms(1000));
+        rig.session.pump(&host);
+        assert_eq!(rig.session.next_wake(), None);
+    }
+    assert_eq!(guest.try_recv(), Ok(None));
+    assert!(rig.session.display().rendered().is_empty());
+
+    guest.send(frame_of_bitmap_900(0)).unwrap();
+    rig.session.pump(&host);
+    while let Some(due) = rig.session.next_wake() {
+        rig.clock.advance_to(due);
+        rig.session.pump(&host);
+    }
+    rig.clock.advance(ms(60_000));
+    rig.session.pump(&host);
+    assert_eq!(guest.try_recv(), Ok(Some(HostToGuest::Tick)));
+    assert_eq!(
+        guest.try_recv(),
+        Ok(None),
+        "two changes and a frame, one tick"
+    );
+    // The frame was rendered with the bitmap that the changes ahead of it created.
+    assert_eq!(rig.session.display().rendered(), [0]);
+    assert_eq!(rig.session.frames(), 1);
+}
+
+#[test]
+fn bitmap_changes_ahead_of_a_frame_are_applied_with_it_before_its_own() {
+    let mut rig = Rig::new();
+    let [create, update] = bitmap_900_ahead();
+    rig.session.handle_message(create);
+    rig.session.handle_message(update);
+    // The frame destroys the bitmap again: only after the changes ahead of it is that valid.
+    let GuestToHost::Frame(mut packet) = frame(0) else {
+        unreachable!()
+    };
+    packet.bitmaps.push(BitmapDelta::Destroy {
+        id: BitmapId::new(900, 0),
+    });
+    rig.frame(GuestToHost::Frame(packet));
+    assert_eq!(rig.session.display().rendered(), [0]);
+    assert!(!rig.session.display().has_bitmap(BitmapId::new(900, 0)));
+    // Held changes are used once: the next frame does not see them again.
+    rig.frame(frame_of_bitmap_900(1));
+    assert_eq!(rig.session.display().rendered(), [0]);
+}
+
+#[test]
+fn a_loaded_state_drops_the_changes_held_for_the_guest_that_is_gone() {
+    let mut rig = Rig::new();
+    for message in bitmap_900_ahead() {
+        rig.session.handle_message(message);
+    }
+    rig.send(GuestToHost::StateLoaded { slot: 1 });
+    rig.frame(frame_of_bitmap_900(0));
+    assert!(rig.session.display().rendered().is_empty());
+}
+
 #[test]
 fn a_second_frame_handled_directly_still_gets_one_tick_each() {
     let mut rig = Rig::new();

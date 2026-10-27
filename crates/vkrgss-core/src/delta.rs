@@ -2,11 +2,13 @@
 //!
 //! Every drawing operation records the bounding rectangle of the pixels it may have changed.
 //! [`Bitmaps::deltas`] turns that, for the bitmaps a frame refers to, into the smallest list of
-//! [`BitmapDelta`]s that brings a compositor's bitmap store up to date.
+//! [`BitmapDelta`]s that brings a compositor's bitmap store up to date. [`split_deltas`] cuts
+//! such a list into parts of a bounded size, for the bitmap changes a guest sends ahead of a
+//! frame.
 
 use std::collections::HashSet;
 
-use vkrgss_proto::{BitmapDelta, BitmapId};
+use vkrgss_proto::{BitmapDelta, BitmapId, Rect};
 
 use crate::bitmap::{Area, Bitmap};
 use crate::{BitmapError, Bitmaps};
@@ -139,6 +141,116 @@ impl Bitmaps {
         }
         deltas
     }
+}
+
+/// What a delta counts for beside its pixels: its kind, id and rectangle, and the length of
+/// its pixels, as encoded, with room to spare.
+const DELTA_OVERHEAD: usize = 64;
+
+/// The bytes `delta` counts for in a part of [`split_deltas`].
+fn cost(delta: &BitmapDelta) -> usize {
+    match delta {
+        BitmapDelta::Update { rgba, .. } => rgba.len() + DELTA_OVERHEAD,
+        BitmapDelta::Create { .. } | BitmapDelta::Destroy { .. } => DELTA_OVERHEAD,
+    }
+}
+
+/// The parts being made, and where a finished one goes.
+struct Parts<F> {
+    limit: usize,
+    part: Vec<BitmapDelta>,
+    bytes: usize,
+    send: F,
+}
+
+impl<F: FnMut(Vec<BitmapDelta>)> Parts<F> {
+    fn push(&mut self, delta: BitmapDelta) {
+        let cost = cost(&delta);
+        if self.bytes + cost > self.limit && !self.part.is_empty() {
+            self.flush();
+        }
+        self.bytes += cost;
+        self.part.push(delta);
+    }
+
+    fn flush(&mut self) {
+        if !self.part.is_empty() {
+            (self.send)(std::mem::take(&mut self.part));
+            self.bytes = 0;
+        }
+    }
+}
+
+/// Hands `deltas` to `send` in parts, in order: concatenated, the parts are `deltas` with
+/// every `Update` that alone passes `limit` cut into updates of bands of whole rows, or of
+/// pieces of one row where a row alone passes it. Applied in order, the parts change a
+/// bitmap store as `deltas` do.
+///
+/// Each part counts at most `limit` bytes: the pixels of its updates and 64 bytes for each
+/// delta, which is more than the encoding of a delta adds to its pixels. Only one band is
+/// copied at a time, so the pixels are held at most once more than in `deltas` while the
+/// parts are sent.
+///
+/// # Panics
+///
+/// If `limit` leaves no room for the pixel of an update: it is below 68.
+pub fn split_deltas(deltas: Vec<BitmapDelta>, limit: usize, send: impl FnMut(Vec<BitmapDelta>)) {
+    let room = limit
+        .checked_sub(DELTA_OVERHEAD)
+        .filter(|room| *room >= 4)
+        .expect("a part has room for a pixel");
+    let mut parts = Parts {
+        limit,
+        part: Vec::new(),
+        bytes: 0,
+        send,
+    };
+    // The offsets of bands and pieces are inside the rectangle of the update, whose sides fit
+    // `i32`.
+    for delta in deltas {
+        match delta {
+            BitmapDelta::Update { id, rect, rgba } if rgba.len() > room => {
+                let row = rect.width as usize * 4;
+                if row <= room {
+                    // Bands of as many rows as fit.
+                    let rows = room / row;
+                    for (band, pixels) in (0usize..).step_by(rows).zip(rgba.chunks(rows * row)) {
+                        parts.push(BitmapDelta::Update {
+                            id,
+                            rect: Rect::new(
+                                rect.x,
+                                rect.y + band as i32,
+                                rect.width,
+                                (pixels.len() / row) as u32,
+                            ),
+                            rgba: pixels.to_vec(),
+                        });
+                    }
+                } else {
+                    // Pieces of each row.
+                    let columns = room / 4;
+                    for (line, pixels) in (0usize..).zip(rgba.chunks(row)) {
+                        for (piece, pixels) in
+                            (0usize..).step_by(columns).zip(pixels.chunks(columns * 4))
+                        {
+                            parts.push(BitmapDelta::Update {
+                                id,
+                                rect: Rect::new(
+                                    rect.x + piece as i32,
+                                    rect.y + line as i32,
+                                    (pixels.len() / 4) as u32,
+                                    1,
+                                ),
+                                rgba: pixels.to_vec(),
+                            });
+                        }
+                    }
+                }
+            }
+            delta => parts.push(delta),
+        }
+    }
+    parts.flush();
 }
 
 #[cfg(test)]

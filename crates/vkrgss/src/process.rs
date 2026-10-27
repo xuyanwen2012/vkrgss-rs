@@ -42,8 +42,9 @@
 //! `Attach` arrive, while the game's messages are handed on. So the deadline for a guest that
 //! was asked to quit is looked at on every turn of the relay, and a guest that stops inside a
 //! message or stops reading cannot hold the program. A guest process may hand the host at most
-//! [`UNPACED_BOUND`] bytes of messages that are not frames between two ticks; one that sends
-//! more is ended.
+//! [`UNPACED_BOUND`] bytes of messages that are not frames between two ticks, and apart from
+//! them [`AHEAD_BOUND`] bytes of bitmap changes ahead of a frame, which are part of the next
+//! frame; one that sends more is ended.
 //!
 //! # Identity
 //!
@@ -97,6 +98,12 @@ const SLOTS: usize = 10;
 /// between two ticks.
 const UNPACED_BOUND: u64 = 256 << 20;
 
+/// The most bytes of bitmap changes ahead of a frame (`GuestToHost::Bitmaps`) that a guest
+/// process may hand the host between two ticks, counted apart from [`UNPACED_BOUND`]: twice
+/// the largest bitmap, which leaves room for the largest bitmap and others in one frame and is
+/// as much as the original runtime, a 32-bit process, could address at all.
+const AHEAD_BOUND: u64 = 2 << 30;
+
 /// What the host holds of a message beside its encoded bytes, as the bound counts it: the
 /// entry of the message in the in-process link, and an allowance for the heap blocks of the
 /// texts in it (two at most, such as the name of a sound and its type, whose bytes the encoded
@@ -105,10 +112,21 @@ const UNPACED_BOUND: u64 = 256 << 20;
 const HELD_PER_MESSAGE: u64 = std::mem::size_of::<GuestToHost>() as u64 + 64;
 
 /// Whether a message of `size` bytes other than a frame packet may be handed to the host when
-/// it holds `unpaced` of the bound: what the host holds with it stays within the bound, and so
-/// does what the program holds while it is decoded, its bytes and their decoded copy at once.
-fn fits(unpaced: u64, size: u64) -> bool {
-    unpaced + 2 * size + HELD_PER_MESSAGE <= UNPACED_BOUND
+/// it holds `held` of `bound`: what the host holds with it stays within the bound, and so does
+/// what the program holds while it is decoded, its bytes and their decoded copy at once.
+fn fits(held: u64, size: u64, bound: u64) -> bool {
+    held + 2 * size + HELD_PER_MESSAGE <= bound
+}
+
+/// [`fits`] for a message of bitmap changes ahead of a frame if `ahead`, else for another that
+/// is not a frame, when the host holds `unpaced` of the one bound and `held_ahead` of the
+/// other.
+fn fits_kind((unpaced, held_ahead): (u64, u64), ahead: bool, size: u64) -> bool {
+    if ahead {
+        fits(held_ahead, size, AHEAD_BOUND)
+    } else {
+        fits(unpaced, size, UNPACED_BOUND)
+    }
 }
 
 /// How long the relay leaves the socket alone after an error of `accept`.
@@ -886,6 +904,7 @@ fn relay(
         accept_paused: None,
         accept_failed: false,
         unpaced: 0,
+        ahead: 0,
         quit: None,
         host_gone: false,
         from_host: MessageReader::new(),
@@ -959,8 +978,11 @@ struct Relay<'a> {
     /// Whether an error of `accept` has been reported.
     accept_failed: bool,
     /// The bytes of the messages other than frame packets that the running guest handed the
-    /// host since it was last handed a tick, each with [`HELD_PER_MESSAGE`].
+    /// host since it was last handed a tick, each with [`HELD_PER_MESSAGE`]; bitmap changes
+    /// ahead of a frame are not among them.
     unpaced: u64,
+    /// The same for the bitmap changes ahead of a frame.
+    ahead: u64,
     /// Since when the guest has been asked to quit: when a quit request was handed to it or
     /// the host went, whichever was first.
     quit: Option<Instant>,
@@ -1054,11 +1076,12 @@ impl Relay<'_> {
     /// Reads what the running guest sent, as far as the budget of a turn goes and no further
     /// than the end of a message: a whole message is handed on before more is read. A message
     /// other than a frame packet is judged by the length it states before the rest of it is
-    /// read ([`fits`]), so the relay never holds one that the bound would refuse.
+    /// read ([`fits`]), so the relay never holds one that its bound would refuse.
     fn read_guest(&mut self) {
         let mut chunk = vec![0; CHUNK];
         let mut read = 0;
         while read < TURN_BUDGET {
+            let counted = (self.unpaced, self.ahead);
             let Some(running) = &mut self.running else {
                 return;
             };
@@ -1068,10 +1091,11 @@ impl Relay<'_> {
             let reader = &running.reader;
             if let Some(len) = reader.first_len()
                 && reader.first_is_frame() == Some(false)
+                && let Some(ahead) = reader.first_is_bitmaps()
                 && len <= MAX_MESSAGE_LEN as usize
-                && !fits(self.unpaced, (LENGTH_LEN + len) as u64)
+                && !fits_kind(counted, ahead, (LENGTH_LEN + len) as u64)
             {
-                return self.flooded();
+                return self.flooded(ahead);
             }
             let at_most = match reader.missing() {
                 Some(0) => return,
@@ -1232,25 +1256,45 @@ impl Relay<'_> {
             message => match only_made_here(&message) {
                 Some(kind) => self.drop_message(kind),
                 None if matches!(message, GuestToHost::Frame(_)) => self.tell_host(message),
-                None if !fits(self.unpaced, size) => self.flooded(),
                 None => {
-                    self.unpaced += size + HELD_PER_MESSAGE;
+                    let ahead = matches!(message, GuestToHost::Bitmaps(_));
+                    if !self.fits(ahead, size) {
+                        return self.flooded(ahead);
+                    }
+                    let held = if ahead {
+                        &mut self.ahead
+                    } else {
+                        &mut self.unpaced
+                    };
+                    *held += size + HELD_PER_MESSAGE;
                     self.tell_host(message);
                 }
             },
         }
     }
 
-    /// Ends the running guest for sending more than the bound allows.
-    fn flooded(&mut self) {
+    /// Whether a message of `size` bytes, bitmap changes ahead of a frame if `ahead`, else
+    /// another that is not a frame, fits the bound of its kind.
+    fn fits(&self, ahead: bool, size: u64) -> bool {
+        fits_kind((self.unpaced, self.ahead), ahead, size)
+    }
+
+    /// Ends the running guest for sending more than the bound of messages that are not frames
+    /// allows, that of bitmap changes ahead of a frame if `ahead`.
+    fn flooded(&mut self, ahead: bool) {
         let pid = self
             .running
             .as_ref()
             .map_or(self.last, |running| running.pid);
+        let (bound, what) = if ahead {
+            (AHEAD_BOUND, "bitmap changes ahead of a frame")
+        } else {
+            (UNPACED_BOUND, "messages other than frames")
+        };
         tracing::error!(
-            "the guest process {pid} sent more than {} MiB of messages other than frames \
-             between two ticks; it is ended",
-            UNPACED_BOUND >> 20
+            "the guest process {pid} sent more than {} MiB of {what} between two ticks; it is \
+             ended",
+            bound >> 20
         );
         self.end_running();
     }
@@ -1325,7 +1369,7 @@ impl Relay<'_> {
                     HostToGuest::Quit => {
                         self.quit.get_or_insert_with(Instant::now);
                     }
-                    HostToGuest::Tick => self.unpaced = 0,
+                    HostToGuest::Tick => (self.unpaced, self.ahead) = (0, 0),
                     _ => {}
                 }
                 let Some(running) = &mut self.running else {
@@ -1372,7 +1416,7 @@ impl Relay<'_> {
         self.last = parked.pid;
         self.running = Some(parked);
         self.refilling = Some(slot);
-        self.unpaced = 0;
+        (self.unpaced, self.ahead) = (0, 0);
         match resumed {
             Ok(()) => self.tell_host(GuestToHost::StateLoaded { slot }),
             // Found out by the end of the connection.
@@ -1917,7 +1961,10 @@ mod tests {
             let held = count * (HELD_PER_MESSAGE + size);
             assert!(held <= UNPACED_BOUND, "titles of {length}: {count}");
             // Ended at the first title that did not fit, with its copy while decoded.
-            assert!(!fits(held, size), "titles of {length}: {count}");
+            assert!(
+                !fits(held, size, UNPACED_BOUND),
+                "titles of {length}: {count}"
+            );
             assert!(sent >= count, "{sent} {count}");
             assert!(
                 text.contains("more than 256 MiB of messages other than frames"),
@@ -1926,6 +1973,21 @@ mod tests {
         }
         #[cfg(target_os = "linux")]
         large_titles_from_another_process();
+    }
+
+    #[test]
+    fn the_largest_bitmap_ahead_of_a_frame_fits_its_bound_and_not_that_of_other_messages() {
+        // Its pixels in parts of at most `BITMAPS_AHEAD_LEN` bytes, as the binding sends them,
+        // with what the encoding adds, and the create that comes first.
+        let part = vkrgss_proto::framing::BITMAPS_AHEAD_LEN as u64 + 4096;
+        let pixels = vkrgss_proto::MAX_BITMAP_PIXELS * 4;
+        let parts = pixels.div_ceil(part - 4096) + 1;
+        let mut held = 0;
+        for _ in 0..parts {
+            assert!(fits(held, part, AHEAD_BOUND), "{held}");
+            held += part + HELD_PER_MESSAGE;
+        }
+        assert!(!fits(0, pixels, UNPACED_BOUND));
     }
 
     #[test]

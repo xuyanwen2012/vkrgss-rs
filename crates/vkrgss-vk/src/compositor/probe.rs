@@ -6,12 +6,10 @@
 use ash::prelude::VkResult;
 #[cfg(test)]
 use ash::vk;
-#[cfg(test)]
-use vkrgss_proto::BitmapDelta;
 
 use crate::VkError;
 #[cfg(test)]
-use crate::compositor::{Pending, VkCompositor};
+use crate::compositor::VkCompositor;
 
 /// The records and the injected failures of the compositor's own work.
 #[derive(Default)]
@@ -187,17 +185,6 @@ impl VkCompositor {
     /// The number of submissions so far.
     pub(crate) fn submissions(&self) -> u64 {
         self.submissions
-    }
-
-    /// Applies bitmap deltas in order and carries out their GPU work, without drawing.
-    pub(crate) fn apply_bitmaps(&mut self, deltas: &[BitmapDelta]) -> Result<(), VkError> {
-        let mut pending = Pending::default();
-        let checked = self.queue_deltas(deltas, &mut pending);
-        if let Err(error) = &checked {
-            self.note_loss(error);
-        }
-        self.execute(pending, None)?;
-        checked
     }
 
     /// The pixels of a live bitmap, read back from its image.

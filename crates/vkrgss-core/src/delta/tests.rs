@@ -820,3 +820,132 @@ fn a_snapshot_stands_alone_and_leaves_what_the_host_is_owed() {
     assert_eq!(alone.rgba, shown.rgba);
     assert_eq!(alone.size, shown.size);
 }
+
+/// Updates of whole bitmaps and of rectangles inside them, between creates and destroys.
+fn any_deltas() -> impl Strategy<Value = Vec<BitmapDelta>> {
+    let bitmap = (1u32..40, 1u32..12, any::<u8>());
+    proptest::collection::vec(bitmap, 1..5)
+        .prop_flat_map(|bitmaps| {
+            let rects: Vec<_> = bitmaps
+                .iter()
+                .map(|&(width, height, _)| (0..width, 0..height, 1..=width, 1..=height))
+                .collect();
+            (Just(bitmaps), rects)
+        })
+        .prop_map(|(bitmaps, rects)| {
+            let mut deltas = Vec::new();
+            for (slot, (&(width, height, seed), (x, y, w, h))) in
+                bitmaps.iter().zip(rects).enumerate()
+            {
+                let id = BitmapId::new(slot as u32, 0);
+                let (w, h) = (w.min(width - x), h.min(height - y));
+                deltas.push(BitmapDelta::Create { id, width, height });
+                for (rect, salt) in [
+                    (ProtoRect::new(0, 0, width, height), 0u8),
+                    (ProtoRect::new(x as i32, y as i32, w, h), 1),
+                ] {
+                    let rgba = (0..rect.width * rect.height * 4)
+                        .map(|index| (index as u8).wrapping_mul(seed | 1).wrapping_add(salt))
+                        .collect();
+                    deltas.push(BitmapDelta::Update { id, rect, rgba });
+                }
+            }
+            deltas.push(BitmapDelta::Destroy {
+                id: BitmapId::new(0, 0),
+            });
+            deltas
+        })
+}
+
+fn applied(deltas: &[BitmapDelta]) -> Vec<(BitmapId, Vec<u8>)> {
+    let mut store = BitmapStore::new();
+    for delta in deltas {
+        store.apply(delta).unwrap();
+    }
+    (0..8)
+        .filter_map(|slot| {
+            let id = BitmapId::new(slot, 0);
+            store
+                .get(id)
+                .ok()
+                .map(|bitmap| (id, bitmap.rgba().to_vec()))
+        })
+        .collect()
+}
+
+proptest! {
+    #[test]
+    fn split_deltas_change_a_store_as_the_whole_list_does(
+        deltas in any_deltas(),
+        limit in 68usize..600,
+    ) {
+        let mut parts = Vec::new();
+        split_deltas(deltas.clone(), limit, |part| parts.push(part));
+        for part in &parts {
+            prop_assert!(!part.is_empty());
+            prop_assert!(part.iter().map(cost).sum::<usize>() <= limit, "{part:?}");
+        }
+        let joined: Vec<BitmapDelta> = parts.concat();
+        prop_assert_eq!(applied(&joined), applied(&deltas));
+        // Deltas that fit stay whole and in their order.
+        let whole: Vec<&BitmapDelta> = deltas.iter().filter(|delta| cost(delta) <= limit).collect();
+        let kept: Vec<&BitmapDelta> = joined.iter().filter(|delta| deltas.contains(delta)).collect();
+        prop_assert_eq!(kept, whole);
+    }
+}
+
+#[test]
+fn a_list_within_the_limit_is_one_part() {
+    let id = BitmapId::new(0, 0);
+    let deltas = vec![
+        BitmapDelta::Create {
+            id,
+            width: 2,
+            height: 2,
+        },
+        BitmapDelta::Update {
+            id,
+            rect: ProtoRect::new(0, 0, 2, 2),
+            rgba: vec![7; 16],
+        },
+    ];
+    let mut parts = Vec::new();
+    split_deltas(deltas.clone(), 1 << 20, |part| parts.push(part));
+    assert_eq!(parts, [deltas]);
+    let mut parts = Vec::new();
+    split_deltas(Vec::new(), 1 << 20, |part| parts.push(part));
+    assert!(parts.is_empty());
+}
+
+#[test]
+fn a_row_wider_than_the_limit_is_cut_into_pieces() {
+    let id = BitmapId::new(0, 0);
+    let rgba: Vec<u8> = (0..10 * 2 * 4).map(|index| index as u8).collect();
+    let update = BitmapDelta::Update {
+        id,
+        rect: ProtoRect::new(0, 0, 10, 2),
+        rgba,
+    };
+    let mut parts = Vec::new();
+    // Room for 4 pixels: each row is cut into pieces of 4, 4 and 2.
+    split_deltas(vec![update], 64 + 16, |part| parts.push(part));
+    let rects: Vec<ProtoRect> = parts
+        .concat()
+        .into_iter()
+        .map(|delta| match delta {
+            BitmapDelta::Update { rect, .. } => rect,
+            other => panic!("{other:?}"),
+        })
+        .collect();
+    assert_eq!(
+        rects,
+        [
+            ProtoRect::new(0, 0, 4, 1),
+            ProtoRect::new(4, 0, 4, 1),
+            ProtoRect::new(8, 0, 2, 1),
+            ProtoRect::new(0, 1, 4, 1),
+            ProtoRect::new(4, 1, 4, 1),
+            ProtoRect::new(8, 1, 2, 1),
+        ]
+    );
+}

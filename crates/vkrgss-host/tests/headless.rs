@@ -1295,3 +1295,74 @@ fn a_freeze_of_the_buffer_rule_is_dumped_across_a_resize() {
         }
     }
 }
+
+/// Scenario "Order" of the bitmap changes ahead of a frame: a message ahead of the frame
+/// makes a bitmap of 4 by 4 red, and the frame's own changes make it green again; the dump
+/// shows green. The messages ahead of the frame get no tick: the guest receives one.
+#[test]
+fn the_changes_of_a_frame_follow_the_changes_ahead_of_it() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("frame-0.png");
+    let id = BitmapId::new(3, 0);
+    let fill = |color: [u8; 4]| BitmapDelta::Update {
+        id,
+        rect: Rect::new(0, 0, 4, 4),
+        rgba: color.repeat(16),
+    };
+    let GuestToHost::Frame(mut packet) = small_frame(0) else {
+        unreachable!("a small frame is a frame");
+    };
+    packet.bitmaps = vec![fill([0, 255, 0, 255])];
+    packet.ops = vec![Op::Quad(Quad {
+        clip: Rect::from_size(packet.logical_size),
+        bitmap: id,
+        src: Rect::new(0, 0, 4, 4),
+        sampling: Sampling::place_at(0, 0),
+        tone: Tone::NEUTRAL,
+        color: Color::new(0, 0, 0, 0),
+        opacity: 255,
+        blend: BlendMode::Normal,
+    })];
+    let ahead = [
+        GuestToHost::Bitmaps(vec![BitmapDelta::Create {
+            id,
+            width: 4,
+            height: 4,
+        }]),
+        GuestToHost::Bitmaps(vec![fill([255, 0, 0, 255])]),
+    ];
+    let guest = move |link: GuestEnd| {
+        for message in ahead {
+            link.send(message).unwrap();
+        }
+        link.send(GuestToHost::Frame(packet)).unwrap();
+        let mut ticks = 0;
+        loop {
+            match link.recv() {
+                Ok(HostToGuest::Tick) => {
+                    ticks += 1;
+                    link.send(GuestToHost::Shutdown).unwrap();
+                }
+                Ok(_) => {}
+                Err(_) => break,
+            }
+        }
+        ticks
+    };
+    let errors = ErrorBuffer::new();
+    let (result, ticks) = run_with(
+        HeadlessOptions {
+            dumps: vec![(0, path.clone())],
+            errors: Box::new(errors.clone()),
+            ..options()
+        },
+        guest,
+    );
+    assert_eq!(result.unwrap().frames, 1);
+    assert_eq!(errors.text(), "");
+    assert_eq!(ticks, 1);
+    let (_, rgba) = read_png(&path);
+    let pixels = rgba.as_chunks::<4>().0;
+    assert_eq!(pixels[0], [0, 255, 0, 255]);
+    assert_eq!(pixels[3 * 16 + 3], [0, 255, 0, 255]);
+}

@@ -12,13 +12,29 @@ use crate::{FrameTiming, Limit, VkError};
 
 impl VkCompositor {
     /// Handles one message. A `Frame` message is rendered and yields `true`; every other
-    /// message yields `false`. Freeze, transition, audio, modal and title messages are outside
-    /// what this compositor models and have no effect on later frames.
+    /// message yields `false`. The bitmap changes of a `Bitmaps` message are applied as those
+    /// of a frame are, which is the same as applying them with the next frame before its own.
+    /// Freeze, transition, audio, modal and title messages are outside what this compositor
+    /// models and have no effect on later frames.
     pub fn handle(&mut self, message: &GuestToHost) -> Result<bool, VkError> {
         match message {
             GuestToHost::Frame(packet) => self.render(packet).map(|()| true),
+            GuestToHost::Bitmaps(deltas) => self
+                .unless_lost(|compositor| compositor.apply_bitmaps(deltas))
+                .map(|()| false),
             _ => Ok(false),
         }
+    }
+
+    /// Applies bitmap deltas in order and carries out their GPU work, without drawing.
+    pub(crate) fn apply_bitmaps(&mut self, deltas: &[BitmapDelta]) -> Result<(), VkError> {
+        let mut pending = Pending::default();
+        let checked = self.queue_deltas(deltas, &mut pending);
+        if let Err(error) = &checked {
+            self.note_loss(error);
+        }
+        self.execute(pending, None)?;
+        checked
     }
 
     /// Applies the packet's bitmap deltas and then its table deltas, then draws its ops into

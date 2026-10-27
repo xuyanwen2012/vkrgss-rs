@@ -22,9 +22,12 @@ use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use vkrgss_core::{BitmapError, InputState, Rules, Scene};
+use vkrgss_core::{BitmapError, InputState, Rules, Scene, split_deltas};
+use vkrgss_proto::framing::BITMAPS_AHEAD_LEN;
 use vkrgss_proto::link::GuestEnd;
-use vkrgss_proto::{AudioChannel, AudioCommand, FramePacket, GuestToHost, HostToGuest, Size};
+use vkrgss_proto::{
+    AudioChannel, AudioCommand, BitmapDelta, FramePacket, GuestToHost, HostToGuest, Size,
+};
 use vkrgss_ruby_sys::ffi::{self, VALUE};
 use vkrgss_ruby_sys::{Raise, Raised, Ruby, RubyError};
 use vkrgss_vfs::{GameIni, LibraryVersion, Runtime};
@@ -281,6 +284,28 @@ impl Guest {
         }
     }
 
+    /// Sends a frame packet to the host. When the pixels of its bitmap changes pass
+    /// [`BITMAPS_AHEAD_LEN`], the changes go ahead of it in `Bitmaps` messages that carry at
+    /// most that many bytes each, so that every message stays under the bound of the framing
+    /// and every bitmap the arena accepts reaches the host.
+    pub(crate) fn send_frame(&mut self, mut packet: FramePacket) {
+        let pixels: usize = packet
+            .bitmaps
+            .iter()
+            .map(|delta| match delta {
+                BitmapDelta::Update { rgba, .. } => rgba.len(),
+                BitmapDelta::Create { .. } | BitmapDelta::Destroy { .. } => 0,
+            })
+            .sum();
+        if pixels > BITMAPS_AHEAD_LEN {
+            let deltas = std::mem::take(&mut packet.bitmaps);
+            split_deltas(deltas, BITMAPS_AHEAD_LEN, |part| {
+                self.send(GuestToHost::Bitmaps(part));
+            });
+        }
+        self.send(GuestToHost::Frame(packet));
+    }
+
     /// Sends a message to the host. When the host has gone the message is dropped and the
     /// guest is left to quit.
     pub(crate) fn send(&mut self, message: GuestToHost) {
@@ -420,7 +445,7 @@ impl Guest {
         let packet = self.extract();
         self.scene.set_frame_count(frame_count);
         if let Some(packet) = packet {
-            self.send(GuestToHost::Frame(packet));
+            self.send_frame(packet);
         }
     }
 
@@ -445,7 +470,7 @@ impl Guest {
             if let Some(panel) = &panel {
                 panel.bring_to_front(&mut packet.ops);
             }
-            self.send(GuestToHost::Frame(packet));
+            self.send_frame(packet);
             drop(extraction);
             self.pump(Await::Tick);
             let frame_rate = self.scene.frame_rate().get();
