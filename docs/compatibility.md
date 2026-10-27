@@ -698,8 +698,11 @@ Known differences:
   which goes on, and two to vkrgss, which starts again.
 - For a file that is not WAV or Ogg Vorbis the pitch is at most 65535, a limit of vkrgss: the
   original asks for `pitch / 100` of the playback rate and what follows was not measured. A
-  MIDI file at a pitch that the synthesiser cannot render (below 25 or above 300 at an
-  output of 48000 Hz) is reported and stays silent.
+  MIDI file at a pitch whose rate the synthesiser cannot run at (below 25 or above 300 at an
+  output of 48000 Hz) is synthesised at the nearest rate it can run at, 16000 or 192000 Hz,
+  and resampled, so that the pitch changes its speed and its pitch together, as for sampled
+  data; the original plays MIDI through DirectMusic, and what it does at such a pitch was
+  not measured.
 - The lookup of the original asks for `name.*` before the name as given, which also finds a
   file such as `Theme.v1.ogg` for `Theme`; vkrgss does not. A name with a NUL byte or in
   UTF-16LE is not cut as the original cuts it.
@@ -869,3 +872,6 @@ Save states are described under [Save states](running.md#save-states). Their lim
 - States need the guest in a process, and no state is saved with
   `--allow-process-functions`, nor in a game of VX Ace while a script thread is alive.
 - The keys only show a notice while input is recorded or replayed.
+- MIDI music that had gone round its loop goes on at the same place in the loop, after the
+  synthesiser has rendered at most the track and the loop once more. What still sounded of
+  the passes before, their reverberation, is that of the first pass through the loop.

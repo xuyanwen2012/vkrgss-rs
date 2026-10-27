@@ -47,6 +47,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- A fade of no time, `Audio.bgm_fade(0)` for one, stops its channel at once, and a fade that
+  follows it no longer makes the mixer give the audio device samples that are not a number.
+- The callback of the audio device no longer waits for the error stream when a sound that
+  plays meets damaged data, and no longer frees the decoded sounds it ends; the audio
+  thread reports and frees them.
+- MIDI music plays at every pitch: below 25 and above 300 at an output of 48000 Hz it was
+  reported as not in a supported format and stayed silent.
+- Loading a state saved after looping MIDI music had played for a long time no longer
+  synthesises all that time again before the next sound plays; the music goes on at the same
+  place in its loop.
+- A panic of the audio thread while it opens a sound is reported once and leaves that sound
+  silent, where before it ended the thread and every later sound was dropped without a
+  word.
 - Closing the window of a game whose scripts do not end, a script in `loop { }` for one,
   closes it five seconds later and ends the program with a failure that says the scripts
   did not end, instead of leaving the window open for ever. The same holds after the frame

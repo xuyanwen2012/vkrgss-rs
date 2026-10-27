@@ -20,7 +20,7 @@
 
 ## 5. Documents
 
-- [ ] 5.1 `docs/compatibility.md` (MIDI pitch, recall of looping MIDI), `CHANGELOG.md`. Verify: the tests that check the documents pass.
+- [x] 5.1 `docs/compatibility.md` (MIDI pitch, recall of looping MIDI), `CHANGELOG.md`. Verify: the tests that check the documents pass.
 
 ## 6. Checks
 
