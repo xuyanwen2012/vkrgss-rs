@@ -2998,6 +2998,85 @@ fn the_physical_tab_fast_forwards_although_the_injected_one_is_down() {
     );
 }
 
+/// A session with states whose key map puts A on F3, one of the program's shortcuts.
+fn f3_holds_a() -> Rig {
+    let mut keys = KeyMap::default();
+    keys.bind(KeyCode::F3, Button::A);
+    Rig::with_options(SessionOptions {
+        keys,
+        states: true,
+        ..SessionOptions::default()
+    })
+}
+
+impl Rig {
+    /// The snapshot the guest holds now.
+    fn current(&mut self) -> InputSnapshot {
+        self.send_whole(inject(0x41, true));
+        match self.send_whole(inject(0x41, false)).last() {
+            Some(HostToGuest::Input(snapshot)) => *snapshot,
+            other => panic!("{other:?}"),
+        }
+    }
+}
+
+/// An injected key holds the buttons of its key map again once a physical press of it that
+/// was a shortcut of the program is over: on its release, in either order of the two, and on
+/// the loss of focus. The physical press itself holds none.
+#[test]
+fn an_injected_key_holds_its_buttons_again_after_the_physical_shortcut_beside_it() {
+    let held_a = |snapshot: InputSnapshot| {
+        assert!(snapshot.is_key_down(0x72), "{snapshot:?}");
+        snapshot.is_down(Button::A)
+    };
+
+    // Injected first.
+    let mut rig = f3_holds_a();
+    rig.send_whole(inject(0x72, true));
+    assert!(held_a(rig.current()));
+    rig.session.key(KeyCode::F3, true);
+    assert!(
+        rig.session
+            .take_messages()
+            .contains(&HostToGuest::SaveState { slot: 0 })
+    );
+    assert!(
+        !held_a(rig.current()),
+        "the shortcut's press holds no button"
+    );
+    rig.session.key(KeyCode::F3, false);
+    assert!(held_a(rig.current()));
+    assert_eq!(rig.send_whole(inject(0x72, false)), [holding(&[], &[])]);
+
+    // Physical first.
+    let mut rig = f3_holds_a();
+    rig.session.key(KeyCode::F3, true);
+    assert!(
+        rig.session
+            .take_messages()
+            .contains(&HostToGuest::SaveState { slot: 0 })
+    );
+    rig.send_whole(inject(0x72, true));
+    assert!(!held_a(rig.current()));
+    rig.session.key(KeyCode::F3, false);
+    assert!(held_a(rig.current()));
+    let HostToGuest::Input(released) = rig.send_whole(inject(0x72, false))[0] else {
+        panic!("a snapshot")
+    };
+    assert_eq!(
+        (released.buttons, released.keys),
+        (0, InputSnapshot::EMPTY.keys)
+    );
+
+    // The loss of focus ends the physical press too.
+    let mut rig = f3_holds_a();
+    rig.send_whole(inject(0x72, true));
+    rig.session.key(KeyCode::F3, true);
+    rig.session.take_messages();
+    rig.session.focus_lost();
+    assert!(held_a(rig.current()));
+}
+
 #[test]
 fn only_the_physical_tab_fast_forwards_and_losing_focus_releases_it() {
     let mut rig = Rig::new();

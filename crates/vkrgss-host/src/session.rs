@@ -802,9 +802,12 @@ impl<D: Display, C: Clock> Session<D, C> {
         action
     }
 
-    /// `key` went up, as `press` says: the physical key, the key as a whole, or both.
+    /// `key` went up, as `press` says: the physical key, the key as a whole, or both. A key
+    /// that a shortcut of the program swallowed holds its buttons again once its physical
+    /// press is over, for the injected key that may still be down; one that the original
+    /// runtime's keys swallowed, once the key as a whole is up.
     fn key_released(&mut self, key: KeyCode, press: Press) {
-        if press.whole {
+        if press.whole || (press.physical && program_shortcut(key)) {
             self.swallowed_keys.remove(&key);
         }
         if press.physical && key == FAST_FORWARD_KEY && self.fast_forward_key {
@@ -923,13 +926,15 @@ impl<D: Display, C: Clock> Session<D, C> {
     pub fn focus_lost(&mut self) {
         self.held_keys.clear();
         self.held_mouse.clear();
-        // The keys the guest holds down by injection stay down.
+        // The keys the guest holds down by injection stay down, and swallowed if the original
+        // runtime's keys swallowed them; the presses of the program's shortcuts are over.
         let injected: HashSet<KeyCode> = self
             .injected
             .iter()
             .filter_map(|code| physical_key(*code))
             .collect();
-        self.swallowed_keys.retain(|key| injected.contains(key));
+        self.swallowed_keys
+            .retain(|key| injected.contains(key) && !program_shortcut(*key));
         // Only the physical key fast-forwards.
         if self.fast_forward_key {
             self.fast_forward_key = false;
@@ -1332,6 +1337,12 @@ impl<D: Display, C: Clock> Drop for Session<D, C> {
             self.report_frame_stats();
         }
     }
+}
+
+/// Whether `key` is one of the program's own shortcuts, which only its physical press causes:
+/// the keys of the states and F11. Tab is one too, and swallows nothing.
+fn program_shortcut(key: KeyCode) -> bool {
+    matches!(key, FULLSCREEN_KEY | SAVE_STATE_KEY | LOAD_STATE_KEY)
 }
 
 /// The mix of step `step` of a transition of `duration` frames, `step` below `duration`: the
