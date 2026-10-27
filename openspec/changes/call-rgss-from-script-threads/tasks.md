@@ -7,8 +7,8 @@
 
 ## 2. Guest state of the process
 
-- [ ] 2.1 Make the guest state, class handles and queues of collected objects one state of the process behind a cell that needs the interpreter's token; free functions queue where any thread's next access drains. Verify: `rgss_classes_work_from_a_script_thread`, `collection_on_a_script_thread_frees_bitmaps_and_elements`, and the existing tests of `vkrgss-binding` and `vkrgss-binding-rgss3` pass with `--test-threads=1` and with the default threads.
-- [ ] 2.2 Correct the safety comments at `Ruby::new()` in `host.rs` of both interpreter crates. Verify: the comment says the caller holds the interpreter; `cargo clippy` with the workspace lints passes.
+- [x] 2.1 Make the guest state, class handles and queues of collected objects one state of the process behind a cell that needs the interpreter's token; free functions queue where any thread's next access drains. Verify: `rgss_classes_work_from_a_script_thread`, `collection_on_a_script_thread_frees_bitmaps_and_elements`, and the existing tests of `vkrgss-binding` and `vkrgss-binding-rgss3` pass with `--test-threads=1` and with the default threads.
+- [x] 2.2 Correct the safety comments at `Ruby::new()` in `host.rs` of both interpreter crates. Verify: the comment says the caller holds the interpreter; `cargo clippy` with the workspace lints passes.
 
 ## 3. Tilemap names of RGSS1
 

@@ -60,8 +60,8 @@ const KINDS: [ElementKind; 5] = [
 ];
 
 /// The scene as the reference compositor draws it now.
-fn frame() -> Frame {
-    scene_testing::with_scene(|scene, bitmaps| {
+fn frame(ruby: &Ruby) -> Frame {
+    scene_testing::with_scene(ruby, |scene, bitmaps| {
         let mut scene = scene.clone();
         let mut bitmaps = bitmaps.clone();
         // The compositor below starts without tables, as it starts without bitmaps.
@@ -144,11 +144,11 @@ fn index(value: VALUE) -> Option<u32> {
 }
 
 /// The pixel as `0xRRGGBBAA`, or `nil` outside the screen.
-fn pixel(_ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
+fn pixel(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     let (Some(x), Some(y)) = (index(args[0]), index(args[1])) else {
         return Ok(ffi::Qnil);
     };
-    let frame = frame();
+    let frame = frame(ruby);
     if x >= frame.size.width || y >= frame.size.height {
         return Ok(ffi::Qnil);
     }
@@ -157,11 +157,11 @@ fn pixel(_ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
 }
 
 /// The number of elements of the kind at this position of [`KINDS`], or `nil`.
-fn scene_count(_ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
+fn scene_count(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     let Some(&kind) = index(args[0]).and_then(|at| KINDS.get(at as usize)) else {
         return Ok(ffi::Qnil);
     };
-    let count = scene_testing::scene_count(kind);
+    let count = scene_testing::scene_count(ruby, kind);
     Ok(ffi::long2fix(count.try_into().unwrap_or(i64::MAX >> 2)))
 }
 

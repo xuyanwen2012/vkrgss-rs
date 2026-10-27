@@ -9,8 +9,11 @@
 //!
 //! The clock is read for this report only: nothing a script can observe depends on it.
 //! Without the request there is no state here and no clock is read.
+//!
+//! The state is one of the process, as the guest is: a measured call on a script thread of
+//! Ruby 1.9.2 counts as one on the main script's thread.
 
-use std::cell::RefCell;
+use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 /// The summary is written after every so many frames.
@@ -115,6 +118,49 @@ struct Measuring {
 }
 
 impl Measuring {
+    /// See [`frame_ends`].
+    fn frame_ends(&mut self) {
+        // A measured call that is still running, because it called into a script that
+        // updates the frame, gives this frame its time up to here.
+        if let Some((part, began)) = self.span {
+            self.parts[part as usize] += began.elapsed();
+        }
+        let parts = std::mem::take(&mut self.parts);
+        if let Some(began) = self.frame.take() {
+            self.rows.add_frame(began.elapsed(), parts);
+            if self.rows.frames() >= INTERVAL {
+                self.report();
+            }
+        }
+    }
+
+    /// See [`frame_begins`].
+    fn frame_begins(&mut self) {
+        let now = Instant::now();
+        self.frame = Some(now);
+        if let Some((_, began)) = &mut self.span {
+            *began = now;
+        }
+    }
+
+    /// A measured call of `part` begins; see [`Span`].
+    fn enter(&mut self, part: Part) {
+        self.depth += 1;
+        if self.depth == 1 {
+            self.span = Some((part, Instant::now()));
+        }
+    }
+
+    /// A measured call ends.
+    fn leave(&mut self) {
+        self.depth = self.depth.saturating_sub(1);
+        if self.depth == 0
+            && let Some((part, began)) = self.span.take()
+        {
+            self.parts[part as usize] += began.elapsed();
+        }
+    }
+
     /// Writes the summary to the error stream and starts the rows anew.
     fn report(&mut self) {
         self.reported = true;
@@ -128,55 +174,35 @@ impl Measuring {
     }
 }
 
-thread_local! {
-    /// The measuring of the guest of this thread, if it was asked for.
-    static MEASURING: RefCell<Option<Measuring>> = const { RefCell::new(None) };
-}
+/// The measuring of the guest, if it was asked for.
+static MEASURING: Mutex<Option<Measuring>> = Mutex::new(None);
 
-/// Runs `access` on the measuring of this thread, if there is one.
+/// Runs `access` on the measuring, if there is one.
 fn measuring(access: impl FnOnce(&mut Measuring)) {
-    // After the thread's locals are gone nothing is measured.
-    let _ = MEASURING.try_with(|cell| {
-        if let Some(measuring) = cell.borrow_mut().as_mut() {
-            access(measuring);
-        }
-    });
+    if let Some(measuring) = MEASURING
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .as_mut()
+    {
+        access(measuring);
+    }
 }
 
 /// Starts the statistics of a guest that begins to play, or turns them off.
 pub(crate) fn start(requested: bool) {
-    MEASURING.with(|cell| *cell.borrow_mut() = requested.then(Measuring::default));
+    *MEASURING.lock().unwrap_or_else(PoisonError::into_inner) = requested.then(Measuring::default);
 }
 
 /// The guest is about to wait for a tick: the frame that began when the last wait returned
 /// is over. What came before the first wait is not a frame and is not counted.
 pub(crate) fn frame_ends() {
-    measuring(|measuring| {
-        // A measured call that is still running, because it called into a script that
-        // updates the frame, gives this frame its time up to here.
-        if let Some((part, began)) = measuring.span {
-            measuring.parts[part as usize] += began.elapsed();
-        }
-        let parts = std::mem::take(&mut measuring.parts);
-        if let Some(began) = measuring.frame.take() {
-            measuring.rows.add_frame(began.elapsed(), parts);
-            if measuring.rows.frames() >= INTERVAL {
-                measuring.report();
-            }
-        }
-    });
+    measuring(Measuring::frame_ends);
 }
 
 /// The tick wait has returned: a frame begins. A measured call that is still running goes on
 /// from here, so the wait belongs to no part.
 pub(crate) fn frame_begins() {
-    measuring(|measuring| {
-        let now = Instant::now();
-        measuring.frame = Some(now);
-        if let Some((_, began)) = &mut measuring.span {
-            *began = now;
-        }
-    });
+    measuring(Measuring::frame_begins);
 }
 
 /// The guest has ended: the summary of a run that had none yet, or of the frames since the
@@ -198,26 +224,14 @@ pub(crate) struct Span;
 
 impl Span {
     pub(crate) fn enter(part: Part) -> Span {
-        measuring(|measuring| {
-            measuring.depth += 1;
-            if measuring.depth == 1 {
-                measuring.span = Some((part, Instant::now()));
-            }
-        });
+        measuring(|measuring| measuring.enter(part));
         Span
     }
 }
 
 impl Drop for Span {
     fn drop(&mut self) {
-        measuring(|measuring| {
-            measuring.depth = measuring.depth.saturating_sub(1);
-            if measuring.depth == 0
-                && let Some((part, began)) = measuring.span.take()
-            {
-                measuring.parts[part as usize] += began.elapsed();
-            }
-        });
+        measuring(Measuring::leave);
     }
 }
 
@@ -247,25 +261,23 @@ mod tests {
         assert_eq!(Rows::default().lines()[1], "  guest scripts: 0 frame(s)");
     }
 
+    // The measuring is one of the process, which other tests reach through the bitmap
+    // methods; these tests use a value of their own.
+
     #[test]
     fn nested_calls_are_counted_once_for_the_outer_part() {
-        start(true);
-        frame_begins();
-        {
-            let _outer = Span::enter(Part::Bitmap);
-            let _inner = Span::enter(Part::Text);
-            std::thread::sleep(MS);
-        }
-        MEASURING.with(|cell| {
-            let cell = cell.borrow();
-            let measuring = cell.as_ref().unwrap();
-            assert!(measuring.parts[Part::Bitmap as usize] >= MS);
-            assert_eq!(measuring.parts[Part::Text as usize], Duration::ZERO);
-            assert_eq!(measuring.depth, 0);
-        });
-        frame_ends();
-        MEASURING.with(|cell| assert_eq!(cell.borrow().as_ref().unwrap().rows.frames(), 1));
-        start(false);
+        let mut measuring = Measuring::default();
+        measuring.frame_begins();
+        measuring.enter(Part::Bitmap);
+        measuring.enter(Part::Text);
+        std::thread::sleep(MS);
+        measuring.leave();
+        measuring.leave();
+        assert!(measuring.parts[Part::Bitmap as usize] >= MS);
+        assert_eq!(measuring.parts[Part::Text as usize], Duration::ZERO);
+        assert_eq!(measuring.depth, 0);
+        measuring.frame_ends();
+        assert_eq!(measuring.rows.frames(), 1);
     }
 
     /// A measured call can run a script, through the conversion of an argument, that updates
@@ -274,36 +286,32 @@ mod tests {
     #[test]
     fn call_across_a_tick_wait_is_split_at_the_frames_and_leaves_the_wait_out() {
         const WAIT: Duration = Duration::from_millis(60);
-        start(true);
+        let mut measuring = Measuring::default();
         // Before the first frame: not counted.
-        let outer = Span::enter(Part::Bitmap);
+        measuring.enter(Part::Bitmap);
         std::thread::sleep(2 * MS);
-        frame_ends();
-        frame_begins();
+        measuring.frame_ends();
+        measuring.frame_begins();
         for _ in 0..2 {
             std::thread::sleep(2 * MS);
-            drop(Span::enter(Part::Text));
-            frame_ends();
+            measuring.enter(Part::Text);
+            measuring.leave();
+            measuring.frame_ends();
             std::thread::sleep(WAIT);
-            frame_begins();
+            measuring.frame_begins();
         }
         std::thread::sleep(2 * MS);
-        drop(outer);
-        frame_ends();
-        MEASURING.with(|cell| {
-            let cell = cell.borrow();
-            let measuring = cell.as_ref().unwrap();
-            let [scripts, bitmap, text, _] = measuring.rows.0;
-            assert_eq!(measuring.rows.frames(), 3);
-            assert!(bitmap.smallest >= 2_000_000, "{bitmap:?}");
-            assert!(Duration::from_nanos(bitmap.largest) < WAIT, "{bitmap:?}");
-            // The whole of each frame lay inside the call.
-            assert!(Duration::from_nanos(scripts.largest) < MS, "{scripts:?}");
-            assert_eq!(text.total, 0);
-            assert_eq!(measuring.depth, 0);
-            assert!(measuring.span.is_none());
-        });
-        start(false);
+        measuring.leave();
+        measuring.frame_ends();
+        let [scripts, bitmap, text, _] = measuring.rows.0;
+        assert_eq!(measuring.rows.frames(), 3);
+        assert!(bitmap.smallest >= 2_000_000, "{bitmap:?}");
+        assert!(Duration::from_nanos(bitmap.largest) < WAIT, "{bitmap:?}");
+        // The whole of each frame lay inside the call.
+        assert!(Duration::from_nanos(scripts.largest) < MS, "{scripts:?}");
+        assert_eq!(text.total, 0);
+        assert_eq!(measuring.depth, 0);
+        assert!(measuring.span.is_none());
     }
 
     #[test]
@@ -312,6 +320,11 @@ mod tests {
         frame_begins();
         drop(Span::enter(Part::Bitmap));
         frame_ends();
-        MEASURING.with(|cell| assert!(cell.borrow().is_none()));
+        assert!(
+            MEASURING
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .is_none()
+        );
     }
 }

@@ -14,19 +14,19 @@ use vkrgss_ruby_sys::ffi::{self, ID, VALUE};
 use vkrgss_ruby_sys::{HostResult, Raised, Ruby};
 use vkrgss_vfs::Runtime;
 
-use crate::guest::Guest;
+use crate::guest::{Guest, InterpreterCell};
 use crate::rb;
 use crate::runtime::Await;
 
-thread_local! {
-    /// The IDs of the names of the buttons in the order of [`Button::ALL`], taken when a
-    /// module of RGSS3 is defined.
-    static NAMES: Cell<Option<[ID; Button::ALL.len()]>> = const { Cell::new(None) };
-}
+/// The IDs of the names of the buttons in the order of [`Button::ALL`], taken when a module
+/// of RGSS3 is defined.
+// SAFETY: the IDs are plain values.
+static NAMES: InterpreterCell<Cell<Option<[ID; Button::ALL.len()]>>> =
+    unsafe { InterpreterCell::new(Cell::new(None)) };
 
 /// Takes the snapshots that have arrived, without waiting, and advances the state.
-fn update(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
-    Guest::with(|guest| {
+fn update(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
+    Guest::with(ruby, |guest| {
         guest.pump(Await::Nothing);
         guest.input.update();
         guest.win32api.input_updated(&guest.input);
@@ -53,10 +53,10 @@ fn button_arg(ruby: &Ruby, value: VALUE) -> Result<Option<Button>, vkrgss_ruby_s
 /// Provenance: oracle measurement 2026-10-13, RGSS301 versions 3.0.0.1 and 3.0.1.1,
 /// `ace-v1-sprite-REPORT.md` section 6. An object that defines `to_int` or `to_sym` was not
 /// measured; it gives `None` here.
-fn button_arg_rgss3(value: VALUE) -> Option<Button> {
+fn button_arg_rgss3(ruby: &Ruby, value: VALUE) -> Option<Button> {
     if ffi::symbol_p(value) {
         let id = ffi::sym2id(value);
-        let names = NAMES.get()?;
+        let names = NAMES.get(ruby).get()?;
         Button::ALL
             .into_iter()
             .zip(names)
@@ -69,43 +69,71 @@ fn button_arg_rgss3(value: VALUE) -> Option<Button> {
 }
 
 /// `true` when `button` is one and `query` holds for it.
-fn answer(button: Option<Button>, query: fn(&InputState, Button) -> bool) -> VALUE {
-    rb::boolean(button.is_some_and(|button| Guest::with(|guest| query(&guest.input, button))))
+fn answer(ruby: &Ruby, button: Option<Button>, query: fn(&InputState, Button) -> bool) -> VALUE {
+    rb::boolean(button.is_some_and(|button| Guest::with(ruby, |guest| query(&guest.input, button))))
 }
 
 fn press(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
-    Ok(answer(button_arg(ruby, args[0])?, InputState::is_pressed))
+    Ok(answer(
+        ruby,
+        button_arg(ruby, args[0])?,
+        InputState::is_pressed,
+    ))
 }
 
 fn trigger(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
-    Ok(answer(button_arg(ruby, args[0])?, InputState::is_triggered))
+    Ok(answer(
+        ruby,
+        button_arg(ruby, args[0])?,
+        InputState::is_triggered,
+    ))
 }
 
 fn repeat(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
-    Ok(answer(button_arg(ruby, args[0])?, InputState::is_repeated))
+    Ok(answer(
+        ruby,
+        button_arg(ruby, args[0])?,
+        InputState::is_repeated,
+    ))
 }
 
 /// `press?` of RGSS3.
-fn press_rgss3(_ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
-    Ok(answer(button_arg_rgss3(args[0]), InputState::is_pressed))
+fn press_rgss3(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
+    Ok(answer(
+        ruby,
+        button_arg_rgss3(ruby, args[0]),
+        InputState::is_pressed,
+    ))
 }
 
 /// `trigger?` of RGSS3.
-fn trigger_rgss3(_ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
-    Ok(answer(button_arg_rgss3(args[0]), InputState::is_triggered))
+fn trigger_rgss3(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
+    Ok(answer(
+        ruby,
+        button_arg_rgss3(ruby, args[0]),
+        InputState::is_triggered,
+    ))
 }
 
 /// `repeat?` of RGSS3.
-fn repeat_rgss3(_ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
-    Ok(answer(button_arg_rgss3(args[0]), InputState::is_repeated))
+fn repeat_rgss3(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
+    Ok(answer(
+        ruby,
+        button_arg_rgss3(ruby, args[0]),
+        InputState::is_repeated,
+    ))
 }
 
-fn dir4(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
-    Ok(rb::fix(i32::from(Guest::with(|guest| guest.input.dir4()))))
+fn dir4(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
+    Ok(rb::fix(i32::from(Guest::with(ruby, |guest| {
+        guest.input.dir4()
+    }))))
 }
 
-fn dir8(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
-    Ok(rb::fix(i32::from(Guest::with(|guest| guest.input.dir8()))))
+fn dir8(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
+    Ok(rb::fix(i32::from(Guest::with(ruby, |guest| {
+        guest.input.dir8()
+    }))))
 }
 
 /// Defines `Input` of `runtime` and its twenty button constants, whose names are those of
@@ -142,7 +170,9 @@ pub(crate) fn define(ruby: &Ruby, runtime: Runtime) -> Result<(), Raised> {
         let symbols = ruby.eval(&format!("[:{}]", names.join(", :")), "Input", 1)?;
         let symbols = rb::array_elements(ruby, symbols).expect("an Array of the names");
         let ids: Vec<ID> = symbols.into_iter().map(ffi::sym2id).collect();
-        NAMES.set(Some(ids.try_into().expect("one ID for each button")));
+        NAMES
+            .get(ruby)
+            .set(Some(ids.try_into().expect("one ID for each button")));
     }
     Ok(())
 }

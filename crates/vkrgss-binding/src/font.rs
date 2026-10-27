@@ -150,17 +150,18 @@ fn assign_color(ruby: &Ruby, object: VALUE, name: &CStr, value: VALUE) -> Result
 /// The current defaults: the guest's, with the colour of the `Font.default_color` object
 /// and, in RGSS3, that of the `Font.default_out_color` object.
 fn defaults(ruby: &Ruby) -> Result<(FontDefaults, bool), Raise> {
-    let class = guest::classes().font;
+    let class = guest::classes(ruby).font;
     let color = color_at(ruby, class, DEFAULT_COLOR)?;
     // Asked in RGSS3 only: the name of the variable is interned at its first use, which
     // would move the sequence of symbols of the other runtimes.
-    let out_color = if is_rgss3() {
+    let out_color = if is_rgss3(ruby) {
         color_at(ruby, class, DEFAULT_OUT_COLOR)?
     } else {
         None
     };
-    let (mut defaults, listed) =
-        Guest::with(|guest| (guest.font_defaults.clone(), guest.font_names_listed));
+    let (mut defaults, listed) = Guest::with(ruby, |guest| {
+        (guest.font_defaults.clone(), guest.font_names_listed)
+    });
     if let Some(color) = color {
         defaults.color = color;
     }
@@ -178,7 +179,7 @@ pub(crate) fn font_arg(ruby: &Ruby, value: VALUE) -> Result<Font, Raise> {
         font.color = color;
     }
     // In RGSS3 only, as in `defaults`.
-    if is_rgss3()
+    if is_rgss3(ruby)
         && let Some(out_color) = color_at(ruby, value, OUT_COLOR)?
     {
         font.out_color = out_color;
@@ -187,8 +188,8 @@ pub(crate) fn font_arg(ruby: &Ruby, value: VALUE) -> Result<Font, Raise> {
 }
 
 /// Whether the game is one of RGSS3.
-fn is_rgss3() -> bool {
-    Guest::with(|guest| guest.runtime.run.runtime == Runtime::Rgss3)
+fn is_rgss3(ruby: &Ruby) -> bool {
+    Guest::with(ruby, |guest| guest.runtime.run.runtime == Runtime::Rgss3)
 }
 
 /// The font defaults a game of `runtime` starts with. RGSS1 takes its family names from
@@ -224,7 +225,7 @@ pub(crate) fn font_new_default(ruby: &Ruby) -> HostResult {
     let (color, out_color) = (font.color, font.out_color);
     let object = wrap::new_object(ruby, FontData { font, names_listed })?;
     give_color(ruby, object, COLOR, color)?;
-    if is_rgss3() {
+    if is_rgss3(ruby) {
         give_color(ruby, object, OUT_COLOR, out_color)?;
         keep_default_objects(ruby, object)?;
     }
@@ -238,7 +239,7 @@ pub(crate) fn font_copy(ruby: &Ruby, original: VALUE) -> HostResult {
     let font = font_arg(ruby, original)?;
     let object = wrap::new_object(ruby, data)?;
     give_color(ruby, object, COLOR, font.color)?;
-    if is_rgss3() {
+    if is_rgss3(ruby) {
         give_color(ruby, object, OUT_COLOR, font.out_color)?;
         keep_objects_of(ruby, object, original)?;
     }
@@ -349,74 +350,85 @@ fn set_color(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
 }
 
 fn default_name(ruby: &Ruby, _class: VALUE, _args: &[VALUE]) -> HostResult {
-    let (names, listed) =
-        Guest::with(|guest| (guest.font_defaults.names.clone(), guest.font_names_listed));
+    let (names, listed) = Guest::with(ruby, |guest| {
+        (guest.font_defaults.names.clone(), guest.font_names_listed)
+    });
     names_value(ruby, &names, listed)
 }
 
 fn set_default_name(ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
     let (names, listed) = names_arg(ruby, args[0])?;
-    Guest::with(|guest| {
+    Guest::with(ruby, |guest| {
         guest.font_defaults.names = names;
         guest.font_names_listed = listed;
     });
     Ok(args[0])
 }
 
-fn default_size(_ruby: &Ruby, _class: VALUE, _args: &[VALUE]) -> HostResult {
-    Ok(rb::fix(Guest::with(|guest| guest.font_defaults.size)))
+fn default_size(ruby: &Ruby, _class: VALUE, _args: &[VALUE]) -> HostResult {
+    Ok(rb::fix(Guest::with(ruby, |guest| guest.font_defaults.size)))
 }
 
 fn set_default_size(ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
     let size = rb::int(ruby, args[0])?;
-    Guest::with(|guest| guest.font_defaults.size = size);
+    Guest::with(ruby, |guest| guest.font_defaults.size = size);
     Ok(args[0])
 }
 
-fn default_bold(_ruby: &Ruby, _class: VALUE, _args: &[VALUE]) -> HostResult {
-    Ok(rb::boolean(Guest::with(|guest| guest.font_defaults.bold)))
+fn default_bold(ruby: &Ruby, _class: VALUE, _args: &[VALUE]) -> HostResult {
+    Ok(rb::boolean(Guest::with(ruby, |guest| {
+        guest.font_defaults.bold
+    })))
 }
 
-fn set_default_bold(_ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
+fn set_default_bold(ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
     let bold = rb::truthy(args[0]);
-    Guest::with(|guest| guest.font_defaults.bold = bold);
+    Guest::with(ruby, |guest| guest.font_defaults.bold = bold);
     Ok(args[0])
 }
 
-fn default_italic(_ruby: &Ruby, _class: VALUE, _args: &[VALUE]) -> HostResult {
-    Ok(rb::boolean(Guest::with(|guest| guest.font_defaults.italic)))
+fn default_italic(ruby: &Ruby, _class: VALUE, _args: &[VALUE]) -> HostResult {
+    Ok(rb::boolean(Guest::with(ruby, |guest| {
+        guest.font_defaults.italic
+    })))
 }
 
-fn set_default_italic(_ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
+fn set_default_italic(ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
     let italic = rb::truthy(args[0]);
-    Guest::with(|guest| guest.font_defaults.italic = italic);
+    Guest::with(ruby, |guest| guest.font_defaults.italic = italic);
     Ok(args[0])
 }
 
-fn default_shadow(_ruby: &Ruby, _class: VALUE, _args: &[VALUE]) -> HostResult {
-    Ok(rb::boolean(Guest::with(|guest| guest.font_defaults.shadow)))
+fn default_shadow(ruby: &Ruby, _class: VALUE, _args: &[VALUE]) -> HostResult {
+    Ok(rb::boolean(Guest::with(ruby, |guest| {
+        guest.font_defaults.shadow
+    })))
 }
 
-fn set_default_shadow(_ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
+fn set_default_shadow(ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
     let shadow = rb::truthy(args[0]);
-    Guest::with(|guest| guest.font_defaults.shadow = shadow);
+    Guest::with(ruby, |guest| guest.font_defaults.shadow = shadow);
     Ok(args[0])
 }
 
 /// The `Color` object new fonts copy their colour from.
 fn default_color(ruby: &Ruby, _class: VALUE, _args: &[VALUE]) -> HostResult {
-    Ok(rb::ivar_get(ruby, guest::classes().font, DEFAULT_COLOR)?)
+    Ok(rb::ivar_get(
+        ruby,
+        guest::classes(ruby).font,
+        DEFAULT_COLOR,
+    )?)
 }
 
 fn set_default_color(ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
-    assign_color(ruby, guest::classes().font, DEFAULT_COLOR, args[0])?;
+    assign_color(ruby, guest::classes(ruby).font, DEFAULT_COLOR, args[0])?;
     Ok(args[0])
 }
 
 /// `Font.exist?(name)`: whether the guest's text backend has the family.
 fn exist(ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
     let name = rb::text(ruby, args[0])?;
-    Ok(rb::boolean(Guest::with(|guest| {
+    Ok(rb::boolean(Guest::with(ruby, |guest| {
         guest.text.font_exists(&name)
     })))
 }
@@ -467,7 +479,7 @@ fn drawn_name(ruby: &Ruby, value: VALUE) -> Result<Option<String>, Raise> {
                 .iter()
                 .map(|&element| asked_name(ruby, element))
                 .collect::<Result<Vec<_>, Raise>>()?;
-            let chosen = Guest::with(|guest| {
+            let chosen = Guest::with(ruby, |guest| {
                 chosen_element(&names, |name| guest.text.font_exists_exactly(name))
             });
             match chosen {
@@ -506,7 +518,7 @@ fn give_colors(ruby: &Ruby, object: VALUE, font: &Font) -> Result<(), Raise> {
 
 /// Makes the font `object` read the name and size objects of the defaults.
 fn keep_default_objects(ruby: &Ruby, object: VALUE) -> Result<(), Raise> {
-    let class = guest::classes().font;
+    let class = guest::classes(ruby).font;
     let name = rb::ivar_get(ruby, class, DEFAULT_NAME)?;
     rb::ivar_set(ruby, object, NAME, name)?;
     let size = rb::ivar_get(ruby, class, DEFAULT_SIZE)?;
@@ -660,24 +672,24 @@ fn set_out_color(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
 
 /// A reader of the class that returns the object of its instance variable `name`.
 fn class_object(ruby: &Ruby, name: &CStr) -> HostResult {
-    Ok(rb::ivar_get(ruby, guest::classes().font, name)?)
+    Ok(rb::ivar_get(ruby, guest::classes(ruby).font, name)?)
 }
 
 /// Keeps `value` in the instance variable `name` of the class.
 fn keep_class_object(ruby: &Ruby, name: &CStr, value: VALUE) -> HostResult {
-    rb::ivar_set(ruby, guest::classes().font, name, value)?;
+    rb::ivar_set(ruby, guest::classes(ruby).font, name, value)?;
     Ok(value)
 }
 
 fn set_default_name_rgss3(ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
     let names = names_of(drawn_name(ruby, args[0])?);
-    Guest::with(|guest| guest.font_defaults.names = names);
+    Guest::with(ruby, |guest| guest.font_defaults.names = names);
     keep_class_object(ruby, DEFAULT_NAME, args[0])
 }
 
 fn set_default_size_rgss3(ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
     let size = size_arg(ruby, args[0], "bad value for default_size")?;
-    Guest::with(|guest| guest.font_defaults.size = size);
+    Guest::with(ruby, |guest| guest.font_defaults.size = size);
     keep_class_object(ruby, DEFAULT_SIZE, args[0])
 }
 
@@ -690,7 +702,7 @@ fn set_default_flag(
     flag: fn(&mut FontDefaults) -> &mut bool,
 ) -> HostResult {
     let truth = rb::truthy(value);
-    Guest::with(|guest| *flag(&mut guest.font_defaults) = truth);
+    Guest::with(ruby, |guest| *flag(&mut guest.font_defaults) = truth);
     keep_class_object(ruby, name, value)
 }
 
@@ -706,7 +718,7 @@ fn set_default_color_object(ruby: &Ruby, name: &CStr, value: VALUE) -> HostResul
 /// String answers false.
 fn exist_rgss3(ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
     let exists = match asked_name(ruby, args[0])? {
-        Some(name) => Guest::with(|guest| guest.text.font_exists_exactly(&name)),
+        Some(name) => Guest::with(ruby, |guest| guest.text.font_exists_exactly(&name)),
         None => false,
     };
     Ok(rb::boolean(exists))
@@ -716,13 +728,14 @@ fn exist_rgss3(ruby: &Ruby, _class: VALUE, args: &[VALUE]) -> HostResult {
 /// defaults start with; in RGSS3 also that of `Font.default_out_color` and the objects the
 /// other readers of the defaults start with. Runs once the classes are installed.
 pub(crate) fn install_defaults(ruby: &Ruby) -> Result<(), Raised> {
-    let classes = guest::classes();
-    let (defaults, runtime) =
-        Guest::with(|guest| (guest.font_defaults.clone(), guest.runtime.run.runtime));
+    let classes = guest::classes(ruby);
+    let (defaults, runtime) = Guest::with(ruby, |guest| {
+        (guest.font_defaults.clone(), guest.runtime.run.runtime)
+    });
     let install_color = |name: &CStr, color: Color| {
         let object = rb::allocate(ruby, classes.color)?;
         if let Some(data) = wrap::find::<Owned<Color>>(ruby, object) {
-            data.with(|data| data.set(color));
+            data.with(|data| data.set(ruby, color));
         }
         rb::ivar_set(ruby, classes.font, name, object)
     };

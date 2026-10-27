@@ -182,7 +182,7 @@ fn perform(_ruby: &Ruby, op: Op) -> Result<(VALUE, Call), Raised> {
         double: 0.0,
         name: std::ptr::null(),
     };
-    // SAFETY: `&Ruby` proves the interpreter thread, and `call_body` fits the contract of
+    // SAFETY: `&Ruby` proves a thread that holds the interpreter, and `call_body` fits the contract of
     // `protect`: it treats its argument as a pointer to `call` and holds nothing with a
     // destructor.
     let value = unsafe { vkrgss_ruby_sys::protect(&mut call, call_body) }?;

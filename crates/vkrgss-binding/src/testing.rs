@@ -250,7 +250,7 @@ impl Harness {
 
     /// The number of live bitmaps in the guest's arena.
     pub fn bitmap_count(&self) -> usize {
-        self.run(|_ruby| Guest::with(|guest| guest.bitmaps().len()))
+        self.run(|ruby| Guest::with(ruby, |guest| guest.bitmaps().len()))
     }
 }
 

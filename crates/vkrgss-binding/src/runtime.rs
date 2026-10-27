@@ -467,8 +467,9 @@ fn reset_class_name(runtime: Runtime) -> &'static CStr {
 /// for a reset request, or in RGSS3 `RGSSReset` with an empty message, and `SystemExit` for
 /// a quit request. Called after [`Guest::pump`] has returned and the guest is released.
 pub(crate) fn raise_pending(ruby: &Ruby) -> Result<(), Raise> {
-    let (pending, runtime) =
-        Guest::with(|guest| (guest.runtime.pending.take(), guest.runtime.run.runtime));
+    let (pending, runtime) = Guest::with(ruby, |guest| {
+        (guest.runtime.pending.take(), guest.runtime.run.runtime)
+    });
     match pending {
         None => Ok(()),
         Some(Pending::Quit) => Err(Raise::new(system_exit(ruby), "exit")),
@@ -488,9 +489,9 @@ pub(crate) fn raise_pending(ruby: &Ruby) -> Result<(), Raise> {
 /// functions. The Ruby part follows in [`prepare`].
 pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
     graphics::define(ruby)?;
-    input::define(ruby, Guest::with(|guest| guest.runtime.run.runtime))?;
+    input::define(ruby, Guest::with(ruby, |guest| guest.runtime.run.runtime))?;
     audio::define(ruby)?;
-    win32api::define(ruby, Guest::with(|guest| guest.runtime.run.runtime))?;
+    win32api::define(ruby, Guest::with(ruby, |guest| guest.runtime.run.runtime))?;
     kernel::define(ruby)
 }
 
@@ -499,16 +500,17 @@ pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
 /// from the guest's [`RunConfig`], and turns the process functions off unless it enables
 /// them.
 pub(crate) fn prepare(ruby: &Ruby) -> Result<(), RubyError> {
-    let (runtime, debug, battle_test, process_functions, library_version) = Guest::with(|guest| {
-        let run = &guest.runtime.run;
-        (
-            run.runtime,
-            run.debug,
-            run.battle_test,
-            run.process_functions,
-            run.library_version,
-        )
-    });
+    let (runtime, debug, battle_test, process_functions, library_version) =
+        Guest::with(ruby, |guest| {
+            let run = &guest.runtime.run;
+            (
+                run.runtime,
+                run.debug,
+                run.battle_test,
+                run.process_functions,
+                run.library_version,
+            )
+        });
     if !rb::RUBY_19 {
         ruby.eval_protected(PRELUDE_RUBY18, PRELUDE_NAME, 1)?;
     }
@@ -894,7 +896,7 @@ fn report_rgss3(ruby: &Ruby, error: &RubyError) -> String {
 
 /// The report of an uncaught exception in a game of the guest's runtime.
 fn report_of_runtime(ruby: &Ruby, error: &RubyError) -> String {
-    if Guest::with(|guest| guest.runtime.run.runtime) == Runtime::Rgss3 {
+    if Guest::with(ruby, |guest| guest.runtime.run.runtime) == Runtime::Rgss3 {
         report_rgss3(ruby, error)
     } else {
         report(ruby, error)
@@ -912,7 +914,7 @@ fn ended(ruby: &Ruby, raised: Raised) -> Ended {
     if is_a(system_exit(ruby)) {
         return Ended::Exit;
     }
-    let runtime = Guest::with(|guest| guest.runtime.run.runtime);
+    let runtime = Guest::with(ruby, |guest| guest.runtime.run.runtime);
     if rb::class_at(ruby, reset_class_name(runtime)).is_ok_and(is_a) {
         return Ended::Reset;
     }
@@ -928,7 +930,7 @@ type Preload = (String, Vec<u8>);
 /// Seeds the random number generator with the seed of the guest's [`RunConfig`], if it has
 /// one.
 fn seed(ruby: &Ruby) -> Result<(), Raised> {
-    if let Some(seed) = Guest::with(|guest| guest.runtime.run.seed) {
+    if let Some(seed) = Guest::with(ruby, |guest| guest.runtime.run.seed) {
         ruby.eval(&format!("Kernel.srand({seed})"), PRELUDE_NAME, 1)?;
     }
     Ok(())
@@ -938,7 +940,7 @@ fn seed(ruby: &Ruby) -> Result<(), Raised> {
 /// scripts file and reads the script archive. Returns the preload scripts and the number of
 /// scripts in the archive.
 fn load(ruby: &Ruby) -> Result<(Vec<Preload>, usize), RunError> {
-    let (builtin, archive, preload) = Guest::with(|guest| {
+    let (builtin, archive, preload) = Guest::with(ruby, |guest| {
         let run = &guest.runtime.run;
         (
             run.builtin_scripts.clone(),
@@ -1000,7 +1002,7 @@ fn load(ruby: &Ruby) -> Result<(Vec<Preload>, usize), RunError> {
 /// the frame rate back and ends a freeze, and the generator is not seeded again: it was
 /// seeded once, before the built-in scripts.
 fn reset(ruby: &Ruby) -> Result<(), Raised> {
-    let runtime = Guest::with(|guest| {
+    let runtime = Guest::with(ruby, |guest| {
         audio::stop_all(guest);
         guest.runtime.run.runtime
     });
@@ -1011,7 +1013,7 @@ fn reset(ruby: &Ruby) -> Result<(), Raised> {
     };
     // SAFETY: the module is kept alive by its constant.
     unsafe { ruby.funcall(graphics, method, &[]) }?;
-    Guest::with(|guest| {
+    Guest::with(ruby, |guest| {
         guest.input = InputState::with_rules(guest.input.rules());
         guest.runtime.pending = None;
     });
@@ -1047,7 +1049,7 @@ fn evaluate_script(ruby: &Ruby, index: usize, runtime: Runtime) -> Result<(), Ra
 /// before as the current error, as in the original runtime: `alias old new unless $@`
 /// relies on it.
 fn run_scripts(ruby: &Ruby, preload: &[Preload], count: usize) -> Result<(), RunError> {
-    let runtime = Guest::with(|guest| guest.runtime.run.runtime);
+    let runtime = Guest::with(ruby, |guest| guest.runtime.run.runtime);
     let mut index = 0;
     while index < preload.len() + count {
         let evaluated = match preload.get(index) {
@@ -1090,7 +1092,7 @@ const FAILED_TO_LOAD_SCRIPT: &str = "Failed to load script.";
 /// Plays the game of the installed guest's [`RunConfig`] over `link`: everything of
 /// [`run_game`] after the installation of the guest.
 pub(crate) fn play(ruby: &Ruby, link: GuestEnd) -> Result<(), RunError> {
-    Guest::with(|guest| {
+    Guest::with(ruby, |guest| {
         guest.connect(link);
         stats::start(guest.runtime.run.frame_stats);
         let title = guest.runtime.run.ini.title.clone();
@@ -1107,7 +1109,7 @@ pub(crate) fn play(ruby: &Ruby, link: GuestEnd) -> Result<(), RunError> {
     let shown = match &outcome {
         Err(RunError::Script(report)) => Some(report.clone()),
         Err(RunError::Archive { .. })
-            if Guest::with(|guest| guest.runtime.run.runtime) == Runtime::Rgss3 =>
+            if Guest::with(ruby, |guest| guest.runtime.run.runtime) == Runtime::Rgss3 =>
         {
             Some(FAILED_TO_LOAD_SCRIPT.to_owned())
         }
@@ -1115,9 +1117,9 @@ pub(crate) fn play(ruby: &Ruby, link: GuestEnd) -> Result<(), RunError> {
     };
     if let Some(text) = shown {
         eprintln!("{text}");
-        Guest::with(|guest| guest.show_message(text));
+        Guest::with(ruby, |guest| guest.show_message(text));
     }
-    Guest::with(|guest| {
+    Guest::with(ruby, |guest| {
         audio::stop_all(guest);
         guest.send(GuestToHost::Outcome {
             ok: outcome.is_ok(),
@@ -1162,7 +1164,7 @@ pub(crate) fn play(ruby: &Ruby, link: GuestEnd) -> Result<(), RunError> {
 ///
 /// # Panics
 ///
-/// Panics when a guest is already installed on this thread.
+/// Panics when a guest is already installed.
 pub fn run_game(ruby: &Ruby, config: Config, link: GuestEnd) -> Result<(), RunError> {
     let runtime = config.run.runtime;
     if runtime == Runtime::Rgss3 && !rb::RUBY_19 {

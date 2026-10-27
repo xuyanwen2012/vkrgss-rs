@@ -72,7 +72,7 @@ fn operate<R>(
     ruby: &Ruby,
     operation: impl FnOnce(&mut Guest) -> Result<R, Error>,
 ) -> Result<R, Raise> {
-    Guest::with(operation).map_err(|error| error::to_raise(ruby, error))
+    Guest::with(ruby, operation).map_err(|error| error::to_raise(ruby, error))
 }
 
 /// The arena id of a `Bitmap` argument. Anything else raises `TypeError`, a disposed bitmap
@@ -94,7 +94,7 @@ pub(crate) fn bitmap_arg(ruby: &Ruby, value: VALUE) -> Result<Option<BitmapId>, 
 fn adopt(ruby: &Ruby, recv: VALUE, id: BitmapId) -> Result<(), Raise> {
     let previous = this(ruby, recv)?.with(|data| data.id.replace(id));
     if let Some(previous) = previous {
-        Guest::with(|guest| guest.bitmaps.dispose(previous));
+        Guest::with(ruby, |guest| guest.bitmaps.dispose(previous));
     }
     Ok(())
 }
@@ -109,7 +109,7 @@ pub(crate) fn bitmap_new(ruby: &Ruby, id: BitmapId) -> HostResult {
     });
     // An object that was made owns the bitmap, and gives it back when it is collected.
     if made.is_err() {
-        Guest::with(|guest| guest.bitmaps.dispose(id));
+        Guest::with(ruby, |guest| guest.bitmaps.dispose(id));
     }
     made
 }
@@ -227,14 +227,14 @@ fn initialize_copy(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
 fn dispose(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
     let id = this(ruby, recv)?.with(|data| data.id.take());
     if let Some(id) = id {
-        Guest::with(|guest| guest.bitmaps.dispose(id));
+        Guest::with(ruby, |guest| guest.bitmaps.dispose(id));
     }
     Ok(ffi::Qnil)
 }
 
 fn disposed(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
     let disposed = match this(ruby, recv)?.get().id {
-        Some(id) => Guest::with(|guest| guest.bitmaps.is_disposed(id)),
+        Some(id) => Guest::with(ruby, |guest| guest.bitmaps.is_disposed(id)),
         None => true,
     };
     Ok(rb::boolean(disposed))

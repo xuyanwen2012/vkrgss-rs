@@ -85,8 +85,8 @@ their outputs are under `local/` of the clone, outside the repository:
   exception caught, as decided above, with the calls of `Viewport`, `Plane`, `Window`,
   `Tilemap`, `Font`, `Table`, `Rect` and `Tone` added and a hundred sprites with bitmaps
   dropped in a thread, then one call in the main script after the threads. Output
-  `threads.txt`: `local/oracle/ace-before/vkrgss/game/threads.txt` before this change.
-  Built-in scripts: a stand-in
+  `threads.txt`: `local/oracle/ace-before/vkrgss/game/threads.txt` before this change,
+  `local/oracle/ace-after/vkrgss/game/threads.txt` after task 2.1. Built-in scripts: a stand-in
   that defines `RPG` only.
 - `local/probes/tilemap-names-probe.rb`, the script of a scratch XP game
   (`local/probes/game-xp`, `Library=RGSS103J.dll`, the DLL the start-up symbol table of RGSS1
@@ -103,19 +103,19 @@ Nothing raised there. This is the expected outcome of the decision above, and th
 Script-thread probe on vkrgss (`--vkrgss-only`; the oracle's probe answers `Input` from its
 schedule on both sides, which presses nothing here):
 
-| # | Call in a thread | Original (this probe) | vkrgss before this change |
-|---|---|---|---|
-| 0 | the scenario: `Bitmap.new(8, 8)`, `fill_rect`, `Sprite.new`, `bitmap=`, `[b.width, Graphics.brightness]` | not run | `Exception: panic in a host function: a guest is installed on the interpreter thread` |
-| 1 | `Bitmap.new(8, 8)`, `fill_rect`, `get_pixel` | not run | the same panic |
-| 2 | `Sprite.new` with that bitmap, `x = 3` | not run | the same panic |
-| 3 | `Graphics.brightness` | not run | the same panic |
-| 4 | `Graphics.update` once (frames counted) | not run | the same panic |
-| 5 | `Input.update`, `Input.press?(:C)` | not run | `false` (the probe's `Input`) |
-| 6 | `Audio.se_stop` | not run | the same panic |
-| 7 | `GC.start` after a dropped bitmap | not run | the same panic |
-| 8 | `Viewport`, `Plane`, `Window`, `Tilemap`, `Font`, `Table`, `Rect`, `Tone` | not run | the same panic |
-| 9 | a hundred sprites with bitmaps dropped, `GC.start` | not run | the same panic |
-| 10 | the main script afterwards: `Bitmap`, `Sprite`, `dispose` | not run | `:done` |
+| # | Call in a thread | Original (this probe) | vkrgss before | vkrgss after |
+|---|---|---|---|---|
+| 0 | the scenario: `Bitmap.new(8, 8)`, `fill_rect`, `Sprite.new`, `bitmap=`, `[b.width, Graphics.brightness]` | not run | `Exception: panic in a host function: a guest is installed on the interpreter thread` | `[8, 255]` |
+| 1 | `Bitmap.new(8, 8)`, `fill_rect`, `get_pixel` | not run | the same panic | `[8, 8, 255.0, 0.0, 255.0, 0.0]` |
+| 2 | `Sprite.new` with that bitmap, `x = 3` | not run | the same panic | `[8, 3, false]` |
+| 3 | `Graphics.brightness` | not run | the same panic | `255` |
+| 4 | `Graphics.update` once (frames counted) | not run | the same panic | `1` |
+| 5 | `Input.update`, `Input.press?(:C)` | not run | `false` (the probe's `Input`) | `false` |
+| 6 | `Audio.se_stop` | not run | the same panic | `nil` |
+| 7 | `GC.start` after a dropped bitmap | not run | the same panic | `:done` |
+| 8 | `Viewport`, `Plane`, `Window`, `Tilemap`, `Font`, `Table`, `Rect`, `Tone` | not run | the same panic | `[3, 2.0, true, 5, 32, false, false, false]` |
+| 9 | a hundred sprites with bitmaps dropped, `GC.start` | not run | the same panic | `:done` |
+| 10 | the main script afterwards: `Bitmap`, `Sprite`, `dispose` | not run | `:done` | `:done` |
 
 Tilemap names of RGSS1 on vkrgss before this change (serial of the marker, `>> 3`, and the
 new names):
@@ -133,6 +133,34 @@ new names):
 
 So vkrgss interns `tilemap` at `Tilemap.new` and `autotileN` at the first read or write of
 slot N; each takes a number of the sequence. Whether the original does the same is task 1.2.
+
+### Guest state of the process (tasks 2.1 and 2.2)
+
+- `InterpreterCell<T>` in `guest.rs`: a static whose `get` takes a `&Ruby` and returns a
+  reference that lives no longer than it. Its `Sync` rests on the interpreter lock as decided
+  above. A guest is not `Send`, because the tables a tilemap shares with its `Table` objects
+  are `Rc`s, so the cell does not ask for `T: Send`; instead `InterpreterCell::new` is
+  `unsafe`, and its condition is that nothing in the value is tied to a thread, which holds
+  for `Rc` and `RefCell`, whose accesses the lock orders. `GUEST`, `CLASSES` and the button
+  names of `input.rs` are such cells; `Guest::with`, `guest::classes` and the functions of
+  `scene_testing` take the `&Ruby` of the call, which every host function has.
+- The two queues of collected objects (`FREED` of `guest.rs` and of `element.rs`) are
+  `Mutex` statics, not cells: a free function runs inside the collector, on whichever Ruby
+  thread it runs, and has no `&Ruby`. The next access of the guest, on any thread, drains
+  both. The frame statistics of `stats.rs` are one `Mutex` static too, because they are not
+  reached with a `&Ruby` either (a `Span` is entered and dropped around bitmap work); its
+  unit tests work on a `Measuring` of their own, since the static is shared by every test of
+  the binary. The counters of live elements of `scene_testing.rs` are atomics.
+- The guest lives in the static until the process ends; the thread-local was dropped when
+  the interpreter thread ended. Nothing depends on that drop: `play` disconnects the link
+  itself, and finalisers that run after it (`at_exit` of RGSS1) still find the guest.
+- The unit tests of `guest.rs` made a guest of their own on the test thread; they now use
+  the harness's guest, and one queues a free on another thread.
+- Comments outside the files the proposal names, a few lines each: the `# Safety` of
+  `Ruby::new` and the documentation of `Ruby` in `interp.rs` of both interpreter crates say a
+  thread that holds the interpreter, which the corrected comment in `host.rs` relies on; the
+  section "Guest state" of `lib.rs`, and the safety comments of `wrap.rs` (`alloc`) and
+  `rb.rs` (`perform`), say the same of the binding. No behaviour of the sys crates changed.
 
 ## Follow-ups
 

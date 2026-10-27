@@ -49,8 +49,8 @@ const RESET_PRIVATE: &str = "class << Graphics; private :_reset; end";
 /// input state marks it shown, which with the rules of RGSS3 lets the next `Input.update` see
 /// the snapshots received so far. Every frame `Graphics` shows passes here, and nothing else
 /// marks a frame.
-fn frame(mut front: Vec<BitmapDelta>) {
-    Guest::with(|guest| {
+fn frame(ruby: &Ruby, mut front: Vec<BitmapDelta>) {
+    Guest::with(ruby, |guest| {
         let extraction = Span::enter(Part::Extraction);
         let mut packet = guest.scene.extract(&mut guest.bitmaps);
         if !front.is_empty() {
@@ -68,7 +68,7 @@ fn frame(mut front: Vec<BitmapDelta>) {
 }
 
 fn update(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
-    frame(Vec::new());
+    frame(ruby, Vec::new());
     runtime::raise_pending(ruby)?;
     Ok(ffi::Qnil)
 }
@@ -79,7 +79,7 @@ fn update(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
 fn frames(ruby: &Ruby, frames: i32, mut before: impl FnMut(i64)) -> Result<(), Raise> {
     for number in 1..=i64::from(frames) {
         before(number);
-        frame(Vec::new());
+        frame(ruby, Vec::new());
         runtime::raise_pending(ruby)?;
     }
     Ok(())
@@ -102,13 +102,13 @@ fn wait(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
 /// `vx-v0-REPORT.md` section 6.
 fn fade(ruby: &Ruby, duration: VALUE, end: i64) -> HostResult {
     let duration = rb::int(ruby, duration)?.max(0);
-    let start = i64::from(Guest::with(|guest| guest.scene.brightness()));
+    let start = i64::from(Guest::with(ruby, |guest| guest.scene.brightness()));
     // The quotient is rounded towards zero from either side, as `b0 - b0 * k / n` is.
     frames(ruby, duration, |number| {
         let level = start + (end - start) * number / i64::from(duration);
-        Guest::with(|guest| guest.scene.set_brightness(level));
+        Guest::with(ruby, |guest| guest.scene.set_brightness(level));
     })?;
-    Guest::with(|guest| guest.scene.set_brightness(end));
+    Guest::with(ruby, |guest| guest.scene.set_brightness(end));
     Ok(ffi::Qnil)
 }
 
@@ -123,15 +123,15 @@ fn fadein(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
 }
 
 /// `Graphics.brightness` of RGSS2: the brightness of the scene.
-fn brightness(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
-    let brightness = Guest::with(|guest| guest.scene.brightness());
+fn brightness(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
+    let brightness = Guest::with(ruby, |guest| guest.scene.brightness());
     Ok(rb::fix(i32::from(brightness)))
 }
 
 /// `Graphics.brightness=` of RGSS2, limited to 0 to 255.
 fn set_brightness(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     let brightness = rb::long(ruby, args[0])?;
-    Guest::with(|guest| guest.scene.set_brightness(brightness));
+    Guest::with(ruby, |guest| guest.scene.set_brightness(brightness));
     Ok(args[0])
 }
 
@@ -139,8 +139,8 @@ fn set_brightness(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
 /// in the buffer of 640 by 480 pixels of that runtime.
 ///
 /// Provenance of RGSS3: oracle measurement 2026-10-13, `ace-v1-sprite-REPORT.md` section 5.
-fn freeze(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
-    Guest::with(|guest| {
+fn freeze(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
+    Guest::with(ruby, |guest| {
         guest.runtime.held = true;
         let rule = match guest.runtime.run.runtime {
             Runtime::Rgss1 | Runtime::Rgss2 => FreezeRule::Frame,
@@ -152,8 +152,8 @@ fn freeze(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
 }
 
 /// Loads the picture of a transition as `Bitmap.new(path)` loads one.
-fn read_mask(path: &str) -> Result<BitmapId, Error> {
-    Guest::with(|guest| -> Result<BitmapId, Error> {
+fn read_mask(ruby: &Ruby, path: &str) -> Result<BitmapId, Error> {
+    Guest::with(ruby, |guest| -> Result<BitmapId, Error> {
         let bytes = guest.files.read(FileKind::Image, path)?;
         let image = vkrgss_image::decode(&bytes)?;
         Ok(guest.bitmaps.create_from_rgba(
@@ -167,7 +167,7 @@ fn read_mask(path: &str) -> Result<BitmapId, Error> {
 
 /// [`read_mask`] with its failure raised.
 fn load_mask(ruby: &Ruby, path: &str) -> Result<BitmapId, Raise> {
-    read_mask(path).map_err(|error| error::to_raise(ruby, error))
+    read_mask(ruby, path).map_err(|error| error::to_raise(ruby, error))
 }
 
 /// `transition(duration, filename = nil, vague)`, by the runtime of the run.
@@ -186,11 +186,11 @@ fn load_mask(ruby: &Ruby, path: &str) -> Result<BitmapId, Raise> {
 /// `vx-v0-REPORT.md` section 6; the default vagueness `vx-v1-sprite-REPORT.md` section 5.
 fn transition(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     rb::check_count(ruby, args, 0, 3)?;
-    let rgss1 = Guest::with(|guest| guest.runtime.run.runtime) == Runtime::Rgss1;
+    let rgss1 = Guest::with(ruby, |guest| guest.runtime.run.runtime) == Runtime::Rgss1;
     let (default_duration, default_vague, rule) = if rgss1 {
         (8, 20, TransitionRule::Rgss1)
     } else {
-        if !Guest::with(|guest| guest.runtime.held) {
+        if !Guest::with(ruby, |guest| guest.runtime.held) {
             return Ok(ffi::Qnil);
         }
         (10, 40, TransitionRule::Rgss2)
@@ -224,10 +224,10 @@ fn show_transition(
     vague: u16,
     rule: TransitionRule,
 ) -> HostResult {
-    let rgss1 = Guest::with(|guest| guest.runtime.run.runtime) == Runtime::Rgss1;
+    let rgss1 = Guest::with(ruby, |guest| guest.runtime.run.runtime) == Runtime::Rgss1;
     // No op refers to the mask, so its deltas are asked from the arena here and travel in
     // front of the first frame's own. Without a frame the mask is never announced.
-    let (mask, mut mask_deltas) = Guest::with(|guest| {
+    let (mask, mut mask_deltas) = Guest::with(ruby, |guest| {
         let (mask, mask_deltas) = match loaded {
             Some(id) if duration > 0 => (Some(id), guest.bitmaps.deltas(&[id]).unwrap_or_default()),
             Some(id) => {
@@ -251,13 +251,13 @@ fn show_transition(
     });
     let mut interrupted = Ok(());
     for _ in 0..duration {
-        frame(std::mem::take(&mut mask_deltas));
+        frame(ruby, std::mem::take(&mut mask_deltas));
         interrupted = runtime::raise_pending(ruby);
         if interrupted.is_err() {
             break;
         }
     }
-    Guest::with(|guest| {
+    Guest::with(ruby, |guest| {
         guest.runtime.held = false;
         if let Some(id) = mask {
             // The destroy delta travels with a later frame.
@@ -278,7 +278,7 @@ fn show_transition(
 /// Provenance: oracle measurement 2026-10-13, RGSS301 version 3.0.1.1 and RGSS300 version
 /// 3.0.0.1, `ace-v1-sprite-REPORT.md` section 5 and its exploration log.
 fn transition_rgss3(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
-    if !Guest::with(|guest| guest.runtime.held) {
+    if !Guest::with(ruby, |guest| guest.runtime.held) {
         return Ok(ffi::Qnil);
     }
     rb::check_count_rgss3(ruby, args, 0, 3)?;
@@ -297,11 +297,11 @@ fn transition_rgss3(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     let loaded = if name.is_empty() {
         None
     } else {
-        match read_mask(&name) {
+        match read_mask(ruby, &name) {
             Ok(id) => Some(id),
             Err(error) => {
                 if matches!(error, Error::Files(VfsError::NotFound { .. })) {
-                    Guest::with(|guest| {
+                    Guest::with(ruby, |guest| {
                         guest.runtime.held = false;
                         guest.send(GuestToHost::Transition {
                             duration: 0,
@@ -346,7 +346,7 @@ fn name_rgss3(ruby: &Ruby, value: VALUE) -> Result<String, Raise> {
 /// RGSS300 version 3.0.0.1, `ace-v1-sprite-REPORT.md` section 5.
 fn play_movie(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     let name = name_rgss3(ruby, args[0])?;
-    let found = Guest::with(|guest| {
+    let found = Guest::with(ruby, |guest| {
         let with_extension = format!("{name}.ogv");
         [name.as_str(), with_extension.as_str()]
             .iter()
@@ -359,24 +359,24 @@ fn play_movie(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     Ok(ffi::Qnil)
 }
 
-fn frame_reset(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
-    Guest::with(|guest| guest.send(GuestToHost::FrameReset));
+fn frame_reset(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
+    Guest::with(ruby, |guest| guest.send(GuestToHost::FrameReset));
     Ok(ffi::Qnil)
 }
 
-fn frame_rate(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
-    let rate = Guest::with(|guest| guest.scene.frame_rate().get());
+fn frame_rate(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
+    let rate = Guest::with(ruby, |guest| guest.scene.frame_rate().get());
     Ok(rb::fix(i32::from(rate)))
 }
 
 fn set_frame_rate(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     let rate = rb::long(ruby, args[0])?;
-    Guest::with(|guest| guest.scene.set_frame_rate(rate));
+    Guest::with(ruby, |guest| guest.scene.set_frame_rate(rate));
     Ok(args[0])
 }
 
 fn frame_count(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
-    let count = Guest::with(|guest| guest.scene.frame_count());
+    let count = Guest::with(ruby, |guest| guest.scene.frame_count());
     match c_long::try_from(count) {
         Ok(count) if ffi::fixable(count) => Ok(ffi::long2fix(count)),
         // A `Bignum`, which the interpreter makes from its literal.
@@ -386,19 +386,19 @@ fn frame_count(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
 
 fn set_frame_count(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     let count = rb::long(ruby, args[0])?;
-    Guest::with(|guest| guest.scene.set_frame_count(count));
+    Guest::with(ruby, |guest| guest.scene.set_frame_count(count));
     Ok(args[0])
 }
 
 /// `Graphics.width` of RGSS2: the width of the frame.
-fn width(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
-    let size = Guest::with(|guest| guest.scene.logical_size());
+fn width(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
+    let size = Guest::with(ruby, |guest| guest.scene.logical_size());
     Ok(ffi::long2fix(size.width.into()))
 }
 
 /// `Graphics.height` of RGSS2: the height of the frame.
-fn height(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
-    let size = Guest::with(|guest| guest.scene.logical_size());
+fn height(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
+    let size = Guest::with(ruby, |guest| guest.scene.logical_size());
     Ok(ffi::long2fix(size.height.into()))
 }
 
@@ -415,7 +415,7 @@ fn resize_screen(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     let width = rb::int(ruby, args[0])?.clamp(1, RGSS2_LARGEST_FRAME.0);
     let height = rb::int(ruby, args[1])?.clamp(1, RGSS2_LARGEST_FRAME.1);
     let size = Size::new(width.unsigned_abs(), height.unsigned_abs());
-    Guest::with(|guest| guest.scene.set_logical_size(size));
+    Guest::with(ruby, |guest| guest.scene.set_logical_size(size));
     Ok(ffi::Qnil)
 }
 
@@ -431,7 +431,7 @@ fn resize_screen(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
 /// `vx-v0-REPORT.md` section 6.
 fn snap_to_bitmap(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
     wrap::intern_owner_names(ruby)?;
-    let created = Guest::with(|guest| -> Option<Result<BitmapId, Error>> {
+    let created = Guest::with(ruby, |guest| -> Option<Result<BitmapId, Error>> {
         let rule = match guest.runtime.run.runtime {
             Runtime::Rgss1 | Runtime::Rgss2 => SnapshotRule::Rgss2,
             Runtime::Rgss3 => SnapshotRule::Rgss3,
@@ -448,20 +448,22 @@ fn snap_to_bitmap(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
         Some(Err(error)) => Err(error::to_raise(ruby, error)),
         // The reference accepts every packet of a scene; a packet it refuses gives no bitmap.
         None => Err(Raise::new(
-            guest::classes().errors.rgss_error,
+            guest::classes(ruby).errors.rgss_error,
             "failed to create bitmap",
         )),
     }
 }
 
 /// `Graphics.visible`: a stored flag without an effect.
-fn visible(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
-    Ok(rb::boolean(Guest::with(|guest| guest.runtime.visible)))
+fn visible(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
+    Ok(rb::boolean(Guest::with(ruby, |guest| {
+        guest.runtime.visible
+    })))
 }
 
-fn set_visible(_ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
+fn set_visible(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     let visible = rb::truthy(args[0]);
-    Guest::with(|guest| guest.runtime.visible = visible);
+    Guest::with(ruby, |guest| guest.runtime.visible = visible);
     Ok(args[0])
 }
 
@@ -470,7 +472,7 @@ pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
     let module = ruby.define_module(c"Graphics")?;
     rb::class_method(ruby, module, c"update", 0, update)?;
     rb::class_method(ruby, module, c"freeze", 0, freeze)?;
-    if Guest::with(|guest| guest.runtime.run.runtime) == Runtime::Rgss3 {
+    if Guest::with(ruby, |guest| guest.runtime.run.runtime) == Runtime::Rgss3 {
         rb::class_method(ruby, module, c"transition", -1, transition_rgss3)?;
     } else {
         rb::class_method(ruby, module, c"transition", -1, transition)?;
@@ -482,7 +484,7 @@ pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
     rb::class_method(ruby, module, c"frame_count=", 1, set_frame_count)?;
     rb::class_method(ruby, module, c"visible", 0, visible)?;
     rb::class_method(ruby, module, c"visible=", 1, set_visible)?;
-    if Guest::with(|guest| guest.runtime.run.runtime) != Runtime::Rgss1 {
+    if Guest::with(ruby, |guest| guest.runtime.run.runtime) != Runtime::Rgss1 {
         rb::class_method(ruby, module, c"width", 0, width)?;
         rb::class_method(ruby, module, c"height", 0, height)?;
         rb::class_method(ruby, module, c"resize_screen", 2, resize_screen)?;
@@ -493,12 +495,12 @@ pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
         rb::class_method(ruby, module, c"fadein", 1, fadein)?;
         rb::class_method(ruby, module, c"snap_to_bitmap", 0, snap_to_bitmap)?;
     }
-    if Guest::with(|guest| guest.runtime.run.runtime) == Runtime::Rgss3 {
+    if Guest::with(ruby, |guest| guest.runtime.run.runtime) == Runtime::Rgss3 {
         rb::class_method(ruby, module, c"__reset__", 0, reset)?;
         rb::class_method(ruby, module, c"play_movie", 1, play_movie)?;
     }
     ruby.eval(RESET, "Graphics", 1)?;
-    if Guest::with(|guest| guest.runtime.run.runtime) == Runtime::Rgss3 {
+    if Guest::with(ruby, |guest| guest.runtime.run.runtime) == Runtime::Rgss3 {
         ruby.eval(RESET_PRIVATE, "Graphics", 1)?;
     }
     Ok(())
@@ -516,7 +518,7 @@ const RESET_FRAME_RATE: i64 = 60;
 fn reset(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
     // SAFETY: `recv` is `Graphics`, kept alive by its constant.
     unsafe { ruby.funcall(recv, c"_reset", &[]) }?;
-    Guest::with(|guest| {
+    Guest::with(ruby, |guest| {
         guest.scene.set_brightness(255);
         guest.scene.set_frame_rate(RESET_FRAME_RATE);
         if guest.runtime.held {

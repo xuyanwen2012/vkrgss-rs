@@ -24,7 +24,7 @@ fn load_error(_ruby: &Ruby) -> VALUE {
 fn locate(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     // The game's files never resolve a path to something outside the game directory.
     locate_with(ruby, args, |file| {
-        Guest::with(|guest| guest.files.resolve(FileKind::Data, file))
+        Guest::with(ruby, |guest| guest.files.resolve(FileKind::Data, file))
     })
 }
 
@@ -56,7 +56,7 @@ pub(crate) fn locate_with(
 /// (`{0001}`) has not, and `LoadError` when that directory is not inside the game directory.
 fn relative(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     relative_with(ruby, args, || {
-        Guest::with(|guest| guest.files.game_dir().to_owned())
+        Guest::with(ruby, |guest| guest.files.game_dir().to_owned())
     })
 }
 
@@ -83,7 +83,7 @@ pub(crate) fn relative_with(
 /// `load_data(path)`: the object `Marshal` loads from a data file of the game.
 fn load_data(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     let path = rb::text(ruby, args[0])?;
-    let bytes = Guest::with(|guest| {
+    let bytes = Guest::with(ruby, |guest| {
         // Scripts write data files through Ruby's own file API (`save_data`, saves), which
         // the cached directory listings do not see.
         guest.files.refresh();
@@ -204,7 +204,7 @@ fn label_proc(ruby: &Ruby) -> Result<VALUE, Raised> {
 fn load_data_rgss3(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     let name = data_name(ruby, args[0])?;
     let current = std::env::current_dir().unwrap_or_default();
-    let found = Guest::with(|guest| {
+    let found = Guest::with(ruby, |guest| {
         // As for `load_data`: the listings do not see what Ruby wrote.
         guest.files.refresh();
         guest.files.data_rgss3(&name, &current)
@@ -239,14 +239,14 @@ fn load_data_rgss3(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
 /// dismissed. The prelude's `print` and `p` build on it.
 fn modal(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     let text = rb::text(ruby, args[0])?;
-    Guest::with(|guest| guest.show_message(text));
+    Guest::with(ruby, |guest| guest.show_message(text));
     runtime::raise_pending(ruby)?;
     Ok(ffi::Qnil)
 }
 
 /// `vkrgss_modal_p(text)`: `vkrgss_modal` for `p`, which does nothing when `p` is log-only.
 fn modal_p(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
-    if Guest::with(|guest| guest.runtime.run.log_p) {
+    if Guest::with(ruby, |guest| guest.runtime.run.log_p) {
         return Ok(ffi::Qnil);
     }
     modal(ruby, recv, args)
@@ -264,7 +264,7 @@ fn exit_now(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
         ffi::Qfalse => 1,
         value => rb::int(ruby, value)?,
     };
-    Guest::with(|guest| {
+    Guest::with(ruby, |guest| {
         audio::stop_all(guest);
         guest.send(GuestToHost::Outcome { ok: status == 0 });
         guest.send(GuestToHost::Shutdown);
@@ -279,7 +279,7 @@ pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
     ruby.define_global_function_with_arity(c"vkrgss_locate", Arity::Fixed(2), locate)?;
     ruby.define_global_function_with_arity(c"vkrgss_modal", Arity::Fixed(1), modal)?;
     ruby.define_global_function_with_arity(c"vkrgss_modal_p", Arity::Fixed(1), modal_p)?;
-    if Guest::with(|guest| guest.runtime.run.runtime) != Runtime::Rgss3 {
+    if Guest::with(ruby, |guest| guest.runtime.run.runtime) != Runtime::Rgss3 {
         return ruby.define_global_function_with_arity(c"load_data", Arity::Fixed(1), load_data);
     }
     // A function of the C API with a fixed count, so that a wrong count reads `wrong number

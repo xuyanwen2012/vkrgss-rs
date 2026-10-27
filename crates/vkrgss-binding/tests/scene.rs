@@ -129,8 +129,8 @@ fn every_group_is_tested_here() {
 fn ruby_reads_the_pixel_of_a_sprite_made_in_rust() {
     scene_support::install(harness());
     // In a corner of the screen that no snippet draws to.
-    let (sprite, dot) = harness().run(|_ruby| {
-        scene_testing::with_scene(|scene, bitmaps| {
+    let (sprite, dot) = harness().run(|ruby| {
+        scene_testing::with_scene(ruby, |scene, bitmaps| {
             let defaults = FontDefaults::new(Vec::new());
             let dot = bitmaps
                 .create_from_rgba(1, 1, vec![10, 20, 30, 255], &defaults)
@@ -149,8 +149,8 @@ fn ruby_reads_the_pixel_of_a_sprite_made_in_rust() {
             .as_deref(),
         Ok("[[10, 20, 30, 255], nil, nil]")
     );
-    harness().run(move |_ruby| {
-        scene_testing::with_scene(|scene, bitmaps| {
+    harness().run(move |ruby| {
+        scene_testing::with_scene(ruby, |scene, bitmaps| {
             scene.dispose_sprite(sprite);
             bitmaps.dispose(dot);
         });

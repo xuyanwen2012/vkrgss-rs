@@ -74,7 +74,7 @@ pub(crate) fn define(ruby: &Ruby) -> Result<ErrorClasses, Raised> {
 /// | a disposed scene element | `RGSSError`, `disposed sprite` and so on for each class |
 /// | a scene element that cannot be created | `RGSSError` |
 pub(crate) fn to_raise(ruby: &Ruby, error: Error) -> Raise {
-    let classes = guest::classes().errors;
+    let classes = guest::classes(ruby).errors;
     match error {
         Error::Bitmap(BitmapError::Disposed) => Raise::new(classes.rgss_error, "disposed bitmap"),
         Error::Bitmap(BitmapError::CreateFailed(_)) | Error::Image(_) => {

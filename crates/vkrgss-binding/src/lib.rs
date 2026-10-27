@@ -39,12 +39,15 @@
 //! A [`Guest`] holds what the classes operate on: the bitmap arena, the font defaults, the
 //! game's files and the [`TextBackend`], and already the scene and the input state that the
 //! scene classes and the modules `Graphics` and `Input` will use. [`Guest::install`] defines the classes and puts one
-//! guest, made from a [`Config`], into a thread-local of the interpreter thread; there is one
-//! per interpreter. Host functions reach it through [`Guest::with`], which panics on
-//! re-entrant access. That is why an access is short and never calls into Ruby: a Ruby call
-//! can run script code that calls back into a method that needs the guest. A method
-//! converts its arguments first (a `to_s` runs there), then enters the guest for the
-//! operation, then builds its result.
+//! guest, made from a [`Config`], into a static of the process, as there is one interpreter
+//! per process. Host functions reach it through [`Guest::with`], with the `&Ruby` of the
+//! call, on whichever Ruby thread calls them: over Ruby 1.9.2 a script thread is a native
+//! thread of its own, and only a thread that holds the interpreter has a `&Ruby`. The
+//! collector, which frees objects on any Ruby thread, queues what they held, and the next
+//! access disposes it. [`Guest::with`] panics on re-entrant access. That is why an access is
+//! short and never calls into Ruby: a Ruby call can run script code that calls back into a
+//! method that needs the guest. A method converts its arguments first (a `to_s` runs
+//! there), then enters the guest for the operation, then builds its result.
 //!
 //! # Entering and leaving Ruby
 //!

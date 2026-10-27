@@ -299,7 +299,7 @@ fn set_autotile(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
         return Ok(args[1]);
     };
     if let Some(id) = tilemap {
-        Guest::with(|guest| {
+        Guest::with(ruby, |guest| {
             if let Ok(tilemap) = guest.scene.tilemap_mut(id) {
                 tilemap.autotiles[slot] = bitmap;
             }
@@ -345,7 +345,7 @@ fn set_sheet(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
         return Ok(args[1]);
     };
     if let Some(id) = wrap::expect::<Autotiles>(ruby, recv)?.get().tilemap {
-        Guest::with(|guest| {
+        Guest::with(ruby, |guest| {
             let tilemap = guest.scene.tilemap_mut(id).ok();
             if let Some(rgss2) = tilemap.and_then(|tilemap| tilemap.rgss2.as_mut()) {
                 rgss2.bitmaps[slot] = bitmap;

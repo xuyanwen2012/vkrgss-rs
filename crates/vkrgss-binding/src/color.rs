@@ -136,7 +136,7 @@ pub(crate) fn color_new(ruby: &Ruby, color: Color) -> HostResult {
 
 /// Replaces the value of a `Color` object.
 pub(crate) fn color_set(ruby: &Ruby, object: VALUE, color: Color) -> Result<(), Raise> {
-    wrap::expect::<Owned<Color>>(ruby, object)?.with(|data| data.set(color));
+    wrap::expect::<Owned<Color>>(ruby, object)?.with(|data| data.set(ruby, color));
     Ok(())
 }
 
@@ -147,7 +147,7 @@ pub(crate) fn tone_arg(ruby: &Ruby, value: VALUE) -> Result<Tone, Raise> {
 
 /// Replaces the value of a `Tone` object.
 pub(crate) fn tone_set(ruby: &Ruby, object: VALUE, tone: Tone) -> Result<(), Raise> {
-    wrap::expect::<Owned<Tone>>(ruby, object)?.with(|data| data.set(tone));
+    wrap::expect::<Owned<Tone>>(ruby, object)?.with(|data| data.set(ruby, tone));
     Ok(())
 }
 
@@ -193,7 +193,7 @@ where
     Owned<Q>: Wrapped,
 {
     let parts = parts_of::<Q>(ruby, args)?;
-    this::<Q>(ruby, recv)?.with(|data| data.set(Q::from_parts(parts)));
+    this::<Q>(ruby, recv)?.with(|data| data.set(ruby, Q::from_parts(parts)));
     Ok(recv)
 }
 
@@ -218,7 +218,7 @@ where
     Owned<Q>: Wrapped,
 {
     let value = Q::from_parts(parts_of_rgss3::<Q>(ruby, args)?);
-    this::<Q>(ruby, recv)?.with(|data| data.set(value));
+    this::<Q>(ruby, recv)?.with(|data| data.set(ruby, value));
     Ok(recv)
 }
 
@@ -232,7 +232,7 @@ where
         [other] => copied::<Q>(ruby, other)?,
         _ => Q::from_parts(parts_of_rgss3::<Q>(ruby, args)?),
     };
-    this::<Q>(ruby, recv)?.with(|data| data.set(value));
+    this::<Q>(ruby, recv)?.with(|data| data.set(ruby, value));
     Ok(recv)
 }
 
@@ -259,7 +259,7 @@ where
     Owned<Q>: Wrapped,
 {
     let value = this::<Q>(ruby, args[0])?.get().value();
-    this::<Q>(ruby, recv)?.with(|data| data.set(value));
+    this::<Q>(ruby, recv)?.with(|data| data.set(ruby, value));
     Ok(recv)
 }
 
@@ -282,7 +282,7 @@ where
     this::<Q>(ruby, recv)?.with(|data| {
         let mut parts = data.value().parts();
         parts[I] = part;
-        data.set(Q::from_parts(parts));
+        data.set(ruby, Q::from_parts(parts));
     });
     Ok(args[0])
 }

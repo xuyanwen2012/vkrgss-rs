@@ -135,7 +135,8 @@ pub enum StartError {
     },
 }
 
-/// Proof of being on the interpreter thread while the interpreter is alive.
+/// Proof of being on a thread that holds the interpreter while the interpreter is alive: the
+/// interpreter thread, or over Ruby 1.9.2 a script thread that Ruby calls a host function on.
 ///
 /// The closures given to [`Interpreter::run`] and the host functions that Ruby calls receive
 /// a `&Ruby`; the operations of this crate that touch the interpreter are its methods. It is
@@ -147,7 +148,8 @@ pub struct Ruby {
 impl Ruby {
     /// # Safety
     ///
-    /// Only on the interpreter thread, between the end of start-up and finalisation.
+    /// Only on a thread that holds the interpreter, between the end of start-up and
+    /// finalisation.
     pub(crate) unsafe fn new() -> Self {
         Self {
             not_send: PhantomData,

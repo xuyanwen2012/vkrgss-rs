@@ -40,9 +40,9 @@ pub(crate) trait Wrapped: Sized + 'static {
 
 unsafe extern "C" fn alloc<T: Wrapped>(class: VALUE) -> VALUE {
     let data = Box::into_raw(Box::new(T::blank()));
-    // SAFETY: Ruby calls the allocator on the interpreter thread with the live class. Only
-    // a raw pointer is alive in this frame, so a `NoMemoryError` jumps over no destructor
-    // (and leaks the box). `free::<T>` takes back exactly this pointer.
+    // SAFETY: Ruby calls the allocator on a thread that holds the interpreter, with the live
+    // class. Only a raw pointer is alive in this frame, so a `NoMemoryError` jumps over no
+    // destructor (and leaks the box). `free::<T>` takes back exactly this pointer.
     unsafe { ffi::rb_data_object_alloc(class, data.cast(), None, Some(free::<T>)) }
 }
 
@@ -109,8 +109,8 @@ impl<T> Handle<T> {
 }
 
 /// The handle of `value` if it is an instance of the class of `T`, or of a subclass.
-pub(crate) fn find<T: Wrapped>(_ruby: &Ruby, value: VALUE) -> Option<Handle<T>> {
-    let class = T::class(&guest::classes());
+pub(crate) fn find<T: Wrapped>(ruby: &Ruby, value: VALUE) -> Option<Handle<T>> {
+    let class = T::class(&guest::classes(ruby));
     // SAFETY: the value is live by the condition of `rb`, and the class is installed. An
     // instance of the class comes from its allocator (Ruby rejects any other allocation), so
     // a data object of that class has a `T` behind its data pointer.
@@ -137,7 +137,7 @@ pub(crate) fn expect<T: Wrapped>(ruby: &Ruby, value: VALUE) -> Result<Handle<T>,
 
 /// A new instance of the class of `T` with this data, without `initialize`.
 pub(crate) fn new_object<T: Wrapped>(ruby: &Ruby, data: T) -> Result<VALUE, Raise> {
-    let object = rb::allocate(ruby, T::class(&guest::classes()))?;
+    let object = rb::allocate(ruby, T::class(&guest::classes(ruby)))?;
     expect::<T>(ruby, object)?.with(|slot| *slot = data);
     Ok(object)
 }
@@ -235,7 +235,7 @@ impl Property for Rect {
 /// Provenance: oracle measurement 2026-10-12, RGSS202E version 2.0.2.1, `vx-v3-save-REPORT.md`
 /// section 2. Not inside [`Guest::with`].
 pub(crate) fn intern_owner_names(ruby: &Ruby) -> Result<(), Raised> {
-    if Guest::with(|guest| std::mem::take(&mut guest.owner_names_pending)) {
+    if Guest::with(ruby, |guest| std::mem::take(&mut guest.owner_names_pending)) {
         rb::intern(ruby, c"owner")?;
         rb::intern(ruby, c"observer")?;
     }
@@ -273,10 +273,12 @@ impl<T: Property> Owned<T> {
 
     /// Replaces the value and passes the change on to the owner. With an owner this enters
     /// the guest state, so it must not be called from inside [`Guest::with`].
-    pub(crate) fn set(&mut self, value: T) {
+    pub(crate) fn set(&mut self, ruby: &Ruby, value: T) {
         self.value = value;
         if let Some(owner) = self.owner {
-            Guest::with(|guest| value.store(owner, &mut guest.scene, &mut guest.bitmaps));
+            Guest::with(ruby, |guest| {
+                value.store(owner, &mut guest.scene, &mut guest.bitmaps)
+            });
         }
     }
 }
@@ -294,14 +296,14 @@ mod tests {
     fn an_owned_value_follows_its_element_and_outlives_it() {
         let red = Color::new(255.0, 0.0, 0.0, 255.0);
         let blue = Color::new(0.0, 0.0, 255.0, 255.0);
-        let (in_scene, after_disposal) = harness().run(move |_ruby| {
-            let sprite = Guest::with(|guest| guest.scene.create_sprite(None)).unwrap();
+        let (in_scene, after_disposal) = harness().run(move |ruby| {
+            let sprite = Guest::with(ruby, |guest| guest.scene.create_sprite(None)).unwrap();
             let mut color = Owned::of(Color::TRANSPARENT, Owner::SpriteColor(sprite));
-            color.set(red);
-            let in_scene = Guest::with(|guest| guest.scene.sprite(sprite).map(|s| s.color));
-            Guest::with(|guest| guest.scene.dispose_sprite(sprite));
+            color.set(ruby, red);
+            let in_scene = Guest::with(ruby, |guest| guest.scene.sprite(sprite).map(|s| s.color));
+            Guest::with(ruby, |guest| guest.scene.dispose_sprite(sprite));
             // The handle names nothing now: the object is a plain value.
-            color.set(blue);
+            color.set(ruby, blue);
             (in_scene, color.value())
         });
         assert_eq!(in_scene, Ok(red));
@@ -310,8 +312,8 @@ mod tests {
 
     #[test]
     fn a_property_of_another_type_is_left_alone() {
-        let rect = harness().run(|_ruby| {
-            Guest::with(|guest| {
+        let rect = harness().run(|ruby| {
+            Guest::with(ruby, |guest| {
                 let sprite = guest.scene.create_sprite(None).unwrap();
                 let color = Owner::SpriteColor(sprite);
                 Rect::new(1, 2, 3, 4).store(color, &mut guest.scene, &mut guest.bitmaps);

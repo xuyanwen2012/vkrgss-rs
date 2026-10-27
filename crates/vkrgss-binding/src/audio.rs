@@ -132,7 +132,7 @@ fn play(ruby: &Ruby, channel: AudioChannel, args: &[VALUE]) -> HostResult {
         volume,
         pitch,
     };
-    Guest::with(|guest| {
+    Guest::with(ruby, |guest| {
         if remembered(guest, channel).is_some_and(|playing| playing.as_ref() == Some(&description))
         {
             return Ok(());
@@ -155,15 +155,15 @@ fn play(ruby: &Ruby, channel: AudioChannel, args: &[VALUE]) -> HostResult {
     Ok(ffi::Qnil)
 }
 
-fn stop(channel: AudioChannel) -> HostResult {
-    Guest::with(|guest| stop_channel(guest, channel));
+fn stop(ruby: &Ruby, channel: AudioChannel) -> HostResult {
+    Guest::with(ruby, |guest| stop_channel(guest, channel));
     Ok(ffi::Qnil)
 }
 
 /// `fade(time)` on a channel, with the time in milliseconds.
 fn fade(ruby: &Ruby, channel: AudioChannel, args: &[VALUE]) -> HostResult {
     let duration_ms = rb::int(ruby, args[0])?.max(0).unsigned_abs();
-    Guest::with(|guest| {
+    Guest::with(ruby, |guest| {
         if let Some(remembered) = remembered(guest, channel) {
             *remembered = None;
         }
@@ -179,8 +179,8 @@ fn bgm_play(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     play(ruby, AudioChannel::Bgm, args)
 }
 
-fn bgm_stop(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
-    stop(AudioChannel::Bgm)
+fn bgm_stop(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
+    stop(ruby, AudioChannel::Bgm)
 }
 
 fn bgm_fade(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
@@ -191,8 +191,8 @@ fn bgs_play(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     play(ruby, AudioChannel::Bgs, args)
 }
 
-fn bgs_stop(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
-    stop(AudioChannel::Bgs)
+fn bgs_stop(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
+    stop(ruby, AudioChannel::Bgs)
 }
 
 fn bgs_fade(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
@@ -203,8 +203,8 @@ fn me_play(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     play(ruby, AudioChannel::Me, args)
 }
 
-fn me_stop(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
-    stop(AudioChannel::Me)
+fn me_stop(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
+    stop(ruby, AudioChannel::Me)
 }
 
 fn me_fade(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
@@ -215,8 +215,8 @@ fn se_play(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
     play(ruby, AudioChannel::Se, args)
 }
 
-fn se_stop(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
-    stop(AudioChannel::Se)
+fn se_stop(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
+    stop(ruby, AudioChannel::Se)
 }
 
 // --- RGSS3 ------------------------------------------------------------------------------------
@@ -277,7 +277,7 @@ fn play_rgss3(ruby: &Ruby, channel: AudioChannel, args: &[VALUE]) -> HostResult 
         Some(&pos) if !ffi::nil_p(pos) => u64::try_from(rb::int(ruby, pos)?).unwrap_or(0),
         _ => 0,
     };
-    Guest::with(|guest| {
+    Guest::with(ruby, |guest| {
         let format = guest.audio.track(channel).and_then(|track| track.format);
         if let Some(Some(playing)) = remembered(guest, channel)
             && playing.name == name
@@ -330,7 +330,9 @@ fn play_rgss3(ruby: &Ruby, channel: AudioChannel, args: &[VALUE]) -> HostResult 
 
 /// The position of the model of a looping channel, an Integer.
 fn position(ruby: &Ruby, channel: AudioChannel) -> HostResult {
-    let bytes = Guest::with(|guest| guest.audio.track(channel).map_or(0, |track| track.bytes()));
+    let bytes = Guest::with(ruby, |guest| {
+        guest.audio.track(channel).map_or(0, |track| track.bytes())
+    });
     match c_long::try_from(bytes) {
         Ok(bytes) if ffi::fixable(bytes) => Ok(ffi::long2fix(bytes)),
         // A `Bignum`, which the interpreter makes from its literal.
@@ -373,7 +375,7 @@ fn setup_midi(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
 /// Defines `Audio`, with the functions of the runtime of the game.
 pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
     let module = ruby.define_module(c"Audio")?;
-    let rgss3 = Guest::with(|guest| guest.runtime.run.runtime) == Runtime::Rgss3;
+    let rgss3 = Guest::with(ruby, |guest| guest.runtime.run.runtime) == Runtime::Rgss3;
     if rgss3 {
         rb::class_method(ruby, module, c"bgm_play", -1, bgm_play_rgss3)?;
     } else {
@@ -413,7 +415,7 @@ pub(crate) fn define(ruby: &Ruby) -> Result<(), Raised> {
 /// `Audio.__reset__` of RGSS3: stops the four channels.
 ///
 /// Provenance: oracle measurement 2026-10-13, RGSS301, `ace-v1-api-REPORT.md` section 1.5.
-fn reset(_ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
-    Guest::with(stop_all);
+fn reset(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
+    Guest::with(ruby, stop_all);
     Ok(ffi::Qnil)
 }

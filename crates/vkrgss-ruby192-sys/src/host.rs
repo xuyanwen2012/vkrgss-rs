@@ -88,7 +88,8 @@ enum Exit {
 ///
 /// # Safety
 ///
-/// Interpreter thread only, called by Ruby (so that there is a handler to jump to).
+/// On a thread that holds the interpreter only, called by Ruby (so that there is a handler to
+/// jump to).
 unsafe fn finish(outcome: std::thread::Result<HostResult>) -> VALUE {
     let raise = match outcome {
         Ok(Ok(value)) => return value,
@@ -173,8 +174,8 @@ impl Arity {
 ///
 /// # Safety
 ///
-/// Interpreter thread only, called by Ruby from a function registered for `F`; `args` must be
-/// live values, valid for this call.
+/// On a thread that holds the interpreter only, called by Ruby from a function registered for
+/// `F`; `args` must be live values, valid for this call.
 unsafe fn run<F>(recv: VALUE, args: &[VALUE]) -> VALUE
 where
     F: Fn(&Ruby, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
@@ -185,11 +186,14 @@ where
         // and a value of it was given to the registration, so one exists; a dangling,
         // aligned pointer is a valid reference to a zero-sized value.
         let function: &F = unsafe { NonNull::<F>::dangling().as_ref() };
-        // SAFETY: Ruby only calls methods on the interpreter thread while it is alive.
+        // SAFETY: Ruby calls a host function only on a thread that holds the interpreter,
+        // while it is alive: the interpreter thread, which is every Ruby thread over Ruby
+        // 1.8.7, or over Ruby 1.9.2 also a script thread, a native thread of its own that
+        // holds the interpreter lock. The caller of `run` guarantees the same.
         let ruby = unsafe { Ruby::new() };
         panic::catch_unwind(AssertUnwindSafe(|| function(&ruby, recv, args)))
     };
-    // SAFETY: on the interpreter thread, called by Ruby.
+    // SAFETY: on a thread that holds the interpreter, called by Ruby.
     unsafe { finish(outcome) }
 }
 
@@ -365,7 +369,7 @@ unsafe extern "C" fn define_body(data: VALUE) -> VALUE {
 
 /// # Safety
 ///
-/// Interpreter thread only; the values inside `target` must be live.
+/// On a thread that holds the interpreter only; the values inside `target` must be live.
 unsafe fn define(target: Target, name: &CStr) -> Result<VALUE, Raised> {
     let mut define = Define {
         target,
@@ -381,7 +385,7 @@ unsafe fn define(target: Target, name: &CStr) -> Result<VALUE, Raised> {
 ///
 /// # Safety
 ///
-/// Interpreter thread only; the values inside `target` must be live.
+/// On a thread that holds the interpreter only; the values inside `target` must be live.
 unsafe fn define_function<F>(
     target: Target,
     name: &CStr,
@@ -416,8 +420,9 @@ where
 /// argument count before the body runs, `arity` reports the count, and the body receives
 /// exactly that many arguments, in order. Panics and raises behave the same in both.
 ///
-/// The body runs on the interpreter thread in the middle of Ruby's own frames. The values it
-/// receives stay alive for the call; a value it creates stays alive while a local holds it.
+/// The body runs on a thread that holds the interpreter, in the middle of Ruby's own frames.
+/// The values it receives stay alive for the call; a value it creates stays alive while a
+/// local holds it.
 impl Ruby {
     /// Defines a top-level class, or returns the existing one of that name.
     ///

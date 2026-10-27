@@ -27,7 +27,7 @@
 //! RGSS2 `Plane#viewport` takes the viewport and has no reader; in RGSS3 `Plane` has the
 //! reader `viewport` and the writer `viewport=` of the other elements.
 
-use std::cell::RefCell;
+use std::sync::{Mutex, PoisonError};
 
 use vkrgss_core::{Color, ElementKind, PlaneId, Rect, Scene, SceneError, SpriteId, TilemapId};
 use vkrgss_core::{Tone, ViewportId, WindowId};
@@ -216,10 +216,10 @@ pub(crate) enum Freed {
     Tilemap(TilemapId),
 }
 
-thread_local! {
-    /// Scene elements whose Ruby objects were collected, waiting to be disposed.
-    static FREED: RefCell<Vec<Freed>> = const { RefCell::new(Vec::new()) };
-}
+/// Scene elements whose Ruby objects were collected, waiting to be disposed. As the queue of
+/// bitmaps (see [`defer_free`](crate::guest::defer_free)), it is of the process, because the
+/// collector frees objects on whichever Ruby thread it runs.
+static FREED: Mutex<Vec<Freed>> = Mutex::new(Vec::new());
 
 /// Disposes `id` unless it is disposed already.
 fn dispose_in<K: Kind>(id: K, guest: &mut Guest) {
@@ -232,7 +232,7 @@ fn dispose_in<K: Kind>(id: K, guest: &mut Guest) {
 
 /// Disposes the scene elements of collected objects. Called when the guest is entered.
 pub(crate) fn dispose_freed(guest: &mut Guest) {
-    let freed = FREED.with(|queue| std::mem::take(&mut *queue.borrow_mut()));
+    let freed = std::mem::take(&mut *FREED.lock().unwrap_or_else(PoisonError::into_inner));
     for element in freed {
         match element {
             Freed::Sprite(id) => dispose_in(id, guest),
@@ -265,8 +265,10 @@ impl<K: Kind> Wrapped for Element<K> {
 
     fn collected(self) {
         if let Some(id) = self.id {
-            // After the thread's locals are gone there is no scene left to free from.
-            let _ = FREED.try_with(|queue| queue.borrow_mut().push(id.freed()));
+            FREED
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .push(id.freed());
         }
     }
 }
@@ -276,7 +278,7 @@ pub(crate) fn operate<R>(
     ruby: &Ruby,
     operation: impl FnOnce(&mut Guest) -> Result<R, SceneError>,
 ) -> Result<R, Raise> {
-    Guest::with(operation).map_err(|failure| error::to_raise(ruby, Error::Scene(failure)))
+    Guest::with(ruby, operation).map_err(|failure| error::to_raise(ruby, Error::Scene(failure)))
 }
 
 /// The `RGSSError` of a disposed element of kind `K`.
@@ -297,7 +299,7 @@ pub(crate) fn id<K: Kind>(ruby: &Ruby, recv: VALUE) -> Result<K, Raise> {
 /// `RGSSError`.
 pub(crate) fn live<K: Kind>(ruby: &Ruby, recv: VALUE) -> Result<K, Raise> {
     let id = id::<K>(ruby, recv)?;
-    if Guest::with(|guest| id.exists(&guest.scene)) {
+    if Guest::with(ruby, |guest| id.exists(&guest.scene)) {
         Ok(id)
     } else {
         Err(disposed_error::<K>(ruby))
@@ -356,7 +358,7 @@ pub(crate) fn create<K: Kind>(
     #[cfg(feature = "testing")]
     crate::scene_testing::count(K::ELEMENT, 1);
     if let Some(previous) = data.with(|data| data.id.replace(id)) {
-        Guest::with(|guest| dispose_in(previous, guest));
+        Guest::with(ruby, |guest| dispose_in(previous, guest));
     }
     let viewport = viewport.copied().unwrap_or(ffi::Qnil);
     rb::ivar_set(ruby, recv, VIEWPORT, viewport)?;
@@ -366,7 +368,7 @@ pub(crate) fn create<K: Kind>(
 /// `dispose`: removes the element from the scene. Disposing again does nothing.
 pub(crate) fn dispose<K: Kind>(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
     if let Some(id) = wrap::expect::<Element<K>>(ruby, recv)?.get().id {
-        Guest::with(|guest| dispose_in(id, guest));
+        Guest::with(ruby, |guest| dispose_in(id, guest));
     }
     Ok(ffi::Qnil)
 }
@@ -374,7 +376,7 @@ pub(crate) fn dispose<K: Kind>(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> Hos
 /// `disposed?`.
 pub(crate) fn disposed<K: Kind>(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
     let disposed = match wrap::expect::<Element<K>>(ruby, recv)?.get().id {
-        Some(id) => Guest::with(|guest| !id.exists(&guest.scene)),
+        Some(id) => Guest::with(ruby, |guest| !id.exists(&guest.scene)),
         None => true,
     };
     Ok(rb::boolean(disposed))
@@ -495,7 +497,7 @@ fn object_arg<T: Wrapped, R>(
     value: VALUE,
     arg: fn(&Ruby, VALUE) -> Result<R, Raise>,
 ) -> Result<R, Raise> {
-    let rgss3 = Guest::with(|guest| guest.runtime.run.runtime) == Runtime::Rgss3;
+    let rgss3 = Guest::with(ruby, |guest| guest.runtime.run.runtime) == Runtime::Rgss3;
     if rgss3 && wrap::find::<T>(ruby, value).is_none() {
         return Err(rb::wrong_type(ruby, value, |class| {
             format!("can't convert {class} into {}", T::CLASS_NAME)

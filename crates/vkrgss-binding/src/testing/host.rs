@@ -217,7 +217,7 @@ fn prepare(harness: &Harness) {
             .unwrap_or_else(PoisonError::into_inner)
             .take();
         harness.run(move |ruby| {
-            Guest::with(|guest| {
+            Guest::with(ruby, |guest| {
                 guest.files.refresh();
                 if let Some(run) = run {
                     guest.runtime.run = run;
@@ -279,9 +279,9 @@ pub fn play(
     let (link, host) = scripted_host(script);
     let source = source.to_owned();
     let outcome = harness.run(move |ruby| {
-        Guest::with(|guest| guest.connect(link));
+        Guest::with(ruby, |guest| guest.connect(link));
         let outcome = inspect(ruby, &source);
-        Guest::with(Guest::disconnect);
+        Guest::with(ruby, Guest::disconnect);
         outcome
     });
     (outcome, host.finish())
@@ -455,7 +455,7 @@ pub fn run_game(
             .expect("what the previous game left is disposed");
         // SAFETY: `nil` is a special constant.
         unsafe { ruby.set_current_error(vkrgss_ruby_sys::ffi::Qnil) };
-        Guest::with(|guest| {
+        Guest::with(ruby, |guest| {
             guest.files = files;
             // Not a new scene: the element objects of earlier games are collected while
             // this one plays, and their handles must not be those of its elements.
@@ -464,7 +464,11 @@ pub fn run_game(
         });
         let outcome = runtime::play(ruby, link);
         let after = inspect(ruby, &after);
-        (outcome, after, Guest::with(|guest| guest.bitmaps().len()))
+        (
+            outcome,
+            after,
+            Guest::with(ruby, |guest| guest.bitmaps().len()),
+        )
     });
     Played {
         outcome,
@@ -486,8 +490,8 @@ mod tests {
     #[test]
     fn three_frames_through_the_pump_are_three_frames_and_three_ticks() {
         let (link, host) = scripted_host(Script::new());
-        harness().run(move |_ruby| {
-            Guest::with(|guest| {
+        harness().run(move |ruby| {
+            Guest::with(ruby, |guest| {
                 guest.connect(link);
                 for _ in 0..3 {
                     let packet = guest.scene.extract(&mut guest.bitmaps);
@@ -533,7 +537,7 @@ mod tests {
     fn a_guest_whose_host_has_gone_stops_waiting_and_quits() {
         let (link, host) = scripted_host(Script::new());
         let quit = harness().run(move |ruby| {
-            Guest::with(|guest| {
+            Guest::with(ruby, |guest| {
                 guest.connect(link);
                 guest.disconnect();
                 guest.pump(Await::Tick);

@@ -44,7 +44,7 @@ pub(crate) fn rect_of(ruby: &Ruby, rect: Rect, owner: Owner) -> HostResult {
 
 /// Replaces the value of a `Rect` object.
 pub(crate) fn rect_set(ruby: &Ruby, object: VALUE, rect: Rect) -> Result<(), Raise> {
-    this(ruby, object)?.with(|data| data.set(rect));
+    this(ruby, object)?.with(|data| data.set(ruby, rect));
     Ok(())
 }
 
@@ -60,7 +60,7 @@ fn set(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
         rb::int(ruby, args[2])?,
         rb::int(ruby, args[3])?,
     );
-    this(ruby, recv)?.with(|data| data.set(rect));
+    this(ruby, recv)?.with(|data| data.set(ruby, rect));
     Ok(recv)
 }
 
@@ -89,7 +89,7 @@ fn initialize_rgss3(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     } else {
         rect_of_args(ruby, args)?
     };
-    this(ruby, recv)?.with(|data| data.set(rect));
+    this(ruby, recv)?.with(|data| data.set(ruby, rect));
     Ok(recv)
 }
 
@@ -101,13 +101,13 @@ fn set_rgss3(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
         [other] => rect_arg(ruby, other)?,
         _ => rect_of_args(ruby, args)?,
     };
-    this(ruby, recv)?.with(|data| data.set(rect));
+    this(ruby, recv)?.with(|data| data.set(ruby, rect));
     Ok(recv)
 }
 
 fn initialize_copy(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     let rect = rect_arg(ruby, args[0])?;
-    this(ruby, recv)?.with(|data| data.set(rect));
+    this(ruby, recv)?.with(|data| data.set(ruby, rect));
     Ok(recv)
 }
 
@@ -116,7 +116,7 @@ fn empty(ruby: &Ruby, recv: VALUE, _args: &[VALUE]) -> HostResult {
     this(ruby, recv)?.with(|data| {
         let mut rect = data.value();
         rect.empty();
-        data.set(rect);
+        data.set(ruby, rect);
     });
     Ok(recv)
 }
@@ -139,7 +139,7 @@ fn set_part<const I: usize>(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostRes
         let mut values = parts(data.value());
         values[I] = value;
         let [x, y, width, height] = values;
-        data.set(Rect::new(x, y, width, height));
+        data.set(ruby, Rect::new(x, y, width, height));
     });
     Ok(args[0])
 }

@@ -831,7 +831,7 @@ fn run_shim(
     in_place: bool,
 ) -> Result<i64, Raise> {
     let before = args.clone();
-    let result = Guest::with(|guest| shim(guest, &mut args));
+    let result = Guest::with(ruby, |guest| shim(guest, &mut args));
     for ((string, after), before) in strings.iter().zip(&args).zip(&before) {
         if let (Some(string), Arg::Buffer(bytes)) = (*string, after)
             && after != before
@@ -897,7 +897,7 @@ const NAMES: [&CStr; 6] = [
 /// Provenance: oracle measurement 2026-10-12, RGSS202E version 2.0.2.1, `vx-v3-save-REPORT.md`
 /// section 2.
 fn names(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
-    if Guest::with(|guest| guest.runtime.run.runtime) == Runtime::Rgss2 {
+    if Guest::with(ruby, |guest| guest.runtime.run.runtime) == Runtime::Rgss2 {
         for name in NAMES {
             rb::intern(ruby, name)?;
         }
@@ -1090,7 +1090,7 @@ fn initialize(ruby: &Ruby, recv: VALUE, args: &[VALUE]) -> HostResult {
     } else {
         export(&rb::bytes(ruby, rb::string_value(ruby, args[3])?)?)
     };
-    if !Guest::with(|guest| library_found(guest, &library)) {
+    if !Guest::with(ruby, |guest| library_found(guest, &library)) {
         // SAFETY: the class globals are set once the interpreter runs.
         let class = unsafe { ffi::rb_eRuntimeError };
         return Err(Raise::new(class, format!("LoadLibrary: {library}\n")));
@@ -1155,7 +1155,7 @@ fn pointer_param(ruby: &Ruby, value: VALUE) -> Result<(Arg, Option<VALUE>), Rais
 /// function.
 fn report(ruby: &Ruby, api: &Api) -> Result<(), Raise> {
     let name = format!("{} {}", api.library, api.function);
-    if !Guest::with(|guest| guest.win32api.reported.insert(name.clone())) {
+    if !Guest::with(ruby, |guest| guest.win32api.reported.insert(name.clone())) {
         return Ok(());
     }
     let line = format!("vkrgss: Win32API {name} is not emulated and returns 0\n");
