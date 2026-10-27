@@ -66,6 +66,8 @@ impl Overlay {
         };
         match overlay.init(device) {
             Ok(()) => Ok(overlay),
+            // Nothing of a lost device is used again: what was made is leaked.
+            Err(error) if error.is_device_lost() => Err(error),
             Err(error) => {
                 overlay.destroy_handles(device);
                 Err(error)

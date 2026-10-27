@@ -72,11 +72,13 @@ impl GpuBuffer {
         let bound =
             unsafe { device.bind_buffer_memory(buffer, allocation.memory(), allocation.offset()) };
         let buffer = GpuBuffer { buffer, allocation };
-        match bound {
+        match bound.map_err(VkError::vulkan("vkBindBufferMemory")) {
             Ok(()) => Ok(buffer),
-            Err(result) => {
+            // Nothing of a lost device is used again: the buffer is leaked.
+            Err(error) if error.is_device_lost() => Err(error),
+            Err(error) => {
                 buffer.destroy(device, allocator);
-                Err(VkError::from_result("vkBindBufferMemory", result))
+                Err(error)
             }
         }
     }
@@ -190,9 +192,12 @@ impl GpuImage {
                 image.allocation.offset(),
             )
         };
-        if let Err(result) = bound {
-            image.destroy(device, allocator);
-            return Err(VkError::from_result("vkBindImageMemory", result));
+        if let Err(error) = bound.map_err(VkError::vulkan("vkBindImageMemory")) {
+            // Nothing of a lost device is used again: the image is leaked.
+            if !error.is_device_lost() {
+                image.destroy(device, allocator);
+            }
+            return Err(error);
         }
         let view_info = vk::ImageViewCreateInfo::default()
             .image(image.image)
@@ -206,8 +211,12 @@ impl GpuImage {
                 Ok(image)
             }
             Err(result) => {
-                image.destroy(device, allocator);
-                Err(VkError::from_result("vkCreateImageView", result))
+                let error = VkError::from_result("vkCreateImageView", result);
+                // Nothing of a lost device is used again: the image is leaked.
+                if !error.is_device_lost() {
+                    image.destroy(device, allocator);
+                }
+                Err(error)
             }
         }
     }

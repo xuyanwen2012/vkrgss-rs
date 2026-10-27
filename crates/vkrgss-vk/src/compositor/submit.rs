@@ -49,12 +49,21 @@ impl VkCompositor {
                 Err(error) => failure = Some(error),
             }
         }
+        // A lost device ends the packet before anything else of it is made or submitted.
+        if let Some(error) = failure.as_ref().filter(|error| error.is_device_lost()) {
+            self.note_loss(error);
+            return Err(error.clone());
+        }
 
         // The frame, with whether its target is new. Made before recording starts.
         let mut draw = None;
         if let (Some(frame), None) = (frame, &failure) {
             match self.prepare_frame_resources(frame) {
                 Ok(new_target) => draw = Some((frame, new_target)),
+                Err(error) if error.is_device_lost() => {
+                    self.note_loss(&error);
+                    return Err(error);
+                }
                 Err(error) => failure = Some(error),
             }
         }
@@ -191,18 +200,23 @@ impl VkCompositor {
         readers.in_layout(vk::ImageLayout::GENERAL)
     }
 
-    /// Resets the command buffer and starts recording into it.
-    pub(super) fn begin_commands(&self) -> Result<(), VkError> {
+    /// Resets the command buffer and starts recording into it. A lost device is recorded
+    /// before the caller cleans up.
+    pub(super) fn begin_commands(&mut self) -> Result<(), VkError> {
         let info = vk::CommandBufferBeginInfo::default()
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
         // SAFETY: the command buffer belongs to this device, its pool allows resetting single
         // buffers, and it is not pending: every submission is waited for.
-        unsafe {
+        let begun = unsafe {
             self.gpu
                 .device
                 .begin_command_buffer(self.commands, &info)
                 .map_err(VkError::vulkan("vkBeginCommandBuffer"))
+        };
+        if let Err(error) = &begun {
+            self.note_loss(error);
         }
+        begun
     }
 
     /// Ends recording, submits the command buffer and blocks until the device has finished it,
@@ -308,6 +322,9 @@ impl VkCompositor {
             MemoryLocation::GpuToCpu,
         )?;
         let result = self.copy_image_to_buffer(image, (width, height), resting, buffer.buffer);
+        if let Err(error) = &result {
+            self.note_loss(error);
+        }
         if result.is_err() && !self.idle_after_failure() {
             // The copy may still be running; see `execute`.
             return result.map(|()| Vec::new());

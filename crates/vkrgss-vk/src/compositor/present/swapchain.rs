@@ -163,7 +163,8 @@ impl VkCompositor {
     /// After a draw that failed: gives the acquired image `index` back to the swapchain and
     /// replaces the two semaphores of the draw, so that the swapchain can go on. Returns
     /// `false` when that is not possible, without swapchain maintenance or because a call
-    /// failed, and the swapchain has to be replaced.
+    /// failed, and the swapchain has to be replaced. A call that finds the device lost
+    /// records that, and nothing more of the device is used.
     pub(super) fn release_undrawn(&mut self, index: u32) -> bool {
         let device = &self.gpu.device;
         let Some(presenter) = self.presenter.as_mut() else {
@@ -183,15 +184,29 @@ impl VkCompositor {
         }
         let semaphore = || {
             // SAFETY: the device is live.
-            unsafe { device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None) }.ok()
+            unsafe { device.create_semaphore(&vk::SemaphoreCreateInfo::default(), None) }
         };
-        let Some(acquired) = semaphore() else {
-            return false;
+        let acquired = match semaphore() {
+            Ok(semaphore) => semaphore,
+            Err(result) => {
+                if result == vk::Result::ERROR_DEVICE_LOST {
+                    self.lost.get_or_insert("vkCreateSemaphore");
+                }
+                return false;
+            }
         };
-        let Some(drawn) = semaphore() else {
-            // SAFETY: the semaphore was just created and is not used.
-            unsafe { device.destroy_semaphore(acquired, None) };
-            return false;
+        let drawn = match semaphore() {
+            Ok(semaphore) => semaphore,
+            Err(result) => {
+                if result == vk::Result::ERROR_DEVICE_LOST {
+                    // Nothing of a lost device is used again: the first one is leaked.
+                    self.lost.get_or_insert("vkCreateSemaphore");
+                    return false;
+                }
+                // SAFETY: the semaphore was just created and is not used.
+                unsafe { device.destroy_semaphore(acquired, None) };
+                return false;
+            }
         };
         let indices = [index];
         let info = vk::ReleaseSwapchainImagesInfoEXT::default()
@@ -403,11 +418,18 @@ impl VkCompositor {
         // only chained, with the flag for it, on a device with the mutable format extension,
         // and names the swapchain's format and its `UNORM` twin. Every submission was
         // waited for, so the old swapchain, if any, is idle and is retired by this call.
-        let created = unsafe { loader.create_swapchain(&info, None) };
+        let created = unsafe { loader.create_swapchain(&info, None) }
+            .map_err(VkError::vulkan("vkCreateSwapchainKHR"));
+        if let Err(error) = &created
+            && error.is_device_lost()
+        {
+            // Nothing of a lost device is used again: the old swapchain is leaked.
+            return Err(error.clone());
+        }
         if let Some(old) = old {
             old.destroy(device, loader);
         }
-        let handle = created.map_err(VkError::vulkan("vkCreateSwapchainKHR"))?;
+        let handle = created?;
         tracing::info!(
             "swapchain of {} by {} pixels, transform {:?} of the surface's {:?}",
             extent.width,
@@ -454,7 +476,7 @@ impl VkCompositor {
             timing,
             present_fences: maintenance.then(Vec::new),
         };
-        let filled = (|| {
+        let filled = (|| -> Result<(), VkError> {
             // SAFETY: the swapchain was just created from this device.
             chain.images = unsafe { loader.get_swapchain_images(chain.handle) }
                 .map_err(VkError::vulkan("vkGetSwapchainImagesKHR"))?;
@@ -487,6 +509,8 @@ impl VkCompositor {
                 presenter.swapchain = Some(chain);
                 Ok(true)
             }
+            // Nothing of a lost device is used again: the swapchain is leaked.
+            Err(error) if error.is_device_lost() => Err(error),
             Err(error) => {
                 chain.destroy(device, loader);
                 Err(error)

@@ -2,19 +2,21 @@
 //! device are replaced by ones that answer as a driver whose device is lost, and that note
 //! every call, so that a test sees which calls were made after the loss. No device is lost.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use ash::vk;
 use vkrgss_compose_ref::fixtures::{self, bitmap};
 use vkrgss_proto::{BitmapDelta, BitmapId, Color, FramePacket, FrameRate, Op, Rect, Size};
 
 use super::harness::{TestCompositor, assert_clean, test_device};
-use crate::{ValidationLog, VkCompositor, VkError};
+use crate::{OverlayImage, ValidationLog, VkCompositor, VkError};
 
 thread_local! {
     /// The replaced commands called on this thread, in order. The compositor calls them on
     /// the thread of the test.
     static CALLS: RefCell<Vec<&'static str>> = const { RefCell::new(Vec::new()) };
+    /// The real `vkCreateSemaphore`, for a replacement that creates the first semaphore.
+    static CREATE_SEMAPHORE: Cell<Option<vk::PFN_vkCreateSemaphore>> = const { Cell::new(None) };
 }
 
 fn note(call: &'static str) {
@@ -89,6 +91,102 @@ unsafe extern "system" fn lost_fences(
 ) -> vk::Result {
     note("vkWaitForFences");
     vk::Result::ERROR_DEVICE_LOST
+}
+
+unsafe extern "system" fn lost_begin(
+    _: vk::CommandBuffer,
+    _: *const vk::CommandBufferBeginInfo<'_>,
+) -> vk::Result {
+    note("vkBeginCommandBuffer");
+    vk::Result::ERROR_DEVICE_LOST
+}
+
+unsafe extern "system" fn lost_image_view(
+    _: vk::Device,
+    _: *const vk::ImageViewCreateInfo<'_>,
+    _: *const vk::AllocationCallbacks<'_>,
+    _: *mut vk::ImageView,
+) -> vk::Result {
+    note("vkCreateImageView");
+    vk::Result::ERROR_DEVICE_LOST
+}
+
+/// Notes the call and destroys nothing, like the other replaced destroys.
+unsafe extern "system" fn destroy_image_view(
+    _: vk::Device,
+    _: vk::ImageView,
+    _: *const vk::AllocationCallbacks<'_>,
+) {
+    note("vkDestroyImageView");
+}
+
+unsafe extern "system" fn lost_bind_buffer(
+    _: vk::Device,
+    _: vk::Buffer,
+    _: vk::DeviceMemory,
+    _: vk::DeviceSize,
+) -> vk::Result {
+    note("vkBindBufferMemory");
+    vk::Result::ERROR_DEVICE_LOST
+}
+
+unsafe extern "system" fn destroy_buffer(
+    _: vk::Device,
+    _: vk::Buffer,
+    _: *const vk::AllocationCallbacks<'_>,
+) {
+    note("vkDestroyBuffer");
+}
+
+unsafe extern "system" fn lost_semaphore(
+    _: vk::Device,
+    _: *const vk::SemaphoreCreateInfo<'_>,
+    _: *const vk::AllocationCallbacks<'_>,
+    _: *mut vk::Semaphore,
+) -> vk::Result {
+    note("vkCreateSemaphore");
+    vk::Result::ERROR_DEVICE_LOST
+}
+
+/// Creates the first semaphore with the real command and finds the device lost at the next.
+unsafe extern "system" fn second_semaphore_lost(
+    device: vk::Device,
+    info: *const vk::SemaphoreCreateInfo<'_>,
+    allocator: *const vk::AllocationCallbacks<'_>,
+    semaphore: *mut vk::Semaphore,
+) -> vk::Result {
+    note("vkCreateSemaphore");
+    match CREATE_SEMAPHORE.with(Cell::take) {
+        // SAFETY: the arguments are those the compositor passed to the real command.
+        Some(create) => unsafe { create(device, info, allocator, semaphore) },
+        None => vk::Result::ERROR_DEVICE_LOST,
+    }
+}
+
+unsafe extern "system" fn destroy_semaphore(
+    _: vk::Device,
+    _: vk::Semaphore,
+    _: *const vk::AllocationCallbacks<'_>,
+) {
+    note("vkDestroySemaphore");
+}
+
+unsafe extern "system" fn lost_pipeline_layout(
+    _: vk::Device,
+    _: *const vk::PipelineLayoutCreateInfo<'_>,
+    _: *const vk::AllocationCallbacks<'_>,
+    _: *mut vk::PipelineLayout,
+) -> vk::Result {
+    note("vkCreatePipelineLayout");
+    vk::Result::ERROR_DEVICE_LOST
+}
+
+unsafe extern "system" fn destroy_set_layout(
+    _: vk::Device,
+    _: vk::DescriptorSetLayout,
+    _: *const vk::AllocationCallbacks<'_>,
+) {
+    note("vkDestroyDescriptorSetLayout");
 }
 
 const SIZE: Size = Size::new(20, 18);
@@ -216,6 +314,196 @@ fn lost_device_in_the_wait_for_present_fences_fails_the_present() {
     assert_eq!(take_calls(), ["vkWaitForFences"]);
     assert_eq!(compositor.present().map(|_| ()), lost);
     assert_eq!(compositor.release_surface(), lost);
+    assert_refused(&mut compositor, &lost);
+    assert_clean(&log, "around the lost device");
+}
+
+/// Starting to record finds the device lost: the device is not idled and the image the
+/// packet destroyed is not released.
+#[test]
+fn lost_begin_is_recorded_before_the_cleanup() {
+    let mut compositor = compositor_with_a_bitmap();
+    compositor.replace_device_commands(|v1_0, _| {
+        v1_0.begin_command_buffer = lost_begin;
+        v1_0.device_wait_idle = idle;
+        v1_0.destroy_image = destroy_image;
+    });
+    let lost = Err(VkError::DeviceLost {
+        call: "vkBeginCommandBuffer",
+    });
+    let destroy = vec![BitmapDelta::Destroy { id: BITMAP }];
+    assert_eq!(compositor.render(&packet(destroy, 2)), lost);
+    assert_eq!(take_calls(), ["vkBeginCommandBuffer"]);
+    assert_refused(&mut compositor, &lost);
+}
+
+/// The view of the image of a new bitmap finds the device lost: the image is not destroyed
+/// and nothing of the packet is submitted.
+#[test]
+fn lost_view_of_a_new_bitmap_destroys_nothing_and_submits_nothing() {
+    let mut compositor = compositor_with_a_bitmap();
+    compositor.replace_device_commands(|v1_0, _| {
+        v1_0.create_image_view = lost_image_view;
+        v1_0.destroy_image_view = destroy_image_view;
+        v1_0.destroy_image = destroy_image;
+        v1_0.begin_command_buffer = lost_begin;
+        v1_0.device_wait_idle = idle;
+    });
+    let submissions = compositor.submissions();
+    let lost = Err(VkError::DeviceLost {
+        call: "vkCreateImageView",
+    });
+    let deltas = bitmap(BitmapId::new(1, 0), 8, 8, fixtures::gradient(8, 8)).into();
+    assert_eq!(compositor.render(&packet(deltas, 2)), lost);
+    assert_eq!(take_calls(), ["vkCreateImageView"]);
+    assert_eq!(compositor.submissions(), submissions);
+    assert_refused(&mut compositor, &lost);
+}
+
+/// Binding the memory of a larger staging buffer finds the device lost: the buffer is not
+/// destroyed, and the packet is neither recorded nor submitted.
+#[test]
+fn lost_bind_of_a_frame_buffer_destroys_nothing_and_submits_nothing() {
+    let mut compositor = compositor_with_a_bitmap();
+    compositor.replace_device_commands(|v1_0, _| {
+        v1_0.bind_buffer_memory = lost_bind_buffer;
+        v1_0.destroy_buffer = destroy_buffer;
+        v1_0.begin_command_buffer = lost_begin;
+        v1_0.device_wait_idle = idle;
+    });
+    let submissions = compositor.submissions();
+    let lost = Err(VkError::DeviceLost {
+        call: "vkBindBufferMemory",
+    });
+    // Four times the upload of the bitmap there is, so the staging buffer has to grow.
+    let deltas = bitmap(BitmapId::new(1, 0), 16, 16, fixtures::gradient(16, 16)).into();
+    assert_eq!(compositor.render(&packet(deltas, 2)), lost);
+    assert_eq!(take_calls(), ["vkBindBufferMemory"]);
+    assert_eq!(compositor.submissions(), submissions);
+    assert_refused(&mut compositor, &lost);
+}
+
+/// A compositor for a headless surface that has presented once, or `None` where an undrawn
+/// image is not given back, so that a failed draw replaces the swapchain instead.
+fn presenting_compositor(log: &ValidationLog) -> Option<VkCompositor> {
+    let mut compositor = VkCompositor::with_headless_surface(test_device(), Some(log)).unwrap();
+    compositor.resize_surface(Size::new(64, 48));
+    compositor.render(&packet(vec![], 1)).unwrap();
+    assert_eq!(compositor.present(), Ok(true));
+    if !compositor.releases_undrawn_images() {
+        eprintln!("{}: undrawn images are not given back", compositor.device());
+        return None;
+    }
+    take_calls();
+    Some(compositor)
+}
+
+/// After a failed draw the semaphores that replace those of the undrawn image cannot be
+/// made, the first or the second, because the device is lost: the present fails with that,
+/// nothing is destroyed, and nothing of the device is used after it.
+#[test]
+fn lost_semaphore_after_a_failed_draw_fails_the_present() {
+    let log = ValidationLog::new();
+    for second in [false, true] {
+        let Some(mut compositor) = presenting_compositor(&log) else {
+            return;
+        };
+        compositor.replace_device_commands(|v1_0, _| {
+            if second {
+                CREATE_SEMAPHORE.with(|create| create.set(Some(v1_0.create_semaphore)));
+                v1_0.create_semaphore = second_semaphore_lost;
+            } else {
+                v1_0.create_semaphore = lost_semaphore;
+            }
+            v1_0.destroy_semaphore = destroy_semaphore;
+        });
+        compositor.fail_next_draw();
+        let lost = Err(VkError::DeviceLost {
+            call: "vkCreateSemaphore",
+        });
+        assert_eq!(compositor.present().map(|_| ()), lost, "second: {second}");
+        let expected: &[&str] = match second {
+            true => &["vkCreateSemaphore", "vkCreateSemaphore"],
+            false => &["vkCreateSemaphore"],
+        };
+        assert_eq!(take_calls(), expected, "second: {second}");
+        assert_eq!(compositor.present().map(|_| ()), lost);
+        assert_refused(&mut compositor, &lost);
+    }
+    assert_clean(&log, "around the lost device");
+}
+
+/// A view of the images of a new swapchain finds the device lost: the new swapchain is not
+/// destroyed, and nothing of the device is used after it.
+#[test]
+fn lost_view_of_a_new_swapchain_fails_the_present() {
+    let log = ValidationLog::new();
+    let mut compositor = VkCompositor::with_headless_surface(test_device(), Some(&log)).unwrap();
+    compositor.resize_surface(Size::new(64, 48));
+    compositor.render(&packet(vec![], 1)).unwrap();
+    assert_eq!(compositor.present(), Ok(true));
+    compositor.replace_device_commands(|v1_0, _| {
+        v1_0.create_image_view = lost_image_view;
+        v1_0.destroy_image_view = destroy_image_view;
+        v1_0.destroy_semaphore = destroy_semaphore;
+    });
+    take_calls();
+    compositor.invalidate_swapchain();
+    let lost = Err(VkError::DeviceLost {
+        call: "vkCreateImageView",
+    });
+    assert_eq!(compositor.present().map(|_| ()), lost);
+    // The old swapchain is retired before the new one is filled; nothing follows the view.
+    let calls = take_calls();
+    assert_eq!(calls.last(), Some(&"vkCreateImageView"), "{calls:?}");
+    assert_eq!(
+        calls
+            .iter()
+            .filter(|call| **call == "vkCreateImageView")
+            .count(),
+        1
+    );
+    assert_eq!(compositor.present().map(|_| ()), lost);
+    assert_refused(&mut compositor, &lost);
+    assert_clean(&log, "around the lost device");
+}
+
+/// What a draw needs, or the overlay, cannot be made because the device is lost: what was
+/// made of it is not destroyed, and nothing of the device is used after it.
+#[test]
+fn lost_device_while_the_presenter_or_the_overlay_is_made_destroys_nothing() {
+    let log = ValidationLog::new();
+    let lost = Err(VkError::DeviceLost {
+        call: "vkCreatePipelineLayout",
+    });
+    let replace = |v1_0: &mut ash::DeviceFnV1_0, _: &mut ash::DeviceFnV1_3| {
+        v1_0.create_pipeline_layout = lost_pipeline_layout;
+        v1_0.destroy_descriptor_set_layout = destroy_set_layout;
+    };
+
+    // The presenter, made by the first scaled frame.
+    let mut compositor = VkCompositor::with_headless_surface(test_device(), Some(&log)).unwrap();
+    compositor.render(&packet(vec![], 1)).unwrap();
+    take_calls();
+    compositor.replace_device_commands(replace);
+    assert_eq!(compositor.scale_frame(SIZE).map(|_| ()), lost);
+    assert_eq!(take_calls(), ["vkCreatePipelineLayout"]);
+    assert_refused(&mut compositor, &lost);
+
+    // The overlay, made by the first picture.
+    let mut compositor = VkCompositor::with_headless_surface(test_device(), Some(&log)).unwrap();
+    compositor.resize_surface(Size::new(64, 48));
+    compositor.render(&packet(vec![], 1)).unwrap();
+    assert_eq!(compositor.present(), Ok(true));
+    take_calls();
+    compositor.replace_device_commands(replace);
+    let picture = OverlayImage {
+        size: Size::new(4, 4),
+        pixels: vec![255; 4 * 4 * 4],
+    };
+    assert_eq!(compositor.set_overlay(Some(&picture)), lost);
+    assert_eq!(take_calls(), ["vkCreatePipelineLayout"]);
+    assert_eq!(compositor.set_overlay(Some(&picture)), lost);
     assert_refused(&mut compositor, &lost);
     assert_clean(&log, "around the lost device");
 }

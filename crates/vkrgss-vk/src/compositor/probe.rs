@@ -173,6 +173,9 @@ impl VkCompositor {
     pub(crate) fn apply_bitmaps(&mut self, deltas: &[BitmapDelta]) -> Result<(), VkError> {
         let mut pending = Pending::default();
         let checked = self.queue_deltas(deltas, &mut pending);
+        if let Err(error) = &checked {
+            self.note_loss(error);
+        }
         self.execute(pending, None)?;
         checked
     }

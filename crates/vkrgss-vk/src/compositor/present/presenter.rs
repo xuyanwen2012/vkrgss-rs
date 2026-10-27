@@ -98,6 +98,8 @@ impl Presenter {
         };
         match presenter.init(device) {
             Ok(()) => Ok(presenter),
+            // Nothing of a lost device is used again: what was made is leaked.
+            Err(error) if error.is_device_lost() => Err(error),
             Err(error) => {
                 presenter.destroy(device, allocator);
                 Err(error)
@@ -422,8 +424,9 @@ impl VkCompositor {
         work: impl FnOnce(&mut VkCompositor) -> Result<(), VkError>,
     ) -> Result<(), VkError> {
         let result = work(self);
-        if result.is_err() {
+        if let Err(error) = &result {
             // A submission whose wait ran out may never end, so a lost device is not idled.
+            self.note_loss(error);
             self.idle_after_failure();
         }
         result

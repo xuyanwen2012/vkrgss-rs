@@ -133,6 +133,19 @@ engine's own waits beyond the existing bounded acquire.
   (`replace_device_commands`) with ones that report the loss and note every call, and check
   that the call fails and that no replaced command and no submission follows; the pacing
   case uses the stand-in of the pacer tests.
+- **Loss on a failure path.** A second review found losses that were still cleaned up after:
+  `begin_commands` now records a loss itself; `GpuBuffer::new` and `GpuImage::new`
+  (`resources.rs`) do not destroy what they made when binding memory or making the view finds
+  the device lost, nor do `Presenter::new` and `Overlay::new` when their setup does, nor the
+  replacement of a swapchain when making it or filling it does (the old or new swapchain is
+  leaked); `release_undrawn` keeps the loss of either replacement semaphore and destroys
+  neither. `submit` returns at once when a buffer, the table buffer or the frame target of
+  the packet found the device lost, instead of recording and submitting the rest;
+  `render_packet`, `forget_all` and the test helper `apply_bitmaps` record a loss of their
+  deltas, the image of a new bitmap, before `execute`, which refuses a lost device before it
+  writes a descriptor; `execute`, `read_image` and `submit_or_idle` record the loss of the
+  work they ran before they idle. Each case has a test in `tests/device_loss.rs` that fails
+  without the fix.
 - **Releasing the surface.** `release_surface` keeps the result of idling, destroys the
   swapchain, releases the surface and then returns the error. The presentation probe can
   replace the result of that idle, after it has idled, for the test. When the idle, or the

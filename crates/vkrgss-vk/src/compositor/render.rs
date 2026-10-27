@@ -69,7 +69,9 @@ impl VkCompositor {
                 Ok(())
             }
             Err(error) => {
-                // A failure of the device outranks an invalid packet.
+                // A failure of the device outranks an invalid packet. A lost device, which
+                // an image of a new bitmap may have met, ends the packet here.
+                self.note_loss(&error);
                 self.execute(pending, None)?;
                 Err(error)
             }
@@ -102,6 +104,9 @@ impl VkCompositor {
         let checked = self
             .queue_deltas(&bitmaps, &mut pending)
             .and_then(|()| self.apply_table_deltas(&tables));
+        if let Err(error) = &checked {
+            self.note_loss(error);
+        }
         self.execute(pending, None)?;
         checked
     }
@@ -261,14 +266,21 @@ impl VkCompositor {
 
     /// Carries out queued bitmap work and, when there is one, the frame: one submission,
     /// waited for, then the release of everything the work was the last user of. That release
-    /// happens on every path, so a failure leaks nothing.
+    /// happens on every path, so a failure leaks nothing, except on a lost device, which is
+    /// not used at all once it is found lost, before or during the submission.
     pub(super) fn execute(
         &mut self,
         pending: Pending<'_>,
         frame: Option<&FrameData>,
     ) -> Result<(), VkError> {
+        if let Some(call) = self.lost {
+            return Err(VkError::DeviceLost { call });
+        }
         self.write_bitmap_descriptors(&pending.touched);
         let result = self.submit(&pending, frame);
+        if let Err(error) = &result {
+            self.note_loss(error);
+        }
         // Whatever was submitted has to finish before the objects below are destroyed and the
         // frame buffers are written again. On a lost device it may still be running: the
         // retired images are leaked, and the device is not idled, which might never end.
