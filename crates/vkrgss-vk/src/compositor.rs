@@ -1,6 +1,6 @@
 //! The compositor: owns the device and everything created from it.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::mem::ManuallyDrop;
 use std::time::Duration;
 
@@ -129,6 +129,9 @@ pub struct VkCompositor {
     /// when a frame first needs it and replaced by a larger one when a frame needs more room;
     /// the descriptor of a storage buffer names the whole of it.
     frame_buffers: [Option<(GpuBuffer, u64)>; FrameBuffer::COUNT],
+    /// The bytes of the uploads of each of the last packets, newest last, at most
+    /// `STAGING_FRAMES` of them: what decides whether the staging buffer is given back.
+    staging_needs: VecDeque<u64>,
     /// The frame target, in the `GENERAL` layout, sized for the last packet that got as far as
     /// drawing. It stays on the device; `read_frame` copies it out as a separate step.
     target: Option<GpuImage>,

@@ -12,10 +12,10 @@
 
 ## 3. Resources and presentation
 
-- [ ] 3.1 `ensure_target` replaces the frame target only after the new one exists. Verify: `failed_target_allocation_keeps_the_previous_frame` and "The newest frame after the frame target was recreated" tests pass.
-- [ ] 3.2 The staging buffer shrinks after a run of small uploads. Verify: `staging_buffer_shrinks_after_one_large_upload` and the per-frame buffer tests pass.
-- [ ] 3.3 A present that shows nothing keeps the frame unshown. Verify: `out_of_date_twice_keeps_the_frame_unshown`.
-- [ ] 3.4 The descriptor check counts the whole set. Verify: `descriptor_check_counts_the_whole_set`.
+- [x] 3.1 `ensure_target` replaces the frame target only after the new one exists. Verify: `failed_target_allocation_keeps_the_previous_frame` and "The newest frame after the frame target was recreated" tests pass.
+- [x] 3.2 The staging buffer shrinks after a run of small uploads. Verify: `staging_buffer_shrinks_after_one_large_upload` and the per-frame buffer tests pass.
+- [x] 3.3 A present that shows nothing keeps the frame unshown. Verify: `out_of_date_twice_keeps_the_frame_unshown`.
+- [x] 3.4 The descriptor check counts the whole set. Verify: `descriptor_check_counts_the_whole_set`.
 
 ## 4. Documents
 

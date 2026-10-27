@@ -31,6 +31,7 @@ impl VkCompositor {
     ) -> Result<(), VkError> {
         let mut failure = None;
         let started = self.stage_start();
+        self.note_staging_need(pending.staging_len);
 
         let mut staging_buffer = vk::Buffer::null();
         if pending.staging_len > 0 {

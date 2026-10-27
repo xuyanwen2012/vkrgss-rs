@@ -119,6 +119,32 @@ engine's own waits beyond the existing bounded acquire.
   lost device is reported once as "the display's device was lost at frame N" and makes the
   session failing whatever `fail_on_rejected_frame` says, so it ends as `SessionEnd::Failed`
   with the tick of that frame; no later frame is rendered.
+- **Previous frame.** `ensure_target` allocates the new image and points the descriptor at
+  it first; only then are `has_frame` cleared, the old image destroyed and the presenter told
+  to forget its binding. The rendering probe can fail the next allocation of a frame target
+  (`fail_next_target`), which is what the test uses; the existing resource probe counts only
+  frame buffers.
+- **Staging buffer.** `frame_buffer` replaces the staging buffer by one of exactly the size
+  the packet needs when it is larger than 64 MiB and more than four times larger than every
+  upload of the last 60 packets (`STAGING_KEPT_BYTES`, `STAGING_SHRINK_FACTOR`,
+  `STAGING_FRAMES` in `buffers.rs`). Each submission counts the bytes of its uploads, 0 for
+  none, in a queue of 60. The check is made where the staging buffer is asked for, so only
+  a packet with an upload gives the buffer back.
+- **Unshown frame.** The attempts of `present` moved into `show`; `present` puts the frame
+  back into `unshown_frame` whenever `show` returns anything but `Ok(true)`. The presentation
+  probe can make acquires report an out-of-date swapchain (`report_out_of_date`).
+- **Descriptor limits.** `DeviceCaps` holds the sampled-image limit (the smaller of the per-set
+  and per-stage update-after-bind limits, against the bitmap slots) and
+  `maxPerStageUpdateAfterBindResources` apart; the latter is held against
+  `COMPOSE_SET_DESCRIPTORS`, 65542 (the 65536 bitmap slots, the frame target and five storage
+  buffers), which a debug assertion ties to the bindings of the set. The devices in use stay
+  suitable, with these values of `maxPerStageUpdateAfterBindResources`: llvmpipe (Mesa
+  26.2.5, LLVM 22.1.8) 1015808 and RADV on the Raphael integrated GPU (Mesa 26.2.5) 8388606,
+  both from `vulkaninfo` under the loader restriction on 2026-10-26; from vulkan.gpuinfo.org,
+  Apple M4 with MoltenVK (report 52267, macOS 27.0.1) 1000000, Mali-G710 (report 51018,
+  Pixel Tablet, the GPU of the Pixel 7a, driver 54.3.0; report 51090, an older driver,
+  1572864) 8388608, and Adreno 750 (report 51830, Galaxy Z Fold6, the GPU of the Galaxy
+  S24+; report 52484 the same) 50331648. Their sampled-image limits are at least 524288.
 - **Drop.** A lost compositor leaks everything, the device and the instance with it: the
   device is now a `ManuallyDrop<Gpu>` that `drop` drops last only when the device is not lost.
 

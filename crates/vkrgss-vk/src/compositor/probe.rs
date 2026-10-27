@@ -23,6 +23,9 @@ pub(super) struct Probe {
     /// The number of frame buffers created so far, first ones and larger ones alike.
     #[cfg(test)]
     frame_buffers_created: u32,
+    /// Failure injection: whether the next allocation of a frame target fails.
+    #[cfg(test)]
+    target_failure: bool,
     /// Failure injection: what the next wait for a submission returns once it has waited.
     #[cfg(test)]
     wait_result: Option<vk::Result>,
@@ -51,6 +54,17 @@ impl Probe {
         self.frame_buffers_created += 1;
     }
 
+    /// Before a frame target is allocated: fails when that is the injected failure.
+    pub(super) fn before_target(&mut self) -> Result<(), VkError> {
+        if std::mem::take(&mut self.target_failure) {
+            return Err(VkError::Memory {
+                what: "frame target",
+                message: "injected failure".to_owned(),
+            });
+        }
+        Ok(())
+    }
+
     /// What a wait for a submission that returned `waited` returns: the injected result, once,
     /// or `waited`.
     pub(super) fn wait_result(&mut self, waited: VkResult<()>) -> VkResult<()> {
@@ -70,6 +84,11 @@ impl Probe {
 
     #[inline(always)]
     pub(super) fn frame_buffer_created(&mut self) {}
+
+    #[inline(always)]
+    pub(super) fn before_target(&mut self) -> Result<(), VkError> {
+        Ok(())
+    }
 
     #[inline(always)]
     pub(super) fn wait_result(&mut self, waited: VkResult<()>) -> VkResult<()> {
@@ -101,6 +120,11 @@ impl VkCompositor {
         self.probe.frame_buffer_failure = Some(successes);
     }
 
+    /// Makes the next allocation of a frame target fail.
+    pub(crate) fn fail_next_target(&mut self) {
+        self.probe.target_failure = true;
+    }
+
     /// The number of frame buffers created so far.
     pub(crate) fn frame_buffers_created(&self) -> u32 {
         self.probe.frame_buffers_created
@@ -111,6 +135,13 @@ impl VkCompositor {
     /// ran out or `ERROR_DEVICE_LOST`.
     pub(crate) fn inject_wait_result(&mut self, result: vk::Result) {
         self.probe.wait_result = Some(result);
+    }
+
+    /// The size of the staging buffer in bytes, if there is one.
+    pub(crate) fn staging_buffer_bytes(&self) -> Option<u64> {
+        self.frame_buffers[super::FrameBuffer::Staging as usize]
+            .as_ref()
+            .map(|(_, bytes)| *bytes)
     }
 
     /// The number of submissions so far.

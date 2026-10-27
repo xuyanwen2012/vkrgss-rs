@@ -35,6 +35,11 @@ use instance::{Candidate, Instance};
 /// Number of bitmap slots, and so the length of the sampled-image array the shader indexes.
 pub(crate) const BITMAP_SLOTS: u32 = 65536;
 
+/// The descriptors of the composition set, which the compute stage reads: the bitmap slots,
+/// the frame target and five storage buffers. Its layout is created for update after bind, so
+/// each of them counts against `maxPerStageUpdateAfterBindResources`.
+pub(crate) const COMPOSE_SET_DESCRIPTORS: u32 = BITMAP_SLOTS + 6;
+
 /// Edge of a tile in pixels, and of the compute workgroup that evaluates it.
 pub(crate) const TILE_SIZE: u32 = 16;
 
@@ -144,6 +149,8 @@ pub(crate) struct DeviceCaps {
     pub dynamic_rendering: bool,
     /// The smaller of the per-set and per-stage update-after-bind sampled-image limits.
     pub max_update_after_bind_sampled_images: u32,
+    /// `maxPerStageUpdateAfterBindResources`: every descriptor of a stage, of any type.
+    pub max_update_after_bind_resources: u32,
     /// `maxComputeWorkGroupInvocations`.
     pub max_work_group_invocations: u32,
     /// The x and y entries of `maxComputeWorkGroupSize`.
@@ -189,6 +196,13 @@ pub(crate) fn lacks(caps: &DeviceCaps) -> Vec<String> {
         lacks.push(format!(
             "{BITMAP_SLOTS} update-after-bind sampled images (supports {})",
             caps.max_update_after_bind_sampled_images
+        ));
+    }
+    if caps.max_update_after_bind_resources < COMPOSE_SET_DESCRIPTORS {
+        lacks.push(format!(
+            "{COMPOSE_SET_DESCRIPTORS} update-after-bind resources per stage, \
+             maxPerStageUpdateAfterBindResources (supports {})",
+            caps.max_update_after_bind_resources
         ));
     }
     let invocations = TILE_SIZE * TILE_SIZE;

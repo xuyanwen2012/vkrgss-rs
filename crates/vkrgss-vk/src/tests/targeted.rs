@@ -666,6 +666,44 @@ fn lost_device_refuses_later_calls() {
     );
 }
 
+// Requirement: The previous frame survives a failed resize
+
+/// Scenario "Allocation fails": the frame target of the first size stays with its frame, and
+/// the size change succeeds once the target can be had.
+#[test]
+fn failed_target_allocation_keeps_the_previous_frame() {
+    let id = BitmapId::new(0, 0);
+    let first = packet(
+        Size::new(20, 18),
+        bitmap(id, 8, 8, fixtures::gradient(8, 8)).into(),
+        vec![
+            clear(Rect::new(0, 0, 20, 18), [10, 20, 30, 255]),
+            Op::Quad(sprite(id, 8, 8, 3, 4)),
+        ],
+    );
+    let larger = |red| plain_frame(Size::new(32, 24), red);
+    let mut reference = reference::Compositor::new();
+    let mut compositor = TestCompositor::new();
+    let wanted = reference.render(&first).unwrap();
+    compositor.render(&first).unwrap();
+
+    compositor.fail_next_target();
+    assert_eq!(
+        compositor.render(&larger(1)),
+        Err(VkError::Memory {
+            what: "frame target",
+            message: "injected failure".to_owned(),
+        })
+    );
+    let kept = compositor.read_frame().unwrap().expect("the first frame");
+    assert_eq!(frame_difference(&wanted, &kept), None);
+
+    let wanted = reference.render(&larger(2)).unwrap();
+    compositor.render(&larger(2)).unwrap();
+    let rendered = compositor.read_frame().unwrap().unwrap();
+    assert_eq!(frame_difference(&wanted, &rendered), None);
+}
+
 // Requirement: Device selection, on the real devices of this machine
 
 #[test]
@@ -920,6 +958,59 @@ fn larger_frame_and_the_small_one_after_it_match_the_reference() {
     }
     assert!(created[1] > created[0], "the large frame needs more room");
     assert_eq!(created[2], created[1], "nothing shrinks");
+}
+
+// Requirement: The upload buffer does not stay at its largest
+
+/// Scenario "One large upload": a bitmap of more than 64 MiB, then a hundred frames that
+/// each upload a small one.
+#[test]
+fn staging_buffer_shrinks_after_one_large_upload() {
+    let size = Size::new(40, 30);
+    let (large, small) = (BitmapId::new(0, 0), BitmapId::new(1, 0));
+    let (width, height) = (4096, 4160);
+    let large_bytes = u64::from(width) * u64::from(height) * 4;
+    assert!(large_bytes > 64 << 20);
+    let mut deltas: Vec<BitmapDelta> =
+        bitmap(large, width, height, fixtures::gradient(width, height)).into();
+    deltas.extend(bitmap(small, 8, 8, fixtures::gradient(8, 8)));
+    let ops = vec![
+        Op::Quad(sprite(large, width, height, -2000, -3000)),
+        Op::Quad(sprite(small, 8, 8, 5, 5)),
+    ];
+    let mut reference = reference::Compositor::new();
+    let mut compositor = TestCompositor::new();
+    let first = packet(size, deltas, ops.clone());
+    let wanted = reference.render(&first).unwrap();
+    compositor.render(&first).unwrap();
+    assert!(compositor.staging_buffer_bytes().unwrap() >= large_bytes);
+    let rendered = compositor.read_frame().unwrap().unwrap();
+    assert_eq!(
+        frame_difference(&wanted, &rendered),
+        None,
+        "the large upload"
+    );
+
+    for round in 0..100u32 {
+        let rgba = (0..8 * 8 * 4)
+            .map(|byte| (byte + round * 3) as u8)
+            .collect();
+        let upload = BitmapDelta::Update {
+            id: small,
+            rect: Rect::new(0, 0, 8, 8),
+            rgba,
+        };
+        let frame = packet(size, vec![upload], ops.clone());
+        let wanted = reference.render(&frame).unwrap();
+        compositor.render(&frame).unwrap();
+        let rendered = compositor.read_frame().unwrap().unwrap();
+        assert_eq!(frame_difference(&wanted, &rendered), None, "round {round}");
+    }
+    let kept = compositor.staging_buffer_bytes().unwrap();
+    assert!(
+        kept < large_bytes,
+        "a staging buffer of {kept} bytes is left"
+    );
 }
 
 // Requirement: Stretch sampling of quads

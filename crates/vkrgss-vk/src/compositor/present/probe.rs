@@ -19,6 +19,9 @@ pub(in crate::compositor) struct Probe {
     /// Failure injection: the number of acquires that still report a timeout.
     #[cfg(test)]
     acquire_timeouts: u32,
+    /// Failure injection: the number of acquires that still report an out-of-date swapchain.
+    #[cfg(test)]
+    acquires_out_of_date: u32,
     /// Makes swapchains present as on a device without swapchain maintenance.
     #[cfg(test)]
     ignore_maintenance: bool,
@@ -51,6 +54,16 @@ impl Probe {
         let injected = self.acquire_timeouts > 0;
         if injected {
             self.acquire_timeouts -= 1;
+        }
+        injected
+    }
+
+    /// Whether the acquire about to be made reports an out-of-date swapchain without asking
+    /// the surface, which uses up one of the injected reports.
+    pub(super) fn acquire_out_of_date(&mut self) -> bool {
+        let injected = self.acquires_out_of_date > 0;
+        if injected {
+            self.acquires_out_of_date -= 1;
         }
         injected
     }
@@ -122,6 +135,11 @@ impl Probe {
 impl Probe {
     #[inline(always)]
     pub(super) fn acquire_times_out(&mut self) -> bool {
+        false
+    }
+
+    #[inline(always)]
+    pub(super) fn acquire_out_of_date(&mut self) -> bool {
         false
     }
 
@@ -198,6 +216,12 @@ impl VkCompositor {
     /// time, without asking the surface.
     pub(crate) fn fail_acquires(&mut self, count: u32) {
         self.present_probe.acquire_timeouts = count;
+    }
+
+    /// Makes the next `count` acquires of a swapchain image report that the swapchain is out
+    /// of date, without asking the surface.
+    pub(crate) fn report_out_of_date(&mut self, count: u32) {
+        self.present_probe.acquires_out_of_date = count;
     }
 
     /// Whether the last acquire gave no image, so that the next one does not wait.

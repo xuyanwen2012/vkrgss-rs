@@ -4,7 +4,7 @@ use ash::vk;
 use vkrgss_proto::Size;
 
 use super::presenter::{DrawCall, PassTarget, record_pass};
-use super::scaling::push_constants;
+use super::scaling::{Sources, push_constants};
 use super::swapchain::ACQUIRE_TIMEOUT;
 use crate::VkError;
 use crate::compositor::pacer::TimingCalls;
@@ -47,6 +47,19 @@ impl VkCompositor {
         let source = self.prepare_sources()?;
         // Whether this present shows a frame for the first time, which is what is paced.
         let frame = std::mem::take(&mut self.unshown_frame);
+        let shown = self.show(source, frame);
+        if !matches!(shown, Ok(true)) {
+            // Nothing was shown, whatever the reason: the frame is still to be shown for the
+            // first time, and paced as such.
+            self.unshown_frame = frame;
+        }
+        shown
+    }
+
+    /// Acquires an image, draws `source` into it and presents it, with one more attempt
+    /// after an out-of-date swapchain. Returns whether an image was presented. `frame` says
+    /// whether it shows a frame for the first time.
+    fn show(&mut self, source: Option<Sources>, frame: bool) -> Result<bool, VkError> {
         // One more attempt after an out-of-date swapchain, and one that does not count after
         // a present the pacing extension refused, which happens once at most.
         let mut attempts = 2;
@@ -80,6 +93,8 @@ impl VkCompositor {
             };
             let acquired = if self.present_probe.acquire_times_out() {
                 Err(vk::Result::TIMEOUT)
+            } else if self.present_probe.acquire_out_of_date() {
+                Err(vk::Result::ERROR_OUT_OF_DATE_KHR)
             } else {
                 // SAFETY: the swapchain and the semaphore are live and belong to this device,
                 // and the semaphore is unsignalled: the draw that waited on it last has
@@ -106,7 +121,6 @@ impl VkCompositor {
                 // to show: like a window without pixels, this present counts for nothing.
                 Err(vk::Result::TIMEOUT | vk::Result::NOT_READY) => {
                     self.starved = true;
-                    self.unshown_frame = frame;
                     return Ok(false);
                 }
                 Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {

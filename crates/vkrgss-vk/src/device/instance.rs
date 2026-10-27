@@ -253,6 +253,7 @@ impl Instance {
             synchronization2: false,
             dynamic_rendering: false,
             max_update_after_bind_sampled_images: 0,
+            max_update_after_bind_resources: 0,
             max_work_group_invocations: properties.limits.max_compute_work_group_invocations,
             max_work_group_size: [
                 properties.limits.max_compute_work_group_size[0],
@@ -289,8 +290,9 @@ impl Instance {
                 features12.descriptor_binding_sampled_image_update_after_bind == vk::TRUE;
             caps.max_update_after_bind_sampled_images = properties12
                 .max_descriptor_set_update_after_bind_sampled_images
-                .min(properties12.max_per_stage_descriptor_update_after_bind_sampled_images)
-                .min(properties12.max_per_stage_update_after_bind_resources);
+                .min(properties12.max_per_stage_descriptor_update_after_bind_sampled_images);
+            caps.max_update_after_bind_resources =
+                properties12.max_per_stage_update_after_bind_resources;
             driver = [
                 c_chars(&properties12.driver_name),
                 c_chars(&properties12.driver_info),

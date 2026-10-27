@@ -12,6 +12,14 @@ use crate::VkError;
 use crate::records::{RECORD_WORDS, TILEMAP_WORDS};
 use crate::resources::{GpuBuffer, GpuImage, write_words};
 
+/// The staging buffer is replaced by one of the size needed once it is larger than this, and
+/// larger by more than `STAGING_SHRINK_FACTOR` than every upload of the last `STAGING_FRAMES`
+/// packets: one large upload does not keep its host-visible memory for the rest of the run,
+/// and a buffer of ordinary size is never made anew.
+const STAGING_KEPT_BYTES: u64 = 64 << 20;
+const STAGING_SHRINK_FACTOR: u64 = 4;
+const STAGING_FRAMES: usize = 60;
+
 impl VkCompositor {
     /// Points the bitmap array at the current image of every slot whose occupant changed.
     ///
@@ -47,11 +55,28 @@ impl VkCompositor {
         unsafe { self.gpu.device.update_descriptor_sets(&writes, &[]) };
     }
 
+    /// Counts the bytes the uploads of a packet fill of the staging buffer, 0 for none.
+    pub(super) fn note_staging_need(&mut self, bytes: u64) {
+        if self.staging_needs.len() == STAGING_FRAMES {
+            self.staging_needs.pop_front();
+        }
+        self.staging_needs.push_back(bytes);
+    }
+
+    /// Whether a staging buffer of `bytes` is to be given back: see `STAGING_KEPT_BYTES`.
+    fn staging_oversized(&self, bytes: u64) -> bool {
+        let largest = self.staging_needs.iter().copied().max().unwrap_or(0);
+        bytes > STAGING_KEPT_BYTES
+            && self.staging_needs.len() == STAGING_FRAMES
+            && largest.saturating_mul(STAGING_SHRINK_FACTOR) < bytes
+    }
+
     /// The frame buffer of `role` with room for `size` bytes, which is not 0: the one kept
     /// when it is large enough, else a new one of at least twice the size of the one it
-    /// replaces, as far as the device lets the shader read a buffer. Nothing is pending, so
-    /// the buffer it replaces is idle and is destroyed at once. When the new one cannot be
-    /// had the old one stays.
+    /// replaces, as far as the device lets the shader read a buffer. A staging buffer that
+    /// the last packets needed much less of is replaced by one of `size` bytes. Nothing is
+    /// pending, so the buffer it replaces is idle and is destroyed at once. When the new one
+    /// cannot be had the old one stays.
     pub(super) fn frame_buffer(
         &mut self,
         role: FrameBuffer,
@@ -59,7 +84,11 @@ impl VkCompositor {
     ) -> Result<&mut GpuBuffer, VkError> {
         let slot = role as usize;
         let kept = self.frame_buffers[slot].as_ref().map(|(_, bytes)| *bytes);
-        if kept.is_none_or(|bytes| bytes < size) {
+        let grow = kept.is_none_or(|bytes| bytes < size);
+        let shrink = !grow
+            && role == FrameBuffer::Staging
+            && kept.is_some_and(|bytes| self.staging_oversized(bytes));
+        if grow || shrink {
             self.probe.before_frame_buffer(role.name())?;
             // The descriptor of a storage buffer names all of it, so it stays within the
             // range the device allows, which `size` was checked against with the frame.
@@ -71,7 +100,10 @@ impl VkCompositor {
                 None => (vk::BufferUsageFlags::TRANSFER_SRC, u64::MAX),
             };
             let doubled = kept.map_or(0, |bytes| bytes.saturating_mul(2).min(limit));
-            let bytes = size.max(doubled);
+            let bytes = match grow {
+                true => size.max(doubled),
+                false => size,
+            };
             let buffer = GpuBuffer::new(
                 &self.gpu.device,
                 &mut self.allocator,
@@ -208,23 +240,15 @@ impl VkCompositor {
     }
 
     /// Makes the frame target `size` pixels large. Returns whether it is a new image, which is
-    /// then in the `UNDEFINED` layout.
+    /// then in the `UNDEFINED` layout. The target there is, and the frame it holds, are only
+    /// given up once the new one exists: when it cannot be had they stay as they were.
     fn ensure_target(&mut self, size: Size) -> Result<bool, VkError> {
         if let Some(target) = &self.target
             && (target.width, target.height) == (size.width, size.height)
         {
             return Ok(false);
         }
-        self.has_frame = false;
-        if let Some(old) = self.target.take() {
-            // Nothing is pending, so the old target is idle.
-            old.destroy(&self.gpu.device, &mut self.allocator);
-            // The presentation set still points at the view that is gone, and the new one
-            // may get its handle.
-            if let Some(presenter) = self.presenter.as_mut() {
-                presenter.forget_bound();
-            }
-        }
+        self.probe.before_target()?;
         let target = GpuImage::new(
             &self.gpu.device,
             &mut self.allocator,
@@ -247,7 +271,16 @@ impl VkCompositor {
             .image_info(&info);
         // SAFETY: the set and the new view are live and no command buffer is pending.
         unsafe { self.gpu.device.update_descriptor_sets(&[write], &[]) };
-        self.target = Some(target);
+        self.has_frame = false;
+        if let Some(old) = self.target.replace(target) {
+            // Nothing is pending, so the old target is idle.
+            old.destroy(&self.gpu.device, &mut self.allocator);
+            // The presentation set still points at the view that is gone, and the new one
+            // may get its handle.
+            if let Some(presenter) = self.presenter.as_mut() {
+                presenter.forget_bound();
+            }
+        }
         Ok(true)
     }
 }

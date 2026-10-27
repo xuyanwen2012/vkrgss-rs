@@ -41,6 +41,7 @@ const CAPABLE: DeviceCaps = DeviceCaps {
     synchronization2: true,
     dynamic_rendering: true,
     max_update_after_bind_sampled_images: BITMAP_SLOTS,
+    max_update_after_bind_resources: COMPOSE_SET_DESCRIPTORS,
     max_work_group_invocations: 256,
     max_work_group_size: [16, 16],
 };
@@ -82,6 +83,7 @@ fn capable_device_lacks_nothing() {
     let newer = DeviceCaps {
         api_version: (1, 4),
         max_update_after_bind_sampled_images: u32::MAX,
+        max_update_after_bind_resources: u32::MAX,
         max_work_group_invocations: 1024,
         max_work_group_size: [1024, 1024],
         ..CAPABLE
@@ -173,6 +175,40 @@ fn each_missing_requirement_is_named() {
     for (caps, expected) in cases {
         assert_eq!(lacks(&caps), vec![expected.to_owned()]);
     }
+}
+
+/// Scenario "Exactly the bitmap slots" of "Descriptor limits of the whole set": the frame
+/// target and the storage buffers of the set count too, and only the whole set is enough.
+#[test]
+fn descriptor_check_counts_the_whole_set() {
+    let short = |resources| DeviceCaps {
+        max_update_after_bind_resources: resources,
+        ..CAPABLE
+    };
+    assert_eq!(COMPOSE_SET_DESCRIPTORS, 65542);
+    for resources in [BITMAP_SLOTS, COMPOSE_SET_DESCRIPTORS - 1] {
+        assert_eq!(
+            lacks(&short(resources)),
+            [format!(
+                "65542 update-after-bind resources per stage, \
+                 maxPerStageUpdateAfterBindResources (supports {resources})"
+            )]
+        );
+        let info = device(0, "short", DeviceKind::Integrated, short(resources));
+        assert!(!info.is_suitable());
+        assert!(
+            info.to_string()
+                .contains("maxPerStageUpdateAfterBindResources"),
+            "{info}"
+        );
+    }
+    assert_eq!(lacks(&short(COMPOSE_SET_DESCRIPTORS)), Vec::<String>::new());
+    // The bitmap slots alone are still held against the limits of sampled images.
+    let few_images = DeviceCaps {
+        max_update_after_bind_sampled_images: BITMAP_SLOTS - 1,
+        ..CAPABLE
+    };
+    assert_eq!(lacks(&few_images).len(), 1);
 }
 
 #[test]

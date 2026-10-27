@@ -1,6 +1,6 @@
 //! Opening the device, building the compositor on it, and taking it down.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::mem::ManuallyDrop;
 
 use ash::vk;
@@ -10,7 +10,7 @@ use vkrgss_proto::Size;
 
 use super::{COMPOSE_SPIRV, Filter, Mix, PUSH_CONSTANT_BYTES, VkCompositor, binding, pacer, query};
 use crate::bitmaps::BitmapTable;
-use crate::device::{BITMAP_SLOTS, Gpu, SurfaceSource};
+use crate::device::{BITMAP_SLOTS, COMPOSE_SET_DESCRIPTORS, Gpu, SurfaceSource};
 use crate::resources::create_shader_module;
 use crate::tables::TableStore;
 use crate::{DeviceChoice, DeviceInfo, ValidationLog, VkError};
@@ -89,6 +89,7 @@ impl VkCompositor {
             tables: TableStore::new(),
             table_buffer: None,
             frame_buffers: Default::default(),
+            staging_needs: VecDeque::new(),
             target: None,
             has_frame: false,
             set_layout: vk::DescriptorSetLayout::null(),
@@ -180,6 +181,14 @@ impl VkCompositor {
             storage_buffer(binding::TILEMAPS),
             storage_buffer(binding::TABLES),
         ];
+        debug_assert_eq!(
+            bindings
+                .iter()
+                .map(|binding| binding.descriptor_count)
+                .sum::<u32>(),
+            COMPOSE_SET_DESCRIPTORS,
+            "the device check counts the descriptors of this set"
+        );
         let mut binding_flags = [vk::DescriptorBindingFlags::empty(); 7];
         binding_flags[binding::BITMAPS as usize] = vk::DescriptorBindingFlags::PARTIALLY_BOUND
             | vk::DescriptorBindingFlags::UPDATE_AFTER_BIND;

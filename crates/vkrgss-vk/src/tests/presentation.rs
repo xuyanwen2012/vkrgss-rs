@@ -1711,6 +1711,45 @@ fn present_without_an_image_in_time_shows_nothing_and_the_next_one_presents() {
     assert_clean(&log, "while the compositor was dropped");
 }
 
+/// Scenario "Out of date twice" of "A frame not shown stays unshown": the frame is counted
+/// once, by the present that shows it.
+#[test]
+fn out_of_date_twice_keeps_the_frame_unshown() {
+    let log = ValidationLog::new();
+    let mut compositor = surface_compositor(&log);
+    compositor.resize_surface(Size::new(64, 48));
+    compositor.set_frame_rate(40);
+    compositor.render(&flat(SIZE, WHITE)).unwrap();
+    assert_eq!(compositor.present(), Ok(true));
+    // Frames measured by the compositor's own clock are counted as their presents go out.
+    let own_clock = !compositor.paces_with_present_timing();
+    let count = |compositor: &VkCompositor| {
+        compositor
+            .present_summary()
+            .map_or(0, |summary| summary.count)
+    };
+    let counted = count(&compositor);
+
+    compositor.render(&flat(SIZE, BLACK)).unwrap();
+    compositor.report_out_of_date(2);
+    assert_eq!(compositor.present(), Ok(false));
+    if own_clock {
+        assert_eq!(count(&compositor), counted, "nothing was shown");
+    }
+    assert_eq!(compositor.present(), Ok(true));
+    // A present that shows the frame again does not count it again.
+    assert_eq!(compositor.present(), Ok(true));
+    if own_clock {
+        assert_eq!(count(&compositor), counted + 1);
+    }
+    let shown = compositor.scale_frame(Size::new(80, 72)).unwrap();
+    assert!(shown.rgba.chunks(4).all(|pixel| pixel == BLACK));
+
+    assert_clean(&log, "around presents to an out-of-date swapchain");
+    drop(compositor);
+    assert_clean(&log, "while the compositor was dropped");
+}
+
 #[test]
 fn presenting_compositor_is_created_and_dropped_repeatedly_without_leaks() {
     let log = ValidationLog::new();
