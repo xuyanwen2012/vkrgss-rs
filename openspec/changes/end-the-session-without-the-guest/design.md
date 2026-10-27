@@ -85,10 +85,15 @@
   accepted, and its messages wait until it has attached or been dropped. A version statement
   is judged as soon as it is whole or departs from the form of the program's own statement,
   so a connection that sends no statement is refused at its first bytes, as before.
-- **`MSG_DONTWAIT` without `unsafe`.** `vkrgss-proto` forbids `unsafe`, so the receive that
-  does not wait calls `recv` through `rustix` (already in the dependency tree), with its
-  features `net` and `fs`; `net` alone does not build in rustix 1.1.5. The crate also takes
-  `tracing`, to log the reasons of framing errors.
+- **`MSG_DONTWAIT` and the reasons in `vkrgss-proto`.** `vkrgss-core` reaches
+  `vkrgss-proto`, so everything `vkrgss-proto` depends on has to be on the core allow-list of
+  `xtask/src/deps.rs` (pure crates, no I/O or FFI); neither `libc`, `rustix` nor `tracing` is.
+  The receive that does not wait therefore declares `recv` itself and calls it with
+  `MSG_DONTWAIT` (0x40 on Linux and Android, 0x80 on macOS) in one function under
+  `#[allow(unsafe_code)]`, the crate going from `forbid` to `deny`: platform code of the
+  stream transport, where `AGENTS.md` allows `unsafe`. The reason of a framing error is
+  written to the error stream as a line of the program's diagnostics, `vkrgss: <reason>`,
+  since the crate has no logger; the relay logs its own through `tracing`.
 - **Android.** The pinned toolchain 1.99.1 on the owner's machine has no standard library
   for `aarch64-linux-android`; `cargo +1.99.0 clippy -p vkrgss-android --target
   aarch64-linux-android -- -D warnings`, with the NDK's clang as linker and C compiler, passes.

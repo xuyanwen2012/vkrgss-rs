@@ -40,7 +40,9 @@
 //! The binary form encodes enum variants by position, so reordering or removing variants, or
 //! changing fields, requires a new [`codec::PROTOCOL_VERSION`].
 
-#![forbid(unsafe_code)]
+// `unsafe` only in the platform code of the stream transport of the link: the receive that
+// does not wait.
+#![deny(unsafe_code)]
 
 pub mod codec;
 pub mod framing;

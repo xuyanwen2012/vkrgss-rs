@@ -12,8 +12,8 @@
 //! on the thread that calls it and has no thread of its own, and never changes the mode of the
 //! socket: a receive that does not wait asks the system not to wait for that one call. Whatever
 //! is at the other side of the socket hands the messages on; the host keeps its [`HostEnd`] of
-//! an in-process link. An error of the framing, such as a message above the bound, is logged
-//! with its reason before the link reports [`Disconnected`].
+//! an in-process link. An error of the framing, such as a message above the bound, is written
+//! to the error stream with its reason before the link reports [`Disconnected`].
 
 use std::cell::RefCell;
 use std::io::{ErrorKind, Read};
@@ -21,7 +21,6 @@ use std::os::unix::net::UnixStream;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 
-use rustix::net::{RecvFlags, recv};
 use thiserror::Error;
 
 use crate::framing::{self, FramingError, MessageReader};
@@ -219,9 +218,7 @@ fn read_more(
     let read = if wait {
         (&mut &*stream).read(&mut chunk)
     } else {
-        recv(stream, &mut chunk, RecvFlags::DONTWAIT)
-            .map(|(count, _)| count)
-            .map_err(std::io::Error::from)
+        recv_now(stream, &mut chunk)
     };
     match read {
         Ok(0) => Err(Disconnected),
@@ -236,11 +233,41 @@ fn read_more(
     }
 }
 
+/// Reads what `stream` has into `buffer` without waiting and without changing the mode of the
+/// socket: `recv` with `MSG_DONTWAIT`, which asks that of this one call.
+#[allow(unsafe_code)]
+fn recv_now(stream: &UnixStream, buffer: &mut [u8]) -> std::io::Result<usize> {
+    use std::ffi::{c_int, c_void};
+    use std::os::fd::AsRawFd;
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    const MSG_DONTWAIT: c_int = 0x40;
+    #[cfg(target_os = "macos")]
+    const MSG_DONTWAIT: c_int = 0x80;
+
+    unsafe extern "C" {
+        fn recv(socket: c_int, buffer: *mut c_void, length: usize, flags: c_int) -> isize;
+    }
+    // SAFETY: `buffer` is valid for writes of its length, and the descriptor is open while
+    // `stream` is borrowed.
+    let read = unsafe {
+        recv(
+            stream.as_raw_fd(),
+            buffer.as_mut_ptr().cast(),
+            buffer.len(),
+            MSG_DONTWAIT,
+        )
+    };
+    usize::try_from(read).map_err(|_| std::io::Error::last_os_error())
+}
+
 /// The disconnection that an error of the framing ends the connection with. An error of the
-/// socket is the other side going; any other is logged with its reason first.
+/// socket is the other side going; any other is written to the error stream with its reason
+/// first, in the form of the program's diagnostics. This crate has no logger: whatever
+/// reaches `vkrgss-core` has to be a pure crate.
 fn disconnected(error: FramingError) -> Disconnected {
     if !matches!(error, FramingError::Io(_)) {
-        tracing::warn!("the connection between guest and host ends: {error}");
+        eprintln!("vkrgss: the connection between guest and host ends: {error}");
     }
     Disconnected
 }
