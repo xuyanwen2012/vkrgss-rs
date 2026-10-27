@@ -170,6 +170,14 @@ impl Assembly<'_> {
     ///
     /// Column `i` of the viewport, or of the screen without one, shows column
     /// `(i + plane.ox + viewport.ox) mod tile width` of the tile, and rows likewise.
+    ///
+    /// The quads are bounded by the pixels the plane covers: every repeat drawn begins
+    /// before the end of the clip and ends after its start, the repeats do not overlap and a
+    /// tile is at least one pixel, so a plane emits at most one quad per screen pixel it
+    /// covers, also when its stretch step is not exact and every repeat is drawn from the
+    /// source. The logical screen of the binding is at most 640 by 480, so at most 307200
+    /// quads. Merging the repeats of an inexact step into fewer quads would change pixels and
+    /// is not done.
     pub(crate) fn plane(&mut self, plane: &Plane, level: &Level) {
         if !plane.visible || plane.opacity == 0 {
             return;

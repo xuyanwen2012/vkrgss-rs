@@ -23,7 +23,7 @@ fn coded(stage: &mut Stage, width: u32, height: u32, set: impl FnOnce(&mut Sprit
 
 /// The rectangles the stretch quads of the next frame are drawn into.
 fn dests(stage: &mut Stage) -> Vec<vkrgss_proto::Rect> {
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     let quads = packet.ops.iter().filter_map(|op| match op {
         Op::Quad(quad) => Some(quad.sampling),
         _ => None,
@@ -223,7 +223,7 @@ fn the_cases_of_place_and_size_are_the_expected_pictures() {
 
 /// The opacities of the quads of the next frame, in draw order.
 fn opacities(stage: &mut Stage) -> Vec<u8> {
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     let quads = packet.ops.iter().filter_map(|op| match op {
         Op::Quad(quad) => Some(quad.opacity),
         _ => None,

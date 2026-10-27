@@ -126,8 +126,15 @@ fn too_large_fails_and_keeps_nothing() {
 }
 
 #[test]
-fn creation_limit_is_the_reference_compositors() {
-    assert_eq!(MAX_BITMAP_PIXELS, vkrgss_compose_ref::MAX_BITMAP_PIXELS);
+fn limits_agree() {
+    // One definition in the protocol, which the compositors use as well; the decoders, which
+    // depend on no crate of the workspace, keep a copy of their own.
+    assert_eq!(MAX_BITMAP_PIXELS, vkrgss_proto::MAX_BITMAP_PIXELS);
+    assert_eq!(
+        vkrgss_compose_ref::MAX_BITMAP_PIXELS,
+        vkrgss_proto::MAX_BITMAP_PIXELS
+    );
+    assert_eq!(vkrgss_image::MAX_PIXELS, vkrgss_proto::MAX_BITMAP_PIXELS);
 }
 
 #[test]

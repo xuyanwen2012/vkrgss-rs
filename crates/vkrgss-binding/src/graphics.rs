@@ -52,7 +52,9 @@ const RESET_PRIVATE: &str = "class << Graphics; private :_reset; end";
 fn frame(ruby: &Ruby, mut front: Vec<BitmapDelta>) {
     Guest::with(ruby, |guest| {
         let extraction = Span::enter(Part::Extraction);
-        let mut packet = guest.scene.extract(&mut guest.bitmaps);
+        let Some(mut packet) = guest.extract() else {
+            return;
+        };
         if !front.is_empty() {
             front.append(&mut packet.bitmaps);
             packet.bitmaps = front;

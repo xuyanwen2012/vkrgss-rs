@@ -81,6 +81,10 @@ impl Bitmaps {
     /// date. If `referenced` names a disposed bitmap the call fails with
     /// [`BitmapError::Disposed`], emits nothing and changes nothing.
     pub fn deltas(&mut self, referenced: &[BitmapId]) -> Result<Vec<BitmapDelta>, BitmapError> {
+        #[cfg(test)]
+        if std::mem::take(&mut self.fail_deltas) {
+            return Err(BitmapError::Disposed);
+        }
         for &id in referenced {
             self.get(id)?;
         }

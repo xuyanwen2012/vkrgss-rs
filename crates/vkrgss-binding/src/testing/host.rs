@@ -494,7 +494,7 @@ mod tests {
             Guest::with(ruby, |guest| {
                 guest.connect(link);
                 for _ in 0..3 {
-                    let packet = guest.scene.extract(&mut guest.bitmaps);
+                    let packet = guest.scene.extract(&mut guest.bitmaps).unwrap();
                     guest.send(GuestToHost::Frame(packet));
                     guest.pump(Await::Tick);
                 }

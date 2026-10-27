@@ -60,7 +60,9 @@ mod testutil;
 
 pub use error::ImageError;
 
-/// The largest number of pixels an image may have: the limit the compositors put on a bitmap.
+/// The largest number of pixels an image may have: the largest bitmap,
+/// `vkrgss_proto::MAX_BITMAP_PIXELS`, which a test of `vkrgss-core` checks this equals. This
+/// crate depends on no crate of the workspace, so it states the number again.
 pub const MAX_PIXELS: u64 = 1 << 28;
 
 /// An image file format this crate decodes.

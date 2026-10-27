@@ -327,7 +327,7 @@ fn a_small_bitmap_is_drawn_from_a_pretiled_copy() {
     let mut stage = Stage::new();
     let bitmap = pattern(&mut stage, 4, 4);
     let id = plane(&mut stage, bitmap);
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert!((1..=64).contains(&quads(&packet)), "{}", quads(&packet));
     let frame = stage.render(&packet).unwrap();
     assert!(shows(&frame, |x, y| texel(x % 4, y % 4)));
@@ -349,7 +349,7 @@ fn a_small_bitmap_is_drawn_from_a_pretiled_copy() {
     let plane = stage.scene.plane_mut(id).unwrap();
     (plane.ox, plane.oy) = (-3, 9);
     (plane.zoom_x, plane.zoom_y) = (2.0, 1.0);
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert!(quads(&packet) <= 64);
     let frame = stage.render(&packet).unwrap();
     assert!(shows(&frame, |x, y| expected((x + 5) % 8 / 2, (y + 9) % 4)));
@@ -366,7 +366,7 @@ fn a_plane_with_exact_steps_never_needs_more_than_64_quads() {
             let plane = stage.scene.plane_mut(id).unwrap();
             (plane.zoom_x, plane.zoom_y) = (zoom, zoom);
             (plane.ox, plane.oy) = (width as i32 - 1, 1);
-            let packet = stage.scene.extract(&mut stage.bitmaps);
+            let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
             let count = quads(&packet);
             assert!(
                 count <= 64,
@@ -388,13 +388,50 @@ fn a_plane_with_exact_steps_never_needs_more_than_64_quads() {
 
 /// A step that is not exact allows no pre-tiled copy: every repeat is a quad of its own.
 #[test]
+fn a_plane_emits_at_most_one_quad_per_pixel_it_covers() {
+    // The worst cases on the largest screen of the binding: a tile of one pixel, from a 1 by
+    // 1 bitmap at zoom 1 and from a 300 by 300 bitmap at zoom 0.01.
+    for rules in [Rules::Rgss1, Rules::Rgss2] {
+        for (side, zoom) in [(1, 1.0), (300, 0.01)] {
+            let mut stage = Stage::with_rules(rules, 640, 480);
+            let bitmap = pattern(&mut stage, side, side);
+            let id = plane(&mut stage, bitmap);
+            let zoomed = stage.scene.plane_mut(id).unwrap();
+            (zoomed.zoom_x, zoomed.zoom_y) = (zoom, zoom);
+            for _ in 0..2 {
+                let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
+                let count = quads(&packet);
+                assert!(count <= 640 * 480, "{count} quads for {side} at {zoom}");
+            }
+        }
+    }
+    // Inexact steps, which draw every repeat from the source, at any origin on a small
+    // screen.
+    for side in [3, 4, 7, 300] {
+        for zoom in [0.75, 0.43, 1.5, 0.01, 0.0034, 1.0 / 3.0] {
+            for origin in [0, 1, -5, 1000] {
+                let mut stage = Stage::sized(64, 48);
+                let bitmap = pattern(&mut stage, side, side);
+                let id = plane(&mut stage, bitmap);
+                let zoomed = stage.scene.plane_mut(id).unwrap();
+                (zoomed.zoom_x, zoomed.zoom_y) = (zoom, zoom);
+                (zoomed.ox, zoomed.oy) = (origin, -origin);
+                let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
+                let count = quads(&packet);
+                assert!(count <= 64 * 48, "{count} quads for {side} at {zoom}");
+            }
+        }
+    }
+}
+
+#[test]
 fn a_plane_with_an_inexact_step_draws_every_repeat_from_its_bitmap() {
     let mut stage = Stage::sized(160, 120);
     let bitmap = pattern(&mut stage, 4, 4);
     let id = plane(&mut stage, bitmap);
     let plane = stage.scene.plane_mut(id).unwrap();
     (plane.zoom_x, plane.zoom_y) = (1.5, 1.5);
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(stage.bitmaps.len(), 1);
     // Tiles of 6 by 6 pixels.
     assert_eq!(quads(&packet), 27 * 20);
@@ -415,7 +452,7 @@ fn a_plane_of_tiny_tiles_with_an_inexact_step_is_drawn_tile_by_tile() {
     let zoomed = stage.scene.plane_mut(id).unwrap();
     (zoomed.zoom_x, zoomed.zoom_y) = (0.75, 0.75);
     (zoomed.ox, zoomed.oy) = (1, -1);
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(stage.bitmaps.len(), 1);
     assert_eq!(quads(&packet), 22 * 17);
     let step = (4u64 << 20) / 3;
@@ -431,7 +468,7 @@ fn a_plane_of_tiny_tiles_with_an_inexact_step_is_drawn_tile_by_tile() {
     let id = plane(&mut stage, bitmap);
     let zoomed = stage.scene.plane_mut(id).unwrap();
     (zoomed.zoom_x, zoomed.zoom_y) = (0.75, 0.75);
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(quads(&packet), 214 * 160);
 }
 
@@ -445,7 +482,7 @@ fn a_plane_that_would_need_too_large_a_copy_draws_every_repeat_from_its_bitmap()
     let zoomed = stage.scene.plane_mut(id).unwrap();
     (zoomed.zoom_x, zoomed.zoom_y) = (2.0 / 1024.0, 2.0 / 1024.0);
     (zoomed.ox, zoomed.oy) = (1, 0);
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(stage.bitmaps.len(), 1);
     assert_eq!(quads(&packet), 17 * 16);
     let frame = stage.render(&packet).unwrap();
@@ -457,7 +494,7 @@ fn a_plane_that_would_need_too_large_a_copy_draws_every_repeat_from_its_bitmap()
     let id = plane(&mut stage, bitmap);
     let zoomed = stage.scene.plane_mut(id).unwrap();
     (zoomed.zoom_x, zoomed.zoom_y) = (1.0 / 32.0, 1.0 / 32.0);
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(stage.bitmaps.len(), 1);
     assert_eq!(quads(&packet), 640 * 480);
     let covered = packet.ops.iter().all(|op| match op {

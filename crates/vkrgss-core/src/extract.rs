@@ -9,7 +9,7 @@ use crate::geometry::{self, Geometry};
 use crate::scene::Arena;
 use crate::scene::Key;
 use crate::tilemap::Strip;
-use crate::{Bitmaps, Rect, Rules, Scene, Sprite, Viewport, ViewportId};
+use crate::{BitmapError, Bitmaps, Rect, Rules, Scene, Sprite, Viewport, ViewportId};
 
 /// The pixels both rectangles cover; a rectangle without pixels when they share none.
 pub(crate) fn intersect(a: vkrgss_proto::Rect, b: vkrgss_proto::Rect) -> vkrgss_proto::Rect {
@@ -151,6 +151,11 @@ impl Bush {
 /// `dest`, and only `inside`, a part of `src`, may be drawn. The pixels of `dest` that show a
 /// texel of `inside`, as start and length, or `None` when none does. `mirror` counts the
 /// texels from the far end of `src`.
+///
+/// The texels of a cut stretch are also found by `transfer_axis` in `bitmap.rs`, for a
+/// transfer between bitmaps, which starts the walk anew at a near cut, and by `Span::texel`
+/// in `turned.rs`, for one pixel of a sprite, which does so where the original does and
+/// otherwise leaves texels out as this span does. No helper is shared.
 fn cut_span(
     src: (i32, u32),
     inside: (i32, u32),
@@ -569,17 +574,20 @@ impl Scene {
     ///
     /// The packets of one scene must reach a compositor in the order they were extracted,
     /// because the bitmap arena and the scene take every delta they hand out to be delivered.
-    pub fn extract(&mut self, bitmaps: &mut Bitmaps) -> FramePacket {
+    ///
+    /// Every op names live bitmaps only, so the arena has no reason to fail; if it fails all
+    /// the same, the error is returned, no packet is made and the index of the next packet
+    /// stays.
+    pub fn extract(&mut self, bitmaps: &mut Bitmaps) -> Result<FramePacket, BitmapError> {
         self.refresh(bitmaps);
-        let tables = self.tables.finish();
         let (ops, referenced) = self.ops(bitmaps);
-        // Every op was checked to name live bitmaps only, which is all `deltas` requires.
-        let deltas = bitmaps.deltas(&referenced).unwrap_or_default();
+        let deltas = bitmaps.deltas(&referenced)?;
+        let tables = self.tables.finish();
 
         let frame_index = self.frame_index;
         self.frame_index += 1;
         self.frame_count = self.frame_count.wrapping_add(1);
-        FramePacket {
+        Ok(FramePacket {
             frame_index,
             logical_size: self.logical_size,
             frame_rate: self.frame_rate,
@@ -587,7 +595,7 @@ impl Scene {
             tables,
             bitmaps: deltas,
             ops,
-        }
+        })
     }
 
     /// The scene as it is now in a packet that stands alone: the ops and the brightness of
@@ -866,7 +874,7 @@ pub(crate) mod testing {
         /// tilemaps is kept for [`Stage::assert_pinned`].
         pub(crate) fn frame(&mut self) -> Frame {
             let tilemaps = self.scene.tilemaps.iter().next().is_some();
-            let packet = self.scene.extract(&mut self.bitmaps);
+            let packet = self.scene.extract(&mut self.bitmaps).unwrap();
             let frame = self
                 .render(&packet)
                 .expect("the reference compositor accepts every extracted packet");

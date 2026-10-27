@@ -146,6 +146,10 @@ impl Span {
     ///
     /// Provenance: oracle measurement 2026-10-10, RGSS103J, probes `srcrect` and `srcrect2`
     /// (112 sprites that are not turned, without a differing pixel).
+    ///
+    /// `transfer_axis` in `bitmap.rs` cuts the stretch of a transfer between bitmaps with
+    /// the same `first` and `end`, walking by `stretch_index` in `i64`, and `cut_span` in
+    /// `extract.rs` finds the screen pixels of a cut quad; no helper is shared with them.
     pub(crate) fn texel(&self, i: u32, size: usize) -> Option<usize> {
         let i = i128::from(i.checked_sub(self.first).filter(|i| *i < self.pixels)?);
         let (start, w, dw) = (

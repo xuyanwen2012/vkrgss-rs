@@ -20,6 +20,15 @@
   `decode` logs it through `tracing` at debug level when it falls back. Outputs of every file
   the custom path decodes today stay byte-identical (the committed fixtures and the measured
   scenarios of "JPEG arithmetic of the original").
+  Outcome: the stated multiple is 4, plus a fixed allowance of 1 MiB for tables and for the
+  block grid of a small image, which covers whole MCUs (a 1 by 1 image of chroma halved in
+  both directions has a grid of 16 by 16 samples). The custom path counts, from the frame
+  header, the coefficients (two bytes) and samples (one byte) of every block grid and the
+  output, and leaves a frame above the bound to `jpeg-decoder`; the coefficients of a
+  component are dropped once its samples are made, so a 4:4:4 decode of 1024 by 1024 peaks
+  at about 7 MiB (13.6 MiB before). The counting allocator of the tests implements the
+  unsafe trait `GlobalAlloc` in test code of `vkrgss-image` (`tests/counting/mod.rs`),
+  passing every call to `System`; the library keeps `forbid(unsafe_code)`.
 - **Fallback memory.** `jpeg-decoder` is called only after the header check of `rgba_len`, as
   now; a file that declares a size without any scan fails in the custom path's header pass and
   is not handed to the library a second time if the library would only fail the same way (a
@@ -39,6 +48,11 @@
 - **Extraction.** `Scene::extract` returns the arena error to its caller (or panics with a
   message in debug and returns the error in release, if the signature cannot change cheaply):
   pick one and record it. The binding reports it as a session failure.
+  Outcome: the signature changed, `Scene::extract` returns `Result<FramePacket,
+  BitmapError>` and leaves the frame index and the table deltas as they were on an error.
+  The binding ends the game as on a quit request, sends no packet, and the run returns
+  `RunError::Extraction`, so the host gets `Outcome { ok: false }`. A test makes the arena
+  fail through a field of `Bitmaps` that exists only in the tests of `vkrgss-core`.
 - **Plane quads.** The binding never sets a logical size above 640 by 480 and a tile is at
   least one pixel, so a plane emits at most one quad per covered pixel. State that bound in
   the doc comment of the plane extraction and test it at the worst case (1 by 1 texel tile,
@@ -49,6 +63,10 @@
   range shows the shared form gives the same answers as each copy; otherwise leave them and add
   a comment in each that names the other two. Either way `cargo xtask xarch check` stays
   identical.
+  Outcome: no helper is shared. `transfer_axis` (i64) and `Span::texel` (i128) share the
+  formulas of the first and the last pixel but walk by `stretch_index` and by the step of a
+  quad, and `cut_span` leaves texels out without starting anew; each has a comment naming
+  the other two.
 - **Fuzz targets of the file readers.** Three targets, `jpeg`, `bmp` and `rgssad`, run by
   `cargo xtask fuzz <name>` on the pinned toolchain: coverage-guided with `libfuzzer-sys` if it
   builds on the pinned stable toolchain, otherwise a seeded random-mutation loop for the given

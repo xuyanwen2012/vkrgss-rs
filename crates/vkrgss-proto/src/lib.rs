@@ -62,9 +62,9 @@ mod types;
 pub use audio::{AudioChannel, AudioCommand};
 pub use fixed::Fixed;
 pub use frame::{
-    BitmapDelta, BlendMode, FramePacket, FrameRate, FrameRateOutOfRange, MAX_LOGICAL_DIMENSION, Op,
-    OpKind, Plane, PlaneRules, Quad, RectEffect, STRETCH_FRAC_BITS, Sampling, TableDelta,
-    TilemapLayer, TilemapPlane, Transform, stretch_index, stretch_step,
+    BitmapDelta, BlendMode, FramePacket, FrameRate, FrameRateOutOfRange, MAX_BITMAP_PIXELS,
+    MAX_LOGICAL_DIMENSION, Op, OpKind, Plane, PlaneRules, Quad, RectEffect, STRETCH_FRAC_BITS,
+    Sampling, TableDelta, TilemapLayer, TilemapPlane, Transform, stretch_index, stretch_step,
 };
 pub use input::{Button, InputSnapshot};
 pub use message::{FreezeRule, GuestToHost, HostToGuest, TransitionRule};

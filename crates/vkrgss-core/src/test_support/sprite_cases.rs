@@ -339,7 +339,7 @@ impl Run {
             },
             "frame" => {
                 let digest = u64::from_str_radix(rest[0], 16).expect("a digest in hexadecimal");
-                frames.push((self.scene.extract(&mut self.bitmaps), digest));
+                frames.push((self.scene.extract(&mut self.bitmaps).unwrap(), digest));
             }
             other => panic!("unknown statement `{other}`"),
         }

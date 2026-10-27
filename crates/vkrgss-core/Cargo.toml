@@ -25,3 +25,4 @@ vkrgss-proto.workspace = true
 [dev-dependencies]
 proptest.workspace = true
 vkrgss-compose-ref.workspace = true
+vkrgss-image.workspace = true

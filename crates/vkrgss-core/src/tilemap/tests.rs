@@ -318,10 +318,10 @@ fn without_updates_the_animation_stands_still() {
     for _ in 0..16 {
         stage.scene.tilemap_mut(id).unwrap().update();
     }
-    let first = stage.scene.extract(&mut stage.bitmaps);
+    let first = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert!(shows_patterns(&stage.render(&first).unwrap(), 1));
     for _ in 0..40 {
-        let packet = stage.scene.extract(&mut stage.bitmaps);
+        let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
         assert_eq!(packet.bitmaps, [], "nothing is composed again");
         assert_eq!(packet.ops, first.ops);
         assert!(shows_patterns(&stage.render(&packet).unwrap(), 1));
@@ -400,7 +400,7 @@ fn scrolling_uploads_nothing() {
     // The packet of the frame after the origin is set to `ox`.
     let mut packet = |ox: i32| {
         stage.scene.tilemap_mut(id).unwrap().ox = ox;
-        let packet = stage.scene.extract(&mut stage.bitmaps);
+        let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
         let frame = stage.render(&packet).unwrap();
         assert!(shows_full_map(&frame, (ox, 0), SCREEN), "{ox}");
         packet
@@ -751,10 +751,10 @@ fn a_tile_whose_priority_is_not_0_to_5_is_not_drawn() {
     priorities.set(400, 0, 0, 6);
     priorities.set(401, 0, 0, -1);
     stage.scene.tilemap_mut(id).unwrap().priorities = Some(priorities.clone());
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(layers(&packet), []);
     priorities.set(400, 0, 0, 5);
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(layers(&packet).len(), 1);
 }
 
@@ -933,7 +933,7 @@ fn stacked_translucent_tiles_of_one_priority_are_blended_one_by_one() {
     tilemap.map_data = Some(map.clone());
     tilemap.priorities = Some(priorities);
 
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     // The ground of the lowest layer, and a row of priority 2 of each layer above: the
     // lowest layer holds no tile of that priority and draws nothing for it.
     assert_eq!(packet.ops.len(), 3);
@@ -962,7 +962,7 @@ fn stacked_translucent_tiles_of_the_ground_are_blended_one_by_one() {
     let tilemap = stage.scene.tilemap_mut(id).unwrap();
     tilemap.tileset = Some(tileset);
     tilemap.map_data = Some(map.clone());
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(packet.ops.len(), 3);
     let frame = stage.render(&packet).unwrap();
     assert_eq!(frame.pixel(5, 6), [111, 107, 120, 255]);
@@ -1027,7 +1027,7 @@ fn a_tilemap_is_one_op_per_layer_of_the_ground_and_per_row_and_layer_above() {
     (tilemap.ox, tilemap.oy) = (5, -7);
     let tileset = tilemap.tileset;
     stage.frame();
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     let found = layers(&packet);
     assert_eq!(found.len(), packet.ops.len());
     let screen = vkrgss_proto::Rect::new(0, 0, 96, 96);
@@ -1072,14 +1072,14 @@ fn a_changed_table_is_sent_again_and_a_table_no_tilemap_has_is_destroyed() {
     let priorities = SharedTable::new(Table::new(1000).unwrap());
     let id = tilemap(&mut stage, &map);
     stage.scene.tilemap_mut(id).unwrap().priorities = Some(priorities.clone());
-    let first = stage.scene.extract(&mut stage.bitmaps);
+    let first = stage.scene.extract(&mut stage.bitmaps).unwrap();
     stage.render(&first).unwrap();
     let op = layers(&first)[0];
     assert_eq!(first.tables.len(), 2);
 
     // One cell is changed through the handle the script kept: that table is replaced.
     map.set(3, 2, 0, 384 + 300);
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     let expected = TableDelta::Set {
         id: op.map,
         xsize: 20,
@@ -1098,7 +1098,7 @@ fn a_changed_table_is_sent_again_and_a_table_no_tilemap_has_is_destroyed() {
     // A priority outside 0 to 5 is sent too.
     priorities.set(384, 0, 0, 9);
     priorities.set(385, 0, 0, -3);
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     let [
         TableDelta::Set {
             id: sent,
@@ -1116,13 +1116,13 @@ fn a_changed_table_is_sent_again_and_a_table_no_tilemap_has_is_destroyed() {
 
     // Invisible, the tilemap keeps its tables with the compositor.
     stage.scene.tilemap_mut(id).unwrap().visible = false;
-    assert_eq!(stage.scene.extract(&mut stage.bitmaps).tables, []);
+    assert_eq!(stage.scene.extract(&mut stage.bitmaps).unwrap().tables, []);
     stage.scene.tilemap_mut(id).unwrap().visible = true;
-    assert_eq!(stage.scene.extract(&mut stage.bitmaps).tables, []);
+    assert_eq!(stage.scene.extract(&mut stage.bitmaps).unwrap().tables, []);
 
     // Without its priorities it names a table without entries, and the old one goes.
     stage.scene.tilemap_mut(id).unwrap().priorities = None;
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     let destroyed = TableDelta::Destroy { id: op.priorities };
     assert_eq!(packet.tables.len(), 2);
     assert!(packet.tables.contains(&destroyed));
@@ -1130,7 +1130,7 @@ fn a_changed_table_is_sent_again_and_a_table_no_tilemap_has_is_destroyed() {
     stage.render(&packet).unwrap();
 
     stage.scene.dispose_tilemap(id, &mut stage.bitmaps);
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(packet.tables, [TableDelta::Destroy { id: op.map }]);
     // The compositor is told, and accepts the frame that follows.
     assert!(all(&stage.render(&packet).unwrap(), BLACK));
@@ -1150,7 +1150,7 @@ fn two_tilemaps_share_the_tables_they_share() {
     let first = tilemap(&mut stage, &map);
     let second = tilemap(&mut stage, &map);
     stage.scene.tilemap_mut(second).unwrap().ox = 32;
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(packet.tables.len(), 2, "the map and the empty priorities");
     let layers = layers(&packet);
     assert_eq!(layers.len(), 2);
@@ -1158,7 +1158,7 @@ fn two_tilemaps_share_the_tables_they_share() {
     stage.render(&packet).unwrap();
     // One of them disposed, the other still has the table.
     stage.scene.dispose_tilemap(first, &mut stage.bitmaps);
-    assert_eq!(stage.scene.extract(&mut stage.bitmaps).tables, []);
+    assert_eq!(stage.scene.extract(&mut stage.bitmaps).unwrap().tables, []);
 }
 
 #[test]
@@ -1216,7 +1216,7 @@ fn measure_an_extraction() {
         let tilemap = stage.scene.tilemap_mut(id).unwrap();
         (tilemap.ox, tilemap.oy) = (step * 32, step * 32);
         let start = std::time::Instant::now();
-        let packet = stage.scene.extract(&mut stage.bitmaps);
+        let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
         extract.push(start.elapsed());
         assert!(packet.bitmaps.is_empty() && packet.tables.is_empty());
     }
@@ -1563,7 +1563,7 @@ fn the_flash_overlay_is_given_back_with_the_last_flashing_cell() {
     stage.frame();
     assert_eq!(stage.bitmaps.len(), without + 1);
     // Unchanged, the overlay is not uploaded again.
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert!(packet.bitmaps.is_empty());
     flash.set(2, 1, 0, 0);
     stage.frame();

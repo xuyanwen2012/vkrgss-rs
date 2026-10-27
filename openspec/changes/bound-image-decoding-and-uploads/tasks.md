@@ -6,10 +6,10 @@
 
 ## 2. One limit, extraction, plane quads
 
-- [ ] 2.1 Move the largest bitmap to `vkrgss_proto::MAX_BITMAP_PIXELS` and use it in core, compose-ref and vk; a core test ties `vkrgss_image::MAX_PIXELS` to it. Verify: the test "Limits agree"; `cargo xtask deps` (or the gate's deps part) passes.
-- [ ] 2.2 `Scene::extract` reports an arena error; the binding reports it as a failure of the session. Verify: the scenario "Arena error".
-- [ ] 2.3 State and test the bound of plane quads. Verify: the scenario "Smallest tile".
-- [ ] 2.4 Stretch cut: share a helper only where a proptest shows identical answers, otherwise cross-reference the three copies in comments; record the outcome in design.md. Verify: the proptest if any; core tests pass.
+- [x] 2.1 Move the largest bitmap to `vkrgss_proto::MAX_BITMAP_PIXELS` and use it in core, compose-ref and vk; a core test ties `vkrgss_image::MAX_PIXELS` to it. Verify: the test "Limits agree"; `cargo xtask deps` (or the gate's deps part) passes.
+- [x] 2.2 `Scene::extract` reports an arena error; the binding reports it as a failure of the session. Verify: the scenario "Arena error".
+- [x] 2.3 State and test the bound of plane quads. Verify: the scenario "Smallest tile".
+- [x] 2.4 Stretch cut: share a helper only where a proptest shows identical answers, otherwise cross-reference the three copies in comments; record the outcome in design.md. Verify: the proptest if any; core tests pass.
 
 ## 3. Bitmap changes ahead of a frame
 

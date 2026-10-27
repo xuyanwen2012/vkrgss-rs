@@ -66,7 +66,7 @@ fn frame(ruby: &Ruby) -> Frame {
         let mut bitmaps = bitmaps.clone();
         // The compositor below starts without tables, as it starts without bitmaps.
         scene.resend_tables();
-        let mut packet = scene.extract(&mut bitmaps);
+        let mut packet = scene.extract(&mut bitmaps).unwrap();
         let mut referenced = Vec::new();
         for op in &packet.ops {
             let (quad, sheets) = match op {

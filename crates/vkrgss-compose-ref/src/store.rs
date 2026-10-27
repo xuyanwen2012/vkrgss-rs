@@ -7,8 +7,8 @@ use vkrgss_proto::{BitmapDelta, BitmapId, Rect};
 
 use crate::{BitmapError, SlotState};
 
-/// Largest bitmap the store accepts, in pixels (1 GiB of RGBA8).
-pub const MAX_BITMAP_PIXELS: u64 = 1 << 28;
+/// Largest bitmap the store accepts, in pixels: [`vkrgss_proto::MAX_BITMAP_PIXELS`].
+pub use vkrgss_proto::MAX_BITMAP_PIXELS;
 
 /// The pixels of one bitmap: RGBA8 with straight alpha, in row order.
 #[derive(Debug, Clone, PartialEq, Eq)]

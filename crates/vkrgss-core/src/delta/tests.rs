@@ -707,7 +707,7 @@ fn after_resending_the_next_frame_carries_every_bitmap_and_table_whole() {
 
     // What the host that has everything is sent next, and shows.
     let (mut scene, mut bitmaps) = (stage.scene.clone(), stage.bitmaps.clone());
-    let partial = scene.extract(&mut bitmaps);
+    let partial = scene.extract(&mut bitmaps).unwrap();
     assert!(partial.tables.is_empty());
     assert_eq!(
         partial.bitmaps.len(),
@@ -719,7 +719,7 @@ fn after_resending_the_next_frame_carries_every_bitmap_and_table_whole() {
 
     stage.bitmaps.resend_all();
     stage.scene.resend_tables();
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
 
     for id in ids {
         let (width, height) = (
@@ -793,7 +793,7 @@ fn a_snapshot_stands_alone_and_leaves_what_the_host_is_owed() {
 
     // What the host is sent next without a snapshot.
     let (mut scene, mut bitmaps) = (stage.scene.clone(), stage.bitmaps.clone());
-    let expected = scene.extract(&mut bitmaps);
+    let expected = scene.extract(&mut bitmaps).unwrap();
     assert_eq!(
         expected.bitmaps.len(),
         2,
@@ -813,7 +813,7 @@ fn a_snapshot_stands_alone_and_leaves_what_the_host_is_owed() {
 
     // A second snapshot is the first, and the host's packet is the one without them.
     assert_eq!(stage.scene.snapshot(&mut stage.bitmaps), snapshot);
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(packet, expected);
     assert_eq!(stage.scene.frame_count(), count + 1);
     let shown = stage.render(&packet).unwrap();

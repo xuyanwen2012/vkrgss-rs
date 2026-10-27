@@ -39,6 +39,27 @@ fn red_then_green(stage: &mut Stage) -> (SpriteId, SpriteId) {
 }
 
 #[test]
+fn an_arena_error_reaches_the_caller() {
+    let mut stage = Stage::sized(16, 16);
+    red_then_green(&mut stage);
+    stage.bitmaps.fail_deltas = true;
+    let failed = stage.scene.extract(&mut stage.bitmaps);
+    assert!(
+        matches!(failed, Err(crate::BitmapError::Disposed)),
+        "{failed:?}"
+    );
+    // No packet was made: the next one has the first index and every bitmap.
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
+    assert_eq!(packet.frame_index, 0);
+    let created = packet
+        .bitmaps
+        .iter()
+        .filter(|delta| matches!(delta, BitmapDelta::Create { .. }))
+        .count();
+    assert_eq!(created, 2);
+}
+
+#[test]
 fn the_larger_z_is_in_front_whichever_was_created_first() {
     let mut stage = Stage::sized(16, 16);
     let (red, green) = red_then_green(&mut stage);
@@ -764,7 +785,7 @@ fn a_full_turn_is_drawn_as_a_turned_sprite() {
     assert_eq!(upright.len(), 24);
     for angle in [360.0, -360.0, 720.0] {
         stage.scene.sprite_mut(id).unwrap().angle = angle;
-        let packet = stage.scene.extract(&mut stage.bitmaps);
+        let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
         let [vkrgss_proto::Op::Quad(quad)] = packet.ops.as_slice() else {
             panic!("one quad");
         };
@@ -790,7 +811,7 @@ fn the_bitmap_of_a_turned_sprite_is_kept_while_nothing_changes() {
     let id = sprite(&mut stage, bitmap, 30, 30);
     assert_eq!(stage.bitmaps.len(), 1);
     stage.scene.sprite_mut(id).unwrap().angle = 30.0;
-    let first = stage.scene.extract(&mut stage.bitmaps);
+    let first = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(stage.bitmaps.len(), 2);
     // Only the rendered bitmap is uploaded.
     assert!(!delta_ids(&first.bitmaps).is_empty());
@@ -801,31 +822,59 @@ fn the_bitmap_of_a_turned_sprite_is_kept_while_nothing_changes() {
     );
 
     // Unchanged, and moved: nothing is uploaded.
-    assert!(stage.scene.extract(&mut stage.bitmaps).bitmaps.is_empty());
+    assert!(
+        stage
+            .scene
+            .extract(&mut stage.bitmaps)
+            .unwrap()
+            .bitmaps
+            .is_empty()
+    );
     let sprite = stage.scene.sprite_mut(id).unwrap();
     (sprite.x, sprite.y) = (20, 25);
     sprite.set_opacity(100);
-    assert!(stage.scene.extract(&mut stage.bitmaps).bitmaps.is_empty());
+    assert!(
+        stage
+            .scene
+            .extract(&mut stage.bitmaps)
+            .unwrap()
+            .bitmaps
+            .is_empty()
+    );
 
     // A changed source and a changed angle are rendered again.
     stage
         .bitmaps
         .set_pixel(bitmap, 0, 0, Color::new(1.0, 2.0, 3.0, 255.0))
         .unwrap();
-    assert!(!stage.scene.extract(&mut stage.bitmaps).bitmaps.is_empty());
+    assert!(
+        !stage
+            .scene
+            .extract(&mut stage.bitmaps)
+            .unwrap()
+            .bitmaps
+            .is_empty()
+    );
     stage.scene.sprite_mut(id).unwrap().angle = 31.0;
-    assert!(!stage.scene.extract(&mut stage.bitmaps).bitmaps.is_empty());
+    assert!(
+        !stage
+            .scene
+            .extract(&mut stage.bitmaps)
+            .unwrap()
+            .bitmaps
+            .is_empty()
+    );
     assert_eq!(stage.bitmaps.len(), 2);
 
     stage.scene.sprite_mut(id).unwrap().angle = 0.0;
-    stage.scene.extract(&mut stage.bitmaps);
+    stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(stage.bitmaps.len(), 1);
 
     stage.scene.sprite_mut(id).unwrap().angle = 30.0;
-    stage.scene.extract(&mut stage.bitmaps);
+    stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(stage.bitmaps.len(), 2);
     stage.scene.dispose_sprite(id);
-    stage.scene.extract(&mut stage.bitmaps);
+    stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(stage.bitmaps.len(), 1);
 }
 
@@ -838,32 +887,70 @@ fn the_bitmap_of_a_cut_sprite_is_kept_while_nothing_changes() {
     let id = sprite(&mut stage, bitmap, 30, 30);
     let sprite = stage.scene.sprite_mut(id).unwrap();
     sprite.src_rect = Rect::new(-2, 0, 6, 4);
-    stage.scene.extract(&mut stage.bitmaps);
+    stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(stage.bitmaps.len(), 1, "not stretched");
 
     stage.scene.sprite_mut(id).unwrap().zoom_x = 2.0;
-    assert!(!stage.scene.extract(&mut stage.bitmaps).bitmaps.is_empty());
+    assert!(
+        !stage
+            .scene
+            .extract(&mut stage.bitmaps)
+            .unwrap()
+            .bitmaps
+            .is_empty()
+    );
     assert_eq!(stage.bitmaps.len(), 2);
     // Unchanged, and moved: nothing is uploaded.
-    assert!(stage.scene.extract(&mut stage.bitmaps).bitmaps.is_empty());
+    assert!(
+        stage
+            .scene
+            .extract(&mut stage.bitmaps)
+            .unwrap()
+            .bitmaps
+            .is_empty()
+    );
     let sprite = stage.scene.sprite_mut(id).unwrap();
     (sprite.x, sprite.y) = (20, 25);
-    assert!(stage.scene.extract(&mut stage.bitmaps).bitmaps.is_empty());
+    assert!(
+        stage
+            .scene
+            .extract(&mut stage.bitmaps)
+            .unwrap()
+            .bitmaps
+            .is_empty()
+    );
     // The faint rows are a stretch of their own.
     stage.scene.sprite_mut(id).unwrap().bush_depth = 2;
-    assert!(!stage.scene.extract(&mut stage.bitmaps).bitmaps.is_empty());
+    assert!(
+        !stage
+            .scene
+            .extract(&mut stage.bitmaps)
+            .unwrap()
+            .bitmaps
+            .is_empty()
+    );
     assert_eq!(stage.bitmaps.len(), 2);
 
     // Turned, the sprite is not drawn, and inside its bitmap it is drawn from that.
     stage.scene.sprite_mut(id).unwrap().angle = 30.0;
-    assert!(stage.scene.extract(&mut stage.bitmaps).ops.is_empty());
+    assert!(
+        stage
+            .scene
+            .extract(&mut stage.bitmaps)
+            .unwrap()
+            .ops
+            .is_empty()
+    );
     assert_eq!(stage.bitmaps.len(), 1);
     let sprite = stage.scene.sprite_mut(id).unwrap();
     sprite.angle = 0.0;
-    stage.scene.extract(&mut stage.bitmaps);
+    stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(stage.bitmaps.len(), 2);
     stage.scene.sprite_mut(id).unwrap().src_rect = Rect::new(0, 0, 6, 4);
-    assert_eq!(stage.scene.extract(&mut stage.bitmaps).ops.len(), 2);
+    assert_eq!(
+        stage.scene.extract(&mut stage.bitmaps).unwrap().ops.len(),
+        2
+    );
     assert_eq!(stage.bitmaps.len(), 1);
 }
 
@@ -956,12 +1043,12 @@ fn a_bush_depth_of_zero_or_less_changes_nothing() {
     let mut stage = Stage::sized(48, 48);
     let bitmap = stage.solid(32, 32, WHITE);
     sprite(&mut stage, bitmap, 0, 0);
-    let plain = stage.scene.extract(&mut stage.bitmaps);
+    let plain = stage.scene.extract(&mut stage.bitmaps).unwrap();
     let plain_frame = stage.render(&plain).unwrap();
     for depth in [0, -8, i32::MIN] {
         let mut stage = Stage::sized(48, 48);
         bush(&mut stage, depth);
-        let packet = stage.scene.extract(&mut stage.bitmaps);
+        let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
         assert_eq!(packet.ops, plain.ops, "depth {depth}");
         assert_eq!(stage.render(&packet).unwrap().rgba, plain_frame.rgba);
     }
@@ -1761,7 +1848,7 @@ fn a_neutral_viewport_changes_nothing() {
 
     let viewport = stage.scene.create_viewport(Rect::new(0, 0, 8, 8)).unwrap();
     stage.scene.set_viewport_z(viewport, 10).unwrap();
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert!(
         packet
             .ops
@@ -1776,7 +1863,7 @@ fn a_neutral_viewport_changes_nothing() {
     viewport.color = Color::new(255.0, 255.0, 255.0, 0.0);
     viewport.flash(Some(Color::new(255.0, 255.0, 255.0, 255.0)), 1);
     viewport.update();
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert!(
         packet
             .ops
@@ -1792,20 +1879,20 @@ fn the_frame_count_follows_the_extracted_frames_and_can_be_set() {
     let mut bitmaps = Bitmaps::new();
     assert_eq!(scene.frame_count(), 0);
     for index in 0..3 {
-        assert_eq!(scene.extract(&mut bitmaps).frame_index, index);
+        assert_eq!(scene.extract(&mut bitmaps).unwrap().frame_index, index);
     }
     assert_eq!(scene.frame_count(), 3);
     scene.set_frame_count(100);
     assert_eq!(scene.frame_count(), 100);
     // The packet's own index is not the settable count.
-    assert_eq!(scene.extract(&mut bitmaps).frame_index, 3);
+    assert_eq!(scene.extract(&mut bitmaps).unwrap().frame_index, 3);
     assert_eq!(scene.frame_count(), 101);
 
     scene.set_frame_count(-5);
-    scene.extract(&mut bitmaps);
+    scene.extract(&mut bitmaps).unwrap();
     assert_eq!(scene.frame_count(), -4);
     scene.set_frame_count(i64::MAX);
-    assert_eq!(scene.extract(&mut bitmaps).frame_index, 5);
+    assert_eq!(scene.extract(&mut bitmaps).unwrap().frame_index, 5);
     assert_eq!(scene.frame_count(), i64::MIN);
 }
 
@@ -1815,15 +1902,15 @@ fn the_brightness_is_clamped_and_carried_by_every_packet() {
     let mut scene = Scene::new();
     let mut bitmaps = Bitmaps::new();
     assert_eq!(scene.brightness(), 255);
-    assert_eq!(scene.extract(&mut bitmaps).brightness, 255);
+    assert_eq!(scene.extract(&mut bitmaps).unwrap().brightness, 255);
     scene.set_brightness(-5);
     assert_eq!(scene.brightness(), 0);
     scene.set_brightness(300);
     assert_eq!(scene.brightness(), 255);
-    assert_eq!(scene.extract(&mut bitmaps).brightness, 255);
+    assert_eq!(scene.extract(&mut bitmaps).unwrap().brightness, 255);
     scene.set_brightness(100);
-    assert_eq!(scene.extract(&mut bitmaps).brightness, 100);
-    assert_eq!(scene.extract(&mut bitmaps).brightness, 100);
+    assert_eq!(scene.extract(&mut bitmaps).unwrap().brightness, 100);
+    assert_eq!(scene.extract(&mut bitmaps).unwrap().brightness, 100);
 }
 
 #[test]
@@ -1831,15 +1918,18 @@ fn the_frame_rate_is_clamped_and_carried_by_every_packet() {
     let mut scene = Scene::new();
     let mut bitmaps = Bitmaps::new();
     assert_eq!(scene.frame_rate().get(), 40);
-    assert_eq!(scene.extract(&mut bitmaps).frame_rate, FrameRate::DEFAULT);
+    assert_eq!(
+        scene.extract(&mut bitmaps).unwrap().frame_rate,
+        FrameRate::DEFAULT
+    );
     scene.set_frame_rate(5);
     assert_eq!(scene.frame_rate().get(), 10);
-    assert_eq!(scene.extract(&mut bitmaps).frame_rate.get(), 10);
+    assert_eq!(scene.extract(&mut bitmaps).unwrap().frame_rate.get(), 10);
     scene.set_frame_rate(500);
     assert_eq!(scene.frame_rate().get(), 120);
-    assert_eq!(scene.extract(&mut bitmaps).frame_rate.get(), 120);
+    assert_eq!(scene.extract(&mut bitmaps).unwrap().frame_rate.get(), 120);
     scene.set_frame_rate(60);
-    assert_eq!(scene.extract(&mut bitmaps).frame_rate.get(), 60);
+    assert_eq!(scene.extract(&mut bitmaps).unwrap().frame_rate.get(), 60);
     scene.set_frame_rate(-1);
     assert_eq!(scene.frame_rate().get(), 10);
 }
@@ -1847,9 +1937,11 @@ fn the_frame_rate_is_clamped_and_carried_by_every_packet() {
 #[test]
 fn packets_carry_the_logical_size_of_the_scene() {
     let mut bitmaps = Bitmaps::new();
-    let packet = Scene::new().extract(&mut bitmaps);
+    let packet = Scene::new().extract(&mut bitmaps).unwrap();
     assert_eq!(packet.logical_size, Size::new(640, 480));
-    let packet = Scene::with_logical_size(Size::new(320, 240)).extract(&mut bitmaps);
+    let packet = Scene::with_logical_size(Size::new(320, 240))
+        .extract(&mut bitmaps)
+        .unwrap();
     assert_eq!(packet.logical_size, Size::new(320, 240));
 
     // A sprite is clipped to that size.
@@ -1883,7 +1975,7 @@ fn deltas_cover_exactly_the_bitmaps_the_ops_refer_to() {
     let invisible = sprite(&mut stage, hidden, 0, 0);
     stage.scene.sprite_mut(invisible).unwrap().visible = false;
 
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(
         delta_ids(&packet.bitmaps),
         [("create", used), ("update", used)]
@@ -1893,13 +1985,13 @@ fn deltas_cover_exactly_the_bitmaps_the_ops_refer_to() {
     // Nothing changed: nothing is sent, also not for the bitmaps nobody shows.
     stage.bitmaps.set_pixel(unused, 0, 0, color(WHITE)).unwrap();
     stage.bitmaps.set_pixel(hidden, 0, 0, color(WHITE)).unwrap();
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(delta_ids(&packet.bitmaps), []);
 
     // A change to a shown bitmap is sent, and a bitmap is uploaded once it is shown.
     stage.bitmaps.set_pixel(used, 1, 1, color(WHITE)).unwrap();
     stage.scene.sprite_mut(invisible).unwrap().visible = true;
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(
         delta_ids(&packet.bitmaps),
         [("create", hidden), ("update", hidden), ("update", used)]
@@ -1909,7 +2001,7 @@ fn deltas_cover_exactly_the_bitmaps_the_ops_refer_to() {
     let shared = stage.solid(2, 2, WHITE);
     sprite(&mut stage, shared, 8, 8);
     sprite(&mut stage, shared, 10, 10);
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(
         delta_ids(&packet.bitmaps),
         [("create", shared), ("update", shared)]
@@ -1918,7 +2010,7 @@ fn deltas_cover_exactly_the_bitmaps_the_ops_refer_to() {
     // A disposed bitmap the compositor knows is destroyed there, the unused one is not.
     stage.bitmaps.dispose(used);
     stage.bitmaps.dispose(unused);
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(delta_ids(&packet.bitmaps), [("destroy", used)]);
 }
 
@@ -1928,15 +2020,15 @@ fn a_sprite_that_draws_nothing_does_not_upload_its_bitmap() {
     let bitmap = stage.solid(4, 4, RED);
     let id = sprite(&mut stage, bitmap, 0, 0);
     stage.scene.sprite_mut(id).unwrap().set_opacity(0);
-    assert_eq!(stage.scene.extract(&mut stage.bitmaps).bitmaps, []);
+    assert_eq!(stage.scene.extract(&mut stage.bitmaps).unwrap().bitmaps, []);
     let sprite = stage.scene.sprite_mut(id).unwrap();
     sprite.set_opacity(255);
     sprite.zoom_x = 0.0;
-    assert_eq!(stage.scene.extract(&mut stage.bitmaps).bitmaps, []);
+    assert_eq!(stage.scene.extract(&mut stage.bitmaps).unwrap().bitmaps, []);
     let sprite = stage.scene.sprite_mut(id).unwrap();
     sprite.zoom_x = 1.0;
     sprite.src_rect = Rect::new(4, 4, 4, 4);
-    assert_eq!(stage.scene.extract(&mut stage.bitmaps).bitmaps, []);
+    assert_eq!(stage.scene.extract(&mut stage.bitmaps).unwrap().bitmaps, []);
 }
 
 /// One operation of a random script.
@@ -2600,7 +2692,7 @@ proptest! {
         }
         for step in steps {
             perform(&mut stage, &mut made, step.clone());
-            let packet = stage.scene.extract(&mut stage.bitmaps);
+            let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
             let rendered = stage.render(&packet);
             prop_assert!(rendered.is_ok(), "after {:?}: {:?}", step, rendered.err());
             // Every delta is for a bitmap an op draws, or destroys one that is gone.

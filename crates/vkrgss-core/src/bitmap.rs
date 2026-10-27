@@ -7,9 +7,9 @@ use crate::{BitmapError, Color, CreateFailure, Font, FontDefaults, Rect};
 
 mod rgss2;
 
-/// Largest bitmap that can be created, in pixels. It equals the limit of the compositors'
-/// bitmap stores, so every bitmap created here can be uploaded.
-pub const MAX_BITMAP_PIXELS: u64 = 1 << 28;
+/// Largest bitmap that can be created, in pixels: [`vkrgss_proto::MAX_BITMAP_PIXELS`], which
+/// the compositors' bitmap stores accept too, so every bitmap created here can be uploaded.
+pub use vkrgss_proto::MAX_BITMAP_PIXELS;
 
 /// A rectangle of pixels inside a bitmap: `left..right` by `top..bottom`, never empty.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -143,6 +143,12 @@ struct Slot {
 ///
 /// Clipping by `0..dst_size` leaves `i` counted from the unclipped start. The destination
 /// coordinates of the result are consecutive.
+///
+/// Two other functions cut a stretch: `Span::texel` in `turned.rs` finds the texel of one
+/// pixel of a sprite drawn on the CPU, by the step of a stretch quad in `i128`, and
+/// `cut_span` in `extract.rs` finds the span of screen pixels a cut quad covers, leaving
+/// texels out without starting anew. They answer other questions in other integer widths,
+/// so no helper is shared; a change to the rules of one is checked against the other two.
 fn transfer_axis(
     (dst_pos, dst_len, dst_size): (i32, i32, usize),
     (src_pos, src_len, src_size): (i32, i32, usize),
@@ -259,6 +265,9 @@ pub struct Bitmaps {
     free: Vec<u32>,
     /// Disposed bitmaps the host still knows, in the order they were disposed.
     pub(crate) destroyed: Vec<BitmapId>,
+    /// Makes the next [`Bitmaps::deltas`] fail, for the tests of its callers.
+    #[cfg(test)]
+    pub(crate) fail_deltas: bool,
 }
 
 impl Bitmaps {

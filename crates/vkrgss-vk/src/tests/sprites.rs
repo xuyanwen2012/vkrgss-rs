@@ -100,7 +100,7 @@ fn the_sprite_that_ends_the_original_of_rgss3_is_composed_by_both_backends() {
     sprite.angle = 180.0;
     sprite.mirror = true;
     sprite.bush_depth = 20;
-    let packet = scene.extract(&mut bitmaps);
+    let packet = scene.extract(&mut bitmaps).unwrap();
     let mut pair = Pair::new();
     let frame = pair.step(&GuestToHost::Frame(packet));
     let frame = frame.expect("the backends agree").expect("no error");

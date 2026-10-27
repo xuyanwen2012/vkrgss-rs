@@ -7,14 +7,10 @@
 
 use std::collections::BTreeMap;
 
-use vkrgss_proto::{BitmapDelta, BitmapId, Rect};
+use vkrgss_proto::{BitmapDelta, BitmapId, MAX_BITMAP_PIXELS, Rect};
 
 use crate::device::BITMAP_SLOTS;
 use crate::{BitmapError, Limit, SlotState, VkError};
-
-/// Largest bitmap the reference compositor accepts, in pixels; a larger one is an invalid delta
-/// for every backend.
-pub(crate) const MAX_BITMAP_PIXELS: u64 = 1 << 28;
 
 /// One occupied slot: the generation living there and its size.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

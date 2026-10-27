@@ -2660,6 +2660,7 @@ dependencies = [
  "proptest",
  "thiserror 2.0.21",
  "vkrgss-compose-ref",
+ "vkrgss-image",
  "vkrgss-pixel",
  "vkrgss-proto",
 ]

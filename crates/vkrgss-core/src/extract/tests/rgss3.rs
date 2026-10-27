@@ -85,7 +85,7 @@ fn in_rgss3_the_width_of_a_sprite_depends_on_the_place() {
     let bitmap = stage.solid(90, 8, WHITE);
     let id = sprite(&mut stage, bitmap, 272, 0);
     stage.scene.sprite_mut(id).unwrap().zoom_x = 0.7;
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     let widths: Vec<u32> = packet
         .ops
         .iter()
@@ -407,7 +407,7 @@ fn the_sprite_that_ends_the_original_of_rgss3_is_drawn() {
     sprite.angle = 180.0;
     sprite.mirror = true;
     sprite.bush_depth = 20;
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     let frame = stage.render(&packet).unwrap();
     assert_eq!(drawn(&frame), Some((360, 414, 142, 433, 159)));
 }
@@ -524,6 +524,6 @@ fn a_snapshot_shows_the_scene_as_it_is_at_the_brightness_of_the_call() {
         assert_eq!(snapped.pixel(x, y), expected);
     }
     // The next extracted packet is the one it would have been without the snapshot.
-    let next = stage.scene.extract(&mut stage.bitmaps);
-    assert_eq!(next, twin.scene.extract(&mut twin.bitmaps));
+    let next = stage.scene.extract(&mut stage.bitmaps).unwrap();
+    assert_eq!(next, twin.scene.extract(&mut twin.bitmaps).unwrap());
 }

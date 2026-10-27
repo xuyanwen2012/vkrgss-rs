@@ -102,6 +102,11 @@ pub struct FrameRateOutOfRange {
     pub found: u8,
 }
 
+/// The largest bitmap, in pixels: 16384 by 16384, 1 GiB of RGBA8, the largest the original
+/// runtime created. The guest creates no larger bitmap and every backend accepts every bitmap
+/// up to it; a larger one is an invalid [`BitmapDelta::Create`].
+pub const MAX_BITMAP_PIXELS: u64 = 1 << 28;
+
 /// A change to the set of bitmaps known to the host.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BitmapDelta {

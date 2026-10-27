@@ -22,9 +22,9 @@ use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use vkrgss_core::{InputState, Rules, Scene};
+use vkrgss_core::{BitmapError, InputState, Rules, Scene};
 use vkrgss_proto::link::GuestEnd;
-use vkrgss_proto::{AudioChannel, AudioCommand, GuestToHost, HostToGuest, Size};
+use vkrgss_proto::{AudioChannel, AudioCommand, FramePacket, GuestToHost, HostToGuest, Size};
 use vkrgss_ruby_sys::ffi::{self, VALUE};
 use vkrgss_ruby_sys::{Raise, Raised, Ruby, RubyError};
 use vkrgss_vfs::{GameIni, LibraryVersion, Runtime};
@@ -222,6 +222,9 @@ pub(crate) struct State {
     pub(crate) held: bool,
     /// Whether a modal message is shown.
     modal: bool,
+    /// The error of the bitmap arena that failed the extraction of a frame, which fails the
+    /// session.
+    failure: Option<BitmapError>,
 }
 
 impl State {
@@ -237,6 +240,7 @@ impl State {
             saves: Vec::new(),
             held: false,
             modal: false,
+            failure: None,
         }
     }
 }
@@ -251,6 +255,7 @@ impl Guest {
         self.runtime.saves.clear();
         self.runtime.held = false;
         self.runtime.modal = false;
+        self.runtime.failure = None;
         self.runtime.music = None;
         self.runtime.background_sound = None;
         self.audio = audio::State::default();
@@ -260,6 +265,20 @@ impl Guest {
     /// Drops the link, which tells the host that the guest has gone.
     pub(crate) fn disconnect(&mut self) {
         self.runtime.link = None;
+    }
+
+    /// Extracts the next frame of the scene. Every op names a live bitmap, so the arena has no
+    /// reason to fail; an error all the same fails the session: no packet is made, the game
+    /// ends as on a quit request, and the run returns [`RunError::Extraction`].
+    pub(crate) fn extract(&mut self) -> Option<FramePacket> {
+        match self.scene.extract(&mut self.bitmaps) {
+            Ok(packet) => Some(packet),
+            Err(error) => {
+                self.runtime.failure = Some(error);
+                self.runtime.pending = Some(Pending::Quit);
+                None
+            }
+        }
     }
 
     /// Sends a message to the host. When the host has gone the message is dropped and the
@@ -398,9 +417,11 @@ impl Guest {
         }
         // The frame of this wait was counted when it was first sent.
         let frame_count = self.scene.frame_count();
-        let packet = self.scene.extract(&mut self.bitmaps);
+        let packet = self.extract();
         self.scene.set_frame_count(frame_count);
-        self.send(GuestToHost::Frame(packet));
+        if let Some(packet) = packet {
+            self.send(GuestToHost::Frame(packet));
+        }
     }
 
     /// Sends the host the modal message `text` and shows it in the message panel until the
@@ -416,8 +437,11 @@ impl Guest {
         loop {
             let frame_count = self.scene.frame_count();
             let extraction = Span::enter(Part::Extraction);
-            let mut packet = self.scene.extract(&mut self.bitmaps);
+            let packet = self.extract();
             self.scene.set_frame_count(frame_count);
+            let Some(mut packet) = packet else {
+                break;
+            };
             if let Some(panel) = &panel {
                 panel.bring_to_front(&mut packet.ops);
             }
@@ -691,6 +715,10 @@ pub enum RunError {
         /// The runtime of the game.
         runtime: Runtime,
     },
+    /// The bitmap arena failed while a frame was extracted. No script can cause this; the
+    /// game was ended as on a quit request.
+    #[error("a frame could not be extracted: {0}")]
+    Extraction(BitmapError),
 }
 
 /// How an evaluation that did not return ended.
@@ -1106,6 +1134,10 @@ pub(crate) fn play(ruby: &Ruby, link: GuestEnd) -> Result<(), RunError> {
             ruby.mark_game_scripts();
             run_scripts(ruby, &preload, count)
         });
+    let outcome = match Guest::with(ruby, |guest| guest.runtime.failure.take()) {
+        Some(error) => Err(RunError::Extraction(error)),
+        None => outcome,
+    };
     let shown = match &outcome {
         Err(RunError::Script(report)) => Some(report.clone()),
         Err(RunError::Archive { .. })

@@ -59,7 +59,7 @@ fn a_tilemap_is_a_lower_plane_at_z_0_and_an_upper_plane_at_z_200() {
         let sprite_mut = stage.scene.sprite_mut(sprite).unwrap();
         sprite_mut.set_bitmap(Some(bitmap), &stage.bitmaps);
         stage.scene.set_sprite_z(sprite, z).unwrap();
-        let packet = stage.scene.extract(&mut stage.bitmaps);
+        let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
         let expected = if z == 100 {
             vec![Some(Plane::Lower), None, Some(Plane::Upper)]
         } else {
@@ -80,11 +80,11 @@ fn an_invisible_tilemap_is_drawn_as_before() {
     let mut stage = Stage::sized(96, 64);
     let (id, map) = tilemap(&mut stage, None);
     map.set(0, 0, 0, 37);
-    let shown = stage.scene.extract(&mut stage.bitmaps);
+    let shown = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(planes(&shown).len(), 2);
     assert_eq!(stage.render(&shown).unwrap().pixel(5, 5), GREEN);
     stage.scene.tilemap_mut(id).unwrap().visible = false;
-    let hidden = stage.scene.extract(&mut stage.bitmaps);
+    let hidden = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(hidden.ops, shown.ops);
     assert_eq!(stage.render(&hidden).unwrap().pixel(5, 5), GREEN);
 }
@@ -98,7 +98,7 @@ fn the_counter_advances_by_updates_only() {
     for _ in 0..31 {
         // Two frames between the updates: frames do not count.
         for _ in 0..2 {
-            let packet = stage.scene.extract(&mut stage.bitmaps);
+            let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
             let [lower, upper] = planes(&packet)[..] else {
                 panic!("two planes");
             };
@@ -128,7 +128,7 @@ fn the_origin_gives_the_first_cell_and_the_corner() {
         let tilemap = stage.scene.tilemap_mut(id).unwrap();
         (tilemap.ox, tilemap.oy) = (ox, oy);
         stage.scene.refresh_tilemap(id).unwrap();
-        let packet = stage.scene.extract(&mut stage.bitmaps);
+        let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
         let plane = planes(&packet)[0];
         assert_eq!(plane.clip, vkrgss_proto::Rect::new(0, 0, 96, 64));
         (plane.first_cell, plane.corner)
@@ -147,7 +147,7 @@ fn the_planes_start_at_the_corner_of_the_viewport_and_its_origin_only_adds() {
     let (id, _) = tilemap(&mut stage, Some(viewport));
     stage.scene.tilemap_mut(id).unwrap().ox = 5;
     stage.scene.refresh_tilemap(id).unwrap();
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     let plane = planes(&packet)[0];
     assert_eq!(plane.clip, vkrgss_proto::Rect::new(40, 30, 100, 80));
     assert_eq!((plane.first_cell, plane.corner), ((0, 0), (35, 30)));
@@ -155,7 +155,7 @@ fn the_planes_start_at_the_corner_of_the_viewport_and_its_origin_only_adds() {
     // A change of the viewport's origin refreshes the tilemap.
     let moved = stage.scene.viewport_mut(viewport).unwrap();
     (moved.ox, moved.oy) = (30, -3);
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     let plane = planes(&packet)[0];
     assert_eq!((plane.first_cell, plane.corner), ((1, 3), (37, 1)));
 }
@@ -170,7 +170,8 @@ fn another_viewport_is_not_a_refresh() {
     stage.scene.viewport_mut(new).unwrap().ox = 16;
     let (id, _) = tilemap(&mut stage, Some(old));
     stage.scene.set_tilemap_viewport(id, Some(new)).unwrap();
-    let corner = |stage: &mut Stage| planes(&stage.scene.extract(&mut stage.bitmaps))[0].corner;
+    let corner =
+        |stage: &mut Stage| planes(&stage.scene.extract(&mut stage.bitmaps).unwrap())[0].corner;
     // In the rectangle of the new viewport, at the origin of the old one.
     assert_eq!(corner(&mut stage), (40, 30));
     assert_eq!(corner(&mut stage), (40, 30));
@@ -193,7 +194,7 @@ fn a_change_of_the_viewport_before_the_tilemap_leaves_it_is_latched() {
     let (id, _) = tilemap(&mut stage, Some(old));
     stage.scene.viewport_mut(old).unwrap().ox = 7;
     stage.scene.set_tilemap_viewport(id, None).unwrap();
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(planes(&packet)[0].corner, (-7, 0));
 }
 
@@ -205,17 +206,17 @@ fn without_map_data_nothing_is_drawn_and_nothing_is_latched() {
     stage.scene.viewport_mut(viewport).unwrap().ox = 9;
     let id = stage.scene.create_tilemap_rgss2(Some(viewport)).unwrap();
     stage.scene.refresh_tilemap(id).unwrap();
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert!(packet.ops.is_empty() && packet.tables.is_empty());
     // A map without cells draws nothing either.
     stage.scene.tilemap_mut(id).unwrap().map_data = Some(map(0, 0));
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert!(packet.ops.is_empty());
     // Moved while it had no map: the origin of the viewport it left was never taken.
     stage.scene.tilemap_mut(id).unwrap().map_data = None;
     stage.scene.set_tilemap_viewport(id, None).unwrap();
     stage.scene.tilemap_mut(id).unwrap().map_data = Some(map(2, 2));
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(planes(&packet)[0].corner, (0, 0));
 }
 
@@ -229,7 +230,7 @@ fn the_three_tables_are_sent_as_they_are_and_again_when_written() {
     let tilemap = stage.scene.tilemap_mut(id).unwrap();
     tilemap.rgss2.as_mut().unwrap().passages = Some(passages.clone());
     tilemap.flash_data = Some(flash);
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     let sizes: Vec<(u32, u32, u32)> = packet
         .tables
         .iter()
@@ -253,13 +254,28 @@ fn the_three_tables_are_sent_as_they_are_and_again_when_written() {
         (upper.map, upper.passages, upper.flash)
     );
     // Nothing written: nothing sent. An element written: that table again.
-    assert!(stage.scene.extract(&mut stage.bitmaps).tables.is_empty());
+    assert!(
+        stage
+            .scene
+            .extract(&mut stage.bitmaps)
+            .unwrap()
+            .tables
+            .is_empty()
+    );
     map.set(0, 0, 0, 5);
     passages.set(5, 0, 0, 0x10);
-    assert_eq!(stage.scene.extract(&mut stage.bitmaps).tables.len(), 2);
+    assert_eq!(
+        stage
+            .scene
+            .extract(&mut stage.bitmaps)
+            .unwrap()
+            .tables
+            .len(),
+        2
+    );
     // Disposed: the compositor gives the three tables back.
     stage.scene.dispose_tilemap(id, &mut stage.bitmaps);
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert!(packet.ops.is_empty());
     let destroyed = |delta: &TableDelta| matches!(delta, TableDelta::Destroy { .. });
     assert_eq!(packet.tables.iter().filter(|d| destroyed(d)).count(), 3);
@@ -281,7 +297,7 @@ fn a_disposed_sheet_is_left_out() {
         .bitmaps[5] = Some(other);
     assert_eq!(stage.frame().pixel(5, 5), RED);
     stage.bitmaps.dispose(other);
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(planes(&packet)[0].bitmaps[5], None);
     assert!(planes(&packet)[0].bitmaps[4].is_some());
     assert_eq!(stage.render(&packet).unwrap().pixel(5, 5), BLACK);
@@ -294,7 +310,7 @@ fn a_tilemap_of_rgss1_stays_as_it_is() {
     assert_eq!(stage.scene.tilemap(id).unwrap().rgss2, None);
     stage.scene.tilemap_mut(id).unwrap().map_data = Some(map(2, 2));
     stage.scene.refresh_tilemap(id).unwrap();
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert!(planes(&packet).is_empty());
 }
 
@@ -303,7 +319,7 @@ fn a_tilemap_of_rgss1_stays_as_it_is() {
 fn a_tilemap_of_rgss2_names_the_rule_set_of_rgss2() {
     let mut stage = Stage::sized(96, 64);
     tilemap(&mut stage, None);
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     let rules: Vec<PlaneRules> = planes(&packet).iter().map(|plane| plane.rules).collect();
     assert_eq!(rules, [PlaneRules::Rgss2; 2]);
 }
@@ -343,7 +359,7 @@ fn a_tilemap_of_rgss3_is_two_planes_of_the_rule_set_of_rgss3() {
     let mut stage = Stage::sized(128, 96);
     let (_, map, _) = tilemap_rgss3(&mut stage, None, (4, 3));
     map.set(3, 2, 3, 15);
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     let [lower, upper] = planes(&packet)[..] else {
         panic!("two planes");
     };
@@ -383,7 +399,7 @@ fn a_star_tile_of_rgss3_is_above_a_sprite_only_from_the_third_layer() {
     flags.set(300, 0, 0, 0x10);
     for (z, pixel) in [(100, RED), (300, BLUE)] {
         cover(&mut stage, (96, 64), z, pixel);
-        let packet = stage.scene.extract(&mut stage.bitmaps);
+        let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
         let frame = stage.render(&packet).unwrap();
         // The first sprite is under the tile of the third layer and over the tile of the
         // first; the second is over both.
@@ -399,7 +415,7 @@ fn the_fourth_layer_of_rgss3_darkens_what_lies_under_the_tilemap() {
     cover(&mut stage, (128, 96), -10, [200, 200, 200, 255]);
     let (_, map, _) = tilemap_rgss3(&mut stage, None, (4, 3));
     map.set(1, 1, 3, 15);
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     let frame = stage.render(&packet).unwrap();
     for y in 0..96 {
         for x in 0..128 {
@@ -424,7 +440,7 @@ fn a_tilemap_of_rgss3_scrolls_and_counts_as_one_of_rgss2() {
         tilemap.update();
     }
     stage.scene.refresh_tilemap(id).unwrap();
-    let packet = stage.scene.extract(&mut stage.bitmaps);
+    let packet = stage.scene.extract(&mut stage.bitmaps).unwrap();
     for plane in planes(&packet) {
         assert_eq!((plane.first_cell, plane.corner), ((3, 0), (-24, 0)));
         assert_eq!(plane.animation_step, 1);
@@ -441,7 +457,8 @@ fn another_viewport_is_not_a_refresh_of_a_tilemap_of_rgss3() {
     stage.scene.viewport_mut(new).unwrap().ox = 16;
     let (id, _, _) = tilemap_rgss3(&mut stage, Some(old), (5, 4));
     stage.scene.set_tilemap_viewport(id, Some(new)).unwrap();
-    let corner = |stage: &mut Stage| planes(&stage.scene.extract(&mut stage.bitmaps))[0].corner;
+    let corner =
+        |stage: &mut Stage| planes(&stage.scene.extract(&mut stage.bitmaps).unwrap())[0].corner;
     assert_eq!(corner(&mut stage), (40, 30));
     stage.scene.refresh_tilemap(id).unwrap();
     assert_eq!(corner(&mut stage), (24, 30));
@@ -462,7 +479,7 @@ fn a_hidden_tilemap_of_rgss3_has_no_planes_and_counts_on() {
     stage.scene.tilemap_mut(id).unwrap().flash_data = Some(flash);
     stage.scene.refresh_tilemap(id).unwrap();
 
-    let shown = stage.scene.extract(&mut stage.bitmaps);
+    let shown = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert_eq!(planes(&shown).len(), 2);
     let frame = stage.render(&shown).unwrap();
     let cells = [5, 40, 70, 100].map(|x| frame.pixel(x, 5));
@@ -473,7 +490,7 @@ fn a_hidden_tilemap_of_rgss3_has_no_planes_and_counts_on() {
 
     stage.scene.tilemap_mut(id).unwrap().visible = false;
     stage.scene.refresh_tilemap(id).unwrap();
-    let hidden = stage.scene.extract(&mut stage.bitmaps);
+    let hidden = stage.scene.extract(&mut stage.bitmaps).unwrap();
     assert!(planes(&hidden).is_empty());
     // The tables stay with the compositor.
     assert!(hidden.tables.is_empty());
@@ -489,7 +506,7 @@ fn a_hidden_tilemap_of_rgss3_has_no_planes_and_counts_on() {
     }
     tilemap.visible = true;
     stage.scene.refresh_tilemap(id).unwrap();
-    let back = stage.scene.extract(&mut stage.bitmaps);
+    let back = stage.scene.extract(&mut stage.bitmaps).unwrap();
     let steps: Vec<u64> = planes(&back).iter().map(|p| p.animation_step).collect();
     assert_eq!(steps, [1, 1]);
     assert!(back.tables.is_empty());
