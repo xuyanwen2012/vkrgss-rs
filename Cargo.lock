@@ -2773,9 +2773,11 @@ version = "0.4.1"
 dependencies = [
  "postcard",
  "proptest",
+ "rustix 1.1.5",
  "serde",
  "tempfile",
  "thiserror 2.0.21",
+ "tracing",
 ]
 
 [[package]]

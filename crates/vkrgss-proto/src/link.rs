@@ -9,8 +9,11 @@
 //! That is the in-process transport. A guest in a process of its own holds a [`GuestEnd`]
 //! made by [`GuestEnd::over_stream`] instead: the same operations on a connected Unix stream
 //! socket, with the messages framed as [`crate::framing`] says. It reads and writes the socket
-//! on the thread that calls it and has no thread of its own. Whatever is at the other side of
-//! the socket hands the messages on; the host keeps its [`HostEnd`] of an in-process link.
+//! on the thread that calls it and has no thread of its own, and never changes the mode of the
+//! socket: a receive that does not wait asks the system not to wait for that one call. Whatever
+//! is at the other side of the socket hands the messages on; the host keeps its [`HostEnd`] of
+//! an in-process link. An error of the framing, such as a message above the bound, is logged
+//! with its reason before the link reports [`Disconnected`].
 
 use std::cell::RefCell;
 use std::io::{ErrorKind, Read};
@@ -18,9 +21,10 @@ use std::os::unix::net::UnixStream;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 
+use rustix::net::{RecvFlags, recv};
 use thiserror::Error;
 
-use crate::framing::{self, LENGTH_LEN};
+use crate::framing::{self, FramingError, MessageReader};
 use crate::{GuestToHost, HostToGuest};
 
 /// The other end of the link has been dropped.
@@ -67,16 +71,15 @@ pub struct GuestEnd {
 }
 
 impl GuestEnd {
-    /// A guest end over a connected Unix stream socket, whose other side reads
-    /// [`GuestToHost`] and writes [`HostToGuest`] messages with [`crate::framing`]. The socket
-    /// is used in blocking mode, except for the time of a [`GuestEnd::try_recv`].
+    /// A guest end over a connected Unix stream socket in blocking mode, whose other side
+    /// reads [`GuestToHost`] and writes [`HostToGuest`] messages with [`crate::framing`].
     pub fn over_stream(stream: UnixStream) -> GuestEnd {
         let stream = Arc::new(stream);
         GuestEnd {
             sender: GuestSender(Sending::Stream(Arc::clone(&stream))),
             receiver: GuestReceiver(Receiving::Stream {
                 stream,
-                buffered: RefCell::new(Vec::new()),
+                reader: RefCell::new(MessageReader::new()),
             }),
         }
     }
@@ -133,7 +136,7 @@ impl GuestSender {
             }
             Sending::Stream(stream) => {
                 // An error of the framing ends the connection like one of the socket.
-                framing::write_message(&mut &**stream, &message).map_err(|_| Disconnected)
+                framing::write_message(&mut &**stream, &message).map_err(disconnected)
             }
         }
     }
@@ -152,8 +155,8 @@ enum Receiving {
     Channel(Receiver<HostToGuest>),
     Stream {
         stream: Arc<UnixStream>,
-        /// Bytes read from the socket that no message was made of yet.
-        buffered: RefCell<Vec<u8>>,
+        /// The bytes read from the socket that no message was taken of yet.
+        reader: RefCell<MessageReader>,
     },
 }
 
@@ -162,14 +165,14 @@ impl GuestReceiver {
     pub fn recv(&self) -> Result<HostToGuest, Disconnected> {
         match &self.0 {
             Receiving::Channel(from_host) => from_host.recv().map_err(|_| Disconnected),
-            Receiving::Stream { stream, buffered } => {
-                let mut buffered = buffered.borrow_mut();
+            Receiving::Stream { stream, reader } => {
+                let mut reader = reader.borrow_mut();
                 loop {
-                    if let Some(message) = take_message(&mut buffered)? {
+                    if let Some(message) = reader.take().map_err(disconnected)? {
                         return Ok(message);
                     }
-                    // In blocking mode nothing read means the wait was interrupted.
-                    read_more(stream, &mut buffered)?;
+                    // Nothing read means the wait was interrupted.
+                    read_more(stream, &mut reader, true)?;
                 }
             }
         }
@@ -179,23 +182,17 @@ impl GuestReceiver {
     pub fn try_recv(&self) -> Result<Option<HostToGuest>, Disconnected> {
         match &self.0 {
             Receiving::Channel(from_host) => try_recv(from_host),
-            Receiving::Stream { stream, buffered } => {
-                let mut buffered = buffered.borrow_mut();
-                if let Some(message) = take_message(&mut buffered)? {
-                    return Ok(Some(message));
-                }
-                stream.set_nonblocking(true).map_err(|_| Disconnected)?;
-                let read = loop {
-                    match read_more(stream, &mut buffered) {
-                        Ok(true) => {}
-                        other => break other,
+            Receiving::Stream { stream, reader } => {
+                let mut reader = reader.borrow_mut();
+                // Each message is taken as soon as it is whole, so what arrived before the
+                // other side closed is still delivered.
+                loop {
+                    if let Some(message) = reader.take().map_err(disconnected)? {
+                        return Ok(Some(message));
                     }
-                };
-                stream.set_nonblocking(false).map_err(|_| Disconnected)?;
-                // What arrived before the other side closed is still delivered.
-                match take_message(&mut buffered)? {
-                    Some(message) => Ok(Some(message)),
-                    None => read.map(|_| None),
+                    if !read_more(stream, &mut reader, false)? {
+                        return Ok(None);
+                    }
                 }
             }
         }
@@ -208,14 +205,28 @@ impl std::fmt::Debug for GuestReceiver {
     }
 }
 
-/// Reads what the socket has into `buffered`. `Ok(false)` is a socket that has nothing now;
-/// one that the other side closed is the disconnection.
-fn read_more(stream: &UnixStream, buffered: &mut Vec<u8>) -> Result<bool, Disconnected> {
-    let mut chunk = [0; 4096];
-    match (&mut &*stream).read(&mut chunk) {
+/// Reads what the socket has into `reader`, waiting for something with `wait`. `Ok(false)` is
+/// a socket that has nothing now, or a wait that was interrupted; one that the other side
+/// closed is the disconnection. Without `wait` the system is asked not to wait for this one
+/// call (`MSG_DONTWAIT`): the socket stays in blocking mode, which a send on another thread
+/// relies on.
+fn read_more(
+    stream: &UnixStream,
+    reader: &mut MessageReader,
+    wait: bool,
+) -> Result<bool, Disconnected> {
+    let mut chunk = [0; 1 << 16];
+    let read = if wait {
+        (&mut &*stream).read(&mut chunk)
+    } else {
+        recv(stream, &mut chunk, RecvFlags::DONTWAIT)
+            .map(|(count, _)| count)
+            .map_err(std::io::Error::from)
+    };
+    match read {
         Ok(0) => Err(Disconnected),
         Ok(count) => {
-            buffered.extend_from_slice(&chunk[..count]);
+            reader.push(&chunk[..count]);
             Ok(true)
         }
         Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::Interrupted) => {
@@ -225,19 +236,13 @@ fn read_more(stream: &UnixStream, buffered: &mut Vec<u8>) -> Result<bool, Discon
     }
 }
 
-/// Takes the first message out of `buffered` if all of it is there. A length above the bound
-/// and bytes that do not decode end the connection.
-fn take_message(buffered: &mut Vec<u8>) -> Result<Option<HostToGuest>, Disconnected> {
-    let Some((length, rest)) = buffered.split_first_chunk::<LENGTH_LEN>() else {
-        return Ok(None);
-    };
-    let len = framing::message_len(*length).map_err(|_| Disconnected)?;
-    let Some(bytes) = rest.get(..len) else {
-        return Ok(None);
-    };
-    let message = framing::decode_message(bytes).map_err(|_| Disconnected)?;
-    buffered.drain(..LENGTH_LEN + len);
-    Ok(Some(message))
+/// The disconnection that an error of the framing ends the connection with. An error of the
+/// socket is the other side going; any other is logged with its reason first.
+fn disconnected(error: FramingError) -> Disconnected {
+    if !matches!(error, FramingError::Io(_)) {
+        tracing::warn!("the connection between guest and host ends: {error}");
+    }
+    Disconnected
 }
 
 /// The host's end of the link.
@@ -502,6 +507,63 @@ mod tests {
         )
         .unwrap();
         assert_eq!(guest.try_recv(), Err(Disconnected));
+    }
+
+    /// Scenario "Send while polling": the receive that does not wait leaves the socket in
+    /// blocking mode, so a send on another thread that fills the socket's buffer waits for
+    /// room instead of failing.
+    #[test]
+    fn a_send_while_the_other_half_polls_waits_for_room() {
+        use std::sync::atomic::AtomicBool;
+        use std::time::Duration;
+
+        use crate::{BitmapDelta, BitmapId, FramePacket, FrameRate, Rect, Size};
+
+        /// A frame packet of about 1 MiB, larger than the buffer of the socket.
+        fn frame(frame_index: u64) -> GuestToHost {
+            let id = BitmapId::new(1, 0);
+            let rgba = vec![(frame_index % 251) as u8; 512 * 512 * 4];
+            GuestToHost::Frame(FramePacket {
+                frame_index,
+                logical_size: Size::new(512, 512),
+                frame_rate: FrameRate::DEFAULT,
+                brightness: 255,
+                bitmaps: vec![BitmapDelta::Update {
+                    id,
+                    rect: Rect::new(0, 0, 512, 512),
+                    rgba,
+                }],
+                tables: Vec::new(),
+                ops: Vec::new(),
+            })
+        }
+
+        const FRAMES: u64 = 8;
+        let (guest, other) = over_socket();
+        let (sender, receiver) = guest.split();
+        let sent = Arc::new(AtomicBool::new(false));
+        let polling = {
+            let sent = Arc::clone(&sent);
+            thread::spawn(move || {
+                while !sent.load(Ordering::SeqCst) {
+                    assert_eq!(receiver.try_recv(), Ok(None));
+                }
+                receiver
+            })
+        };
+        let sending = thread::spawn(move || {
+            let sends: Vec<_> = (0..FRAMES).map(|index| sender.send(frame(index))).collect();
+            sent.store(true, Ordering::SeqCst);
+            (sends, sender)
+        });
+        for index in 0..FRAMES {
+            thread::sleep(Duration::from_millis(20));
+            let message = framing::read_message::<GuestToHost>(&mut &other).unwrap();
+            assert!(message == Some(frame(index)), "frame {index}");
+        }
+        let (sends, _sender) = sending.join().unwrap();
+        assert!(sends.iter().all(Result::is_ok), "{sends:?}");
+        let _receiver = polling.join().unwrap();
     }
 
     #[test]

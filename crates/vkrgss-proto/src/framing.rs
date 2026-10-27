@@ -11,6 +11,10 @@
 //! [`MAX_MESSAGE_LEN`], bytes that do not decode and a stream that ends inside a message are
 //! errors, after which the stream is of no further use; a stream that ends between two
 //! messages is its end.
+//!
+//! [`read_message`] waits for the bytes of a whole message. A reader that must not wait, on
+//! a stream that gives what it has, uses a [`MessageReader`] instead: it is given the bytes
+//! as they arrive and gives each message once its last byte is there.
 
 use std::io::{self, ErrorKind, Read, Write};
 
@@ -98,6 +102,67 @@ pub fn read_message<T: Message>(reader: &mut impl Read) -> Result<Option<T>, Fra
         return Err(FramingError::Truncated);
     }
     decode_message(&bytes).map(Some)
+}
+
+/// Takes the bytes of a stream as they arrive and gives each message once its last byte is
+/// there, with the errors and the bound of [`read_message`].
+///
+/// Whoever gives it bytes takes the messages they complete with [`take`](MessageReader::take)
+/// before giving more; it then keeps no more than the bytes of one message within the bound
+/// plus what it was given at once. A length above the bound is an error as soon as its four
+/// bytes are there.
+#[derive(Debug, Default)]
+pub struct MessageReader {
+    /// Bytes that no message was taken of yet.
+    buffered: Vec<u8>,
+    /// The number of bytes of the messages taken so far, their lengths included.
+    taken: u64,
+}
+
+impl MessageReader {
+    pub fn new() -> MessageReader {
+        MessageReader::default()
+    }
+
+    /// Adds bytes that arrived.
+    pub fn push(&mut self, bytes: &[u8]) {
+        self.buffered.extend_from_slice(bytes);
+    }
+
+    /// Takes the first message if all of it is there. A length above the bound and bytes
+    /// that do not decode are errors, after which the reader is of no further use.
+    pub fn take<T: Message>(&mut self) -> Result<Option<T>, FramingError> {
+        let Some((length, rest)) = self.buffered.split_first_chunk::<LENGTH_LEN>() else {
+            return Ok(None);
+        };
+        let len = message_len(*length)?;
+        let Some(bytes) = rest.get(..len) else {
+            return Ok(None);
+        };
+        let message = decode_message(bytes)?;
+        self.buffered.drain(..LENGTH_LEN + len);
+        self.taken += (LENGTH_LEN + len) as u64;
+        Ok(Some(message))
+    }
+
+    /// Whether it holds no byte of a message that is not whole yet: the stream may end here.
+    pub fn is_empty(&self) -> bool {
+        self.buffered.is_empty()
+    }
+
+    /// The number of bytes of the messages taken so far, their lengths included.
+    pub fn taken(&self) -> u64 {
+        self.taken
+    }
+
+    /// The stream has ended: an error if it ended inside a message.
+    pub fn end(&self) -> Result<(), FramingError> {
+        if self.is_empty() {
+            Ok(())
+        } else {
+            Err(FramingError::Truncated)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -196,6 +261,54 @@ mod tests {
         bytes.extend_from_slice(&[0; 16]);
         let error = read_message::<HostToGuest>(&mut bytes.as_slice()).unwrap_err();
         assert!(matches!(error, FramingError::Truncated), "{error}");
+    }
+
+    /// Scenario "One byte at a time".
+    #[test]
+    fn the_incremental_reader_gives_each_message_after_its_last_byte() {
+        let mut bytes = Vec::new();
+        write_message(&mut bytes, &HostToGuest::Input(InputSnapshot::EMPTY)).unwrap();
+        let first = bytes.len();
+        write_message(&mut bytes, &HostToGuest::Tick).unwrap();
+
+        let mut reader = MessageReader::new();
+        let mut given = Vec::new();
+        for (index, byte) in bytes.iter().enumerate() {
+            reader.push(&[*byte]);
+            if let Some(message) = reader.take::<HostToGuest>().unwrap() {
+                given.push((index + 1, message));
+            }
+        }
+        assert_eq!(
+            given,
+            [
+                (first, HostToGuest::Input(InputSnapshot::EMPTY)),
+                (bytes.len(), HostToGuest::Tick)
+            ]
+        );
+        assert!(reader.is_empty());
+        assert_eq!(reader.taken(), bytes.len() as u64);
+        reader.end().unwrap();
+
+        // A stream that ends inside a message.
+        reader.push(&bytes[..3]);
+        assert!(matches!(reader.end(), Err(FramingError::Truncated)));
+    }
+
+    /// Scenario "Oversized length", for the incremental reader: the error comes with the
+    /// length, before any byte that would follow it.
+    #[test]
+    fn the_incremental_reader_reports_a_length_above_the_bound_at_once() {
+        let mut reader = MessageReader::new();
+        let length = (MAX_MESSAGE_LEN + 1).to_le_bytes();
+        reader.push(&length[..3]);
+        assert!(reader.take::<HostToGuest>().unwrap().is_none());
+        reader.push(&length[3..]);
+        let error = reader.take::<HostToGuest>().unwrap_err();
+        assert!(
+            matches!(error, FramingError::TooLong { len } if len == u64::from(MAX_MESSAGE_LEN) + 1),
+            "{error}"
+        );
     }
 
     /// Scenario "Other version".

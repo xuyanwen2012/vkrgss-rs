@@ -2,7 +2,7 @@
 
 ## 1. Framing and the stream link
 
-- [ ] 1.1 The incremental reader in `framing.rs`, used by `GuestReceiver`; the non-waiting receive with `MSG_DONTWAIT` instead of switching the socket's mode; framing errors logged with their reason before `Disconnected`. Verify: tests of the scenarios "One byte at a time", "Oversized length" (incremental reader) and "Send while polling"; the existing tests of `framing.rs` and `link.rs` pass; `cargo test -p vkrgss-proto --locked` passes.
+- [x] 1.1 The incremental reader in `framing.rs`, used by `GuestReceiver`; the non-waiting receive with `MSG_DONTWAIT` instead of switching the socket's mode; framing errors logged with their reason before `Disconnected`. Verify: tests of the scenarios "One byte at a time", "Oversized length" (incremental reader) and "Send while polling"; the existing tests of `framing.rs` and `link.rs` pass; `cargo test -p vkrgss-proto --locked` passes.
 
 ## 2. The relay
 
