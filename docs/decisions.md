@@ -59,7 +59,8 @@ on 2026-10-26, the work budget of a frame, the bounded waits, what a lost device
 previous frame on a failed resize, and the descriptor limits a device has to meet.
 
 The change `call-rgss-from-script-threads` added to "Script threads" under "VX Ace", on
-2026-10-27, that the RGSS classes work from a script thread as from the main script.
+2026-10-27, that the RGSS classes work from a script thread as from the main script, and
+that `Graphics.update` there returns where the original hangs.
 
 ## Goal and scope
 
@@ -416,7 +417,8 @@ Ace finished and published.
   The RGSS classes work from a script thread as from the main script: the state of the
   binding is one of the process, which a thread reaches only while it holds the interpreter
   lock, and the binding never releases that lock, so no other Ruby thread runs during a call
-  (`Graphics.update` from a thread waits for its tick as from the main script). Objects
+  (`Graphics.update` from a thread waits for its tick as from the main script and returns,
+  where the original 3.0.1.1 never returns from it; copying a hang serves no game). Objects
   collected on any thread are freed at the next call of the binding.
 - Word size: the guest stays a 64-bit build against a 32-bit original. Differences a script
   can see (`2**30` is a Fixnum, `1.size`) are recorded as known differences unless a game

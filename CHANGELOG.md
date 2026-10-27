@@ -51,7 +51,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and bitmaps and scene elements collected while a thread runs are freed. Before, every
   call from a thread, `Thread.new { Bitmap.new(1, 1) }` among them, raised
   `panic in a host function`, `Input.press?` answered `false` there, and what a collection
-  on a thread freed stayed in the arena and in the scene.
+  on a thread freed stayed in the arena and in the scene. `Graphics.update` from a thread
+  returns after its frame, where the original runtime never returns.
+- In a game of XP a tilemap takes the symbol numbers it takes on the original runtime:
+  `Tilemap.new` interns no name and the first use of slot N of `autotiles` interns `atN`.
+  Before, vkrgss interned `tilemap` and `autotile0` to `autotile6`, its own names, so the
+  names a game made afterwards had other numbers than on the original.
 - A frame whose ops cover more than 2^22 tiles in total, which a packet of the largest
   logical size with a few full-screen ops reaches, is refused as a limit before anything is
   allocated for it, and the previous frame stays. Before, such a packet made the program

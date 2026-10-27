@@ -283,6 +283,13 @@ by 480.
 In a game of XP `Tilemap` is as it was: none of `bitmaps`, `passages` and
 `Tilemap::BitmapArray` is defined.
 
+A tilemap of XP takes the symbol numbers it takes on the original runtime of XP (measured on
+RGSS103J on 2026-10-27), which decide the order of instance variables in a save:
+`Tilemap.new` interns no name, and the first read or write of slot N of `autotiles` interns
+`atN`, the name the original keeps that slot under. Known difference: the original interns
+`owner` and `observer` at the first `Bitmap.new` too, which a game of XP in vkrgss does not;
+which calls of XP intern them was not measured.
+
 ## RPG Maker VX Ace
 
 Games of RPG Maker VX Ace (RGSS3) are supported. Two games were compared with the original
@@ -307,11 +314,27 @@ made with the standard scripts of VX Ace shows its title screen and its menu and
 new game.
 
 The classes work from a script thread (`Thread.new`) as from the main script, as on the
-original, where a thread that called `Graphics.frame_count`, `Audio.se_stop` and
-`Bitmap.new` ran to its end. While a call of the binding runs, from a thread or from the main
-script, no other Ruby thread runs, and `Graphics.update` from a thread waits for its frame as
-from the main script; whether the original lets other threads run during its waits was not
-measured.
+original. Measured on the original runtime 3.0.1.1 on 2026-10-27, each call in a fresh
+`Thread.new { ... }.value`:
+
+| Call in a thread | Original | vkrgss |
+|---|---|---|
+| `Bitmap.new(8, 8)`, `fill_rect`, `Sprite.new`, `bitmap=`, `[b.width, Graphics.brightness]` | `[8, 255]` | `[8, 255]` |
+| `Bitmap.new(8, 8)`, `fill_rect`, `get_pixel` | the bitmap and its pixel | the same |
+| `Sprite.new` with that bitmap, `x = 3` | works | works |
+| `Graphics.brightness` | `255` | `255` |
+| `Input.update`, `Input.press?(:C)` | `false` with nothing pressed | `false` |
+| `Audio.se_stop` | `nil` | `nil` |
+| `GC.start` after a dropped bitmap; a hundred sprites with bitmaps dropped and `GC.start` | works | works, and the next call frees them |
+| `Viewport`, `Plane`, `Window`, `Tilemap`, `Font`, `Table`, `Rect`, `Tone` | work | work |
+| `Graphics.update` once | does not return | returns after its frame |
+| `Bitmap`, `Sprite` and `dispose` in the main script after the threads | work | work |
+
+Known difference: `Graphics.update` called in a script thread never returns on the original,
+which reached no frame in 60 seconds after it; vkrgss waits for the frame as from the main
+script and returns. While a call of the binding runs, from a thread or from the main script,
+no other Ruby thread runs; whether the original lets other threads run during its waits was
+not measured.
 
 The endings, `load_data` and the loading of code follow the original as measured; see
 *Endings and loading of VX Ace* below.

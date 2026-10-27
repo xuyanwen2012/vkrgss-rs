@@ -16,7 +16,7 @@
 
 ## 4. Documents
 
-- [ ] 4.1 `docs/decisions.md` (script threads), `docs/compatibility.md` (the measured table; the names of a tilemap of RGSS1), `CHANGELOG.md`. Verify: the tests that check the documents pass.
+- [x] 4.1 `docs/decisions.md` (script threads), `docs/compatibility.md` (the measured table; the names of a tilemap of RGSS1), `CHANGELOG.md`. Verify: the tests that check the documents pass.
 
 ## 5. Checks
 

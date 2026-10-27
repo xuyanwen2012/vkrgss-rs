@@ -212,6 +212,15 @@ decision "Tilemap names of RGSS1".
   of VX (`wrap::intern_owner_names`), which vkrgss does only in RGSS2. That is not a name of a
   tilemap; see "Follow-ups".
 
+### Documents (task 4.1)
+
+`docs/compatibility.md` has the table of the script-thread probe on the original 3.0.1.1 and
+on vkrgss under "RPG Maker VX Ace", with `Graphics.update` in a thread as a known difference,
+and the names of a tilemap of XP after the note on `Tilemap` of XP, with `owner` and
+`observer` as a known difference. `docs/decisions.md` ("Script threads") says that
+`Graphics.update` from a thread returns where the original hangs; `CHANGELOG.md` says both.
+The tests that check the documents (`xtask`'s `doc_links`, `former_name`) pass.
+
 ### Checks of 2026-10-27 (task 5.1, left open with tasks 1.1, 1.2, 3.1 and 4.1)
 
 At `e172139b`: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exited 0, all steps
