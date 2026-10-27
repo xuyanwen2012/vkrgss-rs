@@ -28,13 +28,17 @@ documents say:
   Linux and Android, `LOCAL_PEERPID` on macOS), refuses a connection whose stated number
   differs, whose user is another, or whose number is not positive, and requires the first
   connection to be the child it started. Only numbers taken this way are ever signalled.
-- A confined guest process can no longer signal processes outside itself: Landlock's signal
-  scope where the kernel has it (ABI 6, Linux 6.12), and on every Linux and Android kernel a
-  seccomp rule that denies `kill`, `tkill`, `rt_sigqueueinfo`, `rt_tgsigqueueinfo` and
-  `pidfd_send_signal`. The guest's own code that signals itself moves to forms the filter
-  allows.
-- The relay drops `StateSaved`, `StateLoaded`, `StateFailed` and `Attach` that come from a
-  running guest, and says so once.
+- A confined guest process can no longer signal processes outside itself through the calls
+  a script reaches: on every Linux and Android kernel a seccomp rule denies `kill`, `tkill`,
+  `rt_sigqueueinfo`, `rt_tgsigqueueinfo` and `pidfd_send_signal`, and where the kernel has
+  Landlock's signal scope (ABI 6, Linux 6.12) no signal leaves the Landlock domain. `tgkill`
+  stays allowed for `raise` and `pthread_kill`: below ABI 6 and on Android, native code
+  that a guest already runs could still reach another process with it; no Ruby function
+  does. The guest's own code that signals itself moves to forms the filter allows.
+- The relay drops `StateSaved`, `StateLoaded`, `StateFailed { load: true }` and `Attach`
+  that come from a running guest, and says so once per kind. It hands on
+  `StateFailed { load: false }`: a guest that cannot be copied has no other way to report a
+  failed save.
 - A load of a slot whose copy is being replaced waits for the new copy instead of failing.
 
 ## Capabilities
@@ -46,7 +50,7 @@ None.
 ### Modified Capabilities
 
 - `game-launch`: identity of attaching processes, signals of a confined guest, state answers
-  made by the program alone, a load during a refill.
+  made by the program (a failed save excepted), a load during a refill.
 
 ## Impact
 

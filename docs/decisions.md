@@ -125,7 +125,9 @@ a guest process on macOS is not confined, and how the workspace is built and tes
   answer `ENOSYS`); on macOS none yet. `--sandbox off` and `--allow-process-functions` leave
   out both. The program takes the number and user of every process that attaches from the
   kernel, refuses one whose `Attach` states another number, requires the first to be its
-  child, and signals only numbers taken so; it alone makes the answers about states.
+  child, and signals only numbers taken so; it alone makes the answers saved, loaded and
+  failed load, and hands on only a failed save of the guest, which a guest that cannot be
+  copied has no other way to report.
 - The guest is deterministic: time comes from frame ticks and a host-provided clock, input is
   sampled once per `Input.update`, the random seed can be injected. Input record and replay is a
   first-version test facility.
