@@ -162,6 +162,14 @@ slot N; each takes a number of the sequence. Whether the original does the same 
   section "Guest state" of `lib.rs`, and the safety comments of `wrap.rs` (`alloc`) and
   `rb.rs` (`perform`), say the same of the binding. No behaviour of the sys crates changed.
 
+### Checks of 2026-10-27 (task 5.1, left open with tasks 1.1, 1.2, 3.1 and 4.1)
+
+At `e172139b`: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exited 0, all steps
+passed; `cargo xtask xarch check` against a baseline of `8f028ad5` (the proposal), with the
+ten comparison games of the workspace's `xarch.toml`, printed `all identical` (84 frames, 17
+saves); `openspec validate call-rgss-from-script-threads --strict` passed. Task 3.1 has
+changed nothing yet, so these are to be repeated once it has.
+
 ## Follow-ups
 
 - **The measurements on the originals (tasks 1.1 and 1.2, and 3.1 that depends on 1.2).**
