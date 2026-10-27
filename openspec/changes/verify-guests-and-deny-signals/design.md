@@ -106,16 +106,5 @@ The relay's blocking reads and writes, the accept loop and budgets (change
   parent watch of macOS, which now raises SIGKILL, and the relay's tests, whose stand-ins
   set `sun_len` on macOS; none of them can be built here.
 
-- Open question (2026-10-26): may the checks of tasks 3.1 and 5.1 run with a short
-  temporary directory on disk instead of `TMPDIR="$PWD/target/tmp"`? With that directory,
-  `TMPDIR="$PWD/target/tmp" VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 1:
-  the tests of the guest process (for example `a_guest_that_may_start_processes_saves_no_state`
-  in `crates/vkrgss/tests/end_to_end.rs`) give the program an `XDG_RUNTIME_DIR` in a
-  temporary directory (`crates/vkrgss/tests/support/mod.rs`), and the guest socket below the
-  clone's path is longer than `SUN_LEN` ("path must be shorter than SUN_LEN"); the oracle
-  tests of `xtask` fail the same way (`xtask/src/oracle/mod.rs`). The same
-  commands pass with `TMPDIR=/var/tmp/vkrgss-vgds`: the gate exits 0, `cargo test -p vkrgss
-  --locked` passes, and `cargo xtask xarch check` prints `all identical` with
-  `XDG_RUNTIME_DIR` set to a writable directory. A shorter socket path (in the program or in
-  the test support) is machinery that this design does not name and is left out; tasks 3.1
-  and 5.1 stay unticked until the owner decides.
+- Resolved (2026-10-26): the checks run with `TMPDIR=/var/tmp/vkrgss-<name>`. The long path
+  came from the brief of the run, not from the change; no socket path machinery is added.
