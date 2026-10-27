@@ -34,6 +34,17 @@
 //! When the relay ends it ends every process whose connection it holds, and waits until
 //! those and the ones it let go of before are gone.
 //!
+//! # Not waiting on a guest
+//!
+//! The relay reads and writes every connection without blocking: what a guest sends is
+//! taken by the incremental reader of the framing, and what is sent to it waits in a buffer
+//! that is written as the connection takes it. A connection is attached as its statement and
+//! `Attach` arrive, while the game's messages are handed on. So the deadline for a guest that
+//! was asked to quit is looked at on every turn of the relay, and a guest that stops inside a
+//! message or stops reading cannot hold the program. A guest process may hand the host at most
+//! [`UNPACED_BOUND`] bytes of messages that are not frames between two ticks; one that sends
+//! more is ended.
+//!
 //! # Identity
 //!
 //! The number of a process that attaches is the one the kernel gives for the other side of
@@ -41,6 +52,7 @@
 //! that number. A process of another user is refused, and so is a first process that is not
 //! the child the program started. Only numbers taken this way are signalled.
 
+use std::io::{ErrorKind, Read, Write};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
 use std::os::unix::fs::{DirBuilderExt, MetadataExt};
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -50,12 +62,12 @@ use std::process::{Child, Command, ExitStatus};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use vkrgss_guest::hello;
 use vkrgss_guest::record::{Diagnostics, GuestRecord};
 use vkrgss_guest::role::{GUEST_ROLE, GuestRole};
 use vkrgss_guest::settings::GuestSettings;
-use vkrgss_proto::framing::{read_message, write_message};
+use vkrgss_proto::framing::{MAX_MESSAGE_LEN, MessageReader, write_message};
 use vkrgss_proto::link::{GuestEnd, GuestSender};
 use vkrgss_proto::{GuestToHost, HostToGuest};
 use vkrgss_vfs::Runtime;
@@ -81,15 +93,102 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// The number of state slots.
 const SLOTS: usize = 10;
 
-/// A guest process that has attached, and its connection.
+/// The most bytes of messages other than frame packets that a guest process may hand the host
+/// between two ticks.
+const UNPACED_BOUND: u64 = 256 << 20;
+
+/// How long the relay leaves the socket alone after an error of `accept`.
+const ACCEPT_PAUSE: Duration = Duration::from_millis(100);
+
+/// The most bytes the relay reads of one connection at a time.
+const CHUNK: usize = 1 << 16;
+
+/// The most bytes the relay reads of the running guest in one turn, so that it also looks at
+/// the host and the socket while a guest sends without pause.
+const TURN_BUDGET: usize = 16 * CHUNK;
+
+/// A guest process that has attached, and its connection, which is in non-blocking mode.
 struct Attached {
     stream: UnixStream,
     /// The number of the process, as the kernel gave it for the other side of the
     /// connection ([`peer`]).
     pid: u32,
+    /// What it sent that no message was taken of yet.
+    reader: MessageReader,
+    /// What is to be written to it.
+    outgoing: Vec<u8>,
+    /// Whether it has closed its side of the connection.
+    closed: bool,
+    /// Whether the connection is to be shut for writing once `outgoing` has been written: the
+    /// host has gone, which the guest reads as a request to quit.
+    shut: bool,
 }
 
 impl Attached {
+    /// A process `pid` that has attached on `stream`, and what it sent after its attachment.
+    fn new(stream: UnixStream, pid: u32, reader: MessageReader) -> std::io::Result<Attached> {
+        stream.set_nonblocking(true)?;
+        Ok(Attached {
+            stream,
+            pid,
+            reader,
+            outgoing: Vec::new(),
+            closed: false,
+            shut: false,
+        })
+    }
+
+    /// Reads what the connection has, `budget` bytes at most.
+    fn read_in(&mut self, budget: usize) -> std::io::Result<()> {
+        let mut chunk = vec![0; CHUNK];
+        let mut read = 0;
+        while read < budget && !self.closed {
+            match (&self.stream).read(&mut chunk) {
+                Ok(0) => self.closed = true,
+                Ok(count) => {
+                    self.reader.push(&chunk[..count]);
+                    read += count;
+                }
+                Err(error) if error.kind() == ErrorKind::WouldBlock => break,
+                Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(())
+    }
+
+    /// Puts `message` behind what is to be written to the process, and writes what the
+    /// connection takes.
+    fn send(&mut self, message: &HostToGuest) -> std::io::Result<()> {
+        write_message(&mut self.outgoing, message).map_err(std::io::Error::other)?;
+        self.write_out()
+    }
+
+    /// Writes what the connection takes of what is to be written, and shuts it for writing
+    /// once everything is written, if it is to be. An error drops what was not written: the
+    /// end of the connection is found out by reading.
+    fn write_out(&mut self) -> std::io::Result<()> {
+        let mut written = 0;
+        let result = loop {
+            if written == self.outgoing.len() {
+                break Ok(());
+            }
+            match (&self.stream).write(&self.outgoing[written..]) {
+                Ok(count) => written += count,
+                Err(error) if error.kind() == ErrorKind::WouldBlock => break Ok(()),
+                Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                Err(error) => break Err(error),
+            }
+        };
+        match result {
+            Ok(()) => self.outgoing.drain(..written),
+            Err(_) => self.outgoing.drain(..),
+        };
+        if self.shut && self.outgoing.is_empty() {
+            let _ = self.stream.shutdown(std::net::Shutdown::Write);
+        }
+        result
+    }
     /// Ends the process, if it is still the one at the other side of the connection.
     fn end(&self) {
         // A process that is gone has closed its side; its number may be another's by now.
@@ -167,31 +266,38 @@ fn sweep(base: &Path) {
     }
 }
 
-/// Waits until one of `descriptors` can be read, or has ended, or `timeout` has passed, and
-/// says of each whether it can.
-fn wait_readable<const N: usize>(
-    descriptors: [Option<BorrowedFd<'_>>; N],
-    timeout: Option<Duration>,
-) -> [bool; N] {
-    let mut polled = descriptors.map(|descriptor| libc::pollfd {
+/// An entry of [`wait`]: `descriptor`, if there is one, polled for `events`.
+fn polled(descriptor: Option<BorrowedFd<'_>>, events: libc::c_short) -> libc::pollfd {
+    libc::pollfd {
         // A negative descriptor is ignored.
-        fd: descriptor.map_or(-1, |descriptor| descriptor.as_raw_fd()),
-        events: libc::POLLIN,
+        fd: descriptor
+            .filter(|_| events != 0)
+            .map_or(-1, |descriptor| descriptor.as_raw_fd()),
+        events,
         revents: 0,
-    });
+    }
+}
+
+/// Waits until one of the descriptors of `entries` is ready for what it is polled for, or
+/// has ended, or `timeout` has passed, and leaves in each entry what it is ready for. An
+/// interrupted wait leaves nothing ready, and the caller looks again.
+fn wait(entries: &mut [libc::pollfd], timeout: Option<Duration>) {
     let timeout = timeout.map_or(-1, |timeout| {
         libc::c_int::try_from(timeout.as_millis().max(1)).unwrap_or(libc::c_int::MAX)
     });
-    // SAFETY: `polled` is valid for its `N` entries, and the descriptors are borrowed for
-    // the time of the call.
-    let ready = unsafe { libc::poll(polled.as_mut_ptr(), N as libc::nfds_t, timeout) };
-    // An interrupted wait says that nothing can be read, and the caller waits again.
-    polled.map(|entry| ready > 0 && entry.revents != 0)
+    // SAFETY: `entries` is valid for its length, and the descriptors in it are borrowed by
+    // the caller for the time of the call.
+    let ready = unsafe { libc::poll(entries.as_mut_ptr(), entries.len() as libc::nfds_t, timeout) };
+    if ready <= 0 {
+        entries.iter_mut().for_each(|entry| entry.revents = 0);
+    }
 }
 
 /// Whether `descriptor` can be read now, or has ended.
 fn readable(descriptor: BorrowedFd<'_>) -> bool {
-    wait_readable([Some(descriptor)], Some(Duration::ZERO))[0]
+    let mut entry = [polled(Some(descriptor), libc::POLLIN)];
+    wait(&mut entry, Some(Duration::ZERO));
+    entry[0].revents != 0
 }
 
 /// The process at the other side of a connection, as the kernel tells it.
@@ -257,55 +363,158 @@ fn peer(stream: &UnixStream) -> std::io::Result<Peer> {
     Ok(Peer { pid, user })
 }
 
-/// Takes the statement of the version and the first message of a process that has
-/// connected: what it is. The process is the one the kernel names as the other side of the
-/// connection; one of another user, one the kernel gives no positive number for, one that
-/// attaches under another number than that and one of another version than the program's
-/// are refused.
-fn attached(stream: UnixStream) -> Result<(Attached, Option<u8>)> {
-    let peer = peer(&stream).context("cannot tell which process connected")?;
-    // SAFETY: `geteuid` takes nothing and cannot fail.
-    let user = unsafe { libc::geteuid() };
-    if peer.user != user {
-        bail!(
-            "a process of the user {} connected, not of the user {user} of the program",
-            peer.user
-        );
-    }
-    let Some(pid) = u32::try_from(peer.pid).ok().filter(|pid| *pid > 0) else {
-        bail!(
-            "a process connected whose number the kernel gives as {}",
-            peer.pid
-        );
-    };
-    stream.set_nonblocking(false)?;
-    set_read_timeout(&stream, Some(ATTACH_WAIT))?;
-    hello::read(&mut &stream, VERSION)?;
-    let first = read_message::<GuestToHost>(&mut &stream)?;
-    set_read_timeout(&stream, None)?;
-    match first {
-        Some(GuestToHost::Attach {
-            pid: stated,
-            parked,
-        }) if stated == pid => Ok((Attached { stream, pid }, parked)),
-        Some(GuestToHost::Attach { pid: stated, .. }) => {
-            bail!("the process {pid} connected and attached as the process {stated}")
+/// A process that has connected and has not attached yet: its statement of the version and
+/// its `Attach` are read as they arrive. The process is the one the kernel names as the other
+/// side of the connection; one of another user, one the kernel gives no positive number for,
+/// one that attaches under another number than that and one of another version than the
+/// program's are refused.
+struct Pending {
+    stream: UnixStream,
+    pid: u32,
+    /// When it connected.
+    since: Instant,
+    /// What it sent of its statement of the version, until that has been read.
+    statement: Option<Vec<u8>>,
+    /// What it sent after its statement.
+    reader: MessageReader,
+    /// Whether it has closed its side of the connection.
+    closed: bool,
+}
+
+/// How far a [`Pending`] connection has come.
+enum Attaching {
+    Waiting(Pending),
+    /// The process has attached, as the state of the slot if it is parked.
+    Attached(Attached, Option<u8>),
+}
+
+impl Pending {
+    /// Takes a connection whose process is of the program's user and has a number.
+    fn new(stream: UnixStream) -> Result<Pending> {
+        let peer = peer(&stream).context("cannot tell which process connected")?;
+        // SAFETY: `geteuid` takes nothing and cannot fail.
+        let user = unsafe { libc::geteuid() };
+        if peer.user != user {
+            bail!(
+                "a process of the user {} connected, not of the user {user} of the program",
+                peer.user
+            );
         }
-        other => bail!("a process connected and did not attach: its first message is {other:?}"),
+        let Some(pid) = u32::try_from(peer.pid).ok().filter(|pid| *pid > 0) else {
+            bail!(
+                "a process connected whose number the kernel gives as {}",
+                peer.pid
+            );
+        };
+        stream.set_nonblocking(true)?;
+        Ok(Pending {
+            stream,
+            pid,
+            since: Instant::now(),
+            statement: Some(Vec::new()),
+            reader: MessageReader::new(),
+            closed: false,
+        })
+    }
+
+    /// When the wait for its attachment is over.
+    fn deadline(&self) -> Instant {
+        self.since + ATTACH_WAIT
+    }
+
+    /// The error of a process that did not attach in time.
+    fn late(&self) -> anyhow::Error {
+        anyhow!(
+            "the process {} connected and did not attach within {} seconds",
+            self.pid,
+            ATTACH_WAIT.as_secs()
+        )
+    }
+
+    /// Reads what the connection has and takes the statement and the attachment once they
+    /// are there.
+    fn advance(mut self) -> Result<Attaching> {
+        let mut chunk = vec![0; CHUNK];
+        let count = loop {
+            match (&self.stream).read(&mut chunk) {
+                Ok(count) => {
+                    self.closed |= count == 0;
+                    break count;
+                }
+                Err(error) if error.kind() == ErrorKind::WouldBlock => break 0,
+                Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                Err(error) => {
+                    return Err(error).with_context(|| {
+                        format!("cannot read the process {} that connected", self.pid)
+                    });
+                }
+            }
+        };
+        let read = &chunk[..count];
+        match &mut self.statement {
+            Some(statement) => {
+                statement.extend_from_slice(read);
+                if !self.closed && !statement_complete(statement) {
+                    return Ok(Attaching::Waiting(self));
+                }
+                let mut rest = statement.as_slice();
+                hello::read(&mut rest, VERSION)?;
+                self.reader.push(rest);
+                self.statement = None;
+            }
+            None => self.reader.push(read),
+        }
+        match self.reader.take::<GuestToHost>()? {
+            Some(GuestToHost::Attach {
+                pid: stated,
+                parked,
+            }) if stated == self.pid => {
+                let attached = Attached::new(self.stream, self.pid, self.reader)?;
+                Ok(Attaching::Attached(attached, parked))
+            }
+            Some(GuestToHost::Attach { pid: stated, .. }) => bail!(
+                "the process {} connected and attached as the process {stated}",
+                self.pid
+            ),
+            Some(other) => {
+                bail!("a process connected and did not attach: its first message is {other:?}")
+            }
+            None if self.closed => bail!(
+                "the process {} connected and closed its connection before it attached",
+                self.pid
+            ),
+            None => Ok(Attaching::Waiting(self)),
+        }
     }
 }
 
-/// Sets the read timeout of a connection. macOS refuses that (`EINVAL`) once the other end is
-/// closed, as a guest whose game is short may have closed it before it is accepted; what it
-/// sent can still be read then, and no read blocks.
-fn set_read_timeout(stream: &UnixStream, timeout: Option<Duration>) -> std::io::Result<()> {
-    match stream.set_read_timeout(timeout) {
-        Err(error)
-            if cfg!(target_os = "macos") && error.kind() == std::io::ErrorKind::InvalidInput =>
-        {
-            Ok(())
-        }
-        result => result,
+/// Whether what a process sent of its statement of the version can be judged: the line is
+/// whole, as long as a statement can be, or not of the form of one. A process of the
+/// program's version sends exactly the program's statement, and every statement starts as
+/// that one does up to the version.
+fn statement_complete(statement: &[u8]) -> bool {
+    let mut own = Vec::new();
+    // The program's version can be stated; the tests of the statement say so.
+    let _ = hello::write(&mut own, VERSION);
+    let prefix = &own[..own.len().saturating_sub(VERSION.len() + 1)];
+    let of_the_form = prefix.starts_with(statement) || statement.starts_with(prefix);
+    statement.contains(&b'\n') || statement.len() >= hello::MAX_LEN || !of_the_form
+}
+
+/// Takes the statement and the attachment of a process that has connected on `stream`,
+/// waiting for them up to [`ATTACH_WAIT`].
+fn attached(stream: UnixStream) -> Result<(Attached, Option<u8>)> {
+    let mut pending = Pending::new(stream)?;
+    loop {
+        pending = match pending.advance()? {
+            Attaching::Attached(attached, parked) => return Ok((attached, parked)),
+            Attaching::Waiting(pending) => pending,
+        };
+        let Some(left) = pending.deadline().checked_duration_since(Instant::now()) else {
+            return Err(pending.late());
+        };
+        let mut entry = [polled(Some(pending.stream.as_fd()), libc::POLLIN)];
+        wait(&mut entry, Some(left));
     }
 }
 
@@ -540,9 +749,10 @@ impl GuestProcess {
     /// guest ends, the host sees the guest as gone.
     ///
     /// Returns once the host has gone and the running guest process has ended, and says
-    /// whether the game ended without a failure. A guest process that is still there
-    /// [`GUEST_WAIT`] after the host went is ended, which is a failure if it has not
-    /// reported how its game went. A guest process that has closed its connection ends by
+    /// whether the game ended without a failure. A guest process that is still there once
+    /// the host has gone and [`GUEST_WAIT`] has passed since the guest was asked to quit, by
+    /// a quit request it was handed or by the host's going, is ended, which is a failure if
+    /// it has not reported how its game went. A guest process that has closed its connection ends by
     /// itself and is waited for, for as long again at most: it may still be writing to the
     /// error stream, its frame time statistics for one. Every process of the run is gone
     /// when this returns.
@@ -633,6 +843,13 @@ fn relay(
         outcome: None,
         let_go: Vec::new(),
         dropped: Vec::new(),
+        pending: Vec::new(),
+        accept_paused: None,
+        accept_failed: false,
+        unpaced: 0,
+        quit: None,
+        host_gone: false,
+        from_host: MessageReader::new(),
     };
     // The host's messages come through a channel, which cannot be waited for together with
     // the connections: a thread puts them on a socket that can.
@@ -696,67 +913,169 @@ struct Relay<'a> {
     /// The kinds of message the running guest sent that only the relay makes, which were
     /// dropped and warned of.
     dropped: Vec<&'static str>,
+    /// The connections that have not attached yet, oldest first.
+    pending: Vec<Pending>,
+    /// Until when the socket is left alone after an error of `accept`.
+    accept_paused: Option<Instant>,
+    /// Whether an error of `accept` has been reported.
+    accept_failed: bool,
+    /// The bytes of the messages other than frame packets that the running guest handed the
+    /// host since it was last handed a tick.
+    unpaced: u64,
+    /// Since when the guest has been asked to quit: when a quit request was handed to it or
+    /// the host went, whichever was first.
+    quit: Option<Instant>,
+    /// Whether the host has gone.
+    host_gone: bool,
+    /// What the host sent that no message was taken of yet.
+    from_host: MessageReader,
 }
 
 impl Relay<'_> {
-    /// Hands messages on until the host has gone and the running guest has ended, or
-    /// [`GUEST_WAIT`] has passed since the host went. Returns whether the guest was given
-    /// up on: it had not reported how its game went by then.
+    /// Hands messages on until the host has gone and the running guest has ended, or the
+    /// host has gone and [`GUEST_WAIT`] has passed since the guest was asked to quit. Returns
+    /// whether the guest was given up on: it had not reported how its game went by then.
+    ///
+    /// No read or write waits: every turn of the loop waits for one of the connections,
+    /// the host's side or the socket to be ready, or for the next deadline.
     fn run(&mut self, host: &UnixStream) -> std::io::Result<bool> {
-        // Since when the host is gone.
-        let mut host_gone: Option<Instant> = None;
+        host.set_nonblocking(true)?;
         loop {
-            let waited = match host_gone {
-                None => None,
-                // The guest ends by itself: it may have more to write than its outcome.
-                Some(_) if self.running.is_none() => return Ok(false),
-                Some(since) => match GUEST_WAIT.checked_sub(since.elapsed()) {
-                    Some(left) => Some(left),
-                    None => return Ok(self.outcome.is_none()),
-                },
-            };
-            let running = self.running.as_ref().map(|running| running.stream.as_fd());
-            let host_side = host_gone.is_none().then_some(host.as_fd());
-            // The connection of the guest is looked at before the socket: when a message
-            // of the guest can be read, a copy it made before it sent that has connected.
-            let [from_guest, from_host, _] =
-                wait_readable([running, host_side, Some(self.listener.as_fd())], waited);
-            if from_guest {
-                // Before the message, so that a copy is known before what its maker sent
-                // after making it.
-                let read = self.running.as_ref().map(|running| running.pid);
-                self.accept_copies();
-                // Unless a copy that attached was loaded in place of the guest that could
-                // be read: a load that waited for it.
-                if self.running.as_ref().map(|running| running.pid) == read {
-                    self.guest_message();
-                }
-            } else {
-                self.accept_copies();
+            let now = Instant::now();
+            self.drop_late(now);
+            // What the running guest sent waits for the connections that are pending: a copy
+            // it made is known before what it sent after making it.
+            if self.pending.is_empty() {
+                self.deliver();
             }
-            if from_host {
-                match read_message::<HostToGuest>(&mut &*host) {
-                    Ok(Some(message)) => self.host_message(message),
-                    Ok(None) | Err(_) => {
-                        host_gone = Some(Instant::now());
-                        self.to_host = None;
-                        // The guest reads the end of its link as a request to quit, and
-                        // can still say how its game went.
-                        if let Some(running) = &self.running {
-                            let _ = running.stream.shutdown(std::net::Shutdown::Write);
-                        }
+            if self.host_gone {
+                // The guest ends by itself: it may have more to write than its outcome.
+                if self.running.is_none() {
+                    return Ok(false);
+                }
+                if self.quit.is_some_and(|quit| now >= quit + GUEST_WAIT) {
+                    return Ok(self.outcome.is_none());
+                }
+            }
+
+            let deadlines = self
+                .quit
+                .filter(|_| self.host_gone)
+                .map(|quit| quit + GUEST_WAIT);
+            let deadlines = deadlines
+                .into_iter()
+                .chain(self.pending.iter().map(Pending::deadline))
+                .chain(self.accept_paused);
+            let timeout = deadlines
+                .min()
+                .map(|deadline| deadline.saturating_duration_since(now));
+            // While a connection is pending the running guest is not read.
+            let running = self.running.as_ref().map(|running| {
+                let read = self.pending.is_empty() && !running.closed;
+                let write = !running.outgoing.is_empty();
+                let events =
+                    if read { libc::POLLIN } else { 0 } | if write { libc::POLLOUT } else { 0 };
+                polled(Some(running.stream.as_fd()), events)
+            });
+            let mut entries = vec![
+                running.unwrap_or(polled(None, 0)),
+                polled((!self.host_gone).then_some(host.as_fd()), libc::POLLIN),
+                polled(
+                    self.accept_paused
+                        .is_none()
+                        .then_some(self.listener.as_fd()),
+                    libc::POLLIN,
+                ),
+            ];
+            entries.extend(
+                self.pending
+                    .iter()
+                    .map(|pending| polled(Some(pending.stream.as_fd()), libc::POLLIN)),
+            );
+            wait(&mut entries, timeout);
+
+            // In this order: when bytes of the running guest have been read, a copy it made
+            // before it sent them has connected, and is accepted below, before the next turn
+            // hands on what was read.
+            let guest_ready = entries[0].revents;
+            if guest_ready != 0 && self.pending.is_empty() {
+                self.read_guest();
+            }
+            if guest_ready != 0 {
+                self.write_guest();
+            }
+            self.accept_copies();
+            self.attach_pending();
+            if entries[1].revents != 0 {
+                self.host_messages(host);
+            }
+        }
+    }
+
+    /// Reads what the running guest sent, as far as the budget of a turn goes.
+    fn read_guest(&mut self) {
+        let Some(running) = &mut self.running else {
+            return;
+        };
+        if let Err(error) = running.read_in(TURN_BUDGET) {
+            if self.to_host.is_some() {
+                tracing::warn!("the connection to the guest process failed: {error}");
+            }
+            running.closed = true;
+        }
+    }
+
+    /// Writes what the running guest takes of what is to be written to it.
+    fn write_guest(&mut self) {
+        if let Some(running) = &mut self.running {
+            // A guest that is gone is found out by the end of its connection.
+            let _ = running.write_out();
+        }
+    }
+
+    /// Takes the processes that have connected: the copies of guest processes. An error of
+    /// `accept` is reported once, and the socket is left alone for a while after each.
+    fn accept_copies(&mut self) {
+        if self
+            .accept_paused
+            .is_some_and(|until| Instant::now() < until)
+        {
+            return;
+        }
+        self.accept_paused = None;
+        loop {
+            match self.listener.accept() {
+                Ok((stream, _)) => match Pending::new(stream) {
+                    Ok(pending) => self.pending.push(pending),
+                    Err(error) => tracing::warn!("{error:#}"),
+                },
+                Err(error) if error.kind() == ErrorKind::WouldBlock => return,
+                Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                Err(error) => {
+                    if !self.accept_failed {
+                        self.accept_failed = true;
+                        tracing::warn!(
+                            "cannot accept a connection to the guest socket: {error}; trying \
+                             again every {} ms",
+                            ACCEPT_PAUSE.as_millis()
+                        );
                     }
+                    self.accept_paused = Some(Instant::now() + ACCEPT_PAUSE);
+                    return;
                 }
             }
         }
     }
 
-    /// Takes the processes that have connected: the copies of guest processes.
-    fn accept_copies(&mut self) {
-        while let Ok((stream, _)) = self.listener.accept() {
-            match attached(stream) {
-                Ok((copy, Some(slot))) if usize::from(slot) < SLOTS => self.parked(copy, slot),
-                Ok((copy, _)) => {
+    /// Reads what the pending connections sent, and takes the ones that have attached.
+    fn attach_pending(&mut self) {
+        for pending in std::mem::take(&mut self.pending) {
+            match pending.advance() {
+                Ok(Attaching::Waiting(pending)) => self.pending.push(pending),
+                Ok(Attaching::Attached(copy, Some(slot))) if usize::from(slot) < SLOTS => {
+                    self.parked(copy, slot);
+                }
+                Ok(Attaching::Attached(copy, _)) => {
                     tracing::warn!("guest process {} attached without a slot", copy.pid);
                     copy.end();
                     self.let_go.push(copy.pid);
@@ -764,6 +1083,17 @@ impl Relay<'_> {
                 Err(error) => tracing::warn!("{error:#}"),
             }
         }
+    }
+
+    /// Drops the connections that have not attached within [`ATTACH_WAIT`].
+    fn drop_late(&mut self, now: Instant) {
+        self.pending.retain(|pending| {
+            let late = now >= pending.deadline();
+            if late {
+                tracing::warn!("{:#}; its connection is dropped", pending.late());
+            }
+            !late
+        });
     }
 
     /// A copy has attached as the state of `slot`.
@@ -786,34 +1116,82 @@ impl Relay<'_> {
         }
     }
 
-    /// Takes one message of the running guest, or the end of its connection.
-    fn guest_message(&mut self) {
-        let Some(running) = &self.running else {
-            return;
-        };
-        // A resumed copy that has not left a copy of itself by now has left none.
-        self.refilling = None;
-        let message = read_message::<GuestToHost>(&mut &running.stream);
-        if let Some(slot) = self.kept_load.take() {
-            self.tell_host(GuestToHost::StateFailed { slot, load: true });
-        }
-        match message {
-            Ok(Some(GuestToHost::Outcome { ok })) => self.outcome = Some(ok),
-            Ok(Some(message)) => match only_made_here(&message) {
-                Some(kind) => self.drop_message(kind),
-                None => self.tell_host(message),
-            },
-            ended => {
-                if let Err(error) = ended
-                    && self.to_host.is_some()
-                {
-                    tracing::warn!("the connection to the guest process failed: {error}");
+    /// Hands on the whole messages the running guest sent, and the end of its connection
+    /// once it has closed it.
+    fn deliver(&mut self) {
+        loop {
+            let Some(running) = &mut self.running else {
+                return;
+            };
+            let before = running.reader.taken();
+            let taken = running.reader.take::<GuestToHost>();
+            let size = running.reader.taken() - before;
+            let pid = running.pid;
+            let ended = match taken {
+                Ok(None) if !running.closed => return,
+                Ok(None) => running.reader.end().err(),
+                Ok(Some(_)) => None,
+                Err(ref error) => {
+                    tracing::warn!("the guest process {pid} sent what is no message: {error}");
+                    None
                 }
-                // The host learns that the guest has gone.
-                self.running = None;
-                self.to_host = None;
+            };
+            // A resumed copy that has not left a copy of itself by now has left none.
+            self.refilling = None;
+            if let Some(slot) = self.kept_load.take() {
+                self.tell_host(GuestToHost::StateFailed { slot, load: true });
+            }
+            match taken {
+                Ok(Some(message)) => self.guest_message(message, size),
+                Ok(None) => {
+                    if let Some(error) = ended
+                        && self.to_host.is_some()
+                    {
+                        tracing::warn!("the connection to the guest process failed: {error}");
+                    }
+                    // The host learns that the guest has gone.
+                    self.running = None;
+                    self.to_host = None;
+                }
+                Err(_) => self.end_running(),
             }
         }
+    }
+
+    /// Takes one message of the running guest, of `size` bytes.
+    fn guest_message(&mut self, message: GuestToHost, size: u64) {
+        match message {
+            GuestToHost::Outcome { ok } => self.outcome = Some(ok),
+            message => match only_made_here(&message) {
+                Some(kind) => self.drop_message(kind),
+                None if matches!(message, GuestToHost::Frame(_)) => self.tell_host(message),
+                None if self.unpaced + size > UNPACED_BOUND => {
+                    let pid = self
+                        .running
+                        .as_ref()
+                        .map_or(self.last, |running| running.pid);
+                    tracing::error!(
+                        "the guest process {pid} sent more than {} MiB of messages other than \
+                         frames between two ticks; it is ended",
+                        UNPACED_BOUND >> 20
+                    );
+                    self.end_running();
+                }
+                None => {
+                    self.unpaced += size;
+                    self.tell_host(message);
+                }
+            },
+        }
+    }
+
+    /// Ends the running guest, and the host sees it gone.
+    fn end_running(&mut self) {
+        if let Some(running) = self.running.take() {
+            kill(running.pid);
+            self.let_go.push(running.pid);
+        }
+        self.to_host = None;
     }
 
     /// Drops a message of the running guest that only the relay makes, and warns of the
@@ -827,14 +1205,70 @@ impl Relay<'_> {
         }
     }
 
+    /// Takes what the host sent, or its end.
+    fn host_messages(&mut self, host: &UnixStream) {
+        let mut chunk = vec![0; CHUNK];
+        let gone = loop {
+            match (&mut &*host).read(&mut chunk) {
+                Ok(0) => break true,
+                Ok(count) => self.from_host.push(&chunk[..count]),
+                Err(error) if error.kind() == ErrorKind::WouldBlock => break false,
+                Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                Err(_) => break true,
+            }
+            loop {
+                match self.from_host.take::<HostToGuest>() {
+                    Ok(Some(message)) => self.host_message(message),
+                    Ok(None) => break,
+                    // Written by the thread of this relay: it does not happen.
+                    Err(error) => {
+                        tracing::warn!("cannot read the host's messages: {error}");
+                        return self.host_went();
+                    }
+                }
+            }
+        };
+        if gone {
+            self.host_went();
+        }
+    }
+
+    /// The host has gone.
+    fn host_went(&mut self) {
+        self.host_gone = true;
+        self.quit.get_or_insert_with(Instant::now);
+        self.to_host = None;
+        // The guest reads the end of its link as a request to quit, and can still say how
+        // its game went.
+        if let Some(running) = &mut self.running {
+            running.shut = true;
+            let _ = running.write_out();
+        }
+    }
+
     /// Takes one message of the host.
     fn host_message(&mut self, message: HostToGuest) {
         match message {
             HostToGuest::LoadState { slot } => self.load(slot),
             message => {
+                match message {
+                    HostToGuest::Quit => {
+                        self.quit.get_or_insert_with(Instant::now);
+                    }
+                    HostToGuest::Tick => self.unpaced = 0,
+                    _ => {}
+                }
+                let Some(running) = &mut self.running else {
+                    return;
+                };
                 // A guest that is gone is found out by the end of its connection.
-                if let Some(running) = &self.running {
-                    let _ = write_message(&mut &running.stream, &message);
+                let _ = running.send(&message);
+                if running.outgoing.len() > MAX_MESSAGE_LEN as usize {
+                    tracing::warn!(
+                        "the guest process {} does not read what the program sends; it is ended",
+                        running.pid
+                    );
+                    self.end_running();
                 }
             }
         }
@@ -851,7 +1285,7 @@ impl Relay<'_> {
         }
         let parked = self.slots.get_mut(usize::from(slot)).and_then(Option::take);
         // A copy that is gone has closed its connection, which a parked one never writes to.
-        let Some(parked) = parked.filter(|parked| !readable(parked.stream.as_fd())) else {
+        let Some(mut parked) = parked.filter(|parked| !readable(parked.stream.as_fd())) else {
             self.tell_host(GuestToHost::StateFailed { slot, load: true });
             return;
         };
@@ -860,7 +1294,7 @@ impl Relay<'_> {
             kill(running.pid);
             self.let_go.push(running.pid);
         }
-        let resumed = write_message(&mut &parked.stream, &HostToGuest::Resume);
+        let resumed = parked.send(&HostToGuest::Resume);
         tracing::info!(
             "guest process {} resumes the state of slot {slot}",
             parked.pid
@@ -868,6 +1302,7 @@ impl Relay<'_> {
         self.last = parked.pid;
         self.running = Some(parked);
         self.refilling = Some(slot);
+        self.unpaced = 0;
         match resumed {
             Ok(()) => self.tell_host(GuestToHost::StateLoaded { slot }),
             // Found out by the end of the connection.
@@ -948,8 +1383,13 @@ fn signal_name(signal: i32) -> String {
 mod tests {
     use std::process::Stdio;
 
+    use std::sync::{Arc, Mutex};
+
+    use tracing_subscriber::fmt::MakeWriter;
+    use tracing_subscriber::layer::SubscriberExt;
     use vkrgss_host::{HostLink, headless_link};
-    use vkrgss_proto::{FreezeRule, InputSnapshot};
+    use vkrgss_proto::framing::read_message;
+    use vkrgss_proto::{FramePacket, FrameRate, FreezeRule, InputSnapshot, Size};
 
     use super::*;
 
@@ -973,9 +1413,244 @@ mod tests {
         let (guest_end, host) = headless_link();
         let (near, far) = UnixStream::pair().unwrap();
         let pid = process.id();
-        let first = Attached { stream: near, pid };
+        let first = Attached::new(near, pid, MessageReader::new()).unwrap();
         let relay = thread::spawn(move || relay(guest_end, &listener, Some(first), pid));
         (host, GuestEnd::over_stream(far), relay)
+    }
+
+    /// What the relay logged, as the program writes it.
+    #[derive(Debug, Clone, Default)]
+    struct Logged(Arc<Mutex<Vec<u8>>>);
+
+    impl Write for Logged {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'a> MakeWriter<'a> for Logged {
+        type Writer = Logged;
+
+        fn make_writer(&'a self) -> Logged {
+            self.clone()
+        }
+    }
+
+    impl Logged {
+        /// Runs `run` with what it logs on this thread kept here.
+        fn keep<T>(&self, run: impl FnOnce() -> T) -> T {
+            let lines = tracing_subscriber::fmt::layer()
+                .with_writer(self.clone())
+                .with_ansi(false);
+            let subscriber = tracing_subscriber::registry().with(lines);
+            tracing::subscriber::with_default(subscriber, run)
+        }
+
+        fn text(&self) -> String {
+            String::from_utf8_lossy(&self.0.lock().unwrap()).into_owned()
+        }
+    }
+
+    /// [`relaying`], with what the relay logs kept in the returned [`Logged`].
+    fn relaying_logged(
+        dir: &std::path::Path,
+        process: &Child,
+    ) -> (HostLink, GuestEnd, thread::JoinHandle<Relayed>, Logged) {
+        let listener = UnixListener::bind(dir.join("guest.sock")).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let (guest_end, host) = headless_link();
+        let (near, far) = UnixStream::pair().unwrap();
+        let pid = process.id();
+        let first = Attached::new(near, pid, MessageReader::new()).unwrap();
+        let logged = Logged::default();
+        let keeping = logged.clone();
+        let relay =
+            thread::spawn(move || keeping.keep(|| relay(guest_end, &listener, Some(first), pid)));
+        (host, GuestEnd::over_stream(far), relay, logged)
+    }
+
+    /// A relay on a thread of its own whose first guest is a stand-in: the test writes and
+    /// reads at the returned connection in its place.
+    fn relaying_stand_in(
+        dir: &std::path::Path,
+    ) -> (HostLink, StandIn, UnixStream, thread::JoinHandle<Relayed>) {
+        let listener = UnixListener::bind(dir.join("guest.sock")).unwrap();
+        let (stand_in, connection) = StandIn::connect(dir);
+        let (accepted, _) = listener.accept().unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let pid = stand_in.id();
+        let first = Attached::new(accepted, pid, MessageReader::new()).unwrap();
+        let (guest_end, host) = headless_link();
+        let relay = thread::spawn(move || relay(guest_end, &listener, Some(first), pid));
+        (host, stand_in, connection, relay)
+    }
+
+    /// A frame packet of `bytes` bytes of pixels or more.
+    fn frame_of(bytes: usize) -> GuestToHost {
+        let side = (bytes / 4).isqrt().max(1) as u32 + 1;
+        let id = vkrgss_proto::BitmapId::new(1, 0);
+        GuestToHost::Frame(FramePacket {
+            frame_index: 0,
+            logical_size: Size::new(side, side),
+            frame_rate: FrameRate::DEFAULT,
+            brightness: 255,
+            bitmaps: vec![vkrgss_proto::BitmapDelta::Update {
+                id,
+                rect: vkrgss_proto::Rect::new(0, 0, side, side),
+                rgba: vec![7; (side * side * 4) as usize],
+            }],
+            tables: Vec::new(),
+            ops: Vec::new(),
+        })
+    }
+
+    /// Scenario "Stopped inside a message".
+    #[test]
+    fn a_guest_that_stops_inside_a_message_is_given_up_on_and_ended() {
+        use std::io::Write;
+
+        let dir = tempfile::tempdir().unwrap();
+        let (host, mut stand_in, mut connection, relay) = relaying_stand_in(dir.path());
+        let mut bytes = Vec::new();
+        write_message(&mut bytes, &frame_of(1 << 20)).unwrap();
+        connection.write_all(&bytes[..bytes.len() / 2]).unwrap();
+        // The relay has the half: the host gets nothing of it.
+        thread::sleep(Duration::from_millis(100));
+        let started = Instant::now();
+        drop(host);
+        let relayed = relay.join().unwrap();
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "{:?}",
+            started.elapsed()
+        );
+        assert!(relayed.stuck, "given up on");
+        assert!(stand_in.killed());
+    }
+
+    /// Scenario "Not reading".
+    #[test]
+    fn a_guest_that_does_not_read_is_ended_once_the_host_has_gone() {
+        let dir = tempfile::tempdir().unwrap();
+        let (host, mut stand_in, connection, relay) = relaying_stand_in(dir.path());
+        // Far more than the buffers of the socket hold.
+        for index in 0..200_000_u32 {
+            let snapshot = InputSnapshot::EMPTY.with_key((index % 200) as u8 + 1);
+            host.send(HostToGuest::Input(snapshot)).unwrap();
+        }
+        let started = Instant::now();
+        drop(host);
+        let relayed = relay.join().unwrap();
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "{:?}",
+            started.elapsed()
+        );
+        assert!(relayed.stuck);
+        assert!(stand_in.killed());
+        drop(connection);
+    }
+
+    /// Scenario "Silent connection".
+    #[test]
+    fn a_silent_connection_is_dropped_and_the_game_goes_on() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut process = idle();
+        let (host, guest, relay, logged) = relaying_logged(dir.path(), &process);
+        let silent = UnixStream::connect(dir.path().join("guest.sock")).unwrap();
+        let started = Instant::now();
+        for _ in 0..3 {
+            guest.send(GuestToHost::FrameReset).unwrap();
+        }
+        for _ in 0..3 {
+            assert_eq!(host.recv(), Ok(GuestToHost::FrameReset));
+        }
+        // Held for the wait of an attachment at most.
+        assert!(started.elapsed() < ATTACH_WAIT + Duration::from_secs(2));
+        // The relay has dropped the connection.
+        assert_eq!(read_message::<HostToGuest>(&mut &silent).unwrap(), None);
+        drop(guest);
+        assert!(host.recv().is_err());
+        drop(host);
+        relay.join().unwrap();
+        let text = logged.text();
+        let expected = format!(
+            "connected and did not attach within {} seconds; its connection is dropped",
+            ATTACH_WAIT.as_secs()
+        );
+        assert!(text.contains(&expected), "{text}");
+        process.kill().unwrap();
+        process.wait().unwrap();
+    }
+
+    /// The memory of this process that is resident now and the most that was, in bytes.
+    #[cfg(target_os = "linux")]
+    fn resident() -> (u64, u64) {
+        let status = std::fs::read_to_string("/proc/self/status").unwrap();
+        let field = |name: &str| {
+            let line = status.lines().find(|line| line.starts_with(name)).unwrap();
+            let kib: u64 = line[name.len()..]
+                .trim()
+                .trim_end_matches(" kB")
+                .parse()
+                .unwrap();
+            kib << 10
+        };
+        (field("VmRSS:"), field("VmHWM:"))
+    }
+
+    /// Scenario "Flood of titles": the host reads nothing until the guest has been ended, so
+    /// whatever was handed on is still held then.
+    #[test]
+    fn a_guest_that_floods_the_host_with_titles_is_ended_at_the_bound() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut process = idle();
+        #[cfg(target_os = "linux")]
+        let (before, _) = resident();
+        let (host, guest, relay, logged) = relaying_logged(dir.path(), &process);
+        let title = "t".repeat(1 << 20);
+        let flooding = thread::spawn(move || {
+            let mut sent = 0_u64;
+            while guest
+                .send(GuestToHost::SetTitle {
+                    title: title.clone(),
+                })
+                .is_ok()
+            {
+                sent += 1;
+            }
+            sent
+        });
+        let sent = flooding.join().unwrap();
+        assert_eq!(process.wait().unwrap().signal(), Some(libc::SIGKILL));
+        #[cfg(target_os = "linux")]
+        {
+            let (_, most) = resident();
+            let grown = most.saturating_sub(before);
+            assert!(grown < UNPACED_BOUND + (64 << 20), "{} MiB", grown >> 20);
+        }
+        let mut handed = 0_u64;
+        while let Ok(message) = host.recv() {
+            let GuestToHost::SetTitle { title } = message else {
+                panic!("{message:?}");
+            };
+            handed += title.len() as u64;
+        }
+        assert!(handed <= UNPACED_BOUND, "{handed}");
+        assert!(handed > UNPACED_BOUND - (2 << 20), "{handed}");
+        assert!(sent >= 256, "{sent}");
+        drop(host);
+        relay.join().unwrap();
+        let text = logged.text();
+        assert!(
+            text.contains("more than 256 MiB of messages other than frames"),
+            "{text}"
+        );
     }
 
     #[test]
@@ -1057,7 +1732,7 @@ mod tests {
             child,
             dir: dir.path().join("sockets"),
             listener,
-            first: Some(Attached { stream: near, pid }),
+            first: Some(Attached::new(near, pid, MessageReader::new()).unwrap()),
         };
         let (guest_end, host) = headless_link();
         drop(host);
@@ -1256,9 +1931,10 @@ mod tests {
         )
         .unwrap();
         guest.write_all(&written).unwrap();
-        let (attached, parked) = attached(program).unwrap_or_else(|error| panic!("{error:#}"));
+        let (mut attached, parked) = attached(program).unwrap_or_else(|error| panic!("{error:#}"));
         assert_eq!((attached.pid, parked), (std::process::id(), None));
-        let next = read_message::<GuestToHost>(&mut &attached.stream).unwrap();
+        attached.read_in(CHUNK).unwrap();
+        let next = attached.reader.take::<GuestToHost>().unwrap();
         assert_eq!(
             next,
             Some(GuestToHost::Freeze {

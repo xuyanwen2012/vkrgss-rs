@@ -6,7 +6,7 @@
 
 ## 2. The relay
 
-- [ ] 2.1 Non-blocking reads and writes of the running guest with the outgoing buffer and the deadline checked on every turn; attaching without blocking, with the ordering rule kept; `accept` errors backed off; the bound of 256 MiB on messages that are not frame packets. Verify: relay tests of "Stopped inside a message", "Not reading", "Silent connection" and "Flood of titles" with stand-in processes; the existing relay tests pass; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss --locked` passes, including the states tests; `cargo clippy -p vkrgss-android --target aarch64-linux-android` (or the gate part that checks Android) passes.
+- [x] 2.1 Non-blocking reads and writes of the running guest with the outgoing buffer and the deadline checked on every turn; attaching without blocking, with the ordering rule kept; `accept` errors backed off; the bound of 256 MiB on messages that are not frame packets. Verify: relay tests of "Stopped inside a message", "Not reading", "Silent connection" and "Flood of titles" with stand-in processes; the existing relay tests pass; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss --locked` passes, including the states tests; `cargo clippy -p vkrgss-android --target aarch64-linux-android` (or the gate part that checks Android) passes.
 
 ## 3. The session
 

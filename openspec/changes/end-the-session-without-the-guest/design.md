@@ -71,6 +71,28 @@
   the branch that reads it in `main.rs` goes, with its tests; otherwise it is left and the
   reason written here.
 
+## As built
+
+- **The relay's deadline counts from the quit request.** The relay notes when it hands the
+  guest a quit request; once the host has gone it gives up `GUEST_WAIT` after that request or
+  after the host went, whichever came first. Counting from the host's going alone would add
+  the relay's 5 s to the session's 5 s, and a windowed run of a guest process in `loop {}`
+  would end only after about 10 s, not within the 10 s of the scenario "Script in an endless
+  loop".
+- **Reading and holding.** The relay reads the running guest only while no connection is
+  pending, at most 1 MiB in one turn, and hands on what it has read at the start of the next
+  turn: by then every connection that was made before those bytes were sent has been
+  accepted, and its messages wait until it has attached or been dropped. A version statement
+  is judged as soon as it is whole or departs from the form of the program's own statement,
+  so a connection that sends no statement is refused at its first bytes, as before.
+- **`MSG_DONTWAIT` without `unsafe`.** `vkrgss-proto` forbids `unsafe`, so the receive that
+  does not wait calls `recv` through `rustix` (already in the dependency tree), with its
+  features `net` and `fs`; `net` alone does not build in rustix 1.1.5. The crate also takes
+  `tracing`, to log the reasons of framing errors.
+- **Android.** The pinned toolchain 1.99.1 on the owner's machine has no standard library
+  for `aarch64-linux-android`; `cargo +1.99.0 clippy -p vkrgss-android --target
+  aarch64-linux-android -- -D warnings`, with the NDK's clang as linker and C compiler, passes.
+
 ## Out of scope
 
 Peer credentials and the state answers of the relay (change `verify-guests-and-deny-signals`);
@@ -79,4 +101,7 @@ device loss (change `bound-the-compositor-and-survive-device-loss`).
 
 ## Follow-ups
 
-None yet.
+- The bound of 256 MiB counts messages other than frame packets only. A guest process that
+  sends frame packets without waiting for their ticks is not bounded by the relay: the
+  session sets aside one frame while a tick is pending, but the in-process link to the host
+  holds the rest. Whether the relay should hand on one frame per tick is open.
