@@ -511,7 +511,7 @@ that made a target fail and was fixed SHALL be kept as a test of the normal test
 
 #### Scenario: Unknown target
 - **WHEN** `cargo xtask fuzz nothing` is run
-- **THEN** it ends with an error that names all six targets
+- **THEN** it ends with an error that names all nine targets
 
 ### Requirement: Later security fixes of Ruby 1.9.2 are reviewed
 `docs/vendored-security.md` SHALL list the security fixes published for Ruby after

@@ -456,7 +456,7 @@ was fixed SHALL be kept as a test of the normal test step.
 
 #### Scenario: Unknown target
 - **WHEN** `cargo xtask fuzz nothing` is run
-- **THEN** it ends with an error that names the three targets
+- **THEN** it ends with an error that names every target, these three among them
 
 ### Requirement: Later security fixes are reviewed
 The repository SHALL have a document that lists the security fixes published for Ruby 1.8
