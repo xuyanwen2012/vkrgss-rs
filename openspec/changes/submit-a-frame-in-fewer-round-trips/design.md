@@ -94,7 +94,10 @@ does not improve is recorded, not hidden.
 
 - `render` waits for the compose of the `render` before it, as every method that uses the
   device does before it starts, except the four below; a `Bitmaps` message and
-  `forget_resources` also wait for their own submission before they return. `Drop` waits for
+  `forget_resources` also wait for their own submission before they return, also when it
+  ends in an error other than a lost device (a staging buffer that cannot be had still lets
+  the clears of new images be submitted); a lost device that this wait finds is returned
+  before that error. `Drop` waits for
   the compose with the bounded wait before it idles the device: a test replaces
   `vkDeviceWaitIdle` with a stub that does not idle, and the timeline semaphore was destroyed
   under a pending submission until `Drop` waited for it itself.

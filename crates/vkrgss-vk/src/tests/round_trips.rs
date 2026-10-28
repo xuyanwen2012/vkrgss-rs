@@ -9,7 +9,7 @@ use vkrgss_proto::{
 };
 
 use super::harness::{TestCompositor, assert_clean, test_device};
-use crate::{Filter, Frame, Mix, OverlayImage, ValidationLog, VkCompositor};
+use crate::{Filter, Frame, Mix, OverlayImage, ValidationLog, VkCompositor, VkError};
 
 const SIZE: Size = Size::new(20, 18);
 /// A window twice the size of the frames, which shows each pixel as a block of four.
@@ -392,6 +392,32 @@ fn state_methods_right_after_a_render_leave_the_frame_alone() {
     let packets: Vec<&FramePacket> = packets.iter().collect();
     assert_eq!(compositor.read_frame().unwrap(), Some(reference(&packets)));
     assert_clean(&log, "while the state was set right after renders");
+}
+
+/// Bitmaps whose staging buffer cannot be had still have their images cleared, which is
+/// submitted, and the allocation error is returned once that submission has completed.
+#[test]
+fn bitmaps_whose_staging_buffer_fails_leave_nothing_in_flight() {
+    let mut compositor = TestCompositor::new();
+    compositor.fail_frame_buffer_after(0);
+    let result = compositor.handle(&GuestToHost::Bitmaps(first().bitmaps));
+    assert!(matches!(result, Err(VkError::Memory { .. })), "{result:?}");
+    assert_settled(&compositor, "bitmaps without a staging buffer");
+}
+
+/// The wait for those bitmaps finds the device lost, which outranks the allocation error.
+#[test]
+fn bitmaps_whose_staging_buffer_fails_report_a_wait_that_runs_out() {
+    let mut compositor = TestCompositor::new();
+    compositor.fail_frame_buffer_after(0);
+    compositor.inject_wait_result(ash::vk::Result::TIMEOUT);
+    let result = compositor.handle(&GuestToHost::Bitmaps(first().bitmaps));
+    assert_eq!(
+        result,
+        Err(VkError::DeviceLost {
+            call: "vkWaitSemaphores"
+        })
+    );
 }
 
 /// Dropping the compositor waits for the compose in flight, which still uses the image of a

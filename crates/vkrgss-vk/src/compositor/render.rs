@@ -34,8 +34,7 @@ impl VkCompositor {
         if let Err(error) = &checked {
             self.note_loss(error);
         }
-        self.execute(pending, None)?;
-        self.settle()?;
+        self.execute_and_wait(pending)?;
         checked
     }
 
@@ -132,8 +131,7 @@ impl VkCompositor {
         if let Err(error) = &checked {
             self.note_loss(error);
         }
-        self.execute(pending, None)?;
-        self.settle()?;
+        self.execute_and_wait(pending)?;
         checked
     }
 
@@ -289,6 +287,21 @@ impl VkCompositor {
             }
         }
         Ok(())
+    }
+
+    /// Carries out queued bitmap work, without a frame, and waits for what it submitted, also
+    /// when it returns an error other than a lost device: a failed allocation may follow a
+    /// submission of the steps. A lost device that the wait finds is returned before that
+    /// error; once the device is found lost nothing is waited for.
+    fn execute_and_wait(&mut self, pending: Pending<'_>) -> Result<(), VkError> {
+        let executed = self.execute(pending, None);
+        if let Err(error) = &executed {
+            self.note_loss(error);
+        }
+        if self.lost.is_none() {
+            self.settle()?;
+        }
+        executed
     }
 
     /// Carries out queued bitmap work and, when there is one, the frame: once the compose in
