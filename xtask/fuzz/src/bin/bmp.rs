@@ -5,7 +5,7 @@
 
 #[path = "../check.rs"]
 mod check;
-#[path = "../../../crates/vkrgss-image/tests/counting/mod.rs"]
+#[path = "../../../../crates/vkrgss-image/tests/counting/mod.rs"]
 mod counting;
 
 use vkrgss_image::ImageFormat;

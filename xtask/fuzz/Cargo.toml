@@ -12,8 +12,8 @@ publish = false
 
 [dependencies]
 libfuzzer-sys = "0.4"
-vkrgss-image = { path = "../crates/vkrgss-image" }
-vkrgss-vfs = { path = "../crates/vkrgss-vfs" }
+vkrgss-image = { path = "../../crates/vkrgss-image" }
+vkrgss-vfs = { path = "../../crates/vkrgss-vfs" }
 
 [[bin]]
 name = "jpeg"

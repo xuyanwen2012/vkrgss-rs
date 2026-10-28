@@ -281,7 +281,7 @@ version 1 and of version 3 and decrypts the data of every entry:
 cargo xtask fuzz jpeg --seconds 300
 ```
 
-They are the binaries of the package `fuzz/`, a workspace of its own, which the command
+They are the binaries of the package `xtask/fuzz/`, a workspace of its own, which the command
 builds with libFuzzer's coverage instrumentation through `libfuzzer-sys` on the pinned
 toolchain, without a sanitizer, into `target/fuzz/`, and runs as the targets above, under
 `target/tmp/fuzz/<target>/`. An input is at most 64 KiB. A target fails on a panic, on a
@@ -292,8 +292,8 @@ memory tests of `vkrgss-image`) measures:
 | Target | Seeds | Memory held at once |
 |---|---|---|
 | `jpeg` | the JPEG files of `crates/vkrgss-image/testdata/jpeg/` | 4 times the RGBA output of the largest image, plus 1 MiB |
-| `bmp` | `fuzz/seeds/bmp/` | 4 times the output of the decoded image, plus 1 MiB; on an error, as `jpeg` |
-| `rgssad` | `fuzz/seeds/rgssad/` | 64 bytes for each byte of the input, plus 1 MiB |
+| `bmp` | `xtask/fuzz/seeds/bmp/` | 4 times the output of the decoded image, plus 1 MiB; on an error, as `jpeg` |
+| `rgssad` | `xtask/fuzz/seeds/rgssad/` | 64 bytes for each byte of the input, plus 1 MiB |
 
 The decoder that follows the original keeps a JPEG within 4 times its own output plus 1 MiB,
 which the tests of `vkrgss-image` check; the files it leaves to `jpeg-decoder` are held to the

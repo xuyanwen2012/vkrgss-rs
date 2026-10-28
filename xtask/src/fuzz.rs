@@ -8,7 +8,7 @@
 //! and the compiler and runs that test.
 //!
 //! A target of a file reader feeds arbitrary bytes to the JPEG decoder, the BMP decoder or the
-//! reader of encrypted archives. It is a binary of the package `fuzz/`, a workspace of its
+//! reader of encrypted archives. It is a binary of the package `xtask/fuzz/`, a workspace of its
 //! own, which this command builds with libFuzzer's coverage instrumentation and runs under
 //! `target/tmp/fuzz/<target>/`. See `docs/development.md`.
 
@@ -29,7 +29,7 @@ struct Target {
 enum Kind {
     /// A target of an interpreter, run by the test of its crate, which knows it by its name.
     Interpreter { package: &'static str },
-    /// A target of a file reader: the binary of its name in the package `fuzz/`, which starts
+    /// A target of a file reader: the binary of its name in the package `xtask/fuzz/`, which starts
     /// from the seeds in `seeds`, a directory of the repository.
     Reader { seeds: &'static str },
 }
@@ -51,7 +51,7 @@ const fn reader(name: &'static str, seeds: &'static str) -> Target {
 /// The targets. Those of Ruby 1.8.7 are each the name of a C file under
 /// `crates/vkrgss-ruby-sys/fuzz/`; those of Ruby 1.9.2 add `192` to the name of a C file
 /// under `crates/vkrgss-ruby192-sys/fuzz/`; those of the file readers are each the name of a
-/// binary of `fuzz/`.
+/// binary of `xtask/fuzz/`.
 const TARGETS: [Target; 9] = [
     interpreter("marshal", "vkrgss-ruby-sys"),
     interpreter("parse", "vkrgss-ruby-sys"),
@@ -60,12 +60,12 @@ const TARGETS: [Target; 9] = [
     interpreter("parse192", "vkrgss-ruby192-sys"),
     interpreter("regex192", "vkrgss-ruby192-sys"),
     reader("jpeg", "crates/vkrgss-image/testdata/jpeg"),
-    reader("bmp", "fuzz/seeds/bmp"),
-    reader("rgssad", "fuzz/seeds/rgssad"),
+    reader("bmp", "xtask/fuzz/seeds/bmp"),
+    reader("rgssad", "xtask/fuzz/seeds/rgssad"),
 ];
 
 /// The manifest of the package of the targets of the file readers.
-const READERS_MANIFEST: &str = "fuzz/Cargo.toml";
+const READERS_MANIFEST: &str = "xtask/fuzz/Cargo.toml";
 
 /// Where the instrumented build of those targets goes, apart from the build of the workspace.
 const READERS_TARGET_DIR: &str = "target/fuzz";
@@ -417,7 +417,7 @@ mod tests {
                 }
                 Kind::Reader { seeds } => {
                     let source = format!("src/bin/{}.rs", target.name);
-                    assert!(root.join("fuzz").join(&source).is_file(), "{source}");
+                    assert!(root.join("xtask/fuzz").join(&source).is_file(), "{source}");
                     assert!(
                         manifest
                             .contains(&format!("name = \"{}\"\npath = \"{source}\"", target.name)),
@@ -452,7 +452,7 @@ mod tests {
             [
                 "build",
                 "--manifest-path",
-                "fuzz/Cargo.toml",
+                "xtask/fuzz/Cargo.toml",
                 "--locked",
                 "--release",
                 "--target",

@@ -3,7 +3,7 @@
 
 #![no_main]
 
-#[path = "../../../crates/vkrgss-image/tests/counting/mod.rs"]
+#[path = "../../../../crates/vkrgss-image/tests/counting/mod.rs"]
 mod counting;
 
 #[global_allocator]
