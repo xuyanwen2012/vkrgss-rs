@@ -111,10 +111,13 @@ pub use present::{Filter, Mix, OverlayImage, letterbox};
 /// At most the compose submission of the last [`render`](VkCompositor::render) is in use by
 /// the device when a method returns: `render` submits the bitmap uploads and the compose
 /// dispatch of its frame without waiting for them. Every method that records, reads back,
-/// replaces or destroys waits for that submission before it starts, `render` itself
-/// included, and so does dropping the compositor. Every other submission is waited for
-/// before the method that made it returns, so after any method but `render` nothing is in
-/// use.
+/// replaces or destroys waits for that submission. [`present`](VkCompositor::present), a
+/// freeze ([`freeze`](VkCompositor::freeze), [`freeze_into_buffer`]),
+/// [`read_frame`](VkCompositor::read_frame) and [`scale_frame`](VkCompositor::scale_frame)
+/// submit their own work after it on the same queue and wait once, for both together; every
+/// other method that uses the device, `render` itself included, waits for it before it
+/// starts. Dropping the compositor waits for it too. After `present`, a freeze or a read-back
+/// nothing is in use.
 ///
 /// A wait is bounded: a submission that has not completed within 60 seconds counts as a lost
 /// device, as does any call that reports `VK_ERROR_DEVICE_LOST`. The method returns
@@ -122,6 +125,7 @@ pub use present::{Filter, Mix, OverlayImage, letterbox};
 /// again without using the device. Dropping a compositor whose device is lost leaks the device
 /// and what was made from it.
 ///
+/// [`freeze_into_buffer`]: VkCompositor::freeze_into_buffer
 /// [`VkError::DeviceLost`]: crate::VkError::DeviceLost
 pub struct VkCompositor {
     /// Which slot holds which bitmap. The images below follow it change by change.
@@ -145,7 +149,8 @@ pub struct VkCompositor {
     /// drawing. It stays on the device; `read_frame` copies it out as a separate step.
     target: Option<GpuImage>,
     /// Whether the target holds a completely rendered frame once the compose in flight, if
-    /// any, has completed. Whoever reads the target waits for that compose first.
+    /// any, has completed. Whoever reads the target waits for that compose: on the host
+    /// before reading, on the device by a submission after it on the queue.
     has_frame: bool,
     set_layout: vk::DescriptorSetLayout,
     pipeline_layout: vk::PipelineLayout,
@@ -184,8 +189,12 @@ pub struct VkCompositor {
     present_probe: present::Probe,
     allocator: ManuallyDrop<Allocator>,
     pool: vk::CommandPool,
-    /// The command buffer of every submission. That of the compose may still be pending when
-    /// `render` returns; recording waits for it.
+    /// The command buffer of the uploads and the compose dispatch of a packet, which may still
+    /// be pending when `render` returns.
+    compose_commands: vk::CommandBuffer,
+    /// The command buffer of everything else: the presentation pass, freezes, read-backs and
+    /// uploads of the overlay. Every submission of it is waited for before the method that
+    /// made it returns, so it is never pending when one starts.
     commands: vk::CommandBuffer,
     /// The timeline semaphore every submission signals, each with the next value, and that
     /// the waits for submissions wait on.
@@ -268,6 +277,24 @@ impl VkCompositor {
         self.guarded(|compositor| {
             compositor.settle()?;
             work(compositor)
+        })
+    }
+
+    /// Runs `work` as [`unless_lost`](VkCompositor::unless_lost) does, but without waiting
+    /// for the compose in flight first: for a method that reads what the compose writes only
+    /// in submissions after it on the queue and waits for its last one, which covers the
+    /// compose. When `work` waited for nothing, the compose is waited for afterwards, so that
+    /// nothing is in flight when the method returns.
+    fn unless_lost_after_compose<T>(
+        &mut self,
+        work: impl FnOnce(&mut VkCompositor) -> Result<T, crate::VkError>,
+    ) -> Result<T, crate::VkError> {
+        self.guarded(|compositor| {
+            let result = work(compositor);
+            if compositor.lost.is_none() {
+                compositor.settle()?;
+            }
+            result
         })
     }
 

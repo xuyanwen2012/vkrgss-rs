@@ -19,9 +19,10 @@ impl VkCompositor {
     /// Before the first frame the result is black. Alpha is 255 everywhere.
     ///
     /// The target is an `R8G8B8A8_UNORM` image, so the bytes are what a `UNORM` swapchain
-    /// image would hold. Works with and without a surface.
+    /// image would hold. Works with and without a surface. The draw is submitted after the
+    /// compose of the newest frame, and its wait covers both.
     pub fn scale_frame(&mut self, size: Size) -> Result<Frame, VkError> {
-        self.unless_lost(|compositor| compositor.scale_frame_now(size))
+        self.unless_lost_after_compose(|compositor| compositor.scale_frame_now(size))
     }
 
     fn scale_frame_now(&mut self, size: Size) -> Result<Frame, VkError> {

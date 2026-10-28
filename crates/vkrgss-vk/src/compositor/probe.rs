@@ -27,6 +27,9 @@ pub(super) struct Probe {
     /// Failure injection: what the next wait for a submission returns once it has waited.
     #[cfg(test)]
     wait_result: Option<vk::Result>,
+    /// The number of waits for submissions so far.
+    #[cfg(test)]
+    waits: u64,
 }
 
 #[cfg(test)]
@@ -63,9 +66,10 @@ impl Probe {
         Ok(())
     }
 
-    /// What a wait for a submission that returned `waited` returns: the injected result, once,
-    /// or `waited`.
+    /// Counts a wait for a submission. What one that returned `waited` returns: the injected
+    /// result, once, or `waited`.
     pub(super) fn wait_result(&mut self, waited: VkResult<()>) -> VkResult<()> {
+        self.waits += 1;
         match self.wait_result.take() {
             Some(result) => Err(result),
             None => waited,
@@ -185,6 +189,11 @@ impl VkCompositor {
     /// The number of submissions so far.
     pub(crate) fn submissions(&self) -> u64 {
         self.submissions
+    }
+
+    /// The number of times the host has waited for a submission so far.
+    pub(crate) fn submission_waits(&self) -> u64 {
+        self.probe.waits
     }
 
     /// Whether a submission may still be in use by the device: the compose of the last

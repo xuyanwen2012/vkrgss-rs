@@ -30,8 +30,12 @@ impl VkCompositor {
     /// Fails with [`VkError::NoSurface`] on a compositor that was created without a surface.
     /// While its surface is released ([`release_surface`](VkCompositor::release_surface))
     /// nothing is presented, as for a window without pixels.
+    ///
+    /// The pass is submitted after the compose of the newest frame on the same queue, and
+    /// the host waits once, for both; a held frame made for it is cleared in the same
+    /// submission. A present that shows nothing waits for the compose instead.
     pub fn present(&mut self) -> Result<bool, VkError> {
-        self.unless_lost(|compositor| compositor.present_now())
+        self.unless_lost_after_compose(|compositor| compositor.present_now())
     }
 
     fn present_now(&mut self) -> Result<bool, VkError> {
@@ -187,11 +191,12 @@ impl VkCompositor {
                 // when a frame does, in which case `prepare_sources` pointed the set at the
                 // frame target (`GENERAL`), the held frame and the mask
                 // (`SHADER_READ_ONLY_OPTIMAL`), each left to the fragment stage by its last
-                // barrier. The label and the timestamps are recorded around the pass, each
-                // end after its start.
+                // barrier: that of the compose in flight, submitted before on this queue, or
+                // the clear recorded at the start of these commands. The label and the
+                // timestamps are recorded around the pass, each end after its start.
                 unsafe {
                     compositor.gpu.begin_label(compositor.commands, c"present");
-                    compositor.record_span_start(query::PRESENT);
+                    compositor.record_span_start(compositor.commands, query::PRESENT);
                     record_pass(
                         &compositor.gpu.device,
                         compositor.commands,
@@ -199,7 +204,7 @@ impl VkCompositor {
                         draw.as_ref(),
                         overlay.as_ref(),
                     );
-                    compositor.record_span_end(query::PRESENT);
+                    compositor.record_span_end(compositor.commands, query::PRESENT);
                     compositor.gpu.end_label(compositor.commands);
                 }
                 compositor.submit_drawn(wait, signal)
@@ -297,7 +302,7 @@ impl VkCompositor {
 
     /// Ends recording and submits the command buffer so that it starts drawing once the
     /// swapchain image is available (`wait`) and signals `signal` when it is done, then
-    /// blocks until the device has finished it.
+    /// blocks until the device has finished it, and with it the compose in flight.
     fn submit_drawn(&mut self, wait: vk::Semaphore, signal: vk::Semaphore) -> Result<(), VkError> {
         // The pass first touches the image when its layout changes at the colour attachment
         // output stage (`ImageUse::ACQUIRED`), so that is where the acquire is waited for.

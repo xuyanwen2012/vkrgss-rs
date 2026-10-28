@@ -113,6 +113,7 @@ impl VkCompositor {
             present_probe: Default::default(),
             allocator: ManuallyDrop::new(allocator),
             pool: vk::CommandPool::null(),
+            compose_commands: vk::CommandBuffer::null(),
             commands: vk::CommandBuffer::null(),
             timeline: vk::Semaphore::null(),
             submissions: 0,
@@ -139,10 +140,11 @@ impl VkCompositor {
         let allocate = vk::CommandBufferAllocateInfo::default()
             .command_pool(self.pool)
             .level(vk::CommandBufferLevel::PRIMARY)
-            .command_buffer_count(1);
+            .command_buffer_count(2);
         // SAFETY: the pool was just created from this device.
-        self.commands = unsafe { device.allocate_command_buffers(&allocate) }
-            .map_err(VkError::vulkan("vkAllocateCommandBuffers"))?[0];
+        let buffers = unsafe { device.allocate_command_buffers(&allocate) }
+            .map_err(VkError::vulkan("vkAllocateCommandBuffers"))?;
+        (self.compose_commands, self.commands) = (buffers[0], buffers[1]);
         let mut timeline_info = vk::SemaphoreTypeCreateInfo::default()
             .semaphore_type(vk::SemaphoreType::TIMELINE)
             .initial_value(0);
@@ -296,8 +298,8 @@ impl Drop for VkCompositor {
         }
         let device = &self.gpu.device;
         // SAFETY: the compose in flight has completed and every other submission was waited
-        // for, so nothing below is in use; each handle was created from this device or is
-        // null, and none is used again. The allocator is dropped
+        // for, so nothing below is in use once the device is idle; each handle was created
+        // from this device or is null, and none is used again. The allocator is dropped
         // exactly once, here, after its allocations were freed and while the device is alive;
         // the device is dropped exactly once, last.
         unsafe {
@@ -330,7 +332,7 @@ impl Drop for VkCompositor {
             device.destroy_descriptor_set_layout(self.set_layout, None);
             device.destroy_semaphore(self.timeline, None);
             device.destroy_query_pool(self.query_pool, None);
-            // Frees the command buffer with it.
+            // Frees the command buffers with it.
             device.destroy_command_pool(self.pool, None);
             ManuallyDrop::drop(&mut self.allocator);
             ManuallyDrop::drop(&mut self.gpu);

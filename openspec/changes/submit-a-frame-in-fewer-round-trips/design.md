@@ -86,6 +86,43 @@ does not improve is recorded, not hidden.
 
 ## As built
 
+### What waits where
+
+- `render` waits for the compose of the `render` before it, as every method that uses the
+  device does before it starts, except the four below; a `Bitmaps` message and
+  `forget_resources` also wait for their own submission before they return. `Drop` waits for
+  the compose with the bounded wait before it idles the device: a test replaces
+  `vkDeviceWaitIdle` with a stub that does not idle, and the timeline semaphore was destroyed
+  under a pending submission until `Drop` waited for it itself.
+- The second command buffer is used not only by `present` but by every submission other
+  than the compose: `present`, `freeze`, `freeze_into_buffer`, `read_frame` and
+  `scale_frame` therefore submit after the compose without waiting for it first, and their
+  one wait covers both. When such a method submits nothing (a window without pixels, no
+  frame to read), it waits for the compose before it returns, so after it nothing is in
+  flight.
+- `has_frame` is set when the compose is submitted, not when it is seen complete: every
+  reader waits for the compose first on the host or comes after it on the queue, and a
+  compose that fails on the device is a lost device, after which nothing reads the target.
+  This is what "readers wait for the pending value first" observes.
+- The held frame, the buffer of RGSS3 and the stand-in for a mask are no longer cleared in a
+  submission of their own when they are made: the presenter keeps the images that are to be
+  cleared, and the next commands recorded into the second buffer clear them first. So a
+  freeze into a new buffer clears and copies in one submission, the first present of a
+  compositor makes its held frame and stand-in in the presentation pass's submission, and a
+  freeze before the first frame clears the held frame with the next submission instead of
+  one of its own. When the submission fails, the clears are recorded again with the next
+  commands.
+- A freeze in the middle of a cross-fade still draws the mix into an off-screen target in
+  one submission and copies it in a second; the design names the clear and the copy only.
+- The frame timing: `submit` is the submission alone, plus the wait for the compose where a
+  call waits for it alone, as taking the timing does in a headless run; in a window the wait
+  is part of `present`. `take_frame_timing` waits for the compose of a measured frame so
+  that its device time is known.
+- The per-method tests are in `tests/round_trips.rs`: one test for each method that uses the
+  device, and one that calls each of the fifteen methods that only set or report state
+  right after a render of its own. `attach_window` needs a window and is exercised through
+  `attach_headless_surface`, which makes the same call.
+
 ### Frame times
 
 Machine: AMD Ryzen 5 9600X, its integrated GPU with RADV, and llvmpipe (Mesa 26.2.4), no

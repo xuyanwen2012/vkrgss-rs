@@ -73,9 +73,9 @@ impl VkCompositor {
             return failure.map_or(Ok(()), Err);
         }
 
-        self.begin_commands()?;
+        self.begin_compose()?;
         let (bitmap_use, frame_use) = (self.bitmap_use(), self.frame_use());
-        let (device, commands) = (&self.gpu.device, self.commands);
+        let (device, commands) = (&self.gpu.device, self.compose_commands);
         if !pending.steps.is_empty() {
             // SAFETY: the command buffer is recording. Every image named by a step is alive
             // until a wait has seen this submission complete: live ones are in `self.images`
@@ -132,7 +132,7 @@ impl VkCompositor {
                     before,
                     ImageUse::COMPUTE_STORAGE_WRITE,
                 );
-                self.record_span_start(query::COMPOSE);
+                self.record_span_start(commands, query::COMPOSE);
                 device.cmd_bind_pipeline(commands, vk::PipelineBindPoint::COMPUTE, self.pipeline);
                 device.cmd_bind_descriptor_sets(
                     commands,
@@ -150,7 +150,7 @@ impl VkCompositor {
                     &constants,
                 );
                 device.cmd_dispatch(commands, frame.tiles.tiles_x, frame.tiles.tiles_y, 1);
-                self.record_span_end(query::COMPOSE);
+                self.record_span_end(commands, query::COMPOSE);
                 // Hands the composed frame to the presentation pass and the copies.
                 transition(
                     device,
@@ -209,19 +209,34 @@ impl VkCompositor {
         readers.in_layout(vk::ImageLayout::GENERAL)
     }
 
-    /// Waits for the compose in flight, then resets the command buffer and starts recording
-    /// into it. A lost device is recorded before the caller cleans up.
-    pub(super) fn begin_commands(&mut self) -> Result<(), VkError> {
+    /// Waits for the compose in flight, then resets the compose command buffer and starts
+    /// recording into it.
+    fn begin_compose(&mut self) -> Result<(), VkError> {
         self.settle()?;
+        self.begin(self.compose_commands)
+    }
+
+    /// Resets the command buffer of everything but the compose and starts recording into it,
+    /// with the clears of the new images of the presenter first.
+    pub(super) fn begin_commands(&mut self) -> Result<(), VkError> {
+        self.begin(self.commands)?;
+        self.record_clears();
+        Ok(())
+    }
+
+    /// Resets `commands` and starts recording into it. A lost device is recorded before the
+    /// caller cleans up.
+    fn begin(&mut self, commands: vk::CommandBuffer) -> Result<(), VkError> {
         let info = vk::CommandBufferBeginInfo::default()
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
         // SAFETY: the command buffer belongs to this device, its pool allows resetting single
-        // buffers, and it is not pending: the compose in flight was waited for above, and
-        // every other submission is waited for before the method that made it returns.
+        // buffers, and it is not pending: the compose buffer's last submission was waited for
+        // by `begin_compose`, and every submission of the other one is waited for before the
+        // method that made it returns.
         let begun = unsafe {
             self.gpu
                 .device
-                .begin_command_buffer(self.commands, &info)
+                .begin_command_buffer(commands, &info)
                 .map_err(VkError::vulkan("vkBeginCommandBuffer"))
         };
         if let Err(error) = &begun {
@@ -231,16 +246,18 @@ impl VkCompositor {
     }
 
     /// Ends recording, submits the command buffer and blocks until the device has finished it,
-    /// or for [`SUBMISSION_TIMEOUT`] at most, after which the device counts as lost.
+    /// and with it the compose in flight, or for [`SUBMISSION_TIMEOUT`] at most, after which
+    /// the device counts as lost.
     pub(super) fn submit_and_wait(&mut self) -> Result<(), VkError> {
         // SAFETY: there are no other semaphores.
         unsafe { self.submit_with(&[], &[]) }
     }
 
-    /// Ends recording and submits the command buffer, which waits for the semaphores of
-    /// `waits` and, once done, signals those of `signals` as well as the next value of the
-    /// timeline; then blocks until the timeline has that value, so until the device has
-    /// finished the commands. A wait that runs out after [`SUBMISSION_TIMEOUT`], like a lost
+    /// Ends recording and submits the command buffer of everything but the compose, which
+    /// waits for the semaphores of `waits` and, once done, signals those of `signals` as well
+    /// as the next value of the timeline; then blocks until the timeline has that value, so
+    /// until the device has finished the commands and the compose in flight, which was
+    /// submitted before them. A wait that runs out after [`SUBMISSION_TIMEOUT`], like a lost
     /// device, is [`VkError::DeviceLost`] and marks the compositor lost.
     ///
     /// # Safety
@@ -252,8 +269,9 @@ impl VkCompositor {
         signals: &[vk::SemaphoreSubmitInfo<'_>],
     ) -> Result<(), VkError> {
         // SAFETY: guaranteed by the caller.
-        let value = unsafe { self.submit_commands(self.commands, waits, signals) }?;
-        self.wait_for(value)
+        let submitted = unsafe { self.submit_commands(self.commands, waits, signals) };
+        self.clears_submitted(submitted.is_ok());
+        self.wait_for(submitted?)
     }
 
     /// Ends recording into `commands` and submits it, without waiting: it waits for the
@@ -263,7 +281,7 @@ impl VkCompositor {
     ///
     /// # Safety
     ///
-    /// `commands` must be the compositor's command buffer, recording. The semaphores
+    /// `commands` must be one of the compositor's command buffers, recording. The semaphores
     /// of `waits` and `signals` must be live binary semaphores of this device; each of
     /// `waits` must have a signal operation pending or done that no other wait consumes, and
     /// each of `signals` must be unsignalled with no signal operation pending.
@@ -433,7 +451,9 @@ impl VkCompositor {
             });
         // SAFETY: the command buffer is recording; the caller passes a live image of this size
         // in the use `resting`, created with transfer-source usage, and a live buffer that
-        // holds the whole image; both outlive the wait in `submit_and_wait`.
+        // holds the whole image; both outlive the wait in `submit_and_wait`. A frame target
+        // the compose in flight writes is handed to copies by the compose's last barrier,
+        // whose second scope includes this later submission.
         unsafe {
             if copying != resting {
                 transition(device, commands, image, resting, copying);

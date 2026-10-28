@@ -49,18 +49,21 @@ impl VkCompositor {
         self.timing_on && self.query_pool != vk::QueryPool::null()
     }
 
-    /// Records the start of the device duration whose queries begin at `first`, when device
-    /// durations are measured.
+    /// Records the start of the device duration whose queries begin at `first` into
+    /// `commands`, when device durations are measured.
     ///
     /// # Safety
     ///
-    /// The command buffer must be recording, outside a render pass.
-    pub(super) unsafe fn record_span_start(&self, first: u32) {
+    /// `commands` must be one of the compositor's command buffers, recording, outside a render
+    /// pass. The compose records the queries of `query::COMPOSE` and the presentation pass
+    /// those of `query::PRESENT` only.
+    pub(super) unsafe fn record_span_start(&self, commands: vk::CommandBuffer, first: u32) {
         if self.times_device() {
-            let (device, commands) = (&self.gpu.device, self.commands);
+            let device = &self.gpu.device;
             // SAFETY: the pool has timestamp queries `first` and `first + 1`, which no
-            // pending command buffer uses since recording waits for every submission, and
-            // the queue has timestamps; the rest is guaranteed by the caller.
+            // pending command buffer uses: the compose in flight, the only submission that may
+            // be pending, uses those of the compose, and recording the compose waits for it
+            // first. The queue has timestamps; the rest is guaranteed by the caller.
             unsafe {
                 device.cmd_reset_query_pool(commands, self.query_pool, first, 2);
                 device.cmd_write_timestamp2(
@@ -73,18 +76,18 @@ impl VkCompositor {
         }
     }
 
-    /// Records the end of the device duration whose queries begin at `first`.
+    /// Records the end of the device duration whose queries begin at `first` into `commands`.
     ///
     /// # Safety
     ///
-    /// The command buffer must be recording, outside a render pass, after a
-    /// [`record_span_start`](VkCompositor::record_span_start) of the same queries in it.
-    pub(super) unsafe fn record_span_end(&self, first: u32) {
+    /// As for [`record_span_start`](VkCompositor::record_span_start), which must have been
+    /// recorded for the same queries in `commands` before.
+    pub(super) unsafe fn record_span_end(&self, commands: vk::CommandBuffer, first: u32) {
         if self.times_device() {
             // SAFETY: as in `record_span_start`, which reset the query.
             unsafe {
                 self.gpu.device.cmd_write_timestamp2(
-                    self.commands,
+                    commands,
                     vk::PipelineStageFlags2::ALL_COMMANDS,
                     self.query_pool,
                     first + 1,

@@ -7,7 +7,7 @@ use vkrgss_proto::{FreezeRule, Size};
 use super::scaling::{Mix, Placement, letterbox};
 use crate::VkError;
 use crate::compositor::VkCompositor;
-use crate::resources::{COLOR_LAYERS, COLOR_RANGE, GpuImage, ImageUse, transition};
+use crate::resources::{COLOR_LAYERS, COLOR_RANGE, GpuImage, ImageUse, transition, transition_all};
 
 /// What the held frame and an empty target are cleared to: opaque black.
 const BLACK: [u32; 4] = [0, 0, 0, 255];
@@ -43,8 +43,11 @@ impl VkCompositor {
     /// newest frame. A newest frame wider or higher than the buffer is frozen by
     /// [`freeze`](VkCompositor::freeze) instead, and the buffer keeps its texels. Before
     /// the first frame nothing is written.
+    ///
+    /// The clear of a new buffer and the copy into it are one submission, after the compose
+    /// in flight, and one wait covers them all.
     pub fn freeze_into_buffer(&mut self) -> Result<(), VkError> {
-        self.unless_lost(|compositor| compositor.freeze_into_buffer_now())
+        self.unless_lost_after_compose(|compositor| compositor.freeze_into_buffer_now())
     }
 
     fn freeze_into_buffer_now(&mut self) -> Result<(), VkError> {
@@ -104,7 +107,7 @@ impl VkCompositor {
     }
 
     /// Makes sure there is the buffer of RGSS3 and returns its image. A new one is opaque
-    /// black.
+    /// black once the next commands are submitted, which clear it first.
     fn ensure_buffer(&mut self) -> Result<vk::Image, VkError> {
         let presenter = self.presenter.as_ref().expect("made by the caller");
         if let Some(buffer) = &presenter.buffer {
@@ -113,19 +116,9 @@ impl VkCompositor {
         let size = (FROZEN_BUFFER.width, FROZEN_BUFFER.height);
         let buffer = self.new_held_image(size, "frozen picture buffer")?;
         let image = buffer.image;
-        let cleared =
-            self.submit_or_idle(|compositor| compositor.clear_held(image, ImageUse::UNDEFINED));
-        match cleared {
-            Ok(()) => {
-                let presenter = self.presenter.as_mut().expect("made by the caller");
-                presenter.buffer = Some(buffer);
-                Ok(image)
-            }
-            Err(error) => {
-                self.discard_image(buffer);
-                Err(error)
-            }
-        }
+        self.clear_later(image);
+        self.presenter.as_mut().expect("made by the caller").buffer = Some(buffer);
+        Ok(image)
     }
 
     /// Captures what is shown now as the held frame: the mix of the held and the newest frame
@@ -155,9 +148,13 @@ impl VkCompositor {
     ///
     /// If nothing has been shown yet the mix is taken at the size of the newest frame.
     ///
+    /// The copy into the held frame is submitted after the compose in flight, with the clear
+    /// of a held frame that is new, and one wait covers them all. In the middle of a
+    /// cross-fade the draw of the mix is a submission of its own before it.
+    ///
     /// [`Filter::Auto`]: crate::Filter::Auto
     pub fn freeze(&mut self) -> Result<(), VkError> {
-        self.unless_lost(|compositor| compositor.freeze_now())
+        self.unless_lost_after_compose(|compositor| compositor.freeze_now())
     }
 
     fn freeze_now(&mut self) -> Result<(), VkError> {
@@ -170,16 +167,11 @@ impl VkCompositor {
         let Some((newest, size)) = target else {
             // Nothing has been rendered, so black is what is shown.
             let held = self.presenter.as_ref().and_then(|p| p.held.as_ref());
-            let cleared = match held.map(|held| held.image) {
-                Some(held) => self.submit_or_idle(|compositor| {
-                    compositor.clear_held(held, ImageUse::FRAGMENT_SAMPLED_READ)
-                }),
-                None => Ok(()),
-            };
-            if cleared.is_ok() {
-                self.presenter.as_mut().expect("made above").buffer_held = false;
+            if let Some(held) = held.map(|held| held.image) {
+                self.clear_later(held);
             }
-            return cleared;
+            self.presenter.as_mut().expect("made above").buffer_held = false;
+            return Ok(());
         };
         if self.mix == Mix::Newest {
             return self.capture_held(newest, vk::ImageLayout::GENERAL, size);
@@ -278,7 +270,8 @@ impl VkCompositor {
                 presenter.bound = None;
                 presenter.buffer_held = false;
                 if let Some(old) = presenter.held.replace(fresh) {
-                    // Every submission that read it was waited for.
+                    // Every submission that read it was waited for, and a clear it was
+                    // waiting for went out with the copy.
                     old.destroy(&self.gpu.device, &mut self.allocator);
                 }
                 Ok(())
@@ -309,81 +302,101 @@ impl VkCompositor {
         Ok(image)
     }
 
-    /// Makes sure there is the texel that stands in for a mask.
+    /// Makes sure there is the texel that stands in for a mask. A new one is cleared, like a
+    /// held frame of one pixel, at the start of the next commands.
     pub(super) fn ensure_no_mask(&mut self) -> Result<(), VkError> {
         let presenter = self.presenter.as_ref().expect("made by the caller");
         if presenter.no_mask.is_some() {
             return Ok(());
         }
-        // Made and filled like a held frame of one pixel.
         let no_mask = self.new_held_image((1, 1), "no mask")?;
-        let image = no_mask.image;
-        let cleared =
-            self.submit_or_idle(|compositor| compositor.clear_held(image, ImageUse::UNDEFINED));
-        match cleared {
-            Ok(()) => {
-                let presenter = self.presenter.as_mut().expect("made by the caller");
-                presenter.no_mask = Some(no_mask);
-                Ok(())
-            }
-            Err(error) => {
-                self.discard_image(no_mask);
-                Err(error)
-            }
-        }
+        self.clear_later(no_mask.image);
+        self.presenter.as_mut().expect("made by the caller").no_mask = Some(no_mask);
+        Ok(())
     }
 
     /// Makes sure there is a held frame. One that exists is left alone whatever its size; a
-    /// new one is `size` pixels large and black, which is what was shown before any frame.
+    /// new one is `size` pixels large and black, which is what was shown before any frame,
+    /// once the next commands, which clear it first, are submitted.
     pub(super) fn ensure_held(&mut self, size: (u32, u32)) -> Result<(), VkError> {
         let presenter = self.presenter.as_ref().expect("made by the caller");
         if presenter.held.is_some() {
             return Ok(());
         }
         let held = self.new_held_image(size, "held frame")?;
-        let image = held.image;
-        let cleared =
-            self.submit_or_idle(|compositor| compositor.clear_held(image, ImageUse::UNDEFINED));
-        match cleared {
-            Ok(()) => {
-                let presenter = self.presenter.as_mut().expect("made by the caller");
-                presenter.bound = None;
-                presenter.held = Some(held);
-                Ok(())
-            }
-            Err(error) => {
-                self.discard_image(held);
-                Err(error)
-            }
+        self.clear_later(held.image);
+        let presenter = self.presenter.as_mut().expect("made by the caller");
+        presenter.bound = None;
+        presenter.held = Some(held);
+        Ok(())
+    }
+
+    /// Has `image`, the held frame, the buffer of RGSS3 or the stand-in for a mask, filled
+    /// with opaque black at the start of the next commands, before anything else uses it.
+    fn clear_later(&mut self, image: vk::Image) {
+        let presenter = self.presenter.as_mut().expect("made by the caller");
+        if !presenter.uncleared.contains(&image) {
+            presenter.uncleared.push(image);
         }
     }
 
-    /// Fills the held frame, which was last used as `from` says, with opaque black and leaves
-    /// it to the fragment shader.
-    fn clear_held(&mut self, held: vk::Image, from: ImageUse) -> Result<(), VkError> {
-        self.begin_commands()?;
-        let (device, commands) = (&self.gpu.device, self.commands);
-        // SAFETY: the command buffer is recording; the caller passes the live held image in
-        // the layout of `from`, which has transfer-destination usage and stays alive until
-        // the submission has been waited for. A held image only exists on a queue that draws.
-        unsafe {
-            transition(device, commands, held, from, ImageUse::TRANSFER_WRITE);
-            device.cmd_clear_color_image(
-                commands,
-                held,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                &vk::ClearColorValue { uint32: BLACK },
-                &[COLOR_RANGE],
-            );
-            transition(
-                device,
-                commands,
-                held,
-                ImageUse::TRANSFER_WRITE,
-                ImageUse::FRAGMENT_SAMPLED_READ,
-            );
+    /// Records the clears that [`clear_later`](VkCompositor::clear_later) asked for into the
+    /// commands, which have just begun: each image is filled with opaque black and left to
+    /// the fragment shader in `SHADER_READ_ONLY_OPTIMAL`, as the rest of the commands expect.
+    pub(in crate::compositor) fn record_clears(&mut self) {
+        let Some(presenter) = self.presenter.as_mut() else {
+            return;
+        };
+        if presenter.uncleared.is_empty() {
+            return;
         }
-        self.submit_and_wait()
+        let images = std::mem::take(&mut presenter.uncleared);
+        let (device, commands) = (&self.gpu.device, self.commands);
+        let before: Vec<_> = images
+            .iter()
+            .map(|&image| (image, ImageUse::UNDEFINED, ImageUse::TRANSFER_WRITE))
+            .collect();
+        let after: Vec<_> = images
+            .iter()
+            .map(|&image| {
+                (
+                    image,
+                    ImageUse::TRANSFER_WRITE,
+                    ImageUse::FRAGMENT_SAMPLED_READ,
+                )
+            })
+            .collect();
+        // SAFETY: the command buffer is recording and is not submitted before these images
+        // are cleared; each image is a live image of the presenter, with transfer-destination
+        // usage, that no pending command buffer uses, and stays alive until the submission has
+        // been waited for. Their contents are not kept, so each may be taken from `UNDEFINED`.
+        // A presenter only exists on a queue that draws.
+        unsafe {
+            transition_all(device, commands, &before);
+            for &image in &images {
+                device.cmd_clear_color_image(
+                    commands,
+                    image,
+                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                    &vk::ClearColorValue { uint32: BLACK },
+                    &[COLOR_RANGE],
+                );
+            }
+            transition_all(device, commands, &after);
+        }
+        presenter.clearing = images;
+    }
+
+    /// Ends the clears that [`record_clears`](VkCompositor::record_clears) recorded once the
+    /// commands are submitted; when they could not be, the clears are recorded again with
+    /// the next commands.
+    pub(in crate::compositor) fn clears_submitted(&mut self, submitted: bool) {
+        if let Some(presenter) = self.presenter.as_mut() {
+            let clearing = std::mem::take(&mut presenter.clearing);
+            if !submitted {
+                presenter.uncleared.extend(clearing);
+            }
+        }
     }
 
     /// Copies `source`, which is in `source_layout` for copies to read, into the held frame,

@@ -138,9 +138,10 @@ impl VkCompositor {
     }
 
     /// The most recently rendered frame, copied from the device, or `None` before the first
-    /// successful [`render`](VkCompositor::render).
+    /// successful [`render`](VkCompositor::render). The copy is submitted after the compose
+    /// of that frame, and one wait covers both.
     pub fn read_frame(&mut self) -> Result<Option<Frame>, VkError> {
-        self.unless_lost(|compositor| compositor.read_target())
+        self.unless_lost_after_compose(|compositor| compositor.read_target())
     }
 
     fn read_target(&mut self) -> Result<Option<Frame>, VkError> {

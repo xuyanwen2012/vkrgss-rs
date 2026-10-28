@@ -11,8 +11,8 @@
 
 ## 3. `present` and a freeze wait once (`vkrgss-vk`)
 
-- [ ] 3.1 Record the presentation pass into a second command buffer, submit it after the compose and wait once for it. Verify: the "One wait per shown frame" scenario (a test counts the host waits of `render` followed by `present` on the headless surface); the presentation tests pass.
-- [ ] 3.2 Record a freeze's clear and copy into one submission. Verify: the freeze tests of `present/tests.rs` pass; a test counts one wait per freeze.
+- [x] 3.1 Record the presentation pass into a second command buffer, submit it after the compose and wait once for it. Verify: the "One wait per shown frame" scenario (a test counts the host waits of `render` followed by `present` on the headless surface); the presentation tests pass.
+- [x] 3.2 Record a freeze's clear and copy into one submission. Verify: the freeze tests of `present/tests.rs` pass; a test counts one wait per freeze.
 
 ## 4. Measure after and integration check
 

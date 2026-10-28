@@ -53,6 +53,12 @@ pub(in crate::compositor) struct Presenter {
     /// The views of the newest frame, the held frame and the mask that the descriptor set
     /// points at.
     pub(super) bound: Option<[vk::ImageView; 3]>,
+    /// Images among the three above that are to be filled with opaque black before anything
+    /// uses them, in whatever layout they are: the clears are recorded at the start of the
+    /// next commands, so that they go out in one submission with what uses them.
+    pub(super) uncleared: Vec<vk::Image>,
+    /// The clears recorded into the commands being recorded, until those are submitted.
+    pub(super) clearing: Vec<vk::Image>,
     pub(super) swapchain_loader: Option<ash::khr::swapchain::Device>,
     /// The commands of `VK_EXT_swapchain_maintenance1`, loaded with the first swapchain that
     /// uses them.
@@ -90,6 +96,8 @@ impl Presenter {
             buffer_held: false,
             no_mask: None,
             bound: None,
+            uncleared: Vec::new(),
+            clearing: Vec::new(),
             swapchain_loader: None,
             maintenance_loader: None,
             timing_commands: None,
@@ -457,6 +465,9 @@ impl VkCompositor {
     /// draw then mixes buffer texel (x, y) with newest texel (x, y), as it mixes two frames
     /// of one size. A newest frame that does not fit meets the whole buffer as a held frame
     /// of another size.
+    ///
+    /// A held frame or a stand-in for the mask that is made here is cleared at the start of
+    /// the commands of the draw.
     pub(super) fn prepare_sources(&mut self) -> Result<Option<Sources>, VkError> {
         self.ensure_presenter()?;
         let target = self

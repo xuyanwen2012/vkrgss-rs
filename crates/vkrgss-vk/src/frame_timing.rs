@@ -19,10 +19,13 @@ pub struct FrameTiming {
     /// Copying the bitmap updates and the records into the buffers of the frame and
     /// recording the commands.
     pub upload: Option<Duration>,
-    /// Submitting the commands, and waiting until the device has finished them, which the
-    /// next call that uses the device, or taking the timing, does.
+    /// Submitting the commands, and waiting until the device has finished them where a call
+    /// waits for them alone, as taking the timing does. Where a present, a freeze or a
+    /// read-back waits for them together with its own work, that wait is not counted here;
+    /// for a present it is part of `present`.
     pub submit: Option<Duration>,
-    /// Recording the presentation pass, submitting it and waiting for it.
+    /// Recording the presentation pass, submitting it and waiting for it, and with it for the
+    /// compose of the frame.
     pub present: Option<Duration>,
     /// Device time of the compose dispatch.
     pub compose_device: Option<Duration>,

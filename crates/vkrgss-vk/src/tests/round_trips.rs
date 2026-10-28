@@ -1,6 +1,6 @@
 //! The scenarios of "One wait per shown frame" in `specs/vulkan-compositor/spec.md`: `render`
-//! leaves its compose in flight, and every public method called right after it gives the
-//! result the reference gives, under validation.
+//! leaves its compose in flight, every public method called right after it gives the result
+//! the reference gives, under validation, and a shown frame and a freeze each wait once.
 
 use vkrgss_compose_ref as reference;
 use vkrgss_compose_ref::fixtures::{self, bitmap, sprite};
@@ -111,6 +111,34 @@ fn assert_settled(compositor: &VkCompositor, after: &str) {
     );
 }
 
+// Scenario "One wait per shown frame".
+
+#[test]
+fn render_and_present_wait_once_and_show_the_frame() {
+    let log = ValidationLog::new();
+    let mut compositor = surface_compositor(&log);
+    let (one, two) = (first(), flat_destroying([200, 100, 50, 255]));
+    // The first frame also makes the swapchain, the held frame and the stand-in for a mask;
+    // the second is a frame like every later one.
+    for (packets, what) in [
+        (vec![&one], "the first frame"),
+        (vec![&one, &two], "a later frame"),
+    ] {
+        let packet = packets.last().unwrap();
+        let waits = compositor.submission_waits();
+        compositor.render(packet).unwrap();
+        assert_eq!(compositor.submission_waits(), waits, "render of {what}");
+        assert_eq!(compositor.present(), Ok(true), "{what}");
+        assert_eq!(compositor.submission_waits(), waits + 1, "{what}");
+        assert_settled(&compositor, "a present");
+        let wanted = shown(&reference(&packets), 2);
+        assert_eq!(compositor.scale_frame(WINDOW).unwrap(), wanted, "{what}");
+    }
+    assert_clean(&log, "while frames were rendered and presented");
+    drop(compositor);
+    assert_clean(&log, "while the compositor was dropped");
+}
+
 /// A present that shows nothing still leaves nothing in flight.
 #[test]
 fn present_that_shows_nothing_waits_for_the_compose() {
@@ -183,13 +211,15 @@ fn forget_resources_right_after_a_render_keeps_the_frame() {
 }
 
 #[test]
-fn read_frame_right_after_a_render_reads_the_frame() {
+fn read_frame_right_after_a_render_waits_once_for_the_compose_and_the_copy() {
     let second = flat_destroying([40, 50, 60, 255]);
     let mut compositor = right_after(&second);
+    let waits = compositor.submission_waits();
     assert_eq!(
         compositor.read_frame().unwrap(),
         Some(reference(&[&first(), &second]))
     );
+    assert_eq!(compositor.submission_waits(), waits + 1);
     assert_settled(&compositor, "reading the frame");
 }
 
@@ -371,4 +401,36 @@ fn drop_right_after_a_render_waits_for_it() {
     let compositor = right_after(&flat_destroying([5, 6, 7, 255]));
     // The test compositor asserts on drop that the validation layer reported nothing.
     drop(compositor);
+}
+
+// Scenario "A freeze waits once".
+
+#[test]
+fn freeze_waits_once_and_submits_once() {
+    let mut compositor = right_after(&again());
+    let (waits, submissions) = (compositor.submission_waits(), compositor.submissions());
+    compositor.freeze().unwrap();
+    assert_eq!(
+        compositor.submission_waits(),
+        waits + 1,
+        "waits of a freeze"
+    );
+    assert_eq!(compositor.submissions(), submissions + 1);
+    assert_holds(&mut compositor, &reference(&[&first()]));
+}
+
+/// The first freeze into the buffer of RGSS3 clears the new buffer and copies the frame
+/// into it: one submission, one wait.
+#[test]
+fn first_freeze_into_the_buffer_clears_and_copies_in_one_submission() {
+    let mut compositor = right_after(&again());
+    let (waits, submissions) = (compositor.submission_waits(), compositor.submissions());
+    compositor.freeze_into_buffer().unwrap();
+    assert_eq!(
+        compositor.submission_waits(),
+        waits + 1,
+        "waits of a freeze"
+    );
+    assert_eq!(compositor.submissions(), submissions + 1);
+    assert_holds(&mut compositor, &reference(&[&first()]));
 }
