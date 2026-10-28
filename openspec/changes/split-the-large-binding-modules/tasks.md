@@ -10,8 +10,8 @@
 
 ## 3. Prelude line numbers (`vkrgss-binding`)
 
-- [ ] 3.1 Find every reader of positions inside the preludes and record them with evidence under "As built" in `design.md`. Verify: the section names each reader or the search that found none.
-- [ ] 3.2 Keep the padding with the reason written next to it, or replace it by a starting line, or remove it, as `design.md` decides from 3.1. Verify: the "Prelude positions" scenario; `cargo test -p vkrgss-binding -p vkrgss-binding-rgss3` passes.
+- [x] 3.1 Find every reader of positions inside the preludes and record them with evidence under "As built" in `design.md`. Verify: the section names each reader or the search that found none.
+- [x] 3.2 Keep the padding with the reason written next to it, or replace it by a starting line, or remove it, as `design.md` decides from 3.1. Verify: the "Prelude positions" scenario; `cargo test -p vkrgss-binding -p vkrgss-binding-rgss3` passes.
 
 ## 4. Integration check
 

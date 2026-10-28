@@ -2,31 +2,6 @@
 # Written for vkrgss; `vkrgss_locate` is a host function of the binding, and the other functions
 # whose names start with `vkrgss_` are defined below.
 
-# `Win32API` was defined on the lines below. It moved to `prelude_win32api.rb`, evaluated
-# before this file for RGSS1 and RGSS2; in RGSS3 it is a class of the binding. The comment
-# lines keep the line numbers of what follows.
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-
 # Only Ruby files inside the game directory are loaded.
 module Kernel
   def require(name)

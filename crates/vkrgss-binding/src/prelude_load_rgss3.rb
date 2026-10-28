@@ -1,5 +1,5 @@
-# The rules of loading of RGSS3, after `prelude_rgss3.rb` and evaluated from line 48, where
-# they stood in it; a script of script mode over Ruby 1.9 gets them after `prelude_shared.rb`.
+# The rules of loading of RGSS3, after `prelude_rgss3.rb`; a script of script mode over Ruby 1.9
+# gets them after `prelude_shared.rb`.
 # Only Ruby files inside the game directory are loaded, and `require` and `load` replace
 # those of `prelude_shared.rb`: a file is compiled as UTF-8, as the scripts are.
 # `require_relative` takes the name relative to the directory of the file it is called from,

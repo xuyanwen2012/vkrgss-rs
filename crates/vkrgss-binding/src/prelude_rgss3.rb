@@ -45,54 +45,6 @@ module Process
   module_function :exit!
 end
 
-# The rules of loading stood on the lines below. They moved to `prelude_load_rgss3.rb`,
-# evaluated after this file from line 48, which a script of script mode gets too. The
-# comment lines keep the line numbers of what follows.
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-
 # A modal message: the text goes to the error stream and to the host, and is shown in the
 # message panel until the host has dismissed it.
 def vkrgss_msgbox(text)

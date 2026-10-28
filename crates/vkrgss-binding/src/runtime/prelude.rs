@@ -19,14 +19,9 @@ const PRELUDE: &str = include_str!("../prelude.rb");
 /// function of [`kernel`].
 const PRELUDE_RGSS3: &str = include_str!("../prelude_rgss3.rb");
 
-/// The rules of loading of RGSS3, after [`PRELUDE_RGSS3`], in whose lines from
-/// [`PRELUDE_LOAD_RGSS3_LINE`] on they stood: `require` and `load` that compile as UTF-8,
-/// `require_relative` and `autoload`. A script over Ruby 1.9 gets them too.
+/// The rules of loading of RGSS3, after [`PRELUDE_RGSS3`]: `require` and `load` that
+/// compile as UTF-8, `require_relative` and `autoload`. A script over Ruby 1.9 gets them too.
 const PRELUDE_LOAD_RGSS3: &str = include_str!("../prelude_load_rgss3.rb");
-
-/// The line [`PRELUDE_LOAD_RGSS3`] is evaluated from, so that its backtraces have the
-/// positions they had in [`PRELUDE_RGSS3`].
-const PRELUDE_LOAD_RGSS3_LINE: u32 = 48;
 
 /// What the preparation evaluates for every runtime, after [`PRELUDE`] or before
 /// [`PRELUDE_RGSS3`]: `require` and `load` limited to the game directory.
@@ -91,7 +86,7 @@ pub(crate) fn prepare(ruby: &Ruby) -> Result<(), RubyError> {
         // The prelude of RGSS3 replaces `require` and `load` of the shared one.
         ruby.eval_protected(PRELUDE_SHARED, PRELUDE_NAME, 1)?;
         ruby.eval_protected(PRELUDE_RGSS3, PRELUDE_NAME, 1)?;
-        ruby.eval_protected(PRELUDE_LOAD_RGSS3, PRELUDE_NAME, PRELUDE_LOAD_RGSS3_LINE)?;
+        ruby.eval_protected(PRELUDE_LOAD_RGSS3, PRELUDE_NAME, 1)?;
         ruby.eval_protected(PRELUDE_DL, PRELUDE_NAME, 1)?;
     } else {
         ruby.eval_protected(PRELUDE, PRELUDE_NAME, 1)?;
@@ -130,7 +125,7 @@ pub(crate) fn prepare_loading(ruby: &Ruby) -> Result<(), RubyError> {
     }
     ruby.eval_protected(PRELUDE_SHARED, PRELUDE_NAME, 1)?;
     if rb::RUBY_19 {
-        ruby.eval_protected(PRELUDE_LOAD_RGSS3, PRELUDE_NAME, PRELUDE_LOAD_RGSS3_LINE)?;
+        ruby.eval_protected(PRELUDE_LOAD_RGSS3, PRELUDE_NAME, 1)?;
     }
     Ok(())
 }
