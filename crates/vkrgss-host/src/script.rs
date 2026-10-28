@@ -8,13 +8,16 @@
 //! Frames count from 0. Button names are those of the `Input` constants (`DOWN`, `LEFT`,
 //! `RIGHT`, `UP`, `A`, `B`, `C`, `X`, `Y`, `Z`, `L`, `R`, `SHIFT`, `CTRL`, `ALT`, `F5` to
 //! `F9`) in either case. Blanks around entries and names are ignored, and so are empty entries
-//! such as the one after a trailing comma.
+//! such as the one after a trailing comma. The entries and their frames are read as those of
+//! every frame schedule (`crate::frames`).
 
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use thiserror::Error;
 use vkrgss_proto::{Button, InputSnapshot};
+
+use crate::frames::{self, Entry, EntryError};
 
 /// The buttons held from given frames on.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -46,18 +49,19 @@ impl InputScript {
     /// Reads a script; see the module documentation for the syntax.
     pub fn parse(text: &str) -> Result<InputScript, ScriptError> {
         let mut entries = BTreeMap::new();
-        for entry in text.split([',', '\n']).map(str::trim) {
-            if entry.is_empty() {
-                continue;
-            }
+        for entry in frames::entries(text) {
+            let Entry {
+                frame,
+                rest: buttons,
+                text: entry,
+            } = entry.map_err(|(error, entry)| {
+                let entry = entry.to_owned();
+                match error {
+                    EntryError::MissingColon => ScriptError::MissingColon { entry },
+                    EntryError::InvalidFrame => ScriptError::InvalidFrame { entry },
+                }
+            })?;
             let owned = || entry.to_owned();
-            let (frame, buttons) = entry
-                .split_once(':')
-                .ok_or_else(|| ScriptError::MissingColon { entry: owned() })?;
-            let frame: u64 = frame
-                .trim()
-                .parse()
-                .map_err(|_| ScriptError::InvalidFrame { entry: owned() })?;
             let mut snapshot = InputSnapshot::EMPTY;
             if !buttons.trim().is_empty() {
                 for name in buttons.split('+').map(str::trim) {

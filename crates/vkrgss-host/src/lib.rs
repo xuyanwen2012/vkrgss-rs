@@ -30,6 +30,7 @@
 mod audio;
 mod clock;
 mod display;
+mod frames;
 mod gamepad;
 mod headless;
 mod keys;

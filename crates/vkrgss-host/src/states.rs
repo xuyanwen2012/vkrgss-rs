@@ -8,11 +8,14 @@
 //!
 //! Frames count from 0. Blanks around entries and their parts are ignored, and so are empty
 //! entries such as the one after a trailing comma. A frame may have several entries; they
-//! are made in the order written.
+//! are made in the order written. The entries and their frames are read as those of every
+//! frame schedule (`crate::frames`).
 
 use std::str::FromStr;
 
 use thiserror::Error;
+
+use crate::frames::{self, Entry, EntryError};
 
 /// The highest state slot.
 const LAST_SLOT: u8 = 9;
@@ -54,18 +57,19 @@ impl StateSchedule {
     /// Reads a schedule; see the module documentation for the syntax.
     pub fn parse(text: &str) -> Result<StateSchedule, ScheduleError> {
         let mut entries = Vec::new();
-        for entry in text.split([',', '\n']).map(str::trim) {
-            if entry.is_empty() {
-                continue;
-            }
+        for entry in frames::entries(text) {
+            let Entry {
+                frame,
+                rest: request,
+                text: entry,
+            } = entry.map_err(|(error, entry)| {
+                let entry = entry.to_owned();
+                match error {
+                    EntryError::MissingColon => ScheduleError::MissingColon { entry },
+                    EntryError::InvalidFrame => ScheduleError::InvalidFrame { entry },
+                }
+            })?;
             let owned = || entry.to_owned();
-            let (frame, request) = entry
-                .split_once(':')
-                .ok_or_else(|| ScheduleError::MissingColon { entry: owned() })?;
-            let frame: u64 = frame
-                .trim()
-                .parse()
-                .map_err(|_| ScheduleError::InvalidFrame { entry: owned() })?;
             let mut words = request.split_whitespace();
             let request = match words.next().map(str::to_ascii_lowercase).as_deref() {
                 Some("save") => StateRequest::Save,

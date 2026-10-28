@@ -6,7 +6,7 @@
 
 ## 2. One reader (`vkrgss-host`)
 
-- [ ] 2.1 Add the shared reader of entries and make `InputScript::parse` and `StateSchedule::parse` use it, as `design.md` says. Verify: the scenarios of `specs/host-session/spec.md`; the tests of task 1 and all earlier tests of both modules pass unchanged; `cargo clippy -p vkrgss-host --all-targets -- -D warnings` is clean.
+- [x] 2.1 Add the shared reader of entries and make `InputScript::parse` and `StateSchedule::parse` use it, as `design.md` says. Verify: the scenarios of `specs/host-session/spec.md`; the tests of task 1 and all earlier tests of both modules pass unchanged; `cargo clippy -p vkrgss-host --all-targets -- -D warnings` is clean.
 
 ## 3. Integration check
 
