@@ -2,7 +2,7 @@
 
 ## 1. Measure before (`vkrgss-vk`, no code change)
 
-- [ ] 1.1 Record the frame times of the chosen game and route with `--frame-stats` on llvmpipe (`VK_LOADER_DRIVERS_SELECT='*lvp*'`) and on RADV (`VK_LOADER_DRIVERS_SELECT='*radeon*' VKRGSS_TEST_DEVICE=RADV`) in `design.md` under "As built". Verify: the numbers and the command lines are in `design.md`.
+- [x] 1.1 Record the frame times of the chosen game and route with `--frame-stats` on llvmpipe (`VK_LOADER_DRIVERS_SELECT='*lvp*'`) and on RADV (`VK_LOADER_DRIVERS_SELECT='*radeon*' VKRGSS_TEST_DEVICE=RADV`) in `design.md` under "As built". Verify: the numbers and the command lines are in `design.md`.
 
 ## 2. `render` does not wait (`vkrgss-vk`)
 

@@ -77,8 +77,44 @@ does not improve is recorded, not hidden.
 
 ## Follow-ups
 
-None yet.
+- `--frame-stats` reports no percentile, so the 99th percentile frame time that the
+  measurement above asks for is not recorded; the largest value stands in. Reporting
+  percentiles is a change of `vkrgss-host`, outside this change.
+- No display was available for the measurement, so no windowed run on RADV was made; a
+  headless run presents nothing, and the waits this change removes from a shown frame do not
+  occur in it.
 
 ## As built
 
-(Frame times before/after go here.)
+### Frame times
+
+Machine: AMD Ryzen 5 9600X, its integrated GPU with RADV, and llvmpipe (Mesa 26.2.4), no
+display, so the runs are headless. A release build (`cargo build --release -p vkrgss`) runs
+Visions & Voices (a copy of the game of the `xarch` list) along the input schedule of the
+oracle's measurement V0 for 3700 frames: title, name input, the first maps with messages and
+weather. The command, with `<D>` empty for llvmpipe and `--device RADV` for RADV:
+
+    VK_LOADER_DRIVERS_SELECT='*lvp*'      # or '*radeon*' with VKRGSS_TEST_DEVICE=RADV
+    target/release/vkrgss <copy of vx-visions-and-voices> --headless --no-audio \
+      --frame-stats --runtime rgss2 --rtp RPGVX=<RTP of VX> \
+      --builtin-scripts <rpg_builtin_rgss2.rb> --seed 1 --frames 3700 \
+      --input @ref/tools/oracle/measurements/vx-v0-vv-input.txt <D>
+
+A headless run presents nothing, so its `present` rows count no frame, and `--frame-stats`
+reports the mean, the smallest and the largest value of a stage but no percentile; the
+largest value stands in for the 99th percentile (see Follow-ups). The wall time is that of
+the whole process. Times in milliseconds, three runs each.
+
+Before, at `9d37416d`:
+
+| Device | Run | `submit` mean | `submit` largest | `compose (device)` mean | `compose (device)` largest | Wall time (s) |
+|---|---|---|---|---|---|---|
+| llvmpipe | 1 | 9.299 | 2064.450 | 8.981 | 2064.122 | 35.6 |
+| llvmpipe | 2 | 8.030 | 12.696 | 7.844 | 12.564 | 30.8 |
+| llvmpipe | 3 | 8.057 | 12.602 | 7.873 | 12.551 | 30.9 |
+| RADV | 1 | 0.682 | 3.025 | 0.632 | 1.869 | 3.6 |
+| RADV | 2 | 0.678 | 2.788 | 0.632 | 1.510 | 3.2 |
+| RADV | 3 | 0.681 | 2.901 | 0.632 | 1.692 | 3.2 |
+
+The first llvmpipe run has one frame of two seconds that the later runs do not have, which
+raises its mean. `encode`, `bin` and `upload` have means below 0.006 ms in every run.
