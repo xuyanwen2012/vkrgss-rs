@@ -19,8 +19,11 @@
 ))]
 
 use std::fs;
+use std::io::ErrorKind;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::thread;
+use std::time::Duration;
 
 use tempfile::TempDir;
 use vkrgss_binding::testing::host::{Game, RGSS3_STAND_IN};
@@ -77,9 +80,18 @@ fn copy_headless(program: &Path, game: &impl TestGame, arguments: &[&str]) -> Ra
     let work = tempfile::tempdir().expect("a temporary directory");
     let arguments = headless_arguments(game, arguments);
     let arguments: Vec<&str> = arguments.iter().map(String::as_str).collect();
-    let output = command_of(program, work.path(), &arguments)
-        .output()
-        .expect("the program starts");
+    // Another test's thread can fork while the copy is still open for writing; the child
+    // holds that descriptor until it executes, and the copy cannot be executed meanwhile.
+    let mut tries = 0;
+    let output = loop {
+        match command_of(program, work.path(), &arguments).output() {
+            Err(error) if error.kind() == ErrorKind::ExecutableFileBusy && tries < 50 => {
+                tries += 1;
+                thread::sleep(Duration::from_millis(20));
+            }
+            started => break started.expect("the program starts"),
+        }
+    };
     Ran { output, work }
 }
 

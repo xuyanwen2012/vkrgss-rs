@@ -1830,16 +1830,18 @@ mod tests {
     fn a_guest_that_does_not_read_is_ended_once_the_host_has_gone() {
         let dir = tempfile::tempdir().unwrap();
         let (host, mut stand_in, connection, relay) = relaying_stand_in(dir.path());
-        // Far more than the buffers of the socket hold.
-        for index in 0..200_000_u32 {
+        // Far more than the buffers of the socket hold, about 2 MB.
+        for index in 0..50_000_u32 {
             let snapshot = InputSnapshot::EMPTY.with_key((index % 200) as u8 + 1);
             host.send(HostToGuest::Input(snapshot)).unwrap();
         }
         let started = Instant::now();
         drop(host);
         let relayed = relay.join().unwrap();
+        // The wait for the guest, after the relay has taken what the host sent before it
+        // went, which takes seconds of a debug build on a loaded runner.
         assert!(
-            started.elapsed() < Duration::from_secs(10),
+            started.elapsed() < GUEST_WAIT + Duration::from_secs(10),
             "{:?}",
             started.elapsed()
         );
