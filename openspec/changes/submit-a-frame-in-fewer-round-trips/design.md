@@ -83,6 +83,10 @@ does not improve is recorded, not hidden.
 - No display was available for the measurement, so no windowed run on RADV was made; a
   headless run presents nothing, and the waits this change removes from a shown frame do not
   occur in it.
+- `docs/running.md`, "Frame times", still says that the `submit` row includes the wait for
+  the uploads and the compose and that `present` waits for its pass alone. In a window that
+  wait is now part of `present`; `FrameTiming` in `vkrgss-vk` says so. The page is outside
+  the scope of this change.
 
 ## As built
 
@@ -123,6 +127,15 @@ does not improve is recorded, not hidden.
   right after a render of its own. `attach_window` needs a window and is exercised through
   `attach_headless_surface`, which makes the same call.
 
+### Same frames
+
+`cargo xtask xarch baseline --at 9d37416d` and then `cargo xtask xarch check`, both with
+`VK_LOADER_DRIVERS_SELECT='*lvp*'` over the ten games of the owner's list, found every game
+identical: 81 frames and 17 save files, none different. The games of VX Ace run their guest
+in a process, which needs `XDG_RUNTIME_DIR` to name a directory the sandbox of the run can
+write; with the default one of the session both failed to start in a first baseline run,
+before any frame, and both runs above set it to a directory below `TMPDIR`.
+
 ### Frame times
 
 Machine: AMD Ryzen 5 9600X, its integrated GPU with RADV, and llvmpipe (Mesa 26.2.4), no
@@ -155,3 +168,25 @@ Before, at `9d37416d`:
 
 The first llvmpipe run has one frame of two seconds that the later runs do not have, which
 raises its mean. `encode`, `bin` and `upload` have means below 0.006 ms in every run.
+
+After, at the commit of task group 3 (`cf9e1b89`), with the same commands:
+
+| Device | Run | `submit` mean | `submit` largest | `compose (device)` mean | `compose (device)` largest | Wall time (s) |
+|---|---|---|---|---|---|---|
+| llvmpipe | 1 | 8.367 | 13.140 | 8.108 | 13.074 | 32.1 |
+| llvmpipe | 2 | 8.189 | 15.644 | 8.018 | 15.212 | 31.4 |
+| llvmpipe | 3 | 8.224 | 13.736 | 8.027 | 13.609 | 31.6 |
+| RADV | 1 | 0.683 | 3.038 | 0.633 | 1.850 | 3.2 |
+| RADV | 2 | 0.686 | 2.912 | 0.634 | 1.906 | 3.2 |
+| RADV | 3 | 0.679 | 2.795 | 0.632 | 1.638 | 3.2 |
+
+No improvement, as expected of a headless run: it presents nothing, and its one wait per
+frame, for the compose, is still there, now in `take_frame_timing` (counted in `submit`)
+instead of in `render`. On RADV the numbers are those of before within 0.01 ms. On
+llvmpipe the `submit` means are 2 to 4 % above those of the two comparable runs before
+(8.19 to 8.37 ms against 8.03 and 8.06 ms) and the wall times 0.5 to 1.3 s longer; the
+`compose (device)` means rose by as much, so the device work itself took longer, and these
+runs do not tell whether that is the change or the load of the machine. The frames are
+identical (task 4.3). The change removes the wait of `render` from a shown frame in a
+window, which this machine could not measure (see Follow-ups); there the tests count one
+wait per rendered and presented frame instead of two.

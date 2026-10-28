@@ -16,6 +16,6 @@
 
 ## 4. Measure after and integration check
 
-- [ ] 4.1 Record the frame times after, with the same commands, under "As built". Verify: the numbers are in `design.md`.
-- [ ] 4.2 Run the AMD GPU tests. Verify: `VK_LOADER_DRIVERS_SELECT='*radeon*' VKRGSS_TEST_DEVICE=RADV cargo test -p vkrgss-vk` passes.
-- [ ] 4.3 Run the full gate and the cross-architecture check. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0, `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask xarch check` reports every game identical, and `openspec validate submit-a-frame-in-fewer-round-trips --strict` passes.
+- [x] 4.1 Record the frame times after, with the same commands, under "As built". Verify: the numbers are in `design.md`.
+- [x] 4.2 Run the AMD GPU tests. Verify: `VK_LOADER_DRIVERS_SELECT='*radeon*' VKRGSS_TEST_DEVICE=RADV cargo test -p vkrgss-vk` passes.
+- [x] 4.3 Run the full gate and the cross-architecture check. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0, `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask xarch check` reports every game identical, and `openspec validate submit-a-frame-in-fewer-round-trips --strict` passes.
