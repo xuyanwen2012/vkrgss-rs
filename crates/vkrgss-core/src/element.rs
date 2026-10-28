@@ -10,7 +10,7 @@ use vkrgss_proto::{BitmapId, PlaneRules};
 use crate::scene::{Rules, ViewportId};
 use crate::tilemap::TileCache;
 use crate::turned::Turned;
-use crate::window::{Cache, Caches};
+use crate::window::{Cache, Caches, Kind, rgss2, rgss3};
 use crate::{Bitmaps, Color, Rect, SharedTable, Tone};
 
 /// An opacity as scripts assign it, clamped to 0 to 255.
@@ -328,9 +328,9 @@ pub struct Window {
     counted: (bool, bool),
     /// The bitmaps drawn from the window skin.
     pub(crate) caches: Caches,
-    /// What a window of RGSS2 or RGSS3 keeps beside its properties; `None` in a window of
-    /// RGSS1.
-    pub(crate) rgss2: Option<crate::window::rgss2::State>,
+    /// The runtime of the window, with what a window of that runtime keeps beside its
+    /// properties.
+    pub(crate) kind: Kind,
 }
 
 impl Window {
@@ -358,7 +358,7 @@ impl Window {
             pause_step: 0,
             counted: (true, false),
             caches: Caches::default(),
-            rgss2: None,
+            kind: Kind::Rgss1,
         }
     }
 
@@ -366,7 +366,7 @@ impl Window {
     /// [`Window::call`].
     pub(crate) fn new_rgss2(viewport: Option<ViewportId>, stamp: u64) -> Window {
         Window {
-            rgss2: Some(crate::window::rgss2::State::new()),
+            kind: Kind::Rgss2(rgss2::State::new()),
             ..Window::new(viewport, stamp)
         }
     }
@@ -377,7 +377,7 @@ impl Window {
         Window {
             order: Order { z: 100, stamp },
             back_opacity: 192,
-            rgss2: Some(crate::window::rgss2::State::new_rgss3()),
+            kind: Kind::Rgss3(rgss2::State::new(), rgss3::State::new()),
             ..Window::new(viewport, stamp)
         }
     }
@@ -445,7 +445,7 @@ impl Window {
     /// Lets the counters follow `active` and `pause` when their fields were assigned. In a
     /// window of RGSS2 they follow the calls instead.
     pub(crate) fn follow_flags(&mut self) {
-        if self.rgss2.is_some() {
+        if !matches!(self.kind, Kind::Rgss1) {
             return;
         }
         let (active, pause) = self.counted;

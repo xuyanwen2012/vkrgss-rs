@@ -2,7 +2,7 @@
 
 ## 1. The kind of a window (`vkrgss-core`)
 
-- [ ] 1.1 Replace `Window::rgss2` and `rgss2::State::rgss3` by one kind enum as `design.md` says, and make windows of each runtime with it. Verify: `cargo test -p vkrgss-core` passes with no expectation changed; `grep -n "rgss2: Option\|rgss3: Option" crates/vkrgss-core/src` finds nothing for windows.
+- [x] 1.1 Replace `Window::rgss2` and `rgss2::State::rgss3` by one kind enum as `design.md` says, and make windows of each runtime with it. Verify: `cargo test -p vkrgss-core` passes with no expectation changed; `grep -n "rgss2: Option\|rgss3: Option" crates/vkrgss-core/src` finds nothing for windows.
 
 ## 2. One dispatch (`vkrgss-core`)
 

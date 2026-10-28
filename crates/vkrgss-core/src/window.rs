@@ -476,7 +476,7 @@ impl Window {
     /// is left as it is.
     pub(crate) fn refresh_caches(&mut self, bitmaps: &mut Bitmaps) {
         // A window of RGSS2 builds its bitmaps at its calls, not for a frame.
-        if self.rgss2.is_some() {
+        if !matches!(self.kind, Kind::Rgss1) {
             return;
         }
         self.follow_flags();
@@ -627,6 +627,15 @@ impl Assembly<'_> {
             piece(from, centre_x, y + height - 16, opacity);
         }
     }
+}
+
+/// The runtime a window belongs to, with what a window of that runtime keeps beside its
+/// properties. A window of RGSS3 keeps what one of RGSS2 keeps, and its own beyond that.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum Kind {
+    Rgss1,
+    Rgss2(rgss2::State),
+    Rgss3(rgss2::State, rgss3::State),
 }
 
 pub(crate) mod rgss2;

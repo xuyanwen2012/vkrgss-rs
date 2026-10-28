@@ -52,7 +52,7 @@
 use vkrgss_proto::BitmapId;
 
 use super::rgss2::{self, CURSOR, PAUSE, WindowCall, open_rows};
-use super::{clip_to, cursor_pieces, layer};
+use super::{Kind, clip_to, cursor_pieces, layer};
 use crate::extract::{Assembly, Level, Look};
 use crate::geometry::Geometry;
 use crate::{BitmapError, Bitmaps, Rect, Tone, Window};
@@ -85,7 +85,7 @@ pub(crate) struct State {
 }
 
 impl State {
-    pub(super) fn new() -> State {
+    pub(crate) fn new() -> State {
         State {
             padding: 8,
             padding_bottom: 8,
@@ -112,11 +112,17 @@ fn draw_cursor(
 
 impl Window {
     pub(super) fn rgss3(&self) -> Option<&State> {
-        self.rgss2.as_ref()?.rgss3.as_ref()
+        match &self.kind {
+            Kind::Rgss3(_, rules) => Some(rules),
+            Kind::Rgss1 | Kind::Rgss2(_) => None,
+        }
     }
 
     fn rgss3_mut(&mut self) -> Option<&mut State> {
-        self.rgss2.as_mut()?.rgss3.as_mut()
+        match &mut self.kind {
+            Kind::Rgss3(_, rules) => Some(rules),
+            Kind::Rgss1 | Kind::Rgss2(_) => None,
+        }
     }
 
     /// The distance from the window's left, top and right edge to its contents area: 8 in a
@@ -198,7 +204,7 @@ impl Window {
                 self.show_contents(true);
             }
             WindowCall::Openness(openness) => {
-                if let Some(state) = &mut self.rgss2 {
+                if let Kind::Rgss2(state) | Kind::Rgss3(state, _) = &mut self.kind {
                     state.openness = openness.clamp(0, 255) as u8;
                 }
                 self.show_contents(true);
@@ -266,7 +272,7 @@ impl Window {
 
     /// Lets the contents follow `visible` when the call `latches`.
     fn show_contents(&mut self, latches: bool) {
-        if let Some(state) = &mut self.rgss2
+        if let Kind::Rgss2(state) | Kind::Rgss3(state, _) = &mut self.kind
             && latches
         {
             state.contents_shown = self.visible;
@@ -303,7 +309,7 @@ impl Window {
         // Halves are rounded towards zero, which matters for a negative size.
         let centre = (width / 2 - 8, height / 2 - 8);
         let skin = self.windowskin;
-        if let Some(state) = &mut self.rgss2 {
+        if let Kind::Rgss2(state) | Kind::Rgss3(state, _) = &mut self.kind {
             state.arrows =
                 rgss2::arrows(shown.map(|shown| shown && allowed), (width, height), centre);
             state.arrow_skin = skin;

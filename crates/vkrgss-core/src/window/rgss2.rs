@@ -29,7 +29,7 @@
 use vkrgss_proto::BitmapId;
 
 use super::{
-    CORNER, Key, PADDING, clip_to, cursor_pieces, frame_pieces, layer, rgss3, stretch_bilinear,
+    CORNER, Key, Kind, PADDING, clip_to, cursor_pieces, frame_pieces, layer, stretch_bilinear,
     stretched_part,
 };
 use crate::extract::{Assembly, Level, Look, intersect};
@@ -132,8 +132,6 @@ pub(crate) struct State {
     /// drawn in, and the skin of that moment, from which they are drawn.
     pub(super) arrows: Vec<Arrow>,
     pub(super) arrow_skin: Option<BitmapId>,
-    /// What a window of RGSS3 keeps beyond that; `None` in a window of RGSS2.
-    pub(super) rgss3: Option<rgss3::State>,
 }
 
 impl State {
@@ -143,15 +141,6 @@ impl State {
             contents_shown: true,
             arrows: Vec::new(),
             arrow_skin: None,
-            rgss3: None,
-        }
-    }
-
-    /// The state of a new window of RGSS3.
-    pub(crate) fn new_rgss3() -> State {
-        State {
-            rgss3: Some(rgss3::State::new()),
-            ..State::new()
         }
     }
 }
@@ -308,7 +297,7 @@ impl Window {
     /// z, whose calls latch. [`Window::is_rgss3`] tells the two apart, and a window of
     /// RGSS1 is neither.
     pub fn is_rgss2(&self) -> bool {
-        self.rgss2.is_some()
+        self.rgss2_state().is_some()
     }
 
     /// Whether this is a window of RGSS3.
@@ -319,7 +308,15 @@ impl Window {
     /// How far the window is open, from 0 to 255; 255 in a window of RGSS1, which is always
     /// open.
     pub fn openness(&self) -> u8 {
-        self.rgss2.as_ref().map_or(255, |state| state.openness)
+        self.rgss2_state().map_or(255, |state| state.openness)
+    }
+
+    /// What a window of RGSS2 or RGSS3 keeps beside its properties.
+    pub(super) fn rgss2_state(&self) -> Option<&State> {
+        match &self.kind {
+            Kind::Rgss2(state) | Kind::Rgss3(state, _) => Some(state),
+            Kind::Rgss1 => None,
+        }
     }
 
     /// One call of a script on the window.
@@ -356,7 +353,7 @@ impl Window {
             }
             return;
         }
-        if self.rgss2.is_none() {
+        if self.rgss2_state().is_none() {
             return self.call_rgss1(call);
         }
         if self.is_rgss3() {
@@ -400,7 +397,7 @@ impl Window {
                 self.latch(bitmaps);
             }
             WindowCall::Openness(openness) => {
-                if let Some(state) = &mut self.rgss2 {
+                if let Kind::Rgss2(state) | Kind::Rgss3(state, _) = &mut self.kind {
                     state.openness = openness.clamp(0, 255) as u8;
                 }
                 self.latch(bitmaps);
@@ -509,7 +506,7 @@ impl Window {
     /// contents the arrows stay as they were, with the skin they had.
     fn latch(&mut self, bitmaps: &Bitmaps) {
         let contents = self.contents.and_then(|id| bitmaps.rect(id).ok());
-        let Some(state) = &mut self.rgss2 else {
+        let (Kind::Rgss2(state) | Kind::Rgss3(state, _)) = &mut self.kind else {
             return;
         };
         state.contents_shown = self.visible;
@@ -629,12 +626,11 @@ impl Assembly<'_> {
     /// showing the window's row `stretch_index(i, height, n)`, which is a quad stretched
     /// from all rows of the window into those `n`.
     pub(crate) fn window_rgss2(&mut self, window: &Window, level: &Level) {
-        let Some(state) = &window.rgss2 else {
-            return;
+        let state = match &window.kind {
+            Kind::Rgss1 => return,
+            Kind::Rgss2(state) => state,
+            Kind::Rgss3(state, rules) => return self.window_rgss3(window, state, rules, level),
         };
-        if let Some(rules) = &state.rgss3 {
-            return self.window_rgss3(window, state, rules, level);
-        }
         if !window.visible || window.width <= 0 || window.height <= 0 {
             return;
         }
