@@ -2,7 +2,7 @@
 
 ## 1. Split `runtime.rs` (`vkrgss-binding`)
 
-- [ ] 1.1 Move `runtime.rs` into the modules `design.md` names. Verify: `cargo test -p vkrgss-binding -p vkrgss-binding-rgss3` passes with no test removed; every crate that uses the binding compiles unchanged.
+- [x] 1.1 Move `runtime.rs` into the modules `design.md` names. Verify: `cargo test -p vkrgss-binding -p vkrgss-binding-rgss3` passes with no test removed; every crate that uses the binding compiles unchanged.
 
 ## 2. Split `win32api.rs` and `font.rs` (`vkrgss-binding`)
 
