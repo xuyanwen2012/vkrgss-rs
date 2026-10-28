@@ -2782,6 +2782,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "vkrgss-ruby-glue"
+version = "0.4.1"
+
+[[package]]
 name = "vkrgss-ruby-sys"
 version = "0.4.1"
 dependencies = [
@@ -2790,6 +2794,7 @@ dependencies = [
  "libz-sys",
  "sha2",
  "thiserror 2.0.21",
+ "vkrgss-ruby-glue",
 ]
 
 [[package]]
@@ -2800,6 +2805,7 @@ dependencies = [
  "libc",
  "libz-sys",
  "thiserror 2.0.21",
+ "vkrgss-ruby-glue",
 ]
 
 [[package]]

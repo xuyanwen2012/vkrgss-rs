@@ -110,6 +110,13 @@
 //! With the environment variable `VKRGSS_GC_STRESS` set to a number of 1 or more, the
 //! collector runs at every allocation from the end of start-up on (`GC.stress = true`).
 //!
+//! # The shared glue
+//!
+//! As in `vkrgss-ruby-sys`, the part that bridges Rust and Ruby is that of
+//! `vkrgss-ruby-glue`: `Ruby` and `Root` are the types of that crate for `CApi`, this
+//! interpreter's implementation of its trait, `protect` is its protected call for this
+//! interpreter, and `Raised`, `RubyError`, `HostResult`, `Raise` and `Arity` are its types.
+//!
 //! # Differences from `vkrgss-ruby-sys`
 //!
 //! The public items have the names and the meaning they have in `vkrgss-ruby-sys`, except:
@@ -129,7 +136,7 @@
 //! | `ffi::RObject` with `iv_tbl` | the layout of 1.9.2: slots inside the object, or a pointer to them |
 //! | the type tags `ffi::T_*` and the flag bits `ffi::FL_*` | the values of the 1.9.2 headers; `T_COMPLEX`, `T_RATIONAL`, `T_NODE`, `T_ZOMBIE` and `FL_UNTRUSTED` are new |
 //! | `ffi::ruby_finalize` ends the interpreter | still declared; `ffi::ruby_cleanup`, which also terminates the Ruby threads, is what ends it |
-//! | `Ruby::str_new`, `Ruby::str_new_text` give the same string | `Ruby::str_new` labels the string ASCII-8BIT and `Ruby::str_new_text` UTF-8, valid or not; `Ruby::str_new_utf8` is the latter for a `&str` |
+//! | `Ruby::str_new`, `Ruby::str_new_text` and `Ruby::str_new_utf8`, the latter for a `&str`, give the same string | `Ruby::str_new` labels the string ASCII-8BIT and `Ruby::str_new_text` and `Ruby::str_new_utf8` UTF-8, valid or not |
 //! | `Ruby::eval`, `Ruby::eval_protected` | the same; the source is handed over as a UTF-8 string, a backtrace position outside a method reads ``file:line:in `<main>'``, and the backtrace ends with the frame of the `eval` call itself (``vkrgss:in `eval'``, with the script name, or ``ruby:in `eval'`` without one) |
 //! | `$0` is the script name | the same; an empty `Options::script_name` gives the interpreter no name, and `$0` is `false` |
 //! | `Raised` of a `throw` or `break` | the same shape; the interpreter keeps what the jump carries as its current error until the jump is continued or described |
@@ -162,21 +169,22 @@ on_target! {
     // what makes rustc link it.
     extern crate libz_sys;
 
-    mod call;
+    mod capi;
     pub mod ffi;
-    mod host;
     mod interp;
     mod protect;
-    mod root;
     mod signals;
 
-    pub use call::RubyError;
-    pub use host::{Arity, HostResult, Raise};
+    pub use capi::CApi;
     pub use interp::{
         GC_STRESS_VARIABLE, HASH_SEED, Interpreter, MIN_STACK_SIZE, Options, RUBY_API, Ruby,
         RubyApi, STACK_HEADROOM, StartError,
     };
-    pub use protect::{Raised, protect};
-    pub use root::Root;
+    pub use protect::protect;
+    pub use vkrgss_ruby_glue::{Arity, HostResult, Raise, Raised, RubyError};
+
+    /// A Ruby value that the collector treats as reachable for as long as the `Root` exists:
+    /// `vkrgss_ruby_glue::Root` over this interpreter, made by `Ruby::root`.
+    pub type Root = vkrgss_ruby_glue::Root<CApi>;
     pub use signals::{SIGNALS_TAKEN_BY_RUBY, restart_thread_timer, threads_lost_in_a_copy};
 }

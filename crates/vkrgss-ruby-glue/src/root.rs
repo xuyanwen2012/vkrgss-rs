@@ -2,9 +2,10 @@
 
 use std::marker::PhantomData;
 
-use crate::ffi::{self, VALUE};
-use crate::interp::Ruby;
+use crate::VALUE;
+use crate::interpreter::Interpreter;
 use crate::protect::{self, Raised};
+use crate::ruby::Ruby;
 
 /// A Ruby value that the collector treats as reachable for as long as the `Root` exists.
 ///
@@ -15,12 +16,13 @@ use crate::protect::{self, Raised};
 /// The value sits in a heap slot whose address is registered with the collector, so the
 /// `Root` itself can move freely. It is neither `Send` nor `Sync`: it is created, used and
 /// dropped on the interpreter thread, while the interpreter is alive.
-pub struct Root {
+pub struct Root<I: Interpreter> {
     slot: Box<VALUE>,
     not_send: PhantomData<*mut ()>,
+    interpreter: PhantomData<I>,
 }
 
-impl Root {
+impl<I: Interpreter> Root<I> {
     /// The rooted value.
     pub fn get(&self) -> VALUE {
         *self.slot
@@ -36,23 +38,23 @@ impl Root {
     }
 }
 
-impl Drop for Root {
+impl<I: Interpreter> Drop for Root<I> {
     fn drop(&mut self) {
         // SAFETY: a `Root` cannot leave the interpreter thread, and this is the address that
         // `Ruby::root` registered.
-        unsafe { ffi::rb_gc_unregister_address(&mut *self.slot) };
+        unsafe { I::rb_gc_unregister_address(&mut *self.slot) };
     }
 }
 
-unsafe extern "C" fn register_body(data: VALUE) -> VALUE {
+unsafe extern "C" fn register_body<I: Interpreter>(data: VALUE) -> VALUE {
     // SAFETY: `Ruby::root` passes the address of a heap slot that holds a live value and
     // stays valid until it is unregistered. Registering allocates a list node, which raises
     // `NoMemoryError` when it fails, hence the protection.
-    unsafe { ffi::rb_gc_register_address(data as *mut VALUE) };
-    ffi::Qnil
+    unsafe { I::rb_gc_register_address(data as *mut VALUE) };
+    I::QNIL
 }
 
-impl Ruby {
+impl<I: Interpreter> Ruby<I> {
     /// Registers a value as a root of the collector.
     ///
     /// The error is the `NoMemoryError` of a failed registration; nothing is registered
@@ -62,16 +64,17 @@ impl Ruby {
     ///
     /// `value` must be a special constant or a live object, and the returned `Root` must be
     /// dropped before the interpreter is.
-    pub unsafe fn root(&self, value: VALUE) -> Result<Root, Raised> {
+    pub unsafe fn root(&self, value: VALUE) -> Result<Root<I>, Raised> {
         let mut slot = Box::new(value);
         // SAFETY: `&self` proves the thread. `protect` hands `register_body` the address of
         // the slot itself, which is stable for the life of the box; `Drop` unregisters it
         // before the box is freed. On failure the slot was not registered and the box is
         // simply dropped, with the value still held by the caller's local.
-        unsafe { protect::protect(&mut *slot, register_body) }?;
+        unsafe { protect::protect::<I, _>(&mut *slot, register_body::<I>) }?;
         Ok(Root {
             slot,
             not_send: PhantomData,
+            interpreter: PhantomData,
         })
     }
 }

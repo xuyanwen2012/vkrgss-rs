@@ -10,9 +10,10 @@ use std::ffi::{CStr, c_char, c_int, c_long};
 use std::panic::{self, AssertUnwindSafe};
 use std::ptr::NonNull;
 
-use crate::ffi::{self, VALUE};
-use crate::interp::Ruby;
+use crate::interpreter::Interpreter;
 use crate::protect::{self, Raised};
+use crate::ruby::Ruby;
+use crate::{AnyArgsFn, VALUE};
 
 /// What a host function hands back to Ruby: a value, or the request to raise.
 pub type HostResult = Result<VALUE, Raise>;
@@ -22,7 +23,7 @@ pub type HostResult = Result<VALUE, Raise>;
 pub enum Raise {
     /// Raise a new exception of this class with this message.
     New {
-        /// An exception class, such as [`rb_eArgError`](ffi::rb_eArgError).
+        /// An exception class, such as `rb_eArgError`.
         class: VALUE,
         /// The exception's message.
         message: String,
@@ -57,12 +58,12 @@ struct NewException {
     len: c_long,
 }
 
-unsafe extern "C" fn new_exception_body(data: VALUE) -> VALUE {
+unsafe extern "C" fn new_exception_body<I: Interpreter>(data: VALUE) -> VALUE {
     // SAFETY: `finish` passes a pointer to a `NewException` whose message buffer outlives
     // the call.
     unsafe {
         let new = &*(data as *const NewException);
-        ffi::rb_exc_new(new.class, new.message, new.len)
+        I::rb_exc_new(new.class, new.message, new.len)
     }
 }
 
@@ -90,7 +91,7 @@ enum Exit {
 ///
 /// On a thread that holds the interpreter only, called by Ruby (so that there is a handler to
 /// jump to).
-unsafe fn finish(outcome: std::thread::Result<HostResult>) -> VALUE {
+unsafe fn finish<I: Interpreter>(outcome: std::thread::Result<HostResult>) -> VALUE {
     let raise = match outcome {
         Ok(Ok(value)) => return value,
         Ok(Err(raise)) => raise,
@@ -102,12 +103,12 @@ unsafe fn finish(outcome: std::thread::Result<HostResult>) -> VALUE {
             }
             // Directly `Exception`, so that a script's bare `rescue` does not swallow it.
             // SAFETY: the class globals are set once the interpreter runs.
-            Raise::new(unsafe { ffi::rb_eException }, message)
+            Raise::new(unsafe { I::exception_class() }, message)
         }
     };
 
     let from_raised = |raised: Raised| {
-        if raised.state == ffi::TAG_RAISE || raised.state == ffi::TAG_FATAL {
+        if raised.state == I::TAG_RAISE || raised.state == I::TAG_FATAL {
             Exit::Raise(raised.exception)
         } else {
             Exit::Jump(raised.state)
@@ -125,7 +126,7 @@ unsafe fn finish(outcome: std::thread::Result<HostResult>) -> VALUE {
             // SAFETY: `new_exception_body` fits the contract of `protect`. Creating the
             // exception is protected because `message` is still alive here: a failure comes
             // back as a value instead of jumping over it.
-            let created = unsafe { protect::protect(&mut new, new_exception_body) };
+            let created = unsafe { protect::protect::<I, _>(&mut new, new_exception_body::<I>) };
             drop(message);
             match created {
                 Ok(exception) => Exit::Raise(exception),
@@ -139,8 +140,8 @@ unsafe fn finish(outcome: std::thread::Result<HostResult>) -> VALUE {
     // that is not an exception with a `TypeError`.
     unsafe {
         match exit {
-            Exit::Raise(exception) => ffi::rb_exc_raise(exception),
-            Exit::Jump(state) => ffi::rb_jump_tag(state),
+            Exit::Raise(exception) => I::rb_exc_raise(exception),
+            Exit::Jump(state) => I::rb_jump_tag(state),
         }
     }
 }
@@ -153,12 +154,13 @@ pub enum Arity {
     Any,
     /// Exactly this many arguments, from 0 to [`Arity::MAX_FIXED`]. Ruby checks the count
     /// before the body runs and raises its own `ArgumentError`
-    /// (`wrong number of arguments (1 for 2)`); `arity` is the count.
+    /// (`wrong number of arguments (1 for 2)` over Ruby 1.8.7, without the space over 1.9.2);
+    /// `arity` is the count.
     Fixed(u8),
 }
 
 impl Arity {
-    /// The largest fixed argument count Ruby 1.8 accepts for a C function.
+    /// The largest fixed argument count Ruby accepts for a C function.
     pub const MAX_FIXED: u8 = 15;
 
     /// The `argc` the definition functions of the C API take.
@@ -176,9 +178,9 @@ impl Arity {
 ///
 /// On a thread that holds the interpreter only, called by Ruby from a function registered for
 /// `F`; `args` must be live values, valid for this call.
-unsafe fn run<F>(recv: VALUE, args: &[VALUE]) -> VALUE
+unsafe fn run<I: Interpreter, F>(recv: VALUE, args: &[VALUE]) -> VALUE
 where
-    F: Fn(&Ruby, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
+    F: Fn(&Ruby<I>, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
 {
     let outcome = {
         const { assert!(size_of::<F>() == 0) };
@@ -194,15 +196,19 @@ where
         panic::catch_unwind(AssertUnwindSafe(|| function(&ruby, recv, args)))
     };
     // SAFETY: on a thread that holds the interpreter, called by Ruby.
-    unsafe { finish(outcome) }
+    unsafe { finish::<I>(outcome) }
 }
 
 /// The function Ruby calls for a host function of type `F` that takes any number of
 /// arguments. It is registered with `argc == -1`, so Ruby passes the arguments as a count and
 /// a pointer.
-unsafe extern "C" fn trampoline<F>(argc: c_int, argv: *const VALUE, recv: VALUE) -> VALUE
+unsafe extern "C" fn trampoline<I: Interpreter, F>(
+    argc: c_int,
+    argv: *const VALUE,
+    recv: VALUE,
+) -> VALUE
 where
-    F: Fn(&Ruby, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
+    F: Fn(&Ruby<I>, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
 {
     let args: &[VALUE] = if argc > 0 && !argv.is_null() {
         // SAFETY: Ruby passes `argc` live values at `argv`, valid for this call.
@@ -211,7 +217,7 @@ where
         &[]
     };
     // SAFETY: Ruby called this function, which was registered for `F`.
-    unsafe { run::<F>(recv, args) }
+    unsafe { run::<I, F>(recv, args) }
 }
 
 /// `VALUE`, once per argument name: the parameter types of a fixed-arity C function.
@@ -227,23 +233,23 @@ macro_rules! value_type {
 macro_rules! fixed_trampolines {
     ($($count:literal => $name:ident($($arg:ident),*);)*) => {
         $(
-            unsafe extern "C" fn $name<F>(recv: VALUE $(, $arg: VALUE)*) -> VALUE
+            unsafe extern "C" fn $name<I: Interpreter, F>(recv: VALUE $(, $arg: VALUE)*) -> VALUE
             where
-                F: Fn(&Ruby, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
+                F: Fn(&Ruby<I>, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
             {
                 // Plain data in this frame, where the collector's stack scan sees it.
                 let args: [VALUE; $count] = [$($arg),*];
                 // SAFETY: Ruby called this function, which was registered for `F`, with live
                 // values.
-                unsafe { run::<F>(recv, &args) }
+                unsafe { run::<I, F>(recv, &args) }
             }
         )*
 
         /// The fixed-arity trampoline of `F` for `count` arguments, as the pointer type the
         /// definition functions take.
-        fn fixed_trampoline_of<F>(count: u8) -> ffi::AnyArgsFn
+        fn fixed_trampoline_of<I: Interpreter, F>(count: u8) -> AnyArgsFn
         where
-            F: Fn(&Ruby, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
+            F: Fn(&Ruby<I>, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
         {
             match count {
                 $(
@@ -254,8 +260,8 @@ macro_rules! fixed_trampolines {
                     $count => unsafe {
                         std::mem::transmute::<
                             unsafe extern "C" fn(VALUE $(, value_type!($arg))*) -> VALUE,
-                            ffi::AnyArgsFn,
-                        >($name::<F>)
+                            AnyArgsFn,
+                        >($name::<I, F>)
                     },
                 )*
                 _ => panic!(
@@ -287,9 +293,9 @@ fixed_trampolines! {
 }
 
 /// The trampoline of `F` for `arity`, as the pointer type the definition functions take.
-fn trampoline_of<F>(_function: F, arity: Arity) -> ffi::AnyArgsFn
+fn trampoline_of<I: Interpreter, F>(_function: F, arity: Arity) -> AnyArgsFn
 where
-    F: Fn(&Ruby, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
+    F: Fn(&Ruby<I>, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
 {
     const {
         assert!(
@@ -298,8 +304,8 @@ where
         )
     };
     match arity {
-        Arity::Any => ffi::method_argv(trampoline::<F>),
-        Arity::Fixed(count) => fixed_trampoline_of::<F>(count),
+        Arity::Any => I::method_argv(trampoline::<I, F>),
+        Arity::Fixed(count) => fixed_trampoline_of::<I, F>(count),
     }
 }
 
@@ -321,12 +327,12 @@ enum Target {
 struct Define {
     target: Target,
     name: *const c_char,
-    function: Option<ffi::AnyArgsFn>,
+    function: Option<AnyArgsFn>,
     /// The `argc` the function is registered with; it matches the function's signature.
     argc: c_int,
 }
 
-unsafe extern "C" fn define_body(data: VALUE) -> VALUE {
+unsafe extern "C" fn define_body<I: Interpreter>(data: VALUE) -> VALUE {
     // SAFETY: `define` passes a pointer to a `Define` with a NUL-terminated name that
     // outlives the call, and for every target that takes one a function whose signature is
     // the one Ruby calls for `argc`. The definition functions raise for a frozen class or a
@@ -336,33 +342,33 @@ unsafe extern "C" fn define_body(data: VALUE) -> VALUE {
         let name = define.name;
         let argc = define.argc;
         match (define.target, define.function) {
-            (Target::Class { superclass }, _) => ffi::rb_define_class(name, superclass),
-            (Target::Module, _) => ffi::rb_define_module(name),
+            (Target::Class { superclass }, _) => I::rb_define_class(name, superclass),
+            (Target::Module, _) => I::rb_define_module(name),
             (Target::ClassUnder { outer, superclass }, _) => {
-                ffi::rb_define_class_under(outer, name, superclass)
+                I::rb_define_class_under(outer, name, superclass)
             }
-            (Target::ModuleUnder { outer }, _) => ffi::rb_define_module_under(outer, name),
+            (Target::ModuleUnder { outer }, _) => I::rb_define_module_under(outer, name),
             (Target::Method { class }, Some(function)) => {
-                ffi::rb_define_method(class, name, function, argc);
-                ffi::Qnil
+                I::rb_define_method(class, name, function, argc);
+                I::QNIL
             }
             (Target::PrivateMethod { class }, Some(function)) => {
-                ffi::rb_define_private_method(class, name, function, argc);
-                ffi::Qnil
+                I::rb_define_private_method(class, name, function, argc);
+                I::QNIL
             }
             (Target::SingletonMethod { object }, Some(function)) => {
-                ffi::rb_define_singleton_method(object, name, function, argc);
-                ffi::Qnil
+                I::rb_define_singleton_method(object, name, function, argc);
+                I::QNIL
             }
             (Target::ModuleFunction { module }, Some(function)) => {
-                ffi::rb_define_module_function(module, name, function, argc);
-                ffi::Qnil
+                I::rb_define_module_function(module, name, function, argc);
+                I::QNIL
             }
             (Target::GlobalFunction, Some(function)) => {
-                ffi::rb_define_global_function(name, function, argc);
-                ffi::Qnil
+                I::rb_define_global_function(name, function, argc);
+                I::QNIL
             }
-            (_, None) => ffi::Qnil,
+            (_, None) => I::QNIL,
         }
     }
 }
@@ -370,7 +376,7 @@ unsafe extern "C" fn define_body(data: VALUE) -> VALUE {
 /// # Safety
 ///
 /// On a thread that holds the interpreter only; the values inside `target` must be live.
-unsafe fn define(target: Target, name: &CStr) -> Result<VALUE, Raised> {
+unsafe fn define<I: Interpreter>(target: Target, name: &CStr) -> Result<VALUE, Raised> {
     let mut define = Define {
         target,
         name: name.as_ptr(),
@@ -378,7 +384,7 @@ unsafe fn define(target: Target, name: &CStr) -> Result<VALUE, Raised> {
         argc: -1,
     };
     // SAFETY: `define_body` fits the contract of `protect`.
-    unsafe { protect::protect(&mut define, define_body) }
+    unsafe { protect::protect::<I, _>(&mut define, define_body::<I>) }
 }
 
 /// Defines a host function at `target`, registered for `arity`.
@@ -386,24 +392,24 @@ unsafe fn define(target: Target, name: &CStr) -> Result<VALUE, Raised> {
 /// # Safety
 ///
 /// On a thread that holds the interpreter only; the values inside `target` must be live.
-unsafe fn define_function<F>(
+unsafe fn define_function<I: Interpreter, F>(
     target: Target,
     name: &CStr,
     arity: Arity,
     function: F,
 ) -> Result<(), Raised>
 where
-    F: Fn(&Ruby, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
+    F: Fn(&Ruby<I>, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
 {
     let mut define = Define {
         target,
         name: name.as_ptr(),
-        function: Some(trampoline_of(function, arity)),
+        function: Some(trampoline_of::<I, F>(function, arity)),
         argc: arity.argc(),
     };
     // SAFETY: `define_body` fits the contract of `protect`, and the trampoline was chosen
     // for the same arity as `argc`.
-    unsafe { protect::protect(&mut define, define_body) }.map(|_| ())
+    unsafe { protect::protect::<I, _>(&mut define, define_body::<I>) }.map(|_| ())
 }
 
 /// Definitions of classes, modules and host-backed methods.
@@ -423,7 +429,7 @@ where
 /// The body runs on a thread that holds the interpreter, in the middle of Ruby's own frames.
 /// The values it receives stay alive for the call; a value it creates stays alive while a
 /// local holds it.
-impl Ruby {
+impl<I: Interpreter> Ruby<I> {
     /// Defines a top-level class, or returns the existing one of that name.
     ///
     /// # Safety
@@ -431,13 +437,13 @@ impl Ruby {
     /// `superclass` must be a live class.
     pub unsafe fn define_class(&self, name: &CStr, superclass: VALUE) -> Result<VALUE, Raised> {
         // SAFETY: `&self` proves the thread; the caller guarantees the value.
-        unsafe { define(Target::Class { superclass }, name) }
+        unsafe { define::<I>(Target::Class { superclass }, name) }
     }
 
     /// Defines a top-level module, or returns the existing one of that name.
     pub fn define_module(&self, name: &CStr) -> Result<VALUE, Raised> {
         // SAFETY: `&self` proves the thread; no value is involved.
-        unsafe { define(Target::Module, name) }
+        unsafe { define::<I>(Target::Module, name) }
     }
 
     /// Defines a class inside a class or module.
@@ -452,7 +458,7 @@ impl Ruby {
         superclass: VALUE,
     ) -> Result<VALUE, Raised> {
         // SAFETY: `&self` proves the thread; the caller guarantees the values.
-        unsafe { define(Target::ClassUnder { outer, superclass }, name) }
+        unsafe { define::<I>(Target::ClassUnder { outer, superclass }, name) }
     }
 
     /// Defines a module inside a class or module.
@@ -462,7 +468,7 @@ impl Ruby {
     /// `outer` must be a live class or module.
     pub unsafe fn define_module_under(&self, outer: VALUE, name: &CStr) -> Result<VALUE, Raised> {
         // SAFETY: `&self` proves the thread; the caller guarantees the value.
-        unsafe { define(Target::ModuleUnder { outer }, name) }
+        unsafe { define::<I>(Target::ModuleUnder { outer }, name) }
     }
 
     /// Defines a public instance method of `class`, implemented by a host function.
@@ -477,7 +483,7 @@ impl Ruby {
         function: F,
     ) -> Result<(), Raised>
     where
-        F: Fn(&Ruby, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
+        F: Fn(&Ruby<I>, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
     {
         // SAFETY: the caller guarantees the same as the function called requires.
         unsafe { self.define_method_with_arity(class, name, Arity::Any, function) }
@@ -500,10 +506,10 @@ impl Ruby {
         function: F,
     ) -> Result<(), Raised>
     where
-        F: Fn(&Ruby, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
+        F: Fn(&Ruby<I>, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
     {
         // SAFETY: `&self` proves the thread; the caller guarantees the value.
-        unsafe { define_function(Target::Method { class }, name, arity, function) }
+        unsafe { define_function::<I, _>(Target::Method { class }, name, arity, function) }
     }
 
     /// Defines a private instance method of `class`, implemented by a host function.
@@ -518,7 +524,7 @@ impl Ruby {
         function: F,
     ) -> Result<(), Raised>
     where
-        F: Fn(&Ruby, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
+        F: Fn(&Ruby<I>, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
     {
         // SAFETY: the caller guarantees the same as the function called requires.
         unsafe { self.define_private_method_with_arity(class, name, Arity::Any, function) }
@@ -542,10 +548,10 @@ impl Ruby {
         function: F,
     ) -> Result<(), Raised>
     where
-        F: Fn(&Ruby, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
+        F: Fn(&Ruby<I>, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
     {
         // SAFETY: `&self` proves the thread; the caller guarantees the value.
-        unsafe { define_function(Target::PrivateMethod { class }, name, arity, function) }
+        unsafe { define_function::<I, _>(Target::PrivateMethod { class }, name, arity, function) }
     }
 
     /// Defines a method on one object only, such as a class method when `object` is a class.
@@ -560,7 +566,7 @@ impl Ruby {
         function: F,
     ) -> Result<(), Raised>
     where
-        F: Fn(&Ruby, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
+        F: Fn(&Ruby<I>, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
     {
         // SAFETY: the caller guarantees the same as the function called requires.
         unsafe { self.define_singleton_method_with_arity(object, name, Arity::Any, function) }
@@ -584,10 +590,12 @@ impl Ruby {
         function: F,
     ) -> Result<(), Raised>
     where
-        F: Fn(&Ruby, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
+        F: Fn(&Ruby<I>, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
     {
         // SAFETY: `&self` proves the thread; the caller guarantees the value.
-        unsafe { define_function(Target::SingletonMethod { object }, name, arity, function) }
+        unsafe {
+            define_function::<I, _>(Target::SingletonMethod { object }, name, arity, function)
+        }
     }
 
     /// Defines a module function: callable as `Module.name` and, where the module is
@@ -603,7 +611,7 @@ impl Ruby {
         function: F,
     ) -> Result<(), Raised>
     where
-        F: Fn(&Ruby, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
+        F: Fn(&Ruby<I>, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
     {
         // SAFETY: the caller guarantees the same as the function called requires.
         unsafe { self.define_module_function_with_arity(module, name, Arity::Any, function) }
@@ -627,16 +635,16 @@ impl Ruby {
         function: F,
     ) -> Result<(), Raised>
     where
-        F: Fn(&Ruby, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
+        F: Fn(&Ruby<I>, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
     {
         // SAFETY: `&self` proves the thread; the caller guarantees the value.
-        unsafe { define_function(Target::ModuleFunction { module }, name, arity, function) }
+        unsafe { define_function::<I, _>(Target::ModuleFunction { module }, name, arity, function) }
     }
 
     /// Defines a global function: a private method of `Kernel`, callable from anywhere.
     pub fn define_global_function<F>(&self, name: &CStr, function: F) -> Result<(), Raised>
     where
-        F: Fn(&Ruby, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
+        F: Fn(&Ruby<I>, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
     {
         self.define_global_function_with_arity(name, Arity::Any, function)
     }
@@ -654,20 +662,20 @@ impl Ruby {
         function: F,
     ) -> Result<(), Raised>
     where
-        F: Fn(&Ruby, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
+        F: Fn(&Ruby<I>, VALUE, &[VALUE]) -> HostResult + Copy + 'static,
     {
         // SAFETY: `&self` proves the thread; no value is involved.
-        unsafe { define_function(Target::GlobalFunction, name, arity, function) }
+        unsafe { define_function::<I, _>(Target::GlobalFunction, name, arity, function) }
     }
 
-    /// Checks the argument count of a host function the way Ruby words it:
+    /// Checks the argument count of a host function the way `rb_scan_args` words it:
     /// `wrong number of arguments (given for expected)`, an `ArgumentError`.
     pub fn check_arity(&self, args: &[VALUE], expected: usize) -> Result<(), Raise> {
         if args.len() == expected {
             return Ok(());
         }
         // SAFETY: `&self` proves the thread, and the class globals are set by then.
-        let class = unsafe { ffi::rb_eArgError };
+        let class = unsafe { I::argument_error_class() };
         Err(Raise::new(
             class,
             format!("wrong number of arguments ({} for {expected})", args.len()),

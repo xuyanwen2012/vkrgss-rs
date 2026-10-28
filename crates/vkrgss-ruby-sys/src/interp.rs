@@ -1,12 +1,12 @@
 //! The interpreter thread: start-up, the queue of work, shutdown.
 
 use std::ffi::{CString, c_int, c_ulong};
-use std::marker::PhantomData;
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender, SyncSender};
 use std::thread::{self, JoinHandle, ThreadId};
 
+use crate::capi::CApi;
 use crate::ffi::{self, VALUE};
 use crate::protect;
 use crate::signals::Dispositions;
@@ -146,40 +146,13 @@ pub enum StartError {
     },
 }
 
-/// Proof of being on a thread that holds the interpreter while the interpreter is alive: the
-/// interpreter thread, or over Ruby 1.9.2 a script thread that Ruby calls a host function on.
+/// Proof of being on a thread that holds the interpreter while the interpreter is alive:
+/// [`vkrgss_ruby_glue::Ruby`] over this interpreter, where its methods are documented.
 ///
 /// The closures given to [`Interpreter::run`] and the host functions that Ruby calls receive
 /// a `&Ruby`; the operations of this crate that touch the interpreter are its methods. It is
 /// neither `Send` nor `Sync`, so it cannot leave the thread.
-pub struct Ruby {
-    not_send: PhantomData<*mut ()>,
-}
-
-impl Ruby {
-    /// # Safety
-    ///
-    /// Only on a thread that holds the interpreter, between the end of start-up and
-    /// finalisation.
-    pub(crate) unsafe fn new() -> Self {
-        Self {
-            not_send: PhantomData,
-        }
-    }
-
-    /// Tells the interpreter that the game's scripts begin here.
-    ///
-    /// Symbol numbers follow the original runtime: a name it has before its first game
-    /// script has the number measured there, whenever it is interned. Any other name
-    /// interned before this call gets a number from a separate high range; from this call
-    /// on, a new name gets the next number of the original's sequence, and the first use of
-    /// a name of the high range consumes one number of that sequence. Calling it again
-    /// changes nothing.
-    pub fn mark_game_scripts(&self) {
-        // SAFETY: on the interpreter thread; the function sets a flag and cannot raise.
-        unsafe { ffi::ruby_vkxp_mark_game_scripts() };
-    }
-}
+pub type Ruby = vkrgss_ruby_glue::Ruby<CApi>;
 
 type Job = Box<dyn FnOnce(&Ruby) + Send>;
 

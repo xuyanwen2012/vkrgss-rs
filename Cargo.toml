@@ -7,6 +7,7 @@ members = [
     "crates/vkrgss-image",
     "crates/vkrgss-text",
     "crates/vkrgss-vfs",
+    "crates/vkrgss-ruby-glue",
     "crates/vkrgss-ruby-sys",
     "crates/vkrgss-ruby192-sys",
     "crates/vkrgss-binding",
@@ -74,6 +75,7 @@ vkrgss-core = { path = "crates/vkrgss-core" }
 vkrgss-image = { path = "crates/vkrgss-image" }
 vkrgss-text = { path = "crates/vkrgss-text" }
 vkrgss-vfs = { path = "crates/vkrgss-vfs" }
+vkrgss-ruby-glue = { path = "crates/vkrgss-ruby-glue" }
 vkrgss-ruby-sys = { path = "crates/vkrgss-ruby-sys" }
 vkrgss-binding = { path = "crates/vkrgss-binding" }
 vkrgss-binding-rgss3 = { path = "crates/vkrgss-binding-rgss3" }

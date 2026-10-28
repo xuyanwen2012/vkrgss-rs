@@ -3,9 +3,10 @@
 use std::ffi::{CStr, c_char, c_long};
 use std::fmt;
 
-use crate::ffi::{self, VALUE};
-use crate::interp::Ruby;
+use crate::VALUE;
+use crate::interpreter::Interpreter;
 use crate::protect::{self, Raised};
+use crate::ruby::Ruby;
 
 /// A Ruby exception described in host terms, with no reference into the interpreter.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -15,7 +16,9 @@ pub struct RubyError {
     pub class_name: String,
     /// The exception's message.
     pub message: String,
-    /// The backtrace, innermost position first, as `file:line` or ``file:line:in `method'``.
+    /// The backtrace, innermost position first, as ``file:line:in `method'``; a position
+    /// outside any method is `file:line` over Ruby 1.8.7 and ``file:line:in `<main>'`` over
+    /// Ruby 1.9.2.
     pub backtrace: Vec<String>,
 }
 
@@ -30,15 +33,6 @@ impl fmt::Display for RubyError {
 
 impl std::error::Error for RubyError {}
 
-unsafe extern "C" fn end_procs_body(_data: VALUE) -> VALUE {
-    // SAFETY: `Ruby::run_end_procs` calls this on the interpreter thread. Each block runs
-    // under a tag of the interpreter, so nothing raises out of the call.
-    unsafe {
-        ffi::rb_exec_end_proc();
-        ffi::ruby_errinfo
-    }
-}
-
 /// The plain data of one evaluation.
 struct Eval {
     source: *const c_char,
@@ -48,24 +42,37 @@ struct Eval {
     line: c_long,
 }
 
-unsafe extern "C" fn eval_body(data: VALUE) -> VALUE {
+unsafe extern "C" fn eval_body<I: Interpreter>(data: VALUE) -> VALUE {
     // SAFETY: `Ruby::eval` passes a pointer to an `Eval` whose buffers outlive the call. The
     // argument array is a local of this frame, where the collector's stack scan sees it.
+    // The source is text, which over Ruby 1.9.2 makes UTF-8 the encoding of the literals in
+    // it.
     unsafe {
         let eval = &*(data as *const Eval);
         let args = [
-            ffi::rb_str_new(eval.source, eval.source_len),
-            ffi::Qnil,
-            ffi::rb_str_new(eval.file, eval.file_len),
-            ffi::long2fix(eval.line),
+            I::str_new_text(eval.source, eval.source_len),
+            I::QNIL,
+            I::str_new_text(eval.file, eval.file_len),
+            I::long2fix(eval.line),
         ];
-        ffi::rb_funcall2(
-            ffi::ruby_top_self,
-            ffi::rb_intern(c"eval".as_ptr()),
+        I::rb_funcall2(
+            I::top_self(),
+            I::rb_intern(c"eval".as_ptr()),
             4,
             args.as_ptr(),
         )
     }
+}
+
+/// `rb_funcall(recv, method, 0)`: calls a method without arguments, ignoring its visibility.
+///
+/// # Safety
+///
+/// As the C function, which can raise: inside a protected body only, with a live receiver.
+unsafe fn call0<I: Interpreter>(recv: VALUE, method: &CStr) -> VALUE {
+    // SAFETY: the caller guarantees the thread and the value. Without arguments `rb_funcall`
+    // passes a null argument vector, which is read for no element.
+    unsafe { I::rb_funcall2(recv, I::rb_intern(method.as_ptr()), 0, std::ptr::null()) }
 }
 
 /// The plain data of describing one exception: the input and three Ruby values as output.
@@ -76,55 +83,79 @@ struct Describe {
     backtrace: VALUE,
 }
 
-unsafe extern "C" fn describe_body(data: VALUE) -> VALUE {
+unsafe extern "C" fn describe_body<I: Interpreter>(data: VALUE) -> VALUE {
     // SAFETY: `Ruby::describe` passes a pointer to a `Describe` on its stack, where the
     // collector sees the values stored into it. `message` and `backtrace` are Ruby methods
     // that a script may have redefined, which is why this runs protected.
     unsafe {
         let describe = &mut *(data as *mut Describe);
         let exception = describe.exception;
-        describe.class_name = ffi::rb_class_path(ffi::rb_obj_class(exception));
-        let message = ffi::rb_funcall(exception, ffi::rb_intern(c"message".as_ptr()), 0);
-        describe.message = ffi::rb_obj_as_string(message);
-        let backtrace = ffi::rb_funcall(exception, ffi::rb_intern(c"backtrace".as_ptr()), 0);
-        let backtrace = ffi::rb_check_array_type(backtrace);
-        let lines = ffi::rb_ary_new();
+        describe.class_name = I::rb_class_path(I::rb_obj_class(exception));
+        let message = call0::<I>(exception, c"message");
+        describe.message = I::rb_obj_as_string(message);
+        let backtrace = call0::<I>(exception, c"backtrace");
+        let backtrace = I::rb_check_array_type(backtrace);
+        let lines = I::rb_ary_new();
         describe.backtrace = lines;
-        if !ffi::nil_p(backtrace) {
+        if backtrace != I::QNIL {
             let mut index: c_long = 0;
-            while index < (*ffi::rarray(backtrace)).len {
-                let line = ffi::rb_obj_as_string(ffi::rb_ary_entry(backtrace, index));
-                ffi::rb_ary_push(lines, line);
+            while index < I::rarray_len(backtrace) {
+                let line = I::rb_obj_as_string(I::rb_ary_entry(backtrace, index));
+                I::rb_ary_push(lines, line);
                 index += 1;
             }
         }
     }
-    ffi::Qnil
+    I::QNIL
 }
 
 /// The plain data of creating a string.
 struct NewString {
     bytes: *const c_char,
     len: c_long,
+    /// Whether the string is text or bytes, which over Ruby 1.9.2 are labelled UTF-8 and
+    /// ASCII-8BIT.
+    text: bool,
 }
 
-unsafe extern "C" fn new_string_body(data: VALUE) -> VALUE {
-    // SAFETY: `Ruby::str_new` passes a pointer to a `NewString` whose buffer outlives the
-    // call. The allocation raises `NoMemoryError` when it fails, hence the protection.
+unsafe extern "C" fn new_string_body<I: Interpreter>(data: VALUE) -> VALUE {
+    // SAFETY: `Ruby::str_new` and `Ruby::str_new_text` pass a pointer to a `NewString` whose
+    // buffer outlives the call. The allocation raises `NoMemoryError` when it fails, hence
+    // the protection.
     unsafe {
         let new = &*(data as *const NewString);
-        ffi::rb_str_new(new.bytes, new.len)
+        if new.text {
+            I::str_new_text(new.bytes, new.len)
+        } else {
+            I::rb_str_new(new.bytes, new.len)
+        }
     }
 }
 
-unsafe extern "C" fn inspect_body(data: VALUE) -> VALUE {
+unsafe extern "C" fn end_procs_body<I: Interpreter>(_data: VALUE) -> VALUE {
+    // SAFETY: `Ruby::run_end_procs` calls this on the interpreter thread. Each block runs
+    // under a tag of the interpreter, so nothing raises out of the call.
+    unsafe {
+        I::rb_exec_end_proc();
+        I::errinfo()
+    }
+}
+
+unsafe extern "C" fn set_errinfo_body<I: Interpreter>(data: VALUE) -> VALUE {
+    // SAFETY: `Ruby::set_current_error` passes a pointer to the value. Setting it may raise
+    // `TypeError` for a value that is neither `nil` nor an exception, hence the protection.
+    unsafe { I::set_errinfo(*(data as *const VALUE)) };
+    I::QNIL
+}
+
+unsafe extern "C" fn inspect_body<I: Interpreter>(data: VALUE) -> VALUE {
     // SAFETY: `Ruby::inspect` passes a pointer to the live value to inspect. `inspect` may
     // return any object, whose `to_s` runs in the conversion and may raise as well, so both
     // steps are inside the protection.
     unsafe {
         let value = *(data as *const VALUE);
-        let text = ffi::rb_funcall(value, ffi::rb_intern(c"inspect".as_ptr()), 0);
-        ffi::rb_obj_as_string(text)
+        let text = call0::<I>(value, c"inspect");
+        I::rb_obj_as_string(text)
     }
 }
 
@@ -134,28 +165,30 @@ unsafe extern "C" fn inspect_body(data: VALUE) -> VALUE {
 /// # Safety
 ///
 /// Interpreter thread only; `value` must be a special constant or a live object.
-unsafe fn text_of(value: VALUE) -> String {
-    // SAFETY: the type check makes the cast valid, and a string's `ptr` is valid for `len`
-    // bytes when it is not null. Nothing here can raise or collect.
+unsafe fn text_of<I: Interpreter>(value: VALUE) -> String {
+    // SAFETY: the type check makes the accessors valid, and a string's bytes are valid for
+    // its length when the pointer is not null. Nothing here can raise or collect.
     unsafe {
-        if ffi::rb_type(value) != ffi::T_STRING {
+        if I::rb_type(value) != I::T_STRING {
             return String::new();
         }
-        let string = &*ffi::rstring(value);
-        if string.ptr.is_null() || string.len <= 0 {
+        let (ptr, len) = (I::rstring_ptr(value), I::rstring_len(value));
+        if ptr.is_null() || len <= 0 {
             return String::new();
         }
-        let bytes = std::slice::from_raw_parts(string.ptr.cast::<u8>(), string.len as usize);
+        let bytes = std::slice::from_raw_parts(ptr.cast::<u8>(), len as usize);
         String::from_utf8_lossy(bytes).into_owned()
     }
 }
 
-impl Ruby {
+impl<I: Interpreter> Ruby<I> {
     /// Evaluates Ruby source at the top level, reported as `file` starting at `line`, and
     /// returns its value or the jump that left it.
     ///
     /// This calls Ruby's own `eval(source, nil, file, line)`. Unlike `rb_eval_string` that
-    /// leaves exception messages alone and gives backtraces the positions asked for.
+    /// leaves exception messages alone and gives backtraces the positions asked for. The
+    /// source is handed over as text: over Ruby 1.9.2 a UTF-8 string, which makes
+    /// `__ENCODING__` and the encoding of its string literals UTF-8.
     pub fn eval(&self, source: &str, file: &str, line: u32) -> Result<VALUE, Raised> {
         let mut eval = Eval {
             source: source.as_ptr().cast(),
@@ -166,7 +199,7 @@ impl Ruby {
         };
         // SAFETY: holding `&self` means this is the interpreter thread, and `eval_body` fits
         // the contract of `protect`.
-        unsafe { protect::protect(&mut eval, eval_body) }
+        unsafe { protect::protect::<I, _>(&mut eval, eval_body::<I>) }
     }
 
     /// Evaluates Ruby source as [`eval`](Self::eval) does and returns its value, or the
@@ -194,7 +227,7 @@ impl Ruby {
         args: &[VALUE],
     ) -> Result<VALUE, Raised> {
         // SAFETY: `&self` proves the thread; the caller guarantees the values.
-        unsafe { protect::funcall(recv, method, args) }
+        unsafe { protect::funcall::<I>(recv, method, args) }
     }
 
     /// Copies the class name, message and backtrace of a raised exception into host memory.
@@ -204,7 +237,12 @@ impl Ruby {
     /// `raised` must come from this interpreter, and its exception must still be alive: kept
     /// in a local since it was raised, or rooted.
     pub unsafe fn describe(&self, raised: Raised) -> RubyError {
-        if raised.state != ffi::TAG_RAISE && raised.state != ffi::TAG_FATAL {
+        if raised.state != I::TAG_RAISE && raised.state != I::TAG_FATAL {
+            if I::JUMP_IN_CURRENT_ERROR {
+                // The jump is not continued: what it carried is no longer the current error.
+                // SAFETY: `&self` proves the thread, and `nil` is always accepted.
+                unsafe { I::restore_errinfo(I::QNIL) };
+            }
             return RubyError {
                 class_name: String::new(),
                 message: format!(
@@ -216,28 +254,29 @@ impl Ruby {
         }
         let mut describe = Describe {
             exception: raised.exception,
-            class_name: ffi::Qnil,
-            message: ffi::Qnil,
-            backtrace: ffi::Qnil,
+            class_name: I::QNIL,
+            message: I::QNIL,
+            backtrace: I::QNIL,
         };
         // SAFETY: `describe_body` fits the contract of `protect`; the caller guarantees the
         // exception. Whatever the body stored before a failure is still a valid value, and
         // `text_of` copes with the `nil` of a field it did not reach.
         unsafe {
-            let complete = protect::protect(&mut describe, describe_body).is_ok();
+            let complete = protect::protect::<I, _>(&mut describe, describe_body::<I>).is_ok();
             let mut backtrace = Vec::new();
-            if ffi::rb_type(describe.backtrace) == ffi::T_ARRAY {
-                let lines = &*ffi::rarray(describe.backtrace);
-                for index in 0..usize::try_from(lines.len).unwrap_or(0) {
-                    backtrace.push(text_of(*lines.ptr.add(index)));
+            if I::rb_type(describe.backtrace) == I::T_ARRAY {
+                let lines = I::rarray_ptr(describe.backtrace);
+                let len = I::rarray_len(describe.backtrace);
+                for index in 0..usize::try_from(len).unwrap_or(0) {
+                    backtrace.push(text_of::<I>(*lines.add(index)));
                 }
             }
-            let mut message = text_of(describe.message);
+            let mut message = text_of::<I>(describe.message);
             if !complete && message.is_empty() {
                 message = "(the exception could not be described)".to_owned();
             }
             RubyError {
-                class_name: text_of(describe.class_name),
+                class_name: text_of::<I>(describe.class_name),
                 message,
                 backtrace,
             }
@@ -253,7 +292,7 @@ impl Ruby {
     pub fn run_end_procs(&self) -> VALUE {
         // SAFETY: `&self` proves the thread, and `end_procs_body` fits the contract of
         // `protect`; it reads the current error before `protect` puts back the one it found.
-        unsafe { protect::protect(&mut (), end_procs_body) }.unwrap_or(ffi::Qnil)
+        unsafe { protect::protect::<I, _>(&mut (), end_procs_body::<I>) }.unwrap_or(I::QNIL)
     }
 
     /// Makes `exception` the current error, `$!`, whose backtrace is `$@`. `nil` clears it.
@@ -262,55 +301,70 @@ impl Ruby {
     ///
     /// `exception` must be `nil` or a live exception object.
     pub unsafe fn set_current_error(&self, exception: VALUE) {
-        // SAFETY: `&self` proves the thread, on which `ruby_errinfo` is only touched by the
-        // interpreter, which is not running now. The caller guarantees the value, and the
-        // variable is one the collector marks.
-        unsafe { ffi::ruby_errinfo = exception };
+        let mut exception = exception;
+        // SAFETY: `&self` proves the thread, and `set_errinfo_body` fits the contract of
+        // `protect`. The caller guarantees the value; with it the call cannot fail, and the
+        // current error is a slot the collector marks.
+        let _ = unsafe { protect::protect::<I, _>(&mut exception, set_errinfo_body::<I>) };
     }
 
     /// The `main` object, `self` at the top level.
     pub fn top_self(&self) -> VALUE {
-        // SAFETY: `&self` proves the thread, on which only the interpreter writes the
-        // variable, once, at start-up.
-        unsafe { ffi::ruby_top_self }
+        // SAFETY: `&self` proves the thread; reading the main object raises nothing.
+        unsafe { I::top_self() }
     }
 
-    /// A new Ruby string with these bytes. The error is the `NoMemoryError` of a failed
-    /// allocation.
+    /// A new Ruby string with these bytes, labelled ASCII-8BIT over Ruby 1.9.2: for binary
+    /// data, such as what a `_dump` method returns. The error is the `NoMemoryError` of a
+    /// failed allocation.
     pub fn str_new(&self, bytes: &[u8]) -> Result<VALUE, Raised> {
         let mut new = NewString {
             bytes: bytes.as_ptr().cast(),
             len: c_long::try_from(bytes.len()).expect("fewer than 2^63 bytes"),
+            text: false,
         };
         // SAFETY: `&self` proves the thread; `new_string_body` fits the contract of
         // `protect`, and the buffer is valid for `len` bytes and is copied.
-        unsafe { protect::protect(&mut new, new_string_body) }
+        unsafe { protect::protect::<I, _>(&mut new, new_string_body::<I>) }
     }
 
-    /// A new Ruby string with this text. A string of Ruby 1.8 has no encoding: it is the
-    /// string [`str_new`](Self::str_new) makes, and the bytes need not be UTF-8. The error is
-    /// the `NoMemoryError` of a failed allocation.
+    /// A new Ruby string with these bytes as text. Over Ruby 1.9.2 it is labelled UTF-8
+    /// whether they are valid UTF-8 or not, as a string literal of a script is; a string of
+    /// Ruby 1.8.7 has no encoding, and this is the string [`str_new`](Self::str_new) makes.
+    /// The error is the `NoMemoryError` of a failed allocation.
     pub fn str_new_text(&self, bytes: &[u8]) -> Result<VALUE, Raised> {
-        self.str_new(bytes)
+        let mut new = NewString {
+            bytes: bytes.as_ptr().cast(),
+            len: c_long::try_from(bytes.len()).expect("fewer than 2^63 bytes"),
+            text: true,
+        };
+        // SAFETY: as for `str_new`.
+        unsafe { protect::protect::<I, _>(&mut new, new_string_body::<I>) }
     }
 
-    /// The bytes of a Ruby string, or `None` when the value is not a string.
+    /// [`str_new_text`](Self::str_new_text) of host text.
+    pub fn str_new_utf8(&self, text: &str) -> Result<VALUE, Raised> {
+        self.str_new_text(text.as_bytes())
+    }
+
+    /// The bytes of a Ruby string, whatever its encoding, or `None` when the value is not a
+    /// string.
     ///
     /// # Safety
     ///
     /// `value` must be a special constant or a live object.
     pub unsafe fn str_bytes(&self, value: VALUE) -> Option<Vec<u8>> {
-        // SAFETY: the type check makes the cast valid, and a string's `ptr` is valid for
-        // `len` bytes when it is not null.
+        // SAFETY: the type check makes the accessors valid, and a string's bytes are valid
+        // for its length when the pointer is not null.
         unsafe {
-            if ffi::rb_type(value) != ffi::T_STRING {
+            if I::rb_type(value) != I::T_STRING {
                 return None;
             }
-            let string = &*ffi::rstring(value);
-            if string.ptr.is_null() || string.len <= 0 {
+            let (ptr, len) = (I::rstring_ptr(value), I::rstring_len(value));
+            if ptr.is_null() || len <= 0 {
                 return Some(Vec::new());
             }
-            Some(std::slice::from_raw_parts(string.ptr.cast::<u8>(), string.len as usize).to_vec())
+            Some(std::slice::from_raw_parts(ptr.cast::<u8>(), len as usize).to_vec())
         }
     }
 
@@ -328,8 +382,8 @@ impl Ruby {
         // `inspect_body` fits the contract of `protect`. The resulting string stays in a
         // local until its bytes are copied, which neither raises nor collects.
         unsafe {
-            let text = protect::protect(&mut value, inspect_body)?;
-            Ok(text_of(text))
+            let text = protect::protect::<I, _>(&mut value, inspect_body::<I>)?;
+            Ok(text_of::<I>(text))
         }
     }
 }

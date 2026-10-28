@@ -2,8 +2,8 @@
 
 ## 1. Glue crate
 
-- [ ] 1.1 Create `vkrgss-ruby-glue` with the `Interpreter` trait; move `root.rs` and `host.rs` into it; implement the trait in both sys crates; re-export under the present paths; add the crate to the workspace, the deps rules of `xtask` (guest side) and `deny.toml` if needed. Verify: `cargo test -p vkrgss-ruby-sys -p vkrgss-ruby192-sys -p vkrgss-binding -p vkrgss-binding-rgss3` passes unchanged; the scenarios of "Interpreter glue in one place".
-- [ ] 1.2 Move the shared parts of `protect.rs` and `call.rs`; record in design.md what stays per interpreter and why. Verify: the same tests, the layout tests of both sys crates, `cargo xtask gate --quick` for each of the four crates.
+- [x] 1.1 Create `vkrgss-ruby-glue` with the `Interpreter` trait; move `root.rs` and `host.rs` into it; implement the trait in both sys crates; re-export under the present paths; add the crate to the workspace, the deps rules of `xtask` (guest side) and `deny.toml` if needed. Verify: `cargo test -p vkrgss-ruby-sys -p vkrgss-ruby192-sys -p vkrgss-binding -p vkrgss-binding-rgss3` passes unchanged; the scenarios of "Interpreter glue in one place".
+- [x] 1.2 Move the shared parts of `protect.rs` and `call.rs`; record in design.md what stays per interpreter and why. Verify: the same tests, the layout tests of both sys crates, `cargo xtask gate --quick` for each of the four crates.
 
 ## 2. Jumps and bignums
 

@@ -36,6 +36,35 @@
 - **Same behaviour.** Every existing test of both sys crates and both binding packages passes
   without change; the upstream Ruby suites and the stress tests are part of the gate already.
 
+## What stays per interpreter
+
+- **Everything of `root.rs`, `host.rs`, `call.rs` and `protect.rs` moved.** The glue holds
+  `Ruby<I>` and `Root<I>` with every method of the former `impl Ruby` blocks, the
+  trampolines, the definitions, `protect`, the method call, evaluation, the description of
+  an exception and the string helpers. Where the two copies differed, the difference is an
+  item of the trait: the current error (`errinfo`, `restore_errinfo`, `set_errinfo`: a
+  variable of Ruby 1.8.7, functions of 1.9.2), whether a jump that is not a raise keeps what
+  it carries in the current error (`JUMP_IN_CURRENT_ERROR`, which decides whether `protect`
+  puts the previous error back after such a jump and whether `describe` clears it), a string
+  of text (`rb_str_new` against a UTF-8 string), the main object and the mark of the game's
+  scripts. The type tags of strings and arrays are constants of the trait, since they
+  differ. Nothing stayed duplicated for a cost in the hot path: every item is a direct call
+  or a constant in code monomorphised per interpreter, so no measurement with
+  `--frame-stats` was needed.
+- **`ffi.rs`, `interp.rs`, `signals.rs`** stay, as designed.
+- **`capi.rs`** of each sys crate: the unit type `CApi` and its implementation of the trait.
+- **`protect.rs`** of each sys crate: `protect<T>` for its interpreter, under the present
+  path, because the generic `protect<I, T>` of the glue cannot be named as `protect::<()>`,
+  as the callers and the tests do. Ruby 1.8.7 also keeps `call_void`, which only its
+  finalisation uses.
+- `Ruby` and `Root` of each sys crate are type aliases of the glue's types for `CApi`, so
+  `Ruby::eval` and the other paths of the tests still name the methods. `Ruby::new` is
+  public in the glue, still `unsafe`, because the interpreter crate makes the `Ruby` it hands
+  out. `Ruby::str_new_utf8`, which only 1.9.2 had, exists over 1.8.7 too, as the string of
+  `str_new`. The trait has no variadic function, so `describe` and `inspect` call a method
+  without arguments with `rb_funcall2` and a null argument vector, which is what
+  `rb_funcall` passes for no arguments in both interpreters.
+
 ## Follow-ups
 
 None yet.

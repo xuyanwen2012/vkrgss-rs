@@ -24,6 +24,7 @@ workspace = true
 thiserror.workspace = true
 libc.workspace = true
 libz-sys.workspace = true
+vkrgss-ruby-glue.workspace = true
 
 [build-dependencies]
 cc.workspace = true

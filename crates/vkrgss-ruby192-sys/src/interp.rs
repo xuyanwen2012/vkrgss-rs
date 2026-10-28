@@ -1,12 +1,12 @@
 //! The interpreter thread: start-up, the queue of work, shutdown.
 
 use std::ffi::{CString, c_int, c_ulong};
-use std::marker::PhantomData;
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender, SyncSender};
 use std::thread::{self, JoinHandle, ThreadId};
 
+use crate::capi::CApi;
 use crate::ffi::{self, VALUE};
 use crate::protect;
 use crate::signals::State;
@@ -135,31 +135,13 @@ pub enum StartError {
     },
 }
 
-/// Proof of being on a thread that holds the interpreter while the interpreter is alive: the
-/// interpreter thread, or over Ruby 1.9.2 a script thread that Ruby calls a host function on.
+/// Proof of being on a thread that holds the interpreter while the interpreter is alive:
+/// [`vkrgss_ruby_glue::Ruby`] over this interpreter, where its methods are documented.
 ///
 /// The closures given to [`Interpreter::run`] and the host functions that Ruby calls receive
 /// a `&Ruby`; the operations of this crate that touch the interpreter are its methods. It is
 /// neither `Send` nor `Sync`, so it cannot leave the thread.
-pub struct Ruby {
-    not_send: PhantomData<*mut ()>,
-}
-
-impl Ruby {
-    /// # Safety
-    ///
-    /// Only on a thread that holds the interpreter, between the end of start-up and
-    /// finalisation.
-    pub(crate) unsafe fn new() -> Self {
-        Self {
-            not_send: PhantomData,
-        }
-    }
-
-    /// Tells the interpreter that the game's scripts begin here. It does nothing: Ruby 1.9.2
-    /// numbers its symbols as the release does, and a dump does not depend on the numbers.
-    pub fn mark_game_scripts(&self) {}
-}
+pub type Ruby = vkrgss_ruby_glue::Ruby<CApi>;
 
 type Job = Box<dyn FnOnce(&Ruby) + Send>;
 

@@ -41,6 +41,7 @@ pub(crate) const GUEST_CRATES: &[&str] = &[
     "vkrgss-image",
     "vkrgss-text",
     "vkrgss-vfs",
+    "vkrgss-ruby-glue",
     "vkrgss-ruby-sys",
     "vkrgss-ruby192-sys",
     "vkrgss-binding",

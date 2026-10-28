@@ -124,25 +124,33 @@
 //! signature in both as well: [`threads_lost_in_a_copy`], which is always `false` here, and
 //! [`restart_thread_timer`]. [`SymbolTable`], [`Options::symbols`], [`ffi::ruby_top_self`],
 //! [`ffi::rstring()`] and [`ffi::rarray()`] exist only here.
+//!
+//! The part of this crate that bridges Rust and Ruby is not its own but that of
+//! `vkrgss-ruby-glue`, which both interpreter crates share: [`Ruby`] and [`Root`] are the
+//! types of that crate for [`CApi`], this interpreter's implementation of its trait,
+//! [`protect`] is its protected call for this interpreter, and [`Raised`], [`RubyError`],
+//! [`HostResult`], [`Raise`] and [`Arity`] are its types. The methods of [`Ruby`] are
+//! documented there.
 
 // The `Zlib` extension calls into the zlib that `libz-sys` builds; naming the crate is what
 // makes rustc link it.
 extern crate libz_sys;
 
-mod call;
+mod capi;
 pub mod ffi;
-mod host;
 mod interp;
 mod protect;
-mod root;
 mod signals;
 
-pub use call::RubyError;
-pub use host::{Arity, HostResult, Raise};
+pub use capi::CApi;
 pub use interp::{
     GC_STRESS_VARIABLE, Interpreter, MIN_STACK_SIZE, Options, RUBY_API, Ruby, RubyApi,
     STACK_HEADROOM, StartError, SymbolTable,
 };
-pub use protect::{Raised, protect};
-pub use root::Root;
+pub use protect::protect;
+pub use vkrgss_ruby_glue::{Arity, HostResult, Raise, Raised, RubyError};
+
+/// A Ruby value that the collector treats as reachable for as long as the `Root` exists:
+/// [`vkrgss_ruby_glue::Root`] over this interpreter, made by [`Ruby::root`].
+pub type Root = vkrgss_ruby_glue::Root<CApi>;
 pub use signals::{SIGNALS_TAKEN_BY_RUBY, restart_thread_timer, threads_lost_in_a_copy};
