@@ -10,4 +10,4 @@
 
 ## 3. Integration check
 
-- [ ] 3.1 Run the full gate and the cross-architecture check. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0, `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask xarch check` reports every game identical, and `openspec validate dispatch-the-window-once --strict` passes.
+- [x] 3.1 Run the full gate and the cross-architecture check. Verify: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0, `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask xarch check` reports every game identical, and `openspec validate dispatch-the-window-once --strict` passes.
