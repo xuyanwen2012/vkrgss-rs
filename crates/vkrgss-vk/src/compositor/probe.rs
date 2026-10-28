@@ -187,6 +187,12 @@ impl VkCompositor {
         self.submissions
     }
 
+    /// Whether a submission may still be in use by the device: the compose of the last
+    /// render, until a wait has seen it complete.
+    pub(crate) fn has_compose_in_flight(&self) -> bool {
+        self.in_flight.is_some()
+    }
+
     /// The pixels of a live bitmap, read back from its image.
     pub(crate) fn read_bitmap(&mut self, id: vkrgss_proto::BitmapId) -> Result<Vec<u8>, VkError> {
         self.table

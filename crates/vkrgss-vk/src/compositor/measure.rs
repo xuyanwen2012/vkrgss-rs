@@ -25,7 +25,17 @@ impl VkCompositor {
     /// What was measured since the last call: the stages of the newest frame rendered, with
     /// those of the presents since. `None` when nothing was measured, as always while the
     /// measuring is off, and after a render that failed.
+    ///
+    /// When the compose of a measured frame is still in flight, this waits for it, so that
+    /// its device time is known. A lost device that the wait finds is returned by the next
+    /// call that would use the device.
     pub fn take_frame_timing(&mut self) -> Option<FrameTiming> {
+        if self.lost.is_none() && self.frame_timing.is_some() {
+            let settled = self.settle();
+            if let Err(error) = &settled {
+                self.note_loss(error);
+            }
+        }
         self.frame_timing.take()
     }
 
@@ -49,8 +59,8 @@ impl VkCompositor {
         if self.times_device() {
             let (device, commands) = (&self.gpu.device, self.commands);
             // SAFETY: the pool has timestamp queries `first` and `first + 1`, which no
-            // pending command buffer uses since every submission is waited for, and the
-            // queue has timestamps; the rest is guaranteed by the caller.
+            // pending command buffer uses since recording waits for every submission, and
+            // the queue has timestamps; the rest is guaranteed by the caller.
             unsafe {
                 device.cmd_reset_query_pool(commands, self.query_pool, first, 2);
                 device.cmd_write_timestamp2(

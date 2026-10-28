@@ -116,6 +116,7 @@ impl VkCompositor {
             commands: vk::CommandBuffer::null(),
             timeline: vk::Semaphore::null(),
             submissions: 0,
+            in_flight: None,
             lost: None,
             gpu: ManuallyDrop::new(gpu),
         };
@@ -287,9 +288,16 @@ impl Drop for VkCompositor {
             );
             return;
         }
+        // The compose in flight first, with the bounded wait, which also releases the images
+        // it was the last user of.
+        if let Err(error) = self.settle() {
+            tracing::warn!("{error}; the objects of the Vulkan device are leaked");
+            return;
+        }
         let device = &self.gpu.device;
-        // SAFETY: every submission was waited for, so nothing below is in use; each handle was
-        // created from this device or is null, and none is used again. The allocator is dropped
+        // SAFETY: the compose in flight has completed and every other submission was waited
+        // for, so nothing below is in use; each handle was created from this device or is
+        // null, and none is used again. The allocator is dropped
         // exactly once, here, after its allocations were freed and while the device is alive;
         // the device is dropped exactly once, last.
         unsafe {

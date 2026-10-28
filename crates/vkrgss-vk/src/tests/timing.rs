@@ -1,6 +1,8 @@
 //! The scenarios of "Frame timings on request" in `specs/vulkan-compositor/spec.md`. That
 //! measuring changes no frame is checked with the fixture streams, in `fixtures`.
 
+use std::time::Instant;
+
 use vkrgss_compose_ref::fixtures::{self, bitmap, sprite};
 use vkrgss_proto::{BitmapId, FramePacket, FrameRate, Op, Rect, Size};
 
@@ -108,8 +110,10 @@ fn present_adds_its_stage_and_the_time_of_its_pass() {
     let mut compositor = VkCompositor::with_headless_surface(test_device(), Some(&log)).unwrap();
     compositor.set_frame_timing(true);
     compositor.resize_surface(Size::new(40, 36));
+    let started = Instant::now();
     compositor.render(&frame_with_an_upload()).unwrap();
     assert!(compositor.present().unwrap());
+    let elapsed = started.elapsed();
     let timing = compositor.take_frame_timing().expect("a timing");
     assert!(timing.encode.is_some(), "{timing:?}");
     assert!(timing.present.is_some(), "{timing:?}");
@@ -119,8 +123,10 @@ fn present_adds_its_stage_and_the_time_of_its_pass() {
         "{timing:?}"
     );
     if let (Some(compose), Some(present)) = (timing.compose_device, timing.present_device) {
-        // Each is the difference of two timestamps of one submission that was waited for.
-        assert!(compose <= timing.submit.unwrap(), "{timing:?}");
+        // Each is the difference of two timestamps of one submission that was waited for:
+        // the present's within its stage, which waits for it, and the compose's, which the
+        // present waits for too, within the render and the present together.
+        assert!(compose <= elapsed, "{timing:?}");
         assert!(present <= timing.present.unwrap(), "{timing:?}");
     }
     assert_clean(&log, "with frame timing on a surface");

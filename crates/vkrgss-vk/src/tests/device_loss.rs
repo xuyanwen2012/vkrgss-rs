@@ -335,7 +335,8 @@ fn lost_idle_after_a_failed_submission_ends_the_call() {
     assert_refused(&mut compositor, &lost);
 }
 
-/// Reading the timestamps of a measured frame finds the device lost: the frame fails.
+/// Reading the timestamps of a measured frame finds the device lost: the call that waits for
+/// the frame fails, which is the one after its render, since the render does not wait.
 #[test]
 fn lost_device_in_the_timestamps_fails_the_frame() {
     let mut compositor = compositor_with_a_bitmap();
@@ -350,7 +351,9 @@ fn lost_device_in_the_timestamps_fails_the_frame() {
     let lost = Err(VkError::DeviceLost {
         call: "vkGetQueryPoolResults",
     });
-    assert_eq!(compositor.render(&packet(vec![], 2)), lost);
+    assert_eq!(compositor.render(&packet(vec![], 2)), Ok(()));
+    assert_eq!(take_calls(), Vec::<&str>::new());
+    assert_eq!(compositor.read_frame().map(|_| ()), lost);
     assert_eq!(take_calls(), ["vkGetQueryPoolResults"]);
     assert_refused(&mut compositor, &lost);
 }

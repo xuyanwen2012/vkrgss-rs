@@ -26,7 +26,8 @@ impl VkCompositor {
         }
     }
 
-    /// Applies bitmap deltas in order and carries out their GPU work, without drawing.
+    /// Applies bitmap deltas in order and carries out their GPU work, without drawing, and
+    /// waits for it.
     pub(crate) fn apply_bitmaps(&mut self, deltas: &[BitmapDelta]) -> Result<(), VkError> {
         let mut pending = Pending::default();
         let checked = self.queue_deltas(deltas, &mut pending);
@@ -34,6 +35,7 @@ impl VkCompositor {
             self.note_loss(error);
         }
         self.execute(pending, None)?;
+        self.settle()?;
         checked
     }
 
@@ -54,6 +56,13 @@ impl VkCompositor {
     ///
     /// [`VkError::DeviceLost`] is returned when the device is lost, or the frame did not
     /// complete in time, and for every frame after that.
+    ///
+    /// The uploads and the compose dispatch are submitted without waiting for them: this
+    /// returns once they are submitted, and the next method that waits for them finds out
+    /// how they ended. An error of the device while it runs them, a lost device or a frame
+    /// that did not complete in time, is therefore returned by that method, which may be the
+    /// next `render`, and not by this one. `render` itself waits for the compose of the
+    /// `render` before it, so at most one is in flight.
     pub fn render(&mut self, packet: &FramePacket) -> Result<(), VkError> {
         self.unless_lost(|compositor| compositor.render_packet(packet))
     }
@@ -124,6 +133,7 @@ impl VkCompositor {
             self.note_loss(error);
         }
         self.execute(pending, None)?;
+        self.settle()?;
         checked
     }
 
@@ -280,10 +290,12 @@ impl VkCompositor {
         Ok(())
     }
 
-    /// Carries out queued bitmap work and, when there is one, the frame: one submission,
-    /// waited for, then the release of everything the work was the last user of. That release
-    /// happens on every path, so a failure leaks nothing, except on a lost device, which is
-    /// not used at all once it is found lost, before or during the submission.
+    /// Carries out queued bitmap work and, when there is one, the frame: once the compose in
+    /// flight has completed, one submission, which becomes the compose in flight. Everything
+    /// the work was the last user of is released once a wait has seen it complete, or at once
+    /// when nothing was submitted. That release happens on every path, so a failure leaks
+    /// nothing, except on a lost device, which is not used at all once it is found lost,
+    /// before or during the submission.
     pub(super) fn execute(
         &mut self,
         pending: Pending<'_>,
@@ -292,14 +304,23 @@ impl VkCompositor {
         if let Some(call) = self.lost {
             return Err(VkError::DeviceLost { call });
         }
+        // The descriptors, the frame buffers and the images are only written or released
+        // once nothing in flight uses them.
+        self.settle()?;
         self.write_bitmap_descriptors(&pending.touched);
         let result = self.submit(&pending, frame);
         if let Err(error) = &result {
             self.note_loss(error);
         }
-        // Whatever was submitted has to finish before the objects below are destroyed and the
-        // frame buffers are written again. On a lost device it may still be running: the
-        // retired images are leaked, and the device is not idled, which might never end.
+        if let Some(in_flight) = &mut self.in_flight {
+            // Submitted, so the images go once it has completed.
+            in_flight.retired.extend(pending.retired);
+            return result;
+        }
+        // Nothing went out, or the submission failed. Whatever was submitted has to finish
+        // before the objects below are destroyed and the frame buffers are written again. On
+        // a lost device it may still be running: the retired images are leaked, and the
+        // device is not idled, which might never end.
         if result.is_err() && !self.idle_after_failure() {
             return result;
         }

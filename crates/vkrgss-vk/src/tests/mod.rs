@@ -9,6 +9,7 @@ pub(crate) mod harness;
 mod overlay;
 mod presentation;
 mod properties;
+mod round_trips;
 mod shaders;
 mod sprites;
 mod sweeps;

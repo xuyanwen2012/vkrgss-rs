@@ -19,7 +19,8 @@ pub struct FrameTiming {
     /// Copying the bitmap updates and the records into the buffers of the frame and
     /// recording the commands.
     pub upload: Option<Duration>,
-    /// Submitting the commands and waiting until the device has finished them.
+    /// Submitting the commands, and waiting until the device has finished them, which the
+    /// next call that uses the device, or taking the timing, does.
     pub submit: Option<Duration>,
     /// Recording the presentation pass, submitting it and waiting for it.
     pub present: Option<Duration>,

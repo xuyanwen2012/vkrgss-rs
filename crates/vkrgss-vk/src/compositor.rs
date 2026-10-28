@@ -108,12 +108,19 @@ pub use present::{Filter, Mix, OverlayImage, letterbox};
 
 /// The Vulkan compositor.
 ///
-/// Rendering is synchronous: every call submits its work and waits for it, so no Vulkan object
-/// is ever in use by the device when a method returns. A wait is bounded: a submission that has
-/// not completed within 60 seconds counts as a lost device, as does any call that
-/// reports `VK_ERROR_DEVICE_LOST`. The method returns [`VkError::DeviceLost`] then, and every
-/// later method that would use the device returns it again without using the device. Dropping
-/// a compositor whose device is lost leaks the device and what was made from it.
+/// At most the compose submission of the last [`render`](VkCompositor::render) is in use by
+/// the device when a method returns: `render` submits the bitmap uploads and the compose
+/// dispatch of its frame without waiting for them. Every method that records, reads back,
+/// replaces or destroys waits for that submission before it starts, `render` itself
+/// included, and so does dropping the compositor. Every other submission is waited for
+/// before the method that made it returns, so after any method but `render` nothing is in
+/// use.
+///
+/// A wait is bounded: a submission that has not completed within 60 seconds counts as a lost
+/// device, as does any call that reports `VK_ERROR_DEVICE_LOST`. The method returns
+/// [`VkError::DeviceLost`] then, and every later method that would use the device returns it
+/// again without using the device. Dropping a compositor whose device is lost leaks the device
+/// and what was made from it.
 ///
 /// [`VkError::DeviceLost`]: crate::VkError::DeviceLost
 pub struct VkCompositor {
@@ -137,7 +144,8 @@ pub struct VkCompositor {
     /// The frame target, in the `GENERAL` layout, sized for the last packet that got as far as
     /// drawing. It stays on the device; `read_frame` copies it out as a separate step.
     target: Option<GpuImage>,
-    /// Whether the target holds a completely rendered frame.
+    /// Whether the target holds a completely rendered frame once the compose in flight, if
+    /// any, has completed. Whoever reads the target waits for that compose first.
     has_frame: bool,
     set_layout: vk::DescriptorSetLayout,
     pipeline_layout: vk::PipelineLayout,
@@ -176,12 +184,16 @@ pub struct VkCompositor {
     present_probe: present::Probe,
     allocator: ManuallyDrop<Allocator>,
     pool: vk::CommandPool,
+    /// The command buffer of every submission. That of the compose may still be pending when
+    /// `render` returns; recording waits for it.
     commands: vk::CommandBuffer,
     /// The timeline semaphore every submission signals, each with the next value, and that
     /// the waits for submissions wait on.
     timeline: vk::Semaphore,
     /// The value the last submission signals on `timeline`, 0 before the first.
     submissions: u64,
+    /// The compose submission of the last `render` until a wait has seen it complete.
+    in_flight: Option<InFlight>,
     /// The call that found the device lost, once one has. From then on nothing of the device
     /// is used, destroyed or waited for: a submission whose wait ran out may still be running.
     lost: Option<&'static str>,
@@ -203,6 +215,16 @@ struct Pending<'a> {
     touched: BTreeSet<u32>,
     /// Images of destroyed bitmaps, freed once the packet's work has completed.
     retired: Vec<GpuImage>,
+}
+
+/// A compose submission that the device may still be running.
+struct InFlight {
+    /// The value it signals on the timeline.
+    value: u64,
+    /// Images of bitmaps its packet destroyed, released once it has completed.
+    retired: Vec<GpuImage>,
+    /// Whether it draws a measured frame, whose device time is read once it has completed.
+    measured: bool,
 }
 
 /// Everything the shader reads for one frame.
@@ -232,13 +254,26 @@ enum Step<'a> {
 }
 
 impl VkCompositor {
-    /// Runs `work`, a method that uses the device, unless the device is lost: then it fails
-    /// with [`VkError::DeviceLost`] at once and nothing of the device is used. A lost device
-    /// that `work` returns is recorded, so that every later call is refused, and one that it
-    /// recorded on the way makes it fail with that error whatever it returned.
+    /// Runs `work`, a method that uses the device, once the compose in flight has completed,
+    /// unless the device is lost: then it fails with [`VkError::DeviceLost`] at once and
+    /// nothing of the device is used. A lost device that `work` or the wait returns is
+    /// recorded, so that every later call is refused, and one that it recorded on the way
+    /// makes it fail with that error whatever it returned.
     ///
     /// [`VkError::DeviceLost`]: crate::VkError::DeviceLost
     fn unless_lost<T>(
+        &mut self,
+        work: impl FnOnce(&mut VkCompositor) -> Result<T, crate::VkError>,
+    ) -> Result<T, crate::VkError> {
+        self.guarded(|compositor| {
+            compositor.settle()?;
+            work(compositor)
+        })
+    }
+
+    /// Runs `work` unless the device is lost, and records a lost device that it returns or
+    /// found; see [`unless_lost`](VkCompositor::unless_lost).
+    fn guarded<T>(
         &mut self,
         work: impl FnOnce(&mut VkCompositor) -> Result<T, crate::VkError>,
     ) -> Result<T, crate::VkError> {

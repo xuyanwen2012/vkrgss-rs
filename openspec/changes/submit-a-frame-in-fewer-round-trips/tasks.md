@@ -6,8 +6,8 @@
 
 ## 2. `render` does not wait (`vkrgss-vk`)
 
-- [ ] 2.1 Submit the compose without waiting, keep its timeline value as pending, and make every method that records, reads back, replaces or destroys, `has_frame` readers and `Drop` wait for it first, as `design.md` says. Verify: a new test per public method of `VkCompositor` that calls it right after `render` and checks the result against the reference; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss-vk` passes with validation and no new validation message.
-- [ ] 2.2 Restate the contract in the doc comment of `VkCompositor` and in `render`'s errors section. Verify: the "Restated contract" scenario of `specs/vulkan-compositor/spec.md`.
+- [x] 2.1 Submit the compose without waiting, keep its timeline value as pending, and make every method that records, reads back, replaces or destroys, `has_frame` readers and `Drop` wait for it first, as `design.md` says. Verify: a new test per public method of `VkCompositor` that calls it right after `render` and checks the result against the reference; `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo test -p vkrgss-vk` passes with validation and no new validation message.
+- [x] 2.2 Restate the contract in the doc comment of `VkCompositor` and in `render`'s errors section. Verify: the "Restated contract" scenario of `specs/vulkan-compositor/spec.md`.
 
 ## 3. `present` and a freeze wait once (`vkrgss-vk`)
 

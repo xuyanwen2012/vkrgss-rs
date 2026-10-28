@@ -4,10 +4,11 @@ use ash::vk;
 use gpu_allocator::MemoryLocation;
 
 use std::collections::{HashMap, HashSet};
+use std::time::Instant;
 
 use super::{
-    FrameBuffer, FrameData, PUSH_CONSTANT_BYTES, Pending, SUBMISSION_TIMEOUT, Step, VkCompositor,
-    query,
+    FrameBuffer, FrameData, InFlight, PUSH_CONSTANT_BYTES, Pending, SUBMISSION_TIMEOUT, Step,
+    VkCompositor, query,
 };
 use crate::VkError;
 use crate::resources::{
@@ -17,7 +18,8 @@ use crate::resources::{
 
 impl VkCompositor {
     /// Records and submits the bitmap steps and, when everything it needs could be made, the
-    /// frame.
+    /// frame, without waiting: the submission is then the compose in flight. Nothing may be
+    /// in flight when this is called.
     ///
     /// The table already counts the packet's deltas as applied, so the bitmap steps are
     /// submitted even when a buffer cannot be allocated: every image ends up in the layout the
@@ -76,8 +78,9 @@ impl VkCompositor {
         let (device, commands) = (&self.gpu.device, self.commands);
         if !pending.steps.is_empty() {
             // SAFETY: the command buffer is recording. Every image named by a step is alive
-            // until `execute` has waited for this submission: live ones are in `self.images`
-            // and destroyed ones in `pending.retired`. A new image is in `UNDEFINED` and its
+            // until a wait has seen this submission complete: live ones are in `self.images`
+            // and destroyed ones in `pending.retired`, which `execute` hands to the compose in
+            // flight. A new image is in `UNDEFINED` and its
             // first step is its clear; any other is in `SHADER_READ_ONLY_OPTIMAL`, where the
             // previous submission left it for its readers. Upload rectangles were checked
             // against the image size and their bytes lie inside the staging buffer, which is
@@ -160,20 +163,26 @@ impl VkCompositor {
             }
         }
         if draw.is_some() {
-            // Until the dispatch has completed the target holds no whole frame.
+            // Until the dispatch has been submitted the target holds no whole frame.
             self.has_frame = false;
         }
         let recorded = self.stage_start();
-        self.submit_and_wait()?;
+        // SAFETY: there are no other semaphores.
+        let value = unsafe { self.submit_commands(commands, &[], &[]) }?;
+        self.in_flight = Some(InFlight {
+            value,
+            retired: Vec::new(),
+            measured: draw.is_some() && self.frame_timing.is_some(),
+        });
         if draw.is_some() {
+            // Whole once the submission has completed, which whoever reads the target waits
+            // for; the device time of the dispatch is read then too.
             self.has_frame = true;
-            let compose_device = self.read_span(query::COMPOSE)?;
             if let (Some(timing), Some(started), Some(recorded)) =
                 (&mut self.frame_timing, started, recorded)
             {
                 timing.upload = Some(recorded.duration_since(started));
                 timing.submit = Some(recorded.elapsed());
-                timing.compose_device = compose_device;
             }
         }
         failure.map_or(Ok(()), Err)
@@ -200,13 +209,15 @@ impl VkCompositor {
         readers.in_layout(vk::ImageLayout::GENERAL)
     }
 
-    /// Resets the command buffer and starts recording into it. A lost device is recorded
-    /// before the caller cleans up.
+    /// Waits for the compose in flight, then resets the command buffer and starts recording
+    /// into it. A lost device is recorded before the caller cleans up.
     pub(super) fn begin_commands(&mut self) -> Result<(), VkError> {
+        self.settle()?;
         let info = vk::CommandBufferBeginInfo::default()
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
         // SAFETY: the command buffer belongs to this device, its pool allows resetting single
-        // buffers, and it is not pending: every submission is waited for.
+        // buffers, and it is not pending: the compose in flight was waited for above, and
+        // every other submission is waited for before the method that made it returns.
         let begun = unsafe {
             self.gpu
                 .device
@@ -229,19 +240,39 @@ impl VkCompositor {
     /// Ends recording and submits the command buffer, which waits for the semaphores of
     /// `waits` and, once done, signals those of `signals` as well as the next value of the
     /// timeline; then blocks until the timeline has that value, so until the device has
-    /// finished the commands. A wait that runs out after [`SUBMISSION_TIMEOUT`], like a
-    /// lost device, is [`VkError::DeviceLost`] and marks the compositor lost.
+    /// finished the commands. A wait that runs out after [`SUBMISSION_TIMEOUT`], like a lost
+    /// device, is [`VkError::DeviceLost`] and marks the compositor lost.
     ///
     /// # Safety
     ///
-    /// The semaphores of `waits` and `signals` must be live binary semaphores of this device;
-    /// each of `waits` must have a signal operation pending or done that no other wait
-    /// consumes, and each of `signals` must be unsignalled with no signal operation pending.
+    /// As for [`submit_commands`](VkCompositor::submit_commands).
     pub(super) unsafe fn submit_with(
         &mut self,
         waits: &[vk::SemaphoreSubmitInfo<'_>],
         signals: &[vk::SemaphoreSubmitInfo<'_>],
     ) -> Result<(), VkError> {
+        // SAFETY: guaranteed by the caller.
+        let value = unsafe { self.submit_commands(self.commands, waits, signals) }?;
+        self.wait_for(value)
+    }
+
+    /// Ends recording into `commands` and submits it, without waiting: it waits for the
+    /// semaphores of `waits` and, once done, signals those of `signals` as well as the next
+    /// value of the timeline, which is returned. A lost device is recorded before the caller
+    /// cleans up.
+    ///
+    /// # Safety
+    ///
+    /// `commands` must be the compositor's command buffer, recording. The semaphores
+    /// of `waits` and `signals` must be live binary semaphores of this device; each of
+    /// `waits` must have a signal operation pending or done that no other wait consumes, and
+    /// each of `signals` must be unsignalled with no signal operation pending.
+    unsafe fn submit_commands(
+        &mut self,
+        commands: vk::CommandBuffer,
+        waits: &[vk::SemaphoreSubmitInfo<'_>],
+        signals: &[vk::SemaphoreSubmitInfo<'_>],
+    ) -> Result<u64, VkError> {
         let device = &self.gpu.device;
         let value = self.submissions + 1;
         let mut all_signals = Vec::with_capacity(signals.len() + 1);
@@ -252,19 +283,19 @@ impl VkCompositor {
                 .value(value)
                 .stage_mask(vk::PipelineStageFlags2::ALL_COMMANDS),
         );
-        let buffers = [vk::CommandBufferSubmitInfo::default().command_buffer(self.commands)];
+        let buffers = [vk::CommandBufferSubmitInfo::default().command_buffer(commands)];
         let submit = vk::SubmitInfo2::default()
             .wait_semaphore_infos(waits)
             .command_buffer_infos(&buffers)
             .signal_semaphore_infos(&all_signals);
         // SAFETY: the command buffer is recording and everything it references stays alive
-        // until the wait below returns; the queue and the timeline belong to this device, the
+        // until a wait has seen it complete; the queue and the timeline belong to this device, the
         // device was created with synchronization2 and timeline semaphores, `value` is greater
         // than every value signalled on the timeline before, and the queue is only used from
         // here. The caller vouches for the semaphores of `waits` and `signals`.
         let submitted = unsafe {
             device
-                .end_command_buffer(self.commands)
+                .end_command_buffer(commands)
                 .map_err(VkError::vulkan("vkEndCommandBuffer"))
                 .and_then(|()| {
                     device
@@ -278,15 +309,29 @@ impl VkCompositor {
             return Err(error);
         }
         self.submissions = value;
+        Ok(value)
+    }
+
+    /// Blocks until the timeline has `value`, so until the device has finished the submission
+    /// that signals it and every one before it, or for [`SUBMISSION_TIMEOUT`] at most. A wait
+    /// that runs out, like a lost device, is [`VkError::DeviceLost`] and marks the compositor
+    /// lost. A wait that covers the compose in flight completes it, which may find the device
+    /// lost too.
+    fn wait_for(&mut self, value: u64) -> Result<(), VkError> {
         let (semaphores, values) = ([self.timeline], [value]);
         let wait = vk::SemaphoreWaitInfo::default()
             .semaphores(&semaphores)
             .values(&values);
         let timeout = u64::try_from(SUBMISSION_TIMEOUT.as_nanos()).unwrap_or(u64::MAX);
-        // SAFETY: the timeline belongs to this device and the value was submitted above.
-        let waited = unsafe { device.wait_semaphores(&wait, timeout) };
+        // SAFETY: the timeline belongs to this device and the value was submitted.
+        let waited = unsafe { self.gpu.device.wait_semaphores(&wait, timeout) };
         let result = match self.probe.wait_result(waited) {
-            Ok(()) => return Ok(()),
+            Ok(()) => {
+                if self.in_flight.as_ref().is_some_and(|f| f.value <= value) {
+                    self.complete()?;
+                }
+                return Ok(());
+            }
             Err(vk::Result::TIMEOUT) => {
                 tracing::error!(
                     "a submission has not completed after {} seconds; the device is taken as lost",
@@ -300,6 +345,38 @@ impl VkCompositor {
         // The submission may still be running: nothing it uses may be touched again.
         self.note_loss(&error);
         Err(error)
+    }
+
+    /// Waits for the compose in flight, if there is one. While its frame is measured, the
+    /// wait counts towards the frame's `submit` stage.
+    pub(super) fn settle(&mut self) -> Result<(), VkError> {
+        let Some(in_flight) = &self.in_flight else {
+            return Ok(());
+        };
+        let (value, started) = (in_flight.value, in_flight.measured.then(Instant::now));
+        self.wait_for(value)?;
+        if let (Some(started), Some(timing)) = (started, &mut self.frame_timing) {
+            timing.submit = Some(timing.submit.unwrap_or_default() + started.elapsed());
+        }
+        Ok(())
+    }
+
+    /// Ends the compose in flight once a wait has seen it complete: releases the images it
+    /// was the last user of, and reads its device time when its frame is measured.
+    fn complete(&mut self) -> Result<(), VkError> {
+        let Some(in_flight) = self.in_flight.take() else {
+            return Ok(());
+        };
+        for image in in_flight.retired {
+            image.destroy(&self.gpu.device, &mut self.allocator);
+        }
+        if in_flight.measured && self.frame_timing.is_some() {
+            let compose_device = self.read_span(query::COMPOSE)?;
+            if let Some(timing) = &mut self.frame_timing {
+                timing.compose_device = compose_device;
+            }
+        }
+        Ok(())
     }
 
     /// Copies the pixels of an image to host memory: RGBA8 in row order.
