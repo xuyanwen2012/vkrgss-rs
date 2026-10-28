@@ -148,4 +148,39 @@ mod tests {
             }
         );
     }
+
+    /// Scenarios "Same results" and "Same messages" of "Frame entries are read by one rule".
+    #[test]
+    fn the_entries_and_their_messages_are_pinned() {
+        let text = " , 2 :save 1 ,\n\t\n,, 18446744073709551615: load 1 , 2:load 3,";
+        let schedule = StateSchedule::parse(text).unwrap();
+        assert_eq!(
+            schedule.entries,
+            [
+                (2, StateRequest::Save(1)),
+                (u64::MAX, StateRequest::Load(1)),
+                (2, StateRequest::Load(3)),
+            ]
+        );
+
+        let message = |text| StateSchedule::parse(text).unwrap_err().to_string();
+        assert_eq!(
+            message("1:save 0,  ten  ,"),
+            "states entry `ten` has no `:` between its frame and its request"
+        );
+        assert_eq!(
+            message(" x : save 0 "),
+            "states entry `x : save 0` does not start with a frame number"
+        );
+        assert_eq!(
+            message("18446744073709551616:save 0"),
+            "states entry `18446744073709551616:save 0` does not start with a frame number"
+        );
+        assert_eq!(
+            StateSchedule::parse(":save 0"),
+            Err(ScheduleError::InvalidFrame {
+                entry: ":save 0".to_owned()
+            })
+        );
+    }
 }

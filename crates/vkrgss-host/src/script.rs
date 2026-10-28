@@ -266,4 +266,33 @@ mod tests {
             "script entry `4:JUMP` names the unknown button `JUMP`"
         );
     }
+
+    /// Scenarios "Same results" and "Same messages" of "Frame entries are read by one rule".
+    #[test]
+    fn the_entries_and_their_messages_are_pinned() {
+        let script = InputScript::parse(" , 2 :A ,\n\t\n,, 18446744073709551615: , ").unwrap();
+        assert_eq!(script.at(2), Some(held(&[Button::A])));
+        assert_eq!(script.at(u64::MAX), Some(InputSnapshot::EMPTY));
+        assert_eq!(script.entries.len(), 2);
+
+        let message = |text| InputScript::parse(text).unwrap_err().to_string();
+        assert_eq!(
+            message("1:A,  ten  ,"),
+            "script entry `ten` has no `:` between its frame and its buttons"
+        );
+        assert_eq!(
+            message(" x : A "),
+            "script entry `x : A` does not start with a frame number"
+        );
+        assert_eq!(
+            message("18446744073709551616:A"),
+            "script entry `18446744073709551616:A` does not start with a frame number"
+        );
+        assert_eq!(
+            InputScript::parse("1 2:A"),
+            Err(ScriptError::InvalidFrame {
+                entry: "1 2:A".to_owned()
+            })
+        );
+    }
 }

@@ -2,7 +2,7 @@
 
 ## 1. Pin the messages (`vkrgss-host`)
 
-- [ ] 1.1 Add tests that pin the `MissingColon` and `InvalidFrame` messages and results of both parsers, including blanks, empty entries, a trailing comma and a frame beyond `u64`. Verify: `cargo test -p vkrgss-host script states` passes before the change.
+- [x] 1.1 Add tests that pin the `MissingColon` and `InvalidFrame` messages and results of both parsers, including blanks, empty entries, a trailing comma and a frame beyond `u64`. Verify: `cargo test -p vkrgss-host script states` passes before the change.
 
 ## 2. One reader (`vkrgss-host`)
 
