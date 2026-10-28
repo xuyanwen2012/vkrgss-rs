@@ -38,4 +38,11 @@ syntax descriptions; the shared rule is described once in the new module and ref
 
 ## Follow-ups
 
-None yet.
+- Task 1.1 names `cargo test -p vkrgss-host script states`, which cargo refuses (one test
+  name filter only); the tests were run as `cargo test -p vkrgss-host --lib -- script states`.
+- The first gate run failed once in `crates/vkrgss/tests/rgss3.rs`,
+  `a_copy_of_the_program_alone_names_the_missing_guest_executable`, with "Text file busy"
+  (`ETXTBSY`) when it ran its fresh copy of the program: a test that forks while another
+  thread still holds the copy open for writing. Outside this change; the second run passed.
+- In this sandbox `cargo xtask xarch` needs `XDG_RUNTIME_DIR` set to a writable directory,
+  since vkrgss cannot create its directory under `/run/user/1000`.
