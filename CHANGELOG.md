@@ -90,7 +90,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `cargo xtask xarch` compares every file that a run wrote below the copy of a game,
   whatever its name: one that the game's directory lacks or holds with other bytes, apart
-  from the script archive with the probe. Before, a file was a save only when its name
+  from the script archive with the probe and the `vkrgss.toml` that `xarch android` writes,
+  while it holds what that wrote. Before, a file was a save only when its name
   said so, so `Save/1.rvdata` and `1.cdat` were never compared, while files of the game
   that no run had touched counted as identical saves.
 

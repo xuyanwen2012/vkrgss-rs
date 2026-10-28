@@ -655,7 +655,8 @@ directory and compares its pixels with the same frame of the second, compares ev
 for byte, prints each difference and a line per game, and fails when anything differs or is
 missing. A save is any file of the copy that the run wrote, whatever its name: one that the
 game's directory of the list lacks or holds with other bytes, apart from the script archive
-into which the oracle put the probe; so `compare` reads the list too, and every game of the
+into which the oracle put the probe and the `vkrgss.toml` that `android` put into the copy,
+while it holds what `android` wrote; so `compare` reads the list too, and every game of the
 first directory has to be in it. The line of a game counts its saves, `saves 2 same, 0
 different of 2 expected` for one with `saves = 2`, and such a game fails when either side
 holds fewer saves than it expects, so that a run that saved nothing is not taken for one whose

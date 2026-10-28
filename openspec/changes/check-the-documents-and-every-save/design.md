@@ -88,6 +88,17 @@ Each is checked at the start and corrected if it still disagrees:
   of the first directory that the list lacks.
 - A file that the run of one side wrote and the other side holds unchanged from the game is
   counted as a save that differs, not as one that is missing.
+- `xarch android` also writes `vkrgss.toml`, the options of the app, into the copy before it
+  is pushed, and the copy comes back with it. Taken as a save it made a run of this machine
+  and one of a phone differ (`save vkrgss.toml is missing in A`) and let two phone runs
+  that saved nothing meet `saves = 1` (found in review). `harness_files` now names the files
+  that `xarch android` adds with their bytes; the run writes them from it, and `saves`
+  leaves out a file of that path only while it holds those bytes, so a `vkrgss.toml` that
+  the game changed is still a save. The bytes come from the list, as on the run; a list
+  that cannot make them (no `[builtin_scripts]` for the game's runtime, with which no run
+  could have been made) is an error of `compare`. Three tests of `xarch` cover the
+  comparison of a run here with one on a phone, two phone runs against `saves = 1`, and a
+  changed `vkrgss.toml`.
 - The list of this machine: the owner's `vkxp/local/xarch.toml` was copied to `local/xarch.toml`
   of this clone (not committed), and `saves = 3` was set there for `isoi`, the one game whose
   input saves. The owner's file was left as it is, because `xarch` of `main` refuses the new
@@ -161,6 +172,34 @@ for nothing), the allocation paragraph of `vkrgss-image/src/lib.rs`, the held fr
 
 Left as they are: the row P3 of "Milestones" in `docs/decisions.md` keeps "17 saves", the
 dated record of what `xarch` reported on 2026-10-18.
+
+### Checks (group 4)
+
+Every command ran with `TMPDIR=/var/tmp/vkrgss-check-the-documents-and-every-save` and
+`VK_LOADER_DRIVERS_SELECT='*lvp*'`, `xarch` also with `XDG_RUNTIME_DIR` below `TMPDIR`, on
+the tree of the group-4 commit.
+
+- `cargo xtask gate` (`target/xarch-logs/gate3.log`): exit 0, all steps passed (fmt,
+  clippy, test, test-unvalidated, doc, openspec).
+- `cargo xtask xarch check` against the baseline `base-12ae44dd` (`check2.log`): exit 0,
+  `all identical`, 84 frames. Saves compared: `isoi` 3 same, 0 different, of 3 expected;
+  `arcis`, `crysalis`, `mbbs`, `mh`, `qunzhan`, `tower`, `vv`, `xinbing` and `zhanshen` 0.
+- `openspec validate check-the-documents-and-every-save --strict`: valid.
+
+Earlier runs that failed, recorded as observed; their causes are not established:
+
+- The first full gate (`gate.log`, before the fix of `vkrgss.toml`) exited 1 in one test
+  alone: `upstream_core_suite_passes` of `vkrgss-ruby-sys`, where `test_test` of
+  `third_party/ruby-1.8.7/test/ruby/test_file_exhaustive.rb:472` raised `ArgumentError:
+  time interval must be positive` from `sleep(@time - Time.now + 1.1)`; that file took 24 s
+  for its 68 tests in that run. No Ruby source or test changed in this branch, and the test
+  passed in both later full gates that reached it. It was neither changed nor skipped.
+- The second full gate (`gate2.log`) exited 1 in `upstream.rs` and `upstream_stress.rs` of
+  `vkrgss-ruby192-sys`, with `AlreadyExists` (`File exists`) when linking to the
+  executable; a second gate in the same clone, started by the review, ran at the same time.
+- A quick gate of the review exited 1 naming `crates/vkrgss/tests/rgss3.rs`; a rerun of that
+  test file alone by cargo and of the same test binary of the quick gate each passed all 41
+  tests (`reviewer-rgss3.log`, `reviewer-rgss3-quick-binary.log`). Nothing was changed for it.
 
 ## Follow-ups
 
