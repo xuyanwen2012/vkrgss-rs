@@ -16,6 +16,7 @@ defined in `vkrgss-proto`.
 | `vkrgss-image` | PNG, JPEG, BMP decoding | guest |
 | `vkrgss-text` | Font lookup, substitution table, glyph rasterisation | guest |
 | `vkrgss-vfs` | Path resolution, RTP lookup, encrypted archive | guest |
+| `vkrgss-ruby-glue` | The bridge between Rust and Ruby that both interpreter crates share: host functions and their trampolines, rooting, the protected call and the calls built on it, generic over a trait of the C API; no C code and no unmangled symbol | guest |
 | `vkrgss-ruby-sys` | Build of the embedded Ruby 1.8.7 and raw FFI | guest |
 | `vkrgss-ruby192-sys` | Build of the embedded Ruby 1.9.2, the interpreter of RGSS3, and raw FFI under the names of `vkrgss-ruby-sys`; empty on every target but `x86_64-unknown-linux-gnu` | guest |
 | `vkrgss-binding` | RGSS Ruby API on top of core, over Ruby 1.8.7 | guest |
@@ -39,7 +40,12 @@ between the interpreters is behind the surface that both interpreter crates offe
 same names (which Ruby it is, the options for a runtime, the main object, the accessors of
 strings and arrays, a constructor for bytes and one for text, the mark of the game's scripts)
 or is asked at run time in one place, `rb::RUBY_19`; no `cfg` and no cargo feature tells the
-interpreters apart. A string the classes create is bytes (ASCII-8BIT over Ruby 1.9.2, as on
+interpreters apart. The Rust side of that surface exists once, in `vkrgss-ruby-glue`: its
+`Ruby`, `Root` and `protect` are generic over the trait `Interpreter`, which each interpreter
+crate implements on its unit type `CApi` with its own declarations, and each offers them for
+its interpreter under its own paths (`vkrgss_ruby_sys::Ruby` is `Ruby<CApi>`). What differs
+between the interpreters in that code is an item of the trait. The glue has no C code and no
+unmangled symbol, so both interpreter crates depend on it although no program links the two. A string the classes create is bytes (ASCII-8BIT over Ruby 1.9.2, as on
 the original runtime of RGSS3) unless it is script source or the path of the script archive.
 The main of a guest has one source as well, `crates/vkrgss-guest-main/src`, compiled a second
 time by `vkrgss-guest-main-rgss3` over `vkrgss-binding-rgss3`. The guest executable
@@ -151,7 +157,7 @@ Four rules keep the guest/host boundary intact. A test in `xtask` checks them ag
 violation is reported with the full dependency path that causes it.
 
 1. **Guest crates do not reach host crates.** None of `vkrgss-core`, `vkrgss-image`, `vkrgss-text`,
-   `vkrgss-vfs`, `vkrgss-ruby-sys`, `vkrgss-ruby192-sys`, `vkrgss-binding`, `vkrgss-binding-rgss3`,
+   `vkrgss-vfs`, `vkrgss-ruby-glue`, `vkrgss-ruby-sys`, `vkrgss-ruby192-sys`, `vkrgss-binding`, `vkrgss-binding-rgss3`,
    `vkrgss-guest`, `vkrgss-guest-main`, `vkrgss-guest-main-rgss3`, `vkrgss-guest-rgss12`,
    `vkrgss-guest-rgss3` may depend,
    directly or transitively, on `vkrgss-vk`, `vkrgss-audio` or `vkrgss-host`.
@@ -185,5 +191,8 @@ one version, which a test of `xtask` holds as well.
 In addition, `vkrgss-proto`, `vkrgss-pixel`, `vkrgss-core` and `vkrgss-compose-ref` carry
 `#![forbid(unsafe_code)]`, so `unsafe` in them does not compile, and so does `vkrgss-guest-main`;
 `vkrgss-guest-rgss12` and `vkrgss-guest-rgss3` have no `unsafe`.
+`vkrgss-ruby-glue` allows `unsafe` at its root, as the two interpreter crates do: it holds
+the calls into Ruby and the trampolines that they share, each block with its `SAFETY`
+comment.
 `vkrgss-guest` denies `unsafe`
 at its root and allows it in the modules of the copier and of the signals only.

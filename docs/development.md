@@ -312,6 +312,20 @@ database. A vulnerability, a licence that is not on the list or a crate from any
 crates.io fails it; an unmaintained crate is a warning. Without `cargo-deny` the command
 says how to install it (`cargo install --locked cargo-deny`) and fails.
 
+## The glue of the two interpreters
+
+The Rust code that enters and leaves Ruby, host functions and their trampolines, the
+definitions, rooting, `protect` and the calls built on it, is in `crates/vkrgss-ruby-glue`
+once for both interpreters. It is generic over the trait `Interpreter` of that crate, which
+`src/capi.rs` of `vkrgss-ruby-sys` and of `vkrgss-ruby192-sys` implements with the
+declarations of its `ffi`. A fix to that code is a fix for both; a difference between the
+interpreters is an item of the trait, implemented in both `capi.rs`. What remains of each
+interpreter crate is its build, its `ffi`, its interpreter thread and its signals. The glue
+has no interpreter of its own and no tests that run Ruby: the tests of both interpreter
+crates exercise it, `tests/protect.rs` the jumps through a host function among them, so a
+change to it runs `cargo test -p vkrgss-ruby-sys -p vkrgss-ruby192-sys`, which the quick
+gate does for a change of the glue.
+
 ## The tests of the binding over two interpreters
 
 The RGSS classes have one source, `crates/vkrgss-binding/src`, which `vkrgss-binding` compiles

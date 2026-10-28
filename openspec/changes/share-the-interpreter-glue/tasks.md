@@ -12,5 +12,5 @@
 
 ## 3. Documents and checks
 
-- [ ] 3.1 `docs/architecture.md` (crate table, unsafe list, the paragraph on the two sys crates), `docs/development.md`, `CHANGELOG.md`. Verify: the document tests pass.
-- [ ] 3.2 `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0, `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask xarch check` prints `all identical`, `openspec validate share-the-interpreter-glue --strict` passes.
+- [x] 3.1 `docs/architecture.md` (crate table, unsafe list, the paragraph on the two sys crates), `docs/development.md`, `CHANGELOG.md`. Verify: the document tests pass.
+- [x] 3.2 `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` exits 0, `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask xarch check` prints `all identical`, `openspec validate share-the-interpreter-glue --strict` passes.

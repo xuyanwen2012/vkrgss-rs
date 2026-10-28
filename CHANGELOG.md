@@ -60,6 +60,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- The Rust code that bridges Rust and Ruby, host functions, rooting, the protected call and
+  the method calls, is shared by both interpreters in the new crate `vkrgss-ruby-glue`,
+  generic over a trait of the C API; `vkrgss-ruby-sys` and `vkrgss-ruby192-sys` implement
+  the trait and offer the shared items under their former paths. `Ruby::str_new_utf8`
+  exists over Ruby 1.8.7 too.
+- `Graphics.frame_count` and the byte counts of `Audio.bgm_pos` and `Audio.bgs_pos` make a
+  `Bignum` with `rb_ll2inum` instead of evaluating its decimal text.
 - Protocol version 16: the bitmap changes of a frame may travel ahead of it in messages of
   their own, `GuestToHost::Bitmaps`, which the host applies with the next frame before its
   own changes and answers with no tick. Recordings of version 15 are not read.
@@ -69,6 +76,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   changes, and the binding ends the game with `RunError::Extraction`.
 
 ### Fixed
+
+- Over Ruby 1.9.2, a protected call of the host while a `throw` is pending, such as a host
+  function that catches the `throw` of the block it yields to and calls into Ruby before
+  resuming it, puts the pending `throw` back without `rb_set_errinfo`. Before, that raised
+  `TypeError` (`assigning non-exception to $!`) through the frames of the host.
+- A fatal error that a host function resumes stays a fatal error, which `rescue Exception`
+  does not catch, in both interpreters. Before, it was raised again as an ordinary
+  exception that a script could rescue.
 
 - A bitmap of 16384 by 16384 pixels, which the core accepts as the original runtime does,
   reaches the host from a guest process: its pixels go ahead of the frame in messages under

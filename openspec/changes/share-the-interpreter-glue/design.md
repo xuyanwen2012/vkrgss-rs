@@ -94,4 +94,14 @@
 
 ## Follow-ups
 
-None yet.
+- `AGENTS.md` ("`unsafe` is allowed only in ...") and `docs/decisions.md` (the table of
+  crates, and the crates that may hold `unsafe` under "Process") do not name
+  `vkrgss-ruby-glue`, which holds `unsafe` now. Both are outside the scope of this change,
+  and `decisions.md` changes only through a change that says so; `docs/architecture.md`
+  names the crate in its table and in the paragraph on `unsafe`.
+- `a_copy_of_the_program_alone_names_the_missing_guest_executable` of
+  `crates/vkrgss/tests/rgss3.rs` failed three gate runs of this change under load with
+  `ETXTBSY` ("text file busy") and passed alone and in a fourth gate run: another test thread
+  forks while the copy of the program is still open for writing. The temporary directory of
+  this run is on disk, where copying the program takes longer than on `/tmp`. The test has
+  no retry like the tests of `xtask/src/audit.rs`; it is outside the scope of this change.
