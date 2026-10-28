@@ -82,6 +82,7 @@ fn panic_message(payload: &(dyn Any + Send)) -> String {
 #[derive(Clone, Copy)]
 enum Exit {
     Raise(VALUE),
+    Fatal(VALUE),
     Jump(c_int),
 }
 
@@ -108,8 +109,10 @@ unsafe fn finish<I: Interpreter>(outcome: std::thread::Result<HostResult>) -> VA
     };
 
     let from_raised = |raised: Raised| {
-        if raised.state == I::TAG_RAISE || raised.state == I::TAG_FATAL {
+        if raised.state == I::TAG_RAISE {
             Exit::Raise(raised.exception)
+        } else if raised.state == I::TAG_FATAL {
+            Exit::Fatal(raised.exception)
         } else {
             Exit::Jump(raised.state)
         }
@@ -137,10 +140,16 @@ unsafe fn finish<I: Interpreter>(outcome: std::thread::Result<HostResult>) -> VA
 
     // Only `exit`, which is plain data, is alive now: the jump skips no destructor.
     // SAFETY: Ruby called us, so a handler exists; `rb_exc_raise` itself rejects a value
-    // that is not an exception with a `TypeError`.
+    // that is not an exception with a `TypeError`. A fatal error is resumed as a fatal error,
+    // which `rescue` does not catch, with its exception put back as the current error, where
+    // the interpreter reads it; putting back an exception raises nothing.
     unsafe {
         match exit {
             Exit::Raise(exception) => I::rb_exc_raise(exception),
+            Exit::Fatal(exception) => {
+                I::restore_errinfo(exception);
+                I::rb_jump_tag(I::TAG_FATAL)
+            }
             Exit::Jump(state) => I::rb_jump_tag(state),
         }
     }

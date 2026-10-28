@@ -63,6 +63,20 @@ fn update_counts_frames() {
     assert_eq!(value, "4611686018427387904");
 }
 
+/// A frame count beyond the `Fixnum`s reads back as an equal `Bignum`. On the 64-bit builds
+/// a `Fixnum` has 62 bits, so 2^40 is still one and 2^62 is the first `Bignum`.
+#[test]
+fn a_large_frame_count_reads_back_equal() {
+    let (value, _) = eval(
+        "[2 ** 40, 2 ** 62, -(2 ** 62) - 1].map do |count|
+           Graphics.frame_count = count
+           read = Graphics.frame_count
+           [read == count, read.class]
+         end",
+    );
+    assert_eq!(value, "[[true, Fixnum], [true, Bignum], [true, Bignum]]");
+}
+
 #[test]
 fn a_quit_request_raises_system_exit_in_update() {
     let (value, record) = play(

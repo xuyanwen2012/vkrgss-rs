@@ -9,15 +9,14 @@
 //! Provenance: oracle measurement 2026-10-13, RGSS301 version 3.0.1.1 and RGSS300 version
 //! 3.0.0.1, `ace-v1-api-REPORT.md` sections 6.1 to 6.4.
 
-use std::ffi::c_long;
-
 use vkrgss_core::sound::{Position, SoundFormat};
 use vkrgss_proto::{AudioChannel, AudioCommand, GuestToHost};
 use vkrgss_ruby_sys::ffi::{self, VALUE};
-use vkrgss_ruby_sys::{HostResult, Raise, Raised, Ruby};
+use vkrgss_ruby_sys::{HostResult, Raised, Ruby};
 use vkrgss_vfs::{FileKind, Runtime};
 
 use crate::error;
+use crate::graphics;
 use crate::guest::Guest;
 use crate::rb;
 use crate::runtime::Playing;
@@ -333,13 +332,9 @@ fn position(ruby: &Ruby, channel: AudioChannel) -> HostResult {
     let bytes = Guest::with(ruby, |guest| {
         guest.audio.track(channel).map_or(0, |track| track.bytes())
     });
-    match c_long::try_from(bytes) {
-        Ok(bytes) if ffi::fixable(bytes) => Ok(ffi::long2fix(bytes)),
-        // A `Bignum`, which the interpreter makes from its literal.
-        _ => Ok(ruby
-            .eval(&bytes.to_string(), "Audio", 1)
-            .map_err(Raise::from)?),
-    }
+    // A count of bytes does not reach 2^63.
+    let bytes = i64::try_from(bytes).unwrap_or(i64::MAX);
+    graphics::integer_new(ruby, bytes)
 }
 
 fn bgm_play_rgss3(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {

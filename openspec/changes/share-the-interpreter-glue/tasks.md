@@ -7,8 +7,8 @@
 
 ## 2. Jumps and bignums
 
-- [ ] 2.1 L1 and L2 in the shared `protect` and trampoline: restore only nil or an exception through `rb_set_errinfo`, resume `TAG_FATAL` with `rb_jump_tag`. Verify: the scenarios of "Jumps that are not exceptions cross host functions" for Ruby 1.8.7 and of the 1.9.2 requirement, as tests of the sys crates.
-- [ ] 2.2 `rb_ll2inum` in `graphics.rs` (`frame_count`) and `audio.rs` (byte counts). Verify: a binding test reads `Graphics.frame_count` set to 2^40 back as an equal `Bignum` on both runtimes.
+- [x] 2.1 L1 and L2 in the shared `protect` and trampoline: restore only nil or an exception through `rb_set_errinfo`, resume `TAG_FATAL` with `rb_jump_tag`. Verify: the scenarios of "Jumps that are not exceptions cross host functions" for Ruby 1.8.7 and of the 1.9.2 requirement, as tests of the sys crates.
+- [x] 2.2 `rb_ll2inum` in `graphics.rs` (`frame_count`) and `audio.rs` (byte counts). Verify: a binding test reads `Graphics.frame_count` set to 2^40 back as an equal `Bignum` on both runtimes.
 
 ## 3. Documents and checks
 

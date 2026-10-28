@@ -844,6 +844,10 @@ unsafe extern "C" {
     pub fn rb_errinfo() -> VALUE;
     /// Sets `$!`. The value must be `nil` or an exception, or the call raises `TypeError`.
     pub fn rb_set_errinfo(exception: VALUE);
+    /// Sets the current error to any value without raising, as the interpreter puts it back
+    /// after a tag jump: also to what a pending `throw` carries, which [`rb_set_errinfo`]
+    /// rejects. Defined by `errinfo.c` of this crate.
+    pub fn ruby_vkxp_set_errinfo(errinfo: VALUE);
     /// The `main` object, `self` at the top level. Defined by `vm.c`; declared in no public
     /// header.
     pub fn rb_vm_top_self() -> VALUE;

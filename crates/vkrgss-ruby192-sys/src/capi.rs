@@ -62,9 +62,22 @@ unsafe impl Interpreter for CApi {
     }
 
     unsafe fn restore_errinfo(value: VALUE) {
-        // SAFETY: on a thread that holds the interpreter, with a value that was the current
-        // error, which `rb_set_errinfo` takes.
-        unsafe { ffi::rb_set_errinfo(value) };
+        // SAFETY: on a thread that holds the interpreter, with a value the caller guarantees.
+        // `rb_set_errinfo` takes `nil` and an exception without raising. What a pending jump
+        // carries is a node of the interpreter, whose class `rb_set_errinfo` must not look
+        // at; it, and any other value that was the current error, goes back as the
+        // interpreter puts back the current error after its own tag jumps. The type is read
+        // before the class, so the class is looked up for an object only.
+        unsafe {
+            let exception = value == ffi::Qnil
+                || (ffi::rb_type(value) != ffi::T_NODE
+                    && ffi::rtest(ffi::rb_obj_is_kind_of(value, ffi::rb_eException)));
+            if exception {
+                ffi::rb_set_errinfo(value);
+            } else {
+                ffi::ruby_vkxp_set_errinfo(value);
+            }
+        }
     }
 
     unsafe fn set_errinfo(value: VALUE) {

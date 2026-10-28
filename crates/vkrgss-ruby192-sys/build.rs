@@ -320,6 +320,7 @@ fn main() {
 
     println!("cargo:rerun-if-changed=config");
     println!("cargo:rerun-if-changed=encodings.c");
+    println!("cargo:rerun-if-changed=errinfo.c");
     println!("cargo:rerun-if-changed={}", utf8(&ruby_dir));
     println!("cargo:rerun-if-changed={}", utf8(&core_math_dir));
 
@@ -336,12 +337,14 @@ fn main() {
         .include(core_math_dir.join("vkrgss"));
 
     // The interpreter with its regular expression engine, the four encodings of the core and
-    // the transcoders, and the table of the encodings that are registered at first use.
+    // the transcoders, the table of the encodings that are registered at first use, and the
+    // setter of the current error that `errinfo.c` adds.
     let mut core = base.clone();
     for name in CORE_SOURCES.iter().chain(TRANSCODER_SOURCES) {
         core.file(ruby_dir.join(format!("{name}.c")));
     }
     core.file(manifest_dir.join("encodings.c"));
+    core.file(manifest_dir.join("errinfo.c"));
     core.compile("vkrgss-ruby192-static");
 
     let mut encodings = base.clone();

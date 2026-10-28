@@ -65,6 +65,33 @@
   without arguments with `rb_funcall2` and a null argument vector, which is what
   `rb_funcall` passes for no arguments in both interpreters.
 
+## Jumps and bignums as built
+
+- **L1, recorded.** Over Ruby 1.9.2 `restore_errinfo` puts the previous error back with
+  `rb_set_errinfo` when it is `nil` or an exception, and otherwise with
+  `ruby_vkxp_set_errinfo`, a small accessor in the C glue of `vkrgss-ruby192-sys`
+  (`errinfo.c`) that sets `th->errinfo` as `rb_ensure` and the VM do after their tag jumps.
+  The type is checked for `T_NODE` before `rb_obj_is_kind_of` runs, because what a pending
+  `throw` carries is a node, whose class word is no class. `rb_protect` around the restore
+  was not taken: it would stop the `TypeError` but not put the error back, and the pending
+  `throw` would be lost. Ruby 1.8.7 keeps a `throw` in the tag of its `catch` and assigns
+  `ruby_errinfo`, which takes any value; nothing changes there.
+- **L2.** The trampoline resumes `TAG_FATAL` by putting its exception back as the current
+  error and calling `rb_jump_tag(TAG_FATAL)`, in both interpreters. In Ruby 1.8.7 the
+  `rescue` that the fatal error passes puts back the error it found for every jump that is
+  not a raise, so at the top the jump arrives as `TAG_FATAL` with `$!` as before, as it does
+  without a host function in between; the test of 1.8.7 checks the state and that the
+  `rescue` did not run, the test of 1.9.2 also the exception.
+- The tests of the scenarios are in `tests/protect.rs` of both sys crates: a new test
+  target of `vkrgss-ruby192-sys` would have to be named in `xtask/src/gate.rs`.
+- **Bignums.** `Graphics.frame_count` and the byte counts of `Audio.bgm_pos` and
+  `Audio.bgs_pos` go through `integer_new` of `graphics.rs`: a `Fixnum` when the value fits,
+  otherwise `rb_ll2inum` under `protect`, since it allocates. A byte count is a `u64` and
+  saturates at `i64::MAX`, which it cannot reach. On the 64-bit builds a `Fixnum` has 62
+  bits, so 2^40 reads back as a `Fixnum`; the test in `tests/modules.rs` of the binding,
+  which the package over Ruby 1.9.2 runs as well, reads back 2^40, 2^62 and -2^62 - 1 and
+  checks that the last two are equal `Bignum`s.
+
 ## Follow-ups
 
 None yet.

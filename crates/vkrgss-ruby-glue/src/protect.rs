@@ -68,7 +68,8 @@ pub unsafe fn protect<I: Interpreter, T>(data: &mut T, body: ProtectFn) -> Resul
     }
     // SAFETY: as above. Taking the exception out leaves `$!` as the call found it, which is
     // what a `rescue` that ends does; `before` has been in a local since it was read and was
-    // the current error, so setting it again cannot raise.
+    // the current error, so putting it back raises nothing, also when it is what a pending
+    // `throw` carries.
     let exception = unsafe {
         let pending = I::errinfo();
         I::restore_errinfo(before);

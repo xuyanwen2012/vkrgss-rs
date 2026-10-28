@@ -8,7 +8,7 @@
 //! snapshot rule of RGSS3 and takes the arguments of `transition` as its original runtime
 //! does.
 
-use std::ffi::c_long;
+use std::ffi::{c_long, c_longlong};
 
 use vkrgss_compose_ref::SnapshotRule;
 use vkrgss_proto::{BitmapDelta, BitmapId, FreezeRule, GuestToHost, Size, TransitionRule};
@@ -379,10 +379,27 @@ fn set_frame_rate(ruby: &Ruby, _recv: VALUE, args: &[VALUE]) -> HostResult {
 
 fn frame_count(ruby: &Ruby, _recv: VALUE, _args: &[VALUE]) -> HostResult {
     let count = Guest::with(ruby, |guest| guest.scene.frame_count());
-    match c_long::try_from(count) {
-        Ok(count) if ffi::fixable(count) => Ok(ffi::long2fix(count)),
-        // A `Bignum`, which the interpreter makes from its literal.
-        _ => Ok(ruby.eval(&count.to_string(), "Graphics", 1)?),
+    integer_new(ruby, count)
+}
+
+unsafe extern "C" fn integer_body(data: VALUE) -> VALUE {
+    // SAFETY: `integer_new` passes a pointer to the integer. A `Bignum` is allocated, which
+    // raises `NoMemoryError` when it fails, hence the protection.
+    unsafe { ffi::rb_ll2inum(*(data as *const c_longlong)) }
+}
+
+/// The Integer of a counter of the host, `Graphics.frame_count` or the byte count of
+/// `Audio.bgm_pos`: a `Fixnum`, or a `Bignum` beyond the `Fixnum`s.
+pub(crate) fn integer_new(_ruby: &Ruby, integer: i64) -> HostResult {
+    match c_long::try_from(integer) {
+        Ok(integer) if ffi::fixable(integer) => Ok(ffi::long2fix(integer)),
+        _ => {
+            let mut integer: c_longlong = integer;
+            // SAFETY: `&Ruby` proves a thread that holds the interpreter, and `integer_body`
+            // fits the contract of `protect`: it reads the integer and holds nothing with a
+            // destructor.
+            Ok(unsafe { vkrgss_ruby_sys::protect(&mut integer, integer_body) }?)
+        }
     }
 }
 
