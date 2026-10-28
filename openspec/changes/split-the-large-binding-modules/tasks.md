@@ -6,7 +6,7 @@
 
 ## 2. Split `win32api.rs` and `font.rs` (`vkrgss-binding`)
 
-- [ ] 2.1 Move `win32api.rs` and `font.rs` into the modules `design.md` names, their tests into files of their own. Verify: `cargo test -p vkrgss-binding -p vkrgss-binding-rgss3` passes with no test removed; the "File lengths" scenario of `specs/binding-over-two-interpreters/spec.md`.
+- [x] 2.1 Move `win32api.rs` and `font.rs` into the modules `design.md` names, their tests into files of their own. Verify: `cargo test -p vkrgss-binding -p vkrgss-binding-rgss3` passes with no test removed; the "File lengths" scenario of `specs/binding-over-two-interpreters/spec.md`.
 
 ## 3. Prelude line numbers (`vkrgss-binding`)
 
