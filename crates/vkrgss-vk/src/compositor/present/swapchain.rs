@@ -267,16 +267,25 @@ impl VkCompositor {
     /// the surface has no pixels now, in which case there is nothing to present into.
     pub(super) fn ensure_swapchain(&mut self) -> Result<bool, VkError> {
         let requested = self.surface_size;
+        let replaced = match &self
+            .presenter
+            .as_ref()
+            .expect("made by the caller")
+            .swapchain
+        {
+            Some(chain) if !chain.stale && chain.requested == requested => return Ok(true),
+            Some(_) => true,
+            None => false,
+        };
+        if replaced {
+            // Replacing a swapchain may idle the device below, which is not bounded: the
+            // compose in flight is waited for first, with the bounded wait.
+            self.settle()?;
+        }
         let maintenance = self.uses_swapchain_maintenance();
         let device = &self.gpu.device;
         let surface = self.gpu.surface.as_ref().expect("checked by the caller");
         let presenter = self.presenter.as_mut().expect("made by the caller");
-        if let Some(chain) = &presenter.swapchain
-            && !chain.stale
-            && chain.requested == requested
-        {
-            return Ok(true);
-        }
 
         // SAFETY: the physical device and the surface belong to the live instance.
         let capabilities = unsafe {

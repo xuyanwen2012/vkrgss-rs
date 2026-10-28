@@ -291,6 +291,11 @@ impl VkCompositor {
     ) -> Result<T, crate::VkError> {
         self.guarded(|compositor| {
             let result = work(compositor);
+            // A lost device that `work` returns without having recorded it ends the call
+            // here: the compose is not waited for and nothing it used is released.
+            if let Err(error) = &result {
+                compositor.note_loss(error);
+            }
             if compositor.lost.is_none() {
                 compositor.settle()?;
             }
@@ -330,7 +335,16 @@ impl VkCompositor {
     /// Idles the device after a submission failed, so that whatever was submitted has
     /// finished before what it used is released. Returns whether it may be released: not
     /// when the device is lost, found so before or by this idle.
+    ///
+    /// The compose in flight is waited for first, with the bounded wait, since an idle is not
+    /// bounded: a compose that does not complete in time is a lost device, and the device is
+    /// not idled then.
     fn idle_after_failure(&mut self) -> bool {
+        if self.lost.is_none()
+            && let Err(error) = self.settle()
+        {
+            self.note_loss(&error);
+        }
         if self.lost.is_none() {
             // SAFETY: the device is live.
             let idled = unsafe { self.gpu.device.device_wait_idle() };

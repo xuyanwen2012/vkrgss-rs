@@ -104,6 +104,15 @@ does not improve is recorded, not hidden.
   one wait covers both. When such a method submits nothing (a window without pixels, no
   frame to read), it waits for the compose before it returns, so after it nothing is in
   flight.
+- Two paths idle the device, which is not bounded: the clean-up after a failed submission
+  (a failed draw among them) and the replacement of a swapchain whose presents carry no
+  fences or whose fences did not signal in time. Both first wait for the compose in flight
+  with the bounded wait, and stop there when it finds the device lost; a swapchain is
+  replaced only on the first present after a resize or an out-of-date report, and every
+  other shown frame still waits once. A lost device that one of the four
+  methods above returns is recorded before it would wait for the compose, so it neither
+  waits for it nor releases what the compose uses. `tests/device_loss.rs` covers the three
+  cases with a compose in flight.
 - `has_frame` is set when the compose is submitted, not when it is seen complete: every
   reader waits for the compose first on the host or comes after it on the queue, and a
   compose that fails on the device is a lost device, after which nothing reads the target.

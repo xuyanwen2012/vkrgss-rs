@@ -25,6 +25,8 @@ thread_local! {
     static IDLES: Cell<u32> = const { Cell::new(0) };
     /// The real `vkDestroyDevice`, which a replacement calls after noting the call.
     static DESTROY_DEVICE: Cell<Option<vk::PFN_vkDestroyDevice>> = const { Cell::new(None) };
+    /// The real `vkDeviceWaitIdle`, which a replacement calls after noting the call.
+    static DEVICE_WAIT_IDLE: Cell<Option<vk::PFN_vkDeviceWaitIdle>> = const { Cell::new(None) };
 }
 
 fn note(call: &'static str) {
@@ -59,6 +61,16 @@ unsafe extern "system" fn failing_submit(
 unsafe extern "system" fn idle(_: vk::Device) -> vk::Result {
     note("vkDeviceWaitIdle");
     vk::Result::SUCCESS
+}
+
+/// Notes the call and idles the device with the real command.
+unsafe extern "system" fn noted_idle(device: vk::Device) -> vk::Result {
+    note("vkDeviceWaitIdle");
+    let idle = DEVICE_WAIT_IDLE
+        .with(Cell::get)
+        .expect("set with the replacement");
+    // SAFETY: the real command of the device the compositor calls this for.
+    unsafe { idle(device) }
 }
 
 unsafe extern "system" fn lost_idle(_: vk::Device) -> vk::Result {
@@ -710,4 +722,79 @@ fn lost_device_in_the_last_idle_leaves_the_device_alone() {
     drop(compositor);
     // That of the compositor, then that of the device.
     assert_eq!(take_calls(), ["vkDeviceWaitIdle", "vkDeviceWaitIdle"]);
+}
+
+// The compose of the last render in flight when the device is found lost.
+
+/// A frame that destroys the bitmap is still in flight when a freeze finds the device lost
+/// while it makes the presenter: the freeze does not wait for the compose, and the image of
+/// the destroyed bitmap, which the compose may still use, is not released.
+#[test]
+fn lost_device_found_with_a_compose_in_flight_releases_nothing_it_uses() {
+    let mut compositor = compositor_with_a_bitmap();
+    let destroy = vec![BitmapDelta::Destroy { id: BITMAP }];
+    compositor.render(&packet(destroy, 2)).unwrap();
+    assert!(compositor.has_compose_in_flight());
+    compositor.replace_device_commands(|v1_0, _| {
+        v1_0.create_pipeline_layout = lost_pipeline_layout;
+        v1_0.destroy_image = destroy_image;
+    });
+    let lost = Err(VkError::DeviceLost {
+        call: "vkCreatePipelineLayout",
+    });
+    assert_eq!(compositor.freeze(), lost);
+    assert_eq!(take_calls(), ["vkCreatePipelineLayout"]);
+    assert_refused(&mut compositor, &lost);
+}
+
+/// A compositor for a headless surface that has presented once and has the compose of a
+/// second frame in flight, whose bounded wait is made to run out, and whose idles are noted.
+fn compositor_with_a_stalled_compose(log: &ValidationLog, maintenance: bool) -> VkCompositor {
+    let mut compositor = VkCompositor::with_headless_surface(test_device(), Some(log)).unwrap();
+    if !maintenance {
+        compositor.ignore_swapchain_maintenance();
+    }
+    compositor.resize_surface(Size::new(64, 48));
+    compositor.render(&packet(vec![], 1)).unwrap();
+    assert_eq!(compositor.present(), Ok(true));
+    compositor.render(&packet(vec![], 2)).unwrap();
+    compositor.inject_wait_result(vk::Result::TIMEOUT);
+    compositor.replace_device_commands(|v1_0, _| {
+        DEVICE_WAIT_IDLE.with(|idle| idle.set(Some(v1_0.device_wait_idle)));
+        v1_0.device_wait_idle = noted_idle;
+    });
+    take_calls();
+    compositor
+}
+
+/// A draw that fails is cleaned up by idling the device, which is not bounded: the compose
+/// in flight is waited for first with the bounded wait, which runs out, and the device is
+/// not idled.
+#[test]
+fn failed_draw_waits_for_the_compose_with_the_bounded_wait_before_any_idle() {
+    let log = ValidationLog::new();
+    let mut compositor = compositor_with_a_stalled_compose(&log, true);
+    compositor.fail_next_draw();
+    let lost = Err(VkError::DeviceLost {
+        call: "vkWaitSemaphores",
+    });
+    assert_eq!(compositor.present().map(|_| ()), lost);
+    assert_eq!(take_calls(), Vec::<&str>::new(), "the device was idled");
+    assert_refused(&mut compositor, &lost);
+}
+
+/// A swapchain whose presents carry no fences is replaced after idling the device, which is
+/// not bounded: the compose in flight is waited for first with the bounded wait, which runs
+/// out, and the device is not idled.
+#[test]
+fn replaced_swapchain_waits_for_the_compose_with_the_bounded_wait_before_any_idle() {
+    let log = ValidationLog::new();
+    let mut compositor = compositor_with_a_stalled_compose(&log, false);
+    compositor.invalidate_swapchain();
+    let lost = Err(VkError::DeviceLost {
+        call: "vkWaitSemaphores",
+    });
+    assert_eq!(compositor.present().map(|_| ()), lost);
+    assert_eq!(take_calls(), Vec::<&str>::new(), "the device was idled");
+    assert_refused(&mut compositor, &lost);
 }
