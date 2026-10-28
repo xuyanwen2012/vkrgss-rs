@@ -176,6 +176,11 @@ pub(crate) fn runtime_of(game: &Path) -> Result<Runtime> {
     game::runtime(game, None)
 }
 
+/// The file of a copy of a game that the oracle wrote itself, with the probe in it.
+pub(crate) fn probed_file(copy: &Path) -> Result<PathBuf> {
+    game::probed(copy)
+}
+
 /// Runs a copy of the game with the probe in the original runtime and writes its frames.
 /// Returns the frames that were captured late.
 fn capture_original(

@@ -69,8 +69,9 @@ headless PNG frames reproduce byte for byte, and over 3,000 tests rely on it.
 
 For the ten games compared with the original (seven of XP, one of VX, two of VX Ace), the 84
 compared frames are identical pixel for pixel on x86_64 Linux, aarch64 Linux, an Apple M4
-Mac and two Android phones, and the 17 saves they write are identical byte for byte on the
-Mac and both phones ([`cargo xtask xarch`](docs/development.md#comparing-the-platforms)).
+Mac and two Android phones, and the saves that the runs write, two files of the game of VX
+Ace whose input saves, are identical byte for byte on the Mac and both phones
+([`cargo xtask xarch`](docs/development.md#comparing-the-platforms)).
 Floats take the work: `Math` and `**` of both interpreters come from the vendored CORE-MATH,
 which is correctly rounded, instead of the C library, and no multiply-add is fused.
 

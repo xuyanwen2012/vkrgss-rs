@@ -2,7 +2,7 @@
 
 ## 1. Every save
 
-- [ ] 1.1 `xarch`: a save is a file the run wrote (absent from or different from the game's directory); per-game `saves = N` with a failure below it; the report line gains the expected count; `xarch.example.toml`, `docs/development.md`. Verify: the three scenarios of "Every save of a comparison game is compared" as unit tests of `xtask`; set `saves` in `local/xarch.toml` for the games whose input saves, run `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask xarch check` and record the per-game save counts in design.md.
+- [x] 1.1 `xarch`: a save is a file the run wrote (absent from or different from the game's directory); per-game `saves = N` with a failure below it; the report line gains the expected count; `xarch.example.toml`, `docs/development.md`. Verify: the three scenarios of "Every save of a comparison game is compared" as unit tests of `xtask`; set `saves` in `local/xarch.toml` for the games whose input saves, run `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask xarch check` and record the per-game save counts in design.md.
 
 ## 2. Document test
 

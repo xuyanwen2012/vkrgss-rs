@@ -636,9 +636,10 @@ The games are listed in `local/xarch.toml` of the workspace, which is not commit
 file that `--list FILE` names; names of games after the output directory run only those.
 [`xtask/xarch.example.toml`](../xtask/xarch.example.toml) shows the keys; paths in the file are
 relative to its directory. Each game names its directory, the frames to capture, the schedule
-of `--input`, the run-time packages of `[rtp]` it uses, and whether it draws text with the
-fonts of `fonts`; `[builtin_scripts]` names the built-in scripts file of each runtime, which
-both kinds of run are given, so that they run the same scripts.
+of `--input`, the run-time packages of `[rtp]` it uses, whether it draws text with the
+fonts of `fonts`, and, with `saves = N`, how many saves its input makes; `[builtin_scripts]`
+names the built-in scripts file of each runtime, which both kinds of run are given, so that
+they run the same scripts.
 
 `run` runs each game as `cargo xtask oracle --vkrgss-only` does, into `<out>/<game>/`.
 `android` builds the APK and installs it as `android-run` does, pushes the run-time packages,
@@ -649,9 +650,15 @@ fonts. The copy as the run left it, with the saves, comes back to `<out>/<game>/
 and the frames to `<out>/<game>/frames/`, where the oracle puts them, with the app's log and
 logcat beside them. The phone must be unlocked; the command wakes its screen before each game,
 and the app keeps it on while a game runs. `compare` decodes every frame of vkrgss of the first
-directory and compares its pixels with the same frame of the second, compares every save file
-the game wrote byte for byte, prints each difference and a line per game, and fails when
-anything differs or is missing.
+directory and compares its pixels with the same frame of the second, compares every save byte
+for byte, prints each difference and a line per game, and fails when anything differs or is
+missing. A save is any file of the copy that the run wrote, whatever its name: one that the
+game's directory of the list lacks or holds with other bytes, apart from the script archive
+into which the oracle put the probe; so `compare` reads the list too, and every game of the
+first directory has to be in it. The line of a game counts its saves, `saves 2 same, 0
+different of 2 expected` for one with `saves = 2`, and such a game fails when either side
+holds fewer saves than it expects, so that a run that saved nothing is not taken for one whose
+saves are identical.
 
 Text is drawn with the families each system has where a game asks for one the fonts of the list
 do not cover: Liberation and DejaVu on Linux, the fonts of macOS on the Mac, `Roboto`,

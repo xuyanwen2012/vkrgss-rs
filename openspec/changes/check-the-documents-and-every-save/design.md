@@ -73,7 +73,35 @@ Each is checked at the start and corrected if it still disagrees:
 5. `docs/compatibility.md`: script threads and the RGSS API, as left by
    `call-rgss-from-script-threads`.
 
+## Implementation notes
+
+### Every save (group 1)
+
+- The oracle writes the probe into the script archive of the copy (`Game.rgss3a`, or the
+  file `Scripts=` names), so that file differs from the game's directory although no run
+  wrote it. Counted as a save it would make every game hold one, and `saves = N` could be
+  met by a run that saved nothing. `xarch` leaves it out, and asks the oracle which file it
+  was: `probed` in `xtask/src/oracle/game.rs` and `probed_file` in `xtask/src/oracle/mod.rs`,
+  fourteen lines outside the scope of the proposal that the requirement needs.
+- Telling a save needs the game's directory, which only the list names, so `xarch compare`
+  reads the list as `check` does (`local/xarch.toml`, or `--list FILE`), and fails for a game
+  of the first directory that the list lacks.
+- A file that the run of one side wrote and the other side holds unchanged from the game is
+  counted as a save that differs, not as one that is missing.
+- The list of this machine: the owner's `vkxp/local/xarch.toml` was copied to `local/xarch.toml`
+  of this clone (not committed), and `saves = 3` was set there for `isoi`, the one game whose
+  input saves. The owner's file was left as it is, because `xarch` of `main` refuses the new
+  key; it gets the same line once this change is merged (see Follow-ups).
+- `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask xarch baseline --at 12ae44dd` (the proposal)
+  and then `cargo xtask xarch check`, with `XDG_RUNTIME_DIR` below `TMPDIR`: `all identical`,
+  84 frames. Saves compared per game: `isoi` 3 of 3 expected (`AutoSave.rvdata2`,
+  `Save01.rvdata2` and `playoffline.txt`, which a script of the game writes), every other
+  game 0. The "17 saves" of earlier reports were files whose names said "save", most of
+  them files of the games' directories that no run touched; `README.md` repeated the
+  number and now says what is written.
+
 ## Follow-ups
 
 - Moving the `vkrgss_*` methods and `Graphics._reset` under a `VKRGSS` module (behaviour
   change; not done here).
+- The owner's `local/xarch.toml` gets `saves = 3` in the table of `isoi` after the merge.

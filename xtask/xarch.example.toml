@@ -33,3 +33,4 @@ frames = [100, 1000]
 input = "@schedules/a-vx-game.txt"
 rtp = ["RPGVX"]
 no_threads = true                      # as --no-threads of the oracle
+saves = 2                              # the input saves twice: fewer saves compared fail

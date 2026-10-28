@@ -15,8 +15,11 @@
 //!   it, as with `android-run --validation`, and a game fails when the layer reported an
 //!   error.
 //! - `xarch compare <A> <B>` compares, for each game of `A`, the pixels of every frame and
-//!   the bytes of every save file that the game wrote with those of `B`, and fails when one
-//!   differs or is missing.
+//!   the bytes of every save with those of `B`, and fails when one differs or is missing. A
+//!   save is a file of the copy that the run wrote, whatever its name: one that the game's
+//!   directory of the list lacks or holds with other bytes, apart from the script archive
+//!   into which the oracle put the probe. A game whose entry sets `saves = N` fails when
+//!   fewer than `N` saves were compared on either side.
 //! - `xarch baseline [GAME...]` runs the games as `xarch run` does into
 //!   `target/xarch/base-<COMMIT>`, the short hash of `HEAD`, with `-dirty` when tracked files
 //!   differ from it, and records that directory as the baseline in `target/xarch/baseline`.
@@ -46,7 +49,7 @@ use crate::oracle::report::{self, Picture};
 pub(crate) const USAGE: &str = "\
 usage: cargo xtask xarch run <OUT> [GAME...] [--list FILE]
        cargo xtask xarch android <SERIAL> <OUT> [GAME...] [--list FILE] [--validation]
-       cargo xtask xarch compare <A> <B>
+       cargo xtask xarch compare <A> <B> [--list FILE]
        cargo xtask xarch baseline [GAME...] [--list FILE] [--at REV]
        cargo xtask xarch check [GAME...] [--list FILE]";
 
@@ -83,6 +86,7 @@ pub(crate) enum Command {
     Compare {
         a: PathBuf,
         b: PathBuf,
+        list: Option<PathBuf>,
     },
     Baseline {
         games: Vec<String>,
@@ -151,13 +155,11 @@ pub(crate) fn parse(arguments: &[&str]) -> Result<Command> {
             list,
             validation,
         },
-        ["compare", a, b] => {
-            ensure!(list.is_none(), "compare takes no --list");
-            Command::Compare {
-                a: path(a)?,
-                b: path(b)?,
-            }
-        }
+        ["compare", a, b] => Command::Compare {
+            a: path(a)?,
+            b: path(b)?,
+            list,
+        },
         _ => bail!("xarch: unknown or incomplete command"),
     })
 }
@@ -184,7 +186,10 @@ pub(crate) fn run(command: &Command, cargo: &str, root: &Path) -> Result<()> {
             };
             run_on_phone(&list, &list.chosen(games)?, &phone, out, cargo, root)
         }
-        Command::Compare { a, b } => compare(a, b, &[]),
+        Command::Compare { a, b, list } => {
+            let list = List::read(list.clone().unwrap_or_else(default_list).as_path())?;
+            compare(a, b, &[], &list.games)
+        }
         Command::Baseline { games, list, at } => {
             let list = List::read(list.clone().unwrap_or_else(default_list).as_path())?;
             baseline(&list, &list.chosen(games)?, at.as_deref(), root)
@@ -245,7 +250,7 @@ fn check(list: &List, games: &[Game], root: &Path) -> Result<()> {
     run_here(list, games, &out, root)?;
     println!("xarch: comparing {} with {}", base.display(), out.display());
     let names: Vec<String> = games.iter().map(|game| game.name.clone()).collect();
-    compare(&base, &out, &names)
+    compare(&base, &out, &names, games)
 }
 
 /// A worktree of the commit `commit` of `root` at `tree`, made or moved there.
@@ -316,6 +321,8 @@ struct Game {
     /// `--no-threads` of the oracle.
     #[serde(default)]
     no_threads: bool,
+    /// How many saves a comparison of two runs is to compare at least.
+    saves: Option<usize>,
 }
 
 impl List {
@@ -636,20 +643,29 @@ fn run_one_on_phone(
     Ok(())
 }
 
-/// Whether the file at `path`, below a game directory, is a save file of the game.
-fn is_save(path: &Path) -> bool {
-    let name = path
-        .file_name()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .to_lowercase();
-    let extension = path
-        .extension()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .to_lowercase();
-    let data = ["rxdata", "rvdata", "rvdata2", "cdat"].contains(&extension.as_str());
-    (data && name.contains("save")) || name.starts_with("save") || name.starts_with("autosave")
+/// The saves in `copy`, a copy of the game in `source` as a run left it: the files that
+/// `source` lacks or holds with other bytes, apart from the one into which the oracle put
+/// the probe. Each is given relative to `copy`. A copy that does not exist holds none.
+fn saves(copy: &Path, source: &Path) -> Result<Vec<PathBuf>> {
+    if !copy.is_dir() {
+        return Ok(Vec::new());
+    }
+    let probed = oracle::probed_file(copy)?;
+    let mut saves = Vec::new();
+    for file in files_below(copy)? {
+        if file == probed {
+            continue;
+        }
+        let relative = file.strip_prefix(copy).expect("below the copy");
+        let original = source.join(relative);
+        let bytes = fs::read(&file).with_context(|| file.display().to_string())?;
+        if !original.is_file()
+            || fs::read(&original).with_context(|| original.display().to_string())? != bytes
+        {
+            saves.push(relative.to_owned());
+        }
+    }
+    Ok(saves)
 }
 
 /// The files below `dir`, recursively.
@@ -691,18 +707,21 @@ struct Tally {
     frames_different: usize,
     saves_same: usize,
     saves_different: usize,
+    /// How many saves the copy of `a` and that of `b` hold.
+    saves_of: (usize, usize),
 }
 
-/// Compares the frames and the saves of the game `game` of `a` with those of `b`, and prints
-/// each difference.
-fn compare_game(a: &Path, b: &Path, game: &str) -> Result<Tally> {
-    let (a, b) = (a.join(game), b.join(game));
+/// Compares the frames and the saves of `game` in `a` with those in `b`, and prints each
+/// difference.
+fn compare_game(a: &Path, b: &Path, game: &Game) -> Result<Tally> {
+    let name = &game.name;
+    let (a, b) = (a.join(name), b.join(name));
     let mut tally = Tally::default();
     for frame in captured_frames(&a.join("frames"))? {
         let file = report::vkrgss_file(frame);
         let theirs = b.join(&file);
         if !theirs.is_file() {
-            println!("{game}: frame {frame} is missing in B");
+            println!("{name}: frame {frame} is missing in B");
             tally.frames_different += 1;
             continue;
         }
@@ -714,80 +733,106 @@ fn compare_game(a: &Path, b: &Path, game: &str) -> Result<Tally> {
         tally.frames_different += 1;
         match report::compare(&ours, &theirs) {
             Ok(difference) => println!(
-                "{game}: frame {frame} differs in {} pixels, by up to {}",
+                "{name}: frame {frame} differs in {} pixels, by up to {}",
                 difference.differing_pixels, difference.largest_difference
             ),
-            Err(error) => println!("{game}: frame {frame} differs: {error:#}"),
+            Err(error) => println!("{name}: frame {frame} differs: {error:#}"),
         }
     }
-    let copy = a.join("vkrgss").join("game");
-    for save in files_below(&copy)?.into_iter().filter(|path| is_save(path)) {
-        let relative = save.strip_prefix(&a).expect("below the game's output");
-        let theirs = b.join(relative);
-        if theirs.is_file() && fs::read(&theirs)? == fs::read(&save)? {
-            tally.saves_same += 1;
+    let (copy_a, copy_b) = (a.join("vkrgss/game"), b.join("vkrgss/game"));
+    let (saves_a, saves_b) = (saves(&copy_a, &game.dir)?, saves(&copy_b, &game.dir)?);
+    tally.saves_of = (saves_a.len(), saves_b.len());
+    for save in &saves_a {
+        let (ours, theirs) = (copy_a.join(save), copy_b.join(save));
+        let how = if !theirs.is_file() {
+            "is missing in B"
+        } else if fs::read(&theirs)? != fs::read(&ours)? {
+            "differs"
         } else {
-            tally.saves_different += 1;
-            let how = if theirs.is_file() {
-                "differs"
-            } else {
-                "is missing in B"
-            };
-            println!("{game}: save {} {how}", relative.display());
-        }
+            tally.saves_same += 1;
+            continue;
+        };
+        tally.saves_different += 1;
+        println!("{name}: save {} {how}", save.display());
     }
     // What `b` has and `a` has not.
     let frames = b.join("frames");
     if frames.is_dir() {
         for frame in captured_frames(&frames)? {
             if !a.join(report::vkrgss_file(frame)).is_file() {
-                println!("{game}: frame {frame} is missing in A");
+                println!("{name}: frame {frame} is missing in A");
                 tally.frames_different += 1;
             }
         }
     }
-    let copy = b.join("vkrgss").join("game");
-    for save in files_below(&copy)?.into_iter().filter(|path| is_save(path)) {
-        let relative = save.strip_prefix(&b).expect("below the game's output");
-        if !a.join(relative).is_file() {
-            println!("{game}: save {} is missing in A", relative.display());
-            tally.saves_different += 1;
-        }
+    for save in saves_b.iter().filter(|save| !saves_a.contains(save)) {
+        // A file of `a` that the run of `a` did not write differs from a save of `b`.
+        let how = if copy_a.join(save).is_file() {
+            "differs"
+        } else {
+            "is missing in A"
+        };
+        tally.saves_different += 1;
+        println!("{name}: save {} {how}", save.display());
     }
     Ok(tally)
 }
 
-/// `xarch compare`, of the games named in `only`, or of all games of `a`. A game of `only`
-/// that `a` lacks is a difference.
-fn compare(a: &Path, b: &Path, only: &[String]) -> Result<()> {
-    let mut games: Vec<String> = fs::read_dir(a)
+/// `xarch compare`, of the games named in `only`, or of all games of `a`, each of which
+/// `games` has to hold. A game of `only` that `a` lacks is a difference, as is a game that
+/// expects more saves than either side holds.
+fn compare(a: &Path, b: &Path, only: &[String], games: &[Game]) -> Result<()> {
+    let mut names: Vec<String> = fs::read_dir(a)
         .with_context(|| a.display().to_string())?
         .filter_map(|entry| entry.ok())
         .filter(|entry| entry.path().join("frames").is_dir())
         .map(|entry| entry.file_name().to_string_lossy().into_owned())
         .filter(|game| only.is_empty() || only.contains(game))
         .collect();
-    games.sort();
-    ensure!(!games.is_empty(), "{}: no game output in it", a.display());
+    names.sort();
+    ensure!(!names.is_empty(), "{}: no game output in it", a.display());
     let mut differences = 0;
-    for game in only.iter().filter(|game| !games.contains(game)) {
-        println!("{game}: missing in A");
+    let mut short = String::new();
+    for name in only.iter().filter(|name| !names.contains(name)) {
+        println!("{name}: missing in A");
         differences += 1;
     }
-    for game in &games {
-        if !b.join(game).is_dir() {
-            println!("{game}: missing in B");
+    for name in &names {
+        let game = games
+            .iter()
+            .find(|game| &game.name == name)
+            .with_context(|| {
+                format!(
+                    "{name}: the list has no game of this name, so its saves cannot be told \
+                 from the files of the game"
+                )
+            })?;
+        if !b.join(name).is_dir() {
+            println!("{name}: missing in B");
             differences += 1;
             continue;
         }
         let tally = compare_game(a, b, game)?;
+        let expected = match game.saves {
+            Some(saves) => format!(" of {saves} expected"),
+            None => String::new(),
+        };
         println!(
-            "{game}: frames {} same, {} different; saves {} same, {} different",
+            "{name}: frames {} same, {} different; saves {} same, {} different{expected}",
             tally.frames_same, tally.frames_different, tally.saves_same, tally.saves_different
         );
         differences += tally.frames_different + tally.saves_different;
+        let (of_a, of_b) = tally.saves_of;
+        if let Some(saves) = game.saves.filter(|&saves| of_a.min(of_b) < saves) {
+            let line = format!("{name}: {saves} saves expected, A holds {of_a} and B {of_b}");
+            println!("{line}");
+            short.push_str(&format!("; {line}"));
+        }
     }
-    ensure!(differences == 0, "{differences} difference(s)");
+    ensure!(
+        differences == 0 && short.is_empty(),
+        "{differences} difference(s){short}"
+    );
     println!("all identical");
     Ok(())
 }
@@ -829,6 +874,15 @@ mod tests {
         assert!(parse(&["run", "out", "--validation"]).is_err());
         assert!(parse(&["compare", "a", "b", "--validation"]).is_err());
         assert!(parse(&["compare", "a"]).is_err());
+        let command = parse(&["compare", "a", "b", "--list", "games.toml"]).unwrap();
+        assert_eq!(
+            command,
+            Command::Compare {
+                a: absolute("a").unwrap(),
+                b: absolute("b").unwrap(),
+                list: Some(absolute("games.toml").unwrap()),
+            }
+        );
         assert!(parse(&["run", "out", "--fast"]).is_err());
         let command = parse(&["baseline", "mh", "--at", "origin/main"]).unwrap();
         assert_eq!(
@@ -942,65 +996,114 @@ mod tests {
         );
     }
 
-    #[test]
-    fn saves_are_told_by_their_names() {
-        for save in [
-            "Save1.rxdata",
-            "Saves/SAVE4.rxdata",
-            "AutoSave.rvdata2",
-            "save01.dat",
-        ] {
-            assert!(is_save(Path::new(save)), "{save}");
-        }
-        for other in ["Data/Map001.rxdata", "Game.ini", "MHCI.rxdata"] {
-            assert!(!is_save(Path::new(other)), "{other}");
-        }
-    }
-
-    #[test]
-    fn a_frame_or_a_save_that_differs_is_counted_and_equal_ones_are_not() {
-        let dir = tempfile::tempdir().unwrap();
-        let picture = |red: u8| Picture {
+    /// A game of RGSS2 in `dir/source`, and the copy of it that a run left in `dir/<side>`,
+    /// with the probe in its script archive and `written` written by the run.
+    fn ran(dir: &Path, side: &str, red: u8, written: &[(&str, &str)]) {
+        let files = [
+            ("Game.ini", "[Game]\r\nScripts=Data\\Scripts.rvdata\r\n"),
+            ("Data/Scripts.rvdata", "scripts"),
+            ("Data/Map001.rvdata", "map"),
+        ];
+        let write = |game: &Path| {
+            fs::create_dir_all(game.join("Data")).unwrap();
+            for (file, bytes) in files {
+                fs::write(game.join(file), bytes).unwrap();
+            }
+        };
+        write(&dir.join("source"));
+        let out = dir.join(side).join("game");
+        fs::create_dir_all(out.join("frames")).unwrap();
+        let picture = Picture {
             width: 2,
             height: 1,
             rgba: vec![red, 0, 0, 255, 0, 0, 0, 255],
         };
-        for (side, red, save) in [("a", 10, "one"), ("b", 10, "one"), ("c", 11, "two")] {
-            let out = dir.path().join(side).join("game");
-            fs::create_dir_all(out.join("frames")).unwrap();
-            fs::create_dir_all(out.join("vkrgss/game")).unwrap();
-            picture(red)
-                .write(&out.join(report::vkrgss_file(4)))
-                .unwrap();
-            fs::write(out.join("vkrgss/game/Save1.rxdata"), save).unwrap();
-            fs::write(out.join("vkrgss/game/Map001.rxdata"), side).unwrap();
+        picture.write(&out.join(report::vkrgss_file(4))).unwrap();
+        let copy = out.join("vkrgss/game");
+        write(&copy);
+        fs::write(copy.join("Data/Scripts.rvdata"), "probe and scripts").unwrap();
+        for (file, bytes) in written {
+            fs::create_dir_all(copy.join(file).parent().unwrap()).unwrap();
+            fs::write(copy.join(file), bytes).unwrap();
         }
+    }
+
+    /// The game of [`ran`] as the list names it, expecting `saves`.
+    fn game(dir: &Path, saves: Option<usize>) -> Game {
+        Game {
+            name: "game".to_owned(),
+            dir: dir.join("source"),
+            frames: vec![4],
+            input: None,
+            rtp: Vec::new(),
+            font: false,
+            no_threads: false,
+            saves,
+        }
+    }
+
+    #[test]
+    fn a_numbered_save_that_differs_is_counted_and_fails() {
+        let dir = tempfile::tempdir().unwrap();
         let path = |side: &str| dir.path().join(side);
-        let same = compare_game(&path("a"), &path("b"), "game").unwrap();
+        ran(dir.path(), "a", 10, &[("Save/1.rvdata", "one")]);
+        ran(dir.path(), "b", 10, &[("Save/1.rvdata", "one")]);
+        ran(dir.path(), "c", 11, &[("Save/1.rvdata", "two")]);
+        let games = [game(dir.path(), Some(1))];
+        let same = compare_game(&path("a"), &path("b"), &games[0]).unwrap();
         assert_eq!(
             same,
             Tally {
                 frames_same: 1,
                 saves_same: 1,
+                saves_of: (1, 1),
                 ..Tally::default()
             }
         );
-        compare(&path("a"), &path("b"), &[]).unwrap();
-        let different = compare_game(&path("a"), &path("c"), "game").unwrap();
+        compare(&path("a"), &path("b"), &[], &games).unwrap();
+        let different = compare_game(&path("a"), &path("c"), &games[0]).unwrap();
         assert_eq!(
             different,
             Tally {
                 frames_different: 1,
                 saves_different: 1,
+                saves_of: (1, 1),
                 ..Tally::default()
             }
         );
-        assert!(compare(&path("a"), &path("c"), &[]).is_err());
-        // A save that only the second wrote, and a game that only the second ran.
-        fs::write(path("b").join("game/vkrgss/game/Save2.rxdata"), "two").unwrap();
-        let extra = compare_game(&path("a"), &path("b"), "game").unwrap();
-        assert_eq!((extra.saves_same, extra.saves_different), (1, 1));
-        compare(&path("a"), &path("a"), &["game".to_owned()]).unwrap();
-        assert!(compare(&path("a"), &path("a"), &["other".to_owned()]).is_err());
+        assert!(compare(&path("a"), &path("c"), &[], &games).is_err());
+        // A save that only the second wrote, a data file that only the second changed, and a
+        // game that only the second ran.
+        fs::write(path("b").join("game/vkrgss/game/1.cdat"), "two").unwrap();
+        fs::write(path("b").join("game/vkrgss/game/Data/Map001.rvdata"), "new").unwrap();
+        let extra = compare_game(&path("a"), &path("b"), &games[0]).unwrap();
+        assert_eq!((extra.saves_same, extra.saves_different), (1, 2));
+        compare(&path("a"), &path("a"), &["game".to_owned()], &games).unwrap();
+        assert!(compare(&path("a"), &path("a"), &["other".to_owned()], &games).is_err());
+        // A game that the list lacks cannot be compared.
+        assert!(compare(&path("a"), &path("b"), &[], &[]).is_err());
+    }
+
+    #[test]
+    fn data_files_and_the_probed_archive_are_not_saves() {
+        let dir = tempfile::tempdir().unwrap();
+        ran(dir.path(), "a", 10, &[("Save/1.rvdata", "one")]);
+        let copy = dir.path().join("a/game/vkrgss/game");
+        let saves = saves(&copy, &dir.path().join("source")).unwrap();
+        assert_eq!(saves, [PathBuf::from("Save/1.rvdata")]);
+        assert!(copy.join("Data/Map001.rvdata").is_file());
+    }
+
+    #[test]
+    fn a_game_that_expects_saves_fails_without_them() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = |side: &str| dir.path().join(side);
+        ran(dir.path(), "a", 10, &[]);
+        ran(dir.path(), "b", 10, &[]);
+        compare(&path("a"), &path("b"), &[], &[game(dir.path(), None)]).unwrap();
+        let error = compare(&path("a"), &path("b"), &[], &[game(dir.path(), Some(2))])
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("game: 2 saves expected"), "{error}");
     }
 }

@@ -114,6 +114,16 @@ fn copy_dir(from: &Path, to: &Path) -> Result<()> {
     Ok(())
 }
 
+/// The file of the copy `copy` into which [`prepare`] put the probe: the encrypted archive
+/// of the runtime if there is one, else the script archive that `Game.ini` names.
+pub(super) fn probed(copy: &Path) -> Result<PathBuf> {
+    let runtime = runtime(copy, None)?;
+    match child(copy, runtime.archive_name()) {
+        Some(packed) => Ok(packed),
+        None => scripts_file(copy, &scripts_name(copy)?),
+    }
+}
+
 /// Gives the file `path`, which the oracle wrote, [`fixed_time`].
 pub(super) fn set_fixed_time(path: &Path) -> Result<()> {
     set_times(
