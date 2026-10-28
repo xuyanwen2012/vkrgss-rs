@@ -570,3 +570,17 @@ and end of a word, and in every read of a character that these make.
 #### Scenario: The same input through Ruby 1.9.2
 - **WHEN** the same input is replayed through the fuzz harness of `regex192` under the sanitizers
 - **THEN** no report is made
+
+### Requirement: Jumps that are not exceptions cross host functions
+A `throw` and a fatal error that pass through a protected call of the host or through a host
+function SHALL arrive where they would without the host function in between: a `throw` at its
+`catch`, a fatal error not rescuable by `rescue Exception`. Putting back the previous error
+SHALL NOT raise.
+
+#### Scenario: Throw through a host function
+- **WHEN** a script calls a host function inside `catch(:done)` and the block that the host function yields to does `throw :done, 1`
+- **THEN** `catch` returns 1 and no `TypeError` is raised
+
+#### Scenario: Fatal error
+- **WHEN** a host function resumes a fatal error inside `begin ... rescue Exception`
+- **THEN** the `rescue` branch does not run and the interpreter ends with the fatal error
