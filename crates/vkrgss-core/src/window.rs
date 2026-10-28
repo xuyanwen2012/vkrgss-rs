@@ -472,13 +472,18 @@ impl Window {
         Some((opacity, self.pause_step / PAUSE_PERIOD % 4))
     }
 
-    /// Brings the cached bitmaps this frame draws up to date. What is not drawn this frame
-    /// is left as it is.
+    /// Brings the cached bitmaps this frame draws up to date.
     pub(crate) fn refresh_caches(&mut self, bitmaps: &mut Bitmaps) {
-        // A window of RGSS2 builds its bitmaps at its calls, not for a frame.
-        if !matches!(self.kind, Kind::Rgss1) {
-            return;
+        match self.kind {
+            Kind::Rgss1 => self.refresh_caches_rgss1(bitmaps),
+            // A window of RGSS2 or RGSS3 builds its bitmaps at its calls, not for a frame.
+            Kind::Rgss2(_) | Kind::Rgss3(..) => {}
         }
+    }
+
+    /// Brings the cached bitmaps of a window of RGSS1 that this frame draws up to date.
+    /// What is not drawn this frame is left as it is.
+    fn refresh_caches_rgss1(&mut self, bitmaps: &mut Bitmaps) {
         self.follow_flags();
         if !self.visible {
             return;
@@ -512,6 +517,17 @@ impl Window {
 }
 
 impl Assembly<'_> {
+    /// A window that is one element at its z: one of RGSS2 or RGSS3, drawn by the rules of
+    /// its runtime. A window of RGSS1 is two elements, [`Assembly::window_back`] and
+    /// [`Assembly::window_front`], and draws nothing here.
+    pub(crate) fn window(&mut self, window: &Window, level: &Level) {
+        match &window.kind {
+            Kind::Rgss1 => {}
+            Kind::Rgss2(state) => self.window_rgss2(window, state, level),
+            Kind::Rgss3(state, rules) => self.window_rgss3(window, state, rules, level),
+        }
+    }
+
     /// Draws the whole of `bitmap` unscaled with its top-left corner at (`x`, `y`), looking
     /// as `look` says.
     fn whole_as(&mut self, bitmap: BitmapId, x: i64, y: i64, clip: vkrgss_proto::Rect, look: Look) {

@@ -6,7 +6,7 @@
 
 ## 2. One dispatch (`vkrgss-core`)
 
-- [ ] 2.1 Make `Window::call`, `refresh_caches`, the window assembly and the `rgss3.rs` accessors match the kind once instead of unwrapping options. Verify: the scenarios of `specs/core-scene/spec.md`; `cargo test -p vkrgss-core -p vkrgss-binding -p vkrgss-binding-rgss3` passes; `cargo clippy -p vkrgss-core --all-targets -- -D warnings` is clean.
+- [x] 2.1 Make `Window::call`, `refresh_caches`, the window assembly and the `rgss3.rs` accessors match the kind once instead of unwrapping options. Verify: the scenarios of `specs/core-scene/spec.md`; `cargo test -p vkrgss-core -p vkrgss-binding -p vkrgss-binding-rgss3` passes; `cargo clippy -p vkrgss-core --all-targets -- -D warnings` is clean.
 
 ## 3. Integration check
 

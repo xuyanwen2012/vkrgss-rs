@@ -297,25 +297,20 @@ impl Window {
     /// z, whose calls latch. [`Window::is_rgss3`] tells the two apart, and a window of
     /// RGSS1 is neither.
     pub fn is_rgss2(&self) -> bool {
-        self.rgss2_state().is_some()
+        !matches!(self.kind, Kind::Rgss1)
     }
 
     /// Whether this is a window of RGSS3.
     pub fn is_rgss3(&self) -> bool {
-        self.rgss3().is_some()
+        matches!(self.kind, Kind::Rgss3(..))
     }
 
     /// How far the window is open, from 0 to 255; 255 in a window of RGSS1, which is always
     /// open.
     pub fn openness(&self) -> u8 {
-        self.rgss2_state().map_or(255, |state| state.openness)
-    }
-
-    /// What a window of RGSS2 or RGSS3 keeps beside its properties.
-    pub(super) fn rgss2_state(&self) -> Option<&State> {
         match &self.kind {
-            Kind::Rgss2(state) | Kind::Rgss3(state, _) => Some(state),
-            Kind::Rgss1 => None,
+            Kind::Rgss1 => 255,
+            Kind::Rgss2(state) | Kind::Rgss3(state, _) => state.openness,
         }
     }
 
@@ -341,6 +336,8 @@ impl Window {
     /// A window of RGSS3 latches by lists of its own, which the module `rgss3` describes.
     /// `Padding`, `PaddingBottom` and `ArrowsVisible` are ignored by the other two, and
     /// `Move` is the four assignments in every window.
+    ///
+    /// The call is handed to the function of the window's runtime, chosen here once.
     pub fn call(&mut self, bitmaps: &mut Bitmaps, call: WindowCall) {
         if let WindowCall::Move(x, y, width, height) = call {
             for assignment in [
@@ -353,68 +350,75 @@ impl Window {
             }
             return;
         }
-        if self.rgss2_state().is_none() {
-            return self.call_rgss1(call);
+        // The kind is taken out of the window for the call, so that the function of its
+        // runtime can borrow its state beside the window. Meanwhile the window reads as one
+        // of RGSS1, which is right for the function of RGSS1; those of RGSS2 and RGSS3 get
+        // their state as arguments and do not read the kind.
+        let mut kind = std::mem::replace(&mut self.kind, Kind::Rgss1);
+        match &mut kind {
+            Kind::Rgss1 => self.call_rgss1(call),
+            Kind::Rgss2(state) => self.call_rgss2(state, bitmaps, call),
+            Kind::Rgss3(state, rules) => self.call_rgss3(state, rules, bitmaps, call),
         }
-        if self.is_rgss3() {
-            return self.call_rgss3(bitmaps, call);
-        }
+        self.kind = kind;
+    }
+
+    /// A call on a window of RGSS2, whose state is `state`.
+    fn call_rgss2(&mut self, state: &mut State, bitmaps: &mut Bitmaps, call: WindowCall) {
         match call {
             WindowCall::Update => {
-                self.latch(bitmaps);
+                self.latch(state, bitmaps);
                 self.advance();
             }
             WindowCall::X(x) => {
                 let changed = self.x != x;
                 self.x = x;
-                self.latch_if(changed, bitmaps);
+                self.latch_if(state, changed, bitmaps);
             }
             WindowCall::Y(y) => {
                 let changed = self.y != y;
                 self.y = y;
-                self.latch_if(changed, bitmaps);
+                self.latch_if(state, changed, bitmaps);
             }
             WindowCall::Width(width) => {
                 self.width = width;
-                self.latch(bitmaps);
+                self.latch(state, bitmaps);
                 self.build_back(bitmaps);
             }
             WindowCall::Height(height) => {
                 self.height = height;
-                self.latch(bitmaps);
+                self.latch(state, bitmaps);
                 self.build_back(bitmaps);
             }
             WindowCall::Ox(ox) => {
                 self.ox = ox;
-                self.latch(bitmaps);
+                self.latch(state, bitmaps);
             }
             WindowCall::Oy(oy) => {
                 self.oy = oy;
-                self.latch(bitmaps);
+                self.latch(state, bitmaps);
             }
             WindowCall::ContentsOpacity(opacity) => {
                 self.set_contents_opacity(opacity);
-                self.latch(bitmaps);
+                self.latch(state, bitmaps);
             }
             WindowCall::Openness(openness) => {
-                if let Kind::Rgss2(state) | Kind::Rgss3(state, _) = &mut self.kind {
-                    state.openness = openness.clamp(0, 255) as u8;
-                }
-                self.latch(bitmaps);
+                state.openness = openness.clamp(0, 255) as u8;
+                self.latch(state, bitmaps);
             }
             WindowCall::Active(active) => {
                 let changed = self.store_active(active);
-                self.latch_if(changed, bitmaps);
+                self.latch_if(state, changed, bitmaps);
             }
             WindowCall::Pause(pause) => {
                 let changed = self.store_pause(pause);
-                self.latch_if(changed, bitmaps);
+                self.latch_if(state, changed, bitmaps);
             }
             WindowCall::Windowskin(skin) => {
                 let changed = self.windowskin != skin;
                 self.windowskin = skin;
                 if changed {
-                    self.latch(bitmaps);
+                    self.latch(state, bitmaps);
                     self.build_back(bitmaps);
                     self.build_cursor(bitmaps);
                 }
@@ -422,12 +426,12 @@ impl Window {
             WindowCall::Contents(contents) => {
                 let changed = self.contents != contents;
                 self.contents = contents;
-                self.latch_if(changed, bitmaps);
+                self.latch_if(state, changed, bitmaps);
             }
             WindowCall::CursorRect(rect) => {
                 let old = self.cursor_rect;
                 self.cursor_rect = rect;
-                self.latch_if(old != rect, bitmaps);
+                self.latch_if(state, old != rect, bitmaps);
                 if (old.width, old.height) != (rect.width, rect.height) {
                     self.build_cursor(bitmaps);
                 }
@@ -495,20 +499,17 @@ impl Window {
         }
     }
 
-    fn latch_if(&mut self, changed: bool, bitmaps: &Bitmaps) {
+    fn latch_if(&self, state: &mut State, changed: bool, bitmaps: &Bitmaps) {
         if changed {
-            self.latch(bitmaps);
+            self.latch(state, bitmaps);
         }
     }
 
     /// The refresh: the contents follow `visible`, and with contents the scroll arrows are
     /// decided from the values of this moment and bound to the skin of this moment. Without
     /// contents the arrows stay as they were, with the skin they had.
-    fn latch(&mut self, bitmaps: &Bitmaps) {
+    fn latch(&self, state: &mut State, bitmaps: &Bitmaps) {
         let contents = self.contents.and_then(|id| bitmaps.rect(id).ok());
-        let (Kind::Rgss2(state) | Kind::Rgss3(state, _)) = &mut self.kind else {
-            return;
-        };
         state.contents_shown = self.visible;
         let Some(contents) = contents else {
             return;
@@ -625,12 +626,7 @@ impl Assembly<'_> {
     /// blend: `n` rows from row `top` of its place ([`open_rows`]), screen row `top + i`
     /// showing the window's row `stretch_index(i, height, n)`, which is a quad stretched
     /// from all rows of the window into those `n`.
-    pub(crate) fn window_rgss2(&mut self, window: &Window, level: &Level) {
-        let state = match &window.kind {
-            Kind::Rgss1 => return,
-            Kind::Rgss2(state) => state,
-            Kind::Rgss3(state, rules) => return self.window_rgss3(window, state, rules, level),
-        };
+    pub(super) fn window_rgss2(&mut self, window: &Window, state: &State, level: &Level) {
         if !window.visible || window.width <= 0 || window.height <= 0 {
             return;
         }

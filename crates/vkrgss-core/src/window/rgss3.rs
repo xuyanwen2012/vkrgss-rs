@@ -111,159 +111,155 @@ fn draw_cursor(
 }
 
 impl Window {
-    pub(super) fn rgss3(&self) -> Option<&State> {
-        match &self.kind {
-            Kind::Rgss3(_, rules) => Some(rules),
-            Kind::Rgss1 | Kind::Rgss2(_) => None,
-        }
-    }
-
-    fn rgss3_mut(&mut self) -> Option<&mut State> {
-        match &mut self.kind {
-            Kind::Rgss3(_, rules) => Some(rules),
-            Kind::Rgss1 | Kind::Rgss2(_) => None,
-        }
-    }
-
     /// The distance from the window's left, top and right edge to its contents area: 8 in a
     /// new window of RGSS3, and the fixed 16 of a window of RGSS1 or RGSS2.
     pub fn padding(&self) -> i32 {
-        self.rgss3().map_or(super::PADDING, |rules| rules.padding)
+        match &self.kind {
+            Kind::Rgss1 | Kind::Rgss2(_) => super::PADDING,
+            Kind::Rgss3(_, rules) => rules.padding,
+        }
     }
 
     /// The distance from the window's bottom edge to its contents area, as
     /// [`Window::padding`].
     pub fn padding_bottom(&self) -> i32 {
-        self.rgss3()
-            .map_or(super::PADDING, |rules| rules.padding_bottom)
+        match &self.kind {
+            Kind::Rgss1 | Kind::Rgss2(_) => super::PADDING,
+            Kind::Rgss3(_, rules) => rules.padding_bottom,
+        }
     }
 
     /// Whether the window may show scroll arrows; always in a window of RGSS1 or RGSS2.
     pub fn arrows_visible(&self) -> bool {
-        self.rgss3().is_none_or(|rules| rules.arrows_visible)
+        match &self.kind {
+            Kind::Rgss1 | Kind::Rgss2(_) => true,
+            Kind::Rgss3(_, rules) => rules.arrows_visible,
+        }
     }
 
     /// The tone of the background of a window of RGSS3; neutral in any other window.
     pub fn tone(&self) -> Tone {
-        self.rgss3().map_or_else(Tone::default, |rules| rules.tone)
+        match &self.kind {
+            Kind::Rgss1 | Kind::Rgss2(_) => Tone::default(),
+            Kind::Rgss3(_, rules) => rules.tone,
+        }
     }
 
     /// Sets the tone of the background of a window of RGSS3. It is read when the window is
     /// drawn and latches nothing. A window of RGSS1 or RGSS2 has no tone and ignores it.
     pub fn set_tone(&mut self, tone: Tone) {
-        if let Some(rules) = self.rgss3_mut() {
+        if let Kind::Rgss3(_, rules) = &mut self.kind {
             rules.tone = tone;
         }
     }
 
-    /// One call on a window of RGSS3: the value is stored, then the contents follow
-    /// `visible`, the arrows are decided, the bitmaps are built and the cursor is placed,
-    /// each when the call is on its list (see the table of the module).
-    pub(super) fn call_rgss3(&mut self, bitmaps: &mut Bitmaps, call: WindowCall) {
+    /// One call on a window of RGSS3, whose states are `state` and `rules`: the value is
+    /// stored, then the contents follow `visible`, the arrows are decided, the bitmaps are
+    /// built and the cursor is placed, each when the call is on its list (see the table of
+    /// the module).
+    pub(super) fn call_rgss3(
+        &mut self,
+        state: &mut rgss2::State,
+        rules: &mut State,
+        bitmaps: &mut Bitmaps,
+        call: WindowCall,
+    ) {
         match call {
             WindowCall::Update => {
-                self.show_contents(true);
+                self.show_contents(state, true);
                 self.advance();
             }
             WindowCall::X(x) => {
                 let changed = self.x != x;
                 self.x = x;
-                self.show_contents(changed);
+                self.show_contents(state, changed);
             }
             WindowCall::Y(y) => {
                 let changed = self.y != y;
                 self.y = y;
-                self.show_contents(changed);
+                self.show_contents(state, changed);
             }
             WindowCall::Width(width) => {
                 self.width = width;
-                self.show_contents(true);
-                self.decide_arrows(bitmaps);
+                self.show_contents(state, true);
+                self.decide_arrows(state, rules, bitmaps);
                 self.build_back(bitmaps);
             }
             WindowCall::Height(height) => {
                 self.height = height;
-                self.show_contents(true);
-                self.decide_arrows(bitmaps);
+                self.show_contents(state, true);
+                self.decide_arrows(state, rules, bitmaps);
                 self.build_back(bitmaps);
             }
             WindowCall::Ox(ox) => {
                 self.ox = ox;
-                self.show_contents(true);
-                self.decide_arrows(bitmaps);
-                self.place_cursor();
+                self.show_contents(state, true);
+                self.decide_arrows(state, rules, bitmaps);
+                self.place_cursor(rules);
             }
             WindowCall::Oy(oy) => {
                 self.oy = oy;
-                self.show_contents(true);
-                self.decide_arrows(bitmaps);
-                self.place_cursor();
+                self.show_contents(state, true);
+                self.decide_arrows(state, rules, bitmaps);
+                self.place_cursor(rules);
             }
             WindowCall::ContentsOpacity(opacity) => {
                 self.set_contents_opacity(opacity);
-                self.show_contents(true);
+                self.show_contents(state, true);
             }
             WindowCall::Openness(openness) => {
-                if let Kind::Rgss2(state) | Kind::Rgss3(state, _) = &mut self.kind {
-                    state.openness = openness.clamp(0, 255) as u8;
-                }
-                self.show_contents(true);
+                state.openness = openness.clamp(0, 255) as u8;
+                self.show_contents(state, true);
             }
             WindowCall::Active(active) => {
                 let changed = self.store_active(active);
-                self.show_contents(changed);
+                self.show_contents(state, changed);
             }
             WindowCall::Pause(pause) => {
                 let changed = self.store_pause(pause);
-                self.show_contents(changed);
+                self.show_contents(state, changed);
             }
             WindowCall::Windowskin(skin) => {
                 if self.windowskin == skin {
                     return;
                 }
                 self.windowskin = skin;
-                self.show_contents(true);
-                self.decide_arrows(bitmaps);
+                self.show_contents(state, true);
+                self.decide_arrows(state, rules, bitmaps);
                 self.build_back(bitmaps);
                 self.build_cursor_rgss3(bitmaps);
-                self.place_cursor();
+                self.place_cursor(rules);
             }
             WindowCall::Contents(contents) => {
                 if self.contents == contents {
                     return;
                 }
                 self.contents = contents;
-                self.show_contents(true);
-                self.decide_arrows(bitmaps);
+                self.show_contents(state, true);
+                self.decide_arrows(state, rules, bitmaps);
             }
             WindowCall::CursorRect(rect) => {
                 let old = self.cursor_rect;
                 self.cursor_rect = rect;
-                self.show_contents(old != rect);
+                self.show_contents(state, old != rect);
                 if (old.width, old.height) != (rect.width, rect.height) {
                     self.build_cursor_rgss3(bitmaps);
                 }
-                self.place_cursor();
+                self.place_cursor(rules);
             }
             WindowCall::Padding(padding) => {
-                if let Some(rules) = self.rgss3_mut() {
-                    (rules.padding, rules.padding_bottom) = (padding, padding);
-                }
-                self.show_contents(true);
-                self.place_cursor();
+                (rules.padding, rules.padding_bottom) = (padding, padding);
+                self.show_contents(state, true);
+                self.place_cursor(rules);
             }
             WindowCall::PaddingBottom(padding) => {
-                if let Some(rules) = self.rgss3_mut() {
-                    rules.padding_bottom = padding;
-                }
-                self.show_contents(true);
-                self.place_cursor();
+                rules.padding_bottom = padding;
+                self.show_contents(state, true);
+                self.place_cursor(rules);
             }
             WindowCall::ArrowsVisible(visible) => {
-                if let Some(rules) = self.rgss3_mut() {
-                    rules.arrows_visible = visible;
-                }
-                self.decide_arrows(bitmaps);
+                rules.arrows_visible = visible;
+                self.decide_arrows(state, rules, bitmaps);
             }
             // `Window::call` has made the four assignments of it.
             WindowCall::Move(..) => {}
@@ -271,10 +267,8 @@ impl Window {
     }
 
     /// Lets the contents follow `visible` when the call `latches`.
-    fn show_contents(&mut self, latches: bool) {
-        if let Kind::Rgss2(state) | Kind::Rgss3(state, _) = &mut self.kind
-            && latches
-        {
+    fn show_contents(&self, state: &mut rgss2::State, latches: bool) {
+        if latches {
             state.contents_shown = self.visible;
         }
     }
@@ -291,29 +285,25 @@ impl Window {
 
     /// Decides the scroll arrows from the values of this moment and binds them to the skin
     /// of this moment. Without live contents they stay as they were, with the skin they had.
-    fn decide_arrows(&mut self, bitmaps: &Bitmaps) {
+    fn decide_arrows(&self, state: &mut rgss2::State, rules: &State, bitmaps: &Bitmaps) {
         let Some(contents) = self.contents.and_then(|id| bitmaps.rect(id).ok()) else {
             return;
         };
         let (width, height) = (i64::from(self.width), i64::from(self.height));
         let (ox, oy) = (i64::from(self.ox), i64::from(self.oy));
-        let padding = i64::from(self.padding());
-        let padding_bottom = i64::from(self.padding_bottom());
+        let padding = i64::from(rules.padding);
+        let padding_bottom = i64::from(rules.padding_bottom);
         let shown = [
             i64::from(contents.height) - oy > height - padding - padding_bottom,
             ox > 0,
             i64::from(contents.width) - ox > width - 2 * padding,
             oy > 0,
         ];
-        let allowed = self.arrows_visible();
+        let allowed = rules.arrows_visible;
         // Halves are rounded towards zero, which matters for a negative size.
         let centre = (width / 2 - 8, height / 2 - 8);
-        let skin = self.windowskin;
-        if let Kind::Rgss2(state) | Kind::Rgss3(state, _) = &mut self.kind {
-            state.arrows =
-                rgss2::arrows(shown.map(|shown| shown && allowed), (width, height), centre);
-            state.arrow_skin = skin;
-        }
+        state.arrows = rgss2::arrows(shown.map(|shown| shown && allowed), (width, height), centre);
+        state.arrow_skin = self.windowskin;
     }
 
     /// Builds the cursor from the skin as it is now.
@@ -325,11 +315,11 @@ impl Window {
 
     /// Places the cursor from the values of this moment: its corner, and the part of it
     /// inside the paddings and the window.
-    fn place_cursor(&mut self) {
+    fn place_cursor(&self, rules: &mut State) {
         let (width, height) = (i64::from(self.width), i64::from(self.height));
         let (cut_width, cut_height) = self.cut_size();
-        let padding = i64::from(self.padding());
-        let padding_bottom = i64::from(self.padding_bottom());
+        let padding = i64::from(rules.padding);
+        let padding_bottom = i64::from(rules.padding_bottom);
         let rect = self.cursor_rect;
         let x = padding + (i64::from(rect.x) - i64::from(self.ox)).abs();
         let y = padding + (i64::from(rect.y) - i64::from(self.oy)).abs();
@@ -341,7 +331,7 @@ impl Window {
         let bottom = (y + i64::from(rect.height))
             .min(height - padding_bottom)
             .min(cut_height);
-        let placed = (left < right && top < bottom).then_some(Placed {
+        rules.cursor = (left < right && top < bottom).then_some(Placed {
             x,
             y,
             left,
@@ -349,9 +339,6 @@ impl Window {
             width: right - left,
             height: bottom - top,
         });
-        if let Some(rules) = self.rgss3_mut() {
-            rules.cursor = placed;
-        }
     }
 }
 

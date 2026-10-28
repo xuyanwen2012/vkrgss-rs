@@ -783,7 +783,7 @@ impl Scene {
             }
             Item::Window(key) => {
                 if let Some(window) = self.windows.get(key) {
-                    assembly.window_rgss2(window, level);
+                    assembly.window(window, level);
                 }
             }
             Item::Viewport(_) => {}

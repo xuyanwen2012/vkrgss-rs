@@ -38,6 +38,15 @@ The field borrow of `self.kind` against `&mut self` calls inside the per-runtime
 may need the state taken by `std::mem::replace` or split borrows; whichever is chosen, no
 allocation per call is added.
 
+Chosen: `Window::call` takes the kind out of the window with `std::mem::replace`, leaving
+`Kind::Rgss1`, hands the per-runtime function the state it holds as arguments, and puts it
+back. Nothing is allocated; the functions of RGSS2 and RGSS3 read their state only from
+those arguments, and the function of RGSS1 reads the window as one of RGSS1, which it is.
+The assembly of a one-element window is `Assembly::window` in `window.rs`, which matches the
+kind and calls `window_rgss2` or `window_rgss3`; the one call of it in `extract.rs` (a file
+of `crates/vkrgss-core/src` that the list of files of the proposal does not name) is renamed
+to it, a one-line edit.
+
 ### This is a restructuring, not a rewrite
 
 No rule of any runtime changes, no test is dropped or weakened, and the committed
