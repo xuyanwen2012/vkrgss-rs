@@ -58,7 +58,12 @@ checked by counting.
 
 ## Follow-ups
 
-None yet.
+- Outside this change: `a_copy_of_the_program_alone_names_the_missing_guest_executable` of
+  `crates/vkrgss/tests/rgss3.rs` failed once in a gate run of 2026-10-27 with `ETXTBSY`
+  (`Text file busy`) when it started the copy of the program it had just written; it passed
+  in the gate before and in three runs of the file alone after. It looks like the known
+  race of a copied executable with a fork of another test thread that inherits the
+  descriptor it was written through. Not examined further here.
 
 ## As built
 
@@ -123,3 +128,13 @@ prelude move: those of `prelude_shared.rb` after line 29 by 25 lines up, those o
 47 lines up. The change is harmless by the search above: no test, report check or oracle
 comparison reads them, the original has none of them, and `xarch check` shows every
 comparison game identical (task 4.1).
+
+### Integration check
+
+On 2026-10-27: `VK_LOADER_DRIVERS_SELECT='*lvp*' cargo xtask gate` passed every step;
+`cargo test -p vkrgss-binding -p vkrgss-binding-rgss3` ran the same 947 tests before the
+move and after each task group, all passing; `cargo xtask xarch baseline --at 84a98559`
+(the proposal, before any move) and `cargo xtask xarch check` gave every one of the ten
+games identical, 84 frames and 17 saves. The guest processes of the RGSS3 games put their
+socket under `TMPDIR` for these runs (`XDG_RUNTIME_DIR` unset), because the sandbox of the
+run refuses a directory in `/run/user`.
