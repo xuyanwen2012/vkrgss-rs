@@ -100,6 +100,27 @@ Each is checked at the start and corrected if it still disagrees:
   them files of the games' directories that no run touched; `README.md` repeated the
   number and now says what is written.
 
+### Document test (group 2)
+
+- `xtask/tests/architecture.rs` takes the members and their crate roots from `cargo metadata`,
+  the attributes from the roots, and for a crate that denies `unsafe` the modules whose `mod`
+  line follows `#[allow(unsafe_code)]` and the modules whose file holds that attribute
+  (`link` of `vkrgss-proto`, whose allow is on a function in it). The scenarios with a
+  missing crate and an omitted module run the check on the document with the row of
+  `vkrgss-audio` and the word `seccomp` taken out; a fourth test gives it the old row of
+  `vkrgss-ruby192-sys`.
+- `vkrgss-ruby-sys` has no `targets.rs`: its `TARGETS` are in its `build.rs`, which the test
+  reads. Neither its row nor its top doc comment names a target today.
+- A sentence is checked when it names a target triple (a word of the form `x86_64-...` or
+  `aarch64-...` with two hyphens), and has to name every target of the list.
+- What the test found and this group corrected: the table lacked the members
+  `vkrgss-android` and `xtask`; the row and the top doc comment of `vkrgss-ruby192-sys` named
+  one and two of its four targets; the paragraph on `unsafe` named `vkrgss-proto` as
+  forbidding it (it denies it and allows it in `link`), omitted the modules `exit`, `heap`,
+  `parent_watch` and `seccomp` of `vkrgss-guest`, and said nothing of `vkrgss-image`,
+  `vkrgss-text`, `vkrgss-vfs`, `vkrgss-audio`, `vkrgss-host`, `vkrgss-vk`, `vkrgss`,
+  `vkrgss-android` and `xtask`. It is now a list of three items under its own heading.
+
 ## Follow-ups
 
 - Moving the `vkrgss_*` methods and `Graphics._reset` under a `VKRGSS` module (behaviour

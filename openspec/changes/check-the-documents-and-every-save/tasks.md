@@ -6,7 +6,7 @@
 
 ## 2. Document test
 
-- [ ] 2.1 `xtask/tests/architecture.rs` with the three checks. Verify: the scenarios of "The architecture document matches the workspace" (the last two on documents given to the check function).
+- [x] 2.1 `xtask/tests/architecture.rs` with the three checks. Verify: the scenarios of "The architecture document matches the workspace" (the last two on documents given to the check function).
 
 ## 3. Documents
 

@@ -12,8 +12,9 @@
 //! - `Ruby`: the operations that follow the rules below, available only on that thread:
 //!   protected evaluation and calls, definitions backed by host functions, and rooting.
 //!
-//! The crate is for the targets `x86_64-unknown-linux-gnu` and `aarch64-unknown-linux-gnu`.
-//! For any other target the build script compiles nothing and the crate has no item. The two
+//! The crate is for the targets of `targets.rs`, `x86_64-unknown-linux-gnu`,
+//! `aarch64-unknown-linux-gnu`, `aarch64-apple-darwin` and `aarch64-linux-android`. For any
+//! other target the build script compiles nothing and the crate has no item. The two
 //! interpreters define the same symbols: no program links this crate and `vkrgss-ruby-sys`
 //! together, which a dependency rule of the workspace checks.
 //!

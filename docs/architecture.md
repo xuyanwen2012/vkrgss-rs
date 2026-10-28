@@ -18,7 +18,7 @@ defined in `vkrgss-proto`.
 | `vkrgss-vfs` | Path resolution, RTP lookup, encrypted archive | guest |
 | `vkrgss-ruby-glue` | The bridge between Rust and Ruby that both interpreter crates share: host functions and their trampolines, rooting, the protected call and the calls built on it, generic over a trait of the C API; no C code and no unmangled symbol | guest |
 | `vkrgss-ruby-sys` | Build of the embedded Ruby 1.8.7 and raw FFI | guest |
-| `vkrgss-ruby192-sys` | Build of the embedded Ruby 1.9.2, the interpreter of RGSS3, and raw FFI under the names of `vkrgss-ruby-sys`; empty on every target but `x86_64-unknown-linux-gnu` | guest |
+| `vkrgss-ruby192-sys` | Build of the embedded Ruby 1.9.2, the interpreter of RGSS3, and raw FFI under the names of `vkrgss-ruby-sys`; empty on every target but those of its `targets.rs`, `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `aarch64-apple-darwin` and `aarch64-linux-android` | guest |
 | `vkrgss-binding` | RGSS Ruby API on top of core, over Ruby 1.8.7 | guest |
 | `vkrgss-binding-rgss3` | The source of `vkrgss-binding` compiled over Ruby 1.9.2: no source of its own, and the tests of `vkrgss-binding` a second time | guest |
 | `vkrgss-guest` | The guest role: the hidden option, the guest record and the settings in it, the subscriber of the diagnostics, the attachment, the copies that are states, the sandbox and the signal settings of a guest process | guest |
@@ -29,11 +29,14 @@ defined in `vkrgss-proto`.
 | `vkrgss-compose-ref` | CPU reference compositor | host and tests |
 | `vkrgss-vk` | Vulkan backend | host |
 | `vkrgss-audio` | Mixer, decoding, MIDI synthesis | host |
-| `vkrgss-host` | Event loop, input mapping, thread orchestration, configuration | host |
-| `vkrgss` | Executable: the program, and the guest of games of RGSS1 and RGSS2 on a thread | |
+| `vkrgss-host` | Event loop, input mapping, thread orchestration | host |
+| `vkrgss` | Executable: the program, its command line and configuration files, and the guest of games of RGSS1 and RGSS2 on a thread | |
+| `vkrgss-android` | The Android app: the native library of the APK, its library of games, and a game run as `vkrgss` runs it in a window | platform |
+| `xtask` | Repository automation and the tool that extracts the built-in scripts; not part of the runtime | |
 
-`xtask` holds repository automation and the tool that extracts the built-in scripts; it is not
-part of the runtime.
+A test of `xtask` (`xtask/tests/architecture.rs`) holds this table to the members of the
+workspace, the list under "Where `unsafe` compiles" to the attributes of the crates, and the
+targets named in the row of an interpreter crate and in its top doc comment to its list.
 
 The RGSS classes have one source, `crates/vkrgss-binding/src`, and two packages. What differs
 between the interpreters is behind the surface that both interpreter crates offer under the
@@ -188,11 +191,21 @@ the binding package, and every test file of `vkrgss-binding` or `vkrgss-guest-ma
 of the same name in the package over Ruby 1.9.2. The program and the guest executables have
 one version, which a test of `xtask` holds as well.
 
-In addition, `vkrgss-proto`, `vkrgss-pixel`, `vkrgss-core` and `vkrgss-compose-ref` carry
-`#![forbid(unsafe_code)]`, so `unsafe` in them does not compile, and so does `vkrgss-guest-main`;
-`vkrgss-guest-rgss12` and `vkrgss-guest-rgss3` have no `unsafe`.
-`vkrgss-ruby-glue` allows `unsafe` at its root, as the two interpreter crates do: it holds
-the calls into Ruby and the trampolines that they share, each block with its `SAFETY`
-comment.
-`vkrgss-guest` denies `unsafe`
-at its root and allows it in the modules of the copier and of the signals only.
+### Where `unsafe` compiles
+
+The root of each crate states whether `unsafe` compiles in it, and every `unsafe` block has
+its `SAFETY` comment. The second package of a twin compiles the root of the first, and so
+states what that root states.
+
+- Forbidden, `#![forbid(unsafe_code)]` at the root, so that `unsafe` in the crate does not
+  compile: `vkrgss-pixel`, `vkrgss-core`, `vkrgss-image`, `vkrgss-text`, `vkrgss-vfs`,
+  `vkrgss-guest-main`, `vkrgss-guest-main-rgss3`, `vkrgss-compose-ref`, `vkrgss-audio`,
+  `vkrgss-host`, `xtask`.
+- Denied, `#![deny(unsafe_code)]` at the root and `#[allow(unsafe_code)]` on the modules that
+  call the platform directly: `vkrgss-proto` in `link` (the receive that does not wait);
+  `vkrgss-guest` in `copier`, `exit`, `heap`, `parent_watch`, `seccomp`, `signals`.
+- Allowed, no attribute at the root: `vkrgss-ruby-glue`, which holds the calls into Ruby and
+  the trampolines that the two interpreter crates share, `vkrgss-ruby-sys`,
+  `vkrgss-ruby192-sys`, `vkrgss-binding`, `vkrgss-binding-rgss3`, `vkrgss-vk`, `vkrgss` (the
+  platform code of the relay of guest processes), `vkrgss-android`, and `vkrgss-guest-rgss12`
+  and `vkrgss-guest-rgss3`, which have none.
