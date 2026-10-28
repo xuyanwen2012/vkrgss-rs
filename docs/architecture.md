@@ -42,8 +42,10 @@ The RGSS classes have one source, `crates/vkrgss-binding/src`, and two packages.
 between the interpreters is behind the surface that both interpreter crates offer under the
 same names (which Ruby it is, the options for a runtime, the main object, the accessors of
 strings and arrays, a constructor for bytes and one for text, the mark of the game's scripts)
-or is asked at run time in one place, `rb::RUBY_19`; no `cfg` and no cargo feature tells the
-interpreters apart. The Rust side of that surface exists once, in `vkrgss-ruby-glue`: its
+or is asked at run time in one place, `rb::RUBY_19`. No cargo feature tells the interpreters
+apart, and one `cfg`, `vkrgss_ruby_19`, which the build script of `vkrgss-binding-rgss3`
+sets, keeps out of the build over Ruby 1.8.7 the calls of functions of Ruby 1.9.2 that 1.8.7
+has no counterpart of (those of encodings, in `vkrgss_label_utf8`). The Rust side of that surface exists once, in `vkrgss-ruby-glue`: its
 `Ruby`, `Root` and `protect` are generic over the trait `Interpreter`, which each interpreter
 crate implements on its unit type `CApi` with its own declarations, and each offers them for
 its interpreter under its own paths (`vkrgss_ruby_sys::Ruby` is `Ruby<CApi>`). What differs
@@ -116,7 +118,10 @@ frame that the display holds keeps the brightness it was composed with.
 the frames of a transition of N are shown at the steps 0 to N-1, the first of which is the
 held frame alone, and the frame after them is shown alone. With `TransitionRule::Rgss2` they
 are shown at the steps 1 to N, and the N-th is the newest frame alone and ends the
-transition. The binding sends `TransitionRule::Rgss1` and sets no brightness.
+transition. The binding sends `TransitionRule::Rgss1` for a game of RGSS1 and
+`TransitionRule::Rgss2` for one of RGSS2 or RGSS3. The brightness is 255 in RGSS1; in RGSS2
+and RGSS3 the binding sets it through `Graphics.brightness=`, `Graphics.fadeout` and
+`Graphics.fadein`, and a transition sets it to 255.
 
 `Op::TilemapPlane` draws one of the two planes of a tilemap of RGSS2, as `Op::TilemapLayer`
 draws the tiles of one priority of one layer of a tilemap of RGSS1: nothing of a map is

@@ -8,10 +8,14 @@ use crate::{BitmapError, Color, CreateFailure, Font, FontDefaults, Rect};
 mod rgss2;
 
 /// Largest bitmap that can be created, in pixels: [`vkrgss_proto::MAX_BITMAP_PIXELS`], 16384 by
-/// 16384 as the original created, which the compositors' bitmap stores accept too, so every
-/// bitmap created here can be uploaded. Its pixels are 1 GiB, the bound of one message of the
-/// framing, so a guest sends the changes of a frame that large ahead of it in parts
-/// ([`split_deltas`](crate::split_deltas)).
+/// 16384 as the original created. The bound is on the number of pixels alone, and it is the
+/// one the bitmap stores of both compositors apply, so neither refuses a bitmap made here for
+/// its number of pixels. The Vulkan compositor has limits of its device besides: it refuses
+/// a bitmap whose longer side passes the device's `maxImageDimension2D` as a limit
+/// (`Limit::BitmapDimension` of `vkrgss-vk`), such as one of 1 by 20000 pixels, and the
+/// memory of the device may not hold a bitmap, which it reports as an error too. Its pixels
+/// are 1 GiB, the bound of one message of the framing, so a guest sends the changes of a
+/// frame that large ahead of it in parts ([`split_deltas`](crate::split_deltas)).
 pub use vkrgss_proto::MAX_BITMAP_PIXELS;
 
 /// A rectangle of pixels inside a bitmap: `left..right` by `top..bottom`, never empty.

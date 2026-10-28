@@ -335,9 +335,13 @@ impl Scene {
     }
 
     /// Makes the scene what [`Scene::new`] returns, except that it keeps its rules and that
-    /// the handles handed out so far stay used: one of an element from before names nothing, and no new element gets
-    /// it. The bitmaps the scene made for its elements stay in their arena, as when a scene
-    /// is dropped.
+    /// the handles handed out so far stay used: one of an element from before names nothing,
+    /// and no new element gets it. So the frame index, the frame count and the frame rate,
+    /// the brightness and the logical size (640 by 480) start again, the bookkeeping of the
+    /// tables sent for tilemaps is forgotten and the next table gets the first id, and the
+    /// bitmaps released for disposal are forgotten. Nothing is emitted for what goes: the
+    /// next packet carries no `Destroy` of a bitmap or a table. The bitmaps the scene made
+    /// for its elements stay in their arena, as when a scene is dropped.
     pub fn clear(&mut self) {
         self.sprites.clear();
         self.viewports.clear();

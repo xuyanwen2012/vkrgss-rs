@@ -343,10 +343,11 @@ mod t;
 ```
 
 So the `test` step of the gate builds and runs the tests of the binding twice, and
-`cargo test -p vkrgss-binding-rgss3` runs those over Ruby 1.9.2 alone. The source has no `cfg`
-and no feature that tells the interpreters apart; the one `cfg` in it,
-`vkrgss_interpreter_absent`, is set by the build script of the second package for a target
-without Ruby 1.9.2 and empties the package there.
+`cargo test -p vkrgss-binding-rgss3` runs those over Ruby 1.9.2 alone. The source has no
+feature that tells the interpreters apart, and two `cfg`s, both set by the build script of
+the second package: `vkrgss_ruby_19` keeps out of the build over Ruby 1.8.7 the calls of
+functions of Ruby 1.9.2 that 1.8.7 has no counterpart of, those of encodings, and
+`vkrgss_interpreter_absent`, for a target without Ruby 1.9.2, empties the package there.
 
 The tests reach the interpreter through the harness `vkrgss_binding::testing`. A test process
 has one interpreter, of one runtime: `testing::start_as(runtime)` starts it the first time it

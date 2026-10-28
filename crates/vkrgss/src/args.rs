@@ -47,7 +47,10 @@ usage: vkrgss [GAME_DIR] [OPTIONS]
                             as vkrgss_host=trace, and comes before this option
   --no-audio                run without sound: no audio device is opened
   --soundfont FILE          the SoundFont that MIDI music is played with;
-                            default: the first found in /usr/share/soundfonts
+                            default: the first that exists of
+                            /usr/share/soundfonts/default.sf2,
+                            /usr/share/soundfonts/FluidR3_GM.sf2 and
+                            /usr/share/sounds/sf2/FluidR3_GM.sf2
   --seed N                  the seed of the random number generator; default: 0 in a
                             headless run, the seed of the recording in a replay, and
                             one taken from the clock otherwise

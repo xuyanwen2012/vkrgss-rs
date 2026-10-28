@@ -10,8 +10,8 @@
 
 ## 3. Documents
 
-- [ ] 3.1 Every item under "Items" of design.md: check against the code, correct what still disagrees, note in design.md the items found already fixed. Verify: the document test of group 2 and `doc_links` pass; `cargo doc --workspace --no-deps` with the gate's rustdoc flags passes.
-- [ ] 3.2 `CHANGELOG.md`. Verify: the document tests pass.
+- [x] 3.1 Every item under "Items" of design.md: check against the code, correct what still disagrees, note in design.md the items found already fixed. Verify: the document test of group 2 and `doc_links` pass; `cargo doc --workspace --no-deps` with the gate's rustdoc flags passes.
+- [x] 3.2 `CHANGELOG.md`. Verify: the document tests pass.
 
 ## 4. Checks
 

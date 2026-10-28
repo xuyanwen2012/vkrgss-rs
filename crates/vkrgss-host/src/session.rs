@@ -23,7 +23,7 @@ const RESET_KEY: KeyCode = KeyCode::F12;
 const FPS_KEY: KeyCode = KeyCode::F2;
 /// The key that, like Alt+Enter, switches between windowed and borderless fullscreen.
 const FULLSCREEN_KEY: KeyCode = KeyCode::F11;
-/// The key that engages fast-forward while it is held. A placeholder until the key is settled.
+/// The key that engages fast-forward while it is held.
 const FAST_FORWARD_KEY: KeyCode = KeyCode::Tab;
 
 /// The key that saves a state into the chosen slot, and with Shift chooses the next slot.

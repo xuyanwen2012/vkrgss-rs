@@ -117,7 +117,8 @@ pub use present::{Filter, Mix, OverlayImage, letterbox};
 /// submit their own work after it on the same queue and wait once, for both together; every
 /// other method that uses the device, `render` itself included, waits for it before it
 /// starts. Dropping the compositor waits for it too. After `present`, a freeze or a read-back
-/// nothing is in use.
+/// the device runs nothing of the compositor; only the presentation engine may still hold the
+/// swapchain image that `present` queued, until the swapchain hands it out again.
 ///
 /// A wait is bounded: a submission that has not completed within 60 seconds counts as a lost
 /// device, as does any call that reports `VK_ERROR_DEVICE_LOST`. The method returns

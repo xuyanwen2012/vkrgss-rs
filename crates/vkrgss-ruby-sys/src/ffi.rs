@@ -1,8 +1,8 @@
 //! Hand-written declarations of the Ruby 1.8.7 C API.
 //!
 //! Everything here mirrors `ruby.h` and `intern.h` of the vendored tree for the targets it is
-//! built for, x86_64 and aarch64 Linux, where `VALUE`, `ID`, `long` and pointers all have 64
-//! bits. The struct layouts and the constants are checked against the C headers by
+//! built for, x86_64 and aarch64 Linux, aarch64 macOS and Android on aarch64, where `VALUE`,
+//! `ID`, `long` and pointers all have 64 bits. The struct layouts and the constants are checked against the C headers by
 //! `tests/layout.rs`.
 //!
 //! The declarations are added as the binding needs them; this is not the whole API.

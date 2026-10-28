@@ -1,4 +1,4 @@
-//! Event loop, input mapping, thread orchestration, configuration.
+//! Event loop, input mapping, thread orchestration.
 //!
 //! Side: host.
 //!
@@ -21,8 +21,8 @@
 //! Audio commands go to the session's [`AudioSink`]: the output of `vkrgss-audio` in a window
 //! unless audio is disabled, [`NullSink`] otherwise and in every headless run.
 //!
-//! `demo` is a guest written in Rust, used by the tests and the examples until the Ruby side
-//! exists. It and `testing` are compiled only for tests and with the feature `testing`, which
+//! `demo` is a guest written in Rust, used by the tests and the examples, which need no
+//! interpreter. It and `testing` are compiled only for tests and with the feature `testing`, which
 //! the executable does not enable.
 
 #![forbid(unsafe_code)]

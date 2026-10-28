@@ -92,8 +92,8 @@
 //! functions of `vkrgss-pixel`. Behaviour that is a placeholder until it is checked against the
 //! original runtime is marked `PLACEHOLDER` where it is implemented.
 //!
-//! Modules, all private except [`test_support`]; their items are re-exported from the crate
-//! root:
+//! Modules, all private except [`sound`] and [`test_support`]; the items of the private ones
+//! are re-exported from the crate root:
 //!
 //! | Module | Contents |
 //! |---|---|
@@ -113,6 +113,7 @@
 //! | `plane` | planes as tiled quads, the pre-tiled bitmap of a small pattern |
 //! | `tilemap` | tilemaps as ops, the tables sent for them, the overlay of flashing cells; the tile numbering is `vkrgss_proto::tiles` |
 //! | `input` | [`InputState`] |
+//! | `sound` | the format of a sound and the position that `Audio.bgm_pos` and `Audio.bgs_pos` of RGSS3 report |
 //! | `error` | [`BitmapError`], [`CreateFailure`], [`DecodeError`], [`TableError`], [`SceneError`], [`ElementKind`] |
 //! | `test_support` | stand-ins for tests, such as a rasteriser with fixed-size cells; scenes of windows and of sprites of RGSS2 as text |
 

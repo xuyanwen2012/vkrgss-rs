@@ -307,8 +307,11 @@ not mentioned keep their defaults. The name of a button may be written in either
 refused. A key is named as the key codes of `winit` are
 (`winit::keyboard::KeyCode`): `KeyA` to `KeyZ`, `Digit0` to `Digit9`, `Numpad0` to `Numpad9`,
 `F1` to `F12`, `ArrowUp`, `Space`, `Enter`, `Escape`, `ShiftLeft`, `ControlRight` and so on.
-They name the position of a key, not the letter a keyboard layout puts on it. The host keys
-(F12, F2, F3, F4, F11, Tab, Alt+Enter) are not part of the map.
+They name the position of a key, not the letter a keyboard layout puts on it. The default
+maps put no button on the host keys (F12, F2, F3, F4, F11, Tab, Alt+Enter); `[keys]` may.
+F3, F4, F11 and Enter with Alt held then still only do what the program does with them and
+hold no button, and neither does the press of a key that answers a message panel; F12, F2
+and Tab do what they do and hold the buttons the map gives them as well.
 
 ### The keys of a game of VX
 
@@ -359,8 +362,8 @@ loads the driver of every GPU in the machine unless it is restricted. The comman
 restricts it to RADV, the driver of AMD GPUs; the same on the CPU, with lavapipe, is
 `VK_LOADER_DRIVERS_SELECT='*lvp*'` and `--device llvmpipe`.
 
-The host keys are those of the demo: F12 (reset), Alt+Enter or F11 (borderless fullscreen),
-F2 (frame rate in the title) and Tab held (fast-forward), and the keys of the save states: F3
+The host keys are F12 (reset), Alt+Enter or F11 (borderless fullscreen), F2 (frame rate in
+the title) and Tab held (fast-forward), and the keys of the save states: F3
 saves, F4 loads, and with Shift they choose the slot (see *Save states*). F12, Alt+Enter and
 F2 are keys of the original runtime too; the others are the program's own.
 
@@ -720,7 +723,8 @@ unless `--guest thread` says otherwise.
 There are ten slots, 0 to 9, and slot 0 is chosen at the start. What became of a request, and
 the slot that was chosen, is shown in the window title for two seconds and logged at the level
 `info`. A state is saved at the next frame at which it can be: not between `Graphics.freeze`
-and the end of the transition that follows, and not while a message panel is shown. A slot
+and the end of the transition that follows. While a message panel waits for the player, F3,
+F4 and the choice of a slot do nothing: the request is dropped, not kept for later. A slot
 can be loaded any number of times. Loading starts the display and the pacing afresh for the
 game that goes on from the state, and the music and the background sound go on where they
 were when the state was saved; a fade that was running then is not brought back.

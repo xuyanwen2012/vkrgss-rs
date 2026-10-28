@@ -62,6 +62,14 @@ The change `call-rgss-from-script-threads` added to "Script threads" under "VX A
 2026-10-27, that the RGSS classes work from a script thread as from the main script, and
 that `Graphics.update` there returns where the original hangs.
 
+The change `check-the-documents-and-every-save` brought, on 2026-10-28, statements of this
+document in line with the code where they disagreed, the code taken as what was decided: the
+runtime that `Library=` tells, the extensions of vkrgss in Ruby, the table of crates, which
+lacked `vkrgss-ruby-glue` and `vkrgss-android`, the crates that may hold `unsafe`, the JPEG decoder, the encodings of `Game.ini`, the places a SoundFont is looked
+for, the hard requirements of Vulkan, the bitmap slots on macOS, and the snapshot of VX,
+which the last section held open although it is built. A decision that is not built yet,
+such as the SoundFont of the package, stays and says so.
+
 ## Goal and scope
 
 - vkrgss is a from-scratch runtime for the games of RPG Maker XP, VX and VX Ace, built to a
@@ -95,9 +103,9 @@ that `Graphics.update` there returns where the original hangs.
   unmodified. Games that depend heavily on Windows may need patches.
 - Fidelity: bitmap operations, blending and tone are pixel-exact against the original runtime.
   Text only needs matching layout and advance widths, not identical glyph rasters.
-- Target behaviour of XP is RGSS 1.04. `Library=` in `Game.ini` is planned to tell the runtime
-  too (see "The runtime of a game" under "Several runtimes"); today it is ignored except that
-  a trailing `J` or `E` selects the default font and error-message language.
+- Target behaviour of XP is RGSS 1.04. `Library=` in `Game.ini` tells the runtime too (see
+  "The runtime of a game" under "Several runtimes"), and a trailing `J` or `E` selects the
+  default font and error-message language.
 
 ## Architecture
 
@@ -172,10 +180,15 @@ that `Graphics.update` there returns where the original hangs.
 
 ### Vulkan
 
-- Through `ash`. Vulkan 1.3 core plus descriptor indexing is the only hard requirement. The
-  composition set needs 65536 update-after-bind sampled images and 65542 update-after-bind
-  resources per stage (the sampled images, the frame target and five storage buffers); every
-  device in use has at least a million.
+- Through `ash`. The hard requirements are Vulkan 1.3 core with a compute queue, the
+  features of descriptor indexing that the composition set uses (runtime descriptor arrays,
+  non-uniform indexing of sampled images, partially bound and update-after-bind sampled
+  images), `synchronization2` and `dynamicRendering`, and two kinds of limits. The
+  composition set needs 65536 update-after-bind sampled images, one slot per bitmap, and
+  65542 update-after-bind resources per stage (the sampled images, the frame target and
+  five storage buffers); every device in use has at least a million. The compute dispatch
+  needs workgroups of 16 by 16 invocations, one per pixel of a tile, 256 in all. A device
+  that lacks one of them is refused with what it lacks.
 - Every submission is waited for before the call that made it returns, for 60 seconds at
   most. A wait that runs out, like `VK_ERROR_DEVICE_LOST` from any call, is a lost device:
   the compositor uses the device no more and refuses every later call, and the session
@@ -200,6 +213,7 @@ that `Graphics.update` there returns where the original hangs.
 | `vkrgss-image` | PNG, JPEG, BMP decoding | guest |
 | `vkrgss-text` | Font lookup, substitution table, glyph rasterisation | guest |
 | `vkrgss-vfs` | Path resolution, RTP lookup, encrypted archive | guest |
+| `vkrgss-ruby-glue` | The bridge between Rust and Ruby that both interpreter crates share | guest |
 | `vkrgss-ruby-sys` | Build of the embedded Ruby 1.8.7 and raw FFI | guest |
 | `vkrgss-ruby192-sys` | Build of the embedded Ruby 1.9.2 and raw FFI, under the names of `vkrgss-ruby-sys` | guest |
 | `vkrgss-binding` | RGSS Ruby API on top of core, over Ruby 1.8.7 | guest |
@@ -214,6 +228,7 @@ that `Graphics.update` there returns where the original hangs.
 | `vkrgss-audio` | Mixer, decoding, MIDI synthesis | host |
 | `vkrgss-host` | Event loop, input mapping, thread orchestration | host |
 | `vkrgss` | Executable: command line, configuration files | |
+| `vkrgss-android` | The Android app | platform |
 
 `vkrgss-core` does no file I/O and depends on neither Ruby nor Vulkan.
 
@@ -243,7 +258,11 @@ that `Graphics.update` there returns where the original hangs.
   own does, and `load` with `wrap` evaluates the file in an anonymous module.
 - `Win32API`: the class exists; common calls are emulated from a table; unknown calls log once
   and return 0; preload scripts may override.
-- vkrgss-specific extensions live under a `VKRGSS` module only.
+- vkrgss-specific extensions in Ruby are the host functions of the binding and its prelude:
+  global functions whose names start with `vkrgss_`, private methods of `Kernel` such as
+  `vkrgss_locate` and `vkrgss_modal`, and `Graphics._reset` of RGSS1 and RGSS2. There is no
+  `VKRGSS` module; gathering them under one would change what scripts see and is left to a
+  change of its own.
 - The built-in Enterbrain Ruby source (`RPG::Sprite`, `RPG::Weather`, `RPG::Cache`, the `RPG::`
   data classes) is never committed. A tool extracts it from the user's own DLL into a
   git-ignored file that is loaded at run time.
@@ -264,9 +283,15 @@ correctly rounded one, that function alone is matched to the original.
 
 - `winit` + `cpal`, `gilrs` for gamepads, `symphonia` for decoding, an in-house mixer, a built-in
   SoundFont synthesiser for MIDI.
-- JPEG: if a Rust decoder cannot match IJG 6b bit for bit, libjpeg-turbo is allowed.
-- Encodings: UTF-8 first, then auto-detection among GBK, Shift-JIS and Big5, with a config
-  override. Path lookup is case-insensitive and accepts backslashes.
+- JPEG: a decoder of `vkrgss-image`, written for vkrgss, follows the arithmetic of the
+  original, IJG libjpeg 6b with its floating-point inverse DCT, for baseline and progressive
+  files in greyscale or in Y, Cb, Cr with chroma at full resolution or halved horizontally
+  or in both directions. Every other file, and every file on which it gives up, is decoded
+  by `jpeg-decoder`. libjpeg-turbo, which this item allowed on 2026-10-08, is not used.
+- Encodings of `Game.ini`: UTF-8 first, then GBK, Shift-JIS and Big5 in this order, the first
+  that decodes the file; short titles are often valid in more than one, so the order is a
+  default and not a detection. `--encoding` and the configuration key `encoding` choose
+  one instead. Path lookup is case-insensitive and accepts backslashes.
 - Saves are written to the game directory.
 - Window: resizable; initial size is the largest integer scale that fits; nearest-neighbour at
   integer scales, sharp bilinear otherwise; Alt+Enter is borderless fullscreen.
@@ -280,7 +305,9 @@ correctly rounded one, that function alone is matched to the original.
   (`FONTCONFIG_FILE`, or `$XDG_CONFIG_HOME/fontconfig/fonts.conf`, `/etc/fonts/local.conf`
   and `/etc/fonts/fonts.conf`), or, when they name none, `/usr/share/fonts`,
   `/usr/local/share/fonts`, `~/.fonts` and `~/.local/share/fonts`. No CJK font is bundled.
-- SoundFont: configured path, then `/usr/share/soundfonts`. Decided on 2026-10-15: the
+- SoundFont: the configured path, then the first that exists of
+  `/usr/share/soundfonts/default.sf2`, `/usr/share/soundfonts/FluidR3_GM.sf2` and
+  `/usr/share/sounds/sf2/FluidR3_GM.sf2`. Decided on 2026-10-15 and not built yet: the
   package carries GeneralUser GS with its licence as the default; a user's SF2 replaces it;
   DLS (`gm.dls`, the bank of the original's synthesiser) may follow.
 - Display: no HDR output, because the picture would no longer look like the original's.
@@ -309,8 +336,10 @@ correctly rounded one, that function alone is matched to the original.
   tools), `games/` (local test games), `vkrgss/` (this repository), `wt/` (worktrees).
   Nothing under `ref/` or `games/` is ever committed.
 - Everything in the repository is English. Rust edition 2024, toolchain pinned.
-- `unsafe` only in `vkrgss-vk`, `vkrgss-ruby-sys`, `vkrgss-ruby192-sys`, `vkrgss-binding` (the source
-  that `vkrgss-binding-rgss3` compiles too), `vkrgss-guest` and platform code.
+- `unsafe` only in `vkrgss-vk`, `vkrgss-ruby-glue`, `vkrgss-ruby-sys`, `vkrgss-ruby192-sys`,
+  `vkrgss-binding` (the source that `vkrgss-binding-rgss3` compiles too), `vkrgss-guest` and
+  platform code; [architecture.md](architecture.md#where-unsafe-compiles) lists each crate
+  and module.
   `thiserror` in libraries, `anyhow` in the binary and in `vkrgss-guest-main`, which is the
   body of the `main` of a guest executable, `tracing` for logs.
 - Merge gate: `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test`,
@@ -899,8 +928,8 @@ changes; finishing one does not commit to the next. Their milestones are P1 to P
 ### macOS
 
 - Apple silicon through MoltenVK. MoltenVK has no present timing, so pacing falls back to the
-  timer; portability enumeration and the portability subset; the number of bitmap slots is
-  taken from the device's limits.
+  timer; portability enumeration and the portability subset. The number of bitmap slots is
+  not taken from the device's limits: it is 65536 on every device (see "Vulkan").
 - Prerequisite: the guest of RGSS1 and RGSS2 becomes a program of its own instead of the
   host executing itself again, so that no window framework is linked before `fork`.
 - Tested only on the owner's MacBook Air, by hand, now and then, and only after asking the
@@ -1105,8 +1134,14 @@ Risks of the platforms (change `plan-the-platforms-and-modernization`):
 - MoltenVK may lack something the compositor uses (the number of bitmap slots, 64-bit
   integer emulation in the shaders); found by the first runs on the MacBook.
 
-Open, to be decided before the change that implements it is drafted: how
-`Graphics.snap_to_bitmap` of VX gets the pixels of the scene as it is, also while the display
-is frozen, without a frame going by. Composition happens on the host today and no message
-brings pixels back to the guest. The decision keeps the plain-data boundary and the purity of
-the core, and names the messages it adds or its use of the reference compositor.
+Held open until it was built, to be decided before the change that implements it was
+drafted: how `Graphics.snap_to_bitmap` of VX gets the pixels of the scene as it is, also
+while the display is frozen, without a frame going by. Composition happened on the host
+alone and no message brought pixels back to the guest. The decision was to keep the
+plain-data boundary and the purity of the core, and to name the messages it adds or its use
+of the reference compositor.
+
+Done: the binding draws the scene in the guest with the reference compositor, from a packet
+of the scene as its objects are now, in a compositor of its own for that call, and makes the
+bitmap from it; no message is added and the host is not asked (`snap_to_bitmap` in
+`crates/vkrgss-binding/src/graphics.rs`, the item on the snapshot of RGSS3 under "VX Ace").

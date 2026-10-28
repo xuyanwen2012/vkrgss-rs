@@ -74,8 +74,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   both compositors; a test ties the limit of the image decoders to it.
 - `Scene::extract` returns an error of the bitmap arena instead of a packet without bitmap
   changes, and the binding ends the game with `RunError::Extraction`.
+- `cargo xtask xarch compare` reads the list of games, as `check` does, and takes
+  `--list`: a game of the first directory has to be in it. A game of the list may set
+  `saves = N`, and the comparison fails for it when either side holds fewer saves; its line
+  prints `of N expected`.
+- A test of `xtask` holds `docs/architecture.md` to the workspace: its crate table to the
+  members, its list of where `unsafe` compiles to the attributes of the crates and their
+  modules, and the targets named for an interpreter crate to its list. The documents and doc
+  comments were brought in line with the code where they disagreed, among them the crates
+  and modules that may hold `unsafe`, the targets of Ruby 1.9.2, the hard requirements of
+  Vulkan, the places a SoundFont is looked for (also in the usage message), the order of
+  encodings of `Game.ini`, and the keys that a key map may put buttons on.
 
 ### Fixed
+
+- `cargo xtask xarch` compares every file that a run wrote below the copy of a game,
+  whatever its name: one that the game's directory lacks or holds with other bytes, apart
+  from the script archive with the probe. Before, a file was a save only when its name
+  said so, so `Save/1.rvdata` and `1.cdat` were never compared, while files of the game
+  that no run had touched counted as identical saves.
 
 - Over Ruby 1.9.2, a protected call of the host while a `throw` is pending, such as a host
   function that catches the `throw` of the block it yields to and calls into Ruby before

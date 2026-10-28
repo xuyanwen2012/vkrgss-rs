@@ -121,8 +121,54 @@ Each is checked at the start and corrected if it still disagrees:
   `vkrgss-text`, `vkrgss-vfs`, `vkrgss-audio`, `vkrgss-host`, `vkrgss-vk`, `vkrgss`,
   `vkrgss-android` and `xtask`. It is now a list of three items under its own heading.
 
+### Documents (group 3)
+
+Corrected, item by item:
+
+1. `docs/architecture.md`: besides group 2, `vkrgss-host` no longer claims the configuration
+   (also its top doc comment; `crates/vkrgss/src/config.rs` reads it); the interpreters are
+   told apart by no feature and by the one `cfg` `vkrgss_ruby_19` (also
+   `docs/development.md`); the binding sends `TransitionRule::Rgss2` for RGSS2 and RGSS3
+   and sets the brightness there. The `ffi.rs` of both sys crates name the four targets of
+   their lists, and so does the message of `vkrgss-guest-rgss3` for a target without Ruby
+   1.9.2, a string of `main.rs` beside its doc comments, which item 1 names.
+2. `docs/decisions.md`: the extensions in Ruby (no `VKRGSS` module), the SoundFont paths
+   (also the USAGE of `args.rs`; the GeneralUser GS of the package stays as decided and not
+   built), the fixed order of encodings, the JPEG decoder, the hard requirements of Vulkan,
+   the bitmap slots on macOS, the open snapshot of VX marked done with its history kept,
+   and `Library=`, which was "planned" and is built. `vkrgss-ruby-glue` joins the crates
+   that may hold `unsafe`, and it and `vkrgss-android` the table of crates. A paragraph at
+   the top says what this change corrected.
+3. `docs/running.md`: the default maps put no button on the host keys and a `[keys]` table
+   may, with F3, F4, F11, Alt+Enter and the key that answers a panel swallowed and F12, F2
+   and Tab not; F3, F4 and the choice of a slot during a waiting message panel are dropped;
+   "the keys of the demo" is gone.
+4. Doc comments: `vkrgss-host` (`demo`, the placeholder of `FAST_FORWARD_KEY`),
+   `vkrgss-core` (`sound` is public; `Scene::clear` resets the frame index and the table
+   bookkeeping and emits no `Destroy`; `MAX_BITMAP_PIXELS` bounds the number of pixels,
+   which both compositors' stores apply alike, while the Vulkan compositor also refuses a
+   longer side than the device's `maxImageDimension2D` (`Limit::BitmapDimension`) and may
+   not have the memory, so a bitmap made by the core is not always one it can upload),
+   `vkrgss-vk` (after `present` the presentation engine may still hold the swapchain image).
+
+Found already in line with the code: the doc comments of `vkrgss-binding/src/lib.rs` (no
+`VKRGSS` module is named), the sandbox paragraph and the sentence on the process functions
+of `docs/running.md`, `output.rs` of `vkrgss-audio` (the callback takes no lock and waits
+for nothing), the allocation paragraph of `vkrgss-image/src/lib.rs`, the held frame of
+`render.rs` of `vkrgss-vk`, `GuestForm` (it has no `Default`; the default is
+`guest_form` of `main.rs`, whose doc and the USAGE agree with it), and the script threads of
+`docs/compatibility.md`.
+
+Left as they are: the row P3 of "Milestones" in `docs/decisions.md` keeps "17 saves", the
+dated record of what `xarch` reported on 2026-10-18.
+
 ## Follow-ups
 
 - Moving the `vkrgss_*` methods and `Graphics._reset` under a `VKRGSS` module (behaviour
   change; not done here).
 - The owner's `local/xarch.toml` gets `saves = 3` in the table of `isoi` after the merge.
+- `AGENTS.md` (outside the scope) lists the crates that may hold `unsafe` without
+  `vkrgss-ruby-glue`; `docs/decisions.md` and `docs/architecture.md` name it.
+- The SoundFont of the package (GeneralUser GS, decided on 2026-10-15) is not built.
+- `vkrgss-guest-rgss12` and `vkrgss-guest-rgss3` hold no `unsafe` and carry no attribute; a
+  `#![forbid(unsafe_code)]` in their `main.rs` would make that hold (outside the scope).
